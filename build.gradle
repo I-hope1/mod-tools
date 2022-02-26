@@ -4,7 +4,7 @@ version '1.0'
 
 //compile java 16 code, targeting java 8
 targetCompatibility = 8
-sourceCompatibility = JavaVersion.VERSION_16
+sourceCompatibility = JavaVersion.VERSION_11
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -21,23 +21,27 @@ ext{
 }
 
 //java 8 backwards compatibility flag
-allprojects{
-    tasks.withType(JavaCompile){
-        options.compilerArgs.addAll(['--release', '8'])
-    }
+tasks.withType(JavaCompile){
+    options.compilerArgs.addAll(['--release', '11'])
 }
 
+
 dependencies{
+    implementation 'org.jetbrains:annotations:22.0.0'
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
     compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
 }
 
 task jarAndroid{
     dependsOn "jar"
 
     doLast{
-        if(!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
+        if(!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.")
 
         def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find{ f -> new File(f, "android.jar").exists()}
 

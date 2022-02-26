@@ -4,7 +4,7 @@ version '1.0'
 
 //compile java 16 code, targeting java 8
 targetCompatibility = 8
-sourceCompatibility = JavaVersion.VERSION_11
+sourceCompatibility = JavaVersion.VERSION_16
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -27,7 +27,6 @@ tasks.withType(JavaCompile){
 
 
 dependencies{
-    implementation 'org.jetbrains:annotations:22.0.0'
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
     compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"

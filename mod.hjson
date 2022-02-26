@@ -1,9 +1,10 @@
 
 displayName: "mod make -java"
-name: "mod.make -java"
+name: "mod.make.java"
 author: "I hope..."
 main: "modmake.ModMake"
 description: ""
 version: "1.0"
+hidden: true
 minGameVersion: 129
 

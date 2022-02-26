@@ -22,14 +22,13 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
-import org.jetbrains.annotations.NotNull;
 
 public class IntUI {
 
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
 	/* 一个文本域，可复制粘贴 */
-	public static Dialog showTextArea(@NotNull TextField text) {
+	public static Dialog showTextArea(TextField text) {
 		float w = Core.graphics.getWidth(),
 				h = Core.graphics.getHeight();
 		Dialog dialog = new Dialog("");
@@ -68,7 +67,7 @@ public class IntUI {
 	}
 
 	/* 长按事件 */
-	public static <T extends Element> @NotNull T longPress(@NotNull T elem, float duration, Cons<Boolean> func) {
+	public static <T extends Element> T longPress(T elem, float duration, Cons<Boolean> func) {
 		elem.addListener(new ClickListener() {
 			public void clicked(InputEvent event, float x, float y) {
 				func.get(Time.millis() - visualPressedTime > duration);
@@ -89,7 +88,7 @@ public class IntUI {
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 */
 	public static <T extends Button> Table showSelectTable(T button, Cons3<Table, Runnable, String> f,
-	                                                       Boolean searchable) {
+			Boolean searchable) {
 		if (button == null)
 			throw new NullPointerException("button cannot be null");
 		Table t = new Table(Tex.button) {
@@ -154,8 +153,8 @@ public class IntUI {
 	}
 
 	public static <T extends Button> Table showSelectListTable(T button, Seq<String> list, Prov<String> holder,
-	                                                           Cons<String> cons,
-	                                                           int width, int height, Boolean searchable) {
+			Cons<String> cons,
+			int width, int height, Boolean searchable) {
 		return showSelectTable(button, (Table p, Runnable hide, String text) -> {
 			p.clearChildren();
 
@@ -181,9 +180,9 @@ public class IntUI {
 	 * @param cols      一行的元素数量
 	 */
 	public static <T extends Button, T1> Table showSelectImageTableWithIcons(T button,
-	                                                                         Seq<T1> items, Seq<? extends Drawable> icons, Prov<T1> holder, Cons<T1> cons,
-	                                                                         float size, float imageSize, int cols,
-	                                                                         boolean searchable) {
+			Seq<T1> items, Seq<? extends Drawable> icons, Prov<T1> holder, Cons<T1> cons,
+			float size, float imageSize, int cols,
+			boolean searchable) {
 		return showSelectTable(button, (Table p, Runnable hide, String text) -> {
 			p.clearChildren();
 			p.left();
@@ -196,8 +195,9 @@ public class IntUI {
 				// 过滤不满足条件的
 				UnlockableContent unlock;
 				if (text != "" && !(item instanceof String && ((String) item).matches(text)) &&
-						!(item instanceof UnlockableContent && ((unlock = (UnlockableContent) item).name.matches(text) ||
-								unlock.localizedName.matches(text))))
+						!(item instanceof UnlockableContent
+								&& ((unlock = (UnlockableContent) item).name.matches(text) ||
+										unlock.localizedName.matches(text))))
 					continue;
 
 				ImageButton btn = p.button(Tex.whiteui, Styles.clearToggleTransi, imageSize, () -> {
@@ -205,7 +205,8 @@ public class IntUI {
 					hide.run();
 				}).size(size).get();
 				btn.addListener(new Tooltip(t -> t.background(Tex.button)
-						.add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : item + "")));
+						.add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName
+								: item + "")));
 				btn.getStyle().imageUp = icons.get(i);
 				btn.update(() -> button.setChecked(holder.get() == item));
 
@@ -219,8 +220,8 @@ public class IntUI {
 	 * 弹出一个可以选择内容的窗口（无需你提供图标）
 	 */
 	public static <T extends Button, T1 extends UnlockableContent> Table showSelectImageTable(T button,
-	                                                                                          Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols,
-	                                                                                          boolean searchable) {
+			Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols,
+			boolean searchable) {
 		Seq<Drawable> icons = new Seq<>();
 		items.each(item -> icons.add(new TextureRegionDrawable(item.uiIcon)));
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, imageSize, cols,

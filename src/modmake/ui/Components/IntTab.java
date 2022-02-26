@@ -1,4 +1,4 @@
-package modmake.ui.Components;
+package modmake.ui.components;
 
 import arc.graphics.Color;
 import arc.math.Interp;
@@ -30,7 +30,22 @@ public class IntTab {
 		});
 	}
 
-	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables) {
+	/**
+	 * @param totalWidth 总宽度
+	 * @param names 名称
+	 * @param colors 颜色
+	 * @param tables Tables
+	 * @param cols 一行的个数
+	 * @throws IllegalArgumentException size must be the same.
+	 * */
+	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols){
+		return new IntTab(totalWidth, names, colors, tables, cols);
+	}
+	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables){
+		return new IntTab(totalWidth, names, colors, tables, Integer.MAX_VALUE);
+	}
+
+	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols) {
 		if (!(names.size == colors.size && names.size == tables.size))
 			throw new IllegalArgumentException("size must be the same.");
 		this.totalWidth = totalWidth;

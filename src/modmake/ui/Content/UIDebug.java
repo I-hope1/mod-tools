@@ -1,6 +1,5 @@
-package modmake.ui.Content;
+package modmake.ui.content;
 
-import arc.scene.ui.layout.Table;
 import mindustry.ui.dialogs.BaseDialog;
 
 public class UIDebug extends Content {

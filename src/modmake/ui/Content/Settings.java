@@ -1,4 +1,4 @@
-package modmake.ui.Content;
+package modmake.ui.content;
 
 import arc.Core;
 import arc.scene.ui.layout.Table;
@@ -42,7 +42,8 @@ public class Settings extends Content {
 	public void load() {
 		ui = new BaseDialog(localizedName());
 
-		cont = ui.cont.table().width(400).get();
+		cont = (Table) ui.cont.pane(new Table()).fillX().fillY().get().getWidget();
+		cont.defaults().width(400);
 		cont.add("load").color(Pal.accent).growX().left().row();
 		cont.add(loadTable).growX().left().padLeft(16).row();
 

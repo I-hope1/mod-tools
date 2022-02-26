@@ -1,4 +1,4 @@
-package modmake.ui.Content;
+package modmake.ui.content;
 
 import arc.Core;
 import arc.scene.ui.TextButton;
@@ -12,6 +12,10 @@ public abstract class Content {
 
 	public String localizedName() {
 		return Core.bundle.get(name, name);
+	}
+
+	public String getSettingName(){
+		return IntVars.modName + "-" + name;
 	}
 
 	public boolean loadable() {

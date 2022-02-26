@@ -1,7 +1,7 @@
 package modmake.ui;
 
 import arc.struct.Seq;
-import modmake.ui.Content.*;
+import modmake.ui.content.*;
 
 public class Contents {
 	public static final Seq<Content> all = new Seq<>();

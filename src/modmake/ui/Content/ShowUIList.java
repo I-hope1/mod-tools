@@ -1,7 +1,9 @@
-package modmake.ui.Content;
+package modmake.ui.content;
 
-import modmake.ui.Components.IntTab;
-
+import arc.Core;
+import arc.graphics.Color;
+import arc.scene.style.Drawable;
+import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
@@ -11,17 +13,15 @@ import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Log;
-import mindustry.ui.Styles;
-import mindustry.ui.dialogs.BaseDialog;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
+import mindustry.ui.Styles;
+import mindustry.ui.dialogs.BaseDialog;
+import modmake.ui.components.IntTab;
+import modmake.ui.IntUI;
 
 import java.lang.reflect.Field;
-
-import arc.graphics.Color;
-import arc.scene.style.Drawable;
-import arc.scene.style.TextureRegionDrawable;
 
 public class ShowUIList extends Content {
 
@@ -35,33 +35,29 @@ public class ShowUIList extends Content {
 		ui = new BaseDialog(this.name);
 		Color[] colors = { Color.sky, Color.gold, Color.orange };
 		Table[] tables = {
-				// icon
+				// Icon
+				new Table(t -> Icon.icons.each((k, icon) -> {
+					t.image(new TextureRegionDrawable(icon)).size(32);
+					t.add("" + k).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText()))).row();
+				})),
+				// Tex
 				new Table(t -> {
-					Icon.icons.each((k, icon) -> {
-						t.image(new TextureRegionDrawable(icon)).size(32);
-						t.add("" + k).row();
-					});
-				}),
-				// tex
-				new Table(t -> {
-					Tex tex = new Tex();
-					Field[] fields = tex.getClass().getFields();
+					Field[] fields = Tex.class.getFields();
 					for (Field field : fields) {
 						try {
-							t.image((Drawable) field.get(tex)).size(32);
+							t.image((Drawable) field.get(null)).size(32);
 						} catch (IllegalArgumentException | IllegalAccessException e) {
 							Log.err(e);
 						}
-						t.add(field.getName()).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText()))).row();
 					}
 				}),
-				// styles
-				new Table(((TextureRegionDrawable) Tex.whiteui).tint(1f, 0.6f, 0.6f, 1f), t -> {
-					Styles styles = new Styles();
-					Field[] fields = styles.getClass().getFields();
+				// Styles
+				new Table(IntUI.whiteui.tint(1f, 0.6f, 0.6f, 1f), t -> {
+					Field[] fields = Styles.class.getFields();
 					for (Field field : fields) {
 						try {
-							var style = field.get(styles);
+							var style = field.get(null);
 
 							if (style instanceof LabelStyle) {
 								t.add("label", (LabelStyle) style).size(32);
@@ -90,13 +86,13 @@ public class ShowUIList extends Content {
 							continue;
 						}
 
-						t.add(field.getName()).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText()))).row();
 					}
 				})
 		};
 		String[] names = { "icon", "tex", "styles" };
 
-		IntTab tab = new IntTab(Vars.mobile ? 400f : 600f, new Seq<>(names), new Seq<>(colors), new Seq<>(tables));
+		IntTab tab = IntTab.set(Vars.mobile ? 400f : 600f, new Seq<>(names), new Seq<>(colors), new Seq<>(tables));
 		ui.cont.add(tab.build());
 		ui.addCloseButton();
 	}

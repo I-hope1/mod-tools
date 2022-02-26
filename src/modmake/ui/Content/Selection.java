@@ -1,32 +1,39 @@
-package modmake.ui.Content;
+package modmake.ui.content;
 
 import arc.Core;
+import arc.func.Cons2;
 import arc.graphics.Color;
-import arc.graphics.g2d.*;
+import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.Lines;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
-import arc.scene.event.*;
-import arc.scene.style.TextureRegionDrawable;
+import arc.scene.event.InputEvent;
+import arc.scene.event.InputListener;
+import arc.scene.event.Touchable;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
-import arc.util.Align;
 import arc.util.Time;
 import mindustry.Vars;
-import mindustry.graphics.Pal;
+import mindustry.content.Blocks;
+import mindustry.game.Team;
 import mindustry.gen.*;
-import mindustry.game.*;
-import mindustry.ui.*;
+import mindustry.graphics.Pal;
+import mindustry.ui.Styles;
 import mindustry.world.Tile;
 import mindustry.world.blocks.environment.Floor;
 import mindustry.world.blocks.environment.OverlayFloor;
-import modmake.IntVars;
 import modmake.ui.Contents;
 import modmake.ui.IntUI;
+import modmake.ui.components.MoveListener;
+
+import java.util.ArrayList;
+import java.util.function.Consumer;
 
 public class Selection extends Content {
 
@@ -35,10 +42,11 @@ public class Selection extends Content {
 	}
 
 	final ObjectMap<String, Boolean> select = ObjectMap.of(
-			"tile", true, "building", false, "floor", false);
+			"tile", true, "building", false, "floor", false, "unit", false);
 
 	public Dialog frag;
 	public Table pane, functions;
+	Team defaultTeam = (Team) Core.settings.get(getSettingName(), Team.sharded);
 	boolean show = false, move = false;
 	float x1, y1, x2, y2;
 	static final int buttonWidth = 200, buttonHeight = 45;
@@ -46,15 +54,33 @@ public class Selection extends Content {
 	Function<Tile> tiles;
 	Function<Building> buildings;
 	Function<Floor> floors;
+	Function<Unit> units;
 
 	public void loadString() {
 		Table table = new Table();
 		table.add(localizedName()).color(Pal.accent).growX().left().row();
 		table.table(t -> {
 			t.left().defaults().left();
-			tiles.setting(t);
-			buildings.setting(t);
-			floors.setting(t);
+			all.values().forEach(func -> {
+				func.setting(t);
+			});
+		}).growX().left().padLeft(16).row();
+		table.table(t -> {
+			t.left().defaults().left();
+			t.add("默认队伍").color(Pal.accent).growX().left().row();
+			t.table(t1 -> {
+				t1.left().defaults().left();
+				Team[] arr = Team.baseTeams;
+
+				int c = 0;
+				for (Team team : arr) {
+					ImageButton b = t1.button(IntUI.whiteui, Styles.clearToggleTransi, 32,
+							() -> Core.settings.put(getSettingName() + "-defaultTeam", (defaultTeam = team).id)).size(42).get();
+					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
+					if (++c % 3 == 0) t1.row();
+				}
+
+			}).growX().left().padLeft(16);
 		}).growX().left().padLeft(16);
 		Contents.settings.add(table);
 	}
@@ -79,7 +105,7 @@ public class Selection extends Content {
 		int maxH = 400;
 		InputListener listener = new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (keycode.value == "Escape") {
+				if (keycode == KeyCode.escape) {
 					hide();
 				}
 				return false;
@@ -122,19 +148,23 @@ public class Selection extends Content {
 					return;
 				}
 
-				tiles.clearSeq();
-				buildings.clearSeq();
+				tiles.clearList();
+				buildings.clearList();
 
 				Vec2 v1 = Core.camera.unproject(x1, y1).cpy();
 				Vec2 v2 = Core.camera.unproject(x2, y2).cpy();
+				if (select.get("unit")) {
+					Rect rect = new Rect(v1.x, v1.y, v2.x - v1.x, v2.y - v1.y);
+					Groups.unit.each(unit -> rect.contains(unit.getX(), unit.getY()), unit -> units.list.add(unit));
+				}
 				for (float y = v1.y; y < v2.y; y += Vars.tilesize) {
 					for (float x = v1.x; x < v2.x; x += Vars.tilesize) {
 						Tile tile = Vars.world.tileWorld(x, y);
 						if (tile != null) {
 							if (select.get("tile") || select.get("floor"))
-								tiles.seq.add(tile);
-							if (select.get("building") && tile.build != null && !buildings.seq.contains(tile.build))
-								buildings.seq.add(tile.build);
+								tiles.list.add(tile);
+							if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build))
+								buildings.list.add(tile.build);
 						}
 					}
 				}
@@ -142,10 +172,8 @@ public class Selection extends Content {
 				pane.touchable = Touchable.enabled;
 				pane.visible = true;
 				pane.setPosition(
-						Mathf.clamp(mx, buttonWidth, Core.graphics.getWidth()),
-						// 32是btn的高度
-						Mathf.clamp(my, (maxH + 32) / 2f, Core.graphics.getHeight() - (maxH + 32) / 2f),
-						Align.bottomRight);
+						Mathf.clamp(mx, 0f, Core.graphics.getWidth() - pane.getPrefWidth()),
+						Mathf.clamp(my, 0f, Core.graphics.getHeight() - pane.getPrefHeight()));
 				frag.hide();
 				show = false;
 			}
@@ -154,107 +182,101 @@ public class Selection extends Content {
 
 		int W = buttonWidth, H = buttonHeight;
 
-		functions = new Table(Styles.black5);
+		functions = new Table();
 		functions.defaults().width(W);
 
-		pane = new Table(Styles.black5, t -> {
-			t.table(right -> {
-				right.right().defaults().right();
-				right.button(Icon.cancel, Styles.clearTransi, this::hide).size(32);
-			}).fillX().right().row();
-			ScrollPaneStyle paneStyle = new ScrollPaneStyle();
-			paneStyle.background = Styles.none;
+		pane = new Table();
+		pane.table(right -> {
+			Image img = right.image().color(Color.sky).size(W - 32, 32).get();
+			new MoveListener(img, pane);
+			// right.right().defaults().right();
+			right.button(Icon.cancel, Styles.clearTransi, this::hide).size(32);
+		}).fillX().row();
+		ScrollPaneStyle paneStyle = new ScrollPaneStyle();
+		paneStyle.background = Styles.none;
 
-			t.pane(paneStyle, functions).size(W, maxH).get().setSize(W, maxH);
-		});
-		pane.right().defaults().width(W).right();
+		pane.table(t -> t.pane(paneStyle, functions).fillX().fillY())
+				.size(W, maxH).get().background(Styles.black5);
+
+		pane.left().bottom().defaults().width(W);
 		pane.visible = false;
 		pane.update(() -> {
 			if (Vars.state.isMenu())
 				hide();
 		});
 
-		tiles = new Function<>("tile", new Table(t -> {
+		tiles = new Function<>("tile", (t, func) -> {
 			TextButton btn1 = t.button("Set", () -> {
-			}).height(H).growX().right().get();
-			btn1.clicked(() -> {
-				IntUI.showSelectImageTable(btn1, Vars.content.blocks(), () -> null, block -> {
-					tiles.seq.each(tile -> {
+			}).height(H).growX().get();
+			btn1.clicked(() -> IntUI.showSelectImageTable(btn1, Vars.content.blocks(), () -> null,
+					block -> func.each(tile -> {
 						if (tile.block() != block)
-							tile.setBlock(block, tile.team());
-					});
-				}, 40, 32, 6, true);
-			});
+							tile.setBlock(block, tile.block() != Blocks.air ? tile.team() : defaultTeam);
+					}), 42, 32, 6, true));
 			t.row();
-			t.button("Clear", () -> {
-				tiles.seq.each(Tile::setAir);
-			}).height(H).growX().right().row();
-		}));
+			t.button("Clear", () -> func.each(Tile::setAir)).height(H).growX().row();
+		});
 
-		buildings = new Function<>("building", new Table(t -> {
-			t.button("Infinite health", () -> {
-				buildings.seq.each(b -> {
-					b.health = Float.MAX_VALUE;
-				});
-			}).height(H).growX().right().row();
-			TextButton btn1 = t.button("Team", () -> {
-			}).height(H).growX().right().get();
+		buildings = new Function<>("building", (t, func) -> {
+			t.button("Infinite health", () -> func.each(b -> b.health = Float.POSITIVE_INFINITY)).height(H).growX()
+					.row();
+			Button btn1 = t.button("Team", () -> {
+			}).height(H).growX().get();
 			btn1.clicked(() -> {
 				Team[] arr = Team.baseTeams;
-				Seq<TextureRegionDrawable> icons = new Seq<>();
-				TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+				Seq<Drawable> icons = new Seq<>();
 
 				for (Team team : arr) {
-					icons.add((TextureRegionDrawable) whiteui.tint(team.color));
+					icons.add(IntUI.whiteui.tint(team.color));
 				}
-				IntUI.showSelectImageTableWithIcons(btn1, new Seq<>(arr), icons, () -> null, team -> {
-					buildings.seq.each(b -> {
-						b.changeTeam(team);
-					});
-				}, 40, 32, 3, false);
+				IntUI.showSelectImageTableWithIcons(btn1, new Seq<>(arr), icons, () -> null,
+						team -> func.each(b -> b.changeTeam(team)), 42, 32, 3, false);
 			});
 			t.row();
-			t.button("Kill", () -> {
-				buildings.seq.each(Building::kill);
-			}).height(H).growX().right().row();
-		}));
 
-		floors = new Function<>("floor", new Table(t -> {
-			TextButton btn1 = t.button("Set Floor Reset Overlay", () -> {
-			}).height(H).growX().right().get();
-			btn1.clicked(() -> {
-				IntUI.showSelectImageTable(btn1, Vars.content.blocks().select(block -> block instanceof Floor),
-						() -> null, floor -> {
-							tiles.seq.each(tile -> {
-								tile.setFloor((Floor) floor);
-							});
-						}, 40, 32, 6, true);
+			Button btn2 = t.button("Set items", () -> {}).height(H).growX().get();
+			btn2.clicked(() -> {
+				IntUI.showSelectImageTable(btn2, Vars.content.items(), () -> null,
+						item -> {
+							IntUI.showSelectTable(btn2, (table, hide, str) -> {
+								String[] amount = new String[1];
+								table.field("", s -> amount[0] = s);
+								table.button("", Icon.ok, Styles.clearTogglet, () -> {
+									func.each(b -> b.items.set(item, Integer.parseInt(amount[0])));
+									hide.run();
+								});
+							}, false);
+						}, 42, 32, 6, true);
 			});
+			t.row();
+
+			t.button("Kill", () -> func.each(Building::kill)).height(H).growX().row();
+		});
+
+		floors = new Function<>("floor", (t, func) -> {
+			TextButton btn1 = t.button("Set Floor Reset Overlay", () -> {
+			}).height(H).growX().get();
+			btn1.clicked(() -> IntUI.showSelectImageTable(btn1,
+					Vars.content.blocks().select(block -> block instanceof Floor),
+					() -> null, floor -> tiles.each(tile -> tile.setFloor((Floor) floor)), 42, 32, 6, true));
 			t.row();
 			TextButton btn2 = t.button("Set Floor Preserving Overlay", () -> {
-			}).height(H).growX().right().get();
-			btn2.clicked(() -> {
-				IntUI.showSelectImageTable(btn2, Vars.content.blocks()
-						.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
-						floor -> {
-							tiles.seq.each(tile -> {
-								tile.setFloorUnder((Floor) floor);
-							});
-						}, 40, 32, 6, true);
-			});
+			}).height(H).growX().get();
+			btn2.clicked(() -> IntUI.showSelectImageTable(btn2, Vars.content.blocks()
+							.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
+					floor -> tiles.each(tile -> tile.setFloorUnder((Floor) floor)), 42, 32, 6, true));
 			t.row();
 			TextButton btn3 = t.button("Set Overlay", () -> {
-			}).height(H).growX().right().get();
-			btn3.clicked(() -> {
-				IntUI.showSelectImageTable(btn3, Vars.content.blocks().select(block -> block instanceof OverlayFloor),
-						() -> null, overlay -> {
-							tiles.seq.each(tile -> {
-								tile.setOverlay(overlay);
-							});
-						}, 40, 32, 6, true);
-			});
+			}).height(H).growX().get();
+			btn3.clicked(() -> IntUI.showSelectImageTable(btn3,
+					Vars.content.blocks().select(block -> block instanceof OverlayFloor),
+					() -> null, overlay -> tiles.each(tile -> tile.setOverlay(overlay)), 42, 32, 6, true));
 			t.row();
-		}));
+		});
+
+		units = new Function<>("unit", (t, func) -> {
+			t.button("Kill", () -> func.each(Unit::kill)).height(H).growX().row();
+		});
 
 		Core.scene.root.addChildAt(10, pane);
 
@@ -274,23 +296,32 @@ public class Selection extends Content {
 		frag.show();
 	}
 
-	class Function<T> {
+	public static ObjectMap<String, Function<?>> all = new ObjectMap<>();
+
+	public class Function<T> {
 		public final Table wrap;
 		public final Table main;
 		public final Table cont;
-		public final Seq<T> seq = new Seq<>();
+		public final ArrayList<T> list = new ArrayList<>();
 		public final String name;
 
-		public Function(String n, Table cont) {
+		public Function(String n, Cons2<Table, Function<T>> cons) {
 			name = n;
 			wrap = new Table();
 			main = new Table();
-			this.cont = cont;
+			cont = new Table();
+			cons.get(cont, this);
 			functions.add(wrap).row();
 			main.image().color(Color.gray).height(2).padTop(3f).padBottom(3f).fillX().row();
 			main.add(name).growX().left().row();
 			main.add(cont).width(buttonWidth);
-			setup();
+			select.put(n, (Boolean) Core.settings.get(getSettingName() + "-" + name, select.get(n)));
+			if (select.get(n))
+				setup();
+			else
+				remove();
+
+			all.put(name, this);
 		}
 
 		public void setting(Table t) {
@@ -299,7 +330,9 @@ public class Selection extends Content {
 					setup();
 				else
 					remove();
-				Core.settings.put(IntVars.modName + "-select-" + name, b);
+				hide();
+				select.put(name, b);
+				Core.settings.put(getSettingName() + "-" + name, b);
 			});
 		}
 
@@ -307,8 +340,12 @@ public class Selection extends Content {
 			wrap.clearChildren();
 		}
 
-		public void clearSeq() {
-			seq.removeAll(item -> true);
+		public void each(Consumer<? super T> action) {
+			list.forEach(action);
+		}
+
+		public void clearList() {
+			list.clear();
 		}
 
 		public void setup() {

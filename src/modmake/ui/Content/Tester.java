@@ -1,7 +1,4 @@
-package modmake.ui.Content;
-
-import java.util.ArrayList;
-import java.util.Comparator;
+package modmake.ui.content;
 
 import arc.Core;
 import arc.files.Fi;
@@ -12,7 +9,6 @@ import arc.scene.Action;
 import arc.scene.Scene;
 import arc.scene.ui.Button;
 import arc.scene.ui.Dialog;
-import arc.scene.ui.TextArea;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
@@ -20,21 +16,27 @@ import arc.util.Time;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
+import mindustry.mod.Mods;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import modmake.IntVars;
+import modmake.ModMake;
 import modmake.ui.IntStyles;
 import modmake.ui.IntUI;
+import modmake.ui.components.IntTextArea;
+
+import java.util.ArrayList;
+import java.util.Comparator;
 
 public class Tester extends Content {
-	final Scripts scripts = new Scripts();
+	public final Scripts scripts = new Scripts();
 	String log = "";
-	TextArea area;
+	IntTextArea area;
 	boolean loop = false, wrap = false; // scope: false,
 	final float w = Core.graphics.getWidth() > Core.graphics.getHeight() ? 540f : 440f;
-	float h = Core.graphics.getHeight() * .4f;
-	final Fi record = Vars.dataDirectory.child("mods(I hope...)").child("historical record");
+	public final Fi record = Vars.dataDirectory.child("mods(I hope...)").child("historical record"),
+			bookmarkFi = Vars.dataDirectory.child("mods(I hope...)").child("bookmarks");
 
 	public Tester() {
 		super("tester");
@@ -44,10 +46,27 @@ public class Tester extends Content {
 	ListDialog history;
 	ListDialog bookmark;
 
+	public String linesStr() {
+		int first = area.getFirstLineShowing(),
+				len = area.getLinesShowing() - 1,
+				now = area.getCursorLine();
+		var str = new StringBuilder("[lightgray]");
+		for (var i = 0; i < len; i++) {
+			if (i + first == now) str.append("[gold]");
+			str.append(i + first + 1);
+			if (i + first == now) str.append("[]");
+			str.append("\n");
+		}
+		return str + "[]";
+	}
+
 	public void show(Table table, Table buttons) {
 		Table cont = new Table();
 
-		cont.add(area = new TextArea("")).size(w, 390).row();
+		cont.table(t -> {
+			t.label(this::linesStr);
+			t.add(area = new IntTextArea("")).size(w, 390);
+		}).row();
 
 		cont.button("$ok", () -> {
 			area.setText(getMessage().replaceAll("\r", ""));
@@ -67,32 +86,21 @@ public class Tester extends Content {
 			}
 		}).row();
 
-		cont.table(Tex.button, t -> {
-			t.pane(p -> {
-				p.label(() -> log);
-			}).size(w, 390f);
-		});
+		cont.table(Tex.button, t -> t.pane(p -> p.label(() -> log)).size(w, 390f));
 
 		table.add(cont).row();
 
 		table.pane(p -> {
-			p.button("", Icon.star, Styles.cleart, () -> Vars.dataDirectory.child("mods(I hope...)").child("bookmarks")
-					.child(Vars.dataDirectory.child("mods(I hope...)").child("bookmarks").list().length + "-"
+			p.button("", Icon.star, Styles.cleart, () -> bookmarkFi
+					.child(bookmarkFi.list().length + "-"
 							+ Time.millis() + ".txt")
-					.writeString("" + getMessage()));
-			p.button(b -> {
-				b.label(() -> loop ? "$loop" : "$default");
-			}, Styles.defaultb, () -> loop = !loop).size(100f, 55f);
-			p.button(b -> {
-				b.label(() -> wrap ? "严格" : "非严格");
-			}, Styles.defaultb, () -> wrap = !wrap).size(100f, 55f);
+					.writeString(getMessage()));
+			p.button(b -> b.label(() -> loop ? "$loop" : "$default"), Styles.defaultb, () -> loop = !loop).size(100f,
+					55f);
+			p.button(b -> b.label(() -> wrap ? "严格" : "非严格"), Styles.defaultb, () -> wrap = !wrap).size(100f, 55f);
 
-			p.button("$hitoricalRecord", () -> {
-				history.show();
-			}).size(100, 55);
-			p.button("$bookmark", () -> {
-				bookmark.show();
-			}).size(100f, 55f);
+			p.button("$historicalRecord", () -> history.show()).size(100, 55);
+			p.button("$bookmark", () -> bookmark.show()).size(100f, 55f);
 		}).height(60f).fillX();
 
 		buttons.button("$back", Icon.left, () -> ui.hide()).size(210, 64);
@@ -144,9 +152,12 @@ public class Tester extends Content {
 		String def = getMessage();
 		def = wrap ? "(function(){\"use strict\";" + def + "\n})();" : def;
 		log = scripts.runConsole(def);
+		log = log.replaceAll("\\[(.*?)]", "[ $1 ]");
+
 	}
 
 	public void load() {
+
 		ui = new BaseDialog(localizedName());
 		ui.addCloseListener();
 
@@ -160,12 +171,12 @@ public class Tester extends Content {
 		}, true);
 
 		bookmark = new ListDialog("bookmark", Vars.dataDirectory.child("mods(I hope...)").child("bookmarks"),
-				f -> f, f -> area.setText(f.readString()), (f, p) -> {
-					p.add(f.readString()).row();
-				}, false);
+				f -> f, f -> area.setText(f.readString()), (f, p) -> p.add(f.readString()).row(), false);
+
+		Mods.LoadedMod mod = Vars.mods.locateMod(ModMake.name);
+		scripts.runConsole(mod.root.child("tester.js").readString());
 
 		setup();
-		// scripts.runConsole;
 	}
 
 	public void loadString() {
@@ -177,7 +188,7 @@ public class Tester extends Content {
 
 	class ListDialog extends BaseDialog {
 		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
-				boolean sort) {
+		                  boolean sort) {
 			super(Core.bundle.get("title." + title, title));
 			this.file = file;
 			this.fileHolder = fileHolder;
@@ -189,7 +200,6 @@ public class Tester extends Content {
 		final Table p = new Table();
 		boolean sort;
 		Fi file;
-		Fi[] list;
 		Func<Fi, Fi> fileHolder;
 		Cons<Fi> consumer;
 		Cons2<Fi, Table> pane;
@@ -211,19 +221,18 @@ public class Tester extends Content {
 		}
 
 		void build() {
-			list = file.list();
-			ArrayList<String> longs = sort(list);
+			ArrayList<String> longs = sort(file.list());
 			// 颠倒
 			p.clearChildren();
 			for (int j = longs.size() - 1; j >= 0; j--) {
 				final int i = j;
 				Fi f = file.child(longs.get(j));
 				p.table(Tex.button, t -> {
-					Button btn = t.left().button(b -> {
-						b.pane(c -> c.add(fileHolder.get(f).readString()).left()).fillY().fillX()
-								.left();
-					}, IntStyles.clearb, () -> {
-					}).height(70f).minWidth(400f).growX().fillX().left().get();
+					Button btn = t.left()
+							.button(b -> b.pane(c -> c.add(fileHolder.get(f).readString()).left()).fillY().fillX()
+									.left(), IntStyles.clearb, () -> {
+							})
+							.height(70f).minWidth(400f).growX().fillX().left().get();
 					IntUI.longPress(btn, 600f, longPress -> {
 						if (longPress) {
 							Dialog ui = new Dialog("");

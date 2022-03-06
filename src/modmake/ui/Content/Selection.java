@@ -63,7 +63,7 @@ public class Selection extends Content {
 		table.add(localizedName()).color(Pal.accent).growX().left().row();
 		table.table(t -> {
 			t.left().defaults().left();
-			all.values().forEach(func -> {
+			all.each((k, func) -> {
 				func.setting(t);
 			});
 		}).growX().left().padLeft(16).row();

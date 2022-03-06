@@ -1,20 +1,13 @@
 package modmake.ui;
 
 import arc.Core;
-import arc.files.Fi;
 import arc.func.Cons;
 import arc.graphics.Color;
-import arc.graphics.Texture;
-import arc.graphics.g2d.TextureRegion;
 import arc.scene.Element;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
-import arc.util.Log;
-import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
-import mindustry.mod.Mods;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import modmake.ui.content.Selection;
@@ -23,26 +16,21 @@ import java.lang.reflect.Modifier;
 import java.util.StringJoiner;
 
 public class IntFunc {
-	/* 选择文件 */
-	public static void selectFile(boolean open, String purpose, String ext, Cons<Fi> cons) {
-		StringBuilder b = new StringBuilder(purpose);
-		String _purpose = purpose.charAt(0) == '@' || purpose.charAt(0) == '$'
-				? Core.bundle.get(b.substring(1), purpose)
-				: purpose;
 
-		Vars.platform.showFileChooser(open, _purpose + " (." + ext + ")", ext, fi -> {
-			try {
-				cons.get(fi);
-			} catch (Throwable err) {
-				Log.err("Throw error when failed to select file: ", err);
-			}
-		});
+	public static int parseInt(String string) {
+		try {
+			return Integer.parseInt(string);
+		} catch (Exception e) {
+			return 0;
+		}
 	}
 
-	/* 查找图片 */
-	public static TextureRegion find(Mods.LoadedMod mod, String name) {
-		Seq<Fi> all = mod.root.child("sprites").findAll(fi -> fi.name().equals(name + "png"));
-		return all.size == 0 ? Core.atlas.find("error") : new TextureRegion(new Texture(all.first()));
+	public static float parseFloat(String string) {
+		try {
+			return Float.parseFloat(string);
+		} catch (Exception e) {
+			return 0f;
+		}
 	}
 
 	// 以下提供给 JavaScript
@@ -133,24 +121,26 @@ public class IntFunc {
 						t.add("<" + e + ">", Color.red);
 					}
 					// t.add(m.toGenericString());
-					/*t.add(m.getName());
-					t.add("(");
-					var types = m.getParameterTypes();
-					if (types.length != 0) {
-						int iMax = types.length - 1;
-						for (int i = 0;; i++) {
-							final boolean[] simple = { true };
-							final Class<?> clazz = types[i];
-							t.add(clazz.getSimpleName()).with(l -> {
-								l.setText(simple[0] ? clazz.getName() : clazz.getSimpleName());
-								simple[0] = !simple[0];
-							});
-							if (i == iMax)
-								break;
-							t.add(",").padRight(3);
-						}
-					}
-					t.add(")");*/
+					/*
+					 * t.add(m.getName());
+					 * t.add("(");
+					 * var types = m.getParameterTypes();
+					 * if (types.length != 0) {
+					 * int iMax = types.length - 1;
+					 * for (int i = 0;; i++) {
+					 * final boolean[] simple = { true };
+					 * final Class<?> clazz = types[i];
+					 * t.add(clazz.getSimpleName()).with(l -> {
+					 * l.setText(simple[0] ? clazz.getName() : clazz.getSimpleName());
+					 * simple[0] = !simple[0];
+					 * });
+					 * if (i == iMax)
+					 * break;
+					 * t.add(",").padRight(3);
+					 * }
+					 * }
+					 * t.add(")");
+					 */
 				}).pad(4).row();
 			}
 		}

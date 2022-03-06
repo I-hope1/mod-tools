@@ -18,6 +18,7 @@ import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Time;
 import arc.util.Tmp;
+import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
@@ -204,9 +205,10 @@ public class IntUI {
 					cons.get(item);
 					hide.run();
 				}).size(size).get();
-				btn.addListener(new Tooltip(t -> t.background(Tex.button)
-						.add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName
-								: item + "")));
+				if (!Vars.mobile)
+					btn.addListener(new Tooltip(t -> t.background(Tex.button)
+							.add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName
+									: item + "")));
 				btn.getStyle().imageUp = icons.get(i);
 				btn.update(() -> button.setChecked(holder.get() == item));
 

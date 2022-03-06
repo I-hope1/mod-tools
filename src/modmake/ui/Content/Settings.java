@@ -13,6 +13,7 @@ public class Settings extends Content {
 	Table cont = new Table();
 	final Table loadTable = new Table(t -> t.left().defaults().left());
 
+	@Override
 	public void build() {
 		ui.show();
 	}
@@ -39,6 +40,7 @@ public class Settings extends Content {
 		cont.add(t).width(400).padTop(6).row();
 	}
 
+	@Override
 	public void load() {
 		ui = new BaseDialog(localizedName());
 

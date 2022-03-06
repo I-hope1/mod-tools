@@ -9,6 +9,7 @@ import arc.scene.Action;
 import arc.scene.Scene;
 import arc.scene.ui.Button;
 import arc.scene.ui.Dialog;
+import arc.scene.ui.TextArea;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
@@ -32,7 +33,7 @@ import java.util.Comparator;
 public class Tester extends Content {
 	public final Scripts scripts = new Scripts();
 	String log = "";
-	IntTextArea area;
+	TextArea area;
 	boolean loop = false, wrap = false; // scope: false,
 	final float w = Core.graphics.getWidth() > Core.graphics.getHeight() ? 540f : 440f;
 	public final Fi record = Vars.dataDirectory.child("mods(I hope...)").child("historical record"),
@@ -46,27 +47,12 @@ public class Tester extends Content {
 	ListDialog history;
 	ListDialog bookmark;
 
-	public String linesStr() {
-		int first = area.getFirstLineShowing(),
-				len = area.getLinesShowing() - 1,
-				now = area.getCursorLine();
-		var str = new StringBuilder("[lightgray]");
-		for (var i = 0; i < len; i++) {
-			if (i + first == now) str.append("[gold]");
-			str.append(i + first + 1);
-			if (i + first == now) str.append("[]");
-			str.append("\n");
-		}
-		return str + "[]";
-	}
-
 	public void show(Table table, Table buttons) {
 		Table cont = new Table();
 
-		cont.table(t -> {
-			t.label(this::linesStr);
-			t.add(area = new IntTextArea("")).size(w, 390);
-		}).row();
+		var textarea = new IntTextArea("", w, 390);
+		area = textarea.area;
+		cont.add(textarea).row();
 
 		cont.button("$ok", () -> {
 			area.setText(getMessage().replaceAll("\r", ""));
@@ -95,12 +81,12 @@ public class Tester extends Content {
 					.child(bookmarkFi.list().length + "-"
 							+ Time.millis() + ".txt")
 					.writeString(getMessage()));
-			p.button(b -> b.label(() -> loop ? "$loop" : "$default"), Styles.defaultb, () -> loop = !loop).size(100f,
+			p.button(b -> b.label(() -> loop ? "循环" : "默认"), Styles.defaultb, () -> loop = !loop).size(100f,
 					55f);
 			p.button(b -> b.label(() -> wrap ? "严格" : "非严格"), Styles.defaultb, () -> wrap = !wrap).size(100f, 55f);
 
-			p.button("$historicalRecord", () -> history.show()).size(100, 55);
-			p.button("$bookmark", () -> bookmark.show()).size(100f, 55f);
+			p.button("历史记录", () -> history.show()).size(100, 55);
+			p.button("收藏", () -> bookmark.show()).size(100f, 55f);
 		}).height(60f).fillX();
 
 		buttons.button("$back", Icon.left, () -> ui.hide()).size(210, 64);
@@ -139,13 +125,9 @@ public class Tester extends Content {
 		ui.cont.pane(p -> show(p, ui.buttons)).fillX().fillY();
 	}
 
+	@Override
 	public void build() {
 		ui.show();
-
-		IntVars.frag.update(() -> {
-			if (loop && !getMessage().equals(""))
-				evalMessage();
-		});
 	}
 
 	void evalMessage() {
@@ -156,6 +138,7 @@ public class Tester extends Content {
 
 	}
 
+	@Override
 	public void load() {
 
 		ui = new BaseDialog(localizedName());
@@ -173,12 +156,18 @@ public class Tester extends Content {
 		bookmark = new ListDialog("bookmark", Vars.dataDirectory.child("mods(I hope...)").child("bookmarks"),
 				f -> f, f -> area.setText(f.readString()), (f, p) -> p.add(f.readString()).row(), false);
 
-		Mods.LoadedMod mod = Vars.mods.locateMod(ModMake.name);
+		Mods.LoadedMod mod = Vars.mods.locateMod(IntVars.modName);
 		scripts.runConsole(mod.root.child("tester.js").readString());
 
 		setup();
+
+		btn.update(() -> {
+			if (loop && !getMessage().equals(""))
+				evalMessage();
+		});
 	}
 
+	@Override
 	public void loadString() {
 	}
 
@@ -188,7 +177,7 @@ public class Tester extends Content {
 
 	class ListDialog extends BaseDialog {
 		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
-		                  boolean sort) {
+				boolean sort) {
 			super(Core.bundle.get("title." + title, title));
 			this.file = file;
 			this.fileHolder = fileHolder;
@@ -231,7 +220,7 @@ public class Tester extends Content {
 					Button btn = t.left()
 							.button(b -> b.pane(c -> c.add(fileHolder.get(f).readString()).left()).fillY().fillX()
 									.left(), IntStyles.clearb, () -> {
-							})
+									})
 							.height(70f).minWidth(400f).growX().fillX().left().get();
 					IntUI.longPress(btn, 600f, longPress -> {
 						if (longPress) {

@@ -29,6 +29,7 @@ import mindustry.world.Tile;
 import mindustry.world.blocks.environment.Floor;
 import mindustry.world.blocks.environment.OverlayFloor;
 import modmake.ui.Contents;
+import modmake.ui.IntFunc;
 import modmake.ui.IntUI;
 import modmake.ui.components.MoveListener;
 
@@ -46,7 +47,7 @@ public class Selection extends Content {
 
 	public Dialog frag;
 	public Table pane, functions;
-	Team defaultTeam = (Team) Core.settings.get(getSettingName(), Team.sharded);
+	Team defaultTeam;
 	boolean show = false, move = false;
 	float x1, y1, x2, y2;
 	static final int buttonWidth = 200, buttonHeight = 45;
@@ -56,16 +57,19 @@ public class Selection extends Content {
 	Function<Floor> floors;
 	Function<Unit> units;
 
+	@Override
 	public void loadString() {
 		Table table = new Table();
 		table.add(localizedName()).color(Pal.accent).growX().left().row();
 		table.table(t -> {
 			t.left().defaults().left();
-			all.values().toSeq().each(func -> {
+			all.values().forEach(func -> {
 				func.setting(t);
 			});
 		}).growX().left().padLeft(16).row();
 		table.table(t -> {
+			defaultTeam = Team.get((int) Core.settings.get(getSettingName() + "-defaultTeam", 1));
+
 			t.left().defaults().left();
 			t.add("默认队伍").color(Pal.accent).growX().left().row();
 			t.table(t1 -> {
@@ -75,9 +79,14 @@ public class Selection extends Content {
 				int c = 0;
 				for (Team team : arr) {
 					ImageButton b = t1.button(IntUI.whiteui, Styles.clearToggleTransi, 32,
-							() -> Core.settings.put(getSettingName() + "-defaultTeam", (defaultTeam = team).id)).size(42).get();
+							() -> Core.settings.put(getSettingName() + "-defaultTeam", (defaultTeam = team).id))
+							.size(42).get();
 					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
-					if (++c % 3 == 0) t1.row();
+					b.update(() -> {
+						b.setChecked(defaultTeam == team);
+					});
+					if (++c % 3 == 0)
+						t1.row();
 				}
 
 			}).growX().left().padLeft(16);
@@ -85,6 +94,7 @@ public class Selection extends Content {
 		Contents.settings.add(table);
 	}
 
+	@Override
 	public void load() {
 		frag = new Dialog() {
 			public void draw() {
@@ -206,7 +216,7 @@ public class Selection extends Content {
 		});
 
 		tiles = new Function<>("tile", (t, func) -> {
-			TextButton btn1 = t.button("Set", () -> {
+			TextButton btn1 = t.button("设置", () -> {
 			}).height(H).growX().get();
 			btn1.clicked(() -> IntUI.showSelectImageTable(btn1, Vars.content.blocks(), () -> null,
 					block -> func.each(tile -> {
@@ -214,13 +224,13 @@ public class Selection extends Content {
 							tile.setBlock(block, tile.block() != Blocks.air ? tile.team() : defaultTeam);
 					}), 42, 32, 6, true));
 			t.row();
-			t.button("Clear", () -> func.each(Tile::setAir)).height(H).growX().row();
+			t.button("清除", () -> func.each(Tile::setAir)).height(H).growX().row();
 		});
 
 		buildings = new Function<>("building", (t, func) -> {
-			t.button("Infinite health", () -> func.each(b -> b.health = Float.POSITIVE_INFINITY)).height(H).growX()
+			t.button("无限血量", () -> func.each(b -> b.health = Float.POSITIVE_INFINITY)).height(H).growX()
 					.row();
-			Button btn1 = t.button("Team", () -> {
+			Button btn1 = t.button("队伍", () -> {
 			}).height(H).growX().get();
 			btn1.clicked(() -> {
 				Team[] arr = Team.baseTeams;
@@ -234,23 +244,47 @@ public class Selection extends Content {
 			});
 			t.row();
 
-			Button btn2 = t.button("Set items", () -> {}).height(H).growX().get();
+			Button btn2 = t.button("设置物品", () -> {
+			}).height(H).growX().get();
 			btn2.clicked(() -> {
-				IntUI.showSelectImageTable(btn2, Vars.content.items(), () -> null,
-						item -> {
-							IntUI.showSelectTable(btn2, (table, hide, str) -> {
-								String[] amount = new String[1];
-								table.field("", s -> amount[0] = s);
-								table.button("", Icon.ok, Styles.clearTogglet, () -> {
-									func.each(b -> b.items.set(item, Integer.parseInt(amount[0])));
-									hide.run();
-								});
-							}, false);
-						}, 42, 32, 6, true);
+				IntUI.showSelectImageTable(btn2, Vars.content.items(), () -> null, item -> {
+					IntUI.showSelectTable(btn2, (table, hide, str) -> {
+						String[] amount = new String[1];
+						table.field("", s -> amount[0] = s);
+						table.button("", Icon.ok, Styles.clearTogglet, () -> {
+							func.each(b -> {
+								if (b.items != null)
+									b.items.set(item, IntFunc.parseInt(amount[0]));
+							});
+							hide.run();
+						});
+					}, false);
+				}, 42, 32, 6, true);
 			});
 			t.row();
 
-			t.button("Kill", () -> func.each(Building::kill)).height(H).growX().row();
+			Button btn3 = t.button("设置液体", () -> {
+			}).height(H).growX().get();
+			btn3.clicked(() -> {
+				IntUI.showSelectImageTable(btn3, Vars.content.liquids(), () -> null, liquid -> {
+					IntUI.showSelectTable(btn3, (table, hide, str) -> {
+						String[] amount = new String[1];
+						table.field("", s -> amount[0] = s);
+						table.button("", Icon.ok, Styles.clearTogglet, () -> {
+							func.each(b -> {
+								if (b.liquids == null)
+									return;
+								float now = b.liquids.get(liquid);
+								b.liquids.add(liquid, IntFunc.parseFloat(amount[0]) - now);
+							});
+							hide.run();
+						});
+					}, false);
+				}, 42, 32, 6, true);
+			});
+			t.row();
+
+			t.button("杀死", () -> func.each(Building::kill)).height(H).growX().row();
 		});
 
 		floors = new Function<>("floor", (t, func) -> {
@@ -263,7 +297,7 @@ public class Selection extends Content {
 			TextButton btn2 = t.button("Set Floor Preserving Overlay", () -> {
 			}).height(H).growX().get();
 			btn2.clicked(() -> IntUI.showSelectImageTable(btn2, Vars.content.blocks()
-							.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
+					.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
 					floor -> tiles.each(tile -> tile.setFloorUnder((Floor) floor)), 42, 32, 6, true));
 			t.row();
 			TextButton btn3 = t.button("Set Overlay", () -> {
@@ -275,7 +309,8 @@ public class Selection extends Content {
 		});
 
 		units = new Function<>("unit", (t, func) -> {
-			t.button("Kill", () -> func.each(Unit::kill)).height(H).growX().row();
+			t.button("无限血量", () -> func.each(u -> u.health(Float.POSITIVE_INFINITY))).height(H).fillX().row();
+			t.button("杀死", () -> func.each(Unit::kill)).height(H).growX().row();
 		});
 
 		Core.scene.root.addChildAt(10, pane);
@@ -291,6 +326,7 @@ public class Selection extends Content {
 		pane.touchable = Touchable.disabled;
 	}
 
+	@Override
 	public void build() {
 		show = true;
 		frag.show();

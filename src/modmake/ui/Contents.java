@@ -9,4 +9,5 @@ public class Contents {
 	public static Tester tester = new Tester();
 	public static Selection selection = new Selection();
 	public static ShowUIList showuilist = new ShowUIList();
+	public static UnitSpwan unitSpwan = new UnitSpwan();
 }

@@ -31,6 +31,7 @@ public class ShowUIList extends Content {
 
 	BaseDialog ui;
 
+	@Override
 	public void load() {
 		ui = new BaseDialog(this.name);
 		Color[] colors = { Color.sky, Color.gold, Color.orange };
@@ -49,7 +50,8 @@ public class ShowUIList extends Content {
 						} catch (IllegalArgumentException | IllegalAccessException e) {
 							Log.err(e);
 						}
-						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText()))).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText())))
+								.row();
 					}
 				}),
 				// Styles
@@ -86,7 +88,8 @@ public class ShowUIList extends Content {
 							continue;
 						}
 
-						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText()))).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText())))
+								.row();
 					}
 				})
 		};
@@ -97,6 +100,7 @@ public class ShowUIList extends Content {
 		ui.addCloseButton();
 	}
 
+	@Override
 	public void build() {
 		ui.show();
 	}

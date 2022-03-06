@@ -14,7 +14,7 @@ public abstract class Content {
 		return Core.bundle.get(name, name);
 	}
 
-	public String getSettingName(){
+	public String getSettingName() {
 		return IntVars.modName + "-" + name;
 	}
 
@@ -24,7 +24,7 @@ public abstract class Content {
 
 	public Content(String name) {
 		this.name = name;
-		Contents.all.add((Content) this);
+		Contents.all.add(this);
 	}
 
 	public void loadString() {

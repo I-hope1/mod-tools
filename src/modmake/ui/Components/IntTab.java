@@ -32,16 +32,17 @@ public class IntTab {
 
 	/**
 	 * @param totalWidth 总宽度
-	 * @param names 名称
-	 * @param colors 颜色
-	 * @param tables Tables
-	 * @param cols 一行的个数
+	 * @param names      名称
+	 * @param colors     颜色
+	 * @param tables     Tables
+	 * @param cols       一行的个数
 	 * @throws IllegalArgumentException size must be the same.
-	 * */
-	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols){
+	 */
+	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols) {
 		return new IntTab(totalWidth, names, colors, tables, cols);
 	}
-	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables){
+
+	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables) {
 		return new IntTab(totalWidth, names, colors, tables, Integer.MAX_VALUE);
 	}
 

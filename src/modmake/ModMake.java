@@ -3,14 +3,18 @@ package modmake;
 
 import arc.Core;
 import arc.Events;
+import arc.graphics.Texture;
+import arc.scene.Group;
+import arc.scene.ui.Image;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.Mod;
+import mindustry.mod.Mods.LoadedMod;
 import mindustry.ui.dialogs.BaseDialog;
 
 public class ModMake extends Mod {
-	public static String name = "mod.make.java";
 
 	public ModMake() {
 		Log.info("Loaded ModMake constructor.");
@@ -24,24 +28,19 @@ public class ModMake extends Mod {
 				 * mod sprites are prefixed with the mod name (this mod is called
 				 * 'example-java-mod' in its config)
 				 */
-				dialog.cont.image(Core.atlas.find(name + "-frog")).pad(20f).row();
-				/*
-				 * TextButton b = new TextButton("test");
-				 * dialog.cont.add(b).row();
-				 * b.clicked(() -> {
-				 * Item[] item = { null };
-				 * UI.showSelectImageTable(b, Vars.content.items(), () -> item[0],
-				 * str -> Vars.ui.showInfo((item[0] = str).localizedName),
-				 * 40, 32, 6, false);
-				 * });
-				 */
+				dialog.cont.image(Core.atlas.find(IntVars.modName + "-frog")).pad(20f).row();
 				IntVars.load();
 				dialog.addCloseListener();
 				dialog.cont.button("I see", dialog::hide).size(100f, 50f);
 				dialog.show();
 			});
 
-//			cMenu.main();
+			Group group = (Group) Vars.ui.menuGroup.getChildren().get(0);
+			var children = group.getChildren();
+			children.get(0).remove();
+			LoadedMod mod = Vars.mods.getMod(IntVars.modName);
+			Image img = new Image(new Texture(mod.root.child("test.png")));
+			group.addChildAt(0, img);
 		});
 	}
 

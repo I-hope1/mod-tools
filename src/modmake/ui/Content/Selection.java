@@ -160,6 +160,7 @@ public class Selection extends Content {
 
 				tiles.clearList();
 				buildings.clearList();
+				units.clearList();
 
 				Vec2 v1 = Core.camera.unproject(x1, y1).cpy();
 				Vec2 v2 = Core.camera.unproject(x2, y2).cpy();

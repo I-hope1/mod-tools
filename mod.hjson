@@ -1,5 +1,5 @@
 
-displayName: "mod make -java"
+displayName: "mod工具"
 name: "mod-tools"
 author: "I hope..."
 main: "modmake.ModMake"
@@ -7,4 +7,4 @@ description: ""
 version: "1.0"
 hidden: true
 minGameVersion: 129
-
+repo: "I-hope1/mod-tools"

@@ -22,7 +22,6 @@ import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import modmake.IntVars;
-import modmake.ModMake;
 import modmake.ui.IntStyles;
 import modmake.ui.IntUI;
 import modmake.ui.components.IntTextArea;
@@ -78,8 +77,7 @@ public class Tester extends Content {
 
 		table.pane(p -> {
 			p.button("", Icon.star, Styles.cleart, () -> bookmarkFi
-					.child(bookmarkFi.list().length + "-"
-							+ Time.millis() + ".txt")
+					.child(Time.millis() + ".txt")
 					.writeString(getMessage()));
 			p.button(b -> b.label(() -> loop ? "循环" : "默认"), Styles.defaultb, () -> loop = !loop).size(100f,
 					55f);
@@ -153,7 +151,7 @@ public class Tester extends Content {
 			p.add(f.child("log.txt").readString());
 		}, true);
 
-		bookmark = new ListDialog("bookmark", Vars.dataDirectory.child("mods(I hope...)").child("bookmarks"),
+		bookmark = new ListDialog("bookmark", bookmarkFi,
 				f -> f, f -> area.setText(f.readString()), (f, p) -> p.add(f.readString()).row(), false);
 
 		Mods.LoadedMod mod = Vars.mods.locateMod(IntVars.modName);
@@ -204,8 +202,9 @@ public class Tester extends Content {
 				longs.add(fi.name());
 			}
 			/* 排序 */
-			if (sort)
-				longs.sort(Comparator.naturalOrder());
+			if (sort) {
+
+			}
 			return longs;
 		}
 

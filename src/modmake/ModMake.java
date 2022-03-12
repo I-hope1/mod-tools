@@ -3,16 +3,12 @@ package modmake;
 
 import arc.Core;
 import arc.Events;
-import arc.graphics.Texture;
-import arc.scene.Group;
-import arc.scene.ui.Image;
 import arc.util.Log;
 import arc.util.Time;
-import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.Mod;
-import mindustry.mod.Mods.LoadedMod;
 import mindustry.ui.dialogs.BaseDialog;
+import modmake.ui.Background;
 
 public class ModMake extends Mod {
 
@@ -35,12 +31,7 @@ public class ModMake extends Mod {
 				dialog.show();
 			});
 
-			Group group = (Group) Vars.ui.menuGroup.getChildren().get(0);
-			var children = group.getChildren();
-			children.get(0).remove();
-			LoadedMod mod = Vars.mods.getMod(IntVars.modName);
-			Image img = new Image(new Texture(mod.root.child("test.png")));
-			group.addChildAt(0, img);
+			Background.main();
 		});
 	}
 

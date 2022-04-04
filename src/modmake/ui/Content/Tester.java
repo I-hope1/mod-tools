@@ -28,6 +28,7 @@ import modmake.ui.IntUI;
 import modmake.ui.components.IntTextArea;
 import rhino.*;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.StringJoiner;
 
@@ -191,6 +192,7 @@ public class Tester extends Content {
 
 	class ListDialog extends BaseDialog {
 		public Seq<Fi> list = new Seq<>();
+
 		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
 		                  boolean sort) {
 			super(Core.bundle.get("title." + title, title));
@@ -294,7 +296,11 @@ public class Tester extends Content {
 								Label l = t.add("???").get();
 								l.clicked(() -> {
 									try {
-										l.setText("" + f.get(o));
+										Object v = f.get(o);
+										l.setText("" + v);
+										IntUI.longPress(l, 600f, b -> {
+											if (b) this.showInfo(v);
+										});
 									} catch (IllegalAccessException e) {
 										l.setText("");
 									}
@@ -341,6 +347,14 @@ public class Tester extends Content {
 								sb.append(joiner);
 							}
 							t.add(sb);
+							Label l = t.add("").padLeft(10f).get();
+							t.button("invoke", () -> {
+								try {
+									l.setText("" + m.invoke(o));
+								} catch (IllegalAccessException | InvocationTargetException e) {
+									Vars.ui.showException(e);
+								}
+							}).width(64);
 						} catch (Exception e) {
 							t.add("<" + e + ">", Color.red);
 						}
@@ -392,6 +406,10 @@ public class Tester extends Content {
 				Table t = new Table(table -> table.add(element));
 				d.cont.pane(t).fillX().fillY();
 			});
+		}
+
+		public BaseDialog testElement(String text) {
+			return  testElement(new Label(text));
 		}
 
 		public Selection.Function<?> getFunction(String name) {

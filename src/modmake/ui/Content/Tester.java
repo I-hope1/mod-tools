@@ -29,8 +29,6 @@ import modmake.ui.components.IntTextArea;
 import rhino.*;
 
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.StringJoiner;
 
 public class Tester extends Content {
@@ -38,8 +36,6 @@ public class Tester extends Content {
 	TextArea area;
 	boolean loop = false, wrap = false; // scope: false,
 	final float w = Core.graphics.getWidth() > Core.graphics.getHeight() ? 540f : 440f;
-	public final Fi record = Vars.dataDirectory.child("mods(I hope...)").child("historical record"),
-			bookmarkFi = Vars.dataDirectory.child("mods(I hope...)").child("bookmarks");
 
 	public Tester() {
 		super("tester");
@@ -59,19 +55,16 @@ public class Tester extends Content {
 		cont.button("$ok", () -> {
 			area.setText(getMessage().replaceAll("\r", ""));
 			evalMessage();
-			if (record != null) {
-				Seq<Fi> seq = new Seq<>(record.list());
-				ArrayList<String> list = new ArrayList<>();
-				seq.each(f -> list.add(f.name()));
-				list.sort(Comparator.naturalOrder());
-				/* 限制30个 */
-				for (int i = 0; i < list.size() - 29; i++) {
-					record.child(list.get(i)).deleteDirectory();
-				}
-				Fi d = record.child(Time.millis() + "");
-				d.child("message.txt").writeString(getMessage());
-				d.child("log.txt").writeString(log);
+
+			Fi d = history.file.child(Time.millis() + "");
+			d.child("message.txt").writeString(getMessage());
+			d.child("log.txt").writeString(log);
+			history.list.add(d);
+			for (int i = 0; i < history.list.size - 30; i++) {
+				history.list.get(i).deleteDirectory();
+				history.list.remove(i);
 			}
+
 		}).row();
 
 		cont.table(Tex.button, t -> t.pane(p -> p.label(() -> log)).size(w, 390f));
@@ -79,9 +72,11 @@ public class Tester extends Content {
 		table.add(cont).row();
 
 		table.pane(p -> {
-			p.button("", Icon.star, Styles.cleart, () -> bookmarkFi
-					.child(Time.millis() + ".txt")
-					.writeString(getMessage()));
+			p.button("", Icon.star, Styles.cleart, () -> {
+				Fi fi = bookmark.file.child(Time.millis() + ".txt");
+				bookmark.list.add(fi);
+				fi.writeString(getMessage());
+			});
 			p.button(b -> b.label(() -> loop ? "循环" : "默认"), Styles.defaultb, () -> loop = !loop).size(100f,
 					55f);
 			p.button(b -> b.label(() -> wrap ? "严格" : "非严格"), Styles.defaultb, () -> wrap = !wrap).size(100f, 55f);
@@ -139,22 +134,21 @@ public class Tester extends Content {
 		def = wrap ? "(function(){\"use strict\";" + def + "\n})();" : def;
 		try {
 			Object o = cx.evaluateString(scope, def, null, 1);
-			if (o instanceof NativeJavaObject) o = ((NativeJavaObject)o).unwrap();
+			if (o instanceof NativeJavaObject) o = ((NativeJavaObject) o).unwrap();
 			if (o instanceof Undefined) o = "undefined";
 			log = String.valueOf(o).replaceAll("\\[(.*?)]", "[ $1 ]");
 		} catch (Throwable t) {
 			Vars.ui.showException(t);
-			log = "[red][t.getClass().getSimpleName()]" + t.getMessage();
+			log = "[red][" + t.getClass().getSimpleName() + "][]" + t.getMessage();
 		}
 	}
 
 	@Override
 	public void load() {
-
 		ui = new BaseDialog(localizedName());
 		ui.addCloseListener();
 
-		history = new ListDialog("history", record, f -> f.child("message.txt"), f -> {
+		history = new ListDialog("history", Vars.dataDirectory.child("mods(I hope...)").child("historical record"), f -> f.child("message.txt"), f -> {
 			area.setText(f.child("message.txt").readString());
 			log = f.child("log.txt").readString();
 		}, (f, p) -> {
@@ -163,16 +157,12 @@ public class Tester extends Content {
 			p.add(f.child("log.txt").readString());
 		}, true);
 
-		bookmark = new ListDialog("bookmark", bookmarkFi,
+		bookmark = new ListDialog("bookmark", Vars.dataDirectory.child("mods(I hope...)").child("bookmarks"),
 				f -> f, f -> area.setText(f.readString()), (f, p) -> p.add(f.readString()).row(), false);
 
 		var scripts = Vars.mods.getScripts();
 		this.cx = scripts.context;
 		this.scope = scripts.scope;
-
-		var a = 1;
-
-
 
 		try {
 			Object obj = Context.javaToJS(new JSFunc(), scope);
@@ -200,10 +190,12 @@ public class Tester extends Content {
 	}
 
 	class ListDialog extends BaseDialog {
+		public Seq<Fi> list = new Seq<>();
 		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
 		                  boolean sort) {
 			super(Core.bundle.get("title." + title, title));
 			this.file = file;
+			this.list.addAll(file.list());
 			this.fileHolder = fileHolder;
 			this.consumer = consumer;
 			this.pane = pane;
@@ -222,25 +214,13 @@ public class Tester extends Content {
 			return super.show(stage, action);
 		}
 
-		ArrayList<String> sort(Fi[] list) {
-			ArrayList<String> longs = new ArrayList<>();
-			for (Fi fi : list) {
-				longs.add(fi.name());
-			}
-			/* 排序 */
-			return longs;
-		}
-
-		void build() {
-			ArrayList<String> longs = sort(file.list());
-			// 颠倒
+		public void build() {
 			p.clearChildren();
-			for (int j = longs.size() - 1; j >= 0; j--) {
-				final int i = j;
-				Fi f = file.child(longs.get(j));
+			for (int j = list.size - 1; j >= 0; j--) {
+				Fi f = list.get(j);
 				p.table(Tex.button, t -> {
-					Button btn = t.left()
-							.button(b -> b.pane(c -> c.add(fileHolder.get(f).readString()).left()).fillY().fillX()
+					Button btn = t.left().button(b -> b.pane(c -> c.add(fileHolder.get(f).readString())
+											.left()).fillY().fillX()
 									.left(), IntStyles.clearb, () -> {
 							})
 							.height(70f).minWidth(400f).growX().fillX().left().get();
@@ -262,10 +242,9 @@ public class Tester extends Content {
 					});
 					t.button("", Icon.trash, Styles.cleart,
 							() -> {
-								if (f.deleteDirectory())
-									p.getChildren().get(i)
-											.remove();
-								build();
+								if (!f.deleteDirectory()) f.delete();
+								list.remove(f);
+								this.build();
 							}).fill().right();
 				}).width(w).row();
 			}

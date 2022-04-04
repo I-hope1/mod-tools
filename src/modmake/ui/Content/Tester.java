@@ -28,7 +28,6 @@ import modmake.ui.IntUI;
 import modmake.ui.components.IntTextArea;
 import rhino.*;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.StringJoiner;
 
@@ -347,14 +346,16 @@ public class Tester extends Content {
 								sb.append(joiner);
 							}
 							t.add(sb);
-							Label l = t.add("").padLeft(10f).get();
-							t.button("invoke", () -> {
-								try {
-									l.setText("" + m.invoke(o));
-								} catch (IllegalAccessException | InvocationTargetException e) {
-									Vars.ui.showException(e);
-								}
-							}).width(64);
+							if (m.getParameterTypes().length == 0) {
+								Label l = t.add("").padLeft(10f).get();
+								t.button("invoke", () -> {
+									try {
+										l.setText("" + m.invoke(o));
+									} catch (Exception e) {
+										Vars.ui.showException(e);
+									}
+								}).width(100f);
+							}
 						} catch (Exception e) {
 							t.add("<" + e + ">", Color.red);
 						}

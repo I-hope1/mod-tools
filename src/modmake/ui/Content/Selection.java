@@ -79,7 +79,7 @@ public class Selection extends Content {
 				int c = 0;
 				for (Team team : arr) {
 					ImageButton b = t1.button(IntUI.whiteui, Styles.clearToggleTransi, 32,
-							() -> Core.settings.put(getSettingName() + "-defaultTeam", (defaultTeam = team).id))
+									() -> Core.settings.put(getSettingName() + "-defaultTeam", (defaultTeam = team).id))
 							.size(42).get();
 					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
 					b.update(() -> {
@@ -158,24 +158,30 @@ public class Selection extends Content {
 					return;
 				}
 
-				tiles.clearList();
-				buildings.clearList();
-				units.clearList();
+				if (!Core.input.alt()) {
+					tiles.clearList();
+					buildings.clearList();
+					units.clearList();
+				}
 
 				Vec2 v1 = Core.camera.unproject(x1, y1).cpy();
 				Vec2 v2 = Core.camera.unproject(x2, y2).cpy();
 				if (select.get("unit")) {
 					Rect rect = new Rect(v1.x, v1.y, v2.x - v1.x, v2.y - v1.y);
-					Groups.unit.each(unit -> rect.contains(unit.getX(), unit.getY()), unit -> units.list.add(unit));
+					Groups.unit.each(unit -> rect.contains(unit.getX(), unit.getY()), unit -> {
+						if (!units.list.contains(unit)) units.list.add(unit);
+					});
 				}
 				for (float y = v1.y; y < v2.y; y += Vars.tilesize) {
 					for (float x = v1.x; x < v2.x; x += Vars.tilesize) {
 						Tile tile = Vars.world.tileWorld(x, y);
 						if (tile != null) {
-							if (select.get("tile") || select.get("floor"))
+							if ((select.get("tile") || select.get("floor")) && !tiles.list.contains(tile)) {
 								tiles.list.add(tile);
-							if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build))
+							}
+							if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build)) {
 								buildings.list.add(tile.build);
+							}
 						}
 					}
 				}
@@ -298,7 +304,7 @@ public class Selection extends Content {
 			TextButton btn2 = t.button("Set Floor Preserving Overlay", () -> {
 			}).height(H).growX().get();
 			btn2.clicked(() -> IntUI.showSelectImageTable(btn2, Vars.content.blocks()
-					.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
+							.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
 					floor -> tiles.each(tile -> tile.setFloorUnder((Floor) floor)), 42, 32, 6, true));
 			t.row();
 			TextButton btn3 = t.button("Set Overlay", () -> {

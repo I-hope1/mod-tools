@@ -5,10 +5,13 @@ import arc.files.Fi;
 import arc.func.Cons;
 import arc.func.Cons2;
 import arc.func.Func;
+import arc.graphics.Color;
 import arc.scene.Action;
+import arc.scene.Element;
 import arc.scene.Scene;
 import arc.scene.ui.Button;
 import arc.scene.ui.Dialog;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextArea;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
@@ -17,20 +20,20 @@ import arc.util.Time;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
-import mindustry.mod.Mods;
-import mindustry.mod.Scripts;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
-import modmake.IntVars;
 import modmake.ui.IntStyles;
 import modmake.ui.IntUI;
 import modmake.ui.components.IntTextArea;
+import rhino.*;
 
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.StringJoiner;
 
 public class Tester extends Content {
-	public final Scripts scripts = new Scripts();
 	String log = "";
 	TextArea area;
 	boolean loop = false, wrap = false; // scope: false,
@@ -128,12 +131,21 @@ public class Tester extends Content {
 		ui.show();
 	}
 
+	public Scriptable scope;
+	public Context cx;
+
 	void evalMessage() {
 		String def = getMessage();
 		def = wrap ? "(function(){\"use strict\";" + def + "\n})();" : def;
-		log = scripts.runConsole(def);
-		log = log.replaceAll("\\[(.*?)]", "[ $1 ]");
-
+		try {
+			Object o = cx.evaluateString(scope, def, null, 1);
+			if (o instanceof NativeJavaObject) o = ((NativeJavaObject)o).unwrap();
+			if (o instanceof Undefined) o = "undefined";
+			log = String.valueOf(o).replaceAll("\\[(.*?)]", "[ $1 ]");
+		} catch (Throwable t) {
+			Vars.ui.showException(t);
+			log = "[red][t.getClass().getSimpleName()]" + t.getMessage();
+		}
 	}
 
 	@Override
@@ -154,8 +166,22 @@ public class Tester extends Content {
 		bookmark = new ListDialog("bookmark", bookmarkFi,
 				f -> f, f -> area.setText(f.readString()), (f, p) -> p.add(f.readString()).row(), false);
 
-		Mods.LoadedMod mod = Vars.mods.locateMod(IntVars.modName);
-		scripts.runConsole(mod.root.child("tester.js").readString());
+		var scripts = Vars.mods.getScripts();
+		this.cx = scripts.context;
+		this.scope = scripts.scope;
+
+		var a = 1;
+
+
+
+		try {
+			Object obj = Context.javaToJS(new JSFunc(), scope);
+			ScriptableObject.putProperty(scope, "IntFunc", obj);
+			// cx.evaluateString(scope, "Log.info(IntFunc)", null, 1);
+		} catch (Exception e) {
+			Vars.ui.showException(e);
+		}
+		// scripts.runConsole(mod.root.child("tester.js").readString());
 
 		setup();
 
@@ -175,7 +201,7 @@ public class Tester extends Content {
 
 	class ListDialog extends BaseDialog {
 		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
-				boolean sort) {
+		                  boolean sort) {
 			super(Core.bundle.get("title." + title, title));
 			this.file = file;
 			this.fileHolder = fileHolder;
@@ -202,9 +228,6 @@ public class Tester extends Content {
 				longs.add(fi.name());
 			}
 			/* 排序 */
-			if (sort) {
-
-			}
 			return longs;
 		}
 
@@ -219,7 +242,7 @@ public class Tester extends Content {
 					Button btn = t.left()
 							.button(b -> b.pane(c -> c.add(fileHolder.get(f).readString()).left()).fillY().fillX()
 									.left(), IntStyles.clearb, () -> {
-									})
+							})
 							.height(70f).minWidth(400f).growX().fillX().left().get();
 					IntUI.longPress(btn, 600f, longPress -> {
 						if (longPress) {
@@ -251,6 +274,149 @@ public class Tester extends Content {
 		{
 			cont.pane(p).fillX().fillY();
 			addCloseButton();
+		}
+	}
+
+	public static class JSFunc {
+		// 以下提供给 JavaScript
+		public void showInfo(Object o) {
+			Class<?> finalC = o.getClass();
+			Table cont = new Table();
+			cont.table(t -> {
+				t.left().defaults().left();
+				t.add(finalC.getTypeName());
+				t.button(Icon.copy, Styles.clearPartiali, () -> Core.app.setClipboardText(finalC.getTypeName()));
+			}).fillX().pad(6, 10, 6, 10).row();
+			cont.image().color(Pal.accent).fillX().row();
+			Table fields = cont.table(t -> t.left().defaults().left().top()).pad(4, 6, 4, 6).fillX().get();
+			cont.row();
+			cont.image().color(Pal.accent).fillX().row();
+			Table methods = cont.table(t -> t.left().defaults().left().top()).pad(4, 6, 4, 6).fill().get();
+			for (Class<?> c = finalC; c != Object.class; c = c.getSuperclass()) {
+				if (fields.getChildren().size != 0) {
+					fields.add(c.getSimpleName()).row();
+					fields.image().color(Color.lightGray).fillX().row();
+					methods.add(c.getSimpleName()).row();
+					methods.image().color(Color.lightGray).fillX().row();
+				}
+				for (var f : c.getDeclaredFields()) {
+					fields.table(t -> {
+						t.add(Modifier.toString(f.getModifiers()), Color.valueOf("#ff657a")).padRight(2);
+						t.add(" ");
+						t.add(f.getGenericType().getTypeName(), Color.valueOf("#9cd1bb"));
+						t.add(" ");
+						t.add(f.getName());
+						t.add(" = ");
+						try {
+							f.setAccessible(true);
+							if (f.getType().isPrimitive() || f.getType().equals(String.class)) {
+								t.add("" + f.get(o), Color.valueOf("#bad761"));
+							} else {
+								Label l = t.add("???").get();
+								l.clicked(() -> {
+									try {
+										l.setText("" + f.get(o));
+									} catch (IllegalAccessException e) {
+										l.setText("");
+									}
+								});
+							}
+						} catch (Exception e) {
+							t.add("Unknow", Color.red);
+						}
+					}).pad(4).row();
+				}
+				for (var m : c.getDeclaredMethods()) {
+					methods.table(t -> {
+						try {
+							StringBuilder sb = new StringBuilder();
+
+							int mod = m.getModifiers() & Modifier.methodModifiers();
+
+							sb.append("[#ff657a]");
+							if (mod != 0 && !m.isDefault()) {
+								sb.append(Modifier.toString(mod)).append(' ');
+							} else {
+								sb.append(Modifier.toString(mod)).append(' ');
+								if (m.isDefault())
+									sb.append("default ");
+							}
+							sb.append("[]");
+							sb.append("[#9cd1bb]").append(m.getReturnType().getTypeName()).append("[] ");
+							sb.append(m.getName());
+
+							sb.append("[lightgray]([]");
+							StringJoiner sj = new StringJoiner(", ");
+							for (Class<?> parameterType : m.getParameterTypes()) {
+								sj.add("[#9cd1bb]" + parameterType.getTypeName() + "[]");
+							}
+							sb.append(sj);
+							sb.append("[lightgray])[]");
+
+							Class<?>[] exceptionTypes = m.getExceptionTypes();
+							if (exceptionTypes.length > 0) {
+								StringJoiner joiner = new StringJoiner(",", " [#ff657a]throws[] ", "");
+								for (Class<?> exceptionType : exceptionTypes) {
+									joiner.add(exceptionType.getTypeName());
+								}
+								sb.append(joiner);
+							}
+							t.add(sb);
+						} catch (Exception e) {
+							t.add("<" + e + ">", Color.red);
+						}
+						// t.add(m.toGenericString());
+						/*
+						 * t.add(m.getName());
+						 * t.add("(");
+						 * var types = m.getParameterTypes();
+						 * if (types.length != 0) {
+						 * int iMax = types.length - 1;
+						 * for (int i = 0;; i++) {
+						 * final boolean[] simple = { true };
+						 * final Class<?> clazz = types[i];
+						 * t.add(clazz.getSimpleName()).with(l -> {
+						 * l.setText(simple[0] ? clazz.getName() : clazz.getSimpleName());
+						 * simple[0] = !simple[0];
+						 * });
+						 * if (i == iMax)
+						 * break;
+						 * t.add(",").padRight(3);
+						 * }
+						 * }
+						 * t.add(")");
+						 */
+					}).pad(4).row();
+				}
+			}
+			Table _cont = cont;
+			new BaseDialog(finalC.getSimpleName()) {
+				{
+					cont.pane(_cont).fillX().fillY();
+					addCloseButton();
+				}
+			}.show();
+		}
+
+		public BaseDialog dialog(Cons<BaseDialog> cons) {
+			return new BaseDialog("test") {
+				{
+					cons.get(this);
+					addCloseButton();
+					show();
+				}
+			};
+		}
+
+		public BaseDialog testElement(Element element) {
+			return dialog(d -> {
+				Table t = new Table(table -> table.add(element));
+				d.cont.pane(t).fillX().fillY();
+			});
+		}
+
+		public Selection.Function<?> getFunction(String name) {
+			return Selection.all.get(name);
 		}
 	}
 }

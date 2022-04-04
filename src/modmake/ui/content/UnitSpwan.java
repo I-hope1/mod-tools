@@ -63,8 +63,8 @@ public class UnitSpwan extends Content {
 		});
 		ui.addCloseButton();
 
+		btn.setDisabled(() -> Vars.state.isMenu());
 		btn.update(() -> {
-			btn.setDisabled(Vars.state.isMenu());
 			if (loop)
 				spawn();
 		});

@@ -28,7 +28,8 @@ tasks.withType(JavaCompile){
 
 dependencies{
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+//    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+    compileOnly files("lib/Mindustry136.jar")
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
 
@@ -51,7 +52,7 @@ task jarAndroid{
 
         //dex and desugar files - this requires d8 in your PATH
         "d8 $dependencies --min-api 14 --output ${project.archivesBaseName}Android.jar ${project.archivesBaseName}Desktop.jar"
-            .execute(null, new File("$buildDir/libs")).waitForProcessOutput(System.out, System.err)
+            .execute().waitForProcessOutput(System.out, System.err)
     }
 }
 
@@ -69,6 +70,13 @@ jar{
     from("assets/"){
         include "**"
     }
+
+    /*doLast {
+        def fi = new File("C:\\Users\\ASUS\\AppData\\Roaming\\Mindustry\\mods\\mod-tools.jar")
+        if (fi.exists()) fi.delete()
+        if (!archiveFile.get().asFile.renameTo(fi)) throw new RuntimeException("can't move file")
+        "java -jar E:\\应用\\Mindustry\\136\\Mindustry.jar".execute().waitForProcessOutput(System.out, System.err)
+    }*/
 }
 
 task deploy(type: Jar){

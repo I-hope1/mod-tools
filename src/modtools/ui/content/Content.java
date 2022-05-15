@@ -2,10 +2,11 @@ package modtools.ui.content;
 
 import arc.Core;
 import arc.scene.ui.TextButton;
+import arc.struct.Seq;
 import modtools.IntVars;
-import modtools.ui.Contents;
 
 public abstract class Content {
+	public static Seq<Content> all = new Seq<>();
 	public final String name;
 
 	public TextButton btn;
@@ -24,7 +25,7 @@ public abstract class Content {
 
 	public Content(String name) {
 		this.name = name;
-		Contents.all.add(this);
+		all.add(this);
 	}
 
 	public void loadSettings() {

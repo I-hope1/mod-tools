@@ -6,6 +6,7 @@ import arc.scene.ui.layout.Table;
 import arc.util.Log;
 import mindustry.ui.Styles;
 import modtools.ui.components.MoveListener;
+import modtools.ui.content.Content;
 
 import static modtools.IntVars.modName;
 
@@ -16,7 +17,7 @@ public class Frag extends Table {
 		new MoveListener(image().color(Color.sky).margin(0f).pad(0f).padBottom(-4f).fillX().height(40f)
 				.get(), this);
 		row();
-		table(Styles.none, t -> Contents.all.each(cont -> {
+		table(Styles.none, t -> Content.all.each(cont -> {
 			if (cont == null || !cont.loadable())
 				return;
 

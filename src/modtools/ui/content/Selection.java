@@ -1,6 +1,7 @@
 package modtools.ui.content;
 
 import arc.Core;
+import arc.func.Cons;
 import arc.func.Cons2;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
@@ -21,6 +22,7 @@ import arc.struct.Seq;
 import arc.util.Time;
 import mindustry.Vars;
 import mindustry.content.Blocks;
+import mindustry.ctype.UnlockableContent;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -197,7 +199,7 @@ public class Selection extends Content {
 		};
 		Core.scene.addListener(listener);
 
-		int W = buttonWidth, H = buttonHeight;
+		int W = buttonWidth;
 
 		functions = new Table();
 		functions.defaults().width(W);
@@ -223,93 +225,69 @@ public class Selection extends Content {
 		});
 
 		tiles = new Function<>("tile", (t, func) -> {
-			Button btn1 = FunctionButton(t, "设置", () -> {});
-			btn1.clicked(() -> IntUI.showSelectImageTable(btn1, Vars.content.blocks(), () -> null,
+			FunctionButton(t, "设置", button -> IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null,
 					block -> func.each(tile -> {
 						if (tile.block() != block)
 							tile.setBlock(block, tile.block() != Blocks.air ? tile.team() : defaultTeam);
 					}), 42, 32, 6, true));
 
-			FunctionButton(t, "清除", () -> func.each(Tile::setAir));
+			FunctionButton(t, "清除", __ -> func.each(Tile::setAir));
 		});
 
 		buildings = new Function<>("building", (t, func) -> {
-			FunctionButton(t, "无限血量", () -> func.each(b -> b.health = Float.POSITIVE_INFINITY));
-			Button btn1 = FunctionButton(t, "队伍", () -> {});
-			btn1.clicked(() -> {
-				Team[] arr = Team.baseTeams;
-				Seq<Drawable> icons = new Seq<>();
+			FunctionButton(t, "无限血量", __ -> func.each(b -> b.health = Float.POSITIVE_INFINITY));
+			TeamFunction(t, "设置队伍", team -> func.each(b -> b.changeTeam(team)));
 
-				for (Team team : arr) {
-					icons.add(IntUI.whiteui.tint(team.color));
-				}
-				IntUI.showSelectImageTableWithIcons(btn1, new Seq<>(arr), icons, () -> null,
-						team -> func.each(b -> b.changeTeam(team)), 42, 32, 3, false);
-			});
-
-			Button btn2 = FunctionButton(t, "设置物品", () -> {});
-			btn2.clicked(() -> {
-				IntUI.showSelectImageTable(btn2, Vars.content.items(), () -> null, item -> {
-					IntUI.showSelectTable(btn2, (table, hide, str) -> {
-						String[] amount = new String[1];
-						table.field("", s -> amount[0] = s);
-						table.button("", Icon.ok, Styles.cleart, () -> {
-							func.each(b -> {
-								if (b.items != null)
-									b.items.set(item, IntFunc.parseInt(amount[0]));
-							});
-							hide.run();
+			ListFunction(t, "设置物品", Vars.content.items(), (button, item) -> {
+				IntUI.showSelectTable(button, (table, hide, str) -> {
+					String[] amount = new String[1];
+					table.field("", s -> amount[0] = s);
+					table.button("", Icon.ok, Styles.cleart, () -> {
+						func.each(b -> {
+							if (b.items != null)
+								b.items.set(item, IntFunc.parseInt(amount[0]));
 						});
-					}, false);
-				}, 42, 32, 6, true);
+						hide.run();
+					});
+				}, false);
 			});
 
-			Button btn3 = FunctionButton(t, "设置液体", () -> {});
-			btn3.clicked(() -> {
-				IntUI.showSelectImageTable(btn3, Vars.content.liquids(), () -> null, liquid -> {
-					IntUI.showSelectTable(btn3, (table, hide, str) -> {
-						String[] amount = new String[1];
-						table.field("", s -> amount[0] = s);
-						table.button("", Icon.ok, Styles.cleart, () -> {
-							func.each(b -> {
-								if (b.liquids == null)
-									return;
-								float now = b.liquids.get(liquid);
-								b.liquids.add(liquid, IntFunc.parseFloat(amount[0]) - now);
-							});
-							hide.run();
+			ListFunction(t, "设置液体", Vars.content.liquids(), (button, liquid) -> {
+				IntUI.showSelectTable(button, (table, hide, str) -> {
+					String[] amount = new String[1];
+					table.field("", s -> amount[0] = s);
+					table.button("", Icon.ok, Styles.cleart, () -> {
+						func.each(b -> {
+							if (b.liquids == null)
+								return;
+							float now = b.liquids.get(liquid);
+							b.liquids.add(liquid, IntFunc.parseFloat(amount[0]) - now);
 						});
-					}, false);
-				}, 42, 32, 6, true);
+						hide.run();
+					});
+				}, false);
 			});
 
-			FunctionButton(t, "杀死", () -> func.each(Building::kill));
-			FunctionButton(t, "清除", () -> func.each(Building::remove));
+			FunctionButton(t, "杀死", __ -> func.each(Building::kill));
+			FunctionButton(t, "清除", __ -> func.each(Building::remove));
 		});
 
 		floors = new Function<>("floor", (t, func) -> {
-			TextButton btn1 = FunctionButton(t, "Set Floor Reset Overlay", () -> {});
-			btn1.clicked(() -> IntUI.showSelectImageTable(btn1,
-					Vars.content.blocks().select(block -> block instanceof Floor),
-					() -> null, floor -> tiles.each(tile -> tile.setFloor((Floor) floor)), 42, 32, 6, true));
+			ListFunction(t, "Set Floor Reset Overlay", Vars.content.blocks().select(block -> block instanceof Floor),
+					(button, floor) -> tiles.each(tile -> tile.setFloor((Floor) floor)));
 
-			TextButton btn2 = FunctionButton(t, "Set Floor Preserving Overlay", () -> {});
-			btn2.clicked(() -> IntUI.showSelectImageTable(btn2, Vars.content.blocks()
-							.select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), () -> null,
-					floor -> tiles.each(tile -> tile.setFloorUnder((Floor) floor)), 42, 32, 6, true));
-			t.row();
-			TextButton btn3 = FunctionButton(t, "Set Overlay", () -> {
-			});
-			btn3.clicked(() -> IntUI.showSelectImageTable(btn3,
-					Vars.content.blocks().select(block -> block instanceof OverlayFloor),
-					() -> null, overlay -> tiles.each(tile -> tile.setOverlay(overlay)), 42, 32, 6, true));
-			t.row();
+			ListFunction(t, "Set Floor Preserving Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
+					(button, floor) -> tiles.each(tile -> tile.setFloorUnder((Floor) floor)));
+
+			ListFunction(t, "Set Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor),
+					(button, overlay) -> tiles.each(tile -> tile.setOverlay(overlay)));
 		});
 
 		units = new Function<>("unit", (t, func) -> {
-			FunctionButton(t, "无限血量", () -> func.each(u -> u.health(Float.POSITIVE_INFINITY)));
-			FunctionButton(t, "杀死", () -> func.each(Unit::kill));
-			FunctionButton(t, "清除", () -> func.each(Unit::remove));
+			FunctionButton(t, "无限血量", __ -> func.each(unit -> unit.health(Float.POSITIVE_INFINITY)));
+			TeamFunction(t, "设置队伍", team -> func.each(unit -> unit.team(team)));
+			FunctionButton(t, "杀死", __ -> func.each(Unit::kill));
+			FunctionButton(t, "清除", __ -> func.each(Unit::remove));
 		});
 
 		Core.scene.root.addChildAt(10, pane);
@@ -331,12 +309,30 @@ public class Selection extends Content {
 		frag.show();
 	}
 
-	public TextButton FunctionButton(Table t, String text, Runnable run) {
-		try {
-			return t.button(text, run).height(buttonHeight).growX().get();
-		} finally {
-			t.row();
-		}
+	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
+		FunctionButton(t, name, btn -> {
+			IntUI.showSelectImageTable(btn, list, () -> null, item -> cons.get(btn, item),
+					42, 32, 6, true);
+		});
+	}
+
+	public void FunctionButton(Table table, String name, Cons<TextButton> cons) {
+		var button = new TextButton(name);
+		table.add(button).height(buttonHeight).growX().row();
+		button.clicked(() -> cons.get(button));
+	}
+
+	public void TeamFunction(Table table, String name, Cons<Team> cons) {
+		FunctionButton(table, name, btn -> {
+			Team[] arr = Team.baseTeams;
+			Seq<Drawable> icons = new Seq<>();
+
+			for (Team team : arr) {
+				icons.add(IntUI.whiteui.tint(team.color));
+			}
+			IntUI.showSelectImageTableWithIcons(btn, new Seq<>(arr), icons, () -> null,
+					cons, 42, 32, 3, false);
+		});
 	}
 
 	public static ObjectMap<String, Function<?>> all = new ObjectMap<>();

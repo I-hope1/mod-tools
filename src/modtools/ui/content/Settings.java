@@ -48,7 +48,7 @@ public class Settings extends Content {
 		cont.add("load").color(Pal.accent).growX().left().row();
 		cont.add(loadTable).growX().left().padLeft(16).row();
 
-		Content.all.each(cont -> {
+		Content.all.forEach(cont -> {
 			if (!(cont instanceof Settings))
 				addLoad(cont);
 		});

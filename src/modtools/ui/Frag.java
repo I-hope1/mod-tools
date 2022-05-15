@@ -18,7 +18,7 @@ public class Frag extends Table {
 				.get(), this);
 		row();
 		Contents.load();
-		table(Styles.none, t -> Content.all.each(cont -> {
+		table(Styles.none, t -> Content.all.forEach(cont -> {
 			if (cont == null || !cont.loadable())
 				return;
 

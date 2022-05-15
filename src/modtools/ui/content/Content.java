@@ -2,11 +2,12 @@ package modtools.ui.content;
 
 import arc.Core;
 import arc.scene.ui.TextButton;
-import arc.struct.Seq;
 import modtools.IntVars;
 
+import java.util.ArrayList;
+
 public abstract class Content {
-	public final static Seq<Content> all = new Seq<>();
+	public final static ArrayList<Content> all = new ArrayList<>();
 	public final String name;
 
 	public TextButton btn;

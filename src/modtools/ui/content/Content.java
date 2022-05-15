@@ -6,7 +6,7 @@ import arc.struct.Seq;
 import modtools.IntVars;
 
 public abstract class Content {
-	public static Seq<Content> all = new Seq<>();
+	public final static Seq<Content> all = new Seq<>();
 	public final String name;
 
 	public TextButton btn;

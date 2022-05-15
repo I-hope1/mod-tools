@@ -17,6 +17,7 @@ public class Frag extends Table {
 		new MoveListener(image().color(Color.sky).margin(0f).pad(0f).padBottom(-4f).fillX().height(40f)
 				.get(), this);
 		row();
+		Contents.load();
 		table(Styles.none, t -> Content.all.each(cont -> {
 			if (cont == null || !cont.loadable())
 				return;

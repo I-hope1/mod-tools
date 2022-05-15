@@ -5,7 +5,6 @@ import arc.scene.ui.layout.Table;
 import mindustry.graphics.Pal;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.IntVars;
-import modtools.ui.Contents;
 
 public class Settings extends Content {
 

@@ -15,6 +15,7 @@ import arc.scene.ui.Label;
 import arc.scene.ui.TextArea;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
+import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import arc.util.Time;
 import mindustry.Vars;
@@ -447,6 +448,19 @@ public class Tester extends Content {
 
 		public Class<?> toClass(Class<?> clazz) {
 			return clazz;
+		}
+
+		public ClassLoader main = Vars.mods.mainLoader();
+		public Scriptable scope = Vars.mods.getScripts().scope;
+		public ObjectMap<String, NativeJavaClass> classes = new ObjectMap<>();
+		public NativeJavaClass findClass(String name, boolean isAdapter) throws ClassNotFoundException {
+			if (classes.containsKey(name)) return classes.get(name);
+			var clazz = new NativeJavaClass(scope, main.loadClass(name), isAdapter);
+			classes.put(name, clazz);
+			return clazz;
+		}
+		public NativeJavaClass findClass(String name) throws ClassNotFoundException {
+			return findClass(name, true);
 		}
 	}
 }

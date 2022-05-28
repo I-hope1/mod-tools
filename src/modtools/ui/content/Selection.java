@@ -71,15 +71,15 @@ public class Selection extends Content {
 
 	public void loadSettings() {
 		Table table = new Table();
-		table.add(this.localizedName()).color(Pal.accent).growX().left().row();
+		table.add(localizedName()).color(Pal.accent).growX().left().row();
 		table.table(t -> {
 			t.left().defaults().left();
 			all.each((k, func) -> {
 				func.setting(t);
 			});
-		}).growX().left().padLeft(16.0f).row();
+		}).growX().left().padLeft(16).row();
 		table.table(t -> {
-			this.defaultTeam = Team.get((Integer) Core.settings.get(this.getSettingName() + "-defaultTeam", 1));
+			defaultTeam = Team.get((int) Core.settings.get(getSettingName() + "-defaultTeam", 1));
 			t.left().defaults().left();
 			t.add("默认队伍").color(Pal.accent).growX().left().row();
 			t.table(t1 -> {
@@ -101,8 +101,8 @@ public class Selection extends Content {
 					}
 				}
 
-			}).growX().left().padLeft(16.0f);
-		}).growX().left().padLeft(16.0f);
+			}).growX().left().padLeft(16);
+		}).growX().left().padLeft(16);
 		Contents.settings.add(table);
 	}
 

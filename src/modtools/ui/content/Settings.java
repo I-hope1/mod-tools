@@ -39,7 +39,7 @@ public class Settings extends Content {
     }
 
     public void add(Table t) {
-        cont.add(t).width(400).padTop(6).row();
+        cont.add(t).growX().padTop(6).row();
     }
 
     public void load() {
@@ -47,13 +47,11 @@ public class Settings extends Content {
         cont = new Table();
         ui.cont.pane(cont).fillX().fillY();
         cont.defaults().width(400);
-        cont.add("load").color(Pal.accent).growX().left().row();
-        cont.add(loadTable).growX().left().padLeft(16).row();
+        add("load", loadTable);
         Content.all.forEach(cont -> {
             if (!(cont instanceof Settings)) {
                 addLoad(cont);
             }
-
         });
         ui.addCloseButton();
     }

@@ -16,6 +16,7 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
+import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
 import mindustry.gen.Icon;
@@ -24,6 +25,7 @@ import mindustry.graphics.Pal;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
+import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTextArea;
@@ -40,7 +42,7 @@ import java.util.StringJoiner;
 public class Tester extends Content {
 	String log = "";
 	TextArea area;
-	boolean loop = false, wrap = false, error;
+	boolean loop = false, wrap = false, error, ignoreError = false;
 	final float w = Core.graphics.isPortrait() ? 440 : 540;
 	BaseDialog ui;
 	ListDialog history, bookmark;
@@ -145,7 +147,7 @@ public class Tester extends Content {
 		} catch (Throwable ex) {
 			error = true;
 			loop = false;
-			Vars.ui.showException("" + ex, ex);
+			if (!ignoreError) Vars.ui.showException("执行出错", ex);
 			String type = ex.getClass().getSimpleName();
 			log = "[red][" + type + "][]" + ex.getMessage();
 		}
@@ -178,7 +180,12 @@ public class Tester extends Content {
 			var obj = new NativeJavaClass(scope, JSFunc.class, true);
 			ScriptableObject.putProperty(scope, "IntFunc", obj);
 		} catch (Exception ex) {
-			Vars.ui.showException("" + ex, ex);
+			if (ignoreError) {
+				Log.err(ex);
+			} else {
+				Vars.ui.showException("IntFunc出错", ex);
+			}
+
 		}
 
 		setup();
@@ -188,9 +195,14 @@ public class Tester extends Content {
 			}
 
 		});
+		loadSettings();
 	}
 
 	public void loadSettings() {
+		Table table = new Table();
+		table.check("忽略报错", b -> ignoreError = b);
+
+		Contents.settings.add(localizedName(), table);
 	}
 
 	public String getMessage() {
@@ -349,7 +361,7 @@ public class Tester extends Content {
 											});
 										}
 									} catch (Exception ex) {
-										Vars.ui.showException("" + ex, ex);
+										Vars.ui.showException("invoke出错", ex);
 									}
 
 								}).width(100);

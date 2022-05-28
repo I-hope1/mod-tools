@@ -22,7 +22,7 @@ public abstract class Content {
 	}
 
 	public boolean loadable() {
-		return (Boolean) Core.settings.get(modName + "-load-" + name, true);
+		return (boolean) Core.settings.get(modName + "-load-" + name, true);
 	}
 
 	public Content(String name) {

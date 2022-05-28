@@ -21,7 +21,7 @@ public class Frag extends Table {
 				.padBottom(-4).fillX().height(40).get(), this);
 		row();
 		Contents.load();
-		table(Styles.none, (t) -> {
+		table(Styles.none, t -> {
 			Content.all.forEach(cont -> {
 				if (cont == null || !cont.loadable()) return;
 				String localizedName = cont.localizedName();

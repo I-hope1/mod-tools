@@ -15,6 +15,7 @@ public class IntTab {
 	public Seq<Color> colors;
 	public Seq<Table> tables;
 	public float totalWidth;
+	public int cols;
 
 	protected void init() {
 		if (main != null) return;
@@ -50,6 +51,7 @@ public class IntTab {
 		this.names = names;
 		this.colors = colors;
 		this.tables = tables;
+		this.cols = cols;
 		init();
 	}
 
@@ -57,7 +59,7 @@ public class IntTab {
 		byte[] selected = {-1};
 		boolean[] transitional = {false};
 
-		for (byte i = 0; i < tables.size; ++i) {
+		for (byte i = 0; i < tables.size; i++) {
 			Table t = tables.get(i);
 			byte j = i;
 			title.button(b -> {
@@ -87,6 +89,7 @@ public class IntTab {
 
 				}
 			}).size(totalWidth / (float) names.size, 42.0f);
+			if ((j + 1) % cols == 0) title.row();
 		}
 
 		title.getChildren().get(0).fireClick();

@@ -38,7 +38,7 @@ public class ShowUIList extends Content {
 		tables.add(new Table(t -> {
 			Icon.icons.each((k, icon) -> {
 				t.image(new TextureRegionDrawable(icon)).size(32);
-				t.add("" + k).with((l) -> {
+				t.add("" + k).with(l -> {
 					l.clicked(() -> {
 						Core.app.setClipboardText("" + l.getText());
 					});
@@ -55,7 +55,7 @@ public class ShowUIList extends Content {
 					Log.err(var7);
 				}
 
-				t.add(field.getName()).with((l) -> {
+				t.add(field.getName()).with(l -> {
 					l.clicked(() -> {
 						Core.app.setClipboardText("" + l.getText());
 					});
@@ -98,7 +98,7 @@ public class ShowUIList extends Content {
 					continue;
 				}
 
-				t.add(field.getName()).with((l) -> {
+				t.add(field.getName()).with(l -> {
 					l.clicked(() -> {
 						Core.app.setClipboardText("" + l.getText());
 					});

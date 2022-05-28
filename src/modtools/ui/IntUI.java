@@ -36,15 +36,15 @@ public class IntUI {
 		float w = (float) Core.graphics.getWidth();
 		float h = (float) Core.graphics.getHeight();
 		Dialog dialog = new Dialog("");
-		TextField text2 = (TextField) dialog.cont.add(new TextArea(text.getText())).size(w * 0.85f, h * 0.75f).get();
-		dialog.buttons.table((t) -> {
+		TextField text2 = dialog.cont.add(new TextArea(text.getText())).size(w * 0.85f, h * 0.75f).get();
+		dialog.buttons.table(t -> {
 			TextureRegionDrawable var10002 = Icon.left;
 			Objects.requireNonNull(dialog);
 			t.button("$back", var10002, dialog::hide).size(w / 3.0f - 25.0f, h * 0.05f);
 			t.button("$edit", Icon.edit, () -> {
 				Dialog ui = new Dialog("") {{
 					addCloseButton();
-					table(Tex.button, (t) -> {
+					table(Tex.button, t -> {
 						TextButtonStyle style = Styles.cleart;
 						t.defaults().size(280.0f, 60.0f).left();
 						t.row();
@@ -132,7 +132,7 @@ public class IntUI {
 		Table p = new Table();
 		p.top();
 		if (searchable) {
-			t.table((top) -> {
+			t.table(top -> {
 				top.image(Icon.zoom);
 				TextField text = new TextField();
 				top.add(text).fillX();
@@ -158,7 +158,7 @@ public class IntUI {
 				p.button(item, Styles.cleart, () -> {
 					cons.get(item);
 					hide.run();
-				}).size((float) width, (float) height).disabled(holder.get() == item).row();
+				}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();
 			}
 
 		}, searchable);
@@ -183,11 +183,11 @@ public class IntUI {
 			ButtonGroup<ImageButton> group = new ButtonGroup<>();
 			group.setMinCheckCount(0);
 			p.defaults().size(size);
-			Pattern pattern = null;
+			Pattern pattern;
 
 			try {
 				pattern = Pattern.compile(text);
-			} catch (Exception var18) {
+			} catch (Exception ex) {
 				return;
 			}
 
@@ -195,7 +195,7 @@ public class IntUI {
 
 			for (int i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (text != "") {
+				if (!text.equals("")) {
 					if (item instanceof UnlockableContent) {
 						UnlockableContent unlock;
 						if (!pattern.matcher((unlock = (UnlockableContent) item).name).find() && !pattern.matcher(unlock.localizedName).find()) {
@@ -211,7 +211,7 @@ public class IntUI {
 					hide.run();
 				}).size(size).get();
 				if (!Vars.mobile) {
-					btn.addListener(new Tooltip((t) -> {
+					btn.addListener(new Tooltip(t -> {
 						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item);
 					}));
 				}
@@ -234,7 +234,7 @@ public class IntUI {
 	 */
 	public static <T extends Button, T1 extends UnlockableContent> Table showSelectImageTable(T button, Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols, boolean searchable) {
 		Seq<Drawable> icons = new Seq<>();
-		items.each((item) -> {
+		items.each(item -> {
 			icons.add(new TextureRegionDrawable(item.uiIcon));
 		});
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
@@ -245,8 +245,8 @@ public class IntUI {
 	 */
 	public static <T extends Button, T1> Table showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols, Func<T1, Drawable> func, boolean searchable) {
 		Seq<Drawable> icons = new Seq<>();
-		items.each((item) -> {
-			icons.add((Drawable) func.get(item));
+		items.each(item -> {
+			icons.add(func.get(item));
 		});
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
 	}

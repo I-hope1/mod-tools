@@ -11,10 +11,7 @@ import arc.scene.Action;
 import arc.scene.Element;
 import arc.scene.Scene;
 import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.Button;
-import arc.scene.ui.Dialog;
-import arc.scene.ui.Label;
-import arc.scene.ui.TextArea;
+import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
@@ -123,9 +120,7 @@ public class Tester extends Content {
 	void setup() {
 		ui.cont.clear();
 		ui.buttons.clear();
-		ui.cont.pane(p -> {
-			show(p, ui.buttons);
-		}).fillX().fillY();
+		ui.cont.pane(p -> show(p, ui.buttons)).fillX().fillY();
 	}
 
 	public void build() {
@@ -150,7 +145,7 @@ public class Tester extends Content {
 		} catch (Throwable ex) {
 			error = true;
 			loop = false;
-			Vars.ui.showException(ex);
+			Vars.ui.showException("" + ex, ex);
 			String type = ex.getClass().getSimpleName();
 			log = "[red][" + type + "][]" + ex.getMessage();
 		}
@@ -180,10 +175,10 @@ public class Tester extends Content {
 		scope = scripts.scope;
 
 		try {
-			Object obj = Context.javaToJS(JSFunc.class, scope);
+			var obj = new NativeJavaClass(scope, JSFunc.class, true);
 			ScriptableObject.putProperty(scope, "IntFunc", obj);
 		} catch (Exception ex) {
-			Vars.ui.showException(ex);
+			Vars.ui.showException("" + ex, ex);
 		}
 
 		setup();
@@ -207,29 +202,25 @@ public class Tester extends Content {
 		public static Scriptable scope;
 		public static ObjectMap<String, NativeJavaClass> classes;
 
-		public JSFunc() {
-		}
-
 		public static void showInfo(Object o) {
 			Class<?> finalC = o.getClass();
 			final Table fields;
 			if (finalC.isArray()) {
+				Table _cont = new Table();
+				_cont.defaults().growX().growY();
 				int length = Array.getLength(o);
-				fields = new Table();
 
 				for (int i = 0; i < length; ++i) {
 					Object item = Array.get(o, i);
-					Label l = new Label("" + item);
-					IntUI.longPress(l, 600, b -> {
-						if (b) {
-							showInfo(item);
-						}
+					var button = new TextButton("" + item);
+					button.clicked(() -> {
+						showInfo(item);
 					});
-					fields.add(l).row();
+					_cont.add(button).fillX().height(40).row();
 				}
 
 				new BaseDialog(finalC.getSimpleName()) {{
-					cont.pane(fields).fillX().fillY();
+					cont.pane(_cont).growX().growY();
 					addCloseButton();
 				}}.show();
 
@@ -244,9 +235,8 @@ public class Tester extends Content {
 				});
 			}).fillX().pad(6, 10, 6, 10).row();
 			_cont.image().color(Pal.accent).fillX().row();
-			fields = _cont.table(t -> {
-				t.left().defaults().left().top();
-			}).pad(4, 6, 4, 6).fillX().get();
+			fields = _cont.table(t -> t.left().defaults().left().top())
+					.pad(4, 6, 4, 6).fillX().get();
 			_cont.row();
 			_cont.image().color(Pal.accent).fillX().row();
 			Table methods = _cont.table(t -> {
@@ -274,7 +264,9 @@ public class Tester extends Content {
 
 						if (type.isPrimitive() || type.equals(String.class)) {
 							try {
-								t.add("" + f.get(o), Color.valueOf("#bad761"));
+								Label l = new Label("" + f.get(o));
+								l.setColor(Color.valueOf("#bad761"));
+								t.add(l);
 							} catch (Exception e) {
 								t.add("Unknow", Color.red);
 							}
@@ -284,6 +276,9 @@ public class Tester extends Content {
 								try {
 									Object v = f.get(o);
 									l.setText("" + v);
+									if (v instanceof Color) {
+										t.image(IntUI.whiteui.tint((Color) v)).size(32);
+									}
 									IntUI.longPress(l, 600, b -> {
 										if (b) {
 											showInfo(v);
@@ -319,7 +314,7 @@ public class Tester extends Content {
 							sb.append(m.getName());
 							sb.append("[lightgray]([]");
 							StringJoiner sj = new StringJoiner(", ");
-							Class[] exceptionTypes = m.getParameterTypes();
+							Class<?>[] exceptionTypes = m.getParameterTypes();
 
 							for (Class<?> parameterType : exceptionTypes) {
 								sj.add("[#9cd1bb]" + parameterType.getTypeName() + "[]");
@@ -354,7 +349,7 @@ public class Tester extends Content {
 											});
 										}
 									} catch (Exception ex) {
-										Vars.ui.showException(ex);
+										Vars.ui.showException("" + ex, ex);
 									}
 
 								}).width(100);
@@ -368,7 +363,7 @@ public class Tester extends Content {
 			}
 
 			new BaseDialog(finalC.getSimpleName()) {{
-				cont.pane(_cont).fillX().fillY();
+				cont.pane(_cont).growX().growY();
 				addCloseButton();
 			}}.show();
 		}

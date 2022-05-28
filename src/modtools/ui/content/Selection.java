@@ -72,17 +72,17 @@ public class Selection extends Content {
 	public void loadSettings() {
 		Table table = new Table();
 		table.add(this.localizedName()).color(Pal.accent).growX().left().row();
-		table.table((t) -> {
+		table.table(t -> {
 			t.left().defaults().left();
 			all.each((k, func) -> {
 				func.setting(t);
 			});
 		}).growX().left().padLeft(16.0f).row();
-		table.table((t) -> {
+		table.table(t -> {
 			this.defaultTeam = Team.get((Integer) Core.settings.get(this.getSettingName() + "-defaultTeam", 1));
 			t.left().defaults().left();
 			t.add("默认队伍").color(Pal.accent).growX().left().row();
-			t.table((t1) -> {
+			t.table(t1 -> {
 				t1.left().defaults().left();
 				Team[] arr = Team.baseTeams;
 				int c = 0;
@@ -180,9 +180,9 @@ public class Selection extends Content {
 						Vec2 v2 = Core.camera.unproject(x2, y2).cpy();
 						if (select.get("unit")) {
 							Rect rect = new Rect(v1.x, v1.y, v2.x - v1.x, v2.y - v1.y);
-							Groups.unit.each((unit) -> {
+							Groups.unit.each(unit -> {
 								return rect.contains(unit.getX(), unit.getY());
-							}, (unit) -> {
+							}, unit -> {
 								if (!units.list.contains(unit)) {
 									units.list.add(unit);
 								}
@@ -221,14 +221,14 @@ public class Selection extends Content {
 		functions = new Table();
 		functions.defaults().width((float) W);
 		pane = new Table();
-		pane.table((right) -> {
+		pane.table(right -> {
 			Image img = right.image().color(Color.sky).size((float) (W - 32), 32.0f).get();
 			new MoveListener(img, pane);
 			right.button(Icon.cancel, Styles.clearTogglei, this::hide).size(32.0f);
 		}).fillX().row();
 		ScrollPaneStyle paneStyle = new ScrollPaneStyle();
 		paneStyle.background = Styles.none;
-		pane.table((t) -> {
+		pane.table(t -> {
 			t.pane(paneStyle, functions).fillX().fillY();
 		}).size((float) W, (float) maxH).get().background(Styles.black5);
 		pane.left().bottom().defaults().width((float) W);
@@ -241,9 +241,9 @@ public class Selection extends Content {
 		});
 
 		tiles = new TileFunction<>("tile", (t, func) -> {
-			FunctionBuild(t, "设置", (button) -> {
-				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, (block) -> {
-					func.each((tile) -> {
+			FunctionBuild(t, "设置", button -> {
+				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
+					func.each(tile -> {
 						if (tile.block() != block) {
 							tile.setBlock(block, tile.block() != Blocks.air ? tile.team() : defaultTeam);
 						}
@@ -251,26 +251,26 @@ public class Selection extends Content {
 					});
 				}, 42.0f, 32, 6, true);
 			});
-			FunctionBuild(t, "清除", (__) -> {
+			FunctionBuild(t, "清除", __ -> {
 				func.each(Tile::setAir);
 			});
 		});
 
 		buildings = new BuildFunction<>("building", (t, func) -> {
-			FunctionBuild(t, "无限血量", (__) -> {
-				func.each((b) -> {
+			FunctionBuild(t, "无限血量", __ -> {
+				func.each(b -> {
 					b.health = Float.POSITIVE_INFINITY;
 				});
 			});
-			TeamFunctionBuild(t, "设置队伍", (team) -> {
-				func.each((b) -> {
+			TeamFunctionBuild(t, "设置队伍", team -> {
+				func.each(b -> {
 					b.changeTeam(team);
 				});
 			});
 			ListFunction(t, "设置物品", Vars.content.items(), (button, item) -> {
 				IntUI.showSelectTable(button, (table, hide, str) -> {
 					String[] amount = new String[1];
-					table.field("", (s) -> {
+					table.field("", s -> {
 						amount[0] = s;
 					});
 					table.button("", Icon.ok, Styles.cleart, () -> {
@@ -286,11 +286,11 @@ public class Selection extends Content {
 			ListFunction(t, "设置液体", Vars.content.liquids(), (button, liquid) -> {
 				IntUI.showSelectTable(button, (table, hide, str) -> {
 					String[] amount = new String[1];
-					table.field("", (s) -> {
+					table.field("", s -> {
 						amount[0] = s;
 					});
 					table.button("", Icon.ok, Styles.cleart, () -> {
-						func.each((b) -> {
+						func.each(b -> {
 							if (b.liquids != null) {
 								float now = b.liquids.get(liquid);
 								b.liquids.add(liquid, IntFunc.parseFloat(amount[0]) - now);
@@ -300,27 +300,27 @@ public class Selection extends Content {
 					});
 				}, false);
 			});
-			FunctionBuild(t, "杀死", (__) -> {
+			FunctionBuild(t, "杀死", __ -> {
 				func.each(Building::kill);
 			});
-			FunctionBuild(t, "清除", (__) -> {
+			FunctionBuild(t, "清除", __ -> {
 				func.each(Building::remove);
 			});
 		});
 
 		floors = new TileFunction<>("floor", (t, __) -> {
-			ListFunction(t, "Set Floor Reset Overlay", Vars.content.blocks().select((block) -> block instanceof Floor), (button, floor) -> {
-				tiles.each((tile) -> {
+			ListFunction(t, "Set Floor Reset Overlay", Vars.content.blocks().select(block -> block instanceof Floor), (button, floor) -> {
+				tiles.each(tile -> {
 					tile.setFloor((Floor) floor);
 				});
 			});
-			ListFunction(t, "Set Floor Preserving Overlay", Vars.content.blocks().select((block) -> block instanceof Floor && !(block instanceof OverlayFloor)), (button, floor) -> {
-				tiles.each((tile) -> {
+			ListFunction(t, "Set Floor Preserving Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), (button, floor) -> {
+				tiles.each(tile -> {
 					tile.setFloorUnder((Floor) floor);
 				});
 			});
-			ListFunction(t, "Set Overlay", Vars.content.blocks().select((block) -> block instanceof OverlayFloor), (button, overlay) -> {
-				tiles.each((tile) -> {
+			ListFunction(t, "Set Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor), (button, overlay) -> {
+				tiles.each(tile -> {
 					tile.setOverlay(overlay);
 				});
 			});
@@ -328,20 +328,20 @@ public class Selection extends Content {
 		floors.list = tiles.list;
 
 		units = new UnitFunction<>("unit", (t, func) -> {
-			FunctionBuild(t, "无限血量", (__) -> {
-				func.each((unit) -> {
+			FunctionBuild(t, "无限血量", __ -> {
+				func.each(unit -> {
 					unit.health(Float.POSITIVE_INFINITY);
 				});
 			});
-			TeamFunctionBuild(t, "设置队伍", (team) -> {
-				func.each((unit) -> {
+			TeamFunctionBuild(t, "设置队伍", team -> {
+				func.each(unit -> {
 					unit.team(team);
 				});
 			});
-			FunctionBuild(t, "杀死", (__) -> {
+			FunctionBuild(t, "杀死", __ -> {
 				func.each(Unitc::kill);
 			});
-			FunctionBuild(t, "清除", (__) -> {
+			FunctionBuild(t, "清除", __ -> {
 				func.each(Unitc::remove);
 			});
 		});
@@ -364,8 +364,8 @@ public class Selection extends Content {
 	}
 
 	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
-		FunctionBuild(t, name, (btn) -> {
-			IntUI.showSelectImageTable(btn, list, () -> null, (item) -> {
+		FunctionBuild(t, name, btn -> {
+			IntUI.showSelectImageTable(btn, list, () -> null, item -> {
 				cons.get(btn, item);
 			}, 42.0f, 32, 6, true);
 		});
@@ -380,7 +380,7 @@ public class Selection extends Content {
 	}
 
 	public void TeamFunctionBuild(Table table, String name, Cons<Team> cons) {
-		FunctionBuild(table, name, (btn) -> {
+		FunctionBuild(table, name, btn -> {
 			Team[] arr = Team.baseTeams;
 			Seq<Drawable> icons = new Seq<>();
 
@@ -463,7 +463,7 @@ public class Selection extends Content {
 		}
 
 		public void setting(Table t) {
-			t.check(name, select.get(name), (b) -> {
+			t.check(name, select.get(name), b -> {
 				if (b) {
 					setup();
 				} else {
@@ -496,8 +496,8 @@ public class Selection extends Content {
 			final int[] c = new int[]{0};
 			final int cols = Vars.mobile ? 4 : 6;
 			new BaseDialog(name) {{
-				cont.pane((table) -> {
-					list.forEach((item) -> {
+				cont.pane(table -> {
+					list.forEach(item -> {
 						Table cont = new Table(Tex.button);
 						table.add(cont);
 						buildTable(item, cont);

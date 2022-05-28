@@ -14,7 +14,7 @@ public class IntFunc {
 		try {
 			return Float.parseFloat(string);
 		} catch (Exception e) {
-			return 0.0f;
+			return 0f;
 		}
 	}
 }

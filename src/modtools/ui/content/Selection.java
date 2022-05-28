@@ -495,26 +495,24 @@ public class Selection extends Content {
 		public void showAll() {
 			final int[] c = new int[]{0};
 			final int cols = Vars.mobile ? 4 : 6;
-			(new BaseDialog(name) {
-				{
-					cont.pane((table) -> {
-						list.forEach((item) -> {
-							Table cont = new Table(Tex.button);
-							table.add(cont);
-							buildTable(item, cont);
-							cont.row();
-							cont.button("更多信息", IntStyles.cleart, () -> {
-								JSFunc.showInfo(item);
-							}).fillX().height(buttonHeight);
-							if (++c[0] % cols == 0) {
-								table.row();
-							}
+			new BaseDialog(name) {{
+				cont.pane((table) -> {
+					list.forEach((item) -> {
+						Table cont = new Table(Tex.button);
+						table.add(cont);
+						buildTable(item, cont);
+						cont.row();
+						cont.button("更多信息", IntStyles.cleart, () -> {
+							JSFunc.showInfo(item);
+						}).fillX().height(buttonHeight);
+						if (++c[0] % cols == 0) {
+							table.row();
+						}
 
-						});
-					}).fillX().fillY();
-					addCloseButton();
-				}
-			}).show();
+					});
+				}).fillX().fillY();
+				addCloseButton();
+			}}.show();
 		}
 
 		public void buildTable(T item, Table table) {

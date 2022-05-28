@@ -235,21 +235,21 @@ public class Tester extends Content {
 
 				return;
 			}
-			final Table cont = new Table();
-			cont.table(t -> {
+			final Table _cont = new Table();
+			_cont.table(t -> {
 				t.left().defaults().left();
 				t.add(finalC.getTypeName());
 				t.button(Icon.copy, Styles.cleari, () -> {
 					Core.app.setClipboardText(finalC.getTypeName());
 				});
 			}).fillX().pad(6, 10, 6, 10).row();
-			cont.image().color(Pal.accent).fillX().row();
-			fields = cont.table(t -> {
+			_cont.image().color(Pal.accent).fillX().row();
+			fields = _cont.table(t -> {
 				t.left().defaults().left().top();
 			}).pad(4, 6, 4, 6).fillX().get();
-			cont.row();
-			cont.image().color(Pal.accent).fillX().row();
-			Table methods = cont.table(t -> {
+			_cont.row();
+			_cont.image().color(Pal.accent).fillX().row();
+			Table methods = _cont.table(t -> {
 				t.left().defaults().left().top();
 			}).pad(4, 6, 4, 6).fill().get();
 
@@ -263,6 +263,7 @@ public class Tester extends Content {
 
 				for (Field f : c.getDeclaredFields()) {
 					f.setAccessible(true);
+					Class<?> type = f.getType();
 					fields.table(t -> {
 						t.add(Modifier.toString(f.getModifiers()), Color.valueOf("#ff657a")).padRight(2);
 						t.add(" ");
@@ -271,31 +272,29 @@ public class Tester extends Content {
 						t.add(f.getName());
 						t.add(" = ");
 
-						try {
-							if (!f.getType().isPrimitive() && !f.getType().equals(String.class)) {
-								Label l = t.add("???").get();
-								l.clicked(() -> {
-									try {
-										Object v = f.get(o);
-										l.setText("" + v);
-										IntUI.longPress(l, 600, b -> {
-											if (b) {
-												showInfo(v);
-											}
-
-										});
-									} catch (IllegalAccessException var4) {
-										l.setText("");
-									}
-
-								});
-							} else {
+						if (type.isPrimitive() || type.equals(String.class)) {
+							try {
 								t.add("" + f.get(o), Color.valueOf("#bad761"));
+							} catch (Exception e) {
+								t.add("Unknow", Color.red);
 							}
-						} catch (Exception var4) {
-							t.add("Unknow", Color.red);
-						}
+						} else {
+							Label l = t.add("???").get();
+							l.clicked(() -> {
+								try {
+									Object v = f.get(o);
+									l.setText("" + v);
+									IntUI.longPress(l, 600, b -> {
+										if (b) {
+											showInfo(v);
+										}
+									});
+								} catch (IllegalAccessException ex) {
+									l.setText("");
+								}
 
+							});
+						}
 					}).pad(4).row();
 				}
 
@@ -354,8 +353,8 @@ public class Tester extends Content {
 
 											});
 										}
-									} catch (Exception var4) {
-										Vars.ui.showException(var4);
+									} catch (Exception ex) {
+										Vars.ui.showException(ex);
 									}
 
 								}).width(100);
@@ -369,7 +368,7 @@ public class Tester extends Content {
 			}
 
 			new BaseDialog(finalC.getSimpleName()) {{
-				cont.pane(cont).fillX().fillY();
+				cont.pane(_cont).fillX().fillY();
 				addCloseButton();
 			}}.show();
 		}

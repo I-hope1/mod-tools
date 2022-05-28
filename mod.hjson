@@ -4,7 +4,7 @@ name: "mod-tools"
 author: "I hope..."
 main: "modtools.ModTools"
 description: ""
-version: "1.0"
+version: "1.1"
 hidden: true
 minGameVersion: 136
 repo: "I-hope1/mod-tools"

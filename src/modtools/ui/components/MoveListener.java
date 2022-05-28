@@ -1,3 +1,4 @@
+
 package modtools.ui.components;
 
 import arc.Core;
@@ -12,7 +13,7 @@ import arc.util.Tmp;
 
 public class MoveListener extends InputListener {
 	float bx, by;
-	private final Table main;
+	public final Table main;
 
 	public MoveListener(Element touch, Table main) {
 		this.main = main;
@@ -27,10 +28,6 @@ public class MoveListener extends InputListener {
 
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		Vec2 v = main.localToStageCoordinates(Tmp.v1.set(x, y));
-
-		main.setPosition(
-				Mathf.clamp(-bx + v.x, 0f, Core.graphics.getWidth() - main.getPrefWidth()),
-				Mathf.clamp(-by + v.y, 0f, Core.graphics.getHeight() - main.getPrefHeight()));
-		// Log.info(-by + v.y + ", 0, " + (Core.graphics.getHeight() - main.getPrefHeight()));
+		main.setPosition(Mathf.clamp(-bx + v.x, 0.0f, (float) Core.graphics.getWidth() - main.getPrefWidth()), Mathf.clamp(-by + v.y, 0.0f, (float) Core.graphics.getHeight() - main.getPrefHeight()));
 	}
 }

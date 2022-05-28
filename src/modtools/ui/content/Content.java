@@ -1,27 +1,28 @@
+
 package modtools.ui.content;
 
 import arc.Core;
 import arc.scene.ui.TextButton;
-import modtools.IntVars;
 
 import java.util.ArrayList;
 
-public abstract class Content {
-	public final static ArrayList<Content> all = new ArrayList<>();
-	public final String name;
+import static modtools.IntVars.modName;
 
+public abstract class Content {
+	public static final ArrayList<Content> all = new ArrayList<>();
+	public final String name;
 	public TextButton btn;
 
 	public String localizedName() {
-		return Core.bundle.get(name, name);
+		return Core.bundle.get(modName + "." + name, name);
 	}
 
 	public String getSettingName() {
-		return IntVars.modName + "-" + name;
+		return modName + "-" + name;
 	}
 
 	public boolean loadable() {
-		return (boolean) Core.settings.get(IntVars.modName + "-load-" + name, true);
+		return (Boolean) Core.settings.get(modName + "-load-" + name, true);
 	}
 
 	public Content(String name) {
@@ -36,6 +37,5 @@ public abstract class Content {
 	}
 
 	public void build() {
-
 	}
 }

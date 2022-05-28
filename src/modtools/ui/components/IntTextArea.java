@@ -1,3 +1,4 @@
+
 package modtools.ui.components;
 
 import arc.scene.ui.TextArea;
@@ -7,10 +8,11 @@ public class IntTextArea extends Table {
 	public TextArea area;
 
 	public String linesStr() {
-		int first = area.getFirstLineShowing(),
-				len = area.getLinesShowing() - 1,
-				now = area.getCursorLine();
-		var str = new StringBuilder("[lightgray]");
+		int first = area.getFirstLineShowing();
+		int len = area.getLinesShowing() - 1;
+		int now = area.getCursorLine();
+		StringBuilder str = new StringBuilder("[lightgray]");
+
 		for (int i = 0; i < len; i++) {
 			int current = i + first + 1;
 			if (i + first == now) {
@@ -23,12 +25,13 @@ public class IntTextArea extends Table {
 
 			str.append("\n");
 		}
-		return str + "";
+
+		return "" + str;
 	}
 
 	public IntTextArea(String text, float w, float h) {
 		area = new TextArea(text);
-		label(() -> linesStr());
+		label(this::linesStr);
 		add(area).size(w, h);
 	}
 }

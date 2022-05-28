@@ -1,3 +1,4 @@
+
 package modtools.ui.content;
 
 import arc.Core;
@@ -24,83 +25,94 @@ import modtools.ui.components.IntTab;
 import java.lang.reflect.Field;
 
 public class ShowUIList extends Content {
+	BaseDialog ui;
 
 	public ShowUIList() {
 		super("showuilist");
 	}
 
-	BaseDialog ui;
-
-	@Override
 	public void load() {
-		ui = new BaseDialog(this.name);
-		Color[] colors = { Color.sky, Color.gold, Color.orange };
-		Table[] tables = {
-				// Icon
-				new Table(t -> Icon.icons.each((k, icon) -> {
-					t.image(new TextureRegionDrawable(icon)).size(32);
-					t.add("" + k).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText()))).row();
-				})),
-				// Tex
-				new Table(t -> {
-					Field[] fields = Tex.class.getFields();
-					for (Field field : fields) {
-						try {
-							t.image((Drawable) field.get(null)).size(32);
-						} catch (IllegalArgumentException | IllegalAccessException e) {
-							Log.err(e);
-						}
-						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText())))
-								.row();
+		ui = new BaseDialog(name);
+		Color[] colors = {Color.sky, Color.gold, Color.orange};
+		Seq<Table> tables = new Seq<>();
+		tables.add(new Table(t -> {
+			Icon.icons.each((k, icon) -> {
+				t.image(new TextureRegionDrawable(icon)).size(32);
+				t.add("" + k).with((l) -> {
+					l.clicked(() -> {
+						Core.app.setClipboardText("" + l.getText());
+					});
+				}).row();
+			});
+		}));
+		tables.add(new Table(t -> {
+			Field[] fields = Tex.class.getFields();
+
+			for (Field field : fields) {
+				try {
+					t.image((Drawable) field.get(null)).size(32);
+				} catch (IllegalAccessException | IllegalArgumentException var7) {
+					Log.err(var7);
+				}
+
+				t.add(field.getName()).with((l) -> {
+					l.clicked(() -> {
+						Core.app.setClipboardText("" + l.getText());
+					});
+				}).row();
+			}
+
+		}));
+		tables.add(new Table(IntUI.whiteui.tint(1, 0.6f, 0.6f, 1), t -> {
+			Field[] fields = Styles.class.getFields();
+
+			for (Field field : fields) {
+				try {
+					Object style = field.get(null);
+					if (style instanceof LabelStyle) {
+						t.add("label", (LabelStyle) style).size(32);
+					} else if (style instanceof SliderStyle) {
+						t.slider(0, 10, 1, f -> {
+						});
+					} else if (style instanceof TextFieldStyle) {
+						t.field("field", (TextFieldStyle) style, text -> {
+						});
+					} else if (style instanceof TextButtonStyle) {
+						t.button("text button", (TextButtonStyle) style, () -> {
+						}).size(96, 42);
+					} else if (style instanceof ImageButtonStyle) {
+						t.button(Icon.ok, (ImageButtonStyle) style, () -> {
+						}).size(96, 42);
+					} else if (style instanceof ButtonStyle) {
+						t.button(b -> {
+							b.add("button");
+						}, (ButtonStyle) style, () -> {
+						}).size(260, 42);
+					} else {
+						if (!(style instanceof Drawable)) continue;
+
+						t.table((Drawable) style, __ -> {}).size(42);
 					}
-				}),
-				// Styles
-				new Table(IntUI.whiteui.tint(1f, 0.6f, 0.6f, 1f), t -> {
-					Field[] fields = Styles.class.getFields();
-					for (Field field : fields) {
-						try {
-							var style = field.get(null);
+				} catch (IllegalAccessException | IllegalArgumentException err) {
+					Log.err(err);
+					continue;
+				}
 
-							if (style instanceof LabelStyle) {
-								t.add("label", (LabelStyle) style).size(32);
-							} else if (style instanceof SliderStyle) {
-								t.slider(0f, 10f, 1f, f -> {
-								});
-							} else if (style instanceof TextFieldStyle) {
-								t.field("field", (TextFieldStyle) style, text -> {
-								});
-							} else if (style instanceof TextButtonStyle) {
-								t.button("text button", (TextButtonStyle) style, () -> {
-								}).size(96, 42);
-							} else if (style instanceof ImageButtonStyle) {
-								t.button(Icon.ok, (ImageButtonStyle) style, () -> {
-								}).size(96, 42);
-							} else if (style instanceof ButtonStyle) {
-								t.button(b -> b.add("button"), (ButtonStyle) style, () -> {
-								}).size(260, 42);
-							} else if (style instanceof Drawable) {
-								t.table((Drawable) style, table -> {
-								}).size(42);
-							} else
-								continue;
-						} catch (IllegalArgumentException | IllegalAccessException e) {
-							Log.err(e);
-							continue;
-						}
+				t.add(field.getName()).with((l) -> {
+					l.clicked(() -> {
+						Core.app.setClipboardText("" + l.getText());
+					});
+				}).row();
+			}
 
-						t.add(field.getName()).with(l -> l.clicked(() -> Core.app.setClipboardText("" + l.getText())))
-								.row();
-					}
-				})
-		};
-		String[] names = { "icon", "tex", "styles" };
+		}));
 
-		IntTab tab = IntTab.set(Vars.mobile ? 400f : 600f, new Seq<>(names), new Seq<>(colors), new Seq<>(tables));
+		String[] names = {"icon", "tex", "styles"};
+		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
 		ui.cont.add(tab.build());
 		ui.addCloseButton();
 	}
 
-	@Override
 	public void build() {
 		ui.show();
 	}

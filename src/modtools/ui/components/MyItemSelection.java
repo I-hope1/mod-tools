@@ -29,7 +29,7 @@ public class MyItemSelection {
 		int i = 0;
 
 		for (T item : items) {
-			ImageButton button = cont.button(Tex.whiteui, Styles.clearNoneTogglei, 24, () -> {
+			ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/Styles.clearTogglei, 24, () -> {
 			}).group(group).get();
 			button.changed(() -> {
 				consumer.get(button.isChecked() ? item : null);

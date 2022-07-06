@@ -28,7 +28,7 @@ import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
-import modtools.ui.components.IntTextArea;
+import modtools.ui.components.TextAreaTable;
 import modtools.ui.content.Selection.Function;
 import rhino.*;
 
@@ -46,6 +46,7 @@ public class Tester extends Content {
 	final float w = Core.graphics.isPortrait() ? 440 : 540;
 	BaseDialog ui;
 	ListDialog history, bookmark;
+	public Scripts scripts;
 	public Scriptable scope;
 	public Context cx;
 
@@ -55,9 +56,9 @@ public class Tester extends Content {
 
 	public void show(Table table, Table buttons) {
 		Table cont = new Table();
-		IntTextArea textarea = new IntTextArea("", w, 390);
-		area = textarea.area;
-		cont.add(textarea).row();
+		TextAreaTable textarea = new TextAreaTable("");
+		area = textarea.getArea();
+		cont.add(textarea).size(w, 390).row();
 		cont.button("$ok", () -> {
 			error = false;
 			area.setText(getMessage().replaceAll("\r", ""));
@@ -172,7 +173,7 @@ public class Tester extends Content {
 		}, (f, p) -> {
 			p.add(f.readString()).row();
 		}, false);
-		Scripts scripts = Vars.mods.getScripts();
+		scripts = Vars.mods.getScripts();
 		cx = scripts.context;
 		scope = scripts.scope;
 
@@ -193,7 +194,6 @@ public class Tester extends Content {
 			if (loop && !getMessage().equals("")) {
 				evalMessage();
 			}
-
 		});
 		loadSettings();
 	}
@@ -209,6 +209,19 @@ public class Tester extends Content {
 		return area.getText();
 	}
 
+	public void put(String name, Object val) {
+		ScriptableObject.putProperty(scope, name, Context.javaToJS(val, scope));
+	}
+	public String put(Object val) {
+		int i = 0;
+		String prefix = "temp";
+		while (ScriptableObject.hasProperty(scope, prefix + i)) {
+			i++;
+		}
+		put(prefix + i, val);
+		return prefix + i;
+	}
+
 	public static class JSFunc {
 		public static ClassLoader main;
 		public static Scriptable scope;
@@ -219,7 +232,7 @@ public class Tester extends Content {
 			final Table fields;
 			if (finalC.isArray()) {
 				Table _cont = new Table();
-				_cont.defaults().growX().growY();
+				_cont.defaults().grow();
 				int length = Array.getLength(o);
 
 				for (int i = 0; i < length; ++i) {
@@ -232,7 +245,7 @@ public class Tester extends Content {
 				}
 
 				new BaseDialog(finalC.getSimpleName()) {{
-					cont.pane(_cont).growX().growY();
+					cont.pane(_cont).grow();
 					addCloseButton();
 				}}.show();
 
@@ -375,7 +388,7 @@ public class Tester extends Content {
 			}
 
 			new BaseDialog(finalC.getSimpleName()) {{
-				cont.pane(_cont).growX().growY();
+				cont.pane(_cont).grow();
 				addCloseButton();
 			}}.show();
 		}

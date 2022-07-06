@@ -18,19 +18,19 @@ public class ModTools extends Mod {
 	public ModTools() {
 		Log.info("Loaded ModMake constructor.");
 		Events.on(EventType.ClientLoadEvent.class, e -> {
-			Time.runTask(10.0f, () -> {
+			Time.runTask(10f, () -> {
 				BaseDialog dialog = new BaseDialog("frog");
 				dialog.addCloseListener();
 
 				Table cont = dialog.cont;
-				cont.image(Core.atlas.find(modName + "-frog")).pad(20.0f).row();
+				cont.image(Core.atlas.find(modName + "-frog")).pad(20f).row();
 				cont.add("behold").row();
 				Objects.requireNonNull(dialog);
-				cont.button("I see", dialog::hide).size(100.0f, 50.0f);
+				cont.button("I see", dialog::hide).size(100f, 50f);
 				dialog.show();
 			});
 			IntVars.load();
-			Background.main();
+			if (Core.settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
 		});
 	}
 

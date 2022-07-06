@@ -6,6 +6,7 @@ import arc.scene.ui.layout.Table;
 import mindustry.graphics.Pal;
 import mindustry.ui.dialogs.BaseDialog;
 
+import static modtools.IntVars.frag;
 import static modtools.IntVars.modName;
 
 public class Settings extends Content {
@@ -48,6 +49,11 @@ public class Settings extends Content {
         ui.cont.pane(cont).fillX().fillY();
         cont.defaults().width(400);
         add("load", loadTable);
+        add("其他", new Table(){{
+            left().defaults().left();
+            check("显示主菜单背景", Core.settings.getBool(modName + "-ShowMainMenuBackground"), b -> Core.settings.put(modName + "-ShowMainMenuBackground", b)).row();
+            check("frag置于顶层", b -> frag.keepFrag = b);
+        }});
         Content.all.forEach(cont -> {
             if (!(cont instanceof Settings)) {
                 addLoad(cont);

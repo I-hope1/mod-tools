@@ -6,15 +6,16 @@ import arc.func.Cons;
 import arc.func.Cons3;
 import arc.func.Func;
 import arc.func.Prov;
+import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.ClickListener;
 import arc.scene.event.InputEvent;
+import arc.scene.event.InputListener;
 import arc.scene.style.Drawable;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
-import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Time;
@@ -31,6 +32,31 @@ import java.util.regex.Pattern;
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
+	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
+		elem.addListener(new InputListener() {
+			boolean isDclick = false;
+			short times = 0;
+
+			@Override
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				times++;
+				if (times == 1) {
+					isDclick = false;
+					Time.runTask(10f, () -> {
+						if (isDclick) dclick.run();
+						else click.run();
+						times = 0;
+					});
+				} else {
+					isDclick = true;
+				}
+				return false;
+			}
+		});
+
+	}
+
+
 	/* 一个文本域，可复制粘贴 */
 	public static Dialog showTextArea(TextField text) {
 		float w = (float) Core.graphics.getWidth();
@@ -45,7 +71,8 @@ public class IntUI {
 				Dialog ui = new Dialog("") {{
 					addCloseButton();
 					table(Tex.button, t -> {
-						TextButtonStyle style = Styles.cleart;
+//						TextButtonStyle style = Styles.cleart;
+						var style = Styles.flatt;
 						t.defaults().size(280.0f, 60.0f).left();
 						t.row();
 						t.button("@schematic.copy.import", Icon.download, style, () -> {
@@ -89,7 +116,7 @@ public class IntUI {
 	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 */
-	public static <T extends Button> Table showSelectTable(T button, Cons3<Table, Runnable, String> f, Boolean searchable) {
+	public static <T extends Button> Table showSelectTable(T button, Cons3<Table, Runnable, String> f, boolean searchable) {
 		if (button == null) throw new NullPointerException("button cannot be null");
 		Table t = new Table(Tex.button) {
 			public float getPrefHeight() {
@@ -155,7 +182,7 @@ public class IntUI {
 			p.clearChildren();
 
 			for (String item : list) {
-				p.button(item, Styles.cleart, () -> {
+				p.button(item, Styles.flatt/*Styles.cleart*/, () -> {
 					cons.get(item);
 					hide.run();
 				}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();

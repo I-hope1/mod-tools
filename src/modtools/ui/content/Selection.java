@@ -88,9 +88,9 @@ public class Selection extends Content {
 				int c = 0;
 
 				for (Team team : arr) {
-					ImageButton b = t1.button(IntUI.whiteui, Styles.clearNoneTogglei, 32.0f, () -> {
+					ImageButton b = t1.button(IntUI.whiteui, Styles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
 						Core.settings.put(this.getSettingName() + "-defaultTeam", (this.defaultTeam = team).id);
-					}).size(42.0f).get();
+					}).size(42).get();
 					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
 					b.update(() -> {
 						b.setChecked(this.defaultTeam == team);
@@ -214,6 +214,7 @@ public class Selection extends Content {
 						hide();
 					}
 				}
+				btn.setChecked(false);
 			}
 		};
 		Core.scene.addListener(listener);
@@ -349,6 +350,8 @@ public class Selection extends Content {
 		Core.scene.root.addChildAt(10, pane);
 		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
+
+		btn.setStyle(Styles.logicTogglet);
 	}
 
 	public void hide() {

@@ -1,10 +1,6 @@
 package modtools.ui;
 
-import modtools.ui.content.Selection;
-import modtools.ui.content.Settings;
-import modtools.ui.content.ShowUIList;
-import modtools.ui.content.Tester;
-import modtools.ui.content.UnitSpawn;
+import modtools.ui.content.*;
 
 public class Contents {
 	public static Settings settings;
@@ -12,6 +8,8 @@ public class Contents {
 	public static Selection selection;
 	public static ShowUIList showuilist;
 	public static UnitSpawn unitSpawn;
+	public static ContentList contentList;
+	public static ElementShow elementShow;
 
 	public static void load() {
 		settings = new Settings();
@@ -19,5 +17,7 @@ public class Contents {
 		selection = new Selection();
 		showuilist = new ShowUIList();
 		unitSpawn = new UnitSpawn();
+		contentList = new ContentList();
+		elementShow = new ElementShow();
 	}
 }

@@ -15,9 +15,11 @@ import arc.scene.ui.TextArea;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntSeq;
-import arc.util.Time;
+import arc.util.Log;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
+
+import java.util.Objects;
 
 public class TextAreaTable extends Table {
 	private final MyTextArea area;
@@ -46,7 +48,8 @@ public class TextAreaTable extends Table {
 		update(() -> {
 			Element focus = Core.scene.getKeyboardFocus();
 			if (focus == area) Core.scene.setScrollFocus(pane);
-			if ((focus != null && isAscendantOf(focus)) || Core.scene.getScrollFocus() == pane) Core.scene.setKeyboardFocus(area);
+			if ((focus != null && isAscendantOf(focus)) || Core.scene.getScrollFocus() == pane)
+				Core.scene.setKeyboardFocus(area);
 
 			area.parentHeight = getHeight();
 			area.setFirstLineShowing(0);
@@ -62,18 +65,16 @@ public class TextAreaTable extends Table {
 		}
 
 		public void trackCursor() {
-			Time.runTask(1f, () -> {
-				int cursorLine = area.getCursorLine();
-				int firstLineShowing = area.getRealFirstLineShowing();
-				int max = firstLineShowing + area.getRealLinesShowing();
-				float fontHeight = area.getStyle().font.getLineHeight();
-				if (cursorLine <= firstLineShowing) {
-					setScrollY(cursorLine * fontHeight);
-				}
-				if (cursorLine > max) {
-					setScrollY(cursorLine * fontHeight);
-				}
-			});
+			int cursorLine = area.getCursorLine();
+			int firstLineShowing = area.getRealFirstLineShowing();
+			int max = firstLineShowing + area.getRealLinesShowing();
+			float fontHeight = area.getStyle().font.getLineHeight();
+			if (cursorLine <= firstLineShowing) {
+				setScrollY(cursorLine * fontHeight);
+			}
+			if (cursorLine > max) {
+				setScrollY(cursorLine * fontHeight);
+			}
 		}
 
 		@Override
@@ -155,6 +156,7 @@ public class TextAreaTable extends Table {
 
 			font.getData().markupEnabled = had;
 		}
+
 		@Override
 		public void addInputDialog() {
 		}
@@ -168,14 +170,31 @@ public class TextAreaTable extends Table {
 			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				boolean jump = Core.input.ctrl();
-				// 排除NumLk时，输出数字
-				boolean valid = event != null && !("" + event.character).equals(keycode.value);
-				if (keycode == KeyCode.num7 && valid) {
-					goHome(jump);
+				if (event != null) {
+					char character = event.character;
+					Log.info(keycode);
+					// 排除NumLk时，输出数字
+					boolean valid = character == '\0' || !Objects.equals(keycode.value, "" + character);
+					if (valid) {
+						// end
+						if (keycode == KeyCode.num1) goEnd(jump);
+						// home
+						if (keycode == KeyCode.num7) goHome(jump);
+						// left
+						if (keycode == KeyCode.num4) cursor -= 1;
+						// right
+						if (keycode == KeyCode.num6) cursor += 1;
+						// down
+						if (keycode == KeyCode.num2) moveCursorLine(cursorLine - 1);
+						// up
+						if (keycode == KeyCode.num8) moveCursorLine(cursorLine + 1);
+					}
 				}
-				if (keycode == KeyCode.num1 && valid) {
-					goEnd(jump);
-				}
+				return super.keyDown(event, keycode);
+			}
+
+			@Override
+			public boolean keyUp(InputEvent event, KeyCode keycode) {
 				if (trackCursor != null) {
 					switch (keycode) {
 						case up:
@@ -183,10 +202,13 @@ public class TextAreaTable extends Table {
 							trackCursor.run();
 					}
 				}
-				return super.keyDown(event, keycode);
+
+				// 修复
+				boolean res = super.keyUp(event, keycode);
+				if (event != null) event.character = '\0';
+				return res;
 			}
 		}
-
 	}
 
 	public static class LinesShow extends Table {

@@ -9,6 +9,7 @@ import mindustry.game.EventType;
 import mindustry.mod.Mod;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Background;
+import modtools.ui.MyReflect;
 
 import java.util.Objects;
 
@@ -17,6 +18,8 @@ import static modtools.IntVars.modName;
 public class ModTools extends Mod {
 	public ModTools() {
 		Log.info("Loaded ModMake constructor.");
+		MyReflect.load();
+
 		Events.on(EventType.ClientLoadEvent.class, e -> {
 			Time.runTask(10f, () -> {
 				BaseDialog dialog = new BaseDialog("frog");

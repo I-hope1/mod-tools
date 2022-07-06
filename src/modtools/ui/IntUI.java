@@ -57,45 +57,6 @@ public class IntUI {
 	}
 
 
-	/* 一个文本域，可复制粘贴 */
-	public static Dialog showTextArea(TextField text) {
-		float w = (float) Core.graphics.getWidth();
-		float h = (float) Core.graphics.getHeight();
-		Dialog dialog = new Dialog("");
-		TextField text2 = dialog.cont.add(new TextArea(text.getText())).size(w * 0.85f, h * 0.75f).get();
-		dialog.buttons.table(t -> {
-			TextureRegionDrawable var10002 = Icon.left;
-			Objects.requireNonNull(dialog);
-			t.button("$back", var10002, dialog::hide).size(w / 3.0f - 25.0f, h * 0.05f);
-			t.button("$edit", Icon.edit, () -> {
-				Dialog ui = new Dialog("") {{
-					addCloseButton();
-					table(Tex.button, t -> {
-//						TextButtonStyle style = Styles.cleart;
-						var style = Styles.flatt;
-						t.defaults().size(280.0f, 60.0f).left();
-						t.row();
-						t.button("@schematic.copy.import", Icon.download, style, () -> {
-							dialog.hide();
-							text2.setText(Core.app.getClipboardText());
-						}).marginLeft(12.0f);
-						t.row();
-						t.button("@schematic.copy", Icon.copy, style, () -> {
-							dialog.hide();
-							Core.app.setClipboardText(text2.getText().replaceAll("\\r", "\n"));
-						}).marginLeft(12.0f);
-					});
-					show();
-				}};
-			}).size(w / 3.0f - 25.0f, h * 0.05f);
-			t.button("$ok", Icon.ok, () -> {
-				dialog.hide();
-				text.setText(text2.getText().replaceAll("\\r", "\\n"));
-			}).size(w / 3.0f - 25.0f, h * 0.05f);
-		});
-		return dialog.show();
-	}
-
 	/* 长按事件 */
 	public static <T extends Element> T longPress(T elem, final float duration, final Cons<Boolean> func) {
 		elem.addListener(new ClickListener() {

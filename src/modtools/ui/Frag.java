@@ -14,7 +14,7 @@ import modtools.ui.content.Content;
 import static modtools.IntVars.modName;
 
 public class Frag extends Table {
-	public boolean keepFrag = false, hideCont = false;
+	public boolean keepFrag = true, hideCont = false;
 	public int baseHeight = 0;
 	public Table contTable;
 	public Cell<Table> cell;
@@ -25,6 +25,7 @@ public class Frag extends Table {
 				.padBottom(-4).fillX().minWidth(40).height(40).get();
 		row();
 		new MoveListener(top, this);
+		// 添加双击变小
 		IntUI.doubleClick(top, () -> {}, () -> {
 			hideCont = !hideCont;
 			cell.setElement(hideCont ? null : contTable);

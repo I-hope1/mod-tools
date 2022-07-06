@@ -28,6 +28,7 @@ import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
+import modtools.ui.MyReflect;
 import modtools.ui.components.TextAreaTable;
 import modtools.ui.content.Selection.Function;
 import rhino.*;
@@ -38,6 +39,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
 import java.util.StringJoiner;
+
+import static modtools.ui.Contents.tester;
 
 public class Tester extends Content {
 	String log = "";
@@ -226,6 +229,7 @@ public class Tester extends Content {
 		public static ClassLoader main;
 		public static Scriptable scope;
 		public static ObjectMap<String, NativeJavaClass> classes;
+		public static NativeJavaClass Reflect;
 
 		public static void showInfo(Object o) {
 			Class<?> finalC = o.getClass();
@@ -287,9 +291,12 @@ public class Tester extends Content {
 						t.add(f.getName());
 						t.add(" = ");
 
+						Object[] val = {null};
+
 						if (type.isPrimitive() || type.equals(String.class)) {
 							try {
-								Label l = new Label("" + f.get(o));
+								val[0] = f.get(o);
+								Label l = new Label("" + val[0]);
 								l.setColor(Color.valueOf("#bad761"));
 								t.add(l);
 							} catch (Exception e) {
@@ -299,22 +306,23 @@ public class Tester extends Content {
 							Label l = t.add("???").get();
 							l.clicked(() -> {
 								try {
-									Object v = f.get(o);
-									l.setText("" + v);
-									if (v instanceof Color) {
-										t.image(IntUI.whiteui.tint((Color) v)).size(32);
+									val[0] = f.get(o);
+									l.setText("" + val[0]);
+									if (val[0] instanceof Color) {
+										t.image(IntUI.whiteui.tint((Color) val[0])).size(32);
 									}
 									IntUI.longPress(l, 600, b -> {
 										if (b) {
-											showInfo(v);
+											showInfo(val[0]);
 										}
 									});
 								} catch (IllegalAccessException ex) {
 									l.setText("");
 								}
-
 							});
 						}
+
+						t.button("存储为js变量", () -> tester.put(val[0])).size(150, 40);
 					}).pad(4).row();
 				}
 
@@ -379,6 +387,8 @@ public class Tester extends Content {
 
 								}).width(100);
 							}
+
+							t.button("存储为js变量", () -> tester.put(m)).size(150, 40);
 						} catch (Exception err) {
 							t.add("<" + err + ">", Color.red);
 						}
@@ -440,6 +450,7 @@ public class Tester extends Content {
 			main = Vars.mods.mainLoader();
 			scope = Vars.mods.getScripts().scope;
 			classes = new ObjectMap<>();
+			Reflect = new NativeJavaClass(scope, MyReflect.class, true);
 		}
 	}
 

@@ -15,7 +15,6 @@ import arc.scene.ui.TextArea;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntSeq;
-import arc.util.Log;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 
@@ -25,7 +24,7 @@ public class TextAreaTable extends Table {
 	private final MyTextArea area;
 	public static int numWidth = 13;
 
-	public TextArea getArea() {
+	public MyTextArea getArea() {
 		return area;
 	}
 
@@ -165,14 +164,21 @@ public class TextAreaTable extends Table {
 			return new MyTextAreaListener();
 		}
 
+		public void left() {
+			moveCursor(false, false);
+		}
+
+		public void right() {
+			moveCursor(true, false);
+		}
 
 		public class MyTextAreaListener extends TextAreaListener {
+
 			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				boolean jump = Core.input.ctrl();
 				if (event != null) {
 					char character = event.character;
-					Log.info(keycode);
 					// 排除NumLk时，输出数字
 					boolean valid = character == '\0' || !Objects.equals(keycode.value, "" + character);
 					if (valid) {
@@ -181,9 +187,10 @@ public class TextAreaTable extends Table {
 						// home
 						if (keycode == KeyCode.num7) goHome(jump);
 						// left
-						if (keycode == KeyCode.num4) cursor -= 1;
+						if (keycode == KeyCode.num4) moveCursor(false, jump);
+						;
 						// right
-						if (keycode == KeyCode.num6) cursor += 1;
+						if (keycode == KeyCode.num6) moveCursor(true, jump);
 						// down
 						if (keycode == KeyCode.num2) moveCursorLine(cursorLine - 1);
 						// up
@@ -243,9 +250,8 @@ public class TextAreaTable extends Table {
 			IntSeq linesBreak = area.getLinesBreak();
 			int cursorLine = area.getCursorLine() + 1;
 			Runnable drawLine = () -> {
-				if (cursorLine == cline[0]) font.setColor(Pal.accent);
+				font.setColor(cursorLine == cline[0] ? Pal.accent : Color.lightGray);
 				font.draw("" + cline[0], x, y2 + offsetY[0]);
-				font.setColor(Color.white);
 			};
 			for (int i = firstLineShowing * 2; i < (firstLineShowing + linesShowing) * 2 && i < linesBreak.size; i += 2) {
 				drawLine.run();

@@ -11,7 +11,10 @@ import arc.scene.Action;
 import arc.scene.Element;
 import arc.scene.Scene;
 import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.*;
+import arc.scene.ui.Button;
+import arc.scene.ui.Dialog;
+import arc.scene.ui.Label;
+import arc.scene.ui.TextButton;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
@@ -30,6 +33,7 @@ import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.MyReflect;
 import modtools.ui.components.TextAreaTable;
+import modtools.ui.components.TextAreaTable.MyTextArea;
 import modtools.ui.content.Selection.Function;
 import rhino.*;
 
@@ -44,7 +48,7 @@ import static modtools.ui.Contents.tester;
 
 public class Tester extends Content {
 	String log = "";
-	TextArea area;
+	MyTextArea area;
 	boolean loop = false, wrap = false, error, ignoreError = false;
 	final float w = Core.graphics.isPortrait() ? 440 : 540;
 	BaseDialog ui;
@@ -62,20 +66,25 @@ public class Tester extends Content {
 		TextAreaTable textarea = new TextAreaTable("");
 		area = textarea.getArea();
 		cont.add(textarea).size(w, 390).row();
-		cont.button("$ok", () -> {
-			error = false;
-			area.setText(getMessage().replaceAll("\r", ""));
-			evalMessage();
-			Fi d = history.file.child("" + Time.millis());
-			d.child("message.txt").writeString(getMessage());
-			d.child("log.txt").writeString(log);
-			history.list.add(d);
+		cont.image().color(Color.gray).growX().row();
+		cont.table(t -> {
+			t.button(Icon.left, area::left);
+			t.button("@ok", () -> {
+				error = false;
+				area.setText(getMessage().replaceAll("\r", ""));
+				evalMessage();
+				Fi d = history.file.child("" + Time.millis());
+				d.child("message.txt").writeString(getMessage());
+				d.child("log.txt").writeString(log);
+				history.list.add(d);
 
-			for (int i = 0; i < history.list.size - 30; ++i) {
-				history.list.get(i).deleteDirectory();
-				history.list.remove(i);
-			}
+				for (int i = 0; i < history.list.size - 30; ++i) {
+					history.list.get(i).deleteDirectory();
+					history.list.remove(i);
+				}
 
+			}).padLeft(8f).padRight(8f);
+			t.button(Icon.right, area::right);
 		}).row();
 		cont.table(Tex.button, t -> t.pane(p -> {
 			p.label(() -> log);
@@ -215,6 +224,7 @@ public class Tester extends Content {
 	public void put(String name, Object val) {
 		ScriptableObject.putProperty(scope, name, Context.javaToJS(val, scope));
 	}
+
 	public String put(Object val) {
 		int i = 0;
 		String prefix = "temp";
@@ -503,7 +513,7 @@ public class Tester extends Content {
 								f.delete();
 							}).row();
 							Objects.requireNonNull(ui);
-							ui.cont.button("$ok", ui::hide).fillX().height(60);
+							ui.cont.button("@ok", ui::hide).fillX().height(60);
 							ui.show();
 						} else {
 							consumer.get(f);

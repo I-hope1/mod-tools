@@ -54,7 +54,7 @@ public class MyReflect {
 		return (T)unsafe.getObject(obj, offset);
 	}
 
-	public static Unsafe unsafe;
+	private static Unsafe unsafe;
 
 	/*public static void removeFinal(Field field) throws Throwable {
 		unsafe.putObject(field, unsafe.objectFieldOffset(field), field.getModifiers() & ~Modifier.FINAL);

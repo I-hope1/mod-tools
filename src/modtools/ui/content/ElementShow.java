@@ -11,8 +11,10 @@ import arc.scene.ui.Image;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import mindustry.gen.Tex;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
+import modtools.IntVars;
 
 import static modtools.ui.Contents.tester;
 
@@ -56,7 +58,7 @@ public class ElementShow extends Content {
 
 			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				dialog.show(selected);
+				IntVars.async(() -> dialog.show(selected), () -> {});
 				frag.remove();
 				btn.setChecked(false);
 			}
@@ -115,7 +117,7 @@ public class ElementShow extends Content {
 		public void show(Element element) {
 			rebuild(element);
 			pane.row();
-			pane.add("---------------").padTop(10).padBottom(10).row();
+			pane.image().color(Pal.accent).growX().padTop(10).padBottom(10).row();
 			pane.add(element + "");
 			show();
 		}

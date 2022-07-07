@@ -44,6 +44,7 @@ import java.lang.reflect.Modifier;
 import java.util.Objects;
 import java.util.StringJoiner;
 
+import static modtools.ui.Contents.elementShow;
 import static modtools.ui.Contents.tester;
 
 public class Tester extends Content {
@@ -434,6 +435,9 @@ public class Tester extends Content {
 			return testElement(new Label(text));
 		}
 
+		public static void showElement(Element element){
+			elementShow.dialog.show(element);
+		}
 		public static Function<?> getFunction(String name) {
 			return Selection.all.get(name);
 		}

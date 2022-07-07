@@ -15,10 +15,10 @@ import arc.scene.ui.TextArea;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntSeq;
+import arc.util.Time;
+import arc.util.pooling.Pools;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
-
-import java.util.Objects;
 
 public class TextAreaTable extends Table {
 	private final MyTextArea area;
@@ -66,13 +66,15 @@ public class TextAreaTable extends Table {
 		public void trackCursor() {
 			int cursorLine = area.getCursorLine();
 			int firstLineShowing = area.getRealFirstLineShowing();
-			int max = firstLineShowing + area.getRealLinesShowing();
+			int lines = area.getRealLinesShowing();
+			int max = firstLineShowing + lines;
 			float fontHeight = area.getStyle().font.getLineHeight();
 			if (cursorLine <= firstLineShowing) {
 				setScrollY(cursorLine * fontHeight);
 			}
+			if (area.newLineAtEnd()) cursorLine++;
 			if (cursorLine > max) {
-				setScrollY(cursorLine * fontHeight);
+				setScrollY((cursorLine - lines) * fontHeight);
 			}
 		}
 
@@ -172,48 +174,74 @@ public class TextAreaTable extends Table {
 			moveCursor(true, false);
 		}
 
+		String insert(int position, CharSequence text, String to) {
+			return to.length() == 0 ? text.toString() : to.substring(0, position) + text + to.substring(position);
+		}
+
+		void changeText(String oldText, String newText) {
+			if (!newText.equals(oldText)) {
+				this.text = newText;
+				ChangeEvent changeEvent = (ChangeEvent) Pools.obtain(ChangeEvent.class, ChangeEvent::new);
+				boolean cancelled = this.fire(changeEvent);
+				this.text = cancelled ? oldText : newText;
+				Pools.free(changeEvent);
+			}
+		}
+
+		public void trackCursor() {
+			if (trackCursor != null) trackCursor.run();
+		}
+
+		@Override
+		protected void moveCursor(boolean forward, boolean jump) {
+			super.moveCursor(forward, jump);
+			trackCursor();
+		}
+
 		public class MyTextAreaListener extends TextAreaListener {
 
 			@Override
-			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				boolean jump = Core.input.ctrl();
-				if (event != null) {
-					char character = event.character;
-					// 排除NumLk时，输出数字
-					boolean valid = character == '\0' || !Objects.equals(keycode.value, "" + character);
-					if (valid) {
-						// end
-						if (keycode == KeyCode.num1) goEnd(jump);
-						// home
-						if (keycode == KeyCode.num7) goHome(jump);
-						// left
-						if (keycode == KeyCode.num4) moveCursor(false, jump);
-						;
-						// right
-						if (keycode == KeyCode.num6) moveCursor(true, jump);
-						// down
-						if (keycode == KeyCode.num2) moveCursorLine(cursorLine - 1);
-						// up
-						if (keycode == KeyCode.num8) moveCursorLine(cursorLine + 1);
-					}
-				}
-				return super.keyDown(event, keycode);
+			protected void goHome(boolean jump) {
+				super.goHome(jump);
+				trackCursor();
 			}
 
 			@Override
-			public boolean keyUp(InputEvent event, KeyCode keycode) {
-				if (trackCursor != null) {
-					switch (keycode) {
-						case up:
-						case down:
-							trackCursor.run();
+			protected void goEnd(boolean jump) {
+				super.goEnd(jump);
+				trackCursor();
+			}
+
+			@Override
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				int oldCursor = cursor;
+				boolean jump = Core.input.ctrl();
+				Time.runTask(0f, () -> {
+					// 判断是否一样
+					if (oldCursor == cursor) {
+						// end
+						if (keycode == KeyCode.num1) keyDown(event, KeyCode.end);//goEnd(jump);
+						// home
+						if (keycode == KeyCode.num7) keyDown(event, KeyCode.home);//goHome(jump);
+						// left
+						if (keycode == KeyCode.num4) keyDown(event, KeyCode.left);//moveCursor(false, jump);
+						// right
+						if (keycode == KeyCode.num6) keyDown(event, KeyCode.right);//moveCursor(true, jump);
+						// down
+						if (keycode == KeyCode.num2) keyDown(event, KeyCode.down);//moveCursorLine(cursorLine - 1);
+						// up
+						if (keycode == KeyCode.num8) keyDown(event, KeyCode.up);//moveCursorLine(cursorLine + 1);
 					}
+				});
+				if (jump && keycode == KeyCode.slash) {
+					int home = linesBreak.get(cursorLine * 2);
+					if (text.startsWith("//", home))
+						changeText(text, text.substring(0, home) + text.substring(home + 2));
+					else changeText(text, insert(home, "//", text));
+					updateDisplayText();
 				}
 
-				// 修复
-				boolean res = super.keyUp(event, keycode);
-				if (event != null) event.character = '\0';
-				return res;
+				return super.keyDown(event, keycode);
 			}
 		}
 	}
@@ -246,7 +274,7 @@ public class TextAreaTable extends Table {
 			font.getData().markupEnabled = false;
 			float[] offsetY = {0};
 			int[] cline = {firstLineShowing + 1};
-			int linesShowing = area.getRealLinesShowing();
+			int linesShowing = area.getRealLinesShowing() + 1;
 			IntSeq linesBreak = area.getLinesBreak();
 			int cursorLine = area.getCursorLine() + 1;
 			Runnable drawLine = () -> {

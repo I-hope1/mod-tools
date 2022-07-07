@@ -10,6 +10,7 @@ import arc.scene.event.Touchable;
 import arc.scene.ui.Image;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
+import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -74,12 +75,16 @@ public class ElementShow extends Content {
 
 	public static class ElementShowDialog extends BaseDialog {
 		Table pane = new Table();
+		Element element = null;
 
 		public ElementShowDialog() {
 			super("调试");
 
 			addCloseButton();
 			pane.left().defaults().left();
+			cont.button("显示父元素", Icon.up, () -> {
+				rebuild(element = element.parent);
+			}).disabled(b -> element == null || element.parent == null);
 			cont.pane(pane).grow();
 		}
 
@@ -88,6 +93,10 @@ public class ElementShow extends Content {
 
 			if (element == null) return;
 			build(element, pane);
+
+			pane.row();
+			pane.image().color(Pal.accent).growX().padTop(10).padBottom(10).row();
+			pane.add(element + "");
 		}
 
 		public void build(Element element, Table table) {
@@ -115,10 +124,8 @@ public class ElementShow extends Content {
 		}
 
 		public void show(Element element) {
+			this.element = element;
 			rebuild(element);
-			pane.row();
-			pane.image().color(Pal.accent).growX().padTop(10).padBottom(10).row();
-			pane.add(element + "");
 			show();
 		}
 	}

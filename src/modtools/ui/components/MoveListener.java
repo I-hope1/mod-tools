@@ -15,6 +15,7 @@ public class MoveListener extends InputListener {
 	float bx, by;
 	public final Table main;
 
+
 	public MoveListener(Element touch, Table main) {
 		this.main = main;
 		touch.addListener(this);

@@ -21,6 +21,11 @@ public class ModTools extends Mod {
 		MyReflect.load();
 
 		Events.on(EventType.ClientLoadEvent.class, e -> {
+			/*try {
+				MyPlacement.load();
+			} catch (Throwable ex) {
+				Log.err(ex);
+			}*/
 			Time.runTask(10f, () -> {
 				BaseDialog dialog = new BaseDialog("frog");
 				dialog.addCloseListener();
@@ -35,6 +40,7 @@ public class ModTools extends Mod {
 			IntVars.load();
 			if (Core.settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
 		});
+
 	}
 
 }

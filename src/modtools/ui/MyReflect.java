@@ -9,6 +9,7 @@ import java.util.HashMap;
 
 public class MyReflect {
 	static HashMap<String, Field> map = new HashMap<>();
+//	public static Lookup lookup;
 
 	public static Field getField(Class<?> clazz, String name) throws NoSuchFieldException {
 		if (map.containsKey(clazz.getName() + "." + name)) return map.get(clazz.getName() + "." + name);
@@ -71,9 +72,9 @@ public class MyReflect {
 			long offset = unsafe.objectFieldOffset(module);
 			unsafe.putObject(MyReflect.class, offset, Object.class.getModule());
 
-			/*Field field = MethodHandles.Lookup.class.getDeclaredField("IMPL_LOOKUP");
+			/*Field field = Lookup.class.getDeclaredField("IMPL_LOOKUP");
 			offset = unsafe.staticFieldOffset(field);
-			lookup = (MethodHandles.Lookup) unsafe.getObject(MethodHandles.Lookup.class, offset);*/
+			lookup = (Lookup) unsafe.getObject(Lookup.class, offset);*/
 
 		} catch (Exception e) {
 			Log.err(e);

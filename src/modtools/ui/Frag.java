@@ -22,7 +22,6 @@ public class Frag extends Table {
 
 	public void load() {
 		name = modName + "-frag";
-		;
 		Image top = image().color(Color.sky).margin(0).pad(0)
 				.padBottom(-4).fillX().minWidth(40).height(40).get();
 		row();
@@ -54,6 +53,11 @@ public class Frag extends Table {
 
 		update(() -> {
 			setPosition(Mathf.clamp(x, 0.0f, (float) Core.graphics.getWidth() - getPrefWidth()), Mathf.clamp(y, 0.0f, (float) Core.graphics.getHeight() - getPrefHeight()));
+			/*if (Vars.state.isGame() && Vars.net.server()) {
+				var p = new MyPacket();
+				p.aBoolean = false;
+				Vars.net.send(p, true);
+			}*/
 			if (!keepFrag || root == null || root.getChildren().peek() == this) return;
 			root.removeChild(this);
 			root.addChild(this);

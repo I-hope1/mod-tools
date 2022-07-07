@@ -20,6 +20,8 @@ public class ModTools extends Mod {
 		Log.info("Loaded ModMake constructor.");
 		MyReflect.load();
 
+//		MyPacket.register();
+
 		Events.on(EventType.ClientLoadEvent.class, e -> {
 			/*try {
 				MyPlacement.load();
@@ -40,7 +42,6 @@ public class ModTools extends Mod {
 			IntVars.load();
 			if (Core.settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
 		});
-
 	}
 
 }

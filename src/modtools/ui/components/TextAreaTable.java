@@ -64,18 +64,19 @@ public class TextAreaTable extends Table {
 		}
 
 		public void trackCursor() {
-			int cursorLine = area.getCursorLine();
-			int firstLineShowing = area.getRealFirstLineShowing();
-			int lines = area.getRealLinesShowing();
-			int max = firstLineShowing + lines;
-			float fontHeight = area.getStyle().font.getLineHeight();
-			if (cursorLine <= firstLineShowing) {
-				setScrollY(cursorLine * fontHeight);
-			}
-			if (area.newLineAtEnd()) cursorLine++;
-			if (cursorLine > max) {
-				setScrollY((cursorLine - lines) * fontHeight);
-			}
+			Time.runTask(0f, () -> {
+				int cursorLine = area.getCursorLine();
+				int firstLineShowing = area.getRealFirstLineShowing();
+				int lines = area.getRealLinesShowing();
+				int max = firstLineShowing + lines;
+				float fontHeight = area.getFontLineHeight();
+				if (cursorLine <= firstLineShowing) {
+					setScrollY(cursorLine * fontHeight);
+				}
+				if (cursorLine > max) {
+					setScrollY((cursorLine - lines) * fontHeight);
+				}
+			});
 		}
 
 		@Override
@@ -101,9 +102,12 @@ public class TextAreaTable extends Table {
 			fire(new ChangeEvent());
 		}
 
+		public float getFontLineHeight() {
+			return style.font.getLineHeight();
+		}
 		@Override
 		public float getPrefHeight() {
-			float prefHeight = style.font.getLineHeight() * getLines();
+			float prefHeight = getFontLineHeight() * getLines();
 			var style = getStyle();
 			if (style.background != null) {
 				prefHeight = Math.max(prefHeight + style.background.getBottomHeight() + style.background.getTopHeight(),
@@ -128,7 +132,7 @@ public class TextAreaTable extends Table {
 		}
 
 		public int getRealFirstLineShowing() {
-			if (true) return (int) Math.floor(scrollY / style.font.getLineHeight());
+			if (true) return (int) Math.floor(scrollY / getFontLineHeight());
 
 			int firstLineShowing = 0;
 			if (cursorLine != firstLineShowing) {
@@ -265,8 +269,9 @@ public class TextAreaTable extends Table {
 		public void draw() {
 			super.draw();
 			int firstLineShowing = area.getRealFirstLineShowing();
-			float scrollOffsetY = area.scrollY / area.getStyle().font.getLineHeight() - firstLineShowing;
-			float y2 = getTop() - getBackground().getTopHeight() + scrollOffsetY * 2;
+			float lineHeight = area.getFontLineHeight();
+			float scrollOffsetY = area.scrollY - (int)(area.scrollY / lineHeight) * lineHeight;
+			float y2 = getTop() - getBackground().getTopHeight() + scrollOffsetY;
 //			Log.info(scrollOffsetY);
 			final Font font = area.getStyle().font;
 

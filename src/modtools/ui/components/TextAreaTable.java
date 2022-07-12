@@ -2,6 +2,7 @@
 package modtools.ui.components;
 
 import arc.Core;
+import arc.func.Boolf2;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
 import arc.input.KeyCode;
@@ -55,6 +56,10 @@ public class TextAreaTable extends Table {
 		});
 	}
 
+	public Boolf2<InputEvent, KeyCode> keyDonwB = null;
+	public Boolf2<InputEvent, Character> keyTypedB = null;
+	public Boolf2<InputEvent, KeyCode> keyUpB = null;
+
 	public static class MyScrollPane extends ScrollPane {
 		MyTextArea area;
 
@@ -87,7 +92,7 @@ public class TextAreaTable extends Table {
 		}
 	}
 
-	public static class MyTextArea extends TextArea {
+	public class MyTextArea extends TextArea {
 		public float parentHeight = 0;
 		public float scrollY = 0;
 		public Runnable trackCursor = null;
@@ -105,6 +110,7 @@ public class TextAreaTable extends Table {
 		public float getFontLineHeight() {
 			return style.font.getLineHeight();
 		}
+
 		@Override
 		public float getPrefHeight() {
 			float prefHeight = getFontLineHeight() * getLines();
@@ -163,10 +169,15 @@ public class TextAreaTable extends Table {
 		}
 
 		@Override
+		public void updateDisplayText() {
+			super.updateDisplayText();
+		}
+
+		@Override
 		public void addInputDialog() {
 		}
 
-		protected InputListener createInputListener() {
+		public InputListener createInputListener() {
 			return new MyTextAreaListener();
 		}
 
@@ -178,7 +189,11 @@ public class TextAreaTable extends Table {
 			moveCursor(true, false);
 		}
 
-		String insert(int position, CharSequence text, String to) {
+		public void insert(CharSequence itext) {
+			changeText(text, insert(cursor, itext, text));
+		}
+
+		public String insert(int position, CharSequence text, String to) {
 			return to.length() == 0 ? text.toString() : to.substring(0, position) + text + to.substring(position);
 		}
 
@@ -218,6 +233,8 @@ public class TextAreaTable extends Table {
 
 			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (keyDonwB != null && !keyDonwB.get(event, keycode)) return false;
+
 				int oldCursor = cursor;
 				boolean jump = Core.input.ctrl();
 				Time.runTask(0f, () -> {
@@ -247,6 +264,17 @@ public class TextAreaTable extends Table {
 
 				return super.keyDown(event, keycode);
 			}
+
+			@Override
+			public boolean keyTyped(InputEvent event, char character) {
+				if (keyTypedB != null && !keyTypedB.get(event, character)) return false;
+				return super.keyTyped(event, character);
+			}
+
+			public boolean keyUp(InputEvent event, KeyCode keycode) {
+				if (keyUpB != null && !keyUpB.get(event, keycode)) return false;
+				return super.keyUp(event, keycode);
+			}
 		}
 	}
 
@@ -270,7 +298,7 @@ public class TextAreaTable extends Table {
 			super.draw();
 			int firstLineShowing = area.getRealFirstLineShowing();
 			float lineHeight = area.getFontLineHeight();
-			float scrollOffsetY = area.scrollY - (int)(area.scrollY / lineHeight) * lineHeight;
+			float scrollOffsetY = area.scrollY - (int) (area.scrollY / lineHeight) * lineHeight;
 			float y2 = getTop() - getBackground().getTopHeight() + scrollOffsetY;
 //			Log.info(scrollOffsetY);
 			final Font font = area.getStyle().font;

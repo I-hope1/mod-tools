@@ -5,8 +5,10 @@ import arc.Core;
 import arc.files.Fi;
 import arc.func.Cons;
 import arc.func.Cons2;
+import arc.func.Floatf;
 import arc.func.Func;
 import arc.graphics.Color;
+import arc.input.KeyCode;
 import arc.scene.Action;
 import arc.scene.Element;
 import arc.scene.Scene;
@@ -62,10 +64,39 @@ public class Tester extends Content {
 		super("tester");
 	}
 
+	private static float sort(Fi f) {
+		try {
+			return -Long.parseLong(f.nameWithoutExtension());
+		} catch (Exception e) {
+			return Long.MAX_VALUE;
+		}
+	}
+
 	public void show(Table table, Table buttons) {
 		Table cont = new Table();
 		TextAreaTable textarea = new TextAreaTable("");
 		area = textarea.getArea();
+		boolean[] execed = {false};
+		textarea.keyDonwB = (event, keycode) -> {
+			if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.enter) {
+				evalMessage();
+				execed[0] = true;
+				return false;
+			}
+//			Core.input.ctrl() && keycode == KeyCode.rightBracket
+			if (keycode == KeyCode.tab) {
+				area.insert("  ");
+				area.setCursorPosition(area.getCursorPosition() + 2);
+				area.updateDisplayText();
+			}
+			return true;
+		};
+		textarea.keyTypedB = (event, character) -> !execed[0];
+		textarea.keyUpB = (event, keycode) -> {
+			execed[0] = false;
+			return true;
+		};
+
 		cont.add(textarea).size(w, 390).row();
 		cont.image().color(Color.gray).growX().row();
 		cont.table(t -> {
@@ -77,13 +108,14 @@ public class Tester extends Content {
 				Fi d = history.file.child("" + Time.millis());
 				d.child("message.txt").writeString(getMessage());
 				d.child("log.txt").writeString(log);
-				history.list.add(d);
+				history.list.insert(0, d);
 
-				for (int i = 0; i < history.list.size - 30; ++i) {
+				int max = history.list.size - 1;
+				int min = Math.min(30, max);
+				for (int i = min; i < max; i++) {
 					history.list.get(i).deleteDirectory();
 					history.list.remove(i);
 				}
-
 			}).padLeft(8f).padRight(8f);
 			t.button(Icon.right, area::right);
 		}).row();
@@ -108,6 +140,7 @@ public class Tester extends Content {
 			p.button("历史记录", history::show).size(100, 55);
 			p.button("收藏", bookmark::show).size(100, 55);
 		}).height(60).fillX();
+
 		buttons.button("$back", Icon.left, ui::hide).size(210, 64);
 		BaseDialog dialog = new BaseDialog("$edit");
 		dialog.cont.pane(p -> {
@@ -179,13 +212,13 @@ public class Tester extends Content {
 			p.add(f.child("message.txt").readString()).row();
 			p.image().height(3).fillX().row();
 			p.add(f.child("log.txt").readString());
-		}, true);
+		}, Tester::sort);
 		bookmark = new ListDialog("bookmark", Vars.dataDirectory.child("mods(I hope...)").child("bookmarks"),
 				f -> f, f -> {
 			area.setText(f.readString());
 		}, (f, p) -> {
 			p.add(f.readString()).row();
-		}, false);
+		}, Tester::sort);
 		scripts = Vars.mods.getScripts();
 		cx = scripts.context;
 		scope = scripts.scope;
@@ -226,14 +259,14 @@ public class Tester extends Content {
 		ScriptableObject.putProperty(scope, name, Context.javaToJS(val, scope));
 	}
 
-	public String put(Object val) {
+	public void put(Object val) {
 		int i = 0;
 		String prefix = "temp";
 		while (ScriptableObject.hasProperty(scope, prefix + i)) {
 			i++;
 		}
 		put(prefix + i, val);
-		return prefix + i;
+		Vars.ui.showInfoFade("已储存为[accent]" + prefix + i);
 	}
 
 	public static class JSFunc {
@@ -241,6 +274,11 @@ public class Tester extends Content {
 		public static Scriptable scope;
 		public static ObjectMap<String, NativeJavaClass> classes;
 		public static NativeJavaClass Reflect;
+
+		/*public static Object eval(String code) {
+			var scripts = new Scripts();
+			return scripts.context.evaluateString(scripts.scope, code, "none", 1);
+		}*/
 
 		public static void showInfo(Object o) {
 			Class<?> finalC = o.getClass();
@@ -306,7 +344,7 @@ public class Tester extends Content {
 
 						if (type.isPrimitive() || type.equals(String.class)) {
 							try {
-								val[0] = f.get(o);
+								val[0] = MyReflect.getValue(o, f);
 								Label l = new Label("" + val[0]);
 								l.setColor(Color.valueOf("#bad761"));
 								t.add(l);
@@ -333,7 +371,7 @@ public class Tester extends Content {
 							});
 						}
 
-						t.button("存储为js变量", () -> tester.put(val[0])).size(150, 40);
+						t.button("存储为js变量", () -> tester.put(val[0])).padLeft(10f).size(150, 40);
 					}).pad(4).row();
 				}
 
@@ -435,9 +473,10 @@ public class Tester extends Content {
 			return testElement(new Label(text));
 		}
 
-		public static void showElement(Element element){
+		public static void showElement(Element element) {
 			elementShow.dialog.show(element);
 		}
+
 		public static Function<?> getFunction(String name) {
 			return Selection.all.get(name);
 		}
@@ -460,6 +499,10 @@ public class Tester extends Content {
 			return findClass(name, true);
 		}
 
+		public static Class<?> forName(String name) throws ClassNotFoundException {
+			return Class.forName(name, false, Vars.mods.mainLoader());
+		}
+
 		static {
 			main = Vars.mods.mainLoader();
 			scope = Vars.mods.getScripts().scope;
@@ -471,13 +514,13 @@ public class Tester extends Content {
 	class ListDialog extends BaseDialog {
 		public Seq<Fi> list = new Seq<>();
 		final Table p = new Table();
-		boolean sort;
+		Floatf<Fi> sorter;
 		Fi file;
 		Func<Fi, Fi> fileHolder;
 		Cons<Fi> consumer;
 		Cons2<Fi, Table> pane;
 
-		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane, boolean sort) {
+		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane, Floatf<Fi> sorter) {
 			super(Core.bundle.get("title." + title, title));
 			cont.pane(p).fillX().fillY();
 			addCloseButton();
@@ -486,7 +529,9 @@ public class Tester extends Content {
 			this.fileHolder = fileHolder;
 			this.consumer = consumer;
 			this.pane = pane;
-			this.sort = sort;
+			this.sorter = sorter;
+
+			list.sort(sorter);
 		}
 
 		public Dialog show(Scene stage, Action action) {
@@ -497,8 +542,7 @@ public class Tester extends Content {
 		public void build() {
 			p.clearChildren();
 
-			for (int j = list.size - 1; j >= 0; --j) {
-				Fi f = list.get(j);
+			list.each(f -> {
 				p.table(Tex.button, t -> {
 					Button btn = t.left().button(b -> {
 								b.pane(c -> {
@@ -535,8 +579,7 @@ public class Tester extends Content {
 						build();
 					}).fill().right();
 				}).width(w).row();
-			}
-
+			});
 		}
 	}
 }

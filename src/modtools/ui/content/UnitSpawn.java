@@ -26,6 +26,7 @@ import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Contents;
 import modtools.ui.IntUI;
 import modtools.ui.components.MyItemSelection;
+import modtools.utils.NumberUtils;
 
 import static mindustry.Vars.player;
 import static rhino.ScriptRuntime.*;
@@ -77,13 +78,13 @@ public class UnitSpawn extends Content {
 				x.add("x:");
 				xField = x.field("" + player.x, newX -> {
 //					if (!isNaN(newX)) swapnX = Float.parseFloat(newX);
-				}).valid(val -> !myIsNaN(val)).get();
+				}).valid(val -> validNumber(val)).get();
 			});
 			table.table(y -> {
 				y.add("y:");
 				yField = y.field("" + player.y, newY -> {
 //					if (!isNaN(newY)) swapnY = Float.parseFloat(newY);
-				}).valid(val -> !myIsNaN(val)).get();
+				}).valid(val -> validNumber(val)).get();
 			}).row();
 			table.button("选取坐标", () -> {
 				ui.hide();
@@ -116,7 +117,7 @@ public class UnitSpawn extends Content {
 				teamField = t.field("" + team.id, text -> {
 					int id = (int) toInteger(text);
 					team = Team.get(id);
-				}).valid(val -> !myIsNaN(val) && toInteger(val) >= 0).get();
+				}).valid(val -> validNumber(val) && toInteger(val) >= 0).get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
 				btn.clicked(() -> IntUI.showSelectImageTableWithFunc(btn, new Seq<>(Team.all),
 						() -> team, newTeam -> {
@@ -130,7 +131,7 @@ public class UnitSpawn extends Content {
 				t.add("数量");
 				amountField = t.field("0", text -> {
 					amount = (int) toInteger(text);
-				}).valid(val -> !myIsNaN(val) && toNumber(val) >= 0).get();
+				}).valid(val -> validNumber(val) && NumberUtils.validPosInt(val)).get();
 			});
 		}).row();
 		ui.cont.table(table -> {
@@ -155,12 +156,12 @@ public class UnitSpawn extends Content {
 		return xField.isValid() && yField.isValid() && amountField.isValid() && teamField.isValid();
 	}
 
-	public boolean myIsNaN(String str) {
+	public boolean validNumber(String str) {
 		try {
 			double d = toNumber(str);
-			return isNaN(d);
+			return !isNaN(d);
 		} catch (Exception ignored) {}
-		return false;
+		return true;
 	}
 
 	public void spawn() {

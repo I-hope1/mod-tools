@@ -11,6 +11,7 @@ import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
+import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
@@ -20,6 +21,7 @@ import arc.scene.ui.Image;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextButton;
+import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
@@ -36,11 +38,11 @@ import mindustry.world.Tile;
 import mindustry.world.blocks.environment.Floor;
 import mindustry.world.blocks.environment.OverlayFloor;
 import modtools.ui.Contents;
-import modtools.ui.IntFunc;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.components.MoveListener;
 import modtools.ui.content.Tester.JSFunc;
+import modtools.utils.NumberUtils;
 
 import java.util.ArrayList;
 import java.util.function.Consumer;
@@ -56,10 +58,15 @@ public class Selection extends Content {
 			"floor", false,
 			"unit", false
 	);
-	public Dialog frag;
+	public Dialog fragSelect;
+	public FragDraw fragDraw;
 	public Table pane, functions;
 	Team defaultTeam;
+	// show: pane是否显示
+	// move: 是否移动
 	boolean show = false, move = false;
+	boolean drawSelect = true;
+	// 用于保存选择的坐标
 	float x1, y1, x2, y2;
 
 	static final int buttonWidth = 200, buttonHeight = 45;
@@ -102,14 +109,18 @@ public class Selection extends Content {
 				}
 
 			}).growX().left().padLeft(16);
-		}).growX().left().padLeft(16);
+		}).growX().left().padLeft(16).row();
+		table.table(t -> {
+			t.left().defaults().left();
+			t.check("在世界中显示已选", drawSelect, b -> drawSelect = b);
+		}).growX().left().padLeft(16).row();
 		Contents.settings.add(table);
 	}
 
 	public void load() {
-		frag = new Dialog() {
+		fragSelect = new Dialog() {
 			public void draw() {
-				Lines.stroke(4.0f);
+				Lines.stroke(Scl.scl(4.0f));
 				Draw.color(Pal.accentBack);
 				Rect r = new Rect(Math.min(x1, x2), Math.min(y1, y2) - 1.0f, Math.abs(x1 - x2), Math.abs(y1 - y2));
 				Lines.rect(r);
@@ -118,9 +129,10 @@ public class Selection extends Content {
 				Lines.rect(r);
 			}
 		};
-		frag.background(Tex.button);
-		frag.touchable = Touchable.enabled;
-		frag.setFillParent(true);
+		fragSelect.background(Tex.button);
+		fragSelect.touchable = Touchable.enabled;
+		fragSelect.setFillParent(true);
+
 		int maxH = 400;
 		InputListener listener = new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
@@ -140,7 +152,7 @@ public class Selection extends Content {
 					x1 = x2 = x;
 					y1 = y2 = y;
 					move = true;
-					Time.run(2.0f, () -> {
+					Time.runTask(2f, () -> {
 						move = true;
 					});
 					return show;
@@ -207,9 +219,9 @@ public class Selection extends Content {
 
 						pane.touchable = Touchable.enabled;
 						pane.visible = true;
-						pane.setPosition(Mathf.clamp(mx, 0.0f, (float) Core.graphics.getWidth() - pane.getPrefWidth()), Mathf.clamp(my, 0.0f, (float) Core.graphics.getHeight() - pane.getPrefHeight()));
-						frag.hide();
+						pane.setPosition(Mathf.clamp(mx, 0f, Core.graphics.getWidth() - pane.getPrefWidth()), Mathf.clamp(my, 0f, Core.graphics.getHeight() - pane.getPrefHeight()));
 						show = false;
+						fragSelect.hide();
 					} else {
 						hide();
 					}
@@ -218,9 +230,13 @@ public class Selection extends Content {
 			}
 		};
 		Core.scene.addListener(listener);
-		int W = buttonWidth;
+
+		fragDraw = new FragDraw();
+		Core.scene.add(fragDraw);
+
+		final int W = buttonWidth;
 		functions = new Table();
-		functions.defaults().width((float) W);
+		functions.defaults().width(W);
 		pane = new Table();
 		pane.table(right -> {
 			Image img = right.image().color(Color.sky).size((float) (W - 32), 32.0f).get();
@@ -231,14 +247,13 @@ public class Selection extends Content {
 		paneStyle.background = Styles.none;
 		pane.table(t -> {
 			t.pane(paneStyle, functions).fillX().fillY();
-		}).size((float) W, (float) maxH).get().background(Styles.black5);
-		pane.left().bottom().defaults().width((float) W);
+		}).size(W, maxH).get().background(Styles.black5);
+		pane.left().bottom().defaults().width(W);
 		pane.visible = false;
 		pane.update(() -> {
 			if (Vars.state.isMenu()) {
 				hide();
 			}
-
 		});
 
 		tiles = new TileFunction<>("tile", (t, func) -> {
@@ -273,11 +288,12 @@ public class Selection extends Content {
 					String[] amount = new String[1];
 					table.field("", s -> {
 						amount[0] = s;
-					});
+					}).valid(NumberUtils::validPosInt);
+					;
 					table.button("", Icon.ok, Styles.cleart, () -> {
 						func.each(b -> {
 							if (b.items != null) {
-								b.items.set(item, IntFunc.parseInt(amount[0]));
+								b.items.set(item, NumberUtils.asInt(amount[0]));
 							}
 						});
 						hide.run();
@@ -289,12 +305,12 @@ public class Selection extends Content {
 					String[] amount = new String[1];
 					table.field("", s -> {
 						amount[0] = s;
-					});
+					}).valid(NumberUtils::validPosInt);
 					table.button("", Icon.ok, Styles.cleart, () -> {
 						func.each(b -> {
 							if (b.liquids != null) {
 								float now = b.liquids.get(liquid);
-								b.liquids.add(liquid, IntFunc.parseFloat(amount[0]) - now);
+								b.liquids.add(liquid, NumberUtils.asInt(amount[0]) - now);
 							}
 						});
 						hide.run();
@@ -355,15 +371,23 @@ public class Selection extends Content {
 	}
 
 	public void hide() {
-		frag.hide();
+		fragSelect.hide();
 		show = false;
 		pane.visible = false;
 		pane.touchable = Touchable.disabled;
+		btn.setChecked(false);
+
+//		if (!Core.input.alt()) {
+			tiles.clearList();
+			buildings.clearList();
+			units.clearList();
+//		}
 	}
 
 	public void build() {
 		show = true;
-		frag.show();
+		fragSelect.show();
+//		fragSelect.touchable = Touchable.enabled;
 	}
 
 	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
@@ -405,6 +429,22 @@ public class Selection extends Content {
 			table.add("x:" + item.x).padRight(6.0f);
 			table.add("y:" + item.y);
 		}
+
+		@Override
+		public void draw() {
+			if (!select.get(this.name)) return;
+			list.removeIf(build -> build.dead);
+			list.forEach(unit -> {
+				// 将世界的坐标，转成屏幕的坐标
+				Vec2 vec2 = Core.camera.project(unit.x, unit.y);
+				float x = vec2.x, y = vec2.y;
+				float len = (unit.type.hitSize + 0.1f) * 4;
+				vec2 = new Vec2(len * Core.graphics.getWidth(), len * Core.graphics.getHeight());
+				vec2.mul(Core.camera.mat);
+				float rw = vec2.x, rh = vec2.y;
+				MyDraw.dashSquare(rw / 8, Pal.accent, x, y, rw);
+			});
+		}
 	}
 
 	public class BuildFunction<T extends Building> extends Function<T> {
@@ -422,6 +462,40 @@ public class Selection extends Content {
 			});
 			table.add(pos).row();
 		}
+
+		@Override
+		public void draw() {
+			if (!select.get(this.name)) return;
+			list.removeIf(build -> build.tile.build != build);
+			list.forEach(build -> {
+				// 将世界的坐标，转成屏幕的坐标
+				Vec2 vec2 = Core.camera.project(build.x, build.y);
+				float x = vec2.x, y = vec2.y;
+				float len = (build.block.size + 0.1f) * 4;
+				vec2 = new Vec2(len * Core.graphics.getWidth(), len * Core.graphics.getHeight());
+				vec2.mul(Core.camera.mat);
+				float rw = vec2.x, rh = vec2.y;
+				MyDraw.dashSquare(rw / 8, Pal.accent, x, y, rw);
+				/*TextureRegion region;
+				if (build.block.variants != 0 && build.block.variantRegions != null) {
+					region = build.block.variantRegions[Mathf.randomSeed(build.tile.pos(), 0, Math.max(0, build.block.variantRegions.length - 1))];
+				} else {
+					region = build.block.region;
+				}
+				vec2 = new Vec2(region.width / (float) tilesize * Core.graphics.getWidth(), region.height / (float) tilesize * Core.graphics.getHeight());
+//				vec2 = Core.camera.project(region.width, region.height);
+				vec2.mul(Core.camera.mat);
+				Draw.rect(region, x, y, vec2.x, vec2.y, build.drawrot());*/
+				/*// left
+				Drawf.dashLine(Pal.accent, x - rw, y - rh, x - rw, y + rh, (int) (Math.max(rw, rh) / 2));
+				// down
+				Drawf.dashLine(Pal.accent, x - rw, y - rh, x + rw, y - rh, (int) (Math.max(rw, rh) / 2));
+				// right
+				Drawf.dashLine(Pal.accent, x + rw, y - rh, x + rw, y + rh, (int) (Math.max(rw, rh) / 2));
+				// up
+				Drawf.dashLine(Pal.accent, x - rw, y + rh, x + rw, y + rh, (int) (Math.max(rw, rh) / 2));*/
+			});
+		}
 	}
 
 	public class TileFunction<T extends Tile> extends Function<T> {
@@ -434,6 +508,21 @@ public class Selection extends Content {
 			table.row();
 			table.add("x:" + item.x).padRight(6.0f);
 			table.add("y:" + item.y);
+		}
+
+		@Override
+		public void draw() {
+			if (!select.get(this.name)) return;
+			list.forEach(tile -> {
+				// 将世界的坐标，转成屏幕的坐标
+				Vec2 vec2 = Core.camera.project(tile.worldx(), tile.worldy());
+				float x = vec2.x, y = vec2.y;
+				float len = (tile.block().size + 0.1f) * 4;
+				vec2 = new Vec2(len * Core.graphics.getWidth(), len * Core.graphics.getHeight());
+				vec2.mul(Core.camera.mat);
+				float rw = vec2.x, rh = vec2.y;
+				MyDraw.dashSquare(rw / 8, Pal.accent, x, y, rw);
+			});
 		}
 	}
 
@@ -519,6 +608,53 @@ public class Selection extends Content {
 		}
 
 		public void buildTable(T item, Table table) {
+		}
+
+		public void draw() {}
+	}
+
+	public class FragDraw extends Element {
+		float time;
+		float totalTime = 50;
+
+		{
+			touchable = Touchable.disabled;
+		}
+
+		@Override
+		public void draw() {
+			if (!drawSelect) return;
+			time += Time.delta;
+			if (time > totalTime + 10) time = 0;
+			Draw.color(Color.gold, Color.white, Mathf.clamp(time / totalTime, 0, 1));
+			all.each((k, func) -> func.draw());
+			Draw.color();
+		}
+	}
+
+	public static class MyDraw {
+		public static void dashLine(float thick, Color color, float x, float y, float x2, float y2, int segments) {
+			Lines.stroke(thick);
+			Draw.color(Pal.gray, color.a);
+			Lines.dashLine(x, y, x2, y2, segments);
+			Lines.stroke(thick / 3f, color);
+			Lines.dashLine(x, y, x2, y2, segments);
+			Draw.reset();
+		}
+
+		public static void dashLine(float thick, Color color, float x, float y, float x2, float y2) {
+			dashLine(thick, color, x, y, x2, y2, (int) (Math.max(Math.abs(x - x2), Math.abs(y - y2)) * 8));
+		}
+
+		public static void dashRect(float thick, Color color, float x, float y, float width, float height) {
+			dashLine(thick, color, x, y, x + width, y);
+			dashLine(thick, color, x + width, y, x + width, y + height);
+			dashLine(thick, color, x + width, y + height, x, y + height);
+			dashLine(thick, color, x, y + height, x, y);
+		}
+
+		public static void dashSquare(float thick, Color color, float x, float y, float size) {
+			dashRect(thick, color, x - size / 2f, y - size / 2f, size, size);
 		}
 	}
 }

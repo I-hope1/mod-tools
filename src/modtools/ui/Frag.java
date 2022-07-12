@@ -21,6 +21,7 @@ public class Frag extends Table {
 	public Cell<Table> cell;
 
 	public void load() {
+//		MyPacket.register();
 		name = modName + "-frag";
 		Image top = image().color(Color.sky).margin(0).pad(0)
 				.padBottom(-4).fillX().minWidth(40).height(40).get();

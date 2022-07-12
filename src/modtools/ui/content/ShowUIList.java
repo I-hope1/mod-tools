@@ -6,6 +6,7 @@ import arc.graphics.Color;
 import arc.scene.style.Drawable;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.ui.CheckBox;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.Slider.SliderStyle;
@@ -24,11 +25,18 @@ import modtools.ui.components.IntTab;
 
 import java.lang.reflect.Field;
 
+import static arc.scene.ui.CheckBox.CheckBoxStyle;
+
 public class ShowUIList extends Content {
 	BaseDialog ui;
 
 	public ShowUIList() {
 		super("showuilist");
+	}
+
+	public void copyText(CharSequence text) {
+		Vars.ui.showInfoFade("已复制: [accent]" + text);
+		Core.app.setClipboardText(text.toString());
 	}
 
 	public void load() {
@@ -38,12 +46,7 @@ public class ShowUIList extends Content {
 				new Table(t -> {
 					Icon.icons.each((k, icon) -> {
 						t.image(new TextureRegionDrawable(icon)).size(32);
-						t.add("" + k).with(l -> {
-							l.clicked(() -> {
-								Core.app.setClipboardText("" + l.getText());
-								Vars.ui.showInfoFade("已复制");
-							});
-						}).row();
+						t.add("" + k).with(l -> l.clicked(() -> copyText(l.getText()))).row();
 					});
 				}),
 				new Table(t -> {
@@ -51,16 +54,14 @@ public class ShowUIList extends Content {
 
 					for (Field field : fields) {
 						try {
+							// 跳过private检查，减少时间
+							field.setAccessible(true);
 							t.image((Drawable) field.get(null)).size(32);
-						} catch (IllegalAccessException | IllegalArgumentException var7) {
-							Log.err(var7);
+						} catch (IllegalAccessException | IllegalArgumentException err) {
+							Log.err(err);
 						}
 
-						t.add(field.getName()).with(l -> {
-							l.clicked(() -> {
-								Core.app.setClipboardText("" + l.getText());
-							});
-						}).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l.getText()))).row();
 					}
 
 				}),
@@ -69,6 +70,8 @@ public class ShowUIList extends Content {
 
 					for (Field field : fields) {
 						try {
+							// 跳过private检查，减少时间
+							field.setAccessible(true);
 							Object style = field.get(null);
 							if (style instanceof LabelStyle) {
 								t.add("label", (LabelStyle) style).size(32);
@@ -78,9 +81,10 @@ public class ShowUIList extends Content {
 							} else if (style instanceof TextFieldStyle) {
 								t.field("field", (TextFieldStyle) style, text -> {
 								});
+							} else if (style instanceof CheckBoxStyle) {
+								t.add(new CheckBox("checkbox", (CheckBoxStyle) style)).height(42);
 							} else if (style instanceof TextButtonStyle) {
-								t.button("text button", (TextButtonStyle) style, () -> {
-								}).size(96, 42);
+								t.button("text button", (TextButtonStyle) style, () -> {}).size(96, 42);
 							} else if (style instanceof ImageButtonStyle) {
 								t.button(Icon.ok, (ImageButtonStyle) style, () -> {
 								}).size(96, 42);
@@ -99,11 +103,7 @@ public class ShowUIList extends Content {
 							continue;
 						}
 
-						t.add(field.getName()).with(l -> {
-							l.clicked(() -> {
-								Core.app.setClipboardText("" + l.getText());
-							});
-						}).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l.getText()))).row();
 					}
 
 				}));

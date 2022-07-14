@@ -33,10 +33,10 @@ import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
-import modtools.ui.MyReflect;
 import modtools.ui.components.TextAreaTable;
 import modtools.ui.components.TextAreaTable.MyTextArea;
 import modtools.ui.content.Selection.Function;
+import modtools_lib.MyReflect;
 import rhino.*;
 
 import java.lang.reflect.Array;
@@ -190,7 +190,9 @@ public class Tester extends Content {
 				o = "undefined";
 			}
 
-			log = String.valueOf(o).replaceAll("\\[(.*?)]", "[ $1 ]");
+			log = String.valueOf(o);
+			if (log == null) log = "null";
+			else log = log.replaceAll("\\[(.*?)]", "[ $1 ]");
 		} catch (Throwable ex) {
 			error = true;
 			loop = false;
@@ -281,9 +283,23 @@ public class Tester extends Content {
 		}*/
 
 		public static void showInfo(Object o) {
-			Class<?> finalC = o.getClass();
+			showInfo(o, o.getClass());
+		}
+
+		public static void showInfo(Class<?> clazz) {
+			showInfo(null, clazz);
+		}
+
+		public static void showInfo(Object o, Class<?> clazz) {
+//			if (!clazz.isInstance(o)) return;
+			try {
+				MyReflect.lookupSetClassLoader(clazz, Field.class.getClassLoader());
+			} catch (Throwable e) {
+				Log.err(e);
+			}
 			final Table fields;
-			if (finalC.isArray()) {
+			if (clazz.isArray()) {
+				if (o == null) return;
 				Table _cont = new Table();
 				_cont.defaults().grow();
 				int length = Array.getLength(o);
@@ -294,10 +310,10 @@ public class Tester extends Content {
 					button.clicked(() -> {
 						showInfo(item);
 					});
-					_cont.add(button).fillX().height(40).row();
+					_cont.add(button).fillX().minHeight(40).row();
 				}
 
-				new BaseDialog(finalC.getSimpleName()) {{
+				new BaseDialog(clazz.getSimpleName()) {{
 					cont.pane(_cont).grow();
 					addCloseButton();
 				}}.show();
@@ -305,11 +321,12 @@ public class Tester extends Content {
 				return;
 			}
 			final Table _cont = new Table();
+			_cont.button("存储为js变量", () -> tester.put(o)).padLeft(10f).height(50).growX().row();
 			_cont.table(t -> {
 				t.left().defaults().left();
-				t.add(finalC.getTypeName());
+				t.add(clazz.getTypeName());
 				t.button(Icon.copy, Styles.cleari, () -> {
-					Core.app.setClipboardText(finalC.getTypeName());
+					Core.app.setClipboardText(clazz.getTypeName());
 				});
 			}).fillX().pad(6, 10, 6, 10).row();
 			_cont.image().color(Pal.accent).fillX().row();
@@ -321,7 +338,7 @@ public class Tester extends Content {
 				t.left().defaults().left().top();
 			}).pad(4, 6, 4, 6).fill().get();
 
-			for (Class<?> c = finalC; c != Object.class; c = c.getSuperclass()) {
+			for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
 				if (fields.getChildren().size != 0) {
 					fields.add(c.getSimpleName()).row();
 					fields.image().color(Color.lightGray).fillX().row();
@@ -329,54 +346,82 @@ public class Tester extends Content {
 					methods.image().color(Color.lightGray).fillX().row();
 				}
 
-				for (Field f : c.getDeclaredFields()) {
-					f.setAccessible(true);
+//				for (Field f : c.getDeclaredFields()) {
+				Field[] fields2 = {};
+				try {
+					fields2 = MyReflect.lookupGetFields(c);
+					if (fields2.length == 0) throw new RuntimeException();
+				} catch (Throwable e) {
+					try {
+						fields2 = c.getDeclaredFields();
+					} catch (Exception ignored) {}
+				}
+				for (Field f : fields2) {
+					int modifiers = f.getModifiers();
+					try {
+						MyReflect.lookupRemoveFinal(f);
+					} catch (Throwable ignored) {}
+					try {
+						MyReflect.setOverride(f);
+					} catch (Throwable t) {Log.err(t);}
+
 					Class<?> type = f.getType();
 					fields.table(t -> {
-						t.add(Modifier.toString(f.getModifiers()), Color.valueOf("#ff657a")).padRight(2);
-						t.add(" ");
-						t.add(f.getGenericType().getTypeName(), Color.valueOf("#9cd1bb"));
-						t.add(" ");
-						t.add(f.getName());
-						t.add(" = ");
+						try {
+							t.add(Modifier.toString(modifiers), Color.valueOf("#ff657a")).padRight(2);
+							t.add(" ");
+							t.add(f.getGenericType().getTypeName(), Color.valueOf("#9cd1bb"));
+							t.add(" ");
+							t.add(f.getName());
+							t.add(" = ");
+						} catch (Exception e) {
+							Log.err(e);
+						}
 
 						Object[] val = {null};
 
 						if (type.isPrimitive() || type.equals(String.class)) {
 							try {
-								val[0] = MyReflect.getValue(o, f);
+								val[0] = MyReflect.getValueExact(o, f);
 								Label l = new Label("" + val[0]);
 								l.setColor(Color.valueOf("#bad761"));
 								t.add(l);
 							} catch (Exception e) {
-								t.add("Unknow", Color.red);
+//								`Log.info`(e);
+								t.add("Unknown", Color.red);
 							}
 						} else {
 							Label l = t.add("???").get();
 							l.clicked(() -> {
 								try {
-									val[0] = f.get(o);
+									val[0] = MyReflect.getValueExact(o, f);
 									l.setText("" + val[0]);
 									if (val[0] instanceof Color) {
 										t.image(IntUI.whiteui.tint((Color) val[0])).size(32);
 									}
 									IntUI.longPress(l, 600, b -> {
 										if (b) {
-											showInfo(val[0]);
+											if (val[0] != null)
+												showInfo(val[0]);
+											else showInfo(null, f.getType());
 										}
 									});
-								} catch (IllegalAccessException ex) {
+								} catch (Exception ex) {
+									Log.err(ex);
 									l.setText("");
 								}
 							});
 						}
 
-						t.button("存储为js变量", () -> tester.put(val[0])).padLeft(10f).size(150, 40);
+						t.button("将字段储存为js变量", () -> tester.put(f)).padLeft(10f).size(180, 40);
+						t.button("将值存储为js变量", () -> tester.put(val[0])).padLeft(10f).size(180, 40);
 					}).pad(4).row();
 				}
 
 				for (Method m : c.getDeclaredMethods()) {
-					m.setAccessible(true);
+					try {
+						MyReflect.setOverride(m);
+					} catch (Throwable ignored) {}
 					methods.table(t -> {
 						try {
 							StringBuilder sb = new StringBuilder();
@@ -418,16 +463,16 @@ public class Tester extends Content {
 							t.add(sb);
 							if (m.getParameterTypes().length == 0) {
 								Label l = t.add("").padLeft(10).get();
-								t.button("invoke", () -> {
+								if (o != null || Modifier.isStatic(m.getModifiers())) t.button("invoke", () -> {
 									try {
 										Object returnV = m.invoke(o);
 										l.setText("" + returnV);
-										if (!(returnV instanceof String) && !returnV.getClass().isPrimitive()) {
+										if (returnV != null && !(returnV instanceof String) && !returnV.getClass().isPrimitive()) {
+//											l.setColor(Color.white);
 											IntUI.longPress(l, 600, b -> {
 												if (b) {
 													showInfo(returnV);
 												}
-
 											});
 										}
 									} catch (Exception ex) {
@@ -437,7 +482,7 @@ public class Tester extends Content {
 								}).width(100);
 							}
 
-							t.button("存储为js变量", () -> tester.put(m)).size(150, 40);
+							t.button("将函数存储为js变量", () -> tester.put(m)).padLeft(10f).size(180, 40);
 						} catch (Exception err) {
 							t.add("<" + err + ">", Color.red);
 						}
@@ -446,11 +491,12 @@ public class Tester extends Content {
 				}
 			}
 
-			new BaseDialog(finalC.getSimpleName()) {{
+			new BaseDialog(clazz.getSimpleName()) {{
 				cont.pane(_cont).grow();
 				addCloseButton();
 			}}.show();
 		}
+
 
 		public static BaseDialog dialog(final Cons<BaseDialog> cons) {
 			return new BaseDialog("test") {{
@@ -481,8 +527,16 @@ public class Tester extends Content {
 			return Selection.all.get(name);
 		}
 
-		public static Class<?> toClass(Class<?> clazz) {
-			return clazz;
+		public static Object unwrap(Object o) {
+			if (o instanceof NativeJavaObject) {
+				NativeJavaObject n = (NativeJavaObject) o;
+				return n.unwrap();
+			}
+			if (o instanceof Undefined) {
+				return "undefined";
+			}
+
+			return o;
 		}
 
 		public static NativeJavaClass findClass(String name, boolean isAdapter) throws ClassNotFoundException {
@@ -501,6 +555,10 @@ public class Tester extends Content {
 
 		public static Class<?> forName(String name) throws ClassNotFoundException {
 			return Class.forName(name, false, Vars.mods.mainLoader());
+		}
+
+		public static Object asJS(Object o) {
+			return Context.javaToJS(o, scope);
 		}
 
 		static {

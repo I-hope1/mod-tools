@@ -2,35 +2,35 @@ package modtools;
 
 import arc.Core;
 import arc.Events;
+import arc.files.Fi;
 import arc.scene.ui.layout.Table;
 import arc.util.Log;
 import arc.util.Time;
+import mindustry.Vars;
 import mindustry.game.EventType;
 import mindustry.mod.Mod;
+import mindustry.mod.ModClassLoader;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Background;
-import modtools.ui.MyReflect;
+import modtools_lib.MyReflect;
 
 import java.util.Objects;
 
 import static modtools.IntVars.modName;
 
 public class ModTools extends Mod {
-	public boolean stop = false;
+	public static ModClassLoader mainLoader;
 
 	public ModTools() {
 		Log.info("Loaded ModTools constructor.");
-		MyReflect.load();
+		Time.runTask(1, ModTools::loadReflect);
 
-//		MyPacket.register();
-
-		/*new ItemSourceNode("物品源节点") {{
-			localizedName = "物品源节点";
-
-			requirements(Category.distribution, ItemStack.with());
-		}};*/
 		Events.on(EventType.ClientLoadEvent.class, e -> {
-			stop = true;
+			try {
+				Class.forName("modtools_lib.MyReflect", true, mainLoader);
+			} catch (Exception ex) {
+				return;
+			}
 			/*try {
 				MyPlacement.load();
 			} catch (Throwable ex) {
@@ -48,18 +48,31 @@ public class ModTools extends Mod {
 				dialog.show();
 			});
 			IntVars.load();
-			/*DPSTest.initTable();
-			new DPSTest() {{
-				localizedName = "DPS测试";
-				health = Integer.MAX_VALUE;
-				hitSize = 8;
-
-				init();
-				load();
-				loadIcon();
-			}};*/
 
 			if (Core.settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
 		});
+	}
+
+	public static boolean init = false;
+	public static void loadReflect() {
+		if (init) return;
+		init = true;
+		// 加载前置
+		try {
+			mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+			Fi sourceFi = Vars.mods.locateMod("mod-tools").root
+					.child("libs").child("mod-tools-" + (Vars.mobile ? "Android" : "Desktop") + "-lib.jar");
+			Fi toFi = Vars.dataDirectory.child("tmp/mod-tools-lib.jar");
+			if (toFi.isDirectory()) toFi.deleteDirectory();
+			if (!toFi.exists()) toFi.writeString("");
+			sourceFi.copyTo(toFi);
+			ClassLoader loader = Vars.platform.loadJar(toFi, mainLoader);
+			mainLoader.addChild(loader);
+			Class.forName("modtools_lib.MyReflect", true, loader);
+			toFi.delete();
+		} catch (Exception e) {
+			Vars.ui.showException(e);
+		}
+		MyReflect.load();
 	}
 }

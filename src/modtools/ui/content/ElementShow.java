@@ -87,6 +87,7 @@ public class ElementShow extends Content {
 	public static class ElementShowDialog extends BaseDialog {
 		Table pane = new Table();
 		Element element = null;
+		Pattern pattern;
 
 		public ElementShowDialog() {
 			super("调试");
@@ -97,7 +98,7 @@ public class ElementShow extends Content {
 			pane.left().defaults().left();
 			cont.table(t -> {
 				t.button("显示父元素", Icon.up, () -> {
-					Runnable go = () -> rebuild(element = element.parent, "");
+					Runnable go = () -> rebuild(element = element.parent, pattern);
 					if (element.parent == Core.scene.root) {
 						Vars.ui.showConfirm("父元素为根节点，是否确定", () -> {
 							if (hideSelf) remove();
@@ -108,7 +109,7 @@ public class ElementShow extends Content {
 				}).disabled(b -> element == null || element.parent == null).width(120);
 				t.table(search -> {
 					search.image(Icon.zoom);
-					search.field("", str -> rebuild(element, str));
+					search.field("", str -> rebuild(element, str)).growX();
 				}).growX();
 			}).growX().row();
 
@@ -129,12 +130,21 @@ public class ElementShow extends Content {
 			try {
 				pattern = text.isEmpty() ? null : Pattern.compile("(.*?)(" + text + ")", Pattern.CASE_INSENSITIVE);
 			} catch (Exception ignored) {}
+			rebuild(element, pattern);
+		}
+
+		public void rebuild(Element element, Pattern pattern) {
+			pane.clearChildren();
+
+			if (element == null) return;
+			this.pattern = pattern;
 			build(element, pane, pattern);
 
 			pane.row();
 			pane.image().color(Pal.accent).growX().padTop(10).padBottom(10).row();
 			highlightShowMultiRow(pane, pattern, element + "");
 		}
+
 
 		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {

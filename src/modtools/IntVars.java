@@ -12,7 +12,7 @@ public class IntVars {
 	public static final Frag frag = new Frag();
 
 	public static void load() {
-		frag.load();
+	frag.load();
 	}
 
 

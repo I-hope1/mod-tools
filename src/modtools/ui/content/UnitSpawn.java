@@ -8,17 +8,16 @@ import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.ui.ImageButton;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import mindustry.Vars;
+import mindustry.content.Fx;
 import mindustry.content.UnitTypes;
 import mindustry.game.EventType;
 import mindustry.game.Team;
-import mindustry.gen.Groups;
-import mindustry.gen.Icon;
-import mindustry.gen.Tex;
-import mindustry.gen.Unit;
+import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
@@ -26,7 +25,7 @@ import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Contents;
 import modtools.ui.IntUI;
 import modtools.ui.components.MyItemSelection;
-import modtools.utils.NumberUtils;
+import modtools.utils.Tools;
 
 import static mindustry.Vars.player;
 import static rhino.ScriptRuntime.*;
@@ -42,7 +41,7 @@ public class UnitSpawn extends Content {
 	int amount = 0;
 	Team team;
 	Table unitCont;
-	boolean loop = false;
+	boolean loop = false, unitUnlimited;
 	TextField xField, yField, amountField, teamField;
 
 	public void setup() {
@@ -50,8 +49,14 @@ public class UnitSpawn extends Content {
 		MyItemSelection.buildTable(unitCont, Vars.content.units(), () -> selectUnit, u -> selectUnit = u,
 				Vars.mobile ? 6 : 10);
 		unitCont.table(right -> {
-			right.label(() -> selectUnit.name).row();
-			right.label(() -> selectUnit.localizedName);
+			Label name = new Label("");
+			Label localizedName = new Label("");
+			right.update(() -> {
+				name.setText(selectUnit != null ? selectUnit.name : "[red]ERROR");
+				localizedName.setText(selectUnit != null ? selectUnit.localizedName : "[red]ERROR");
+			});
+			right.add(name).wrap().row();
+			right.add(localizedName).wrap().row();
 		});
 	}
 
@@ -117,7 +122,7 @@ public class UnitSpawn extends Content {
 				teamField = t.field("" + team.id, text -> {
 					int id = (int) toInteger(text);
 					team = Team.get(id);
-				}).valid(val -> validNumber(val) && toInteger(val) >= 0).get();
+				}).valid(val -> Tools.validPosInt(val) && toInteger(val) < Team.all.length).get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
 				btn.clicked(() -> IntUI.showSelectImageTableWithFunc(btn, new Seq<>(Team.all),
 						() -> team, newTeam -> {
@@ -131,7 +136,7 @@ public class UnitSpawn extends Content {
 				t.add("数量");
 				amountField = t.field("0", text -> {
 					amount = (int) toInteger(text);
-				}).valid(val -> validNumber(val) && NumberUtils.validPosInt(val)).get();
+				}).valid(val -> validNumber(val) && Tools.validPosInt(val)).get();
 			});
 		}).row();
 		ui.cont.table(table -> {
@@ -153,25 +158,39 @@ public class UnitSpawn extends Content {
 	}
 
 	public boolean isOk() {
-		return xField.isValid() && yField.isValid() && amountField.isValid() && teamField.isValid();
+		return selectUnit != null && xField.isValid() && yField.isValid() && amountField.isValid() && teamField.isValid();
 	}
 
 	public boolean validNumber(String str) {
 		try {
 			double d = toNumber(str);
-			return !isNaN(d);
+			return Math.abs(d) < 1E6 && !isNaN(d);
 		} catch (Exception ignored) {}
-		return true;
+		return false;
 	}
 
 	public void spawn() {
 		if (!isOk()) return;
 
-		float x = Float.parseFloat(xField.getText());
-		float y = Float.parseFloat(yField.getText());
+		float x = (float) toNumber(xField.getText());
+		float y = (float) toNumber(yField.getText());
 
-		for (int i = 0; i < amount; i++) {
-			selectUnit.spawn(team, x, y);
+		if (selectUnit.uiIcon == null || selectUnit.fullIcon == null) {
+			Vars.ui.showException("所选单位的图标为null，可能会崩溃", new NullPointerException("selectUnit icon is null"));
+			return;
+		}
+		try {
+			Unit unit = selectUnit.constructor.get();
+			;
+			if (unit instanceof BlockUnitUnit) {
+				Vars.ui.showException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));
+				return;
+			}
+			for (int i = 0; i < amount; i++) {
+				selectUnit.spawn(team, x, y);
+			}
+		} catch (Throwable e) {
+			Vars.ui.showException("无法生成单位 " + selectUnit.localizedName, e);
 		}
 	}
 
@@ -183,10 +202,24 @@ public class UnitSpawn extends Content {
 		table.table(cont -> {
 			cont.left().defaults().left().width(200);
 			int[] defCap = {0};
-			Events.run(EventType.WorldLoadEvent.class, () -> defCap[0] = Vars.state.rules.unitCap);
-			cont.check("单位无限制", b -> Vars.state.rules.unitCap = b ? 0xffffff : defCap[0]).fillX().row();
-			cont.button("杀死所有单位", () -> Groups.unit.each(Unit::kill)).fillX().row();
-			cont.button("清除所有单位", () -> Groups.unit.each(Unit::remove)).fillX().row();
+			Events.run(EventType.WorldLoadEvent.class, () -> {
+				defCap[0] = Vars.state.rules.unitCap;
+				Vars.state.rules.unitCap = unitUnlimited ? 0xffffff : defCap[0];
+			});
+			cont.check("单位无限制", unitUnlimited, b -> {
+				unitUnlimited = b;
+				Vars.state.rules.unitCap = b ? 0xffffff : defCap[0];
+			}).fillX().row();
+			cont.button("隐藏单位死亡痕迹", () -> {
+				Vars.content.units().each(u -> u.deathExplosionEffect = Fx.none);
+			}).row();
+			cont.button("杀死所有单位", () -> {
+				Groups.unit.each(Unit::kill);
+			}).fillX().row();
+			cont.button("清除所有单位", () -> {
+				Groups.unit.each(Unit::remove);
+				Groups.unit.clear();
+			}).fillX().row();
 //			cont.check("服务器适配", b -> server = b);
 		}).padLeft(6);
 

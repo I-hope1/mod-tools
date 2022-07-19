@@ -6,6 +6,7 @@ import arc.func.Boolf2;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
 import arc.input.KeyCode;
+import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.event.InputEvent;
@@ -20,6 +21,8 @@ import arc.util.Time;
 import arc.util.pooling.Pools;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
+
+import java.util.regex.Pattern;
 
 public class TextAreaTable extends Table {
 	private final MyTextArea area;
@@ -217,6 +220,46 @@ public class TextAreaTable extends Table {
 			trackCursor();
 		}
 
+		public int clamp(int index) {
+			return Mathf.clamp(index, 0, text.length());
+		}
+
+		// 注释
+		public void comment(boolean shift) {
+			String selection = getSelection();
+			if (shift) {
+				int start = Math.min(cursor, selectionStart);
+				int len = selection.length(), maxLen = text.length();
+				int selectionEnd = start + len;
+				int startIndex, endIndex;
+				int offset = 2;
+				if (((startIndex = text.substring(Math.max(0, start - offset), Math.min(start + offset, maxLen)).indexOf("/*")) >= 0)
+						&& ((endIndex = text.substring(Math.max(0, selectionEnd - offset), Math.min(selectionEnd + offset, maxLen)).indexOf("*/")) >= 0)) {
+					startIndex += Math.max(0, start - offset);
+					endIndex += Math.max(0, selectionEnd - offset);
+					changeText(text, text.substring(0, startIndex) + text.substring(startIndex + 2, endIndex) + text.substring(Math.min(endIndex + 2, maxLen)));
+					selectionStart = clamp(selectionStart - 2);
+					cursor = clamp(cursor - 2);
+				} else {
+					changeText(text, text.substring(0, start) + "/*" + selection + "*/"
+							+ text.substring(selectionEnd));
+					selectionStart = clamp(selectionStart + 2);
+					cursor = clamp(cursor + 2);
+				}
+			} else {
+				int home = linesBreak.get(cursorLine * 2);
+				int end = linesBreak.get(Math.min(linesBreak.size - 1, (cursorLine + 1) * 2));
+				if (Pattern.compile("\\s*//").matcher(text.substring(home, end)).find()) {
+					int start = home + text.substring(home, end).indexOf("//");
+					changeText(text, text.substring(0, start) + text.substring(start + 2));
+					cursor = clamp(cursor - 2);
+				} else {
+					changeText(text, insert(home, "//", text));
+					cursor = clamp(cursor + 2);
+				}
+			}
+		}
+
 		public class MyTextAreaListener extends TextAreaListener {
 
 			@Override
@@ -236,6 +279,7 @@ public class TextAreaTable extends Table {
 				if (keyDonwB != null && !keyDonwB.get(event, keycode)) return false;
 
 				int oldCursor = cursor;
+				boolean shift = Core.input.shift();
 				boolean jump = Core.input.ctrl();
 				Time.runTask(0f, () -> {
 					// 判断是否一样
@@ -255,10 +299,7 @@ public class TextAreaTable extends Table {
 					}
 				});
 				if (jump && keycode == KeyCode.slash) {
-					int home = linesBreak.get(cursorLine * 2);
-					if (text.startsWith("//", home))
-						changeText(text, text.substring(0, home) + text.substring(home + 2));
-					else changeText(text, insert(home, "//", text));
+					comment(shift);
 					updateDisplayText();
 				}
 

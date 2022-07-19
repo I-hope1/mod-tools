@@ -6,19 +6,18 @@ import arc.func.Cons;
 import arc.func.Cons3;
 import arc.func.Func;
 import arc.func.Prov;
-import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.ClickListener;
 import arc.scene.event.InputEvent;
-import arc.scene.event.InputListener;
 import arc.scene.style.Drawable;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Time;
+import arc.util.Timer;
 import arc.util.Tmp;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
@@ -33,24 +32,19 @@ public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
 	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
-		elem.addListener(new InputListener() {
-			boolean isDclick = false;
-			short times = 0;
+		elem.addListener(new ClickListener() {
+			Timer.Task clickTask = null;
 
 			@Override
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				times++;
-				if (times == 1) {
-					isDclick = false;
-					Time.runTask(10f, () -> {
-						if (isDclick) dclick.run();
-						else click.run();
-						times = 0;
-					});
+			public void clicked(InputEvent event, float x, float y) {
+				super.clicked(event, x, y);
+				if (clickTask != null && tapCount >= 2) {
+					dclick.run();
+					clickTask.cancel();
+					clickTask = null;
 				} else {
-					isDclick = true;
+					clickTask = Time.runTask(20, click);
 				}
-				return false;
 			}
 		});
 

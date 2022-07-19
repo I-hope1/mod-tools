@@ -32,7 +32,7 @@ public class Frag extends Table {
 			hideCont = !hideCont;
 			cell.setElement(hideCont ? null : contTable);
 		});
-		Contents.load();
+		if (Content.all.isEmpty()) Contents.load();
 		cell = table().get().table(table -> {
 			contTable = table;
 			Content.all.forEach(cont -> {
@@ -60,8 +60,7 @@ public class Frag extends Table {
 				Vars.net.send(p, true);
 			}*/
 			if (!keepFrag || root == null || root.getChildren().peek() == this) return;
-			root.removeChild(this);
-			root.addChild(this);
+			setZIndex(Integer.MAX_VALUE);
 		});
 	}
 }

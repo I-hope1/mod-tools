@@ -1,5 +1,6 @@
 package modtools;
 
+import arc.Core;
 import arc.util.Log;
 import modtools.ui.Frag;
 
@@ -12,7 +13,8 @@ public class IntVars {
 	public static final Frag frag = new Frag();
 
 	public static void load() {
-	frag.load();
+		if (frag.getChildren().isEmpty()) frag.load();
+		else Core.scene.add(frag);
 	}
 
 

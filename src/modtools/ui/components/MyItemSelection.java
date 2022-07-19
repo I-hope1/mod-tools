@@ -29,6 +29,7 @@ public class MyItemSelection {
 		int i = 0;
 
 		for (T item : items) {
+			if (item == null) continue;
 			ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/Styles.clearTogglei, 24, () -> {
 			}).group(group).get();
 			button.changed(() -> {

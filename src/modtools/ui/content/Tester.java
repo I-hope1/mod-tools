@@ -22,7 +22,7 @@ import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
-import mindustry.game.EventType;
+import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
@@ -103,8 +103,8 @@ public class Tester extends Content {
 //				history.build(d).with(b -> b.setZIndex(0));
 
 				int max = history.list.size - 1;
-				int min = Math.min(30, max);
-				for (int i = min; i < max; i++) {
+				int min = 30;
+				for (int i = max; i >= min; i--) {
 					history.list.get(i).deleteDirectory();
 					history.list.remove(i);
 				}
@@ -121,7 +121,7 @@ public class Tester extends Content {
 				Fi fi = bookmark.file.child(Time.millis() + ".txt");
 				bookmark.list.add(fi);
 				fi.writeString(getMessage());
-				bookmark.build(fi).with(t -> t.setZIndex(0));
+				bookmark.build();
 			}).size(42).padRight(6f);
 			p.button(b -> {
 				b.label(() -> loop ? "循环" : "默认");
@@ -253,8 +253,7 @@ public class Tester extends Content {
 		}
 
 		setup();
-		Events.run(EventType.Trigger.update, () -> {
-//			Log.info("update");
+		if (!init) btn.update(() -> {
 			if (checkUI) {
 				if (Core.scene.root.getChildren().select(el -> el.visible).size > 70) {
 					loop = false;
@@ -270,17 +269,20 @@ public class Tester extends Content {
 //					Events.fire(new ClientLoadEvent())
 				}
 			}
-			if (loop && !getMessage().equals("")) {
+		});
+		Events.run(Trigger.update, () -> {
+//			Log.info("update");
+			if (loop && !getMessage().isEmpty()) {
 				evalMessage();
 			}
 		});
-		loadSettings();
+		if (!init) loadSettings();
+		init = true;
 	}
 
-	public static boolean loadedSettings = false;
+	public static boolean init = false;
+
 	public void loadSettings() {
-		if (loadedSettings) return;
-		loadedSettings = true;
 		Table table = new Table();
 		table.table(t -> {
 			t.left().defaults().left();

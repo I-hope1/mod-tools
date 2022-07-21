@@ -248,6 +248,7 @@ public class Window extends Table {
 	}
 
 	public Window show() {
+		display();
 		if (isShown()) {
 			setZIndex(Integer.MAX_VALUE);
 			if (isMinimize) minimize();

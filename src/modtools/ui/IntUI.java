@@ -97,7 +97,7 @@ public class IntUI {
 		Core.scene.add(t);
 		t.update(() -> {
 			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
-				button.localToStageCoordinates(Tmp.v1.set(button.getWidth() / 2.0f, button.getHeight() / 2.0f));
+				button.localToStageCoordinates(Tmp.v1.set(button.getWidth() / 2f, button.getHeight() / 2f));
 				t.setPosition(Tmp.v1.x, Tmp.v1.y, 1);
 				if (t.getWidth() > Core.scene.getWidth()) {
 					t.setWidth((float) Core.graphics.getWidth());

@@ -42,7 +42,7 @@ public class MoveListener extends InputListener {
 		Vec2 v = main.localToStageCoordinates(Tmp.v1.set(x, y));
 		float mainWidth = main.getWidth(), mainHeight = main.getHeight();
 		float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
-		main.setPosition(Mathf.clamp(-bx + v.x, -touchWidth / 2f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
+		main.setPosition(Mathf.clamp(-bx + v.x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
 				Mathf.clamp(-by + v.y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
 //		Core.graphics.cursor(SystemCursor.crosshair);
 	}

@@ -15,7 +15,7 @@ repositories{
 
 ext{
     //the build number that this mod is made for
-    mindustryVersion = 'v135'
+    mindustryVersion = 'v136'
     jabelVersion = "0.6.0"
     sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 }
@@ -28,8 +28,8 @@ tasks.withType(JavaCompile){
 
 dependencies{
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-//    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-    compileOnly files("lib/Mindustry136.jar", "assets/libs/mod-tools-Desktop-lib.jar")
+    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+    compileOnly files(/*"lib/Mindustry136.jar", */"assets/libs/lib.jar")
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
 

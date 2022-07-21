@@ -19,16 +19,16 @@ import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
-import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
+import modtools.ui.components.Window;
 
 import java.lang.reflect.Field;
 
 import static arc.scene.ui.CheckBox.CheckBoxStyle;
 
 public class ShowUIList extends Content {
-	BaseDialog ui;
+	Window ui;
 
 	public ShowUIList() {
 		super("showuilist");
@@ -40,7 +40,7 @@ public class ShowUIList extends Content {
 	}
 
 	public void load() {
-		ui = new BaseDialog(name);
+		ui = new Window(localizedName(), 400, 500, true);
 		Color[] colors = {Color.sky, Color.gold, Color.orange};
 		Seq<Table> tables = Seq.with(
 				new Table(t -> {
@@ -110,8 +110,8 @@ public class ShowUIList extends Content {
 
 		String[] names = {"icon", "tex", "styles"};
 		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
-		ui.cont.add(tab.build());
-		ui.addCloseButton();
+		ui.cont.add(tab.build()).pad(10f);
+//		ui.addCloseButton();
 	}
 
 	public void build() {

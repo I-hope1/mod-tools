@@ -6,6 +6,7 @@ import arc.func.Cons;
 import arc.func.Cons3;
 import arc.func.Func;
 import arc.func.Prov;
+import arc.graphics.Color;
 import arc.math.Interp;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
@@ -14,22 +15,25 @@ import arc.scene.event.InputEvent;
 import arc.scene.style.Drawable;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
+import arc.scene.ui.layout.Collapser;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.Time;
-import arc.util.Timer;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
+import modtools.ui.components.Window;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import static mindustry.Vars.ui;
+
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+	public static final MyIcons icons = new MyIcons();
 
 	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
 		elem.addListener(new ClickListener() {
@@ -231,5 +235,42 @@ public class IntUI {
 			icons.add(func.get(item));
 		});
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
+	}
+
+	/**
+	 * Window弹窗错误
+	 */
+	public static void showException(Throwable t) {
+		showException("", t);
+	}
+
+	public static void showException(String text, Throwable exc) {
+		ui.loadfrag.hide();
+		new Window("", 300, 0, false) {{
+			String message = Strings.getFinalMessage(exc);
+
+			cont.margin(15);
+			cont.add("@error.title").colspan(2);
+			cont.row();
+			cont.image().width(300f).pad(2).colspan(2).height(4f).color(Color.scarlet);
+			cont.row();
+			cont.add((text.startsWith("@") ? Core.bundle.get(text.substring(1)) : text) + (message == null ? "" : "\n[lightgray](" + message + ")"))
+					.colspan(2).wrap().growX().center()
+					.get().setAlignment(Align.center);
+			cont.row();
+
+			Collapser col = new Collapser(base -> base.pane(t -> t.margin(14f).add(Strings.neatError(exc)).color(Color.lightGray).left()), true);
+
+			cont.button("@details", Styles.togglet, col::toggle).size(180f, 50f).checked(b -> !col.isCollapsed()).growX().right();
+			col.setDuration(0.2f);
+			cont.button("@ok", this::hide).size(110, 50).growX().left();
+			cont.row();
+			col.setCollapsed(false, false);
+			cont.add(col).colspan(2).pad(2);
+//            closeOnBack();
+			hidden(() -> {
+				Time.runTask(30f, this::clear);
+			});
+		}}.show();
 	}
 }

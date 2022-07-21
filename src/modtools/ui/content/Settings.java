@@ -4,13 +4,13 @@ package modtools.ui.content;
 import arc.Core;
 import arc.scene.ui.layout.Table;
 import mindustry.graphics.Pal;
-import mindustry.ui.dialogs.BaseDialog;
+import modtools.ui.components.Window;
 
 import static modtools.IntVars.frag;
 import static modtools.IntVars.modName;
 
 public class Settings extends Content {
-	BaseDialog ui;
+	Window ui;
 	Table cont = new Table();
 	final Table loadTable = new Table(t -> {
 		t.left().defaults().left();
@@ -44,7 +44,7 @@ public class Settings extends Content {
 	}
 
 	public void load() {
-		ui = new BaseDialog(localizedName());
+		ui = new Window(localizedName(), 425, 90, true);
 		cont = new Table();
 		ui.cont.pane(cont).fillX().fillY();
 		cont.defaults().width(400);
@@ -59,6 +59,6 @@ public class Settings extends Content {
 				addLoad(cont);
 			}
 		});
-		ui.addCloseButton();
+//		ui.addCloseButton();
 	}
 }

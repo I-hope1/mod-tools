@@ -16,15 +16,16 @@ import arc.scene.ui.Image;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Table;
 import arc.util.Log;
+import arc.util.Time;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.graphics.Layer;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import mindustry.ui.dialogs.BaseDialog;
 import modtools.IntVars;
 import modtools.ui.IntUI;
+import modtools.ui.components.Window;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,8 +36,6 @@ public class ElementShow extends Content {
 	public ElementShow() {
 		super("检查元素");
 	}
-
-	public ElementShowDialog dialog;
 	public static final boolean hideSelf = true;
 	public Element frag;
 	public Element selected, tmp;
@@ -65,7 +64,6 @@ public class ElementShow extends Content {
 
 	@Override
 	public void load() {
-		dialog = new ElementShowDialog();
 		frag = new Element() {
 			@Override
 			public void draw() {
@@ -100,7 +98,7 @@ public class ElementShow extends Content {
 			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				selecting = false;
-				IntVars.async(() -> dialog.show(selected), () -> {});
+				IntVars.async(() -> new ElementShowDialog().show(selected), () -> {});
 				frag.remove();
 				btn.setChecked(false);
 			}
@@ -119,21 +117,29 @@ public class ElementShow extends Content {
 		}
 	}
 
-	public static class ElementShowDialog extends BaseDialog {
+	public static class ElementShowDialog extends Window {
 		Table pane = new Table();
 		Element element = null;
 		Pattern pattern;
 
 		public ElementShowDialog() {
-			super("调试");
+			super("审查元素", 340, 160, true);
+			getCell(cont).maxWidth(Core.graphics.getWidth());
 
 			name = "ElementShowDialog";
 
-			addCloseButton();
+//			addCloseButton();
 			pane.left().defaults().left();
 			cont.table(t -> {
 				t.button("显示父元素", Icon.up, () -> {
-					Runnable go = () -> rebuild(element = element.parent, pattern);
+					Runnable go = () -> {
+						hide();
+						var window = new ElementShowDialog();
+						window.pattern = pattern;
+						window.show(element.parent);
+						window.setPosition(x, y);
+						window.display();
+					};
 					if (element.parent == Core.scene.root) {
 						Vars.ui.showConfirm("父元素为根节点，是否确定", () -> {
 							if (hideSelf) remove();
@@ -142,6 +148,12 @@ public class ElementShow extends Content {
 						});
 					} else go.run();
 				}).disabled(b -> element == null || element.parent == null).width(120);
+				t.button(Icon.copy, Styles.flati, () -> {
+					var window = new ElementShowDialog();
+					window.pattern = pattern;
+					window.show(element);
+				}).padLeft(4f).padRight(4f);
+				t.button(Icon.refresh, Styles.flati, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
 				t.table(search -> {
 					search.image(Icon.zoom);
 					search.field("", str -> rebuild(element, str)).growX();
@@ -211,7 +223,7 @@ public class ElementShow extends Content {
 				while (index <= text.length() && matcher.find(index)) {
 					times++;
 					if (times > 70) {
-						Vars.ui.showException(new Exception("too many"));
+						IntUI.showException(new Exception("too many"));
 						break;
 					}
 					int len = matcher.group().length();
@@ -247,7 +259,7 @@ public class ElementShow extends Content {
 					if (element instanceof Group) {
 						highlightShowMultiRow(wrap, pattern, getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
 						var children = ((Group) element).getChildren();
-						wrap.table(Tex.button, t -> {
+						wrap.table(Window.myPane, t -> {
 							if (children.size == 0) {
 								return;
 							}
@@ -264,7 +276,7 @@ public class ElementShow extends Content {
 						}).padLeft(8).left();
 					} else if (element instanceof Image) {
 						try {
-							wrap.table(Tex.pane, p -> p.add(new Image(((Image)element).getRegion())).color(element.color).size(element.getWidth(), element.getHeight()));
+							wrap.table(Window.myPane, p -> p.add(new Image(((Image) element).getRegion())).color(element.color).size(element.getWidth(), element.getHeight()));
 						} catch (Throwable e) {
 							wrap.add("空图像");
 						}
@@ -286,7 +298,7 @@ public class ElementShow extends Content {
 
 		public void show(Element element) {
 			this.element = element;
-			((ScrollPane)pane.parent).setScrollY(0);
+			((ScrollPane) pane.parent).setScrollY(0);
 			IntVars.async(() -> {
 				rebuild(element, "");
 			}, this::show);
@@ -308,6 +320,12 @@ public class ElementShow extends Content {
 		}
 
 		@Override
+		public void hide() {
+			super.hide();
+			Time.runTask(30f, this::clear);
+		}
+
+		@Override
 		public String toString() {
 			if (hideSelf) return name;
 			return super.toString();
@@ -315,9 +333,10 @@ public class ElementShow extends Content {
 	}
 
 	public static String getSimpleName(Class<?> clazz) {
-		/*while (clazz.getSimpleName() == null && clazz.isAssignableFrom(Group.class)) {
+		if (!Group.class.isAssignableFrom(clazz)) return clazz.getSimpleName();
+		while (clazz.getSimpleName().isEmpty() && clazz != Group.class) {
 			clazz = clazz.getSuperclass();
-		}*/
+		}
 		return clazz.getSimpleName();
 	}
 }

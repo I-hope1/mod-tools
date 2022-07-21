@@ -15,8 +15,9 @@ import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.IntUI;
+import modtools.ui.components.Window;
+import modtools.ui.content.ElementShow.ElementShowDialog;
 import modtools.ui.content.Selection;
 import modtools_lib.MyReflect;
 import rhino.*;
@@ -24,7 +25,6 @@ import rhino.*;
 import java.lang.reflect.*;
 import java.util.StringJoiner;
 
-import static modtools.ui.Contents.elementShow;
 import static modtools.ui.Contents.tester;
 
 public class JSFunc {
@@ -64,14 +64,14 @@ public class JSFunc {
 				var button = new TextButton("" + item);
 				button.clicked(() -> {
 					if (item != null) showInfo(item);
-					else Vars.ui.showException(new NullPointerException("item is null"));
+					else IntUI.showException(new NullPointerException("item is null"));
 				});
 				_cont.add(button).fillX().minHeight(40).row();
 			}
 
-			new BaseDialog(clazz.getSimpleName()) {{
+			new Window(clazz.getSimpleName(), 400, 400, true) {{
 				cont.pane(_cont).grow();
-				addCloseButton();
+//				addCloseButton();
 			}}.show();
 
 			return;
@@ -267,7 +267,7 @@ ifl:
 										});
 									}
 								} catch (Exception ex) {
-									Vars.ui.showException("invoke出错", ex);
+									IntUI.showException("invoke出错", ex);
 								}
 
 							}).width(100);
@@ -336,9 +336,9 @@ ifl:
 			}
 		}
 
-		BaseDialog dialog = new BaseDialog(clazz.getSimpleName());
+		Window dialog = new Window(clazz.getSimpleName(), 400, 400, true);
 		dialog.cont.pane(cont).grow();
-		dialog.addCloseButton();
+//		dialog.addCloseButton();
 		dialog.show();
 	}
 
@@ -349,16 +349,16 @@ ifl:
 		return base;
 	}
 
-	public static BaseDialog dialog(final Cons<BaseDialog> cons) {
-		return new BaseDialog("test") {{
+	public static Window window(final Cons<Window> cons) {
+		return new Window("test") {{
 			cons.get(this);
-			addCloseButton();
+//			addCloseButton();
 			show();
 		}};
 	}
 
-	public static BaseDialog testElement(Element element) {
-		return dialog(d -> {
+	public static Window testElement(Element element) {
+		return window(d -> {
 			Table t = new Table(table -> {
 				table.add(element);
 			});
@@ -366,12 +366,12 @@ ifl:
 		});
 	}
 
-	public static BaseDialog testElement(String text) {
+	public static Window testElement(String text) {
 		return testElement(new Label(text));
 	}
 
 	public static void showElement(Element element) {
-		elementShow.dialog.show(element);
+		new ElementShowDialog().show(element);
 	}
 
 	public static Selection.Function<?> getFunction(String name) {

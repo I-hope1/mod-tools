@@ -3,6 +3,7 @@ package modtools;
 import arc.Core;
 import arc.util.Log;
 import modtools.ui.Frag;
+import modtools.ui.IntUI;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -20,7 +21,7 @@ public class IntVars {
 
 	public static void showException(Exception e, boolean b) {
 		if (b) {
-			ui.showException(e);
+			IntUI.showException(e);
 		} else {
 			Log.err(e);
 		}

@@ -37,7 +37,6 @@ public class ModTools extends Mod {
 			} catch (Exception e) {
 				Log.err(e);
 			}*/
-//			unsafe.park(true, Long.MAX_VALUE);
 		});
 		Events.on(EventType.ClientLoadEvent.class, e -> {
 			if (throwable != null) {

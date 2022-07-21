@@ -12,6 +12,8 @@ import arc.struct.Seq;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
+import modtools.IntVars;
+import modtools.ui.IntStyles;
 
 public class MyItemSelection {
 	public MyItemSelection() {
@@ -22,6 +24,10 @@ public class MyItemSelection {
 	}
 
 	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder, Cons<T> consumer, int cols) {
+		IntVars.async(() -> buildTable0(table, items, holder, consumer, cols), () -> {});
+	}
+
+	private static <T extends UnlockableContent> void buildTable0(Table table, Seq<T> items, Prov<T> holder, Cons<T> consumer, int cols) {
 		ButtonGroup<ImageButton> group = new ButtonGroup<>();
 		group.setMinCheckCount(0);
 		Table cont = new Table();
@@ -36,18 +42,19 @@ public class MyItemSelection {
 				consumer.get(button.isChecked() ? item : null);
 			});
 			button.getStyle().imageUp = new TextureRegionDrawable(item.uiIcon);
-			button.update(() -> {
+			if (item == holder.get()) button.setChecked(true);
+			/*button.update(() -> {
 				button.setChecked(holder.get() == item);
-			});
+			});*/
 
 			if (++i % cols == 0) {
 				cont.row();
 			}
 		}
 
-		ScrollPane pane = new ScrollPane(cont, Styles.smallPane);
+		ScrollPane pane = new ScrollPane(cont, IntStyles.nonePane);
 		pane.setScrollingDisabled(true, false);
 		pane.setOverscroll(false, false);
-		table.add(pane).maxHeight(200);
+		table.add(pane).maxHeight(40 * 5).grow();
 	}
 }

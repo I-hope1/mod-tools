@@ -51,8 +51,8 @@ public class TextAreaTable extends Table {
 		update(() -> {
 			Element focus = Core.scene.getKeyboardFocus();
 			if (focus == area) Core.scene.setScrollFocus(pane);
-			if ((focus != null && isAscendantOf(focus)) || Core.scene.getScrollFocus() == pane)
-				Core.scene.setKeyboardFocus(area);
+			/*if ((focus != null && isAscendantOf(focus)) || Core.scene.getScrollFocus() == pane)
+				Core.scene.setKeyboardFocus(area);*/
 
 			area.parentHeight = getHeight();
 			area.setFirstLineShowing(0);

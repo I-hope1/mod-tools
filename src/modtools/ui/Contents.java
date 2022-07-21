@@ -18,7 +18,7 @@ public class Contents {
 		selection = new Selection();
 		showuilist = new ShowUIList();
 		unitSpawn = new UnitSpawn();
-		errorDisplay = new ErrorDisplay();
+//		errorDisplay = new ErrorDisplay();
 		contentList = new ContentList();
 		elementShow = new ElementShow();
 	}

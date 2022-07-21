@@ -14,21 +14,42 @@ import arc.util.Tmp;
 public class MoveListener extends InputListener {
 	float bx, by;
 	public final Table main;
-
+	public final Element touch;
+	public boolean disabled = false;
+	public Runnable fire;
 
 	public MoveListener(Element touch, Table main) {
 		this.main = main;
+		this.touch = touch;
 		touch.addListener(this);
 	}
+//	public Cursor lastCursor;
 
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		bx = x;
 		by = y;
+		/*try {
+			lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}*/
 		return true;
 	}
 
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
+		if (disabled) return;
+		if (fire != null) fire.run();
 		Vec2 v = main.localToStageCoordinates(Tmp.v1.set(x, y));
-		main.setPosition(Mathf.clamp(-bx + v.x, 0.0f, (float) Core.graphics.getWidth() - main.getPrefWidth()), Mathf.clamp(-by + v.y, 0.0f, (float) Core.graphics.getHeight() - main.getPrefHeight()));
+		float mainWidth = main.getWidth(), mainHeight = main.getHeight();
+		float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
+		main.setPosition(Mathf.clamp(-bx + v.x, -touchWidth / 2f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
+				Mathf.clamp(-by + v.y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
+//		Core.graphics.cursor(SystemCursor.crosshair);
+	}
+
+	@Override
+	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+		super.touchUp(event, x, y, pointer, button);
+//		Core.graphics.cursor(lastCursor);
 	}
 }

@@ -13,6 +13,7 @@ import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
 import mindustry.gen.Icon;
 import mindustry.ui.dialogs.BaseDialog;
+import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 
 import java.lang.reflect.Field;
@@ -54,7 +55,7 @@ public class ContentList extends Content {
 				fxs.put(f.getName(), (Effect) obj);
 			} catch (IllegalAccessException e) {
 //				Log.err(e);
-				Vars.ui.showException(e);
+				IntUI.showException(e);
 			}
 		}
 		fields = Bullets.class.getFields();
@@ -66,7 +67,7 @@ public class ContentList extends Content {
 				bullets.put(f.getName(), (BulletType) obj);
 			} catch (IllegalAccessException e) {
 //				Log.err(e);
-				Vars.ui.showException(e);
+				IntUI.showException(e);
 			}
 		}
 	}

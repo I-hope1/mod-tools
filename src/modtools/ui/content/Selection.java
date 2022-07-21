@@ -17,17 +17,14 @@ import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
-import arc.scene.ui.Image;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
-import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
-import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
 import mindustry.entities.units.UnitController;
 import mindustry.game.Team;
@@ -42,7 +39,7 @@ import mindustry.world.blocks.environment.OverlayFloor;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
-import modtools.ui.components.MoveListener;
+import modtools.ui.components.Window;
 import modtools.utils.JSFunc;
 import modtools.utils.Tools;
 import modtools.utils.WorldDraw;
@@ -70,7 +67,8 @@ public class Selection extends Content {
 	public WorldDraw unitWD = new WorldDraw(Layer.weather), tileWD = new WorldDraw(Layer.darkness + 1),
 			buildWD = new WorldDraw(Layer.darkness), otherWD = new WorldDraw(Layer.overlayUI);
 	public Element fragSelect;
-	public Table pane, functions;
+	public Window pane;
+	public Table functions;
 	Team defaultTeam;
 	// show: pane是否显示
 	// move: 是否移动
@@ -211,10 +209,8 @@ public class Selection extends Content {
 				}
 
 				float minX = Mathf.clamp(start.x, 0, Vars.world.unitWidth());
-				Log.info(minX);
 				float maxX = Mathf.clamp(end.x, 0, Vars.world.unitWidth());
 				float minY = Mathf.clamp(start.y, 0, Vars.world.unitHeight());
-				Log.info(minY);
 				float maxY = Mathf.clamp(end.y, 0, Vars.world.unitHeight());
 				for (float y = minY; y < maxY; y += tilesize) {
 					for (float x = minX; x < maxX; x += tilesize) {
@@ -231,9 +227,10 @@ public class Selection extends Content {
 					}
 				}
 
-				pane.touchable = Touchable.enabled;
-				pane.visible = true;
-				pane.setPosition(Mathf.clamp(mx, 0f, Core.graphics.getWidth() - pane.getPrefWidth()), Mathf.clamp(my, 0f, Core.graphics.getHeight() - pane.getPrefHeight()));
+				if (!pane.isShown()) {
+					pane.show();
+					pane.setPosition(Mathf.clamp(mx, 0f, Core.graphics.getWidth() - pane.getPrefWidth()), Mathf.clamp(my, 0f, Core.graphics.getHeight() - pane.getPrefHeight()));
+				}
 				show = false;
 //				start = end = null;
 			}
@@ -247,22 +244,17 @@ public class Selection extends Content {
 		final int W = buttonWidth;
 		functions = new Table();
 		functions.defaults().width(W);
-		pane = new Table();
-		pane.table(right -> {
-			Image img = right.image().color(Color.sky).size((float) (W - 32), 32.0f).get();
-			new MoveListener(img, pane);
-			right.button(Icon.cancel, Styles.cleari, this::hide).size(32.0f);
-		}).fillX().row();
+		pane = new Window("选择", W - 64/* two buttons */, maxH, true);
+		pane.hidden(this::hide);
 		ScrollPaneStyle paneStyle = new ScrollPaneStyle();
 		paneStyle.background = Styles.none;
-		pane.table(t -> {
+		pane.cont.table(t -> {
 			t.pane(paneStyle, functions).fillX().fillY();
-		}).size(W, maxH).get().background(Styles.black5);
-		pane.left().bottom().defaults().width(W);
-		pane.visible = false;
+		});
+//		pane.cont.left().bottom().defaults().width(W);
 		pane.update(() -> {
 			if (Vars.state.isMenu()) {
-				hide();
+				pane.hide();
 			}
 		});
 
@@ -271,7 +263,7 @@ public class Selection extends Content {
 				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
 					func.each(tile -> {
 						if (tile.block() != block) {
-							tile.setBlock(block, tile.block() != Blocks.air ? tile.team() : defaultTeam);
+							tile.setBlock(block, tile.build != null ? tile.team() : defaultTeam);
 						}
 
 					});
@@ -388,7 +380,7 @@ public class Selection extends Content {
 			});
 		});
 
-		Core.scene.root.addChildAt(10, pane);
+//		pane.show();
 		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
 
@@ -411,8 +403,8 @@ public class Selection extends Content {
 	public void hide() {
 		fragSelect.visible = false;
 		show = false;
-		pane.visible = false;
-		pane.touchable = Touchable.disabled;
+//		pane.visible = false;
+//		pane.touchable = Touchable.disabled;
 		btn.setChecked(false);
 
 //		if (!Core.input.alt()) {

@@ -1,9 +1,9 @@
 package modtools;
 
-import arc.Core;
 import arc.util.Log;
 import modtools.ui.Frag;
 import modtools.ui.IntUI;
+import modtools.ui.TopGroup;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -12,10 +12,11 @@ import static mindustry.Vars.ui;
 public class IntVars {
 	public static final String modName = "mod-tools";
 	public static final Frag frag = new Frag();
+	public static final TopGroup topGroup = new TopGroup();
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) frag.load();
-		else Core.scene.add(frag);
+		else topGroup.addChild(frag);
 	}
 
 

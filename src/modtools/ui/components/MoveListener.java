@@ -40,11 +40,16 @@ public class MoveListener extends InputListener {
 		if (disabled) return;
 		if (fire != null) fire.run();
 		Vec2 v = main.localToStageCoordinates(Tmp.v1.set(x, y));
+
+		display(-bx + v.x, -by + v.y);
+//		Core.graphics.cursor(SystemCursor.crosshair);
+	}
+
+	public void display(float x, float y) {
 		float mainWidth = main.getWidth(), mainHeight = main.getHeight();
 		float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
-		main.setPosition(Mathf.clamp(-bx + v.x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
-				Mathf.clamp(-by + v.y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
-//		Core.graphics.cursor(SystemCursor.crosshair);
+		main.setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
+				Mathf.clamp(y, -Math.max(mainHeight, touchHeight) / 3f * 2f, Core.graphics.getHeight() - mainHeight));
 	}
 
 	@Override

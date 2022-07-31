@@ -12,7 +12,8 @@ import java.util.HashMap;
 public class MyIcons extends HashMap<String, Drawable> {
 	{
 		Vars.mods.getMod(ModTools.class).root.child("icons").findAll().each(f -> {
-			put(f.nameWithoutExtension(), new TextureRegionDrawable(new TextureRegion(new Texture(f))));
+			put(f.nameWithoutExtension(), new TextureRegionDrawable(
+					new TextureRegion(new Texture(f))));
 		});
 	}
 }

@@ -17,6 +17,7 @@ import mindustry.gen.EffectState;
 
 /**
  * 世界渲染模块
+ * @author I hope...
  */
 public class WorldDraw {
 	// 玩家渲染区域

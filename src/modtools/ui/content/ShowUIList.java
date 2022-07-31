@@ -35,7 +35,7 @@ public class ShowUIList extends Content {
 	}
 
 	public void copyText(CharSequence text) {
-		Vars.ui.showInfoFade("已复制: [accent]" + text);
+		IntUI.showInfoFade(ui, "已复制: [accent]" + text);
 		Core.app.setClipboardText(text.toString());
 	}
 

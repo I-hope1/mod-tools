@@ -20,7 +20,10 @@ import mindustry.content.UnitTypes;
 import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.game.Team;
-import mindustry.gen.*;
+import mindustry.gen.BlockUnitUnit;
+import mindustry.gen.Groups;
+import mindustry.gen.Icon;
+import mindustry.gen.Unit;
 import mindustry.graphics.Layer;
 import mindustry.graphics.Pal;
 import mindustry.type.UnitType;
@@ -32,12 +35,17 @@ import modtools.ui.components.Window;
 import modtools.utils.Tools;
 
 import static mindustry.Vars.player;
+import static modtools.utils.MySettings.settings;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {
 
 	public UnitSpawn() {
 		super("unitSpawn");
+	}
+
+	public boolean loadable() {
+		return settings.getBool("load-" + name, "false");
 	}
 
 	Window ui;
@@ -210,7 +218,7 @@ public class UnitSpawn extends Content {
 		}
 		try {
 			Unit unit = selectUnit.constructor.get();
-			;
+
 			if (unit instanceof BlockUnitUnit) {
 				IntUI.showException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));
 				return;

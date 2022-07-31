@@ -1,13 +1,13 @@
 
 package modtools.ui.content;
 
-import arc.Core;
 import arc.scene.ui.layout.Table;
 import mindustry.graphics.Pal;
 import modtools.ui.components.Window;
 
 import static modtools.IntVars.frag;
-import static modtools.IntVars.modName;
+import static modtools.IntVars.topGroup;
+import static modtools.utils.MySettings.settings;
 
 public class Settings extends Content {
 	Window ui;
@@ -25,8 +25,8 @@ public class Settings extends Content {
 	}
 
 	public <T extends Content> void addLoad(T cont) {
-		loadTable.check(cont.localizedName(), (boolean) Core.settings.get(modName + "-load-" + cont.name, true), b -> {
-			Core.settings.put(modName + "-load-" + cont.name, b);
+		loadTable.check(cont.localizedName(), cont.loadable(), b -> {
+			settings.put("load-" + cont.name, b);
 		}).row();
 	}
 
@@ -51,8 +51,9 @@ public class Settings extends Content {
 		add("load", loadTable);
 		add("其他", new Table() {{
 			left().defaults().left();
-			check("显示主菜单背景", Core.settings.getBool(modName + "-ShowMainMenuBackground"), b -> Core.settings.put(modName + "-ShowMainMenuBackground", b)).row();
-			check("frag置于顶层", frag.keepFrag, b -> frag.keepFrag = b);
+			check("显示主菜单背景", settings.getBool("ShowMainMenuBackground"), b -> settings.put("ShowMainMenuBackground", b)).row();
+			check("ui过多检查", topGroup.checkUI, b -> topGroup.checkUI = b);
+			check("frag置于顶层", frag.keepFrag, b -> settings.put("ShowMainMenuBackground", frag.keepFrag = b));
 		}});
 		Content.all.forEach(cont -> {
 			if (!(cont instanceof Settings)) {

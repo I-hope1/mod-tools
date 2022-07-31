@@ -7,16 +7,19 @@ import arc.scene.ui.layout.Table;
 import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
-import mindustry.game.EventType;
+import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.Mod;
 import mindustry.mod.ModClassLoader;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Background;
 import modtools_lib.MyReflect;
+import rhino.Context;
 
 import java.util.Objects;
 
+import static mindustry.Vars.ui;
 import static modtools.IntVars.modName;
+import static modtools.utils.MySettings.settings;
 
 public class ModTools extends Mod {
 	public static ModClassLoader mainLoader;
@@ -27,23 +30,21 @@ public class ModTools extends Mod {
 		Time.runTask(0, () -> {
 			Log.info("Loaded Reflect.");
 			loadReflect();
-//			Test.main();
-//			CatchError.main((ThreadPoolExecutor) Vars.mainExecutor);
-//			unsafe.throwException(new Throwable());
-			/*try {
-				Field f = Settings.class.getDeclaredField("executor");
-				f.setAccessible(true);
-				CatchError.main((ThreadPoolExecutor) f.get(Core.settings));
-			} catch (Exception e) {
-				Log.err(e);
-			}*/
 		});
-		Events.on(EventType.ClientLoadEvent.class, e -> {
+
+		Events.on(ClientLoadEvent.class, e -> {
 			if (throwable != null) {
-				Vars.ui.showException(throwable);
+				ui.showException(throwable);
 				return;
 			}
 
+			if (!Vars.mobile) try {
+				Context context = Context.getCurrentContext();
+				MyReflect.setValue(context != null ? context : Context.enter(), Context.class, "applicationClassLoader", Vars.mods.mainLoader());
+			} catch (Throwable err) {
+				throw new RuntimeException(err);
+			}
+			// Unit135G.main();
 			Time.runTask(10f, () -> {
 				BaseDialog dialog = new BaseDialog("frog");
 				dialog.addCloseListener();
@@ -57,10 +58,8 @@ public class ModTools extends Mod {
 			});
 			IntVars.load();
 
-			if (Core.settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
+			if (settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
 		});
-
-//		DesktopLauncher.main(new String[]{""});
 	}
 
 	public static Throwable throwable = null;
@@ -88,10 +87,24 @@ public class ModTools extends Mod {
 			Class.forName("modtools_lib.MyReflect", true, loader);
 			toFi.delete();
 			MyReflect.load();
-		} catch (Exception e) {
+
+			/*var urlloader = new URLClassLoader(new URL[]{Vars.tmpDirectory.child("mindustry.jar").file().toURI().toURL()}, null);
+			for (Field f : MyReflect.lookupGetFields(ClassLoader.class)) {
+				if (f.getName().equals("parent")) {
+					MyReflect.setOverride(f);
+					f.set(mdtcl, urlloader);
+					break;
+				}
+			}*/
+			//			urlloader.loadClass("mindustry.ctype.Content", true);
+			//		mdtcl.addChild(loader);
+			//			mdtcl.loadClass("mindustry.ctype.Content");
+			//			Class.forName("mindustry.ctype.Content", true, mainLoader);
+		} catch (Throwable e) {
 			throwable = e;
 			Log.err(e);
 		}
+
 	}
 
 	/*public static void test() {

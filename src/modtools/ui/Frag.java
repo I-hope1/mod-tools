@@ -3,7 +3,6 @@ package modtools.ui;
 import arc.Core;
 import arc.graphics.Color;
 import arc.math.Mathf;
-import arc.scene.Group;
 import arc.scene.ui.Image;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
@@ -13,9 +12,11 @@ import modtools.ui.components.MoveListener;
 import modtools.ui.content.Content;
 
 import static modtools.IntVars.modName;
+import static modtools.IntVars.topGroup;
+import static modtools.utils.MySettings.settings;
 
 public class Frag extends Table {
-	public boolean keepFrag = true, hideCont = false;
+	public boolean keepFrag = settings.getBool("ShowMainMenuBackground", "true"), hideCont = false;
 	public int baseHeight = 0;
 	public Table contTable;
 	public Cell<Table> cell;
@@ -48,18 +49,20 @@ public class Frag extends Table {
 			});
 		});
 		left().bottom();
-		Core.scene.add(this);
-		Group root = Core.scene.root;
+		topGroup.addChild(this);
 		Log.info(this);
+		/*x = Core.graphics.getWidth() / -2f;
+		y = Core.graphics.getHeight() / -2f;*/
 
 		update(() -> {
-			setPosition(Mathf.clamp(x, 0.0f, (float) Core.graphics.getWidth() - getPrefWidth()), Mathf.clamp(y, 0.0f, (float) Core.graphics.getHeight() - getPrefHeight()));
+			setPosition(Mathf.clamp(x, 0f, (float) Core.graphics.getWidth() - getPrefWidth()),
+					Mathf.clamp(y, 0f, (float) Core.graphics.getHeight() - getPrefHeight()));
 			/*if (Vars.state.isGame() && Vars.net.server()) {
 				var p = new MyPacket();
 				p.aBoolean = false;
 				Vars.net.send(p, true);
 			}*/
-			if (!keepFrag || root == null || root.getChildren().peek() == this) return;
+			if (!keepFrag || parent == null || parent.getChildren().peek() == this) return;
 			setZIndex(Integer.MAX_VALUE);
 		});
 	}

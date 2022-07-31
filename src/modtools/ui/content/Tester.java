@@ -11,6 +11,7 @@ import arc.func.Func;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.scene.Action;
+import arc.scene.Element;
 import arc.scene.Scene;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.Button;
@@ -19,11 +20,13 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
+import arc.util.Align;
 import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
+import mindustry.gen.Tex;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
 import modtools.ui.Contents;
@@ -38,10 +41,12 @@ import rhino.*;
 
 import java.util.Objects;
 
+import static modtools.utils.Tools.getAbsPos;
+
 public class Tester extends Content {
 	String log = "";
 	MyTextArea area;
-	boolean loop = false, wrap = false, error, ignoreError = false,
+	public boolean loop = false, wrap = false, error, ignoreError = false,
 			checkUI = true, wrapRef = true, multiWindows = false;
 	static final float w = Core.graphics.isPortrait() ? 440 : 540;
 	Window ui;
@@ -87,7 +92,7 @@ public class Tester extends Content {
 			return true;
 		};
 
-		cont.add(textarea).size(w, 390).row();
+		cont.add(textarea).height(390).growX().row();
 		cont.image().color(Color.gray).growX().row();
 		cont.table(t -> {
 			t.button(Icon.left, area::left);
@@ -110,12 +115,12 @@ public class Tester extends Content {
 				}
 			}).padLeft(8f).padRight(8f);
 			t.button(Icon.right, area::right);
-		}).row();
-		cont.table(Window.myPane, t -> t.pane(p -> {
-			p.label(() -> log);
-		}).size(w, 390));
+		}).growX().row();
+		cont.table(Tex.pane,t -> t.pane(p -> {
+			p.label(() -> log).wrap().growX().labelAlign(Align.center, Align.left);
+		}).height(390).growX()).growX();
 //		table.update(() -> table.layout());
-		table.add(cont).row();
+		table.add(cont).grow().row();
 		table.pane(p -> {
 			p.button("", Icon.star, Styles.cleart, () -> {
 				Fi fi = bookmark.file.child(Time.millis() + ".txt");
@@ -131,6 +136,10 @@ public class Tester extends Content {
 			p.button(b -> {
 				b.label(() -> wrap ? "严格" : "非严格");
 			}, Styles.defaultb, () -> wrap = !wrap).size(100, 55);
+			/*p.button(b -> {
+				b.label(() -> textarea.enableHighlighting ? "高亮" : "不高亮");
+			}, Styles.defaultb, () -> textarea.enableHighlighting = !textarea.enableHighlighting).size(100, 55);*/
+
 			p.button("历史记录", history::show).size(100, 55);
 			p.button("收藏夹", bookmark::show).size(100, 55);
 		}).height(60).growX();
@@ -233,6 +242,7 @@ public class Tester extends Content {
 			p.add(f.readString()).row();
 		}, Tester::sort);
 		scripts = Vars.mods.getScripts();
+		if (Context.getCurrentContext() == null) Context.enter();
 		cx = scripts.context;
 		scope = scripts.scope;
 
@@ -253,23 +263,6 @@ public class Tester extends Content {
 		}
 
 		setup();
-		if (!init) btn.update(() -> {
-			if (checkUI) {
-				if (Core.scene.root.getChildren().select(el -> el.visible).size > 70) {
-					loop = false;
-					Dialog dialog;
-					while (true) {
-						dialog = Core.scene.getDialog();
-						if (dialog == null) break;
-						dialog.hide();
-					}
-//					Core.scene.root.clearChildren();
-//					Vars.ui.init();
-
-//					Events.fire(new ClientLoadEvent())
-				}
-			}
-		});
 		Events.run(Trigger.update, () -> {
 //			Log.info("update");
 			if (loop && !getMessage().isEmpty()) {
@@ -287,11 +280,10 @@ public class Tester extends Content {
 		table.table(t -> {
 			t.left().defaults().left();
 			t.check("忽略报错", ignoreError, b -> ignoreError = b);
-			t.check("ui过多检查", checkUI, b -> checkUI = b);
+			t.check("自动转换储存的js变量", wrapRef, b -> wrapRef = b);
 		}).row();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("自动转换储存的js变量", wrapRef, b -> wrapRef = b);
 			t.check("窗口多开", multiWindows, b -> multiWindows = b);
 		});
 
@@ -321,7 +313,15 @@ public class Tester extends Content {
 			i++;
 		}
 		put(prefix + i, val);
-		Vars.ui.showInfoFade("已储存为[accent]" + prefix + i);
+	}
+	public void put(Element element, Object val) {
+		int i = 0;
+		String prefix = "temp";
+		while (ScriptableObject.hasProperty(scope, prefix + i)) {
+			i++;
+		}
+		put(prefix + i, val);
+		IntUI.showInfoFade(getAbsPos(element), "已储存为[accent]" + prefix + i);
 	}
 
 	static class ListDialog extends Window {

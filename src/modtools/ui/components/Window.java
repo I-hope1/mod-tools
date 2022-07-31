@@ -2,7 +2,6 @@ package modtools.ui.components;
 
 import arc.Core;
 import arc.func.Prov;
-import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.Mathf;
@@ -13,7 +12,6 @@ import arc.scene.Scene;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
-import arc.scene.style.NinePatchDrawable;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
@@ -25,16 +23,21 @@ import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 
+import static modtools.IntVars.topGroup;
 import static modtools.ui.IntUI.icons;
-
+/**
+ * 浮动的窗口，可以缩放，最小化，最大化
+ * @author I hope...
+ **/
 public class Window extends Table {
-	public static Drawable myPane = ((NinePatchDrawable) Tex.pane).tint(new Color(1, 1, 1, 0.8f));
+	public static final Seq<Window> all = new Seq<>();
+	public static Drawable myPane = Tex.pane;
+			// ((NinePatchDrawable) Tex.pane).tint(new Color(1, 1, 1, 0.9f));
 	public static final Cell emptyCell = new Cell<>();
 	public Table top = new Table(myPane), cont = new Table(myPane), buttons = new Table(myPane);
-	public float topAndBottomHeight;
 	public float minWidth, minHeight;
 	// 用于最小化时的最小宽度
-	private static final float topWdith = 160, topHeight = 45;
+	private static final float topHeight = 45;
 	public Label title;
 	public boolean
 			// 是否置顶
@@ -45,6 +48,9 @@ public class Window extends Table {
 
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super(Styles.none);
+
+		all.add(this);
+
 		addListener(new InputListener() {
 			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
@@ -56,12 +62,11 @@ public class Window extends Table {
 		top.margin(0);
 		cont.margin(8f);
 		buttons.margin(0);
-		this.minWidth = minWidth;
 		this.minHeight = minHeight;
 		this.full = full;
 		this.noButtons = noButtons;
 
-//		top.defaults().width(winWidth);
+		//		top.defaults().width(winWidth);
 
 		left().defaults().left();
 
@@ -81,14 +86,16 @@ public class Window extends Table {
 			});
 		}
 		top.button(Icon.cancel, Styles.clearNonei, 32, this::hide).padLeft(4f).padRight(4f);
-//		cont.defaults().height(winHeight);
+		//		cont.defaults().height(winHeight);
 		setup();
 
 		moveListener.fire = () -> {
 			if (isMaximize && !isMinimize) maximize();
 		};
 		Time.runTask(1, () -> {
-			sclLisetener = new SclLisetener(this, minWidth, minHeight);
+			// 默认最小宽度为pref宽度
+			this.minWidth = Math.max(minWidth, getMinWidth());
+			sclLisetener = new SclLisetener(this, this.minWidth, minHeight);
 			update(() -> {
 				if (sticky) setZIndex(Integer.MAX_VALUE);
 				sclLisetener.disabled = isMaximize;
@@ -101,6 +108,7 @@ public class Window extends Table {
 	}
 
 	Seq<Runnable> runs = new Seq<>();
+
 	@Override
 	public Element update(Runnable r) {
 		runs.add(r);
@@ -129,8 +137,8 @@ public class Window extends Table {
 		noButtons = val;
 		if (noButtons) {
 			buttons.remove();
-//			buttons.clear();
-//			buttons = null;
+			//			buttons.clear();
+			//			buttons = null;
 		} else {
 			if (buttons.parent != null) {
 				buttons.remove();
@@ -148,6 +156,7 @@ public class Window extends Table {
 
 
 	public float getPrefWidth() {
+		// 默认最小宽度为顶部的最小宽度
 		return Mathf.clamp(super.getPrefWidth(), minWidth, Core.graphics.getWidth());
 	}
 
@@ -188,7 +197,13 @@ public class Window extends Table {
 			}
 		}
 	};
-	;
+
+
+	@Override
+	public void clear() {
+		super.clear();
+		all.remove(this);
+	}
 
 	@Override
 	protected void setScene(Scene stage) {
@@ -226,7 +241,7 @@ public class Window extends Table {
 		if (actor != null && !actor.isDescendantOf(this)) previousScrollFocus = actor;
 
 		pack();
-		stage.add(this);
+		topGroup.addChild(this);
 		stage.setKeyboardFocus(this);
 		stage.setScrollFocus(this);
 
@@ -333,7 +348,7 @@ public class Window extends Table {
 				lastHeight = getHeight();
 			}
 
-			width = topWdith;
+			width = getMinWidth();
 			height = topHeight;
 			y += lastHeight - height;
 

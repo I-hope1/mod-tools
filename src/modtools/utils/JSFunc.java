@@ -46,8 +46,11 @@ public class JSFunc {
 		showInfo(null, clazz);
 	}
 
+	public static final Color keyword = Color.valueOf("ff657a"),
+			type = Color.valueOf("9cd1bb");
+
 	public static void showInfo(Object o, Class<?> clazz) {
-//			if (!clazz.isInstance(o)) return;
+		//			if (!clazz.isInstance(o)) return;
 		/*try {
 			MyReflect.lookupSetClassLoader(clazz, Field.class.getClassLoader());
 		} catch (Throwable e) {
@@ -69,16 +72,18 @@ public class JSFunc {
 				_cont.add(button).fillX().minHeight(40).row();
 			}
 
-			new Window(clazz.getSimpleName(), 400, 400, true) {{
+			new Window(clazz.getSimpleName(), 200, 200, true) {{
 				cont.pane(_cont).grow();
-//				addCloseButton();
+				//				addCloseButton();
 			}}.show();
 
 			return;
 		}
 		final Table cont = new Table();
 		cont.left().defaults().left();
-		cont.button("存储为js变量", () -> tester.put(o)).padLeft(10f).height(50).growX().maxWidth(600).row();
+		cont.button("存储为js变量", () -> {}).padLeft(10f).height(50).growX().maxWidth(600).with(b -> {
+			b.clicked(() -> tester.put(b, o));
+		}).row();
 		cont.table(t -> {
 			t.left().defaults().left();
 			t.add(clazz.getTypeName());
@@ -103,6 +108,12 @@ public class JSFunc {
 		Table constructors = cont.table(t -> {
 			t.left().defaults().left().top();
 		}).pad(4, 6, 4, 6).fill().padTop(8).get();
+		cont.row();
+		cont.add("类").row();
+		cont.image().color(Pal.accent).fillX().row();
+		Table classes = cont.table(t -> {
+			t.left().defaults().left().top();
+		}).pad(4, 6, 4, 6).fill().padTop(8).get();
 
 		for (Class<?> cls = clazz; cls != null; cls = cls.getSuperclass()) {
 			Class<?> finalCls = cls;
@@ -113,8 +124,10 @@ public class JSFunc {
 			methods.image().color(Color.lightGray).fillX().padTop(6).row();
 			constructors.add(cls.getSimpleName()).row();
 			constructors.image().color(Color.lightGray).fillX().padTop(6).row();
+			classes.add(cls.getSimpleName()).row();
+			classes.image().color(Color.lightGray).fillX().padTop(6).row();
 
-//				for (Field f : cls.getDeclaredFields()) {
+			//				for (Field f : cls.getDeclaredFields()) {
 			Field[] fields2 = {};
 			try {
 				fields2 = MyReflect.lookupGetFields(cls);
@@ -132,7 +145,7 @@ public class JSFunc {
 				} catch (Throwable ignored) {}*/
 				try {
 					MyReflect.setOverride(f);
-//					f.setAccessible(true);
+					//					f.setAccessible(true);
 				} catch (Throwable t) {
 					Log.err(t);
 				}
@@ -140,7 +153,7 @@ public class JSFunc {
 				Class<?> type = f.getType();
 				fields.table(t -> {
 					try {
-						t.add(Modifier.toString(modifiers), Color.valueOf("#ff657a")).padRight(2);
+						t.add(Modifier.toString(modifiers), keyword).padRight(2);
 						t.add(" ");
 						t.add(format(type));
 						t.add(" ");
@@ -163,7 +176,7 @@ public class JSFunc {
 							l.setText(Tools.format(type == String.class ? '"' + base + '"' : base));
 							l.setColor(Color.valueOf("#bad761"));
 						} catch (Exception e) {
-//								`Log.info`(e);
+							//								`Log.info`(e);
 							t.add("Unknown", Color.red);
 						}
 					} else {
@@ -189,8 +202,12 @@ public class JSFunc {
 						});
 					}
 
-					t.button("将字段储存为js变量", () -> tester.put(f)).padLeft(10f).size(180, 40);
-					t.button("将值存储为js变量", () -> tester.put(val[0])).padLeft(10f).size(180, 40);
+					t.button("将字段储存为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
+						b.clicked(() -> tester.put(b, f));
+					});
+					t.button("将值存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
+						b.clicked(() -> tester.put(b, val[0]));
+					});
 				}).pad(4).row();
 			}
 
@@ -213,7 +230,7 @@ public class JSFunc {
 					try {
 						StringBuilder sb = new StringBuilder();
 						int mod = m.getModifiers() & Modifier.methodModifiers();
-						sb.append("[#ff657a]");
+						sb.append("[#").append(keyword).append("]");
 						if (mod != 0 && !m.isDefault()) {
 							sb.append(Modifier.toString(mod)).append(' ');
 						} else {
@@ -224,7 +241,7 @@ public class JSFunc {
 						}
 
 						sb.append("[]");
-						sb.append("[#9cd1bb]").append(m.getReturnType().getTypeName()).append("[] ");
+						sb.append("[#").append(type).append("]").append(m.getReturnType().getTypeName()).append("[] ");
 						sb.append(m.getName());
 						sb.append("[lightgray]([]");
 						StringJoiner sj = new StringJoiner(", ");
@@ -238,7 +255,7 @@ public class JSFunc {
 						sb.append("[lightgray])[]");
 						exceptionTypes = m.getExceptionTypes();
 						if (exceptionTypes.length > 0) {
-							StringJoiner joiner = new StringJoiner(",", " [#ff657a]throws[] ", "");
+							StringJoiner joiner = new StringJoiner(",", " [#" + keyword + "]throws[] ", "");
 
 							for (Class<?> exceptionType : exceptionTypes) {
 								joiner.add(exceptionType.getTypeName());
@@ -248,7 +265,7 @@ public class JSFunc {
 						}
 
 						t.add(sb);
-ifl:
+						ifl:
 						if (m.getParameterTypes().length == 0) {
 							Label l = new Label("");
 							t.add(l);
@@ -259,7 +276,7 @@ ifl:
 									Object returnV = m.invoke(o);
 									l.setText(Tools.format("" + returnV));
 									if (returnV != null && !(returnV instanceof String) && !returnV.getClass().isPrimitive()) {
-//											l.setColor(Color.white);
+										//											l.setColor(Color.white);
 										IntUI.longPress(l, 600, b -> {
 											if (b) {
 												showInfo(returnV);
@@ -273,7 +290,9 @@ ifl:
 							}).width(100);
 						}
 
-						t.button("将函数存储为js变量", () -> tester.put(m)).padLeft(10f).size(180, 40);
+						t.button("将函数存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
+							b.clicked(() -> tester.put(b, m));
+						});
 					} catch (Exception err) {
 						t.add("<" + err + ">", Color.red);
 					}
@@ -300,11 +319,11 @@ ifl:
 					try {
 						StringBuilder sb = new StringBuilder();
 						int mod = cons.getModifiers() & Modifier.methodModifiers();
-						sb.append("[#ff657a]");
+						sb.append("[#").append(keyword).append("]");
 						sb.append(Modifier.toString(mod)).append(' ');
 
 						sb.append("[]");
-						sb.append("[#9cd1bb]").append(finalCls.getSimpleName()).append("[] ");
+						sb.append("[#").append(type).append("]").append(finalCls.getSimpleName()).append("[] ");
 						sb.append("[lightgray]([]");
 
 						StringJoiner sj = new StringJoiner(", ");
@@ -318,7 +337,7 @@ ifl:
 						Type[] exceptionTypes = cons.getGenericExceptionTypes();
 						// 报错
 						if (exceptionTypes.length > 0) {
-							StringJoiner joiner = new StringJoiner(",", " [#ff657a]throws[] ", "");
+							StringJoiner joiner = new StringJoiner(",", " [#" + keyword + "]throws[] ", "");
 
 							for (Type exceptionType : exceptionTypes) {
 								joiner.add(exceptionType.getTypeName());
@@ -328,23 +347,54 @@ ifl:
 						}
 						t.add(sb);
 
-						t.button("将函数存储为js变量", () -> tester.put(cons)).padLeft(10f).size(180, 40);
+						t.button("将函数存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
+							b.clicked(() -> tester.put(b, cons));
+						});
 					} catch (Exception e) {
 						Log.err(e);
 					}
 				}).pad(4).row();
 			}
+
+			for (Class<?> dcls : cls.getDeclaredClasses()) {
+				classes.table(t -> {
+					try {
+						int mod = dcls.getModifiers() & Modifier.classModifiers();
+						t.add(Modifier.toString(mod), keyword).padRight(8f);
+						Label l = t.add(dcls.getSimpleName(), type).padRight(8f).get();
+						Class<?>[] types = dcls.getInterfaces();
+						if (types.length > 0) {
+							t.add("implements").padRight(8f);
+							for (Class<?> interf : types) {
+								t.add(interf.getName()).padRight(8f);
+							}
+						}
+						IntUI.longPress(l, 600, b -> {
+							if (b) {
+								showInfo(dcls);
+							}
+						});
+
+						t.button("将类存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
+							b.clicked(() -> tester.put(b, dcls));
+						});
+					} catch (Exception e) {
+						Log.err(e);
+					}
+				}).pad(4).row();
+
+			}
 		}
 
-		Window dialog = new Window(clazz.getSimpleName(), 400, 400, true);
+		Window dialog = new Window(clazz.getSimpleName(), 200, 200, true);
 		dialog.cont.pane(cont).grow();
-//		dialog.addCloseButton();
+		//		dialog.addCloseButton();
 		dialog.show();
 	}
 
 	public static CharSequence format(Class<?> cls) {
 		StringBuilder base = new StringBuilder();
-		base.append("[#9cd1bb]").append(cls.getTypeName()).append("[]");
+		base.append("[#").append(type).append("]").append(cls.getTypeName()).append("[]");
 		if (cls.isArray()) base.append("[\u0001]");
 		return base;
 	}
@@ -352,7 +402,7 @@ ifl:
 	public static Window window(final Cons<Window> cons) {
 		return new Window("test") {{
 			cons.get(this);
-//			addCloseButton();
+			//			addCloseButton();
 			show();
 		}};
 	}
@@ -380,7 +430,7 @@ ifl:
 
 	public static Object unwrap(Object o) {
 		if (o instanceof NativeJavaObject) {
-			((NativeJavaObject) o).unwrap();
+			return ((NativeJavaObject) o).unwrap();
 		}
 		if (o instanceof Undefined) {
 			return "undefined";

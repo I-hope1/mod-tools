@@ -2,12 +2,11 @@
 package modtools.ui;
 
 import arc.Core;
-import arc.func.Cons;
-import arc.func.Cons3;
-import arc.func.Func;
-import arc.func.Prov;
+import arc.func.*;
 import arc.graphics.Color;
+import arc.input.KeyCode;
 import arc.math.Interp;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.ClickListener;
@@ -19,7 +18,6 @@ import arc.scene.ui.layout.Collapser;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
-import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
@@ -29,7 +27,10 @@ import modtools.ui.components.Window;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import static mindustry.Vars.mobile;
 import static mindustry.Vars.ui;
+import static modtools.IntVars.topGroup;
+import static modtools.utils.Tools.getAbsPos;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -94,7 +95,7 @@ public class IntUI {
 		hitter.clicked(hide);
 		hitter.fillParent = true;
 		Core.scene.add(hitter);
-		Core.scene.add(t);
+		topGroup.addChild(t);
 		t.update(() -> {
 			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
 				button.localToStageCoordinates(Tmp.v1.set(button.getWidth() / 2f, button.getHeight() / 2f));
@@ -196,7 +197,7 @@ public class IntUI {
 					cons.get(item);
 					hide.run();
 				}).size(size).get();
-				if (!Vars.mobile) {
+				if (!mobile) {
 					btn.addListener(new Tooltip(t -> {
 						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item);
 					}));
@@ -246,7 +247,7 @@ public class IntUI {
 
 	public static void showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		new Window("", 300, 0, false) {{
+		new Window("", 0, 200, false) {{
 			String message = Strings.getFinalMessage(exc);
 
 			cont.margin(15);
@@ -267,10 +268,60 @@ public class IntUI {
 			cont.row();
 			col.setCollapsed(false, false);
 			cont.add(col).colspan(2).pad(2);
-//            closeOnBack();
+			//            closeOnBack();
 			hidden(() -> {
 				Time.runTask(30f, this::clear);
 			});
 		}}.show();
+	}
+
+	public static void showInfoFade(Element element, String info) {
+		showInfoFade(getAbsPos(element), info);
+	}
+
+
+	public static void showInfoFade(Vec2 pos, String info) {
+		new Window("info", 0, 64) {{
+			cont.add(info);
+			setPosition(pos.x, pos.y);
+			// 1.2s
+			Time.runTask(60 * 1.2f, this::hide);
+			Time.runTask(0, this::display);
+		}}.show();
+	}
+
+	public static void showConfirm(Vec2 pos, String text, Runnable confirmed) {
+		showConfirm(pos, "@confirm", text, null, confirmed);
+	}
+
+	public static void showConfirm(Vec2 pos, String title, String text, Runnable confirmed) {
+		showConfirm(pos, title, text, null, confirmed);
+	}
+
+	public static void showConfirm(Vec2 pos, String title, String text, Boolp hide, Runnable confirmed) {
+		Window window = new Window(title, 0, 100, false, false);
+		window.setPosition(pos.x, pos.y);
+		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
+		window.buttons.defaults().size(200f, 54f).pad(2f);
+		window.setFillParent(false);
+		window.buttons.button("@cancel", Icon.cancel, window::hide);
+		window.buttons.button("@ok", Icon.ok, () -> {
+			window.hide();
+			confirmed.run();
+		});
+		if (hide != null) {
+			window.update(() -> {
+				if (hide.get()) {
+					window.hide();
+				}
+			});
+		}
+		window.keyDown(KeyCode.enter, () -> {
+			window.hide();
+			confirmed.run();
+		});
+		window.keyDown(KeyCode.escape, window::hide);
+		window.keyDown(KeyCode.back, window::hide);
+		window.show();
 	}
 }

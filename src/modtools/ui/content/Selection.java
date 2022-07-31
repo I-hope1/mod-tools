@@ -25,6 +25,7 @@ import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import arc.util.Time;
 import mindustry.Vars;
+import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
 import mindustry.entities.units.UnitController;
 import mindustry.game.Team;
@@ -32,7 +33,6 @@ import mindustry.gen.*;
 import mindustry.graphics.Layer;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import mindustry.ui.dialogs.BaseDialog;
 import mindustry.world.Tile;
 import mindustry.world.blocks.environment.Floor;
 import mindustry.world.blocks.environment.OverlayFloor;
@@ -50,6 +50,8 @@ import java.util.ArrayList;
 import java.util.function.Consumer;
 
 import static mindustry.Vars.tilesize;
+import static mindustry.Vars.world;
+import static modtools.utils.MySettings.settings;
 import static modtools.utils.WorldDraw.drawRegion;
 import static modtools.utils.WorldDraw.rect;
 
@@ -59,10 +61,10 @@ public class Selection extends Content {
 	}
 
 	final ObjectMap<String, Boolean> select = ObjectMap.of(
-			"tile", true,
-			"building", false,
-			"floor", false,
-			"unit", false
+			"tile", settings.getBool(getSettingName() + "-tile", "true"),
+			"building", settings.getBool(getSettingName() + "-building", "false"),
+			"floor", settings.getBool(getSettingName() + "-floor", "false"),
+			"unit", settings.getBool(getSettingName() + "-unit", "false")
 	);
 	public WorldDraw unitWD = new WorldDraw(Layer.weather), tileWD = new WorldDraw(Layer.darkness + 1),
 			buildWD = new WorldDraw(Layer.darkness), otherWD = new WorldDraw(Layer.overlayUI);
@@ -78,7 +80,6 @@ public class Selection extends Content {
 	static final int buttonWidth = 200, buttonHeight = 45;
 	Function<Tile> tiles;
 	Function<Building> buildings;
-	Function<Tile> floors;
 	Function<Unit> units;
 	public static ObjectMap<String, Function<?>> all = new ObjectMap<>();
 
@@ -92,7 +93,7 @@ public class Selection extends Content {
 			});
 		}).growX().left().padLeft(16).row();
 		table.table(t -> {
-			defaultTeam = Team.get((int) Core.settings.get(getSettingName() + "-defaultTeam", 1));
+			defaultTeam = Team.get(settings.getInt(getSettingName() + "-defaultTeam", 1));
 			t.left().defaults().left();
 			t.add("默认队伍").color(Pal.accent).growX().left().row();
 			t.table(t1 -> {
@@ -102,7 +103,8 @@ public class Selection extends Content {
 
 				for (Team team : arr) {
 					ImageButton b = t1.button(IntUI.whiteui, Styles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
-						Core.settings.put(this.getSettingName() + "-defaultTeam", (this.defaultTeam = team).id);
+						defaultTeam = team;
+						settings.put(this.getSettingName() + "-defaultTeam", "" + team.id);
 					}).size(42).get();
 					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
 					b.update(() -> {
@@ -208,13 +210,13 @@ public class Selection extends Content {
 					});
 				}
 
-				float minX = Mathf.clamp(start.x, 0, Vars.world.unitWidth());
-				float maxX = Mathf.clamp(end.x, 0, Vars.world.unitWidth());
-				float minY = Mathf.clamp(start.y, 0, Vars.world.unitHeight());
-				float maxY = Mathf.clamp(end.y, 0, Vars.world.unitHeight());
+				float minX = Mathf.clamp(start.x, 0, world.unitWidth());
+				float maxX = Mathf.clamp(end.x, 0, world.unitWidth());
+				float minY = Mathf.clamp(start.y, 0, world.unitHeight());
+				float maxY = Mathf.clamp(end.y, 0, world.unitHeight());
 				for (float y = minY; y < maxY; y += tilesize) {
 					for (float x = minX; x < maxX; x += tilesize) {
-						Tile tile = Vars.world.tileWorld(x, y);
+						Tile tile = world.tileWorld(x, y);
 						if (tile != null) {
 							if ((select.get("tile") || select.get("floor")) && !tiles.list.contains(tile)) {
 								tiles.add(tile);
@@ -232,7 +234,7 @@ public class Selection extends Content {
 					pane.setPosition(Mathf.clamp(mx, 0f, Core.graphics.getWidth() - pane.getPrefWidth()), Mathf.clamp(my, 0f, Core.graphics.getHeight() - pane.getPrefHeight()));
 				}
 				show = false;
-//				start = end = null;
+				//				start = end = null;
 			}
 		};
 		Core.scene.add(fragSelect);
@@ -241,17 +243,16 @@ public class Selection extends Content {
 		/*fragDraw = new FragDraw();
 		Core.scene.add(fragDraw);*/
 
-		final int W = buttonWidth;
 		functions = new Table();
-		functions.defaults().width(W);
-		pane = new Window("选择", W - 64/* two buttons */, maxH, true);
+		functions.defaults().width(buttonWidth);
+		pane = new Window("选择", 0/* two buttons */, maxH, true);
 		pane.hidden(this::hide);
 		ScrollPaneStyle paneStyle = new ScrollPaneStyle();
 		paneStyle.background = Styles.none;
 		pane.cont.table(t -> {
 			t.pane(paneStyle, functions).fillX().fillY();
 		});
-//		pane.cont.left().bottom().defaults().width(W);
+		//		pane.cont.left().bottom().defaults().width(W);
 		pane.update(() -> {
 			if (Vars.state.isMenu()) {
 				pane.hide();
@@ -262,15 +263,41 @@ public class Selection extends Content {
 			FunctionBuild(t, "设置", button -> {
 				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
 					func.each(tile -> {
-						if (tile.block() != block) {
-							tile.setBlock(block, tile.build != null ? tile.team() : defaultTeam);
+						int offsetx = -(block.size - 1) / 2;
+						int offsety = -(block.size - 1) / 2;
+						for (int dx = 0; dx < block.size; dx++) {
+							for (int dy = 0; dy < block.size; dy++) {
+								int worldx = dx + offsetx + tile.x;
+								int worldy = dy + offsety + tile.y;
+								Tile other = world.tile(worldx, worldy);
+
+								if (other != null && other.block().isMultiblock() && other.block() == block) {
+									return;
+								}
+							}
 						}
 
+						tile.setBlock(block, tile.build != null ? tile.team() : defaultTeam);
 					});
 				}, 42.0f, 32, 6, true);
 			});
 			FunctionBuild(t, "清除", __ -> {
 				func.each(Tile::setAir);
+			});
+			ListFunction(t, "设置地板重置Overlay", Vars.content.blocks().select(block -> block instanceof Floor), (button, floor) -> {
+				tiles.each(tile -> {
+					tile.setFloor((Floor) floor);
+				});
+			});
+			ListFunction(t, "设置地板保留Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), (button, floor) -> {
+				tiles.each(tile -> {
+					tile.setFloorUnder((Floor) floor);
+				});
+			});
+			ListFunction(t, "设置Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor), (button, overlay) -> {
+				tiles.each(tile -> {
+					tile.setOverlay(overlay);
+				});
 			});
 		});
 
@@ -320,31 +347,21 @@ public class Selection extends Content {
 				}, false);
 			});
 			FunctionBuild(t, "杀死", __ -> {
-				func.each(Building::kill);
+				func.list.removeIf(b -> {
+					if (b.tile.build == b) b.kill();
+					return b.tile.build != null;
+				});
 			});
 			FunctionBuild(t, "清除", __ -> {
-				func.each(Building::remove);
-			});
-		});
-
-		floors = new TileFunction<>("floor", (t, __) -> {
-			ListFunction(t, "Set Floor Reset Overlay", Vars.content.blocks().select(block -> block instanceof Floor), (button, floor) -> {
-				tiles.each(tile -> {
-					tile.setFloor((Floor) floor);
-				});
-			});
-			ListFunction(t, "Set Floor Preserving Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), (button, floor) -> {
-				tiles.each(tile -> {
-					tile.setFloorUnder((Floor) floor);
-				});
-			});
-			ListFunction(t, "Set Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor), (button, overlay) -> {
-				tiles.each(tile -> {
-					tile.setOverlay(overlay);
+				func.list.removeIf(b -> {
+					if (b.tile != null && b.tile.block() != Blocks.air) {
+						b.tile.remove();
+					}
+					b.remove();
+					return b.tile.build != null;
 				});
 			});
 		});
-		floors.list = tiles.list;
 
 		units = new UnitFunction<>("unit", (t, func) -> {
 			FunctionBuild(t, "无限血量", __ -> {
@@ -358,15 +375,27 @@ public class Selection extends Content {
 				});
 			});
 			FunctionBuild(t, "杀死", __ -> {
-				func.each(Unit::kill);
+				func.list.removeIf(u -> {
+					Call.unitDeath(u.id);
+					try {
+						return !addedField.getBoolean(u);
+					} catch (Exception ignored) {}
+					return false;
+				});
 			});
 			FunctionBuild(t, "清除", __ -> {
-				func.each(Unit::remove);
+				func.list.removeIf(u -> {
+					u.remove();
+					try {
+						return !addedField.getBoolean(u);
+					} catch (Exception ignored) {}
+					return false;
+				});
 			});
 			FunctionBuild(t, "强制清除", __ -> {
-				func.each(u -> {
+				func.list.removeIf(u -> {
 					u.remove();
-					if (!Groups.unit.contains(unit -> unit == u)) return;
+					if (!Groups.unit.contains(unit -> unit == u)) return true;
 					Groups.all.remove(u);
 					Groups.unit.remove(u);
 					Groups.sync.remove(u);
@@ -376,11 +405,12 @@ public class Selection extends Content {
 						addedField.setBoolean(u, false);
 						((UnitController) controller.get(u)).removed(u);
 					} catch (Exception ignored) {}
+					return true;
 				});
 			});
 		});
 
-//		pane.show();
+		//		pane.show();
 		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
 
@@ -403,21 +433,21 @@ public class Selection extends Content {
 	public void hide() {
 		fragSelect.visible = false;
 		show = false;
-//		pane.visible = false;
-//		pane.touchable = Touchable.disabled;
+		//		pane.visible = false;
+		//		pane.touchable = Touchable.disabled;
 		btn.setChecked(false);
 
-//		if (!Core.input.alt()) {
+		//		if (!Core.input.alt()) {
 		tiles.clearList();
 		buildings.clearList();
 		units.clearList();
-//		}
+		//		}
 	}
 
 	public void build() {
 		show = true;
 		fragSelect.visible = true;
-//		fragSelect.touchable = Touchable.enabled;
+		//		fragSelect.touchable = Touchable.enabled;
 	}
 
 	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
@@ -523,7 +553,7 @@ public class Selection extends Content {
 
 			buildWD.drawSeq.add(() -> {
 				if (building.tile.build != building) {
-//					buildWD.hasChange = false;
+					//					buildWD.hasChange = false;
 					return false;
 				}
 				if (!rect.contains(building.x, building.y)) return true;
@@ -598,7 +628,6 @@ public class Selection extends Content {
 			main.add(name).growX().left().row();
 			main.button("show all", IntStyles.cleart, this::showAll).growX().height(buttonHeight).row();
 			main.add(cont).width(buttonWidth);
-			select.put(name, (Boolean) Core.settings.get(getSettingName() + "-" + name, select.get(name)));
 			if (select.get(name)) {
 				setup();
 			} else {
@@ -618,7 +647,7 @@ public class Selection extends Content {
 
 				hide();
 				select.put(name, b);
-				Core.settings.put(getSettingName() + "-" + name, b);
+				settings.put(getSettingName() + "-" + name, b);
 			});
 		}
 
@@ -641,7 +670,7 @@ public class Selection extends Content {
 		public void showAll() {
 			final int[] c = new int[]{0};
 			final int cols = Vars.mobile ? 4 : 6;
-			new BaseDialog(name) {{
+			new Window(name, 0, 200, true) {{
 				cont.pane(table -> {
 					list.forEach(item -> {
 						Table cont = new Table(Tex.button);
@@ -657,7 +686,7 @@ public class Selection extends Content {
 
 					});
 				}).fillX().fillY();
-				addCloseButton();
+				//				addCloseButton();
 			}}.show();
 		}
 
@@ -677,7 +706,7 @@ public class Selection extends Content {
 			Lines.stroke(thick / 3f, color);
 			Lines.dashLine(x, y, x2, y2, segments);
 			Draw.reset();
-//			Log.info(segments);
+			//			Log.info(segments);
 		}
 
 		public static void dashLine(float thick, Color color, float x, float y, float x2, float y2) {

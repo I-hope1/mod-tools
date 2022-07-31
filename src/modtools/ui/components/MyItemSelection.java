@@ -36,17 +36,19 @@ public class MyItemSelection {
 
 		for (T item : items) {
 			if (item == null) continue;
-			ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/Styles.clearTogglei, 24, () -> {
-			}).group(group).get();
-			button.changed(() -> {
-				consumer.get(button.isChecked() ? item : null);
-			});
-			button.getStyle().imageUp = new TextureRegionDrawable(item.uiIcon);
-			if (item == holder.get()) button.setChecked(true);
+			try {
+				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/Styles.clearTogglei, 24, () -> {
+				}).group(group).get();
+				button.changed(() -> {
+					consumer.get(button.isChecked() ? item : null);
+				});
+				button.getStyle().imageUp = new TextureRegionDrawable(item.uiIcon);
+				if (item == holder.get()) button.setChecked(true);
 			/*button.update(() -> {
 				button.setChecked(holder.get() == item);
 			});*/
 
+			} catch (Exception ignored) {}
 			if (++i % cols == 0) {
 				cont.row();
 			}

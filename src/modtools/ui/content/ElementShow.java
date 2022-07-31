@@ -1,6 +1,7 @@
 package modtools.ui.content;
 
 import arc.Core;
+import arc.func.Boolp;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -10,7 +11,6 @@ import arc.scene.Element;
 import arc.scene.Group;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
-import arc.scene.event.Touchable;
 import arc.scene.ui.Button;
 import arc.scene.ui.Image;
 import arc.scene.ui.ScrollPane;
@@ -31,11 +31,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static modtools.ui.Contents.tester;
+import static modtools.utils.Tools.getAbsPos;
 
 public class ElementShow extends Content {
 	public ElementShow() {
 		super("检查元素");
 	}
+
 	public static final boolean hideSelf = true;
 	public Element frag;
 	public Element selected, tmp;
@@ -51,15 +53,6 @@ public class ElementShow extends Content {
 				tmp = selected.hit(x, y, true);
 			} while (tmp != null && selected != tmp);
 		}
-	}
-
-	public Vec2 getAbsPos(Element el) {
-		Vec2 vec2 = new Vec2(el.x, el.y);
-		while (el.parent != null) {
-			el = el.parent;
-			vec2.add(el.x, el.y);
-		}
-		return vec2;
 	}
 
 	@Override
@@ -80,12 +73,11 @@ public class ElementShow extends Content {
 				return selecting ? null : super.hit(x, y, touchable);
 			}
 		};
-		frag.touchable = Touchable.enabled;
-		frag.setFillParent(true);
-		frag.addListener(new InputListener() {
+		frag.update(() -> frag.toFront());
+		Core.scene.addListener(new InputListener() {
 			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				selecting = true;
+				if (!selecting) return false;
 				getSelected(x, y);
 				return true;
 			}
@@ -98,7 +90,16 @@ public class ElementShow extends Content {
 			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				selecting = false;
-				IntVars.async(() -> new ElementShowDialog().show(selected), () -> {});
+				IntVars.async(() -> {
+					if (((Boolp) () -> {
+						Element parent = selected.parent;
+						while (true) {
+							if (parent instanceof ElementShowDialog) return false;
+							if (parent == null) return true;
+							parent = parent.parent;
+						}
+					}).get()) new ElementShowDialog().show(selected);
+				}, () -> {});
 				frag.remove();
 				btn.setChecked(false);
 			}
@@ -111,6 +112,7 @@ public class ElementShow extends Content {
 	public void build() {
 		selected = null;
 		if (frag.parent == null) {
+			selecting = true;
 			Core.scene.add(frag);
 		} else {
 			frag.remove();
@@ -123,15 +125,16 @@ public class ElementShow extends Content {
 		Pattern pattern;
 
 		public ElementShowDialog() {
-			super("审查元素", 340, 160, true);
+			super("审查元素", 0, 160, true);
 			getCell(cont).maxWidth(Core.graphics.getWidth());
 
 			name = "ElementShowDialog";
 
-//			addCloseButton();
+			//			addCloseButton();
 			pane.left().defaults().left();
 			cont.table(t -> {
-				t.button("显示父元素", Icon.up, () -> {
+				Button[] bs = {null};
+				bs[0] = t.button("显示父元素", Icon.up, () -> {
 					Runnable go = () -> {
 						hide();
 						var window = new ElementShowDialog();
@@ -141,13 +144,10 @@ public class ElementShow extends Content {
 						window.display();
 					};
 					if (element.parent == Core.scene.root) {
-						Vars.ui.showConfirm("父元素为根节点，是否确定", () -> {
-							if (hideSelf) remove();
-							go.run();
-							if (hideSelf) Core.scene.add(this);
-						});
+						Vec2 vec2 = bs[0].localToStageCoordinates(new Vec2(0, 0));
+						IntUI.showConfirm(vec2, "父元素为根节点，是否确定", go);
 					} else go.run();
-				}).disabled(b -> element == null || element.parent == null).width(120);
+				}).disabled(b -> element == null || element.parent == null).width(120).get();
 				t.button(Icon.copy, Styles.flati, () -> {
 					var window = new ElementShowDialog();
 					window.pattern = pattern;
@@ -283,13 +283,13 @@ public class ElementShow extends Content {
 					} else {
 						highlightShowMultiRow(wrap, pattern, element + "");
 					}
-					wrap.button("储存为js变量", () -> tester.put(element)).size(96, 50);
+					wrap.button("储存为js变量", () -> tester.put(wrap, element)).size(96, 50);
 					IntUI.doubleClick(wrap.getChildren().first(), () -> {}, () -> {
-						tester.put(element);
+						tester.put(wrap, element);
 					});
 				}).row();
 			} catch (Exception e) {
-//				Vars.ui.showException(e);
+				//				Vars.ui.showException(e);
 				Log.err(e);
 			}
 
@@ -305,15 +305,15 @@ public class ElementShow extends Content {
 			// 不知道为什么，这样就可以显示全面
 			Vars.ui.showInfoFade("[clear]额");
 
-//			Vars.ui.loadSync();
-//			Time.runTask(1, () -> {
+			//			Vars.ui.loadSync();
+			//			Time.runTask(1, () -> {
 				/*int i = 0;
 				String prefix = "temp";
 				while (ScriptableObject.hasProperty(tester.scope, prefix + i)) {
 					i++;
 				}*/
-//				tester.put(prefix + i, "ikzak");
-//			});
+			//				tester.put(prefix + i, "ikzak");
+			//			});
 			/*Time.runTask(1, () -> {
 				for (int i = 0; i < 1E6; i++) ;
 			});*/

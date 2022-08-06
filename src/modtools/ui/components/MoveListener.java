@@ -12,7 +12,7 @@ import arc.scene.ui.layout.Table;
 import arc.util.Tmp;
 
 public class MoveListener extends InputListener {
-	float bx, by;
+	public float bx, by;
 	public final Table main;
 	public final Element touch;
 	public boolean disabled = false;
@@ -41,7 +41,7 @@ public class MoveListener extends InputListener {
 		if (fire != null) fire.run();
 		Vec2 v = main.localToStageCoordinates(Tmp.v1.set(x, y));
 
-		display(-bx + v.x, -by + v.y);
+		if (v.x != bx || v.y != by) display(-bx + v.x, -by + v.y);
 //		Core.graphics.cursor(SystemCursor.crosshair);
 	}
 

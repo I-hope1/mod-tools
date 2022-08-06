@@ -11,6 +11,7 @@ public class Contents {
 	public static ErrorDisplay errorDisplay;
 	public static ContentList contentList;
 	public static ElementShow elementShow;
+	public static WindowManager windowManager;
 
 	public static void load() {
 		settings = new Settings();
@@ -21,5 +22,7 @@ public class Contents {
 //		errorDisplay = new ErrorDisplay();
 		contentList = new ContentList();
 		elementShow = new ElementShow();
+		windowManager = new WindowManager();
+
 	}
 }

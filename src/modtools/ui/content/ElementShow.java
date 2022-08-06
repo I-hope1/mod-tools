@@ -9,12 +9,13 @@ import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.Group;
-import arc.scene.event.InputEvent;
-import arc.scene.event.InputListener;
+import arc.scene.event.*;
 import arc.scene.ui.Button;
 import arc.scene.ui.Image;
+import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Table;
+import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
@@ -24,7 +25,10 @@ import mindustry.graphics.Layer;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
+import modtools.ui.MyFonts;
+import modtools.ui.components.MyLabel;
 import modtools.ui.components.Window;
 
 import java.util.regex.Matcher;
@@ -35,7 +39,7 @@ import static modtools.utils.Tools.getAbsPos;
 
 public class ElementShow extends Content {
 	public ElementShow() {
-		super("检查元素");
+		super("reviewElement");
 	}
 
 	public static final boolean hideSelf = true;
@@ -70,14 +74,44 @@ public class ElementShow extends Content {
 
 			@Override
 			public Element hit(float x, float y, boolean touchable) {
-				return selecting ? null : super.hit(x, y, touchable);
+				return super.hit(x, y, touchable);
 			}
 		};
 		frag.update(() -> frag.toFront());
-		Core.scene.addListener(new InputListener() {
+		frag.touchable = Touchable.enabled;
+		frag.fillParent = true;
+		frag.addListener(new InputListener() {
+			/*@Override
+			public boolean mouseMoved(InputEvent event, float x, float y) {
+				if (!selecting) return false;
+				getSelected(x, y);
+				return true;
+			}
+
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				// Seq<? extends Element> tmp = Core.scene.root.getChildren().copy();
+				if (!selecting || selected == null) return;
+				// Core.scene.unfocusAll();
+				// super.clicked(event, x, y);
+				selecting = false;
+				IntVars.async(() -> {
+					frag.remove();
+					if (((Boolp) () -> {
+						Element parent = selected.parent;
+						while (true) {
+							if (parent instanceof ElementShowDialog) return false;
+							if (parent == null) return true;
+							parent = parent.parent;
+						}
+					}).get()) new ElementShowDialog().show(selected);
+				}, () -> {});
+				btn.setChecked(false);
+			}*/
 			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (!selecting) return false;
+				frag.touchable = Touchable.disabled;
 				getSelected(x, y);
 				return true;
 			}
@@ -92,6 +126,7 @@ public class ElementShow extends Content {
 				selecting = false;
 				IntVars.async(() -> {
 					if (((Boolp) () -> {
+						if (selected == null) return false;
 						Element parent = selected.parent;
 						while (true) {
 							if (parent instanceof ElementShowDialog) return false;
@@ -101,10 +136,10 @@ public class ElementShow extends Content {
 					}).get()) new ElementShowDialog().show(selected);
 				}, () -> {});
 				frag.remove();
-				btn.setChecked(false);
 			}
 		});
 
+		btn.update(() -> btn.setChecked(selecting));
 		btn.setStyle(Styles.logicTogglet);
 	}
 
@@ -113,8 +148,10 @@ public class ElementShow extends Content {
 		selected = null;
 		if (frag.parent == null) {
 			selecting = true;
+			frag.touchable = Touchable.enabled;
 			Core.scene.add(frag);
 		} else {
+			selecting = false;
 			frag.remove();
 		}
 	}
@@ -145,7 +182,7 @@ public class ElementShow extends Content {
 					};
 					if (element.parent == Core.scene.root) {
 						Vec2 vec2 = bs[0].localToStageCoordinates(new Vec2(0, 0));
-						IntUI.showConfirm(vec2, "父元素为根节点，是否确定", go);
+						IntUI.showConfirm("父元素为根节点，是否确定", go).setPosition(vec2);
 					} else go.run();
 				}).disabled(b -> element == null || element.parent == null).width(120).get();
 				t.button(Icon.copy, Styles.flati, () -> {
@@ -195,7 +232,7 @@ public class ElementShow extends Content {
 
 		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(text);
+				table.add(new MyLabel(text, IntStyles.myLabel));
 				return;
 			}
 			table.table(t -> {
@@ -209,17 +246,19 @@ public class ElementShow extends Content {
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(text);
+				table.add(text, IntStyles.myLabel);
 				return;
 			}
 			Matcher matcher = pattern.matcher(text);
 			table.table(t -> {
+				// Font font = style.font;
+
 				int index = 0;
 				var ref = new Object() {
 					String curText;
 				};
-				t.left().defaults().left();
 				int times = 0;
+				float offsetX = 0;
 				while (index <= text.length() && matcher.find(index)) {
 					times++;
 					if (times > 70) {
@@ -234,21 +273,21 @@ public class ElementShow extends Content {
 					t.add(ref.curText);
 					ref.curText = matcher.group(2);
 					t.table(IntUI.whiteui.tint(Pal.accent), t1 -> {
-						t1.add(ref.curText, Color.sky).row();
+						t1.add(new MyLabel(ref.curText, new LabelStyle(MyFonts.MSYHMONO, Color.sky))).row();
 					});
 				}
-				if (text.length() - index > 0) t.add(text.substring(index));
+				if (text.length() - index > 0) t.add(text.substring(index), IntStyles.myLabel);
 			});
 		}
 
 		public void build(Element element, Table table, Pattern pattern) {
 			if (hideSelf) {
 				if (element == this) {
-					table.add("----" + name + "-----").row();
+					table.add("----" + name + "-----", IntStyles.myLabel).row();
 					return;
 				}
 				if (element == pane) {
-					table.add("----" + name + "$pane-----").row();
+					table.add("----" + name + "$pane-----", IntStyles.myLabel).row();
 					return;
 				}
 			}
@@ -322,6 +361,7 @@ public class ElementShow extends Content {
 		@Override
 		public void hide() {
 			super.hide();
+			all.remove(this);
 			Time.runTask(30f, this::clear);
 		}
 

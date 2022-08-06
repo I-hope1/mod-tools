@@ -15,13 +15,14 @@ import mindustry.gen.Icon;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 import modtools.ui.components.Window;
+import modtools.utils.Tools;
 
 import java.lang.reflect.Field;
 import java.util.regex.Pattern;
 
 public class ContentList extends Content {
 	public ContentList() {
-		super("内容列表");
+		super("contentList");
 	}
 
 	Window ui;
@@ -97,7 +98,7 @@ public class ContentList extends Content {
 					IntUI.longPress(button, 600, b -> {
 						if (b) {
 							Core.app.setClipboardText(name);
-							IntUI.showInfoFade(button, "已复制[accent]" + name);
+							IntUI.showInfoFade("已复制[accent]" + name).setPosition(Tools.getAbsPos(button));
 						} else {
 							if (Vars.player.unit() == null) return;
 							effect.at(Vars.player.x, Vars.player.y, Vars.player.unit().rotation());
@@ -115,7 +116,7 @@ public class ContentList extends Content {
 					IntUI.longPress(button, 600, b -> {
 						if (b) {
 							Core.app.setClipboardText(name);
-							IntUI.showInfoFade(button, "已复制[accent]" + name);
+							IntUI.showInfoFade("已复制[accent]" + name).setPosition(Tools.getAbsPos(button));
 						} else {
 							if (Vars.player.unit() == null) return;
 							bulletType.create(Vars.player.unit(), Vars.player.x, Vars.player.y, Vars.player.unit().rotation());

@@ -217,7 +217,7 @@ public class UnitSpawn extends Content {
 			return;
 		}
 		try {
-			Unit unit = selectUnit.constructor.get();
+			Unit unit = selectUnit.sample;
 
 			if (unit instanceof BlockUnitUnit) {
 				IntUI.showException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));

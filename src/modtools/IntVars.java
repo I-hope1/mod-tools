@@ -1,5 +1,7 @@
 package modtools;
 
+import arc.*;
+import arc.struct.Seq;
 import arc.util.Log;
 import modtools.ui.Frag;
 import modtools.ui.IntUI;
@@ -53,6 +55,22 @@ public class IntVars {
 		} catch (Exception e) {
 			showException(e, displayUI);
 		}
+	}
+
+	public static final Seq<Runnable> resizeListenrs = new Seq<>();
+
+	public static void addResizeListener(Runnable runnable) {
+		resizeListenrs.add(runnable);
+	}
+
+	static {
+		Core.app.addListener(new ApplicationListener() {
+			@Override
+			public void resize(int width, int height) {
+				for (var r : resizeListenrs) r.run();
+			}
+		});
+
 	}
 
 

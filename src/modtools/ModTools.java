@@ -1,42 +1,38 @@
 package modtools;
 
-import arc.Core;
 import arc.Events;
 import arc.files.Fi;
-import arc.scene.ui.layout.Table;
-import arc.util.Log;
-import arc.util.Time;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
-import mindustry.mod.Mod;
-import mindustry.mod.ModClassLoader;
-import mindustry.ui.dialogs.BaseDialog;
-import modtools.ui.Background;
+import mindustry.mod.*;
+import modtools.ui.*;
+import modtools.utils.Tools;
 import modtools_lib.MyReflect;
 import rhino.Context;
 
-import java.util.Objects;
-
 import static mindustry.Vars.ui;
-import static modtools.IntVars.modName;
 import static modtools.utils.MySettings.settings;
 
 public class ModTools extends Mod {
 	public static ModClassLoader mainLoader;
-	public static boolean init = false;
 
 	public ModTools() {
 		Log.info("Loaded ModTools constructor.");
-		Time.runTask(0, () -> {
+		Tools.forceRun(() -> {
+			if (Vars.mods.getMod(ModTools.class) == null) throw new RuntimeException();
 			Log.info("Loaded Reflect.");
 			loadReflect();
 		});
-
+		// Log.debug(MethodHandles.Im);
 		Events.on(ClientLoadEvent.class, e -> {
 			if (throwable != null) {
 				ui.showException(throwable);
 				return;
 			}
+
+			// texture.getTextureData();
+			MyFonts.load();
 
 			if (!Vars.mobile) try {
 				Context context = Context.getCurrentContext();
@@ -45,8 +41,8 @@ public class ModTools extends Mod {
 				throw new RuntimeException(err);
 			}
 			// Unit135G.main();
-			Time.runTask(10f, () -> {
-				BaseDialog dialog = new BaseDialog("frog");
+			Time.runTask(6f, () -> {
+				/*BaseDialog dialog = new BaseDialog("frog");
 				dialog.addCloseListener();
 
 				Table cont = dialog.cont;
@@ -54,23 +50,26 @@ public class ModTools extends Mod {
 				cont.add("behold").row();
 				Objects.requireNonNull(dialog);
 				cont.button("I see", dialog::hide).size(100f, 50f);
-				dialog.show();
+				dialog.show();*/
+				IntVars.load();
+				if (settings.getBool("ShowMainMenuBackground")) Background.main();
 			});
-			IntVars.load();
 
-			if (settings.getBool(modName + "-ShowMainMenuBackground")) Background.main();
 		});
 	}
 
 	public static Throwable throwable = null;
 
 	public static void loadReflect() {
-		if (init) return;
-		init = true;
+		mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+		try {
+			// 没错误 证明已经加载
+			Class.forName("modtools_lib.MyReflect", false, mainLoader);
+			return;
+		} catch (Exception ignored) {}
 		// 加载反射
 		try {
-			mainLoader = (ModClassLoader) Vars.mods.mainLoader();
-			Fi sourceFi = Vars.mods.getMod("mod-tools").root
+			Fi sourceFi = Vars.mods.getMod(ModTools.class).root
 					.child("libs").child("lib.jar");
 			Log.info("load source fi: " + sourceFi);
 			Fi toFi = Vars.dataDirectory.child("tmp/mod-tools-lib.jar");
@@ -87,19 +86,6 @@ public class ModTools extends Mod {
 			Class.forName("modtools_lib.MyReflect", true, loader);
 			toFi.delete();
 			MyReflect.load();
-
-			/*var urlloader = new URLClassLoader(new URL[]{Vars.tmpDirectory.child("mindustry.jar").file().toURI().toURL()}, null);
-			for (Field f : MyReflect.lookupGetFields(ClassLoader.class)) {
-				if (f.getName().equals("parent")) {
-					MyReflect.setOverride(f);
-					f.set(mdtcl, urlloader);
-					break;
-				}
-			}*/
-			//			urlloader.loadClass("mindustry.ctype.Content", true);
-			//		mdtcl.addChild(loader);
-			//			mdtcl.loadClass("mindustry.ctype.Content");
-			//			Class.forName("mindustry.ctype.Content", true, mainLoader);
 		} catch (Throwable e) {
 			throwable = e;
 			Log.err(e);

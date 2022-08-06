@@ -8,6 +8,7 @@ import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
+import arc.scene.ui.Label;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
@@ -22,6 +23,7 @@ import mindustry.ui.Styles;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 import modtools.ui.components.Window;
+import modtools.utils.Tools;
 
 import java.lang.reflect.Field;
 
@@ -34,9 +36,9 @@ public class ShowUIList extends Content {
 		super("showuilist");
 	}
 
-	public void copyText(CharSequence text) {
-		IntUI.showInfoFade(ui, "已复制: [accent]" + text);
-		Core.app.setClipboardText(text.toString());
+	public void copyText(Label label) {
+		IntUI.showInfoFade("已复制: [accent]" + label.getText()).setPosition(Tools.getAbsPos(label));
+		Core.app.setClipboardText(label.getText().toString());
 	}
 
 	public void load() {
@@ -46,7 +48,7 @@ public class ShowUIList extends Content {
 				new Table(t -> {
 					Icon.icons.each((k, icon) -> {
 						t.image(new TextureRegionDrawable(icon)).size(32);
-						t.add("" + k).with(l -> l.clicked(() -> copyText(l.getText()))).row();
+						t.add("" + k).with(l -> l.clicked(() -> copyText(l))).growY().row();
 					});
 				}),
 				new Table(t -> {
@@ -61,7 +63,7 @@ public class ShowUIList extends Content {
 							Log.err(err);
 						}
 
-						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l.getText()))).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l))).growY().row();
 					}
 
 				}),
@@ -70,7 +72,7 @@ public class ShowUIList extends Content {
 
 					for (Field field : fields) {
 						try {
-							// 跳过private检查，减少时间
+							// 跳过访问检查，减少时间
 							field.setAccessible(true);
 							Object style = field.get(null);
 							if (style instanceof LabelStyle) {
@@ -103,7 +105,7 @@ public class ShowUIList extends Content {
 							continue;
 						}
 
-						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l.getText()))).row();
+						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l))).growY().row();
 					}
 
 				}));
@@ -111,7 +113,7 @@ public class ShowUIList extends Content {
 		String[] names = {"icon", "tex", "styles"};
 		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
 		ui.cont.add(tab.build()).pad(10f);
-//		ui.addCloseButton();
+		//		ui.addCloseButton();
 	}
 
 	public void build() {

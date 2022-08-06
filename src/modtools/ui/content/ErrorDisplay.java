@@ -13,6 +13,7 @@ import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.IntVars;
 import modtools.ui.components.IntTab;
+import modtools.ui.components.MyLabel;
 import modtools.utils.Tools;
 
 import java.util.regex.Matcher;
@@ -33,11 +34,11 @@ public class ErrorDisplay extends Content {
 				Fi[] list = Vars.dataDirectory.child("crashes").list();
 				p.left().defaults().left();
 				for (var fi : list) {
-					Label label = new Label("");
+					Label label = new MyLabel("");
 					label.setStyle(Styles.outlineLabel);
 					TextButton button = p.button(fi.nameWithoutExtension(), new TextButtonStyle(Styles.logicTogglet), () -> {
 						if (label.getText().length() == 0) {
-							label.setText(Tools.format(fi.readString()).replaceAll("\\n", "\n\n"));
+							label.setText(fi.readString().replaceAll("\\n", "\n\n"));
 						}
 					}).size(Vars.mobile ? 450 : 650, 45).get();
 					button.getStyle().up = Tex.underline;

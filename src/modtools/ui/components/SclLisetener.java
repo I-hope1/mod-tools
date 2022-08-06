@@ -22,11 +22,15 @@ public class SclLisetener extends InputListener {
 		if (element == null) throw new IllegalArgumentException("element is null");
 		bind = element;
 		bind.addListener(this);
+		set(minW, minH);
+	}
+	public void set(float minW, float minH){
 		this.minW = Scl.scl(minW);
 		this.minH = Scl.scl(minH);
 	}
 
 	public boolean left, bottom, right, top;
+	public Runnable listener = null;
 
 	public boolean valid() {
 		return left || right || bottom || top;
@@ -99,6 +103,7 @@ public class SclLisetener extends InputListener {
 			Core.graphics.cursor(SystemCursor.verticalResize);
 			bind.setHeight(Mathf.clamp(defHeight + y - last.y, minH, Core.graphics.getHeight()));
 		}
+		if (listener !=  null) listener.run();
 		/*int index = bind.getZIndex();
 		Group parent = bind.parent;
 		parent.removeChild(bind, false);

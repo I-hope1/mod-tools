@@ -4,8 +4,7 @@ import arc.Core;
 import arc.Events;
 import arc.func.Boolf;
 import arc.func.Boolp;
-import arc.graphics.Color;
-import arc.graphics.Gl;
+import arc.graphics.*;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.TextureRegion;
 import arc.graphics.gl.FrameBuffer;
@@ -17,6 +16,7 @@ import mindustry.gen.EffectState;
 
 /**
  * 世界渲染模块
+ *
  * @author I hope...
  */
 public class WorldDraw {
@@ -58,7 +58,7 @@ public class WorldDraw {
 			}
 		});
 
-//		int lastChange = Vars.world.tileChanges;
+		//		int lastChange = Vars.world.tileChanges;
 		Events.run(EventType.Trigger.draw, () -> {
 			if (entity == null) {
 				entity = new MyEntity();
@@ -67,7 +67,7 @@ public class WorldDraw {
 			}
 			entity.set(center.x, center.y);
 
-//			if (lastChange == Vars.world.tileChanges) return;
+			//			if (lastChange == Vars.world.tileChanges) return;
 			if (hasChange) {
 				hasChange = false;
 			}
@@ -84,21 +84,31 @@ public class WorldDraw {
 	}
 
 	public static TextureRegion drawRegion(int width, int height, Runnable draw) {
-		FrameBuffer buffer = new FrameBuffer(width, height, false);
-		return drawRegion(buffer, draw);
+		return new TextureRegion(drawTexture(width, height, draw));
 	}
 
 	public static TextureRegion drawRegion(FrameBuffer buffer, Runnable draw) {
+		return new TextureRegion(drawTexture(buffer, draw));
+	}
+
+	public static Texture drawTexture(int width, int height, Runnable draw) {
+		return drawTexture(new FrameBuffer(width, height, false), draw);
+	}
+
+	public static Texture drawTexture(FrameBuffer buffer, Runnable draw) {
 		Draw.flush();
 		// 绑定
 		buffer.bind();
 		// 清空
 		Gl.clear(Gl.colorBufferBit);
+		// buffer.begin(Color.clear);
 		draw.run();
 		// 结束
 		buffer.end();
-		return new TextureRegion(buffer.getTexture());
+		// buffer.dispose();
+		return buffer.getTexture();
 	}
+
 
 	public class MyEntity extends EffectState {
 		@Override

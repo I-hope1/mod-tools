@@ -6,7 +6,6 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.Interp;
-import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.ClickListener;
@@ -30,7 +29,6 @@ import java.util.regex.Pattern;
 import static mindustry.Vars.mobile;
 import static mindustry.Vars.ui;
 import static modtools.IntVars.topGroup;
-import static modtools.utils.Tools.getAbsPos;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -241,13 +239,13 @@ public class IntUI {
 	/**
 	 * Window弹窗错误
 	 */
-	public static void showException(Throwable t) {
-		showException("", t);
+	public static Window showException(Throwable t) {
+		return showException("", t);
 	}
 
-	public static void showException(String text, Throwable exc) {
+	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		new Window("", 0, 200, false) {{
+		return new Window("", 0, 200, false) {{
 			String message = Strings.getFinalMessage(exc);
 
 			cont.margin(15);
@@ -270,37 +268,35 @@ public class IntUI {
 			cont.add(col).colspan(2).pad(2);
 			//            closeOnBack();
 			hidden(() -> {
+				all.remove(this);
 				Time.runTask(30f, this::clear);
 			});
 		}}.show();
 	}
 
-	public static void showInfoFade(Element element, String info) {
-		showInfoFade(getAbsPos(element), info);
-	}
-
-
-	public static void showInfoFade(Vec2 pos, String info) {
-		new Window("info", 0, 64) {{
+	public static Window showInfoFade(String info) {
+		return new Window("info", 0, 64) {{
 			cont.add(info);
-			setPosition(pos.x, pos.y);
 			// 1.2s
-			Time.runTask(60 * 1.2f, this::hide);
-			Time.runTask(0, this::display);
+			Time.runTask(60 * 1.2f, () -> {
+				hide();
+				all.remove(this);
+			});
+			// Time.runTask(0, this::display);
 		}}.show();
 	}
 
-	public static void showConfirm(Vec2 pos, String text, Runnable confirmed) {
-		showConfirm(pos, "@confirm", text, null, confirmed);
+	public static Window showConfirm(String text, Runnable confirmed) {
+		return showConfirm("@confirm", text, null, confirmed);
 	}
 
-	public static void showConfirm(Vec2 pos, String title, String text, Runnable confirmed) {
-		showConfirm(pos, title, text, null, confirmed);
+	public static Window showConfirm(String title, String text, Runnable confirmed) {
+		return showConfirm(title, text, null, confirmed);
 	}
 
-	public static void showConfirm(Vec2 pos, String title, String text, Boolp hide, Runnable confirmed) {
+	public static Window showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
 		Window window = new Window(title, 0, 100, false, false);
-		window.setPosition(pos.x, pos.y);
+		window.hidden(() -> Window.all.remove(window));
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2f);
 		window.setFillParent(false);
@@ -323,5 +319,6 @@ public class IntUI {
 		window.keyDown(KeyCode.escape, window::hide);
 		window.keyDown(KeyCode.back, window::hide);
 		window.show();
+		return window;
 	}
 }

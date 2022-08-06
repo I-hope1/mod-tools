@@ -1,10 +1,12 @@
 package modtools.ui.components;
 
+import arc.ApplicationListener;
 import arc.Core;
 import arc.func.Prov;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.Mathf;
+import arc.math.geom.Position;
 import arc.math.geom.Vec2;
 import arc.scene.Action;
 import arc.scene.Element;
@@ -22,17 +24,42 @@ import arc.util.Time;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 
 import static modtools.IntVars.topGroup;
+import static modtools.ui.Contents.windowManager;
 import static modtools.ui.IntUI.icons;
+
 /**
  * 浮动的窗口，可以缩放，最小化，最大化
+ *
  * @author I hope...
  **/
 public class Window extends Table {
-	public static final Seq<Window> all = new Seq<>();
+	public static final Seq<Window> all = new Seq<>() {
+		@Override
+		public Seq<Window> add(Window value) {
+			super.add(value);
+			if (windowManager != null && windowManager.ui != null && windowManager.ui.isShown())
+				windowManager.rebuild();
+			return this;
+		}
+
+		@Override
+		public boolean remove(Window value) {
+			boolean ok = super.remove(value);
+			if (windowManager != null && windowManager.ui != null && windowManager.ui.isShown())
+				windowManager.rebuild();
+			return ok;
+		}
+	};
+
+	static {
+		IntVars.addResizeListener(() -> all.each(Window::display));
+	}
+
 	public static Drawable myPane = Tex.pane;
-			// ((NinePatchDrawable) Tex.pane).tint(new Color(1, 1, 1, 0.9f));
+	// ((NinePatchDrawable) Tex.pane).tint(new Color(1, 1, 1, 0.9f));
 	public static final Cell emptyCell = new Cell<>();
 	public Table top = new Table(myPane), cont = new Table(myPane), buttons = new Table(myPane);
 	public float minWidth, minHeight;
@@ -48,8 +75,6 @@ public class Window extends Table {
 
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super(Styles.none);
-
-		all.add(this);
 
 		addListener(new InputListener() {
 			@Override
@@ -76,11 +101,11 @@ public class Window extends Table {
 		if (full) {
 			top.button(icons.get("sticky"), Styles.clearNoneTogglei, 32, () -> {
 				sticky = !sticky;
-			}).padLeft(4f);
+			}).checked(b -> sticky).padLeft(4f).name("sticky");
 			top.button(Icon.down, Styles.clearNoneTogglei, 32, this::minimize).update(b -> {
 				b.setChecked(isMinimize);
 			}).padLeft(4f);
-			ImageButton button = top.button(Tex.whiteui, Styles.flati, 32, this::maximize).padLeft(4f).get();
+			ImageButton button = top.button(Tex.whiteui, Styles.clearNonei, 32, this::maximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? icons.get("normal") : icons.get("maximize");
 			});
@@ -89,13 +114,19 @@ public class Window extends Table {
 		//		cont.defaults().height(winHeight);
 		setup();
 
+		sclLisetener = new SclLisetener(this, this.minWidth, minHeight);
 		moveListener.fire = () -> {
-			if (isMaximize && !isMinimize) maximize();
+			if (isMaximize && !isMinimize) {
+				float mulx = moveListener.bx / width;
+				maximize();
+				moveListener.bx = width * mulx;
+				x -= moveListener.bx;
+			}
 		};
 		Time.runTask(1, () -> {
 			// 默认最小宽度为pref宽度
 			this.minWidth = Math.max(minWidth, getMinWidth());
-			sclLisetener = new SclLisetener(this, this.minWidth, minHeight);
+			sclLisetener.set(this.minWidth, minHeight);
 			update(() -> {
 				if (sticky) setZIndex(Integer.MAX_VALUE);
 				sclLisetener.disabled = isMaximize;
@@ -105,6 +136,8 @@ public class Window extends Table {
 		super.update(() -> {
 			for (Runnable r : runs) r.run();
 		});
+
+		all.add(this);
 	}
 
 	Seq<Runnable> runs = new Seq<>();
@@ -150,7 +183,7 @@ public class Window extends Table {
 	public void display() {
 		float mainWidth = getWidth(), mainHeight = getHeight();
 		float touchWidth = top.getWidth(), touchHeight = top.getHeight();
-		setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
+		super.setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
 				Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
 	}
 
@@ -410,6 +443,11 @@ public class Window extends Table {
 				return false;
 			}
 		});
+	}
+
+	public void setPosition(Position pos) {
+		setPosition(pos.getX(), pos.getY());
+		display();
 	}
 
 	public interface MinimizedListener {

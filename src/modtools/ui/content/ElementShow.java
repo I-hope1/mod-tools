@@ -173,7 +173,7 @@ public class ElementShow extends Content {
 				Button[] bs = {null};
 				bs[0] = t.button("显示父元素", Icon.up, () -> {
 					Runnable go = () -> {
-						hide();
+						if (hideSelf) hide();
 						var window = new ElementShowDialog();
 						window.pattern = pattern;
 						window.show(element.parent);
@@ -361,8 +361,9 @@ public class ElementShow extends Content {
 		@Override
 		public void hide() {
 			super.hide();
+			remove();
 			all.remove(this);
-			Time.runTask(30f, this::clear);
+			clear();
 		}
 
 		@Override

@@ -7,9 +7,10 @@ import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import modtools.ui.*;
+import modtools.ui.components.FrameLabel;
 import modtools.utils.Tools;
 import modtools_lib.MyReflect;
-import rhino.Context;
+import rhino.*;
 
 import static mindustry.Vars.ui;
 import static modtools.utils.MySettings.settings;
@@ -90,7 +91,11 @@ public class ModTools extends Mod {
 			throwable = e;
 			Log.err(e);
 		}
+	}
 
+	static {
+		/*Scriptable scope = Vars.mods.getScripts().scope;
+		ScriptableObject.putProperty(scope, "FrameLabel", new NativeJavaClass(scope, FrameLabel.class, true));*/
 	}
 
 	/*public static void test() {

@@ -3,6 +3,7 @@ package modtools.ui.components;
 import arc.ApplicationListener;
 import arc.Core;
 import arc.func.Prov;
+import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.Mathf;
@@ -97,7 +98,9 @@ public class Window extends Table {
 
 		add(top).growX().height(topHeight).row();
 		moveListener = new MoveListener(top, this);
-		this.title = top.add(title).grow().padLeft(10f).padRight(10f).get();
+		this.title = top.add(title).grow().padLeft(10f).padRight(10f).update(l -> {
+			l.setColor(Core.scene.root.getChildren().peek() == this ? Color.white : Color.lightGray);
+		}).get();
 		if (full) {
 			top.button(icons.get("sticky"), Styles.clearNoneTogglei, 32, () -> {
 				sticky = !sticky;

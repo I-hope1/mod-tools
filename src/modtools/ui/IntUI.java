@@ -269,7 +269,7 @@ public class IntUI {
 			//            closeOnBack();
 			hidden(() -> {
 				all.remove(this);
-				Time.runTask(30f, this::clear);
+				Time.runTask(30f, this::clearChildren);
 			});
 		}}.show();
 	}

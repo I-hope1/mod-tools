@@ -33,6 +33,7 @@ import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
@@ -52,8 +53,9 @@ import static modtools.utils.Tools.getAbsPos;
 public class Tester extends Content {
 	String log = "";
 	MyTextArea area;
-	public boolean loop = false, wrap = false, error, ignoreError = false,
-			checkUI = true, wrapRef = true, multiWindows = false;
+	public boolean loop = false,
+			wrap = false, error, ignoreError = false,
+			wrapRef = true, multiWindows = false;
 	static final float w = Core.graphics.isPortrait() ? 440 : 540;
 	Window ui;
 	ListDialog history, bookmark;
@@ -81,8 +83,7 @@ public class Tester extends Content {
 		boolean[] execed = {false};
 		textarea.keyDonwB = (event, keycode) -> {
 			if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.enter) {
-				complieScript();
-				execScript();
+				complieAndExec();
 				execed[0] = true;
 				return false;
 			}
@@ -108,9 +109,8 @@ public class Tester extends Content {
 			t.button(Icon.left, area::left);
 			t.button("@ok", () -> {
 				error = false;
-				area.setText(getMessage().replaceAll("\r", ""));
-				complieScript();
-				execScript();
+				area.setText(getMessage().replaceAll("\\r", "\\n"));
+				complieAndExec();
 				Fi d = history.file.child(String.valueOf(Time.millis()));
 				d.child("message.txt").writeString(getMessage());
 				d.child("log.txt").writeString(log);
@@ -163,14 +163,14 @@ public class Tester extends Content {
 		};
 		table.add(cont).grow().maxHeight(Core.graphics.getHeight()).row();
 		table.pane(p -> {
-			p.button("", Icon.star, Styles.cleart, () -> {
+			p.button(Icon.star, Styles.clearNonei, () -> {
 				Fi fi = bookmark.file.child(Time.millis() + ".txt");
 				bookmark.list.add(fi);
 				fi.writeString(getMessage());
 				bookmark.build();
 			}).size(42).padRight(6f);
 			p.button(b -> {
-				b.label(() -> loop ? "循环" : "默认");
+				b.label(() -> loop ? "循环" : "不循环");
 			}, Styles.defaultb, () -> {
 				loop = !loop;
 			}).size(100, 55);
@@ -240,7 +240,15 @@ public class Tester extends Content {
 		} else ui.show();*/
 	}
 
+	public void complieAndExec() {
+		Time.runTask(0, () -> {
+			complieScript();
+			execScript();
+		});
+	}
+
 	public void complieScript() {
+		error = false;
 		String def = getMessage();
 		String source = wrap ? "(function(){\"use strict\";" + def + "\n})();" : def;
 		try {
@@ -258,6 +266,7 @@ public class Tester extends Content {
 	}
 
 	public void execScript() {
+		if (error) return;
 		try {
 			/*V8 runtime = V8.createV8Runtime();
 			Log.debug(runtime.executeIntegerScript("let x=1;x*2"));*/
@@ -324,7 +333,7 @@ public class Tester extends Content {
 		Events.run(Trigger.update, () -> {
 			//			Log.info("update");
 			if (loop && script != null) {
-				execScript();
+				Time.runTask(0, this::execScript);
 			}
 		});
 		if (!init) loadSettings();

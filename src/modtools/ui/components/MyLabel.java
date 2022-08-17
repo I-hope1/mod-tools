@@ -18,11 +18,11 @@ public class MyLabel extends Label {
 	}
 
 	@Override
-	public void draw() {
+	public void layout() {
 		Font.FontData fontData = style.font.getData();
 		boolean had = fontData.markupEnabled;
 		fontData.markupEnabled = false;
-		super.draw();
-		style.font.getData().markupEnabled = had;
+		super.layout();
+		fontData.markupEnabled = had;
 	}
 }

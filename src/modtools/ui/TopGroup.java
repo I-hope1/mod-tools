@@ -8,14 +8,15 @@ import arc.scene.ui.Dialog;
 import arc.struct.Seq;
 import mindustry.game.EventType;
 import modtools.ui.components.Window;
+import modtools.utils.MySettings;
 
 import static modtools.IntVars.modName;
 import static modtools.IntVars.topGroup;
-import static modtools.ui.Contents.tester;
+import static modtools.ui.Contents.*;
 
 // 存储mod的窗口和Frag
 public final class TopGroup extends Group {
-	public boolean checkUI = true;
+	public boolean checkUI = MySettings.settings.getBool("checkUI", "false");
 
 	{
 		fillParent = true;

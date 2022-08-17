@@ -75,10 +75,8 @@ public class JSFunc {
 					dialog[0].hide();
 					try {
 						showInfo(o, clazz).setPosition(Tools.getAbsPos(dialog[0]));
-					} catch (Exception e) {
-						IntUI.showException(e).setPosition(Tools.getAbsPos(dialog[0]));
 					} catch (Throwable e) {
-						Log.err(e);
+						IntUI.showException(e).setPosition(Tools.getAbsPos(dialog[0]));
 					}
 				});
 			}).size(50).row();
@@ -111,10 +109,8 @@ public class JSFunc {
 					dialog[0].hide();
 					try {
 						showInfo(o, clazz).setPosition(Tools.getAbsPos(dialog[0]));
-					} catch (Exception e) {
-						IntUI.showException(e).setPosition(Tools.getAbsPos(dialog[0]));
 					} catch (Throwable e) {
-						Log.err(e);
+						IntUI.showException(e).setPosition(Tools.getAbsPos(dialog[0]));
 					}
 				});
 			}).size(50);
@@ -147,16 +143,17 @@ public class JSFunc {
 		}).growX().row();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.add(clazz.getTypeName(), IntStyles.myLabel);
+			t.add(new MyLabel(clazz.getTypeName(), IntStyles.myLabel));
 			t.button(Icon.copy, Styles.cleari, () -> {
 				Core.app.setClipboardText(clazz.getTypeName());
 			});
 		}).fillX().pad(6, 10, 6, 10).row();
 		rebuild.get(null);
-		cont.add(build).grow();
+		// cont.add(build).grow();
 
 		dialog[0] = new Window(clazz.getSimpleName(), 200, 200, true);
-		dialog[0].cont.pane(cont).grow();
+		dialog[0].cont.add(cont).row();
+		dialog[0].cont.pane(build).grow();
 		//		dialog.addCloseButton();
 		dialog[0].show();
 		assert dialog[0] != null;
@@ -237,7 +234,8 @@ public class JSFunc {
 						// modifiers
 						fields.add(Modifier.toString(modifiers) + " ", new LabelStyle(MyFonts.MSYHMONO, keyword)).growY();
 						// type
-						fields.add(type.getSimpleName() + " ", new LabelStyle(MyFonts.MSYHMONO, JSFunc.type)).growY();
+						fields.add(new MyLabel(type.getSimpleName() + " ", new LabelStyle(MyFonts.MSYHMONO, JSFunc.type)))
+								.growY().padRight(8);
 						// name
 						fields.add(f.getName(), IntStyles.myLabel).growY();
 						fields.add(" = ", IntStyles.myLabel).growY();
@@ -295,10 +293,8 @@ public class JSFunc {
 											} else {
 												showInfo(null, f.getType()).setPosition(Tools.getAbsPos(l));
 											}
-										} catch (Exception e) {
-											IntUI.showException(e).setPosition(Tools.getAbsPos(l));
 										} catch (Throwable e) {
-											Log.err(e);
+											IntUI.showException(e).setPosition(Tools.getAbsPos(l));
 										}
 									});
 								});
@@ -348,7 +344,7 @@ public class JSFunc {
 						// modifiers
 						methods.add(sb, new LabelStyle(MyFonts.MSYHMONO, keyword)).growY();
 						// return type
-						methods.add(m.getReturnType().getSimpleName() + " ", new LabelStyle(MyFonts.MSYHMONO, type)).growY();
+						methods.add(new MyLabel(m.getReturnType().getSimpleName() + " ", new LabelStyle(MyFonts.MSYHMONO, type))).growY();
 						// method name
 						methods.add(m.getName(), IntStyles.myLabel).growY();
 						sb = new StringBuilder();
@@ -451,7 +447,7 @@ public class JSFunc {
 						sb.append(Modifier.toString(mod)).append(' ');
 
 						sb.append("[]");
-						sb.append("[#").append(type).append("]").append(finalCls.getSimpleName()).append("[] ");
+						sb.append("[#").append(type).append("]").append(finalCls.getSimpleName()).append("[]");
 						sb.append("[lightgray]([]");
 
 						StringJoiner sj = new StringJoiner(", ");
@@ -478,7 +474,7 @@ public class JSFunc {
 						t.button("将函数存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
 							b.clicked(() -> tester.put(b, cons));
 						});
-					} catch (Exception e) {
+					} catch (Throwable e) {
 						Log.err(e);
 					}
 				}).pad(4).row();
@@ -504,10 +500,8 @@ public class JSFunc {
 								Time.runTask(0, () -> {
 									try {
 										showInfo(dcls).setPosition(Tools.getAbsPos(l));
-									} catch (Exception e) {
-										IntUI.showException(e).setPosition(Tools.getAbsPos(l));
 									} catch (Throwable e) {
-										Log.err(e);
+										IntUI.showException(e).setPosition(Tools.getAbsPos(l));
 									}
 								});
 							}
@@ -516,7 +510,7 @@ public class JSFunc {
 						t.button("将类存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
 							b.clicked(() -> tester.put(b, dcls));
 						});
-					} catch (Exception e) {
+					} catch (Throwable e) {
 						Log.err(e);
 					}
 				}).pad(4).row();

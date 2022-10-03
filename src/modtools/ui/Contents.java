@@ -8,7 +8,7 @@ public class Contents {
 	public static Selection selection;
 	public static ShowUIList showuilist;
 	public static UnitSpawn unitSpawn;
-	public static ErrorDisplay errorDisplay;
+	// public static ErrorDisplay errorDisplay;
 	public static ContentList contentList;
 	public static ElementShow elementShow;
 	public static WindowManager windowManager;
@@ -19,7 +19,7 @@ public class Contents {
 		selection = new Selection();
 		showuilist = new ShowUIList();
 		unitSpawn = new UnitSpawn();
-//		errorDisplay = new ErrorDisplay();
+		//		errorDisplay = new ErrorDisplay();
 		contentList = new ContentList();
 		elementShow = new ElementShow();
 		windowManager = new WindowManager();

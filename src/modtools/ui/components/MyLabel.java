@@ -18,11 +18,15 @@ public class MyLabel extends Label {
 	}
 
 	@Override
-	public void layout() {
+	public void setStyle(LabelStyle style) {
+		if (style == null) throw new IllegalArgumentException("style cannot be null.");
+		if (style.font == null) throw new IllegalArgumentException("Missing LabelStyle font.");
 		Font.FontData fontData = style.font.getData();
 		boolean had = fontData.markupEnabled;
 		fontData.markupEnabled = false;
-		super.layout();
+		this.style = style;
+		cache = style.font.newFontCache();
+		invalidateHierarchy();
 		fontData.markupEnabled = had;
 	}
 }

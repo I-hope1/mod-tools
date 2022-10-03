@@ -93,16 +93,15 @@ public class UnitSpawn extends Content {
 
 	public void setX(float x) {
 		xField.setText(String.valueOf(x));
-//		swapnX = x;
+		//		swapnX = x;
 	}
 
 	public void setY(float y) {
 		yField.setText(String.valueOf(y));
-//		swapnY = y;
+		//		swapnY = y;
 	}
 
-	@Override
-	public void load() {
+	public void _load() {
 		selectUnit = UnitTypes.alpha;
 		team = Team.derelict;
 
@@ -113,17 +112,17 @@ public class UnitSpawn extends Content {
 			table.table(x -> {
 				x.add("x:");
 				xField = x.field("" + player.x, newX -> {
-//					if (!isNaN(newX)) swapnX = Float.parseFloat(newX);
+					//					if (!isNaN(newX)) swapnX = Float.parseFloat(newX);
 				}).valid(val -> validNumber(val)).get();
 			}).growX();
 			table.table(y -> {
 				y.add("y:");
 				yField = y.field("" + player.y, newY -> {
-//					if (!isNaN(newY)) swapnY = Float.parseFloat(newY);
+					//					if (!isNaN(newY)) swapnY = Float.parseFloat(newY);
 				}).valid(val -> validNumber(val)).get();
 			}).growX().row();
 			table.button("选取坐标", Styles.flatToggleMenut, () -> {
-//				ui.hide();
+				//				ui.hide();
 				if (el.parent == null) {
 					Core.scene.addListener(listener);
 					Core.scene.add(el);
@@ -168,7 +167,7 @@ public class UnitSpawn extends Content {
 			table.check("loop", b -> loop = b);
 		}).growX();
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
-//		ui.addCloseButton();
+		//		ui.addCloseButton();
 
 		btn.setDisabled(() -> Vars.state.isMenu());
 		btn.update(() -> {
@@ -190,8 +189,11 @@ public class UnitSpawn extends Content {
 			Draw.color();
 		});
 
-		loadSettings();
 
+	}
+
+	public void load() {
+		loadSettings();
 	}
 
 	public boolean isOk() {
@@ -261,7 +263,7 @@ public class UnitSpawn extends Content {
 				Groups.unit.each(Unit::remove);
 				Groups.unit.clear();
 			}).fillX().row();
-//			cont.check("服务器适配", b -> server = b);
+			//			cont.check("服务器适配", b -> server = b);
 		}).padLeft(6);
 
 		Contents.settings.add(table);
@@ -269,6 +271,7 @@ public class UnitSpawn extends Content {
 
 	@Override
 	public void build() {
+		if (ui == null) _load();
 		setup();
 		ui.show();
 	}

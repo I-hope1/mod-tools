@@ -14,7 +14,10 @@ public class Background {
 
 	public static void main() {
 		// EntityShow.main();
-		Group group = (Group) Vars.ui.menuGroup.getChildren().get(0);
+		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
+		;
+		if (!(tmp instanceof Group)) return;
+		Group group = (Group) tmp;
 		Seq<Element> children = group.getChildren();
 		children.get(0).clear();
 		children.get(0).remove();

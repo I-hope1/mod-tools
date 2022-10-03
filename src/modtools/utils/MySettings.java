@@ -9,9 +9,21 @@ import mindustry.Vars;
 import java.util.Objects;
 
 public class MySettings {
-	static Fi dataDirectory = Vars.dataDirectory.child("mods(I hope...)");
+	public static final Fi dataDirectory = Vars.dataDirectory.child("b0kkihope");
+
+	static {
+		try {
+			Fi fi = Vars.dataDirectory.child("mods(I hope...)");
+			if (fi.exists() && fi.isDirectory()) {
+				fi.copyFilesTo(dataDirectory);
+				fi.deleteDirectory();
+			}
+		} catch (Throwable ignored) {}
+	}
+
 	static Fi config = dataDirectory.child("mod-tools-config.hjson");
 	public static final Data settings = new Data();
+
 	static {
 		settings.loadFi(config);
 	}

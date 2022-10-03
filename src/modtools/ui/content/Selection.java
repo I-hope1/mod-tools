@@ -11,19 +11,19 @@ import arc.graphics.g2d.Lines;
 import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
 import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
-import arc.scene.ui.ImageButton;
+import arc.scene.ui.*;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
-import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
-import arc.struct.ObjectMap;
-import arc.struct.Seq;
-import arc.util.Time;
+import arc.struct.*;
+import arc.util.*;
+import arc.util.Timer;
+import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
@@ -46,7 +46,7 @@ import modtools.utils.WorldDraw;
 import modtools_lib.MyReflect;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.function.Consumer;
 
 import static mindustry.Vars.tilesize;
@@ -66,6 +66,10 @@ public class Selection extends Content {
 			"floor", settings.getBool(getSettingName() + "-floor", "false"),
 			"unit", settings.getBool(getSettingName() + "-unit", "false")
 	);
+
+	public static final Color focusColor = Color.pink.cpy().a(0.4f);
+	// public ObjectSet<Object> focusSet = new ObjectSet<>();
+	// public Vec2 focusFrom = new Vec2();
 	public WorldDraw unitWD = new WorldDraw(Layer.weather), tileWD = new WorldDraw(Layer.darkness + 1),
 			buildWD = new WorldDraw(Layer.darkness), otherWD = new WorldDraw(Layer.overlayUI);
 	public Element fragSelect;
@@ -120,6 +124,7 @@ public class Selection extends Content {
 		}).growX().left().padLeft(16).row();
 		table.table(t -> {
 			t.left().defaults().left();
+			t.check("在世界反应焦点", settings.getBool("focusOnWorld"), b -> settings.put("focusOnWorld", b)).row();
 			t.check("在世界中显示已选", drawSelect, b -> drawSelect = b);
 		}).growX().left().padLeft(16).row();
 		Contents.settings.add(table);
@@ -127,7 +132,7 @@ public class Selection extends Content {
 
 	public void load() {
 		fragSelect = new Element();
-		fragSelect.update(() -> fragSelect.setZIndex(Integer.MAX_VALUE));
+		fragSelect.update(() -> fragSelect.toFront());
 		fragSelect.touchable = Touchable.enabled;
 		fragSelect.setFillParent(true);
 
@@ -238,7 +243,7 @@ public class Selection extends Content {
 			}
 		};
 		Core.scene.add(fragSelect);
-		Core.scene.addListener(listener);
+		fragSelect.addListener(listener);
 
 		/*fragDraw = new FragDraw();
 		Core.scene.add(fragDraw);*/
@@ -450,6 +455,20 @@ public class Selection extends Content {
 		//		fragSelect.touchable = Touchable.enabled;
 	}
 
+	public static Rect getWorldRect(Tile t) {
+		return new Rect(t.worldx(), t.worldy(), tilesize * 4, tilesize * 4);
+	}
+
+	public static Rect getWorldRect(Unit unit) {
+		return new Rect(unit.x, unit.y, unit.type.fullIcon.width, unit.type.fullIcon.height);
+	}
+
+	public static Rect getWorldRect(Building t) {
+		TextureRegion region = t.block.region;
+		return new Rect(t.x, t.y, region.width, region.height);
+	}
+
+
 	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
 		FunctionBuild(t, name, btn -> {
 			IntUI.showSelectImageTable(btn, list, () -> null, item -> {
@@ -486,24 +505,27 @@ public class Selection extends Content {
 
 		public void buildTable(T unit, Table table) {
 			table.image(unit.type().uiIcon).row();
-			table.add("x:" + unit.x).padRight(6.0f);
-			table.add("y:" + unit.y);
+			// table.label(() -> "(" + unit.x + ", " + unit.y + ')');
 		}
 
 		public ObjectMap<Float, TextureRegion> map = new ObjectMap<>();
 
-		@Override
-		public void add(T unit) {
-			super.add(unit);
-			if (!drawSelect) return;
+		public TextureRegion getRegion(T unit) {
 			float rsize = unit.hitSize * 1.4f * 4;
-			TextureRegion region = map.get(unit.hitSize, () -> {
+			return map.get(unit.hitSize, () -> {
 				int size = (int) (rsize * 2);
 				float thick = 12f;
 				return drawRegion(size, size, () -> {
 					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Color.sky);
 				});
 			});
+		}
+
+		@Override
+		public void add(T unit) {
+			super.add(unit);
+			if (!drawSelect) return;
+			TextureRegion region = getRegion(unit);
 			unitWD.drawSeq.add(() -> {
 				if (!unit.isAdded()) {
 					return false;
@@ -526,15 +548,29 @@ public class Selection extends Content {
 			super(name, cons);
 		}
 
+		@Override
+		public TextureRegion getRegion(T building) {
+			return map.get(building.block.size, () -> {
+				int size = building.block.size * 32;
+				int thick = 7;
+				return drawRegion(size + thick, size + thick, () -> {
+					MyDraw.dashSquare(thick, Pal.accent, (size + thick) / 2f, (size + thick) / 2f, size);
+				});
+			});
+		}
+
 		public void buildTable(T building, Table table) {
 			Table cont = new Table();
 			building.display(cont);
 			table.add(cont).row();
-			Table pos = new Table(t -> {
-				t.add("x:" + building.x).padRight(6.0f);
-				t.add("y:" + building.y);
-			});
-			table.add(pos).row();
+			String[] pos = {"(" + building.x + ", " + building.y + ')'};
+			Vec2 last = new Vec2(building.x, building.y);
+			table.label(() -> {
+				if (last.x != building.x || last.y != building.y) {
+					pos[0] = "(" + building.x + ", " + building.y + ')';
+				}
+				return pos[0];
+			}).padRight(6.0f).row();
 		}
 
 		public ObjectMap<Integer, TextureRegion> map = new ObjectMap<>();
@@ -543,14 +579,8 @@ public class Selection extends Content {
 		public void add(T building) {
 			super.add(building);
 			if (!drawSelect) return;
-			TextureRegion region = map.get(building.block.size, () -> {
-				int size = building.block.size * 32;
-				int thick = 7;
-				return drawRegion(size + thick, size + thick, () -> {
-					MyDraw.dashSquare(thick, Pal.accent, (size + thick) / 2f, (size + thick) / 2f, size);
-				});
-			});
 
+			TextureRegion region = getRegion(building);
 			buildWD.drawSeq.add(() -> {
 				if (building.tile.build != building) {
 					//					buildWD.hasChange = false;
@@ -574,11 +604,21 @@ public class Selection extends Content {
 			super(name, cons);
 		}
 
+		@Override
+		public TextureRegion getRegion(T tile) {
+			return map.get(tile.block().size, () -> {
+				int size = tilesize * 4;
+				int thick = 7;
+				return drawRegion(size + thick, size + thick, () -> {
+					MyDraw.dashSquare(thick, Pal.accentBack, (size + thick) / 2f, (size + thick) / 2f, size);
+				});
+			});
+		}
+
 		public void buildTable(T tile, Table table) {
 			tile.display(table);
 			table.row();
-			table.add("x:" + tile.x).padRight(6.0f);
-			table.add("y:" + tile.y);
+			table.add("(" + tile.x + ", " + tile.y + ')');
 		}
 
 		public ObjectMap<Integer, TextureRegion> map = new ObjectMap<>();
@@ -587,13 +627,7 @@ public class Selection extends Content {
 		public void add(T tile) {
 			super.add(tile);
 			if (!drawSelect) return;
-			TextureRegion region = map.get(tile.block().size, () -> {
-				int size = 1 * tilesize * 4;
-				int thick = 7;
-				return drawRegion(size + thick, size + thick, () -> {
-					MyDraw.dashSquare(thick, Pal.accentBack, (size + thick) / 2f, (size + thick) / 2f, size);
-				});
-			});
+			TextureRegion region = getRegion(tile);
 			tileWD.drawSeq.add(() -> {
 				if (!rect.contains(tile.worldx(), tile.worldy())) return true;
 				Draw.rect(region, tile.worldx(), tile.worldy());
@@ -637,6 +671,8 @@ public class Selection extends Content {
 			all.put(name, this);
 		}
 
+		public abstract TextureRegion getRegion(T t);
+
 		public void setting(Table t) {
 			t.check(name, select.get(name), b -> {
 				if (b) {
@@ -667,25 +703,71 @@ public class Selection extends Content {
 			wrap.add(main);
 		}
 
-		public void showAll() {
-			final int[] c = new int[]{0};
+		public final void showAll() {
 			final int cols = Vars.mobile ? 4 : 6;
+			final int[] c = new int[]{0};
 			new Window(name, 0, 200, true) {{
 				cont.pane(table -> {
 					list.forEach(item -> {
-						Table cont = new Table(Tex.button);
-						table.add(cont);
+						var cont = new Table(Tex.pane) {
+							Task task, task2;
+
+							public Element hit(float x, float y, boolean touchable) {
+								Element tmp = super.hit(x, y, touchable);
+								if (tmp == null) return null;
+								if (task2 != null) task2.cancel();
+								focusElem = this;
+								task2 = Time.runTask(2, () -> {
+									focusElem = null;
+								});
+								if (item instanceof Tile) focusTile = (Tile) item;
+								else if (item instanceof Building) focusBuild = (Building) item;
+								else if (item instanceof Unit) focusUnits.add((Unit) item);
+								if (task != null) task.cancel();
+								focusLock = true;
+								task = Time.runTask(2, () -> {
+									if (item instanceof Tile) focusTile = null;
+									else if (item instanceof Building) focusBuild = null;
+									else if (item instanceof Unit) focusUnits.remove((Unit) item);
+									focusLock = false;
+								});
+								return tmp;
+							}
+
+							public void draw() {
+								super.draw();
+								if (focusElem == this) {
+									Draw.color(focusColor);
+									Fill.crect(x, y, width, height);
+								}
+							}
+
+							{
+								touchable = Touchable.enabled;
+								update(() -> {
+									if (!focusLock && (focusTile == item || focusBuild == item
+											|| (item instanceof Unit && focusUnits.contains((Unit) item)))) {
+										if (task2 != null) task2.cancel();
+										focusElem = this;
+										task2 = Time.runTask(2, () -> {
+											focusElem = null;
+										});
+									}
+								});
+							}
+						};
+						table.add(cont).minWidth(150);
 						buildTable(item, cont);
 						cont.row();
 						cont.button("更多信息", IntStyles.cleart, () -> {
 							JSFunc.showInfo(item);
-						}).fillX().height(buttonHeight);
+						}).growX().height(buttonHeight);
 						if (++c[0] % cols == 0) {
 							table.row();
 						}
-
 					});
-				}).fillX().fillY();
+					// table.getCells().reverse();
+				}).fill();
 				//				addCloseButton();
 			}}.show();
 		}
@@ -693,9 +775,85 @@ public class Selection extends Content {
 		public void buildTable(T item, Table table) {
 		}
 
+
 		public void add(T item) {
 			list.add(item);
 		}
+
+	}
+
+	Vec2 mouse;
+
+	public void drawFocus() {
+		mouse = Core.input.mouseWorld();
+		drawFocus(focusTile);
+		drawFocus(focusBuild);
+		for (var focus : focusUnits) {
+			drawFocus(focus);
+		}
+	}
+
+	public void drawFocus(Object focus) {
+		if (focus == null) return;
+		Rect rect;
+		if (focus instanceof Tile) {
+			rect = getWorldRect((Tile) focus);
+		} else if (focus instanceof Building) {
+			rect = getWorldRect((Building) focus);
+		} else if (focus instanceof Unit) {
+			rect = getWorldRect((Unit) focus);
+		} else return;
+		// Color lastColor = Draw.getColor().cpy();
+
+		Draw.color(focusColor);
+		// Log.info(Draw.getColor());
+		// float z = Draw.z();
+		Draw.z(Layer.end);
+		Fill.rect(rect.x, rect.y, rect.width / 4f, rect.height / 4f);
+		// Vec2 vec2 = Core.camera.unproject(focusFrom.x, focusFrom.y);
+		Draw.color(Pal.accent);
+		Lines.line(mouse.x, mouse.y, rect.x, rect.y);
+		if (focusElem != null) {
+			Vec2 vec2 = Core.camera.unproject(Tools.getAbsPos(focusElem));
+			Lines.line(vec2.x, vec2.y, rect.x, rect.y);
+		}
+		// Draw.z(z);
+		// Draw.color(lastColor);
+	}
+
+	private boolean focusLock;
+	private Element focusElem;
+	private Tile focusTile;
+	private Building focusBuild;
+	private final ObjectSet<Unit> focusUnits = new ObjectSet<>();
+
+	{
+		otherWD.drawSeq.add(() -> {
+			if (!focusLock) {
+				focusUnits.clear();
+				if (settings.getBool("focusOnWorld")) {
+					Vec2 mouseWorld = Core.input.mouseWorld();
+					focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
+					focusBuild = focusTile != null ? focusTile.build : null;
+					Groups.unit.each(u -> {
+						if (mouse.x > u.x - u.hitSize && mouse.y > u.y - u.hitSize
+								&& mouse.x < u.x + u.hitSize && mouse.y < u.y + u.hitSize)
+							focusUnits.add(u);
+					});
+				} else {
+					if (focusTile != null) {
+						focusTile = null;
+					}
+					if (focusBuild != null) {
+						focusBuild = null;
+					}
+				}
+			}
+
+
+			drawFocus();
+			return true;
+		});
 	}
 
 	public static class MyDraw {

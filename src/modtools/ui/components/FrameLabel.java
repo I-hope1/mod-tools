@@ -35,6 +35,23 @@ public class FrameLabel extends Label {
 
 	@Override
 	public void draw() {
-		super.draw();
+		if (frameInvalid) {
+			Bloom bloom = new Bloom((int) width, (int) height, true, true);
+			region = WorldDraw.drawRegion((int) width, (int) height, () -> {
+				// validate();
+				Color color = tempColor.set(this.color);
+				color.a *= parentAlpha;
+				if (style.background != null) {
+					Draw.color(color.r, color.g, color.b, color.a);
+					style.background.draw(0, 0, width, height);
+				}
+				if (style.fontColor != null) color.mul(style.fontColor);
+				cache.tint(color);
+				cache.setPosition(0, 0);
+				cache.draw();
+			});
+			frameInvalid = false;
+		}
+		Draw.rect(region, x, y, width, height);
 	}
 }

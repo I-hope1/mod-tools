@@ -4,9 +4,7 @@ package modtools.ui.content;
 import arc.Core;
 import arc.Events;
 import arc.files.Fi;
-import arc.func.Cons;
-import arc.func.Cons2;
-import arc.func.Floatf;
+import arc.func.*;
 import arc.func.Func;
 import arc.input.KeyCode;
 import arc.math.Mathf;
@@ -28,6 +26,8 @@ import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
 import mindustry.Vars;
+import mindustry.android.AndroidRhinoContext;
+import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
@@ -42,10 +42,12 @@ import modtools.ui.components.SclLisetener;
 import modtools.ui.components.TextAreaTable;
 import modtools.ui.components.TextAreaTable.MyTextArea;
 import modtools.ui.components.Window;
-import modtools.utils.JSFunc;
+import modtools.utils.*;
 import modtools_lib.MyReflect;
 import rhino.*;
 
+import java.io.File;
+import java.lang.reflect.*;
 import java.util.Objects;
 
 import static modtools.utils.Tools.getAbsPos;
@@ -77,6 +79,7 @@ public class Tester extends Content {
 	}
 
 	public void build(Table table, Table buttons) {
+		if (ui == null) _load();
 		Table cont = new Table();
 		TextAreaTable textarea = new TextAreaTable("");
 		area = textarea.getArea();
@@ -146,7 +149,7 @@ public class Tester extends Content {
 			@Override
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				super.touchDragged(event, x, y, pointer);
-				;
+
 				cell.height(Mathf.clamp(bind.getHeight(), 100, cont.getHeight() - 140));
 				cont.invalidate();
 				pane.setScrollingDisabled(false, false);
@@ -229,6 +232,7 @@ public class Tester extends Content {
 	}
 
 	public void build() {
+		if (ui == null) _load();
 		if (multiWindows) {
 			var newTester = new Tester();
 			newTester.load();
@@ -270,9 +274,13 @@ public class Tester extends Content {
 		try {
 			/*V8 runtime = V8.createV8Runtime();
 			Log.debug(runtime.executeIntegerScript("let x=1;x*2"));*/
+			if (Context.getCurrentContext() != cx) {
+				cx = Context.getCurrentContext();
+				LinkRhino189012201.init(cx);
+			}
 			Object o = script.exec(cx, scope);
-			if (o instanceof NativeJavaObject) {
-				o = ((NativeJavaObject) o).unwrap();
+			if (o instanceof Wrapper) {
+				o = ((Wrapper) o).unwrap();
 			}
 
 			if (o instanceof Undefined) {
@@ -287,13 +295,13 @@ public class Tester extends Content {
 		}
 	}
 
-	public void load() {
+	public void _load() {
 		ui = new Window(localizedName(), w, 600, true, false);
 		/*ui.update(() -> {
 			ui.setZIndex(frag.getZIndex() - 1);
 		});*/
 		//		ui.addCloseListener();
-		history = new ListDialog("history", Vars.dataDirectory.child("mods(I hope...)").child("historical record"),
+		history = new ListDialog("history", MySettings.dataDirectory.child("historical record"),
 				f -> f.child("message.txt"), f -> {
 			area.setText(f.child("message.txt").readString());
 			log = f.child("log.txt").readString();
@@ -302,7 +310,7 @@ public class Tester extends Content {
 			p.image().height(3).fillX().row();
 			p.add(f.child("log.txt").readString());
 		}, Tester::sort);
-		bookmark = new ListDialog("bookmark", Vars.dataDirectory.child("mods(I hope...)").child("bookmarks"),
+		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
 				f -> f, f -> {
 			area.setText(f.readString());
 		}, (f, p) -> {
@@ -314,11 +322,12 @@ public class Tester extends Content {
 		scope = scripts.scope;
 
 		try {
-			Object obj = new NativeJavaClass(scope, JSFunc.class, true);
-			ScriptableObject.putProperty(scope, "IntFunc", obj);
-			obj = new NativeJavaClass(scope, MyReflect.class, false);
-			ScriptableObject.putProperty(scope, "MyReflect", obj);
+			Object obj1 = new NativeJavaClass(scope, JSFunc.class, true);
+			ScriptableObject.putProperty(scope, "IntFunc", obj1);
+			Object obj2 = new NativeJavaClass(scope, MyReflect.class, false);
+			ScriptableObject.putProperty(scope, "MyReflect", obj2);
 			ScriptableObject.putProperty(scope, "unsafe", MyReflect.unsafe);
+			LinkRhino189012201.init(cx);
 			//			ScriptableObject.putProperty(scope, "Window", new NativeJavaClass(scope, Window.class, true));
 		} catch (Exception ex) {
 			if (ignoreError) {
@@ -326,16 +335,19 @@ public class Tester extends Content {
 			} else {
 				Vars.ui.showException("IntFunc出错", ex);
 			}
-
 		}
 
 		setup();
 		Events.run(Trigger.update, () -> {
 			//			Log.info("update");
 			if (loop && script != null) {
-				Time.runTask(0, this::execScript);
+				execScript();
 			}
 		});
+	}
+
+	@Override
+	public void load() {
 		if (!init) loadSettings();
 		init = true;
 	}
@@ -362,7 +374,13 @@ public class Tester extends Content {
 	}
 
 	public Object getWrap(Object val) {
-		return Context.javaToJS(val, scope);
+		try {
+			if (val instanceof Class) return new NativeJavaClass(scope, (Class<?>) val);
+			if (val instanceof Method) return new NativeJavaMethod((Method) val, ((Method) val).getName());
+			return Context.javaToJS(val, scope);
+		} catch (Throwable e) {
+			return val;
+		}
 	}
 
 	public void put(String name, Object val) {

@@ -41,7 +41,7 @@ public class ShowUIList extends Content {
 		Core.app.setClipboardText(label.getText().toString());
 	}
 
-	public void load() {
+	public void _load() {
 		ui = new Window(localizedName(), 400, 500, true);
 		Color[] colors = {Color.sky, Color.gold, Color.orange};
 		Seq<Table> tables = Seq.with(
@@ -117,6 +117,7 @@ public class ShowUIList extends Content {
 	}
 
 	public void build() {
+		if (ui == null) _load();
 		ui.show();
 	}
 }

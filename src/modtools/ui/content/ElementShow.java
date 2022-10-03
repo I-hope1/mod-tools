@@ -3,8 +3,7 @@ package modtools.ui.content;
 import arc.Core;
 import arc.func.Boolp;
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
-import arc.graphics.g2d.Fill;
+import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
@@ -18,6 +17,7 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
+import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
@@ -45,7 +45,8 @@ public class ElementShow extends Content {
 	public static final boolean hideSelf = true;
 	public Element frag;
 	public Element selected, tmp;
-	public boolean selecting;
+	public boolean selecting, cancalEvent;
+
 
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {
@@ -57,7 +58,11 @@ public class ElementShow extends Content {
 				tmp = selected.hit(x, y, true);
 			} while (tmp != null && selected != tmp);
 		}
+		// Log.info(selected);
 	}
+
+	public static Element focus;
+	public static Color focusColor = Color.blue.cpy().a(0.5f);
 
 	@Override
 	public void load() {
@@ -65,22 +70,38 @@ public class ElementShow extends Content {
 			@Override
 			public void draw() {
 				super.draw();
+				if (focus != null) {
+					Draw.color(focusColor);
+					Vec2 vec2 = getAbsPos(focus);
+					Fill.crect(vec2.x, vec2.y, focus.getWidth(), focus.getHeight());
+					// Vec2 vec2 = Core.camera.unproject(focusFrom.x, focusFrom.y);
+					Vec2 mouse = Core.input.mouse();
+					Draw.color();
+					Lines.stroke(3f);
+					Lines.line(mouse.x, mouse.y, vec2.x + focus.getWidth() / 2f, vec2.y + focus.getHeight() / 2f);
+				}
 				if (selected == null || !selecting) return;
 				Draw.z(Layer.fogOfWar);
-				Draw.color(Color.blue, 0.4f);
+				Draw.color(focusColor);
 				Vec2 vec2 = getAbsPos(selected);
 				Fill.crect(vec2.x, vec2.y, selected.getWidth(), selected.getHeight());
 			}
 
 			@Override
 			public Element hit(float x, float y, boolean touchable) {
-				return super.hit(x, y, touchable);
+				if (cancalEvent) {
+					return this;
+				} else {
+					return null;
+				}
 			}
 		};
-		frag.update(() -> frag.toFront());
-		frag.touchable = Touchable.enabled;
+		frag.update(() -> {
+			frag.toFront();
+		});
+		frag.touchable = Touchable.disabled;
 		frag.fillParent = true;
-		frag.addListener(new InputListener() {
+		Core.scene.addListener(new InputListener() {
 			/*@Override
 			public boolean mouseMoved(InputEvent event, float x, float y) {
 				if (!selecting) return false;
@@ -108,36 +129,36 @@ public class ElementShow extends Content {
 				}, () -> {});
 				btn.setChecked(false);
 			}*/
-			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (!selecting) return false;
-				frag.touchable = Touchable.disabled;
+				// frag.touchable = Touchable.disabled;
 				getSelected(x, y);
 				return true;
 			}
 
-			@Override
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				getSelected(x, y);
 			}
 
-			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				cancalEvent = true;
+				Time.runTask(2, () -> cancalEvent = false);
 				selecting = false;
-				IntVars.async(() -> {
-					if (((Boolp) () -> {
-						if (selected == null) return false;
-						Element parent = selected.parent;
-						while (true) {
-							if (parent instanceof ElementShowDialog) return false;
-							if (parent == null) return true;
-							parent = parent.parent;
-						}
-					}).get()) new ElementShowDialog().show(selected);
-				}, () -> {});
-				frag.remove();
+				// IntVars.async(() -> {
+				if (((Boolp) () -> {
+					if (selected == null) return false;
+					Element parent = selected.parent;
+					while (true) {
+						if (parent instanceof ElementShowDialog) return false;
+						if (parent == null) return true;
+						parent = parent.parent;
+					}
+				}).get()) new ElementShowDialog().show(selected);
+				// }, () -> {});
+				// frag.remove();
 			}
 		});
+		Core.scene.add(frag);
 
 		btn.update(() -> btn.setChecked(selecting));
 		btn.setStyle(Styles.logicTogglet);
@@ -146,14 +167,8 @@ public class ElementShow extends Content {
 	@Override
 	public void build() {
 		selected = null;
-		if (frag.parent == null) {
-			selecting = true;
-			frag.touchable = Touchable.enabled;
-			Core.scene.add(frag);
-		} else {
-			selecting = false;
-			frag.remove();
-		}
+		// frag.remove();
+		selecting = !selecting;
 	}
 
 	public static class ElementShowDialog extends Window {
@@ -226,7 +241,7 @@ public class ElementShow extends Content {
 
 			pane.row();
 			pane.image().color(Pal.accent).growX().padTop(10).padBottom(10).row();
-			highlightShowMultiRow(pane, pattern, element + "");
+			// highlightShowMultiRow(pane, pattern, element + "");
 		}
 
 
@@ -294,7 +309,7 @@ public class ElementShow extends Content {
 			table.left().defaults().left();
 
 			try {
-				table.table(Tex.underlineWhite, wrap -> {
+				table.add(new Table(Tex.underlineWhite, wrap -> {
 					if (element instanceof Group) {
 						highlightShowMultiRow(wrap, pattern, getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
 						var children = ((Group) element).getChildren();
@@ -326,6 +341,29 @@ public class ElementShow extends Content {
 					IntUI.doubleClick(wrap.getChildren().first(), () -> {}, () -> {
 						tester.put(wrap, element);
 					});
+				}) {
+					public Task task;
+
+					{
+						touchable = Touchable.enabled;
+					}
+
+					@Override
+					public Element hit(float x, float y, boolean touchable) {
+						focus = null;
+						Element tmp = super.hit(x, y, touchable);
+						if (tmp == null) return null;
+						if (focus != null) {
+							if (task != null) task.cancel();
+							return tmp;
+						}
+						focus = element;
+						if (task != null) task.cancel();
+						task = Time.runTask(2, () -> {
+							focus = null;
+						});
+						return tmp;
+					}
 				}).row();
 			} catch (Exception e) {
 				//				Vars.ui.showException(e);

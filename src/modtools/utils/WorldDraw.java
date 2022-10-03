@@ -23,7 +23,7 @@ public class WorldDraw {
 	// 玩家渲染区域
 	public static final Rect rect = new Rect();
 	// 存储渲染
-	public final Seq<Boolp> drawSeq = new Seq<>() {
+	public final Seq<Boolp> drawSeq = new Seq<>();/* {
 		@Override
 		public Seq<Boolp> add(Boolp value) {
 			hasChange = true;
@@ -41,16 +41,21 @@ public class WorldDraw {
 			hasChange = true;
 			return super.clear();
 		}
-	};
-	public static final Seq<MyEntity> entities = new Seq<>();
+	};*/
+	// public static final Seq<MyEntity> entities = new Seq<>();
 	public static final Vec2 center = new Vec2();
-	public boolean hasChange = false;
-	public float z;
-	public MyEntity entity = new MyEntity();
+	// public boolean hasChange = false;
+	// public MyEntity entity = new MyEntity();
+	public static Seq<Runnable> tasks = new Seq<>();
 
 	public WorldDraw(float z) {
-		this.z = z;
-		Events.run(EventType.WorldLoadEvent.class, () -> {
+		tasks.add(() -> {
+			Color last = Draw.getColor();
+			Draw.z(z);
+			drawSeq.filter(Boolp::get);
+			Draw.color(last);
+		});
+		/*Events.run(EventType.WorldLoadEvent.class, () -> {
 			if (entity != null) {
 				entity.remove();
 				entities.remove(entity);
@@ -71,7 +76,7 @@ public class WorldDraw {
 			if (hasChange) {
 				hasChange = false;
 			}
-		});
+		});*/
 	}
 
 	static {
@@ -80,6 +85,7 @@ public class WorldDraw {
 			Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
 			rect.set(v1.x, v1.y, v2.x - v1.x, v2.y - v1.y);
 			rect.getCenter(center);
+			tasks.each(Runnable::run);
 		});
 	}
 
@@ -110,7 +116,7 @@ public class WorldDraw {
 	}
 
 
-	public class MyEntity extends EffectState {
+	/*public class MyEntity extends EffectState {
 		@Override
 		public void update() {
 		}
@@ -134,5 +140,5 @@ public class WorldDraw {
 		public float clipSize() {
 			return 0;
 		}
-	}
+	}*/
 }

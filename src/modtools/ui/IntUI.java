@@ -55,10 +55,10 @@ public class IntUI {
 
 
 	/* 长按事件 */
-	public static <T extends Element> T longPress(T elem, final float duration, final Cons<Boolean> func) {
+	public static <T extends Element> T longPress(T elem, final long duration, final Cons<Boolean> func) {
 		elem.addListener(new ClickListener() {
 			public void clicked(InputEvent event, float x, float y) {
-				func.get((float) (Time.millis() - visualPressedTime) > duration);
+				func.get((Time.millis() - visualPressedTime) > duration);
 			}
 		});
 		return elem;

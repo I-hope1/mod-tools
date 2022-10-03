@@ -24,7 +24,8 @@ public class SclLisetener extends InputListener {
 		bind.addListener(this);
 		set(minW, minH);
 	}
-	public void set(float minW, float minH){
+
+	public void set(float minW, float minH) {
 		this.minW = Scl.scl(minW);
 		this.minH = Scl.scl(minH);
 	}
@@ -51,11 +52,10 @@ public class SclLisetener extends InputListener {
 		scling = false;
 		try {
 			lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
-		} catch (Throwable e) {
-			throw new RuntimeException(e);
+		} catch (Throwable ignored) {
 		}
-//		Log.debug(last);
-//		if (valid()) Log.debug("ok");
+		//		Log.debug(last);
+		//		if (valid()) Log.debug("ok");
 		if (valid()) {
 			change.set(0, 0);
 			defWidth = bind.getWidth();
@@ -68,6 +68,7 @@ public class SclLisetener extends InputListener {
 	}
 
 	public Vec2 change = new Vec2(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY);
+
 	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		scling = true;
@@ -85,8 +86,8 @@ public class SclLisetener extends InputListener {
 			bind.setWidth(w);
 			change.x = defWidth - w;
 			bind.x = defX + change.x;
-//			Log.debug("defX: @, defW: @, w: @", defX, defWidth, w);
-//			Log.debug("x: @, lx: @", x, last.x);
+			//			Log.debug("defX: @, defW: @, w: @", defX, defWidth, w);
+			//			Log.debug("x: @, lx: @", x, last.x);
 		}
 		if (right) {
 			Core.graphics.cursor(SystemCursor.horizontalResize);
@@ -103,7 +104,7 @@ public class SclLisetener extends InputListener {
 			Core.graphics.cursor(SystemCursor.verticalResize);
 			bind.setHeight(Mathf.clamp(defHeight + y - last.y, minH, Core.graphics.getHeight()));
 		}
-		if (listener !=  null) listener.run();
+		if (listener != null) listener.run();
 		/*int index = bind.getZIndex();
 		Group parent = bind.parent;
 		parent.removeChild(bind, false);
@@ -112,7 +113,7 @@ public class SclLisetener extends InputListener {
 
 	@Override
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-//		Log.info("end");
+		//		Log.info("end");
 		super.touchUp(event, x, y, pointer, button);
 		change.set(0, 0);
 		Core.graphics.cursor(lastCursor);

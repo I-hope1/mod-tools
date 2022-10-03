@@ -2,9 +2,21 @@
 displayName: "mod工具"
 name: "mod-tools"
 author: "I hope..."
-description: "- 全新ui\n- 修复一些bug"
+description: '''
+1. added focus feedback on Element Show & Selection.
+2. fixed a bug memory bug which didn't remove window when it's close.
+3. changed mod data directory.
+4. optimized code.
+5. fixed some of other small bugs.
+---------------------------------
+1. 添加 审查元素 和 选择器 的焦点反馈.
+2. 修复窗口关闭时仍占内存的bug.
+3. 修改的mod数据目录.
+4. 优化代码.
+5. 修复其他一些bug.
+'''
 main: "modtools.ModTools"
-version: "1.3"
+version: "1.4"
 hidden: true
 minGameVersion: 136
 repo: "I-hope1/mod-tools"

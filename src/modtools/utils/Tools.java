@@ -3,7 +3,8 @@ package modtools.utils;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.struct.Seq;
-import arc.util.Time;
+import arc.util.*;
+import arc.util.Timer.Task;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -30,7 +31,7 @@ public class Tools {
 	}
 
 	public static Vec2 getAbsPos(Element el) {
-		if (true) return el.localToStageCoordinates(new Vec2(0, 0));
+		if (true) return el.localToStageCoordinates(Tmp.v1.set(0, 0));
 		Vec2 vec2 = new Vec2(el.x, el.y);
 		while (el.parent != null) {
 			el = el.parent;
@@ -82,7 +83,19 @@ public class Tools {
 	}
 
 	public static void forceRun(Runnable toRun) {
-		Runnable[] run = {null};
+
+		Timer.schedule(new Task() {
+			@Override
+			public void run() {
+				try {
+					toRun.run();
+					cancel();
+				} catch (Exception e) {
+					Log.err(e);
+				}
+			}
+		}, 0, 1 / 60f, -1);
+		/*Runnable[] run = {null};
 		run[0] = () -> {
 			Time.runTask(0, () -> {
 				try {
@@ -92,6 +105,6 @@ public class Tools {
 				}
 			});
 		};
-		run[0].run();
+		run[0].run();*/
 	}
 }

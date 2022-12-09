@@ -6,6 +6,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.Interp;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.ClickListener;
@@ -36,7 +37,7 @@ public class IntUI {
 
 	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
 		elem.addListener(new ClickListener() {
-			Timer.Task clickTask = null;
+			final Timer.Task clickTask = Time.runTask(20, click);
 
 			@Override
 			public void clicked(InputEvent event, float x, float y) {
@@ -44,13 +45,11 @@ public class IntUI {
 				if (clickTask != null && tapCount >= 2) {
 					dclick.run();
 					clickTask.cancel();
-					clickTask = null;
 				} else {
-					clickTask = Time.runTask(20, click);
+					Timer.schedule(clickTask, 20 / 60f);
 				}
 			}
 		});
-
 	}
 
 
@@ -286,16 +285,16 @@ public class IntUI {
 		}}.show();
 	}
 
-	public static Window showConfirm(String text, Runnable confirmed) {
+	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {
 		return showConfirm("@confirm", text, null, confirmed);
 	}
 
-	public static Window showConfirm(String title, String text, Runnable confirmed) {
+	public static ConfirmWindow showConfirm(String title, String text, Runnable confirmed) {
 		return showConfirm(title, text, null, confirmed);
 	}
 
-	public static Window showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
-		Window window = new Window(title, 0, 100, false, false);
+	public static ConfirmWindow showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
+		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.hidden(() -> Window.all.remove(window));
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2f);
@@ -320,5 +319,15 @@ public class IntUI {
 		window.keyDown(KeyCode.back, window::hide);
 		window.show();
 		return window;
+	}
+
+	public static class ConfirmWindow extends Window {
+		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(title, minWidth, minHeight, full, noButtons);
+		}
+
+		public void setCenter(Vec2 vec2) {
+			setPosition(vec2.x - getPrefWidth() / 2f, vec2.y - getPrefHeight() / 2f);
+		}
 	}
 }

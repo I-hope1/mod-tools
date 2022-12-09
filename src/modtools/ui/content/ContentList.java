@@ -34,7 +34,7 @@ public class ContentList extends Content {
 	public void load() {
 		ui = new Window(localizedName(), 100, 100, true);
 		main = new Table();
-		ui.cont.pane(p -> {
+		ui.cont.table(p -> {
 			p.table(top -> {
 				top.image(Icon.zoom).pad(20f);
 				search = new TextField();
@@ -91,7 +91,6 @@ public class ContentList extends Content {
 		Pattern finalPattern = pattern;
 		tables.add(new Table(t -> {
 			if (finalPattern == null) return;
-			t.add("长按可以复制哦!").growX().row();
 			fxs.each((name, effect) -> {
 				if (!name.isEmpty() && !finalPattern.matcher(name).find()) return;
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -109,7 +108,6 @@ public class ContentList extends Content {
 		}));
 		tables.add(new Table(t -> {
 			if (finalPattern == null) return;
-			t.add("长按可以复制哦!").growX().row();
 			bullets.each((name, bulletType) -> {
 				if (!name.isEmpty() && !finalPattern.matcher(name).find()) return;
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -127,8 +125,10 @@ public class ContentList extends Content {
 		}));
 
 		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), colors, tables);
+		tab.title.add("@contentlist.tip").growX().row();
+
 		main.clearChildren();
-		main.add(tab.build());
+		main.add(tab.build()).grow().top();
 	}
 
 	@Override

@@ -11,29 +11,20 @@ import arc.math.Mathf;
 import arc.scene.Action;
 import arc.scene.Element;
 import arc.scene.Scene;
-import arc.scene.event.InputEvent;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.Button;
-import arc.scene.ui.Dialog;
-import arc.scene.ui.ScrollPane;
+import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
-import arc.scene.ui.layout.Cell;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import arc.struct.Seq;
-import arc.util.Align;
-import arc.util.Log;
-import arc.util.Strings;
-import arc.util.Time;
+import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.Vars;
-import mindustry.android.AndroidRhinoContext;
-import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
-import modtools.IntVars;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
@@ -42,21 +33,24 @@ import modtools.ui.components.SclLisetener;
 import modtools.ui.components.TextAreaTable;
 import modtools.ui.components.TextAreaTable.MyTextArea;
 import modtools.ui.components.Window;
+import modtools.ui.components.highlight.*;
 import modtools.utils.*;
 import modtools_lib.MyReflect;
 import rhino.*;
 
-import java.io.File;
 import java.lang.reflect.*;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import static modtools.utils.Tools.getAbsPos;
 
 public class Tester extends Content {
 	String log = "";
 	MyTextArea area;
-	public boolean loop = false,
-			wrap = false, error, ignoreError = false,
+	public boolean loop = false;
+	public Object res;
+	private boolean
+			wrap = false, error, ignorePopUpError = false,
 			wrapRef = true, multiWindows = false;
 	static final float w = Core.graphics.isPortrait() ? 440 : 540;
 	Window ui;
@@ -80,13 +74,23 @@ public class Tester extends Content {
 
 	public void build(Table table, Table buttons) {
 		if (ui == null) _load();
-		Table cont = new Table();
 		TextAreaTable textarea = new TextAreaTable("");
+		Table cont = new Table() {
+			@Override
+			public Element hit(float x, float y, boolean touchable) {
+				Element element = super.hit(x, y, touchable);
+				if (element == null) return null;
+				if (element.isDescendantOf(this)) textarea.focus();
+				return element;
+			}
+		};
+		textarea.syntax = new JSSyntax(textarea);
+		// JSSyntax.apply(textarea);
 		area = textarea.getArea();
 		boolean[] execed = {false};
 		textarea.keyDonwB = (event, keycode) -> {
 			if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.enter) {
-				complieAndExec();
+				complieAndExec(() -> {});
 				execed[0] = true;
 				return false;
 			}
@@ -109,28 +113,32 @@ public class Tester extends Content {
 		cont.update(() -> areaCell.maxHeight(ui.cont.getHeight()));
 
 		cont.table(t -> {
+			t.defaults().padRight(8f);
 			t.button(Icon.left, area::left);
 			t.button("@ok", () -> {
 				error = false;
-				area.setText(getMessage().replaceAll("\\r", "\\n"));
-				complieAndExec();
-				Fi d = history.file.child(String.valueOf(Time.millis()));
-				d.child("message.txt").writeString(getMessage());
-				d.child("log.txt").writeString(log);
-				history.list.insert(0, d);
-				if (history.isShown()) {
-					history.build();
-				}
-				//	history.build(d).with(b -> b.setZIndex(0));
+				// area.setText(getMessage().replaceAll("\\r", "\\n"));
+				complieAndExec(() -> {
+					Fi d = history.file.child(String.valueOf(Time.millis()));
+					d.child("message.txt").writeString(getMessage());
+					d.child("log.txt").writeString(log);
+					history.list.insert(0, d);
+					if (history.isShown()) {
+						history.build();
+					}
+					//	history.build(d).with(b -> b.setZIndex(0));
 
-				int max = history.list.size - 1;
-				int min = 30;
-				for (int i = max; i >= min; i--) {
-					history.list.get(i).deleteDirectory();
-					history.list.remove(i);
-				}
-			}).padLeft(8f).padRight(8f);
+					int max = history.list.size - 1;
+					int min = 30;
+					for (int i = max; i >= min; i--) {
+						history.list.get(i).deleteDirectory();
+						history.list.remove(i);
+					}
+				});
+			});
 			t.button(Icon.right, area::right);
+			t.button(Icon.copy, area::copy).padLeft(8f);
+			t.button(Icon.paste, () -> area.paste(Core.app.getClipboardText(), true)).padLeft(8f);
 		}).growX().row();
 		Cell<?> cell = cont.table(Tex.sliderBack, t -> t.pane(p -> {
 			p.add(new MyLabel(() -> log)).style(IntStyles.myLabel).wrap().growX().labelAlign(Align.center, Align.left);
@@ -158,6 +166,11 @@ public class Tester extends Content {
 				// cont.pack();
 			}
 
+			{
+				cell.height(Mathf.clamp(bind.getHeight() + 1, 100, cont.getHeight() - 140));
+				cont.invalidate();
+			}
+
 			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
@@ -172,21 +185,23 @@ public class Tester extends Content {
 				fi.writeString(getMessage());
 				bookmark.build();
 			}).size(42).padRight(6f);
+			p.defaults().size(100, 60);
 			p.button(b -> {
-				b.label(() -> loop ? "循环" : "不循环");
+				b.label(() -> loop ? "@tester.loop" : "@tester.notloop");
 			}, Styles.defaultb, () -> {
 				loop = !loop;
-			}).size(100, 55);
+			});
 			p.button(b -> {
-				b.label(() -> wrap ? "严格" : "非严格");
-			}, Styles.defaultb, () -> wrap = !wrap).size(100, 55);
+				b.label(() -> wrap ? "@tester.strict" : "@tester.notstrict");
+			}, Styles.defaultb, () -> wrap = !wrap);
 			p.button(b -> {
-				b.label(() -> textarea.enableHighlighting ? "高亮" : "不高亮");
-			}, Styles.defaultb, () -> textarea.enableHighlighting = !textarea.enableHighlighting).size(100, 55);
+				b.label(() -> textarea.enableHighlighting ? "@tester.highlighting" : "@tester.nothighlighting");
+			}, Styles.defaultb, () -> textarea.enableHighlighting = !textarea.enableHighlighting);
+			p.button("@details", () -> JSFunc.showInfo(res));
 
-			p.button("历史记录", history::show).size(100, 55);
-			p.button("收藏夹", bookmark::show).size(100, 55);
-		}).height(60).growX();
+			p.button("@historymessage", history::show);
+			p.button("@bookmark", bookmark::show);
+		}).height(60).width(w).growX();
 
 		//		buttons.button("$back", Icon.left, ui::hide).size(210, 64);
 		var editTable = new Table(Styles.black5, p -> {
@@ -244,10 +259,11 @@ public class Tester extends Content {
 		} else ui.show();*/
 	}
 
-	public void complieAndExec() {
+	public void complieAndExec(Runnable callback) {
 		Time.runTask(0, () -> {
 			complieScript();
 			execScript();
+			callback.run();
 		});
 	}
 
@@ -265,7 +281,8 @@ public class Tester extends Content {
 	public void makeError(Throwable ex) {
 		error = true;
 		loop = false;
-		if (!ignoreError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
+		if (MySettings.settings.getBool("outputToLog")) Log.err("tester", ex);
+		if (!ignorePopUpError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = Strings.neatError(ex);
 	}
 
@@ -282,6 +299,7 @@ public class Tester extends Content {
 			if (o instanceof Wrapper) {
 				o = ((Wrapper) o).unwrap();
 			}
+			res = o;
 
 			if (o instanceof Undefined) {
 				o = "undefined";
@@ -289,7 +307,9 @@ public class Tester extends Content {
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
-			else log = log.replaceAll("\\[(\\w*?)]", "[\u0001$1]");
+			if (MySettings.settings.getBool("outputToLog")) Log.info("tester: " + log);
+
+			log = log.replaceAll("\\[(\\w*?)]", "[[$1]");
 		} catch (Throwable ex) {
 			makeError(ex);
 		}
@@ -307,8 +327,8 @@ public class Tester extends Content {
 			log = f.child("log.txt").readString();
 		}, (f, p) -> {
 			p.add(f.child("message.txt").readString()).row();
-			p.image().height(3).fillX().row();
-			p.add(f.child("log.txt").readString());
+			p.image().color(JSFunc.underline).growX().padTop(6f).padBottom(6f).row();
+			p.add(f.child("log.txt").readString()).row();
 		}, Tester::sort);
 		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
 				f -> f, f -> {
@@ -316,26 +336,6 @@ public class Tester extends Content {
 		}, (f, p) -> {
 			p.add(f.readString()).row();
 		}, Tester::sort);
-		scripts = Vars.mods.getScripts();
-		if (Context.getCurrentContext() == null) Context.enter();
-		cx = scripts.context;
-		scope = scripts.scope;
-
-		try {
-			Object obj1 = new NativeJavaClass(scope, JSFunc.class, true);
-			ScriptableObject.putProperty(scope, "IntFunc", obj1);
-			Object obj2 = new NativeJavaClass(scope, MyReflect.class, false);
-			ScriptableObject.putProperty(scope, "MyReflect", obj2);
-			ScriptableObject.putProperty(scope, "unsafe", MyReflect.unsafe);
-			LinkRhino189012201.init(cx);
-			//			ScriptableObject.putProperty(scope, "Window", new NativeJavaClass(scope, Window.class, true));
-		} catch (Exception ex) {
-			if (ignoreError) {
-				Log.err(ex);
-			} else {
-				Vars.ui.showException("IntFunc出错", ex);
-			}
-		}
 
 		setup();
 		Events.run(Trigger.update, () -> {
@@ -350,20 +350,47 @@ public class Tester extends Content {
 	public void load() {
 		if (!init) loadSettings();
 		init = true;
+
+		scripts = Vars.mods.getScripts();
+		if (Context.getCurrentContext() == null) Context.enter();
+		cx = scripts.context;
+		scope = scripts.scope;
+
+		try {
+			Object obj1 = new NativeJavaClass(scope, JSFunc.class, true);
+			ScriptableObject.putProperty(scope, "IntFunc", obj1);
+			Object obj2 = new NativeJavaClass(scope, MyReflect.class, false);
+			ScriptableObject.putProperty(scope, "MyReflect", obj2);
+			ScriptableObject.putProperty(scope, "unsafe", MyReflect.unsafe);
+			LinkRhino189012201.init(cx);
+			//			ScriptableObject.putProperty(scope, "Window", new NativeJavaClass(scope, Window.class, true));
+		} catch (Exception ex) {
+			if (ignorePopUpError) {
+				Log.err(ex);
+			} else {
+				Vars.ui.showException("IntFunc出错", ex);
+			}
+		}
 	}
 
 	public static boolean init = false;
 
 	public void loadSettings() {
 		Table table = new Table();
+		table.defaults().growX();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("忽略报错", ignoreError, b -> ignoreError = b);
-			t.check("自动转换储存的js变量", wrapRef, b -> wrapRef = b);
+			t.check("@settings.ignorePopUpError", MySettings.settings.getBool("ignorePopUpError"), b -> {
+				MySettings.settings.put("ignorePopUpError", ignorePopUpError = b);
+			}).row();
+			t.check("@settings.wrapRef", wrapRef, b -> wrapRef = b);
 		}).row();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("窗口多开", multiWindows, b -> multiWindows = b);
+			t.check("@settings.multiWindows", multiWindows, b -> multiWindows = b).row();
+			t.check("@settings.outputToLog", MySettings.settings.getBool("outputToLog"), b -> {
+				MySettings.settings.put("outputToLog", b);
+			});
 		});
 
 		Contents.settings.add(localizedName(), table);
@@ -391,13 +418,15 @@ public class Tester extends Content {
 		ScriptableObject.putProperty(scope, name, val);
 	}
 
-	public void put(Object val) {
+	public String put(Object val) {
 		int i = 0;
 		String prefix = "temp";
 		while (ScriptableObject.hasProperty(scope, prefix + i)) {
 			i++;
 		}
-		put(prefix + i, val);
+		String key = prefix + i;
+		put(key, val);
+		return key;
 	}
 
 	public void put(Element element, Object val) {
@@ -407,10 +436,13 @@ public class Tester extends Content {
 			i++;
 		}
 		put(prefix + i, val);
-		IntUI.showInfoFade("已储存为[accent]" + prefix + i).setPosition(getAbsPos(element));
+		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", prefix + i))
+				.setPosition(getAbsPos(element));
 	}
 
-	static class ListDialog extends Window {
+	public static Pattern fileUnfair = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*$)");
+
+	/*public class ListDialog extends Window {
 		public Seq<Fi> list = new Seq<>();
 		final Table p = new Table();
 		Floatf<Fi> sorter;
@@ -447,10 +479,130 @@ public class Tester extends Content {
 
 		public Cell<Table> build(Fi f) {
 			var tmp = p.table(Window.myPane, t -> {
+				Fi fi = fileHolder.get(f);
+				Fi[] fis = {fi};
+				if (f == fi) {
+					Label label = new Label(f.name());
+					Cell cell = t.add(label);
+					TextField field = new TextField();
+					field.setValidator(text -> {
+						try {
+							return !text.isBlank() && !fileUnfair.matcher(text).find()
+									&& (fis[0].name().equals(field.getText()) || !fis[0].sibling(text).exists());
+						} catch (Throwable e) {
+							return false;
+						}
+					});
+					field.update(() -> {
+						if (Core.scene.getKeyboardFocus() != field) {
+							if (!fis[0].name().equals(field.getText()) && fis[0].sibling(field.getText()).exists()) {
+								IntUI.showException(new IllegalArgumentException("文件夹已存在.\nFile has existed."));
+							} else if (field.isValid()) {
+								Fi toFi = f.sibling(field.getText());
+								fis[0].moveTo(toFi);
+								list.replace(fis[0], toFi);
+								fis[0] = toFi;
+								label.setText(field.getText());
+							}
+							cell.setElement(label);
+						}
+					});
+					label.clicked(() -> {
+						Core.scene.setKeyboardFocus(field);
+						field.setText(fis[0].name());
+						cell.setElement(field);
+					});
+				}
+				TextButton code = new TextButton("Code");
+				String cont = fi.exists() ? fi.readString() : "";
+				code.clicked(() -> {
+					IntUI.showSelectTable(code, (p, hide, __) -> {
+						var table = new TextAreaTable(cont) {
+							@Override
+							public float getPrefHeight() {
+								return Core.graphics.getHeight() - Scl.scl(30f);
+							}
+						};
+						table.syntax = new JSSyntax(table);
+						var area = p.add(table).width(400).get().getArea();
+						// Time.runTask(5, () -> {
+						area.updateDisplayText();
+						Time.runTask(1, () -> {
+							// area.layout();
+							Timer.schedule(new Task() {
+								@Override
+								public void run() {
+									if (!p.isDescendantOf(Core.scene.root) && fis[0].exists()) {
+										if (fis[0].readString().equals(area.getText())) return;
+										fis[0].writeString(area.getText());
+									}
+								}
+							}, 0, 0.5f, -1);
+						});
+					}, false);
+				});
+				t.add(code).grow();
+				t.button(Icon.download, Styles.cleari, () -> {
+					area.setText(fis[0].readString());
+					hide();
+				}).right();
+				t.button("", Icon.trash, Styles.cleart, () -> IntUI.showConfirm("@confirm", "@mod.remove.confirm", () -> {
+					if (!fis[0].deleteDirectory()) {
+						fis[0].delete();
+					}
+
+					list.remove(fis[0]);
+
+					p.getCell(t).height(0).clearElement();
+				}).setCenter(Core.input.mouse())).padLeft(8f).right();
+			}).growX().height(70);
+			p.row();
+			return tmp;
+		}
+	}*/
+
+	static class ListDialog extends Window {
+		public Seq<Fi> list = new Seq<>();
+		final Table p = new Table();
+		Floatf<Fi> sorter;
+		Fi file;
+		Func<Fi, Fi> fileHolder;
+		Cons<Fi> consumer;
+		Cons2<Fi, Table> pane;
+
+		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane, Floatf<Fi> sorter) {
+			super(Core.bundle.get("title." + title, title), w, 600, true);
+			cont.add("@tester.tip").growX().left().row();
+			cont.pane(p).grow();
+			//			addCloseButton();
+			this.file = file;
+			list.addAll(file.list());
+			this.fileHolder = fileHolder;
+			this.consumer = consumer;
+			this.pane = pane;
+			this.sorter = sorter;
+
+			list.sort(sorter);
+		}
+
+		public Window show(Scene stage, Action action) {
+			build();
+			return super.show(stage, action);
+		}
+
+		public void build() {
+			p.clearChildren();
+
+			list.each(this::build);
+		}
+
+
+		public Cell<Table> build(Fi f) {
+			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					b.pane(c -> {
 						c.add(fileHolder.get(f).readString()).left();
-					}).fillY().fillX().left();
+					}).grow().left();
 				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, 600, longPress -> {
 					if (longPress) {
@@ -486,3 +638,4 @@ public class Tester extends Content {
 		}
 	}
 }
+

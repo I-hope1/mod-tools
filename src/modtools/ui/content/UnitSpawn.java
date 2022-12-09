@@ -121,7 +121,7 @@ public class UnitSpawn extends Content {
 					//					if (!isNaN(newY)) swapnY = Float.parseFloat(newY);
 				}).valid(val -> validNumber(val)).get();
 			}).growX().row();
-			table.button("选取坐标", Styles.flatToggleMenut, () -> {
+			table.button("@unitspawn.selectAposition", Styles.flatToggleMenut, () -> {
 				//				ui.hide();
 				if (el.parent == null) {
 					Core.scene.addListener(listener);
@@ -132,7 +132,7 @@ public class UnitSpawn extends Content {
 			}).growX().height(32).update(b -> {
 				b.setChecked(el.parent != null);
 			});
-			table.button("获取玩家坐标", Styles.cleart, () -> {
+			table.button("@unitspawn.getfromplayer", Styles.cleart, () -> {
 				setX(player.x);
 				setY(player.y);
 			}).growX().height(32);
@@ -140,7 +140,7 @@ public class UnitSpawn extends Content {
 		// Options2
 		ui.cont.table(Window.myPane, table -> {
 			table.table(t -> {
-				t.add("队伍");
+				t.add("@rules.title.teams");
 				teamField = t.field("" + team.id, text -> {
 					int id = (int) toInteger(text);
 					team = Team.get(id);
@@ -155,7 +155,7 @@ public class UnitSpawn extends Content {
 				t.add(btn);
 			});
 			table.table(t -> {
-				t.add("数量");
+				t.add("@filter.option.amount");
 				amountField = t.field("0", text -> {
 					amount = (int) toInteger(text);
 				}).valid(val -> validNumber(val) && Tools.validPosInt(val)).get();
@@ -164,7 +164,7 @@ public class UnitSpawn extends Content {
 		ui.cont.table(table -> {
 			table.button("@ok", Styles.cleart, this::spawn).size(90, 50)
 					.disabled(b -> !isOk());
-			table.check("loop", b -> loop = b);
+			table.check("Loop", b -> loop = b);
 		}).growX();
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
 		//		ui.addCloseButton();
@@ -229,7 +229,7 @@ public class UnitSpawn extends Content {
 				selectUnit.spawn(team, x, y);
 			}
 		} catch (Throwable e) {
-			IntUI.showException("无法生成单位 " + selectUnit.localizedName, e);
+			IntUI.showException("Can't spawn unit: " + selectUnit.localizedName, e);
 		}
 	}
 
@@ -245,21 +245,21 @@ public class UnitSpawn extends Content {
 				defCap[0] = Vars.state.rules.unitCap;
 				Vars.state.rules.unitCap = unitUnlimited ? 0xffffff : defCap[0];
 			});
-			cont.check("单位无限制", unitUnlimited, b -> {
+			cont.check("@settings.unitUnlimited", unitUnlimited, b -> {
 				unitUnlimited = b;
 				Vars.state.rules.unitCap = b ? 0xffffff : defCap[0];
 			}).fillX().row();
-			cont.button("隐藏单位死亡痕迹", () -> {
+			cont.button("@settings.noScorchMarks", () -> {
 				Vars.content.units().each(u -> {
 					u.deathExplosionEffect = Fx.none;
 					u.createScorch = false;
 					u.createWreck = false;
 				});
 			}).row();
-			cont.button("杀死所有单位", () -> {
+			cont.button("@unitspawn.killAllUnits", () -> {
 				Groups.unit.each(Unit::kill);
 			}).fillX().row();
-			cont.button("清除所有单位", () -> {
+			cont.button("@unitspawn.removeAllUnits", () -> {
 				Groups.unit.each(Unit::remove);
 				Groups.unit.clear();
 			}).fillX().row();

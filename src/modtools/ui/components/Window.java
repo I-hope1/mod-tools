@@ -1,7 +1,6 @@
 package modtools.ui.components;
 
-import arc.ApplicationListener;
-import arc.Core;
+import arc.*;
 import arc.func.Prov;
 import arc.graphics.Color;
 import arc.input.KeyCode;
@@ -22,6 +21,7 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Time;
+import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
@@ -29,7 +29,7 @@ import modtools.IntVars;
 
 import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.windowManager;
-import static modtools.ui.IntUI.icons;
+import static modtools.ui.IntUI.*;
 
 /**
  * 浮动的窗口，可以缩放，最小化，最大化
@@ -55,8 +55,27 @@ public class Window extends Table {
 		}
 	};
 
+	static Window focusWindow;
+
 	static {
 		IntVars.addResizeListener(() -> all.each(Window::display));
+
+		Events.run(Trigger.update, () -> {
+			var children = Core.scene.root.getChildren();
+			for (int i = children.size - 1; i >= 0; i--) {
+				if (children.get(i) instanceof Window) {
+					focusWindow = (Window) children.get(i);
+					break;
+				}
+			}
+			/*while (focus != null) {
+				if (focus instanceof Window) {
+					focusWindow = (Window) focus;
+					break;
+				}
+				focus = focus.parent;
+			}*/
+		});
 	}
 
 	public static Drawable myPane = Tex.pane;
@@ -77,13 +96,7 @@ public class Window extends Table {
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super(Styles.none);
 
-		addListener(new InputListener() {
-			@Override
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				setZIndex(Integer.MAX_VALUE);
-				return false;
-			}
-		});
+		tapped(this::toFront);
 		touchable = top.touchable = cont.touchable = Touchable.enabled;
 		top.margin(0);
 		cont.margin(8f);
@@ -99,7 +112,9 @@ public class Window extends Table {
 		add(top).growX().height(topHeight).row();
 		moveListener = new MoveListener(top, this);
 		this.title = top.add(title).grow().padLeft(10f).padRight(10f).update(l -> {
-			l.setColor(Core.scene.root.getChildren().peek() == this ? Color.white : Color.lightGray);
+			// var children = Core.scene.root.getChildren();
+			// l.setColor(children.peek() == this || (children.size >= 2 && children.get(children.size - 2) == this) ? Color.white : Color.lightGray);
+			l.setColor(focusWindow == this ? Color.white : Color.lightGray);
 		}).get();
 		if (full) {
 			top.button(icons.get("sticky"), Styles.clearNoneTogglei, 32, () -> {
@@ -131,7 +146,7 @@ public class Window extends Table {
 			this.minWidth = Math.max(minWidth, getMinWidth());
 			sclLisetener.set(this.minWidth, minHeight);
 			update(() -> {
-				if (sticky) setZIndex(Integer.MAX_VALUE);
+				if (sticky) toFront();
 				sclLisetener.disabled = isMaximize;
 				moveListener.disabled = sclLisetener.scling;
 			});

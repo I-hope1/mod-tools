@@ -3,6 +3,7 @@ package modtools.ui.components;
 
 import arc.graphics.Color;
 import arc.math.Interp;
+import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.ui.Image;
 import arc.scene.ui.ScrollPane;
@@ -24,8 +25,8 @@ public class IntTab {
 		title = new Table();
 		pane = new ScrollPane(null);
 		main = new Table(t -> {
-			t.add(title).width(totalWidth).row();
-			t.add(pane).growX().fillY();
+			t.add(title).width(totalWidth).top().row();
+			t.add(pane).grow();
 		});
 	}
 
@@ -60,11 +61,13 @@ public class IntTab {
 	public Table build() {
 		byte[] selected = {-1};
 		boolean[] transitional = {false};
+		Element[] first = {null};
 
 		for (byte i = 0; i < tables.size; i++) {
 			Table t = tables.get(i);
 			byte j = i;
 			title.button(b -> {
+				if (first[0] == null) first[0] = b;
 				b.add(names.get(j), colors.get(j)).padRight(15.0f).growY().row();
 				Image image = b.image().fillX().growX().get();
 				b.update(() -> {
@@ -94,8 +97,8 @@ public class IntTab {
 			}).height(42).growX();
 			if ((j + 1) % cols == 0) title.row();
 		}
-
-		title.getChildren().get(0).fireClick();
+		title.row();
+		first[0].fireClick();
 		return main;
 	}
 }

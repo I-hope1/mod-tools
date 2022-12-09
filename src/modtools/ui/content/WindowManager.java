@@ -11,7 +11,7 @@ import static modtools.ui.IntUI.icons;
 
 public class WindowManager extends Content {
 	public WindowManager() {
-		super("窗口管理");
+		super("windowManager");
 	}
 
 	public Window ui;

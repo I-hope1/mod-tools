@@ -5,13 +5,14 @@ import arc.Events;
 import arc.func.Boolf;
 import arc.func.Boolp;
 import arc.graphics.*;
-import arc.graphics.g2d.Draw;
-import arc.graphics.g2d.TextureRegion;
+import arc.graphics.g2d.*;
 import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
 import arc.struct.Seq;
+import arc.util.Log;
 import mindustry.game.EventType;
+import mindustry.game.EventType.Trigger;
 import mindustry.gen.EffectState;
 
 /**
@@ -80,7 +81,8 @@ public class WorldDraw {
 	}
 
 	static {
-		Events.run(EventType.Trigger.draw, () -> {
+		Events.run(Trigger.draw, () -> {
+			Draw.reset();
 			Vec2 v1 = Core.camera.unproject(0, 0).cpy();
 			Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
 			rect.set(v1.x, v1.y, v2.x - v1.x, v2.y - v1.y);
@@ -104,15 +106,18 @@ public class WorldDraw {
 	public static Texture drawTexture(FrameBuffer buffer, Runnable draw) {
 		Draw.flush();
 		// 绑定
+		// buffer.begin(Color.clear);
 		buffer.bind();
 		// 清空
-		Gl.clear(Gl.colorBufferBit);
-		// buffer.begin(Color.clear);
+		Gl.clearColor(0, 0, 0, 0);
+		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 		draw.run();
 		// 结束
 		buffer.end();
 		// buffer.dispose();
-		return buffer.getTexture();
+		Texture texture = buffer.getTexture();
+		texture.bind(1);
+		return texture;
 	}
 
 

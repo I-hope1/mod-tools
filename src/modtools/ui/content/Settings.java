@@ -1,8 +1,15 @@
 
 package modtools.ui.content;
 
+import arc.Core;
+import arc.func.*;
+import arc.scene.event.Touchable;
+import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
+import arc.util.Strings;
+import mindustry.Vars;
 import mindustry.graphics.Pal;
+import mindustry.ui.Styles;
 import modtools.ui.components.Window;
 
 import static modtools.IntVars.frag;
@@ -48,18 +55,42 @@ public class Settings extends Content {
 		cont = new Table();
 		ui.cont.pane(cont).fillX().fillY();
 		cont.defaults().width(400);
-		add("load", loadTable);
-		add("其他", new Table() {{
+		add("Load", loadTable);
+		add("@mod-tools.others", new Table() {{
 			left().defaults().left();
-			check("显示主菜单背景", settings.getBool("ShowMainMenuBackground"), b -> settings.put("ShowMainMenuBackground", b)).row();
-			check("ui过多检查", topGroup.checkUI, b -> topGroup.checkUI = b);
-			check("frag置于顶层", frag.keepFrag, b -> settings.put("ShowMainMenuBackground", frag.keepFrag = b));
+			check("@settings.mainmenubackground", settings.getBool("ShowMainMenuBackground"), b -> settings.put("ShowMainMenuBackground", b)).row();
+			check("@settings.checkuicount", topGroup.checkUI, b -> topGroup.checkUI = b).row();
+			check("@settings.fragtofront", frag.keepFrag, b -> settings.put("ShowMainMenuBackground", frag.keepFrag = b)).row();
+			Settings.slider(this, "rendererMinZoom", 0.1f, Vars.renderer.minZoom, Vars.renderer.minZoom, 0.1f, val -> {
+				Vars.renderer.minZoom = val;
+			}).change();
+			Settings.slider(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1f, val -> {
+				Vars.maxSchematicSize = (int) val;
+			}).change();
 		}});
 		Content.all.forEach(cont -> {
 			if (!(cont instanceof Settings)) {
 				addLoad(cont);
 			}
 		});
-//		ui.addCloseButton();
+		// ui.addCloseButton();
+	}
+
+	public static Slider slider(Table table, String name, float min, float max, float def, float step, Floatc floatc) {
+		Slider slider = new Slider(min, max, step, false);
+		slider.setValue(settings.getFloat(name, def));
+		Label value = new Label("", Styles.outlineLabel);
+		slider.moved(val -> {
+			settings.put(name, val);
+			value.setText(String.valueOf(val));
+			floatc.get(val);
+		});
+		Table content = new Table();
+		content.add(Core.bundle.get("settings." + name, name), Styles.outlineLabel).left().growX().wrap();
+		content.add(value).padLeft(10f).right();
+		content.margin(3f, 33f, 3f, 33f);
+		content.touchable = Touchable.disabled;
+		table.stack(slider, content).growX().padTop(4f).row();
+		return slider;
 	}
 }

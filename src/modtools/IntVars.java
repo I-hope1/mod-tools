@@ -21,6 +21,10 @@ public class IntVars {
 	public static final Frag frag = new Frag();
 	public static final TopGroup topGroup = new TopGroup();
 
+	static {
+		Core.scene.add(topGroup);
+	}
+
 	public static void load() {
 		if (frag.getChildren().isEmpty()) frag.load();
 		else topGroup.addChild(frag);

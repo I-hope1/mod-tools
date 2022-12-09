@@ -51,6 +51,7 @@ import java.util.function.Consumer;
 
 import static mindustry.Vars.tilesize;
 import static mindustry.Vars.world;
+import static modtools.IntVars.topGroup;
 import static modtools.utils.MySettings.settings;
 import static modtools.utils.WorldDraw.drawRegion;
 import static modtools.utils.WorldDraw.rect;
@@ -63,7 +64,7 @@ public class Selection extends Content {
 	final ObjectMap<String, Boolean> select = ObjectMap.of(
 			"tile", settings.getBool(getSettingName() + "-tile", "true"),
 			"building", settings.getBool(getSettingName() + "-building", "false"),
-			"floor", settings.getBool(getSettingName() + "-floor", "false"),
+			"bullet", settings.getBool(getSettingName() + "-bullet", "false"),
 			"unit", settings.getBool(getSettingName() + "-unit", "false")
 	);
 
@@ -71,7 +72,8 @@ public class Selection extends Content {
 	// public ObjectSet<Object> focusSet = new ObjectSet<>();
 	// public Vec2 focusFrom = new Vec2();
 	public WorldDraw unitWD = new WorldDraw(Layer.weather), tileWD = new WorldDraw(Layer.darkness + 1),
-			buildWD = new WorldDraw(Layer.darkness), otherWD = new WorldDraw(Layer.overlayUI);
+			buildWD = new WorldDraw(Layer.darkness), bulletWD = new WorldDraw(Layer.bullet + 5),
+			otherWD = new WorldDraw(Layer.overlayUI);
 	public Element fragSelect;
 	public Window pane;
 	public Table functions;
@@ -85,6 +87,7 @@ public class Selection extends Content {
 	Function<Tile> tiles;
 	Function<Building> buildings;
 	Function<Unit> units;
+	Function<Bullet> bullets;
 	public static ObjectMap<String, Function<?>> all = new ObjectMap<>();
 
 	public void loadSettings() {
@@ -124,15 +127,16 @@ public class Selection extends Content {
 		}).growX().left().padLeft(16).row();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("在世界反应焦点", settings.getBool("focusOnWorld"), b -> settings.put("focusOnWorld", b)).row();
-			t.check("在世界中显示已选", drawSelect, b -> drawSelect = b);
+			t.check("@settings.focusOnWorld", settings.getBool("focusOnWorld"), b -> settings.put("focusOnWorld", b)).row();
+			t.check("@settings.drawSelect", drawSelect, b -> drawSelect = b);
 		}).growX().left().padLeft(16).row();
+
 		Contents.settings.add(table);
 	}
 
 	public void load() {
 		fragSelect = new Element();
-		fragSelect.update(() -> fragSelect.toFront());
+		// fragSelect.update(() -> fragSelect.toFront());
 		fragSelect.touchable = Touchable.enabled;
 		fragSelect.setFillParent(true);
 
@@ -201,9 +205,20 @@ public class Selection extends Content {
 				if (!Core.input.alt()) {
 					tiles.clearList();
 					buildings.clearList();
+					bullets.clearList();
 					units.clearList();
 				}
 
+				if (select.get("bullet")) {
+					Groups.bullet.each(bullet -> {
+						// 返回单位是否在所选区域内
+						return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
+					}, bullet -> {
+						if (!bullets.list.contains(bullet)) {
+							bullets.add(bullet);
+						}
+					});
+				}
 				if (select.get("unit")) {
 					Groups.unit.each(unit -> {
 						// 返回单位是否在所选区域内
@@ -223,7 +238,7 @@ public class Selection extends Content {
 					for (float x = minX; x < maxX; x += tilesize) {
 						Tile tile = world.tileWorld(x, y);
 						if (tile != null) {
-							if ((select.get("tile") || select.get("floor")) && !tiles.list.contains(tile)) {
+							if (select.get("tile") && !tiles.list.contains(tile)) {
 								tiles.add(tile);
 							}
 
@@ -250,7 +265,7 @@ public class Selection extends Content {
 
 		functions = new Table();
 		functions.defaults().width(buttonWidth);
-		pane = new Window("选择", 0/* two buttons */, maxH, true);
+		pane = new Window(localizedName(), 0/* two buttons */, maxH, true);
 		pane.hidden(this::hide);
 		ScrollPaneStyle paneStyle = new ScrollPaneStyle();
 		paneStyle.background = Styles.none;
@@ -415,6 +430,10 @@ public class Selection extends Content {
 			});
 		});
 
+		bullets = new BulletFunction<>("bullet", (t, func) -> {
+
+		});
+
 		//		pane.show();
 		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
@@ -468,6 +487,10 @@ public class Selection extends Content {
 		return new Rect(t.x, t.y, region.width, region.height);
 	}
 
+	public static Rect getWorldRect(Bullet t) {
+		return new Rect(t.x, t.y, t.hitSize, t.hitSize);
+	}
+
 
 	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
 		FunctionBuild(t, name, btn -> {
@@ -496,6 +519,51 @@ public class Selection extends Content {
 
 			IntUI.showSelectImageTableWithIcons(btn, new Seq<>(arr), icons, () -> null, cons, 42.0f, 32.0f, 3, false);
 		});
+	}
+
+	public class BulletFunction<T extends Bullet> extends Function<T> {
+		public BulletFunction(String name, Cons2<Table, Function<T>> cons) {
+			super(name, cons);
+		}
+
+		public void buildTable(T bullet, Table table) {
+			table.add(String.valueOf(bullet.type)).row();
+			table.label(() -> "(" + bullet.x + ", " + bullet.y + ')');
+		}
+
+		public ObjectMap<Float, TextureRegion> map = new ObjectMap<>();
+
+		public TextureRegion getRegion(T bullet) {
+			float rsize = bullet.hitSize * 1.4f * 4;
+			return map.get(bullet.hitSize, () -> {
+				int size = (int) (rsize * 2);
+				float thick = 12f;
+				return drawRegion(size, size, () -> {
+					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Color.sky);
+				});
+			});
+		}
+
+		@Override
+		public void add(T bullet) {
+			super.add(bullet);
+			if (!drawSelect) return;
+			TextureRegion region = getRegion(bullet);
+			bulletWD.drawSeq.add(() -> {
+				if (!bullet.isAdded()) {
+					return false;
+				}
+				if (!rect.contains(bullet.x, bullet.y)) return true;
+				Draw.rect(region, bullet.x, bullet.y);
+				return true;
+			});
+		}
+
+		@Override
+		public void clearList() {
+			super.clearList();
+			if (!bulletWD.drawSeq.isEmpty()) bulletWD.drawSeq.clear();
+		}
 	}
 
 	public class UnitFunction<T extends Unit> extends Function<T> {
@@ -628,9 +696,11 @@ public class Selection extends Content {
 			super.add(tile);
 			if (!drawSelect) return;
 			TextureRegion region = getRegion(tile);
+			// int thick = 3;
 			tileWD.drawSeq.add(() -> {
 				if (!rect.contains(tile.worldx(), tile.worldy())) return true;
 				Draw.rect(region, tile.worldx(), tile.worldy());
+				// MyDraw.dashSquare(thick, Pal.accentBack, tile.worldx(), tile.worldy(), size);
 				return true;
 			});
 		}
@@ -643,6 +713,14 @@ public class Selection extends Content {
 			}
 		}
 	}
+
+	public final Task task2 = new Task() {
+		@Override
+		public void run() {
+			focusElem = null;
+		}
+	};
+
 
 	public abstract class Function<T> {
 		public final Table wrap;
@@ -710,27 +788,31 @@ public class Selection extends Content {
 				cont.pane(table -> {
 					list.forEach(item -> {
 						var cont = new Table(Tex.pane) {
-							Task task, task2;
+							public final Task task = new Task() {
+								@Override
+								public void run() {
+									if (item instanceof Tile) focusTile = null;
+									else if (item instanceof Building) focusBuild = null;
+									else if (item instanceof Unit) focusUnits.remove((Unit) item);
+									else if (item instanceof Bullet) focusBullets.remove((Bullet) item);
+									focusLock = false;
+								}
+							};
 
 							public Element hit(float x, float y, boolean touchable) {
 								Element tmp = super.hit(x, y, touchable);
 								if (tmp == null) return null;
-								if (task2 != null) task2.cancel();
 								focusElem = this;
-								task2 = Time.runTask(2, () -> {
-									focusElem = null;
-								});
+								if (task2.isScheduled()) task2.cancel();
+								Timer.schedule(task2, Time.delta * 2f / 60f);
 								if (item instanceof Tile) focusTile = (Tile) item;
 								else if (item instanceof Building) focusBuild = (Building) item;
 								else if (item instanceof Unit) focusUnits.add((Unit) item);
-								if (task != null) task.cancel();
+								else if (item instanceof Bullet) focusBullets.add((Bullet) item);
+								if (task.isScheduled()) task.cancel();
+
 								focusLock = true;
-								task = Time.runTask(2, () -> {
-									if (item instanceof Tile) focusTile = null;
-									else if (item instanceof Building) focusBuild = null;
-									else if (item instanceof Unit) focusUnits.remove((Unit) item);
-									focusLock = false;
-								});
+								Timer.schedule(task, Time.delta * 2f / 60f);
 								return tmp;
 							}
 
@@ -747,11 +829,11 @@ public class Selection extends Content {
 								update(() -> {
 									if (!focusLock && (focusTile == item || focusBuild == item
 											|| (item instanceof Unit && focusUnits.contains((Unit) item)))) {
-										if (task2 != null) task2.cancel();
 										focusElem = this;
-										task2 = Time.runTask(2, () -> {
-											focusElem = null;
-										});
+										if (task.isScheduled()) task.cancel();
+										Timer.schedule(task, Time.delta * 2f / 60f);
+										if (task2.isScheduled()) task2.cancel();
+										Timer.schedule(task2, Time.delta * 2f / 60f);
 									}
 								});
 							}
@@ -782,13 +864,18 @@ public class Selection extends Content {
 
 	}
 
-	Vec2 mouse;
+	Vec2 mouse = new Vec2();
+	Vec2 mouseWorld = new Vec2();
 
 	public void drawFocus() {
-		mouse = Core.input.mouseWorld();
+		mouse.set(Core.input.mouse());
+		mouseWorld.set(Core.camera.unproject(mouse));
 		drawFocus(focusTile);
 		drawFocus(focusBuild);
 		for (var focus : focusUnits) {
+			drawFocus(focus);
+		}
+		for (var focus : focusBullets) {
 			drawFocus(focus);
 		}
 	}
@@ -802,20 +889,31 @@ public class Selection extends Content {
 			rect = getWorldRect((Building) focus);
 		} else if (focus instanceof Unit) {
 			rect = getWorldRect((Unit) focus);
+		} else if (focus instanceof Bullet) {
+			rect = getWorldRect((Bullet) focus);
 		} else return;
 		// Color lastColor = Draw.getColor().cpy();
 
 		Draw.color(focusColor);
 		// Log.info(Draw.getColor());
 		// float z = Draw.z();
-		Draw.z(Layer.end);
-		Fill.rect(rect.x, rect.y, rect.width / 4f, rect.height / 4f);
+		Draw.z(Layer.max);
+		Vec2 tmp = Core.camera.project(rect.x, rect.y);
+		float x = tmp.x, y = tmp.y;
+		tmp = Core.camera.project(rect.x + rect.width / 4f, rect.y + rect.height / 4f);
+		float w = tmp.x - x, h = tmp.y - y;
+		Fill.rect(x, y, w, h);
 		// Vec2 vec2 = Core.camera.unproject(focusFrom.x, focusFrom.y);
 		Draw.color(Pal.accent);
-		Lines.line(mouse.x, mouse.y, rect.x, rect.y);
+
+		Lines.stroke(4f);
 		if (focusElem != null) {
-			Vec2 vec2 = Core.camera.unproject(Tools.getAbsPos(focusElem));
-			Lines.line(vec2.x, vec2.y, rect.x, rect.y);
+			Vec2 vec2 = focusElem.localToStageCoordinates(
+					Tmp.v1.set(focusElem.getWidth(), focusElem.getHeight()));
+			Lines.line(vec2.x, vec2.y, x, y);
+			vec2 = focusElem.localToStageCoordinates(
+					Tmp.v1.set(0, 0));
+			Lines.line(vec2.x, vec2.y, x, y);
 		}
 		// Draw.z(z);
 		// Draw.color(lastColor);
@@ -826,18 +924,18 @@ public class Selection extends Content {
 	private Tile focusTile;
 	private Building focusBuild;
 	private final ObjectSet<Unit> focusUnits = new ObjectSet<>();
+	private final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
 
 	{
 		otherWD.drawSeq.add(() -> {
 			if (!focusLock) {
 				focusUnits.clear();
 				if (settings.getBool("focusOnWorld")) {
-					Vec2 mouseWorld = Core.input.mouseWorld();
 					focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
 					focusBuild = focusTile != null ? focusTile.build : null;
 					Groups.unit.each(u -> {
-						if (mouse.x > u.x - u.hitSize && mouse.y > u.y - u.hitSize
-								&& mouse.x < u.x + u.hitSize && mouse.y < u.y + u.hitSize)
+						if (this.mouseWorld.x > u.x - u.hitSize && this.mouseWorld.y > u.y - u.hitSize
+								&& this.mouseWorld.x < u.x + u.hitSize && this.mouseWorld.y < u.y + u.hitSize)
 							focusUnits.add(u);
 					});
 				} else {
@@ -851,6 +949,9 @@ public class Selection extends Content {
 			}
 
 
+			return true;
+		});
+		topGroup.drawSeq.add(() -> {
 			drawFocus();
 			return true;
 		});

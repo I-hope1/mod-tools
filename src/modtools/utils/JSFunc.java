@@ -3,9 +3,9 @@ package modtools.utils;
 import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.Font;
 import arc.math.Mathf;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
@@ -17,25 +17,26 @@ import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.ui.IntStyles;
-import modtools.ui.IntUI;
-import modtools.ui.MyFonts;
+import modtools.ui.*;
 import modtools.ui.components.*;
-import modtools.ui.content.ElementShow.ElementShowDialog;
-import modtools.ui.content.Selection;
+import modtools.ui.content.*;
+import modtools.ui.content.ElementShow.ElementShowWindow;
 import modtools_lib.MyReflect;
 import rhino.*;
 
+import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
 import static modtools.ui.Contents.*;
+import static modtools.utils.Tools.getAbsPos;
 
 public class JSFunc {
 	public static ClassLoader main;
 	public static Scriptable scope;
-	public static final ObjectMap<String, NativeJavaClass> classes;
+	public static final ObjectMap<String, Scriptable> classes;
+	public static final Font FONT = MyFonts.MSYHMONO;
 	public static final Class<?> Reflect = MyReflect.class;
 
 	/*public static Object eval(String code) {
@@ -44,6 +45,7 @@ public class JSFunc {
 	}*/
 
 	public static Window showInfo(Object o) {
+		if (o == null) return null;
 		return showInfo(o, o.getClass());
 	}
 
@@ -53,13 +55,14 @@ public class JSFunc {
 
 	public static final Color keyword = Color.valueOf("ff657a"),
 			type = Color.valueOf("9cd1bb"),
-			number = Color.valueOf("bad761");
+			number = Color.valueOf("bad761"),
+			underline = Color.gray.a(0.7f);
 
 	public static final LabelStyle
-			keywordStyle = new LabelStyle(MyFonts.MSYHMONO, keyword),
-			typeStyle = new LabelStyle(MyFonts.MSYHMONO, type),
-			lightGrayStyle = new LabelStyle(MyFonts.MSYHMONO, Color.lightGray),
-			redStyle = new LabelStyle(MyFonts.MSYHMONO, Color.red);
+			keywordStyle = new LabelStyle(FONT, keyword),
+			typeStyle = new LabelStyle(FONT, type),
+			lightGrayStyle = new LabelStyle(FONT, Color.lightGray),
+			redStyle = new LabelStyle(FONT, Color.red);
 
 
 	public static Window showInfo(Object o, Class<?> clazz) {
@@ -88,7 +91,7 @@ public class JSFunc {
 			}
 		});
 		if (clazz.isArray()) {
-			if (o == null) return null;
+			if (o == null) return new Window("none");
 			Table _cont = new Table();
 			_cont.defaults().grow();
 			_cont.button(Icon.refresh, Styles.clearNonei, () -> {
@@ -96,9 +99,9 @@ public class JSFunc {
 				Time.runTask(0, () -> {
 					dialog[0].hide();
 					try {
-						showInfo(o, clazz).setPosition(Tools.getAbsPos(dialog[0]));
+						showInfo(o, clazz).setPosition(getAbsPos(dialog[0]));
 					} catch (Throwable e) {
-						IntUI.showException(e).setPosition(Tools.getAbsPos(dialog[0]));
+						IntUI.showException(e).setPosition(getAbsPos(dialog[0]));
 					}
 					dialog[0] = null;
 				});
@@ -107,19 +110,22 @@ public class JSFunc {
 
 			for (int i = 0; i < length; i++) {
 				Object item = Array.get(o, i);
-				var button = new TextButton("" + item);
+				var button = new TextButton("" + item, Styles.grayt);
+				int j = i;
+				addWatchButton(button, o + "#" + i, () -> Array.get(o, j));
 				button.clicked(() -> {
 					// 使用Time.runTask避免stack overflow
-					if (item != null) Time.runTask(0, () -> showInfo(item).setPosition(Tools.getAbsPos(button)));
+					if (item != null) Time.runTask(0, () -> showInfo(item).setPosition(getAbsPos(button)));
 					else IntUI.showException(new NullPointerException("item is null"));
 				});
 				_cont.add(button).fillX().minHeight(40).row();
+				_cont.image().color(underline).growX().row();
 			}
 
-			return dialog[0] = new Window(clazz.getSimpleName(), 200, 200, true) {{
-				cont.pane(_cont).grow();
-				//				addCloseButton();
-			}}.show();
+			dialog[0] = new Window(clazz.getSimpleName(), 200, 200, true);
+			dialog[0].cont.pane(_cont).grow();
+			dialog[0].show();
+			return dialog[0];
 		}
 		dialog[0] = new ShowInfoWindow(clazz);
 
@@ -141,9 +147,7 @@ public class JSFunc {
 				});*/
 				rebuild.get(null);
 			}).size(50);
-			t.button("存储为js变量", () -> {}).padLeft(10f).height(50).growX().maxWidth(600).with(b -> {
-				b.clicked(() -> tester.put(b, o));
-			}).row();
+			addStoreButton(t, "", () -> o);
 		}).growX().row();
 		cont.table(t -> {
 			t.button(Tex.whiteui, 35, null).size(42).with(img -> {
@@ -167,7 +171,22 @@ public class JSFunc {
 		// cont.add(build).grow();
 
 		dialog[0].cont.add(cont).row();
-		dialog[0].cont.pane(build).grow();
+		dialog[0].cont.add(new ScrollPane(build)/* {
+			Seq<Cell> bak = build.getCells().copy();
+
+			@Override
+			public void draw() {
+				super.draw();
+				Seq<Cell> now = build.getCells();
+				Element elem;
+				for (int i = 0; i < now.size; i++) {
+					elem = now.get(i).get();
+					if (elem == null || !(0 <= elem.x && width >= elem.y && 0 <= elem.y && height >= elem.y)) {
+						now.get(i).clearElement();
+					} else now.get(i).set(bak.get(i));
+				}
+			}
+		}*/).grow();
 		//		dialog.addCloseButton();
 		dialog[0].show();
 		assert dialog[0] != null;
@@ -213,26 +232,26 @@ public class JSFunc {
 			window.classesTable.filter(name -> pattern == null || pattern.matcher(name).find() != isBlack);
 			return;
 		}
-		cont.add("字段").row();
+		cont.add("@jsfunc.field").row();
 		cont.image().color(Pal.accent).fillX().row();
 		var fields = window.fieldsTable = cont.add(new ReflectTable())
 				.pad(4, 6, 4, 6)
 				.fillX().padTop(8).get();
 		fields.left().defaults().left().top();
 		cont.row();
-		cont.add("函数").row();
+		cont.add("@jsfunc.method").row();
 		cont.image().color(Pal.accent).fillX().row();
 		var methods = window.methodsTable = cont.add(new ReflectTable())
 				.pad(4, 6, 4, 6)
 				.fillX().padTop(8).get();
 		methods.left().defaults().left().top();
 		cont.row();
-		cont.add("构造器").row();
+		cont.add("@jsfunc.constructor").row();
 		cont.image().color(Pal.accent).fillX().row();
 		Table constructors = cont.table(t -> t.left().defaults().left().top())
 				.pad(4, 6, 4, 6).fill().padTop(8).get();
 		cont.row();
-		cont.add("类").row();
+		cont.add("@jsfunc.class").row();
 		cont.image().color(Pal.accent).fillX().row();
 		var classes = window.classesTable = cont.add(new ReflectTable())
 				.pad(4, 6, 4, 6)
@@ -302,8 +321,24 @@ public class JSFunc {
 					try {
 						l.setVal(f.get(o));
 						if (l.val instanceof Color) {
+							final Color color = (Color) l.val;
 							cell.setElement(new BorderImage(Core.atlas.white(), 2f)
-									.border(((Color) l.val).cpy().inv())).color((Color) l.val).size(42f);
+									.border(color.cpy().inv())).color(color).size(42f).with(b -> {
+								IntUI.doubleClick(b, () -> {}, () -> {
+									Vars.ui.picker.show(color, cur -> {
+										Log.info(color);
+										Log.info(color.set(cur));
+										Log.info(color == Color.white);
+										Log.info(color);
+										Log.info(Color.white);
+										try {
+											Log.info(f.get(o));
+										} catch (IllegalAccessException e) {
+											throw new RuntimeException(e);
+										}
+									});
+								});
+							});
 						}
 						// prefW[0] = l.getPrefWidth();
 						// listener.run();
@@ -340,14 +375,16 @@ public class JSFunc {
 						});
 					}*/
 
-					t.button("将字段储存为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
-						b.clicked(() -> tester.put(b, f));
-					});
-					t.button("将值存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
-						b.clicked(() -> tester.put(b, l.val));
-					});
-				}).pad(4).row();
+					t.table(buttons -> {
+						buttons.right().top().defaults().right().top();
+						addLabelButton(buttons, () -> l.val, l.type);
+						addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
+						addWatchButton(buttons, f.getDeclaringClass().getName() + ": " + f.getName(), () -> f.get(o));
+					}).grow().top().right();
+				}).pad(4).growX().left().row();
+				fields.image().color(underline).growX().colspan(6).row();
 			}
+			if (fields.hasChildren()) fields.getChildren().peek().remove();
 
 
 			// 函数
@@ -417,38 +454,45 @@ public class JSFunc {
 							// float[] prefW = {0};
 							t.add(l)/*.self(c -> c.update(__ -> c.width(Math.min(prefW[0], Core.graphics.getWidth()))))*/;
 
-							t.button("invoke", () -> {
-								try {
-									l.setVal(m.invoke(o));
-									// l.setWrap(false);
-									// prefW[0] = l.getPrefWidth();
-									// l.setWrap(true);
+							t.table(buttons -> {
+								buttons.right().top().defaults().right().top();
+								buttons.button("Invoke", Styles.flatBordert, () -> {
+									try {
+										l.setVal(m.invoke(o));
+										// l.setWrap(false);
+										// prefW[0] = l.getPrefWidth();
+										// l.setWrap(true);
 
-									if (l.val instanceof Color) {
-										cell.setElement(new Image(IntUI.whiteui.tint((Color) l.val))).size(32).padRight(4).touchable(Touchable.disabled);
+										if (l.val instanceof Color) {
+											cell.setElement(new Image(IntUI.whiteui.tint((Color) l.val))).size(32).padRight(4).touchable(Touchable.disabled);
+										}
+										if (l.val != null && !(l.val instanceof String) && !m.getReturnType().isPrimitive()) {
+											//											l.setColor(Color.white);
+											l.addShowInfoListener();
+										} else {
+											l.setColor(number);
+										}
+									} catch (Throwable ex) {
+										IntUI.showException("invoke出错", ex).setPosition(getAbsPos(l));
 									}
-									if (l.val != null && !(l.val instanceof String) && !m.getReturnType().isPrimitive()) {
-										//											l.setColor(Color.white);
-										l.addShowInfoListener();
-									} else {
-										l.setColor(number);
-									}
-								} catch (Throwable ex) {
-									IntUI.showException("invoke出错", ex).setPosition(Tools.getAbsPos(l));
-								}
 
-							}).width(100);
+								}).width(100);
+								addLabelButton(buttons, () -> l.val, l.type);
+								addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
+							}).grow().top().right();
+						} else {
+							t.table(buttons -> {
+								buttons.right().top().defaults().right().top();
+								addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
+							}).grow().top().right();
 						}
-
-						t.button("将函数存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
-							b.clicked(() -> tester.put(b, m));
-						});
-					}).pad(4).row();
+					}).pad(4).growX().left().row();
 				} catch (Throwable err) {
 					methods.add("<" + err + ">", redStyle);
 				}
-
+				methods.image().color(underline).growX().colspan(6).row();
 			}
+			if (methods.hasChildren()) methods.getChildren().peek().remove();
 
 			// 构造器
 			Constructor<?>[] constructors1;
@@ -492,14 +536,16 @@ public class JSFunc {
 							t.add(new MyLabel(joiner.toString(), typeStyle));
 						}
 
-						t.button("将函数存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
-							b.clicked(() -> tester.put(b, cons));
-						});
+						t.table(buttons -> {
+							addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
+						}).grow().top().right();
 					} catch (Throwable e) {
 						Log.err(e);
 					}
-				}).pad(4).row();
+				}).pad(4).growX().left().row();
+				constructors.image().color(underline).growX().colspan(6).row();
 			}
+			if (constructors.hasChildren()) constructors.getChildren().peek().remove();
 
 			for (Class<?> dcls : cls.getDeclaredClasses()) {
 				classes.bind(dcls.getName());
@@ -520,25 +566,28 @@ public class JSFunc {
 								// 使用Time.runTask避免stack overflow
 								Time.runTask(0, () -> {
 									try {
-										showInfo(dcls).setPosition(Tools.getAbsPos(l));
+										showInfo(dcls).setPosition(getAbsPos(l));
 									} catch (Throwable e) {
-										IntUI.showException(e).setPosition(Tools.getAbsPos(l));
+										IntUI.showException(e).setPosition(getAbsPos(l));
 									}
 								});
 							}
 						});
 
-						t.button("将类存储为js变量", () -> {}).padLeft(10f).size(180, 40).with(b -> {
-							b.clicked(() -> tester.put(b, dcls));
-						});
+						t.table(buttons -> {
+							addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> dcls);
+						}).grow().top().right();
 					} catch (Throwable e) {
 						Log.err(e);
 					}
-				}).pad(4).row();
+				}).pad(4).growX().left().row();
+				classes.image().color(underline).growX().colspan(6).row();
 			}
+			if (classes.hasChildren()) classes.getChildren().peek().remove();
 		}
 		// return mainRun;
 	}
+
 
 	public static CharSequence format(Class<?> cls) {
 		StringBuilder base = new StringBuilder();
@@ -568,8 +617,13 @@ public class JSFunc {
 		return testElement(new Label(text));
 	}
 
+	public static Window testElement(Cons<Table> cons) {
+		return testElement(new Table(cons));
+	}
+
+
 	public static void showElement(Element element) {
-		new ElementShowDialog().show(element);
+		new ElementShowWindow().show(element);
 	}
 
 	public static Selection.Function<?> getFunction(String name) {
@@ -587,17 +641,17 @@ public class JSFunc {
 		return o;
 	}
 
-	public static NativeJavaClass findClass(String name, boolean isAdapter) throws ClassNotFoundException {
+	public static Scriptable findClass(String name, boolean isAdapter) throws ClassNotFoundException {
 		if (classes.containsKey(name)) {
 			return classes.get(name);
 		} else {
-			NativeJavaClass clazz = new NativeJavaClass(scope, main.loadClass(name), isAdapter);
+			Scriptable clazz = tester.cx.getWrapFactory().wrapJavaClass(tester.cx, scope, main.loadClass(name));
 			classes.put(name, clazz);
 			return clazz;
 		}
 	}
 
-	public static NativeJavaClass findClass(String name) throws ClassNotFoundException {
+	public static Scriptable findClass(String name) throws ClassNotFoundException {
 		return findClass(name, true);
 	}
 
@@ -614,48 +668,6 @@ public class JSFunc {
 		scope = Vars.mods.getScripts().scope;
 		classes = new ObjectMap<>();
 		// V8.createV8Runtime();
-	}
-
-	static class ShowInfoWindow extends Window {
-
-		private final Class<?> clazz;
-		private ReflectTable
-				fieldsTable,
-				methodsTable,
-				classesTable;
-
-		public ShowInfoWindow(Class<?> clazz) {
-			super(getName(clazz), 200, 200, true);
-			this.clazz = clazz;
-
-			hidden(() -> {
-				all.remove(this);
-				clearChildren();
-				/*fieldsTable.clear();
-				methodsTable.clear();
-				classesTable.clear();
-				fieldsTable = null;
-				methodsTable = null;
-				classesTable = null;*/
-			});
-		}
-
-		public void build() {
-		}
-
-		@Override
-		public String toString() {
-			return getClass().getSimpleName() + "#" + title.getText();
-		}
-
-		public static String getName(Class<?> cls) {
-			while (cls != null) {
-				String tmp = cls.getName();
-				if (!tmp.isEmpty()) return tmp;
-				cls = cls.getSuperclass();
-			}
-			return "unknown";
-		}
 	}
 
 	static class BindCell {
@@ -724,8 +736,7 @@ public class JSFunc {
 				t.add(cls.getSimpleName(), IntStyles.myLabel).row();
 				t.image().color(Color.lightGray).fillX().padTop(6).row();
 				heads.put(cls, t);
-			}).growY().row();
-
+			}).growX().growY().row();
 		}
 	}
 
@@ -761,7 +772,11 @@ public class JSFunc {
 			if (this.val == val) return;
 			this.val = val;
 			hasChange = true;
-			setText(type == String.class ? '"' + (String) val + '"' : String.valueOf(val));
+			String text = type == String.class ? '"' + (String) val + '"' : String.valueOf(val);
+			if (text.length() > 1000) {
+				text = text.substring(0, 1000) + "  ...";
+			}
+			setText(text);
 		}
 
 		public void clearVal() {
@@ -781,22 +796,103 @@ public class JSFunc {
 			}
 		}
 
+		public static final boolean disabled = true;
+
 		public void addShowInfoListener() {
+			// disabled
+			if (disabled) return;
 			IntUI.longPress(this, 600, b -> {
 				if (!b) return;
 				// 使用Time.runTask避免stack overflow
 				Time.runTask(0, () -> {
 					try {
 						if (val != null) {
-							showInfo(val).setPosition(Tools.getAbsPos(this));
+							showInfo(val).setPosition(getAbsPos(this));
 						} else {
-							showInfo(null, type).setPosition(Tools.getAbsPos(this));
+							showInfo(null, type).setPosition(getAbsPos(this));
 						}
 					} catch (Throwable e) {
-						IntUI.showException(e).setPosition(Tools.getAbsPos(this));
+						IntUI.showException(e).setPosition(getAbsPos(this));
 					}
 				});
 			});
 		}
+	}
+
+	public static class WatchWindow extends Window {
+		Table pane;
+
+		public WatchWindow() {
+			super("Watch");
+			pane = new Table();
+			cont.add(new ScrollPane(pane)).minSize(220, 120).grow();
+		}
+
+		public WatchWindow watch(String info, MyProv<Object> value) {
+			return watch(info, value, 0);
+		}
+
+		public WatchWindow watch(String info, MyProv<Object> value, float interval) {
+			pane.add(info).color(Pal.accent).growX().left().row();
+			pane.image().color(underline).growX().row();
+			var label = new MyLabel(() -> {
+				try {
+					return String.valueOf(value.get());
+				} catch (Exception e) {
+					StringWriter sw = new StringWriter();
+					PrintWriter pw = new PrintWriter(sw);
+					e.printStackTrace(pw);
+					return sw.toString();
+				}
+			});
+			label.interval = interval;
+			pane.add(label).style(IntStyles.myLabel).growX().left().padLeft(6f).row();
+			pane.image().color(Pal.accent).growX().row();
+			pack();
+			return this;
+		}
+
+		public String toString() {
+			return "Watch@" + hashCode();
+		}
+	}
+
+	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
+		table.button("@details", Styles.flatBordert, () -> {
+			Object o = prov.get();
+			showInfo(o, o != null ? o.getClass() : clazz);
+		}).size(96, 45);
+		addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
+	}
+
+	public static void addStoreButton(Table table, String key, Prov<?> prov) {
+		table.button(
+				key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2") : Core.bundle.format("jsfunc.store_as_js_var", key),
+				Styles.flatBordert, () -> {}).padLeft(10f).size(180, 40).with(b -> {
+			b.clicked(() -> {
+				tester.put(b, prov.get());
+			});
+		});
+	}
+
+	public static WatchWindow watch(String info, MyProv<Object> value) {
+		return watch(info, value, 0);
+	}
+
+	public static WatchWindow watch(String info, MyProv<Object> value, float interval) {
+		return new WatchWindow() {{
+			watch(info, value);
+			show();
+		}};
+	}
+
+	public static void addWatchButton(Table buttons, String info, MyProv<Object> value) {
+		buttons.button(Icon.eyeSmall, Styles.squarei, () -> {}).with(b -> b.clicked(() -> {
+			watch(info, value).setPosition(b.localToStageCoordinates(Tmp.v1.set(0, 0)));
+		})).size(45);
+	}
+
+	public interface MyProv<T> {
+		T get() throws Exception;
 	}
 }

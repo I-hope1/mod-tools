@@ -1,7 +1,6 @@
 package modtools.ui.content;
 
 import arc.Core;
-import arc.func.Boolp;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -14,9 +13,7 @@ import arc.scene.ui.Image;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
-import arc.util.Log;
-import arc.util.Time;
+import arc.util.*;
 import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.gen.Icon;
@@ -30,11 +27,12 @@ import modtools.ui.IntUI;
 import modtools.ui.MyFonts;
 import modtools.ui.components.MyLabel;
 import modtools.ui.components.Window;
+import modtools.utils.JSFunc;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static modtools.ui.Contents.tester;
+import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.getAbsPos;
 
 public class ElementShow extends Content {
@@ -62,10 +60,33 @@ public class ElementShow extends Content {
 	}
 
 	public static Element focus;
+	public static ElementShowWindow focusWindow;
 	public static Color focusColor = Color.blue.cpy().a(0.5f);
+	public final Task task = new Task() {
+		@Override
+		public void run() {
+			cancalEvent = false;
+		}
+	};
 
 	@Override
 	public void load() {
+		IntVars.topGroup.drawSeq.add(() -> {
+			if (focus != null) {
+				Vec2 vec2 = focus.localToStageCoordinates(Tmp.v2.set(0, 0));
+				Vec2 mouse = Core.input.mouse();
+				Draw.color();
+				Lines.stroke(3f);
+				Lines.line(mouse.x, mouse.y, vec2.x + focus.getWidth() / 2f, vec2.y + focus.getHeight() / 2f);
+			}
+			if (selected == null || !selecting) return true;
+			Draw.z(Layer.fogOfWar);
+			Draw.color(focusColor);
+			Vec2 vec2 = getAbsPos(selected);
+			Fill.crect(vec2.x, vec2.y, selected.getWidth(), selected.getHeight());
+
+			return true;
+		});
 		frag = new Element() {
 			@Override
 			public void draw() {
@@ -75,16 +96,7 @@ public class ElementShow extends Content {
 					Vec2 vec2 = getAbsPos(focus);
 					Fill.crect(vec2.x, vec2.y, focus.getWidth(), focus.getHeight());
 					// Vec2 vec2 = Core.camera.unproject(focusFrom.x, focusFrom.y);
-					Vec2 mouse = Core.input.mouse();
-					Draw.color();
-					Lines.stroke(3f);
-					Lines.line(mouse.x, mouse.y, vec2.x + focus.getWidth() / 2f, vec2.y + focus.getHeight() / 2f);
 				}
-				if (selected == null || !selecting) return;
-				Draw.z(Layer.fogOfWar);
-				Draw.color(focusColor);
-				Vec2 vec2 = getAbsPos(selected);
-				Fill.crect(vec2.x, vec2.y, selected.getWidth(), selected.getHeight());
 			}
 
 			@Override
@@ -97,9 +109,9 @@ public class ElementShow extends Content {
 			}
 		};
 		frag.update(() -> {
-			frag.toFront();
+			frag.setZIndex(selecting ? IntVars.frag.getZIndex() : focusWindow != null ? Math.max(focusWindow.getZIndex() - 1, 0) : 0);
 		});
-		frag.touchable = Touchable.disabled;
+		frag.touchable = Touchable.enabled;
 		frag.fillParent = true;
 		Core.scene.addListener(new InputListener() {
 			/*@Override
@@ -140,20 +152,22 @@ public class ElementShow extends Content {
 				getSelected(x, y);
 			}
 
+			public boolean filter() {
+				if (selected == null) return false;
+				Element parent = selected.parent;
+				while (true) {
+					if (parent instanceof ElementShowWindow) return false;
+					if (parent == null) return true;
+					parent = parent.parent;
+				}
+			}
+
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				cancalEvent = true;
-				Time.runTask(2, () -> cancalEvent = false);
 				selecting = false;
+				cancalEvent = true;
+				Timer.schedule(task, 3 / 60f, 0, 1);
 				// IntVars.async(() -> {
-				if (((Boolp) () -> {
-					if (selected == null) return false;
-					Element parent = selected.parent;
-					while (true) {
-						if (parent instanceof ElementShowDialog) return false;
-						if (parent == null) return true;
-						parent = parent.parent;
-					}
-				}).get()) new ElementShowDialog().show(selected);
+				if (filter()) new ElementShowWindow().show(selected);
 				// }, () -> {});
 				// frag.remove();
 			}
@@ -171,13 +185,20 @@ public class ElementShow extends Content {
 		selecting = !selecting;
 	}
 
-	public static class ElementShowDialog extends Window {
+
+	public static class ElementShowWindow extends Window {
+		public final Task task = new Task() {
+			@Override
+			public void run() {
+				focus = null;
+			}
+		};
 		Table pane = new Table();
 		Element element = null;
 		Pattern pattern;
 
-		public ElementShowDialog() {
-			super("审查元素", 0, 160, true);
+		public ElementShowWindow() {
+			super(elementShow.localizedName(), 0, 160, true);
 			getCell(cont).maxWidth(Core.graphics.getWidth());
 
 			name = "ElementShowDialog";
@@ -188,12 +209,12 @@ public class ElementShow extends Content {
 				Button[] bs = {null};
 				bs[0] = t.button("显示父元素", Icon.up, () -> {
 					Runnable go = () -> {
-						if (hideSelf) hide();
-						var window = new ElementShowDialog();
+						hide();
+						var window = new ElementShowWindow();
 						window.pattern = pattern;
 						window.show(element.parent);
 						window.setPosition(x, y);
-						window.display();
+						window.setSize(width, height);
 					};
 					if (element.parent == Core.scene.root) {
 						Vec2 vec2 = bs[0].localToStageCoordinates(new Vec2(0, 0));
@@ -201,9 +222,10 @@ public class ElementShow extends Content {
 					} else go.run();
 				}).disabled(b -> element == null || element.parent == null).width(120).get();
 				t.button(Icon.copy, Styles.flati, () -> {
-					var window = new ElementShowDialog();
+					var window = new ElementShowWindow();
 					window.pattern = pattern;
 					window.show(element);
+					window.setSize(width, height);
 				}).padLeft(4f).padRight(4f);
 				t.button(Icon.refresh, Styles.flati, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
 				t.table(search -> {
@@ -219,6 +241,12 @@ public class ElementShow extends Content {
 					return super.toString();
 				}
 			}).grow();
+
+			update(() -> {
+				if (!task.isScheduled()) {
+					Timer.schedule(task, Time.delta * 2f / 60f);
+				}
+			});
 		}
 
 		public void rebuild(Element element, String text) {
@@ -247,7 +275,8 @@ public class ElementShow extends Content {
 
 		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(new MyLabel(text, IntStyles.myLabel));
+				table.add(new MyLabel(text, IntStyles.myLabel)).color(Pal.accent).growX().left().row();
+				table.image().color(JSFunc.underline).growX().row();
 				return;
 			}
 			table.table(t -> {
@@ -256,12 +285,13 @@ public class ElementShow extends Content {
 					highlightShow(t, pattern, line);
 					t.row();
 				}
-			});
+			}).growX().left().row();
+			table.image().color(JSFunc.underline).growX().row();
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(text, IntStyles.myLabel);
+				table.add(text, IntStyles.myLabel).color(Pal.accent);
 				return;
 			}
 			Matcher matcher = pattern.matcher(text);
@@ -273,7 +303,6 @@ public class ElementShow extends Content {
 					String curText;
 				};
 				int times = 0;
-				float offsetX = 0;
 				while (index <= text.length() && matcher.find(index)) {
 					times++;
 					if (times > 70) {
@@ -285,13 +314,13 @@ public class ElementShow extends Content {
 					index += len;
 
 					ref.curText = matcher.group(1);
-					t.add(ref.curText);
+					t.add(ref.curText).color(Pal.accent);
 					ref.curText = matcher.group(2);
-					t.table(IntUI.whiteui.tint(Pal.accent), t1 -> {
+					t.table(IntUI.whiteui.tint(Pal.heal), t1 -> {
 						t1.add(new MyLabel(ref.curText, new LabelStyle(MyFonts.MSYHMONO, Color.sky))).row();
 					});
 				}
-				if (text.length() - index > 0) t.add(text.substring(index), IntStyles.myLabel);
+				if (text.length() - index > 0) t.add(text.substring(index), IntStyles.myLabel).color(Pal.accent);
 			});
 		}
 
@@ -309,6 +338,7 @@ public class ElementShow extends Content {
 			table.left().defaults().left();
 
 			try {
+
 				table.add(new Table(Tex.underlineWhite, wrap -> {
 					if (element instanceof Group) {
 						highlightShowMultiRow(wrap, pattern, getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
@@ -317,9 +347,10 @@ public class ElementShow extends Content {
 							if (children.size == 0) {
 								return;
 							}
-							Button button = t.button("更多", Icon.info, Styles.togglet, () -> {}).minWidth(200).height(45).growX().get();
+							Button button = t.button("@details", Icon.info, Styles.flatTogglet, () -> {}).minWidth(200).height(45).growX().get();
 							t.row();
 							t.collapser(c -> {
+								c.background(Window.myPane);
 								for (var child : children) {
 									build(child, c, pattern);
 								}
@@ -335,18 +366,14 @@ public class ElementShow extends Content {
 							wrap.add("空图像");
 						}
 					} else {
-						highlightShowMultiRow(wrap, pattern, element + "");
+						highlightShowMultiRow(wrap, pattern, String.valueOf(element));
 					}
-					wrap.button("储存为js变量", () -> tester.put(wrap, element)).size(96, 50);
+					JSFunc.addStoreButton(wrap, "element", () -> element);
 					IntUI.doubleClick(wrap.getChildren().first(), () -> {}, () -> {
-						tester.put(wrap, element);
+						IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", tester.put(element))).setPosition(Core.input.mouse());
 					});
+					wrap.touchable = Touchable.enabled;
 				}) {
-					public Task task;
-
-					{
-						touchable = Touchable.enabled;
-					}
 
 					@Override
 					public Element hit(float x, float y, boolean touchable) {
@@ -354,14 +381,11 @@ public class ElementShow extends Content {
 						Element tmp = super.hit(x, y, touchable);
 						if (tmp == null) return null;
 						if (focus != null) {
-							if (task != null) task.cancel();
+							if (task.isScheduled()) task.cancel();
 							return tmp;
 						}
 						focus = element;
-						if (task != null) task.cancel();
-						task = Time.runTask(2, () -> {
-							focus = null;
-						});
+						if (task.isScheduled()) task.cancel();
 						return tmp;
 					}
 				}).row();
@@ -408,6 +432,15 @@ public class ElementShow extends Content {
 		public String toString() {
 			if (hideSelf) return name;
 			return super.toString();
+		}
+
+		@Override
+		public Element hit(float x, float y, boolean touchable) {
+			Element elem = super.hit(x, y, touchable);
+			if (elem != null && elem.isDescendantOf(this)) {
+				focusWindow = this;
+			}
+			return elem;
 		}
 	}
 

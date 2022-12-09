@@ -37,7 +37,7 @@ public class ShowUIList extends Content {
 	}
 
 	public void copyText(Label label) {
-		IntUI.showInfoFade("已复制: [accent]" + label.getText()).setPosition(Tools.getAbsPos(label));
+		IntUI.showInfoFade(Core.bundle.format("IntFunc.copied", label.getText())).setPosition(Tools.getAbsPos(label));
 		Core.app.setClipboardText(label.getText().toString());
 	}
 

@@ -2,6 +2,7 @@ package modtools.ui;
 
 import arc.Core;
 import arc.Events;
+import arc.func.*;
 import arc.scene.Element;
 import arc.scene.Group;
 import arc.scene.ui.Dialog;
@@ -17,6 +18,11 @@ import static modtools.ui.Contents.*;
 // 存储mod的窗口和Frag
 public final class TopGroup extends Group {
 	public boolean checkUI = MySettings.settings.getBool("checkUI", "false");
+	public Seq<Boolp> drawSeq = new Seq<>();
+
+	public void draw() {
+		drawSeq.filter(Boolp::get);
+	}
 
 	{
 		fillParent = true;

@@ -10,7 +10,7 @@ import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.ui.layout.Scl;
-import modtools_lib.MyReflect;
+import ihope_lib.MyReflect;
 
 public class SclLisetener extends InputListener {
 	public boolean disabled;

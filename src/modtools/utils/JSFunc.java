@@ -21,7 +21,7 @@ import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.content.*;
 import modtools.ui.content.ElementShow.ElementShowWindow;
-import modtools_lib.MyReflect;
+import ihope_lib.MyReflect;
 import rhino.*;
 
 import java.io.*;
@@ -379,7 +379,7 @@ public class JSFunc {
 						buttons.right().top().defaults().right().top();
 						addLabelButton(buttons, () -> l.val, l.type);
 						addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
-						addWatchButton(buttons, f.getDeclaringClass().getName() + ": " + f.getName(), () -> f.get(o));
+						addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
 					}).grow().top().right();
 				}).pad(4).growX().left().row();
 				fields.image().color(underline).growX().colspan(6).row();
@@ -476,7 +476,7 @@ public class JSFunc {
 										IntUI.showException("invoke出错", ex).setPosition(getAbsPos(l));
 									}
 
-								}).width(100);
+								}).size(96, 45);
 								addLabelButton(buttons, () -> l.val, l.type);
 								addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
 							}).grow().top().right();
@@ -819,13 +819,19 @@ public class JSFunc {
 		}
 	}
 
+
 	public static class WatchWindow extends Window {
 		Table pane;
 
 		public WatchWindow() {
 			super("Watch");
 			pane = new Table();
-			cont.add(new ScrollPane(pane)).minSize(220, 120).grow();
+			cont.add(new ScrollPane(pane) {
+				@Override
+				public float getPrefWidth() {
+					return 220;
+				}
+			}).grow();
 		}
 
 		public WatchWindow watch(String info, MyProv<Object> value) {

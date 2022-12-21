@@ -5,8 +5,6 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
-import arc.graphics.g2d.Font.FontData;
-import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.*;
@@ -16,9 +14,7 @@ import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.style.Drawable;
-import arc.scene.ui.ScrollPane;
-import arc.scene.ui.TextArea;
-import arc.scene.ui.TextField;
+import arc.scene.ui.*;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
@@ -119,18 +115,18 @@ public class TextAreaTable extends Table {
 		}
 
 		public void trackCursor() {
-			Time.runTask(0f, () -> {
-				int cursorLine = area.getCursorLine();
-				int firstLineShowing = area.getRealFirstLineShowing();
-				int lines = area.getRealLinesShowing();
-				int max = firstLineShowing + lines;
-				if (cursorLine <= firstLineShowing) {
-					setScrollY(cursorLine * area.lineHeight());
-				}
-				if (cursorLine > max) {
-					setScrollY((cursorLine - lines) * area.lineHeight());
-				}
-			});
+			// Time.runTask(0f, () -> {
+			int cursorLine = area.getCursorLine();
+			int firstLineShowing = area.getRealFirstLineShowing();
+			int lines = area.getRealLinesShowing();
+			int max = firstLineShowing + lines;
+			if (cursorLine <= firstLineShowing) {
+				setScrollY(cursorLine * area.lineHeight());
+			}
+			if (cursorLine > max) {
+				setScrollY((cursorLine - lines) * area.lineHeight());
+			}
+			// });
 		}
 
 		@Override
@@ -730,21 +726,19 @@ public class TextAreaTable extends Table {
 			changeText(text, insert(cursor, itext, text));
 		}
 
-		public String insert(int position, CharSequence text, String to) {
-			if (readOnly) return text.toString();
-			// Time.mark();
-			// Log.debug(Time.elapsed());
-			return to.length() == 0 ? text.toString() : to.substring(0, position) + text + to.substring(position);
+		String insert(int position, CharSequence text, String to) {
+			if (to.length() == 0) return text.toString();
+			return to.substring(0, position) + text + to.substring(position);
 		}
 
-		void changeText(String oldText, String newText) {
-			if (readOnly) return;
-			if (newText.equals(oldText)) return;
-			this.text = newText;
+		boolean changeText(String oldText, String newText) {
+			if (readOnly || newText.equals(oldText)) return false;
+			text = newText;
 			ChangeEvent changeEvent = Pools.obtain(ChangeEvent.class, ChangeEvent::new);
 			boolean cancelled = fire(changeEvent);
-			this.text = cancelled ? oldText : newText;
+			text = cancelled ? oldText : newText;
 			Pools.free(changeEvent);
+			return !cancelled;
 		}
 
 		public void trackCursor() {
@@ -774,10 +768,14 @@ public class TextAreaTable extends Table {
 						&& ((endIndex = text.substring(Math.max(0, selectionEnd - offset), Math.min(selectionEnd + offset, maxLen)).indexOf("*/")) >= 0)) {
 					startIndex += Math.max(0, start - offset);
 					endIndex += Math.max(0, selectionEnd - offset);
+					// text.delete(startIndex, 2);
+					// text.delete(Math.min(endIndex + 2, maxLen), text.length());
 					changeText(text, text.substring(0, startIndex) + text.substring(startIndex + 2, endIndex) + text.substring(Math.min(endIndex + 2, maxLen)));
 					selectionStart = clamp(selectionStart - 2);
 					cursor = clamp(cursor - 2);
 				} else {
+					// text.insert(start, "/*");
+					// text.insert(selectionEnd + 2, "*/");
 					changeText(text, text.substring(0, start) + "/*" + selection + "*/"
 							+ text.substring(selectionEnd));
 					selectionStart = clamp(selectionStart + 2);
@@ -788,6 +786,7 @@ public class TextAreaTable extends Table {
 				int end = linesBreak.get(Math.min(linesBreak.size - 1, (cursorLine + 1) * 2));
 				if (startComment.matcher(text.substring(home, end)).find()) {
 					int start = home + text.substring(home, end).indexOf("//");
+					// text.delete(start, 2);
 					changeText(text, text.substring(0, start) + text.substring(start + 2));
 					cursor = clamp(cursor - 2);
 				} else {
@@ -849,6 +848,7 @@ public class TextAreaTable extends Table {
 			@Override
 			public boolean keyTyped(InputEvent event, char character) {
 				if (keyTypedB != null && !keyTypedB.get(event, character)) return false;
+				trackCursor();
 				return super.keyTyped(event, character);
 			}
 

@@ -1,27 +1,21 @@
 package modtools.ui;
 
-import arc.Events;
 import arc.files.Fi;
 import arc.freetype.FreeTypeFontGenerator;
-import arc.freetype.FreeTypeFontGenerator.FreeTypeFontData;
-import arc.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
+import arc.freetype.FreeTypeFontGenerator.*;
 import arc.graphics.Color;
-import arc.graphics.g2d.*;
-import arc.graphics.g2d.Font.Glyph;
-import arc.scene.style.TextureRegionDrawable;
-import arc.util.*;
+import arc.graphics.g2d.Font;
 import mindustry.Vars;
-import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.ui.Fonts;
 import modtools.ModTools;
 
-import static modtools.ui.IntUI.icons;
+import static modtools.utils.MySettings.dataDirectory;
 
 public class MyFonts {
 	public static Font MSYHMONO;
 
 	public static void load() {
-		Fi fontFi = Vars.mods.getMod(ModTools.class).root.child("MSYHMONO.ttf");
+		Fi fontFi = dataDirectory.child("font.ttf");
 		if (!fontFi.exists()) {
 			MSYHMONO = Fonts.def;
 			return;

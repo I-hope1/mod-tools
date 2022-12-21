@@ -173,6 +173,7 @@ public class ElementShow extends Content {
 			}
 		});
 		Core.scene.add(frag);
+		// frag.update(() -> frag.toFront());
 
 		btn.update(() -> btn.setChecked(selecting));
 		btn.setStyle(Styles.logicTogglet);
@@ -181,7 +182,7 @@ public class ElementShow extends Content {
 	@Override
 	public void build() {
 		selected = null;
-		// frag.remove();
+		// Core.scene.add(frag);
 		selecting = !selecting;
 	}
 
@@ -275,7 +276,7 @@ public class ElementShow extends Content {
 
 		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(new MyLabel(text, IntStyles.myLabel)).color(Pal.accent).growX().left().row();
+				table.add(new MyLabel(text)).color(Pal.accent).growX().left().row();
 				table.image().color(JSFunc.underline).growX().row();
 				return;
 			}
@@ -291,7 +292,7 @@ public class ElementShow extends Content {
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(text, IntStyles.myLabel).color(Pal.accent);
+				table.add(text).color(Pal.accent);
 				return;
 			}
 			Matcher matcher = pattern.matcher(text);
@@ -361,7 +362,10 @@ public class ElementShow extends Content {
 						}).padLeft(8).left();
 					} else if (element instanceof Image) {
 						try {
-							wrap.table(Window.myPane, p -> p.add(new Image(((Image) element).getRegion())).color(element.color).size(element.getWidth(), element.getHeight()));
+							wrap.table(Window.myPane, p -> {
+								p.add(new Image(((Image) element).getRegion())).color(element.color)
+										.get().setSize(element.getWidth(), element.getHeight());
+							});
 						} catch (Throwable e) {
 							wrap.add("空图像");
 						}

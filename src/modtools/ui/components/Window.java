@@ -19,13 +19,14 @@ import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.Align;
-import arc.util.Time;
+import arc.util.*;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
+import mindustry.logic.LExecutor.Var;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.ui.IntUI;
 
 import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.windowManager;
@@ -99,12 +100,12 @@ public class Window extends Table {
 		tapped(this::toFront);
 		touchable = top.touchable = cont.touchable = Touchable.enabled;
 		top.margin(0);
+		if (OS.isWindows) IntUI.doubleClick(top, () -> {}, this::toggleMaximize);
 		cont.margin(8f);
 		buttons.margin(0);
 		this.minHeight = minHeight;
 		this.full = full;
 		this.noButtons = noButtons;
-
 		//		top.defaults().width(winWidth);
 
 		left().defaults().left();
@@ -123,7 +124,7 @@ public class Window extends Table {
 			top.button(Icon.down, Styles.clearNoneTogglei, 32, this::minimize).update(b -> {
 				b.setChecked(isMinimize);
 			}).padLeft(4f);
-			ImageButton button = top.button(Tex.whiteui, Styles.clearNonei, 32, this::maximize).disabled(b -> !isShown()).padLeft(4f).get();
+			ImageButton button = top.button(Tex.whiteui, Styles.clearNonei, 32, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? icons.get("normal") : icons.get("maximize");
 			});
@@ -136,7 +137,7 @@ public class Window extends Table {
 		moveListener.fire = () -> {
 			if (isMaximize && !isMinimize) {
 				float mulx = moveListener.bx / width;
-				maximize();
+				toggleMaximize();
 				moveListener.bx = width * mulx;
 				x -= moveListener.bx;
 			}
@@ -203,6 +204,11 @@ public class Window extends Table {
 		float touchWidth = top.getWidth(), touchHeight = top.getHeight();
 		super.setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
 				Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
+		if (isMaximize) {
+			// false取反为true
+			isMaximize = false;
+			toggleMaximize();
+		}
 	}
 
 
@@ -371,7 +377,7 @@ public class Window extends Table {
 	public boolean isMaximize = false;
 	public Vec2 lastPos = new Vec2();
 
-	public void maximize() {
+	public void toggleMaximize() {
 		if (isMinimize) minimize();
 		isMaximize = !isMaximize;
 		if (isMaximize) {

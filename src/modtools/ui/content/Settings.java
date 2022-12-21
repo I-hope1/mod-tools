@@ -6,7 +6,6 @@ import arc.func.*;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
-import arc.util.Strings;
 import mindustry.Vars;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;

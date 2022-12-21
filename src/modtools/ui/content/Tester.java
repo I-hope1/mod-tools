@@ -18,7 +18,7 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import arc.util.Timer.Task;
+import hope_rhino.LinkRhino189012201;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
@@ -35,7 +35,7 @@ import modtools.ui.components.TextAreaTable.MyTextArea;
 import modtools.ui.components.Window;
 import modtools.ui.components.highlight.*;
 import modtools.utils.*;
-import modtools_lib.MyReflect;
+import ihope_lib.MyReflect;
 import rhino.*;
 
 import java.lang.reflect.*;

@@ -1,11 +1,10 @@
-package rhino;
+package hope_rhino;
+
+import rhino.*;
 
 import java.lang.reflect.Field;
 
 public class LinkRhino189012201 {
-	public static void enter(Context cx, ContextFactory factory) {
-		Context.enter(cx, factory);
-	}
 
 	static Field factory;
 	/*static DynamicMaker def = DynamicMaker.getDefault();

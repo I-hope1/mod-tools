@@ -3,7 +3,6 @@ package modtools.ui.content;
 import arc.Core;
 import arc.files.Fi;
 import arc.graphics.Color;
-import arc.scene.ui.Label;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
@@ -11,13 +10,8 @@ import arc.struct.Seq;
 import mindustry.Vars;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
-import mindustry.ui.dialogs.BaseDialog;
 import modtools.IntVars;
 import modtools.ui.components.*;
-import modtools.utils.Tools;
-
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static modtools.utils.MySettings.settings;
 

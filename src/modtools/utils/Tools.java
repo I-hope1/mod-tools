@@ -1,5 +1,6 @@
 package modtools.utils;
 
+import arc.func.Boolp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.struct.Seq;
@@ -9,7 +10,7 @@ import arc.util.Timer.Task;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
-import static modtools_lib.MyReflect.unsafe;
+import static ihope_lib.MyReflect.unsafe;
 
 public class Tools {
 	public static boolean validPosInt(String text) {
@@ -82,19 +83,19 @@ public class Tools {
 		}
 	}
 
-	public static void forceRun(Runnable toRun) {
+	public static void forceRun(Boolp boolp) {
 
 		Timer.schedule(new Task() {
 			@Override
 			public void run() {
 				try {
-					toRun.run();
-					cancel();
+					if (boolp.get()) cancel();
 				} catch (Exception e) {
 					Log.err(e);
+					cancel();
 				}
 			}
-		}, 0, 1 / 60f, -1);
+		}, 0, 1, -1);
 		/*Runnable[] run = {null};
 		run[0] = () -> {
 			Time.runTask(0, () -> {

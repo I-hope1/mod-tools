@@ -1,12 +1,7 @@
 package modtools.utils;
 
-import arc.util.*;
-import mindustry.gen.Icon;
-import mindustry.ui.Styles;
 import modtools.ui.components.Window;
 import modtools.utils.JSFunc.*;
-
-import java.io.*;
 
 class ShowInfoWindow extends Window {
 

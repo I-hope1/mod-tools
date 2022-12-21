@@ -2,69 +2,35 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
-import arc.func.*;
-import arc.graphics.*;
-import arc.graphics.Texture.TextureFilter;
-import arc.graphics.g2d.*;
+import arc.graphics.Color;
 import arc.math.Mathf;
-import arc.struct.*;
 import arc.util.*;
-import arc.util.Http.HttpStatusException;
+import ihope_lib.MyReflect;
 import mindustry.Vars;
-import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
-import mindustry.content.*;
-import mindustry.ctype.*;
 import mindustry.game.EventType.ClientLoadEvent;
-import mindustry.graphics.g3d.PlanetGrid.Ptile;
-import mindustry.io.JsonIO;
 import mindustry.mod.*;
-import mindustry.mod.Mods.ModMeta;
-import mindustry.type.*;
-import mindustry.ui.dialogs.ModsDialog;
-import mindustry.world.Block;
+import mindustry.type.Sector;
 import modtools.ui.*;
-import modtools.ui.components.FrameLabel;
 import modtools.utils.Tools;
-import modtools_lib.MyReflect;
-import rhino.*;
-
-import java.lang.reflect.Field;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 
 import static mindustry.Vars.ui;
-import static modtools.utils.MySettings.settings;
-import static modtools_lib.MyReflect.unsafe;
+import static modtools.utils.MySettings.*;
 
 public class ModTools extends Mod {
 	public static ModClassLoader mainLoader;
 
 	public ModTools() {
 		Log.info("Loaded ModTools constructor.");
-		// Log.info("A2");
-		// ApplicationCore
 
 		Tools.forceRun(() -> {
-			if (Vars.mods.getMod(ModTools.class) == null) throw new RuntimeException();
-			Log.info("Loaded Reflect.");
+			if (Vars.mods.getMod(ModTools.class) == null) return false;
 			loadReflect();
-			/*Field field;
-			try {
-				field = Vars.class.getDeclaredField("defaultContentIcons");
-				unsafe.putObject(Vars.class,
-						unsafe.staticFieldOffset(field),
-						Seq.with(ContentType.all)
-								.filter(t -> t.contentClass != null && UnlockableContent.class.isAssignableFrom(t.contentClass))
-								.toArray(ContentType.class));
-			} catch (Exception e) {
-				Log.err(e);
-			}*/
+			// if (!dataDirectory.child("font.ttf").exists())
+			// 	Core.files.internal("fonts/icon.ttf").copyTo(dataDirectory.child("font.ttf"));
+
+
+			return true;
 		});
-		/*Tools.forceRun(() -> {
-			var sectors = Planets.serpulo.sectors;
-			Log.info("loaded replace");
-			sectors.replace(MySactor::new);
-		});*/
 
 		// Log.debug(MethodHandles.Im);
 
@@ -75,9 +41,9 @@ public class ModTools extends Mod {
 				ui.showException(throwable);
 				return;
 			}
-			Planets.serpulo.sectors.set(171, new MySactor(Planets.serpulo.sectors.get(171)) {{
-				threat = 10;
-			}});
+			// Planets.serpulo.sectors.set(171, new MySactor(Planets.serpulo.sectors.get(171)) {{
+			// 	threat = 10;
+			// }});
 
 			// texture.getTextureData();
 			MyFonts.load();
@@ -132,11 +98,13 @@ public class ModTools extends Mod {
 
 	public static void loadReflect() {
 		mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+
 		try {
 			// 没错误 证明已经加载
-			Class.forName("modtools_lib.MyReflect", false, mainLoader);
+			Class.forName("ihope_lib.MyReflect", false, mainLoader);
 			return;
 		} catch (Exception ignored) {}
+		Log.info("Loaded Reflect.");
 		// 加载反射
 		try {
 			Fi sourceFi = Vars.mods.getMod(ModTools.class).root
@@ -153,7 +121,7 @@ public class ModTools extends Mod {
 			sourceFi.copyTo(toFi);
 			ClassLoader loader = Vars.platform.loadJar(toFi, mainLoader);
 			mainLoader.addChild(loader);
-			Class.forName("modtools_lib.MyReflect", true, loader);
+			Class.forName("ihope_lib.MyReflect", true, loader);
 			toFi.delete();
 			MyReflect.load();
 		} catch (Throwable e) {

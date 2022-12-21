@@ -43,7 +43,7 @@ import modtools.ui.components.Window;
 import modtools.utils.JSFunc;
 import modtools.utils.Tools;
 import modtools.utils.WorldDraw;
-import modtools_lib.MyReflect;
+import ihope_lib.MyReflect;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -391,6 +391,7 @@ public class Selection extends Content {
 			});
 			TeamFunctionBuild(t, "设置队伍", team -> {
 				func.each(unit -> {
+					if (Vars.player.unit() == unit) Vars.player.team(team);
 					unit.team(team);
 				});
 			});
@@ -517,7 +518,7 @@ public class Selection extends Content {
 				icons.add(IntUI.whiteui.tint(team.color));
 			}
 
-			IntUI.showSelectImageTableWithIcons(btn, new Seq<>(arr), icons, () -> null, cons, 42.0f, 32.0f, 3, false);
+			IntUI.showSelectImageTableWithIcons(btn, new Seq<>(arr), icons, () -> null, cons, 42f, 32f, 3, false);
 		});
 	}
 

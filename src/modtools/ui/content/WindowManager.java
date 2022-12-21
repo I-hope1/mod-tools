@@ -39,10 +39,10 @@ public class WindowManager extends Content {
 				}).checked(b -> window.sticky).padLeft(4f);
 				ImageButton button = top.button(Tex.whiteui, Styles.clearNonei, 32, () -> {
 					window.show();
-					window.maximize();
+					window.toggleMaximize();
 				}).padLeft(4f).get();
 				button.update(() -> {
-					button.getStyle().imageUp = window.isMaximize ? icons.get("normal") : icons.get("maximize");
+					button.getStyle().imageUp = window.isMaximize ? icons.get("normal") : icons.get("toggleMaximize");
 				});
 			}
 			top.button(Icon.cancel, Styles.clearNonei, 32, window::hide).padLeft(4f).padRight(4f);

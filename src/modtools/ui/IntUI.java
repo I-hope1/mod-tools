@@ -37,19 +37,20 @@ public class IntUI {
 
 	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
 		elem.addListener(new ClickListener() {
-			final Timer.Task clickTask = Time.runTask(20, click);
+			final Timer.Task clickTask = Time.runTask(0.2f * 60f, click);
 
 			@Override
 			public void clicked(InputEvent event, float x, float y) {
 				super.clicked(event, x, y);
-				if (clickTask != null && tapCount >= 2) {
+				if (clickTask.isScheduled()) {
 					dclick.run();
 					clickTask.cancel();
 				} else {
-					Timer.schedule(clickTask, 20 / 60f);
+					Timer.schedule(clickTask, 0.2f);
 				}
 			}
 		});
+
 	}
 
 

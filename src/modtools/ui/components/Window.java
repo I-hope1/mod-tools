@@ -1,7 +1,7 @@
 package modtools.ui.components;
 
 import arc.*;
-import arc.func.Prov;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.Interp;
@@ -14,19 +14,18 @@ import arc.scene.Scene;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
-import arc.scene.ui.ImageButton;
-import arc.scene.ui.Label;
+import arc.scene.ui.*;
+import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
-import mindustry.logic.LExecutor.Var;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 
 import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.windowManager;
@@ -38,16 +37,14 @@ import static modtools.ui.IntUI.*;
  * @author I hope...
  **/
 public class Window extends Table {
-	public static final Seq<Window> all = new Seq<>() {
-		@Override
-		public Seq<Window> add(Window value) {
-			super.add(value);
+	public static final ObjectSet<Window> all = new ObjectSet<>() {
+		public boolean add(Window value) {
+			boolean b = super.add(value);
 			if (windowManager != null && windowManager.ui != null && windowManager.ui.isShown())
 				windowManager.rebuild();
-			return this;
+			return b;
 		}
 
-		@Override
 		public boolean remove(Window value) {
 			boolean ok = super.remove(value);
 			if (windowManager != null && windowManager.ui != null && windowManager.ui.isShown())
@@ -82,7 +79,19 @@ public class Window extends Table {
 	public static Drawable myPane = Tex.pane;
 	// ((NinePatchDrawable) Tex.pane).tint(new Color(1, 1, 1, 0.9f));
 	public static final Cell emptyCell = new Cell<>();
-	public Table top = new Table(myPane), cont = new Table(myPane), buttons = new Table(myPane);
+	public Table top = new Table(myPane) {
+		@Override
+		public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, float isize, Runnable listener) {
+			var cell = super.button(icon, style, isize, listener);
+			cell.get().tapped(() -> {
+				moveListener.disabled = true;
+				Time.runTask(0, () -> moveListener.disabled = false);
+			});
+			return cell;
+		}
+	},
+			cont = new Table(myPane),
+			buttons = new Table(myPane);
 	public float minWidth, minHeight;
 	// 用于最小化时的最小宽度
 	private static final float topHeight = 45;
@@ -97,6 +106,7 @@ public class Window extends Table {
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super(Styles.none);
 
+		cont.setClip(true);
 		tapped(this::toFront);
 		touchable = top.touchable = cont.touchable = Touchable.enabled;
 		top.margin(0);
@@ -106,7 +116,6 @@ public class Window extends Table {
 		this.minHeight = minHeight;
 		this.full = full;
 		this.noButtons = noButtons;
-		//		top.defaults().width(winWidth);
 
 		left().defaults().left();
 
@@ -118,18 +127,18 @@ public class Window extends Table {
 			l.setColor(focusWindow == this ? Color.white : Color.lightGray);
 		}).get();
 		if (full) {
-			top.button(icons.get("sticky"), Styles.clearNoneTogglei, 32, () -> {
+			top.button(icons.get("sticky"), IntStyles.clearNoneTogglei, 32, () -> {
 				sticky = !sticky;
 			}).checked(b -> sticky).padLeft(4f).name("sticky");
-			top.button(Icon.down, Styles.clearNoneTogglei, 32, this::minimize).update(b -> {
+			top.button(Icon.down, IntStyles.clearNoneTogglei, 32, this::toggleMinimize).update(b -> {
 				b.setChecked(isMinimize);
 			}).padLeft(4f);
-			ImageButton button = top.button(Tex.whiteui, Styles.clearNonei, 32, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
+			ImageButton button = top.button(Tex.whiteui, IntStyles.clearNonei, 32, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? icons.get("normal") : icons.get("maximize");
 			});
 		}
-		top.button(Icon.cancel, Styles.clearNonei, 32, this::hide).padLeft(4f).padRight(4f);
+		top.button(Icon.cancel, IntStyles.clearNonei, 32, this::hide).padLeft(4f).padRight(4f);
 		//		cont.defaults().height(winHeight);
 		setup();
 
@@ -142,24 +151,28 @@ public class Window extends Table {
 				x -= moveListener.bx;
 			}
 		};
+		keyDown(k -> {
+			if (k == KeyCode.f4 && Core.input.ctrl()) {
+				hide();
+			}
+		});
+
 		Time.runTask(1, () -> {
 			// 默认最小宽度为pref宽度
 			this.minWidth = Math.max(minWidth, getMinWidth());
 			sclLisetener.set(this.minWidth, minHeight);
-			update(() -> {
-				if (sticky) toFront();
-				sclLisetener.disabled = isMaximize;
-				moveListener.disabled = sclLisetener.scling;
-			});
 		});
 		super.update(() -> {
 			for (Runnable r : runs) r.run();
+			if (sticky) toFront();
+			sclLisetener.disabled = isMaximize;
+			moveListener.disabled = sclLisetener.scling;
 		});
 
 		all.add(this);
 	}
 
-	Seq<Runnable> runs = new Seq<>();
+	ObjectSet<Runnable> runs = new ObjectSet<>();
 
 	@Override
 	public Element update(Runnable r) {
@@ -323,7 +336,7 @@ public class Window extends Table {
 		display();
 		if (isShown()) {
 			setZIndex(Integer.MAX_VALUE);
-			if (isMinimize) minimize();
+			if (isMinimize) toggleMinimize();
 			return this;
 		}
 		return show(Core.scene);
@@ -378,7 +391,7 @@ public class Window extends Table {
 	public Vec2 lastPos = new Vec2();
 
 	public void toggleMaximize() {
-		if (isMinimize) minimize();
+		if (isMinimize) toggleMinimize();
 		isMaximize = !isMaximize;
 		if (isMaximize) {
 			lastWidth = getWidth();
@@ -397,7 +410,7 @@ public class Window extends Table {
 	// 用于存储最小/大化前的宽度和高度
 	public float lastWidth, lastHeight;
 
-	public void minimize() {
+	public void toggleMinimize() {
 		isMinimize = !isMinimize;
 		if (isMinimize) {
 			if (!isMaximize) {
@@ -476,5 +489,31 @@ public class Window extends Table {
 
 	public interface MinimizedListener {
 		void fire();
+	}
+
+	public static class DisposableWindow extends Window {
+
+		public DisposableWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(title, minWidth, minHeight, full, noButtons);
+		}
+
+		public DisposableWindow(String title, float width, float height, boolean full) {
+			super(title, width, height, full);
+		}
+
+		public DisposableWindow(String title, float width, float height) {
+			super(title, width, height);
+		}
+
+		public DisposableWindow(String title) {
+			super(title);
+		}
+
+		@Override
+		public void hide() {
+			super.hide();
+			all.remove(this);
+			clearChildren();
+		}
 	}
 }

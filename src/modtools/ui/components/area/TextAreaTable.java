@@ -1,5 +1,5 @@
 
-package modtools.ui.components;
+package modtools.ui.components.area;
 
 import arc.Core;
 import arc.func.*;
@@ -15,6 +15,7 @@ import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
+import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
@@ -1042,7 +1043,7 @@ public class TextAreaTable extends Table {
 
 
 	// 等宽字体样式（没有等宽字体默认样式）
-	public static TextField.TextFieldStyle style = new TextField.TextFieldStyle(Styles.defaultField) {{
+	public static TextFieldStyle style = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.MSYHMONO;
 		// background = null;
 	}};

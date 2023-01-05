@@ -9,6 +9,7 @@ import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import modtools.ui.Frag;
 import modtools.ui.IntUI;
 import modtools.ui.TopGroup;
+import modtools.utils.MyObjectSet;
 import rhino.*;
 
 import java.lang.reflect.Field;
@@ -21,9 +22,6 @@ public class IntVars {
 	public static final Frag frag = new Frag();
 	public static final TopGroup topGroup = new TopGroup();
 
-	static {
-		Core.scene.add(topGroup);
-	}
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) frag.load();
@@ -66,7 +64,7 @@ public class IntVars {
 		}
 	}
 
-	public static final Seq<Runnable> resizeListenrs = new Seq<>();
+	public static final MyObjectSet<Runnable> resizeListenrs = new MyObjectSet<>();
 
 	public static void addResizeListener(Runnable runnable) {
 		resizeListenrs.add(runnable);
@@ -79,7 +77,6 @@ public class IntVars {
 				for (var r : resizeListenrs) r.run();
 			}
 		});
-
 	}
 
 

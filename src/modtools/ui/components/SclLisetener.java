@@ -49,7 +49,6 @@ public class SclLisetener extends InputListener {
 		right = Math.abs(x - bind.getWidth()) < offset;
 		bottom = Math.abs(y) < offset;
 		top = Math.abs(y - bind.getHeight()) < offset;
-		scling = false;
 		try {
 			lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
 		} catch (Throwable ignored) {
@@ -57,6 +56,7 @@ public class SclLisetener extends InputListener {
 		//		Log.debug(last);
 		//		if (valid()) Log.debug("ok");
 		if (valid()) {
+			scling = true;
 			change.set(0, 0);
 			defWidth = bind.getWidth();
 			defHeight = bind.getHeight();

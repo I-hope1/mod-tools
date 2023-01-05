@@ -30,8 +30,8 @@ import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.components.MyLabel;
 import modtools.ui.components.SclLisetener;
-import modtools.ui.components.TextAreaTable;
-import modtools.ui.components.TextAreaTable.MyTextArea;
+import modtools.ui.components.area.TextAreaTable;
+import modtools.ui.components.area.TextAreaTable.MyTextArea;
 import modtools.ui.components.Window;
 import modtools.ui.components.highlight.*;
 import modtools.utils.*;
@@ -177,9 +177,12 @@ public class Tester extends Content {
 				pane.setScrollingDisabled(false, true);
 			}
 		};
+		ui.sclLisetener.listener = () -> {
+			cont.invalidate();
+		};
 		table.add(cont).grow().maxHeight(Core.graphics.getHeight()).row();
 		table.pane(p -> {
-			p.button(Icon.star, Styles.clearNonei, () -> {
+			p.button(Icon.star, IntStyles.clearNonei, () -> {
 				Fi fi = bookmark.file.child(Time.millis() + ".txt");
 				bookmark.list.add(fi);
 				fi.writeString(getMessage());
@@ -211,7 +214,7 @@ public class Tester extends Content {
 				ui.noButtons(false);
 			};
 			p.table(Tex.pane, t -> {
-				TextButtonStyle style = Styles.cleart;
+				TextButtonStyle style = IntStyles.cleart;
 				t.defaults().size(280, 60).left();
 				t.row();
 				t.button("@schematic.copy.import", Icon.download, style, () -> {
@@ -420,7 +423,7 @@ public class Tester extends Content {
 
 	public String put(Object val) {
 		int i = 0;
-		String prefix = "temp";
+		String prefix = "tmp";
 		while (ScriptableObject.hasProperty(scope, prefix + i)) {
 			i++;
 		}
@@ -431,7 +434,7 @@ public class Tester extends Content {
 
 	public void put(Element element, Object val) {
 		int i = 0;
-		String prefix = "temp";
+		String prefix = "tmp";
 		while (ScriptableObject.hasProperty(scope, prefix + i)) {
 			i++;
 		}
@@ -624,7 +627,7 @@ public class Tester extends Content {
 					}
 
 				});
-				t.button("", Icon.trash, Styles.cleart, () -> {
+				t.button("", Icon.trash, IntStyles.cleart, () -> {
 					if (!f.deleteDirectory()) {
 						f.delete();
 					}

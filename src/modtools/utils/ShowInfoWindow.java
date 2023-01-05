@@ -1,9 +1,10 @@
 package modtools.utils;
 
 import modtools.ui.components.Window;
+import modtools.ui.components.Window.DisposableWindow;
 import modtools.utils.JSFunc.*;
 
-class ShowInfoWindow extends Window {
+class ShowInfoWindow extends DisposableWindow {
 
 	final Class<?> clazz;
 	ReflectTable
@@ -14,17 +15,6 @@ class ShowInfoWindow extends Window {
 	public ShowInfoWindow(Class<?> clazz) {
 		super(clazz.getSimpleName(), 200, 200, true);
 		this.clazz = clazz;
-
-		hidden(() -> {
-			all.remove(this);
-			clearChildren();
-			/*fieldsTable.clear();
-			methodsTable.clear();
-			classesTable.clear();
-			fieldsTable = null;
-			methodsTable = null;
-			classesTable = null;*/
-		});
 	}
 
 	public void build() {

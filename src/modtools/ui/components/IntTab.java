@@ -9,6 +9,7 @@ import arc.scene.ui.Image;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
+import arc.util.Log;
 import modtools.ui.IntStyles;
 
 public class IntTab {
@@ -47,8 +48,10 @@ public class IntTab {
 	}
 
 	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols) {
-		if (names.size != colors.size || names.size != tables.size)
+		if (names.size != colors.size || names.size != tables.size) {
+			Log.info("name: @, color: @, table: @", names.size, colors.size, tables.size);
 			throw new IllegalArgumentException("size must be the same.");
+		}
 
 		this.totalWidth = totalWidth;
 		this.names = names;

@@ -7,6 +7,7 @@ import arc.graphics.g2d.*;
 import arc.scene.*;
 import arc.scene.ui.Image;
 import arc.struct.Seq;
+import arc.util.Time;
 import mindustry.Vars;
 import mindustry.mod.Mods.LoadedMod;
 import modtools.*;
@@ -24,12 +25,15 @@ public class Background {
 		LoadedMod mod = Vars.mods.getMod(ModTools.class);
 
 		Texture landscape = new Texture(mod.root.child("横屏.png")), portrait = new Texture(mod.root.child("竖屏.png"));
-		Image img = new Image(Core.graphics.isPortrait() ? portrait : landscape);
+		Image img = new Image(Pixmaps.blankTexture());
 		//		img.rotation = Core.graphics.isPortrait() ? 90 : 0;
 		img.setFillParent(true);
 		IntVars.addResizeListener(() -> {
 			img.getRegion().set(Core.graphics.isPortrait() ? portrait : landscape);
 		});
 		group.addChildAt(0, img);
+		Time.runTask(6f, () -> {
+			img.getRegion().set(Core.graphics.isPortrait() ? portrait : landscape);
+		});
 	}
 }

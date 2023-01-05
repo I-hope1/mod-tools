@@ -18,12 +18,14 @@ import arc.scene.ui.layout.Collapser;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.ui.components.Window;
 
+import java.lang.reflect.Array;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -37,7 +39,12 @@ public class IntUI {
 
 	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
 		elem.addListener(new ClickListener() {
-			final Timer.Task clickTask = Time.runTask(0.2f * 60f, click);
+			final Task clickTask = new Task() {
+				@Override
+				public void run() {
+					click.run();
+				}
+			};
 
 			@Override
 			public void clicked(InputEvent event, float x, float y) {
@@ -46,7 +53,7 @@ public class IntUI {
 					dclick.run();
 					clickTask.cancel();
 				} else {
-					Timer.schedule(clickTask, 0.2f);
+					Timer.schedule(clickTask, 0.25f);
 				}
 			}
 		});
@@ -140,7 +147,7 @@ public class IntUI {
 			p.clearChildren();
 
 			for (String item : list) {
-				p.button(item, Styles.flatt/*Styles.cleart*/, () -> {
+				p.button(item, IntStyles.flatt/*Styles.cleart*/, () -> {
 					cons.get(item);
 					hide.run();
 				}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();
@@ -218,11 +225,11 @@ public class IntUI {
 	 * 弹出一个可以选择内容的窗口（无需你提供图标）
 	 */
 	public static <T extends Button, T1 extends UnlockableContent> Table showSelectImageTable(T button, Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols, boolean searchable) {
-		Seq<Drawable> icons = new Seq<>();
-		items.each(item -> {
-			icons.add(new TextureRegionDrawable(item.uiIcon));
-		});
-		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
+		Drawable[] icons = (Drawable[]) Array.newInstance(Drawable.class, items.size);
+		for (int i = 0; i < items.size; i++) {
+			icons[i] = new TextureRegionDrawable(items.get(i).uiIcon);
+		}
+		return showSelectImageTableWithIcons(button, items, new Seq<>(icons), holder, cons, size, (float) imageSize, cols, searchable);
 	}
 
 	/**

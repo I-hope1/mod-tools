@@ -1,10 +1,9 @@
 package modtools.ui.components.highlight;
 
 import arc.graphics.Color;
-import arc.util.serialization.*;
 import mindustry.graphics.Pal;
-import modtools.ui.components.TextAreaTable;
-import modtools.ui.components.TextAreaTable.MyTextArea;
+import modtools.ui.components.area.TextAreaTable;
+import modtools.ui.components.area.TextAreaTable.MyTextArea;
 
 import java.util.regex.Pattern;
 

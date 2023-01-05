@@ -17,6 +17,7 @@ import arc.struct.Seq;
 import mindustry.Vars;
 import mindustry.content.Fx;
 import mindustry.content.UnitTypes;
+import mindustry.core.Version;
 import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.game.Team;
@@ -28,8 +29,7 @@ import mindustry.graphics.Layer;
 import mindustry.graphics.Pal;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
-import modtools.ui.Contents;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.components.MyItemSelection;
 import modtools.ui.components.Window;
 import modtools.utils.Tools;
@@ -121,7 +121,7 @@ public class UnitSpawn extends Content {
 					//					if (!isNaN(newY)) swapnY = Float.parseFloat(newY);
 				}).valid(val -> validNumber(val)).get();
 			}).growX().row();
-			table.button("@unitspawn.selectAposition", Styles.flatToggleMenut, () -> {
+			table.button("@unitspawn.selectAposition", IntStyles.flatToggleMenut, () -> {
 				//				ui.hide();
 				if (el.parent == null) {
 					Core.scene.addListener(listener);
@@ -132,7 +132,7 @@ public class UnitSpawn extends Content {
 			}).growX().height(32).update(b -> {
 				b.setChecked(el.parent != null);
 			});
-			table.button("@unitspawn.getfromplayer", Styles.cleart, () -> {
+			table.button("@unitspawn.getfromplayer", IntStyles.cleart, () -> {
 				setX(player.x);
 				setY(player.y);
 			}).growX().height(32);
@@ -162,7 +162,7 @@ public class UnitSpawn extends Content {
 			});
 		}).growX().row();
 		ui.cont.table(table -> {
-			table.button("@ok", Styles.cleart, this::spawn).size(90, 50)
+			table.button("@ok", IntStyles.cleart, this::spawn).size(90, 50)
 					.disabled(b -> !isOk());
 			table.check("Loop", b -> loop = b);
 		}).growX();
@@ -219,7 +219,9 @@ public class UnitSpawn extends Content {
 			return;
 		}
 		try {
-			Unit unit = selectUnit.sample;
+			Unit unit = Version.number >= 136 ?
+					selectUnit.sample :
+					selectUnit.constructor.get();
 
 			if (unit instanceof BlockUnitUnit) {
 				IntUI.showException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));

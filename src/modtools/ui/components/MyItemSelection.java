@@ -54,7 +54,7 @@ public class MyItemSelection {
 			}
 		}
 
-		ScrollPane pane = new ScrollPane(cont, IntStyles.nonePane);
+		ScrollPane pane = new ScrollPane(cont, IntStyles.noBarPane);
 		pane.setScrollingDisabled(true, false);
 		pane.setOverscroll(false, false);
 		table.add(pane).maxHeight(40 * 5).grow();

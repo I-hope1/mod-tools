@@ -40,6 +40,7 @@ import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
+import modtools.ui.components.Window.DisposableWindow;
 import modtools.utils.JSFunc;
 import modtools.utils.Tools;
 import modtools.utils.WorldDraw;
@@ -109,7 +110,7 @@ public class Selection extends Content {
 				int c = 0;
 
 				for (Team team : arr) {
-					ImageButton b = t1.button(IntUI.whiteui, Styles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
+					ImageButton b = t1.button(IntUI.whiteui, IntStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
 						defaultTeam = team;
 						settings.put(this.getSettingName() + "-defaultTeam", "" + team.id);
 					}).size(42).get();
@@ -136,6 +137,7 @@ public class Selection extends Content {
 
 	public void load() {
 		fragSelect = new Element();
+		fragSelect.name = "SelectionElem";
 		// fragSelect.update(() -> fragSelect.toFront());
 		fragSelect.touchable = Touchable.enabled;
 		fragSelect.setFillParent(true);
@@ -200,7 +202,7 @@ public class Selection extends Content {
 					start.y = end.y;
 					end.y = tmp;
 				}
-				fragSelect.visible = false;
+				fragSelect.remove();
 
 				if (!Core.input.alt()) {
 					tiles.clearList();
@@ -257,7 +259,7 @@ public class Selection extends Content {
 				//				start = end = null;
 			}
 		};
-		Core.scene.add(fragSelect);
+		// Core.scene.add(fragSelect);
 		fragSelect.addListener(listener);
 
 		/*fragDraw = new FragDraw();
@@ -314,7 +316,7 @@ public class Selection extends Content {
 					tile.setFloorUnder((Floor) floor);
 				});
 			});
-			ListFunction(t, "设置Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor), (button, overlay) -> {
+			ListFunction(t, "设置Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), (button, overlay) -> {
 				tiles.each(tile -> {
 					tile.setOverlay(overlay);
 				});
@@ -339,7 +341,7 @@ public class Selection extends Content {
 						amount[0] = s;
 					}).valid(Tools::validPosInt);
 
-					table.button("", Icon.ok, Styles.cleart, () -> {
+					table.button("", Icon.ok, IntStyles.cleart, () -> {
 						func.each(b -> {
 							if (b.items != null) {
 								b.items.set(item, Tools.asInt(amount[0]));
@@ -355,7 +357,7 @@ public class Selection extends Content {
 					table.field("", s -> {
 						amount[0] = s;
 					}).valid(Tools::validPosInt);
-					table.button("", Icon.ok, Styles.cleart, () -> {
+					table.button("", Icon.ok, IntStyles.cleart, () -> {
 						func.each(b -> {
 							if (b.liquids != null) {
 								float now = b.liquids.get(liquid);
@@ -456,7 +458,7 @@ public class Selection extends Content {
 	}
 
 	public void hide() {
-		fragSelect.visible = false;
+		fragSelect.remove();
 		show = false;
 		//		pane.visible = false;
 		//		pane.touchable = Touchable.disabled;
@@ -471,7 +473,7 @@ public class Selection extends Content {
 
 	public void build() {
 		show = true;
-		fragSelect.visible = true;
+		Core.scene.add(fragSelect);
 		//		fragSelect.touchable = Touchable.enabled;
 	}
 
@@ -739,7 +741,7 @@ public class Selection extends Content {
 			functions.add(wrap).padTop(10.0f).row();
 			main.image().color(Color.white).height(3.0f).padTop(3.0f).padBottom(3.0f).fillX().row();
 			main.add(name).growX().left().row();
-			main.button("show all", IntStyles.cleart, this::showAll).growX().height(buttonHeight).row();
+			main.button("show all", IntStyles.blackt, this::showAll).growX().height(buttonHeight).row();
 			main.add(cont).width(buttonWidth);
 			if (select.get(name)) {
 				setup();
@@ -785,7 +787,7 @@ public class Selection extends Content {
 		public final void showAll() {
 			final int cols = Vars.mobile ? 4 : 6;
 			final int[] c = new int[]{0};
-			new Window(name, 0, 200, true) {{
+			new DisposableWindow(name, 0, 200, true) {{
 				cont.pane(table -> {
 					list.forEach(item -> {
 						var cont = new Table(Tex.pane) {
@@ -842,7 +844,7 @@ public class Selection extends Content {
 						table.add(cont).minWidth(150);
 						buildTable(item, cont);
 						cont.row();
-						cont.button("更多信息", IntStyles.cleart, () -> {
+						cont.button("更多信息", IntStyles.blackt, () -> {
 							JSFunc.showInfo(item);
 						}).growX().height(buttonHeight);
 						if (++c[0] % cols == 0) {

@@ -4,14 +4,19 @@ import arc.*;
 import arc.files.Fi;
 import arc.graphics.Color;
 import arc.math.Mathf;
+import arc.scene.ui.Image;
+import arc.scene.ui.ImageButton;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.type.Sector;
+import mindustry.ui.Fonts;
 import modtools.ui.*;
-import modtools.utils.Tools;
+import modtools.utils.*;
+
+import java.awt.*;
 
 import static mindustry.Vars.ui;
 import static modtools.utils.MySettings.*;
@@ -41,9 +46,6 @@ public class ModTools extends Mod {
 				ui.showException(throwable);
 				return;
 			}
-			// Planets.serpulo.sectors.set(171, new MySactor(Planets.serpulo.sectors.get(171)) {{
-			// 	threat = 10;
-			// }});
 
 			// texture.getTextureData();
 			MyFonts.load();
@@ -59,13 +61,15 @@ public class ModTools extends Mod {
 				Objects.requireNonNull(dialog);
 				cont.button("I see", dialog::hide).size(100f, 50f);
 				dialog.show();*/
+				//noinspection Convert2MethodRef
 				IntVars.load();
-				if (settings.getBool("ShowMainMenuBackground")) {
-					try {
-						Background.main();
-					} catch (Throwable ignored) {}
-				}
 			});
+			if (settings.getBool("ShowMainMenuBackground")) {
+				try {
+					Background.main();
+				} catch (Throwable ignored) {}
+			}
+			// JSFunc.testElement(new Image(Fonts.def.getRegion()));
 
 			/*TechTree.nodeRoot("AAA", blockAAA, () -> {
 				TechTree.node(blockBBB
@@ -75,26 +79,6 @@ public class ModTools extends Mod {
 	}
 
 	public static Throwable throwable = null;
-
-	public static class MySactor extends Sector {
-		public MySactor(Sector sector) {
-			super(sector.planet, sector.tile);
-			threat = sector.threat;
-			generateEnemyBase = sector.generateEnemyBase;
-			save = sector.save;
-			preset = sector.preset;
-			info = sector.info;
-		}
-
-		public String displayThreat() {
-			float step = 0.2f;
-			String color = Tmp.c1.set(Color.white).lerp(Color.scarlet, Mathf.round(threat, step)).toString();
-			String[] threats = {"low", "medium", "high", "extreme", "eradication", "hell"};
-			int index = Math.min((int) (threat / step), threats.length - 1);
-			return "[#" + color + "]" + Core.bundle.get("threat." + threats[index]);
-		}
-
-	}
 
 	public static void loadReflect() {
 		mainLoader = (ModClassLoader) Vars.mods.mainLoader();

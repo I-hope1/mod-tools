@@ -47,7 +47,8 @@ public class ShowUIList extends Content {
 		Seq<Table> tables = Seq.with(
 				new Table(t -> {
 					Icon.icons.each((k, icon) -> {
-						t.image(new TextureRegionDrawable(icon)).size(32);
+						var region = icon.getRegion();
+						t.image(icon).size(32, region.height / (float) region.width * 32);
 						t.add("" + k).with(l -> l.clicked(() -> copyText(l))).growY().row();
 					});
 				}),

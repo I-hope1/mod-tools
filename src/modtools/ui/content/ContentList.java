@@ -4,8 +4,7 @@ import arc.Core;
 import arc.graphics.Color;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
-import arc.struct.ObjectMap;
-import arc.struct.Seq;
+import arc.struct.*;
 import mindustry.Vars;
 import mindustry.content.Bullets;
 import mindustry.content.Fx;
@@ -15,7 +14,7 @@ import mindustry.gen.Icon;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 import modtools.ui.components.Window;
-import modtools.utils.Tools;
+import modtools.utils.*;
 
 import java.lang.reflect.Field;
 import java.util.regex.Pattern;
@@ -75,14 +74,8 @@ public class ContentList extends Content {
 
 
 	public void rebuild(String text) {
-		Seq<Color> colors = new Seq<>();
-		Seq<Table> tables = new Seq<>() {
-			@Override
-			public Seq<Table> add(Table value) {
-				colors.add(Color.sky);
-				return super.add(value);
-			}
-		};
+		MyObjectSet<Table> tables = new MyObjectSet<>();
+		Color[] colors = {Color.sky, Color.sky};
 		String[] names = {"fx", "bullet"};
 		Pattern pattern = null;
 		try {
@@ -124,7 +117,10 @@ public class ContentList extends Content {
 			});
 		}));
 
-		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), colors, tables);
+		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600,
+				new Seq<>(names),
+				new Seq<>(colors),
+				tables.toSeq());
 		tab.title.add("@contentlist.tip").growX().row();
 
 		main.clearChildren();

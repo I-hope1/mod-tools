@@ -9,11 +9,13 @@ import arc.graphics.g2d.*;
 import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.Log;
 import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.EffectState;
+
+import java.util.*;
 
 /**
  * 世界渲染模块
@@ -24,7 +26,7 @@ public class WorldDraw {
 	// 玩家渲染区域
 	public static final Rect rect = new Rect();
 	// 存储渲染
-	public final Seq<Boolp> drawSeq = new Seq<>();/* {
+	public final MyObjectSet<Boolp> drawSeq = new MyObjectSet<>();/* {
 		@Override
 		public Seq<Boolp> add(Boolp value) {
 			hasChange = true;
@@ -47,7 +49,7 @@ public class WorldDraw {
 	public static final Vec2 center = new Vec2();
 	// public boolean hasChange = false;
 	// public MyEntity entity = new MyEntity();
-	public static Seq<Runnable> tasks = new Seq<>();
+	public static ObjectSet<Runnable> tasks = new ObjectSet<>();
 
 	public WorldDraw(float z) {
 		tasks.add(() -> {

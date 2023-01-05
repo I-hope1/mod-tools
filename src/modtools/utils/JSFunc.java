@@ -13,12 +13,14 @@ import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
+import hope_android.FieldUtils;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.components.*;
+import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.content.*;
 import modtools.ui.content.ElementShow.ElementShowWindow;
 import ihope_lib.MyReflect;
@@ -29,6 +31,7 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.getAbsPos;
 
@@ -91,10 +94,10 @@ public class JSFunc {
 			}
 		});
 		if (clazz.isArray()) {
-			if (o == null) return new Window("none");
+			if (o == null) return new DisposableWindow("none");
 			Table _cont = new Table();
 			_cont.defaults().grow();
-			_cont.button(Icon.refresh, Styles.clearNonei, () -> {
+			_cont.button(Icon.refresh, IntStyles.clearNonei, () -> {
 				// 使用Time.runTask避免stack overflow
 				Time.runTask(0, () -> {
 					dialog[0].hide();
@@ -122,7 +125,7 @@ public class JSFunc {
 				_cont.image().color(underline).growX().row();
 			}
 
-			dialog[0] = new Window(clazz.getSimpleName(), 200, 200, true);
+			dialog[0] = new DisposableWindow(clazz.getSimpleName(), 200, 200, true);
 			dialog[0].cont.pane(_cont).grow();
 			dialog[0].show();
 			return dialog[0];
@@ -134,7 +137,7 @@ public class JSFunc {
 		cont.left().defaults().left();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.button(Icon.refresh, Styles.clearNonei, () -> {
+			t.button(Icon.refresh, IntStyles.clearNonei, () -> {
 				// 使用Time.runTask避免stack overflow
 				/*Time.runTask(0, () -> {
 					dialog[0].hide();
@@ -232,30 +235,49 @@ public class JSFunc {
 			window.classesTable.filter(name -> pattern == null || pattern.matcher(name).find() != isBlack);
 			return;
 		}
-		cont.add("@jsfunc.field").row();
+		ReflectTable fields, methods, constructors, classes;
+		boolean[] c = {false, false, false, false};
+
+		// cont.add("@jsfunc.field").row();
+		cont.button("@jsfunc.field", IntStyles.flatTogglet, () -> c[0] ^= true).growX().height(42)
+				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
+				.row();
 		cont.image().color(Pal.accent).fillX().row();
-		var fields = window.fieldsTable = cont.add(new ReflectTable())
+		cont.collapser(fields = window.fieldsTable = new ReflectTable(), true, () -> c[0])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get();
+				.fillX().padTop(8);
 		fields.left().defaults().left().top();
 		cont.row();
-		cont.add("@jsfunc.method").row();
+
+		// cont.add("@jsfunc.method").row();
+		cont.button("@jsfunc.method", IntStyles.flatTogglet, () -> c[1] ^= true).growX().height(42)
+				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
+				.row();
 		cont.image().color(Pal.accent).fillX().row();
-		var methods = window.methodsTable = cont.add(new ReflectTable())
+		cont.collapser(methods = window.methodsTable = new ReflectTable(), true, () -> c[1])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get();
+				.fillX().padTop(8);
 		methods.left().defaults().left().top();
 		cont.row();
-		cont.add("@jsfunc.constructor").row();
+
+		// cont.add("@jsfunc.constructor").row();
+		cont.button("@jsfunc.constructor", IntStyles.flatTogglet, () -> c[2] ^= true).growX().height(42)
+				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
+				.row();
 		cont.image().color(Pal.accent).fillX().row();
-		Table constructors = cont.table(t -> t.left().defaults().left().top())
-				.pad(4, 6, 4, 6).fill().padTop(8).get();
-		cont.row();
-		cont.add("@jsfunc.class").row();
-		cont.image().color(Pal.accent).fillX().row();
-		var classes = window.classesTable = cont.add(new ReflectTable())
+		cont.collapser(constructors = new ReflectTable(), true, () -> c[2])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get();
+				.fillX().padTop(8);
+		constructors.left().defaults().left().top();
+		cont.row();
+
+		cont.button("@jsfunc.class", IntStyles.flatTogglet, () -> c[3] ^= true).growX().height(42)
+				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
+				.row();
+		cont.image().color(Pal.accent).fillX().row();
+		cont.collapser(classes = window.classesTable = new ReflectTable(), true, () -> c[3])
+				.pad(4, 6, 4, 6)
+				.fillX().padTop(8);
 		classes.left().defaults().left().top();
 
 		boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
@@ -339,7 +361,23 @@ public class JSFunc {
 									});
 								});
 							});
+						} else if (l.type == Boolean.TYPE || l.type == Boolean.class) {
+							var btn = new TextButton((boolean) l.val ? "TRUE" : "FALSE", IntStyles.flatTogglet);
+							btn.setChecked((boolean) l.val);
+							btn.clicked(() -> {
+								boolean b = !(boolean) l.val;
+								btn.setText(b ? "TRUE" : "FALSE");
+								try {
+									l.setFieldValue(b);
+								} catch (Throwable e) {
+									IntUI.showException(e).setPosition(Core.input.mouse());
+								}
+								l.setVal(b);
+							});
+							cell.setElement(btn);
+							cell.size(96, 42);
 						}
+
 						// prefW[0] = l.getPrefWidth();
 						// listener.run();
 						// Time.runTask(0, () -> l.setWrap(true));
@@ -456,7 +494,7 @@ public class JSFunc {
 
 							t.table(buttons -> {
 								buttons.right().top().defaults().right().top();
-								buttons.button("Invoke", Styles.flatBordert, () -> {
+								buttons.button("Invoke", IntStyles.flatBordert, () -> {
 									try {
 										l.setVal(m.invoke(o));
 										// l.setWrap(false);
@@ -779,6 +817,15 @@ public class JSFunc {
 			setText(text);
 		}
 
+		public void setFieldValue(Object val) {
+			boolean isStatic = Modifier.isStatic(field.getModifiers());
+
+			unsafe.putObject(isStatic ? field.getDeclaringClass() : obj,
+					OS.isAndroid ? FieldUtils.getFieldOffset(field) :
+							isStatic ? unsafe.staticFieldOffset(field) : unsafe.objectFieldOffset(field),
+					val);
+		}
+
 		public void clearVal() {
 			val = "";
 			lastWidth = 0;
@@ -864,7 +911,7 @@ public class JSFunc {
 	}
 
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
-		table.button("@details", Styles.flatBordert, () -> {
+		table.button("@details", IntStyles.flatBordert, () -> {
 			Object o = prov.get();
 			showInfo(o, o != null ? o.getClass() : clazz);
 		}).size(96, 45);
@@ -874,7 +921,7 @@ public class JSFunc {
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(
 				key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2") : Core.bundle.format("jsfunc.store_as_js_var", key),
-				Styles.flatBordert, () -> {}).padLeft(10f).size(180, 40).with(b -> {
+				IntStyles.flatBordert, () -> {}).padLeft(10f).size(180, 40).with(b -> {
 			b.clicked(() -> {
 				tester.put(b, prov.get());
 			});

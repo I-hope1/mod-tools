@@ -56,7 +56,7 @@ public class Frag extends Table {
 			Content.all.forEach(cont -> {
 				if (cont == null || !cont.loadable()) return;
 				String localizedName = cont.localizedName();
-				var style = Styles.flatt;
+				var style = IntStyles.flatt;
 				// var style = Styles.cleart;
 				// Objects.requireNonNull(cont);
 				cont.btn = table.button(localizedName, style, cont::build).size(120, 40).get();
@@ -64,12 +64,14 @@ public class Frag extends Table {
 				cont.load();
 				table.row();
 			});
-		}), Styles.noBarPane)).size(120, 40 * 5 + 1);
+		}), IntStyles.noBarPane)).size(120, 40 * 5 + 1);
 		// lastIndex = getCells().indexOf(cell);
 		contPane = cell.get();
 		contPane.update(() -> contPane.setOverscroll(false, false));
 		left().bottom();
+		topGroup.ok = true;
 		topGroup.addChild(this);
+		topGroup.ok = false;
 		Log.info(this);
 
 		IntVars.addResizeListener(() -> listener.display(x, y));

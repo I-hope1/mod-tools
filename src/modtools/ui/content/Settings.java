@@ -7,12 +7,12 @@ import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
+import mindustry.core.Version;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.components.Window;
 
-import static modtools.IntVars.frag;
-import static modtools.IntVars.topGroup;
+import static modtools.IntVars.*;
 import static modtools.utils.MySettings.settings;
 
 public class Settings extends Content {
@@ -60,12 +60,15 @@ public class Settings extends Content {
 			check("@settings.mainmenubackground", settings.getBool("ShowMainMenuBackground"), b -> settings.put("ShowMainMenuBackground", b)).row();
 			check("@settings.checkuicount", topGroup.checkUI, b -> topGroup.checkUI = b).row();
 			check("@settings.fragtofront", frag.keepFrag, b -> settings.put("ShowMainMenuBackground", frag.keepFrag = b)).row();
+			check("@settings.debugbounds", topGroup.debugBounds, b -> settings.put("debugbounds", topGroup.debugBounds = b)).row();
 			Settings.slider(this, "rendererMinZoom", 0.1f, Vars.renderer.minZoom, Vars.renderer.minZoom, 0.1f, val -> {
 				Vars.renderer.minZoom = val;
 			}).change();
-			Settings.slider(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1f, val -> {
-				Vars.maxSchematicSize = (int) val;
-			}).change();
+			if (Version.number >= 136) {
+				Settings.slider(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1f, val -> {
+					Vars.maxSchematicSize = (int) val;
+				});
+			}
 		}});
 		Content.all.forEach(cont -> {
 			if (!(cont instanceof Settings)) {

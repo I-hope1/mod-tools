@@ -2,10 +2,8 @@ package modtools.ui.components.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import arc.util.Log;
-import modtools.ui.components.TextAreaTable;
+import modtools.ui.components.area.TextAreaTable;
 
-import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class JSSyntax extends Syntax {

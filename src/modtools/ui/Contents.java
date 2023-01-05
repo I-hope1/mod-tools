@@ -12,6 +12,7 @@ public class Contents {
 	public static ContentList contentList;
 	public static ElementShow elementShow;
 	public static WindowManager windowManager;
+	public static ActionsDebug actionsDebug;
 
 	public static void load() {
 		settings = new Settings();
@@ -23,6 +24,6 @@ public class Contents {
 		contentList = new ContentList();
 		elementShow = new ElementShow();
 		windowManager = new WindowManager();
-
+		actionsDebug = new ActionsDebug();
 	}
 }

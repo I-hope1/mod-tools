@@ -1,6 +1,9 @@
 package modtools.ui;
 
 import modtools.ui.content.*;
+import modtools.ui.content.debug.*;
+import modtools.ui.content.ui.*;
+import modtools.ui.content.world.*;
 
 public class Contents {
 	public static Settings settings;
@@ -10,9 +13,9 @@ public class Contents {
 	public static UnitSpawn unitSpawn;
 	public static ErrorDisplay errorDisplay;
 	public static ContentList contentList;
-	public static ElementShow elementShow;
+	public static ReviewElement elementShow;
 	public static WindowManager windowManager;
-	public static ActionsDebug actionsDebug;
+	// public static ActionsDebug actionsDebug;
 
 	public static void load() {
 		settings = new Settings();
@@ -22,8 +25,8 @@ public class Contents {
 		unitSpawn = new UnitSpawn();
 		errorDisplay = new ErrorDisplay();
 		contentList = new ContentList();
-		elementShow = new ElementShow();
+		elementShow = new ReviewElement();
 		windowManager = new WindowManager();
-		actionsDebug = new ActionsDebug();
+		// actionsDebug = new ActionsDebug();
 	}
 }

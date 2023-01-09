@@ -1,47 +1,37 @@
 
-package modtools.ui.content;
+package modtools.ui.content.debug;
 
-import arc.Core;
-import arc.Events;
+import arc.*;
 import arc.files.Fi;
-import arc.func.*;
-import arc.func.Func;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.scene.Action;
 import arc.scene.Element;
-import arc.scene.Scene;
 import arc.scene.event.*;
 import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.*;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
 import arc.util.*;
 import hope_rhino.LinkRhino189012201;
+import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.Icon;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
-import modtools.ui.Contents;
-import modtools.ui.IntStyles;
-import modtools.ui.IntUI;
-import modtools.ui.components.MyLabel;
-import modtools.ui.components.SclLisetener;
+import modtools.ui.*;
+import modtools.ui.components.*;
 import modtools.ui.components.area.TextAreaTable;
 import modtools.ui.components.area.TextAreaTable.MyTextArea;
-import modtools.ui.components.Window;
-import modtools.ui.components.highlight.*;
+import modtools.ui.components.highlight.JSSyntax;
+import modtools.ui.content.Content;
+import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
-import ihope_lib.MyReflect;
 import rhino.*;
 
-import java.lang.reflect.*;
-import java.util.Objects;
-import java.util.regex.Pattern;
+import java.lang.reflect.Method;
 
+import static modtools.ui.components.ListDialog.fileUnfair;
 import static modtools.utils.Tools.getAbsPos;
 
 public class Tester extends Content {
@@ -52,8 +42,8 @@ public class Tester extends Content {
 	private boolean
 			wrap = false, error, ignorePopUpError = false,
 			wrapRef = true, multiWindows = false;
-	static final float w = Core.graphics.isPortrait() ? 440 : 540;
-	Window ui;
+	public static final float w = Core.graphics.isPortrait() ? 440 : 540;
+	public Window ui;
 	ListDialog history, bookmark;
 	public Scripts scripts;
 	public Scriptable scope;
@@ -66,17 +56,24 @@ public class Tester extends Content {
 
 	private static float sort(Fi f) {
 		try {
-			return -Long.parseLong(f.nameWithoutExtension());
+			return -f.lastModified();
+			// return -Long.parseLong(f.nameWithoutExtension());
 		} catch (Exception e) {
 			return Long.MAX_VALUE;
 		}
 	}
 
+	/**
+	 * 用于回滚历史
+	 */
+	public int historyIndex;
+	public static final boolean reincarnationHistory = false;
+
 	public void build(Table table, Table buttons) {
 		if (ui == null) _load();
+
 		TextAreaTable textarea = new TextAreaTable("");
 		Table cont = new Table() {
-			@Override
 			public Element hit(float x, float y, boolean touchable) {
 				Element element = super.hit(x, y, touchable);
 				if (element == null) return null;
@@ -84,17 +81,61 @@ public class Tester extends Content {
 				return element;
 			}
 		};
+		Runnable invalidate = () -> {
+			// cont.invalidate();
+			textarea.getArea().invalidateHierarchy();
+		};
+		ui.maximized(isMax -> {
+			Time.runTask(0, invalidate);
+		});
+		ui.sclLisetener.listener = invalidate;
+
 		textarea.syntax = new JSSyntax(textarea);
 		// JSSyntax.apply(textarea);
 		area = textarea.getArea();
 		boolean[] execed = {false};
 		textarea.keyDonwB = (event, keycode) -> {
-			if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.enter) {
-				complieAndExec(() -> {});
-				execed[0] = true;
+			if (Core.input.ctrl() && Core.input.shift()) {
+				if (keycode == KeyCode.enter) {
+					complieAndExec(() -> {});
+					execed[0] = true;
+				}
+				if (keycode == KeyCode.up) {
+					int i = historyIndex++;
+					if (!reincarnationHistory && historyIndex >= history.list.size) {
+						historyIndex = history.list.size - 1;
+						return false;
+					}
+					if (i >= history.list.size) {
+						if (reincarnationHistory) {
+							i -= history.list.size;
+							historyIndex -= history.list.size;
+						}
+					}
+
+					Fi dir = history.list.get(i);
+					area.setText(dir.child("message.txt").readString());
+					log = dir.child("log.txt").readString();
+				}
+				if (keycode == KeyCode.down) {
+					int i = historyIndex--;
+					if (!reincarnationHistory && historyIndex < 0) {
+						historyIndex = 0;
+						return false;
+					}
+					if (i < 0) {
+						if (reincarnationHistory) {
+							i += history.list.size;
+							historyIndex += history.list.size;
+						}
+					}
+					Fi dir = history.list.get(i);
+					area.setText(dir.child("message.txt").readString());
+					log = dir.child("log.txt").readString();
+				}
 				return false;
 			}
-			//			Core.input.ctrl() && keycode == KeyCode.rightBracket
+			// Core.input.ctrl() && keycode == KeyCode.rightBracket
 			if (keycode == KeyCode.tab) {
 				area.insert("  ");
 				area.setCursorPosition(area.getCursorPosition() + 2);
@@ -118,23 +159,7 @@ public class Tester extends Content {
 			t.button("@ok", () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
-				complieAndExec(() -> {
-					Fi d = history.file.child(String.valueOf(Time.millis()));
-					d.child("message.txt").writeString(getMessage());
-					d.child("log.txt").writeString(log);
-					history.list.insert(0, d);
-					if (history.isShown()) {
-						history.build();
-					}
-					//	history.build(d).with(b -> b.setZIndex(0));
-
-					int max = history.list.size - 1;
-					int min = 30;
-					for (int i = max; i >= min; i--) {
-						history.list.get(i).deleteDirectory();
-						history.list.remove(i);
-					}
-				});
+				complieAndExec(() -> {});
 			});
 			t.button(Icon.right, area::right);
 			t.button(Icon.copy, area::copy).padLeft(8f);
@@ -158,7 +183,7 @@ public class Tester extends Content {
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				super.touchDragged(event, x, y, pointer);
 
-				cell.height(Mathf.clamp(bind.getHeight(), 100, cont.getHeight() - 140));
+				cell.height(Mathf.clamp(bind.getHeight(), 100, cont.getHeight() - 150));
 				cont.invalidate();
 				pane.setScrollingDisabled(false, false);
 				// cont.layout();
@@ -167,7 +192,7 @@ public class Tester extends Content {
 			}
 
 			{
-				cell.height(Mathf.clamp(bind.getHeight() + 1, 100, cont.getHeight() - 140));
+				cell.height(Mathf.clamp(bind.getHeight() + 1, 100, cont.getHeight() - 150));
 				cont.invalidate();
 			}
 
@@ -177,16 +202,22 @@ public class Tester extends Content {
 				pane.setScrollingDisabled(false, true);
 			}
 		};
-		ui.sclLisetener.listener = () -> {
-			cont.invalidate();
-		};
 		table.add(cont).grow().maxHeight(Core.graphics.getHeight()).row();
 		table.pane(p -> {
 			p.button(Icon.star, IntStyles.clearNonei, () -> {
-				Fi fi = bookmark.file.child(Time.millis() + ".txt");
-				bookmark.list.add(fi);
-				fi.writeString(getMessage());
-				bookmark.build();
+				new NameWindow(res -> {
+					Fi fi = bookmark.file.child(res);
+					bookmark.list.insert(0, fi);
+					fi.writeString(getMessage());
+					bookmark.build();
+				}, t -> {
+					try {
+						return !t.isBlank() && !fileUnfair.matcher(t).find()
+								&& !bookmark.file.child(t).exists();
+					} catch (Throwable e) {
+						return false;
+					}
+				}, "").show();
 			}).size(42).padRight(6f);
 			p.defaults().size(100, 60);
 			p.button(b -> {
@@ -266,6 +297,24 @@ public class Tester extends Content {
 		Time.runTask(0, () -> {
 			complieScript();
 			execScript();
+
+			historyIndex = 0;
+			// 保存历史记录
+			Fi d = history.file.child(String.valueOf(Time.millis()));
+			d.child("message.txt").writeString(getMessage());
+			d.child("log.txt").writeString(log);
+			history.list.insert(0, d);
+			if (history.isShown()) {
+				history.build();
+			}
+			//	history.build(d).with(b -> b.setZIndex(0));
+
+			int max = history.list.size - 1;
+			int min = 30;
+			for (int i = max; i >= min; i--) {
+				history.list.get(i).deleteDirectory();
+				history.list.remove(i);
+			}
 			callback.run();
 		});
 	}
@@ -289,6 +338,7 @@ public class Tester extends Content {
 		log = Strings.neatError(ex);
 	}
 
+	// 执行脚本
 	public void execScript() {
 		if (error) return;
 		try {
@@ -319,7 +369,8 @@ public class Tester extends Content {
 	}
 
 	public void _load() {
-		ui = new Window(localizedName(), w, 600, true, false);
+		ui = new Window(localizedName(), w, 400, true, false);
+		// JSFunc.watch("times", () -> ui.times);
 		/*ui.update(() -> {
 			ui.setZIndex(frag.getZIndex() - 1);
 		});*/
@@ -443,7 +494,6 @@ public class Tester extends Content {
 				.setPosition(getAbsPos(element));
 	}
 
-	public static Pattern fileUnfair = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*$)");
 
 	/*public class ListDialog extends Window {
 		public Seq<Fi> list = new Seq<>();
@@ -564,81 +614,6 @@ public class Tester extends Content {
 		}
 	}*/
 
-	static class ListDialog extends Window {
-		public Seq<Fi> list = new Seq<>();
-		final Table p = new Table();
-		Floatf<Fi> sorter;
-		Fi file;
-		Func<Fi, Fi> fileHolder;
-		Cons<Fi> consumer;
-		Cons2<Fi, Table> pane;
 
-		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane, Floatf<Fi> sorter) {
-			super(Core.bundle.get("title." + title, title), w, 600, true);
-			cont.add("@tester.tip").growX().left().row();
-			cont.pane(p).grow();
-			//			addCloseButton();
-			this.file = file;
-			list.addAll(file.list());
-			this.fileHolder = fileHolder;
-			this.consumer = consumer;
-			this.pane = pane;
-			this.sorter = sorter;
-
-			list.sort(sorter);
-		}
-
-		public Window show(Scene stage, Action action) {
-			build();
-			return super.show(stage, action);
-		}
-
-		public void build() {
-			p.clearChildren();
-
-			list.each(this::build);
-		}
-
-
-		public Cell<Table> build(Fi f) {
-			var tmp = p.table(Window.myPane, t -> {
-				Button btn = t.left().button(b -> {
-					b.pane(c -> {
-						c.add(fileHolder.get(f).readString()).left();
-					}).grow().left();
-				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
-				IntUI.longPress(btn, 600, longPress -> {
-					if (longPress) {
-						Dialog ui = new Dialog("");
-						ui.cont.pane(p1 -> {
-							pane.get(f, p1);
-						}).size(400).row();
-						ui.cont.button(Icon.trash, () -> {
-							ui.hide();
-							f.delete();
-						}).row();
-						Objects.requireNonNull(ui);
-						ui.cont.button("@ok", ui::hide).fillX().height(60);
-						ui.show();
-					} else {
-						consumer.get(f);
-						build();
-						hide();
-					}
-
-				});
-				t.button("", Icon.trash, IntStyles.cleart, () -> {
-					if (!f.deleteDirectory()) {
-						f.delete();
-					}
-
-					list.remove(f);
-					build();
-				}).fill().right();
-			}).width(w);
-			p.row();
-			return tmp;
-		}
-	}
 }
 

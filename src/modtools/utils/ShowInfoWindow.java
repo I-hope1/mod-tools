@@ -1,8 +1,7 @@
 package modtools.utils;
 
-import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisposableWindow;
-import modtools.utils.JSFunc.*;
+import modtools.utils.JSFunc.ReflectTable;
 
 class ShowInfoWindow extends DisposableWindow {
 

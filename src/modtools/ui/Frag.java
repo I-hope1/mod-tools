@@ -71,7 +71,7 @@ public class Frag extends Table {
 		left().bottom();
 		topGroup.ok = true;
 		topGroup.addChild(this);
-		topGroup.ok = false;
+		// topGroup.ok = false;
 		Log.info(this);
 
 		IntVars.addResizeListener(() -> listener.display(x, y));

@@ -41,6 +41,7 @@ import java.util.regex.Pattern;
  **/
 public class TextAreaTable extends Table {
 	private final MyTextArea area;
+	public final MyScrollPane pane;
 	/**
 	 * 编辑器是否只可读
 	 **/
@@ -61,28 +62,28 @@ public class TextAreaTable extends Table {
 
 		area = new MyTextArea(text);
 		area.setStyle(style);
-		MyScrollPane pane = new MyScrollPane();
+		pane = new MyScrollPane();
 		area.trackCursor = pane::trackCursor;
 		LinesShow linesShow = new LinesShow(area);
 		Cell<?> cell = add(linesShow).growY().left();
 		// fill().add(area);
 		add(pane).grow();
-		area.setPrefRows(14);
+		area.setPrefRows(10);
 		area.x += pane.x;
 		area.y += pane.y;
 		area.changed(() -> {
-			// pane.trackCursor();
-			Element last = Core.scene.getKeyboardFocus();
+			pane.trackCursor();
+			// Element last = Core.scene.getKeyboardFocus();
 			// 刷新Area
-			pane.setWidget(area);
+			pane.invalidate();
 			cell.setElement(showLine ? linesShow : null);
-			if (last == area) focus();
+			// if (last == area) focus();
 		});
 		Rect rect = new Rect();
 		margin(0);
 		update(() -> {
-			Element focus = Core.scene.getKeyboardFocus();
-			if (focus == area) Core.scene.setScrollFocus(pane);
+			// Element focus = Core.scene.getKeyboardFocus();
+			// if (focus == area) Core.scene.setScrollFocus(pane);
 			if (!showLine) cell.clearElement();
 			rect.set(x, y, width, height);
 			/*if (rect.contains(Core.input.mouse()) && visible && ((focus != null && isAscendantOf(focus)) || Core.scene.getScrollFocus() == pane))
@@ -95,7 +96,6 @@ public class TextAreaTable extends Table {
 
 		syntax = new JSSyntax(this);
 	}
-
 	/*@Override
 	public void draw() {
 		super.draw();
@@ -818,6 +818,7 @@ public class TextAreaTable extends Table {
 					trackCursor();
 				}
 
+				// 修复笔记本上不能使用的问题
 				int oldCursor = cursor;
 				boolean shift = Core.input.shift();
 				boolean jump = Core.input.ctrl();

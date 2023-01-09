@@ -1,5 +1,5 @@
 
-package modtools.ui.content;
+package modtools.ui.content.ui;
 
 import arc.Core;
 import arc.graphics.Color;
@@ -23,7 +23,8 @@ import mindustry.ui.Styles;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 import modtools.ui.components.Window;
-import modtools.utils.Tools;
+import modtools.ui.content.Content;
+import modtools.utils.*;
 
 import java.lang.reflect.Field;
 
@@ -38,7 +39,7 @@ public class ShowUIList extends Content {
 
 	public void copyText(Label label) {
 		IntUI.showInfoFade(Core.bundle.format("IntFunc.copied", label.getText())).setPosition(Tools.getAbsPos(label));
-		Core.app.setClipboardText(label.getText().toString());
+		Core.app.setClipboardText(String.valueOf(label.getText()));
 	}
 
 	public void _load() {
@@ -49,7 +50,7 @@ public class ShowUIList extends Content {
 					Icon.icons.each((k, icon) -> {
 						var region = icon.getRegion();
 						t.image(icon).size(32, region.height / (float) region.width * 32);
-						t.add("" + k).with(l -> l.clicked(() -> copyText(l))).growY().row();
+						t.add("" + k).with(JSFunc::addDClickCopy).growY().row();
 					});
 				}),
 				new Table(t -> {
@@ -64,7 +65,7 @@ public class ShowUIList extends Content {
 							Log.err(err);
 						}
 
-						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l))).growY().row();
+						t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
 					}
 
 				}),
@@ -106,7 +107,7 @@ public class ShowUIList extends Content {
 							continue;
 						}
 
-						t.add(field.getName()).with(l -> l.clicked(() -> copyText(l))).growY().row();
+						t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
 					}
 
 				}));

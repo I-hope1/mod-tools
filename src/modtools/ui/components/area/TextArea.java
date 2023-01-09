@@ -11,11 +11,14 @@ import arc.scene.ui.TextField.TextFieldStyle;
 import arc.struct.IntSeq;
 import arc.util.Align;
 import arc.util.pooling.Pools;
+import mindustry.core.Version;
+
+import java.lang.reflect.Field;
 
 /**
  * A multiple-line text input field, entirely based on {@link arc.scene.ui.TextField}
  */
-public class TextArea extends modtools.ui.components.area.TextField {
+public class TextArea extends TextField {
 
 	/**
 	 * Array storing starting and ending positions of each line.
@@ -42,6 +45,14 @@ public class TextArea extends modtools.ui.components.area.TextField {
 	 **/
 	protected int linesShowing;
 	protected float prefRows;
+
+	// 为了适配v6
+	public TextFieldStyle style;
+
+	public void setStyle(TextFieldStyle style) {
+		super.setStyle(style);
+		this.style = style;
+	}
 
 	public TextArea(String text) {
 		super(text);
@@ -393,9 +404,18 @@ public class TextArea extends modtools.ui.components.area.TextField {
 			updateCurrentLine();
 		}
 
-		@Override
+
+		public boolean getFocusTraversal() {
+			if (focusTraversalField == null) return focusTraversal;
+			try {
+				return focusTraversalField.getBoolean(TextArea.this);
+			} catch (IllegalAccessException e) {
+				return false;
+			}
+		}
+
 		protected boolean checkFocusTraverse(char character) {
-			return focusTraversal && character == TAB;
+			return getFocusTraversal() && character == TAB;
 		}
 
 		@Override
@@ -463,6 +483,21 @@ public class TextArea extends modtools.ui.components.area.TextField {
 				cursor = text.length();
 			} else if (cursorLine * 2 + 1 < linesBreak.size) {
 				cursor = linesBreak.get(cursorLine * 2 + 1);
+			}
+		}
+	}
+
+
+	// 为了适配135
+	static Field focusTraversalField;
+
+	static {
+		if (Version.number <= 135) {
+			try {
+				focusTraversalField = TextField.class.getDeclaredField("focusTraversal");
+				focusTraversalField.setAccessible(true);
+			} catch (NoSuchFieldException e) {
+				throw new RuntimeException(e);
 			}
 		}
 	}

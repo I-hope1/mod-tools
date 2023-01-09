@@ -3,6 +3,7 @@ package modtools.ui.components;
 import arc.func.Prov;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
+import arc.scene.Group;
 import arc.scene.ui.*;
 import arc.util.Time;
 import modtools.utils.*;
@@ -25,7 +26,7 @@ public class FrameLabel extends Label {
 	}
 
 	boolean frameInvalid = true;
-	public TextureRegion region = new TextureRegion();
+	public TextureRegion region;
 
 	@Override
 	public void setText(CharSequence newText) {
@@ -36,10 +37,19 @@ public class FrameLabel extends Label {
 	@Override
 	public void draw() {
 		if (frameInvalid) {
-			Bloom bloom = new Bloom((int) width, (int) height, true, true);
-			region = WorldDraw.drawRegion((int) width, (int) height, () -> {
+			// Bloom bloom = new Bloom((int) width, (int) height, true, true);
+			region = WorldDraw.drawRegion((int) width * 8, (int) height * 8, () -> {
 				// validate();
-				Color color = tempColor.set(this.color);
+				float lx = x, ly = y;
+				x = -width;
+				y = -height;
+				Group lparent = parent;
+				parent = null;
+				super.draw();
+				x = lx;
+				y = ly;
+				parent = lparent;
+				/*Color color = tempColor.set(this.color);
 				color.a *= parentAlpha;
 				if (style.background != null) {
 					Draw.color(color.r, color.g, color.b, color.a);
@@ -48,7 +58,7 @@ public class FrameLabel extends Label {
 				if (style.fontColor != null) color.mul(style.fontColor);
 				cache.tint(color);
 				cache.setPosition(0, 0);
-				cache.draw();
+				cache.draw();*/
 			});
 			frameInvalid = false;
 		}

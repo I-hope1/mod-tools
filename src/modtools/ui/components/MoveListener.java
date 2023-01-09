@@ -12,7 +12,7 @@ import arc.util.*;
 import arc.util.Timer.Task;
 
 public class MoveListener extends InputListener {
-	public float bx, by;
+	// public float bx, by;
 	public final Table main;
 	public final Element touch;
 	public boolean disabled = false;
@@ -51,6 +51,8 @@ public class MoveListener extends InputListener {
 		if (fire != null) fire.run();
 		// Log.info(event.stageX == x);
 		// Vec2 v = main.localToStageCoordinates(Tmp.v1.set(x, y));
+		// display(-bx + v.x, -by + v.y);
+
 		Vec2 mouse = Core.input.mouse();
 		display(lastMain.x + mouse.x - lastMouse.x, lastMain.y + mouse.y - lastMouse.y);
 

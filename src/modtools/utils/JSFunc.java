@@ -21,9 +21,9 @@ import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableWindow;
-import modtools.ui.content.*;
-import modtools.ui.content.ElementShow.ElementShowWindow;
+import modtools.ui.content.ui.ReviewElement.ElementShowWindow;
 import ihope_lib.MyReflect;
+import modtools.ui.content.world.Selection;
 import rhino.*;
 
 import java.io.*;
@@ -72,27 +72,6 @@ public class JSFunc {
 		//			if (!clazz.isInstance(o)) return;
 
 		Window[] dialog = {null};
-		Table build = new Table();
-		// 默认左居中
-		build.left().defaults().left();
-		boolean[] isBlack = {false};
-		TextField textField = new TextField();
-		// Runnable[] last = {null};
-		Cons<String> rebuild = text -> {
-			// build.clearChildren();
-			Pattern pattern;
-			try {
-				pattern = text == null || text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
-			} catch (Throwable e) {
-				pattern = null;
-			}
-			buildReflect(o, (ShowInfoWindow) dialog[0], build, pattern, isBlack[0]);
-		};
-		textField.changed(() -> {
-			if (textField.isValid()) {
-				rebuild.get(textField.getText());
-			}
-		});
 		if (clazz.isArray()) {
 			if (o == null) return new DisposableWindow("none");
 			Table _cont = new Table();
@@ -130,6 +109,28 @@ public class JSFunc {
 			dialog[0].show();
 			return dialog[0];
 		}
+
+		Table build = new Table();
+		// 默认左居中
+		build.left().top().defaults().left();
+		boolean[] isBlack = {false};
+		TextField textField = new TextField();
+		// Runnable[] last = {null};
+		Cons<String> rebuild = text -> {
+			// build.clearChildren();
+			Pattern pattern;
+			try {
+				pattern = text == null || text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
+			} catch (Throwable e) {
+				pattern = null;
+			}
+			buildReflect(o, (ShowInfoWindow) dialog[0], build, pattern, isBlack[0]);
+		};
+		textField.changed(() -> {
+			if (textField.isValid()) {
+				rebuild.get(textField.getText());
+			}
+		});
 		dialog[0] = new ShowInfoWindow(clazz);
 
 		final Table cont = new Table();
@@ -245,7 +246,7 @@ public class JSFunc {
 		cont.image().color(Pal.accent).fillX().row();
 		cont.collapser(fields = window.fieldsTable = new ReflectTable(), true, () -> c[0])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8);
+				.fillX().padTop(8).get().setDuration(0.1f);
 		fields.left().defaults().left().top();
 		cont.row();
 
@@ -256,7 +257,7 @@ public class JSFunc {
 		cont.image().color(Pal.accent).fillX().row();
 		cont.collapser(methods = window.methodsTable = new ReflectTable(), true, () -> c[1])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8);
+				.fillX().padTop(8).get().setDuration(0.1f);
 		methods.left().defaults().left().top();
 		cont.row();
 
@@ -267,7 +268,7 @@ public class JSFunc {
 		cont.image().color(Pal.accent).fillX().row();
 		cont.collapser(constructors = new ReflectTable(), true, () -> c[2])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8);
+				.fillX().padTop(8).get().setDuration(0.1f);
 		constructors.left().defaults().left().top();
 		cont.row();
 
@@ -277,7 +278,7 @@ public class JSFunc {
 		cont.image().color(Pal.accent).fillX().row();
 		cont.collapser(classes = window.classesTable = new ReflectTable(), true, () -> c[3])
 				.pad(4, 6, 4, 6)
-				.fillX().padTop(8);
+				.fillX().padTop(8).get().setDuration(0.1f);
 		classes.left().defaults().left().top();
 
 		boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
@@ -320,7 +321,8 @@ public class JSFunc {
 					fields.add(new MyLabel(type.getSimpleName(), typeStyle))
 							.growY().padRight(16).touchable(Touchable.disabled);
 					// name
-					fields.add(f.getName(), IntStyles.myLabel).growY().touchable(Touchable.disabled);
+					addDClickCopy(fields.add(f.getName(), IntStyles.myLabel)
+							.growY().get());
 					fields.add(" = ", IntStyles.myLabel).growY().touchable(Touchable.disabled);
 				} catch (Throwable e) {
 					Log.err(e);
@@ -348,11 +350,11 @@ public class JSFunc {
 									.border(color.cpy().inv())).color(color).size(42f).with(b -> {
 								IntUI.doubleClick(b, () -> {}, () -> {
 									Vars.ui.picker.show(color, cur -> {
-										Log.info(color);
+										/*Log.info(color);
 										Log.info(color.set(cur));
 										Log.info(color == Color.white);
 										Log.info(color);
-										Log.info(Color.white);
+										Log.info(Color.white);*/
 										try {
 											Log.info(f.get(o));
 										} catch (IllegalAccessException e) {
@@ -455,7 +457,8 @@ public class JSFunc {
 					// return type
 					methods.add(new MyLabel(m.getReturnType().getSimpleName(), typeStyle)).growY().touchable(Touchable.disabled).padRight(8f);
 					// method name
-					methods.add(m.getName(), IntStyles.myLabel).growY().touchable(Touchable.disabled);
+					addDClickCopy(methods.add(m.getName(), IntStyles.myLabel)
+							.growY().get());
 					// method parameters + exceptions + buttons
 					methods.table(t -> {
 						t.left().defaults().left();
@@ -592,6 +595,7 @@ public class JSFunc {
 						int mod = dcls.getModifiers() & Modifier.classModifiers();
 						t.add(Modifier.toString(mod) + " class ", keywordStyle).padRight(8f).touchable(Touchable.disabled);
 						Label l = t.add(dcls.getSimpleName(), typeStyle).padRight(8f).get();
+						addDClickCopy(l);
 						Class<?>[] types = dcls.getInterfaces();
 						if (types.length > 0) {
 							t.add(" implements ", keywordStyle).padRight(8f).touchable(Touchable.disabled);
@@ -701,11 +705,23 @@ public class JSFunc {
 		return Context.javaToJS(o, scope);
 	}
 
+	// public static Window frameLabel(String text) {
+	// 	return testElement(new FrameLabel(text));
+	// }
+
 	static {
 		main = Vars.mods.mainLoader();
 		scope = Vars.mods.getScripts().scope;
 		classes = new ObjectMap<>();
 		// V8.createV8Runtime();
+	}
+
+	public static void addDClickCopy(Label label) {
+		IntUI.doubleClick(label, () -> {}, () -> {
+			Core.app.setClipboardText(String.valueOf(label.getText()));
+			IntUI.showInfoFade(Core.bundle.format("IntUI.copied", label.getText()))
+					.setPosition(Tools.getAbsPos(label));
+		});
 	}
 
 	static class BindCell {
@@ -867,7 +883,7 @@ public class JSFunc {
 	}
 
 
-	public static class WatchWindow extends Window {
+	public static class WatchWindow extends DisposableWindow {
 		Table pane;
 
 		public WatchWindow() {

@@ -1,25 +1,18 @@
 package modtools;
 
-import arc.*;
+import arc.Events;
 import arc.files.Fi;
-import arc.graphics.Color;
-import arc.math.Mathf;
-import arc.scene.ui.Image;
-import arc.scene.ui.ImageButton;
 import arc.util.*;
 import ihope_lib.MyReflect;
+import jdk.internal.reflect.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
-import mindustry.type.Sector;
-import mindustry.ui.Fonts;
 import modtools.ui.*;
-import modtools.utils.*;
-
-import java.awt.*;
+import modtools.utils.Tools;
 
 import static mindustry.Vars.ui;
-import static modtools.utils.MySettings.*;
+import static modtools.utils.MySettings.settings;
 
 public class ModTools extends Mod {
 	public static ModClassLoader mainLoader;

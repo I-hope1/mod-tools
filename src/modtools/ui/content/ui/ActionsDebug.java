@@ -1,4 +1,4 @@
-package modtools.ui.content;
+package modtools.ui.content.ui;
 
 import arc.graphics.Color;
 import arc.scene.*;
@@ -9,6 +9,7 @@ import ihope_lib.MyReflect;
 import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.Window;
+import modtools.ui.content.Content;
 import modtools.utils.Tools;
 
 public class ActionsDebug extends Content {
@@ -41,12 +42,12 @@ public class ActionsDebug extends Content {
 					}
 					if (action == ColorAction.class) {
 						element.actions(Actions.sequence(Actions.color(Color.pink, 0.1f)
-								, Actions.color(Color.sky, 0.1f),
-								Actions.color(Color.blue, 0.1f),
-								Actions.color(Color.green, 0.1f),
-								Actions.color(Color.yellow, 0.1f),
-								Actions.color(Color.pink, 0.1f),
-								Actions.color(element.color, 0.1f)
+								, Actions.color(Color.sky, 0.1f)
+								, Actions.color(Color.blue, 0.1f)
+								, Actions.color(Color.green, 0.1f)
+								, Actions.color(Color.yellow, 0.1f)
+								, Actions.color(Color.pink, 0.1f)
+								, Actions.color(element.color, 0.1f)
 						));
 					}
 				}).size(200, 42);

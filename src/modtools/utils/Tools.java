@@ -12,6 +12,7 @@ import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.jar.*;
 
@@ -89,7 +90,7 @@ public class Tools {
 	}
 
 	public static void forceRun(Boolp boolp) {
-
+		// Log.info(Time.deltaimpl);
 		Timer.schedule(new Task() {
 			@Override
 			public void run() {
@@ -138,7 +139,7 @@ public class Tools {
 				// 如果是以文件的形式保存在服务器上
 				if ("file".equals(protocol)) {
 					// 获取包的物理路径
-					String filePath = URLDecoder.decode(url.getFile(), "UTF-8");
+					String filePath = URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8);
 					// 以文件的方式扫描整个包下的文件 并添加到集合中
 					findClassesInPackageByFile(pack, filePath, recursive, classes);
 				} else if ("jar".equals(protocol)) {

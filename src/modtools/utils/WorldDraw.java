@@ -2,7 +2,6 @@ package modtools.utils;
 
 import arc.Core;
 import arc.Events;
-import arc.func.Boolf;
 import arc.func.Boolp;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -10,12 +9,7 @@ import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
 import arc.struct.*;
-import arc.util.Log;
-import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.EffectState;
-
-import java.util.*;
 
 /**
  * 世界渲染模块
@@ -26,7 +20,7 @@ public class WorldDraw {
 	// 玩家渲染区域
 	public static final Rect rect = new Rect();
 	// 存储渲染
-	public final MyObjectSet<Boolp> drawSeq = new MyObjectSet<>();/* {
+	public final MySet<Boolp> drawSeq = new MySet<>();/* {
 		@Override
 		public Seq<Boolp> add(Boolp value) {
 			hasChange = true;
@@ -118,7 +112,7 @@ public class WorldDraw {
 		buffer.end();
 		// buffer.dispose();
 		Texture texture = buffer.getTexture();
-		texture.bind(1);
+		// texture.bind(1);
 		return texture;
 	}
 

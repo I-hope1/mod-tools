@@ -30,12 +30,13 @@ public class MyLabel extends Label {
 		});
 	}
 
-	@Override
 	public void layout() {
+		prefSizeInvalid = true;
 		Font.FontData fontData = style.font.getData();
 		boolean had = fontData.markupEnabled;
 		fontData.markupEnabled = false;
 		super.layout();
+		getPrefWidth();
 		fontData.markupEnabled = had;
 	}
 }

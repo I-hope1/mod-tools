@@ -1,35 +1,31 @@
 package modtools.ui.components;
 
 import arc.*;
-import arc.func.*;
+import arc.func.Prov;
 import arc.graphics.Color;
 import arc.input.KeyCode;
-import arc.math.Interp;
-import arc.math.Mathf;
-import arc.math.geom.Position;
-import arc.math.geom.Vec2;
-import arc.scene.Action;
-import arc.scene.Element;
-import arc.scene.Scene;
+import arc.math.*;
+import arc.math.geom.*;
+import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
-import arc.scene.ui.layout.Cell;
-import arc.scene.ui.layout.Table;
-import arc.struct.*;
+import arc.scene.ui.layout.*;
+import arc.struct.ObjectSet;
 import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.Icon;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
+import modtools.utils.*;
 
 import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.windowManager;
-import static modtools.ui.IntUI.*;
+import static modtools.ui.IntUI.icons;
 
 /**
  * 浮动的窗口，可以缩放，最小化，最大化
@@ -37,7 +33,7 @@ import static modtools.ui.IntUI.*;
  * @author I hope...
  **/
 public class Window extends Table {
-	public static final ObjectSet<Window> all = new ObjectSet<>() {
+	public static final MySet<Window> all = new MySet<>() {
 		public boolean add(Window value) {
 			boolean b = super.add(value);
 			if (windowManager != null && windowManager.ui != null && windowManager.ui.isShown())
@@ -53,13 +49,15 @@ public class Window extends Table {
 		}
 	};
 
-	static Window focusWindow;
+	public static Window focusWindow;
 
 	static {
-		IntVars.addResizeListener(() -> all.each(Window::display));
+		IntVars.addResizeListener(() -> {
+			all.each(Window::display);
+		});
 
 		Events.run(Trigger.update, () -> {
-			var children = Core.scene.root.getChildren();
+			var children = (topGroup.ok ? topGroup : Core.scene.root).getChildren();
 			for (int i = children.size - 1; i >= 0; i--) {
 				if (children.get(i) instanceof Window) {
 					focusWindow = (Window) children.get(i);
@@ -145,10 +143,16 @@ public class Window extends Table {
 		sclLisetener = new SclLisetener(this, this.minWidth, minHeight);
 		moveListener.fire = () -> {
 			if (isMaximize && !isMinimize) {
-				float mulx = moveListener.bx / width;
+				float mulxw = (moveListener.lastMouse.x - x) / width;
+				float mulxh = (moveListener.lastMouse.y - y) / height;
 				toggleMaximize();
-				moveListener.bx = width * mulx;
-				x -= moveListener.bx;
+				// 修复移动侦听器的位置
+				moveListener.lastMain.x = x;
+				moveListener.lastMain.y = y;
+				moveListener.lastMouse.x = x + width * mulxw;
+				moveListener.lastMouse.y = y + height * mulxh;
+				// moveListener.bx = width * mulx;
+				// moveListener.by = Core.scene.getHeight() - moveListener.by;
 			}
 		};
 		keyDown(k -> {
@@ -217,7 +221,7 @@ public class Window extends Table {
 		float touchWidth = top.getWidth(), touchHeight = top.getHeight();
 		super.setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
 				Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
-		if (isMaximize) {
+		if (lastMaximize) {
 			// false取反为true
 			isMaximize = false;
 			toggleMaximize();
@@ -387,40 +391,69 @@ public class Window extends Table {
 		hide(defaultHideAction.get());
 	}
 
-	public boolean isMaximize = false;
-	public Vec2 lastPos = new Vec2();
+	// 用于存储最小/大化前的位置和大小
+	public Rect lastRect = new Rect();
+	private boolean disabledActions = false;
 
-	public void toggleMaximize() {
-		if (isMinimize) toggleMinimize();
-		isMaximize = !isMaximize;
-		if (isMaximize) {
-			lastWidth = getWidth();
-			lastHeight = getHeight();
-			lastPos.set(x, y);
-			setSize(Core.graphics.getWidth(), Core.graphics.getHeight());
-			setPosition(0, 0);
-		} else {
-			setSize(lastWidth, lastHeight);
-			setPosition(lastPos.x, lastPos.y);
-		}
+
+	public ObjectSet<RunListener> maxlisteners = new ObjectSet<>();
+	public boolean isMaximize = false, lastMaximize = false;
+
+	/**
+	 * Adds a toggleMaximize() listener.
+	 */
+	public void maximized(RunListener run) {
+		maxlisteners.add(run);
 	}
 
-	public Seq<MinimizedListener> mlisteners = new Seq<>();
+	public void toggleMaximize() {
+		boolean lastMin = isMinimize;
+		if (isMinimize) {
+			boolean l = disabledActions;
+			disabledActions = true;
+			toggleMinimize();
+			disabledActions = l;
+		}
+		isMaximize = !isMaximize;
+		if (isMaximize) {
+			if (!lastMin) {
+				lastRect.set(x, y, width, height);
+			}
+			actions(Actions.sizeTo(Core.graphics.getWidth(), Core.graphics.getHeight(), disabledActions ? 0 : 0.06f),
+					Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
+			// setSize(Core.graphics.getWidth(), Core.graphics.getHeight());
+			// setPosition(0, 0);
+		} else {
+			actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.06f),
+					Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
+		}
+
+		Timer.schedule(new Task() {
+			@Override
+			public void run() {
+				if (!hasActions()) {
+					maxlisteners.each(r -> r.fire(isMaximize));
+					lastMaximize = isMaximize;
+				}
+			}
+		}, 0, 0.01f, -1);
+		// Time.runTask(0, () -> cont.invalidate());
+	}
+
+
+	public ObjectSet<RunListener> minlisteners = new ObjectSet<>();
 	public boolean isMinimize = false;
-	// 用于存储最小/大化前的宽度和高度
-	public float lastWidth, lastHeight;
 
 	public void toggleMinimize() {
 		isMinimize = !isMinimize;
 		if (isMinimize) {
 			if (!isMaximize) {
-				lastWidth = getWidth();
-				lastHeight = getHeight();
+				lastRect.setSize(getWidth(), getHeight());
 			}
 
-			width = getMinWidth();
-			height = topHeight;
-			y += lastHeight - height;
+			actions(Actions.sizeTo(getMinWidth(), topHeight, disabledActions ? 0 : 0.01f),
+					Actions.moveTo(Math.max(x, lastRect.width / 2f),
+							y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
 
 			getCell(cont).set(emptyCell);
 			cont.remove();
@@ -431,29 +464,39 @@ public class Window extends Table {
 				} catch (Throwable ignored) {}
 			}
 			removeListener(sclLisetener);
-			x = Math.max(x, lastWidth / 2f);
 			sizeChanged();
 		} else {
 			setup();
 
+			left().top();
 			if (isMaximize) {
-				x = y = 0;
-				setSize(Core.graphics.getWidth(), Core.graphics.getHeight());
+				actions(Actions.sizeTo(Core.graphics.getWidth(), Core.graphics.getHeight(), disabledActions ? 0 : 0.1f),
+						Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
 			} else {
-				setSize(lastWidth, lastHeight);
-				y -= height - topHeight;
+				actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.01f),
+						Actions.moveTo(lastRect.x = x,
+								lastRect.y = y - lastRect.height + topHeight,
+								disabledActions ? 0 : 0.01f));
+				// y -= height - topHeight;
 			}
 			addListener(sclLisetener);
 		}
-		display();
-		mlisteners.each(MinimizedListener::fire);
+		Timer.schedule(new Task() {
+			@Override
+			public void run() {
+				if (!hasActions()) {
+					if (!isMaximize) display();
+					minlisteners.each(r -> r.fire(isMinimize));
+				}
+			}
+		}, 0, 0.01f, -1);
 	}
 
 	/**
-	 * Adds a minimized() listener.
+	 * Adds a toggleMinimize() listener.
 	 */
-	public void minimized(Runnable run) {
-		mlisteners.add(run::run);
+	public void minimized(RunListener run) {
+		minlisteners.add(run);
 	}
 
 	/**
@@ -487,8 +530,8 @@ public class Window extends Table {
 		display();
 	}
 
-	public interface MinimizedListener {
-		void fire();
+	public interface RunListener {
+		void fire(boolean status);
 	}
 
 	public static class DisposableWindow extends Window {

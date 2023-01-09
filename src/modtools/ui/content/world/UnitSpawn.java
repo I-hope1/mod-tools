@@ -1,4 +1,4 @@
-package modtools.ui.content;
+package modtools.ui.content.world;
 
 import arc.Core;
 import arc.Events;
@@ -32,6 +32,7 @@ import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.MyItemSelection;
 import modtools.ui.components.Window;
+import modtools.ui.content.Content;
 import modtools.utils.Tools;
 
 import static mindustry.Vars.player;

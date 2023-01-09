@@ -1,4 +1,4 @@
-package modtools.ui.content;
+package modtools.ui.content.world;
 
 import arc.Core;
 import arc.graphics.Color;
@@ -14,6 +14,7 @@ import mindustry.gen.Icon;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 import modtools.ui.components.Window;
+import modtools.ui.content.Content;
 import modtools.utils.*;
 
 import java.lang.reflect.Field;
@@ -74,7 +75,7 @@ public class ContentList extends Content {
 
 
 	public void rebuild(String text) {
-		MyObjectSet<Table> tables = new MyObjectSet<>();
+		MySet<Table> tables = new MySet<>();
 		Color[] colors = {Color.sky, Color.sky};
 		String[] names = {"fx", "bullet"};
 		Pattern pattern = null;

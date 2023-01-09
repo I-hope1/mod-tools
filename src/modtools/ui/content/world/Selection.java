@@ -1,5 +1,5 @@
 
-package modtools.ui.content;
+package modtools.ui.content.world;
 
 import arc.Core;
 import arc.func.Cons;
@@ -41,6 +41,7 @@ import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.content.Content;
 import modtools.utils.JSFunc;
 import modtools.utils.Tools;
 import modtools.utils.WorldDraw;
@@ -743,6 +744,10 @@ public class Selection extends Content {
 			main.add(name).growX().left().row();
 			main.button("show all", IntStyles.blackt, this::showAll).growX().height(buttonHeight).row();
 			main.add(cont).width(buttonWidth);
+			wrap.update(() -> {
+				if (list.isEmpty()) remove();
+				else setup();
+			});
 			if (select.get(name)) {
 				setup();
 			} else {

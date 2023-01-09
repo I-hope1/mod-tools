@@ -1,4 +1,4 @@
-package modtools.ui.content;
+package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
@@ -12,6 +12,7 @@ import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.*;
+import modtools.ui.content.Content;
 
 import static modtools.utils.MySettings.settings;
 

@@ -1,4 +1,4 @@
-package modtools.ui.content;
+package modtools.ui.content.ui;
 
 import arc.Core;
 import arc.graphics.Color;
@@ -27,16 +27,18 @@ import modtools.ui.MyFonts;
 import modtools.ui.components.MyLabel;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.content.Content;
 import modtools.utils.JSFunc;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.getAbsPos;
 
-public class ElementShow extends Content {
-	public ElementShow() {
+public class ReviewElement extends Content {
+	public ReviewElement() {
 		super("reviewElement");
 	}
 
@@ -68,7 +70,7 @@ public class ElementShow extends Content {
 	@Override
 	public void load() {
 		final Color maskColor = Color.black.cpy().a(0.4f);
-		IntVars.topGroup.drawSeq.add(() -> {
+		topGroup.drawSeq.add(() -> {
 			if (selecting) {
 				Draw.color(maskColor);
 				Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
@@ -190,15 +192,15 @@ public class ElementShow extends Content {
 			}
 
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				Time.runTask(20, () -> {
-					// cancel(actor);
-					mask.remove();
-				});
+				// Time.runTask(20, () -> {
+				// cancel(actor);
+				mask.remove();
+				// });
 				selecting = false;
 				if (filter()) new ElementShowWindow().show(selected);
 			}
 		});
-		Core.scene.add(frag);
+		topGroup.addChild(frag);
 		// frag.update(() -> frag.toFront());
 
 		btn.update(() -> btn.setChecked(selecting));
@@ -212,13 +214,14 @@ public class ElementShow extends Content {
 	}
 
 
+	public static final Task CANCEL_TASK = new Task() {
+		@Override
+		public void run() {
+			focus = null;
+		}
+	};
+
 	public static class ElementShowWindow extends DisposableWindow {
-		public final Task task = new Task() {
-			@Override
-			public void run() {
-				focus = null;
-			}
-		};
 		Table pane = new Table();
 		Element element = null;
 		Pattern pattern;
@@ -269,8 +272,8 @@ public class ElementShow extends Content {
 			}).grow();
 
 			update(() -> {
-				if (!task.isScheduled()) {
-					Timer.schedule(task, Time.delta * 2f / 60f);
+				if (!CANCEL_TASK.isScheduled()) {
+					Timer.schedule(CANCEL_TASK, Time.delta * 2f / 60f);
 				}
 			});
 		}
@@ -281,7 +284,7 @@ public class ElementShow extends Content {
 			if (element == null) return;
 			Pattern pattern = null;
 			try {
-				pattern = text.isEmpty() ? null : Pattern.compile("(.*?)(" + text + ")", Pattern.CASE_INSENSITIVE);
+				pattern = text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
 			} catch (Exception ignored) {}
 			rebuild(element, pattern);
 		}
@@ -410,11 +413,11 @@ public class ElementShow extends Content {
 						Element tmp = super.hit(x, y, touchable);
 						if (tmp == null) return null;
 						if (focus != null) {
-							if (task.isScheduled()) task.cancel();
+							if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
 							return tmp;
 						}
 						focus = element;
-						if (task.isScheduled()) task.cancel();
+						if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
 						return tmp;
 					}
 				}).row();

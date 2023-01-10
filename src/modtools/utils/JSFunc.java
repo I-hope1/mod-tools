@@ -32,8 +32,9 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
+import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.*;
-import static modtools.utils.Tools.getAbsPos;
+import static modtools.utils.Tools.*;
 
 public class JSFunc {
 	public static ClassLoader main;
@@ -208,7 +209,7 @@ public class JSFunc {
 				j--;
 			}
 		}
-		array = (T[]) Array.newInstance(array.getClass().getComponentType(), j);
+		array = as(Array.newInstance(array.getClass().getComponentType(), j));
 		int k = 0;
 		for (T t : newArr) {
 			if (t != null) {
@@ -281,7 +282,7 @@ public class JSFunc {
 				.fillX().padTop(8).get().setDuration(0.1f);
 		classes.left().defaults().left().top();
 
-		boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
+		// boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
 		for (Class<?> cls = window.clazz; cls != null; cls = cls.getSuperclass()) {
 			// fieldArray = filter(pattern, isBlack, Field::getName, fieldArray);
 			fields.build(cls);
@@ -699,6 +700,10 @@ public class JSFunc {
 
 	public static Class<?> forName(String name) throws ClassNotFoundException {
 		return Class.forName(name, false, Vars.mods.mainLoader());
+	}
+
+	public static void setDrawPadElem(Element elem) {
+		topGroup.drawPadElem = elem;
 	}
 
 	public static Object asJS(Object o) {

@@ -6,7 +6,6 @@ import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
-import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.Group;
 import arc.scene.event.*;
@@ -77,6 +76,8 @@ public final class TopGroup extends Group {
 				elem.getWidth(), elem.getHeight());
 	}
 
+	public Element drawPadElem = null;
+
 	{
 		Core.scene.addListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
@@ -118,11 +119,17 @@ public final class TopGroup extends Group {
 		// Core.scene.add(this);
 		/* 显示UI布局 */
 		drawSeq.add(() -> {
-			if (!debugBounds) return true;
+			if (!debugBounds && drawPadElem == null) return true;
+			Element drawPadElem = Tools.or(this.drawPadElem, Core.scene.root);
+			if (drawPadElem.parent != null) {
+				Tools.getAbsPos(drawPadElem.parent);
+			} else if (drawPadElem == Core.scene.root) {
+				Tmp.v1.set(0, 0);
+			} else return true;
 			Draw.color(Color.white);
 			Draw.alpha(0.7f);
 			Lines.stroke(1);
-			drawPad(Core.scene.root, 0, 0);
+			drawPad(drawPadElem, Tmp.v1.x, Tmp.v1.y);
 			Draw.flush();
 			return true;
 		});
@@ -148,8 +155,8 @@ public final class TopGroup extends Group {
 					}
 				}
 				if (topGroup.getChildren().select(el -> el.visible).size > 70) {
-					Seq<Element> windows = topGroup.getChildren().select(el -> el instanceof Window);
-					windows.each(Element::remove);
+					Seq<Window> windows = topGroup.getChildren().select(el -> el instanceof Window).as();
+					windows.each(Window::hide);
 				}
 
 			}

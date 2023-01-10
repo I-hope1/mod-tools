@@ -5,8 +5,6 @@ import arc.scene.*;
 import arc.scene.actions.*;
 import arc.scene.ui.*;
 import arc.util.*;
-import ihope_lib.MyReflect;
-import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;

@@ -294,7 +294,7 @@ public class TextArea extends TextField {
 					linesBreak.add(i);
 					lineStart = i + 1;
 				} else {
-					lastSpace = (continueCursor(i, 0) ? lastSpace : i);
+					lastSpace = continueCursor(i, 0) ? lastSpace : i;
 					layout.setText(font, text.subSequence(lineStart, i + 1));
 					if (layout.width > maxWidthLine) {
 						if (lineStart >= lastSpace) {

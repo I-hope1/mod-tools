@@ -1,11 +1,9 @@
 package modtools.ui.components;
 
 import arc.func.Prov;
-import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.scene.Group;
 import arc.scene.ui.*;
-import arc.util.Time;
 import modtools.utils.*;
 
 /**

@@ -8,7 +8,6 @@ import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
-import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.MoveListener;
 import modtools.ui.content.Content;

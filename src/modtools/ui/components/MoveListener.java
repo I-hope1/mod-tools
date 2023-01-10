@@ -8,8 +8,6 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.layout.*;
-import arc.util.*;
-import arc.util.Timer.Task;
 
 public class MoveListener extends InputListener {
 	// public float bx, by;

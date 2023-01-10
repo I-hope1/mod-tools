@@ -8,7 +8,6 @@ import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.*;
-import arc.scene.Element;
 import arc.scene.Scene;
 import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.event.InputEvent;

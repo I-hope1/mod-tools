@@ -3,7 +3,6 @@ package modtools.ui;
 
 import arc.*;
 import arc.graphics.*;
-import arc.graphics.g2d.*;
 import arc.scene.*;
 import arc.scene.ui.Image;
 import arc.struct.Seq;

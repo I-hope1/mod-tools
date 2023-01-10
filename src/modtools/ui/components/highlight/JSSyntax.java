@@ -4,13 +4,14 @@ import arc.graphics.Color;
 import arc.struct.*;
 import modtools.ui.components.area.TextAreaTable;
 
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 public class JSSyntax extends Syntax {
 	public static Pattern
-			keywordP = Pattern.compile("\\b(break|c(?:ase|atch|onst|ontinue)|d(?:efault|elete|o)|else|f(?:inally|or|unction)|i[fn]|instranceof|let|new|return|switch|this|t(?:hrow|ry|ypeof)|v(?:ar|oid)|w(?:hile|ith)|yield)\\b", Pattern.COMMENTS),
-	// 数字和true|false
-	numberP = Pattern.compile("\\b([+-]?\\d+(?:\\.\\d*)?(?:[Ee]\\d+)?)\\b"),
+			// keywordP = Pattern.compile("\\b(break|c(?:ase|atch|onst|ontinue)|d(?:efault|elete|o)|else|f(?:inally|or|unction)|i[fn]|instranceof|let|new|return|switch|this|t(?:hrow|ry|ypeof)|v(?:ar|oid)|w(?:hile|ith)|yield)\\b", Pattern.COMMENTS),
+			// 数字和true|false
+			numberP = Pattern.compile("\\b([+-]?\\d+(?:\\.\\d*)?(?:[Ee]\\d+)?)\\b"),
 			commentP = Pattern.compile("(//.*|/\\*[\\s\\S]*?\\*/|/\\*[^(*/)]*$)"),
 	/**
 	 * 我也不知道为什么这么慢
@@ -21,8 +22,8 @@ public class JSSyntax extends Syntax {
 			// others = Pattern.compile("([a-z$]+)", Pattern.CASE_INSENSITIVE)
 			;
 	public static Seq<Pattern> patternSeq = Seq.with(
-			whiteSpaceP, stringP, keywordP, numberP, commentP,
-			bracketsP, operatCharP/*, functionsP*/, objectsP
+			// whiteSpaceP, stringP, keywordP, numberP, commentP,
+			// bracketsP, operatCharP/*, functionsP*/, objectsP
 	);
 	public static Seq<Color> colorSeq = Seq.with(
 			Color.clear, stringC, keywordC, numberC, commentC,
@@ -41,9 +42,9 @@ public class JSSyntax extends Syntax {
 			keywords = reader.parse("{\"b\":{\"r\":{\"e\":{\"a\":{\"k\":false}}}},\"c\":{\"a\":{\"s\":{\"e\":false},\"t\":{\"c\":{\"h\":false}}},\"o\":{\"n\":{\"s\":{\"t\":false},\"t\":{\"i\":{\"n\":{\"u\":{\"e\":false}}}}}}},\"d\":{\"e\":{\"f\":{\"a\":{\"u\":{\"l\":{\"t\":false}}}},\"l\":{\"e\":{\"t\":{\"e\":false}}}},\"o\":false},\"e\":{\"l\":{\"s\":{\"e\":false}}},\"f\":{\"i\":{\"n\":{\"a\":{\"l\":{\"l\":{\"y\":false}}}}},\"o\":{\"r\":false},\"u\":{\"n\":{\"c\":{\"t\":{\"i\":{\"o\":{\"n\":false}}}}}}},\"i\":{\"f\":false,\"n\":{\"s\":{\"t\":{\"r\":{\"a\":{\"n\":{\"c\":{\"e\":{\"o\":{\"f\":false}}}}}}}}}},\"l\":{\"e\":{\"t\":false}},\"n\":{\"e\":{\"w\":false}},\"r\":{\"e\":{\"t\":{\"u\":{\"r\":{\"n\":false}}}}},\"s\":{\"w\":{\"i\":{\"t\":{\"c\":{\"h\":false}}}}},\"t\":{\"h\":{\"i\":{\"s\":false},\"r\":{\"o\":{\"w\":false}}},\"r\":{\"y\":false},\"y\":{\"p\":{\"e\":{\"o\":{\"f\":false}}}}},\"v\":{\"a\":{\"r\":false},\"o\":{\"i\":{\"d\":false}}},\"w\":{\"h\":{\"i\":{\"l\":{\"e\":false}}},\"i\":{\"t\":{\"h\":false}}},\"y\":{\"i\":{\"e\":{\"l\":{\"d\":false}}}}}"),
 			objects = reader.parse("{\"n\":{\"u\":{\"l\":{\"l\":false}}},\"u\":{\"n\":{\"d\":{\"e\":{\"f\":{\"i\":{\"n\":{\"e\":{\"d\":false}}}}}}}},\"t\":{\"r\":{\"u\":{\"e\":false}}},\"f\":{\"a\":{\"l\":{\"s\":{\"e\":false}}}},\"a\":{\"r\":{\"g\":{\"u\":{\"m\":{\"e\":{\"n\":{\"t\":{\"s\":false}}}}}}}}}");*/
 
-	static IntMap<?>
-			keywordMap = IntMap.of('b', IntMap.of('r', IntMap.of('e', IntMap.of('a', IntMap.of('k', new IntMap<>())))), 'c', IntMap.of('a', IntMap.of('s', IntMap.of('e', new IntMap<>()), 't', IntMap.of('c', IntMap.of('h', new IntMap<>()))), 'o', IntMap.of('n', IntMap.of('s', IntMap.of('t', new IntMap<>()), 't', IntMap.of('i', IntMap.of('n', IntMap.of('u', IntMap.of('e', new IntMap<>()))))))), 'd', IntMap.of('e', IntMap.of('f', IntMap.of('a', IntMap.of('u', IntMap.of('l', IntMap.of('t', new IntMap<>())))), 'l', IntMap.of('e', IntMap.of('t', IntMap.of('e', new IntMap<>())))), 'o', new IntMap<>()), 'e', IntMap.of('l', IntMap.of('s', IntMap.of('e', new IntMap<>()))), 'f', IntMap.of('i', IntMap.of('n', IntMap.of('a', IntMap.of('l', IntMap.of('l', IntMap.of('y', new IntMap<>()))))), 'o', IntMap.of('r', new IntMap<>()), 'u', IntMap.of('n', IntMap.of('c', IntMap.of('t', IntMap.of('i', IntMap.of('o', IntMap.of('n', new IntMap<>()))))))), 'i', IntMap.of('f', new IntMap<>(), 'n', IntMap.of('s', IntMap.of('t', IntMap.of('r', IntMap.of('a', IntMap.of('n', IntMap.of('c', IntMap.of('e', IntMap.of('o', IntMap.of('f', new IntMap<>())))))))))), 'l', IntMap.of('e', IntMap.of('t', new IntMap<>())), 'n', IntMap.of('e', IntMap.of('w', new IntMap<>())), 'r', IntMap.of('e', IntMap.of('t', IntMap.of('u', IntMap.of('r', IntMap.of('n', new IntMap<>()))))), 's', IntMap.of('w', IntMap.of('i', IntMap.of('t', IntMap.of('c', IntMap.of('h', new IntMap<>()))))), 't', IntMap.of('h', IntMap.of('i', IntMap.of('s', new IntMap<>()), 'r', IntMap.of('o', IntMap.of('w', new IntMap<>()))), 'r', IntMap.of('y', new IntMap<>()), 'y', IntMap.of('p', IntMap.of('e', IntMap.of('o', IntMap.of('f', new IntMap<>()))))), 'v', IntMap.of('a', IntMap.of('r', new IntMap<>()), 'o', IntMap.of('i', IntMap.of('d', new IntMap<>()))), 'w', IntMap.of('h', IntMap.of('i', IntMap.of('l', IntMap.of('e', new IntMap<>()))), 'i', IntMap.of('t', IntMap.of('h', new IntMap<>()))), 'y', IntMap.of('i', IntMap.of('e', IntMap.of('l', IntMap.of('d', new IntMap<>()))))),
-			objectMap = IntMap.of('n', IntMap.of('u', IntMap.of('l', IntMap.of('l', new IntMap<>()))), 'u', IntMap.of('n', IntMap.of('d', IntMap.of('e', IntMap.of('f', IntMap.of('i', IntMap.of('n', IntMap.of('e', IntMap.of('d', new IntMap<>())))))))), 't', IntMap.of('r', IntMap.of('u', IntMap.of('e', new IntMap<>()))), 'f', IntMap.of('a', IntMap.of('l', IntMap.of('s', IntMap.of('e', new IntMap<>())))), 'a', IntMap.of('r', IntMap.of('g', IntMap.of('u', IntMap.of('m', IntMap.of('e', IntMap.of('n', IntMap.of('t', IntMap.of('s', new IntMap<>())))))))));
+	// static IntMap<?>
+	// keywordMap = IntMap.of('b', IntMap.of('r', IntMap.of('e', IntMap.of('a', IntMap.of('k', null)))), 'c', IntMap.of('a', IntMap.of('s', IntMap.of('e', null), 't', IntMap.of('c', IntMap.of('h', null))), 'o', IntMap.of('n', IntMap.of('s', IntMap.of('t', null), 't', IntMap.of('i', IntMap.of('n', IntMap.of('u', IntMap.of('e', null))))))), 'd', IntMap.of('e', IntMap.of('f', IntMap.of('a', IntMap.of('u', IntMap.of('l', IntMap.of('t', null)))), 'l', IntMap.of('e', IntMap.of('t', IntMap.of('e', null)))), 'o', null), 'e', IntMap.of('l', IntMap.of('s', IntMap.of('e', null))), 'f', IntMap.of('i', IntMap.of('n', IntMap.of('a', IntMap.of('l', IntMap.of('l', IntMap.of('y', null))))), 'o', IntMap.of('r', null), 'u', IntMap.of('n', IntMap.of('c', IntMap.of('t', IntMap.of('i', IntMap.of('o', IntMap.of('n', null))))))), 'i', IntMap.of('f', null, 'n', IntMap.of('s', IntMap.of('t', IntMap.of('r', IntMap.of('a', IntMap.of('n', IntMap.of('c', IntMap.of('e', IntMap.of('o', IntMap.of('f', null)))))))))), 'l', IntMap.of('e', IntMap.of('t', null)), 'n', IntMap.of('e', IntMap.of('w', null)), 'r', IntMap.of('e', IntMap.of('t', IntMap.of('u', IntMap.of('r', IntMap.of('n', null))))), 's', IntMap.of('w', IntMap.of('i', IntMap.of('t', IntMap.of('c', IntMap.of('h', null))))), 't', IntMap.of('h', IntMap.of('i', IntMap.of('s', null), 'r', IntMap.of('o', IntMap.of('w', null))), 'r', IntMap.of('y', null), 'y', IntMap.of('p', IntMap.of('e', IntMap.of('o', IntMap.of('f', null))))), 'v', IntMap.of('a', IntMap.of('r', null), 'o', IntMap.of('i', IntMap.of('d', null))), 'w', IntMap.of('h', IntMap.of('i', IntMap.of('l', IntMap.of('e', null))), 'i', IntMap.of('t', IntMap.of('h', null))), 'y', IntMap.of('i', IntMap.of('e', IntMap.of('l', IntMap.of('d', null))))),
+	// objectMap = IntMap.of('n', IntMap.of('u', IntMap.of('l', IntMap.of('l', null))), 'u', IntMap.of('n', IntMap.of('d', IntMap.of('e', IntMap.of('f', IntMap.of('i', IntMap.of('n', IntMap.of('e', IntMap.of('d', null)))))))), 't', IntMap.of('r', IntMap.of('u', IntMap.of('e', null))), 'f', IntMap.of('a', IntMap.of('l', IntMap.of('s', IntMap.of('e', null)))), 'a', IntMap.of('r', IntMap.of('g', IntMap.of('u', IntMap.of('m', IntMap.of('e', IntMap.of('n', IntMap.of('t', IntMap.of('s', null)))))))));
 
 
 	/*static {
@@ -57,7 +58,7 @@ public class JSSyntax extends Syntax {
 		StringJoiner sj = new StringJoiner(",");
 		for (JsonValue entry = value; entry != null; entry = entry.next) {
 			sj.add("'" + entry.name + "'");
-			if (entry.child == null) sj.add("new IntMap<>()");
+			if (entry.child == null) sj.add("null");
 			else {
 				StringBuffer sb2 = new StringBuffer();
 				append(sb2, entry.child);
@@ -76,11 +77,12 @@ public class JSSyntax extends Syntax {
 	public DrawTask task = null;
 	public DrawTask[] taskArr = new DrawTask[]{
 			new DrawString(stringC),
-			new DrawComment(commentC),
 			new DrawSymol(brackets, bracketsC),
 			new DrawSymol(operats, operatCharC),
-			new DrawWord(keywordMap, keywordC),
-			new DrawWord(objectMap, objectsC),
+			new DrawComment(commentC),
+			// new DrawWord(keywordMap, keywordC),
+			// new DrawWord(objectMap, objectsC),
+			new DrawToken(),
 			new DrawNumber(numberC),
 	};
 
@@ -91,16 +93,19 @@ public class JSSyntax extends Syntax {
 	}
 
 	void reset() {
-		if (task != null) task.reset();
+		if (task != null) {
+			task.reset();
+		}
 		task = null;
 	}
+
 
 	public void highlightingDraw(String displayText) {
 		this.displayText = displayText;
 		reset();
 		// String result;
 		for (DrawTask drawTask : taskArr) {
-			drawTask.reset();
+			drawTask.init();
 		}
 		int lastIndex = 0;
 		len = displayText.length();
@@ -112,13 +117,13 @@ public class JSSyntax extends Syntax {
 			if (task == null) {
 				for (DrawTask drawTask : taskArr) {
 					if (drawTask.draw(i)) {
-						if (drawTask.isFinished()) {
-							drawTask.drawText(i);
+						task = drawTask;
+						if (task.isFinished()) {
+							task.drawText(i);
 							reset();
 							lastIndex = i + 1;
 							continue out;
 						}
-						task = drawTask;
 						break;
 					}
 					drawTask.reset();
@@ -126,9 +131,8 @@ public class JSSyntax extends Syntax {
 			} else if (task.draw(i)) {
 				if (task.isFinished()) {
 					task.drawText(i);
+					reset();
 					lastIndex = i + 1;
-					task.reset();
-					task = null;
 				}
 			} else {
 				reset();
@@ -142,6 +146,7 @@ public class JSSyntax extends Syntax {
 		}
 		if (task != null && task.crazy) {
 			task.drawText(len - 1);
+			reset();
 		} else if (lastIndex < len) {
 			drawDefText(lastIndex, len);
 		}
@@ -161,7 +166,14 @@ public class JSSyntax extends Syntax {
 			this(color, false);
 		}
 
+		/**
+		 * 循环开始时，执行
+		 */
+		void init() {}
 
+		/**
+		 * 渲染结束（包括失败）时，执行
+		 */
 		void reset() {
 			lastIndex = -1;
 		}
@@ -181,7 +193,87 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
-	class DrawWord extends DrawTask {
+	ObjectMap<Color, ObjectSet<String>> TOKEN_MAP = ObjectMap.of(
+			keywordC, ObjectSet.with(
+					"break", "case", "catch", "const", "continue",
+					"default", "delete", "do", "else",
+					"finally", "for", "function", "if",
+					"instranceof", "let", "new", "return", "switch",
+					"this", "throw", "try", "typeof", "var",
+					"void", "while", "with",
+					"yield"
+			),
+			objectsC, ObjectSet.with(
+					"null", "undefined", "true", "false", "arguments"
+			)
+	);
+
+	class DrawToken extends DrawTask {
+		// IntMap<?>[] total;
+		// IntMap<?>[] current;
+		boolean begin = false, finished;
+
+		public DrawToken() {
+			super(new Color());
+		}
+
+		void reset() {
+			super.reset();
+			// System.arraycopy(total, 0, current, 0, total.length);
+			finished = false;
+			begin = false;
+		}
+
+		void init() {
+			lastToken = null;
+		}
+
+		boolean isFinished() {
+			return finished;
+		}
+
+		String lastToken;
+
+		void draw(String token) {
+			color.set(defalutColor);
+
+			// Log.info(token);
+			TOKEN_MAP.each((c, m) -> {
+				if (!finished && m.contains(token)) {
+					color.set(c);
+					finished = true;
+				}
+			});
+
+			if (Objects.equals(lastToken, "function")) {
+				color.set(functionsC);
+				finished = true;
+			}
+			lastToken = token;
+		}
+
+		boolean draw(int i) {
+			// if (!current.containsKey(c)) return false;
+			if (!begin && !(isWordBreak(lastChar) && !isWordBreak(c))) return false;
+			if (!begin) begin = true;
+			if (lastIndex == -1) lastIndex = i;
+
+			if (i + 1 < len) {
+				char nextC = displayText.charAt(i + 1);
+				boolean valid = !isWordBreak(nextC);
+				if (!valid) {
+					draw(displayText.substring(lastIndex, i + 1));
+					return finished;
+				}
+				return true;
+			} else {
+				draw(displayText.substring(lastIndex, i + 1));
+				return finished;
+			}
+		}
+	}
+
+	/*class DrawWord extends DrawTask {
 		IntMap<?> total;
 		IntMap<?> current;
 		boolean begin = false;
@@ -194,6 +286,7 @@ public class JSSyntax extends Syntax {
 		void reset() {
 			super.reset();
 			current = total;
+			lastIndex = -1;
 			begin = false;
 		}
 
@@ -205,10 +298,9 @@ public class JSSyntax extends Syntax {
 			if (!current.containsKey(c)) return false;
 			if (!begin && !isWordBreak(lastChar)) return false;
 			begin = true;
-
 			if (lastIndex == -1) lastIndex = i;
 			current = (IntMap<?>) current.get(c);
-			if (current.size == 0) {
+			if (current == null) {
 				if (i + 1 < len && !isWordBreak(displayText.charAt(i + 1))) return false;
 				// result = displayText.substring(lastIndex, i);
 				current = total;
@@ -222,8 +314,7 @@ public class JSSyntax extends Syntax {
 			}
 			return true;
 		}
-
-	}
+	}*/
 
 	class DrawComment extends DrawTask {
 

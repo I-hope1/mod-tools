@@ -68,6 +68,10 @@ public class Syntax {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90) || (97 <= c && c <= 122) || (19968 <= c && c <= 40869));
 	}
 
+	public boolean isWhitespace(char ch) {
+		return ch != ' ' && ch != '\t' && !Character.isWhitespace(ch);
+	}
+
 	public void highlightingDraw(String displayText) {
 	}
 

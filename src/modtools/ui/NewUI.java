@@ -3,7 +3,6 @@ package modtools.ui;
 import arc.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Batch;
-import arc.scene.*;
 import arc.util.Log;
 import mindustry.game.EventType;
 

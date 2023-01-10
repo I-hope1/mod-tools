@@ -4,7 +4,6 @@ package modtools.ui.content.ui;
 import arc.Core;
 import arc.graphics.Color;
 import arc.scene.style.Drawable;
-import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox;
 import arc.scene.ui.ImageButton.ImageButtonStyle;

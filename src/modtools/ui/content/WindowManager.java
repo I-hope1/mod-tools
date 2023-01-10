@@ -4,7 +4,6 @@ import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
-import mindustry.ui.Styles;
 import modtools.ui.IntStyles;
 import modtools.ui.components.Window;
 

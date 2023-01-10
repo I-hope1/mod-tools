@@ -58,7 +58,6 @@ public class IntStyles {
 	 */
 	clearNonei;
 	public static ScrollPaneStyle noBarPane = new ScrollPaneStyle();
-	;
 
 	static void V6Adapter() {
 		flatt = new TextButtonStyle() {{

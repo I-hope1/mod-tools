@@ -28,8 +28,8 @@ public class ContentList extends Content {
 	Window ui;
 	Table main;
 	TextField search;
-	ObjectMap<String, Effect> fxs = new ObjectMap<>();
-	ObjectMap<String, BulletType> bullets = new ObjectMap<>();
+	final ObjectMap<String, Effect> fxs = new ObjectMap<>();
+	final ObjectMap<String, BulletType> bullets = new ObjectMap<>();
 
 	public void load() {
 		ui = new Window(localizedName(), 100, 100, true);

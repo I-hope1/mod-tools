@@ -5,9 +5,7 @@ import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
-import mindustry.Vars;
 import mindustry.ui.Fonts;
-import modtools.ModTools;
 
 import static modtools.utils.MySettings.dataDirectory;
 

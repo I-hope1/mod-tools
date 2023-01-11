@@ -2,9 +2,11 @@ package modtools.ui.components.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import arc.util.Log;
 import modtools.ui.components.area.TextAreaTable;
+import rhino.ScriptRuntime;
 
-import java.util.Objects;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class JSSyntax extends Syntax {
@@ -68,131 +70,6 @@ public class JSSyntax extends Syntax {
 		sb.append(sj);
 		sb.append(")");
 	}*/
-
-
-	Color defalutColor = Color.white;
-	char c, lastChar;
-	int len;
-
-	public DrawTask task = null;
-	public DrawTask[] taskArr = new DrawTask[]{
-			new DrawString(stringC),
-			new DrawSymol(brackets, bracketsC),
-			new DrawSymol(operats, operatCharC),
-			new DrawComment(commentC),
-			// new DrawWord(keywordMap, keywordC),
-			// new DrawWord(objectMap, objectsC),
-			new DrawToken(),
-			new DrawNumber(numberC),
-	};
-
-
-	public void drawDefText(int start, int max) {
-		area.font.setColor(defalutColor);
-		area.drawMultiText(displayText, start, max);
-	}
-
-	void reset() {
-		if (task != null) {
-			task.reset();
-		}
-		task = null;
-	}
-
-
-	public void highlightingDraw(String displayText) {
-		this.displayText = displayText;
-		reset();
-		// String result;
-		for (DrawTask drawTask : taskArr) {
-			drawTask.init();
-		}
-		int lastIndex = 0;
-		len = displayText.length();
-		lastChar = '\n';
-		out:
-		for (int i = 0; i < len; i++, lastChar = c) {
-			c = displayText.charAt(i);
-
-			if (task == null) {
-				for (DrawTask drawTask : taskArr) {
-					if (drawTask.draw(i)) {
-						task = drawTask;
-						if (task.isFinished()) {
-							task.drawText(i);
-							reset();
-							lastIndex = i + 1;
-							continue out;
-						}
-						break;
-					}
-					drawTask.reset();
-				}
-			} else if (task.draw(i)) {
-				if (task.isFinished()) {
-					task.drawText(i);
-					reset();
-					lastIndex = i + 1;
-				}
-			} else {
-				reset();
-			}
-			if (task == null) {
-				if (lastIndex < i + 1) {
-					drawDefText(lastIndex, i + 1);
-					lastIndex = i + 1;
-				}
-			}
-		}
-		if (task != null && task.crazy) {
-			task.drawText(len - 1);
-			reset();
-		} else if (lastIndex < len) {
-			drawDefText(lastIndex, len);
-		}
-	}
-
-	public abstract class DrawTask {
-		final Color color;
-		boolean crazy;
-		int lastIndex;
-
-		public DrawTask(Color color, boolean crazy) {
-			this.color = color;
-			this.crazy = crazy;
-		}
-
-		public DrawTask(Color color) {
-			this(color, false);
-		}
-
-		/**
-		 * 循环开始时，执行
-		 */
-		void init() {}
-
-		/**
-		 * 渲染结束（包括失败）时，执行
-		 */
-		void reset() {
-			lastIndex = -1;
-		}
-
-		abstract boolean isFinished();
-
-		abstract boolean draw(int i);
-
-		public void drawText(int i) {
-			if (lastIndex == -1) return;
-			area.font.setColor(color);
-			area.drawMultiText(displayText, lastIndex, i + 1);
-		}
-
-		public boolean nextIs(int i, char c) {
-			return i + 1 < len && c == displayText.charAt(i + 1);
-		}
-	}
-
 	ObjectMap<Color, ObjectSet<String>> TOKEN_MAP = ObjectMap.of(
 			keywordC, ObjectSet.with(
 					"break", "case", "catch", "const", "continue",
@@ -207,70 +84,40 @@ public class JSSyntax extends Syntax {
 					"null", "undefined", "true", "false", "arguments"
 			)
 	);
-
-	class DrawToken extends DrawTask {
-		// IntMap<?>[] total;
-		// IntMap<?>[] current;
-		boolean begin = false, finished;
-
-		public DrawToken() {
-			super(new Color());
-		}
-
-		void reset() {
-			super.reset();
-			// System.arraycopy(total, 0, current, 0, total.length);
-			finished = false;
-			begin = false;
-		}
-
-		void init() {
-			lastToken = null;
-		}
-
-		boolean isFinished() {
-			return finished;
-		}
-
-		String lastToken;
-
-		void draw(String token) {
-			color.set(defalutColor);
-
-			// Log.info(token);
-			TOKEN_MAP.each((c, m) -> {
-				if (!finished && m.contains(token)) {
-					color.set(c);
-					finished = true;
-				}
-			});
-
-			if (Objects.equals(lastToken, "function")) {
-				color.set(functionsC);
-				finished = true;
-			}
-			lastToken = token;
-		}
-
-		boolean draw(int i) {
-			// if (!current.containsKey(c)) return false;
-			if (!begin && !(isWordBreak(lastChar) && !isWordBreak(c))) return false;
-			if (!begin) begin = true;
-			if (lastIndex == -1) lastIndex = i;
-
-			if (i + 1 < len) {
-				char nextC = displayText.charAt(i + 1);
-				boolean valid = !isWordBreak(nextC);
-				if (!valid) {
-					draw(displayText.substring(lastIndex, i + 1));
-					return finished;
-				}
-				return true;
-			} else {
-				draw(displayText.substring(lastIndex, i + 1));
-				return finished;
+	final DrawSymbol operatsSymbol = new DrawSymbol(operats, operatCharC);
+	public TokenDraw[] tokenDraws = {task -> {
+		for (var entry : TOKEN_MAP) {
+			if (entry.value.contains(task.token)) {
+				return entry.key;
 			}
 		}
+		return null;
+	}, task -> {
+		if (Objects.equals(task.lastToken, "function")) {
+			return functionsC;
+		}
+		return null;
+	}, task -> {
+		String s = operatsSymbol.lastSymbol != null && operatsSymbol.lastSymbol == '.'
+				&& task.token.charAt(0) == 'e' && task.lastToken != null
+				? task.lastToken + "." + task.token : task.token;
+		return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s))
+				? null : numberC;
+	}
+	};
+	private final DrawTask[] taskArr0 = {
+			new DrawString(stringC),
+			new DrawSymbol(brackets, bracketsC),
+			operatsSymbol,
+			new DrawComment(commentC),
+			// new DrawWord(keywordMap, keywordC),
+			// new DrawWord(objectMap, objectsC),
+			new DrawToken(tokenDraws),
+			// new DrawNumber(numberC),
+	};
+
+	{
+		taskArr = taskArr0;
 	}
 
 	/*class DrawWord extends DrawTask {
@@ -398,7 +245,7 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
-	class DrawNumber extends DrawTask {
+	/*class DrawNumber extends DrawTask {
 		public DrawNumber(Color color) {
 			super(color);
 		}
@@ -467,43 +314,20 @@ public class JSSyntax extends Syntax {
 
 			return false;
 		}
-	}
+	}*/
 
-	class DrawSymol extends DrawTask {
-		final IntMap<Object> symbols;
-
-		public DrawSymol(IntMap<Object> map, Color color) {
-			super(color);
-			symbols = map;
-		}
-
-		@Override
-		boolean isFinished() {
-			return true;
-		}
-
-		@Override
-		boolean draw(int i) {
-			if (symbols.containsKey(c)) {
-				lastIndex = i;
-				return true;
-			}
-			return false;
-		}
-	}
-
-	static IntMap<Object> operats = new IntMap<>();
-	static IntMap<Object> brackets = new IntMap<>();
+	static IntSet operats = new IntSet();
+	static IntSet brackets = new IntSet();
 
 	static {
 		String s;
 		s = "~|,+-=*/<>!%^&;.";
 		for (int i = 0, len = s.length(); i < len; i++) {
-			operats.put(s.charAt(i), null);
+			operats.add(s.charAt(i));
 		}
 		s = "()[]{}";
 		for (int i = 0, len = s.length(); i < len; i++) {
-			brackets.put(s.charAt(i), null);
+			brackets.add(s.charAt(i));
 		}
 	}
 }

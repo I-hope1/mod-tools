@@ -786,6 +786,7 @@ public class Selection extends Content {
 		}
 
 		public void setup() {
+			if (main.parent == wrap) return;
 			wrap.add(main);
 		}
 
@@ -955,7 +956,6 @@ public class Selection extends Content {
 					}
 				}
 			}
-
 
 			return true;
 		});

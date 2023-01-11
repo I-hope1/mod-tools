@@ -17,6 +17,7 @@ import mindustry.graphics.Pal;
 import modtools.ui.components.Window;
 import modtools.utils.*;
 
+import java.lang.invoke.LambdaMetafactory;
 import java.util.ArrayList;
 
 import static modtools.IntVars.*;
@@ -33,7 +34,6 @@ public final class TopGroup extends Group {
 
 	public void draw() {
 		super.draw();
-		drawSeq.filter(Boolp::get);
 
 		if (isSwicthWindows) {
 			float tw = Core.graphics.getWidth(), th = Core.graphics.getHeight();
@@ -79,11 +79,11 @@ public final class TopGroup extends Group {
 	public Element drawPadElem = null;
 
 	{
-		Core.scene.addListener(new InputListener() {
+		Core.scene.root.getListeners().insert(0, new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (shownWindows.isEmpty()) return false;
 				if (keycode == KeyCode.tab && Core.input.ctrl()) {
-					Core.scene.setKeyboardFocus(null);
+					Core.scene.setKeyboardFocus(TopGroup.this);
 					if (!isSwicthWindows) {
 						currentIndex = Window.focusWindow != null ? shownWindows.indexOf(Window.focusWindow) : 0;
 					}
@@ -93,7 +93,7 @@ public final class TopGroup extends Group {
 					} else if (currentIndex >= shownWindows.size()) {
 						currentIndex -= shownWindows.size();
 					}
-					Log.info(currentIndex);
+					// Log.info(currentIndex);
 					// currentIndex = Mathf.clamp(currentIndex, 0, shownWindows.size() - 1);
 					isSwicthWindows = true;
 				}
@@ -118,20 +118,23 @@ public final class TopGroup extends Group {
 
 		// Core.scene.add(this);
 		/* 显示UI布局 */
-		drawSeq.add(() -> {
-			if (!debugBounds && drawPadElem == null) return true;
+		Events.run(Trigger.uiDrawEnd, () -> {
+			drawSeq.filter(Boolp::get);
+			Draw.flush();
+
+			if (!debugBounds && drawPadElem == null) return;
 			Element drawPadElem = Tools.or(this.drawPadElem, Core.scene.root);
 			if (drawPadElem.parent != null) {
 				Tools.getAbsPos(drawPadElem.parent);
 			} else if (drawPadElem == Core.scene.root) {
 				Tmp.v1.set(0, 0);
-			} else return true;
+			} else return;
 			Draw.color(Color.white);
 			Draw.alpha(0.7f);
 			Lines.stroke(1);
 			drawPad(drawPadElem, Tmp.v1.x, Tmp.v1.y);
+
 			Draw.flush();
-			return true;
 		});
 		Core.scene.add(this);
 		// update(this::toFront);
@@ -171,5 +174,9 @@ public final class TopGroup extends Group {
 			return;
 		}
 		Core.scene.add(actor);
+	}
+
+	public Element hit(float x, float y, boolean touchable) {
+		return isSwicthWindows ? this : super.hit(x, y, touchable);
 	}
 }

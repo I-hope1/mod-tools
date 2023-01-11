@@ -101,6 +101,7 @@ public class WorldDraw {
 
 	public static Texture drawTexture(FrameBuffer buffer, Runnable draw) {
 		Draw.flush();
+		Draw.reset();
 		// 绑定
 		// buffer.begin(Color.clear);
 		buffer.bind();

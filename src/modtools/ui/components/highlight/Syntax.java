@@ -1,6 +1,7 @@
 package modtools.ui.components.highlight;
 
 import arc.graphics.Color;
+import arc.struct.IntSet;
 import mindustry.graphics.Pal;
 import modtools.ui.components.area.TextAreaTable;
 import modtools.ui.components.area.TextAreaTable.MyTextArea;
@@ -72,11 +73,227 @@ public class Syntax {
 		return ch != ' ' && ch != '\t' && !Character.isWhitespace(ch);
 	}
 
+	public void drawDefText(int start, int max) {
+		area.font.setColor(defalutColor);
+		area.drawMultiText(displayText, start, max);
+	}
+
+	void reset() {
+		if (cTask != null) {
+			cTask.reset();
+		}
+		cTask = null;
+	}
+
 	public void highlightingDraw(String displayText) {
+		this.displayText = displayText;
+		reset();
+		// String result;
+		for (DrawTask drawTask : taskArr) {
+			drawTask.init();
+		}
+		int lastIndex = 0;
+		len = displayText.length();
+		lastChar = '\n';
+		out:
+		for (int i = 0; i < len; i++, lastChar = c) {
+			c = displayText.charAt(i);
+
+			if (cTask == null) {
+				for (DrawTask drawTask : taskArr) {
+					if (drawTask.draw(i)) {
+						cTask = drawTask;
+						if (cTask.isFinished()) {
+							cTask.drawText(i);
+							reset();
+							lastIndex = i + 1;
+							continue out;
+						}
+						break;
+					}
+					drawTask.reset();
+				}
+			} else if (cTask.draw(i)) {
+				if (cTask.isFinished()) {
+					cTask.drawText(i);
+					reset();
+					lastIndex = i + 1;
+				}
+			} else {
+				reset();
+			}
+			if (cTask == null) {
+				if (lastIndex < i + 1) {
+					drawDefText(lastIndex, i + 1);
+					lastIndex = i + 1;
+				}
+			}
+		}
+		if (cTask != null && cTask.crazy) {
+			cTask.drawText(len - 1);
+			reset();
+		} else if (lastIndex < len) {
+			drawDefText(lastIndex, len);
+		}
 	}
 
 
 	public MyTextArea area;
 	public String displayText;
+
+	Color defalutColor = Color.white;
+	char c, lastChar;
+	int len;
+
+	/**
+	 * 当前任务
+	 */
+	public DrawTask cTask = null;
+	/**
+	 * 所有的任务
+	 */
+	public DrawTask[] taskArr = {};
+
+	class DrawToken extends DrawTask {
+		// IntMap<?>[] total;
+		// IntMap<?>[] current;
+		boolean begin = false, finished;
+		TokenDraw[] tokenDraws;
+		String lastToken, token;
+
+		public DrawToken(TokenDraw... tokenDraws) {
+			super(new Color());
+			this.tokenDraws = tokenDraws;
+		}
+
+		void reset() {
+			super.reset();
+			// System.arraycopy(total, 0, current, 0, total.length);
+			finished = false;
+			begin = false;
+		}
+
+		void init() {
+			lastToken = null;
+			token = null;
+		}
+
+		boolean isFinished() {
+			return finished;
+		}
+
+
+		void draw(String token) {
+			this.token = token;
+			color.set(defalutColor);
+			// Log.info(token);
+			Color newColor;
+			for (TokenDraw draw : tokenDraws) {
+				newColor = draw.draw(this);
+				if (newColor != null) {
+					color.set(newColor);
+					finished = true;
+					break;
+				}
+			}
+			lastToken = token;
+		}
+
+		boolean draw(int i) {
+			// if (!current.containsKey(c)) return false;
+			if (!begin && !(isWordBreak(lastChar) && !isWordBreak(c))) return false;
+			if (!begin) begin = true;
+			if (lastIndex == -1) lastIndex = i;
+
+			if (i + 1 < len) {
+				char nextC = displayText.charAt(i + 1);
+				boolean valid = !isWordBreak(nextC);
+				if (!valid) {
+					draw(displayText.substring(lastIndex, i + 1));
+					return finished;
+				}
+				return true;
+			} else {
+				draw(displayText.substring(lastIndex));
+				return finished;
+			}
+		}
+	}
+
+	class DrawSymbol extends DrawTask {
+		final IntSet symbols;
+		Character lastSymbol;
+
+		public DrawSymbol(IntSet map, Color color) {
+			super(color);
+			symbols = map;
+		}
+
+		boolean isFinished() {
+			return true;
+		}
+
+		@Override
+		void init() {
+			lastSymbol = null;
+		}
+
+		boolean draw(int i) {
+			if (symbols.contains(c)) {
+				lastSymbol = c;
+				lastIndex = i;
+				return true;
+			}
+			return false;
+		}
+	}
+
+	interface TokenDraw {
+		/**
+		 * @return Color 如果为null，则不渲染
+		 **/
+		Color draw(DrawToken task);
+	}
+
+	public abstract class DrawTask {
+		final Color color;
+		boolean crazy;
+		int lastIndex;
+
+		public DrawTask(Color color, boolean crazy) {
+			this.color = color;
+			this.crazy = crazy;
+		}
+
+		public DrawTask(Color color) {
+			this(color, false);
+		}
+
+		/**
+		 * 循环开始时，执行
+		 */
+		void init() {}
+
+		/**
+		 * 渲染结束（包括失败）时，执行
+		 */
+		void reset() {
+			lastIndex = -1;
+		}
+
+		abstract boolean isFinished();
+
+		abstract boolean draw(int i);
+
+		public void drawText(int i) {
+			if (lastIndex == -1) return;
+			area.font.setColor(color);
+			area.drawMultiText(displayText, lastIndex, i + 1);
+		}
+
+		public boolean nextIs(int i, char c) {
+			return i + 1 < len && c == displayText.charAt(i + 1);
+		}
+	}
 
 }

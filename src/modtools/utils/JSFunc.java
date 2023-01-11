@@ -8,6 +8,7 @@ import arc.math.Mathf;
 import arc.scene.*;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
+import arc.scene.ui.Label;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
@@ -24,15 +25,17 @@ import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.content.ui.ReviewElement.ElementShowWindow;
 import ihope_lib.MyReflect;
 import modtools.ui.content.world.Selection;
+import org.objectweb.asm.*;
 import rhino.*;
 
 import java.io.*;
 import java.lang.reflect.*;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.IntVars.topGroup;
+import static modtools.IntVars.*;
 import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.*;
 
@@ -170,6 +173,32 @@ public class JSFunc {
 			t.add(new MyLabel(clazz.getTypeName(), IntStyles.myLabel));
 			t.button(Icon.copy, Styles.cleari, () -> {
 				Core.app.setClipboardText(clazz.getTypeName());
+			});
+			if (false) t.button(Icon.admin, Styles.cleari, () -> {
+				try {
+					new ClassReader(clazz.getName()).accept(new ClassVisitor(Opcodes.ASM9) {
+						@Override
+						public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+							return new MethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions)) {
+								@Override
+								public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
+									Log.info(owner + "\n" + name + descriptor);
+									super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+								}
+
+								@Override
+								public void visitLineNumber(int line, org.objectweb.asm.Label start) {
+									Log.info(line);
+									super.visitLineNumber(line, start);
+								}
+							};
+						}
+
+
+					}, 0);
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
 			});
 		}).fillX().pad(6, 10, 6, 10).row();
 		rebuild.get(null);

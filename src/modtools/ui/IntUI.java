@@ -62,10 +62,27 @@ public class IntUI {
 
 
 	/* 长按事件 */
-	public static <T extends Element> T longPress(T elem, final long duration, final Cons<Boolean> func) {
+	public static <T extends Element> T longPress(T elem, final long duration, final Boolc boolc) {
 		elem.addListener(new ClickListener() {
-			public void clicked(InputEvent event, float x, float y) {
-				func.get((Time.millis() - visualPressedTime) > duration);
+			Task task;
+
+			@Override
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				if (super.touchDown(event, x, y, pointer, button)) {
+					task = Time.runTask(duration / 1000f * 60f, () -> {
+						boolc.get(true);
+						cancelled = true;
+					});
+					return true;
+				}
+				return false;
+			}
+
+			@Override
+			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				super.touchUp(event, x, y, pointer, button);
+				boolc.get(false);
+				task.cancel();
 			}
 		});
 		return elem;
@@ -187,7 +204,7 @@ public class IntUI {
 
 			for (int i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (!text.equals("")) {
+				if (!text.isEmpty()) {
 					if (item instanceof UnlockableContent) {
 						UnlockableContent unlock;
 						if (!pattern.matcher((unlock = (UnlockableContent) item).name).find() && !pattern.matcher(unlock.localizedName).find()) {

@@ -112,7 +112,7 @@ public class ShowUIList extends Content {
 				}));
 
 		String[] names = {"icon", "tex", "styles"};
-		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
+		IntTab tab = new IntTab(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
 		ui.cont.add(tab.build()).pad(10f);
 		//		ui.addCloseButton();
 	}

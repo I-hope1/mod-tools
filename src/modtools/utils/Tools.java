@@ -7,6 +7,8 @@ import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer;
 import arc.util.Timer.Task;
+import hope_android.FieldUtils;
+import rhino.ScriptRuntime;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -21,6 +23,14 @@ import static ihope_lib.MyReflect.unsafe;
 public class Tools {
 	public static boolean validPosInt(String text) {
 		return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
+	}
+
+	public static boolean isNum(String text) {
+		try {
+			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text));
+		} catch (Throwable ignored) {
+			return false;
+		}
 	}
 
 	public static int asInt(String text) {
@@ -54,14 +64,14 @@ public class Tools {
 			for (Field f : fields) {
 				if (!Modifier.isStatic(f.getModifiers()) && (blackList == null || !blackList.contains(f.getName()))) {
 					// if (display) Log.debug(f);
-					setValue(f, from, to);
+					copyValue(f, from, to);
 				}
 			}
 			cls = cls.getSuperclass();
 		}
 	}
 
-	public static void setValue(Field f, Object from, Object to) {
+	public static void copyValue(Field f, Object from, Object to) {
 		Class<?> type = f.getType();
 		long offset = unsafe.objectFieldOffset(f);
 		if (int.class.equals(type)) {
@@ -254,9 +264,70 @@ public class Tools {
 		}
 	}
 
+	public static Class<?> box(Class<?> type) {
+		if (!type.isPrimitive()) return type;
+		if (type == boolean.class) return Boolean.class;
+		if (type == byte.class) return Byte.class;
+		if (type == char.class) return Character.class;
+		if (type == short.class) return Short.class;
+		if (type == int.class) return Integer.class;
+		if (type == float.class) return Float.class;
+		if (type == long.class) return Long.class;
+		if (type == double.class) return Double.class;
+		return type;
+		// return TO_BOX_MAP.get(type, type);
+	}
+
+	public static Class<?> unbox(Class<?> type) {
+		if (type.isPrimitive()) return type;
+		if (type == Boolean.class) return boolean.class;
+		if (type == Byte.class) return byte.class;
+		if (type == Character.class) return char.class;
+		if (type == Short.class) return short.class;
+		if (type == Integer.class) return int.class;
+		if (type == Float.class) return float.class;
+		if (type == Long.class) return long.class;
+		if (type == Double.class) return double.class;
+		// it will not reach
+		return type;
+	}
+
 	public static <T> T as(Object o) {
 		//noinspection unchecked
 		return (T) o;
+	}
+
+	public static long fieldOffset(boolean isStatic, Field f) {
+		return OS.isAndroid ? FieldUtils.getFieldOffset(f) : isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+	}
+
+	public static void setFieldValue(Field f, Object obj, Object value) {
+		Class<?> type = f.getType();
+		boolean isStatic = Modifier.isStatic(f.getModifiers());
+		Object o = isStatic ? f.getDeclaringClass() : obj;
+		long offset = fieldOffset(isStatic, f);
+		/*if (int.class.equals(type)) {
+			unsafe.putInt(o, offset, (int) value);
+		} else if (float.class.equals(type)) {
+			unsafe.putFloat(o, offset, (float) value);
+		} else if (double.class.equals(type)) {
+			unsafe.putDouble(o, offset, (double) value);
+		} else if (long.class.equals(type)) {
+			unsafe.putLong(o, offset, (long) value);
+		} else if (char.class.equals(type)) {
+			unsafe.putChar(o, offset, (char) value);
+		} else if (byte.class.equals(type)) {
+			unsafe.putByte(o, offset, (byte) value);
+		} else if (short.class.equals(type)) {
+			unsafe.putShort(o, offset, (short) value);
+		} else if (boolean.class.equals(type)) {
+			unsafe.putBoolean(o, offset, (boolean) value);
+		} else {*/
+		unsafe.putObject(o, offset, value);
+			/*if (f.getType().isArray()) {
+				o = Arrays.copyOf((Object[]) o, Array.getLength(o));
+			}*/
+		// }
 	}
 
 	public static <T> T or(T t1, T t2) {

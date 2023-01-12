@@ -447,7 +447,7 @@ public class Tester extends Content {
 			});
 		});
 
-		Contents.settings.add(localizedName(), table);
+		Contents.settingsUI.add(localizedName(), table);
 	}
 
 	public String getMessage() {

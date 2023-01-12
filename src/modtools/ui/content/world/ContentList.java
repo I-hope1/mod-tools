@@ -118,7 +118,7 @@ public class ContentList extends Content {
 			});
 		}));
 
-		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600,
+		IntTab tab = new IntTab(Vars.mobile ? 400 : 600,
 				new Seq<>(names),
 				new Seq<>(colors),
 				tables.toSeq());

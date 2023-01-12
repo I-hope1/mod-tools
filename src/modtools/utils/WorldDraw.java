@@ -9,6 +9,7 @@ import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
 import arc.struct.*;
+import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 
 /**
@@ -47,6 +48,7 @@ public class WorldDraw {
 
 	public WorldDraw(float z) {
 		tasks.add(() -> {
+			if (Vars.state.isMenu()) return;
 			Color last = Draw.getColor();
 			Draw.z(z);
 			drawSeq.filter(Boolp::get);

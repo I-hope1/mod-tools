@@ -6,11 +6,15 @@ import arc.func.*;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
+import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import mindustry.core.Version;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.components.Window;
+import modtools.utils.MySettings.Data;
+
+import java.util.Date;
 
 import static modtools.IntVars.*;
 import static modtools.utils.MySettings.settings;
@@ -49,12 +53,21 @@ public class Settings extends Content {
 		cont.add(t).growX().padTop(6).row();
 	}
 
+	public Data jsfuncEdit;
+
 	public void load() {
 		ui = new Window(localizedName(), 425, 90, true);
 		cont = new Table();
 		ui.cont.pane(cont).fillX().fillY();
 		cont.defaults().width(400);
 		add("Load", loadTable);
+		add("jsfunc", new Table() {{
+			left().defaults().left();
+			jsfuncEdit = (Data) settings.get("JsfuncEdit", () -> new Data(settings, new JsonMap()));
+			check("@settings.jsfunc.number.edit", jsfuncEdit.getBool("number", false), b -> jsfuncEdit.put("number", b)).row();
+			check("@settings.jsfunc.string.edit", jsfuncEdit.getBool("string", false), b -> jsfuncEdit.put("string", b)).row();
+			check("@settings.jsfunc.boolean.edit", jsfuncEdit.getBool("boolean", false), b -> jsfuncEdit.put("boolean", b)).row();
+		}});
 		add("@mod-tools.others", new Table() {{
 			left().defaults().left();
 			check("@settings.mainmenubackground", settings.getBool("ShowMainMenuBackground"), b -> settings.put("ShowMainMenuBackground", b)).row();

@@ -12,6 +12,8 @@ import arc.struct.Seq;
 import arc.util.Log;
 import modtools.ui.IntStyles;
 
+import java.util.Arrays;
+
 public class IntTab {
 	public Table main, title;
 	public ScrollPane pane;
@@ -20,34 +22,52 @@ public class IntTab {
 	public Seq<Table> tables;
 	public float totalWidth;
 	public int cols;
+	public boolean column;
 
 	protected void init() {
 		if (main != null) return;
 		title = new Table();
+		title.defaults().growX().height(42);
 		pane = new ScrollPane(null);
 		main = new Table(t -> {
-			t.add(title).width(totalWidth).top().row();
+			t.add(title).width(totalWidth).top();
+			if (!column) t.row();
 			t.add(pane).grow();
 		});
 	}
 
+	public static Seq<Color> fillColor(int size, Color color) {
+		Color[] colors = new Color[size];
+		Arrays.fill(colors, color);
+		return new Seq<>(colors);
+	}
+
 	/**
-	 * @param totalWidth 总宽度
+	 * 自适配颜色
+	 */
+	public IntTab(float totalWidth, Seq<String> names, Color color, Seq<Table> tables) {
+		this(totalWidth, names, fillColor(names.size, color), tables);
+	}
+
+	public IntTab(float totalWidth, Seq<String> names, Color color, Seq<Table> tables, int cols, boolean column) {
+		this(totalWidth, names, fillColor(names.size, color), tables, cols, column);
+	}
+
+
+	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables) {
+		this(totalWidth, names, colors, tables, Integer.MAX_VALUE, false);
+	}
+
+	/**
+	 * @param totalWidth 总宽度（如果为纵向，totalWidth是标题宽度）
 	 * @param names      名称
 	 * @param colors     颜色
 	 * @param tables     Tables
 	 * @param cols       一行的个数
+	 * @param column     是否为纵向排列
 	 * @throws IllegalArgumentException size must be the same.
 	 */
-	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols) {
-		return new IntTab(totalWidth, names, colors, tables, cols);
-	}
-
-	public static IntTab set(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables) {
-		return new IntTab(totalWidth, names, colors, tables, Integer.MAX_VALUE);
-	}
-
-	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols) {
+	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols, boolean column) {
 		if (names.size != colors.size || names.size != tables.size) {
 			Log.info("name: @, color: @, table: @", names.size, colors.size, tables.size);
 			throw new IllegalArgumentException("size must be the same.");
@@ -58,6 +78,7 @@ public class IntTab {
 		this.colors = colors;
 		this.tables = tables;
 		this.cols = cols;
+		this.column = column;
 		init();
 	}
 
@@ -97,7 +118,7 @@ public class IntTab {
 					}
 
 				}
-			}).height(42).growX();
+			});
 			if ((j + 1) % cols == 0) title.row();
 		}
 		title.row();

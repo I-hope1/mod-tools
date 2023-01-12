@@ -143,14 +143,21 @@ public class Window extends Table {
 		sclLisetener = new SclLisetener(this, this.minWidth, minHeight);
 		moveListener.fire = () -> {
 			if (isMaximize && !isMinimize) {
-				float mulxw = (moveListener.lastMouse.x - x) / width;
-				float mulxh = (moveListener.lastMouse.y - y) / height;
+				float mulxw = moveListener.lastMouse.x / width;
+				float mulxh = moveListener.lastMouse.y / height;
 				toggleMaximize();
 				// 修复移动侦听器的位置
-				moveListener.lastMain.x = x;
-				moveListener.lastMain.y = y;
-				moveListener.lastMouse.x = x + width * mulxw;
-				moveListener.lastMouse.y = y + height * mulxh;
+				RunListener listener = new RunListener() {
+					@Override
+					public void fire(boolean status) {
+						moveListener.lastMain.x = x;
+						moveListener.lastMain.y = y;
+						moveListener.lastMouse.x = x + width * mulxw;
+						moveListener.lastMouse.y = y + height * mulxh;
+						maxlisteners.remove(this);
+					}
+				};
+				maximized(listener);
 				// moveListener.bx = width * mulx;
 				// moveListener.by = Core.scene.getHeight() - moveListener.by;
 			}
@@ -434,6 +441,7 @@ public class Window extends Table {
 				if (!hasActions()) {
 					maxlisteners.each(r -> r.fire(isMaximize));
 					lastMaximize = isMaximize;
+					cancel();
 				}
 			}
 		}, 0, 0.01f, -1);
@@ -487,6 +495,7 @@ public class Window extends Table {
 				if (!hasActions()) {
 					if (!isMaximize) display();
 					minlisteners.each(r -> r.fire(isMinimize));
+					cancel();
 				}
 			}
 		}, 0, 0.01f, -1);

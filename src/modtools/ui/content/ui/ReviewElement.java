@@ -170,7 +170,7 @@ public class ReviewElement extends Content {
 				cancelEvent = false;
 				// frag.touchable = Touchable.disabled;
 				getSelected(x, y);
-				Core.scene.add(mask);
+				topGroup.addChild(mask);
 				cancelEvent = true;
 				return true;
 			}

@@ -170,7 +170,6 @@ public class UnitSpawn extends Content {
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
 		//		ui.addCloseButton();
 
-		btn.setDisabled(() -> Vars.state.isMenu());
 		btn.update(() -> {
 			if (loop) {
 				spawn();
@@ -195,6 +194,7 @@ public class UnitSpawn extends Content {
 
 	public void load() {
 		loadSettings();
+		btn.setDisabled(() -> Vars.state.isMenu());
 	}
 
 	public boolean isOk() {
@@ -269,7 +269,7 @@ public class UnitSpawn extends Content {
 			//			cont.check("服务器适配", b -> server = b);
 		}).padLeft(6);
 
-		Contents.settings.add(table);
+		Contents.settingsUI.add(table);
 	}
 
 	@Override

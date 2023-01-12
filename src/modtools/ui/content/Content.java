@@ -23,7 +23,7 @@ public abstract class Content {
 	}
 
 	public boolean loadable() {
-		return settings.getBool("load-" + name, "true");
+		return settings.getBool("load-" + name, true);
 	}
 
 	public Content(String name) {

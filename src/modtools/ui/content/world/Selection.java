@@ -18,7 +18,6 @@ import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
-import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
@@ -39,7 +38,7 @@ import mindustry.world.blocks.environment.OverlayFloor;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
-import modtools.ui.components.Window;
+import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.content.Content;
 import modtools.utils.JSFunc;
@@ -51,8 +50,7 @@ import java.lang.reflect.Field;
 import java.util.*;
 import java.util.function.Consumer;
 
-import static mindustry.Vars.tilesize;
-import static mindustry.Vars.world;
+import static mindustry.Vars.*;
 import static modtools.IntVars.topGroup;
 import static modtools.utils.MySettings.settings;
 import static modtools.utils.WorldDraw.drawRegion;
@@ -64,10 +62,10 @@ public class Selection extends Content {
 	}
 
 	final ObjectMap<String, Boolean> select = ObjectMap.of(
-			"tile", settings.getBool(getSettingName() + "-tile", "true"),
-			"building", settings.getBool(getSettingName() + "-building", "false"),
-			"bullet", settings.getBool(getSettingName() + "-bullet", "false"),
-			"unit", settings.getBool(getSettingName() + "-unit", "false")
+			"tile", settings.getBool(getSettingName() + "-tile", "true")
+			, "building", settings.getBool(getSettingName() + "-building", "false")
+			, "unit", settings.getBool(getSettingName() + "-unit", "false")
+			, "bullet", settings.getBool(getSettingName() + "-bullet", "false")
 	);
 
 	public static final Color focusColor = Color.pink.cpy().a(0.4f);
@@ -78,7 +76,7 @@ public class Selection extends Content {
 			otherWD = new WorldDraw(Layer.overlayUI);
 	public Element fragSelect;
 	public Window pane;
-	public Table functions;
+	// public Table functions;
 	Team defaultTeam;
 	// show: pane是否显示
 	// move: 是否移动
@@ -90,14 +88,14 @@ public class Selection extends Content {
 	Function<Building> buildings;
 	Function<Unit> units;
 	Function<Bullet> bullets;
-	public static ObjectMap<String, Function<?>> all = new ObjectMap<>();
+	public static OrderedMap<String, Function<?>> allFunctions = new OrderedMap<>();
 
 	public void loadSettings() {
 		Table table = new Table();
 		table.add(localizedName()).color(Pal.accent).growX().left().row();
 		table.table(t -> {
 			t.left().defaults().left();
-			all.each((k, func) -> {
+			allFunctions.each((k, func) -> {
 				func.setting(t);
 			});
 		}).growX().left().padLeft(16).row();
@@ -133,7 +131,7 @@ public class Selection extends Content {
 			t.check("@settings.drawSelect", drawSelect, b -> drawSelect = b);
 		}).growX().left().padLeft(16).row();
 
-		Contents.settings.add(table);
+		Contents.settingsUI.add(table);
 	}
 
 	public void load() {
@@ -266,15 +264,11 @@ public class Selection extends Content {
 		/*fragDraw = new FragDraw();
 		Core.scene.add(fragDraw);*/
 
-		functions = new Table();
-		functions.defaults().width(buttonWidth);
+		// functions = new Table();
+		// functions.defaults().width(buttonWidth);
 		pane = new Window(localizedName(), 0/* two buttons */, maxH, true);
 		pane.hidden(this::hide);
-		ScrollPaneStyle paneStyle = new ScrollPaneStyle();
-		paneStyle.background = Styles.none;
-		pane.cont.table(t -> {
-			t.pane(paneStyle, functions).fillX().fillY();
-		});
+
 		//		pane.cont.left().bottom().defaults().width(W);
 		pane.update(() -> {
 			if (Vars.state.isMenu()) {
@@ -285,27 +279,37 @@ public class Selection extends Content {
 		tiles = new TileFunction<>("tile", (t, func) -> {
 			FunctionBuild(t, "设置", button -> {
 				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
+					/*Task task = new Task() {
+						@Override
+						public void run() {
+							headless = false;
+						}
+					};*/
 					func.each(tile -> {
-						int offsetx = -(block.size - 1) / 2;
-						int offsety = -(block.size - 1) / 2;
-						for (int dx = 0; dx < block.size; dx++) {
-							for (int dy = 0; dy < block.size; dy++) {
-								int worldx = dx + offsetx + tile.x;
-								int worldy = dy + offsety + tile.y;
-								Tile other = world.tile(worldx, worldy);
+						if (tile.block() == block) return;
+						if (block.isMultiblock()) {
+							int offsetx = -(block.size - 1) / 2;
+							int offsety = -(block.size - 1) / 2;
+							for (int dx = 0; dx < block.size; dx++) {
+								for (int dy = 0; dy < block.size; dy++) {
+									int worldx = dx + offsetx + tile.x;
+									int worldy = dy + offsety + tile.y;
+									Tile other = world.tile(worldx, worldy);
 
-								if (other != null && other.block().isMultiblock() && other.block() == block) {
-									return;
+									if (other != null && other.block().isMultiblock() && other.block() == block) {
+										return;
+									}
 								}
 							}
 						}
-
 						tile.setBlock(block, tile.build != null ? tile.team() : defaultTeam);
 					});
-				}, 42.0f, 32, 6, true);
+				}, 42f, 32, 6, true);
 			});
 			FunctionBuild(t, "清除", __ -> {
-				func.each(Tile::setAir);
+				func.each(tile -> {
+					if (tile.block() != Blocks.air) tile.setAir();
+				});
 			});
 			ListFunction(t, "设置地板重置Overlay", Vars.content.blocks().select(block -> block instanceof Floor), (button, floor) -> {
 				tiles.each(tile -> {
@@ -410,10 +414,9 @@ public class Selection extends Content {
 			FunctionBuild(t, "清除", __ -> {
 				func.list.removeIf(u -> {
 					u.remove();
-					try {
-						return !addedField.getBoolean(u);
-					} catch (Exception ignored) {}
-					return false;
+					return Groups.unit.contains(u0 -> u0 == u);
+					// return !addedField.getBoolean(u);
+					// return false;
 				});
 			});
 			FunctionBuild(t, "强制清除", __ -> {
@@ -435,9 +438,29 @@ public class Selection extends Content {
 		});
 
 		bullets = new BulletFunction<>("bullet", (t, func) -> {
+			FunctionBuild(t, "清除", __ -> {
+				func.list.removeIf(bullet -> {
+					bullet.remove();
+					try {
+						return Groups.bullet.contains(b -> b == bullet);
+					} catch (Exception ignored) {}
+					return false;
+				});
+			});
 
 		});
 
+		// ScrollPaneStyle paneStyle = new ScrollPaneStyle();
+		// paneStyle.background = Styles.none;
+		Seq<Table> tableSeq = new Seq<>();
+		for (var func : allFunctions) {
+			tableSeq.add(func.value.wrap);
+		}
+		IntTab tab = new IntTab(100, allFunctions.orderedKeys(),
+				Color.sky, tableSeq, 1, true);
+		pane.cont.left().add(tab.build()).grow().left();
+		// t.pane(paneStyle, functions).grow();
+		// });
 		//		pane.show();
 		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
@@ -725,7 +748,6 @@ public class Selection extends Content {
 		}
 	};
 
-
 	public abstract class Function<T> {
 		public final Table wrap;
 		public final Table main;
@@ -739,10 +761,10 @@ public class Selection extends Content {
 			main = new Table();
 			cont = new Table();
 			cons.get(cont, this);
-			functions.add(wrap).padTop(10.0f).row();
-			main.image().color(Color.white).height(3.0f).padTop(3.0f).padBottom(3.0f).fillX().row();
-			main.add(name).growX().left().row();
-			main.button("show all", IntStyles.blackt, this::showAll).growX().height(buttonHeight).row();
+			// functions.add(wrap).padTop(10.0f).row();
+			// main.image().color(Color.white).height(3.0f).padTop(3.0f).padBottom(3.0f).fillX().row();
+			// main.add(name).growX().left().row();
+			main.button("show all", IntStyles.blackt, this::showAll).grow().top().height(buttonHeight).row();
 			main.add(cont).width(buttonWidth);
 			wrap.update(() -> {
 				if (list.isEmpty()) remove();
@@ -754,7 +776,7 @@ public class Selection extends Content {
 				remove();
 			}
 
-			all.put(name, this);
+			allFunctions.put(name, this);
 		}
 
 		public abstract TextureRegion getRegion(T t);
@@ -960,7 +982,7 @@ public class Selection extends Content {
 			return true;
 		});
 		topGroup.drawSeq.add(() -> {
-			drawFocus();
+			if (state.isGame()) drawFocus();
 			return true;
 		});
 	}

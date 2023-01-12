@@ -68,9 +68,10 @@ public class Frag extends Table {
 		contPane = cell.get();
 		contPane.update(() -> contPane.setOverscroll(false, false));
 		left().bottom();
+		boolean last = topGroup.ok;
 		topGroup.ok = true;
 		topGroup.addChild(this);
-		// topGroup.ok = false;
+		topGroup.ok = last;
 		Log.info(this);
 
 		IntVars.addResizeListener(() -> listener.display(x, y));

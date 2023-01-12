@@ -1,10 +1,12 @@
 package modtools.utils;
 
 import arc.files.Fi;
-import arc.struct.StringMap;
+import arc.struct.*;
 import arc.util.Log;
 import arc.util.serialization.Jval;
+import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
+import rhino.ScriptRuntime;
 
 import java.util.Objects;
 
@@ -22,26 +24,36 @@ public class MySettings {
 	}
 
 	static Fi config = dataDirectory.child("mod-tools-config.hjson");
-	public static final Data settings = new Data();
+	public static final Data settings = new Data(config);
 
-	static {
-		settings.loadFi(config);
-	}
+	public static class Data extends OrderedMap<String, Object> {
+		public Data parent;
 
-	public static class Data extends StringMap {
-		public String put(String key, Object value) {
-			return put(key, value.toString());
+		public Data(Data parent, JsonMap jsonMap) {
+			this.parent = parent;
+			loadJval(parent, jsonMap);
+		}
+
+		public Data(Fi fi) {
+			loadFi(fi);
 		}
 
 		@Override
-		public String put(String key, String value) {
-			String old = super.put(key, value);
-			if (!Objects.equals(old, value)) config.writeString("" + this);
+		public Object put(String key, Object value) {
+			Object old = super.put(key, value);
+			if (!Objects.equals(old, value)) {
+				write();
+			}
 			return old;
 		}
 
+		public void write() {
+			if (parent == null) config.writeString("" + this);
+			else parent.write();
+		}
+
 		@Override
-		public String get(String key, String defaultValue) {
+		public Object get(String key, Object defaultValue) {
 			return get(key, () -> defaultValue);
 		}
 
@@ -51,25 +63,61 @@ public class MySettings {
 				return;
 			}
 			try {
-				for (var entry : Jval.read(fi.readString()).asObject()) {
-					super.put(entry.key, "" + entry.value);
-				}
+				loadJval(null, Jval.read(fi.readString()).asObject());
 			} catch (Exception e) {
 				Log.err(e);
 			}
 		}
 
-		public boolean getBool(String name, String def) {
-			return get(name, def).equals("true");
+		public void loadJval(Data parent, JsonMap jsonMap) {
+			for (var entry : jsonMap) {
+				super.put(entry.key, entry.value.isObject() ? new Data(parent, entry.value.asObject()) : entry.value);
+			}
 		}
 
-		@Override
+		public boolean toBool(Object v) {
+			if (v instanceof Jval) return ((Jval) v).asBool();
+			if (v instanceof Boolean) return (boolean) v;
+			return ScriptRuntime.toBoolean("" + v);
+		}
+
+		public boolean getBool(String name) {
+			return toBool(get(name));
+		}
+
+		public boolean getBool(String name, Object def) {
+			return toBool(get(name, def));
+		}
+
 		public String toString() {
+			return toString(new StringBuilder());
+		}
+
+		public String toString(StringBuilder tab) {
 			StringBuilder builder = new StringBuilder();
+			builder.append("{\n");
+			tab.append("    ");
 			each((k, v) -> {
-				builder.append(k).append(": ").append("\"").append(v).append("\"").append("\n");
+				builder.append(tab).append(k).append(": ")
+						.append(v instanceof Data ? ((Data) v).toString(tab) : v)
+						.append("\n");
 			});
+			tab.deleteCharAt(tab.length() - 1);
+			builder.append(tab);
+			builder.append("\n}");
 			return builder.toString();
+		}
+
+		public float getFloat(String name, float def) {
+			Object v = get(name, def);
+			if (v instanceof Jval) return ((Jval) v).asFloat();
+			return Float.parseFloat("" + v);
+		}
+
+		public int getInt(String name, int def) {
+			Object v = get(name, def);
+			if (v instanceof Jval) return ((Jval) v).asInt();
+			return Integer.parseInt("" + v);
 		}
 	}
 }

@@ -174,32 +174,6 @@ public class JSFunc {
 			t.button(Icon.copy, Styles.cleari, () -> {
 				Core.app.setClipboardText(clazz.getTypeName());
 			});
-			if (false) t.button(Icon.admin, Styles.cleari, () -> {
-				try {
-					new ClassReader(clazz.getName()).accept(new ClassVisitor(Opcodes.ASM9) {
-						@Override
-						public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-							return new MethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions)) {
-								@Override
-								public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
-									Log.info(owner + "\n" + name + descriptor);
-									super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
-								}
-
-								@Override
-								public void visitLineNumber(int line, org.objectweb.asm.Label start) {
-									Log.info(line);
-									super.visitLineNumber(line, start);
-								}
-							};
-						}
-
-
-					}, 0);
-				} catch (IOException e) {
-					throw new RuntimeException(e);
-				}
-			});
 		}).fillX().pad(6, 10, 6, 10).row();
 		rebuild.get(null);
 		// cont.add(build).grow();
@@ -393,7 +367,7 @@ public class JSFunc {
 									});
 								});
 							});
-						} else if (l.type == Boolean.TYPE || l.type == Boolean.class) {
+						} else if (settingsUI.jsfuncEdit.getBool("boolean", false) && (l.type == Boolean.TYPE || l.type == Boolean.class)) {
 							var btn = new TextButton((boolean) l.val ? "TRUE" : "FALSE", IntStyles.flatTogglet);
 							btn.setChecked((boolean) l.val);
 							btn.clicked(() -> {
@@ -408,12 +382,42 @@ public class JSFunc {
 							});
 							cell.setElement(btn);
 							cell.size(96, 42);
+						} else if (settingsUI.jsfuncEdit.getBool("number", false) && Number.class.isAssignableFrom(Tools.box(l.type))) {
+							var field = new TextField();
+							field.update(() -> {
+								if (Core.scene.getKeyboardFocus() != field) try {
+									l.setVal(f.get(o));
+									field.setText(String.valueOf(l.val));
+								} catch (Exception ignored) {}
+							});
+							field.setValidator(Tools::isNum);
+							field.changed(() -> {
+								double d = ScriptRuntime.toNumber(field.getText());
+								setFieldValue(f, o, d);
+								l.setVal(d);
+							});
+							cell.setElement(field);
+							cell.size(120, 42);
+						} else if (settingsUI.jsfuncEdit.getBool("string", false) && l.type == String.class) {
+							var field = new TextField();
+							field.update(() -> {
+								if (Core.scene.getKeyboardFocus() != field) try {
+									l.setVal(f.get(o));
+									field.setText(String.valueOf(l.val));
+								} catch (Exception ignored) {}
+							});
+							field.changed(() -> {
+								Tools.setFieldValue(f, o, field.getText());
+								l.setVal(field.getText());
+							});
+							cell.setElement(field);
+							cell.size(120, 42);
 						}
 
 						// prefW[0] = l.getPrefWidth();
 						// listener.run();
 						// Time.runTask(0, () -> l.setWrap(true));
-						if (!type.isPrimitive() && type != String.class) {
+						if (!Tools.unbox(type).isPrimitive() && type != String.class) {
 							l.addShowInfoListener();
 						} else {
 							l.setColor(number);
@@ -699,7 +703,7 @@ public class JSFunc {
 	}
 
 	public static Selection.Function<?> getFunction(String name) {
-		return Selection.all.get(name);
+		return Selection.allFunctions.get(name);
 	}
 
 	public static Object unwrap(Object o) {

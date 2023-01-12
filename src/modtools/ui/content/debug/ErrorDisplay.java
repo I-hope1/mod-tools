@@ -59,7 +59,7 @@ public class ErrorDisplay extends Content {
 			return last_log.exists() ? last_log.readString() : "";
 		}))), crashes);
 		String[] names = {"last_log", "crashes"};
-		IntTab tab = IntTab.set(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
+		IntTab tab = new IntTab(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
 		ui.cont.add(tab.build()).grow();
 
 		// ui.addCloseButton();

@@ -25,7 +25,6 @@ import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.content.ui.ReviewElement.ElementShowWindow;
 import ihope_lib.MyReflect;
 import modtools.ui.content.world.Selection;
-import org.objectweb.asm.*;
 import rhino.*;
 
 import java.io.*;

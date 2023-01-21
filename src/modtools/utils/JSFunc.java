@@ -26,7 +26,7 @@ import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.components.input.highlight.*;
 import modtools.ui.components.limit.*;
-import modtools.ui.content.ui.ReviewElement.ElementShowWindow;
+import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.world.Selection;
 import rhino.*;
 
@@ -623,8 +623,8 @@ public class JSFunc {
 	}
 
 
-	public static void showElement(Element element) {
-		new ElementShowWindow().show(element);
+	public static void reviewElement(Element element) {
+		new ReviewElementWindow().show(element);
 	}
 
 	public static Selection.Function<?> getFunction(String name) {

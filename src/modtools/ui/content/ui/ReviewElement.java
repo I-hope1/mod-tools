@@ -62,7 +62,7 @@ public class ReviewElement extends Content {
 	}
 
 	public static Element focus;
-	public static ElementShowWindow focusWindow;
+	public static ReviewElementWindow focusWindow;
 	public static Color focusColor = Color.blue.cpy().a(0.5f);
 
 	@Override
@@ -183,7 +183,7 @@ public class ReviewElement extends Content {
 				if (selected == null) return false;
 				Element parent = selected.parent;
 				while (parent != null) {
-					if (parent instanceof ElementShowWindow) return false;
+					if (parent instanceof ReviewElementWindow) return false;
 					parent = parent.parent;
 				}
 				return true;
@@ -195,7 +195,7 @@ public class ReviewElement extends Content {
 				mask.remove();
 				// });
 				selecting = false;
-				if (filter()) new ElementShowWindow().show(selected);
+				if (filter()) new ReviewElementWindow().show(selected);
 			}
 		});
 		topGroup.addChild(frag);
@@ -219,16 +219,16 @@ public class ReviewElement extends Content {
 		}
 	};
 
-	public static class ElementShowWindow extends DisposableWindow {
+	public static class ReviewElementWindow extends DisposableWindow {
 		Table pane = new LimitTable();
 		Element element = null;
 		Pattern pattern;
 
-		public ElementShowWindow() {
+		public ReviewElementWindow() {
 			super(elementShow.localizedName(), 0, 160, true);
 			getCell(cont).maxWidth(Core.graphics.getWidth());
 
-			name = "ElementShowWindow";
+			name = "ReviewElementWindow";
 
 			//			addCloseButton();
 			pane.left().defaults().left();
@@ -237,7 +237,7 @@ public class ReviewElement extends Content {
 				bs[0] = t.button("显示父元素", Icon.up, () -> {
 					Runnable go = () -> {
 						hide();
-						var window = new ElementShowWindow();
+						var window = new ReviewElementWindow();
 						window.pattern = pattern;
 						window.show(element.parent);
 						window.setPosition(x, y);
@@ -249,7 +249,7 @@ public class ReviewElement extends Content {
 					} else go.run();
 				}).disabled(b -> element == null || element.parent == null).width(120).get();
 				t.button(Icon.copy, IntStyles.clearNonei, () -> {
-					var window = new ElementShowWindow();
+					var window = new ReviewElementWindow();
 					window.pattern = pattern;
 					window.show(element);
 					window.setSize(width, height);

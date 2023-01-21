@@ -41,6 +41,7 @@ dependencies{
 
 tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
+    options.fork = true
     options.forkOptions.jvmArgs.addAll([
 			"--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
     ])

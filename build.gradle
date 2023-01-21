@@ -41,7 +41,9 @@ dependencies{
 
 tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
-    options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
+    options.forkOptions.jvmArgs.addAll([
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+    ])
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.loader=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.reflect=ALL-UNNAMED")

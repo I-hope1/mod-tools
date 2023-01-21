@@ -27,7 +27,7 @@ tasks.withType(JavaCompile){
     options.encoding = "UTF-8"
     options.fork = true
     options.forkOptions.jvmArgs.addAll([
-			"--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+        "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
     ])
 }
 

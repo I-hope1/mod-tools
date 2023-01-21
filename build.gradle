@@ -15,7 +15,7 @@ repositories{
 
 ext{
     //the build number that this mod is made for
-    mindustryVersion = 'v137'
+    mindustryVersion = 'v141.2'
     jabelVersion = "0.6.0"
     sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 }
@@ -41,7 +41,7 @@ dependencies{
 
 tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
-    options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+    options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.loader=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.reflect=ALL-UNNAMED")

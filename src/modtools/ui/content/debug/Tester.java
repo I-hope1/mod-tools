@@ -241,7 +241,7 @@ public class Tester extends Content {
 
 			p.button("@historymessage", history::show);
 			p.button("@bookmark", bookmark::show);
-			p.button("@startup", bookmark::show);
+			// p.button("@startup", bookmark::show);
 			p.check("@stopIfOvertime", stopIfOvertime, b -> stopIfOvertime = b);
 		}).height(60).width(w).growX();
 
@@ -422,13 +422,7 @@ public class Tester extends Content {
 		// currentThread = new Thread(() -> {
 		try {
 			Object o = script.exec(cx, scope);
-			if (o instanceof Wrapper) {
-				o = ((Wrapper) o).unwrap();
-			}
-			res = o;
-			if (o instanceof Undefined) {
-				o = "undefined";
-			}
+			res = o = JSFunc.unwrap(o);
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
@@ -461,16 +455,16 @@ public class Tester extends Content {
 			area.setText(f.child("message.txt").readString());
 			log = f.child("log.txt").readString();
 		}, (f, p) -> {
-			p.add(f.child("message.txt").readString()).row();
+			p.add(new MyLabel(f.child("message.txt").readString())).row();
 			p.image().color(JSFunc.underline).growX().padTop(6f).padBottom(6f).row();
-			p.add(f.child("log.txt").readString()).row();
+			p.add(new MyLabel(f.child("log.txt").readString())).row();
 		}, Tester::sort);
 		history.hide();
 		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
 				f -> f, f -> {
 			area.setText(f.readString());
 		}, (f, p) -> {
-			p.add(f.readString()).row();
+			p.add(new MyLabel(f.readString())).row();
 		}, Tester::sort);
 		bookmark.hide();
 

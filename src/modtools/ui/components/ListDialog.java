@@ -5,6 +5,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.scene.*;
 import arc.scene.ui.*;
+import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
@@ -13,6 +14,8 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
 import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.debug.Tester;
 import modtools.utils.*;
 
@@ -20,7 +23,7 @@ import java.util.regex.Pattern;
 
 public class ListDialog extends DisposableWindow {
 	public Seq<Fi> list = new Seq<>();
-	final Table p = new Table();
+	final Table p = new LimitTable();
 	Floatf<Fi> sorter;
 	public Fi file;
 	Func<Fi, Fi> fileHolder;
@@ -90,14 +93,14 @@ public class ListDialog extends DisposableWindow {
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					b.pane(c -> {
-						c.add(fileHolder.get(f).readString()).left();
+						c.add(new MyLabel(fileHolder.get(f).readString())).left();
 					}).grow().left();
 				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, 600, longPress -> {
 					if (longPress) {
-						Window ui = new DisposableWindow("Info", 300, 80);
+						Window ui = new DisposableWindow("@info", 300, 80);
 						var cont = ui.cont;
-						cont.add(f.name(), Pal.accent).left().colspan(2).row();
+						cont.add(new MyLabel(f.name(), accentStyle)).left().colspan(2).row();
 						cont.image().color(Pal.accent).growX().colspan(2);
 						cont.row();
 						cont.pane(p1 -> {
@@ -158,7 +161,7 @@ public class ListDialog extends DisposableWindow {
 				TextFieldValidator validator,
 				Cons2<TextField, Label> modifier,
 				Table t) {
-			Label label = new Label(def);
+			Label label = new MyLabel(def) {{interval = Integer.MAX_VALUE;}};
 			Cell<?> cell = t.add(label);
 			TextField field = new TextField();
 			if (validator != null) field.setValidator(validator);
@@ -177,4 +180,6 @@ public class ListDialog extends DisposableWindow {
 			return cell;
 		}
 	}
+
+	public static LabelStyle accentStyle = new LabelStyle(MyFonts.MSYHMONO, Pal.accent);
 }

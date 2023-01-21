@@ -597,15 +597,6 @@ public class JSFunc {
 		// return mainRun;
 	}
 
-
-	public static CharSequence format(Class<?> cls) {
-		return cls.getSimpleName();
-		// StringBuilder base = new StringBuilder();
-		// base.append(cls.getTypeName());
-		// // if (cls.isArray()) base.append("[\u0001]");
-		// return base;
-	}
-
 	public static Window window(final Cons<Window> cons) {
 		return new Window("test") {{
 			cons.get(this);
@@ -641,8 +632,8 @@ public class JSFunc {
 	}
 
 	public static Object unwrap(Object o) {
-		if (o instanceof NativeJavaObject) {
-			return ((NativeJavaObject) o).unwrap();
+		if (o instanceof Wrapper) {
+			return ((Wrapper) o).unwrap();
 		}
 		if (o instanceof Undefined) {
 			return "undefined";
@@ -993,13 +984,14 @@ public class JSFunc {
 	}
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
-		table.button(
-				key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2") : Core.bundle.format("jsfunc.store_as_js_var", key),
-				IntStyles.flatBordert, () -> {}).padLeft(10f).size(180, 40).with(b -> {
-			b.clicked(() -> {
-				tester.put(b, prov.get());
-			});
-		});
+		table.button(key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
+								: Core.bundle.format("jsfunc.store_as_js_var", key),
+						IntStyles.flatBordert, () -> {}).padLeft(10f).size(180, 40)
+				.with(b -> {
+					b.clicked(() -> {
+						tester.put(b, prov.get());
+					});
+				});
 	}
 
 	public static WatchWindow watch(String info, MyProv<Object> value) {
@@ -1008,7 +1000,7 @@ public class JSFunc {
 
 	public static WatchWindow watch(String info, MyProv<Object> value, float interval) {
 		return new WatchWindow() {{
-			watch(info, value);
+			watch(info, value, interval);
 			show();
 		}};
 	}

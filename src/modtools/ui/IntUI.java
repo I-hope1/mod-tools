@@ -62,30 +62,30 @@ public class IntUI {
 
 	/* 长按事件 */
 	public static <T extends Element> T longPress(T elem, final long duration, final Boolc boolc) {
-		elem.addListener(new ClickListener() {
-			Task task = new Task() {
+		elem.addListener(new InputListener() {
+			final Task task = new Task() {
 				@Override
 				public void run() {
 					boolc.get(true);
-					pressed = true;
 				}
 			};
 
 			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				task.cancel();
-				if (super.touchDown(event, x, y, pointer, button)) {
-					task = Time.runTask(duration / 1000f * 60f, task);
-					return true;
-				}
-				return false;
+				// if (super.touchDown(event, x, y, pointer, button)) {
+				Timer.schedule(task, duration / 1000f);
+				return true;
+				// }
+				// return false;
 			}
 
 			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				super.touchUp(event, x, y, pointer, button);
-				if (event.handled) return;
-				boolc.get(false);
+				if (task.isScheduled()) {
+					task.cancel();
+					boolc.get(false);
+				}
+				// super.touchUp(event, x, y, pointer, button);
 			}
 		});
 		return elem;

@@ -8,14 +8,17 @@ import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
+import arc.util.Log;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
+import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.content.debug.Tester;
+import modtools.utils.*;
 
 import java.util.regex.Pattern;
 
-public class ListDialog extends Window {
+public class ListDialog extends DisposableWindow {
 	public Seq<Fi> list = new Seq<>();
 	final Table p = new Table();
 	Floatf<Fi> sorter;
@@ -79,9 +82,11 @@ public class ListDialog extends Window {
 					f = toFi;
 					label.setText(field.getText());
 				}
-			}, p).left().color(Pal.accent).growX().row();
+			}, p).left().color(Pal.accent).growX();
+			p.row();
 			// p.add(f.name(), Pal.accent).left().row();
-			p.image().color(Pal.accent).growX().row();
+			p.image().color(Pal.accent).growX();
+			p.row();
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					b.pane(c -> {
@@ -91,16 +96,24 @@ public class ListDialog extends Window {
 				IntUI.longPress(btn, 600, longPress -> {
 					if (longPress) {
 						Window ui = new DisposableWindow("Info", 300, 80);
-						ui.cont.add(f.name(), Pal.accent).left().row();
-						ui.cont.image().color(Pal.accent).growX().row();
-						ui.cont.pane(p1 -> {
+						var cont = ui.cont;
+						cont.add(f.name(), Pal.accent).left().colspan(2).row();
+						cont.image().color(Pal.accent).growX().colspan(2);
+						cont.row();
+						cont.pane(p1 -> {
 							pane.get(f, p1);
-						}).size(300, 60).maxHeight(300).row();
-						ui.cont.button(Icon.trash, () -> {
+						}).size(300, 60).maxHeight(300).colspan(2);
+						cont.row();
+
+						cont.button(Icon.copy, () -> {
+							JSFunc.copyText(f.readString());
+						});
+						cont.button(Icon.trash, () -> IntUI.showConfirm("@confirm.remove", () -> {
 							ui.hide();
 							f.delete();
-						}).row();
+						})).row();
 						ui.show();
+						ui.setPosition(Core.input.mouse().sub(ui.getWidth() / 2, ui.getHeight() / 2));
 					} else {
 						consumer.get(f);
 						ListDialog.this.build();

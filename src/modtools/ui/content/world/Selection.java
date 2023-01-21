@@ -35,11 +35,13 @@ import mindustry.ui.Styles;
 import mindustry.world.Tile;
 import mindustry.world.blocks.environment.Floor;
 import mindustry.world.blocks.environment.OverlayFloor;
+import modtools.IntVars;
 import modtools.ui.Contents;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 import modtools.utils.JSFunc;
 import modtools.utils.Tools;
@@ -211,44 +213,65 @@ public class Selection extends Content {
 				}
 
 				if (select.get("bullet")) {
-					Groups.bullet.each(bullet -> {
-						// 返回单位是否在所选区域内
-						return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
-					}, bullet -> {
-						if (!bullets.list.contains(bullet)) {
-							bullets.add(bullet);
-						}
-					});
+					new Thread(() -> {
+						Groups.bullet.each(bullet -> {
+							// 返回单位是否在所选区域内
+							return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
+						}, bullet -> {
+							try {
+								Thread.sleep(1);
+							} catch (InterruptedException e) {
+								throw new RuntimeException(e);
+							}
+							if (!bullets.list.contains(bullet)) {
+								bullets.add(bullet);
+							}
+						});
+					}).start();
 				}
 				if (select.get("unit")) {
-					Groups.unit.each(unit -> {
-						// 返回单位是否在所选区域内
-						return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
-					}, unit -> {
-						if (!units.list.contains(unit)) {
-							units.add(unit);
-						}
-					});
+					new Thread(() -> {
+						Groups.unit.each(unit -> {
+							// 返回单位是否在所选区域内
+							return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
+						}, unit -> {
+							try {
+								Thread.sleep(1);
+							} catch (InterruptedException e) {
+								throw new RuntimeException(e);
+							}
+							if (!units.list.contains(unit)) {
+								units.add(unit);
+							}
+						});
+					}).start();
 				}
 
 				float minX = Mathf.clamp(start.x, 0, world.unitWidth());
 				float maxX = Mathf.clamp(end.x, 0, world.unitWidth());
 				float minY = Mathf.clamp(start.y, 0, world.unitHeight());
 				float maxY = Mathf.clamp(end.y, 0, world.unitHeight());
-				for (float y = minY; y < maxY; y += tilesize) {
-					for (float x = minX; x < maxX; x += tilesize) {
-						Tile tile = world.tileWorld(x, y);
-						if (tile != null) {
-							if (select.get("tile") && !tiles.list.contains(tile)) {
-								tiles.add(tile);
-							}
+				new Thread(() -> {
+					for (float y = minY; y < maxY; y += tilesize) {
+						for (float x = minX; x < maxX; x += tilesize) {
+							Tile tile = world.tileWorld(x, y);
+							if (tile != null) {
+								try {
+									Thread.sleep(1);
+								} catch (InterruptedException e) {
+									throw new RuntimeException(e);
+								}
+								if (select.get("tile") && !tiles.list.contains(tile)) {
+									tiles.add(tile);
+								}
 
-							if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build)) {
-								buildings.add(tile.build);
+								if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build)) {
+									buildings.add(tile.build);
+								}
 							}
 						}
 					}
-				}
+				}).start();
 
 				if (!pane.isShown()) {
 					pane.show();
@@ -575,14 +598,16 @@ public class Selection extends Content {
 		public void add(T bullet) {
 			super.add(bullet);
 			if (!drawSelect) return;
-			TextureRegion region = getRegion(bullet);
-			bulletWD.drawSeq.add(() -> {
-				if (!bullet.isAdded()) {
-					return false;
-				}
-				if (!rect.contains(bullet.x, bullet.y)) return true;
-				Draw.rect(region, bullet.x, bullet.y);
-				return true;
+			Time.runTask(0, () -> {
+				TextureRegion region = getRegion(bullet);
+				bulletWD.drawSeq.add(() -> {
+					if (!bullet.isAdded()) {
+						return false;
+					}
+					if (!rect.contains(bullet.x, bullet.y)) return true;
+					Draw.rect(region, bullet.x, bullet.y);
+					return true;
+				});
 			});
 		}
 
@@ -620,14 +645,16 @@ public class Selection extends Content {
 		public void add(T unit) {
 			super.add(unit);
 			if (!drawSelect) return;
-			TextureRegion region = getRegion(unit);
-			unitWD.drawSeq.add(() -> {
-				if (!unit.isAdded()) {
-					return false;
-				}
-				if (!rect.contains(unit.x, unit.y)) return true;
-				Draw.rect(region, unit.x, unit.y);
-				return true;
+			Time.runTask(0, () -> {
+				TextureRegion region = getRegion(unit);
+				unitWD.drawSeq.add(() -> {
+					if (!unit.isAdded()) {
+						return false;
+					}
+					if (!rect.contains(unit.x, unit.y)) return true;
+					Draw.rect(region, unit.x, unit.y);
+					return true;
+				});
 			});
 		}
 
@@ -675,15 +702,17 @@ public class Selection extends Content {
 			super.add(building);
 			if (!drawSelect) return;
 
-			TextureRegion region = getRegion(building);
-			buildWD.drawSeq.add(() -> {
-				if (building.tile.build != building) {
-					//					buildWD.hasChange = false;
-					return false;
-				}
-				if (!rect.contains(building.x, building.y)) return true;
-				Draw.rect(region, building.x, building.y);
-				return true;
+			Time.runTask(0, () -> {
+				TextureRegion region = getRegion(building);
+				buildWD.drawSeq.add(() -> {
+					if (building.tile.build != building) {
+						//					buildWD.hasChange = false;
+						return false;
+					}
+					if (!rect.contains(building.x, building.y)) return true;
+					Draw.rect(region, building.x, building.y);
+					return true;
+				});
 			});
 		}
 
@@ -703,9 +732,9 @@ public class Selection extends Content {
 		public TextureRegion getRegion(T tile) {
 			return map.get(tile.block().size, () -> {
 				int size = tilesize * 4;
-				int thick = 7;
+				int thick = 3;
 				return drawRegion(size + thick, size + thick, () -> {
-					MyDraw.dashSquare(thick, Pal.accentBack, (size + thick) / 2f, (size + thick) / 2f, size);
+					MyDraw.dashSquare(thick, Pal.heal, (size + thick) / 2f, (size + thick) / 2f, size);
 				});
 			});
 		}
@@ -722,13 +751,14 @@ public class Selection extends Content {
 		public void add(T tile) {
 			super.add(tile);
 			if (!drawSelect) return;
-			TextureRegion region = getRegion(tile);
-			// int thick = 3;
-			tileWD.drawSeq.add(() -> {
-				if (!rect.contains(tile.worldx(), tile.worldy())) return true;
-				Draw.rect(region, tile.worldx(), tile.worldy());
-				// MyDraw.dashSquare(thick, Pal.accentBack, tile.worldx(), tile.worldy(), size);
-				return true;
+			Time.runTask(0, () -> {
+				TextureRegion region = getRegion(tile);
+				tileWD.drawSeq.add(() -> {
+					if (!rect.contains(tile.worldx(), tile.worldy())) return true;
+					Draw.rect(region, tile.worldx(), tile.worldy());
+					// MyDraw.dashSquare(thick, Pal.accentBack, tile.worldx(), tile.worldy(), size);
+					return true;
+				});
 			});
 		}
 
@@ -799,8 +829,27 @@ public class Selection extends Content {
 			wrap.clearChildren();
 		}
 
+		private int c;
+
 		public void each(Consumer<? super T> action) {
-			list.forEach(action);
+			// if (list.size() < 1e4) {
+			// 	IntVars.async("each", () -> list.forEach(action), () -> {});
+			// 	return;
+			// }
+			/*c = 0;
+			list.forEach(e -> {
+				Time.runTask(c++ / 100f, () -> action.accept(e));
+			});*/
+			new Thread(() -> {
+				// c = 0;
+				try {
+					Thread.sleep(2);
+				} catch (InterruptedException e) {
+					throw new RuntimeException(e);
+				}
+				// action.accept();
+				list.forEach(action);
+			}).start();
 		}
 
 		public void clearList() {
@@ -816,9 +865,9 @@ public class Selection extends Content {
 			final int cols = Vars.mobile ? 4 : 6;
 			final int[] c = new int[]{0};
 			new DisposableWindow(name, 0, 200, true) {{
-				cont.pane(table -> {
-					list.forEach(item -> {
-						var cont = new Table(Tex.pane) {
+				cont.pane(new LimitTable(table -> {
+					for (T item : list) {
+						var cont = new LimitTable(Tex.pane) {
 							public final Task task = new Task() {
 								@Override
 								public void run() {
@@ -878,9 +927,10 @@ public class Selection extends Content {
 						if (++c[0] % cols == 0) {
 							table.row();
 						}
-					});
+					}
 					// table.getCells().reverse();
-				}).fill();
+					// table.getCells().reverse();
+				})).fill();
 				//				addCloseButton();
 			}}.show();
 		}

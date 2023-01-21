@@ -6,7 +6,7 @@ import modtools.ui.content.ui.*;
 import modtools.ui.content.world.*;
 
 public class Contents {
-	public static Settings settingsUI;
+	public static SettingsContent settingsUI;
 	public static Tester tester;
 	public static Selection selection;
 	public static ShowUIList showuilist;
@@ -15,10 +15,10 @@ public class Contents {
 	public static ContentList contentList;
 	public static ReviewElement elementShow;
 	public static WindowManager windowManager;
-	// public static ActionsDebug actionsDebug;
+	public static ActionsDebug actionsDebug;
 
 	public static void load() {
-		settingsUI = new Settings();
+		settingsUI = new SettingsContent();
 		tester = new Tester();
 		selection = new Selection();
 		showuilist = new ShowUIList();
@@ -27,6 +27,6 @@ public class Contents {
 		contentList = new ContentList();
 		elementShow = new ReviewElement();
 		windowManager = new WindowManager();
-		// actionsDebug = new ActionsDebug();
+		actionsDebug = new ActionsDebug();
 	}
 }

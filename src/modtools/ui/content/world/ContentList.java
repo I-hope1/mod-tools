@@ -90,8 +90,7 @@ public class ContentList extends Content {
 				t.button(name, () -> {}).growX().height(64).with(button -> {
 					IntUI.longPress(button, 600, b -> {
 						if (b) {
-							Core.app.setClipboardText(name);
-							IntUI.showInfoFade("已复制[accent]" + name).setPosition(Tools.getAbsPos(button));
+							JSFunc.copyText(name, button);
 						} else {
 							if (Vars.player.unit() == null) return;
 							effect.at(Vars.player.x, Vars.player.y, Vars.player.unit().rotation());
@@ -107,8 +106,7 @@ public class ContentList extends Content {
 				t.button(name, () -> {}).growX().height(64).with(button -> {
 					IntUI.longPress(button, 600, b -> {
 						if (b) {
-							Core.app.setClipboardText(name);
-							IntUI.showInfoFade("已复制[accent]" + name).setPosition(Tools.getAbsPos(button));
+							JSFunc.copyText(name, button);
 						} else {
 							if (Vars.player.unit() == null) return;
 							bulletType.create(Vars.player.unit(), Vars.player.x, Vars.player.y, Vars.player.unit().rotation());

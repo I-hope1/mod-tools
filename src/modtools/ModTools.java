@@ -22,17 +22,10 @@ public class ModTools extends Mod {
 		Tools.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
 			loadReflect();
-			// if (!dataDirectory.child("font.ttf").exists())
-			// 	Core.files.internal("fonts/icon.ttf").copyTo(dataDirectory.child("font.ttf"));
-
 
 			return true;
 		});
 
-		// Log.debug(MethodHandles.Im);
-
-		/*Block blockAAA = new Block("blockAAA");
-		Block blockBBB = new Block("blockBBB");*/
 		Events.on(ClientLoadEvent.class, e -> {
 			if (throwable != null) {
 				ui.showException(throwable);
@@ -62,11 +55,6 @@ public class ModTools extends Mod {
 				} catch (Throwable ignored) {}
 			}
 			// JSFunc.testElement(new Image(Fonts.def.getRegion()));
-
-			/*TechTree.nodeRoot("AAA", blockAAA, () -> {
-				TechTree.node(blockBBB
-						, ItemStack.with(Items.copper, 100), () -> {});
-			});*/
 		});
 	}
 

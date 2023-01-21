@@ -21,6 +21,7 @@ import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
+import modtools.ui.components.linstener.*;
 import modtools.utils.*;
 
 import static modtools.IntVars.topGroup;
@@ -565,7 +566,7 @@ public class Window extends Table {
 		public void hide() {
 			super.hide();
 			all.remove(this);
-			clearChildren();
+			// clearChildren();
 		}
 	}
 }

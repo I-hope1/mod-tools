@@ -47,6 +47,10 @@ public class Tools {
 		return s.split("").length - 1;
 	}
 
+	public static Vec2 getAbsPos1(Element el) {
+		return el.localToStageCoordinates(Tmp.v1.set(el.getWidth() / -2f, el.getHeight() / -2f));
+	}
+
 	public static Vec2 getAbsPos(Element el) {
 		if (true) return el.localToStageCoordinates(Tmp.v1.set(0, 0));
 		Vec2 vec2 = new Vec2(el.x, el.y);
@@ -302,7 +306,7 @@ public class Tools {
 	}
 
 	public static void setFieldValue(Field f, Object obj, Object value) {
-		Class<?> type = f.getType();
+		// Class<?> type = f.getType();
 		boolean isStatic = Modifier.isStatic(f.getModifiers());
 		Object o = isStatic ? f.getDeclaringClass() : obj;
 		long offset = fieldOffset(isStatic, f);

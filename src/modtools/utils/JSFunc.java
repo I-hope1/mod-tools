@@ -5,16 +5,16 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
 import arc.math.Mathf;
-import arc.scene.*;
+import arc.math.geom.*;
+import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
-import arc.scene.ui.Label;
 import arc.scene.ui.Label.LabelStyle;
-import arc.scene.ui.layout.Cell;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import hope_android.FieldUtils;
+import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -22,19 +22,21 @@ import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.area.AutoTextField;
+import modtools.ui.components.input.highlight.*;
+import modtools.ui.components.limit.*;
 import modtools.ui.content.ui.ReviewElement.ElementShowWindow;
-import ihope_lib.MyReflect;
 import modtools.ui.content.world.Selection;
 import rhino.*;
 
 import java.io.*;
 import java.lang.reflect.*;
-import java.lang.reflect.Type;
 import java.util.*;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.IntVars.*;
+import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.*;
 
@@ -61,14 +63,16 @@ public class JSFunc {
 
 	public static final Color keyword = Color.valueOf("ff657a"),
 			type = Color.valueOf("9cd1bb"),
-			number = Color.valueOf("bad761"),
-			underline = Color.gray.a(0.7f);
+			NUMBER_COLOR = Color.valueOf("bad761"),
+			underline = Color.gray.cpy().a(0.7f);
+	public static final String keywordMark = "[#" + keyword + "]",
+			typeMark = "[#" + type + "]";
 
 	public static final LabelStyle
 			keywordStyle = new LabelStyle(FONT, keyword),
 			typeStyle = new LabelStyle(FONT, type),
-			lightGrayStyle = new LabelStyle(FONT, Color.lightGray),
-			redStyle = new LabelStyle(FONT, Color.red);
+	// lightGrayStyle = new LabelStyle(FONT, Color.lightGray),
+	redStyle = new LabelStyle(FONT, Color.red);
 
 
 	public static Window showInfo(Object o, Class<?> clazz) {
@@ -83,10 +87,11 @@ public class JSFunc {
 				// 使用Time.runTask避免stack overflow
 				Time.runTask(0, () -> {
 					dialog[0].hide();
+					var pos = getAbsPos(dialog[0]);
 					try {
-						showInfo(o, clazz).setPosition(getAbsPos(dialog[0]));
+						showInfo(o, clazz).setPosition(pos);
 					} catch (Throwable e) {
-						IntUI.showException(e).setPosition(getAbsPos(dialog[0]));
+						IntUI.showException(e).setPosition(pos);
 					}
 					dialog[0] = null;
 				});
@@ -95,7 +100,7 @@ public class JSFunc {
 
 			for (int i = 0; i < length; i++) {
 				Object item = Array.get(o, i);
-				var button = new TextButton("" + item, Styles.grayt);
+				var button = new LimitTextButton("" + item, Styles.grayt);
 				int j = i;
 				addWatchButton(button, o + "#" + i, () -> Array.get(o, j));
 				button.clicked(() -> {
@@ -113,7 +118,7 @@ public class JSFunc {
 			return dialog[0];
 		}
 
-		Table build = new Table();
+		Table build = new LimitTable();
 		// 默认左居中
 		build.left().top().defaults().left();
 		boolean[] isBlack = {false};
@@ -129,33 +134,22 @@ public class JSFunc {
 			}
 			buildReflect(o, (ShowInfoWindow) dialog[0], build, pattern, isBlack[0]);
 		};
-		textField.changed(() -> {
+		Runnable rebuild0 = () -> {
 			if (textField.isValid()) {
 				rebuild.get(textField.getText());
 			}
-		});
+		};
+		textField.changed(rebuild0);
 		dialog[0] = new ShowInfoWindow(clazz);
 
 		final Table cont = new Table();
 		// 默认左居中
-		cont.left().defaults().left();
+		cont.left().defaults().left().fillX();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.button(Icon.refresh, IntStyles.clearNonei, () -> {
-				// 使用Time.runTask避免stack overflow
-				/*Time.runTask(0, () -> {
-					dialog[0].hide();
-					try {
-						showInfo(o, clazz).setPosition(Tools.getAbsPos(dialog[0]));
-					} catch (Throwable e) {
-						IntUI.showException(e).setPosition(Tools.getAbsPos(dialog[0]));
-					}
-					dialog[0] = null;
-				});*/
-				rebuild.get(null);
-			}).size(50);
+			t.button(Icon.refresh, IntStyles.clearNonei, rebuild0).size(50);
 			addStoreButton(t, "", () -> o);
-		}).growX().row();
+		}).row();
 		cont.table(t -> {
 			t.button(Tex.whiteui, 35, null).size(42).with(img -> {
 				img.clicked(() -> {
@@ -166,34 +160,19 @@ public class JSFunc {
 			});
 			t.image(Icon.zoom).size(42);
 			t.add(textField).growX();
-		}).growX().row();
+		}).row();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.add(new MyLabel(clazz.getTypeName(), IntStyles.myLabel));
+			t.add(clazz.getTypeName(), IntStyles.myLabel);
 			t.button(Icon.copy, Styles.cleari, () -> {
-				Core.app.setClipboardText(clazz.getTypeName());
+				copyText(clazz.getTypeName(), t);
 			});
-		}).fillX().pad(6, 10, 6, 10).row();
+		}).pad(6, 10, 6, 10).row();
 		rebuild.get(null);
 		// cont.add(build).grow();
 
 		dialog[0].cont.add(cont).row();
-		dialog[0].cont.add(new ScrollPane(build)/* {
-			Seq<Cell> bak = build.getCells().copy();
-
-			@Override
-			public void draw() {
-				super.draw();
-				Seq<Cell> now = build.getCells();
-				Element elem;
-				for (int i = 0; i < now.size; i++) {
-					elem = now.get(i).get();
-					if (elem == null || !(0 <= elem.x && width >= elem.y && 0 <= elem.y && height >= elem.y)) {
-						now.get(i).clearElement();
-					} else now.get(i).set(bak.get(i));
-				}
-			}
-		}*/).grow();
+		dialog[0].cont.add(new ScrollPane(build)).grow();
 		//		dialog.addCloseButton();
 		dialog[0].show();
 		assert dialog[0] != null;
@@ -250,7 +229,6 @@ public class JSFunc {
 		cont.collapser(fields = window.fieldsTable = new ReflectTable(), true, () -> c[0])
 				.pad(4, 6, 4, 6)
 				.fillX().padTop(8).get().setDuration(0.1f);
-		fields.left().defaults().left().top();
 		cont.row();
 
 		// cont.add("@jsfunc.method").row();
@@ -261,7 +239,6 @@ public class JSFunc {
 		cont.collapser(methods = window.methodsTable = new ReflectTable(), true, () -> c[1])
 				.pad(4, 6, 4, 6)
 				.fillX().padTop(8).get().setDuration(0.1f);
-		methods.left().defaults().left().top();
 		cont.row();
 
 		// cont.add("@jsfunc.constructor").row();
@@ -272,7 +249,6 @@ public class JSFunc {
 		cont.collapser(constructors = new ReflectTable(), true, () -> c[2])
 				.pad(4, 6, 4, 6)
 				.fillX().padTop(8).get().setDuration(0.1f);
-		constructors.left().defaults().left().top();
 		cont.row();
 
 		cont.button("@jsfunc.class", IntStyles.flatTogglet, () -> c[3] ^= true).growX().height(42)
@@ -282,7 +258,7 @@ public class JSFunc {
 		cont.collapser(classes = window.classesTable = new ReflectTable(), true, () -> c[3])
 				.pad(4, 6, 4, 6)
 				.fillX().padTop(8).get().setDuration(0.1f);
-		classes.left().defaults().left().top();
+		cont.row();
 
 		// boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
 		for (Class<?> cls = window.clazz; cls != null; cls = cls.getSuperclass()) {
@@ -292,8 +268,8 @@ public class JSFunc {
 			methods.build(cls);
 			/*Constructor<?>[] constructorArray = filter(pattern, isBlack, Constructor::getName, window.consMap.get(cls));
 			if (constructorArray.length != 0 || !displayClass) {*/
-			constructors.add(cls.getSimpleName(), IntStyles.myLabel).row();
-			constructors.image().color(Color.lightGray).fillX().padTop(6).row();
+			constructors.add(new MyLabel(cls.getSimpleName(), IntStyles.myLabel)).row();
+			constructors.image().color(Color.lightGray).fillX().padTop(6).colspan(6).row();
 			// }
 			classes.build(cls);
 			// 字段
@@ -319,14 +295,16 @@ public class JSFunc {
 				int modifiers = f.getModifiers();
 				try {
 					// modifiers
-					fields.add(Modifier.toString(modifiers) + " ", keywordStyle).growY().touchable(Touchable.disabled);
+					fields.add(new MyLabel(Modifier.toString(modifiers) + " ", keywordStyle))
+							.touchable(Touchable.disabled);
 					// type
-					fields.add(new MyLabel(type.getSimpleName(), typeStyle))
-							.growY().padRight(16).touchable(Touchable.disabled);
+					fields.add(new MyLabel(getGenericString(type), typeStyle))
+							.padRight(16).touchable(Touchable.disabled);
 					// name
-					addDClickCopy(fields.add(f.getName(), IntStyles.myLabel)
-							.growY().get());
-					fields.add(" = ", IntStyles.myLabel).growY().touchable(Touchable.disabled);
+					addDClickCopy(fields.add(new MyLabel(f.getName(), IntStyles.myLabel))
+							.get());
+					fields.add(new MyLabel(" = ", IntStyles.myLabel))
+							.touchable(Touchable.disabled);
 				} catch (Throwable e) {
 					Log.err(e);
 				}
@@ -346,7 +324,7 @@ public class JSFunc {
 
 					// if (type.isPrimitive() || type == String.class) {
 					try {
-						l.setVal(f.get(o));
+						l.setVal();
 						if (l.val instanceof Color) {
 							final Color color = (Color) l.val;
 							cell.setElement(new BorderImage(Core.atlas.white(), 2f)
@@ -368,49 +346,49 @@ public class JSFunc {
 							});
 						} else if (settingsUI.jsfuncEdit.getBool("boolean", false) && (l.type == Boolean.TYPE || l.type == Boolean.class)) {
 							var btn = new TextButton((boolean) l.val ? "TRUE" : "FALSE", IntStyles.flatTogglet);
-							btn.setChecked((boolean) l.val);
+							btn.update(() -> btn.setChecked((boolean) l.val));
 							btn.clicked(() -> {
 								boolean b = !(boolean) l.val;
 								btn.setText(b ? "TRUE" : "FALSE");
 								try {
 									l.setFieldValue(b);
 								} catch (Throwable e) {
-									IntUI.showException(e).setPosition(Core.input.mouse());
+									IntUI.showException(e)
+											.setPosition(Core.input.mouse());
 								}
 								l.setVal(b);
 							});
 							cell.setElement(btn);
 							cell.size(96, 42);
+							l.remove();
 						} else if (settingsUI.jsfuncEdit.getBool("number", false) && Number.class.isAssignableFrom(Tools.box(l.type))) {
-							var field = new TextField();
+							var field = new AutoTextField();
 							field.update(() -> {
-								if (Core.scene.getKeyboardFocus() != field) try {
-									l.setVal(f.get(o));
+								if (Core.scene.getKeyboardFocus() != field) {
+									l.setVal();
 									field.setText(String.valueOf(l.val));
-								} catch (Exception ignored) {}
+								}
 							});
 							field.setValidator(Tools::isNum);
 							field.changed(() -> {
 								double d = ScriptRuntime.toNumber(field.getText());
-								setFieldValue(f, o, d);
-								l.setVal(d);
+								l.setFieldValue(d);
 							});
 							cell.setElement(field);
-							cell.size(120, 42);
+							cell.height(42);
 						} else if (settingsUI.jsfuncEdit.getBool("string", false) && l.type == String.class) {
-							var field = new TextField();
+							var field = new AutoTextField();
 							field.update(() -> {
-								if (Core.scene.getKeyboardFocus() != field) try {
-									l.setVal(f.get(o));
+								if (Core.scene.getKeyboardFocus() != field) {
+									l.setVal();
 									field.setText(String.valueOf(l.val));
-								} catch (Exception ignored) {}
+								}
 							});
 							field.changed(() -> {
-								Tools.setFieldValue(f, o, field.getText());
-								l.setVal(field.getText());
+								l.setFieldValue(field.getText());
 							});
 							cell.setElement(field);
-							cell.size(120, 42);
+							cell.height(42);
 						}
 
 						// prefW[0] = l.getPrefWidth();
@@ -418,8 +396,6 @@ public class JSFunc {
 						// Time.runTask(0, () -> l.setWrap(true));
 						if (!Tools.unbox(type).isPrimitive() && type != String.class) {
 							l.addShowInfoListener();
-						} else {
-							l.setColor(number);
 						}
 					} catch (Throwable e) {
 						//								`Log.info`(e);
@@ -486,85 +462,65 @@ public class JSFunc {
 						}
 					}
 					// modifiers
-					methods.add(sb, keywordStyle).growY().touchable(Touchable.disabled).padRight(8f);
+					methods.add(new MyLabel(sb, keywordStyle)).touchable(Touchable.disabled).padRight(8f);
 					// return type
-					methods.add(new MyLabel(m.getReturnType().getSimpleName(), typeStyle)).growY().touchable(Touchable.disabled).padRight(8f);
+					methods.add(new MyLabel(getGenericString(m.getReturnType()), typeStyle)).touchable(Touchable.disabled).padRight(8f);
 					// method name
-					addDClickCopy(methods.add(m.getName(), IntStyles.myLabel)
-							.growY().get());
+					addDClickCopy(methods.add(new MyLabel(m.getName(), IntStyles.myLabel))
+							.get());
 					// method parameters + exceptions + buttons
-					methods.table(t -> {
-						t.left().defaults().left();
-						t.add("(", lightGrayStyle);
+					methods.add(new LimitLabel(buildArgsAndExceptions(m.getParameterTypes(), m.getExceptionTypes())))
+							.pad(4).left().touchable(Touchable.disabled);
 
-						Class<?>[] exceptionTypes = m.getParameterTypes();
 
-						for (int i = 0, exceptionTypesLength = exceptionTypes.length; i < exceptionTypesLength; i++) {
-							Class<?> parameterType = exceptionTypes[i];
-							t.add(parameterType.getSimpleName(), typeStyle);
-							if (i != exceptionTypesLength - 1) t.add(", ");
+					// 占位符
+					Cell<?> cell = methods.add();
+					ifl:
+					if (m.getParameterTypes().length == 0) {
+						if (o == null && !Modifier.isStatic(m.getModifiers())) {
+							methods.add();
+							break ifl;
 						}
-						t.add(")", lightGrayStyle);
+						ValueLabel l = new ValueLabel("", m.getReturnType());
+						methods.labels.add(l);
+						// float[] prefW = {0};
+						methods.add(l)/*.self(c -> c.update(__ -> c.width(Math.min(prefW[0], Core.graphics.getWidth()))))*/;
 
-						exceptionTypes = m.getExceptionTypes();
-						if (exceptionTypes.length > 0) {
-							t.add(" throws ", keywordStyle);
-							for (int i = 0, exceptionTypesLength = exceptionTypes.length; i < exceptionTypesLength; i++) {
-								Class<?> parameterType = exceptionTypes[i];
-								t.add(parameterType.getSimpleName(), typeStyle);
-								if (i != exceptionTypesLength - 1) t.add(", ");
-							}
-						}
-						// 占位符
-						Cell<?> cell = t.add();
-						ifl:
-						if (m.getParameterTypes().length == 0) {
-							if (o == null && !Modifier.isStatic(m.getModifiers())) {
-								t.add();
-								break ifl;
-							}
-							ValueLabel l = new ValueLabel("", m.getReturnType());
-							methods.labels.add(l);
-							// float[] prefW = {0};
-							t.add(l)/*.self(c -> c.update(__ -> c.width(Math.min(prefW[0], Core.graphics.getWidth()))))*/;
+						methods.table(buttons -> {
+							buttons.right().top().defaults().right().top();
+							buttons.button("Invoke", IntStyles.flatBordert, () -> {
+								try {
+									l.setVal(m.invoke(o));
+									// l.setWrap(false);
+									// prefW[0] = l.getPrefWidth();
+									// l.setWrap(true);
 
-							t.table(buttons -> {
-								buttons.right().top().defaults().right().top();
-								buttons.button("Invoke", IntStyles.flatBordert, () -> {
-									try {
-										l.setVal(m.invoke(o));
-										// l.setWrap(false);
-										// prefW[0] = l.getPrefWidth();
-										// l.setWrap(true);
-
-										if (l.val instanceof Color) {
-											cell.setElement(new Image(IntUI.whiteui.tint((Color) l.val))).size(32).padRight(4).touchable(Touchable.disabled);
-										}
-										if (l.val != null && !(l.val instanceof String) && !m.getReturnType().isPrimitive()) {
-											//											l.setColor(Color.white);
-											l.addShowInfoListener();
-										} else {
-											l.setColor(number);
-										}
-									} catch (Throwable ex) {
-										IntUI.showException("invoke出错", ex).setPosition(getAbsPos(l));
+									if (l.val instanceof Color) {
+										cell.setElement(new Image(IntUI.whiteui.tint((Color) l.val))).size(32).padRight(4).touchable(Touchable.disabled);
 									}
-
-								}).size(96, 45);
-								addLabelButton(buttons, () -> l.val, l.type);
-								addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-							}).grow().top().right();
-						} else {
-							t.table(buttons -> {
-								buttons.right().top().defaults().right().top();
-								addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-							}).grow().top().right();
-						}
-					}).pad(4).growX().left().row();
+									if (l.val != null && !(l.val instanceof String) && !m.getReturnType().isPrimitive()) {
+										//											l.setColor(Color.white);
+										l.addShowInfoListener();
+									}
+								} catch (Throwable ex) {
+									IntUI.showException("invoke出错", ex).setPosition(getAbsPos(l));
+								}
+							}).size(96, 45);
+							addLabelButton(buttons, () -> l.val, l.type);
+							addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
+						}).grow().top().right();
+					} else {
+						methods.add(); // 占位符， 对应上面
+						methods.table(buttons -> {
+							buttons.right().top().defaults().right().top();
+							addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
+						}).grow().top().right();
+					}
 				} catch (Throwable err) {
-					methods.add("<" + err + ">", redStyle);
+					methods.add(new MyLabel("<" + err + ">", redStyle));
 				}
-				methods.image().color(underline).growX().colspan(6).row();
+				methods.row();
+				methods.image().color(underline).growX().colspan(7).row();
 			}
 			if (methods.hasChildren()) methods.getChildren().peek().remove();
 
@@ -580,44 +536,20 @@ public class JSFunc {
 					MyReflect.setOverride(cons);
 				} catch (Throwable ignored) {}
 
-				constructors.table(t -> {
-					try {
-						int mod = cons.getModifiers() & Modifier.constructorModifiers();
-						t.add(new MyLabel(Modifier.toString(mod), keywordStyle));
-						t.add(new MyLabel(cons.getDeclaringClass().getSimpleName(), typeStyle)).padLeft(10);
-						t.add(new MyLabel("(", lightGrayStyle)).padLeft(4);
+				final Table t = constructors;
+				try {
+					int mod = cons.getModifiers()/* & Modifier.constructorModifiers()*/;
+					t.add(new MyLabel(Modifier.toString(mod), keywordStyle));
+					t.add(new MyLabel(cons.getDeclaringClass().getSimpleName(), typeStyle)).padLeft(10);
+					t.add(new LimitLabel(buildArgsAndExceptions(cons.getParameterTypes(), cons.getParameterTypes())));
 
-						if (cons.getParameterCount() > 0) {
-							StringJoiner sj = new StringJoiner(", ");
-							// 参数
-							Class<?>[] parameterTypes = cons.getParameterTypes();
-							for (Class<?> pt : parameterTypes) {
-								sj.add(format(pt));
-							}
-							t.add(new MyLabel(sj.toString(), typeStyle));
-						}
-						t.add(new MyLabel(")", lightGrayStyle));
-						Type[] exceptionTypes = cons.getGenericExceptionTypes();
-						// 报错
-						if (exceptionTypes.length > 0) {
-							t.add(" throws ");
-							StringJoiner joiner = new StringJoiner(",");
-
-							for (Type exceptionType : exceptionTypes) {
-								joiner.add(exceptionType.getTypeName());
-							}
-
-							t.add(new MyLabel(joiner.toString(), typeStyle));
-						}
-
-						t.table(buttons -> {
-							addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
-						}).grow().top().right();
-					} catch (Throwable e) {
-						Log.err(e);
-					}
-				}).pad(4).growX().left().row();
-				constructors.image().color(underline).growX().colspan(6).row();
+					t.table(buttons -> {
+						addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
+					}).grow().top().right();
+				} catch (Throwable e) {
+					Log.err(e);
+				}
+				t.image().color(underline).growX().colspan(6).row();
 			}
 			if (constructors.hasChildren()) constructors.getChildren().peek().remove();
 
@@ -626,24 +558,26 @@ public class JSFunc {
 				classes.table(t -> {
 					try {
 						int mod = dcls.getModifiers() & Modifier.classModifiers();
-						t.add(Modifier.toString(mod) + " class ", keywordStyle).padRight(8f).touchable(Touchable.disabled);
-						Label l = t.add(dcls.getSimpleName(), typeStyle).padRight(8f).get();
+						t.add(new MyLabel(Modifier.toString(mod) + " class ", keywordStyle)).padRight(8f).touchable(Touchable.disabled);
+
+						Label l = t.add(new MyLabel(getGenericString(dcls), typeStyle)).padRight(8f).get();
 						addDClickCopy(l);
 						Class<?>[] types = dcls.getInterfaces();
 						if (types.length > 0) {
-							t.add(" implements ", keywordStyle).padRight(8f).touchable(Touchable.disabled);
+							t.add(new MyLabel(" implements ", keywordStyle)).padRight(8f).touchable(Touchable.disabled);
 							for (Class<?> interf : types) {
-								t.add(interf.getName()).style(IntStyles.myLabel).padRight(8f);
+								t.add(new MyLabel(getGenericString(interf), IntStyles.myLabel)).padRight(8f);
 							}
 						}
 						IntUI.longPress(l, 600, b -> {
 							if (b) {
+								var pos = getAbsPos(l);
 								// 使用Time.runTask避免stack overflow
 								Time.runTask(0, () -> {
 									try {
-										showInfo(dcls).setPosition(getAbsPos(l));
+										showInfo(dcls).setPosition(pos);
 									} catch (Throwable e) {
-										IntUI.showException(e).setPosition(getAbsPos(l));
+										IntUI.showException(e).setPosition(pos);
 									}
 								});
 							}
@@ -665,10 +599,11 @@ public class JSFunc {
 
 
 	public static CharSequence format(Class<?> cls) {
-		StringBuilder base = new StringBuilder();
-		base.append(cls.getTypeName());
-		if (cls.isArray()) base.append("[\u0001]");
-		return base;
+		return cls.getSimpleName();
+		// StringBuilder base = new StringBuilder();
+		// base.append(cls.getTypeName());
+		// // if (cls.isArray()) base.append("[\u0001]");
+		// return base;
 	}
 
 	public static Window window(final Cons<Window> cons) {
@@ -755,10 +690,23 @@ public class JSFunc {
 
 	public static void addDClickCopy(Label label) {
 		IntUI.doubleClick(label, () -> {}, () -> {
-			Core.app.setClipboardText(String.valueOf(label.getText()));
-			IntUI.showInfoFade(Core.bundle.format("IntUI.copied", label.getText()))
-					.setPosition(Tools.getAbsPos(label));
+			copyText(String.valueOf(label.getText()), label);
 		});
+	}
+
+	public static void copyText(String text, Element element) {
+		copyText(text, Tools.getAbsPos(element));
+	}
+
+	public static void copyText(String text) {
+		copyText(text, Core.input.mouse());
+	}
+
+
+	public static void copyText(String text, Vec2 vec2) {
+		Core.app.setClipboardText(text);
+		IntUI.showInfoFade(Core.bundle.format("IntUI.copied", text))
+				.setPosition(vec2);
 	}
 
 	static class BindCell {
@@ -780,11 +728,12 @@ public class JSFunc {
 		}
 	}
 
-	static class ReflectTable extends Table {
+	static class ReflectTable extends LimitTable {
 		ObjectMap<String, Seq<BindCell>> map = new ObjectMap<>();
-		ObjectMap<Class<?>, Table> heads = new ObjectMap<>();
+		// ObjectMap<Class<?>, Table> heads = new ObjectMap<>();
 
 		public ReflectTable() {
+			left().defaults().left().top();
 		}
 
 		private Seq<BindCell> current;
@@ -794,6 +743,11 @@ public class JSFunc {
 		public void bind(String name) {
 			current = map.get(name, Seq::new);
 			// currentHead = head;
+		}
+
+		@Override
+		protected void drawChildren() {
+			super.drawChildren();
 		}
 
 		public void unbind() {
@@ -822,14 +776,13 @@ public class JSFunc {
 		}
 
 		public void build(Class<?> cls) {
-			table(t -> {
-				t.left().defaults().left();
-				t.add(cls.getSimpleName(), IntStyles.myLabel).row();
-				t.image().color(Color.lightGray).fillX().padTop(6).row();
-				heads.put(cls, t);
-			}).growX().growY().row();
+			add(new MyLabel(cls.getSimpleName(), IntStyles.myLabel)).labelAlign(Align.left).row();
+			image().color(Color.lightGray).fillX().padTop(6).colspan(6).row();
 		}
 	}
+
+	static Seq<Class<?>> NUMBER_SEQ = Seq.with(int.class, byte.class, short.class,
+			long.class, float.class, double.class);
 
 	static class ValueLabel extends MyLabel {
 		public Object val;
@@ -839,9 +792,15 @@ public class JSFunc {
 
 		public ValueLabel(Object val, Class<?> type) {
 			super(String.valueOf(val), IntStyles.myLabel);
-			setVal(val);
 			this.type = type;
+			setVal(val);
 			setAlignment(Align.left, Align.left);
+
+			update(() -> {
+				if (settingsUI.jsfunc.getBool("auto_refresh", false)) {
+					setVal();
+				}
+			});
 		}
 
 		private boolean hasChange = false;
@@ -863,7 +822,10 @@ public class JSFunc {
 			if (this.val == val) return;
 			this.val = val;
 			hasChange = true;
-			String text = type == String.class ? '"' + (String) val + '"' : String.valueOf(val);
+			String text = type == String.class && val != null ? '"' + (String) val + '"' : String.valueOf(val);
+			setColor(val == null ? Syntax.objectsC
+					: type == String.class ? Syntax.stringC
+					: NUMBER_SEQ.contains(Tools.unbox(type)) ? NUMBER_COLOR : Color.white);
 			if (text.length() > 1000) {
 				text = text.substring(0, 1000) + "  ...";
 			}
@@ -877,6 +839,8 @@ public class JSFunc {
 					OS.isAndroid ? FieldUtils.getFieldOffset(field) :
 							isStatic ? unsafe.staticFieldOffset(field) : unsafe.objectFieldOffset(field),
 					val);
+
+			setVal(val);
 		}
 
 		public void clearVal() {
@@ -886,7 +850,7 @@ public class JSFunc {
 		}
 
 		public void setVal() {
-			if (field == null) {
+			if (field == null || (obj == null && !Modifier.isStatic(field.getModifiers()))) {
 				setVal(null);
 			} else {
 				try {
@@ -905,18 +869,75 @@ public class JSFunc {
 				if (!b) return;
 				// 使用Time.runTask避免stack overflow
 				Time.runTask(0, () -> {
+					var pos = getAbsPos(this);
 					try {
 						if (val != null) {
-							showInfo(val).setPosition(getAbsPos(this));
+							showInfo(val).setPosition(pos);
 						} else {
-							showInfo(null, type).setPosition(getAbsPos(this));
+							showInfo(null, type).setPosition(pos);
 						}
 					} catch (Throwable e) {
-						IntUI.showException(e).setPosition(getAbsPos(this));
+						IntUI.showException(e).setPosition(pos);
 					}
 				});
 			});
 		}
+	}
+
+	private static StringBuilder
+	buildArgsAndExceptions(Class<?>[] args,
+	                       Class<?>[] exceptions) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("[lightgray](");
+
+		for (int i = 0, length = args.length; i < length; i++) {
+			Class<?> parameterType = args[i];
+			sb.append(typeMark);
+			sb.append(parameterType.getSimpleName());
+			if (i != length - 1) {
+				sb.append(", ");
+			}
+		}
+		sb.append("[lightgray])");
+
+		if (exceptions.length > 0) {
+			sb.append(' ').append(keywordMark).append("throws ");
+			for (int i = 0, length = exceptions.length; i < length; i++) {
+				Class<?> parameterType = exceptions[i];
+				sb.append(typeMark);
+				sb.append(parameterType.getSimpleName());
+				if (i != length - 1) {
+					sb.append(", ");
+				}
+			}
+		}
+		return sb;
+	}
+
+	public static CharSequence getGenericString(Class<?> cls) {
+		if (settingsUI.jsfunc.getBool("displayGeneric")) return cls.getSimpleName();
+		StringBuilder sb = new StringBuilder();
+		String simpleName;
+		int arrayDepth = 0;
+		while (cls.isArray()) {
+			arrayDepth++;
+			cls = cls.getComponentType();
+		}
+		simpleName = cls.getName();
+		simpleName = simpleName.substring(simpleName.lastIndexOf('.') + 1); // strip the package name
+		sb.append(simpleName);
+		TypeVariable<?>[] typeparms = cls.getTypeParameters();
+		if (typeparms.length > 0) {
+			StringJoiner sj = new StringJoiner(",", "<", ">");
+			for (TypeVariable<?> typeparm : typeparms) {
+				sj.add(typeparm.getTypeName());
+			}
+			sb.append(sj);
+		}
+
+		sb.append("[]".repeat(Math.max(0, arrayDepth)));
+
+		return sb;
 	}
 
 
@@ -940,11 +961,11 @@ public class JSFunc {
 
 		public WatchWindow watch(String info, MyProv<Object> value, float interval) {
 			pane.add(info).color(Pal.accent).growX().left().row();
-			pane.image().color(underline).growX().row();
+			pane.image().color(Pal.accent).growX().row();
 			var label = new MyLabel(() -> {
 				try {
 					return String.valueOf(value.get());
-				} catch (Exception e) {
+				} catch (Throwable e) {
 					StringWriter sw = new StringWriter();
 					PrintWriter pw = new PrintWriter(sw);
 					e.printStackTrace(pw);
@@ -953,7 +974,7 @@ public class JSFunc {
 			});
 			label.interval = interval;
 			pane.add(label).style(IntStyles.myLabel).growX().left().padLeft(6f).row();
-			pane.image().color(Pal.accent).growX().row();
+			pane.image().color(underline).growX().row();
 			pack();
 			return this;
 		}

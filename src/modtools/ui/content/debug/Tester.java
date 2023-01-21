@@ -19,20 +19,24 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
+import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.components.*;
-import modtools.ui.components.area.TextAreaTable;
-import modtools.ui.components.area.TextAreaTable.MyTextArea;
-import modtools.ui.components.highlight.JSSyntax;
+import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.area.TextAreaTable;
+import modtools.ui.components.input.area.TextAreaTable.MyTextArea;
+import modtools.ui.components.input.highlight.JSSyntax;
+import modtools.ui.components.linstener.SclLisetener;
 import modtools.ui.content.Content;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import rhino.*;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 
+import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.ListDialog.fileUnfair;
-import static modtools.utils.Tools.getAbsPos;
+import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
 	String log = "";
@@ -49,6 +53,7 @@ public class Tester extends Content {
 	public Scriptable scope;
 	public Context cx;
 	public Script script = null;
+	public boolean stopIfOvertime;
 
 	public Tester() {
 		super("tester");
@@ -68,6 +73,7 @@ public class Tester extends Content {
 	 */
 	public int historyIndex;
 	public static final boolean reincarnationHistory = false;
+
 
 	public void build(Table table, Table buttons) {
 		if (ui == null) _load();
@@ -101,7 +107,7 @@ public class Tester extends Content {
 					execed[0] = true;
 				}
 				if (keycode == KeyCode.up) {
-					int i = historyIndex++;
+					int i = ++historyIndex;
 					if (!reincarnationHistory && historyIndex >= history.list.size) {
 						historyIndex = history.list.size - 1;
 						return false;
@@ -118,7 +124,7 @@ public class Tester extends Content {
 					log = dir.child("log.txt").readString();
 				}
 				if (keycode == KeyCode.down) {
-					int i = historyIndex--;
+					int i = --historyIndex;
 					if (!reincarnationHistory && historyIndex < 0) {
 						historyIndex = 0;
 						return false;
@@ -160,7 +166,7 @@ public class Tester extends Content {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
 				complieAndExec(() -> {});
-			});
+			}).disabled(__ -> !finished);
 			t.button(Icon.right, area::right);
 			t.button(Icon.copy, area::copy).padLeft(8f);
 			t.button(Icon.paste, () -> area.paste(Core.app.getClipboardText(), true)).padLeft(8f);
@@ -235,6 +241,8 @@ public class Tester extends Content {
 
 			p.button("@historymessage", history::show);
 			p.button("@bookmark", bookmark::show);
+			p.button("@startup", bookmark::show);
+			p.check("@stopIfOvertime", stopIfOvertime, b -> stopIfOvertime = b);
 		}).height(60).width(w).growX();
 
 		//		buttons.button("$back", Icon.left, ui::hide).size(210, 64);
@@ -255,7 +263,7 @@ public class Tester extends Content {
 				t.row();
 				t.button("@schematic.copy", Icon.copy, style, () -> {
 					hide.run();
-					Core.app.setClipboardText(getMessage().replaceAll("\r", "\n"));
+					JSFunc.copyText(getMessage().replaceAll("\r", "\n"));
 				}).marginLeft(12);
 				t.row();
 				t.button("@back", Icon.left, style, hide).marginLeft(12);
@@ -293,7 +301,42 @@ public class Tester extends Content {
 		} else ui.show();*/
 	}
 
+	boolean finished = true;
+	public long lastTime = Long.MAX_VALUE;
+
+	/*static Method nativeInterrupt;
+
+	static {
+		if (OS.isAndroid) try {
+			Method method = Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class);
+			method.setAccessible(true);
+			nativeInterrupt = (Method) method.invoke(Thread.class, "parkFor$", new Class[]{long.class});
+			nativeInterrupt.setAccessible(true);
+		} catch (Throwable thr) {
+			Log.err(thr);
+		}
+	}
+
+	Thread currentThread;
+	Task task = Timer.schedule(() -> {
+		if (stopIfOvertime && Time.millis() - lastTime >= 2_000) {
+			// currentThread.interrupt();p
+			lastTime = Long.MAX_VALUE;
+			if (OS.isAndroid) {
+				try {
+					nativeInterrupt.invoke(currentThread, Long.MAX_VALUE);
+				} catch (Throwable e) {
+					Log.err(e);
+				}
+			} else {
+				currentThread.stop();
+			}
+		}
+	}, 0, 0.1f, -1);*/
+
 	public void complieAndExec(Runnable callback) {
+		if (Context.getCurrentContext() == null) Context.enter();
+		lastTime = Time.millis();
 		Time.runTask(0, () -> {
 			complieScript();
 			execScript();
@@ -317,6 +360,29 @@ public class Tester extends Content {
 			}
 			callback.run();
 		});
+		/*Object helper = VMBridge.getThreadContextHelper();
+		new Thread(() -> {
+			while (true) {
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					throw new RuntimeException(e);
+				}
+				if (finished || Time.millis() - time >= 1_000) {
+					Log.info("break");
+					VMBridge.setContext(helper, null);
+					Method m = null;
+					try {
+						m = ContextFactory.class.getDeclaredMethod("onContextReleased", Context.class);
+						m.setAccessible(true);
+						m.invoke(cx.getFactory(), cx);
+					} catch (Exception e) {
+						throw new RuntimeException(e);
+					}
+					break;
+				}
+			}
+		}).start();*/
 	}
 
 	public void complieScript() {
@@ -338,22 +404,28 @@ public class Tester extends Content {
 		log = Strings.neatError(ex);
 	}
 
+
 	// 执行脚本
 	public void execScript() {
-		if (error) return;
-		try {
-			/*V8 runtime = V8.createV8Runtime();
+		if (!finished) return;
+		finished = false;
+		if (error) {
+			finished = true;
+			return;
+		}
+		/*V8 runtime = V8.createV8Runtime();
 			Log.debug(runtime.executeIntegerScript("let x=1;x*2"));*/
-			if (Context.getCurrentContext() != cx) {
-				cx = Context.getCurrentContext();
-				LinkRhino189012201.init(cx);
-			}
+		if (Context.getCurrentContext() != cx) {
+			cx = Context.getCurrentContext();
+			LinkRhino189012201.init(cx);
+		}
+		// currentThread = new Thread(() -> {
+		try {
 			Object o = script.exec(cx, scope);
 			if (o instanceof Wrapper) {
 				o = ((Wrapper) o).unwrap();
 			}
 			res = o;
-
 			if (o instanceof Undefined) {
 				o = "undefined";
 			}
@@ -362,10 +434,19 @@ public class Tester extends Content {
 			if (log == null) log = "null";
 			if (MySettings.settings.getBool("outputToLog")) Log.info("tester: " + log);
 
-			log = log.replaceAll("\\[(\\w*?)]", "[[$1]");
-		} catch (Throwable ex) {
-			makeError(ex);
+			// log = log.replaceAll("\\[(\\w*?)]", "[[$1]");
+			finished = true;
+			lastTime = Long.MAX_VALUE;
+			// });
+			// currentThread.setPriority(1);
+			// currentThread.setUncaughtExceptionHandler((__, e) -> {
+		} catch (Throwable e) {
+			makeError(e);
+			finished = true;
+			lastTime = Long.MAX_VALUE;
 		}
+		// });
+		// currentThread.start();
 	}
 
 	public void _load() {
@@ -384,14 +465,17 @@ public class Tester extends Content {
 			p.image().color(JSFunc.underline).growX().padTop(6f).padBottom(6f).row();
 			p.add(f.child("log.txt").readString()).row();
 		}, Tester::sort);
+		history.hide();
 		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
 				f -> f, f -> {
 			area.setText(f.readString());
 		}, (f, p) -> {
 			p.add(f.readString()).row();
 		}, Tester::sort);
+		bookmark.hide();
 
 		setup();
+
 		Events.run(Trigger.update, () -> {
 			//			Log.info("update");
 			if (loop && script != null) {
@@ -403,6 +487,11 @@ public class Tester extends Content {
 	@Override
 	public void load() {
 		if (!init) loadSettings();
+		try {
+			Class.forName("modtools.rhino.ForRhino", true, Tester.class.getClassLoader());
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);
+		}
 		init = true;
 
 		scripts = Vars.mods.getScripts();
@@ -415,7 +504,12 @@ public class Tester extends Content {
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
 			Object obj2 = new NativeJavaClass(scope, MyReflect.class, false);
 			ScriptableObject.putProperty(scope, "MyReflect", obj2);
-			ScriptableObject.putProperty(scope, "unsafe", MyReflect.unsafe);
+			ScriptableObject.putProperty(scope, "unsafe", unsafe);
+			Field f = Context.class.getDeclaredField("factory");
+			f.setAccessible(true);
+			f.set(cx, ForRhino.factory);
+			cx.setGenerateObserverCount(true);
+			// cx.setInstructionObserverThreshold(0);
 			LinkRhino189012201.init(cx);
 			//			ScriptableObject.putProperty(scope, "Window", new NativeJavaClass(scope, Window.class, true));
 		} catch (Exception ex) {
@@ -424,6 +518,22 @@ public class Tester extends Content {
 			} else {
 				Vars.ui.showException("IntFunc出错", ex);
 			}
+		}
+
+		Fi dir = MySettings.dataDirectory.child("startup");
+		if (dir.exists() && dir.isDirectory()) {
+			dir.walk(f -> {
+				if (!f.extEquals("js")) return;
+				try {
+					cx.compileString(f.readString(), f.name(), 1).exec(cx, scope);
+				} catch (Throwable e) {
+					Log.err(e);
+				}
+			});
+		} else {
+			Log.info("Loaded startup directory.");
+			dir.delete();
+			dir.child("README.txt").writeString("这是一个用于启动脚本（js）的文件夹\n\n所有的js文件都会执行");
 		}
 	}
 

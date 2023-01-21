@@ -24,7 +24,7 @@ public class ActionsDebug extends Content {
 		ui.cont.add(element = new Image()).size(64).row();
 		element.setOrigin(Align.topRight);
 		// element.setOrigin(element.getWidth() / 2f, element.getHeight() / 2f);
-		element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
+		// element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
 		var classes = Tools.getClasses("arc.scene.actions");
 		ui.cont.pane(t -> {
 			int c = 0;

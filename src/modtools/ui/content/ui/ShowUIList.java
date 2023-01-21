@@ -36,11 +36,6 @@ public class ShowUIList extends Content {
 		super("showuilist");
 	}
 
-	public void copyText(Label label) {
-		IntUI.showInfoFade(Core.bundle.format("IntFunc.copied", label.getText())).setPosition(Tools.getAbsPos(label));
-		Core.app.setClipboardText(String.valueOf(label.getText()));
-	}
-
 	public void _load() {
 		ui = new Window(localizedName(), 400, 500, true);
 		Color[] colors = {Color.sky, Color.gold, Color.orange};

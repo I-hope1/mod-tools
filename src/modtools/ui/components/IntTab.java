@@ -101,7 +101,7 @@ public class IntTab {
 				if (selected[0] != j && !transitional[0]) {
 					if (selected[0] != -1) {
 						Table last = tables.get(selected[0]);
-						last.actions(Actions.fadeOut(0.2f, Interp.fade), Actions.remove());
+						last.actions(Actions.fadeOut(0.07f, Interp.fade), Actions.remove());
 						transitional[0] = true;
 						title.update(() -> {
 							if (!last.hasActions()) {

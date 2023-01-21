@@ -5,18 +5,15 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
-import arc.scene.Element;
-import arc.scene.Group;
+import arc.scene.*;
+import arc.scene.actions.*;
 import arc.scene.event.*;
-import arc.scene.ui.Button;
-import arc.scene.ui.Image;
+import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
-import arc.scene.ui.ScrollPane;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import arc.util.*;
 import arc.util.Timer.Task;
-import mindustry.gen.Icon;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import mindustry.graphics.Layer;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -24,9 +21,10 @@ import modtools.IntVars;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
 import modtools.ui.MyFonts;
-import modtools.ui.components.MyLabel;
+import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 import modtools.utils.JSFunc;
 
@@ -222,7 +220,7 @@ public class ReviewElement extends Content {
 	};
 
 	public static class ElementShowWindow extends DisposableWindow {
-		Table pane = new Table();
+		Table pane = new LimitTable();
 		Element element = null;
 		Pattern pattern;
 
@@ -250,17 +248,17 @@ public class ReviewElement extends Content {
 						IntUI.showConfirm("父元素为根节点，是否确定", go).setPosition(vec2);
 					} else go.run();
 				}).disabled(b -> element == null || element.parent == null).width(120).get();
-				t.button(Icon.copy, IntStyles.flati, () -> {
+				t.button(Icon.copy, IntStyles.clearNonei, () -> {
 					var window = new ElementShowWindow();
 					window.pattern = pattern;
 					window.show(element);
 					window.setSize(width, height);
 				}).padLeft(4f).padRight(4f);
-				t.button(Icon.refresh, IntStyles.flati, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
+				t.button(Icon.refresh, IntStyles.clearNonei, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
 				t.table(search -> {
 					search.image(Icon.zoom);
 					search.field("", str -> rebuild(element, str)).growX();
-				}).growX();
+				}).growX().padLeft(2f);
 			}).growX().row();
 
 			cont.add(new ScrollPane(pane) {
@@ -273,7 +271,7 @@ public class ReviewElement extends Content {
 
 			update(() -> {
 				if (!CANCEL_TASK.isScheduled()) {
-					Timer.schedule(CANCEL_TASK, Time.delta * 2f / 60f);
+					Timer.schedule(CANCEL_TASK, Time.delta / 60f);
 				}
 			});
 		}
@@ -305,7 +303,7 @@ public class ReviewElement extends Content {
 		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
 				table.add(new MyLabel(text)).color(Pal.accent).growX().left().row();
-				table.image().color(JSFunc.underline).growX().row();
+				table.image().color(JSFunc.underline).fillX().colspan(2).row();
 				return;
 			}
 			table.table(t -> {
@@ -315,7 +313,7 @@ public class ReviewElement extends Content {
 					t.row();
 				}
 			}).growX().left().row();
-			table.image().color(JSFunc.underline).growX().row();
+			table.image().color(JSFunc.underline).fillX().colspan(2).row();
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
@@ -367,27 +365,37 @@ public class ReviewElement extends Content {
 			table.left().defaults().left();
 
 			try {
-
 				table.add(new Table(Tex.underlineWhite, wrap -> {
 					if (element instanceof Group) {
+						/* 占位符 */
+						ImageButton button;
+						wrap.add(button = new ImageButton(Icon.rightOpen, Styles.clearNonei)).size(42);
+						// button.translation.set(button.getWidth() / 2f, button.getHeight() / 2f);
 						highlightShowMultiRow(wrap, pattern, getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
 						var children = ((Group) element).getChildren();
-						wrap.table(Window.myPane, t -> {
+						wrap.table(t -> {
 							if (children.size == 0) {
 								return;
 							}
-							Button button = t.button("@details", Icon.info, IntStyles.flatTogglet, () -> {}).minWidth(200).height(45).growX().get();
-							t.row();
-							t.collapser(c -> {
-								c.background(Window.myPane);
-								for (var child : children) {
-									build(child, c, pattern);
+							Table table1 = new Table();
+							for (var child : children) {
+								build(child, table1, pattern);
+							}
+							Cell<?> _cell = t.add(table1).grow();
+							final boolean[] checked = {children.size < 20};
+							button.clicked(() -> checked[0] = !checked[0]);
+							Image image = button.getImage();
+							button.update(() -> {
+								button.setOrigin(Align.center);
+								if (checked[0]) {
+									image.actions(Actions.rotateTo(-90, 0.1f));
+									_cell.setElement(table1);
+								} else {
+									image.actions(Actions.rotateTo(0, 0.1f));
+									_cell.clearElement();
 								}
-							}, true, button::isChecked).growX().with(col -> {
-								col.setDuration(0.2f);
-							}).row();
-							button.setChecked(children.size < 20);
-						}).padLeft(8).left();
+							});
+						}).padLeft(8).left().colspan(2);
 					} else if (element instanceof Image) {
 						try {
 							wrap.table(Window.myPane, p -> {
@@ -400,7 +408,7 @@ public class ReviewElement extends Content {
 					} else {
 						highlightShowMultiRow(wrap, pattern, String.valueOf(element));
 					}
-					JSFunc.addStoreButton(wrap, "element", () -> element);
+					// JSFunc.addStoreButton(wrap, "element", () -> element);
 					IntUI.doubleClick(wrap.getChildren().first(), () -> {}, () -> {
 						IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", tester.put(element))).setPosition(Core.input.mouse());
 					});

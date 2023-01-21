@@ -12,6 +12,7 @@ import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.*;
+import modtools.ui.components.input.MyLabel;
 import modtools.ui.content.Content;
 
 import static modtools.utils.MySettings.settings;

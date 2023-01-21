@@ -9,8 +9,7 @@ import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
-import arc.scene.event.ClickListener;
-import arc.scene.event.InputEvent;
+import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
@@ -64,15 +63,19 @@ public class IntUI {
 	/* 长按事件 */
 	public static <T extends Element> T longPress(T elem, final long duration, final Boolc boolc) {
 		elem.addListener(new ClickListener() {
-			Task task;
+			Task task = new Task() {
+				@Override
+				public void run() {
+					boolc.get(true);
+					pressed = true;
+				}
+			};
 
 			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				task.cancel();
 				if (super.touchDown(event, x, y, pointer, button)) {
-					task = Time.runTask(duration / 1000f * 60f, () -> {
-						boolc.get(true);
-						cancelled = true;
-					});
+					task = Time.runTask(duration / 1000f * 60f, task);
 					return true;
 				}
 				return false;
@@ -81,8 +84,8 @@ public class IntUI {
 			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
+				if (event.handled) return;
 				boolc.get(false);
-				task.cancel();
 			}
 		});
 		return elem;

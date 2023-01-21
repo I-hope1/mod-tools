@@ -76,8 +76,12 @@ public class MySettings {
 		}
 
 		public boolean toBool(Object v) {
-			if (v instanceof Jval) return ((Jval) v).asBool();
+			if (v instanceof Jval) {
+				if (((Jval) v).isBoolean()) return ((Jval) v).asBool();
+				else return v.toString().equals("true");
+			}
 			if (v instanceof Boolean) return (boolean) v;
+			if (v == null) return false;
 			return ScriptRuntime.toBoolean("" + v);
 		}
 
@@ -96,27 +100,32 @@ public class MySettings {
 		public String toString(StringBuilder tab) {
 			StringBuilder builder = new StringBuilder();
 			builder.append("{\n");
-			tab.append("    ");
+			tab.append("	");
 			each((k, v) -> {
 				builder.append(tab).append(k).append(": ")
 						.append(v instanceof Data ? ((Data) v).toString(tab) : v)
 						.append("\n");
 			});
 			tab.deleteCharAt(tab.length() - 1);
-			builder.append(tab);
-			builder.append("\n}");
+			builder.append('\n').append(tab).append('}');
 			return builder.toString();
 		}
 
 		public float getFloat(String name, float def) {
 			Object v = get(name, def);
-			if (v instanceof Jval) return ((Jval) v).asFloat();
+			if (v instanceof Jval) {
+				if (((Jval) v).isNumber()) return ((Jval) v).asFloat();
+				v = v.toString();
+			}
 			return Float.parseFloat("" + v);
 		}
 
 		public int getInt(String name, int def) {
 			Object v = get(name, def);
-			if (v instanceof Jval) return ((Jval) v).asInt();
+			if (v instanceof Jval) {
+				if (((Jval) v).isNumber()) return ((Jval) v).asInt();
+				v = v.toString();
+			}
 			return Integer.parseInt("" + v);
 		}
 	}

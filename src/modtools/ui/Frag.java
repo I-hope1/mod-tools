@@ -9,7 +9,7 @@ import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
 import modtools.IntVars;
-import modtools.ui.components.MoveListener;
+import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
 
 import static modtools.IntVars.modName;

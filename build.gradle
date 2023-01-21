@@ -48,7 +48,6 @@ dependencies{
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.loader=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.reflect=ALL-UNNAMED")
-}
 
 task jarAndroid{
     dependsOn "jar"

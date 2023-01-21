@@ -23,6 +23,12 @@ ext{
 //java 8 backwards compatibility flag
 tasks.withType(JavaCompile){
     options.compilerArgs.addAll(['--release', '11'])
+    
+    options.encoding = "UTF-8"
+    options.fork = true
+    options.forkOptions.jvmArgs.addAll([
+			"--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+    ])
 }
 
 
@@ -39,12 +45,6 @@ dependencies{
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
 
-tasks.withType(JavaCompile) {
-    options.encoding = "UTF-8"
-    options.fork = true
-    options.forkOptions.jvmArgs.addAll([
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
-    ])
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.loader=ALL-UNNAMED")
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.reflect=ALL-UNNAMED")

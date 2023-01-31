@@ -17,45 +17,29 @@ import static modtools.ui.IntUI.whiteui;
 
 public class IntStyles {
 	public static final TextButtonStyle blackt;
-	public static final ButtonStyle clearb;
-	public static final Drawable none = whiteui.tint(0f, 0f, 0f, 0.01f);
+	public static final ButtonStyle     clearb;
+	public static final Drawable        none = whiteui.tint(0f, 0f, 0f, 0.01f);
 
 
 	public static final LabelStyle myLabel;
 
 
-	/**
-	 * Similar to flatToggle, but with a transparent base background.
-	 */
+	/** Similar to flatToggle, but with a transparent base background. */
 	public static TextButtonStyle flatToggleMenut,
-	/**
-	 * Flat, square, toggleable.
-	 */
+	/** Flat, square, toggleable. */
 	flatTogglet,
-	/**
-	 * Flat, square, opaque.
-	 */
+	/** Flat, square, opaque. */
 	flatt,
-	/**
-	 * Flat, square, gray border.
-	 */
+	/** Flat, square, gray border. */
 	flatBordert,
-	/**
-	 * Partially transparent square button.
-	 */
+	/** Partially transparent square button. */
 	cleart;
 
-	/**
-	 * Flat, square, black background.
-	 */
+	/** Flat, square, black background. */
 	public static ImageButtonStyle flati,
-	/**
-	 * clearNone, but toggleable.
-	 */
+	/** clearNone, but toggleable. */
 	clearNoneTogglei,
-	/**
-	 * No background unless focused, no border.
-	 */
+	/** No background unless focused, no border. */
 	clearNonei;
 	public static ScrollPaneStyle noBarPane = new ScrollPaneStyle();
 

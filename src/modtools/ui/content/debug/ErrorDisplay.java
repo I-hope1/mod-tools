@@ -13,6 +13,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 
 import static modtools.utils.MySettings.settings;
@@ -28,10 +29,10 @@ public class ErrorDisplay extends Content {
 	}
 
 	Window ui;
-	Table crashes;
+	Table  crashes;
 
 	public void load() {
-		crashes = new Table(p -> {
+		crashes = new LimitTable(p -> {
 			p.defaults().grow();
 			IntVars.async(() -> {
 				Seq<Fi> list = new Seq<>(Vars.dataDirectory.child("crashes").list()).reverse();
@@ -52,21 +53,27 @@ public class ErrorDisplay extends Content {
 	}
 
 	public void rebuild() {
-		ui = new Window(localizedName());
+		float w = getW();
+		ui = new Window(localizedName(), w, 90, true);
+		ui.update(() -> ui.minWidth = getW());
 
-		Color[] colors = {Color.sky, Color.gold};
-		Fi last_log = Vars.dataDirectory.child("last_log.txt");
-		Seq<Table> tables = Seq.with(new Table(t -> t.pane(p -> p.label(() -> {
+		Color[] colors   = {Color.sky, Color.gold};
+		Fi      last_log = Vars.dataDirectory.child("last_log.txt");
+		Seq<Table> tables = Seq.with(new LimitTable(t -> t.pane(p -> p.label(() -> {
 			return last_log.exists() ? last_log.readString() : "";
 		}))), crashes);
 		String[] names = {"last_log", "crashes"};
-		IntTab tab = new IntTab(Vars.mobile ? 400 : 600, new Seq<>(names), new Seq<>(colors), tables);
+		IntTab   tab   = new IntTab(-1, new Seq<>(names), new Seq<>(colors), tables);
+		tab.setPrefSize(w, -1);
 		ui.cont.add(tab.build()).grow();
 
 		// ui.addCloseButton();
 	}
 
-	@Override
+	private static int getW() {
+		return Core.graphics.isPortrait() ? 400 : 600;
+	}
+
 	public void build() {
 		if (ui == null) rebuild();
 		else ui.toFront();

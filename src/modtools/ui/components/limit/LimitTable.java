@@ -77,6 +77,10 @@ public class LimitTable extends Table {
 		return super.button(cons, listener);
 	}
 
+	@Override
+	public Cell<Image> image(Drawable name) {
+		return add(new LimitImage(name));
+	}
 
 	@Override
 	public void updateVisibility() {

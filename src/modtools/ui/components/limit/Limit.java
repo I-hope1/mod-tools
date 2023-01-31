@@ -20,7 +20,7 @@ public interface Limit {
 		return Tmp.v1.x + Tmp.v2.x <= elem.getWidth() || Tmp.v2.x + Tmp.v2.y <= elem.getHeight();
 	}*/
 	static boolean isVisible(Element actor) {
-		Element elem = actor.parent;
+		Element elem = actor;
 		while (!(elem instanceof ScrollPane)) {
 			elem = elem.parent;
 			if (elem == null) return false;

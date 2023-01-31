@@ -10,27 +10,36 @@ import arc.scene.Element;
 import arc.scene.Group;
 import arc.scene.event.*;
 import arc.scene.ui.Dialog;
+import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.game.EventType.Trigger;
+import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import modtools.ui.components.Window;
 import modtools.utils.*;
+import modtools.utils.Tools.SR;
 
-import java.lang.invoke.LambdaMetafactory;
 import java.util.ArrayList;
 
 import static modtools.IntVars.*;
 import static modtools.ui.Contents.*;
 
 // 存储mod的窗口和Frag
-public final class TopGroup extends Group {
+public final class TopGroup extends WidgetGroup {
 	public boolean checkUI = MySettings.settings.getBool("checkUI", "false"),
 			debugBounds = MySettings.settings.getBool("debugbounds", "false");
 	public MySet<Boolp> drawSeq = new MySet<>();
 	public boolean isSwicthWindows = false;
 	public int currentIndex = 0;
 	public ArrayList<Window> shownWindows = new ArrayList<>();
+	private final Group
+			back = new Group() {{name = "back";}},
+			windows = new Group() {{name = "windows";}},
+			frag = new Group() {{name = "frag";}},
+			others = new WidgetGroup() {{name = "others";}};
+	private final Group[] all = {back, windows, frag, others};
+	public Element drawPadElem = null;
 
 	public void draw() {
 		super.draw();
@@ -76,10 +85,8 @@ public final class TopGroup extends Group {
 				elem.getWidth(), elem.getHeight());
 	}
 
-	public Element drawPadElem = null;
-
 	{
-		Core.scene.root.getListeners().insert(0, new InputListener() {
+		Core.scene.addListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (shownWindows.isEmpty()) return false;
 				if (keycode == KeyCode.tab && Core.input.ctrl()) {
@@ -112,8 +119,8 @@ public final class TopGroup extends Group {
 		});
 
 		fillParent = true;
-		touchable = Touchable.enabled;
-		name = modName + "-topTable";
+		touchable = Touchable.childrenOnly;
+		name = modName + "-TopGroup";
 		// Log.info("Loaded top group");
 
 		// Core.scene.add(this);
@@ -137,18 +144,23 @@ public final class TopGroup extends Group {
 			Draw.flush();
 		});
 		Core.scene.add(this);
+		for (Group group : all) {
+			group.fillParent = true;
+			group.touchable = Touchable.childrenOnly;
+			super.addChild(group);
+		}
 		// update(this::toFront);
 
 		Events.run(Trigger.update, () -> {
 			shownWindows.clear();
-			children.each(elem -> {
+			windows.forEach(elem -> {
 				if (elem instanceof Window) {
 					shownWindows.add((Window) elem);
 				}
 			});
 			toFront();
 			if (checkUI) {
-				if (Core.scene.root.getChildren().select(el -> el.visible).size > 70) {
+				if (Core.scene.root.getChildren().count(el -> el.visible) > 70) {
 					tester.loop = false;
 					Dialog dialog;
 					while (true) {
@@ -157,20 +169,22 @@ public final class TopGroup extends Group {
 						dialog.hide();
 					}
 				}
-				if (topGroup.getChildren().select(el -> el.visible).size > 70) {
-					Seq<Window> windows = topGroup.getChildren().select(el -> el instanceof Window).as();
-					windows.each(Window::hide);
+				if (windows.getChildren().count(el -> el.visible) > 70) {
+					windows.getChildren().<Window>as().each(Window::hide);
 				}
 
 			}
 		});
 	}
 
-	public boolean ok = true;
+	public static final boolean enabled = true;
 
 	public void addChild(Element actor) {
-		if (ok) {
-			super.addChild(actor);
+		if (enabled) {
+			(actor instanceof BackInterface ? back
+					: actor instanceof Window ? windows
+					: actor instanceof Frag ? frag
+					: others).addChild(actor);
 			return;
 		}
 		Core.scene.add(actor);
@@ -179,4 +193,12 @@ public final class TopGroup extends Group {
 	public Element hit(float x, float y, boolean touchable) {
 		return isSwicthWindows ? this : super.hit(x, y, touchable);
 	}
+
+
+	/**
+	 * just a flag
+	 */
+	public static class BackElement extends Element implements BackInterface {}
+
+	public interface BackInterface {}
 }

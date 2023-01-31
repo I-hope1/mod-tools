@@ -12,14 +12,17 @@ import java.util.concurrent.CompletableFuture;
 import static mindustry.Vars.ui;
 
 public class IntVars {
-	public static final String modName = "mod-tools";
-	public static final Frag frag = new Frag();
+	public static final String   modName  = "mod-tools";
+	public static final Frag     frag     = new Frag();
 	public static final TopGroup topGroup = new TopGroup();
 
 
 	public static void load() {
-		if (frag.getChildren().isEmpty()) frag.load();
-		else topGroup.addChild(frag);
+		if (frag.getChildren().isEmpty()) {
+			frag.load();
+		} else {
+			topGroup.addChild(frag);
+		}
 	}
 
 
@@ -30,15 +33,12 @@ public class IntVars {
 			Log.err(e);
 		}
 	}
-
 	public static void async(Runnable runnable, Runnable callback) {
 		async(null, runnable, callback, false);
 	}
-
 	public static void async(String text, Runnable runnable, Runnable callback) {
 		async(text, runnable, callback, ui != null);
 	}
-
 	public static void async(String text, Runnable runnable, Runnable callback, boolean displayUI) {
 		if (displayUI) ui.loadfrag.show(text);
 		CompletableFuture<?> completableFuture = CompletableFuture.supplyAsync(() -> {
@@ -59,7 +59,6 @@ public class IntVars {
 	}
 
 	public static final MySet<Runnable> resizeListenrs = new MySet<>();
-
 	public static void addResizeListener(Runnable runnable) {
 		resizeListenrs.add(runnable);
 	}
@@ -72,6 +71,4 @@ public class IntVars {
 			}
 		});
 	}
-
-
 }

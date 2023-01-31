@@ -17,14 +17,14 @@ public class Background {
 		// EntityShow.main();
 		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
 		if (!(tmp instanceof Group)) return;
-		Group group = (Group) tmp;
+		Group        group    = (Group) tmp;
 		Seq<Element> children = group.getChildren();
 		children.get(0).clear();
 		children.get(0).remove();
 		LoadedMod mod = Vars.mods.getMod(ModTools.class);
 
 		Texture landscape = new Texture(mod.root.child("横屏.png")), portrait = new Texture(mod.root.child("竖屏.png"));
-		Image img = new Image(Pixmaps.blankTexture());
+		Image   img       = new Image(Pixmaps.blankTexture());
 		//		img.rotation = Core.graphics.isPortrait() ? 90 : 0;
 		img.setFillParent(true);
 		IntVars.addResizeListener(() -> {

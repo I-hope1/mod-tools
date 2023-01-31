@@ -7,15 +7,15 @@ import modtools.ui.content.world.*;
 
 public class Contents {
 	public static SettingsContent settingsUI;
-	public static Tester tester;
-	public static Selection selection;
-	public static ShowUIList showuilist;
-	public static UnitSpawn unitSpawn;
-	public static ErrorDisplay errorDisplay;
-	public static ContentList contentList;
-	public static ReviewElement elementShow;
-	public static WindowManager windowManager;
-	public static ActionsDebug actionsDebug;
+	public static Tester          tester;
+	public static Selection       selection;
+	public static ShowUIList      showuilist;
+	public static UnitSpawn       unitSpawn;
+	public static ErrorDisplay    errorDisplay;
+	public static ContentList     contentList;
+	public static ReviewElement   elementShow;
+	public static WindowManager   windowManager;
+	public static ActionsDebug    actionsDebug;
 
 	public static void load() {
 		settingsUI = new SettingsContent();

@@ -39,18 +39,14 @@ import java.util.regex.Pattern;
  * @author I hope...
  **/
 public class TextAreaTable extends Table {
-	private final MyTextArea area;
-	public final MyScrollPane pane;
-	/**
-	 * 编辑器是否只可读
-	 **/
-	public boolean readOnly = false,
-	/**
-	 * 编辑器是否显示行数
-	 */
+	private final MyTextArea   area;
+	public final  MyScrollPane pane;
+	/** 编辑器是否只可读 */
+	public        boolean      readOnly = false,
+	/** 编辑器是否显示行数 */
 	showLine = true;
-	public Syntax syntax;
-	public static int numWidth = 13;
+	public        Syntax syntax;
+	public static int    numWidth = 13;
 
 	public MyTextArea getArea() {
 		return area;
@@ -64,7 +60,7 @@ public class TextAreaTable extends Table {
 		pane = new MyScrollPane();
 		area.trackCursor = pane::trackCursor;
 		LinesShow linesShow = new LinesShow(area);
-		Cell<?> cell = add(linesShow).growY().left();
+		Cell<?>   cell      = add(linesShow).growY().left();
 		// fill().add(area);
 		add(pane).grow();
 		area.setPrefRows(10);
@@ -101,9 +97,9 @@ public class TextAreaTable extends Table {
 		area.draw();
 	}*/
 
-	public Boolf2<InputEvent, KeyCode> keyDonwB = null;
+	public Boolf2<InputEvent, KeyCode>   keyDonwB  = null;
 	public Boolf2<InputEvent, Character> keyTypedB = null;
-	public Boolf2<InputEvent, KeyCode> keyUpB = null;
+	public Boolf2<InputEvent, KeyCode>   keyUpB    = null;
 
 	public void focus() {
 		Core.scene.setKeyboardFocus(area);
@@ -116,10 +112,10 @@ public class TextAreaTable extends Table {
 
 		public void trackCursor() {
 			// Time.runTask(0f, () -> {
-			int cursorLine = area.getCursorLine();
+			int cursorLine       = area.getCursorLine();
 			int firstLineShowing = area.getRealFirstLineShowing();
-			int lines = area.getRealLinesShowing();
-			int max = firstLineShowing + lines;
+			int lines            = area.getRealLinesShowing();
+			int max              = firstLineShowing + lines;
 			if (cursorLine <= firstLineShowing) {
 				setScrollY(cursorLine * area.lineHeight());
 			}
@@ -155,9 +151,9 @@ public class TextAreaTable extends Table {
 	public static final float fontWidth = 12;
 
 	public class MyTextArea extends TextArea {
-		public float parentHeight = 0;
-		private float scrollY = 0;
-		public Runnable trackCursor = null;
+		public  float    parentHeight = 0;
+		private float    scrollY      = 0;
+		public  Runnable trackCursor  = null;
 
 		public float lineHeight() {
 			return style.font.getLineHeight();
@@ -175,10 +171,10 @@ public class TextAreaTable extends Table {
 		@Override
 		public float getPrefHeight() {
 			float prefHeight = textHeight * getLines();
-			var style = getStyle();
+			var   style      = getStyle();
 			if (style.background != null) {
 				prefHeight = Math.max(prefHeight + style.background.getBottomHeight() + style.background.getTopHeight(),
-						style.background.getMinHeight());
+				                      style.background.getMinHeight());
 			}
 			return prefHeight + parentHeight / 2f;
 		}
@@ -192,8 +188,8 @@ public class TextAreaTable extends Table {
 		}
 
 		public int getRealLinesShowing() {
-			Drawable background = style.background;
-			float availableHeight = parentHeight - (background == null ? 0 : background.getBottomHeight() + background.getTopHeight());
+			Drawable background      = style.background;
+			float    availableHeight = parentHeight - (background == null ? 0 : background.getBottomHeight() + background.getTopHeight());
 			return (int) Math.floor(availableHeight / lineHeight());
 		}
 
@@ -212,8 +208,8 @@ public class TextAreaTable extends Table {
 
 		@Override
 		protected void drawText(Font font, float x, float y) {
-			boolean had = font.getData().markupEnabled;
-			Color lastColor = font.getColor();
+			boolean had       = font.getData().markupEnabled;
+			Color   lastColor = font.getColor();
 			font.getData().markupEnabled = false;
 
 			if (enableHighlighting) {
@@ -224,13 +220,13 @@ public class TextAreaTable extends Table {
 				}
 			} else {
 				font.setColor(Color.white);
-				int firstLineShowing = getRealFirstLineShowing();
-				int linesShowing = getRealLinesShowing() + 1;
-				float offsetY = -firstLineShowing * lineHeight();
-				int max = (firstLineShowing + linesShowing) * 2;
+				int   firstLineShowing = getRealFirstLineShowing();
+				int   linesShowing     = getRealLinesShowing() + 1;
+				float offsetY          = -firstLineShowing * lineHeight();
+				int   max              = (firstLineShowing + linesShowing) * 2;
 				for (int i = firstLineShowing * 2; i < max && i < linesBreak.size; i += 2) {
 					font.draw(displayText, x, y + offsetY, linesBreak.get(i), linesBreak.get(i + 1),
-							0, Align.left, false).free();
+					          0, Align.left, false).free();
 					offsetY -= lineHeight();
 				}
 			}
@@ -735,7 +731,7 @@ public class TextAreaTable extends Table {
 			if (readOnly || newText.equals(oldText)) return false;
 			text = newText;
 			ChangeEvent changeEvent = Pools.obtain(ChangeEvent.class, ChangeEvent::new);
-			boolean cancelled = fire(changeEvent);
+			boolean     cancelled   = fire(changeEvent);
 			text = cancelled ? oldText : newText;
 			Pools.free(changeEvent);
 			return !cancelled;
@@ -759,13 +755,13 @@ public class TextAreaTable extends Table {
 		public void comment(boolean shift) {
 			String selection = getSelection();
 			if (shift) {
-				int start = hasSelection ? Math.min(cursor, selectionStart) : cursor;
-				int len = selection.length(), maxLen = text.length();
+				int start        = hasSelection ? Math.min(cursor, selectionStart) : cursor;
+				int len          = selection.length(), maxLen = text.length();
 				int selectionEnd = start + len;
 				int startIndex, endIndex;
-				int offset = 2;
+				int offset       = 2;
 				if (((startIndex = text.substring(Math.max(0, start - offset), Math.min(start + offset, maxLen)).indexOf("/*")) >= 0)
-						&& ((endIndex = text.substring(Math.max(0, selectionEnd - offset), Math.min(selectionEnd + offset, maxLen)).indexOf("*/")) >= 0)) {
+				    && ((endIndex = text.substring(Math.max(0, selectionEnd - offset), Math.min(selectionEnd + offset, maxLen)).indexOf("*/")) >= 0)) {
 					startIndex += Math.max(0, start - offset);
 					endIndex += Math.max(0, selectionEnd - offset);
 					// text.delete(startIndex, 2);
@@ -777,13 +773,13 @@ public class TextAreaTable extends Table {
 					// text.insert(start, "/*");
 					// text.insert(selectionEnd + 2, "*/");
 					changeText(text, text.substring(0, start) + "/*" + selection + "*/"
-							+ text.substring(selectionEnd));
+					                 + text.substring(selectionEnd));
 					selectionStart = clamp(selectionStart + 2);
 					cursor = clamp(cursor + 2);
 				}
 			} else {
 				int home = linesBreak.get(cursorLine * 2);
-				int end = linesBreak.get(Math.min(linesBreak.size - 1, (cursorLine + 1) * 2));
+				int end  = linesBreak.get(Math.min(linesBreak.size - 1, (cursorLine + 1) * 2));
 				if (startComment.matcher(text.substring(home, end)).find()) {
 					int start = home + text.substring(home, end).indexOf("//");
 					// text.delete(start, 2);
@@ -818,9 +814,9 @@ public class TextAreaTable extends Table {
 				}
 
 				// 修复笔记本上不能使用的问题
-				int oldCursor = cursor;
-				boolean shift = Core.input.shift();
-				boolean jump = Core.input.ctrl();
+				int     oldCursor = cursor;
+				boolean shift     = Core.input.shift();
+				boolean jump      = Core.input.ctrl();
 				Time.runTask(0f, () -> {
 					// 判断是否一样
 					if (oldCursor == cursor) {
@@ -988,19 +984,19 @@ public class TextAreaTable extends Table {
 
 			font.getData().markupEnabled = had;*/
 			int firstLineShowing = area.getRealFirstLineShowing();
-			int linesShowing = area.getRealLinesShowing();
+			int linesShowing     = area.getRealLinesShowing();
 			font = area.getStyle().font;
-			boolean had = font.getData().markupEnabled;
-			String text = area.getText();
-			float scrollOffsetY = area.scrollY - (int) (area.scrollY / area.lineHeight()) * area.lineHeight();
-			float offsetY = getTop() - getBackground().getTopHeight() + scrollOffsetY;
-			IntSeq linesBreak = area.getLinesBreak();
-			int row = 1;
+			boolean had           = font.getData().markupEnabled;
+			String  text          = area.getText();
+			float   scrollOffsetY = area.scrollY - (int) (area.scrollY / area.lineHeight()) * area.lineHeight();
+			float   offsetY       = getTop() - getBackground().getTopHeight() + scrollOffsetY;
+			IntSeq  linesBreak    = area.getLinesBreak();
+			int     row           = 1;
 			font.getData().markupEnabled = false;
 			realCurrorLine = 0;
-			int cursorLine = area.getCursorLine() * 2;
-			Runnable task = getTask(offsetY, row);
-			int i = 0;
+			int      cursorLine = area.getCursorLine() * 2;
+			Runnable task       = getTask(offsetY, row);
+			int      i          = 0;
 			int start = firstLineShowing * 2,
 					end = start + linesShowing * 2;
 			for (; i <= end && i < linesBreak.size; i += 2) {

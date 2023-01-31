@@ -2,61 +2,47 @@
 package modtools.ui.content.world;
 
 import arc.Core;
-import arc.func.Cons;
-import arc.func.Cons2;
+import arc.func.*;
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
-import arc.graphics.g2d.Fill;
-import arc.graphics.g2d.Lines;
-import arc.graphics.g2d.TextureRegion;
+import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.*;
 import arc.scene.Element;
-import arc.scene.event.InputEvent;
-import arc.scene.event.InputListener;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
-import arc.util.Timer;
 import arc.util.Timer.Task;
+import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
 import mindustry.entities.units.UnitController;
 import mindustry.game.Team;
 import mindustry.gen.*;
-import mindustry.graphics.Layer;
-import mindustry.graphics.Pal;
+import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import mindustry.world.Tile;
-import mindustry.world.blocks.environment.Floor;
-import mindustry.world.blocks.environment.OverlayFloor;
-import modtools.IntVars;
-import modtools.ui.Contents;
-import modtools.ui.IntStyles;
-import modtools.ui.IntUI;
+import mindustry.world.blocks.environment.*;
+import modtools.ui.*;
+import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
-import modtools.utils.JSFunc;
-import modtools.utils.Tools;
-import modtools.utils.WorldDraw;
-import ihope_lib.MyReflect;
+import modtools.utils.*;
 
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.ArrayList;
 import java.util.function.Consumer;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.topGroup;
 import static modtools.utils.MySettings.settings;
-import static modtools.utils.WorldDraw.drawRegion;
-import static modtools.utils.WorldDraw.rect;
+import static modtools.utils.WorldDraw.*;
 
 public class Selection extends Content {
 	public Selection() {
@@ -71,25 +57,30 @@ public class Selection extends Content {
 	);
 
 	public static final Color focusColor = Color.pink.cpy().a(0.4f);
-	// public ObjectSet<Object> focusSet = new ObjectSet<>();
-	// public Vec2 focusFrom = new Vec2();
-	public WorldDraw unitWD = new WorldDraw(Layer.weather), tileWD = new WorldDraw(Layer.darkness + 1),
-			buildWD = new WorldDraw(Layer.darkness), bulletWD = new WorldDraw(Layer.bullet + 5),
-			otherWD = new WorldDraw(Layer.overlayUI);
+
+	public final WorldDraw
+			unitWD   = new WorldDraw(Layer.weather),
+			tileWD   = new WorldDraw(Layer.darkness + 1),
+			buildWD  = new WorldDraw(Layer.darkness),
+			bulletWD = new WorldDraw(Layer.bullet + 5),
+			otherWD  = new WorldDraw(Layer.overlayUI);
 	public Element fragSelect;
-	public Window pane;
+	public Window  pane;
 	// public Table functions;
-	Team defaultTeam;
+	Team    defaultTeam;
 	// show: pane是否显示
 	// move: 是否移动
-	boolean show = false, move = false;
-	boolean drawSelect = true;
+	boolean show       = false,
+			move       = false,
+			drawSelect = true;
 
-	static final int buttonWidth = 200, buttonHeight = 45;
-	Function<Tile> tiles;
+	static final int
+			buttonWidth  = 200,
+			buttonHeight = 45;
+	Function<Tile>     tiles;
 	Function<Building> buildings;
-	Function<Unit> units;
-	Function<Bullet> bullets;
+	Function<Unit>     units;
+	Function<Bullet>   bullets;
 	public static OrderedMap<String, Function<?>> allFunctions = new OrderedMap<>();
 
 	public void loadSettings() {
@@ -108,7 +99,7 @@ public class Selection extends Content {
 			t.table(t1 -> {
 				t1.left().defaults().left();
 				Team[] arr = Team.baseTeams;
-				int c = 0;
+				int    c   = 0;
 
 				for (Team team : arr) {
 					ImageButton b = t1.button(IntUI.whiteui, IntStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
@@ -135,9 +126,8 @@ public class Selection extends Content {
 
 		Contents.settingsUI.add(table);
 	}
-
 	public void load() {
-		fragSelect = new Element();
+		fragSelect = new BackElement();
 		fragSelect.name = "SelectionElem";
 		// fragSelect.update(() -> fragSelect.toFront());
 		fragSelect.touchable = Touchable.enabled;
@@ -281,7 +271,6 @@ public class Selection extends Content {
 				//				start = end = null;
 			}
 		};
-		// Core.scene.add(fragSelect);
 		fragSelect.addListener(listener);
 
 		/*fragDraw = new FragDraw();
@@ -302,12 +291,6 @@ public class Selection extends Content {
 		tiles = new TileFunction<>("tile", (t, func) -> {
 			FunctionBuild(t, "设置", button -> {
 				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
-					/*Task task = new Task() {
-						@Override
-						public void run() {
-							headless = false;
-						}
-					};*/
 					func.each(tile -> {
 						if (tile.block() == block) return;
 						if (block.isMultiblock()) {
@@ -315,9 +298,9 @@ public class Selection extends Content {
 							int offsety = -(block.size - 1) / 2;
 							for (int dx = 0; dx < block.size; dx++) {
 								for (int dy = 0; dy < block.size; dy++) {
-									int worldx = dx + offsetx + tile.x;
-									int worldy = dy + offsety + tile.y;
-									Tile other = world.tile(worldx, worldy);
+									int  worldx = dx + offsetx + tile.x;
+									int  worldy = dy + offsety + tile.y;
+									Tile other  = world.tile(worldx, worldy);
 
 									if (other != null && other.block().isMultiblock() && other.block() == block) {
 										return;
@@ -334,17 +317,20 @@ public class Selection extends Content {
 					if (tile.block() != Blocks.air) tile.setAir();
 				});
 			});
-			ListFunction(t, "设置地板重置Overlay", Vars.content.blocks().select(block -> block instanceof Floor), (button, floor) -> {
-				tiles.each(tile -> {
-					tile.setFloor((Floor) floor);
-				});
-			});
-			ListFunction(t, "设置地板保留Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)), (button, floor) -> {
-				tiles.each(tile -> {
-					tile.setFloorUnder((Floor) floor);
-				});
-			});
-			ListFunction(t, "设置Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), (button, overlay) -> {
+			ListFunction(t, "设置地板重置Overlay",
+			             Vars.content.blocks().select(block -> block instanceof Floor),
+			             null, floor -> {
+						tiles.each(tile -> {
+							tile.setFloor((Floor) floor);
+						});
+					});
+			ListFunction(t, "设置地板保留Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
+			             null, floor -> {
+						tiles.each(tile -> {
+							tile.setFloorUnder((Floor) floor);
+						});
+					});
+			ListFunction(t, "设置Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), null, overlay -> {
 				tiles.each(tile -> {
 					tile.setOverlay(overlay);
 				});
@@ -362,39 +348,30 @@ public class Selection extends Content {
 					b.changeTeam(team);
 				});
 			});
-			ListFunction(t, "设置物品", Vars.content.items(), (button, item) -> {
-				IntUI.showSelectTable(button, (table, hide, str) -> {
-					String[] amount = new String[1];
-					table.field("", s -> {
-						amount[0] = s;
-					}).valid(Tools::validPosInt);
-
-					table.button("", Icon.ok, IntStyles.cleart, () -> {
-						func.each(b -> {
-							if (b.items != null) {
-								b.items.set(item, Tools.asInt(amount[0]));
-							}
-						});
-						hide.run();
-					});
-				}, false);
+			String[] amount = new String[1];
+			ListFunction(t, "设置物品", Vars.content.items(), t1 -> {
+				t1.row();
+				t1.field("", s -> {
+					amount[0] = s;
+				}).valid(Tools::validPosInt);
+			}, item -> {
+				func.each(b -> {
+					if (b.items != null) {
+						b.items.set(item, Tools.asInt(amount[0]));
+					}
+				});
 			});
-			ListFunction(t, "设置液体", Vars.content.liquids(), (button, liquid) -> {
-				IntUI.showSelectTable(button, (table, hide, str) -> {
-					String[] amount = new String[1];
-					table.field("", s -> {
-						amount[0] = s;
-					}).valid(Tools::validPosInt);
-					table.button("", Icon.ok, IntStyles.cleart, () -> {
-						func.each(b -> {
-							if (b.liquids != null) {
-								float now = b.liquids.get(liquid);
-								b.liquids.add(liquid, Tools.asInt(amount[0]) - now);
-							}
-						});
-						hide.run();
-					});
-				}, false);
+			ListFunction(t, "设置液体", Vars.content.liquids(), t1 -> {
+				t1.row();
+				t1.field("", s -> {
+					amount[0] = s;
+				}).valid(Tools::validPosInt);
+			}, liquid -> {
+				func.each(b -> {
+					if (b.liquids != null) {
+						b.liquids.add(liquid, Tools.asInt(amount[0]) - b.liquids.get(liquid));
+					}
+				});
 			});
 			FunctionBuild(t, "杀死", __ -> {
 				func.list.removeIf(b -> {
@@ -480,7 +457,7 @@ public class Selection extends Content {
 			tableSeq.add(func.value.wrap);
 		}
 		IntTab tab = new IntTab(100, allFunctions.orderedKeys(),
-				Color.sky, tableSeq, 1, true);
+		                        Color.sky, tableSeq, 1, true);
 		pane.cont.left().add(tab.build()).grow().left();
 		// t.pane(paneStyle, functions).grow();
 		// });
@@ -517,39 +494,35 @@ public class Selection extends Content {
 		units.clearList();
 		//		}
 	}
-
 	public void build() {
 		show = true;
 		Core.scene.add(fragSelect);
 		//		fragSelect.touchable = Touchable.enabled;
 	}
-
 	public static Rect getWorldRect(Tile t) {
 		return new Rect(t.worldx(), t.worldy(), tilesize * 4, tilesize * 4);
 	}
-
 	public static Rect getWorldRect(Unit unit) {
 		return new Rect(unit.x, unit.y, unit.type.fullIcon.width, unit.type.fullIcon.height);
 	}
-
 	public static Rect getWorldRect(Building t) {
 		TextureRegion region = t.block.region;
 		return new Rect(t.x, t.y, region.width, region.height);
 	}
-
 	public static Rect getWorldRect(Bullet t) {
 		return new Rect(t.x, t.y, t.hitSize, t.hitSize);
 	}
-
-
-	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list, Cons2<TextButton, T> cons) {
+	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list,
+	                                                       Cons<Table> builder,
+	                                                       Cons<T> cons) {
 		FunctionBuild(t, name, btn -> {
-			IntUI.showSelectImageTable(btn, list, () -> null, item -> {
-				cons.get(btn, item);
-			}, 42.0f, 32, 6, true);
+			var table = IntUI.showSelectImageTable(
+					btn, list, () -> null,
+					cons, 42.0f, 32,
+					6, true);
+			if (builder != null) builder.get(table);
 		});
 	}
-
 	public void FunctionBuild(Table table, String name, Cons<TextButton> cons) {
 		TextButton button = new TextButton(name);
 		table.add(button).height(buttonHeight).growX().row();
@@ -557,10 +530,9 @@ public class Selection extends Content {
 			cons.get(button);
 		});
 	}
-
 	public void TeamFunctionBuild(Table table, String name, Cons<Team> cons) {
 		FunctionBuild(table, name, btn -> {
-			Team[] arr = Team.baseTeams;
+			Team[]        arr   = Team.baseTeams;
 			Seq<Drawable> icons = new Seq<>();
 
 			for (Team team : arr) {
@@ -586,7 +558,7 @@ public class Selection extends Content {
 		public TextureRegion getRegion(T bullet) {
 			float rsize = bullet.hitSize * 1.4f * 4;
 			return map.get(bullet.hitSize, () -> {
-				int size = (int) (rsize * 2);
+				int   size  = (int) (rsize * 2);
 				float thick = 12f;
 				return drawRegion(size, size, () -> {
 					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Color.sky);
@@ -633,7 +605,7 @@ public class Selection extends Content {
 		public TextureRegion getRegion(T unit) {
 			float rsize = unit.hitSize * 1.4f * 4;
 			return map.get(unit.hitSize, () -> {
-				int size = (int) (rsize * 2);
+				int   size  = (int) (rsize * 2);
 				float thick = 12f;
 				return drawRegion(size, size, () -> {
 					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Color.sky);
@@ -673,7 +645,7 @@ public class Selection extends Content {
 		@Override
 		public TextureRegion getRegion(T building) {
 			return map.get(building.block.size, () -> {
-				int size = building.block.size * 32;
+				int size  = building.block.size * 32;
 				int thick = 7;
 				return drawRegion(size + thick, size + thick, () -> {
 					MyDraw.dashSquare(thick, Pal.accent, (size + thick) / 2f, (size + thick) / 2f, size);
@@ -685,8 +657,8 @@ public class Selection extends Content {
 			Table cont = new Table();
 			building.display(cont);
 			table.add(cont).row();
-			String[] pos = {"(" + building.x + ", " + building.y + ')'};
-			Vec2 last = new Vec2(building.x, building.y);
+			String[] pos  = {"(" + building.x + ", " + building.y + ')'};
+			Vec2     last = new Vec2(building.x, building.y);
 			table.label(() -> {
 				if (last.x != building.x || last.y != building.y) {
 					pos[0] = "(" + building.x + ", " + building.y + ')';
@@ -706,11 +678,11 @@ public class Selection extends Content {
 				TextureRegion region = getRegion(building);
 				buildWD.drawSeq.add(() -> {
 					if (building.tile.build != building) {
-						//					buildWD.hasChange = false;
+						// buildWD.hasChange = false;
 						return false;
 					}
 					if (!rect.contains(building.x, building.y)) return true;
-					Draw.rect(region, building.x, building.y);
+					Draw.rect(region, building.x, building.y, 45);
 					return true;
 				});
 			});
@@ -731,8 +703,8 @@ public class Selection extends Content {
 		@Override
 		public TextureRegion getRegion(T tile) {
 			return map.get(tile.block().size, () -> {
-				int size = tilesize * 4;
-				int thick = 3;
+				int size  = tilesize * 4;
+				int thick = 7;
 				return drawRegion(size + thick, size + thick, () -> {
 					MyDraw.dashSquare(thick, Pal.heal, (size + thick) / 2f, (size + thick) / 2f, size);
 				});
@@ -779,11 +751,11 @@ public class Selection extends Content {
 	};
 
 	public abstract class Function<T> {
-		public final Table wrap;
-		public final Table main;
-		public final Table cont;
-		public ArrayList<T> list = new ArrayList<>();
-		public final String name;
+		public final Table        wrap;
+		public final Table        main;
+		public final Table        cont;
+		public       ArrayList<T> list = new ArrayList<>();
+		public final String       name;
 
 		public Function(String name, Cons2<Table, Function<T>> cons) {
 			this.name = name;
@@ -862,8 +834,8 @@ public class Selection extends Content {
 		}
 
 		public final void showAll() {
-			final int cols = Vars.mobile ? 4 : 6;
-			final int[] c = new int[]{0};
+			final int   cols = Vars.mobile ? 4 : 6;
+			final int[] c    = new int[]{0};
 			new DisposableWindow(name, 0, 200, true) {{
 				cont.pane(new LimitTable(table -> {
 					for (T item : list) {
@@ -908,7 +880,7 @@ public class Selection extends Content {
 								touchable = Touchable.enabled;
 								update(() -> {
 									if (!focusLock && (focusTile == item || focusBuild == item
-											|| (item instanceof Unit && focusUnits.contains((Unit) item)))) {
+									                   || (item instanceof Unit && focusUnits.contains((Unit) item)))) {
 										focusElem = this;
 										if (task.isScheduled()) task.cancel();
 										Timer.schedule(task, Time.delta * 2f / 60f);
@@ -945,7 +917,7 @@ public class Selection extends Content {
 
 	}
 
-	Vec2 mouse = new Vec2();
+	Vec2 mouse      = new Vec2();
 	Vec2 mouseWorld = new Vec2();
 
 	public void drawFocus() {
@@ -979,8 +951,8 @@ public class Selection extends Content {
 		// Log.info(Draw.getColor());
 		// float z = Draw.z();
 		Draw.z(Layer.max);
-		Vec2 tmp = Core.camera.project(rect.x, rect.y);
-		float x = tmp.x, y = tmp.y;
+		Vec2  tmp = Core.camera.project(rect.x, rect.y);
+		float x   = tmp.x, y = tmp.y;
 		tmp = Core.camera.project(rect.x + rect.width / 4f, rect.y + rect.height / 4f);
 		float w = tmp.x - x, h = tmp.y - y;
 		Fill.rect(x, y, w, h);
@@ -1000,11 +972,11 @@ public class Selection extends Content {
 		// Draw.color(lastColor);
 	}
 
-	private boolean focusLock;
-	private Element focusElem;
-	private Tile focusTile;
-	private Building focusBuild;
-	private final ObjectSet<Unit> focusUnits = new ObjectSet<>();
+	private       boolean           focusLock;
+	private       Element           focusElem;
+	private       Tile              focusTile;
+	private       Building          focusBuild;
+	private final ObjectSet<Unit>   focusUnits   = new ObjectSet<>();
 	private final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
 
 	{
@@ -1016,7 +988,7 @@ public class Selection extends Content {
 					focusBuild = focusTile != null ? focusTile.build : null;
 					Groups.unit.each(u -> {
 						if (this.mouseWorld.x > u.x - u.hitSize && this.mouseWorld.y > u.y - u.hitSize
-								&& this.mouseWorld.x < u.x + u.hitSize && this.mouseWorld.y < u.y + u.hitSize)
+						    && this.mouseWorld.x < u.x + u.hitSize && this.mouseWorld.y < u.y + u.hitSize)
 							focusUnits.add(u);
 					});
 				} else {

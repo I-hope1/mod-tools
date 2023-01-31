@@ -23,5 +23,6 @@ public class LimitLabel extends Label {
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);
+		if (visible) draw();
 	}
 }

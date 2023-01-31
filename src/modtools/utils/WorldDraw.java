@@ -19,32 +19,11 @@ import mindustry.game.EventType.Trigger;
  */
 public class WorldDraw {
 	// 玩家渲染区域
-	public static final Rect rect = new Rect();
-	// 存储渲染
-	public final MySet<Boolp> drawSeq = new MySet<>();/* {
-		@Override
-		public Seq<Boolp> add(Boolp value) {
-			hasChange = true;
-			return super.add(value);
-		}
+	public static final Rect                rect   = new Rect();
+	public static final Vec2                center = new Vec2();
+	public static       ObjectSet<Runnable> tasks  = new ObjectSet<>();
 
-		@Override
-		public boolean remove(Boolf value) {
-			hasChange = true;
-			return super.remove(value);
-		}
-
-		@Override
-		public Seq<Boolp> clear() {
-			hasChange = true;
-			return super.clear();
-		}
-	};*/
-	// public static final Seq<MyEntity> entities = new Seq<>();
-	public static final Vec2 center = new Vec2();
-	// public boolean hasChange = false;
-	// public MyEntity entity = new MyEntity();
-	public static ObjectSet<Runnable> tasks = new ObjectSet<>();
+	public final MySet<Boolp> drawSeq = new MySet<>();
 
 	public WorldDraw(float z) {
 		tasks.add(() -> {
@@ -81,11 +60,14 @@ public class WorldDraw {
 	static {
 		Events.run(Trigger.draw, () -> {
 			Draw.reset();
+			Draw.flush();
 			Vec2 v1 = Core.camera.unproject(0, 0).cpy();
 			Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
 			rect.set(v1.x, v1.y, v2.x - v1.x, v2.y - v1.y);
 			rect.getCenter(center);
 			tasks.each(Runnable::run);
+			// Draw.flush();
+			Draw.reset();
 		});
 	}
 
@@ -102,8 +84,8 @@ public class WorldDraw {
 	}
 
 	public static Texture drawTexture(FrameBuffer buffer, Runnable draw) {
-		Draw.flush();
 		Draw.reset();
+		Draw.flush();
 		// 绑定
 		// buffer.begin(Color.clear);
 		buffer.bind();

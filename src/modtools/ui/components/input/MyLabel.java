@@ -18,17 +18,15 @@ public class MyLabel extends LimitLabel {
 	public MyLabel(Prov<CharSequence> sup) {
 		super(sup);
 	}
-
 	public MyLabel(CharSequence text) {
 		super(text);
 	}
-
 	public MyLabel(CharSequence text, LabelStyle style) {
 		super(text, style);
 	}
 
-	public float interval = 0;
-	private float timer = 0;
+	public  float interval = 0;
+	private float timer    = 0;
 
 	public void setText(Prov<CharSequence> sup) {
 		update(() -> {
@@ -48,7 +46,7 @@ public class MyLabel extends LimitLabel {
 		}
 		prefSizeInvalid = true;
 		Font.FontData fontData = style.font.getData();
-		boolean had = fontData.markupEnabled;
+		boolean       had      = fontData.markupEnabled;
 		fontData.markupEnabled = false;
 		super.layout();
 		getPrefWidth();

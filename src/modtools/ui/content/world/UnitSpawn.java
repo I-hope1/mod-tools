@@ -49,15 +49,15 @@ public class UnitSpawn extends Content {
 		return settings.getBool("load-" + name, "false");
 	}
 
-	Window ui;
+	Window   ui;
 	UnitType selectUnit;
-	int amount = 0;
-	Team team;
-	Table unitCont;
-	boolean loop = false, unitUnlimited;
+	int      amount = 0;
+	Team     team;
+	Table    unitCont;
+	boolean  loop   = false, unitUnlimited;
 	TextField xField, yField, amountField, teamField;
 	// 用于获取点击的坐标
-	Element el = new Element();
+	Element       el       = new Element();
 	InputListener listener = new InputListener() {
 		@Override
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
@@ -74,14 +74,13 @@ public class UnitSpawn extends Content {
 		el.fillParent = true;
 	}
 
-
 	public void setup() {
 		unitCont.clearChildren();
 		MyItemSelection.buildTable(unitCont, Vars.content.units(), () -> selectUnit, u -> selectUnit = u,
-				10);
+		                           10);
 		unitCont.row();
 		unitCont.table(right -> {
-			Label name = new Label("");
+			Label name          = new Label("");
 			Label localizedName = new Label("");
 			right.update(() -> {
 				name.setText(selectUnit != null ? selectUnit.name : "[red]ERROR");
@@ -91,12 +90,10 @@ public class UnitSpawn extends Content {
 			right.add(localizedName).growX().wrap().row();
 		}).growX();
 	}
-
 	public void setX(float x) {
 		xField.setText(String.valueOf(x));
 		//		swapnX = x;
 	}
-
 	public void setY(float y) {
 		yField.setText(String.valueOf(y));
 		//		swapnY = y;
@@ -148,11 +145,11 @@ public class UnitSpawn extends Content {
 				}).valid(val -> Tools.validPosInt(val) && toInteger(val) < Team.all.length).get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
 				btn.clicked(() -> IntUI.showSelectImageTableWithFunc(btn, new Seq<>(Team.all),
-						() -> team, newTeam -> {
+				                                                     () -> team, newTeam -> {
 							team = newTeam;
 							teamField.setText("" + team.id);
 						}, 48, 32, 6,
-						team -> IntUI.whiteui.tint(team.color), true));
+				                                                     team -> IntUI.whiteui.tint(team.color), true));
 				t.add(btn);
 			});
 			table.table(t -> {
@@ -191,12 +188,10 @@ public class UnitSpawn extends Content {
 
 
 	}
-
 	public void load() {
 		loadSettings();
 		btn.setDisabled(() -> Vars.state.isMenu());
 	}
-
 	public boolean isOk() {
 		return selectUnit != null && xField.isValid() && yField.isValid() && amountField.isValid() && teamField.isValid();
 	}
@@ -208,7 +203,6 @@ public class UnitSpawn extends Content {
 		} catch (Exception ignored) {}
 		return false;
 	}
-
 	public void spawn() {
 		if (!isOk()) return;
 
@@ -236,7 +230,6 @@ public class UnitSpawn extends Content {
 		}
 	}
 
-	@Override
 	public void loadSettings() {
 		Table table = new Table();
 		table.left().defaults().left();
@@ -271,8 +264,6 @@ public class UnitSpawn extends Content {
 
 		Contents.settingsUI.add(table);
 	}
-
-	@Override
 	public void build() {
 		if (ui == null) _load();
 		setup();

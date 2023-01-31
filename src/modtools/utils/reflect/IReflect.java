@@ -1,12 +1,14 @@
 package modtools.utils.reflect;
 
+import arc.util.OS;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
-import sun.misc.Unsafe;
 
 import java.lang.reflect.*;
 import java.security.ProtectionDomain;
+
+import static jdk.internal.misc.Unsafe.getUnsafe;
 
 public class IReflect {
 	// public static final Lookup lookup = MethodHandles.lookup();
@@ -63,7 +65,7 @@ public class IReflect {
 			}
 		} else {
 			try {
-				return jdk.internal.misc.Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, superClass.getClassLoader(), null);
+				return getUnsafe().defineClass0(null, bytes, 0, bytes.length, superClass.getClassLoader(), null);
 			} catch (Exception ex) {
 				throw new RuntimeException(ex);
 			}
@@ -72,7 +74,7 @@ public class IReflect {
 	}
 
 	public static Class<?> defineClass(String name, ClassLoader loader, byte[] bytes) {
-		if (Vars.mobile) {
+		if (OS.isAndroid) {
 			try {
 				return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
 						.createClassLoader(loader))
@@ -82,7 +84,7 @@ public class IReflect {
 			}
 		} else {
 			try {
-				return jdk.internal.misc.Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, loader, null);
+				return getUnsafe().defineClass0(null, bytes, 0, bytes.length, loader, null);
 			} catch (Exception ex) {
 				throw new RuntimeException(ex);
 			}
@@ -92,7 +94,7 @@ public class IReflect {
 
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes, ProtectionDomain pd) {
 		try {
-			return jdk.internal.misc.Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length,
+			return getUnsafe().defineClass0(null, bytes, 0, bytes.length,
 					loader, pd);
 		} catch (Exception ex) {
 			throw new RuntimeException(ex);

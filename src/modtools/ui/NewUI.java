@@ -34,8 +34,8 @@ public class NewUI {
 		} catch (Exception ex) {
 			throw new RuntimeException(ex);
 		}
-		Field finalField = field;
-		final Batch[] lastBatch = {Core.batch};
+		Field         finalField = field;
+		final Batch[] lastBatch  = {Core.batch};
 		Events.run(EventType.Trigger.update, () -> {
 			if (lastBatch[0] == Core.batch) return;
 			lastBatch[0] = Core.batch;

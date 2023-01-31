@@ -6,6 +6,7 @@ import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import modtools.ui.IntStyles;
 import modtools.ui.components.Window;
+import modtools.ui.components.limit.LimitTable;
 
 import static modtools.ui.IntUI.icons;
 
@@ -17,15 +18,13 @@ public class WindowManager extends Content {
 	public Window ui;
 	Table cont;
 
-	@Override
 	public void load() {
 		ui = new Window(localizedName(), 400, 400, true);
 		// 强制置顶
 		ui.top.find("sticky").remove();
 		ui.sticky = true;
-		ui.cont.pane(cont = new Table());
+		ui.cont.pane(cont = new LimitTable());
 	}
-
 	public void rebuild() {
 		cont.clearChildren();
 		Window.all.each(window -> {
@@ -49,8 +48,6 @@ public class WindowManager extends Content {
 			// Tools.clone(window.top, top, Table.class, null);
 		});
 	}
-
-	@Override
 	public void build() {
 		rebuild();
 		ui.show();

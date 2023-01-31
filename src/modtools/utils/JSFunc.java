@@ -19,6 +19,7 @@ import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableWindow;
@@ -33,6 +34,7 @@ import rhino.*;
 import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -41,11 +43,11 @@ import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.*;
 
 public class JSFunc {
-	public static ClassLoader main;
-	public static Scriptable scope;
+	public static       ClassLoader                   main;
+	public static       Scriptable                    scope;
 	public static final ObjectMap<String, Scriptable> classes;
-	public static final Font FONT = MyFonts.MSYHMONO;
-	public static final Class<?> Reflect = MyReflect.class;
+	public static final Font                          FONT    = MyFonts.MSYHMONO;
+	public static final Class<?>                      Reflect = MyReflect.class;
 
 	/*public static Object eval(String code) {
 		var scripts = new Scripts();
@@ -62,15 +64,15 @@ public class JSFunc {
 	}
 
 	public static final Color keyword = Color.valueOf("ff657a"),
-			type = Color.valueOf("9cd1bb"),
-			NUMBER_COLOR = Color.valueOf("bad761"),
-			underline = Color.gray.cpy().a(0.7f);
+			type                      = Color.valueOf("9cd1bb"),
+			NUMBER_COLOR              = Color.valueOf("bad761"),
+			underline                 = Color.gray.cpy().a(0.7f);
 	public static final String keywordMark = "[#" + keyword + "]",
-			typeMark = "[#" + type + "]";
+			typeMark                       = "[#" + type + "]";
 
 	public static final LabelStyle
 			keywordStyle = new LabelStyle(FONT, keyword),
-			typeStyle = new LabelStyle(FONT, type),
+			typeStyle    = new LabelStyle(FONT, type),
 	// lightGrayStyle = new LabelStyle(FONT, Color.lightGray),
 	redStyle = new LabelStyle(FONT, Color.red);
 
@@ -81,7 +83,7 @@ public class JSFunc {
 		Window[] dialog = {null};
 		if (clazz.isArray()) {
 			if (o == null) return new DisposableWindow("none");
-			Table _cont = new Table();
+			Table _cont = new LimitTable();
 			_cont.defaults().grow();
 			_cont.button(Icon.refresh, IntStyles.clearNonei, () -> {
 				// 使用Time.runTask避免stack overflow
@@ -99,9 +101,9 @@ public class JSFunc {
 			int length = Array.getLength(o);
 
 			for (int i = 0; i < length; i++) {
-				Object item = Array.get(o, i);
-				var button = new LimitTextButton("" + item, Styles.grayt);
-				int j = i;
+				Object item   = Array.get(o, i);
+				var    button = new LimitTextButton("" + item, Styles.grayt);
+				int    j      = i;
 				addWatchButton(button, o + "#" + i, () -> Array.get(o, j));
 				button.clicked(() -> {
 					// 使用Time.runTask避免stack overflow
@@ -121,7 +123,7 @@ public class JSFunc {
 		Table build = new LimitTable();
 		// 默认左居中
 		build.left().top().defaults().left();
-		boolean[] isBlack = {false};
+		boolean[] isBlack   = {false};
 		TextField textField = new TextField();
 		// Runnable[] last = {null};
 		Cons<String> rebuild = text -> {
@@ -183,7 +185,7 @@ public class JSFunc {
 		// return Seq.select(array, t -> pattern == null || pattern.matcher(func.get(t)).find() == isBlack).toArray();
 		if (pattern == null) return array;
 		T[] newArr = Arrays.copyOf(array, array.length);
-		int j = array.length;
+		int j      = array.length;
 		for (int i = 0; i < array.length; i++) {
 			if (pattern.matcher(func.get(array[i])).find() == isBlack) {
 				newArr[i] = null;
@@ -219,46 +221,29 @@ public class JSFunc {
 			return;
 		}
 		ReflectTable fields, methods, constructors, classes;
-		boolean[] c = {false, false, false, false};
+		boolean[]    c = new boolean[4];
+		Arrays.fill(c, true);
 
 		// cont.add("@jsfunc.field").row();
-		cont.button("@jsfunc.field", IntStyles.flatTogglet, () -> c[0] ^= true).growX().height(42)
-				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
-				.row();
-		cont.image().color(Pal.accent).fillX().row();
-		cont.collapser(fields = window.fieldsTable = new ReflectTable(), true, () -> c[0])
-				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get().setDuration(0.1f);
-		cont.row();
-
-		// cont.add("@jsfunc.method").row();
-		cont.button("@jsfunc.method", IntStyles.flatTogglet, () -> c[1] ^= true).growX().height(42)
-				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
-				.row();
-		cont.image().color(Pal.accent).fillX().row();
-		cont.collapser(methods = window.methodsTable = new ReflectTable(), true, () -> c[1])
-				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get().setDuration(0.1f);
-		cont.row();
-
-		// cont.add("@jsfunc.constructor").row();
-		cont.button("@jsfunc.constructor", IntStyles.flatTogglet, () -> c[2] ^= true).growX().height(42)
-				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
-				.row();
-		cont.image().color(Pal.accent).fillX().row();
-		cont.collapser(constructors = new ReflectTable(), true, () -> c[2])
-				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get().setDuration(0.1f);
-		cont.row();
-
-		cont.button("@jsfunc.class", IntStyles.flatTogglet, () -> c[3] ^= true).growX().height(42)
-				.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
-				.row();
-		cont.image().color(Pal.accent).fillX().row();
-		cont.collapser(classes = window.classesTable = new ReflectTable(), true, () -> c[3])
-				.pad(4, 6, 4, 6)
-				.fillX().padTop(8).get().setDuration(0.1f);
-		cont.row();
+		BiFunction<String, Integer, ReflectTable> func = (text, index) -> {
+			cont.button(text, Styles.logicTogglet, () -> c[index] ^= true).growX().height(42)
+					.checked(c[index])
+					.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
+					.row();
+			// 占位符
+			cont.add().grow();
+			cont.image().color(Pal.accent).growX().row();
+			var table = new ReflectTable();
+			cont.collapser(table, true, () -> c[index])
+					.pad(4, 6, 4, 6)
+					.fillX().padTop(8).get().setDuration(0.1f);
+			cont.row();
+			return table;
+		};
+		fields = window.fieldsTable = func.apply("@jsfunc.field", 0);
+		methods = window.methodsTable = func.apply("@jsfunc.method", 1);
+		constructors = func.apply("@jsfunc.constructor", 2);
+		classes = window.classesTable = func.apply("@jsfunc.class", 3);
 
 		// boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
 		for (Class<?> cls = window.clazz; cls != null; cls = cls.getSuperclass()) {
@@ -291,8 +276,8 @@ public class JSFunc {
 					Log.err(t);
 				}
 
-				Class<?> type = f.getType();
-				int modifiers = f.getModifiers();
+				Class<?> type      = f.getType();
+				int      modifiers = f.getModifiers();
 				try {
 					// modifiers
 					fields.add(new MyLabel(Modifier.toString(modifiers) + " ", keywordStyle))
@@ -302,7 +287,7 @@ public class JSFunc {
 							.padRight(16).touchable(Touchable.disabled);
 					// name
 					addDClickCopy(fields.add(new MyLabel(f.getName(), IntStyles.myLabel))
-							.get());
+							              .get());
 					fields.add(new MyLabel(" = ", IntStyles.myLabel))
 							.touchable(Touchable.disabled);
 				} catch (Throwable e) {
@@ -310,17 +295,17 @@ public class JSFunc {
 				}
 				fields.table(t -> {
 					// 占位符
-					Cell<?> cell = t.add();
-					// float[] prefW = {0};
+					Cell<?> cell  = t.add();
+					float[] prefW = {0};
 					/*Cell<?> lableCell = */
 					ValueLabel l = new ValueLabel("", type);
 					fields.labels.add(l);
 					l.field = f;
 					l.obj = o;
-					t.add(l);
+					Cell<?> labelCell = t.add(l);
 					// 太卡了
-					// Runnable listener = () -> lableCell.width(Math.min(prefW[0], Core.graphics.getWidth()));
-					// IntVars.addResizeListener(listener);
+					Runnable listener = () -> labelCell.width(Math.min(prefW[0], Core.graphics.getWidth()));
+					IntVars.addResizeListener(listener);
 
 					// if (type.isPrimitive() || type == String.class) {
 					try {
@@ -328,23 +313,12 @@ public class JSFunc {
 						if (l.val instanceof Color) {
 							final Color color = (Color) l.val;
 							cell.setElement(new BorderImage(Core.atlas.white(), 2f)
-									.border(color.cpy().inv())).color(color).size(42f).with(b -> {
+									                .border(color.cpy().inv())).color(color).size(42f).with(b -> {
 								IntUI.doubleClick(b, () -> {}, () -> {
-									Vars.ui.picker.show(color, cur -> {
-										/*Log.info(color);
-										Log.info(color.set(cur));
-										Log.info(color == Color.white);
-										Log.info(color);
-										Log.info(Color.white);*/
-										try {
-											Log.info(f.get(o));
-										} catch (IllegalAccessException e) {
-											throw new RuntimeException(e);
-										}
-									});
+									Vars.ui.picker.show(color, color::set);
 								});
 							});
-						} else if (settingsUI.jsfuncEdit.getBool("boolean", false) && (l.type == Boolean.TYPE || l.type == Boolean.class)) {
+						} else if (settingsUI.jsfuncEdit.getBool("boolean", false) && (type == Boolean.TYPE || type == Boolean.class)) {
 							var btn = new TextButton((boolean) l.val ? "TRUE" : "FALSE", IntStyles.flatTogglet);
 							btn.update(() -> btn.setChecked((boolean) l.val));
 							btn.clicked(() -> {
@@ -361,7 +335,7 @@ public class JSFunc {
 							cell.setElement(btn);
 							cell.size(96, 42);
 							l.remove();
-						} else if (settingsUI.jsfuncEdit.getBool("number", false) && Number.class.isAssignableFrom(Tools.box(l.type))) {
+						} else if (settingsUI.jsfuncEdit.getBool("number", false) && Number.class.isAssignableFrom(box(type))) {
 							var field = new AutoTextField();
 							field.update(() -> {
 								if (Core.scene.getKeyboardFocus() != field) {
@@ -371,12 +345,14 @@ public class JSFunc {
 							});
 							field.setValidator(Tools::isNum);
 							field.changed(() -> {
-								double d = ScriptRuntime.toNumber(field.getText());
-								l.setFieldValue(d);
+								if (!field.isValid()) return;
+								l.setFieldValue(Context.jsToJava(
+										ScriptRuntime.toNumber(field.getText()),
+										type));
 							});
 							cell.setElement(field);
 							cell.height(42);
-						} else if (settingsUI.jsfuncEdit.getBool("string", false) && l.type == String.class) {
+						} else if (settingsUI.jsfuncEdit.getBool("string", false) && type == String.class) {
 							var field = new AutoTextField();
 							field.update(() -> {
 								if (Core.scene.getKeyboardFocus() != field) {
@@ -394,7 +370,7 @@ public class JSFunc {
 						// prefW[0] = l.getPrefWidth();
 						// listener.run();
 						// Time.runTask(0, () -> l.setWrap(true));
-						if (!Tools.unbox(type).isPrimitive() && type != String.class) {
+						if (!unbox(type).isPrimitive() && type != String.class) {
 							l.addShowInfoListener();
 						}
 					} catch (Throwable e) {
@@ -426,7 +402,7 @@ public class JSFunc {
 
 					t.table(buttons -> {
 						buttons.right().top().defaults().right().top();
-						addLabelButton(buttons, () -> l.val, l.type);
+						addLabelButton(buttons, () -> l.val, type);
 						addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
 						addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
 					}).grow().top().right();
@@ -451,8 +427,8 @@ public class JSFunc {
 					MyReflect.setOverride(m);
 				} catch (Throwable ignored) {}
 				try {
-					StringBuilder sb = new StringBuilder();
-					int mod = m.getModifiers() & Modifier.methodModifiers();
+					StringBuilder sb  = new StringBuilder();
+					int           mod = m.getModifiers() & Modifier.methodModifiers();
 					if (mod != 0 && !m.isDefault()) {
 						sb.append(Modifier.toString(mod));
 					} else {
@@ -467,7 +443,7 @@ public class JSFunc {
 					methods.add(new MyLabel(getGenericString(m.getReturnType()), typeStyle)).touchable(Touchable.disabled).padRight(8f);
 					// method name
 					addDClickCopy(methods.add(new MyLabel(m.getName(), IntStyles.myLabel))
-							.get());
+							              .get());
 					// method parameters + exceptions + buttons
 					methods.add(new LimitLabel(buildArgsAndExceptions(m.getParameterTypes(), m.getExceptionTypes())))
 							.pad(4).left().touchable(Touchable.disabled);
@@ -607,7 +583,7 @@ public class JSFunc {
 
 	public static Window testElement(Element element) {
 		return window(d -> {
-			Table t = new Table(table -> {
+			Table t = new LimitTable(table -> {
 				table.add(element);
 			});
 			d.cont.pane(t).fillX().fillY();
@@ -700,11 +676,11 @@ public class JSFunc {
 				.setPosition(vec2);
 	}
 
-	static class BindCell {
-		static Cell<?> unusedCell = new Cell<>();
-		Cell<?> cell;
-		private Cell<?> copyCell;
-		Element element;
+	public static class BindCell {
+		public static Cell<?> unusedCell = new Cell<>();
+		public        Cell<?> cell;
+		private       Cell<?> copyCell;
+		public        Element element;
 		// Table head;
 
 		public BindCell(Cell<?> cell) {
@@ -727,8 +703,8 @@ public class JSFunc {
 			left().defaults().left().top();
 		}
 
-		private Seq<BindCell> current;
-		public Seq<ValueLabel> labels = new Seq<>();
+		private Seq<BindCell>   current;
+		public  Seq<ValueLabel> labels = new Seq<>();
 		// private Table currentHead;
 
 		public void bind(String name) {
@@ -758,11 +734,11 @@ public class JSFunc {
 		public void filter(Boolf<String> boolf) {
 			map.each((name, seq) -> {
 				seq.each(boolf.get(name) ?
-						c -> c.cell.set(c.getCopyCell()).setElement(c.element) :
-						c -> {
-							c.getCopyCell();
-							c.cell.set(BindCell.unusedCell).clearElement();
-						});
+						         c -> c.cell.set(c.getCopyCell()).setElement(c.element) :
+						         c -> {
+							         c.getCopyCell();
+							         c.cell.set(BindCell.unusedCell).clearElement();
+						         });
 			});
 		}
 
@@ -773,13 +749,13 @@ public class JSFunc {
 	}
 
 	static Seq<Class<?>> NUMBER_SEQ = Seq.with(int.class, byte.class, short.class,
-			long.class, float.class, double.class);
+	                                           long.class, float.class, double.class);
 
 	static class ValueLabel extends MyLabel {
-		public Object val;
-		private @Nullable Object obj;
-		private @Nullable Field field;
-		public final Class<?> type;
+		public            Object   val;
+		private @Nullable Object   obj;
+		private @Nullable Field    field;
+		public final      Class<?> type;
 
 		public ValueLabel(Object val, Class<?> type) {
 			super(String.valueOf(val), IntStyles.myLabel);
@@ -795,7 +771,7 @@ public class JSFunc {
 		}
 
 		private boolean hasChange = false;
-		private float lastWidth = 0;
+		private float   lastWidth = 0;
 
 		@Override
 		public float getPrefWidth() {
@@ -815,7 +791,7 @@ public class JSFunc {
 			hasChange = true;
 			String text = type == String.class && val != null ? '"' + (String) val + '"' : String.valueOf(val);
 			setColor(val == null ? Syntax.objectsC
-					: type == String.class ? Syntax.stringC
+					         : type == String.class ? Syntax.stringC
 					: NUMBER_SEQ.contains(Tools.unbox(type)) ? NUMBER_COLOR : Color.white);
 			if (text.length() > 1000) {
 				text = text.substring(0, 1000) + "  ...";
@@ -826,10 +802,20 @@ public class JSFunc {
 		public void setFieldValue(Object val) {
 			boolean isStatic = Modifier.isStatic(field.getModifiers());
 
-			unsafe.putObject(isStatic ? field.getDeclaringClass() : obj,
-					OS.isAndroid ? FieldUtils.getFieldOffset(field) :
-							isStatic ? unsafe.staticFieldOffset(field) : unsafe.objectFieldOffset(field),
-					val);
+			// Tools.setFieldValue(field, obj, val);
+			if (OS.isAndroid) {
+				try {
+					field.set(obj, val);
+				} catch (IllegalAccessException e) {
+					throw new RuntimeException(e);
+				}
+			} else {
+				unsafe.putObject(
+						isStatic ? field.getDeclaringClass() : obj,
+						OS.isAndroid ? FieldUtils.getFieldOffset(field) :
+								isStatic ? unsafe.staticFieldOffset(field) : unsafe.objectFieldOffset(field),
+						val);
+			}
 
 			setVal(val);
 		}
@@ -907,9 +893,9 @@ public class JSFunc {
 
 	public static CharSequence getGenericString(Class<?> cls) {
 		if (settingsUI.jsfunc.getBool("displayGeneric")) return cls.getSimpleName();
-		StringBuilder sb = new StringBuilder();
-		String simpleName;
-		int arrayDepth = 0;
+		StringBuilder sb         = new StringBuilder();
+		String        simpleName;
+		int           arrayDepth = 0;
 		while (cls.isArray()) {
 			arrayDepth++;
 			cls = cls.getComponentType();
@@ -958,7 +944,7 @@ public class JSFunc {
 					return String.valueOf(value.get());
 				} catch (Throwable e) {
 					StringWriter sw = new StringWriter();
-					PrintWriter pw = new PrintWriter(sw);
+					PrintWriter  pw = new PrintWriter(sw);
 					e.printStackTrace(pw);
 					return sw.toString();
 				}
@@ -985,8 +971,8 @@ public class JSFunc {
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
-								: Core.bundle.format("jsfunc.store_as_js_var", key),
-						IntStyles.flatBordert, () -> {}).padLeft(10f).size(180, 40)
+				             : Core.bundle.format("jsfunc.store_as_js_var", key),
+		             IntStyles.flatBordert, () -> {}).padLeft(10f).size(180, 40)
 				.with(b -> {
 					b.clicked(() -> {
 						tester.put(b, prov.get());

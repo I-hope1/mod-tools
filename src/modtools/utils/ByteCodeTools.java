@@ -27,16 +27,14 @@ public class ByteCodeTools {
 
 	public static final String
 			functionsKey = "_KSINIA_Functions",
-			TMP_CLASS = "__BYTE_Class";
+			TMP_CLASS    = "__BYTE_Class";
 	private static int lastID = 0;
 
-	// 用于临时储存
 
 	public static class MyClass<T> {
 		public final ClassFileWriter writer;
-		public final String adapterName, superName;
-		// public String allSuperKey = "all_super" + functionsKey;
-		final Class<?> superClass;
+		public final String          adapterName, superName;
+		final         Class<?>            superClass;
 		private final ArrayList<Queue<?>> queues = new ArrayList<>();
 		// private final ArrayList<ClassInfo> superFunctions = new ArrayList<>();
 
@@ -52,7 +50,8 @@ public class ByteCodeTools {
 			writer.stopMethod((short) run.get(writer)); // this + args + var * 1
 		}
 
-		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, boolean buildSuper, Class<V> returnType, Class<?>... args) {
+		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, boolean buildSuper,
+		                        Class<V> returnType, Class<?>... args) {
 			if (func2 == null) {
 				writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 				writer.addLoadThis();
@@ -67,8 +66,8 @@ public class ByteCodeTools {
 				return;
 			}
 			String fieldName = functionsKey + "$" + lastID++;
-			short max = (short) (args.length + 1);
-			int v1 = max++, v2 = max++;
+			short  max       = (short) (args.length + 1);
+			int    v1        = max++, v2 = max++;
 			queues.add(new Queue<>(fieldName, () -> func2, Func2.class));
 			writer.addField(fieldName, typeToNative(Func2.class), (short) (Modifier.PUBLIC | Modifier.STATIC | Modifier.FINAL));
 			writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
@@ -135,7 +134,8 @@ public class ByteCodeTools {
 		 * @param returnType 方法的返回值
 		 * @param args       方法的参数
 		 **/
-		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, Class<V> returnType, Class<?>... args) {
+		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, Class<V> returnType,
+		                        Class<?>... args) {
 			setFunc(name, func2, flags, false, returnType, args);
 		}
 
@@ -147,7 +147,8 @@ public class ByteCodeTools {
 			}, flags, false, void.class, args);
 		}
 
-		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, boolean buildSuper, Class<?>... args) {
+		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, boolean buildSuper,
+		                    Class<?>... args) {
 			setFunc(name, (self, a) -> {
 				cons2.get(self, a);
 				return null;
@@ -178,7 +179,8 @@ public class ByteCodeTools {
 			else return ASTORE;
 		}
 
-		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType, Class<?>... args) {
+		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
+		                           Class<?>... args) {
 			writer.startMethod(thisMethodName, nativeMethod(returnType, ArrayList.class), (short) Modifier.PUBLIC);
 			writer.addLoadThis(); // this
 			for (int i = 0; i < args.length; i++) {
@@ -241,16 +243,16 @@ public class ByteCodeTools {
 				if (m.getAnnotation(Exclude.class) != null) continue;
 				int mod = m.getModifiers();
 				if (!Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
-				Class<?>[] types = m.getParameterTypes();
-				Class<?>[] args = Arrays.copyOfRange(types, 1, types.length);
-				Class<?> returnType = m.getReturnType();
+				Class<?>[] types      = m.getParameterTypes();
+				Class<?>[] args       = Arrays.copyOfRange(types, 1, types.length);
+				Class<?>   returnType = m.getReturnType();
 				writer.startMethod(m.getName(), nativeMethod(returnType, args), (short) Modifier.PUBLIC);
 				writer.addLoadThis();
 				for (int i = 0; i < args.length; i++) {
 					writer.add(addLoad(args[i]), i + 1);
 				}
 				writer.addInvoke(INVOKESTATIC, nativeName(cls),
-						m.getName(), nativeMethod(returnType, types));
+				                 m.getName(), nativeMethod(returnType, types));
 				addCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
@@ -271,7 +273,7 @@ public class ByteCodeTools {
 				throw new RuntimeException(e);
 			}*/
 			ObjectMap<String, Field> map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
-			long off;
+			long                     off;
 			for (var q : queues) {
 				off = Vars.mobile ? FieldUtils.getFieldOffset(map.get(q.name)) : unsafe.staticFieldOffset(map.get(q.name));
 				unsafe.putObject(base, off, q.get());
@@ -300,7 +302,7 @@ public class ByteCodeTools {
 			var base = IReflect.defineClass(adapterName, loader, writer.toByteArray());
 
 			ObjectMap<String, Field> map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
-			long off;
+			long                     off;
 			for (var q : queues) {
 				off = Vars.mobile ? FieldUtils.getFieldOffset(map.get(q.name)) : unsafe.staticFieldOffset(map.get(q.name));
 				unsafe.putObject(base, off, q.get());
@@ -324,8 +326,8 @@ public class ByteCodeTools {
 	}
 
 	public static class Queue<T> {
-		public String name;
-		public Prov<T> func;
+		public String   name;
+		public Prov<T>  func;
 		// prov 应该返回的类
 		public Class<?> cls;
 
@@ -373,7 +375,7 @@ public class ByteCodeTools {
 			String tmp = nativeName(box(type));
 			writer.add(CHECKCAST, tmp);
 			writer.addInvoke(INVOKEVIRTUAL, tmp,
-					type.getSimpleName() + "Value", nativeMethod(type));
+			                 type.getSimpleName() + "Value", nativeMethod(type));
 		} else {
 			writer.add(CHECKCAST, nativeName(type));
 		}
@@ -404,8 +406,8 @@ public class ByteCodeTools {
 
 	public static short buildReturn(Class<?> returnType) {
 		if (returnType == boolean.class || returnType == int.class
-				|| returnType == byte.class || returnType == short.class
-				|| returnType == char.class)
+		    || returnType == byte.class || returnType == short.class
+		    || returnType == char.class)
 			return IRETURN;
 		else if (returnType == long.class) return LRETURN;
 		else if (returnType == float.class) return FRETURN;

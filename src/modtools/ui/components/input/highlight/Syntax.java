@@ -13,22 +13,22 @@ import static java.util.regex.Pattern.COMMENTS;
 public class Syntax {
 	static final Pattern
 			whiteSpaceP = Pattern.compile("(\\s+)"),
-			stringP = Pattern.compile("(([\"'`]).*?(?<!\\\\)\\2)", COMMENTS),
+			stringP     = Pattern.compile("(([\"'`]).*?(?<!\\\\)\\2)", COMMENTS),
 			operatCharP = Pattern.compile("([~|,+=*/\\-<>!]+)", COMMENTS),
-			bracketsP = Pattern.compile("([\\[{()}\\]]+)", COMMENTS),
-			others = Pattern.compile("([\\s\\S])")
+			bracketsP   = Pattern.compile("([\\[{()}\\]]+)", COMMENTS),
+			others      = Pattern.compile("([\\s\\S])")
 					// ,whitespace = Pattern.compile("(\\s+)")
 					;
 
 	public static final Color
-			stringC = Color.valueOf("#ce9178"),
-			keywordC = Color.valueOf("#569cd6"),
-			numberC = Color.valueOf("#b5cea8"),
-			commentC = Color.valueOf("#6a9955"),
-			bracketsC = Color.valueOf("#ffd704"),
+			stringC     = new Color(0xce9178FF),
+			keywordC    = new Color(0x569cd6FF),
+			numberC     = new Color(0xb5cea8FF),
+			commentC    = new Color(0x6a9955FF),
+			bracketsC   = new Color(0xffd704FF),
 			operatCharC = Pal.accentBack,
-			functionsC = Color.sky,//Color.valueOf("#ae81ff")
-			objectsC = Color.valueOf("#66d9ef");
+			functionsC  = Color.sky,//Color.valueOf("#ae81ff")
+			objectsC    = new Color(0x66d9efFF);
 	/*public static class Node {
 		public boolean has;
 		public Node parent;
@@ -67,7 +67,8 @@ public class Syntax {
 
 	public boolean isWordBreak(char c) {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90)
-				|| (97 <= c && c <= 122) || (19968 <= c && c <= 40869));
+		         || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
+		         || c == '$');
 	}
 
 	public boolean isWhitespace(char ch) {
@@ -82,12 +83,14 @@ public class Syntax {
 	void reset() {
 		if (cTask != null) {
 			cTask.reset();
+			lastTask = cTask;
 		}
 		cTask = null;
 	}
 
 	public void highlightingDraw(String displayText) {
 		this.displayText = displayText;
+		cTask = null;
 		reset();
 		// String result;
 		for (DrawTask drawTask : taskArr) {
@@ -140,16 +143,16 @@ public class Syntax {
 
 
 	public MyTextArea area;
-	public String displayText;
+	public String     displayText;
 
 	Color defalutColor = Color.white;
-	char c, lastChar;
+	char  c, lastChar;
 	int len;
 
 	/**
 	 * 当前任务
 	 */
-	public DrawTask cTask = null;
+	public DrawTask cTask, lastTask; // default for null.
 	/**
 	 * 所有的任务
 	 */
@@ -160,7 +163,8 @@ public class Syntax {
 		// IntMap<?>[] current;
 		boolean begin = false, finished;
 		TokenDraw[] tokenDraws;
-		String lastToken, token;
+		int         lastTokenIndex = -1;
+		String      lastToken, token;
 
 		public DrawToken(TokenDraw... tokenDraws) {
 			super(new Color());
@@ -170,6 +174,7 @@ public class Syntax {
 		void reset() {
 			super.reset();
 			// System.arraycopy(total, 0, current, 0, total.length);
+			lastTokenIndex = -1;
 			finished = false;
 			begin = false;
 		}
@@ -197,6 +202,7 @@ public class Syntax {
 					break;
 				}
 			}
+			lastTokenIndex = lastIndex;
 			lastToken = token;
 		}
 
@@ -247,6 +253,7 @@ public class Syntax {
 		}
 	}
 
+
 	interface TokenDraw {
 		/**
 		 * @return Color 如果为null，则不渲染
@@ -257,7 +264,7 @@ public class Syntax {
 	public abstract class DrawTask {
 		final Color color;
 		boolean crazy;
-		int lastIndex;
+		int     lastIndex;
 
 		public DrawTask(Color color, boolean crazy) {
 			this.color = color;
@@ -294,5 +301,4 @@ public class Syntax {
 			return i + 1 < len && c == displayText.charAt(i + 1);
 		}
 	}
-
 }

@@ -10,7 +10,7 @@ import mindustry.content.Bullets;
 import mindustry.content.Fx;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
-import mindustry.gen.Icon;
+import mindustry.gen.*;
 import modtools.ui.IntUI;
 import modtools.ui.components.IntTab;
 import modtools.ui.components.Window;
@@ -26,33 +26,24 @@ public class ContentList extends Content {
 	}
 
 	Window ui;
-	Table main;
-	TextField search;
-	final ObjectMap<String, Effect> fxs = new ObjectMap<>();
+	Table  main;
+	final ObjectMap<String, Effect>     fxs     = new ObjectMap<>();
 	final ObjectMap<String, BulletType> bullets = new ObjectMap<>();
 
 	public void load() {
-		ui = new Window(localizedName(), 100, 100, true);
+		ui = new Window(localizedName(), getWidth(), 100, true);
 		main = new Table();
-		ui.cont.table(p -> {
-			p.table(top -> {
-				top.image(Icon.zoom).pad(20f);
-				search = new TextField();
-				top.add(search).growX();
-				search.changed(() -> {
-					rebuild(search.getText());
-				});
-			}).growX().row();
-			p.add(main).grow().top();
-		}).grow();
-		//		ui.addCloseButton();
+		Table top = new Table();
+		ui.cont.add(top).row();
+		ui.cont.add(main).grow();
+		new Search((__, t) -> rebuild(t)).build(top, main);
 
 		Field[] fields = Fx.class.getFields();
 		for (var f : fields) {
 			try {
+				if (!Effect.class.isAssignableFrom(f.getType())) continue;
 				f.setAccessible(true);
 				Object obj = f.get(null);
-				if (!(obj instanceof Effect)) continue;
 				fxs.put(f.getName(), (Effect) obj);
 			} catch (IllegalAccessException e) {
 				//				Log.err(e);
@@ -62,9 +53,9 @@ public class ContentList extends Content {
 		fields = Bullets.class.getFields();
 		for (var f : fields) {
 			try {
+				if (!BulletType.class.isAssignableFrom(f.getType())) continue;
 				f.setAccessible(true);
 				Object obj = f.get(null);
-				if (!(obj instanceof BulletType)) continue;
 				bullets.put(f.getName(), (BulletType) obj);
 			} catch (IllegalAccessException e) {
 				//				Log.err(e);
@@ -72,13 +63,14 @@ public class ContentList extends Content {
 			}
 		}
 	}
-
-
+	private static int getWidth() {
+		return 200;
+	}
 	public void rebuild(String text) {
-		MySet<Table> tables = new MySet<>();
-		Color[] colors = {Color.sky, Color.sky};
-		String[] names = {"fx", "bullet"};
-		Pattern pattern = null;
+		MySet<Table> tables  = new MySet<>();
+		Color[]      colors  = {Color.sky, Color.sky};
+		String[]     names   = {"fx", "bullet"};
+		Pattern      pattern = null;
 		try {
 			pattern = Pattern.compile(text, Pattern.CASE_INSENSITIVE);
 		} catch (Exception ignored) {}
@@ -116,17 +108,15 @@ public class ContentList extends Content {
 			});
 		}));
 
-		IntTab tab = new IntTab(Vars.mobile ? 400 : 600,
-				new Seq<>(names),
-				new Seq<>(colors),
-				tables.toSeq());
+		IntTab tab = new IntTab(-1,
+		                        new Seq<>(names),
+		                        new Seq<>(colors),
+		                        tables.toSeq());
 		tab.title.add("@contentlist.tip").growX().row();
 
 		main.clearChildren();
 		main.add(tab.build()).grow().top();
 	}
-
-	@Override
 	public void build() {
 		rebuild("");
 		ui.show();

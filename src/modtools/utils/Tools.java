@@ -3,6 +3,7 @@ package modtools.utils;
 import arc.func.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer;
@@ -16,7 +17,9 @@ import java.lang.reflect.Modifier;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.*;
 import java.util.jar.*;
+import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
 
@@ -32,7 +35,6 @@ public class Tools {
 			return false;
 		}
 	}
-
 	public static int asInt(String text) {
 		return (int) Float.parseFloat(text);
 	}
@@ -41,16 +43,12 @@ public class Tools {
 	public static String format(String s) {
 		return s.replaceAll("\\[(\\w+?)\\]", "[\u0001$1]");
 	}
-
-
 	public static int len(String s) {
 		return s.split("").length - 1;
 	}
-
 	public static Vec2 getAbsPos1(Element el) {
 		return el.localToStageCoordinates(Tmp.v1.set(el.getWidth() / -2f, el.getHeight() / -2f));
 	}
-
 	public static Vec2 getAbsPos(Element el) {
 		if (true) return el.localToStageCoordinates(Tmp.v1.set(0, 0));
 		Vec2 vec2 = new Vec2(el.x, el.y);
@@ -74,10 +72,9 @@ public class Tools {
 			cls = cls.getSuperclass();
 		}
 	}
-
 	public static void copyValue(Field f, Object from, Object to) {
-		Class<?> type = f.getType();
-		long offset = unsafe.objectFieldOffset(f);
+		Class<?> type   = f.getType();
+		long     offset = unsafe.objectFieldOffset(f);
 		if (int.class.equals(type)) {
 			unsafe.putInt(to, offset, unsafe.getInt(from, offset));
 		} else if (float.class.equals(type)) {
@@ -131,6 +128,7 @@ public class Tools {
 
 	/**
 	 * @param pack 包名
+	 *
 	 * @return Set数组
 	 **/
 	public static Set<Class<?>> getClasses(String pack) {
@@ -178,7 +176,6 @@ public class Tools {
 		}
 		return classes;
 	}
-
 	/* 以文件的形式来获取包下的所有Class
 	 *
 	 * @param packageName
@@ -186,7 +183,8 @@ public class Tools {
 	 * @param recursive
 	 * @param classes
 	 */
-	private static void findClassesInPackageByFile(String packageName, String packagePath, final boolean recursive, Set<Class<?>> classes) {
+	private static void findClassesInPackageByFile(String packageName, String packagePath, final boolean recursive,
+	                                               Set<Class<?>> classes) {
 		// 获取此包的目录 建立一个File
 		File dir = new File(packagePath);
 		// 如果不存在或者 也不是目录就直接返回
@@ -197,7 +195,7 @@ public class Tools {
 		// 如果存在 就获取包下的所有文件 包括目录
 		// 自定义过滤规则 如果可以循环(包含子目录) 或则是以.class结尾的文件(编译好的java类文件)
 		File[] dirfiles = dir.listFiles(file ->
-				(recursive && file.isDirectory()) || file.getName().endsWith(".class"));
+				                                (recursive && file.isDirectory()) || file.getName().endsWith(".class"));
 		// 循环所有文件
 		assert dirfiles != null;
 		for (File file : dirfiles) {
@@ -230,12 +228,14 @@ public class Tools {
 	 * @param recursive      ？？？
 	 * @param classes        ？？？
 	 */
-	private static void findClassesInPackageByJar(String packageName, Enumeration<JarEntry> entries, String packageDirName, final boolean recursive, Set<Class<?>> classes) {
+	private static void findClassesInPackageByJar(String packageName, Enumeration<JarEntry> entries,
+	                                              String packageDirName, final boolean recursive,
+	                                              Set<Class<?>> classes) {
 		// 同样的进行循环迭代
 		while (entries.hasMoreElements()) {
 			// 获取jar里的一个实体 可以是目录 和一些jar包里的其他文件 如META-INF等文件
 			JarEntry entry = entries.nextElement();
-			String name = entry.getName();
+			String   name  = entry.getName();
 			// 如果是以/开头的
 			if (name.charAt(0) == '/') {
 				// 获取后面的字符串
@@ -281,7 +281,6 @@ public class Tools {
 		return type;
 		// return TO_BOX_MAP.get(type, type);
 	}
-
 	public static Class<?> unbox(Class<?> type) {
 		if (type.isPrimitive()) return type;
 		if (type == Boolean.class) return boolean.class;
@@ -300,16 +299,14 @@ public class Tools {
 		//noinspection unchecked
 		return (T) o;
 	}
-
 	public static long fieldOffset(boolean isStatic, Field f) {
 		return OS.isAndroid ? FieldUtils.getFieldOffset(f) : isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
 	}
-
 	public static void setFieldValue(Field f, Object obj, Object value) {
 		// Class<?> type = f.getType();
 		boolean isStatic = Modifier.isStatic(f.getModifiers());
-		Object o = isStatic ? f.getDeclaringClass() : obj;
-		long offset = fieldOffset(isStatic, f);
+		Object  o        = isStatic ? f.getDeclaringClass() : obj;
+		long    offset   = fieldOffset(isStatic, f);
 		/*if (int.class.equals(type)) {
 			unsafe.putInt(o, offset, (int) value);
 		} else if (float.class.equals(type)) {
@@ -337,10 +334,84 @@ public class Tools {
 	public static <T> T or(T t1, T t2) {
 		return t1 == null ? t2 : t1;
 	}
-
 	public static <T> T or(T t1, Prov<T> t2) {
 		return t1 == null ? t2.get() : t1;
 	}
+	public static <T> SR<T> sr(T value) {
+		return new SR<>(value);
+	}
+	public static boolean test(Pattern pattern, String text) {
+		return pattern == null || pattern.matcher(text).find();
+	}
+	public static void __(Object __) {}
+	public static <T> void checknull(T t, Consumer<T> cons) {
+		if (t != null) cons.accept(t);
+	}
+	public static <T> void checknull(T t, Runnable run) {
+		if (t != null) run.run();
+	}
 
+	public static class SR<T> implements SRI<T> {
+		private T value;
+
+		public SR(T value) {
+			this.value = value;
+		}
+
+		public SR<T> reset(Function<T, T> func) {
+			value = func.apply(value);
+			return this;
+		}
+
+		/**
+		 * @param consumer 如果满足就执行
+		 *
+		 * @throws RuntimeException 当执行后抛出
+		 */
+		public <R> SRI<T> isInstance(Class<R> cls, Consumer<R> consumer) {
+			if (cls.isInstance(value)) {
+				consumer.accept(cls.cast(value));
+				throw new RuntimeException();
+			}
+			return this;
+		}
+
+		public SRI<T> cons(Consumer<T> consumer) {
+			consumer.accept(value);
+			return this;
+		}
+
+		public T get() {
+			return value;
+		}
+	}
+
+	public interface SRI<T> {
+		SRI none = new SRI() {
+			public SRI reset(Function func) {
+				return this;
+			}
+
+			public SRI isInstance(Class cls, Consumer consumer) {
+				return this;
+			}
+
+			public SRI cons(Consumer consumer) {
+				return this;
+			}
+
+			public Object get() {
+				return null;
+			}
+		};
+
+		SRI<T> reset(Function<T, T> func);
+
+		<R> SRI<T> isInstance(Class<R> cls, Consumer<R> consumer);
+
+		SRI<T> cons(Consumer<T> consumer);
+
+		T get();
+	}
 }
 

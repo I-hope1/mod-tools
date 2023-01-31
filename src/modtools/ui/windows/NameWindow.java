@@ -9,7 +9,7 @@ import arc.scene.ui.layout.Cell;
 import modtools.ui.components.Window;
 
 public class NameWindow extends Window {
-	TextField namef = new TextField();
+	TextField    namef = new TextField();
 	Cons<String> okCons;
 
 	{

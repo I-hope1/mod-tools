@@ -10,33 +10,35 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
-import arc.scene.style.TextureRegionDrawable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
-import arc.scene.ui.layout.Collapser;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import mindustry.ctype.UnlockableContent;
-import mindustry.gen.Icon;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.ui.components.Window;
+import modtools.ui.components.Window.DisposableWindow;
+import modtools.utils.Search;
 
 import java.lang.reflect.Array;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-import static mindustry.Vars.mobile;
-import static mindustry.Vars.ui;
+import static mindustry.Vars.*;
 import static modtools.IntVars.topGroup;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
-	public static final MyIcons icons = new MyIcons();
 
-	public static <T extends Element> void doubleClick(T elem, Runnable click, Runnable dclick) {
+	public static final float   DEF_DURATION = 0.2f;
+	public static final MyIcons icons        = new MyIcons();
+
+	public static <T extends Element> T
+	doubleClick(T elem, Runnable click, Runnable dclick) {
 		elem.addListener(new ClickListener() {
 			final Task clickTask = new Task() {
 				@Override
@@ -56,12 +58,13 @@ public class IntUI {
 				}
 			}
 		});
-
+		return elem;
 	}
 
 
 	/* 长按事件 */
-	public static <T extends Element> T longPress(T elem, final long duration, final Boolc boolc) {
+	public static <T extends Element> T
+	longPress(T elem, final long duration, final Boolc boolc) {
 		elem.addListener(new InputListener() {
 			final Task task = new Task() {
 				@Override
@@ -91,6 +94,105 @@ public class IntUI {
 		return elem;
 	}
 
+	public static <T extends Element> T
+	rightClick(T elem, Runnable run) {
+		elem.addListener(new ClickListener(KeyCode.mouseRight) {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				run.run();
+			}
+		});
+		return elem;
+	}
+
+	/**
+	 * long press for mobile
+	 * r-click for desktop
+	 */
+	public static <T extends Element> T
+	longPressOrRclick(T element, Consumer<T> run) {
+		return mobile ? longPress(element, 600, b -> {
+			if (b) run.accept(element);
+		}) : rightClick(element, () -> run.accept(element));
+	}
+
+	public static void
+	addShowMenuLinstenr(Element elem, MenuList... list) {
+		longPressOrRclick(elem, __ -> {
+			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+				for (var menu : list) {
+					p.button(menu.name, menu.icon, Styles.flatt, () -> {
+						menu.run.run();
+						hide.run();
+					}).size(120, 42).row();
+				}
+			}, false);
+		});
+	}
+
+	/**
+	 * 在鼠标右下弹出一个小窗，自己设置内容
+	 *
+	 * @param vec2       用于定位弹窗的位置
+	 * @param f          (p, hide, text)
+	 *                   p 是Table，你可以添加元素
+	 *                   hide 是一个函数，调用就会关闭弹窗
+	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param searchable 可选，启用后会添加一个搜索框
+	 */
+	public static Table
+	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
+	                  boolean searchable) {
+		Table t = new Table(Tex.pane) {
+			public float getPrefHeight() {
+				return Math.min(super.getPrefHeight(), (float) Core.graphics.getHeight());
+			}
+
+			public float getPrefWidth() {
+				return Math.min(super.getPrefWidth(), (float) Core.graphics.getWidth());
+			}
+		};
+		Element hitter = new Element();
+		Runnable hide = () -> {
+			hitter.remove();
+			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade), Actions.remove());
+		};
+		hitter.clicked(hide);
+		hitter.fillParent = true;
+		topGroup.addChild(hitter);
+		topGroup.addChild(t);
+		t.update(() -> {
+			Tmp.v1.set(vec2);
+			t.setPosition(Tmp.v1.x, Tmp.v1.y, Align.bottomRight);
+			if (t.getWidth() > Core.scene.getWidth()) {
+				t.setWidth((float) Core.graphics.getWidth());
+			}
+
+			if (t.getHeight() > Core.scene.getHeight()) {
+				t.setHeight((float) Core.graphics.getHeight());
+			}
+
+			t.keepInStage();
+			t.invalidateHierarchy();
+			t.pack();
+		});
+		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
+		Table p = new Table();
+		p.top();
+		if (searchable) {
+			new Search((cont, text) -> {
+				f.get(cont, hide, text);
+			}).build(t, p);
+		}
+
+		f.get(p, hide, "");
+		ScrollPane pane = new ScrollPane(p);
+		t.top().add(pane).pad(0.0f).top();
+		pane.setScrollingDisabled(true, false);
+		t.pack();
+		return t;
+	}
+
 	/**
 	 * 弹出一个小窗，自己设置内容
 	 *
@@ -101,7 +203,9 @@ public class IntUI {
 	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 */
-	public static <T extends Button> Table showSelectTable(T button, Cons3<Table, Runnable, String> f, boolean searchable) {
+	public static <T extends Button> Table
+	showSelectTable(T button, Cons3<Table, Runnable, String> f,
+	                boolean searchable) {
 		if (button == null) throw new NullPointerException("button cannot be null");
 		Table t = new Table(Tex.button) {
 			public float getPrefHeight() {
@@ -119,7 +223,7 @@ public class IntUI {
 		};
 		hitter.clicked(hide);
 		hitter.fillParent = true;
-		Core.scene.add(hitter);
+		topGroup.addChild(hitter);
 		topGroup.addChild(t);
 		t.update(() -> {
 			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
@@ -144,14 +248,9 @@ public class IntUI {
 		Table p = new Table();
 		p.top();
 		if (searchable) {
-			t.table(top -> {
-				top.image(Icon.zoom);
-				TextField text = new TextField();
-				top.add(text).fillX();
-				text.changed(() -> {
-					f.get(p, hide, text.getText());
-				});
-			}).padRight(8.0f).fillX().fill().top().row();
+			new Search((cont, text) -> {
+				f.get(cont, hide, text);
+			}).build(t, p);
 		}
 
 		f.get(p, hide, "");
@@ -162,7 +261,10 @@ public class IntUI {
 		return t;
 	}
 
-	public static <T extends Button> Table showSelectListTable(T button, Seq<String> list, Prov<String> holder, Cons<String> cons, int width, int height, Boolean searchable) {
+	public static <T extends Button> Table
+	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
+	                    Cons<String> cons, int width, int height,
+	                    Boolean searchable) {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 
@@ -188,7 +290,12 @@ public class IntUI {
 	 * @param cons      选中内容就会调用
 	 * @param cols      一行的元素数量
 	 */
-	public static <T extends Button, T1> Table showSelectImageTableWithIcons(T button, Seq<T1> items, Seq<? extends Drawable> icons, Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols, boolean searchable) {
+	public static <T extends Button, T1> Table
+	showSelectImageTableWithIcons(T button, Seq<T1> items,
+	                              Seq<? extends Drawable> icons,
+	                              Prov<T1> holder, Cons<T1> cons, float size,
+	                              float imageSize, int cols,
+	                              boolean searchable) {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 			p.left();
@@ -224,7 +331,8 @@ public class IntUI {
 				}).size(size).get();
 				if (!mobile) {
 					btn.addListener(new Tooltip(t -> {
-						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item);
+						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item)
+								.right().bottom();
 					}));
 				}
 
@@ -242,9 +350,14 @@ public class IntUI {
 	}
 
 	/**
-	 * 弹出一个可以选择内容的窗口（无需你提供图标）
+	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要提供构造器）
 	 */
-	public static <T extends Button, T1 extends UnlockableContent> Table showSelectImageTable(T button, Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols, boolean searchable) {
+	public static <T extends Button, T1 extends UnlockableContent> Table
+	showSelectImageTable(T button, Seq<T1> items,
+	                     Prov<T1> holder,
+	                     Cons<T1> cons, float size,
+	                     int imageSize, int cols,
+	                     boolean searchable) {
 		Drawable[] icons = (Drawable[]) Array.newInstance(Drawable.class, items.size);
 		for (int i = 0; i < items.size; i++) {
 			icons[i] = new TextureRegionDrawable(items.get(i).uiIcon);
@@ -255,7 +368,11 @@ public class IntUI {
 	/**
 	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
 	 */
-	public static <T extends Button, T1> Table showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder, Cons<T1> cons, float size, int imageSize, int cols, Func<T1, Drawable> func, boolean searchable) {
+	public static <T extends Button, T1> Table
+	showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder,
+	                             Cons<T1> cons, float size, int imageSize,
+	                             int cols, Func<T1, Drawable> func,
+	                             boolean searchable) {
 		Seq<Drawable> icons = new Seq<>();
 		items.each(item -> {
 			icons.add(func.get(item));
@@ -349,13 +466,35 @@ public class IntUI {
 		return window;
 	}
 
-	public static class ConfirmWindow extends Window {
+	public static class ConfirmWindow extends DisposableWindow {
 		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
 
 		public void setCenter(Vec2 vec2) {
 			setPosition(vec2.x - getPrefWidth() / 2f, vec2.y - getPrefHeight() / 2f);
+		}
+	}
+
+
+	public static class MenuList {
+		public Drawable icon;
+		public String   name;
+		public Runnable run;
+
+		public MenuList(Drawable icon, String name, Runnable run) {
+			this.icon = icon;
+			this.name = name;
+			this.run = run;
+		}
+	}
+
+	public static class ConfigList extends MenuList {
+
+		public ConfigList(Drawable icon, String name, String text, Runnable run) {
+			super(icon, name, () -> {
+				IntUI.showConfirm(text, run);
+			});
 		}
 	}
 }

@@ -2,42 +2,42 @@ package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import arc.util.Log;
+import mindustry.Vars;
 import modtools.ui.components.input.area.TextAreaTable;
-import rhino.ScriptRuntime;
+import rhino.*;
 
 import java.util.*;
 import java.util.regex.Pattern;
 
 public class JSSyntax extends Syntax {
-	public static Pattern
-			// keywordP = Pattern.compile("\\b(break|c(?:ase|atch|onst|ontinue)|d(?:efault|elete|o)|else|f(?:inally|or|unction)|i[fn]|instranceof|let|new|return|switch|this|t(?:hrow|ry|ypeof)|v(?:ar|oid)|w(?:hile|ith)|yield)\\b", Pattern.COMMENTS),
-			// 数字和true|false
-			numberP = Pattern.compile("\\b([+-]?\\d+(?:\\.\\d*)?(?:[Ee]\\d+)?)\\b"),
-			commentP = Pattern.compile("(//.*|/\\*[\\s\\S]*?\\*/|/\\*[^(*/)]*$)"),
-	/**
-	 * 我也不知道为什么这么慢
-	 **/
-	functionsP = Pattern.compile("([a-z_$][\\w$]*)\\s*\\(", Pattern.CASE_INSENSITIVE),
+	// public static Pattern
+	// 		// keywordP = Pattern.compile("\\b(break|c(?:ase|atch|onst|ontinue)|d(?:efault|elete|o)|else|f(?:inally|or|unction)|i[fn]|instranceof|let|new|return|switch|this|t(?:hrow|ry|ypeof)|v(?:ar|oid)|w(?:hile|ith)|yield)\\b", Pattern.COMMENTS),
+	// 		// 数字和true|false
+	// 		numberP  = Pattern.compile("\\b([+-]?\\d+(?:\\.\\d*)?(?:[Ee]\\d+)?)\\b"),
+	// 		commentP = Pattern.compile("(//.*|/\\*[\\s\\S]*?\\*/|/\\*[^(*/)]*$)"),
+	// /**
+	//  * 我也不知道为什么这么慢
+	//  **/
+	// functionsP = Pattern.compile("([a-z_$][\\w$]*)\\s*\\(", Pattern.CASE_INSENSITIVE),
+	//
+	// objectsP = Pattern.compile("\\b(null|undefined|true|false|arguments)\\b", Pattern.COMMENTS)
+	// 		// others = Pattern.compile("([a-z$]+)", Pattern.CASE_INSENSITIVE)
+	// 		;
+	// public static Seq<Pattern> patternSeq = Seq.with(
+	// 		// whiteSpaceP, stringP, keywordP, numberP, commentP,
+	// 		// bracketsP, operatCharP/*, functionsP*/, objectsP
+	// );
+	// public static Seq<Color>   colorSeq   = Seq.with(
+	// 		Color.clear, stringC, keywordC, numberC, commentC,
+	// 		bracketsC, operatCharC/*, functionsC*/, objectsC
+	// );
 
-	objectsP = Pattern.compile("\\b(null|undefined|true|false|arguments)\\b", Pattern.COMMENTS)
-			// others = Pattern.compile("([a-z$]+)", Pattern.CASE_INSENSITIVE)
-			;
-	public static Seq<Pattern> patternSeq = Seq.with(
-			// whiteSpaceP, stringP, keywordP, numberP, commentP,
-			// bracketsP, operatCharP/*, functionsP*/, objectsP
-	);
-	public static Seq<Color> colorSeq = Seq.with(
-			Color.clear, stringC, keywordC, numberC, commentC,
-			bracketsC, operatCharC/*, functionsC*/, objectsC
-	);
+	public static Color constants = new Color(0x4FC1FFFF);
 
 	public JSSyntax(TextAreaTable table) {
 		super(table);
 	}
-
-	/*public JSSyntax() {
-
-	}*/
 
 	/*static JsonValue
 			keywords = reader.parse("{\"b\":{\"r\":{\"e\":{\"a\":{\"k\":false}}}},\"c\":{\"a\":{\"s\":{\"e\":false},\"t\":{\"c\":{\"h\":false}}},\"o\":{\"n\":{\"s\":{\"t\":false},\"t\":{\"i\":{\"n\":{\"u\":{\"e\":false}}}}}}},\"d\":{\"e\":{\"f\":{\"a\":{\"u\":{\"l\":{\"t\":false}}}},\"l\":{\"e\":{\"t\":{\"e\":false}}}},\"o\":false},\"e\":{\"l\":{\"s\":{\"e\":false}}},\"f\":{\"i\":{\"n\":{\"a\":{\"l\":{\"l\":{\"y\":false}}}}},\"o\":{\"r\":false},\"u\":{\"n\":{\"c\":{\"t\":{\"i\":{\"o\":{\"n\":false}}}}}}},\"i\":{\"f\":false,\"n\":{\"s\":{\"t\":{\"r\":{\"a\":{\"n\":{\"c\":{\"e\":{\"o\":{\"f\":false}}}}}}}}}},\"l\":{\"e\":{\"t\":false}},\"n\":{\"e\":{\"w\":false}},\"r\":{\"e\":{\"t\":{\"u\":{\"r\":{\"n\":false}}}}},\"s\":{\"w\":{\"i\":{\"t\":{\"c\":{\"h\":false}}}}},\"t\":{\"h\":{\"i\":{\"s\":false},\"r\":{\"o\":{\"w\":false}}},\"r\":{\"y\":false},\"y\":{\"p\":{\"e\":{\"o\":{\"f\":false}}}}},\"v\":{\"a\":{\"r\":false},\"o\":{\"i\":{\"d\":false}}},\"w\":{\"h\":{\"i\":{\"l\":{\"e\":false}}},\"i\":{\"t\":{\"h\":false}}},\"y\":{\"i\":{\"e\":{\"l\":{\"d\":false}}}}}"),
@@ -47,6 +47,14 @@ public class JSSyntax extends Syntax {
 	// keywordMap = IntMap.of('b', IntMap.of('r', IntMap.of('e', IntMap.of('a', IntMap.of('k', null)))), 'c', IntMap.of('a', IntMap.of('s', IntMap.of('e', null), 't', IntMap.of('c', IntMap.of('h', null))), 'o', IntMap.of('n', IntMap.of('s', IntMap.of('t', null), 't', IntMap.of('i', IntMap.of('n', IntMap.of('u', IntMap.of('e', null))))))), 'd', IntMap.of('e', IntMap.of('f', IntMap.of('a', IntMap.of('u', IntMap.of('l', IntMap.of('t', null)))), 'l', IntMap.of('e', IntMap.of('t', IntMap.of('e', null)))), 'o', null), 'e', IntMap.of('l', IntMap.of('s', IntMap.of('e', null))), 'f', IntMap.of('i', IntMap.of('n', IntMap.of('a', IntMap.of('l', IntMap.of('l', IntMap.of('y', null))))), 'o', IntMap.of('r', null), 'u', IntMap.of('n', IntMap.of('c', IntMap.of('t', IntMap.of('i', IntMap.of('o', IntMap.of('n', null))))))), 'i', IntMap.of('f', null, 'n', IntMap.of('s', IntMap.of('t', IntMap.of('r', IntMap.of('a', IntMap.of('n', IntMap.of('c', IntMap.of('e', IntMap.of('o', IntMap.of('f', null)))))))))), 'l', IntMap.of('e', IntMap.of('t', null)), 'n', IntMap.of('e', IntMap.of('w', null)), 'r', IntMap.of('e', IntMap.of('t', IntMap.of('u', IntMap.of('r', IntMap.of('n', null))))), 's', IntMap.of('w', IntMap.of('i', IntMap.of('t', IntMap.of('c', IntMap.of('h', null))))), 't', IntMap.of('h', IntMap.of('i', IntMap.of('s', null), 'r', IntMap.of('o', IntMap.of('w', null))), 'r', IntMap.of('y', null), 'y', IntMap.of('p', IntMap.of('e', IntMap.of('o', IntMap.of('f', null))))), 'v', IntMap.of('a', IntMap.of('r', null), 'o', IntMap.of('i', IntMap.of('d', null))), 'w', IntMap.of('h', IntMap.of('i', IntMap.of('l', IntMap.of('e', null))), 'i', IntMap.of('t', IntMap.of('h', null))), 'y', IntMap.of('i', IntMap.of('e', IntMap.of('l', IntMap.of('d', null))))),
 	// objectMap = IntMap.of('n', IntMap.of('u', IntMap.of('l', IntMap.of('l', null))), 'u', IntMap.of('n', IntMap.of('d', IntMap.of('e', IntMap.of('f', IntMap.of('i', IntMap.of('n', IntMap.of('e', IntMap.of('d', null)))))))), 't', IntMap.of('r', IntMap.of('u', IntMap.of('e', null))), 'f', IntMap.of('a', IntMap.of('l', IntMap.of('s', IntMap.of('e', null)))), 'a', IntMap.of('r', IntMap.of('g', IntMap.of('u', IntMap.of('m', IntMap.of('e', IntMap.of('n', IntMap.of('t', IntMap.of('s', null)))))))));
 
+	public static final ObjectSet<String> constantSet = ObjectSet.with(
+			"arguments", "Infinity");
+
+	static {
+		for (Object id : Vars.mods.getScripts().scope.getIds()) {
+			constantSet.add(String.valueOf(id));
+		}
+	}
 
 	/*static {
 		StringBuffer sb = new StringBuffer();
@@ -69,8 +77,8 @@ public class JSSyntax extends Syntax {
 		sb.append(sj);
 		sb.append(")");
 	}*/
-	ObjectMap<Color, ObjectSet<String>> TOKEN_MAP = ObjectMap.of(
-			keywordC, ObjectSet.with(
+	ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = ObjectMap.of(
+			ObjectSet.with(
 					"break", "case", "catch", "const", "continue",
 					"default", "delete", "do", "else",
 					"finally", "for", "function", "if",
@@ -78,35 +86,38 @@ public class JSSyntax extends Syntax {
 					"this", "throw", "try", "typeof", "var",
 					"void", "while", "with",
 					"yield"
-			),
-			objectsC, ObjectSet.with(
-					"null", "undefined", "true", "false", "arguments"
-			)
+			), keywordC,
+			ObjectSet.with("null", "undefined", "true", "false"), keywordC,
+			constantSet, constants
 	);
-	final DrawSymbol operatsSymbol = new DrawSymbol(operats, operatCharC);
-	public TokenDraw[] tokenDraws = {task -> {
+	protected final DrawSymbol
+			operatsSymbol  = new DrawSymbol(operats, operatCharC),
+			bracketsSymbol = new DrawSymbol(brackets, bracketsC);
+
+	public        TokenDraw[] tokenDraws = {task -> {
 		for (var entry : TOKEN_MAP) {
-			if (entry.value.contains(task.token)) {
-				return entry.key;
+			if (entry.key.contains(task.token)) {
+				return entry.value;
 			}
 		}
 		return null;
 	}, task -> {
-		if (Objects.equals(task.lastToken, "function")) {
+		if (Objects.equals(task.lastToken, "function")
+		    && lastTask == task/*中间不能有其他字符*/) {
 			return functionsC;
 		}
 		return null;
 	}, task -> {
 		String s = operatsSymbol.lastSymbol != null && operatsSymbol.lastSymbol == '.'
-				&& task.token.charAt(0) == 'e' && task.lastToken != null
+		           && task.token.charAt(0) == 'e' && task.lastToken != null
 				? task.lastToken + "." + task.token : task.token;
 		return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN")
 				? null : numberC;
 	}
 	};
-	private final DrawTask[] taskArr0 = {
+	private final DrawTask[]  taskArr0   = {
 			new DrawString(stringC),
-			new DrawSymbol(brackets, bracketsC),
+			bracketsSymbol,
 			operatsSymbol,
 			new DrawComment(commentC),
 			// new DrawWord(keywordMap, keywordC),
@@ -314,8 +325,7 @@ public class JSSyntax extends Syntax {
 			return false;
 		}
 	}*/
-
-	static IntSet operats = new IntSet();
+	static IntSet operats  = new IntSet();
 	static IntSet brackets = new IntSet();
 
 	static {

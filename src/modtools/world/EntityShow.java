@@ -14,7 +14,9 @@ import mindustry.ui.*;
 
 public class EntityShow {
 	public static final int cols = 10;
-	static Table cont, cinfo = (Table) Core.scene.find("coreinfo");
+
+	static Table cont,
+			cinfo = (Table) Core.scene.find("coreinfo");
 
 	public static void main() {
 		cont = new Table(Styles.black5);
@@ -26,8 +28,8 @@ public class EntityShow {
 		Events.on(WorldLoadEvent.class, e -> rebuild());
 		Events.on(TileChangeEvent.class, e -> rebuild());
 		Events.on(UnitSpawnEvent.class, e -> {
-			UnitType u = e.unit.type;
-			Stack stack = cont.find("icon:" + u.name);
+			UnitType u     = e.unit.type;
+			Stack    stack = cont.find("icon:" + u.name);
 			idMap.put(u.id, idMap.get(u.id, () -> 0) + 1);
 			if (stack == null) {
 				((Cell<Table>) cont.getCells().get(0)).setElement(buildTable(unitTypes));
@@ -37,7 +39,7 @@ public class EntityShow {
 			}
 		});
 		Events.on(UnitDestroyEvent.class, e -> {
-			UnitType u = e.unit.type;
+			UnitType  u     = e.unit.type;
 			ItemImage stack = cont.find("icon:" + u.name);
 			idMap.put(u.id, idMap.get(u.id, () -> 0) - 1);
 			if (stack == null) {
@@ -49,9 +51,9 @@ public class EntityShow {
 		});
 	}
 
-	static IntMap<Integer> idMap = new IntMap<>();
+	static IntMap<Integer>        idMap     = new IntMap<>();
 	static Seq<UnlockableContent> unitTypes = Vars.content.units().as(),
-			blocks = Vars.content.blocks().as();
+			blocks                          = Vars.content.blocks().as();
 
 	public static void rebuild() {
 		cont.y = cinfo.getPrefHeight();

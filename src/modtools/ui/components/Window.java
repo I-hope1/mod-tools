@@ -58,13 +58,8 @@ public class Window extends Table {
 		});
 
 		Events.run(Trigger.update, () -> {
-			var children = (topGroup.ok ? topGroup : Core.scene.root).getChildren();
-			for (int i = children.size - 1; i >= 0; i--) {
-				if (children.get(i) instanceof Window) {
-					focusWindow = (Window) children.get(i);
-					break;
-				}
-			}
+			var children = topGroup.shownWindows;
+			focusWindow = children.isEmpty() ? null : children.get(children.size() - 1);
 			/*while (focus != null) {
 				if (focus instanceof Window) {
 					focusWindow = (Window) focus;

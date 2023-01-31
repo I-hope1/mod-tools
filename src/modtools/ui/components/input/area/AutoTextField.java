@@ -24,10 +24,9 @@ public class AutoTextField extends TextField {
 	public AutoTextField() {
 	}
 
-	@Override
 	public float getPrefWidth() {
-		int cursor = text.length();
-		float val = textOffset;
+		int   cursor = text.length();
+		float val    = textOffset;
 		try {
 			val = glyphPositions.get(cursor) - glyphPositions.get(0) + fontOffset + style.font.getData().cursorX;
 			Drawable background = getBack();
@@ -37,14 +36,13 @@ public class AutoTextField extends TextField {
 	}
 
 	Drawable getBack() {
-		Scene stage = getScene();
+		Scene   stage   = getScene();
 		boolean focused = stage != null && stage.getKeyboardFocus() == this;
 		return (disabled && style.disabledBackground != null) ? style.disabledBackground
 				: (!isValid() && style.invalidBackground != null) ? style.invalidBackground
 				: ((focused && style.focusedBackground != null) ? style.focusedBackground : style.background);
 	}
 
-	@Override
 	protected void drawCursor(Drawable cursorPatch, Font font, float x, float y) {
 		cursorPatch.draw(
 				x + textOffset + glyphPositions.get(cursor) - glyphPositions.get(visibleTextStart) + fontOffset + font.getData().cursorX,

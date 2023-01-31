@@ -1,7 +1,9 @@
 package modtools;
 
-import arc.Events;
+import arc.*;
 import arc.files.Fi;
+import arc.graphics.Camera;
+import arc.math.geom.Vec2;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
@@ -14,8 +16,6 @@ import static mindustry.Vars.ui;
 import static modtools.utils.MySettings.settings;
 
 public class ModTools extends Mod {
-	public static ModClassLoader mainLoader;
-
 	public ModTools() {
 		Log.info("Loaded ModTools constructor.");
 
@@ -33,7 +33,7 @@ public class ModTools extends Mod {
 			}
 
 			// texture.getTextureData();
-			MyFonts.load();
+			Core.app.post(MyFonts::load);
 
 			// Unit135G.main();
 			Time.runTask(6f, () -> {
@@ -58,7 +58,8 @@ public class ModTools extends Mod {
 		});
 	}
 
-	public static Throwable throwable = null;
+	public static ModClassLoader mainLoader;
+	public static Throwable      throwable = null;
 
 	public static void loadReflect() {
 		mainLoader = (ModClassLoader) Vars.mods.mainLoader();

@@ -39,21 +39,26 @@ import static modtools.ui.components.ListDialog.fileUnfair;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
-	String log = "";
+	String     log = "";
 	MyTextArea area;
 	public boolean loop = false;
-	public Object res;
+	public Object  res;
+
 	private boolean
-			wrap = false, error, ignorePopUpError = false,
-			wrapRef = true, multiWindows = false;
-	public static final float w = Core.graphics.isPortrait() ? 440 : 540;
-	public Window ui;
+			wrap             = false,
+			error            = false,
+			ignorePopUpError = false,
+			wrapRef          = true,
+			multiWindows     = false;
+
+	public static final float  w = Core.graphics.isPortrait() ? 440 : 540;
+	public              Window ui;
 	ListDialog history, bookmark;
-	public Scripts scripts;
+	public Scripts    scripts;
 	public Scriptable scope;
-	public Context cx;
-	public Script script = null;
-	public boolean stopIfOvertime;
+	public Context    cx;
+	public Script     script = null;
+	public boolean    stopIfOvertime;
 
 	public Tester() {
 		super("tester");
@@ -71,10 +76,10 @@ public class Tester extends Content {
 	/**
 	 * 用于回滚历史
 	 */
-	public int historyIndex;
+	public              int     historyIndex;
 	public static final boolean reincarnationHistory = false;
 
-
+	public ScrollPane pane;
 	public void build(Table table, Table buttons) {
 		if (ui == null) _load();
 
@@ -219,7 +224,7 @@ public class Tester extends Content {
 				}, t -> {
 					try {
 						return !t.isBlank() && !fileUnfair.matcher(t).find()
-								&& !bookmark.file.child(t).exists();
+						       && !bookmark.file.child(t).exists();
 					} catch (Throwable e) {
 						return false;
 					}
@@ -276,18 +281,6 @@ public class Tester extends Content {
 			ui.noButtons(true);
 		}).size(210, 64);
 	}
-
-	public ScrollPane pane;
-
-	void setup() {
-		//		ui.cont.clear();
-		//		ui.buttons.clear();
-		ui.cont.pane(p -> build(p, ui.buttons)).grow().update(pane -> {
-			this.pane = pane;
-			pane.setOverscroll(false, false);
-		});
-	}
-
 	public void build() {
 		if (ui == null) _load();
 		if (multiWindows) {
@@ -299,6 +292,14 @@ public class Tester extends Content {
 		/*if (ui.isShown()) {
 			ui.setZIndex(Integer.MAX_VALUE);
 		} else ui.show();*/
+	}
+	void setup() {
+		//		ui.cont.clear();
+		//		ui.buttons.clear();
+		ui.cont.pane(p -> build(p, ui.buttons)).grow().update(pane -> {
+			this.pane = pane;
+			pane.setOverscroll(false, false);
+		});
 	}
 
 	boolean finished = true;
@@ -333,7 +334,6 @@ public class Tester extends Content {
 			}
 		}
 	}, 0, 0.1f, -1);*/
-
 	public void complieAndExec(Runnable callback) {
 		if (Context.getCurrentContext() == null) Context.enter();
 		lastTime = Time.millis();
@@ -384,10 +384,9 @@ public class Tester extends Content {
 			}
 		}).start();*/
 	}
-
 	public void complieScript() {
 		error = false;
-		String def = getMessage();
+		String def    = getMessage();
 		String source = wrap ? "(function(){\"use strict\";" + def + "\n})();" : def;
 		try {
 			script = cx.compileString(source, "console.js", 1);
@@ -451,7 +450,7 @@ public class Tester extends Content {
 		});*/
 		//		ui.addCloseListener();
 		history = new ListDialog("history", MySettings.dataDirectory.child("historical record"),
-				f -> f.child("message.txt"), f -> {
+		                         f -> f.child("message.txt"), f -> {
 			area.setText(f.child("message.txt").readString());
 			log = f.child("log.txt").readString();
 		}, (f, p) -> {
@@ -461,7 +460,7 @@ public class Tester extends Content {
 		}, Tester::sort);
 		history.hide();
 		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
-				f -> f, f -> {
+		                          f -> f, f -> {
 			area.setText(f.readString());
 		}, (f, p) -> {
 			p.add(new MyLabel(f.readString())).row();
@@ -477,8 +476,6 @@ public class Tester extends Content {
 			}
 		});
 	}
-
-	@Override
 	public void load() {
 		if (!init) loadSettings();
 		try {
@@ -532,7 +529,6 @@ public class Tester extends Content {
 	}
 
 	public static boolean init = false;
-
 	public void loadSettings() {
 		Table table = new Table();
 		table.defaults().growX();
@@ -557,7 +553,6 @@ public class Tester extends Content {
 	public String getMessage() {
 		return area.getText();
 	}
-
 	public Object getWrap(Object val) {
 		try {
 			if (val instanceof Class) return new NativeJavaClass(scope, (Class<?>) val);
@@ -575,9 +570,8 @@ public class Tester extends Content {
 		}
 		ScriptableObject.putProperty(scope, name, val);
 	}
-
 	public String put(Object val) {
-		int i = 0;
+		int    i      = 0;
 		String prefix = "tmp";
 		while (ScriptableObject.hasProperty(scope, prefix + i)) {
 			i++;
@@ -586,9 +580,8 @@ public class Tester extends Content {
 		put(key, val);
 		return key;
 	}
-
 	public void put(Element element, Object val) {
-		int i = 0;
+		int    i      = 0;
 		String prefix = "tmp";
 		while (ScriptableObject.hasProperty(scope, prefix + i)) {
 			i++;
@@ -597,7 +590,6 @@ public class Tester extends Content {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", prefix + i))
 				.setPosition(getAbsPos(element));
 	}
-
 
 	/*public class ListDialog extends Window {
 		public Seq<Fi> list = new Seq<>();
@@ -717,7 +709,5 @@ public class Tester extends Content {
 			return tmp;
 		}
 	}*/
-
-
 }
 

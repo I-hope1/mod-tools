@@ -11,6 +11,8 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Log;
 import modtools.ui.IntStyles;
+import modtools.ui.components.limit.LimitTable;
+import modtools.utils.Tools;
 
 import java.util.Arrays;
 
@@ -24,16 +26,34 @@ public class IntTab {
 	public int cols;
 	public boolean column;
 
+	public void setTotalWidth(float amount) {
+		totalWidth = amount;
+	}
+
 	protected void init() {
 		if (main != null) return;
 		title = new Table();
 		title.defaults().growX().height(42);
 		pane = new ScrollPane(null);
 		main = new Table(t -> {
-			t.add(title).width(totalWidth).top();
+			t.add(title).self(c -> {
+				if (totalWidth == -1) {
+					c.growX();
+				} else {
+					c.width(totalWidth);
+				}
+			}).top();
 			if (!column) t.row();
-			t.add(pane).grow();
-		});
+			t.add(pane).minWidth(totalWidth).grow();
+		}) {
+			public float getPrefWidth() {
+				return prefW != -1 ? prefW : super.getPrefWidth();
+			}
+
+			public float getPrefHeight() {
+				return prefH != -1 ? prefH : super.getPrefHeight();
+			}
+		};
 	}
 
 	public static Seq<Color> fillColor(int size, Color color) {
@@ -72,6 +92,7 @@ public class IntTab {
 			Log.info("name: @, color: @, table: @", names.size, colors.size, tables.size);
 			throw new IllegalArgumentException("size must be the same.");
 		}
+		if (names.size == 0) throw new RuntimeException("size can't be 0.");
 
 		this.totalWidth = totalWidth;
 		this.names = names;
@@ -82,47 +103,53 @@ public class IntTab {
 		init();
 	}
 
-	public Table build() {
-		byte[] selected = {-1};
-		boolean[] transitional = {false};
-		Element[] first = {null};
+	byte selected = -1;
+	boolean transitional = false;
+	Element first = null;
+	float prefW = -1, prefH = -1;
 
+	public void setPrefSize(float w, float h) {
+		prefW = w;
+		prefH = h;
+	}
+
+	public Table build() {
 		for (byte i = 0; i < tables.size; i++) {
 			Table t = tables.get(i);
 			byte j = i;
 			title.button(b -> {
-				if (first[0] == null) first[0] = b;
+				if (first == null) first = b;
 				b.add(names.get(j), colors.get(j)).padRight(15.0f).growY().row();
 				Image image = b.image().fillX().growX().get();
 				b.update(() -> {
-					image.setColor(selected[0] == j ? colors.get(j) : Color.gray);
+					image.setColor(selected == j ? colors.get(j) : Color.gray);
 				});
 			}, IntStyles.clearb, () -> {
-				if (selected[0] != j && !transitional[0]) {
-					if (selected[0] != -1) {
-						Table last = tables.get(selected[0]);
-						last.actions(Actions.fadeOut(0.07f, Interp.fade), Actions.remove());
-						transitional[0] = true;
+				if (selected != j && !transitional) {
+					if (selected != -1) {
+						Table last = tables.get(selected);
+						last.actions(Actions.fadeOut(0.03f, Interp.fade), Actions.remove());
+						transitional = true;
 						title.update(() -> {
 							if (!last.hasActions()) {
-								transitional[0] = false;
+								transitional = false;
 								title.update(null);
-								selected[0] = j;
+								selected = j;
 								pane.setWidget(t);
 								t.actions(Actions.alpha(0), Actions.fadeIn(0.3f, Interp.fade));
 							}
 						});
 					} else {
 						pane.setWidget(t);
-						selected[0] = j;
+						selected = j;
 					}
 
 				}
-			});
+			}).width(totalWidth * (int) (cols / tables.size));
 			if ((j + 1) % cols == 0) title.row();
 		}
 		title.row();
-		first[0].fireClick();
+		first.fireClick();
 		return main;
 	}
 }

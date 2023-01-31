@@ -51,7 +51,8 @@ public class JSSyntax extends Syntax {
 			"arguments", "Infinity");
 
 	static {
-		for (Object id : Vars.mods.getScripts().scope.getIds()) {
+		var scope = Vars.mods.getScripts().scope;
+		for (Object id : scope.getIds()) {
 			constantSet.add(String.valueOf(id));
 		}
 	}

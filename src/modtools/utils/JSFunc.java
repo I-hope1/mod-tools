@@ -63,12 +63,14 @@ public class JSFunc {
 		return showInfo(null, clazz);
 	}
 
-	public static final Color keyword = Color.valueOf("ff657a"),
-			type                      = Color.valueOf("9cd1bb"),
-			NUMBER_COLOR              = Color.valueOf("bad761"),
-			underline                 = Color.gray.cpy().a(0.7f);
-	public static final String keywordMark = "[#" + keyword + "]",
-			typeMark                       = "[#" + type + "]";
+	public static final Color
+			keyword      = Color.valueOf("ff657a"),
+			type         = Color.valueOf("9cd1bb"),
+			NUMBER_COLOR = Color.valueOf("bad761"),
+			underline    = Color.gray.cpy().a(0.7f);
+	public static final String
+			keywordMark = "[#" + keyword + "]",
+			typeMark    = "[#" + type + "]";
 
 	public static final LabelStyle
 			keywordStyle = new LabelStyle(FONT, keyword),
@@ -230,14 +232,14 @@ public class JSFunc {
 					.checked(c[index])
 					.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
 					.row();
-			// 占位符
-			cont.add().grow();
-			cont.image().color(Pal.accent).growX().row();
+			cont.image().color(Pal.accent).growX().height(2).row();
 			var table = new ReflectTable();
 			cont.collapser(table, true, () -> c[index])
 					.pad(4, 6, 4, 6)
 					.fillX().padTop(8).get().setDuration(0.1f);
 			cont.row();
+			// 占位符
+			cont.add().grow().row();
 			return table;
 		};
 		fields = window.fieldsTable = func.apply("@jsfunc.field", 0);
@@ -521,7 +523,7 @@ public class JSFunc {
 
 					t.table(buttons -> {
 						addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
-					}).grow().top().right();
+					}).grow().top().right().row();
 				} catch (Throwable e) {
 					Log.err(e);
 				}

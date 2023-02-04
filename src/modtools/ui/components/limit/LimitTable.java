@@ -1,37 +1,24 @@
 package modtools.ui.components.limit;
 
-import arc.Events;
 import arc.func.Cons;
-import arc.math.geom.Rect;
-import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.scene.utils.Elem;
-import arc.struct.Seq;
-import arc.util.Tmp;
-import mindustry.game.EventType.Trigger;
-import modtools.ui.components.input.MyLabel;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
 
 public class LimitTable extends Table {
-	public static final Seq<Runnable> tasks = new Seq<>();
-
 	public LimitTable() {
 	}
-
 	public LimitTable(Drawable background) {
 		super(background);
 	}
-
 	public LimitTable(Drawable background, Cons<Table> cons) {
 		super(background, cons);
 	}
-
 	public LimitTable(Cons<Table> cons) {
 		super(cons);
 	}

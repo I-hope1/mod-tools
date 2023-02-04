@@ -23,7 +23,7 @@ public class MySettings {
 		} catch (Throwable ignored) {}
 	}
 
-	static Fi config = dataDirectory.child("mod-tools-config.hjson");
+	static              Fi   config   = dataDirectory.child("mod-tools-config.hjson");
 	public static final Data settings = new Data(config);
 
 	public static class Data extends OrderedMap<String, Object> {
@@ -33,12 +33,10 @@ public class MySettings {
 			this.parent = parent;
 			loadJval(parent, jsonMap);
 		}
-
 		public Data(Fi fi) {
 			loadFi(fi);
 		}
 
-		@Override
 		public Object put(String key, Object value) {
 			Object old = super.put(key, value);
 			if (!Objects.equals(old, value)) {
@@ -46,13 +44,11 @@ public class MySettings {
 			}
 			return old;
 		}
-
 		public void write() {
 			if (parent == null) config.writeString("" + this);
 			else parent.write();
 		}
 
-		@Override
 		public Object get(String key, Object defaultValue) {
 			return get(key, () -> defaultValue);
 		}
@@ -68,7 +64,6 @@ public class MySettings {
 				Log.err(e);
 			}
 		}
-
 		public void loadJval(Data parent, JsonMap jsonMap) {
 			for (var entry : jsonMap) {
 				super.put(entry.key, entry.value.isObject() ? new Data(parent, entry.value.asObject()) : entry.value);
@@ -84,11 +79,9 @@ public class MySettings {
 			if (v == null) return false;
 			return ScriptRuntime.toBoolean("" + v);
 		}
-
 		public boolean getBool(String name) {
 			return toBool(get(name));
 		}
-
 		public boolean getBool(String name, Object def) {
 			return toBool(get(name, def));
 		}
@@ -96,7 +89,6 @@ public class MySettings {
 		public String toString() {
 			return toString(new StringBuilder());
 		}
-
 		public String toString(StringBuilder tab) {
 			StringBuilder builder = new StringBuilder();
 			builder.append("{\n");
@@ -119,7 +111,6 @@ public class MySettings {
 			}
 			return Float.parseFloat("" + v);
 		}
-
 		public int getInt(String name, int def) {
 			Object v = get(name, def);
 			if (v instanceof Jval) {

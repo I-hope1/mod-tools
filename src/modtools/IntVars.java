@@ -65,7 +65,6 @@ public class IntVars {
 
 	static {
 		Core.app.addListener(new ApplicationListener() {
-			@Override
 			public void resize(int width, int height) {
 				for (var r : resizeListenrs) r.run();
 			}

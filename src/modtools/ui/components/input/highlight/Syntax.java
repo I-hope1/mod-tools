@@ -6,19 +6,7 @@ import mindustry.graphics.Pal;
 import modtools.ui.components.input.area.TextAreaTable;
 import modtools.ui.components.input.area.TextAreaTable.MyTextArea;
 
-import java.util.regex.Pattern;
-
-import static java.util.regex.Pattern.COMMENTS;
-
 public class Syntax {
-	static final Pattern
-			whiteSpaceP = Pattern.compile("(\\s+)"),
-			stringP     = Pattern.compile("(([\"'`]).*?(?<!\\\\)\\2)", COMMENTS),
-			operatCharP = Pattern.compile("([~|,+=*/\\-<>!]+)", COMMENTS),
-			bracketsP   = Pattern.compile("([\\[{()}\\]]+)", COMMENTS),
-			others      = Pattern.compile("([\\s\\S])")
-					// ,whitespace = Pattern.compile("(\\s+)")
-					;
 
 	public static final Color
 			stringC     = new Color(0xce9178FF),
@@ -68,7 +56,7 @@ public class Syntax {
 	public boolean isWordBreak(char c) {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90)
 		         || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
-		         || c == '$');
+		         || c == '$' || c == '_');
 	}
 
 	public boolean isWhitespace(char ch) {
@@ -105,32 +93,32 @@ public class Syntax {
 
 			if (cTask == null) {
 				for (DrawTask drawTask : taskArr) {
-					if (drawTask.draw(i)) {
-						cTask = drawTask;
-						if (cTask.isFinished()) {
-							cTask.drawText(i);
-							reset();
-							lastIndex = i + 1;
-							continue out;
-						}
-						break;
+					if (!drawTask.draw(i)) {
+						drawTask.reset();
+						continue;
 					}
-					drawTask.reset();
+					cTask = drawTask;
+					if (cTask.isFinished()) {
+						cTask.drawText(i);
+						reset();
+						lastIndex = i + 1;
+						continue out;
+					}
+					break;
 				}
-			} else if (cTask.draw(i)) {
-				if (cTask.isFinished()) {
-					cTask.drawText(i);
-					reset();
-					lastIndex = i + 1;
-				}
+			} else l1:if (cTask.draw(i)) {
+				if (!cTask.isFinished()) break l1;
+				cTask.drawText(i);
+				reset();
+				lastIndex = i + 1;
 			} else {
 				reset();
 			}
 			if (cTask == null) {
-				if (lastIndex < i + 1) {
-					drawDefText(lastIndex, i + 1);
-					lastIndex = i + 1;
-				}
+				if (lastIndex >= i + 1) continue;
+
+				drawDefText(lastIndex, i + 1);
+				lastIndex = i + 1;
 			}
 		}
 		if (cTask != null && cTask.crazy) {
@@ -145,8 +133,8 @@ public class Syntax {
 	public MyTextArea area;
 	public String     displayText;
 
-	Color defalutColor = Color.white;
-	char  c, lastChar;
+	public Color defalutColor = Color.white;
+	char c, lastChar;
 	int len;
 
 	/**
@@ -196,11 +184,11 @@ public class Syntax {
 			Color newColor;
 			for (TokenDraw draw : tokenDraws) {
 				newColor = draw.draw(this);
-				if (newColor != null) {
-					color.set(newColor);
-					finished = true;
-					break;
-				}
+				if (newColor == null) continue;
+
+				color.set(newColor);
+				finished = true;
+				break;
 			}
 			lastTokenIndex = lastIndex;
 			lastToken = token;
@@ -237,8 +225,6 @@ public class Syntax {
 		boolean isFinished() {
 			return true;
 		}
-
-		@Override
 		void init() {
 			lastSymbol = null;
 		}

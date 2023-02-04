@@ -12,8 +12,7 @@ import hope_android.FieldUtils;
 import rhino.ScriptRuntime;
 
 import java.io.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -26,6 +25,14 @@ import static ihope_lib.MyReflect.unsafe;
 public class Tools {
 	public static boolean validPosInt(String text) {
 		return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
+	}
+
+	public static Pattern complieRegExp(String text) {
+		try {
+			return Pattern.compile(text, Pattern.CASE_INSENSITIVE);
+		} catch (Throwable e) {
+			return null;
+		}
 	}
 
 	public static boolean isNum(String text) {
@@ -412,6 +419,16 @@ public class Tools {
 		SRI<T> cons(Consumer<T> consumer);
 
 		T get();
+	}
+
+
+	// Reflection
+	public static Object invoke(Method m, Object obj, Object... args) {
+		try {
+			return m.invoke(obj, args);
+		} catch (IllegalAccessException | InvocationTargetException e) {
+			throw new RuntimeException(e);
+		}
 	}
 }
 

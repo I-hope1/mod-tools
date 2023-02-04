@@ -26,13 +26,11 @@ public class FrameLabel extends Label {
 	boolean frameInvalid = true;
 	public TextureRegion region;
 
-	@Override
 	public void setText(CharSequence newText) {
 		if (!text.toString().equals(newText.toString())) frameInvalid = true;
 		super.setText(newText);
 	}
 
-	@Override
 	public void draw() {
 		if (frameInvalid) {
 			// Bloom bloom = new Bloom((int) width, (int) height, true, true);

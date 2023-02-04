@@ -29,12 +29,13 @@ import modtools.ui.components.input.highlight.*;
 import modtools.ui.components.limit.*;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.world.Selection;
+import modtools.utils.search.FilterTable;
 import rhino.*;
 
 import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.function.BiFunction;
+import java.util.function.*;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -58,7 +59,6 @@ public class JSFunc {
 		if (o == null) return null;
 		return showInfo(o, o.getClass());
 	}
-
 	public static Window showInfo(Class<?> clazz) {
 		return showInfo(null, clazz);
 	}
@@ -591,11 +591,9 @@ public class JSFunc {
 			d.cont.pane(t).fillX().fillY();
 		});
 	}
-
 	public static Window testElement(String text) {
 		return testElement(new Label(text));
 	}
-
 	public static Window testElement(Cons<Table> cons) {
 		return testElement(new Table(cons));
 	}
@@ -629,11 +627,9 @@ public class JSFunc {
 			return clazz;
 		}
 	}
-
 	public static Scriptable findClass(String name) throws ClassNotFoundException {
 		return findClass(name, true);
 	}
-
 	public static Class<?> forName(String name) throws ClassNotFoundException {
 		return Class.forName(name, false, Vars.mods.mainLoader());
 	}
@@ -666,92 +662,28 @@ public class JSFunc {
 	public static void copyText(String text, Element element) {
 		copyText(text, Tools.getAbsPos(element));
 	}
-
 	public static void copyText(String text) {
 		copyText(text, Core.input.mouse());
 	}
-
-
 	public static void copyText(String text, Vec2 vec2) {
 		Core.app.setClipboardText(text);
 		IntUI.showInfoFade(Core.bundle.format("IntUI.copied", text))
 				.setPosition(vec2);
 	}
 
-	public static class BindCell {
-		public static Cell<?> unusedCell = new Cell<>();
-		public        Cell<?> cell;
-		private       Cell<?> copyCell;
-		public        Element element;
-		// Table head;
-
-		public BindCell(Cell<?> cell) {
-			this.cell = cell;
-			this.element = cell.get();
-			// this.head = currentHead;
-		}
-
-		public Cell<?> getCopyCell() {
-			if (copyCell == null) copyCell = new Cell<>().set(cell);
-			return copyCell;
-		}
-	}
-
-	static class ReflectTable extends LimitTable {
-		ObjectMap<String, Seq<BindCell>> map = new ObjectMap<>();
-		// ObjectMap<Class<?>, Table> heads = new ObjectMap<>();
-
+	static class ReflectTable extends FilterTable {
+		public Seq<ValueLabel> labels = new Seq<>();
 		public ReflectTable() {
 			left().defaults().left().top();
 		}
-
-		private Seq<BindCell>   current;
-		public  Seq<ValueLabel> labels = new Seq<>();
-		// private Table currentHead;
-
-		public void bind(String name) {
-			current = map.get(name, Seq::new);
-			// currentHead = head;
-		}
-
-		@Override
-		protected void drawChildren() {
-			super.drawChildren();
-		}
-
-		public void unbind() {
-			current = null;
-			// currentHead = null;
-		}
-
-		@Override
-		public <T extends Element> Cell<T> add(T element) {
-			Cell<T> cell = super.add(element);
-			if (current != null) current.add(new BindCell(cell));
-			return cell;
-		}
-
-		// public Table unuseTable = new Table();
-
-		public void filter(Boolf<String> boolf) {
-			map.each((name, seq) -> {
-				seq.each(boolf.get(name) ?
-						         c -> c.cell.set(c.getCopyCell()).setElement(c.element) :
-						         c -> {
-							         c.getCopyCell();
-							         c.cell.set(BindCell.unusedCell).clearElement();
-						         });
-			});
-		}
-
 		public void build(Class<?> cls) {
 			add(new MyLabel(cls.getSimpleName(), IntStyles.myLabel)).labelAlign(Align.left).row();
 			image().color(Color.lightGray).fillX().padTop(6).colspan(6).row();
 		}
 	}
 
-	static Seq<Class<?>> NUMBER_SEQ = Seq.with(int.class, byte.class, short.class,
-	                                           long.class, float.class, double.class);
+	static final Seq<Class<?>> NUMBER_SEQ = Seq.with(int.class, byte.class, short.class,
+	                                                 long.class, float.class, double.class);
 
 	static class ValueLabel extends MyLabel {
 		public            Object   val;
@@ -919,7 +851,6 @@ public class JSFunc {
 		return sb;
 	}
 
-
 	public static class WatchWindow extends DisposableWindow {
 		Table pane;
 
@@ -962,6 +893,15 @@ public class JSFunc {
 			return "Watch@" + hashCode();
 		}
 	}
+	public static WatchWindow watch(String info, MyProv<Object> value) {
+		return watch(info, value, 0);
+	}
+	public static WatchWindow watch(String info, MyProv<Object> value, float interval) {
+		return new WatchWindow() {{
+			watch(info, value, interval);
+			show();
+		}};
+	}
 
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
 		table.button("@details", IntStyles.flatBordert, () -> {
@@ -980,17 +920,6 @@ public class JSFunc {
 						tester.put(b, prov.get());
 					});
 				});
-	}
-
-	public static WatchWindow watch(String info, MyProv<Object> value) {
-		return watch(info, value, 0);
-	}
-
-	public static WatchWindow watch(String info, MyProv<Object> value, float interval) {
-		return new WatchWindow() {{
-			watch(info, value, interval);
-			show();
-		}};
 	}
 
 	public static void addWatchButton(Table buttons, String info, MyProv<Object> value) {

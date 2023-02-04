@@ -3,7 +3,9 @@ package modtools.rhino;
 import arc.func.Func2;
 import arc.util.*;
 import mindustry.Vars;
+import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import mindustry.mod.ModClassLoader;
+import modtools.ui.IntUI;
 import modtools.utils.ByteCodeTools.*;
 import modtools.utils.Tools;
 import rhino.*;
@@ -28,10 +30,10 @@ public class ForRhino {
 	public static ContextFactory createFactory() throws Exception {
 		ContextFactory                    global         = ContextFactory.getGlobal();
 		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(global.getClass().getName().replace('.', '/') + "_aa1", global.getClass());
+		factoryMyClass.addInterface(MyRhino.class);
 		factoryMyClass.visit(ForRhino.class);
 
 		factoryMyClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, OS.isAndroid ? new Class[]{File.class} : new Class[0]);
-
 		// factoryMyClass.writer.write(Vars.tmpDirectory.child(factoryMyClass.adapterName + ".class").write());
 
 		forNameOrAddLoader(global.getClass());
@@ -59,6 +61,25 @@ public class ForRhino {
 	}
 
 	public static void observeInstructionCount(ContextFactory factory, Context cx, int instructionCount) {
-		if (tester.stopIfOvertime && Time.millis() - tester.lastTime >= 3_000) throw new RuntimeException("超时了");
+		if (tester.stopIfOvertime && Time.millis() - tester.lastTime >= 4_000) throw new RuntimeException("超时了");
 	}
+
+	public static Object doTopCall(ContextFactory factory,
+	                               Callable callable,
+	                               Context cx, Scriptable scope,
+	                               Scriptable thisObj, Object[] args) {
+		try {
+			return ((MyRhino) factory).super$_doTopCall(callable, cx, scope, thisObj, args);
+		} catch (Throwable t) {
+			tester.handleError(t);
+			return t;
+		}
+	}
+
+	public interface MyRhino {
+		Object super$_doTopCall(Callable callable,
+		                        Context cx, Scriptable scope,
+		                        Scriptable thisObj, Object[] args);
+	}
+
 }

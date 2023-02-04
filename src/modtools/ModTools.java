@@ -33,6 +33,7 @@ public class ModTools extends Mod {
 			}
 
 			// texture.getTextureData();
+			// 加载字体
 			Core.app.post(MyFonts::load);
 
 			// Unit135G.main();

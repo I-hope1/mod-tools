@@ -54,13 +54,13 @@ public class ReviewElement extends Content {
 	public void getSelected(float x, float y) {
 		tmp = Core.scene.root.hit(x, y, true);
 		selected = tmp;
-		if (tmp != null) {
+		//if (tmp != null) {
 			/*do {
 				selected = tmp;
 				tmp.parentToLocalCoordinates(Tmp.v1.set(x, y));
 				tmp = selected.hit(x = Tmp.v1.x, y = Tmp.v1.y, true);
 			} while (tmp != null && selected != tmp);*/
-		}
+		// }
 		// Log.info(selected);
 	}
 
@@ -72,7 +72,6 @@ public class ReviewElement extends Content {
 	public static ReviewElementWindow focusWindow;
 	public static Color               focusColor = Color.blue.cpy().a(0.4f);
 
-	@Override
 	public void load() {
 		final Color maskColor = Color.black.cpy().a(0.3f);
 		topGroup.drawSeq.add(() -> {
@@ -108,6 +107,15 @@ public class ReviewElement extends Content {
 		frag.touchable = Touchable.enabled;
 		frag.fillParent = true;
 
+		addSceneLinstener();
+		topGroup.addChild(frag);
+		// frag.update(() -> frag.toFront());
+
+		btn.update(() -> btn.setChecked(selecting));
+		btn.setStyle(Styles.logicTogglet);
+	}
+	/** 用于获取元素 */
+	private void addSceneLinstener() {
 		Core.scene.addListener(new InputListener() {
 			final Element mask = new Element() {
 				{
@@ -119,52 +127,15 @@ public class ReviewElement extends Content {
 					return cancelEvent ? this : null;
 				}
 			};
-
-			/*@Override
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (selecting) {
-					last = event.listenerActor.touchable;
-					event.listenerActor.touchable = Touchable.disabled;
-					// Time.runTask(20, tmp::remove);
-					IntVars.async(() -> {
-						Element parent = selected.parent;
-						while (true) {
-							if (parent instanceof ElementShowWindow) return;
-							if (parent == null) {
-								new ElementShowWindow().show(selected);
-								return;
-							}
-							parent = parent.parent;
-						}
-					}, () -> {});
-				}
-				return true;
-			}*/
-
 			public void cancel() {
 				selecting = false;
 			}
-
-			/*public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (last != null) {
-					cancel(event);
-				}
-			}
-
-			public boolean mouseMoved(InputEvent event, float x, float y) {
-				if (!selecting) return false;
-				getSelected(x, y);
-				return true;
-			}*/
-
-			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (keycode == KeyCode.escape) {
 					cancel();
 				}
 				return super.keyDown(event, keycode);
 			}
-
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (event.listenerActor == btn) return false;
 				if (!selecting) return false;
@@ -175,13 +146,11 @@ public class ReviewElement extends Content {
 				cancelEvent = true;
 				return true;
 			}
-
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				cancelEvent = false;
 				getSelected(x, y);
 				cancelEvent = true;
 			}
-
 			public boolean filter() {
 				if (selected == null) return false;
 				Element parent = selected;
@@ -201,14 +170,8 @@ public class ReviewElement extends Content {
 				if (filter()) new ReviewElementWindow().show(selected);
 			}
 		});
-		topGroup.addChild(frag);
-		// frag.update(() -> frag.toFront());
-
-		btn.update(() -> btn.setChecked(selecting));
-		btn.setStyle(Styles.logicTogglet);
 	}
 
-	@Override
 	public void build() {
 		selected = null;
 		selecting = !selecting;
@@ -238,7 +201,7 @@ public class ReviewElement extends Content {
 			pane.left().defaults().left();
 			cont.table(t -> {
 				Button[] bs = {null};
-				bs[0] = t.button("显示父元素", Icon.up, () -> {
+				bs[0] = t.button("@reviewElement.parent", Icon.up, () -> {
 					Runnable go = () -> {
 						hide();
 						var window = new ReviewElementWindow();
@@ -249,7 +212,7 @@ public class ReviewElement extends Content {
 					};
 					if (element.parent == Core.scene.root) {
 						Vec2 vec2 = bs[0].localToStageCoordinates(new Vec2(0, 0));
-						IntUI.showConfirm("父元素为根节点，是否确定", go).setPosition(vec2);
+						IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					} else go.run();
 				}).disabled(b -> element == null || element.parent == null).width(120).get();
 				t.button(Icon.copy, IntStyles.clearNonei, () -> {
@@ -428,7 +391,7 @@ public class ReviewElement extends Content {
 					// JSFunc.addStoreButton(wrap, "element", () -> element);
 					Element elem = wrap.getChildren().get(wrap.getChildren().size > 1 ? 1 : 0);
 					Runnable copy = () -> {
-						IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", tester.put(element))).setPosition(Core.input.mouse());
+						tester.put(Core.input.mouse(), element);
 					};
 					IntUI.addShowMenuLinstenr(elem, new MenuList(Icon.copy, "@jsfunc.store_as_js_var2", copy),
 					                          new MenuList(Icon.trash, "@clear", () -> element.remove()),

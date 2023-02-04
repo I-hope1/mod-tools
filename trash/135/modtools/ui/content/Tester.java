@@ -94,7 +94,6 @@ public class Tester extends Content {
 		dialog.cont.pane(p -> {
 			p.margin(10);
 			p.table(Tex.button, t -> {
-				TextButtonStyle style = Styles.cleart;
 				t.defaults().size(280, 60).left();
 
 				t.row();

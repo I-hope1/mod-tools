@@ -15,6 +15,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.Timer;
 import arc.util.Timer.Task;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
@@ -25,7 +26,7 @@ import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
-import mindustry.world.Tile;
+import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.BackElement;
@@ -36,7 +37,7 @@ import modtools.ui.content.Content;
 import modtools.utils.*;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.function.Consumer;
 
 import static mindustry.Vars.*;
@@ -95,7 +96,7 @@ public class Selection extends Content {
 		table.table(t -> {
 			defaultTeam = Team.get(settings.getInt(getSettingName() + "-defaultTeam", 1));
 			t.left().defaults().left();
-			t.add("默认队伍").color(Pal.accent).growX().left().row();
+			t.add("@selection.default.team").color(Pal.accent).growX().left().row();
 			t.table(t1 -> {
 				t1.left().defaults().left();
 				Team[] arr = Team.baseTeams;
@@ -103,15 +104,14 @@ public class Selection extends Content {
 
 				for (Team team : arr) {
 					ImageButton b = t1.button(IntUI.whiteui, IntStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
+						settings.put(getSettingName() + "-defaultTeam", team.id);
 						defaultTeam = team;
-						settings.put(this.getSettingName() + "-defaultTeam", "" + team.id);
 					}).size(42).get();
 					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
 					b.update(() -> {
-						b.setChecked(this.defaultTeam == team);
+						b.setChecked(defaultTeam == team);
 					});
-					++c;
-					if (c % 3 == 0) {
+					if (++c % 3 == 0) {
 						t1.row();
 					}
 				}
@@ -131,6 +131,7 @@ public class Selection extends Content {
 		fragSelect.name = "SelectionElem";
 		// fragSelect.update(() -> fragSelect.toFront());
 		fragSelect.touchable = Touchable.enabled;
+
 		fragSelect.setFillParent(true);
 
 		int maxH = 400;
@@ -173,11 +174,9 @@ public class Selection extends Content {
 					return show;
 				}
 			}
-
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				end.set(Core.camera.unproject(x, y));
 			}
-
 			public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
 				btn.setChecked(false);
 
@@ -203,54 +202,42 @@ public class Selection extends Content {
 				}
 
 				if (select.get("bullet")) {
-					new Thread(() -> {
+					Threads.thread(() -> {
 						Groups.bullet.each(bullet -> {
 							// 返回单位是否在所选区域内
 							return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
 						}, bullet -> {
-							try {
-								Thread.sleep(1);
-							} catch (InterruptedException e) {
-								throw new RuntimeException(e);
-							}
+							Threads.sleep(1);
 							if (!bullets.list.contains(bullet)) {
 								bullets.add(bullet);
 							}
 						});
-					}).start();
+					});
 				}
 				if (select.get("unit")) {
-					new Thread(() -> {
+					Threads.thread(() -> {
 						Groups.unit.each(unit -> {
 							// 返回单位是否在所选区域内
 							return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
 						}, unit -> {
-							try {
-								Thread.sleep(1);
-							} catch (InterruptedException e) {
-								throw new RuntimeException(e);
-							}
+							Threads.sleep(1);
 							if (!units.list.contains(unit)) {
 								units.add(unit);
 							}
 						});
-					}).start();
+					});
 				}
 
 				float minX = Mathf.clamp(start.x, 0, world.unitWidth());
 				float maxX = Mathf.clamp(end.x, 0, world.unitWidth());
 				float minY = Mathf.clamp(start.y, 0, world.unitHeight());
 				float maxY = Mathf.clamp(end.y, 0, world.unitHeight());
-				new Thread(() -> {
+				Threads.thread(() -> {
 					for (float y = minY; y < maxY; y += tilesize) {
 						for (float x = minX; x < maxX; x += tilesize) {
 							Tile tile = world.tileWorld(x, y);
 							if (tile != null) {
-								try {
-									Thread.sleep(1);
-								} catch (InterruptedException e) {
-									throw new RuntimeException(e);
-								}
+								Threads.sleep(1);
 								if (select.get("tile") && !tiles.list.contains(tile)) {
 									tiles.add(tile);
 								}
@@ -261,7 +248,7 @@ public class Selection extends Content {
 							}
 						}
 					}
-				}).start();
+				});
 
 				if (!pane.isShown()) {
 					pane.show();
@@ -278,7 +265,8 @@ public class Selection extends Content {
 
 		// functions = new Table();
 		// functions.defaults().width(buttonWidth);
-		pane = new Window(localizedName(), 0/* two buttons */, maxH, true);
+		pane = new Window(localizedName(), buttonWidth * 1.5f/* two buttons */,
+		                  maxH, true);
 		pane.hidden(this::hide);
 
 		//		pane.cont.left().bottom().defaults().width(W);
@@ -289,67 +277,50 @@ public class Selection extends Content {
 		});
 
 		tiles = new TileFunction<>("tile", (t, func) -> {
-			FunctionBuild(t, "设置", button -> {
+			FunctionBuild(t, "@selection.reset", button -> {
 				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
 					func.each(tile -> {
-						if (tile.block() == block) return;
-						if (block.isMultiblock()) {
-							int offsetx = -(block.size - 1) / 2;
-							int offsety = -(block.size - 1) / 2;
-							for (int dx = 0; dx < block.size; dx++) {
-								for (int dy = 0; dy < block.size; dy++) {
-									int  worldx = dx + offsetx + tile.x;
-									int  worldy = dy + offsety + tile.y;
-									Tile other  = world.tile(worldx, worldy);
-
-									if (other != null && other.block().isMultiblock() && other.block() == block) {
-										return;
-									}
-								}
-							}
-						}
-						tile.setBlock(block, tile.build != null ? tile.team() : defaultTeam);
+						setBlock(block, tile);
 					});
 				}, 42f, 32, 6, true);
 			});
-			FunctionBuild(t, "清除", __ -> {
+			FunctionBuild(t, "@clear", __ -> {
 				func.each(tile -> {
 					if (tile.block() != Blocks.air) tile.setAir();
 				});
 			});
-			ListFunction(t, "设置地板重置Overlay",
+			ListFunction(t, "@selection.setfloor",
 			             Vars.content.blocks().select(block -> block instanceof Floor),
 			             null, floor -> {
 						tiles.each(tile -> {
 							tile.setFloor((Floor) floor);
 						});
 					});
-			ListFunction(t, "设置地板保留Overlay", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
+			ListFunction(t, "@selection.setfloorUnder", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
 			             null, floor -> {
 						tiles.each(tile -> {
 							tile.setFloorUnder((Floor) floor);
 						});
 					});
-			ListFunction(t, "设置Overlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), null, overlay -> {
+			ListFunction(t, "@selection.setoverlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), null, overlay -> {
 				tiles.each(tile -> {
 					tile.setOverlay(overlay);
 				});
 			});
 		});
-
 		buildings = new BuildFunction<>("building", (t, func) -> {
-			FunctionBuild(t, "无限血量", __ -> {
+			FunctionBuild(t, "@selection.infiniteHealth", __ -> {
 				func.each(b -> {
 					b.health = Float.POSITIVE_INFINITY;
 				});
 			});
-			TeamFunctionBuild(t, "设置队伍", team -> {
+			TeamFunctionBuild(t, "@editor.teams", team -> {
 				func.each(b -> {
 					b.changeTeam(team);
 				});
 			});
 			String[] amount = new String[1];
-			ListFunction(t, "设置物品", Vars.content.items(), t1 -> {
+			ListFunction(t, "@selection.items", Vars.content.items(), t1 -> {
 				t1.row();
 				t1.field("", s -> {
 					amount[0] = s;
@@ -361,7 +332,7 @@ public class Selection extends Content {
 					}
 				});
 			});
-			ListFunction(t, "设置液体", Vars.content.liquids(), t1 -> {
+			ListFunction(t, "@selection.liquids", Vars.content.liquids(), t1 -> {
 				t1.row();
 				t1.field("", s -> {
 					amount[0] = s;
@@ -373,13 +344,13 @@ public class Selection extends Content {
 					}
 				});
 			});
-			FunctionBuild(t, "杀死", __ -> {
+			FunctionBuild(t, "@kill", __ -> {
 				func.list.removeIf(b -> {
 					if (b.tile.build == b) b.kill();
 					return b.tile.build != null;
 				});
 			});
-			FunctionBuild(t, "清除", __ -> {
+			FunctionBuild(t, "@clear", __ -> {
 				func.list.removeIf(b -> {
 					if (b.tile != null && b.tile.block() != Blocks.air) {
 						b.tile.remove();
@@ -389,20 +360,19 @@ public class Selection extends Content {
 				});
 			});
 		});
-
 		units = new UnitFunction<>("unit", (t, func) -> {
-			FunctionBuild(t, "无限血量", __ -> {
+			FunctionBuild(t, "@selection.infiniteHealth", __ -> {
 				func.each(unit -> {
 					unit.health(Float.POSITIVE_INFINITY);
 				});
 			});
-			TeamFunctionBuild(t, "设置队伍", team -> {
+			TeamFunctionBuild(t, "@editor.teams", team -> {
 				func.each(unit -> {
 					if (Vars.player.unit() == unit) Vars.player.team(team);
 					unit.team(team);
 				});
 			});
-			FunctionBuild(t, "杀死", __ -> {
+			FunctionBuild(t, "@kill", __ -> {
 				func.list.removeIf(u -> {
 					Call.unitDeath(u.id);
 					try {
@@ -411,7 +381,7 @@ public class Selection extends Content {
 					return false;
 				});
 			});
-			FunctionBuild(t, "清除", __ -> {
+			FunctionBuild(t, "@clear", __ -> {
 				func.list.removeIf(u -> {
 					u.remove();
 					return Groups.unit.contains(u0 -> u0 == u);
@@ -419,7 +389,7 @@ public class Selection extends Content {
 					// return false;
 				});
 			});
-			FunctionBuild(t, "强制清除", __ -> {
+			FunctionBuild(t, "@selection.forceClear", __ -> {
 				func.list.removeIf(u -> {
 					u.remove();
 					if (!Groups.unit.contains(unit -> unit == u)) return true;
@@ -436,9 +406,8 @@ public class Selection extends Content {
 				});
 			});
 		});
-
 		bullets = new BulletFunction<>("bullet", (t, func) -> {
-			FunctionBuild(t, "清除", __ -> {
+			FunctionBuild(t, "@clear", __ -> {
 				func.list.removeIf(bullet -> {
 					bullet.remove();
 					try {
@@ -467,6 +436,25 @@ public class Selection extends Content {
 
 		btn.setStyle(Styles.logicTogglet);
 	}
+	private void setBlock(Block block, Tile tile) {
+		if (tile.block() == block) return;
+		if (block.isMultiblock()) {
+			int offsetx = -(block.size - 1) / 2;
+			int offsety = -(block.size - 1) / 2;
+			for (int dx = 0; dx < block.size; dx++) {
+				for (int dy = 0; dy < block.size; dy++) {
+					int  worldx = dx + offsetx + tile.x;
+					int  worldy = dy + offsety + tile.y;
+					Tile other  = world.tile(worldx, worldy);
+
+					if (other != null && other.block().isMultiblock() && other.block() == block) {
+						return;
+					}
+				}
+			}
+		}
+		tile.setBlock(block, tile.build != null ? tile.team() : defaultTeam);
+	}
 
 	public static Field addedField, controller;
 
@@ -492,6 +480,7 @@ public class Selection extends Content {
 		tiles.clearList();
 		buildings.clearList();
 		units.clearList();
+		bullets.clearList();
 		//		}
 	}
 	public void build() {
@@ -751,11 +740,11 @@ public class Selection extends Content {
 	};
 
 	public abstract class Function<T> {
-		public final Table        wrap;
-		public final Table        main;
-		public final Table        cont;
-		public       ArrayList<T> list = new ArrayList<>();
-		public final String       name;
+		public final Table   wrap;
+		public final Table   main;
+		public final Table   cont;
+		public       List<T> list = new MyList();
+		public final String  name;
 
 		public Function(String name, Cons2<Table, Function<T>> cons) {
 			this.name = name;
@@ -801,8 +790,9 @@ public class Selection extends Content {
 			wrap.clearChildren();
 		}
 
-		private int c;
+		// private int c;
 
+		Thread thread;
 		public void each(Consumer<? super T> action) {
 			// if (list.size() < 1e4) {
 			// 	IntVars.async("each", () -> list.forEach(action), () -> {});
@@ -812,16 +802,23 @@ public class Selection extends Content {
 			list.forEach(e -> {
 				Time.runTask(c++ / 100f, () -> action.accept(e));
 			});*/
-			new Thread(() -> {
-				// c = 0;
-				try {
-					Thread.sleep(2);
-				} catch (InterruptedException e) {
-					throw new RuntimeException(e);
+
+			Thread[] tmp = {null};
+			tmp[0] = Threads.thread(() -> {
+				while (thread != null && thread.isAlive()) {
+					Threads.sleep(10);
 				}
-				// action.accept();
-				list.forEach(action);
-			}).start();
+				thread = tmp[0];
+				for (T t : list) {
+					try {
+						action.accept(t);
+					} catch (Exception e) {
+						Log.err(e);
+					}
+					Threads.sleep(1, 1000);
+				}
+				thread = null;
+			});
 		}
 
 		public void clearList() {
@@ -914,7 +911,6 @@ public class Selection extends Content {
 		public void add(T item) {
 			list.add(item);
 		}
-
 	}
 
 	Vec2 mouse      = new Vec2();
@@ -980,6 +976,12 @@ public class Selection extends Content {
 	private final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
 
 	{
+		otherWD.drawSeq.add(() -> {
+			if (Core.input.alt()) {
+				Draw.alpha(0.3f);
+			}
+			return true;
+		});
 		otherWD.drawSeq.add(() -> {
 			if (!focusLock) {
 				focusUnits.clear();
@@ -1070,4 +1072,101 @@ public class Selection extends Content {
 			entity.add();
 		}
 	}*/
+
+	public static Object[] EMPTY = {};
+
+	private static class MyList<T> extends AbstractList<T> {
+		Object[] arr  = EMPTY;
+		int      size = 0;
+		public T get(int index) {
+			return (T) arr[index];
+		}
+		@Override
+		public void clear() {
+			arr = new Object[0];
+			size = 0;
+		}
+		/**
+		 * Returns a capacity at least as large as the given minimum capacity.
+		 * Returns the current capacity increased by 50% if that suffices.
+		 * Will not return a capacity greater than MAX_ARRAY_SIZE unless
+		 * the given minimum capacity is greater than MAX_ARRAY_SIZE.
+		 *
+		 * @param minCapacity the desired minimum capacity
+		 *
+		 * @throws OutOfMemoryError if minCapacity is less than zero
+		 */
+		private int newCapacity(int minCapacity) {
+			// overflow-conscious code
+			int oldCapacity = arr.length;
+			int newCapacity = oldCapacity + (oldCapacity >> 1);
+			if (newCapacity - minCapacity <= 0) {
+				if (minCapacity < 0) // overflow
+					throw new OutOfMemoryError();
+				return minCapacity;
+			}
+			return newCapacity;
+		}
+		/**
+		 * Increases the capacity to ensure that it can hold at least the
+		 * number of elements specified by the minimum capacity argument.
+		 *
+		 * @param minCapacity the desired minimum capacity
+		 *
+		 * @throws OutOfMemoryError if minCapacity is less than zero
+		 */
+		private Object[] grow(int minCapacity) {
+			return arr = Arrays.copyOf(arr, newCapacity(minCapacity));
+		}
+
+		private Object[] grow() {
+			return grow(size + 1);
+		}
+		public void add(int index, T element) {
+			final int s;
+			Object[]  arr;
+			if (this.arr == EMPTY) {
+				this.arr = new Object[10];
+			}
+			if ((s = size) == (arr = this.arr).length)
+				arr = grow();
+			System.arraycopy(arr, index,
+			                 arr, index + 1,
+			                 s - index);
+			arr[index] = element;
+			size = s + 1;
+		}
+		public int size() {
+			return size;
+		}
+
+		/**
+		 * Removes the element at the specified position in this list.
+		 * Shifts any subsequent elements to the left (subtracts one from their
+		 * indices).
+		 *
+		 * @param index the index of the element to be removed
+		 *
+		 * @return the element that was removed from the list
+		 * @throws IndexOutOfBoundsException {@inheritDoc}
+		 */
+		public T remove(int index) {
+			Objects.checkIndex(index, size);
+
+			T oldValue = (T) arr[index];
+			fastRemove(arr, index);
+
+			return oldValue;
+		}
+		/**
+		 * Private remove method that skips bounds checking and does not
+		 * return the value removed.
+		 */
+		private void fastRemove(Object[] es, int i) {
+			final int newSize;
+			if ((newSize = size - 1) > i)
+				System.arraycopy(es, i + 1, es, i, newSize - i);
+			es[size = newSize] = null;
+		}
+	}
 }

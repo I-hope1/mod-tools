@@ -70,11 +70,11 @@ public class Window extends Table {
 		});
 	}
 
-	public static Drawable myPane = Tex.pane;
-	// ((NinePatchDrawable) Tex.pane).tint(new Color(1, 1, 1, 0.9f));
-	public static final Cell emptyCell = new Cell<>();
-	public Table top = new Table(myPane) {
-		@Override
+	public static       Drawable myPane    = Tex.pane;
+	public static final Cell     emptyCell = new Cell<>();
+
+	public Table
+			top     = new Table(myPane) {
 		public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, float isize, Runnable listener) {
 			var cell = super.button(icon, style, isize, listener);
 			cell.get().tapped(() -> {
@@ -84,12 +84,14 @@ public class Window extends Table {
 			return cell;
 		}
 	},
-			cont = new Table(myPane),
+			cont    = new Table(myPane),
 			buttons = new Table(myPane);
 	public float minWidth, minHeight;
 	// 用于最小化时的最小宽度
 	private static final float topHeight = 45;
+
 	public Label title;
+
 	public boolean
 			// 是否置顶
 			sticky = false,
@@ -144,7 +146,6 @@ public class Window extends Table {
 				toggleMaximize();
 				// 修复移动侦听器的位置
 				RunListener listener = new RunListener() {
-					@Override
 					public void fire(boolean status) {
 						moveListener.lastMain.x = x;
 						moveListener.lastMain.y = y;
@@ -180,8 +181,6 @@ public class Window extends Table {
 	}
 
 	ObjectSet<Runnable> runs = new ObjectSet<>();
-
-	@Override
 	public Element update(Runnable r) {
 		runs.add(r);
 		return this;
@@ -220,10 +219,10 @@ public class Window extends Table {
 	}
 
 	public void display() {
-		float mainWidth = getWidth(), mainHeight = getHeight();
+		float mainWidth  = getWidth(), mainHeight = getHeight();
 		float touchWidth = top.getWidth(), touchHeight = top.getHeight();
 		super.setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
-				Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
+		                  Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
 		if (lastMaximize) {
 			// false取反为true
 			isMaximize = false;
@@ -245,7 +244,6 @@ public class Window extends Table {
 			defaultShowAction = () -> Actions.sequence(Actions.alpha(0), Actions.fadeIn(0.2f, Interp.fade)),
 			defaultHideAction = () -> Actions.fadeOut(0.2f, Interp.fade);
 	protected InputListener ignoreTouchDown = new InputListener() {
-		@Override
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			event.cancel();
 			return false;
@@ -253,12 +251,10 @@ public class Window extends Table {
 	};
 	Element previousKeyboardFocus, previousScrollFocus;
 	FocusListener focusListener = new FocusListener() {
-		@Override
 		public void keyboardFocusChanged(FocusEvent event, Element actor, boolean focused) {
 			if (!focused) focusChanged(event);
 		}
 
-		@Override
 		public void scrollFocusChanged(FocusEvent event, Element actor, boolean focused) {
 			if (!focused) focusChanged(event);
 		}
@@ -266,17 +262,15 @@ public class Window extends Table {
 		private void focusChanged(FocusEvent event) {
 			Scene stage = getScene();
 			if (stage != null && stage.root.getChildren().size > 0
-					&& stage.root.getChildren().peek() == Window.this) { // Dialog is top most actor.
+			    && stage.root.getChildren().peek() == Window.this) { // Dialog is top most actor.
 				Element newFocusedActor = event.relatedActor;
 				if (newFocusedActor != null && !newFocusedActor.isDescendantOf(Window.this) &&
-						!(newFocusedActor.equals(previousKeyboardFocus) || newFocusedActor.equals(previousScrollFocus)))
+				    !(newFocusedActor.equals(previousKeyboardFocus) || newFocusedActor.equals(previousScrollFocus)))
 					event.cancel();
 			}
 		}
 	};
 
-
-	@Override
 	public void clear() {
 		super.clear();
 		all.remove(this);
@@ -395,12 +389,12 @@ public class Window extends Table {
 	}
 
 	// 用于存储最小/大化前的位置和大小
-	public Rect lastRect = new Rect();
-	private boolean disabledActions = false;
+	public  Rect    lastRect        = new Rect();
+	private boolean disabledActions = true;
 
 
 	public ObjectSet<RunListener> maxlisteners = new ObjectSet<>();
-	public boolean isMaximize = false, lastMaximize = false;
+	public boolean                isMaximize   = false, lastMaximize = false;
 
 	/**
 	 * Adds a toggleMaximize() listener.
@@ -423,12 +417,12 @@ public class Window extends Table {
 				lastRect.set(x, y, width, height);
 			}
 			actions(Actions.sizeTo(Core.graphics.getWidth(), Core.graphics.getHeight(), disabledActions ? 0 : 0.06f),
-					Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
+			        Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
 			// setSize(Core.graphics.getWidth(), Core.graphics.getHeight());
 			// setPosition(0, 0);
 		} else {
 			actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.06f),
-					Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
+			        Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
 		}
 
 		Timer.schedule(new Task() {
@@ -446,7 +440,7 @@ public class Window extends Table {
 
 
 	public ObjectSet<RunListener> minlisteners = new ObjectSet<>();
-	public boolean isMinimize = false;
+	public boolean                isMinimize   = false;
 
 	public void toggleMinimize() {
 		isMinimize = !isMinimize;
@@ -456,8 +450,8 @@ public class Window extends Table {
 			}
 
 			actions(Actions.sizeTo(getMinWidth(), topHeight, disabledActions ? 0 : 0.01f),
-					Actions.moveTo(Math.max(x, lastRect.width / 2f),
-							y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
+			        Actions.moveTo(Math.max(x, lastRect.width / 2f),
+			                       y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
 
 			getCell(cont).set(emptyCell);
 			cont.remove();
@@ -475,12 +469,12 @@ public class Window extends Table {
 			left().top();
 			if (isMaximize) {
 				actions(Actions.sizeTo(Core.graphics.getWidth(), Core.graphics.getHeight(), disabledActions ? 0 : 0.1f),
-						Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
+				        Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
 			} else {
 				actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.01f),
-						Actions.moveTo(lastRect.x = x,
-								lastRect.y = y - lastRect.height + topHeight,
-								disabledActions ? 0 : 0.01f));
+				        Actions.moveTo(lastRect.x = x,
+				                       lastRect.y = y - lastRect.height + topHeight,
+				                       disabledActions ? 0 : 0.01f));
 				// y -= height - topHeight;
 			}
 			addListener(sclLisetener);

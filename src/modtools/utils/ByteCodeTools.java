@@ -18,6 +18,7 @@ import java.util.*;
 
 import static ihope_lib.MyReflect.unsafe;
 import static rhino.classfile.ByteCode.*;
+import static rhino.classfile.ClassFileWriter.ACC_PUBLIC;
 
 public class ByteCodeTools {
 	/*public static <T> MyClass<T> newClass(String name, String superName) {
@@ -238,25 +239,41 @@ public class ByteCodeTools {
 		}
 
 		public void visit(Class<?> cls) {
-			Method[] methods = cls.getDeclaredMethods();
+			Method[] methods   = cls.getDeclaredMethods();
+			String   className = nativeName(cls);
 			for (var m : methods) {
 				if (m.getAnnotation(Exclude.class) != null) continue;
 				int mod = m.getModifiers();
 				if (!Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
-				Class<?>[] types      = m.getParameterTypes();
-				Class<?>[] args       = Arrays.copyOfRange(types, 1, types.length);
+				// 传给cls方法的参数
+				Class<?>[] types = m.getParameterTypes();
+				// 用于super方法
+				Class<?>[] realTypes  = Arrays.copyOfRange(types, 1, types.length);
 				Class<?>   returnType = m.getReturnType();
-				writer.startMethod(m.getName(), nativeMethod(returnType, args), (short) Modifier.PUBLIC);
-				writer.addLoadThis();
-				for (int i = 0; i < args.length; i++) {
-					writer.add(addLoad(args[i]), i + 1);
+				String     descriptor = nativeMethod(returnType, realTypes);
+				{ // buildSuper
+					writer.startMethod("super$_" + m.getName(),
+					                   descriptor, ACC_PUBLIC);
+					writer.addLoadThis(); // this
+					for (int i = 1; i <= realTypes.length; i++) {
+						writer.add(addLoad(types[i]), i);
+						// addCast(writer, types[i]);
+					}
+					writer.addInvoke(INVOKESPECIAL, superName, m.getName(), descriptor);
+					writer.add(buildReturn(returnType));
+					writer.stopMethod((short) types.length);
 				}
-				writer.addInvoke(INVOKESTATIC, nativeName(cls),
+				writer.startMethod(m.getName(), descriptor, (short) Modifier.PUBLIC);
+				writer.addLoadThis();
+				for (int i = 0; i < realTypes.length; i++) {
+					writer.add(addLoad(realTypes[i]), i + 1);
+				}
+				writer.addInvoke(INVOKESTATIC, className,
 				                 m.getName(), nativeMethod(returnType, types));
 				addCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
-				writer.stopMethod((short) (args.length + 1));
+				writer.stopMethod((short) (realTypes.length + 1));
 			}
 		}
 

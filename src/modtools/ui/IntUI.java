@@ -41,13 +41,11 @@ public class IntUI {
 	doubleClick(T elem, Runnable click, Runnable dclick) {
 		elem.addListener(new ClickListener() {
 			final Task clickTask = new Task() {
-				@Override
 				public void run() {
 					click.run();
 				}
 			};
 
-			@Override
 			public void clicked(InputEvent event, float x, float y) {
 				super.clicked(event, x, y);
 				if (clickTask.isScheduled()) {
@@ -67,13 +65,10 @@ public class IntUI {
 	longPress(T elem, final long duration, final Boolc boolc) {
 		elem.addListener(new InputListener() {
 			final Task task = new Task() {
-				@Override
 				public void run() {
 					boolc.get(true);
 				}
 			};
-
-			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				// if (super.touchDown(event, x, y, pointer, button)) {
 				Timer.schedule(task, duration / 1000f);
@@ -81,8 +76,6 @@ public class IntUI {
 				// }
 				// return false;
 			}
-
-			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (task.isScheduled()) {
 					task.cancel();
@@ -97,7 +90,6 @@ public class IntUI {
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
 		elem.addListener(new ClickListener(KeyCode.mouseRight) {
-			@Override
 			public void clicked(InputEvent event, float x, float y) {
 				run.run();
 			}

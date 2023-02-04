@@ -71,6 +71,9 @@ public class TextAreaTable extends Table {
 			// Element last = Core.scene.getKeyboardFocus();
 			// 刷新Area
 			pane.invalidate();
+			// invalidateHierarchy();
+			linesShow.invalidate();
+			invalidate();
 			cell.setElement(showLine ? linesShow : null);
 			// if (last == area) focus();
 		});
@@ -91,11 +94,6 @@ public class TextAreaTable extends Table {
 
 		syntax = new JSSyntax(this);
 	}
-	/*@Override
-	public void draw() {
-		super.draw();
-		area.draw();
-	}*/
 
 	public Boolf2<InputEvent, KeyCode>   keyDonwB  = null;
 	public Boolf2<InputEvent, Character> keyTypedB = null;
@@ -108,6 +106,7 @@ public class TextAreaTable extends Table {
 	public class MyScrollPane extends ScrollPane {
 		public MyScrollPane() {
 			super(area);
+			setVelocityY(100);
 		}
 
 		public void trackCursor() {
@@ -137,38 +136,25 @@ public class TextAreaTable extends Table {
 		}*/
 	}
 
-	/**
-	 * 用于语法高亮<br>
-	 * patternSeq匹配字符，colorSeq用于绘制颜色
-	 **//*
-	public Seq<Pattern> patternSeq = null;
-	public Seq<MyMatcher> matcherSeq = new Seq<>();
-	public Seq<Color> colorSeq = null;*/
 	public boolean enableHighlighting = true;
 
 	private static final Pattern startComment = Pattern.compile("\\s*//");
-
-	public static final float fontWidth = 12;
+	public static final  float   fontWidth    = 12;
 
 	public class MyTextArea extends TextArea {
 		public  float    parentHeight = 0;
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
-		public float lineHeight() {
-			return style.font.getLineHeight();
-		}
-
 		public MyTextArea(String text) {
 			super(text);
 		}
-
-		@Override
+		public float lineHeight() {
+			return style.font.getLineHeight();
+		}
 		public void setText(String str) {
 			super.setText(str);
 		}
-
-		@Override
 		public float getPrefHeight() {
 			float prefHeight = textHeight * getLines();
 			var   style      = getStyle();
@@ -182,17 +168,14 @@ public class TextAreaTable extends Table {
 		public void setFirstLineShowing(int v) {
 			firstLineShowing = v;
 		}
-
 		public IntSeq getLinesBreak() {
 			return linesBreak;
 		}
-
 		public int getRealLinesShowing() {
 			Drawable background      = style.background;
 			float    availableHeight = parentHeight - (background == null ? 0 : background.getBottomHeight() + background.getTopHeight());
 			return (int) Math.floor(availableHeight / lineHeight());
 		}
-
 		public int getRealFirstLineShowing() {
 			if (true) return (int) Math.floor(scrollY / lineHeight());
 
@@ -206,7 +189,6 @@ public class TextAreaTable extends Table {
 			return firstLineShowing;
 		}
 
-		@Override
 		protected void drawText(Font font, float x, float y) {
 			boolean had       = font.getData().markupEnabled;
 			Color   lastColor = font.getColor();
@@ -234,212 +216,9 @@ public class TextAreaTable extends Table {
 			font.getData().markupEnabled = had;
 		}
 
-		/*public void highlightingDraw(Font font, float x, float y) {
-			if (needsLayout()) return;
-			int firstLineShowing = getRealFirstLineShowing();
-			final float[] offsetY = {-firstLineShowing * font.getLineHeight()};
-			int linesShowing = getRealLinesShowing() + 1;
-			StringBuilder builder = new StringBuilder(displayText);
-			for (int i = firstLineShowing * 2; i < (firstLineShowing + linesShowing) * 2 && i < linesBreak.size; i += 2) {
-				try {
-					int end = linesBreak.get(i + 1);
-					if (displayText.charAt(end) == ' ')
-						builder.replace(end, end + 1, "\n");
-					// Log.debug(displayText.charAt(linesBreak.get(i + 1)) == 32);
-				} catch (Exception ignored) {}
-			}
-			// Log.debug(displayText);
-
-			Matcher m;
-			String group;
-			final float[] offsetX = new float[1];
-			int lastIndex;
-			matcherSeq.clear();
-			// for (int i = firstLineShowing * 2; i < (firstLineShowing + linesShowing) * 2 && i < linesBreak.size; i += 2) {
-			final int[] i = {firstLineShowing * 2};
-			final int[] home = {linesBreak.get(i[0])};
-			final int[] end = {linesBreak.get(i[0] + 1)};
-			// String line = displayText.substring(home, end);
-			matcherSeq.clear();
-			for (var p : patternSeq) {
-				matcherSeq.add(p.matcher(builder));
-			}
-			lastIndex = 0;
-			offsetX[0] = x;
-
-			Cons2<Integer, Integer> drawMultiText = (start, max) -> {
-				// Log.debug("s: @, m: @, t: @", start, max, displayText.substring(start, max));
-				// Log.debug("full: @", displayText.substring(start, max));
-				for (end[0] = linesBreak.get(i[0] + 1); max > end[0]; end[0] = linesBreak.get(i[0] + 1)) {
-					if (i[0] + 4 > linesBreak.size) {
-						// offsetY[0] += font.getLineHeight();
-						break;
-					}
-					i[0] += 2;
-					font.draw(builder.substring(start, end[0]), offsetX[0], y + offsetY[0], 0, Align.left, false).free();
-					offsetX[0] = x;
-					offsetY[0] -= font.getLineHeight();
-					start = end[0];
-					// if (i + 2 > linesBreak.size) break main;
-				}
-				offsetX[0] = x + glyphPositions.get(start) - glyphPositions.get(linesBreak.get(i[0]));
-				if (start < builder.length() && start < max && builder.charAt(start) == '\n') start++;
-				font.draw(builder.substring(start, max), offsetX[0], y + offsetY[0], 0, Align.left, false).free();
-			};
-			while (true) {
-				currentMatcher[0] = null;
-				int res = -1;
-				for (int j = 0, size = patternSeq.size; j < size; j++) {
-					m = matcherSeq.get(j);
-					if (m.find(lastIndex) && (currentMatcher[0] == null || m.start(1) < currentIndex[0])) {
-						currentMatcher[0] = m;
-						currentIndex[0] = m.start(1);
-						res = j;
-					}
-				}
-				if (currentMatcher[0] == null) break;
-
-				currentColor[0] = colorSeq.get(res);
-				group = currentMatcher[0].group(1);
-				int index = currentIndex[0];
-				font.setColor(Color.white);
-				drawMultiText.get(lastIndex, index);
-				lastIndex = index + group.length();
-
-				font.setColor(currentColor[0]);
-				drawMultiText.get(index, lastIndex);
-				// currentMatcher[0] = null;
-				// if (lastIndex > linesBreak.items[i]) offsetY -= font.getLineHeight();
-			}
-			font.setColor(Color.white);
-			int max = builder.length();
-			drawMultiText.get(lastIndex, max);
-			// offsetY[0] -= font.getLineHeight();
-			// }
-
-			// glyphPositions.get(cursor) - glyphPositions.get(0) + fontOffset + style.font.getData().cursorX
-			// font.draw(, x, y + offsetY, linesBreak.items[i], linesBreak.items[i + 1], 0, 8, false);
-			Draw.color();
-		}*/
-
 		float offsetX, offsetY, baseOffsetX;
 		int row, displayTextStart, displayTextEnd;
 		public Font font = null;
-
-		/*public void highlightingDraw(Font font, float x, float y) {
-			if (needsLayout()) return;
-			this.font = font;
-			baseOffsetX = offsetX = x;
-			int firstLineShowing = getRealFirstLineShowing();
-			offsetY = -firstLineShowing * lineHeight() + y;
-			int linesShowing = getRealLinesShowing() + 1;
-			row = firstLineShowing;
-
-			displayTextStart = linesBreak.get(Math.min(firstLineShowing * 2, linesBreak.size - 1));
-			displayTextEnd = linesBreak.get(Math.min((firstLineShowing + linesShowing) * 2, linesBreak.size) - 1);
-			if (displayTextStart == displayTextEnd) return;
-			String displayText = text.substring(displayTextStart, displayTextEnd);
-
-			*//*int lastIndex;
-			Seq<RegExpResult> results = new Seq<>();
-			// 匹配所有正则表达式
-			for (int j = 0; j < patternSeq.size; j++) {
-				m = patternSeq.get(j).matcher(displayText);
-				Color color1 = colorSeq.get(j);
-
-				while (m.find()) {
-					var res = new RegExpResult();
-					res.priority = j;
-					res.color = color1;
-					res.start = m.start(1);
-					res.text = m.group(1);
-					res.len = res.text.length();
-					res.end = res.start + res.len;
-					results.add(res);
-				}
-			}
-			// 根据优先级排序
-			results.sort((a, b) -> {
-				if (a.start > b.start) return 1;
-				else if (a.start < b.start) return -1;
-				else return Integer.compare(a.priority, b.priority);
-			});
-
-			lastIndex = 0;
-			for (var res : results) {
-				if (lastIndex > res.start) continue;
-				currentColor[0] = res.color;
-				int index = currentIndex[0] = res.start;
-				font.setColor(Color.white);
-				drawMultiText(displayText, lastIndex, index);
-				lastIndex = res.end;
-
-				font.setColor(currentColor[0]);
-				drawMultiText(displayText, index, lastIndex);
-			}
-			font.setColor(Color.white);
-			drawMultiText(displayText, lastIndex, displayText.length());
-
-			Draw.color();*//*
-			// for (int i = firstLineShowing * 2; i < (firstLineShowing + linesShowing) * 2 && i < linesBreak.size; i += 2) {
-			// String line = displayText.substring(home, end);
-			MyMatcher m;
-			matcherSeq.clear();
-			for (var p : patternSeq) {
-				m = new MyMatcher(p.matcher(displayText));
-				// if (p == JSSyntax.commentP) m.multi = true;
-				matcherSeq.add(m);
-			}
-			String group;
-			int lastIndex = 0;
-			int length = displayText.length();
-			MyMatcher currentMatcher;
-			int currentIndex = 0;
-			Color currentColor;
-			while (lastIndex < length) {
-				currentMatcher = null;
-				int res = -1;
-				// int end = displayText.indexOf(lastIndex);
-				currentIndex = -1;
-				// int rowEnd = -2;
-				for (int j = 0, size = patternSeq.size; j < size; j++) {
-					m = matcherSeq.get(j);
-					// if (!m.multi && rowEnd == -2) rowEnd = displayText.indexOf('\n', lastIndex);
-					if (m.found(lastIndex))
-						m.matcher.region(lastIndex, currentIndex != -1 ? currentIndex - 1 : *//*m.multi || rowEnd == -1 ? length : rowEnd*//*length);
-					if (m.find()) {
-						// Log.info("old:" + currentMatcher + "," + currentIndex);
-						currentMatcher = m;
-						// Log.info("now:" + currentMatcher + "," + (currentIndex - 1));
-						currentIndex = m.start();
-						res = j;
-						if (currentIndex == lastIndex) break;
-					}
-				}
-				if (currentMatcher == null) break;
-
-				currentColor = colorSeq.get(res);
-				group = currentMatcher.group();
-				font.setColor(Color.white);
-				drawMultiText(displayText, lastIndex, currentIndex);
-				lastIndex = currentIndex + group.length();
-
-				font.setColor(currentColor);
-				drawMultiText(displayText, currentIndex, lastIndex);
-				// currentMatcher[0] = null;
-				// if (lastIndex > linesBreak.items[i]) offsetY -= font.getLineHeight();
-			}
-			if (lastIndex < displayText.length()) {
-				font.setColor(Color.white);
-				drawMultiText(displayText, lastIndex, displayText.length());
-			}
-			// offsetY[0] -= font.getLineHeight();
-			// }
-
-			// glyphPositions.get(cursor) - glyphPositions.get(0) + fontOffset + style.font.getData().cursorX
-			// font.draw(, x, y + offsetY, linesBreak.items[i], linesBreak.items[i + 1], 0, 8, false);
-			Draw.color();
-		}*/
 
 		public void highlightingDraw(Font font, float x, float y) {
 			if (needsLayout()) return;
@@ -456,7 +235,6 @@ public class TextAreaTable extends Table {
 
 			syntax.highlightingDraw(text.substring(displayTextStart, displayTextEnd));
 		}
-
 		public void drawMultiText(String text, int start, int max) {
 			if (start >= max) return;
 			if (font.getColor().a == 0) return;
@@ -479,229 +257,9 @@ public class TextAreaTable extends Table {
 			}
 		}
 
-		/*public void highlightingDraw(Font font, float x, float y) {
-			int firstLineShowing = getRealFirstLineShowing();
-			int linesShowing = getRealLinesShowing() + 1;
-			float offsetY = -firstLineShowing * font.getLineHeight();
-			// StringBuilder builder = new StringBuilder(displayText);
-			int displayTextStart = linesBreak.get(firstLineShowing * 2);
-			int displayTextEnd = linesBreak.get(Math.min((firstLineShowing + linesShowing) * 2, linesBreak.size) - 1);
-			// Log.debug(displayTextStart + "," + displayTextEnd);
-			String displayText = text.substring(displayTextStart, displayTextEnd);
-			// String displayText = String.valueOf(this.displayText);
-
-			Matcher m;
-			// String group;
-			float offsetX;
-			int lastIndex, home;
-			String line;
-			for (int i = firstLineShowing * 2; i < (firstLineShowing + linesShowing) * 2 && i < linesBreak.size; i += 2) {
-				home = linesBreak.items[i];
-				line = displayText.substring(home - displayTextStart, linesBreak.items[i + 1] - displayTextStart);
-				lastIndex = 0;
-				offsetX = x;
-				Seq<RegExpResult> results = new Seq<>();
-				for (int j = 0; j < patternSeq.size; j++) {
-					m = patternSeq.get(j).matcher(line);
-					Color color1 = colorSeq.get(j);
-					while (m.find()) {
-						var res = new RegExpResult();
-						res.priority = j;
-						res.color = color1;
-						res.start = m.start(1);
-						res.text = m.group(1);
-						res.len = res.text.length();
-						res.end = res.start + res.len;
-						results.add(res);
-					}
-				}
-				results.sort((a, b) -> {
-					if (a.start != b.start) return Integer.compare(a.start, b.start);
-					else return Integer.compare(a.priority, b.priority);
-				});
-
-				for (var res : results) {
-					if (lastIndex > res.start) continue;
-					int index = res.start;
-					font.setColor(Color.white);
-					font.draw(line.substring(lastIndex, index), offsetX, y + offsetY, 0, 8, false).free();
-					offsetX = x + glyphPositions.get(home + index) - glyphPositions.get(home);
-					lastIndex = res.end;
-					font.setColor(res.color);
-					font.draw(res.text, offsetX, y + offsetY, 0, 8, false).free();
-					offsetX = x + glyphPositions.get(home + lastIndex) - glyphPositions.get(home);
-				}
-				font.setColor(Color.white);
-				font.draw(line.substring(lastIndex), offsetX, y + offsetY, 0, 8, false).free();
-
-				// glyphPositions.get(cursor) - glyphPositions.get(0) + fontOffset + style.font.getData().cursorX
-				// font.draw(, x, y + offsetY, linesBreak.items[i], linesBreak.items[i + 1], 0, 8, false);
-				offsetY -= font.getLineHeight();
-			}
-			Draw.color();
-		}*/
-
-
-		/*@Override
-		protected void drawSelection(Drawable selection, Font font, float x, float y) {
-
-		}*/
-
-		@Override
 		public void updateDisplayText() {
 			super.updateDisplayText();
 		}
-
-		/*@Override
-		public void updateDisplayText() {
-			Font font = style.font;
-			FontData data = font.getData();
-			String text = this.text;
-			int textLength = text.length();
-
-			*//*StringBuilder buffer = new StringBuilder();
-			for (int i = 0; i < textLength; i++) {
-				char c = text.charAt(i);
-				buffer.append(data.hasGlyph(c) ? c : ' ');
-			}
-			String newDisplayText = buffer.toString();*//*
-			String newDisplayText = text;
-
-			if (passwordMode && data.hasGlyph(passwordCharacter)) {
-				if (passwordBuffer == null) passwordBuffer = new StringBuilder(newDisplayText.length());
-				if (passwordBuffer.length() > textLength)
-					passwordBuffer.setLength(textLength);
-				else {
-					passwordBuffer.append(String.valueOf(passwordCharacter).repeat(Math.max(0, textLength - passwordBuffer.length())));
-				}
-				displayText = passwordBuffer;
-			} else
-				displayText = newDisplayText;
-
-			// layout.setText(font, displayText);
-			glyphPositions.clear();
-			for (int i = 0; i <= textLength; i++) {
-				glyphPositions.add(i * fontWidth);
-			}
-
-			visibleTextStart = Math.min(visibleTextStart, glyphPositions.size);
-			visibleTextEnd = Mathf.clamp(visibleTextEnd, visibleTextStart, glyphPositions.size);
-
-			if (selectionStart > newDisplayText.length()) selectionStart = textLength;
-		}*/
-
-		/*protected void calculateOffsets() {
-			float visibleWidth = getWidth();
-			Drawable background = getBackgroundDrawable();
-			if (background != null) visibleWidth -= background.getLeftWidth() + background.getRightWidth();
-
-			int glyphCount = glyphPositions.size;
-			float[] glyphPositions = this.glyphPositions.items;
-
-			// Check if the cursor has gone out the left or right side of the visible area and adjust renderOffset.
-			cursor = Mathf.clamp(cursor, 0, glyphPositions.length - 1);
-			float distance = glyphPositions[Math.max(0, cursor - 1)] + renderOffset;
-			if (distance <= 0)
-				renderOffset -= distance;
-			else {
-				int index = Math.min(glyphCount - 1, cursor + 1);
-				float minX = glyphPositions[index] - visibleWidth;
-				if (-renderOffset < minX) renderOffset = -minX;
-			}
-
-			// Prevent renderOffset from starting too close to the end, eg after text was deleted.
-			float maxOffset = 0;
-			float width = glyphPositions[Mathf.clamp(glyphCount - 1, 0, glyphPositions.length - 1)];
-			for (int i = glyphCount - 2; i >= 0; i--) {
-				float x = glyphPositions[i];
-				if (width - x > visibleWidth) break;
-				maxOffset = x;
-			}
-			if (-renderOffset > maxOffset) renderOffset = -maxOffset;
-
-			// calculate first visible char based on render offset
-			visibleTextStart = 0;
-			float startX = 0;
-			for (int i = 0; i < glyphCount; i++) {
-				if (glyphPositions[i] >= -renderOffset) {
-					visibleTextStart = i;
-					startX = glyphPositions[i];
-					break;
-				}
-			}
-
-			// calculate last visible char based on visible width and render offset
-			int length = Math.min(displayText.length(), glyphPositions.length - 1);
-			visibleTextEnd = Math.min(length, cursor + 1);
-			for (; visibleTextEnd <= length; visibleTextEnd++)
-				if (glyphPositions[visibleTextEnd] > startX + visibleWidth) break;
-			visibleTextEnd = Math.max(0, visibleTextEnd - 1);
-
-			if ((textHAlign & Align.left) == 0) {
-				textOffset = visibleWidth - (glyphPositions[visibleTextEnd] - startX);
-				if ((textHAlign & Align.center) != 0) textOffset = Math.round(textOffset * 0.5f);
-			} else
-				textOffset = startX + renderOffset;
-
-			// calculate selection x position and width
-			if (hasSelection) {
-				int minIndex = Math.min(cursor, selectionStart);
-				int maxIndex = Math.max(cursor, selectionStart);
-				float minX = Math.max(glyphPositions[minIndex] - glyphPositions[visibleTextStart], -textOffset);
-				float maxX = Math.min(glyphPositions[maxIndex] - glyphPositions[visibleTextStart], visibleWidth - textOffset);
-				selectionX = minX;
-				selectionWidth = maxX - minX - style.font.getData().cursorX;
-			}
-
-			if (!this.text.equals(lastText)) {
-				this.lastText = text;
-				Font font = style.font;
-				float maxWidthLine = this.getWidth()
-						- (style.background != null ? style.background.getLeftWidth() + style.background.getRightWidth() : 0);
-				linesBreak.clear();
-				int lineStart = 0;
-				int lastSpace = 0;
-				char lastCharacter;
-				GlyphLayout layout = Pools.obtain(GlyphLayout.class, GlyphLayout::new);
-				layout.ignoreMarkup = true;
-				for (int i = 0; i < text.length(); i++) {
-					lastCharacter = text.charAt(i);
-					if (lastCharacter == '\n' || lastCharacter == '\r') {
-						linesBreak.add(lineStart);
-						linesBreak.add(i);
-						lineStart = i + 1;
-					} else {
-						lastSpace = continueCursor(i, 0) ? lastSpace : i;
-						layout.setText(font, text.subSequence(lineStart, i + 1));
-						if (layout.width > maxWidthLine) {
-							if (lineStart >= lastSpace) {
-								lastSpace = i - 1;
-							}
-							linesBreak.add(lineStart);
-							linesBreak.add(lastSpace + 1);
-							lineStart = lastSpace + 1;
-							lastSpace = lineStart;
-						}
-					}
-				}
-				Pools.free(layout);
-				// Add last line
-				if (lineStart < text.length()) {
-					linesBreak.add(lineStart);
-					linesBreak.add(text.length());
-				}
-				trackCursor();
-			}
-		}
-		private Drawable getBackgroundDrawable() {
-			Scene stage = getScene();
-			boolean focused = stage != null && stage.getKeyboardFocus() == this;
-			return (disabled && style.disabledBackground != null) ? style.disabledBackground
-					: (!isValid() && style.invalidBackground != null) ? style.invalidBackground
-					: ((focused && style.focusedBackground != null) ? style.focusedBackground : style.background);
-		}*/
-
-		@Override
 		public void addInputDialog() {
 		}
 
@@ -712,7 +270,6 @@ public class TextAreaTable extends Table {
 		public void left() {
 			moveCursor(false, false);
 		}
-
 		public void right() {
 			moveCursor(true, false);
 		}
@@ -721,7 +278,6 @@ public class TextAreaTable extends Table {
 			if (readOnly) return;
 			changeText(text, insert(cursor, itext, text));
 		}
-
 		String insert(int position, CharSequence text, String to) {
 			if (to.length() == 0) return text.toString();
 			return to.substring(0, position) + text + to.substring(position);
@@ -736,16 +292,14 @@ public class TextAreaTable extends Table {
 			Pools.free(changeEvent);
 			return !cancelled;
 		}
-
 		public void trackCursor() {
 			if (trackCursor != null) trackCursor.run();
 		}
 
-		/*@Override
 		public void moveCursor(boolean forward, boolean jump) {
 			super.moveCursor(forward, jump);
 			trackCursor();
-		}*/
+		}
 
 		public int clamp(int index) {
 			return Mathf.clamp(index, 0, text.length());
@@ -791,7 +345,6 @@ public class TextAreaTable extends Table {
 				}
 			}
 		}
-
 		public class MyTextAreaListener extends TextAreaListener {
 			@Override
 			protected void goHome(boolean jump) {
@@ -918,16 +471,14 @@ public class TextAreaTable extends Table {
 		public MyTextArea area;
 
 		public LinesShow(MyTextArea area) {
-			super(Tex.buttonRight);
+			super(Tex.paneRight);
 			this.area = area;
 		}
 
-		@Override
 		public float getPrefWidth() {
 			// （行数+1）* 数字宽度
 			return (area.getLines() + " ").length() * numWidth;
 		}
-
 
 		Font font;
 		/**
@@ -940,8 +491,6 @@ public class TextAreaTable extends Table {
 			font.setColor(realCurrorLine == row ? Pal.accent : Color.lightGray);
 			font.draw(String.valueOf(row), x, offsetY);
 		}
-
-		@Override
 		public void draw() {
 			super.draw();
 			/*int firstLineShowing = area.getRealFirstLineShowing();

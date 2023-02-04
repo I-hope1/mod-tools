@@ -19,7 +19,7 @@ import static modtools.utils.MySettings.settings;
 
 public class SettingsContent extends Content {
 	Window ui;
-	Table cont = new Table();
+	Table  cont = new Table();
 	final Table loadTable = new Table(t -> {
 		t.left().defaults().left();
 	});
@@ -46,7 +46,6 @@ public class SettingsContent extends Content {
 		add(table);
 		return table;
 	}
-
 	public void add(Table t) {
 		cont.add(t).growX().padTop(6).row();
 	}

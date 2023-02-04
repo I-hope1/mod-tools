@@ -1,7 +1,6 @@
 package modtools.ui;
 
 import arc.struct.Seq;
-import modtools.ui.content.*;
 
 public class Contents {
 	public static final Seq<Content> all = new Seq<>();

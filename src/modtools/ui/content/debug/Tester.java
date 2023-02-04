@@ -5,14 +5,13 @@ import arc.*;
 import arc.files.Fi;
 import arc.input.KeyCode;
 import arc.math.Mathf;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.util.*;
-import hope_rhino.LinkRhino189012201;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
@@ -76,11 +75,11 @@ public class Tester extends Content {
 	/**
 	 * 用于回滚历史
 	 */
-	public              int     historyIndex;
+	public              int     historyIndex         = -1;
 	public static final boolean reincarnationHistory = false;
 
 	public ScrollPane pane;
-	public void build(Table table, Table buttons) {
+	public void build(Table table) {
 		if (ui == null) _load();
 
 		TextAreaTable textarea = new TextAreaTable("");
@@ -95,10 +94,9 @@ public class Tester extends Content {
 		Runnable invalidate = () -> {
 			// cont.invalidate();
 			textarea.getArea().invalidateHierarchy();
+			textarea.layout();
 		};
-		ui.maximized(isMax -> {
-			Time.runTask(0, invalidate);
-		});
+		ui.maximized(isMax -> Time.runTask(0, invalidate));
 		ui.sclLisetener.listener = invalidate;
 
 		textarea.syntax = new JSSyntax(textarea);
@@ -106,46 +104,7 @@ public class Tester extends Content {
 		area = textarea.getArea();
 		boolean[] execed = {false};
 		textarea.keyDonwB = (event, keycode) -> {
-			if (Core.input.ctrl() && Core.input.shift()) {
-				if (keycode == KeyCode.enter) {
-					complieAndExec(() -> {});
-					execed[0] = true;
-				}
-				if (keycode == KeyCode.up) {
-					int i = ++historyIndex;
-					if (!reincarnationHistory && historyIndex >= history.list.size) {
-						historyIndex = history.list.size - 1;
-						return false;
-					}
-					if (i >= history.list.size) {
-						if (reincarnationHistory) {
-							i -= history.list.size;
-							historyIndex -= history.list.size;
-						}
-					}
-
-					Fi dir = history.list.get(i);
-					area.setText(dir.child("message.txt").readString());
-					log = dir.child("log.txt").readString();
-				}
-				if (keycode == KeyCode.down) {
-					int i = --historyIndex;
-					if (!reincarnationHistory && historyIndex < 0) {
-						historyIndex = 0;
-						return false;
-					}
-					if (i < 0) {
-						if (reincarnationHistory) {
-							i += history.list.size;
-							historyIndex += history.list.size;
-						}
-					}
-					Fi dir = history.list.get(i);
-					area.setText(dir.child("message.txt").readString());
-					log = dir.child("log.txt").readString();
-				}
-				return false;
-			}
+			if (rollAndExec(execed, keycode)) return false;
 			// Core.input.ctrl() && keycode == KeyCode.rightBracket
 			if (keycode == KeyCode.tab) {
 				area.insert("  ");
@@ -174,23 +133,19 @@ public class Tester extends Content {
 			}).disabled(__ -> !finished);
 			t.button(Icon.right, area::right);
 			t.button(Icon.copy, area::copy).padLeft(8f);
-			t.button(Icon.paste, () -> area.paste(Core.app.getClipboardText(), true)).padLeft(8f);
+			t.button(Icon.paste, () ->
+					area.paste(Core.app.getClipboardText(), true)
+			).padLeft(8f);
 		}).growX().row();
 		Cell<?> cell = cont.table(Tex.sliderBack, t -> t.pane(p -> {
-			p.add(new MyLabel(() -> log)).style(IntStyles.myLabel).wrap().growX().labelAlign(Align.center, Align.left);
+			p.add(new MyLabel(() -> log)).style(IntStyles.myLabel).wrap()
+					.growX().labelAlign(Align.center, Align.left);
 		}).growX()).growX().height(100).with(t -> t.touchable = Touchable.enabled);
 
-		// Vec2 last = new Vec2(ui.getWidth(), ui.getHeight());
-		// ui.sclLisetener.listener = () -> {
-		// cell.height(cell.get().getHeight() * ui.getHeight() / last.y);
-		// };
 		new SclLisetener(cell.get(), 0, 100) {
-			@Override
 			public boolean valid() {
 				return !left && !right && !bottom && top;
 			}
-
-			@Override
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				super.touchDragged(event, x, y, pointer);
 
@@ -207,7 +162,6 @@ public class Tester extends Content {
 				cont.invalidate();
 			}
 
-			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
 				pane.setScrollingDisabled(false, true);
@@ -215,21 +169,7 @@ public class Tester extends Content {
 		};
 		table.add(cont).grow().maxHeight(Core.graphics.getHeight()).row();
 		table.pane(p -> {
-			p.button(Icon.star, IntStyles.clearNonei, () -> {
-				new NameWindow(res -> {
-					Fi fi = bookmark.file.child(res);
-					bookmark.list.insert(0, fi);
-					fi.writeString(getMessage());
-					bookmark.build();
-				}, t -> {
-					try {
-						return !t.isBlank() && !fileUnfair.matcher(t).find()
-						       && !bookmark.file.child(t).exists();
-					} catch (Throwable e) {
-						return false;
-					}
-				}, "").show();
-			}).size(42).padRight(6f);
+			p.button(Icon.star, IntStyles.clearNonei, this::star).size(42).padRight(6f);
 			p.defaults().size(100, 60);
 			p.button(b -> {
 				b.label(() -> loop ? "@tester.loop" : "@tester.notloop");
@@ -247,10 +187,12 @@ public class Tester extends Content {
 			p.button("@historymessage", history::show);
 			p.button("@bookmark", bookmark::show);
 			// p.button("@startup", bookmark::show);
-			p.check("@stopIfOvertime", stopIfOvertime, b -> stopIfOvertime = b);
+			p.check("@stopIfOvertime", stopIfOvertime, b -> stopIfOvertime = b).width(120);
 		}).height(60).width(w).growX();
 
-		//		buttons.button("$back", Icon.left, ui::hide).size(210, 64);
+		buildEditTable();
+	}
+	private void buildEditTable() {
 		var editTable = new Table(Styles.black5, p -> {
 			p.fillParent = true;
 			Runnable hide = () -> {
@@ -274,12 +216,69 @@ public class Tester extends Content {
 				t.button("@back", Icon.left, style, hide).marginLeft(12);
 			});
 		});
-		TextureRegionDrawable drawable = Icon.edit;
-		buttons.button("@edit", drawable, () -> {
+		ui.buttons.button("@edit", Icon.edit, () -> {
 			ui.cont.addChild(editTable);
 			editTable.setPosition(0, 0);
 			ui.noButtons(true);
 		}).size(210, 64);
+	}
+	private void star() {
+		new NameWindow(res -> {
+			Fi fi = bookmark.file.child(res);
+			bookmark.list.insert(0, fi);
+			fi.writeString(getMessage());
+			bookmark.build();
+		}, t -> {
+			try {
+				return !t.isBlank() && !fileUnfair.matcher(t).find()
+				       && !bookmark.file.child(t).exists();
+			} catch (Throwable e) {
+				return false;
+			}
+		}, "").show();
+	}
+	private boolean rollAndExec(boolean[] execed, KeyCode keycode) {
+		if (Core.input.ctrl() && Core.input.shift()) {
+			if (keycode == KeyCode.enter) {
+				complieAndExec(() -> {});
+				execed[0] = true;
+			}
+			if (keycode == KeyCode.up) {
+				int i = ++historyIndex;
+				if (!reincarnationHistory && historyIndex >= history.list.size) {
+					historyIndex = history.list.size - 1;
+					return true;
+				}
+				if (i >= history.list.size) {
+					if (reincarnationHistory) {
+						i -= history.list.size;
+						historyIndex -= history.list.size;
+					}
+				}
+
+				Fi dir = history.list.get(i);
+				area.setText(dir.child("message.txt").readString());
+				log = dir.child("log.txt").readString();
+			}
+			if (keycode == KeyCode.down) {
+				int i = --historyIndex;
+				if (!reincarnationHistory && historyIndex < 0) {
+					historyIndex = 0;
+					return true;
+				}
+				if (i < 0) {
+					if (reincarnationHistory) {
+						i += history.list.size;
+						historyIndex += history.list.size;
+					}
+				}
+				Fi dir = history.list.get(i);
+				area.setText(dir.child("message.txt").readString());
+				log = dir.child("log.txt").readString();
+			}
+			return true;
+		}
+		return false;
 	}
 	public void build() {
 		if (ui == null) _load();
@@ -296,7 +295,7 @@ public class Tester extends Content {
 	void setup() {
 		//		ui.cont.clear();
 		//		ui.buttons.clear();
-		ui.cont.pane(p -> build(p, ui.buttons)).grow().update(pane -> {
+		ui.cont.pane(p -> build(p)).grow().update(pane -> {
 			this.pane = pane;
 			pane.setOverscroll(false, false);
 		});
@@ -416,7 +415,6 @@ public class Tester extends Content {
 			Log.debug(runtime.executeIntegerScript("let x=1;x*2"));*/
 		if (Context.getCurrentContext() != cx) {
 			cx = Context.getCurrentContext();
-			LinkRhino189012201.init(cx);
 		}
 		// currentThread = new Thread(() -> {
 		try {
@@ -434,12 +432,15 @@ public class Tester extends Content {
 			// currentThread.setPriority(1);
 			// currentThread.setUncaughtExceptionHandler((__, e) -> {
 		} catch (Throwable e) {
-			makeError(e);
-			finished = true;
-			lastTime = Long.MAX_VALUE;
+			handleError(e);
 		}
 		// });
 		// currentThread.start();
+	}
+	public void handleError(Throwable ex) {
+		makeError(ex);
+		finished = true;
+		lastTime = Long.MAX_VALUE;
 	}
 
 	public void _load() {
@@ -460,11 +461,10 @@ public class Tester extends Content {
 		}, Tester::sort);
 		history.hide();
 		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
-		                          f -> f, f -> {
-			area.setText(f.readString());
-		}, (f, p) -> {
-			p.add(new MyLabel(f.readString())).row();
-		}, Tester::sort);
+		                          f -> f, f -> area.setText(f.readString()),
+		                          (f, p) -> {
+			                          p.add(new MyLabel(f.readString())).row();
+		                          }, Tester::sort);
 		bookmark.hide();
 
 		setup();
@@ -501,8 +501,7 @@ public class Tester extends Content {
 			f.set(cx, ForRhino.factory);
 			cx.setGenerateObserverCount(true);
 			// cx.setInstructionObserverThreshold(0);
-			LinkRhino189012201.init(cx);
-			//			ScriptableObject.putProperty(scope, "Window", new NativeJavaClass(scope, Window.class, true));
+			// ScriptableObject.putProperty(scope, "Window", new NativeJavaClass(scope, Window.class, true));
 		} catch (Exception ex) {
 			if (ignorePopUpError) {
 				Log.err(ex);
@@ -511,6 +510,7 @@ public class Tester extends Content {
 			}
 		}
 
+		// 启动脚本
 		Fi dir = MySettings.dataDirectory.child("startup");
 		if (dir.exists() && dir.isDirectory()) {
 			dir.walk(f -> {
@@ -534,7 +534,7 @@ public class Tester extends Content {
 		table.defaults().growX();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("@settings.ignorePopUpError", MySettings.settings.getBool("ignorePopUpError"), b -> {
+			t.check("@settings.ignorePopUpError", ignorePopUpError = MySettings.settings.getBool("ignorePopUpError"), b -> {
 				MySettings.settings.put("ignorePopUpError", ignorePopUpError = b);
 			}).row();
 			t.check("@settings.wrapRef", wrapRef, b -> wrapRef = b);
@@ -570,144 +570,21 @@ public class Tester extends Content {
 		}
 		ScriptableObject.putProperty(scope, name, val);
 	}
+	public final String prefix = "tmp";
 	public String put(Object val) {
-		int    i      = 0;
-		String prefix = "tmp";
-		while (ScriptableObject.hasProperty(scope, prefix + i)) {
-			i++;
-		}
+		int i = 0;
+		// 从0开始直到找到没有被定义的变量
+		while (ScriptableObject.hasProperty(scope, prefix + i)) i++;
 		String key = prefix + i;
 		put(key, val);
 		return key;
 	}
 	public void put(Element element, Object val) {
-		int    i      = 0;
-		String prefix = "tmp";
-		while (ScriptableObject.hasProperty(scope, prefix + i)) {
-			i++;
-		}
-		put(prefix + i, val);
-		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", prefix + i))
-				.setPosition(getAbsPos(element));
+		put(getAbsPos(element), val);
+	}
+	public void put(Vec2 vec2, Object val) {
+		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)))
+				.setPosition(vec2);
 	}
 
-	/*public class ListDialog extends Window {
-		public Seq<Fi> list = new Seq<>();
-		final Table p = new Table();
-		Floatf<Fi> sorter;
-		Fi file;
-		Func<Fi, Fi> fileHolder;
-		Cons<Fi> consumer;
-		Cons2<Fi, Table> pane;
-
-		public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane, Floatf<Fi> sorter) {
-			super(Core.bundle.get("title." + title, title), w, 600, true);
-			cont.pane(p).grow();
-			//			addCloseButton();
-			this.file = file;
-			list.addAll(file.list());
-			this.fileHolder = fileHolder;
-			this.consumer = consumer;
-			this.pane = pane;
-			this.sorter = sorter;
-
-			list.sort(sorter);
-		}
-
-		public Window show(Scene stage, Action action) {
-			build();
-			return super.show(stage, action);
-		}
-
-		public void build() {
-			p.clearChildren();
-
-			list.each(this::build);
-		}
-
-
-		public Cell<Table> build(Fi f) {
-			var tmp = p.table(Window.myPane, t -> {
-				Fi fi = fileHolder.get(f);
-				Fi[] fis = {fi};
-				if (f == fi) {
-					Label label = new Label(f.name());
-					Cell cell = t.add(label);
-					TextField field = new TextField();
-					field.setValidator(text -> {
-						try {
-							return !text.isBlank() && !fileUnfair.matcher(text).find()
-									&& (fis[0].name().equals(field.getText()) || !fis[0].sibling(text).exists());
-						} catch (Throwable e) {
-							return false;
-						}
-					});
-					field.update(() -> {
-						if (Core.scene.getKeyboardFocus() != field) {
-							if (!fis[0].name().equals(field.getText()) && fis[0].sibling(field.getText()).exists()) {
-								IntUI.showException(new IllegalArgumentException("文件夹已存在.\nFile has existed."));
-							} else if (field.isValid()) {
-								Fi toFi = f.sibling(field.getText());
-								fis[0].moveTo(toFi);
-								list.replace(fis[0], toFi);
-								fis[0] = toFi;
-								label.setText(field.getText());
-							}
-							cell.setElement(label);
-						}
-					});
-					label.clicked(() -> {
-						Core.scene.setKeyboardFocus(field);
-						field.setText(fis[0].name());
-						cell.setElement(field);
-					});
-				}
-				TextButton code = new TextButton("Code");
-				String cont = fi.exists() ? fi.readString() : "";
-				code.clicked(() -> {
-					IntUI.showSelectTable(code, (p, hide, __) -> {
-						var table = new TextAreaTable(cont) {
-							@Override
-							public float getPrefHeight() {
-								return Core.graphics.getHeight() - Scl.scl(30f);
-							}
-						};
-						table.syntax = new JSSyntax(table);
-						var area = p.add(table).width(400).get().getArea();
-						// Time.runTask(5, () -> {
-						area.updateDisplayText();
-						Time.runTask(1, () -> {
-							// area.layout();
-							Timer.schedule(new Task() {
-								@Override
-								public void run() {
-									if (!p.isDescendantOf(Core.scene.root) && fis[0].exists()) {
-										if (fis[0].readString().equals(area.getText())) return;
-										fis[0].writeString(area.getText());
-									}
-								}
-							}, 0, 0.5f, -1);
-						});
-					}, false);
-				});
-				t.add(code).grow();
-				t.button(Icon.download, Styles.cleari, () -> {
-					area.setText(fis[0].readString());
-					hide();
-				}).right();
-				t.button("", Icon.trash, Styles.cleart, () -> IntUI.showConfirm("@confirm", "@mod.remove.confirm", () -> {
-					if (!fis[0].deleteDirectory()) {
-						fis[0].delete();
-					}
-
-					list.remove(fis[0]);
-
-					p.getCell(t).height(0).clearElement();
-				}).setCenter(Core.input.mouse())).padLeft(8f).right();
-			}).growX().height(70);
-			p.row();
-			return tmp;
-		}
-	}*/
 }
-

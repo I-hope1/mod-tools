@@ -22,8 +22,6 @@ public class ErrorDisplay extends Content {
 	public ErrorDisplay() {
 		super("errordisplay");
 	}
-
-	@Override
 	public boolean loadable() {
 		return settings.getBool("load-" + name, "false");
 	}

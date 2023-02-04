@@ -25,12 +25,11 @@ tasks.withType(JavaCompile){
     // options.compilerArgs.addAll(['--release', '11'])
     
     options.encoding = "UTF-8"
-    options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
-    
-    options.fork = true
+    options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+    /*options.fork = true
     options.forkOptions.jvmArgs.addAll([
         "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-    ])
+    ])*/
 }
 
 

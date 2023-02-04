@@ -22,7 +22,7 @@ ext{
 
 //java 8 backwards compatibility flag
 tasks.withType(JavaCompile){
-    options.compilerArgs.addAll(['--release', '11'])
+    // options.compilerArgs.addAll(['--release', '11'])
     
     options.encoding = "UTF-8"
     options.fork = true

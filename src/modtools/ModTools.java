@@ -2,8 +2,6 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
-import arc.graphics.Camera;
-import arc.math.geom.Vec2;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
@@ -21,6 +19,7 @@ public class ModTools extends Mod {
 
 		Tools.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
+			root = Vars.mods.getMod(ModTools.class).root;
 			loadReflect();
 
 			return true;
@@ -60,6 +59,7 @@ public class ModTools extends Mod {
 	}
 
 	public static ModClassLoader mainLoader;
+	public static Fi             root;
 	public static Throwable      throwable = null;
 
 	public static void loadReflect() {

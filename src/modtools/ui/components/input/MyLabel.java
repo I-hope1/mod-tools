@@ -1,14 +1,8 @@
 package modtools.ui.components.input;
 
-import arc.*;
 import arc.func.Prov;
 import arc.graphics.g2d.Font;
-import arc.math.geom.Vec2;
-import arc.scene.Element;
-import arc.scene.ui.*;
-import arc.struct.Seq;
 import arc.util.*;
-import mindustry.game.EventType.Trigger;
 import modtools.ui.components.limit.LimitLabel;
 
 /**

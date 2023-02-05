@@ -11,14 +11,11 @@ import arc.scene.Group;
 import arc.scene.event.*;
 import arc.scene.ui.Dialog;
 import arc.scene.ui.layout.*;
-import arc.struct.*;
 import arc.util.*;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import modtools.ui.components.Window;
 import modtools.utils.*;
-import modtools.utils.Tools.SR;
 
 import java.util.ArrayList;
 
@@ -28,18 +25,18 @@ import static modtools.ui.Contents.*;
 // 存储mod的窗口和Frag
 public final class TopGroup extends WidgetGroup {
 	public boolean checkUI = MySettings.settings.getBool("checkUI", "false"),
-			debugBounds = MySettings.settings.getBool("debugbounds", "false");
-	public MySet<Boolp> drawSeq = new MySet<>();
-	public boolean isSwicthWindows = false;
-	public int currentIndex = 0;
-	public ArrayList<Window> shownWindows = new ArrayList<>();
+			debugBounds    = MySettings.settings.getBool("debugbounds", "false");
+	public        MySet<Boolp>      drawSeq         = new MySet<>();
+	public        boolean           isSwicthWindows = false;
+	public        int               currentIndex    = 0;
+	public        ArrayList<Window> shownWindows    = new ArrayList<>();
 	private final Group
-			back = new Group() {{name = "back";}},
-			windows = new Group() {{name = "windows";}},
-			frag = new Group() {{name = "frag";}},
-			others = new WidgetGroup() {{name = "others";}};
-	private final Group[] all = {back, windows, frag, others};
-	public Element drawPadElem = null;
+	                                back            = new Group() {{name = "back";}},
+			windows                                 = new Group() {{name = "windows";}},
+			frag                                    = new Group() {{name = "frag";}},
+			others                                  = new WidgetGroup() {{name = "others";}};
+	private final Group[] all         = {back, windows, frag, others};
+	public        Element drawPadElem = null;
 
 	public void draw() {
 		super.draw();
@@ -48,9 +45,9 @@ public final class TopGroup extends WidgetGroup {
 			float tw = Core.graphics.getWidth(), th = Core.graphics.getHeight();
 			Draw.color(Color.darkGray);
 			Fill.polyBegin();
-			Font font = MyFonts.MSYHMONO;
-			float rw = 0, rh = shownWindows.size() * font.getLineHeight();
-			var l = new GlyphLayout(font, "");
+			Font  font = MyFonts.MSYHMONO;
+			float rw   = 0, rh = shownWindows.size() * font.getLineHeight();
+			var   l    = new GlyphLayout(font, "");
 			for (Window window : shownWindows) {
 				l.setText(font, window.title.getText());
 				rw = Math.max(rw, l.width);
@@ -82,7 +79,7 @@ public final class TopGroup extends WidgetGroup {
 		}
 
 		Lines.rect(offsetX, offsetY,
-				elem.getWidth(), elem.getHeight());
+		           elem.getWidth(), elem.getHeight());
 	}
 
 	{

@@ -1,7 +1,7 @@
 package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
-import arc.struct.IntSet;
+import arc.struct.*;
 import mindustry.graphics.Pal;
 import modtools.ui.components.input.area.TextAreaTable;
 import modtools.ui.components.input.area.TextAreaTable.MyTextArea;
@@ -52,6 +52,10 @@ public class Syntax {
 		area = areaTable.getArea();
 	}
 
+	/** 判断指定index，是否为单词边界 */
+	public boolean isWordBreak(int i) {
+		return isWordBreak(displayText.charAt(i));
+	}
 
 	public boolean isWordBreak(char c) {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90)
@@ -99,18 +103,14 @@ public class Syntax {
 					}
 					cTask = drawTask;
 					if (cTask.isFinished()) {
-						cTask.drawText(i);
-						reset();
-						lastIndex = i + 1;
+						lastIndex = drawAndReset(i);
 						continue out;
 					}
 					break;
 				}
 			} else l1:if (cTask.draw(i)) {
 				if (!cTask.isFinished()) break l1;
-				cTask.drawText(i);
-				reset();
-				lastIndex = i + 1;
+				lastIndex = drawAndReset(i);
 			} else {
 				reset();
 			}
@@ -127,6 +127,11 @@ public class Syntax {
 		} else if (lastIndex < len) {
 			drawDefText(lastIndex, len);
 		}
+	}
+	private int drawAndReset(int i) {
+		cTask.drawText(i);
+		reset();
+		return i + 1;
 	}
 
 
@@ -168,6 +173,7 @@ public class Syntax {
 		}
 
 		void init() {
+			super.init();
 			lastToken = null;
 			token = null;
 		}
@@ -177,19 +183,19 @@ public class Syntax {
 		}
 
 
-		void draw(String token) {
+		void setColor(String token) {
 			this.token = token;
 			color.set(defalutColor);
 			// Log.info(token);
 			Color newColor;
 			for (TokenDraw draw : tokenDraws) {
-				newColor = draw.draw(this);
-				if (newColor == null) continue;
+				/* 只要draw结果为null，就下一个 */
+				if ((newColor = draw.draw(this)) == null) continue;
 
 				color.set(newColor);
-				finished = true;
 				break;
 			}
+			finished = true;
 			lastTokenIndex = lastIndex;
 			lastToken = token;
 		}
@@ -200,14 +206,16 @@ public class Syntax {
 			if (!begin) begin = true;
 			if (lastIndex == -1) lastIndex = i;
 
-			if (i + 1 < len) {
-				if (isWordBreak(displayText.charAt(i + 1))) {
-					draw(displayText.substring(lastIndex, i + 1));
+			/* 判断下一个index是否越界 */
+			if (++i < len) {
+				/* 判断下一个index是否越界 */
+				if (isWordBreak(i)) {
+					setColor(displayText.substring(lastIndex, i));
 					return finished;
 				}
 				return true;
 			} else {
-				draw(displayText.substring(lastIndex));
+				setColor(displayText.substring(lastIndex));
 				return finished;
 			}
 		}
@@ -226,6 +234,7 @@ public class Syntax {
 			return true;
 		}
 		void init() {
+			super.init();
 			lastSymbol = null;
 		}
 
@@ -236,6 +245,96 @@ public class Syntax {
 				return true;
 			}
 			return false;
+		}
+	}
+
+	class DrawComment extends DrawTask {
+
+		public DrawComment(Color color) {
+			super(color, true);
+		}
+
+		@Override
+		void reset() {
+			super.reset();
+			body = false;
+			finished = false;
+		}
+
+		@Override
+		boolean isFinished() {
+			return finished;
+		}
+
+		private boolean finished, body, multi;
+
+		@Override
+		boolean draw(int i) {
+			if (body) {
+				if (multi ? lastChar == '*' && c == '/' : c == '\n' || i + 1 >= len) {
+					finished = true;
+				}
+				return true;
+			}
+			if (c == '/' && i + 1 < len) {
+				char next = displayText.charAt(i + 1);
+				if (next == '*' || next == '/') {
+					lastIndex = i;
+					multi = next == '*';
+					body = true;
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+
+	public static IntMap<Boolean> chars = IntMap.of(
+			'\'', false,
+			'"', false,
+			'`', true);
+
+	class DrawString extends DrawTask {
+		public DrawString(Color color) {
+			this(color, chars);
+		}
+		public DrawString(Color color, IntMap<Boolean> chars) {
+			super(color, true);
+			map = chars;
+		}
+
+		public IntMap<Boolean> map;
+		void reset() {
+			super.reset();
+			leftQuote = rightQuote = false;
+		}
+
+		@Override
+		boolean isFinished() {
+			return rightQuote;
+		}
+
+		boolean leftQuote, rightQuote;
+		char quote;
+
+		@Override
+		boolean draw(int i) {
+			if (!leftQuote) {
+				if (map.containsKey(c)) {
+					quote = c;
+					leftQuote = true;
+					lastIndex = i;
+					return true;
+				} else {
+					return false;
+				}
+			}
+			if (quote == c || (c == '\n' && !map.get(quote))) {
+				rightQuote = true;
+				leftQuote = false;
+				return true;
+			}
+			return true;
 		}
 	}
 
@@ -264,7 +363,8 @@ public class Syntax {
 		/**
 		 * 循环开始时，执行
 		 */
-		void init() {}
+		void init() {
+		}
 
 		/**
 		 * 渲染结束（包括失败）时，执行

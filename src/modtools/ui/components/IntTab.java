@@ -11,20 +11,18 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Log;
 import modtools.ui.IntStyles;
-import modtools.ui.components.limit.LimitTable;
-import modtools.utils.Tools;
 
 import java.util.Arrays;
 
 public class IntTab {
 	public Table main, title;
-	public ScrollPane pane;
+	public ScrollPane  pane;
 	public Seq<String> names;
-	public Seq<Color> colors;
-	public Seq<Table> tables;
-	public float totalWidth;
-	public int cols;
-	public boolean column;
+	public Seq<Color>  colors;
+	public Seq<Table>  tables;
+	public float       totalWidth;
+	public int         cols;
+	public boolean     column;
 
 	public void setTotalWidth(float amount) {
 		totalWidth = amount;
@@ -85,6 +83,7 @@ public class IntTab {
 	 * @param tables     Tables
 	 * @param cols       一行的个数
 	 * @param column     是否为纵向排列
+	 *
 	 * @throws IllegalArgumentException size must be the same.
 	 */
 	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols, boolean column) {
@@ -103,10 +102,10 @@ public class IntTab {
 		init();
 	}
 
-	byte selected = -1;
+	byte    selected     = -1;
 	boolean transitional = false;
-	Element first = null;
-	float prefW = -1, prefH = -1;
+	Element first        = null;
+	float   prefW        = -1, prefH = -1;
 
 	public void setPrefSize(float w, float h) {
 		prefW = w;
@@ -116,7 +115,7 @@ public class IntTab {
 	public Table build() {
 		for (byte i = 0; i < tables.size; i++) {
 			Table t = tables.get(i);
-			byte j = i;
+			byte  j = i;
 			title.button(b -> {
 				if (first == null) first = b;
 				b.add(names.get(j), colors.get(j)).padRight(15.0f).growY().row();

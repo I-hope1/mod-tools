@@ -1,9 +1,7 @@
 package modtools.ui.components.limit;
 
 import arc.func.Prov;
-import arc.scene.Element;
 import arc.scene.ui.*;
-import arc.util.Tmp;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 

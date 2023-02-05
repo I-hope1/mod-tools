@@ -6,12 +6,11 @@ import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.gen.Tex;
-import modtools.ui.IntUI;
 import modtools.ui.components.input.area.TextAreaTable;
 import rhino.*;
 
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.Objects;
 
 import static modtools.utils.Tools.invoke;
 
@@ -27,7 +26,7 @@ public class JSSyntax extends Syntax {
 	public JSSyntax(TextAreaTable table) {
 		super(table);
 		// defalutColor = __defalutColor__;
-		area.style.selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
+		area.getStyle().selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}
 
 	static ImporterTopLevel scope = (ImporterTopLevel) Vars.mods.getScripts().scope;
@@ -94,11 +93,11 @@ public class JSSyntax extends Syntax {
 			defVarSet, defVarColor
 	);
 	protected final DrawSymbol
-			operatsSymbol  = new DrawSymbol(operats, operatCharC),
+			operatesSymbol = new DrawSymbol(operates, operatCharC),
 			bracketsSymbol = new DrawSymbol(brackets, bracketsC);
 
 	public        TokenDraw[] tokenDraws = {task -> {
-		if (lastTask == operatsSymbol && operatsSymbol.lastSymbol != null && operatsSymbol.lastSymbol == '.') {
+		if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != null && operatesSymbol.lastSymbol == '.') {
 			return null;
 		}
 		for (var entry : TOKEN_MAP) {
@@ -114,7 +113,7 @@ public class JSSyntax extends Syntax {
 		}
 		return null;
 	}, task -> {
-		String s = operatsSymbol.lastSymbol != null && operatsSymbol.lastSymbol == '.'
+		String s = operatesSymbol.lastSymbol != null && operatesSymbol.lastSymbol == '.'
 		           && task.token.charAt(0) == 'e' && task.lastToken != null
 				? task.lastToken + "." + task.token : task.token;
 		return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN")
@@ -124,7 +123,7 @@ public class JSSyntax extends Syntax {
 			new DrawString(stringC),
 			bracketsSymbol,
 			new DrawComment(commentC),
-			operatsSymbol,
+			operatesSymbol,
 			// new DrawWord(keywordMap, keywordC),
 			// new DrawWord(objectMap, objectsC),
 			new DrawToken(tokenDraws),
@@ -135,97 +134,15 @@ public class JSSyntax extends Syntax {
 		taskArr = taskArr0;
 	}
 
-	class DrawComment extends DrawTask {
 
-		public DrawComment(Color color) {
-			super(color, true);
-		}
-
-		@Override
-		void reset() {
-			super.reset();
-			body = false;
-			finished = false;
-		}
-
-		@Override
-		boolean isFinished() {
-			return finished;
-		}
-
-		private boolean finished, body, multi;
-
-		@Override
-		boolean draw(int i) {
-			if (body) {
-				if (multi ? lastChar == '*' && c == '/' : c == '\n' || i + 1 >= len) {
-					finished = true;
-				}
-				return true;
-			}
-			if (c == '/' && i + 1 < len) {
-				char next = displayText.charAt(i + 1);
-				if (next == '*' || next == '/') {
-					lastIndex = i;
-					multi = next == '*';
-					body = true;
-					return true;
-				}
-			}
-			return false;
-		}
-	}
-
-	class DrawString extends DrawTask {
-
-		public DrawString(Color color) {
-			super(color, true);
-		}
-
-		@Override
-		void reset() {
-			super.reset();
-			leftQuote = rightQuote = false;
-		}
-
-		@Override
-		boolean isFinished() {
-			return rightQuote;
-		}
-
-		boolean leftQuote, rightQuote;
-		char quote;
-
-		@Override
-		boolean draw(int i) {
-			if (!leftQuote) {
-				if (c == '\'' || c == '"' || c == '`') {
-					quote = c;
-					leftQuote = true;
-					lastIndex = i;
-					return true;
-				} else {
-					return false;
-				}
-			}
-			if (quote == c || (c == '\n' && quote != '`')) {
-				rightQuote = true;
-				leftQuote = false;
-				return true;
-			}
-			return true;
-		}
-	}
-
-
-	static IntSet operats  = new IntSet();
-	static IntSet brackets = new IntSet();
+	public static IntSet operates = new IntSet();
+	public static IntSet brackets = new IntSet();
 
 	static {
 		String s;
-		s = "~|,+-=*/<>!%^&;.";
+		s = "~|,+-=*/<>!%^&;.:";
 		for (int i = 0, len = s.length(); i < len; i++) {
-			operats.add(s.charAt(i));
+			operates.add(s.charAt(i));
 		}
 		s = "()[]{}";
 		for (int i = 0, len = s.length(); i < len; i++) {

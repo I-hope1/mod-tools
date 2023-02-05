@@ -8,7 +8,6 @@ import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.*;
 import arc.scene.event.*;
-import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
@@ -28,7 +27,6 @@ import modtools.ui.components.Window.DisposableWindow;
 import modtools.ui.components.limit.*;
 import modtools.ui.content.Content;
 import modtools.utils.*;
-import modtools.utils.Tools.SR;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -393,7 +391,7 @@ public class ReviewElement extends Content {
 					Runnable copy = () -> {
 						tester.put(Core.input.mouse(), element);
 					};
-					IntUI.addShowMenuLinstenr(elem, new MenuList(Icon.copy, "@jsfunc.store_as_js_var2", copy),
+					IntUI.addShowMenuListener(elem, new MenuList(Icon.copy, "@jsfunc.store_as_js_var2", copy),
 					                          new MenuList(Icon.trash, "@clear", () -> element.remove()),
 					                          new MenuList(Icon.info, "@details", () -> JSFunc.showInfo(element)));
 					IntUI.doubleClick(elem, () -> {}, copy);

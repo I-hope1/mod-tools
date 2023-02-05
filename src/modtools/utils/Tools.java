@@ -3,7 +3,6 @@ package modtools.utils;
 import arc.func.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer;

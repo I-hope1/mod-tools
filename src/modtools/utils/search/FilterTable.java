@@ -1,16 +1,11 @@
 package modtools.utils.search;
 
 import arc.func.*;
-import arc.graphics.Color;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
-import arc.util.Align;
-import modtools.ui.IntStyles;
-import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
-import modtools.utils.JSFunc.*;
 import modtools.utils.Tools;
 
 import java.util.function.Supplier;

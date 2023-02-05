@@ -45,7 +45,6 @@ public class IntUI {
 					click.run();
 				}
 			};
-
 			public void clicked(InputEvent event, float x, float y) {
 				super.clicked(event, x, y);
 				if (clickTask.isScheduled()) {
@@ -63,23 +62,25 @@ public class IntUI {
 	/* 长按事件 */
 	public static <T extends Element> T
 	longPress(T elem, final long duration, final Boolc boolc) {
-		elem.addListener(new InputListener() {
+		elem.addListener(new ClickListener() {
 			final Task task = new Task() {
 				public void run() {
-					boolc.get(true);
+					if (pressed) {
+						boolc.get(true);
+					}
 				}
 			};
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				// if (super.touchDown(event, x, y, pointer, button)) {
-				Timer.schedule(task, duration / 1000f);
-				return true;
-				// }
-				// return false;
+				if (super.touchDown(event, x, y, pointer, button)) {
+					Timer.schedule(task, duration / 1000f);
+					return true;
+				}
+				return false;
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (task.isScheduled()) {
 					task.cancel();
-					boolc.get(false);
+					if (pressed) boolc.get(false);
 				}
 				// super.touchUp(event, x, y, pointer, button);
 			}
@@ -109,7 +110,7 @@ public class IntUI {
 	}
 
 	public static void
-	addShowMenuLinstenr(Element elem, MenuList... list) {
+	addShowMenuListener(Element elem, MenuList... list) {
 		longPressOrRclick(elem, __ -> {
 			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
 				for (var menu : list) {

@@ -2,32 +2,30 @@
 package modtools.ui.components.input.area;
 
 import arc.Core;
-import arc.func.*;
+import arc.func.Boolf2;
 import arc.graphics.Color;
-import arc.graphics.g2d.*;
+import arc.graphics.g2d.Font;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.math.geom.*;
+import arc.math.geom.Rect;
 import arc.scene.Scene;
 import arc.scene.event.ChangeListener.ChangeEvent;
-import arc.scene.event.InputEvent;
-import arc.scene.event.InputListener;
+import arc.scene.event.*;
 import arc.scene.style.Drawable;
+import arc.scene.ui.TextArea;
 import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldStyle;
-import arc.scene.ui.layout.Cell;
-import arc.scene.ui.layout.Table;
-import arc.struct.*;
+import arc.scene.ui.layout.*;
+import arc.struct.IntSeq;
 import arc.util.*;
 import arc.util.pooling.Pools;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.MyFonts;
-import modtools.ui.components.input.highlight.*;
+import modtools.ui.components.input.highlight.Syntax;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.regex.*;
 
 
 /**
@@ -45,7 +43,7 @@ public class TextAreaTable extends Table {
 	public        boolean      readOnly = false,
 	/** 编辑器是否显示行数 */
 	showLine = true;
-	public        Syntax syntax;
+	public        Syntax syntax   = new Syntax(this);
 	public static int    numWidth = 13;
 
 	public MyTextArea getArea() {
@@ -91,8 +89,6 @@ public class TextAreaTable extends Table {
 			area.setFirstLineShowing(0);
 		});
 		Time.runTask(2, area::updateDisplayText);
-
-		syntax = new JSSyntax(this);
 	}
 
 	public Boolf2<InputEvent, KeyCode>   keyDonwB  = null;
@@ -195,11 +191,11 @@ public class TextAreaTable extends Table {
 			font.getData().markupEnabled = false;
 
 			if (enableHighlighting) {
-				try {
-					highlightingDraw(font, x, y);
-				} catch (Exception e) {
-					Log.err(e);
-				}
+				// try {
+				highlightingDraw(font, x, y);
+				// } catch (Exception e) {
+				// 	Log.err(e);
+				// }
 			} else {
 				font.setColor(Color.white);
 				int   firstLineShowing = getRealFirstLineShowing();
@@ -236,14 +232,16 @@ public class TextAreaTable extends Table {
 			syntax.highlightingDraw(text.substring(displayTextStart, displayTextEnd));
 		}
 		public void drawMultiText(String text, int start, int max) {
-			if (start >= max) return;
+			if (start == max) return;
+			if (start > max) throw new IllegalArgumentException("start: " + start + " > max:" + max);
 			if (font.getColor().a == 0) return;
 			/*start -= displayTextStart;
 			max -= displayTextEnd;*/
 			// StringBuffer sb = new StringBuffer();
 			for (int cursor = start; cursor < max; cursor++) {
+				// 判断是否为换行（包括自动换行）
 				if (text.charAt(cursor) == '\n' || cursor + displayTextStart == linesBreak.get(row * 2 + 1)) {
-					font.draw(text, offsetX, offsetY, start, cursor, 0, Align.left, false).free();
+					drawText(text, start, cursor);
 					start = text.charAt(cursor) == '\n' ? cursor + 1 : cursor;
 					offsetX = baseOffsetX;
 					offsetY -= area.lineHeight();
@@ -252,9 +250,12 @@ public class TextAreaTable extends Table {
 				// Log.info(cursor + "," + linesBreak.get(row * 2 + 1));
 			}
 			if (start < max) {
-				font.draw(text, offsetX, offsetY, start, max, 0, Align.left, false).free();
-				offsetX += glyphPositions.get(max) - glyphPositions.get(start);
+				drawText(text, start, max);
+				offsetX += glyphPositions.get(displayTextStart + max) - glyphPositions.get(displayTextStart + start);
 			}
+		}
+		private void drawText(String text, int start, int cursor) {
+			font.draw(text, offsetX, offsetY, start, cursor, 0, Align.left, false).free();
 		}
 
 		public void updateDisplayText() {

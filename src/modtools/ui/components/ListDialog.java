@@ -9,7 +9,6 @@ import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
-import arc.util.Log;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
@@ -23,14 +22,15 @@ import java.util.regex.Pattern;
 
 public class ListDialog extends DisposableWindow {
 	public Seq<Fi> list = new Seq<>();
-	final Table p = new LimitTable();
+	final  Table   p    = new LimitTable();
 	Floatf<Fi> sorter;
 	public Fi file;
-	Func<Fi, Fi> fileHolder;
-	Cons<Fi> consumer;
+	Func<Fi, Fi>     fileHolder;
+	Cons<Fi>         consumer;
 	Cons2<Fi, Table> pane;
 
-	public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane, Floatf<Fi> sorter) {
+	public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
+	                  Floatf<Fi> sorter) {
 		super(Core.bundle.get("title." + title, title), Tester.w, 600, true);
 		cont.add("@tester.tip").growX().left().row();
 		cont.pane(p).grow();
@@ -56,11 +56,11 @@ public class ListDialog extends DisposableWindow {
 		list.each(this::build);
 	}
 
-	public static Pattern fileUnfair = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*$)");
+	public static       Pattern            fileUnfair    = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*$)");
 	public static final Boolf2<Fi, String> fileNameValid = (f, text) -> {
 		try {
 			return !text.isBlank() && !fileUnfair.matcher(text).find()
-					&& (f.name().equals(text) || !f.sibling(text).exists());
+			       && (f.name().equals(text) || !f.sibling(text).exists());
 		} catch (Throwable e) {
 			return false;
 		}
@@ -98,8 +98,8 @@ public class ListDialog extends DisposableWindow {
 				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, 600, longPress -> {
 					if (longPress) {
-						Window ui = new DisposableWindow("@info", 300, 80);
-						var cont = ui.cont;
+						Window ui   = new DisposableWindow("@info", 300, 80);
+						var    cont = ui.cont;
 						cont.add(new MyLabel(f.name(), accentStyle)).left().colspan(2).row();
 						cont.image().color(Pal.accent).growX().colspan(2);
 						cont.row();
@@ -150,7 +150,7 @@ public class ListDialog extends DisposableWindow {
 		public static final Boolf2<Fi, String> fiTest = (fi, text) -> {
 			try {
 				return !text.isBlank() && !fileUnfair.matcher(text).find()
-						&& (fi.name().equals(text) || !fi.sibling(text).exists());
+				       && (fi.name().equals(text) || !fi.sibling(text).exists());
 			} catch (Throwable e) {
 				return false;
 			}
@@ -161,8 +161,8 @@ public class ListDialog extends DisposableWindow {
 				TextFieldValidator validator,
 				Cons2<TextField, Label> modifier,
 				Table t) {
-			Label label = new MyLabel(def) {{interval = Integer.MAX_VALUE;}};
-			Cell<?> cell = t.add(label);
+			Label     label = new MyLabel(def) {{interval = Integer.MAX_VALUE;}};
+			Cell<?>   cell  = t.add(label);
 			TextField field = new TextField();
 			if (validator != null) field.setValidator(validator);
 			field.update(() -> {

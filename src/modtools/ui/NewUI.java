@@ -4,7 +4,6 @@ import arc.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Batch;
 import arc.util.Log;
-import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 
 import java.lang.reflect.Field;

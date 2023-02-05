@@ -5,10 +5,8 @@ import arc.func.*;
 import arc.struct.*;
 import arc.util.Log;
 import hope_android.FieldUtils;
-import ihope_lib.MyReflect;
 import mindustry.Vars;
 import modtools.utils.reflect.IReflect;
-import rhino.GeneratedClassLoader;
 import rhino.classfile.ClassFileWriter;
 
 import java.io.FileOutputStream;

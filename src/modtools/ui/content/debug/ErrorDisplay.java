@@ -2,6 +2,7 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
+import arc.func.Prov;
 import arc.graphics.Color;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextButton.TextButtonStyle;
@@ -15,6 +16,7 @@ import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
+import modtools.utils.Tools;
 
 import static modtools.utils.MySettings.settings;
 
@@ -55,10 +57,16 @@ public class ErrorDisplay extends Content {
 		ui = new Window(localizedName(), w, 90, true);
 		ui.update(() -> ui.minWidth = getW());
 
-		Color[] colors   = {Color.sky, Color.gold};
-		Fi      last_log = Vars.dataDirectory.child("last_log.txt");
+		Color[]      colors       = {Color.sky, Color.gold};
+		Fi           last_log     = Vars.dataDirectory.child("last_log.txt");
+		long[]       lastModified = {last_log.lastModified()};
+		Prov<String> getString    = () -> last_log.exists() ? last_log.readString() : "";
+		String[]     text         = {getString.get()};
 		Seq<Table> tables = Seq.with(new LimitTable(t -> t.pane(p -> p.label(() -> {
-			return last_log.exists() ? last_log.readString() : "";
+			if (last_log.exists() && Tools.EQSET(lastModified, last_log.lastModified())) {
+				text[0] = getString.get();
+			}
+			return text[0];
 		}))), crashes);
 		String[] names = {"last_log", "crashes"};
 		IntTab   tab   = new IntTab(-1, new Seq<>(names), new Seq<>(colors), tables);

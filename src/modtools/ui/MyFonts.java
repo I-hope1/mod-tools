@@ -12,6 +12,10 @@ import static modtools.utils.MySettings.dataDirectory;
 public class MyFonts {
 	public static Font MSYHMONO;
 
+	static {
+		load();
+	}
+
 	public static void load() {
 		Fi fontFi = dataDirectory.child("font.ttf");
 		if (!fontFi.exists()) {

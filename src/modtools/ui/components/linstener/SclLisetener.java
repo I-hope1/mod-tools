@@ -2,6 +2,7 @@ package modtools.ui.components.linstener;
 
 import arc.Core;
 import arc.Graphics;
+import arc.Graphics.Cursor;
 import arc.Graphics.Cursor.SystemCursor;
 import arc.input.KeyCode;
 import arc.math.Mathf;
@@ -10,13 +11,14 @@ import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.ui.layout.Scl;
+import arc.util.Time;
 import ihope_lib.MyReflect;
 
 public class SclLisetener extends InputListener {
 	public boolean disabled;
-	public float offset = 10;
+	public float   offset = 10;
 	public Element bind;
-	public float defWidth, defHeight, defX, defY, minW, minH;
+	public float   defWidth, defHeight, defX, defY, minW, minH;
 
 	public SclLisetener(Element element, float minW, float minH) {
 		if (element == null) throw new IllegalArgumentException("element is null");
@@ -33,29 +35,27 @@ public class SclLisetener extends InputListener {
 	public boolean left, bottom, right, top;
 	public Runnable listener = null;
 
-	public boolean valid() {
+	public boolean valid(float x, float y) {
+		left = Math.abs(x) < offset;
+		right = Math.abs(x - bind.getWidth()) < offset;
+		bottom = Math.abs(y) < offset;
+		top = Math.abs(y - bind.getHeight()) < offset;
 		return left || right || bottom || top;
 	}
 
-	public Vec2 last = new Vec2();
-	public boolean scling = false;
+	public Vec2         last   = new Vec2();
+	public boolean      scling = false;
 	public SystemCursor lastCursor;
+
 
 	@Override
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		if (bind.parent == null || disabled) return false;
 		last.set(x, y);
-		left = Math.abs(x) < offset;
-		right = Math.abs(x - bind.getWidth()) < offset;
-		bottom = Math.abs(y) < offset;
-		top = Math.abs(y - bind.getHeight()) < offset;
-		try {
-			lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
-		} catch (Throwable ignored) {
-		}
+
 		//		Log.debug(last);
 		//		if (valid()) Log.debug("ok");
-		if (valid()) {
+		if (valid(x, y)) {
 			scling = true;
 			change.set(0, 0);
 			defWidth = bind.getWidth();
@@ -69,6 +69,11 @@ public class SclLisetener extends InputListener {
 
 	public Vec2 change = new Vec2(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY);
 
+	Cursor getCursor() {
+		return left || right ? SystemCursor.horizontalResize
+				: top || bottom ? SystemCursor.verticalResize
+				: SystemCursor.arrow;
+	}
 	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		scling = true;
@@ -80,8 +85,8 @@ public class SclLisetener extends InputListener {
 			y += change.y;
 			change.y = Float.NEGATIVE_INFINITY;
 		}
+		Core.graphics.cursor(getCursor());
 		if (left) {
-			Core.graphics.cursor(SystemCursor.horizontalResize);
 			float w = Mathf.clamp(defWidth - x - last.x, minW, Core.graphics.getWidth());
 			bind.setWidth(w);
 			change.x = defWidth - w;
@@ -90,18 +95,15 @@ public class SclLisetener extends InputListener {
 			//			Log.debug("x: @, lx: @", x, last.x);
 		}
 		if (right) {
-			Core.graphics.cursor(SystemCursor.horizontalResize);
 			bind.setWidth(Mathf.clamp(defWidth + x - last.x, minW, Core.graphics.getWidth()));
 		}
 		if (bottom) {
-			Core.graphics.cursor(SystemCursor.verticalResize);
 			float h = Mathf.clamp(defHeight - y - last.y, minH, Core.graphics.getHeight());
 			bind.setHeight(h);
 			change.y = defHeight - h;
 			bind.y = defY + change.y;
 		}
 		if (top) {
-			Core.graphics.cursor(SystemCursor.verticalResize);
 			bind.setHeight(Mathf.clamp(defHeight + y - last.y, minH, Core.graphics.getHeight()));
 		}
 		if (listener != null) listener.run();
@@ -116,8 +118,47 @@ public class SclLisetener extends InputListener {
 		//		Log.info("end");
 		super.touchUp(event, x, y, pointer, button);
 		change.set(0, 0);
-		Core.graphics.cursor(lastCursor);
 		scling = false;
 		defWidth = defHeight = defX = defY = -1;
 	}
+
+	@Override
+	public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+		storeCursor();
+	}
+	private void storeCursor() {
+		if (lastCursor != null) return;
+		try {
+			lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
+		} catch (Throwable ignored) {}
+	}
+	@Override
+	public boolean mouseMoved(InputEvent event, float x, float y) {
+		storeCursor();
+		if (valid(x, y)) {
+			Core.graphics.cursor(getCursor());
+		} else {
+			restoreCursor();
+		}
+		return false;
+	}
+	private boolean restoreCursor() {
+		/*if (lastCursor == null) {
+			try {
+				lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
+			} catch (Throwable ignored) {}
+		}*/
+		if (lastCursor == null) {
+			// Core.graphics.restoreCursor();
+			return false;
+		}
+		Core.graphics.cursor(lastCursor);
+		lastCursor = null;
+		return true;
+	}
+	@Override
+	public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+		if (!restoreCursor()) Core.graphics.restoreCursor();
+	}
+
 }

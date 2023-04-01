@@ -12,7 +12,7 @@ import arc.struct.Seq;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
-import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.debug.Tester;
@@ -20,7 +20,7 @@ import modtools.utils.*;
 
 import java.util.regex.Pattern;
 
-public class ListDialog extends DisposableWindow {
+public class ListDialog extends Window implements DisposableInterface {
 	public Seq<Fi> list = new Seq<>();
 	final  Table   p    = new LimitTable();
 	Floatf<Fi> sorter;
@@ -98,7 +98,7 @@ public class ListDialog extends DisposableWindow {
 				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, 600, longPress -> {
 					if (longPress) {
-						Window ui   = new DisposableWindow("@info", 300, 80);
+						Window ui   = new DisWindow("@info", 300, 80);
 						var    cont = ui.cont;
 						cont.add(new MyLabel(f.name(), accentStyle)).left().colspan(2).row();
 						cont.image().color(Pal.accent).growX().colspan(2);

@@ -343,6 +343,14 @@ public class Tools {
 	public static <T> T or(T t1, Prov<T> t2) {
 		return t1 == null ? t2.get() : t1;
 	}
+	/** @return 是否不相等，相等就会设置值 */
+	public static boolean EQSET(long[] arr, long t) {
+		if (arr[0] != t) {
+			arr[0] = t;
+			return true;
+		}
+		return false;
+	}
 	public static <T> SR<T> sr(T value) {
 		return new SR<>(value);
 	}

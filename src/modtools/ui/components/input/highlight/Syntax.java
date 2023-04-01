@@ -253,15 +253,13 @@ public class Syntax {
 		public DrawComment(Color color) {
 			super(color, true);
 		}
-
-		@Override
+	
 		void reset() {
 			super.reset();
 			body = false;
 			finished = false;
 		}
 
-		@Override
 		boolean isFinished() {
 			return finished;
 		}

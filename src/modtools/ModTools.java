@@ -5,8 +5,12 @@ import arc.files.Fi;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
+import mindustry.content.*;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
+import mindustry.type.*;
+import mindustry.world.Block;
+import mindustry.world.blocks.production.GenericCrafter;
 import modtools.ui.*;
 import modtools.utils.Tools;
 
@@ -17,6 +21,7 @@ public class ModTools extends Mod {
 	public ModTools() {
 		Log.info("Loaded ModTools constructor.");
 
+
 		Tools.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
 			root = Vars.mods.getMod(ModTools.class).root;
@@ -24,7 +29,6 @@ public class ModTools extends Mod {
 
 			return true;
 		});
-
 		Events.on(ClientLoadEvent.class, e -> {
 			if (throwable != null) {
 				ui.showException(throwable);
@@ -33,7 +37,7 @@ public class ModTools extends Mod {
 
 			// texture.getTextureData();
 			// 加载字体
-			Core.app.post(MyFonts::load);
+			// Core.app.post(MyFonts::load);
 
 			// Unit135G.main();
 			Time.runTask(6f, () -> {

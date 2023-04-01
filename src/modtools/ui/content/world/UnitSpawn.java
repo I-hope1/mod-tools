@@ -33,9 +33,10 @@ import modtools.ui.*;
 import modtools.ui.components.MyItemSelection;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;
-import modtools.utils.Tools;
+import modtools.utils.*;
 
 import static mindustry.Vars.player;
+import static modtools.ui.Contents.tester;
 import static modtools.utils.MySettings.settings;
 import static rhino.ScriptRuntime.*;
 
@@ -80,8 +81,11 @@ public class UnitSpawn extends Content {
 		                           10);
 		unitCont.row();
 		unitCont.table(right -> {
-			Label name          = new Label("");
-			Label localizedName = new Label("");
+			Label name = new Label(""),
+					localizedName = new Label("");
+			IntUI.longPressOrRclick(name, l -> {
+				tester.put(l, selectUnit);
+			});
 			right.update(() -> {
 				name.setText(selectUnit != null ? selectUnit.name : "[red]ERROR");
 				localizedName.setText(selectUnit != null ? selectUnit.localizedName : "[red]ERROR");

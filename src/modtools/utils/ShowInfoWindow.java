@@ -1,9 +1,10 @@
 package modtools.utils;
 
-import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.Window;
+import modtools.ui.components.Window.DisposableInterface;
 import modtools.utils.JSFunc.ReflectTable;
 
-class ShowInfoWindow extends DisposableWindow {
+class ShowInfoWindow extends Window implements DisposableInterface {
 
 	final Class<?> clazz;
 	ReflectTable

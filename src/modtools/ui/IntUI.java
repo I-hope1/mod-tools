@@ -1,7 +1,7 @@
 
 package modtools.ui;
 
-import arc.Core;
+import arc.*;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.input.KeyCode;
@@ -20,7 +20,7 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.ui.components.Window;
-import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.Window.DisposableInterface;
 import modtools.utils.Search;
 
 import java.lang.reflect.Array;
@@ -459,7 +459,27 @@ public class IntUI {
 		return window;
 	}
 
-	public static class ConfirmWindow extends DisposableWindow {
+	/* 整数倒计时 */
+	public static void countdown(int times, Intc cons) {
+		int[] i = {times};
+		Timer.schedule(() -> {
+			cons.get(i[0]);
+			i[0]--;
+		}, 0, 1, times);
+	}
+
+	// static {
+	// 	Time.run(0, () -> {
+	// 		new BaseDialog("a") {{
+	// 			addCloseButton();
+	// 			TextButton button = (TextButton) buttons.getChildren().first();
+	// 			shown(new Countdown(button));
+	// 			show();
+	// 		}};
+	// 	});
+	// }
+
+	public static class ConfirmWindow extends Window implements DisposableInterface {
 		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
@@ -488,6 +508,36 @@ public class IntUI {
 			super(icon, name, () -> {
 				IntUI.showConfirm(text, run);
 			});
+		}
+	}
+
+	public static class Countdown implements Runnable, Cons {
+		TextButton button;
+		int        times;
+		public Countdown(TextButton button, int times) {
+			this.button = button;
+			this.times = times;
+			init();
+		}
+		public Countdown(TextButton button) {
+			this(button, 3);
+		}
+		public void init() {
+			button.setDisabled(true);
+		}
+		public void run() {
+			countdown(times, i -> {
+				if (i == 0) {
+					button.setDisabled(false);
+					button.setText("@ok");
+				} else {
+					button.setText(Core.bundle.get("ok") + "(" + i + ")");
+				}
+			});
+		}
+		// ingroed o
+		public void get(Object o) {
+			run();
 		}
 	}
 }

@@ -7,6 +7,7 @@ import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
+import mindustry.world.Block;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
 import modtools.ui.content.Content;
@@ -25,6 +26,7 @@ public class ContentList extends Content {
 	Table  main;
 	final ObjectMap<String, Effect>     fxs     = new ObjectMap<>();
 	final ObjectMap<String, BulletType> bullets = new ObjectMap<>();
+	final ObjectMap<String, Block>      blocks  = new ObjectMap<>();
 
 	Pattern pattern = null;
 	public void load() {
@@ -37,10 +39,13 @@ public class ContentList extends Content {
 			pattern = Tools.complieRegExp(text);
 		}).build(top, main);
 
-		Field[] fields = Fx.class.getFields();
+		Field[] fields;
+		fields = Fx.class.getFields();
 		buildTable(fields, Effect.class, fxs);
 		fields = Bullets.class.getFields();
 		buildTable(fields, BulletType.class, bullets);
+		fields = Blocks.class.getFields();
+		buildTable(fields, Block.class, blocks);
 		rebuild();
 	}
 	private <T> void buildTable(Field[] fields, Class<T> cl, ObjectMap<String, T> map) {
@@ -60,10 +65,9 @@ public class ContentList extends Content {
 		return 200;
 	}
 	public void rebuild() {
-		MySet<Table> tables = new MySet<>();
-		Color[]      colors = {Color.sky, Color.sky};
-		String[]     names  = {"fx", "bullet"};
-		tables.add(new FilterTable(t -> {
+		Seq<Table> tables = new Seq<>();
+		String[]   names  = {"fx", "bullet", "blocks"};
+		tables.add(new FilterTable<>(t -> {
 			fxs.each((name, effect) -> {
 				t.bind(name);
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -79,7 +83,7 @@ public class ContentList extends Content {
 			});
 			t.addUpdateListener(() -> pattern);
 		}));
-		tables.add(new FilterTable(t -> {
+		tables.add(new FilterTable<>(t -> {
 			bullets.each((name, bulletType) -> {
 				t.bind(name);
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -95,12 +99,23 @@ public class ContentList extends Content {
 			});
 			t.addUpdateListener(() -> pattern);
 		}));
+		tables.add(new FilterTable<>(t -> {
+			blocks.each((name, bulletType) -> {
+				t.bind(name);
+				t.button(name, () -> {}).growX().height(64).with(button -> {
+					IntUI.longPress(button, 600, b -> {
+						if (b) JSFunc.copyText(name, button);
+					});
+				}).row();
+			});
+			t.addUpdateListener(() -> pattern);
+		}));
 
 		IntTab tab = new IntTab(-1,
 		                        new Seq<>(names),
-		                        new Seq<>(colors),
-		                        tables.toSeq());
-		tab.title.add("@contentlist.tip").growX().row();
+		                        Color.sky,
+		                        tables);
+		tab.title.add("@contentlist.tip").colspan(tables.size).growX().row();
 
 		main.add(tab.build()).grow().top();
 	}

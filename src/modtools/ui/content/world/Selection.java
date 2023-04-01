@@ -17,6 +17,7 @@ import arc.struct.*;
 import arc.util.*;
 import arc.util.Timer;
 import arc.util.Timer.Task;
+import arc.util.pooling.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.content.Blocks;
@@ -31,13 +32,14 @@ import mindustry.world.blocks.environment.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
-import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.Vector;
 import java.util.function.Consumer;
 
 import static mindustry.Vars.*;
@@ -215,16 +217,13 @@ public class Selection extends Content {
 					});
 				}
 				if (select.get("unit")) {
-					Threads.thread(() -> {
-						Groups.unit.each(unit -> {
-							// 返回单位是否在所选区域内
-							return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
-						}, unit -> {
-							Threads.sleep(1);
-							if (!units.list.contains(unit)) {
-								units.add(unit);
-							}
-						});
+					Groups.unit.each(unit -> {
+						// 返回单位是否在所选区域内
+						return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
+					}, unit -> {
+						if (!units.list.contains(unit)) {
+							units.add(unit);
+						}
 					});
 				}
 
@@ -435,6 +434,20 @@ public class Selection extends Content {
 		loadSettings();
 
 		btn.setStyle(Styles.logicTogglet);
+
+		/*{
+			Pools.set(Bullet.class, new Pool<>(4, 5000) {
+				public Bullet newObject() {
+					return new Bullet() {
+						@Override
+						public void update() {
+							super.update();
+							rotation(360 * (float) Math.random());
+						}
+					};
+				}
+			});
+		}*/
 	}
 	private void setBlock(Block block, Tile tile) {
 		if (tile.block() == block) return;
@@ -743,7 +756,7 @@ public class Selection extends Content {
 		public final Table   wrap;
 		public final Table   main;
 		public final Table   cont;
-		public       List<T> list = new MyList();
+		public       List<T> list = new Vector<>();
 		public final String  name;
 
 		public Function(String name, Cons2<Table, Function<T>> cons) {
@@ -833,7 +846,7 @@ public class Selection extends Content {
 		public final void showAll() {
 			final int   cols = Vars.mobile ? 4 : 6;
 			final int[] c    = new int[]{0};
-			new DisposableWindow(name, 0, 200, true) {{
+			new DisWindow(name, 0, 200, true) {{
 				cont.pane(new LimitTable(table -> {
 					for (T item : list) {
 						var cont = new LimitTable(Tex.pane) {
@@ -1075,98 +1088,98 @@ public class Selection extends Content {
 
 	public static Object[] EMPTY = {};
 
-	private static class MyList<T> extends AbstractList<T> {
-		Object[] arr  = EMPTY;
-		int      size = 0;
-		public T get(int index) {
-			return (T) arr[index];
-		}
-		@Override
-		public void clear() {
-			arr = new Object[0];
-			size = 0;
-		}
-		/**
-		 * Returns a capacity at least as large as the given minimum capacity.
-		 * Returns the current capacity increased by 50% if that suffices.
-		 * Will not return a capacity greater than MAX_ARRAY_SIZE unless
-		 * the given minimum capacity is greater than MAX_ARRAY_SIZE.
-		 *
-		 * @param minCapacity the desired minimum capacity
-		 *
-		 * @throws OutOfMemoryError if minCapacity is less than zero
-		 */
-		private int newCapacity(int minCapacity) {
-			// overflow-conscious code
-			int oldCapacity = arr.length;
-			int newCapacity = oldCapacity + (oldCapacity >> 1);
-			if (newCapacity - minCapacity <= 0) {
-				if (minCapacity < 0) // overflow
-					throw new OutOfMemoryError();
-				return minCapacity;
-			}
-			return newCapacity;
-		}
-		/**
-		 * Increases the capacity to ensure that it can hold at least the
-		 * number of elements specified by the minimum capacity argument.
-		 *
-		 * @param minCapacity the desired minimum capacity
-		 *
-		 * @throws OutOfMemoryError if minCapacity is less than zero
-		 */
-		private Object[] grow(int minCapacity) {
-			return arr = Arrays.copyOf(arr, newCapacity(minCapacity));
-		}
-
-		private Object[] grow() {
-			return grow(size + 1);
-		}
-		public void add(int index, T element) {
-			final int s;
-			Object[]  arr;
-			if (this.arr == EMPTY) {
-				this.arr = new Object[10];
-			}
-			if ((s = size) == (arr = this.arr).length)
-				arr = grow();
-			System.arraycopy(arr, index,
-			                 arr, index + 1,
-			                 s - index);
-			arr[index] = element;
-			size = s + 1;
-		}
-		public int size() {
-			return size;
-		}
-
-		/**
-		 * Removes the element at the specified position in this list.
-		 * Shifts any subsequent elements to the left (subtracts one from their
-		 * indices).
-		 *
-		 * @param index the index of the element to be removed
-		 *
-		 * @return the element that was removed from the list
-		 * @throws IndexOutOfBoundsException {@inheritDoc}
-		 */
-		public T remove(int index) {
-			Objects.checkIndex(index, size);
-
-			T oldValue = (T) arr[index];
-			fastRemove(arr, index);
-
-			return oldValue;
-		}
-		/**
-		 * Private remove method that skips bounds checking and does not
-		 * return the value removed.
-		 */
-		private void fastRemove(Object[] es, int i) {
-			final int newSize;
-			if ((newSize = size - 1) > i)
-				System.arraycopy(es, i + 1, es, i, newSize - i);
-			es[size = newSize] = null;
-		}
+	private static class MyList<T> extends Vector<T> {
+		// Object[] arr  = EMPTY;
+		// int      size = 0;
+		// public T get(int index) {
+		// 	return (T) arr[index];
+		// }
+		// @Override
+		// public void clear() {
+		// 	arr = new Object[0];
+		// 	size = 0;
+		// }
+		// /**
+		//  * Returns a capacity at least as large as the given minimum capacity.
+		//  * Returns the current capacity increased by 50% if that suffices.
+		//  * Will not return a capacity greater than MAX_ARRAY_SIZE unless
+		//  * the given minimum capacity is greater than MAX_ARRAY_SIZE.
+		//  *
+		//  * @param minCapacity the desired minimum capacity
+		//  *
+		//  * @throws OutOfMemoryError if minCapacity is less than zero
+		//  */
+		// private int newCapacity(int minCapacity) {
+		// 	// overflow-conscious code
+		// 	int oldCapacity = arr.length;
+		// 	int newCapacity = oldCapacity + (oldCapacity >> 1);
+		// 	if (newCapacity - minCapacity <= 0) {
+		// 		if (minCapacity < 0) // overflow
+		// 			throw new OutOfMemoryError();
+		// 		return minCapacity;
+		// 	}
+		// 	return newCapacity;
+		// }
+		// /**
+		//  * Increases the capacity to ensure that it can hold at least the
+		//  * number of elements specified by the minimum capacity argument.
+		//  *
+		//  * @param minCapacity the desired minimum capacity
+		//  *
+		//  * @throws OutOfMemoryError if minCapacity is less than zero
+		//  */
+		// private Object[] grow(int minCapacity) {
+		// 	return arr = Arrays.copyOf(arr, newCapacity(minCapacity));
+		// }
+		//
+		// private Object[] grow() {
+		// 	return grow(size + 1);
+		// }
+		// public void add(int index, T element) {
+		// 	final int s;
+		// 	Object[]  arr;
+		// 	if (this.arr == EMPTY) {
+		// 		this.arr = new Object[10];
+		// 	}
+		// 	if ((s = size) == (arr = this.arr).length)
+		// 		arr = grow();
+		// 	System.arraycopy(arr, index,
+		// 	                 arr, index + 1,
+		// 	                 s - index);
+		// 	arr[index] = element;
+		// 	size = s + 1;
+		// }
+		// public int size() {
+		// 	return size;
+		// }
+		//
+		// /**
+		//  * Removes the element at the specified position in this list.
+		//  * Shifts any subsequent elements to the left (subtracts one from their
+		//  * indices).
+		//  *
+		//  * @param index the index of the element to be removed
+		//  *
+		//  * @return the element that was removed from the list
+		//  * @throws IndexOutOfBoundsException {@inheritDoc}
+		//  */
+		// public T remove(int index) {
+		// 	Objects.checkIndex(index, size);
+		//
+		// 	T oldValue = (T) arr[index];
+		// 	fastRemove(arr, index);
+		//
+		// 	return oldValue;
+		// }
+		// /**
+		//  * Private remove method that skips bounds checking and does not
+		//  * return the value removed.
+		//  */
+		// private void fastRemove(Object[] es, int i) {
+		// 	final int newSize;
+		// 	if ((newSize = size - 1) > i)
+		// 		System.arraycopy(es, i + 1, es, i, newSize - i);
+		// 	es[size = newSize] = null;
+		// }
 	}
 }

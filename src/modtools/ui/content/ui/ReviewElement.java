@@ -1,9 +1,12 @@
 package modtools.ui.content.ui;
 
 import arc.Core;
-import arc.graphics.Color;
+import arc.files.Fi;
+import arc.graphics.*;
+import arc.graphics.PixmapIO.PngWriter;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
+import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.*;
@@ -19,18 +22,21 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.IntUI.MenuList;
+import modtools.ui.IntUI.*;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.Window;
-import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.limit.*;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 
+import java.io.IOException;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static mindustry.Vars.*;
 import static modtools.IntVars.topGroup;
 import static modtools.ui.Contents.*;
 import static modtools.utils.Tools.*;
@@ -184,7 +190,7 @@ public class ReviewElement extends Content {
 		}
 	};
 
-	public static class ReviewElementWindow extends DisposableWindow {
+	public static class ReviewElementWindow extends Window implements DisposableInterface {
 		Table   pane    = new LimitTable() {};
 		Element element = null;
 		Pattern pattern;
@@ -204,6 +210,7 @@ public class ReviewElement extends Content {
 						hide();
 						var window = new ReviewElementWindow();
 						window.pattern = pattern;
+						// Log.info(element.parent);
 						window.show(element.parent);
 						window.setPosition(x, y);
 						window.setSize(width, height);
@@ -232,7 +239,7 @@ public class ReviewElement extends Content {
 					if (hideSelf) return name;
 					return super.toString();
 				}
-			}).grow();
+			}).grow().minHeight(90);
 
 			update(() -> {
 				if (!CANCEL_TASK.isScheduled()) {
@@ -264,7 +271,7 @@ public class ReviewElement extends Content {
 			// highlightShowMultiRow(pane, pattern, element + "");
 		}
 
-
+		/** 结构： Label，Image（下划线） */
 		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
 				table.add(new MyLabel(text, IntStyles.myLabel)).color(Pal.accent).growX().left().row();
@@ -327,97 +334,7 @@ public class ReviewElement extends Content {
 			table.left().defaults().left().growX();
 
 			try {
-				table.add(new Table(wrap -> {
-					/* 用于添加侦听器 */
-					if (element instanceof Group) {
-						/* 占位符 */
-						ImageButton button;
-						int         size     = 32;
-						var         children = ((Group) element).getChildren();
-						wrap.add(button = new ImageButton(Icon.rightOpen, Styles.clearNonei))
-								.size(size)//.marginLeft(-size).marginRight(-size)
-								.disabled(__ -> children.isEmpty());
-						// button.translation.set(button.getWidth() / 2f, button.getHeight() / 2f);
-						highlightShowMultiRow(wrap, pattern, element == Core.scene.root ? "ROOT"
-								: getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
-						wrap.image().fillY().left()
-								.update(t -> t.color.set(focusFrom == wrap ? ColorFul.color : Color.darkGray));
-						wrap.defaults().growX();
-						wrap.add(new LimitTable(t -> {
-							if (children.isEmpty()) {
-								return;
-							}
-							// t.marginLeft(size / 4f);
-							Table table1 = new Table();
-							for (var child : children) {
-								build(child, table1, pattern);
-							}
-							Cell<?>         _cell   = t.add(table1).grow();
-							final boolean[] checked = {children.size < 20};
-							button.clicked(() -> checked[0] = !checked[0]);
-							Image image = button.getImage();
-							button.update(() -> {
-								button.setOrigin(Align.center);
-								if (checked[0]) {
-									image.actions(Actions.rotateTo(-90, 0.1f));
-									_cell.setElement(table1);
-								} else {
-									image.actions(Actions.rotateTo(0, 0.1f));
-									_cell.clearElement();
-								}
-							});
-						})).left();
-					} else if (element instanceof Image) {
-						wrap.table(p0 -> {
-							p0.table(Window.myPane, p -> {
-								try {
-									int   size = 32;
-									float mul  = element.getHeight() / element.getWidth();
-									p.add(new Image(((Image) element).getDrawable())).color(element.color)
-											.size(size / Scl.scl(), size * mul / Scl.scl());
-								} catch (Throwable e) {
-									p.add("空图像").labelAlign(Align.left);
-								}
-							});
-							// 用于补位
-							p0.add().growX();
-						}).growX().get();
-					} else {
-						wrap.defaults().growX();
-						highlightShowMultiRow(wrap, pattern, String.valueOf(element));
-					}
-					// JSFunc.addStoreButton(wrap, "element", () -> element);
-					Element elem = wrap.getChildren().get(wrap.getChildren().size > 1 ? 1 : 0);
-					Runnable copy = () -> {
-						tester.put(Core.input.mouse(), element);
-					};
-					IntUI.addShowMenuListener(elem, new MenuList(Icon.copy, "@jsfunc.store_as_js_var2", copy),
-					                          new MenuList(Icon.trash, "@clear", () -> element.remove()),
-					                          new MenuList(Icon.info, "@details", () -> JSFunc.showInfo(element)));
-					IntUI.doubleClick(elem, () -> {}, copy);
-					wrap.touchable = Touchable.enabled;
-				}) {
-
-					@Override
-					public Element hit(float x, float y, boolean touchable) {
-						focus = null;
-						Element tmp = super.hit(x, y, touchable);
-						if (tmp == null) return null;
-						// color.set(Color.white);
-						if (focus != null) {
-							if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
-							return tmp;
-						}
-						focus = element;
-						focusFrom = this;
-						if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
-						return tmp;
-					}
-
-					{
-						update(() -> background(focusFrom == this ? Styles.black8 : Styles.none));
-					}
-				});
+				table.add(new MyWrapTable(this, element, pattern));
 			} catch (Exception e) {
 				//				Vars.ui.showException(e);
 				Log.err(e);
@@ -469,5 +386,214 @@ public class ReviewElement extends Content {
 			clazz = clazz.getSuperclass();
 		}
 		return clazz.getSimpleName();
+	}
+
+	private static class MyWrapTable extends LimitTable {
+		private final Element element;
+		// private final ReviewElementWindow window;
+		public MyWrapTable(ReviewElementWindow window, Element element, Pattern pattern) {
+			super(wrap -> {
+				// ((ScrollPane) pane.parent).setScrollingDisabled(true, true);
+				int childIndex;
+				/* 用于添加侦听器 */
+				if (element instanceof Group) {
+					/* 占位符 */
+					ImageButton button;
+					int         size     = 32;
+					var         children = ((Group) element).getChildren();
+					wrap.add(button = new ImageButton(Icon.rightOpen, Styles.clearNonei))
+							.size(size)//.marginLeft(-size).marginRight(-size)
+							.disabled(__ -> children.isEmpty());
+					// button.translation.set(button.getWidth() / 2f, button.getHeight() / 2f);
+					childIndex = 1;
+					window.highlightShowMultiRow(wrap, pattern, element == Core.scene.root ? "ROOT"
+							: ReviewElement.getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
+					wrap.image().fillY().left()
+							.update(t -> t.color.set(ReviewElement.focusFrom == wrap ? ColorFul.color : Color.darkGray));
+					wrap.defaults().growX();
+					wrap.add(new LimitTable(t -> {
+						if (children.isEmpty()) {
+							return;
+						}
+						// t.marginLeft(size / 4f);
+						Table table1 = new Table();
+						for (var child : children) {
+							window.build(child, table1, pattern);
+						}
+						Cell<?>         _cell   = t.add(table1).grow();
+						final boolean[] checked = {children.size < 20};
+						button.clicked(() -> checked[0] = !checked[0]);
+						Image image = button.getImage();
+						button.update(() -> {
+							button.setOrigin(Align.center);
+							if (checked[0]) {
+								image.actions(Actions.rotateTo(-90, 0.1f));
+								_cell.setElement(table1);
+							} else {
+								image.actions(Actions.rotateTo(0, 0.1f));
+								_cell.clearElement();
+							}
+						});
+					})).left();
+					// Log.info(wrap);
+				} else if (element instanceof Image) {
+					childIndex = 0;
+					wrap.table(p0 -> {
+						p0.table(Window.myPane, p -> {
+							try {
+								int   size = 32;
+								float mul  = element.getHeight() / element.getWidth();
+								p.add(new Image(((Image) element).getDrawable())).color(element.color)
+										.size(size / Scl.scl(), size * mul / Scl.scl());
+							} catch (Throwable e) {
+								p.add("空图像").labelAlign(Align.left);
+							}
+						});
+						// 用于补位
+						p0.add().growX();
+					}).growX().get();
+				} else {
+					wrap.defaults().growX();
+					childIndex = 0;
+					window.highlightShowMultiRow(wrap, pattern, String.valueOf(element));
+				}
+				// JSFunc.addStoreButton(wrap, "element", () -> element);
+				Element _elem = wrap.getChildren().get(childIndex);
+				Runnable copy = () -> {
+					Contents.tester.put(Core.input.mouse(), element);
+				};
+				IntUI.addShowMenuListener
+						(_elem, new MenuList(Icon.copy, "@jsfunc.store_as_js_var2", copy),
+						 new ConfigList(Icon.trash, "@clear", "@confirm.remove", () -> element.remove()),
+						 new MenuList(Icon.copy, "@copy.path", () -> {
+							 JSFunc.copyText(getPath(element));
+						 }),
+						 new MenuList(Icon.fileImage, "@reviewElement.screenshot", () -> {
+							 screenshot(element);
+						 }),
+						 new MenuList(Icon.info, "@details", () -> JSFunc.showInfo(element))
+						);
+				IntUI.doubleClick(_elem, () -> {}, copy);
+				wrap.touchable = Touchable.enabled;
+			});
+			this.element = element;
+			// this.window = window;
+			update(() -> background(focusFrom == this ? Styles.black8 : Styles.none));
+		}
+		/** 使用ScreenUtils截图 */
+		private static void screenshot(Element element) {
+			Vec2 vec2 = Tmp.v1.set(element.x, element.y);
+
+			int w = (int) element.getWidth(),
+					h = (int) element.getHeight();
+			int potW = Mathf.nextPowerOfTwo(w);
+			int potH = Mathf.nextPowerOfTwo(h);
+
+			// 清空
+			Gl.clearColor(0, 0, 0, 0);
+			Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
+			// var trans = Draw.trans();
+			// trans.rotate(180);
+			// Draw.trans(new Mat(trans).scl(0.1f));
+			element.draw();
+			Draw.flush();
+			Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h),
+					potPixmap = new Pixmap(potW, potH);
+			// Draw.trans(trans);
+			// trans.rotate(-180);
+			potPixmap.draw(pixmap, 0, 0);
+			Texture       texture       = new Texture(potPixmap);
+			TextureRegion textureRegion = new TextureRegion(texture, 0, h, w, -h);
+			JSFunc.testElement(textureRegion);
+
+			Fi fi = screenshotDirectory.child(
+					Optional.ofNullable(element.name)
+							.orElseGet(() -> "" + Time.nanos()) + ".png");
+			// 将图片写入文件
+			PngWriter writer = new PngWriter((int) (pixmap.width * pixmap.height * 1.5f)); // Guess at deflated size.
+			try {
+				writer.setFlipY(true);
+				writer.write(fi, pixmap);
+			} catch (IOException ignored) {
+			} finally {
+				writer.dispose();
+			}
+			// PixmapIO.writePng(fi, potPixmap);
+			pixmap.dispose();
+			potPixmap.dispose();
+
+			Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
+			// Time.runTask(30, w::hide);
+		}
+		private static String getPath(Element element) {
+			Element       el = element;
+			StringBuilder sb = new StringBuilder();
+			while (el != null) {
+				if (el.name != null) {
+					return "Core.scene.find(\"" + el.name + "\")" + sb;
+				} else {
+					sb.append(".children.get(").append(el.getZIndex()).append(')');
+					el = el.parent;
+				}
+			}
+			return "Core.scene.root" + sb;
+		}
+		@Override
+		public Element hit(float x, float y, boolean touchable) {
+			focus = null;
+			Element tmp = super.hit(x, y, touchable);
+			if (tmp == null) return null;
+			// color.set(Color.white);
+			if (focus != null) {
+				if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
+				return tmp;
+			}
+			focus = element;
+			focusFrom = this;
+			if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
+			return tmp;
+		}
+
+		static int getDeep(Element element) {
+			int deep = 0;
+			while (element.parent != null) {
+				element = element.parent;
+				deep++;
+			}
+			return deep;
+		}
+		/** 获取最近的Wrap父节点 */
+		public MyWrapTable _getParent(Element element) {
+			Element element1 = element;
+			while (element1 != null) {
+				if (element1 instanceof MyWrapTable) return (MyWrapTable) element1;
+				element1 = element1.parent;
+			}
+			return null;
+		}
+
+		/*{
+			addListener(new InputListener() {
+				public final Vec2 lastMouse = new Vec2(), lastOff = new Vec2();
+				public boolean touchDown(InputEvent event, float x, float y, int __, KeyCode button) {
+					MyWrapTable p = _getParent(hit(x, y, true));
+					// Log.info(getDeep(event.listenerActor));
+					lastMouse.set(Core.input.mouse());
+					lastOff.set(event.listenerActor.translation);
+					if (p == MyWrapTable.this) {
+						((ScrollPane) window.pane.parent).setScrollingDisabledY(true);
+						toFront();
+						return true;
+					}
+					return false;
+				}
+				public void touchDragged(InputEvent event, float x, float y, int pointer) {
+					event.listenerActor.translation.y = Core.input.mouseY() - lastMouse.y + lastOff.y;
+				}
+				public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					((ScrollPane) window.pane.parent).setScrollingDisabledY(false);
+				}
+			});
+		}*/
 	}
 }

@@ -71,7 +71,7 @@ public class ShowUIList extends Content {
 	}
 
 	Pattern pattern;
-	Table   icons = new FilterTable(t -> {
+	Table   icons = new FilterTable<>(t -> {
 		t.clearChildren();
 		Icon.icons.each((k, icon) -> {
 			t.bind(k);
@@ -81,7 +81,7 @@ public class ShowUIList extends Content {
 			t.unbind();
 		});
 		t.addUpdateListener(() -> pattern);
-	}), tex       = new FilterTable(t -> {
+	}), tex       = new FilterTable<>(t -> {
 		Field[] fields = Tex.class.getFields();
 		t.clearChildren();
 		for (Field field : fields) {
@@ -102,7 +102,7 @@ public class ShowUIList extends Content {
 
 		}
 		t.addUpdateListener(() -> pattern);
-	}), styles    = new FilterTable(IntUI.whiteui.tint(1, 0.6f, 0.6f, 1), t -> {
+	}), styles    = new FilterTable<>(IntUI.whiteui.tint(1, 0.6f, 0.6f, 1), t -> {
 		Field[] fields = Styles.class.getFields();
 
 		t.clearChildren();
@@ -132,7 +132,7 @@ public class ShowUIList extends Content {
 		}
 		t.addUpdateListener(() -> pattern);
 
-	}), colorsT   = new FilterTable(t -> {
+	}), colorsT   = new FilterTable<>(t -> {
 		t.defaults().left().growX();
 		t.addUpdateListener(() -> pattern);
 

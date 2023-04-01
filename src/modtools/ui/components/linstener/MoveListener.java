@@ -11,9 +11,9 @@ import arc.scene.ui.layout.*;
 
 public class MoveListener extends InputListener {
 	// public float bx, by;
-	public final Table main;
+	public final Table   main;
 	public final Element touch;
-	public boolean disabled = false;
+	public       boolean disabled = false, isFiring = false;
 	public Runnable fire;
 
 	public MoveListener(Element touch, Table main) {
@@ -39,6 +39,7 @@ public class MoveListener extends InputListener {
 		if (disabled) return false;
 		lastMouse.set(Core.input.mouse());
 		lastMain.set(main.x, main.y);
+		isFiring = true;
 		// bx = x;
 		// by = y;
 		return true;
@@ -59,7 +60,7 @@ public class MoveListener extends InputListener {
 	}
 
 	public void display(float x, float y) {
-		float mainWidth = main.getWidth(), mainHeight = main.getHeight();
+		float mainWidth  = main.getWidth(), mainHeight = main.getHeight();
 		float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
 		main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
 		main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
@@ -69,6 +70,7 @@ public class MoveListener extends InputListener {
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		// task.cancel();
 		super.touchUp(event, x, y, pointer, button);
+		isFiring = false;
 		//		Core.graphics.cursor(lastCursor);
 	}
 }

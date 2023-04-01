@@ -26,15 +26,16 @@ import static modtools.ui.Contents.*;
 public final class TopGroup extends WidgetGroup {
 	public boolean checkUI = MySettings.settings.getBool("checkUI", "false"),
 			debugBounds    = MySettings.settings.getBool("debugbounds", "false");
-	public        MySet<Boolp>      drawSeq         = new MySet<>();
-	public        boolean           isSwicthWindows = false;
-	public        int               currentIndex    = 0;
-	public        ArrayList<Window> shownWindows    = new ArrayList<>();
+	public MySet<Boolp>      drawSeq         = new MySet<>();
+	public boolean           isSwicthWindows = false;
+	public int               currentIndex    = 0;
+	public ArrayList<Window> shownWindows    = new ArrayList<>();
+
 	private final Group
-	                                back            = new Group() {{name = "back";}},
-			windows                                 = new Group() {{name = "windows";}},
-			frag                                    = new Group() {{name = "frag";}},
-			others                                  = new WidgetGroup() {{name = "others";}};
+			back    = new Group() {{name = "back";}},
+			windows = new Group() {{name = "windows";}},
+			frag    = new Group() {{name = "frag";}},
+			others  = new WidgetGroup() {{name = "others";}};
 	private final Group[] all         = {back, windows, frag, others};
 	public        Element drawPadElem = null;
 
@@ -176,6 +177,36 @@ public final class TopGroup extends WidgetGroup {
 
 	public static final boolean enabled = true;
 
+	/**
+	 * 根据类别添加child
+	 * <p>按顺序z-index不断增加</p>
+	 * <table style="border: 1px solid #ccf; background: #ffc; color: #333">
+	 *     <thead>
+	 *     <tr>
+	 *         <th scope="col">元素类型</th>
+	 *         <th scope="col">所处的父节点</th>
+	 *     <tr/>
+	 *     </thead>
+	 *     <tbody>
+	 *     <tr>
+	 *         <td>BackInterface</td>
+	 *         <td>back</td>
+	 *     </tr>
+	 *     <tr>
+	 *         <td>Window</td>
+	 *         <td>windows</td>
+	 *     </tr>
+	 *     <tr>
+	 *         <td>Frag</td>
+	 *         <td>frag</td>
+	 *     </tr>
+	 *     <tr>
+	 *         <td>其余</td>
+	 *         <td>others</td>
+	 *     </tr>
+	 *     </tbody>
+	 *  </table>
+	 */
 	public void addChild(Element actor) {
 		if (enabled) {
 			(actor instanceof BackInterface ? back
@@ -194,6 +225,8 @@ public final class TopGroup extends WidgetGroup {
 
 	/**
 	 * just a flag
+	 *
+	 * @see modtools.ui.TopGroup#addChild
 	 */
 	public static class BackElement extends Element implements BackInterface {}
 

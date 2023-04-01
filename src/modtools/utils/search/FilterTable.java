@@ -11,18 +11,18 @@ import modtools.utils.Tools;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-public class FilterTable extends LimitTable {
+public class FilterTable<E> extends LimitTable {
 	public FilterTable() {}
-	public FilterTable(Cons<FilterTable> cons) {
+	public FilterTable(Cons<FilterTable<E>> cons) {
 		super((Cons) cons);
 	}
-	public FilterTable(Drawable background, Cons<FilterTable> cons) {
+	public FilterTable(Drawable background, Cons<FilterTable<E>> cons) {
 		super(background, (Cons) cons);
 	}
-	ObjectMap<String, Seq<BindCell>> map;
+	ObjectMap<E, Seq<BindCell>> map;
 	private Seq<BindCell> current;
 
-	public void bind(String name) {
+	public void bind(E name) {
 		if (map == null) map = new ObjectMap<>();
 		current = map.get(name, Seq::new);
 	}
@@ -42,14 +42,15 @@ public class FilterTable extends LimitTable {
 		update(() -> {
 			if (last[0] != supplier.get()) {
 				last[0] = supplier.get();
-				filter(name -> Tools.test(last[0], name));
+				filter(name -> Tools.test(last[0], String.valueOf(name)));
 			}
 		});
 	}
 
 	// public Table unuseTable = new Table();
 
-	public void filter(Boolf<String> boolf) {
+	public void filter(Boolf<E> boolf) {
+		if (map == null) return;
 		map.each((name, seq) -> {
 			seq.each(boolf.get(name) ?
 					         BindCell::build : BindCell::remove);

@@ -96,15 +96,16 @@ public class Window extends Table {
 			// 是否置顶
 			sticky = false,
 			full, noButtons;
-	public MoveListener moveListener;
-	public SclLisetener sclLisetener;
+	public MoveListener       moveListener;
+	public ObjectSet<Element> fireMoveElems = ObjectSet.with(this, top);
+	public SclLisetener       sclLisetener;
 
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super(Styles.none);
 
 		cont.setClip(true);
 		tapped(this::toFront);
-		touchable = top.touchable = cont.touchable = Touchable.enabled;
+		touchable = top.touchable/* = cont.touchable */ = Touchable.enabled;
 		top.margin(0);
 		if (OS.isWindows) IntUI.doubleClick(top, () -> {}, this::toggleMaximize);
 		cont.margin(8f);
@@ -115,13 +116,18 @@ public class Window extends Table {
 
 		left().defaults().left();
 
-		add(top).growX().height(topHeight).row();
-		moveListener = new MoveListener(top, this);
-		this.title = top.add(title).grow().padLeft(10f).padRight(10f).update(l -> {
-			// var children = Core.scene.root.getChildren();
-			// l.setColor(children.peek() == this || (children.size >= 2 && children.get(children.size - 2) == this) ? Color.white : Color.lightGray);
-			l.setColor(focusWindow == this ? Color.white : Color.lightGray);
-		}).get();
+		// top.fillParent = true;
+		// top.top();
+		add(top).growX().height(topHeight);
+		row();
+		moveListener = new MoveListener(this, this);
+		this.title = top.add(title).grow().touchable(Touchable.disabled)
+				.padLeft(10f).padRight(10f)
+				.update(l -> {
+					// var children = Core.scene.root.getChildren();
+					// l.setColor(children.peek() == this || (children.size >= 2 && children.get(children.size - 2) == this) ? Color.white : Color.lightGray);
+					l.setColor(focusWindow == this ? Color.white : Color.lightGray);
+				}).get();
 		if (full) {
 			top.button(icons.get("sticky"), IntStyles.clearNoneTogglei, 32, () -> {
 				sticky = !sticky;
@@ -198,6 +204,16 @@ public class Window extends Table {
 		this(title, 120, 80, false);
 	}
 
+	/** 用于当hit元素不是想要的，取消MoveListener */
+	public Element hit(float x, float y, boolean touchable) {
+		Element element = super.hit(x, y, touchable);
+		if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
+		/*if (element instanceof ScrollPane) {
+			boolean f = !moveListener.disabled;
+			((ScrollPane) element).setScrollingDisabled(f, f);
+		}*/
+		return element;
+	}
 	public void setup() {
 		add(cont).grow().row();
 		if (!noButtons) add(buttons).growX().row();
@@ -373,6 +389,10 @@ public class Window extends Table {
 			addAction(Actions.sequence(action, Actions.removeListener(ignoreTouchDown, true), Actions.remove()));
 		} else
 			remove();
+
+		if (this instanceof DisposableInterface) {
+			all.remove(this);
+		}
 	}
 
 	/**
@@ -533,29 +553,68 @@ public class Window extends Table {
 		void fire(boolean status);
 	}
 
-	public static class DisposableWindow extends Window {
+	/** just a flag */
+	public interface DisposableInterface {}
 
-		public DisposableWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+	public static class DisWindow extends Window implements DisposableInterface {
+		public DisWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
-
-		public DisposableWindow(String title, float width, float height, boolean full) {
+		public DisWindow(String title, float width, float height, boolean full) {
 			super(title, width, height, full);
 		}
-
-		public DisposableWindow(String title, float width, float height) {
+		public DisWindow(String title, float width, float height) {
 			super(title, width, height);
 		}
+		public DisWindow(String title) {
+			super(title);
+		}
+	}
 
-		public DisposableWindow(String title) {
+	public static class NoTopWindow extends Window {
+
+		public NoTopWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(title, minWidth, minHeight, full, noButtons);
+		}
+		public NoTopWindow(String title, float width, float height, boolean full) {
+			super(title, width, height, full);
+		}
+		public NoTopWindow(String title, float width, float height) {
+			super(title, width, height);
+		}
+		public NoTopWindow(String title) {
 			super(title);
 		}
 
+		{
+			getCells().remove(getCell(top), true);
+			top.remove();
+			Table table = new Table();
+			table.setFillParent(true);
+			addChild(table);
+			table.top().add(top).growX().height(topHeight).padTop(-topHeight);
+			// table.translation.y = topHeight;
+			table.setClip(true);
+			// top.translation.y = -topHeight;
+
+			/*addListener(new InputListener() {
+				public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+					top.translation.y = 0;
+				}
+			});*/
+		}
+
 		@Override
-		public void hide() {
-			super.hide();
-			all.remove(this);
-			// clearChildren();
+		public Element hit(float x, float y, boolean touchable) {
+			Element element = super.hit(x, y, touchable);
+			float   toValue;
+			if (height - topHeight <= y && element != null) {
+				toValue = -topHeight;
+			} else {
+				toValue = 0;
+			}
+			top.translation.y = Mathf.lerp(top.translation.y, toValue, 0.1f);
+			return element;
 		}
 	}
 }

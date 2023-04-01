@@ -5,17 +5,22 @@ import arc.scene.ui.layout.Cell;
 
 public class CCell {
 	public static Cell<?> UNSET_CELL = new Cell<>();
-	public        Cell<?> cell, cpy;
+	public        Cell<?> cell;
+	private       Cell<?> cpy;
 	public CCell(Cell<?> cell) {
 		this.cell = cell;
 	}
+	public Cell<?> getCpy() {
+		if (cpy == null) cpy = new Cell<>().set(cell);
+		return cpy;
+	}
 	public void set(Element el) {
 		if (cell.get() == el) return;
-		cell.set(cpy).setElement(el);
+		cell.set(getCpy()).setElement(el);
 	}
 	public void remove() {
 		if (cell.get() == null) return;
-		if (cpy == null) cpy = new Cell<>().set(cell);
+		getCpy();
 		cell.set(UNSET_CELL).clearElement();
 	}
 }

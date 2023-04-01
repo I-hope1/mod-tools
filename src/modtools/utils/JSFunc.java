@@ -3,11 +3,13 @@ package modtools.utils;
 import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
-import arc.graphics.g2d.Font;
+import arc.graphics.g2d.*;
+import arc.graphics.gl.Shader;
 import arc.math.Mathf;
 import arc.math.geom.*;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
@@ -22,7 +24,7 @@ import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.components.*;
-import modtools.ui.components.Window.DisposableWindow;
+import modtools.ui.components.Window.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.components.input.highlight.*;
@@ -64,9 +66,9 @@ public class JSFunc {
 	}
 
 	public static final Color
-			keyword      = Color.valueOf("ff657a"),
-			type         = Color.valueOf("9cd1bb"),
-			NUMBER_COLOR = Color.valueOf("bad761"),
+			keyword      = new Color(0xc586c0),
+			type         = new Color(0x4ec9b0),
+			NUMBER_COLOR = new Color(0xb5cea8),
 			underline    = Color.gray.cpy().a(0.7f);
 	public static final String
 			keywordMark = "[#" + keyword + "]",
@@ -84,7 +86,7 @@ public class JSFunc {
 
 		Window[] dialog = {null};
 		if (clazz.isArray()) {
-			if (o == null) return new DisposableWindow("none");
+			if (o == null) return new DisWindow("none");
 			Table _cont = new LimitTable();
 			_cont.defaults().grow();
 			_cont.button(Icon.refresh, IntStyles.clearNonei, () -> {
@@ -116,7 +118,7 @@ public class JSFunc {
 				_cont.image().color(underline).growX().row();
 			}
 
-			dialog[0] = new DisposableWindow(clazz.getSimpleName(), 200, 200, true);
+			dialog[0] = new DisWindow(clazz.getSimpleName(), 200, 200, true);
 			dialog[0].cont.pane(_cont).grow();
 			dialog[0].show();
 			return dialog[0];
@@ -583,17 +585,31 @@ public class JSFunc {
 		}};
 	}
 
+	public static Window testShader(Shader shader, Runnable draw) {
+		return testElement(new Image() {
+			@Override
+			public void draw() {
+				Draw.blit(WorldDraw.drawTexture(100, 100, draw), shader);
+			}
+		});
+	}
+
 	public static Window testElement(Element element) {
 		return window(d -> {
 			Table t = new LimitTable(table -> {
-				table.add(element);
+				table.add(element).grow();
 			});
-			d.cont.pane(t).fillX().fillY();
+			t.fillParent = true;
+			d.cont.pane(t).grow();
 		});
 	}
 	public static Window testElement(String text) {
 		return testElement(new Label(text));
 	}
+	public static Window testElement(TextureRegion region) {
+		return testElement(new Image(region));
+	}
+
 	public static Window testElement(Cons<Table> cons) {
 		return testElement(new Table(cons));
 	}
@@ -671,7 +687,7 @@ public class JSFunc {
 				.setPosition(vec2);
 	}
 
-	static class ReflectTable extends FilterTable {
+	static class ReflectTable extends FilterTable<String> {
 		public Seq<ValueLabel> labels = new Seq<>();
 		public ReflectTable() {
 			left().defaults().left().top();
@@ -851,57 +867,141 @@ public class JSFunc {
 		return sb;
 	}
 
-	public static class WatchWindow extends DisposableWindow {
-		Table pane;
+	/*static Field rowField;
+
+	static {
+		try {
+			rowField = Cell.class.getDeclaredField("row");
+			rowField.setAccessible(true);
+		} catch (NoSuchFieldException e) {
+			throw new RuntimeException(e);
+		}
+	}*/
+
+	public static class WatchWindow extends NoTopWindow implements DisposableInterface {
+		FilterTable<MyProv<Object>> template = new FilterTable<>();
+		Table                       pane     = new Table();
 
 		public WatchWindow() {
 			super("Watch");
-			pane = new Table();
-			cont.add(new ScrollPane(pane) {
+			pane.update(() -> {
+				template.filter(p -> {
+					try {
+						return ScriptRuntime.toNumber(p.get()) != 0;
+					} catch (Exception e) {
+						return false;
+					}
+				});
+				pane.clearChildren();
+				pane.getCells().clear();
+				var cells = template.getCells();
+				for (int i = 0; i < cells.size; i++) {
+					var c = cells.get(i);
+					if (c.get() == null) continue;
+					pane.add(c.get()).set(c);
+					if (cells.get(pane.getChildren().size - 1).isEndRow()) pane.row();
+				}
+				/*var seq  = pane.getCells();
+				int size = seq.size;
+				for (int i = 0; i < size; i++) {
+					if (seq.get(i).get() != null) continue;
+					for (int j = i; j < size; j++) {
+						if (seq.get(j).get() != null) {
+							try {
+								rowField.setInt(seq.get(j), rowField.getInt(seq.get(i)));
+							} catch (Throwable ignored) {}
+							seq.swap(i, j);
+							break;
+						}
+					}
+				}*/
+			});
+			/*sclLisetener.listener = () -> {
+				pane.invalidateHierarchy();
+			};*/
+			ScrollPane sc = new ScrollPane(pane) {
 				@Override
 				public float getPrefWidth() {
 					return 220;
 				}
-			}).grow();
+				@Override
+				public float getPrefHeight() {
+					return 120;
+				}
+			};
+			fireMoveElems.add(title);
+			title.touchable = Touchable.enabled;
+			cont.add(sc).grow();
 		}
 
 		public WatchWindow watch(String info, MyProv<Object> value) {
 			return watch(info, value, 0);
 		}
 
+		public WatchWindow watch(Drawable icon, MyProv<Object> value) {
+			return watch(icon, value, 0);
+		}
+		public void newLine() {
+			template.row();
+		}
+
+		public WatchWindow watch(Drawable icon, MyProv<Object> value, float interval) {
+			Object[] callback = {null};
+			template.bind(value);
+			template.stack(new Table(o -> {
+				o.left();
+				o.add(new Image(icon)).size(32f).scaling(Scaling.fit);
+			}), new Table(t -> {
+				t.left().bottom();
+				MyLabel label;
+				t.add(label = new MyLabel(getSup(value, callback))).style(Styles.outlineLabel);
+				label.interval = interval;
+				t.pack();
+			}));
+			template.unbind();
+			return this;
+		}
+
+		public static final Object[] TMP = {null};
 		public WatchWindow watch(String info, MyProv<Object> value, float interval) {
-			pane.add(info).color(Pal.accent).growX().left().row();
-			pane.image().color(Pal.accent).growX().row();
-			var label = new MyLabel(() -> {
+			template.add(info).color(Pal.accent).growX().left().row();
+			template.image().color(Pal.accent).growX().row();
+			var label = new MyLabel(getSup(value, TMP));
+			label.interval = interval;
+			template.add(label).style(IntStyles.myLabel).growX().left().padLeft(6f).row();
+			template.image().color(underline).growX().row();
+			pack();
+			return this;
+		}
+		private static Prov<CharSequence> getSup(MyProv<Object> value, Object[] callback) {
+			return () -> {
 				try {
-					return String.valueOf(value.get());
+					callback[0] = value.get();
+					return String.valueOf(callback[0]);
 				} catch (Throwable e) {
 					StringWriter sw = new StringWriter();
 					PrintWriter  pw = new PrintWriter(sw);
 					e.printStackTrace(pw);
 					return sw.toString();
 				}
-			});
-			label.interval = interval;
-			pane.add(label).style(IntStyles.myLabel).growX().left().padLeft(6f).row();
-			pane.image().color(underline).growX().row();
-			pack();
-			return this;
+			};
 		}
 
 		public String toString() {
 			return "Watch@" + hashCode();
 		}
 	}
-	public static WatchWindow watch(String info, MyProv<Object> value) {
+	public static WatchWindow watch() {
+		return new WatchWindow();
+	}
+	/*public static WatchWindow watch(String info, MyProv<Object> value) {
 		return watch(info, value, 0);
 	}
 	public static WatchWindow watch(String info, MyProv<Object> value, float interval) {
-		return new WatchWindow() {{
-			watch(info, value, interval);
-			show();
-		}};
-	}
+		var w = new WatchWindow().watch(info, value, interval);
+		w.show();
+		return w;
+	}*/
 
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
 		table.button("@details", IntStyles.flatBordert, () -> {
@@ -924,7 +1024,7 @@ public class JSFunc {
 
 	public static void addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		buttons.button(Icon.eyeSmall, Styles.squarei, () -> {}).with(b -> b.clicked(() -> {
-			watch(info, value).setPosition(b.localToStageCoordinates(Tmp.v1.set(0, 0)));
+			watch().watch(info, value).setPosition(b.localToStageCoordinates(Tmp.v1.set(0, 0)));
 		})).size(45);
 	}
 

@@ -37,7 +37,7 @@ import modtools.utils.*;
 
 import static mindustry.Vars.player;
 import static modtools.ui.Contents.tester;
-import static modtools.utils.MySettings.settings;
+import static modtools.utils.MySettings.SETTINGS;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {
@@ -46,8 +46,8 @@ public class UnitSpawn extends Content {
 		super("unitSpawn");
 	}
 
-	public boolean loadable() {
-		return settings.getBool("load-" + name, "false");
+	{
+		defLoadable = false;
 	}
 
 	Window   ui;
@@ -78,7 +78,7 @@ public class UnitSpawn extends Content {
 	public void setup() {
 		unitCont.clearChildren();
 		MyItemSelection.buildTable(unitCont, Vars.content.units(), () -> selectUnit, u -> selectUnit = u,
-		                           10);
+				10);
 		unitCont.row();
 		unitCont.table(right -> {
 			Label name = new Label(""),
@@ -149,11 +149,11 @@ public class UnitSpawn extends Content {
 				}).valid(val -> Tools.validPosInt(val) && toInteger(val) < Team.all.length).get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
 				btn.clicked(() -> IntUI.showSelectImageTableWithFunc(btn, new Seq<>(Team.all),
-				                                                     () -> team, newTeam -> {
+						() -> team, newTeam -> {
 							team = newTeam;
 							teamField.setText("" + team.id);
 						}, 48, 32, 6,
-				                                                     team -> IntUI.whiteui.tint(team.color), true));
+						team -> IntUI.whiteui.tint(team.color), true));
 				t.add(btn);
 			});
 			table.table(t -> {

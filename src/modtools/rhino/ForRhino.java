@@ -4,6 +4,7 @@ import arc.func.Func2;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.mod.ModClassLoader;
+import modtools.ui.content.debug.Tester;
 import modtools.utils.ByteCodeTools.*;
 import modtools.utils.Tools;
 import rhino.*;
@@ -67,8 +68,9 @@ public class ForRhino {
 	                               Context cx, Scriptable scope,
 	                               Scriptable thisObj, Object[] args) {
 		try {
-			return ((MyRhino) factory).super$_doTopCall(callable, cx, scope, thisObj, args);
+			return ((ContextFactory & MyRhino) factory).super$_doTopCall(callable, cx, scope, thisObj, args);
 		} catch (Throwable t) {
+			if (!Tester.catchOutsizeError) throw t;
 			tester.handleError(t);
 			return t;
 		}

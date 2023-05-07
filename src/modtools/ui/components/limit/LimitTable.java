@@ -72,5 +72,6 @@ public class LimitTable extends Table {
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);
+		// if (visible) draw();
 	}
 }

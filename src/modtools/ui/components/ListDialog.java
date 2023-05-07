@@ -85,7 +85,7 @@ public class ListDialog extends Window implements DisposableInterface {
 					f = toFi;
 					label.setText(field.getText());
 				}
-			}, p).left().color(Pal.accent).growX();
+			}, Integer.MAX_VALUE, p).left().color(Pal.accent).growX();
 			p.row();
 			// p.add(f.name(), Pal.accent).left().row();
 			p.image().color(Pal.accent).growX();
@@ -160,8 +160,9 @@ public class ListDialog extends Window implements DisposableInterface {
 				Prov<CharSequence> def,
 				TextFieldValidator validator,
 				Cons2<TextField, Label> modifier,
+				float interval,
 				Table t) {
-			Label     label = new MyLabel(def) {{interval = Integer.MAX_VALUE;}};
+			MyLabel   label = new MyLabel(def, interval);
 			Cell<?>   cell  = t.add(label);
 			TextField field = new TextField();
 			if (validator != null) field.setValidator(validator);

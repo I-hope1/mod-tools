@@ -19,7 +19,7 @@ public class Search {
 			text.changed(() -> {
 				rebuild(cont, text.getText());
 			});
-		}).padRight(8.0f).fillX().top().row();
+		}).padRight(8f).fillX().top().row();
 		rebuild(cont, null);
 	}
 	public Cons2<Table, String> rebuild;

@@ -11,11 +11,13 @@ import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.ui.layout.Scl;
-import arc.util.Time;
 import ihope_lib.MyReflect;
 
 public class SclLisetener extends InputListener {
-	public boolean disabled;
+	public boolean disabled0, disabled1;
+	private boolean isDisabled() {
+		return disabled0 || disabled1;
+	}
 	public float   offset = 10;
 	public Element bind;
 	public float   defWidth, defHeight, defX, defY, minW, minH;
@@ -50,7 +52,7 @@ public class SclLisetener extends InputListener {
 
 	@Override
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-		if (bind.parent == null || disabled) return false;
+		if (bind.parent == null || isDisabled()) return false;
 		last.set(x, y);
 
 		//		Log.debug(last);
@@ -76,6 +78,7 @@ public class SclLisetener extends InputListener {
 	}
 	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
+		if (isDisabled()) return;
 		scling = true;
 		if (change.x != Float.NEGATIVE_INFINITY) {
 			x += change.x;
@@ -134,6 +137,7 @@ public class SclLisetener extends InputListener {
 	}
 	@Override
 	public boolean mouseMoved(InputEvent event, float x, float y) {
+		if (isDisabled()) return false;
 		storeCursor();
 		if (valid(x, y)) {
 			Core.graphics.cursor(getCursor());

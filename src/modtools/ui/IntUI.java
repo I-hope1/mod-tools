@@ -15,24 +15,34 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.Timer;
 import arc.util.Timer.Task;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.ui.components.Window;
-import modtools.ui.components.Window.DisposableInterface;
-import modtools.utils.Search;
+import modtools.ui.components.Window.*;
+import modtools.utils.*;
 
 import java.lang.reflect.Array;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static mindustry.Vars.*;
-import static modtools.IntVars.topGroup;
 
 public class IntUI {
-	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+	public static final TextureRegionDrawable whiteui  = (TextureRegionDrawable) Tex.whiteui;
+	public static final Frag                  frag     = new Frag();
+	public static final TopGroup              topGroup = new TopGroup();
+
+	public static void load() {
+		if (frag.getChildren().isEmpty()) {
+			frag.load();
+		} else {
+			topGroup.addChild(frag);
+		}
+	}
 
 	public static final float   DEF_DURATION = 0.2f;
 	public static final MyIcons icons        = new MyIcons();
@@ -82,7 +92,7 @@ public class IntUI {
 					task.cancel();
 					if (pressed) boolc.get(false);
 				}
-				// super.touchUp(event, x, y, pointer, button);
+				super.touchUp(event, x, y, pointer, button);
 			}
 		});
 		return elem;
@@ -114,7 +124,33 @@ public class IntUI {
 		longPressOrRclick(elem, __ -> {
 			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
 				for (var menu : list) {
-					p.button(menu.name, menu.icon, Styles.flatt, () -> {
+					p.button(menu.name, menu.icon, Styles.cleart, () -> {
+						menu.run.run();
+						hide.run();
+					}).size(120, 42).row();
+				}
+			}, false);
+		});
+	}
+	public static void
+	addShowMenuListener(Element elem, Iterable<MenuList> list) {
+		longPressOrRclick(elem, __ -> {
+			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+				for (var menu : list) {
+					p.button(menu.name, menu.icon, Styles.cleart, () -> {
+						menu.run.run();
+						hide.run();
+					}).size(120, 42).row();
+				}
+			}, false);
+		});
+	}
+	public static void
+	addShowMenuListener(Element elem, ArrayList<MenuList> list) {
+		longPressOrRclick(elem, __ -> {
+			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+				for (var menu : list) {
+					p.button(menu.name, menu.icon, Styles.cleart, () -> {
 						menu.run.run();
 						hide.run();
 					}).size(120, 42).row();
@@ -136,7 +172,7 @@ public class IntUI {
 	public static Table
 	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
 	                  boolean searchable) {
-		Table t = new Table(Tex.pane) {
+		Table t = new Table(Styles.black8) {
 			public float getPrefHeight() {
 				return Math.min(super.getPrefHeight(), (float) Core.graphics.getHeight());
 			}
@@ -145,6 +181,7 @@ public class IntUI {
 				return Math.min(super.getPrefWidth(), (float) Core.graphics.getWidth());
 			}
 		};
+		t.margin(6, 8, 6, 8);
 		Element hitter = new Element();
 		Runnable hide = () -> {
 			hitter.remove();
@@ -200,15 +237,7 @@ public class IntUI {
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
 	                boolean searchable) {
 		if (button == null) throw new NullPointerException("button cannot be null");
-		Table t = new Table(Tex.button) {
-			public float getPrefHeight() {
-				return Math.min(super.getPrefHeight(), (float) Core.graphics.getHeight());
-			}
-
-			public float getPrefWidth() {
-				return Math.min(super.getPrefWidth(), (float) Core.graphics.getWidth());
-			}
-		};
+		Table   t      = new AutoFitTable();
 		Element hitter = new Element();
 		Runnable hide = () -> {
 			hitter.remove();
@@ -298,7 +327,7 @@ public class IntUI {
 			Pattern pattern;
 
 			try {
-				pattern = Pattern.compile(text);
+				pattern = Tools.complieRegExp(text);
 			} catch (Exception ex) {
 				return;
 			}
@@ -341,6 +370,105 @@ public class IntUI {
 
 		}, searchable);
 	}
+	public static <T1> Table
+	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,
+	                              Seq<? extends Drawable> icons,
+	                              Prov<T1> holder, Cons<T1> cons, float size,
+	                              float imageSize, int cols,
+	                              boolean searchable) {
+		return showSelectTable(vec2, (p, hide, text) -> {
+			p.clearChildren();
+			p.left();
+			ButtonGroup<ImageButton> group = new ButtonGroup<>();
+			group.setMinCheckCount(0);
+			p.defaults().size(size);
+			Pattern pattern;
+
+			try {
+				pattern = Tools.complieRegExp(text);
+			} catch (Exception ex) {
+				return;
+			}
+
+			int c = 0;
+
+			for (int i = 0; i < items.size; ++i) {
+				T1 item = items.get(i);
+				if (!text.isEmpty()) {
+					if (item instanceof UnlockableContent) {
+						UnlockableContent unlock;
+						if (!pattern.matcher((unlock = (UnlockableContent) item).name).find() && !pattern.matcher(unlock.localizedName).find()) {
+							continue;
+						}
+					} else if (!pattern.matcher("" + item).find()) {
+						continue;
+					}
+				}
+
+				ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {
+					cons.get(item);
+					hide.run();
+				}).size(size).get();
+				if (!mobile) {
+					btn.addListener(new Tooltip(t -> {
+						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item)
+								.right().bottom();
+					}));
+				}
+
+				btn.getStyle().imageUp = icons.get(i);
+				++c;
+				if (c % cols == 0) {
+					p.row();
+				}
+			}
+
+		}, searchable);
+	}
+	public static Table
+	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
+	                boolean searchable) {
+		Table   t      = new AutoFitTable();
+		Element hitter = new Element();
+		Runnable hide = () -> {
+			hitter.remove();
+			t.actions(Actions.fadeOut(0.3f, Interp.fade), Actions.remove());
+		};
+		hitter.clicked(hide);
+		hitter.fillParent = true;
+		topGroup.addChild(hitter);
+		topGroup.addChild(t);
+		t.update(() -> {
+
+			t.setPosition(vec2.x, vec2.y, 1);
+			if (t.getWidth() > Core.scene.getWidth()) {
+				t.setWidth((float) Core.graphics.getWidth());
+			}
+
+			if (t.getHeight() > Core.scene.getHeight()) {
+				t.setHeight((float) Core.graphics.getHeight());
+			}
+
+			t.keepInStage();
+			t.invalidateHierarchy();
+			t.pack();
+		});
+		t.actions(Actions.alpha(0.0f), Actions.fadeIn(0.3f, Interp.fade));
+		Table p = new Table();
+		p.top();
+		if (searchable) {
+			new Search((cont, text) -> {
+				f.get(cont, hide, text);
+			}).build(t, p);
+		}
+
+		f.get(p, hide, "");
+		ScrollPane pane = new ScrollPane(p);
+		t.top().add(pane).pad(0.0f).top();
+		pane.setScrollingDisabled(true, false);
+		t.pack();
+		return t;
+	}
 
 	/**
 	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要提供构造器）
@@ -356,6 +484,21 @@ public class IntUI {
 			icons[i] = new TextureRegionDrawable(items.get(i).uiIcon);
 		}
 		return showSelectImageTableWithIcons(button, items, new Seq<>(icons), holder, cons, size, (float) imageSize, cols, searchable);
+	}
+	/**
+	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要提供构造器）
+	 */
+	public static <T1 extends UnlockableContent> Table
+	showSelectImageTable(Vec2 vec2, Seq<T1> items,
+	                     Prov<T1> holder,
+	                     Cons<T1> cons, float size,
+	                     int imageSize, int cols,
+	                     boolean searchable) {
+		Drawable[] icons = (Drawable[]) Array.newInstance(Drawable.class, items.size);
+		for (int i = 0; i < items.size; i++) {
+			icons[i] = new TextureRegionDrawable(items.get(i).uiIcon);
+		}
+		return showSelectImageTableWithIcons(vec2, items, new Seq<>(icons), holder, cons, size, (float) imageSize, cols, searchable);
 	}
 
 	/**
@@ -382,43 +525,14 @@ public class IntUI {
 
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		return new Window("", 0, 200, false) {{
-			String message = Strings.getFinalMessage(exc);
-
-			cont.margin(15);
-			cont.add("@error.title").colspan(2);
-			cont.row();
-			cont.image().width(300f).pad(2).colspan(2).height(4f).color(Color.scarlet);
-			cont.row();
-			cont.add((text.startsWith("@") ? Core.bundle.get(text.substring(1)) : text) + (message == null ? "" : "\n[lightgray](" + message + ")"))
-					.colspan(2).wrap().growX().center()
-					.get().setAlignment(Align.center);
-			cont.row();
-
-			Collapser col = new Collapser(base -> base.pane(t -> t.margin(14f).add(Strings.neatError(exc)).color(Color.lightGray).left()), true);
-
-			cont.button("@details", Styles.togglet, col::toggle).size(180f, 50f).checked(b -> !col.isCollapsed()).growX().right();
-			col.setDuration(0.2f);
-			cont.button("@ok", this::hide).size(110, 50).growX().left();
-			cont.row();
-			col.setCollapsed(false, false);
-			cont.add(col).colspan(2).pad(2);
-			//            closeOnBack();
-			hidden(() -> {
-				all.remove(this);
-				Time.runTask(30f, this::clearChildren);
-			});
-		}}.show();
+		return new ExceptionPopup(exc, text).show();
 	}
 
 	public static Window showInfoFade(String info) {
-		return new Window("info", 0, 64) {{
+		return new InfoFadePopup("info", 0, 64) {{
 			cont.add(info);
 			// 1.2s
-			Time.runTask(60 * 1.2f, () -> {
-				hide();
-				all.remove(this);
-			});
+			Time.runTask(60 * 1.2f, this::hide);
 			// Time.runTask(0, this::display);
 		}}.show();
 	}
@@ -479,7 +593,7 @@ public class IntUI {
 	// 	});
 	// }
 
-	public static class ConfirmWindow extends Window implements DisposableInterface {
+	public static class ConfirmWindow extends Window implements DisposableInterface, PopupWindow {
 		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
@@ -502,9 +616,8 @@ public class IntUI {
 		}
 	}
 
-	public static class ConfigList extends MenuList {
-
-		public ConfigList(Drawable icon, String name, String text, Runnable run) {
+	public static class ConfirmList extends MenuList {
+		public ConfirmList(Drawable icon, String name, String text, Runnable run) {
 			super(icon, name, () -> {
 				IntUI.showConfirm(text, run);
 			});
@@ -538,6 +651,67 @@ public class IntUI {
 		// ingroed o
 		public void get(Object o) {
 			run();
+		}
+	}
+
+	public static class Tooltip extends arc.scene.ui.Tooltip {
+
+		public Tooltip(Cons<Table> contents) {
+			super(contents);
+			show = () -> topGroup.addChild(getContainer());
+		}
+		public Tooltip(Cons<Table> contents, Runnable show) {
+			super(contents, show);
+		}
+		public Tooltip(Cons<Table> contents, Tooltips manager) {
+			super(contents, manager);
+		}
+	}
+
+
+	public static class InfoFadePopup extends Window implements DisposableInterface, PopupWindow {
+		public InfoFadePopup(String title, float width, float height) {
+			super(title, width, height);
+		}
+	}
+
+	public interface PopupWindow {}
+
+	private static class ExceptionPopup extends Window implements DisposableInterface, PopupWindow {
+		public ExceptionPopup(Throwable exc, String text) {
+			super("", 0, 200, false);
+			String message = Strings.getFinalMessage(exc);
+
+			cont.margin(15);
+			cont.add("@error.title").colspan(2);
+			cont.row();
+			cont.image().width(300f).pad(2).colspan(2).height(4f).color(Color.scarlet);
+			cont.row();
+			cont.add((text.startsWith("@") ? Core.bundle.get(text.substring(1)) : text) + (message == null ? "" : "\n[lightgray](" + message + ")"))
+					.colspan(2).wrap().growX().center()
+					.get().setAlignment(Align.center);
+			cont.row();
+
+			Collapser col = new Collapser(base -> base.pane(t -> t.margin(14f).add(Strings.neatError(exc)).color(Color.lightGray).left()), true);
+
+			cont.button("@details", Styles.togglet, col::toggle).size(180f, 50f).checked(b -> !col.isCollapsed()).growX().right();
+			col.setDuration(0.2f);
+			cont.button("@ok", this::hide).size(110, 50).growX().left();
+			cont.row();
+			col.setCollapsed(false, false);
+			cont.add(col).colspan(2).pad(2);
+			//            closeOnBack();
+		}
+	}
+
+	private static class AutoFitTable extends Table implements PopupWindow {
+		public AutoFitTable() {super(Tex.button);}
+		public float getPrefHeight() {
+			return Math.min(super.getPrefHeight(), (float) Core.graphics.getHeight());
+		}
+
+		public float getPrefWidth() {
+			return Math.min(super.getPrefWidth(), (float) Core.graphics.getWidth());
 		}
 	}
 }

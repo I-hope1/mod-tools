@@ -102,7 +102,10 @@ public class IntTab {
 		init();
 	}
 
-	byte    selected     = -1;
+	byte selected = -1;
+	public byte getSelected() {
+		return selected;
+	}
 	boolean transitional = false;
 	Element first        = null;
 	float   prefW        = -1, prefH = -1;

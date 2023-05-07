@@ -44,27 +44,27 @@ public class JSSyntax extends Syntax {
 	}
 
 	public static final ObjectSet<String> constantSet = new ObjectSet<>() {
-		{
-			addAll("arguments", "Infinity");
-		}
-
+		// final ObjectSet<String> blackList = new ObjectSet<>();
 		public boolean contains(String key) {
+			// if (blackList.contains(key)) return false;
 			boolean val = super.contains(key);
-			if (getPkgs != null && !val &&
+			if (val) return true;
+			// if (key.length() > 64) return false;
+			char c = key.charAt(0);
+			if (!(('A' <= c && c <= 'Z') || c == '$')) return false;
+			if (getPkgs != null &&
 			    invoke(getPkgs, scope, key, scope) != Scriptable.NOT_FOUND) {
-				char c = key.charAt(0);
-				if (('A' <= c && c <= 'Z') || c == '$') {
-					add(key);
-				}
+				add(key);
 				return true;
 			}
 
-			return val;
+			return false;
 		}
 	};
 	public static final ObjectSet<String> defVarSet   = new ObjectSet<>();
 
 	static {
+		defVarSet.addAll("arguments", "Infinity");
 		for (Object id : scope.getIds()) {
 			if (!(id instanceof String)) continue;
 			String key = (String) id;
@@ -96,7 +96,7 @@ public class JSSyntax extends Syntax {
 			operatesSymbol = new DrawSymbol(operates, operatCharC),
 			bracketsSymbol = new DrawSymbol(brackets, bracketsC);
 
-	public        TokenDraw[] tokenDraws = {task -> {
+	public        TokenDraw[] tokenDraws = {/* tokon map */task -> {
 		if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != null && operatesSymbol.lastSymbol == '.') {
 			return null;
 		}
@@ -106,7 +106,7 @@ public class JSSyntax extends Syntax {
 			}
 		}
 		return null;
-	}, task -> {
+	}, /* function */task -> {
 		if (Objects.equals(task.lastToken, "function")
 		    && lastTask == task/*中间不能有其他字符*/) {
 			return functionsC;

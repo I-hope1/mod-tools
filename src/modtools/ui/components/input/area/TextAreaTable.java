@@ -2,7 +2,7 @@
 package modtools.ui.components.input.area;
 
 import arc.Core;
-import arc.func.Boolf2;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
 import arc.input.KeyCode;
@@ -11,7 +11,7 @@ import arc.math.geom.Rect;
 import arc.scene.Scene;
 import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.TextArea;
 import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldStyle;
@@ -39,6 +39,7 @@ import java.util.regex.*;
 public class TextAreaTable extends Table {
 	private final MyTextArea   area;
 	public final  MyScrollPane pane;
+	public final  CodeTooltip  tooltip  = new CodeTooltip();
 	/** 编辑器是否只可读 */
 	public        boolean      readOnly = false,
 	/** 编辑器是否显示行数 */
@@ -54,7 +55,7 @@ public class TextAreaTable extends Table {
 		super(Tex.underline);
 
 		area = new MyTextArea(text);
-		area.setStyle(style);
+		area.setStyle(MOMO_STYLE);
 		pane = new MyScrollPane();
 		area.trackCursor = pane::trackCursor;
 		LinesShow linesShow = new LinesShow(area);
@@ -156,7 +157,7 @@ public class TextAreaTable extends Table {
 			var   style      = getStyle();
 			if (style.background != null) {
 				prefHeight = Math.max(prefHeight + style.background.getBottomHeight() + style.background.getTopHeight(),
-				                      style.background.getMinHeight());
+						style.background.getMinHeight());
 			}
 			return prefHeight + parentHeight / 2f;
 		}
@@ -204,7 +205,7 @@ public class TextAreaTable extends Table {
 				int   max              = (firstLineShowing + linesShowing) * 2;
 				for (int i = firstLineShowing * 2; i < max && i < linesBreak.size; i += 2) {
 					font.draw(displayText, x, y + offsetY, linesBreak.get(i), linesBreak.get(i + 1),
-					          0, Align.left, false).free();
+							0, Align.left, false).free();
 					offsetY -= lineHeight();
 				}
 			}
@@ -231,6 +232,7 @@ public class TextAreaTable extends Table {
 
 			syntax.highlightingDraw(text.substring(displayTextStart, displayTextEnd));
 		}
+		/** 渲染多文本 */
 		public void drawMultiText(String text, int start, int max) {
 			if (start == max) return;
 			if (start > max) throw new IllegalArgumentException("start: " + start + " > max:" + max);
@@ -374,18 +376,18 @@ public class TextAreaTable extends Table {
 				Time.runTask(0f, () -> {
 					// 判断是否一样
 					if (oldCursor == cursor) {
-						// end
-						if (keycode == KeyCode.num1) keyDown(event, KeyCode.end);//goEnd(jump);
-						// home
-						if (keycode == KeyCode.num7) keyDown(event, KeyCode.home);//goHome(jump);
-						// left
-						if (keycode == KeyCode.num4) keyDown(event, KeyCode.left);//moveCursor(false, jump);
-						// right
-						if (keycode == KeyCode.num6) keyDown(event, KeyCode.right);//moveCursor(true, jump);
-						// down
-						if (keycode == KeyCode.num2) keyDown(event, KeyCode.down);//moveCursorLine(cursorLine - 1);
-						// up
-						if (keycode == KeyCode.num8) keyDown(event, KeyCode.up);//moveCursorLine(cursorLine + 1);
+						// end: goEnd(jump);
+						if (keycode == KeyCode.num1) keyDown(event, KeyCode.end);
+						// home: goHome(jump);
+						if (keycode == KeyCode.num7) keyDown(event, KeyCode.home);
+						// left: moveCursor(false, jump);
+						if (keycode == KeyCode.num4) keyDown(event, KeyCode.left);
+						// right: moveCursor(true, jump);
+						if (keycode == KeyCode.num6) keyDown(event, KeyCode.right);
+						// down: moveCursorLine(cursorLine - 1);
+						if (keycode == KeyCode.num2) keyDown(event, KeyCode.down);
+						// up: moveCursorLine(cursorLine + 1);
+						if (keycode == KeyCode.num8) keyDown(event, KeyCode.up);
 					}
 				});
 				if (jump && keycode == KeyCode.slash) {
@@ -400,6 +402,7 @@ public class TextAreaTable extends Table {
 			public boolean keyTyped(InputEvent event, char character) {
 				if (keyTypedB != null && !keyTypedB.get(event, character)) return false;
 				trackCursor();
+				// tooltip.show(TextAreaTable.this, getCursorX(), getCursorY() - getRealFirstLineShowing() * lineHeight());
 				return super.keyTyped(event, character);
 			}
 
@@ -472,7 +475,8 @@ public class TextAreaTable extends Table {
 		public MyTextArea area;
 
 		public LinesShow(MyTextArea area) {
-			super(Tex.paneRight);
+			super(((NinePatchDrawable) Tex.underline).tint(Color.clear));
+			image().color(Color.gray).marginRight(6f);
 			this.area = area;
 		}
 
@@ -487,6 +491,7 @@ public class TextAreaTable extends Table {
 		 **/
 		public int realCurrorLine;
 
+		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
 			font.setColor(realCurrorLine == row ? Pal.accent : Color.lightGray);
@@ -587,9 +592,19 @@ public class TextAreaTable extends Table {
 		}
 	}
 
+	public static class CodeTooltip extends Tooltip {
+		public CodeTooltip() {
+			super(t -> {});
+		}
+
+		public void apply() {
+
+		}
+	}
+
 
 	// 等宽字体样式（没有等宽字体默认样式）
-	public static TextFieldStyle style = new TextFieldStyle(Styles.defaultField) {{
+	public static TextFieldStyle MOMO_STYLE = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.MSYHMONO;
 		// background = null;
 	}};

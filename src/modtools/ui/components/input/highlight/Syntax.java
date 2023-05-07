@@ -64,7 +64,7 @@ public class Syntax {
 	}
 
 	public boolean isWhitespace(char ch) {
-		return ch != ' ' && ch != '\t' && !Character.isWhitespace(ch);
+		return !Character.isWhitespace(ch);
 	}
 
 	public void drawDefText(int start, int max) {
@@ -253,7 +253,7 @@ public class Syntax {
 		public DrawComment(Color color) {
 			super(color, true);
 		}
-	
+
 		void reset() {
 			super.reset();
 			body = false;
@@ -327,7 +327,7 @@ public class Syntax {
 					return false;
 				}
 			}
-			if (quote == c || (c == '\n' && !map.get(quote))) {
+			if ((quote == c && lastChar != '\\') || (c == '\n' && !map.get(quote))) {
 				rightQuote = true;
 				leftQuote = false;
 				return true;

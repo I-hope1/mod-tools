@@ -2,9 +2,9 @@ apply plugin: "java"
 
 version '1.0'
 
-//compile java 16 code, targeting java 8
+//compile java 17 code, targeting java 11
 targetCompatibility = 11
-sourceCompatibility = JavaVersion.VERSION_11
+sourceCompatibility = JavaVersion.VERSION_17
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -15,7 +15,7 @@ repositories{
 
 ext{
     //the build number that this mod is made for
-    mindustryVersion = 'v141.2'
+    mindustryVersion = 'v143'
     jabelVersion = "0.6.0"
     sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 }
@@ -39,6 +39,7 @@ dependencies{
     compileOnly files(
         /*"lib/Mindustry136.jar", */"assets/libs/lib.jar",
         "lib/Mindustry_android.jar"
+        "lib/procyon-0.6.jar"
     )
     implementation files(
         "lib/AndroidField.jar"

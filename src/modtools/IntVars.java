@@ -2,6 +2,7 @@ package modtools;
 
 import arc.*;
 import arc.util.Log;
+import mindustry.game.EventType.ResizeEvent;
 import modtools.ui.Frag;
 import modtools.ui.IntUI;
 import modtools.ui.TopGroup;
@@ -12,18 +13,9 @@ import java.util.concurrent.CompletableFuture;
 import static mindustry.Vars.ui;
 
 public class IntVars {
-	public static final String   modName  = "mod-tools";
-	public static final Frag     frag     = new Frag();
-	public static final TopGroup topGroup = new TopGroup();
-
-
-	public static void load() {
-		if (frag.getChildren().isEmpty()) {
-			frag.load();
-		} else {
-			topGroup.addChild(frag);
-		}
-	}
+	public static final String  modName = "mod-tools";
+	public static final String  NL      = System.lineSeparator();
+	public static       boolean hasDecomplier;
 
 
 	public static void showException(Exception e, boolean b) {
@@ -64,10 +56,8 @@ public class IntVars {
 	}
 
 	static {
-		Core.app.addListener(new ApplicationListener() {
-			public void resize(int width, int height) {
-				for (var r : resizeListenrs) r.run();
-			}
+		Events.on(ResizeEvent.class, e -> {
+			for (var r : resizeListenrs) r.run();
 		});
 	}
 }

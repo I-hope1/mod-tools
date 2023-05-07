@@ -18,14 +18,14 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 import modtools.utils.Tools;
 
-import static modtools.utils.MySettings.settings;
+import static modtools.utils.MySettings.SETTINGS;
 
 public class ErrorDisplay extends Content {
 	public ErrorDisplay() {
 		super("errordisplay");
 	}
-	public boolean loadable() {
-		return settings.getBool("load-" + name, "false");
+	{
+		defLoadable = false;
 	}
 
 	Window ui;

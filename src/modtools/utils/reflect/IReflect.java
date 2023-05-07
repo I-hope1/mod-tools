@@ -13,7 +13,7 @@ import static jdk.internal.misc.Unsafe.getUnsafe;
 public class IReflect {
 	// public static final Lookup lookup = MethodHandles.lookup();
 	public static final MyClassLoader loader = new MyClassLoader(IReflect.class.getClassLoader());
-	public static ClassLoader IMPL_LOADER;
+	public static       ClassLoader   IMPL_LOADER;
 
 	// private static final Constructor<?> IMPL_CONS;
 
@@ -106,8 +106,8 @@ public class IReflect {
 	}
 
 	public static Class<?> getCaller() {
-		Thread thread = Thread.currentThread();
-		StackTraceElement[] trace = thread.getStackTrace();
+		Thread              thread = Thread.currentThread();
+		StackTraceElement[] trace  = thread.getStackTrace();
 		try {
 			return Class.forName(trace[3].getClassName(), false, Vars.mods.mainLoader());
 		} catch (ClassNotFoundException e) {

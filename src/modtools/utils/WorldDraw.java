@@ -82,6 +82,10 @@ public class WorldDraw {
 	public static Texture drawTexture(int width, int height, Runnable draw) {
 		return drawTexture(new FrameBuffer(width, height, false), draw);
 	}
+	public static Texture drawTexture(FrameBuffer buffer, int width, int height, Runnable draw) {
+		buffer.resize(width, height);
+		return drawTexture(buffer, draw);
+	}
 
 	public static Texture drawTexture(FrameBuffer buffer, Runnable draw) {
 		Draw.reset();

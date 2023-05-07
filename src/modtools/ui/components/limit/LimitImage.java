@@ -74,6 +74,6 @@ public class LimitImage extends Image implements Limit {
 
 	public void updateVisibility() {
 		visible = Limit.isVisible(this);
-		if (visible) draw();
+		// if (visible) draw();
 	}
 }

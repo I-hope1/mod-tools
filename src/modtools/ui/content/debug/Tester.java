@@ -43,12 +43,13 @@ public class Tester extends Content {
 	public boolean loop = false;
 	public Object  res;
 
-	private boolean
-			wrap             = false,
-			error            = false,
-			ignorePopUpError = false,
-			wrapRef          = true,
-			multiWindows     = false;
+	public static boolean catchOutsizeError = false;
+	private       boolean
+	                      wrap              = false,
+			error                           = false,
+			ignorePopUpError                = false,
+			wrapRef                         = true,
+			multiWindows                    = false;
 
 	public static final float  w = Core.graphics.isPortrait() ? 440 : 540;
 	public              Window ui;
@@ -104,7 +105,7 @@ public class Tester extends Content {
 		area = textarea.getArea();
 		boolean[] execed = {false};
 		textarea.keyDonwB = (event, keycode) -> {
-			if (rollAndExec(execed, keycode)) return false;
+			if (rollAndExec(execed, keycode) || detailsListener(keycode)) return false;
 			// Core.input.ctrl() && keycode == KeyCode.rightBracket
 			if (keycode == KeyCode.tab) {
 				area.insert("  ");
@@ -138,7 +139,7 @@ public class Tester extends Content {
 			).padLeft(8f);
 		}).growX().row();
 		Cell<?> cell = cont.table(Tex.sliderBack, t -> t.pane(p -> {
-			p.add(new MyLabel(() -> log)).style(IntStyles.myLabel).wrap()
+			p.add(new MyLabel(() -> log)).style(IntStyles.MOMO_Label).wrap()
 					.growX().labelAlign(Align.center, Align.left);
 		}).growX()).growX().height(100).with(t -> t.touchable = Touchable.enabled);
 
@@ -182,7 +183,7 @@ public class Tester extends Content {
 			p.button(b -> {
 				b.label(() -> textarea.enableHighlighting ? "@tester.highlighting" : "@tester.nothighlighting");
 			}, Styles.defaultb, () -> textarea.enableHighlighting = !textarea.enableHighlighting);
-			p.button("@details", () -> JSFunc.showInfo(res));
+			p.button("@details", this::showDetails);
 
 			p.button("@historymessage", history::show);
 			p.button("@bookmark", bookmark::show);
@@ -191,6 +192,17 @@ public class Tester extends Content {
 		}).height(60).width(w).growX();
 
 		buildEditTable();
+	}
+	private void showDetails() {
+		if (res instanceof Class) JSFunc.showInfo((Class<?>) res);
+		else JSFunc.showInfo(res);
+	}
+	public boolean detailsListener(KeyCode keycode) {
+		if (keycode == KeyCode.d && Core.input.ctrl() && Core.input.shift()) {
+			showDetails();
+			return true;
+		}
+		return false;
 	}
 	private void buildEditTable() {
 		var editTable = new Table(Styles.black5, p -> {
@@ -242,8 +254,7 @@ public class Tester extends Content {
 			if (keycode == KeyCode.enter) {
 				complieAndExec(() -> {});
 				execed[0] = true;
-			}
-			if (keycode == KeyCode.up) {
+			} else if (keycode == KeyCode.up) {
 				int i = ++historyIndex;
 				if (!reincarnationHistory && historyIndex >= history.list.size) {
 					historyIndex = history.list.size - 1;
@@ -259,8 +270,7 @@ public class Tester extends Content {
 				Fi dir = history.list.get(i);
 				area.setText(dir.child("message.txt").readString());
 				log = dir.child("log.txt").readString();
-			}
-			if (keycode == KeyCode.down) {
+			} else if (keycode == KeyCode.down) {
 				int i = --historyIndex;
 				if (!reincarnationHistory && historyIndex < 0) {
 					historyIndex = 0;
@@ -275,7 +285,7 @@ public class Tester extends Content {
 				Fi dir = history.list.get(i);
 				area.setText(dir.child("message.txt").readString());
 				log = dir.child("log.txt").readString();
-			}
+			} else return false;
 			return true;
 		}
 		return false;
@@ -295,7 +305,7 @@ public class Tester extends Content {
 	void setup() {
 		//		ui.cont.clear();
 		//		ui.buttons.clear();
-		ui.cont.pane(p -> build(p)).grow().update(pane -> {
+		ui.cont.pane(this::build).grow().update(pane -> {
 			this.pane = pane;
 			pane.setOverscroll(false, false);
 		});
@@ -397,7 +407,7 @@ public class Tester extends Content {
 	public void makeError(Throwable ex) {
 		error = true;
 		loop = false;
-		if (MySettings.settings.getBool("outputToLog")) Log.err("tester", ex);
+		if (MySettings.SETTINGS.getBool("outputToLog")) Log.err("tester", ex);
 		if (!ignorePopUpError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = Strings.neatError(ex);
 	}
@@ -423,7 +433,7 @@ public class Tester extends Content {
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
-			if (MySettings.settings.getBool("outputToLog")) Log.info("tester: " + log);
+			if (MySettings.SETTINGS.getBool("outputToLog")) Log.info("tester: " + log);
 
 			// log = log.replaceAll("\\[(\\w*?)]", "[[$1]");
 			finished = true;
@@ -451,7 +461,7 @@ public class Tester extends Content {
 		});*/
 		//		ui.addCloseListener();
 		history = new ListDialog("history", MySettings.dataDirectory.child("historical record"),
-		                         f -> f.child("message.txt"), f -> {
+				f -> f.child("message.txt"), f -> {
 			area.setText(f.child("message.txt").readString());
 			log = f.child("log.txt").readString();
 		}, (f, p) -> {
@@ -461,10 +471,10 @@ public class Tester extends Content {
 		}, Tester::sort);
 		history.hide();
 		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
-		                          f -> f, f -> area.setText(f.readString()),
-		                          (f, p) -> {
-			                          p.add(new MyLabel(f.readString())).row();
-		                          }, Tester::sort);
+				f -> f, f -> area.setText(f.readString()),
+				(f, p) -> {
+					p.add(new MyLabel(f.readString())).row();
+				}, Tester::sort);
 		bookmark.hide();
 
 		setup();
@@ -534,16 +544,19 @@ public class Tester extends Content {
 		table.defaults().growX();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("@settings.ignorePopUpError", ignorePopUpError = MySettings.settings.getBool("ignorePopUpError"), b -> {
-				MySettings.settings.put("ignorePopUpError", ignorePopUpError = b);
+			t.check("@settings.ignorePopUpError", ignorePopUpError = MySettings.SETTINGS.getBool("ignorePopUpError", ignorePopUpError), b -> {
+				MySettings.SETTINGS.put("ignorePopUpError", ignorePopUpError = b);
+			}).row();
+			t.check("@settings.catchOutsizeError", catchOutsizeError = MySettings.SETTINGS.getBool("catchOutsizeError", catchOutsizeError), b -> {
+				MySettings.SETTINGS.put("catchOutsizeError", catchOutsizeError = b);
 			}).row();
 			t.check("@settings.wrapRef", wrapRef, b -> wrapRef = b);
 		}).row();
 		table.table(t -> {
 			t.left().defaults().left();
 			t.check("@settings.multiWindows", multiWindows, b -> multiWindows = b).row();
-			t.check("@settings.outputToLog", MySettings.settings.getBool("outputToLog"), b -> {
-				MySettings.settings.put("outputToLog", b);
+			t.check("@settings.outputToLog", MySettings.SETTINGS.getBool("outputToLog"), b -> {
+				MySettings.SETTINGS.put("outputToLog", b);
 			});
 		});
 

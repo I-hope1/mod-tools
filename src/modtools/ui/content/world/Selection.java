@@ -1,7 +1,7 @@
 
 package modtools.ui.content.world;
 
-import arc.Core;
+import arc.*;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
@@ -10,60 +10,74 @@ import arc.math.Mathf;
 import arc.math.geom.*;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.Timer;
 import arc.util.Timer.Task;
-import arc.util.pooling.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
 import mindustry.entities.units.UnitController;
+import mindustry.game.EventType.Trigger;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.*;
+import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.ui.*;
+import modtools.ui.IntUI.*;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
-import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.limit.*;
 import modtools.ui.content.Content;
+import modtools.ui.effect.MyDraw;
 import modtools.utils.*;
 
-import java.lang.reflect.Field;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.Vector;
-import java.util.function.Consumer;
+import java.util.function.*;
 
 import static mindustry.Vars.*;
-import static modtools.IntVars.topGroup;
-import static modtools.utils.MySettings.settings;
+import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.Contents.tester;
+import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.WorldDraw.*;
 
 public class Selection extends Content {
+	private Function<?> selectedFunc;
 	public Selection() {
 		super("selection");
 	}
 
 	final ObjectMap<String, Boolean> select = ObjectMap.of(
-			"tile", settings.getBool(getSettingName() + "-tile", "true")
-			, "building", settings.getBool(getSettingName() + "-building", "false")
-			, "unit", settings.getBool(getSettingName() + "-unit", "false")
-			, "bullet", settings.getBool(getSettingName() + "-bullet", "false")
+			"tile", SETTINGS.getBool(getSettingName() + "-tile", true)
+			, "building", SETTINGS.getBool(getSettingName() + "-building", false)
+			, "unit", SETTINGS.getBool(getSettingName() + "-unit", false)
+			, "bullet", SETTINGS.getBool(getSettingName() + "-bullet", false)
 	);
 
-	public static final Color focusColor = Color.pink.cpy().a(0.4f);
+	/* 临时变量 */
+	public static final List     tmpList   = new ArrayList<>(1) {
+		public void forEach(Consumer<? super Object> action) {
+			super.forEach(action);
+			clear();
+		}
+	};
+	public static final String[] tmpAmount = new String[1];
+
+	public static final Color focusColor = Color.cyan.cpy().a(0.3f);
 
 	public final WorldDraw
 			unitWD   = new WorldDraw(Layer.weather),
-			tileWD   = new WorldDraw(Layer.darkness + 1),
+			tileWD   = new WorldDraw(Layer.darkness - 1),
 			buildWD  = new WorldDraw(Layer.darkness),
 			bulletWD = new WorldDraw(Layer.bullet + 5),
 			otherWD  = new WorldDraw(Layer.overlayUI);
@@ -85,6 +99,12 @@ public class Selection extends Content {
 	Function<Unit>     units;
 	Function<Bullet>   bullets;
 	public static OrderedMap<String, Function<?>> allFunctions = new OrderedMap<>();
+	private static void intField(Table t1) {
+		t1.row();
+		t1.field("", s -> {
+			tmpAmount[0] = s;
+		}).valid(Tools::validPosInt);
+	}
 
 	public void loadSettings() {
 		Table table = new Table();
@@ -96,7 +116,7 @@ public class Selection extends Content {
 			});
 		}).growX().left().padLeft(16).row();
 		table.table(t -> {
-			defaultTeam = Team.get(settings.getInt(getSettingName() + "-defaultTeam", 1));
+			defaultTeam = Team.get(SETTINGS.getInt(getSettingName() + "-defaultTeam", 1));
 			t.left().defaults().left();
 			t.add("@selection.default.team").color(Pal.accent).growX().left().row();
 			t.table(t1 -> {
@@ -106,7 +126,7 @@ public class Selection extends Content {
 
 				for (Team team : arr) {
 					ImageButton b = t1.button(IntUI.whiteui, IntStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
-						settings.put(getSettingName() + "-defaultTeam", team.id);
+						SETTINGS.put(getSettingName() + "-defaultTeam", team.id);
 						defaultTeam = team;
 					}).size(42).get();
 					b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
@@ -122,7 +142,7 @@ public class Selection extends Content {
 		}).growX().left().padLeft(16).row();
 		table.table(t -> {
 			t.left().defaults().left();
-			t.check("@settings.focusOnWorld", settings.getBool("focusOnWorld"), b -> settings.put("focusOnWorld", b)).row();
+			t.check("@settings.focusOnWorld", SETTINGS.getBool("focusOnWorld"), b -> SETTINGS.put("focusOnWorld", b)).row();
 			t.check("@settings.drawSelect", drawSelect, b -> drawSelect = b);
 		}).growX().left().padLeft(16).row();
 
@@ -136,136 +156,28 @@ public class Selection extends Content {
 
 		fragSelect.setFillParent(true);
 
-		int maxH = 400;
-		InputListener listener = new InputListener() {
-			final Vec2 start = new Vec2();
-			final Vec2 end = new Vec2();
-
-			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				/*if (keycode == KeyCode.escape) {
-					hide();
-				}*/
-
-				return false;
-			}
-
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (button != KeyCode.mouseLeft || Vars.state.isMenu()) {
-					hide();
-					move = false;
-					return false;
-				} else {
-					end.set(start.set(Core.camera.unproject(x, y)));
-					move = true;
-					Time.runTask(2f, () -> {
-						move = true;
-					});
-					otherWD.drawSeq.add(() -> {
-						if (!show) {
-							return false;
-						}
-						Draw.color(Pal.accent, 0.3f);
-						float minX = Mathf.clamp(Math.min(start.x, end.x), rect.x, rect.x + rect.width);
-						float minY = Mathf.clamp(Math.min(start.y, end.y), rect.y, rect.y + rect.height);
-						float maxX = Mathf.clamp(Math.max(start.x, end.x), rect.x, rect.x + rect.width);
-						float maxY = Mathf.clamp(Math.max(start.y, end.y), rect.y, rect.y + rect.height);
-
-						Fill.crect(minX, minY, maxX - minX, maxY - minY);
-						return true;
-					});
-					return show;
-				}
-			}
-			public void touchDragged(InputEvent event, float x, float y, int pointer) {
-				end.set(Core.camera.unproject(x, y));
-			}
-			public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
-				btn.setChecked(false);
-
-				if (!move) return;
-				float tmp;
-				if (start.x > end.x) {
-					tmp = start.x;
-					start.x = end.x;
-					end.x = tmp;
-				}
-				if (start.y > end.y) {
-					tmp = start.y;
-					start.y = end.y;
-					end.y = tmp;
-				}
-				fragSelect.remove();
-
-				if (!Core.input.alt()) {
-					tiles.clearList();
-					buildings.clearList();
-					bullets.clearList();
-					units.clearList();
-				}
-
-				if (select.get("bullet")) {
-					Threads.thread(() -> {
-						Groups.bullet.each(bullet -> {
-							// 返回单位是否在所选区域内
-							return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
-						}, bullet -> {
-							Threads.sleep(1);
-							if (!bullets.list.contains(bullet)) {
-								bullets.add(bullet);
-							}
-						});
-					});
-				}
-				if (select.get("unit")) {
-					Groups.unit.each(unit -> {
-						// 返回单位是否在所选区域内
-						return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
-					}, unit -> {
-						if (!units.list.contains(unit)) {
-							units.add(unit);
-						}
-					});
-				}
-
-				float minX = Mathf.clamp(start.x, 0, world.unitWidth());
-				float maxX = Mathf.clamp(end.x, 0, world.unitWidth());
-				float minY = Mathf.clamp(start.y, 0, world.unitHeight());
-				float maxY = Mathf.clamp(end.y, 0, world.unitHeight());
-				Threads.thread(() -> {
-					for (float y = minY; y < maxY; y += tilesize) {
-						for (float x = minX; x < maxX; x += tilesize) {
-							Tile tile = world.tileWorld(x, y);
-							if (tile != null) {
-								Threads.sleep(1);
-								if (select.get("tile") && !tiles.list.contains(tile)) {
-									tiles.add(tile);
-								}
-
-								if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build)) {
-									buildings.add(tile.build);
-								}
-							}
-						}
-					}
-				});
-
-				if (!pane.isShown()) {
-					pane.show();
-					pane.setPosition(Mathf.clamp(mx, 0f, Core.graphics.getWidth() - pane.getPrefWidth()), Mathf.clamp(my, 0f, Core.graphics.getHeight() - pane.getPrefHeight()));
-				}
-				show = false;
-				//				start = end = null;
-			}
-		};
+		InputListener listener = new SelectListener();
 		fragSelect.addListener(listener);
 
 		/*fragDraw = new FragDraw();
 		Core.scene.add(fragDraw);*/
 
+
+		loadFocusWindow();
+		loadUI();
+	}
+
+	Window focusW;
+	void loadFocusWindow() {
+		focusW = new FocusWindow("Focus");
+	}
+
+	void loadUI() {
+		int maxH = 400;
 		// functions = new Table();
 		// functions.defaults().width(buttonWidth);
 		pane = new Window(localizedName(), buttonWidth * 1.5f/* two buttons */,
-		                  maxH, true);
+				maxH, true);
 		pane.hidden(this::hide);
 
 		//		pane.cont.left().bottom().defaults().width(W);
@@ -275,82 +187,79 @@ public class Selection extends Content {
 			}
 		});
 
-		tiles = new TileFunction<>("tile", (t, func) -> {
-			FunctionBuild(t, "@selection.reset", button -> {
-				IntUI.showSelectImageTable(button, Vars.content.blocks(), () -> null, block -> {
-					func.each(tile -> {
+		tiles = new TileFunction<>("tile") {{
+			FunctionBuild("@selection.reset", __ -> {
+				IntUI.showSelectImageTable(Core.input.mouse().cpy(), Vars.content.blocks(), () -> null, block -> {
+					each(tile -> {
 						setBlock(block, tile);
 					});
 				}, 42f, 32, 6, true);
 			});
-			FunctionBuild(t, "@clear", __ -> {
-				func.each(tile -> {
+			FunctionBuild("@clear", __ -> {
+				each(tile -> {
 					if (tile.block() != Blocks.air) tile.setAir();
 				});
 			});
-			ListFunction(t, "@selection.setfloor",
-			             Vars.content.blocks().select(block -> block instanceof Floor),
-			             null, floor -> {
-						tiles.each(tile -> {
+			ListFunction("@selection.setfloor",
+					Vars.content.blocks().select(block -> block instanceof Floor),
+					null, floor -> {
+						each(tile -> {
 							tile.setFloor((Floor) floor);
 						});
 					});
-			ListFunction(t, "@selection.setfloorUnder", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
-			             null, floor -> {
-						tiles.each(tile -> {
+			ListFunction("@selection.setfloorUnder", Vars.content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
+					null, floor -> {
+						each(tile -> {
 							tile.setFloorUnder((Floor) floor);
 						});
 					});
-			ListFunction(t, "@selection.setoverlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), null, overlay -> {
-				tiles.each(tile -> {
+			ListFunction("@selection.setoverlay", Vars.content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air), null, overlay -> {
+				each(tile -> {
 					tile.setOverlay(overlay);
 				});
 			});
-		});
-		buildings = new BuildFunction<>("building", (t, func) -> {
-			FunctionBuild(t, "@selection.infiniteHealth", __ -> {
-				func.each(b -> {
+		}};
+		buildings = new BuildFunction<>("building") {{
+			FunctionBuild("@selection.infiniteHealth", __ -> {
+				each(b -> {
 					b.health = Float.POSITIVE_INFINITY;
 				});
 			});
-			TeamFunctionBuild(t, "@editor.teams", team -> {
-				func.each(b -> {
+			TeamFunctionBuild("@editor.teams", team -> {
+				each(b -> {
 					b.changeTeam(team);
 				});
 			});
-			String[] amount = new String[1];
-			ListFunction(t, "@selection.items", Vars.content.items(), t1 -> {
-				t1.row();
-				t1.field("", s -> {
-					amount[0] = s;
-				}).valid(Tools::validPosInt);
-			}, item -> {
-				func.each(b -> {
+			ListFunction("@selection.items", Vars.content.items(), Selection::intField, item -> {
+				each(b -> {
 					if (b.items != null) {
-						b.items.set(item, Tools.asInt(amount[0]));
+						b.items.set(item, Tools.asInt(tmpAmount[0]));
 					}
 				});
 			});
-			ListFunction(t, "@selection.liquids", Vars.content.liquids(), t1 -> {
-				t1.row();
-				t1.field("", s -> {
-					amount[0] = s;
-				}).valid(Tools::validPosInt);
-			}, liquid -> {
-				func.each(b -> {
+			ListFunction("@selection.liquids", Vars.content.liquids(), Selection::intField, liquid -> {
+				each(b -> {
 					if (b.liquids != null) {
-						b.liquids.add(liquid, Tools.asInt(amount[0]) - b.liquids.get(liquid));
+						b.liquids.add(liquid, Tools.asInt(tmpAmount[0]) - b.liquids.get(liquid));
 					}
 				});
 			});
-			FunctionBuild(t, "@kill", __ -> {
-				func.list.removeIf(b -> {
+			FunctionBuild("物品统计", list -> {
+				sumItems(content.items(), i -> sum(list, b -> b.items == null ? 0 : b.items.get(i)),
+						list.size() == 1 ? getItemSetter(list.get(0)) : null);
+			});
+			FunctionBuild("液体统计", list -> {
+				sumItems(content.liquids(), l -> sumf(list, b -> b.liquids == null ? 0 : b.liquids.get(l)),
+						list.size() == 1 ? getLiquidSetter(list.get(0)) : null);
+			});
+			FunctionBuild("@kill", list -> {
+				removeIf(list, b -> {
 					if (b.tile.build == b) b.kill();
 					return b.tile.build != null;
 				});
 			});
-			FunctionBuild(t, "@clear", __ -> {
-				func.list.removeIf(b -> {
+			FunctionBuild("@clear", list -> {
+				removeIf(list, b -> {
 					if (b.tile != null && b.tile.block() != Blocks.air) {
 						b.tile.remove();
 					}
@@ -358,21 +267,21 @@ public class Selection extends Content {
 					return b.tile.build != null;
 				});
 			});
-		});
-		units = new UnitFunction<>("unit", (t, func) -> {
-			FunctionBuild(t, "@selection.infiniteHealth", __ -> {
-				func.each(unit -> {
+		}};
+		units = new UnitFunction<>("unit") {{
+			FunctionBuild("@selection.infiniteHealth", __ -> {
+				each(unit -> {
 					unit.health(Float.POSITIVE_INFINITY);
 				});
 			});
-			TeamFunctionBuild(t, "@editor.teams", team -> {
-				func.each(unit -> {
+			TeamFunctionBuild("@editor.teams", team -> {
+				each(unit -> {
 					if (Vars.player.unit() == unit) Vars.player.team(team);
 					unit.team(team);
 				});
 			});
-			FunctionBuild(t, "@kill", __ -> {
-				func.list.removeIf(u -> {
+			FunctionBuild("@kill", list -> {
+				removeIf(list, u -> {
 					Call.unitDeath(u.id);
 					try {
 						return !addedField.getBoolean(u);
@@ -380,16 +289,16 @@ public class Selection extends Content {
 					return false;
 				});
 			});
-			FunctionBuild(t, "@clear", __ -> {
-				func.list.removeIf(u -> {
+			FunctionBuild("@clear", list -> {
+				removeIf(list, u -> {
 					u.remove();
 					return Groups.unit.contains(u0 -> u0 == u);
 					// return !addedField.getBoolean(u);
 					// return false;
 				});
 			});
-			FunctionBuild(t, "@selection.forceClear", __ -> {
-				func.list.removeIf(u -> {
+			FunctionBuild("@selection.forceClear", list -> {
+				removeIf(list, u -> {
 					u.remove();
 					if (!Groups.unit.contains(unit -> unit == u)) return true;
 					Groups.all.remove(u);
@@ -404,10 +313,10 @@ public class Selection extends Content {
 					return true;
 				});
 			});
-		});
-		bullets = new BulletFunction<>("bullet", (t, func) -> {
-			FunctionBuild(t, "@clear", __ -> {
-				func.list.removeIf(bullet -> {
+		}};
+		bullets = new BulletFunction<>("bullet") {{
+			FunctionBuild("@clear", list -> {
+				removeIf(list, bullet -> {
 					bullet.remove();
 					try {
 						return Groups.bullet.contains(b -> b == bullet);
@@ -416,7 +325,7 @@ public class Selection extends Content {
 				});
 			});
 
-		});
+		}};
 
 		// ScrollPaneStyle paneStyle = new ScrollPaneStyle();
 		// paneStyle.background = Styles.none;
@@ -424,8 +333,12 @@ public class Selection extends Content {
 		for (var func : allFunctions) {
 			tableSeq.add(func.value.wrap);
 		}
-		IntTab tab = new IntTab(100, allFunctions.orderedKeys(),
-		                        Color.sky, tableSeq, 1, true);
+		var tab = new IntTab(100, allFunctions.orderedKeys(),
+				Color.sky, tableSeq, 1, true);
+		var values = allFunctions.values().toSeq();
+		pane.cont.update(() -> {
+			selectedFunc = values.get(tab.getSelected());
+		});
 		pane.cont.left().add(tab.build()).grow().left();
 		// t.pane(paneStyle, functions).grow();
 		// });
@@ -514,40 +427,10 @@ public class Selection extends Content {
 	public static Rect getWorldRect(Bullet t) {
 		return new Rect(t.x, t.y, t.hitSize, t.hitSize);
 	}
-	public <T extends UnlockableContent> void ListFunction(Table t, String name, Seq<T> list,
-	                                                       Cons<Table> builder,
-	                                                       Cons<T> cons) {
-		FunctionBuild(t, name, btn -> {
-			var table = IntUI.showSelectImageTable(
-					btn, list, () -> null,
-					cons, 42.0f, 32,
-					6, true);
-			if (builder != null) builder.get(table);
-		});
-	}
-	public void FunctionBuild(Table table, String name, Cons<TextButton> cons) {
-		TextButton button = new TextButton(name);
-		table.add(button).height(buttonHeight).growX().row();
-		button.clicked(() -> {
-			cons.get(button);
-		});
-	}
-	public void TeamFunctionBuild(Table table, String name, Cons<Team> cons) {
-		FunctionBuild(table, name, btn -> {
-			Team[]        arr   = Team.baseTeams;
-			Seq<Drawable> icons = new Seq<>();
-
-			for (Team team : arr) {
-				icons.add(IntUI.whiteui.tint(team.color));
-			}
-
-			IntUI.showSelectImageTableWithIcons(btn, new Seq<>(arr), icons, () -> null, cons, 42f, 32f, 3, false);
-		});
-	}
 
 	public class BulletFunction<T extends Bullet> extends Function<T> {
-		public BulletFunction(String name, Cons2<Table, Function<T>> cons) {
-			super(name, cons);
+		public BulletFunction(String name) {
+			super(name);
 		}
 
 		public void buildTable(T bullet, Table table) {
@@ -579,6 +462,7 @@ public class Selection extends Content {
 						return false;
 					}
 					if (!rect.contains(bullet.x, bullet.y)) return true;
+					Draw.alpha(getAlpha(this));
 					Draw.rect(region, bullet.x, bullet.y);
 					return true;
 				});
@@ -593,8 +477,8 @@ public class Selection extends Content {
 	}
 
 	public class UnitFunction<T extends Unit> extends Function<T> {
-		public UnitFunction(String name, Cons2<Table, Function<T>> cons) {
-			super(name, cons);
+		public UnitFunction(String name) {
+			super(name);
 		}
 
 		public void buildTable(T unit, Table table) {
@@ -626,6 +510,7 @@ public class Selection extends Content {
 						return false;
 					}
 					if (!rect.contains(unit.x, unit.y)) return true;
+					Draw.alpha(getAlpha(this));
 					Draw.rect(region, unit.x, unit.y);
 					return true;
 				});
@@ -640,8 +525,8 @@ public class Selection extends Content {
 	}
 
 	public class BuildFunction<T extends Building> extends Function<T> {
-		public BuildFunction(String name, Cons2<Table, Function<T>> cons) {
-			super(name, cons);
+		public BuildFunction(String name) {
+			super(name);
 		}
 
 		@Override
@@ -655,18 +540,30 @@ public class Selection extends Content {
 			});
 		}
 
-		public void buildTable(T building, Table table) {
-			Table cont = new Table();
-			building.display(cont);
-			table.add(cont).row();
-			String[] pos  = {"(" + building.x + ", " + building.y + ')'};
-			Vec2     last = new Vec2(building.x, building.y);
-			table.label(() -> {
-				if (last.x != building.x || last.y != building.y) {
-					pos[0] = "(" + building.x + ", " + building.y + ')';
-				}
-				return pos[0];
-			}).padRight(6.0f).row();
+		public void buildTable(T build, Table table) {
+			/*Table cont = new Table();
+			// building.display(cont);
+			table.add(cont).row();*/
+			table.image(Icon.star).size(10).color(build.team.color).colspan(0);
+			table.add(build.block.name).row();
+			buildPos(table, build);
+			table.row();
+			table.table(t -> {
+				t.defaults().size(75, 42);
+				var style = Styles.flatt;
+				t.button("物品统计", style, () -> sumItems(content.items(),
+						i -> build.items == null ? 0 : build.items.get(i),
+						getItemSetter(build)));
+				t.button("液体统计", style, () -> sumItems(content.liquids(),
+						l -> build.liquids == null ? 0 : build.liquids.get(l),
+						getLiquidSetter(build)));
+			});
+		}
+		Cons2<Liquid, String> getLiquidSetter(T build) {
+			return (l, str) -> build.liquids.set(l, Tools.asFloat(str));
+		}
+		Cons2<Item, String> getItemSetter(T build) {
+			return (i, str) -> build.items.set(i, Tools.asInt(str));
 		}
 
 		public ObjectMap<Integer, TextureRegion> map = new ObjectMap<>();
@@ -684,6 +581,7 @@ public class Selection extends Content {
 						return false;
 					}
 					if (!rect.contains(building.x, building.y)) return true;
+					Draw.alpha(getAlpha(this));
 					Draw.rect(region, building.x, building.y, 45);
 					return true;
 				});
@@ -698,8 +596,8 @@ public class Selection extends Content {
 	}
 
 	public class TileFunction<T extends Tile> extends Function<T> {
-		public TileFunction(String name, Cons2<Table, Function<T>> cons) {
-			super(name, cons);
+		public TileFunction(String name) {
+			super(name);
 		}
 
 		@Override
@@ -713,10 +611,14 @@ public class Selection extends Content {
 			});
 		}
 
-		public void buildTable(T tile, Table table) {
-			tile.display(table);
-			table.row();
-			table.add("(" + tile.x + ", " + tile.y + ')');
+		public void buildTable(T tile, Table t) {
+			// tile.display(table);
+			// table.row();
+			t.defaults().padRight(4f);
+			t.image(tile.block() == Blocks.air ? Styles.none : new TextureRegionDrawable(tile.block().uiIcon)).size(24);
+			t.add(tile.block().name).with(JSFunc::addDClickCopy);
+			t.add("(" + tile.x + ", " + tile.y + ")");
+			if (tile.overlay().itemDrop != null) t.image(tile.overlay().itemDrop.uiIcon).size(24);
 		}
 
 		public ObjectMap<Integer, TextureRegion> map = new ObjectMap<>();
@@ -729,6 +631,7 @@ public class Selection extends Content {
 				TextureRegion region = getRegion(tile);
 				tileWD.drawSeq.add(() -> {
 					if (!rect.contains(tile.worldx(), tile.worldy())) return true;
+					Draw.alpha(getAlpha(this));
 					Draw.rect(region, tile.worldx(), tile.worldy());
 					// MyDraw.dashSquare(thick, Pal.accentBack, tile.worldx(), tile.worldy(), size);
 					return true;
@@ -744,6 +647,9 @@ public class Selection extends Content {
 			}
 		}
 	}
+	private float getAlpha(Function<?> func) {
+		return pane.isShown() && func == selectedFunc ? 1f : 0.3f;
+	}
 
 	public final Task task2 = new Task() {
 		@Override
@@ -752,19 +658,18 @@ public class Selection extends Content {
 		}
 	};
 
+
+	public static final ObjectMap<String, Drawable> icons = new ObjectMap<>();
+
 	public abstract class Function<T> {
-		public final Table   wrap;
-		public final Table   main;
-		public final Table   cont;
+		public final Table   wrap = new Table();
+		public final Table   main = new Table();
+		public final Table   cont = new Table();
 		public       List<T> list = new Vector<>();
 		public final String  name;
 
-		public Function(String name, Cons2<Table, Function<T>> cons) {
+		public Function(String name) {
 			this.name = name;
-			wrap = new Table();
-			main = new Table();
-			cont = new Table();
-			cons.get(cont, this);
 			// functions.add(wrap).padTop(10.0f).row();
 			// main.image().color(Color.white).height(3.0f).padTop(3.0f).padBottom(3.0f).fillX().row();
 			// main.add(name).growX().left().row();
@@ -781,6 +686,10 @@ public class Selection extends Content {
 			}
 
 			allFunctions.put(name, this);
+
+			FunctionBuild("copy", list -> {
+				tester.put(Core.input.mouse(), Seq.with(list).toArray());
+			});
 		}
 
 		public abstract TextureRegion getRegion(T t);
@@ -795,7 +704,7 @@ public class Selection extends Content {
 
 				hide();
 				select.put(name, b);
-				settings.put(getSettingName() + "-" + name, b);
+				SETTINGS.put(getSettingName() + "-" + name, b);
 			});
 		}
 
@@ -805,8 +714,27 @@ public class Selection extends Content {
 
 		// private int c;
 
+		public float sumf(List<T> list, Floatf<T> summer) {
+			float sum = 0;
+			for (T t : list) {
+				sum += summer.get(t);
+			}
+			return sum;
+		}
+		public int sum(List<T> list, Intf<T> summer) {
+			int sum = 0;
+			for (T t : list) {
+				sum += summer.get(t);
+			}
+			return sum;
+		}
+
 		Thread thread;
 		public void each(Consumer<? super T> action) {
+			if (tmpList.size() != 0) {
+				tmpList.forEach(action);
+				return;
+			}
 			// if (list.size() < 1e4) {
 			// 	IntVars.async("each", () -> list.forEach(action), () -> {});
 			// 	return;
@@ -833,16 +761,17 @@ public class Selection extends Content {
 				thread = null;
 			});
 		}
+		void removeIf(List<T> list, Predicate<? super T> action) {
+			list.removeIf(action);
+		}
 
 		public void clearList() {
 			list.clear();
 		}
-
 		public void setup() {
 			if (main.parent == wrap) return;
 			wrap.add(main);
 		}
-
 		public final void showAll() {
 			final int   cols = Vars.mobile ? 4 : 6;
 			final int[] c    = new int[]{0};
@@ -920,9 +849,55 @@ public class Selection extends Content {
 		public void buildTable(T item, Table table) {
 		}
 
-
 		public void add(T item) {
 			list.add(item);
+		}
+
+
+		final ObjectMap<String, Cons<List<T>>> FUNCTIONS = new OrderedMap<>();
+
+		public class MENU_FUNCTION {
+			Cons<List<T>> cons;
+			MenuList      list;
+			public MENU_FUNCTION(Cons<List<T>> cons, MenuList list) {
+				this.cons = cons;
+				this.list = list;
+			}
+		}
+		public <R extends UnlockableContent> void ListFunction(String name, Seq<R> list,
+		                                                       Cons<Table> builder,
+		                                                       Cons<R> cons) {
+			FunctionBuild(name, __ -> {
+				var table = IntUI.showSelectImageTable(
+						Core.input.mouse().cpy(), list, () -> null,
+						cons, 42f, 32,
+						6, true);
+				if (builder != null) builder.get(table);
+			});
+		}
+
+		/** 这个exec的list只是为Functions提供作用 */
+		public void FunctionBuild(String name, Cons<List<T>> exec) {
+			TextButton button = new TextButton(name);
+			cont.add(button).height(buttonHeight).growX().row();
+
+			FUNCTIONS.put(name, exec);
+			button.clicked(() -> {
+				exec.get(list);
+			});
+		}
+
+		public void TeamFunctionBuild(String name, Cons<Team> cons) {
+			FunctionBuild(name, __ -> {
+				Team[]        arr   = Team.baseTeams;
+				Seq<Drawable> icons = new Seq<>();
+
+				for (Team team : arr) {
+					icons.add(IntUI.whiteui.tint(team.color));
+				}
+
+				IntUI.showSelectImageTableWithIcons(Core.input.mouse().cpy(), new Seq<>(arr), icons, () -> null, cons, 42f, 32f, 3, false);
+			});
 		}
 	}
 
@@ -981,12 +956,13 @@ public class Selection extends Content {
 		// Draw.color(lastColor);
 	}
 
-	private       boolean           focusLock;
+	private boolean focusLock, focusActive;
 	private       Element           focusElem;
 	private       Tile              focusTile;
 	private       Building          focusBuild;
 	private final ObjectSet<Unit>   focusUnits   = new ObjectSet<>();
 	private final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
+
 
 	{
 		otherWD.drawSeq.add(() -> {
@@ -996,74 +972,43 @@ public class Selection extends Content {
 			return true;
 		});
 		otherWD.drawSeq.add(() -> {
+			Element tmp = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
+			focusActive = !topGroup.isSelecting() && (tmp == null || tmp.isDescendantOf(focusW) || !tmp.visible
+			                                          || tmp.isDescendantOf(el -> el.getClass().getName().contains("modtools.ui.IntUI"))
+			                                          || tmp.isDescendantOf(topGroup.getTopG()));
+			if (!focusActive) return true;
 			if (!focusLock) {
-				focusUnits.clear();
-				if (settings.getBool("focusOnWorld")) {
-					focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
-					focusBuild = focusTile != null ? focusTile.build : null;
-					Groups.unit.each(u -> {
-						if (this.mouseWorld.x > u.x - u.hitSize && this.mouseWorld.y > u.y - u.hitSize
-						    && this.mouseWorld.x < u.x + u.hitSize && this.mouseWorld.y < u.y + u.hitSize)
-							focusUnits.add(u);
-					});
-				} else {
-					if (focusTile != null) {
-						focusTile = null;
-					}
-					if (focusBuild != null) {
-						focusBuild = null;
-					}
-				}
+				reacquireFocus();
 			}
 
 			return true;
 		});
-		topGroup.drawSeq.add(() -> {
+		topGroup.backDrawSeq.add(() -> {
 			if (state.isGame()) drawFocus();
 			return true;
 		});
 	}
 
-	public static class MyDraw {
-		public static void dashLine(float thick, Color color, float x, float y, float x2, float y2, int segments) {
-			Lines.stroke(thick);
-			Draw.color(Pal.gray, color.a);
-			Lines.dashLine(x, y, x2, y2, segments);
-			Lines.stroke(thick / 3f, color);
-			Lines.dashLine(x, y, x2, y2, segments);
-			Draw.reset();
-			//			Log.info(segments);
-		}
-
-		public static void dashLine(float thick, Color color, float x, float y, float x2, float y2) {
-			dashLine(thick, color, x, y, x2, y2, (int) (Math.max(Math.abs(x - x2), Math.abs(y - y2)) / 5f));
-		}
-
-		public static void dashRect(float thick, Color color, float x, float y, float width, float height) {
-			dashLine(thick, color, x, y, x + width, y);
-			dashLine(thick, color, x + width, y, x + width, y + height);
-			dashLine(thick, color, x + width, y + height, x, y + height);
-			dashLine(thick, color, x, y + height, x, y);
-		}
-
-		public static void dashSquare(float thick, Color color, float x, float y, float size) {
-			dashRect(thick, color, x - size / 2f, y - size / 2f, size, size);
-		}
-
-		public static void square(float x, float y, float radius, float rotation, float thick, Color color) {
-			Lines.stroke(thick, Pal.gray);
-			Lines.square(x, y, radius + 1f, rotation);
-			Lines.stroke(thick / 3f, color);
-			Lines.square(x, y, radius + 1f, rotation);
-			Draw.reset();
-		}
-
-		public static void square(float x, float y, float radius, float thick, float rotation) {
-			square(x, y, radius, rotation, thick, Pal.accent);
-		}
-
-		public static void square(float x, float y, float radius, float thick, Color color) {
-			square(x, y, radius, 45, thick, color);
+	private void reacquireFocus() {
+		focusUnits.clear();
+		focusBullets.clear();
+		if (SETTINGS.getBool("focusOnWorld")) {
+			focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
+			focusBuild = focusTile != null ? focusTile.build : null;
+			Groups.unit.each(u -> {
+				if (mouseWorld.x > u.x - u.hitSize && mouseWorld.y > u.y - u.hitSize
+				    && mouseWorld.x < u.x + u.hitSize && mouseWorld.y < u.y + u.hitSize)
+					focusUnits.add(u);
+			});
+			Groups.bullet.each(b -> {
+				float hitSize = b.hitSize + 2;
+				if (mouseWorld.x > b.x - hitSize && mouseWorld.y > b.y - hitSize
+				    && mouseWorld.x < b.x + hitSize && mouseWorld.y < b.y + hitSize)
+					focusBullets.add(b);
+			});
+		} else {
+			focusTile = null;
+			focusBuild = null;
 		}
 	}
 
@@ -1085,101 +1030,333 @@ public class Selection extends Content {
 			entity.add();
 		}
 	}*/
+	public class FocusWindow extends Window {
+		public FocusWindow(String title) {
+			super(title);
+		}
 
-	public static Object[] EMPTY = {};
+		boolean updatePos = true;
+		long    delayTime = 200, lastFire = 0;
 
-	private static class MyList<T> extends Vector<T> {
-		// Object[] arr  = EMPTY;
-		// int      size = 0;
-		// public T get(int index) {
-		// 	return (T) arr[index];
-		// }
-		// @Override
-		// public void clear() {
-		// 	arr = new Object[0];
-		// 	size = 0;
-		// }
-		// /**
-		//  * Returns a capacity at least as large as the given minimum capacity.
-		//  * Returns the current capacity increased by 50% if that suffices.
-		//  * Will not return a capacity greater than MAX_ARRAY_SIZE unless
-		//  * the given minimum capacity is greater than MAX_ARRAY_SIZE.
-		//  *
-		//  * @param minCapacity the desired minimum capacity
-		//  *
-		//  * @throws OutOfMemoryError if minCapacity is less than zero
-		//  */
-		// private int newCapacity(int minCapacity) {
-		// 	// overflow-conscious code
-		// 	int oldCapacity = arr.length;
-		// 	int newCapacity = oldCapacity + (oldCapacity >> 1);
-		// 	if (newCapacity - minCapacity <= 0) {
-		// 		if (minCapacity < 0) // overflow
-		// 			throw new OutOfMemoryError();
-		// 		return minCapacity;
-		// 	}
-		// 	return newCapacity;
-		// }
-		// /**
-		//  * Increases the capacity to ensure that it can hold at least the
-		//  * number of elements specified by the minimum capacity argument.
-		//  *
-		//  * @param minCapacity the desired minimum capacity
-		//  *
-		//  * @throws OutOfMemoryError if minCapacity is less than zero
-		//  */
-		// private Object[] grow(int minCapacity) {
-		// 	return arr = Arrays.copyOf(arr, newCapacity(minCapacity));
-		// }
-		//
-		// private Object[] grow() {
-		// 	return grow(size + 1);
-		// }
-		// public void add(int index, T element) {
-		// 	final int s;
-		// 	Object[]  arr;
-		// 	if (this.arr == EMPTY) {
-		// 		this.arr = new Object[10];
-		// 	}
-		// 	if ((s = size) == (arr = this.arr).length)
-		// 		arr = grow();
-		// 	System.arraycopy(arr, index,
-		// 	                 arr, index + 1,
-		// 	                 s - index);
-		// 	arr[index] = element;
-		// 	size = s + 1;
-		// }
-		// public int size() {
-		// 	return size;
-		// }
-		//
-		// /**
-		//  * Removes the element at the specified position in this list.
-		//  * Shifts any subsequent elements to the left (subtracts one from their
-		//  * indices).
-		//  *
-		//  * @param index the index of the element to be removed
-		//  *
-		//  * @return the element that was removed from the list
-		//  * @throws IndexOutOfBoundsException {@inheritDoc}
-		//  */
-		// public T remove(int index) {
-		// 	Objects.checkIndex(index, size);
-		//
-		// 	T oldValue = (T) arr[index];
-		// 	fastRemove(arr, index);
-		//
-		// 	return oldValue;
-		// }
-		// /**
-		//  * Private remove method that skips bounds checking and does not
-		//  * return the value removed.
-		//  */
-		// private void fastRemove(Object[] es, int i) {
-		// 	final int newSize;
-		// 	if ((newSize = size - 1) > i)
-		// 		System.arraycopy(es, i + 1, es, i, newSize - i);
-		// 	es[size = newSize] = null;
-		// }
+		{
+			top.remove();
+			/* 禁用缩放和移动侦听器 */
+			touchable = Touchable.childrenOnly;
+			sclLisetener.disabled1 = true;
+			moveListener.disabled = true;
+			cont.update(() -> {
+				if (updatePos && focusActive) updatePos();
+			});
+			buildCont0();
+			Events.run(Trigger.update, () -> {
+				if (state.isMenu() || !SETTINGS.getBool("focusOnWorld") || !focusActive) {
+					hide();
+				} else if (!isShown()) {
+					show();
+				}
+				if (!Vars.mobile && Time.millis() - lastFire > delayTime
+				    && Core.input.alt() && Core.input.ctrl()) {
+					lastFire = Time.millis();
+					updatePos = !updatePos;
+					focusLock = !updatePos;
+				}
+			});
+		}
+
+		public void hide() {
+			remove();
+		}
+		public Element hit(float x, float y, boolean touchable) {
+			Element el = super.hit(x, y, touchable);
+			if (Vars.mobile) {
+				updatePos = el == null;
+				focusLock = !updatePos;
+			}
+			return el;
+		}
+		private void buildCont0() {
+			/* tile */
+			newTable(t -> {
+				buildCont(t, focusTile);
+				t.background(t.getChildren().any() ? Tex.underlineDisabled : null);
+			});
+			/* build */
+			newTable(t -> {
+				buildCont(t, focusBuild);
+				t.background(t.getChildren().any() ? Tex.underlineDisabled : null);
+			});
+			/* unit */
+			newTable(t -> {
+				buildCont(t, focusUnits);
+				t.background(t.getChildren().any() ? Tex.underlineDisabled : null);
+			});
+			/* bullet */
+			newTable(t -> {
+				buildCont1(t, focusBullets);
+				t.background(t.getChildren().any() ? Tex.underlineDisabled : null);
+			});
+		}
+		private void newTable(Cons<Table> cons) {
+			cont.table(t -> {
+				t.act(0.15f);
+				t.left().defaults().left().growY();
+				t.marginTop(-2f);
+				t.update(() -> cons.get(t));
+			}).growX().row();
+		}
+
+		public Tile lastTile;
+		private void addMoreButton(Table t, Object o) {
+			t.button("More", Styles.flatt, () -> JSFunc.showInfo(o)).size(50, 24);
+		}
+		private void buildCont(Table table, Tile tile) {
+			if (lastTile == tile) return;
+			table.clearChildren();
+			lastTile = tile;
+			if (tile == null) return;
+
+			ArrayList<MenuList> list = new ArrayList<>(tiles.FUNCTIONS.size);
+			tiles.FUNCTIONS.each((k, r) -> {
+				list.add(new MenuList(Styles.none, k, () -> {
+					tmpList.clear();
+					tmpList.add(tile);
+					r.get(tmpList);
+				}));
+			});
+			table.table(t -> {
+				IntUI.addShowMenuListener(t, list);
+				t.defaults().padRight(4f).growY();
+				t.image(tile.block() == Blocks.air ? Styles.none : new TextureRegionDrawable(tile.block().uiIcon)).size(24);
+				t.add(tile.block().name).with(JSFunc::addDClickCopy);
+				t.add("(" + tile.x + ", " + tile.y + ")");
+				if (tile.overlay().itemDrop != null) t.image(tile.overlay().itemDrop.uiIcon).size(24);
+				addMoreButton(t, tile);
+			}).row();
+		}
+
+		public Building lastBuild;
+		private void buildCont(Table table, Building build) {
+			if (lastBuild == build) return;
+			table.clearChildren();
+			lastBuild = build;
+			if (build == null) return;
+
+			ArrayList<MenuList> list = new ArrayList<>(buildings.FUNCTIONS.size);
+			buildings.FUNCTIONS.each((k, r) -> {
+				list.add(new MenuList(Styles.none, k, () -> {
+					tmpList.clear();
+					tmpList.add(build);
+					r.get(tmpList);
+				}));
+			});
+			table.table(t -> {
+				IntUI.addShowMenuListener(t, list);
+				t.defaults().padRight(6f).growY();
+				t.image(Icon.star).size(10).color(build.team.color);
+				buildPos(t, build);
+				addMoreButton(t, build);
+			}).row();
+		}
+
+		public int lastUnitSize;
+		private void buildCont(Table table, ObjectSet<Unit> unitSet) {
+			if (lastUnitSize == unitSet.size) return;
+			table.clearChildren();
+			lastUnitSize = unitSet.size;
+			if (lastUnitSize == 0) return;
+
+			ArrayList<MenuList> list = new ArrayList<>(units.FUNCTIONS.size);
+			units.FUNCTIONS.each((k, r) -> {
+				list.add(new MenuList(Styles.none, k, () -> {
+					tmpList.clear();
+					unitSet.each(tmpList::add);
+					r.get(tmpList);
+				}));
+			});
+			unitSet.each(u -> table.table(Tex.underline, t -> {
+				IntUI.addShowMenuListener(t, list);
+				t.defaults().padRight(6f).growY();
+				t.image(Icon.star).size(10).color(u.team.color);
+				t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
+				t.add("" + u.type.name).with(JSFunc::addDClickCopy);
+
+				buildPos(t, u);
+				// t.add("pathfind:" + u.pathType());
+				addMoreButton(t, u);
+			}).growX().row());
+		}
+
+		public int lastBulletSize;
+		private void buildCont1(Table table, ObjectSet<Bullet> unitSet) {
+			if (lastBulletSize == unitSet.size) return;
+			table.clearChildren();
+			lastBulletSize = unitSet.size;
+			if (lastBulletSize == 0) return;
+
+			ArrayList<MenuList> list = new ArrayList<>(units.FUNCTIONS.size);
+			units.FUNCTIONS.each((k, r) -> {
+				list.add(new MenuList(Styles.none, k, () -> {
+					tmpList.clear();
+					unitSet.each(tmpList::add);
+					r.get(tmpList);
+				}));
+			});
+			unitSet.each(u -> table.table(Tex.underline, t -> {
+				IntUI.addShowMenuListener(t, list);
+				t.defaults().padRight(6f).growY();
+				t.image(Icon.star).size(10).color(u.team.color).colspan(0);
+				t.label(() -> u.time + "/" + u.lifetime).size(10).colspan(2).row();
+				// t.add("" + u.type).with(JSFunc::addDClickCopy);
+
+				buildPos(t, u);
+				// t.add("pathfind:" + u.pathType());
+				addMoreButton(t, u);
+			}).growX().row());
+		}
+
+		private void updatePos() {
+			Tmp.v1.set(Core.input.mouse());
+			x = Tmp.v1.x;
+			if (x + width > Core.scene.getWidth()) x -= width;
+			y = Tmp.v1.y;
+			if (y + height > Core.scene.getHeight()) y -= height;
+		}
+	}
+	private static void buildPos(Table table, Position u) {
+		String[] pos  = {"(" + u.getX() + ", " + u.getY() + ')'};
+		Vec2     last = new Vec2(u.getX(), u.getY());
+		table.label(() -> {
+			if (last.x != u.getX() || last.y != u.getY()) {
+				pos[0] = "(" + u.getX() + ", " + u.getY() + ')';
+			}
+			return pos[0];
+		}).get().act(0.1f);
+	}
+	private <T extends UnlockableContent, E> void sumItems(Seq<T> items, Func<T, E> func, Cons2<T, String> setter) {
+		var wacther = JSFunc.watch();
+		wacther.addAllCheckbox();
+		items.each(i -> {
+			wacther.watchWithSetter(new TextureRegionDrawable(i.uiIcon), () -> {
+				if (i.id % 6 == 0) wacther.newLine();
+				return func.get(i);
+			}, setter == null ? null : str -> setter.get(i, str), 2);
+		});
+		wacther.show();
+	}
+	private class SelectListener extends InputListener {
+		final Vec2 start = new Vec2();
+		final Vec2 end   = new Vec2();
+
+		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			if (button != KeyCode.mouseLeft || Vars.state.isMenu()) {
+				hide();
+				move = false;
+				return false;
+			} else {
+				aquireWorldPos(x, y);
+				move = true;
+				Time.runTask(2f, () -> {
+					move = true;
+				});
+				otherWD.drawSeq.add(() -> {
+					if (!show) {
+						return false;
+					}
+					Draw.color(Pal.accent, 0.3f);
+					float minX = Mathf.clamp(Math.min(start.x, end.x), rect.x, rect.x + rect.width);
+					float minY = Mathf.clamp(Math.min(start.y, end.y), rect.y, rect.y + rect.height);
+					float maxX = Mathf.clamp(Math.max(start.x, end.x), rect.x, rect.x + rect.width);
+					float maxY = Mathf.clamp(Math.max(start.y, end.y), rect.y, rect.y + rect.height);
+
+					Fill.crect(minX, minY, maxX - minX, maxY - minY);
+					return true;
+				});
+				return show;
+			}
+		}
+		public void touchDragged(InputEvent event, float x, float y, int pointer) {
+			aquireWorldPos(x, y);
+		}
+		private void aquireWorldPos(float x, float y) {
+			end.set(Core.camera.unproject(x, y));
+		}
+		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
+			aquireWorldPos(mx, my);
+			btn.setChecked(false);
+
+			if (!move) return;
+			float tmp;
+			if (start.x > end.x) {
+				tmp = start.x;
+				start.x = end.x;
+				end.x = tmp;
+			}
+			if (start.y > end.y) {
+				tmp = start.y;
+				start.y = end.y;
+				end.y = tmp;
+			}
+			fragSelect.remove();
+
+			if (!Core.input.alt()) {
+				tiles.clearList();
+				buildings.clearList();
+				bullets.clearList();
+				units.clearList();
+			}
+
+			if (select.get("bullet")) {
+				Threads.thread(() -> {
+					Groups.bullet.each(bullet -> {
+						// 返回单位是否在所选区域内
+						return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
+					}, bullet -> {
+						Threads.sleep(1);
+						if (!bullets.list.contains(bullet)) {
+							bullets.add(bullet);
+						}
+					});
+				});
+			}
+			if (select.get("unit")) {
+				Groups.unit.each(unit -> {
+					// 返回单位是否在所选区域内
+					return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
+				}, unit -> {
+					if (!units.list.contains(unit)) {
+						units.add(unit);
+					}
+				});
+			}
+
+			float minX = Mathf.clamp(start.x, 0, world.unitWidth());
+			float maxX = Mathf.clamp(end.x, 0, world.unitWidth());
+			float minY = Mathf.clamp(start.y, 0, world.unitHeight());
+			float maxY = Mathf.clamp(end.y, 0, world.unitHeight());
+			Threads.thread(() -> {
+				for (float y = minY; y < maxY; y += tilesize) {
+					for (float x = minX; x < maxX; x += tilesize) {
+						Tile tile = world.tileWorld(x, y);
+						if (tile != null) {
+							Threads.sleep(1);
+							if (select.get("tile") && !tiles.list.contains(tile)) {
+								tiles.add(tile);
+							}
+
+							if (select.get("building") && tile.build != null && !buildings.list.contains(tile.build)) {
+								buildings.add(tile.build);
+							}
+						}
+					}
+				}
+			});
+
+			if (!pane.isShown()) {
+				pane.setPosition(mx, my);
+				pane.show();
+			}
+			show = false;
+			//				start = end = null;
+		}
 	}
 }

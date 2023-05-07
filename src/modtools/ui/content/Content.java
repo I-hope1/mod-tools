@@ -7,7 +7,7 @@ import arc.scene.ui.TextButton;
 import java.util.ArrayList;
 
 import static modtools.IntVars.modName;
-import static modtools.utils.MySettings.settings;
+import static modtools.utils.MySettings.SETTINGS;
 
 public abstract class Content {
 	public static final ArrayList<Content> all = new ArrayList<>();
@@ -21,8 +21,9 @@ public abstract class Content {
 		return name;
 	}
 
-	public boolean loadable() {
-		return settings.getBool("load-" + name, true);
+	protected boolean defLoadable = true;
+	public final boolean loadable() {
+		return SETTINGS.getBool("load-" + name, defLoadable);
 	}
 	public Content(String name) {
 		this.name = name;

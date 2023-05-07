@@ -36,7 +36,7 @@ public class ContentList extends Content {
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
 		new Search((__, text) -> {
-			pattern = Tools.complieRegExp(text);
+			pattern = Tools.complieRegExpCatch(text);
 		}).build(top, main);
 
 		Field[] fields;

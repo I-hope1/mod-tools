@@ -45,6 +45,10 @@ public class WindowManager extends Content {
 				});
 			}
 			top.button(Icon.cancel, IntStyles.clearNonei, 32, window::hide).padLeft(4f).padRight(4f);
+			top.button(Icon.trash, IntStyles.clearNonei, 32, () -> {
+				Window.all.remove(window);
+				window.hide();
+			}).padLeft(4f).padRight(4f);
 			// Tools.clone(window.top, top, Table.class, null);
 		});
 	}

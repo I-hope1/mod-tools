@@ -23,15 +23,20 @@ public class MySettings {
 		} catch (Throwable ignored) {}
 	}
 
-	static              Fi   config   = dataDirectory.child("mod-tools-config.hjson");
-	public static final Data settings = new Data(config);
+	static Fi config = dataDirectory.child("mod-tools-config.hjson");
+
+	public static final Data
+			SETTINGS      = new Data(config),
+			D_JSFUNC_EDIT = (Data) SETTINGS.get("JsfuncEdit", () -> new Data(SETTINGS, new JsonMap())),
+			D_JSFUNC      = (Data) SETTINGS.get("Jsfunc", () -> new Data(SETTINGS, new JsonMap())),
+			D_BLUR        = (Data) SETTINGS.get("BLUR", () -> new Data(SETTINGS, new JsonMap()));
 
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
 
 		public Data(Data parent, JsonMap jsonMap) {
 			this.parent = parent;
-			loadJval(parent, jsonMap);
+			loadJval(jsonMap);
 		}
 		public Data(Fi fi) {
 			loadFi(fi);
@@ -59,28 +64,29 @@ public class MySettings {
 				return;
 			}
 			try {
-				loadJval(null, Jval.read(fi.readString()).asObject());
+				loadJval(Jval.read(fi.readString()).asObject());
 			} catch (Exception e) {
 				Log.err(e);
 			}
 		}
-		public void loadJval(Data parent, JsonMap jsonMap) {
+		public void loadJval(JsonMap jsonMap) {
 			for (var entry : jsonMap) {
-				super.put(entry.key, entry.value.isObject() ? new Data(parent, entry.value.asObject()) : entry.value);
+				super.put(entry.key, entry.value.isObject() ? new Data(this, entry.value.asObject()) :
+						entry.value.isBoolean() ? entry.value.asBool() : entry.value);
 			}
 		}
 
 		public boolean toBool(Object v) {
 			if (v instanceof Jval) {
 				if (((Jval) v).isBoolean()) return ((Jval) v).asBool();
-				else return v.toString().equals("true");
+				return v.toString().equals("true");
 			}
-			if (v instanceof Boolean) return (boolean) v;
+			if (v instanceof Boolean) return (Boolean) v;
 			if (v == null) return false;
 			return ScriptRuntime.toBoolean("" + v);
 		}
 		public boolean getBool(String name) {
-			return toBool(get(name));
+			return toBool(get(name, false));
 		}
 		public boolean getBool(String name, Object def) {
 			return toBool(get(name, def));
@@ -117,7 +123,7 @@ public class MySettings {
 				if (((Jval) v).isNumber()) return ((Jval) v).asInt();
 				v = v.toString();
 			}
-			return Integer.parseInt("" + v);
+			return Jval.read("" + v).asInt();
 		}
 	}
 }

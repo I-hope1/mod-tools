@@ -3,6 +3,7 @@ package modtools.ui.components;
 import arc.*;
 import arc.func.Prov;
 import arc.graphics.Color;
+import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.*;
@@ -16,17 +17,19 @@ import arc.scene.ui.layout.*;
 import arc.struct.ObjectSet;
 import arc.util.*;
 import arc.util.Timer.Task;
+import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.components.linstener.*;
+import modtools.ui.effect.MyDraw;
 import modtools.utils.*;
 
-import static modtools.IntVars.topGroup;
+import static arc.Core.graphics;
 import static modtools.ui.Contents.windowManager;
-import static modtools.ui.IntUI.icons;
+import static modtools.ui.IntUI.*;
 
 /**
  * 浮动的窗口，可以缩放，最小化，最大化
@@ -120,7 +123,7 @@ public class Window extends Table {
 		// top.top();
 		add(top).growX().height(topHeight);
 		row();
-		moveListener = new MoveListener(this, this);
+		moveListener = new MoveListener(top, this);
 		this.title = top.add(title).grow().touchable(Touchable.disabled)
 				.padLeft(10f).padRight(10f)
 				.update(l -> {
@@ -179,7 +182,7 @@ public class Window extends Table {
 		super.update(() -> {
 			for (Runnable r : runs) r.run();
 			if (sticky) toFront();
-			sclLisetener.disabled = isMaximize;
+			sclLisetener.disabled0 = isMaximize;
 			moveListener.disabled = sclLisetener.scling;
 		});
 
@@ -237,8 +240,8 @@ public class Window extends Table {
 	public void display() {
 		float mainWidth  = getWidth(), mainHeight = getHeight();
 		float touchWidth = top.getWidth(), touchHeight = top.getHeight();
-		super.setPosition(Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth + touchWidth / 2f),
-		                  Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, Core.graphics.getHeight() - mainHeight));
+		super.setPosition(Mathf.clamp(x, -touchWidth / 3f, graphics.getWidth() - mainWidth + touchWidth / 2f),
+				Mathf.clamp(y, -mainHeight + touchHeight / 3f * 2f, graphics.getHeight() - mainHeight));
 		if (lastMaximize) {
 			// false取反为true
 			isMaximize = false;
@@ -247,13 +250,23 @@ public class Window extends Table {
 	}
 
 
+	public static boolean Modible_Disabled = true;
+	// public TextureRegion bakRegion;
+	/** 截图 */
+	public TextureRegion screenshot() {
+		// return getFrameBufferTexture((int) x, (int) y, (int) width, (int) height);
+		// return new TextureRegion(bufferCapture(this));
+		if (Vars.mobile && Modible_Disabled) return null;
+		return cache = isMinimize ? cache : Tools.screenshot(cont, true, null);
+	}
+
 	public float getPrefWidth() {
 		// 默认最小宽度为顶部的最小宽度
-		return Mathf.clamp(super.getPrefWidth(), minWidth, Core.graphics.getWidth());
+		return Mathf.clamp(super.getPrefWidth(), minWidth, graphics.getWidth());
 	}
 
 	public float getPrefHeight() {
-		return Mathf.clamp(super.getPrefHeight(), minHeight, Core.graphics.getHeight());
+		return Mathf.clamp(super.getPrefHeight(), minHeight, graphics.getHeight());
 	}
 
 	private static final Prov<Action>
@@ -335,6 +348,13 @@ public class Window extends Table {
 		if (action != null) addAction(action);
 		pack();
 
+		if (!Window.all.contains(this)) {
+			Window.all.add(this);
+		}
+
+		Core.scene.unfocusAll();
+		invalidate();
+
 		return this;
 	}
 
@@ -371,6 +391,7 @@ public class Window extends Table {
 	 * Hides the dialog with the given action and then removes it from the stage.
 	 */
 	public void hide(Action action) {
+		// bakRegion = screenshot();
 		this.fire(new VisibilityEvent(true));
 
 		Scene stage = getScene();
@@ -395,12 +416,14 @@ public class Window extends Table {
 		}
 	}
 
+	public TextureRegion cache = null;
 	/**
 	 * Hides the dialog. Called automatically when a button is clicked. The default implementation fades out the dialog over 400
 	 * milliseconds.
 	 */
 	public void hide() {
 		if (!isShown()) return;
+		screenshot();
 		setOrigin(Align.center);
 		setClip(false);
 		setTransform(true);
@@ -436,13 +459,13 @@ public class Window extends Table {
 			if (!lastMin) {
 				lastRect.set(x, y, width, height);
 			}
-			actions(Actions.sizeTo(Core.graphics.getWidth(), Core.graphics.getHeight(), disabledActions ? 0 : 0.06f),
-			        Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
+			actions(Actions.sizeTo(graphics.getWidth(), graphics.getHeight(), disabledActions ? 0 : 0.06f),
+					Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
 			// setSize(Core.graphics.getWidth(), Core.graphics.getHeight());
 			// setPosition(0, 0);
 		} else {
 			actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.06f),
-			        Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
+					Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
 		}
 
 		Timer.schedule(new Task() {
@@ -463,6 +486,7 @@ public class Window extends Table {
 	public boolean                isMinimize   = false;
 
 	public void toggleMinimize() {
+		if (!isMinimize) screenshot();
 		isMinimize = !isMinimize;
 		if (isMinimize) {
 			if (!isMaximize) {
@@ -470,8 +494,8 @@ public class Window extends Table {
 			}
 
 			actions(Actions.sizeTo(getMinWidth(), topHeight, disabledActions ? 0 : 0.01f),
-			        Actions.moveTo(Math.max(x, lastRect.width / 2f),
-			                       y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
+					Actions.moveTo(Math.max(x, lastRect.width / 2f),
+							y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
 
 			getCell(cont).set(emptyCell);
 			cont.remove();
@@ -488,13 +512,13 @@ public class Window extends Table {
 
 			left().top();
 			if (isMaximize) {
-				actions(Actions.sizeTo(Core.graphics.getWidth(), Core.graphics.getHeight(), disabledActions ? 0 : 0.1f),
-				        Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
+				actions(Actions.sizeTo(graphics.getWidth(), graphics.getHeight(), disabledActions ? 0 : 0.1f),
+						Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
 			} else {
 				actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.01f),
-				        Actions.moveTo(lastRect.x = x,
-				                       lastRect.y = y - lastRect.height + topHeight,
-				                       disabledActions ? 0 : 0.01f));
+						Actions.moveTo(lastRect.x = x,
+								lastRect.y = y - lastRect.height + topHeight,
+								disabledActions ? 0 : 0.01f));
 				// y -= height - topHeight;
 			}
 			addListener(sclLisetener);
@@ -549,6 +573,12 @@ public class Window extends Table {
 		display();
 	}
 
+	public void draw() {
+		MyDraw.blur(() -> {
+			Fill.crect(x, y, width, height);
+		});
+		super.draw();
+	}
 	public interface RunListener {
 		void fire(boolean status);
 	}
@@ -587,6 +617,8 @@ public class Window extends Table {
 		}
 
 		{
+			moveListener.remove();
+			moveListener = new MoveListener(this, this);
 			getCells().remove(getCell(top), true);
 			top.remove();
 			Table table = new Table();

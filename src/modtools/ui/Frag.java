@@ -4,22 +4,20 @@ import arc.Core;
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.event.Touchable;
-import arc.scene.ui.Image;
-import arc.scene.ui.ScrollPane;
+import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.util.*;
+import arc.util.Log;
 import modtools.IntVars;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
 
-import static modtools.IntVars.modName;
-import static modtools.IntVars.topGroup;
-import static modtools.utils.MySettings.settings;
+import static modtools.IntVars.*;
+import static modtools.ui.IntUI.topGroup;
 
 public class Frag extends Table {
-	public boolean keepFrag = settings.getBool("ShowMainMenuBackground", "true"), hideCont = false;
-	public int baseHeight = 0;
+	public boolean    hideCont   = false;
+	public int        baseHeight = 0;
 	public ScrollPane contPane;
 	Cell<?> cell;
 
@@ -40,7 +38,7 @@ public class Frag extends Table {
 			Content.all.forEach(cont -> {
 				if (cont == null || !cont.loadable()) return;
 				String localizedName = cont.localizedName();
-				var style = IntStyles.flatt;
+				var    style         = IntStyles.flatt;
 				// var style = Styles.cleart;
 				// Objects.requireNonNull(cont);
 				cont.btn = table.button(localizedName, style, cont::build).size(120, 40).get();
@@ -67,7 +65,7 @@ public class Frag extends Table {
 
 		var listener = new MoveListener(top, this) {
 			public void display(float x, float y) {
-				float mainWidth = main.getWidth(), mainHeight = main.getPrefHeight();
+				float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
 				float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
 				main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
 				main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);

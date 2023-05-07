@@ -20,8 +20,8 @@ public class IntStyles {
 	public static final ButtonStyle     clearb;
 	public static final Drawable        none = whiteui.tint(0f, 0f, 0f, 0.01f);
 
-
-	public static final LabelStyle myLabel;
+	/** 默认使用等宽字体，没有的话使用默认字体 */
+	public static final LabelStyle MOMO_Label;
 
 
 	/** Similar to flatToggle, but with a transparent base background. */
@@ -120,7 +120,7 @@ public class IntStyles {
 			down = over = Styles.flatOver;
 		}};
 
-		myLabel = new LabelStyle(Styles.defaultLabel) {{
+		MOMO_Label = new LabelStyle(Styles.defaultLabel) {{
 			font = MyFonts.MSYHMONO;
 		}};
 		if (Version.number <= 135) {

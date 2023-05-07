@@ -54,11 +54,7 @@ public class ShowUIList extends Content {
 		ui.cont.add(wrap).grow();
 		new Search((cont, text) -> {
 			if (!wrap.getChildren().isEmpty()) {
-				try {
-					pattern = Pattern.compile(text);
-				} catch (Exception ignored) {
-					pattern = null;
-				}
+				pattern = Tools.complieRegExpCatch(text);
 				return;
 				// tab.pane.getWidget().clear();
 			}

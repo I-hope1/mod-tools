@@ -1,21 +1,18 @@
 package modtools;
 
-import arc.*;
+import arc.Events;
 import arc.files.Fi;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
-import mindustry.content.*;
-import mindustry.game.EventType.ClientLoadEvent;
+import mindustry.game.EventType.*;
 import mindustry.mod.*;
-import mindustry.type.*;
-import mindustry.world.Block;
-import mindustry.world.blocks.production.GenericCrafter;
+import modtools.graphics.MyShaders;
 import modtools.ui.*;
-import modtools.utils.Tools;
+import modtools.utils.*;
 
-import static mindustry.Vars.ui;
-import static modtools.utils.MySettings.settings;
+import static mindustry.Vars.*;
+import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
 	public ModTools() {
@@ -25,8 +22,12 @@ public class ModTools extends Mod {
 		Tools.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
 			root = Vars.mods.getMod(ModTools.class).root;
-			loadReflect();
+			mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+			libs = root.child("libs");
+			if (loadLib("reflect-core", "ihope_lib.MyReflect", true)) MyReflect.load();
+			IntVars.hasDecomplier = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 
+			MyShaders.load();
 			return true;
 		});
 		Events.on(ClientLoadEvent.class, e -> {
@@ -34,6 +35,10 @@ public class ModTools extends Mod {
 				ui.showException(throwable);
 				return;
 			}
+			/* JSFunc.testElement(new DesignTable<>(new Table()) {{
+				template.image().size(42);
+			}}); */
+			// Time.runTask(100f, () -> JSFunc.testElement(new MyLabel("开始", IntStyles.myLabel)));
 
 			// texture.getTextureData();
 			// 加载字体
@@ -51,9 +56,9 @@ public class ModTools extends Mod {
 				cont.button("I see", dialog::hide).size(100f, 50f);
 				dialog.show();*/
 				//noinspection Convert2MethodRef
-				IntVars.load();
+				IntUI.load();
 			});
-			if (settings.getBool("ShowMainMenuBackground")) {
+			if (SETTINGS.getBool("ShowMainMenuBackground")) {
 				try {
 					Background.main();
 				} catch (Throwable ignored) {}
@@ -65,22 +70,20 @@ public class ModTools extends Mod {
 	public static ModClassLoader mainLoader;
 	public static Fi             root;
 	public static Throwable      throwable = null;
+	public static Fi             libs;
 
-	public static void loadReflect() {
-		mainLoader = (ModClassLoader) Vars.mods.mainLoader();
-
+	public static boolean loadLib(String fileName, String mainClassName, boolean showError) {
 		try {
 			// 没错误 证明已经加载
-			Class.forName("ihope_lib.MyReflect", false, mainLoader);
-			return;
+			Class.forName(mainClassName, false, mainLoader);
+			return true;
 		} catch (Exception ignored) {}
-		Log.info("Loaded Reflect.");
+		Log.info("Loading @.jar", fileName);
 		// 加载反射
 		try {
-			Fi sourceFi = Vars.mods.getMod(ModTools.class).root
-					.child("libs").child("lib.jar");
-			Log.info("load source fi: " + sourceFi);
-			Fi toFi = Vars.dataDirectory.child("tmp/mod-tools-lib.jar");
+			Fi sourceFi = libs.child(fileName + ".jar");
+			Log.info("Load source fi: " + sourceFi);
+			Fi toFi = Vars.dataDirectory.child("tmp/mod-tools-" + fileName + ".jar");
 			if (toFi.exists()) {
 				if (toFi.isDirectory()) {
 					toFi.deleteDirectory();
@@ -91,12 +94,13 @@ public class ModTools extends Mod {
 			sourceFi.copyTo(toFi);
 			ClassLoader loader = Vars.platform.loadJar(toFi, mainLoader);
 			mainLoader.addChild(loader);
-			Class.forName("ihope_lib.MyReflect", true, loader);
+			Class.forName(mainClassName, true, loader);
 			toFi.delete();
-			MyReflect.load();
+			return true;
 		} catch (Throwable e) {
-			throwable = e;
+			if (showError) throwable = e;
 			Log.err(e);
+			return false;
 		}
 	}
 	/*public static void test() {

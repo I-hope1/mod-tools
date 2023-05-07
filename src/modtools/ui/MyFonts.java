@@ -25,8 +25,9 @@ public class MyFonts {
 		FreeTypeFontGenerator generator = new FreeTypeFontGenerator(fontFi);
 		FreeTypeFontParameter parameter = new FreeTypeFontParameter() {{
 			size = 22;
-			shadowColor = Color.darkGray;
-			shadowOffsetY = 2;
+			// mono = true;
+			// shadowColor = Color.darkGray;
+			// shadowOffsetY = 2;
 			incremental = true;
 		}};
 		// final boolean[] generating = {false};

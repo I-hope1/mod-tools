@@ -51,9 +51,11 @@ public class EntityShow {
 		});
 	}
 
-	static IntMap<Integer>        idMap     = new IntMap<>();
-	static Seq<UnlockableContent> unitTypes = Vars.content.units().as(),
-			blocks                          = Vars.content.blocks().as();
+	static IntMap<Integer> idMap = new IntMap<>();
+
+	static Seq<UnlockableContent>
+			unitTypes = Vars.content.units().as(),
+			blocks    = Vars.content.blocks().as();
 
 	public static void rebuild() {
 		cont.y = cinfo.getPrefHeight();

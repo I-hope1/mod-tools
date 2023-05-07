@@ -21,6 +21,9 @@ public class MoveListener extends InputListener {
 		this.touch = touch;
 		touch.addListener(this);
 	}
+	public void remove() {
+		touch.removeListener(this);
+	}
 
 	//	public Cursor lastCursor;
 

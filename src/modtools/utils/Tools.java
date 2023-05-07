@@ -1,6 +1,12 @@
 package modtools.utils;
 
+import arc.Core;
+import arc.files.Fi;
 import arc.func.*;
+import arc.graphics.*;
+import arc.graphics.PixmapIO.PngWriter;
+import arc.graphics.g2d.*;
+import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.struct.Seq;
@@ -20,18 +26,22 @@ import java.util.jar.*;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.unsafe;
+import static mindustry.Vars.*;
 
 public class Tools {
 	public static boolean validPosInt(String text) {
 		return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
 	}
 
-	public static Pattern complieRegExp(String text) {
+	public static Pattern complieRegExpCatch(String text) {
 		try {
-			return Pattern.compile(text, Pattern.CASE_INSENSITIVE);
+			return complieRegExp(text);
 		} catch (Throwable e) {
 			return null;
 		}
+	}
+	public static Pattern complieRegExp(String text) {
+		return text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
 	}
 
 	public static boolean isNum(String text) {
@@ -39,6 +49,13 @@ public class Tools {
 			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text));
 		} catch (Throwable ignored) {
 			return false;
+		}
+	}
+	public static float asFloat(String text) {
+		try {
+			return Float.parseFloat(text);
+		} catch (Throwable e) {
+			return Float.NaN;
 		}
 	}
 	public static int asInt(String text) {
@@ -55,9 +72,10 @@ public class Tools {
 	public static Vec2 getAbsPos1(Element el) {
 		return el.localToStageCoordinates(Tmp.v1.set(el.getWidth() / -2f, el.getHeight() / -2f));
 	}
+	public static final Vec2 v1 = new Vec2();
 	public static Vec2 getAbsPos(Element el) {
-		if (true) return el.localToStageCoordinates(Tmp.v1.set(0, 0));
-		Vec2 vec2 = new Vec2(el.x, el.y);
+		if (true) return el.localToStageCoordinates(v1.set(0, 0));
+		Vec2 vec2 = Tmp.v1.set(el.x, el.y);
 		while (el.parent != null) {
 			el = el.parent;
 			vec2.add(el.x, el.y);
@@ -201,7 +219,7 @@ public class Tools {
 		// 如果存在 就获取包下的所有文件 包括目录
 		// 自定义过滤规则 如果可以循环(包含子目录) 或则是以.class结尾的文件(编译好的java类文件)
 		File[] dirfiles = dir.listFiles(file ->
-				                                (recursive && file.isDirectory()) || file.getName().endsWith(".class"));
+				(recursive && file.isDirectory()) || file.getName().endsWith(".class"));
 		// 循环所有文件
 		assert dirfiles != null;
 		for (File file : dirfiles) {
@@ -308,33 +326,57 @@ public class Tools {
 	public static long fieldOffset(boolean isStatic, Field f) {
 		return OS.isAndroid ? FieldUtils.getFieldOffset(f) : isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
 	}
-	public static void setFieldValue(Field f, Object obj, Object value) {
-		// Class<?> type = f.getType();
-		boolean isStatic = Modifier.isStatic(f.getModifiers());
-		Object  o        = isStatic ? f.getDeclaringClass() : obj;
-		long    offset   = fieldOffset(isStatic, f);
-		/*if (int.class.equals(type)) {
-			unsafe.putInt(o, offset, (int) value);
+	public static Object getFieldValue(Object o, long off, Class<?> type) {
+		if (int.class.equals(type)) {
+			return unsafe.getInt(o, off);
 		} else if (float.class.equals(type)) {
-			unsafe.putFloat(o, offset, (float) value);
+			return unsafe.getFloat(o, off);
 		} else if (double.class.equals(type)) {
-			unsafe.putDouble(o, offset, (double) value);
+			return unsafe.getDouble(o, off);
 		} else if (long.class.equals(type)) {
-			unsafe.putLong(o, offset, (long) value);
+			return unsafe.getLong(o, off);
 		} else if (char.class.equals(type)) {
-			unsafe.putChar(o, offset, (char) value);
+			return unsafe.getChar(o, off);
 		} else if (byte.class.equals(type)) {
-			unsafe.putByte(o, offset, (byte) value);
+			return unsafe.getByte(o, off);
 		} else if (short.class.equals(type)) {
-			unsafe.putShort(o, offset, (short) value);
+			return unsafe.getShort(o, off);
 		} else if (boolean.class.equals(type)) {
-			unsafe.putBoolean(o, offset, (boolean) value);
-		} else {*/
-		unsafe.putObject(o, offset, value);
+			return unsafe.getBoolean(o, off);
+		} else {
+			return unsafe.getObject(o, off);
+		}
+	}
+	public static void setFieldValue(Field f, Object obj, Object value) {
+		Class<?> type     = f.getType();
+		boolean  isStatic = Modifier.isStatic(f.getModifiers());
+		Object   o        = isStatic ? f.getDeclaringClass() : obj;
+		long     offset   = fieldOffset(isStatic, f);
+		setFieldValue(o, offset, value, type);
+	}
+	public static void setFieldValue(Object o, long off, Object value, Class<?> type) {
+		if (int.class.equals(type)) {
+			unsafe.putInt(o, off, ((Number) value).intValue());
+		} else if (float.class.equals(type)) {
+			unsafe.putFloat(o, off, ((Number) value).floatValue());
+		} else if (double.class.equals(type)) {
+			unsafe.putDouble(o, off, ((Number) value).doubleValue());
+		} else if (long.class.equals(type)) {
+			unsafe.putLong(o, off, ((Number) value).longValue());
+		} else if (char.class.equals(type)) {
+			unsafe.putChar(o, off, (char) value);
+		} else if (byte.class.equals(type)) {
+			unsafe.putByte(o, off, ((Number) value).byteValue());
+		} else if (short.class.equals(type)) {
+			unsafe.putShort(o, off, ((Number) value).shortValue());
+		} else if (boolean.class.equals(type)) {
+			unsafe.putBoolean(o, off, (boolean) value);
+		} else {
+			unsafe.putObject(o, off, value);
 			/*if (f.getType().isArray()) {
 				o = Arrays.copyOf((Object[]) o, Array.getLength(o));
 			}*/
-		// }
+		}
 	}
 
 	public static <T> T or(T t1, T t2) {
@@ -354,6 +396,7 @@ public class Tools {
 	public static <T> SR<T> sr(T value) {
 		return new SR<>(value);
 	}
+
 	public static boolean test(Pattern pattern, String text) {
 		return pattern == null || pattern.matcher(text).find();
 	}
@@ -361,8 +404,70 @@ public class Tools {
 	public static <T> void checknull(T t, Consumer<T> cons) {
 		if (t != null) cons.accept(t);
 	}
+	public static <T> void checknull(T t, Consumer<T> cons, Runnable notcons) {
+		if (t != null) cons.accept(t);
+		else notcons.run();
+	}
 	public static <T> void checknull(T t, Runnable run) {
 		if (t != null) run.run();
+	}
+
+	public static void quietScreenshot(Element element) {
+		screenshot(element, true, (region, pixmap) -> {
+			JSFunc.testElement(region);
+
+			Fi fi = screenshotDirectory.child(
+					Optional.ofNullable(element.name)
+							.orElseGet(() -> "" + Time.nanos()) + ".png");
+			// 将图片写入文件
+			PngWriter writer = new PngWriter((int) (pixmap.width * pixmap.height * 1.5f)); // Guess at deflated size.
+			try {
+				writer.setFlipY(true);
+				writer.write(fi, pixmap);
+			} catch (IOException ignored) {
+			} finally {
+				writer.dispose();
+			}
+			// PixmapIO.writePng(fi, potPixmap);
+			pixmap.dispose();
+
+			Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
+		});
+		// Time.runTask(30, w::hide);
+	}
+	public static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {
+		return screenshot(element, false, callback);
+	}
+	/** 使用ScreenUtils截图 */
+	public static TextureRegion screenshot(Element element, boolean clear, Cons2<TextureRegion, Pixmap> callback) {
+		int w = (int) element.getWidth(),
+				h = (int) element.getHeight();
+
+		// Draw.shader();
+		// 清空
+		if (clear) {
+			clearScreen();
+			element.draw();
+			Draw.flush();
+		}
+		// var trans = Draw.trans();
+		// trans.rotate(180);
+		// Draw.trans(new Mat(trans).scl(0.1f));
+		Vec2   vec2   = getAbsPos(element);
+		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h);
+		// pixmap = sr(new Pixmap(w, h)).cons(pixmap, Pixmap::draw).get();
+
+		// Draw.trans(trans);
+		// trans.rotate(-180);
+		TextureRegion textureRegion = new TextureRegion(new Texture(pixmap), 0, h, w, -h);
+		if (callback != null) callback.get(textureRegion, pixmap);
+		/* Core.scene.draw();
+		Draw.flush(); */
+		return textureRegion;
+	}
+	public static void clearScreen() {
+		Gl.clearColor(0, 0, 0, 0);
+		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
 	public static class SR<T> implements SRI<T> {
@@ -378,54 +483,84 @@ public class Tools {
 		}
 
 		/**
-		 * @param consumer 如果满足就执行
+		 * @param cons 如果满足就执行
 		 *
 		 * @throws RuntimeException 当执行后抛出
 		 */
-		public <R> SRI<T> isInstance(Class<R> cls, Consumer<R> consumer) {
+		public <R> SR<T> isInstance(Class<R> cls, Consumer<R> cons) {
 			if (cls.isInstance(value)) {
-				consumer.accept(cls.cast(value));
+				cons.accept(cls.cast(value));
 				throw new RuntimeException();
 			}
 			return this;
 		}
 
-		public SRI<T> cons(Consumer<T> consumer) {
-			consumer.accept(value);
+		public SR<T> cons(float f, BiConsumer<T, Float> cons) {
+			cons.accept(value, f);
 			return this;
 		}
 
+		public <R> SR<T> cons(R obj, BiConsumer<T, R> cons) {
+			cons.accept(value, obj);
+			return this;
+		}
+
+		public SR<T> cons(Consumer<T> cons) {
+			cons.accept(value);
+			return this;
+		}
+		public SR<T> ifRun(boolean b, Consumer<T> cons) {
+			if (b) cons.accept(value);
+			return this;
+		}
+
+		public boolean test(Predicate<T> predicate) {
+			return value != null && predicate.test(value);
+		}
 		public T get() {
 			return value;
 		}
+		public <R> R get(Function<T, R> func) {
+			return func.apply(value);
+		}
+
 	}
 
 	public interface SRI<T> {
-		SRI none = new SRI() {
+		SRI none = new SRI<>() {
 			public SRI reset(Function func) {
 				return this;
 			}
-
-			public SRI isInstance(Class cls, Consumer consumer) {
+			public SRI isInstance(Class cls, Consumer cons) {
 				return this;
 			}
-
-			public SRI cons(Consumer consumer) {
+			public SRI cons(Consumer cons) {
 				return this;
 			}
-
+			public SRI cons(Object obj, BiConsumer cons) {return this;}
+			public SRI cons(float obj, BiConsumer cons) {return this;}
+			public boolean test(Predicate predicate) {return false;}
 			public Object get() {
 				return null;
 			}
+			public Object get(Function function) {return null;}
 		};
 
 		SRI<T> reset(Function<T, T> func);
 
-		<R> SRI<T> isInstance(Class<R> cls, Consumer<R> consumer);
+		<R> SRI<T> isInstance(Class<R> cls, Consumer<R> cons);
 
-		SRI<T> cons(Consumer<T> consumer);
+		SRI<T> cons(Consumer<T> cons);
+
+		<R> SRI<T> cons(R obj, BiConsumer<T, R> cons);
+
+		SRI<T> cons(float f, BiConsumer<T, Float> cons);
+
+		boolean test(Predicate<T> predicate);
 
 		T get();
+
+		<R> R get(Function<T, R> func);
 	}
 
 

@@ -15,7 +15,7 @@ import mindustry.core.Version;
 import java.lang.reflect.Field;
 
 /** A multiple-line text input field, entirely based on {@link arc.scene.ui.TextField} */
-public class TextArea extends TextField {
+public class TextArea extends MyTextField {
 
 	/** Array storing starting and ending positions of each line. */
 	protected IntSeq linesBreak;
@@ -92,7 +92,7 @@ public class TextArea extends TextField {
 			float prefHeight = textHeight * prefRows;
 			if (style.background != null) {
 				prefHeight = Math.max(prefHeight + style.background.getBottomHeight() + style.background.getTopHeight(),
-				                      style.background.getMinHeight());
+						style.background.getMinHeight());
 			}
 			return prefHeight;
 		}
@@ -215,7 +215,7 @@ public class TextArea extends TextField {
 				float selectionWidth = glyphPositions.get(end) - glyphPositions.get(start);
 
 				selection.draw(x + selectionX + fontOffset, y - textHeight - font.getDescent() - offsetY, selectionWidth,
-				               font.getLineHeight());
+						font.getLineHeight());
 			}
 
 			offsetY += font.getLineHeight();
@@ -240,15 +240,16 @@ public class TextArea extends TextField {
 		float textOffset = cursor >= glyphPositions.size || cursorLine * 2 >= linesBreak.size ? 0
 				: glyphPositions.get(cursor) - glyphPositions.get(linesBreak.items[cursorLine * 2]);
 		cursorPatch.draw(x + textOffset + fontOffset + font.getData().cursorX,
-		                 y - font.getDescent() / 2 - (cursorLine - firstLineShowing + 1) * font.getLineHeight(), cursorPatch.getMinWidth(),
-		                 font.getLineHeight());
+				y - font.getDescent() / 2 - (cursorLine - firstLineShowing + 1) * font.getLineHeight(), cursorPatch.getMinWidth(),
+				font.getLineHeight());
 	}
 
 	@Override
 	protected void calculateOffsets() {
 		super.calculateOffsets();
-		if (!this.text.equals(lastText)) {
-			this.lastText = text;
+		String s = text.toString();
+		if (!s.equals(lastText)) {
+			this.lastText = s;
 			Font font = style.font;
 			float maxWidthLine = this.getWidth()
 			                     - (style.background != null ? style.background.getLeftWidth() + style.background.getRightWidth() : 0);

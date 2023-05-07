@@ -1,31 +1,31 @@
 package modtools.ui.components.linstener;
 
-import arc.Core;
-import arc.Graphics;
+import arc.*;
 import arc.Graphics.Cursor;
 import arc.Graphics.Cursor.SystemCursor;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.event.InputEvent;
-import arc.scene.event.InputListener;
+import arc.scene.event.*;
 import arc.scene.ui.layout.Scl;
 import ihope_lib.MyReflect;
 
-public class SclLisetener extends InputListener {
-	public boolean disabled0, disabled1;
-	private boolean isDisabled() {
+public class SclListener extends ClickListener {
+	public static Element fireElement;
+	public        boolean disabled0, disabled1;
+	protected boolean isDisabled() {
 		return disabled0 || disabled1;
 	}
-	public float   offset = 10;
-	public Element bind;
-	public float   defWidth, defHeight, defX, defY, minW, minH;
+	public float offset = 10;
+	public float defWidth, defHeight, defX, defY, minW, minH;
 
-	public SclLisetener(Element element, float minW, float minH) {
+	public final Element bind;
+
+	public SclListener(Element element, float minW, float minH) {
 		if (element == null) throw new IllegalArgumentException("element is null");
 		bind = element;
-		bind.addListener(this);
+		bind.addCaptureListener(this);
 		set(minW, minH);
 	}
 
@@ -42,7 +42,7 @@ public class SclLisetener extends InputListener {
 		right = Math.abs(x - bind.getWidth()) < offset;
 		bottom = Math.abs(y) < offset;
 		top = Math.abs(y - bind.getHeight()) < offset;
-		return left || right || bottom || top;
+		return (left || right || bottom || top) && !isDisabled();
 	}
 
 	public Vec2         last   = new Vec2();
@@ -64,6 +64,7 @@ public class SclLisetener extends InputListener {
 			defHeight = bind.getHeight();
 			defX = bind.x;
 			defY = bind.y;
+			fireElement = event.listenerActor;
 			return true;
 		}
 		return false;
@@ -76,7 +77,6 @@ public class SclLisetener extends InputListener {
 				: top || bottom ? SystemCursor.verticalResize
 				: SystemCursor.arrow;
 	}
-	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		if (isDisabled()) return;
 		scling = true;
@@ -116,35 +116,66 @@ public class SclLisetener extends InputListener {
 		parent.addChildAt(index, bind);*/
 	}
 
-	@Override
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		//		Log.info("end");
 		super.touchUp(event, x, y, pointer, button);
 		change.set(0, 0);
 		scling = false;
 		defWidth = defHeight = defX = defY = -1;
+		fireElement = null;
+		event.cancel();
 	}
 
-	@Override
-	public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
-		storeCursor();
-	}
+	/* public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+		// storeCursor();
+		super.enter(event, x, y, pointer, fromActor);
+		setCursor(event, x, y);
+	} */
 	private void storeCursor() {
 		if (lastCursor != null) return;
 		try {
 			lastCursor = MyReflect.getValue(Core.graphics, Graphics.class, "lastCursor");
 		} catch (Throwable ignored) {}
 	}
-	@Override
+
 	public boolean mouseMoved(InputEvent event, float x, float y) {
 		if (isDisabled()) return false;
-		storeCursor();
-		if (valid(x, y)) {
-			Core.graphics.cursor(getCursor());
-		} else {
-			restoreCursor();
-		}
+
+		/* if (!(event.listenerActor instanceof WatchWindow) && event.listenerActor instanceof Window) {
+			watch = JSFunc.watch(watch).clearWatch()
+					.watch("la", event.listenerActor, Tools::clName)
+					.watch("ta", event.targetActor, Tools::clName)
+					.show();
+		} */
+		setCursor(event, x, y);
+		/* if (!withoutListener(event)) {
+			event.listenerActor.fire(new InputEvent() {{
+				type = InputEventType.enter;
+				pointer = -1;
+			}});
+		} */
 		return false;
+	}
+	private void setCursor(InputEvent event, float x, float y) {
+		boolean valid = valid(x, y);
+		if (event.pointer == -1 && valid) {
+			Core.graphics.cursor(getCursor());
+		} else if (!valid) {
+			/* checknull(event.targetActor, el0 -> {
+				Element el = el0;
+				while (!el.getListeners().any() && el != bind) el = el.parent;
+				InputEvent event1 = new InputEvent();
+				event1.targetActor = event1.listenerActor = el;
+				event1.type = InputEventType.enter;
+				event1.pointer = -1;
+				el.getListeners().each(l -> l.handle(event1));
+			}); */
+		} else {
+			Core.graphics.restoreCursor();
+		}
+	}
+	private boolean withoutListener(InputEvent event) {
+		return event.targetActor == bind;
 	}
 	private boolean restoreCursor() {
 		/*if (lastCursor == null) {
@@ -162,7 +193,11 @@ public class SclLisetener extends InputListener {
 	}
 	@Override
 	public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
-		if (!restoreCursor()) Core.graphics.restoreCursor();
+		// if (!restoreCursor()) Core.graphics.restoreCursor();
+		super.exit(event, x, y, pointer, toActor);
+		if (pointer == -1) {
+			Core.graphics.restoreCursor();
+		}
 	}
 
 }

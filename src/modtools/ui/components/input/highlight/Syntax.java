@@ -1,22 +1,26 @@
 package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
+import arc.math.geom.Vec2;
 import arc.struct.*;
+import arc.util.Tmp;
 import mindustry.graphics.Pal;
-import modtools.ui.components.input.area.TextAreaTable;
-import modtools.ui.components.input.area.TextAreaTable.MyTextArea;
+import modtools.ui.components.input.area.TextAreaTab;
+import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 
+/** 用于控制渲染，当然你也可以解析文本 */
 public class Syntax {
 
 	public static final Color
-			stringC     = new Color(0xce9178FF),
-			keywordC    = new Color(0x569cd6FF),
-			numberC     = new Color(0xb5cea8FF),
-			commentC    = new Color(0x6a9955FF),
-			bracketsC   = new Color(0xffd704FF),
-			operatCharC = Pal.accentBack,
-			functionsC  = Color.sky,//Color.valueOf("#ae81ff")
-			objectsC    = new Color(0x66d9efFF);
+	 c_string      = new Color(0xce9178FF),
+	 c_keyword     = new Color(0x569cd6FF),
+	 c_number      = new Color(0xb5cea8FF),
+	 c_comment     = new Color(0x6a9955FF),
+	 c_brackets    = new Color(0xffd704FF),
+	 c_operateChar = Pal.accentBack,
+	 c_functions   = Color.sky,//Color.valueOf("#ae81ff")
+	 c_objects     = new Color(0x66d9efFF),
+	 c_map         = new Color(0xadde68FF);
 	/*public static class Node {
 		public boolean has;
 		public Node parent;
@@ -45,9 +49,12 @@ public class Syntax {
 	}*/
 	// public static JsonReader reader = new JsonReader();
 
-	public final TextAreaTable areaTable;
+	public TextAreaTab areaTable;
+	public DrawToken   drawToken;
 
-	public Syntax(TextAreaTable table) {
+	public Syntax(TextAreaTab table) {
+		/* 为null时文本解析，不渲染 */
+		if (table == null) return;
 		areaTable = table;
 		area = areaTable.getArea();
 	}
@@ -59,18 +66,33 @@ public class Syntax {
 
 	public boolean isWordBreak(char c) {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90)
-		         || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
-		         || c == '$' || c == '_');
+						 || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
+						 || c == '$' || c == '_');
 	}
 
 	public boolean isWhitespace(char ch) {
 		return !Character.isWhitespace(ch);
 	}
 
+	/** 用于文本解析 */
+	public interface DrawDefCons {
+		void get(int start, int max);
+	}
+	public DrawDefCons drawDefCons;
 	public void drawDefText(int start, int max) {
-		area.font.setColor(defalutColor);
+		drawText0(area == null ? null : Tmp.c1.set(defaultColor).mulA(areaTable.parentAlpha()),
+		 start, max);
+	}
+	public void drawText0(Color color, int start, int max) {
+		if (start == -1) return;
+		if (area == null) {
+			if (drawDefCons != null) drawDefCons.get(start, max);
+			return;
+		}
+		area.font.setColor(color);
 		area.drawMultiText(displayText, start, max);
 	}
+
 
 	void reset() {
 		if (cTask != null) {
@@ -80,7 +102,7 @@ public class Syntax {
 		cTask = null;
 	}
 
-	public void highlightingDraw(String displayText) {
+	public void highlightingDraw(CharSequence displayText) {
 		this.displayText = displayText;
 		cTask = null;
 		reset();
@@ -134,11 +156,19 @@ public class Syntax {
 		return i + 1;
 	}
 
+	protected Vec2 getCursorPos() {
+		return getRelativePos(area.cursor);
+	}
 
-	public MyTextArea area;
-	public String     displayText;
+	protected Vec2 getRelativePos(int pos) {
+		return Tmp.v3.set(area.getRelativeX(pos), area.getRelativeY(pos));
+	}
 
-	public Color defalutColor = Color.white;
+
+	public MyTextArea   area;
+	public CharSequence displayText;
+
+	public Color defaultColor = Color.white;
 	char c, lastChar;
 	int len;
 
@@ -151,13 +181,13 @@ public class Syntax {
 	 */
 	public DrawTask[] taskArr = {};
 
-	class DrawToken extends DrawTask {
+	public class DrawToken extends DrawTask {
 		// IntMap<?>[] total;
 		// IntMap<?>[] current;
-		boolean begin = false, finished;
-		TokenDraw[] tokenDraws;
-		int         lastTokenIndex = -1;
-		String      lastToken, token;
+		public boolean begin = false, finished;
+		public TokenDraw[] tokenDraws;
+		public int         lastTokenIndex = -1, currentIndex = -1;
+		public CharSequence lastToken, token;
 
 		public DrawToken(TokenDraw... tokenDraws) {
 			super(new Color());
@@ -183,9 +213,14 @@ public class Syntax {
 		}
 
 
-		void setColor(String token) {
+		void setColor(int from, int to) {
+			currentIndex = to;
+			setColor(displayText.subSequence(from, to));
+		}
+
+		void setColor(CharSequence token) {
 			this.token = token;
-			color.set(defalutColor);
+			color.set(defaultColor);
 			// Log.info(token);
 			Color newColor;
 			for (TokenDraw draw : tokenDraws) {
@@ -210,20 +245,20 @@ public class Syntax {
 			if (++i < len) {
 				/* 判断下一个index是否越界 */
 				if (isWordBreak(i)) {
-					setColor(displayText.substring(lastIndex, i));
+					setColor(lastIndex, i);
 					return finished;
 				}
 				return true;
 			} else {
-				setColor(displayText.substring(lastIndex));
+				setColor(lastIndex, displayText.length());
 				return finished;
 			}
 		}
 	}
 
-	class DrawSymbol extends DrawTask {
-		final IntSet symbols;
-		Character lastSymbol;
+	public class DrawSymbol extends DrawTask {
+		public final IntSet symbols;
+		public       char   lastSymbol;
 
 		public DrawSymbol(IntSet map, Color color) {
 			super(color);
@@ -235,7 +270,7 @@ public class Syntax {
 		}
 		void init() {
 			super.init();
-			lastSymbol = null;
+			lastSymbol = '\u0000';
 		}
 
 		boolean draw(int i) {
@@ -248,7 +283,7 @@ public class Syntax {
 		}
 	}
 
-	class DrawComment extends DrawTask {
+	public class DrawComment extends DrawTask {
 
 		public DrawComment(Color color) {
 			super(color, true);
@@ -288,11 +323,11 @@ public class Syntax {
 	}
 
 	public static IntMap<Boolean> chars = IntMap.of(
-			'\'', false,
-			'"', false,
-			'`', true);
+	 '\'', false,
+	 '"', false,
+	 '`', true);
 
-	class DrawString extends DrawTask {
+	public class DrawString extends DrawTask {
 		public DrawString(Color color) {
 			this(color, chars);
 		}
@@ -337,7 +372,7 @@ public class Syntax {
 	}
 
 
-	interface TokenDraw {
+	public interface TokenDraw {
 		/**
 		 * @return Color 如果为null，则不渲染
 		 **/
@@ -345,9 +380,9 @@ public class Syntax {
 	}
 
 	public abstract class DrawTask {
-		final Color color;
-		boolean crazy;
-		int     lastIndex;
+		public final Color   color;
+		public       boolean crazy;
+		public       int     lastIndex;
 
 		public DrawTask(Color color, boolean crazy) {
 			this.color = color;
@@ -376,9 +411,7 @@ public class Syntax {
 		abstract boolean draw(int i);
 
 		public void drawText(int i) {
-			if (lastIndex == -1) return;
-			area.font.setColor(color);
-			area.drawMultiText(displayText, lastIndex, i + 1);
+			drawText0(color, lastIndex, i + 1);
 		}
 
 		public boolean nextIs(int i, char c) {

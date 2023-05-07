@@ -21,18 +21,27 @@ public class FilterTable<E> extends LimitTable {
 	}
 	ObjectMap<E, Seq<BindCell>> map;
 	private Seq<BindCell> current;
+	private Cons<Element> cons;
 
 	public void bind(E name) {
 		if (map == null) map = new ObjectMap<>();
 		current = map.get(name, Seq::new);
 	}
-
+	public void listener(Cons<Element> cons) {
+		this.cons = cons;
+	}
+	public void clear() {
+		super.clear();
+		if (map != null) map.clear();
+		unbind();
+	}
 	public void unbind() {
 		current = null;
 	}
 
 	public <T extends Element> Cell<T> add(T element) {
 		Cell<T> cell = super.add(element);
+		if (cons != null) cons.get(element);
 		if (current != null) current.add(new BindCell(cell));
 		return cell;
 	}
@@ -53,7 +62,7 @@ public class FilterTable<E> extends LimitTable {
 		if (map == null) return;
 		map.each((name, seq) -> {
 			seq.each(boolf.get(name) ?
-					         BindCell::build : BindCell::remove);
+					BindCell::build : BindCell::remove);
 		});
 	}
 }

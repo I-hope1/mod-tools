@@ -1,7 +1,7 @@
 package modtools.ui.content.ui;
 
 import arc.Core;
-import arc.func.Cons;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
@@ -11,14 +11,16 @@ import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
+import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
-import mindustry.gen.Icon;
-import mindustry.graphics.*;
+import mindustry.gen.*;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.TopGroup.Drawer;
+import modtools.ui.TopGroup.FocusTask;
+import modtools.ui.components.ListDialog.ModifiedLabel;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.input.MyLabel;
@@ -28,18 +30,19 @@ import modtools.utils.*;
 
 import java.util.regex.*;
 
-import static modtools.ui.Contents.elementShow;
+import static modtools.ui.Contents.reviewElement;
 import static modtools.ui.IntStyles.*;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.getAbsPos;
+import static modtools.utils.Tools.*;
 
 public class ReviewElement extends Content {
+	private static final float duration = 0.1f;
 	public ReviewElement() {
 		super("reviewElement");
 	}
 
 	public static final boolean    hideSelf  = true;
-	public static final LabelStyle skyMyFont = new LabelStyle(MyFonts.MSYHMONO, Color.sky);
+	public static final LabelStyle skyMyFont = new LabelStyle(MyFonts.def, Color.sky);
 
 
 	public static Element             focus;
@@ -48,36 +51,34 @@ public class ReviewElement extends Content {
 	 */
 	public static Table               focusFrom;
 	public static ReviewElementWindow focusWindow;
-	public static Color               focusColor = Color.blue.cpy().a(0.4f);
+	public static Color               focusColor = DEF_FOCUS_COLOR;
 
-	public static final Color  maskColor = Color.black.cpy().a(0.3f);
-	public static final Drawer drawer    = (selecting, selected) -> {
-		if (!selecting) return;
-		/* 绘制遮罩 */
-		Draw.color(maskColor);
-		Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
-
-		/* 绘制选择提示 */
-		Draw.z(Layer.fogOfWar);
-		drawFocus(selected);
-	};
+	public static final Color maskColor = DEF_MASK_COLOR;
 
 	public void load() {
-		topGroup.drawSeq.add(() -> {
-			if (focus == null) return true;
+		topGroup.focusOnElement(new FocusTask(maskColor, focusColor) {
+			{drawSlightly = true;}
 
-			Vec2 vec2  = focus.localToStageCoordinates(Tmp.v2.set(0, 0));
-			Vec2 mouse = Core.input.mouse();
-			Draw.color(ColorFul.color);
-			Lines.stroke(4f);
-			Lines.line(mouse.x, mouse.y, vec2.x + focus.getWidth() / 2f, vec2.y + focus.getHeight() / 2f);
+			public void backDraw() {
+				if (focus != null) drawFocus(focus);
+			}
+			public void elemDraw() {
+			}
+			public void drawLine() {
+				if (focus == null) return;
 
-			return true;
-		});
-		topGroup.backDrawSeq.add(() -> {
-			if (focus != null) drawFocus(focus);
-			return true;
-			// Vec2 vec2 = Core.camera.unproject(focusFrom.x, focusFrom.y);
+				Vec2 vec2  = focus.localToStageCoordinates(Tmp.v2.set(0, 0));
+				Vec2 mouse = Core.input.mouse();
+				Draw.color(ColorFul.color);
+				Lines.stroke(4f);
+				Lines.line(mouse.x, mouse.y, vec2.x + focus.getWidth() / 2f, vec2.y + focus.getHeight() / 2f);
+			}
+			public void endDraw() {
+				if (topGroup.isSelecting()) super.endDraw();
+				drawLine();
+				elem = topGroup.getSelected();
+				if (elem != null) super.elemDraw();
+			}
 		});
 		// frag.update(() -> frag.toFront());
 
@@ -87,19 +88,10 @@ public class ReviewElement extends Content {
 		TopGroup.searchBlackList.add(btn);
 		TopGroup.classBlackList.add(ReviewElementWindow.class);
 	}
-	private static void drawFocus(Element elem) {
-		Draw.color(focusColor);
-		Vec2 vec2 = getAbsPos(elem);
-		Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
-
-		Draw.color(Pal.accent);
-		Lines.stroke(1f);
-		Drawf.dashRectBasic(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
-	}
 
 	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
 	public void build() {
-		topGroup.requestSelectElem(drawer, callback);
+		topGroup.requestSelectElem(null, callback);
 	}
 
 
@@ -117,7 +109,7 @@ public class ReviewElement extends Content {
 		Pattern pattern;
 
 		public ReviewElementWindow() {
-			super(elementShow.localizedName(), 0, 160, true);
+			super(reviewElement.localizedName(), 20, 160, true);
 			getCell(cont).maxWidth(Core.graphics.getWidth());
 
 			name = "ReviewElementWindow";
@@ -127,25 +119,27 @@ public class ReviewElement extends Content {
 			cont.table(t -> {
 				Button[] bs = {null};
 				bs[0] = t.button("@reviewElement.parent", Icon.up, () -> {
-					Runnable go = () -> {
-						hide();
-						var window = new ReviewElementWindow();
-						window.pattern = pattern;
-						// Log.info(element.parent);
-						window.show(element.parent);
-						window.setPosition(x, y);
-						window.setSize(width, height);
-					};
-					if (element.parent == Core.scene.root) {
-						Vec2 vec2 = bs[0].localToStageCoordinates(new Vec2(0, 0));
-						IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
-					} else go.run();
-				}).disabled(b -> element == null || element.parent == null).width(120).get();
+					 Runnable go = () -> {
+						 var window = new ReviewElementWindow();
+						 // Log.info(element.parent);
+						 window.setPosition(x, y);
+						 window.setSize(width, height);
+						 window.pattern = pattern;
+						 window.show(element.parent);
+						 hide();
+					 };
+					 if (element.parent == Core.scene.root) {
+						 Vec2 vec2 = getAbsPos(bs[0]);
+						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
+					 } else go.run();
+				 })
+				 .disabled(b -> element == null || element.parent == null)
+				 .width(120).get();
 				t.button(Icon.copy, clearNonei, () -> {
 					var window = new ReviewElementWindow();
 					window.pattern = pattern;
-					window.show(element);
 					window.setSize(width, height);
+					window.show(element);
 				}).padLeft(4f).padRight(4f);
 				t.button(Icon.refresh, clearNonei, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
 				t.table(search -> {
@@ -173,7 +167,7 @@ public class ReviewElement extends Content {
 			pane.clearChildren();
 
 			if (element == null) return;
-			Pattern pattern = Tools.complieRegExpCatch(text);
+			Pattern pattern = Tools.compileRegExpCatch(text);
 			rebuild(element, pattern);
 		}
 
@@ -182,33 +176,33 @@ public class ReviewElement extends Content {
 
 			if (element == null) return;
 			this.pattern = pattern;
-			build(element, pane, pattern);
+			build(element, pane);
 
 			pane.row();
-			pane.image().color(Pal.accent).growX().padTop(10).padBottom(10).row();
+			pane.image().color(Pal.accent).growX().padTop(8).padBottom(8).row();
 			// highlightShowMultiRow(pane, pattern, element + "");
 		}
 
 		/** 结构： Label，Image（下划线） */
-		public void highlightShowMultiRow(Table table, Pattern pattern, String text) {
+		public void highlightShowMultiRow(Table table, String text) {
 			if (pattern == null) {
-				table.add(new MyLabel(text, MOMO_Label)).growX().left().color(Pal.accent).row();
-				table.image().color(JSFunc.underline).growX().colspan(2).row();
+				table.add(new MyLabel(text, MOMO_LabelStyle)).growX().left().color(Pal.accent).row();
+				table.image().color(JSFunc.c_underline).growX().colspan(2).row();
 				return;
 			}
 			table.table(t -> {
 				t.left().defaults().left();
-				for (var line : text.split("\n")) {
+				for (var line : text.split("\\n")) {
 					highlightShow(t, pattern, line);
 					t.row();
 				}
 			}).growX().left().row();
-			table.image().color(JSFunc.underline).growX().colspan(2).row();
+			table.image().color(JSFunc.c_underline).growX().colspan(2).row();
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(text, MOMO_Label).color(Pal.accent);
+				table.add(text, MOMO_LabelStyle).color(Pal.accent);
 				return;
 			}
 			Matcher matcher = pattern.matcher(text);
@@ -233,53 +227,33 @@ public class ReviewElement extends Content {
 					});
 				}
 				if (text.length() - lastIndex > 0)
-					t.add(text.substring(lastIndex), MOMO_Label).color(Pal.accent);
+					t.add(text.substring(lastIndex), MOMO_LabelStyle).color(Pal.accent);
 			});
 		}
-		public void build(Element element, Table table, Pattern pattern) {
-			if (hideSelf) {
-				if (element instanceof ReviewElementWindow) {
-					table.add("----" + name + "-----", MOMO_Label).row();
-					return;
-				}
-				/*if (pane.getClass() == element.getClass()) {
-					table.add("----" + name + "$pane-----", IntStyles.myLabel).row();
-					return;
-				}*/
+		public void build(Element element, Table table) {
+			if (element == null) throw new IllegalArgumentException("element is null");
+			if (hideSelf && element instanceof ReviewElementWindow) {
+				table.add("----" + name + "-----", MOMO_LabelStyle).row();
+				return;
 			}
 			table.left().defaults().left().growX();
 
-			try {
-				table.add(new MyWrapTable(this, element, pattern));
-			} catch (Exception e) {
-				//				Vars.ui.showException(e);
-				Log.err(e);
-			}
+			Core.app.post(() -> {
+				try {
+					table.add(new MyWrapTable(this, element));
+				} catch (Exception e) {
+					Log.err(e);
+				}
 
-			table.row();
+				table.row();
+			});
 		}
 
 		public void show(Element element) {
 			this.element = element;
 			((ScrollPane) pane.parent).setScrollY(0);
-			IntVars.async(() -> {
-				rebuild(element, "");
-			}, this::show);
-			// 不知道为什么，这样就可以显示全面
-			// Vars.ui.showInfoFade("[clear]额");
-
-			//			Vars.ui.loadSync();
-			//			Time.runTask(1, () -> {
-				/*int i = 0;
-				String prefix = "temp";
-				while (ScriptableObject.hasProperty(tester.scope, prefix + i)) {
-					i++;
-				}*/
-			//				tester.put(prefix + i, "ikzak");
-			//			});
-			/*Time.runTask(1, () -> {
-				for (int i = 0; i < 1E6; i++) ;
-			});*/
+			IntVars.async(() -> rebuild(element, pattern),
+			 this::show);
 		}
 
 		public String toString() {
@@ -290,7 +264,7 @@ public class ReviewElement extends Content {
 		public Element hit(float x, float y, boolean touchable) {
 			Element elem = super.hit(x, y, touchable);
 			if (elem != null && elem.isDescendantOf(this)) {
-				focusWindow = this;
+				frontWindow = this;
 			}
 			return elem;
 		}
@@ -308,105 +282,119 @@ public class ReviewElement extends Content {
 		private final Element element;
 		/** Group的子元素数量 */
 		// private final ReviewElementWindow window;
-		public MyWrapTable(ReviewElementWindow window, Element element, Pattern pattern) {
-			super(wrap -> {
-				// ((ScrollPane) pane.parent).setScrollingDisabled(true, true);
-				int childIndex;
-				/* 用于添加侦听器 */
-				if (element instanceof Group) {
-					/* 占位符 */
-					ImageButton button;
-					int         size     = 32;
-					var         children = ((Group) element).getChildren();
-					wrap.add(button = new ImageButton(Icon.rightOpen, Styles.clearNonei))
-							.size(size)//.marginLeft(-size).marginRight(-size)
-							.disabled(__ -> children.isEmpty());
-					// button.translation.set(button.getWidth() / 2f, button.getHeight() / 2f);
-					childIndex = 1;
-					window.highlightShowMultiRow(wrap, pattern, element == Core.scene.root ? "ROOT"
-							: ReviewElement.getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
-					wrap.image().growY().left()
-							.update(t -> t.color.set(ReviewElement.focusFrom == wrap ? ColorFul.color : Color.darkGray));
-					wrap.defaults().growX();
-					wrap.add(new LimitTable(t -> {
+		public MyWrapTable(ReviewElementWindow window, Element element) {
+			this.element = element;
+			/* 用于下面的侦听器  */
+			int childIndex;
+			/* 用于添加侦听器 */
+			if (element instanceof Group group) {
+				/* 占位符 */
+				ImageButton  button   = new ImageButton(Icon.rightOpen, Styles.clearNonei);
+				int          size     = 32;
+				Seq<Element> children = group.getChildren();
+				add(button).size(size).disabled(__ -> children.isEmpty());
+				childIndex = 1;
+				window.highlightShowMultiRow(this, element == Core.scene.root ? "ROOT"
+				 : ReviewElement.getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
+				image().growY().left()
+				 .update(t -> t.color.set(ReviewElement.focusFrom == this ? ColorFul.color : Color.darkGray));
+				defaults().growX();
+				add(new LimitTable(t -> {
 						/*if (children.isEmpty()) {
 							return;
 						}*/
-						// t.marginLeft(size / 4f);
-						Table table1 = new Table();
-						Runnable rebuild = () -> {
-							table1.clearChildren();
-							for (var child : children) {
-								window.build(child, table1, pattern);
+					// t.marginLeft(size / 4f);
+					Table table1 = new Table();
+					Runnable rebuild = () -> {
+						table1.clearChildren();
+						for (var child : children) {
+							if (child == null) continue;
+							window.build(child, table1);
+						}
+					};
+					rebuild.run();
+					Cell<?>         _cell            = t.add(table1).grow();
+					final boolean[] checked          = {!children.isEmpty() && children.size < 20};
+					int[]           lastChildrenSize = {children.size};
+					button.clicked(() -> checked[0] = !checked[0]);
+					Image image = button.getImage();
+					button.update(() -> {
+						button.setOrigin(Align.center);
+						if (checked[0]) {
+							if (lastChildrenSize[0] != children.size) {
+								lastChildrenSize[0] = children.size;
+								rebuild.run();
 							}
-						};
-						rebuild.run();
-						Cell<?>         _cell            = t.add(table1).grow();
-						final boolean[] checked          = {!children.isEmpty() && children.size < 20};
-						int[]           lastChildrenSize = {children.size};
-						button.clicked(() -> checked[0] = !checked[0]);
-						Image image = button.getImage();
-						button.update(() -> {
-							button.setOrigin(Align.center);
-							if (checked[0]) {
-								if (lastChildrenSize[0] != children.size) {
-									lastChildrenSize[0] = children.size;
-									rebuild.run();
-								}
-								image.actions(Actions.rotateTo(-90, 0.1f));
-								_cell.setElement(table1);
-							} else {
-								image.actions(Actions.rotateTo(0, 0.1f));
-								_cell.clearElement();
-							}
-						});
-					})).left();
-					// Log.info(wrap);
-				} else if (element instanceof Image) {
-					childIndex = 0;
-					wrap.table(p0 -> {
-						// Tooltip tooltip = new Tooltip(t -> t.image(((Image) element).getDrawable())) ;
-						// tooltip.allowMobile = true;
-						// p0.addListener(tooltip);
-						p0.table(Window.myPane, p -> {
-							try {
-								int   size = 32;
-								float mul  = element.getHeight() / element.getWidth();
-								p.add(new Image(((Image) element).getDrawable())).color(element.color)
-										.size(size, size * mul);
-							} catch (Throwable e) {
-								p.add("空图像").labelAlign(Align.left);
-							}
-						});
-						// 用于补位
-						p0.add().growX();
-					}).growX().get();
-				} else {
-					wrap.defaults().growX();
-					childIndex = 0;
-					window.highlightShowMultiRow(wrap, pattern, String.valueOf(element));
-				}
-				// JSFunc.addStoreButton(wrap, "element", () -> element);
-				Element _elem = wrap.getChildren().get(childIndex);
-				Runnable copy = () -> {
-					Contents.tester.put(Core.input.mouse(), element);
-				};
-				IntUI.addShowMenuListener
-						(_elem, new MenuList(Icon.copy, "@jsfunc.store_as_js_var2", copy),
-								new ConfirmList(Icon.trash, "@clear", "@confirm.remove", () -> element.remove()),
-								new MenuList(Icon.copy, "@copy.path", () -> {
-									JSFunc.copyText(getPath(element));
-								}),
-								new MenuList(Icon.fileImage, "@reviewElement.screenshot", () -> {
-									Tools.quietScreenshot(element);
-								}),
-								new MenuList(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
-								new MenuList(Icon.info, "@details", () -> JSFunc.showInfo(element))
-						);
-				IntUI.doubleClick(_elem, () -> {}, copy);
-				wrap.touchable = Touchable.enabled;
-			});
-			this.element = element;
+							image.actions(Actions.rotateTo(-90, duration));
+							_cell.setElement(table1);
+						} else {
+							image.actions(Actions.rotateTo(0, duration));
+							_cell.clearElement();
+						}
+					});
+				})).left();
+				// Log.info(wrap);
+			} else if (element instanceof Image img) {
+				childIndex = 0;
+				table(p0 -> {
+					// Tooltip tooltip = new Tooltip(t -> t.image(((Image) element).getDrawable())) ;
+					// tooltip.allowMobile = true;
+					// p0.addListener(tooltip);
+					p0.table(Window.myPane, p -> {
+						try {
+							int   size = 32;
+							float w    = Math.max(1, element.getWidth());
+							float mul  = element.getHeight() / w;
+							// float mul    = element.getHeight() / element.getHeight();
+							p.add(new Image(img.getDrawable()))
+							 .color(element.color)
+							 .size(size, size * mul);
+						} catch (Throwable e) {
+							p.add("空图像").labelAlign(Align.left);
+						}
+					});
+					// 用于补位
+					p0.add().growX();
+				}).growX().get();
+			} else {
+				defaults().growX();
+				childIndex = 0;
+				window.highlightShowMultiRow(this, String.valueOf(element));
+			}
+			// JSFunc.addStoreButton(wrap, "element", () -> element);
+			Element  _elem = getChildren().get(childIndex);
+			MenuList list  = copyAsJSMenu(null, () -> element);
+			IntUI.addShowMenuListener(_elem, () -> sr(Seq.with(
+			 list,
+			 ConfirmList.with(Icon.trash, "@clear", "@confirm.remove", () -> element.remove()),
+			 MenuList.with(Icon.copy, "@copy.path", () -> {
+				 JSFunc.copyText(getPath(element));
+			 }),
+			 MenuList.with(Icon.fileImage, "@reviewElement.screenshot", () -> {
+				 Tools.quietScreenshot(element);
+			 }),
+			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
+			 MenuList.with(Icon.info, "新窗口", () -> new ReviewElementWindow().show(element)),
+			 MenuList.with(Icon.info, "@details", () -> JSFunc.showInfo(element))
+			)).ifRun(element instanceof Table, seq -> seq.add(
+			 MenuList.with(Icon.waves, "cells", () -> {
+				 JSFunc.dialog(d -> {
+					 d.left().defaults().left();
+					 // Table p = new_Table(d);
+					 for (var cell : ((Table) element).getCells()) {
+						 // p.left();
+						 d.table(Tex.pane, t0 -> {
+							 t0.add(String.valueOf(cell));
+						 });
+						 if (cell.isEndRow()) {
+							 // p = new_Table(d);
+							 d.row();
+						 }
+					 }
+				 });
+			 }))).get());
+			IntUI.doubleClick(_elem, null, list.run);
+			touchable = Touchable.enabled;
 			// this.window = window;
 			update(() -> background(focusFrom == this ? Styles.flatDown : Styles.none));
 		}
@@ -481,5 +469,65 @@ public class ReviewElement extends Content {
 				}
 			});
 		}*/
+	}
+	private static Table new_Table(Table d) {
+		Table p;
+		p = d.table().get();
+		d.row();
+		return p;
+	}
+
+
+	public static class ElementDetailsWindow extends Window implements DisposableInterface {
+		Element element;
+		public ElementDetailsWindow(Element element) {
+			super("", 20, 160, true);
+			this.element = element;
+
+			cont.defaults().growX();
+			cont.table(setter -> {
+				setter.defaults().height(42).growX();
+				setter.add(floatSetter("x", () -> "" + element.x, val -> element.x = val)).row();
+				setter.add(floatSetter("y", () -> "" + element.y, val -> element.y = val)).row();
+				setter.add(floatSetter("width", () -> "" + element.getWidth(), element::setWidth)).row();
+				setter.add(floatSetter("height", () -> "" + element.getHeight(), element::setHeight)).row();
+			}).growX().row();
+			Table table = cont.table().get();
+			table.defaults().growX();
+			if (element.parent instanceof Table) {
+				var cl = ((Table) element.parent).getCell(element);
+				table.table(Tex.pane, t -> {
+					t.defaults().grow();
+					t.add();
+					getAdd(t, cl, "padTop");
+					t.add().row();
+					getAdd(t, cl, "padLeft");
+					t.image();
+					getAdd(t, cl, "padRight").row();
+					t.add();
+					getAdd(t, cl, "padBottom");
+					t.add();
+				}).colspan(2).row();
+				table.button("growX", Styles.flatBordert, cl::growX).height(32).growX();
+				table.button("growY", Styles.flatBordert, cl::growY).height(32).growX();
+			}
+		}
+		private Cell<Table> getAdd(Table t, Cell cl, String name) {
+			return t.add(floatSetter(null, () -> "" + Reflect.get(Cell.class, cl, name), f -> {
+				Reflect.set(Cell.class, cl, name, f);
+				if (cl.get() != null) cl.get().invalidateHierarchy();
+			}));
+		}
+		public Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
+			return new Table(t -> {
+				t.defaults().grow();
+				if (name != null) t.add(name);
+				ModifiedLabel.build(def, Tools::isNum, (field, label) -> {
+					if (!field.isValid()) return;
+					label.setText(field.getText());
+					floatc.get(Tools.asFloat(field.getText()));
+				}, 2, t);
+			});
+		}
 	}
 }

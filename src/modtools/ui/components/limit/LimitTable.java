@@ -1,18 +1,19 @@
 package modtools.ui.components.limit;
 
 import arc.func.Cons;
+import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
-import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
+import arc.struct.ObjectSet;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
 
-public class LimitTable extends Table {
-	public LimitTable() {
-	}
+public class LimitTable extends Table implements Limit{
+	private ObjectSet<Element> limitElems;
+	public LimitTable() {}
 	public LimitTable(Drawable background) {
 		super(background);
 	}
@@ -23,7 +24,7 @@ public class LimitTable extends Table {
 		super(cons);
 	}
 
-	@Override
+	/* @Override
 	public Cell<Label> add(CharSequence text) {
 		return add(new LimitLabel(text));
 	}
@@ -31,15 +32,7 @@ public class LimitTable extends Table {
 	@Override
 	public Cell<Label> add(CharSequence text, LabelStyle labelStyle) {
 		return add(new LimitLabel(text, labelStyle));
-	}
-
-	@Override
-	public Cell<TextButton> button(String text, TextButtonStyle style, Runnable listener) {
-		TextButton button = new LimitTextButton(text, style);
-		if (listener != null)
-			button.changed(listener);
-		return add(button);
-	}
+	} */
 
 	public Cell<Table> table(Drawable background) {
 		Table table = new LimitTable(background);
@@ -59,19 +52,37 @@ public class LimitTable extends Table {
 		return add(table);
 	}
 
-	@Override
+	public Cell<TextButton> button(String text, TextButtonStyle style, Runnable listener) {
+		TextButton button = new LimitTextButton(text, style);
+		if (listener != null)
+			button.changed(listener);
+		return add(button);
+	}
 	public Cell<Button> button(Cons<Button> cons, Runnable listener) {
 		return super.button(cons, listener);
 	}
 
-	@Override
+	/* @Override
 	public Cell<Image> image(Drawable name) {
 		return add(new LimitImage(name));
+	} */
+
+	ObjectSet<Element> acquireLimitElems() {
+		return limitElems == null ? limitElems = new ObjectSet<>() : limitElems;
+	}
+	public <T extends Element> Cell<T> add(T element) {
+		if (!(element instanceof Limit)) acquireLimitElems().add(element);
+		return super.add(element);
 	}
 
+	protected void drawChildren() {
+		super.drawChildren();
+	}
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);
-		// if (visible) draw();
+		acquireLimitElems().each(el -> {
+			el.visible = isVisible(el);
+		});
 	}
 }

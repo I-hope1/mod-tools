@@ -3,6 +3,7 @@ package modtools.ui.content;
 
 import arc.Core;
 import arc.scene.ui.TextButton;
+import modtools.utils.MySettings.Data;
 
 import java.util.ArrayList;
 
@@ -30,7 +31,14 @@ public abstract class Content {
 		all.add(this);
 	}
 
-	public void loadSettings() {
+	public final void loadSettings() {
+		loadSettings(data());
+	}
+	public void loadSettings(Data SETTINGS) {
+	}
+
+	public Data data() {
+		return SETTINGS.child(name);
 	}
 	public void load() {
 	}

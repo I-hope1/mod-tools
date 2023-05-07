@@ -5,10 +5,9 @@ import arc.graphics.Color;
 import arc.math.Interp;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
-import arc.scene.ui.Image;
-import arc.scene.ui.ScrollPane;
-import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
+import arc.scene.ui.*;
+import arc.scene.ui.layout.*;
+import arc.struct.*;
 import arc.util.Log;
 import modtools.ui.IntStyles;
 
@@ -16,13 +15,13 @@ import java.util.Arrays;
 
 public class IntTab {
 	public Table main, title;
-	public ScrollPane  pane;
-	public Seq<String> names;
-	public Seq<Color>  colors;
-	public Seq<Table>  tables;
-	public float       totalWidth;
-	public int         cols;
-	public boolean     column;
+	public ScrollPane pane;
+	public String[]   names;
+	public Color[]    colors;
+	public Table[]    tables;
+	public float      totalWidth;
+	public int        cols;
+	public boolean    column;
 
 	public void setTotalWidth(float amount) {
 		totalWidth = amount;
@@ -54,25 +53,29 @@ public class IntTab {
 		};
 	}
 
-	public static Seq<Color> fillColor(int size, Color color) {
+	public static Color[] fillColor(int size, Color color) {
 		Color[] colors = new Color[size];
 		Arrays.fill(colors, color);
-		return new Seq<>(colors);
+		return colors;
 	}
 
 	/**
 	 * 自适配颜色
 	 */
-	public IntTab(float totalWidth, Seq<String> names, Color color, Seq<Table> tables) {
-		this(totalWidth, names, fillColor(names.size, color), tables);
+	public IntTab(float totalWidth, String[] names, Color color, Table[] tables) {
+		this(totalWidth, names,
+		 fillColor(names.length, color),
+		 tables);
 	}
 
-	public IntTab(float totalWidth, Seq<String> names, Color color, Seq<Table> tables, int cols, boolean column) {
-		this(totalWidth, names, fillColor(names.size, color), tables, cols, column);
+	public IntTab(float totalWidth, String[] names, Color color, Table[] tables, int cols, boolean column) {
+		this(totalWidth, names,
+		 fillColor(names.length, color),
+		 tables, cols, column);
 	}
 
 
-	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables) {
+	public IntTab(float totalWidth, String[] names, Color[] colors, Table[] tables) {
 		this(totalWidth, names, colors, tables, Integer.MAX_VALUE, false);
 	}
 
@@ -87,11 +90,16 @@ public class IntTab {
 	 * @throws IllegalArgumentException size must be the same.
 	 */
 	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols, boolean column) {
-		if (names.size != colors.size || names.size != tables.size) {
-			Log.info("name: @, color: @, table: @", names.size, colors.size, tables.size);
+		this(totalWidth, names.toArray(String.class),
+		 colors.toArray(Table.class),
+		 tables.toArray(Table.class), cols, column);
+	}
+	public IntTab(float totalWidth, String[] names, Color[] colors, Table[] tables, int cols, boolean column) {
+		if (names.length != colors.length || names.length != tables.length) {
+			Log.err("name: @, color: @, table: @", names.length, colors.length, tables.length);
 			throw new IllegalArgumentException("size must be the same.");
 		}
-		if (names.size == 0) throw new RuntimeException("size can't be 0.");
+		if (names.length == 0) throw new RuntimeException("size can't be 0.");
 
 		this.totalWidth = totalWidth;
 		this.names = names;
@@ -115,21 +123,23 @@ public class IntTab {
 		prefH = h;
 	}
 
+	public ObjectMap<String, Label> labels = new ObjectMap<>();
 	public Table build() {
-		for (byte i = 0; i < tables.size; i++) {
-			Table t = tables.get(i);
+		for (byte i = 0; i < tables.length; i++) {
+			Table t = tables[i];
 			byte  j = i;
-			title.button(b -> {
+			Cell cell = title.button(b -> {
 				if (first == null) first = b;
-				b.add(names.get(j), colors.get(j)).padRight(15.0f).growY().row();
-				Image image = b.image().fillX().growX().get();
+				labels.put(names[j], b.add(names[j], colors[j]).growY().get());
+				b.row();
+				Image image = b.image().growX().get();
 				b.update(() -> {
-					image.setColor(selected == j ? colors.get(j) : Color.gray);
+					image.setColor(selected == j ? colors[j] : Color.gray);
 				});
 			}, IntStyles.clearb, () -> {
 				if (selected != j && !transitional) {
 					if (selected != -1) {
-						Table last = tables.get(selected);
+						Table last = tables[selected];
 						last.actions(Actions.fadeOut(0.03f, Interp.fade), Actions.remove());
 						transitional = true;
 						title.update(() -> {
@@ -147,7 +157,13 @@ public class IntTab {
 					}
 
 				}
-			}).width(totalWidth * (int) (cols / tables.size));
+			});
+			cell.width(totalWidth / (float) cols);
+			/* if (totalWidth == -1) {
+				cell.update(__ -> {
+					cell.width(main.getWidth() * (cols / (float) tables.size));
+				});
+			} */
 			if ((j + 1) % cols == 0) title.row();
 		}
 		title.row();

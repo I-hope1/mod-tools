@@ -2,8 +2,7 @@ package modtools.ui.content;
 
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
-import mindustry.gen.Icon;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import modtools.ui.IntStyles;
 import modtools.ui.components.Window;
 import modtools.ui.components.limit.LimitTable;
@@ -21,8 +20,9 @@ public class WindowManager extends Content {
 	public void load() {
 		ui = new Window(localizedName(), 400, 400, true);
 		// 强制置顶
-		ui.top.find("sticky").remove();
+		ui.titleTable.find("sticky").remove();
 		ui.sticky = true;
+
 		ui.cont.pane(cont = new LimitTable());
 	}
 	public void rebuild() {

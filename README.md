@@ -5,19 +5,18 @@ It provides many useful tools for developers.
 
 ## showUIList
 
-- 显示 `icon`, `tex`, `styles`, `colors`
+- 显示 `icon`, `tex`, `styles`
 
 ## Tester
 
 - 提供 `js` 编辑器 `tester`
 - - `ctrl+shift+enter` 立即执行代码
 - - `ctrl+shift+up/down` 切换历史记录
-- 内置 `unsafe`, `lookup`, `MyReflect`
+- 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类
 ```java
 public class JSFunc {
 	public static void showInfo(Object o);
-	public static void showInfo(Class o);
 	public static Window window(final Cons<Window> cons);
 	public static Window testElement(Element element);
 	public static Window testElement(String text);
@@ -34,10 +33,6 @@ public class JSFunc {
 	public static MyReflect Reflect;
 }
 ```
-- `IntFunc.showInfo`显示所有`字段``方法``构造器``内部类`
-### ShowInfoWinodw
-- 支持 `文本编辑` `数字编辑` `布尔编辑` `颜色编辑（双击）`
-
 
 ## UnitSwapn
 
@@ -49,12 +44,10 @@ public class JSFunc {
 
 - 选择器
 - 支持 `Tile`, `Building`, `Bullet`, `Unit`
-- 按住 `alt` 多选
 
 
 ## ReviewElement
 显示元素列表，双击复制元素到js变量
-`右键(desktop)`/`长按(mobile)`显示更多
 
 ## Window
 - `ctrl+tab` 切换窗口

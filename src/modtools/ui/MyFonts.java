@@ -3,41 +3,39 @@ package modtools.ui;
 import arc.files.Fi;
 import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
-import arc.graphics.Color;
 import arc.graphics.g2d.Font;
 import mindustry.ui.Fonts;
 
-import static modtools.utils.MySettings.dataDirectory;
+import static modtools.utils.MySettings.*;
 
 public class MyFonts {
-	public static Font MSYHMONO;
+	public static       Font def;
+	public static final Fi   fontDirectory = dataDirectory.child("fonts");
 
 	static {
 		load();
 	}
 
 	public static void load() {
-		Fi fontFi = dataDirectory.child("font.ttf");
+		def = acquireFont();
+	}
+
+	private static Font acquireFont() {
+		if (def != null) return Fonts.def;
+		if (!SETTINGS.containsKey("font")) return Fonts.def;
+
+		Fi fontFi = fontDirectory.child(SETTINGS.getString("font"));
 		if (!fontFi.exists()) {
-			MSYHMONO = Fonts.def;
-			return;
+			if (Fonts.def == null) throw new RuntimeException("you can't load it before font load");
+			return Fonts.def;
 		}
 		FreeTypeFontGenerator generator = new FreeTypeFontGenerator(fontFi);
 		FreeTypeFontParameter parameter = new FreeTypeFontParameter() {{
-			size = 22;
-			// mono = true;
-			// shadowColor = Color.darkGray;
-			// shadowOffsetY = 2;
+			size = 20;
 			incremental = true;
 		}};
-		// final boolean[] generating = {false};
-		MSYHMONO = generator.generateFont(parameter, new FreeTypeFontData() {
-			{
-				markupEnabled = true;
-			}
-		});
-		// MSYHMONO.getData().markupEnabled = false;
-		// generating[0] = false;
-		// Tools.clone(MSYHMONO, Fonts.def, Font.class, null);
+		return generator.generateFont(parameter, new FreeTypeFontData() {{
+			markupEnabled = true;
+		}});
 	}
 }

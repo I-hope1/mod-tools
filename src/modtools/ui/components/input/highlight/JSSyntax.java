@@ -1,59 +1,52 @@
 package modtools.ui.components.input.highlight;
 
+import arc.Core;
 import arc.graphics.Color;
+import arc.math.geom.Vec2;
 import arc.scene.style.TextureRegionDrawable;
+import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.gen.Tex;
-import modtools.ui.components.input.area.TextAreaTable;
+import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.area.TextAreaTab;
+import modtools.utils.JSFunc;
 import rhino.*;
 
-import java.lang.reflect.Method;
 import java.util.Objects;
 
-import static modtools.utils.Tools.invoke;
+import static modtools.utils.Tools.*;
 
 public class JSSyntax extends Syntax {
 
 	public static Color
-			constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
+	 c_constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
 	// 常规变量
-	defVarColor = new Color(0x7CDCFEFF)
-			// , __defalutColor__ = new Color(0xDCDCAAFF)
-			;
+	c_defVar = new Color(0x7CDCFEFF)
+	 // , __defalutColor__ = new Color(0xDCDCAAFF)
+	 ;
 
-	public JSSyntax(TextAreaTable table) {
+	public JSSyntax(TextAreaTab table) {
 		super(table);
+		if (area == null) return;
 		// defalutColor = __defalutColor__;
 		area.getStyle().selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}
 
-	static ImporterTopLevel scope = (ImporterTopLevel) Vars.mods.getScripts().scope;
-	static Method           getPkgs;
-
-	static {
-		if (OS.isWindows) {
-			try {
-				getPkgs = ImporterTopLevel.class.getDeclaredMethod("getPackageProperty", String.class, Scriptable.class);
-				getPkgs.setAccessible(true);
-			} catch (NoSuchMethodException e) {
-				// throw new RuntimeException(e);
-			}
-		}
-	}
+	public static       ImporterTopLevel              scope          = (ImporterTopLevel) Vars.mods.getScripts().scope;
+	public static final ObjectMap<String, Scriptable> SCRIPTABLE_MAP = new ObjectMap<>();
 
 	public static final ObjectSet<String> constantSet = new ObjectSet<>() {
 		// final ObjectSet<String> blackList = new ObjectSet<>();
 		public boolean contains(String key) {
-			// if (blackList.contains(key)) return false;
-			boolean val = super.contains(key);
-			if (val) return true;
-			// if (key.length() > 64) return false;
+			boolean contains = super.contains(key);
+			if (contains) return true;
 			char c = key.charAt(0);
 			if (!(('A' <= c && c <= 'Z') || c == '$')) return false;
-			if (getPkgs != null &&
-			    invoke(getPkgs, scope, key, scope) != Scriptable.NOT_FOUND) {
+			Object o = scope.get(key, scope);
+			if (o != Scriptable.NOT_FOUND) {
+				if (o instanceof Scriptable) SCRIPTABLE_MAP.put(key, (Scriptable) o);
 				add(key);
 				return true;
 			}
@@ -64,71 +57,152 @@ public class JSSyntax extends Syntax {
 	public static final ObjectSet<String> defVarSet   = new ObjectSet<>();
 
 	static {
-		defVarSet.addAll("arguments", "Infinity");
+		defVarSet.addAll("arguments", "Infinity", "Packages");
 		for (Object id : scope.getIds()) {
-			if (!(id instanceof String)) continue;
-			String key = (String) id;
+			if (!(id instanceof String key)) continue;
 			try {
 				ScriptableObject.redefineProperty(scope, key, false);
 				defVarSet.add(key);
 			} catch (RuntimeException ignored) {
+				if (scope.get((String) id, scope) instanceof Scriptable o) SCRIPTABLE_MAP.put(key, o);
 				constantSet.add(key);
 			}
 		}
 	}
 
 
-	ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = ObjectMap.of(
-			ObjectSet.with(
-					"break", "case", "catch", "const", "continue",
-					"default", "delete", "do", "else",
-					"finally", "for", "function", "if",
-					"instanceof", "let", "new", "return", "switch",
-					"this", "throw", "try", "typeof", "var",
-					"void", "while", "with",
-					"yield"
-			), keywordC,
-			ObjectSet.with("null", "undefined", "true", "false"), keywordC,
-			constantSet, constants,
-			defVarSet, defVarColor
+	ObjectMap<ObjectSet<CharSequence>, Color> TOKEN_MAP = ObjectMap.of(
+	 ObjectSet.with(
+		"break", "case", "catch", "const", "continue",
+		"default", "delete", "do", "else",
+		"finally", "for", "function", "if", "in",
+		"instanceof", "let", "new", "of", "return", "switch",
+		"this", "throw", "try", "typeof", "var",
+		"void", "while", "with",
+		"yield"
+	 ), c_keyword,
+	 ObjectSet.with("null", "undefined", "true", "false"), c_keyword,
+	 constantSet, c_constants,
+	 defVarSet, c_defVar
 	);
-	protected final DrawSymbol
-			operatesSymbol = new DrawSymbol(operates, operatCharC),
-			bracketsSymbol = new DrawSymbol(brackets, bracketsC);
 
-	public        TokenDraw[] tokenDraws = {/* tokon map */task -> {
-		if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != null && operatesSymbol.lastSymbol == '.') {
+	protected final DrawSymbol
+	 operatesSymbol = new DrawSymbol(operates, c_operateChar),
+	 bracketsSymbol = new DrawSymbol(brackets, c_brackets);
+
+	public Object getPropOrNotFound(Scriptable scope, String key) {
+		try {
+			return ScriptableObject.getProperty(scope, key);
+		} catch (Throwable e) {
+			return Scriptable.NOT_FOUND;
+		}
+	}
+
+	public NativeJavaPackage pkg          = null;
+	public Scriptable        obj          = null;
+	public boolean           enableJSProp = false;
+
+	public TokenDraw[] tokenDraws = {
+	 task -> {
+		 String token = task.token + "";
+		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
+			 if (operatesSymbol.lastSymbol == '.') {
+				 return dealJSProp(token);
+			 } else {
+				 obj = null;
+				 pkg = null;
+			 }
+		 }
+
+		 for (var entry : TOKEN_MAP) {
+			 if (!entry.key.contains(token)) continue;
+			 if (entry.key != as(constantSet) || obj != null) return entry.value;
+			 Object o = SCRIPTABLE_MAP.get(token);
+			 if (o instanceof NativeJavaPackage newPkg) {
+				 pkg = newPkg;
+				 obj = null;
+			 } else if (o instanceof Scriptable newObj) {
+				 pkg = null;
+				 obj = newObj;
+				 // showTooltipMouse(task);
+				 // showTooltip(task);
+			 }
+			 return entry.value;
+		 }
+		 return null;
+	 },
+	 task -> Objects.equals(task.lastToken, "function") && lastTask == task ? c_functions : null,
+	 task -> {
+		 CharSequence s = operatesSymbol.lastSymbol != '\u0000' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
+		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN") ? null : c_number;
+	 }
+	};
+	private Color dealJSProp(String token) {
+		if (!enableJSProp) return null;
+		Object o = getPropOrNotFound(pkg != null ? pkg : obj, token);
+		if (o == Scriptable.NOT_FOUND) {
+			obj = null;
 			return null;
 		}
-		for (var entry : TOKEN_MAP) {
-			if (entry.key.contains(task.token)) {
-				return entry.value;
+
+		if (o instanceof NativeJavaPackage) {
+			pkg = (NativeJavaPackage) o;
+		} else if (o instanceof Scriptable) {
+			pkg = null;
+			obj = (Scriptable) o;
+			// showTooltipMouse(task);
+			// showTooltip(task);
+			return c_defVar;
+		}
+		obj = null;
+		return null;
+	}
+	private void showTooltipMouse(DrawToken task) {
+		if (areaTable.tooltip.container.parent != null) return;
+		Vec2  v    = getRelativePos(task.lastIndex);
+		float minX = v.x, minY = v.y - area.lineHeight() * 0.1f;
+		v = getRelativePos(task.currentIndex);
+		Vec2 abs   = getAbsPos(area.parent);
+		Vec2 mouse = Core.input.mouse();
+		Vec2 sub   = mouse.sub(abs);
+		if (Tmp.r1.set(minX, minY, v.x, v.y + area.lineHeight() * 1.1f).contains(sub)) {
+			Table p = areaTable.tooltip.p;
+			p.clearChildren();
+			Object obj = this.obj;
+			JSFunc.addDetailsButton(p, () -> obj, obj.getClass());
+			areaTable.tooltip.show(Core.scene.root, mouse.x, mouse.y);
+			Time.runTask(60 * 0.6f, () -> {
+				areaTable.tooltip.hide();
+			});
+		}
+	}
+
+	private void showTooltip(DrawToken task) {
+		float cursor = area.getRelativeCursor();
+		if (task.lastIndex < cursor && cursor <= task.currentIndex) {
+			Table p = areaTable.tooltip.p;
+			p.clearChildren();
+			areaTable.clearChildren();
+			for (Object id : obj.getIds()) {
+				areaTable.tooltip.p.add(new MyLabel("" + id)).row();
 			}
+			areaTable.tooltip.container.invalidateHierarchy();
 		}
-		return null;
-	}, /* function */task -> {
-		if (Objects.equals(task.lastToken, "function")
-		    && lastTask == task/*中间不能有其他字符*/) {
-			return functionsC;
-		}
-		return null;
-	}, task -> {
-		String s = operatesSymbol.lastSymbol != null && operatesSymbol.lastSymbol == '.'
-		           && task.token.charAt(0) == 'e' && task.lastToken != null
-				? task.lastToken + "." + task.token : task.token;
-		return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN")
-				? null : numberC;
-	}};
-	private final DrawTask[]  taskArr0   = {
-			new DrawString(stringC),
-			bracketsSymbol,
-			new DrawComment(commentC),
-			operatesSymbol,
-			// new DrawWord(keywordMap, keywordC),
-			// new DrawWord(objectMap, objectsC),
-			new DrawToken(tokenDraws),
-			// new DrawNumber(numberC),
-	};
+	}
+
+	private final DrawTask[] taskArr0 = {
+	 new DrawString(c_string),
+	 bracketsSymbol,
+	 new DrawComment(c_comment),
+	 operatesSymbol,
+	 drawToken = new DrawToken(tokenDraws) {
+		 void init() {
+			 super.init();
+			 pkg = null;
+			 obj = null;
+		 }
+	 },
+	 };
 
 	{
 		taskArr = taskArr0;
@@ -139,14 +213,11 @@ public class JSSyntax extends Syntax {
 	public static IntSet brackets = new IntSet();
 
 	static {
-		String s;
-		s = "~|,+-=*/<>!%^&;.:";
-		for (int i = 0, len = s.length(); i < len; i++) {
-			operates.add(s.charAt(i));
+		for (char c : "~|,+-=*/<>!%^&;.:".toCharArray()) {
+			operates.add(c);
 		}
-		s = "()[]{}";
-		for (int i = 0, len = s.length(); i < len; i++) {
-			brackets.add(s.charAt(i));
+		for (char c : "()[]{}".toCharArray()) {
+			brackets.add(c);
 		}
 	}
 }

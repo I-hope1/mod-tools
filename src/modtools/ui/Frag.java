@@ -12,12 +12,11 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
 
-import static modtools.IntVars.*;
+import static modtools.IntVars.modName;
 import static modtools.ui.IntUI.topGroup;
 
 public class Frag extends Table {
 	public boolean    hideCont   = false;
-	public int        baseHeight = 0;
 	public ScrollPane contPane;
 	Cell<?> cell;
 
@@ -29,7 +28,7 @@ public class Frag extends Table {
 		//		MyPacket.register();
 		name = modName + "-frag";
 		Image top = image().color(Color.sky).margin(0).pad(0)
-				.padBottom(-4).fillX().minWidth(40).height(40).get();
+		  .padBottom(-4).fillX().minWidth(40).height(40).get();
 		row();
 
 		if (Content.all.isEmpty()) Contents.load();
@@ -42,7 +41,6 @@ public class Frag extends Table {
 				// var style = Styles.cleart;
 				// Objects.requireNonNull(cont);
 				cont.btn = table.button(localizedName, style, cont::build).size(120, 40).get();
-				baseHeight += 40;
 				cont.load();
 				table.row();
 			});
@@ -61,7 +59,7 @@ public class Frag extends Table {
 		addCont.run();
 		left().bottom();
 		topGroup.addChild(this);
-		Log.info(this);
+		Log.info("Init TopGroup.");
 
 		var listener = new MoveListener(top, this) {
 			public void display(float x, float y) {
@@ -72,7 +70,7 @@ public class Frag extends Table {
 			}
 		};
 		// 添加双击变小
-		IntUI.doubleClick(top, () -> {}, () -> {
+		IntUI.doubleClick(top, null, () -> {
 			hideCont = !hideCont;
 			if (hideCont) {
 				removeCont.run();

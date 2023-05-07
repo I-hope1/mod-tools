@@ -13,6 +13,7 @@ import java.io.File;
 import java.lang.reflect.*;
 
 import static modtools.ui.Contents.tester;
+import static modtools.utils.Tools.clName;
 
 public class ForRhino {
 	public static final ContextFactory factory;
@@ -28,7 +29,7 @@ public class ForRhino {
 	@Exclude
 	public static ContextFactory createFactory() throws Exception {
 		ContextFactory                    global         = ContextFactory.getGlobal();
-		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(global.getClass().getName().replace('.', '/') + "_aa1", global.getClass());
+		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(clName(global).replace('.', '/') + "_aa1", global.getClass());
 		factoryMyClass.addInterface(MyRhino.class);
 		factoryMyClass.visit(ForRhino.class);
 
@@ -81,5 +82,4 @@ public class ForRhino {
 		                        Context cx, Scriptable scope,
 		                        Scriptable thisObj, Object[] args);
 	}
-
 }

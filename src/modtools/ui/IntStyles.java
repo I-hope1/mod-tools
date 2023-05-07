@@ -21,7 +21,7 @@ public class IntStyles {
 	public static final Drawable        none = whiteui.tint(0f, 0f, 0f, 0.01f);
 
 	/** 默认使用等宽字体，没有的话使用默认字体 */
-	public static final LabelStyle MOMO_Label;
+	public static final LabelStyle MOMO_LabelStyle;
 
 
 	/** Similar to flatToggle, but with a transparent base background. */
@@ -42,6 +42,7 @@ public class IntStyles {
 	/** No background unless focused, no border. */
 	clearNonei;
 	public static ScrollPaneStyle noBarPane = new ScrollPaneStyle();
+	public static ButtonStyle     flatb;
 
 	static void V6Adapter() {
 		flatt = new TextButtonStyle() {{
@@ -120,20 +121,25 @@ public class IntStyles {
 			down = over = Styles.flatOver;
 		}};
 
-		MOMO_Label = new LabelStyle(Styles.defaultLabel) {{
-			font = MyFonts.MSYHMONO;
+		MOMO_LabelStyle = new LabelStyle(Styles.defaultLabel) {{
+			font = MyFonts.def;
 		}};
+		init();
+		flatb = new ButtonStyle(flatt);
+	}
+
+	static void init() {
 		if (Version.number <= 135) {
 			V6Adapter();
-		} else {
-			flatt = Styles.flatt;
-			flati = Styles.flati;
-			flatTogglet = Styles.flatTogglet;
-			flatToggleMenut = Styles.flatToggleMenut;
-			flatBordert = Styles.flatBordert;
-			clearNoneTogglei = Styles.clearNoneTogglei;
-			clearNonei = Styles.clearNonei;
-			cleart = Styles.cleart;
+			return;
 		}
+		flatt = Styles.flatt;
+		flati = Styles.flati;
+		flatTogglet = Styles.flatTogglet;
+		flatToggleMenut = Styles.flatToggleMenut;
+		flatBordert = Styles.flatBordert;
+		clearNoneTogglei = Styles.clearNoneTogglei;
+		clearNonei = Styles.clearNonei;
+		cleart = Styles.cleart;
 	}
 }

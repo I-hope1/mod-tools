@@ -1,11 +1,11 @@
 package modtools.ui.components.limit;
 
 import arc.func.Prov;
-import arc.scene.ui.*;
+import arc.scene.ui.Label;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
-public class LimitLabel extends Label {
+public class LimitLabel extends Label implements Limit {
 	public LimitLabel(Prov<CharSequence> sup) {
 		super(sup);
 	}
@@ -21,6 +21,5 @@ public class LimitLabel extends Label {
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);
-		// if (visible) draw();
 	}
 }

@@ -5,65 +5,53 @@ import arc.files.Fi;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
-import mindustry.game.EventType.*;
+import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import modtools.graphics.MyShaders;
 import modtools.ui.*;
-import modtools.utils.*;
+import modtools.ui.tutorial.AllTutorial;
+import modtools.utils.Tools;
 
-import static mindustry.Vars.*;
+import static mindustry.Vars.ui;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
 	public ModTools() {
 		Log.info("Loaded ModTools constructor.");
 
-
 		Tools.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
 			root = Vars.mods.getMod(ModTools.class).root;
 			mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 			libs = root.child("libs");
-			if (loadLib("reflect-core", "ihope_lib.MyReflect", true)) MyReflect.load();
+			loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 			IntVars.hasDecomplier = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 
+			// MyReflect.classDefiner().defineClass();
 			MyShaders.load();
 			return true;
 		});
+		/* Tools.forceRun(() -> {
+			Fonts.outline = Fonts.icon = Fonts.def = MSYHMONO;
+			return false;
+		}); */
+
 		Events.on(ClientLoadEvent.class, e -> {
 			if (throwable != null) {
 				ui.showException(throwable);
 				return;
 			}
-			/* JSFunc.testElement(new DesignTable<>(new Table()) {{
-				template.image().size(42);
-			}}); */
-			// Time.runTask(100f, () -> JSFunc.testElement(new MyLabel("开始", IntStyles.myLabel)));
 
-			// texture.getTextureData();
-			// 加载字体
-			// Core.app.post(MyFonts::load);
-
-			// Unit135G.main();
 			Time.runTask(6f, () -> {
-				/*BaseDialog dialog = new BaseDialog("frog");
-				dialog.addCloseListener();
-
-				Table cont = dialog.cont;
-				cont.image(Core.atlas.find(modName + "-frog")).pad(20f).row();
-				cont.add("behold").row();
-				Objects.requireNonNull(dialog);
-				cont.button("I see", dialog::hide).size(100f, 50f);
-				dialog.show();*/
 				//noinspection Convert2MethodRef
 				IntUI.load();
+				AllTutorial.init();
 			});
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
 				try {
 					Background.main();
 				} catch (Throwable ignored) {}
 			}
-			// JSFunc.testElement(new Image(Fonts.def.getRegion()));
 		});
 	}
 
@@ -73,9 +61,13 @@ public class ModTools extends Mod {
 	public static Fi             libs;
 
 	public static boolean loadLib(String fileName, String mainClassName, boolean showError) {
+		return loadLib(fileName, mainClassName, showError, null);
+	}
+
+	public static boolean loadLib(String fileName, String mainClassName, boolean showError, Runnable callback) {
 		try {
 			// 没错误 证明已经加载
-			Class.forName(mainClassName, false, mainLoader);
+			mainLoader.loadClass(mainClassName);
 			return true;
 		} catch (Exception ignored) {}
 		Log.info("Loading @.jar", fileName);
@@ -95,11 +87,14 @@ public class ModTools extends Mod {
 			ClassLoader loader = Vars.platform.loadJar(toFi, mainLoader);
 			mainLoader.addChild(loader);
 			Class.forName(mainClassName, true, loader);
+			if (callback != null) callback.run();
 			toFi.delete();
 			return true;
 		} catch (Throwable e) {
-			if (showError) throwable = e;
-			Log.err(e);
+			if (showError) {
+				throwable = e;
+				Log.err(e);
+			}
 			return false;
 		}
 	}

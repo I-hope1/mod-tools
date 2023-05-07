@@ -1,7 +1,6 @@
 package modtools.utils.reflect;
 
 import arc.util.OS;
-import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
@@ -9,15 +8,12 @@ import rhino.*;
 import java.lang.reflect.*;
 import java.security.ProtectionDomain;
 
-//import static jdk.internal.misc.Unsafe.getUnsafe;
+import static jdk.internal.misc.Unsafe.getUnsafe;
 
 public class IReflect {
 	// public static final Lookup lookup = MethodHandles.lookup();
 	public static final MyClassLoader loader = new MyClassLoader(IReflect.class.getClassLoader());
 	public static       ClassLoader   IMPL_LOADER;
-
-	private static final Object UNSAFE;
-	private static final Method DEFINE_CLASS;
 
 	// private static final Constructor<?> IMPL_CONS;
 
@@ -25,16 +21,10 @@ public class IReflect {
 		try {
 			Constructor<?> cons = Class.forName("jdk.internal.reflect.DelegatingClassLoader")
 					.getDeclaredConstructor(ClassLoader.class);
-
-			Class<?> clazz = Class.forName("jdk.internal.misc.Unsafe");
-			UNSAFE = clazz.getDeclaredMethod("getUnsafe").invoke(null);
-			DEFINE_CLASS = clazz.getDeclaredMethod("defineClass0", String.class, byte[].class, int.class, int.class, ClassLoader.class, ProtectionDomain.class);
-
 			cons.setAccessible(true);
 			// IMPL_CONS = cons;
 			IMPL_LOADER = (ClassLoader) cons.newInstance(loader);
-		} catch (Exception e) {
-			throw new RuntimeException(e);
+		} catch (Exception ignored) {
 		}
 	}
 
@@ -42,6 +32,7 @@ public class IReflect {
 	 * only for android
 	 **/
 	public static <T> void setPublic(T obj, Class<T> cls) {
+		// MyReflect.setPublic(cls);
 		try {
 			Field f = cls.getDeclaredField("accessFlags");
 			f.setAccessible(true);
@@ -75,7 +66,7 @@ public class IReflect {
 			}
 		} else {
 			try {
-				return (Class<?>) DEFINE_CLASS.invoke(UNSAFE, null, bytes, 0, bytes.length, superClass.getClassLoader(), null);
+				return getUnsafe().defineClass0(null, bytes, 0, bytes.length, superClass.getClassLoader(), null);
 			} catch (Exception ex) {
 				throw new RuntimeException(ex);
 			}
@@ -94,7 +85,7 @@ public class IReflect {
 			}
 		} else {
 			try {
-				return (Class<?>) DEFINE_CLASS.invoke(UNSAFE, null, bytes, 0, bytes.length, loader, null);
+				return getUnsafe().defineClass0(null, bytes, 0, bytes.length, loader, null);
 			} catch (Exception ex) {
 				throw new RuntimeException(ex);
 			}
@@ -104,7 +95,7 @@ public class IReflect {
 
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes, ProtectionDomain pd) {
 		try {
-			return (Class<?>) DEFINE_CLASS.invoke(UNSAFE, null, bytes, 0, bytes.length,
+			return getUnsafe().defineClass0(null, bytes, 0, bytes.length,
 					loader, pd);
 		} catch (Exception ex) {
 			throw new RuntimeException(ex);
@@ -124,4 +115,6 @@ public class IReflect {
 			return null;
 		}
 	}
+
+	// public static native Class<?> defineClass0(ClassLoader loader, byte[] bytes);
 }

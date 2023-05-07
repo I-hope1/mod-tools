@@ -1,11 +1,9 @@
 package modtools;
 
-import arc.*;
+import arc.Events;
 import arc.util.Log;
 import mindustry.game.EventType.ResizeEvent;
-import modtools.ui.Frag;
 import modtools.ui.IntUI;
-import modtools.ui.TopGroup;
 import modtools.utils.MySet;
 
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +23,10 @@ public class IntVars {
 			Log.err(e);
 		}
 	}
+	public static void async(Runnable runnable) {
+		async(runnable, null);
+	}
+
 	public static void async(Runnable runnable, Runnable callback) {
 		async(null, runnable, callback, false);
 	}
@@ -40,7 +42,7 @@ public class IntVars {
 				showException(err, displayUI);
 			}
 			if (displayUI) ui.loadfrag.hide();
-			callback.run();
+			if (callback != null) callback.run();
 			return 1;
 		});
 		try {
@@ -50,14 +52,15 @@ public class IntVars {
 		}
 	}
 
-	public static final MySet<Runnable> resizeListenrs = new MySet<>();
+	public static final MySet<Runnable> resizeListeners = new MySet<>();
 	public static void addResizeListener(Runnable runnable) {
-		resizeListenrs.add(runnable);
+		resizeListeners.add(runnable);
 	}
 
 	static {
+		// new Not("aaa");
 		Events.on(ResizeEvent.class, e -> {
-			for (var r : resizeListenrs) r.run();
+			for (var r : resizeListeners) r.run();
 		});
 	}
 }

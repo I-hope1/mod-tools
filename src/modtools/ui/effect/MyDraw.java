@@ -6,7 +6,6 @@ import arc.struct.*;
 import mindustry.graphics.Pal;
 
 import static arc.Core.graphics;
-import static modtools.ui.Contents.settingsUI;
 import static modtools.utils.MySettings.D_BLUR;
 
 public class MyDraw {
@@ -51,18 +50,19 @@ public class MyDraw {
 		square(x, y, radius, 45, thick, color);
 	}
 
-	static final DrawEffect blur = new Blur();
+	static final DrawEffect blur = new EBBlur();
 
 	static ObjectMap<String, Seq<Runnable>> draws = new ObjectMap<>();
-	public static void blur(Runnable draw) {
-		if (!D_BLUR.getBool("enable", false)) return;
+	public static void blurRect(float x, float y, float w, float h) {
+		if (!isBlurEnable()) return;
 		// draws.get("blur", Seq::new).add(draw);
 		blur.resize(graphics.getWidth(), graphics.getHeight());
-		blur.capture();
-		Draw.reset();
-		draw.run();
+		blur.capture(x, y, w, h);
 		blur.render();
 		Draw.flush();
+	}
+	public static boolean isBlurEnable() {
+		return D_BLUR.getBool("enable", false);
 	}
 	/* static {
 		topGroup.backDrawSeq.add(() -> {
@@ -78,7 +78,7 @@ public class MyDraw {
 	public interface DrawEffect {
 		void resize(int width, int height);
 
-		void capture();
+		void capture(float x, float y, float w, float h);
 
 		void render();
 	}

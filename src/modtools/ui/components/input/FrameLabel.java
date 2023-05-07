@@ -1,19 +1,13 @@
 package modtools.ui.components.input;
 
 import arc.func.Prov;
-import arc.graphics.Texture;
-import arc.graphics.g2d.*;
+import arc.graphics.*;
+import arc.graphics.g2d.Draw;
 import arc.graphics.gl.FrameBuffer;
-import arc.scene.Group;
-import arc.scene.ui.*;
-import arc.util.*;
+import arc.scene.ui.Label;
 import modtools.graphics.MyShaders;
-import modtools.ui.TopGroup;
-import modtools.ui.effect.ScreenSampler;
-import modtools.utils.*;
 
-import static arc.Core.graphics;
-import static modtools.ui.effect.ScreenSampler.*;
+import static modtools.ui.effect.ScreenSampler.bufferCapture;
 
 /**
  * 缓存label，可以缓存文本图像，减少cpu和gpu消耗
@@ -44,9 +38,9 @@ public class FrameLabel extends Label {
 		super.layout();
 		frameInvalid = true;
 	}
-	static FrameBuffer buffer = new FrameBuffer(2, 2, false);
+	public FrameBuffer pingpong = new FrameBuffer();
 	public void draw() {
-		if (true) {
+		if (sampling) {
 			super.draw();
 			return;
 		}
@@ -57,38 +51,20 @@ public class FrameLabel extends Label {
 				sampling = false;
 				frameInvalid = false;
 			}); */
-			// Draw.flush();
-			// bloom.capture();
-			// bloom.capturePause();
-			// if (texture != null) texture.dispose();
-			WorldDraw.drawTexture(buffer, graphics.getWidth(), graphics.getHeight(), super::draw);
+			sampling = true;
+			pingpong.resize((int) width, (int) height);
+			pingpong.begin(Color.clear);
+			Draw.blit(bufferCapture(this), MyShaders.baseShader);
+			Draw.flush();
+			pingpong.end();
+			texture = pingpong.getTexture();
+			sampling = false;
 			frameInvalid = false;
-			// 	// validate();
-			// 	float lx = x, ly = y;
-			// 	x = -width;
-			// 	y = -height;
-			// 	Group lparent = parent;
-			// 	parent = null;
-			// 	super.draw();
-			// 	x = lx;
-			// 	y = ly;
-			// 	parent = lparent;
-			// 	/*Color color = tempColor.set(this.color);
-			// 	color.a *= parentAlpha;
-			// 	if (style.background != null) {
-			// 		Draw.color(color.r, color.g, color.b, color.a);
-			// 		style.background.draw(0, 0, width, height);
-			// 	}
-			// 	if (style.fontColor != null) color.mul(style.fontColor);
-			// 	cache.tint(color);
-			// 	cache.setPosition(0, 0);
-			// 	cache.draw();*/
-			// });
 		}
 		// bloom.render();
 		// ScreenSampler.pause();
-		Draw.flush();
-		Draw.blit(buffer, MyShaders.baseShader);
+		Draw.rect(Draw.wrap(texture), x, y, width, height);
+		// Draw.blit(pingpong, MyShaders.baseShader);
 		// ScreenSampler.contiune();
 	}
 }

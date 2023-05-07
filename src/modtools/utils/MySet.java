@@ -1,6 +1,6 @@
 package modtools.utils;
 
-import arc.func.*;
+import arc.func.Boolf;
 import arc.struct.*;
 
 import java.util.Iterator;
@@ -10,7 +10,7 @@ import java.util.Iterator;
  */
 public class MySet<T> extends OrderedSet<T> {
 	public void filter(Boolf<T> predicate) {
-		Iterator<T> iter = this.iterator();
+		Iterator<T> iter = iterator();
 
 		while (iter.hasNext()) {
 			if (!predicate.get(iter.next())) {

@@ -1,19 +1,22 @@
 package modtools.utils;
 
-import arc.Core;
+import arc.*;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
-import arc.graphics.PixmapIO.PngWriter;
 import arc.graphics.g2d.*;
-import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.struct.Seq;
-import arc.util.*;
 import arc.util.Timer;
+import arc.util.*;
 import arc.util.Timer.Task;
+import dalvik.system.DexFile;
 import hope_android.FieldUtils;
+import mindustry.game.EventType.Trigger;
+import modtools.ui.IntUI;
+import modtools.ui.components.Window;
+import modtools.ui.effect.ScreenSampler;
 import rhino.ScriptRuntime;
 
 import java.io.*;
@@ -29,19 +32,27 @@ import static ihope_lib.MyReflect.unsafe;
 import static mindustry.Vars.*;
 
 public class Tools {
+	public static TaskSet tasks = new TaskSet();
+
+	static {
+		Events.run(Trigger.update, () -> {
+			tasks.exec();
+		});
+	}
+
 	public static boolean validPosInt(String text) {
 		return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
 	}
 
-	public static Pattern complieRegExpCatch(String text) {
+	public static Pattern compileRegExpCatch(String text) {
 		try {
-			return complieRegExp(text);
+			return compileRegExp(text);
 		} catch (Throwable e) {
 			return null;
 		}
 	}
-	public static Pattern complieRegExp(String text) {
-		return text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
+	public static Pattern compileRegExp(String text) {
+		return text == null || text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
 	}
 
 	public static boolean isNum(String text) {
@@ -59,20 +70,24 @@ public class Tools {
 		}
 	}
 	public static int asInt(String text) {
-		return (int) Float.parseFloat(text);
+		float f = asFloat(text);
+		return Float.isNaN(f) ? 0 : (int) f;
+	}
+
+
+	public static String clName(Object o) {
+		return o.getClass().getName();
 	}
 
 	// 去除颜色
 	public static String format(String s) {
 		return s.replaceAll("\\[(\\w+?)\\]", "[\u0001$1]");
 	}
-	public static int len(String s) {
-		return s.split("").length - 1;
-	}
-	public static Vec2 getAbsPos1(Element el) {
+
+	public static Vec2 getAbsPosCenter(Element el) {
 		return el.localToStageCoordinates(Tmp.v1.set(el.getWidth() / -2f, el.getHeight() / -2f));
 	}
-	public static final Vec2 v1 = new Vec2();
+	public static final Vec2 v1 = new Vec2(), v2 = new Vec2();
 	public static Vec2 getAbsPos(Element el) {
 		if (true) return el.localToStageCoordinates(v1.set(0, 0));
 		Vec2 vec2 = Tmp.v1.set(el.x, el.y);
@@ -136,7 +151,7 @@ public class Tools {
 					cancel();
 				}
 			}
-		}, 0, 1, -1);
+		}, 1f, 1f, -1);
 		/*Runnable[] run = {null};
 		run[0] = () -> {
 			Time.runTask(0, () -> {
@@ -150,12 +165,30 @@ public class Tools {
 		run[0].run();*/
 	}
 
-	/**
-	 * @param pack 包名
-	 *
-	 * @return Set数组
-	 **/
+
 	public static Set<Class<?>> getClasses(String pack) {
+		return OS.isAndroid ? getClasses1(pack) : getClasses0(pack);
+	}
+
+	public static Set<Class<?>> getClasses1(String pack) {
+		if (true) return new LinkedHashSet<>();
+		Set<Class<?>> classNameList = new LinkedHashSet<>();
+		try {
+			DexFile             df          = new DexFile(new Fi(".").file());//通过DexFile查找当前的APK中可执行文件
+			Enumeration<String> enumeration = df.entries();//获取df中的元素  这里包含了所有可执行的类名 该类名包含了包名+类名的方式
+			while (enumeration.hasMoreElements()) {//遍历
+				String className = enumeration.nextElement();
+
+				if (className.startsWith(pack)) {//在当前所有可执行的类里面查找包含有该包名的所有类
+					classNameList.add(mods.mainLoader().loadClass(className));
+				}
+			}
+		} catch (IOException | ClassNotFoundException e) {
+			Log.err(e);
+		}
+		return classNameList;
+	}
+	public static Set<Class<?>> getClasses0(String pack) {
 		// 第一个class类的集合
 		Set<Class<?>> classes = new LinkedHashSet<Class<?>>();
 		// 是否循环迭代
@@ -165,7 +198,7 @@ public class Tools {
 		// 定义一个枚举的集合 并进行循环来处理这个目录下的things
 		Enumeration<URL> dirs;
 		try {
-			dirs = Thread.currentThread().getContextClassLoader().getResources(packageDirName);
+			dirs = mods.mainLoader().getResources(packageDirName);
 			// 循环迭代下去
 			while (dirs.hasMoreElements()) {
 				// 获取下一个元素
@@ -208,7 +241,7 @@ public class Tools {
 	 * @param classes
 	 */
 	private static void findClassesInPackageByFile(String packageName, String packagePath, final boolean recursive,
-	                                               Set<Class<?>> classes) {
+																								 Set<Class<?>> classes) {
 		// 获取此包的目录 建立一个File
 		File dir = new File(packagePath);
 		// 如果不存在或者 也不是目录就直接返回
@@ -219,7 +252,7 @@ public class Tools {
 		// 如果存在 就获取包下的所有文件 包括目录
 		// 自定义过滤规则 如果可以循环(包含子目录) 或则是以.class结尾的文件(编译好的java类文件)
 		File[] dirfiles = dir.listFiles(file ->
-				(recursive && file.isDirectory()) || file.getName().endsWith(".class"));
+		 (recursive && file.isDirectory()) || file.getName().endsWith(".class"));
 		// 循环所有文件
 		assert dirfiles != null;
 		for (File file : dirfiles) {
@@ -253,8 +286,8 @@ public class Tools {
 	 * @param classes        ？？？
 	 */
 	private static void findClassesInPackageByJar(String packageName, Enumeration<JarEntry> entries,
-	                                              String packageDirName, final boolean recursive,
-	                                              Set<Class<?>> classes) {
+																								String packageDirName, final boolean recursive,
+																								Set<Class<?>> classes) {
 		// 同样的进行循环迭代
 		while (entries.hasMoreElements()) {
 			// 获取jar里的一个实体 可以是目录 和一些jar包里的其他文件 如META-INF等文件
@@ -393,8 +426,9 @@ public class Tools {
 		}
 		return false;
 	}
+	private static SR sr_instance = new SR<>(null);
 	public static <T> SR<T> sr(T value) {
-		return new SR<>(value);
+		return sr_instance.setv(value);
 	}
 
 	public static boolean test(Pattern pattern, String text) {
@@ -404,62 +438,54 @@ public class Tools {
 	public static <T> void checknull(T t, Consumer<T> cons) {
 		if (t != null) cons.accept(t);
 	}
-	public static <T> void checknull(T t, Consumer<T> cons, Runnable notcons) {
+	/**
+	 * 检查是否为null，
+	 *
+	 * @param cons     非null时执行
+	 * @param nullcons 为null时执行
+	 */
+	public static <T> void checknull(T t, Consumer<T> cons, Runnable nullcons) {
 		if (t != null) cons.accept(t);
-		else notcons.run();
+		else nullcons.run();
 	}
 	public static <T> void checknull(T t, Runnable run) {
 		if (t != null) run.run();
 	}
 
 	public static void quietScreenshot(Element element) {
-		screenshot(element, true, (region, pixmap) -> {
-			JSFunc.testElement(region);
-
+		// ui.update();
+		ScreenSampler.pause();
+		JSFunc.dialog(screenshot(element, true, (region, pixmap) -> {
 			Fi fi = screenshotDirectory.child(
-					Optional.ofNullable(element.name)
-							.orElseGet(() -> "" + Time.nanos()) + ".png");
-			// 将图片写入文件
-			PngWriter writer = new PngWriter((int) (pixmap.width * pixmap.height * 1.5f)); // Guess at deflated size.
-			try {
-				writer.setFlipY(true);
-				writer.write(fi, pixmap);
-			} catch (IOException ignored) {
-			} finally {
-				writer.dispose();
-			}
-			// PixmapIO.writePng(fi, potPixmap);
-			pixmap.dispose();
+			 Optional.ofNullable(element.name)
+				.orElseGet(() -> "" + Time.nanos()) + ".png");
+			// PixmapIO.writePng(fi, pixmap);
+			// pixmap.dispose();
 
 			Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
-		});
+		}));
+		ScreenSampler.contiune();
 		// Time.runTask(30, w::hide);
 	}
 	public static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {
 		return screenshot(element, false, callback);
 	}
 	/** 使用ScreenUtils截图 */
-	public static TextureRegion screenshot(Element element, boolean clear, Cons2<TextureRegion, Pixmap> callback) {
-		int w = (int) element.getWidth(),
-				h = (int) element.getHeight();
+	public static TextureRegion screenshot(Element el, boolean clear, Cons2<TextureRegion, Pixmap> callback) {
+		int w = (int) el.getWidth(),
+		 h = (int) el.getHeight();
 
 		// Draw.shader();
 		// 清空
 		if (clear) {
 			clearScreen();
-			element.draw();
+			el.draw();
 			Draw.flush();
 		}
-		// var trans = Draw.trans();
-		// trans.rotate(180);
-		// Draw.trans(new Mat(trans).scl(0.1f));
-		Vec2   vec2   = getAbsPos(element);
-		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h);
-		// pixmap = sr(new Pixmap(w, h)).cons(pixmap, Pixmap::draw).get();
+		Vec2   vec2   = getAbsPos(el);
+		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h, true);
 
-		// Draw.trans(trans);
-		// trans.rotate(-180);
-		TextureRegion textureRegion = new TextureRegion(new Texture(pixmap), 0, h, w, -h);
+		TextureRegion textureRegion = new TextureRegion(new Texture(pixmap), 0, 0, w, h);
 		if (callback != null) callback.get(textureRegion, pixmap);
 		/* Core.scene.draw();
 		Draw.flush(); */
@@ -470,15 +496,60 @@ public class Tools {
 		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
-	public static class SR<T> implements SRI<T> {
+	/**
+	 * 返回List的第i个元素，超过区间返回null
+	 * 负数index为倒数第i个元素
+	 *
+	 * @param list 列表
+	 * @param i    索引
+	 */
+	public static <T> T getNull(List<T> list, int i) {
+		if (i < 0) i += list.size();
+		return i < list.size() ? list.get(i) : null;
+	}
+
+
+	/** 自动监控原seq */
+	public static <T> Seq<T> selectUpdateFrom(Seq<T> items, Boolf<T> predicate) {
+		Seq<T> arr  = new Seq<>();
+		int[]  size = {items.size};
+		tasks.add(() -> {
+			if (items.size != size[0]) arr.selectFrom(items, predicate);
+		});
+		return arr.selectFrom(items, predicate);
+	}
+
+	public static class SR<T> {
 		private T value;
 
 		public SR(T value) {
 			this.value = value;
 		}
 
-		public SR<T> reset(Function<T, T> func) {
-			value = func.apply(value);
+		public SR<T> setv(T value) {
+			this.value = value;
+			return this;
+		}
+		public SR<T> set(Function<T, T> func) {
+			if (func != null) value = func.apply(value);
+			return this;
+		}
+		public SR<T> setnull(Boolf<T> condition) {
+			return set(condition, null);
+		}
+
+		public SR<T> set(Boolf<T> conditon, T newValue) {
+			if (conditon != null && conditon.get(value)) value = newValue;
+			return this;
+		}
+
+		public SR<T> ifPresent(Consumer<T> cons) {
+			return ifPresent(cons, null);
+		}
+
+		public SR<T> ifPresent(Consumer<T> cons, Runnable nullrun) {
+			if (value != null) cons.accept(value);
+			else if (nullrun != null) nullrun.run();
 			return this;
 		}
 
@@ -487,10 +558,10 @@ public class Tools {
 		 *
 		 * @throws RuntimeException 当执行后抛出
 		 */
-		public <R> SR<T> isInstance(Class<R> cls, Consumer<R> cons) {
+		public <R> SR<T> isInstance(Class<R> cls, Consumer<R> cons) throws SatisfyException {
 			if (cls.isInstance(value)) {
 				cons.accept(cls.cast(value));
-				throw new RuntimeException();
+				throw new SatisfyException();
 			}
 			return this;
 		}
@@ -499,7 +570,10 @@ public class Tools {
 			cons.accept(value, f);
 			return this;
 		}
-
+		public SR<T> cons(int i, BiConsumer<T, Integer> cons) {
+			cons.accept(value, i);
+			return this;
+		}
 		public <R> SR<T> cons(R obj, BiConsumer<T, R> cons) {
 			cons.accept(value, obj);
 			return this;
@@ -524,45 +598,53 @@ public class Tools {
 			return func.apply(value);
 		}
 
+		/* ---- for classes ---- */
+		/**
+		 * 判断是否继承
+		 *
+		 * @param cons 形参为满足的<code>class</code>
+		 */
+		public SR<T> isExtend(Consumer<Class<?>> cons, Class<?>... classes) {
+			if (!(value instanceof Class<?> orgin)) throw new IllegalStateException("Value isn't a class");
+
+			for (Class<?> cl : classes) {
+				if (cl.isAssignableFrom(orgin)) {
+					cons.accept(cl);
+					break;
+				}
+			}
+			return this;
+		}
 	}
 
-	public interface SRI<T> {
-		SRI none = new SRI<>() {
-			public SRI reset(Function func) {
-				return this;
+	public static Runnable catchRun(CatchRun run) {
+		return catchRun("", run, null);
+	}
+	public static Runnable catchRun(CatchRun run, Element el) {
+		return catchRun("", run, el);
+	}
+	public static Runnable catchRun(String text, CatchRun run, Element el) {
+		return () -> {
+			try {
+				run.run0();
+			} catch (Throwable th) {
+				Window window = IntUI.showException(text, th);
+				if (el != null) window.setPosition(getAbsPos(el));
 			}
-			public SRI isInstance(Class cls, Consumer cons) {
-				return this;
-			}
-			public SRI cons(Consumer cons) {
-				return this;
-			}
-			public SRI cons(Object obj, BiConsumer cons) {return this;}
-			public SRI cons(float obj, BiConsumer cons) {return this;}
-			public boolean test(Predicate predicate) {return false;}
-			public Object get() {
-				return null;
-			}
-			public Object get(Function function) {return null;}
 		};
-
-		SRI<T> reset(Function<T, T> func);
-
-		<R> SRI<T> isInstance(Class<R> cls, Consumer<R> cons);
-
-		SRI<T> cons(Consumer<T> cons);
-
-		<R> SRI<T> cons(R obj, BiConsumer<T, R> cons);
-
-		SRI<T> cons(float f, BiConsumer<T, Float> cons);
-
-		boolean test(Predicate<T> predicate);
-
-		T get();
-
-		<R> R get(Function<T, R> func);
 	}
 
+	/** 只是标识 */
+	public static class SatisfyException extends Exception {}
+
+	public interface CatchRun {
+		void run0() throws Throwable;
+		/* default void run() {
+			try {
+				run0();
+			} catch (Throwable ignored) {}
+		} */
+	}
 
 	// Reflection
 	public static Object invoke(Method m, Object obj, Object... args) {

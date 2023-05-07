@@ -4,7 +4,6 @@ import arc.Core;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
-import arc.util.Tmp;
 
 public interface Limit {
 	/*static boolean isVisible(Element actor) {
@@ -39,10 +38,7 @@ public interface Limit {
 				return false;
 			}
 		}
-		// localToStageCoordinates(v1.set(0, 0));
 		actor.localToAscendantCoordinates(elem, v1.set(0, 0));
 		return v1.x >= -w && v1.y >= -h && v1.x <= elem.getWidth() && v1.y <= elem.getHeight();
-		// actor.localToAscendantCoordinates(elem, v1.set(w, h));
-		// localToStageCoordinates(v1.set(w, h));
 	}
 }

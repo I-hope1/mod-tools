@@ -13,7 +13,7 @@ public class Contents {
 	public static UnitSpawn       unitSpawn;
 	public static ErrorDisplay    errorDisplay;
 	public static ContentList     contentList;
-	public static ReviewElement   elementShow;
+	public static ReviewElement   reviewElement;
 	public static WindowManager   windowManager;
 	public static ActionsDebug    actionsDebug;
 
@@ -25,7 +25,7 @@ public class Contents {
 		unitSpawn = new UnitSpawn();
 		errorDisplay = new ErrorDisplay();
 		contentList = new ContentList();
-		elementShow = new ReviewElement();
+		reviewElement = new ReviewElement();
 		windowManager = new WindowManager();
 		actionsDebug = new ActionsDebug();
 	}

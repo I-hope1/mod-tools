@@ -6,65 +6,74 @@ import arc.graphics.Color;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
+import arc.struct.Seq;
 import arc.util.*;
-import com.strobel.decompiler.*;
 import com.strobel.decompiler.Decompiler;
+import com.strobel.decompiler.*;
 import ihope_lib.MyReflect;
-import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
-import mindustry.ui.*;
+import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.events.*;
 import modtools.ui.*;
+import modtools.ui.IntUI.MenuList;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableInterface;
-import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.*;
-import modtools.ui.content.SettingsContent;
-import modtools.utils.JSFunc.ReflectTable;
+import modtools.utils.search.BindCell;
 import rhino.*;
 
 import java.io.StringWriter;
+import java.lang.invoke.*;
 import java.lang.reflect.*;
-import java.util.Arrays;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static modtools.IntVars.hasDecomplier;
-import static modtools.ui.IntStyles.MOMO_Label;
+import static modtools.ui.IntStyles.MOMO_LabelStyle;
+import static modtools.ui.content.SettingsContent.addSettingsTable;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.MySettings.*;
 import static modtools.utils.Tools.*;
 
 class ShowInfoWindow extends Window implements DisposableInterface {
 
-	final Class<?> clazz;
-	Object o;
-	ReflectTable
-	       fieldsTable,
-			methodsTable,
-			classesTable;
+	private final Class<?> clazz;
+	private final Object   o;
+	private final MyEvents events = new MyEvents();
+
+	private ReflectTable
+	 fieldsTable,
+	 methodsTable,
+	 constructorsTable,
+	 classesTable;
 
 	public ShowInfoWindow(Object o, Class<?> clazz) {
 		super(clazz.getSimpleName(), 200, 200, true);
 		this.o = o;
 		this.clazz = clazz;
+		MyEvents.current = events;
 		build();
+		MyEvents.current = null;
 	}
-
+	Cons<String> rebuild;
+	TextField    textField;
 
 	public void build() {
 		Table build = new LimitTable();
 		// 默认左居中
 		build.left().top().defaults().left();
-		boolean[] isBlack   = {false};
-		TextField textField = new TextField();
+		boolean[] isBlack = {false};
+		textField = new TextField();
 		// Runnable[] last = {null};
-		Cons<String> rebuild = text -> {
+		rebuild = text -> {
 			// build.clearChildren();
-			Pattern pattern = Tools.complieRegExpCatch(text);
+			Pattern pattern = Tools.compileRegExpCatch(text);
 			buildReflect(o, build, pattern, isBlack[0]);
 		};
 		Runnable rebuild0 = () -> {
@@ -76,29 +85,39 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 
 		final Table cont = new Table();
 		// 默认左居中
-		cont.left().defaults().left().fillX();
-		cont.table(t -> {
+		cont.left().defaults().left().growX();
+		cont.pane(t -> {
 			t.left().defaults().left();
-			SettingsContent.bool(t.table().get(), "multi-watch", D_JSFUNC, "@settings.jsfunc.multi.watch");
-			if (hasDecomplier) t.button("Decomplie", Styles.flatBordert, () -> {
+			t.button(Icon.settingsSmall, Styles.clearNonei, () -> {
+				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+					addSettingsTable(p, "", n -> "jsfunc." + n, D_JSFUNC, E_JSFunc.values());
+					addSettingsTable(p, "Display", n -> "jsfunc.display." + n, D_JSFUNC_DISPLAY, E_JSFuncDisplay.values());
+					addSettingsTable(p, "Edit", n -> "jsfunc.edit." + n, D_JSFUNC_EDIT, E_JSFuncEdit.values());
+				}, false);
+			}).size(42);
+			if (hasDecomplier) t.button("Decompile", Styles.flatBordert, () -> {
 				StringWriter stringWriter = new StringWriter();
 				Decompiler.decompile(
-						// clazz.getClassLoader().getResource()
-						clazz.getName().replace('.', '/') + ".class",
-						new PlainTextOutput(stringWriter)
+				 // clazz.getClassLoader().getResource()
+				 clazz.getName().replace('.', '/') + ".class",
+				 new PlainTextOutput(stringWriter)
 				);
-				var textarea = new TextAreaTable(stringWriter.toString());
+				Log.info(stringWriter);
+				TextAreaTab textarea = new TextAreaTab(stringWriter.toString());
 				textarea.syntax = new JavaSyntax(textarea);
-				JSFunc.window(d -> {
+				window(d -> {
 					d.cont.setSize(textarea.getArea().getPrefWidth(), textarea.getArea().getPrefHeight());
 					d.cont.add(textarea).grow();
 				});
-			}).size(100, 32);
-			t.button(Icon.refresh, IntStyles.clearNonei, rebuild0).size(50);
-			addStoreButton(t, "", () -> o);
-		}).row();
+			}).size(100, 42);
+			t.button(Icon.refreshSmall, IntStyles.clearNonei, rebuild0).size(42);
+			if (o != null) {
+				addStoreButton(t, "", () -> o);
+				t.label(() -> "" + addressOf(o)).padLeft(8f);
+			}
+		}).height(42).row();
 		cont.table(t -> {
-			t.button(Tex.whiteui, 35, null).size(42).with(img -> {
+			t.button(Tex.whiteui, 32, null).size(42).with(img -> {
 				img.clicked(() -> {
 					isBlack[0] = !isBlack[0];
 					img.getStyle().imageUpColor = isBlack[0] ? Color.black : Color.white;
@@ -110,37 +129,22 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 		}).row();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.add(clazz.getTypeName(), MOMO_Label);
-			t.button(Icon.copy, Styles.cleari, () -> {
+			t.add(clazz.getTypeName(), MOMO_LabelStyle);
+			t.button(Icon.copySmall, Styles.cleari, () -> {
 				copyText(clazz.getTypeName(), t);
-			});
+			}).size(32);
+			if (o == null) t.add("NULL", MOMO_LabelStyle).color(Color.red).padLeft(8f);
 		}).pad(6, 10, 6, 10).row();
 		rebuild.get(null);
 		// cont.add(build).grow();
 
 		this.cont.add(cont).row();
 		this.cont.add(new ScrollPane(build)).grow().row();
-	}
 
-	private static <T> T[] filter(Pattern pattern, boolean isBlack, Func<T, String> func, T[] array) {
-		// return Seq.select(array, t -> pattern == null || pattern.matcher(func.get(t)).find() == isBlack).toArray();
-		if (pattern == null) return array;
-		T[] newArr = Arrays.copyOf(array, array.length);
-		int j      = array.length;
-		for (int i = 0; i < array.length; i++) {
-			if (pattern.matcher(func.get(array[i])).find() == isBlack) {
-				newArr[i] = null;
-				j--;
-			}
+		for (E_JSFuncDisplay value : E_JSFuncDisplay.values()) {
+			events.fireIns(value);
 		}
-		array = as(Array.newInstance(array.getClass().getComponentType(), j));
-		int k = 0;
-		for (T t : newArr) {
-			if (t != null) {
-				array[k++] = t;
-			}
-		}
-		return array;
+		pack();
 	}
 
 	/**
@@ -154,28 +158,29 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 			runnables.each(Runnable::run);
 		});*/
 		if (cont.getChildren().size > 0) {
-			fieldsTable.filter(name -> pattern == null || pattern.matcher(name).find() != isBlack);
+			Boolf<String> stringBoolf = name -> pattern == null || find(pattern, name) != isBlack;
+			fieldsTable.filter(stringBoolf);
 			fieldsTable.labels.each(ValueLabel::setVal);
-			methodsTable.filter(name -> pattern == null || pattern.matcher(name).find() != isBlack);
+			methodsTable.filter(stringBoolf);
 			methodsTable.labels.each(ValueLabel::clearVal);
-			classesTable.filter(name -> pattern == null || pattern.matcher(name).find() != isBlack);
+			constructorsTable.filter(stringBoolf);
+			classesTable.filter(stringBoolf);
 			return;
 		}
 		ReflectTable fields, methods, constructors, classes;
 		boolean[]    c = new boolean[4];
 		Arrays.fill(c, true);
 
-		// cont.add("@jsfunc.field").row();
 		BiFunction<String, Integer, ReflectTable> func = (text, index) -> {
-			cont.button(text, Styles.logicTogglet, () -> c[index] ^= true).growX().height(42)
-					.checked(c[index])
-					.with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
-					.row();
+			cont.button(text, Styles.flatToggleMenut, () -> c[index] ^= true)
+			 .growX().height(42).checked(c[index])
+			 .with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
+			 .row();
 			cont.image().color(Pal.accent).growX().height(2).row();
 			var table = new ReflectTable();
 			cont.collapser(table, true, () -> c[index])
-					.pad(4, 6, 4, 6)
-					.fillX().padTop(8).get().setDuration(0.1f);
+			 .pad(4, 6, 4, 6)
+			 .growX().padTop(8).get().setDuration(0.1f);
 			cont.row();
 			// 占位符
 			cont.add().grow().row();
@@ -183,62 +188,59 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 		};
 		fields = fieldsTable = func.apply("@jsfunc.field", 0);
 		methods = methodsTable = func.apply("@jsfunc.method", 1);
-		constructors = func.apply("@jsfunc.constructor", 2);
+		constructors = constructorsTable = func.apply("@jsfunc.constructor", 2);
 		classes = classesTable = func.apply("@jsfunc.class", 3);
 
 		// boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
 		for (Class<?> cls = clazz; cls != null; cls = cls.getSuperclass()) {
-			// fieldArray = filter(pattern, isBlack, Field::getName, fieldArray);
 			fields.build(cls);
-			// Method[] methodArray = filter(pattern, isBlack, Method::getName, window.methodMap.get(cls));
 			methods.build(cls);
-			/*Constructor<?>[] constructorArray = filter(pattern, isBlack, Constructor::getName, window.consMap.get(cls));
-			if (constructorArray.length != 0 || !displayClass) {*/
-			constructors.add(new MyLabel(cls.getSimpleName(), MOMO_Label)).row();
-			constructors.image().color(Color.lightGray).fillX().padTop(6).colspan(6).row();
-			// }
+			constructors.build(cls);
 			classes.build(cls);
+
 			// 字段
-			Field[] fields1;
-			try {fields1 = MyReflect.lookupGetFields(cls);} catch (Throwable e) {fields1 = new Field[0];}
-			for (Field f : fields1) {
+			for (Field f : getFields1(cls)) {
 				buildField(o, fields, f);
 			}
-			if (fields.hasChildren()) fields.getChildren().peek().remove();
+			checkRemovePeek(fields);
 
 			// 函数
-			Method[] methods1;
-			try {
-				methods1 = MyReflect.lookupGetMethods(cls);
-			} catch (Throwable e) {
-				methods1 = new Method[0];
-			}
-			for (Method m : methods1) {
+			for (Method m : getMethods1(cls)) {
 				buildMethod(o, methods, m);
 			}
-			if (methods.hasChildren()) methods.getChildren().peek().remove();
+			checkRemovePeek(methods);
+
 			// 构造器
-			Constructor<?>[] constructors1;
-			try {
-				constructors1 = MyReflect.lookupGetConstructors(cls);
-			} catch (Throwable e) {
-				constructors1 = new Constructor<?>[0];
-			}
-			for (Constructor<?> cons : constructors1) {
+			for (Constructor<?> cons : getConstructors1(cls)) {
 				buildConstructor(constructors, cons);
 			}
-			if (constructors.hasChildren()) constructors.getChildren().peek().remove();
+			checkRemovePeek(constructors);
 
 			// 类
 			for (Class<?> dcls : cls.getDeclaredClasses()) {
 				buildClass(classes, dcls);
 			}
-			if (classes.hasChildren()) classes.getChildren().peek().remove();
+			checkRemovePeek(classes);
 		}
 		// return mainRun;
 	}
+	public static boolean find(Pattern pattern, String name) {
+		return E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
+	}
+	private static void checkRemovePeek(ReflectTable table) {
+		if (table.hasChildren()) table.getChildren().peek().remove();
+	}
+	private static Field[] getFields1(Class<?> cls) {
+		try {return MyReflect.lookupGetFields(cls);} catch (Throwable e) {return new Field[0];}
+	}
+	private static Constructor<?>[] getConstructors1(Class<?> cls) {
+		try {return MyReflect.lookupGetConstructors(cls);} catch (Throwable e) {return new Constructor<?>[0];}
+	}
+	private static Method[] getMethods1(Class<?> cls) {
+		try {return MyReflect.lookupGetMethods(cls);} catch (Throwable e) {return new Method[0];}
+	}
 
-	private static void buildField(Object o, ReflectTable fields, Field f) {
+	private void buildField(Object o, ReflectTable fields, Field f) {
 		fields.bind(f.getName());
 		try {
 			MyReflect.setOverride(f);
@@ -252,69 +254,79 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 			// modifiers
 			addModifier(fields, Modifier.toString(modifiers));
 			// type
-			fields.add(new MyLabel(getGenericString(type), typeStyle))
-					.padRight(16).touchable(Touchable.disabled);
+			addRType(fields, type);
 			// name
-			addDClickCopy(fields.add(new MyLabel(f.getName(), MOMO_Label))
-					.get());
-			fields.add(new MyLabel(" = ", MOMO_Label))
-					.touchable(Touchable.disabled);
+			MyLabel label = fields.add(new MyLabel(f.getName(), MOMO_LabelStyle)).get();
+			addDClickCopy(label);
+			IntUI.addShowMenuListener(label, () -> Seq.with(
+			 IntUI.copyAsJSMenu("field", () -> f),
+			 MenuList.with(Icon.copy, "copy offset", () -> {
+				 JSFunc.copyText("" + (Modifier.isStatic(modifiers) ? MyReflect.unsafe.staticFieldOffset(f) : MyReflect.unsafe.objectFieldOffset(f)));
+			 })
+			));
+			fields.add(new MyLabel(" = ", MOMO_LabelStyle)).touchable(Touchable.disabled);
 		} catch (Throwable e) {
 			Log.err(e);
 		}
 		fields.table(t -> {
+			t.left().defaults().left();
 			// 占位符
-			Cell<?> cell  = t.add();
-			float[] prefW = {0};
+			Cell<?>  cell   = t.add();
+			BindCell c_cell = addDisplayListener(cell, E_JSFuncDisplay.value);
+			float[]  prefW  = {0};
 			/*Cell<?> lableCell = */
-			ValueLabel l = new ValueLabel("", type);
-			l.set(f, o);
+			ValueLabel l = new ValueLabel("", type, f, o);
 			fields.labels.add(l);
 			Cell<?> labelCell = t.add(l);
 			// 太卡了
 			IntVars.addResizeListener(() -> labelCell.width(Math.min(prefW[0], Core.graphics.getWidth())));
 
-			// if (type.isPrimitive() || type == String.class) {
 			try {
 				l.setVal();
-				if (l.isStatic() || o != null) buildFieldValue(type, cell, l);
+				buildFieldValue(type, c_cell, l);
 
-				// prefW[0] = l.getPrefWidth();
-				// listener.run();
-				// Time.runTask(0, () -> l.setWrap(true));
 				if (!unbox(type).isPrimitive() && type != String.class) {
 					l.addShowInfoListener();
 				}
 			} catch (Throwable e) {
-				//								`Log.info`(e);
 				l.setText("<ERROR>");
 				l.setColor(Color.red);
 			}
 
-			t.table(buttons -> {
+			addDisplayListener(t.table(buttons -> {
 				buttons.right().top().defaults().right().top();
 				addLabelButton(buttons, () -> l.val, type);
-				addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
+				// addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
 				addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
-			}).grow().top().right();
-		}).pad(4).growX().left().row();
-		fields.image().color(underline).growX().colspan(6).row();
+			}).grow().top(), E_JSFuncDisplay.buttons);
+		}).pad(4).growX().row();
+		fields.image().color(c_underline).growX().colspan(6).row();
 	}
-	private static void addModifier(ReflectTable table, CharSequence string) {
-		// if (true) return;
-		table.add(new MyLabel(string, keywordStyle))
-				.touchable(Touchable.disabled).padRight(8);
+
+	private BindCell addDisplayListener(Cell<?> cell0, E_JSFuncDisplay type) {
+		BindCell cell = new BindCell(cell0);
+		events.onIns(type, b -> {
+			if (b.enabled()) cell.build();
+			else cell.remove();
+		});
+		return cell;
 	}
-	private static void buildFieldValue(Class<?> type, Cell<?> cell, ValueLabel l) {
+	private void addModifier(Table table, CharSequence string) {
+		addDisplayListener(table.add(new MyLabel(string, keywordStyle))
+		 .padRight(8), E_JSFuncDisplay.modifier);
+	}
+	private void addRType(Table table, Class<?> type) {
+		addDisplayListener(table.add(new MyLabel(getGenericString(type), typeStyle))
+		 .padRight(16).touchable(Touchable.disabled), E_JSFuncDisplay.type);
+	}
+
+	private void buildFieldValue(Class<?> type, BindCell c_cell, ValueLabel l) {
+		if (!l.isStatic() && l.obj == null) return;
+		Cell<?> cell = c_cell.cell;
 		if (l.val instanceof Color) {
-			final Color color = (Color) l.val;
-			cell.setElement(new BorderImage(Core.atlas.white(), 2f)
-					.border(color.cpy().inv())).color(color).size(42f).with(b -> {
-				IntUI.doubleClick(b, () -> {}, () -> {
-					Vars.ui.picker.show(color, color::set);
-				});
-			});
-		} else if (D_JSFUNC_EDIT.getBool("boolean", false) && (type == Boolean.TYPE || type == Boolean.class)) {
+			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
+			c_cell.reget();
+		} else if (type == Boolean.TYPE || type == Boolean.class) {
 			var btn = new TextButton("", IntStyles.flatTogglet);
 			btn.update(() -> {
 				l.setVal();
@@ -327,15 +339,14 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 				try {
 					l.setFieldValue(b);
 				} catch (Throwable e) {
-					IntUI.showException(e)
-							.setPosition(Core.input.mouse());
+					IntUI.showException(e).setPosition(Core.input.mouse());
 				}
 				l.setVal(b);
 			});
 			cell.setElement(btn);
 			cell.size(96, 42);
-			l.remove();
-		} else if (D_JSFUNC_EDIT.getBool("number", false) && Number.class.isAssignableFrom(box(type))) {
+			c_cell.reget();
+		} else if (Number.class.isAssignableFrom(box(type))) {
 			var field = new AutoTextField();
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {
@@ -347,11 +358,16 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 			field.changed(() -> {
 				if (!field.isValid()) return;
 				l.setFieldValue(Context.jsToJava(
-						ScriptRuntime.toNumber(field.getText()),
-						type));
+				 ScriptRuntime.toNumber(field.getText()),
+				 type));
 			});
 			cell.setElement(field);
 			cell.height(42);
+			c_cell.reget();
+			events.onIns(E_JSFuncEdit.number, edit -> {
+				cell.setElement(edit.enabled() ? field : null);
+				c_cell.reget();
+			});
 		} else if (D_JSFUNC_EDIT.getBool("string", false) && type == String.class) {
 			var field = new AutoTextField();
 			field.update(() -> {
@@ -365,143 +381,261 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 			});
 			cell.setElement(field);
 			cell.height(42);
+			c_cell.reget();
+			events.onIns(E_JSFuncEdit.number, edit -> {
+				cell.setElement(edit.enabled() ? field : null);
+				c_cell.reget();
+			});
 		}
+
 	}
-	private static void buildMethod(Object o, ReflectTable methods, Method m) {
+	private void buildMethod(Object o, ReflectTable methods, Method m) {
 		// if (c++ > 10) continue;
 		methods.bind(m.getName());
 		try {
 			MyReflect.setOverride(m);
 		} catch (Throwable ignored) {}
 		try {
-			StringBuilder sb  = new StringBuilder();
-			int           mod = m.getModifiers() & Modifier.methodModifiers();
-			if (mod != 0 && !m.isDefault()) {
-				sb.append(Modifier.toString(mod));
-			} else {
-				sb.append(Modifier.toString(mod));
-				if (m.isDefault()) {
-					sb.append(" default");
-				}
-			}
+			int mod = m.getModifiers();
 			// modifiers
-			addModifier(methods, sb);
+			addModifier(methods, buildExecutableModifier(m));
 			// return type
-			methods.add(new MyLabel(getGenericString(m.getReturnType()), typeStyle)).touchable(Touchable.disabled).padRight(8f);
+			addRType(methods, m.getReturnType());
 			// method name
-			addDClickCopy(methods.add(new MyLabel(m.getName(), MOMO_Label))
-					.get());
+			MyLabel label = methods.add(new MyLabel(m.getName(), MOMO_LabelStyle))
+			 .get();
+			addDClickCopy(label);
 			// method parameters + exceptions + buttons
-			methods.add(new LimitLabel(buildArgsAndExceptions(m.getParameterTypes(), m.getExceptionTypes())
-					, MOMO_Label)).pad(4).left().touchable(Touchable.disabled);
+			methods.add(new LimitLabel(buildArgsAndExceptions(m)
+			 , MOMO_LabelStyle)).pad(4).left().touchable(Touchable.disabled);
 
 
 			// 占位符
 			Cell<?> cell = methods.add();
-			ifl:
-			if (m.getParameterTypes().length == 0) {
-				if (o == null && !Modifier.isStatic(m.getModifiers())) {
-					methods.add();
-					break ifl;
+			Cell<?> buttonsCell;
+
+			boolean isSingle = m.getParameterTypes().length == 0;
+			boolean isValid  = o != null || Modifier.isStatic(mod);
+			// if (isSingle && !isValid) methods.add();
+
+			ValueLabel l = new ValueLabel("", o, m);
+			l.clearVal();
+			methods.labels.add(l);
+			IntUI.addShowMenuListener(label, () -> Seq.with(
+			 IntUI.copyAsJSMenu("method", () -> m),
+			 MenuList.with(Icon.copySmall, "copy reflection getter", () -> {
+				 copyExecutableReflection(m);
+			 }),
+			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
+				 m.setAccessible(true);
+				 if (isSingle) {
+					 try {
+						 dealInvokeResult(m.invoke(o), cell, l);
+					 } catch (Throwable th) {IntUI.showException(th);}
+					 return;
+				 }
+				 JSRequest.requestForMethod(m, o, ret -> {
+					 Object[] arr = convertArgs((NativeArray) ret, m.getParameterTypes());
+					 Object   res;
+					 if (l.isStatic()) res = m.invoke(null, arr);
+						 // it may not happen.
+					 else if (o == null) throw new NullPointerException("'obj' is null.");
+					 else res = m.invoke(o, arr);
+					 dealInvokeResult(res, cell, l);
+				 });
+			 }),
+			 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
+				 MethodHandle handle;
+				 try {
+					 handle = MyReflect.lookup.findSpecial(m.getDeclaringClass(),
+						m.getName(), MethodType.methodType(m.getReturnType(), m.getParameterTypes()), m.getDeclaringClass());
+				 } catch (NoSuchMethodException | IllegalAccessException e) {
+					 throw new RuntimeException(e);
+				 }
+				 if (isSingle) {
+					 try {
+						 dealInvokeResult(handle.invokeWithArguments(o), cell, l);
+					 } catch (Throwable th) {IntUI.showException(th);}
+					 return;
+				 }
+				 JSRequest.requestForMethod(handle, o, ret -> {
+					 Object[] arr = convertArgs((NativeArray) ret, m.getParameterTypes());
+					 Object   res;
+					 if (l.isStatic()) res = handle.invokeWithArguments(arr);
+						 // it may not happen.
+					 else if (o == null) throw new NullPointerException("'obj' is null.");
+					 else res = handle.invokeWithArguments(o, arr);
+					 dealInvokeResult(res, cell, l);
+				 });
+			 })/* ,
+			  MenuList.with(Icon.infoSmall, "ReplaceGenerate", () -> {
+				  try {
+					  Seq<CtClass> seq = new Seq<>(CtClass.class);
+					  for (Class<?> type : m.getParameterTypes()) {
+						  seq.add(ClassPool.getDefault().get(type.getName()));
+					  }
+					  if (ClassPool.getDefault().getOrNull("arc.util.Log") == null)
+						  ClassPool.getDefault().appendClassPath(new ClassClassPath(Log.class));
+					  CtMethod ctMethod = ClassPool.getDefault().get(m.getDeclaringClass().getName())
+						.getDeclaredMethod(m.getName(), seq.toArray());
+					  JSRequest.requestForMethod(ctMethod, o, ret -> {
+						  ctMethod.setBody((String) ret);
+					  });
+				  } catch (NotFoundException e) {
+					  IntUI.showException(e);
+				  }
+			  }) */
+			));
+			// float[] prefW = {0};
+			methods.add(l);
+
+			buttonsCell = methods.table(buttons -> {
+				buttons.right().top().defaults().right().top();
+				if (isSingle && isValid) {
+					buttons.button("Invoke", IntStyles.flatBordert, catchRun("invoke出错", () -> {
+						dealInvokeResult(m.invoke(o), cell, l);
+					}, l)).size(96, 45);
 				}
-				ValueLabel l = new ValueLabel("", m.getReturnType());
-				methods.labels.add(l);
-				// float[] prefW = {0};
-				methods.add(l)/*.self(c -> c.update(__ -> c.width(Math.min(prefW[0], Core.graphics.getWidth()))))*/;
-
-				methods.table(buttons -> {
-					buttons.right().top().defaults().right().top();
-					buttons.button("Invoke", IntStyles.flatBordert, () -> {
-						try {
-							l.setVal(m.invoke(o));
-							// l.setWrap(false);
-							// prefW[0] = l.getPrefWidth();
-							// l.setWrap(true);
-
-							if (l.val instanceof Color) {
-								cell.setElement(new Image(IntUI.whiteui.tint((Color) l.val))).size(32).padRight(4).touchable(Touchable.disabled);
-							}
-							if (l.val != null && !(l.val instanceof String) && !m.getReturnType().isPrimitive()) {
-								//											l.setColor(Color.white);
-								l.addShowInfoListener();
-							}
-						} catch (Throwable ex) {
-							IntUI.showException("invoke出错", ex).setPosition(getAbsPos(l));
-						}
-					}).size(96, 45);
-					addLabelButton(buttons, () -> l.val, l.type);
-					addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-				}).grow().top().right();
-			} else {
-				// methods.add(); // 占位符， 对应上面
-				methods.table(buttons -> {
-					buttons.right().top().defaults().right().top();
-					addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-				}).grow().top().right().colspan(2);
-			}
+				addLabelButton(buttons, () -> l.val, l.type);
+				// addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
+			}).grow().top().right();
+			if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 		} catch (Throwable err) {
 			methods.add(new MyLabel("<" + err + ">", redStyle));
 		}
 		methods.row();
-		methods.image().color(underline).growX().colspan(7).row();
+		methods.image().color(c_underline).growX().colspan(7).row();
 	}
-	private static void buildConstructor(ReflectTable t, Constructor<?> cons) {
+	private static Object[] convertArgs(NativeArray ret, Class<?>[] types) {
+		Iterator<Class<?>> iterator = Seq.with(types).iterator();
+		Seq                seq      = Seq.with(ret.toArray());
+		seq.replace(a -> JavaAdapter.convertResult(a, iterator.next()));
+		return seq.items;
+	}
+
+	static final int ACCESS_MODIFIERS =
+	 Modifier.PUBLIC | Modifier.PROTECTED | Modifier.PRIVATE;
+	/** copy from Executable
+	 * @see Executable#sharedToGenericString(int, boolean) 
+	 * */
+	public static StringBuilder buildExecutableModifier(Executable m) {
+		int     mod       = m.getModifiers() & (m instanceof Method ? Modifier.methodModifiers() : Modifier.constructorModifiers());
+		boolean isDefault = m instanceof Method && ((Method) m).isDefault();
+
+		StringBuilder sb = new StringBuilder();
+		if (mod != 0 && !isDefault) {
+			sb.append(Modifier.toString(mod)).append(' ');
+		} else {
+			int access_mod = mod & ACCESS_MODIFIERS;
+			if (access_mod != 0)
+				sb.append(Modifier.toString(access_mod)).append(' ');
+			if (isDefault)
+				sb.append("default ");
+			mod = (mod & ~ACCESS_MODIFIERS);
+			if (mod != 0)
+				sb.append(Modifier.toString(mod)).append(' ');
+		}
+		return sb;
+	}
+	private static void copyExecutableReflection(Executable m) {
+		StringBuffer sb    = new StringBuffer();
+		Class<?>     dcl   = m.getDeclaringClass();
+		String       name1 = m.getClass().getSimpleName();
+		char         c     = Character.toLowerCase(name1.charAt(0));
+
+		sb.append(name1);
+		if (c == 'c') sb.append("<?>");
+		sb.append(" ").append(c)
+		 .append(" = ");
+		sb.append(getClassString0(dcl));
+		sb.append(".getDeclared").append(name1)
+		 .append("(\"").append(m.getName())
+		 .append('"');
+		for (Class<?> type : m.getParameterTypes()) {
+			sb.append(", ");
+			sb.append(getClassString0(type));
+		}
+		sb.append(");");
+		JSFunc.copyText(sb);
+	}
+	/** 返回类的java访问方法 */
+	private static String getClassString0(Class<?> dcl) {
+		return Modifier.isPublic(dcl.getModifiers())
+		 ? dcl.getSimpleName() + ".class" : "Class.forName(" + dcl.getName() + ")";
+	}
+	private static void dealInvokeResult(Object res, Cell<?> cell, ValueLabel l) {
+		l.setVal(res);
+		if (l.val instanceof Color) {
+			cell.setElement(new Image(IntUI.whiteui.tint((Color) l.val))).size(32).padRight(4).touchable(Touchable.disabled);
+		}
+	}
+	private void buildConstructor(ReflectTable t, Constructor<?> ctor) {
 		try {
-			MyReflect.setOverride(cons);
+			MyReflect.setOverride(ctor);
 		} catch (Throwable ignored) {}
 		try {
-			/* & Modifier.constructorModifiers()*/
-			addModifier(t, Modifier.toString(cons.getModifiers()));
-			t.add(new MyLabel(cons.getDeclaringClass().getSimpleName(), typeStyle));
-			t.add(new LimitLabel(buildArgsAndExceptions(cons.getParameterTypes(), cons.getParameterTypes())));
+			addModifier(t, buildExecutableModifier(ctor));
+			MyLabel label    = new MyLabel(ctor.getDeclaringClass().getSimpleName(), typeStyle);
+			boolean isSingle = ctor.getParameterTypes().length == 0;
+			IntUI.addShowMenuListener(label, () -> Seq.with(
+			 MenuList.with(Icon.copySmall, "copy reflection getter", () -> {
+				 copyExecutableReflection(ctor);
+			 }),
+			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
+				 ctor.setAccessible(true);
+				 if (isSingle) {
+					 try {
+						 JSFunc.copyValue("instance", ctor.newInstance());
+					 } catch (Throwable th) {IntUI.showException(th);}
+					 return;
+				 }
+				 JSRequest.requestForMethod(ctor, o, ret -> {
+					 JSFunc.copyValue("instance", ctor.newInstance(
+						convertArgs((NativeArray) ret, ctor.getParameterTypes())
+					 ));
+				 });
+			 }),
+			 IntUI.copyAsJSMenu("constructor", () -> ctor)
+			));
+			t.add(label);
+			t.add(new LimitLabel(buildArgsAndExceptions(ctor)));
 
-			t.table(buttons -> {
+			/* addDisplayListener(t.table(buttons -> {
 				addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
-			}).grow().top().right().row();
+			}).grow().top().right(), JSFuncDisplay.buttons); */
+			t.row();
 		} catch (Throwable e) {
 			Log.err(e);
 		}
-		t.image().color(underline).growX().colspan(6).row();
+		t.image().color(c_underline).growX().colspan(6).row();
 	}
-	private static void buildClass(ReflectTable classes, Class<?> cls) {
-		classes.bind(cls.getName());
-		classes.table(t -> {
+	private void buildClass(ReflectTable table, Class<?> cls) {
+		table.bind(cls.getName());
+		table.table(t -> {
 			try {
-				int mod = cls.getModifiers() & Modifier.classModifiers();
-				t.add(new MyLabel(Modifier.toString(mod) + " class ", keywordStyle)).padRight(8f).touchable(Touchable.disabled);
+				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ");
 
 				Label l = t.add(new MyLabel(getGenericString(cls), typeStyle)).padRight(8f).get();
+				IntUI.addShowMenuListener(l, () -> Seq.with(IntUI.copyAsJSMenu("class", () -> cls)));
 				addDClickCopy(l);
 				Class<?>[] types = cls.getInterfaces();
 				if (types.length > 0) {
 					t.add(new MyLabel(" implements ", keywordStyle)).padRight(8f).touchable(Touchable.disabled);
 					for (Class<?> interf : types) {
-						t.add(new MyLabel(getGenericString(interf), MOMO_Label)).padRight(8f);
+						t.add(new MyLabel(getGenericString(interf), MOMO_LabelStyle)).padRight(8f).color(c_type);
 					}
 				}
-				IntUI.longPress(l, 600, b -> {
-					if (b) {
-						var pos = getAbsPos(l);
-						// 使用Time.runTask避免stack overflow
-						Time.runTask(0, () -> {
-							try {
-								showInfo(cls).setPosition(pos);
-							} catch (Throwable e) {
-								IntUI.showException(e).setPosition(pos);
-							}
-						});
-					}
-				});
 
-				t.table(buttons -> {
-					addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
-				}).grow().top().right();
+				addDisplayListener(t.table(buttons -> {
+					buttons.right().defaults().right();
+					addDetailsButton(buttons, () -> null, cls);
+					// addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
+				}).grow().padRight(40), E_JSFuncDisplay.buttons);
 			} catch (Throwable e) {
 				Log.err(e);
 			}
 		}).pad(4).growX().left().row();
-		classes.image().color(underline).growX().colspan(6).row();
-
+		table.image().color(c_underline).growX().colspan(6).row();
 	}
 
 
@@ -509,13 +643,12 @@ class ShowInfoWindow extends Window implements DisposableInterface {
 	public String toString() {
 		return getClass().getSimpleName() + "#" + title.getText();
 	}
-
-	public static String getName(Class<?> cls) {
-		while (cls != null) {
-			String tmp = cls.getName();
-			if (!tmp.isEmpty()) return tmp;
-			cls = cls.getSuperclass();
-		}
-		return "unknown";
+	public void hide() {
+		super.hide();
+		/* fieldsTable.labels.each(ValueLabel::dispose);
+		methodsTable.labels.each(ValueLabel::dispose);
+		constructorsTable.labels.each(ValueLabel::dispose);
+		classesTable.labels.each(ValueLabel::dispose); */
+		events.removeIns();
 	}
 }

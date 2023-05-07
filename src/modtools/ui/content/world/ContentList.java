@@ -2,7 +2,7 @@ package modtools.ui.content.world;
 
 import arc.graphics.Color;
 import arc.scene.ui.layout.Table;
-import arc.struct.*;
+import arc.struct.ObjectMap;
 import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.entities.Effect;
@@ -12,7 +12,7 @@ import modtools.ui.IntUI;
 import modtools.ui.components.*;
 import modtools.ui.content.Content;
 import modtools.utils.*;
-import modtools.utils.search.FilterTable;
+import modtools.utils.search.*;
 
 import java.lang.reflect.Field;
 import java.util.regex.Pattern;
@@ -36,7 +36,7 @@ public class ContentList extends Content {
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
 		new Search((__, text) -> {
-			pattern = Tools.complieRegExpCatch(text);
+			pattern = Tools.compileRegExpCatch(text);
 		}).build(top, main);
 
 		Field[] fields;
@@ -65,9 +65,8 @@ public class ContentList extends Content {
 		return 200;
 	}
 	public void rebuild() {
-		Seq<Table> tables = new Seq<>();
-		String[]   names  = {"fx", "bullet", "blocks"};
-		tables.add(new FilterTable<>(t -> {
+		String[] names = {"fx", "bullet", "blocks"};
+		Table[] tables = {new FilterTable<>(t -> {
 			fxs.each((name, effect) -> {
 				t.bind(name);
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -82,8 +81,7 @@ public class ContentList extends Content {
 				}).row();
 			});
 			t.addUpdateListener(() -> pattern);
-		}));
-		tables.add(new FilterTable<>(t -> {
+		}), new FilterTable<>(t -> {
 			bullets.each((name, bulletType) -> {
 				t.bind(name);
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -98,8 +96,7 @@ public class ContentList extends Content {
 				}).row();
 			});
 			t.addUpdateListener(() -> pattern);
-		}));
-		tables.add(new FilterTable<>(t -> {
+		}), new FilterTable<>(t -> {
 			blocks.each((name, bulletType) -> {
 				t.bind(name);
 				t.button(name, () -> {}).growX().height(64).with(button -> {
@@ -109,13 +106,10 @@ public class ContentList extends Content {
 				}).row();
 			});
 			t.addUpdateListener(() -> pattern);
-		}));
+		})};
 
-		IntTab tab = new IntTab(-1,
-		                        new Seq<>(names),
-		                        Color.sky,
-		                        tables);
-		tab.title.add("@contentlist.tip").colspan(tables.size).growX().row();
+		IntTab tab = new IntTab(-1, names, Color.sky, tables);
+		tab.title.add("@contentlist.tip").colspan(tables.length).growX().row();
 
 		main.add(tab.build()).grow().top();
 	}

@@ -1,7 +1,7 @@
 package modtools.utils;
 
 import arc.files.Fi;
-import arc.struct.*;
+import arc.struct.OrderedMap;
 import arc.util.Log;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
@@ -26,10 +26,18 @@ public class MySettings {
 	static Fi config = dataDirectory.child("mod-tools-config.hjson");
 
 	public static final Data
-			SETTINGS      = new Data(config),
-			D_JSFUNC_EDIT = (Data) SETTINGS.get("JsfuncEdit", () -> new Data(SETTINGS, new JsonMap())),
-			D_JSFUNC      = (Data) SETTINGS.get("Jsfunc", () -> new Data(SETTINGS, new JsonMap())),
-			D_BLUR        = (Data) SETTINGS.get("BLUR", () -> new Data(SETTINGS, new JsonMap()));
+	 SETTINGS         = new Data(config),
+	 D_SELECTION      = SETTINGS.child("Selection"),
+	 D_TESTER         = SETTINGS.child("Tester"),
+	 D_JSFUNC_EDIT    = SETTINGS.child("JSFuncEdit"),
+	 D_JSFUNC         = SETTINGS.child("JSFunc"),
+	 D_JSFUNC_DISPLAY = D_JSFUNC.child("Display"),
+	 D_BLUR           = SETTINGS.child("BLUR");
+
+	/* 设置默认值 */
+	static {
+
+	}
 
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
@@ -40,6 +48,10 @@ public class MySettings {
 		}
 		public Data(Fi fi) {
 			loadFi(fi);
+		}
+
+		public Data child(String key) {
+			return (Data) get(key, () -> new Data(this, new JsonMap()));
 		}
 
 		public Object put(String key, Object value) {
@@ -72,16 +84,16 @@ public class MySettings {
 		public void loadJval(JsonMap jsonMap) {
 			for (var entry : jsonMap) {
 				super.put(entry.key, entry.value.isObject() ? new Data(this, entry.value.asObject()) :
-						entry.value.isBoolean() ? entry.value.asBool() : entry.value);
+				 entry.value.isBoolean() ? entry.value.asBool() : entry.value);
 			}
 		}
 
 		public boolean toBool(Object v) {
+			if (v instanceof Boolean) return (Boolean) v;
 			if (v instanceof Jval) {
 				if (((Jval) v).isBoolean()) return ((Jval) v).asBool();
 				return v.toString().equals("true");
 			}
-			if (v instanceof Boolean) return (Boolean) v;
 			if (v == null) return false;
 			return ScriptRuntime.toBoolean("" + v);
 		}
@@ -101,9 +113,10 @@ public class MySettings {
 			tab.append("	");
 			each((k, v) -> {
 				builder.append(tab).append(k).append(": ")
-						.append(v instanceof Data ? ((Data) v).toString(tab) : v)
-						.append("\n");
+				 .append(v instanceof Data ? ((Data) v).toString(tab) : v)
+				 .append('\n');
 			});
+			builder.deleteCharAt(builder.length() - 1);
 			tab.deleteCharAt(tab.length() - 1);
 			builder.append('\n').append(tab).append('}');
 			return builder.toString();
@@ -124,6 +137,10 @@ public class MySettings {
 				v = v.toString();
 			}
 			return Jval.read("" + v).asInt();
+		}
+		public String getString(String name) {
+			Object o = get(name);
+			return o instanceof Jval ? ((Jval) o).asString() : (String) o;
 		}
 	}
 }

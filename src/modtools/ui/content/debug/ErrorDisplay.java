@@ -18,8 +18,6 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 import modtools.utils.Tools;
 
-import static modtools.utils.MySettings.SETTINGS;
-
 public class ErrorDisplay extends Content {
 	public ErrorDisplay() {
 		super("errordisplay");
@@ -62,14 +60,14 @@ public class ErrorDisplay extends Content {
 		long[]       lastModified = {last_log.lastModified()};
 		Prov<String> getString    = () -> last_log.exists() ? last_log.readString() : "";
 		String[]     text         = {getString.get()};
-		Seq<Table> tables = Seq.with(new LimitTable(t -> t.pane(p -> p.label(() -> {
+		Table[] tables = {new LimitTable(t -> t.pane(p -> p.label(() -> {
 			if (last_log.exists() && Tools.EQSET(lastModified, last_log.lastModified())) {
 				text[0] = getString.get();
 			}
 			return text[0];
-		}))), crashes);
+		}))), crashes};
 		String[] names = {"last_log", "crashes"};
-		IntTab   tab   = new IntTab(-1, new Seq<>(names), new Seq<>(colors), tables);
+		IntTab   tab   = new IntTab(-1, names, colors, tables);
 		tab.setPrefSize(w, -1);
 		ui.cont.add(tab.build()).grow();
 

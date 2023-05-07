@@ -1,4 +1,4 @@
-package modtools.utils;
+package modtools.utils.search;
 
 import arc.func.Cons2;
 import arc.scene.ui.TextField;

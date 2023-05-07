@@ -6,29 +6,41 @@ import arc.graphics.g2d.Draw;
 import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import mindustry.game.EventType.*;
+import mindustry.game.EventType.Trigger;
 import modtools.IntVars;
 import modtools.graphics.MyShaders;
+import modtools.utils.Tools;
 
 import static arc.Core.graphics;
+import static modtools.utils.MySettings.D_BLUR;
 
 public class ScreenSampler {
-	public static final FrameBuffer BUFFER_SCREEN = new FrameBuffer();
+	public static final FrameBuffer BUFFER = new FrameBuffer();
+
+	private static final Runnable flashRun = () -> {
+		if (BUFFER.isBound()) {
+			BUFFER.end();
+			// Log.info("????");
+			Tools.clearScreen();
+			BUFFER.blit(MyShaders.baseShader);
+		}
+
+		if (!D_BLUR.getBool("enable")) return;
+		BUFFER.begin(Color.clear);
+	};
 
 	public static void init() {
-		BUFFER_SCREEN.resize(graphics.getWidth(), graphics.getHeight());
-		BUFFER_SCREEN.begin(Color.clear);
-		BUFFER_SCREEN.end();
+		/* 初始化buffer */
+		BUFFER.begin(Color.clear);
+		Tools.clearScreen();
+		BUFFER.end();
+
+		BUFFER.resize(graphics.getWidth(), graphics.getHeight());
 		IntVars.addResizeListener(() -> {
-			BUFFER_SCREEN.resize(graphics.getWidth(), graphics.getHeight());
+			BUFFER.resize(graphics.getWidth(), graphics.getHeight());
 		});
-		Events.run(Trigger.uiDrawEnd, () -> {
-			if (BUFFER_SCREEN.isBound()) {
-				BUFFER_SCREEN.end();
-				BUFFER_SCREEN.blit(MyShaders.baseShader);
-			}
-			BUFFER_SCREEN.begin(Color.clear);
-		});
+
+		Events.run(Trigger.uiDrawEnd, flashRun);
 	}
 
 	public static Texture getSampler() {
@@ -36,8 +48,9 @@ public class ScreenSampler {
 			BUFFER_SCREEN.begin(Color.clear);
 			BUFFER_SCREEN.end();
 		} */
+		Draw.flush();
 		// if (true) return getSampler0();
-		return BUFFER_SCREEN.getTexture();
+		return BUFFER.getTexture();
 	}
 	/* static FrameBuffer pingpong1 = new FrameBuffer();
 	public static Texture getSampler0() {
@@ -54,11 +67,11 @@ public class ScreenSampler {
 		BUFFER_SCREEN.blit(MyShaders.baseShader);
 		pingpong1.end(); */
 		// FrameBuffer.unbind();
-		BUFFER_SCREEN.end();
+		BUFFER.end();
 	}
 	public static void contiune() {
 		// Draw.flush();
-		BUFFER_SCREEN.begin();
+		BUFFER.begin();
 	}
 
 	private static final FrameBuffer buffer = new FrameBuffer();

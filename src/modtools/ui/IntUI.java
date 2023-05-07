@@ -1,9 +1,10 @@
 
 package modtools.ui;
 
-import arc.*;
+import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
@@ -15,26 +16,38 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import arc.util.Timer;
 import arc.util.Timer.Task;
+import arc.util.pooling.Pools;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
-import mindustry.ui.Styles;
+import mindustry.ui.*;
+import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.Window;
-import modtools.ui.components.Window.*;
+import modtools.ui.components.Window.DisposableInterface;
 import modtools.utils.*;
+import modtools.utils.search.Search;
 
-import java.lang.reflect.Array;
-import java.util.*;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+import static arc.Core.graphics;
 import static mindustry.Vars.*;
+import static modtools.graphics.MyShaders.baseShader;
+import static modtools.ui.Contents.tester;
+import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
+import static modtools.utils.Tools.getAbsPos;
 
 public class IntUI {
-	public static final TextureRegionDrawable whiteui  = (TextureRegionDrawable) Tex.whiteui;
-	public static final Frag                  frag     = new Frag();
-	public static final TopGroup              topGroup = new TopGroup();
+	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+	public static final Frag                  frag    = new Frag();
+	public static final TopGroup              topGroup;
+
+	static {
+		topGroup = new TopGroup();
+		// Events.run(Trigger.uiDrawBegin, myscene::draw);
+		// Events.run(Trigger.update, myscene::act);
+	}
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) {
@@ -52,7 +65,7 @@ public class IntUI {
 		elem.addListener(new ClickListener() {
 			final Task clickTask = new Task() {
 				public void run() {
-					click.run();
+					if (click != null) click.run();
 				}
 			};
 			public void clicked(InputEvent event, float x, float y) {
@@ -88,11 +101,14 @@ public class IntUI {
 				return false;
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				super.touchUp(event, x, y, pointer, button);
+				task.cancel();
+			}
+			public void clicked(InputEvent event, float x, float y) {
+				// super.clicked(event, x, y);
 				if (task.isScheduled()) {
-					task.cancel();
 					if (pressed) boolc.get(false);
 				}
-				super.touchUp(event, x, y, pointer, button);
 			}
 		});
 		return elem;
@@ -120,43 +136,48 @@ public class IntUI {
 	}
 
 	public static void
+	addShowMenuListener(Element elem, Prov<Seq<MenuList>> prov) {
+		longPressOrRclick(elem, __ -> {
+			Seq<MenuList> list = prov.get();
+			showMenuList(list, () -> Pools.freeAll(list, true));
+		});
+	}
+
+	public static void
 	addShowMenuListener(Element elem, MenuList... list) {
 		longPressOrRclick(elem, __ -> {
-			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
-				for (var menu : list) {
-					p.button(menu.name, menu.icon, Styles.cleart, () -> {
-						menu.run.run();
-						hide.run();
-					}).size(120, 42).row();
-				}
-			}, false);
+			showMenuList(Seq.with(list));
 		});
 	}
 	public static void
 	addShowMenuListener(Element elem, Iterable<MenuList> list) {
 		longPressOrRclick(elem, __ -> {
-			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
-				for (var menu : list) {
-					p.button(menu.name, menu.icon, Styles.cleart, () -> {
-						menu.run.run();
-						hide.run();
-					}).size(120, 42).row();
-				}
-			}, false);
+			showMenuList(list);
 		});
 	}
-	public static void
-	addShowMenuListener(Element elem, ArrayList<MenuList> list) {
-		longPressOrRclick(elem, __ -> {
-			showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
-				for (var menu : list) {
-					p.button(menu.name, menu.icon, Styles.cleart, () -> {
+	public static void showMenuList(Iterable<MenuList> list) {
+		showMenuList(list, null);
+	}
+	public static void showMenuList(Iterable<MenuList> list, Runnable hideMenu) {
+		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+			for (var menu : list) {
+				p.button(menu.getName(), menu.icon, Styles.flatt,
+					/* arc.scene.ui.layout.Cell#unset */
+					menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> {
 						menu.run.run();
 						hide.run();
-					}).size(120, 42).row();
-				}
-			}, false);
-		});
+						if (hideMenu != null) hideMenu.run();
+					})
+				 .minSize(150, 42).marginLeft(5f).marginRight(5f).row();
+			}
+		}, false);
+	}
+	public static MenuList copyAsJSMenu(String key, Prov<Object> prov) {
+		return MenuList.with(Icon.copySmall,
+		 JSFunc.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
+		 () -> {
+			 tester.put(Core.input.mouse(), prov.get());
+		 });
 	}
 
 	/**
@@ -171,16 +192,8 @@ public class IntUI {
 	 */
 	public static Table
 	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
-	                  boolean searchable) {
-		Table t = new Table(Styles.black8) {
-			public float getPrefHeight() {
-				return Math.min(super.getPrefHeight(), (float) Core.graphics.getHeight());
-			}
-
-			public float getPrefWidth() {
-				return Math.min(super.getPrefWidth(), (float) Core.graphics.getWidth());
-			}
-		};
+										boolean searchable) {
+		Table t = new InsideTable();
 		t.margin(6, 8, 6, 8);
 		Element hitter = new Element();
 		Runnable hide = () -> {
@@ -193,13 +206,13 @@ public class IntUI {
 		topGroup.addChild(t);
 		t.update(() -> {
 			Tmp.v1.set(vec2);
-			t.setPosition(Tmp.v1.x, Tmp.v1.y, Align.bottomRight);
+			t.setPosition(Tmp.v1.x, Tmp.v1.y, Align.topLeft);
 			if (t.getWidth() > Core.scene.getWidth()) {
-				t.setWidth((float) Core.graphics.getWidth());
+				t.setWidth((float) graphics.getWidth());
 			}
 
 			if (t.getHeight() > Core.scene.getHeight()) {
-				t.setHeight((float) Core.graphics.getHeight());
+				t.setHeight((float) graphics.getHeight());
 			}
 
 			t.keepInStage();
@@ -235,7 +248,7 @@ public class IntUI {
 	 */
 	public static <T extends Button> Table
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
-	                boolean searchable) {
+									boolean searchable) {
 		if (button == null) throw new NullPointerException("button cannot be null");
 		Table   t      = new AutoFitTable();
 		Element hitter = new Element();
@@ -252,11 +265,11 @@ public class IntUI {
 				button.localToStageCoordinates(Tmp.v1.set(button.getWidth() / 2f, button.getHeight() / 2f));
 				t.setPosition(Tmp.v1.x, Tmp.v1.y, 1);
 				if (t.getWidth() > Core.scene.getWidth()) {
-					t.setWidth((float) Core.graphics.getWidth());
+					t.setWidth((float) graphics.getWidth());
 				}
 
 				if (t.getHeight() > Core.scene.getHeight()) {
-					t.setHeight((float) Core.graphics.getHeight());
+					t.setHeight((float) graphics.getHeight());
 				}
 
 				t.keepInStage();
@@ -285,8 +298,8 @@ public class IntUI {
 
 	public static <T extends Button> Table
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
-	                    Cons<String> cons, int width, int height,
-	                    Boolean searchable) {
+											Cons<String> cons, int width, int height,
+											Boolean searchable) {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 
@@ -314,120 +327,74 @@ public class IntUI {
 	 */
 	public static <T extends Button, T1> Table
 	showSelectImageTableWithIcons(T button, Seq<T1> items,
-	                              Seq<? extends Drawable> icons,
-	                              Prov<T1> holder, Cons<T1> cons, float size,
-	                              float imageSize, int cols,
-	                              boolean searchable) {
-		return showSelectTable(button, (p, hide, text) -> {
-			p.clearChildren();
-			p.left();
-			ButtonGroup<ImageButton> group = new ButtonGroup<>();
-			group.setMinCheckCount(0);
-			p.defaults().size(size);
-			Pattern pattern;
-
-			try {
-				pattern = Tools.complieRegExp(text);
-			} catch (Exception ex) {
-				return;
-			}
-
-			int c = 0;
-
-			for (int i = 0; i < items.size; ++i) {
-				T1 item = items.get(i);
-				if (!text.isEmpty()) {
-					if (item instanceof UnlockableContent) {
-						UnlockableContent unlock;
-						if (!pattern.matcher((unlock = (UnlockableContent) item).name).find() && !pattern.matcher(unlock.localizedName).find()) {
-							continue;
-						}
-					} else if (!pattern.matcher("" + item).find()) {
-						continue;
-					}
-				}
-
-				ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {
-					cons.get(item);
-					hide.run();
-				}).size(size).get();
-				if (!mobile) {
-					btn.addListener(new Tooltip(t -> {
-						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item)
-								.right().bottom();
-					}));
-				}
-
-				btn.getStyle().imageUp = icons.get(i);
-				btn.update(() -> {
-					button.setChecked(holder.get() == item);
-				});
-				++c;
-				if (c % cols == 0) {
-					p.row();
-				}
-			}
-
-		}, searchable);
+																Seq<? extends Drawable> icons,
+																Prov<T1> holder, Cons<T1> cons, float size,
+																float imageSize, int cols,
+																boolean searchable) {
+		return showSelectTable(button, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable);
 	}
 	public static <T1> Table
 	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,
-	                              Seq<? extends Drawable> icons,
-	                              Prov<T1> holder, Cons<T1> cons, float size,
-	                              float imageSize, int cols,
-	                              boolean searchable) {
-		return showSelectTable(vec2, (p, hide, text) -> {
+																Seq<? extends Drawable> icons,
+																Prov<T1> holder, Cons<T1> cons, float size,
+																float imageSize, int cols,
+																boolean searchable) {
+		return showSelectTable(vec2, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable);
+	}
+	private static <T1> Cons3<Table, Runnable, String> getCons3(
+	 Seq<T1> items, Seq<? extends Drawable> icons,
+	 Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols) {
+		return (p, hide, text) -> {
 			p.clearChildren();
 			p.left();
 			ButtonGroup<ImageButton> group = new ButtonGroup<>();
 			group.setMinCheckCount(0);
 			p.defaults().size(size);
 			Pattern pattern;
-
 			try {
-				pattern = Tools.complieRegExp(text);
-			} catch (Exception ex) {
-				return;
-			}
+				pattern = Tools.compileRegExp(text);
+			} catch (Exception ex) {return;}
 
-			int c = 0;
-
-			for (int i = 0; i < items.size; ++i) {
+			for (int c = 0, i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (!text.isEmpty()) {
-					if (item instanceof UnlockableContent) {
-						UnlockableContent unlock;
-						if (!pattern.matcher((unlock = (UnlockableContent) item).name).find() && !pattern.matcher(unlock.localizedName).find()) {
-							continue;
-						}
-					} else if (!pattern.matcher("" + item).find()) {
-						continue;
-					}
-				}
+				if (isMatched(text, pattern, item)) continue;
 
-				ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {
-					cons.get(item);
-					hide.run();
-				}).size(size).get();
-				if (!mobile) {
-					btn.addListener(new Tooltip(t -> {
-						t.background(Tex.button).add(item instanceof UnlockableContent ? ((UnlockableContent) item).localizedName : "" + item)
-								.right().bottom();
-					}));
-				}
-
-				btn.getStyle().imageUp = icons.get(i);
-				++c;
-				if (c % cols == 0) {
+				ImageButton btn = getImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
+				btn.update(() -> {
+					btn.setChecked(holder.get() == item);
+				});
+				if (++c % cols == 0) {
 					p.row();
 				}
 			}
-
-		}, searchable);
+		};
+	}
+	public static <T1> ImageButton getImageButton(Cons<T1> cons, float size, float imageSize, Table p, Runnable hide,
+																								T1 item, Drawable icon) {
+		ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {
+			cons.get(item);
+			hide.run();
+		}).size(size).get();
+		if (!mobile) {
+			btn.addListener(new Tooltip(t -> {
+				t.background(Tex.button).add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
+				 .right().bottom();
+			}));
+		}
+		btn.getStyle().imageUp = icon;
+		return btn;
+	}
+	private static <T1> boolean isMatched(String text, Pattern pattern, T1 item) {
+		if (text.isEmpty()) return false;
+		if (pattern == null) return true;
+		if (item instanceof UnlockableContent unlock) {
+			return !pattern.matcher(unlock.name).find() && !pattern.matcher(unlock.localizedName).find();
+		}
+		return !pattern.matcher("" + item).find();
 	}
 	public static Table
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
-	                boolean searchable) {
+									boolean searchable) {
 		Table   t      = new AutoFitTable();
 		Element hitter = new Element();
 		Runnable hide = () -> {
@@ -442,11 +409,11 @@ public class IntUI {
 
 			t.setPosition(vec2.x, vec2.y, 1);
 			if (t.getWidth() > Core.scene.getWidth()) {
-				t.setWidth((float) Core.graphics.getWidth());
+				t.setWidth((float) graphics.getWidth());
 			}
 
 			if (t.getHeight() > Core.scene.getHeight()) {
-				t.setHeight((float) Core.graphics.getHeight());
+				t.setHeight((float) graphics.getHeight());
 			}
 
 			t.keepInStage();
@@ -470,46 +437,42 @@ public class IntUI {
 		return t;
 	}
 
+
 	/**
-	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要提供构造器）
-	 */
-	public static <T extends Button, T1 extends UnlockableContent> Table
-	showSelectImageTable(T button, Seq<T1> items,
-	                     Prov<T1> holder,
-	                     Cons<T1> cons, float size,
-	                     int imageSize, int cols,
-	                     boolean searchable) {
-		Drawable[] icons = (Drawable[]) Array.newInstance(Drawable.class, items.size);
-		for (int i = 0; i < items.size; i++) {
-			icons[i] = new TextureRegionDrawable(items.get(i).uiIcon);
-		}
-		return showSelectImageTableWithIcons(button, items, new Seq<>(icons), holder, cons, size, (float) imageSize, cols, searchable);
-	}
-	/**
-	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要提供构造器）
+	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>UnlockableContent</i>）
 	 */
 	public static <T1 extends UnlockableContent> Table
 	showSelectImageTable(Vec2 vec2, Seq<T1> items,
-	                     Prov<T1> holder,
-	                     Cons<T1> cons, float size,
-	                     int imageSize, int cols,
-	                     boolean searchable) {
-		Drawable[] icons = (Drawable[]) Array.newInstance(Drawable.class, items.size);
-		for (int i = 0; i < items.size; i++) {
-			icons[i] = new TextureRegionDrawable(items.get(i).uiIcon);
-		}
-		return showSelectImageTableWithIcons(vec2, items, new Seq<>(icons), holder, cons, size, (float) imageSize, cols, searchable);
+											 Prov<T1> holder,
+											 Cons<T1> cons, float size,
+											 float imageSize, int cols,
+											 boolean searchable) {
+		return showSelectImageTableWithFunc(vec2, items, holder, cons, size, imageSize, cols,
+		 u -> new TextureRegionDrawable(u.uiIcon), searchable);
 	}
-
+	/**
+	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
+	 */
+	public static <T1> Table
+	showSelectImageTableWithFunc(Vec2 vec2, Seq<T1> items, Prov<T1> holder,
+															 Cons<T1> cons, float size, float imageSize,
+															 int cols, Func<T1, Drawable> func,
+															 boolean searchable) {
+		Seq<Drawable> icons = new Seq<>(items.size);
+		items.each(item -> {
+			icons.add(func.get(item));
+		});
+		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
+	}
 	/**
 	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
 	 */
 	public static <T extends Button, T1> Table
 	showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder,
-	                             Cons<T1> cons, float size, int imageSize,
-	                             int cols, Func<T1, Drawable> func,
-	                             boolean searchable) {
-		Seq<Drawable> icons = new Seq<>();
+															 Cons<T1> cons, float size, float imageSize,
+															 int cols, Func<T1, Drawable> func,
+															 boolean searchable) {
+		Seq<Drawable> icons = new Seq<>(items.size);
 		items.each(item -> {
 			icons.add(func.get(item));
 		});
@@ -529,12 +492,20 @@ public class IntUI {
 	}
 
 	public static Window showInfoFade(String info) {
-		return new InfoFadePopup("info", 0, 64) {{
+		return showInfoFade(info, Core.input.mouse());
+	}
+
+	public static Window showInfoFade(String info, Vec2 pos) {
+		return showInfoFade(info, pos, Align.center);
+	}
+	public static Window showInfoFade(String info, Vec2 pos, int align) {
+		return new InfoFadePopup("info", 100, 64) {{
 			cont.add(info);
+			show();
+			setPosition(pos, align);
 			// 1.2s
 			Time.runTask(60 * 1.2f, this::hide);
-			// Time.runTask(0, this::display);
-		}}.show();
+		}};
 	}
 
 	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {
@@ -572,6 +543,66 @@ public class IntUI {
 		window.show();
 		return window;
 	}
+	public static void colorBlock(Cell<?> cell, Color color, boolean needDouble) {
+		colorBlock(cell, color, null, needDouble);
+	}
+	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback) {
+		colorBlock(cell, color, callback, true);
+	}
+	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDouble) {
+		BorderImage image = new BorderImage(Core.atlas.white(), 2f) {
+			public void draw() {
+				Tex.alphaBg.draw(x, y, width, height);
+				super.draw();
+			}
+		};
+		Color inv = new Color();
+		cell.setElement(image).color(color).size(42f)
+		 .update(el -> {
+			 el.color.set(color);
+			 image.border(inv.set(color).inv());
+		 });
+		Runnable runnable = () -> {
+			ui.picker.show(color, c1 -> {
+				color.set(c1);
+				if (callback != null) callback.get(c1);
+			});
+		};
+		IntUI.doubleClick(image, needDouble ? null : runnable, needDouble ? runnable : null);
+	}
+
+	public static String tips(String key) {
+		return Core.bundle.format("mod-tools.tips", Core.bundle.get("mod-tools.tips." + key));
+	}
+
+
+	public static final
+	Color DEF_MASK_COLOR = Color.black.cpy().a(0.5f),
+	 DEF_FOCUS_COLOR     = Color.blue.cpy().a(0.4f);
+
+	/**
+	 * 聚焦一个元素
+	 *
+	 * @param element 要聚焦的元素
+	 */
+	public static void focusOnElement(Element element, Boolp boolp) {
+		topGroup.focusOnElement(new FocusTask(element, DEF_MASK_COLOR, Color.clear) {
+			public void backDraw() {
+				super.backDraw();
+				if (!boolp.get()) topGroup.removeFocusElement(this);
+			}
+			public void drawFocus(Element elem) {
+				super.drawFocus(elem);
+				Draw.blit(bufferCaptureAll(getAbsPos(elem), elem), baseShader);
+			}
+			public void elemDraw() {}
+			public void endDraw() {
+				super.endDraw();
+				drawFocus(elem);
+			}
+		});
+	}
+
 
 	/* 整数倒计时 */
 	public static void countdown(int times, Intc cons) {
@@ -603,24 +634,49 @@ public class IntUI {
 		}
 	}
 
-
 	public static class MenuList {
-		public Drawable icon;
-		public String   name;
-		public Runnable run;
-
-		public MenuList(Drawable icon, String name, Runnable run) {
+		public Drawable     icon;
+		public String       name;
+		public Prov<String> provider;
+		public Runnable     run;
+		public static MenuList with(Drawable icon, String name, Runnable run) {
+			MenuList list = Pools.get(MenuList.class, MenuList::new, 100).obtain();
+			list.icon = icon;
+			list.name = name;
+			list.run = run;
+			return list;
+		}
+		public MenuList(Drawable icon, Prov<String> provider, Runnable run) {
 			this.icon = icon;
-			this.name = name;
+			this.provider = provider;
 			this.run = run;
 		}
-	}
-
-	public static class ConfirmList extends MenuList {
-		public ConfirmList(Drawable icon, String name, String text, Runnable run) {
-			super(icon, name, () -> {
-				IntUI.showConfirm(text, run);
+		public static MenuList with(Drawable icon, Prov<String> provider, Runnable run) {
+			MenuList list = Pools.get(MenuList.class, MenuList::new, 100).obtain();
+			list.icon = icon;
+			list.provider = provider;
+			list.run = run;
+			return list;
+		}
+		public static MenuList with(Drawable icon, String name, Prov prov) {
+			return with(icon, name, () -> {
+				tester.put(prov.get());
 			});
+		}
+
+		private MenuList() {}
+
+		public String getName() {
+			return provider != null ? provider.get() : name;
+		}
+	}
+	public static class ConfirmList extends MenuList {
+		public static MenuList with(Drawable icon, String name, String text, Runnable run) {
+			ConfirmList list = Pools.get(ConfirmList.class, ConfirmList::new, 10).obtain();
+			list.icon = icon;
+			list.name = name;
+			list.run = () -> IntUI.showConfirm(text, run);
+			return list;
 		}
 	}
 
@@ -657,8 +713,14 @@ public class IntUI {
 	public static class Tooltip extends arc.scene.ui.Tooltip {
 
 		public Tooltip(Cons<Table> contents) {
-			super(contents);
-			show = () -> topGroup.addChild(getContainer());
+			super(t -> {});
+			/* 异步执行时，字体会缺失  */
+			show = () -> {
+				Table table = container;
+				if (table.getChildren().isEmpty()) contents.get(table);
+				table.pack();
+				topGroup.addChild(table);
+			};
 		}
 		public Tooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
@@ -669,15 +731,15 @@ public class IntUI {
 	}
 
 
-	public static class InfoFadePopup extends Window implements DisposableInterface, PopupWindow {
+	// -----弹窗------
+	public interface PopupWindow extends DisposableInterface {}
+
+	public static class InfoFadePopup extends Window implements DisposableInterface {
 		public InfoFadePopup(String title, float width, float height) {
 			super(title, width, height);
 		}
 	}
-
-	public interface PopupWindow {}
-
-	private static class ExceptionPopup extends Window implements DisposableInterface, PopupWindow {
+	private static class ExceptionPopup extends Window implements PopupWindow {
 		public ExceptionPopup(Throwable exc, String text) {
 			super("", 0, 200, false);
 			String message = Strings.getFinalMessage(exc);
@@ -688,8 +750,8 @@ public class IntUI {
 			cont.image().width(300f).pad(2).colspan(2).height(4f).color(Color.scarlet);
 			cont.row();
 			cont.add((text.startsWith("@") ? Core.bundle.get(text.substring(1)) : text) + (message == null ? "" : "\n[lightgray](" + message + ")"))
-					.colspan(2).wrap().growX().center()
-					.get().setAlignment(Align.center);
+			 .colspan(2).wrap().growX().center()
+			 .get().setAlignment(Align.center);
 			cont.row();
 
 			Collapser col = new Collapser(base -> base.pane(t -> t.margin(14f).add(Strings.neatError(exc)).color(Color.lightGray).left()), true);
@@ -703,15 +765,34 @@ public class IntUI {
 			//            closeOnBack();
 		}
 	}
-
 	private static class AutoFitTable extends Table implements PopupWindow {
 		public AutoFitTable() {super(Tex.button);}
 		public float getPrefHeight() {
-			return Math.min(super.getPrefHeight(), (float) Core.graphics.getHeight());
+			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
 		}
 
 		public float getPrefWidth() {
-			return Math.min(super.getPrefWidth(), (float) Core.graphics.getWidth());
+			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
+		}
+	}
+	public static class InsideTable extends Table {
+		public InsideTable() {
+		}
+		public InsideTable(Drawable background) {
+			super(background);
+		}
+		public InsideTable(Drawable background, Cons<Table> cons) {
+			super(background, cons);
+		}
+		public InsideTable(Cons<Table> cons) {
+			super(cons);
+		}
+		public float getPrefHeight() {
+			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
+		}
+
+		public float getPrefWidth() {
+			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
 		}
 	}
 }

@@ -1,15 +1,13 @@
 package modtools.utils;
 
-import arc.Events;
 import arc.graphics.Color;
 import arc.math.Mathf;
-import arc.util.*;
-import mindustry.game.EventType.Trigger;
+import arc.util.Time;
 
 public class ColorFul {
 	private static final Color[] colors = {
-			Color.red, Color.orange, Color.yellow,
-			Color.green, Color.cyan, Color.sky, Color.pink};
+	  Color.red, Color.orange, Color.yellow,
+	  Color.green, Color.cyan, Color.sky, Color.pink};
 
 	public static final Color color = new Color(colors[0]);
 	private static      int   i     = 1;
@@ -17,7 +15,7 @@ public class ColorFul {
 
 	static {
 		float precent = 60;
-		Events.run(Trigger.update, () -> {
+		Tools.tasks.add(() -> {
 			timer += Time.delta;
 			color.lerp(colors[i], Mathf.clamp(timer / precent));
 			if (timer >= precent) {

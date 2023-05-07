@@ -1,17 +1,13 @@
 package modtools.ui.content.ui.design;
 
-import arc.func.*;
+import arc.func.Floatc;
 import arc.graphics.Color;
 import arc.input.KeyCode;
-import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
 import arc.struct.FloatSeq;
 import mindustry.graphics.Drawf;
-import modtools.graphics.MyShaders;
-
-import static modtools.utils.Tools.sr;
 
 public class DesignTable<T extends Group> extends Element {
 	private             Element selected;
@@ -54,10 +50,11 @@ public class DesignTable<T extends Group> extends Element {
 	public void sizeChanged() {
 		super.sizeChanged();
 		xSpecial.clear();
-		ySpecial.clear();
 		xSpecial.add(0);
 		xSpecial.add(width / 2f);
 		xSpecial.add(width);
+
+		ySpecial.clear();
 		ySpecial.add(0);
 		ySpecial.add(height / 2f);
 		ySpecial.add(height);
@@ -75,7 +72,7 @@ public class DesignTable<T extends Group> extends Element {
 		lookup.lookup(delta / 2f);
 		lookup.lookup(-delta);
 		lookup.lookup(delta);
-		return lookup.getRes(OFFSET);
+		return lookup.getRes();
 		/* seq.lookfor(fx, 0, OFFSET, Float.POSITIVE_INFINITY, fx,
 				p -> seq.lookfor(p.a(-delta / 2f),
 						____ -> seq.lookfor(p.a(delta / 2f),
@@ -97,7 +94,9 @@ public class DesignTable<T extends Group> extends Element {
 		MyFloatSeq seq;
 		float      val, minOff, minOffValue;
 		private static final LookupForParmas INSTANCE = new LookupForParmas();
-		LookupForParmas() {}
+		LookupForParmas() {
+			if (INSTANCE != null) throw new RuntimeException();
+		}
 		LookupForParmas reset() {
 			minOff = Float.POSITIVE_INFINITY;
 			minOffValue = val;
@@ -112,17 +111,18 @@ public class DesignTable<T extends Group> extends Element {
 			return this;
 		}
 
-		float getRes(float offset) {
-			return minOff < offset ? minOffValue : val;
+		float getRes() {
+			return minOff < DesignTable.OFFSET ? minOffValue : val;
 		}
 
 		void lookup(float offset) {
 			// a(a);
-			seq.each(v -> {
-				float off = Math.abs(val + offset - v);
+			seq.each(v0 -> {
+				float v1  = v0 + offset;
+				float off = Math.abs(val - v1);
 				if (off < minOff) {
 					minOff = off;
-					minOffValue = v - offset;
+					minOffValue = v1;
 				}
 			});
 		}

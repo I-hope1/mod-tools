@@ -28,6 +28,9 @@ public class ByteCodeTools {
 			functionsKey = "_KSINIA_Functions",
 			TMP_CLASS    = "__BYTE_Class";
 	private static int lastID = 0;
+	private static int nextID() {
+		return lastID++;
+	}
 
 
 	public static class MyClass<T> {
@@ -41,7 +44,7 @@ public class ByteCodeTools {
 			this.superClass = superClass;
 			adapterName = name;
 			superName = nativeName(superClass);
-			writer = new ClassFileWriter(name, superName, TMP_CLASS + lastID++);
+			writer = new ClassFileWriter(name, superName, TMP_CLASS + nextID());
 		}
 
 		public <V> void setFunc(String name, MyRun run, int flags, Class<V> returnType, Class<?>... args) {
@@ -64,7 +67,7 @@ public class ByteCodeTools {
 				writer.stopMethod((short) (args.length + 1));
 				return;
 			}
-			String fieldName = functionsKey + "$" + lastID++;
+			String fieldName = functionsKey + "$" + nextID();
 			short  max       = (short) (args.length + 1);
 			int    v1        = max++, v2 = max++;
 			queues.add(new Queue<>(fieldName, () -> func2, Func2.class));
@@ -195,7 +198,7 @@ public class ByteCodeTools {
 		}
 
 		public String buildSuperFunc(String methodName, Class<?> returnType, Class<?>... args) {
-			String superMethodName = methodName + lastID++;
+			String superMethodName = methodName + nextID();
 			buildSuperFunc(superMethodName, methodName, returnType, args);
 			return superMethodName;
 		}

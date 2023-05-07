@@ -5,14 +5,12 @@ import arc.files.Fi;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.Vec2;
-import arc.scene.ui.layout.Scl;
-import arc.util.Time;
 import modtools.ModTools;
 
 
 public class MyShaders {
 	public static Shader specl, baseShader;
-	public static BlurShader blur;
+	public static Shader blur;
 
 	public static       Fi      shaderFi = ModTools.root.child("shaders");
 	public static final float[] kernel   = {
@@ -21,14 +19,14 @@ public class MyShaders {
 			0.0625f, 0.125f, 0.105f
 	};
 	public static void load() {
-		// GaussianBlur = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("高斯模糊.frag")) {
-		// 			public void apply() {
-		// 				setUniform1fv("u_kernel", kernel, 0, kernel.length);
-		// 				float width  = Core.camera.width;
-		// 				float height = Core.camera.height;
-		// 				setUniformf("u_invsize", 1f / width, 1f / height);
-		// 			}
-		// 		};
+		blur = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("高斯模糊.frag")) {
+			public void apply() {
+				setUniform1fv("u_kernel", kernel, 0, kernel.length);
+				float width  = Core.camera.width;
+				float height = Core.camera.height;
+				setUniformf("u_invsize", 1f / width, 1f / height);
+			}
+		};
 		/* specl = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("毛玻璃.frag")) {
 			public void apply() {
 				setUniformf("u_time", Time.time / Scl.scl(1f));

@@ -5,10 +5,12 @@ import arc.func.Cons;
 import arc.input.KeyCode;
 import arc.scene.event.*;
 import arc.scene.ui.TextField;
+import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.Cell;
+import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.Window;
 
-public class NameWindow extends Window {
+public class NameWindow extends Window implements PopupWindow {
 	TextField    namef = new TextField();
 	Cons<String> okCons;
 
@@ -25,7 +27,7 @@ public class NameWindow extends Window {
 		// closeOnBack();
 	}
 
-	public NameWindow(Cons<String> okCons, TextField.TextFieldValidator valid, String text) {
+	public NameWindow(Cons<String> okCons, TextFieldValidator valid, String text) {
 		super("", 120, 80, false, false);
 		this.okCons = okCons;
 		if (valid != null) namef.setValidator(valid);

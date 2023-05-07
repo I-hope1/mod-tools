@@ -1,10 +1,10 @@
 package modtools.ui.components.limit;
 
-import arc.scene.ui.*;
+import arc.scene.ui.TextButton;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
-public class LimitTextButton extends TextButton {
+public class LimitTextButton extends TextButton implements Limit{
 	public LimitTextButton(String text) {
 		super(text);
 	}
@@ -29,7 +29,6 @@ public class LimitTextButton extends TextButton {
 		return !(Tmp.v1.x > elem.getWidth()) && !(Tmp.v1.y > elem.getHeight());
 	}
 	*/
-
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);

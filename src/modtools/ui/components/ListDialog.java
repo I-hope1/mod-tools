@@ -14,23 +14,25 @@ import mindustry.graphics.Pal;
 import modtools.ui.*;
 import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.debug.Tester;
-import modtools.utils.*;
+import modtools.utils.JSFunc;
 
+import java.util.Comparator;
 import java.util.regex.Pattern;
 
 public class ListDialog extends Window implements DisposableInterface {
 	public Seq<Fi> list = new Seq<>();
 	final  Table   p    = new LimitTable();
-	Floatf<Fi> sorter;
+	Comparator<Fi> sorter;
 	public Fi file;
 	Func<Fi, Fi>     fileHolder;
 	Cons<Fi>         consumer;
 	Cons2<Fi, Table> pane;
 
 	public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
-	                  Floatf<Fi> sorter) {
+										Comparator<Fi> sorter) {
 		super(Core.bundle.get("title." + title, title), Tester.w, 600, true);
 		cont.add("@tester.tip").growX().left().row();
 		cont.pane(p).grow();
@@ -60,7 +62,7 @@ public class ListDialog extends Window implements DisposableInterface {
 	public static final Boolf2<Fi, String> fileNameValid = (f, text) -> {
 		try {
 			return !text.isBlank() && !fileUnfair.matcher(text).find()
-			       && (f.name().equals(text) || !f.sibling(text).exists());
+						 && (f.name().equals(text) || !f.sibling(text).exists());
 		} catch (Throwable e) {
 			return false;
 		}
@@ -93,7 +95,7 @@ public class ListDialog extends Window implements DisposableInterface {
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					b.pane(c -> {
-						c.add(new MyLabel(fileHolder.get(f).readString())).left();
+						c.add(new MyLabel(fileHolder.get(f).readString(), IntStyles.MOMO_LabelStyle)).left();
 					}).grow().left();
 				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, 600, longPress -> {
@@ -150,25 +152,26 @@ public class ListDialog extends Window implements DisposableInterface {
 		public static final Boolf2<Fi, String> fiTest = (fi, text) -> {
 			try {
 				return !text.isBlank() && !fileUnfair.matcher(text).find()
-				       && (fi.name().equals(text) || !fi.sibling(text).exists());
+							 && (fi.name().equals(text) || !fi.sibling(text).exists());
 			} catch (Throwable e) {
 				return false;
 			}
 		};
 
 		public static Cell<?> build(
-				Prov<CharSequence> def,
-				TextFieldValidator validator,
-				Cons2<TextField, Label> modifier,
-				float interval,
-				Table t) {
-			MyLabel   label = new MyLabel(def, interval);
-			Cell<?>   cell  = t.add(label);
-			TextField field = new TextField();
+		 Prov<CharSequence> def,
+		 TextFieldValidator validator,
+		 Cons2<TextField, Label> modifier,
+		 float interval,
+		 Table t) {
+			MyLabel       label = new MyLabel(def, interval);
+			Cell<?>       cell  = t.add(label);
+			AutoTextField field = new AutoTextField();
 			if (validator != null) field.setValidator(validator);
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {
 					modifier.get(field, label);
+					label.setText(field.getText());
 					cell.setElement(label);
 				}
 			});
@@ -182,5 +185,5 @@ public class ListDialog extends Window implements DisposableInterface {
 		}
 	}
 
-	public static LabelStyle accentStyle = new LabelStyle(MyFonts.MSYHMONO, Pal.accent);
+	public static LabelStyle accentStyle = new LabelStyle(MyFonts.def, Pal.accent);
 }

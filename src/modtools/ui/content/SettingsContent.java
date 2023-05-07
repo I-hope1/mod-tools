@@ -2,16 +2,21 @@
 package modtools.ui.content;
 
 import arc.Core;
+import arc.files.Fi;
 import arc.func.*;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import mindustry.core.Version;
+import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.events.MyEvents;
+import modtools.ui.MyFonts;
 import modtools.ui.components.Window;
-import modtools.utils.MySettings.Data;
+import modtools.ui.components.Window.DisWindow;
+import modtools.utils.MySettings.*;
 
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.MySettings.*;
@@ -40,9 +45,10 @@ public class SettingsContent extends Content {
 	public Table add(String title, Table t) {
 		Table table = new Table();
 		table.add(title).color(Pal.accent).growX().left().row();
+		table.image().color(Pal.accent).growX().left().row();
 		t.left().defaults().left();
 		table.add(t).growX().left().padLeft(16);
-		add(table);
+		cont.add(table).row();
 		return table;
 	}
 	public void add(Table t) {
@@ -52,14 +58,11 @@ public class SettingsContent extends Content {
 	public void load() {
 		ui = new Window(localizedName(), 425, 90, true);
 		cont = new Table();
-		ui.cont.pane(cont).fillX().fillY();
-		cont.defaults().width(400);
+		ui.cont.pane(cont).grow();
+		cont.defaults().minWidth(400).padTop(20);
 		add("Load", loadTable);
 		add("jsfunc", new Table() {{
 			left().defaults().left();
-			bool(this, "@settings.jsfunc.number.edit", D_JSFUNC_EDIT, "number");
-			bool(this, "@settings.jsfunc.string.edit", D_JSFUNC_EDIT, "string");
-			bool(this, "@settings.jsfunc.boolean.edit", D_JSFUNC_EDIT, "boolean");
 			bool(this, "@settings.jsfunc.auto_refresh", D_JSFUNC, "auto_refresh");
 		}});
 		add("毛玻璃", new Table() {{
@@ -72,14 +75,30 @@ public class SettingsContent extends Content {
 			bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
 			bool(this, "@settings.checkuicount", SETTINGS, "checkuicount", topGroup.checkUI, b -> topGroup.checkUI = b);
 			bool(this, "@settings.debugbounds", SETTINGS, "debugbounds", topGroup.debugBounds, b -> SETTINGS.put("debugbounds", topGroup.debugBounds = b));
-			SettingsContent.slider(this, "rendererMinZoom", 0.1f, Vars.renderer.minZoom, Vars.renderer.minZoom, 0.1f, val -> {
+			bool(this, "@settings.select_unvisible", SETTINGS, "select_unvisible", topGroup.selectUnvisible, b -> SETTINGS.put("select_unvisible", topGroup.selectUnvisible = b));
+			float minZoom = Vars.renderer.minZoom;
+			float maxZoom = Vars.renderer.maxZoom;
+			SettingsContent.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
 				Vars.renderer.minZoom = val;
+			}).change();
+			SettingsContent.slider(this, "rendererMaxZoom", maxZoom, Math.max(14f, maxZoom), maxZoom, 0.1f, val -> {
+				Vars.renderer.maxZoom = val;
 			}).change();
 			if (Version.number >= 136) {
 				SettingsContent.slideri(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1, val -> {
 					Vars.maxSchematicSize = val;
 				});
 			}
+			button("FONT", Styles.flatBordert, () -> {
+				new DisWindow("FONTS") {{
+					for (Fi fi : MyFonts.fontDirectory.list()) {
+						cont.button(fi.nameWithoutExtension(), Styles.flatt, () -> {
+							SETTINGS.put("font", fi.name());
+						}).size(96, 42);
+					}
+					show();
+				}};
+			}).growX().height(42);
 		}});
 		Content.all.forEach(cont -> {
 			if (!(cont instanceof SettingsContent)) {
@@ -93,7 +112,7 @@ public class SettingsContent extends Content {
 		return slider(table, SETTINGS, name, min, max, def, step, floatc);
 	}
 	public static Slider slider(Table table, Data data, String name, float min, float max, float def, float step,
-	                            Floatc floatc) {
+															Floatc floatc) {
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(data.getFloat(name, def));
 		Label value = new Label(slider.getValue() + "", Styles.outlineLabel);
@@ -132,7 +151,7 @@ public class SettingsContent extends Content {
 		table.stack(slider, content).growX().padTop(4f).row();
 		return slider;
 	}
-	public void bool(Table table, String text, Data data, boolean def, Boolc boolc) {
+	public static void bool(Table table, String text, Data data, boolean def, Boolc boolc) {
 		bool(table, text, data, null, def, boolc);
 	}
 	public static void bool(Table table, String text, Data data, String key, boolean def) {
@@ -146,5 +165,18 @@ public class SettingsContent extends Content {
 			if (key != null) data.put(key, b);
 			if (boolc != null) boolc.get(b);
 		}).row();
+	}
+
+
+	public static <T extends Enum<T>> void addSettingsTable(Table p, String name, Func<String, String> keyProvider,
+																													Data data, T[] values) {
+		p.table(Tex.pane, dis -> {
+			dis.left().defaults().left();
+			dis.add(name).color(Pal.accent).row();
+			for (var value : values) {
+				SettingsContent.bool(dis, "@settings." + keyProvider.get(value.name()),
+				 data, value.name(), true, b -> MyEvents.fire(value));
+			}
+		}).grow().left().row();
 	}
 }

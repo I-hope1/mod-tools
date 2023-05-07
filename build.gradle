@@ -1,127 +1,180 @@
-apply plugin: "java"
+plugins {
+	id 'java'
+	id "io.github.liplum.mgpp" version "1.2.0"
+}
 
+targetCompatibility = 11
+sourceCompatibility = 11
+
+tasks.withType(JavaCompile) {
+	options.encoding = 'UTF-8'
+	options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+	options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED")
+	options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED")
+
+//	options.compilerArgs.addAll(['--release', '11'])
+//	options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
+}
+
+tasks.withType(JavaCompile) {
+	options.fork = true
+	options.forkOptions.jvmArgs.addAll([
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+			"--add-opens", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+	])
+}
+
+group 'org.example'
 version '1.0'
+sourceSets {
+	main {
+		java.srcDirs = ["src"]
+	}
+}
+repositories {
+	mavenCentral()
+	mindustryRepo()
+}
+def MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
+def VERSION = "1.4.3.1"
+def uncVersion = "1.7.4"
 
-//compile java 17 code, targeting java 11
-//targetCompatibility = 11
-//sourceCompatibility = JavaVersion.VERSION_17
+dependencies {
+	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
-sourceSets.main.java.srcDirs = ["src"]
-
-repositories{
-    mavenCentral()
-    maven{ url 'https://www.jitpack.io' }
+	compileOnly files(
+//			"E:/Users/ASUS/Desktop/Mindustry136/mods/StructureOrderedDesktop.jar",
+//			"F:/files/mindustry/a/mdt-ac-1.0.jar",
+			"_libs/Mindustry_android.jar",
+//			"${MdtDataDir}/Mindustry_desktop.jar",
+			"assets/libs/reflect-core.jar",
+			"assets/libs/procyon-0.6.jar",
+	)
+	implementation files(
+			"z_backfile/javassist.jar",
+			"_libs/Android_dalvik-1.0.jar",
+			"_libs/AndroidField.jar",
+	)
+	def mindustryVersion = 'v145.1'
+	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+//	importMindustry()
+}
+mindustry {
+	dependency {}
+	client {}
+	meta << ModMeta(
+			version: VERSION
+	)
+	meta.displayName = "mod-tools"
+	def name = project.archivesBaseName
+	deploy {
+		baseName = name
+	}
+	dexJar {
+		options.minApi = '31'
+	}
+}
+mindustryAssets {
+	// Set the assets root
+	rootAt "$projectDir/assets"
+}
+test {
+	useJUnitPlatform()
 }
 
-ext{
-    uncVersion = "1.7.4"
-    //the build number that this mod is made for
-    mindustryVersion = 'v143'
-    sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+import arc.files.Fi
+import arc.util.Log;
+
+task playGame(dependsOn: classes, type: JavaExec) {
+	dependsOn jar
+
+	doFirst {
+		Log.info("$buildDir")
+		/* 复制文件到mods目录 */
+		def modFi = project.archivesBaseName + "-" + VERSION + ".jar"
+		def buildDir = new Fi("" + buildDir).child("libs")
+		def from = buildDir.child(project.archivesBaseName + "-1.0.jar");
+		if (from.exists()) from.copyTo(buildDir.child(modFi))
+		buildDir.child(modFi).copyTo(new Fi(MdtDataDir).child("mods").child(modFi))
+	}
+	//运行游戏目录
+	main = "-jar"
+	args = [
+			MdtDataDir + "/Mindustry.jar",
+//"E:/应用/Mindustry/jre/desktop.jar"
+//			"-antialias"
+//			, "-debug"
+	]
+}
+task ZComplieAll {
+	dependsOn deploy
 }
 
-//java 8 backwards compatibility flag
-tasks.withType(JavaCompile){
-    options.compilerArgs.addAll(['--release', '11'])
-    
-    options.encoding = "UTF-8"
-    //options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+task mergeLibs(type: Jar) {
+	archiveFileName = "$rootDir/assets/libs/reflect-core.jar"
 
-    options.fork = true
-    options.forkOptions.jvmArgs.addAll([
-            "--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
-            "--add-opens", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
-            "--add-opens", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
-            "--add-opens", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
-            "--add-opens", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
-            "--add-opens", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
-    ])
-    /*options.fork = true
-    options.forkOptions.jvmArgs.addAll([
-        "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-    ])*/
+	def libsDir = new File("$rootDir/libs/build/libs")
+
+	from(zipTree("$libsDir/libs-desktop.jar")) {
+		exclude "classes.dex"
+//		exclude "mod.hjson"
+		exclude "META-INF/META-INF.MF"
+	}
+	from(zipTree("$libsDir/libs-dx.jar")) {
+		include "**"
+	}
+}
+
+task playAndroid {
+	dependsOn deploy
+//    System.out.println("${project.archivesBaseName}-${VERSION}.jar");
+//    throw  new RuntimeException()
+	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files";
+	def adb = "F:/files/java/sdk/platform-tools/adb";
+	doLast {
+		("$adb push ${buildDir}/tmp/deploy/${project.archivesBaseName}-${VERSION}.jar"
+				+ " $MDT_ANDROID_DIR/mods/")
+				.execute().waitForProcessOutput(System.out, System.err)
+		"$adb shell am force-stop io.anuke.mindustry"
+				.execute().waitForProcessOutput(System.out, System.err)
+
+		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -D -W "
+				.execute().waitForProcessOutput(System.out, System.err)
+
+		def MindustryLogPath = "${MDT_ANDROID_DIR}/last_log.txt"
+		new Fi("${project.rootDir}\\appendLog.sh")
+				.writeString("""
+#!/bin/sh
+# MADE By BING
+# 获取文件的初始修改时间
+old_time=-1
+# 循环检查文件的修改时间
+while true; do
+  # 获取文件的当前修改时间
+  new_time=\$(stat -c %y ${MindustryLogPath})
+  # 如果修改时间发生变化
+  if [ "\$new_time" != "\$old_time" ]; then
+    # 将文件的内容追加到控制台
+    tail -f ${MindustryLogPath}
+    # 更新修改时间
+    old_time=\$new_time
+  fi
+  # 等待一段时间（秒）
+  sleep 0.05
+done""")
+		"$adb push ${project.rootDir}\\appendLog.sh ${MDT_ANDROID_DIR}/appendLog.sh"
+				.execute().waitForProcessOutput(System.out, System.err)
+		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -D -W "
+				.execute().waitForProcessOutput(System.out, System.err)
+		"$adb shell sh ${MDT_ANDROID_DIR}/appendLog.sh"
+				.execute().waitForProcessOutput(System.out, System.err)
+	}
 }
 
 
-dependencies{
-    compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-    compileOnly files(
-        /*"lib/Mindustry136.jar", "assets/libs/lib.jar",*/
-        "lib/Mindustry_android.jar",
-        "assets/libs/reflect-core.jar",
-        "lib/procyon-0.6.jar",
-    )
-    implementation files(
-        "lib/AndroidField.jar"
-    )
-
-    annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
-}
-
-    // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
-    // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.loader=ALL-UNNAMED")
-    // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.reflect=ALL-UNNAMED")
-
-task jarAndroid{
-    dependsOn "jar"
-
-    doLast{
-        if(!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.")
-
-        def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find{ f -> new File(f, "android.jar").exists()}
-
-        if(!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
-
-        //collect dependencies needed for desugaring
-        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect{ "--classpath $it.path" }.join(" ")
-
-        //dex and desugar files - this requires d8 in your PATH
-        "d8 $dependencies --min-api 14 --output ${project.archivesBaseName}Android.jar ${project.archivesBaseName}Desktop.jar"
-            .execute(null, new File("$buildDir/libs")).waitForProcessOutput(System.out, System.err)
-    }
-}
-
-jar{
-    archiveFileName = "${project.archivesBaseName}Desktop.jar"
-
-    from{
-        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
-    }
-
-    from(rootDir){
-        include "mod.hjson"
-    }
-
-    from("assets/"){
-        include "**"
-    }
-
-    /*doLast {
-        def fi = new File("C:\\Users\\ASUS\\AppData\\Roaming\\Mindustry\\mods\\mod-tools.jar")
-        if (fi.exists()) fi.delete()
-        if (!archiveFile.get().asFile.renameTo(fi)) throw new RuntimeException("can't move file")
-        "java -jar E:\\应用\\Mindustry\\136\\Mindustry.jar".execute().waitForProcessOutput(System.out, System.err)
-    }*/
-}
-
-task deploy(type: Jar){
-    dependsOn jarAndroid
-    dependsOn jar
-    archiveFileName = "${project.archivesBaseName}.jar"
-
-    from{ [zipTree("$buildDir/libs/${project.archivesBaseName}Desktop.jar"), zipTree("$buildDir/libs/${project.archivesBaseName}Android.jar")] }
-
-    doLast{
-        delete{
-            delete "$buildDir/libs/${project.archivesBaseName}Desktop.jar"
-            delete "$buildDir/libs/${project.archivesBaseName}Android.jar"
-        }
-    }
-}
-task unzip(type: Copy) {
-    // 从jar的目录树中输出到目标目录
-    from zipTree("$buildDir/libs/${project.archivesBaseName}.jar")
-    into file("$buildDir/libs/tmp")
-}
-
+//build.dependsOn(mergeLibs)

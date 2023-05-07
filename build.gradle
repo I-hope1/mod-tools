@@ -3,8 +3,8 @@ apply plugin: "java"
 version '1.0'
 
 //compile java 17 code, targeting java 11
-targetCompatibility = 11
-sourceCompatibility = JavaVersion.VERSION_17
+//targetCompatibility = 11
+//sourceCompatibility = JavaVersion.VERSION_17
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -14,18 +14,28 @@ repositories{
 }
 
 ext{
+    uncVersion = "1.7.4"
     //the build number that this mod is made for
     mindustryVersion = 'v143'
-    jabelVersion = "0.6.0"
     sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 }
 
 //java 8 backwards compatibility flag
 tasks.withType(JavaCompile){
-    // options.compilerArgs.addAll(['--release', '11'])
+    options.compilerArgs.addAll(['--release', '11'])
     
     options.encoding = "UTF-8"
-    options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+    //options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+
+    options.fork = true
+    options.forkOptions.jvmArgs.addAll([
+            "--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+            "--add-opens", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+            "--add-opens", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
+            "--add-opens", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+            "--add-opens", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+            "--add-opens", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+    ])
     /*options.fork = true
     options.forkOptions.jvmArgs.addAll([
         "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
@@ -37,14 +47,16 @@ dependencies{
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
     compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
     compileOnly files(
-        /*"lib/Mindustry136.jar", */"assets/libs/lib.jar",
-        "lib/Mindustry_android.jar"
-        "lib/procyon-0.6.jar"
+        /*"lib/Mindustry136.jar", "assets/libs/lib.jar",*/
+        "lib/Mindustry_android.jar",
+        "assets/libs/reflect-core.jar",
+        "lib/procyon-0.6.jar",
     )
     implementation files(
         "lib/AndroidField.jar"
     )
-    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
+
+    annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 }
 
     // options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")

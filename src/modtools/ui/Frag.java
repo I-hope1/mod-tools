@@ -59,7 +59,7 @@ public class Frag extends Table {
 		addCont.run();
 		left().bottom();
 		topGroup.addChild(this);
-		Log.info("Init TopGroup.");
+		Log.info("Initialize TopGroup.");
 
 		var listener = new MoveListener(top, this) {
 			public void display(float x, float y) {

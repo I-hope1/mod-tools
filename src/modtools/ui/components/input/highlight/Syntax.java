@@ -5,8 +5,6 @@ import arc.math.geom.Vec2;
 import arc.struct.*;
 import arc.util.Tmp;
 import mindustry.graphics.Pal;
-import modtools.ui.components.input.area.TextAreaTab;
-import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 
 /** 用于控制渲染，当然你也可以解析文本 */
 public class Syntax {
@@ -49,14 +47,13 @@ public class Syntax {
 	}*/
 	// public static JsonReader reader = new JsonReader();
 
-	public TextAreaTab areaTable;
-	public DrawToken   drawToken;
+	public SyntaxDrawable drawable;
+	public DrawToken      drawToken;
 
-	public Syntax(TextAreaTab table) {
+	public Syntax(SyntaxDrawable drawable) {
 		/* 为null时文本解析，不渲染 */
-		if (table == null) return;
-		areaTable = table;
-		area = areaTable.getArea();
+		if (drawable == null) return;
+		this.drawable = drawable;
 	}
 
 	/** 判断指定index，是否为单词边界 */
@@ -80,17 +77,17 @@ public class Syntax {
 	}
 	public DrawDefCons drawDefCons;
 	public void drawDefText(int start, int max) {
-		drawText0(area == null ? null : Tmp.c1.set(defaultColor).mulA(areaTable.parentAlpha()),
+		drawText0(drawable == null ? null : Tmp.c1.set(defaultColor).mulA(drawable.alpha()),
 		 start, max);
 	}
 	public void drawText0(Color color, int start, int max) {
 		if (start == -1) return;
-		if (area == null) {
+		if (drawable == null) {
 			if (drawDefCons != null) drawDefCons.get(start, max);
 			return;
 		}
-		area.font.setColor(color);
-		area.drawMultiText(displayText, start, max);
+		drawable.font().setColor(color);
+		drawable.drawMultiText(displayText, start, max);
 	}
 
 
@@ -157,15 +154,13 @@ public class Syntax {
 	}
 
 	protected Vec2 getCursorPos() {
-		return getRelativePos(area.cursor);
+		return getRelativePos(drawable.cursor());
 	}
-
 	protected Vec2 getRelativePos(int pos) {
-		return Tmp.v3.set(area.getRelativeX(pos), area.getRelativeY(pos));
+		return Tmp.v3.set(drawable.getRelativeX(pos), drawable.getRelativeY(pos));
 	}
 
 
-	public MyTextArea   area;
 	public CharSequence displayText;
 
 	public Color defaultColor = Color.white;

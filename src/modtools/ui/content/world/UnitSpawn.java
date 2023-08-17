@@ -197,8 +197,8 @@ public class UnitSpawn extends Content {
 	public void spawn() {
 		if (!isOk()) return;
 
-		float x = (float) toNumber(xField.getText());
-		float y = (float) toNumber(yField.getText());
+		float x = Strings.parseFloat(xField.getText());
+		float y = Strings.parseFloat(yField.getText());
 
 		if (selectUnit.uiIcon == null || selectUnit.fullIcon == null) {
 			IntUI.showException("所选单位的图标为null，可能会崩溃", new NullPointerException("selectUnit icon is null"));
@@ -222,7 +222,7 @@ public class UnitSpawn extends Content {
 	}
 
 	public void loadSettings(Data SETTINGS) {
-		Contents.settingsUI.add(localizedName(), new Table() {{
+		Contents.settings_ui.add(localizedName(), new Table() {{
 			left().defaults().left();
 			add(localizedName()).color(Pal.accent).row();
 			table(cont -> {

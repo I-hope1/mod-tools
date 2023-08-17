@@ -1,22 +1,15 @@
 package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
-import arc.scene.style.TextureRegionDrawable;
 import arc.struct.*;
-import arc.util.Tmp;
-import mindustry.gen.Tex;
-import modtools.ui.components.input.area.TextAreaTab;
 import rhino.ScriptRuntime;
 
 import static modtools.ui.components.input.highlight.JSSyntax.*;
-import static modtools.utils.Tools.sr;
+import static modtools.utils.Tools.Sr;
 
 public class JavaSyntax extends Syntax {
-	public JavaSyntax(TextAreaTab table) {
-		super(table);
-		if (area == null) return;
-		// defalutColor = __defalutColor__;
-		area.getStyle().selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
+	public JavaSyntax(SyntaxDrawable drawable) {
+		super(drawable);
 	}
 
 	ObjectMap<ObjectSet<CharSequence>, Color> TOKEN_MAP = ObjectMap.of(
@@ -51,7 +44,7 @@ public class JavaSyntax extends Syntax {
 		}
 		return null;
 	}, task -> {
-		CharSequence token = sr(task.token.charAt(task.token.length() - 1))
+		CharSequence token = Sr(task.token.charAt(task.token.length() - 1))
 		                       .get(t -> t == 'F' || t == 'f' || t == 'l' || t == 'L'
 			                               ? task.token.subSequence(0, task.token.length() - 1) : task.token);
 		CharSequence s = operatesSymbol.lastSymbol != '\u0000' && operatesSymbol.lastSymbol == '.'

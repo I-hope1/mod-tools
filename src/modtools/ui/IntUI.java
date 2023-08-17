@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
-import arc.math.Interp;
+import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
@@ -17,15 +17,17 @@ import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
+import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
+import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.Window;
-import modtools.ui.components.Window.DisposableInterface;
+import modtools.ui.components.Window.*;
 import modtools.utils.*;
-import modtools.utils.search.Search;
+import modtools.utils.ui.search.*;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -36,18 +38,13 @@ import static mindustry.Vars.*;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
-import static modtools.utils.Tools.getAbsPos;
+import static modtools.utils.ElementUtils.getAbsPos;
 
 public class IntUI {
-	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
-	public static final Frag                  frag    = new Frag();
-	public static final TopGroup              topGroup;
-
-	static {
-		topGroup = new TopGroup();
-		// Events.run(Trigger.uiDrawBegin, myscene::draw);
-		// Events.run(Trigger.update, myscene::act);
-	}
+	public static final TextureRegionDrawable whiteui       = (TextureRegionDrawable) Tex.whiteui;
+	public static final Frag                  frag          = new Frag();
+	public static final TopGroup              topGroup      = new TopGroup();
+	public static       float                 default_width = 150;
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) {
@@ -57,12 +54,21 @@ public class IntUI {
 		}
 	}
 
-	public static final float   DEF_DURATION = 0.2f;
-	public static final MyIcons icons        = new MyIcons();
+	/** 默认的动效时间（单位秒） */
+	public static final float DEF_DURATION = 0.2f;
 
+	static final Vec2 last = new Vec2();
+	/**
+	 * <p>创建一个双击事件</p>
+	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
+	 * @param elem    被添加侦听器的元素
+	 * @param click   单击事件
+	 * @param d_click 双击事件
+	 */
 	public static <T extends Element> T
-	doubleClick(T elem, Runnable click, Runnable dclick) {
-		elem.addListener(new ClickListener() {
+	doubleClick(T elem, Runnable click, Runnable d_click) {
+		if (click == null && d_click == null) return elem;
+		class DoubleClick extends ClickListener {
 			final Task clickTask = new Task() {
 				public void run() {
 					if (click != null) click.run();
@@ -70,19 +76,26 @@ public class IntUI {
 			};
 			public void clicked(InputEvent event, float x, float y) {
 				super.clicked(event, x, y);
-				if (clickTask.isScheduled()) {
-					dclick.run();
-					clickTask.cancel();
-				} else {
-					Timer.schedule(clickTask, 0.25f);
+				Vec2 mouse = d_click != null ? Core.input.mouse() : null;
+				if (TaskManager.reScheduled(0.3f, clickTask)) {
+					last.set(mouse);
+					return;
 				}
+				if (d_click == null) return;
+				if (mouse.dst(last) < 35f) d_click.run();
 			}
-		});
+		}
+		elem.addListener(new DoubleClick());
 		return elem;
 	}
 
 
-	/* 长按事件 */
+	/**
+	 * 长按事件
+	 * @param elem     被添加侦听器的元素
+	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
+	 * @param boolc    {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+	 */
 	public static <T extends Element> T
 	longPress(T elem, final long duration, final Boolc boolc) {
 		elem.addListener(new ClickListener() {
@@ -114,6 +127,11 @@ public class IntUI {
 		return elem;
 	}
 
+	/**
+	 * 添加右键事件
+	 * @param elem 被添加侦听器的元素
+	 * @param run  右键执行的代码
+	 */
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
 		elem.addListener(new ClickListener(KeyCode.mouseRight) {
@@ -125,8 +143,8 @@ public class IntUI {
 	}
 
 	/**
-	 * long press for mobile
-	 * r-click for desktop
+	 * <p>long press for {@link Vars#mobile moblie}</p>
+	 * <p>r-click for desktop</p>
 	 */
 	public static <T extends Element> T
 	longPressOrRclick(T element, Consumer<T> run) {
@@ -139,7 +157,7 @@ public class IntUI {
 	addShowMenuListener(Element elem, Prov<Seq<MenuList>> prov) {
 		longPressOrRclick(elem, __ -> {
 			Seq<MenuList> list = prov.get();
-			showMenuList(list, () -> Pools.freeAll(list, true));
+			showMenuList(list, () -> Pools.freeAll(list, false));
 		});
 	}
 
@@ -160,29 +178,65 @@ public class IntUI {
 	}
 	public static void showMenuList(Iterable<MenuList> list, Runnable hideMenu) {
 		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+			showMeniList(list, hideMenu, p, hide);
+		}, false);
+	}
+	/** TODO: 多个FoldedList有问题 */
+	private static Cell<Table> showMeniList(Iterable<MenuList> list, Runnable hideMenu, Table p, Runnable hide) {
+		return p.table(main -> {
 			for (var menu : list) {
-				p.button(menu.getName(), menu.icon, Styles.flatt,
-					/* arc.scene.ui.layout.Cell#unset */
-					menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> {
-						menu.run.run();
+				Cons<Button> cons = menu.cons;
+				var cell = main.button(menu.getName(), menu.icon,
+				 menu instanceof CheckboxList || menu instanceof FoldedList ? Styles.flatTogglet : Styles.flatt,
+				 /** @see Cell#unset */
+				 menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> {}
+				).minSize(default_width, 42).marginLeft(5f).marginRight(5f);
+				if (menu instanceof FoldedList foldedList) {
+					Core.app.post(() -> {
+						class MyRun implements Runnable {
+							Cell<Table> newCell;
+							BindCell    bcell;
+							public void run() {
+								if (newCell == null) {
+									newCell = showMeniList(foldedList.getChildren(), hideMenu, p, hide);
+									bcell = new BindCell(newCell);
+								} else bcell.toggle();
+							}
+						}
+						cell.get().clicked(new MyRun());
+					});
+					// newCell
+				} else {
+					cell.with(b -> b.clicked(() -> {
+						if (cons != null) cons.get(b);
 						hide.run();
 						if (hideMenu != null) hideMenu.run();
-					})
-				 .minSize(150, 42).marginLeft(5f).marginRight(5f).row();
+					})).checked(menu instanceof CheckboxList l && l.checked);
+				}
+				cell.row();
+				if (menu instanceof DisabledList) {
+					cell.disabled(__ -> ((DisabledList) menu).disabled.get()).row();
+				}
 			}
-		}, false);
+		}).growY();
 	}
 	public static MenuList copyAsJSMenu(String key, Prov<Object> prov) {
 		return MenuList.with(Icon.copySmall,
 		 JSFunc.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
-		 () -> {
-			 tester.put(Core.input.mouse(), prov.get());
-		 });
+		 storeRun(prov));
+	}
+	public static MenuList copyAsJSMenu(String key, Runnable run) {
+		return MenuList.with(Icon.copySmall,
+		 JSFunc.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
+		 run);
+	}
+
+	public static Runnable storeRun(Prov<Object> prov) {
+		return () -> tester.put(Core.input.mouse(), prov.get());
 	}
 
 	/**
 	 * 在鼠标右下弹出一个小窗，自己设置内容
-	 *
 	 * @param vec2       用于定位弹窗的位置
 	 * @param f          (p, hide, text)
 	 *                   p 是Table，你可以添加元素
@@ -194,8 +248,9 @@ public class IntUI {
 	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
 										boolean searchable) {
 		Table t = new InsideTable();
-		t.margin(6, 8, 6, 8);
-		Element hitter = new Element();
+		/* t.margin(6, 8, 6, 8); */
+		class Hitter extends Element /* implements BackInterface */ {}
+		Element hitter = new Hitter();
 		Runnable hide = () -> {
 			hitter.remove();
 			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade), Actions.remove());
@@ -230,7 +285,7 @@ public class IntUI {
 
 		f.get(p, hide, "");
 		ScrollPane pane = new ScrollPane(p);
-		t.top().add(pane).pad(0.0f).top();
+		t.top().add(p).pad(0.0f).top();
 		pane.setScrollingDisabled(true, false);
 		t.pack();
 		return t;
@@ -238,7 +293,6 @@ public class IntUI {
 
 	/**
 	 * 弹出一个小窗，自己设置内容
-	 *
 	 * @param button     用于定位弹窗的位置
 	 * @param f          (p, hide, text)
 	 *                   p 是Table，你可以添加元素
@@ -246,7 +300,7 @@ public class IntUI {
 	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 */
-	public static <T extends Button> Table
+	public static <T extends Element> Table
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
 		if (button == null) throw new NullPointerException("button cannot be null");
@@ -263,13 +317,17 @@ public class IntUI {
 		t.update(() -> {
 			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
 				button.localToStageCoordinates(Tmp.v1.set(button.getWidth() / 2f, button.getHeight() / 2f));
-				t.setPosition(Tmp.v1.x, Tmp.v1.y, 1);
+				if (Tmp.v1.y < graphics.getHeight() / 2f) {
+					t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, Align.center | Align.bottom);
+				} else {
+					t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight() / 2f, Align.center | Align.top);
+				}
 				if (t.getWidth() > Core.scene.getWidth()) {
 					t.setWidth((float) graphics.getWidth());
 				}
-
-				if (t.getHeight() > Core.scene.getHeight()) {
+				if (t.getHeight() >= Core.scene.getHeight()) {
 					t.setHeight((float) graphics.getHeight());
+					t.x += (t.x > graphics.getWidth() / 2f ? -1 : 1) * button.getWidth();
 				}
 
 				t.keepInStage();
@@ -316,7 +374,6 @@ public class IntUI {
 	/**
 	 * 弹出一个可以选择内容的窗口（类似物品液体源的选择）
 	 * （需要提供图标）
-	 *
 	 * @param items     用于展示可选的内容
 	 * @param icons     可选内容的图标
 	 * @param holder    选中的内容，null就没有选中任何
@@ -352,7 +409,7 @@ public class IntUI {
 			p.defaults().size(size);
 			Pattern pattern;
 			try {
-				pattern = Tools.compileRegExp(text);
+				pattern = PatternUtils.compileRegExp(text);
 			} catch (Exception ex) {return;}
 
 			for (int c = 0, i = 0; i < items.size; ++i) {
@@ -371,21 +428,47 @@ public class IntUI {
 	}
 	public static <T1> ImageButton getImageButton(Cons<T1> cons, float size, float imageSize, Table p, Runnable hide,
 																								T1 item, Drawable icon) {
-		ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {
+		ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {}).size(size).get();
+		longPress(btn, 500, b -> {
+			if (b) return;
 			cons.get(item);
 			hide.run();
-		}).size(size).get();
-		if (!mobile) {
-			btn.addListener(new Tooltip(t -> {
-				t.background(Tex.button).add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
-				 .right().bottom();
-			}));
-		}
+		});
+
+		if (!mobile) addHover(imageSize, btn);
+		// if (!mobile) {
+		btn.addListener(new Tooltip(t -> {
+			t.background(Tex.pane).add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
+			 .right().bottom();
+		}));
+		// }
 		btn.getStyle().imageUp = icon;
 		return btn;
 	}
+	private static void addHover(float imageSize, ImageButton btn) {
+		var task = new Task() {
+			boolean reverse = false;
+			float a = 0;
+			public void run() {
+				a += (reverse ? -1 : 1) * 0.1f;
+				btn.resizeImage(imageSize + Interp.pow2.apply(0, 5, Mathf.clamp(a)));
+				btn.invalidate();
+				if (reverse ? a <= 0 : a >= 1) {
+					cancel();
+				}
+			}
+		};
+		btn.hovered(() -> {
+			task.reverse = false;
+			if (!task.isScheduled()) Timer.schedule(task, 0, 0.02f, -1);
+		});
+		btn.exited(() -> {
+			task.reverse = true;
+			if (!task.isScheduled()) Timer.schedule(task, 0, 0.02f, -1);
+		});
+	}
 	private static <T1> boolean isMatched(String text, Pattern pattern, T1 item) {
-		if (text.isEmpty()) return false;
+		if (text == null || text.isEmpty()) return false;
 		if (pattern == null) return true;
 		if (item instanceof UnlockableContent unlock) {
 			return !pattern.matcher(unlock.name).find() && !pattern.matcher(unlock.localizedName).find();
@@ -406,7 +489,6 @@ public class IntUI {
 		topGroup.addChild(hitter);
 		topGroup.addChild(t);
 		t.update(() -> {
-
 			t.setPosition(vec2.x, vec2.y, 1);
 			if (t.getWidth() > Core.scene.getWidth()) {
 				t.setWidth((float) graphics.getWidth());
@@ -415,6 +497,7 @@ public class IntUI {
 			if (t.getHeight() > Core.scene.getHeight()) {
 				t.setHeight((float) graphics.getHeight());
 			}
+			// if (t.y < 0) t.x += (t.x > graphics.getWidth() / 2f ? -1 : 1) * t.getWidth();
 
 			t.keepInStage();
 			t.invalidateHierarchy();
@@ -439,7 +522,7 @@ public class IntUI {
 
 
 	/**
-	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>UnlockableContent</i>）
+	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>）
 	 */
 	public static <T1 extends UnlockableContent> Table
 	showSelectImageTable(Vec2 vec2, Seq<T1> items,
@@ -451,7 +534,7 @@ public class IntUI {
 		 u -> new TextureRegionDrawable(u.uiIcon), searchable);
 	}
 	/**
-	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
+	 * 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}）
 	 */
 	public static <T1> Table
 	showSelectImageTableWithFunc(Vec2 vec2, Seq<T1> items, Prov<T1> holder,
@@ -465,6 +548,7 @@ public class IntUI {
 		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
 	}
 	/**
+	 * {@literal }
 	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
 	 */
 	public static <T extends Button, T1> Table
@@ -488,7 +572,7 @@ public class IntUI {
 
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		return new ExceptionPopup(exc, text).show();
+		return new ExceptionPopup(exc, text).setPosition(Core.input.mouse());
 	}
 
 	public static Window showInfoFade(String info) {
@@ -501,7 +585,6 @@ public class IntUI {
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
 		return new InfoFadePopup("info", 100, 64) {{
 			cont.add(info);
-			show();
 			setPosition(pos, align);
 			// 1.2s
 			Time.runTask(60 * 1.2f, this::hide);
@@ -518,7 +601,6 @@ public class IntUI {
 
 	public static ConfirmWindow showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
-		window.hidden(() -> Window.all.remove(window));
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2f);
 		window.setFillParent(false);
@@ -540,16 +622,34 @@ public class IntUI {
 		});
 		window.keyDown(KeyCode.escape, window::hide);
 		window.keyDown(KeyCode.back, window::hide);
-		window.show();
+		window.setPosition(Core.input.mouse());
 		return window;
 	}
 	public static void colorBlock(Cell<?> cell, Color color, boolean needDouble) {
 		colorBlock(cell, color, null, needDouble);
 	}
+	/**
+	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
+	 * {@linkplain #colorBlock(Cell, Color, Cons, boolean)
+	 * colorBlock(
+	 * cell,
+	 * color,
+	 * callback,
+	 * needDclick: boolean = true
+	 * )}
+	 * @see #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick)
+	 */
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback) {
 		colorBlock(cell, color, callback, true);
 	}
-	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDouble) {
+	/**
+	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
+	 * @param cell       被修改成颜色块的cell
+	 * @param color      初始化颜色
+	 * @param callback   回调函数，形参为修改后的{@link Color color}
+	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
+	 */
+	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
 		BorderImage image = new BorderImage(Core.atlas.white(), 2f) {
 			public void draw() {
 				Tex.alphaBg.draw(x, y, width, height);
@@ -567,8 +667,17 @@ public class IntUI {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
+			topGroup.addChild(ui.picker);
 		};
-		IntUI.doubleClick(image, needDouble ? null : runnable, needDouble ? runnable : null);
+		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
+	}
+
+
+	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
+															String valid, String unvalid) {
+		cell.get().addListener(new IntUI.Tooltip(t -> t.background(Tex.pane)
+		 .label(() -> boolp.get() ? valid : unvalid)));
+		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
 	public static String tips(String key) {
@@ -582,8 +691,8 @@ public class IntUI {
 
 	/**
 	 * 聚焦一个元素
-	 *
 	 * @param element 要聚焦的元素
+	 * @param boolp   {@link Boolp#get()}的返回值如果为{@code false}则移除聚焦
 	 */
 	public static void focusOnElement(Element element, Boolp boolp) {
 		topGroup.focusOnElement(new FocusTask(element, DEF_MASK_COLOR, Color.clear) {
@@ -606,56 +715,43 @@ public class IntUI {
 
 	/* 整数倒计时 */
 	public static void countdown(int times, Intc cons) {
-		int[] i = {times};
-		Timer.schedule(() -> {
-			cons.get(i[0]);
-			i[0]--;
+		Timer.schedule(new Task() {
+			int i = times;
+			public void run() {
+				cons.get(i);
+				i--;
+			}
 		}, 0, 1, times);
 	}
 
-	// static {
-	// 	Time.run(0, () -> {
-	// 		new BaseDialog("a") {{
-	// 			addCloseButton();
-	// 			TextButton button = (TextButton) buttons.getChildren().first();
-	// 			shown(new Countdown(button));
-	// 			show();
-	// 		}};
-	// 	});
-	// }
-
-	public static class ConfirmWindow extends Window implements DisposableInterface, PopupWindow {
-		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
-			super(title, minWidth, minHeight, full, noButtons);
-		}
-
-		public void setCenter(Vec2 vec2) {
-			setPosition(vec2.x - getPrefWidth() / 2f, vec2.y - getPrefHeight() / 2f);
-		}
-	}
-
 	public static class MenuList {
-		public Drawable     icon;
-		public String       name;
-		public Prov<String> provider;
-		public Runnable     run;
+		public static int          max = 20;
+		public        Drawable     icon;
+		public        String       name;
+		public        Prov<String> provider;
+		public        Cons<Button> cons;
 		public static MenuList with(Drawable icon, String name, Runnable run) {
-			MenuList list = Pools.get(MenuList.class, MenuList::new, 100).obtain();
+			MenuList list = Pools.get(MenuList.class, MenuList::new, max).obtain();
 			list.icon = icon;
 			list.name = name;
-			list.run = run;
+			list.provider = null;
+			list.cons = __ -> run.run();
 			return list;
 		}
-		public MenuList(Drawable icon, Prov<String> provider, Runnable run) {
-			this.icon = icon;
-			this.provider = provider;
-			this.run = run;
+		public static MenuList with(Drawable icon, String name, Cons<Button> cons) {
+			MenuList list = Pools.get(MenuList.class, MenuList::new, max).obtain();
+			list.icon = icon;
+			list.name = name;
+			list.provider = null;
+			list.cons = cons;
+			return list;
 		}
 		public static MenuList with(Drawable icon, Prov<String> provider, Runnable run) {
-			MenuList list = Pools.get(MenuList.class, MenuList::new, 100).obtain();
+			MenuList list = Pools.get(MenuList.class, MenuList::new, max).obtain();
 			list.icon = icon;
+			list.name = null;
 			list.provider = provider;
-			list.run = run;
+			list.cons = __ -> run.run();
 			return list;
 		}
 		public static MenuList with(Drawable icon, String name, Prov prov) {
@@ -672,13 +768,57 @@ public class IntUI {
 	}
 	public static class ConfirmList extends MenuList {
 		public static MenuList with(Drawable icon, String name, String text, Runnable run) {
-			ConfirmList list = Pools.get(ConfirmList.class, ConfirmList::new, 10).obtain();
-			list.icon = icon;
-			list.name = name;
-			list.run = () -> IntUI.showConfirm(text, run);
+			MenuList list = MenuList.with(icon, name, run);
+			list.cons = __ -> IntUI.showConfirm(text, run);
 			return list;
 		}
 	}
+	public static class CheckboxList extends MenuList {
+		public boolean checked;
+		public static CheckboxList withc(Drawable icon, String name, boolean checked, Runnable run) {
+			CheckboxList list = Pools.get(CheckboxList.class, CheckboxList::new, max).obtain();
+			list.icon = icon;
+			list.name = name;
+			list.checked = checked;
+			// Log.info("0) check: @, list.checked: @", checked, list.checked);
+			list.cons = __ -> run.run();
+			return list;
+		}
+	}
+	public static class DisabledList extends MenuList {
+		public Boolp disabled;
+		public static DisabledList withd(Drawable icon, String name, Boolp disabled, Runnable run) {
+			DisabledList list = Pools.get(DisabledList.class, DisabledList::new, max).obtain();
+			list.icon = icon;
+			list.name = name;
+			list.disabled = disabled;
+			// Log.info("0) check: @, list.checked: @", checked, list.checked);
+			list.cons = __ -> run.run();
+			return list;
+		}
+	}
+	public static class FoldedList extends MenuList implements Poolable {
+		Prov<Seq<MenuList>> childrenGetter;
+		Seq<MenuList>       children;
+		public static FoldedList withf(Drawable icon, String name, Prov<Seq<MenuList>> children) {
+			FoldedList list = Pools.get(FoldedList.class, FoldedList::new, max).obtain();
+			list.icon = icon;
+			list.name = name;
+			list.children = null;
+			list.childrenGetter = children;
+			// Log.info("0) check: @, list.checked: @", checked, list.checked);
+			list.cons = null;
+			return list;
+		}
+		public Seq<MenuList> getChildren() {
+			if (children == null) children = childrenGetter.get();
+			return children;
+		}
+		public void reset() {
+			if (children != null) Pools.freeAll(children, false);
+		}
+	}
+
 
 	public static class Countdown implements Runnable, Cons {
 		TextButton button;
@@ -714,6 +854,7 @@ public class IntUI {
 
 		public Tooltip(Cons<Table> contents) {
 			super(t -> {});
+			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
 			show = () -> {
 				Table table = container;
@@ -728,15 +869,22 @@ public class IntUI {
 		public Tooltip(Cons<Table> contents, Tooltips manager) {
 			super(contents, manager);
 		}
+		public void show(Element element, float x, float y) {
+			super.show(element, x, y);
+			if (mobile) Time.runTask(60 * 1.2f, this::hide);
+		}
+		/** 禁用原本的mobile自动隐藏 */
+		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {}
 	}
 
 
 	// -----弹窗------
 	public interface PopupWindow extends DisposableInterface {}
 
-	public static class InfoFadePopup extends Window implements DisposableInterface {
+	public static class InfoFadePopup extends NoTopWindow implements DisposableInterface {
 		public InfoFadePopup(String title, float width, float height) {
 			super(title, width, height);
+			removeCaptureListener(sclListener);
 		}
 	}
 	private static class ExceptionPopup extends Window implements PopupWindow {
@@ -765,8 +913,17 @@ public class IntUI {
 			//            closeOnBack();
 		}
 	}
+	public static class ConfirmWindow extends Window implements DisposableInterface, PopupWindow {
+		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(title, minWidth, minHeight, full, noButtons);
+		}
+
+		public void setCenter(Vec2 vec2) {
+			setPosition(vec2.x - getPrefWidth() / 2f, vec2.y - getPrefHeight() / 2f);
+		}
+	}
 	private static class AutoFitTable extends Table implements PopupWindow {
-		public AutoFitTable() {super(Tex.button);}
+		public AutoFitTable() {super(Tex.pane);}
 		public float getPrefHeight() {
 			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
 		}

@@ -3,12 +3,12 @@ package modtools.ui.content.ui;
 import arc.graphics.Color;
 import arc.scene.*;
 import arc.scene.actions.*;
-import arc.scene.ui.*;
-import arc.util.*;
-import modtools.ui.*;
+import arc.scene.ui.Image;
+import arc.util.Align;
+import modtools.ui.IntStyles;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;
-import modtools.utils.Tools;
+import modtools.utils.reflect.ClassUtils;
 
 public class ActionsDebug extends Content {
 	public ActionsDebug() {
@@ -25,7 +25,7 @@ public class ActionsDebug extends Content {
 		element.setOrigin(Align.topRight);
 		// element.setOrigin(element.getWidth() / 2f, element.getHeight() / 2f);
 		// element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
-		var classes = Tools.getClasses("arc.scene.actions");
+		var classes = ClassUtils.getClasses("arc.scene.actions");
 		ui.cont.pane(t -> {
 			int c = 0;
 			for (var action : classes) {

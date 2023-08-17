@@ -10,7 +10,7 @@ import arc.math.Mathf;
 import arc.math.geom.Rect;
 import arc.scene.*;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
@@ -21,11 +21,11 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.IntUI.InsideTable;
-import modtools.ui.components.input.highlight.Syntax;
+import modtools.ui.components.input.highlight.*;
 
 import java.util.regex.*;
 
-import static modtools.utils.Tools.sr;
+import static modtools.utils.Tools.Sr;
 
 
 /**
@@ -33,21 +33,20 @@ import static modtools.utils.Tools.sr;
  * 支持显示行数
  * 支持高亮显示
  * 支持滚动
- *
  * @author I hope...
  **/
-public class TextAreaTab extends Table {
+public class TextAreaTab extends Table implements SyntaxDrawable {
 	private final MyTextArea   area;
 	public final  MyScrollPane pane;
-	private final LinesShow    linesShow;
-	public final  CodeTooltip  tooltip  = new CodeTooltip();
+	private       LinesShow    linesShow;
+	// public final  CodeTooltip  tooltip  = new CodeTooltip();
 	/** 编辑器是否只可读 */
 	public        boolean      readOnly = false,
 	/** 编辑器是否显示行数 */
 	showLine;
 	public Syntax syntax;
 
-	public static float numWidth = sr(0f).set(__ -> {
+	public static float numWidth = Sr(0f).setOpt(__ -> {
 		var layout = new GlyphLayout();
 		layout.setText(Fonts.def, "0");
 		return layout.width;
@@ -74,8 +73,7 @@ public class TextAreaTab extends Table {
 		area.setStyle(MOMO_STYLE);
 		pane = new MyScrollPane();
 		area.trackCursor = pane::trackCursor;
-		linesShow = new LinesShow(area);
-		Cell<?> cell = add(linesShow).growY().left();
+		Cell<?> cell = add(showLine ? getLinesShow() : null).growY().left();
 		add(pane).grow();
 		area.setPrefRows(8);
 		area.x += pane.x;
@@ -85,7 +83,7 @@ public class TextAreaTab extends Table {
 			// 刷新Area
 			pane.invalidate();
 			// invalidateHierarchy();
-			Time.runTask(0, this::invalidate);
+			Core.app.post(this::invalidate);
 			cell.setElement(showLine ? linesShow : null);
 			// if (last == area) focus();
 		});
@@ -100,6 +98,10 @@ public class TextAreaTab extends Table {
 		});
 		Time.runTask(2, area::updateDisplayText);
 	}
+	private LinesShow getLinesShow() {
+		linesShow = new LinesShow(area);
+		return linesShow;
+	}
 
 	public float parentAlpha() {
 		return parentAlpha;
@@ -112,6 +114,15 @@ public class TextAreaTab extends Table {
 
 	public void focus() {
 		Core.scene.setKeyboardFocus(area);
+	}
+	public float alpha() {
+		return parentAlpha;
+	}
+	public Font font() {
+		return area.font;
+	}
+	public void drawMultiText(CharSequence displayText, int start, int max) {
+		area.drawMultiText(displayText, start, max);
 	}
 
 	public class MyScrollPane extends ScrollPane {
@@ -133,21 +144,15 @@ public class TextAreaTab extends Table {
 				setScrollY((cursorLine - lines) * area.lineHeight());
 				act(10);
 			}
-			// });
 		}
 
 		@Override
 		public void visualScrollY(float pixelsY) {
 			area.scrollY = pixelsY;
-			//			Log.info(pixelsY);
 			super.visualScrollY(pixelsY);
 		}
 		public void draw() {
 			super.draw();
-			// int   c  = area.cursor;
-			// float x1 = area.getRelativeX(c), y1 = area.getRelativeY(c);
-			// Fill.crect(x + x1, y +y1, 20, 20);
-			// if (tooltip.p.getChildren().any()) tooltip.show(this, x1, y1);
 		}
 
 		/*@Override
@@ -172,15 +177,15 @@ public class TextAreaTab extends Table {
 		public float lineHeight() {
 			return style.font.getLineHeight();
 		}
-		/* public float getPrefHeight() {
+		public float getPrefHeight() {
 			float prefHeight = textHeight * getLines();
 			var   style      = getStyle();
 			if (style.background != null) {
 				prefHeight = Math.max(prefHeight + style.background.getBottomHeight() + style.background.getTopHeight(),
 				 style.background.getMinHeight());
 			}
-			return prefHeight + parentHeight / 2f;
-		} */
+			return Math.max(super.getPrefHeight(), prefHeight + parentHeight / 2f);
+		}
 
 		public void setFirstLineShowing(int v) {
 			firstLineShowing = v;
@@ -337,7 +342,7 @@ public class TextAreaTab extends Table {
 			trackCursor();
 		}
 
-		public float rx, ry;
+		/* public float rx, ry;
 		public float getRelativeCursor() {
 			return cursor - area.getRealFirstLineShowing() * 2;
 
@@ -372,7 +377,7 @@ public class TextAreaTab extends Table {
 			return ry = y + getTextY(style.font, area.style.background) +
 									(style.font.isFlipped() ? -textHeight : 0)
 									- (i / 2f) * lineHeight();
-		}
+		} */
 
 		public int clamp(int index) {
 			return Mathf.clamp(index, 0, text.length());
@@ -715,6 +720,6 @@ public class TextAreaTab extends Table {
 	// 等宽字体样式（没有等宽字体默认样式）
 	public static TextFieldStyle MOMO_STYLE = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.def;
-		// background = null;
+		selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}};
 }

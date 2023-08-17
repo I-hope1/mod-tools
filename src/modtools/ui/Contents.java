@@ -1,32 +1,30 @@
 package modtools.ui;
 
+import modtools.annotations.ContentInit;
 import modtools.ui.content.*;
 import modtools.ui.content.debug.*;
 import modtools.ui.content.ui.*;
+import modtools.ui.content.ui.design.DesignContent;
 import modtools.ui.content.world.*;
 
+@ContentInit
 public class Contents {
-	public static SettingsContent settingsUI;
-	public static Tester          tester;
-	public static Selection       selection;
-	public static ShowUIList      showuilist;
-	public static UnitSpawn       unitSpawn;
-	public static ErrorDisplay    errorDisplay;
-	public static ContentList     contentList;
-	public static ReviewElement   reviewElement;
-	public static WindowManager   windowManager;
-	public static ActionsDebug    actionsDebug;
+	public static SettingsUI    settings_ui;
+	public static Tester        tester;
+	public static Selection     selection;
+	public static ShowUIList    show_ui_list;
+	public static UnitSpawn     unit_spawn;
+	public static LogDisplay    log_display;
+	public static ContentList   content_list;
+	public static ReviewElement review_element;
+	// public static ActionsDebug  actions_debug;
+	public static DesignContent design_content;
+	public static WindowManager window_manager;
 
-	public static void load() {
-		settingsUI = new SettingsContent();
-		tester = new Tester();
-		selection = new Selection();
-		showuilist = new ShowUIList();
-		unitSpawn = new UnitSpawn();
-		errorDisplay = new ErrorDisplay();
-		contentList = new ContentList();
-		reviewElement = new ReviewElement();
-		windowManager = new WindowManager();
-		actionsDebug = new ActionsDebug();
-	}
+	/**
+	 * generate by annotation
+	 *
+	 * @see ContentInit
+	 */
+	public static void load() {}
 }

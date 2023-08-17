@@ -14,11 +14,11 @@ public class ColorFul {
 	private static      float timer = 0;
 
 	static {
-		float precent = 60;
-		Tools.tasks.add(() -> {
+		float percent = 60;
+		Tools.TASKS.add(() -> {
 			timer += Time.delta;
-			color.lerp(colors[i], Mathf.clamp(timer / precent));
-			if (timer >= precent) {
+			color.lerp(colors[i], Mathf.clamp(timer / percent));
+			if (timer >= percent) {
 				timer = 0;
 				i++;
 			}

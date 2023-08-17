@@ -24,6 +24,7 @@ import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.Window;
 import modtools.ui.effect.*;
 import modtools.utils.*;
+import modtools.utils.array.TaskSet;
 
 import java.util.ArrayList;
 
@@ -38,23 +39,22 @@ import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
 public final class TopGroup extends WidgetGroup {
-	public boolean checkUI = SETTINGS.getBool("checkUI"),
-	  debugBounds          = SETTINGS.getBool("debugbounds"),
-	  selectUnvisible = SETTINGS.getBool("selectUnvisible");
+	public boolean
+	 checkUI         = SETTINGS.getBool("checkUI"),
+	 debugBounds     = SETTINGS.getBool("debugbounds"),
+	 selectUnvisible = SETTINGS.getBool("selectUnvisible");
 	/* 渲染相关 */
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
 
-	public boolean isSwitchWindows = false;
-	public int     currentIndex    = 0;
+	public boolean           isSwitchWindows = false;
+	public int               currentIndex    = 0;
 	public ArrayList<Window> shownWindows    = new ArrayList<>();
 
 	public Group getTopG() {
 		return others;
 	}
-	// public Group getTopW() {
-	// 	return windows;
-	// }
+
 	private Element selected;
 	public Element getSelected() {
 		return selected;
@@ -66,32 +66,27 @@ public final class TopGroup extends WidgetGroup {
 	private boolean cancelEvent;
 
 	private final Group
-	  back    = new Group() {
-		public void draw() {
-			backDrawSeq.exec();
-			drawResidentTasks.each(ResidentDrawTask::backDraw);
-			super.draw();
-		}
-		{name = "back";}
-	},
-	  windows = new Group() {{name = "windows";}},
-	  frag    = new Group() {{name = "frag";}},
-	  others  = new WidgetGroup() {
-		  public Element hit(float x, float y, boolean touchable) {
-			  return sr(super.hit(x, y, touchable))
-				.set(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
-				  ? el -> or(el, this) : null)
+	 back    = new Group() {{name = "back";}},
+	 windows = new Group() {{name = "windows";}},
+	 frag    = new Group() {{name = "frag";}},
+	 others  = new WidgetGroup() {
+		 public Element hit(float x, float y, boolean touchable) {
+			 return Sr(super.hit(x, y, touchable))
+				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
+				 ? el -> or(el, this) : null)
 				.get();
-		  }
-		  {
-			  name = "others";
-		  }
-	  };
+		 }
+		 {
+			 name = "others";
+		 }
+	 };
 	private final Table end = new MyEnd();
 
 	public Element drawPadElem = null;
 
 	public void draw() {
+		backDrawSeq.exec();
+		drawResidentTasks.each(ResidentDrawTask::backDraw);
 		super.draw();
 
 		if (elementDrawer != null && selected != null) {
@@ -126,7 +121,7 @@ public final class TopGroup extends WidgetGroup {
 		Draw.color(elem instanceof Group ? Color.sky : Color.green);
 
 		Lines.rect(vec2.x, vec2.y,
-		  elem.getWidth(), elem.getHeight());
+		 elem.getWidth(), elem.getHeight());
 
 		if (elem instanceof Group group) {
 			Vec2 cpy = vec2.cpy();
@@ -145,9 +140,7 @@ public final class TopGroup extends WidgetGroup {
 		fillParent = true;
 		touchable = Touchable.childrenOnly;
 		name = modName + "-TopGroup";
-		// Log.info("Loaded top group");
 
-		// Core.scene.add(this);
 		/* 显示UI布局 */
 		Events.run(Trigger.uiDrawEnd, () -> {
 			drawSeq.exec();
@@ -159,7 +152,7 @@ public final class TopGroup extends WidgetGroup {
 			Element drawPadElem = or(this.drawPadElem, scene.root);
 			Vec2    vec2;
 			if (drawPadElem.parent != null) {
-				vec2 = Tools.getAbsPos(drawPadElem.parent);
+				vec2 = ElementUtils.getAbsPos(drawPadElem.parent);
 			} else if (drawPadElem == scene.root) {
 				vec2 = Tmp.v1.set(0, 0);
 			} else return;
@@ -183,7 +176,7 @@ public final class TopGroup extends WidgetGroup {
 		}
 		// update(this::toFront);
 
-		tasks.add(() -> {
+		TASKS.add(() -> {
 			toFront();
 			if (checkUI) {
 				if (scene.root.getChildren().count(el -> el.visible) > 70) {
@@ -263,10 +256,10 @@ public final class TopGroup extends WidgetGroup {
 	public void addChild(Element actor) {
 		if (enabled) {
 			(actor instanceof BackInterface ? back
-			  : actor instanceof PopupWindow ? others
-			  : actor instanceof Window ? windows
-			  : actor instanceof Frag ? frag
-			  : others).addChild(actor);
+			 : actor instanceof PopupWindow ? others
+			 : actor instanceof Window ? windows
+			 : actor instanceof Frag ? frag
+			 : others).addChild(actor);
 			return;
 		}
 		scene.add(actor);
@@ -274,9 +267,9 @@ public final class TopGroup extends WidgetGroup {
 
 	public Element hit(float x, float y, boolean touchable) {
 		/*isSwicthWindows ? end.hit(x, y, touchable) : */
-		return sr(super.hit(x, y, touchable))
-		  .setnull(el -> el == this || el == null || el.touchable == Touchable.disabled)
-		  .get();
+		return Sr(super.hit(x, y, touchable))
+		 .setnull(el -> el == this || el == null || el.touchable == Touchable.disabled)
+		 .get();
 	}
 
 /* 	public void requestSelectRegion
@@ -286,6 +279,11 @@ public final class TopGroup extends WidgetGroup {
 
 	} */
 
+	/**
+	 * 请求选择元素
+	 *
+	 * @param drawer 用于选择时渲染
+	 */
 	public void requestSelectElem(Drawer drawer, Cons<Element> callback) {
 		if (callback == null) throw new IllegalArgumentException("callback is null");
 		selected = null;
@@ -303,8 +301,7 @@ public final class TopGroup extends WidgetGroup {
 	public ObjectFloatMap<Element> filterSelected = new ObjectFloatMap<>();
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {
-		Element tmp = scene.root.hit(x, y, !selectUnvisible);
-		selected = tmp;
+		selected = scene.root.hit(x, y, !selectUnvisible);
 		//if (tmp != null) {
 			/*do {
 				selected = tmp;
@@ -337,9 +334,22 @@ public final class TopGroup extends WidgetGroup {
 			public void cancel() {
 				selecting = false;
 			}
+			/* 拦截事件 */
+			public boolean keyUp(InputEvent event, KeyCode keycode) {
+				if (selecting) {
+					event.cancel();
+				}
+				return true;
+			}
+			public boolean keyTyped(InputEvent event, char character) {
+				if (selecting) {
+					event.cancel();
+				}
+				return true;
+			}
 			/* 拦截keydown */
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (!selecting) return false;
+				if (!selecting) return true;
 				if (keycode == KeyCode.escape) {
 					event.cancel();
 					cancel();
@@ -405,7 +415,7 @@ public final class TopGroup extends WidgetGroup {
 	}
 
 
-	private final Seq<ResidentDrawTask> drawResidentTasks = new Seq<>();
+	public final Seq<ResidentDrawTask> drawResidentTasks = new Seq<>();
 	public void focusOnElement(FocusTask task) {
 		drawResidentTasks.add(task);
 	}
@@ -433,6 +443,9 @@ public final class TopGroup extends WidgetGroup {
 
 	/** 用于切换窗口的事件侦听器 */
 	private class SwitchInputListener extends InputListener {
+		public void touchDragged(InputEvent event, float x, float y, int pointer) {
+			super.touchDragged(event, x, y, pointer);
+		}
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			acquireShownWindows();
 			if (shownWindows.isEmpty()) return false;
@@ -486,19 +499,20 @@ public final class TopGroup extends WidgetGroup {
 		end.clearChildren();
 		Table end = new Table();
 		this.end.pane(end).grow().with(
-		  s -> s.setScrollingDisabled(true, false));
+		 s -> s.setScrollingDisabled(true, false));
 		int             W          = graphics.getWidth(), H = graphics.getHeight();
 		float           eachW      = W > H ? W / 3f : W / 4f - 16f, eachH = H / 3f;
 		final Element[] tappedElem = {null}, hoveredElem = {null};
-		for (int i = 0; i < shownWindows.size(); i++) {
-			if (i % 4 == 0) end.row();
-			Window w  = shownWindows.get(i);
-			Image  el = new Image(w.screenshot());
+		Table           table      = end.row().table().get();
+		for (Window w : shownWindows) {
+			Image el = new Image(w.screenshot());
 
 			// TextureRegionDrawable drawable = new TextureRegionDrawable((TextureRegionDrawable) Tex.pane);
 			boolean[] cancelEvent = {false};
 			float     bestScl     = eachW / eachH, realScl = el.getWidth() / el.getHeight();
-			end.button(t -> {
+			float     width1      = bestScl < realScl ? eachW : eachH * realScl;
+			if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table = end.row().table().get();
+			table.button(t -> {
 				t.margin(4, 6, 4, 6);
 				t.act(0.1f);
 				t.tapped(() -> tappedElem[0] = t);
@@ -512,8 +526,8 @@ public final class TopGroup extends WidgetGroup {
 						cancelEvent[0] = true;
 					}).visible(() -> hoveredElem[0] == t);
 				}).growX().pad(6, 8, 6, 8).row();
-				t.add(el).size(bestScl < realScl ? eachW : eachH * realScl,
-				  bestScl < realScl ? eachW / realScl : eachH);
+				t.add(el).size(width1,
+				 bestScl < realScl ? eachW / realScl : eachH);
 				t.clicked(() -> {
 					if (cancelEvent[0]) {
 						removeWindow(hoveredElem[0]);
@@ -567,8 +581,9 @@ public final class TopGroup extends WidgetGroup {
 			Fill.crect(x - ow / 2f, y - oh / 2f, getPrefWidth() + ow, getPrefHeight() + oh);
 		}
 		private void allocateNewTexture() {
+			if (pixmap != null) pixmap.dispose();
 			texture = new Texture(pixmap = new Pixmap(
-			  graphics.getWidth(), graphics.getHeight()
+			 graphics.getWidth(), graphics.getHeight()
 			));
 		}
 
@@ -586,7 +601,12 @@ public final class TopGroup extends WidgetGroup {
 		default void backDraw() {}
 
 		default void elemDraw() {}
-
+		/**
+		 * 在{@code drawer}渲染之前渲染
+		 *
+		 * @param drawer 等一会会渲染的元素
+		 */
+		default void beforeDraw(Element drawer) {}
 		default void endDraw() {}
 	}
 
@@ -603,13 +623,11 @@ public final class TopGroup extends WidgetGroup {
 			this.maskColor = maskColor;
 			this.focusColor = focusColor;
 		}
-		public void backDraw() {
-		}
 		public void elemDraw() {
 			drawFocus(elem);
 		}
 		public void drawFocus(Element elem) {
-			Vec2 vec2 = getAbsPos(elem);
+			Vec2 vec2 = ElementUtils.getAbsPos(elem);
 			if (focusColor.a > 0) {
 				Draw.color(focusColor);
 				Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());

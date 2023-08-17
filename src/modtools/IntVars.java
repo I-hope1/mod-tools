@@ -4,7 +4,7 @@ import arc.Events;
 import arc.util.Log;
 import mindustry.game.EventType.ResizeEvent;
 import modtools.ui.IntUI;
-import modtools.utils.MySet;
+import modtools.utils.array.MySet;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -13,7 +13,7 @@ import static mindustry.Vars.ui;
 public class IntVars {
 	public static final String  modName = "mod-tools";
 	public static final String  NL      = System.lineSeparator();
-	public static       boolean hasDecomplier;
+	public static       boolean hasDecompiler;
 
 
 	public static void showException(Exception e, boolean b) {
@@ -59,7 +59,7 @@ public class IntVars {
 
 	static {
 		// new Not("aaa");
-		Events.on(ResizeEvent.class, e -> {
+		Events.on(ResizeEvent.class, __ -> {
 			for (var r : resizeListeners) r.run();
 		});
 	}

@@ -9,6 +9,10 @@ public class PrefPane extends ScrollPane {
 	public PrefPane(Element widget) {
 		super(widget);
 	}
+	public PrefPane(Cons<Table> cons, FloatFloatf xp) {
+		this(cons);
+		this.xp = xp;
+	}
 	public PrefPane(Cons<Table> cons) {
 		super(new Table(cons));
 	}

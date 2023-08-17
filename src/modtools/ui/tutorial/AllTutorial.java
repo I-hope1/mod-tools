@@ -1,22 +1,128 @@
 package modtools.ui.tutorial;
 
 
-import arc.Core;
+import arc.*;
 import arc.func.Boolp;
+import arc.graphics.*;
+import arc.graphics.g2d.*;
+import arc.graphics.gl.FrameBuffer;
+import arc.input.KeyCode;
+import arc.math.*;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.util.viewport.Viewport;
+import arc.scene.event.*;
+import arc.util.Timer.Task;
+import arc.util.Tmp;
+import mindustry.game.EventType.Trigger;
+import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
+import modtools.utils.*;
+import modtools.utils.ui.LerpFun;
+
+import static modtools.utils.Tools.TASKS;
 
 public class AllTutorial {
-	public static void f(Element elem, Boolp boolp) {
+	public static void focusOn(Element elem, Boolp boolp) {
 		IntUI.focusOnElement(elem, boolp);
 	}
+	public static void f2(Element elem) {
+		Camera camera = Core.scene.getCamera();
+		float  mul    = camera.height / camera.width;
+		float  mul2   = elem.getHeight() / elem.getWidth();
+		Vec2   endPos = ElementUtils.getAbsPosCenter(elem);
+
+		Interp  fun   = Interp.swing;
+		float[] a     = {0};
+		float   end   = mul > mul2 ? elem.getWidth() : elem.getHeight();
+		float   start = mul > mul2 ? camera.width : camera.height;
+		float startX = camera.position.x, endX = endPos.x,
+		 startY = camera.position.y, endY = endPos.y;
+		TASKS.add(() -> {
+			a[0] += 0.01f;
+			float v    = a[0] < 1 ? a[0] : 2 - a[0];
+			float unit = fun.apply(start, end, v);
+			camera.position.set(
+			 fun.apply(startX, endX, v),
+			 fun.apply(startY, endY, v)
+			);
+			camera.width = unit;
+			camera.height = unit * mul;
+			if (a[0] >= 2) {
+				camera.position.set(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f);
+			}
+			return a[0] <= 2;
+		});
+	}
+
+	public static FrameBuffer pingpong1 = new FrameBuffer(), pingpong2 = new FrameBuffer();
+
+	static {
+		pingpong1.begin(Color.clear);
+		pingpong1.end();
+		pingpong2.begin(Color.clear);
+		pingpong2.end();
+	}
+
+	public static void drawFocus(Color bgColor, Runnable draw) {
+		drawFocus(bgColor, draw, Color.clear);
+	}
+
+	public static void drawFocus(Color bgColor, Runnable draw, Color color) {
+		int w = Core.graphics.getWidth();
+		int h = Core.graphics.getHeight();
+		pingpong1.resize(w, h);
+		pingpong1.begin(Color.clear);
+		Draw.color(bgColor.rgba());
+		Fill.crect(0, 0, w, h);
+		pingpong1.end();
+		pingpong2.resize(w, h);
+		pingpong2.begin(Color.clear);
+		draw.run();
+		pingpong2.end();
+		pingpong2.getTexture().bind(1);
+		MyShaders.mixShader.color = color;
+		Draw.blit(pingpong1, MyShaders.mixShader);
+	}
+	public static boolean enableFocusMouse;
 	public static void init() {
-		Viewport viewport = Core.scene.getViewport();
 		/* Events.run(Trigger.update, () -> {
 			viewport.getCamera().position.set(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f - 50);
 			viewport.setWorldHeight(Core.graphics.getHeight() - 50);
 		}); */
+		InputListener listener = new InputListener() {
+			final Task task = new Task() {
+				public void run() {}
+			};
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (keycode == KeyCode.shiftLeft) {
+					if (!TaskManager.reScheduled(0.4f, task)) {
+						enableFocusMouse = !enableFocusMouse;
+					}
+				}
+				return false;
+			}
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				if (enableFocusMouse) event.cancel();
+				enableFocusMouse = false;
+				return false;
+			}
+		};
+		Core.scene.root.getCaptureListeners().insert(0, listener);
+		LerpFun fun = new LerpFun(Interp.fade, Interp.fastSlow);
+		fun.register(0.1f);
+		Events.run(Trigger.uiDrawEnd, () -> {
+			if (enableFocusMouse || fun.a > 0) {
+				fun.enabled = true;
+				fun.reverse = !enableFocusMouse;
+				float aLerp = Mathf.lerp(0.1f, 0.5f, fun.applyV);
+				drawFocus(Tmp.c1.set(Color.black).a(aLerp), () -> {
+					Fill.circle(Core.input.mouseX(), Core.input.mouseY(),
+					 Mathf.lerp(600f, 80f, fun.applyV)
+					);
+				}, Tmp.c2.set(Color.white).a(aLerp));
+			} else fun.enabled = false;
+		});
+		// boolean valid[] = {false};
 		// viewport.setScreenBounds(20, 40,
 		//  Core.graphics.getWidth() -20,
 		//  Core.graphics.getHeight() -40);

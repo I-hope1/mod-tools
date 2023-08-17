@@ -9,7 +9,7 @@ import arc.scene.Element;
 import mindustry.game.EventType.Trigger;
 import modtools.IntVars;
 import modtools.graphics.MyShaders;
-import modtools.utils.Tools;
+import modtools.utils.ElementUtils;
 
 import static arc.Core.graphics;
 import static modtools.utils.MySettings.D_BLUR;
@@ -21,7 +21,7 @@ public class ScreenSampler {
 		if (BUFFER.isBound()) {
 			BUFFER.end();
 			// Log.info("????");
-			Tools.clearScreen();
+			ElementUtils.clearScreen();
 			BUFFER.blit(MyShaders.baseShader);
 		}
 
@@ -32,7 +32,7 @@ public class ScreenSampler {
 	public static void init() {
 		/* 初始化buffer */
 		BUFFER.begin(Color.clear);
-		Tools.clearScreen();
+		ElementUtils.clearScreen();
 		BUFFER.end();
 
 		BUFFER.resize(graphics.getWidth(), graphics.getHeight());
@@ -49,7 +49,6 @@ public class ScreenSampler {
 			BUFFER_SCREEN.end();
 		} */
 		Draw.flush();
-		// if (true) return getSampler0();
 		return BUFFER.getTexture();
 	}
 	/* static FrameBuffer pingpong1 = new FrameBuffer();
@@ -69,7 +68,7 @@ public class ScreenSampler {
 		// FrameBuffer.unbind();
 		BUFFER.end();
 	}
-	public static void contiune() {
+	public static void _continue() {
 		// Draw.flush();
 		BUFFER.begin();
 	}

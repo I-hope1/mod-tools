@@ -23,7 +23,6 @@ public class ByteCodeTools {
 		return new MyClass<>(name, superName);
 	}*/
 
-
 	public static final String
 			functionsKey = "_KSINIA_Functions",
 			TMP_CLASS    = "__BYTE_Class";

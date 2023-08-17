@@ -8,6 +8,7 @@ import modtools.ui.effect.MyDraw.DrawEffect;
 
 import static modtools.utils.MySettings.D_BLUR;
 
+/** from EB-wilson */
 public class EBBlur implements DrawEffect {
 	public enum DEF {
 		A(
@@ -212,7 +213,7 @@ public class EBBlur implements DrawEffect {
 
 		Gl.enable(Gl.blend);
 		Gl.blendFunc(Gl.srcAlpha, Gl.oneMinusSrcAlpha);
-		ScreenSampler.contiune();
+		ScreenSampler._continue();
 		buffer.blit(blurShader);
 	}
 }

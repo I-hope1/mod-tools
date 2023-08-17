@@ -11,7 +11,18 @@ import java.security.ProtectionDomain;
 import static jdk.internal.misc.Unsafe.getUnsafe;
 
 public class IReflect {
-	// public static final Lookup lookup = MethodHandles.lookup();
+	/**
+	 * @see jdk.internal.loader.NativeLibraries.LibraryPaths.SYS_PATHS
+	 * @see =
+	 * @see jdk.internal.loader.NativeLibraries.LibraryPaths.SYS_PATHS
+	 * @see
+	 * */
+	static {
+		// new SharedLibraryLoader(Vars.mods.getMod(ModTools.class).file.path())
+		//  .load("reflect");
+		// defineClass0(null, new byte[]{});
+	}
+
 	public static final MyClassLoader loader = new MyClassLoader(IReflect.class.getClassLoader());
 	public static       ClassLoader   IMPL_LOADER;
 
@@ -20,7 +31,7 @@ public class IReflect {
 	static {
 		try {
 			Constructor<?> cons = Class.forName("jdk.internal.reflect.DelegatingClassLoader")
-					.getDeclaredConstructor(ClassLoader.class);
+			 .getDeclaredConstructor(ClassLoader.class);
 			cons.setAccessible(true);
 			// IMPL_CONS = cons;
 			IMPL_LOADER = (ClassLoader) cons.newInstance(loader);
@@ -59,8 +70,8 @@ public class IReflect {
 			}
 			try {
 				return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
-						.createClassLoader(superClass.getClassLoader()))
-						.defineClass(name, bytes);
+				 .createClassLoader(superClass.getClassLoader()))
+				 .defineClass(name, bytes);
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
 			}
@@ -78,8 +89,8 @@ public class IReflect {
 		if (OS.isAndroid) {
 			try {
 				return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
-						.createClassLoader(loader))
-						.defineClass(name, bytes);
+				 .createClassLoader(loader))
+				 .defineClass(name, bytes);
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
 			}
@@ -96,7 +107,7 @@ public class IReflect {
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes, ProtectionDomain pd) {
 		try {
 			return getUnsafe().defineClass0(null, bytes, 0, bytes.length,
-					loader, pd);
+			 loader, pd);
 		} catch (Exception ex) {
 			throw new RuntimeException(ex);
 		}

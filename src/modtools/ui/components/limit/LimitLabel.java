@@ -9,11 +9,9 @@ public class LimitLabel extends Label implements Limit {
 	public LimitLabel(Prov<CharSequence> sup) {
 		super(sup);
 	}
-
 	public LimitLabel(CharSequence text) {
 		super(text);
 	}
-
 	public LimitLabel(CharSequence text, LabelStyle style) {
 		super(text, style);
 	}

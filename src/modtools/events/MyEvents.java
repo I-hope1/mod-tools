@@ -3,16 +3,19 @@ package modtools.events;
 import arc.func.Cons;
 import arc.struct.*;
 
+import static modtools.utils.Tools.Sr;
+
 /* copy from arc.Events */
 public class MyEvents {
-	private static final ObjectMap<Object, Seq<Cons<?>>> events = new ObjectMap<>();
+	private static final ObjectMap<Object, Seq> events = new ObjectMap<>();
 
-	private final ObjectMap<Object, Seq<Cons<?>>> insEvents    = new ObjectMap<>();
-	public static Seq<MyEvents>                   allInstances = new Seq<>();
+	private final ObjectMap<Object, Seq> insEvents    = new ObjectMap<>();
+	public static Seq<MyEvents>          allInstances = new Seq<>();
 	public MyEvents() {
 		allInstances.add(this);
 	}
 	public void removeIns() {
+		insEvents.each((__, seq) -> seq.clear());
 		insEvents.clear();
 		allInstances.remove(this);
 	}
@@ -33,6 +36,23 @@ public class MyEvents {
 		}
 	}
 
+	/** Handle an event by class. */
+	public void onIns(Object type, Runnable listener) {
+		insEvents.get(type, () -> new Seq<>(Runnable.class)).add(listener);
+	}
+	/** Fires an enum trigger. */
+	public void fireIns(Object type) {
+		Seq<Runnable> listeners = insEvents.get(type);
+
+		if (listeners != null) {
+			int        len   = listeners.size;
+			Runnable[] items = listeners.items;
+			for (int i = 0; i < len; i++) {
+				items[i].run();
+			}
+		}
+	}
+
 	/* ---------------------------------------- */
 
 
@@ -45,23 +65,28 @@ public class MyEvents {
 	} */
 
 	public static MyEvents current = null;
+	/* ------------- for enum ---------- */
 	/** Handle an event by class. */
 	public static <T extends Enum<T>> void on(Enum<T> type, Cons<T> listener) {
 		(current != null ? current.insEvents : events).get(type, () -> new Seq<>(Cons.class)).add(listener);
 	}
 
-
 	/** Fires an enum trigger. */
 	public static <T extends Enum<T>> void fire(Enum<T> type) {
-		Seq<Cons<?>> listeners = events.get(type);
+		Seq<Cons<Enum<T>>> listeners = events.get(type);
 
 		if (listeners != null) {
-			int    len   = listeners.size;
-			Cons[] items = listeners.items;
-			for (int i = 0; i < len; i++) {
-				items[i].get(type);
-			}
+			listeners.each(cons -> cons.get(type));
 		}
 		allInstances.each(e -> e.fireIns(type));
+	}
+
+	/* ------------- for object ---------- */
+	public static void on(Object type, Runnable listener) {
+		events.get(type, Seq::new).add(listener);
+	}
+	public static void fire(Object type) {
+		Sr((Seq<Runnable>) events.get(type))
+		 .ifPresent(l -> l.each(Runnable::run));
 	}
 }

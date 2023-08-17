@@ -1,41 +1,27 @@
 package modtools.ui.components.input.highlight;
 
-import arc.Core;
 import arc.graphics.Color;
-import arc.math.geom.Vec2;
-import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.layout.Table;
 import arc.struct.*;
-import arc.util.*;
 import mindustry.Vars;
-import mindustry.gen.Tex;
-import modtools.ui.components.input.MyLabel;
-import modtools.ui.components.input.area.TextAreaTab;
-import modtools.utils.JSFunc;
 import rhino.*;
 
 import java.util.Objects;
-
-import static modtools.utils.Tools.*;
 
 public class JSSyntax extends Syntax {
 
 	public static Color
 	 c_constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
 	// 常规变量
-	c_defVar = new Color(0x7CDCFEFF)
+	c_defvar = new Color(0x7CDCFEFF)
 	 // , __defalutColor__ = new Color(0xDCDCAAFF)
 	 ;
 
-	public JSSyntax(TextAreaTab table) {
-		super(table);
-		if (area == null) return;
+	public JSSyntax(SyntaxDrawable drawable) {
+		super(drawable);
 		// defalutColor = __defalutColor__;
-		area.getStyle().selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}
 
-	public static       ImporterTopLevel              scope          = (ImporterTopLevel) Vars.mods.getScripts().scope;
-	public static final ObjectMap<String, Scriptable> SCRIPTABLE_MAP = new ObjectMap<>();
+	public static ImporterTopLevel scope = (ImporterTopLevel) Vars.mods.getScripts().scope;
 
 	public static final ObjectSet<String> constantSet = new ObjectSet<>() {
 		// final ObjectSet<String> blackList = new ObjectSet<>();
@@ -46,7 +32,6 @@ public class JSSyntax extends Syntax {
 			if (!(('A' <= c && c <= 'Z') || c == '$')) return false;
 			Object o = scope.get(key, scope);
 			if (o != Scriptable.NOT_FOUND) {
-				if (o instanceof Scriptable) SCRIPTABLE_MAP.put(key, (Scriptable) o);
 				add(key);
 				return true;
 			}
@@ -64,7 +49,6 @@ public class JSSyntax extends Syntax {
 				ScriptableObject.redefineProperty(scope, key, false);
 				defVarSet.add(key);
 			} catch (RuntimeException ignored) {
-				if (scope.get((String) id, scope) instanceof Scriptable o) SCRIPTABLE_MAP.put(key, o);
 				constantSet.add(key);
 			}
 		}
@@ -83,8 +67,10 @@ public class JSSyntax extends Syntax {
 	 ), c_keyword,
 	 ObjectSet.with("null", "undefined", "true", "false"), c_keyword,
 	 constantSet, c_constants,
-	 defVarSet, c_defVar
+	 defVarSet, c_defvar
 	);
+
+	ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
 
 	protected final DrawSymbol
 	 operatesSymbol = new DrawSymbol(operates, c_operateChar),
@@ -105,7 +91,7 @@ public class JSSyntax extends Syntax {
 	public TokenDraw[] tokenDraws = {
 	 task -> {
 		 String token = task.token + "";
-		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
+		 if (enableJSProp) if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
 			 if (operatesSymbol.lastSymbol == '.') {
 				 return dealJSProp(token);
 			 } else {
@@ -116,8 +102,9 @@ public class JSSyntax extends Syntax {
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
-			 if (entry.key != as(constantSet) || obj != null) return entry.value;
-			 Object o = SCRIPTABLE_MAP.get(token);
+			 if (!enableJSProp || (entry.key != (ObjectSet) constantSet && entry.key != (ObjectSet) defVarSet) ||obj != null)
+				 return entry.value;
+			 Object o = scope.get(token, scope);
 			 if (o instanceof NativeJavaPackage newPkg) {
 				 pkg = newPkg;
 				 obj = null;
@@ -129,6 +116,14 @@ public class JSSyntax extends Syntax {
 			 }
 			 return entry.value;
 		 }
+		 if (lastTask != task) return null;
+		 if (localKeywords.contains(task.lastToken + "")) {
+			 return c_defvar;
+		 }
+		 if ("const".equals(task.lastToken + "")) {
+			 return c_constants;
+		 }
+
 		 return null;
 	 },
 	 task -> Objects.equals(task.lastToken, "function") && lastTask == task ? c_functions : null,
@@ -137,9 +132,14 @@ public class JSSyntax extends Syntax {
 		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN") ? null : c_number;
 	 }
 	};
+
+
+
+	ObjectMap<Object, ObjectMap<String, Object>> js_prop_map = new ObjectMap<>();
 	private Color dealJSProp(String token) {
 		if (!enableJSProp) return null;
-		Object o = getPropOrNotFound(pkg != null ? pkg : obj, token);
+		Object o = pkg != null || !(obj instanceof NativeJavaObject nja) ? getPropOrNotFound(pkg, token)
+		 : js_prop_map.get(nja.unwrap(), ObjectMap::new).get(token, () -> getPropOrNotFound(nja, token));
 		if (o == Scriptable.NOT_FOUND) {
 			obj = null;
 			return null;
@@ -152,17 +152,17 @@ public class JSSyntax extends Syntax {
 			obj = (Scriptable) o;
 			// showTooltipMouse(task);
 			// showTooltip(task);
-			return c_defVar;
+			return c_defvar;
 		}
 		obj = null;
 		return null;
 	}
-	private void showTooltipMouse(DrawToken task) {
+	/* private void showTooltipMouse(DrawToken task) {
 		if (areaTable.tooltip.container.parent != null) return;
 		Vec2  v    = getRelativePos(task.lastIndex);
 		float minX = v.x, minY = v.y - area.lineHeight() * 0.1f;
 		v = getRelativePos(task.currentIndex);
-		Vec2 abs   = getAbsPos(area.parent);
+		Vec2 abs   = ElementUtils.getAbsPos(area.parent);
 		Vec2 mouse = Core.input.mouse();
 		Vec2 sub   = mouse.sub(abs);
 		if (Tmp.r1.set(minX, minY, v.x, v.y + area.lineHeight() * 1.1f).contains(sub)) {
@@ -188,7 +188,7 @@ public class JSSyntax extends Syntax {
 			}
 			areaTable.tooltip.container.invalidateHierarchy();
 		}
-	}
+	}*/
 
 	private final DrawTask[] taskArr0 = {
 	 new DrawString(c_string),
@@ -213,7 +213,7 @@ public class JSSyntax extends Syntax {
 	public static IntSet brackets = new IntSet();
 
 	static {
-		for (char c : "~|,+-=*/<>!%^&;.:".toCharArray()) {
+		for (char c : "~|,+-=*/<>!%^&;.:?".toCharArray()) {
 			operates.add(c);
 		}
 		for (char c : "()[]{}".toCharArray()) {

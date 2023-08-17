@@ -27,17 +27,10 @@ public class MySettings {
 
 	public static final Data
 	 SETTINGS         = new Data(config),
-	 D_SELECTION      = SETTINGS.child("Selection"),
-	 D_TESTER         = SETTINGS.child("Tester"),
 	 D_JSFUNC_EDIT    = SETTINGS.child("JSFuncEdit"),
 	 D_JSFUNC         = SETTINGS.child("JSFunc"),
 	 D_JSFUNC_DISPLAY = D_JSFUNC.child("Display"),
 	 D_BLUR           = SETTINGS.child("BLUR");
-
-	/* 设置默认值 */
-	static {
-
-	}
 
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
@@ -67,7 +60,7 @@ public class MySettings {
 		}
 
 		public Object get(String key, Object defaultValue) {
-			return get(key, () -> defaultValue);
+			return super.get(key, () -> defaultValue);
 		}
 
 		public void loadFi(Fi fi) {
@@ -140,7 +133,7 @@ public class MySettings {
 		}
 		public String getString(String name) {
 			Object o = get(name);
-			return o instanceof Jval ? ((Jval) o).asString() : (String) o;
+			return o instanceof Jval ? ((Jval) o).asString() : String.valueOf(o);
 		}
 	}
 }

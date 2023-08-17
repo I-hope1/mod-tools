@@ -14,7 +14,7 @@ import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Table;
-import arc.util.Log;
+import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
@@ -22,16 +22,18 @@ import modtools.ui.IntUI;
 import modtools.ui.components.*;
 import modtools.ui.content.Content;
 import modtools.utils.*;
-import modtools.utils.Tools.SatisfyException;
-import modtools.utils.search.*;
+import modtools.utils.SR.SatisfyException;
+import modtools.utils.ui.search.*;
 
 import java.lang.reflect.*;
+import java.util.Arrays;
 import java.util.regex.Pattern;
 
 import static arc.scene.ui.CheckBox.CheckBoxStyle;
-import static modtools.utils.Tools.sr;
+import static modtools.utils.Tools.Sr;
 
 public class ShowUIList extends Content {
+	public IntTab tab;
 	Window ui;
 
 	public ShowUIList() {
@@ -44,8 +46,9 @@ public class ShowUIList extends Content {
 		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid};
 
 		String[] names = {"icon", "tex", "styles", "colors"};
-		IntTab   tab   = new IntTab(-1, names, colors, tables);
+		tab = new IntTab(-1, names, colors, tables);
 		tab.setPrefSize(getW(), -1);
+		tab.title.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).colspan(10).row();
 		ui.cont.table(t -> {
 			t.add("bgColor: ");
 			IntUI.colorBlock(t.add().growX(), bgColor, false);
@@ -57,16 +60,12 @@ public class ShowUIList extends Content {
 		ui.cont.add(wrap).grow();
 		new Search((cont, text) -> {
 			if (!wrap.getChildren().isEmpty()) {
-				pattern = Tools.compileRegExpCatch(text);
+				pattern = PatternUtils.compileRegExpCatch(text);
 				return;
-				// tab.pane.getWidget().clear();
 			}
-			wrap.add(tab.build()).pad(10f).update(t -> {
-				ui.minWidth = getW();
-				tab.setPrefSize(getW(), -1);
-			});
+			wrap.add(tab.build()).pad(10f).grow();
 		}).build(top, ui.cont);
-		//		ui.addCloseButton();
+		// ui.addCloseButton();
 	}
 
 	Pattern pattern;
@@ -81,8 +80,7 @@ public class ShowUIList extends Content {
 			t.unbind();
 		});
 	}), tex     = newTable(t -> {
-		Field[] fields = Tex.class.getFields();
-		for (Field field : fields) {
+		for (Field field : Tex.class.getFields()) {
 			try {
 				// 是否为Drawable
 				if (!Drawable.class.isAssignableFrom(field.getType())) continue;
@@ -100,24 +98,25 @@ public class ShowUIList extends Content {
 
 		}
 	}), styles  = newTable(t -> {
-		Field[] fields = Styles.class.getFields();
-
 		Builder.t = t;
+		Field[] fields = OS.isAndroid ? Arrays.stream(Styles.class.getFields()).sorted((a, b) -> {
+			return a.getType().hashCode() - b.getType().hashCode();
+		}).toArray(Field[]::new) : Styles.class.getFields();
 		for (Field field : fields) {
 			try {
 				// 跳过访问检查，减少时间
 				field.setAccessible(true);
 				Object style = field.get(null);
 				t.bind(field.getName());
-				sr(style)
-				  .isInstance(LabelStyle.class, Builder::build)
-				  .isInstance(SliderStyle.class, Builder::build)
-				  .isInstance(TextFieldStyle.class, Builder::build)
-				  .isInstance(CheckBoxStyle.class, Builder::build)
-				  .isInstance(TextButtonStyle.class, Builder::build)
-				  .isInstance(ImageButtonStyle.class, Builder::build)
-				  .isInstance(ButtonStyle.class, Builder::build)
-				  .isInstance(Drawable.class, Builder::build);
+				Sr(style)
+				 .isInstance(LabelStyle.class, Builder::build)
+				 .isInstance(SliderStyle.class, Builder::build)
+				 .isInstance(TextFieldStyle.class, Builder::build)
+				 .isInstance(CheckBoxStyle.class, Builder::build)
+				 .isInstance(TextButtonStyle.class, Builder::build)
+				 .isInstance(ImageButtonStyle.class, Builder::build)
+				 .isInstance(ButtonStyle.class, Builder::build)
+				 .isInstance(Drawable.class, Builder::build);
 			} catch (IllegalAccessException | IllegalArgumentException err) {
 				Log.err(err);
 				continue;
@@ -132,11 +131,10 @@ public class ShowUIList extends Content {
 		Cons<Class<?>> buildColor = cls -> {
 			t.add(cls.getSimpleName()).color(Pal.accent).colspan(2).row();
 			t.image().color(Pal.accent).colspan(2).row();
-			Field[] fields = cls.getFields();
 
-			for (Field field : fields) {
+			for (Field field : cls.getFields()) {
 				if (!Modifier.isStatic(field.getModifiers())
-				    || !Color.class.isAssignableFrom(field.getType())) continue;
+						|| !Color.class.isAssignableFrom(field.getType())) continue;
 				try {
 					// 跳过private检查，减少时间
 					field.setAccessible(true);
@@ -146,7 +144,7 @@ public class ShowUIList extends Content {
 					var tooltip = new IntUI.Tooltip(tl -> tl.table(Tex.button, t2 -> t2.add("" + color)));
 					t.listener(el -> el.addListener(tooltip));
 					t.add(new BorderImage(Core.atlas.white(), 2f)
-					  .border(color.cpy().inv())).color(color).size(42f);
+					 .border(color.cpy().inv())).color(color).size(42f);
 					t.add(field.getName()).with(JSFunc::addDClickCopy).growY();
 					t.listener(null);
 				} catch (IllegalAccessException | IllegalArgumentException err) {
@@ -166,6 +164,7 @@ public class ShowUIList extends Content {
 	public void build() {
 		if (ui == null) _load();
 		ui.show();
+		Time.runTask(2, () -> tab.main.invalidate());
 	}
 	public <T> FilterTable<T> newTable(Cons<FilterTable<T>> cons) {
 		return new FilterTable<>(t -> {
@@ -185,7 +184,7 @@ public class ShowUIList extends Content {
 		}
 		static void build(SliderStyle style) {
 			t.slider(0, 10, 1, f -> {})
-			  .get().setStyle(style);
+			 .get().setStyle(style);
 		}
 		static void build(TextButtonStyle style) {
 			t.button("text button", style, () -> {}).size(96, 42);

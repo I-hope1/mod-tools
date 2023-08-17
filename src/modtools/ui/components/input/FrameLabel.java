@@ -45,12 +45,6 @@ public class FrameLabel extends Label {
 			return;
 		}
 		if (frameInvalid) {
-			/* Time.runTask(0, () -> {
-				sampling = true;
-				texture = bufferCaptureAll(Tmp.v1.set(0, 0), this);
-				sampling = false;
-				frameInvalid = false;
-			}); */
 			sampling = true;
 			pingpong.resize((int) width, (int) height);
 			pingpong.begin(Color.clear);

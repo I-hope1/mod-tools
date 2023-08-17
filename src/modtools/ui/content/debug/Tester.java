@@ -8,20 +8,25 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.event.InputEvent.InputEventType;
+import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.util.*;
+import arc.util.Timer.Task;
+import arc.util.pooling.Pools;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
-import modtools.events.*;
+import modtools.annotations.DataFieldInit;
+import modtools.events.E_Tester;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.components.*;
+import modtools.ui.components.Window.FillTable;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
@@ -33,31 +38,40 @@ import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import rhino.*;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Method;
+import java.util.concurrent.ThreadPoolExecutor;
 
-import static arc.Core.scene;
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.ListDialog.fileUnfair;
-import static modtools.ui.content.SettingsContent.addSettingsTable;
-import static modtools.utils.MySettings.D_TESTER;
-import static modtools.utils.Tools.*;
+import static modtools.ui.content.SettingsUI.addSettingsTable;
+import static modtools.utils.Tools.TASKS;
+
+;
 
 public class Tester extends Content {
 	private static final int bottomCenter   = Align.center | Align.bottom;
 	private final        int maxHistorySize = 30;
+
+	private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor(name, 1);
+
 	String     log = "";
 	MyTextArea area;
 	public boolean loop = false;
 	public Object  res;
 
-	public static boolean catchOutsizeError = false;
+	@DataFieldInit
+	public static boolean catchOutsizeError;
 
 	private boolean
-	 wrap             = false,
-	 error            = false,
-	 ignorePopUpError = false,
+	 strict = false,
+	 error  = false;
+
+	@DataFieldInit
+	private static boolean
+	 ignorePopupError = false,
 	 wrapRef          = true,
-	 multiWindows     = false;
+	 multiWindows     = false,
+	 JSProp           = false;
 
 	public static final float  w = Core.graphics.isPortrait() ? 400 : 500;
 	public              Window ui;
@@ -66,6 +80,7 @@ public class Tester extends Content {
 	public Scriptable scope;
 	public Context    cx;
 	public Script     script = null;
+	public boolean    multiThread;
 	public boolean    stopIfOvertime;
 
 	public Tester() {
@@ -78,7 +93,6 @@ public class Tester extends Content {
 		return 0;
 	}
 
-	public JSSyntax syntax;
 
 	/**
 	 * 用于回滚历史<br>
@@ -88,6 +102,7 @@ public class Tester extends Content {
 	public        int          historyIndex    = -1;
 	/** 位于0处的文本 */
 	public        StringBuffer originalText    = null;
+	@DataFieldInit
 	public static boolean      rollbackHistory = E_Tester.rollback_history.enabled();
 
 	public ScrollPane pane;
@@ -95,11 +110,11 @@ public class Tester extends Content {
 		if (ui == null) _load();
 
 		TextAreaTab textarea = new TextAreaTab("");
-		Table cont = new Table() {
+		Table _cont = new Table() {
 			public Element hit(float x, float y, boolean touchable) {
 				Element element = super.hit(x, y, touchable);
 				if (element == null) return null;
-				if (element.isDescendantOf(this)) textarea.focus();
+				if (Vars.mobile && element.isDescendantOf(this)) textarea.focus();
 				return element;
 			}
 		};
@@ -111,7 +126,7 @@ public class Tester extends Content {
 		ui.maximized(isMax -> Time.runTask(0, invalidate));
 		ui.sclListener.listener = invalidate;
 
-		textarea.syntax = syntax = new JSSyntax(textarea);
+		textarea.syntax = new JSSyntax(textarea);
 		// JSSyntax.apply(textarea);
 		area = textarea.getArea();
 		boolean[] cancelEvent = {false};
@@ -134,31 +149,33 @@ public class Tester extends Content {
 		textarea.keyUpB = (event, keycode) -> cancelEvent[0];
 		// textarea.pack();
 
-		Cell<?> areaCell = cont.add(textarea).grow();
+		Cell<?> areaCell = _cont.add(textarea).grow();
 		areaCell.row();
-		cont.update(() -> areaCell.maxHeight(ui.cont.getHeight() / Scl.scl()));
+		ui.cont.update(() -> {
+			((JSSyntax) textarea.syntax).enableJSProp = JSProp;
+			areaCell.maxHeight(ui.cont.getHeight() / Scl.scl());
+		});
 
-		cont.table(t -> {
+		_cont.table(t -> {
 			t.defaults().padRight(8f).size(32);
 			t.button(Icon.leftOpenSmall, Styles.clearNonei, area::left);
-			t.button("@ok", Styles.flatt, () -> {
+			t.button("@ok", Styles.flatBordert, () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
 				compileAndExec(() -> {});
-			}).width(50).disabled(__ -> !finished);
+			}).width(64).disabled(__ -> !finished);
 			t.button(Icon.rightOpenSmall, Styles.clearNonei, area::right);
 			t.button(Icon.copySmall, Styles.clearNonei, area::copy).padLeft(8f);
 			t.button(Icon.pasteSmall, Styles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
 			).padLeft(8f);
 		}).growX().row();
-		Cell<?> cell = cont.pane(p -> {
-			p.background(Tex.sliderBack);
+		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(new PrefTable(p -> {
 			p.add(new MyLabel(() -> log)).style(IntStyles.MOMO_LabelStyle).wrap()
 			 .grow().labelAlign(Align.center, Align.left);
-		}).growX().with(t -> t.touchable = Touchable.enabled);
+		})).grow()).growX().with(t -> t.touchable = Touchable.enabled);
 
-		new SclListener(cell.get(), 0, cell.get().getPrefHeight()) {
+		new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
 			public boolean valid(float x, float y) {
 				super.valid(x, y);
 				return top && !isDisabled();
@@ -166,16 +183,22 @@ public class Tester extends Content {
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				super.touchDragged(event, x, y, pointer);
 
-				cell.height(Mathf.clamp(bind.getHeight(), 0, cont.getHeight()) / Scl.scl());
-				cont.invalidate();
+				logCell.height(Mathf.clamp(bind.getHeight(), 0, _cont.getHeight()) / Scl.scl());
+				_cont.invalidate();
 				pane.setScrollingDisabled(false, false);
 			}
 
 			{
 				Time.runTask(1, () -> {
-					Vec2 v1 = getAbsPos(cont);
-					if (scene.touchDown((int) v1.x, (int) v1.y, 0, KeyCode.mouseLeft)) {
-						scene.touchUp((int) v1.x, (int) v1.y, 0, KeyCode.mouseLeft);
+					Vec2       v1    = ElementUtils.getAbsPos(_cont);
+					InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
+					event.type = (InputEventType.touchDown);
+					event.stageX = v1.x;
+					event.stageY = v1.y;
+					event.pointer = 0;
+					event.keyCode = KeyCode.mouseLeft;
+					if (touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
+						touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
 					}
 				});
 			}
@@ -185,43 +208,50 @@ public class Tester extends Content {
 				pane.setScrollingDisabled(false, true);
 			}
 		};
+		logCell.height(64f);
 
-		area.invalidateHierarchy();
-		table.add(cont).grow()
+		table.add(_cont).grow()
 		 .self(c -> c.update(__ -> c.maxHeight(Core.graphics.getHeight() / Scl.scl())))
 		 .row();
 
-		table.add(
-			sr(new PrefPane(p -> {
-				p.button(Icon.star, IntStyles.clearNonei, this::star).size(42).padRight(6f);
-				p.defaults().size(100, 56);
-				ButtonStyle style = IntStyles.flatb;
-				p.button(b -> {
-					b.label(() -> loop ? "@tester.loop" : "@tester.notloop");
-				}, style, () -> {
-					loop = !loop;
-				});
-				p.button(b -> {
-					b.label(() -> wrap ? "@tester.strict" : "@tester.notstrict");
-				}, style, () -> wrap = !wrap);
-				p.button(b -> {
-					b.label(() -> textarea.enableHighlighting ? "@tester.highlighting" : "@tester.nothighlighting");
-				}, style, () -> textarea.enableHighlighting = !textarea.enableHighlighting);
+		table.add(new PrefPane(p -> {
+			 ImageButtonStyle istyle = IntStyles.clearNonei;
+			 int              isize  = 26;
+			 p.defaults().size(42).padLeft(2f);
+			 p.button(Icon.starSmall, istyle, isize, this::star);
 
-				TextButtonStyle style1 = Styles.flatt;
-				p.button("@details", style1, this::showDetails);
-				p.button("@historymessage", style1, history::show);
-				p.button("@bookmark", style1, bookmark::show);
-				// p.button("@startup", bookmark::show);
-				p.check("@stopIfOvertime", stopIfOvertime, b -> stopIfOvertime = b).width(120);
-			})).ifPresent(p -> p.xp = sp -> Math.min(sp, w)).get())
+			 IntUI.addCheck(p.button(HopeIcons.loop, istyle, isize, () -> {
+				 loop = !loop;
+			 }), () -> loop, "@tester.loop", "@tester.notloop");
+
+			 IntUI.addCheck(p.button(Icon.lockSmall, istyle, isize, () -> {
+				 strict = !strict;
+			 }), () -> strict, "@tester.strict", "@tester.notstrict");
+
+			 // highlight
+			 IntUI.addCheck(p.button(HopeIcons.highlight, istyle, isize, () -> {
+				 textarea.enableHighlighting = !textarea.enableHighlighting;
+			 }), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
+
+			 p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails);
+			 p.button(HopeIcons.history, istyle, isize, history::show);
+			 p.button(HopeIcons.favorites, istyle, isize, bookmark::show);
+			 // p.button("@startup", bookmark::show);
+
+			 IntUI.addCheck(p.button(Icon.warningSmall, istyle, isize, () -> {
+				 stopIfOvertime = !stopIfOvertime;
+			 }), () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
+			 IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> {
+				 multiThread = !multiThread;
+			 }), () -> multiThread, "@tester.multiThread", "@tester.multiThread");
+		 }, sp -> Math.min(sp, w)))
 		 .height(56).growX()
 		 .get().setScrollingDisabledY(true);
 
 		buildEditTable();
 	}
 	private void showDetails() {
-		if (res instanceof Class<?> cl) JSFunc.showInfo(cl);
+		if (res instanceof Class) JSFunc.showInfo((Class<?>) res);
 		else JSFunc.showInfo(res);
 	}
 	public boolean detailsListener(KeyCode keycode) {
@@ -233,39 +263,35 @@ public class Tester extends Content {
 	}
 	private void buildEditTable() {
 		// ui.buttons.row();
-		var editTable = new Table(Styles.black5, p -> {
-			p.fillParent = true;
-			p.touchable = Touchable.enabled;
-			Runnable hide = p::remove;
-			p.table(Tex.pane, t -> {
-				TextButtonStyle style = IntStyles.cleart;
-				t.defaults().size(280, 60).left();
-				t.row();
-				t.button("@schematic.copy.import", Icon.download, style, () -> {
-					hide.run();
-					area.setText(Core.app.getClipboardText());
-				}).marginLeft(12);
-				t.row();
-				t.button("@schematic.copy", Icon.copy, style, () -> {
-					hide.run();
-					JSFunc.copyText(getMessage().replaceAll("\r", "\n"));
-				}).marginLeft(12);
-				t.row();
-				t.button("@back", Icon.left, style, hide).marginLeft(12);
-			});
-		});
+		FillTable editTable = ui.addFillTable(p -> p.table(Tex.pane, t -> {
+			TextButtonStyle style = IntStyles.cleart;
+			t.defaults().size(280, 60).left();
+			t.row();
+			t.button("@schematic.copy.import", Icon.download, style, () -> {
+				p.hide();
+				area.setText(Core.app.getClipboardText());
+			}).marginLeft(12);
+			t.row();
+			t.button("@schematic.copy", Icon.copy, style, () -> {
+				p.hide();
+				JSFunc.copyText(getMessage().replaceAll("\r", "\n"));
+			}).marginLeft(12);
+			t.row();
+			t.button("@back", Icon.left, style, p::hide).marginLeft(12);
+		}));
 
-		ui.button(Icon.upOpenSmall, Styles.squarei, () -> {
-			ui.addChild(editTable);
-			editTable.setPosition(0, 0);
-			// ui.noButtons(true);
-		}).update(b -> {
-			b.setPosition(ui.cont.getWidth() / 2f, 0, Align.center | Align.bottom);
-		}).with(b -> {
-			ui.getCell(b).clearElement();
-			b.remove();
-			ui.addChild(b);
-		});
+		ui.cont.button(Icon.upOpenSmall, Styles.flati, 16f,
+			editTable::show)
+		 .visible(() -> !ui.isMinimize)
+		 .update(b -> {
+			 b.toFront();
+			 b.setSize(Scl.scl(32), Scl.scl(24));
+			 b.setPosition(ui.cont.getWidth() / 2f, 0, Align.center | Align.bottom);
+		 }).with(b -> {
+			 ui.cont.getCell(b).clearElement();
+			 b.remove();
+			 ui.cont.addChild(b);
+		 });
 		/* ui.buttons.button("@edit", Icon.edit, () -> {
 			ui.cont.addChild(editTable);
 			editTable.setPosition(0, 0);
@@ -351,120 +377,109 @@ public class Tester extends Content {
 		});
 	}
 
-	boolean finished = true;
-	public long lastTime = Long.MAX_VALUE;
-
+	public boolean finished = true;
 	public void compileAndExec(Runnable callback) {
-		if (Context.getCurrentContext() == null) Context.enter();
-		lastTime = Time.millis();
-		Time.runTask(0, () -> {
-			compileScript();
-			execScript();
+		if (Context.getCurrentContext() == null) {
+			Context.enter();
+		}
 
-			historyIndex = -1;
-			originalText = area.getText0();
-			// 保存历史记录
-			Fi d = history.file.child(String.valueOf(Time.millis()));
-			d.child("message.txt").writeString(getMessage());
-			d.child("log.txt").writeString(log);
-			history.list.insert(0, d);
-			if (history.isShown()) {
-				history.build();
-			}
-			//	history.build(d).with(b -> b.setZIndex(0));
+		compileScript();
+		execScript();
 
-			int max = history.list.size - 1;
-			/* 判断是否大于边际（min：30），大于就删除 */
-			for (int i = max; i >= maxHistorySize; i--) {
-				history.list.get(i).deleteDirectory();
-				history.list.remove(i);
-			}
-			callback.run();
-		});
-		/*Object helper = VMBridge.getThreadContextHelper();
-		new Thread(() -> {
-			while (true) {
-				try {
-					Thread.sleep(100);
-				} catch (InterruptedException e) {
-					throw new RuntimeException(e);
-				}
-				if (finished || Time.millis() - time >= 1_000) {
-					Log.info("break");
-					VMBridge.setContext(helper, null);
-					Method m = null;
-					try {
-						m = ContextFactory.class.getDeclaredMethod("onContextReleased", Context.class);
-						m.setAccessible(true);
-						m.invoke(cx.getFactory(), cx);
-					} catch (Exception e) {
-						throw new RuntimeException(e);
-					}
-					break;
-				}
-			}
-		}).start();*/
+		historyIndex = -1;
+		originalText = area.getText0();
+		// 保存历史记录
+		Fi d = history.file.child(String.valueOf(Time.millis()));
+		d.child("message.txt").writeString(getMessage());
+		d.child("log.txt").writeString(log);
+		history.list.insert(0, d);
+		if (history.isShown()) {
+			history.build();
+		}
+		//	history.build(d).with(b -> b.setZIndex(0));
+
+		int max = history.list.size - 1;
+		/* 判断是否大于边际（min：30），大于就删除 */
+		for (int i = max; i >= maxHistorySize; i--) {
+			history.list.get(i).deleteDirectory();
+			history.list.remove(i);
+		}
+		callback.run();
 	}
 	public void compileScript() {
 		error = false;
-		String def    = getMessage();
-		String source = wrap ? "(function(){\"use strict\";" + def + "\n})();" : def;
 		try {
-			script = cx.compileString(source, "console.js", 1);
+			boolean def = Reflect.get(cx, "isTopLevelStrict");
+			Reflect.set(cx, "isTopLevelStrict", strict);
+			cx.setGenerateObserverCount(true);
+			script = cx.compileString(getMessage(), "console.js", 1);
+			cx.setGenerateObserverCount(false);
+			Reflect.set(cx, "isTopLevelStrict", def);
 		} catch (Throwable ex) {
-			makeError(ex);
+			makeError(ex, false);
 		}
 	}
 
-	public void makeError(Throwable ex) {
+	public void makeError(Throwable ex, boolean fromExecutor) {
 		error = true;
 		loop = false;
-		if (MySettings.SETTINGS.getBool("outputToLog")) Log.err("tester", ex);
-		if (!ignorePopUpError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
-		log = Strings.neatError(ex);
+		if (data().getBool("output_to_log")) Log.err(name, ex);
+		if (!ignorePopupError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
+		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
 	}
 
 
+	public boolean killScript;
 	// 执行脚本
 	public void execScript() {
 		if (!finished) return;
 		finished = false;
+		if (executor.getActiveCount() > 0) {
+			return;
+		}
+		killScript = false;
 		if (error) {
 			finished = true;
 			return;
 		}
-		/*V8 runtime = V8.createV8Runtime();
-			Log.debug(runtime.executeIntegerScript("let x=1;x*2"));*/
-		if (Context.getCurrentContext() != cx) {
-			cx = Context.getCurrentContext();
+		if (multiThread) {
+			executor.submit(this::execAndDealRes);
+		} else {
+			Core.app.post(this::execAndDealRes);
 		}
-		// currentThread = new Thread(() -> {
+		Timer.schedule(new Task() {
+			public void run() {
+				if ((!multiThread || executor.getActiveCount() > 0) && stopIfOvertime) {
+					killScript = true;
+					cancel();
+				}
+			}
+		}, 4, 0.1f, -1);
+	}
+	private void execAndDealRes() {
 		try {
+			if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
 			Object o = script.exec(cx, scope);
 			res = o = JSFunc.unwrap(o);
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
-			if (MySettings.SETTINGS.getBool("outputToLog")) {
-				Log.info("[ [tester]: " + log);
+			if (data().getBool("output_to_log")) {
+				Log.info("[[tester]: " + log);
 			}
-
-			finished = true;
-			lastTime = Long.MAX_VALUE;
 		} catch (Throwable e) {
-			handleError(e);
+			Core.app.post(() -> handleError(e));
+		} finally {
+			finished = true;
 		}
-		// });
-		// currentThread.start();
 	}
 	public void handleError(Throwable ex) {
-		makeError(ex);
+		makeError(ex, true);
 		finished = true;
-		lastTime = Long.MAX_VALUE;
 	}
 
 	public void _load() {
-		ui = new Window(localizedName(), w, 200, true, true);
+		ui = new Window(localizedName(), 0, 100, true);
 		// JSFunc.watch("times", () -> ui.times);
 		/*ui.update(() -> {
 			ui.setZIndex(frag.getZIndex() - 1);
@@ -488,7 +503,7 @@ public class Tester extends Content {
 
 		setup();
 
-		tasks.add(() -> {
+		TASKS.add(() -> {
 			if (loop && script != null) {
 				execScript();
 			}
@@ -499,10 +514,9 @@ public class Tester extends Content {
 		init = true;
 		loadSettings();
 		if (Kit.classOrNull(Tester.class.getClassLoader(), "modtools.rhino.ForRhino")
-				== null) throw new RuntimeException("无法找到类: modtools.rhino.ForRhino");
+				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
 		scripts = Vars.mods.getScripts();
-		if (Context.getCurrentContext() == null) Context.enter();
 		cx = scripts.context;
 		scope = scripts.scope;
 
@@ -514,12 +528,16 @@ public class Tester extends Content {
 			ScriptableObject.putProperty(scope, "unsafe", unsafe);
 			ScriptableObject.putProperty(scope, "modName", "<unknown>");
 			ScriptableObject.putProperty(scope, "scriptName", "console.js");
-			Field f = Context.class.getDeclaredField("factory");
-			f.setAccessible(true);
-			f.set(cx, ForRhino.factory);
-			cx.setGenerateObserverCount(true);
+
+			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(scope, "Packages");
+			ClassLoader       loader = Vars.mods.mainLoader();
+			Reflect.set(NativeJavaPackage.class, pkg, "classLoader", loader);
+			if (cx.getFactory() != ForRhino.factory) {
+				Reflect.set(Context.class, cx, "factory", ForRhino.factory);
+			}
+			setAppClassLoader(loader);
 		} catch (Exception ex) {
-			if (ignorePopUpError) {
+			if (ignorePopupError) {
 				Log.err(ex);
 			} else {
 				Vars.ui.showException("IntFunc出错", ex);
@@ -529,6 +547,7 @@ public class Tester extends Content {
 		// 启动脚本
 		Fi dir = MySettings.dataDirectory.child("startup");
 		if (dir.exists() && dir.isDirectory()) {
+			Log.info("Loading startup directory.");
 			dir.walk(f -> {
 				if (!f.extEquals("js")) return;
 				try {
@@ -538,20 +557,37 @@ public class Tester extends Content {
 				}
 			});
 		} else {
-			Log.info("Loaded startup directory.");
+			Log.info("Creating startup directory.");
 			dir.delete();
 			dir.child("README.txt").writeString("这是一个用于启动脚本（js）的文件夹\n\n所有的js文件都会执行");
 		}
+	}
+	private void setAppClassLoader(ClassLoader loader) {
+		if (ForRhino.factory.getApplicationClassLoader() != loader) {
+			try {
+				ForRhino.factory.initApplicationClassLoader(loader);
+			} catch (Throwable e) {
+				Reflect.set(ContextFactory.class, ForRhino.factory
+				 , "applicationClassLoader", loader);
+			}
+		}
+		cx.setApplicationClassLoader(loader);
 	}
 
 	public static boolean init = false;
 	public void loadSettings(Data settings) {
 		Table table = new Table();
 		table.defaults().growX();
-		addSettingsTable(table, "BASE", n -> "tester." + n, D_TESTER, E_Tester.values());
-		MyEvents events = new MyEvents();
+		dataInit();
+		addSettingsTable(table, "BASE", n -> "tester." + n, settings, E_Tester.values(), true);
+
+		Contents.settings_ui.add(localizedName(), table);
+	}
+
+	public void dataInit() {
+		/* MyEvents events = new MyEvents();
 		events.onIns(E_Tester.ignore_popup_error, e -> {
-			ignorePopUpError = e.enabled();
+			ignorePopupError = e.enabled();
 		});
 		events.onIns(E_Tester.catch_outsize_error, e -> {
 			catchOutsizeError = e.enabled();
@@ -566,18 +602,15 @@ public class Tester extends Content {
 			rollbackHistory = e.enabled();
 		});
 		events.onIns(E_Tester.js_prop, e -> {
-			syntax.enableJSProp = e.enabled();
-		});
-
-		Contents.settingsUI.add(localizedName(), table);
+			JSProp = e.enabled();
+		}); */
 	}
-
 	public String getMessage() {
 		return area.getText();
 	}
 	public Object getWrap(Object val) {
 		try {
-			if (val instanceof Class<?> cl) return cx.getWrapFactory().wrapJavaClass(cx, scope, cl);
+			if (val instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) val);
 			if (val instanceof Method method) return new NativeJavaMethod(method, method.getName());
 			return Context.javaToJS(val, scope);
 		} catch (Throwable e) {
@@ -602,7 +635,7 @@ public class Tester extends Content {
 		return key;
 	}
 	public void put(Element element, Object val) {
-		put(getAbsPos(element), val);
+		put(ElementUtils.getAbsPos(element), val);
 	}
 	public void put(Vec2 vec2, Object val) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)), vec2);

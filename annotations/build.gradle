@@ -1,0 +1,33 @@
+apply plugin: 'java'
+
+sourceSets.main.java.srcDirs = ["src"]
+
+repositories {
+	mavenCentral()
+	mavenLocal()
+	maven { url 'https://www.jitpack.io' }
+}
+
+tasks.withType(JavaCompile) {
+	options.encoding = "UTF-8"
+}
+
+//import org.gradle.internal.
+
+dependencies {
+	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+	compileOnly 'com.google.auto.service:auto-service:1.0.1'
+	def uncVersion = "1.8.4"
+	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+
+//	implementation 'com.squareup:javapoet:1.12.1'
+	def mindustryVersion = 'v145.1'
+	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+
+	// only for document
+	def pro = project.parent
+	compileOnly files(new File(pro.buildDir, "libs/${pro.name}-1.0.jar"))
+
+	pro = project(":compiler")
+	compileOnly files(new File(pro.buildDir, "libs/${pro.name}-1.0.jar"))
+}

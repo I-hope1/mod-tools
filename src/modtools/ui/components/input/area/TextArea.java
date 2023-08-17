@@ -11,6 +11,7 @@ import arc.struct.IntSeq;
 import arc.util.Align;
 import arc.util.pooling.Pools;
 import mindustry.core.Version;
+import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.Field;
 
@@ -92,7 +93,7 @@ public class TextArea extends MyTextField {
 			float prefHeight = textHeight * prefRows;
 			if (style.background != null) {
 				prefHeight = Math.max(prefHeight + style.background.getBottomHeight() + style.background.getTopHeight(),
-						style.background.getMinHeight());
+				 style.background.getMinHeight());
 			}
 			return prefHeight;
 		}
@@ -106,7 +107,7 @@ public class TextArea extends MyTextField {
 	/** Returns if there's a new line at then end of the text */
 	public boolean newLineAtEnd() {
 		return text.length() != 0
-		       && (text.charAt(text.length() - 1) == '\r' || text.charAt(text.length() - 1) == '\n');
+					 && (text.charAt(text.length() - 1) == '\r' || text.charAt(text.length() - 1) == '\n');
 	}
 
 	/** Moves the cursor to the given number line */
@@ -125,12 +126,12 @@ public class TextArea extends MyTextField {
 		} else if (line != cursorLine) {
 			if (moveOffset < 0) {
 				moveOffset = linesBreak.size <= cursorLine * 2 ? 0
-						: glyphPositions.get(cursor) - glyphPositions.get(linesBreak.get(cursorLine * 2));
+				 : glyphPositions.get(cursor) - glyphPositions.get(linesBreak.get(cursorLine * 2));
 			}
 			cursorLine = line;
 			cursor = cursorLine * 2 >= linesBreak.size ? text.length() : linesBreak.get(cursorLine * 2);
 			while (cursor < text.length() && cursor <= linesBreak.get(cursorLine * 2 + 1) - 1
-			       && glyphPositions.get(cursor) - glyphPositions.get(linesBreak.get(cursorLine * 2)) < moveOffset) {
+						 && glyphPositions.get(cursor) - glyphPositions.get(linesBreak.get(cursorLine * 2)) < moveOffset) {
 				cursor++;
 			}
 			showCursor();
@@ -144,9 +145,9 @@ public class TextArea extends MyTextField {
 		// Special case when cursor moves to the beginning of the line from the end of another and a word
 		// wider than the box
 		if (index % 2 == 0 || index + 1 >= linesBreak.size || cursor != linesBreak.items[index]
-		    || linesBreak.items[index + 1] != linesBreak.items[index]) {
+				|| linesBreak.items[index + 1] != linesBreak.items[index]) {
 			if (line < linesBreak.size / 2 || text.length() == 0 || text.charAt(text.length() - 1) == '\r'
-			    || text.charAt(text.length() - 1) == '\n') {
+					|| text.charAt(text.length() - 1) == '\n') {
 				cursorLine = line;
 			}
 		}
@@ -206,7 +207,7 @@ public class TextArea extends MyTextField {
 			int lineEnd   = linesBreak.get(i + 1);
 
 			if (!((minIndex < lineStart && minIndex < lineEnd && maxIndex < lineStart && maxIndex < lineEnd)
-			      || (minIndex > lineStart && minIndex > lineEnd && maxIndex > lineStart && maxIndex > lineEnd))) {
+						|| (minIndex > lineStart && minIndex > lineEnd && maxIndex > lineStart && maxIndex > lineEnd))) {
 
 				int start = Math.min(Math.max(linesBreak.get(i), minIndex), glyphPositions.size - 1);
 				int end   = Math.min(Math.min(linesBreak.get(i + 1), maxIndex), glyphPositions.size - 1);
@@ -215,7 +216,7 @@ public class TextArea extends MyTextField {
 				float selectionWidth = glyphPositions.get(end) - glyphPositions.get(start);
 
 				selection.draw(x + selectionX + fontOffset, y - textHeight - font.getDescent() - offsetY, selectionWidth,
-						font.getLineHeight());
+				 font.getLineHeight());
 			}
 
 			offsetY += font.getLineHeight();
@@ -238,10 +239,10 @@ public class TextArea extends MyTextField {
 	@Override
 	protected void drawCursor(Drawable cursorPatch, Font font, float x, float y) {
 		float textOffset = cursor >= glyphPositions.size || cursorLine * 2 >= linesBreak.size ? 0
-				: glyphPositions.get(cursor) - glyphPositions.get(linesBreak.items[cursorLine * 2]);
+		 : glyphPositions.get(cursor) - glyphPositions.get(linesBreak.items[cursorLine * 2]);
 		cursorPatch.draw(x + textOffset + fontOffset + font.getData().cursorX,
-				y - font.getDescent() / 2 - (cursorLine - firstLineShowing + 1) * font.getLineHeight(), cursorPatch.getMinWidth(),
-				font.getLineHeight());
+		 y - font.getDescent() / 2 - (cursorLine - firstLineShowing + 1) * font.getLineHeight(), cursorPatch.getMinWidth(),
+		 font.getLineHeight());
 	}
 
 	@Override
@@ -252,7 +253,7 @@ public class TextArea extends MyTextField {
 			this.lastText = s;
 			Font font = style.font;
 			float maxWidthLine = this.getWidth()
-			                     - (style.background != null ? style.background.getLeftWidth() + style.background.getRightWidth() : 0);
+													 - (style.background != null ? style.background.getLeftWidth() + style.background.getRightWidth() : 0);
 			linesBreak.clear();
 			int         lineStart = 0;
 			int         lastSpace = 0;
@@ -305,7 +306,7 @@ public class TextArea extends MyTextField {
 		int count = forward ? 1 : -1;
 		int index = (cursorLine * 2) + count;
 		if (index >= 0 && index + 1 < linesBreak.size && linesBreak.items[index] == cursor
-		    && linesBreak.items[index + 1] == cursor) {
+				&& linesBreak.items[index + 1] == cursor) {
 			cursorLine += count;
 			if (jump) {
 				super.moveCursor(forward, jump);
@@ -322,7 +323,7 @@ public class TextArea extends MyTextField {
 	protected boolean continueCursor(int index, int offset) {
 		int pos = calculateCurrentLineIndex(index + offset);
 		return super.continueCursor(index, offset) && (pos < 0 || pos >= linesBreak.size - 2 || (linesBreak.items[pos + 1] != index)
-		                                               || (linesBreak.items[pos + 1] == linesBreak.items[pos + 2]));
+																									 || (linesBreak.items[pos + 1] == linesBreak.items[pos + 2]));
 	}
 
 	public int getCursorLine() {
@@ -463,12 +464,7 @@ public class TextArea extends MyTextField {
 
 	static {
 		if (Version.number <= 135) {
-			try {
-				focusTraversalField = TextField.class.getDeclaredField("focusTraversal");
-				focusTraversalField.setAccessible(true);
-			} catch (NoSuchFieldException e) {
-				throw new RuntimeException(e);
-			}
+			focusTraversalField = FieldUtils.getFieldAccess(TextField.class, "focusTraversal");
 		}
 	}
 }

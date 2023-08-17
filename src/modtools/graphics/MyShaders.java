@@ -2,6 +2,7 @@ package modtools.graphics;
 
 import arc.Core;
 import arc.files.Fi;
+import arc.graphics.Color;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.Vec2;
@@ -10,23 +11,11 @@ import modtools.ModTools;
 
 public class MyShaders {
 	public static Shader specl, baseShader;
-	public static Shader blur;
+	/** 将任何纹理2中有颜色的替换成{@code color} */
+	public static MixShader mixShader;
 
-	public static       Fi      shaderFi = ModTools.root.child("shaders");
-	public static final float[] kernel   = {
-			0.02f, 0.125f, 0.0625f,
-			0.125f, 0.25f, 0.125f,
-			0.0625f, 0.125f, 0.105f
-	};
+	public static Fi shaderFi = ModTools.root.child("shaders");
 	public static void load() {
-		blur = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("高斯模糊.frag")) {
-			public void apply() {
-				setUniform1fv("u_kernel", kernel, 0, kernel.length);
-				float width  = Core.camera.width;
-				float height = Core.camera.height;
-				setUniformf("u_invsize", 1f / width, 1f / height);
-			}
-		};
 		/* specl = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("毛玻璃.frag")) {
 			public void apply() {
 				setUniformf("u_time", Time.time / Scl.scl(1f));
@@ -41,6 +30,7 @@ public class MyShaders {
 		}; */
 
 		baseShader = new Shader(Core.files.internal("shaders/screenspace.vert"), shaderFi.child("dist_base.frag"));
+		mixShader = new MixShader();
 
 		// blur = new BlurShader();
 
@@ -67,7 +57,7 @@ public class MyShaders {
 
 		public BlurShader() {
 			super(Core.files.internal("bloomshaders/blurspace.vert"),
-					shaderFi.child("gaussian_blur.frag"));
+			 shaderFi.child("gaussian_blur.frag"));
 		}
 
 		/* public void setConvMat(float... conv) {
@@ -82,6 +72,17 @@ public class MyShaders {
 		public void apply() {
 			setUniformMatrix("conv", convMat);
 			setUniformf("size", size);
+		}
+	}
+	public static class MixShader extends Shader {
+		public Color color;
+		public MixShader() {
+			super(Core.files.internal("shaders/screenspace.vert"), MyShaders.shaderFi.child("mix.frag"));
+		}
+		public void apply() {
+			setUniformf("color", color.r, color.g, color.b, color.a);
+			setUniformi("u_texture0", 0);
+			setUniformi("u_texture1", 1);
 		}
 	}
 }

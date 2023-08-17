@@ -1,0 +1,47 @@
+apply plugin: 'java'
+
+sourceSets.main.java.srcDirs = ["src"]
+
+repositories {
+	mavenCentral()
+	mavenLocal()
+	maven { url 'https://www.jitpack.io' }
+}
+
+tasks.withType(JavaCompile) {
+	options.encoding = "UTF-8"
+
+	options.compilerArgs.addAll(
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
+			"--add-exports", "java.base/sun.reflect.annotation=ALL-UNNAMED",
+			"--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED",
+			"--add-exports", "jdk.jfr/jdk.jfr.internal=ALL-UNNAMED"
+	)
+}
+
+//import org.gradle.internal.
+
+dependencies {
+	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+	compileOnly 'com.google.auto.service:auto-service:1.0.1'
+	implementation project(":annotations")
+	def uncVersion = "1.8.4"
+	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+
+	def mindustryVersion = 'v145.1'
+	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
+
+	// only for document
+	def project = project.parent
+	compileOnly files(new File(project.buildDir, "libs/${project.name}-1.0.jar"))
+}

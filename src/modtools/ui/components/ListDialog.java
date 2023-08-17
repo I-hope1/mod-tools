@@ -12,7 +12,6 @@ import arc.struct.Seq;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
-import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.components.limit.LimitTable;
@@ -22,7 +21,7 @@ import modtools.utils.JSFunc;
 import java.util.Comparator;
 import java.util.regex.Pattern;
 
-public class ListDialog extends Window implements DisposableInterface {
+public class ListDialog extends Window {
 	public Seq<Fi> list = new Seq<>();
 	final  Table   p    = new LimitTable();
 	Comparator<Fi> sorter;
@@ -164,9 +163,17 @@ public class ListDialog extends Window implements DisposableInterface {
 		 Cons2<TextField, Label> modifier,
 		 float interval,
 		 Table t) {
+			return build(def, validator, modifier, interval, t, AutoTextField::new);
+		}
+		public static Cell<?> build(
+		 Prov<CharSequence> def,
+		 TextFieldValidator validator,
+		 Cons2<TextField, Label> modifier,
+		 float interval,
+		 Table t, Prov<TextField> fieldProv) {
 			MyLabel       label = new MyLabel(def, interval);
 			Cell<?>       cell  = t.add(label);
-			AutoTextField field = new AutoTextField();
+			TextField field = fieldProv.get();
 			if (validator != null) field.setValidator(validator);
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {

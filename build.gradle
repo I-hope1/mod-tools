@@ -3,67 +3,54 @@ plugins {
 	id "io.github.liplum.mgpp" version "1.2.0"
 }
 
-targetCompatibility = 11
-sourceCompatibility = 11
 
-tasks.withType(JavaCompile) {
-	options.encoding = 'UTF-8'
-	options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
-	options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED")
-	options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED")
-
-//	options.compilerArgs.addAll(['--release', '11'])
-//	options.compilerArgs.addAll("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED")
-}
-
-tasks.withType(JavaCompile) {
-	options.fork = true
-	options.forkOptions.jvmArgs.addAll([
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
-			"--add-opens", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
-	])
+allprojects {
+	tasks.withType(JavaCompile) {
+		options.encoding = 'UTF-8'
+//		targetCompatibility = 17
+//		sourceCompatibility = 17
+		targetCompatibility = 9
+		sourceCompatibility = 9
+		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED")
+		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED")
+	}
 }
 
 group 'org.example'
 version '1.0'
-sourceSets {
-	main {
-		java.srcDirs = ["src"]
-	}
-}
+sourceSets.main.java.srcDirs = ["src"]
 repositories {
 	mavenCentral()
 	mindustryRepo()
 }
 def MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
 def VERSION = "1.4.3.1"
-def uncVersion = "1.7.4"
 
 dependencies {
+	def uncVersion = "1.8.4"
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+	annotationProcessor project(":compiler")
+	compileOnly project(":annotations")
 
 	compileOnly files(
-//			"E:/Users/ASUS/Desktop/Mindustry136/mods/StructureOrderedDesktop.jar",
-//			"F:/files/mindustry/a/mdt-ac-1.0.jar",
+			"F:/files/mindustry/a/mdt-ac-1.0.jar",
 			"_libs/Mindustry_android.jar",
 //			"${MdtDataDir}/Mindustry_desktop.jar",
+//			"E:/Program Files/AndroidStudio/sdk/platforms/android-32/android.jar",
 			"assets/libs/reflect-core.jar",
-			"assets/libs/procyon-0.6.jar",
+			"trash/procyon-0.6.jar",
+			"_libs/Android_dalvik-1.0.jar",
 	)
 	implementation files(
-			"z_backfile/javassist.jar",
-			"_libs/Android_dalvik-1.0.jar",
 			"_libs/AndroidField.jar",
 	)
 	def mindustryVersion = 'v145.1'
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-//	importMindustry()
 }
+
+
 mindustry {
 	dependency {}
 	client {}
@@ -88,7 +75,7 @@ test {
 }
 
 import arc.files.Fi
-import arc.util.Log;
+import arc.util.Log
 
 task playGame(dependsOn: classes, type: JavaExec) {
 	dependsOn jar
@@ -106,7 +93,6 @@ task playGame(dependsOn: classes, type: JavaExec) {
 	main = "-jar"
 	args = [
 			MdtDataDir + "/Mindustry.jar",
-//"E:/应用/Mindustry/jre/desktop.jar"
 //			"-antialias"
 //			, "-debug"
 	]
@@ -132,21 +118,22 @@ task mergeLibs(type: Jar) {
 
 task playAndroid {
 	dependsOn deploy
-//    System.out.println("${project.archivesBaseName}-${VERSION}.jar");
-//    throw  new RuntimeException()
+
+	def adb = "F:/files/java/sdk/platform-tools/adb -s emulator-5554"
+	doFirst {
+		"$adb shell am force-stop io.anuke.mindustry"
+				.execute().waitForProcessOutput(System.out, System.err)
+	}
 	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files";
-	def adb = "F:/files/java/sdk/platform-tools/adb";
 	doLast {
 		("$adb push ${buildDir}/tmp/deploy/${project.archivesBaseName}-${VERSION}.jar"
 				+ " $MDT_ANDROID_DIR/mods/")
-				.execute().waitForProcessOutput(System.out, System.err)
-		"$adb shell am force-stop io.anuke.mindustry"
 				.execute().waitForProcessOutput(System.out, System.err)
 
 		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -D -W "
 				.execute().waitForProcessOutput(System.out, System.err)
 
-		def MindustryLogPath = "${MDT_ANDROID_DIR}/last_log.txt"
+		/*def MindustryLogPath = "${MDT_ANDROID_DIR}/last_log.txt"
 		new Fi("${project.rootDir}\\appendLog.sh")
 				.writeString("""
 #!/bin/sh
@@ -166,8 +153,8 @@ while true; do
   fi
   # 等待一段时间（秒）
   sleep 0.05
-done""")
-		"$adb push ${project.rootDir}\\appendLog.sh ${MDT_ANDROID_DIR}/appendLog.sh"
+done""")*/
+		"$adb push ${project.rootDir}/appendLog.sh ${MDT_ANDROID_DIR}/appendLog.sh"
 				.execute().waitForProcessOutput(System.out, System.err)
 		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -D -W "
 				.execute().waitForProcessOutput(System.out, System.err)
@@ -176,5 +163,3 @@ done""")
 	}
 }
 
-
-//build.dependsOn(mergeLibs)

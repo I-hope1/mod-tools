@@ -4,10 +4,11 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
+import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
@@ -21,7 +22,7 @@ import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.ListDialog.ModifiedLabel;
-import modtools.ui.components.Window;
+import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
@@ -30,28 +31,37 @@ import modtools.utils.*;
 
 import java.util.regex.*;
 
-import static modtools.ui.Contents.reviewElement;
+import static modtools.ui.Contents.review_element;
 import static modtools.ui.IntStyles.*;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.Sr;
 
 public class ReviewElement extends Content {
 	private static final float duration = 0.1f;
 	public ReviewElement() {
 		super("reviewElement");
+		Core.scene.root.getCaptureListeners().insert(0, new InputListener() {
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
+					topGroup.requestSelectElem(null, callback);
+					event.cancel();
+				}
+				return true;
+			}
+		});
 	}
 
 	public static final boolean    hideSelf  = true;
 	public static final LabelStyle skyMyFont = new LabelStyle(MyFonts.def, Color.sky);
 
 
-	public static Element             focus;
+	public static Element focus;
 	/**
 	 * focus的来源元素
 	 */
-	public static Table               focusFrom;
-	public static ReviewElementWindow focusWindow;
-	public static Color               focusColor = DEF_FOCUS_COLOR;
+	public static Table   focusFrom;
+	public static Window  focusWindow;
+	public static Color   focusColor = DEF_FOCUS_COLOR;
 
 	public static final Color maskColor = DEF_MASK_COLOR;
 
@@ -59,10 +69,11 @@ public class ReviewElement extends Content {
 		topGroup.focusOnElement(new FocusTask(maskColor, focusColor) {
 			{drawSlightly = true;}
 
-			public void backDraw() {
-				if (focus != null) drawFocus(focus);
-			}
-			public void elemDraw() {
+			/** 清除elemDraw  */
+			public void elemDraw() {}
+			public void beforeDraw(Element drawer) {
+				if (drawer == focusWindow && focus != null) drawFocus(focus);
+				;
 			}
 			public void drawLine() {
 				if (focus == null) return;
@@ -80,7 +91,6 @@ public class ReviewElement extends Content {
 				if (elem != null) super.elemDraw();
 			}
 		});
-		// frag.update(() -> frag.toFront());
 
 		btn.update(() -> btn.setChecked(topGroup.isSelecting()));
 		btn.setStyle(Styles.logicTogglet);
@@ -99,6 +109,7 @@ public class ReviewElement extends Content {
 		@Override
 		public void run() {
 			focus = null;
+			focusWindow = null;
 			focusFrom = null;
 		}
 	};
@@ -109,7 +120,7 @@ public class ReviewElement extends Content {
 		Pattern pattern;
 
 		public ReviewElementWindow() {
-			super(reviewElement.localizedName(), 20, 160, true);
+			super(review_element.localizedName(), 20, 160, true);
 			getCell(cont).maxWidth(Core.graphics.getWidth());
 
 			name = "ReviewElementWindow";
@@ -122,14 +133,17 @@ public class ReviewElement extends Content {
 					 Runnable go = () -> {
 						 var window = new ReviewElementWindow();
 						 // Log.info(element.parent);
-						 window.setPosition(x, y);
-						 window.setSize(width, height);
+						 /* 左上角对齐 */
 						 window.pattern = pattern;
 						 window.show(element.parent);
+						 window.shown(() -> {
+							 window.setSize(width, height);
+							 window.setPosition(x, getY(Align.topLeft), Align.topLeft);
+						 });
 						 hide();
 					 };
 					 if (element.parent == Core.scene.root) {
-						 Vec2 vec2 = getAbsPos(bs[0]);
+						 Vec2 vec2 = ElementUtils.getAbsPos(bs[0]);
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
 				 })
@@ -138,8 +152,8 @@ public class ReviewElement extends Content {
 				t.button(Icon.copy, clearNonei, () -> {
 					var window = new ReviewElementWindow();
 					window.pattern = pattern;
-					window.setSize(width, height);
 					window.show(element);
+					window.shown(() -> window.setSize(width, height));
 				}).padLeft(4f).padRight(4f);
 				t.button(Icon.refresh, clearNonei, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
 				t.table(search -> {
@@ -149,7 +163,6 @@ public class ReviewElement extends Content {
 			}).growX().row();
 
 			cont.add(new ScrollPane(pane) {
-				@Override
 				public String toString() {
 					if (hideSelf) return name;
 					return super.toString();
@@ -167,7 +180,7 @@ public class ReviewElement extends Content {
 			pane.clearChildren();
 
 			if (element == null) return;
-			Pattern pattern = Tools.compileRegExpCatch(text);
+			Pattern pattern = PatternUtils.compileRegExpCatch(text);
 			rebuild(element, pattern);
 		}
 
@@ -183,15 +196,24 @@ public class ReviewElement extends Content {
 			// highlightShowMultiRow(pane, pattern, element + "");
 		}
 
-		/** 结构： Label，Image（下划线） */
+
 		public void highlightShowMultiRow(Table table, String text) {
+			highlightShowMultiRowWithPos(table, text, null);
+		}
+		/** 结构： Label，Image（下划线） */
+		public void highlightShowMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
 			if (pattern == null) {
-				table.add(new MyLabel(text, MOMO_LabelStyle)).growX().left().color(Pal.accent).row();
+				table.table(t -> {
+					t.left().defaults().left();
+					makePosLabel(t, pos);
+					t.add(new MyLabel(text, MOMO_LabelStyle)).growX().left().color(Pal.accent);
+				}).growX().left().row();
 				table.image().color(JSFunc.c_underline).growX().colspan(2).row();
 				return;
 			}
 			table.table(t -> {
 				t.left().defaults().left();
+				makePosLabel(t, pos);
 				for (var line : text.split("\\n")) {
 					highlightShow(t, pattern, line);
 					t.row();
@@ -278,11 +300,15 @@ public class ReviewElement extends Content {
 		return clazz.getSimpleName();
 	}
 
+	static void makePosLabel(Table t, Prov<Vec2> pos) {
+		if (pos != null) t.label(() -> String.valueOf(pos.get())).color(Color.gray);
+	}
+
 	private static class MyWrapTable extends LimitTable {
-		private final Element element;
-		/** Group的子元素数量 */
-		// private final ReviewElementWindow window;
+		private final ReviewElementWindow window;
+		private final Element             element;
 		public MyWrapTable(ReviewElementWindow window, Element element) {
+			this.window = window;
 			this.element = element;
 			/* 用于下面的侦听器  */
 			int childIndex;
@@ -294,8 +320,9 @@ public class ReviewElement extends Content {
 				Seq<Element> children = group.getChildren();
 				add(button).size(size).disabled(__ -> children.isEmpty());
 				childIndex = 1;
-				window.highlightShowMultiRow(this, element == Core.scene.root ? "ROOT"
-				 : ReviewElement.getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""));
+				window.highlightShowMultiRowWithPos(this, element == Core.scene.root ? "ROOT"
+					: ReviewElement.getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""),
+				 () -> Tmp.v1.set(element.x, element.y));
 				image().growY().left()
 				 .update(t -> t.color.set(ReviewElement.focusFrom == this ? ColorFul.color : Color.darkGray));
 				defaults().growX();
@@ -353,49 +380,59 @@ public class ReviewElement extends Content {
 							p.add("空图像").labelAlign(Align.left);
 						}
 					});
+					Prov<Vec2> prov = () -> Tmp.v1.set(element.x, element.y);
+					makePosLabel(p0, prov);
 					// 用于补位
 					p0.add().growX();
 				}).growX().get();
 			} else {
 				defaults().growX();
 				childIndex = 0;
-				window.highlightShowMultiRow(this, String.valueOf(element));
+				window.highlightShowMultiRowWithPos(this, String.valueOf(element),
+				 () -> Tmp.v1.set(element.x, element.y));
 			}
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
-			Element  _elem = getChildren().get(childIndex);
-			MenuList list  = copyAsJSMenu(null, () -> element);
-			IntUI.addShowMenuListener(_elem, () -> sr(Seq.with(
-			 list,
+			Element  window_elem = getChildren().get(childIndex);
+			Runnable copy        = storeRun(() -> element);
+			IntUI.addShowMenuListener(window_elem, () -> Sr(Seq.with(
+			 copyAsJSMenu(null, copy),
 			 ConfirmList.with(Icon.trash, "@clear", "@confirm.remove", () -> element.remove()),
 			 MenuList.with(Icon.copy, "@copy.path", () -> {
 				 JSFunc.copyText(getPath(element));
 			 }),
 			 MenuList.with(Icon.fileImage, "@reviewElement.screenshot", () -> {
-				 Tools.quietScreenshot(element);
+				 ElementUtils.quietScreenshot(element);
 			 }),
 			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
 			 MenuList.with(Icon.info, "新窗口", () -> new ReviewElementWindow().show(element)),
-			 MenuList.with(Icon.info, "@details", () -> JSFunc.showInfo(element))
+			 MenuList.with(Icon.info, "@details", () -> JSFunc.showInfo(element)),
+			 FoldedList.withf(Icon.boxSmall, "exec", () -> Seq.with(
+				MenuList.with(Icon.info, "invalidate", element::invalidate),
+				MenuList.with(Icon.info, "invalidateHierarchy", element::invalidateHierarchy),
+				MenuList.with(Icon.info, "layout", element::layout)
+			 )),
+			 ValueLabel.newElementDetailsList(element)
 			)).ifRun(element instanceof Table, seq -> seq.add(
-			 MenuList.with(Icon.waves, "cells", () -> {
-				 JSFunc.dialog(d -> {
-					 d.left().defaults().left();
-					 // Table p = new_Table(d);
-					 for (var cell : ((Table) element).getCells()) {
-						 // p.left();
-						 d.table(Tex.pane, t0 -> {
-							 t0.add(String.valueOf(cell));
-						 });
-						 if (cell.isEndRow()) {
-							 // p = new_Table(d);
-							 d.row();
-						 }
-					 }
-				 });
-			 }))).get());
-			IntUI.doubleClick(_elem, null, list.run);
+				MenuList.with(Icon.waves, "cells", () -> {
+					JSFunc.dialog(d -> {
+						d.left().defaults().left();
+						for (var cell : ((Table) element).getCells()) {
+							d.table(Tex.pane, t0 -> {
+								t0.add(new ValueLabel(cell, Cell.class, null, null));
+							});
+							if (cell.isEndRow()) {
+								d.row();
+							}
+						}
+					});
+				})))
+			 .ifRun(element.parent instanceof Table, seq -> seq.add(
+				DisabledList.withd(Icon.waves, "this cell", () -> !(element.parent instanceof Table), () -> {
+					new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
+				}))).get());
+			IntUI.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;
-			// this.window = window;
+
 			update(() -> background(focusFrom == this ? Styles.flatDown : Styles.none));
 		}
 		private static CharSequence getPath(Element element) {
@@ -417,12 +454,13 @@ public class ReviewElement extends Content {
 			focus = null;
 			Element tmp = super.hit(x, y, touchable);
 			if (tmp == null) return null;
-			// color.set(Color.white);
+
 			if (focus != null) {
 				if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
 				return tmp;
 			}
 			focus = element;
+			focusWindow = window;
 			focusFrom = this;
 			if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
 			return tmp;
@@ -478,10 +516,87 @@ public class ReviewElement extends Content {
 	}
 
 
+	public static class CellDetailsWindow extends Window implements DisposableInterface {
+		Cell<?> cl;
+		public CellDetailsWindow(Cell<?> cl) {
+			super("cell");
+			this.cl = cl;
+
+			cont.table(Tex.pane, t -> {
+				t.defaults().grow();
+				t.add();
+				getAdd(t, cl, "padTop");
+				t.add().row();
+				getAdd(t, cl, "padLeft");
+				ValueLabel label = new ValueLabel(cl.get(), Element.class, null, null);
+				label.enableUpdate = false;
+				label.update(() -> label.setVal(cl.get()));
+				Label   placeholder = new MyLabel("<VALUE>", MOMO_LabelStyle);
+				Cell<?> cell        = t.add(placeholder);
+				placeholder.clicked(() -> cell.setElement(label));
+				label.clicked(() -> cell.setElement(placeholder));
+
+				getAdd(t, cl, "padRight").row();
+				t.add();
+				getAdd(t, cl, "padBottom");
+				t.add();
+			}).colspan(2).row();
+			cont.defaults().height(32).growX();
+			cont.defaults().colspan(2);
+			getAddWithName(cont, cl, "minWidth").row();
+			getAddWithName(cont, cl, "minHeight").row();
+			getAddWithName(cont, cl, "maxWidth").row();
+			getAddWithName(cont, cl, "maxHeight").row();
+			cont.defaults().colspan(1);
+			checkField(cont, cl, "fillX", float.class);
+			checkField(cont, cl, "fillY", float.class);
+			cont.row();
+			checkField(cont, cl, "expandX", int.class);
+			checkField(cont, cl, "expandY", int.class);
+			cont.row();
+			checkField(cont, cl, "uniformX", boolean.class);
+			checkField(cont, cl, "uniformY", boolean.class);
+			cont.row();
+			cont.button("growX", Styles.flatBordert, cl::growX);
+			cont.button("growY", Styles.flatBordert, cl::growY);
+			cont.row();
+			checkField(cont, cl, "endRow", boolean.class).colspan(2);
+		}
+	}
+	/* private static <T> void field(Table cont, Cell<?> cell, String key, TextFieldValidator validator,
+																Func<String, T> func) {
+		cont.table(t -> {
+			t.add(key);
+			ModifiedLabel.build(() -> String.valueOf(Reflect.get(Cell.class, cell, key)),
+			 validator, (field, label) -> {
+				 if (!field.isValid()) return;
+				 Reflect.set(Cell.class, cell, key, func.get(field.getText()));
+				 label.setText(field.getText());
+			 }, 2, t);
+		});
+	} */
+	private static Cell<CheckBox> checkField(Table cont, Cell<?> obj, String key, Class<?> valueType) {
+		return checkField(cont, Cell.class, obj, key, valueType);
+	}
+
+	private static <T> Cell<CheckBox> checkField(Table cont, Class<? extends T> ctype, T obj, String key,
+																							 Class<?> valueType) {
+		return cont.check(key, getChecked(ctype, obj, key), b -> {
+			Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
+		}).checked(__ -> getChecked(ctype, obj, key));
+	}
+	private static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
+		return Sr(Reflect.get(ctype, obj, key))
+		 .reset(t -> t instanceof Boolean ? (Boolean) t :
+			t instanceof Number n && n.intValue() == 1)
+		 .get();
+	}
+
 	public static class ElementDetailsWindow extends Window implements DisposableInterface {
 		Element element;
 		public ElementDetailsWindow(Element element) {
 			super("", 20, 160, true);
+			show();
 			this.element = element;
 
 			cont.defaults().growX();
@@ -491,6 +606,7 @@ public class ReviewElement extends Content {
 				setter.add(floatSetter("y", () -> "" + element.y, val -> element.y = val)).row();
 				setter.add(floatSetter("width", () -> "" + element.getWidth(), element::setWidth)).row();
 				setter.add(floatSetter("height", () -> "" + element.getHeight(), element::setHeight)).row();
+				setter.add(floatSetter("rot", () -> "" + element.getRotation(), element::setRotation)).row();
 			}).growX().row();
 			Table table = cont.table().get();
 			table.defaults().growX();
@@ -508,26 +624,44 @@ public class ReviewElement extends Content {
 					getAdd(t, cl, "padBottom");
 					t.add();
 				}).colspan(2).row();
-				table.button("growX", Styles.flatBordert, cl::growX).height(32).growX();
-				table.button("growY", Styles.flatBordert, cl::growY).height(32).growX();
+				table.defaults().height(32).growX();
+				table.button("growX", Styles.flatBordert, cl::growX);
+				table.button("growY", Styles.flatBordert, cl::growY);
+				table.row();
 			}
+
+			checkField(table, Element.class, element, "fillParent", boolean.class);
+			checkField(table, Element.class, element, "visible", boolean.class).row();
+			if (element instanceof Group) checkField(table, Group.class, element, "transform", boolean.class).row();
+
+			cont.row().defaults().height(32).growX();
+			cont.button("invalidate", Styles.flatBordert, element::invalidate).row();
+			cont.button("invalidateHierarchy", Styles.flatBordert, element::invalidateHierarchy).row();
+			cont.button("layout", Styles.flatBordert, element::layout).row();
+			cont.button("pack", Styles.flatBordert, element::pack).row();
 		}
-		private Cell<Table> getAdd(Table t, Cell cl, String name) {
-			return t.add(floatSetter(null, () -> "" + Reflect.get(Cell.class, cl, name), f -> {
-				Reflect.set(Cell.class, cl, name, f);
-				if (cl.get() != null) cl.get().invalidateHierarchy();
-			}));
-		}
-		public Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
-			return new Table(t -> {
-				t.defaults().grow();
-				if (name != null) t.add(name);
-				ModifiedLabel.build(def, Tools::isNum, (field, label) -> {
-					if (!field.isValid()) return;
-					label.setText(field.getText());
-					floatc.get(Tools.asFloat(field.getText()));
-				}, 2, t);
-			});
-		}
+	}
+	private static Cell<Table> getAdd(Table t, Cell cl, String name) {
+		return t.add(floatSetter(null, () -> "" + Reflect.get(Cell.class, cl, name), f -> {
+			Reflect.set(Cell.class, cl, name, f);
+			if (cl.get() != null) cl.get().invalidateHierarchy();
+		}));
+	}
+	private static Cell<Table> getAddWithName(Table t, Cell cl, String name) {
+		return t.add(floatSetter("[lightgray]" + name + ": ", () -> "" + Reflect.get(Cell.class, cl, name), f -> {
+			Reflect.set(Cell.class, cl, name, f);
+			if (cl.get() != null) cl.get().invalidateHierarchy();
+		}));
+	}
+	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
+		return new Table(t -> {
+			if (name != null) t.add(name).color(Color.gray).padRight(8f);
+			t.defaults().growX();
+			ModifiedLabel.build(def, Strings::canParseFloat, (field, label) -> {
+				if (!field.isValid()) return;
+				label.setText(field.getText());
+				floatc.get(Strings.parseFloat(field.getText()));
+			}, 2, t, TextField::new);
+		});
 	}
 }

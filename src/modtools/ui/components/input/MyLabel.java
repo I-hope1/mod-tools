@@ -9,8 +9,6 @@ import modtools.utils.JSFunc.MyProv;
 
 import java.io.*;
 
-import static arc.Core.graphics;
-
 /**
  * a label that disables markup ( [color]文字颜色 )
  */
@@ -40,22 +38,24 @@ public class MyLabel extends Label {
 	private float timer    = 0;
 
 	/* 会缓存value的prov */
-	public static class CacheProv implements Prov<CharSequence> {
-		public Object value;
+	public static class CacheProv implements Prov<Object> {
 		public MyProv<Object> prov;
+		public Object         value;
 		public CacheProv(MyProv<Object> prov) {
 			this.prov = prov;
 		}
-		public CharSequence get() {
+		public Object get() {
 			try {
-				value = prov.get();
-				return prov.stringify(value);
+				return value = prov.get();
 			} catch (Throwable e) {
 				StringWriter sw = new StringWriter();
 				PrintWriter  pw = new PrintWriter(sw);
 				e.printStackTrace(pw);
 				return sw.toString();
 			}
+		}
+		public Prov<CharSequence> getStringProv() {
+			return () -> prov.stringify(get());
 		}
 	}
 
@@ -70,19 +70,14 @@ public class MyLabel extends Label {
 	}
 
 	public boolean markupEnabled = false;
-
 	public void layout() {
-		if (markupEnabled) {
-			super.layout();
-			layout.height = Math.min(graphics.getHeight(), layout.height);
-			return;
-		}
-		// invalidate();
 		FontData fontData = style.font.getData();
 
 		boolean had = fontData.markupEnabled;
-		fontData.markupEnabled = false;
+		fontData.markupEnabled = markupEnabled;
 		super.layout();
+		/* 重新计算pref width  */
+		prefSizeInvalid = true;
 		getPrefWidth();
 		fontData.markupEnabled = had;
 	}

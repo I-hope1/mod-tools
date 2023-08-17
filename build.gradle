@@ -5,6 +5,9 @@ plugins {
 
 
 allprojects {
+	ext {
+		uncVersion = "1.8.1"
+	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
 //		targetCompatibility = 17
@@ -69,9 +72,6 @@ mindustry {
 mindustryAssets {
 	// Set the assets root
 	rootAt "$projectDir/assets"
-}
-test {
-	useJUnitPlatform()
 }
 
 import arc.files.Fi

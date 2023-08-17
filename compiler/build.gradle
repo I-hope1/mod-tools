@@ -9,8 +9,6 @@ repositories {
 }
 
 tasks.withType(JavaCompile) {
-	options.encoding = "UTF-8"
-
 	options.compilerArgs.addAll(
 			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
 			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
@@ -28,13 +26,10 @@ tasks.withType(JavaCompile) {
 	)
 }
 
-//import org.gradle.internal.
-
 dependencies {
 	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
 	compileOnly 'com.google.auto.service:auto-service:1.0.1'
 	implementation project(":annotations")
-	def uncVersion = "1.8.4"
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 	def mindustryVersion = 'v145.1'

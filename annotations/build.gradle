@@ -8,16 +8,9 @@ repositories {
 	maven { url 'https://www.jitpack.io' }
 }
 
-tasks.withType(JavaCompile) {
-	options.encoding = "UTF-8"
-}
-
-//import org.gradle.internal.
-
 dependencies {
 	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
 	compileOnly 'com.google.auto.service:auto-service:1.0.1'
-	def uncVersion = "1.8.4"
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 //	implementation 'com.squareup:javapoet:1.12.1'

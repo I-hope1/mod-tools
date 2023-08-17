@@ -18,7 +18,7 @@ import java.util.*;
 
 import static modtools.ui.IntStyles.MOMO_LabelStyle;
 import static modtools.utils.JSFunc.*;
-import static modtools.utils.ui.ReflectTools.makeDetails;
+import static modtools.utils.ui.ReflectTools.*;
 import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
 
 public interface MethodTools {

@@ -1,7 +1,5 @@
 package modtools.annotations;
 
-// import modtools.annotations.processors.ContentProcessor;
-import modtools.ui.Contents;
 
 import java.lang.annotation.*;
 
@@ -21,8 +19,8 @@ import java.lang.annotation.*;
  *     // ....
  *   }
  * }}</pre>
- * @see ContentProcessor#dealElement
- * @see Contents
+ * @see modtools.annotations.processors.ContentProcessor#dealElement
+ * @see modtools.ui.Contents
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)

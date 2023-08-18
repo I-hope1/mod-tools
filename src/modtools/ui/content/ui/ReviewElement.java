@@ -73,7 +73,6 @@ public class ReviewElement extends Content {
 			public void elemDraw() {}
 			public void beforeDraw(Element drawer) {
 				if (drawer == focusWindow && focus != null) drawFocus(focus);
-				;
 			}
 			public void drawLine() {
 				if (focus == null) return;

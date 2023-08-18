@@ -66,9 +66,9 @@ public final class TopGroup extends WidgetGroup {
 	private boolean cancelEvent;
 
 	private final Group
-	 back    = new Group() {{name = "back";}},
-	 windows = new Group() {{name = "windows";}},
-	 frag    = new Group() {{name = "frag";}},
+	 back    = new NamedGroup("back"),
+	 windows = new NamedGroup("windows"),
+	 frag    = new NamedGroup("frag"),
 	 others  = new WidgetGroup() {
 		 public Element hit(float x, float y, boolean touchable) {
 			 return Sr(super.hit(x, y, touchable))
@@ -85,6 +85,7 @@ public final class TopGroup extends WidgetGroup {
 	public Element drawPadElem = null;
 
 	public void draw() {
+		setTransform(false);
 		backDrawSeq.exec();
 		drawResidentTasks.each(ResidentDrawTask::backDraw);
 		super.draw();
@@ -603,13 +604,19 @@ public final class TopGroup extends WidgetGroup {
 		default void elemDraw() {}
 		/**
 		 * 在{@code drawer}渲染之前渲染
-		 *
 		 * @param drawer 等一会会渲染的元素
 		 */
 		default void beforeDraw(Element drawer) {}
 		default void endDraw() {}
 	}
 
+
+	public static class NamedGroup extends Group {
+		public NamedGroup(String name) {
+			super();
+			this.name = name;
+		}
+	}
 	public static class FocusTask implements ResidentDrawTask {
 		public       Element elem;
 		public final Color   maskColor, focusColor;

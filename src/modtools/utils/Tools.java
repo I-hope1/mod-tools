@@ -21,6 +21,8 @@ import java.util.function.Consumer;
 import static ihope_lib.MyReflect.unsafe;
 
 public class Tools {
+	public static final Object[] EMPTY_ARRAY = {};
+
 	public static TaskSet TASKS = new TaskSet();
 
 	static {

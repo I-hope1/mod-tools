@@ -497,7 +497,7 @@ public class Selection extends Content {
 			if (tile.floor().liquidDrop != null) t.image(tile.floor().liquidDrop.uiIcon).size(24);
 		}
 
-		public ObjectMap<Integer, TextureRegion> map = new ObjectMap<>();
+		public IntMap<TextureRegion> map = new IntMap<>();
 
 		public boolean checkRemove(T item) {
 			return item == null;
@@ -598,7 +598,7 @@ public class Selection extends Content {
 			main.update(() -> selectFunc = this);
 
 			FunctionBuild("copy", list -> {
-				tester.put(Core.input.mouse(), Seq.with(list).toArray());
+				tester.put(Core.input.mouse(), list.toArray());
 			});
 		}
 		private void buildButtons() {

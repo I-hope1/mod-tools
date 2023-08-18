@@ -3,7 +3,7 @@ package modtools.utils;
 import arc.files.Fi;
 import arc.func.*;
 import arc.struct.*;
-import arc.util.Log;
+import arc.util.*;
 import hope_android.FieldUtils;
 import mindustry.Vars;
 import modtools.utils.reflect.IReflect;
@@ -24,8 +24,8 @@ public class ByteCodeTools {
 	}*/
 
 	public static final String
-			functionsKey = "_KSINIA_Functions",
-			TMP_CLASS    = "__BYTE_Class";
+	 functionsKey = "_KSINIA_Functions",
+	 TMP_CLASS    = "__BYTE_Class";
 	private static int lastID = 0;
 	private static int nextID() {
 		return lastID++;
@@ -52,7 +52,7 @@ public class ByteCodeTools {
 		}
 
 		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, boolean buildSuper,
-		                        Class<V> returnType, Class<?>... args) {
+														Class<V> returnType, Class<?>... args) {
 			if (func2 == null) {
 				writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 				writer.addLoadThis();
@@ -136,7 +136,7 @@ public class ByteCodeTools {
 		 * @param args       方法的参数
 		 **/
 		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, Class<V> returnType,
-		                        Class<?>... args) {
+														Class<?>... args) {
 			setFunc(name, func2, flags, false, returnType, args);
 		}
 
@@ -149,7 +149,7 @@ public class ByteCodeTools {
 		}
 
 		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, boolean buildSuper,
-		                    Class<?>... args) {
+												Class<?>... args) {
 			setFunc(name, (self, a) -> {
 				cons2.get(self, a);
 				return null;
@@ -181,7 +181,7 @@ public class ByteCodeTools {
 		}
 
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
-		                           Class<?>... args) {
+															 Class<?>... args) {
 			writer.startMethod(thisMethodName, nativeMethod(returnType, ArrayList.class), (short) Modifier.PUBLIC);
 			writer.addLoadThis(); // this
 			for (int i = 0; i < args.length; i++) {
@@ -253,7 +253,7 @@ public class ByteCodeTools {
 				String     descriptor = nativeMethod(returnType, realTypes);
 				{ // buildSuper
 					writer.startMethod("super$_" + m.getName(),
-					                   descriptor, ACC_PUBLIC);
+					 descriptor, ACC_PUBLIC);
 					writer.addLoadThis(); // this
 					for (int i = 1; i <= realTypes.length; i++) {
 						writer.add(addLoad(types[i]), i);
@@ -269,7 +269,7 @@ public class ByteCodeTools {
 					writer.add(addLoad(realTypes[i]), i + 1);
 				}
 				writer.addInvoke(INVOKESTATIC, className,
-				                 m.getName(), nativeMethod(returnType, types));
+				 m.getName(), nativeMethod(returnType, types));
 				addCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
@@ -289,10 +289,10 @@ public class ByteCodeTools {
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
 			}*/
-			ObjectMap<String, Field> map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
-			long                     off;
+			var  map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
+			long off;
 			for (var q : queues) {
-				off = Vars.mobile ? FieldUtils.getFieldOffset(map.get(q.name)) : unsafe.staticFieldOffset(map.get(q.name));
+				off = OS.isAndroid ? FieldUtils.getFieldOffset(map.get(q.name)) : unsafe.staticFieldOffset(map.get(q.name));
 				unsafe.putObject(base, off, q.get());
 			}
 			/*var base = MyReflect.defineClass(adapterName, superClass, writer.toByteArray());
@@ -392,7 +392,7 @@ public class ByteCodeTools {
 			String tmp = nativeName(box(type));
 			writer.add(CHECKCAST, tmp);
 			writer.addInvoke(INVOKEVIRTUAL, tmp,
-			                 type.getSimpleName() + "Value", nativeMethod(type));
+			 type.getSimpleName() + "Value", nativeMethod(type));
 		} else {
 			writer.add(CHECKCAST, nativeName(type));
 		}
@@ -423,8 +423,8 @@ public class ByteCodeTools {
 
 	public static short buildReturn(Class<?> returnType) {
 		if (returnType == boolean.class || returnType == int.class
-		    || returnType == byte.class || returnType == short.class
-		    || returnType == char.class)
+				|| returnType == byte.class || returnType == short.class
+				|| returnType == char.class)
 			return IRETURN;
 		else if (returnType == long.class) return LRETURN;
 		else if (returnType == float.class) return FRETURN;

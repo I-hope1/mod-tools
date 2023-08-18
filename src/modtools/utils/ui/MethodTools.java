@@ -18,7 +18,7 @@ import java.util.*;
 
 import static modtools.ui.IntStyles.MOMO_LabelStyle;
 import static modtools.utils.JSFunc.*;
-import static modtools.utils.ui.ReflectTools.*;
+import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
 
 public interface MethodTools {
@@ -35,6 +35,7 @@ public interface MethodTools {
 		 .map(a -> JavaAdapter.convertResult(a, iterator.next()))
 		 .toArray();
 	}
+	/** value: {@value ACCESS_MODIFIERS */
 	int ACCESS_MODIFIERS =
 	 Modifier.PUBLIC | Modifier.PROTECTED | Modifier.PRIVATE;
 	/**

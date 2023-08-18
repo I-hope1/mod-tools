@@ -2,7 +2,6 @@ package modtools.ui.effect;
 
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
-import arc.struct.*;
 import mindustry.graphics.Pal;
 
 import static arc.Core.graphics;
@@ -52,7 +51,7 @@ public class MyDraw {
 
 	static final DrawEffect blur = new EBBlur();
 
-	static ObjectMap<String, Seq<Runnable>> draws = new ObjectMap<>();
+	// static ObjectMap<String, Seq<Runnable>> draws = new ObjectMap<>();
 	public static void blurRect(float x, float y, float w, float h) {
 		if (!isBlurEnable()) return;
 		// draws.get("blur", Seq::new).add(draw);

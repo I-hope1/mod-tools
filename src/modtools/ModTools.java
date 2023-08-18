@@ -18,6 +18,7 @@ import modtools.utils.Tools;
 
 import java.io.File;
 import java.net.URLClassLoader;
+import java.util.Arrays;
 
 import static mindustry.Vars.ui;
 import static modtools.utils.MySettings.SETTINGS;
@@ -97,22 +98,25 @@ public class ModTools extends Mod {
 	 * @see Mods#buildFiles()
 	 */
 	public static void loadBundle() {
-		ObjectMap<String, Seq<Fi>> bundles = new ObjectMap<>();
+		ObjectMap<String, Seq<Fi>> bundles;
 		//load up bundles.
 		Fi folder = root.child("bundles");
-		if (folder.exists()) {
-			for (Fi file : folder.list()) {
-				if (file.name().startsWith("bundle") && file.extension().equals("properties")) {
-					String name = file.nameWithoutExtension();
-					bundles.get(name, Seq::new).add(file);
-				}
-			}
+		if (!folder.exists()) return;
+
+		Fi[] files = Arrays.stream(folder.list()).filter(file ->
+			file.name().startsWith("bundle") && file.extension().equals("properties"))
+		 .toArray(Fi[]::new);
+		bundles = new ObjectMap<>(files.length);
+		for (Fi file : files) {
+			String name = file.nameWithoutExtension();
+			bundles.get(name, Seq::new).add(file);
 		}
+
 		I18NBundle bundle = Core.bundle;
 		while (bundle != null) {
 			String str    = bundle.getLocale().toString();
 			String locale = "bundle" + (str.isEmpty() ? "" : "_" + str);
-			for (Fi file : bundles.get(locale, Seq::new)) {
+			if (bundles.containsKey(locale)) for (Fi file : bundles.get(locale)) {
 				try {
 					PropertiesUtils.load(bundle.getProperties(), file.reader());
 				} catch (Throwable e) {
@@ -121,6 +125,7 @@ public class ModTools extends Mod {
 			}
 			bundle = bundle.getParent();
 		}
+
 	}
 
 	public static ModClassLoader mainLoader;

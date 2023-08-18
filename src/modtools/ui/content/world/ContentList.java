@@ -27,31 +27,34 @@ public class ContentList extends Content {
 
 	Window ui;
 	Table  main;
-	final ObjectMap<String, Effect>     fxs     = new ObjectMap<>();
-	final ObjectMap<String, BulletType> bullets = new ObjectMap<>();
-	final ObjectMap<String, Block>      blocks  = new ObjectMap<>();
-	final ObjectMap<String, Item>       items   = new ObjectMap<>();
-	final ObjectMap<String, Liquid>     liquids = new ObjectMap<>();
+
+	ObjectMap<String, Effect>     fxs     = null;
+	ObjectMap<String, BulletType> bullets = null;
+	ObjectMap<String, Block>      blocks  = null;
+	ObjectMap<String, Item>       items   = null;
+	ObjectMap<String, Liquid>     liquids = null;
+	ObjectMap<String, Planet>     planets = null;
 
 	Pattern pattern = null;
-	public void load() {
+	public void load0() {
 		ui = new Window(localizedName(), getWidth(), 100, true);
 		main = new Table();
 		Table top = new Table();
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
-		new Search((__, text) -> {
-			pattern = PatternUtils.compileRegExpCatch(text);
-		}).build(top, main);
+		new Search((__, text) -> pattern = PatternUtils.compileRegExpCatch(text))
+		 .build(top, main);
 
-		fieldsToMap(Fx.class.getFields(), Effect.class, fxs);
-		fieldsToMap(Bullets.class.getFields(), BulletType.class, bullets);
-		fieldsToMap(Blocks.class.getFields(), Block.class, blocks);
-		fieldsToMap(Items.class.getFields(), Item.class, items);
-		fieldsToMap(Liquids.class.getFields(), Liquid.class, liquids);
+		fxs = fieldsToMap(Fx.class.getFields(), Effect.class);
+		bullets = fieldsToMap(Bullets.class.getFields(), BulletType.class);
+		blocks = fieldsToMap(Blocks.class.getFields(), Block.class);
+		items = fieldsToMap(Items.class.getFields(), Item.class);
+		liquids = fieldsToMap(Liquids.class.getFields(), Liquid.class);
+		planets = fieldsToMap(Planets.class.getFields(), Planet.class);
 		buildAll();
 	}
-	private <T> void fieldsToMap(Field[] fields, Class<T> cl, ObjectMap<String, T> map) {
+	private <T> ObjectMap<String, T> fieldsToMap(Field[] fields, Class<T> cl) {
+		ObjectMap<String, T> map = new ObjectMap<>(fields.length);
 		for (var f : fields) {
 			try {
 				if (!cl.isAssignableFrom(f.getType())) continue;
@@ -63,20 +66,23 @@ public class ContentList extends Content {
 				IntUI.showException(e);
 			}
 		}
+		return map;
 	}
 	private static int getWidth() {
 		return 200;
 	}
 	IntTab tab;
 	public void buildAll() {
-		String[] names = {"fx", "bullet", "blocks", "items", "liquids"};
-		Table[] tables = {defaultTable(fxs, effect -> {
-			if (Vars.player.unit() == null) return;
-			effect.at(Vars.player.x, Vars.player.y, Vars.player.unit().rotation());
-		}), defaultTable(bullets, bulletType -> {
+		String[] names = {"fx", "bullet", "blocks", "items", "liquids", "planets"};
+		Table[] tables = {
+		 defaultTable(fxs, effect -> {
+			 if (Vars.player.unit() == null) return;
+			 effect.at(Vars.player.x, Vars.player.y, Vars.player.unit().rotation());
+		 }), defaultTable(bullets, bulletType -> {
 			if (Vars.player.unit() == null) return;
 			bulletType.create(Vars.player.unit(), Vars.player.x, Vars.player.y, Vars.player.unit().rotation());
-		}), defaultTable(blocks), defaultTable(items), defaultTable(liquids)};
+		}), defaultTable(blocks), defaultTable(items), defaultTable(liquids),
+		 defaultTable(liquids)};
 
 		tab = new IntTab(main.getWidth(), names, Color.sky, tables);
 		tab.eachWidth = 86;
@@ -106,6 +112,7 @@ public class ContentList extends Content {
 		});
 	}
 	public void build() {
+		if (ui == null) load0();
 		ui.show();
 		Time.runTask(2, () -> tab.main.invalidate());
 	}

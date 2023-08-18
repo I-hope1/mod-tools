@@ -27,7 +27,7 @@ public class IntTab {
 	/** 这些会乘以{@link Scl#scl} */
 	public float    totalWidth, eachWidth;
 	public int     cols;
-	public boolean column = false;
+	public boolean column/*  = false */;
 
 	public void setTotalWidth(float amount) {
 		totalWidth = amount;
@@ -35,6 +35,7 @@ public class IntTab {
 
 	protected void init() {
 		if (main != null) return;
+		labels = new ObjectMap<>(names.length);
 		title = new PrefTable();
 		title.defaults().growX().height(42);
 		pane = new ScrollPane(null, Styles.smallPane);
@@ -130,7 +131,7 @@ public class IntTab {
 		main.pack();
 	}
 
-	public ObjectMap<String, Label> labels = new ObjectMap<>();
+	public ObjectMap<String, Label> labels;
 	boolean hideTitle;
 	public Table build() {
 		if (totalWidth == -1) title.defaults().growX();

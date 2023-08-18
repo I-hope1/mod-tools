@@ -5,6 +5,7 @@ import arc.math.geom.Vec2;
 import arc.struct.*;
 import arc.util.Tmp;
 import mindustry.graphics.Pal;
+import modtools.utils.Tools;
 
 /** 用于控制渲染，当然你也可以解析文本 */
 public class Syntax {
@@ -174,7 +175,7 @@ public class Syntax {
 	/**
 	 * 所有的任务
 	 */
-	public DrawTask[] taskArr = {};
+	public DrawTask[] taskArr = (DrawTask[]) Tools.EMPTY_ARRAY;
 
 	public class DrawToken extends DrawTask {
 		// IntMap<?>[] total;

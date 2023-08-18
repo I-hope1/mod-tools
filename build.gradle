@@ -6,7 +6,8 @@ plugins {
 
 allprojects {
 	ext {
-		uncVersion = "1.8.1"
+		uncVersion = "1.8.5"
+		mindustryVersion = 'v145.1'
 	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
@@ -25,13 +26,13 @@ version '1.0'
 sourceSets.main.java.srcDirs = ["src"]
 repositories {
 	mavenCentral()
+	maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
 	mindustryRepo()
 }
 def MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
 def VERSION = "1.4.3.1"
 
 dependencies {
-	def uncVersion = "1.8.4"
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	annotationProcessor project(":compiler")
 	compileOnly project(":annotations")
@@ -48,7 +49,6 @@ dependencies {
 	implementation files(
 			"_libs/AndroidField.jar",
 	)
-	def mindustryVersion = 'v145.1'
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
 }

@@ -6,19 +6,16 @@ import arc.scene.ui.layout.Table;
 import mindustry.gen.Icon;
 
 public class Search {
-	public Search() {}
-
 	public Search(Cons2<Table, String> rebuild) {
 		this.rebuild = rebuild;
 	}
 	public void build(Table title, Table cont) {
 		title.table(top -> {
 			top.image(Icon.zoomSmall);
-			TextField text = new TextField();
-			top.add(text).growX();
-			text.changed(() -> {
-				rebuild(cont, text.getText());
-			});
+			TextField field = new TextField();
+			field.setMessageText("@players.search");
+			top.add(field).growX();
+			field.changed(() -> rebuild(cont, field.getText()));
 		}).padRight(8f).growX().top().row();
 		rebuild(cont, null);
 	}

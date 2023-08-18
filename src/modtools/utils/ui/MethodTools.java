@@ -96,7 +96,7 @@ public interface MethodTools {
 
 		for (int i = 0, length = args.length; i < length; i++) {
 			var ptype = args[i];
-			table.add(makeGenericType(ptype, makeDetails(ptype, genericArgs[i])))
+			table.add(ReflectTools.makeGenericType(ptype, makeDetails(ptype, genericArgs[i])))
 			 .color(c_type);
 			if (i != length - 1) {
 				table.add(", ");
@@ -115,7 +115,7 @@ public interface MethodTools {
 			table.bind(throwKey);
 			for (int i = 0, length = exceptions.length; i < length; i++) {
 				var eType = exceptions[i];
-				table.add(makeGenericType(eType, makeDetails(eType, genericExceptions[i])))
+				table.add(ReflectTools.makeGenericType(eType, makeDetails(eType, genericExceptions[i])))
 				 .color(c_type);
 				if (i != length - 1) {
 					table.add(", ");

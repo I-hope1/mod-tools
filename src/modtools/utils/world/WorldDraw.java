@@ -5,6 +5,7 @@ import arc.func.Boolp;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.FrameBuffer;
+import arc.math.Mat;
 import arc.math.geom.*;
 import arc.struct.ObjectSet;
 import mindustry.Vars;

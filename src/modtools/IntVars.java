@@ -1,8 +1,12 @@
 package modtools;
 
 import arc.Events;
+import arc.files.Fi;
 import arc.util.Log;
+import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
+import mindustry.mod.ModClassLoader;
+import mindustry.mod.Mods.*;
 import modtools.ui.IntUI;
 import modtools.utils.array.MySet;
 
@@ -11,8 +15,12 @@ import java.util.concurrent.CompletableFuture;
 import static mindustry.Vars.ui;
 
 public class IntVars {
-	public static final String  modName = "mod-tools";
-	public static final String  NL      = System.lineSeparator();
+	public static final String         modName    = "mod-tools";
+	public static       ModMeta        meta;
+	public static       Fi             root;
+	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+
+	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;
 
 
@@ -55,6 +63,11 @@ public class IntVars {
 	public static final MySet<Runnable> resizeListeners = new MySet<>();
 	public static void addResizeListener(Runnable runnable) {
 		resizeListeners.add(runnable);
+	}
+
+	/** @return {@code true} if the file be deleted successfully */
+	public static boolean delete(Fi fi) {
+		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
 	}
 
 	static {

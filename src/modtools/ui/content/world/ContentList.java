@@ -108,7 +108,7 @@ public class ContentList extends Content {
 					});
 				}).row();
 			});
-			t.addUpdateListener(() -> pattern);
+			t.addPatternUpdateListener(() -> pattern);
 		});
 	}
 	public void build() {

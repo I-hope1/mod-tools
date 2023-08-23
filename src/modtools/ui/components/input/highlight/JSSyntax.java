@@ -12,7 +12,7 @@ public class JSSyntax extends Syntax {
 	public static Color
 	 c_constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
 	// 常规变量
-	c_defvar = new Color(0x7CDCFEFF)
+	c_localvar = new Color(0x7CDCFEFF)
 	 // , __defalutColor__ = new Color(0xDCDCAAFF)
 	 ;
 
@@ -55,6 +55,7 @@ public class JSSyntax extends Syntax {
 	}
 
 
+	ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
 	ObjectMap<ObjectSet<CharSequence>, Color> TOKEN_MAP = ObjectMap.of(
 	 ObjectSet.with(
 		"break", "case", "catch", "const", "continue",
@@ -66,8 +67,10 @@ public class JSSyntax extends Syntax {
 		"yield"
 	 ), c_keyword,
 	 ObjectSet.with("null", "undefined", "true", "false"), c_keyword,
+	 localVars, c_localvar,
+	 localConstants, c_constants,
 	 constantSet, c_constants,
-	 defVarSet, c_defvar
+	 defVarSet, c_localvar
 	);
 
 	ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
@@ -88,10 +91,11 @@ public class JSSyntax extends Syntax {
 	public Scriptable        obj          = null;
 	public boolean           enableJSProp = false;
 
+	@SuppressWarnings("StringEqualsCharSequence")
 	public TokenDraw[] tokenDraws = {
 	 task -> {
 		 String token = task.token + "";
-		 if (enableJSProp) if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
+		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
 			 if (operatesSymbol.lastSymbol == '.') {
 				 return dealJSProp(token);
 			 } else {
@@ -102,7 +106,7 @@ public class JSSyntax extends Syntax {
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
-			 if (!enableJSProp || (entry.key != (ObjectSet) constantSet && entry.key != (ObjectSet) defVarSet) ||obj != null)
+			 if (!enableJSProp || (entry.key != (ObjectSet) constantSet && entry.key != (ObjectSet) defVarSet) || obj != null)
 				 return entry.value;
 			 Object o = scope.get(token, scope);
 			 if (o instanceof NativeJavaPackage newPkg) {
@@ -111,22 +115,23 @@ public class JSSyntax extends Syntax {
 			 } else if (o instanceof Scriptable newObj) {
 				 pkg = null;
 				 obj = newObj;
-				 // showTooltipMouse(task);
-				 // showTooltip(task);
 			 }
 			 return entry.value;
 		 }
 		 if (lastTask != task) return null;
-		 if (localKeywords.contains(task.lastToken + "")) {
-			 return c_defvar;
+		 String lastToken = task.lastToken + "";
+		 if (localKeywords.contains(lastToken)) {
+			 localVars.add(token);
+			 return c_localvar;
 		 }
-		 if ("const".equals(task.lastToken + "")) {
+		 if ("const".equals(lastToken)) {
+			 localConstants.add(token);
 			 return c_constants;
 		 }
 
 		 return null;
 	 },
-	 task -> Objects.equals(task.lastToken, "function") && lastTask == task ? c_functions : null,
+	 task -> "function".equals(task.lastToken) && lastTask == task ? c_functions : null,
 	 task -> {
 		 CharSequence s = operatesSymbol.lastSymbol != '\u0000' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
 		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN") ? null : c_number;
@@ -152,7 +157,7 @@ public class JSSyntax extends Syntax {
 			obj = (Scriptable) o;
 			// showTooltipMouse(task);
 			// showTooltip(task);
-			return c_defvar;
+			return c_localvar;
 		}
 		obj = null;
 		return null;
@@ -198,6 +203,8 @@ public class JSSyntax extends Syntax {
 	 drawToken = new DrawToken(tokenDraws) {
 		 void init() {
 			 super.init();
+			 localVars.clear();
+			 localConstants.clear();
 			 pkg = null;
 			 obj = null;
 		 }

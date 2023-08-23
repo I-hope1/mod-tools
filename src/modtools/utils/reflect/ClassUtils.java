@@ -17,55 +17,16 @@ import java.util.jar.*;
 import static mindustry.Vars.mods;
 
 public class ClassUtils {
-	static              Method getConstantPool;
-
-	static {
-		if (OS.isWindows) try {
-			getConstantPool = Class.class.getDeclaredMethod("getConstantPool");
-			getConstantPool.setAccessible(true);
-		} catch (NoSuchMethodException e) {
-			throw new RuntimeException(e);
-		}
-	}
-
-	public static String toSource(Class<?> klass) throws Exception {
-		ConstantPool  pool = (ConstantPool) getConstantPool.invoke(klass);
-		StringBuilder sb   = new StringBuilder();
-		int           size = pool.getSize();
-		for (int i = 0; i < size; i++) {
-			Tag tag = pool.getTagAt(i);
-			try {
-				switch (tag) {
-					case UTF8 -> sb.append(pool.getUTF8At(i));
-					case INTEGER -> sb.append(pool.getIntAt(i));
-					case FLOAT -> sb.append(pool.getFloatAt(i));
-					case LONG -> sb.append(pool.getLongAt(i));
-					case DOUBLE -> sb.append(pool.getDoubleAt(i));
-					case CLASS -> sb.append(pool.getClassAt(i));
-					case STRING -> sb.append(pool.getStringAt(i));
-					case FIELDREF -> sb.append(pool.getFieldAt(i));
-					case METHODREF -> sb.append(pool.getMethodAt(i));
-					// case INTERFACEMETHODREF -> sb.append(pool.getMethodAt(i));
-					case NAMEANDTYPE -> sb.append(Arrays.toString(pool.getNameAndTypeRefInfoAt(i)));
-					// case METHODHANDLE ->sb.append(pool.getMethodAt(i));
-					// case METHODTYPE -> sb.append(pool.getMethodAt(i));
-					// case INVOKEDYNAMIC, INVALID -> {}
-				}
-			} catch (Throwable e) {
-				Log.info("tag: @, i: @", tag, i);
-			}
-		}
-		return sb.toString();
-	}
 
 	public static Set<Class<?>> getClasses(String pack) {
 		return OS.isAndroid ? getClasses1(pack) : getClasses0(pack);
 	}
+	/** only for {@link OS#isAndroid} */
 	public static Set<Class<?>> getClasses1(String pack) {
 		if (true) return new LinkedHashSet<>();
 		Set<Class<?>> classNameList = new LinkedHashSet<>();
 		try {
-			DexFile             df          = new DexFile(new Fi(".").file());//通过DexFile查找当前的APK中可执行文件
+			DexFile             df          = new DexFile(".");//通过DexFile查找当前的APK中可执行文件
 			Enumeration<String> enumeration = df.entries();//获取df中的元素  这里包含了所有可执行的类名 该类名包含了包名+类名的方式
 			while (enumeration.hasMoreElements()) {//遍历
 				String className = enumeration.nextElement();
@@ -81,7 +42,7 @@ public class ClassUtils {
 	}
 	public static Set<Class<?>> getClasses0(String pack) {
 		// 第一个class类的集合
-		Set<Class<?>> classes = new LinkedHashSet<Class<?>>();
+		Set<Class<?>> classes = new LinkedHashSet<>();
 		// 是否循环迭代
 		boolean recursive = true;
 		// 获取包的名字 并进行替换

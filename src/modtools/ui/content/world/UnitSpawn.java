@@ -1,6 +1,7 @@
 package modtools.ui.content.world;
 
 import arc.*;
+import arc.graphics.Gl;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
@@ -9,7 +10,7 @@ import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.Strings;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.core.Version;
@@ -19,18 +20,26 @@ import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
+import modtools.events.ExecuteTree;
+import modtools.events.ExecuteTree.*;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
+import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
-import modtools.ui.content.Content;
+import modtools.ui.content.*;
+import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.Tools;
 
 import static mindustry.Vars.player;
-import static modtools.ui.Contents.tester;
+import static modtools.ui.Contents.*;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {
 
+	public static final String noScorchMarksKey  = "@settings.noScorchMarks";
+	public static final String killAllUnitsKey   = "@unitspawn.killAllUnits";
+	public static final String removeAllUnitsKey = "@unitspawn.removeAllUnits";
+	public final        String unitUnlimitedKey  = "@settings.unitUnlimited";
 	public UnitSpawn() {
 		super("unitSpawn");
 	}
@@ -44,12 +53,19 @@ public class UnitSpawn extends Content {
 	int      amount = 1;
 	Team     team;
 	Table    unitCont;
-	boolean  loop   = false, unitUnlimited;
+
+	boolean unitUnlimited;
+	float   x, y;
 	TextField xField, yField, amountField, teamField;
+
 	// 用于获取点击的坐标
-	Element       el       = new Element();
+	Element el = new Element();
+
+	{
+		el.fillParent = true;
+	}
+
 	InputListener listener = new InputListener() {
-		@Override
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			Core.scene.removeListener(this);
 			Vec2 vec2 = Core.camera.unproject(x, y);
@@ -59,10 +75,6 @@ public class UnitSpawn extends Content {
 			return false;
 		}
 	};
-
-	{
-		el.fillParent = true;
-	}
 
 	public void setup() {
 		unitCont.clearChildren();
@@ -75,6 +87,8 @@ public class UnitSpawn extends Content {
 			IntUI.longPressOrRclick(name, l -> {
 				tester.put(l, selectUnit);
 			});
+			JSFunc.addDClickCopy(name);
+			JSFunc.addDClickCopy(localizedName);
 			right.update(() -> {
 				name.setText(selectUnit != null ? selectUnit.name : "[red]ERROR");
 				localizedName.setText(selectUnit != null ? selectUnit.localizedName : "[red]ERROR");
@@ -84,34 +98,44 @@ public class UnitSpawn extends Content {
 		}).growX();
 	}
 	public void setX(float x) {
+		if (!validNumber(String.valueOf(x))) return;
 		xField.setText(String.valueOf(x));
+		this.x = x;
 		//		swapnX = x;
 	}
 	public void setY(float y) {
+		if (!validNumber(String.valueOf(y))) return;
 		yField.setText(String.valueOf(y));
+		this.y = y;
 		//		swapnY = y;
 	}
 
 	public void _load() {
-		selectUnit = UnitTypes.alpha;
+		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, () -> {});
+		x = player.x;
+		y = player.y;
+
+		selectUnit = UnitTypes.dagger;
 		team = Team.sharded;
 
-		ui = new Window(localizedName(), 40 * 10, 400, true);
+		ui = new Window(localizedName(), 40 * 8, 400, true);
 		ui.cont.table(table -> unitCont = table).grow().row();
 		// Options1 (生成pos)
 		ui.cont.table(Window.myPane, table -> {
-			table.table(x -> {
-				x.add("x:");
-				xField = x.field("" + player.x, newX -> {
-					//					if (!isNaN(newX)) swapnX = Float.parseFloat(newX);
-				}).valid(val -> validNumber(val)).get();
+			table.margin(-4f, 0f, -4f, 0f);
+			table.table(x0 -> {
+				x0.add("x:");
+				xField = x0.field(String.valueOf(x), newX -> {
+					x = Strings.parseFloat(newX);
+				}).valid(this::validNumber).growX().get();
 			}).growX();
-			table.table(y -> {
-				y.add("y:");
-				yField = y.field("" + player.y, newY -> {}).valid(val -> validNumber(val)).get();
+			table.table(y0 -> {
+				y0.add("y:");
+				yField = y0.field(String.valueOf(y), newY -> {
+					y = Strings.parseFloat(newY);
+				}).valid(this::validNumber).growX().get();
 			}).growX().row();
 			table.button("@unitspawn.selectAposition", IntStyles.flatToggleMenut, () -> {
-				//				ui.hide();
 				if (el.parent == null) {
 					Core.scene.addListener(listener);
 					Core.scene.add(el);
@@ -128,6 +152,7 @@ public class UnitSpawn extends Content {
 		}).growX().row();
 		// Options2
 		ui.cont.table(Window.myPane, table -> {
+			table.margin(-4f, 0f, -4f, 0f);
 			table.table(t -> {
 				t.add("@rules.title.teams");
 				teamField = t.field("" + team.id, text -> {
@@ -150,41 +175,50 @@ public class UnitSpawn extends Content {
 				}).valid(val -> validNumber(val) && Tools.validPosInt(val)).get();
 			});
 		}).growX().row();
-		ui.cont.table(table -> {
-			table.button("@ok", IntStyles.cleart, this::spawn).size(90, 50)
+		ui.cont.table(Window.myPane, table -> {
+			table.margin(-4f, 0f, -4f, 0f);
+			table.button("@ok", IntStyles.cleart, this::spawnIgnored)
+			 .size(90, 50)
 			 .disabled(b -> !isOk());
-			table.check("Loop", b -> loop = b);
+			table.button("post task", IntStyles.cleart, () ->
+			 ExecuteTree.context(root, () ->
+				ExecuteTree.node(selectUnit.localizedName,
+				 "(" + x + "," + +y + ")\n{"
+				 + team + "}[accent]×" + amount,
+				 spawnRun()).resubmitted().apply()
+			 )
+			).size(90, 50);
+			table.button(Icon.menuSmall, Styles.flati, 24, () -> {
+				IntUI.showMenuListDispose(() -> Seq.with(
+				 CheckboxList.withc(HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
+				 MenuList.with(Icon.eyeOffSmall, noScorchMarksKey, UnitSpawn::noScorchMarks),
+				 MenuList.with(Icon.cancelSmall, killAllUnitsKey, UnitSpawn::killAllUnits),
+				 MenuList.with(Icon.cancelSmall, removeAllUnitsKey, UnitSpawn::removeAllUnits)
+				));
+			}).size(32);
 		}).growX();
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
-		//		ui.addCloseButton();
-
-		btn.update(() -> {
-			if (loop) {
-				spawn();
-			}
-		});
+		// ui.addCloseButton();
 
 		Events.run(Trigger.draw, () -> {
-			if (!isOk()) return;
+			// if (!isOk()) return;
 
-			float x = (float) toNumber(xField.getText());
-			float y = (float) toNumber(yField.getText());
-
+			Gl.flush();
 			Draw.z(Layer.overlayUI);
-			Draw.color(Pal.accent);
+			Draw.color(isOk() ? Pal.accent : Pal.remove, 0.5f);
 			Lines.stroke(2);
 			Lines.circle(x, y, 5);
 			Draw.color();
 		});
-
-
 	}
+	TaskNode root;
 	public void load() {
 		loadSettings();
 		btn.setDisabled(() -> Vars.state.isMenu());
 	}
 	public boolean isOk() {
-		return selectUnit != null && xField.isValid() && yField.isValid() && amountField.isValid() && teamField.isValid();
+		return !Float.isNaN(x) && !Float.isNaN(y) && selectUnit != null && xField.isValid() && yField.isValid()
+					 && amountField.isValid() && teamField.isValid();
 	}
 
 	public boolean validNumber(String str) {
@@ -194,65 +228,75 @@ public class UnitSpawn extends Content {
 		} catch (Exception ignored) {}
 		return false;
 	}
-	public void spawn() {
+	public void spawnIgnored() {
+		try {
+			spawn(selectUnit, amount, team, x, y);
+		} catch (Throwable ignored) {}
+	}
+	public Runnable spawnRun() {
+		UnitType selectUnit0 = selectUnit;
+		int      amount0     = amount;
+		Team     team0       = team;
+		float    x0          = x, y0 = y;
+		return () -> spawn(selectUnit0, amount0, team0, x0, y0);
+	}
+
+	public void spawn(UnitType selectUnit, int amount, Team team, float x, float y) {
 		if (!isOk()) return;
 
-		float x = Strings.parseFloat(xField.getText());
-		float y = Strings.parseFloat(yField.getText());
-
 		if (selectUnit.uiIcon == null || selectUnit.fullIcon == null) {
-			IntUI.showException("所选单位的图标为null，可能会崩溃", new NullPointerException("selectUnit icon is null"));
-			return;
+			RuntimeException exception = new RuntimeException("所选单位的图标为null，可能会崩溃", new NullPointerException("selectUnit icon is null"));
+			IntUI.showException(exception);
+			throw exception;
 		}
-		try {
-			Unit unit = Version.number >= 136 ?
-			 selectUnit.sample :
-			 selectUnit.constructor.get();
 
-			if (unit instanceof BlockUnitUnit) {
-				IntUI.showException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));
-				return;
-			}
-			for (int i = 0; i < amount; i++) {
-				selectUnit.spawn(team, x, y);
-			}
-		} catch (Throwable e) {
-			IntUI.showException("Can't spawn unit: " + selectUnit.localizedName, e);
+		Unit unit = Version.number >= 136 ?
+		 selectUnit.sample :
+		 selectUnit.constructor.get();
+
+		if (unit instanceof BlockUnitUnit) {
+			RuntimeException exception = new RuntimeException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));
+			IntUI.showException(exception);
+			throw exception;
+		}
+		for (int i = 0; i < amount; i++) {
+			selectUnit.spawn(team, x, y);
 		}
 	}
 
+	int defCap;
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), new Table() {{
 			left().defaults().left();
-			add(localizedName()).color(Pal.accent).row();
-			table(cont -> {
-				cont.left().defaults().left().width(200);
-				int[] defCap = {0};
-				Events.run(EventType.WorldLoadEvent.class, () -> {
-					defCap[0] = Vars.state.rules.unitCap;
-					Vars.state.rules.unitCap = unitUnlimited ? 0xffffff : defCap[0];
-				});
-				cont.check("@settings.unitUnlimited", unitUnlimited, b -> {
-					unitUnlimited = b;
-					Vars.state.rules.unitCap = b ? 0xffffff : defCap[0];
-				}).fillX().row();
-				cont.button("@settings.noScorchMarks", () -> {
-					Vars.content.units().each(u -> {
-						u.deathExplosionEffect = Fx.none;
-						u.createScorch = false;
-						u.createWreck = false;
-					});
-				}).row();
-				cont.button("@unitspawn.killAllUnits", () -> {
-					Groups.unit.each(Unit::kill);
-				}).fillX().row();
-				cont.button("@unitspawn.removeAllUnits", () -> {
-					Groups.unit.each(Unit::remove);
-					Groups.unit.clear();
-				}).fillX().row();
-				//			cont.check("服务器适配", b -> server = b);
-			}).padLeft(6);
+			Events.run(EventType.WorldLoadEvent.class, () -> {
+				defCap = Vars.state.rules.unitCap;
+				Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
+			});
+			check(unitUnlimitedKey, unitUnlimited, b -> toggleUnitCap(b)).padLeft(6).row();
+			defaults().growX();
+			button(noScorchMarksKey, UnitSpawn::noScorchMarks).row();
+			button(killAllUnitsKey, UnitSpawn::killAllUnits).row();
+			button(removeAllUnitsKey, UnitSpawn::removeAllUnits);
 		}});
+	}
+	private void toggleUnitCap(boolean b) {
+		unitUnlimited = b;
+		Vars.state.rules.unitCap = b ? 0xffffff : defCap;
+	}
+	private static void removeAllUnits() {
+		Groups.unit.each(Unit::remove);
+		Groups.unit.clear();
+		//			cont.check("服务器适配", b -> server = b);
+	}
+	private static void killAllUnits() {
+		Groups.unit.each(Unit::kill);
+	}
+	private static void noScorchMarks() {
+		Vars.content.units().each(u -> {
+			u.deathExplosionEffect = Fx.none;
+			u.createScorch = false;
+			u.createWreck = false;
+		});
 	}
 	public void build() {
 		if (ui == null) _load();

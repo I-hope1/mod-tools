@@ -22,8 +22,10 @@ import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.linstener.*;
-import modtools.ui.effect.MyDraw;
+import modtools.ui.effect.*;
+import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.utils.*;
 import modtools.utils.array.MySet;
 import modtools.utils.ui.search.FilterTable;
@@ -132,6 +134,8 @@ public class Window extends Table {
 			 l.setColor(frontWindow == this ? Color.white : Color.lightGray);
 		 })
 		 .get();
+
+		titleTable.defaults().size(38f);
 
 		if (full) {
 			titleTable.button(HopeIcons.sticky, IntStyles.clearNoneTogglei, 32, () -> {
@@ -787,6 +791,8 @@ public class Window extends Table {
 			titleTable.invalidateHierarchy();
 			class ExitListener extends InputListener {
 				public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+					/* 如果toActor是titleTable的子节点，就忽略 */
+					if (toActor.isDescendantOf(titleTable)) return;
 					translateTo(topHeight);
 				}
 			}
@@ -810,40 +816,13 @@ public class Window extends Table {
 		private void obtainAction(float toValue) {
 			float time = last == null ? 0 : Math.max(0, last.getDuration() - last.getTime())/* 反过来 */;
 			if (last != null) titleTable.removeAction(last);
-			if (last == null) last = Actions.action(TranslateToAction.class, TranslateToAction::new);
+			if (last == null) last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);
 			last.reset();
 			last.setTime(time);
 			last.setTranslation(0, toValue);
 			last.setDuration(0.3f);
 			last.setInterpolation(Interp.fastSlow);
 			titleTable.addAction(last);
-		}
-	}
-	public static class TranslateToAction extends TemporalAction {
-		private float startX, startY;
-		private float endX, endY;
-		protected void begin() {
-			startX = target.translation.x;
-			startY = target.translation.y;
-		}
-		public void setTranslation(float x, float y) {
-			endX = x;
-			endY = y;
-		}
-		public float getX() {
-			return endX;
-		}
-		public void setX(float x) {
-			endX = x;
-		}
-		public float getY() {
-			return endY;
-		}
-		public void setY(float y) {
-			endY = y;
-		}
-		protected void update(float percent) {
-			target.setTranslation(startX + (endX - startX) * percent, startY + (endY - startY) * percent);
 		}
 	}
 }

@@ -1,6 +1,8 @@
 package modtools.utils.reflect;
 
 import arc.util.OS;
+import dalvik.system.VMRuntime;
+import ihope_lib.Desktop;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
@@ -21,22 +23,24 @@ public class IReflect {
 		// new SharedLibraryLoader(Vars.mods.getMod(ModTools.class).file.path())
 		//  .load("reflect");
 		// defineClass0(null, new byte[]{});
+
+		try {
+			clearReflectionFilter();
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
 	}
 
-	public static final MyClassLoader loader = new MyClassLoader(IReflect.class.getClassLoader());
-	public static       ClassLoader   IMPL_LOADER;
 
-	// private static final Constructor<?> IMPL_CONS;
-
-	static {
-		try {
-			Constructor<?> cons = Class.forName("jdk.internal.reflect.DelegatingClassLoader")
-			 .getDeclaredConstructor(ClassLoader.class);
-			cons.setAccessible(true);
-			// IMPL_CONS = cons;
-			IMPL_LOADER = (ClassLoader) cons.newInstance(loader);
-		} catch (Exception ignored) {
-		}
+	public static void clearReflectionFilter() throws Throwable {
+		if (!OS.isAndroid) return;
+		// code: VMRuntime.getRuntime().setHiddenApiExemptions(new String[]{"L"});
+		Method methodM = Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class);
+		methodM.setAccessible(true);
+		Method m2 = (Method) methodM.invoke(VMRuntime.class,
+		 "setHiddenApiExemptions", new Class[]{String[].class});
+		m2.setAccessible(true);
+		m2.invoke(VMRuntime.getRuntime(), (Object) new String[]{"L"});
 	}
 
 	/**

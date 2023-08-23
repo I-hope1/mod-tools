@@ -18,12 +18,12 @@ public class Contents {
 	public static ContentList   content_list;
 	public static ReviewElement review_element;
 	// public static ActionsDebug  actions_debug;
-	public static DesignContent design_content;
+	// public static DesignContent design_content;
+	public static Executor      executor;
 	public static WindowManager window_manager;
 
 	/**
 	 * generate by annotation
-	 *
 	 * @see ContentInit
 	 */
 	public static void load() {}

@@ -2,7 +2,7 @@ package modtools.utils;
 
 import arc.files.Fi;
 import arc.struct.OrderedMap;
-import arc.util.Log;
+import arc.util.*;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
@@ -32,6 +32,7 @@ public class MySettings {
 	 D_JSFUNC_DISPLAY = D_JSFUNC.child("Display"),
 	 D_BLUR           = SETTINGS.child("BLUR");
 
+
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
 
@@ -45,6 +46,11 @@ public class MySettings {
 
 		public Data child(String key) {
 			return (Data) get(key, () -> new Data(this, new JsonMap()));
+		}
+
+		/** auto invoke {@link String#valueOf(Object)} */
+		public Object putString(String key, Object value) {
+			return put(key, String.valueOf(value));
 		}
 
 		public Object put(String key, Object value) {
@@ -115,6 +121,10 @@ public class MySettings {
 			return builder.toString();
 		}
 
+		public float getFloat(String name) {
+			return getFloat(name, 0);
+		}
+
 		public float getFloat(String name, float def) {
 			Object v = get(name, def);
 			if (v instanceof Jval) {
@@ -129,7 +139,21 @@ public class MySettings {
 				if (((Jval) v).isNumber()) return ((Jval) v).asInt();
 				v = v.toString();
 			}
-			return Jval.read("" + v).asInt();
+			return Integer.parseInt(("" + v).trim());
+		}
+		public int get0xInt(String name, int def) {
+			Object v = get(name, def);
+			if (v instanceof Jval) {
+				if (((Jval) v).isNumber()) return ((Jval) v).asInt();
+				v = v.toString();
+			}
+			if (v == null) return 0;
+			try {
+				return (int) Long.parseLong("" + v, 16);
+			} catch (Throwable err) {
+				Log.err(err);
+				return def;
+			}
 		}
 		public String getString(String name) {
 			Object o = get(name);

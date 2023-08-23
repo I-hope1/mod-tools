@@ -10,6 +10,8 @@ import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
+import arc.scene.event.FocusListener.FocusEvent;
+import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -26,7 +28,7 @@ import modtools.ui.effect.*;
 import modtools.utils.*;
 import modtools.utils.array.TaskSet;
 
-import java.util.ArrayList;
+import java.util.*;
 
 import static arc.Core.*;
 import static modtools.IntVars.modName;
@@ -47,9 +49,9 @@ public final class TopGroup extends WidgetGroup {
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
 
-	public boolean           isSwitchWindows = false;
-	public int               currentIndex    = 0;
-	public ArrayList<Window> shownWindows    = new ArrayList<>();
+	public boolean      isSwitchWindows = false;
+	public int          currentIndex    = 0;
+	public List<Window> shownWindows    = new ArrayList<>();
 
 	public Group getTopG() {
 		return others;
@@ -76,9 +78,7 @@ public final class TopGroup extends WidgetGroup {
 				 ? el -> or(el, this) : null)
 				.get();
 		 }
-		 {
-			 name = "others";
-		 }
+		 {name = "others";}
 	 };
 	private final Table end = new MyEnd();
 
@@ -136,7 +136,8 @@ public final class TopGroup extends WidgetGroup {
 		if (topGroup != null) throw new IllegalStateException("topGroup已被加载");
 		addSceneListener();
 		scene.addListener(new SwitchInputListener());
-		scene.addListener(new CloseWindowListener());
+		scene.addCaptureListener(new SwitchGestureListener());
+		if (OS.isWindows) scene.addListener(new CloseWindowListener());
 
 		fillParent = true;
 		touchable = Touchable.childrenOnly;
@@ -165,11 +166,7 @@ public final class TopGroup extends WidgetGroup {
 			Draw.flush();
 		});
 		scene.add(this);
-		Group[] all = {back, windows, frag, others, new Table(t -> t.add(end)) {
-			public Element hit(float x, float y, boolean touchable) {
-				return or(super.hit(x, y, touchable), isSwitchWindows ? this : null);
-			}
-		}};
+		Group[] all = {back, windows, frag, others, new FillEnd()};
 		for (Group group : all) {
 			group.fillParent = true;
 			group.touchable = Touchable.childrenOnly;
@@ -210,7 +207,7 @@ public final class TopGroup extends WidgetGroup {
 			end.touchable = isSwitchWindows ? Touchable.childrenOnly : Touchable.disabled;
 		});
 	}
-	public ArrayList<Window> acquireShownWindows() {
+	public List<Window> acquireShownWindows() {
 		shownWindows.clear();
 		Cons<Element> cons = elem -> {
 			if (elem instanceof Window window) {
@@ -282,7 +279,6 @@ public final class TopGroup extends WidgetGroup {
 
 	/**
 	 * 请求选择元素
-	 *
 	 * @param drawer 用于选择时渲染
 	 */
 	public void requestSelectElem(Drawer drawer, Cons<Element> callback) {
@@ -427,7 +423,6 @@ public final class TopGroup extends WidgetGroup {
 
 	/**
 	 * just a flag
-	 *
 	 * @see modtools.ui.TopGroup#addChild
 	 */
 	public static class BackElement extends Element implements BackInterface {}
@@ -442,18 +437,39 @@ public final class TopGroup extends WidgetGroup {
 
 	boolean KAL_once = false;
 
-	/** 用于切换窗口的事件侦听器 */
-	private class SwitchInputListener extends InputListener {
-		public void touchDragged(InputEvent event, float x, float y, int pointer) {
-			super.touchDragged(event, x, y, pointer);
+	/**
+	 * 用于切换窗口的事件侦听器
+	 * @see SwitchInputListener
+	 */
+	private class SwitchGestureListener extends ElementGestureListener {
+		int lastTouches;
+		public void touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			lastTouches = input.getTouches();
 		}
+		public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {
+			// Log.info("fling: (@, @, @) ", velocityX, velocityY, lastTouches);
+			if (velocityX < 1000 || lastTouches != 3) return;
+			Log.info("valid");
+			if (!isSwitchWindows) {
+				currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
+			}
+			isSwitchWindows = true;
+			if (!KAL_once) {
+				resolveOnce();
+			}
+		}
+	}
+	/**
+	 * 用于切换窗口的事件侦听器
+	 * @see SwitchGestureListener
+	 */
+	private class SwitchInputListener extends InputListener {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
-			acquireShownWindows();
+			// acquireShownWindows();
 			if (shownWindows.isEmpty()) return false;
-			if ((keycode == KeyCode.tab && Core.input.ctrl()) || (Vars.mobile && keycode == KeyCode.volumeDown)) {
+			if ((keycode == KeyCode.tab && Core.input.ctrl()) /* || (Vars.mobile && keycode == KeyCode.volumeDown) */) {
 				if (!KAL_once) {
 					resolveOnce();
-					KAL_once = true;
 				}
 				scene.setKeyboardFocus(TopGroup.this);
 				if (!isSwitchWindows) {
@@ -496,15 +512,25 @@ public final class TopGroup extends WidgetGroup {
 		isSwitchWindows = false;
 		KAL_once = false;
 	}
+
+
+	public class Hitter extends Element {
+		{
+			fillParent = true;
+			touchablility = () -> isSwitchWindows ? Touchable.enabled : Touchable.disabled;
+			clicked(TopGroup.this::resetSwitch);
+		}
+	}
 	private void resolveOnce() {
+		KAL_once = true;
 		end.clearChildren();
-		Table end = new Table();
-		this.end.pane(end).grow().with(
-		 s -> s.setScrollingDisabled(true, false));
+		Table paneTable = new Table();
+		end.pane(paneTable).grow().with(
+		 s -> s.setScrollingDisabled(OS.isWindows, false));
 		int             W          = graphics.getWidth(), H = graphics.getHeight();
 		float           eachW      = W > H ? W / 3f : W / 4f - 16f, eachH = H / 3f;
 		final Element[] tappedElem = {null}, hoveredElem = {null};
-		Table           table      = end.row().table().get();
+		Table           table      = paneTable.row().table().get();
 		for (Window w : shownWindows) {
 			Image el = new Image(w.screenshot());
 
@@ -512,7 +538,7 @@ public final class TopGroup extends WidgetGroup {
 			boolean[] cancelEvent = {false};
 			float     bestScl     = eachW / eachH, realScl = el.getWidth() / el.getHeight();
 			float     width1      = bestScl < realScl ? eachW : eachH * realScl;
-			if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table = end.row().table().get();
+			if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table = paneTable.row().table().get();
 			table.button(t -> {
 				t.margin(4, 6, 4, 6);
 				t.act(0.1f);
@@ -636,8 +662,14 @@ public final class TopGroup extends WidgetGroup {
 		public void drawFocus(Element elem) {
 			Vec2 vec2 = ElementUtils.getAbsPos(elem);
 			if (focusColor.a > 0) {
-				Draw.color(focusColor);
+				float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
+				Draw.color(focusColor, alpha);
 				Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+			}
+			if (!elem.visible) {
+				Draw.color(Pal.accent);
+				TextureRegionDrawable icon = Icon.eyeOffSmall;
+				icon.draw(vec2.x, vec2.y, 16, 16);
 			}
 
 			Draw.color(Pal.accent);
@@ -654,4 +686,17 @@ public final class TopGroup extends WidgetGroup {
 			}
 		}
 	}
+	private class FillEnd extends Table {
+		public FillEnd() {
+			super(t -> {
+				t.addChild(new Hitter());
+				t.add(TopGroup.this.end);
+			});
+		}
+		public Element hit(float x, float y, boolean touchable) {
+			return or(super.hit(x, y, touchable), isSwitchWindows ? this : null);
+		}
+	}
+
+
 }

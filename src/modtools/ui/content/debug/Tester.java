@@ -11,28 +11,33 @@ import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.ScrollPane;
-import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
+import arc.struct.ObjectMap.Entry;
+import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
+import arc.util.serialization.Jval.JsonMap;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
+import mindustry.game.EventType;
+import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
 import modtools.annotations.DataFieldInit;
-import modtools.events.E_Tester;
+import modtools.events.*;
+import modtools.events.ExecuteTree.TaskNode;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.components.*;
-import modtools.ui.components.Window.FillTable;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.components.linstener.SclListener;
 import modtools.ui.content.Content;
+import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
@@ -44,16 +49,60 @@ import java.util.concurrent.ThreadPoolExecutor;
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.ListDialog.fileUnfair;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
-import static modtools.utils.Tools.TASKS;
-
-;
+import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
-	private static final int bottomCenter   = Align.center | Align.bottom;
-	private final        int maxHistorySize = 30;
+	private static final int   bottomCenter = Align.center | Align.bottom;
+	public static final  float w            = Core.graphics.isPortrait() ? 400 : 420;
+
+	public static Scripts    scripts;
+	public static Scriptable scope;
+	public static Context    cx;
+
+	private final int maxHistorySize = 30;
 
 	private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor(name, 1);
 
+
+	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
+	public static final Fi   bookmarkDirectory = MySettings.dataDirectory.child("bookmarks");
+
+	static TaskNode startupTask;
+	static TaskNode startupTask() {
+		if (startupTask == null) startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
+		 Icon.craftingSmall, () -> {});
+		return startupTask;
+	}
+
+	public static void initExecution() {
+		scripts = Vars.mods.getScripts();
+		scope = scripts.scope;
+		cx = scripts.context;
+		if (EXEC_DATA.isEmpty()) return;
+		ExecuteTree.context(startupTask(), () -> {
+			for (Entry<String, Object> entry : EXEC_DATA) {
+				// Log.info("[modtools]: loaded fi: " + entry.value.getClass());
+				if (!(entry.value instanceof Data map)) continue;
+
+				String taskName = startupTask().name;
+				String source = "(()=>{modName='" + taskName + "';scriptName=`" + entry.key + "`;" +
+												(map.getBool("once") && map.containsKey("type") ?
+												 "Events.on(" + map.get("type") + ", $e$ => {\n" + bookmarkDirectory.child(entry.key).readString() + ";});"
+												 : bookmarkDirectory.child(entry.key).readString())
+												+ "\n})()";
+				ExecuteTree.node(() -> {
+					 cx.evaluateString(scope,
+						source, "<" + taskName + ">", 1);
+				 }, taskName, entry.key, Icon.none, () -> {})
+				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
+				 .repeatCount(map.getBool("once") ? 0 : map.getInt("repeatCount", 0))
+				 .apply();
+			}
+		});
+	}
+
+
+	Fi         lastDir;
 	String     log = "";
 	MyTextArea area;
 	public boolean loop = false;
@@ -73,24 +122,20 @@ public class Tester extends Content {
 	 multiWindows     = false,
 	 JSProp           = false;
 
-	public static final float  w = Core.graphics.isPortrait() ? 400 : 500;
-	public              Window ui;
+	public Window ui;
 	ListDialog history, bookmark;
-	public Scripts    scripts;
-	public Scriptable scope;
-	public Context    cx;
-	public Script     script = null;
-	public boolean    multiThread;
-	public boolean    stopIfOvertime;
+
+	public Script  script = null;
+	public boolean multiThread;
+	public boolean stopIfOvertime;
 
 	public Tester() {
 		super("tester");
 	}
 
+	/* 按修改时间倒序  */
 	private static int sort(Fi f1, Fi f2) {
-		/* 按修改时间倒序  */
-		if (f1.lastModified() > f2.lastModified()) return -1;
-		return 0;
+		return Long.compare(f2.lastModified(), f1.lastModified());
 	}
 
 
@@ -157,7 +202,7 @@ public class Tester extends Content {
 		});
 
 		_cont.table(t -> {
-			t.defaults().padRight(8f).size(32);
+			t.defaults().padRight(8f).size(42);
 			t.button(Icon.leftOpenSmall, Styles.clearNonei, area::left);
 			t.button("@ok", Styles.flatBordert, () -> {
 				error = false;
@@ -217,7 +262,7 @@ public class Tester extends Content {
 		table.add(new PrefPane(p -> {
 			 ImageButtonStyle istyle = IntStyles.clearNonei;
 			 int              isize  = 26;
-			 p.defaults().size(42).padLeft(2f);
+			 p.defaults().size(45).padLeft(2f);
 			 p.button(Icon.starSmall, istyle, isize, this::star);
 
 			 IntUI.addCheck(p.button(HopeIcons.loop, istyle, isize, () -> {
@@ -238,7 +283,7 @@ public class Tester extends Content {
 			 p.button(HopeIcons.favorites, istyle, isize, bookmark::show);
 			 // p.button("@startup", bookmark::show);
 
-			 IntUI.addCheck(p.button(Icon.warningSmall, istyle, isize, () -> {
+			 IntUI.addCheck(p.button(HopeIcons.interrupt, istyle, isize, () -> {
 				 stopIfOvertime = !stopIfOvertime;
 			 }), () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
 			 IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> {
@@ -263,7 +308,7 @@ public class Tester extends Content {
 	}
 	private void buildEditTable() {
 		// ui.buttons.row();
-		FillTable editTable = ui.addFillTable(p -> p.table(Tex.pane, t -> {
+/* 		FillTable editTable = ui.addFillTable(p -> p.table(Tex.pane, t -> {
 			TextButtonStyle style = IntStyles.cleart;
 			t.defaults().size(280, 60).left();
 			t.row();
@@ -278,8 +323,9 @@ public class Tester extends Content {
 			}).marginLeft(12);
 			t.row();
 			t.button("@back", Icon.left, style, p::hide).marginLeft(12);
-		}));
+		})); */
 
+		/* ui.cont.marginBottom(4);
 		ui.cont.button(Icon.upOpenSmall, Styles.flati, 16f,
 			editTable::show)
 		 .visible(() -> !ui.isMinimize)
@@ -291,7 +337,7 @@ public class Tester extends Content {
 			 ui.cont.getCell(b).clearElement();
 			 b.remove();
 			 ui.cont.addChild(b);
-		 });
+		 }).padBottom(-4); */
 		/* ui.buttons.button("@edit", Icon.edit, () -> {
 			ui.cont.addChild(editTable);
 			editTable.setPosition(0, 0);
@@ -350,8 +396,8 @@ public class Tester extends Content {
 		}
 		IntUI.showInfoFade(historyIndex + 1 + "/[lightgray]" + maxHistorySize, pos, bottomCenter);
 		Fi dir = history.list.get(historyIndex);
-		area.setText(dir.child("message.txt").readString());
-		log = dir.child("log.txt").readString();
+		area.setText(readFiOrEmpty(dir.child("message.txt")));
+		log = readFiOrEmpty(dir.child("log.txt"));
 		return true;
 	}
 	private static void showRollback(Vec2 pos) {
@@ -389,10 +435,9 @@ public class Tester extends Content {
 		historyIndex = -1;
 		originalText = area.getText0();
 		// 保存历史记录
-		Fi d = history.file.child(String.valueOf(Time.millis()));
-		d.child("message.txt").writeString(getMessage());
-		d.child("log.txt").writeString(log);
-		history.list.insert(0, d);
+		lastDir = history.file.child(String.valueOf(Time.millis()));
+		lastDir.child("message.txt").writeString(getMessage());
+		history.list.insert(0, lastDir);
 		if (history.isShown()) {
 			history.build();
 		}
@@ -409,12 +454,12 @@ public class Tester extends Content {
 	public void compileScript() {
 		error = false;
 		try {
-			boolean def = Reflect.get(cx, "isTopLevelStrict");
-			Reflect.set(cx, "isTopLevelStrict", strict);
+			boolean def = true;
+			if (def != strict) Reflect.set(Context.class, cx, "isTopLevelStrict", strict);
 			cx.setGenerateObserverCount(true);
 			script = cx.compileString(getMessage(), "console.js", 1);
 			cx.setGenerateObserverCount(false);
-			Reflect.set(cx, "isTopLevelStrict", def);
+			if (def != strict) Reflect.set(Context.class, cx, "isTopLevelStrict", def);
 		} catch (Throwable ex) {
 			makeError(ex, false);
 		}
@@ -427,7 +472,6 @@ public class Tester extends Content {
 		if (!ignorePopupError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
 	}
-
 
 	public boolean killScript;
 	// 执行脚本
@@ -467,6 +511,8 @@ public class Tester extends Content {
 			if (data().getBool("output_to_log")) {
 				Log.info("[[tester]: " + log);
 			}
+			if (lastDir != null) lastDir.child("log.txt").writeString(log);
+			lastDir = null;
 		} catch (Throwable e) {
 			Core.app.post(() -> handleError(e));
 		} finally {
@@ -486,19 +532,17 @@ public class Tester extends Content {
 		});*/
 		history = new ListDialog("history", MySettings.dataDirectory.child("historical record"),
 		 f -> f.child("message.txt"), f -> {
-			area.setText(f.child("message.txt").readString());
-			log = f.child("log.txt").readString();
+			area.setText(readFiOrEmpty(f.child("message.txt")));
+			log = readFiOrEmpty(f.child("log.txt"));
 		}, (f, p) -> {
-			p.add(new MyLabel(f.child("message.txt").readString())).row();
+			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), IntStyles.MOMO_LabelStyle)).row();
 			p.image().color(JSFunc.c_underline).growX().padTop(6f).padBottom(6f).row();
-			p.add(new MyLabel(f.child("log.txt").readString())).row();
+			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), IntStyles.MOMO_LabelStyle)).row();
 		}, Tester::sort);
 		history.hide();
-		bookmark = new ListDialog("bookmark", MySettings.dataDirectory.child("bookmarks"),
-		 f -> f, f -> area.setText(f.readString()),
-		 (f, p) -> {
-			 p.add(new MyLabel(f.readString())).row();
-		 }, Tester::sort);
+		bookmark = new ListDialog("bookmark", bookmarkDirectory,
+		 f -> f, f -> area.setText(readFiOrEmpty(f)),
+		 Tester::buildBookmark, Tester::sort);
 		bookmark.hide();
 
 		setup();
@@ -509,6 +553,48 @@ public class Tester extends Content {
 			}
 		});
 	}
+	private static void buildBookmark(Fi f, Table p) {
+		var classes = new Seq<>()
+		 .add(EventType.class.getClasses())
+		 .add(Trigger.values());
+
+		p.left().defaults().left();
+		p.table(Tex.pane, t -> {
+			t.left().defaults().left();
+			t.add(IntUI.tips("execution.js.added")).row();
+			t.add(IntUI.tips("execution.js.var")).row();
+			new SettingsBuilder(t) {
+				boolean enabled = EXEC_DATA.containsKey(f.name());
+				final Data JS = enabled ? EXEC_DATA.child(f.name()) :
+				 new Data(EXEC_DATA, new JsonMap());
+
+				{
+					check("Added to executor", c -> {
+						enabled = c;
+						if (enabled) {EXEC_DATA.put(f.name(), JS);} else {EXEC_DATA.remove(f.name());}
+					}, () -> EXEC_DATA.containsKey(f.name()));
+
+					number("@task.intervalseconds",
+					 JS, "intervalSeconds", 0.1f
+					 , () -> enabled, 0.01f, Float.MAX_VALUE);
+
+					check("Once", JS, "once", () -> enabled);
+					numberi("@task.repeatcount",
+					 JS, "repeatCount", 0,
+					 () -> enabled && !JS.getBool("once"),
+					 -1, Integer.MAX_VALUE);
+
+					list("event", val -> JS.put("type", val),
+					 () -> JS.get("type"), classes,
+					 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val),
+					 () -> JS.getBool("once"));
+				}
+			};
+		}).row();
+		p.add(new MyLabel(readFiOrEmpty(f), IntStyles.MOMO_LabelStyle)).row();
+	}
+
+
 	public void load() {
 		if (init) return;
 		init = true;
@@ -516,17 +602,13 @@ public class Tester extends Content {
 		if (Kit.classOrNull(Tester.class.getClassLoader(), "modtools.rhino.ForRhino")
 				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
-		scripts = Vars.mods.getScripts();
-		cx = scripts.context;
-		scope = scripts.scope;
-
 		try {
 			Object obj1 = new NativeJavaClass(scope, JSFunc.class, true);
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
 			Object obj2 = new NativeJavaClass(scope, MyReflect.class, false);
 			ScriptableObject.putProperty(scope, "MyReflect", obj2);
 			ScriptableObject.putProperty(scope, "unsafe", unsafe);
-			ScriptableObject.putProperty(scope, "modName", "<unknown>");
+			ScriptableObject.putProperty(scope, "modName", "<null>");
 			ScriptableObject.putProperty(scope, "scriptName", "console.js");
 
 			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(scope, "Packages");
@@ -548,14 +630,12 @@ public class Tester extends Content {
 		Fi dir = MySettings.dataDirectory.child("startup");
 		if (dir.exists() && dir.isDirectory()) {
 			Log.info("Loading startup directory.");
-			dir.walk(f -> {
+			ExecuteTree.context(startupTask(), () -> dir.walk(f -> {
 				if (!f.extEquals("js")) return;
-				try {
-					cx.evaluateString(scope, f.readString(), f.name(), 1);
-				} catch (Throwable e) {
-					Log.err(e);
-				}
-			});
+				ExecuteTree.node(f.name(),
+					() -> cx.evaluateString(scope, readFiOrEmpty(f), f.name(), 1))
+				 .apply();
+			}));
 		} else {
 			Log.info("Creating startup directory.");
 			dir.delete();

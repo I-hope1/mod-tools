@@ -7,19 +7,21 @@ import arc.fx.util.FxWidgetGroup;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.Shader;
-import arc.math.Mathf;
+import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.ObjectMap;
+import arc.struct.*;
 import arc.util.Tmp;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.Icon;
+import mindustry.gen.*;
 import mindustry.ui.Styles;
+import mindustry.world.Tile;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.components.*;
@@ -28,7 +30,9 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.Selection;
+import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
+import modtools.utils.draw.InterpImage;
 import modtools.utils.ui.*;
 import modtools.utils.world.WorldDraw;
 import rhino.*;
@@ -36,7 +40,7 @@ import rhino.*;
 import java.lang.reflect.Array;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.ui.Contents.tester;
+import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.*;
 import static modtools.utils.Tools.Sr;
@@ -178,6 +182,20 @@ public class JSFunc {
 	public static Window dialog(Texture texture) {
 		return dialog(new TextureRegion(texture));
 	}
+	public static Window dialog(Drawable drawable) {
+		return dialog(new Image(drawable));
+	}
+	public static Window pixmap(int size, Cons<Pixmap> cons) {
+		return pixmap(size, size, cons);
+	}
+	public static Window pixmap(int width, int height, Cons<Pixmap> cons) {
+		Pixmap pixmap = new Pixmap(width, height);
+		cons.get(pixmap);
+		Window dialog = dialog(new TextureRegion(new Texture(pixmap)));
+		dialog.hidden(pixmap::dispose);
+		return dialog;
+	}
+
 	public static Window dialog(Cons<Table> cons) {
 		return dialog(new Table(cons));
 	}
@@ -385,10 +403,33 @@ public class JSFunc {
 	public static void scl(Element elem) {
 		AllTutorial.f2(elem);
 	}
+	public static void showInterp(Interp interp) {
+		dialog(new InterpImage(interp));
+	}
 	public static void rotateCamera(float degree) {
 		Core.scene.getCamera().mat.rotate(degree);
 	}
-	public static void drawFocus(Element element) {
+
+	public static void focusWorld(Tile obj) {
+		selection.focusInternal.add(obj);
+	}
+	public static void focusWorld(Building obj) {
+		selection.focusInternal.add(obj);
+	}
+	public static void focusWorld(Unit obj) {
+		selection.focusInternal.add(obj);
+	}
+	public static void focusWorld(Bullet obj) {
+		selection.focusInternal.add(obj);
+	}
+	public static void focusWorld(Seq obj) {
+		selection.focusInternal.add(obj);
+	}
+	public static void removeFocusAll() {
+		selection.focusInternal.clear();
+	}
+
+	public static void focusElement(Element element) {
 		applyDraw(() -> AllTutorial.drawFocus(Tmp.c1.set(Color.black).a(0.4f), () -> {
 			Vec2 point = getAbsPosCenter(element);
 			Fill.circle(point.x, point.y, Mathf.dst(element.getWidth(), element.getHeight()) / 2f);
@@ -396,6 +437,10 @@ public class JSFunc {
 	}
 	public static void applyDraw(Runnable run) {
 		Events.run(Trigger.uiDrawEnd, run);
+	}
+
+	public static Element fx(String text) {
+		return HopeFx.colorFulText(text);
 	}
 	public interface MyProv<T> {
 		T get() throws Exception;

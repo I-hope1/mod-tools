@@ -19,6 +19,7 @@ import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 
+import static arc.Core.*;
 import static modtools.utils.Tools.TASKS;
 
 public class AllTutorial {
@@ -26,15 +27,15 @@ public class AllTutorial {
 		IntUI.focusOnElement(elem, boolp);
 	}
 	public static void f2(Element elem) {
-		Camera camera = Core.scene.getCamera();
-		float  mul    = camera.height / camera.width;
+		Camera camera = scene.getCamera();
+		float  mul    = graphics.getHeight() / (float) graphics.getWidth();
 		float  mul2   = elem.getHeight() / elem.getWidth();
 		Vec2   endPos = ElementUtils.getAbsPosCenter(elem);
 
 		Interp  fun   = Interp.swing;
 		float[] a     = {0};
-		float   end   = mul > mul2 ? elem.getWidth() : elem.getHeight();
-		float   start = mul > mul2 ? camera.width : camera.height;
+		float   end   = elem.getWidth();
+		float   start = graphics.getWidth();
 		float startX = camera.position.x, endX = endPos.x,
 		 startY = camera.position.y, endY = endPos.y;
 		TASKS.add(() -> {
@@ -48,7 +49,9 @@ public class AllTutorial {
 			camera.width = unit;
 			camera.height = unit * mul;
 			if (a[0] >= 2) {
-				camera.position.set(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f);
+				camera.width = graphics.getWidth();
+				camera.height = graphics.getHeight();
+				camera.position.set(graphics.getWidth() / 2f, graphics.getHeight() / 2f);
 			}
 			return a[0] <= 2;
 		});
@@ -68,8 +71,8 @@ public class AllTutorial {
 	}
 
 	public static void drawFocus(Color bgColor, Runnable draw, Color color) {
-		int w = Core.graphics.getWidth();
-		int h = Core.graphics.getHeight();
+		int w = graphics.getWidth();
+		int h = graphics.getHeight();
 		pingpong1.resize(w, h);
 		pingpong1.begin(Color.clear);
 		Draw.color(bgColor.rgba());
@@ -107,17 +110,18 @@ public class AllTutorial {
 				return false;
 			}
 		};
-		Core.scene.root.getCaptureListeners().insert(0, listener);
+		scene.root.getCaptureListeners().insert(0, listener);
 		LerpFun fun = new LerpFun(Interp.fade, Interp.fastSlow);
 		fun.register(0.1f);
 		Events.run(Trigger.uiDrawEnd, () -> {
 			if (enableFocusMouse || fun.a > 0) {
+				graphics.requestRendering();
 				fun.enabled = true;
 				fun.reverse = !enableFocusMouse;
 				float aLerp = Mathf.lerp(0.1f, 0.5f, fun.applyV);
 				drawFocus(Tmp.c1.set(Color.black).a(aLerp), () -> {
 					Fill.circle(Core.input.mouseX(), Core.input.mouseY(),
-					 Mathf.lerp(600f, 80f, fun.applyV)
+					 Mathf.lerp(1000f, 80f, fun.applyV)
 					);
 				}, Tmp.c2.set(Color.white).a(aLerp));
 			} else fun.enabled = false;

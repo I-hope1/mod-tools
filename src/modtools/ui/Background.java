@@ -3,6 +3,7 @@ package modtools.ui;
 
 import arc.Core;
 import arc.graphics.*;
+import arc.graphics.g2d.TextureRegion;
 import arc.scene.*;
 import arc.scene.ui.Image;
 import arc.struct.Seq;
@@ -10,11 +11,9 @@ import arc.util.Time;
 import mindustry.Vars;
 import modtools.IntVars;
 
-import static modtools.ModTools.root;
+import static modtools.IntVars.root;
 
 public class Background {
-
-
 	static Texture landscape, portrait;
 	static Texture landscape() {
 		if (landscape == null) landscape = new Texture(root.child("横屏.png"));
@@ -33,7 +32,7 @@ public class Background {
 		children.get(0).remove();
 
 		// Draw.rect(Draw.wrap(Core.graphics.isPortrait() ? portrait : landscape), 0, 0);
-		Image img = new Image(Pixmaps.blankTexture()) {
+		Image img = new Image(new TextureRegion()) {
 			public void draw() {
 				// Shader last = Draw.getShader();
 				// MyShaders.Specl.setUniformf("u_mix_color", 1, 0, 1);

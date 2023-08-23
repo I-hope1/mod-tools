@@ -11,19 +11,21 @@ import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
+import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.AutoTextField;
-import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.debug.Tester;
-import modtools.utils.JSFunc;
+import modtools.utils.*;
+import modtools.utils.ui.search.*;
 
-import java.util.Comparator;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class ListDialog extends Window {
 	public Seq<Fi> list = new Seq<>();
-	final  Table   p    = new LimitTable();
+
+	final FilterTable<String> p = new FilterTable<>();
 	Comparator<Fi> sorter;
 	public Fi file;
 	Func<Fi, Fi>     fileHolder;
@@ -34,6 +36,9 @@ public class ListDialog extends Window {
 										Comparator<Fi> sorter) {
 		super(Core.bundle.get("title." + title, title), Tester.w, 600, true);
 		cont.add("@tester.tip").growX().left().row();
+		new Search((__, text) -> pattern = PatternUtils.compileRegExpCatch(text))
+		 .build(cont, p);
+		p.addPatternUpdateListener(() -> pattern);
 		cont.pane(p).grow();
 		//			addCloseButton();
 		this.file = file;
@@ -52,7 +57,7 @@ public class ListDialog extends Window {
 	}
 
 	public void build() {
-		p.clearChildren();
+		p.clear();
 
 		list.each(this::build);
 	}
@@ -85,6 +90,7 @@ public class ListDialog extends Window {
 					list.replace(f, toFi);
 					f = toFi;
 					label.setText(field.getText());
+					ListDialog.this.build();
 				}
 			}, Integer.MAX_VALUE, p).left().color(Pal.accent).growX();
 			p.row();
@@ -106,13 +112,13 @@ public class ListDialog extends Window {
 						cont.row();
 						cont.pane(p1 -> {
 							pane.get(f, p1);
-						}).size(300, 60).maxHeight(300).colspan(2);
+						}).grow().colspan(2);
 						cont.row();
 
-						cont.button(Icon.copy, () -> {
+						cont.button(Icon.copy, Styles.flati, () -> {
 							JSFunc.copyText(f.readString());
 						});
-						cont.button(Icon.trash, () -> IntUI.showConfirm("@confirm.remove", () -> {
+						cont.button(Icon.trash, Styles.flati, () -> IntUI.showConfirm("@confirm.remove", () -> {
 							ui.hide();
 							f.delete();
 						})).row();
@@ -140,6 +146,7 @@ public class ListDialog extends Window {
 	}
 
 	public Cell<Table> build(Fi f) {
+		p.bind(f.name());
 		return new Builder(f).build();
 	}
 
@@ -171,8 +178,8 @@ public class ListDialog extends Window {
 		 Cons2<TextField, Label> modifier,
 		 float interval,
 		 Table t, Prov<TextField> fieldProv) {
-			MyLabel       label = new MyLabel(def, interval);
-			Cell<?>       cell  = t.add(label);
+			MyLabel   label = new MyLabel(def, interval);
+			Cell<?>   cell  = t.add(label);
 			TextField field = fieldProv.get();
 			if (validator != null) field.setValidator(validator);
 			field.update(() -> {
@@ -193,4 +200,6 @@ public class ListDialog extends Window {
 	}
 
 	public static LabelStyle accentStyle = new LabelStyle(MyFonts.def, Pal.accent);
+
+	Pattern pattern = null;
 }

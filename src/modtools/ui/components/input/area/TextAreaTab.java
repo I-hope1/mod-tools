@@ -1,15 +1,21 @@
 
 package modtools.ui.components.input.area;
 
+import android.view.*;
+import android.view.View.OnKeyListener;
 import arc.Core;
+import arc.Input.TextInput;
+import arc.backend.android.AndroidInput;
+import arc.backend.sdl.jni.SDL;
 import arc.func.Boolf2;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.math.geom.Rect;
+import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.event.*;
+import arc.scene.event.InputEvent;
 import arc.scene.style.*;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField.TextFieldStyle;

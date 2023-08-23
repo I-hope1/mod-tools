@@ -7,14 +7,12 @@ import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.*;
-import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import arc.util.Timer.Task;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -24,6 +22,7 @@ import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.ListDialog.ModifiedLabel;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableInterface;
+import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
@@ -37,7 +36,6 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.Sr;
 
 public class ReviewElement extends Content {
-	private static final float duration = 0.1f;
 	public ReviewElement() {
 		super("reviewElement");
 		Core.scene.root.getCaptureListeners().insert(0, new InputListener() {
@@ -55,33 +53,43 @@ public class ReviewElement extends Content {
 	public static final LabelStyle skyMyFont = new LabelStyle(MyFonts.def, Color.sky);
 
 
-	public static Element focus;
+	public static Element FOCUS;
 	/**
 	 * focus的来源元素
 	 */
-	public static Table   focusFrom;
-	public static Window  focusWindow;
-	public static Color   focusColor = DEF_FOCUS_COLOR;
+	public static Element FOCUS_FROM;
+	public static Window  FOCUS_WINDOW;
 
-	public static final Color maskColor = DEF_MASK_COLOR;
+	public static void addFocusSource(Element source, Prov<Window> windowProv, Prov<Element> focusProv) {
+		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
+		if (windowProv == null) throw new IllegalArgumentException("windowProv is null.");
+		source.hovered(() -> {
+			FOCUS_FROM = source;
+			FOCUS = focusProv.get();
+			FOCUS_WINDOW = windowProv.get();
+		});
+		source.exited(CANCEL_TASK);
+	}
+	public static final Color focusColor = DEF_FOCUS_COLOR;
+	public static final Color maskColor  = DEF_MASK_COLOR;
 
 	public void load() {
 		topGroup.focusOnElement(new FocusTask(maskColor, focusColor) {
 			{drawSlightly = true;}
 
-			/** 清除elemDraw  */
+			/** 清除elemDraw */
 			public void elemDraw() {}
 			public void beforeDraw(Element drawer) {
-				if (drawer == focusWindow && focus != null) drawFocus(focus);
+				if (drawer == FOCUS_WINDOW && FOCUS != null) drawFocus(FOCUS);
 			}
 			public void drawLine() {
-				if (focus == null) return;
+				if (FOCUS == null) return;
 
-				Vec2 vec2  = focus.localToStageCoordinates(Tmp.v2.set(0, 0));
+				Vec2 vec2  = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
 				Vec2 mouse = Core.input.mouse();
 				Draw.color(ColorFul.color);
 				Lines.stroke(4f);
-				Lines.line(mouse.x, mouse.y, vec2.x + focus.getWidth() / 2f, vec2.y + focus.getHeight() / 2f);
+				Lines.line(mouse.x, mouse.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
 			}
 			public void endDraw() {
 				if (topGroup.isSelecting()) super.endDraw();
@@ -104,13 +112,10 @@ public class ReviewElement extends Content {
 	}
 
 
-	public static final Task CANCEL_TASK = new Task() {
-		@Override
-		public void run() {
-			focus = null;
-			focusWindow = null;
-			focusFrom = null;
-		}
+	public static final Runnable CANCEL_TASK = () -> {
+		FOCUS = null;
+		FOCUS_WINDOW = null;
+		FOCUS_FROM = null;
 	};
 
 	public static class ReviewElementWindow extends Window implements DisposableInterface {
@@ -168,11 +173,11 @@ public class ReviewElement extends Content {
 				}
 			}).grow().minHeight(90);
 
-			update(() -> {
-				if (!CANCEL_TASK.isScheduled()) {
+			/* update(() -> {
+				if (focusWindow instanceof ReviewElementWindow && !CANCEL_TASK.isScheduled()) {
 					Timer.schedule(CANCEL_TASK, Time.delta / 60f);
 				}
-			});
+			}); */
 		}
 
 		public void rebuild(Element element, String text) {
@@ -197,10 +202,10 @@ public class ReviewElement extends Content {
 
 
 		public void highlightShowMultiRow(Table table, String text) {
-			highlightShowMultiRowWithPos(table, text, null);
+			addMultiRowWithPos(table, text, null);
 		}
 		/** 结构： Label，Image（下划线） */
-		public void highlightShowMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
+		public void addMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
 			if (pattern == null) {
 				table.table(t -> {
 					t.left().defaults().left();
@@ -300,30 +305,31 @@ public class ReviewElement extends Content {
 	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
-		if (pos != null) t.label(() -> String.valueOf(pos.get())).color(Color.gray);
+		if (pos != null) t.label(new PositionProv(pos))
+		 .style(MOMO_LabelStyle).color(Color.lightGray)
+		 .fontScale(0.85f).padLeft(4f).padRight(4f);
 	}
 
-	private static class MyWrapTable extends LimitTable {
-		private final ReviewElementWindow window;
-		private final Element             element;
+	private static class MyWrapTable extends ChildrenFirstTable {
 		public MyWrapTable(ReviewElementWindow window, Element element) {
-			this.window = window;
-			this.element = element;
 			/* 用于下面的侦听器  */
 			int childIndex;
 			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
 				/* 占位符 */
-				ImageButton  button   = new ImageButton(Icon.rightOpen, Styles.clearNonei);
-				int          size     = 32;
-				Seq<Element> children = group.getChildren();
+				var button   = new FoldedImageButton(false);
+				int size     = 32;
+				var children = group.getChildren();
 				add(button).size(size).disabled(__ -> children.isEmpty());
 				childIndex = 1;
-				window.highlightShowMultiRowWithPos(this, element == Core.scene.root ? "ROOT"
-					: ReviewElement.getSimpleName(element.getClass()) + (element.name != null ? ": " + element.name : ""),
+				window.addMultiRowWithPos(this,
+				 element == Core.scene.root ? "ROOT"
+					: ReviewElement.getSimpleName(element.getClass())
+						+ (element.name != null ? ": " + element.name : ""),
 				 () -> Tmp.v1.set(element.x, element.y));
-				image().growY().left()
-				 .update(t -> t.color.set(ReviewElement.focusFrom == this ? ColorFul.color : Color.darkGray));
+				image().growY().left().update(
+				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
+				);
 				defaults().growX();
 				add(new LimitTable(t -> {
 						/*if (children.isEmpty()) {
@@ -339,25 +345,15 @@ public class ReviewElement extends Content {
 						}
 					};
 					rebuild.run();
-					Cell<?>         _cell            = t.add(table1).grow();
-					final boolean[] checked          = {!children.isEmpty() && children.size < 20};
-					int[]           lastChildrenSize = {children.size};
-					button.clicked(() -> checked[0] = !checked[0]);
-					Image image = button.getImage();
-					button.update(() -> {
-						button.setOrigin(Align.center);
-						if (checked[0]) {
-							if (lastChildrenSize[0] != children.size) {
-								lastChildrenSize[0] = children.size;
-								rebuild.run();
-							}
-							image.actions(Actions.rotateTo(-90, duration));
-							_cell.setElement(table1);
-						} else {
-							image.actions(Actions.rotateTo(0, duration));
-							_cell.clearElement();
-						}
-					});
+					int[] lastChildrenSize = {children.size};
+
+					button.table = table1;
+					button.fireCheck(!children.isEmpty() && children.size < 20);
+					button.cell = t.add(table1).grow();
+					button.rebuild = () -> {
+						if (lastChildrenSize[0] == children.size) {return;}
+						rebuild.run();
+					};
 				})).left();
 				// Log.info(wrap);
 			} else if (element instanceof Image img) {
@@ -387,7 +383,7 @@ public class ReviewElement extends Content {
 			} else {
 				defaults().growX();
 				childIndex = 0;
-				window.highlightShowMultiRowWithPos(this, String.valueOf(element),
+				window.addMultiRowWithPos(this, String.valueOf(element),
 				 () -> Tmp.v1.set(element.x, element.y));
 			}
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
@@ -395,20 +391,21 @@ public class ReviewElement extends Content {
 			Runnable copy        = storeRun(() -> element);
 			IntUI.addShowMenuListener(window_elem, () -> Sr(Seq.with(
 			 copyAsJSMenu(null, copy),
-			 ConfirmList.with(Icon.trash, "@clear", "@confirm.remove", () -> element.remove()),
-			 MenuList.with(Icon.copy, "@copy.path", () -> {
+			 ConfirmList.with(Icon.trashSmall, "@clear", "@confirm.remove", () -> element.remove()),
+			 MenuList.with(Icon.copySmall, "@copy.path", () -> {
 				 JSFunc.copyText(getPath(element));
 			 }),
-			 MenuList.with(Icon.fileImage, "@reviewElement.screenshot", () -> {
+			 MenuList.with(Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 				 ElementUtils.quietScreenshot(element);
 			 }),
 			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
-			 MenuList.with(Icon.info, "新窗口", () -> new ReviewElementWindow().show(element)),
-			 MenuList.with(Icon.info, "@details", () -> JSFunc.showInfo(element)),
+			 MenuList.with(Icon.infoSmall, "新窗口", () -> new ReviewElementWindow().show(element)),
+			 MenuList.with(Icon.infoSmall, "@details", () -> JSFunc.showInfo(element)),
 			 FoldedList.withf(Icon.boxSmall, "exec", () -> Seq.with(
-				MenuList.with(Icon.info, "invalidate", element::invalidate),
-				MenuList.with(Icon.info, "invalidateHierarchy", element::invalidateHierarchy),
-				MenuList.with(Icon.info, "layout", element::layout)
+				MenuList.with(Icon.boxSmall, "invalidate", element::invalidate),
+				MenuList.with(Icon.boxSmall, "invalidateHierarchy", element::invalidateHierarchy),
+				MenuList.with(Icon.boxSmall, "layout", element::layout),
+				MenuList.with(Icon.boxSmall, "pack", element::pack)
 			 )),
 			 ValueLabel.newElementDetailsList(element)
 			)).ifRun(element instanceof Table, seq -> seq.add(
@@ -432,7 +429,8 @@ public class ReviewElement extends Content {
 			IntUI.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;
 
-			update(() -> background(focusFrom == this ? Styles.flatDown : Styles.none));
+			update(() -> background(FOCUS_FROM == this ? Styles.flatDown : Styles.none));
+			addFocusSource(this, () -> window, () -> element);
 		}
 		private static CharSequence getPath(Element element) {
 			if (element == null) return "null";
@@ -447,22 +445,6 @@ public class ReviewElement extends Content {
 				}
 			}
 			return element.getScene() != null ? "Core.scene.root" + sb : sb.delete(0, 0);
-		}
-		@Override
-		public Element hit(float x, float y, boolean touchable) {
-			focus = null;
-			Element tmp = super.hit(x, y, touchable);
-			if (tmp == null) return null;
-
-			if (focus != null) {
-				if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
-				return tmp;
-			}
-			focus = element;
-			focusWindow = window;
-			focusFrom = this;
-			if (CANCEL_TASK.isScheduled()) CANCEL_TASK.cancel();
-			return tmp;
 		}
 
 		static int getDeep(Element element) {
@@ -517,49 +499,51 @@ public class ReviewElement extends Content {
 
 	public static class CellDetailsWindow extends Window implements DisposableInterface {
 		Cell<?> cl;
-		public CellDetailsWindow(Cell<?> cl) {
+		public CellDetailsWindow(Cell<?> cell) {
 			super("cell");
-			this.cl = cl;
+			this.cl = cell;
 
 			cont.table(Tex.pane, t -> {
 				t.defaults().grow();
 				t.add();
-				getAdd(t, cl, "padTop");
+				getAdd(t, cell, "padTop");
 				t.add().row();
-				getAdd(t, cl, "padLeft");
-				ValueLabel label = new ValueLabel(cl.get(), Element.class, null, null);
+				getAdd(t, cell, "padLeft");
+				ValueLabel label = new ValueLabel(cell.get(), Element.class, null, null);
 				label.enableUpdate = false;
-				label.update(() -> label.setVal(cl.get()));
-				Label   placeholder = new MyLabel("<VALUE>", MOMO_LabelStyle);
-				Cell<?> cell        = t.add(placeholder);
-				placeholder.clicked(() -> cell.setElement(label));
-				label.clicked(() -> cell.setElement(placeholder));
+				label.update(() -> label.setVal(cell.get()));
+				Label   placeholder     = new MyLabel("<VALUE>", MOMO_LabelStyle);
+				Cell<?> placeholderCell = t.add(placeholder);
+				placeholder.clicked(() -> placeholderCell.setElement(label));
+				label.clicked(() -> placeholderCell.setElement(placeholder));
 
-				getAdd(t, cl, "padRight").row();
+				getAdd(t, cell, "padRight").row();
 				t.add();
-				getAdd(t, cl, "padBottom");
+				getAdd(t, cell, "padBottom");
 				t.add();
 			}).colspan(2).row();
 			cont.defaults().height(32).growX();
 			cont.defaults().colspan(2);
-			getAddWithName(cont, cl, "minWidth").row();
-			getAddWithName(cont, cl, "minHeight").row();
-			getAddWithName(cont, cl, "maxWidth").row();
-			getAddWithName(cont, cl, "maxHeight").row();
+			getAddWithName(cont, cell, "minWidth").row();
+			getAddWithName(cont, cell, "minHeight").row();
+			getAddWithName(cont, cell, "maxWidth").row();
+			getAddWithName(cont, cell, "maxHeight").row();
 			cont.defaults().colspan(1);
-			checkField(cont, cl, "fillX", float.class);
-			checkField(cont, cl, "fillY", float.class);
+			checkField(cont, cell, "fillX", float.class);
+			checkField(cont, cell, "fillY", float.class);
 			cont.row();
-			checkField(cont, cl, "expandX", int.class);
-			checkField(cont, cl, "expandY", int.class);
+			checkField(cont, cell, "expandX", int.class);
+			checkField(cont, cell, "expandY", int.class);
 			cont.row();
-			checkField(cont, cl, "uniformX", boolean.class);
-			checkField(cont, cl, "uniformY", boolean.class);
+			checkField(cont, cell, "uniformX", boolean.class);
+			checkField(cont, cell, "uniformY", boolean.class);
 			cont.row();
-			cont.button("growX", Styles.flatBordert, cl::growX);
-			cont.button("growY", Styles.flatBordert, cl::growY);
+			cont.button("growX", Styles.flatBordert, cell::growX);
+			cont.button("growY", Styles.flatBordert, cell::growY);
 			cont.row();
-			checkField(cont, cl, "endRow", boolean.class).colspan(2);
+			checkField(cont, cell, "endRow", boolean.class).colspan(2);
+
+			addFocusSource(this, () -> this, cell::get);
 		}
 	}
 	/* private static <T> void field(Table cont, Cell<?> cell, String key, TextFieldValidator validator,
@@ -591,10 +575,15 @@ public class ReviewElement extends Content {
 		 .get();
 	}
 
+
 	public static class ElementDetailsWindow extends Window implements DisposableInterface {
 		Element element;
+
 		public ElementDetailsWindow(Element element) {
 			super("", 20, 160, true);
+			addFocusSource(this, () -> this, () -> element);
+
+
 			show();
 			this.element = element;
 
@@ -640,16 +629,16 @@ public class ReviewElement extends Content {
 			cont.button("pack", Styles.flatBordert, element::pack).row();
 		}
 	}
-	private static Cell<Table> getAdd(Table t, Cell cl, String name) {
-		return t.add(floatSetter(null, () -> "" + Reflect.get(Cell.class, cl, name), f -> {
-			Reflect.set(Cell.class, cl, name, f);
-			if (cl.get() != null) cl.get().invalidateHierarchy();
+	private static Cell<Table> getAdd(Table t, Cell cell, String name) {
+		return t.add(floatSetter(null, () -> "" + Reflect.get(Cell.class, cell, name), f -> {
+			Reflect.set(Cell.class, cell, name, f);
+			if (cell.get() != null) cell.get().invalidateHierarchy();
 		}));
 	}
-	private static Cell<Table> getAddWithName(Table t, Cell cl, String name) {
-		return t.add(floatSetter("[lightgray]" + name + ": ", () -> "" + Reflect.get(Cell.class, cl, name), f -> {
-			Reflect.set(Cell.class, cl, name, f);
-			if (cl.get() != null) cl.get().invalidateHierarchy();
+	private static Cell<Table> getAddWithName(Table t, Cell cell, String name) {
+		return t.add(floatSetter("[lightgray]" + name + ": ", () -> "" + Reflect.get(Cell.class, cell, name), f -> {
+			Reflect.set(Cell.class, cell, name, f);
+			if (cell.get() != null) cell.get().invalidateHierarchy();
 		}));
 	}
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {

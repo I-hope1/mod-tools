@@ -1,6 +1,7 @@
 package modtools.ui.content.ui;
 
 import arc.graphics.Color;
+import arc.math.Mathf;
 import arc.scene.*;
 import arc.scene.actions.*;
 import arc.scene.ui.Image;
@@ -22,7 +23,7 @@ public class ActionsDebug extends Content {
 	public void load() {
 		ui = new Window(localizedName());
 		ui.cont.add(element = new Image()).size(64).row();
-		element.setOrigin(Align.topRight);
+		element.update(() -> element.setOrigin(Align.center));
 		// element.setOrigin(element.getWidth() / 2f, element.getHeight() / 2f);
 		// element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
 		var classes = ClassUtils.getClasses("arc.scene.actions");
@@ -38,14 +39,21 @@ public class ActionsDebug extends Content {
 					if (action == RotateByAction.class) {
 						element.actions(Actions.rotateBy(-360, 0.2f));
 					}
+					if (action == MoveByAction.class) {
+						float mx = Mathf.random(-100f, 100f), my = Mathf.random(-100f, 100f);
+						element.actions(
+						 Actions.moveBy(mx, my, 1f),
+						 Actions.moveBy(-mx, -my, 1f)
+						);
+					}
 					if (action == ColorAction.class) {
 						element.actions(Actions.sequence(Actions.color(Color.pink, 0.1f)
-								, Actions.color(Color.sky, 0.1f)
-								, Actions.color(Color.blue, 0.1f)
-								, Actions.color(Color.green, 0.1f)
-								, Actions.color(Color.yellow, 0.1f)
-								, Actions.color(Color.pink, 0.1f)
-								, Actions.color(element.color, 0.1f)
+						 , Actions.color(Color.sky, 0.1f)
+						 , Actions.color(Color.blue, 0.1f)
+						 , Actions.color(Color.green, 0.1f)
+						 , Actions.color(Color.yellow, 0.1f)
+						 , Actions.color(Color.pink, 0.1f)
+						 , Actions.color(element.color, 0.1f)
 						));
 					}
 				}).size(200, 42);

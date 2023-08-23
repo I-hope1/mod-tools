@@ -62,8 +62,8 @@ public interface MethodTools {
 		}
 		return sb;
 	}
-	int argKey = 1,
-	 throwKey  = 2;
+	int argKey = 0b01,
+	 throwKey  = 0b10;
 	static LimitTable
 	buildArgsAndExceptions(Executable executable) {
 		Class<?>[] args = executable.getParameterTypes(),
@@ -123,6 +123,7 @@ public interface MethodTools {
 			}
 			table.unbind();
 		}
+		table.layout();
 		return table;
 	}
 

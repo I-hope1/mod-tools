@@ -69,12 +69,12 @@ public class MyLabel extends Label {
 		});
 	}
 
-	public boolean markupEnabled = false;
 	public void layout() {
-		FontData fontData = style.font.getData();
+		if (cache == null) return;
+		FontData fontData = cache.getFont().getData();
 
 		boolean had = fontData.markupEnabled;
-		fontData.markupEnabled = markupEnabled;
+		fontData.markupEnabled = false;
 		super.layout();
 		/* 重新计算pref width  */
 		prefSizeInvalid = true;

@@ -41,10 +41,11 @@ import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsPos;
 
 public class IntUI {
-	public static final TextureRegionDrawable whiteui       = (TextureRegionDrawable) Tex.whiteui;
-	public static final Frag                  frag          = new Frag();
-	public static final TopGroup              topGroup      = new TopGroup();
-	public static       float                 default_width = 150;
+	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+
+	public static final Frag     frag          = new Frag();
+	public static final TopGroup topGroup      = new TopGroup();
+	public static       float    default_width = 150;
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) {
@@ -76,12 +77,15 @@ public class IntUI {
 			};
 			public void clicked(InputEvent event, float x, float y) {
 				super.clicked(event, x, y);
-				Vec2 mouse = d_click != null ? Core.input.mouse() : null;
+				if (click != null && d_click == null) {
+					click.run();
+					return;
+				}
+				Vec2 mouse = Core.input.mouse();
 				if (TaskManager.reScheduled(0.3f, clickTask)) {
 					last.set(mouse);
 					return;
 				}
-				if (d_click == null) return;
 				if (mouse.dst(last) < 35f) d_click.run();
 			}
 		}
@@ -155,10 +159,11 @@ public class IntUI {
 
 	public static void
 	addShowMenuListener(Element elem, Prov<Seq<MenuList>> prov) {
-		longPressOrRclick(elem, __ -> {
-			Seq<MenuList> list = prov.get();
-			showMenuList(list, () -> Pools.freeAll(list, false));
-		});
+		longPressOrRclick(elem, __ -> showMenuListDispose(prov));
+	}
+	public static void showMenuListDispose(Prov<Seq<MenuList>> prov) {
+		Seq<MenuList> list = prov.get();
+		showMenuList(list, () -> Pools.freeAll(list, false));
 	}
 
 	public static void
@@ -358,11 +363,18 @@ public class IntUI {
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
 											Boolean searchable) {
+		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable);
+	}
+	public static <BTN extends Button, V> Table
+	showSelectListTable(
+	 BTN button, Seq<V> list, Prov<V> holder,
+	 Cons<V> cons, Func<V, String> stringify, int width, int height,
+	 Boolean searchable) {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 
-			for (String item : list) {
-				p.button(item, IntStyles.flatt/*Styles.cleart*/, () -> {
+			for (V item : list) {
+				p.button(stringify.get(item), IntStyles.flatt/*Styles.cleart*/, () -> {
 					cons.get(item);
 					hide.run();
 				}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();
@@ -570,9 +582,10 @@ public class IntUI {
 		return showException("", t);
 	}
 
+	static ExceptionPopup lastException;
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		return new ExceptionPopup(exc, text).setPosition(Core.input.mouse());
+		return (lastException != null && lastException.isShown() ? lastException : new ExceptionPopup(exc, text)).setPosition(Core.input.mouse());
 	}
 
 	public static Window showInfoFade(String info) {
@@ -652,7 +665,10 @@ public class IntUI {
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
 		BorderImage image = new BorderImage(Core.atlas.white(), 2f) {
 			public void draw() {
+				float alpha = Draw.getColor().a;
+				Draw.alpha(1f);
 				Tex.alphaBg.draw(x, y, width, height);
+				Draw.alpha(alpha);
 				super.draw();
 			}
 		};
@@ -818,6 +834,15 @@ public class IntUI {
 			if (children != null) Pools.freeAll(children, false);
 		}
 	}
+	public static class InfoList extends MenuList {
+		public static InfoList withi(Drawable icon, Prov<String> name) {
+			InfoList list = Pools.get(InfoList.class, InfoList::new, max).obtain();
+			list.icon = icon;
+			list.provider = name;
+			list.cons = null;
+			return list;
+		}
+	}
 
 
 	public static class Countdown implements Runnable, Cons {
@@ -875,6 +900,10 @@ public class IntUI {
 		}
 		/** 禁用原本的mobile自动隐藏 */
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {}
+
+		static {
+			Tooltips.getInstance().textProvider = text -> new Tooltip(t -> t.background(Styles.black6).margin(4f).add(text));
+		}
 	}
 
 

@@ -3,7 +3,7 @@ package modtools.ui.components.input.highlight;
 import arc.graphics.Color;
 import arc.math.geom.Vec2;
 import arc.struct.*;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.graphics.Pal;
 import modtools.utils.Tools;
 
@@ -175,7 +175,7 @@ public class Syntax {
 	/**
 	 * 所有的任务
 	 */
-	public DrawTask[] taskArr = (DrawTask[]) Tools.EMPTY_ARRAY;
+	public DrawTask[] taskArr = {};
 
 	public class DrawToken extends DrawTask {
 		// IntMap<?>[] total;
@@ -318,10 +318,13 @@ public class Syntax {
 		}
 	}
 
-	public static IntMap<Boolean> chars = IntMap.of(
+	/** key(字符char，用于判断是否为字符串) -> value(boolean是否为多行) */
+	@SuppressWarnings("StaticMethods")
+	public static final IntMap<Boolean> chars = IntMap.of(
 	 '\'', false,
 	 '"', false,
-	 '`', true);
+	 '`', true
+	);
 
 	public class DrawString extends DrawTask {
 		public DrawString(Color color) {

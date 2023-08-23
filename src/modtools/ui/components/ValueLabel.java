@@ -6,6 +6,7 @@ import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.scene.style.Drawable;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
@@ -15,13 +16,14 @@ import mindustry.entities.Effect;
 import mindustry.gen.*;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.IntUI.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.content.ui.ReviewElement;
-import modtools.ui.content.ui.ReviewElement.ElementDetailsWindow;
+import modtools.ui.content.ui.ReviewElement.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
+import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.*;
 import java.util.*;
@@ -33,8 +35,20 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
 public class ValueLabel extends MyLabel {
-	public static        Object unset  = new Object();
-	private static final Color  c_enum = new Color(0xFF_C6_6D_FF);
+	public static Object unset = new Object();
+
+	public static Color c_enum = new Color(0xFFC66DFF);
+	// public static final String mark_c_enum    = "[#FFC66DFF]";
+	// public static final String mark_lightgray = "[lightgray]";
+	//
+	// /** @see Syntax#c_map */
+	// public static final
+	// String mark_c_map = "[#" + Syntax.c_map + "]",
+	//  mark_c_objects   = "[#" + Syntax.c_objects + "]",
+	//  mark_c_string    = "[#" + Syntax.c_string + "]",
+	//  mark_c_number    = "[#" + Syntax.c_number + "]";
+
+	public final int truncateLength = 2000;
 
 	public            Object   val;
 	public @Nullable  Object   obj;
@@ -47,12 +61,17 @@ public class ValueLabel extends MyLabel {
 	/** 是否启用更新 */
 	enableUpdate = true;
 
-	public final Func<Object, String> defFunc = this::dealVal;
+	public final Func<Object, CharSequence> defFunc   = this::dealVal;
 	/**
 	 * <p>用于显示label内容</p>
 	 * <p>每次修改时，都会执行这个func，返回值作为显示值</p>
 	 */
-	public       Func<Object, String> func;
+	public       Func<Object, CharSequence> func;
+	/**
+	 *
+	 */
+	public       Func<Object, Object>       valueFunc = o -> o;
+
 
 	public ValueLabel(Object newVal, Object obj, Method method) {
 		this(newVal, method.getReturnType(), null, obj, method);
@@ -68,11 +87,12 @@ public class ValueLabel extends MyLabel {
 		if (type == null) throw new NullPointerException("'type' is null.");
 		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
 			throw new IllegalArgumentException("type(" + type + ") mismatches value(" + newVal + ").");
+		// markupEnabled = true;
 		wrap = true;
 		setStyle(IntStyles.MOMO_LabelStyle);
 		this.type = type;
 		if (field != null) set(field, obj);
-		if (newVal != unset) setVal(newVal);
+		if (newVal != unset) setVal0(newVal);
 		setAlignment(Align.left, Align.left);
 
 		update(() -> {
@@ -81,6 +101,12 @@ public class ValueLabel extends MyLabel {
 			}
 		});
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
+
+		if (Element.class.isAssignableFrom(type)) {
+			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> (Element) val);
+		} else if (Cell.class.isAssignableFrom(type)) {
+			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> val == null ? null : ((Cell<?>) val).get());
+		}
 
 		IntUI.addShowMenuListener(this, () -> getMenuLists(type, field, obj));
 	}
@@ -91,11 +117,12 @@ public class ValueLabel extends MyLabel {
 				 SR.catchSatisfy(() -> Sr(val)
 					.isInstance(TextureRegion.class, JSFunc::dialog)
 					.isInstance(Texture.class, JSFunc::dialog)
+					.isInstance(Drawable.class, JSFunc::dialog)
 				 );
 			 }));
-		 }, TextureRegion.class, Texture.class)
+		 }, TextureRegion.class, Texture.class, Drawable.class)
 		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.name, () -> {
+			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
 				 JSFunc.reviewElement((Element) val);
 			 }));
 			 list.add(newElementDetailsList((Element) val));
@@ -107,14 +134,17 @@ public class ValueLabel extends MyLabel {
 		 }, Effect.class)
 		 .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
-				 new ReviewElement.CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsPos(b)).show();
+				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsPos(b)).show();
 			 }));
 		 }, Cell.class)
 		 .isExtend(__ -> {
-			 list.add(MenuList.with(HopeIcons.position, () -> (selection.focusBuildsInternal.contains((Building) val) ? "hide" : "show") + " on world", () -> {
-				 if (!selection.focusBuildsInternal.add((Building) val)) selection.focusBuildsInternal.remove((Building) val);
-			 }));
-		 }, Building.class);
+			 list.add(DisabledList.withd(HopeIcons.position,
+				(val == null ? "" : selection.focusInternal.contains(val) ? "hide" : "show")
+				+ " on world", () -> val == null, () -> {
+					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
+				}));
+		 }, Building.class, Unit.class, Bullet.class);
+
 		if (field != null && !type.isPrimitive()) list.add(MenuList.with(Icon.editSmall, "@selection.reset", () -> {
 			JSRequest.requestForField(val, obj, o -> {
 				setFieldValue(type.cast(o));
@@ -125,8 +155,11 @@ public class ValueLabel extends MyLabel {
 		list.add(MenuList.with(Icon.listSmall, () -> (enableTruncate ? "disable" : "enable") + " truncate", () -> {
 			enableTruncate = !enableTruncate;
 		}));
-		list.add(MenuList.with(Icon.eyeSmall, "条件显示", () -> {
-			JSRequest.<Func<Object, String>>requestForDisplay(defFunc, obj, o -> func = o);
+		list.add(MenuList.with(Icon.eyeSmall, "stringifyFunc", () -> {
+			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc, obj, o -> func = o);
+		}));
+		list.add(MenuList.with(Icon.eyeSmall, "valueFunc", () -> {
+			JSRequest.<Func<Object, Object>>requestForDisplay(func, obj, o -> valueFunc = o);
 		}));
 		list.add(MenuList.with(Icon.eraserSmall, "@clear", this::clearVal));
 
@@ -155,19 +188,8 @@ public class ValueLabel extends MyLabel {
 	}
 	public long getOffset() {
 		if (field == null) throw new RuntimeException("field is null");
-		if (offset == null) offset = fieldOffset(field);
+		if (offset == null) offset = FieldUtils.fieldOffset(field);
 		return offset;
-	}
-	public void setVal(Object val) {
-		if (this.val == val && (type.isPrimitive() || type == String.class)) return;
-		this.val = val;
-		if (func == null) resetFunc();
-		try {
-			setText(func.get(val));
-		} catch (Throwable th) {
-			resThrowable(val, th);
-		}
-		layout();
 	}
 	public float getPrefWidth() {
 		if (prefSizeInvalid) computePrefSize();
@@ -193,11 +215,12 @@ public class ValueLabel extends MyLabel {
 		return lastSize;
 	}
 	private void resThrowable(Object val, Throwable th) {
+		Log.err(th);
 		IntUI.showException(th);
 		if (func != defFunc) {
 			resetFunc();
 			try {
-				setText(func.get(val));
+				setText(defFunc.get(val));
 				return;
 			} catch (Throwable ignored) {}
 		}
@@ -208,7 +231,7 @@ public class ValueLabel extends MyLabel {
 	}
 
 	@SuppressWarnings("ConstantConditions")
-	public String dealVal(Object val) {
+	public CharSequence dealVal(Object val) {
 		if (val instanceof ObjectMap) {
 			StringBuilder sb = new StringBuilder();
 			sb.append('{');
@@ -223,8 +246,10 @@ public class ValueLabel extends MyLabel {
 			}
 			if (checkTail) sb.deleteCharAt(sb.length() - 2);
 			sb.append('}');
+
+			// return mark_c_map + sb;
 			setColor(Syntax.c_map);
-			return sb.toString();
+			return sb;
 		}
 		if (val instanceof Map) {
 			StringBuilder sb = new StringBuilder();
@@ -240,8 +265,9 @@ public class ValueLabel extends MyLabel {
 			}
 			if (checkTail) sb.deleteCharAt(sb.length() - 2);
 			sb.append('}');
+
 			setColor(Syntax.c_map);
-			return sb.toString();
+			return sb;
 		}
 		if ((field == null || !field.getName().startsWith("entries"))
 				&& (val instanceof Iterable || (val != null && val.getClass().isArray()))) {
@@ -254,7 +280,8 @@ public class ValueLabel extends MyLabel {
 				 Seq.with(asArray(val));
 				ObjectSet set = seq.asSet();
 				if (set.size == 1) {
-					sb.append(dealVal(seq.get(0))).append(" [×").append(seq.size).append(']');
+					sb.append(dealVal(seq.get(0)));
+					if (seq.size > 1) sb.append(" [>> ×").append(seq.size).append(" <<]");
 					break l;
 				}
 				for (Object o : seq) {
@@ -269,34 +296,36 @@ public class ValueLabel extends MyLabel {
 				} */
 				checkTail = true;
 			} catch (ArcRuntimeException ignored) {
-			} catch (Throwable e) {sb.append("<ERROR>");}
+			} catch (Throwable e) {sb.append("|>ERROR<|");}
 			if (checkTail && sb.length() >= 2) sb.delete(sb.length() - 2, sb.length());
 			sb.append(']');
-			setColor(Color.white);
-			return sb.toString();
-		}
-		if (val instanceof Character) {
-			return "'" + val + "'";
+			return sb;
 		}
 
 		String text = CatchSR.apply(() ->
-		 CatchSR.of(() -> val instanceof String ? '"' + (String) val + '"' : String.valueOf(val))
+		 CatchSR.of(() ->
+			 val instanceof String ? '"' + (String) val + '"'
+				: val instanceof Character ? "'" + val + "'"
+				: String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + val.hashCode())
 			.get(() -> val.getClass().getName())
 		);
-		setColor(val == null ? Syntax.c_objects
-		 : type == String.class ? Syntax.c_string
-		 : Number.class.isAssignableFrom(box(type)) ? JSFunc.c_number
-		 : val.getClass().
-		 isEnum() ? c_enum
-		 : Color.white);
-		if (isTruncate(text.length())) {
-			text = text.substring(0, 2000) + "  ...";
-		}
+		text = truncate(text);
+
+		Color mainColor = val == null ? Syntax.c_objects
+		 : type == String.class || val instanceof Character ? Syntax.c_string
+		 : Number.class.isAssignableFrom(box(type)) ? Syntax.c_number
+		 : val.getClass().isEnum() ? c_enum
+		 : Color.white;
+		setColor(mainColor);
+
 		return text;
 	}
 	private boolean isTruncate(int length) {
-		return enableTruncate && truncate_text.enabled() && length > 2000;
+		return enableTruncate && truncate_text.enabled() && length > truncateLength;
+	}
+	private String truncate(String text) {
+		return isTruncate(text.length()) ? text.substring(0, truncateLength) + "  ..." : text;
 	}
 	private Object[] asArray(Object arr) {
 		if (arr instanceof Object[]) return (Object[]) arr;
@@ -317,7 +346,7 @@ public class ValueLabel extends MyLabel {
 				throw new RuntimeException(e);
 			}
 		} else {
-			Tools.setFieldValue(
+			FieldUtils.setValue(
 			 isStatic ? field.getDeclaringClass() : obj,
 			 getOffset(), val, field.getType());
 		}
@@ -327,7 +356,7 @@ public class ValueLabel extends MyLabel {
 
 	public void clearVal() {
 		val = "";
-		setText((CharSequence) null);
+		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
 	public void setText(CharSequence newText) {
@@ -339,10 +368,30 @@ public class ValueLabel extends MyLabel {
 	}
 	public void setVal() {
 		if (field == null || (obj == null && !isStatic)) {
-			setVal(null);
+			setVal0(null);
 		} else {
-			setVal(Tools.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType()));
+			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
+			setVal0(value);
 		}
+	}
+	private void setVal0(Object newVal) {
+		try {
+			setVal(valueFunc.get(newVal));
+		} catch (Throwable th) {
+			Log.err(th);
+			setVal(newVal);
+		}
+	}
+	public void setVal(Object val) {
+		if (this.val == val && (type.isPrimitive() || type == String.class)) return;
+		this.val = val;
+		if (func == null) resetFunc();
+		try {
+			setText(func.get(val));
+		} catch (Throwable th) {
+			resThrowable(val, th);
+		}
+		layout();
 	}
 
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
@@ -366,6 +415,7 @@ public class ValueLabel extends MyLabel {
 	public void draw() {
 		if (shown) super.draw();
 	}
+
 
 	/* public Element build() {
 		if (val instanceof Iterable ite) {

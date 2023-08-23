@@ -20,11 +20,8 @@ public class Frag extends Table {
 	public ScrollPane contPane;
 	Cell<?> cell;
 
-	{
-		touchable = Touchable.enabled;
-	}
-
 	public void load() {
+		touchable = Touchable.enabled;
 		//		MyPacket.register();
 		name = modName + "-frag";
 		Image top = image().color(Color.sky).margin(0).pad(0)

@@ -5,25 +5,26 @@ import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
+import arc.util.pooling.Pools;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.PatternUtils;
 
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-@SuppressWarnings("rawtypes")
 public class FilterTable<E> extends LimitTable {
 	public FilterTable() {}
+	@SuppressWarnings("rawtypes")
 	public FilterTable(Cons<FilterTable<E>> cons) {
 		super((Cons) cons);
 	}
+	@SuppressWarnings("rawtypes")
 	public FilterTable(Drawable background, Cons<FilterTable<E>> cons) {
 		super(background, (Cons) cons);
 	}
-	ObjectMap<E, Seq<BindCell>> map;
-	private Seq<BindCell> current;
-	private Cons<Element> cons;
+	protected ObjectMap<E, Seq<BindCell>> map;
+	Seq<BindCell> current;
 
+	private Cons<Element> cons;
 
 	public void bind(E name) {
 		if (map == null) map = new ObjectMap<>();
@@ -34,14 +35,14 @@ public class FilterTable<E> extends LimitTable {
 	}
 	public void clear() {
 		super.clear();
+		unbind();
 		if (map != null) {
-			map.each((__, seq) -> {
+			map.each((key, seq) -> {
+				if (key instanceof Compound<?, ?> compound) Pools.free(compound);
 				seq.each(BindCell::clear);
-				seq.clear().shrink();
 			});
 			map.clear();
 		}
-		unbind();
 	}
 	public void unbind() {
 		current = null;
@@ -54,35 +55,79 @@ public class FilterTable<E> extends LimitTable {
 		return cell;
 	}
 
-	public void addIntUpdateListener(Intp supplier) {
-		int[] last = {0};
+	public void addIntUpdateListener(Intp provider) {
+		addConditionUpdateListener(new IntBoolf(provider, i -> (int) i));
+	}
+	/* 就是E == Intp */
+	public void addIntp_UpdateListener(Intp provider) {
+		addConditionUpdateListener(new IntBoolf(provider, i -> ((Intp) i).get()));
+	}
+	public void addPatternUpdateListener(Prov<Pattern> provider) {
+		addConditionUpdateListener(new PatternBoolf(provider));
+	}
+	public void addConditionUpdateListener(Condition<E> condition) {
 		update(() -> {
-			if (last[0] != supplier.get()) {
-				last[0] = supplier.get();
-				filter(name -> (last[0] & (int) name) != 0);
-			}
+			if (condition.needUpdate()) filter(condition::valid);
 		});
 	}
 
-	public void addUpdateListener(Supplier<Pattern> supplier) {
-		Pattern[] last = {null};
-		update(() -> {
-			if (last[0] != supplier.get()) {
-				last[0] = supplier.get();
-				filter(name -> PatternUtils.test(last[0], String.valueOf(name)));
-			}
-		});
-	}
 
 	// public Table unuseTable = new Table();
 	public void filter(Boolf<E> boolf) {
 		if (map == null) return;
 		map.each((name, seq) -> {
-			seq.each(boolf.get(name) ?
-			 BindCell::build : BindCell::remove);
+			seq.each(boolf.get(name) ? BindCell::build : BindCell::remove);
 		});
 	}
 	public boolean isEmpty() {
 		return map == null || map.isEmpty();
+	}
+
+	public static final class Compound<P1, P2> {
+		P1 p1;
+		P2 p2;
+		private Compound(P1 p1, P2 p2) {
+			this.p1 = p1;
+			this.p2 = p2;
+		}
+		public static <P1, P2> Compound<P1, P2> with(P1 p1, P2 p2) {
+			return Pools.get(Compound.class, () -> new Compound<>(p1, p2)).obtain();
+		}
+	}
+
+	public class IntBoolf implements Condition<E> {
+		int     last;
+		Intp    provider;
+		Intf<E> intf;
+		public IntBoolf(Intp provider, Intf<E> intf) {
+			this.provider = provider;
+			this.intf = intf;
+		}
+		public boolean needUpdate() {
+			return last != provider.get();
+		}
+		public boolean valid(E name) {
+			last = provider.get();
+			return (last & intf.get(name)) != 0;
+		}
+	}
+	public class PatternBoolf implements Condition<E> {
+		Pattern       last;
+		Prov<Pattern> provider;
+		public PatternBoolf(Prov<Pattern> provider) {
+			this.provider = provider;
+		}
+		public boolean needUpdate() {
+			return last != provider.get();
+		}
+		public boolean valid(E name) {
+			return PatternUtils.test(last = provider.get(), String.valueOf(name));
+		}
+	}
+
+
+	public interface Condition<E> {
+		default boolean needUpdate() {return true;}
+		boolean valid(E name);
 	}
 }

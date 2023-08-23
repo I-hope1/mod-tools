@@ -6,7 +6,7 @@ import arc.graphics.Color;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.Vec2;
-import modtools.ModTools;
+import modtools.*;
 
 
 public class MyShaders {
@@ -14,7 +14,7 @@ public class MyShaders {
 	/** 将任何纹理2中有颜色的替换成{@code color} */
 	public static MixShader mixShader;
 
-	public static Fi shaderFi = ModTools.root.child("shaders");
+	public static Fi shaderFi = IntVars.root.child("shaders");
 	public static void load() {
 		/* specl = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("毛玻璃.frag")) {
 			public void apply() {

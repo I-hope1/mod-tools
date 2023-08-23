@@ -1,18 +1,23 @@
 #!/bin/sh
 # MADE By BING, DEBUG By I-hope
-# 获取文件的初始修改时间
-old_time=-1
-# 循环检查文件的修改时间
-while true; do
+
+# 将文件的内容追加到控制台
+appendLastLog() {
   # 获取文件的当前修改时间
   new_time=$(stat -c %y /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt)
   # 如果修改时间发生变化
   if [ "$new_time" != "$old_time" ]; then
     # 将文件的内容追加到控制台
-    tail -f /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt
+    tail /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt
     # 更新修改时间
     old_time=$new_time
   fi
+}
+
+# 获取文件的初始修改时间
+old_time=-1
+# 循环检查文件的修改时间
+while true; do
   # 获取mindustry的进程ID
   pid=$(pidof io.anuke.mindustry)
 #  echo "pid: $pid"
@@ -22,8 +27,9 @@ while true; do
     echo "mindustry is not running, exiting..."
     # 退出程序
     exit 0
+  else
+    appendLastLog
   fi
   # 等待一段时间（秒）
-  sleep 0.05
+  sleep 0.01
 done
-

@@ -6,6 +6,7 @@ import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.*;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.TaskManager;

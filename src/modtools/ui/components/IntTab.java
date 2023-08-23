@@ -179,7 +179,7 @@ public class IntTab {
 		title.row();
 		first.fireClick();
 		if (column) {
-			title.add().height(/* unset */Float.NEGATIVE_INFINITY).growY().row();
+			title.add().height(/** {@link Cell#unset} */Float.NEGATIVE_INFINITY).growY().row();
 			title.left().defaults().left();
 			title.fill().left().bottom().button(Icon.menuSmall, Styles.flati, () -> {
 				hideTitle = !hideTitle;

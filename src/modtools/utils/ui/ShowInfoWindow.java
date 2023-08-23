@@ -27,7 +27,7 @@ import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.*;
-import modtools.utils.reflect.ModifierR;
+import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
 
@@ -123,7 +123,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			}
 		}).height(42).row();
 		cont.table(t -> {
-			addModifierBtn(t);
+			ElementUtils.addCodedBtn(t, "modifiers", 4,
+			 i -> modifiers = i, () -> modifiers,
+			 ModifierR.values());
 			t.button(Tex.whiteui, 32, null).size(42).with(img -> {
 				img.clicked(() -> {
 					isBlack = !isBlack;
@@ -171,36 +173,6 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				});
 			}
 		}).size(100, 42);
-	}
-
-	private void addModifierBtn(Table t) {
-		t.button("", Styles.flatt, null).with(tbtn -> {
-			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, hide, ___) -> {
-				buildModifier(p);
-			}, false));
-			Table fill = tbtn.fill();
-			fill.top().add("modifier", 0.6f).growX().labelAlign(Align.left).color(Color.lightGray);
-			tbtn.getCell(fill).colspan(0);
-			tbtn.getCells().reverse();
-		}).size(85, 32).update(b -> b.setText(String.format("%X", (short) modifiers)));
-	}
-	private void buildModifier(Table p) {
-		p.button("all", Styles.flatToggleMenut, () -> {
-			 modifiers = modifiers != -1 ? -1 : 0;
-			 rebuildReflect();
-		 }).growX().colspan(4).height(42)
-		 .update(b -> b.setChecked(modifiers == -1))
-		 .row();
-		int c = 0;
-		for (ModifierR value : ModifierR.values()) {
-			int bit = 1 << value.ordinal();
-			p.button(value.name(), Styles.flatToggleMenut, () -> {
-				 modifiers ^= bit;
-				 rebuildReflect();
-			 }).size(96, 42)
-			 .update(b -> b.setChecked((modifiers & bit) != 0));
-			if (++c % 4 == 0) p.row();
-		}
 	}
 
 
@@ -417,11 +389,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			// type
 			addRType(fields, type, makeDetails(type, f.getGenericType()));
 			// name
-			MyLabel label = newCopyLabel(fields, f.getName());
+			MyLabel label = newCopyLabel(fields, f.getName(), type);
 			IntUI.addShowMenuListener(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("field", () -> f),
 			 MenuList.with(Icon.copySmall, "copy offset", () -> {
-				 JSFunc.copyText("" + fieldOffset(f));
+				 JSFunc.copyText("" + FieldUtils.fieldOffset(f));
 			 }),
 			 MenuList.with(Icon.copySmall, "copy field getter", () -> {
 				 copyFieldReflection(f);
@@ -478,7 +450,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			addRType(methods, m.getReturnType(),
 			 makeDetails(m.getReturnType(), m.getGenericReturnType()));
 			// method name
-			MyLabel label = newCopyLabel(methods, m.getName());
+			MyLabel label = newCopyLabel(methods, m.getName(), m.getReturnType());
 			// method parameters + exceptions + buttons
 			methods.add(buildArgsAndExceptions(m)).growY().pad(4).left();
 
@@ -605,7 +577,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			try {
 				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ");
 
-				MyLabel l = newCopyLabel(t, getGenericString(cls));
+				MyLabel l = newCopyLabel(t, getGenericString(cls), null);
 				l.setColor(c_type);
 				IntUI.addShowMenuListener(l, () -> Seq.with(
 				 IntUI.copyAsJSMenu("class", () -> cls),
@@ -632,9 +604,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	}
 
 	/** 双击复制文本内容 */
-	private static MyLabel newCopyLabel(Table table, String text) {
+	private static MyLabel newCopyLabel(Table table, String text, Class<?> type) {
 		MyLabel label = new MyLabel(text, MOMO_LabelStyle);
-		table.add(label).growY().labelAlign(Align.top);
+		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
+			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));
+		}) */;
 		addDClickCopy(label);
 		return label;
 	}
@@ -664,6 +638,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	public static final int colspan = 8;
 	public static class ReflectTable extends FilterTable<Member> {
 		public final Seq<ValueLabel> labels = new Seq<>();
+
 		public ReflectTable() {
 			left().defaults().left().top();
 		}
@@ -678,7 +653,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			unbind();
 			add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
 			 .style(MOMO_LabelStyle)
-			 .labelAlign(Align.left).color(Pal.accent).colspan(colspan).row();
+			 .labelAlign(Align.left).color(Pal.accent).colspan(colspan)
+			 .row();
 			image().color(Color.lightGray)
 			 .growX().padTop(6).colspan(colspan).row();
 		}

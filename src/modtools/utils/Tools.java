@@ -1,13 +1,12 @@
 package modtools.utils;
 
 import arc.Events;
+import arc.files.Fi;
 import arc.func.*;
 import arc.scene.Element;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
-import hope_android.FieldUtils;
-import jdk.internal.misc.Unsafe;
 import mindustry.game.EventType.Trigger;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
@@ -51,6 +50,12 @@ public class Tools {
 		return Strings.parseInt(text);
 	}
 
+	public static String readFiOrEmpty(Fi fi) {
+		try {
+			return fi.exists() ? fi.readString() : "";
+		} catch (Throwable ignored) {}
+		return ">>>><ERROR><<<<";
+	}
 
 	public static String clName(Object o) {
 		return o.getClass().getName();
@@ -77,7 +82,7 @@ public class Tools {
 	}
 	public static void copyValue(Field f, Object from, Object to) {
 		Class<?> type   = f.getType();
-		long     offset = fieldOffset(f);
+		long     offset = modtools.utils.reflect.FieldUtils.fieldOffset(f);
 		if (int.class == type) {
 			unsafe.putInt(to, offset, unsafe.getInt(from, offset));
 		} else if (float.class == type) {
@@ -103,6 +108,7 @@ public class Tools {
 		}
 	}
 
+	/** 重复运行直到返回{@code true} */
 	public static void forceRun(Boolp boolp) {
 		// Log.info(Time.deltaimpl);
 		Timer.schedule(new Task() {
@@ -155,64 +161,6 @@ public class Tools {
 		if (type == Double.class) return double.class;
 		// it will not reach
 		return type;
-	}
-	public static long fieldOffset(Field f) {
-		return fieldOffset(Modifier.isStatic(f.getModifiers()), f);
-	}
-	public static long fieldOffset(boolean isStatic, Field f) {
-		return OS.isAndroid ? FieldUtils.getFieldOffset(f) : isStatic ? Unsafe.getUnsafe().staticFieldOffset(f) : Unsafe.getUnsafe().objectFieldOffset(f);
-	}
-	public static Object getFieldValue(Object o, long off, Class<?> type) {
-		if (int.class.equals(type)) {
-			return unsafe.getInt(o, off);
-		} else if (float.class.equals(type)) {
-			return unsafe.getFloat(o, off);
-		} else if (double.class.equals(type)) {
-			return unsafe.getDouble(o, off);
-		} else if (long.class.equals(type)) {
-			return unsafe.getLong(o, off);
-		} else if (char.class.equals(type)) {
-			return unsafe.getChar(o, off);
-		} else if (byte.class.equals(type)) {
-			return unsafe.getByte(o, off);
-		} else if (short.class.equals(type)) {
-			return unsafe.getShort(o, off);
-		} else if (boolean.class.equals(type)) {
-			return unsafe.getBoolean(o, off);
-		} else {
-			return unsafe.getObject(o, off);
-		}
-	}
-	public static void setFieldValue(Field f, Object obj, Object value) {
-		Class<?> type     = f.getType();
-		boolean  isStatic = Modifier.isStatic(f.getModifiers());
-		Object   o        = isStatic ? f.getDeclaringClass() : obj;
-		long     offset   = fieldOffset(isStatic, f);
-		setFieldValue(o, offset, value, type);
-	}
-	public static void setFieldValue(Object o, long off, Object value, Class<?> type) {
-		if (int.class.equals(type)) {
-			unsafe.putInt(o, off, ((Number) value).intValue());
-		} else if (float.class.equals(type)) {
-			unsafe.putFloat(o, off, ((Number) value).floatValue());
-		} else if (double.class.equals(type)) {
-			unsafe.putDouble(o, off, ((Number) value).doubleValue());
-		} else if (long.class.equals(type)) {
-			unsafe.putLong(o, off, ((Number) value).longValue());
-		} else if (char.class.equals(type)) {
-			unsafe.putChar(o, off, (char) value);
-		} else if (byte.class.equals(type)) {
-			unsafe.putByte(o, off, ((Number) value).byteValue());
-		} else if (short.class.equals(type)) {
-			unsafe.putShort(o, off, ((Number) value).shortValue());
-		} else if (boolean.class.equals(type)) {
-			unsafe.putBoolean(o, off, (boolean) value);
-		} else {
-			unsafe.putObject(o, off, value);
-			/*if (f.getType().isArray()) {
-				o = Arrays.copyOf((Object[]) o, Array.getLength(o));
-			}*/
-		}
 	}
 
 	public static <T> T as(Object o) {

@@ -6,7 +6,7 @@ import mindustry.Vars;
 import mindustry.mod.ModClassLoader;
 import modtools.ui.content.debug.Tester;
 import modtools.utils.ByteCodeTools.MyClass;
-import modtools.utils.Tools;
+import modtools.utils.reflect.FieldUtils;
 import rhino.*;
 
 import java.io.File;
@@ -43,7 +43,7 @@ public class ForRhino {
 		if (!ContextFactory.hasExplicitGlobal()) {
 			ContextFactory.getGlobalSetter().setContextFactoryGlobal(factory);
 		} else {
-			Tools.setFieldValue(
+			FieldUtils.setValue(
 			 ContextFactory.class.getDeclaredField("global"),
 			 null, factory);
 		}

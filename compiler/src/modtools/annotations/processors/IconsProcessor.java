@@ -56,7 +56,9 @@ public class IconsProcessor extends BaseProcessor {
 		String s       = root.name.toString();
 		String genName = s.substring(0, s.length() - 1);
 		root.name = ns(genName);
+		root.mods = mMaker.Modifiers(1);
 		String content = unit.toString();
+		root.mods = mMaker.Modifiers(0);
 		root.name = ns(s);
 		var source = /* unit.getSourceFile() */
 		 mFiler.createSourceFile(GEN_PREFIX + genName);

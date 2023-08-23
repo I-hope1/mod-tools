@@ -1,12 +1,13 @@
 package modtools.utils;
 
 import arc.func.*;
+import modtools.events.ExecuteTree.OK;
 import modtools.utils.Tools.CBoolp;
 
 import java.util.function.*;
 
 public class SR<T> {
-	private T value;
+	T value;
 
 	public SR(T value) {
 		this.value = value;
@@ -120,18 +121,23 @@ public class SR<T> {
 	}
 
 	/* ---- for classes ---- */
+	public static final SR NONE = new SR<>(null) {
+		public SR<Object> isExtend(Consumer<Class<?>> cons, Class<?>... classes) {
+			return this;
+		}
+	};
 	/**
 	 * 判断是否继承
 	 * @param cons    形参为满足的{@code class}
 	 * @param classes 判断的类
 	 */
 	public SR<T> isExtend(Consumer<Class<?>> cons, Class<?>... classes) {
-		if (!(value instanceof Class<?> orgin)) throw new IllegalStateException("Value isn't a class");
+		if (!(value instanceof Class<?> origin)) throw new IllegalStateException("Value isn't a class");
 
 		for (Class<?> cl : classes) {
-			if (cl.isAssignableFrom(orgin)) {
+			if (cl.isAssignableFrom(origin)) {
 				cons.accept(cl);
-				break;
+				return NONE;
 			}
 		}
 		return this;
@@ -161,7 +167,7 @@ public class SR<T> {
 	public static class CatchSR<R> {
 		private              R       value;
 		private static final CatchSR instance = new CatchSR();
-		private CatchSR(){}
+		private CatchSR() {}
 		public static <R> CatchSR<R> of(Prov<R> prov) {
 			instance.value = null;
 			return instance.get(prov);
@@ -195,5 +201,25 @@ public class SR<T> {
 	}
 	public interface FunctionCatch<P, R> {
 		R apply(P p) throws Throwable;
+	}
+
+	public static class MatchSR<T, R> extends SR<T> {
+		public MatchSR(T value) {
+			super(value);
+		}
+		R matchValue;
+		/**
+		 * @param cons 如果满足就执行
+		 * @throws RuntimeException 当执行后抛出
+		 */
+		public <P extends T> MatchSR<T, R> match(Class<P> cls, Function<P, R> cons) throws SatisfyException {
+			if (matchValue == null && cls.isInstance(value)) {
+				matchValue = cons.apply(cls.cast(value));
+			}
+			return this;
+		}
+		public R matchValue() {
+			return matchValue;
+		}
 	}
 }

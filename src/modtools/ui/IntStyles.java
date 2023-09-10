@@ -3,6 +3,8 @@ package modtools.ui;
 import arc.graphics.Color;
 import arc.scene.style.Drawable;
 import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.ui.CheckBox;
+import arc.scene.ui.CheckBox.CheckBoxStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
@@ -22,6 +24,9 @@ public class IntStyles {
 
 	/** 默认使用等宽字体，没有的话使用默认字体 */
 	public static final LabelStyle MOMO_LabelStyle;
+	// public static final CheckBoxStyle checkbox;
+
+	/* ---------TODO：以下是为了适配V6----------- */
 
 
 	/** Similar to flatToggle, but with a transparent base background. */
@@ -124,6 +129,17 @@ public class IntStyles {
 		MOMO_LabelStyle = new LabelStyle(Styles.defaultLabel) {{
 			font = MyFonts.def;
 		}};
+		/* checkbox = new CheckBoxStyle() {{
+			checkboxOn = checkOn;
+			checkboxOff = checkOff;
+			checkboxOnOver = checkOnOver;
+			checkboxOver = checkOver;
+			checkboxOnDisabled = checkOnDisabled;
+			checkboxOffDisabled = checkDisabled;
+			font = Fonts.def;
+			fontColor = Color.white;
+			disabledFontColor = Color.gray;
+		}}; */
 		init();
 		flatb = new ButtonStyle(flatt);
 	}

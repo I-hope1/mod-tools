@@ -1,35 +1,40 @@
 #!/bin/sh
 # MADE By BING, DEBUG By I-hope
 
-# 将文件的内容追加到控制台
-appendLastLog() {
-  # 获取文件的当前修改时间
-  new_time=$(stat -c %y /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt)
-  # 如果修改时间发生变化
-  if [ "$new_time" != "$old_time" ]; then
-    # 将文件的内容追加到控制台
-    tail /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt
-    # 更新修改时间
-    old_time=$new_time
-  fi
-}
+root="/sdcard/Android/data/io.anuke.mindustry/files"
+crashes="$root/crashes"
+file="$root/last_log.txt"
+last_line=0
 
-# 获取文件的初始修改时间
-old_time=-1
-# 循环检查文件的修改时间
 while true; do
-  # 获取mindustry的进程ID
-  pid=$(pidof io.anuke.mindustry)
-#  echo "pid: $pid"
-  # 如果进程ID为空，说明没有运行
-  if [ -z "$pid" ]; then
-    # 输出提示信息
-    echo "mindustry is not running, exiting..."
-    # 退出程序
-    exit 0
-  else
-    appendLastLog
+  # Get the current number of lines in the file
+  current_line=$(wc -l <"$file")
+  # If the number of lines has changed
+  if [ "$current_line" -gt "$last_line" ]; then
+    # Output the new lines to the console
+    awk -v last_line="$last_line" 'NR > last_line' "$file"
+    # Update the last line number
+    last_line=$current_line
   fi
-  # 等待一段时间（秒）
+  # Check if the process is running
+  pid=$(pidof io.anuke.mindustry)
+  if [ -z "$pid" ]; then
+    echo "mindustry is not running, exiting..."
+    # Find the newest file in the crashes directory
+    newest_file=$(ls -t "$crashes" | head -n1)
+    # Get the modification time of the newest file
+    mod_time=$(stat -c %Y "$crashes/$newest_file")
+    # Get the current time
+    current_time=$(date +%s)
+    # Calculate the time difference
+    time_diff=$(expr $current_time - $mod_time)
+    # Check if the time difference is within the allowed range (0.5s)
+    if [ $time_diff -le 1 ]; then
+      # Print the content of the newest file to the console
+      cat "$crashes/$newest_file"
+    fi
+    exit 0
+  fi
+
   sleep 0.01
 done

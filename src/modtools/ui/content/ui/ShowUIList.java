@@ -228,7 +228,11 @@ public class ShowUIList extends Content {
 	public static class Builder {
 		static Table t;
 		static void build(ScrollPaneStyle style) {
-			t.pane(style, p -> p.add("pane")).growX().height(42);
+			t.pane(style, p -> {
+				p.add("pane").row();
+				p.add("test-test-test").color(Color.gray).row();
+				p.add("test-test-test").color(Color.gray).row();
+			}).growX().maxWidth(96).height(42);
 		}
 		static void build(DialogStyle style) {
 			t.pane(p -> p.add(new Dialog("dialog", style))).growX().height(42);

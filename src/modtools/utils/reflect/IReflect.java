@@ -26,9 +26,7 @@ public class IReflect {
 
 		try {
 			clearReflectionFilter();
-		} catch (Throwable e) {
-			throw new RuntimeException(e);
-		}
+		} catch (Throwable ignored) {}
 	}
 
 

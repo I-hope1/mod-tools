@@ -110,12 +110,12 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			t.left().defaults().left();
 			t.button(Icon.settingsSmall, Styles.clearNonei, () -> {
 				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
-					addSettingsTable(p, null, n -> "jsfunc." + n, D_JSFUNC, E_JSFunc.values());
+					addSettingsTable(p, "", n -> "jsfunc." + n, D_JSFUNC, E_JSFunc.values());
 					addSettingsTable(p, "Display", n -> "jsfunc.display." + n, D_JSFUNC_DISPLAY, E_JSFuncDisplay.values());
 					addSettingsTable(p, "Edit", n -> "jsfunc.edit." + n, D_JSFUNC_EDIT, E_JSFuncEdit.values());
 				}, false);
 			}).size(42);
-			if (hasDecompiler) buildCompiler(t);
+			if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, IntStyles.clearNonei, rebuild0).size(42);
 			if (o != null) {
 				addStoreButton(t, "", () -> o);
@@ -156,7 +156,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		}
 		pack();
 	}
-	private void buildCompiler(Table t) {
+	private void buildDeCompiler(Table t) {
 		t.button("Decompile", Styles.flatBordert, new Runnable() {
 			public void run() {
 				StringWriter stringWriter = new StringWriter();

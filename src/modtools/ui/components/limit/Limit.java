@@ -22,10 +22,10 @@ public interface Limit {
 	Vec2 v1 = new Vec2(), v2 = new Vec2();
 
 	static boolean isVisible(Element actor) {
-		Element elem = actor;
+		Element elem = actor.parent;
 		while (!(elem instanceof ScrollPane)) {
-			elem = elem.parent;
 			if (elem == null) return false;
+			elem = elem.parent;
 		}
 		elem.localToStageCoordinates(v1.set(0, 0));
 		boolean computeIfOverStage = v1.x + elem.getWidth() > Core.graphics.getWidth()

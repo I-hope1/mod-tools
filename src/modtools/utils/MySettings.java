@@ -61,8 +61,9 @@ public class MySettings {
 			return old;
 		}
 		public void write() {
-			if (parent == null) config.writeString("" + this);
-			else parent.write();
+			if (parent == null) {
+				config.writeString("" + this);
+			} else parent.write();
 		}
 
 		public Object get(String key, Object defaultValue) {
@@ -73,6 +74,8 @@ public class MySettings {
 			if (!fi.exists()) {
 				fi.writeString("");
 				return;
+			} else {
+				fi.copyTo(fi.sibling("mod-tools-config.bak"));
 			}
 			try {
 				loadJval(Jval.read(fi.readString()).asObject());
@@ -111,7 +114,9 @@ public class MySettings {
 			builder.append("{\n");
 			tab.append("	");
 			each((k, v) -> {
-				builder.append(tab).append(k).append(": ")
+				builder.append(tab).append('"')
+				 .append(k.replaceAll("\"", "\\\""))
+				 .append('"').append(": ")
 				 .append(v instanceof Data ? ((Data) v).toString(tab) : v)
 				 .append('\n');
 			});

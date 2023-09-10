@@ -245,12 +245,10 @@ public class JSFunc {
 	}
 
 	public static void setDrawPadElem(Element elem) {
-		TopGroup.drawHiddenPad = false;
-		topGroup.drawPadElem = elem;
+		topGroup.setDrawPadElem(elem);
 	}
 	public static void toggleDrawPadElem(Element elem) {
-		TopGroup.drawHiddenPad = true;
-		topGroup.drawPadElem = topGroup.drawPadElem == elem ? null : elem;
+		topGroup.setDrawPadElem(topGroup.drawPadElem == elem ? null : elem);
 	}
 
 	public static Object asJS(Object o) {

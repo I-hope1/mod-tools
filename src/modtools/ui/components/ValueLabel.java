@@ -1,6 +1,6 @@
 package modtools.ui.components;
 
-import arc.func.Func;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
@@ -276,27 +276,41 @@ public class ValueLabel extends MyLabel {
 			sb.append('[');
 			l:
 			try {
-				Seq seq = val instanceof Iterable<?> ? Seq.with((Iterable<?>) val) :
+				var seq = val instanceof Iterable<?> ? Seq.with((Iterable<?>) val) :
 				 Seq.with(asArray(val));
-				ObjectSet set = seq.asSet();
-				if (set.size == 1) {
-					sb.append(dealVal(seq.get(0)));
-					if (seq.size > 1) sb.append(" [>> ×").append(seq.size).append(" <<]");
-					break l;
+				if (seq.any()) {
+					Object last  = seq.first();
+					int    count = 0;
+					for (Object item : seq) {
+						if (last == item) {
+							count++;
+						} else {
+							sb.append(dealVal(last));
+							if (count > 1) sb.append(" ▶×").append(count).append("◀");
+							sb.append(", ");
+							if (isTruncate(sb.length())) break;
+							last = item;
+							count = 0;
+						}
+					}
+					sb.append(dealVal(last));
+					if (count > 1) sb.append(" ▶×").append(count).append("◀");
+					sb.append(", ");
+					// break l;
+					checkTail = true;
 				}
-				for (Object o : seq) {
+				/* for (Object o : seq) {
 					sb.append(dealVal(o));
 					sb.append(", ");
 					if (isTruncate(sb.length())) break;
-				}
+				} */
 				/* for (int i = 0, len = Array.getLength(val); i < len; i++) {
 					sb.append(dealVal(Array.get(val, i)));
 					sb.append(", ");
 					if (isTruncate(sb.length())) break;
 				} */
-				checkTail = true;
 			} catch (ArcRuntimeException ignored) {
-			} catch (Throwable e) {sb.append("|>ERROR<|");}
+			} catch (Throwable e) {sb.append("▶ERROR◀");}
 			if (checkTail && sb.length() >= 2) sb.delete(sb.length() - 2, sb.length());
 			sb.append(']');
 			return sb;
@@ -438,3 +452,4 @@ public class ValueLabel extends MyLabel {
 		return isDisposed;
 	} */
 }
+

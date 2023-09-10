@@ -33,6 +33,7 @@ public class ElementUtils {
 	public static Vec2 getAbsPosCenter(Element el) {
 		return el.localToStageCoordinates(v2.set(el.getWidth() / 2f, el.getHeight() / 2f));
 	}
+
 	public static Vec2 getAbsPos(Element el) {
 		if (true) return el.localToStageCoordinates(v1.set(0, 0));
 		Vec2 vec2 = Tmp.v1.set(el.x, el.y);

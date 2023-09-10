@@ -8,6 +8,8 @@ allprojects {
 	ext {
 		uncVersion = "1.8.5"
 		mindustryVersion = 'v145.1'
+		MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
+		VERSION = "1.4.3.2"
 	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
@@ -31,8 +33,6 @@ repositories {
 	maven { url 'https://www.jitpack.io' }
 //	mindustryRepo()
 }
-def MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
-def VERSION = "1.4.3.1"
 
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"

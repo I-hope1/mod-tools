@@ -5,6 +5,7 @@ import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.Color;
+import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
@@ -12,15 +13,15 @@ import arc.struct.Seq;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.core.Version;
-import mindustry.game.Team;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.components.Window;
+import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
+import modtools.ui.components.limit.LimitTable;
 
 import static modtools.ui.IntUI.*;
 import static modtools.utils.MySettings.*;
@@ -65,21 +66,23 @@ public class SettingsUI extends Content {
 		ui.cont.pane(cont).grow();
 		cont.defaults().minWidth(400).padTop(20);
 		add("Load", loadTable);
-		add("jsfunc", new Table() {{
+		add("jsfunc", new LimitTable() {{
 			left().defaults().left();
 			bool(this, "@settings.jsfunc.auto_refresh", D_JSFUNC, "auto_refresh");
 		}});
-		add("毛玻璃", new Table() {{
+		add("毛玻璃", new LimitTable() {{
 			left().defaults().left();
 			bool(this, "启用", D_BLUR, "enable");
 			SettingsUI.slideri(this, D_BLUR, "缩放级别", 1, 8, 4, 1, null);
 		}});
-		add("@mod-tools.others", new Table() {{
+		add("@mod-tools.others", new LimitTable() {{
 			left().defaults().left();
 			bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
 			bool(this, "@settings.checkuicount", SETTINGS, "checkuicount", topGroup.checkUI, b -> topGroup.checkUI = b);
 			bool(this, "@settings.debugbounds", SETTINGS, "debugbounds", topGroup.debugBounds, b -> SETTINGS.put("debugbounds", topGroup.debugBounds = b));
-			bool(this, "@settings.select_unvisible", SETTINGS, "select_unvisible", topGroup.selectUnvisible, b -> SETTINGS.put("select_unvisible", topGroup.selectUnvisible = b));
+			bool(this, "@setting.showhiddenbounds", SETTINGS, "showHiddenBounds", TopGroup.drawHiddenPad, b -> SETTINGS.put("drawHiddenPad", b), () -> topGroup.debugBounds);
+			addValueLabel(this, "Bound Element", () -> topGroup.drawPadElem, () -> topGroup.debugBounds);
+			bool(this, "@settings.select_invisible", SETTINGS, "select_invisible", topGroup.selectInvisible, b -> SETTINGS.put("select_invisible", topGroup.selectInvisible = b));
 			float minZoom = Vars.renderer.minZoom;
 			float maxZoom = Vars.renderer.maxZoom;
 			SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
@@ -120,6 +123,18 @@ public class SettingsUI extends Content {
 			}
 		});
 		// ui.addCloseButton();
+	}
+	public static void addValueLabel(Table table, String text, Prov<Object> prov, Boolp condition) {
+		ValueLabel vl = new ValueLabel(prov.get(), Element.class, null, null);
+		vl.setAlignment(Align.right);
+		Label l = new Label(text);
+		table.stack(l, vl)
+		 .update(t -> {
+			 vl.setVal(prov.get());
+			 Color color = condition.get() ? Color.white : Color.gray;
+			 vl.setColor(color);
+			 l.setColor(color);
+		 }).growX().row();
 	}
 
 	public static Slider slider(Table table, String name, float min, float max, float def, float step, Floatc floatc) {
@@ -175,9 +190,14 @@ public class SettingsUI extends Content {
 		bool(table, text, data, key, false, null);
 	}
 	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc) {
+		bool(table, text, data, key, def, boolc, null);
+	}
+	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc, Boolp condition) {
 		table.check(text, key == null ? def : data.getBool(key, def), b -> {
 			if (key != null) data.put(key, b);
 			if (boolc != null) boolc.get(b);
+		}).with(t -> {
+			if (condition != null) t.setDisabled(() -> !condition.get());
 		}).row();
 	}
 
@@ -191,12 +211,13 @@ public class SettingsUI extends Content {
 	 Data data, T[] values) {
 		addSettingsTable(p, name, keyProvider, data, values, false);
 	}
+	/** @param name 为{@code null}就无背景，无name，为{@code ""}但有背景 */
 	public static <T extends Enum<T>> void addSettingsTable(
 	 Table p, String name, Func<String, String> keyProvider,
 	 Data data, T[] values, boolean fireAll) {
-		p.table(Tex.pane, dis -> {
+		p.table(name == null ? null : Tex.pane, dis -> {
 			dis.left().defaults().left();
-			if (name != null) dis.add(name).color(Pal.accent).row();
+			if (name != null && !name.isEmpty()) dis.add(name).color(Pal.accent).row();
 			for (T value : values) {
 				SettingsUI.bool(dis, "@settings." + keyProvider.get(value.name()),
 				 data, value.name(), true, b -> MyEvents.fire(value));

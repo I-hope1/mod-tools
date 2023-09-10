@@ -1,6 +1,6 @@
 package modtools.ui;
 
-import arc.*;
+import arc.Core;
 import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -10,20 +10,19 @@ import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.event.FocusListener.FocusEvent;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import mindustry.Vars;
-import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
+import modtools.annotations.DataObjectInit;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.Window;
+import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.effect.*;
 import modtools.utils.*;
 import modtools.utils.array.TaskSet;
@@ -40,11 +39,12 @@ import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
+@DataObjectInit
 public final class TopGroup extends WidgetGroup {
 	public boolean
 	 checkUI         = SETTINGS.getBool("checkUI"),
 	 debugBounds     = SETTINGS.getBool("debugbounds"),
-	 selectUnvisible = SETTINGS.getBool("selectUnvisible");
+	 selectInvisible = SETTINGS.getBool("selectInvisible");
 	/* 渲染相关 */
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
@@ -83,7 +83,10 @@ public final class TopGroup extends WidgetGroup {
 	private final Table end = new MyEnd();
 
 	public Element drawPadElem = null;
-
+	public void setDrawPadElem(Element drawPadElem) {
+		debugBounds = drawPadElem != null;
+		this.drawPadElem = drawPadElem;
+	}
 	public void draw() {
 		setTransform(false);
 		backDrawSeq.exec();
@@ -95,6 +98,25 @@ public final class TopGroup extends WidgetGroup {
 			elementDrawer.draw(selecting, selected);
 		}
 		drawResidentTasks.each(ResidentDrawTask::elemDraw);
+
+		Draw.flush();
+
+		drawSeq.exec();
+		drawResidentTasks.each(ResidentDrawTask::endDraw);
+		Draw.flush();
+
+		if (!debugBounds && drawPadElem == null) return;
+		Element drawPadElem = or(this.drawPadElem, scene.root);
+		Vec2    vec2;
+		if (drawPadElem.parent != null) {
+			vec2 = ElementUtils.getAbsPos(drawPadElem.parent);
+		} else if (drawPadElem == scene.root) {
+			vec2 = Tmp.v1.set(0, 0);
+		} else return;
+		Draw.color(Color.white);
+		Draw.alpha(0.7f);
+		drawPad(drawPadElem, vec2);
+		Draw.flush();
 	}
 	/** 如果选中的元素太小，会在边缘显示 */
 	private void drawSlightlyIfSmall() {
@@ -110,17 +132,17 @@ public final class TopGroup extends WidgetGroup {
 		Draw.color(ColorFul.color);
 		Lines.stroke(4f);
 		Lines.line(mouse.x, mouse.y, Tmp.v1.x, Tmp.v1.y);
-		Draw.flush();
 	}
 
-	public static boolean drawHiddenPad = false;
+	public static boolean drawHiddenPad = SETTINGS.getBool("");
 	public static void drawPad(Element elem, Vec2 vec2) {
 		if (!drawHiddenPad && !elem.visible) return;
 		/* translation也得参与计算 */
 		vec2.x += elem.x + elem.translation.x;
 		vec2.y += elem.y + elem.translation.y;
-		Draw.color(elem instanceof Group ? Color.sky : Color.green);
 
+		Lines.stroke(elem instanceof Group ? 3 : 1);
+		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
 		Lines.rect(vec2.x, vec2.y,
 		 elem.getWidth(), elem.getHeight());
 
@@ -143,28 +165,6 @@ public final class TopGroup extends WidgetGroup {
 		touchable = Touchable.childrenOnly;
 		name = modName + "-TopGroup";
 
-		/* 显示UI布局 */
-		Events.run(Trigger.uiDrawEnd, () -> {
-			drawSeq.exec();
-
-			drawResidentTasks.each(ResidentDrawTask::endDraw);
-			Draw.flush();
-
-			if (!debugBounds && drawPadElem == null) return;
-			Element drawPadElem = or(this.drawPadElem, scene.root);
-			Vec2    vec2;
-			if (drawPadElem.parent != null) {
-				vec2 = ElementUtils.getAbsPos(drawPadElem.parent);
-			} else if (drawPadElem == scene.root) {
-				vec2 = Tmp.v1.set(0, 0);
-			} else return;
-			Draw.color(Color.white);
-			Draw.alpha(0.7f);
-			Lines.stroke(1);
-			drawPad(drawPadElem, vec2);
-
-			Draw.flush();
-		});
 		scene.add(this);
 		Group[] all = {back, windows, frag, others, new FillEnd()};
 		for (Group group : all) {
@@ -210,7 +210,7 @@ public final class TopGroup extends WidgetGroup {
 	public List<Window> acquireShownWindows() {
 		shownWindows.clear();
 		Cons<Element> cons = elem -> {
-			if (elem instanceof Window window) {
+			if (elem instanceof Window window && !(elem instanceof DelayDisposable)) {
 				shownWindows.add(window);
 			}
 		};
@@ -298,7 +298,7 @@ public final class TopGroup extends WidgetGroup {
 	public ObjectFloatMap<Element> filterSelected = new ObjectFloatMap<>();
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {
-		selected = scene.root.hit(x, y, !selectUnvisible);
+		selected = scene.root.hit(x, y, !selectInvisible);
 		//if (tmp != null) {
 			/*do {
 				selected = tmp;
@@ -660,7 +660,9 @@ public final class TopGroup extends WidgetGroup {
 			drawFocus(elem);
 		}
 		public void drawFocus(Element elem) {
-			Vec2 vec2 = ElementUtils.getAbsPos(elem);
+			drawFocus(elem, ElementUtils.getAbsPos(elem));
+		}
+		public void drawFocus(Element elem, Vec2 vec2) {
 			if (focusColor.a > 0) {
 				float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
 				Draw.color(focusColor, alpha);

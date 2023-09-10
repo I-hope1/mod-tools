@@ -3,6 +3,7 @@ package modtools;
 import arc.*;
 import arc.files.*;
 import arc.graphics.Color;
+import arc.scene.event.*;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
@@ -96,7 +97,7 @@ public class ModTools extends Mod {
 		libs = root.child("libs");
 
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
-		setLoadRenderer();
+		// setLoadRenderer();
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();
 
@@ -131,25 +132,33 @@ public class ModTools extends Mod {
 			ui.showException(error);
 			return;
 		}
-		if (OS.isWindows) ui.mods.shown(() -> {
-			ui.mods.buttons.row().button("importFromSelector", () -> {
-				FileUtils.openFiSelector(list -> {
-					try {
-						for (Fi fi : list) {
-							if (!fi.extEquals("zip") && !fi.extEquals("jar"))
-								throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
+		if (OS.isWindows) {
+			ui.mods.addListener(new VisibilityListener() {
+				@Override
+				public boolean shown() {
+					ui.mods.buttons.row().button("importFromSelector", () -> {
+
+						ui.mods.removeListener(this);
+						FileUtils.openFiSelector(list -> {
 							try {
-								Vars.mods.importMod(fi);
-							} catch (IOException e) {
-								throw new RuntimeException(e);
+								for (Fi fi : list) {
+									if (!fi.extEquals("zip") && !fi.extEquals("jar"))
+										throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
+									try {
+										Vars.mods.importMod(fi);
+									} catch (IOException e) {
+										throw new RuntimeException(e);
+									}
+								}
+							} catch (Throwable e) {
+								IntUI.showException("Failed to import mod from selector", e);
 							}
-						}
-					} catch (Throwable e) {
-						IntUI.showException("Failed to import mod from selector", e);
-					}
-				});
+						});
+					});
+					return false;
+				}
 			});
-		});
+		}
 		MyShaders.load();
 		Time.runTask(6f, () -> {
 			IntUI.load();

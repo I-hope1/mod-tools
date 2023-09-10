@@ -3,11 +3,13 @@ displayName: "mod工具"
 name: "mod-tools"
 author: "I hope..."
 description: '''
-1. 大幅优化了代码高亮性能
-2. 添加监视功能
+1. 修复设置的存在的巨大bug（key有空白字符就无了）
+2. 修复一些其他bug
+3. UnitSpawn 快速按钮
+...
 '''
 main: "modtools.ModTools"
-version: "1.4.3.1"
+version: "1.4.3.2"
 hidden: true
 minGameVersion: 136
 repo: "I-hope1/mod-tools"

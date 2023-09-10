@@ -74,10 +74,6 @@ public class LimitTable extends Table implements Limit{
 		if (!(element instanceof Limit)) acquireLimitElems().add(element);
 		return super.add(element);
 	}
-
-	protected void drawChildren() {
-		super.drawChildren();
-	}
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);

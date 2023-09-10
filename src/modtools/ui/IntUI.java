@@ -43,9 +43,14 @@ import static modtools.utils.ElementUtils.getAbsPos;
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
-	public static final Frag     frag          = new Frag();
-	public static final TopGroup topGroup      = new TopGroup();
-	public static       float    default_width = 150;
+	public static final Frag     frag = new Frag();
+	public static final TopGroup topGroup;
+
+	static {
+		topGroup = new TopGroup();
+	}
+
+	public static float default_width = 150;
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) {
@@ -373,11 +378,13 @@ public class IntUI {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 
+			Pattern pattern = PatternUtils.compileRegExpCatch(text);
 			for (V item : list) {
-				p.button(stringify.get(item), IntStyles.flatt/*Styles.cleart*/, () -> {
-					cons.get(item);
-					hide.run();
-				}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();
+				if (PatternUtils.test(pattern, stringify.get(item)))
+					p.button(stringify.get(item), IntStyles.flatt/*Styles.cleart*/, () -> {
+						cons.get(item);
+						hide.run();
+					}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();
 			}
 
 		}, searchable);
@@ -910,7 +917,7 @@ public class IntUI {
 	// -----弹窗------
 	public interface PopupWindow extends DisposableInterface {}
 
-	public static class InfoFadePopup extends NoTopWindow implements DisposableInterface {
+	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
 		public InfoFadePopup(String title, float width, float height) {
 			super(title, width, height);
 			removeCaptureListener(sclListener);

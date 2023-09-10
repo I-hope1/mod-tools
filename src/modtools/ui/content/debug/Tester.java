@@ -3,6 +3,7 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
+import arc.func.Func;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
@@ -87,7 +88,7 @@ public class Tester extends Content {
 				String taskName = startupTask().name;
 				String source = "(()=>{modName='" + taskName + "';scriptName=`" + entry.key + "`;" +
 												(map.getBool("once") && map.containsKey("type") ?
-												 "Events.on(" + map.get("type") + ", $e$ => {\n" + bookmarkDirectory.child(entry.key).readString() + ";});"
+												 "Events.on(" + map.get("type") + ", $e$ => {try{\n" + bookmarkDirectory.child(entry.key).readString() + ";}catch(e){Log.err(e);}});"
 												 : bookmarkDirectory.child(entry.key).readString())
 												+ "\n})()";
 				ExecuteTree.node(() -> {
@@ -557,6 +558,7 @@ public class Tester extends Content {
 		var classes = new Seq<>()
 		 .add(EventType.class.getClasses())
 		 .add(Trigger.values());
+		classes.remove(Trigger.class);
 
 		p.left().defaults().left();
 		p.table(Tex.pane, t -> {
@@ -584,10 +586,10 @@ public class Tester extends Content {
 					 () -> enabled && !JS.getBool("once"),
 					 -1, Integer.MAX_VALUE);
 
-					list("event", val -> JS.put("type", val),
+					Func<Object, String> stringify = val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
+					list("event", val -> JS.put("type", stringify.get(val)),
 					 () -> JS.get("type"), classes,
-					 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val),
-					 () -> JS.getBool("once"));
+					 stringify, () -> JS.getBool("once"));
 				}
 			};
 		}).row();
@@ -659,7 +661,7 @@ public class Tester extends Content {
 		Table table = new Table();
 		table.defaults().growX();
 		dataInit();
-		addSettingsTable(table, "BASE", n -> "tester." + n, settings, E_Tester.values(), true);
+		addSettingsTable(table, null, n -> "tester." + n, settings, E_Tester.values(), true);
 
 		Contents.settings_ui.add(localizedName(), table);
 	}

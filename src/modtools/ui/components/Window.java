@@ -1,5 +1,6 @@
 package modtools.ui.components;
 
+import android.nfc.cardemulation.HostApduService;
 import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
@@ -19,6 +20,7 @@ import arc.util.*;
 import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.gen.*;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
@@ -28,7 +30,7 @@ import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.utils.*;
 import modtools.utils.array.MySet;
-import modtools.utils.ui.search.FilterTable;
+import modtools.utils.ui.search.*;
 
 import static arc.Core.graphics;
 import static modtools.ui.Contents.window_manager;
@@ -70,11 +72,11 @@ public class Window extends Table {
 		});
 	}
 
-	public static       Drawable myPane    = Tex.pane;
-	public static final Cell     emptyCell = new Cell<>();
+	public static Drawable myPane  = Tex.pane;
+	public static Drawable topPane = whiteui.tint(Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f));
 
 	public Table
-	 titleTable = new Table(myPane) {
+	 titleTable = new Table(topPane) {
 		public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, float isize, Runnable listener) {
 			var cell = super.button(icon, style, isize, listener);
 			cell.get().tapped(() -> {
@@ -546,11 +548,11 @@ public class Window extends Table {
 			 Actions.moveTo(Math.max(x, lastRect.width / 2f),
 				y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
 
-			getCell(cont).set(emptyCell);
+			getCell(cont).set(BindCell.UNSET_CELL);
 			cont.remove();
 			if (!noButtons) {
 				Tools.runIgnoredException(() -> {
-					getCell(buttons).set(emptyCell);
+					getCell(buttons).set(BindCell.UNSET_CELL);
 					buttons.remove();
 				});
 			}
@@ -706,6 +708,13 @@ public class Window extends Table {
 			});
 		}
 	}
+	/**
+	 * 延迟几秒销毁的窗口
+	 * @see InfoFadePopup
+	 */
+	public interface DelayDisposable extends DisposableInterface {
+	}
+
 
 	public static class DisWindow extends Window implements DisposableInterface {
 		public DisWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {

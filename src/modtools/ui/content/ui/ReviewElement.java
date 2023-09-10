@@ -42,7 +42,7 @@ public class ReviewElement extends Content {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
 					topGroup.requestSelectElem(null, callback);
-					event.cancel();
+					event.stop();
 				}
 				return true;
 			}
@@ -80,7 +80,53 @@ public class ReviewElement extends Content {
 			/** 清除elemDraw */
 			public void elemDraw() {}
 			public void beforeDraw(Element drawer) {
-				if (drawer == FOCUS_WINDOW && FOCUS != null) drawFocus(FOCUS);
+				if (drawer == FOCUS_WINDOW && FOCUS != null) {
+					drawFocus(FOCUS);
+				}
+			}
+			public void drawFocus(Element elem, Vec2 vec2) {
+				super.drawFocus(elem, vec2);
+				if (elem instanceof Table table) {
+					drawMargin(vec2, table);
+				}
+
+				if (elem.parent instanceof Table table) {
+					drawMargin(table.localToStageCoordinates(Tmp.v1.set(0, 0)), table);
+					// 浅绿色
+					Draw.color(0x8C_E9_9A_75);
+					Cell<?> cl        = table.getCell(elem);
+					float   padLeft   = Reflect.get(Cell.class, cl, "padLeft");
+					float   padTop    = Reflect.get(Cell.class, cl, "padTop");
+					float   padBottom = Reflect.get(Cell.class, cl, "padBottom");
+					float   padRight  = Reflect.get(Cell.class, cl, "padRight");
+
+					// 左边
+					Fill.crect(vec2.x - padLeft, vec2.y, padLeft, elem.getHeight());
+
+					// 顶部
+					Fill.crect(vec2.x, vec2.y - padTop, elem.getWidth(), padTop);
+
+					// 底部
+					Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), padBottom);
+
+					// 右边
+					Fill.crect(vec2.x + elem.getWidth(), vec2.y, padRight, elem.getHeight());
+				}
+
+			}
+			private static void drawMargin(Vec2 vec2, Table table) {
+				Draw.color(Color.orange, 0.5f);
+				// 左边
+				Fill.crect(vec2.x, vec2.y, table.getMarginLeft(), table.getHeight());
+
+				// 顶部
+				Fill.crect(vec2.x, vec2.y, table.getWidth(), table.getMarginTop());
+
+				// 底部
+				Fill.crect(vec2.x, vec2.y + table.getHeight(), table.getWidth(), -table.getMarginBottom());
+
+				// 右边
+				Fill.crect(vec2.x + table.getWidth(), vec2.y, -table.getMarginRight(), table.getHeight());
 			}
 			public void drawLine() {
 				if (FOCUS == null) return;

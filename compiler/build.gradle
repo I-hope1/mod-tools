@@ -31,8 +31,7 @@ dependencies {
 	compileOnly 'com.google.auto.service:auto-service:1.0.1'
 	implementation project(":annotations")
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
-
-	def mindustryVersion = 'v145.1'
+	
 	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 

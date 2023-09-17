@@ -14,7 +14,6 @@ dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 //	implementation 'com.squareup:javapoet:1.12.1'
-	def mindustryVersion = 'v145.1'
 	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 
 	// only for document

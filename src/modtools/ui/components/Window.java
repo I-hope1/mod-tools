@@ -86,8 +86,9 @@ public class Window extends Table {
 			return cell;
 		}
 	},
-	 cont       = new Table(myPane),
-	 buttons    = new Table(myPane);
+	/** container */
+	cont     = new Table(myPane),
+	 buttons = new Table(myPane);
 	public float minWidth, minHeight;
 	// 用于最小化时的最小宽度
 	private static final float topHeight = 45;
@@ -801,7 +802,7 @@ public class Window extends Table {
 			class ExitListener extends InputListener {
 				public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 					/* 如果toActor是titleTable的子节点，就忽略 */
-					if (toActor.isDescendantOf(titleTable)) return;
+					if (toActor == null || toActor.isDescendantOf(titleTable)) return;
 					translateTo(topHeight);
 				}
 			}

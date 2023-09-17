@@ -51,8 +51,8 @@ public class ModTools extends Mod {
 			if (!isImportFromGame) IntVars.meta.hidden = false;
 			resolveLibsCatch();
 
-			if (isImportFromGame) resolveUI();
-			else Events.on(ClientLoadEvent.class, e -> resolveUI());
+			if (isImportFromGame) resolveInputAndUI();
+			else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
 		} catch (Throwable e) {
 			if (isImportFromGame) Vars.ui.showException("Cannot load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
@@ -126,19 +126,19 @@ public class ModTools extends Mod {
 		}
 	}
 
-	private static void resolveUI() {
+	private static void resolveInputAndUI() {
 		if (ui == null) return;
 		if (error != null) {
 			ui.showException(error);
 			return;
 		}
+		HopeInput.load();
 		if (OS.isWindows) {
 			ui.mods.addListener(new VisibilityListener() {
 				@Override
 				public boolean shown() {
+					ui.mods.removeListener(this);
 					ui.mods.buttons.row().button("importFromSelector", () -> {
-
-						ui.mods.removeListener(this);
 						FileUtils.openFiSelector(list -> {
 							try {
 								for (Fi fi : list) {

@@ -4,18 +4,18 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
-import arc.input.KeyCode;
+import arc.input.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
-import mindustry.ui.Styles;
+import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.TopGroup.FocusTask;
@@ -33,7 +33,7 @@ import java.util.regex.*;
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.IntStyles.*;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.Sr;
+import static modtools.utils.Tools.*;
 
 public class ReviewElement extends Content {
 	public ReviewElement() {
@@ -42,6 +42,7 @@ public class ReviewElement extends Content {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
 					topGroup.requestSelectElem(null, callback);
+					HopeInput.justPressed.clear();
 					event.stop();
 				}
 				return true;
@@ -100,33 +101,67 @@ public class ReviewElement extends Content {
 					float   padBottom = Reflect.get(Cell.class, cl, "padBottom");
 					float   padRight  = Reflect.get(Cell.class, cl, "padRight");
 
-					// 左边
-					Fill.crect(vec2.x - padLeft, vec2.y, padLeft, elem.getHeight());
-
-					// 顶部
-					Fill.crect(vec2.x, vec2.y - padTop, elem.getWidth(), padTop);
-
-					// 底部
-					Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), padBottom);
-
-					// 右边
-					Fill.crect(vec2.x + elem.getWidth(), vec2.y, padRight, elem.getHeight());
+					drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
 				}
+			}
 
+			private static void drawText(String text, float x, float y, Color color) {
+				Font  font      = Fonts.def;
+				float oldScaleX = font.getScaleX();
+				float oldScaleY = font.getScaleY();
+				font.getData().setScale(0.6f);
+				Color oldColor = font.getColor();
+				font.setColor(color);
+				font.draw(text, x, y, Align.center);
+				font.setColor(oldColor);
+				font.getData().setScale(oldScaleX, oldScaleY);
 			}
 			private static void drawMargin(Vec2 vec2, Table table) {
 				Draw.color(Color.orange, 0.5f);
-				// 左边
-				Fill.crect(vec2.x, vec2.y, table.getMarginLeft(), table.getHeight());
 
-				// 顶部
-				Fill.crect(vec2.x, vec2.y, table.getWidth(), table.getMarginTop());
+				drawMarginOrPad(vec2, table, false,
+				 table.getMarginLeft(), table.getMarginTop(),
+				 table.getMarginRight(), table.getMarginBottom());
+			}
+			/** @param pad true respect 外边距 */
+			private static void drawMarginOrPad(
+			 Vec2 vec2, Element elem, boolean pad,
+			 float left, float top, float right, float bottom) {
 
-				// 底部
-				Fill.crect(vec2.x, vec2.y + table.getHeight(), table.getWidth(), -table.getMarginBottom());
+				if (pad) {
+					left *= -1;
+					top *= -1;
+					right *= -1;
+					bottom *= -1;
+				}
+				// 左边 left
+				Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
+				Color color = pad ? Color.green : Pal.accent;
+				if (left != 0)
+					drawText(Strings.autoFixed(left, 1),
+					 vec2.x + left / 2f,
+					 vec2.y + elem.getHeight() / 2f, color);
 
-				// 右边
-				Fill.crect(vec2.x + table.getWidth(), vec2.y, -table.getMarginRight(), table.getHeight());
+				// 底部 bottom
+				Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
+				if (bottom != 0)
+					drawText(Strings.autoFixed(bottom, 1),
+					 vec2.x + elem.getWidth() / 2f,
+					 vec2.y + bottom, color);
+
+				// 顶部 top
+				Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
+				if (top != 0)
+					drawText(Strings.autoFixed(top, 1),
+					 vec2.x + elem.getWidth() / 2f,
+					 vec2.y + elem.getHeight(), color);
+
+				// 右边 right
+				Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
+				if (right != 0)
+					drawText(Strings.autoFixed(right, 1),
+					 vec2.x + elem.getWidth() - left / 2f,
+					 vec2.y + elem.getHeight() / 2f, color);
 			}
 			public void drawLine() {
 				if (FOCUS == null) return;

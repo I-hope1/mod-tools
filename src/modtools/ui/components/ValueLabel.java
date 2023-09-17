@@ -102,7 +102,7 @@ public class ValueLabel extends MyLabel {
 		});
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
 
-		if (Element.class.isAssignableFrom(type)) {
+		if (Element.class.isAssignableFrom(type) && val instanceof Element) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> (Element) val);
 		} else if (Cell.class.isAssignableFrom(type)) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> val == null ? null : ((Cell<?>) val).get());
@@ -320,6 +320,7 @@ public class ValueLabel extends MyLabel {
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? "'" + val + "'"
+				: val instanceof Float ? Strings.autoFixed((float) val, 2)
 				: String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + val.hashCode())
 			.get(() -> val.getClass().getName())

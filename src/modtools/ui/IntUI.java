@@ -43,6 +43,8 @@ import static modtools.utils.ElementUtils.getAbsPos;
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
+	public static Drawable skyui = whiteui.tint(Color.sky);
+
 	public static final Frag     frag = new Frag();
 	public static final TopGroup topGroup;
 
@@ -263,7 +265,8 @@ public class IntUI {
 		Element hitter = new Hitter();
 		Runnable hide = () -> {
 			hitter.remove();
-			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade), Actions.remove());
+			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
+			 Actions.remove());
 		};
 		hitter.clicked(hide);
 		hitter.fillParent = true;
@@ -310,15 +313,17 @@ public class IntUI {
 	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 */
-	public static <T extends Element> Table
+	public static <T extends Element> SelectTable
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
 		if (button == null) throw new NullPointerException("button cannot be null");
-		Table   t      = new AutoFitTable();
-		Element hitter = new Element();
+		SelectTable t      = new SelectTable();
+		Element     hitter = new Element();
 		Runnable hide = () -> {
 			hitter.remove();
-			t.actions(Actions.fadeOut(0.3f, Interp.fade), Actions.remove());
+			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
+			 Actions.run(() -> t.fire(new VisibilityEvent(true))),
+			 Actions.remove());
 		};
 		hitter.clicked(hide);
 		hitter.fillParent = true;
@@ -347,7 +352,7 @@ public class IntUI {
 				Core.app.post(hide);
 			}
 		});
-		t.actions(Actions.alpha(0.0f), Actions.fadeIn(0.3f, Interp.fade));
+		t.actions(Actions.alpha(0.0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
 		Table p = new Table();
 		p.top();
 		if (searchable) {
@@ -494,14 +499,14 @@ public class IntUI {
 		}
 		return !pattern.matcher("" + item).find();
 	}
-	public static Table
+	public static SelectTable
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
-		Table   t      = new AutoFitTable();
-		Element hitter = new Element();
+		SelectTable t      = new SelectTable();
+		Element     hitter = new Element();
 		Runnable hide = () -> {
 			hitter.remove();
-			t.actions(Actions.fadeOut(0.3f, Interp.fade), Actions.remove());
+			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade), Actions.remove());
 		};
 		hitter.clicked(hide);
 		hitter.fillParent = true;
@@ -522,7 +527,7 @@ public class IntUI {
 			t.invalidateHierarchy();
 			t.pack();
 		});
-		t.actions(Actions.alpha(0.0f), Actions.fadeIn(0.3f, Interp.fade));
+		t.actions(Actions.alpha(0.0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
 		Table p = new Table();
 		p.top();
 		if (searchable) {
@@ -986,6 +991,21 @@ public class IntUI {
 
 		public float getPrefWidth() {
 			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
+		}
+	}
+
+	public static class SelectTable extends AutoFitTable {
+		/**
+		 * Adds a hide() listener.
+		 */
+		public void hidden(Runnable run) {
+			addListener(new VisibilityListener() {
+				@Override
+				public boolean hidden() {
+					run.run();
+					return false;
+				}
+			});
 		}
 	}
 }

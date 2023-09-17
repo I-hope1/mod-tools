@@ -71,7 +71,6 @@ public class WorldDraw {
 			CAMERA_RECT.setSize(v2.x - CAMERA_RECT.x, v2.y - CAMERA_RECT.y);
 			CAMERA_RECT.getCenter(center);
 			tasks.each(Runnable::run);
-			// Draw.flush();
 			Draw.reset();
 		});
 	}

@@ -22,6 +22,7 @@ import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
+import modtools.utils.ElementUtils;
 
 import static modtools.ui.IntUI.*;
 import static modtools.utils.MySettings.*;
@@ -75,6 +76,10 @@ public class SettingsUI extends Content {
 			bool(this, "启用", D_BLUR, "enable");
 			SettingsUI.slideri(this, D_BLUR, "缩放级别", 1, 8, 4, 1, null);
 		}});
+		/* add("Window", new LimitTable() {{
+			left().defaults().left();
+			// add("", );
+		}}); */
 		add("@mod-tools.others", new LimitTable() {{
 			left().defaults().left();
 			bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
@@ -247,10 +252,8 @@ public class SettingsUI extends Content {
 				t.button(b -> {
 					 b.label(() -> stringify.get(prov.get())).grow()
 						.update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-					 b.clicked(() -> {
-						 IntUI.showSelectListTable(b, list,
-							prov, cons, stringify, 220, 42, true);
-					 });
+					 b.clicked(() -> IntUI.showSelectListTable(b, list,
+						prov, cons, stringify, 220, 42, true));
 				 }, Styles.defaultb, () -> {})
 				 .size(220, 42)
 				 .update(a -> a.setDisabled(!condition.get()))

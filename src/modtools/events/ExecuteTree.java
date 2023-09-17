@@ -187,12 +187,7 @@ public class ExecuteTree {
 				numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
 				IntUI.showSelectTable(Core.input.mouse().cpy(), (p, hide, search) -> {
 					p.add(main).grow();
-				}, false).addListener(new VisibilityListener() {
-					public boolean hidden() {
-						main.clearChildren();
-						return true;
-					}
-				});
+				}, false).hidden(() -> main.clearChildren());
 			}};
 		}
 	}

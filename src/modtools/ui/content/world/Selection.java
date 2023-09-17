@@ -16,7 +16,6 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
-import arc.util.Timer;
 import arc.util.*;
 import arc.util.Timer.Task;
 import mindustry.Vars;
@@ -45,11 +44,9 @@ import modtools.ui.effect.MyDraw;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.array.ArrayUtils;
-import modtools.utils.reflect.IReflect;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.world.*;
 
-import java.lang.annotation.Retention;
 import java.lang.reflect.Field;
 import java.util.Vector;
 import java.util.*;
@@ -242,11 +239,11 @@ public class Selection extends Content {
 					}
 				});
 			});
-			FunctionBuild("物品统计", list -> {
+			FunctionBuild("@selection.sumitems", list -> {
 				sumItems(content.items(), i -> sum(list, b -> b.items == null ? 0 : b.items.get(i)),
 				 list.size() == 1 ? getItemSetter(list.get(0)) : null);
 			});
-			FunctionBuild("液体统计", list -> {
+			FunctionBuild("@selection.sumliquids", list -> {
 				sumItems(content.liquids(), l -> sumf(list, b -> b.liquids == null ? 0 : b.liquids.get(l)),
 				 list.size() == 1 ? getLiquidSetter(list.get(0)) : null);
 			});
@@ -400,12 +397,13 @@ public class Selection extends Content {
 			table.image(unit.type().uiIcon).row();
 			// table.label(() -> "(" + unit.x + ", " + unit.y + ')');
 		}
+		static final double sqrt2 = Math.sqrt(2);
 		public TextureRegion getRegion(T unit) {
 			return iconMap.get(unit.hitSize, () -> {
-				int   size  = (int) (unit.hitSize * 1.4f * 4 * 2);
-				float thick = 12f;
+				int   size  = (int) (unit.hitSize * sqrt2 * 4 * 2);
+				float thick = 9f;
 				return drawRegion(size, size, () -> {
-					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Color.sky);
+					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Pal.items);
 				});
 			});
 		}
@@ -426,14 +424,14 @@ public class Selection extends Content {
 		public TextureRegion getRegion(T building) {
 			return iconMap.get((float) building.block.size, () -> {
 				int size  = building.block.size * 32;
-				int thick = 7, rsize = size + thick;
+				int thick = 6, rsize = size + thick;
 				return drawRegion(rsize, rsize, () -> {
 					MyDraw.dashSquare(thick, Pal.accent, rsize / 2f, rsize / 2f, size);
 				});
 			});
 		}
 		public float rotation(T item) {
-			return 90;
+			return 45;
 		}
 		public TextureRegion getIcon(T key) {
 			return key.block.uiIcon;
@@ -472,12 +470,15 @@ public class Selection extends Content {
 		public TileFunction(String name) {
 			super(name, tileWD);
 		}
+		public float rotation(T item) {
+			return 30;
+		}
 
 		TextureRegion region;
 		public TextureRegion getRegion(T tile) {
 			if (region == null) {
 				int size  = tilesize * 4;
-				int thick = 7, rsize = size + thick;
+				int thick = 5, rsize = size + thick;
 				region = drawRegion(rsize, rsize, () -> {
 					MyDraw.dashSquare(thick, Pal.heal, (rsize) / 2f, (rsize) / 2f, size);
 				});
@@ -560,15 +561,41 @@ public class Selection extends Content {
 					var value = new SeqBind(entry.value);
 					selectMap.put(entry.key, value);
 					template.bind(value);
-					Button el = new Button(Styles.flatTogglet);
-					el.update(() -> {
-						el.setChecked(select.contains(value, true));
+					class NewBtn extends Button {
+						public NewBtn() {
+							super(new ButtonStyle(Styles.flatTogglet));
+						}
+						static final NinePatchDrawable tinted = ((NinePatchDrawable) Styles.flatDown).tint(Color.pink);
+
+						static {
+							tinted.setLeftWidth(0);
+							tinted.setRightWidth(0);
+							tinted.setTopHeight(0);
+							tinted.setBottomHeight(0);
+						}
+
+						boolean uiShowing = false;
+						void toggleShowing() {
+							if (uiShowing) {
+								uiShowing = false;
+								getStyle().checked = Styles.flatDown;
+							} else {
+								uiShowing = true;
+								getStyle().checked = tinted;
+							}
+						}
+					}
+					;
+					var btn = new NewBtn();
+					btn.update(() -> {
+						btn.setChecked(btn.uiShowing || select.contains(value, true));
 					});
-					IntUI.doubleClick(el, () -> {
+					IntUI.doubleClick(btn, () -> {
 						if (select.contains(value, true)) select.remove(value);
 						else select.add(value);
 					}, () -> {
-						IntUI.showSelectTable(el, (p, hide, str) -> {
+						btn.toggleShowing();
+						IntUI.showSelectTable(btn, (p, hide, str) -> {
 							int c = 0;
 							for (T item : value) {
 								p.add(new MyLimitTable(item, t -> {
@@ -576,10 +603,10 @@ public class Selection extends Content {
 								}));
 								if (++c % 6 == 0) p.row();
 							}
-						}, false);
+						}, false).hidden(btn::toggleShowing);
 					});
-					el.add(new ItemImage(entry.key, value.size)).grow().pad(6f);
-					template.add(el);
+					btn.add(new ItemImage(entry.key, value.size)).grow().pad(6f);
+					template.add(btn);
 					template.unbind();
 					if (++i % 4 == 0) template.newLine();
 				}
@@ -720,7 +747,7 @@ public class Selection extends Content {
 			list.add(item);
 			if (drawSelect) {
 				// 异步无法创建FrameBuffer
-				Core.app.post(() -> afterAdd(item));
+				Core.app.post(() -> Core.app.post(() -> afterAdd(item)));
 			}
 		}
 
@@ -832,17 +859,17 @@ public class Selection extends Content {
 			}
 		}
 		private class MyLimitTable extends LimitButton {
-			private static final float delaySeconds    = 2f / 60f;
-			public final         Task  clearFocusWorld = new Task() {
+			public final Task clearFocusWorld = new Task() {
 				public void run() {
 					if (item instanceof Tile) focusTile = null;
 					else if (item instanceof Building) focusBuild = null;
 					else if (item instanceof Unit) focusUnits.remove((Unit) item);
 					else if (item instanceof Bullet) focusBullets.remove((Bullet) item);
-					disabledGetFocus = false;
+					focusDisabled = false;
 				}
 			};
-			private final        T     item;
+
+			private final T item;
 
 			public MyLimitTable(T item) {
 				super(Styles.flati);
@@ -850,52 +877,56 @@ public class Selection extends Content {
 				this.item = item;
 
 				touchable = Touchable.enabled;
+
+				hovered(() -> {
+					if (focusDisabled) return;
+					focusElem = this;
+					focusElemType = Function.this;
+					if (item instanceof Tile) focusTile = (Tile) item;
+					else if (item instanceof Building) focusBuild = (Building) item;
+					else if (item instanceof Unit) focusUnits.add((Unit) item);
+					else if (item instanceof Bullet) focusBullets.add((Bullet) item);
+					focusDisabled = true;
+				});
+				exited(() -> {
+					focusElem = null;
+					focusElemType = null;
+					clearFocusWorld.run();
+				});
 			}
 
 			public void updateVisibility() {
 				super.updateVisibility();
-				if (!disabledGetFocus && focusElem != this &&
-						(focusTile == item || focusBuild == item
-						 || (item instanceof Unit && focusUnits.contains((Unit) item))
-						 || (item instanceof Bullet && focusBullets.contains((Bullet) item))
-						)) {
-					focusElem = this;
-					focusElemType = Function.this;
-					if (clearFocusWorld.isScheduled()) clearFocusWorld.cancel();
-					Timer.schedule(clearFocusWorld, delaySeconds);
-					if (clearFocusElem.isScheduled()) clearFocusElem.cancel();
-					Timer.schedule(clearFocusElem, delaySeconds);
-				}
+				if (focusDisabled || focusElem == this ||
+						(focusTile != item && focusBuild != item
+						 && !(item instanceof Unit && focusUnits.contains((Unit) item))
+						 && !(item instanceof Bullet && focusBullets.contains((Bullet) item))
+						)
+				) return;
+
+				focusElem = this;
+				focusElemType = Function.this;
 			}
 
 			public MyLimitTable(T item, Cons<Table> cons) {
 				this(item);
 				cons.get(this);
 			}
-			public Element hit(float x, float y, boolean touchable) {
+			/* public Element hit(float x, float y, boolean touchable) {
 				Element tmp = super.hit(x, y, touchable);
 				if (tmp == null) return null;
 
 				focusElem = this;
-				disabledGetFocus = true;
-				if (clearFocusElem.isScheduled()) clearFocusElem.cancel();
-				Timer.schedule(clearFocusElem, delaySeconds);
-
-				if (item instanceof Tile) focusTile = (Tile) item;
-				else if (item instanceof Building) focusBuild = (Building) item;
-				else if (item instanceof Unit) focusUnits.add((Unit) item);
-				else if (item instanceof Bullet) focusBullets.add((Bullet) item);
-				if (clearFocusWorld.isScheduled()) clearFocusWorld.cancel();
-
-				Timer.schedule(clearFocusWorld, delaySeconds);
 				return tmp;
-			}
+			} */
 
 			public void draw() {
 				super.draw();
 				if (focusElem == this) {
-					Draw.color(focusColor);
-					Fill.crect(x, y, width, height);
+					Draw.color(Pal.accent);
+					Lines.stroke(4f);
+					MyDraw.dashRect(x + width / 2f, y + height / 2f, width - 2, height - 2, Time.globalTime / 10f);
+					// Fill.crect(x, y, width, height);
 				}
 			}
 
@@ -957,7 +988,6 @@ public class Selection extends Content {
 			seq.each(this::drawFocus);
 			return;
 		}
-		Draw.flush();
 
 		TextureRegion region;
 		if (focus instanceof Tile) {
@@ -986,7 +1016,7 @@ public class Selection extends Content {
 		float x = TMP_RECT.x, y = TMP_RECT.y;
 		float w = TMP_RECT.width, h = TMP_RECT.height;
 		Draw.mixcol(focusColor, 1);
-		Draw.alpha((region == Core.atlas.white() ? 0.8f : 1) * focusColor.a);
+		Draw.alpha((region == Core.atlas.white() ? 0.7f : 0.9f) * focusColor.a);
 
 		/* Vec2  tmp = transform ? Core.camera.project(TMP_RECT.x, TMP_RECT.y) : Tmp.v3.set(TMP_RECT.x, TMP_RECT.y);
 		float x   = tmp.x, y = tmp.y, w, h;
@@ -1029,7 +1059,7 @@ public class Selection extends Content {
 		Draw.reset();
 	}
 
-	private boolean disabledGetFocus, focusActive;
+	private boolean focusDisabled, focusEnabled;
 	public       Element           focusElem;
 	public       Tile              focusTile;
 	public       Building          focusBuild;
@@ -1048,19 +1078,19 @@ public class Selection extends Content {
 
 
 			Element tmp = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
-			focusActive = !topGroup.isSelecting() && (
+			focusEnabled = !topGroup.isSelecting() && (
 			 tmp == null || tmp.isDescendantOf(focusW) || (!tmp.visible && tmp.touchable == Touchable.disabled)
 			 // || tmp.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
 			 || tmp.isDescendantOf(topGroup.getTopG()));
-			if (!focusActive) return true;
-			if (!disabledGetFocus) {
+			if (!focusEnabled) return true;
+			if (!focusDisabled) {
 				reacquireFocus();
 			}
 
 			return true;
 		});
 		topGroup.backDrawSeq.add(() -> {
-			if (!focusActive && focusElem == null) return true;
+			if (!focusEnabled && focusElem == null) return true;
 			if (state.isGame()) {
 				drawFocus();
 			}
@@ -1107,8 +1137,10 @@ public class Selection extends Content {
 		public float getHeight() {
 			return height = super.getPrefHeight();
 		}
-		boolean updatePos = true;
-		long    delayTime = 200, lastFire = 0;
+		boolean updatePosUI = true;
+		long    toggleDelay = 200, lastToggleTime = 0;
+
+		public Table pane;
 
 		{
 			titleTable.remove();
@@ -1117,25 +1149,25 @@ public class Selection extends Content {
 			sclListener.disabled1 = true;
 			moveListener.disabled = true;
 			cont.update(() -> {
-				if (updatePos && focusActive) updatePos();
+				if (updatePosUI && focusEnabled) updatePosUI();
 				else updatePosWorld();
-				expectPos();
+				clampPosition();
 			});
 			cont.pane(p -> pane = p).grow();
 			buildCont0();
 			Tools.TASKS.add(() -> {
-				if (state.isMenu() || !data().getBool("focusOnWorld") || !focusActive) {
+				if (state.isMenu() || !data().getBool("focusOnWorld") || !focusEnabled) {
 					hide();
 				} else if (!isShown() && SclListener.fireElement == null) {
 					show();
 				}
 				toBack();
-				if (!Vars.mobile && Time.millis() - lastFire > delayTime
-						&& Core.input.alt() && Core.input.ctrl()) {
-					lastFire = Time.millis();
-					updatePos = !updatePos;
-					disabledGetFocus = !updatePos;
-				}
+
+				if (Vars.mobile || Time.millis() - lastToggleTime <= toggleDelay
+						|| !Core.input.alt() || !Core.input.ctrl()) return;
+				lastToggleTime = Time.millis();
+				updatePosUI = !updatePosUI;
+				focusDisabled = !updatePosUI;
 			});
 		}
 
@@ -1145,8 +1177,8 @@ public class Selection extends Content {
 		public Element hit(float x, float y, boolean touchable) {
 			Element el = super.hit(x, y, touchable);
 			if (Vars.mobile) {
-				updatePos = el == null;
-				disabledGetFocus = !updatePos;
+				updatePosUI = el == null;
+				focusDisabled = !updatePosUI;
 			}
 			return el;
 		}
@@ -1168,7 +1200,6 @@ public class Selection extends Content {
 				buildCont1(t, focusBullets);
 			});
 		}
-		public Table pane;
 		private void newTable(Cons<Table> cons) {
 			pane.table(t -> {
 				t.act(0.1f);
@@ -1223,7 +1254,7 @@ public class Selection extends Content {
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color);
 				t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
-				t.add("" + u.type.name).with(JSFunc::addDClickCopy);
+				t.add(u.type.name).with(JSFunc::addDClickCopy);
 
 				buildPos(t, u);
 				// t.add("pathfind:" + u.pathType());
@@ -1257,11 +1288,11 @@ public class Selection extends Content {
 			x = v1.x;
 			y = v1.y;
 		}
-		public void expectPos() {
+		public void clampPosition() {
 			if (x + width > Core.scene.getWidth()) x -= width;
 			if (y + height > Core.scene.getHeight()) y -= height;
 		}
-		private void updatePos() {
+		private void updatePosUI() {
 			Vec2 v1 = Core.input.mouse();
 			/* 向右上偏移 */
 			v1.add(2, 2);

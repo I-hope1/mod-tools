@@ -141,18 +141,20 @@ public class JSFunc {
 	public static Window window(final Cons<Window> cons) {
 		class JSWindow extends HiddenTopWindow implements DisposableInterface {
 			{
+				title.setFontScale(0.7f);
+				titleTable.getCell(title).pad(0);
 				cons.get(this);
 				// addCloseButton();
 				hidden(this::clearAll);
 				show();
 			}
 
-			public JSWindow(String title) {
-				super(title);
+			public JSWindow() {
+				super("TEST", 64, 64);
 				setPosition(Core.input.mouse());
 			}
 		}
-		return new JSWindow("test");
+		return new JSWindow();
 	}
 
 	public static Window testDraw(Runnable draw) {
@@ -312,7 +314,7 @@ public class JSFunc {
 		return watch == null ? new WatchWindow() : watch;
 	}
 
-	/** 相当于js中的<b><i>{@code ===}</i></b> */
+	/** 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code> */
 	public static boolean eq(Object a, Object b) {
 		return a == b;
 	}

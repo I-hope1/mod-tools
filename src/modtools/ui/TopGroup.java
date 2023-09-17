@@ -15,6 +15,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
@@ -296,9 +297,12 @@ public final class TopGroup extends WidgetGroup {
 
 	/* 过滤掉的选择元素 */
 	public ObjectFloatMap<Element> filterSelected = new ObjectFloatMap<>();
+	Element getSelected0(float x, float y) {
+		return scene.root.hit(x, y, !selectInvisible);
+	}
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {
-		selected = scene.root.hit(x, y, !selectInvisible);
+		selected = getSelected0(x, y);
 		//if (tmp != null) {
 			/*do {
 				selected = tmp;
@@ -318,6 +322,7 @@ public final class TopGroup extends WidgetGroup {
 	/** 用于获取元素 */
 	private void addSceneListener() {
 		scene.addCaptureListener(new InputListener() {
+			boolean locked = false;
 			final Element mask = new Element() {
 				{
 					fillParent = true;
@@ -352,16 +357,26 @@ public final class TopGroup extends WidgetGroup {
 					cancel();
 				}
 				if (keycode == KeyCode.f && selected != null) {
-					selected.visible = false;
-					filterSelected.put(selected, selected.translation.x);
-					selected.translation.x = scene.getWidth() * 2;
+					filterElem(selected);
 					// Log.info(selected);
 				}
 				return false;
 			}
+			private void filterElem(Element element) {
+				element.visible = false;
+				filterSelected.put(element, element.translation.x);
+				element.translation.x = scene.getWidth() * 2;
+			}
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				if (locked) {
+					if (Vars.android) {
+						filterElem(getSelected0(x, y));
+					}
+					return false;
+				}
 				if (event.listenerActor.isDescendantOf(searchBlackList::contains)) return false;
 				if (!selecting) return false;
+				locked = true;
 				topGroup.addChild(mask);
 				cancelEvent = true;
 				event.cancel();
@@ -392,6 +407,7 @@ public final class TopGroup extends WidgetGroup {
 			}
 
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				locked = false;
 				mask.remove();
 				filterSelected.each(entry -> {
 					entry.key.translation.x = entry.value;

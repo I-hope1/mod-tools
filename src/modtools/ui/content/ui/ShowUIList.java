@@ -58,9 +58,10 @@ public class ShowUIList extends Content {
 			t.left().defaults().left();
 			t.add("bgColor: ");
 			IntUI.colorBlock(t.add().growX(), bgColor, false);
-			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).row();
+			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
 			t.table(t0 -> t0.check("forceDisabled",
 				forceDisabled, val -> forceDisabled = val))
+			 .colspan(3).left()
 			 .growX().padTop(-4f);
 		}).row();
 
@@ -103,7 +104,7 @@ public class ShowUIList extends Content {
 				t.bind(field.getName());
 				// 跳过private检查，减少时间
 				field.setAccessible(true);
-				t.image((Drawable) field.get(null)).size(32);
+				addImage(t, (Drawable) field.get(null));
 			} catch (Exception err) {
 				t.add();// 占位
 				Log.err(err);
@@ -195,6 +196,18 @@ public class ShowUIList extends Content {
 			 }
 		 });
 	 });
+	private static void addImage(Table t, Drawable drawable) {
+		Image image = new Image(drawable);
+		image.fillParent = true;
+		Label label = new Label(drawable instanceof TextureRegionDrawable ? "texture" : "nine");
+		label.setColor(Color.lightGray);
+		label.setFontScale(0.7f);
+		label.fillParent = true;
+		label.setAlignment(Align.topLeft);
+		Stack stack = t.stack(image, label).size(32).get();
+		stack.hovered(() -> label.visible = false);
+		stack.exited(() -> label.visible = true);
+	}
 	private static int getW() {
 		return Core.graphics.isPortrait() ? 300 : 400;
 	}
@@ -212,7 +225,7 @@ public class ShowUIList extends Content {
 			t.clearChildren();
 			t.add(new Element()).colspan(0).update(__ -> {
 				t.background(IntUI.whiteui.tint(bgColor));
-			});
+			}).left();
 			cons.get(t);
 			t.addPatternUpdateListener(() -> pattern);
 		}) {
@@ -262,7 +275,7 @@ public class ShowUIList extends Content {
 			t.add(new CheckBox("checkbox", style)).height(42);
 		}
 		static void build(Drawable drawable) {
-			t.table(drawable, __ -> {}).size(42);
+			addImage(t, drawable);
 		}
 	}
 

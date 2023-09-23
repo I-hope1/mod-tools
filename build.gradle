@@ -110,7 +110,7 @@ task ZComplieAll(type: Copy) {
 	rename { fileName ->
 		// a simple way is to remove the "-$version" from the jar filename
 		// but you can customize the filename replacement rule as you wish.
-		fileName.replace("136-$version", "")
+		fileName.replace("136-$version", "").replace("-$version", "")
 	}
 }
 

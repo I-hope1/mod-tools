@@ -39,11 +39,13 @@ dependencies {
 	annotationProcessor project(":compiler")
 	compileOnly project(":annotations")
 
+	def sdkRoot = System.getenv("ANDROID_HOME")
+	println "AndroidHome: $sdkRoot"
+	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 	compileOnly files(
-			"F:/files/mindustry/a/mdt-ac-1.0.jar",
 			"_libs/Mindustry_android.jar",
-			"${MdtDataDir}/Mindustry_desktop.jar",
-			"E:/Program Files/AndroidStudio/sdk/platforms/android-32/android.jar",
+//			"${MdtDataDir}/Mindustry_desktop.jar",
+			"$platformRoot/android.jar",
 			"assets/libs/reflect-core.jar",
 			"trash/procyon-0.6.jar",
 			"_libs/Android_dalvik-1.0.jar",

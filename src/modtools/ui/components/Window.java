@@ -1,6 +1,5 @@
 package modtools.ui.components;
 
-import android.nfc.cardemulation.HostApduService;
 import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
@@ -9,7 +8,7 @@ import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.*;
 import arc.scene.*;
-import arc.scene.actions.*;
+import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
@@ -24,7 +23,6 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.components.linstener.*;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;

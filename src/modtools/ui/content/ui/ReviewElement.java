@@ -87,6 +87,27 @@ public class ReviewElement extends Content {
 			}
 			public void drawFocus(Element elem, Vec2 vec2) {
 				super.drawFocus(elem, vec2);
+				{
+					Lines.stroke(4);
+					Draw.color(Color.slate, 0.6f);
+					// x: 0 -> x
+					drawText("" + vec2.x, vec2.x / 2f, vec2.y, Color.lime);
+					Lines.line(0, vec2.y, vec2.x, vec2.y);
+					// y: 0 -> y
+					drawText("" + vec2.y, vec2.x, vec2.y / 2f, Color.lime);
+					Lines.line(vec2.x, 0, vec2.x, vec2.y);
+
+					// width
+					float w = elem.getWidth();
+					drawText(Strings.autoFixed(w, 1),
+					 vec2.x + w / 2f, vec2.y - 8f, Color.magenta);
+
+					// height
+					float h = elem.getHeight();
+					drawText(Strings.autoFixed(h, 1),
+					 vec2.x - 8f, vec2.y + 8f + h / 2f, Color.magenta);
+				}
+
 				if (elem instanceof Table table) {
 					drawMargin(vec2, table);
 				}
@@ -163,6 +184,7 @@ public class ReviewElement extends Content {
 					 vec2.x + elem.getWidth() - left / 2f,
 					 vec2.y + elem.getHeight() / 2f, color);
 			}
+			/** 从元素到hover的元素的连线 */
 			public void drawLine() {
 				if (FOCUS == null) return;
 

@@ -203,7 +203,9 @@ public class Tester extends Content {
 		});
 
 		_cont.table(t -> {
-			t.defaults().padRight(8f).size(42);
+			t.defaults()
+			 .padRight(4f).padRight(4f)
+			 .size(45, 42);
 			t.button(Icon.leftOpenSmall, Styles.clearNonei, area::left);
 			t.button("@ok", Styles.flatBordert, () -> {
 				error = false;
@@ -211,10 +213,10 @@ public class Tester extends Content {
 				compileAndExec(() -> {});
 			}).width(64).disabled(__ -> !finished);
 			t.button(Icon.rightOpenSmall, Styles.clearNonei, area::right);
-			t.button(Icon.copySmall, Styles.clearNonei, area::copy).padLeft(8f);
+			t.button(Icon.copySmall, Styles.clearNonei, area::copy);
 			t.button(Icon.pasteSmall, Styles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
-			).padLeft(8f);
+			);
 		}).growX().row();
 		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(new PrefTable(p -> {
 			p.add(new MyLabel(() -> log)).style(IntStyles.MOMO_LabelStyle).wrap()

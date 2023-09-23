@@ -73,6 +73,10 @@ public class Window extends Table {
 	public static Drawable myPane  = Tex.pane;
 	public static Drawable topPane = whiteui.tint(Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f));
 
+	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(IntStyles.hope_clearNonei) {{
+		over = whiteui.tint(Pal.remove);
+	}};
+
 	public Table
 	 titleTable = new Table(topPane) {
 		public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, float isize, Runnable listener) {
@@ -145,18 +149,18 @@ public class Window extends Table {
 			titleTable.button(Icon.down, IntStyles.clearNoneTogglei, 32, this::toggleMinimize).update(b -> {
 				b.setChecked(isMinimize);
 			}).padLeft(4f);
-			ImageButton button = titleTable.button(Tex.whiteui, IntStyles.clearNonei, 28, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
+			ImageButton button = titleTable.button(Tex.whiteui, IntStyles.hope_clearNonei, 28, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? HopeIcons.normal : HopeIcons.maximize;
 			});
 		}
 		FillTable resize = getResizeFillTable();
+
 		IntUI.longPressOrRclick(
-		 titleTable.button(Icon.cancel, IntStyles.clearNonei, 32, this::hide)
+		 titleTable.button(Icon.cancel,
+			 cancel_clearNonei, 32, this::hide)
 			.padLeft(4f).padRight(4f)
-			.get(), __ -> {
-			 resize.show();
-		 });
+			.get(), __ -> resize.show());
 		setup();
 
 		sclListener = new SclListener(this, this.minWidth, minHeight);
@@ -517,6 +521,7 @@ public class Window extends Table {
 			actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.06f),
 			 Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
 		}
+		act(0);
 
 		Timer.schedule(new Task() {
 			@Override
@@ -573,6 +578,7 @@ public class Window extends Table {
 			}
 			sclListener.rebind();
 		}
+		act(0);
 
 		Timer.schedule(new Task() {
 			public void run() {

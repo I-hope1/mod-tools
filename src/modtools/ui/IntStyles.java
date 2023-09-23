@@ -9,6 +9,7 @@ import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.util.Log;
 import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.ui.*;
@@ -25,6 +26,10 @@ public class IntStyles {
 	/** 默认使用等宽字体，没有的话使用默认字体 */
 	public static final LabelStyle MOMO_LabelStyle;
 	// public static final CheckBoxStyle checkbox;
+
+
+	public static ImageButtonStyle
+	 hope_clearNonei;
 
 	/* ---------TODO：以下是为了适配V6----------- */
 
@@ -46,6 +51,7 @@ public class IntStyles {
 	clearNoneTogglei,
 	/** No background unless focused, no border. */
 	clearNonei;
+
 	public static ScrollPaneStyle noBarPane = new ScrollPaneStyle();
 	public static ButtonStyle     flatb;
 
@@ -141,6 +147,9 @@ public class IntStyles {
 			disabledFontColor = Color.gray;
 		}}; */
 		init();
+		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
+			down = over;
+		}};
 		flatb = new ButtonStyle(flatt);
 	}
 

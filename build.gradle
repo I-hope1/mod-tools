@@ -9,7 +9,6 @@ allprojects {
 		uncVersion = "1.8.5"
 		mindustryVersion = 'v146'
 		MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
-		VERSION = "1.4.3.2"
 	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
@@ -23,8 +22,8 @@ allprojects {
 	}
 }
 
-group 'org.example'
-version '1.0'
+group 'mod-tools'
+version '1.4.3.2'
 sourceSets.main.java.srcDirs = ["src"]
 repositories {
 	mavenCentral()
@@ -33,6 +32,7 @@ repositories {
 	maven { url 'https://www.jitpack.io' }
 //	mindustryRepo()
 }
+
 
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
@@ -62,7 +62,7 @@ mindustry {
 	dependency {}
 	client {}
 	meta << ModMeta(
-			version: VERSION
+			version: version
 	)
 	meta.displayName = "mod-tools"
 	def name = project.archivesBaseName
@@ -79,18 +79,17 @@ mindustryAssets {
 }
 
 import arc.files.Fi
-import arc.util.Log
 
 task playGame(dependsOn: classes, type: JavaExec) {
 	dependsOn jar
 
 	doFirst {
-		Log.info("$buildDir")
+		println "buildDir: $buildDir; version: $version"
 		/* 复制文件到mods目录 */
-		def modFi = project.archivesBaseName + "-" + VERSION + ".jar"
+		def modFi = archivesBaseName + "-${version}.jar"
 		def buildDir = new Fi("" + buildDir).child("libs")
-		def from = buildDir.child(project.archivesBaseName + "-1.0.jar");
-		if (from.exists()) from.copyTo(buildDir.child(modFi))
+		def from = buildDir.child(archivesBaseName + "-${version}.jar")
+		println "from: $from; to: $MdtDataDir/mods/$modFi"
 		buildDir.child(modFi).copyTo(new Fi(MdtDataDir).child("mods").child(modFi))
 	}
 	//运行游戏目录
@@ -101,8 +100,18 @@ task playGame(dependsOn: classes, type: JavaExec) {
 //			, "-debug"
 	]
 }
-task ZComplieAll {
+task ZComplieAll(type: Copy) {
 	dependsOn deploy
+
+	from("$buildDir/tmp/deploy/") {
+		include "${rootProject.name}-${version}.jar"
+	}
+	into("$buildDir/libs")
+	rename { fileName ->
+		// a simple way is to remove the "-$version" from the jar filename
+		// but you can customize the filename replacement rule as you wish.
+		fileName.replace("136-$version", "")
+	}
 }
 
 task mergeLibs(type: Jar) {
@@ -126,7 +135,7 @@ task playAndroid {
 	def adb = "F:/files/java/sdk/platform-tools/adb"
 	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files";
 	doLast {
-		("$adb push ${buildDir}/tmp/deploy/${project.archivesBaseName}-${VERSION}.jar"
+		("$adb push ${buildDir}/tmp/deploy/${archivesBaseName}-${version}.jar"
 				+ " $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)
 

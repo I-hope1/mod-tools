@@ -9,12 +9,16 @@ import arc.scene.ui.layout.*;
 import arc.util.Align;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.ui.IntStyles;
 
 
 public class FoldedImageButton extends ImageButton {
 	private static final float duration = 0.1f;
 	public FoldedImageButton(boolean checkOnlyChanged) {
-		super(Icon.rightOpen, Styles.clearNonei);
+		this(checkOnlyChanged, IntStyles.clearNonei);
+	}
+	public FoldedImageButton(boolean checkOnlyChanged, ImageButtonStyle style) {
+		super(Icon.rightOpen, style);
 
 		clicked(() -> {
 			checked = !checked;

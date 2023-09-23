@@ -131,7 +131,7 @@ public class Tester extends Content {
 	public boolean stopIfOvertime;
 
 	public Tester() {
-		super("tester");
+		super("tester", Icon.terminalSmall);
 	}
 
 	/* 按修改时间倒序  */

@@ -1,5 +1,6 @@
 package modtools.utils;
 
+import android.provider.ContactsContract.CommonDataKinds.Im;
 import arc.*;
 import arc.files.Fi;
 import arc.func.*;
@@ -15,7 +16,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
-import arc.util.Tmp;
+import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
@@ -142,16 +143,22 @@ public class JSFunc {
 		class JSWindow extends HiddenTopWindow implements DisposableInterface {
 			{
 				title.setFontScale(0.7f);
-				titleTable.getCell(title).pad(0);
+				for (Cell<?> child : titleTable.getCells()) {
+					if (child.get() instanceof ImageButton) {
+						child.size(24);
+					}
+				}
+				titleHeight = 28;
+				((Table) titleTable.parent).getCell(titleTable).height(titleHeight);
 				cons.get(this);
 				// addCloseButton();
 				hidden(this::clearAll);
+				setPosition(Core.input.mouse());
 				show();
 			}
 
 			public JSWindow() {
 				super("TEST", 64, 64);
-				setPosition(Core.input.mouse());
 			}
 		}
 		return new JSWindow();

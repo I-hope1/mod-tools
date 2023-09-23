@@ -18,6 +18,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.ListDialog.ModifiedLabel;
 import modtools.ui.components.*;
@@ -37,7 +38,7 @@ import static modtools.utils.Tools.*;
 
 public class ReviewElement extends Content {
 	public ReviewElement() {
-		super("reviewElement");
+		super("reviewElement", HopeIcons.codeSmall);
 		Core.scene.root.getCaptureListeners().insert(0, new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {

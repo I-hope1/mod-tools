@@ -9,7 +9,7 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import mindustry.Vars;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.*;
@@ -20,7 +20,7 @@ import modtools.utils.Tools;
 
 public class LogDisplay extends Content {
 	public LogDisplay() {
-		super("logdisplay");
+		super("logdisplay", Icon.fileTextSmall);
 	}
 	{
 		defLoadable = false;

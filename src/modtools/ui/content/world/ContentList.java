@@ -9,6 +9,7 @@ import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
+import mindustry.gen.Icon;
 import mindustry.type.*;
 import mindustry.world.Block;
 import modtools.ui.IntUI;
@@ -22,7 +23,7 @@ import java.util.regex.Pattern;
 
 public class ContentList extends Content {
 	public ContentList() {
-		super("contentList");
+		super("contentList", Icon.listSmall);
 	}
 
 	Window ui;

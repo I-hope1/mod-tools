@@ -121,6 +121,11 @@ public class ValueLabel extends MyLabel {
 				 );
 			 }));
 		 }, TextureRegion.class, Texture.class, Drawable.class)
+		 /* .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
+
+			 }));
+		 }, Drawable.class) */
 		 .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
 				 JSFunc.reviewElement((Element) val);
@@ -158,9 +163,9 @@ public class ValueLabel extends MyLabel {
 		list.add(MenuList.with(Icon.eyeSmall, "stringifyFunc", () -> {
 			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc, obj, o -> func = o);
 		}));
-		list.add(MenuList.with(Icon.eyeSmall, "valueFunc", () -> {
+		/* list.add(MenuList.with(Icon.eyeSmall, "valueFunc", () -> {
 			JSRequest.<Func<Object, Object>>requestForDisplay(func, obj, o -> valueFunc = o);
-		}));
+		})); */
 		list.add(MenuList.with(Icon.eraserSmall, "@clear", this::clearVal));
 
 		// Log.info("valuelabel: @", enableUpdate);

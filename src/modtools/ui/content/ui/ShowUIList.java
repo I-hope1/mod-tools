@@ -43,7 +43,7 @@ public class ShowUIList extends Content {
 	Window ui;
 
 	public ShowUIList() {
-		super("showuilist");
+		super("showuilist", Icon.adminSmall);
 	}
 
 	public void _load() {

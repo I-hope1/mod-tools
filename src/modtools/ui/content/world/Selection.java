@@ -64,7 +64,7 @@ public class Selection extends Content {
 	private Function<?> selectFunc;
 	private Function<?> focusElemType;
 	public Selection() {
-		super("selection");
+		super("selection", Icon.craftingSmall);
 	}
 
 	/* 临时变量 */
@@ -923,7 +923,7 @@ public class Selection extends Content {
 			public void draw() {
 				super.draw();
 				if (focusElem == this) {
-					Draw.color(Pal.accent);
+					Draw.color(Pal.accent, Draw.getColor().a);
 					Lines.stroke(4f);
 					MyDraw.dashRect(x + width / 2f, y + height / 2f, width - 2, height - 2, Time.globalTime / 10f);
 					// Fill.crect(x, y, width, height);
@@ -1046,7 +1046,8 @@ public class Selection extends Content {
 		}
 		if (transform) Draw.proj(mat);
 
-		if (focusElem != null && focusElemType != null && focusElemType.list.contains(focus)) {
+		if (focusElem != null && focusElem.getScene() != null &&
+				focusElemType != null && focusElemType.list.contains(focus)) {
 			Lines.stroke(4f);
 			Vec2 tmp0 = Core.camera.project(x, y);
 			x = tmp0.x;
@@ -1153,7 +1154,7 @@ public class Selection extends Content {
 				else updatePosWorld();
 				clampPosition();
 			});
-			cont.pane(p -> pane = p).grow();
+			cont.pane(Styles.smallPane, p -> pane = p).grow();
 			buildCont0();
 			Tools.TASKS.add(() -> {
 				if (state.isMenu() || !data().getBool("focusOnWorld") || !focusEnabled) {

@@ -23,6 +23,8 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
+import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
@@ -146,9 +148,11 @@ public class Window extends Table {
 			titleTable.button(HopeIcons.sticky, IntStyles.clearNoneTogglei, 32, () -> {
 				sticky = !sticky;
 			}).checked(b -> sticky).padLeft(4f).name("sticky");
-			titleTable.button(Icon.down, IntStyles.clearNoneTogglei, 32, this::toggleMinimize).update(b -> {
-				b.setChecked(isMinimize);
-			}).padLeft(4f);
+			titleTable.add(new FoldedImageButton(false, IntStyles.hope_clearNonei))
+			 .with(b -> {
+				 b.resizeImage(32);
+				 b.clicked(this::toggleMinimize);
+			 }).update(b -> b.fireCheck(isMinimize)).padLeft(4f);
 			ImageButton button = titleTable.button(Tex.whiteui, IntStyles.hope_clearNonei, 28, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? HopeIcons.normal : HopeIcons.maximize;
@@ -548,9 +552,11 @@ public class Window extends Table {
 				lastRect.setSize(getWidth(), getHeight());
 			}
 
-			actions(Actions.sizeTo(getMinWidth(), topHeight, disabledActions ? 0 : 0.01f),
-			 Actions.moveTo(Math.max(x, lastRect.width / 2f),
-				y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f));
+			actions(
+			 Actions.moveTo(x,
+				y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f),
+			 Actions.sizeTo(getMinWidth(), topHeight, disabledActions ? 0 : 0.01f)
+			);
 
 			getCell(cont).set(BindCell.UNSET_CELL);
 			cont.remove();
@@ -794,12 +800,14 @@ public class Window extends Table {
 			super(title);
 		}
 
+		public float titleHeight = topHeight;
+
 		{
 			getCells().remove(getCell(titleTable).clearElement(), true);
 			Table table = new Table();
 			table.setFillParent(true);
-			table.top().add(titleTable).growX().height(topHeight);
-			titleTable.translation.y = topHeight;
+			table.top().add(titleTable).growX().height(titleHeight);
+			titleTable.translation.y = titleHeight;
 			table.setClip(true);
 			addChild(table);
 			titleTable.invalidateHierarchy();
@@ -821,7 +829,7 @@ public class Window extends Table {
 		TranslateToAction last;
 		public Element hit(float x, float y, boolean touchable) {
 			Element element = super.hit(x, y, touchable);
-			translateTo(height - topHeight <= y && element != null ? 0 : topHeight);
+			translateTo(height - titleHeight <= y && element != null ? 0 : titleHeight);
 			return element;
 		}
 		private void translateTo(float toValue) {

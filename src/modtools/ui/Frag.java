@@ -7,6 +7,7 @@ import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.Log;
+import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
@@ -17,7 +18,7 @@ import static modtools.ui.IntUI.topGroup;
 
 public class Frag extends Table {
 	public boolean    hideCont   = false;
-	public ScrollPane contPane;
+	public ScrollPane container;
 	Cell<?> cell;
 
 	public void load() {
@@ -30,23 +31,28 @@ public class Frag extends Table {
 
 		if (Content.all.isEmpty()) Contents.load();
 
-		contPane = new ScrollPane(new LimitTable(table -> {
-			Content.all.forEach(cont -> {
-				if (cont == null || !cont.loadable()) return;
-				String localizedName = cont.localizedName();
+		container = new ScrollPane(new LimitTable(table -> {
+			Content.all.forEach(content -> {
+				if (content == null || !content.loadable()) return;
+				String localizedName = content.localizedName();
 				var    style         = IntStyles.flatt;
 				// var style = Styles.cleart;
 				// Objects.requireNonNull(cont);
-				cont.btn = table.button(localizedName, style, cont::build).size(120, 40).get();
-				cont.load();
+				content.btn = table.button(localizedName,
+					content.icon,
+					style, content.icon == Styles.none ? 0 : 20,
+					content::build)
+				 .marginLeft(6f)
+				 .size(120, 40).get();
+				content.load();
 				table.row();
 			});
 		}), IntStyles.noBarPane);
 		// lastIndex = getCells().indexOf(cell);
-		contPane.update(() -> contPane.setOverscroll(false, false));
-		cell = add(contPane);
+		container.update(() -> container.setOverscroll(false, false));
+		cell = add(container);
 		Runnable addCont = () -> {
-			cell.setElement(contPane);
+			cell.setElement(container);
 			cell.size(120, 40 * 5 + 1);
 		}, removeCont = () -> {
 			cell.clearElement();

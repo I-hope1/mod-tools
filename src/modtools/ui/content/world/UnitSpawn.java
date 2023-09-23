@@ -41,7 +41,7 @@ public class UnitSpawn extends Content {
 	public static final String removeAllUnitsKey = "@unitspawn.removeAllUnits";
 	public final        String unitUnlimitedKey  = "@settings.unitUnlimited";
 	public UnitSpawn() {
-		super("unitSpawn");
+		super("unitSpawn", Icon.unitsSmall);
 	}
 
 	{
@@ -254,8 +254,9 @@ public class UnitSpawn extends Content {
 		 selectUnit.sample :
 		 selectUnit.constructor.get();
 
-		if (unit instanceof BlockUnitUnit) {
-			RuntimeException exception = new RuntimeException("所选单位为blockUnit，可能会崩溃", new IllegalArgumentException("selectUnit is blockunit"));
+		if (unit instanceof BlockUnitc) {
+			RuntimeException exception = new RuntimeException("所选单位为blockUnit，可能会崩溃",
+			 new IllegalArgumentException("selectedUnit is blockunit"));
 			IntUI.showException(exception);
 			throw exception;
 		}

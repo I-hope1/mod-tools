@@ -3,6 +3,8 @@
 A mod for mindustry v7.
 It provides many useful tools for developers.
 
+![icon.png](./assets/icon.png)
+
 ## showUIList
 
 - 显示 `icon`, `tex`, `styles`
@@ -10,8 +12,10 @@ It provides many useful tools for developers.
 ## Tester
 
 - 提供 `js` 编辑器 `tester`
-- - `ctrl+shift+enter` 立即执行代码
-- - `ctrl+shift+up/down` 切换历史记录
+-
+    - `ctrl`+`shift`+`enter` 立即执行代码
+-
+    - `ctrl`+`shift`+`up/down` 切换历史记录
 - 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类
 ```java
@@ -34,20 +38,22 @@ public class JSFunc {
 }
 ```
 
-## UnitSwapn
+## UnitSpawn
 
 - 多队伍选择
 - 支持定点生成
 - 显示`name`和`localizedName`
+  ![unitSpawn](./screenshots/unit_spawn.png)
 
 ## Selection
 
 - 选择器
 - 支持 `Tile`, `Building`, `Bullet`, `Unit`
-
+  ![selection](./screenshots/selection.png)
 
 ## ReviewElement
 显示元素列表，双击复制元素到js变量
+![reviewElement](./screenshots/review_element.png)
 
 ## Window
 - `ctrl+tab` 切换窗口

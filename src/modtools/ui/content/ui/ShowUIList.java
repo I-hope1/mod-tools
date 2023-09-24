@@ -24,7 +24,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
-import modtools.ui.content.Content;
+import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.draw.InterpImage;
@@ -43,7 +43,7 @@ public class ShowUIList extends Content {
 	Window ui;
 
 	public ShowUIList() {
-		super("showuilist", Icon.adminSmall);
+		super("showuilist", Icon.imageSmall);
 	}
 
 	public void _load() {
@@ -56,8 +56,7 @@ public class ShowUIList extends Content {
 		tab.setPrefSize(getW(), -1);
 		ui.cont.table(t -> {
 			t.left().defaults().left();
-			t.add("bgColor: ");
-			IntUI.colorBlock(t.add().growX(), bgColor, false);
+			t.add(bgColorWrap);
 			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
 			t.table(t0 -> t0.check("forceDisabled",
 				forceDisabled, val -> forceDisabled = val))
@@ -81,12 +80,15 @@ public class ShowUIList extends Content {
 
 	boolean forceDisabled = data().getBool("forceDisabled");
 	Pattern pattern;
-	final Color bgColor = new Color(data().get0xInt("bgColor", /* 黄灰色 */0x877f5e_FF)) {
-		public Color set(Color color) {
-			data().putString("bgColor", color);
-			return super.set(color);
-		}
-	};
+
+	Color bgColor;
+	Table bgColorWrap = new Table();
+
+	{
+		bgColor = SettingsUI.colorBlock(bgColorWrap,
+		 "bgColor", data(), "bgColor",
+		 0x877f5e_FF, color -> {});
+	}
 
 	Table icons = newTable(t -> {
 		Icon.icons.each((k, icon) -> {

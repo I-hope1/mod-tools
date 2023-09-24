@@ -115,7 +115,7 @@ public class Selection extends Content {
 	}
 
 	public void loadSettings(Data SETTINGS) {
-		Contents.settings_ui.add(localizedName(), new Table() {{
+		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			table(t -> {
 				t.left().defaults().left();
 				allFunctions.each((k, func) -> func.setting(t));

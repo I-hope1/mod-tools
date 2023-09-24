@@ -4,6 +4,7 @@ import arc.Core;
 import arc.graphics.Color;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
+import arc.util.Align;
 import mindustry.gen.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
@@ -13,19 +14,19 @@ import modtools.utils.TaskManager;
 
 public class WindowManager extends Content {
 	public WindowManager() {
-		super("windowManager");
+		super("windowManager", Icon.adminSmall);
 	}
 
 	public Window ui;
 	Table cont;
 
 	public void load() {
-		ui = new Window(localizedName(), 400, 400, true);
+		ui = new Window(localizedName(), 300, 400, true);
 		// 强制置顶
 		ui.titleTable.find("sticky").remove();
 		ui.sticky = true;
 
-		ui.cont.pane(cont = new LimitTable());
+		ui.cont.pane(cont = new LimitTable()).grow();
 	}
 	Runnable run = this::rebuild0;
 	public void rebuild() {
@@ -42,12 +43,15 @@ public class WindowManager extends Content {
 				window.invalidateHierarchy();
 				window.display();
 			})).row();
-			top.label(() -> window.title.getText()).grow().padLeft(10f).padRight(10f).get();
+			top.defaults().size(Window.buttonSize);
+			top.label(() -> window.title.getText())
+			 .grow().left()
+			 .padLeft(10f).padRight(10f);
 			if (window.full) {
-				top.button(HopeIcons.sticky, IntStyles.clearNoneTogglei, 32, () -> {
+				top.button(HopeIcons.sticky, IntStyles.hope_clearNoneTogglei, 32, () -> {
 					window.sticky = !window.sticky;
 				}).checked(b -> window.sticky).padLeft(4f);
-				ImageButton button = top.button(Tex.whiteui, IntStyles.clearNonei, 32, () -> {
+				ImageButton button = top.button(Tex.whiteui, IntStyles.hope_clearNonei, 28, () -> {
 					window.show();
 					window.toggleMaximize();
 				}).padLeft(4f).get();
@@ -55,8 +59,8 @@ public class WindowManager extends Content {
 					button.getStyle().imageUp = window.isMaximize ? HopeIcons.normal : HopeIcons.maximize;
 				});
 			}
-			top.button(Icon.cancel, IntStyles.clearNonei, 32, window::hide).padLeft(4f).padRight(4f);
-			top.button(Icon.trash, IntStyles.clearNonei, 32, () -> {
+			top.button(Icon.cancel, Window.cancel_clearNonei, 32, window::hide).padLeft(4f).padRight(4f);
+			top.button(Icon.trash, Window.cancel_clearNonei, 32, () -> {
 				Window.all.remove(window);
 				window.hide();
 			}).padLeft(4f).padRight(4f);

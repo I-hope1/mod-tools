@@ -57,7 +57,7 @@ public class Executor extends Content {
 			cont.bind(() -> 1 << node.status.code());
 			/* 布局
 			 * |-------|=========topImg===========|
-			 * |       |       |        |         |
+			 * |  		     |       |        |         |
 			 * leftImg | icon  | center | buttons |
 			 * |       |       |        |         |
 			 * |-------|--------------------------|
@@ -70,7 +70,7 @@ public class Executor extends Content {
 			Reflect.set(Element.class,
 			 /* leftImage */cont.image().growY().get()
 			 , "color", color);
-			cont.add(button).growX().row();
+			cont.add(button).growX().marginBottom(8f).marginLeft(6f).row();
 			cont.image().color(Color.lightGray).padBottom(6f).growX().colspan(2).row();
 			cont.unbind();
 			button.getImage().addListener(new IntUI.Tooltip(

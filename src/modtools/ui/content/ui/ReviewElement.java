@@ -17,6 +17,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
+import modtools.annotations.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
@@ -26,17 +27,32 @@ import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.content.Content;
+import modtools.ui.content.*;
+import modtools.ui.effect.MyDraw;
 import modtools.utils.*;
+import modtools.utils.MySettings.Data;
 
 import java.util.regex.*;
 
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.IntStyles.*;
 import static modtools.ui.IntUI.*;
+import static modtools.ui.content.SettingsUI.bool;
 import static modtools.utils.Tools.*;
 
 public class ReviewElement extends Content {
+	@DataColorFieldInit(needSetting = true)
+	public int
+	 // 浅绿色
+	 padColor        = 0x8C_E9_9A_75,
+	 padTextColor    = Color.green.rgba(),
+	 marginColor     = Tmp.c1.set(Color.orange).a(0.5f).rgba(),
+	 marginTextColor = Pal.accent.rgba(),
+	 posLineColor    = Tmp.c1.set(Color.slate).a(0.6f).rgba(),
+	 posColor        = Color.lime.rgba(),
+	 sizeTextColor   = Color.magenta.rgba();
+
+
 	public ReviewElement() {
 		super("reviewElement", HopeIcons.codeSmall);
 		Core.scene.root.getCaptureListeners().insert(0, new InputListener() {
@@ -75,7 +91,18 @@ public class ReviewElement extends Content {
 	public static final Color focusColor = DEF_FOCUS_COLOR;
 	public static final Color maskColor  = DEF_MASK_COLOR;
 
+	public void loadSettings(Data SETTINGS) {
+		Contents.settings_ui.add(localizedName(), icon, new Table() {{
+			bool(this, "@settings.select_invisible", SETTINGS, "select_invisible", topGroup.selectInvisible, b -> SETTINGS.put("select_invisible", topGroup.selectInvisible = b));
+			settingColor(this);
+		}});
+	}
+
+	/** 代码生成 */
+	public void settingColor(Table t) {}
+
 	public void load() {
+		loadSettings();
 		topGroup.focusOnElement(new FocusTask(maskColor, focusColor) {
 			{drawSlightly = true;}
 
@@ -90,23 +117,24 @@ public class ReviewElement extends Content {
 				super.drawFocus(elem, vec2);
 				{
 					Lines.stroke(4);
-					Draw.color(Color.slate, 0.6f);
+					Draw.color(posLineColor);
 					// x: 0 -> x
-					drawText("" + vec2.x, vec2.x / 2f, vec2.y, Color.lime);
+					MyDraw.drawText(fixed(vec2.x), vec2.x / 2f, vec2.y, Tmp.c1.set(posColor));
 					Lines.line(0, vec2.y, vec2.x, vec2.y);
 					// y: 0 -> y
-					drawText("" + vec2.y, vec2.x, vec2.y / 2f, Color.lime);
+					MyDraw.drawText(fixed(vec2.y), vec2.x, vec2.y / 2f, Tmp.c1.set(posColor));
 					Lines.line(vec2.x, 0, vec2.x, vec2.y);
 
+					Color color = Tmp.c1.set(sizeTextColor);
+					float w     = elem.getWidth();
+					float h     = elem.getHeight();
 					// width
-					float w = elem.getWidth();
-					drawText(Strings.autoFixed(w, 1),
-					 vec2.x + w / 2f, vec2.y - 8f, Color.magenta);
+					MyDraw.drawText(fixed(w),
+					 vec2.x + w / 2f, 20, color, Align.left);
 
 					// height
-					float h = elem.getHeight();
-					drawText(Strings.autoFixed(h, 1),
-					 vec2.x - 8f, vec2.y + 8f + h / 2f, Color.magenta);
+					MyDraw.drawText(fixed(h),
+					 0, vec2.y + h / 2, color, Align.left);
 				}
 
 				if (elem instanceof Table table) {
@@ -115,8 +143,8 @@ public class ReviewElement extends Content {
 
 				if (elem.parent instanceof Table table) {
 					drawMargin(table.localToStageCoordinates(Tmp.v1.set(0, 0)), table);
-					// 浅绿色
-					Draw.color(0x8C_E9_9A_75);
+
+					Draw.color(padColor);
 					Cell<?> cl        = table.getCell(elem);
 					float   padLeft   = Reflect.get(Cell.class, cl, "padLeft");
 					float   padTop    = Reflect.get(Cell.class, cl, "padTop");
@@ -127,26 +155,15 @@ public class ReviewElement extends Content {
 				}
 			}
 
-			private static void drawText(String text, float x, float y, Color color) {
-				Font  font      = Fonts.def;
-				float oldScaleX = font.getScaleX();
-				float oldScaleY = font.getScaleY();
-				font.getData().setScale(0.6f);
-				Color oldColor = font.getColor();
-				font.setColor(color);
-				font.draw(text, x, y, Align.center);
-				font.setColor(oldColor);
-				font.getData().setScale(oldScaleX, oldScaleY);
-			}
-			private static void drawMargin(Vec2 vec2, Table table) {
-				Draw.color(Color.orange, 0.5f);
+			private void drawMargin(Vec2 vec2, Table table) {
+				Draw.color(marginColor);
 
 				drawMarginOrPad(vec2, table, false,
 				 table.getMarginLeft(), table.getMarginTop(),
 				 table.getMarginRight(), table.getMarginBottom());
 			}
 			/** @param pad true respect 外边距 */
-			private static void drawMarginOrPad(
+			private void drawMarginOrPad(
 			 Vec2 vec2, Element elem, boolean pad,
 			 float left, float top, float right, float bottom) {
 
@@ -158,30 +175,30 @@ public class ReviewElement extends Content {
 				}
 				// 左边 left
 				Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
-				Color color = pad ? Color.green : Pal.accent;
+				Color color = pad ? Tmp.c1.set(padTextColor) : Tmp.c1.set(marginTextColor);
 				if (left != 0)
-					drawText(Strings.autoFixed(left, 1),
+					MyDraw.drawText(fixed(left),
 					 vec2.x + left / 2f,
 					 vec2.y + elem.getHeight() / 2f, color);
 
 				// 底部 bottom
 				Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
 				if (bottom != 0)
-					drawText(Strings.autoFixed(bottom, 1),
+					MyDraw.drawText(fixed(bottom),
 					 vec2.x + elem.getWidth() / 2f,
 					 vec2.y + bottom, color);
 
 				// 顶部 top
 				Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
 				if (top != 0)
-					drawText(Strings.autoFixed(top, 1),
+					MyDraw.drawText(fixed(top),
 					 vec2.x + elem.getWidth() / 2f,
 					 vec2.y + elem.getHeight(), color);
 
 				// 右边 right
 				Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
 				if (right != 0)
-					drawText(Strings.autoFixed(right, 1),
+					MyDraw.drawText(fixed(right),
 					 vec2.x + elem.getWidth() - left / 2f,
 					 vec2.y + elem.getHeight() / 2f, color);
 			}
@@ -694,11 +711,13 @@ public class ReviewElement extends Content {
 			cont.defaults().growX();
 			cont.table(setter -> {
 				setter.defaults().height(42).growX();
-				setter.add(floatSetter("x", () -> "" + element.x, val -> element.x = val)).row();
-				setter.add(floatSetter("y", () -> "" + element.y, val -> element.y = val)).row();
-				setter.add(floatSetter("width", () -> "" + element.getWidth(), element::setWidth)).row();
-				setter.add(floatSetter("height", () -> "" + element.getHeight(), element::setHeight)).row();
-				setter.add(floatSetter("rot", () -> "" + element.getRotation(), element::setRotation)).row();
+				setter.add(floatSetter("x", () -> fixed(element.x), val -> element.x = val)).row();
+				setter.add(floatSetter("y", () -> fixed(element.y), val -> element.y = val)).row();
+				setter.add(floatSetter("width", () -> fixed(element.getWidth()), element::setWidth)).row();
+				setter.add(floatSetter("height", () -> fixed(element.getHeight()), element::setHeight)).row();
+				setter.add(floatSetter("prefWidth", () -> fixed(element.getPrefWidth()), null)).row();
+				setter.add(floatSetter("preHeight", () -> fixed(element.getPrefHeight()), null)).row();
+				setter.add(floatSetter("rot", () -> fixed(element.getRotation()), element::setRotation)).row();
 			}).growX().row();
 			Table table = cont.table().get();
 			table.defaults().growX();
@@ -749,11 +768,19 @@ public class ReviewElement extends Content {
 		return new Table(t -> {
 			if (name != null) t.add(name).color(Color.gray).padRight(8f);
 			t.defaults().growX();
+			if (floatc == null) {
+				t.label(def);
+				return;
+			}
 			ModifiedLabel.build(def, Strings::canParseFloat, (field, label) -> {
 				if (!field.isValid()) return;
 				label.setText(field.getText());
 				floatc.get(Strings.parseFloat(field.getText()));
 			}, 2, t, TextField::new);
 		});
+	}
+
+	static String fixed(float value) {
+		return Strings.autoFixed(value, 1);
 	}
 }

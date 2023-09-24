@@ -15,10 +15,12 @@ import java.util.concurrent.CompletableFuture;
 import static mindustry.Vars.ui;
 
 public class IntVars {
-	public static final String         modName    = "mod-tools";
-	public static       ModMeta        meta;
-	public static       Fi             root;
-	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+	public static final String  modName = "mod-tools";
+	public static       ModMeta meta;
+	public static       Fi      root;
+
+	public static String         QQ         = "http://wpa.qq.com/msgrd?v=3&uin=2540772408&site=qq&menu=yes";
+	public static ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
 	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;

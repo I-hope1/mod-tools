@@ -98,6 +98,7 @@ task playGame(dependsOn: classes, type: JavaExec) {
 			MdtDataDir + "/Mindustry.jar",
 //			"-antialias"
 //			, "-debug"
+//			"-testMobile"
 	]
 }
 task ZComplieAll(type: Copy) {

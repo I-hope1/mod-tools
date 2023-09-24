@@ -1,11 +1,15 @@
 package modtools.ui.components.linstener;
 
 import arc.Core;
-import arc.graphics.g2d.Fill;
+import arc.graphics.*;
+import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.event.*;
+import arc.util.*;
+import mindustry.graphics.Pal;
+import modtools.ui.effect.MyDraw;
 
 import static mindustry.Vars.world;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
@@ -42,6 +46,18 @@ public class WorldSelectListener extends InputListener {
 		float maxY = Mathf.clamp(Math.max(start.y, end.y), CAMERA_RECT.y, CAMERA_RECT.y + CAMERA_RECT.height);
 
 		Fill.crect(minX, minY, maxX - minX, maxY - minY);
+
+		Lines.stroke(2);
+		// x: 0 -> x
+		float width = Math.abs(maxX - minX);
+		MyDraw.drawText(Strings.autoFixed(width, 1),
+		 minX + width / 2f, minY, Pal.accent);
+		Lines.line(minX, minY, maxX, minY);
+		// y: 0 -> y
+		float height = Math.abs(maxY - minY);
+		MyDraw.drawText(Strings.autoFixed(height, 1),
+		 minX, minY + height / 2f, Pal.accent);
+		Lines.line(minX, minY, minX, maxY);
 	}
 	protected void clampWorld() {
 		start.x = Mathf.clamp(start.x, 0, world.unitWidth());

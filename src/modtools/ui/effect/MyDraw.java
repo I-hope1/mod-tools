@@ -7,6 +7,7 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.util.*;
 import mindustry.graphics.Pal;
+import mindustry.ui.Fonts;
 
 import static arc.Core.graphics;
 import static modtools.utils.MySettings.D_BLUR;
@@ -136,6 +137,20 @@ public class MyDraw {
 			return true;
 		});
 	} */
+	public static void drawText(String text, float x, float y, Color color) {
+		drawText(text, x, y, color, Align.center);
+	}
+	public static void drawText(String text, float x, float y, Color color, int align) {
+		Font  font      = Fonts.def;
+		float oldScaleX = font.getScaleX();
+		float oldScaleY = font.getScaleY();
+		font.getData().setScale(0.6f);
+		Color oldColor = font.getColor();
+		font.setColor(color);
+		font.draw(text, x, y, align);
+		font.setColor(oldColor);
+		font.getData().setScale(oldScaleX, oldScaleY);
+	}
 
 	public interface DrawEffect {
 		void resize(int width, int height);

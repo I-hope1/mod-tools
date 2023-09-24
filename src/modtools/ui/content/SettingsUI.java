@@ -7,18 +7,21 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.core.Version;
-import mindustry.gen.Tex;
+import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
+import modtools.*;
 import modtools.events.*;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
@@ -49,11 +52,16 @@ public class SettingsUI extends Content {
 	}
 
 	public Table add(String title, Table t) {
+		return add(title, null, t);
+	}
+	public Table add(String title, Drawable icon, Table t) {
 		Table table = new Table();
+		if (icon != null) table.image(icon).size(24).padRight(4f);
+		else table.add(); /* 占位符 */
 		table.add(title).color(Pal.accent).growX().left().row();
-		table.image().color(Pal.accent).growX().left().row();
+		table.image().color(Pal.accent).growX().colspan(2).left().row();
 		t.left().defaults().left();
-		table.add(t).growX().left().padLeft(16);
+		table.add(t).growX().colspan(2).left().padLeft(16);
 		cont.add(table).row();
 		return table;
 	}
@@ -71,7 +79,7 @@ public class SettingsUI extends Content {
 			left().defaults().left();
 			bool(this, "@settings.jsfunc.auto_refresh", D_JSFUNC, "auto_refresh");
 		}});
-		add("毛玻璃", new LimitTable() {{
+		add("毛玻璃", Tex.clear, new LimitTable() {{
 			left().defaults().left();
 			bool(this, "启用", D_BLUR, "enable");
 			SettingsUI.slideri(this, D_BLUR, "缩放级别", 1, 8, 4, 1, null);
@@ -80,14 +88,13 @@ public class SettingsUI extends Content {
 			left().defaults().left();
 			// add("", );
 		}}); */
-		add("@mod-tools.others", new LimitTable() {{
+		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall, new LimitTable() {{
 			left().defaults().left();
 			bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
 			bool(this, "@settings.checkuicount", SETTINGS, "checkuicount", topGroup.checkUI, b -> topGroup.checkUI = b);
 			bool(this, "@settings.debugbounds", SETTINGS, "debugbounds", topGroup.debugBounds, b -> SETTINGS.put("debugbounds", topGroup.debugBounds = b));
 			bool(this, "@setting.showhiddenbounds", SETTINGS, "showHiddenBounds", TopGroup.drawHiddenPad, b -> SETTINGS.put("drawHiddenPad", b), () -> topGroup.debugBounds);
 			addValueLabel(this, "Bound Element", () -> topGroup.drawPadElem, () -> topGroup.debugBounds);
-			bool(this, "@settings.select_invisible", SETTINGS, "select_invisible", topGroup.selectInvisible, b -> SETTINGS.put("select_invisible", topGroup.selectInvisible = b));
 			float minZoom = Vars.renderer.minZoom;
 			float maxZoom = Vars.renderer.maxZoom;
 			SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
@@ -121,7 +128,19 @@ public class SettingsUI extends Content {
 					show();
 				}};
 			}).growX().height(42);
-		}});
+
+			row();
+			table(Tex.pane, t -> {
+				t.add("@editor.author");
+				t.add(IntVars.meta.author).row();
+				t.button("Github", Icon.githubSmall, Styles.flatt, () -> {
+					Core.app.openURI("https://github.com/" + IntVars.meta.repo);
+				}).growX();
+				t.button("QQ", HopeIcons.QQ, Styles.flatt, () -> {
+					Core.app.openURI(IntVars.QQ);
+				}).growX();
+			}).growX();
+		}}));
 		Content.all.forEach(cont -> {
 			if (!(cont instanceof SettingsUI)) {
 				addLoad(cont);
@@ -206,6 +225,23 @@ public class SettingsUI extends Content {
 		}).row();
 	}
 
+	public static Color colorBlock(
+	 Table table, String text,
+	 Data data, String key, int defaultColor,
+	 Cons<Color> colorCons) {
+		Color color = new Color(data.get0xInt(key, defaultColor)) {
+			public Color set(Color color) {
+				data.putString(key, color);
+				super.set(color);
+				colorCons.get(this);
+				return this;
+			}
+		};
+		table.add(text).padRight(4f).left().labelAlign(Align.left);
+		IntUI.colorBlock(table.add().right().growX(), color, false);
+		table.row();
+		return color;
+	}
 
 	public static Cell<CheckBox> checkboxWithEnum(Table t, String text, E_DataInterface _enum) {
 		return t.check(text, _enum.enabled(), _enum::set);

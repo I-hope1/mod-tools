@@ -77,7 +77,10 @@ public class Window extends Table {
 
 	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(IntStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);
+		down = whiteui.tint(Tmp.c1.set(Pal.remove).lerp(Color.gray, 0.3f));
 	}};
+
+	public static final float buttonSize = 38f;
 
 	public Table
 	 titleTable = new Table(topPane) {
@@ -142,10 +145,10 @@ public class Window extends Table {
 		 })
 		 .get();
 
-		titleTable.defaults().size(38f);
+		titleTable.defaults().size(buttonSize);
 
 		if (full) {
-			titleTable.button(HopeIcons.sticky, IntStyles.clearNoneTogglei, 32, () -> {
+			titleTable.button(HopeIcons.sticky, IntStyles.hope_clearNoneTogglei, 32, () -> {
 				sticky = !sticky;
 			}).checked(b -> sticky).padLeft(4f).name("sticky");
 			titleTable.add(new FoldedImageButton(false, IntStyles.hope_clearNonei))

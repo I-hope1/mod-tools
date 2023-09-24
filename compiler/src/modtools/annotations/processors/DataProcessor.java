@@ -97,6 +97,6 @@ public class DataProcessor extends BaseProcessor {
 	}
 
 	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(DataFieldInit.class.getCanonicalName(), DataObjectInit.class.getCanonicalName());
+		return Set.of(DataEventFieldInit.class.getCanonicalName(), DataObjectInit.class.getCanonicalName());
 	}
 }

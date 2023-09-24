@@ -26,7 +26,7 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
-import modtools.annotations.DataFieldInit;
+import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
 import modtools.events.ExecuteTree.TaskNode;
 import modtools.rhino.ForRhino;
@@ -87,7 +87,7 @@ public class Tester extends Content {
 
 				String taskName = startupTask().name;
 				String source = "(()=>{modName='" + taskName + "';scriptName=`" + entry.key + "`;" +
-												(map.getBool("once") && map.containsKey("type") ?
+												(map.getBool("disposable") && map.containsKey("type") ?
 												 "Events.on(" + map.get("type") + ", $e$ => {try{\n" + bookmarkDirectory.child(entry.key).readString() + ";}catch(e){Log.err(e);}});"
 												 : bookmarkDirectory.child(entry.key).readString())
 												+ "\n})()";
@@ -96,7 +96,7 @@ public class Tester extends Content {
 						source, "<" + taskName + ">", 1);
 				 }, taskName, entry.key, Icon.none, () -> {})
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
-				 .repeatCount(map.getBool("once") ? 0 : map.getInt("repeatCount", 0))
+				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
 				 .apply();
 			}
 		});
@@ -109,14 +109,14 @@ public class Tester extends Content {
 	public boolean loop = false;
 	public Object  res;
 
-	@DataFieldInit
+	@DataEventFieldInit
 	public static boolean catchOutsizeError;
 
 	private boolean
 	 strict = false,
 	 error  = false;
 
-	@DataFieldInit
+	@DataEventFieldInit
 	private static boolean
 	 ignorePopupError = false,
 	 wrapRef          = true,
@@ -148,7 +148,7 @@ public class Tester extends Content {
 	public        int          historyIndex    = -1;
 	/** 位于0处的文本 */
 	public        StringBuffer originalText    = null;
-	@DataFieldInit
+	@DataEventFieldInit
 	public static boolean      rollbackHistory = E_Tester.rollback_history.enabled();
 
 	public ScrollPane pane;
@@ -573,7 +573,7 @@ public class Tester extends Content {
 				 new Data(EXEC_DATA, new JsonMap());
 
 				{
-					check("Added to executor", c -> {
+					check("Add to executor", c -> {
 						enabled = c;
 						if (enabled) {EXEC_DATA.put(f.name(), JS);} else {EXEC_DATA.remove(f.name());}
 					}, () -> EXEC_DATA.containsKey(f.name()));
@@ -582,16 +582,16 @@ public class Tester extends Content {
 					 JS, "intervalSeconds", 0.1f
 					 , () -> enabled, 0.01f, Float.MAX_VALUE);
 
-					check("Once", JS, "once", () -> enabled);
+					check("Disposable", JS, "disposable", () -> enabled);
 					numberi("@task.repeatcount",
 					 JS, "repeatCount", 0,
-					 () -> enabled && !JS.getBool("once"),
+					 () -> enabled && !JS.getBool("disposable"),
 					 -1, Integer.MAX_VALUE);
 
 					Func<Object, String> stringify = val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
 					list("event", val -> JS.put("type", stringify.get(val)),
 					 () -> JS.get("type"), classes,
-					 stringify, () -> JS.getBool("once"));
+					 stringify, () -> JS.getBool("disposable"));
 				}
 			};
 		}).row();
@@ -665,7 +665,7 @@ public class Tester extends Content {
 		dataInit();
 		addSettingsTable(table, null, n -> "tester." + n, settings, E_Tester.values(), true);
 
-		Contents.settings_ui.add(localizedName(), table);
+		Contents.settings_ui.add(localizedName(), icon, table);
 	}
 
 	public void dataInit() {

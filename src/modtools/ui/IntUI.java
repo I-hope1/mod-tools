@@ -695,6 +695,7 @@ public class IntUI {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
+			;
 			topGroup.addChild(ui.picker);
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);

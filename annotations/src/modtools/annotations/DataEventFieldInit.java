@@ -20,5 +20,5 @@ import java.lang.annotation.*;
  */
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.SOURCE)
-public @interface DataFieldInit {
+public @interface DataEventFieldInit {
 }

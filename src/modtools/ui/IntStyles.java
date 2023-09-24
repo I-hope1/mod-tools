@@ -1,7 +1,7 @@
 package modtools.ui;
 
 import arc.graphics.Color;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox;
 import arc.scene.ui.CheckBox.CheckBoxStyle;
@@ -29,7 +29,8 @@ public class IntStyles {
 
 
 	public static ImageButtonStyle
-	 hope_clearNonei;
+	 hope_clearNonei,
+	 hope_clearNoneTogglei;
 
 	/* ---------TODO：以下是为了适配V6----------- */
 
@@ -148,7 +149,12 @@ public class IntStyles {
 		}}; */
 		init();
 		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
-			down = over;
+			down = ((TextureRegionDrawable) over).tint(Color.gray);
+		}};
+		hope_clearNoneTogglei = new ImageButtonStyle(clearNoneTogglei) {{
+			over = flatOver;
+			checkedOver = flatDown;
+			checked = down = buttonSelect;
 		}};
 		flatb = new ButtonStyle(flatt);
 	}

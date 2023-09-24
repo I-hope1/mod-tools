@@ -79,7 +79,7 @@ public class UnitSpawn extends Content {
 	public void setup() {
 		unitCont.clearChildren();
 		MyItemSelection.buildTable(unitCont, Vars.content.units(), () -> selectUnit, u -> selectUnit = u,
-		 10);
+		 Vars.mobile ? 8 : 10);
 		unitCont.row();
 		unitCont.table(right -> {
 			Label name = new Label(""),
@@ -127,13 +127,17 @@ public class UnitSpawn extends Content {
 				x0.add("x:");
 				xField = x0.field(String.valueOf(x), newX -> {
 					x = Strings.parseFloat(newX);
-				}).valid(this::validNumber).growX().get();
+				 })
+				 .valid(this::validNumber).growX()
+				 .get();
 			}).growX();
 			table.table(y0 -> {
 				y0.add("y:");
 				yField = y0.field(String.valueOf(y), newY -> {
 					y = Strings.parseFloat(newY);
-				}).valid(this::validNumber).growX().get();
+				 })
+				 .valid(this::validNumber).growX()
+				 .get();
 			}).growX().row();
 			table.button("@unitspawn.selectAposition", IntStyles.flatToggleMenut, () -> {
 				if (el.parent == null) {
@@ -156,9 +160,12 @@ public class UnitSpawn extends Content {
 			table.table(t -> {
 				t.add("@rules.title.teams");
 				teamField = t.field("" + team.id, text -> {
-					int id = (int) toInteger(text);
-					team = Team.get(id);
-				}).valid(val -> Tools.validPosInt(val) && toInteger(val) < Team.all.length).get();
+					 int id = (int) toInteger(text);
+					 team = Team.get(id);
+				 })
+				 .valid(val -> Tools.validPosInt(val) && toInteger(val) < Team.all.length)
+				 .width(100)
+				 .get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
 				btn.clicked(() -> IntUI.showSelectImageTableWithFunc(btn, new Seq<>(Team.all),
 				 () -> team, newTeam -> {
@@ -171,8 +178,11 @@ public class UnitSpawn extends Content {
 			table.table(t -> {
 				t.add("@filter.option.amount");
 				amountField = t.field("" + amount, text -> {
-					amount = (int) toInteger(text);
-				}).valid(val -> validNumber(val) && Tools.validPosInt(val)).get();
+					 amount = (int) toInteger(text);
+				 })
+				 .valid(val -> validNumber(val) && Tools.validPosInt(val))
+				 .width(100)
+				 .get();
 			});
 		}).growX().row();
 		ui.cont.table(Window.myPane, table -> {
@@ -267,7 +277,7 @@ public class UnitSpawn extends Content {
 
 	int defCap;
 	public void loadSettings(Data SETTINGS) {
-		Contents.settings_ui.add(localizedName(), new Table() {{
+		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			left().defaults().left();
 			Events.run(EventType.WorldLoadEvent.class, () -> {
 				defCap = Vars.state.rules.unitCap;

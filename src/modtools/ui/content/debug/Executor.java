@@ -57,7 +57,7 @@ public class Executor extends Content {
 			cont.bind(() -> 1 << node.status.code());
 			/* 布局
 			 * |-------|=========topImg===========|
-			 * |  		     |       |        |         |
+			 * |       |       |        |         |
 			 * leftImg | icon  | center | buttons |
 			 * |       |       |        |         |
 			 * |-------|--------------------------|

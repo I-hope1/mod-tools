@@ -1,11 +1,9 @@
 package modtools.ui;
 
-import android.view.KeyEvent;
 import arc.Core;
-import arc.backend.android.AndroidInput;
 import arc.input.KeyboardDevice;
 import arc.struct.IntSet;
-import arc.util.*;
+import arc.util.Reflect;
 
 public class HopeInput {
 	public static IntSet justPressed;

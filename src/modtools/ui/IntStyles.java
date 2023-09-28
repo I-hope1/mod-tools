@@ -2,12 +2,13 @@ package modtools.ui;
 
 import arc.graphics.Color;
 import arc.scene.style.*;
+import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
-import arc.scene.ui.CheckBox;
 import arc.scene.ui.CheckBox.CheckBoxStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
+import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.util.Log;
 import mindustry.core.Version;
@@ -31,6 +32,8 @@ public class IntStyles {
 	public static ImageButtonStyle
 	 hope_clearNonei,
 	 hope_clearNoneTogglei;
+	public static SliderStyle
+	 hope_defaultSlider;
 
 	/* ---------TODO：以下是为了适配V6----------- */
 
@@ -156,6 +159,12 @@ public class IntStyles {
 			checkedOver = flatDown;
 			checked = down = buttonSelect;
 		}};
+		/* hope_defaultSlider = new SliderStyle() {{
+			background = sliderBack;
+			knob = sliderKnob;
+			knobOver = sliderKnobOver;
+			knobDown = sliderKnobDown;
+		}}; */
 		flatb = new ButtonStyle(flatt);
 	}
 

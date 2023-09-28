@@ -1,27 +1,39 @@
-package modtools.annotations.processors;
+package modtools.annotations.processors.fieldinit;
 
-import arc.util.Log;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
+import modtools.annotations.fieldinit.DataColorFieldInit;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.util.Set;
 
 @AutoService({Processor.class})
-public class DataColorProcessor extends BaseProcessor<Element> {
+public class ColorProcessor extends BaseProcessor<Element> implements DataUtils {
 	ClassSymbol settingUI;
+	/* method: settingColor */
 	public void dealElement(Element element) throws Throwable {
 		if (element.getKind() == ElementKind.FIELD) {
-			JCClassDecl    decl   = trees.getTree((TypeElement) element.getEnclosingElement());
-			JCMethodDecl   method = findChild(decl, Tag.METHODDEF, d -> d.name.contentEquals("settingColor"));
+			DataColorFieldInit anno = element.getAnnotation(DataColorFieldInit.class);
+			JCClassDecl        decl = trees.getTree((TypeElement) element.getEnclosingElement());
 			JCVariableDecl field  = (JCVariableDecl) trees.getTree(element);
 			String         key    = field.name.toString();
+			field.init = mMaker.Apply(
+			 List.nil(),
+			 mMaker.Select(selfData(decl.sym.type),
+				names.fromString("get0xInt")),
+			 List.of(
+				mMaker.Literal(key),
+				field.init
+			 )
+			);
+			if (!anno.needSetting()) return;
+
+			JCMethodDecl method = findChild(decl, Tag.METHODDEF, d -> d.name.contentEquals("settingColor"));
 			mMaker.at(method);
 			JCVariableDecl param = makeVar0(Flags.PARAMETER, null, "c", null, method.sym);
 			param.startPos = 0;
@@ -45,16 +57,6 @@ public class DataColorProcessor extends BaseProcessor<Element> {
 				 )
 				)
 			 ))
-			);
-			// Log.info(method);
-			field.init = mMaker.Apply(
-			 List.nil(),
-			 mMaker.Select(mMaker.Apply(List.nil(), mMaker.Select(mMaker.This(decl.sym.type), names.fromString("data")), List.nil()),
-				names.fromString("get0xInt")),
-			 List.of(
-				mMaker.Literal(key),
-				field.init
-			 )
 			);
 		}
 	}

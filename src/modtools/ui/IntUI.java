@@ -26,6 +26,7 @@ import mindustry.ui.*;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
+import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
 import modtools.utils.ui.search.*;
 
@@ -47,6 +48,7 @@ public class IntUI {
 
 	public static final Frag     frag = new Frag();
 	public static final TopGroup topGroup;
+	public static       ColorPicker picker = new ColorPicker();
 
 	static {
 		topGroup = new TopGroup();
@@ -691,12 +693,12 @@ public class IntUI {
 			 image.border(inv.set(color).inv());
 		 });
 		Runnable runnable = () -> {
-			ui.picker.show(color, c1 -> {
+			IntUI.picker.show(color, c1 -> {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
-			;
-			topGroup.addChild(ui.picker);
+			Core.app.post(() -> IntUI.picker.setPosition(getAbsPos(image), Align.left | Align.center));
+			// topGroup.addChild(IntUI.picker);
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}

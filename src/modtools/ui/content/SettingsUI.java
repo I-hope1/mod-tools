@@ -18,16 +18,16 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
-import modtools.*;
+import modtools.IntVars;
+import modtools.annotations.SettingsBuilder.Bool;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
-import modtools.utils.ElementUtils;
 
-import static modtools.ui.IntUI.*;
+import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.MySettings.*;
 
 public class SettingsUI extends Content {
@@ -88,59 +88,63 @@ public class SettingsUI extends Content {
 			left().defaults().left();
 			// add("", );
 		}}); */
-		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall, new LimitTable() {{
-			left().defaults().left();
-			bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
-			bool(this, "@settings.checkuicount", SETTINGS, "checkuicount", topGroup.checkUI, b -> topGroup.checkUI = b);
-			bool(this, "@settings.debugbounds", SETTINGS, "debugbounds", topGroup.debugBounds, b -> SETTINGS.put("debugbounds", topGroup.debugBounds = b));
-			bool(this, "@setting.showhiddenbounds", SETTINGS, "showHiddenBounds", TopGroup.drawHiddenPad, b -> SETTINGS.put("drawHiddenPad", b), () -> topGroup.debugBounds);
-			addValueLabel(this, "Bound Element", () -> topGroup.drawPadElem, () -> topGroup.debugBounds);
-			float minZoom = Vars.renderer.minZoom;
-			float maxZoom = Vars.renderer.maxZoom;
-			SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
-				Vars.renderer.minZoom = val;
-			}).change();
-			SettingsUI.slider(this, "rendererMaxZoom", maxZoom, Math.max(14f, maxZoom), maxZoom, 0.1f, val -> {
-				Vars.renderer.maxZoom = val;
-			}).change();
-			if (Version.number >= 136) {
-				SettingsUI.slideri(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1, val -> {
-					Vars.maxSchematicSize = val;
-				});
-			}
-			button("clear mods restart", Styles.flatBordert, () -> {
-				Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
-			}).growX().height(42).row();
+		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall,
+		 new LimitTable() {{
+			 left().defaults().left();
+			 bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
+			 /* bool0(topGroup.checkUICount);
+			 bool0(topGroup.debugBounds);
+			 bool0(TopGroup.drawHiddenPad); */
+			 bool(this, "@settings.checkuicount", "checkUICount", topGroup.checkUICount, b -> topGroup.checkUICount = b);
+			 bool(this, "@settings.debugbounds", "debugBounds", topGroup.debugBounds, b -> SETTINGS.put("debugBounds", topGroup.debugBounds = b));
+			 bool(this, "@settings.showhiddenbounds", "showHiddenBounds", TopGroup.drawHiddenPad, b -> SETTINGS.put("drawHiddenPad", TopGroup.drawHiddenPad = b), () -> topGroup.debugBounds);
+			 addValueLabel(this, "Bound Element", () -> topGroup.drawPadElem, () -> topGroup.debugBounds);
+			 float minZoom = Vars.renderer.minZoom;
+			 float maxZoom = Vars.renderer.maxZoom;
+			 SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
+				 Vars.renderer.minZoom = val;
+			 }).change();
+			 SettingsUI.slider(this, "rendererMaxZoom", maxZoom, Math.max(14f, maxZoom), maxZoom, 0.1f, val -> {
+				 Vars.renderer.maxZoom = val;
+			 }).change();
+			 if (Version.number >= 136) {
+				 SettingsUI.slideri(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1, val -> {
+					 Vars.maxSchematicSize = val;
+				 });
+			 }
+			 button("clear mods restart", Styles.flatBordert, () -> {
+				 Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
+			 }).growX().height(42).row();
 
-			button("FONT", Styles.flatBordert, () -> {
-				new DisWindow("FONTS") {{
-					for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
-						cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
-							 SETTINGS.put("font", fi.name());
-						 }).height(42).growX()
-						 .checked(__ -> fi.name().equals(SETTINGS.getString("font")))
-						 .row();
-					}
-					cont.image().color(Color.gray).growX().row();
-					cont.button("DIRECTORY", Styles.flatBordert, () -> {
-						Core.app.openFolder(MyFonts.fontDirectory.path());
-					}).growX().height(45);
-					show();
-				}};
-			}).growX().height(42);
+			 button("FONT", Styles.flatBordert, () -> {
+				 new DisWindow("FONTS") {{
+					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
+						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
+								SETTINGS.put("font", fi.name());
+							}).height(42).growX()
+							.checked(__ -> fi.name().equals(SETTINGS.getString("font")))
+							.row();
+					 }
+					 cont.image().color(Color.gray).growX().row();
+					 cont.button("DIRECTORY", Styles.flatBordert, () -> {
+						 Core.app.openFolder(MyFonts.fontDirectory.path());
+					 }).growX().height(45);
+					 show();
+				 }};
+			 }).growX().height(42);
 
-			row();
-			table(Tex.pane, t -> {
-				t.add("@editor.author");
-				t.add(IntVars.meta.author).row();
-				t.button("Github", Icon.githubSmall, Styles.flatt, () -> {
-					Core.app.openURI("https://github.com/" + IntVars.meta.repo);
-				}).growX();
-				t.button("QQ", HopeIcons.QQ, Styles.flatt, () -> {
-					Core.app.openURI(IntVars.QQ);
-				}).growX();
-			}).growX();
-		}}));
+			 row();
+			 table(Tex.pane, t -> {
+				 t.add("@editor.author");
+				 t.add(IntVars.meta.author).row();
+				 t.button("Github", Icon.githubSmall, Styles.flatt, () -> {
+					 Core.app.openURI("https://github.com/" + IntVars.meta.repo);
+				 }).height(42).growX();
+				 t.button("QQ", HopeIcons.QQ, Styles.flatt, () -> {
+					 Core.app.openURI(IntVars.QQ);
+				 }).height(42).growX();
+			 }).growX();
+		 }}));
 		Content.all.forEach(cont -> {
 			if (!(cont instanceof SettingsUI)) {
 				addLoad(cont);
@@ -213,9 +217,16 @@ public class SettingsUI extends Content {
 	public static void bool(Table table, String text, Data data, String key) {
 		bool(table, text, data, key, false, null);
 	}
+	public static void bool(Table table, String text, String key, boolean def, Boolc boolc) {
+		bool(table, text, SETTINGS, key, def, boolc, null);
+	}
 	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc) {
 		bool(table, text, data, key, def, boolc, null);
 	}
+	public static void bool(Table table, String text, String key, boolean def, Boolc boolc, Boolp condition) {
+		bool(table, text, SETTINGS, key, def, boolc, condition);
+	}
+
 	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc, Boolp condition) {
 		table.check(text, key == null ? def : data.getBool(key, def), b -> {
 			if (key != null) data.put(key, b);
@@ -224,6 +235,8 @@ public class SettingsUI extends Content {
 			if (condition != null) t.setDisabled(() -> !condition.get());
 		}).row();
 	}
+	/** for annotation processor */
+	private static void bool0(boolean value) {}
 
 	public static Color colorBlock(
 	 Table table, String text,
@@ -237,7 +250,9 @@ public class SettingsUI extends Content {
 				return this;
 			}
 		};
-		table.add(text).padRight(4f).left().labelAlign(Align.left);
+		IntUI.doubleClick(table.add(text).padRight(4f).left().labelAlign(Align.left).get(), null, () -> {
+			color.set(defaultColor);
+		});
 		IntUI.colorBlock(table.add().right().growX(), color, false);
 		table.row();
 		return color;

@@ -35,13 +35,15 @@ public abstract class Content {
 		return SETTINGS.getBool("load-" + name, defLoadable);
 	}
 	public Content(String name) {
-		this(name, Styles.none);
+		this(name, null);
 	}
 	public Content(String name, Drawable icon) {
 		this.name = name;
-		try {
+		if (icon == null) try {
 			icon = Reflect.get(Icon.class, name + "Small");
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) {
+			icon = Styles.none;
+		}
 		this.icon = icon;
 		all.add(this);
 	}

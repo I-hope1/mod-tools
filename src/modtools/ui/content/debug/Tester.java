@@ -102,6 +102,7 @@ public class Tester extends Content {
 		});
 	}
 
+	// =------------------------------=
 
 	Fi         lastDir;
 	String     log = "";
@@ -471,7 +472,7 @@ public class Tester extends Content {
 	public void makeError(Throwable ex, boolean fromExecutor) {
 		error = true;
 		loop = false;
-		if (data().getBool("output_to_log")) Log.err(name, ex);
+		if (E_Tester.output_to_log.enabled()) Log.err(name, ex);
 		if (!ignorePopupError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
 	}
@@ -511,7 +512,7 @@ public class Tester extends Content {
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
-			if (data().getBool("output_to_log")) {
+			if (E_Tester.output_to_log.enabled()) {
 				Log.info("[[tester]: " + log);
 			}
 			if (lastDir != null) lastDir.child("log.txt").writeString(log);
@@ -709,7 +710,7 @@ public class Tester extends Content {
 		}
 		ScriptableObject.putProperty(scope, name, val);
 	}
-	public final String prefix = "tmp";
+	public static final String prefix = "tmp";
 	public String put(Object val) {
 		int i = 0;
 		// 从0开始直到找到没有被定义的变量

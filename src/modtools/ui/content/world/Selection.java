@@ -1110,7 +1110,7 @@ public class Selection extends Content {
 	private void reacquireFocus() {
 		focusUnits.clear();
 		focusBullets.clear();
-		if (data().getBool("focusOnWorld")) {
+		if (E_Selection.focusOnWorld.enabled()) {
 			focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
 			focusBuild = focusTile != null ? focusTile.build : null;
 			Groups.unit.each(u -> {
@@ -1157,7 +1157,7 @@ public class Selection extends Content {
 			cont.pane(Styles.smallPane, p -> pane = p).grow();
 			buildCont0();
 			Tools.TASKS.add(() -> {
-				if (state.isMenu() || !data().getBool("focusOnWorld") || !focusEnabled) {
+				if (state.isMenu() || !E_Selection.focusOnWorld.enabled() || !focusEnabled) {
 					hide();
 				} else if (!isShown() && SclListener.fireElement == null) {
 					show();

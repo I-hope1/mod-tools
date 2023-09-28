@@ -17,7 +17,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
-import modtools.annotations.*;
+import modtools.annotations.fieldinit.DataColorFieldInit;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
@@ -49,7 +49,7 @@ public class ReviewElement extends Content {
 	 marginColor     = Tmp.c1.set(Color.orange).a(0.5f).rgba(),
 	 marginTextColor = Pal.accent.rgba(),
 	 posLineColor    = Tmp.c1.set(Color.slate).a(0.6f).rgba(),
-	 posColor        = Color.lime.rgba(),
+	 posTextColor = Color.lime.rgba(),
 	 sizeTextColor   = Color.magenta.rgba();
 
 
@@ -94,11 +94,16 @@ public class ReviewElement extends Content {
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			bool(this, "@settings.select_invisible", SETTINGS, "select_invisible", topGroup.selectInvisible, b -> SETTINGS.put("select_invisible", topGroup.selectInvisible = b));
-			settingColor(this);
+			Seq<Element> children1 = table(t -> settingColor(t)).grow().get().getChildren();
+			for (Element element : children1) {
+				if (element instanceof Label) {
+					// element.clicked(() -> );
+				}
+			}
 		}});
 	}
 
-	/** 代码生成 */
+	/** 代码生成{@link ColorProcessor} */
 	public void settingColor(Table t) {}
 
 	public void load() {
@@ -115,26 +120,45 @@ public class ReviewElement extends Content {
 			}
 			public void drawFocus(Element elem, Vec2 vec2) {
 				super.drawFocus(elem, vec2);
+				posLine:
 				{
+					if ((posLineColor & 0x00000011) == 0) break posLine;
 					Lines.stroke(4);
 					Draw.color(posLineColor);
 					// x: 0 -> x
-					MyDraw.drawText(fixed(vec2.x), vec2.x / 2f, vec2.y, Tmp.c1.set(posColor));
 					Lines.line(0, vec2.y, vec2.x, vec2.y);
 					// y: 0 -> y
-					MyDraw.drawText(fixed(vec2.y), vec2.x, vec2.y / 2f, Tmp.c1.set(posColor));
 					Lines.line(vec2.x, 0, vec2.x, vec2.y);
+				}
+				posText:
+				{
+					if ((posTextColor & 0x00000011) == 0) break posText;
+					// x: 0 -> x
+					MyDraw.drawText(fixed(vec2.x),
+					 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+					// y: 0 -> y
+					MyDraw.drawText(fixed(vec2.y),
+					 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+				}
 
+				sizeText:
+				{
 					Color color = Tmp.c1.set(sizeTextColor);
-					float w     = elem.getWidth();
-					float h     = elem.getHeight();
+					if (color.a == 0) break sizeText;
+					float w = elem.getWidth();
+					float h = elem.getHeight();
 					// width
+					boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
 					MyDraw.drawText(fixed(w),
-					 vec2.x + w / 2f, 20, color, Align.left);
+					 vec2.x + w / 2f,
+					 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
+					 color, Align.center);
 
 					// height
 					MyDraw.drawText(fixed(h),
-					 0, vec2.y + h / 2, color, Align.left);
+					 flipX ? Core.graphics.getWidth() : 0,
+					 vec2.y + (h + MyDraw.fontHeight()) / 2f,
+					 color, flipX ? Align.right : Align.left);
 				}
 
 				if (elem instanceof Table table) {
@@ -144,73 +168,8 @@ public class ReviewElement extends Content {
 				if (elem.parent instanceof Table table) {
 					drawMargin(table.localToStageCoordinates(Tmp.v1.set(0, 0)), table);
 
-					Draw.color(padColor);
-					Cell<?> cl        = table.getCell(elem);
-					float   padLeft   = Reflect.get(Cell.class, cl, "padLeft");
-					float   padTop    = Reflect.get(Cell.class, cl, "padTop");
-					float   padBottom = Reflect.get(Cell.class, cl, "padBottom");
-					float   padRight  = Reflect.get(Cell.class, cl, "padRight");
-
-					drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
+					drawPadding(elem, vec2, table);
 				}
-			}
-
-			private void drawMargin(Vec2 vec2, Table table) {
-				Draw.color(marginColor);
-
-				drawMarginOrPad(vec2, table, false,
-				 table.getMarginLeft(), table.getMarginTop(),
-				 table.getMarginRight(), table.getMarginBottom());
-			}
-			/** @param pad true respect 外边距 */
-			private void drawMarginOrPad(
-			 Vec2 vec2, Element elem, boolean pad,
-			 float left, float top, float right, float bottom) {
-
-				if (pad) {
-					left *= -1;
-					top *= -1;
-					right *= -1;
-					bottom *= -1;
-				}
-				// 左边 left
-				Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
-				Color color = pad ? Tmp.c1.set(padTextColor) : Tmp.c1.set(marginTextColor);
-				if (left != 0)
-					MyDraw.drawText(fixed(left),
-					 vec2.x + left / 2f,
-					 vec2.y + elem.getHeight() / 2f, color);
-
-				// 底部 bottom
-				Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
-				if (bottom != 0)
-					MyDraw.drawText(fixed(bottom),
-					 vec2.x + elem.getWidth() / 2f,
-					 vec2.y + bottom, color);
-
-				// 顶部 top
-				Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
-				if (top != 0)
-					MyDraw.drawText(fixed(top),
-					 vec2.x + elem.getWidth() / 2f,
-					 vec2.y + elem.getHeight(), color);
-
-				// 右边 right
-				Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
-				if (right != 0)
-					MyDraw.drawText(fixed(right),
-					 vec2.x + elem.getWidth() - left / 2f,
-					 vec2.y + elem.getHeight() / 2f, color);
-			}
-			/** 从元素到hover的元素的连线 */
-			public void drawLine() {
-				if (FOCUS == null) return;
-
-				Vec2 vec2  = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
-				Vec2 mouse = Core.input.mouse();
-				Draw.color(ColorFul.color);
-				Lines.stroke(4f);
-				Lines.line(mouse.x, mouse.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
 			}
 			public void endDraw() {
 				if (topGroup.isSelecting()) super.endDraw();
@@ -225,6 +184,82 @@ public class ReviewElement extends Content {
 
 		TopGroup.searchBlackList.add(btn);
 		TopGroup.classBlackList.add(ReviewElementWindow.class);
+	}
+	public void drawPadding(Element elem, Vec2 vec2, Table table) {
+		/* 如果a = 0就返回 */
+		if ((padColor & 0x00000011) == 0) return;
+		Draw.color(padColor);
+		Cell<?> cl = table.getCell(elem);
+		if (cl == null) {
+			return;
+		}
+		float padLeft   = Reflect.get(Cell.class, cl, "padLeft");
+		float padTop    = Reflect.get(Cell.class, cl, "padTop");
+		float padBottom = Reflect.get(Cell.class, cl, "padBottom");
+		float padRight  = Reflect.get(Cell.class, cl, "padRight");
+
+		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
+	}
+
+	public void drawMargin(Vec2 vec2, Table table) {
+		if ((marginColor & 0x00000011) == 0) return;
+		Draw.color(marginColor);
+
+		drawMarginOrPad(vec2, table, false,
+		 table.getMarginLeft(), table.getMarginTop(),
+		 table.getMarginRight(), table.getMarginBottom());
+	}
+	/** @param pad true respect 外边距 */
+	private void drawMarginOrPad(
+	 Vec2 vec2, Element elem, boolean pad,
+	 float left, float top, float right, float bottom) {
+
+		if (pad) {
+			left *= -1;
+			top *= -1;
+			right *= -1;
+			bottom *= -1;
+		}
+		float mul = pad ? -1 : 1;
+		// 左边 left
+		Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
+		Color color = pad ? Tmp.c1.set(padTextColor) : Tmp.c1.set(marginTextColor);
+		if (color.a == 0) return;
+		if (left != 0)
+			MyDraw.drawText(fixed(left * mul),
+			 vec2.x + left / 2f,
+			 vec2.y + (MyDraw.fontHeight() + elem.getHeight()) / 2f, color);
+
+		// 底部 bottom
+		Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
+		if (bottom != 0)
+			MyDraw.drawText(fixed(bottom * mul),
+			 vec2.x + elem.getWidth() / 2f,
+			 vec2.y + bottom, color);
+
+		// 顶部 top
+		Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
+		if (top != 0)
+			MyDraw.drawText(fixed(top * mul),
+			 vec2.x + elem.getWidth() / 2f,
+			 vec2.y + elem.getHeight() - top / 2f, color);
+
+		// 右边 right
+		Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
+		if (right != 0)
+			MyDraw.drawText(fixed(right * mul),
+			 vec2.x + elem.getWidth() - left / 2f,
+			 vec2.y + (MyDraw.fontHeight() + elem.getHeight()) / 2f, color);
+	}
+	/** 从元素到hover的元素的连线 */
+	public void drawLine() {
+		if (FOCUS == null) return;
+
+		Vec2 vec2  = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
+		Vec2 mouse = Core.input.mouse();
+		Draw.color(ColorFul.color);
+		Lines.stroke(4f);
+		Lines.line(mouse.x, mouse.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
 	}
 
 	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
@@ -721,8 +756,10 @@ public class ReviewElement extends Content {
 			}).growX().row();
 			Table table = cont.table().get();
 			table.defaults().growX();
+			l:
 			if (element.parent instanceof Table) {
 				var cl = ((Table) element.parent).getCell(element);
+				if (cl == null) break l;
 				table.table(Tex.pane, t -> {
 					t.defaults().grow();
 					t.add();

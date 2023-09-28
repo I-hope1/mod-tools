@@ -22,6 +22,7 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.annotations.fieldinit.DataBoolFieldInit;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
 import modtools.ui.content.*;
@@ -78,7 +79,8 @@ public class ShowUIList extends Content {
 		// ui.addCloseButton();
 	}
 
-	boolean forceDisabled = data().getBool("forceDisabled");
+	@DataBoolFieldInit(data = "")
+	boolean forceDisabled;
 	Pattern pattern;
 
 	Color bgColor;
@@ -87,7 +89,7 @@ public class ShowUIList extends Content {
 	{
 		bgColor = SettingsUI.colorBlock(bgColorWrap,
 		 "bgColor", data(), "bgColor",
-		 0x877f5e_FF, color -> {});
+		 0x877F5E_FF, color -> {});
 	}
 
 	Table icons = newTable(t -> {

@@ -19,7 +19,7 @@ public class IntVars {
 	public static       ModMeta meta;
 	public static       Fi      root;
 
-	public static String         QQ         = "http://wpa.qq.com/msgrd?v=3&uin=2540772408&site=qq&menu=yes";
+	public static String QQ = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
 	public static final String  NL = System.lineSeparator();

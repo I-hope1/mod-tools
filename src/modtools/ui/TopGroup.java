@@ -20,6 +20,7 @@ import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
+import modtools.annotations.fieldinit.DataBoolFieldInit;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.Window;
@@ -32,20 +33,21 @@ import java.util.*;
 
 import static arc.Core.*;
 import static modtools.IntVars.modName;
-import static modtools.ui.Contents.tester;
+import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.components.Window.frontWindow;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
-import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
 @DataObjectInit
 public final class TopGroup extends WidgetGroup {
+	@DataBoolFieldInit
 	public boolean
-	 checkUI         = SETTINGS.getBool("checkUI"),
-	 debugBounds     = SETTINGS.getBool("debugbounds"),
-	 selectInvisible = SETTINGS.getBool("selectInvisible");
+	 checkUICount,
+	 debugBounds,
+	 selectInvisible;
+
 	/* 渲染相关 */
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
@@ -116,6 +118,7 @@ public final class TopGroup extends WidgetGroup {
 		} else return;
 		Draw.color(Color.white);
 		Draw.alpha(0.7f);
+		ScreenSampler.pause();
 		drawPad(drawPadElem, vec2);
 		Draw.flush();
 	}
@@ -135,22 +138,37 @@ public final class TopGroup extends WidgetGroup {
 		Lines.line(mouse.x, mouse.y, Tmp.v1.x, Tmp.v1.y);
 	}
 
-	public static boolean drawHiddenPad = SETTINGS.getBool("");
+
+	@DataBoolFieldInit
+	public static boolean drawHiddenPad;
+
 	public static void drawPad(Element elem, Vec2 vec2) {
 		if (!drawHiddenPad && !elem.visible) return;
 		/* translation也得参与计算 */
-		vec2.x += elem.x + elem.translation.x;
-		vec2.y += elem.y + elem.translation.y;
+		elem.localToParentCoordinates(vec2);
 
-		Lines.stroke(elem instanceof Group ? 3 : 1);
+		float thick = elem instanceof Group ? 2 : 1;
+		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
+		Lines.stroke(thick);
+		Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+		/* Lines.stroke(elem instanceof Group ? 3 : 1);
 		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
 		Lines.rect(vec2.x, vec2.y,
-		 elem.getWidth(), elem.getHeight());
+		 elem.getWidth(), elem.getHeight()); */
+
+		Draw.color(Color.white, 0.01f);
+		Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+		if (elem instanceof Table) {
+			review_element.drawMargin(vec2, (Table) elem);
+		}
+		if (elem.parent instanceof Table) {
+			review_element.drawPadding(elem, vec2, (Table) elem.parent);
+		}
 
 		if (elem instanceof Group group) {
-			Vec2 cpy = vec2.cpy();
+			float x = vec2.x, y = vec2.y;
 			for (var e : group.getChildren()) {
-				drawPad(e, vec2.set(cpy));
+				drawPad(e, vec2.set(x, y));
 			}
 		}
 	}
@@ -177,7 +195,7 @@ public final class TopGroup extends WidgetGroup {
 
 		TASKS.add(() -> {
 			toFront();
-			if (checkUI) {
+			if (checkUICount) {
 				if (scene.root.getChildren().count(el -> el.visible) > 70) {
 					tester.loop = false;
 					Dialog dialog;
@@ -715,6 +733,5 @@ public final class TopGroup extends WidgetGroup {
 			return or(super.hit(x, y, touchable), isSwitchWindows ? this : null);
 		}
 	}
-
 
 }

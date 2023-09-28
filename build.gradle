@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
 	ext {
-		uncVersion = "1.8.5"
+		uncVersion = "1.8.7"
 		mindustryVersion = 'v146'
 		MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
 	}

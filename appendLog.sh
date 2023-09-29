@@ -36,5 +36,5 @@ while true; do
     exit 0
   fi
 
-  sleep 0.01
+  sleep 0.1
 done

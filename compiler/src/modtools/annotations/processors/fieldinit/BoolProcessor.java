@@ -80,7 +80,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 				names.fromString("bool")),
 			 List.of(
 				mMaker.Ident(method.params.get(0))/* 参数t */,
-				mMaker.Literal(anno.prefix() + Strings.camelToKebab(name.replace("UI", "Ui")).replace('-', '_')),
+				mMaker.Literal(anno.prefix() + name.toLowerCase()),
 				data,
 				key,
 				node,

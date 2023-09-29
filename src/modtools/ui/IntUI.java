@@ -114,13 +114,14 @@ public class IntUI {
 		elem.addListener(new ClickListener() {
 			final Task task = new Task() {
 				public void run() {
-					if (pressed) {
+					if (pressed && Core.input.mouse().dst(last) < 35f) {
 						boolc.get(true);
 					}
 				}
 			};
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (super.touchDown(event, x, y, pointer, button)) {
+					last.set(Core.input.mouse());
 					Timer.schedule(task, duration / 1000f);
 					return true;
 				}

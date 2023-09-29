@@ -20,7 +20,7 @@ import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
-import modtools.annotations.fieldinit.DataBoolFieldInit;
+import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.Window;
@@ -126,16 +126,20 @@ public final class TopGroup extends WidgetGroup {
 	private void drawSlightlyIfSmall() {
 		if (selected == null || selected.getWidth() > width / 3f || selected.getHeight() > height / 3f) return;
 
-		Vec2 mouse = input.mouse();
-		Tmp.v1.x = mouse.x < width / 2f ? width - selected.getWidth() : 0;
-		Tmp.v1.y = mouse.y < height / 2f ? height - selected.getHeight() : 0;
+		Vec2    mouse = input.mouse();
+		boolean right = mouse.x < width / 2f;
+		Tmp.v1.x = right ? width - selected.getWidth() : 0;
+		boolean top = mouse.y < height / 2f;
+		Tmp.v1.y = top ? height - selected.getHeight() : 0;
 		// Tools.screenshot(selected, true, null).texture;
 		// buffer.blit(MyShaders.Specl);
 		// scene.getCamera().bounds(Tmp.r1.set(selected.x, selected.y, selected.getWidth(), selected.getHeight()));
 		Draw.blit(bufferCaptureAll(Tmp.v1, selected), MyShaders.baseShader);
 		Draw.color(ColorFul.color);
 		Lines.stroke(4f);
-		Lines.line(mouse.x, mouse.y, Tmp.v1.x, Tmp.v1.y);
+		Lines.line(mouse.x, mouse.y,
+		 (right ? 0 : selected.getWidth()) + Tmp.v1.x,
+		 (top ? 0 : selected.getHeight()) + Tmp.v1.y);
 	}
 
 

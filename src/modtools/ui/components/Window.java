@@ -14,7 +14,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.ObjectSet;
+import arc.struct.*;
 import arc.util.*;
 import arc.util.Timer.Task;
 import mindustry.Vars;
@@ -66,7 +66,6 @@ public class Window extends Table {
 		IntVars.addResizeListener(() -> {
 			all.each(Window::display);
 		});
-
 		Tools.TASKS.add(() -> {
 			frontWindow = getBound(topGroup.acquireShownWindows(), -1);
 		});
@@ -148,9 +147,12 @@ public class Window extends Table {
 		titleTable.defaults().size(buttonSize);
 
 		if (full) {
+			//noinspection rawtypes
 			titleTable.button(HopeIcons.sticky, IntStyles.hope_clearNoneTogglei, 32, () -> {
-				sticky = !sticky;
-			}).checked(b -> sticky).padLeft(4f).name("sticky");
+				 sticky = !sticky;
+			 }).padLeft(4f).name("sticky")
+			 /* 这是一个奇葩的bug */
+			 .checked((Boolf) t -> sticky);
 			titleTable.add(new FoldedImageButton(false, IntStyles.hope_clearNonei))
 			 .with(b -> {
 				 b.resizeImage(32);

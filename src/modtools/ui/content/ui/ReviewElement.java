@@ -2,9 +2,10 @@ package modtools.ui.content.ui;
 
 import arc.Core;
 import arc.func.*;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.*;
+import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
@@ -17,7 +18,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
-import modtools.annotations.fieldinit.DataColorFieldInit;
+import modtools.annotations.builder.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
@@ -31,9 +32,11 @@ import modtools.ui.content.*;
 import modtools.ui.effect.MyDraw;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
+import modtools.utils.ui.search.BindCell;
 
 import java.util.regex.*;
 
+import static arc.Core.scene;
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.IntStyles.*;
 import static modtools.ui.IntUI.*;
@@ -53,9 +56,13 @@ public class ReviewElement extends Content {
 	 sizeTextColor   = Color.magenta.rgba();
 
 
+	@DataBoolFieldInit(data = "")
+	private boolean
+	 hoverInfoWindow = true;
+
 	public ReviewElement() {
 		super("reviewElement", HopeIcons.codeSmall);
-		Core.scene.root.getCaptureListeners().insert(0, new InputListener() {
+		scene.root.getCaptureListeners().insert(0, new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
 					topGroup.requestSelectElem(null, callback);
@@ -93,91 +100,24 @@ public class ReviewElement extends Content {
 
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
-			bool(this, "@settings.select_invisible", SETTINGS, "select_invisible", topGroup.selectInvisible, b -> SETTINGS.put("select_invisible", topGroup.selectInvisible = b));
-			Seq<Element> children1 = table(t -> settingColor(t)).grow().get().getChildren();
-			for (Element element : children1) {
-				if (element instanceof Label) {
-					// element.clicked(() -> );
-				}
-			}
+			left().defaults().left();
+			settingBool(this);
+			table(t -> settingColor(t)).grow();
 		}});
 	}
 
 	/** 代码生成{@link ColorProcessor} */
 	public void settingColor(Table t) {}
+	// @DataBoolSetting
+	public void settingBool(Table t) {
+		boolean[] __ = {topGroup.selectInvisible, hoverInfoWindow};
+	}
+
+
 
 	public void load() {
 		loadSettings();
-		topGroup.focusOnElement(new FocusTask(maskColor, focusColor) {
-			{drawSlightly = true;}
-
-			/** 清除elemDraw */
-			public void elemDraw() {}
-			public void beforeDraw(Element drawer) {
-				if (drawer == FOCUS_WINDOW && FOCUS != null) {
-					drawFocus(FOCUS);
-				}
-			}
-			public void drawFocus(Element elem, Vec2 vec2) {
-				super.drawFocus(elem, vec2);
-				posLine:
-				{
-					if ((posLineColor & 0x00000011) == 0) break posLine;
-					Lines.stroke(4);
-					Draw.color(posLineColor);
-					// x: 0 -> x
-					Lines.line(0, vec2.y, vec2.x, vec2.y);
-					// y: 0 -> y
-					Lines.line(vec2.x, 0, vec2.x, vec2.y);
-				}
-				posText:
-				{
-					if ((posTextColor & 0x00000011) == 0) break posText;
-					// x: 0 -> x
-					MyDraw.drawText(fixed(vec2.x),
-					 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
-					// y: 0 -> y
-					MyDraw.drawText(fixed(vec2.y),
-					 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
-				}
-
-				sizeText:
-				{
-					Color color = Tmp.c1.set(sizeTextColor);
-					if (color.a == 0) break sizeText;
-					float w = elem.getWidth();
-					float h = elem.getHeight();
-					// width
-					boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
-					MyDraw.drawText(fixed(w),
-					 vec2.x + w / 2f,
-					 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
-					 color, Align.center);
-
-					// height
-					MyDraw.drawText(fixed(h),
-					 flipX ? Core.graphics.getWidth() : 0,
-					 vec2.y + (h + MyDraw.fontHeight()) / 2f,
-					 color, flipX ? Align.right : Align.left);
-				}
-
-				if (elem instanceof Table table) {
-					drawMargin(vec2, table);
-				}
-
-				if (elem.parent instanceof Table table) {
-					drawMargin(table.localToStageCoordinates(Tmp.v1.set(0, 0)), table);
-
-					drawPadding(elem, vec2, table);
-				}
-			}
-			public void endDraw() {
-				if (topGroup.isSelecting()) super.endDraw();
-				drawLine();
-				elem = topGroup.getSelected();
-				if (elem != null) super.elemDraw();
-			}
-		});
+		topGroup.focusOnElement(new MyFocusTask());
 
 		btn.update(() -> btn.setChecked(topGroup.isSelecting()));
 		btn.setStyle(Styles.logicTogglet);
@@ -187,7 +127,7 @@ public class ReviewElement extends Content {
 	}
 	public void drawPadding(Element elem, Vec2 vec2, Table table) {
 		/* 如果a = 0就返回 */
-		if ((padColor & 0x00000011) == 0) return;
+		if ((padColor & 0x000000FF) == 0) return;
 		Draw.color(padColor);
 		Cell<?> cl = table.getCell(elem);
 		if (cl == null) {
@@ -202,7 +142,7 @@ public class ReviewElement extends Content {
 	}
 
 	public void drawMargin(Vec2 vec2, Table table) {
-		if ((marginColor & 0x00000011) == 0) return;
+		if ((marginColor & 0x000000FF) == 0) return;
 		Draw.color(marginColor);
 
 		drawMarginOrPad(vec2, table, false,
@@ -220,36 +160,39 @@ public class ReviewElement extends Content {
 			right *= -1;
 			bottom *= -1;
 		}
-		float mul = pad ? -1 : 1;
-		// 左边 left
-		Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
 		Color color = pad ? Tmp.c1.set(padTextColor) : Tmp.c1.set(marginTextColor);
-		if (color.a == 0) return;
-		if (left != 0)
+		float mul   = pad ? -1 : 1;
+		// 左边 left
+		if (left != 0) {
+			Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
 			MyDraw.drawText(fixed(left * mul),
 			 vec2.x + left / 2f,
 			 vec2.y + (MyDraw.fontHeight() + elem.getHeight()) / 2f, color);
+		}
 
 		// 底部 bottom
-		Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
-		if (bottom != 0)
+		if (bottom != 0) {
+			Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
 			MyDraw.drawText(fixed(bottom * mul),
 			 vec2.x + elem.getWidth() / 2f,
 			 vec2.y + bottom, color);
+		}
 
 		// 顶部 top
-		Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
-		if (top != 0)
+		if (top != 0) {
+			Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
 			MyDraw.drawText(fixed(top * mul),
 			 vec2.x + elem.getWidth() / 2f,
 			 vec2.y + elem.getHeight() - top / 2f, color);
+		}
 
 		// 右边 right
-		Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
-		if (right != 0)
+		if (right != 0) {
+			Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
 			MyDraw.drawText(fixed(right * mul),
 			 vec2.x + elem.getWidth() - left / 2f,
 			 vec2.y + (MyDraw.fontHeight() + elem.getHeight()) / 2f, color);
+		}
 	}
 	/** 从元素到hover的元素的连线 */
 	public void drawLine() {
@@ -302,7 +245,7 @@ public class ReviewElement extends Content {
 						 });
 						 hide();
 					 };
-					 if (element.parent == Core.scene.root) {
+					 if (element.parent == scene.root) {
 						 Vec2 vec2 = ElementUtils.getAbsPos(bs[0]);
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
@@ -479,9 +422,7 @@ public class ReviewElement extends Content {
 				add(button).size(size).disabled(__ -> children.isEmpty());
 				childIndex = 1;
 				window.addMultiRowWithPos(this,
-				 element == Core.scene.root ? "ROOT"
-					: ReviewElement.getSimpleName(element.getClass())
-						+ (element.name != null ? ": " + element.name : ""),
+				 getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
 				image().growY().left().update(
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
@@ -525,7 +466,7 @@ public class ReviewElement extends Content {
 							float mul  = element.getHeight() / w;
 							// float mul    = element.getHeight() / element.getHeight();
 							p.add(new Image(img.getDrawable()))
-							 .color(element.color)
+							 .update(t -> t.setColor(element.color))
 							 .size(size, size * mul);
 						} catch (Throwable e) {
 							p.add("空图像").labelAlign(Align.left);
@@ -645,11 +586,10 @@ public class ReviewElement extends Content {
 			});
 		}*/
 	}
-	private static Table new_Table(Table d) {
-		Table p;
-		p = d.table().get();
-		d.row();
-		return p;
+	private static String getElementName(Element element) {
+		return element == scene.root ? "ROOT"
+		 : ReviewElement.getSimpleName(element.getClass())
+			 + (element.name != null ? ": " + element.name : "");
 	}
 
 
@@ -819,5 +759,182 @@ public class ReviewElement extends Content {
 
 	static String fixed(float value) {
 		return Strings.autoFixed(value, 1);
+	}
+	private class MyFocusTask extends FocusTask {
+		{drawSlightly = true;}
+
+		public MyFocusTask() {super(ReviewElement.maskColor, ReviewElement.focusColor);}
+
+		/** 清除elemDraw */
+		public void elemDraw() {}
+		public void beforeDraw(Element drawer) {
+			if (drawer == FOCUS_WINDOW && FOCUS != null) {
+				drawFocus(FOCUS);
+			}
+		}
+		public void drawFocus(Element elem, Vec2 vec2) {
+			super.drawFocus(elem, vec2);
+			posLine:
+			{
+				if ((posLineColor & 0x000000FF) == 0) break posLine;
+				Lines.stroke(4);
+				Draw.color(posLineColor);
+				// x: 0 -> x
+				Lines.line(0, vec2.y, vec2.x, vec2.y);
+				// y: 0 -> y
+				Lines.line(vec2.x, 0, vec2.x, vec2.y);
+			}
+			posText:
+			{
+				if ((posTextColor & 0x000000FF) == 0) break posText;
+				// x: 0 -> x
+				MyDraw.drawText(fixed(vec2.x),
+				 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+				// y: 0 -> y
+				MyDraw.drawText(fixed(vec2.y),
+				 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+			}
+
+			sizeText:
+			{
+				Color color = Tmp.c1.set(sizeTextColor);
+				if (color.a == 0) break sizeText;
+				float w = elem.getWidth();
+				float h = elem.getHeight();
+				// width
+				boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
+				MyDraw.drawText(fixed(w),
+				 vec2.x + w / 2f,
+				 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
+				 color, Align.center);
+
+				// height
+				MyDraw.drawText(fixed(h),
+				 flipX ? Core.graphics.getWidth() : 0,
+				 vec2.y + (h + MyDraw.fontHeight()) / 2f,
+				 color, flipX ? Align.right : Align.left);
+			}
+
+			if (elem instanceof Table table) {
+				drawMargin(vec2, table);
+			}
+
+			if (elem.parent instanceof Table table) {
+				drawMargin(table.localToStageCoordinates(Tmp.v1.set(0, 0)), table);
+
+				drawPadding(elem, vec2, table);
+			}
+
+			if (!hoverInfoWindow) return;
+			table.nameLabel.setText(getElementName(elem));
+			table.sizeLabel.setText(fixed(elem.getWidth()) + "×" + fixed(elem.getHeight()));
+			table.colorContainer.setColorValue(elem.color);
+			table.colorLabel.setText("" + elem.color);
+			table.rotation(elem.rotation);
+			table.translation(elem.translation);
+
+			displayDetails(elem, vec2);
+		}
+
+		// ---------------------
+		private void displayDetails(Element elem, Vec2 vec2) {
+			table.colorContainer.invalidate();
+			table.colorContainer.layout();
+			table.colorLabel.invalidate();
+			table.colorLabel.layout();
+			table.invalidate();
+			table.act(1);
+			table.getPrefWidth();
+			table.layout();
+			table.bottom().left();
+			float x = vec2.x;
+			if (x + table.getPrefWidth() > Core.graphics.getWidth()) {
+				x = Core.graphics.getWidth();
+				table.right();
+			}
+			if (x < 0) {
+				x = 0;
+				table.left();
+			}
+			float y = vec2.y + elem.getHeight();
+			if (y + table.getPrefHeight() > Core.graphics.getHeight()) {
+				y = vec2.y;
+				table.top();
+			}
+			if (y - table.getPrefHeight() < 0) {
+				table.bottom();
+				if (y < vec2.y && y + table.getPrefHeight() > y
+						&& y + table.getPrefHeight() < Core.graphics.getHeight()) {
+					y = vec2.y + elem.getHeight();
+				} else {
+					y = 0;
+				}
+			}
+			table.setPosition(x, y);
+			table.draw();
+		}
+		final InfoDetails table = new InfoDetails();
+		class InfoDetails extends Table {
+			Label nameLabel   = new Label(""), sizeLabel = new Label("", MOMO_LabelStyle),
+			 transformLabel   = new Label(""),
+			 colorLabel       = new Label(""),
+			 rotationLabel    = new Label("0"),
+			 translationLabel = new Label("");
+			ColorContainer colorContainer = new ColorContainer(Color.white);
+
+			BindCell rotCell, translationCell;
+			void rotation(float rotation) {
+				if (rotation % 360 == 0) {
+					rotCell.remove();
+					return;
+				}
+				rotCell.build();
+				rotationLabel.setText(fixed(rotation));
+			}
+			void translation(Vec2 translation) {
+				if (Mathf.zero(translation.x) && Mathf.zero(translation.y)) {
+					translationCell.remove();
+					return;
+				}
+				translationCell.build();
+				translationLabel.setText(
+				 fixed(translation.x) + "×"
+				 + fixed(translation.y));
+			}
+			{
+				margin(4, 4, 4, 4);
+				nameLabel.setFontScale(0.7f);
+				sizeLabel.setFontScale(0.7f);
+				colorLabel.setFontScale(0.6f);
+				rotationLabel.setFontScale(0.6f);
+				translationLabel.setFontScale(0.6f);
+				table(Tex.pane, t -> {
+					t.table(top -> {
+						top.add(nameLabel);
+						top.add(sizeLabel).padLeft(10f)
+						 .growX().right().labelAlign(Align.right).color(Color.lightGray);
+					}).growX();
+					t.row().table(col -> {
+						col.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
+						col.add(colorContainer).size(16);
+						col.add(colorLabel).row();
+					}).growX();
+					rotCell = new BindCell(t.row().table(col -> {
+						col.add("Rotation").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
+						col.add(rotationLabel).row();
+					}).growX());
+					translationCell = new BindCell(t.row().table(col -> {
+						col.add("Translation").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
+						col.add(translationLabel).row();
+					}).growX());
+				});
+			}
+		}
+		public void endDraw() {
+			if (topGroup.isSelecting()) super.endDraw();
+			drawLine();
+			elem = topGroup.getSelected();
+			if (elem != null) super.elemDraw();
+		}
 	}
 }

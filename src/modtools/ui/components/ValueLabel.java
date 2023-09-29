@@ -19,7 +19,7 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
-import modtools.ui.content.ui.ReviewElement;
+import modtools.ui.content.ui.*;
 import modtools.ui.content.ui.ReviewElement.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
@@ -30,7 +30,7 @@ import java.util.*;
 import java.util.Map.Entry;
 
 import static modtools.events.E_JSFunc.truncate_text;
-import static modtools.ui.Contents.selection;
+import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
@@ -160,7 +160,7 @@ public class ValueLabel extends MyLabel {
 		list.add(MenuList.with(Icon.listSmall, () -> (enableTruncate ? "disable" : "enable") + " truncate", () -> {
 			enableTruncate = !enableTruncate;
 		}));
-		list.add(MenuList.with(Icon.eyeSmall, "stringifyFunc", () -> {
+		list.add(MenuList.with(Icon.diagonalSmall, "stringifyFunc", () -> {
 			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc, obj, o -> func = o);
 		}));
 		/* list.add(MenuList.with(Icon.eyeSmall, "valueFunc", () -> {
@@ -207,6 +207,7 @@ public class ValueLabel extends MyLabel {
 	// Method m = Label.class.getDeclaredMethod("scaleAndComputePrefSize");
 	void computePrefSize() {
 		prefSizeInvalid = true;
+		wrap = true;
 		Reflect.invoke(Label.class, this, "scaleAndComputePrefSize", null);
 		prefSizeInvalid = false;
 		wrap = false;
@@ -287,7 +288,8 @@ public class ValueLabel extends MyLabel {
 					Object last  = seq.first();
 					int    count = 0;
 					for (Object item : seq) {
-						if (last == item) {
+						if (Reflect.isWrapper(last.getClass())
+						 ? last.equals(item) : last == item) {
 							count++;
 						} else {
 							sb.append(dealVal(last));
@@ -326,6 +328,8 @@ public class ValueLabel extends MyLabel {
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? "'" + val + "'"
 				: val instanceof Float ? Strings.autoFixed((float) val, 2)
+				: val instanceof Color ? ShowUIList.colorKeyMap.containsKey((Color) val) ?
+				ShowUIList.colorKeyMap.get((Color) val) : String.valueOf(val)
 				: String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + val.hashCode())
 			.get(() -> val.getClass().getName())

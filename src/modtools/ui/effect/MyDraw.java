@@ -138,6 +138,7 @@ public class MyDraw {
 		});
 	} */
 	public static void drawText(String text, float x, float y, Color color) {
+		if (color.a == 0) return;
 		drawText(text, x, y, color, Align.center);
 	}
 	public static float fontHeight() {

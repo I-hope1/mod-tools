@@ -30,10 +30,11 @@ public class MyShaders {
 				setUniformf("u_invsize", 1f / width, 1f / height);
 			}
 		}; */
-		Shader last = Draw.getShader();
-		Draw.shader();
-		baseShader = Draw.getShader();
-		Draw.shader(last);
+		// Shader last = Draw.getShader();
+		// Draw.shader();
+		// baseShader = Draw.getShader();
+		// Draw.shader(last);
+		baseShader = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("dist_base.frag"));
 		mixShader = new MixShader();
 		// frontShader = new FrontShader();
 

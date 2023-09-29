@@ -17,7 +17,7 @@ public class Contents {
 	public static LogDisplay    log_display;
 	public static ContentList   content_list;
 	public static ReviewElement review_element;
-	// public static ActionsDebug  actions_debug;
+	public static ActionsDebug  actions_debug;
 	// public static DesignContent design_content;
 	public static Executor      executor;
 	public static WindowManager window_manager;

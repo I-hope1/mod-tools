@@ -18,11 +18,12 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
 import arc.scene.utils.Disableable;
+import arc.struct.ObjectMap;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.annotations.fieldinit.DataBoolFieldInit;
+import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
 import modtools.ui.content.*;
@@ -89,9 +90,10 @@ public class ShowUIList extends Content {
 	{
 		bgColor = SettingsUI.colorBlock(bgColorWrap,
 		 "bgColor", data(), "bgColor",
-		 0x877F5E_FF, color -> {});
+		 0x877F5E_FF, null);
 	}
 
+	public static ObjectMap<Color, String> colorKeyMap = new ObjectMap<>();
 	Table icons = newTable(t -> {
 		Icon.icons.each((k, icon) -> {
 			t.bind(k);
@@ -163,6 +165,7 @@ public class ShowUIList extends Content {
 					// 跳过private检查，减少时间
 					field.setAccessible(true);
 					Color color = (Color) field.get(null);
+					colorKeyMap.put(color, field.getName());
 
 					t.bind(field.getName());
 					var tooltip = new IntUI.Tooltip(tl -> tl.table(Tex.pane, t2 -> t2.add("" + color)));
@@ -171,7 +174,7 @@ public class ShowUIList extends Content {
 					 .border(color.cpy().inv())).color(color).size(42f);
 					t.add(field.getName()).with(JSFunc::addDClickCopy).growY();
 					t.listener(null);
-				} catch (IllegalAccessException | IllegalArgumentException err) {
+				} catch (IllegalAccessException | IllegalArgumentException | ClassCastException err) {
 					Log.err(err);
 				} finally {
 					t.unbind();

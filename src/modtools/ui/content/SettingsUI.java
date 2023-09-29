@@ -19,16 +19,17 @@ import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.SettingsBuilder.Bool;
+import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
+import modtools.utils.MySettings;
+import modtools.utils.MySettings.Data;
 
 import static modtools.ui.IntUI.topGroup;
-import static modtools.utils.MySettings.*;
 
 public class SettingsUI extends Content {
 	Window ui;
@@ -47,7 +48,7 @@ public class SettingsUI extends Content {
 
 	public <T extends Content> void addLoad(T cont) {
 		loadTable.check(cont.localizedName(), cont.loadable(), b -> {
-			SETTINGS.put("load-" + cont.name, b);
+			MySettings.SETTINGS.put("load-" + cont.name, b);
 		}).row();
 	}
 
@@ -77,12 +78,12 @@ public class SettingsUI extends Content {
 		add("Load", loadTable);
 		add("jsfunc", new LimitTable() {{
 			left().defaults().left();
-			bool(this, "@settings.jsfunc.auto_refresh", D_JSFUNC, "auto_refresh");
+			bool(this, "@settings.jsfunc.auto_refresh", MySettings.D_JSFUNC, "auto_refresh");
 		}});
 		add("毛玻璃", Tex.clear, new LimitTable() {{
 			left().defaults().left();
-			bool(this, "启用", D_BLUR, "enable");
-			SettingsUI.slideri(this, D_BLUR, "缩放级别", 1, 8, 4, 1, null);
+			bool(this, "启用", MySettings.D_BLUR, "enable");
+			SettingsUI.slideri(this, MySettings.D_BLUR, "缩放级别", 1, 8, 4, 1, null);
 		}});
 		/* add("Window", new LimitTable() {{
 			left().defaults().left();
@@ -91,13 +92,8 @@ public class SettingsUI extends Content {
 		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall,
 		 new LimitTable() {{
 			 left().defaults().left();
-			 bool(this, "@settings.mainmenubackground", SETTINGS, "ShowMainMenuBackground");
-			 /* bool0(topGroup.checkUICount);
-			 bool0(topGroup.debugBounds);
-			 bool0(TopGroup.drawHiddenPad); */
-			 bool(this, "@settings.checkuicount", "checkUICount", topGroup.checkUICount, b -> topGroup.checkUICount = b);
-			 bool(this, "@settings.debugbounds", "debugBounds", topGroup.debugBounds, b -> SETTINGS.put("debugBounds", topGroup.debugBounds = b));
-			 bool(this, "@settings.showhiddenbounds", "showHiddenBounds", TopGroup.drawHiddenPad, b -> SETTINGS.put("drawHiddenPad", TopGroup.drawHiddenPad = b), () -> topGroup.debugBounds);
+			 bool(this, "@settings.mainmenubackground", MySettings.SETTINGS, "ShowMainMenuBackground");
+			 settingBool(this);
 			 addValueLabel(this, "Bound Element", () -> topGroup.drawPadElem, () -> topGroup.debugBounds);
 			 float minZoom = Vars.renderer.minZoom;
 			 float maxZoom = Vars.renderer.maxZoom;
@@ -120,9 +116,9 @@ public class SettingsUI extends Content {
 				 new DisWindow("FONTS") {{
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
-								SETTINGS.put("font", fi.name());
+								MySettings.SETTINGS.put("font", fi.name());
 							}).height(42).growX()
-							.checked(__ -> fi.name().equals(SETTINGS.getString("font")))
+							.checked(__ -> fi.name().equals(MySettings.SETTINGS.getString("font")))
 							.row();
 					 }
 					 cont.image().color(Color.gray).growX().row();
@@ -152,6 +148,10 @@ public class SettingsUI extends Content {
 		});
 		// ui.addCloseButton();
 	}
+	@DataBoolSetting
+	public void settingBool(Table t) {
+		boolean[] __ = {topGroup.checkUICount, topGroup.debugBounds, TopGroup.drawHiddenPad};
+	}
 	public static void addValueLabel(Table table, String text, Prov<Object> prov, Boolp condition) {
 		ValueLabel vl = new ValueLabel(prov.get(), Element.class, null, null);
 		vl.setAlignment(Align.right);
@@ -166,7 +166,7 @@ public class SettingsUI extends Content {
 	}
 
 	public static Slider slider(Table table, String name, float min, float max, float def, float step, Floatc floatc) {
-		return slider(table, SETTINGS, name, min, max, def, step, floatc);
+		return slider(table, MySettings.SETTINGS, name, min, max, def, step, floatc);
 	}
 	public static Slider slider(Table table, Data data, String name, float min, float max, float def, float step,
 															Floatc floatc) {
@@ -187,7 +187,7 @@ public class SettingsUI extends Content {
 		return slider;
 	}
 	public static Slider slideri(Table table, String name, int min, int max, int def, int step, Intc intc) {
-		return slideri(table, SETTINGS, name, min, max, def, step, intc);
+		return slideri(table, MySettings.SETTINGS, name, min, max, def, step, intc);
 	}
 	public static Slider slideri(Table table, Data data, String name, int min, int max, int def, int step, Intc intc) {
 		Slider slider = new Slider(min, max, step, false);
@@ -218,13 +218,13 @@ public class SettingsUI extends Content {
 		bool(table, text, data, key, false, null);
 	}
 	public static void bool(Table table, String text, String key, boolean def, Boolc boolc) {
-		bool(table, text, SETTINGS, key, def, boolc, null);
+		bool(table, text, MySettings.SETTINGS, key, def, boolc, null);
 	}
 	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc) {
 		bool(table, text, data, key, def, boolc, null);
 	}
 	public static void bool(Table table, String text, String key, boolean def, Boolc boolc, Boolp condition) {
-		bool(table, text, SETTINGS, key, def, boolc, condition);
+		bool(table, text, MySettings.SETTINGS, key, def, boolc, condition);
 	}
 
 	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc, Boolp condition) {
@@ -235,8 +235,6 @@ public class SettingsUI extends Content {
 			if (condition != null) t.setDisabled(() -> !condition.get());
 		}).row();
 	}
-	/** for annotation processor */
-	private static void bool0(boolean value) {}
 
 	public static Color colorBlock(
 	 Table table, String text,
@@ -244,14 +242,16 @@ public class SettingsUI extends Content {
 	 Cons<Color> colorCons) {
 		Color color = new Color(data.get0xInt(key, defaultColor)) {
 			public Color set(Color color) {
+				if (this.equals(color)) return this;
 				data.putString(key, color);
 				super.set(color);
-				colorCons.get(this);
+				if (colorCons != null) colorCons.get(this);
 				return this;
 			}
 		};
-		IntUI.doubleClick(table.add(text).padRight(4f).left().labelAlign(Align.left).get(), null, () -> {
-			color.set(defaultColor);
+		IntUI.doubleClick(table.add(text).growY()
+		 .padRight(4f).left().labelAlign(Align.left).get(), null, () -> {
+			color.set(Tmp.c2.set(defaultColor));
 		});
 		IntUI.colorBlock(table.add().right().growX(), color, false);
 		table.row();

@@ -338,7 +338,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {
 					l.setVal();
-					field.setText(String.valueOf(l.val));
+					field.setText(l.val instanceof Float ? Strings.autoFixed((float) l.val, 2)
+					 : String.valueOf(l.val));
 				}
 			});
 			field.setValidator(Tools::isNum);
@@ -369,7 +370,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.reget();
-			events.onIns(E_JSFuncEdit.number, edit -> {
+			events.onIns(E_JSFuncEdit.string, edit -> {
 				cell.setElement(edit.enabled() ? field : null);
 				c_cell.reget();
 			});

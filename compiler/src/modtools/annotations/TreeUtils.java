@@ -1,13 +1,17 @@
 package modtools.annotations;
 
+import arc.struct.Seq;
 import arc.util.Log;
+import com.sun.source.tree.Tree;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.Name;
 
 import javax.lang.model.element.Element;
+import java.util.Iterator;
 import java.util.regex.Pattern;
 
 import static modtools.annotations.BaseProcessor.*;
@@ -58,35 +62,6 @@ public interface TreeUtils extends ParseUtils {
 		 type, name, mMaker.Literal(value), classDecl.sym);
 		classDecl.defs = classDecl.defs.prepend(x);
 		return x;
-	}
-
-
-	default ClassSymbol findClassByImport(Element dcls, String name) {
-		JCClassDecl classDecl = (JCClassDecl) trees.getTree(dcls);
-		if (name.equals(dcls.getSimpleName().toString())) {
-			return classDecl.sym;
-		}
-
-		var imports = (java.util.List<JCImport>) trees.getPath(dcls).getCompilationUnit().getImports();
-
-		ClassSymbol cl;
-		for (JCImport i : imports) {
-			JCFieldAccess qualid = (JCFieldAccess) i.qualid;
-			if (qualid.name.contentEquals("*") && (cl = (ClassSymbol) findClassSymbol(qualid.name + "." + name)) != null) {
-				return cl;
-			} else if (!qualid.name.isEmpty() && (cl = (ClassSymbol) findClassSymbol(qualid.selected + "." + name)) != null) {
-				return cl;
-			}
-		}
-		for (JCTree t : classDecl.defs) {
-			if (t instanceof JCClassDecl c) {
-				if (c.sym.name.contentEquals(name)) {
-					return c.sym;
-				}
-			}
-		}
-
-		return null;
 	}
 
 	default Type findTypeBoot(String name) {

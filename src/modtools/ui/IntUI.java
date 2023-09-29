@@ -677,21 +677,8 @@ public class IntUI {
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
-		BorderImage image = new BorderImage(Core.atlas.white(), 2f) {
-			public void draw() {
-				float alpha = Draw.getColor().a;
-				Draw.alpha(1f);
-				Tex.alphaBg.draw(x, y, width, height);
-				Draw.alpha(alpha);
-				super.draw();
-			}
-		};
-		Color inv = new Color();
-		cell.setElement(image).color(color).size(42f)
-		 .update(el -> {
-			 el.color.set(color);
-			 image.border(inv.set(color).inv());
-		 });
+		BorderImage image = new ColorContainer(color);
+		cell.setElement(image).size(42f);
 		Runnable runnable = () -> {
 			IntUI.picker.show(color, c1 -> {
 				color.set(c1);
@@ -701,6 +688,30 @@ public class IntUI {
 			// topGroup.addChild(IntUI.picker);
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
+	}
+
+	public static class ColorContainer extends BorderImage {
+		private Color colorValue;
+		public ColorContainer(Color color) {
+			super(Core.atlas.white(), 2f);
+
+			changeColor(colorValue = color);
+			update(() -> changeColor(colorValue));
+		}
+		private void changeColor(Color color) {
+			this.color.set(color);
+			border(Tmp.c1.set(color).inv());
+		}
+		public void draw() {
+			float alpha = Draw.getColor().a;
+			Draw.alpha(1f);
+			Tex.alphaBg.draw(x, y, width, height);
+			Draw.alpha(alpha);
+			super.draw();
+		}
+		public void setColorValue(Color color) {
+			colorValue = color;
+		}
 	}
 
 

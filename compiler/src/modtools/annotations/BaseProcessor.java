@@ -5,6 +5,7 @@ import arc.util.Log;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
+import com.sun.tools.javac.comp.Attr;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.parser.ParserFactory;
@@ -21,9 +22,9 @@ import java.util.function.Predicate;
 
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor implements TreeUtils, AnnotationUtils {
 	public static JavacElements elements;
-	public static JavacTrees trees;
-	public static TreeMaker  mMaker;
-	public static Names      names;
+	public static JavacTrees    trees;
+	public static TreeMaker     mMaker;
+	public static Names         names;
 	public static Types         types;
 	public static ParserFactory parsers;
 	public static Symtab        mSymtab;
@@ -31,6 +32,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static JavacFiler    mFiler;
 	public static ClassWriter   classWriter;
 	public static Gen           __gen__;
+	public static Attr          __attr__;
 
 	public static Context __context;
 
@@ -102,6 +104,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		mFiler = (JavacFiler) env.getFiler();
 		classWriter = ClassWriter.instance(__context);
 		__gen__ = Gen.instance(__context);
+		__attr__ = Attr.instance(__context);
 
 		stringType = mSymtab.stringType;
 	}

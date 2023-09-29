@@ -11,10 +11,18 @@ public interface DataUtils {
 	default JCMethodInvocation selfData(Type type) {
 		return mMaker.Apply(List.nil(), mMaker.Select(mMaker.This(type), names.fromString("data")), List.nil());
 	}
-	ClassSymbol[] MySettings = {null};
+	ClassSymbol[] symbols = {
+	 null/* MySettings */,
+	 null/* SettingUI */
+	};
+	default ClassSymbol SettingUI() {
+		if (symbols[1] == null)
+			symbols[1] = mSymtab.getClass(mSymtab.unnamedModule, names.fromString("modtools.ui.content.SettingsUI"));
+		return symbols[1];
+	}
 	default JCFieldAccess internalData(String key) {
-		if (MySettings[0] == null)
-			MySettings[0] = mSymtab.getClass(mSymtab.unnamedModule, names.fromString("modtools.utils.MySettings"));
-		return mMaker.Select(mMaker.Ident(MySettings[0]), names.fromString(key));
+		if (symbols[0] == null)
+			symbols[0] = mSymtab.getClass(mSymtab.unnamedModule, names.fromString("modtools.utils.MySettings"));
+		return mMaker.Select(mMaker.Ident(symbols[0]), names.fromString(key));
 	}
 }

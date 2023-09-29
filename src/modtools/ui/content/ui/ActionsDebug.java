@@ -11,6 +11,10 @@ import modtools.ui.components.Window;
 import modtools.ui.content.Content;
 import modtools.utils.reflect.ClassUtils;
 
+import java.lang.reflect.Method;
+import java.util.*;
+import java.util.stream.Collectors;
+
 public class ActionsDebug extends Content {
 	public ActionsDebug() {
 		super("actionsdebug");
@@ -26,10 +30,11 @@ public class ActionsDebug extends Content {
 		element.update(() -> element.setOrigin(Align.center));
 		// element.setOrigin(element.getWidth() / 2f, element.getHeight() / 2f);
 		// element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
-		var classes = ClassUtils.getClasses("arc.scene.actions");
+		Set<Class<?>> classes = Arrays.stream(Actions.class.getDeclaredMethods())
+		 .map(Method::getReturnType).collect(Collectors.toSet());
 		ui.cont.pane(t -> {
 			int c = 0;
-			for (var action : classes) {
+			for (Class<?> action : classes) {
 				if (!Action.class.isAssignableFrom(action)) continue;
 				t.button(action.getSimpleName(), IntStyles.flatTogglet, () -> {
 					// element.actions((Action) MyReflect.unsafe.allocateInstance(action));
@@ -44,6 +49,13 @@ public class ActionsDebug extends Content {
 						element.actions(
 						 Actions.moveBy(mx, my, 1f),
 						 Actions.moveBy(-mx, -my, 1f)
+						);
+					}
+					if (action == TranslateByAction.class) {
+						float mx = Mathf.random(-100f, 100f), my = Mathf.random(-100f, 100f);
+						element.actions(
+						 Actions.translateBy(mx, my, 1f),
+						 Actions.translateBy(-mx, -my, 1f)
 						);
 					}
 					if (action == ColorAction.class) {

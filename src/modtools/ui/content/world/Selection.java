@@ -10,6 +10,7 @@ import arc.math.*;
 import arc.math.geom.*;
 import arc.math.geom.QuadTree.QuadTreeObject;
 import arc.scene.Element;
+import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -1140,6 +1141,10 @@ public class Selection extends Content {
 		}
 		boolean updatePosUI = true;
 		long    toggleDelay = 200, lastToggleTime = 0;
+
+		public Window show() {
+			return show(Core.scene, Actions.fadeIn(0.1f));
+		}
 
 		public Table pane;
 

@@ -1,4 +1,4 @@
-package modtools.annotations.fieldinit;
+package modtools.annotations.builder;
 
 import java.lang.annotation.*;
 

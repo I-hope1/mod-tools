@@ -9,7 +9,6 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
@@ -110,7 +109,7 @@ public class ElementUtils {
 		t.button("", Styles.flatt, null).with(tbtn -> {
 			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, hide, ___) -> {
 				buildModifier(p, cols, cons, prov, seq);
-			}, false));
+			}, false, Align.center));
 			Table fill = tbtn.fill();
 			fill.top().add(text, 0.6f).growX().labelAlign(Align.left).color(Color.lightGray);
 			tbtn.getCell(fill).colspan(0);

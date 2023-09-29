@@ -604,7 +604,7 @@ public class Selection extends Content {
 								}));
 								if (++c % 6 == 0) p.row();
 							}
-						}, false).hidden(btn::toggleShowing);
+						}, false, Align.center).hidden(btn::toggleShowing);
 					});
 					btn.add(new ItemImage(entry.key, value.size)).grow().pad(6f);
 					template.add(btn);
@@ -710,8 +710,8 @@ public class Selection extends Content {
 			}
 			executor.submit(() -> {
 				Tools.each(list, t -> {
-					new LerpFun(Interp.linear).onWorld().rev()
-					 .registerDispose(1 / 20f, fin -> {
+					new LerpFun(Interp.smooth).onWorld().rev()
+					 .registerDispose(1 / 24f, fin -> {
 						 Draw.color(Pal.accent);
 						 Vec2 pos = getPos(t);
 						 Lines.stroke(3f - fin * 2f);

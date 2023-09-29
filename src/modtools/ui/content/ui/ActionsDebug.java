@@ -6,6 +6,7 @@ import arc.scene.*;
 import arc.scene.actions.*;
 import arc.scene.ui.Image;
 import arc.util.Align;
+import mindustry.gen.Icon;
 import modtools.ui.IntStyles;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;
@@ -17,7 +18,7 @@ import java.util.stream.Collectors;
 
 public class ActionsDebug extends Content {
 	public ActionsDebug() {
-		super("actionsdebug");
+		super("actionsdebug", Icon.logicSmall);
 	}
 
 	Window ui;

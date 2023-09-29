@@ -2,15 +2,18 @@ package modtools.ui.content.world;
 
 import arc.func.Cons;
 import arc.graphics.Color;
+import arc.scene.ui.Image;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectMap;
-import arc.util.Time;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.content.*;
+import mindustry.ctype.UnlockableContent;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
 import mindustry.gen.Icon;
 import mindustry.type.*;
+import mindustry.ui.Styles;
 import mindustry.world.Block;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
@@ -83,7 +86,7 @@ public class ContentList extends Content {
 			if (Vars.player.unit() == null) return;
 			bulletType.create(Vars.player.unit(), Vars.player.x, Vars.player.y, Vars.player.unit().rotation());
 		}), defaultTable(blocks), defaultTable(items), defaultTable(liquids),
-		 defaultTable(liquids)};
+		 defaultTable(planets)};
 
 		tab = new IntTab(main.getWidth(), names, Color.sky, tables);
 		tab.eachWidth = 86;
@@ -102,7 +105,10 @@ public class ContentList extends Content {
 		return new FilterTable<>(t -> {
 			map.each((name, item) -> {
 				t.bind(name);
-				t.button(name, () -> {}).growX().height(64).with(button -> {
+				if (item instanceof UnlockableContent u) {
+					t.add(new Image(u.uiIcon)).size(32f);
+				} else t.add();
+				t.button(name, Styles.flatt, () -> {}).growX().height(42).with(button -> {
 					IntUI.longPress(button, 600, b -> {
 						if (b) JSFunc.copyText(name, button);
 						else if (longPress != null) longPress.get(item);

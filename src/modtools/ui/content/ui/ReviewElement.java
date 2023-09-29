@@ -396,8 +396,7 @@ public class ReviewElement extends Content {
 	}
 
 	public static String getSimpleName(Class<?> clazz) {
-		if (!Group.class.isAssignableFrom(clazz)) return clazz.getSimpleName();
-		while (clazz.getSimpleName().isEmpty() && clazz != Group.class) {
+		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
 			clazz = clazz.getSuperclass();
 		}
 		return clazz.getSimpleName();
@@ -916,7 +915,7 @@ public class ReviewElement extends Content {
 					}).growX();
 					t.row().table(col -> {
 						col.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
-						col.add(colorContainer).size(16);
+						col.add(colorContainer).size(16).padRight(4f);
 						col.add(colorLabel).row();
 					}).growX();
 					rotCell = new BindCell(t.row().table(col -> {

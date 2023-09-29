@@ -43,6 +43,7 @@ import static modtools.utils.ElementUtils.getAbsPos;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+	public static final float                 maxOff  = 35f;
 
 	public static Drawable skyui = whiteui.tint(Color.sky);
 
@@ -84,7 +85,12 @@ public class IntUI {
 					if (click != null) click.run();
 				}
 			};
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				last.set(Core.input.mouse());
+				return super.touchDown(event, x, y, pointer, button);
+			}
 			public void clicked(InputEvent event, float x, float y) {
+				if (last.dst(Core.input.mouse()) > maxOff) return;
 				super.clicked(event, x, y);
 				if (click != null && d_click == null) {
 					click.run();
@@ -95,7 +101,7 @@ public class IntUI {
 					last.set(mouse);
 					return;
 				}
-				if (mouse.dst(last) < 35f) d_click.run();
+				if (mouse.dst(last) < maxOff) d_click.run();
 			}
 		}
 		elem.addListener(new DoubleClick());
@@ -114,7 +120,7 @@ public class IntUI {
 		elem.addListener(new ClickListener() {
 			final Task task = new Task() {
 				public void run() {
-					if (pressed && Core.input.mouse().dst(last) < 35f) {
+					if (pressed && Core.input.mouse().dst(last) < maxOff) {
 						boolc.get(true);
 					}
 				}
@@ -315,10 +321,11 @@ public class IntUI {
 	 *                   hide 是一个函数，调用就会关闭弹窗
 	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
+	 * @param align
 	 */
 	public static <T extends Element> SelectTable
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
-									boolean searchable) {
+									boolean searchable, int align) {
 		if (button == null) throw new NullPointerException("button cannot be null");
 		SelectTable t      = new SelectTable();
 		Element     hitter = new Element();
@@ -334,11 +341,11 @@ public class IntUI {
 		topGroup.addChild(t);
 		t.update(() -> {
 			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
-				button.localToStageCoordinates(Tmp.v1.set(button.getWidth() / 2f, button.getHeight() / 2f));
+				button.localToStageCoordinates(Tmp.v1.set(button.getX(align), button.getY(align)));
 				if (Tmp.v1.y < graphics.getHeight() / 2f) {
-					t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, Align.center | Align.bottom);
+					t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, align | Align.bottom);
 				} else {
-					t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight() / 2f, Align.center | Align.top);
+					t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight() / 2f, align | Align.top);
 				}
 				if (t.getWidth() > Core.scene.getWidth()) {
 					t.setWidth((float) graphics.getWidth());
@@ -355,7 +362,7 @@ public class IntUI {
 				Core.app.post(hide);
 			}
 		});
-		t.actions(Actions.alpha(0.0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
+		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
 		Table p = new Table();
 		p.top();
 		if (searchable) {
@@ -366,7 +373,7 @@ public class IntUI {
 
 		f.get(p, hide, "");
 		ScrollPane pane = new ScrollPane(p);
-		t.top().add(pane).pad(0.0f).top();
+		t.top().add(pane).grow().pad(0f).top();
 		pane.setScrollingDisabled(true, false);
 		t.pack();
 		return t;
@@ -375,14 +382,21 @@ public class IntUI {
 	public static <T extends Button> Table
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
-											Boolean searchable) {
-		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable);
+											boolean searchable) {
+		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, Align.center);
 	}
-	public static <BTN extends Button, V> Table
+	public static <T extends Element, E extends Enum<E>> Table
+	showSelectListEnumTable(T button, Seq<E> list, Prov<E> holder,
+													Cons<E> cons, float width, float height,
+													boolean searchable, int align) {
+		return showSelectListTable(button, list, holder, cons,
+		 Enum::name, width, height, searchable, align);
+	}
+	public static <BTN extends Element, V> Table
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
-	 Cons<V> cons, Func<V, String> stringify, int width, int height,
-	 Boolean searchable) {
+	 Cons<V> cons, Func<V, String> stringify, float minWidth, float height,
+	 boolean searchable, int align) {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 
@@ -390,12 +404,14 @@ public class IntUI {
 			for (V item : list) {
 				if (PatternUtils.test(pattern, stringify.get(item)))
 					p.button(stringify.get(item), IntStyles.flatt/*Styles.cleart*/, () -> {
-						cons.get(item);
-						hide.run();
-					}).size((float) width, (float) height).disabled(Objects.equals(holder.get(), item)).row();
+						 cons.get(item);
+						 hide.run();
+					 }).minWidth(minWidth).growX()
+					 .height(height)
+					 .disabled(Objects.equals(holder.get(), item)).row();
 			}
 
-		}, searchable);
+		}, searchable, align);
 	}
 
 	/**
@@ -415,7 +431,7 @@ public class IntUI {
 																Prov<T1> holder, Cons<T1> cons, float size,
 																float imageSize, int cols,
 																boolean searchable) {
-		return showSelectTable(button, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable);
+		return showSelectTable(button, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable, Align.center);
 	}
 	public static <T1> Table
 	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,

@@ -304,7 +304,7 @@ public class SettingsUI extends Content {
 					 b.label(() -> stringify.get(prov.get())).grow()
 						.update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
 					 b.clicked(() -> IntUI.showSelectListTable(b, list,
-						prov, cons, stringify, 220, 42, true));
+						prov, cons, stringify, 220, 42, true, Align.left));
 				 }, Styles.defaultb, () -> {})
 				 .size(220, 42)
 				 .update(a -> a.setDisabled(!condition.get()))

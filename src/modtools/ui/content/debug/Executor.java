@@ -24,7 +24,7 @@ import modtools.utils.ui.search.FilterTable;
 
 public class Executor extends Content {
 	public Executor() {
-		super("executor");
+		super("executor", Icon.wrenchSmall);
 	}
 
 	public  Window ui;

@@ -345,6 +345,13 @@ public class ValueLabel extends MyLabel {
 
 		return text;
 	}
+	public void addEnumSetter() {
+		clicked(() -> IntUI.showSelectListEnumTable(this,
+		 Seq.with(type.getEnumConstants()).<Enum>as(),
+		 () -> (Enum) val, this::setFieldValue,
+		 Float.NEGATIVE_INFINITY, 42,
+		 true, Align.left));
+	}
 	private boolean isTruncate(int length) {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
@@ -415,6 +422,7 @@ public class ValueLabel extends MyLabel {
 		} catch (Throwable th) {
 			resThrowable(val, th);
 		}
+		invalidateHierarchy();
 		layout();
 	}
 

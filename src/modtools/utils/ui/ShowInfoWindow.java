@@ -26,6 +26,7 @@ import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.content.ui.ReviewElement;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
@@ -34,12 +35,12 @@ import rhino.*;
 import java.io.StringWriter;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
-import java.util.Arrays;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static modtools.IntVars.hasDecompiler;
+import static modtools.IntVars.*;
 import static modtools.ui.IntStyles.MOMO_LabelStyle;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.JSFunc.*;
@@ -60,9 +61,12 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	 methodsTable,
 	 consTable,
 	 classesTable;
+	private final Seq<Runnable> resizeListeners = new Seq<>();
+	private final Runnable      resizeRun       = () -> resizeListeners.each(Runnable::run);
 
 	public ShowInfoWindow(Object o, Class<?> clazz) {
 		super(getName(clazz), 200, 200, true);
+		IntVars.addResizeListener(resizeRun);
 		this.o = o;
 		this.clazz = clazz;
 		if (clazz.isPrimitive()) {
@@ -294,7 +298,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	}
 
 	static void applyChangedFx(Element label) {
-		new LerpFun(Interp.linear).rev().onUI().registerDispose(0.05f, fin -> {
+		new LerpFun(Interp.smooth).rev().onUI().registerDispose(0.05f, fin -> {
 			Draw.color(Pal.heal, fin);
 			Lines.stroke(3f - fin * 2f);
 			Vec2  e    = ElementUtils.getAbsPosCenter(label);
@@ -417,10 +421,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			float[]  prefW  = {0};
 			/*Cell<?> lableCell = */
 			ValueLabel l = new ValueLabel(ValueLabel.unset, type, f, o);
+			if (Enum.class.isAssignableFrom(type)) l.addEnumSetter();
 			fields.labels.add(l);
-			Cell<?> labelCell = t.add(l).grow();
+			Cell<?> labelCell = t.add(l).minWidth(42).growX();
 			// 太卡了
-			IntVars.addResizeListener(() -> labelCell.width(Math.min(prefW[0], Core.graphics.getWidth())));
+			resizeListeners.add(() -> labelCell.width(Math.min(prefW[0], Core.graphics.getWidth())));
 
 			try {
 				l.setVal();
@@ -624,6 +629,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		clearAll();
 		clearChildren();
 		events.removeIns();
+		resizeListeners.clear();
+		IntVars.resizeListeners.remove(resizeRun);
 		System.gc();
 	}
 

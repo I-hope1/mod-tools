@@ -99,7 +99,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 			)));
 		}
 		method.body.stats = buffer.toList();
-		Log.info(method);
+		// Log.info(method);
 	}
 	private JCExpression getData(DataBoolFieldInit anno, Type type) {
 		return anno.data().isEmpty() ? selfData(type) : internalData(anno.data());

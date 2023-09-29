@@ -108,7 +108,7 @@ public class ReviewElement extends Content {
 
 	/** 代码生成{@link ColorProcessor} */
 	public void settingColor(Table t) {}
-	// @DataBoolSetting
+	@DataBoolSetting
 	public void settingBool(Table t) {
 		boolean[] __ = {topGroup.selectInvisible, hoverInfoWindow};
 	}

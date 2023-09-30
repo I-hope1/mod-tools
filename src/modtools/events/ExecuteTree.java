@@ -198,7 +198,7 @@ public class ExecuteTree {
 	}
 	public enum StatusEnum implements StatusInterface {
 		/* 因为Icon(可能)还为赋值 */
-		noTask(() -> Icon.none, Pal.gray),
+		noTask(() -> Icon.none, Color.lightGray),
 		paused(() -> Icon.bookOpen, Color.orange),
 		running(() -> Icon.rotate, Color.pink),
 		ok(() -> Icon.ok, Color.green),

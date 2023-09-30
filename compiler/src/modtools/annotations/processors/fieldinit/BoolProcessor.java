@@ -42,7 +42,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 			if (selector == null) selector = names.fromString("getBool");
 			field.init = mMaker.Apply(
 			 List.nil(),
-			 mMaker.Select(getData(anno, decl.sym.type), selector),
+			 mMaker.Select(getData(anno.data(), decl.sym.type), selector),
 			 List.of(
 				mMaker.Literal(key),
 				field.init != null ? field.init : mMaker.Literal(false)
@@ -73,7 +73,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 			mMaker.at(method);
 			JCVariableDecl param = makeVar0(Flags.PARAMETER, null, "aoao", null, method.sym);
 			param.startPos = 0;
-			JCExpression data = getData(fieldInit, ((ClassSymbol) element.getEnclosingElement()).type);
+			JCExpression data = getData(fieldInit.data(), ((ClassSymbol) element.getEnclosingElement()).type);
 			JCLiteral    key  = mMaker.Literal(name);
 			buffer.add(mMaker.Exec(mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Ident(SettingUI()),
@@ -100,9 +100,6 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 		}
 		method.body.stats = buffer.toList();
 		// Log.info(method);
-	}
-	private JCExpression getData(DataBoolFieldInit anno, Type type) {
-		return anno.data().isEmpty() ? selfData(type) : internalData(anno.data());
 	}
 	public Set<String> getSupportedAnnotationTypes() {
 		return Set.of(DataBoolFieldInit.class.getCanonicalName(),

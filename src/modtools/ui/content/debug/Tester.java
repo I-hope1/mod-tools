@@ -220,7 +220,7 @@ public class Tester extends Content {
 			);
 		}).growX().row();
 		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(new PrefTable(p -> {
-			p.add(new MyLabel(() -> log)).style(IntStyles.MOMO_LabelStyle).wrap()
+			p.add(new MyLabel(() -> log)).style(HopeStyles.MOMO_LabelStyle).wrap()
 			 .grow().labelAlign(Align.center, Align.left);
 		})).grow()).growX().with(t -> t.touchable = Touchable.enabled);
 
@@ -264,7 +264,7 @@ public class Tester extends Content {
 		 .row();
 
 		table.add(new PrefPane(p -> {
-			 ImageButtonStyle istyle = IntStyles.clearNonei;
+			 ImageButtonStyle istyle = HopeStyles.clearNonei;
 			 int              isize  = 26;
 			 p.defaults().size(45).padLeft(2f);
 			 p.button(Icon.starSmall, istyle, isize, this::star);
@@ -539,9 +539,9 @@ public class Tester extends Content {
 			area.setText(readFiOrEmpty(f.child("message.txt")));
 			log = readFiOrEmpty(f.child("log.txt"));
 		}, (f, p) -> {
-			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), IntStyles.MOMO_LabelStyle)).row();
-			p.image().color(JSFunc.c_underline).growX().padTop(6f).padBottom(6f).row();
-			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), IntStyles.MOMO_LabelStyle)).row();
+			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), HopeStyles.MOMO_LabelStyle)).row();
+			p.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().padTop(6f).padBottom(6f).row();
+			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), HopeStyles.MOMO_LabelStyle)).row();
 		}, Tester::sort);
 		history.hide();
 		bookmark = new ListDialog("bookmark", bookmarkDirectory,
@@ -596,7 +596,7 @@ public class Tester extends Content {
 				}
 			};
 		}).row();
-		p.add(new MyLabel(readFiOrEmpty(f), IntStyles.MOMO_LabelStyle)).row();
+		p.add(new MyLabel(readFiOrEmpty(f), HopeStyles.MOMO_LabelStyle)).row();
 	}
 
 

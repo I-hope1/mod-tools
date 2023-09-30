@@ -10,7 +10,7 @@ import arc.struct.*;
 import arc.util.Log;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
-import modtools.ui.IntStyles;
+import modtools.ui.HopeStyles;
 import modtools.ui.components.input.MyLabel;
 
 import java.util.Arrays;
@@ -148,7 +148,7 @@ public class IntTab {
 				 b.update(() -> {
 					 image.setColor(selected == j ? colors[j] : Color.gray);
 				 });
-			 }, IntStyles.clearb, () -> {
+			 }, HopeStyles.clearb, () -> {
 				 if (selected != j && !transitional) {
 					 if (selected != -1) {
 						 Table last = tables[selected];

@@ -5,6 +5,7 @@ import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.Color;
+import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
@@ -26,7 +27,7 @@ import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
-import modtools.utils.MySettings;
+import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
 import static modtools.ui.IntUI.topGroup;
@@ -76,11 +77,18 @@ public class SettingsUI extends Content {
 		ui.cont.pane(cont).grow();
 		cont.defaults().minWidth(400).padTop(20);
 		add("Load", loadTable);
-		add("jsfunc", new LimitTable() {{
+		add("JSFunc", new LimitTable() {{
 			left().defaults().left();
 			bool(this, "@settings.jsfunc.auto_refresh", MySettings.D_JSFUNC, "auto_refresh");
+			new SettingsBuilder(this) {{
+				list("settings.jsfunc", "arrayDelimiter", MySettings.D_JSFUNC,
+				 Seq.with(JSFunc.defaultDelimiter, "\n\n", "\n▶▶▶▶▶▶", "\n★★★"),
+				 s -> s.replaceAll("\\n", "\\\\n")).colspan(2);
+			}};
+			row();
+			JSFunc.settingColor(this);
 		}});
-		add("毛玻璃", Tex.clear, new LimitTable() {{
+		add("毛玻璃", Styles.none, new LimitTable() {{
 			left().defaults().left();
 			bool(this, "启用", MySettings.D_BLUR, "enable");
 			SettingsUI.slideri(this, MySettings.D_BLUR, "缩放级别", 1, 8, 4, 1, null);
@@ -294,22 +302,37 @@ public class SettingsUI extends Content {
 		public static <T> void list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify) {
 			list(text, cons, prov, list, stringify, () -> true);
 		}
-		public static <T> void list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify,
-																Boolp condition) {
-			main.table(t -> {
-				t.left();
-				t.add(text).left().padRight(10)
-				 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-				t.button(b -> {
-					 b.label(() -> stringify.get(prov.get())).grow()
-						.update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-					 b.clicked(() -> IntUI.showSelectListTable(b, list,
-						prov, cons, stringify, 220, 42, true, Align.left));
-				 }, Styles.defaultb, () -> {})
-				 .size(220, 42)
-				 .update(a -> a.setDisabled(!condition.get()))
-				 .padRight(100f);
-			}).padTop(0).row();
+		public static Cell<Table> list(String prefix, String key, Data data, Seq<String> list,
+																	 Func<String, String> stringify) {
+			return list("@" + prefix + "." + key.toLowerCase(), v -> data.put(key, v),
+			 () -> data.getString(key, list.get(0)), list,
+			 stringify, () -> true);
+		}
+		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify,
+																			 Boolp condition) {
+			Table t = new Table();
+			t.right();
+			t.add(text).left().padRight(10).growX().labelAlign(Align.left)
+			 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+			t.button(b -> {
+				 b.margin(0, 8f, 0, 8f);
+				 b.add("").grow().labelAlign(Align.right)
+					.update(l -> {
+						l.setText(stringify.get(prov.get()));
+						l.setColor(condition.get() ? Color.white : Color.gray);
+					});
+				 b.clicked(() -> IntUI.showSelectListTable(b, list,
+					prov, cons, stringify, 100, 42,
+					true,
+					Align.left));
+				 b.update(condition == null ? null : () -> b.setDisabled(!condition.get()));
+			 }, HopeStyles.hope_defaultb, () -> {})
+			 .height(42).self(c -> c.update(b ->
+				c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))
+			 ));
+			Cell<Table> cell = main.add(t).growX().padTop(0);
+			cell.row();
+			return cell;
 		}
 
 		public static void number(String text, Floatc cons, Floatp prov) {

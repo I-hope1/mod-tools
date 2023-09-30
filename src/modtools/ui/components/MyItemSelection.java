@@ -13,7 +13,7 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.ui.IntStyles;
+import modtools.ui.HopeStyles;
 
 public class MyItemSelection {
 	public MyItemSelection() {
@@ -54,7 +54,7 @@ public class MyItemSelection {
 			}
 		}
 
-		ScrollPane pane = new ScrollPane(cont, IntStyles.noBarPane);
+		ScrollPane pane = new ScrollPane(cont, HopeStyles.noBarPane);
 		pane.setScrollingDisabled(true, false);
 		pane.setOverscroll(false, false);
 		table.add(pane).maxHeight(40 * 5).grow();

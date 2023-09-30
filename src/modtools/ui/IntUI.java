@@ -341,7 +341,9 @@ public class IntUI {
 		topGroup.addChild(t);
 		t.update(() -> {
 			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
-				button.localToStageCoordinates(Tmp.v1.set(button.getX(align), button.getY(align)));
+				button.localToStageCoordinates(
+				 Tmp.v1.set(button.getX(align), button.getY(align))
+					.sub(button.x, button.y));
 				if (Tmp.v1.y < graphics.getHeight() / 2f) {
 					t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, align | Align.bottom);
 				} else {
@@ -403,7 +405,7 @@ public class IntUI {
 			Pattern pattern = PatternUtils.compileRegExpCatch(text);
 			for (V item : list) {
 				if (PatternUtils.test(pattern, stringify.get(item)))
-					p.button(stringify.get(item), IntStyles.flatt/*Styles.cleart*/, () -> {
+					p.button(stringify.get(item), HopeStyles.flatt/*Styles.cleart*/, () -> {
 						 cons.get(item);
 						 hide.run();
 					 }).minWidth(minWidth).growX()

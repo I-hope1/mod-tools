@@ -115,9 +115,11 @@ public class MySettings {
 			tab.append("	");
 			each((k, v) -> {
 				builder.append(tab).append('"')
-				 .append(k.replaceAll("\"", "\\\""))
+				 .append(k.replaceAll("\"", "\\\\\""))
 				 .append('"').append(": ")
-				 .append(v instanceof Data ? ((Data) v).toString(tab) : v)
+				 .append(v instanceof Data ? ((Data) v).toString(tab) :
+					(Reflect.isWrapper(v.getClass()) ? v : "\"" + v.toString()
+					 .replaceAll("\\\\", "\\\\") + "\""))
 				 .append('\n');
 			});
 			builder.deleteCharAt(builder.length() - 1);
@@ -148,8 +150,9 @@ public class MySettings {
 		}
 		public int get0xInt(String name, int def) {
 			Object v = get(name, def);
+			if (v instanceof Integer) return (int) v;
 			if (v instanceof Jval) {
-				if (((Jval) v).isNumber()) return ((Jval) v).asInt();
+				if (((Jval) v).isNumber()) return (int) ((Jval) v).asLong();
 				v = v.toString();
 			}
 			if (v == null) return 0;
@@ -160,6 +163,12 @@ public class MySettings {
 				return def;
 			}
 		}
+
+		public String getString(String name, String def) {
+			Object o = get(name, def);
+			return o instanceof Jval ? ((Jval) o).asString() : String.valueOf(o);
+		}
+
 		public String getString(String name) {
 			Object o = get(name);
 			return o instanceof Jval ? ((Jval) o).asString() : String.valueOf(o);

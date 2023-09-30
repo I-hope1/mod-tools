@@ -4,6 +4,7 @@ import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
+import modtools.annotations.builder.DataBoolFieldInit;
 
 import static modtools.annotations.BaseProcessor.*;
 
@@ -25,4 +26,8 @@ public interface DataUtils {
 			symbols[0] = mSymtab.getClass(mSymtab.unnamedModule, names.fromString("modtools.utils.MySettings"));
 		return mMaker.Select(mMaker.Ident(symbols[0]), names.fromString(key));
 	}
+	default JCExpression getData(String data, Type type) {
+		return data.isEmpty() ? selfData(type) : internalData(data);
+	}
+
 }

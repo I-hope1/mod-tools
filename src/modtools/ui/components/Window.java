@@ -74,7 +74,7 @@ public class Window extends Table {
 	public static Drawable myPane  = Tex.pane;
 	public static Drawable topPane = whiteui.tint(Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f));
 
-	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(IntStyles.hope_clearNonei) {{
+	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);
 		down = whiteui.tint(Tmp.c1.set(Pal.remove).lerp(Color.gray, 0.3f));
 	}};
@@ -148,17 +148,17 @@ public class Window extends Table {
 
 		if (full) {
 			//noinspection rawtypes
-			titleTable.button(HopeIcons.sticky, IntStyles.hope_clearNoneTogglei, 32, () -> {
+			titleTable.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32, () -> {
 				 sticky = !sticky;
 			 }).padLeft(4f).name("sticky")
 			 /* 这是一个奇葩的bug */
 			 .checked((Boolf) t -> sticky);
-			titleTable.add(new FoldedImageButton(false, IntStyles.hope_clearNonei))
+			titleTable.add(new FoldedImageButton(false, HopeStyles.hope_clearNonei))
 			 .with(b -> {
 				 b.resizeImage(32);
 				 b.clicked(this::toggleMinimize);
 			 }).update(b -> b.fireCheck(isMinimize)).padLeft(4f);
-			ImageButton button = titleTable.button(Tex.whiteui, IntStyles.hope_clearNonei, 28, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
+			ImageButton button = titleTable.button(Tex.whiteui, HopeStyles.hope_clearNonei, 28, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? HopeIcons.normal : HopeIcons.maximize;
 			});

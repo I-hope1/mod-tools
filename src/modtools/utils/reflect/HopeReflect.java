@@ -2,7 +2,6 @@ package modtools.utils.reflect;
 
 import arc.util.OS;
 import dalvik.system.VMRuntime;
-import ihope_lib.Desktop;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
@@ -10,9 +9,7 @@ import rhino.*;
 import java.lang.reflect.*;
 import java.security.ProtectionDomain;
 
-import static jdk.internal.misc.Unsafe.getUnsafe;
-
-public class IReflect {
+public class HopeReflect {
 	/**
 	 * @see jdk.internal.loader.NativeLibraries.LibraryPaths.SYS_PATHS
 	 * @see =
@@ -59,57 +56,42 @@ public class IReflect {
 	}
 
 	public static Class<?> defineClass(String name, Class<?> superClass, byte[] bytes) {
-		/*try {
-			Class.forName(superClass.getName(), false, loader);
-		} catch (Throwable e) {
-			loader.addChild(superClass.getClassLoader());
-			Log.info("ok");
-		}*/
-		if (Vars.mobile) {
+		if (OS.isAndroid) {
 			int mod = superClass.getModifiers();
 			if (/*Modifier.isFinal(mod) || */Modifier.isPrivate(mod)) {
 				setPublic(superClass, Class.class);
 			}
-			try {
-				return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
-				 .createClassLoader(superClass.getClassLoader()))
-				 .defineClass(name, bytes);
-			} catch (Throwable e) {
-				throw new RuntimeException(e);
-			}
-		} else {
-			try {
-				return getUnsafe().defineClass0(null, bytes, 0, bytes.length, superClass.getClassLoader(), null);
-			} catch (Exception ex) {
-				throw new RuntimeException(ex);
-			}
+			return androidDefineClass(name, superClass.getClassLoader(), bytes);
 		}
-		// return unsafe.defineAnonymousClass(superClass, bytes, null);
+		try {
+			return UnsafeHandler.defineClass(null, bytes, superClass.getClassLoader());
+		} catch (Exception ex) {
+			throw new RuntimeException(ex);
+		}
 	}
 
 	public static Class<?> defineClass(String name, ClassLoader loader, byte[] bytes) {
-		if (OS.isAndroid) {
-			try {
-				return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
-				 .createClassLoader(loader))
-				 .defineClass(name, bytes);
-			} catch (Throwable e) {
-				throw new RuntimeException(e);
-			}
-		} else {
-			try {
-				return getUnsafe().defineClass0(null, bytes, 0, bytes.length, loader, null);
-			} catch (Exception ex) {
-				throw new RuntimeException(ex);
-			}
+		if (OS.isAndroid) return androidDefineClass(name, loader, bytes);
+		try {
+			return UnsafeHandler.defineClass(null, bytes, loader);
+		} catch (Exception ex) {
+			throw new RuntimeException(ex);
+		}
+	}
+	private static Class<?> androidDefineClass(String name, ClassLoader loader, byte[] bytes) {
+		try {
+			return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
+			 .createClassLoader(loader))
+			 .defineClass(name, bytes);
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
 		}
 	}
 
 
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes, ProtectionDomain pd) {
 		try {
-			return getUnsafe().defineClass0(null, bytes, 0, bytes.length,
-			 loader, pd);
+			return UnsafeHandler.defineClass(null, bytes, loader, pd);
 		} catch (Exception ex) {
 			throw new RuntimeException(ex);
 		}

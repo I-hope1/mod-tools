@@ -46,7 +46,7 @@ public class Frag extends Table {
 				if (content == null || !content.loadable()) return;
 				enabledContents.add(content);
 				String localizedName = content.localizedName();
-				var    style         = IntStyles.flatt;
+				var    style         = HopeStyles.flatt;
 				// var style = Styles.cleart;
 				// Objects.requireNonNull(cont);
 				content.btn = table.button(localizedName,
@@ -58,7 +58,7 @@ public class Frag extends Table {
 				content.load();
 				table.row();
 			});
-		}), IntStyles.noBarPane);
+		}), HopeStyles.noBarPane);
 		// lastIndex = getCells().indexOf(cell);
 		container.update(() -> container.setOverscroll(false, false));
 		cell = add(container);
@@ -111,7 +111,7 @@ public class Frag extends Table {
 	private void circleBuild() {
 		float angle = 90;
 		for (Content content : enabledContents) {
-			ImageButton image = new ImageButton(content.icon, IntStyles.flati);
+			ImageButton image = new ImageButton(content.icon, HopeStyles.flati);
 			image.setTransform(true);
 			float finalAngle = angle;
 			angle -= 30;

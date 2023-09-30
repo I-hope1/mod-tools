@@ -198,26 +198,5 @@ public class WatchProcessor extends BaseProcessor {
 		 WatchVar.class.getCanonicalName()
 		);
 	}
-	/* public void init() {
-		var out = new ByteArrayOutputStream();
-		try {
-			ClassSymbol super_ = findClassSymbol("test0.FINAL");
-			classWriter.writeClassFile(out, super_);
-			byte[] b = out.toByteArray();
-			Unsafe.getUnsafe().defineClass(null, b, 0, b.length, null, null);
-			out = new ByteArrayOutputStream();
-			ClassSymbol symbol = new ClassSymbol(0, names.fromString("AAA"), super_.owner);
-			((ClassType) symbol.type).supertype_field = super_.type;
-			symbol.members_field = super_.members_field.dup();
-			classWriter.writeClassFile(out, symbol);
-			byte[] bytes = out.toByteArray();
-			Log.info(HopeReflect.
-			 defineHiddenClass(bytes)
-			 .getSuperclass());
-		} catch (Throwable e) {
-			Log.err(e);
-			throw new RuntimeException(e);
-		}
-	} */
 	final ObjectMap<Element, Seq<Element>> classFields = new ObjectMap<>();
 }

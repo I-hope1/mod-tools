@@ -89,7 +89,7 @@ public class ValueLabel extends MyLabel {
 			throw new IllegalArgumentException("type(" + type + ") mismatches value(" + newVal + ").");
 		// markupEnabled = true;
 		wrap = true;
-		setStyle(IntStyles.MOMO_LabelStyle);
+		setStyle(HopeStyles.MOMO_LabelStyle);
 		this.type = type;
 		if (field != null) set(field, obj);
 		if (newVal != unset) setVal0(newVal);
@@ -294,7 +294,7 @@ public class ValueLabel extends MyLabel {
 						} else {
 							sb.append(dealVal(last));
 							if (count > 1) sb.append(" ▶×").append(count).append("◀");
-							sb.append(", ");
+							sb.append(MySettings.D_JSFUNC.getString("arrayDelimiter", JSFunc.defaultDelimiter));
 							if (isTruncate(sb.length())) break;
 							last = item;
 							count = 0;

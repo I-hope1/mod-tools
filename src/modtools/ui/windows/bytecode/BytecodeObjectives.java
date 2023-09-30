@@ -240,7 +240,7 @@ public class BytecodeObjectives implements Iterable<BytecodeObjective>, Eachable
 	}
 
 	public enum Status {
-		normal(Pal.gray), err(Color.red), warning(Color.yellow);
+		normal(Color.gray), err(Color.red), warning(Color.yellow);
 		public final Color color;
 		Status(Color color) {
 			this.color = color;

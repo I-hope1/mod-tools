@@ -139,7 +139,7 @@ public class UnitSpawn extends Content {
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
-			table.button("@unitspawn.selectAposition", IntStyles.flatToggleMenut, () -> {
+			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, () -> {
 				if (el.parent == null) {
 					Core.scene.addListener(listener);
 					Core.scene.add(el);
@@ -149,7 +149,7 @@ public class UnitSpawn extends Content {
 			}).growX().height(32).update(b -> {
 				b.setChecked(el.parent != null);
 			});
-			table.button("@unitspawn.getfromplayer", IntStyles.cleart, () -> {
+			table.button("@unitspawn.getfromplayer", HopeStyles.cleart, () -> {
 				setX(player.x);
 				setY(player.y);
 			}).growX().height(32);
@@ -187,10 +187,10 @@ public class UnitSpawn extends Content {
 		}).growX().row();
 		ui.cont.table(Window.myPane, table -> {
 			table.margin(-4f, 0f, -4f, 0f);
-			table.button("@ok", IntStyles.cleart, this::spawnIgnored)
+			table.button("@ok", HopeStyles.cleart, this::spawnIgnored)
 			 .size(90, 50)
 			 .disabled(b -> !isOk());
-			table.button("post task", IntStyles.cleart, () ->
+			table.button("post task", HopeStyles.cleart, () ->
 			 ExecuteTree.context(root, () ->
 				ExecuteTree.node(selectUnit.localizedName,
 				 "(" + x + "," + +y + ")\n{"

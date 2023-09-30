@@ -131,7 +131,7 @@ public class Selection extends Content {
 					int    c   = 0;
 
 					for (Team team : arr) {
-						ImageButton b = t1.button(IntUI.whiteui, IntStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
+						ImageButton b = t1.button(IntUI.whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
 							SETTINGS.put("defaultTeam", team.id);
 							defaultTeam = team;
 						}).size(42).get();
@@ -369,7 +369,7 @@ public class Selection extends Content {
 
 		public void buildTable(T bullet, Table table) {
 			table.add(String.valueOf(bullet.type)).row();
-			table.label(() -> "(" + bullet.x + ", " + bullet.y + ')');
+			table.label(() -> "(" + bullet.x + "\n" + bullet.y + ')');
 		}
 
 		public TextureRegion getRegion(T bullet) {
@@ -546,7 +546,7 @@ public class Selection extends Content {
 			Tools.TASKS.add(() -> WD.alpha = selectFunc == this ? 0.7f : 0.1f);
 			executor = Threads.boundedExecutor(name + "-each", 1);
 
-			main.button("show all", IntStyles.blackt, this::showAll).growX().height(buttonHeight).row();
+			main.button("show all", HopeStyles.blackt, this::showAll).growX().height(buttonHeight).row();
 			main.add(buttons).growX().row();
 			buildButtons();
 
@@ -942,7 +942,7 @@ public class Selection extends Content {
 						table.add(cont).minWidth(150);
 						buildTable(item, cont);
 						cont.row();
-						cont.button("@details", IntStyles.blackt, () -> {
+						cont.button("@details", HopeStyles.blackt, () -> {
 							 JSFunc.showInfo(item);
 						 }).growX().height(buttonHeight)
 						 .colspan(10);

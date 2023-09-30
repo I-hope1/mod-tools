@@ -100,9 +100,9 @@ public class ListDialog extends Window {
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					b.pane(c -> {
-						c.add(new MyLabel(fileHolder.get(f).readString(), IntStyles.MOMO_LabelStyle)).left();
+						c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.MOMO_LabelStyle)).left();
 					}).grow().left();
-				}, IntStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
+				}, HopeStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, 600, longPress -> {
 					if (longPress) {
 						Window ui   = new DisWindow("@info", 300, 80);
@@ -131,7 +131,7 @@ public class ListDialog extends Window {
 					}
 
 				});
-				t.button("", Icon.trash, IntStyles.cleart, () -> {
+				t.button("", Icon.trash, HopeStyles.cleart, () -> {
 					if (!f.deleteDirectory()) {
 						f.delete();
 					}

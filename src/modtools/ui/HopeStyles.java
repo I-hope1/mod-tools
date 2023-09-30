@@ -2,15 +2,12 @@ package modtools.ui;
 
 import arc.graphics.Color;
 import arc.scene.style.*;
-import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
-import arc.scene.ui.CheckBox.CheckBoxStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
-import arc.util.Log;
 import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.ui.*;
@@ -19,7 +16,7 @@ import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
 import static modtools.ui.IntUI.whiteui;
 
-public class IntStyles {
+public class HopeStyles {
 	public static final TextButtonStyle blackt;
 	public static final ButtonStyle     clearb;
 	public static final Drawable        none = whiteui.tint(0f, 0f, 0f, 0.01f);
@@ -32,6 +29,8 @@ public class IntStyles {
 	public static ImageButtonStyle
 	 hope_clearNonei,
 	 hope_clearNoneTogglei;
+	public static ButtonStyle
+	 hope_defaultb;
 	public static SliderStyle
 	 hope_defaultSlider;
 
@@ -159,6 +158,7 @@ public class IntStyles {
 			checkedOver = flatDown;
 			checked = down = buttonSelect;
 		}};
+		hope_defaultb = new ButtonStyle(clearNonei);
 		/* hope_defaultSlider = new SliderStyle() {{
 			background = sliderBack;
 			knob = sliderKnob;

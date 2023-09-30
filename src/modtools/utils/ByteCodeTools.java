@@ -6,7 +6,7 @@ import arc.struct.*;
 import arc.util.*;
 import hope_android.FieldUtils;
 import mindustry.Vars;
-import modtools.utils.reflect.IReflect;
+import modtools.utils.reflect.HopeReflect;
 import rhino.classfile.ClassFileWriter;
 
 import java.io.FileOutputStream;
@@ -282,7 +282,7 @@ public class ByteCodeTools {
 		}
 
 		public Class<? extends T> define(Class<?> superClass) {
-			var base = IReflect.defineClass(adapterName, superClass, writer.toByteArray());
+			var base = HopeReflect.defineClass(adapterName, superClass, writer.toByteArray());
 			// MyReflect.loader.addChild(base.getClassLoader());
 			/*try {
 				Class.forName(adapterName, true, base.getClassLoader());
@@ -316,7 +316,7 @@ public class ByteCodeTools {
 		}
 
 		public Class<? extends T> define(ClassLoader loader) {
-			var base = IReflect.defineClass(adapterName, loader, writer.toByteArray());
+			var base = HopeReflect.defineClass(adapterName, loader, writer.toByteArray());
 
 			ObjectMap<String, Field> map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
 			long                     off;

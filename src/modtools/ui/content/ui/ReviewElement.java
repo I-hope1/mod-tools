@@ -38,13 +38,13 @@ import java.util.regex.*;
 
 import static arc.Core.scene;
 import static modtools.ui.Contents.review_element;
-import static modtools.ui.IntStyles.*;
+import static modtools.ui.HopeStyles.*;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.SettingsUI.bool;
 import static modtools.utils.Tools.*;
 
 public class ReviewElement extends Content {
-	@DataColorFieldInit(needSetting = true)
+	@DataColorFieldInit(data = "", needSetting = true)
 	public int
 	 // 浅绿色
 	 padColor        = 0x8C_E9_9A_75,
@@ -52,7 +52,7 @@ public class ReviewElement extends Content {
 	 marginColor     = Tmp.c1.set(Color.orange).a(0.5f).rgba(),
 	 marginTextColor = Pal.accent.rgba(),
 	 posLineColor    = Tmp.c1.set(Color.slate).a(0.6f).rgba(),
-	 posTextColor = Color.lime.rgba(),
+	 posTextColor    = Color.lime.rgba(),
 	 sizeTextColor   = Color.magenta.rgba();
 
 
@@ -112,7 +112,6 @@ public class ReviewElement extends Content {
 	public void settingBool(Table t) {
 		boolean[] __ = {topGroup.selectInvisible, hoverInfoWindow};
 	}
-
 
 
 	public void load() {
@@ -311,7 +310,7 @@ public class ReviewElement extends Content {
 					makePosLabel(t, pos);
 					t.add(new MyLabel(text, MOMO_LabelStyle)).growX().left().color(Pal.accent);
 				}).growX().left().row();
-				table.image().color(JSFunc.c_underline).growX().colspan(2).row();
+				table.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
 				return;
 			}
 			table.table(t -> {
@@ -322,7 +321,7 @@ public class ReviewElement extends Content {
 					t.row();
 				}
 			}).growX().left().row();
-			table.image().color(JSFunc.c_underline).growX().colspan(2).row();
+			table.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
@@ -636,6 +635,12 @@ public class ReviewElement extends Content {
 			cont.button("growX", Styles.flatBordert, cell::growX);
 			cont.button("growY", Styles.flatBordert, cell::growY);
 			cont.row();
+			cont.button("left", Styles.flatBordert, cell::left);
+			cont.button("right", Styles.flatBordert, cell::right);
+			cont.row();
+			cont.button("top", Styles.flatBordert, cell::top);
+			cont.button("bottom", Styles.flatBordert, cell::bottom);
+			cont.row();
 			checkField(cont, cell, "endRow", boolean.class).colspan(2);
 
 			addFocusSource(this, () -> this, cell::get);
@@ -735,14 +740,14 @@ public class ReviewElement extends Content {
 		}));
 	}
 	private static Cell<Table> getAddWithName(Table t, Cell cell, String name) {
-		return t.add(floatSetter("[lightgray]" + name + ": ", () -> "" + Reflect.get(Cell.class, cell, name), f -> {
+		return t.add(floatSetter(name + ": ", () -> fixed(Reflect.get(Cell.class, cell, name)), f -> {
 			Reflect.set(Cell.class, cell, name, f);
 			if (cell.get() != null) cell.get().invalidateHierarchy();
 		}));
 	}
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
-			if (name != null) t.add(name).color(Color.gray).padRight(8f);
+			if (name != null) t.add(name).color(Pal.accent).padRight(8f);
 			t.defaults().growX();
 			if (floatc == null) {
 				t.label(def);

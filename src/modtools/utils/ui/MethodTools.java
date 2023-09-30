@@ -6,7 +6,7 @@ import arc.scene.event.Touchable;
 import arc.scene.ui.Image;
 import arc.scene.ui.layout.Cell;
 import arc.struct.Seq;
-import arc.util.Align;
+import arc.util.*;
 import modtools.ui.IntUI;
 import modtools.ui.components.ValueLabel;
 import modtools.ui.components.limit.LimitTable;
@@ -16,7 +16,7 @@ import rhino.*;
 import java.lang.reflect.*;
 import java.util.*;
 
-import static modtools.ui.IntStyles.MOMO_LabelStyle;
+import static modtools.ui.HopeStyles.MOMO_LabelStyle;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
@@ -97,7 +97,7 @@ public interface MethodTools {
 		for (int i = 0, length = args.length; i < length; i++) {
 			var ptype = args[i];
 			table.add(ReflectTools.makeGenericType(ptype, makeDetails(ptype, genericArgs[i])))
-			 .color(c_type);
+			 .color(Tmp.c1.set(c_type));
 			if (i != length - 1) {
 				table.add(", ");
 			}
@@ -107,7 +107,7 @@ public interface MethodTools {
 
 		if (exceptions.length > 0) {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
-			table.add(" throws ").color(c_keyword)
+			table.add(" throws ").color(Tmp.c1.set(c_keyword))
 			 .with(t -> IntUI.doubleClick(t, null, () -> {
 				 applyChangedFx(table);
 				 table.name ^= throwKey;
@@ -116,7 +116,7 @@ public interface MethodTools {
 			for (int i = 0, length = exceptions.length; i < length; i++) {
 				var eType = exceptions[i];
 				table.add(ReflectTools.makeGenericType(eType, makeDetails(eType, genericExceptions[i])))
-				 .color(c_type);
+				 .color(Tmp.c1.set(c_type));
 				if (i != length - 1) {
 					table.add(", ");
 				}

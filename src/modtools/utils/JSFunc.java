@@ -1,6 +1,5 @@
 package modtools.utils;
 
-import android.provider.ContactsContract.CommonDataKinds.Im;
 import arc.*;
 import arc.files.Fi;
 import arc.func.*;
@@ -13,16 +12,16 @@ import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
-import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Tmp;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import mindustry.world.Tile;
+import modtools.annotations.builder.DataColorFieldInit;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.components.*;
@@ -57,6 +56,8 @@ public class JSFunc {
 	public static final Fi data = MySettings.dataDirectory;
 
 	public static final ObjectMap<String, Scriptable> classes;
+	public static final String                        defaultDelimiter = ", ";
+
 	/*public static Object eval(String code) {
 		var scripts = new Scripts();
 		return scripts.context.evaluateString(scripts.scope, code, "none", 1);
@@ -70,21 +71,13 @@ public class JSFunc {
 		return showInfo(null, clazz);
 	}
 
-	public static final Color
-	 c_keyword   = new Color(0xf92672FF),
-	 c_type      = new Color(0x66d9efFF),
-	 c_number    = new Color(0xab9df2FF),
-	 c_underline = Color.gray.cpy().a(0.7f);
-
-	/* public static final String
-	 keyword_mark = "[#" + c_keyword + "]",
-	 type_mark    = "[#" + c_type + "]"; */
-
-	public static final LabelStyle
-	 keyword_style = new LabelStyle(FONT, c_keyword),
-	 type_style    = new LabelStyle(FONT, c_type),
-	// lightGrayStyle = new LabelStyle(FONT, Color.lightGray),
-	red_style = new LabelStyle(FONT, Color.red);
+	@DataColorFieldInit(data = "D_JSFUNC", needSetting = true, fieldPrefix = "c_")
+	public static int
+	 c_keyword   = 0xF92672_FF,
+	 c_type      = 0x66D9EF_FF,
+	 c_underline = Color.gray.cpy().a(0.7f).rgba();
+	/** 代码生成{@link ColorProcessor} */
+	public static void settingColor(Table t) {}
 
 
 	public static Window showInfo(Object o, Class<?> clazz) {
@@ -93,7 +86,7 @@ public class JSFunc {
 			if (o == null) return new DisWindow("none");
 			Table _cont = new LimitTable();
 			_cont.defaults().grow();
-			_cont.button(Icon.refresh, IntStyles.clearNonei, () -> {
+			_cont.button(Icon.refresh, HopeStyles.clearNonei, () -> {
 				// 避免stack overflow
 				Core.app.post(() -> {
 					dialog[0].hide();
@@ -113,7 +106,7 @@ public class JSFunc {
 				Object item   = Array.get(o, i);
 				var    button = new TextButton("", Styles.grayt);
 				button.clearChildren();
-				button.add(i + "[lightgray]:", IntStyles.MOMO_LabelStyle).padRight(8f);
+				button.add(i + "[lightgray]:", HopeStyles.MOMO_LabelStyle).padRight(8f);
 				button.add(new ValueLabel(item, componentType, null, null)).grow();
 				int j = i;
 				button.clicked(() -> {
@@ -123,7 +116,7 @@ public class JSFunc {
 				});
 				_cont.add(button).growX().minHeight(40);
 				addWatchButton(_cont, o + "#" + i, () -> Array.get(o, j)).row();
-				_cont.image().color(c_underline).colspan(2).growX().row();
+				_cont.image().color(Tmp.c1.set(c_underline)).colspan(2).growX().row();
 			}
 
 			dialog[0] = new DisWindow(clazz.getSimpleName(), 200, 200, true);
@@ -350,7 +343,7 @@ public class JSFunc {
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
 	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
-		table.button("@details", IntStyles.flatBordert, () -> {
+		table.button("@details", HopeStyles.flatBordert, () -> {
 			Object o = prov.get();
 			Core.app.post(() -> showInfo(o, o != null ? o.getClass() : clazz));
 		}).size(96, 45);
@@ -358,7 +351,7 @@ public class JSFunc {
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
-			IntStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
+			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
 		 .with(b -> {
 			 b.clicked(() -> {
 				 tester.put(b, prov.get());

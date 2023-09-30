@@ -7,10 +7,9 @@ import arc.scene.actions.*;
 import arc.scene.ui.Image;
 import arc.util.Align;
 import mindustry.gen.Icon;
-import modtools.ui.IntStyles;
+import modtools.ui.HopeStyles;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;
-import modtools.utils.reflect.ClassUtils;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -37,7 +36,7 @@ public class ActionsDebug extends Content {
 			int c = 0;
 			for (Class<?> action : classes) {
 				if (!Action.class.isAssignableFrom(action)) continue;
-				t.button(action.getSimpleName(), IntStyles.flatTogglet, () -> {
+				t.button(action.getSimpleName(), HopeStyles.flatTogglet, () -> {
 					// element.actions((Action) MyReflect.unsafe.allocateInstance(action));
 					if (action == ScaleToAction.class) {
 						element.actions(Actions.sequence(Actions.scaleTo(0, 0, 0.2f), Actions.scaleTo(1, 1, 0.2f)));

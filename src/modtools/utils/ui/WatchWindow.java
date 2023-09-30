@@ -10,7 +10,7 @@ import arc.struct.ObjectMap;
 import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.ui.IntStyles;
+import modtools.ui.HopeStyles;
 import modtools.ui.components.ListDialog.ModifiedLabel;
 import modtools.ui.components.TemplateTable;
 import modtools.ui.components.Window.*;
@@ -139,8 +139,8 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 		label.prov = prov;
 		label.interval = interval;
 		JSFunc.addDetailsButton(template, () -> prov.value, null);
-		template.add(label).name(info).style(IntStyles.MOMO_LabelStyle).growX().left().padLeft(6f).row();
-		template.image().color(JSFunc.c_underline).growX().colspan(2).row();
+		template.add(label).name(info).style(HopeStyles.MOMO_LabelStyle).growX().left().padLeft(6f).row();
+		template.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
 		template.unbind();
 		return this;
 	}

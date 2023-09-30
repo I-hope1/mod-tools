@@ -4,7 +4,6 @@ import arc.Core;
 import arc.graphics.Color;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
-import arc.util.Align;
 import mindustry.gen.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
@@ -48,10 +47,10 @@ public class WindowManager extends Content {
 			 .grow().left()
 			 .padLeft(10f).padRight(10f);
 			if (window.full) {
-				top.button(HopeIcons.sticky, IntStyles.hope_clearNoneTogglei, 32, () -> {
+				top.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32, () -> {
 					window.sticky = !window.sticky;
 				}).checked(b -> window.sticky).padLeft(4f);
-				ImageButton button = top.button(Tex.whiteui, IntStyles.hope_clearNonei, 28, () -> {
+				ImageButton button = top.button(Tex.whiteui, HopeStyles.hope_clearNonei, 28, () -> {
 					window.show();
 					window.toggleMaximize();
 				}).padLeft(4f).get();

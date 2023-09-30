@@ -4,14 +4,13 @@ import arc.func.Prov;
 import arc.util.Reflect;
 import ihope_lib.MyReflect;
 import modtools.events.E_JSFunc;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.utils.JSFunc;
 
 import java.lang.reflect.*;
 import java.util.StringJoiner;
 
-import static modtools.utils.JSFunc.type_style;
 import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
 
 public interface ReflectTools {
@@ -27,7 +26,8 @@ public interface ReflectTools {
 		return makeGenericType(() -> getGenericString(type), details);
 	}
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
-		MyLabel label = new MyLabel(type.get(), type_style);
+		MyLabel label = new MyLabel(type.get(), HopeStyles.MOMO_LabelStyle);
+		label.color.set(JSFunc.c_type);
 		IntUI.doubleClick(label, null, details == null ? null : () -> {
 			applyChangedFx(label);
 			label.setText(label.getText().toString().equals(type.get())

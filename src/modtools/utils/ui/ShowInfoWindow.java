@@ -26,7 +26,6 @@ import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.content.ui.ReviewElement;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
@@ -35,13 +34,13 @@ import rhino.*;
 import java.io.StringWriter;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
-import java.util.*;
+import java.util.Arrays;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static modtools.IntVars.*;
-import static modtools.ui.IntStyles.MOMO_LabelStyle;
+import static modtools.IntVars.hasDecompiler;
+import static modtools.ui.HopeStyles.MOMO_LabelStyle;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.MySettings.*;
@@ -120,7 +119,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				}, false);
 			}).size(42);
 			if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
-			t.button(Icon.refreshSmall, IntStyles.clearNonei, rebuild0).size(42);
+			t.button(Icon.refreshSmall, HopeStyles.clearNonei, rebuild0).size(42);
 			if (o != null) {
 				addStoreButton(t, "", () -> o);
 				t.label(() -> "" + addressOf(o)).padLeft(8f);
@@ -160,6 +159,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		}
 		pack();
 	}
+	@SuppressWarnings("Convert2Lambda")
 	private void buildDeCompiler(Table t) {
 		t.button("Decompile", Styles.flatBordert, new Runnable() {
 			public void run() {
@@ -288,7 +288,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		return cell;
 	}
 	private void addModifier(Table table, CharSequence string) {
-		addDisplayListener(table.add(new MyLabel(string, keyword_style))
+		addDisplayListener(table.add(new MyLabel(string, MOMO_LabelStyle)).color(Tmp.c1.set(c_keyword))
 		 .padRight(8), E_JSFuncDisplay.modifier);
 	}
 	private void addRType(Table table, Class<?> type, Prov<String> details) {
@@ -318,7 +318,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
 			c_cell.reget();
 		} else if (type == Boolean.TYPE || type == Boolean.class) {
-			var btn = new TextButton("", IntStyles.flatTogglet);
+			var btn = new TextButton("", HopeStyles.flatTogglet);
 			btn.update(() -> {
 				l.setVal();
 				btn.setText((boolean) l.val ? "TRUE" : "FALSE");
@@ -410,7 +410,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			));
 			fields.add(new MyLabel(" = ", MOMO_LabelStyle)).touchable(Touchable.disabled);
 		} catch (Throwable e) {
-			fields.add(new MyLabel("<" + e + ">", red_style));
+			MyLabel label = new MyLabel("<" + e + ">", MOMO_LabelStyle);
+			label.setColor(Color.red);
+			fields.add(label);
 			Log.err(e);
 		}
 		fields.table(t -> {
@@ -442,7 +444,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
 			}).grow().top(), E_JSFuncDisplay.buttons);
 		}).pad(4).growX().row();
-		fields.image().color(c_underline).growX().colspan(6).row();
+		fields.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
 	}
 	private void buildMethod(Object o, ReflectTable methods, Method m) {
 		if (!E_JSFunc.display_synthetic.enabled() && m.isSynthetic()) return;
@@ -521,7 +523,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			buttonsCell = methods.table(buttons -> {
 				buttons.right().top().defaults().right().top();
 				if (isSingle && isValid) {
-					buttons.button("Invoke", IntStyles.flatBordert, catchRun("invoke出错", () -> {
+					buttons.button("Invoke", HopeStyles.flatBordert, catchRun("invoke出错", () -> {
 						dealInvokeResult(m.invoke(o), cell, l);
 					}, l)).size(96, 45);
 				}
@@ -530,16 +532,19 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			}).grow().top().right();
 			if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 		} catch (Throwable err) {
-			methods.add(new MyLabel("<" + err + ">", red_style));
+			MyLabel label = new MyLabel("<" + err + ">", MOMO_LabelStyle);
+			label.setColor(Color.red);
+			methods.add(label);
 		}
 		methods.row();
-		methods.image().color(c_underline).growX().colspan(7).row();
+		methods.image().color(Tmp.c1.set(c_underline)).growX().colspan(7).row();
 	}
 	private void buildConstructor(ReflectTable t, Constructor<?> ctor) {
 		setAccessible(ctor);
 		try {
 			addModifier(t, buildExecutableModifier(ctor));
-			MyLabel label    = new MyLabel(ctor.getDeclaringClass().getSimpleName(), type_style);
+			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), MOMO_LabelStyle);
+			label.color.set(c_type);
 			boolean isSingle = ctor.getParameterTypes().length == 0;
 			IntUI.addShowMenuListener(label, () -> Seq.with(
 			 MenuList.with(Icon.copySmall, "copy reflect getter", () -> {
@@ -574,7 +579,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		} catch (Throwable e) {
 			Log.err(e);
 		}
-		t.image().color(c_underline).growX().colspan(6).row();
+		t.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
 	}
 	private void buildClass(ReflectTable table, Class<?> cls) {
 		table.bind(wrapMember(cls));
@@ -584,16 +589,16 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ");
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls), null);
-				l.setColor(c_type);
+				l.color.set(c_type);
 				IntUI.addShowMenuListener(l, () -> Seq.with(
 				 IntUI.copyAsJSMenu("class", () -> cls),
 				 ValueLabel.newDetailsMenuList(l, cls, Class.class)
 				));
 				Class<?>[] types = cls.getInterfaces();
 				if (types.length > 0) {
-					t.add(new MyLabel(" implements ", keyword_style)).padRight(8f).touchable(Touchable.disabled);
+					t.add(new MyLabel(" implements ", MOMO_LabelStyle)).color(Tmp.c1.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
 					for (Class<?> interf : types) {
-						t.add(new MyLabel(getGenericString(interf), MOMO_LabelStyle)).padRight(8f).color(c_type);
+						t.add(new MyLabel(getGenericString(interf), MOMO_LabelStyle)).padRight(8f).color(Tmp.c1.set(c_type));
 					}
 				}
 
@@ -606,7 +611,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				Log.err(e);
 			}
 		}).pad(4).growX().left().top().row();
-		table.image().color(c_underline).growX().colspan(6).row();
+		table.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
 	}
 
 	/** 双击复制文本内容 */

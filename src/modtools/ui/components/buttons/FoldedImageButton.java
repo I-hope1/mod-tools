@@ -8,14 +8,13 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.Align;
 import mindustry.gen.Icon;
-import mindustry.ui.Styles;
-import modtools.ui.IntStyles;
+import modtools.ui.HopeStyles;
 
 
 public class FoldedImageButton extends ImageButton {
 	private static final float duration = 0.1f;
 	public FoldedImageButton(boolean checkOnlyChanged) {
-		this(checkOnlyChanged, IntStyles.clearNonei);
+		this(checkOnlyChanged, HopeStyles.clearNonei);
 	}
 	public FoldedImageButton(boolean checkOnlyChanged, ImageButtonStyle style) {
 		super(Icon.rightOpen, style);

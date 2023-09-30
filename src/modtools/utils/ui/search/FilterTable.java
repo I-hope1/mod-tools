@@ -9,6 +9,7 @@ import arc.util.pooling.Pools;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.PatternUtils;
 
+import java.util.HashMap;
 import java.util.regex.Pattern;
 
 public class FilterTable<E> extends LimitTable {
@@ -21,14 +22,14 @@ public class FilterTable<E> extends LimitTable {
 	public FilterTable(Drawable background, Cons<FilterTable<E>> cons) {
 		super(background, (Cons) cons);
 	}
-	protected ObjectMap<E, Seq<BindCell>> map;
+	protected HashMap<E, Seq<BindCell>> map;
 	Seq<BindCell> current;
 
 	private Cons<Element> cons;
 
 	public void bind(E name) {
-		if (map == null) map = new ObjectMap<>();
-		current = map.get(name, Seq::new);
+		if (map == null) map = new HashMap<>();
+		current = map.computeIfAbsent(name, k -> new Seq<>());
 	}
 	public void listener(Cons<Element> cons) {
 		this.cons = cons;
@@ -37,7 +38,7 @@ public class FilterTable<E> extends LimitTable {
 		super.clear();
 		unbind();
 		if (map != null) {
-			map.each((key, seq) -> {
+			map.forEach((key, seq) -> {
 				if (key instanceof Compound<?, ?> compound) Pools.free(compound);
 				seq.each(BindCell::clear);
 			});
@@ -75,7 +76,7 @@ public class FilterTable<E> extends LimitTable {
 	// public Table unuseTable = new Table();
 	public void filter(Boolf<E> boolf) {
 		if (map == null) return;
-		map.each((name, seq) -> {
+		map.forEach((name, seq) -> {
 			seq.each(boolf.get(name) ? BindCell::build : BindCell::remove);
 		});
 	}

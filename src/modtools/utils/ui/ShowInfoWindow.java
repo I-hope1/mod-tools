@@ -448,7 +448,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	}
 	private void buildMethod(Object o, ReflectTable methods, Method m) {
 		if (!E_JSFunc.display_synthetic.enabled() && m.isSynthetic()) return;
-		if (m.getName().equals("insert") && m.getParameterCount() == 2 && m.getParameterTypes()[1].isPrimitive() &&
+		/* if (m.getName().equals("insert") && m.getParameterCount() == 2 && m.getParameterTypes()[1].isPrimitive() &&
 				(
 				 // m.getParameterTypes()[1] == char.class ||
 				 m.getParameterTypes()[1] == boolean.class ||
@@ -460,9 +460,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				 // m.getParameterTypes()[1] == short.class ||
 				 false
 				)) {
-			methods.unbind();
+			// methods.unbind();
+			methods.bind(m);
 			// return;
-		} else methods.bind(m);
+		} else  */
+		methods.bind(m);
 		setAccessible(m);
 		try {
 			int mod = m.getModifiers();

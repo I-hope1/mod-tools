@@ -17,6 +17,7 @@ import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Stack;
 import arc.scene.utils.Disableable;
 import arc.struct.ObjectMap;
 import arc.util.*;
@@ -34,7 +35,7 @@ import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.search.*;
 
 import java.lang.reflect.*;
-import java.util.Arrays;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static arc.scene.ui.CheckBox.CheckBoxStyle;
@@ -93,9 +94,9 @@ public class ShowUIList extends Content {
 		 0x877F5E_FF, null);
 	}
 
-	public static ObjectMap<Drawable, String> iconKeyMap  = new ObjectMap<>();
-	public static ObjectMap<Color, String> colorKeyMap = new ObjectMap<>();
-	public static ObjectMap<Style, String>    styleKeyMap = new ObjectMap<>();
+	public static HashMap<Drawable, String> iconKeyMap  = new HashMap<>();
+	public static HashMap<Color, String>    colorKeyMap = new HashMap<>();
+	public static HashMap<Style, String>    styleKeyMap = new HashMap<>();
 
 	Table icons = newTable(t -> {
 		Icon.icons.each((k, icon) -> {

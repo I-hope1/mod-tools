@@ -369,7 +369,7 @@ public class Selection extends Content {
 
 		public void buildTable(T bullet, Table table) {
 			table.add(String.valueOf(bullet.type)).row();
-			table.label(() -> "(" + bullet.x + "\n" + bullet.y + ')');
+			buildPos(table, bullet);
 		}
 
 		public TextureRegion getRegion(T bullet) {
@@ -1344,7 +1344,7 @@ public class Selection extends Content {
 	private static void buildPos(Table table, Position u) {
 		table.label(new PositionProv(() -> Tmp.v1.set(u),
 			u instanceof Building ? "," : "\n"))
-		 .fontScale(0.9f).color(Color.lightGray)
+		 .fontScale(0.7f).color(Color.lightGray)
 		 .get().act(0.1f);
 	}
 	private <T extends UnlockableContent, E> void sumItems(Seq<T> items, Func<T, E> func, Cons2<T, String> setter) {

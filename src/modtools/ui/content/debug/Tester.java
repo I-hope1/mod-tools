@@ -60,15 +60,14 @@ public class Tester extends Content {
 	public static Scriptable scope;
 	public static Context    cx;
 
-	private final int maxHistorySize = 30;
+	private final int maxHistorySize = 40;
 
 	private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor(name, 1);
-
 
 	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
 	public static final Fi   bookmarkDirectory = MySettings.dataDirectory.child("bookmarks");
 
-	static TaskNode startupTask;
+	private static TaskNode startupTask;
 	static TaskNode startupTask() {
 		if (startupTask == null) startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
 		 Icon.craftingSmall, () -> {});
@@ -181,7 +180,7 @@ public class Tester extends Content {
 			cancelEvent[0] = false;
 			if (rollAndExec(keycode) || detailsListener(keycode)) {
 				cancelEvent[0] = true;
-				event.cancel();
+				if (event != null) event.cancel();
 				return true;
 			}
 			// Core.input.ctrl() && keycode == KeyCode.rightBracket

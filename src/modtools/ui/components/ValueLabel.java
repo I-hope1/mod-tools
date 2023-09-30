@@ -6,7 +6,7 @@ import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
@@ -280,7 +280,6 @@ public class ValueLabel extends MyLabel {
 			boolean       checkTail = false;
 			StringBuilder sb        = new StringBuilder();
 			sb.append('[');
-			l:
 			try {
 				var seq = val instanceof Iterable<?> ? Seq.with((Iterable<?>) val) :
 				 Seq.with(asArray(val));
@@ -324,13 +323,20 @@ public class ValueLabel extends MyLabel {
 		}
 
 		String text = CatchSR.apply(() ->
-		 CatchSR.of(() ->
-			 val instanceof String ? '"' + (String) val + '"'
-				: val instanceof Character ? "'" + val + "'"
-				: val instanceof Float ? Strings.autoFixed((float) val, 2)
-				: val instanceof Color ? ShowUIList.colorKeyMap.containsKey((Color) val) ?
-				ShowUIList.colorKeyMap.get((Color) val) : String.valueOf(val)
-				: String.valueOf(val))
+		 CatchSR.of(() -> val instanceof String ? '"' + (String) val + '"'
+			 : val instanceof Character ? "'" + val + "'"
+			 : val instanceof Float ? Strings.autoFixed((float) val, 2)
+
+			 : val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
+			 ShowUIList.iconKeyMap.get(icon)
+
+			 : val instanceof Style style1 && ShowUIList.styleKeyMap.containsKey(style1) ?
+			 ShowUIList.styleKeyMap.get(style1)
+
+			 : val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
+			 ShowUIList.colorKeyMap.get((Color) val)
+
+			 : String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + val.hashCode())
 			.get(() -> val.getClass().getName())
 		);
@@ -358,9 +364,11 @@ public class ValueLabel extends MyLabel {
 	private String truncate(String text) {
 		return isTruncate(text.length()) ? text.substring(0, truncateLength) + "  ..." : text;
 	}
+	public static final Object[] EMPTY_ARRAY = new Object[0];
 	private Object[] asArray(Object arr) {
 		if (arr instanceof Object[]) return (Object[]) arr;
-		int      len    = Array.getLength(arr);
+		int len = Array.getLength(arr);
+		if (len == 0) return EMPTY_ARRAY;
 		Object[] objArr = new Object[len];
 		for (int i = 0; i < len; i++) {
 			objArr[i] = Array.get(arr, i);

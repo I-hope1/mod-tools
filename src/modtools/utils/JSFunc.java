@@ -439,6 +439,10 @@ public class JSFunc {
 		Events.run(Trigger.uiDrawEnd, run);
 	}
 
+	public static void openModule(Module module, String pn) throws Throwable {
+		MyReflect.openModule(module, pn);
+	}
+
 	public static Element fx(String text) {
 		return HopeFx.colorFulText(text);
 	}

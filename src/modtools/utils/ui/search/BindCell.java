@@ -8,7 +8,7 @@ public class BindCell {
 
 	public  Cell<?> cell;
 	private Cell<?> cpy;
-	private Element el;
+	public  Element el;
 
 	public BindCell(Cell<?> cell) {
 		this.cell = cell;
@@ -45,4 +45,10 @@ public class BindCell {
 		if (b) build();
 		else remove();
 	}
+	public boolean toggle1(boolean b) {
+		if (b) build();
+		else remove();
+		return b;
+	}
+
 }

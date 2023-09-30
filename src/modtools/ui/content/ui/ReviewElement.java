@@ -9,6 +9,7 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
+import arc.scene.style.Style;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
@@ -34,10 +35,11 @@ import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.regex.*;
 
 import static arc.Core.scene;
-import static modtools.ui.Contents.review_element;
+import static modtools.ui.Contents.*;
 import static modtools.ui.HopeStyles.*;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.SettingsUI.bool;
@@ -231,7 +233,7 @@ public class ReviewElement extends Content {
 			pane.left().defaults().left();
 			cont.table(t -> {
 				Button[] bs = {null};
-				bs[0] = t.button("@reviewElement.parent", Icon.up, () -> {
+				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, Styles.flatBordert, () -> {
 					 Runnable go = () -> {
 						 var window = new ReviewElementWindow();
 						 // Log.info(element.parent);
@@ -248,19 +250,21 @@ public class ReviewElement extends Content {
 						 Vec2 vec2 = ElementUtils.getAbsPos(bs[0]);
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
-				 })
+				 }).with(b -> b.getLabel().setFontScale(0.8f))
 				 .disabled(b -> element == null || element.parent == null)
 				 .width(120).get();
-				t.button(Icon.copy, clearNonei, () -> {
+				t.button(Icon.copySmall, clearNonei, () -> {
 					var window = new ReviewElementWindow();
 					window.pattern = pattern;
 					window.show(element);
 					window.shown(() -> window.setSize(width, height));
 				}).padLeft(4f).padRight(4f);
-				t.button(Icon.refresh, clearNonei, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
+				t.button(Icon.refreshSmall, clearNonei, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
 				t.table(search -> {
-					search.image(Icon.zoom);
-					search.field("", str -> rebuild(element, str)).growX();
+					search.image(Icon.zoomSmall);
+					search.field("", str -> rebuild(element, str))
+					 .with(f -> f.setMessageText("@players.search"))
+					 .growX();
 				}).growX().padLeft(2f);
 			}).growX().row();
 
@@ -404,7 +408,7 @@ public class ReviewElement extends Content {
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
 		if (pos != null) t.label(new PositionProv(pos))
 		 .style(MOMO_LabelStyle).color(Color.lightGray)
-		 .fontScale(0.85f).padLeft(4f).padRight(4f);
+		 .fontScale(0.7f).padLeft(4f).padRight(4f);
 	}
 
 	private static class MyWrapTable extends ChildrenFirstTable {
@@ -607,7 +611,7 @@ public class ReviewElement extends Content {
 				label.enableUpdate = false;
 				label.update(() -> label.setVal(cell.get()));
 				Label   placeholder     = new MyLabel("<VALUE>", MOMO_LabelStyle);
-				Cell<?> placeholderCell = t.add(placeholder);
+				Cell<?> placeholderCell = t.add(placeholder).pad(6f);
 				placeholder.clicked(() -> placeholderCell.setElement(label));
 				label.clicked(() -> placeholderCell.setElement(placeholder));
 
@@ -622,6 +626,7 @@ public class ReviewElement extends Content {
 			getAddWithName(cont, cell, "minHeight").row();
 			getAddWithName(cont, cell, "maxWidth").row();
 			getAddWithName(cont, cell, "maxHeight").row();
+			getAddWithName(cont, cell, "colspan", Float::intValue).row();
 			cont.defaults().colspan(1);
 			checkField(cont, cell, "fillX", float.class);
 			checkField(cont, cell, "fillY", float.class);
@@ -739,15 +744,22 @@ public class ReviewElement extends Content {
 			if (cell.get() != null) cell.get().invalidateHierarchy();
 		}));
 	}
+
 	private static Cell<Table> getAddWithName(Table t, Cell cell, String name) {
-		return t.add(floatSetter(name + ": ", () -> fixed(Reflect.get(Cell.class, cell, name)), f -> {
-			Reflect.set(Cell.class, cell, name, f);
-			if (cell.get() != null) cell.get().invalidateHierarchy();
+		return getAddWithName(t, cell, name, f -> f);
+	}
+	private static <T extends Number> Cell<Table> getAddWithName(Table t, Cell cell, String name,
+																															 Func<Float, T> valueOf) {
+		return t.add(floatSetter(name + ": ", () -> fixedAny(Reflect.get(Cell.class, cell, name)), f -> {
+			Reflect.set(Cell.class, cell, name, valueOf.get(f));
+			Core.app.post(() -> {
+				if (cell.get() != null) cell.get().invalidateHierarchy();
+			});
 		}));
 	}
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
-			if (name != null) t.add(name).color(Pal.accent).padRight(8f);
+			if (name != null) t.add(name).color(Pal.accent).fontScale(0.7f).labelAlign(Align.topLeft).growY().padRight(8f);
 			t.defaults().growX();
 			if (floatc == null) {
 				t.label(def);
@@ -759,6 +771,11 @@ public class ReviewElement extends Content {
 				floatc.get(Strings.parseFloat(field.getText()));
 			}, 2, t, TextField::new);
 		});
+	}
+
+	static String fixedAny(Object value) {
+		if (value instanceof Float) return fixed((float) value);
+		return value.toString();
 	}
 
 	static String fixed(float value) {
@@ -819,23 +836,30 @@ public class ReviewElement extends Content {
 				 color, flipX ? Align.right : Align.left);
 			}
 
-			if (elem instanceof Table table) {
-				drawMargin(vec2, table);
+			if (elem instanceof Table) {
+				drawMargin(vec2, (Table) elem);
 			}
 
-			if (elem.parent instanceof Table table) {
-				drawMargin(table.localToStageCoordinates(Tmp.v1.set(0, 0)), table);
+			if (elem.parent instanceof Table parent) {
+				drawMargin(parent.localToStageCoordinates(Tmp.v1.set(0, 0)), parent);
 
-				drawPadding(elem, vec2, table);
+				drawPadding(elem, vec2, parent);
 			}
 
 			if (!hoverInfoWindow) return;
 			table.nameLabel.setText(getElementName(elem));
 			table.sizeLabel.setText(fixed(elem.getWidth()) + "×" + fixed(elem.getHeight()));
-			table.colorContainer.setColorValue(elem.color);
-			table.colorLabel.setText("" + elem.color);
+			table.color(elem.color);
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
+			table.style(elem);
+			table.colspan(null);
+			cellLabel:
+			if (elem.parent instanceof Table parent) {
+				Cell cell = parent.getCell(elem);
+				if (cell == null) break cellLabel;
+				table.colspan(cell);
+			}
 
 			displayDetails(elem, vec2);
 		}
@@ -846,6 +870,8 @@ public class ReviewElement extends Content {
 			table.colorContainer.layout();
 			table.colorLabel.invalidate();
 			table.colorLabel.layout();
+			table.cellCell.toggle(((Table) table.cellCell.el).getChildren().size
+														> 2/* 两个基础元素 */);
 			table.invalidate();
 			table.act(1);
 			table.getPrefWidth();
@@ -878,60 +904,99 @@ public class ReviewElement extends Content {
 			table.draw();
 		}
 		final InfoDetails table = new InfoDetails();
-		class InfoDetails extends Table {
-			Label nameLabel   = new Label(""), sizeLabel = new Label("", MOMO_LabelStyle),
-			 transformLabel   = new Label(""),
-			 colorLabel       = new Label(""),
-			 rotationLabel    = new Label("0"),
-			 translationLabel = new Label("");
+		static class InfoDetails extends Table {
+			Label nameLabel = new MyLabel(""),
+			 sizeLabel      = new MyLabel("", MOMO_LabelStyle),
+
+			// transformLabel    = new MyLabel(""),
+			colorLabel        = new MyLabel(""),
+			 rotationLabel    = new MyLabel("0"),
+			 translationLabel = new MyLabel(""),
+			 styleLabel       = new MyLabel(""),
+			 colspanLabel     = new MyLabel("");
 			ColorContainer colorContainer = new ColorContainer(Color.white);
 
-			BindCell rotCell, translationCell;
+			BindCell rotCell, translationCell, styleCell,
+			 cellCell,
+			 colspanCell;
+
+
+			void color(Color color) {
+				colorContainer.setColorValue(color);
+				colorLabel.setText(color.toString().toUpperCase());
+			}
 			void rotation(float rotation) {
-				if (rotation % 360 == 0) {
-					rotCell.remove();
-					return;
-				}
-				rotCell.build();
-				rotationLabel.setText(fixed(rotation));
+				if (rotCell.toggle1(rotation % 360 != 0))
+					rotationLabel.setText(fixed(rotation));
 			}
 			void translation(Vec2 translation) {
-				if (Mathf.zero(translation.x) && Mathf.zero(translation.y)) {
-					translationCell.remove();
+				if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
+					translationLabel.setText(fixed(translation.x) + "×" + fixed(translation.y));
+			}
+			void style(Element element) {
+				try {
+					Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
+					if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
+						styleLabel.setText(ShowUIList.styleKeyMap.get(style));
+				} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+					styleCell.remove();
+				}
+			}
+			void colspan(Cell<?> cell) {
+				if (cell == null) {
+					colspanCell.remove();
 					return;
 				}
-				translationCell.build();
-				translationLabel.setText(
-				 fixed(translation.x) + "×"
-				 + fixed(translation.y));
+				int colspan = Reflect.get(Cell.class, cell, "colspan");
+				if (colspanCell.toggle1(colspan != 1))
+					colspanLabel.setText("" + colspan);
 			}
 			{
 				margin(4, 4, 4, 4);
-				nameLabel.setFontScale(0.7f);
+				nameLabel.setFontScale(0.75f);
 				sizeLabel.setFontScale(0.7f);
 				colorLabel.setFontScale(0.6f);
 				rotationLabel.setFontScale(0.6f);
 				translationLabel.setFontScale(0.6f);
-				table(Tex.pane, t -> {
-					t.table(top -> {
-						top.add(nameLabel);
-						top.add(sizeLabel).padLeft(10f)
-						 .growX().right().labelAlign(Align.right).color(Color.lightGray);
-					}).growX();
-					t.row().table(col -> {
-						col.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
-						col.add(colorContainer).size(16).padRight(4f);
-						col.add(colorLabel).row();
-					}).growX();
-					rotCell = new BindCell(t.row().table(col -> {
-						col.add("Rotation").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
-						col.add(rotationLabel).row();
+				colspanLabel.setFontScale(0.6f);
+				styleLabel.setFontScale(0.6f);
+				table(Tex.pane, this::build);
+			}
+
+			public static final float padRight = 8f;
+			private void build(Table t) {
+				t.table(top -> {
+					top.add(nameLabel).color(Color.violet);
+					top.add(sizeLabel).padLeft(10f)
+					 .growX().right().labelAlign(Align.right).color(Color.lightGray);
+				}).growX();
+				t.row().table(color -> {
+					color.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+					color.add(colorContainer).size(16).padRight(4f);
+					color.add(colorLabel).row();
+				}).growX();
+				rotCell = new BindCell(t.row().table(rot -> {
+					rot.add("Rotation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+					rot.add(rotationLabel).row();
+				}).growX());
+				translationCell = new BindCell(t.row().table(tran -> {
+					tran.add("Translation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+					tran.add(translationLabel).row();
+				}).growX());
+				styleCell = new BindCell(t.row().table(tran -> {
+					tran.add("Style").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+					tran.add(styleLabel).color(Color.orange).row();
+				}).growX());
+
+				cellCell = new BindCell(t.row().table(c -> {
+					c.row().add("Cell", MOMO_LabelStyle).color(Pal.accent).left().fontScale(0.75f);
+					c.image().color(Tmp.c1.set(Color.orange).lerp(Pal.gray, 0.9f).a(0.5f)).padLeft(padRight).padRight(padRight).growX();
+					c.defaults().colspan(2);
+					colspanCell = new BindCell(c.row().table(col -> {
+						col.add("Colspan").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+						col.add(colspanLabel).row();
 					}).growX());
-					translationCell = new BindCell(t.row().table(col -> {
-						col.add("Translation").fontScale(0.7f).color(Color.lightGray).growX().padRight(6f);
-						col.add(translationLabel).row();
-					}).growX());
-				});
+				}).growX());
 			}
 		}
 		public void endDraw() {

@@ -148,8 +148,9 @@ public class MySettings {
 			}
 			return Integer.parseInt(("" + v).trim());
 		}
+		/* for color */
 		public int get0xInt(String name, int def) {
-			Object v = get(name, def);
+			Object v = get(name, Integer.toHexString(def));
 			if (v instanceof Integer) return (int) v;
 			if (v instanceof Jval) {
 				if (((Jval) v).isNumber()) return (int) ((Jval) v).asLong();

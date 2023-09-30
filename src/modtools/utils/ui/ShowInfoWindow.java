@@ -40,7 +40,7 @@ import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
 import static modtools.IntVars.hasDecompiler;
-import static modtools.ui.HopeStyles.MOMO_LabelStyle;
+import static modtools.ui.HopeStyles.*;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.MySettings.*;
@@ -394,7 +394,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			// type
 			addRType(fields, type, makeDetails(type, f.getGenericType()));
 			// name
-			MyLabel label = newCopyLabel(fields, f.getName(), type);
+			MyLabel label = newCopyLabel(fields, f.getName());
 			IntUI.addShowMenuListener(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("field", () -> f),
 			 MenuList.with(Icon.copySmall, "copy offset", () -> {
@@ -448,7 +448,21 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	}
 	private void buildMethod(Object o, ReflectTable methods, Method m) {
 		if (!E_JSFunc.display_synthetic.enabled() && m.isSynthetic()) return;
-		methods.bind(m);
+		if (m.getName().equals("insert") && m.getParameterCount() == 2 && m.getParameterTypes()[1].isPrimitive() &&
+				(
+				 // m.getParameterTypes()[1] == char.class ||
+				 m.getParameterTypes()[1] == boolean.class ||
+				 m.getParameterTypes()[1] == long.class ||
+				 // m.getParameterTypes()[1] == int.class ||
+				 m.getParameterTypes()[1] == double.class ||
+				 m.getParameterTypes()[1] == float.class ||
+				 // m.getParameterTypes()[1] == byte.class ||
+				 // m.getParameterTypes()[1] == short.class ||
+				 false
+				)) {
+			methods.unbind();
+			// return;
+		} else methods.bind(m);
 		setAccessible(m);
 		try {
 			int mod = m.getModifiers();
@@ -458,7 +472,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			addRType(methods, m.getReturnType(),
 			 makeDetails(m.getReturnType(), m.getGenericReturnType()));
 			// method name
-			MyLabel label = newCopyLabel(methods, m.getName(), m.getReturnType());
+			MyLabel label = newCopyLabel(methods, m.getName());
 			// method parameters + exceptions + buttons
 			methods.add(buildArgsAndExceptions(m)).growY().pad(4).left();
 
@@ -466,7 +480,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			Cell<?> cell = methods.add();
 			Cell<?> buttonsCell;
 
-			boolean isSingle = m.getParameterTypes().length == 0;
+			boolean isSingle = m.getParameterCount() == 0;
 			boolean isValid  = o != null || Modifier.isStatic(mod);
 			// if (isSingle && !isValid) methods.add();
 
@@ -475,10 +489,10 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			methods.labels.add(l);
 			IntUI.addShowMenuListener(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("method", () -> m),
-			 MenuList.with(Icon.copySmall, "Copy method getter", () -> {
+			 MenuList.with(Icon.copySmall, "Cpy method getter", () -> {
 				 copyExecutableReflection(m);
 			 }),
-			 MenuList.with(Icon.copySmall, "Copy value getter", () -> {
+			 MenuList.with(Icon.copySmall, "Cpy value getter", () -> {
 				 copyExecutableArcReflection(m);
 			 }),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
@@ -545,7 +559,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			addModifier(t, buildExecutableModifier(ctor));
 			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), MOMO_LabelStyle);
 			label.color.set(c_type);
-			boolean isSingle = ctor.getParameterTypes().length == 0;
+			boolean isSingle = ctor.getParameterCount() == 0;
 			IntUI.addShowMenuListener(label, () -> Seq.with(
 			 MenuList.with(Icon.copySmall, "copy reflect getter", () -> {
 				 copyExecutableReflection(ctor);
@@ -588,7 +602,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			try {
 				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ");
 
-				MyLabel l = newCopyLabel(t, getGenericString(cls), null);
+				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
 				IntUI.addShowMenuListener(l, () -> Seq.with(
 				 IntUI.copyAsJSMenu("class", () -> cls),
@@ -615,7 +629,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	}
 
 	/** 双击复制文本内容 */
-	private static MyLabel newCopyLabel(Table table, String text, Class<?> type) {
+	private static MyLabel newCopyLabel(Table table, String text) {
 		MyLabel label = new MyLabel(text, MOMO_LabelStyle);
 		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
 			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));

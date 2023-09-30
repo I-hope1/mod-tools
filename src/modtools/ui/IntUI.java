@@ -695,6 +695,7 @@ public class IntUI {
 	 * @param callback   回调函数，形参为修改后的{@link Color color}
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
+	
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);

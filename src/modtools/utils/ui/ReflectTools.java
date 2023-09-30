@@ -23,7 +23,7 @@ public interface ReflectTools {
 		return cls.isPrimitive() ? null : type::getTypeName;
 	}
 	static MyLabel makeGenericType(Class<?> type, Prov<String> details) {
-		return makeGenericType(() -> getGenericString(type), details);
+		return makeGenericType(() -> getGenericString(type), type.isPrimitive() ? null : details);
 	}
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
 		MyLabel label = new MyLabel(type.get(), HopeStyles.MOMO_LabelStyle);
@@ -51,6 +51,7 @@ public interface ReflectTools {
 			simpleName = simpleName.substring(simpleName.lastIndexOf('.') + 1); // strip the package name
 		} else simpleName = cls.getSimpleName();
 		sb.append(simpleName);
+		// if (!cls.isPrimitive()) {
 		TypeVariable<?>[] typeparms = cls.getTypeParameters();
 		if (typeparms.length > 0) {
 			StringJoiner sj = new StringJoiner(",", "<", ">");
@@ -59,6 +60,7 @@ public interface ReflectTools {
 			}
 			sb.append(sj);
 		}
+		// }
 
 		sb.append("[]".repeat(arrayDepth));
 
@@ -94,7 +96,6 @@ public interface ReflectTools {
 
 	/**
 	 * 生成反射调用
-	 *
 	 * @see Class#getDeclaredConstructor(Class[])
 	 * @see Class#getDeclaredMethod(String, Class[])
 	 */
@@ -121,7 +122,6 @@ public interface ReflectTools {
 	}
 	/**
 	 * 生成反射调用
-	 *
 	 * @see Class#getDeclaredField(String)
 	 */
 	static void copyFieldReflection(Field field) {
@@ -135,13 +135,12 @@ public interface ReflectTools {
 	}
 	/**
 	 * 生成反射调用
-	 *
 	 * @see Class#getDeclaredField(String)
 	 * @see Reflect#get(Class, Object, String) Reflect.get(Class<?> type, Object object, String name)
 	 */
 	static void copyFieldArcReflection(Field field) {
 		boolean isStatic = Modifier.isStatic(field.getModifiers());
-		
+
 		StringBuilder sb = new StringBuilder();
 		sb.append("T val = ").append("Reflect.get(");
 		sb.append(getClassString0(field.getDeclaringClass())).append(", ");
@@ -153,7 +152,6 @@ public interface ReflectTools {
 
 	/**
 	 * 生成arc的{@link Reflect 反射}调用
-	 *
 	 * @see Reflect#invoke(Class, Object, String, Object[], Class[]) Reflect.invoke(Class<?> type, Object object, String name, Object[] args, Class<?>... parameterTypes)
 	 */
 	static void copyExecutableArcReflection(Executable m) {

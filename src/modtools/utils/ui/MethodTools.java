@@ -40,7 +40,6 @@ public interface MethodTools {
 	 Modifier.PUBLIC | Modifier.PROTECTED | Modifier.PRIVATE;
 	/**
 	 * copy from {@link Executable#sharedToGenericString(int, boolean)}
-	 *
 	 * @see Executable#sharedToGenericString(int, boolean)
 	 */
 	static StringBuilder buildExecutableModifier(Executable m) {
@@ -85,12 +84,12 @@ public interface MethodTools {
 		table.add("(").color(Color.lightGray);
 		if (args.length > 0) {
 			table.unbind();
-			table.add("<args>").color(Color.gray).with(t -> {
+			table.add("<args>").fontScale(0.8f)
+			 .color(Color.gray).with(t ->
 				IntUI.doubleClick(t, null, () -> {
 					applyChangedFx(table);
 					table.name ^= argKey;
-				});
-			});
+				}));
 			table.bind(argKey);
 		}
 

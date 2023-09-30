@@ -93,9 +93,13 @@ public class ShowUIList extends Content {
 		 0x877F5E_FF, null);
 	}
 
+	public static ObjectMap<Drawable, String> iconKeyMap  = new ObjectMap<>();
 	public static ObjectMap<Color, String> colorKeyMap = new ObjectMap<>();
+	public static ObjectMap<Style, String>    styleKeyMap = new ObjectMap<>();
+
 	Table icons = newTable(t -> {
 		Icon.icons.each((k, icon) -> {
+			iconKeyMap.put(icon, k);
 			t.bind(k);
 			var region = icon.getRegion();
 			t.image(icon).size(32, region.height / (float) region.width * 32);
@@ -131,6 +135,7 @@ public class ShowUIList extends Content {
 				// 跳过访问检查，减少时间
 				field.setAccessible(true);
 				Object style = field.get(null);
+				if (style instanceof Style style1) styleKeyMap.put(style1, field.getName());
 				t.bind(field.getName());
 				Sr(style)
 				 .isInstance(ScrollPaneStyle.class, Builder::build)

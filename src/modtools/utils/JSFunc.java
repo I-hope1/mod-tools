@@ -76,7 +76,7 @@ public class JSFunc {
 	public static int
 	 c_keyword   = 0xF92672_FF,
 	 c_type      = 0x66D9EF_FF,
-	 c_underline = Color.gray.cpy().a(0.7f).rgba();
+	 c_underline = Color.lightGray.cpy().a(0.5f).rgba();
 	/** 代码生成{@link ColorProcessor} */
 	public static void settingColor(Table t) {}
 
@@ -91,7 +91,7 @@ public class JSFunc {
 				// 避免stack overflow
 				Core.app.post(() -> {
 					dialog[0].hide();
-					var pos = getAbsPos(dialog[0]);
+					var pos = getAbstractPos(dialog[0]);
 					try {
 						showInfo(o, clazz).setPosition(pos);
 					} catch (Throwable e) {
@@ -112,7 +112,7 @@ public class JSFunc {
 				int j = i;
 				button.clicked(() -> {
 					// 使用post避免stack overflow
-					if (item != null) Core.app.post(() -> showInfo(item).setPosition(getAbsPos(button)));
+					if (item != null) Core.app.post(() -> showInfo(item).setPosition(getAbstractPos(button)));
 					else IntUI.showException(new NullPointerException("item is null"));
 				});
 				_cont.add(button).growX().minHeight(40);
@@ -276,7 +276,7 @@ public class JSFunc {
 	}
 
 	public static void copyText(CharSequence text, Element element) {
-		copyText(text, getAbsPos(element));
+		copyText(text, getAbstractPos(element));
 	}
 	public static void copyText(CharSequence text) {
 		copyText(text, Core.input.mouse());
@@ -371,7 +371,7 @@ public class JSFunc {
 		return buttons.button(Icon.eyeSmall, Styles.squarei, () -> {}).with(b -> b.clicked(() -> {
 			Sr((!isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : watch()).watch(info, value).show())
-			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsPos(b)));
+			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbstractPos(b)));
 		})).size(45);
 	}
 

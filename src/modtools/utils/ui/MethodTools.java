@@ -106,7 +106,7 @@ public interface MethodTools {
 
 		if (exceptions.length > 0) {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
-			table.add(" throws ").color(Tmp.c1.set(c_keyword))
+			table.add(" throws ").color(Tmp.c1.set(c_keyword)).fontScale(0.9f)
 			 .with(t -> IntUI.doubleClick(t, null, () -> {
 				 applyChangedFx(table);
 				 table.name ^= throwKey;

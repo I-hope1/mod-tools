@@ -32,6 +32,7 @@ public class Frag extends Table {
 	Seq<Content> enabledContents = new Seq<>();
 
 	public void load() {
+		setRound(false);
 		touchable = Touchable.enabled;
 		//		MyPacket.register();
 		name = modName + "-frag";

@@ -61,12 +61,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	 methodsTable,
 	 consTable,
 	 classesTable;
-	private final Seq<Runnable> resizeListeners = new Seq<>();
-	private final Runnable      resizeRun       = () -> resizeListeners.each(Runnable::run);
 
 	public ShowInfoWindow(Object o, Class<?> clazz) {
 		super(getName(clazz), 200, 200, true);
-		IntVars.addResizeListener(resizeRun);
 		this.o = o;
 		this.clazz = clazz;
 		if (clazz.isPrimitive()) {
@@ -218,7 +215,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 .growX().padTop(8).get().setDuration(0.1f);
 			cont.row();
 			// 占位符
-			cont.add().grow().row();
+			cont.add().grow().top().row();
 			return table;
 		};
 		fieldsTable = func.apply("@jsfunc.field", 0);
@@ -289,12 +286,14 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		return cell;
 	}
 	private void addModifier(Table table, CharSequence string) {
-		addDisplayListener(table.add(new MyLabel(string, MOMO_LabelStyle)).color(Tmp.c1.set(c_keyword))
+		addDisplayListener(table.add(new MyLabel(string, MOMO_LabelStyle))
+		 .color(Tmp.c1.set(c_keyword)).fontScale(0.7f)
 		 .padRight(8), E_JSFuncDisplay.modifier);
 	}
 	private void addRType(Table table, Class<?> type, Prov<String> details) {
 		MyLabel label = makeGenericType(type, details);
 		addDisplayListener(table.add(label)
+		 .fontScale(0.86f)
 		 .padRight(16), E_JSFuncDisplay.type);
 	}
 
@@ -409,7 +408,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 }),
 			 ValueLabel.newDetailsMenuList(label, f, Field.class)
 			));
-			fields.add(new MyLabel(" = ", MOMO_LabelStyle)).touchable(Touchable.disabled);
+			fields.add(new MyLabel(" = ", MOMO_LabelStyle))
+			 .color(Color.lightGray).top()
+			 .touchable(Touchable.disabled);
 		} catch (Throwable e) {
 			MyLabel label = new MyLabel("<" + e + ">", MOMO_LabelStyle);
 			label.setColor(Color.red);
@@ -419,16 +420,14 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		fields.table(t -> {
 			t.left().defaults().left();
 			// 占位符
-			Cell<?>  cell   = t.add();
+			Cell<?> cell = t.add().top();
 			BindCell c_cell = addDisplayListener(cell, E_JSFuncDisplay.value);
-			float[]  prefW  = {0};
 			/*Cell<?> lableCell = */
 			ValueLabel l = new ValueLabel(ValueLabel.unset, type, f, o);
 			if (Enum.class.isAssignableFrom(type)) l.addEnumSetter();
 			fields.labels.add(l);
-			Cell<?> labelCell = t.add(l).minWidth(42).growX().uniformX();
-			// 太卡了
-			resizeListeners.add(() -> labelCell.width(Math.min(prefW[0], Core.graphics.getWidth())));
+			t.add(l).minWidth(42).growX().uniformX()
+			 .labelAlign(Align.topLeft);
 
 			try {
 				l.setVal();
@@ -476,78 +475,82 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 makeDetails(m.getReturnType(), m.getGenericReturnType()));
 			// method name
 			MyLabel label = newCopyLabel(methods, m.getName());
+
 			// method parameters + exceptions + buttons
-			methods.add(buildArgsAndExceptions(m)).growY().pad(4).left();
+			methods.table(t -> {
+				t.left().defaults().left();
+				t.add(buildArgsAndExceptions(m)).growY().pad(4).left();
 
-			// 占位符
-			Cell<?> cell = methods.add();
-			Cell<?> buttonsCell;
+				// 占位符
+				Cell<?> cell = t.add().top();
+				Cell<?> buttonsCell;
 
-			boolean isSingle = m.getParameterCount() == 0;
-			boolean isValid  = o != null || Modifier.isStatic(mod);
-			// if (isSingle && !isValid) methods.add();
+				boolean isSingle = m.getParameterCount() == 0;
+				boolean isValid  = o != null || Modifier.isStatic(mod);
+				// if (isSingle && !isValid) methods.add();
 
-			ValueLabel l = new ValueLabel(ValueLabel.unset, o, m);
-			l.clearVal();
-			methods.labels.add(l);
-			IntUI.addShowMenuListenerp(label, () -> Seq.with(
-			 IntUI.copyAsJSMenu("method", () -> m),
-			 MenuList.with(Icon.copySmall, "Cpy method getter", () -> {
-				 copyExecutableReflection(m);
-			 }),
-			 MenuList.with(Icon.copySmall, "Cpy value getter", () -> {
-				 copyExecutableArcReflection(m);
-			 }),
-			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
-				 m.setAccessible(true);
-				 if (isSingle) {
+				ValueLabel l = new ValueLabel(ValueLabel.unset, o, m);
+				l.clearVal();
+				methods.labels.add(l);
+				IntUI.addShowMenuListenerp(label, () -> Seq.with(
+				 IntUI.copyAsJSMenu("method", () -> m),
+				 MenuList.with(Icon.copySmall, "Cpy method getter", () -> {
+					 copyExecutableReflection(m);
+				 }),
+				 MenuList.with(Icon.copySmall, "Cpy value getter", () -> {
+					 copyExecutableArcReflection(m);
+				 }),
+				 MenuList.with(Icon.boxSmall, "Invoke", () -> {
+					 m.setAccessible(true);
+					 if (isSingle) {
+						 try {
+							 dealInvokeResult(m.invoke(o), cell, l);
+						 } catch (Throwable th) {IntUI.showException(th);}
+						 return;
+					 }
+					 JSRequest.<NativeArray>requestForMethod(m, o, arr -> {
+						 dealInvokeResult(invokeForMethod(o, m, l, arr,
+							args -> m.invoke(o, args)), cell, l);
+					 });
+				 }),
+				 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
+					 m.setAccessible(true);
+					 MethodHandle handle;
 					 try {
-						 dealInvokeResult(m.invoke(o), cell, l);
-					 } catch (Throwable th) {IntUI.showException(th);}
-					 return;
-				 }
-				 JSRequest.<NativeArray>requestForMethod(m, o, arr -> {
-					 dealInvokeResult(invokeForMethod(o, m, l, arr,
-						args -> m.invoke(o, args)), cell, l);
-				 });
-			 }),
-			 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
-				 m.setAccessible(true);
-				 MethodHandle handle;
-				 try {
-					 handle = lookup.unreflectSpecial(m, m.getDeclaringClass());
-				 } catch (IllegalAccessException e) {
-					 throw new RuntimeException(e);
-				 }
-				 if (isSingle) {
-					 try {
-						 dealInvokeResult(handle.invokeWithArguments(o), cell, l);
-					 } catch (Throwable th) {IntUI.showException(th);}
-					 return;
-				 }
-				 if (!l.isStatic()) handle.bindTo(o);
-				 JSRequest.<NativeArray>requestForMethod(handle, o, arr -> {
-					 dealInvokeResult(invokeForMethod(o, m, l, arr,
-						handle::invokeWithArguments
-					 ), cell, l);
-				 });
-			 }),
-			 ValueLabel.newDetailsMenuList(label, m, Method.class)
-			));
-			// float[] prefW = {0};
-			methods.add(l).grow().uniformX();
+						 handle = lookup.unreflectSpecial(m, m.getDeclaringClass());
+					 } catch (IllegalAccessException e) {
+						 throw new RuntimeException(e);
+					 }
+					 if (isSingle) {
+						 try {
+							 dealInvokeResult(handle.invokeWithArguments(o), cell, l);
+						 } catch (Throwable th) {IntUI.showException(th);}
+						 return;
+					 }
+					 if (!l.isStatic()) handle.bindTo(o);
+					 JSRequest.<NativeArray>requestForMethod(handle, o, arr -> {
+						 dealInvokeResult(invokeForMethod(o, m, l, arr,
+							handle::invokeWithArguments
+						 ), cell, l);
+					 });
+				 }),
+				 ValueLabel.newDetailsMenuList(label, m, Method.class)
+				));
+				// float[] prefW = {0};
+				t.add(l).grow().uniformX();
 
-			buttonsCell = methods.table(buttons -> {
-				buttons.right().top().defaults().right().top();
-				if (isSingle && isValid) {
-					buttons.button("Invoke", HopeStyles.flatBordert, catchRun("invoke出错", () -> {
-						dealInvokeResult(m.invoke(o), cell, l);
-					}, l)).size(96, 45);
-				}
-				addLabelButton(buttons, () -> l.val, l.type);
-				// addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-			}).grow().top().right();
-			if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
+				buttonsCell = t.table(buttons -> {
+					buttons.right().top().defaults().right().top();
+					if (isSingle && isValid) {
+						buttons.button("Invoke", HopeStyles.flatBordert, catchRun("invoke出错", () -> {
+							dealInvokeResult(m.invoke(o), cell, l);
+						}, l)).size(96, 45);
+					}
+					addLabelButton(buttons, () -> l.val, l.type);
+					// addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
+				}).grow().top().right();
+				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
+			}).grow();
 		} catch (Throwable err) {
 			MyLabel label = new MyLabel("<" + err + ">", MOMO_LabelStyle);
 			label.setColor(Color.red);
@@ -587,7 +590,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			t.add(label);
 			t.add(buildArgsAndExceptions(ctor)).growY();
 			/* 占位符 */
-			t.add().grow();
+			t.add().grow().top();
 
 			/* addDisplayListener(t.table(buttons -> {
 				addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
@@ -651,8 +654,6 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		clearAll();
 		clearChildren();
 		events.removeIns();
-		resizeListeners.clear();
-		IntVars.resizeListeners.remove(resizeRun);
 		System.gc();
 	}
 
@@ -684,6 +685,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
 			 .style(MOMO_LabelStyle)
 			 .labelAlign(Align.left).color(Pal.accent).colspan(colspan)
+			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
+				Seq.with(arr).map(String::valueOf),
+				() -> null, __ -> {}, 400, 0, true)))
 			 .row();
 			image().color(Color.lightGray)
 			 .growX().padTop(6).colspan(colspan).row();

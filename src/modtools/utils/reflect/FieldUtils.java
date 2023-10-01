@@ -17,6 +17,30 @@ public class FieldUtils {
 			throw new RuntimeException(e);
 		}
 	}
+
+	public static float getFloat(Object obj, Field field) {
+		try {
+			return field.getFloat(obj);
+		} catch (IllegalAccessException e) {
+			return 0;
+		}
+	}
+	public static int getInt(Object obj, Field field) {
+		try {
+			return field.getInt(obj);
+		} catch (IllegalAccessException e) {
+			return 0;
+		}
+	}
+	public static <T> T get(Object obj, Field field) {
+		try {
+			return (T) field.get(obj);
+		} catch (IllegalAccessException e) {
+			return null;
+		}
+	}
+
+
 	public static <T> T getOrNull(Field field) {
 		try {
 			return Modifier.isStatic(field.getModifiers()) ? (T) field.get(null) : null;

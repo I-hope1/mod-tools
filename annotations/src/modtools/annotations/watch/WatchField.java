@@ -1,4 +1,4 @@
-package modtools.annotations;
+package modtools.annotations.watch;
 
 import java.lang.annotation.*;
 

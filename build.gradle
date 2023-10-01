@@ -39,13 +39,13 @@ dependencies {
 	annotationProcessor project(":compiler")
 	compileOnly project(":annotations")
 
-	def sdkRoot = System.getenv("ANDROID_HOME")
-	println "AndroidHome: $sdkRoot"
-	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
+//	def sdkRoot = System.getenv("ANDROID_HOME")
+//	println "AndroidHome: $sdkRoot"
+//	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 	compileOnly files(
 			"_libs/Mindustry_android.jar",
 //			"${MdtDataDir}/Mindustry_desktop.jar",
-			"$platformRoot/android.jar",
+//			"$platformRoot/android.jar",
 			"assets/libs/reflect-core.jar",
 			"trash/procyon-0.6.jar",
 			"_libs/Android_dalvik-1.0.jar",
@@ -78,28 +78,19 @@ mindustryAssets {
 	rootAt "$projectDir/assets"
 }
 
-import arc.files.Fi
-
 task playGame(dependsOn: classes, type: JavaExec) {
 	dependsOn jar
 
 	doFirst {
 		println "buildDir: $buildDir; version: $version"
-		/* 复制文件到mods目录 */
-		def modFi = archivesBaseName + "-${version}.jar"
-		def buildDir = new Fi("" + buildDir).child("libs")
-		def from = buildDir.child(archivesBaseName + "-${version}.jar")
-		println "from: $from; to: $MdtDataDir/mods/$modFi"
-		buildDir.child(modFi).copyTo(new Fi(MdtDataDir).child("mods").child(modFi))
+		copy {
+			from "$buildDir/libs"
+			into "${MdtDataDir}/mods"
+			include "$archivesBaseName-${version}.jar"
+		}
 	}
 	//运行游戏目录
-	main = "-jar"
-	args = [
-			MdtDataDir + "/Mindustry.jar",
-//			"-antialias"
-//			, "-debug"
-//			"-testMobile"
-	]
+	classpath(MdtDataDir + "/Mindustry.jar")
 }
 task ZComplieAll(type: Copy) {
 	dependsOn deploy

@@ -1061,7 +1061,7 @@ public class Selection extends Content {
 			y = tmp0.y;
 			Vec2 vec2 = ElementUtils.getAbsPosCenter(focusElem);
 			Lines.line(vec2.x, vec2.y, x, y);
-			vec2 = ElementUtils.getAbsPos(focusElem);
+			vec2 = ElementUtils.getAbstractPos(focusElem);
 			Lines.line(vec2.x, vec2.y, x, y);
 		}
 		Draw.reset();

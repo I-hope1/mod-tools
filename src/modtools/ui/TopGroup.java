@@ -112,7 +112,7 @@ public final class TopGroup extends WidgetGroup {
 		Element drawPadElem = or(this.drawPadElem, scene.root);
 		Vec2    vec2;
 		if (drawPadElem.parent != null) {
-			vec2 = ElementUtils.getAbsPos(drawPadElem.parent);
+			vec2 = ElementUtils.getAbstractPos(drawPadElem.parent);
 		} else if (drawPadElem == scene.root) {
 			vec2 = Tmp.v1.set(0, 0);
 		} else return;
@@ -669,7 +669,7 @@ public final class TopGroup extends WidgetGroup {
 		 * 在{@code drawer}渲染之前渲染
 		 * @param drawer 等一会会渲染的元素
 		 */
-		default void beforeDraw(Element drawer) {}
+		default void beforeDraw(Window drawer) {}
 		default void endDraw() {}
 	}
 
@@ -697,7 +697,7 @@ public final class TopGroup extends WidgetGroup {
 			drawFocus(elem);
 		}
 		public void drawFocus(Element elem) {
-			drawFocus(elem, ElementUtils.getAbsPos(elem));
+			drawFocus(elem, ElementUtils.getAbstractPos(elem));
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
 			if (focusColor.a > 0) {

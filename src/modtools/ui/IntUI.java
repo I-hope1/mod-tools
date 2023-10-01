@@ -40,7 +40,7 @@ import static mindustry.Vars.*;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
-import static modtools.utils.ElementUtils.getAbsPos;
+import static modtools.utils.ElementUtils.getAbstractPos;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -383,7 +383,7 @@ public class IntUI {
 		return t;
 	}
 
-	public static <T extends Button> Table
+	public static <T extends Element> Table
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
 											boolean searchable) {
@@ -406,13 +406,14 @@ public class IntUI {
 
 			Pattern pattern = PatternUtils.compileRegExpCatch(text);
 			for (V item : list) {
-				if (PatternUtils.test(pattern, stringify.get(item)))
-					p.button(stringify.get(item), HopeStyles.flatt/*Styles.cleart*/, () -> {
-						 cons.get(item);
-						 hide.run();
-					 }).minWidth(minWidth).growX()
-					 .height(height)
-					 .disabled(Objects.equals(holder.get(), item)).row();
+				if (!PatternUtils.test(pattern, stringify.get(item))) continue;
+				p.button(stringify.get(item), HopeStyles.cleart/*Styles.cleart*/, () -> {
+					 cons.get(item);
+					 hide.run();
+				 }).minWidth(minWidth).growX()
+				 .height(height).marginTop(6f).marginBottom(6f)
+				 .disabled(Objects.equals(holder.get(), item)).row();
+				p.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().row();
 			}
 
 		}, searchable, align);
@@ -657,7 +658,7 @@ public class IntUI {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
-			Core.app.post(() -> IntUI.picker.setPosition(getAbsPos(image), Align.left | Align.center));
+			Core.app.post(() -> IntUI.picker.setPosition(getAbstractPos(image), Align.left | Align.center));
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
@@ -953,7 +954,7 @@ public class IntUI {
 		}
 		public void drawFocus(Element elem) {
 			super.drawFocus(elem);
-			Draw.blit(bufferCaptureAll(getAbsPos(elem), elem), baseShader);
+			Draw.blit(bufferCaptureAll(getAbstractPos(elem), elem), baseShader);
 		}
 		public void elemDraw() {}
 		public void endDraw() {

@@ -9,6 +9,7 @@ import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
+import modtools.annotations.watch.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
@@ -124,62 +125,61 @@ public class WatchProcessor extends BaseProcessor {
 
 	private void buildVar(Element dcls, JCClassDecl classDecl) {
 		CompilationUnitTree unit = trees.getPath(dcls).getCompilationUnit();
-		for (JCTree def : classDecl.defs) {
-			def.accept(new TreeScanner<JCTree, Element>() {
-				public JCTree visitMethod(MethodTree node, Element parent) {
-					return super.visitMethod(node, findChild(parent, node.getName() + "", ElementKind.METHOD));
-				}
-				public JCBlock block;
-				public JCTree visitBlock(BlockTree node, Element parent) {
-					block = (JCBlock) node;
-					JCTree tree = super.visitBlock(node, parent);
-					block = null;
-					return tree;
-				}
-				public JCTree visitVariable(VariableTree node, Element parent) {
-					if (block == null) return super.visitVariable(node, parent);
-					var variable = (JCVariableDecl) node;
 
-					// symbol.resetAnnotations();
-					// symbol.apiComplete();
-					WatchVar watchVar = getAnnotationByTree(WatchVar.class, unit, variable, true);
-					if (watchVar == null) return super.visitVariable(variable, parent);
-					// Log.info(watchVar.classes()[0].getDeclaredMethods());
+		classDecl.accept(new TreeScanner<JCTree, Element>() {
+			public JCTree visitMethod(MethodTree node, Element parent) {
+				return super.visitMethod(node, findChild(parent, node.getName() + "", ElementKind.METHOD));
+			}
+			public JCBlock block;
+			public JCTree visitBlock(BlockTree node, Element parent) {
+				block = (JCBlock) node;
+				JCTree tree = super.visitBlock(node, parent);
+				block = null;
+				return tree;
+			}
+			public JCTree visitVariable(VariableTree node, Element parent) {
+				if (block == null) return super.visitVariable(node, parent);
+				var variable = (JCVariableDecl) node;
 
-					String fieldName = watchVar.group() + WATCH_SIG;
-					if (!checkField(classDecl, fieldName, "" + watchVar.group()))
-						return super.visitVariable(variable, parent);
-					Seq<JCStatement> seq = Seq.with(block.stats);
+				// symbol.resetAnnotations();
+				// symbol.apiComplete();
+				WatchVar watchVar = getAnnotationByTree(WatchVar.class, unit, variable, true);
+				if (watchVar == null) return super.visitVariable(variable, parent);
+				// Log.info(watchVar.classes()[0].getDeclaredMethods());
 
-					// StringBuilder sb = new StringBuilder();
-					// sb.append('{');
-
-					seq.insert(seq.indexOf(variable) + 1, execStatement(
-					 mMaker.Select(
-						mMaker.Apply(List.nil(),
-						 PSelect(fieldName, "watch"),
-						 List.of(
-							mMaker.Literal("lc-" + classDecl.getSimpleName().toString() + "-" + variable.getName()),
-							PLambda0(mMaker.Ident(variable)),
-							mMaker.Literal(watchVar.interval()))),
-						names.fromString("showIfOk")),
-					 List.nil()));
-
-					// sb.append(fieldName).append(".watch(\"lc-%prefix%-%name%\",()->%name%,%interval%);"
-					//  .replace("%prefix%", parent.getSimpleName() + "")
-					//  .replaceAll("%name%", variable.getName() + "")
-					//  .replace("%interval%", watchVar.interval() + "F")
-					// );
-					// sb.append(fieldName).append(".showIfOk();");
-					// sb.append('}');
-					// seq.insert(seq.indexOf((JCStatement) variable) + 1,
-					//  parseBlock(sb));
-					block.stats = List.from(seq);
-					// Log.info(block);
+				String fieldName = watchVar.group() + WATCH_SIG;
+				if (!checkField(classDecl, fieldName, "" + watchVar.group()))
 					return super.visitVariable(variable, parent);
-				}
-			}, dcls);
-		}
+				Seq<JCStatement> seq = Seq.with(block.stats);
+
+				// StringBuilder sb = new StringBuilder();
+				// sb.append('{');
+
+				seq.insert(seq.indexOf(variable) + 1, execStatement(
+				 mMaker.Select(
+					mMaker.Apply(List.nil(),
+					 PSelect(fieldName, "watch"),
+					 List.of(
+						mMaker.Literal("lc-" + classDecl.getSimpleName().toString() + "-" + variable.getName()),
+						PLambda0(mMaker.Ident(variable)),
+						mMaker.Literal(watchVar.interval()))),
+					names.fromString("showIfOk")),
+				 List.nil()));
+
+				// sb.append(fieldName).append(".watch(\"lc-%prefix%-%name%\",()->%name%,%interval%);"
+				//  .replace("%prefix%", parent.getSimpleName() + "")
+				//  .replaceAll("%name%", variable.getName() + "")
+				//  .replace("%interval%", watchVar.interval() + "F")
+				// );
+				// sb.append(fieldName).append(".showIfOk();");
+				// sb.append('}');
+				// seq.insert(seq.indexOf((JCStatement) variable) + 1,
+				//  parseBlock(sb));
+				block.stats = List.from(seq);
+				// Log.info(block);
+				return super.visitVariable(variable, parent);
+			}
+		}, dcls);
 	}
 	public void dealElement(Element element) {
 		// 对应WatchClass

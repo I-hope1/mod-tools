@@ -378,7 +378,6 @@ public class Window extends Table {
 	public Window show0(Scene stage, Action action) {
 		setOrigin(Align.center);
 		setClip(false);
-		setTransform(true);
 
 		this.fire(new VisibilityEvent(false));
 
@@ -489,7 +488,6 @@ public class Window extends Table {
 		if (!(this instanceof DisposableInterface)) screenshot();
 		setOrigin(Align.center);
 		setClip(false);
-		setTransform(true);
 
 		hide(defaultHideAction.get());
 	}
@@ -716,7 +714,7 @@ public class Window extends Table {
 	/** just a flag */
 	public interface DisposableInterface {
 		default void clearAll() {
-			((Table) this).find(e -> {
+			if (this instanceof Group) ((Group) this).find(e -> {
 				if (e instanceof FilterTable) {
 					Core.app.post(e::clear);
 				}

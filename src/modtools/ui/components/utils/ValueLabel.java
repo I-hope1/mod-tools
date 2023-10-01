@@ -35,22 +35,10 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
 public class ValueLabel extends MyLabel {
-	public static Object unset = new Object();
-
-	public static Color c_enum = new Color(0xFFC66DFF);
-	// public static final String mark_c_enum    = "[#FFC66DFF]";
-	// public static final String mark_lightgray = "[lightgray]";
-	//
-	// /** @see Syntax#c_map */
-	// public static final
-	// String mark_c_map = "[#" + Syntax.c_map + "]",
-	//  mark_c_objects   = "[#" + Syntax.c_objects + "]",
-	//  mark_c_string    = "[#" + Syntax.c_string + "]",
-	//  mark_c_number    = "[#" + Syntax.c_number + "]";
-
-	public final int truncateLength = 2000;
-
-	public static final boolean DEBUG = false;
+	public static       Object  unset          = new Object();
+	public static       Color   c_enum         = new Color(0xFFC66DFF);
+	public final        int     truncateLength = 2000;
+	public static final boolean DEBUG          = false;
 
 	public            Object   val;
 	public @Nullable  Object   obj;
@@ -69,9 +57,6 @@ public class ValueLabel extends MyLabel {
 	 * <p>每次修改时，都会执行这个func，返回值作为显示值</p>
 	 */
 	public       Func<Object, CharSequence> func;
-	/**
-	 *
-	 */
 	public       Func<Object, Object>       valueFunc = o -> o;
 
 
@@ -141,7 +126,7 @@ public class ValueLabel extends MyLabel {
 		 }, Effect.class)
 		 .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
-				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsPos(b)).show();
+				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbstractPos(b)).show();
 			 }));
 		 }, Cell.class)
 		 .isExtend(__ -> {
@@ -440,7 +425,7 @@ public class ValueLabel extends MyLabel {
 	}
 
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
-		Vec2 pos = ElementUtils.getAbsPos(el);
+		Vec2 pos = ElementUtils.getAbstractPos(el);
 		try {
 			JSFunc.showInfo(val1, type).setPosition(pos);
 		} catch (Throwable e) {
@@ -460,7 +445,10 @@ public class ValueLabel extends MyLabel {
 	public void draw() {
 		if (shown) super.draw();
 	}
-
+	public void clear() {
+		super.clear();
+		clearVal();
+	}
 
 	/* public Element build() {
 		if (val instanceof Iterable ite) {

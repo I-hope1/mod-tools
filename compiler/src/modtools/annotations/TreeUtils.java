@@ -8,10 +8,11 @@ import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 
 import javax.lang.model.element.Element;
-import java.util.Iterator;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static modtools.annotations.BaseProcessor.*;
@@ -70,7 +71,24 @@ public interface TreeUtils extends ParseUtils {
 	default ClassType findType(String name) {
 		return (ClassType) mSymtab.getClass(mSymtab.unnamedModule, names.fromString(name)).type;
 	}
+	default ClassSymbol findClassSymbolByBoot(String name) {
+		return mSymtab.getClass(mSymtab.java_base, names.fromString(name));
+	}
+
 	default ClassSymbol findClassSymbol(String name) {
 		return mSymtab.getClass(mSymtab.unnamedModule, names.fromString(name));
+	}
+
+	default void addImport(Element element, ClassSymbol sym) {
+		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element.getEnclosingElement()).getCompilationUnit();
+		if (!unit.namedImportScope.includes(sym) && !unit.starImportScope.includes(sym)) {
+			/* unit.namedImportScope.importType(
+			 SettingUI().members(), SettingUI().members(), SettingUI()
+			); */
+			Seq seq = Seq.with(unit.defs.toArray());
+			seq.insert(1, mMaker.Import(mMaker.Select(mMaker.Ident(
+			 sym.packge().fullname), sym), false));
+			unit.defs = List.from(seq);
+		}
 	}
 }

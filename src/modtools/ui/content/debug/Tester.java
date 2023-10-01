@@ -240,7 +240,7 @@ public class Tester extends Content {
 
 			{
 				Time.runTask(1, () -> {
-					Vec2       v1    = ElementUtils.getAbsPos(_cont);
+					Vec2 v1 = ElementUtils.getAbstractPos(_cont);
 					InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
 					event.type = (InputEventType.touchDown);
 					event.stageX = v1.x;
@@ -721,7 +721,7 @@ public class Tester extends Content {
 		return key;
 	}
 	public void put(Element element, Object val) {
-		put(ElementUtils.getAbsPos(element), val);
+		put(ElementUtils.getAbstractPos(element), val);
 	}
 	public void put(Vec2 vec2, Object val) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)), vec2);

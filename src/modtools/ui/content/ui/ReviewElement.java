@@ -4,7 +4,7 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
-import arc.input.*;
+import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
@@ -13,24 +13,25 @@ import arc.scene.style.Style;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.*;
+import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
-import mindustry.ui.*;
+import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.annotations.OptimizeReflect;
 import modtools.annotations.builder.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
-import modtools.ui.components.utils.ValueLabel;
-import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.buttons.FoldedImageButton;
-import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.*;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.content.*;
+import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.windows.ListDialog.ModifiedLabel;
+import modtools.ui.content.Content;
 import modtools.ui.effect.MyDraw;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
@@ -40,11 +41,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.regex.*;
 
 import static arc.Core.scene;
-import static modtools.ui.Contents.*;
-import static modtools.ui.HopeStyles.*;
+import static modtools.ui.Contents.review_element;
+import static modtools.ui.HopeStyles.MOMO_LabelStyle;
 import static modtools.ui.IntUI.*;
-import static modtools.ui.content.SettingsUI.bool;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.Sr;
 
 public class ReviewElement extends Content {
 	/** {@link Cell#unset} */
@@ -122,7 +122,7 @@ public class ReviewElement extends Content {
 
 	public void load() {
 		loadSettings();
-		topGroup.focusOnElement(new MyFocusTask());
+		topGroup.focusOnElement(new ReviewFocusTask());
 
 		btn.update(() -> btn.setChecked(topGroup.isSelecting()));
 		btn.setStyle(Styles.logicTogglet);
@@ -138,10 +138,11 @@ public class ReviewElement extends Content {
 		if (cl == null) {
 			return;
 		}
-		float padLeft   = Reflect.get(Cell.class, cl, "padLeft");
-		float padTop    = Reflect.get(Cell.class, cl, "padTop");
-		float padBottom = Reflect.get(Cell.class, cl, "padBottom");
-		float padRight  = Reflect.get(Cell.class, cl, "padRight");
+		@OptimizeReflect
+		float padLeft = Reflect.get(Cell.class, cl, "padLeft"),
+		 padTop = Reflect.get(Cell.class, cl, "padTop"),
+		 padBottom = Reflect.get(Cell.class, cl, "padBottom"),
+		 padRight = Reflect.get(Cell.class, cl, "padRight");
 
 		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
 	}
@@ -224,7 +225,7 @@ public class ReviewElement extends Content {
 
 	public static class ReviewElementWindow extends Window implements DisposableInterface {
 		Table   pane    = new LimitTable() {};
-		Element element = null;
+		Element element;
 		Pattern pattern;
 
 		public ReviewElementWindow() {
@@ -251,22 +252,24 @@ public class ReviewElement extends Content {
 						 hide();
 					 };
 					 if (element.parent == scene.root) {
-						 Vec2 vec2 = ElementUtils.getAbsPos(bs[0]);
+						 Vec2 vec2 = ElementUtils.getAbstractPos(bs[0]);
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
 				 })
-				 .with(b -> b.getLabel().setFontScale(0.9f))
-				 .disabled(b -> element == null || element.parent == null)
-				 .size(120, 35).get();
-				t.button(Icon.copySmall, clearNonei, 28, () -> {
-					var window = new ReviewElementWindow();
-					window.pattern = pattern;
-					window.show(element);
-					window.shown(() -> window.setSize(width, height));
+				 .with(b -> {
+					 t.update(() -> b.setDisabled(element == null || element.parent == null));
+					 b.getLabel().setFontScale(0.9f);
+				 })
+				 .size(130, 35).get();
+				t.button(Icon.copySmall, HopeStyles.clearNonei, 28, () -> {
+					 var window = new ReviewElementWindow();
+					 window.pattern = pattern;
+					 window.show(element);
+					 window.shown(() -> window.setSize(width, height));
 				 })
 				 .size(35)
 				 .padLeft(4f).padRight(4f);
-				t.button(Icon.refreshSmall, clearNonei, 28, () -> rebuild(element, pattern))
+				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element, pattern))
 				 .size(35)
 				 .padLeft(4f).padRight(4f);
 				t.table(search -> {
@@ -387,6 +390,7 @@ public class ReviewElement extends Content {
 		}
 
 		public void show(Element element) {
+			if (isShown()) return;
 			this.element = element;
 			((ScrollPane) pane.parent).setScrollY(0);
 			IntVars.async(() -> rebuild(element, pattern),
@@ -470,9 +474,11 @@ public class ReviewElement extends Content {
 					// Tooltip tooltip = new Tooltip(t -> t.image(((Image) element).getDrawable())) ;
 					// tooltip.allowMobile = true;
 					// p0.addListener(tooltip);
-					p0.table(Window.myPane, p -> {
+					Prov<Vec2> prov = () -> Tmp.v1.set(element.x, element.y);
+					makePosLabel(p0, prov);
+					p0.table(h -> h.left().table(Window.myPane, p -> {
 						try {
-							int   size = 32;
+							int size = 28;
 							float w    = Math.max(1, element.getWidth());
 							float mul  = element.getHeight() / w;
 							// float mul    = element.getHeight() / element.getHeight();
@@ -482,11 +488,9 @@ public class ReviewElement extends Content {
 						} catch (Throwable e) {
 							p.add("空图像").labelAlign(Align.left);
 						}
-					});
-					Prov<Vec2> prov = () -> Tmp.v1.set(element.x, element.y);
-					makePosLabel(p0, prov);
+					})).growX().touchable(Touchable.enabled);
 					// 用于补位
-					p0.add().growX();
+					p0.add();
 				}).growX().get();
 			} else {
 				defaults().growX();
@@ -678,9 +682,11 @@ public class ReviewElement extends Content {
 
 	private static <T> Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
 																									Class<?> valueType) {
-		return cont.check(key, getChecked(ctype, obj, key), b -> {
+		return cont.check(key, 28, getChecked(ctype, obj, key), b -> {
 			Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
-		}).checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
+		 })
+		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
+		 .checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
 	}
 	private static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
 		return Sr(Reflect.get(ctype, obj, key))
@@ -799,70 +805,163 @@ public class ReviewElement extends Content {
 		if (Float.isNaN(value)) return "NAN";
 		return Strings.autoFixed(value, 1);
 	}
-	private class MyFocusTask extends FocusTask {
+
+	@OptimizeReflect
+	static class InfoDetails extends Table {
+		public static final float keyScale   = 0.7f;
+		public static final float valueScale = 0.6f;
+		Label nameLabel = new NoMarkupLabel(""),
+		 sizeLabel      = new NoMarkupLabel(""),
+
+		// transformLabel    = new MyLabel(""),
+		colorLabel        = new NoMarkupLabel(""),
+		 rotationLabel    = new NoMarkupLabel(""),
+		 translationLabel = new NoMarkupLabel(""),
+		 styleLabel       = new NoMarkupLabel(""),
+		 alignLabel       = new NoMarkupLabel(""),
+
+		colspanLabel  = new NoMarkupLabel(""),
+		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
+		 cAlignLabel  = new NoMarkupLabel("");
+		ColorContainer colorContainer = new ColorContainer(Color.white);
+
+		BindCell rotCell, translationCell, styleCell,
+		 cellCell,
+		 colspanCell, minSizeCell, maxSizeCell,
+		 cAlignCell;
+
+
+		void color(Color color) {
+			colorContainer.setColorValue(color);
+			colorLabel.setText(color.toString().toUpperCase());
+		}
+		void rotation(float rotation) {
+			if (rotCell.toggle1(rotation % 360 != 0))
+				rotationLabel.setText(fixed(rotation));
+		}
+		void translation(Vec2 translation) {
+			if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
+				translationLabel.setText(fixed(translation.x) + "×" + fixed(translation.y));
+		}
+		void style(Element element) {
+			try {
+				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
+				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
+					styleLabel.setText(ShowUIList.styleKeyMap.get(style));
+			} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+				styleCell.remove();
+			}
+		}
+		void colspan(Cell<?> cell) {
+			if (cell == null) {
+				colspanCell.remove();
+				return;
+			}
+			@OptimizeReflect
+			int colspan = Reflect.get(Cell.class, cell, "colspan");
+			if (colspanCell.toggle1(colspan != 1))
+				colspanLabel.setText("" + colspan);
+		}
+		void minSize(Cell<?> cell) {
+			if (cell == null) {
+				minSizeCell.remove();
+				return;
+			}
+			@OptimizeReflect
+			float minWidth = Reflect.get(Cell.class, cell, "minWidth"),
+			 minHeight = Reflect.get(Cell.class, cell, "minHeight");
+			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset))
+				minSizeLabel.setText(fixedUnlessUnset(minWidth / Scl.scl()) + "[accent]×[]" + fixedUnlessUnset(minHeight / Scl.scl()));
+		}
+		void maxSize(Cell<?> cell) {
+			if (cell == null) {
+				maxSizeCell.remove();
+				return;
+			}
+			@OptimizeReflect
+			float maxWidth = Reflect.get(Cell.class, cell, "maxWidth"),
+			 maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
+			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset))
+				maxSizeLabel.setText(fixedUnlessUnset(maxWidth / Scl.scl()) + "×" + fixedUnlessUnset(maxHeight / Scl.scl()));
+		}
+
+		{
+			margin(4, 4, 4, 4);
+			nameLabel.setFontScale(0.75f);
+			sizeLabel.setFontScale(0.7f);
+			colorLabel.setFontScale(valueScale);
+			rotationLabel.setFontScale(valueScale);
+			translationLabel.setFontScale(valueScale);
+			styleLabel.setFontScale(valueScale);
+			colspanLabel.setFontScale(valueScale);
+			minSizeLabel.setFontScale(valueScale);
+			maxSizeLabel.setFontScale(valueScale);
+			table(Tex.pane, this::build);
+		}
+
+		public static final float padRight = 8f;
+		private void build(Table t) {
+			t.table(top -> {
+				top.add(nameLabel).color(Color.violet).padLeft(-4f);
+				top.add(sizeLabel).padLeft(10f)
+				 .growX().right().labelAlign(Align.right).color(Color.lightGray);
+			}).growX();
+			t.row().table(color -> {
+				color.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				color.add(colorContainer).size(16).padRight(4f);
+				color.add(colorLabel).row();
+			}).growX();
+			rotCell = new BindCell(t.row().table(rot -> {
+				rot.add("Rotation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				rot.add(rotationLabel).row();
+			}).growX());
+			translationCell = new BindCell(t.row().table(tran -> {
+				tran.add("Translation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				tran.add(translationLabel).row();
+			}).growX());
+			styleCell = new BindCell(t.row().table(tran -> {
+				tran.add("Style").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				tran.add(styleLabel).color(Color.orange).row();
+			}).growX());
+
+			cellCell = new BindCell(t.row().table(c -> {
+				c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
+				c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
+				c.defaults().colspan(2);
+				colspanCell = new BindCell(c.row().table(col -> {
+					col.add("Colspan").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+					col.add(colspanLabel).row();
+				}).growX());
+				minSizeCell = new BindCell(c.row().table(col -> {
+					col.add("MinSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+					col.add(minSizeLabel).row();
+				}).growX());
+				maxSizeCell = new BindCell(c.row().table(col -> {
+					col.add("MaxSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+					col.add(maxSizeLabel).row();
+				}).growX());
+			}).growX());
+		}
+	}
+
+	private class ReviewFocusTask extends FocusTask {
 		{drawSlightly = true;}
 
-		public MyFocusTask() {super(ReviewElement.maskColor, ReviewElement.focusColor);}
+		public ReviewFocusTask() {super(ReviewElement.maskColor, ReviewElement.focusColor);}
 
 		/** 清除elemDraw */
 		public void elemDraw() {}
-		public void beforeDraw(Element drawer) {
+		public void beforeDraw(Window drawer) {
 			if (drawer == FOCUS_WINDOW && FOCUS != null) {
 				drawFocus(FOCUS);
 			}
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
 			super.drawFocus(elem, vec2);
-			posLine:
-			{
-				if ((posLineColor & 0x000000FF) == 0) break posLine;
-				Lines.stroke(4);
-				Draw.color(posLineColor);
-				// x: 0 -> x
-				Lines.line(0, vec2.y, vec2.x, vec2.y);
-				// y: 0 -> y
-				Lines.line(vec2.x, 0, vec2.x, vec2.y);
-			}
-			posText:
-			{
-				if ((posTextColor & 0x000000FF) == 0) break posText;
-				// x: 0 -> x
-				MyDraw.drawText(fixed(vec2.x),
-				 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
-				// y: 0 -> y
-				MyDraw.drawText(fixed(vec2.y),
-				 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
-			}
+			Gl.flush();
 
-			sizeText:
-			{
-				Color color = Tmp.c1.set(sizeTextColor);
-				if (color.a == 0) break sizeText;
-				float w = elem.getWidth();
-				float h = elem.getHeight();
-				// width
-				boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
-				MyDraw.drawText(fixed(w),
-				 vec2.x + w / 2f,
-				 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
-				 color, Align.center);
-
-				// height
-				MyDraw.drawText(fixed(h),
-				 flipX ? Core.graphics.getWidth() : 0,
-				 vec2.y + (h + MyDraw.fontHeight()) / 2f,
-				 color, flipX ? Align.right : Align.left);
-			}
-
-			if (elem instanceof Table) {
-				drawMargin(vec2, (Table) elem);
-			}
-
-			if (elem.parent instanceof Table parent) {
-				drawMargin(parent.localToStageCoordinates(Tmp.v1.set(0, 0)), parent);
-
-				drawPadding(elem, vec2, parent);
-			}
+			MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
+			Gl.flush();
 
 			if (!hoverInfoWindow) return;
 			table.nameLabel.setText(getElementName(elem));
@@ -879,17 +978,70 @@ public class ReviewElement extends Content {
 				table.maxSize(cell);
 			}
 
-			displayDetails(elem, vec2);
+			showHover(elem, vec2);
+			Gl.flush();
+		}
+		private void drawGeneric(Element elem, Vec2 vec2) {
+			posLine:
+			{
+				if ((posLineColor & 0x000000FF) == 0) break posLine;
+				Lines.stroke(4);
+				Draw.color(posLineColor);
+				// x: 0 -> x
+				if (vec2.x != 0) Lines.line(0, vec2.y, vec2.x, vec2.y);
+				// y: 0 -> y
+				if (vec2.y != 0) Lines.line(vec2.x, 0, vec2.x, vec2.y);
+			}
+			posText:
+			{
+				if ((posTextColor & 0x000000FF) == 0) break posText;
+				// x: 0 -> x
+				if (vec2.x != 0) MyDraw.drawText(fixed(vec2.x),
+				 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+				// y: 0 -> y
+				if (vec2.y != 0) MyDraw.drawText(fixed(vec2.y),
+				 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+			}
+			sizeText:
+			{
+				Color color = Tmp.c1.set(sizeTextColor);
+				if (color.a == 0) break sizeText;
+				float w = elem.getWidth();
+				float h = elem.getHeight();
+				// width
+				boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
+				if (w != 0) MyDraw.drawText(fixed(w),
+				 vec2.x + w / 2f,
+				 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
+				 color, Align.center);
+
+				// height
+				if (h != 0) MyDraw.drawText(fixed(h),
+				 flipX ? Core.graphics.getWidth() : 0,
+				 vec2.y + (h + MyDraw.fontHeight()) / 2f,
+				 color, flipX ? Align.right : Align.left);
+			}
+
+			if (elem instanceof Table) {
+				drawMargin(vec2, (Table) elem);
+			}
+
+			if (elem.parent instanceof Table parent) {
+				drawMargin(parent.localToStageCoordinates(Tmp.v1.set(0, 0)), parent);
+
+				drawPadding(elem, vec2, parent);
+			}
 		}
 
 		// ---------------------
-		private void displayDetails(Element elem, Vec2 vec2) {
-			table.cellCell.toggle(((Table) table.cellCell.el).getChildren().size
-														> 2/* 两个基础元素 */);
-			table.layout();
-			table.invalidateHierarchy();
+		private void showHover(Element elem, Vec2 vec2) {
+			table.cellCell.toggle(
+			 ((Table) table.cellCell.el).getChildren().size > 2/* 两个基础元素 */
+			);
+			// table.layout();
+			table.invalidate();
 			table.getPrefWidth();
-			table.act(1);
+			table.act(0);
 			table.bottom().left();
 			float x = vec2.x;
 			if (x + table.getPrefWidth() > Core.graphics.getWidth()) {
@@ -921,141 +1073,12 @@ public class ReviewElement extends Content {
 			table.draw();
 		}
 		final InfoDetails table = new InfoDetails();
-		static class InfoDetails extends Table {
-			public static final float keyScale   = 0.7f;
-			public static final float valueScale = 0.6f;
-			Label nameLabel = new MyLabel(""),
-			 sizeLabel      = new MyLabel("", MOMO_LabelStyle),
 
-			// transformLabel    = new MyLabel(""),
-			colorLabel        = new MyLabel(""),
-			 rotationLabel    = new MyLabel("0"),
-			 translationLabel = new MyLabel(""),
-			 styleLabel       = new MyLabel(""),
-
-			colspanLabel  = new MyLabel(""),
-			 minSizeLabel = new Label(""), maxSizeLabel = new Label("");
-			ColorContainer colorContainer = new ColorContainer(Color.white);
-
-			BindCell rotCell, translationCell, styleCell,
-			 cellCell,
-			 colspanCell, minSizeCell, maxSizeCell;
-
-
-			void color(Color color) {
-				colorContainer.setColorValue(color);
-				colorLabel.setText(color.toString().toUpperCase());
-			}
-			void rotation(float rotation) {
-				if (rotCell.toggle1(rotation % 360 != 0))
-					rotationLabel.setText(fixed(rotation));
-			}
-			void translation(Vec2 translation) {
-				if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
-					translationLabel.setText(fixed(translation.x) + "×" + fixed(translation.y));
-			}
-			void style(Element element) {
-				try {
-					Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
-					if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
-						styleLabel.setText(ShowUIList.styleKeyMap.get(style));
-				} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
-					styleCell.remove();
-				}
-			}
-			void colspan(Cell<?> cell) {
-				if (cell == null) {
-					colspanCell.remove();
-					return;
-				}
-				int colspan = Reflect.get(Cell.class, cell, "colspan");
-				if (colspanCell.toggle1(colspan != 1))
-					colspanLabel.setText("" + colspan);
-			}
-			void minSize(Cell<?> cell) {
-				if (cell == null) {
-					minSizeCell.remove();
-					return;
-				}
-				float minWidth  = Reflect.get(Cell.class, cell, "minWidth");
-				float minHeight = Reflect.get(Cell.class, cell, "minHeight");
-				if (minSizeCell.toggle1(minWidth != unset || minHeight != unset))
-					minSizeLabel.setText(fixedUnlessUnset(minWidth / Scl.scl()) + "×" + fixedUnlessUnset(minHeight / Scl.scl()));
-			}
-			void maxSize(Cell<?> cell) {
-				if (cell == null) {
-					maxSizeCell.remove();
-					return;
-				}
-				float maxWidth  = Reflect.get(Cell.class, cell, "maxWidth");
-				float maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
-				if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset))
-					maxSizeLabel.setText(fixedUnlessUnset(maxWidth / Scl.scl()) + "×" + fixedUnlessUnset(maxHeight / Scl.scl()));
-			}
-
-			{
-				margin(4, 4, 4, 4);
-				nameLabel.setFontScale(0.75f);
-				sizeLabel.setFontScale(0.7f);
-				colorLabel.setFontScale(valueScale);
-				rotationLabel.setFontScale(valueScale);
-				translationLabel.setFontScale(valueScale);
-				styleLabel.setFontScale(valueScale);
-				colspanLabel.setFontScale(valueScale);
-				minSizeLabel.setFontScale(valueScale);
-				maxSizeLabel.setFontScale(valueScale);
-				table(Tex.pane, this::build);
-			}
-
-			public static final float padRight = 8f;
-			private void build(Table t) {
-				t.table(top -> {
-					top.add(nameLabel).color(Color.violet).padLeft(-4f);
-					top.add(sizeLabel).padLeft(10f)
-					 .growX().right().labelAlign(Align.right).color(Color.lightGray);
-				}).growX();
-				t.row().table(color -> {
-					color.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
-					color.add(colorContainer).size(16).padRight(4f);
-					color.add(colorLabel).row();
-				}).growX();
-				rotCell = new BindCell(t.row().table(rot -> {
-					rot.add("Rotation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
-					rot.add(rotationLabel).row();
-				}).growX());
-				translationCell = new BindCell(t.row().table(tran -> {
-					tran.add("Translation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
-					tran.add(translationLabel).row();
-				}).growX());
-				styleCell = new BindCell(t.row().table(tran -> {
-					tran.add("Style").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
-					tran.add(styleLabel).color(Color.orange).row();
-				}).growX());
-
-				cellCell = new BindCell(t.row().table(c -> {
-					c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
-					c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
-					c.defaults().colspan(2);
-					colspanCell = new BindCell(c.row().table(col -> {
-						col.add("Colspan").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-						col.add(colspanLabel).row();
-					}).growX());
-					minSizeCell = new BindCell(c.row().table(col -> {
-						col.add("MinSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-						col.add(minSizeLabel).row();
-					}).growX());
-					maxSizeCell = new BindCell(c.row().table(col -> {
-						col.add("MaxSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-						col.add(maxSizeLabel).row();
-					}).growX());
-				}).growX());
-			}
-		}
 		public void endDraw() {
 			if (topGroup.isSelecting()) super.endDraw();
 			drawLine();
 			elem = topGroup.getSelected();
-			if (elem != null) super.elemDraw();
+			if (elem != null) drawFocus(elem);
 		}
 	}
 }

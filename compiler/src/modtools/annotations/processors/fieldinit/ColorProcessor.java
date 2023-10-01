@@ -3,6 +3,7 @@ package modtools.annotations.processors.fieldinit;
 import arc.struct.Seq;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
@@ -32,15 +33,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 				init
 			 )
 			);
-			JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element.getEnclosingElement()).getCompilationUnit();
-			if (!unit.namedImportScope.includes(SettingUI()) && !unit.starImportScope.includes(SettingUI())) {
-				/* unit.namedImportScope.importType(
-				 SettingUI().members(), SettingUI().members(), SettingUI()
-				); */
-				Seq seq = Seq.with(unit.defs.toArray());
-				seq.insert(1, mMaker.Import(mMaker.Select(mMaker.Ident(SettingUI().packge().fullname), SettingUI()), false));
-				unit.defs = List.from(seq);
-			}
+			addImport(element, SettingUI());
 			// Log.info(field);
 			if (!anno.needSetting()) return;
 

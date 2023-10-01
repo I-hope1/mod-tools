@@ -12,6 +12,7 @@ import arc.scene.ui.layout.Table;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
+import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
@@ -34,7 +35,7 @@ public class ElementUtils {
 		return el.localToStageCoordinates(v2.set(el.getWidth() / 2f, el.getHeight() / 2f));
 	}
 
-	public static Vec2 getAbsPos(Element el) {
+	public static Vec2 getAbstractPos(Element el) {
 		if (true) return el.localToStageCoordinates(v1.set(0, 0));
 		Vec2 vec2 = Tmp.v1.set(el.x, el.y);
 		while (el.parent != null) {
@@ -69,10 +70,18 @@ public class ElementUtils {
 		// 清空
 		if (clear) {
 			clearScreen();
+			boolean last = false;
+			if (el instanceof Table) {
+				last = ((Table) el).isTransform();
+				((Table) el).setTransform(true);
+			}
 			el.draw();
+			if (el instanceof Table) {
+				((Table) el).setTransform(last);
+			}
 			Draw.flush();
 		}
-		Vec2   vec2   = getAbsPos(el);
+		Vec2 vec2 = getAbstractPos(el);
 		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h, true);
 
 		TextureRegion textureRegion = new TextureRegion(new Texture(pixmap), 0, 0, w, h);

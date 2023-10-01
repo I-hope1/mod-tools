@@ -1,6 +1,6 @@
 package modtools.ui.effect;
 
-import arc.func.*;
+import arc.func.Floatc4;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.Mathf;
@@ -28,10 +28,14 @@ public class MyDraw {
 	}
 
 	public static void dashRect(float thick, Color color, float x, float y, float width, float height) {
-		dashLine(thick, color, x, y, x + width, y);
-		dashLine(thick, color, x + width, y, x + width, y + height);
-		dashLine(thick, color, x + width, y + height, x, y + height);
-		dashLine(thick, color, x, y + height, x, y);
+		if (0 < x && x < graphics.getWidth()) {
+			dashLine(thick, color, x + width, y, x + width, y + height);
+			dashLine(thick, color, x, y + height, x, y);
+		}
+		if (0 < y && y < graphics.getHeight()) {
+			dashLine(thick, color, x, y, x + width, y);
+			dashLine(thick, color, x + width, y + height, x, y + height);
+		}
 	}
 
 	public static void dashSquare(float thick, Color color, float x, float y, float size) {
@@ -138,23 +142,26 @@ public class MyDraw {
 		});
 	} */
 	public static void drawText(String text, float x, float y, Color color) {
-		if (color.a == 0) return;
-		drawText(text, x, y, color, Align.center);
+		intoDraw(() -> drawText(text, x, y, color, Align.center));
 	}
 	public static float fontHeight() {
 		return font.getLineHeight() * fontScale;
 	}
 	public static Font  font      = Fonts.def;
 	public static float fontScale = 0.6f;
-	public static void drawText(String text, float x, float y, Color color, int align) {
+	public static void intoDraw(Runnable draw) {
 		float oldScaleX = font.getScaleX();
 		float oldScaleY = font.getScaleY();
 		font.getData().setScale(fontScale);
 		Color oldColor = font.getColor();
-		font.setColor(color);
-		font.draw(text, x, y, align);
+		draw.run();
 		font.setColor(oldColor);
 		font.getData().setScale(oldScaleX, oldScaleY);
+	}
+	public static void drawText(String text, float x, float y, Color color, int align) {
+		if (color.a == 0) return;
+		font.setColor(color);
+		font.draw(text, x, y, align);
 	}
 
 	public interface DrawEffect {

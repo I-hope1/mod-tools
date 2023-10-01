@@ -1,4 +1,4 @@
-package modtools.annotations;
+package modtools.annotations.watch;
 
 public enum WatchUpdater {
 	/* 主线程更新 */

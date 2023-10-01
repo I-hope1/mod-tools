@@ -3,8 +3,8 @@ package modtools.ui.components.input;
 import arc.Core;
 import arc.func.Prov;
 import arc.graphics.g2d.Font.FontData;
-import arc.scene.ui.Label;
 import arc.util.*;
+import modtools.ui.components.limit.LimitLabel;
 import modtools.utils.JSFunc.MyProv;
 
 import java.io.*;
@@ -12,7 +12,7 @@ import java.io.*;
 /**
  * a label that disables markup ( [color]文字颜色 )
  */
-public class MyLabel extends Label {
+public class MyLabel extends LimitLabel {
 	// public static ObjectMap<Font, ObjectMap<String, FontCache>> fontObjectMapObjectMap;
 	public @Nullable CacheProv prov;
 	public MyLabel(Prov<CharSequence> sup) {

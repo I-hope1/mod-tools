@@ -242,7 +242,7 @@ public class Tools {
 				run.run();
 			} catch (Throwable th) {
 				Window window = IntUI.showException(text, th);
-				if (el != null) window.setPosition(ElementUtils.getAbsPos(el));
+				if (el != null) window.setPosition(ElementUtils.getAbstractPos(el));
 			}
 		};
 	}

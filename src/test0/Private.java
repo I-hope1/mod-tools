@@ -1,7 +1,7 @@
 package test0;
 
 import arc.util.Log;
-import modtools.annotations.*;
+import modtools.annotations.watch.*;
 import test0.Tests.AnnotationInterface;
 
 @WatchClass(groups = {Private.NAME})

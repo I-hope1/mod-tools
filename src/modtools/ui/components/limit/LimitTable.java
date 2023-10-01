@@ -4,15 +4,18 @@ import arc.func.Cons;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
+import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectSet;
+
+import java.util.*;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
 
 public class LimitTable extends Table implements Limit{
-	private ObjectSet<Element> limitElems;
+	private HashSet<Element> limitElems;
 	public LimitTable() {}
 	public LimitTable(Drawable background) {
 		super(background);
@@ -61,24 +64,22 @@ public class LimitTable extends Table implements Limit{
 	public Cell<Button> button(Cons<Button> cons, Runnable listener) {
 		return super.button(cons, listener);
 	}
-
 	/* @Override
 	public Cell<Image> image(Drawable name) {
 		return add(new LimitImage(name));
 	} */
 
-	ObjectSet<Element> acquireLimitElems() {
-		return limitElems == null ? limitElems = new ObjectSet<>() : limitElems;
+	HashSet<Element> acquireLimitElems() {
+		return limitElems == null ? limitElems = new HashSet<>() : limitElems;
 	}
 	public <T extends Element> Cell<T> add(T element) {
-		if (!(element instanceof Limit)) acquireLimitElems().add(element);
+		if (!(element instanceof Limit) && element != null) acquireLimitElems().add(element);
 		return super.add(element);
 	}
 	@Override
 	public void updateVisibility() {
 		visible = isVisible(this);
-		acquireLimitElems().each(el -> {
-			el.visible = isVisible(el);
-		});
+		acquireLimitElems()
+		 .forEach(el -> el.visible = isVisible(el));
 	}
 }

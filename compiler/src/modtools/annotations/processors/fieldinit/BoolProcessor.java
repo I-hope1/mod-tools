@@ -1,14 +1,11 @@
 package modtools.annotations.processors.fieldinit;
 
 import arc.struct.*;
-import arc.util.Log;
-import arc.util.*;
 import com.google.auto.service.AutoService;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;

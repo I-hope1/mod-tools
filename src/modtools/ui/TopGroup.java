@@ -22,6 +22,7 @@ import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
 import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.graphics.MyShaders;
+import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
@@ -71,9 +72,9 @@ public final class TopGroup extends WidgetGroup {
 	private boolean cancelEvent;
 
 	private final Group
-	 back    = new NamedGroup("back"),
-	 windows = new NamedGroup("windows"),
-	 frag    = new NamedGroup("frag"),
+	 back    = new NGroup("back"),
+	 windows = new NGroup("windows"),
+	 frag    = new NGroup("frag"),
 	 others  = new WidgetGroup() {
 		 public Element hit(float x, float y, boolean touchable) {
 			 return Sr(super.hit(x, y, touchable))
@@ -343,7 +344,7 @@ public final class TopGroup extends WidgetGroup {
 
 	/** 用于获取元素 */
 	private void addSceneListener() {
-		scene.addCaptureListener(new InputListener() {
+		scene.root.getCaptureListeners().insert(0, new InputListener() {
 			boolean locked = false;
 			final Element mask = new Element() {
 				{
@@ -358,19 +359,7 @@ public final class TopGroup extends WidgetGroup {
 			public void cancel() {
 				selecting = false;
 			}
-			/* 拦截事件 */
-			public boolean keyUp(InputEvent event, KeyCode keycode) {
-				if (selecting) {
-					event.cancel();
-				}
-				return true;
-			}
-			public boolean keyTyped(InputEvent event, char character) {
-				if (selecting) {
-					event.cancel();
-				}
-				return true;
-			}
+
 			/* 拦截keydown */
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (!selecting) return true;
@@ -382,6 +371,10 @@ public final class TopGroup extends WidgetGroup {
 					filterElem(selected);
 					// Log.info(selected);
 				}
+				/* 拦截事件 */
+				HopeInput.pressed.clear();
+				HopeInput.justPressed.clear();
+				event.stop();
 				return false;
 			}
 			private void filterElem(Element element) {
@@ -575,10 +568,10 @@ public final class TopGroup extends WidgetGroup {
 			boolean[] cancelEvent = {false};
 			float     bestScl     = eachW / eachH, realScl = el.getWidth() / el.getHeight();
 			float     width1      = bestScl < realScl ? eachW : eachH * realScl;
-			if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table = paneTable.row().table().get();
+			if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table.row();
 			table.button(t -> {
 				t.margin(4, 6, 4, 6);
-				t.act(0.1f);
+				t.act(0);
 				t.tapped(() -> tappedElem[0] = t);
 				t.hovered(() -> hoveredElem[0] = t);
 				t.exited(() -> hoveredElem[0] = null);
@@ -674,8 +667,8 @@ public final class TopGroup extends WidgetGroup {
 	}
 
 
-	public static class NamedGroup extends Group {
-		public NamedGroup(String name) {
+	public static class NGroup extends Group {
+		public NGroup(String name) {
 			super();
 			this.name = name;
 		}

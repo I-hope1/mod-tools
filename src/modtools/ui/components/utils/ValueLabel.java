@@ -336,6 +336,7 @@ public class ValueLabel extends MyLabel {
 		 : type == String.class || val instanceof Character ? Syntax.c_string
 		 : Number.class.isAssignableFrom(box(type)) ? Syntax.c_number
 		 : val.getClass().isEnum() ? c_enum
+		 : box(val.getClass()) == Boolean.class ? Syntax.c_objects
 		 : Color.white;
 		setColor(mainColor);
 

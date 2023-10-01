@@ -604,7 +604,7 @@ public class ReviewElement extends Content {
 	private static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
 		 : ReviewElement.getSimpleName(element.getClass())
-			 + (element.name != null ? ":^- " + element.name + " -^" : "");
+			 + (element.name != null ? " ★" + element.name + "★" : "");
 	}
 
 

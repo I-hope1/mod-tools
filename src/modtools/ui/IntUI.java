@@ -583,12 +583,12 @@ public class IntUI {
 		return showInfoFade(info, pos, Align.center);
 	}
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
-		return new InfoFadePopup("info", 100, 64) {{
+		return new InfoFadePopup("Info", 80, 64) {{
 			cont.add(info);
 			setPosition(pos, align);
 			// 1.2s
 			Time.runTask(60 * 1.2f, this::hide);
-		}};
+		}}.show();
 	}
 
 	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {
@@ -871,7 +871,7 @@ public class IntUI {
 			cont.row();
 			cont.image().width(300f).pad(2).colspan(2).height(4f).color(Color.scarlet);
 			cont.row();
-			cont.add((text.startsWith("@") ? Core.bundle.get(text.substring(1)) : text) + (message == null ? "" : "\n[lightgray](" + message + ")"))
+			cont.add(text == null ? "" : (text.startsWith("@") ? Core.bundle.get(text.substring(1)) : text) + (message == null ? "" : "\n[lightgray](" + message + ")"))
 			 .colspan(2).wrap().growX().center()
 			 .get().setAlignment(Align.center);
 			cont.row();

@@ -6,8 +6,9 @@ import arc.struct.IntSet;
 import arc.util.Reflect;
 
 public class HopeInput {
-	public static IntSet justPressed;
+	public static IntSet justPressed, pressed;
 	public static void load() {
+		pressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "pressed");
 		justPressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "justPressed");
 	}
 	static {

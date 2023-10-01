@@ -164,6 +164,16 @@ public class SR<T> {
 		return v -> cons2.get(v, p1);
 	}
 
+	/**
+	 * 使用方法:<br />
+	 * + {@link CatchSR#apply(Runnable run)}<br />
+	 * run是get链<br />
+	 *
+	 * <pre>{@code CatchSR.apply(() -> CatchSR.of(
+	 * () -> MyReflect.lookupGetMethods(cls))
+	 * .get(cls::getDeclaredMethods)
+	 * .get(() -> new Method[0])}</pre>
+	 */
 	public static class CatchSR<R> {
 		private              R       value;
 		private static final CatchSR instance = new CatchSR();
@@ -175,7 +185,7 @@ public class SR<T> {
 		public static <R> R apply(Runnable run) {
 			try {
 				run.run();
-				throw new IllegalStateException("can not meet the requirement.");
+				throw new IllegalStateException("Cannot meet the requirements.");
 			} catch (SatisfyException e) {
 				return (R) instance.value;
 			}

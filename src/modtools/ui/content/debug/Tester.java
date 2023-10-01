@@ -577,7 +577,11 @@ public class Tester extends Content {
 				{
 					check("Add to executor", c -> {
 						enabled = c;
-						if (enabled) {EXEC_DATA.put(f.name(), JS);} else {EXEC_DATA.remove(f.name());}
+						if (enabled) {
+							EXEC_DATA.put(f.name(), JS);
+						} else {
+							EXEC_DATA.remove(f.name());
+						}
 					}, () -> EXEC_DATA.containsKey(f.name()));
 
 					number("@task.intervalseconds",

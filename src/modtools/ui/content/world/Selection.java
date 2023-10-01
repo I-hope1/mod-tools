@@ -499,8 +499,7 @@ public class Selection extends Content {
 			t.left().defaults().left().padRight(4f);
 			t.image(tile.block() == Blocks.air ? null : new TextureRegionDrawable(tile.block().uiIcon)).size(24);
 			t.add(tile.block().name).with(JSFunc::addDClickCopy);
-			t.add("(" + tile.x + ", " + tile.y + ")")
-			 .fontScale(0.9f).color(Color.lightGray);
+			buildPos(t, new Vec2().set(tile.x, tile.y));
 			if (tile.overlay().itemDrop != null) t.image(tile.overlay().itemDrop.uiIcon).size(24);
 			if (tile.floor().liquidDrop != null) t.image(tile.floor().liquidDrop.uiIcon).size(24);
 		}
@@ -637,27 +636,30 @@ public class Selection extends Content {
 		}
 		private void buildButtons() {
 			buttons.defaults().height(buttonHeight).growX();
-			buttons.button("refresh", Icon.refreshSmall, Styles.flatt, () -> {
+			buttons.button("Refresh", Icon.refreshSmall, Styles.flatt, () -> {
 				MyEvents.fire(this);
 			});
-			buttons.button("all", Icon.menuSmall, Styles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
+			buttons.button("All", Icon.menuSmall, Styles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
 				 boolean all = select.size != selectMap.size;
 				 select.clear();
 				 if (all) for (var entry : selectMap) select.add(entry.value);
 			 })).update(b -> b.setChecked(select.size == selectMap.size))
 			 .row();
-			buttons.button("run", Icon.okSmall, Styles.flatt, () -> {}).with(b -> b.clicked(() -> {
+			buttons.button("Run", Icon.okSmall, Styles.flatt, () -> {}).with(b -> b.clicked(() -> {
 				showMenuList(getMenuLists(this, mergeList()));
 			})).disabled(__ -> select.isEmpty());
-			buttons.button("filter", Icon.filtersSmall, Styles.flatt, () -> {
+			buttons.button("Filter", Icon.filtersSmall, Styles.flatt, () -> {
 				JSRequest.requestForSelection(mergeList(), null, boolf -> {
+					int size = select.sum(seq -> seq.size);
 					select.each(seq -> seq.filter((Boolf) boolf));
+					showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
+					 .sticky = true;
 				});
-			}).row();
-			buttons.button("drawAll", Icon.menuSmall, Styles.flatTogglet, () -> {
+			}).disabled(__ -> select.size == 0).row();
+			buttons.button("DrawAll", Icon.menuSmall, Styles.flatTogglet, () -> {
 				drawAll = !drawAll;
 			}).update(t -> t.setChecked(drawAll));
-			buttons.button("clearAll", Icon.trash, Styles.flatt, () -> {
+			buttons.button("ClearAll", Icon.trash, Styles.flatt, () -> {
 				clearList();
 				changeEvent.run();
 			}).update(t -> t.setChecked(drawAll)).row();
@@ -1349,7 +1351,7 @@ public class Selection extends Content {
 
 	private static void buildPos(Table table, Position u) {
 		table.label(new PositionProv(() -> Tmp.v1.set(u),
-			u instanceof Building ? "," : "\n"))
+			u instanceof Building || u instanceof Vec2 ? "," : "\n"))
 		 .fontScale(0.7f).color(Color.lightGray)
 		 .get().act(0.1f);
 	}

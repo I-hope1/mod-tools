@@ -28,6 +28,7 @@ import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.utils.*;
+import modtools.utils.SR.CatchSR;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
@@ -139,8 +140,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		}).row();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.pane(t0 -> t0.add(clazz.getTypeName(), MOMO_LabelStyle))
-			 .with(p -> p.setScrollingDisabledY(true)).grow().maxWidth(390);
+			t.pane(t0 -> t0.left().add(clazz.getTypeName(), MOMO_LabelStyle).left())
+			 .with(p -> p.setScrollingDisabledY(true)).grow().uniform();
 			t.button(Icon.copySmall, Styles.cleari, () -> {
 				copyText(clazz.getTypeName(), t);
 			}).size(32);
@@ -270,7 +271,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		try {return MyReflect.lookupGetFields(cls);} catch (Throwable e) {return new Field[0];}
 	}
 	private static Method[] getMethods1(Class<?> cls) {
-		try {return MyReflect.lookupGetMethods(cls);} catch (Throwable e) {return new Method[0];}
+		return CatchSR.apply(() -> CatchSR.of(
+			() -> MyReflect.lookupGetMethods(cls))
+		 .get(() -> new Method[0])
+		);
+
 	}
 	private static Constructor<?>[] getConstructors1(Class<?> cls) {
 		try {return MyReflect.lookupGetConstructors(cls);} catch (Throwable e) {return new Constructor<?>[0];}
@@ -503,9 +508,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				 MenuList.with(Icon.boxSmall, "Invoke", () -> {
 					 m.setAccessible(true);
 					 if (isSingle) {
-						 try {
-							 dealInvokeResult(m.invoke(o), cell, l);
-						 } catch (Throwable th) {IntUI.showException(th);}
+						 catchRun(() -> dealInvokeResult(m.invoke(o), cell, l),
+							l).run();
 						 return;
 					 }
 					 JSRequest.<NativeArray>requestForMethod(m, o, arr -> {
@@ -522,9 +526,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 						 throw new RuntimeException(e);
 					 }
 					 if (isSingle) {
-						 try {
-							 dealInvokeResult(handle.invokeWithArguments(o), cell, l);
-						 } catch (Throwable th) {IntUI.showException(th);}
+						 catchRun(() -> dealInvokeResult(handle.invokeWithArguments(o), cell, l)
+							, l).run();
 						 return;
 					 }
 					 if (!l.isStatic()) handle.bindTo(o);
@@ -555,6 +558,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			MyLabel label = new MyLabel("<" + err + ">", MOMO_LabelStyle);
 			label.setColor(Color.red);
 			methods.add(label);
+			Log.err(err);
 		}
 		methods.row();
 		methods.image().color(Tmp.c1.set(c_underline)).growX().colspan(7).row();
@@ -573,9 +577,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
 				 ctor.setAccessible(true);
 				 if (isSingle) {
-					 try {
-						 JSFunc.copyValue("instance", ctor.newInstance());
-					 } catch (Throwable th) {IntUI.showException(th);}
+					 catchRun(() -> JSFunc.copyValue("instance", ctor.newInstance())
+						, label).run();
 					 return;
 				 }
 				 JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {

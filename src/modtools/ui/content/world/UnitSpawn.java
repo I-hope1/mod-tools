@@ -26,6 +26,7 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
+import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
@@ -39,7 +40,7 @@ public class UnitSpawn extends Content {
 	public static final String noScorchMarksKey  = "@settings.noScorchMarks";
 	public static final String killAllUnitsKey   = "@unitspawn.killAllUnits";
 	public static final String removeAllUnitsKey = "@unitspawn.removeAllUnits";
-	public final        String unitUnlimitedKey  = "@settings.unitUnlimited";
+	public static final String unitUnlimitedKey  = "@settings.unitUnlimited";
 	public UnitSpawn() {
 		super("unitSpawn", Icon.unitsSmall);
 	}
@@ -283,11 +284,13 @@ public class UnitSpawn extends Content {
 				defCap = Vars.state.rules.unitCap;
 				Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
 			});
-			check(unitUnlimitedKey, unitUnlimited, b -> toggleUnitCap(b)).padLeft(6).row();
-			defaults().growX();
-			button(noScorchMarksKey, UnitSpawn::noScorchMarks).row();
-			button(killAllUnitsKey, UnitSpawn::killAllUnits).row();
-			button(removeAllUnitsKey, UnitSpawn::removeAllUnits);
+			check(unitUnlimitedKey, 28, unitUnlimited, b -> toggleUnitCap(b))
+			 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck))
+			 .row();
+			defaults().growX().height(42);
+			button(noScorchMarksKey, Styles.flatBordert, UnitSpawn::noScorchMarks).row();
+			button(killAllUnitsKey, Styles.flatBordert, UnitSpawn::killAllUnits).row();
+			button(removeAllUnitsKey, Styles.flatBordert, UnitSpawn::removeAllUnits);
 		}});
 	}
 	private void toggleUnitCap(boolean b) {

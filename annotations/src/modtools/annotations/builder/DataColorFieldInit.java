@@ -2,6 +2,7 @@ package modtools.annotations.builder;
 
 import java.lang.annotation.*;
 
+/** {@code   SettingsUI#colorBlock(t, "pad", data(), "padColor", padColor, c -> padColor = c.rgba());} */
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.SOURCE)
 public @interface DataColorFieldInit {

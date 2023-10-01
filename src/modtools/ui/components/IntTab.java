@@ -12,6 +12,7 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.limit.PrefTable;
 
 import java.util.Arrays;
 

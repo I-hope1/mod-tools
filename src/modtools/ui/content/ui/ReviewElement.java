@@ -23,7 +23,8 @@ import modtools.annotations.builder.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
-import modtools.ui.components.ListDialog.ModifiedLabel;
+import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.buttons.FoldedImageButton;
@@ -46,6 +47,9 @@ import static modtools.ui.content.SettingsUI.bool;
 import static modtools.utils.Tools.*;
 
 public class ReviewElement extends Content {
+	/** {@link Cell#unset} */
+	public static final float unset = Float.NEGATIVE_INFINITY;
+
 	@DataColorFieldInit(data = "", needSetting = true)
 	public int
 	 // 浅绿色
@@ -250,16 +254,21 @@ public class ReviewElement extends Content {
 						 Vec2 vec2 = ElementUtils.getAbsPos(bs[0]);
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
-				 }).with(b -> b.getLabel().setFontScale(0.8f))
+				 })
+				 .with(b -> b.getLabel().setFontScale(0.9f))
 				 .disabled(b -> element == null || element.parent == null)
-				 .width(120).get();
-				t.button(Icon.copySmall, clearNonei, () -> {
+				 .size(120, 35).get();
+				t.button(Icon.copySmall, clearNonei, 28, () -> {
 					var window = new ReviewElementWindow();
 					window.pattern = pattern;
 					window.show(element);
 					window.shown(() -> window.setSize(width, height));
-				}).padLeft(4f).padRight(4f);
-				t.button(Icon.refreshSmall, clearNonei, () -> rebuild(element, pattern)).padLeft(4f).padRight(4f);
+				 })
+				 .size(35)
+				 .padLeft(4f).padRight(4f);
+				t.button(Icon.refreshSmall, clearNonei, 28, () -> rebuild(element, pattern))
+				 .size(35)
+				 .padLeft(4f).padRight(4f);
 				t.table(search -> {
 					search.image(Icon.zoomSmall);
 					search.field("", str -> rebuild(element, str))
@@ -488,7 +497,7 @@ public class ReviewElement extends Content {
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
 			Element  window_elem = getChildren().get(childIndex);
 			Runnable copy        = storeRun(() -> element);
-			IntUI.addShowMenuListener(window_elem, () -> Sr(Seq.with(
+			IntUI.addShowMenuListenerp(window_elem, () -> Sr(Seq.with(
 			 copyAsJSMenu(null, copy),
 			 ConfirmList.with(Icon.trashSmall, "@clear", "@confirm.remove", () -> element.remove()),
 			 MenuList.with(Icon.copySmall, "@copy.path", () -> {
@@ -498,17 +507,17 @@ public class ReviewElement extends Content {
 				 ElementUtils.quietScreenshot(element);
 			 }),
 			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
-			 MenuList.with(Icon.infoSmall, "新窗口", () -> new ReviewElementWindow().show(element)),
+			 MenuList.with(Icon.copySmall, "新窗口", () -> new ReviewElementWindow().show(element)),
 			 MenuList.with(Icon.infoSmall, "@details", () -> JSFunc.showInfo(element)),
-			 FoldedList.withf(Icon.boxSmall, "exec", () -> Seq.with(
-				MenuList.with(Icon.boxSmall, "invalidate", element::invalidate),
-				MenuList.with(Icon.boxSmall, "invalidateHierarchy", element::invalidateHierarchy),
-				MenuList.with(Icon.boxSmall, "layout", element::layout),
-				MenuList.with(Icon.boxSmall, "pack", element::pack)
+			 FoldedList.withf(Icon.boxSmall, "Exec", () -> Seq.with(
+				MenuList.with(Icon.boxSmall, "Invalidate", element::invalidate),
+				MenuList.with(Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
+				MenuList.with(Icon.boxSmall, "Layout", element::layout),
+				MenuList.with(Icon.boxSmall, "Pack", element::pack)
 			 )),
 			 ValueLabel.newElementDetailsList(element)
 			)).ifRun(element instanceof Table, seq -> seq.add(
-				MenuList.with(Icon.waves, "cells", () -> {
+				MenuList.with(Icon.waves, "Cells", () -> {
 					JSFunc.dialog(d -> {
 						d.left().defaults().left();
 						for (var cell : ((Table) element).getCells()) {
@@ -522,7 +531,7 @@ public class ReviewElement extends Content {
 					});
 				})))
 			 .ifRun(element.parent instanceof Table, seq -> seq.add(
-				DisabledList.withd(Icon.waves, "this cell", () -> !(element.parent instanceof Table), () -> {
+				DisabledList.withd(Icon.waves, "This Cell", () -> !(element.parent instanceof Table), () -> {
 					new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
 				}))).get());
 			IntUI.doubleClick(window_elem, null, copy);
@@ -591,7 +600,7 @@ public class ReviewElement extends Content {
 	private static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
 		 : ReviewElement.getSimpleName(element.getClass())
-			 + (element.name != null ? ": " + element.name : "");
+			 + (element.name != null ? ":^- " + element.name + " -^" : "");
 	}
 
 
@@ -628,14 +637,14 @@ public class ReviewElement extends Content {
 			getAddWithName(cont, cell, "maxHeight").row();
 			getAddWithName(cont, cell, "colspan", Float::intValue).row();
 			cont.defaults().colspan(1);
-			checkField(cont, cell, "fillX", float.class);
-			checkField(cont, cell, "fillY", float.class);
+			checkboxField(cont, cell, "fillX", float.class);
+			checkboxField(cont, cell, "fillY", float.class);
 			cont.row();
-			checkField(cont, cell, "expandX", int.class);
-			checkField(cont, cell, "expandY", int.class);
+			checkboxField(cont, cell, "expandX", int.class);
+			checkboxField(cont, cell, "expandY", int.class);
 			cont.row();
-			checkField(cont, cell, "uniformX", boolean.class);
-			checkField(cont, cell, "uniformY", boolean.class);
+			checkboxField(cont, cell, "uniformX", boolean.class);
+			checkboxField(cont, cell, "uniformY", boolean.class);
 			cont.row();
 			cont.button("growX", Styles.flatBordert, cell::growX);
 			cont.button("growY", Styles.flatBordert, cell::growY);
@@ -646,7 +655,7 @@ public class ReviewElement extends Content {
 			cont.button("top", Styles.flatBordert, cell::top);
 			cont.button("bottom", Styles.flatBordert, cell::bottom);
 			cont.row();
-			checkField(cont, cell, "endRow", boolean.class).colspan(2);
+			checkboxField(cont, cell, "endRow", boolean.class).colspan(2);
 
 			addFocusSource(this, () -> this, cell::get);
 		}
@@ -663,15 +672,15 @@ public class ReviewElement extends Content {
 			 }, 2, t);
 		});
 	} */
-	private static Cell<CheckBox> checkField(Table cont, Cell<?> obj, String key, Class<?> valueType) {
-		return checkField(cont, Cell.class, obj, key, valueType);
+	private static Cell<CheckBox> checkboxField(Table cont, Cell<?> obj, String key, Class<?> valueType) {
+		return checkboxField(cont, Cell.class, obj, key, valueType);
 	}
 
-	private static <T> Cell<CheckBox> checkField(Table cont, Class<? extends T> ctype, T obj, String key,
-																							 Class<?> valueType) {
+	private static <T> Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
+																									Class<?> valueType) {
 		return cont.check(key, getChecked(ctype, obj, key), b -> {
 			Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
-		}).checked(__ -> getChecked(ctype, obj, key));
+		}).checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
 	}
 	private static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
 		return Sr(Reflect.get(ctype, obj, key))
@@ -727,9 +736,9 @@ public class ReviewElement extends Content {
 				table.row();
 			}
 
-			checkField(table, Element.class, element, "fillParent", boolean.class);
-			checkField(table, Element.class, element, "visible", boolean.class).row();
-			if (element instanceof Group) checkField(table, Group.class, element, "transform", boolean.class).row();
+			checkboxField(table, Element.class, element, "fillParent", boolean.class);
+			checkboxField(table, Element.class, element, "visible", boolean.class).row();
+			if (element instanceof Group) checkboxField(table, Group.class, element, "transform", boolean.class).row();
 
 			cont.row().defaults().height(32).growX();
 			cont.button("invalidate", Styles.flatBordert, element::invalidate).row();
@@ -778,7 +787,16 @@ public class ReviewElement extends Content {
 		return value.toString();
 	}
 
+	/**
+	 * 如果不是{@link #unset}就fixed
+	 * @return <b color="gray">UNSET</b> if value equals {@link #unset}
+	 */
+	static String fixedUnlessUnset(float value) {
+		if (value == unset) return "[gray]UNSET[]";
+		return fixed(value);
+	}
 	static String fixed(float value) {
+		if (Float.isNaN(value)) return "NAN";
 		return Strings.autoFixed(value, 1);
 	}
 	private class MyFocusTask extends FocusTask {
@@ -853,12 +871,12 @@ public class ReviewElement extends Content {
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
 			table.style(elem);
-			table.colspan(null);
-			cellLabel:
-			if (elem.parent instanceof Table parent) {
-				Cell cell = parent.getCell(elem);
-				if (cell == null) break cellLabel;
+			{
+				Cell cell = null;
+				if (elem.parent instanceof Table parent) cell = parent.getCell(elem);
 				table.colspan(cell);
+				table.minSize(cell);
+				table.maxSize(cell);
 			}
 
 			displayDetails(elem, vec2);
@@ -866,16 +884,12 @@ public class ReviewElement extends Content {
 
 		// ---------------------
 		private void displayDetails(Element elem, Vec2 vec2) {
-			table.colorContainer.invalidate();
-			table.colorContainer.layout();
-			table.colorLabel.invalidate();
-			table.colorLabel.layout();
 			table.cellCell.toggle(((Table) table.cellCell.el).getChildren().size
 														> 2/* 两个基础元素 */);
-			table.invalidate();
-			table.act(1);
-			table.getPrefWidth();
 			table.layout();
+			table.invalidateHierarchy();
+			table.getPrefWidth();
+			table.act(1);
 			table.bottom().left();
 			float x = vec2.x;
 			if (x + table.getPrefWidth() > Core.graphics.getWidth()) {
@@ -889,22 +903,27 @@ public class ReviewElement extends Content {
 			float y = vec2.y + elem.getHeight();
 			if (y + table.getPrefHeight() > Core.graphics.getHeight()) {
 				y = vec2.y;
+				// if (y + table.getPrefHeight() > Core.graphics.getHeight()) y = 0;
 				table.top();
-			}
-			if (y - table.getPrefHeight() < 0) {
-				table.bottom();
-				if (y < vec2.y && y + table.getPrefHeight() > y
-						&& y + table.getPrefHeight() < Core.graphics.getHeight()) {
-					y = vec2.y + elem.getHeight();
-				} else {
+				if (y - table.getPrefHeight() < 0) {
+					table.bottom();
 					y = 0;
 				}
 			}
+			/* if () {
+				table.bottom();
+				if (!(y < vec2.y && vec2.y + table.getPrefHeight() > y
+							&& y + table.getPrefHeight() < Core.graphics.getHeight())) {
+					y = 0;
+				}
+			} */
 			table.setPosition(x, y);
 			table.draw();
 		}
 		final InfoDetails table = new InfoDetails();
 		static class InfoDetails extends Table {
+			public static final float keyScale   = 0.7f;
+			public static final float valueScale = 0.6f;
 			Label nameLabel = new MyLabel(""),
 			 sizeLabel      = new MyLabel("", MOMO_LabelStyle),
 
@@ -913,12 +932,14 @@ public class ReviewElement extends Content {
 			 rotationLabel    = new MyLabel("0"),
 			 translationLabel = new MyLabel(""),
 			 styleLabel       = new MyLabel(""),
-			 colspanLabel     = new MyLabel("");
+
+			colspanLabel  = new MyLabel(""),
+			 minSizeLabel = new Label(""), maxSizeLabel = new Label("");
 			ColorContainer colorContainer = new ColorContainer(Color.white);
 
 			BindCell rotCell, translationCell, styleCell,
 			 cellCell,
-			 colspanCell;
+			 colspanCell, minSizeCell, maxSizeCell;
 
 
 			void color(Color color) {
@@ -951,22 +972,45 @@ public class ReviewElement extends Content {
 				if (colspanCell.toggle1(colspan != 1))
 					colspanLabel.setText("" + colspan);
 			}
+			void minSize(Cell<?> cell) {
+				if (cell == null) {
+					minSizeCell.remove();
+					return;
+				}
+				float minWidth  = Reflect.get(Cell.class, cell, "minWidth");
+				float minHeight = Reflect.get(Cell.class, cell, "minHeight");
+				if (minSizeCell.toggle1(minWidth != unset || minHeight != unset))
+					minSizeLabel.setText(fixedUnlessUnset(minWidth / Scl.scl()) + "×" + fixedUnlessUnset(minHeight / Scl.scl()));
+			}
+			void maxSize(Cell<?> cell) {
+				if (cell == null) {
+					maxSizeCell.remove();
+					return;
+				}
+				float maxWidth  = Reflect.get(Cell.class, cell, "maxWidth");
+				float maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
+				if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset))
+					maxSizeLabel.setText(fixedUnlessUnset(maxWidth / Scl.scl()) + "×" + fixedUnlessUnset(maxHeight / Scl.scl()));
+			}
+
 			{
 				margin(4, 4, 4, 4);
 				nameLabel.setFontScale(0.75f);
 				sizeLabel.setFontScale(0.7f);
-				colorLabel.setFontScale(0.6f);
-				rotationLabel.setFontScale(0.6f);
-				translationLabel.setFontScale(0.6f);
-				colspanLabel.setFontScale(0.6f);
-				styleLabel.setFontScale(0.6f);
+				colorLabel.setFontScale(valueScale);
+				rotationLabel.setFontScale(valueScale);
+				translationLabel.setFontScale(valueScale);
+				styleLabel.setFontScale(valueScale);
+				colspanLabel.setFontScale(valueScale);
+				minSizeLabel.setFontScale(valueScale);
+				maxSizeLabel.setFontScale(valueScale);
 				table(Tex.pane, this::build);
 			}
 
 			public static final float padRight = 8f;
 			private void build(Table t) {
 				t.table(top -> {
-					top.add(nameLabel).color(Color.violet);
+					top.add(nameLabel).color(Color.violet).padLeft(-4f);
 					top.add(sizeLabel).padLeft(10f)
 					 .growX().right().labelAlign(Align.right).color(Color.lightGray);
 				}).growX();
@@ -989,12 +1033,20 @@ public class ReviewElement extends Content {
 				}).growX());
 
 				cellCell = new BindCell(t.row().table(c -> {
-					c.row().add("Cell", MOMO_LabelStyle).color(Pal.accent).left().fontScale(0.75f);
-					c.image().color(Tmp.c1.set(Color.orange).lerp(Pal.gray, 0.9f).a(0.5f)).padLeft(padRight).padRight(padRight).growX();
+					c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
+					c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
 					c.defaults().colspan(2);
 					colspanCell = new BindCell(c.row().table(col -> {
-						col.add("Colspan").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+						col.add("Colspan").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 						col.add(colspanLabel).row();
+					}).growX());
+					minSizeCell = new BindCell(c.row().table(col -> {
+						col.add("MinSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+						col.add(minSizeLabel).row();
+					}).growX());
+					maxSizeCell = new BindCell(c.row().table(col -> {
+						col.add("MaxSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+						col.add(maxSizeLabel).row();
 					}).growX());
 				}).growX());
 			}

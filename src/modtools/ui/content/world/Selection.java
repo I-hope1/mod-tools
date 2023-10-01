@@ -33,12 +33,13 @@ import mindustry.world.Tile;
 import mindustry.world.blocks.environment.*;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.TopGroup.BackElement;
+import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.JSRequest;
 import modtools.ui.components.limit.*;
 import modtools.ui.components.linstener.*;
+import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.content.*;
 import modtools.ui.content.ui.PositionProv;
 import modtools.ui.effect.MyDraw;
@@ -117,10 +118,11 @@ public class Selection extends Content {
 
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
+			defaults().growX().left();
 			table(t -> {
-				t.left().defaults().left();
+				t.left().defaults().left().padRight(4f).growX();
 				allFunctions.each((k, func) -> func.setting(t));
-			}).growX().left().padLeft(16).row();
+			}).row();
 			table(t -> {
 				defaultTeam = Team.get(SETTINGS.getInt("defaultTeam", 1));
 				t.left().defaults().left();
@@ -143,12 +145,13 @@ public class Selection extends Content {
 					}
 
 				}).growX().left().padLeft(16);
-			}).growX().left().padLeft(16).row();
+			}).row();
 			table(t -> {
 				t.left().defaults().left();
 				SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", E_Selection.focusOnWorld).row();
-				t.check("@settings.drawSelect", drawSelect, b -> drawSelect = b);
-			}).growX().left().padLeft(16).row();
+				t.check("@settings.drawSelect", 28, drawSelect, b -> drawSelect = b)
+				 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
+			}).row();
 		}});
 	}
 
@@ -600,7 +603,7 @@ public class Selection extends Content {
 							int c = 0;
 							for (T item : value) {
 								p.add(new MyLimitTable(item, t -> {
-									t.image(getIcon(item));
+									t.image(getIcon(item)).size(45);
 								}));
 								if (++c % 6 == 0) p.row();
 							}
@@ -670,12 +673,15 @@ public class Selection extends Content {
 		public abstract TextureRegion getRegion(T t);
 
 		public void setting(Table t) {
-			t.check(name, E_Selection.valueOf(name).enabled(), b -> {
+			t.check(name, 28, E_Selection.valueOf(name).enabled(), b -> {
 				if (b) setup();
 				else remove();
 
 				hide();
 				E_Selection.valueOf(name).set(b);
+			}).with(cb -> {
+				cb.left();
+				cb.setStyle(HopeStyles.hope_defaultCheck);
 			});
 		}
 
@@ -1083,7 +1089,7 @@ public class Selection extends Content {
 			focusEnabled = !topGroup.isSelecting() && (
 			 tmp == null || tmp.isDescendantOf(focusW) || (!tmp.visible && tmp.touchable == Touchable.disabled)
 			 // || tmp.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
-			 || tmp.isDescendantOf(topGroup.getTopG()));
+			 || tmp instanceof Hitter);
 			if (!focusEnabled) return true;
 			if (!focusDisabled) {
 				reacquireFocus();
@@ -1226,7 +1232,7 @@ public class Selection extends Content {
 			if (tile == null) return;
 
 			table.table(t -> {
-				IntUI.addShowMenuListener(t, () -> getMenuLists(tile));
+				IntUI.addShowMenuListenerp(t, () -> getMenuLists(tile));
 				tiles.buildTable(tile, t);
 				addMoreButton(t, tile);
 			}).row();
@@ -1240,7 +1246,7 @@ public class Selection extends Content {
 			if (build == null) return;
 
 			table.table(t -> {
-				IntUI.addShowMenuListener(t, () -> getMenuLists(build));
+				IntUI.addShowMenuListenerp(t, () -> getMenuLists(build));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(20).color(build.team.color);
 				buildPos(t, build);
@@ -1256,7 +1262,7 @@ public class Selection extends Content {
 			if (lastUnitSize == 0) return;
 
 			unitSet.each(u -> table.table(Tex.underline, t -> {
-				IntUI.addShowMenuListener(t, () -> getMenuLists(unitSet));
+				IntUI.addShowMenuListenerp(t, () -> getMenuLists(unitSet));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color);
 				t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
@@ -1276,7 +1282,7 @@ public class Selection extends Content {
 			if (lastBulletSize == 0) return;
 
 			bulletSet.each(u -> table.table(Tex.underlineDisabled, t -> {
-				IntUI.addShowMenuListener(t, () -> getMenuLists0(bulletSet));
+				IntUI.addShowMenuListenerp(t, () -> getMenuLists0(bulletSet));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color).colspan(0);
 				t.label(() -> u.time + "/" + u.lifetime).size(10).colspan(2).row();

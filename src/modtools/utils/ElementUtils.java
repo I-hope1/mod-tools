@@ -13,6 +13,7 @@ import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
 
 import java.util.Optional;

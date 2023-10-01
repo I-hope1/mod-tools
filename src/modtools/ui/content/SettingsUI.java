@@ -27,6 +27,7 @@ import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
@@ -48,9 +49,9 @@ public class SettingsUI extends Content {
 	}
 
 	public <T extends Content> void addLoad(T cont) {
-		loadTable.check(cont.localizedName(), cont.loadable(), b -> {
+		loadTable.check(cont.localizedName(), 28, cont.loadable(), b -> {
 			MySettings.SETTINGS.put("load-" + cont.name, b);
-		}).row();
+		}).with(b -> b.setStyle(HopeStyles.hope_defaultCheck)).row();
 	}
 
 	public Table add(String title, Table t) {
@@ -183,7 +184,7 @@ public class SettingsUI extends Content {
 		Label value = new Label(slider.getValue() + "", Styles.outlineLabel);
 		slider.moved(val -> {
 			data.put(name, val);
-			value.setText(String.valueOf(val));
+			value.setText(Strings.fixed(val, -Mathf.floor(Mathf.log(10, step))));
 			if (floatc != null) floatc.get(val);
 		});
 		Table content = new Table();
@@ -236,10 +237,11 @@ public class SettingsUI extends Content {
 	}
 
 	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc, Boolp condition) {
-		table.check(text, key == null ? def : data.getBool(key, def), b -> {
+		table.check(text, 28, key == null ? def : data.getBool(key, def), b -> {
 			if (key != null) data.put(key, b);
 			if (boolc != null) boolc.get(b);
 		}).with(t -> {
+			t.setStyle(HopeStyles.hope_defaultCheck);
 			if (condition != null) t.setDisabled(() -> !condition.get());
 		}).row();
 	}
@@ -267,7 +269,8 @@ public class SettingsUI extends Content {
 	}
 
 	public static Cell<CheckBox> checkboxWithEnum(Table t, String text, E_DataInterface _enum) {
-		return t.check(text, _enum.enabled(), _enum::set);
+		return t.check(text, 28, _enum.enabled(), _enum::set)
+		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
 	public static <T extends Enum<T>> void addSettingsTable(

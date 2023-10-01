@@ -22,8 +22,8 @@ import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
 import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.graphics.MyShaders;
-import modtools.ui.IntUI.PopupWindow;
-import modtools.ui.components.Window;
+import modtools.ui.IntUI.*;
+import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.effect.*;
 import modtools.utils.*;
@@ -552,9 +552,8 @@ public final class TopGroup extends WidgetGroup {
 	}
 
 
-	public class Hitter extends Element {
+	public class GroupHitter extends Hitter {
 		{
-			fillParent = true;
 			touchablility = () -> isSwitchWindows ? Touchable.enabled : Touchable.disabled;
 			clicked(TopGroup.this::resetSwitch);
 		}
@@ -704,6 +703,7 @@ public final class TopGroup extends WidgetGroup {
 			if (focusColor.a > 0) {
 				float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
 				Draw.color(focusColor, alpha);
+				// Tmp.m1.set(Draw.trans());
 				Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
 			}
 			if (!elem.visible) {
@@ -729,7 +729,7 @@ public final class TopGroup extends WidgetGroup {
 	private class FillEnd extends Table {
 		public FillEnd() {
 			super(t -> {
-				t.addChild(new Hitter());
+				t.addChild(new GroupHitter());
 				t.add(TopGroup.this.end);
 			});
 		}

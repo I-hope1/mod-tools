@@ -26,6 +26,7 @@ import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
@@ -395,7 +396,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			addRType(fields, type, makeDetails(type, f.getGenericType()));
 			// name
 			MyLabel label = newCopyLabel(fields, f.getName());
-			IntUI.addShowMenuListener(label, () -> Seq.with(
+			IntUI.addShowMenuListenerp(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("field", () -> f),
 			 MenuList.with(Icon.copySmall, "copy offset", () -> {
 				 JSFunc.copyText("" + FieldUtils.fieldOffset(f));
@@ -425,7 +426,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			ValueLabel l = new ValueLabel(ValueLabel.unset, type, f, o);
 			if (Enum.class.isAssignableFrom(type)) l.addEnumSetter();
 			fields.labels.add(l);
-			Cell<?> labelCell = t.add(l).minWidth(42).growX();
+			Cell<?> labelCell = t.add(l).minWidth(42).growX().uniformX();
 			// 太卡了
 			resizeListeners.add(() -> labelCell.width(Math.min(prefW[0], Core.graphics.getWidth())));
 
@@ -489,7 +490,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			ValueLabel l = new ValueLabel(ValueLabel.unset, o, m);
 			l.clearVal();
 			methods.labels.add(l);
-			IntUI.addShowMenuListener(label, () -> Seq.with(
+			IntUI.addShowMenuListenerp(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("method", () -> m),
 			 MenuList.with(Icon.copySmall, "Cpy method getter", () -> {
 				 copyExecutableReflection(m);
@@ -534,7 +535,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 ValueLabel.newDetailsMenuList(label, m, Method.class)
 			));
 			// float[] prefW = {0};
-			methods.add(l).grow();
+			methods.add(l).grow().uniformX();
 
 			buttonsCell = methods.table(buttons -> {
 				buttons.right().top().defaults().right().top();
@@ -562,7 +563,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), MOMO_LabelStyle);
 			label.color.set(c_type);
 			boolean isSingle = ctor.getParameterCount() == 0;
-			IntUI.addShowMenuListener(label, () -> Seq.with(
+			IntUI.addShowMenuListenerp(label, () -> Seq.with(
 			 MenuList.with(Icon.copySmall, "copy reflect getter", () -> {
 				 copyExecutableReflection(ctor);
 			 }),
@@ -606,7 +607,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
-				IntUI.addShowMenuListener(l, () -> Seq.with(
+				IntUI.addShowMenuListenerp(l, () -> Seq.with(
 				 IntUI.copyAsJSMenu("class", () -> cls),
 				 ValueLabel.newDetailsMenuList(l, cls, Class.class)
 				));

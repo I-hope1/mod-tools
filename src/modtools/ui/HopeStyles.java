@@ -3,14 +3,19 @@ package modtools.ui;
 import arc.graphics.Color;
 import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.ui.CheckBox.CheckBoxStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.util.Tmp;
 import mindustry.core.Version;
 import mindustry.gen.Tex;
+import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.ui.HopeIcons;
+import modtools.ui.IntUI.CheckboxList;
 
 import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
@@ -31,8 +36,8 @@ public class HopeStyles {
 	 hope_clearNoneTogglei;
 	public static ButtonStyle
 	 hope_defaultb;
-	public static SliderStyle
-	 hope_defaultSlider;
+	public static CheckBoxStyle
+	 hope_defaultCheck;
 
 	/* ---------TODO：以下是为了适配V6----------- */
 
@@ -150,6 +155,7 @@ public class HopeStyles {
 			disabledFontColor = Color.gray;
 		}}; */
 		init();
+
 		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
 			down = ((TextureRegionDrawable) over).tint(Color.gray);
 		}};
@@ -159,6 +165,20 @@ public class HopeStyles {
 			checked = down = buttonSelect;
 		}};
 		hope_defaultb = new ButtonStyle(clearNonei);
+		hope_defaultCheck = new CheckBoxStyle() {{
+			Color on  = Tmp.c1.set(Pal.accent).lerp(Color.gray, 0.2f);
+			Color off = Color.lightGray;
+			checkboxOn = HopeIcons.squareInset.tint(on);
+			checkboxOff = HopeIcons.lineSquare.tint(off);
+			Color over = Tmp.c1.set(on).lerp(Color.white, 0.4f);
+			checkboxOnOver = HopeIcons.squareInset.tint(over);
+			checkboxOver = HopeIcons.lineSquare.tint(over);
+			checkboxOnDisabled = HopeIcons.squareInset.tint(Color.gray);
+			checkboxOffDisabled = HopeIcons.lineSquare.tint(Color.gray);
+			font = Fonts.def;
+			fontColor = Color.white;
+			disabledFontColor = Color.gray;
+		}};
 		/* hope_defaultSlider = new SliderStyle() {{
 			background = sliderBack;
 			knob = sliderKnob;

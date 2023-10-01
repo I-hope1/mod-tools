@@ -108,6 +108,8 @@ public class Frag extends Table {
 		});
 		IntVars.addResizeListener(() -> listener.display(x, y));
 	}
+	public       int hoverSize   = 45;
+	public final int hoverRadius = 96;
 	private void circleBuild() {
 		float angle = 90;
 		for (Content content : enabledContents) {
@@ -118,13 +120,13 @@ public class Frag extends Table {
 			new LerpFun(Interp.smooth).onUI().registerDispose(1 / 24f, f -> {
 				float rotation1 = Mathf.lerp(0, finalAngle, f);
 				// image.setRotation(rotation1);
-				float radius = Mathf.lerp(0, 72, f);
+				float radius = Mathf.lerp(0, hoverRadius, f);
 				image.setPosition(
 				 top.getWidth() / 2f + radius * Mathf.cosDeg(rotation1),
 				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1));/* Align.center); */
 			});
 			image.update(() -> {
-				image.setSize(42 * Scl.scl());
+				image.setSize(hoverSize * Scl.scl());
 				image.setOrigin(Align.center);
 			});
 			image.clicked(content::build);

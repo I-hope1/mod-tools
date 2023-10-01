@@ -1,11 +1,8 @@
 package modtools.annotations.processors.fieldinit;
 
 import arc.struct.Seq;
-import arc.util.Log;
 import com.google.auto.service.AutoService;
-import com.sun.source.tree.*;
-import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
@@ -13,7 +10,7 @@ import modtools.annotations.builder.DataColorFieldInit;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.*;
+import java.util.Set;
 
 @AutoService({Processor.class})
 public class ColorProcessor extends BaseProcessor<Element> implements DataUtils {

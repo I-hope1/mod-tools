@@ -24,10 +24,11 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
 import modtools.ui.TopGroup.FocusTask;
-import modtools.ui.components.Window;
+import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
+import modtools.utils.ui.Hover;
 import modtools.utils.ui.search.*;
 
 import java.util.Objects;
@@ -43,9 +44,9 @@ import static modtools.utils.ElementUtils.getAbsPos;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
-	public static final float                 maxOff  = 35f;
 
-	public static Drawable skyui = whiteui.tint(Color.sky);
+	public static final float default_width = 150;
+	public static final float maxOff        = 35f;
 
 	public static final Frag     frag = new Frag();
 	public static final TopGroup topGroup;
@@ -54,8 +55,6 @@ public class IntUI {
 	static {
 		topGroup = new TopGroup();
 	}
-
-	public static float default_width = 150;
 
 	public static void load() {
 		if (frag.getChildren().isEmpty()) {
@@ -79,12 +78,13 @@ public class IntUI {
 	public static <T extends Element> T
 	doubleClick(T elem, Runnable click, Runnable d_click) {
 		if (click == null && d_click == null) return elem;
+		class ClickTask extends Task {
+			public void run() {
+				if (click != null) click.run();
+			}
+		}
 		class DoubleClick extends ClickListener {
-			final Task clickTask = new Task() {
-				public void run() {
-					if (click != null) click.run();
-				}
-			};
+			final Task clickTask = new ClickTask();
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				last.set(Core.input.mouse());
 				return super.touchDown(event, x, y, pointer, button);
@@ -117,14 +117,15 @@ public class IntUI {
 	 */
 	public static <T extends Element> T
 	longPress(T elem, final long duration, final Boolc boolc) {
-		elem.addListener(new ClickListener() {
-			final Task task = new Task() {
+		class LongPressListener extends ClickListener {
+			class LongPressTask extends Task {
 				public void run() {
 					if (pressed && Core.input.mouse().dst(last) < maxOff) {
 						boolc.get(true);
 					}
 				}
-			};
+			}
+			final Task task = new LongPressTask();
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (super.touchDown(event, x, y, pointer, button)) {
 					last.set(Core.input.mouse());
@@ -143,7 +144,8 @@ public class IntUI {
 					if (pressed) boolc.get(false);
 				}
 			}
-		});
+		}
+		elem.addListener(new LongPressListener());
 		return elem;
 	}
 
@@ -154,11 +156,14 @@ public class IntUI {
 	 */
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
-		elem.addListener(new ClickListener(KeyCode.mouseRight) {
+
+		class HClickListener extends ClickListener {
+			HClickListener() {super(KeyCode.mouseRight);}
 			public void clicked(InputEvent event, float x, float y) {
 				run.run();
 			}
-		});
+		}
+		elem.addListener(new HClickListener());
 		return elem;
 	}
 
@@ -174,7 +179,7 @@ public class IntUI {
 	}
 
 	public static void
-	addShowMenuListener(Element elem, Prov<Seq<MenuList>> prov) {
+	addShowMenuListenerp(Element elem, Prov<Seq<MenuList>> prov) {
 		longPressOrRclick(elem, __ -> showMenuListDispose(prov));
 	}
 	public static void showMenuListDispose(Prov<Seq<MenuList>> prov) {
@@ -270,7 +275,6 @@ public class IntUI {
 										boolean searchable) {
 		Table t = new InsideTable();
 		/* t.margin(6, 8, 6, 8); */
-		class Hitter extends Element /* implements BackInterface */ {}
 		Element hitter = new Hitter();
 		Runnable hide = () -> {
 			hitter.remove();
@@ -278,7 +282,6 @@ public class IntUI {
 			 Actions.remove());
 		};
 		hitter.clicked(hide);
-		hitter.fillParent = true;
 		topGroup.addChild(hitter);
 		topGroup.addChild(t);
 		t.update(() -> {
@@ -328,7 +331,7 @@ public class IntUI {
 									boolean searchable, int align) {
 		if (button == null) throw new NullPointerException("button cannot be null");
 		SelectTable t      = new SelectTable();
-		Element     hitter = new Element();
+		Element     hitter = new Hitter();
 		Runnable hide = () -> {
 			hitter.remove();
 			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
@@ -336,7 +339,6 @@ public class IntUI {
 			 Actions.remove());
 		};
 		hitter.clicked(hide);
-		hitter.fillParent = true;
 		topGroup.addChild(hitter);
 		topGroup.addChild(t);
 		t.update(() -> {
@@ -459,9 +461,9 @@ public class IntUI {
 
 			for (int c = 0, i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (isMatched(text, pattern, item)) continue;
+				if (PatternUtils.testContent(text, pattern, item)) continue;
 
-				ImageButton btn = getImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
+				ImageButton btn = Hover.getImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
 				btn.update(() -> {
 					btn.setChecked(holder.get() == item);
 				});
@@ -471,66 +473,17 @@ public class IntUI {
 			}
 		};
 	}
-	public static <T1> ImageButton getImageButton(Cons<T1> cons, float size, float imageSize, Table p, Runnable hide,
-																								T1 item, Drawable icon) {
-		ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {}).size(size).get();
-		longPress(btn, 500, b -> {
-			if (b) return;
-			cons.get(item);
-			hide.run();
-		});
 
-		if (!mobile) addHover(imageSize, btn);
-		// if (!mobile) {
-		btn.addListener(new Tooltip(t -> {
-			t.background(Tex.pane).add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
-			 .right().bottom();
-		}));
-		// }
-		btn.getStyle().imageUp = icon;
-		return btn;
-	}
-	private static void addHover(float imageSize, ImageButton btn) {
-		var task = new Task() {
-			boolean reverse = false;
-			float a = 0;
-			public void run() {
-				a += (reverse ? -1 : 1) * 0.1f;
-				btn.resizeImage(imageSize + Interp.pow2.apply(0, 5, Mathf.clamp(a)));
-				btn.invalidate();
-				if (reverse ? a <= 0 : a >= 1) {
-					cancel();
-				}
-			}
-		};
-		btn.hovered(() -> {
-			task.reverse = false;
-			if (!task.isScheduled()) Timer.schedule(task, 0, 0.02f, -1);
-		});
-		btn.exited(() -> {
-			task.reverse = true;
-			if (!task.isScheduled()) Timer.schedule(task, 0, 0.02f, -1);
-		});
-	}
-	private static <T1> boolean isMatched(String text, Pattern pattern, T1 item) {
-		if (text == null || text.isEmpty()) return false;
-		if (pattern == null) return true;
-		if (item instanceof UnlockableContent unlock) {
-			return !pattern.matcher(unlock.name).find() && !pattern.matcher(unlock.localizedName).find();
-		}
-		return !pattern.matcher("" + item).find();
-	}
 	public static SelectTable
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
 		SelectTable t      = new SelectTable();
-		Element     hitter = new Element();
+		Element     hitter = new Hitter();
 		Runnable hide = () -> {
 			hitter.remove();
 			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade), Actions.remove());
 		};
 		hitter.clicked(hide);
-		hitter.fillParent = true;
 		topGroup.addChild(hitter);
 		topGroup.addChild(t);
 		t.update(() -> {
@@ -695,7 +648,7 @@ public class IntUI {
 	 * @param callback   回调函数，形参为修改后的{@link Color color}
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
-	
+
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);
@@ -705,7 +658,6 @@ public class IntUI {
 				if (callback != null) callback.get(c1);
 			});
 			Core.app.post(() -> IntUI.picker.setPosition(getAbsPos(image), Align.left | Align.center));
-			// topGroup.addChild(IntUI.picker);
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
@@ -719,7 +671,7 @@ public class IntUI {
 			update(() -> changeColor(colorValue));
 		}
 		private void changeColor(Color color) {
-			this.color.set(color);
+			setColor(color);
 			border(Tmp.c1.set(color).inv());
 		}
 		public void draw() {
@@ -737,8 +689,9 @@ public class IntUI {
 
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 															String valid, String unvalid) {
-		cell.get().addListener(new IntUI.Tooltip(t -> t.background(Tex.pane)
-		 .label(() -> boolp.get() ? valid : unvalid)));
+		cell.get().addListener(new IntUI.Tooltip(
+		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : unvalid)
+		));
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
@@ -757,35 +710,11 @@ public class IntUI {
 	 * @param boolp   {@link Boolp#get()}的返回值如果为{@code false}则移除聚焦
 	 */
 	public static void focusOnElement(Element element, Boolp boolp) {
-		topGroup.focusOnElement(new FocusTask(element, DEF_MASK_COLOR, Color.clear) {
-			public void backDraw() {
-				super.backDraw();
-				if (!boolp.get()) topGroup.removeFocusElement(this);
-			}
-			public void drawFocus(Element elem) {
-				super.drawFocus(elem);
-				Draw.blit(bufferCaptureAll(getAbsPos(elem), elem), baseShader);
-			}
-			public void elemDraw() {}
-			public void endDraw() {
-				super.endDraw();
-				drawFocus(elem);
-			}
-		});
+		topGroup.focusOnElement(new MyFocusTask(element, boolp));
 	}
 
 
-	/* 整数倒计时 */
-	public static void countdown(int times, Intc cons) {
-		Timer.schedule(new Task() {
-			int i = times;
-			public void run() {
-				cons.get(i);
-				i--;
-			}
-		}, 0, 1, times);
-	}
-
+	/* -----List------- */
 	public static class MenuList {
 		public static int          max = 20;
 		public        Drawable     icon;
@@ -891,36 +820,6 @@ public class IntUI {
 	}
 
 
-	public static class Countdown implements Runnable, Cons {
-		TextButton button;
-		int        times;
-		public Countdown(TextButton button, int times) {
-			this.button = button;
-			this.times = times;
-			init();
-		}
-		public Countdown(TextButton button) {
-			this(button, 3);
-		}
-		public void init() {
-			button.setDisabled(true);
-		}
-		public void run() {
-			countdown(times, i -> {
-				if (i == 0) {
-					button.setDisabled(false);
-					button.setText("@ok");
-				} else {
-					button.setText(Core.bundle.get("ok") + "(" + i + ")");
-				}
-			});
-		}
-		// ingroed o
-		public void get(Object o) {
-			run();
-		}
-	}
-
 	public static class Tooltip extends arc.scene.ui.Tooltip {
 
 		public Tooltip(Cons<Table> contents) {
@@ -952,8 +851,7 @@ public class IntUI {
 		}
 	}
 
-
-	// -----弹窗------
+	// ======-----弹窗------======
 	public interface PopupWindow extends DisposableInterface {}
 
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
@@ -1040,6 +938,27 @@ public class IntUI {
 					return false;
 				}
 			});
+		}
+	}
+
+	private static class MyFocusTask extends FocusTask {
+		private final Boolp boolp;
+		public MyFocusTask(Element element, Boolp boolp) {
+			super(element, IntUI.DEF_MASK_COLOR, Color.clear);
+			this.boolp = boolp;
+		}
+		public void backDraw() {
+			super.backDraw();
+			if (!boolp.get()) topGroup.removeFocusElement(this);
+		}
+		public void drawFocus(Element elem) {
+			super.drawFocus(elem);
+			Draw.blit(bufferCaptureAll(getAbsPos(elem), elem), baseShader);
+		}
+		public void elemDraw() {}
+		public void endDraw() {
+			super.endDraw();
+			drawFocus(elem);
 		}
 	}
 }

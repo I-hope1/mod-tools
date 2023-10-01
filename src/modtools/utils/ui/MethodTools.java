@@ -8,7 +8,7 @@ import arc.scene.ui.layout.Cell;
 import arc.struct.Seq;
 import arc.util.*;
 import modtools.ui.IntUI;
-import modtools.ui.components.ValueLabel;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.ui.search.FilterTable;
 import rhino.*;

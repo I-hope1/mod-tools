@@ -36,7 +36,9 @@ import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.components.input.highlight.JSSyntax;
+import modtools.ui.components.limit.*;
 import modtools.ui.components.linstener.SclListener;
+import modtools.ui.components.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.windows.NameWindow;
@@ -48,7 +50,7 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.ui.components.ListDialog.fileUnfair;
+import static modtools.ui.components.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.Tools.*;
 
@@ -195,7 +197,7 @@ public class Tester extends Content {
 		textarea.keyUpB = (event, keycode) -> cancelEvent[0];
 		// textarea.pack();
 
-		Cell<?> areaCell = _cont.add(textarea).grow();
+		Cell<?> areaCell = _cont.add(textarea).grow().uniform();
 		areaCell.row();
 		ui.cont.update(() -> {
 			((JSSyntax) textarea.syntax).enableJSProp = JSProp;

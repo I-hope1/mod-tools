@@ -19,7 +19,7 @@ public class DesignContent extends Content {
 		ui = new Window(localizedName());
 		ui.cont.button("text", Styles.flatBordert, () -> {})
 		 .height(42)
-		 .self(c -> IntUI.addShowMenuListener(c.get(), () -> Seq.with(
+		 .self(c -> IntUI.addShowMenuListenerp(c.get(), () -> Seq.with(
 			MenuList.with(null, "growX", () -> {
 				c.growX();
 				c.getTable().layout();

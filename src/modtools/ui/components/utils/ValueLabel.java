@@ -1,4 +1,4 @@
-package modtools.ui.components;
+package modtools.ui.components.utils;
 
 import arc.func.*;
 import arc.graphics.*;
@@ -49,6 +49,8 @@ public class ValueLabel extends MyLabel {
 	//  mark_c_number    = "[#" + Syntax.c_number + "]";
 
 	public final int truncateLength = 2000;
+
+	public static final boolean DEBUG = false;
 
 	public            Object   val;
 	public @Nullable  Object   obj;
@@ -108,7 +110,7 @@ public class ValueLabel extends MyLabel {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> val == null ? null : ((Cell<?>) val).get());
 		}
 
-		IntUI.addShowMenuListener(this, () -> getMenuLists(type, field, obj));
+		IntUI.addShowMenuListenerp(this, () -> getMenuLists(type, field, obj));
 	}
 	public Seq<MenuList> getMenuLists(Class<?> type, Field field, Object obj) {
 		Seq<MenuList> list = new Seq<>();
@@ -177,7 +179,7 @@ public class ValueLabel extends MyLabel {
 		return list;
 	}
 	public static MenuList newElementDetailsList(Element element) {
-		return MenuList.with(Icon.crafting, "el details", () -> {
+		return MenuList.with(Icon.crafting, "El Details", () -> {
 			new ElementDetailsWindow(element);
 		});
 	}
@@ -287,7 +289,7 @@ public class ValueLabel extends MyLabel {
 					Object last  = seq.first();
 					int    count = 0;
 					for (Object item : seq) {
-						if (Reflect.isWrapper(last.getClass())
+						if (last != null && Reflect.isWrapper(last.getClass())
 						 ? last.equals(item) : last == item) {
 							count++;
 						} else {
@@ -316,7 +318,10 @@ public class ValueLabel extends MyLabel {
 					if (isTruncate(sb.length())) break;
 				} */
 			} catch (ArcRuntimeException ignored) {
-			} catch (Throwable e) {sb.append("▶ERROR◀");}
+			} catch (Throwable e) {
+				if (DEBUG) Log.err(e);
+				sb.append("▶ERROR◀");
+			}
 			if (checkTail && sb.length() >= 2) sb.delete(sb.length() - 2, sb.length());
 			sb.append(']');
 			return sb;
@@ -422,7 +427,7 @@ public class ValueLabel extends MyLabel {
 		}
 	}
 	public void setVal(Object val) {
-		if (this.val == val && (type.isPrimitive() || type == String.class)) return;
+		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
 		this.val = val;
 		if (func == null) resetFunc();
 		try {

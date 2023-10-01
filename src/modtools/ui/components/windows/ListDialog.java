@@ -1,4 +1,4 @@
-package modtools.ui.components;
+package modtools.ui.components.windows;
 
 import arc.Core;
 import arc.files.Fi;
@@ -13,6 +13,7 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.*;
+import modtools.ui.components.Window;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.content.debug.Tester;

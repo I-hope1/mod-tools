@@ -1,4 +1,4 @@
-package modtools.ui.components;
+package modtools.ui.components.limit;
 
 import arc.func.*;
 import arc.scene.style.Drawable;

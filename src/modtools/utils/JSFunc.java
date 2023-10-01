@@ -27,6 +27,7 @@ import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.Selection;

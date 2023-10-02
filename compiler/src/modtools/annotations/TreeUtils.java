@@ -11,7 +11,7 @@ import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 
-import javax.lang.model.element.Element;
+import javax.lang.model.element.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -79,12 +79,13 @@ public interface TreeUtils extends ParseUtils {
 		return mSymtab.getClass(mSymtab.unnamedModule, names.fromString(name));
 	}
 
-	default void addImport(Element element, ClassSymbol sym) {
-		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element.getEnclosingElement()).getCompilationUnit();
+	default void addImport(TypeElement element, ClassSymbol sym) {
+		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		if (!unit.namedImportScope.includes(sym) && !unit.starImportScope.includes(sym)) {
 			/* unit.namedImportScope.importType(
 			 SettingUI().members(), SettingUI().members(), SettingUI()
 			); */
+			unit.namedImportScope.importType(sym.owner.members(), sym.owner.members(), sym);
 			Seq seq = Seq.with(unit.defs.toArray());
 			seq.insert(1, mMaker.Import(mMaker.Select(mMaker.Ident(
 			 sym.packge().fullname), sym), false));

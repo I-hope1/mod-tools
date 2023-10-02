@@ -4,25 +4,35 @@ import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.Texture.TextureFilter;
 import arc.graphics.g2d.*;
+import arc.input.KeyCode;
+import arc.math.Mathf;
 import arc.scene.Element;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.gen.*;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.ui.IntUI;
 import modtools.ui.components.Window;
 
+import static modtools.ui.HopeStyles.hope_defaultSlider;
+
 public class ColorPicker extends Window {
-	private static Texture hueTex;
+	private static      Texture hueTex;
+	public static final Color   bgColor = Pal.gray;
 
 	private Cons<Color> cons = c -> {};
 	Color current = new Color();
 	float h, s, v, a;
 	TextField hexField;
-	Slider    hSlider, sSlider, vSlider, aSlider;
+	Slider    hSlider, aSlider;
 
 	public ColorPicker() {
 		super("@pickcolor", 0, 0, false, false);
+
+		cont.background(IntUI.whiteui.tint(bgColor));
 	}
 
 	public void show(Color color, Cons<Color> consumer) {
@@ -47,18 +57,57 @@ public class ColorPicker extends Window {
 
 		cont.clear();
 		cont.pane(newTable(t -> {
-			t.table(Tex.pane, i -> {
-				i.stack(new Image(Tex.alphaBg), new Image() {{
-					setColor(current);
-					update(() -> setColor(current));
-				}}).size(100f);
-			}).colspan(2).padBottom(5);
+			t.add(new Element() {
+				 public void draw() {
+					 float first  = Tmp.c1.set(current).value(1).saturation(0f).a(parentAlpha).toFloatBits();
+					 float second = Tmp.c2.set(current).value(1).saturation(1f).a(parentAlpha).toFloatBits();
 
-			t.row();
+					 Fill.quad(
+						x, y, Tmp.c1.value(0).toFloatBits(),/* 左下角 */
+						x + width, y, Tmp.c2.value(0).toFloatBits(),/* 有下角 */
+						x + width, y + height, second,/* 有上角 */
+						x, y + height, first/* 左上角 */
+					 );
+
+					 Draw.color(Tmp.c1.fromHsv(h, s, v).inv());
+					 Icon.cancelSmall.draw(x + s * width, y + v * height,
+						5 * Scl.scl(), 5 * Scl.scl());
+				 }
+			 }).growX().height(100).padBottom(6f).colspan(2)
+			 .with(l -> l.addListener(new InputListener() {
+				 public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					 apply(x, y);
+					 return true;
+				 }
+				 public void touchDragged(InputEvent event, float x, float y, int pointer) {
+					 apply(x, y);
+				 }
+				 private void apply(float x, float y) {
+					 s = x / l.getWidth();
+					 v = y / l.getHeight();
+					 updateColor();
+				 }
+			 }))
+			 .row();
 
 			t.defaults().width(140f).height(24f);
 
-			t.stack(new Image(new TextureRegion(hueTex)), hSlider = new Slider(0f, 360f, 0.3f, false) {{
+
+			t.add(new Element() {
+				public void draw() {
+					float x      = getX(Align.center);
+					float y      = getY(Align.center);
+					float radius = width / 2;
+					float alpha  = a * parentAlpha;
+
+					Draw.color(Tmp.c1.fromHsv(h, s, v).inv(), alpha);
+					Fill.circle(x, y, radius);
+					Draw.color(Tmp.c1.fromHsv(h, s, v), alpha);
+					Fill.circle(x, y, radius - 1);
+				}
+			}).size(42);
+
+			t.stack(new Image(new TextureRegion(hueTex)), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
 				setValue(h);
 				moved(value -> {
 					h = value;
@@ -66,7 +115,7 @@ public class ColorPicker extends Window {
 				});
 			}}).row();
 
-			t.stack(new Element() {
+			/* t.stack(new Element() {
 				@Override
 				public void draw() {
 					float first  = Tmp.c1.set(current).saturation(0f).a(parentAlpha).toFloatBits();
@@ -106,32 +155,9 @@ public class ColorPicker extends Window {
 					v = value;
 					updateColor();
 				});
-			}}).row();
+			}}).row(); */
 
-			if (alpha) {
-				t.stack(new Image(Tex.alphaBgLine), new Element() {
-					@Override
-					public void draw() {
-						float first  = Tmp.c1.set(current).a(0f).toFloatBits();
-						float second = Tmp.c1.set(current).a(parentAlpha).toFloatBits();
-
-						Fill.quad(
-						 x, y, first,
-						 x + width, y, second,
-						 x + width, y + height, second,
-						 x, y + height, first
-						);
-					}
-				}, aSlider = new Slider(0f, 1f, 0.001f, false) {{
-					setValue(a);
-					moved(value -> {
-						a = value;
-						updateColor();
-					});
-				}}).row();
-			}
-
-			hexField = t.field(current.toString(), value -> {
+			hexField = t.field(current.toString().toUpperCase(), value -> {
 				try {
 					current.set(Color.valueOf(value).a(a));
 					current.toHsv(values);
@@ -141,8 +167,6 @@ public class ColorPicker extends Window {
 					a = current.a;
 
 					hSlider.setValue(h);
-					sSlider.setValue(s);
-					vSlider.setValue(v);
 					if (aSlider != null) {
 						aSlider.setValue(a);
 					}
@@ -159,6 +183,30 @@ public class ColorPicker extends Window {
 					return false;
 				}
 			}).get();
+
+			if (alpha) {
+				t.stack(new Image(Tex.alphaBgLine), new Element() {
+					@Override
+					public void draw() {
+						float first  = Tmp.c1.set(current).a(0f).toFloatBits();
+						float second = Tmp.c1.set(current).a(parentAlpha).toFloatBits();
+
+						Fill.quad(
+						 x, y, first,
+						 x + width, y, second,
+						 x + width, y + height, second,
+						 x, y + height, first
+						);
+					}
+				}, aSlider = new Slider(0f, 1f, 0.001f, false, hope_defaultSlider) {{
+					setValue(a);
+					moved(value -> {
+						a = value;
+						updateColor();
+					});
+				}}).row();
+			}
+
 		})).grow();
 
 		buttons.clear();
@@ -175,11 +223,14 @@ public class ColorPicker extends Window {
 	}
 
 	void updateColor(boolean updateField) {
+		h = Mathf.clamp(h, 0, 360);
+		s = Mathf.clamp(s);
+		v = Mathf.clamp(v);
 		current.fromHsv(h, s, v);
 		current.a = a;
 
 		if (hexField != null && updateField) {
-			String val = current.toString();
+			String val = current.toString().toUpperCase();
 			if (current.a >= 0.9999f) {
 				val = val.substring(0, 6);
 			}

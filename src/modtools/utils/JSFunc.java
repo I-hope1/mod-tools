@@ -159,7 +159,7 @@ public class JSFunc {
 	}
 
 	public static Window testDraw(Runnable draw) {
-		return dialog(new Image() {
+		return dialog(new Element() {
 			public void draw() {
 				draw.run();
 			}

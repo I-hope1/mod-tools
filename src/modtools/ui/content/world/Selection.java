@@ -22,7 +22,6 @@ import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
-import mindustry.entities.units.UnitController;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.*;
@@ -33,7 +32,7 @@ import mindustry.world.Tile;
 import mindustry.world.blocks.environment.*;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.TopGroup.*;
+import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.JSRequest;
@@ -49,7 +48,6 @@ import modtools.utils.array.ArrayUtils;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.world.*;
 
-import java.lang.reflect.Field;
 import java.util.Vector;
 import java.util.*;
 import java.util.concurrent.*;
@@ -58,7 +56,6 @@ import java.util.function.*;
 import static mindustry.Vars.*;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.reflect.FieldUtils.getFieldAccess;
 import static modtools.utils.world.WorldDraw.*;
 
 @SuppressWarnings({"rawtypes", "CodeBlock2Expr", "DanglingJavadoc"})
@@ -282,10 +279,7 @@ public class Selection extends Content {
 			FunctionBuild("@kill", list -> {
 				removeIf(list, u -> {
 					Call.unitDeath(u.id);
-					try {
-						return !addedField.getBoolean(u);
-					} catch (Exception ignored) {}
-					return false;
+					return UnitUtils.kill(u);
 				});
 			});
 			FunctionBuild("@clear", list -> {
@@ -305,11 +299,8 @@ public class Selection extends Content {
 					Groups.sync.remove(u);
 					Groups.draw.remove(u);
 					u.team.data().updateCount(u.type, -1);
-					try {
-						addedField.setBoolean(u, false);
-						((UnitController) controller.get(u)).removed(u);
-					} catch (Exception ignored) {}
-					return true;
+
+					return UnitUtils.forceRemove(u);
 				});
 			});
 		}};
@@ -340,10 +331,6 @@ public class Selection extends Content {
 		loadSettings();
 		btn.setStyle(Styles.logicTogglet);
 	}
-
-	public static final Field
-	 addedField = getFieldAccess(UnitEntity.class, "added"),
-	 controller = getFieldAccess(UnitEntity.class, "controller");
 
 	public void hide() {
 		fragSelect.remove();
@@ -514,13 +501,6 @@ public class Selection extends Content {
 		}
 	}
 
-	public final Task clearFocusElem = new Task() {
-		public void run() {
-			focusElem = null;
-		}
-	};
-
-
 	public abstract class Function<T> {
 		public final Table   wrap    = new Table();
 		public final Table   main    = new Table();
@@ -532,7 +512,8 @@ public class Selection extends Content {
 		public        Seq<Seq<T>> select      = new Seq<>();
 		private final Runnable    changeEvent = () -> MyEvents.fire(this);
 		public final  String      name;
-		public        WorldDraw   WD;
+		E_Selection data;
+		public WorldDraw WD;
 
 		public TemplateTable<Seq<T>> template;
 
@@ -544,6 +525,7 @@ public class Selection extends Content {
 
 		public Function(String name, WorldDraw WD) {
 			this.name = name;
+			data = E_Selection.valueOf(name);
 			this.WD = WD;
 			Tools.TASKS.add(() -> WD.alpha = selectFunc == this ? 0.7f : 0.1f);
 			executor = Threads.boundedExecutor(name + "-each", 1);
@@ -620,7 +602,7 @@ public class Selection extends Content {
 			main.add(template).grow().row();
 			template.addAllCheckbox(main);
 			wrap.update(() -> {
-				if (E_Selection.valueOf(name).enabled()) {
+				if (data.enabled()) {
 					setup();
 				} else {
 					remove();
@@ -675,12 +657,12 @@ public class Selection extends Content {
 		public abstract TextureRegion getRegion(T t);
 
 		public void setting(Table t) {
-			t.check(name, 28, E_Selection.valueOf(name).enabled(), b -> {
-				if (b) setup();
+			t.check(name, 28, data.enabled(), checked -> {
+				if (checked) setup();
 				else remove();
 
 				hide();
-				E_Selection.valueOf(name).set(b);
+				data.set(checked);
 			}).with(cb -> {
 				cb.left();
 				cb.setStyle(HopeStyles.hope_defaultCheck);
@@ -1362,8 +1344,7 @@ public class Selection extends Content {
 			if (i.id % 6 == 0) watcher.newLine();
 			watcher.watchWithSetter(new TextureRegionDrawable(i.uiIcon),
 			 () -> func.get(i),
-			 setter == null ? null : str -> setter.get(i, str),
-			 2);
+			 setter == null ? null : str -> setter.get(i, str));
 		});
 		watcher.show();
 	}

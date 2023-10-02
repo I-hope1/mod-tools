@@ -94,7 +94,7 @@ public class Tester extends Content {
 												+ "\n})()";
 				ExecuteTree.node(() -> {
 					 cx.evaluateString(scope,
-						source, "<" + taskName + ">", 1);
+						source, "<" + taskName + ">" + entry.key, 1);
 				 }, taskName, entry.key, Icon.none, () -> {})
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
@@ -561,7 +561,8 @@ public class Tester extends Content {
 	private static void buildBookmark(Fi f, Table p) {
 		var classes = new Seq<>()
 		 .add(EventType.class.getClasses())
-		 .add(Trigger.values());
+		 .add(Trigger.values())
+		 .addAll(Content.all);
 		classes.remove(Trigger.class);
 
 		p.left().defaults().left();
@@ -594,8 +595,12 @@ public class Tester extends Content {
 					 () -> enabled && !JS.getBool("disposable"),
 					 -1, Integer.MAX_VALUE);
 
-					Func<Object, String> stringify = val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
-					list("event", val -> JS.put("type", stringify.get(val)),
+					Func<Object, String> stringify =
+					 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
+					Func<Object, String> valuify = val -> val instanceof Class<?> cl ? cl.getSimpleName()
+					 : val instanceof Content ? "Vars.mods.mainLoader().loadClass('" + val.getClass().getName() + "')"
+					 : String.valueOf(val);
+					list("Event", val -> JS.put("type", valuify.get(val)),
 					 () -> JS.get("type"), classes,
 					 stringify, () -> JS.getBool("disposable"));
 				}

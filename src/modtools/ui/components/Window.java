@@ -46,10 +46,10 @@ import static modtools.utils.Tools.*;
 public class Window extends Table {
 	public static final MySet<Window> all = new MySet<>() {
 		public boolean add(Window value) {
-			boolean b = super.add(value);
+			boolean ok = super.add(value);
 			if (window_manager != null && window_manager.ui != null && window_manager.ui.isShown())
 				window_manager.rebuild();
-			return b;
+			return ok;
 		}
 
 		public boolean remove(Window value) {
@@ -128,6 +128,40 @@ public class Window extends Table {
 
 		left().defaults().left();
 
+		buildTitle(title, full);
+
+		sclListener = new SclListener(this, this.minWidth, minHeight);
+		moveListener.fire = () -> {
+			if (isMaximize && !isMinimize) {
+				float mulxw = moveListener.lastMouse.x / width;
+				float mulxh = moveListener.lastMouse.y / height;
+				toggleMaximize();
+				// 修复移动侦听器的位置
+				RunListener listener = new RunListener() {
+					public void fire(boolean status) {
+						moveListener.lastMain.x = x;
+						moveListener.lastMain.y = y;
+						moveListener.lastMouse.x = x + width * mulxw;
+						moveListener.lastMouse.y = y + height * mulxh;
+						maxlisteners.remove(this);
+					}
+				};
+				maximized(listener);
+			}
+		};
+
+		Core.app.post(() -> {
+			// 默认最小宽度为pref宽度
+			this.minWidth = Math.max(minWidth, getMinWidth());
+			float minHeight0 = Math.max(minHeight, getMinHeight());
+			sclListener.set(this.minWidth, minHeight0);
+			setSize(Math.max(this.minWidth, getWidth()),
+			 Math.max(this.minHeight, getHeight()));
+			if (this instanceof DisposableInterface) show();
+		});
+		all.add(this);
+	}
+	private void buildTitle(String title, boolean full) {
 		add(titleTable).growX().height(topHeight).name("titleTable");
 		row();
 		moveListener = new MoveListener(titleTable, this) {
@@ -171,38 +205,9 @@ public class Window extends Table {
 			.padLeft(4f).padRight(4f)
 			.get(), __ -> resize.show());
 		setup();
-
-		sclListener = new SclListener(this, this.minWidth, minHeight);
-		moveListener.fire = () -> {
-			if (isMaximize && !isMinimize) {
-				float mulxw = moveListener.lastMouse.x / width;
-				float mulxh = moveListener.lastMouse.y / height;
-				toggleMaximize();
-				// 修复移动侦听器的位置
-				RunListener listener = new RunListener() {
-					public void fire(boolean status) {
-						moveListener.lastMain.x = x;
-						moveListener.lastMain.y = y;
-						moveListener.lastMouse.x = x + width * mulxw;
-						moveListener.lastMouse.y = y + height * mulxh;
-						maxlisteners.remove(this);
-					}
-				};
-				maximized(listener);
-			}
-		};
-
-		Core.app.post(() -> {
-			// 默认最小宽度为pref宽度
-			this.minWidth = Math.max(minWidth, getMinWidth());
-			float minHeight0 = Math.max(minHeight, getMinHeight());
-			sclListener.set(this.minWidth, minHeight0);
-			setSize(Math.max(this.minWidth, getWidth()),
-			 Math.max(this.minHeight, getHeight()));
-			if (this instanceof DisposableInterface) show();
-		});
-		all.add(this);
 	}
+
+
 	public void layout() {
 		super.layout();
 		display();

@@ -14,10 +14,17 @@ public class FieldUtils {
 			field.setAccessible(true);
 			return field;
 		} catch (NoSuchFieldException e) {
-			throw new RuntimeException(e);
+			return null;
 		}
 	}
 
+	public static boolean getBoolean(Object obj, Field field) {
+		try {
+			return field.getBoolean(obj);
+		} catch (IllegalAccessException e) {
+			return false;
+		}
+	}
 	public static float getFloat(Object obj, Field field) {
 		try {
 			return field.getFloat(obj);
@@ -105,5 +112,19 @@ public class FieldUtils {
 				o = Arrays.copyOf((Object[]) o, Array.getLength(o));
 			}*/
 		}
+	}
+
+
+	public static boolean setBoolean(Object o, Field field, boolean val) {
+		try {
+			field.setBoolean(o, val);
+			return true;
+		} catch (IllegalAccessException ignored) {}
+		return false;
+	}
+	/** for compiler */
+	public static boolean set$$(Class<?> cls, Object obj, String fieldName, Object value) {
+		/* nothing to do */
+		return false;
 	}
 }

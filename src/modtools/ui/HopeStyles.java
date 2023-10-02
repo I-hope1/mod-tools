@@ -1,6 +1,7 @@
 package modtools.ui;
 
 import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
 import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox.CheckBoxStyle;
@@ -9,6 +10,7 @@ import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.scene.ui.layout.Scl;
 import arc.util.Tmp;
 import mindustry.core.Version;
 import mindustry.gen.Tex;
@@ -36,6 +38,8 @@ public class HopeStyles {
 	 hope_clearNoneTogglei;
 	public static ButtonStyle
 	 hope_defaultb;
+	public static SliderStyle
+	 hope_defaultSlider;
 	public static CheckBoxStyle
 	 hope_defaultCheck;
 
@@ -165,6 +169,15 @@ public class HopeStyles {
 			checked = down = buttonSelect;
 		}};
 		hope_defaultb = new ButtonStyle(clearNonei);
+		hope_defaultSlider = new SliderStyle() {{
+			background = sliderBack;
+			Drawable drawable = new TextureRegionDrawable(whiteui);
+			drawable.setMinHeight(32 * Scl.scl());
+			drawable.setMinWidth(4 * Scl.scl());
+			knob = drawable;
+			knobOver = drawable;
+			knobDown = drawable;
+		}};
 		hope_defaultCheck = new CheckBoxStyle() {{
 			Color on  = Tmp.c1.set(Pal.accent).lerp(Color.gray, 0.2f);
 			Color off = Color.lightGray;

@@ -42,7 +42,7 @@ public class MyFonts {
 			size = 20;
 			incremental = true;
 		}};
-		FreeTypeFontGenerator other = Reflect.get(FreeTypeFontData.class, Fonts.def.getData(), "generator");
+		// FreeTypeFontGenerator other = Reflect.get(FreeTypeFontData.class, Fonts.def.getData(), "generator");
 		Method                method;
 		try {
 			method = FreeTypeFontGenerator.class.getDeclaredMethod("createGlyph", char.class, FreeTypeFontData.class, FreeTypeFontParameter.class, Stroker.class, float.class, PixmapPacker.class);

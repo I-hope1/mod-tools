@@ -67,7 +67,7 @@ public class DataEnumProcessor extends BaseProcessor<TypeElement> {
 	private void checkAndAddedSet(TypeElement element, JCClassDecl clazz) {
 		if (findChild(element, "set", ElementKind.METHOD) != null) return;
 		MethodSymbol symbol = new MethodSymbol(Flags.PUBLIC | Flags.FINAL, names.fromString("def"), mSymtab.voidType, clazz.sym);
-		mMaker.at(clazz.defs.stream().mapToInt(t -> t.pos).sum());
+		mMaker.at(clazz.defs.head);
 		JCVariableDecl value = makeVar(Flags.PARAMETER, mSymtab.booleanType, "value", null, symbol);
 		JCMethodDecl methodDef = mMaker.MethodDef(
 		 mMaker.Modifiers(symbol.flags_field),

@@ -12,6 +12,7 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.annotations.OptimizeReflect;
 import modtools.events.ExecuteTree;
 import modtools.events.ExecuteTree.*;
 import modtools.ui.*;
@@ -65,12 +66,18 @@ public class Executor extends Content {
 
 			Color color = cont.image().growX().colspan(2).get().color;
 			cont.row();
-			ImageButton button = new ImageButton(new ImageButtonStyle(Styles.cleari));
+			ImageButton button = new ImageButton(new ImageButtonStyle(Styles.cleari) {{
+				down = over;
+			}});
 
 			Reflect.set(Element.class,
 			 /* leftImage */cont.image().growY().get()
 			 , "color", color);
-			cont.add(button).growX().marginBottom(8f).marginLeft(6f).row();
+			cont.add(button).growX().marginBottom(8f).marginLeft(6f);
+			Reflect.set(Element.class,
+			 /* rightImage */cont.image().growY().get()
+			 , "color", color);
+			cont.row();
 			cont.image().color(Color.lightGray).padBottom(6f).growX().colspan(2).row();
 			cont.unbind();
 			button.getImage().addListener(new IntUI.Tooltip(
@@ -78,6 +85,7 @@ public class Executor extends Content {
 			));
 
 			button.table(center -> {
+				center.marginLeft(4f);
 				center.left().defaults().left();
 				var foldedButton = new FoldedImageButton(true);
 				center.table(t -> {
@@ -107,21 +115,21 @@ public class Executor extends Content {
 				}
 			});
 			button.table(right -> {
-				right.right().defaults().right();
 				if (node.isResubmitted()) {
-					right.button(Icon.wrench, Styles.squarei, 24, node::edit).size(42);
+					right.right().defaults().right().size(42);
+					right.button(Icon.wrench, Styles.squarei, 24, node::edit);
 					right.button(HopeIcons.loop, Styles.squarei, 24, () -> {
 						node.forever().apply();
-					}).size(42).row();
+					}).row();
 					right.button(Icon.box, Styles.squarei, 24, () -> {
 						node.repeatCount(0).apply();
-					}).size(42);
+					});
 					right.button(Icon.trash, Styles.squarei, 24, () -> {
 						node.clear();
 						cont.getCells().remove(cont.getCell(button));
 						button.remove();
-					}).size(42).row();
-					right.button(HopeIcons.interrupt, Styles.squarei, 24, node::interrupt).size(42).row();
+					}).row();
+					right.button(HopeIcons.interrupt, Styles.squarei, 24, node::interrupt).row();
 				}
 			}).row();
 

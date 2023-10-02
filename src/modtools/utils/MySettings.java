@@ -3,6 +3,7 @@ package modtools.utils;
 import arc.files.Fi;
 import arc.struct.OrderedMap;
 import arc.util.*;
+import arc.util.Timer.Task;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
@@ -60,10 +61,18 @@ public class MySettings {
 			}
 			return old;
 		}
-		public void write() {
+		public Object remove(String key) {
+			Object o = super.remove(key);
+			write();
+			return o;
+		}
+		public Runnable task = () -> {
 			if (parent == null) {
 				config.writeString("" + this);
 			} else parent.write();
+		};
+		public void write() {
+			TaskManager.acquireTask(24, task);
 		}
 
 		public Object get(String key, Object defaultValue) {

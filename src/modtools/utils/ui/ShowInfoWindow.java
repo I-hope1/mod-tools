@@ -506,7 +506,6 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 					 copyExecutableArcReflection(m);
 				 }),
 				 MenuList.with(Icon.boxSmall, "Invoke", () -> {
-					 m.setAccessible(true);
 					 if (isSingle) {
 						 catchRun(() -> dealInvokeResult(m.invoke(o), cell, l),
 							l).run();
@@ -518,7 +517,6 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 					 });
 				 }),
 				 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
-					 m.setAccessible(true);
 					 MethodHandle handle;
 					 try {
 						 handle = lookup.unreflectSpecial(m, m.getDeclaringClass());
@@ -575,7 +573,6 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				 copyExecutableReflection(ctor);
 			 }),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
-				 ctor.setAccessible(true);
 				 if (isSingle) {
 					 catchRun(() -> JSFunc.copyValue("instance", ctor.newInstance())
 						, label).run();

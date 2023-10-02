@@ -65,4 +65,8 @@ public abstract class Content {
 	/** 点击按钮触发的事件 */
 	public void build() {
 	}
+
+	public String toString() {
+		return "Content#" + name;
+	}
 }

@@ -3,7 +3,6 @@ package modtools.graphics;
 import arc.Core;
 import arc.files.Fi;
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.Vec2;
@@ -12,8 +11,8 @@ import modtools.*;
 
 public class MyShaders {
 	public static Shader specl, baseShader;
-	/** 将任何纹理2中有颜色的替换成{@code color} */
-	public static MixShader mixShader;
+	/** 将任何纹理中有颜色的替换成{@code color} */
+	public static MixScreen mixScreen;
 	// public static FrontShader frontShader;
 
 	public static Fi shaderFi = IntVars.root.child("shaders");
@@ -35,7 +34,7 @@ public class MyShaders {
 		// baseShader = Draw.getShader();
 		// Draw.shader(last);
 		baseShader = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("dist_base.frag"));
-		mixShader = new MixShader();
+		mixScreen = new MixScreen();
 		// frontShader = new FrontShader();
 
 		// blur = new BlurShader();
@@ -80,11 +79,12 @@ public class MyShaders {
 			setUniformf("size", size);
 		}
 	}
-	public static class MixShader extends Shader {
-		public Color color;
-		public MixShader() {
+	public static class MixScreen extends Shader {
+		public MixScreen() {
 			super(Core.files.internal("shaders/screenspace.vert"), shaderFi.child("mix.frag"));
 		}
+
+		public Color color;
 		public void apply() {
 			setUniformf("color", color.r, color.g, color.b, color.a);
 			setUniformi("u_texture0", 0);

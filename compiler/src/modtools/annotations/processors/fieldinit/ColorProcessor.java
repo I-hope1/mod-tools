@@ -33,7 +33,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 				init
 			 )
 			);
-			addImport(element, SettingUI());
+			addImport((TypeElement) element.getEnclosingElement(), SettingUI());
 			// Log.info(field);
 			if (!anno.needSetting()) return;
 

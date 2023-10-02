@@ -268,8 +268,8 @@ public class SettingsUI extends Content {
 		return color;
 	}
 
-	public static Cell<CheckBox> checkboxWithEnum(Table t, String text, E_DataInterface _enum) {
-		return t.check(text, 28, _enum.enabled(), _enum::set)
+	public static Cell<CheckBox> checkboxWithEnum(Table t, String text, E_DataInterface enum_) {
+		return t.check(text, 28, enum_.enabled(), enum_::set)
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 

@@ -89,7 +89,7 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 		return watch(icon, value, 0);
 	}
 
-	public WatchWindow watchWithSetter(Drawable icon, MyProv<Object> value, Cons<String> setter, float interval) {
+	public WatchWindow watchWithSetter(Drawable icon, MyProv<Object> value, Cons<String> setter) {
 		Object[] callback = {null};
 		template.bind(value);
 		template.stack(new Table(o -> {
@@ -100,7 +100,7 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 			ModifiedLabel.build(new CacheProv(value).getStringProv(), Tools::isNum, (field, label) -> {
 				if (!field.isValid() || setter == null) return;
 				setter.get(field.getText());
-			}, interval, t).style(Styles.outlineLabel);
+			}, t).style(Styles.outlineLabel);
 			t.pack();
 		}));
 		template.unbind();

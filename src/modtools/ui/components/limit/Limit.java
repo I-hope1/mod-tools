@@ -4,6 +4,9 @@ import arc.Core;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
+import arc.util.Log;
+
+import java.util.Locale;
 
 public interface Limit {
 	/*static boolean isVisible(Element actor) {
@@ -27,10 +30,13 @@ public interface Limit {
 			if (elem == null) return false;
 			elem = elem.parent;
 		}
+
 		elem.localToStageCoordinates(v1.set(0, 0));
 		boolean computeIfOverStage = v1.x + elem.getWidth() > Core.graphics.getWidth()
-		                             || v1.y + elem.getHeight() < Core.graphics.getHeight()
-		                             || v1.x < 0 || v1.y < 0;
+																 || v1.y + elem.getHeight() < Core.graphics.getHeight()
+																 || v1.x < 0 || v1.y < 0;
+
+		/* w, h > 0 */
 		float w = actor.getWidth(), h = actor.getHeight();
 		if (computeIfOverStage) {
 			actor.localToStageCoordinates(v2.set(0, 0));
@@ -39,6 +45,7 @@ public interface Limit {
 			}
 		}
 		actor.localToAscendantCoordinates(elem, v1.set(0, 0));
-		return v1.x >= -w && v1.y >= -h && v1.x <= elem.getWidth() && v1.y <= elem.getHeight();
+		return v1.x > -w && v1.y > -h && v1.x < elem.getWidth() && v1.y < elem.getHeight();
+		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();
 	}
 }

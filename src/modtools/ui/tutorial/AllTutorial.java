@@ -83,8 +83,8 @@ public class AllTutorial {
 		draw.run();
 		pingpong2.end();
 		pingpong2.getTexture().bind(1);
-		MyShaders.mixShader.color = color;
-		Draw.blit(pingpong1, MyShaders.mixShader);
+		MyShaders.mixScreen.color = color;
+		Draw.blit(pingpong1, MyShaders.mixScreen);
 	}
 	public static boolean enableFocusMouse;
 	public static void init() {

@@ -1,6 +1,6 @@
 package modtools.ui;
 
-import arc.Core;
+import arc.*;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.*;
@@ -56,6 +56,7 @@ public class Frag extends Table {
 					content::build)
 				 .marginLeft(6f)
 				 .size(120, 40).get();
+				Events.fire(content);
 				content.load();
 				table.row();
 			});

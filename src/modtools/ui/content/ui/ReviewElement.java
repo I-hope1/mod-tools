@@ -535,7 +535,8 @@ public class ReviewElement extends Content {
 					});
 				})))
 			 .ifRun(element.parent instanceof Table, seq -> seq.add(
-				DisabledList.withd(Icon.waves, "This Cell", () -> !(element.parent instanceof Table), () -> {
+				DisabledList.withd(Icon.waves, "This Cell",
+				 () -> !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
 					new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
 				}))).get());
 			IntUI.doubleClick(window_elem, null, copy);
@@ -775,7 +776,7 @@ public class ReviewElement extends Content {
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
 			if (name != null) t.add(name).color(Pal.accent).fontScale(0.7f).labelAlign(Align.topLeft).growY().padRight(8f);
-			t.defaults().growX();
+			t.defaults().grow();
 			if (floatc == null) {
 				t.label(def);
 				return;
@@ -784,7 +785,7 @@ public class ReviewElement extends Content {
 				if (!field.isValid()) return;
 				label.setText(field.getText());
 				floatc.get(Strings.parseFloat(field.getText()));
-			}, 2, t, TextField::new);
+			}, t, TextField::new);
 		});
 	}
 
@@ -812,23 +813,21 @@ public class ReviewElement extends Content {
 		public static final float valueScale = 0.6f;
 		Label nameLabel = new NoMarkupLabel(""),
 		 sizeLabel      = new NoMarkupLabel(""),
+		 touchableLabel = new NoMarkupLabel(""),
 
 		// transformLabel    = new MyLabel(""),
 		colorLabel        = new NoMarkupLabel(""),
 		 rotationLabel    = new NoMarkupLabel(""),
 		 translationLabel = new NoMarkupLabel(""),
 		 styleLabel       = new NoMarkupLabel(""),
-		 alignLabel       = new NoMarkupLabel(""),
 
 		colspanLabel  = new NoMarkupLabel(""),
-		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
-		 cAlignLabel  = new NoMarkupLabel("");
+		 minSizeLabel = new Label(""), maxSizeLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
 		BindCell rotCell, translationCell, styleCell,
 		 cellCell,
-		 colspanCell, minSizeCell, maxSizeCell,
-		 cAlignCell;
+		 colspanCell, minSizeCell, maxSizeCell;
 
 
 		void color(Color color) {
@@ -889,6 +888,7 @@ public class ReviewElement extends Content {
 			margin(4, 4, 4, 4);
 			nameLabel.setFontScale(0.75f);
 			sizeLabel.setFontScale(0.7f);
+			touchableLabel.setFontScale(valueScale);
 			colorLabel.setFontScale(valueScale);
 			rotationLabel.setFontScale(valueScale);
 			translationLabel.setFontScale(valueScale);
@@ -906,21 +906,25 @@ public class ReviewElement extends Content {
 				top.add(sizeLabel).padLeft(10f)
 				 .growX().right().labelAlign(Align.right).color(Color.lightGray);
 			}).growX();
+			t.row().table(touch -> {
+				touch.add("Touchable").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+				touch.add(touchableLabel).row();
+			}).growX();
 			t.row().table(color -> {
-				color.add("Color").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				color.add("Color").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 				color.add(colorContainer).size(16).padRight(4f);
 				color.add(colorLabel).row();
 			}).growX();
 			rotCell = new BindCell(t.row().table(rot -> {
-				rot.add("Rotation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				rot.add("Rotation").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 				rot.add(rotationLabel).row();
 			}).growX());
 			translationCell = new BindCell(t.row().table(tran -> {
-				tran.add("Translation").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				tran.add("Translation").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 				tran.add(translationLabel).row();
 			}).growX());
 			styleCell = new BindCell(t.row().table(tran -> {
-				tran.add("Style").fontScale(0.7f).color(Color.lightGray).growX().padRight(padRight);
+				tran.add("Style").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 				tran.add(styleLabel).color(Color.orange).row();
 			}).growX());
 
@@ -966,6 +970,7 @@ public class ReviewElement extends Content {
 			if (!hoverInfoWindow) return;
 			table.nameLabel.setText(getElementName(elem));
 			table.sizeLabel.setText(fixed(elem.getWidth()) + "×" + fixed(elem.getHeight()));
+			table.touchableLabel.setText(toString(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
@@ -980,6 +985,13 @@ public class ReviewElement extends Content {
 
 			showHover(elem, vec2);
 			Gl.flush();
+		}
+		private CharSequence toString(Touchable touchable) {
+			return switch (touchable) {
+				case enabled -> "Enabled";
+				case disabled -> "Disabled";
+				case childrenOnly -> "Children Only";
+			};
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posLine:

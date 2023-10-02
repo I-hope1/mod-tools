@@ -14,7 +14,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.Window;
-import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.content.debug.Tester;
 import modtools.utils.*;
@@ -93,7 +93,7 @@ public class ListDialog extends Window {
 					label.setText(field.getText());
 					ListDialog.this.build();
 				}
-			}, Integer.MAX_VALUE, p).left().color(Pal.accent).growX();
+			}, p).left().color(Pal.accent).growX();
 			p.row();
 			// p.add(f.name(), Pal.accent).left().row();
 			p.image().color(Pal.accent).growX();
@@ -169,17 +169,15 @@ public class ListDialog extends Window {
 		 Prov<CharSequence> def,
 		 TextFieldValidator validator,
 		 Cons2<TextField, Label> modifier,
-		 float interval,
 		 Table t) {
-			return build(def, validator, modifier, interval, t, AutoTextField::new);
+			return build(def, validator, modifier, t, AutoTextField::new);
 		}
 		public static Cell<?> build(
 		 Prov<CharSequence> def,
 		 TextFieldValidator validator,
 		 Cons2<TextField, Label> modifier,
-		 float interval,
 		 Table t, Prov<TextField> fieldProv) {
-			MyLabel   label = new MyLabel(def, interval);
+			NoMarkupLabel label = new NoMarkupLabel(def);
 			Cell<?>   cell  = t.add(label);
 			TextField field = fieldProv.get();
 			if (validator != null) field.setValidator(validator);

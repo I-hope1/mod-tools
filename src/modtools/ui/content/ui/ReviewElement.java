@@ -15,6 +15,7 @@ import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
+import mindustry.core.UI;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -125,7 +126,7 @@ public class ReviewElement extends Content {
 		topGroup.focusOnElement(new ReviewFocusTask());
 
 		btn.update(() -> btn.setChecked(topGroup.isSelecting()));
-		btn.setStyle(Styles.logicTogglet);
+		btn.setStyle(HopeStyles.hope_clearTogglet);
 
 		TopGroup.searchBlackList.add(btn);
 		TopGroup.classBlackList.add(ReviewElementWindow.class);
@@ -804,6 +805,7 @@ public class ReviewElement extends Content {
 	}
 	static String fixed(float value) {
 		if (Float.isNaN(value)) return "NAN";
+		if (Float.isInfinite(value)) return value > 0 ? "+∞" : "-∞";
 		return Strings.autoFixed(value, 1);
 	}
 
@@ -840,7 +842,7 @@ public class ReviewElement extends Content {
 		}
 		void translation(Vec2 translation) {
 			if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
-				translationLabel.setText(fixed(translation.x) + "×" + fixed(translation.y));
+				translationLabel.setText(fixed(translation.x) + " × " + fixed(translation.y));
 		}
 		void style(Element element) {
 			try {
@@ -870,7 +872,7 @@ public class ReviewElement extends Content {
 			float minWidth = Reflect.get(Cell.class, cell, "minWidth"),
 			 minHeight = Reflect.get(Cell.class, cell, "minHeight");
 			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset))
-				minSizeLabel.setText(fixedUnlessUnset(minWidth / Scl.scl()) + "[accent]×[]" + fixedUnlessUnset(minHeight / Scl.scl()));
+				minSizeLabel.setText(sizeText(minWidth, minHeight));
 		}
 		void maxSize(Cell<?> cell) {
 			if (cell == null) {
@@ -881,7 +883,11 @@ public class ReviewElement extends Content {
 			float maxWidth = Reflect.get(Cell.class, cell, "maxWidth"),
 			 maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
 			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset))
-				maxSizeLabel.setText(fixedUnlessUnset(maxWidth / Scl.scl()) + "×" + fixedUnlessUnset(maxHeight / Scl.scl()));
+				maxSizeLabel.setText(sizeText(maxWidth, maxHeight));
+		}
+
+		private static String sizeText(float w, float h) {
+			return fixedUnlessUnset(w / Scl.scl()) + "[accent]×[]" + fixedUnlessUnset(h / Scl.scl());
 		}
 
 		{
@@ -889,6 +895,7 @@ public class ReviewElement extends Content {
 			nameLabel.setFontScale(0.75f);
 			sizeLabel.setFontScale(0.7f);
 			touchableLabel.setFontScale(valueScale);
+			touchableLabel.setColor(Color.acid);
 			colorLabel.setFontScale(valueScale);
 			rotationLabel.setFontScale(valueScale);
 			translationLabel.setFontScale(valueScale);
@@ -969,7 +976,7 @@ public class ReviewElement extends Content {
 
 			if (!hoverInfoWindow) return;
 			table.nameLabel.setText(getElementName(elem));
-			table.sizeLabel.setText(fixed(elem.getWidth()) + "×" + fixed(elem.getHeight()));
+			table.sizeLabel.setText(fixed(elem.getWidth()) + " × " + fixed(elem.getHeight()));
 			table.touchableLabel.setText(toString(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);

@@ -16,7 +16,6 @@ import ihope_lib.MyReflect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.IntVars;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.IntUI.MenuList;
@@ -321,7 +320,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		Cell<?> cell = c_cell.cell;
 		if (l.val instanceof Color) {
 			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
-			c_cell.reget();
+			c_cell.require();
 		} else if (type == Boolean.TYPE || type == Boolean.class) {
 			var btn = new TextButton("", HopeStyles.flatTogglet);
 			btn.update(() -> {
@@ -341,7 +340,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			});
 			cell.setElement(btn);
 			cell.size(96, 42);
-			c_cell.reget();
+			c_cell.require();
 		} else if (Number.class.isAssignableFrom(box(type))) {
 			var field = new AutoTextField();
 			field.update(() -> {
@@ -360,10 +359,10 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			});
 			cell.setElement(field);
 			cell.height(42);
-			c_cell.reget();
+			c_cell.require();
 			events.onIns(E_JSFuncEdit.number, edit -> {
 				cell.setElement(edit.enabled() ? field : null);
-				c_cell.reget();
+				c_cell.require();
 			});
 		} else if (D_JSFUNC_EDIT.getBool("string", false) && type == String.class) {
 			var field = new AutoTextField();
@@ -378,10 +377,10 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			});
 			cell.setElement(field);
 			cell.height(42);
-			c_cell.reget();
+			c_cell.require();
 			events.onIns(E_JSFuncEdit.string, edit -> {
 				cell.setElement(edit.enabled() ? field : null);
-				c_cell.reget();
+				c_cell.require();
 			});
 		}
 

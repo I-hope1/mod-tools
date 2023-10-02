@@ -4,6 +4,7 @@ package modtools.ui.content.ui;
 import arc.Core;
 import arc.func.Cons;
 import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
 import arc.math.Interp;
 import arc.scene.Element;
 import arc.scene.style.*;
@@ -236,9 +237,14 @@ public class ShowUIList extends Content {
 	public <T> FilterTable<T> newTable(boolean withDisabled, Cons<FilterTable<T>> cons) {
 		return new FilterTable<>(t -> {
 			t.clearChildren();
-			t.add(new Element()).colspan(0).update(__ -> {
-				t.background(IntUI.whiteui.tint(bgColor));
-			}).left();
+			t.addChild(new Element() {
+				{fillParent = true;}
+
+				public void draw() {
+					Draw.color(bgColor, bgColor.a * parentAlpha);
+					IntUI.whiteui.draw(t.x, t.y, t.getWidth(), t.getHeight());
+				}
+			});
 			cons.get(t);
 			t.addPatternUpdateListener(() -> pattern);
 		}) {

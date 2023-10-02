@@ -12,9 +12,9 @@ public class BindCell {
 
 	public BindCell(Cell<?> cell) {
 		this.cell = cell;
-		reget();
+		require();
 	}
-	public void reget() {
+	public void require() {
 		el = cell.get();
 	}
 	public Cell<?> getCpy() {

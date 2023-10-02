@@ -35,13 +35,66 @@ public class HopeStyles {
 
 	public static ImageButtonStyle
 	 hope_clearNonei,
-	 hope_clearNoneTogglei;
+	 hope_clearNoneTogglei,
+	 hope_flati;
+	public static TextButtonStyle
+	 hope_clearTogglet;
 	public static ButtonStyle
 	 hope_defaultb;
 	public static SliderStyle
 	 hope_defaultSlider;
 	public static CheckBoxStyle
 	 hope_defaultCheck;
+
+	static void loadHopeStyles() {
+		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
+			down = ((TextureRegionDrawable) over).tint(Color.gray);
+		}};
+		hope_clearNoneTogglei = new ImageButtonStyle(clearNoneTogglei) {{
+			over = flatOver;
+			checkedOver = flatDown;
+			checked = down = buttonSelect;
+		}};
+		hope_flati = new ImageButtonStyle(flati) {{
+			up = pane;
+		}};
+		hope_clearTogglet = new TextButtonStyle(cleart) {{
+			over = flatOver;
+			checkedOver = flatDown;
+			checked = down = buttonSelect;
+		}};
+		hope_defaultb = new ButtonStyle(clearNonei);
+		hope_defaultSlider = new SliderStyle() {{
+			background = sliderBack;
+			Drawable drawable = new TextureRegionDrawable(whiteui);
+			drawable.setMinHeight(32 * Scl.scl());
+			drawable.setMinWidth(4 * Scl.scl());
+			knob = drawable;
+			knobOver = drawable;
+			knobDown = drawable;
+		}};
+		hope_defaultCheck = new CheckBoxStyle() {{
+			Color on  = Tmp.c1.set(Pal.accent).lerp(Color.gray, 0.2f);
+			Color off = Color.lightGray;
+			checkboxOn = HopeIcons.squareInset.tint(on);
+			checkboxOff = HopeIcons.lineSquare.tint(off);
+			Color over = Tmp.c1.set(on).lerp(Color.white, 0.4f);
+			checkboxOnOver = HopeIcons.squareInset.tint(over);
+			checkboxOver = HopeIcons.lineSquare.tint(over);
+			checkboxOnDisabled = HopeIcons.squareInset.tint(Color.gray);
+			checkboxOffDisabled = HopeIcons.lineSquare.tint(Color.gray);
+			font = Fonts.def;
+			fontColor = Color.white;
+			disabledFontColor = Color.gray;
+		}};
+		/* hope_defaultSlider = new SliderStyle() {{
+			background = sliderBack;
+			knob = sliderKnob;
+			knobOver = sliderKnobOver;
+			knobDown = sliderKnobDown;
+		}}; */
+		flatb = new ButtonStyle(flatt);
+	}
 
 	/* ---------TODO：以下是为了适配V6----------- */
 
@@ -160,45 +213,7 @@ public class HopeStyles {
 		}}; */
 		init();
 
-		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
-			down = ((TextureRegionDrawable) over).tint(Color.gray);
-		}};
-		hope_clearNoneTogglei = new ImageButtonStyle(clearNoneTogglei) {{
-			over = flatOver;
-			checkedOver = flatDown;
-			checked = down = buttonSelect;
-		}};
-		hope_defaultb = new ButtonStyle(clearNonei);
-		hope_defaultSlider = new SliderStyle() {{
-			background = sliderBack;
-			Drawable drawable = new TextureRegionDrawable(whiteui);
-			drawable.setMinHeight(32 * Scl.scl());
-			drawable.setMinWidth(4 * Scl.scl());
-			knob = drawable;
-			knobOver = drawable;
-			knobDown = drawable;
-		}};
-		hope_defaultCheck = new CheckBoxStyle() {{
-			Color on  = Tmp.c1.set(Pal.accent).lerp(Color.gray, 0.2f);
-			Color off = Color.lightGray;
-			checkboxOn = HopeIcons.squareInset.tint(on);
-			checkboxOff = HopeIcons.lineSquare.tint(off);
-			Color over = Tmp.c1.set(on).lerp(Color.white, 0.4f);
-			checkboxOnOver = HopeIcons.squareInset.tint(over);
-			checkboxOver = HopeIcons.lineSquare.tint(over);
-			checkboxOnDisabled = HopeIcons.squareInset.tint(Color.gray);
-			checkboxOffDisabled = HopeIcons.lineSquare.tint(Color.gray);
-			font = Fonts.def;
-			fontColor = Color.white;
-			disabledFontColor = Color.gray;
-		}};
-		/* hope_defaultSlider = new SliderStyle() {{
-			background = sliderBack;
-			knob = sliderKnob;
-			knobOver = sliderKnobOver;
-			knobDown = sliderKnobDown;
-		}}; */
-		flatb = new ButtonStyle(flatt);
+		loadHopeStyles();
 	}
 
 	static void init() {

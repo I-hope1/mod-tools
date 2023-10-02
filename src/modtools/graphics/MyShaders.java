@@ -33,7 +33,9 @@ public class MyShaders {
 		// Draw.shader();
 		// baseShader = Draw.getShader();
 		// Draw.shader(last);
-		baseShader = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("dist_base.frag"));
+		baseShader = new Shader(
+		 Core.files.internal("shaders/screenspace.vert"),
+		 shaderFi.child("dist_base.frag"));
 		mixScreen = new MixScreen();
 		// frontShader = new FrontShader();
 
@@ -81,7 +83,8 @@ public class MyShaders {
 	}
 	public static class MixScreen extends Shader {
 		public MixScreen() {
-			super(Core.files.internal("shaders/screenspace.vert"), shaderFi.child("mix.frag"));
+			super(Core.files.internal("shaders/screenspace.vert"),
+			 shaderFi.child("mix.frag"));
 		}
 
 		public Color color;

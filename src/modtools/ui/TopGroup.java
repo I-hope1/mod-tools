@@ -75,14 +75,13 @@ public final class TopGroup extends WidgetGroup {
 	 back    = new NGroup("back"),
 	 windows = new NGroup("windows"),
 	 frag    = new NGroup("frag"),
-	 others  = new WidgetGroup() {
+	 others = new NGroup("others") {
 		 public Element hit(float x, float y, boolean touchable) {
 			 return Sr(super.hit(x, y, touchable))
 				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
 				 ? el -> or(el, this) : null)
 				.get();
 		 }
-		 {name = "others";}
 	 };
 	private final Table end = new MyEnd();
 
@@ -326,14 +325,6 @@ public final class TopGroup extends WidgetGroup {
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {
 		selected = getSelected0(x, y);
-		//if (tmp != null) {
-			/*do {
-				selected = tmp;
-				tmp.parentToLocalCoordinates(Tmp.v1.set(x, y));
-				tmp = selected.hit(x = Tmp.v1.x, y = Tmp.v1.y, true);
-			} while (tmp != null && selected != tmp);*/
-		// }
-		// Log.info(selected);
 	}
 
 	public static final ObjectSet<Element>  searchBlackList = new ObjectSet<>();
@@ -346,12 +337,7 @@ public final class TopGroup extends WidgetGroup {
 	private void addSceneListener() {
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
 			boolean locked = false;
-			final Element mask = new Element() {
-				{
-					fillParent = true;
-				}
-
-				@Override
+			final Element mask = new Hitter() {
 				public Element hit(float x, float y, boolean touchable) {
 					return cancelEvent ? this : null;
 				}
@@ -711,12 +697,12 @@ public final class TopGroup extends WidgetGroup {
 			Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
 		}
 		public void endDraw() {
-			if (maskColor.a > 0) {
-				Draw.color(maskColor);
-				Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
+			if (maskColor.a == 0) return;
 
-				if (drawSlightly) topGroup.drawSlightlyIfSmall();
-			}
+			Draw.color(maskColor);
+			Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
+
+			if (drawSlightly) topGroup.drawSlightlyIfSmall();
 		}
 	}
 	private class FillEnd extends Table {

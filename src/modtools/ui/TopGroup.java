@@ -76,6 +76,10 @@ public final class TopGroup extends WidgetGroup {
 	 windows = new NGroup("windows"),
 	 frag    = new NGroup("frag"),
 	 others = new NGroup("others") {
+		 public void draw() {
+			 validate();
+			 super.draw();
+		 }
 		 public Element hit(float x, float y, boolean touchable) {
 			 return Sr(super.hit(x, y, touchable))
 				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
@@ -105,6 +109,7 @@ public final class TopGroup extends WidgetGroup {
 		Draw.flush();
 
 		drawSeq.exec();
+		Gl.flush();
 		drawResidentTasks.each(ResidentDrawTask::endDraw);
 		Draw.flush();
 
@@ -135,6 +140,7 @@ public final class TopGroup extends WidgetGroup {
 		// buffer.blit(MyShaders.Specl);
 		// scene.getCamera().bounds(Tmp.r1.set(selected.x, selected.y, selected.getWidth(), selected.getHeight()));
 		Draw.blit(bufferCaptureAll(Tmp.v1, selected), MyShaders.baseShader);
+		Gl.flush();
 		Draw.color(ColorFul.color);
 		Lines.stroke(4f);
 		Lines.line(mouse.x, mouse.y,
@@ -679,6 +685,7 @@ public final class TopGroup extends WidgetGroup {
 			drawFocus(elem, ElementUtils.getAbstractPos(elem));
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
+			Gl.flush();
 			if (focusColor.a > 0) {
 				float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
 				Draw.color(focusColor, alpha);
@@ -703,6 +710,7 @@ public final class TopGroup extends WidgetGroup {
 			Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
 
 			if (drawSlightly) topGroup.drawSlightlyIfSmall();
+			Gl.flush();
 		}
 	}
 	private class FillEnd extends Table {

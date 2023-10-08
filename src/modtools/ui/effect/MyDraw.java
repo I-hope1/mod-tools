@@ -100,8 +100,8 @@ public class MyDraw {
 		float unit = (w + h) / 32f;
 		float cx   = x - w / 2f, cy = y - h / 2f;
 
-		off %= unit * 4f;
 		float unit4 = unit * 4f;
+		off %= unit4;
 		// float bx    = cx - unit4 + off;
 		float x1, y1;
 		Floatc4 line = (_x1, _y1, x2, y2) -> Lines.line(

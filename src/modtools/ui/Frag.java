@@ -116,6 +116,7 @@ public class Frag extends Table {
 				float rotation1 = Mathf.lerp(0, finalAngle, f);
 				// image.setRotation(rotation1);
 				float radius = Mathf.lerp(0, hoverRadius, f);
+				Core.graphics.requestRendering();
 				image.setPosition(
 				 top.getWidth() / 2f + radius * Mathf.cosDeg(rotation1),
 				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1));/* Align.center); */

@@ -1,7 +1,6 @@
 package modtools.ui;
 
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
 import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox.CheckBoxStyle;
@@ -16,9 +15,8 @@ import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.ui.HopeIcons;
-import modtools.ui.IntUI.CheckboxList;
 
+import static modtools.ui.HopeIcons.*;
 import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
 import static modtools.ui.IntUI.whiteui;
@@ -56,7 +54,8 @@ public class HopeStyles {
 			checked = down = buttonSelect;
 		}};
 		hope_flati = new ImageButtonStyle(flati) {{
-			up = pane;
+			up = paneCircle;
+			down = over = whiteuiCircle.tint(Tmp.c1.set(0x454545_FF));
 		}};
 		hope_clearTogglet = new TextButtonStyle(cleart) {{
 			over = flatOver;
@@ -76,13 +75,13 @@ public class HopeStyles {
 		hope_defaultCheck = new CheckBoxStyle() {{
 			Color on  = Tmp.c1.set(Pal.accent).lerp(Color.gray, 0.2f);
 			Color off = Color.lightGray;
-			checkboxOn = HopeIcons.squareInset.tint(on);
-			checkboxOff = HopeIcons.lineSquare.tint(off);
+			checkboxOn = squareInset.tint(on);
+			checkboxOff = lineSquare.tint(off);
 			Color over = Tmp.c1.set(on).lerp(Color.white, 0.4f);
-			checkboxOnOver = HopeIcons.squareInset.tint(over);
-			checkboxOver = HopeIcons.lineSquare.tint(over);
-			checkboxOnDisabled = HopeIcons.squareInset.tint(Color.gray);
-			checkboxOffDisabled = HopeIcons.lineSquare.tint(Color.gray);
+			checkboxOnOver = squareInset.tint(over);
+			checkboxOver = lineSquare.tint(over);
+			checkboxOnDisabled = squareInset.tint(Color.gray);
+			checkboxOffDisabled = lineSquare.tint(Color.gray);
 			font = Fonts.def;
 			fontColor = Color.white;
 			disabledFontColor = Color.gray;

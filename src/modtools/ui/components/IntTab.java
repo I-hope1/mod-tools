@@ -1,9 +1,11 @@
 package modtools.ui.components;
 
+import arc.func.Prov;
 import arc.graphics.Color;
 import arc.math.Interp;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -22,11 +24,12 @@ public class IntTab {
 	public        PrefTable  title;
 	public        ScrollPane pane;
 
-	public String[] names;
-	public Color[]  colors;
-	public Table[]  tables;
+	public Drawable[] icons;
+	public String[]   names;
+	public Color[]    colors;
+	public Table[]    tables;
 	/** 这些会乘以{@link Scl#scl} */
-	public float    totalWidth, eachWidth;
+	public float      totalWidth, eachWidth;
 	public int     cols;
 	public boolean column/*  = false */;
 
@@ -131,6 +134,9 @@ public class IntTab {
 		prefH = h;
 		main.pack();
 	}
+	public void setIcons(Drawable... icons) {
+		this.icons = icons;
+	}
 
 	public ObjectMap<String, Label> labels;
 	boolean hideTitle;
@@ -142,8 +148,10 @@ public class IntTab {
 			int   j = i;
 			title.button(b -> {
 				 if (first == null) first = b;
-				 labels.put(names[j], b.add(new MyLabel(() -> hideTitle ? "" + Character.toUpperCase(names[j].charAt(0)) : names[j]
-				 )).color(colors[j]).padLeft(4f).padRight(4f).growY().get());
+				 labels.put(names[j], b.add(new TitleLabel(
+					() -> hideTitle ? "" : names[j],
+					icons == null ? null : icons[j]
+				 )).color(colors[j]).padLeft(4f).padRight(4f).minWidth(28).growY().get());
 				 b.row();
 				 Image image = b.image().growX().get();
 				 b.update(() -> {
@@ -193,5 +201,16 @@ public class IntTab {
 		 title.getPrefWidth() <= main.getPrefWidth(),
 		 title.getPrefHeight() <= main.getPrefHeight()); */
 		return main;
+	}
+	public static class TitleLabel extends MyLabel {
+		Drawable icon;
+		public TitleLabel(Prov<CharSequence> sup, Drawable icon) {
+			super(sup);
+			this.icon = icon;
+		}
+		public void act(float delta) {
+			super.act(delta);
+			style.background = text.isEmpty() ? icon : null;
+		}
 	}
 }

@@ -2,17 +2,22 @@ package modtools.annotations.processors;
 
 import arc.files.Fi;
 import arc.graphics.Texture;
+import arc.graphics.g2d.TextureRegion;
 import arc.scene.style.TextureRegionDrawable;
 import arc.struct.ObjectMap;
+import arc.util.Strings;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.Kinds.Kind;
+import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.Name;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
-import javax.lang.model.element.Element;
+import javax.lang.model.element.*;
 import java.io.Writer;
 import java.util.Set;
 
@@ -25,27 +30,48 @@ public class IconsProcessor extends BaseProcessor {
 		 ns(name), List.nil(), null, List.nil(), List.nil(),
 		 List.nil(), symbol) {} */(JCClassDecl) trees.getTree(element);
 		root.defs = List.nil();
-		var icons = getAnnotationByElement(IconAnn.class, element, false);
+		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
 
 		((ClassType) root.sym.type).supertype_field = mSymtab.objectType;
-		ClassType drawable = findType(TextureRegionDrawable.class.getName());
-		ClassType texture  = findType(Texture.class.getName());
-		ClassType map      = (ClassType) findType(ObjectMap.class.getName()).constType(123);
+		ClassSymbol drawableSymbol = findClassSymbol(TextureRegionDrawable.class.getName());
+		ClassType   drawable       = (ClassType) drawableSymbol.type;
+		ClassType   texture        = findType(Texture.class.getName());
+		ClassType   map            = (ClassType) findType(ObjectMap.class.getName()).constType(123);
 		map.typarams_field = List.of(stringType, texture);
+
+		addImport((TypeElement) element, (ClassSymbol) map.tsym);
+		addImport((TypeElement) element, drawableSymbol);
+		addImport((TypeElement) element, findClassSymbol(Fi.class.getName()));
+		addImport((TypeElement) element, findClassSymbol(TextureRegion.class.getName()));
+		addImport((TypeElement) element, findClassSymbol(Texture.class.getName()));
+		addImport((TypeElement) element, findClassSymbol("mindustry.Vars"));
+
 		StringBuilder sb = new StringBuilder();
-		addField(root, Flags.STATIC | Flags.PUBLIC, map,
-		 "map", "mindustry.Vars.mods.getMod(" + icons.mainClass().getName()
+		stringType.tsym.owner.kind = Kind.VAR;
+		texture.tsym.owner.kind = Kind.VAR;
+		map.tsym.owner.kind = Kind.VAR;
+		addField(root, Flags.STATIC | Flags.PUBLIC | Flags.FINAL, map,
+		 "map", "Vars.mods.getMod(" + icons.mainClass().getName()
 						+ ".class).root.child(\"" + icons.iconDir()
-						+ "\").findAll().asMap(arc.files.Fi::nameWithoutExtension,arc.graphics.Texture::new)"
+						+ "\").findAll().asMap(Fi::nameWithoutExtension, Texture::new)"
 		);
+		stringType.tsym.owner.kind = Kind.PCK;
+		texture.tsym.owner.kind = Kind.PCK;
+		map.tsym.owner.kind = Kind.PCK;
+
 		for (Fi fi : Fi.get("./assets/" + icons.iconDir()).findAll(f -> f.extEquals("png"))) {
+			Kind last = drawable.tsym.owner.kind;
+			drawable.tsym.owner.kind = Kind.VAR;
+			String f_name = Strings.kebabToCamel(fi.nameWithoutExtension());
 			addField(root, Flags.STATIC | Flags.PUBLIC,
-			 drawable, fi.nameWithoutExtension(), null);
-			sb.append(fi.nameWithoutExtension())
-			 .append("=new arc.scene.style.TextureRegionDrawable(new arc.graphics.g2d.TextureRegion(map.get(\"")
+			 drawable, f_name, null);
+			drawable.tsym.owner.kind = last;
+			sb.append(f_name)
+			 .append("=new TextureRegionDrawable(new TextureRegion(map.get(\"")
 			 .append(fi.nameWithoutExtension())
 			 .append("\")));");
 		}
+
 		JCBlock x = parseBlock(Flags.STATIC, "{" + sb + "}");
 		x.pos = 1000;
 		root.defs = root.defs.append(x);

@@ -30,7 +30,7 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.ui.design.DesignTable;
-import modtools.ui.content.world.Selection;
+import modtools.ui.content.world.*;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.draw.InterpImage;
@@ -216,7 +216,7 @@ public class JSFunc {
 		new ReviewElementWindow().show(element);
 	}
 
-	public static Selection.Function<?> getFunction(String name) {
+	public static WFunction<?> getFunction(String name) {
 		return Selection.allFunctions.get(name);
 	}
 

@@ -14,7 +14,8 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.ui.IntUI;
+import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;
@@ -95,6 +96,8 @@ public class ColorPicker extends Window {
 
 			t.add(new Element() {
 				public void draw() {
+					Draw.color();
+					HopeIcons.alphaBgCircle.draw(x, y, width, height);
 					float x      = getX(Align.center);
 					float y      = getY(Align.center);
 					float radius = width / 2;

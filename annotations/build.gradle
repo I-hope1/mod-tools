@@ -2,19 +2,12 @@ apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
 
-repositories {
-	mavenCentral()
-	mavenLocal()
-	maven { url 'https://www.jitpack.io' }
-}
-
 dependencies {
 	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
 	compileOnly 'com.google.auto.service:auto-service:1.0.1'
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 //	implementation 'com.squareup:javapoet:1.12.1'
-	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 
 	// only for document
 	def pro = project.parent

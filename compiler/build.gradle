@@ -2,13 +2,7 @@ apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
 
-repositories {
-	mavenCentral()
-	mavenLocal()
-	maven { url 'https://www.jitpack.io' }
-}
-
-tasks.withType(JavaCompile) {
+tasks.withType(JavaCompile).configureEach {
 	options.compilerArgs.addAll(
 			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
 			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
@@ -33,7 +27,7 @@ dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	
 	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
+//	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 
 	// only for document
 	def project = project.parent

@@ -6,9 +6,9 @@ plugins {
 
 allprojects {
 	ext {
-		uncVersion = "1.8.7"
+		uncVersion = '1.8.7'
 		mindustryVersion = 'v146'
-		MdtDataDir = "E:/Users/ASUS/Desktop/Mindustry136"
+		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
@@ -20,18 +20,17 @@ allprojects {
 		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED")
 		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED")
 	}
+	repositories {
+		mavenCentral()
+		mavenLocal()
+		maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
+		maven { url 'https://www.jitpack.io' }
+	}
 }
 
 group 'mod-tools'
 version '1.4.3.2'
 sourceSets.main.java.srcDirs = ["src"]
-repositories {
-	mavenCentral()
-	mavenLocal()
-	maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
-	maven { url 'https://www.jitpack.io' }
-//	mindustryRepo()
-}
 
 
 dependencies {

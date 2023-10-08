@@ -676,6 +676,7 @@ public class IntUI {
 			border(Tmp.c1.set(color).inv());
 		}
 		public void draw() {
+			Draw.color();
 			float alpha = Draw.getColor().a;
 			Draw.alpha(parentAlpha);
 			Tex.alphaBg.draw(x, y, width, height);

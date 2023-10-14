@@ -1,6 +1,10 @@
 package modtools.ui;
 
+import arc.Core;
+import arc.files.Fi;
 import arc.graphics.Color;
+import arc.graphics.Texture.TextureFilter;
+import arc.graphics.g2d.*;
 import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox.CheckBoxStyle;
@@ -15,6 +19,7 @@ import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.IntVars;
 
 import static modtools.ui.HopeIcons.*;
 import static mindustry.gen.Tex.*;
@@ -211,7 +216,6 @@ public class HopeStyles {
 			disabledFontColor = Color.gray;
 		}}; */
 		init();
-
 		loadHopeStyles();
 	}
 

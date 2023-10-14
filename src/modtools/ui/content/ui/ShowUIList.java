@@ -6,7 +6,7 @@ import arc.func.Cons;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.math.Interp;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
@@ -22,12 +22,15 @@ import arc.scene.ui.layout.Stack;
 import arc.scene.utils.Disableable;
 import arc.struct.ObjectMap;
 import arc.util.*;
+import mindustry.Vars;
+import mindustry.core.UI;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
@@ -98,6 +101,7 @@ public class ShowUIList extends Content {
 	public static HashMap<Drawable, String> iconKeyMap  = new HashMap<>();
 	public static HashMap<Color, String>    colorKeyMap = new HashMap<>();
 	public static HashMap<Style, String>    styleKeyMap = new HashMap<>();
+	public static HashMap<Group, String>    uiKeyMap    = new HashMap<>();
 
 	Table icons = newTable(t -> {
 		Icon.icons.each((k, icon) -> {
@@ -209,7 +213,17 @@ public class ShowUIList extends Content {
 				 }
 			 }
 		 });
-	 });
+	 }), uis    = newTable(t -> {
+		for (Field f : UI.class.getFields()) {
+			Object o = FieldUtils.getOrNull(f, Vars.ui);
+			if (!(o instanceof Group)) continue;
+			uiKeyMap.put((Group) o, f.getName());
+			t.bind(f.getName());
+			t.add(f.getName());
+			t.add(new ValueLabel(ValueLabel.unset, UI.class, f, Vars.ui));
+			t.unbind();
+		}
+	});
 	private static void addImage(Table t, Drawable drawable) {
 		Image image = new Image(drawable);
 		image.fillParent = true;

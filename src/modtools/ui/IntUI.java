@@ -45,8 +45,8 @@ import static modtools.utils.ElementUtils.getAbstractPos;
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
-	public static final float default_width = 150;
-	public static final float maxOff        = 35f;
+	public static final float DEFAULT_WIDTH = 150;
+	public static final float MAX_OFF       = 35f;
 
 	public static final Frag     frag = new Frag();
 	public static final TopGroup topGroup;
@@ -90,7 +90,7 @@ public class IntUI {
 				return super.touchDown(event, x, y, pointer, button);
 			}
 			public void clicked(InputEvent event, float x, float y) {
-				if (last.dst(Core.input.mouse()) > maxOff) return;
+				if (last.dst(Core.input.mouse()) > MAX_OFF) return;
 				super.clicked(event, x, y);
 				if (click != null && d_click == null) {
 					click.run();
@@ -101,7 +101,7 @@ public class IntUI {
 					last.set(mouse);
 					return;
 				}
-				if (mouse.dst(last) < maxOff) d_click.run();
+				if (mouse.dst(last) < MAX_OFF) d_click.run();
 			}
 		}
 		elem.addListener(new DoubleClick());
@@ -120,7 +120,7 @@ public class IntUI {
 		class LongPressListener extends ClickListener {
 			class LongPressTask extends Task {
 				public void run() {
-					if (pressed && Core.input.mouse().dst(last) < maxOff) {
+					if (pressed && Core.input.mouse().dst(last) < MAX_OFF) {
 						boolc.get(true);
 					}
 				}
@@ -209,14 +209,14 @@ public class IntUI {
 	}
 	/** TODO: 多个FoldedList有问题 */
 	private static Cell<Table> showMeniList(Iterable<MenuList> list, Runnable hideMenu, Table p, Runnable hide) {
-		return p.table(main -> {
+		return p.table(Styles.black6, main -> {
 			for (var menu : list) {
 				Cons<Button> cons = menu.cons;
 				var cell = main.button(menu.getName(), menu.icon,
-				 menu instanceof CheckboxList || menu instanceof FoldedList ? Styles.flatTogglet : Styles.flatt,
+				 menu instanceof CheckboxList || menu instanceof FoldedList ? HopeStyles.flatToggleMenut : HopeStyles.flatt,
 				 /** @see Cell#unset */
 				 menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> {}
-				).minSize(default_width, 42).marginLeft(5f).marginRight(5f);
+				).minSize(DEFAULT_WIDTH, 42).marginLeft(5f).marginRight(5f);
 				if (menu instanceof FoldedList foldedList) {
 					Core.app.post(() -> {
 						class MyRun implements Runnable {
@@ -376,7 +376,7 @@ public class IntUI {
 		}
 
 		f.get(p, hide, "");
-		ScrollPane pane = new ScrollPane(p);
+		ScrollPane pane = new ScrollPane(p, Styles.smallPane);
 		t.top().add(pane).grow().pad(0f).top();
 		pane.setScrollingDisabled(true, false);
 		t.pack();
@@ -502,7 +502,7 @@ public class IntUI {
 			t.invalidateHierarchy();
 			t.pack();
 		});
-		t.actions(Actions.alpha(0.0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
+		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
 		Table p = new Table();
 		p.top();
 		if (searchable) {
@@ -512,8 +512,8 @@ public class IntUI {
 		}
 
 		f.get(p, hide, "");
-		ScrollPane pane = new ScrollPane(p);
-		t.top().add(pane).pad(0.0f).top();
+		ScrollPane pane = new ScrollPane(p, Styles.smallPane);
+		t.top().add(pane).pad(0).top();
 		pane.setScrollingDisabled(true, false);
 		t.pack();
 		return t;
@@ -544,7 +544,7 @@ public class IntUI {
 		items.each(item -> {
 			icons.add(func.get(item));
 		});
-		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
+		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
 	/**
 	 * {@literal }
@@ -559,7 +559,7 @@ public class IntUI {
 		items.each(item -> {
 			icons.add(func.get(item));
 		});
-		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, (float) imageSize, cols, searchable);
+		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
 
 	/**

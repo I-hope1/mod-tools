@@ -109,7 +109,6 @@ public final class TopGroup extends WidgetGroup {
 		Draw.flush();
 
 		drawSeq.exec();
-		Gl.flush();
 		drawResidentTasks.each(ResidentDrawTask::endDraw);
 		Draw.flush();
 
@@ -125,7 +124,7 @@ public final class TopGroup extends WidgetGroup {
 		Draw.alpha(0.7f);
 		ScreenSampler.pause();
 		drawPad(drawPadElem, vec2);
-		Draw.flush();
+		ScreenSampler._continue();
 	}
 	/** 如果选中的元素太小，会在边缘显示 */
 	private void drawSlightlyIfSmall() {
@@ -166,8 +165,8 @@ public final class TopGroup extends WidgetGroup {
 		Lines.rect(vec2.x, vec2.y,
 		 elem.getWidth(), elem.getHeight()); */
 
-		Draw.color(Color.white, 0.01f);
-		Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+		// Draw.color(Color.white, 0.01f);
+		// Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
 		if (elem instanceof Table) {
 			review_element.drawMargin(vec2, (Table) elem);
 		}

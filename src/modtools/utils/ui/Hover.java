@@ -10,7 +10,7 @@ import arc.util.Timer.Task;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.IntUI.Tooltip;
 
 import static mindustry.Vars.mobile;
@@ -18,7 +18,7 @@ import static mindustry.Vars.mobile;
 public class Hover {
 	public static <T> ImageButton getImageButton(Cons<T> cons, float size, float imageSize, Table p, Runnable hide,
 																							 T item, Drawable icon) {
-		ImageButton btn = p.button(Tex.whiteui, Styles.clearTogglei, imageSize, () -> {}).size(size).get();
+		ImageButton btn = p.button(Tex.whiteui, HopeStyles.clearNoneTogglei, imageSize, () -> {}).size(size).get();
 		IntUI.longPress(btn, 500, b -> {
 			if (b) return;
 			cons.get(item);

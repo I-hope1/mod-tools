@@ -3,9 +3,10 @@ package modtools.ui.components.input.highlight;
 import arc.graphics.Color;
 import arc.struct.*;
 import mindustry.Vars;
+import modtools.utils.Tools;
 import rhino.*;
 
-import java.util.Objects;
+import java.util.*;
 
 public class JSSyntax extends Syntax {
 
@@ -54,8 +55,8 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
-
 	ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
+
 	ObjectMap<ObjectSet<CharSequence>, Color> TOKEN_MAP = ObjectMap.of(
 	 ObjectSet.with(
 		"break", "case", "catch", "const", "continue",
@@ -139,12 +140,11 @@ public class JSSyntax extends Syntax {
 	};
 
 
-
-	ObjectMap<Object, ObjectMap<String, Object>> js_prop_map = new ObjectMap<>();
+	HashMap<Object, HashMap<String, Object>> js_prop_map = new HashMap<>();
 	private Color dealJSProp(String token) {
 		if (!enableJSProp) return null;
 		Object o = pkg != null || !(obj instanceof NativeJavaObject nja) ? getPropOrNotFound(pkg, token)
-		 : js_prop_map.get(nja.unwrap(), ObjectMap::new).get(token, () -> getPropOrNotFound(nja, token));
+		 : js_prop_map.computeIfAbsent(nja.unwrap(), k -> new HashMap<>()).computeIfAbsent(token, k -> getPropOrNotFound(nja, token));
 		if (o == Scriptable.NOT_FOUND) {
 			obj = null;
 			return null;

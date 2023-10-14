@@ -10,6 +10,7 @@ public class BindCell {
 	private Cell<?> cpy;
 	public  Element el;
 
+
 	public BindCell(Cell<?> cell) {
 		this.cell = cell;
 		require();
@@ -18,7 +19,9 @@ public class BindCell {
 		el = cell.get();
 	}
 	public Cell<?> getCpy() {
-		if (cpy == null) cpy = new Cell<>().set(cell);
+		if (cpy == null) {
+			cpy = new Cell<>().set(cell);
+		}
 		return cpy;
 	}
 	public void build() {

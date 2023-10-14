@@ -15,9 +15,17 @@ public class WorldInfo {
 		}, false, Align.center);
 	}
 	public static void build(Table p, Tile tile) {
+		p.left().defaults().left();
 		p.add("block").color(Color.lightGray);
+		p.image(tile.block().fullIcon).size(24);
 		p.add(tile.block().name);
 		p.row().add("floor").color(Color.lightGray);
+		p.image(tile.floor().fullIcon).size(24);
 		p.add(tile.floor().name);
+		if (tile.drop() != null) {
+			p.row().add("ore").color(Color.lightGray);
+			p.image(tile.drop().fullIcon).size(24);
+			p.add(tile.drop().name);
+		}
 	}
 }

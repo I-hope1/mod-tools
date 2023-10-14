@@ -58,7 +58,7 @@ public class SettingsUI extends Content {
 		return add(title, null, t);
 	}
 	public Table add(String title, Drawable icon, Table t) {
-		Table table = new Table();
+		Table table = new LimitTable();
 		if (icon != null) table.image(icon).size(24).padRight(4f);
 		else table.add(); /* 占位符 */
 		table.add(title).color(Pal.accent).growX().left().row();
@@ -83,7 +83,7 @@ public class SettingsUI extends Content {
 			bool(this, "@settings.jsfunc.auto_refresh", MySettings.D_JSFUNC, "auto_refresh");
 			new SettingsBuilder(this) {{
 				list("settings.jsfunc", "arrayDelimiter", MySettings.D_JSFUNC,
-				 Seq.with(JSFunc.defaultDelimiter, "\n\n", "\n▶▶▶▶▶▶", "\n★★★"),
+				 Seq.with(JSFunc.defaultDelimiter, "\n", "\n\n", "\n▶▶▶▶", "\n★★★"),
 				 s -> s.replaceAll("\\n", "\\\\n")).colspan(2);
 			}};
 			row();

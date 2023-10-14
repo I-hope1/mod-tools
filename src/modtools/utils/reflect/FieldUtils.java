@@ -1,6 +1,7 @@
 package modtools.utils.reflect;
 
 import arc.util.OS;
+import modtools.ui.components.utils.ValueLabel;
 
 import java.lang.reflect.*;
 
@@ -48,9 +49,18 @@ public class FieldUtils {
 	}
 
 
+	/** @return {@code null} if field isn't static or getting an exception.  */
 	public static <T> T getOrNull(Field field) {
 		try {
 			return Modifier.isStatic(field.getModifiers()) ? (T) field.get(null) : null;
+		} catch (IllegalAccessException ignored) {
+			return null;
+		}
+	}
+	/** @return {@code null} if getting an exception.  */
+	public static <T> T getOrNull(Field field, Object o) {
+		try {
+			return (T) field.get(o);
 		} catch (IllegalAccessException ignored) {
 			return null;
 		}

@@ -5,7 +5,7 @@ import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.style.*;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
@@ -35,10 +35,11 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
 public class ValueLabel extends MyLabel {
-	public static       Object  unset          = new Object();
-	public static       Color   c_enum         = new Color(0xFFC66DFF);
-	public final        int     truncateLength = 2000;
-	public static final boolean DEBUG          = false;
+	public static Object unset          = new Object();
+	public static Color  c_enum         = new Color(0xFFC66DFF);
+	public final  int    truncateLength = 2000;
+
+	public static final boolean DEBUG = false;
 
 	public            Object   val;
 	public @Nullable  Object   obj;
@@ -61,15 +62,12 @@ public class ValueLabel extends MyLabel {
 
 
 	public ValueLabel(Object newVal, Object obj, Method method) {
-		this(newVal, method.getReturnType(), null, obj, method);
+		this(newVal, method.getReturnType(), null, obj);
 		labelAlign = Align.left;
 		lineAlign = Align.topLeft;
 		isStatic = Modifier.isStatic(method.getModifiers());
 	}
 	public ValueLabel(Object newVal, Class<?> type, Field field, Object obj) {
-		this(newVal, type, field, obj, null);
-	}
-	public ValueLabel(Object newVal, Class<?> type, Field field, Object obj, Method method) {
 		super((CharSequence) null);
 		if (type == null) throw new NullPointerException("'type' is null.");
 		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
@@ -82,8 +80,8 @@ public class ValueLabel extends MyLabel {
 		if (newVal != unset) setVal0(newVal);
 		setAlignment(Align.left, Align.left);
 
-		update(() -> {
-			if (E_JSFunc.auto_refresh.enabled() && field != null && enableUpdate) {
+		if (field != null) update(() -> {
+			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
 				setVal();
 			}
 		});
@@ -233,7 +231,7 @@ public class ValueLabel extends MyLabel {
 				sb.append(dealVal(o.key));
 				sb.append('=');
 				sb.append(dealVal(o.value));
-				sb.append(", ");
+				sb.append(getArrayDelimiter());
 				checkTail = true;
 				if (isTruncate(sb.length())) break;
 			}
@@ -252,7 +250,7 @@ public class ValueLabel extends MyLabel {
 				sb.append(entry.getKey());
 				sb.append('=');
 				sb.append(dealVal(entry.getValue()));
-				sb.append(", ");
+				sb.append(getArrayDelimiter());
 				checkTail = true;
 				if (isTruncate(sb.length())) break;
 			}
@@ -280,7 +278,7 @@ public class ValueLabel extends MyLabel {
 						} else {
 							sb.append(dealVal(last));
 							if (count > 1) sb.append(" ▶×").append(count).append("◀");
-							sb.append(MySettings.D_JSFUNC.getString("arrayDelimiter", JSFunc.defaultDelimiter));
+							sb.append(getArrayDelimiter());
 							if (isTruncate(sb.length())) break;
 							last = item;
 							count = 0;
@@ -326,6 +324,9 @@ public class ValueLabel extends MyLabel {
 			 : val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
 			 ShowUIList.colorKeyMap.get((Color) val)
 
+			 : val instanceof Group && ShowUIList.uiKeyMap.containsKey((Group) val) ?
+			 ShowUIList.uiKeyMap.get((Group) val)
+
 			 : String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + val.hashCode())
 			.get(() -> val.getClass().getName())
@@ -341,6 +342,9 @@ public class ValueLabel extends MyLabel {
 		setColor(mainColor);
 
 		return text;
+	}
+	private static String getArrayDelimiter() {
+		return MySettings.D_JSFUNC.getString("arrayDelimiter", JSFunc.defaultDelimiter);
 	}
 	public void addEnumSetter() {
 		clicked(() -> IntUI.showSelectListEnumTable(this,
@@ -389,6 +393,7 @@ public class ValueLabel extends MyLabel {
 		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
+	@SuppressWarnings("SizeReplaceableByIsEmpty")
 	public void setText(CharSequence newText) {
 		if (newText == null || /* newText.isEmpty()新版本才有 */newText.length() == 0) {
 			newText = "<EMPTY>";

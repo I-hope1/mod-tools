@@ -414,6 +414,7 @@ public class Window extends Table {
 		return this;
 	}
 	public void pack() {
+		if (isMinimize) return;
 		if (!isMaximize) {
 			super.pack();
 			return;

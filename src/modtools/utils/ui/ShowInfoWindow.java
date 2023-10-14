@@ -67,7 +67,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		this.o = o;
 		this.clazz = clazz;
 		if (clazz.isPrimitive()) {
-			cont.add("<PRIMITIVE>").color(Color.gray);
+			cont.add("<PRIMITIVE>").color(Color.gray).row();
+			cont.add(clazz.getName()).color(Tmp.c1.set(c_type)).row();
+			cont.add(String.valueOf(o));
 			return;
 		}
 		MyEvents.current = events;
@@ -109,7 +111,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		cont.left().defaults().left().growX();
 		cont.pane(t -> {
 			t.left().defaults().left();
-			t.button(Icon.settingsSmall, Styles.clearNonei, () -> {
+			t.button(Icon.settingsSmall, HopeStyles.clearNonei, () -> {
 				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
 					addSettingsTable(p, "", n -> "jsfunc." + n, D_JSFUNC, E_JSFunc.values());
 					addSettingsTable(p, "Display", n -> "jsfunc.display." + n, D_JSFUNC_DISPLAY, E_JSFuncDisplay.values());
@@ -283,10 +285,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 
 	private BindCell addDisplayListener(Cell<?> cell0, E_JSFuncDisplay type) {
 		BindCell cell = new BindCell(cell0);
-		events.onIns(type, b -> {
-			if (b.enabled()) cell.build();
-			else cell.remove();
-		});
+		events.onIns(type, b -> cell.toggle(b.enabled()));
 		return cell;
 	}
 	private void addModifier(Table table, CharSequence string) {
@@ -297,7 +296,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	private void addRType(Table table, Class<?> type, Prov<String> details) {
 		MyLabel label = makeGenericType(type, details);
 		addDisplayListener(table.add(label)
-		 .fontScale(0.86f)
+		 .fontScale(0.9f)
 		 .padRight(16), E_JSFuncDisplay.type);
 	}
 
@@ -344,7 +343,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		} else if (Number.class.isAssignableFrom(box(type))) {
 			var field = new AutoTextField();
 			field.update(() -> {
-				if (Core.scene.getKeyboardFocus() != field) {
+				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
+				if (l.enableUpdate) {
 					l.setVal();
 					field.setText(l.val instanceof Float ? Strings.autoFixed((float) l.val, 2)
 					 : String.valueOf(l.val));
@@ -367,7 +367,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		} else if (D_JSFUNC_EDIT.getBool("string", false) && type == String.class) {
 			var field = new AutoTextField();
 			field.update(() -> {
-				if (Core.scene.getKeyboardFocus() != field) {
+				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
+				if (l.enableUpdate) {
 					l.setVal();
 					field.setText(String.valueOf(l.val));
 				}
@@ -393,21 +394,24 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		Class<?> type      = f.getType();
 		int      modifiers = f.getModifiers();
 		try {
-			// modifiers
-			addModifier(fields, Modifier.toString(modifiers));
-			// type
-			addRType(fields, type, makeDetails(type, f.getGenericType()));
+			fields.table(attr -> {
+				attr.defaults().left();
+				// modifiers
+				addModifier(attr, Modifier.toString(modifiers));
+				// type
+				addRType(attr.row(), type, makeDetails(type, f.getGenericType()));
+			});
 			// name
 			MyLabel label = newCopyLabel(fields, f.getName());
 			IntUI.addShowMenuListenerp(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("field", () -> f),
-			 MenuList.with(Icon.copySmall, "copy offset", () -> {
+			 MenuList.with(Icon.copySmall, "Cpy offset", () -> {
 				 JSFunc.copyText("" + FieldUtils.fieldOffset(f));
 			 }),
-			 MenuList.with(Icon.copySmall, "copy field getter", () -> {
+			 MenuList.with(Icon.copySmall, "Cpy field getter", () -> {
 				 copyFieldReflection(f);
 			 }),
-			 MenuList.with(Icon.copySmall, "copy value getter", () -> {
+			 MenuList.with(Icon.copySmall, "Cpy value getter", () -> {
 				 copyFieldArcReflection(f);
 			 }),
 			 ValueLabel.newDetailsMenuList(label, f, Field.class)
@@ -421,33 +425,34 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			fields.add(label);
 			Log.err(e);
 		}
+		ValueLabel[] l = {null};
 		fields.table(t -> {
 			t.left().defaults().left();
 			// 占位符
 			Cell<?> cell = t.add().top();
 			BindCell c_cell = addDisplayListener(cell, E_JSFuncDisplay.value);
 			/*Cell<?> lableCell = */
-			ValueLabel l = new ValueLabel(ValueLabel.unset, type, f, o);
-			if (Enum.class.isAssignableFrom(type)) l.addEnumSetter();
+			l[0] = new ValueLabel(ValueLabel.unset, type, f, o);
+			if (Enum.class.isAssignableFrom(type)) l[0].addEnumSetter();
 			fields.labels.add(l);
-			t.add(l).minWidth(42).growX().uniformX()
+			t.add(l[0]).minWidth(42).growX().uniformX()
 			 .labelAlign(Align.topLeft);
 
 			try {
-				l.setVal();
-				buildFieldValue(type, c_cell, l);
+				l[0].setVal();
+				buildFieldValue(type, c_cell, l[0]);
 			} catch (Throwable e) {
-				l.setText("<ERROR>");
-				l.setColor(Color.red);
+				l[0].setText("<ERROR>");
+				l[0].setColor(Color.red);
 			}
-
-			addDisplayListener(t.table(buttons -> {
-				buttons.right().top().defaults().right().top();
-				addLabelButton(buttons, () -> l.val, type);
-				// addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
-				addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
-			}).grow().top(), E_JSFuncDisplay.buttons);
-		}).pad(4).growX().row();
+		}).pad(4).growX();
+		addDisplayListener(fields.add(new HoverTable(buttons -> {
+			buttons.right().top().defaults().right().top();
+			addLabelButton(buttons, () -> l[0].val, type);
+			// addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
+			addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
+		})).top().width(64).colspan(0), E_JSFuncDisplay.buttons);
+		fields.row();
 		fields.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
 	}
 	private void buildMethod(Object o, ReflectTable methods, Method m) {
@@ -472,11 +477,14 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		setAccessible(m);
 		try {
 			int mod = m.getModifiers();
-			// modifiers
-			addModifier(methods, buildExecutableModifier(m));
-			// return type
-			addRType(methods, m.getReturnType(),
-			 makeDetails(m.getReturnType(), m.getGenericReturnType()));
+			methods.table(attr -> {
+				attr.defaults().left();
+				// modifiers
+				addModifier(attr, buildExecutableModifier(m));
+				// return type
+				addRType(attr.row(), m.getReturnType(),
+				 makeDetails(m.getReturnType(), m.getGenericReturnType()));
+			});
 			// method name
 			MyLabel label = newCopyLabel(methods, m.getName());
 
@@ -539,16 +547,16 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				// float[] prefW = {0};
 				t.add(l).grow().uniformX();
 
-				buttonsCell = t.table(buttons -> {
+				buttonsCell = t.add(new HoverTable(buttons -> {
 					buttons.right().top().defaults().right().top();
 					if (isSingle && isValid) {
-						buttons.button("Invoke", HopeStyles.flatBordert, catchRun("invoke出错", () -> {
+						buttons.button(Icon.rightOpenOutSmall, flati, catchRun("invoke出错", () -> {
 							dealInvokeResult(m.invoke(o), cell, l);
-						}, l)).size(96, 45);
+						}, l)).size(32, 32);
 					}
 					addLabelButton(buttons, () -> l.val, l.type);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-				}).grow().top().right();
+				})).grow().top().right().colspan(2);
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow();
 		} catch (Throwable err) {
@@ -568,7 +576,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			label.color.set(c_type);
 			boolean isSingle = ctor.getParameterCount() == 0;
 			IntUI.addShowMenuListenerp(label, () -> Seq.with(
-			 MenuList.with(Icon.copySmall, "copy reflect getter", () -> {
+			 MenuList.with(Icon.copySmall, "Cpy reflect getter", () -> {
 				 copyExecutableReflection(ctor);
 			 }),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
@@ -603,7 +611,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	private void buildClass(ReflectTable table, Class<?> cls) {
 		table.bind(wrapMember(cls));
 		table.table(t -> {
-			t.top().defaults().top();
+			t.left().top().defaults().top();
 			try {
 				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ");
 
@@ -621,11 +629,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 					}
 				}
 
-				addDisplayListener(t.table(buttons -> {
+				addDisplayListener(t.add(new HoverTable(buttons -> {
 					buttons.right().defaults().right();
 					addDetailsButton(buttons, () -> null, cls);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
-				}).grow().padRight(40), E_JSFuncDisplay.buttons);
+				})).grow().colspan(0), E_JSFuncDisplay.buttons);
 			} catch (Throwable e) {
 				Log.err(e);
 			}

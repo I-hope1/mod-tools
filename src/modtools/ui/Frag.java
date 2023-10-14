@@ -13,6 +13,7 @@ import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.ui.components.buttons.CircleImageButton;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
@@ -33,7 +34,7 @@ public class Frag extends Table {
 
 	Seq<Content> enabledContents = new Seq<>();
 	public Frag() {
-		super(Styles.black6);
+		super(Styles.black8);
 	}
 	public void load() {
 		touchable = Touchable.enabled;
@@ -108,7 +109,7 @@ public class Frag extends Table {
 	private void circleBuild() {
 		float angle = 90;
 		for (Content content : enabledContents) {
-			ImageButton image = new ImageButton(content.icon, HopeStyles.hope_flati);
+			ImageButton image = new CircleImageButton(content.icon, HopeStyles.hope_flati);
 			image.setTransform(true);
 			float finalAngle = angle;
 			angle -= 30;

@@ -3,25 +3,28 @@ package modtools.events;
 import arc.func.Cons;
 import arc.struct.*;
 
+import java.util.HashMap;
+
 import static modtools.utils.Tools.Sr;
 
 /* copy from arc.Events */
 public class MyEvents {
-	private static final ObjectMap<Object, Seq> events = new ObjectMap<>();
+	private static final HashMap<Object, Seq> events = new HashMap<>();
 
-	private final ObjectMap<Object, Seq> insEvents    = new ObjectMap<>();
-	public static Seq<MyEvents>          allInstances = new Seq<>();
+	private final HashMap<Object, Seq> insEvents    = new HashMap<>();
+	public static Seq<MyEvents>        allInstances = new Seq<>();
 	public MyEvents() {
 		allInstances.add(this);
 	}
 	public void removeIns() {
-		insEvents.each((__, seq) -> seq.clear());
+		insEvents.forEach((__, seq) -> seq.clear());
 		insEvents.clear();
 		allInstances.remove(this);
 	}
 	/** Handle an event by class. */
 	public <T extends Enum<T>> void onIns(Enum<T> type, Cons<T> listener) {
-		insEvents.get(type, () -> new Seq<>(Cons.class)).add(listener);
+		insEvents.computeIfAbsent(type, k -> new Seq<>(Cons.class))
+		 .add(listener);
 	}
 	/** Fires an enum trigger. */
 	public <T extends Enum<T>> void fireIns(Enum<T> type) {
@@ -38,7 +41,8 @@ public class MyEvents {
 
 	/** Handle an event by class. */
 	public void onIns(Object type, Runnable listener) {
-		insEvents.get(type, () -> new Seq<>(Runnable.class)).add(listener);
+		insEvents.computeIfAbsent(type, k -> new Seq<>(Runnable.class))
+		 .add(listener);
 	}
 	/** Fires an enum trigger. */
 	public void fireIns(Object type) {
@@ -68,7 +72,9 @@ public class MyEvents {
 	/* ------------- for enum ---------- */
 	/** Handle an event by class. */
 	public static <T extends Enum<T>> void on(Enum<T> type, Cons<T> listener) {
-		(current != null ? current.insEvents : events).get(type, () -> new Seq<>(Cons.class)).add(listener);
+		(current != null ? current.insEvents : events)
+		 .computeIfAbsent(type, k -> new Seq<>(Cons.class))
+		 .add(listener);
 	}
 
 	/** Fires an enum trigger. */
@@ -83,7 +89,7 @@ public class MyEvents {
 
 	/* ------------- for object ---------- */
 	public static void on(Object type, Runnable listener) {
-		events.get(type, Seq::new).add(listener);
+		events.computeIfAbsent(type, k -> new Seq<>()).add(listener);
 	}
 	public static void fire(Object type) {
 		Sr((Seq<Runnable>) events.get(type))

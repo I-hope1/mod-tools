@@ -225,7 +225,7 @@ public class ReviewElement extends Content {
 	};
 
 	public static class ReviewElementWindow extends Window implements DisposableInterface {
-		Table   pane    = new LimitTable() {};
+		Table pane = new LimitTable() {};
 		Element element;
 		Pattern pattern;
 
@@ -512,13 +512,15 @@ public class ReviewElement extends Content {
 				 ElementUtils.quietScreenshot(element);
 			 }),
 			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
-			 MenuList.with(Icon.copySmall, "新窗口", () -> new ReviewElementWindow().show(element)),
+			 MenuList.with(Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
 			 MenuList.with(Icon.infoSmall, "@details", () -> JSFunc.showInfo(element)),
 			 FoldedList.withf(Icon.boxSmall, "Exec", () -> Seq.with(
 				MenuList.with(Icon.boxSmall, "Invalidate", element::invalidate),
 				MenuList.with(Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
 				MenuList.with(Icon.boxSmall, "Layout", element::layout),
-				MenuList.with(Icon.boxSmall, "Pack", element::pack)
+				MenuList.with(Icon.boxSmall, "Pack", element::pack),
+				MenuList.with(Icon.boxSmall, "Validate", element::validate),
+				MenuList.with(Icon.boxSmall, "Keep in stage", element::keepInStage)
 			 )),
 			 ValueLabel.newElementDetailsList(element)
 			)).ifRun(element instanceof Table, seq -> seq.add(
@@ -538,8 +540,8 @@ public class ReviewElement extends Content {
 			 .ifRun(element.parent instanceof Table, seq -> seq.add(
 				DisabledList.withd(Icon.waves, "This Cell",
 				 () -> !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
-					new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
-				}))).get());
+					 new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
+				 }))).get());
 			IntUI.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;
 
@@ -685,7 +687,7 @@ public class ReviewElement extends Content {
 	private static <T> Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
 																									Class<?> valueType) {
 		return cont.check(key, 28, getChecked(ctype, obj, key), b -> {
-			Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
+			 Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
 		 })
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
 		 .checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
@@ -813,17 +815,17 @@ public class ReviewElement extends Content {
 	static class InfoDetails extends Table {
 		public static final float keyScale   = 0.7f;
 		public static final float valueScale = 0.6f;
-		Label nameLabel = new NoMarkupLabel(""),
-		 sizeLabel      = new NoMarkupLabel(""),
-		 touchableLabel = new NoMarkupLabel(""),
+		Label nameLabel = new NoMarkupLabel(0.75f),
+		 sizeLabel      = new NoMarkupLabel(0.7f),
+		 touchableLabel = new NoMarkupLabel(valueScale),
 
 		// transformLabel    = new MyLabel(""),
-		colorLabel        = new NoMarkupLabel(""),
-		 rotationLabel    = new NoMarkupLabel(""),
-		 translationLabel = new NoMarkupLabel(""),
-		 styleLabel       = new NoMarkupLabel(""),
+		colorLabel        = new NoMarkupLabel(valueScale),
+		 rotationLabel    = new NoMarkupLabel(valueScale),
+		 translationLabel = new NoMarkupLabel(valueScale),
+		 styleLabel       = new NoMarkupLabel(valueScale),
 
-		colspanLabel  = new NoMarkupLabel(""),
+		colspanLabel = new NoMarkupLabel(valueScale),
 		 minSizeLabel = new Label(""), maxSizeLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
@@ -892,21 +894,18 @@ public class ReviewElement extends Content {
 
 		{
 			margin(4, 4, 4, 4);
-			nameLabel.setFontScale(0.75f);
-			sizeLabel.setFontScale(0.7f);
-			touchableLabel.setFontScale(valueScale);
 			touchableLabel.setColor(Color.acid);
-			colorLabel.setFontScale(valueScale);
-			rotationLabel.setFontScale(valueScale);
-			translationLabel.setFontScale(valueScale);
-			styleLabel.setFontScale(valueScale);
-			colspanLabel.setFontScale(valueScale);
 			minSizeLabel.setFontScale(valueScale);
 			maxSizeLabel.setFontScale(valueScale);
 			table(Tex.pane, this::build);
 		}
 
 		public static final float padRight = 8f;
+		Table cells_ = new Table(c -> {
+			c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
+			c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
+			c.defaults().colspan(2);
+		});
 		private void build(Table t) {
 			t.table(top -> {
 				top.add(nameLabel).color(Color.violet).padLeft(-4f);
@@ -936,9 +935,6 @@ public class ReviewElement extends Content {
 			}).growX());
 
 			cellCell = new BindCell(t.row().table(c -> {
-				c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
-				c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
-				c.defaults().colspan(2);
 				colspanCell = new BindCell(c.row().table(col -> {
 					col.add("Colspan").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 					col.add(colspanLabel).row();

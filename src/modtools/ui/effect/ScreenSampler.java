@@ -25,9 +25,12 @@ public class ScreenSampler {
 			BUFFER.blit(MyShaders.baseShader);
 		}
 
-		if (!D_BLUR.getBool("enable")) return;
+		if (!isEnabled()) return;
 		BUFFER.begin(Color.clear);
 	};
+	private static boolean isEnabled() {
+		return D_BLUR.getBool("enable");
+	}
 
 	public static void init() {
 		/* 初始化buffer */
@@ -69,6 +72,7 @@ public class ScreenSampler {
 		BUFFER.end();
 	}
 	public static void _continue() {
+		if (!isEnabled()) return;
 		// Draw.flush();
 		BUFFER.begin();
 	}

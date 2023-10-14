@@ -111,7 +111,7 @@ public class AllTutorial {
 			}
 		};
 		scene.root.getCaptureListeners().insert(0, listener);
-		LerpFun fun = new LerpFun(Interp.fade, Interp.fastSlow);
+		LerpFun fun = new LerpFun(Interp.smooth, Interp.smooth);
 		fun.register(0.1f);
 		Events.run(Trigger.uiDrawEnd, () -> {
 			if (enableFocusMouse || fun.a > 0) {

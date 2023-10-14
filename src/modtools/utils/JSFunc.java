@@ -86,7 +86,6 @@ public class JSFunc {
 		if (clazz != null && clazz.isArray()) {
 			if (o == null) return new DisWindow("none");
 			Table _cont = new LimitTable();
-			_cont.defaults().grow();
 			_cont.button(Icon.refresh, HopeStyles.clearNonei, () -> {
 				// 避免stack overflow
 				Core.app.post(() -> {
@@ -99,7 +98,7 @@ public class JSFunc {
 					}
 					dialog[0] = null;
 				});
-			}).size(50).row();
+			}).left().size(50).row();
 			int length = Array.getLength(o);
 
 			Class<?> componentType = clazz.getComponentType();
@@ -159,8 +158,10 @@ public class JSFunc {
 	}
 
 	public static Window testDraw(Runnable draw) {
-		return dialog(new Element() {
-			public void draw() {
+		return dialog(new Group() {
+			{transform = true;}
+
+			public void drawChildren() {
 				draw.run();
 			}
 		});
@@ -326,7 +327,7 @@ public class JSFunc {
 		return switch (unsafe.addressSize()) {
 			case 4 -> unsafe.getInt(ONE_ARRAY, baseOffset);
 			case 8 -> unsafe.getLong(ONE_ARRAY, baseOffset);
-			default -> throw new Error("unsupported address size: " + unsafe.addressSize());
+			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
 		};
 	}
 
@@ -344,10 +345,14 @@ public class JSFunc {
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
 	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
-		table.button("@details", HopeStyles.flatBordert, () -> {
+		/* table.button("@details", HopeStyles.flatBordert, () -> {
 			Object o = prov.get();
 			Core.app.post(() -> showInfo(o, o != null ? o.getClass() : clazz));
-		}).size(96, 45);
+		}).size(96, 45); */
+		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 24, () -> {
+			Object o = prov.get();
+			Core.app.post(() -> showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
+		}).size(32, 32);
 	}
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
@@ -368,11 +373,11 @@ public class JSFunc {
 		return Core.input.ctrl() || E_JSFunc.watch_multi.enabled();
 	}
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
-		return buttons.button(Icon.eyeSmall, Styles.squarei, () -> {}).with(b -> b.clicked(() -> {
+		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
 			Sr((!isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbstractPos(b)));
-		})).size(45);
+		})).size(32);
 	}
 
 	public static <T extends Group> void design(T element) {

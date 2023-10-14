@@ -16,6 +16,10 @@ public class NoMarkupLabel extends Label {
 	public NoMarkupLabel(CharSequence text, LabelStyle style) {
 		super(text, style);
 	}
+	public NoMarkupLabel(float scale) {
+		super("");
+		setFontScale(scale);
+	}
 	public void layout() {
 		if (cache == null) return;
 		FontData fontData = cache.getFont().getData();

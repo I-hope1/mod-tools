@@ -2,7 +2,7 @@ package modtools;
 
 import arc.*;
 import arc.files.*;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.scene.event.*;
 import arc.struct.*;
 import arc.util.*;
@@ -18,9 +18,10 @@ import modtools.graphics.MyShaders;
 import modtools.ui.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.utils.Tools;
+import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.FileUtils;
+import test0.Circle;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -127,6 +128,7 @@ public class ModTools extends Mod {
 	}
 
 	private static void resolveInputAndUI() {
+		Time.mark();
 		if (ui == null) return;
 		if (error != null) {
 			ui.showException(error);
@@ -163,10 +165,12 @@ public class ModTools extends Mod {
 		Time.runTask(6f, () -> {
 			IntUI.load();
 			AllTutorial.init();
+			// Circle.draw();
 		});
 		if (SETTINGS.getBool("ShowMainMenuBackground")) {
 			Tools.runIgnoredException(Background::main);
 		}
+		Log.info("Loaded ModTools input and ui in @ms", Time.elapsed());
 	}
 
 	/**

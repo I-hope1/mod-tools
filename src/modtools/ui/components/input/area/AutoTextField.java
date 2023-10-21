@@ -23,12 +23,17 @@ public class AutoTextField extends TextField {
 		changed(this::resize0);
 	}
 
+	public void setTextCheck(String str) {
+		if (Core.scene.getKeyboardFocus() == this) return;
+		setText(str);
+	}
+
 	public void setText(String str) {
 		super.setText(str);
 		resize0();
 	}
 	private void resize0() {
-		Time.runTask(0, () -> setWidth(getPrefWidth()));
+		Core.app.post(() -> setWidth(getPrefWidth()));
 		if (parent != null) parent.invalidateHierarchy();
 	}
 	public float getPrefWidth() {

@@ -10,12 +10,14 @@ import arc.math.Mathf;
 import arc.math.geom.Rect;
 import arc.scene.*;
 import arc.scene.event.*;
+import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.style.*;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.IntSeq;
 import arc.util.*;
+import arc.util.pooling.Pools;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
@@ -171,8 +173,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public  Runnable trackCursor  = null;
 
 		public MyTextArea(String text) {
-			super("");
-			setText0(new StringBuffer(text));
+			super("", HopeStyles.defaultMultiArea);
+			onlyFontChars = false;
+			setText(text);
 		}
 		public float lineHeight() {
 			return style.font.getLineHeight();
@@ -234,7 +237,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			font.setColor(lastColor);
 			font.getData().markupEnabled = had;
 		}
-
 		float offsetX, offsetY, baseOffsetX;
 		int row, displayTextStart, displayTextEnd;
 		public Font font = null;
@@ -331,6 +333,16 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		boolean changeText(StringBuffer oldText, StringBuffer newText) {
 			return !readOnly && super.changeText(oldText, newText);
 		}
+		/* boolean changeText(String oldText, String newText){
+        if(readOnly || newText.equals(oldText)) return false;
+        text = newText;
+        ChangeEvent changeEvent = Pools.obtain(ChangeEvent.class, ChangeEvent::new);
+        boolean     cancelled   = fire(changeEvent);
+        text = cancelled ? oldText : newText;
+        Pools.free(changeEvent);
+        return !cancelled;
+    } */
+
 		public void trackCursor() {
 			if (trackCursor != null) {
 				Time.runTask(1f, trackCursor);
@@ -502,62 +514,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				trackCursor();
 				return super.keyUp(event, keycode);
 			}
-		}
-	}
-
-	/*public static class RegExpResult {
-		public int priority;
-		public int start, len, end;
-		public String text;
-		public Color color;
-	}*/
-
-	public static class MyMatcher {
-		private final Matcher matcher;
-		// public boolean multi = false;
-
-		private MyMatcher(Matcher matcher) {
-			this.matcher = matcher;
-		}
-
-		// boolean notFound;
-		int lastStart = -1;
-		// int minStart = -1;
-
-		private boolean found(int index) {
-			return index < lastStart;
-		}
-
-		private boolean find() {
-			if (matcher.find()) {
-				lastStart = matcher.start();
-				return true;
-			}
-			return false;
-			/*if (*//*notFound || start <= lastStart || *//*start > matcher.regionEnd()) return false;
-			// if (start <= lastStart) return true;
-			if (matcher.find(start)) {
-				// lastStart = matcher.start();
-				return true;
-			}
-			// notFound = true;
-			// minStart = matcher.regionEnd();
-			return false;*/
-		}
-
-		// 只获取第一个组
-		private int start() {
-			return matcher.start(1);
-		}
-
-		// 只获取第一个组
-		private String group() {
-			return matcher.group(1);
-		}
-
-		@Override
-		public String toString() {
-			return matcher.toString();
 		}
 	}
 

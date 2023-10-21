@@ -20,7 +20,7 @@ public interface ReflectTools {
 		} catch (Throwable ignored) {}
 	}
 	static Prov<String> makeDetails(Class<?> cls, Type type) {
-		return cls.isPrimitive() ? null : type::getTypeName;
+		return cls.isPrimitive() || type == null ? null : type::getTypeName;
 	}
 	static MyLabel makeGenericType(Class<?> type, Prov<String> details) {
 		return makeGenericType(() -> getGenericString(type), type.isPrimitive() ? null : details);

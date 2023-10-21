@@ -15,7 +15,6 @@ import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import mindustry.core.UI;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -30,7 +29,7 @@ import modtools.ui.components.Window.DisposableInterface;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.*;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.utils.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
 import modtools.ui.effect.MyDraw;
@@ -160,7 +159,10 @@ public class ReviewElement extends Content {
 	private void drawMarginOrPad(
 	 Vec2 vec2, Element elem, boolean pad,
 	 float left, float top, float right, float bottom) {
-
+		left = TopGroup.clamp(vec2, left, true);
+		top = TopGroup.clamp(vec2, top, false);
+		right = TopGroup.clamp(vec2, right, true);
+		bottom = TopGroup.clamp(vec2, bottom, false);
 		if (pad) {
 			left *= -1;
 			top *= -1;
@@ -253,7 +255,7 @@ public class ReviewElement extends Content {
 						 hide();
 					 };
 					 if (element.parent == scene.root) {
-						 Vec2 vec2 = ElementUtils.getAbstractPos(bs[0]);
+						 Vec2 vec2 = ElementUtils.getAbsolutePos(bs[0]);
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
 				 })
@@ -432,7 +434,7 @@ public class ReviewElement extends Content {
 			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
 				/* 占位符 */
-				var button   = new FoldedImageButton(false);
+				var button = new FoldedImageButton(true);
 				int size     = 32;
 				var children = group.getChildren();
 				add(button).size(size).disabled(__ -> children.isEmpty());
@@ -445,7 +447,7 @@ public class ReviewElement extends Content {
 				);
 				defaults().growX();
 				add(new LimitTable(t -> {
-						/*if (children.isEmpty()) {
+					/*if (children.isEmpty()) {
 							return;
 						}*/
 					// t.marginLeft(size / 4f);
@@ -457,14 +459,14 @@ public class ReviewElement extends Content {
 							window.build(child, table1);
 						}
 					};
-					rebuild.run();
-					int[] lastChildrenSize = {children.size};
+					if (children.size < 20) rebuild.run();
+					int[] lastChildrenSize = {children.size < 20 ? children.size : -1};
 
 					button.table = table1;
 					button.fireCheck(!children.isEmpty() && children.size < 20);
 					button.cell = t.add(table1).grow();
 					button.rebuild = () -> {
-						if (lastChildrenSize[0] == children.size) {return;}
+						if (lastChildrenSize[0] == children.size) return;
 						rebuild.run();
 					};
 				})).left();
@@ -529,11 +531,9 @@ public class ReviewElement extends Content {
 						d.left().defaults().left();
 						for (var cell : ((Table) element).getCells()) {
 							d.table(Tex.pane, t0 -> {
-								t0.add(new ValueLabel(cell, Cell.class, null, null));
+								t0.add(new ReadOnlyValueLabel<>(Cell.class, () -> cell));
 							});
-							if (cell.isEndRow()) {
-								d.row();
-							}
+							if (cell.isEndRow()) d.row();
 						}
 					});
 				})))
@@ -605,7 +605,7 @@ public class ReviewElement extends Content {
 			});
 		}*/
 	}
-	private static String getElementName(Element element) {
+	public static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
 		 : ReviewElement.getSimpleName(element.getClass())
 			 + (element.name != null ? " ★" + element.name + "★" : "");
@@ -624,7 +624,7 @@ public class ReviewElement extends Content {
 				getAdd(t, cell, "padTop");
 				t.add().row();
 				getAdd(t, cell, "padLeft");
-				ValueLabel label = new ValueLabel(cell.get(), Element.class, null, null);
+				ValueLabel label = new ReadOnlyValueLabel<>(Element.class, cell::get);
 				label.enableUpdate = false;
 				label.update(() -> label.setVal(cell.get()));
 				Label   placeholder     = new MyLabel("<VALUE>", MOMO_LabelStyle);

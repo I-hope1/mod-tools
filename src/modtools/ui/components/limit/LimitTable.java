@@ -1,20 +1,20 @@
 package modtools.ui.components.limit;
 
 import arc.func.Cons;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.ObjectSet;
 
 import java.util.*;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
 
-public class LimitTable extends Table implements Limit{
+public class LimitTable extends Table implements Limit {
 	private HashSet<Element> limitElems;
 	public LimitTable() {}
 	public LimitTable(Drawable background) {
@@ -64,10 +64,25 @@ public class LimitTable extends Table implements Limit{
 	public Cell<Button> button(Cons<Button> cons, Runnable listener) {
 		return super.button(cons, listener);
 	}
-	/* @Override
+
+	public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, Runnable listener) {
+		ImageButton button = new LimitImageButton(icon, style);
+		button.clicked(listener);
+		button.resizeImage(icon.imageSize());
+		return add(button);
+	}
+	public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, float isize, Runnable listener) {
+		ImageButton button = new LimitImageButton(icon, style);
+		button.clicked(listener);
+		button.resizeImage(isize);
+		return add(button);
+	}
+	public Cell<Image> image() {
+		return add(new LimitImage());
+	}
 	public Cell<Image> image(Drawable name) {
 		return add(new LimitImage(name));
-	} */
+	}
 
 	HashSet<Element> acquireLimitElems() {
 		return limitElems == null ? limitElems = new HashSet<>() : limitElems;
@@ -76,10 +91,12 @@ public class LimitTable extends Table implements Limit{
 		if (!(element instanceof Limit) && element != null) acquireLimitElems().add(element);
 		return super.add(element);
 	}
-	@Override
+	// final Vec2 absPos = new Vec2();
+
 	public void updateVisibility() {
+		// Limit.absPos(this, absPos);
+
 		visible = isVisible(this);
-		acquireLimitElems()
-		 .forEach(el -> el.visible = isVisible(el));
+		if (visible) acquireLimitElems().forEach(el -> el.visible = isVisible(el));
 	}
 }

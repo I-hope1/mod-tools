@@ -214,6 +214,9 @@ public class Tools {
 		if (i < 0) i += list.size();
 		return 0 <= i && i < list.size() ? list.get(i) : null;
 	}
+	public static <T> T getOrNull(T[] arr, int i) {
+		return 0 <= i && i < arr.length ? arr[i] : null;
+	}
 
 	/** 自动监控原seq */
 	public static <T> Seq<T> selectUpdateFrom(Seq<T> items, Boolf<T> predicate) {
@@ -242,7 +245,7 @@ public class Tools {
 				run.run();
 			} catch (Throwable th) {
 				Window window = IntUI.showException(text, th);
-				if (el != null) window.setPosition(ElementUtils.getAbstractPos(el));
+				if (el != null) window.setPosition(ElementUtils.getAbsolutePos(el));
 			}
 		};
 	}

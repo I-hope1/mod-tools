@@ -2,10 +2,14 @@ package modtools.graphics;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.graphics.Color;
+import arc.graphics.*;
+import arc.graphics.Texture.TextureFilter;
+import arc.graphics.g2d.*;
+import arc.graphics.g3d.PlaneBatch3D;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
+import arc.util.*;
 import modtools.*;
 
 
@@ -29,6 +33,14 @@ public class MyShaders {
 				setUniformf("u_invsize", 1f / width, 1f / height);
 			}
 		}; */
+		Core.batch = new SpriteBatch() {
+			final Texture texture = new Texture(1000, 1000);
+			protected void draw(Texture texture, float[] spriteVertices, int offset, int count) {
+				super.draw(texture, spriteVertices, offset, count);
+				switchTexture(this.texture);
+			}
+		};
+		Draw.color();
 		// Shader last = Draw.getShader();
 		// Draw.shader();
 		// baseShader = Draw.getShader();

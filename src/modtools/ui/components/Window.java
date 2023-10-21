@@ -10,7 +10,7 @@ import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.layout.*;
@@ -26,6 +26,7 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
+import modtools.ui.content.ui.ReviewElement;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.utils.*;
@@ -39,7 +40,7 @@ import static modtools.utils.Tools.*;
 
 /**
  * <p>浮动的窗口，可以缩放，{@link #toggleMinimize() 最小化}，{@link #toggleMaximize() 最大化}</p>
- * <p>如果继承{@link DisposableInterface}，自动{@link #show()}，{@link #hide()}时销毁</p>
+ * <p>如果继承{@link DisposableInterface}，{@link #show()}，{@link #hide()}时自动销毁</p>
  * 记住左下角是{@code (0, 0)}
  * @author I hope...
  **/
@@ -72,7 +73,7 @@ public class Window extends Table {
 	}
 
 	public static Drawable myPane  = Tex.pane;
-	public static Drawable topPane = whiteui.tint(Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f));
+	public static Drawable topPane = new TintDrawable(IntUI.whiteui, () -> JSFunc.c_window_title);
 
 	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);
@@ -679,6 +680,26 @@ public class Window extends Table {
 	public FillTable addFillTable(Cons<FillTable> cons) {
 		return new FillTable(Styles.black5, cons);
 	}
+	private static class TintDrawable extends TextureRegionDrawable {
+		int  last = tint.rgba();
+		Intp intp;
+		public TintDrawable(TextureRegionDrawable drawable, Intp intp) {
+			super(drawable);
+			this.intp = intp;
+		}
+		void updateTint() {
+			if (last != intp.get()) tint.set(last = intp.get());
+		}
+		public void draw(float x, float y, float width, float height) {
+			updateTint();
+			super.draw(x, y, width, height);
+		}
+		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
+										 float scaleY, float rotation) {
+			updateTint();
+			super.draw(x, y, originX, originY, width, height, scaleX, scaleY, rotation);
+		}
+	}
 
 	public class FillTable extends Table {
 		{
@@ -774,6 +795,9 @@ public class Window extends Table {
 		}
 	}
 
+	public String toString() {
+		return ReviewElement.getElementName(this);
+	}
 	public static class NoTopWindow extends Window {
 
 		public NoTopWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
@@ -842,9 +866,9 @@ public class Window extends Table {
 			return element;
 		}
 		private void translateTo(float toValue) {
-			if (last == null || toValue != last.getY()) obtainAction(toValue);
+			if (last == null || toValue != last.getY()) applyAction(toValue);
 		}
-		private void obtainAction(float toValue) {
+		private void applyAction(float toValue) {
 			float time = last == null ? 0 : Math.max(0, last.getDuration() - last.getTime())/* 反过来 */;
 			if (last != null) titleTable.removeAction(last);
 			if (last == null) last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);

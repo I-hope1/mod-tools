@@ -13,6 +13,7 @@ import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Scl;
 import arc.util.Tmp;
 import mindustry.core.Version;
@@ -48,6 +49,8 @@ public class HopeStyles {
 	 hope_defaultSlider;
 	public static CheckBoxStyle
 	 hope_defaultCheck;
+	public static TextFieldStyle
+	 defaultMultiArea;
 
 	static void loadHopeStyles() {
 		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
@@ -98,6 +101,10 @@ public class HopeStyles {
 			knobDown = sliderKnobDown;
 		}}; */
 		flatb = new ButtonStyle(flatt);
+
+		defaultMultiArea = new TextFieldStyle(defaultField) {{
+			background = null;
+		}};
 	}
 
 	/* ---------TODO：以下是为了适配V6----------- */

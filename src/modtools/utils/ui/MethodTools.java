@@ -10,6 +10,7 @@ import arc.util.*;
 import modtools.ui.IntUI;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.components.limit.LimitTable;
+import modtools.utils.Tools;
 import modtools.utils.ui.search.FilterTable;
 import rhino.*;
 
@@ -95,7 +96,7 @@ public interface MethodTools {
 
 		for (int i = 0, length = args.length; i < length; i++) {
 			var ptype = args[i];
-			table.add(ReflectTools.makeGenericType(ptype, makeDetails(ptype, genericArgs[i])))
+			table.add(ReflectTools.makeGenericType(ptype, makeDetails(ptype, Tools.getOrNull(genericArgs, i))))
 			 .color(Tmp.c1.set(c_type));
 			if (i != length - 1) {
 				table.add(", ");

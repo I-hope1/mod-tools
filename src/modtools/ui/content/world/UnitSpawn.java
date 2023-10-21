@@ -28,6 +28,7 @@ import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
 import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.*;
+import modtools.ui.content.ui.ReviewElement;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
@@ -99,14 +100,14 @@ public class UnitSpawn extends Content {
 		}).growX();
 	}
 	public void setX(float x) {
-		if (!validNumber(String.valueOf(x))) return;
-		xField.setText(String.valueOf(x));
+		if (!validNumber(x)) return;
+		xField.setText(Strings.fixed(x, 1));
 		this.x = x;
 		//		swapnX = x;
 	}
 	public void setY(float y) {
-		if (!validNumber(String.valueOf(y))) return;
-		yField.setText(String.valueOf(y));
+		if (!validNumber(y)) return;
+		yField.setText(Strings.fixed(y, 1));
 		this.y = y;
 		//		swapnY = y;
 	}
@@ -127,7 +128,7 @@ public class UnitSpawn extends Content {
 			table.table(x0 -> {
 				x0.add("x:");
 				xField = x0.field(String.valueOf(x), newX -> {
-					x = Strings.parseFloat(newX);
+					 x = Strings.parseFloat(newX);
 				 })
 				 .valid(this::validNumber).growX()
 				 .get();
@@ -135,7 +136,7 @@ public class UnitSpawn extends Content {
 			table.table(y0 -> {
 				y0.add("y:");
 				yField = y0.field(String.valueOf(y), newY -> {
-					y = Strings.parseFloat(newY);
+					 y = Strings.parseFloat(newY);
 				 })
 				 .valid(this::validNumber).growX()
 				 .get();
@@ -234,10 +235,12 @@ public class UnitSpawn extends Content {
 
 	public boolean validNumber(String str) {
 		try {
-			float d = Strings.parseFloat(str);
-			return Math.abs(d) < 1E6 && !isNaN(d);
+			return validNumber(Strings.parseFloat(str));
 		} catch (Exception ignored) {}
 		return false;
+	}
+	public boolean validNumber(float d) {
+		return Math.abs(d) < 1E6 && !isNaN(d);
 	}
 	public void spawnIgnored() {
 		try {

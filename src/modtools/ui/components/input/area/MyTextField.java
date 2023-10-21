@@ -2,7 +2,6 @@ package modtools.ui.components.input.area;
 
 import arc.Core;
 import arc.Input.TextInput;
-import arc.func.Cons;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.Font.FontData;
@@ -45,46 +44,14 @@ public class MyTextField extends TextField implements Disableable {
 	static protected final char BACKSPACE = 8;
 	static protected final char TAB       = '\t';
 	static protected final char DELETE    = 127;
-	static protected final char BULLET    = 149;
 
+	public StringBuffer text;
 
-	public static float keyRepeatInitialTime = 0.4f;
-	public static float keyRepeatTime        = 0.1f;
-
-	/** Special field containing implementation-specific data for IME support. */
-	public Object imeData;
-
-	public StringBuffer text = new StringBuffer();
-
-	public int cursor, selectionStart;
-	public boolean      hasSelection;
-	public boolean      writeEnters;
-	public CharSequence displayText = new StringBuffer();
-	public float        fontOffset, textHeight, textOffset;
-	public InputListener      inputDialogListener;
-	public TextFieldStyle     style;
-	public InputListener      inputListener;
-	public TextFieldListener  listener;
-	public TextFieldValidator validator;
-	public TextFieldFilter    filter;
-	public boolean            focusTraversal = true, onlyFontChars = true, disabled;
-	public StringBuffer    undoText       = new StringBuffer();
-	public long            lastChangeTime;
-	public boolean         passwordMode;
-	public float           renderOffset;
-	public boolean         cursorOn       = true;
-	public boolean         hasInputDialog = false;
-	public long            lastBlink;
-	public MyKeyRepeatTask keyRepeatTask  = new MyKeyRepeatTask();
-	public boolean         programmaticChangeEvents;
-	public String          messageText;
-	public int             textHAlign     = Align.left;
-	public float           selectionX, selectionWidth;
-	public StringBuffer passwordBuffer;
-	public char         passwordCharacter = BULLET;
-	public int          visibleTextStart, visibleTextEnd;
-	public int   maxLength = 0;
-	public float blinkTime = 0.32f;
+	public          StringBuffer    undoText       = new StringBuffer();
+	protected final FloatSeq        glyphPositions = new FloatSeq();
+	public          MyKeyRepeatTask keyRepeatTask  = new MyKeyRepeatTask();
+	public          CharSequence    displayText    = new StringBuffer();
+	public          StringBuffer    passwordBuffer;
 
 	public MyTextField() {
 		super("");
@@ -103,6 +70,7 @@ public class MyTextField extends TextField implements Disableable {
 		addListener(new IbeamCursorListener());
 		addInputDialog();
 	}
+
 	class MyKeyRepeatTask extends Task {
 		KeyCode keycode;
 
@@ -116,7 +84,9 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	protected int letterUnderCursor(float x) {
-
+		if (visibleTextStart >= glyphPositions.size) {
+			return text.length();
+		}
 		x -= textOffset + fontOffset - style.font.getData().cursorX - glyphPositions.get(visibleTextStart);
 		Drawable background = getBackgroundDrawable();
 		if (background != null) x -= style.background.getLeftWidth();
@@ -130,10 +100,6 @@ public class MyTextField extends TextField implements Disableable {
 		}
 
 		return n - 1;
-	}
-
-	protected boolean isWordCharacter(char c) {
-		return Character.isLetterOrDigit(c);
 	}
 
 	protected int[] wordUnderCursor(int at) {
@@ -167,13 +133,6 @@ public class MyTextField extends TextField implements Disableable {
 		return maxLength <= 0 || size < maxLength;
 	}
 
-	public void removeInputDialog() {
-		if (hasInputDialog && inputDialogListener != null) {
-			removeListener(inputDialogListener);
-			hasInputDialog = false;
-		}
-	}
-
 	public void addInputDialog() {
 		//mobile only
 		if (!app.isMobile() || hasInputDialog) return;
@@ -203,16 +162,8 @@ public class MyTextField extends TextField implements Disableable {
 		});
 	}
 
-	public int getMaxLength() {
-		return this.maxLength;
-	}
-
-	public void setMaxLength(int maxLength) {
-		this.maxLength = maxLength;
-	}
-
 	public void clearText() {
-		setText("");
+		text.setLength(0);
 	}
 
 	/**
@@ -230,13 +181,6 @@ public class MyTextField extends TextField implements Disableable {
 	 */
 	public TextFieldStyle getStyle() {
 		return style;
-	}
-
-	public void setStyle(TextFieldStyle style) {
-		if (style == null) throw new IllegalArgumentException("style cannot be null.");
-		this.style = style;
-		textHeight = style.font.getCapHeight() - style.font.getDescent() * 2;
-		invalidateHierarchy();
 	}
 
 	protected void calculateOffsets() {
@@ -381,19 +325,6 @@ public class MyTextField extends TextField implements Disableable {
 		return validator == null || validator.valid(String.valueOf(text));
 	}
 
-	protected float getTextY(Font font, Drawable background) {
-		float height = getHeight();
-		float textY  = textHeight / 2 + font.getDescent();
-		if (background != null) {
-			float bottom = background.getBottomHeight();
-			textY = textY + (height - background.getTopHeight() - bottom) / 2 + bottom;
-		} else {
-			textY = textY + height / 2;
-		}
-		if (font.usesIntegerPositions()) textY = (int) textY;
-		return textY;
-	}
-
 	/** Draws selection rectangle **/
 	protected void drawSelection(Drawable selection, Font font, float x, float y) {
 		selection.draw(x + textOffset + selectionX + fontOffset, y - textHeight - font.getDescent(), selectionWidth, textHeight);
@@ -425,12 +356,13 @@ public class MyTextField extends TextField implements Disableable {
 
 		int textLength = Math.min(text.length(), displayTextEnd0());
 
-		StringBuffer newDisplayText = new StringBuffer();
+		StringBuffer newDisplayText = (StringBuffer) displayText;
+		newDisplayText.setLength(0);
 		for (int i = displayTextStart0(); i < textLength; i++) {
 			char c = text.charAt(i);
 			newDisplayText.append(data.hasGlyph(c) ? c : ' ');
 		}
-		if (newDisplayText.length() == 0) newDisplayText.append(' ');
+		if (newDisplayText.isEmpty()) newDisplayText.append(' ');
 		// Log.info(newDisplayText);
 
 		if (passwordMode && data.hasGlyph(passwordCharacter)) {
@@ -507,11 +439,12 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	public void paste(StringBuffer content, boolean fireChangeEvent) {
-		if (content == null || (content.length() == 0 && text.length() == 0)) return;
-		StringBuffer buffer     = new StringBuffer();
-		int          textLength = text.length();
+		if (content == null || (content.isEmpty() && text.isEmpty())) return;
+
+		int textLength = text.length();
 		if (hasSelection) textLength -= Math.abs(cursor - selectionStart);
 		FontData data = style.font.getData();
+		StringBuffer buffer = new StringBuffer(content.length());
 		for (int i = 0, n = content.length(); i < n; i++) {
 			if (!withinMaxLength(textLength + buffer.length())) break;
 			char c = content.charAt(i);
@@ -536,9 +469,9 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	public StringBuffer insert(int position, CharSequence text, StringBuffer to) {
-		if (to.length() == 0) {
+		if (to.isEmpty()) {
 			if (text instanceof StringBuffer) return (StringBuffer) text;
-			return new StringBuffer(text);
+			return to.append(text);
 		}
 		return to.insert(position, text);
 	}
@@ -558,21 +491,6 @@ public class MyTextField extends TextField implements Disableable {
 		}
 		clearSelection();
 		return minIndex;
-	}
-	public InputListener getDefaultInputListener() {
-		return inputListener;
-	}
-
-	public void typed(char ch, Runnable run) {
-		setTextFieldListener((textField, c) -> {
-			if (c == ch) {
-				run.run();
-			}
-		});
-	}
-
-	public void typed(Cons<Character> cons) {
-		setTextFieldListener((textField, c) -> cons.get(c));
 	}
 
 	/** @return May be null. */
@@ -599,7 +517,7 @@ public class MyTextField extends TextField implements Disableable {
 
 		clearSelection();
 		cursor = text.length();
-		paste(new StringBuffer(str), programmaticChangeEvents);
+		paste(str, programmaticChangeEvents);
 	}
 
 	/** @return Never null, might be an empty string. */
@@ -626,15 +544,19 @@ public class MyTextField extends TextField implements Disableable {
 	}
 	public void setText(String str) {
 		if (str == null) str = "";
-		if (text != null && str.equals(text.toString())) return;
+		checkText();
+		if (str.equals(text.toString())) return;
 
 		clearSelection();
-		text = new StringBuffer();
+		text.setLength(0);
 		paste(str, false);
 		if (programmaticChangeEvents) {
 			changeText();
 		}
 		cursor = 0;
+	}
+	private void checkText() {
+		if (text == null) text = new StringBuffer();
 	}
 	/**
 	 * @param oldText May be null.
@@ -718,31 +640,6 @@ public class MyTextField extends TextField implements Disableable {
 		cursor = Math.min(cursorPosition, text.length());
 	}
 
-	@Override
-	public float getPrefWidth() {
-		return 150;
-	}
-
-	@Override
-	public float getPrefHeight() {
-		float topAndBottom = 0, minHeight = 0;
-		if (style.background != null) {
-			topAndBottom = Math.max(topAndBottom, style.background.getBottomHeight() + style.background.getTopHeight());
-			minHeight = Math.max(minHeight, style.background.getMinHeight());
-		}
-		if (style.focusedBackground != null) {
-			topAndBottom = Math.max(topAndBottom,
-			 style.focusedBackground.getBottomHeight() + style.focusedBackground.getTopHeight());
-			minHeight = Math.max(minHeight, style.focusedBackground.getMinHeight());
-		}
-		if (style.disabledBackground != null) {
-			topAndBottom = Math.max(topAndBottom,
-			 style.disabledBackground.getBottomHeight() + style.disabledBackground.getTopHeight());
-			minHeight = Math.max(minHeight, style.disabledBackground.getMinHeight());
-		}
-		return Math.max(topAndBottom + textHeight, minHeight);
-	}
-
 	/**
 	 * Sets text horizontal alignment (left, center or right).
 	 *
@@ -750,10 +647,6 @@ public class MyTextField extends TextField implements Disableable {
 	 */
 	public void setAlignment(int alignment) {
 		this.textHAlign = alignment;
-	}
-
-	public boolean isPasswordMode() {
-		return passwordMode;
 	}
 
 	/**
@@ -774,21 +667,6 @@ public class MyTextField extends TextField implements Disableable {
 		this.passwordCharacter = passwordCharacter;
 		if (passwordMode) updateDisplayText();
 	}
-
-	public void setBlinkTime(float blinkTime) {
-		this.blinkTime = blinkTime;
-	}
-
-	@Override
-	public boolean isDisabled() {
-		return disabled;
-	}
-
-	@Override
-	public void setDisabled(boolean disabled) {
-		this.disabled = disabled;
-	}
-
 	protected void moveCursor(boolean forward, boolean jump) {
 		int limit      = forward ? text.length() : 0;
 		int charOffset = forward ? 0 : -1;
@@ -802,37 +680,11 @@ public class MyTextField extends TextField implements Disableable {
 			if (isWord != continueCursor(cursor, charOffset)) break;
 		}
 	}
-
 	protected boolean continueCursor(int index, int offset) {
 		return continueCursor(text.charAt(index + offset));
 	}
 	protected boolean continueCursor(char c) {
 		return isWordCharacter(c);
-	}
-
-	/**
-	 * Interface for listening to typed characters.
-	 *
-	 * @author mzechner
-	 */
-	public interface TextFieldListener {
-		void keyTyped(TextField textField, char c);
-	}
-
-	/**
-	 * Interface for filtering characters entered into the text field.
-	 *
-	 * @author mzechner
-	 */
-	public interface TextFieldFilter {
-		TextFieldFilter digitsOnly = (field, c) -> Character.isDigit(c);
-		TextFieldFilter floatsOnly = (field, c) -> Character.isDigit(c) || ((!field.getText().contains(".")) && c == '.');
-
-		boolean acceptChar(TextField textField, char c);
-	}
-
-	public interface TextFieldValidator {
-		boolean valid(String text);
 	}
 
 	/** Basic input listener for the text field */

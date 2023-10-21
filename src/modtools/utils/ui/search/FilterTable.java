@@ -5,6 +5,7 @@ import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
+import arc.util.Log;
 import arc.util.pooling.Pools;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.PatternUtils;
@@ -45,15 +46,21 @@ public class FilterTable<E> extends LimitTable {
 			map.clear();
 		}
 	}
+	public boolean isBound() {
+		return current != null;
+	}
 	public void unbind() {
 		current = null;
 	}
 
 	public <T extends Element> Cell<T> add(T element) {
 		Cell<T> cell = super.add(element);
+		bindCell(element, cell);
+		return cell;
+	}
+	protected <T extends Element> void bindCell(T element, Cell<T> cell) {
 		if (cons != null) cons.get(element);
 		if (current != null) current.add(new BindCell(cell));
-		return cell;
 	}
 
 	public void addIntUpdateListener(Intp provider) {

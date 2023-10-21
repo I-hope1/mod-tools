@@ -30,7 +30,7 @@ import mindustry.ui.*;
 import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.ui.IntUI;
 import modtools.ui.components.*;
-import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.utils.*;
 import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
@@ -220,7 +220,7 @@ public class ShowUIList extends Content {
 			uiKeyMap.put((Group) o, f.getName());
 			t.bind(f.getName());
 			t.add(f.getName());
-			t.add(new ValueLabel(ValueLabel.unset, UI.class, f, Vars.ui));
+			t.add(new FieldValueLabel(ValueLabel.unset, UI.class, f, Vars.ui));
 			t.unbind();
 		}
 	});

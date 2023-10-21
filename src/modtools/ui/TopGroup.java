@@ -5,7 +5,7 @@ import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
-import arc.math.Interp;
+import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
@@ -21,9 +21,7 @@ import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
 import modtools.annotations.builder.DataBoolFieldInit;
-import modtools.graphics.MyShaders;
-import modtools.ui.HopeIcons;
-import modtools.ui.IntUI.*;
+import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.effect.*;
@@ -37,7 +35,6 @@ import static modtools.IntVars.modName;
 import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.components.Window.frontWindow;
-import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
@@ -116,7 +113,7 @@ public final class TopGroup extends WidgetGroup {
 		Element drawPadElem = or(this.drawPadElem, scene.root);
 		Vec2    vec2;
 		if (drawPadElem.parent != null) {
-			vec2 = ElementUtils.getAbstractPos(drawPadElem.parent);
+			vec2 = ElementUtils.getAbsolutePos(drawPadElem.parent);
 		} else if (drawPadElem == scene.root) {
 			vec2 = Tmp.v1.set(0, 0);
 		} else return;
@@ -138,7 +135,11 @@ public final class TopGroup extends WidgetGroup {
 		// Tools.screenshot(selected, true, null).texture;
 		// buffer.blit(MyShaders.Specl);
 		// scene.getCamera().bounds(Tmp.r1.set(selected.x, selected.y, selected.getWidth(), selected.getHeight()));
-		Draw.blit(bufferCaptureAll(Tmp.v1, selected), MyShaders.baseShader);
+		Draw.rect(Draw.wrap(ScreenSampler.bufferCapture(selected)),
+		 Tmp.v1.x + selected.getWidth() / 2f,
+		 Tmp.v1.y + selected.getHeight() / 2f,
+		 selected.getWidth(),
+		 /* 上下翻转 */-selected.getHeight());
 		Gl.flush();
 		Draw.color(ColorFul.color);
 		Lines.stroke(4f);
@@ -151,6 +152,8 @@ public final class TopGroup extends WidgetGroup {
 	@DataBoolFieldInit
 	public static boolean drawHiddenPad;
 
+
+	static final Mat mat = new Mat();
 	public static void drawPad(Element elem, Vec2 vec2) {
 		if (!drawHiddenPad && !elem.visible) return;
 		/* translation也得参与计算 */
@@ -159,7 +162,9 @@ public final class TopGroup extends WidgetGroup {
 		float thick = elem instanceof Group ? 2 : 1;
 		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
 		Lines.stroke(thick);
-		Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+		Drawf.dashRectBasic(vec2.x, vec2.y - thick,
+		 clamp(vec2, elem.getWidth() + thick, true),
+		 clamp(vec2, elem.getHeight() + thick, false));
 		/* Lines.stroke(elem instanceof Group ? 3 : 1);
 		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
 		Lines.rect(vec2.x, vec2.y,
@@ -180,6 +185,11 @@ public final class TopGroup extends WidgetGroup {
 				drawPad(e, vec2.set(x, y));
 			}
 		}
+	}
+	public static float clamp(Vec2 pos, float value, boolean x) {
+		return Mathf.clamp(
+		 value, 0, x ? pos.x + graphics.getWidth() : pos.y + graphics.getHeight()
+		);
 	}
 
 	public TopGroup() {
@@ -681,7 +691,7 @@ public final class TopGroup extends WidgetGroup {
 			drawFocus(elem);
 		}
 		public void drawFocus(Element elem) {
-			drawFocus(elem, ElementUtils.getAbstractPos(elem));
+			drawFocus(elem, ElementUtils.getAbsolutePos(elem));
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
 			Gl.flush();

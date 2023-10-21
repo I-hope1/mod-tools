@@ -10,12 +10,13 @@ import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.IntUI.MenuList;
@@ -25,7 +26,7 @@ import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.utils.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
 import modtools.utils.reflect.*;
@@ -266,7 +267,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		return E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
 	}
 	private static void checkRemovePeek(ReflectTable table) {
-		if (!table.lastEmpty && table.hasChildren()) table.getChildren().peek().remove();
+		if (!table.lastEmpty && table.current.hasChildren()) table.current.getChildren().peek().remove();
 	}
 	private static Field[] getFields1(Class<?> cls) {
 		try {return MyReflect.lookupGetFields(cls);} catch (Throwable e) {return new Field[0];}
@@ -314,8 +315,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		});
 	}
 
-	public void buildFieldValue(Class<?> type, BindCell c_cell, ValueLabel l) {
-		if (!l.isStatic() && l.obj == null) return;
+	public void buildFieldValue(Class<?> type, BindCell c_cell, FieldValueLabel l) {
+		if (!l.isStatic() && l.getObject() == null) return;
 		Cell<?> cell = c_cell.cell;
 		if (l.val instanceof Color) {
 			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
@@ -342,20 +343,16 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			c_cell.require();
 		} else if (Number.class.isAssignableFrom(box(type))) {
 			var field = new AutoTextField();
+			l.afterSet = () -> field.setTextCheck(String.valueOf(l.getText()));
+			l.afterSet.run();
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
-				if (l.enableUpdate) {
-					l.setVal();
-					field.setText(l.val instanceof Float ? Strings.autoFixed((float) l.val, 2)
-					 : String.valueOf(l.val));
-				}
 			});
 			field.setValidator(Tools::isNum);
 			field.changed(() -> {
 				if (!field.isValid()) return;
 				l.setFieldValue(Context.jsToJava(
-				 ScriptRuntime.toNumber(field.getText()),
-				 type));
+				 ScriptRuntime.toNumber(field.getText()), type));
 			});
 			cell.setElement(field);
 			cell.height(42);
@@ -366,12 +363,10 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			});
 		} else if (D_JSFUNC_EDIT.getBool("string", false) && type == String.class) {
 			var field = new AutoTextField();
+			l.afterSet = () -> field.setTextCheck(String.valueOf(l.getText()));
+			l.afterSet.run();
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
-				if (l.enableUpdate) {
-					l.setVal();
-					field.setText(String.valueOf(l.val));
-				}
 			});
 			field.changed(() -> {
 				l.setFieldValue(field.getText());
@@ -425,14 +420,14 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			fields.add(label);
 			Log.err(e);
 		}
-		ValueLabel[] l = {null};
+		FieldValueLabel[] l = {null};
 		fields.table(t -> {
 			t.left().defaults().left();
 			// 占位符
 			Cell<?> cell = t.add().top();
 			BindCell c_cell = addDisplayListener(cell, E_JSFuncDisplay.value);
 			/*Cell<?> lableCell = */
-			l[0] = new ValueLabel(ValueLabel.unset, type, f, o);
+			l[0] = new FieldValueLabel(ValueLabel.unset, type, f, o);
 			if (Enum.class.isAssignableFrom(type)) l[0].addEnumSetter();
 			fields.labels.add(l);
 			t.add(l[0]).minWidth(42).growX().uniformX()
@@ -442,8 +437,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				l[0].setVal();
 				buildFieldValue(type, c_cell, l[0]);
 			} catch (Throwable e) {
-				l[0].setText("<ERROR>");
-				l[0].setColor(Color.red);
+				l[0].setError();
 			}
 		}).pad(4).growX();
 		addDisplayListener(fields.add(new HoverTable(buttons -> {
@@ -501,8 +495,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				boolean isValid  = o != null || Modifier.isStatic(mod);
 				// if (isSingle && !isValid) methods.add();
 
-				ValueLabel l = new ValueLabel(ValueLabel.unset, o, m);
-				l.clearVal();
+				ValueLabel l = new MethodValueLabel(o, m);
 				methods.labels.add(l);
 				IntUI.addShowMenuListenerp(label, () -> Seq.with(
 				 IntUI.copyAsJSMenu("method", () -> m),
@@ -680,23 +673,35 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		public ReflectTable() {
 			left().defaults().left().top();
 		}
+		public <T extends Element> Cell<T> add(T element) {
+			var cell = current == null || !isBound() ? super.add(element) : current.add(element);
+			bindCell(element, cell);
+			return cell;
+		}
 
 		boolean lastEmpty;
+		Table   current;
+		public Table row() {
+			return current == null || !isBound() ? super.row() : current.row();
+		}
 		public void build(Class<?> cls, Type type, Object[] arr) {
+			unbind();
+			current = table().name(cls.getSimpleName()).get();
+			current.left().defaults().left().top();
+			super.row();
 			lastEmpty = false;
 			if (arr.length == 0 && E_JSFunc.hidden_if_empty.enabled()) {
 				lastEmpty = true;
 				return;
 			}
-			unbind();
-			add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
+			current.add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
 			 .style(MOMO_LabelStyle)
 			 .labelAlign(Align.left).color(Pal.accent).colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
 				() -> null, __ -> {}, 400, 0, true)))
 			 .row();
-			image().color(Color.lightGray)
+			current.image().color(Color.lightGray)
 			 .growX().padTop(6).colspan(colspan).row();
 		}
 		public void clear() {

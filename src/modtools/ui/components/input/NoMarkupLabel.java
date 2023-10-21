@@ -3,6 +3,7 @@ package modtools.ui.components.input;
 import arc.func.Prov;
 import arc.graphics.g2d.Font.FontData;
 import arc.scene.ui.Label;
+import modtools.ui.components.limit.LimitLabel;
 
 import java.awt.*;
 

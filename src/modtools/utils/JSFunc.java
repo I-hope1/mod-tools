@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.fx.util.FxWidgetGroup;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
-import arc.graphics.gl.Shader;
+import arc.graphics.gl.*;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
@@ -19,15 +19,17 @@ import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import mindustry.world.Tile;
+import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.limit.*;
+import modtools.ui.components.utils.*;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.*;
@@ -52,6 +54,7 @@ public class JSFunc {
 	public static       Scriptable  scope;
 	public static final Font        FONT    = MyFonts.def;
 	/* for js */
+	public static final Class<?> vars = IntVars.class;
 	public static final Class<?>    reflect = MyReflect.class;
 
 	public static final Fi data = MySettings.dataDirectory;
@@ -74,9 +77,10 @@ public class JSFunc {
 
 	@DataColorFieldInit(data = "D_JSFUNC", needSetting = true, fieldPrefix = "c_")
 	public static int
-	 c_keyword   = 0xF92672_FF,
-	 c_type      = 0x66D9EF_FF,
-	 c_underline = Color.lightGray.cpy().a(0.5f).rgba();
+	 c_keyword      = 0xF92672_FF,
+	 c_type         = 0x66D9EF_FF,
+	 c_underline    = Color.lightGray.cpy().a(0.5f).rgba(),
+	 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba();
 	/** 代码生成{@link ColorProcessor} */
 	public static void settingColor(Table t) {}
 
@@ -86,11 +90,14 @@ public class JSFunc {
 		if (clazz != null && clazz.isArray()) {
 			if (o == null) return new DisWindow("none");
 			Table _cont = new LimitTable();
+
+			int length = Array.getLength(o);
+			_cont.add("Length: " + length).left();
+
 			_cont.button(Icon.refresh, HopeStyles.clearNonei, () -> {
-				// 避免stack overflow
 				Core.app.post(() -> {
 					dialog[0].hide();
-					var pos = getAbstractPos(dialog[0]);
+					var pos = getAbsolutePos(dialog[0]);
 					try {
 						showInfo(o, clazz).setPosition(pos);
 					} catch (Throwable e) {
@@ -99,25 +106,10 @@ public class JSFunc {
 					dialog[0] = null;
 				});
 			}).left().size(50).row();
-			int length = Array.getLength(o);
 
-			Class<?> componentType = clazz.getComponentType();
-			for (int i = 0; i < length; i++) {
-				Object item   = Array.get(o, i);
-				var    button = new TextButton("", Styles.grayt);
-				button.clearChildren();
-				button.add(i + "[lightgray]:", HopeStyles.MOMO_LabelStyle).padRight(8f);
-				button.add(new ValueLabel(item, componentType, null, null)).grow();
-				int j = i;
-				button.clicked(() -> {
-					// 使用post避免stack overflow
-					if (item != null) Core.app.post(() -> showInfo(item).setPosition(getAbstractPos(button)));
-					else IntUI.showException(new NullPointerException("item is null"));
-				});
-				_cont.add(button).growX().minHeight(40);
-				addWatchButton(_cont, o + "#" + i, () -> Array.get(o, j)).row();
-				_cont.image().color(Tmp.c1.set(c_underline)).colspan(2).growX().row();
-			}
+
+			buildArrayCont(o, clazz, length, _cont);
+			_cont.row();
 
 			dialog[0] = new DisWindow(clazz.getSimpleName(), 200, 200, true);
 			dialog[0].cont.pane(_cont).grow();
@@ -130,6 +122,27 @@ public class JSFunc {
 		dialog[0].show();
 		assert dialog[0] != null;
 		return dialog[0];
+	}
+	private static void buildArrayCont(Object o, Class<?> clazz, int length, Table cont) {
+		Class<?> componentType = clazz.getComponentType();
+		Table    c1            = null;
+		for (int i = 0; i < length; i++) {
+			if (i % 100 == 0) c1 = cont.row().table().grow().colspan(2).get();
+			var button = new LimitTextButton("", HopeStyles.cleart);
+			button.clearChildren();
+			button.add(i + "[lightgray]:", HopeStyles.MOMO_LabelStyle).padRight(8f);
+			int j = i;
+			button.add(new ReadOnlyValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
+			button.clicked(() -> {
+				Object item = Array.get(o, j);
+				// 使用post避免stack overflow
+				if (item != null) Core.app.post(() -> showInfo(item).setPosition(getAbsolutePos(button)));
+				else IntUI.showException(new NullPointerException("item is null"));
+			});
+			c1.add(button).growX().minHeight(40);
+			addWatchButton(c1, o + "#" + i, () -> Array.get(o, j)).row();
+			c1.image().color(Tmp.c1.set(c_underline)).colspan(2).growX().row();
+		}
 	}
 
 	public static Window window(final Cons<Window> cons) {
@@ -156,20 +169,32 @@ public class JSFunc {
 		}
 		return new JSWindow();
 	}
+	public static Window btn(String text, Runnable run) {
+		return dialog(t -> t.button(text, Styles.flatt, run).size(64, 45));
+	}
 
 	public static Window testDraw(Runnable draw) {
+		return testDraw0(__ -> draw.run());
+	}
+
+	static Window testDraw0(Cons<Group> draw) {
 		return dialog(new Group() {
 			{transform = true;}
 
 			public void drawChildren() {
-				draw.run();
+				draw.get(this);
 			}
 		});
 	}
 
+	// static FrameBuffer buffer = new FrameBuffer();
 	public static Window testShader(Shader shader, Runnable draw) {
-		return testDraw(() -> {
-			Draw.blit(WorldDraw.drawTexture(100, 100, draw), shader);
+		return testDraw0(t -> {
+			// buffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
+			FrameBuffer buffer  = new FrameBuffer(Core.graphics.getWidth(), Core.graphics.getHeight());
+			Texture     texture = WorldDraw.drawTexture(buffer, draw);
+			Draw.blit(texture, shader);
+			buffer.dispose();
 		});
 	}
 
@@ -277,7 +302,7 @@ public class JSFunc {
 	}
 
 	public static void copyText(CharSequence text, Element element) {
-		copyText(text, getAbstractPos(element));
+		copyText(text, getAbsolutePos(element));
 	}
 	public static void copyText(CharSequence text) {
 		copyText(text, Core.input.mouse());
@@ -376,7 +401,7 @@ public class JSFunc {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
 			Sr((!isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : watch()).watch(info, value).show())
-			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbstractPos(b)));
+			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
 		})).size(32);
 	}
 

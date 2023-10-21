@@ -1,11 +1,13 @@
 package modtools.ui.effect;
 
-import arc.Events;
+import arc.*;
 import arc.graphics.*;
 import arc.graphics.g2d.Draw;
 import arc.graphics.gl.FrameBuffer;
+import arc.math.Mat;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.util.Tmp;
 import mindustry.game.EventType.Trigger;
 import modtools.IntVars;
 import modtools.graphics.MyShaders;
@@ -93,18 +95,23 @@ public class ScreenSampler {
 		element.y = lastY;
 		return buffer.getTexture();
 	}
+
+	static Mat mat = new Mat();
+	/** 图片反着的 */
 	public static Texture bufferCapture(Element element) {
-		float lastX = element.x, lastY = element.y;
-		element.x = 0;
-		element.y = 0;
+		Gl.flush();
+
+		Tmp.m1.set(Draw.proj());
+		mat.setOrtho(element.x, element.y, element.getWidth(), element.getHeight());
+		Draw.proj(mat);
 		buffer.resize((int) element.getWidth(), (int) element.getHeight());
 		buffer.begin(Color.clear);
 		Draw.reset();
 		// Tools.clearScreen();
 		element.draw();
 		buffer.end();
-		element.x = lastX;
-		element.y = lastY;
+		Draw.proj(Tmp.m1);
+		Gl.viewport(0, 0, graphics.getWidth(), graphics.getHeight());
 		return buffer.getTexture();
 	}
 

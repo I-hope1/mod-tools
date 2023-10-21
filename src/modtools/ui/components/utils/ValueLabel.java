@@ -16,14 +16,12 @@ import mindustry.entities.Effect;
 import mindustry.gen.*;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.content.ui.*;
 import modtools.ui.content.ui.ReviewElement.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
-import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.*;
 import java.util.*;
@@ -34,17 +32,33 @@ import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
-public class ValueLabel extends MyLabel {
+public abstract class ValueLabel extends NoMarkupLabel {
 	public static Object unset          = new Object();
 	public static Color  c_enum         = new Color(0xFFC66DFF);
 	public final  int    truncateLength = 2000;
 
 	public static final boolean DEBUG = false;
 
-	public            Object   val;
-	public @Nullable  Object   obj;
-	private @Nullable Field    field;
-	public final      Class<?> type;
+	public       Object   val;
+	public final Class<?> type;
+	protected ValueLabel(Class<?> type) {
+		super((CharSequence) null);
+		if (type == null) throw new NullPointerException("'type' is null.");
+		this.type = type;
+		wrap = true;
+		setStyle(HopeStyles.MOMO_LabelStyle);
+		setAlignment(Align.left, Align.left);
+
+		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
+
+		if (Element.class.isAssignableFrom(type) || val instanceof Element) {
+			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> (Element) val);
+		} else if (Cell.class.isAssignableFrom(type)) {
+			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> val == null ? null : ((Cell<?>) val).get());
+		}
+
+		IntUI.addShowMenuListenerp(this, this::getMenuLists);
+	}
 
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
 	public boolean
@@ -60,107 +74,7 @@ public class ValueLabel extends MyLabel {
 	public       Func<Object, CharSequence> func;
 	public       Func<Object, Object>       valueFunc = o -> o;
 
-
-	public ValueLabel(Object newVal, Object obj, Method method) {
-		this(newVal, method.getReturnType(), null, obj);
-		labelAlign = Align.left;
-		lineAlign = Align.topLeft;
-		isStatic = Modifier.isStatic(method.getModifiers());
-	}
-	public ValueLabel(Object newVal, Class<?> type, Field field, Object obj) {
-		super((CharSequence) null);
-		if (type == null) throw new NullPointerException("'type' is null.");
-		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
-			throw new IllegalArgumentException("type(" + type + ") mismatches value(" + newVal + ").");
-		// markupEnabled = true;
-		wrap = true;
-		setStyle(HopeStyles.MOMO_LabelStyle);
-		this.type = type;
-		if (field != null) set(field, obj);
-		if (newVal != unset) setVal0(newVal);
-		setAlignment(Align.left, Align.left);
-
-		if (field != null) update(() -> {
-			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
-				setVal();
-			}
-		});
-		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
-
-		if (Element.class.isAssignableFrom(type) && val instanceof Element) {
-			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> (Element) val);
-		} else if (Cell.class.isAssignableFrom(type)) {
-			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> val == null ? null : ((Cell<?>) val).get());
-		}
-
-		IntUI.addShowMenuListenerp(this, () -> getMenuLists(type, field, obj));
-	}
-	public Seq<MenuList> getMenuLists(Class<?> type, Field field, Object obj) {
-		Seq<MenuList> list = new Seq<>();
-		Sr(type).isExtend(__ -> {
-			 list.add(MenuList.with(Icon.imageSmall, "img", () -> {
-				 SR.catchSatisfy(() -> Sr(val)
-					.isInstance(TextureRegion.class, JSFunc::dialog)
-					.isInstance(Texture.class, JSFunc::dialog)
-					.isInstance(Drawable.class, JSFunc::dialog)
-				 );
-			 }));
-		 }, TextureRegion.class, Texture.class, Drawable.class)
-		 /* .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
-
-			 }));
-		 }, Drawable.class) */
-		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
-				 JSFunc.reviewElement((Element) val);
-			 }));
-			 list.add(newElementDetailsList((Element) val));
-		 }, Element.class)
-		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.infoSmall, "at player", () -> {
-				 ((Effect) val).at(Vars.player);
-			 }));
-		 }, Effect.class)
-		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
-				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbstractPos(b)).show();
-			 }));
-		 }, Cell.class)
-		 .isExtend(__ -> {
-			 list.add(DisabledList.withd(HopeIcons.position,
-				(val == null ? "" : selection.focusInternal.contains(val) ? "hide" : "show")
-				+ " on world", () -> val == null, () -> {
-					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
-				}));
-		 }, Building.class, Unit.class, Bullet.class);
-
-		if (field != null && !type.isPrimitive()) list.add(MenuList.with(Icon.editSmall, "@selection.reset", () -> {
-			JSRequest.requestForField(val, obj, o -> {
-				setFieldValue(type.cast(o));
-			});
-		}));
-
-		list.add(newDetailsMenuList(this, val, (Class) type));
-		list.add(MenuList.with(Icon.listSmall, () -> (enableTruncate ? "disable" : "enable") + " truncate", () -> {
-			enableTruncate = !enableTruncate;
-		}));
-		list.add(MenuList.with(Icon.diagonalSmall, "stringifyFunc", () -> {
-			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc, obj, o -> func = o);
-		}));
-		/* list.add(MenuList.with(Icon.eyeSmall, "valueFunc", () -> {
-			JSRequest.<Func<Object, Object>>requestForDisplay(func, obj, o -> valueFunc = o);
-		})); */
-		list.add(MenuList.with(Icon.eraserSmall, "@clear", this::clearVal));
-
-		// Log.info("valuelabel: @", enableUpdate);
-		CheckboxList checkboxList = CheckboxList.withc(Icon.refresh1Small, "auto refresh", enableUpdate, () -> {
-			enableUpdate = !enableUpdate;
-		});
-		list.add(checkboxList);
-		list.add(copyAsJSMenu("value", () -> val));
-		return list;
-	}
+	public abstract Seq<MenuList> getMenuLists();
 	public static MenuList newElementDetailsList(Element element) {
 		return MenuList.with(Icon.crafting, "El Details", () -> {
 			new ElementDetailsWindow(element);
@@ -171,15 +85,13 @@ public class ValueLabel extends MyLabel {
 			showNewInfo(el, val, type);
 		});
 	}
-	private Long    offset;
-	private boolean isStatic;
+
+	protected boolean isStatic;
 	public boolean isStatic() {
 		return isStatic;
 	}
 	public long getOffset() {
-		if (field == null) throw new RuntimeException("field is null");
-		if (offset == null) offset = FieldUtils.fieldOffset(field);
-		return offset;
+		throw new UnsupportedOperationException("Not implemented yet");
 	}
 	public float getPrefWidth() {
 		if (prefSizeInvalid) computePrefSize();
@@ -211,11 +123,11 @@ public class ValueLabel extends MyLabel {
 		if (func != defFunc) {
 			resetFunc();
 			try {
-				setText(defFunc.get(val));
+				setText0(defFunc.get(val));
 				return;
 			} catch (Throwable ignored) {}
 		}
-		setText(val.getClass().getName());
+		setText0(val.getClass().getName());
 	}
 	private void resetFunc() {
 		func = defFunc;
@@ -260,8 +172,8 @@ public class ValueLabel extends MyLabel {
 			setColor(Syntax.c_map);
 			return sb;
 		}
-		if ((field == null || !field.getName().startsWith("entries"))
-				&& (val instanceof Iterable || (val != null && val.getClass().isArray()))) {
+		iter:
+		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
 			boolean       checkTail = false;
 			StringBuilder sb        = new StringBuilder();
 			sb.append('[');
@@ -301,6 +213,7 @@ public class ValueLabel extends MyLabel {
 					if (isTruncate(sb.length())) break;
 				} */
 			} catch (ArcRuntimeException ignored) {
+				break iter;
 			} catch (Throwable e) {
 				if (DEBUG) Log.err(e);
 				sb.append("▶ERROR◀");
@@ -314,6 +227,8 @@ public class ValueLabel extends MyLabel {
 		 CatchSR.of(() -> val instanceof String ? '"' + (String) val + '"'
 			 : val instanceof Character ? "'" + val + "'"
 			 : val instanceof Float ? Strings.autoFixed((float) val, 2)
+
+			 : val instanceof Element ? ReviewElement.getElementName((Element) val)
 
 			 : val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
 			 ShowUIList.iconKeyMap.get(icon)
@@ -346,13 +261,7 @@ public class ValueLabel extends MyLabel {
 	private static String getArrayDelimiter() {
 		return MySettings.D_JSFUNC.getString("arrayDelimiter", JSFunc.defaultDelimiter);
 	}
-	public void addEnumSetter() {
-		clicked(() -> IntUI.showSelectListEnumTable(this,
-		 Seq.with(type.getEnumConstants()).<Enum>as(),
-		 () -> (Enum) val, this::setFieldValue,
-		 Float.NEGATIVE_INFINITY, 42,
-		 true, Align.left));
-	}
+
 	private boolean isTruncate(int length) {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
@@ -371,45 +280,30 @@ public class ValueLabel extends MyLabel {
 		return objArr;
 	}
 
-	public void setFieldValue(Object val) {
-		// Tools.setFieldValue(field, obj, val);
-		if (field.getType().isPrimitive()) {
-			try {
-				field.set(obj, val);
-			} catch (IllegalAccessException e) {
-				throw new RuntimeException(e);
-			}
-		} else {
-			FieldUtils.setValue(
-			 isStatic ? field.getDeclaringClass() : obj,
-			 getOffset(), val, field.getType());
-		}
-
-		setVal(val);
-	}
-
 	public void clearVal() {
 		val = "";
 		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
-	@SuppressWarnings("SizeReplaceableByIsEmpty")
+	public static final String ERROR = "<ERROR>";
+	public void setError() {
+		super.setText(ERROR);
+		setColor(Color.red);
+	}
 	public void setText(CharSequence newText) {
-		if (newText == null || /* newText.isEmpty()新版本才有 */newText.length() == 0) {
+		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
+	}
+	@SuppressWarnings("SizeReplaceableByIsEmpty")
+	void setText0(CharSequence newText) {
+		if (newText == null || newText.length() == 0) {
 			newText = "<EMPTY>";
 			setColor(Color.gray);
 		}
 		super.setText(newText);
 	}
-	public void setVal() {
-		if (field == null || (obj == null && !isStatic)) {
-			setVal0(null);
-		} else {
-			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
-			setVal0(value);
-		}
-	}
-	private void setVal0(Object newVal) {
+	public Runnable afterSet;
+	public abstract void setVal();
+	protected void setVal0(Object newVal) {
 		try {
 			setVal(valueFunc.get(newVal));
 		} catch (Throwable th) {
@@ -420,9 +314,10 @@ public class ValueLabel extends MyLabel {
 	public void setVal(Object val) {
 		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
 		this.val = val;
+		if (afterSet != null) afterSet.run();
 		if (func == null) resetFunc();
 		try {
-			setText(func.get(val));
+			setText0(func.get(val));
 		} catch (Throwable th) {
 			resThrowable(val, th);
 		}
@@ -431,17 +326,76 @@ public class ValueLabel extends MyLabel {
 	}
 
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
-		Vec2 pos = ElementUtils.getAbstractPos(el);
+		Vec2 pos = ElementUtils.getAbsolutePos(el);
 		try {
 			JSFunc.showInfo(val1, type).setPosition(pos);
 		} catch (Throwable e) {
 			IntUI.showException(e).setPosition(pos);
 		}
 	}
-	public void set(Field field, Object obj) {
-		this.field = field;
-		isStatic = Modifier.isStatic(field.getModifiers());
-		this.obj = obj;
+
+	protected Seq<MenuList> basicMenuLists(Seq<MenuList> list) {
+		Sr(type).isExtend(__ -> {
+			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
+				SR.catchSatisfy(() -> Sr(val)
+				 .isInstance(TextureRegion.class, JSFunc::dialog)
+				 .isInstance(Texture.class, JSFunc::dialog)
+				 .isInstance(Drawable.class, JSFunc::dialog)
+				)));
+		 }, TextureRegion.class, Texture.class, Drawable.class)
+		 /* .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
+
+			 }));
+		 }, Drawable.class) */
+		 .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
+				 JSFunc.reviewElement((Element) val);
+			 }));
+			 list.add(newElementDetailsList((Element) val));
+		 }, Element.class)
+		 .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.infoSmall, "at player", () -> {
+				 ((Effect) val).at(Vars.player);
+			 }));
+		 }, Effect.class)
+		 .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
+				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
+			 }));
+		 }, Cell.class)
+		 .isExtend(__ -> {
+			 list.add(DisabledList.withd(modtools.ui.HopeIcons.position,
+				(val == null ? "" : selection.focusInternal.contains(val) ? "hide" : "show")
+				+ " on world", () -> val == null, () -> {
+					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
+				}));
+		 }, Building.class, Unit.class, Bullet.class);
+
+		list.add(newDetailsMenuList(this, val, (Class) type));
+		list.add(MenuList.with(Icon.diagonalSmall, "stringifyFunc", () -> {
+			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc,
+			 getObject(), o -> func = o);
+		}));
+
+		list.add(MenuList.with(Icon.eraserSmall, "@clear", this::clearVal));
+		list.add(MenuList.with(Icon.listSmall, () -> (enableTruncate ? "disable" : "enable") + " truncate", () -> {
+			enableTruncate = !enableTruncate;
+		}));
+
+		if (enabledUpdate()) {
+			CheckboxList checkboxList = CheckboxList.withc(Icon.refresh1Small, "auto refresh", enableUpdate, () -> {
+				enableUpdate = !enableUpdate;
+			});
+			list.add(checkboxList);
+		}
+		list.add(copyAsJSMenu("value", () -> val));
+		return list;
+	}
+
+	public abstract Object getObject();
+	public boolean enabledUpdate() {
+		return true;
 	}
 
 	boolean shown = E_JSFuncDisplay.value.enabled();
@@ -455,26 +409,4 @@ public class ValueLabel extends MyLabel {
 		super.clear();
 		clearVal();
 	}
-
-	/* public Element build() {
-		if (val instanceof Iterable ite) {
-			Table table = new Table();
-			for (Object newV : ite) {
-				table.add(new ValueLabel(newV, Kit.classOrNull(Vars.mods.mainLoader(), ite.getClass().getTypeParameters()[0].getName()), null, null));
-			}
-			return table;
-		}
-		return this;
-	} */
-
-	/* private boolean isDisposed = false;
-	public void dispose() {
-		if (isDisposed) return;
-		isDisposed = true;
-		Pools.freeAll(list, true);
-	}
-	public boolean isDisposed() {
-		return isDisposed;
-	} */
 }
-

@@ -27,7 +27,7 @@ import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.utils.*;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
@@ -89,9 +89,9 @@ public class SettingsUI extends Content {
 			row();
 			JSFunc.settingColor(this);
 		}});
-		add("毛玻璃", Styles.none, new LimitTable() {{
+		add("Effects", Icon.effectSmall, new LimitTable() {{
 			left().defaults().left();
-			bool(this, "启用", MySettings.D_BLUR, "enable");
+			bool(this, "@enabled", MySettings.D_BLUR, "enable");
 			SettingsUI.slideri(this, MySettings.D_BLUR, "缩放级别", 1, 8, 4, 1, null);
 		}});
 		/* add("Window", new LimitTable() {{
@@ -103,7 +103,10 @@ public class SettingsUI extends Content {
 			 left().defaults().left();
 			 bool(this, "@settings.mainmenubackground", MySettings.SETTINGS, "ShowMainMenuBackground");
 			 settingBool(this);
-			 addValueLabel(this, "Bound Element", () -> topGroup.drawPadElem, () -> topGroup.debugBounds);
+			 addElemValueLabel(this, "Bound Element",
+				() -> topGroup.drawPadElem,
+				() -> topGroup.setDrawPadElem(null),
+				() -> topGroup.debugBounds);
 			 float minZoom = Vars.renderer.minZoom;
 			 float maxZoom = Vars.renderer.maxZoom;
 			 SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
@@ -130,7 +133,7 @@ public class SettingsUI extends Content {
 							.checked(__ -> fi.name().equals(MySettings.SETTINGS.getString("font")))
 							.row();
 					 }
-					 cont.image().color(Color.gray).growX().row();
+					 cont.image().color(Color.gray).growX().padTop(6f).row();
 					 cont.button("DIRECTORY", Styles.flatBordert, () -> {
 						 Core.app.openFolder(MyFonts.fontDirectory.path());
 					 }).growX().height(45);
@@ -161,15 +164,16 @@ public class SettingsUI extends Content {
 	public void settingBool(Table t) {
 		boolean[] __ = {topGroup.checkUICount, topGroup.debugBounds, TopGroup.drawHiddenPad};
 	}
-	public static void addValueLabel(Table table, String text, Prov<Object> prov, Boolp condition) {
-		ValueLabel vl = new ValueLabel(prov.get(), Element.class, null, null);
+	public static void addElemValueLabel(
+	 Table table, String text, Prov<Element> prov,
+	 Runnable clear, Boolp condition) {
+		ValueLabel vl = new ClearValueLabel<>(Element.class, prov, clear);
 		vl.setAlignment(Align.right);
 		Label l = new Label(text);
 		table.stack(l, vl)
 		 .update(t -> {
 			 vl.setVal(prov.get());
 			 Color color = condition.get() ? Color.white : Color.gray;
-			 vl.setColor(color);
 			 l.setColor(color);
 		 }).growX().row();
 	}

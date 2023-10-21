@@ -31,7 +31,7 @@ public interface Limit {
 			elem = elem.parent;
 		}
 
-		elem.localToStageCoordinates(v1.set(0, 0));
+		absPos(elem, v1);
 		boolean computeIfOverStage = v1.x + elem.getWidth() > Core.graphics.getWidth()
 																 || v1.y + elem.getHeight() < Core.graphics.getHeight()
 																 || v1.x < 0 || v1.y < 0;
@@ -39,7 +39,7 @@ public interface Limit {
 		/* w, h > 0 */
 		float w = actor.getWidth(), h = actor.getHeight();
 		if (computeIfOverStage) {
-			actor.localToStageCoordinates(v2.set(0, 0));
+			absPos(elem, v2);
 			if (v2.x < -w || v2.y < -h || v2.x > Core.graphics.getWidth() || v2.y > Core.graphics.getHeight()) {
 				return false;
 			}
@@ -47,5 +47,12 @@ public interface Limit {
 		actor.localToAscendantCoordinates(elem, v1.set(0, 0));
 		return v1.x > -w && v1.y > -h && v1.x < elem.getWidth() && v1.y < elem.getHeight();
 		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();
+	}
+	static void absPos(Element elem, Vec2 vec2) {
+		// if (elem.parent instanceof LimitTable l) {
+		// 	elem.localToParentCoordinates(vec2.set(l.absPos));
+		// } else {
+		elem.localToStageCoordinates(vec2.set(0, 0));
+		// }
 	}
 }

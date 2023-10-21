@@ -1,10 +1,10 @@
 package modtools.utils.world;
 
 import arc.*;
-import arc.func.Boolp;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
-import arc.graphics.gl.FrameBuffer;
+import arc.graphics.gl.*;
 import arc.math.Mat;
 import arc.math.geom.*;
 import arc.struct.ObjectSet;
@@ -33,6 +33,7 @@ public class WorldDraw {
 		tasks.add(() -> {
 			if (Vars.state.isMenu()) return;
 			Draw.reset();
+			Draw.flush();
 			Draw.z(z);
 			Draw.alpha(alpha);
 			drawSeq.filter(Boolp::get);
@@ -63,7 +64,7 @@ public class WorldDraw {
 	}
 
 	static {
-		Events.run(Trigger.draw, () -> {
+		Events.run(Trigger.postDraw, () -> {
 			Draw.reset();
 			Draw.flush();
 			CAMERA_RECT.setPosition(Core.camera.unproject(0, 0));
@@ -84,7 +85,8 @@ public class WorldDraw {
 	}
 
 	public static Texture drawTexture(int width, int height, Runnable draw) {
-		return drawTexture(new FrameBuffer(width, height, false), draw);
+		FrameBuffer buffer = new FrameBuffer(width, height, false);
+		return drawTexture(buffer, draw);
 	}
 	public static Texture drawTexture(FrameBuffer buffer, int width, int height, Runnable draw) {
 		buffer.resize(width, height);
@@ -93,9 +95,7 @@ public class WorldDraw {
 
 	public static Texture drawTexture(FrameBuffer buffer, Runnable draw) {
 		Draw.reset();
-		Draw.flush();
 		// 绑定
-		// buffer.begin(Color.clear);
 		buffer.bind();
 		// 清空
 		Gl.clearColor(0, 0, 0, 0);

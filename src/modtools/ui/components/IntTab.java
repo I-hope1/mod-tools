@@ -3,13 +3,13 @@ package modtools.ui.components;
 import arc.func.Prov;
 import arc.graphics.Color;
 import arc.math.Interp;
-import arc.scene.Element;
-import arc.scene.actions.Actions;
+import arc.scene.*;
+import arc.scene.actions.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
-import arc.util.Log;
+import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
@@ -19,7 +19,7 @@ import modtools.ui.components.limit.PrefTable;
 import java.util.Arrays;
 
 public class IntTab {
-	private final float      duration = 0.07f;
+	private final float duration = 0.1f;
 	public        Table      main;
 	public        PrefTable  title;
 	public        ScrollPane pane;
@@ -161,7 +161,7 @@ public class IntTab {
 				 if (selected != j && !transitional) {
 					 if (selected != -1) {
 						 Table last = tables[selected];
-						 last.actions(Actions.fadeOut(duration, Interp.fade), Actions.remove());
+						 last.actions(getFadeOut(), Actions.remove());
 						 transitional = true;
 						 title.update(() -> {
 							 if (!last.hasActions()) {
@@ -169,7 +169,7 @@ public class IntTab {
 								 title.update(null);
 								 selected = j;
 								 pane.setWidget(t);
-								 t.actions(Actions.alpha(0), Actions.fadeIn(duration, Interp.fade));
+								 t.addAction(getFadeIn());
 							 }
 						 });
 					 } else {
@@ -201,6 +201,14 @@ public class IntTab {
 		 title.getPrefWidth() <= main.getPrefWidth(),
 		 title.getPrefHeight() <= main.getPrefHeight()); */
 		return main;
+	}
+	private Action getFadeIn() {
+		return Actions.sequence(Actions.alpha(0.2f), Actions.fadeIn(duration, Interp.fade));
+		// return Actions.sequence(Actions.moveToAligned(0,0, Align.left, duration, Interp.fade));
+	}
+	private Action getFadeOut() {
+		return Actions.alpha(0.2f, duration, Interp.fade);
+		// return Actions.sequence(Actions.moveToAligned(0,0, Align.right, duration, Interp.fade));
 	}
 	public static class TitleLabel extends MyLabel {
 		Drawable icon;

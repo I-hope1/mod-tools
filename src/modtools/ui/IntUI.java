@@ -40,7 +40,7 @@ import static mindustry.Vars.*;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
-import static modtools.utils.ElementUtils.getAbstractPos;
+import static modtools.utils.ElementUtils.getAbsolutePos;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -658,7 +658,7 @@ public class IntUI {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
-			Core.app.post(() -> IntUI.picker.setPosition(getAbstractPos(image), Align.left | Align.center));
+			Core.app.post(() -> IntUI.picker.setPosition(getAbsolutePos(image), Align.left | Align.center));
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
@@ -955,7 +955,7 @@ public class IntUI {
 		}
 		public void drawFocus(Element elem) {
 			super.drawFocus(elem);
-			Draw.blit(bufferCaptureAll(getAbstractPos(elem), elem), baseShader);
+			Draw.blit(bufferCaptureAll(getAbsolutePos(elem), elem), baseShader);
 		}
 		public void elemDraw() {}
 		public void endDraw() {

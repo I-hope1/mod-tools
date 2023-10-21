@@ -13,20 +13,20 @@ import modtools.ui.HopeStyles;
 
 public class FoldedImageButton extends ImageButton {
 	private static final float duration = 0.1f;
-	public FoldedImageButton(boolean checkOnlyChanged) {
-		this(checkOnlyChanged, HopeStyles.clearNonei);
+	public FoldedImageButton(boolean autoFire) {
+		this(autoFire, HopeStyles.clearNonei);
 	}
-	public FoldedImageButton(boolean checkOnlyChanged, ImageButtonStyle style) {
+	public FoldedImageButton(boolean autoFire, ImageButtonStyle style) {
 		super(Icon.rightOpen, style);
 
 		clicked(() -> {
 			checked = !checked;
-			if (checkOnlyChanged) {
+			if (autoFire) {
 				change(getImage());
 			}
 		});
 		update(() -> {
-			if (checkOnlyChanged) return;
+			if (autoFire) return;
 			setOrigin(Align.center);
 			change(getImage());
 		});
@@ -46,7 +46,7 @@ public class FoldedImageButton extends ImageButton {
 	}
 	private void change(Image image) {
 		if (checked) {
-			rebuild.run();
+			if (rebuild != null) rebuild.run();
 			if (image.rotation != -90) image.actions(Actions.rotateTo(-90, duration));
 			cell.setElement(table);
 		} else {

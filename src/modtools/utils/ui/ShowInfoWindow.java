@@ -362,14 +362,16 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				c_cell.require();
 			});
 		} else if (D_JSFUNC_EDIT.getBool("string", false) && type == String.class) {
+			cell.row();
 			var field = new AutoTextField();
-			l.afterSet = () -> field.setTextCheck(String.valueOf(l.getText()));
+			l.afterSet = () -> field.setTextCheck((String) l.val);
 			l.afterSet.run();
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
 			});
 			field.changed(() -> {
-				l.setFieldValue(field.getText());
+				String text = field.getText();
+				l.setFieldValue(text.equals(AutoTextField.NULL_STR) ? null : text);
 			});
 			cell.setElement(field);
 			cell.height(42);
@@ -379,7 +381,6 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				c_cell.require();
 			});
 		}
-
 	}
 
 	private void buildField(Object o, ReflectTable fields, Field f) {
@@ -430,12 +431,12 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			l[0] = new FieldValueLabel(ValueLabel.unset, type, f, o);
 			if (Enum.class.isAssignableFrom(type)) l[0].addEnumSetter();
 			fields.labels.add(l);
-			t.add(l[0]).minWidth(42).growX().uniformX()
-			 .labelAlign(Align.topLeft);
 
 			try {
 				l[0].setVal();
 				buildFieldValue(type, c_cell, l[0]);
+				t.add(l[0]).minWidth(42).growX().uniformX()
+				 .labelAlign(Align.topLeft);
 			} catch (Throwable e) {
 				l[0].setError();
 			}

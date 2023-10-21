@@ -15,6 +15,8 @@ public class AutoTextField extends TextField {
 		setStyle(MOMO_STYLE);
 	}
 
+	public static final String NULL_STR = "'null";
+
 	public AutoTextField(String text) {
 		super(text);
 	}
@@ -25,6 +27,7 @@ public class AutoTextField extends TextField {
 
 	public void setTextCheck(String str) {
 		if (Core.scene.getKeyboardFocus() == this) return;
+		if (str == null) setText(NULL_STR);
 		setText(str);
 	}
 

@@ -697,7 +697,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			}
 			current.add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
 			 .style(MOMO_LabelStyle)
-			 .labelAlign(Align.left).color(Pal.accent).colspan(colspan)
+			 .labelAlign(Align.left).color(cls.isInterface() ? Color.lightGray : Pal.accent).colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
 				() -> null, __ -> {}, 400, 0, true)))

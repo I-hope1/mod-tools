@@ -12,10 +12,12 @@ import modtools.ui.components.Window;
 import modtools.ui.components.Window.HiddenTopWindow;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
+import modtools.ui.content.debug.Tester;
 import modtools.utils.JSFunc;
 import rhino.*;
 
 import static mindustry.Vars.mods;
+import static modtools.ui.Contents.tester;
 import static modtools.utils.Tools.*;
 
 public class JSRequest {
@@ -44,7 +46,7 @@ public class JSRequest {
 
 	public static JSRequestWindow window   = new JSRequestWindow();
 	public static Context         cx       = mods.getScripts().context;
-	public static Scriptable      topScope = mods.getScripts().scope;
+	public static Scriptable      topScope = Tester.scope;
 	public static Scriptable      scope;
 
 	public static Label tips;

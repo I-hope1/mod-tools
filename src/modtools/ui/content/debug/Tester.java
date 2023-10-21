@@ -32,7 +32,7 @@ import modtools.events.ExecuteTree.TaskNode;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.components.*;
-import modtools.ui.components.input.MyLabel;
+import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.components.input.highlight.JSSyntax;
@@ -59,7 +59,7 @@ public class Tester extends Content {
 	public static final  float w            = Core.graphics.isPortrait() ? 400 : 420;
 
 	public static Scripts    scripts;
-	public static Scriptable scope;
+	public static Scriptable topScope, scope;
 	public static Context    cx;
 
 	private final int maxHistorySize = 40;
@@ -78,7 +78,8 @@ public class Tester extends Content {
 
 	public static void initExecution() {
 		scripts = Vars.mods.getScripts();
-		scope = scripts.scope;
+		topScope = scripts.scope;
+		scope = new BaseFunction(topScope, null);
 		cx = scripts.context;
 		if (EXEC_DATA.isEmpty()) return;
 		ExecuteTree.context(startupTask(), () -> {
@@ -618,15 +619,17 @@ public class Tester extends Content {
 				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
 		try {
-			Object obj1 = cx.getWrapFactory().wrapJavaClass(cx, scope, JSFunc.class);
+			Object obj1 = cx.getWrapFactory().wrapJavaClass(cx, topScope, JSFunc.class);
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
-			Object obj2 = new NativeJavaClass(scope, MyReflect.class, false);
+			ScriptableObject.putProperty(scope, "$", obj1);
+			Object obj2 = new NativeJavaClass(topScope, MyReflect.class, false);
 			ScriptableObject.putProperty(scope, "MyReflect", obj2);
 			ScriptableObject.putProperty(scope, "unsafe", unsafe);
-			ScriptableObject.putProperty(scope, "modName", "<null>");
-			ScriptableObject.putProperty(scope, "scriptName", "console.js");
+			ScriptableObject.putProperty(topScope, "modName", "<null>");
+			ScriptableObject.putProperty(topScope, "scriptName", "console.js");
 
-			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(scope, "Packages");
+			BaseFunction      parent = new BaseFunction(topScope, null);
+			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
 			ClassLoader       loader = Vars.mods.mainLoader();
 			Reflect.set(NativeJavaPackage.class, pkg, "classLoader", loader);
 			if (cx.getFactory() != ForRhino.factory) {
@@ -705,9 +708,9 @@ public class Tester extends Content {
 	}
 	public Object getWrap(Object val) {
 		try {
-			if (val instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) val);
+			if (val instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
 			if (val instanceof Method method) return new NativeJavaMethod(method, method.getName());
-			return Context.javaToJS(val, scope);
+			return Context.javaToJS(val, topScope);
 		} catch (Throwable e) {
 			return val;
 		}
@@ -718,13 +721,13 @@ public class Tester extends Content {
 			val = getWrap(val);
 			//			else if (val instanceof Field) val = new NativeJavaObject(scope, val, Field.class);
 		}
-		ScriptableObject.putProperty(scope, name, val);
+		ScriptableObject.putProperty(topScope, name, val);
 	}
 	public static final String prefix = "tmp";
 	public String put(Object val) {
 		int i = 0;
 		// 从0开始直到找到没有被定义的变量
-		while (ScriptableObject.hasProperty(scope, prefix + i)) i++;
+		while (ScriptableObject.hasProperty(topScope, prefix + i)) i++;
 		String key = prefix + i;
 		put(key, val);
 		return key;

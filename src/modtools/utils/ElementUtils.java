@@ -9,6 +9,7 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
+import arc.struct.Seq;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
@@ -45,17 +46,17 @@ public class ElementUtils {
 	}
 	public static void quietScreenshot(Element element) {
 		// ui.update();
-		ScreenSampler.pause();
-		JSFunc.dialog(screenshot(element, true, (region, pixmap) -> {
-			Fi fi = screenshotDirectory.child(
-			 Optional.ofNullable(element.name)
-				.orElseGet(() -> "" + Time.nanos()) + ".png");
-			PixmapIO.writePng(fi, pixmap);
-			// pixmap.dispose();
+		Core.app.post(() -> {
+			JSFunc.dialog(screenshot(element, true, (region, pixmap) -> {
+				Fi fi = screenshotDirectory.child(
+				 Optional.ofNullable(element.name)
+					.orElseGet(() -> "" + Time.nanos()) + ".png");
+				PixmapIO.writePng(fi, pixmap);
+				// pixmap.dispose();
 
-			Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
-		}));
-		ScreenSampler._continue();
+				Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
+			}));
+		});
 		// Time.runTask(30, w::hide);
 	}
 	public static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {
@@ -69,16 +70,8 @@ public class ElementUtils {
 		// 清空
 		if (clear) {
 			clearScreen();
-			boolean last = false;
-			if (el instanceof Table) {
-				last = ((Table) el).isTransform();
-				((Table) el).setTransform(true);
-			}
+			// boolean last = false;
 			el.draw();
-			if (el instanceof Table) {
-				((Table) el).setTransform(last);
-			}
-			Draw.flush();
 		}
 		Vec2 vec2 = getAbsolutePos(el);
 		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h, true);

@@ -53,9 +53,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
 
 		if (Element.class.isAssignableFrom(type) || val instanceof Element) {
-			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> (Element) val);
+			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
+			 () -> val instanceof Element ? (Element) val : null);
 		} else if (Cell.class.isAssignableFrom(type)) {
-			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this), () -> val == null ? null : ((Cell<?>) val).get());
+			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
+			 () -> val == null ? null : ((Cell<?>) val).get());
 		}
 
 		IntUI.addShowMenuListenerp(this, this::getMenuLists);
@@ -79,8 +81,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public static MenuList newElementDetailsList(Element element) {
 		return DisabledList.withd(Icon.crafting, "El Details", () -> element == null,
 		 () -> {
-			new ElementDetailsWindow(element);
-		});
+			 new ElementDetailsWindow(element);
+		 });
 	}
 	public static <T> MenuList newDetailsMenuList(Element el, T val, Class<T> type) {
 		return MenuList.with(Icon.infoCircleSmall, "@details", () -> {
@@ -226,26 +228,27 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}
 
 		String text = CatchSR.apply(() ->
-		 CatchSR.of(() -> val instanceof String ? '"' + (String) val + '"'
-			 : val instanceof Character ? "'" + val + "'"
-			 : val instanceof Float ? Strings.autoFixed((float) val, 2)
+		 CatchSR.of(() ->
+			 val instanceof String ? '"' + (String) val + '"'
+				: val instanceof Character ? "'" + val + "'"
+				: val instanceof Float ? Strings.autoFixed((float) val, 2)
 
-			 : val instanceof Element ? ReviewElement.getElementName((Element) val)
+				: val instanceof Element ? ReviewElement.getElementName((Element) val)
 
-			 : val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
-			 ShowUIList.iconKeyMap.get(icon)
+				: val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
+				ShowUIList.iconKeyMap.get(icon)
 
-			 : val instanceof Style style1 && ShowUIList.styleKeyMap.containsKey(style1) ?
-			 ShowUIList.styleKeyMap.get(style1)
+				: val instanceof Style style1 && ShowUIList.styleKeyMap.containsKey(style1) ?
+				ShowUIList.styleKeyMap.get(style1)
 
-			 : val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
-			 ShowUIList.colorKeyMap.get((Color) val)
+				: val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
+				ShowUIList.colorKeyMap.get((Color) val)
 
-			 : val instanceof Group && ShowUIList.uiKeyMap.containsKey((Group) val) ?
-			 ShowUIList.uiKeyMap.get((Group) val)
+				: val instanceof Group && ShowUIList.uiKeyMap.containsKey((Group) val) ?
+				ShowUIList.uiKeyMap.get((Group) val)
 
-			 : String.valueOf(val))
-			.get(() -> val.getClass().getName() + "@" + val.hashCode())
+				: String.valueOf(val))
+			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(hashCode()))
 			.get(() -> val.getClass().getName())
 		);
 		text = truncate(text);
@@ -315,6 +318,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 	public void setVal(Object val) {
 		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
+		if (this.val != null && val != null &&
+				this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
+				this.val.equals(val)) return;
+
 		this.val = val;
 		if (afterSet != null) afterSet.run();
 		if (func == null) resetFunc();
@@ -378,7 +385,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 }, Drawable.class) */
 		 .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
-				 JSFunc.reviewElement((Element) val);
+				 JSFunc.inspect((Element) val);
 			 }));
 			 list.add(newElementDetailsList((Element) val));
 			 elementSetter(list, this::setVal);
@@ -402,13 +409,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 }, Building.class, Unit.class, Bullet.class);
 	}
 
-	static Color focusColor = new Color(Color.slate).a(0.6f);
 	protected void elementSetter(Seq<MenuList> list, Cons<Element> callback) {
 		list.add(MenuList.with(Icon.editSmall, "choose one", () -> {
-			topGroup.requestSelectElem((selecting, el) -> {
-				if (!selecting) return;
-				TopGroup.drawFocus(el, ElementUtils.getAbsolutePos(el), focusColor);
-			}, callback);
+			topGroup.requestSelectElem(TopGroup.defaultDrawer, callback);
 		}));
 	}
 

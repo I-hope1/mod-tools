@@ -28,7 +28,8 @@ import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
-import modtools.utils.ui.Hover;
+import modtools.utils.JSFunc.MyProv;
+import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
 import java.util.Objects;
@@ -41,7 +42,7 @@ import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
-import static modtools.utils.Tools.catchRun;
+import static modtools.utils.Tools.*;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -249,14 +250,53 @@ public class IntUI {
 	}
 	public static MenuList copyAsJSMenu(String key, Prov<Object> prov) {
 		return MenuList.with(Icon.copySmall,
-		 JSFunc.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
+		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
 		 storeRun(prov));
 	}
 	public static MenuList copyAsJSMenu(String key, Runnable run) {
 		return MenuList.with(Icon.copySmall,
-		 JSFunc.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
+		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
 		 run);
 	}
+
+
+	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
+		addDetailsButton(table, prov, clazz);
+		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
+	}
+	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
+		/* table.button("@details", HopeStyles.flatBordert, () -> {
+			Object o = prov.get();
+			Core.app.post(() -> showInfo(o, o != null ? o.getClass() : clazz));
+		}).size(96, 45); */
+		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 24, () -> {
+			Object o = prov.get();
+			Core.app.post(() -> JSFunc.showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
+		}).size(32, 32);
+	}
+
+	public static void addStoreButton(Table table, String key, Prov<?> prov) {
+		table.button(buildStoreKey(key),
+			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
+		 .with(b -> {
+			 b.clicked(() -> {
+				 tester.put(b, prov.get());
+			 });
+		 });
+	}
+	public static String buildStoreKey(String key) {
+		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
+		 : Core.bundle.format("jsfunc.store_as_js_var", key);
+	}
+
+	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
+		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
+			Sr((!WatchWindow.isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
+			 ? w : JSFunc.watch()).watch(info, value).show())
+			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
+		})).size(32);
+	}
+
 
 	public static Runnable storeRun(Prov<Object> prov) {
 		return () -> tester.put(Core.input.mouse(), prov.get());

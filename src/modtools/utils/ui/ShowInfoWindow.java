@@ -16,7 +16,6 @@ import ihope_lib.MyReflect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.IntVars;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.IntUI.MenuList;
@@ -122,19 +121,21 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, HopeStyles.clearNonei, rebuild0).size(42);
 			if (o != null) {
-				addStoreButton(t, "", () -> o);
+				IntUI.addStoreButton(t, "", () -> o);
 				t.label(() -> "" + addressOf(o)).padLeft(8f);
 			}
 		}).height(42).row();
 		cont.table(t -> {
 			ElementUtils.addCodedBtn(t, "modifiers", 4,
-			 i -> modifiers = i, () -> modifiers,
-			 ModifierR.values());
+			 i -> {
+				 modifiers = i;
+				 rebuild0.run();
+			 }, () -> modifiers, ModifierR.values());
 			t.button(Tex.whiteui, 32, null).size(42).with(img -> {
 				img.clicked(() -> {
 					isBlack = !isBlack;
-					img.getStyle().imageUpColor = isBlack ? Color.black : Color.white;
-					rebuild.get(textField.getText());
+					img.getStyle().imageUpColor = isBlack ? Color.darkGray : Color.white;
+					rebuild0.run();
 				});
 			});
 			t.image(Icon.zoom).size(42);
@@ -194,7 +195,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
 			 (pattern == null || find(pattern, member.getName()) != isBlack)
-			 && containsMod(member.getModifiers());
+			 && containsMod(member.getModifiers()) != isBlack;
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::setVal);
 			methodsTable.filter(memberBoolf);
@@ -443,9 +444,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		}).pad(4).growX();
 		addDisplayListener(fields.add(new HoverTable(buttons -> {
 			buttons.right().top().defaults().right().top();
-			addLabelButton(buttons, () -> l[0].val, type);
+			IntUI.addLabelButton(buttons, () -> l[0].val, type);
 			// addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
-			addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
+			IntUI.addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
 		})).top().width(64).colspan(0), E_JSFuncDisplay.buttons);
 		fields.row();
 		fields.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
@@ -548,7 +549,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 							dealInvokeResult(m.invoke(o), cell, l);
 						}, l)).size(32, 32);
 					}
-					addLabelButton(buttons, () -> l.val, l.type);
+					IntUI.addLabelButton(buttons, () -> l.val, l.type);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
 				})).grow().top().right().colspan(2);
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
@@ -603,7 +604,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		t.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
 	}
 	private void buildClass(ReflectTable table, Class<?> cls) {
-		table.bind(wrapMember(cls));
+		table.bind(wrapClass(cls));
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
@@ -625,7 +626,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 
 				addDisplayListener(t.add(new HoverTable(buttons -> {
 					buttons.right().defaults().right();
-					addDetailsButton(buttons, () -> null, cls);
+					IntUI.addDetailsButton(buttons, () -> null, cls);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
 				})).grow().colspan(0), E_JSFuncDisplay.buttons);
 			} catch (Throwable e) {

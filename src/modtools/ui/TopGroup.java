@@ -1,7 +1,7 @@
 package modtools.ui;
 
 import arc.*;
-import arc.func.Cons;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -350,6 +350,10 @@ public final class TopGroup extends WidgetGroup {
 
 	public Cons<Element> elementCallback = null;
 	public Drawer        elementDrawer   = null;
+	public static final Drawer defaultDrawer = (selecting, el) -> {
+		if (!selecting) return;
+		TopGroup.drawFocus(el, ElementUtils.getAbsolutePos(el), IntUI.DEF_FOCUS_COLOR);
+	};
 
 	/** 用于获取元素 */
 	private void addSceneListener() {
@@ -710,22 +714,10 @@ public final class TopGroup extends WidgetGroup {
 		public void endDraw() {
 			if (maskColor.a == 0) return;
 
-			// Draw.color(maskColor);
-			// Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
+			Draw.color(maskColor);
+			Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
 
-			afterAll();
 			if (drawSlightly) topGroup.drawSlightlyIfSmall();
-		}
-		Batch prev = batch;
-		public void init() {
-			if (MyShaders.maskBatch == null) return;
-			prev = batch;
-			batch = MyShaders.maskBatch;
-			MyShaders.maskShader.setMashColor(maskColor);
-		}
-		public void afterAll() {
-			MyShaders.maskShader.setMashColor(Color.clear);
-			batch = prev;
 		}
 	}
 	public static void drawFocus(Element elem, Vec2 vec2, Color focusColor) {

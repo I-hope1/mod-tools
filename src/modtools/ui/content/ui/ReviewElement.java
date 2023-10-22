@@ -1091,9 +1091,6 @@ public class ReviewElement extends Content {
 		}
 		final InfoDetails table = new InfoDetails();
 
-		public void init() {
-			if (isSelecting()) super.init();
-		}
 		private boolean isSelecting() {
 			return topGroup.elementCallback == callback;
 		}

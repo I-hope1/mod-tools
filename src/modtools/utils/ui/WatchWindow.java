@@ -10,7 +10,8 @@ import arc.struct.ObjectMap;
 import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.ui.HopeStyles;
+import modtools.events.E_JSFunc;
+import modtools.ui.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.components.Window.*;
@@ -34,6 +35,9 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 			def = new WatchWindow();
 		}
 		return def;
+	}
+	public static boolean isMultiWatch() {
+		return Core.input.ctrl() || E_JSFunc.watch_multi.enabled();
 	}
 	public static final ObjectMap<String, WatchWindow> instances = new ObjectMap<>();
 	public WatchWindow fromInstance(String id) {
@@ -138,7 +142,7 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 		var label = new MyLabel(prov.getStringProv());
 		label.prov = prov;
 		label.interval = interval;
-		JSFunc.addDetailsButton(template, () -> prov.value, Void.class);
+		IntUI.addDetailsButton(template, () -> prov.value, Void.class);
 		template.add(label).name(info).style(HopeStyles.MOMO_LabelStyle).growX().left().padLeft(6f).row();
 		template.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
 		template.unbind();

@@ -10,6 +10,8 @@ import arc.math.geom.*;
 import arc.struct.ObjectSet;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
+import modtools.ui.effect.ScreenSampler;
+import modtools.utils.*;
 import modtools.utils.array.MySet;
 
 
@@ -98,8 +100,7 @@ public class WorldDraw {
 		// 绑定
 		buffer.bind();
 		// 清空
-		Gl.clearColor(0, 0, 0, 0);
-		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
+		ElementUtils.clearScreen();
 		draw.run();
 		// 结束
 		buffer.end();

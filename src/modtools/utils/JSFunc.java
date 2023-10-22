@@ -24,12 +24,12 @@ import mindustry.ui.Styles;
 import mindustry.world.Tile;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
-import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.*;
+import modtools.ui.content.debug.Tester;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.*;
@@ -46,7 +46,6 @@ import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.*;
-import static modtools.utils.Tools.Sr;
 
 /** for js */
 public class JSFunc {
@@ -140,7 +139,7 @@ public class JSFunc {
 				else IntUI.showException(new NullPointerException("item is null"));
 			});
 			c1.add(button).growX().minHeight(40);
-			addWatchButton(c1, o + "#" + i, () -> Array.get(o, j)).row();
+			IntUI.addWatchButton(c1, o + "#" + i, () -> Array.get(o, j)).row();
 			c1.image().color(Tmp.c1.set(c_underline)).colspan(2).growX().row();
 		}
 	}
@@ -177,7 +176,7 @@ public class JSFunc {
 		return testDraw0(__ -> draw.run());
 	}
 
-	static Window testDraw0(Cons<Group> draw) {
+	private static Window testDraw0(Cons<Group> draw) {
 		return dialog(new Group() {
 			{transform = true;}
 
@@ -238,11 +237,11 @@ public class JSFunc {
 	}
 
 
-	public static void reviewElement(Element element) {
+	public static void inspect(Element element) {
 		new ReviewElementWindow().show(element);
 	}
 
-	public static WFunction<?> getFunction(String name) {
+	public static WFunction<?> getFunc(String name) {
 		return Selection.allFunctions.get(name);
 	}
 
@@ -256,18 +255,19 @@ public class JSFunc {
 
 		return o;
 	}
+	public static Object asJS(Object o) {
+		return Context.javaToJS(o, scope);
+	}
 
-	public static Scriptable findClass(String name, boolean isAdapter) throws ClassNotFoundException {
+
+	public static Scriptable findClass(String name) throws ClassNotFoundException {
 		if (classes.containsKey(name)) {
 			return classes.get(name);
 		} else {
-			Scriptable clazz = tester.cx.getWrapFactory().wrapJavaClass(tester.cx, scope, main.loadClass(name));
+			Scriptable clazz = Tester.cx.getWrapFactory().wrapJavaClass(Tester.cx, scope, main.loadClass(name));
 			classes.put(name, clazz);
 			return clazz;
 		}
-	}
-	public static Scriptable findClass(String name) throws ClassNotFoundException {
-		return findClass(name, true);
 	}
 	public static Class<?> forName(String name) throws ClassNotFoundException {
 		return Class.forName(name, false, Vars.mods.mainLoader());
@@ -278,10 +278,6 @@ public class JSFunc {
 	}
 	public static void toggleDrawPadElem(Element elem) {
 		topGroup.setDrawPadElem(topGroup.drawPadElem == elem ? null : elem);
-	}
-
-	public static Object asJS(Object o) {
-		return Context.javaToJS(o, scope);
 	}
 
 	// public static Window frameLabel(String text) {
@@ -341,7 +337,8 @@ public class JSFunc {
 		return watch == null ? new WatchWindow() : watch;
 	}
 
-	/** 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code> */
+	/** 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code>
+	 * <br>（不一定） */
 	public static boolean eq(Object a, Object b) {
 		return a == b;
 	}
@@ -364,47 +361,6 @@ public class JSFunc {
 		w.show();
 		return w;
 	}*/
-
-	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
-		addDetailsButton(table, prov, clazz);
-		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
-	}
-	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
-		/* table.button("@details", HopeStyles.flatBordert, () -> {
-			Object o = prov.get();
-			Core.app.post(() -> showInfo(o, o != null ? o.getClass() : clazz));
-		}).size(96, 45); */
-		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 24, () -> {
-			Object o = prov.get();
-			Core.app.post(() -> showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
-		}).size(32, 32);
-	}
-
-	public static void addStoreButton(Table table, String key, Prov<?> prov) {
-		table.button(buildStoreKey(key),
-			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
-		 .with(b -> {
-			 b.clicked(() -> {
-				 tester.put(b, prov.get());
-			 });
-		 });
-	}
-	public static String buildStoreKey(String key) {
-		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
-		 : Core.bundle.format("jsfunc.store_as_js_var", key);
-	}
-
-	public static boolean isMultiWatch() {
-		return Core.input.ctrl() || E_JSFunc.watch_multi.enabled();
-	}
-	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
-		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
-			Sr((!isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
-			 ? w : watch()).watch(info, value).show())
-			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
-		})).size(32);
-	}
-
 	public static <T extends Group> void design(T element) {
 		dialog(d -> d.add(new DesignTable<>(element)));
 	}
@@ -477,6 +433,10 @@ public class JSFunc {
 
 	public static Element fx(String text) {
 		return HopeFx.colorFulText(text);
+	}
+
+	public static void requestEl(Cons<Element> cons) {
+		topGroup.requestSelectElem(TopGroup.defaultDrawer, cons);
 	}
 	public interface MyProv<T> {
 		T get() throws Exception;

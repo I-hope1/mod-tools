@@ -38,8 +38,8 @@ public class MyShaders {
 		 Core.files.internal("shaders/screenspace.vert"),
 		 shaderFi.child("dist_base.frag"));
 		mixScreen = new MixScreen();
-		maskShader = new MaskShader();
-		maskBatch = Core.batch = new SpriteBatch(10, maskShader);
+		// maskShader = new MaskShader();
+		// maskBatch = Core.batch = new SpriteBatch(10, maskShader);
 		// frontShader = new FrontShader();
 
 		// blur = new BlurShader();

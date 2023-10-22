@@ -310,7 +310,7 @@ public class Window extends Table {
 		// return getFrameBufferTexture((int) x, (int) y, (int) width, (int) height);
 		// return new TextureRegion(bufferCapture(this));
 		if (Vars.mobile && Modible_Disabled) return null;
-		return cache = isMinimize ? cache : ElementUtils.screenshot(cont, true, null);
+		return cache = isMinimize || cont == null ? cache : ElementUtils.screenshot(cont, true, null);
 	}
 
 	public float getPrefWidth() {

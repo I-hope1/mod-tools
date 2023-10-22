@@ -75,10 +75,10 @@ public interface ReflectTools {
 		return getGenericString(clazz);
 	}
 
-	static Member wrapMember(Class<?> cl) {
+	static Member wrapClass(Class<?> cl) {
 		return new Member() {
 			public Class<?> getDeclaringClass() {
-				return null;
+				return cl.getDeclaringClass();
 			}
 			public String getName() {
 				return cl.getName();

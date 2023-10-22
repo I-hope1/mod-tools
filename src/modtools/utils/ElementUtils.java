@@ -67,14 +67,19 @@ public class ElementUtils {
 		 h = (int) el.getHeight();
 
 		// 清空
+		Vec2 vec = getAbsolutePos(el);
 		if (clear) {
 			clearScreen();
+			float px = el.x, py = el.y;
+			el.x = vec.x;
+			el.y = vec.y;
 			el.draw();
+			el.x = px;
+			el.y = py;
 
 			Draw.flush();
 		}
-		Vec2   vec2   = getAbsolutePos(el);
-		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) el.x, (int) el.y, w, h, true);
+		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec.x, (int) vec.y, w, h, true);
 
 		TextureRegion textureRegion = new TextureRegion(new Texture(pixmap), 0, 0, w, h);
 		if (callback != null) callback.get(textureRegion, pixmap);

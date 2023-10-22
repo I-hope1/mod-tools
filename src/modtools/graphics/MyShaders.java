@@ -3,21 +3,22 @@ package modtools.graphics;
 import arc.Core;
 import arc.files.Fi;
 import arc.graphics.*;
-import arc.graphics.Texture.TextureFilter;
 import arc.graphics.g2d.*;
-import arc.graphics.g3d.PlaneBatch3D;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.*;
-import arc.util.*;
+import arc.util.Log;
 import modtools.*;
 
 
 public class MyShaders {
 	public static Shader specl, baseShader;
 	/** 将任何纹理中有颜色的替换成{@code color} */
-	public static MixScreen mixScreen;
+	public static MixScreen  mixScreen;
+	public static MaskShader maskShader;
 	// public static FrontShader frontShader;
+
+	public static Batch maskBatch;
 
 	public static Fi shaderFi = IntVars.root.child("shaders");
 	public static void load() {
@@ -33,22 +34,12 @@ public class MyShaders {
 				setUniformf("u_invsize", 1f / width, 1f / height);
 			}
 		}; */
-		Core.batch = new SpriteBatch() {
-			final Texture texture = new Texture(1000, 1000);
-			protected void draw(Texture texture, float[] spriteVertices, int offset, int count) {
-				super.draw(texture, spriteVertices, offset, count);
-				switchTexture(this.texture);
-			}
-		};
-		Draw.color();
-		// Shader last = Draw.getShader();
-		// Draw.shader();
-		// baseShader = Draw.getShader();
-		// Draw.shader(last);
 		baseShader = new Shader(
 		 Core.files.internal("shaders/screenspace.vert"),
 		 shaderFi.child("dist_base.frag"));
 		mixScreen = new MixScreen();
+		maskShader = new MaskShader();
+		maskBatch = Core.batch = new SpriteBatch(10, maskShader);
 		// frontShader = new FrontShader();
 
 		// blur = new BlurShader();
@@ -68,6 +59,56 @@ public class MyShaders {
 				// shader.apply();
 			});
 		}); */
+	}
+
+	public static class MaskShader extends Shader {
+		private final Color mashColor = new Color();
+
+		public MaskShader() {
+			super("attribute vec4 a_position;\n" +
+						"attribute vec4 a_color;\n" +
+						"attribute vec2 a_texCoord0;\n" +
+						"attribute vec4 a_mix_color;\n" +
+						"uniform mat4 u_projTrans;\n" +
+						"varying vec4 v_color;\n" +
+						"varying vec4 v_mix_color;\n" +
+						"varying vec4 v_mask;\n" +
+						"varying vec2 v_texCoords;\n" +
+
+						"void main(){\n" +
+						"   v_color = a_color;\n" +
+						"   v_color.a = v_color.a * (255.0/254.0);\n" +
+						"   v_mix_color = a_mix_color;\n" +
+						"   v_mix_color.a *= (255.0/254.0);\n" +
+						"   v_texCoords = a_texCoord0;\n" +
+						"   gl_Position = u_projTrans * a_position;\n" +
+						"}",
+
+			 "\n" +
+			 "varying lowp vec4 v_color;\n" +
+			 "varying lowp vec4 v_mix_color;\n" +
+			 "varying highp vec2 v_texCoords;\n" +
+			 "uniform highp sampler2D u_texture;\n" +
+			 "uniform vec4 u_mask;\n" +
+			 "void main(){\n" +
+			 "  vec4 c = texture2D(u_texture, v_texCoords);\n" +
+			 "  gl_FragColor = v_color" +
+			 " * mix(c, vec4(v_mix_color.rgb, c.a), v_mix_color.a)" +
+			 " * (vec4(1) - u_mask);" +
+			 "}");
+			apply();
+		}
+		public void setMashColor(Color color) {
+			mashColor.set(color);
+			apply();
+		}
+		public void bind() {
+			apply();
+			super.bind();
+		}
+		public void apply() {
+			setUniformf("u_mask", mashColor);
+		}
 	}
 
 	public static class BlurShader extends Shader {

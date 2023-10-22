@@ -122,9 +122,10 @@ public class ReviewElement extends Content {
 
 	public void load() {
 		loadSettings();
-		topGroup.focusOnElement(new ReviewFocusTask());
+		ReviewFocusTask task = new ReviewFocusTask();
+		topGroup.focusOnElement(task);
 
-		btn.update(() -> btn.setChecked(topGroup.isSelecting()));
+		btn.update(() -> btn.setChecked(task.isSelecting()));
 		btn.setStyle(HopeStyles.hope_clearTogglet);
 
 		TopGroup.searchBlackList.add(btn);
@@ -531,7 +532,7 @@ public class ReviewElement extends Content {
 						d.left().defaults().left();
 						for (var cell : ((Table) element).getCells()) {
 							d.table(Tex.pane, t0 -> {
-								t0.add(new ReadOnlyValueLabel<>(Cell.class, () -> cell));
+								t0.add(new PlainValueLabel<>(Cell.class, () -> cell));
 							});
 							if (cell.isEndRow()) d.row();
 						}
@@ -624,7 +625,7 @@ public class ReviewElement extends Content {
 				getAdd(t, cell, "padTop");
 				t.add().row();
 				getAdd(t, cell, "padLeft");
-				ValueLabel label = new ReadOnlyValueLabel<>(Element.class, cell::get);
+				ValueLabel label = new PlainValueLabel<>(Element.class, cell::get);
 				label.enableUpdate = false;
 				label.update(() -> label.setVal(cell.get()));
 				Label   placeholder     = new MyLabel("<VALUE>", MOMO_LabelStyle);
@@ -964,6 +965,7 @@ public class ReviewElement extends Content {
 			}
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
+			super.afterAll();
 			super.drawFocus(elem, vec2);
 			Gl.flush();
 
@@ -1089,8 +1091,14 @@ public class ReviewElement extends Content {
 		}
 		final InfoDetails table = new InfoDetails();
 
+		public void init() {
+			if (isSelecting()) super.init();
+		}
+		private boolean isSelecting() {
+			return topGroup.elementCallback == callback;
+		}
 		public void endDraw() {
-			if (topGroup.isSelecting()) super.endDraw();
+			if (isSelecting()) super.endDraw();
 			drawLine();
 			elem = topGroup.getSelected();
 			if (elem != null) drawFocus(elem);

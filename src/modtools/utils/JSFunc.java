@@ -132,7 +132,7 @@ public class JSFunc {
 			button.clearChildren();
 			button.add(i + "[lightgray]:", HopeStyles.MOMO_LabelStyle).padRight(8f);
 			int j = i;
-			button.add(new ReadOnlyValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
+			button.add(new PlainValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
 			button.clicked(() -> {
 				Object item = Array.get(o, j);
 				// 使用post避免stack overflow

@@ -41,6 +41,7 @@ import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
+import static modtools.utils.Tools.catchRun;
 
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -233,11 +234,11 @@ public class IntUI {
 					});
 					// newCell
 				} else {
-					cell.with(b -> b.clicked(() -> {
+					cell.with(b -> b.clicked(catchRun(() -> {
 						if (cons != null) cons.get(b);
 						hide.run();
 						if (hideMenu != null) hideMenu.run();
-					})).checked(menu instanceof CheckboxList l && l.checked);
+					}))).checked(menu instanceof CheckboxList l && l.checked);
 				}
 				cell.row();
 				if (menu instanceof DisabledList) {

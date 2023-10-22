@@ -1,6 +1,6 @@
 package modtools.ui;
 
-import arc.Core;
+import arc.*;
 import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -16,11 +16,13 @@ import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
+import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
 import modtools.annotations.builder.DataBoolFieldInit;
+import modtools.graphics.MyShaders;
 import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
@@ -29,6 +31,7 @@ import modtools.utils.*;
 import modtools.utils.array.TaskSet;
 
 import java.util.*;
+import java.util.EventListener;
 
 import static arc.Core.*;
 import static modtools.IntVars.modName;
@@ -359,6 +362,7 @@ public final class TopGroup extends WidgetGroup {
 			};
 			public void cancel() {
 				selecting = false;
+				resetSelectElem();
 			}
 
 			/* 拦截keydown */
@@ -445,6 +449,12 @@ public final class TopGroup extends WidgetGroup {
 
 
 	public final Seq<ResidentDrawTask> drawResidentTasks = new Seq<>();
+
+	{
+		Events.run(Trigger.uiDrawBegin, () -> drawResidentTasks.each(ResidentDrawTask::init));
+		Events.run(Trigger.uiDrawEnd, () -> drawResidentTasks.each(ResidentDrawTask::afterAll));
+	}
+
 	public void focusOnElement(FocusTask task) {
 		drawResidentTasks.add(task);
 	}
@@ -665,8 +675,9 @@ public final class TopGroup extends WidgetGroup {
 		 */
 		default void beforeDraw(Window drawer) {}
 		default void endDraw() {}
+		default void init() {}
+		default void afterAll() {}
 	}
-
 
 	public static class NGroup extends Group {
 		public NGroup(String name) {
@@ -694,33 +705,47 @@ public final class TopGroup extends WidgetGroup {
 			drawFocus(elem, ElementUtils.getAbsolutePos(elem));
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
-			Gl.flush();
-			if (focusColor.a > 0) {
-				float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
-				Draw.color(focusColor, alpha);
-				// Tmp.m1.set(Draw.trans());
-				Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
-			}
-			if (!elem.visible) {
-				Draw.color(Pal.accent);
-				TextureRegionDrawable icon = Icon.eyeOffSmall;
-				icon.draw(vec2.x, vec2.y, 16, 16);
-			}
-
-			Draw.color(Pal.accent);
-			float thick = 1f;
-			Lines.stroke(thick);
-			Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+			TopGroup.drawFocus(elem, vec2, focusColor);
 		}
 		public void endDraw() {
 			if (maskColor.a == 0) return;
 
-			Draw.color(maskColor);
-			Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
+			// Draw.color(maskColor);
+			// Fill.crect(0, 0, Core.graphics.getWidth(), Core.graphics.getHeight());
 
+			afterAll();
 			if (drawSlightly) topGroup.drawSlightlyIfSmall();
-			Gl.flush();
 		}
+		Batch prev = batch;
+		public void init() {
+			if (MyShaders.maskBatch == null) return;
+			prev = batch;
+			batch = MyShaders.maskBatch;
+			MyShaders.maskShader.setMashColor(maskColor);
+		}
+		public void afterAll() {
+			MyShaders.maskShader.setMashColor(Color.clear);
+			batch = prev;
+		}
+	}
+	public static void drawFocus(Element elem, Vec2 vec2, Color focusColor) {
+		Gl.flush();
+		if (focusColor.a > 0) {
+			float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
+			Draw.color(focusColor, alpha);
+			// Tmp.m1.set(Draw.trans());
+			Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+		}
+		if (!elem.visible) {
+			Draw.color(Pal.accent);
+			TextureRegionDrawable icon = Icon.eyeOffSmall;
+			icon.draw(vec2.x, vec2.y, 16, 16);
+		}
+
+		Draw.color(Pal.accent);
+		float thick = 1f;
+		Lines.stroke(thick);
+		Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
 	}
 	private class FillEnd extends Table {
 		public FillEnd() {

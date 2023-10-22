@@ -106,6 +106,7 @@ public class SettingsUI extends Content {
 			 addElemValueLabel(this, "Bound Element",
 				() -> topGroup.drawPadElem,
 				() -> topGroup.setDrawPadElem(null),
+				topGroup::setDrawPadElem,
 				() -> topGroup.debugBounds);
 			 float minZoom = Vars.renderer.minZoom;
 			 float maxZoom = Vars.renderer.maxZoom;
@@ -166,8 +167,10 @@ public class SettingsUI extends Content {
 	}
 	public static void addElemValueLabel(
 	 Table table, String text, Prov<Element> prov,
-	 Runnable clear, Boolp condition) {
-		ValueLabel vl = new ClearValueLabel<>(Element.class, prov, clear);
+	 Runnable clear, Cons<Element> setter,
+	 Boolp condition) {
+		var vl = new ClearValueLabel<>(Element.class, prov, clear);
+		vl.setter = (Cons) setter;
 		vl.setAlignment(Align.right);
 		Label l = new Label(text);
 		table.stack(l, vl)

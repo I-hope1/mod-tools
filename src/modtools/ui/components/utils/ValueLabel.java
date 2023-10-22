@@ -16,6 +16,7 @@ import mindustry.entities.Effect;
 import mindustry.gen.*;
 import modtools.events.*;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.content.ui.*;
@@ -76,7 +77,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 	public abstract Seq<MenuList> getMenuLists();
 	public static MenuList newElementDetailsList(Element element) {
-		return MenuList.with(Icon.crafting, "El Details", () -> {
+		return DisabledList.withd(Icon.crafting, "El Details", () -> element == null,
+		 () -> {
 			new ElementDetailsWindow(element);
 		});
 	}
@@ -117,7 +119,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		if (lastSize == null) lastSize = new Vec2();
 		return lastSize;
 	}
-	private void resThrowable(Object val, Throwable th) {
+	private void resolveThrow(Object val, Throwable th) {
 		Log.err(th);
 		IntUI.showException(th);
 		if (func != defFunc) {
@@ -319,7 +321,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		try {
 			setText0(func.get(val));
 		} catch (Throwable th) {
-			resThrowable(val, th);
+			resolveThrow(val, th);
 		}
 		invalidateHierarchy();
 		layout();
@@ -335,44 +337,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 
 	protected Seq<MenuList> basicMenuLists(Seq<MenuList> list) {
-		Sr(type).isExtend(__ -> {
-			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
-				SR.catchSatisfy(() -> Sr(val)
-				 .isInstance(TextureRegion.class, JSFunc::dialog)
-				 .isInstance(Texture.class, JSFunc::dialog)
-				 .isInstance(Drawable.class, JSFunc::dialog)
-				)));
-		 }, TextureRegion.class, Texture.class, Drawable.class)
-		 /* .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
-
-			 }));
-		 }, Drawable.class) */
-		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
-				 JSFunc.reviewElement((Element) val);
-			 }));
-			 list.add(newElementDetailsList((Element) val));
-		 }, Element.class)
-		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.infoSmall, "at player", () -> {
-				 ((Effect) val).at(Vars.player);
-			 }));
-		 }, Effect.class)
-		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
-				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
-			 }));
-		 }, Cell.class)
-		 .isExtend(__ -> {
-			 list.add(DisabledList.withd(modtools.ui.HopeIcons.position,
-				(val == null ? "" : selection.focusInternal.contains(val) ? "hide" : "show")
-				+ " on world", () -> val == null, () -> {
-					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
-				}));
-		 }, Building.class, Unit.class, Bullet.class);
-
-		list.add(newDetailsMenuList(this, val, (Class) type));
+		specialBuild(list);
+		detailsBuild(list);
 		list.add(MenuList.with(Icon.diagonalSmall, "stringifyFunc", () -> {
 			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc,
 			 getObject(), o -> func = o);
@@ -391,6 +357,59 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}
 		list.add(copyAsJSMenu("value", () -> val));
 		return list;
+	}
+
+	protected void detailsBuild(Seq<MenuList> list) {
+		list.add(newDetailsMenuList(this, val, (Class) type));
+	}
+	protected void specialBuild(Seq<MenuList> list) {
+		Sr(type).isExtend(__ -> {
+			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
+				SR.catchSatisfy(() -> Sr(val)
+				 .isInstance(TextureRegion.class, JSFunc::dialog)
+				 .isInstance(Texture.class, JSFunc::dialog)
+				 .isInstance(Drawable.class, JSFunc::dialog)
+				)));
+		 }, TextureRegion.class, Texture.class, Drawable.class)
+		 /* .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
+
+			 }));
+		 }, Drawable.class) */
+		 .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
+				 JSFunc.reviewElement((Element) val);
+			 }));
+			 list.add(newElementDetailsList((Element) val));
+			 elementSetter(list, this::setVal);
+		 }, Element.class)
+		 .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.infoSmall, "at player", () -> {
+				 ((Effect) val).at(Vars.player);
+			 }));
+		 }, Effect.class)
+		 .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
+				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
+			 }));
+		 }, Cell.class)
+		 .isExtend(__ -> {
+			 list.add(DisabledList.withd(HopeIcons.position,
+				(val == null ? "" : selection.focusInternal.contains(val) ? "hide" : "show")
+				+ " on world", () -> val == null, () -> {
+					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
+				}));
+		 }, Building.class, Unit.class, Bullet.class);
+	}
+
+	static Color focusColor = new Color(Color.slate).a(0.6f);
+	protected void elementSetter(Seq<MenuList> list, Cons<Element> callback) {
+		list.add(MenuList.with(Icon.editSmall, "choose one", () -> {
+			topGroup.requestSelectElem((selecting, el) -> {
+				if (!selecting) return;
+				TopGroup.drawFocus(el, ElementUtils.getAbsolutePos(el), focusColor);
+			}, callback);
+		}));
 	}
 
 	public abstract Object getObject();

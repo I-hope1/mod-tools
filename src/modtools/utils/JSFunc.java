@@ -227,14 +227,6 @@ public class JSFunc {
 	public static Window dialog(Cons<Table> cons) {
 		return dialog(new Table(cons));
 	}
-	public static Window dialogFx(Cons<Table> cons) {
-		FxWidgetGroup group = new FxWidgetGroup();
-		Table         table = new Table(cons);
-		table.setClip(false);
-		table.fillParent = true;
-		group.addChild(table);
-		return window(d -> d.add(group).grow());
-	}
 
 
 	public static void inspect(Element element) {

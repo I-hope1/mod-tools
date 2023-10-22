@@ -9,11 +9,10 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
-import modtools.ui.components.*;
+import modtools.ui.components.Window;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
 
@@ -46,17 +45,17 @@ public class ElementUtils {
 	}
 	public static void quietScreenshot(Element element) {
 		// ui.update();
-		Core.app.post(() -> {
-			JSFunc.dialog(screenshot(element, true, (region, pixmap) -> {
-				Fi fi = screenshotDirectory.child(
-				 Optional.ofNullable(element.name)
-					.orElseGet(() -> "" + Time.nanos()) + ".png");
-				PixmapIO.writePng(fi, pixmap);
-				// pixmap.dispose();
+		ScreenSampler.pause();
+		JSFunc.dialog(screenshot(element, true, (region, pixmap) -> {
+			Fi fi = screenshotDirectory.child(
+			 Optional.ofNullable(element.name)
+				.orElseGet(() -> "" + Time.nanos()) + ".png");
+			PixmapIO.writePng(fi, pixmap);
+			// pixmap.dispose();
 
-				Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
-			}));
-		});
+			Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
+		}));
+		ScreenSampler._continue();
 		// Time.runTask(30, w::hide);
 	}
 	public static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {
@@ -70,11 +69,12 @@ public class ElementUtils {
 		// 清空
 		if (clear) {
 			clearScreen();
-			// boolean last = false;
 			el.draw();
+
+			Draw.flush();
 		}
-		Vec2 vec2 = getAbsolutePos(el);
-		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) vec2.x, (int) vec2.y, w, h, true);
+		Vec2   vec2   = getAbsolutePos(el);
+		Pixmap pixmap = ScreenUtils.getFrameBufferPixmap((int) el.x, (int) el.y, w, h, true);
 
 		TextureRegion textureRegion = new TextureRegion(new Texture(pixmap), 0, 0, w, h);
 		if (callback != null) callback.get(textureRegion, pixmap);

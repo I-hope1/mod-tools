@@ -71,9 +71,16 @@ public class ModTools extends Mod {
 		if (OS.isWindows) {
 			return Fi.get(((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0].getFile());
 		}
+		if(OS.isMac){
+            		return Vars.modDirectory.child(lastTerm(((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0].getFile()));
+       		}
 		if (OS.isAndroid) return findRootAndroid();
 		throw new UnsupportedOperationException();
 	}
+	private static String getFileName(String file){
+        	int index = file.lastIndexOf('/');
+        	return file.substring(index).replace("/","");
+    	}
 	public static Fi findRootAndroid() {
 		Object pathList = Reflect.get(BaseDexClassLoader.class, ModTools.class.getClassLoader(),
 		 "pathList");
@@ -137,7 +144,7 @@ public class ModTools extends Mod {
 			return;
 		}
 		HopeInput.load();
-		if (OS.isWindows) {
+		if (OS.isWindows || OS.isMac) {
 			ui.mods.addListener(new VisibilityListener() {
 				@Override
 				public boolean shown() {

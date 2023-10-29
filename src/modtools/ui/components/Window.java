@@ -120,7 +120,7 @@ public class Window extends Table {
 		tapped(this::toFront);
 		touchable = titleTable.touchable/* = cont.touchable */ = Touchable.enabled;
 		titleTable.margin(0);
-		if (OS.isWindows && full) IntUI.doubleClick(titleTable, null, this::toggleMaximize);
+		if ((OS.isWindows || OS.isMac) && full) IntUI.doubleClick(titleTable, null, this::toggleMaximize);
 		cont.margin(6f);
 		buttons.margin(0);
 		this.minHeight = minHeight;

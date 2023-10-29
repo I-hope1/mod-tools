@@ -1,8 +1,16 @@
 package modtools.utils.world;
 
+import arc.util.io.*;
 import mindustry.Vars;
+import mindustry.game.Team;
+import mindustry.gen.Call;
+import mindustry.net.*;
+import mindustry.type.UnitType;
 import mindustry.world.*;
+import modtools.net.packet.*;
 import modtools.ui.Contents;
+
+import static mindustry.Vars.*;
 
 public class WorldUtils {
 	public static void setBlock(Tile tile, Block block) {
@@ -27,6 +35,16 @@ public class WorldUtils {
 		}
 	}
 	private static void setBlock0(Tile tile, Block block) {
-		tile.setBlock(block, tile.build != null ? tile.team() : Contents.selection.defaultTeam);
+		HopeCall.setBlock(block, tile, tile.build != null ? tile.team() : Contents.selection.defaultTeam);
 	}
+	public static void setBlock(Tile tile, Block block, Team team) {
+		tile.setBlock(block, team);
+	}
+	public static void spawnUnit(UnitType selectUnit, float x, float y, int amount, Team team) {
+		for (int i = 0; i < amount; i++) {
+			selectUnit.spawn(team, x, y);
+		}
+	}
+
+
 }

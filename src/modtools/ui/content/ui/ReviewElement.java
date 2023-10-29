@@ -46,6 +46,7 @@ import static modtools.ui.HopeStyles.MOMO_LabelStyle;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.Sr;
 
+/** it should be `InspectElement`, but it's too late.  */
 public class ReviewElement extends Content {
 	/** {@link Cell#unset} */
 	public static final float unset = Float.NEGATIVE_INFINITY;

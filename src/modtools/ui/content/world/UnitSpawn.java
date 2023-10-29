@@ -22,17 +22,17 @@ import mindustry.type.UnitType;
 import mindustry.ui.Styles;
 import modtools.events.ExecuteTree;
 import modtools.events.ExecuteTree.*;
+import modtools.net.packet.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
-import modtools.ui.components.utils.MyItemSelection;
+import modtools.ui.components.utils.*;
 import modtools.ui.content.*;
-import modtools.ui.content.ui.ReviewElement;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
-import static mindustry.Vars.player;
+import static mindustry.Vars.*;
 import static modtools.ui.Contents.*;
 import static rhino.ScriptRuntime.*;
 
@@ -274,9 +274,7 @@ public class UnitSpawn extends Content {
 			IntUI.showException(exception);
 			throw exception;
 		}
-		for (int i = 0; i < amount; i++) {
-			selectUnit.spawn(team, x, y);
-		}
+		HopeCall.spawnUnit(selectUnit, x, y, amount, team);
 	}
 
 	int defCap;
@@ -303,7 +301,7 @@ public class UnitSpawn extends Content {
 	private static void removeAllUnits() {
 		Groups.unit.each(Unit::remove);
 		Groups.unit.clear();
-		//			cont.check("服务器适配", b -> server = b);
+		// cont.check("服务器适配", b -> server = b);
 	}
 	private static void killAllUnits() {
 		Groups.unit.each(Unit::kill);
@@ -320,4 +318,5 @@ public class UnitSpawn extends Content {
 		setup();
 		ui.show();
 	}
+
 }

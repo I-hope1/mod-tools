@@ -106,7 +106,7 @@ public class ContentList extends Content {
 			map.each((name, item) -> {
 				t.bind(name);
 				if (item instanceof UnlockableContent u) {
-					t.add(new Image(u.uiIcon)).size(32f);
+					t.add(new Image(u.fullIcon)).size(32f);
 				} else t.add();
 				t.button(name, Styles.flatt, () -> {}).growX().height(42).with(button -> {
 					IntUI.longPress(button, 600, b -> {

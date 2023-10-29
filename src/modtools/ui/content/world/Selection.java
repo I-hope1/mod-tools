@@ -268,6 +268,9 @@ public class Selection extends Content {
 					unit.team(team);
 				});
 			});
+			FunctionBuild("@heal", list -> {
+				each(list, Healthc::heal);
+			});
 			FunctionBuild("@kill", list -> {
 				removeIf(list, u -> {
 					Call.unitDeath(u.id);

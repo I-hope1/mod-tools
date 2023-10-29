@@ -2,7 +2,7 @@ package modtools;
 
 import arc.Events;
 import arc.files.Fi;
-import arc.util.Log;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
@@ -10,7 +10,7 @@ import mindustry.mod.Mods.*;
 import modtools.ui.IntUI;
 import modtools.utils.array.MySet;
 
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 
 import static mindustry.Vars.ui;
 
@@ -21,6 +21,8 @@ public class IntVars {
 
 	public static String QQ = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+
+	public static final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor("hope-async", 1);
 
 	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;

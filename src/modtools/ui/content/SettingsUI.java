@@ -36,9 +36,7 @@ import static modtools.ui.IntUI.topGroup;
 public class SettingsUI extends Content {
 	Window ui;
 	Table  cont = new Table();
-	final Table loadTable = new Table(t -> {
-		t.left().defaults().left();
-	});
+	final Table loadTable = new Table(t -> t.left().defaults().left());
 
 	public void build() {
 		ui.show();

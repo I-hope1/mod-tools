@@ -10,29 +10,25 @@ import arc.util.io.PropertiesUtils;
 import dalvik.system.BaseDexClassLoader;
 import ihope_lib.MyReflect;
 import mindustry.*;
-import mindustry.content.Items;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.graphics.LoadRenderer;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
-import mindustry.type.*;
-import mindustry.world.blocks.distribution.BufferedItemBridge;
-import mindustry.world.meta.BlockGroup;
 import modtools.graphics.MyShaders;
+import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.FileUtils;
-import test0.Circle;
 
 import java.io.*;
 import java.lang.reflect.Field;
 import java.net.URLClassLoader;
 import java.util.Arrays;
 
-import static mindustry.Vars.ui;
+import static mindustry.Vars.*;
 import static modtools.IntVars.root;
 import static modtools.utils.MySettings.SETTINGS;
 
@@ -48,6 +44,7 @@ public class ModTools extends Mod {
 
 	public ModTools() {
 		Log.info("Loaded ModTools constructor" + (isImportFromGame ? " [[[from game]]]" : "") + ".");
+		if (headless) Log.info("Running in headless environment.");
 
 		ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 		IntVars.meta = metas.get(ModTools.class);
@@ -56,6 +53,7 @@ public class ModTools extends Mod {
 			if (!isImportFromGame) IntVars.meta.hidden = false;
 			resolveLibsCatch();
 
+			HopeCall.init();
 			if (isImportFromGame) resolveInputAndUI();
 			else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
 		} catch (Throwable e) {
@@ -132,8 +130,8 @@ public class ModTools extends Mod {
 	}
 
 	private static void resolveInputAndUI() {
-		Time.mark();
 		if (ui == null) return;
+		Time.mark();
 		if (error != null) {
 			ui.showException(error);
 			return;

@@ -1,17 +1,16 @@
 package modtools.events;
 
 import arc.Core;
-import arc.func.Prov;
+import arc.func.*;
 import arc.graphics.Color;
-import arc.scene.event.VisibilityListener;
 import arc.scene.style.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import mindustry.gen.Icon;
-import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.utils.ElementUtils.MarkedCode;
@@ -69,12 +68,6 @@ public class ExecuteTree {
 		context = prev;
 	}
 
-	static {
-		/* all.each(node -> {
-			node.task;
-		}); */
-	}
-
 	public static class TaskNode {
 		public static final float perTick = 1 / 60f;
 
@@ -92,7 +85,7 @@ public class ExecuteTree {
 
 		float intervalSeconds = perTick;
 		public TaskNode intervalSeconds(float intervalSeconds) {
-			if (intervalSeconds < 0.01f) throw new IllegalArgumentException("intervalSeconds cannot be less than 0.01f");
+			if (intervalSeconds < 0.001f) throw new IllegalArgumentException("intervalSeconds cannot be less than 0.001f");
 			this.intervalSeconds = intervalSeconds;
 			return this;
 		}
@@ -133,11 +126,22 @@ public class ExecuteTree {
 			all.add(this);
 		}
 		public void apply() {
+			apply(false);
+		}
+
+		public void apply(boolean async) {
+			if (!(task instanceof MyTask) && async) throw new IllegalStateException("async can be applied only for MyTask.");
 			interrupt();
+			if (async) {
+				DelegateRun newRun = new DelegateRun(task, () -> intervalSeconds);
+				((MyTask) task).delegate = newRun;
+				IntVars.executor.execute(newRun);
+				return;
+			}
 			Timer.schedule(task, 0, intervalSeconds, repeatCount);
 		}
 		public boolean running() {
-			return task.isScheduled();
+			return task.isScheduled() || (task instanceof MyTask t && t.delegate != null);
 		}
 		public boolean editable() {
 			return editable;
@@ -151,14 +155,18 @@ public class ExecuteTree {
 		}
 		public void interrupt() {
 			if (task != null) {
-				task.cancel();
+				if (task instanceof MyTask t && t.delegate != null) {
+					t.delegate.stop();
+				} else task.cancel();
 				status = new Paused();
 			}
+
 		}
 
 		private class MyTask extends Task {
-			private final Runnable run;
-			private final String   source;
+			private final Runnable    run;
+			private final String      source;
+			private       DelegateRun delegate;
 			public MyTask(Runnable run, String source) {
 				this.run = run;
 				this.source = source;
@@ -178,7 +186,6 @@ public class ExecuteTree {
 					cancel();
 				}
 			}
-
 		}
 
 		public void edit() {
@@ -282,6 +289,27 @@ public class ExecuteTree {
 		}
 		public int code() {
 			return 4;
+		}
+	}
+
+
+	public static class DelegateRun implements Runnable {
+		Runnable delegate;
+		Floatp   intervalSeconds;
+		public DelegateRun(Runnable delegate, Floatp intervalSeconds) {
+			this.delegate = delegate;
+			this.intervalSeconds = intervalSeconds;
+		}
+		public void run() {
+			if (delegate == null) return;
+			delegate.run();
+			/* sec -> ms */
+			float v = intervalSeconds.get() * 1000;
+			Threads.sleep((long) v, (int) (v - ((long) v) * 100000));
+			run();
+		}
+		public void stop() {
+			delegate = null;
 		}
 	}
 }

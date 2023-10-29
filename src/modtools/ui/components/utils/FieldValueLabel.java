@@ -3,7 +3,7 @@ package modtools.ui.components.utils;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
-import modtools.events.E_JSFunc;
+import modtools.events.*;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.MenuList;
 import modtools.ui.components.input.JSRequest;
@@ -18,6 +18,7 @@ public class FieldValueLabel extends ValueLabel {
 	public Object getObject() {
 		return obj;
 	}
+
 	public FieldValueLabel(Object newVal, Class<?> type, Field field, Object obj) {
 		super(type);
 		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
@@ -29,11 +30,13 @@ public class FieldValueLabel extends ValueLabel {
 
 		if (newVal != unset) setVal(newVal);
 
-		if (field != null) update(() -> {
-			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
-				setVal();
-			}
-		});
+		if (field != null) {
+			update(() -> {
+				if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
+					setVal();
+				}
+			});
+		}
 	}
 
 	public void setVal() {

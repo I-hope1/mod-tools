@@ -111,7 +111,6 @@ public class ScreenSampler {
 		element.draw();
 		buffer.end();
 		Draw.proj(Tmp.m1);
-		Gl.viewport(0, 0, graphics.getWidth(), graphics.getHeight());
 		return buffer.getTexture();
 	}
 

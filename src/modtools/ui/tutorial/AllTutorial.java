@@ -75,7 +75,7 @@ public class AllTutorial {
 		int h = graphics.getHeight();
 		pingpong1.resize(w, h);
 		pingpong1.begin(Color.clear);
-		Draw.color(bgColor.rgba());
+		Draw.color(bgColor);
 		Fill.crect(0, 0, w, h);
 		pingpong1.end();
 		pingpong2.resize(w, h);
@@ -84,7 +84,7 @@ public class AllTutorial {
 		pingpong2.end();
 		pingpong2.getTexture().bind(1);
 		MyShaders.mixScreen.color = color;
-		Draw.blit(pingpong1, MyShaders.mixScreen);
+		pingpong1.blit(MyShaders.mixScreen);
 	}
 	public static boolean enableFocusMouse;
 	public static void init() {
@@ -111,8 +111,8 @@ public class AllTutorial {
 			}
 		};
 		scene.root.getCaptureListeners().insert(0, listener);
-		LerpFun fun = new LerpFun(Interp.smooth, Interp.smooth);
-		fun.register(0.1f);
+		LerpFun fun = new LerpFun(Interp.fastSlow, Interp.slowFast);
+		fun.register(0.05f);
 		Events.run(Trigger.uiDrawEnd, () -> {
 			if (enableFocusMouse || fun.a > 0) {
 				graphics.requestRendering();

@@ -19,15 +19,18 @@ public class MyItemSelection {
 	public MyItemSelection() {
 	}
 
-	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder, Cons<T> consumer) {
+	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder,
+																															Cons<T> consumer) {
 		buildTable(table, items, holder, consumer, 4);
 	}
 
-	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder, Cons<T> consumer, int cols) {
+	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder,
+																															Cons<T> consumer, int cols) {
 		IntVars.async(() -> buildTable0(table, items, holder, consumer, cols), () -> {});
 	}
 
-	private static <T extends UnlockableContent> void buildTable0(Table table, Seq<T> items, Prov<T> holder, Cons<T> consumer, int cols) {
+	private static <T extends UnlockableContent> void buildTable0(Table table, Seq<T> items, Prov<T> holder,
+																																Cons<T> consumer, int cols) {
 		ButtonGroup<ImageButton> group = new ButtonGroup<>();
 		group.setMinCheckCount(0);
 		Table cont = new Table();
@@ -37,17 +40,13 @@ public class MyItemSelection {
 		for (T item : items) {
 			if (item == null) continue;
 			try {
-				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/Styles.clearTogglei, 24, () -> {
+				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, () -> {
 				}).group(group).get();
 				button.changed(() -> {
 					consumer.get(button.isChecked() ? item : null);
 				});
 				button.getStyle().imageUp = new TextureRegionDrawable(item.uiIcon);
 				if (item == holder.get()) button.setChecked(true);
-			/*button.update(() -> {
-				button.setChecked(holder.get() == item);
-			});*/
-
 			} catch (Exception ignored) {}
 			if (++i % cols == 0) {
 				cont.row();

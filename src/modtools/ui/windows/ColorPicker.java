@@ -21,8 +21,8 @@ import modtools.ui.components.Window;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
 public class ColorPicker extends Window {
-	private static      Texture hueTex;
-	public static final Color   bgColor = Pal.gray;
+	static       Texture hueTex;
+	static final Color   bgColor = Pal.gray;
 
 	private Cons<Color> cons = c -> {};
 	Color current = new Color();

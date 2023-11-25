@@ -35,6 +35,7 @@ import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.*;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
+import modtools.ui.windows.utils.Comparator;
 import modtools.utils.draw.InterpImage;
 import modtools.utils.ui.*;
 import modtools.utils.world.WorldDraw;
@@ -421,6 +422,10 @@ public class JSFunc {
 	/** 如果不用Object，安卓上会出问题 */
 	public static void openModule(Object module, String pn) throws Throwable {
 		MyReflect.openModule((Module) module, pn);
+	}
+
+	public static void compare(Object o1, Object o2) {
+		Comparator.compare(o1, o2);
 	}
 
 	public static Element fx(String text) {

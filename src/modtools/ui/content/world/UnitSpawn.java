@@ -1,39 +1,39 @@
 package modtools.ui.content.world;
 
-import arc.*;
+import arc.Events;
 import arc.graphics.Gl;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
-import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.event.*;
+import arc.scene.event.InputEvent;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Strings;
 import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.core.Version;
 import mindustry.game.*;
-import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
 import modtools.events.ExecuteTree;
-import modtools.events.ExecuteTree.*;
-import modtools.net.packet.*;
+import modtools.events.ExecuteTree.TaskNode;
+import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.*;
-import modtools.ui.components.*;
-import modtools.ui.components.utils.*;
-import modtools.ui.content.*;
+import modtools.ui.components.Window;
+import modtools.ui.components.linstener.WorldSelectListener;
+import modtools.ui.components.utils.MyItemSelection;
+import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
+import modtools.utils.world.WorldUtils;
 
-import static mindustry.Vars.*;
-import static modtools.ui.Contents.*;
+import static mindustry.Vars.player;
+import static modtools.ui.Contents.tester;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {
@@ -44,9 +44,6 @@ public class UnitSpawn extends Content {
 	public static final String unitUnlimitedKey  = "@settings.unitUnlimited";
 	public UnitSpawn() {
 		super("unitSpawn", Icon.unitsSmall);
-	}
-
-	{
 		defLoadable = false;
 	}
 
@@ -61,22 +58,35 @@ public class UnitSpawn extends Content {
 	TextField xField, yField, amountField, teamField;
 
 	// 用于获取点击的坐标
-	Element el = new Element();
+	Element             el       = new Element();
+	WorldSelectListener listener = new WorldSelectListener() {
+		protected void acquireWorldPos(float x, float y) {
+			super.acquireWorldPos(x, y);
+			setX(end.x);
+			setY(end.y);
+		}
+		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
+			super.touchUp(event, mx, my, pointer, button);
+			el.remove();
+		}
+		public void draw() {
+			Gl.flush();
+			Draw.z(Layer.overlayUI);
+			Draw.color(isOk() ? Pal.accent : Pal.remove, 0.5f);
+			Lines.stroke(2);
+			Lines.circle(x, y, 5);
+			Draw.color();
+		}
+	};
 
 	{
 		el.fillParent = true;
+		el.addListener(listener);
+		WorldUtils.uiWD.drawSeq.add(() -> {
+			listener.draw();
+			return true;
+		});
 	}
-
-	InputListener listener = new InputListener() {
-		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			Core.scene.removeListener(this);
-			Vec2 vec2 = Core.camera.unproject(x, y);
-			setX(vec2.x);
-			setY(vec2.y);
-			el.remove();
-			return false;
-		}
-	};
 
 	public void setup() {
 		unitCont.clearChildren();
@@ -86,9 +96,7 @@ public class UnitSpawn extends Content {
 		unitCont.table(right -> {
 			Label name = new Label(""),
 			 localizedName = new Label("");
-			IntUI.longPressOrRclick(name, l -> {
-				tester.put(l, selectUnit);
-			});
+			IntUI.longPressOrRclick(name, l -> tester.put(l, selectUnit));
 			JSFunc.addDClickCopy(name);
 			JSFunc.addDClickCopy(localizedName);
 			right.update(() -> {
@@ -127,27 +135,18 @@ public class UnitSpawn extends Content {
 			table.margin(-4f, 0f, -4f, 0f);
 			table.table(x0 -> {
 				x0.add("x:");
-				xField = x0.field(String.valueOf(x), newX -> {
-					 x = Strings.parseFloat(newX);
-				 })
+				xField = x0.field(String.valueOf(x), newX -> x = Strings.parseFloat(newX))
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX();
 			table.table(y0 -> {
 				y0.add("y:");
-				yField = y0.field(String.valueOf(y), newY -> {
-					 y = Strings.parseFloat(newY);
-				 })
+				yField = y0.field(String.valueOf(y), newY -> y = Strings.parseFloat(newY))
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
 			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, () -> {
-				if (el.parent == null) {
-					Core.scene.addListener(listener);
-					Core.scene.add(el);
-				} else {
-					el.remove();
-				}
+				ElementUtils.addOrRemove(el, el.parent == null);
 			}).growX().height(32).update(b -> {
 				b.setChecked(el.parent != null);
 			});
@@ -179,9 +178,7 @@ public class UnitSpawn extends Content {
 			});
 			table.table(t -> {
 				t.add("@filter.option.amount");
-				amountField = t.field("" + amount, text -> {
-					 amount = (int) toInteger(text);
-				 })
+				amountField = t.field("" + amount, text -> amount = (int) toInteger(text))
 				 .valid(val -> validNumber(val) && Tools.validPosInt(val))
 				 .width(100)
 				 .get();
@@ -211,17 +208,6 @@ public class UnitSpawn extends Content {
 		}).growX();
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
 		// ui.addCloseButton();
-
-		Events.run(Trigger.draw, () -> {
-			// if (!isOk()) return;
-
-			Gl.flush();
-			Draw.z(Layer.overlayUI);
-			Draw.color(isOk() ? Pal.accent : Pal.remove, 0.5f);
-			Lines.stroke(2);
-			Lines.circle(x, y, 5);
-			Draw.color();
-		});
 	}
 	TaskNode root;
 	public void load() {
@@ -306,6 +292,7 @@ public class UnitSpawn extends Content {
 	private static void killAllUnits() {
 		Groups.unit.each(Unit::kill);
 	}
+
 	private static void noScorchMarks() {
 		Vars.content.units().each(u -> {
 			u.deathExplosionEffect = Fx.none;
@@ -318,5 +305,4 @@ public class UnitSpawn extends Content {
 		setup();
 		ui.show();
 	}
-
 }

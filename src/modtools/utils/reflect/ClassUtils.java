@@ -2,6 +2,7 @@ package modtools.utils.reflect;
 
 
 import arc.files.Fi;
+import arc.struct.*;
 import arc.util.*;
 import dalvik.system.DexFile;
 import jdk.internal.reflect.ConstantPool;
@@ -20,6 +21,22 @@ public class ClassUtils {
 
 	public static Set<Class<?>> getClasses(String pack) {
 		return OS.isAndroid ? getClasses1(pack) : getClasses0(pack);
+	}
+	/**
+	 * 获取给定类及其父类的所有类对象的集合
+	 * @param cls 给定的类对象
+	 * @return 包含给定类及其父类的所有类对象的集合
+	 */
+	public static ObjectSet<Class<?>> getClassAndParents(Class<?> cls) {
+		ObjectSet<Class<?>> seq = new ObjectSet<>();
+		seq.add(cls);
+
+		for (Class<?> inter : cls.getInterfaces()) {
+			seq.add(inter);
+		}
+		Class<?> superclass = cls.getSuperclass();
+		if (superclass != null) seq.addAll(getClassAndParents(superclass));
+		return seq;
 	}
 	/** only for {@link OS#isAndroid} */
 	public static Set<Class<?>> getClasses1(String pack) {

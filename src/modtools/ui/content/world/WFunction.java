@@ -247,7 +247,7 @@ public abstract class WFunction<T> {
 		}
 		executor.submit(() -> {
 			Tools.each(list, t -> {
-				new LerpFun(Interp.smooth).onWorld().rev()
+				new LerpFun(Interp.fastSlow).onWorld().rev()
 				 .registerDispose(1 / 24f, fin -> {
 					 Draw.color(Pal.accent);
 					 Vec2 pos = getPos(t);
@@ -261,7 +261,7 @@ public abstract class WFunction<T> {
 			});
 		});
 	}
-	public void removeIf(List<T> list, Predicate<? super T> action) {
+	public void removeAll(List<T> list, Predicate<? super T> action) {
 		list.removeIf(action);
 	}
 	public final void clearList() {

@@ -293,6 +293,35 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			updateTextIndex();
 			super.updateDisplayText();
 		}
+		protected void drawSelection(Drawable selection, Font font, float x, float y) {
+			int   firstLineShowing = getRealFirstLineShowing();
+			int   linesShowing     = getRealLinesShowing();
+			int   i                = firstLineShowing * 2;
+			float offsetY          = lineHeight() * firstLineShowing;
+			int   minIndex         = Math.min(cursor, selectionStart);
+			int   maxIndex         = Math.max(cursor, selectionStart);
+			while (i + 1 < linesBreak.size && i < (firstLineShowing + linesShowing) * 2) {
+
+				int lineStart = linesBreak.get(i);
+				int lineEnd   = linesBreak.get(i + 1);
+
+				if (!((minIndex < lineStart && minIndex < lineEnd && maxIndex < lineStart && maxIndex < lineEnd)
+							|| (minIndex > lineStart && minIndex > lineEnd && maxIndex > lineStart && maxIndex > lineEnd))) {
+
+					int start = Math.min(Math.max(linesBreak.get(i), minIndex), glyphPositions.size - 1);
+					int end   = Math.min(Math.min(linesBreak.get(i + 1), maxIndex), glyphPositions.size - 1);
+
+					float selectionX     = glyphPositions.get(start) - glyphPositions.get(Math.min(linesBreak.get(i), glyphPositions.size));
+					float selectionWidth = glyphPositions.get(end) - glyphPositions.get(start);
+
+					selection.draw(x + selectionX + fontOffset, y - textHeight - font.getDescent() - offsetY, selectionWidth,
+					 font.getLineHeight());
+				}
+
+				offsetY += font.getLineHeight();
+				i += 2;
+			}
+		}
 		private void updateTextIndex() {
 			int firstLineShowing = getRealFirstLineShowing();
 			int linesShowing     = getRealLinesShowing() + 1;

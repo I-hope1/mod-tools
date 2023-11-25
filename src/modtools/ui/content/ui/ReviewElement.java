@@ -731,7 +731,7 @@ public class ReviewElement extends Content {
 				var cl = ((Table) element.parent).getCell(element);
 				if (cl == null) break l;
 				table.table(Tex.pane, t -> {
-					t.defaults().grow();
+					t.center().defaults().grow().center();
 					t.add();
 					getAdd(t, cl, "padTop");
 					t.add().row();

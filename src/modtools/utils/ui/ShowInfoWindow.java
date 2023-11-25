@@ -302,17 +302,20 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		 .padRight(16), E_JSFuncDisplay.type);
 	}
 
-	static void applyChangedFx(Element label) {
-		new LerpFun(Interp.smooth).rev().onUI().registerDispose(0.05f, fin -> {
+	static void applyChangedFx(Element element) {
+		new LerpFun(Interp.slowFast).rev().onUI().registerDispose(0.05f, fin -> {
 			Draw.color(Pal.heal, fin);
 			Lines.stroke(3f - fin * 2f);
-			Vec2  e    = ElementUtils.getAbsPosCenter(label);
+			Vec2  e    = ElementUtils.getAbsPosCenter(element);
 			float fout = 1 - fin;
-			Fill.rect(e.x, e.y, fout * label.getWidth() * 1.2f, fout * label.getHeight() * 1.2f);
+			Fill.rect(e.x, e.y, fout * element.getWidth() * 1.2f, fout * element.getHeight() * 1.2f);
 
-			Angles.randLenVectors(e.hashCode(), 3, 1, (x, y) -> {
-				Fill.square(e.x + x, e.y + y, 1f);
-			});
+			/* Draw.color(Pal.powerLight, fout);
+			Angles.randLenVectors(new Rand().nextInt(), 4, element.getWidth(), (x, __) -> {
+				Angles.randLenVectors(new Rand().nextInt(), 4, element.getHeight(), (___, y) -> {
+					Fill.circle(e.x + x, e.y + y, fin * 2);
+				});
+			}); */
 		});
 	}
 

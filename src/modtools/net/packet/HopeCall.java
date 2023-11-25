@@ -1,12 +1,9 @@
 package modtools.net.packet;
 
-import mindustry.Vars;
 import mindustry.game.Team;
-import mindustry.gen.*;
 import mindustry.net.*;
 import mindustry.type.UnitType;
 import mindustry.world.*;
-import modtools.ui.content.world.UnitSpawn;
 import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.net;

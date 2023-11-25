@@ -25,6 +25,11 @@ public class WorldSelectListener extends InputListener {
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		acquireWorldPos(x, y);
 	}
+	/**
+	 * 获取世界坐标
+	 * @param x 视口中的横向坐标
+	 * @param y 视口中的纵向坐标
+	 */
 	protected void acquireWorldPos(float x, float y) {
 		end.set(Core.camera.unproject(x, y));
 	}
@@ -39,7 +44,7 @@ public class WorldSelectListener extends InputListener {
 			start.y = end.y + (end.y = start.y) * 0;
 		}
 	}
-	protected void draw() {
+	public void draw() {
 		float minX = Mathf.clamp(Math.min(start.x, end.x), CAMERA_RECT.x, CAMERA_RECT.x + CAMERA_RECT.width);
 		float minY = Mathf.clamp(Math.min(start.y, end.y), CAMERA_RECT.y, CAMERA_RECT.y + CAMERA_RECT.height);
 		float maxX = Mathf.clamp(Math.max(start.x, end.x), CAMERA_RECT.x, CAMERA_RECT.x + CAMERA_RECT.width);

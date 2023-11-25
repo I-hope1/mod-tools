@@ -25,7 +25,7 @@ import mindustry.graphics.*;
 import mindustry.input.InputHandler;
 import mindustry.type.*;
 import mindustry.ui.Styles;
-import mindustry.world.Tile;
+import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.events.E_Selection;
 import modtools.ui.*;
@@ -75,7 +75,7 @@ public class Selection extends Content {
 	 tileWD   = new WorldDraw(Layer.darkness + 1, "tile"),
 	 buildWD  = new WorldDraw(Layer.darkness + 2, "build"),
 	 bulletWD = new WorldDraw(Layer.bullet + 5, "bullet"),
-	 otherWD  = new WorldDraw(Layer.overlayUI, "other");
+	 otherWD = new WorldDraw(Layer.darkness + 5, "other");
 
 	public Element fragSelect;
 	public Window  pane;
@@ -95,6 +95,7 @@ public class Selection extends Content {
 	WFunction<Building> buildings;
 	WFunction<Unit>     units;
 	WFunction<Bullet>   bullets;
+	WFunction<Entityc>  others;
 
 	/** @see E_Selection */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
@@ -106,42 +107,49 @@ public class Selection extends Content {
 	}
 
 	public void loadSettings(Data SETTINGS) {
-		Contents.settings_ui.add(localizedName(), icon, new Table() {{
-			defaults().growX().left();
-			table(t -> {
-				t.left().defaults().left().padRight(4f).growX();
-				allFunctions.each((k, func) -> func.setting(t));
-			}).row();
-			table(t -> {
-				defaultTeam = Team.get(SETTINGS.getInt("defaultTeam", 1));
-				t.left().defaults().left();
-				t.add("@selection.default.team").color(Pal.accent).growX().left().row();
-				t.table(t1 -> {
-					t1.left().defaults().left();
-					Team[] arr = Team.baseTeams;
-					int    c   = 0;
+		Contents.settings_ui.add(localizedName(), icon, new Table() {
+			int lastIndex = 0;
 
-					for (Team team : arr) {
-						ImageButton b = t1.button(IntUI.whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
-							SETTINGS.put("defaultTeam", team.id);
-							defaultTeam = team;
-						}).size(42).get();
-						b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
-						b.update(() -> b.setChecked(defaultTeam == team));
-						if (++c % 3 == 0) {
-							t1.row();
+			{
+				defaults().growX().left();
+				table(t -> {
+					t.left().defaults().left().padRight(4f).growX();
+					allFunctions.each((k, func) -> {
+						if (lastIndex++ % 3 == 0) t.row();
+						func.setting(t);
+					});
+				}).row();
+				table(t -> {
+					defaultTeam = Team.get(SETTINGS.getInt("defaultTeam", 1));
+					t.left().defaults().left();
+					t.add("@selection.default.team").color(Pal.accent).growX().left().row();
+					t.table(t1 -> {
+						t1.left().defaults().left();
+						Team[] arr = Team.baseTeams;
+						int    c   = 0;
+
+						for (Team team : arr) {
+							ImageButton b = t1.button(IntUI.whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
+								SETTINGS.put("defaultTeam", team.id);
+								defaultTeam = team;
+							}).size(42).get();
+							b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
+							b.update(() -> b.setChecked(defaultTeam == team));
+							if (++c % 3 == 0) {
+								t1.row();
+							}
 						}
-					}
 
-				}).growX().left().padLeft(16);
-			}).row();
-			table(t -> {
-				t.left().defaults().left();
-				SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", E_Selection.focusOnWorld).row();
-				t.check("@settings.drawSelect", 28, drawSelect, b -> drawSelect = b)
-				 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
-			}).row();
-		}});
+					}).growX().left().padLeft(16);
+				}).row();
+				table(t -> {
+					t.left().defaults().left();
+					SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", E_Selection.focusOnWorld).row();
+					t.check("@settings.drawSelect", 28, drawSelect, b -> drawSelect = b)
+					 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
+				}).row();
+			}
+		});
 	}
 
 	public void load() {
@@ -183,7 +191,7 @@ public class Selection extends Content {
 			});
 			FunctionBuild("@clear", list -> {
 				each(list, tile -> {
-					if (tile.block() != Blocks.air) tile.setAir();
+					if (tile.block() != Blocks.air) WorldUtils.setBlock(tile, Blocks.air);
 				});
 			});
 			ListFunction("@selection.setfloor",
@@ -241,13 +249,13 @@ public class Selection extends Content {
 				 list.size() == 1 ? getLiquidSetter(list.get(0)) : null);
 			});
 			FunctionBuild("@kill", list -> {
-				removeIf(list, b -> {
+				removeAll(list, b -> {
 					if (b.tile.build == b) b.kill();
 					return b.tile.build != null;
 				});
 			});
 			FunctionBuild("@clear", list -> {
-				removeIf(list, b -> {
+				removeAll(list, b -> {
 					if (b.tile != null && b.tile.block() != Blocks.air) {
 						b.tile.remove();
 					}
@@ -272,13 +280,13 @@ public class Selection extends Content {
 				each(list, Healthc::heal);
 			});
 			FunctionBuild("@kill", list -> {
-				removeIf(list, u -> {
+				removeAll(list, u -> {
 					Call.unitDeath(u.id);
 					return UnitUtils.kill(u);
 				});
 			});
 			FunctionBuild("@clear", list -> {
-				removeIf(list, u -> {
+				removeAll(list, u -> {
 					u.remove();
 					return Groups.unit.contains(u0 -> u0 == u);
 					// return !addedField.getBoolean(u);
@@ -286,7 +294,7 @@ public class Selection extends Content {
 				});
 			});
 			FunctionBuild("@selection.forceClear", list -> {
-				removeIf(list, u -> {
+				removeAll(list, u -> {
 					u.remove();
 					if (!Groups.unit.contains(unit -> unit == u)) return true;
 					Groups.all.remove(u);
@@ -301,7 +309,7 @@ public class Selection extends Content {
 		}};
 		bullets = new BulletFunction<>("bullet") {{
 			FunctionBuild("@clear", list -> {
-				removeIf(list, bullet -> {
+				removeAll(list, bullet -> {
 					bullet.remove();
 					try {
 						return Groups.bullet.contains(b -> b == bullet);
@@ -310,12 +318,24 @@ public class Selection extends Content {
 				});
 			});
 		}};
+		others = new EntityFunction<>("others") {{
+			FunctionBuild("@clear", list -> {
+				removeAll(list, entity -> {
+					try {
+						entity.remove();
+						return !entity.isAdded();
+					} catch (Exception ignored) {}
+					return false;
+				});
+			});
+		}};
+
 
 		var tab = new IntTab(-1, allFunctions.orderedKeys().toArray(String.class),
 		 Color.sky,
 		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
 		 1, true);
-		tab.icons = new Drawable[]{HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall};
+		tab.icons = new Drawable[]{HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall};
 		pane.cont.update(() -> {
 			tab.labels.each((name, l) -> {
 				l.color.set(E_Selection.valueOf(name).enabled() ? Color.white : Color.lightGray);
@@ -348,6 +368,33 @@ public class Selection extends Content {
 		TMP_RECT.set(t.worldx(), t.worldy(), 32, 32);
 	}
 
+	public class EntityFunction<T extends Entityc> extends WFunction<T> {
+		public EntityFunction(String name) {
+			super(name, otherWD);
+		}
+
+		public void buildTable(T t, Table table) {
+			if (t instanceof Position) buildPos(table, (Position) t);
+		}
+
+		public TextureRegion getRegion(T t) {
+			float hitSize = t instanceof Hitboxc ? ((Hitboxc) t).hitSize() : 4;
+			return iconMap.get(hitSize, () -> {
+				int   size  = (int) (hitSize * 1.4f * 4 * 2);
+				float thick = 12f;
+				return drawRegion(size, size, () -> {
+					MyDraw.square(size / 2f, size / 2f, size * 2 / (float) tilesize - 1, thick, Color.cyan);
+				});
+			});
+		}
+
+		public TextureRegion getIcon(T key) {
+			return Core.atlas.white();
+		}
+		public boolean checkRemove(T item) {
+			return !item.isAdded();
+		}
+	}
 	public class BulletFunction<T extends Bullet> extends WFunction<T> {
 		public BulletFunction(String name) {
 			super(name, bulletWD);
@@ -604,7 +651,7 @@ public class Selection extends Content {
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
 
 	{
-		otherWD.drawSeq.add(() -> {
+		WorldUtils.uiWD.drawSeq.add(() -> {
 			Gl.flush();
 			if (Core.input.alt()) {
 				Draw.alpha(0.3f);
@@ -859,7 +906,7 @@ public class Selection extends Content {
 				Time.runTask(2f, () -> {
 					move = true;
 				});
-				otherWD.drawSeq.add(() -> {
+				WorldUtils.uiWD.drawSeq.add(() -> {
 					if (!show) return false;
 					Draw.color(Pal.accent, 0.3f);
 					draw();
@@ -904,6 +951,18 @@ public class Selection extends Content {
 					}
 				});
 			}
+			if (E_Selection.others.enabled()) {
+				Groups.all.each(unit -> {
+					if (unit instanceof Bullet) return false;
+					if (unit instanceof Unit) return false;
+					// 返回单位是否在所选区域内
+					return !(unit instanceof Position pos) || start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
+				}, unit -> {
+					if (!others.list.contains(unit)) {
+						others.add(unit);
+					}
+				});
+			}
 
 			clampWorld();
 
@@ -934,3 +993,4 @@ public class Selection extends Content {
 		}
 	}
 }
+

@@ -4,6 +4,7 @@ import arc.util.io.*;
 import mindustry.Vars;
 import mindustry.game.Team;
 import mindustry.gen.Call;
+import mindustry.graphics.Layer;
 import mindustry.net.*;
 import mindustry.type.UnitType;
 import mindustry.world.*;
@@ -13,6 +14,8 @@ import modtools.ui.Contents;
 import static mindustry.Vars.*;
 
 public class WorldUtils {
+	public static WorldDraw uiWD = new WorldDraw(Layer.overlayUI, "ui");
+
 	public static void setBlock(Tile tile, Block block) {
 		if (tile.block() == block) return;
 		if (!block.isMultiblock()) {

@@ -2,6 +2,7 @@ package modtools.utils.reflect;
 
 import arc.util.OS;
 import modtools.ui.components.utils.ValueLabel;
+import modtools.utils.Tools;
 
 import java.lang.reflect.*;
 
@@ -53,7 +54,7 @@ public class FieldUtils {
 	public static <T> T getOrNull(Field field) {
 		try {
 			return Modifier.isStatic(field.getModifiers()) ? (T) field.get(null) : null;
-		} catch (IllegalAccessException ignored) {
+		} catch (Throwable ignored) {
 			return null;
 		}
 	}
@@ -61,7 +62,7 @@ public class FieldUtils {
 	public static <T> T getOrNull(Field field, Object o) {
 		try {
 			return (T) field.get(o);
-		} catch (IllegalAccessException ignored) {
+		} catch (Throwable ignored) {
 			return null;
 		}
 	}

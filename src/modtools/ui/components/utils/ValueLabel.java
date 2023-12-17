@@ -298,7 +298,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public void setText(CharSequence newText) {
 		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
 	}
-	@SuppressWarnings("SizeReplaceableByIsEmpty")
 	void setText0(CharSequence newText) {
 		if (newText == null || newText.length() == 0) {
 			newText = "<EMPTY>";

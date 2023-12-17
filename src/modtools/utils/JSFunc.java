@@ -53,6 +53,9 @@ public class JSFunc {
 	public static       ClassLoader main;
 	public static       Scriptable  scope;
 	public static final Font        FONT    = MyFonts.def;
+	public static void strikethrough(Runnable run) {
+		MyFonts.strikethrough = true;
+	}
 	/* for js */
 	public static final Class<?> vars = IntVars.class;
 	public static final Class<?>    reflect = MyReflect.class;

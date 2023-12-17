@@ -218,7 +218,7 @@ public class IntTab {
 		}
 		public void act(float delta) {
 			super.act(delta);
-			style.background = text.isEmpty() ? icon : null;
+			style.background = text.length() == 0 ? icon : null;
 		}
 	}
 }

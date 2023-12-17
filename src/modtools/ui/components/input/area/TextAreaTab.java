@@ -10,14 +10,12 @@ import arc.math.Mathf;
 import arc.math.geom.Rect;
 import arc.scene.*;
 import arc.scene.event.*;
-import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.style.*;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.IntSeq;
 import arc.util.*;
-import arc.util.pooling.Pools;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
@@ -571,7 +569,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
 			font.setColor(realCurrorLine == row ? Pal.accent : Color.lightGray);
+			MyFonts.underline = realCurrorLine == row;
 			font.draw(String.valueOf(row), x, offsetY);
+			MyFonts.underline = false;
 		}
 		public void draw() {
 			super.draw();

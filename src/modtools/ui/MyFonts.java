@@ -4,14 +4,17 @@ import arc.files.Fi;
 import arc.freetype.FreeType.Stroker;
 import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
+import arc.graphics.Texture.TextureFilter;
 import arc.graphics.g2d.*;
-import arc.graphics.g2d.Font.Glyph;
+import arc.graphics.g2d.Font.*;
 import arc.struct.Seq;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.ui.Fonts;
 import modtools.utils.Tools;
+import modtools.utils.reflect.HopeReflect;
 
 import java.lang.reflect.Method;
+import java.sql.Ref;
 
 import static modtools.utils.MySettings.*;
 
@@ -28,8 +31,12 @@ public class MyFonts {
 		def = acquireFont();
 	}
 
+	// public static boolean italic = true;
+	public static boolean
+	 underline     = false,
+	 strikethrough = false;
 	private static Font acquireFont() {
-		if (def != null) return Fonts.def;
+		if (def != null) return def;
 		if (!SETTINGS.containsKey("font")) return Fonts.def;
 
 		Fi fontFi = fontDirectory.child(SETTINGS.getString("font"));
@@ -43,15 +50,8 @@ public class MyFonts {
 			incremental = true;
 		}};
 		// FreeTypeFontGenerator other = Reflect.get(FreeTypeFontData.class, Fonts.def.getData(), "generator");
-		Method                method;
-		try {
-			method = FreeTypeFontGenerator.class.getDeclaredMethod("createGlyph", char.class, FreeTypeFontData.class, FreeTypeFontParameter.class, Stroker.class, float.class, PixmapPacker.class);
-			method.setAccessible(true);
-		} catch (NoSuchMethodException e) {
-			throw new RuntimeException(e);
-		}
-		GlyphLayout layout = new GlyphLayout(Fonts.def, "");
 		class MyFontData extends FreeTypeFontData {
+			final GlyphLayout layout = new GlyphLayout(Fonts.def, "");
 			public Glyph getGlyph(char ch) {
 				Glyph glyph = super.getGlyph(ch);
 				if (glyph != missingGlyph) return glyph;
@@ -70,9 +70,44 @@ public class MyFonts {
 				markupEnabled = true;
 			}
 		}
-		Font               font    = generator.generateFont(parameter, new MyFontData());
-		Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, font.getData(), "regions");
-		regions.add(Fonts.def.getRegion());
+		FreeTypeFontData data = new MyFontData();
+		generator.generateData(parameter, data);
+
+		Font font = new Font(data,
+		 (Seq<TextureRegion>) Reflect.get(FreeTypeFontData.class, data, "regions"),
+		 false) {
+			public FontCache newFontCache() {
+				return new MyFontCache(this);
+			}
+		};
+		font.setOwnsTexture(parameter.packer == null);
+		// Font font = generator.generateFont(parameter, new MyFontData());
+
+		// Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, font.getData(), "regions");
+		font.getRegions().add(Fonts.def.getRegion());
+		Fonts.def.getRegion().texture.setFilter(TextureFilter.linear, TextureFilter.nearest);
+		font.getRegion().texture.setFilter(TextureFilter.nearest);
+
 		return font;
+	}
+
+	private static class MyFontCache extends FontCache {
+		public MyFontCache(Font font) {super(font, font.usesIntegerPositions());}
+		// boolean underline_ = underline;
+		// boolean strikethrough_ = strikethrough;
+		public void draw() {
+			super.draw();
+
+			// Log.info(HopeReflect.getCaller() + ": " + underline);
+			if (!(underline || strikethrough)) return;
+			GlyphLayout layout = getLayouts().firstOpt();
+			// Log.info(layout);
+			if (layout == null) return;
+
+			Draw.color();
+			float[] vertices = getVertices();
+			Fill.crect(getX() + vertices[0] - 1, getY() + vertices[1] - 4 + (strikethrough ? layout.height / 2f : 0),
+			 Math.max(4, getLayouts().sumf(l -> l.width) + 1), 2);
+		}
 	}
 }

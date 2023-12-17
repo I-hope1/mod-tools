@@ -362,7 +362,7 @@ public class MyTextField extends TextField implements Disableable {
 			char c = text.charAt(i);
 			newDisplayText.append(data.hasGlyph(c) ? c : ' ');
 		}
-		if (newDisplayText.isEmpty()) newDisplayText.append(' ');
+		if (newDisplayText.length() == 0) newDisplayText.append(' ');
 		// Log.info(newDisplayText);
 
 		if (passwordMode && data.hasGlyph(passwordCharacter)) {
@@ -439,7 +439,7 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	public void paste(StringBuffer content, boolean fireChangeEvent) {
-		if (content == null || (content.isEmpty() && text.isEmpty())) return;
+		if (content == null || (content.length() == 0 && text.length() == 0)) return;
 
 		int textLength = text.length();
 		if (hasSelection) textLength -= Math.abs(cursor - selectionStart);
@@ -469,7 +469,7 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	public StringBuffer insert(int position, CharSequence text, StringBuffer to) {
-		if (to.isEmpty()) {
+		if (to.length() == 0) {
 			if (text instanceof StringBuffer) return (StringBuffer) text;
 			return to.append(text);
 		}

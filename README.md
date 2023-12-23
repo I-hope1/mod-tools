@@ -7,7 +7,7 @@ It provides many useful tools for developers.
 
 ## showUIList
 
-- 显示 `icon`, `tex`, `styles`
+- 显示 `icon`, `tex`, `styles`, `colors`, `interps`
 
 ## Tester
 
@@ -17,7 +17,7 @@ It provides many useful tools for developers.
 -
     - `ctrl`+`shift`+`up/down` 切换历史记录
 - 内置 `unsafe`, `lookup`
-- 内置 `IntFunc` 类
+- 内置 `IntFunc` 类 (缩写`$`)
 ```java
 public class JSFunc {
 	public static void showInfo(Object o);
@@ -34,6 +34,9 @@ public class JSFunc {
 	public static Object unwrap(Object o);
 	public static WatchWindow watch(String info, MyProv<Object> value, float interval);
 	public static WatchWindow watch(String info, MyProv<Object> value);
+  public static boolean eq(Object a, Object b);
+  public static long addressOf(Object o);
+  public static void focusWorld(T o);
 	public static MyReflect Reflect;
 }
 ```
@@ -57,3 +60,7 @@ public class JSFunc {
 
 ## Window
 - `ctrl+tab` 切换窗口
+
+## ShowInfoWindow
+
+- `‘null`表示null字符串

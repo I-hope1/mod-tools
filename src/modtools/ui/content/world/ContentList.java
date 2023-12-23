@@ -109,7 +109,7 @@ public class ContentList extends Content {
 					t.add(new Image(u.fullIcon)).size(32f);
 				} else t.add();
 				t.button(name, Styles.flatt, () -> {}).growX().height(42).with(button -> {
-					IntUI.longPress(button, 600, b -> {
+					IntUI.longPress(button, b -> {
 						if (b) JSFunc.copyText(name, button);
 						else if (longPress != null) longPress.get(item);
 					});

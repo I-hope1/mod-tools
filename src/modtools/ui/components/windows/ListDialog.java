@@ -104,7 +104,7 @@ public class ListDialog extends Window {
 						c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.MOMO_LabelStyle)).left();
 					}).grow().left();
 				}, HopeStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
-				IntUI.longPress(btn, 600, longPress -> {
+				IntUI.longPress(btn, longPress -> {
 					if (longPress) {
 						Window ui   = new DisWindow("@info", 300, 80);
 						var    cont = ui.cont;

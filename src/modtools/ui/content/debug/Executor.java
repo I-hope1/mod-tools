@@ -2,6 +2,7 @@ package modtools.ui.content.debug;
 
 import arc.func.*;
 import arc.graphics.Color;
+import arc.input.KeyCode;
 import arc.scene.*;
 import arc.scene.actions.*;
 import arc.scene.event.*;
@@ -17,10 +18,11 @@ import modtools.events.ExecuteTree;
 import modtools.events.ExecuteTree.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
+import modtools.ui.IntUI.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.content.Content;
-import modtools.utils.ElementUtils;
+import modtools.utils.*;
 import modtools.utils.ui.search.FilterTable;
 
 public class Executor extends Content {
@@ -37,7 +39,7 @@ public class Executor extends Content {
 	FilterTable<Intp> p;
 	public void loadUI() {
 		ui = new Window(localizedName(), 200, 100, true);
-		ui.cont.button(Icon.refresh, Styles.flati, () -> {
+		ui.cont.button(Icon.refresh, HopeStyles.flati, () -> {
 			p.clear();
 			build(p);
 			p.invalidateHierarchy();
@@ -45,8 +47,11 @@ public class Executor extends Content {
 		ElementUtils.addCodedBtn(ui.cont, "status", 1,
 		 i -> statusCode = i, () -> statusCode,
 		 StatusEnum.class.getEnumConstants());
+		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {
+
+		}).size(96, 45);
 		ui.cont.row();
-		ui.cont.pane(p = new FilterTable<>(this::build)).colspan(2)
+		ui.cont.pane(p = new FilterTable<>(this::build)).colspan(3)
 		 .grow();
 	}
 	public void build(FilterTable<Intp> cont) {
@@ -78,7 +83,10 @@ public class Executor extends Content {
 			 /* rightImage */cont.image().growY().get()
 			 , "color", color);
 			cont.row();
-			cont.image().color(Color.lightGray).padBottom(6f).growX().colspan(2).row();
+			Reflect.set(Element.class,
+			 /* bottomImage */cont.image().padBottom(6f).growX().colspan(2).get()
+			 , "color", color);
+			cont.row();
 			cont.unbind();
 			button.getImage().addListener(new IntUI.Tooltip(
 			 t -> t.background(Tex.pane).label(() -> node.status.name()).pad(4f)
@@ -90,7 +98,7 @@ public class Executor extends Content {
 				var foldedButton = new FoldedImageButton(true);
 				center.table(t -> {
 					t.left().defaults().left();
-					t.image(node.icon).size(24);
+					t.image(node.icon).size(24).padLeft(6f);
 					if (node.repeatCount() < 0 && node.running()) {
 						t.image(HopeIcons.loop).color(Pal.accent).size(24);
 					}
@@ -112,6 +120,17 @@ public class Executor extends Content {
 			button.addListener(new InputListener() {
 				public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
 					event.stop();
+				}
+			});
+			IntUI.longPressOrRclick(button, __ -> {
+				IntUI.showMenuListDispose(() -> Seq.with(MenuList.with(Icon.copySmall, "cpy as JS", () -> {
+					if (node.code != null) JSFunc.copyText(node.code);
+				})));
+			});
+			button.addListener(new InputListener() {
+				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					event.stop();
+					return false;
 				}
 			});
 			button.table(right -> {

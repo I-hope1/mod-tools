@@ -31,6 +31,7 @@ import modtools.events.*;
 import modtools.events.ExecuteTree.TaskNode;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.TextAreaTab;
@@ -284,7 +285,9 @@ public class Tester extends Content {
 				 textarea.enableHighlighting = !textarea.enableHighlighting;
 			 }), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
 
-			 p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails);
+			 p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails).with(c -> {
+				 IntUI.longPress0(c, () -> JSFunc.showInfo(res));
+			 });
 			 p.button(HopeIcons.history, istyle, isize, history::show);
 			 p.button(HopeIcons.favorites, istyle, isize, bookmark::show);
 			 // p.button("@startup", bookmark::show);
@@ -628,7 +631,6 @@ public class Tester extends Content {
 			ScriptableObject.putProperty(topScope, "modName", "<null>");
 			ScriptableObject.putProperty(topScope, "scriptName", "console.js");
 
-			BaseFunction      parent = new BaseFunction(topScope, null);
 			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
 			ClassLoader       loader = Vars.mods.mainLoader();
 			Reflect.set(NativeJavaPackage.class, pkg, "classLoader", loader);

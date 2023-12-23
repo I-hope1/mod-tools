@@ -68,6 +68,7 @@ public class IntUI {
 
 	/** 默认的动效时间（单位秒） */
 	public static final float DEF_DURATION = 0.2f;
+	public static final long  DEF_LONGPRESS = 600L;
 
 	static final Vec2 last = new Vec2();
 	/**
@@ -150,6 +151,26 @@ public class IntUI {
 		elem.addListener(new LongPressListener());
 		return elem;
 	}
+	public static <T extends Element> T
+	longPress(T elem, final Boolc boolc) {
+		return longPress(elem, DEF_LONGPRESS, boolc);
+	}
+	/**
+	 * 长按事件
+	 * @param elem     被添加侦听器的元素
+	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
+	 * @param run    长按时调用
+	 */
+	public static <T extends Element> T
+	longPress0(T elem, final long duration, final Runnable run) {
+		return longPress(elem, duration, b -> {
+			if (b) run.run();
+		});
+	}
+	public static <T extends Element> T
+	longPress0(T elem, final Runnable run) {
+		return longPress0(elem, DEF_LONGPRESS, run);
+	}
 
 	/**
 	 * 添加右键事件
@@ -173,11 +194,11 @@ public class IntUI {
 	 * <p>long press for {@link Vars#mobile moblie}</p>
 	 * <p>r-click for desktop</p>
 	 */
+	@SuppressWarnings("UnusedReturnValue")
 	public static <T extends Element> T
 	longPressOrRclick(T element, Consumer<T> run) {
-		return mobile ? longPress(element, 600, b -> {
-			if (b) run.accept(element);
-		}) : rightClick(element, () -> run.accept(element));
+		return mobile ? longPress0(element, () -> run.accept(element))
+		 : rightClick(element, () -> run.accept(element));
 	}
 
 	public static void

@@ -308,7 +308,7 @@ public abstract class WFunction<T> {
 	/** 返回{@code true}如果需要删除 */
 	public abstract boolean checkRemove(T item);
 	public Vec2 getPos(T item) {
-		if (item instanceof Posc) return Tmp.v3.set(((Posc) item).x(), ((Posc) item).y());
+		if (item instanceof Position pos) return Tmp.v3.set(pos);
 		throw new UnsupportedOperationException("You don't overwrite it.");
 	}
 	public float rotation(T item) {

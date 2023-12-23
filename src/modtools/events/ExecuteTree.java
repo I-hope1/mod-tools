@@ -1,6 +1,6 @@
 package modtools.events;
 
-import arc.Core;
+import arc.*;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.style.*;
@@ -8,12 +8,14 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
+import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.utils.ElementUtils.MarkedCode;
+import modtools.utils.Tools;
 
 public class ExecuteTree {
 	private static TaskNode context = null;
@@ -71,7 +73,17 @@ public class ExecuteTree {
 	public static class TaskNode {
 		public static final float perTick = 1 / 60f;
 
+		public String code;
+		public TaskNode code(String code) {
+			this.code = code;
+			return this;
+		}
 		private final Task task;
+		public        Timer timer = Timer.instance();
+		public TaskNode worldTimer() {
+			timer = worldTimer;
+			return this;
+		}
 
 		public Runnable run;
 		public Drawable icon;
@@ -138,7 +150,7 @@ public class ExecuteTree {
 				IntVars.executor.execute(newRun);
 				return;
 			}
-			Timer.schedule(task, 0, intervalSeconds, repeatCount);
+			timer.scheduleTask(task, 0, intervalSeconds, repeatCount);
 		}
 		public boolean running() {
 			return task.isScheduled() || (task instanceof MyTask t && t.delegate != null);
@@ -191,6 +203,7 @@ public class ExecuteTree {
 		public void edit() {
 			new SettingsBuilder(new Table()) {{
 				number("@task.intervalseconds", f -> intervalSeconds = f, () -> intervalSeconds, 0.01f, Float.MAX_VALUE);
+				check("@task.worldtimer", b -> timer = b ? Timer.instance() : worldTimer, () -> timer != Timer.instance());
 				numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
 				IntUI.showSelectTable(Core.input.mouse().cpy(), (p, hide, search) -> {
 					p.add(main).grow();
@@ -198,7 +211,14 @@ public class ExecuteTree {
 			}};
 		}
 	}
+	public static Timer worldTimer = new Timer();
 
+	static {
+		Tools.TASKS.add(() -> {
+			if (Vars.state.isPaused()) worldTimer.stop();
+			else worldTimer.start();
+		});
+	}
 	public interface StatusInterface extends MarkedCode {
 		Color color();
 		default Drawable icon() {return Icon.warning.tint(color());}

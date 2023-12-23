@@ -1,6 +1,6 @@
 package modtools.ui.content.world;
 
-import arc.Events;
+import arc.*;
 import arc.graphics.Gl;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -9,7 +9,7 @@ import arc.scene.event.InputEvent;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.Strings;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.core.Version;
@@ -70,9 +70,10 @@ public class UnitSpawn extends Content {
 			el.remove();
 		}
 		public void draw() {
+			if (ui == null) return;
 			Gl.flush();
 			Draw.z(Layer.overlayUI);
-			Draw.color(isOk() ? Pal.accent : Pal.remove, 0.5f);
+			Draw.color(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove, ui.isShown() ? 0.7f : 0.5f);
 			Lines.stroke(2);
 			Lines.circle(x, y, 5);
 			Draw.color();
@@ -188,15 +189,20 @@ public class UnitSpawn extends Content {
 			table.margin(-4f, 0f, -4f, 0f);
 			table.button("@ok", HopeStyles.cleart, this::spawnIgnored)
 			 .size(90, 50)
-			 .disabled(b -> !isOk());
-			table.button("post task", HopeStyles.cleart, () ->
-			 ExecuteTree.context(root, () ->
-				ExecuteTree.node(selectUnit.localizedName,
-				 "(" + x + "," + +y + ")\n{"
-				 + team + "}[accent]×" + amount,
-				 spawnRun()).resubmitted().apply()
-			 )
-			).size(90, 50);
+			 .disabled(b -> !isOk(x, y, amount, team, selectUnit));
+			table.button("post task", HopeStyles.cleart, () -> {
+				ExecuteTree.context(root, () ->
+				 ExecuteTree.node(selectUnit.localizedName,
+					"(" + x + "," + +y + ")\n{"
+					+ team + "}[accent]×" + amount,
+					getSpawnRun()).code(generateCode()).resubmitted().worldTimer().apply()
+				);
+				Window dialog = JSFunc.dialog(t -> {
+					t.add("已添加").row();
+					t.button("查看", () -> Contents.executor.build());
+				}).setPosition(Core.input.mouse());
+				Time.runTask(2.5f * 60f, dialog::hide);
+			}).size(90, 50);
 			table.button(Icon.menuSmall, Styles.flati, 24, () -> {
 				IntUI.showMenuListDispose(() -> Seq.with(
 				 CheckboxList.withc(HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
@@ -214,9 +220,9 @@ public class UnitSpawn extends Content {
 		loadSettings();
 		btn.setDisabled(() -> Vars.state.isMenu());
 	}
-	public boolean isOk() {
-		return !Float.isNaN(x) && !Float.isNaN(y) && selectUnit != null && xField.isValid() && yField.isValid()
-					 && amountField.isValid() && teamField.isValid();
+	public boolean isOk(float x, float y, int amount, Team team, UnitType selectUnit) {
+		return validNumber(x) && validNumber(y) && selectUnit != null
+					 && validNumber(amount) && amount > 0 && team != null;
 	}
 
 	public boolean validNumber(String str) {
@@ -233,16 +239,25 @@ public class UnitSpawn extends Content {
 			spawn(selectUnit, amount, team, x, y);
 		} catch (Throwable ignored) {}
 	}
-	public Runnable spawnRun() {
+	public Runnable getSpawnRun() {
+		float x0      = x, y0 = y;
+		int   amount0 = amount;
+		Team  team0   = team;
 		UnitType selectUnit0 = selectUnit;
-		int      amount0     = amount;
-		Team     team0       = team;
-		float    x0          = x, y0 = y;
 		return () -> spawn(selectUnit0, amount0, team0, x0, y0);
+	}
+	public String generateCode() {
+		return "Packages.modtools.ui.Contents.unit_spawn.spawn(" +
+					 "Vars.content.getByID(ContentType.unit, " + selectUnit.id + ")," +
+					 amount + "," +
+					 "Team.get(" + team.id + ")," +
+					 x + "," +
+					 y +
+					 ")";
 	}
 
 	public void spawn(UnitType selectUnit, int amount, Team team, float x, float y) {
-		if (!isOk()) return;
+		if (!isOk(x, y, amount, team, selectUnit)) return;
 
 		if (selectUnit.uiIcon == null || selectUnit.fullIcon == null) {
 			RuntimeException exception = new RuntimeException("所选单位的图标为null，可能会崩溃", new NullPointerException("selectUnit icon is null"));

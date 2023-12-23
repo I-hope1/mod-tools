@@ -104,6 +104,10 @@ public class AllTutorial {
 				}
 				return false;
 			}
+			public boolean keyTyped(InputEvent event, char character) {
+				task.cancel();
+				return false;
+			}
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (enableFocusMouse) event.cancel();
 				enableFocusMouse = false;

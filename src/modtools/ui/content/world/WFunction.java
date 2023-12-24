@@ -56,19 +56,19 @@ public abstract class WFunction<T> {
 
 
 	// for select
-	public        Seq<Seq<T>> select      = new Seq<>();
-	private final Runnable    changeEvent = () -> MyEvents.fire(this);
-	public final  String      name;
+	public        Seq<OrderedSet<T>> select      = new Seq<>();
+	private final Runnable           changeEvent = () -> MyEvents.fire(this);
+	public final  String             name;
 	E_Selection data;
 	public WorldDraw WD;
 
-	public TemplateTable<Seq<T>> template;
+	public TemplateTable<OrderedSet<T>> template;
 
 	public ObjectMap<Float, TextureRegion> iconMap = new ObjectMap<>();
 
-	private final ExecutorService                  executor;
-	private final ObjectMap<TextureRegion, Seq<T>> selectMap = new ObjectMap<>();
-	private       boolean                          drawAll   = true;
+	private final ExecutorService                         executor;
+	private final ObjectMap<TextureRegion, OrderedSet<T>> selectMap = new ObjectMap<>();
+	private       boolean                                 drawAll   = true;
 
 	public WFunction(String name, WorldDraw WD) {
 		this.name = name;
@@ -86,10 +86,10 @@ public abstract class WFunction<T> {
 			select.clear();
 			selectMap.clear();
 			Tools.each(list, t -> {
-				selectMap.get(getIcon(t), Seq::new).add(t);
+				selectMap.get(getIcon(t), OrderedSet::new).add(t);
 			});
 			int i = 0;
-			for (Entry<TextureRegion, Seq<T>> entry : selectMap) {
+			for (Entry<TextureRegion, OrderedSet<T>> entry : selectMap) {
 				var value = new SeqBind(entry.value);
 				selectMap.put(entry.key, value);
 				template.bind(value);
@@ -120,7 +120,7 @@ public abstract class WFunction<T> {
 				;
 				var btn = new NewBtn();
 				btn.update(() -> {
-					btn.setChecked(btn.uiShowing || select.contains(value, true));
+					btn.setChecked(btn.uiShowing || select.contains(value));
 				});
 				IntUI.doubleClick(btn, () -> {
 					if (select.contains(value, true)) select.remove(value);
@@ -180,7 +180,13 @@ public abstract class WFunction<T> {
 		buttons.button("Filter", Icon.filtersSmall, Styles.flatt, () -> {
 			JSRequest.requestForSelection(mergeList(), null, boolf -> {
 				int size = select.sum(seq -> seq.size);
-				select.each(seq -> seq.filter((Boolf) boolf));
+				select.each(seq -> {
+					var b    = ((Boolf<T>) boolf);
+					var iter = seq.iterator();
+					while (iter.hasNext()) {
+						if (!b.get(iter.next())) iter.remove();
+					}
+				});
 				showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
 				 .sticky = true;
 			});
@@ -299,7 +305,9 @@ public abstract class WFunction<T> {
 			Vec2 pos = getPos(item);
 			/* 判断是否在相机内 */
 			if (!CAMERA_RECT.overlaps(pos.x, pos.y, region.width, region.height)) return true;
-			if (drawAll || select.contains(t -> t.contains(item, true))) {
+			if (drawAll || (
+			 select.contains(selectMap.get(getIcon(item)))
+			 && selectMap.get(getIcon(item), OrderedSet::new).contains(item))) {
 				Draw.rect(region, pos.x, pos.y, rotation(item));
 			}
 			return true;
@@ -497,11 +505,11 @@ public abstract class WFunction<T> {
 			})).grow();
 		}
 	}
-	private class SeqBind extends Seq<T> {
-		final Seq<T> from;
-		public SeqBind(Seq<T> from) {
+	private class SeqBind extends OrderedSet<T> {
+		final Iterable<T> from;
+		public SeqBind(Iterable<T> from) {
 			this.from = from;
-			addAll(from);
+			for (var e : from) add(e);
 		}
 		public boolean equals(Object object) {
 			return this == object && ((SeqBind) object).from == from;

@@ -271,17 +271,13 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		if (!table.lastEmpty && table.current.hasChildren()) table.current.getChildren().peek().remove();
 	}
 	private static Field[] getFields1(Class<?> cls) {
-		try {return MyReflect.lookupGetFields(cls);} catch (Throwable e) {return new Field[0];}
+		return InterfaceReflect.impl.getFields(cls);
 	}
 	private static Method[] getMethods1(Class<?> cls) {
-		return CatchSR.apply(() -> CatchSR.of(
-			() -> MyReflect.lookupGetMethods(cls))
-		 .get(() -> new Method[0])
-		);
-
+		return InterfaceReflect.impl.getMethods(cls);
 	}
 	private static Constructor<?>[] getConstructors1(Class<?> cls) {
-		try {return MyReflect.lookupGetConstructors(cls);} catch (Throwable e) {return new Constructor<?>[0];}
+		return InterfaceReflect.impl.getConstructors(cls);
 	}
 
 

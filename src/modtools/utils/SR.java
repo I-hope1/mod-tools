@@ -178,7 +178,7 @@ public class SR<T> {
 		private              R       value;
 		private static final CatchSR instance = new CatchSR();
 		private CatchSR() {}
-		public static <R> CatchSR<R> of(Prov<R> prov) {
+		public static <R> CatchSR<R> of(ProvT<R> prov) {
 			instance.value = null;
 			return instance.get(prov);
 		}
@@ -190,7 +190,7 @@ public class SR<T> {
 				return (R) instance.value;
 			}
 		}
-		public CatchSR<R> get(Prov<R> prov) {
+		public CatchSR<R> get(ProvT<R> prov) {
 			try {
 				value = prov.get();
 			} catch (Throwable ignored) {
@@ -200,6 +200,9 @@ public class SR<T> {
 		}
 		public R get() {
 			return value;
+		}
+		public interface ProvT<R> {
+			R get() throws Throwable;
 		}
 	}
 	public static boolean getIgnoreException(CBoolp run, boolean def) {

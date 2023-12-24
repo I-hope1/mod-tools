@@ -1,30 +1,25 @@
 package modtools.ui.content.debug;
 
-import arc.func.*;
+import arc.func.Intp;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.scene.*;
-import arc.scene.actions.*;
+import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.ui.*;
+import arc.scene.ui.ImageButton;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.struct.Seq;
 import arc.util.*;
-import arc.util.Timer.Task;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.annotations.OptimizeReflect;
 import modtools.events.ExecuteTree;
 import modtools.events.ExecuteTree.*;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.JSRequest;
-import modtools.ui.components.input.area.TextAreaTab;
-import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.ui.search.FilterTable;
@@ -62,7 +57,8 @@ public class Executor extends Content {
 			}));
 		}).size(96, 45);
 		ui.cont.row();
-		ui.cont.pane(p = new FilterTable<>(this::build)).colspan(3)
+		ui.cont.pane(p = new FilterTable<>(this::build))
+		 .colspan(3)
 		 .grow();
 	}
 	public void build(FilterTable<Intp> cont) {
@@ -109,7 +105,7 @@ public class Executor extends Content {
 				var foldedButton = new FoldedImageButton(true);
 				center.table(t -> {
 					t.left().defaults().left();
-					t.image(node.icon).size(24).padLeft(6f);
+					if (node.icon != null) t.image(node.icon).size(24).padLeft(6f).padRight(6f);
 					if (node.repeatCount() < 0 && node.running()) {
 						t.image(HopeIcons.loop).color(Pal.accent).size(24);
 					}

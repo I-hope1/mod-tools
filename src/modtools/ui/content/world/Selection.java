@@ -374,7 +374,14 @@ public class Selection extends Content {
 				});
 			});
 		}
-
+		public Vec2 getPos(T item) {
+			if (item instanceof PowerGraphUpdaterc) return Tmp.v3.set(-1, -1);
+			try {
+				return super.getPos(item);
+			} catch (UnsupportedOperationException e) {
+				return Tmp.v3.set(Mathf.random(10F), Mathf.random(10F));
+			}
+		}
 		public TextureRegion getIcon(T key) {
 			return Core.atlas.white();
 		}
@@ -942,8 +949,9 @@ public class Selection extends Content {
 				Groups.all.each(unit -> {
 					if (unit instanceof Bullet) return false;
 					if (unit instanceof Unit) return false;
+					if (!(unit instanceof Position pos)) return false;
 					// 返回单位是否在所选区域内
-					return !(unit instanceof Position pos) || start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
+					return start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
 				}, unit -> {
 					if (!others.list.contains(unit)) {
 						others.add(unit);

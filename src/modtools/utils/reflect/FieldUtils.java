@@ -1,9 +1,6 @@
 package modtools.utils.reflect;
 
-import arc.files.Fi;
 import arc.util.OS;
-import modtools.ui.components.utils.ValueLabel;
-import modtools.utils.Tools;
 
 import java.lang.reflect.*;
 

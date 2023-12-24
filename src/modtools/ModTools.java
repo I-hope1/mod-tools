@@ -22,7 +22,7 @@ import modtools.ui.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
-import modtools.utils.reflect.FieldUtils;
+import modtools.utils.reflect.*;
 import modtools.utils.ui.FileUtils;
 
 import java.io.*;

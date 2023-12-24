@@ -6,20 +6,24 @@ import mindustry.gen.*;
 import modtools.annotations.OptimizeReflect;
 import modtools.utils.reflect.FieldUtils;
 
-@OptimizeReflect
 public class UnitUtils {
 	public static boolean forceRemove(Unit u) {
-		@OptimizeReflect(isSetter = true)
-		boolean ok = FieldUtils.set$$(UnitEntity.class, u, "added", false);
-		@OptimizeReflect
-		UnitController controller = Reflect.get(UnitEntity.class, u, "controller");
+		u.remove();
+		if (!Groups.unit.contains(unit -> unit == u)) return true;
+		Groups.all.remove(u);
+		Groups.unit.remove(u);
+		Groups.sync.remove(u);
+		Groups.draw.remove(u);
+		u.team.data().updateCount(u.type, -1);
+
+		boolean        ok         = FieldUtils.setBoolean(u, FieldUtils.getFieldAccessAll(u.getClass(), "added"), false);
+		UnitController controller = u.controller();
 		if (controller == null) return false;
 		controller.removed(u);
 		return ok;
 	}
 	public static boolean kill(Unit u) {
-		@OptimizeReflect
-		boolean b = Reflect.get(UnitEntity.class, u, "added");
-		return b;
+		Call.unitDeath(u.id);
+		return u.isAdded();
 	}
 }

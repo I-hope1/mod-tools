@@ -200,7 +200,7 @@ public class UnitSpawn extends Content {
 				Window dialog = JSFunc.dialog(t -> {
 					t.add("已添加").row();
 					t.button("查看", () -> Contents.executor.build());
-				}).setPosition(Core.input.mouse());
+				});
 				Time.runTask(2.5f * 60f, dialog::hide);
 			}).size(90, 50);
 			table.button(Icon.menuSmall, Styles.flati, 24, () -> {

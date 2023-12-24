@@ -90,6 +90,11 @@ task playGame(dependsOn: classes, type: JavaExec) {
 	}
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
+	jvmArgs = [
+			'-DsocksProxyHost=127.0.0.1',
+			'-DsocksProxyPort=1080',
+			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
+	]
 }
 task ZComplieAll(type: Copy) {
 	dependsOn deploy

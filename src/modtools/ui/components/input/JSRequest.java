@@ -1,15 +1,16 @@
 package modtools.ui.components.input;
 
 import arc.Core;
-import arc.func.ConsT;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.scene.utils.Disableable;
 import arc.util.Align;
 import mindustry.ui.Styles;
+import modtools.events.ExecuteTree;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
-import modtools.ui.components.Window.HiddenTopWindow;
+import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.content.debug.Tester;
@@ -96,6 +97,19 @@ public class JSRequest {
 			parent.put((String) args[0], parent, args[1]);
 		}
 		buildButtons(callback);
+	}
+
+	public static void requestCode(Cons<String> callback) {
+		new DisWindow("code") {{
+			TextAreaTab area = new TextAreaTab("");
+			area.syntax = new JSSyntax(area);
+			cont.add(area).grow().row();
+			cont.button("ok", () -> {
+				callback.get(area.getText());
+				hide();
+			}).size(120, 45);
+			setPosition(Core.input.mouse());
+		}}.show();
 	}
 
 

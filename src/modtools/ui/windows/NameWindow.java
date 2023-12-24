@@ -17,7 +17,7 @@ public class NameWindow extends Window implements PopupWindow {
 	{
 		cont.table(t -> {
 			t.add("@name");
-			Cell<TextField> c = t.add(namef).growX();
+			t.add(namef).growX();
 		}).growX().row();
 
 		buttons.button("@ok", () -> {

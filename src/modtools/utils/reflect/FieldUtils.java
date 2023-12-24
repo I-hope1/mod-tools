@@ -1,5 +1,6 @@
 package modtools.utils.reflect;
 
+import arc.files.Fi;
 import arc.util.OS;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.utils.Tools;
@@ -19,6 +20,17 @@ public class FieldUtils {
 			return null;
 		}
 	}
+	/** 查找包括自类的字段  */
+	public static Field getFieldAccessAll(Class<?> cls, String name) {
+		Field field;
+		while (cls != null) {
+			field = getFieldAccess(cls, name);
+			if (field != null) return field;
+			cls = cls.getSuperclass();
+		}
+		return null;
+	}
+
 
 	public static boolean getBoolean(Object obj, Field field) {
 		try {

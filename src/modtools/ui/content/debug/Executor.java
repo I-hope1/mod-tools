@@ -10,6 +10,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -21,9 +22,13 @@ import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
+import modtools.ui.components.input.JSRequest;
+import modtools.ui.components.input.area.TextAreaTab;
+import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.ui.search.FilterTable;
+import rhino.BaseFunction;
 
 public class Executor extends Content {
 	public Executor() {
@@ -48,7 +53,13 @@ public class Executor extends Content {
 		 i -> statusCode = i, () -> statusCode,
 		 StatusEnum.class.getEnumConstants());
 		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {
-
+			JSRequest.requestCode(code -> ExecuteTree.context(customTask(), () -> {
+				BaseFunction scope = new BaseFunction(JSRequest.topScope, new BaseFunction());
+				ExecuteTree.node("custom",
+					() -> JSRequest.cx.evaluateString(scope,
+					 code, "<custom>", 1))
+				 .resubmitted().apply();
+			}));
 		}).size(96, 45);
 		ui.cont.row();
 		ui.cont.pane(p = new FilterTable<>(this::build)).colspan(3)
@@ -177,6 +188,12 @@ public class Executor extends Content {
 				}; */
 			});
 		}
+	}
+	private static TaskNode customTask;
+	public static TaskNode customTask() {
+		if (customTask == null) customTask = ExecuteTree.nodeRoot(null, "CustomJS", "startup",
+		 Icon.craftingSmall, () -> {});
+		return customTask;
 	}
 	public void build() {
 		if (ui == null) loadUI();

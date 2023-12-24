@@ -280,10 +280,7 @@ public class Selection extends Content {
 				each(list, Healthc::heal);
 			});
 			FunctionBuild("@kill", list -> {
-				removeAll(list, u -> {
-					Call.unitDeath(u.id);
-					return UnitUtils.kill(u);
-				});
+				removeAll(list, UnitUtils::kill);
 			});
 			FunctionBuild("@clear", list -> {
 				removeAll(list, u -> {
@@ -294,17 +291,7 @@ public class Selection extends Content {
 				});
 			});
 			FunctionBuild("@selection.forceClear", list -> {
-				removeAll(list, u -> {
-					u.remove();
-					if (!Groups.unit.contains(unit -> unit == u)) return true;
-					Groups.all.remove(u);
-					Groups.unit.remove(u);
-					Groups.sync.remove(u);
-					Groups.draw.remove(u);
-					u.team.data().updateCount(u.type, -1);
-
-					return UnitUtils.forceRemove(u);
-				});
+				removeAll(list, UnitUtils::forceRemove);
 			});
 		}};
 		bullets = new BulletFunction<>("bullet") {{

@@ -3,13 +3,13 @@ displayName: "mod工具"
 name: "mod-tools"
 author: "I hope..."
 description: '''
-1. 修复设置的存在的巨大bug（key有空白字符就无了）
-2. 修复一些其他bug
-3. UnitSpawn 快速按钮
-...
-'''
+             1. 修复一堆bug
+             2. UnitSpawn 优化
+             3. 更好的Executor
+             4.
+             '''
 main: "modtools.ModTools"
-version: "1.4.3.2"
+version: "1.4.4"
 hidden: true
 minGameVersion: 136
 repo: "I-hope1/mod-tools"

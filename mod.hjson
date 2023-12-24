@@ -6,7 +6,7 @@ description: '''
              1. 修复一堆bug
              2. UnitSpawn 优化
              3. 更好的Executor
-             4.
+             4. ...
              '''
 main: "modtools.ModTools"
 version: "1.4.4"

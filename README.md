@@ -16,6 +16,7 @@ It provides many useful tools for developers.
     - `ctrl`+`shift`+`enter` 立即执行代码
 -
     - `ctrl`+`shift`+`up/down` 切换历史记录
+    - `ctrl`+`shift`+`d` 查看详细信息
 - 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类 (缩写`$`)
 ```java
@@ -40,6 +41,10 @@ public class JSFunc {
 	public static MyReflect Reflect;
 }
 ```
+
+- 长按收藏夹里的代码，可以添加到启动项
+  ![](./screenshots/startup.png)
+-
 
 ## UnitSpawn
 

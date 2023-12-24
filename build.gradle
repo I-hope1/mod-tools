@@ -90,6 +90,9 @@ task playGame(dependsOn: classes, type: JavaExec) {
 	}
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
+	args = [
+//	        '-testMobile'
+	]
 	jvmArgs = [
 			'-DsocksProxyHost=127.0.0.1',
 			'-DsocksProxyPort=1080',

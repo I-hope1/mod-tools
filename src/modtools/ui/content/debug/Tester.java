@@ -95,11 +95,11 @@ public class Tester extends Content {
 												 : bookmarkDirectory.child(entry.key).readString())
 												+ "\n})()";
 				ExecuteTree.node(() -> {
-					 cx.evaluateString(scope,
-						source, "<" + taskName + ">" + entry.key, 1);
+					 cx.evaluateString(scope, source, "<" + taskName + ">" + entry.key, 1);
 				 }, taskName, entry.key, Icon.none, () -> {})
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
+				 .code(source)
 				 .apply();
 			}
 		});
@@ -654,6 +654,7 @@ public class Tester extends Content {
 				if (!f.extEquals("js")) return;
 				ExecuteTree.node(f.name(),
 					() -> cx.evaluateString(scope, readFiOrEmpty(f), f.name(), 1))
+				 .code(readFiOrEmpty(f))
 				 .apply();
 			}));
 		} else {

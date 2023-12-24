@@ -53,6 +53,7 @@ public class Executor extends Content {
 				ExecuteTree.node("custom",
 					() -> JSRequest.cx.evaluateString(scope,
 					 code, "<custom>", 1))
+				 .code(code)
 				 .resubmitted().apply();
 			}));
 		}).size(96, 45);
@@ -133,12 +134,6 @@ public class Executor extends Content {
 				IntUI.showMenuListDispose(() -> Seq.with(MenuList.with(Icon.copySmall, "cpy as JS", () -> {
 					if (node.code != null) JSFunc.copyText(node.code);
 				})));
-			});
-			button.addListener(new InputListener() {
-				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-					event.stop();
-					return false;
-				}
 			});
 			button.table(right -> {
 				if (node.isResubmitted()) {

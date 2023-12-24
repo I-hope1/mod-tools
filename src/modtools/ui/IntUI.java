@@ -130,9 +130,11 @@ public class IntUI {
 			}
 			final Task task = new LongPressTask();
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				if (event.stopped) return false;
 				if (super.touchDown(event, x, y, pointer, button)) {
 					last.set(Core.input.mouse());
 					Timer.schedule(task, duration / 1000f);
+					event.stop();
 					return true;
 				}
 				return false;
@@ -144,7 +146,9 @@ public class IntUI {
 			public void clicked(InputEvent event, float x, float y) {
 				// super.clicked(event, x, y);
 				if (task.isScheduled()) {
-					if (pressed) boolc.get(false);
+					if (pressed) {
+						boolc.get(false);
+					}
 				}
 			}
 		}
@@ -179,11 +183,12 @@ public class IntUI {
 	 */
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
-
 		class HClickListener extends ClickListener {
 			HClickListener() {super(KeyCode.mouseRight);}
 			public void clicked(InputEvent event, float x, float y) {
+				if (event.stopped) return;
 				run.run();
+				event.stop();
 			}
 		}
 		elem.addListener(new HClickListener());

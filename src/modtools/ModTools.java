@@ -2,31 +2,25 @@ package modtools;
 
 import arc.*;
 import arc.files.*;
-import arc.graphics.*;
-import arc.graphics.Texture.TextureFilter;
-import arc.scene.event.*;
+import arc.scene.event.VisibilityListener;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import dalvik.system.BaseDexClassLoader;
 import ihope_lib.MyReflect;
-import mindustry.*;
+import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
-import mindustry.graphics.LoadRenderer;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
-import mindustry.ui.Fonts;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.utils.*;
-import modtools.utils.reflect.*;
+import modtools.utils.Tools;
 import modtools.utils.ui.FileUtils;
 
 import java.io.*;
-import java.lang.reflect.Field;
 import java.net.URLClassLoader;
 import java.util.Arrays;
 
@@ -70,11 +64,15 @@ public class ModTools extends Mod {
 		Core.app.post(Tester::initExecution);
 	}
 	public static Fi findRoot() {
-		if (OS.isWindows) {
+		if (OS.isWindows || OS.isMac) {
 			return Fi.get(((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0].getFile());
 		}
 		if (OS.isAndroid) return findRootAndroid();
 		throw new UnsupportedOperationException();
+	}
+	private static String getFileName(String file) {
+		int index = file.lastIndexOf('/');
+		return file.substring(index).replace("/", "");
 	}
 	public static Fi findRootAndroid() {
 		Object pathList = Reflect.get(BaseDexClassLoader.class, ModTools.class.getClassLoader(),
@@ -109,28 +107,6 @@ public class ModTools extends Mod {
 		// MyReflect.classDefiner().defineClass();
 	}
 
-	private static void setLoadRenderer() {
-		try {
-			Time.mark();
-			Field        field  = FieldUtils.getFieldAccess(ClientLauncher.class, "loader");
-			LoadRenderer loader = (LoadRenderer) field.get(Vars.platform);
-			Color        color  = Reflect.get(LoadRenderer.class, loader, "color");
-			color.set(Color.cyan);
-			color = Reflect.get(LoadRenderer.class, loader, "colorRed");
-			color.set(Color.sky);
-			FieldUtils.setValue(LoadRenderer.class.getDeclaredField("orange"),
-			 loader, "[cyan]");
-			FieldUtils.setValue(LoadRenderer.class.getDeclaredField("red"),
-			 loader, "[sky]");
-
-			// FieldUtils.setValue(Enum.class.getDeclaredField("ordinal"), LogLevel.warn, 0);
-		} catch (Exception e) {
-			Log.err(e);
-		} finally {
-			Log.info("Time to set load renderer: @ms", Time.elapsed());
-		}
-	}
-
 	private static void resolveInputAndUI() {
 		if (ui == null) return;
 		Time.mark();
@@ -139,7 +115,7 @@ public class ModTools extends Mod {
 			return;
 		}
 		HopeInput.load();
-		if (OS.isWindows) {
+		if (OS.isWindows || OS.isMac) {
 			ui.mods.addListener(new VisibilityListener() {
 				@Override
 				public boolean shown() {

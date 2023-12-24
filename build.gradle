@@ -29,7 +29,7 @@ allprojects {
 }
 
 group 'mod-tools'
-version '1.4.3.2'
+version '1.4.4'
 sourceSets.main.java.srcDirs = ["src"]
 
 

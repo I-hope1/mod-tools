@@ -37,7 +37,7 @@ public class Background {
 		IntVars.addResizeListener(() -> {
 			img.getRegion().set(Core.graphics.isPortrait() ? portrait() : landscape());
 		});
-		Time.runTask(6f, () -> {
+		Time.runTask(4f, () -> {
 			group.addChildAt(0, img);
 			img.getRegion().set(Core.graphics.isPortrait() ? portrait() : landscape());
 		});

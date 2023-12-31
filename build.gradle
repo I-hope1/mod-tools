@@ -44,7 +44,7 @@ dependencies {
 //	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 	compileOnly files(
 			"_libs/Mindustry_android.jar",
-//			"${MdtDataDir}/Mindustry_desktop.jar",
+			"${MdtDataDir}/Mindustry_desktop.jar",
 //			"$platformRoot/android.jar",
 			"assets/libs/reflect-core.jar",
 			"trash/procyon-0.6.jar",

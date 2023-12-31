@@ -3,7 +3,6 @@ package modtools.ui;
 import arc.files.Fi;
 import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
-import arc.graphics.Texture.TextureFilter;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.Font.Glyph;
 import arc.struct.Seq;
@@ -80,7 +79,7 @@ public class MyFonts {
 
 		// Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, font.getData(), "regions");
 		font.getRegions().add(Fonts.def.getRegion());
-		Fonts.def.getRegion().texture.setFilter(TextureFilter.linear, TextureFilter.linear);
+		// Fonts.def.getRegion().texture.setFilter(TextureFilter.linear, TextureFilter.linear);
 		// font.getRegion().texture.setFilter(TextureFilter.linear);
 		// font.getRegion().texture.setFilter(TextureFilter.mipMapLinearLinear, TextureFilter.mipMapLinearLinear); // linear filtering in nearest mipmap image
 		return font;

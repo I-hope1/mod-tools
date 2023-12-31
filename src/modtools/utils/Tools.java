@@ -96,7 +96,7 @@ public class Tools {
 					cancel();
 				}
 			}
-		}, 1f, 1f, -1);
+		}, 0f, 1f, -1);
 		/*Runnable[] run = {null};
 		run[0] = () -> {
 			Time.runTask(0, () -> {

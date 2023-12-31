@@ -62,7 +62,7 @@ public class Tester extends Content {
 
 	public static Scripts    scripts;
 	public static Scriptable topScope, scope;
-	public static Context    cx;
+	public static Context cx;
 
 	private final int maxHistorySize = 40;
 
@@ -243,7 +243,7 @@ public class Tester extends Content {
 
 			{
 				Time.runTask(1, () -> {
-					Vec2 v1 = ElementUtils.getAbsolutePos(_cont);
+					Vec2       v1    = ElementUtils.getAbsolutePos(_cont);
 					InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
 					event.type = (InputEventType.touchDown);
 					event.stageX = v1.x;

@@ -60,7 +60,9 @@ public class ModTools extends Mod {
 
 	public void loadContent() {
 		IntVars.meta.hidden = true;
-		Core.app.post(Tester::initExecution);
+		// Time.mark();
+		Tester.initExecution();
+		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 	public static Fi findRoot() {
 		if (OS.isWindows || OS.isMac) {
@@ -199,7 +201,7 @@ public class ModTools extends Mod {
 
 		Log.info("Loading @.jar", fileName);
 		Time.mark();
-		// 加载反射
+		// 加载前置
 		try {
 			Fi toFi = Vars.dataDirectory.child("tmp/mod-tools-" + fileName + ".jar");
 			IntVars.delete(toFi);

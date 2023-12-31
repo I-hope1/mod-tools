@@ -4,7 +4,7 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
-import arc.util.Align;
+import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window.*;
@@ -18,9 +18,29 @@ import static mindustry.Vars.mods;
 import static modtools.utils.Tools.*;
 
 public class JSRequest {
-	static class JSRequestWindow extends HiddenTopWindow {
+	static class JSRequestWindow<R> extends HiddenTopWindow {
 		TextAreaTab area = new TextAreaTab("", false);
-		String      log;
+		String  log;
+		boolean notHideAuto;
+
+		void buildButtons(ConsT<R, Throwable> callback) {
+			buttons.check("@jsrequest.nothideauto", b -> notHideAuto = b).checked(__ -> notHideAuto)
+			 .colspan(3).padRight(100f).get().left();
+			buttons.row();
+
+			buttons.button("@cancel", Styles.flatt, this::hide).growX().height(42);
+			buttons.button("Test", Styles.flatt, catchRun(() -> {
+				Object o   = eval();
+				String log = String.valueOf(o);
+				if (log == null) log = "null";
+				this.log = log;
+			})).growX().height(42);
+			buttons.button("@ok", Styles.flatt, catchRun(() -> {
+				Object o = eval();
+				callback.get(as(o));
+				if (!notHideAuto) hide();
+			})).growX().height(42);
+		}
 
 		public JSRequestWindow() {
 			super("", 220, 220, true, false);
@@ -41,7 +61,7 @@ public class JSRequest {
 		}
 	}
 
-	public static JSRequestWindow window   = new JSRequestWindow();
+	public static JSRequestWindow window   = new JSRequestWindow<>();
 	public static Context         cx       = mods.getScripts().context;
 	public static Scriptable      topScope = Tester.scope;
 	public static Scriptable      scope;
@@ -92,9 +112,12 @@ public class JSRequest {
 		for (int i = 0; i < args.length; i += 2) {
 			parent.put((String) args[0], parent, args[1]);
 		}
-		buildButtons(callback);
+		window.buildButtons(callback);
 	}
 
+	private static Object eval() {
+		return window.eval();
+	}
 	public static void requestCode(Cons<String> callback) {
 		new DisWindow("code") {{
 			TextAreaTab area = new TextAreaTab("");
@@ -106,26 +129,5 @@ public class JSRequest {
 			}).size(120, 45);
 			setPosition(Core.input.mouse());
 		}}.show();
-	}
-
-
-	private static <R> void buildButtons(ConsT<R, Throwable> callback) {
-		window.buttons.button("@cancel", Styles.flatt, () -> {
-			window.hide();
-		}).growX().height(42);
-		window.buttons.button("test", Styles.flatt, catchRun(() -> {
-			Object o   = eval();
-			String log = String.valueOf(o);
-			if (log == null) log = "null";
-			window.log = log;
-		})).growX().height(42);
-		window.buttons.button("@ok", Styles.flatt, catchRun(() -> {
-			Object o = eval();
-			callback.get(as(o));
-			window.hide();
-		})).growX().height(42);
-	}
-	private static Object eval() {
-		return window.eval();
 	}
 }

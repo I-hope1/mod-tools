@@ -613,13 +613,14 @@ public class IntUI {
 	 * @param width the width
 	 * @param height the height
 	 * @param searchable the searchable
+	 * @param align
 	 * @return the table
 	 */
 	public static <T extends Element> Table
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
-											boolean searchable) {
-		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, Align.center);
+											boolean searchable, int align) {
+		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, align);
 	}
 	/**
 	 * Show select list enum table table.

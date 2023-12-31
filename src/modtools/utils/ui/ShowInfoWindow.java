@@ -34,7 +34,7 @@ import rhino.*;
 import java.io.StringWriter;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
-import java.util.Arrays;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
@@ -60,6 +60,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	 methodsTable,
 	 consTable,
 	 classesTable;
+	final Set<Class<?>> classSet = new HashSet<>();
 
 	public ShowInfoWindow(Object o, Class<?> clazz) {
 		super(getName(clazz), 200, 200, true);
@@ -231,16 +232,18 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		for (Class<?> cls = clazz; cls != null; type = cls.getGenericSuperclass(), cls = cls.getSuperclass()) {
 			buildAllByClass(o, cls, type);
 		}
-		if (clazz == null) return;
 
+		// return mainRun;
+	}
+	private void buildInterface(Object o, Class<?> clazz) {
 		Type[]     interfaceTypes = clazz.getGenericInterfaces();
 		Class<?>[] interfaces     = clazz.getInterfaces();
 		for (int i = 0, clazzInterfacesLength = interfaces.length; i < clazzInterfacesLength; i++) {
 			buildAllByClass(o, interfaces[i], interfaceTypes[i]);
 		}
-		// return mainRun;
 	}
 	private void buildAllByClass(Object o, Class<?> cls, Type type) {
+		if (!classSet.add(cls)) return;
 		Field[] fields1 = getFields1(cls);
 		fieldsTable.build(cls, type, fields1);
 		Method[] methods1 = getMethods1(cls);
@@ -261,6 +264,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		// 类
 		for (Class<?> dcls : classes1) {buildClass(classesTable, dcls);}
 		checkRemovePeek(classesTable);
+
+		// 实现接口
+		buildInterface(o, cls);
 	}
 
 	public static boolean find(Pattern pattern, String name) {
@@ -569,8 +575,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren()) return;
 			IntUI.showSelectTable(attribute, (p, hide, text) -> {
 				table.left().top().defaults().left().top();
-				var pair = table.map.get(member.getName());
-				Table one = pair.getFirst(ShowInfoWindow::newPairTable);
+				var   pair = table.map.get(member.getName());
+				Table one  = pair.getFirst(ShowInfoWindow::newPairTable);
 				p.add(one).right().grow().get();
 				Time.runTask(6f, () -> one.invalidateHierarchy());
 			}, false, Align.topLeft);
@@ -717,9 +723,12 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		public Table row() {
 			return current == null || !isBound() ? super.row() : current.row();
 		}
+		public void unbind() {
+			super.unbind();
+			skip = false;
+		}
 		public void build(Class<?> cls, Type type, Object[] arr) {
 			unbind();
-			if (skip) return;
 			current = table().name(cls.getSimpleName()).get();
 			current.left().defaults().left().top();
 			super.row();
@@ -733,7 +742,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .labelAlign(Align.left).color(cls.isInterface() ? Color.lightGray : Pal.accent).colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
-				() -> null, __ -> {}, 400, 0, true)))
+				() -> null, __ -> {}, 400, 0, true, Align.left)))
 			 .row();
 			current.image().color(Color.lightGray)
 			 .growX().padTop(6).colspan(colspan).row();

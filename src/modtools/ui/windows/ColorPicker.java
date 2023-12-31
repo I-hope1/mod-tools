@@ -14,9 +14,9 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
+import modtools.ui.IntUI;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 

@@ -42,6 +42,7 @@ import modtools.ui.components.linstener.SclListener;
 import modtools.ui.components.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.ui.IntUI;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
@@ -223,7 +224,7 @@ public class Tester extends Content {
 			);
 		}).growX().row();
 		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(new PrefTable(p -> {
-			p.add(new MyLabel(() -> log)).style(HopeStyles.MOMO_LabelStyle).wrap()
+			p.add(new MyLabel(() -> log)).style(HopeStyles.defaultLabel).wrap()
 			 .grow().labelAlign(Align.center, Align.left);
 		})).grow()).growX().with(t -> t.touchable = Touchable.enabled);
 
@@ -544,9 +545,9 @@ public class Tester extends Content {
 			area.setText(readFiOrEmpty(f.child("message.txt")));
 			log = readFiOrEmpty(f.child("log.txt"));
 		}, (f, p) -> {
-			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), HopeStyles.MOMO_LabelStyle)).row();
+			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), HopeStyles.defaultLabel)).row();
 			p.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().padTop(6f).padBottom(6f).row();
-			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), HopeStyles.MOMO_LabelStyle)).row();
+			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), HopeStyles.defaultLabel)).row();
 		}, Tester::sort);
 		history.hide();
 		bookmark = new ListDialog("bookmark", bookmarkDirectory,
@@ -610,7 +611,7 @@ public class Tester extends Content {
 				}
 			};
 		}).row();
-		p.add(new MyLabel(readFiOrEmpty(f), HopeStyles.MOMO_LabelStyle)).row();
+		p.add(new MyLabel(readFiOrEmpty(f), HopeStyles.defaultLabel)).row();
 	}
 
 

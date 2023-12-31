@@ -7,7 +7,7 @@ import arc.struct.*;
 import ihope_lib.MyReflect;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
-import modtools.ui.IntUI.MenuList;
+import modtools.ui.menus.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.components.utils.PlainValueLabel;
 import modtools.utils.reflect.*;

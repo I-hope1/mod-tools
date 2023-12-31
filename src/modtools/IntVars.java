@@ -55,7 +55,7 @@ public class IntVars {
 			}
 			if (displayUI) ui.loadfrag.hide();
 			if (callback != null) callback.run();
-			return 1;
+			return true;
 		});
 		try {
 			completableFuture.get();

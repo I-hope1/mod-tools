@@ -1,10 +1,6 @@
 package modtools.ui;
 
-import arc.Core;
-import arc.files.Fi;
 import arc.graphics.Color;
-import arc.graphics.Texture.TextureFilter;
-import arc.graphics.g2d.*;
 import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.CheckBox.CheckBoxStyle;
@@ -20,7 +16,6 @@ import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.IntVars;
 
 import static modtools.ui.HopeIcons.*;
 import static mindustry.gen.Tex.*;
@@ -33,7 +28,7 @@ public class HopeStyles {
 	public static final Drawable        none = whiteui.tint(0f, 0f, 0f, 0.01f);
 
 	/** 默认使用等宽字体，没有的话使用默认字体 */
-	public static final LabelStyle MOMO_LabelStyle;
+	public static final LabelStyle defaultLabel;
 	// public static final CheckBoxStyle checkbox;
 
 
@@ -208,7 +203,7 @@ public class HopeStyles {
 			down = over = Styles.flatOver;
 		}};
 
-		MOMO_LabelStyle = new LabelStyle(Styles.defaultLabel) {{
+		defaultLabel = new LabelStyle(Styles.defaultLabel) {{
 			font = MyFonts.def;
 		}};
 		/* checkbox = new CheckBoxStyle() {{

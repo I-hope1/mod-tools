@@ -11,7 +11,6 @@ import mindustry.game.EventType.Trigger;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
 import modtools.utils.array.TaskSet;
-import rhino.ScriptRuntime;
 
 import java.lang.reflect.*;
 import java.util.List;
@@ -20,34 +19,10 @@ import java.util.function.Consumer;
 import static ihope_lib.MyReflect.unsafe;
 
 public class Tools {
-	public static final Object[] EMPTY_ARRAY = {};
-
 	public static TaskSet TASKS = new TaskSet();
 
 	static {
 		Events.run(Trigger.update, TASKS::exec);
-	}
-
-	public static boolean validPosInt(String text) {
-		return Strings.canParsePositiveInt(text);
-		// return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
-	}
-	public static boolean isNum(String text) {
-		try {
-			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text));
-		} catch (Throwable ignored) {
-			return false;
-		}
-	}
-	public static float asFloat(String text) {
-		try {
-			return Float.parseFloat(text);
-		} catch (Throwable e) {
-			return Float.NaN;
-		}
-	}
-	public static int asInt(String text) {
-		return Strings.parseInt(text);
 	}
 
 	public static String readFiOrEmpty(Fi fi) {
@@ -233,6 +208,7 @@ public class Tools {
 			run.run();
 		} catch (Throwable ignored) {}
 	}
+
 	public static Runnable catchRun(CatchRun run) {
 		return catchRun("", run, null);
 	}
@@ -250,6 +226,16 @@ public class Tools {
 		};
 	}
 
+	public static <T> Cons<T> catchCons(CCons<T> cons, Cons<Throwable> resolver) {
+		return t -> {
+			try {
+				cons.get(t);
+			} catch (Throwable e) {
+				resolver.get(e);
+			}
+		};
+	}
+
 	public static <T> void each(List<T> list, Cons<T> cons) {
 		for (int i = list.size(); i-- > 0; ) {
 			cons.get(list.get(i));
@@ -260,6 +246,9 @@ public class Tools {
 	}
 	public interface CBoolp {
 		boolean get() throws Throwable;
+	}
+	public interface CCons<T> {
+		void get(T t) throws Throwable;
 	}
 	public interface CProv<T> {
 		T get() throws Throwable;

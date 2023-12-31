@@ -30,12 +30,14 @@ import mindustry.world.blocks.environment.*;
 import modtools.events.E_Selection;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
+import modtools.ui.IntUI.IMenu;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.NoTopWindow;
 import modtools.ui.components.linstener.*;
 import modtools.ui.content.*;
 import modtools.ui.effect.MyDraw;
+import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.array.ArrayUtils;
@@ -75,7 +77,7 @@ public class Selection extends Content {
 	 tileWD   = new WorldDraw(Layer.darkness + 1, "tile"),
 	 buildWD  = new WorldDraw(Layer.darkness + 2, "build"),
 	 bulletWD = new WorldDraw(Layer.bullet + 5, "bullet"),
-	 otherWD = new WorldDraw(Layer.darkness + 5, "other");
+	 otherWD  = new WorldDraw(Layer.darkness + 5, "other");
 
 	public Element fragSelect;
 	public Window  pane;
@@ -100,10 +102,10 @@ public class Selection extends Content {
 	/** @see E_Selection */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
 	private static void intField(Table t1) {
-		t1.row().field("", s -> tmpAmount[0] = s).valid(Tools::validPosInt);
+		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::validPosInt);
 	}
 	private static void floatField(Table t1) {
-		t1.row().field("", s -> tmpAmount[0] = s).valid(Strings::canParsePositiveFloat);
+		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::isPositiveFloat);
 	}
 
 	public void loadSettings(Data SETTINGS) {
@@ -229,14 +231,14 @@ public class Selection extends Content {
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
 				each(list, b -> {
 					if (b.items != null) {
-						b.items.set(item, Tools.asInt(tmpAmount[0]));
+						b.items.set(item, NumberHelper.asInt(tmpAmount[0]));
 					}
 				});
 			});
 			ListFunction("@selection.liquids", () -> content.liquids(), Selection::floatField, (list, liquid) -> {
 				each(list, b -> {
 					if (b.liquids != null) {
-						b.liquids.add(liquid, Tools.asInt(tmpAmount[0]) - b.liquids.get(liquid));
+						b.liquids.add(liquid, NumberHelper.asInt(tmpAmount[0]) - b.liquids.get(liquid));
 					}
 				});
 			});
@@ -487,10 +489,10 @@ public class Selection extends Content {
 			return item.tile.build != item;
 		}
 		Cons2<Liquid, String> getLiquidSetter(T build) {
-			return (l, str) -> build.liquids.set(l, Tools.asFloat(str));
+			return (l, str) -> build.liquids.set(l, NumberHelper.asFloat(str));
 		}
 		Cons2<Item, String> getItemSetter(T build) {
-			return (i, str) -> build.items.set(i, Tools.asInt(str));
+			return (i, str) -> build.items.set(i, NumberHelper.asInt(str));
 		}
 
 	}
@@ -635,7 +637,7 @@ public class Selection extends Content {
 	}
 
 	boolean focusDisabled;
-	private boolean focusEnabled;
+	private      boolean           focusEnabled;
 	public       Element           focusElem;
 	public       Tile              focusTile;
 	public       Building          focusBuild;
@@ -651,19 +653,19 @@ public class Selection extends Content {
 				Draw.alpha(0.3f);
 			}
 			drawFocusInternal();
-
-
+			return true;
+		});
+		Tools.TASKS.add(() -> {
 			Element tmp = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
 			focusEnabled = !topGroup.isSelecting() && (
 			 tmp == null || tmp.isDescendantOf(focusW) || (!tmp.visible && tmp.touchable == Touchable.disabled)
+			 || tmp.isDescendantOf(el -> el instanceof IMenu)
 			 // || tmp.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
-			 || tmp instanceof Hitter);
-			if (!focusEnabled) return true;
+			 /* || tmp instanceof IMenu */);
+			if (!focusEnabled) return;
 			if (!focusDisabled) {
 				reacquireFocus();
 			}
-
-			return true;
 		});
 		topGroup.backDrawSeq.add(() -> {
 			if (!focusEnabled && focusElem == null) return true;

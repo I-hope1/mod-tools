@@ -4,6 +4,8 @@ import arc.func.Prov;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 
+import static modtools.utils.ui.FormatHelper.fixed;
+
 public class PositionProv implements Prov<CharSequence> {
 	float lastX, lastY;
 	String lastPos;
@@ -19,7 +21,7 @@ public class PositionProv implements Prov<CharSequence> {
 	public String get() {
 		Vec2 pos = posProv.get();
 		if (lastPos == null || !Mathf.equal(lastX, pos.x) || !Mathf.equal(lastY, pos.y)) {
-			lastPos = "(" + ReviewElement.fixed(pos.x) + delimiter + ReviewElement.fixed(pos.y) + ')';
+			lastPos = "(" + fixed(pos.x) + delimiter + fixed(pos.y) + ')';
 		}
 		return lastPos;
 	}

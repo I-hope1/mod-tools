@@ -1,20 +1,15 @@
 package modtools.ui;
 
 import arc.files.Fi;
-import arc.freetype.FreeType.Stroker;
 import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
 import arc.graphics.Texture.TextureFilter;
 import arc.graphics.g2d.*;
-import arc.graphics.g2d.Font.*;
+import arc.graphics.g2d.Font.Glyph;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Reflect;
 import mindustry.ui.Fonts;
 import modtools.utils.Tools;
-import modtools.utils.reflect.HopeReflect;
-
-import java.lang.reflect.Method;
-import java.sql.Ref;
 
 import static modtools.utils.MySettings.*;
 
@@ -85,9 +80,9 @@ public class MyFonts {
 
 		// Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, font.getData(), "regions");
 		font.getRegions().add(Fonts.def.getRegion());
-		Fonts.def.getRegion().texture.setFilter(TextureFilter.linear, TextureFilter.nearest);
-		font.getRegion().texture.setFilter(TextureFilter.nearest);
-
+		Fonts.def.getRegion().texture.setFilter(TextureFilter.linear, TextureFilter.linear);
+		// font.getRegion().texture.setFilter(TextureFilter.linear);
+		// font.getRegion().texture.setFilter(TextureFilter.mipMapLinearLinear, TextureFilter.mipMapLinearLinear); // linear filtering in nearest mipmap image
 		return font;
 	}
 

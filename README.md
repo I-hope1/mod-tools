@@ -64,7 +64,8 @@ public class JSFunc {
 ![reviewElement](./screenshots/review_element.png)
 
 ## Window
-- `ctrl+tab` 切换窗口
+- `Ctrl`+`Tab` 切换窗口
+- `Shift`+`F4` 关闭当前窗口
 
 ## ShowInfoWindow
 

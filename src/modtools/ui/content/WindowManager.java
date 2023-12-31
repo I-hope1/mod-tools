@@ -9,6 +9,7 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.IntUI;
 import modtools.utils.TaskManager;
 
 public class WindowManager extends Content {

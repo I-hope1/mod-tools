@@ -2,7 +2,6 @@ package modtools.ui.content.debug;
 
 import arc.func.Intp;
 import arc.graphics.Color;
-import arc.input.KeyCode;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
@@ -16,7 +15,7 @@ import mindustry.ui.Styles;
 import modtools.events.ExecuteTree;
 import modtools.events.ExecuteTree.*;
 import modtools.ui.*;
-import modtools.ui.IntUI.MenuList;
+import modtools.ui.menus.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.JSRequest;

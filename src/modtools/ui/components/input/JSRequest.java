@@ -4,12 +4,9 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
-import arc.scene.utils.Disableable;
 import arc.util.Align;
 import mindustry.ui.Styles;
-import modtools.events.ExecuteTree;
 import modtools.ui.IntUI;
-import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
@@ -18,7 +15,6 @@ import modtools.utils.JSFunc;
 import rhino.*;
 
 import static mindustry.Vars.mods;
-import static modtools.ui.Contents.tester;
 import static modtools.utils.Tools.*;
 
 public class JSRequest {

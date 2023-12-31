@@ -1,7 +1,7 @@
 package modtools.ui;
 
 import arc.*;
-import arc.func.*;
+import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -22,8 +22,7 @@ import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.DataObjectInit;
 import modtools.annotations.builder.DataBoolFieldInit;
-import modtools.graphics.MyShaders;
-import modtools.ui.IntUI.PopupWindow;
+import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.effect.*;
@@ -31,7 +30,6 @@ import modtools.utils.*;
 import modtools.utils.array.TaskSet;
 
 import java.util.*;
-import java.util.EventListener;
 
 import static arc.Core.*;
 import static modtools.IntVars.modName;
@@ -57,10 +55,6 @@ public final class TopGroup extends WidgetGroup {
 	public int          currentIndex    = 0;
 	public List<Window> shownWindows    = new ArrayList<>();
 
-	public Group getTopG() {
-		return others;
-	}
-
 	private Element selected;
 	public Element getSelected() {
 		return selected;
@@ -75,7 +69,7 @@ public final class TopGroup extends WidgetGroup {
 	 back    = new NGroup("back"),
 	 windows = new NGroup("windows"),
 	 frag    = new NGroup("frag"),
-	 others = new NGroup("others") {
+	 others  = new NGroup("others") {
 		 public void draw() {
 			 // validate();
 			 super.draw();
@@ -85,6 +79,18 @@ public final class TopGroup extends WidgetGroup {
 				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
 				 ? el -> or(el, this) : null)
 				.get();
+		 }
+		 final Group menus = new NGroup(this, "menus");
+		 final Group notices = new NGroup(this, "notices");
+		 final Group _others = new NGroup(this, "others");
+		 public void addChild(Element actor) {
+			 if (_others == null) {
+				 super.addChild(actor);
+				 return;
+			 }
+			 (actor instanceof IMenu ? menus
+				: actor instanceof INotice ? notices : _others)
+				.addChild(actor);
 		 }
 	 };
 	private final Table end = new MyEnd();
@@ -348,9 +354,9 @@ public final class TopGroup extends WidgetGroup {
 	public static final ObjectSet<Element>  searchBlackList = new ObjectSet<>();
 	public static final ObjectSet<Class<?>> classBlackList  = new ObjectSet<>();
 
-	public Cons<Element> elementCallback = null;
-	public Drawer        elementDrawer   = null;
-	public static final Drawer defaultDrawer = (selecting, el) -> {
+	public              Cons<Element> elementCallback = null;
+	public              Drawer        elementDrawer   = null;
+	public static final Drawer        defaultDrawer   = (selecting, el) -> {
 		if (!selecting) return;
 		TopGroup.drawFocus(el, ElementUtils.getAbsolutePos(el), IntUI.DEF_FOCUS_COLOR);
 	};
@@ -687,6 +693,13 @@ public final class TopGroup extends WidgetGroup {
 		public NGroup(String name) {
 			super();
 			this.name = name;
+			update(this::validate);
+		}
+		public NGroup(Group parent, String name) {
+			this(name);
+			touchable = Touchable.childrenOnly;
+			setFillParent(true);
+			parent.addChild(this);
 		}
 	}
 	public static class FocusTask implements ResidentDrawTask {

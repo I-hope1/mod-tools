@@ -23,13 +23,14 @@ import modtools.events.ExecuteTree.TaskNode;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
-import modtools.ui.IntUI.*;
+import modtools.ui.menus.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.linstener.WorldSelectListener;
 import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
+import modtools.utils.ui.FormatHelper;
 import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
@@ -110,13 +111,13 @@ public class UnitSpawn extends Content {
 	}
 	public void setX(float x) {
 		if (!validNumber(x)) return;
-		xField.setText(Strings.fixed(x, 1));
+		xField.setText(FormatHelper.fixed(x, 1));
 		this.x = x;
 		//		swapnX = x;
 	}
 	public void setY(float y) {
 		if (!validNumber(y)) return;
-		yField.setText(Strings.fixed(y, 1));
+		yField.setText(FormatHelper.fixed(y, 1));
 		this.y = y;
 		//		swapnY = y;
 	}
@@ -136,13 +137,13 @@ public class UnitSpawn extends Content {
 			table.margin(-4f, 0f, -4f, 0f);
 			table.table(x0 -> {
 				x0.add("x:");
-				xField = x0.field(String.valueOf(x), newX -> x = Strings.parseFloat(newX))
+				xField = x0.field(String.valueOf(x), newX -> x = NumberHelper.asFloat(newX))
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX();
 			table.table(y0 -> {
 				y0.add("y:");
-				yField = y0.field(String.valueOf(y), newY -> y = Strings.parseFloat(newY))
+				yField = y0.field(String.valueOf(y), newY -> y = NumberHelper.asFloat(newY))
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
@@ -165,7 +166,7 @@ public class UnitSpawn extends Content {
 					 int id = (int) toInteger(text);
 					 team = Team.get(id);
 				 })
-				 .valid(val -> Tools.validPosInt(val) && toInteger(val) < Team.all.length)
+				 .valid(val -> NumberHelper.validPosInt(val) && toInteger(val) < Team.all.length)
 				 .width(100)
 				 .get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
@@ -180,7 +181,7 @@ public class UnitSpawn extends Content {
 			table.table(t -> {
 				t.add("@filter.option.amount");
 				amountField = t.field("" + amount, text -> amount = (int) toInteger(text))
-				 .valid(val -> validNumber(val) && Tools.validPosInt(val))
+				 .valid(val -> validNumber(val) && NumberHelper.validPosInt(val))
 				 .width(100)
 				 .get();
 			});
@@ -227,7 +228,7 @@ public class UnitSpawn extends Content {
 
 	public boolean validNumber(String str) {
 		try {
-			return validNumber(Strings.parseFloat(str));
+			return validNumber(NumberHelper.asFloat(str));
 		} catch (Exception ignored) {}
 		return false;
 	}

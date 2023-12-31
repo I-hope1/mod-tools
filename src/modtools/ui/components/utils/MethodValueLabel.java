@@ -2,7 +2,7 @@ package modtools.ui.components.utils;
 
 import arc.struct.Seq;
 import arc.util.Align;
-import modtools.ui.IntUI.MenuList;
+import modtools.ui.menus.MenuList;
 
 import java.lang.reflect.*;
 
@@ -28,7 +28,7 @@ public class MethodValueLabel extends ValueLabel {
 		setVal(unset);
 	}
 
-	public boolean enabledUpdate() {
+	public boolean enabledUpdateMenu() {
 		return false;
 	}
 }

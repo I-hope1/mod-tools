@@ -26,9 +26,9 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
-import modtools.ui.content.ui.ReviewElement;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
+import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.array.MySet;
 import modtools.utils.ui.search.*;
@@ -41,7 +41,7 @@ import static modtools.utils.Tools.*;
 
 /**
  * <p>浮动的窗口，可以缩放，{@link #toggleMinimize() 最小化}，{@link #toggleMaximize() 最大化}</p>
- * <p>如果继承{@link DisposableInterface}，{@link #show()}，{@link #hide()}时自动销毁</p>
+ * <p>如果继承{@link IDisposable}，{@link #show()}，{@link #hide()}时自动销毁</p>
  * 记住左下角是{@code (0, 0)}
  * @author I hope...
  **/
@@ -159,7 +159,7 @@ public class Window extends Table {
 			sclListener.set(this.minWidth, minHeight0);
 			setSize(Math.max(this.minWidth, getWidth()),
 			 Math.max(this.minHeight, getHeight()));
-			if (this instanceof DisposableInterface) show();
+			if (this instanceof IDisposable) show();
 		});
 		all.add(this);
 	}
@@ -481,7 +481,7 @@ public class Window extends Table {
 		} else
 			remove();
 
-		if (this instanceof DisposableInterface) {
+		if (this instanceof IDisposable) {
 			all.remove(this);
 		}
 	}
@@ -493,7 +493,7 @@ public class Window extends Table {
 	 */
 	public void hide() {
 		if (!isShown()) return;
-		if (!(this instanceof DisposableInterface)) screenshot();
+		if (!(this instanceof IDisposable)) screenshot();
 		setOrigin(Align.center);
 		setClip(false);
 
@@ -740,7 +740,7 @@ public class Window extends Table {
 	}
 
 	/** just a flag */
-	public interface DisposableInterface {
+	public interface IDisposable {
 		default void clearAll() {
 			if (this instanceof Group) ((Group) this).find(e -> {
 				if (e instanceof FilterTable) {
@@ -754,11 +754,11 @@ public class Window extends Table {
 	 * 延迟几秒销毁的窗口
 	 * @see InfoFadePopup
 	 */
-	public interface DelayDisposable extends DisposableInterface {
+	public interface DelayDisposable extends IDisposable {
 	}
 
 
-	public static class DisWindow extends Window implements DisposableInterface {
+	public static class DisWindow extends Window implements IDisposable {
 		public DisWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
@@ -797,7 +797,7 @@ public class Window extends Table {
 	}
 
 	public String toString() {
-		return ReviewElement.getElementName(this);
+		return ElementUtils.getElementName(this);
 	}
 	public static class NoTopWindow extends Window {
 

@@ -9,8 +9,8 @@ import arc.util.Timer;
 import arc.util.Timer.Task;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Tex;
-import mindustry.ui.Styles;
 import modtools.ui.*;
+import modtools.ui.IntUI;
 import modtools.ui.IntUI.Tooltip;
 
 import static mindustry.Vars.mobile;

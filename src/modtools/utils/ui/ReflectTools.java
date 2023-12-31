@@ -6,6 +6,7 @@ import ihope_lib.MyReflect;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.components.input.MyLabel;
+import modtools.ui.IntUI;
 import modtools.utils.JSFunc;
 
 import java.lang.reflect.*;
@@ -26,7 +27,7 @@ public interface ReflectTools {
 		return makeGenericType(() -> getGenericString(type), type.isPrimitive() ? null : details);
 	}
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
-		MyLabel label = new MyLabel(type.get(), HopeStyles.MOMO_LabelStyle);
+		MyLabel label = new MyLabel(type.get(), HopeStyles.defaultLabel);
 		label.color.set(JSFunc.c_type);
 		IntUI.doubleClick(label, null, details == null ? null : () -> {
 			applyChangedFx(label);

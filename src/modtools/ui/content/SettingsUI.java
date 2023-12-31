@@ -28,6 +28,7 @@ import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
+import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
@@ -388,10 +389,10 @@ public class SettingsUI extends Content {
 				t.left();
 				t.add(text).left().padRight(5)
 				 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-				t.field((integer ? (int) prov.get() : prov.get()) + "", s -> cons.get(Strings.parseFloat(s)))
+				t.field((integer ? (int) prov.get() : prov.get()) + "", s -> cons.get(NumberHelper.asFloat(s)))
 				 .padRight(100f)
 				 .update(a -> a.setDisabled(!condition.get()))
-				 .valid(f -> Strings.canParsePositiveFloat(f) && Strings.parseFloat(f) >= min && Strings.parseFloat(f) <= max).width(120f).left();
+				 .valid(f -> NumberHelper.isFloat(f) && NumberHelper.asFloat(f) >= min && NumberHelper.asFloat(f) <= max).width(120f).left();
 			}).padTop(0);
 			main.row();
 		}
@@ -429,7 +430,7 @@ public class SettingsUI extends Content {
 		}
 
 		public Cell<TextField> field(Table table, float value, Floatc setter) {
-			return table.field(Strings.autoFixed(value, 2), v -> setter.get(Strings.parseFloat(v)))
+			return table.field(Strings.autoFixed(value, 2), v -> setter.get(NumberHelper.asFloat(v)))
 			 .valid(Strings::canParsePositiveFloat)
 			 .size(90f, 40f).pad(2f);
 		}

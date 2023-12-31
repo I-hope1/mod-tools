@@ -17,7 +17,7 @@ import rhino.*;
 import java.lang.reflect.*;
 import java.util.*;
 
-import static modtools.ui.HopeStyles.MOMO_LabelStyle;
+import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
@@ -75,7 +75,7 @@ public interface MethodTools {
 		var table = new FilterTable<Integer>() {
 			int name = ~throwKey;
 			public <T extends Element> Cell<T> add(T element) {
-				return super.add(element).labelAlign(Align.topLeft).style(MOMO_LabelStyle);
+				return super.add(element).labelAlign(Align.topLeft).style(defaultLabel);
 			}
 		};
 		if (args.length > 4) table.name ^= argKey;

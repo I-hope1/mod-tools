@@ -10,7 +10,6 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.buttons.CircleImageButton;

@@ -4,7 +4,7 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
-import arc.math.*;
+import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
@@ -12,22 +12,21 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import ihope_lib.MyReflect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.IntUI.MenuList;
-import modtools.ui.components.*;
-import modtools.ui.components.Window.DisposableInterface;
+import modtools.ui.components.Window;
+import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
+import modtools.ui.menus.MenuList;
 import modtools.utils.*;
-import modtools.utils.SR.CatchSR;
+import modtools.utils.array.Pair;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
@@ -50,7 +49,7 @@ import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
 
 @SuppressWarnings("CodeBlock2Expr")
-public class ShowInfoWindow extends Window implements DisposableInterface {
+public class ShowInfoWindow extends Window implements IDisposable {
 	/* non-null */
 	private final Class<?> clazz;
 	private final Object   o;
@@ -143,12 +142,12 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		}).row();
 		cont.table(t -> {
 			t.left().defaults().left();
-			t.pane(t0 -> t0.left().add(clazz.getTypeName(), MOMO_LabelStyle).left())
+			t.pane(t0 -> t0.left().add(clazz.getTypeName(), defaultLabel).left())
 			 .with(p -> p.setScrollingDisabledY(true)).grow().uniform();
 			t.button(Icon.copySmall, Styles.cleari, () -> {
 				copyText(clazz.getTypeName(), t);
 			}).size(32);
-			if (o == null) t.add("NULL", MOMO_LabelStyle).color(Color.red).padLeft(8f);
+			if (o == null) t.add("NULL", defaultLabel).color(Color.red).padLeft(8f);
 		}).pad(6, 10, 6, 10).row();
 		rebuild.get(null);
 		// cont.add(build).grow();
@@ -287,7 +286,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		return cell;
 	}
 	private void addModifier(Table table, CharSequence string) {
-		addDisplayListener(table.add(new MyLabel(string, MOMO_LabelStyle))
+		addDisplayListener(table.add(new MyLabel(string, defaultLabel))
 		 .color(Tmp.c1.set(c_keyword)).fontScale(0.7f)
 		 .padRight(8), E_JSFuncDisplay.modifier);
 	}
@@ -348,7 +347,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
 			});
-			field.setValidator(Tools::isNum);
+			field.setValidator(NumberHelper::isNum);
 			field.changed(() -> {
 				if (!field.isValid()) return;
 				l.setFieldValue(Context.jsToJava(
@@ -390,17 +389,18 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		Class<?> type      = f.getType();
 		int      modifiers = f.getModifiers();
 		try {
-			fields.table(attr -> {
+			Element attribute = fields.table(attr -> {
 				attr.defaults().left();
 				// modifiers
 				addModifier(attr, Modifier.toString(modifiers));
 				// type
 				addRType(attr.row(), type, makeDetails(type, f.getGenericType()));
-			});
+			}).get();
 			// name
 			MyLabel label = newCopyLabel(fields, f.getName());
+			foldUnwrap(fields, f, label, attribute);
 			IntUI.addShowMenuListenerp(label, () -> Seq.with(
-			 IntUI.copyAsJSMenu("field", () -> f),
+			 IntUI.copyAsJSMenu("Field", () -> f),
 			 MenuList.with(Icon.copySmall, "Cpy offset", () -> {
 				 JSFunc.copyText("" + FieldUtils.fieldOffset(f));
 			 }),
@@ -412,11 +412,11 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 }),
 			 ValueLabel.newDetailsMenuList(label, f, Field.class)
 			));
-			fields.add(new MyLabel(" = ", MOMO_LabelStyle))
+			fields.add(new MyLabel(" = ", defaultLabel))
 			 .color(Color.lightGray).top()
 			 .touchable(Touchable.disabled);
 		} catch (Throwable e) {
-			MyLabel label = new MyLabel("<" + e + ">", MOMO_LabelStyle);
+			MyLabel label = new MyLabel("<" + e + ">", defaultLabel);
 			label.setColor(Color.red);
 			fields.add(label);
 			Log.err(e);
@@ -425,7 +425,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		fields.table(t -> {
 			t.left().defaults().left();
 			// 占位符
-			Cell<?> cell = t.add().top();
+			Cell<?>  cell   = t.add().top();
 			BindCell c_cell = addDisplayListener(cell, E_JSFuncDisplay.value);
 			/*Cell<?> lableCell = */
 			l[0] = new FieldValueLabel(ValueLabel.unset, type, f, o);
@@ -446,7 +446,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			IntUI.addLabelButton(buttons, () -> l[0].val, type);
 			// addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
 			IntUI.addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
-		})).top().width(64).colspan(0), E_JSFuncDisplay.buttons);
+		})).top().padRight(-10).width(64)/* .colspan(0) */, E_JSFuncDisplay.buttons);
 		fields.row();
 		fields.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
 	}
@@ -472,16 +472,17 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		setAccessible(m);
 		try {
 			int mod = m.getModifiers();
-			methods.table(attr -> {
+			Element attribute = methods.table(attr -> {
 				attr.defaults().left();
 				// modifiers
 				addModifier(attr, buildExecutableModifier(m));
 				// return type
 				addRType(attr.row(), m.getReturnType(),
 				 makeDetails(m.getReturnType(), m.getGenericReturnType()));
-			});
+			}).get();
 			// method name
 			MyLabel label = newCopyLabel(methods, m.getName());
+			foldUnwrap(methods, m, label, attribute);
 
 			// method parameters + exceptions + buttons
 			methods.table(t -> {
@@ -554,7 +555,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow();
 		} catch (Throwable err) {
-			MyLabel label = new MyLabel("<" + err + ">", MOMO_LabelStyle);
+			MyLabel label = new MyLabel("<" + err + ">", defaultLabel);
 			label.setColor(Color.red);
 			methods.add(label);
 			Log.err(err);
@@ -562,11 +563,24 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 		methods.row();
 		methods.image().color(Tmp.c1.set(c_underline)).growX().colspan(7).row();
 	}
+	private void foldUnwrap(ReflectTable table, Member member, MyLabel label, Element attribute) {
+		if (table.skip) return;
+		IntUI.doubleClick(label, () -> {
+			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren()) return;
+			IntUI.showSelectTable(attribute, (p, hide, text) -> {
+				table.left().top().defaults().left().top();
+				var pair = table.map.get(member.getName());
+				Table one = pair.getFirst(ShowInfoWindow::newPairTable);
+				p.add(one).right().grow().get();
+				Time.runTask(6f, () -> one.invalidateHierarchy());
+			}, false, Align.topLeft);
+		}, null);
+	}
 	private void buildConstructor(ReflectTable t, Constructor<?> ctor) {
 		setAccessible(ctor);
 		try {
 			addModifier(t, buildExecutableModifier(ctor));
-			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), MOMO_LabelStyle);
+			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), defaultLabel);
 			label.color.set(c_type);
 			boolean isSingle = ctor.getParameterCount() == 0;
 			IntUI.addShowMenuListenerp(label, () -> Seq.with(
@@ -575,7 +589,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			 }),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
 				 if (isSingle) {
-					 catchRun(() -> JSFunc.copyValue("instance", ctor.newInstance())
+					 catchRun(() -> JSFunc.copyValue("Instance", ctor.newInstance())
 						, label).run();
 					 return;
 				 }
@@ -617,9 +631,9 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				));
 				Class<?>[] types = cls.getInterfaces();
 				if (types.length > 0) {
-					t.add(new MyLabel(" implements ", MOMO_LabelStyle)).color(Tmp.c1.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
+					t.add(new MyLabel(" implements ", defaultLabel)).color(Tmp.c1.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
 					for (Class<?> interf : types) {
-						t.add(new MyLabel(getGenericString(interf), MOMO_LabelStyle)).padRight(8f).color(Tmp.c1.set(c_type));
+						t.add(new MyLabel(getGenericString(interf), defaultLabel)).padRight(8f).color(Tmp.c1.set(c_type));
 					}
 				}
 
@@ -637,7 +651,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 
 	/** 双击复制文本内容 */
 	private static MyLabel newCopyLabel(Table table, String text) {
-		MyLabel label = new MyLabel(text, MOMO_LabelStyle);
+		MyLabel label = new MyLabel(text, defaultLabel);
 		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
 			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));
 		}) */;
@@ -671,22 +685,41 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 	public static class ReflectTable extends FilterTable<Member> {
 		public final Seq<ValueLabel> labels = new Seq<>();
 
+		final ObjectMap<String, Pair<Table, Seq<Member>>> map = new ObjectMap<>();
+
 		public ReflectTable() {
 			left().defaults().left().top();
 		}
+		boolean skip;
+		Table   skipTable;
+
 		public <T extends Element> Cell<T> add(T element) {
-			var cell = current == null || !isBound() ? super.add(element) : current.add(element);
+			var cell = skip ? skipTable.add(element) : (current == null || !isBound() ? super.add(element) : current.add(element));
 			bindCell(element, cell);
 			return cell;
 		}
 
 		boolean lastEmpty;
 		Table   current;
+		public void bind(Member member) {
+			super.bind(member);
+			skip = false;
+			if (member.getClass().getClassLoader() != Class.class.getClassLoader()) return;
+
+			skip = E_JSFunc.folded_name.enabled() && map.containsKey(member.getName());
+			skipTable = skip ? map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable) : null;
+			if (skip) add(getName(member.getDeclaringClass()))
+			 .fontScale(0.7f).color(Pal.accent).left().padRight(4f);
+
+			map.get(member.getName(), Pair::new)
+			 .getSecond(Seq::new).add(member);
+		}
 		public Table row() {
 			return current == null || !isBound() ? super.row() : current.row();
 		}
 		public void build(Class<?> cls, Type type, Object[] arr) {
 			unbind();
+			if (skip) return;
 			current = table().name(cls.getSimpleName()).get();
 			current.left().defaults().left().top();
 			super.row();
@@ -696,7 +729,7 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 				return;
 			}
 			current.add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
-			 .style(MOMO_LabelStyle)
+			 .style(defaultLabel)
 			 .labelAlign(Align.left).color(cls.isInterface() ? Color.lightGray : Pal.accent).colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
@@ -709,5 +742,8 @@ public class ShowInfoWindow extends Window implements DisposableInterface {
 			labels.each(ValueLabel::clearVal);
 			labels.clear().shrink();
 		}
+	}
+	static Table newPairTable() {
+		return new Table(t -> t.left().defaults().left().top());
 	}
 }

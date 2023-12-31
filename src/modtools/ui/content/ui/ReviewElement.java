@@ -25,14 +25,16 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
-import modtools.ui.components.Window.DisposableInterface;
+import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.*;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.review.CellDetailsWindow;
 import modtools.ui.components.utils.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
 import modtools.ui.effect.MyDraw;
+import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;
@@ -42,15 +44,13 @@ import java.util.regex.*;
 
 import static arc.Core.scene;
 import static modtools.ui.Contents.review_element;
-import static modtools.ui.HopeStyles.MOMO_LabelStyle;
+import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.Sr;
+import static modtools.utils.Tools.*;
+import static modtools.utils.ui.FormatHelper.*;
 
 /** It should be `InspectElement`, but it's too late.  */
 public class ReviewElement extends Content {
-	/** {@link Cell#unset} */
-	public static final float unset = Float.NEGATIVE_INFINITY;
-
 	@DataColorFieldInit(data = "", needSetting = true)
 	public int
 	 // 浅绿色
@@ -228,7 +228,7 @@ public class ReviewElement extends Content {
 		FOCUS_FROM = null;
 	};
 
-	public static class ReviewElementWindow extends Window implements DisposableInterface {
+	public static class ReviewElementWindow extends Window implements IDisposable {
 		Table pane = new LimitTable() {};
 		Element element;
 		Pattern pattern;
@@ -329,7 +329,7 @@ public class ReviewElement extends Content {
 				table.table(t -> {
 					t.left().defaults().left();
 					makePosLabel(t, pos);
-					t.add(new MyLabel(text, MOMO_LabelStyle)).growX().left().color(Pal.accent);
+					t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent);
 				}).growX().left().row();
 				table.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
 				return;
@@ -347,7 +347,7 @@ public class ReviewElement extends Content {
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
 			if (pattern == null) {
-				table.add(text, MOMO_LabelStyle).color(Pal.accent);
+				table.add(text, defaultLabel).color(Pal.accent);
 				return;
 			}
 			Matcher matcher = pattern.matcher(text);
@@ -372,13 +372,13 @@ public class ReviewElement extends Content {
 					});
 				}
 				if (text.length() - lastIndex > 0)
-					t.add(text.substring(lastIndex), MOMO_LabelStyle).color(Pal.accent);
+					t.add(text.substring(lastIndex), defaultLabel).color(Pal.accent);
 			});
 		}
 		public void build(Element element, Table table) {
 			if (element == null) throw new IllegalArgumentException("element is null");
 			if (hideSelf && element instanceof ReviewElementWindow) {
-				table.add("----" + name + "-----", MOMO_LabelStyle).row();
+				table.add("----" + name + "-----", defaultLabel).row();
 				return;
 			}
 			table.left().defaults().left().growX();
@@ -416,16 +416,9 @@ public class ReviewElement extends Content {
 		}
 	}
 
-	public static String getSimpleName(Class<?> clazz) {
-		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
-			clazz = clazz.getSuperclass();
-		}
-		return clazz.getSimpleName();
-	}
-
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
 		if (pos != null) t.label(new PositionProv(pos))
-		 .style(MOMO_LabelStyle).color(Color.lightGray)
+		 .style(defaultLabel).color(Color.lightGray)
 		 .fontScale(0.7f).padLeft(4f).padRight(4f);
 	}
 
@@ -442,7 +435,7 @@ public class ReviewElement extends Content {
 				add(button).size(size).disabled(__ -> children.isEmpty());
 				childIndex = 1;
 				window.addMultiRowWithPos(this,
-				 getElementName(element),
+				 ElementUtils.getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
 				image().growY().left().update(
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
@@ -608,177 +601,7 @@ public class ReviewElement extends Content {
 			});
 		}*/
 	}
-	public static String getElementName(Element element) {
-		return element == scene.root ? "ROOT"
-		 : ReviewElement.getSimpleName(element.getClass())
-			 + (element.name != null ? " ★" + element.name + "★" : "");
-	}
 
-
-	public static class CellDetailsWindow extends Window implements DisposableInterface {
-		Cell<?> cl;
-		public CellDetailsWindow(Cell<?> cell) {
-			super("cell");
-			this.cl = cell;
-
-			cont.table(Tex.pane, t -> {
-				t.defaults().grow();
-				t.add();
-				getAdd(t, cell, "padTop");
-				t.add().row();
-				getAdd(t, cell, "padLeft");
-				ValueLabel label = new PlainValueLabel<>(Element.class, cell::get);
-				label.enableUpdate = false;
-				label.update(() -> label.setVal(cell.get()));
-				Label   placeholder     = new MyLabel("<VALUE>", MOMO_LabelStyle);
-				Cell<?> placeholderCell = t.add(placeholder).pad(6f);
-				placeholder.clicked(() -> placeholderCell.setElement(label));
-				label.clicked(() -> placeholderCell.setElement(placeholder));
-
-				getAdd(t, cell, "padRight").row();
-				t.add();
-				getAdd(t, cell, "padBottom");
-				t.add();
-			}).colspan(2).row();
-			cont.defaults().height(32).growX();
-			cont.defaults().colspan(2);
-			getAddWithName(cont, cell, "minWidth").row();
-			getAddWithName(cont, cell, "minHeight").row();
-			getAddWithName(cont, cell, "maxWidth").row();
-			getAddWithName(cont, cell, "maxHeight").row();
-			getAddWithName(cont, cell, "colspan", Float::intValue).row();
-			cont.defaults().colspan(1);
-			checkboxField(cont, cell, "fillX", float.class);
-			checkboxField(cont, cell, "fillY", float.class);
-			cont.row();
-			checkboxField(cont, cell, "expandX", int.class);
-			checkboxField(cont, cell, "expandY", int.class);
-			cont.row();
-			checkboxField(cont, cell, "uniformX", boolean.class);
-			checkboxField(cont, cell, "uniformY", boolean.class);
-			cont.row();
-			cont.button("growX", Styles.flatBordert, cell::growX);
-			cont.button("growY", Styles.flatBordert, cell::growY);
-			cont.row();
-			cont.button("left", Styles.flatBordert, cell::left);
-			cont.button("right", Styles.flatBordert, cell::right);
-			cont.row();
-			cont.button("top", Styles.flatBordert, cell::top);
-			cont.button("bottom", Styles.flatBordert, cell::bottom);
-			cont.row();
-			checkboxField(cont, cell, "endRow", boolean.class).colspan(2);
-
-			addFocusSource(this, () -> this, cell::get);
-		}
-	}
-	/* private static <T> void field(Table cont, Cell<?> cell, String key, TextFieldValidator validator,
-																Func<String, T> func) {
-		cont.table(t -> {
-			t.add(key);
-			ModifiedLabel.build(() -> String.valueOf(Reflect.get(Cell.class, cell, key)),
-			 validator, (field, label) -> {
-				 if (!field.isValid()) return;
-				 Reflect.set(Cell.class, cell, key, func.get(field.getText()));
-				 label.setText(field.getText());
-			 }, 2, t);
-		});
-	} */
-	private static Cell<CheckBox> checkboxField(Table cont, Cell<?> obj, String key, Class<?> valueType) {
-		return checkboxField(cont, Cell.class, obj, key, valueType);
-	}
-
-	private static <T> Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
-																									Class<?> valueType) {
-		return cont.check(key, 28, getChecked(ctype, obj, key), b -> {
-			 Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
-		 })
-		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
-		 .checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
-	}
-	private static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
-		return Sr(Reflect.get(ctype, obj, key))
-		 .reset(t -> t instanceof Boolean ? (Boolean) t :
-			t instanceof Number n && n.intValue() == 1)
-		 .get();
-	}
-
-
-	public static class ElementDetailsWindow extends Window implements DisposableInterface {
-		Element element;
-
-		public ElementDetailsWindow(Element element) {
-			super("", 20, 160, true);
-			addFocusSource(this, () -> this, () -> element);
-
-
-			show();
-			this.element = element;
-
-			cont.defaults().growX();
-			cont.table(setter -> {
-				setter.defaults().height(42).growX();
-				setter.add(floatSetter("x", () -> fixed(element.x), val -> element.x = val)).row();
-				setter.add(floatSetter("y", () -> fixed(element.y), val -> element.y = val)).row();
-				setter.add(floatSetter("width", () -> fixed(element.getWidth()), element::setWidth)).row();
-				setter.add(floatSetter("height", () -> fixed(element.getHeight()), element::setHeight)).row();
-				setter.add(floatSetter("prefWidth", () -> fixed(element.getPrefWidth()), null)).row();
-				setter.add(floatSetter("preHeight", () -> fixed(element.getPrefHeight()), null)).row();
-				setter.add(floatSetter("rot", () -> fixed(element.getRotation()), element::setRotation)).row();
-			}).growX().row();
-			Table table = cont.table().get();
-			table.defaults().growX();
-			l:
-			if (element.parent instanceof Table) {
-				var cl = ((Table) element.parent).getCell(element);
-				if (cl == null) break l;
-				table.table(Tex.pane, t -> {
-					t.center().defaults().grow().center();
-					t.add();
-					getAdd(t, cl, "padTop");
-					t.add().row();
-					getAdd(t, cl, "padLeft");
-					t.image();
-					getAdd(t, cl, "padRight").row();
-					t.add();
-					getAdd(t, cl, "padBottom");
-					t.add();
-				}).colspan(2).row();
-				table.defaults().height(32).growX();
-				table.button("growX", Styles.flatBordert, cl::growX);
-				table.button("growY", Styles.flatBordert, cl::growY);
-				table.row();
-			}
-
-			checkboxField(table, Element.class, element, "fillParent", boolean.class);
-			checkboxField(table, Element.class, element, "visible", boolean.class).row();
-			if (element instanceof Group) checkboxField(table, Group.class, element, "transform", boolean.class).row();
-
-			cont.row().defaults().height(32).growX();
-			cont.button("invalidate", Styles.flatBordert, element::invalidate).row();
-			cont.button("invalidateHierarchy", Styles.flatBordert, element::invalidateHierarchy).row();
-			cont.button("layout", Styles.flatBordert, element::layout).row();
-			cont.button("pack", Styles.flatBordert, element::pack).row();
-		}
-	}
-	private static Cell<Table> getAdd(Table t, Cell cell, String name) {
-		return t.add(floatSetter(null, () -> "" + Reflect.get(Cell.class, cell, name), f -> {
-			Reflect.set(Cell.class, cell, name, f);
-			if (cell.get() != null) cell.get().invalidateHierarchy();
-		}));
-	}
-
-	private static Cell<Table> getAddWithName(Table t, Cell cell, String name) {
-		return getAddWithName(t, cell, name, f -> f);
-	}
-	private static <T extends Number> Cell<Table> getAddWithName(Table t, Cell cell, String name,
-																															 Func<Float, T> valueOf) {
-		return t.add(floatSetter(name + ": ", () -> fixedAny(Reflect.get(Cell.class, cell, name)), f -> {
-			Reflect.set(Cell.class, cell, name, valueOf.get(f));
-			Core.app.post(() -> {
-				if (cell.get() != null) cell.get().invalidateHierarchy();
-			});
-		}));
-	}
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
 			if (name != null) t.add(name).color(Pal.accent).fontScale(0.7f).labelAlign(Align.topLeft).growY().padRight(8f);
@@ -787,31 +610,12 @@ public class ReviewElement extends Content {
 				t.label(def);
 				return;
 			}
-			ModifiedLabel.build(def, Strings::canParseFloat, (field, label) -> {
+			ModifiedLabel.build(def, NumberHelper::isFloat, (field, label) -> {
 				if (!field.isValid()) return;
 				label.setText(field.getText());
-				floatc.get(Strings.parseFloat(field.getText()));
+				floatc.get(NumberHelper.asFloat(field.getText()));
 			}, t, TextField::new);
 		});
-	}
-
-	static String fixedAny(Object value) {
-		if (value instanceof Float) return fixed((float) value);
-		return value.toString();
-	}
-
-	/**
-	 * 如果不是{@link #unset}就fixed
-	 * @return <b color="gray">UNSET</b> if value equals {@link #unset}
-	 */
-	static String fixedUnlessUnset(float value) {
-		if (value == unset) return "[gray]UNSET[]";
-		return fixed(value);
-	}
-	static String fixed(float value) {
-		if (Float.isNaN(value)) return "NAN";
-		if (Float.isInfinite(value)) return value > 0 ? "+∞" : "-∞";
-		return Strings.autoFixed(value, 1);
 	}
 
 	@OptimizeReflect
@@ -975,7 +779,7 @@ public class ReviewElement extends Content {
 			Gl.flush();
 
 			if (!hoverInfoWindow) return;
-			table.nameLabel.setText(getElementName(elem));
+			table.nameLabel.setText(ElementUtils.getElementName(elem));
 			table.sizeLabel.setText(fixed(elem.getWidth()) + " × " + fixed(elem.getHeight()));
 			table.touchableLabel.setText(toString(elem.touchable));
 			table.color(elem.color);

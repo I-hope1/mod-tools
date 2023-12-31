@@ -6,7 +6,6 @@ import arc.input.KeyCode;
 import arc.scene.event.*;
 import arc.scene.ui.TextField;
 import arc.scene.ui.TextField.TextFieldValidator;
-import arc.scene.ui.layout.Cell;
 import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.components.Window;
 

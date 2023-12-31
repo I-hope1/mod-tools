@@ -20,7 +20,6 @@ import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
 import arc.scene.ui.layout.Stack;
 import arc.scene.utils.Disableable;
-import arc.struct.ObjectMap;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.core.UI;

@@ -20,6 +20,7 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
+import modtools.ui.IntUI;
 import modtools.ui.IntUI.InsideTable;
 import modtools.ui.components.input.highlight.*;
 

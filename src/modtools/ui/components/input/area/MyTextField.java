@@ -41,9 +41,6 @@ import static arc.Core.*;
  * @author i hope
  */
 public class MyTextField extends TextField implements Disableable {
-	static protected final char BACKSPACE = 8;
-	static protected final char TAB       = '\t';
-	static protected final char DELETE    = 127;
 
 	public StringBuffer text;
 

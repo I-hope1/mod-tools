@@ -19,10 +19,12 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
+import modtools.ui.components.review.*;
 import modtools.ui.content.ui.*;
-import modtools.ui.content.ui.ReviewElement.*;
+import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
+import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.*;
 import java.util.*;
@@ -47,7 +49,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		if (type == null) throw new NullPointerException("'type' is null.");
 		this.type = type;
 		wrap = true;
-		setStyle(HopeStyles.MOMO_LabelStyle);
+		setStyle(HopeStyles.defaultLabel);
 		setAlignment(Align.left, Align.left);
 
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
@@ -57,7 +59,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			 () -> val instanceof Element ? (Element) val : null);
 		} else if (Cell.class.isAssignableFrom(type)) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
-			 () -> val == null ? null : ((Cell<?>) val).get());
+			 () -> val instanceof Cell<?> cell ?  cell.get() : null);
 		}
 
 		IntUI.addShowMenuListenerp(this, this::getMenuLists);
@@ -79,7 +81,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 	public abstract Seq<MenuList> getMenuLists();
 	public static MenuList newElementDetailsList(Element element) {
-		return DisabledList.withd(Icon.crafting, "El Details", () -> element == null,
+		return DisabledList.withd(Icon.crafting, "Elem Details", () -> element == null,
 		 () -> {
 			 new ElementDetailsWindow(element);
 		 });
@@ -231,9 +233,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? "'" + val + "'"
-				: val instanceof Float ? Strings.autoFixed((float) val, 2)
+				: val instanceof Float ? FormatHelper.fixed((float) val, 2)
+				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
 
-				: val instanceof Element ? ReviewElement.getElementName((Element) val)
+				: val instanceof Element ? ElementUtils.getElementName((Element) val)
 
 				: val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
 				ShowUIList.iconKeyMap.get(icon)
@@ -355,7 +358,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			enableTruncate = !enableTruncate;
 		}));
 
-		if (enabledUpdate()) {
+		if (enabledUpdateMenu()) {
 			CheckboxList checkboxList = CheckboxList.withc(Icon.refresh1Small, "auto refresh", enableUpdate, () -> {
 				enableUpdate = !enableUpdate;
 			});
@@ -390,19 +393,19 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			 elementSetter(list, this::setVal);
 		 }, Element.class)
 		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.infoSmall, "at player", () -> {
+			 list.add(MenuList.with(Icon.infoSmall, "At player", () -> {
 				 ((Effect) val).at(Vars.player);
 			 }));
 		 }, Effect.class)
 		 .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.infoCircleSmall, "cell details", b -> {
+			 list.add(MenuList.with(Icon.infoCircleSmall, "Cell details", b -> {
 				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
 			 }));
 		 }, Cell.class)
 		 .isExtend(__ -> {
 			 list.add(DisabledList.withd(HopeIcons.position,
-				(val == null ? "" : selection.focusInternal.contains(val) ? "hide" : "show")
-				+ " on world", () -> val == null, () -> {
+				(val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on")
+				+ " world", () -> val == null, () -> {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
 		 }, Building.class, Unit.class, Bullet.class);
@@ -415,7 +418,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 
 	public abstract Object getObject();
-	public boolean enabledUpdate() {
+	public boolean enabledUpdateMenu() {
 		return true;
 	}
 
@@ -426,7 +429,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public void draw() {
 		if (shown) super.draw();
 	}
+
+	boolean cleared;
 	public void clear() {
+		cleared = true;
 		super.clear();
 		clearVal();
 	}

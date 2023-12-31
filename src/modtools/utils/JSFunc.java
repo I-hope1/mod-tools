@@ -3,7 +3,6 @@ package modtools.utils;
 import arc.*;
 import arc.files.Fi;
 import arc.func.*;
-import arc.fx.util.FxWidgetGroup;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
@@ -34,6 +33,7 @@ import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.*;
 import modtools.ui.effect.HopeFx;
+import modtools.ui.IntUI;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.Comparator;
 import modtools.utils.draw.InterpImage;
@@ -52,13 +52,13 @@ import static modtools.utils.ElementUtils.*;
 public class JSFunc {
 	public static       ClassLoader main;
 	public static       Scriptable  scope;
-	public static final Font        FONT    = MyFonts.def;
+	public static final Font        FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;
 	}
 	/* for js */
-	public static final Class<?> vars = IntVars.class;
-	public static final Class<?>    reflect = MyReflect.class;
+	public static final Class<?> vars    = IntVars.class;
+	public static final Class<?> reflect = MyReflect.class;
 
 	public static final Fi data = MySettings.dataDirectory;
 
@@ -133,7 +133,7 @@ public class JSFunc {
 			if (i % 100 == 0) c1 = cont.row().table().grow().colspan(2).get();
 			var button = new LimitTextButton("", HopeStyles.cleart);
 			button.clearChildren();
-			button.add(i + "[lightgray]:", HopeStyles.MOMO_LabelStyle).padRight(8f);
+			button.add(i + "[lightgray]:", HopeStyles.defaultLabel).padRight(8f);
 			int j = i;
 			button.add(new PlainValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
 			button.clicked(() -> {
@@ -149,7 +149,7 @@ public class JSFunc {
 	}
 
 	public static Window window(final Cons<Window> cons) {
-		class JSWindow extends HiddenTopWindow implements DisposableInterface {
+		class JSWindow extends HiddenTopWindow implements IDisposable {
 			{
 				title.setFontScale(0.7f);
 				for (Cell<?> child : titleTable.getCells()) {

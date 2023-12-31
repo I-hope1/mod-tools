@@ -136,7 +136,7 @@ public class ModTools extends Mod {
 			});
 		}
 		MyShaders.load();
-		Time.runTask(8f, () -> {
+		Time.runTask(6f, () -> {
 			IntUI.load();
 			AllTutorial.init();
 			// Circle.draw();

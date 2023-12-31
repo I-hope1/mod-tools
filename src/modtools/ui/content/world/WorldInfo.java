@@ -8,19 +8,16 @@ import mindustry.gen.Building;
 import mindustry.graphics.Pal;
 import mindustry.world.Tile;
 import modtools.ui.IntUI;
-import modtools.utils.SR.SatisfyException;
-import modtools.utils.Tools;
+import modtools.utils.*;
 
 public class WorldInfo {
 	public static void showInfo(Element element, Object o) {
-		IntUI.showSelectTable(element, (p, hide, cont) -> {
-			try {
-				Tools.Sr(o)
-				 .isInstance(Tile.class, x -> build(p, x))
-				 .isInstance(Building.class, x -> build(p, x))
-				 .isInstance(Object.class, x -> p.add("TODO"));
-			} catch (SatisfyException ignored) {}
-		}, false, Align.center);
+		IntUI.showSelectTable(element, (p, hide, cont) -> SR.apply(() ->
+			Tools.Sr(o)
+			 .isInstance(Tile.class, x -> build(p, x))
+			 .isInstance(Building.class, x -> build(p, x))
+			 .isInstance(Object.class, x -> p.add("TODO")))
+		, false, Align.center);
 	}
 	public static void build(Table p, Tile tile) {
 		p.left().defaults().left();

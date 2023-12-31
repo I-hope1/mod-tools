@@ -29,6 +29,7 @@ import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.content.ui.PositionProv;
 import modtools.ui.effect.MyDraw;
+import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.world.WorldDraw;

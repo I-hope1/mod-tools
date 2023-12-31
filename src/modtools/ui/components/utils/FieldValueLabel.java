@@ -3,10 +3,10 @@ package modtools.ui.components.utils;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
-import modtools.events.*;
+import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
-import modtools.ui.IntUI.MenuList;
 import modtools.ui.components.input.JSRequest;
+import modtools.ui.menus.MenuList;
 import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.*;
@@ -22,7 +22,7 @@ public class FieldValueLabel extends ValueLabel {
 	public FieldValueLabel(Object newVal, Class<?> type, Field field, Object obj) {
 		super(type);
 		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
-			throw new IllegalArgumentException("type(" + type + ") mismatches value(" + newVal + ").");
+			throw new IllegalArgumentException("Type(" + type + ") mismatches value(" + newVal + ").");
 		// markupEnabled = true;
 		if (field != null) isStatic = Modifier.isStatic(field.getModifiers());
 		this.obj = obj;
@@ -31,11 +31,15 @@ public class FieldValueLabel extends ValueLabel {
 		if (newVal != unset) setVal(newVal);
 
 		if (field != null) {
-			update(() -> {
+			Runnable r = () -> {
 				if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
 					setVal();
 				}
-			});
+			};
+			update(r);
+			/* update(() -> {
+				if (!E_JSFunc.update_async.enabled()) r.run();
+			}); */
 		}
 	}
 
@@ -49,11 +53,14 @@ public class FieldValueLabel extends ValueLabel {
 	}
 	Long offset;
 	public long getOffset() {
-		if (field == null) throw new RuntimeException("field is null");
+		if (field == null) throw new RuntimeException("Field is null.");
 		if (offset == null) offset = FieldUtils.fieldOffset(field);
 		return offset;
 	}
 
+	public float getMinWidth() {
+		return 96;
+	}
 	public Seq<MenuList> getMenuLists() {
 		Seq<MenuList> list = new Seq<>();
 		basicMenuLists(list);

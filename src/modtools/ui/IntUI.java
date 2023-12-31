@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
-import arc.math.*;
+import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
@@ -17,7 +17,6 @@ import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
-import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
@@ -26,6 +25,7 @@ import mindustry.ui.*;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
+import modtools.ui.menus.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
 import modtools.utils.JSFunc.MyProv;
@@ -44,20 +44,44 @@ import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 import static modtools.utils.Tools.*;
 
+/**
+ * The type Int ui.
+ */
 public class IntUI {
+	/**
+	 * The constant whiteui.
+	 */
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
+	/**
+	 * The constant DEFAULT_WIDTH.
+	 */
 	public static final float DEFAULT_WIDTH = 150;
+	/**
+	 * The constant MAX_OFF.
+	 */
 	public static final float MAX_OFF       = 35f;
 
-	public static final Frag     frag = new Frag();
-	public static final TopGroup topGroup;
+	/**
+	 * The constant frag.
+	 */
+	public static final Frag        frag   = new Frag();
+	/**
+	 * The constant topGroup.
+	 */
+	public static final TopGroup    topGroup;
+	/**
+	 * The constant picker.
+	 */
 	public static       ColorPicker picker = new ColorPicker();
 
 	static {
 		topGroup = new TopGroup();
 	}
 
+	/**
+	 * Load.
+	 */
 	public static void load() {
 		if (frag.getChildren().isEmpty()) {
 			frag.load();
@@ -67,16 +91,24 @@ public class IntUI {
 	}
 
 	/** 默认的动效时间（单位秒） */
-	public static final float DEF_DURATION = 0.2f;
+	public static final float DEF_DURATION  = 0.2f;
+	/**
+	 * The constant DEF_LONGPRESS.
+	 */
 	public static final long  DEF_LONGPRESS = 600L;
 
+	/**
+	 * The Last.
+	 */
 	static final Vec2 last = new Vec2();
 	/**
 	 * <p>创建一个双击事件</p>
 	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
-	 * @param elem    被添加侦听器的元素
-	 * @param click   单击事件
+	 * @param <T>  the type parameter
+	 * @param elem 被添加侦听器的元素
+	 * @param click 单击事件
 	 * @param d_click 双击事件
+	 * @return the t
 	 */
 	public static <T extends Element> T
 	doubleClick(T elem, Runnable click, Runnable d_click) {
@@ -114,9 +146,11 @@ public class IntUI {
 
 	/**
 	 * 长按事件
-	 * @param elem     被添加侦听器的元素
+	 * @param <T>  the type parameter
+	 * @param elem 被添加侦听器的元素
 	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param boolc    {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+	 * @param boolc {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+	 * @return the t
 	 */
 	public static <T extends Element> T
 	longPress(T elem, final long duration, final Boolc boolc) {
@@ -155,15 +189,25 @@ public class IntUI {
 		elem.addListener(new LongPressListener());
 		return elem;
 	}
+	/**
+	 * Long press t.
+	 *
+	 * @param <T>  the type parameter
+	 * @param elem the elem
+	 * @param boolc the boolc
+	 * @return the t
+	 */
 	public static <T extends Element> T
 	longPress(T elem, final Boolc boolc) {
 		return longPress(elem, DEF_LONGPRESS, boolc);
 	}
 	/**
 	 * 长按事件
-	 * @param elem     被添加侦听器的元素
+	 * @param <T>  the type parameter
+	 * @param elem 被添加侦听器的元素
 	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param run    长按时调用
+	 * @param run 长按时调用
+	 * @return the t
 	 */
 	public static <T extends Element> T
 	longPress0(T elem, final long duration, final Runnable run) {
@@ -171,6 +215,14 @@ public class IntUI {
 			if (b) run.run();
 		});
 	}
+	/**
+	 * Long press 0 t.
+	 *
+	 * @param <T>  the type parameter
+	 * @param elem the elem
+	 * @param run the run
+	 * @return the t
+	 */
 	public static <T extends Element> T
 	longPress0(T elem, final Runnable run) {
 		return longPress0(elem, DEF_LONGPRESS, run);
@@ -178,8 +230,10 @@ public class IntUI {
 
 	/**
 	 * 添加右键事件
+	 * @param <T>  the type parameter
 	 * @param elem 被添加侦听器的元素
-	 * @param run  右键执行的代码
+	 * @param run 右键执行的代码
+	 * @return the t
 	 */
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
@@ -198,6 +252,10 @@ public class IntUI {
 	/**
 	 * <p>long press for {@link Vars#mobile moblie}</p>
 	 * <p>r-click for desktop</p>
+	 * @param <T>  the type parameter
+	 * @param element the element
+	 * @param run the run
+	 * @return the t
 	 */
 	@SuppressWarnings("UnusedReturnValue")
 	public static <T extends Element> T
@@ -206,34 +264,76 @@ public class IntUI {
 		 : rightClick(element, () -> run.accept(element));
 	}
 
+	/**
+	 * Add show menu listenerp.
+	 *
+	 * @param elem the elem
+	 * @param prov the prov
+	 */
 	public static void
 	addShowMenuListenerp(Element elem, Prov<Seq<MenuList>> prov) {
 		longPressOrRclick(elem, __ -> showMenuListDispose(prov));
 	}
+	/**
+	 * Show menu list dispose.
+	 *
+	 * @param prov the prov
+	 */
 	public static void showMenuListDispose(Prov<Seq<MenuList>> prov) {
 		Seq<MenuList> list = prov.get();
 		showMenuList(list, () -> Pools.freeAll(list, false));
 	}
 
+	/**
+	 * Add show menu listener.
+	 *
+	 * @param elem the elem
+	 * @param list the list
+	 */
 	public static void
 	addShowMenuListener(Element elem, MenuList... list) {
 		longPressOrRclick(elem, __ -> {
 			showMenuList(Seq.with(list));
 		});
 	}
+	/**
+	 * Add show menu listener.
+	 *
+	 * @param elem the elem
+	 * @param list the list
+	 */
 	public static void
 	addShowMenuListener(Element elem, Iterable<MenuList> list) {
 		longPressOrRclick(elem, __ -> {
 			showMenuList(list);
 		});
 	}
+	/**
+	 * Show menu list.
+	 *
+	 * @param list the list
+	 */
 	public static void showMenuList(Iterable<MenuList> list) {
 		showMenuList(list, null);
 	}
+	/**
+	 * Show menu list.
+	 *
+	 * @param list the list
+	 * @param hideMenu the hide menu
+	 */
 	public static void showMenuList(Iterable<MenuList> list, Runnable hideMenu) {
 		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
 			showMeniList(list, hideMenu, p, hide);
 		}, false);
+	}
+	public static SelectTable showMenuListFor(
+	 Element elem,
+	 int align, Prov<Seq<MenuList>> prov) {
+		return showSelectTable(elem, (p, hide, ___) -> {
+			Seq<MenuList> list = prov.get();
+			showMeniList(list, () -> Pools.freeAll(list, false), p, hide);
+		}, false, align);
 	}
 	/** TODO: 多个FoldedList有问题 */
 	private static Cell<Table> showMeniList(Iterable<MenuList> list, Runnable hideMenu, Table p, Runnable hide) {
@@ -274,11 +374,25 @@ public class IntUI {
 			}
 		}).growY();
 	}
+	/**
+	 * Copy as js menu menu list.
+	 *
+	 * @param key the key
+	 * @param prov the prov
+	 * @return the menu list
+	 */
 	public static MenuList copyAsJSMenu(String key, Prov<Object> prov) {
 		return MenuList.with(Icon.copySmall,
 		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
 		 storeRun(prov));
 	}
+	/**
+	 * Copy as js menu menu list.
+	 *
+	 * @param key the key
+	 * @param run the run
+	 * @return the menu list
+	 */
 	public static MenuList copyAsJSMenu(String key, Runnable run) {
 		return MenuList.with(Icon.copySmall,
 		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
@@ -286,10 +400,24 @@ public class IntUI {
 	}
 
 
+	/**
+	 * Add label button.
+	 *
+	 * @param table the table
+	 * @param prov the prov
+	 * @param clazz the clazz
+	 */
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
 		addDetailsButton(table, prov, clazz);
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
+	/**
+	 * Add details button.
+	 *
+	 * @param table the table
+	 * @param prov the prov
+	 * @param clazz the clazz
+	 */
 	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
 		/* table.button("@details", HopeStyles.flatBordert, () -> {
 			Object o = prov.get();
@@ -301,6 +429,13 @@ public class IntUI {
 		}).size(32, 32);
 	}
 
+	/**
+	 * Add store button.
+	 *
+	 * @param table the table
+	 * @param key the key
+	 * @param prov the prov
+	 */
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
 			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
@@ -310,11 +445,25 @@ public class IntUI {
 			 });
 		 });
 	}
+	/**
+	 * Build store key string.
+	 *
+	 * @param key the key
+	 * @return the string
+	 */
 	public static String buildStoreKey(String key) {
 		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
 		 : Core.bundle.format("jsfunc.store_as_js_var", key);
 	}
 
+	/**
+	 * Add watch button cell.
+	 *
+	 * @param buttons the buttons
+	 * @param info the info
+	 * @param value the value
+	 * @return the cell
+	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
 			Sr((!WatchWindow.isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
@@ -324,18 +473,22 @@ public class IntUI {
 	}
 
 
+	/**
+	 * Store run runnable.
+	 *
+	 * @param prov the prov
+	 * @return the runnable
+	 */
 	public static Runnable storeRun(Prov<Object> prov) {
 		return () -> tester.put(Core.input.mouse(), prov.get());
 	}
 
 	/**
 	 * 在鼠标右下弹出一个小窗，自己设置内容
-	 * @param vec2       用于定位弹窗的位置
-	 * @param f          (p, hide, text)
-	 *                   p 是Table，你可以添加元素
-	 *                   hide 是一个函数，调用就会关闭弹窗
-	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param vec2 用于定位弹窗的位置
+	 * @param f (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
+	 * @return the table
 	 */
 	public static Table
 	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
@@ -385,13 +538,12 @@ public class IntUI {
 
 	/**
 	 * 弹出一个小窗，自己设置内容
-	 * @param button     用于定位弹窗的位置
-	 * @param f          (p, hide, text)
-	 *                   p 是Table，你可以添加元素
-	 *                   hide 是一个函数，调用就会关闭弹窗
-	 *                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param <T>  the type parameter
+	 * @param button 用于定位弹窗的位置
+	 * @param f (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
-	 * @param align
+	 * @param align the align
+	 * @return the select table
 	 */
 	public static <T extends Element> SelectTable
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
@@ -450,12 +602,40 @@ public class IntUI {
 		return t;
 	}
 
+	/**
+	 * Show select list table table.
+	 *
+	 * @param <T>  the type parameter
+	 * @param button the button
+	 * @param list the list
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param width the width
+	 * @param height the height
+	 * @param searchable the searchable
+	 * @return the table
+	 */
 	public static <T extends Element> Table
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
 											boolean searchable) {
 		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, Align.center);
 	}
+	/**
+	 * Show select list enum table table.
+	 *
+	 * @param <T>  the type parameter
+	 * @param <E>  the type parameter
+	 * @param button the button
+	 * @param list the list
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param width the width
+	 * @param height the height
+	 * @param searchable the searchable
+	 * @param align the align
+	 * @return the table
+	 */
 	public static <T extends Element, E extends Enum<E>> Table
 	showSelectListEnumTable(T button, Seq<E> list, Prov<E> holder,
 													Cons<E> cons, float width, float height,
@@ -463,6 +643,22 @@ public class IntUI {
 		return showSelectListTable(button, list, holder, cons,
 		 Enum::name, width, height, searchable, align);
 	}
+	/**
+	 * Show select list table table.
+	 *
+	 * @param <BTN>  the type parameter
+	 * @param <V>  the type parameter
+	 * @param button the button
+	 * @param list the list
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param stringify the stringify
+	 * @param minWidth the min width
+	 * @param height the height
+	 * @param searchable the searchable
+	 * @param align the align
+	 * @return the table
+	 */
 	public static <BTN extends Element, V> Table
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
@@ -489,13 +685,18 @@ public class IntUI {
 	/**
 	 * 弹出一个可以选择内容的窗口（类似物品液体源的选择）
 	 * （需要提供图标）
-	 * @param items     用于展示可选的内容
-	 * @param icons     可选内容的图标
-	 * @param holder    选中的内容，null就没有选中任何
-	 * @param size      每个内容的元素大小
+	 * @param <T>  the type parameter
+	 * @param <T1>  the type parameter
+	 * @param button the button
+	 * @param items 用于展示可选的内容
+	 * @param icons 可选内容的图标
+	 * @param holder 选中的内容，null就没有选中任何
+	 * @param cons 选中内容就会调用
+	 * @param size 每个内容的元素大小
 	 * @param imageSize 每个内容的图标大小
-	 * @param cons      选中内容就会调用
-	 * @param cols      一行的元素数量
+	 * @param cols 一行的元素数量
+	 * @param searchable the searchable
+	 * @return the table
 	 */
 	public static <T extends Button, T1> Table
 	showSelectImageTableWithIcons(T button, Seq<T1> items,
@@ -505,6 +706,21 @@ public class IntUI {
 																boolean searchable) {
 		return showSelectTable(button, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable, Align.center);
 	}
+	/**
+	 * Show select image table with icons table.
+	 *
+	 * @param <T1>  the type parameter
+	 * @param vec2 the vec 2
+	 * @param items the items
+	 * @param icons the icons
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param size the size
+	 * @param imageSize the image size
+	 * @param cols the cols
+	 * @param searchable the searchable
+	 * @return the table
+	 */
 	public static <T1> Table
 	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,
 																Seq<? extends Drawable> icons,
@@ -542,6 +758,14 @@ public class IntUI {
 		};
 	}
 
+	/**
+	 * Show select table select table.
+	 *
+	 * @param vec2 the vec 2
+	 * @param f the f
+	 * @param searchable the searchable
+	 * @return the select table
+	 */
 	public static SelectTable
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
@@ -589,6 +813,16 @@ public class IntUI {
 
 	/**
 	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>）
+	 * @param <T1>  the type parameter
+	 * @param vec2 the vec 2
+	 * @param items the items
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param size the size
+	 * @param imageSize the image size
+	 * @param cols the cols
+	 * @param searchable the searchable
+	 * @return the table
 	 */
 	public static <T1 extends UnlockableContent> Table
 	showSelectImageTable(Vec2 vec2, Seq<T1> items,
@@ -601,6 +835,17 @@ public class IntUI {
 	}
 	/**
 	 * 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}）
+	 * @param <T1>  the type parameter
+	 * @param vec2 the vec 2
+	 * @param items the items
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param size the size
+	 * @param imageSize the image size
+	 * @param cols the cols
+	 * @param func the func
+	 * @param searchable the searchable
+	 * @return the table
 	 */
 	public static <T1> Table
 	showSelectImageTableWithFunc(Vec2 vec2, Seq<T1> items, Prov<T1> holder,
@@ -616,6 +861,18 @@ public class IntUI {
 	/**
 	 * {@literal }
 	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
+	 * @param <T>  the type parameter
+	 * @param <T1>  the type parameter
+	 * @param button the button
+	 * @param items the items
+	 * @param holder the holder
+	 * @param cons the cons
+	 * @param size the size
+	 * @param imageSize the image size
+	 * @param cols the cols
+	 * @param func the func
+	 * @param searchable the searchable
+	 * @return the table
 	 */
 	public static <T extends Button, T1> Table
 	showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder,
@@ -631,24 +888,57 @@ public class IntUI {
 
 	/**
 	 * Window弹窗错误
+	 * @param t the t
+	 * @return the window
 	 */
 	public static Window showException(Throwable t) {
 		return showException("", t);
 	}
 
+	/**
+	 * The Last exception.
+	 */
 	static ExceptionPopup lastException;
+	/**
+	 * Show exception window.
+	 *
+	 * @param text the text
+	 * @param exc the exc
+	 * @return the window
+	 */
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
 		return (lastException != null && lastException.isShown() ? lastException : new ExceptionPopup(exc, text)).setPosition(Core.input.mouse());
 	}
 
+	/**
+	 * Show info fade window.
+	 *
+	 * @param info the info
+	 * @return the window
+	 */
 	public static Window showInfoFade(String info) {
 		return showInfoFade(info, Core.input.mouse());
 	}
 
+	/**
+	 * Show info fade window.
+	 *
+	 * @param info the info
+	 * @param pos the pos
+	 * @return the window
+	 */
 	public static Window showInfoFade(String info, Vec2 pos) {
 		return showInfoFade(info, pos, Align.center);
 	}
+	/**
+	 * Show info fade window.
+	 *
+	 * @param info the info
+	 * @param pos the pos
+	 * @param align the align
+	 * @return the window
+	 */
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
 		return new InfoFadePopup("Info", 80, 64) {{
 			cont.add(info);
@@ -658,14 +948,38 @@ public class IntUI {
 		}}.show();
 	}
 
+	/**
+	 * Show confirm confirm window.
+	 *
+	 * @param text the text
+	 * @param confirmed the confirmed
+	 * @return the confirm window
+	 */
 	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {
 		return showConfirm("@confirm", text, null, confirmed);
 	}
 
+	/**
+	 * Show confirm confirm window.
+	 *
+	 * @param title the title
+	 * @param text the text
+	 * @param confirmed the confirmed
+	 * @return the confirm window
+	 */
 	public static ConfirmWindow showConfirm(String title, String text, Runnable confirmed) {
 		return showConfirm(title, text, null, confirmed);
 	}
 
+	/**
+	 * Show confirm confirm window.
+	 *
+	 * @param title the title
+	 * @param text the text
+	 * @param hide the hide
+	 * @param confirmed the confirmed
+	 * @return the confirm window
+	 */
 	public static ConfirmWindow showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
@@ -692,6 +1006,13 @@ public class IntUI {
 		window.setPosition(Core.input.mouse());
 		return window;
 	}
+	/**
+	 * Color block.
+	 *
+	 * @param cell the cell
+	 * @param color the color
+	 * @param needDouble the need double
+	 */
 	public static void colorBlock(Cell<?> cell, Color color, boolean needDouble) {
 		colorBlock(cell, color, null, needDouble);
 	}
@@ -703,20 +1024,23 @@ public class IntUI {
 	 * color,
 	 * callback,
 	 * needDclick: boolean = true
-	 * )}
-	 * @see #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick)
+	 * )}*
+	 * @param cell the cell
+	 * @param color the color
+	 * @param callback the callback
+	 * @see #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick) #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick)
 	 */
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback) {
 		colorBlock(cell, color, callback, true);
 	}
+
 	/**
 	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
-	 * @param cell       被修改成颜色块的cell
-	 * @param color      初始化颜色
-	 * @param callback   回调函数，形参为修改后的{@link Color color}
+	 * @param cell 被修改成颜色块的cell
+	 * @param color 初始化颜色
+	 * @param callback 回调函数，形参为修改后的{@link Color color}
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
-
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);
@@ -730,8 +1054,16 @@ public class IntUI {
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
 
+	/**
+	 * The type Color container.
+	 */
 	public static class ColorContainer extends BorderImage {
 		private Color colorValue;
+		/**
+		 * Instantiates a new Color container.
+		 *
+		 * @param color the color
+		 */
 		public ColorContainer(Color color) {
 			super(Core.atlas.white(), 2f);
 
@@ -750,12 +1082,25 @@ public class IntUI {
 			Draw.alpha(alpha);
 			super.draw();
 		}
+		/**
+		 * Sets color value.
+		 *
+		 * @param color the color
+		 */
 		public void setColorValue(Color color) {
 			colorValue = color;
 		}
 	}
 
 
+	/**
+	 * Add check.
+	 *
+	 * @param cell the cell
+	 * @param boolp the boolp
+	 * @param valid the valid
+	 * @param unvalid the unvalid
+	 */
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 															String valid, String unvalid) {
 		cell.get().addListener(new IntUI.Tooltip(
@@ -764,133 +1109,47 @@ public class IntUI {
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
+	/**
+	 * Tips string.
+	 *
+	 * @param key the key
+	 * @return the string
+	 */
 	public static String tips(String key) {
 		return Core.bundle.format("mod-tools.tips", Core.bundle.get("mod-tools.tips." + key));
 	}
 
 
+	/**
+	 * The constant DEF_MASK_COLOR.
+	 */
 	public static final
 	Color DEF_MASK_COLOR = Color.black.cpy().a(0.5f),
-	 DEF_FOCUS_COLOR     = Color.blue.cpy().a(0.4f);
+	/**
+	 * The Def focus color.
+	 */
+	DEF_FOCUS_COLOR = Color.blue.cpy().a(0.4f);
 
 	/**
 	 * 聚焦一个元素
 	 * @param element 要聚焦的元素
-	 * @param boolp   {@link Boolp#get()}的返回值如果为{@code false}则移除聚焦
+	 * @param boolp {@link Boolp#get()}的返回值如果为{@code false}则移除聚焦
 	 */
 	public static void focusOnElement(Element element, Boolp boolp) {
 		topGroup.focusOnElement(new MyFocusTask(element, boolp));
 	}
 
 
-	/* -----List------- */
-	public static class MenuList {
-		public static int          max = 20;
-		public        Drawable     icon;
-		public        String       name;
-		public        Prov<String> provider;
-		public        Cons<Button> cons;
-		public static MenuList with(Drawable icon, String name, Runnable run) {
-			MenuList list = Pools.get(MenuList.class, MenuList::new, max).obtain();
-			list.icon = icon;
-			list.name = name;
-			list.provider = null;
-			list.cons = __ -> run.run();
-			return list;
-		}
-		public static MenuList with(Drawable icon, String name, Cons<Button> cons) {
-			MenuList list = Pools.get(MenuList.class, MenuList::new, max).obtain();
-			list.icon = icon;
-			list.name = name;
-			list.provider = null;
-			list.cons = cons;
-			return list;
-		}
-		public static MenuList with(Drawable icon, Prov<String> provider, Runnable run) {
-			MenuList list = Pools.get(MenuList.class, MenuList::new, max).obtain();
-			list.icon = icon;
-			list.name = null;
-			list.provider = provider;
-			list.cons = __ -> run.run();
-			return list;
-		}
-		public static MenuList with(Drawable icon, String name, Prov prov) {
-			return with(icon, name, () -> {
-				tester.put(prov.get());
-			});
-		}
-
-		private MenuList() {}
-
-		public String getName() {
-			return provider != null ? provider.get() : name;
-		}
-	}
-	public static class ConfirmList extends MenuList {
-		public static MenuList with(Drawable icon, String name, String text, Runnable run) {
-			MenuList list = MenuList.with(icon, name, run);
-			list.cons = __ -> IntUI.showConfirm(text, run);
-			return list;
-		}
-	}
-	public static class CheckboxList extends MenuList {
-		public boolean checked;
-		public static CheckboxList withc(Drawable icon, String name, boolean checked, Runnable run) {
-			CheckboxList list = Pools.get(CheckboxList.class, CheckboxList::new, max).obtain();
-			list.icon = icon;
-			list.name = name;
-			list.checked = checked;
-			// Log.info("0) check: @, list.checked: @", checked, list.checked);
-			list.cons = __ -> run.run();
-			return list;
-		}
-	}
-	public static class DisabledList extends MenuList {
-		public Boolp disabled;
-		public static DisabledList withd(Drawable icon, String name, Boolp disabled, Runnable run) {
-			DisabledList list = Pools.get(DisabledList.class, DisabledList::new, max).obtain();
-			list.icon = icon;
-			list.name = name;
-			list.disabled = disabled;
-			// Log.info("0) check: @, list.checked: @", checked, list.checked);
-			list.cons = __ -> run.run();
-			return list;
-		}
-	}
-	public static class FoldedList extends MenuList implements Poolable {
-		Prov<Seq<MenuList>> childrenGetter;
-		Seq<MenuList>       children;
-		public static FoldedList withf(Drawable icon, String name, Prov<Seq<MenuList>> children) {
-			FoldedList list = Pools.get(FoldedList.class, FoldedList::new, max).obtain();
-			list.icon = icon;
-			list.name = name;
-			list.children = null;
-			list.childrenGetter = children;
-			// Log.info("0) check: @, list.checked: @", checked, list.checked);
-			list.cons = null;
-			return list;
-		}
-		public Seq<MenuList> getChildren() {
-			if (children == null) children = childrenGetter.get();
-			return children;
-		}
-		public void reset() {
-			if (children != null) Pools.freeAll(children, false);
-		}
-	}
-	public static class InfoList extends MenuList {
-		public static InfoList withi(Drawable icon, Prov<String> name) {
-			InfoList list = Pools.get(InfoList.class, InfoList::new, max).obtain();
-			list.icon = icon;
-			list.provider = name;
-			list.cons = null;
-			return list;
-		}
-	}
-
-
+	/**
+	 * The type Tooltip.
+	 */
 	public static class Tooltip extends arc.scene.ui.Tooltip {
 
+		/**
+		 * Instantiates a new Tooltip.
+		 *
+		 * @param contents the contents
+		 */
 		public Tooltip(Cons<Table> contents) {
 			super(t -> {});
 			allowMobile = true;
@@ -902,9 +1161,21 @@ public class IntUI {
 				topGroup.addChild(table);
 			};
 		}
+		/**
+		 * Instantiates a new Tooltip.
+		 *
+		 * @param contents the contents
+		 * @param show the show
+		 */
 		public Tooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
 		}
+		/**
+		 * Instantiates a new Tooltip.
+		 *
+		 * @param contents the contents
+		 * @param manager the manager
+		 */
 		public Tooltip(Cons<Table> contents, Tooltips manager) {
 			super(contents, manager);
 		}
@@ -920,16 +1191,44 @@ public class IntUI {
 		}
 	}
 
+	/**
+	 * The interface Popup window.
+	 */
 	// ======-----弹窗------======
-	public interface PopupWindow extends DisposableInterface {}
+	public interface PopupWindow extends INotice {}
+	/**
+	 * The interface Menu.
+	 */
+	public interface IMenu extends IDisposable {
+	}
+	/**
+	 * The interface Notice.
+	 */
+	public interface INotice extends IDisposable {}
 
+	/**
+	 * The type Info fade popup.
+	 */
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
+		/**
+		 * Instantiates a new Info fade popup.
+		 *
+		 * @param title the title
+		 * @param width the width
+		 * @param height the height
+		 */
 		public InfoFadePopup(String title, float width, float height) {
 			super(title, width, height);
 			removeCaptureListener(sclListener);
 		}
 	}
 	private static class ExceptionPopup extends Window implements PopupWindow {
+		/**
+		 * Instantiates a new Exception popup.
+		 *
+		 * @param exc the exc
+		 * @param text the text
+		 */
 		public ExceptionPopup(Throwable exc, String text) {
 			super("", 0, 200, false);
 			String message = Strings.getFinalMessage(exc);
@@ -955,16 +1254,36 @@ public class IntUI {
 			//            closeOnBack();
 		}
 	}
-	public static class ConfirmWindow extends Window implements DisposableInterface, PopupWindow {
+	/**
+	 * The type Confirm window.
+	 */
+	public static class ConfirmWindow extends Window implements IDisposable, PopupWindow {
+		/**
+		 * Instantiates a new Confirm window.
+		 *
+		 * @param title the title
+		 * @param minWidth the min width
+		 * @param minHeight the min height
+		 * @param full the full
+		 * @param noButtons the no buttons
+		 */
 		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
 
+		/**
+		 * Sets center.
+		 *
+		 * @param vec2 the vec 2
+		 */
 		public void setCenter(Vec2 vec2) {
 			setPosition(vec2.x - getPrefWidth() / 2f, vec2.y - getPrefHeight() / 2f);
 		}
 	}
 	private static class AutoFitTable extends Table implements PopupWindow {
+		/**
+		 * Instantiates a new Auto fit table.
+		 */
 		public AutoFitTable() {super(Tex.pane);}
 		public float getPrefHeight() {
 			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
@@ -974,12 +1293,29 @@ public class IntUI {
 			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
 		}
 	}
-	public static class InsideTable extends Table {
+	/**
+	 * The type Inside table.
+	 */
+	public static class InsideTable extends Table implements IMenu {
+		/**
+		 * Instantiates a new Inside table.
+		 */
 		public InsideTable() {
 		}
+		/**
+		 * Instantiates a new Inside table.
+		 *
+		 * @param background the background
+		 */
 		public InsideTable(Drawable background) {
 			super(background);
 		}
+		/**
+		 * Instantiates a new Inside table.
+		 *
+		 * @param background the background
+		 * @param cons the cons
+		 */
 		public InsideTable(Drawable background, Cons<Table> cons) {
 			super(background, cons);
 		}
@@ -995,7 +1331,10 @@ public class IntUI {
 		}
 	}
 
-	public static class SelectTable extends AutoFitTable {
+	/**
+	 * The type Select table.
+	 */
+	public static class SelectTable extends AutoFitTable implements IMenu {
 		/**
 		 * Adds a hide() listener.
 		 */

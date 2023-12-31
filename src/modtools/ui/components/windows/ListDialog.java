@@ -17,6 +17,7 @@ import modtools.ui.components.Window;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.content.debug.Tester;
+import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.ui.search.*;
 
@@ -101,7 +102,7 @@ public class ListDialog extends Window {
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					b.pane(c -> {
-						c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.MOMO_LabelStyle)).left();
+						c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.defaultLabel)).left();
 					}).grow().left();
 				}, HopeStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, longPress -> {

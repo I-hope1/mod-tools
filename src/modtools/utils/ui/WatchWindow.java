@@ -17,10 +17,11 @@ import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.MyLabel.CacheProv;
+import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
 
-public class WatchWindow extends HiddenTopWindow implements DisposableInterface {
+public class WatchWindow extends HiddenTopWindow implements IDisposable {
 	private static final MyProv<Object> NORMAL = () -> null;
 	TemplateTable<MyProv<Object>> template = new TemplateTable<>(NORMAL, p -> {
 		try {
@@ -101,7 +102,7 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 			o.add(new Image(icon)).size(32f).scaling(Scaling.fit);
 		}), new Table(t -> {
 			t.left().bottom();
-			ModifiedLabel.build(new CacheProv(value).getStringProv(), Tools::isNum, (field, label) -> {
+			ModifiedLabel.build(new CacheProv(value).getStringProv(), NumberHelper::isNum, (field, label) -> {
 				if (!field.isValid() || setter == null) return;
 				setter.get(field.getText());
 			}, t).style(Styles.outlineLabel);
@@ -143,7 +144,7 @@ public class WatchWindow extends HiddenTopWindow implements DisposableInterface 
 		label.prov = prov;
 		label.interval = interval;
 		IntUI.addDetailsButton(template, () -> prov.value, Void.class);
-		template.add(label).name(info).style(HopeStyles.MOMO_LabelStyle).growX().left().padLeft(6f).row();
+		template.add(label).name(info).style(HopeStyles.defaultLabel).growX().left().padLeft(6f).row();
 		template.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
 		template.unbind();
 		return this;

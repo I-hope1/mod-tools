@@ -1,13 +1,17 @@
 package modtools.utils;
 
 import arc.func.*;
-import modtools.events.ExecuteTree.OK;
 import modtools.utils.Tools.CBoolp;
 
 import java.util.function.*;
 
 public class SR<T> {
 	T value;
+	public static void apply(Runnable run) {
+		try {
+			run.run();
+		} catch (SatisfyException ignored) {}
+	}
 
 	public SR(T value) {
 		this.value = value;

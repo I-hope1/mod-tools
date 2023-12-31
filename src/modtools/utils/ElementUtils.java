@@ -18,6 +18,7 @@ import modtools.ui.effect.ScreenSampler;
 
 import java.util.Optional;
 
+import static arc.Core.scene;
 import static mindustry.Vars.*;
 
 public class ElementUtils {
@@ -99,6 +100,18 @@ public class ElementUtils {
 			if (el instanceof Window window) return window;
 		}
 		return null;
+	}
+
+	public static String getSimpleName(Class<?> clazz) {
+		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
+			clazz = clazz.getSuperclass();
+		}
+		return clazz.getSimpleName();
+	}
+	public static String getElementName(Element element) {
+		return element == scene.root ? "ROOT"
+		 : getSimpleName(element.getClass())
+			 + (element.name != null ? " ★" + element.name + "★" : "");
 	}
 
 	/** 具有code的接口 */

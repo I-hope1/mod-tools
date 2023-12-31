@@ -2,7 +2,7 @@ apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
 
-tasks.withType(JavaCompile).configureEach {
+tasks.withType(JavaCompile) {
 	options.compilerArgs.addAll(
 			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
 			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
@@ -21,15 +21,20 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
-	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
-	compileOnly 'com.google.auto.service:auto-service:1.0.1'
 	implementation project(":annotations")
+
+//	compileOnly 'com.google.auto.service:auto-service:1.0.1'
+//	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+	compileOnly files("../_libs/auto-service-1.1.1.jar")
+	annotationProcessor files("../_libs/auto-service-1.1.1.jar")
+
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
-	
+
 	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 //	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 
 	// only for document
-	def project = project.parent
-	compileOnly files(new File(project.buildDir, "libs/${project.name}-1.0.jar"))
+	compileOnly files(
+			new File(parent.buildDir0, "libs/${project.name}-1.0.jar")
+	)
 }

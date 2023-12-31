@@ -18,7 +18,7 @@ public class MyShaders {
 	public static MaskShader maskShader;
 	// public static FrontShader frontShader;
 
-	public static Batch maskBatch;
+	// public static Batch maskBatch;
 
 	public static Fi shaderFi = IntVars.root.child("shaders");
 	public static void load() {

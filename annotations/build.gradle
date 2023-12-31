@@ -3,16 +3,12 @@ apply plugin: 'java'
 sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
-	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
-	compileOnly 'com.google.auto.service:auto-service:1.0.1'
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 //	implementation 'com.squareup:javapoet:1.12.1'
 
 	// only for document
-	def pro = project.parent
-	compileOnly files(new File(pro.buildDir, "libs/${pro.name}-1.0.jar"))
+	compileOnly files(new File(parent.buildDir0, "libs/${parent.name}-1.0.jar"))
 
-	pro = project(":compiler")
-	compileOnly files(new File(pro.buildDir, "libs/${pro.name}-1.0.jar"))
+	compileOnly files(new File(parent.project("compiler").buildDir0, "libs/${name}-1.0.jar"))
 }

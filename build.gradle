@@ -9,6 +9,7 @@ allprojects {
 		uncVersion = '1.8.9'
 		mindustryVersion = 'v146'
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
+		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
@@ -23,7 +24,7 @@ allprojects {
 	repositories {
 		mavenCentral()
 		mavenLocal()
-		maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
+//		maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
 		maven { url 'https://www.jitpack.io' }
 	}
 }
@@ -35,8 +36,8 @@ sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
-	annotationProcessor project(":compiler")
 	compileOnly project(":annotations")
+	annotationProcessor project(":compiler")
 
 //	def sdkRoot = System.getenv("ANDROID_HOME")
 //	println "AndroidHome: $sdkRoot"
@@ -81,9 +82,9 @@ task playGame(dependsOn: classes, type: JavaExec) {
 	dependsOn jar
 
 	doFirst {
-		println "buildDir: $buildDir; version: $version"
+		println "buildDir: $buildDir0; version: $version"
 		copy {
-			from "$buildDir/libs"
+			from "$buildDir0/libs"
 			into "${MdtDataDir}/mods"
 			include "$archivesBaseName-${version}.jar"
 		}
@@ -99,13 +100,13 @@ task playGame(dependsOn: classes, type: JavaExec) {
 			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
-task ZComplieAll(type: Copy) {
+task ZCompileAll(type: Copy) {
 	dependsOn deploy
 
-	from("$buildDir/tmp/deploy/") {
+	from("$buildDir0/tmp/deploy/") {
 		include "${rootProject.name}-${version}.jar"
 	}
-	into("$buildDir/libs")
+	into("$buildDir0/libs")
 	rename { fileName ->
 		// a simple way is to remove the "-$version" from the jar filename
 		// but you can customize the filename replacement rule as you wish.
@@ -134,8 +135,8 @@ task playAndroid {
 	def adb = "F:/files/java/sdk/platform-tools/adb"
 	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files";
 	doLast {
-		("$adb push ${buildDir}/tmp/deploy/${archivesBaseName}-${version}.jar"
-				+ " $MDT_ANDROID_DIR/mods/")
+		("$adb push ${buildDir0}/tmp/deploy/${archivesBaseName}-${version}.jar"
+				+ " $MDT_ANDROID_DIR/tmp/")
 				.execute().waitForProcessOutput(System.out, System.err)
 
 		/*def MindustryLogPath = "${MDT_ANDROID_DIR}/last_log.txt"
@@ -167,4 +168,5 @@ done""")*/
 				.execute().waitForProcessOutput(System.out, System.err)
 	}
 }
+
 

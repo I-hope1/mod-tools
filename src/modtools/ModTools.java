@@ -13,14 +13,13 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
 import modtools.graphics.MyShaders;
-import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.ui.FileUtils;
 
-import java.io.*;
+import java.io.File;
 import java.net.URLClassLoader;
 import java.util.Arrays;
 
@@ -49,7 +48,7 @@ public class ModTools extends Mod {
 			if (!isImportFromGame) IntVars.meta.hidden = false;
 			resolveLibsCatch();
 
-			HopeCall.init();
+			// HopeCall.init();
 			if (isImportFromGame) resolveInputAndUI();
 			else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
 		} catch (Throwable e) {
@@ -117,7 +116,6 @@ public class ModTools extends Mod {
 		HopeInput.load();
 		if (OS.isWindows || OS.isMac) {
 			ui.mods.addListener(new VisibilityListener() {
-				@Override
 				public boolean shown() {
 					ui.mods.removeListener(this);
 					ui.mods.buttons.row().button("importFromSelector", () -> {
@@ -126,11 +124,7 @@ public class ModTools extends Mod {
 								for (Fi fi : list) {
 									if (!fi.extEquals("zip") && !fi.extEquals("jar"))
 										throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
-									try {
-										Vars.mods.importMod(fi);
-									} catch (IOException e) {
-										throw new RuntimeException(e);
-									}
+									Vars.mods.importMod(fi);
 								}
 							} catch (Throwable e) {
 								IntUI.showException("Failed to import mod from selector", e);
@@ -142,7 +136,7 @@ public class ModTools extends Mod {
 			});
 		}
 		MyShaders.load();
-		Time.runTask(6f, () -> {
+		Time.runTask(8f, () -> {
 			IntUI.load();
 			AllTutorial.init();
 			// Circle.draw();

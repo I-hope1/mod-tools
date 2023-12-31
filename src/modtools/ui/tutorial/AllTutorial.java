@@ -13,6 +13,7 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.util.Timer.Task;
 import arc.util.Tmp;
+import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
@@ -88,6 +89,7 @@ public class AllTutorial {
 	}
 	public static boolean enableFocusMouse;
 	public static void init() {
+		if (Vars.mobile) return;
 		/* Events.run(Trigger.update, () -> {
 			viewport.getCamera().position.set(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f - 50);
 			viewport.setWorldHeight(Core.graphics.getHeight() - 50);

@@ -527,7 +527,8 @@ public class ReviewElement extends Content {
 				MenuList.with(Icon.boxSmall, "Keep in stage", element::keepInStage)
 			 )),
 			 ValueLabel.newElementDetailsList(element)
-			)).ifRun(element instanceof Table, seq -> seq.add(
+			))
+			 .ifRun(element instanceof Table, seq -> seq.add(
 				MenuList.with(Icon.waves, "Cells", () -> {
 					JSFunc.dialog(d -> {
 						d.left().defaults().left();

@@ -16,7 +16,7 @@ import java.lang.annotation.*;
  *   public static Data data = MySettings.SETTINGS.child("%className%");
  * }
  * }</pre>
- * @see modtools.annotations.processors.DataProcessor#process*/
+ * @see modtools.annotations.processors.DataProcessor#process2*/
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)
 public @interface DataObjectInit {

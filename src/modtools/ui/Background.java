@@ -2,11 +2,10 @@
 package modtools.ui;
 
 import arc.Core;
-import arc.graphics.*;
+import arc.graphics.Texture;
 import arc.graphics.g2d.TextureRegion;
 import arc.scene.*;
 import arc.scene.ui.Image;
-import arc.struct.Seq;
 import arc.util.Time;
 import mindustry.Vars;
 import modtools.IntVars;
@@ -27,26 +26,19 @@ public class Background {
 		// EntityShow.main();
 		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
 		if (!(tmp instanceof Group group)) return;
-		Seq<Element> children = group.getChildren();
-		children.get(0).clear();
-		children.get(0).remove();
+		Element childrenFirst = group.getChildren().first();
+		childrenFirst.clear();
+		childrenFirst.remove();
 
 		// Draw.rect(Draw.wrap(Core.graphics.isPortrait() ? portrait : landscape), 0, 0);
-		Image img = new Image(new TextureRegion()) {
-			public void draw() {
-				// Shader last = Draw.getShader();
-				// MyShaders.Specl.setUniformf("u_mix_color", 1, 0, 1);
-				// Draw.blit(getRegion().texture, MyShaders.Specl);
-				super.draw();
-			}
-		};
+		Image img = new Image(new TextureRegion());
 		//		img.rotation = Core.graphics.isPortrait() ? 90 : 0;
 		img.setFillParent(true);
 		IntVars.addResizeListener(() -> {
 			img.getRegion().set(Core.graphics.isPortrait() ? portrait() : landscape());
 		});
-		group.addChildAt(0, img);
 		Time.runTask(6f, () -> {
+			group.addChildAt(0, img);
 			img.getRegion().set(Core.graphics.isPortrait() ? portrait() : landscape());
 		});
 	}

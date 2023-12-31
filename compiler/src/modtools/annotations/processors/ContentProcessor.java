@@ -1,8 +1,6 @@
 package modtools.annotations.processors;
 
-import arc.util.Log;
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.ListBuffer;
 import modtools.annotations.*;

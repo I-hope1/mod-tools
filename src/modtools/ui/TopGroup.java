@@ -77,7 +77,7 @@ public final class TopGroup extends WidgetGroup {
 	 frag    = new NGroup("frag"),
 	 others = new NGroup("others") {
 		 public void draw() {
-			 validate();
+			 // validate();
 			 super.draw();
 		 }
 		 public Element hit(float x, float y, boolean touchable) {

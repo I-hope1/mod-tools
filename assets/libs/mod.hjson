@@ -1,13 +1,12 @@
-
 displayName: "mod工具前置"
 name: "mod-tools-lib"
 author: "I hope..."
 main: "modtools_lib.MyReflect"
-description: "
-一个厉害的前置 
-- 在电脑上open模块，清除反射过滤，添加类加载器（不怕找不到类）
-- 在安卓上显示隐藏的方法和字段，能够修改类修饰符
-"
+description: '''
+             一个厉害的前置
+             - 在电脑上open模块，清除反射过滤，添加类加载器（不怕找不到类）
+             - 在安卓上显示隐藏的方法和字段，能够修改类修饰符
+             '''
 version: "1.2.2"
 // hidden: true
 minGameVersion: 136

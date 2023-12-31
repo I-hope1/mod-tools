@@ -2,12 +2,11 @@ package modtools.annotations.processors;
 
 
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Strings;
 import com.google.auto.service.AutoService;
-import com.sun.java.accessibility.util.Translator;
 import com.sun.tools.javac.code.Flags;
-import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 import modtools.annotations.reflect.ReflectUtils;
@@ -15,7 +14,7 @@ import modtools.annotations.reflect.ReflectUtils;
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.lang.reflect.Modifier;
-import java.util.*;
+import java.util.Set;
 
 @AutoService({Processor.class})
 public class OptimizeReflectProcessor extends BaseProcessor<Element> implements ReflectUtils {

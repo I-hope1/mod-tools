@@ -16,7 +16,7 @@ import java.lang.annotation.*;
  * }
  * }</pre>
  *
- * @see modtools.annotations.processors.DataProcessor#process
+ * @see modtools.annotations.processors.DataProcessor#process2
  */
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.SOURCE)

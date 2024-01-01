@@ -42,9 +42,8 @@ dependencies {
 //	def sdkRoot = System.getenv("ANDROID_HOME")
 //	println "AndroidHome: $sdkRoot"
 //	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
-	try {
+	if (new File("${MdtDataDir}/Mindustry_desktop.jar").exists())
 		compileOnly files("${MdtDataDir}/Mindustry_desktop.jar")
-	} catch (ignored) {}
 	compileOnly files(
 			"_libs/Mindustry_android.jar",
 //			"$platformRoot/android.jar",

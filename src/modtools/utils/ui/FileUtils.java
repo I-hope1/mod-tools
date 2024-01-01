@@ -8,6 +8,8 @@ package modtools.utils.ui;
 
 import arc.files.Fi;
 import arc.func.Cons;
+import arc.scene.ui.layout.Table;
+import mindustry.Vars;
 import modtools.ui.IntUI;
 
 import javax.swing.*;
@@ -50,6 +52,21 @@ public class FileUtils {
 		}};
 	}
 
+	public static void buildSelector(Table t) {
+		t.button("importFromSelector", () -> {
+			FileUtils.openFiSelector(list -> {
+				try {
+					for (Fi fi : list) {
+						if (!fi.extEquals("zip") && !fi.extEquals("jar"))
+							throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
+						Vars.mods.importMod(fi);
+					}
+				} catch (Throwable e) {
+					IntUI.showException("Failed to import mod from selector", e);
+				}
+			});
+		});
+	}
 	/* public static void shareFile(Fi file) {
 		Context app         = ((AndroidApplication) Core.app);
 		Intent  shareIntent = new Intent();

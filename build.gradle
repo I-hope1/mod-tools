@@ -42,9 +42,11 @@ dependencies {
 //	def sdkRoot = System.getenv("ANDROID_HOME")
 //	println "AndroidHome: $sdkRoot"
 //	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
+	try {
+		compileOnly files("${MdtDataDir}/Mindustry_desktop.jar")
+	} catch (ignored) {}
 	compileOnly files(
 			"_libs/Mindustry_android.jar",
-			"${MdtDataDir}/Mindustry_desktop.jar",
 //			"$platformRoot/android.jar",
 			"assets/libs/reflect-core.jar",
 			"trash/procyon-0.6.jar",

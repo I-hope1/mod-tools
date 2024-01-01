@@ -120,19 +120,7 @@ public class ModTools extends Mod {
 			ui.mods.addListener(new VisibilityListener() {
 				public boolean shown() {
 					ui.mods.removeListener(this);
-					ui.mods.buttons.row().button("importFromSelector", () -> {
-						FileUtils.openFiSelector(list -> {
-							try {
-								for (Fi fi : list) {
-									if (!fi.extEquals("zip") && !fi.extEquals("jar"))
-										throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
-									Vars.mods.importMod(fi);
-								}
-							} catch (Throwable e) {
-								IntUI.showException("Failed to import mod from selector", e);
-							}
-						});
-					});
+					FileUtils.buildSelector(ui.mods.buttons.row());
 					return false;
 				}
 			});

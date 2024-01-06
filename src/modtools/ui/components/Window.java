@@ -30,7 +30,7 @@ import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.ui.IntUI;
 import modtools.utils.*;
-import modtools.utils.array.MySet;
+import modtools.struct.MySet;
 import modtools.utils.ui.search.*;
 
 
@@ -82,6 +82,8 @@ public class Window extends Table {
 	}};
 
 	public static final float buttonSize = 38f;
+	// 用于最小化时的最小宽度
+	private static final float topHeight = 45;
 
 	public Table
 	 titleTable = new Table(topPane) {
@@ -98,8 +100,7 @@ public class Window extends Table {
 	cont     = new Table(myPane),
 	 buttons = new Table(myPane);
 	public float minWidth, minHeight;
-	// 用于最小化时的最小宽度
-	private static final float topHeight = 45;
+
 
 	public Label title;
 
@@ -734,12 +735,11 @@ public class Window extends Table {
 		public Runnable shown;
 	}
 
-
 	public interface RunListener {
 		void fire(boolean status);
 	}
 
-	/** just a flag */
+	/** 窗口会自动销毁 */
 	public interface IDisposable {
 		default void clearAll() {
 			if (this instanceof Group) ((Group) this).find(e -> {
@@ -750,6 +750,7 @@ public class Window extends Table {
 			});
 		}
 	}
+	public interface IInfo {}
 	/**
 	 * 延迟几秒销毁的窗口
 	 * @see InfoFadePopup

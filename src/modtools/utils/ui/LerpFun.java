@@ -3,8 +3,8 @@ package modtools.utils.ui;
 import arc.func.*;
 import arc.math.*;
 import mindustry.graphics.Layer;
+import modtools.struct.*;
 import modtools.utils.Tools;
-import modtools.utils.array.*;
 import modtools.utils.world.WorldDraw;
 
 import static modtools.ui.IntUI.topGroup;

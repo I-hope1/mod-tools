@@ -8,7 +8,7 @@ import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
 import mindustry.mod.Mods.*;
 import modtools.ui.IntUI;
-import modtools.utils.array.MySet;
+import modtools.struct.MySet;
 
 import java.util.concurrent.*;
 
@@ -19,7 +19,7 @@ public class IntVars {
 	public static       ModMeta meta;
 	public static       Fi      root;
 
-	public static String QQ = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
+	public static final String QQ = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
 	public static final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor("hope-async", 1);

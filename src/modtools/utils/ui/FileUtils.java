@@ -53,19 +53,18 @@ public class FileUtils {
 	}
 
 	public static void buildSelector(Table t) {
-		t.button("importFromSelector", () -> {
-			FileUtils.openFiSelector(list -> {
-				try {
-					for (Fi fi : list) {
-						if (!fi.extEquals("zip") && !fi.extEquals("jar"))
-							throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
-						Vars.mods.importMod(fi);
-					}
-				} catch (Throwable e) {
-					IntUI.showException("Failed to import mod from selector", e);
-				}
-			});
-		});
+		t.button("ImportFromSelector", () -> FileUtils.openFiSelector(
+		 list -> {
+			 try {
+				 for (Fi fi : list) {
+					 if (!fi.extEquals("zip") && !fi.extEquals("jar"))
+						 throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
+					 Vars.mods.importMod(fi);
+				 }
+			 } catch (Throwable e) {
+				 IntUI.showException("Failed to import mod from selector", e);
+			 }
+		 }));
 	}
 	/* public static void shareFile(Fi file) {
 		Context app         = ((AndroidApplication) Core.app);

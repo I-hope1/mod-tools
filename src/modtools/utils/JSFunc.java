@@ -232,10 +232,14 @@ public class JSFunc {
 		return dialog(new Table(cons));
 	}
 
-
+// ------------- ReviewElement --------------
 	public static void inspect(Element element) {
 		new ReviewElementWindow().show(element);
 	}
+	public static void pickElement(Cons<Element> callback) {
+		topGroup.requestSelectElem(TopGroup.defaultDrawer, callback);
+	}
+
 
 	public static WFunction<?> getFunc(String name) {
 		return Selection.allFunctions.get(name);
@@ -433,10 +437,6 @@ public class JSFunc {
 
 	public static Element fx(String text) {
 		return HopeFx.colorFulText(text);
-	}
-
-	public static void requestEl(Cons<Element> cons) {
-		topGroup.requestSelectElem(TopGroup.defaultDrawer, cons);
 	}
 	public interface MyProv<T> {
 		T get() throws Exception;

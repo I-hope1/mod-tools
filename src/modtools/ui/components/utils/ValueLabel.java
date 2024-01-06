@@ -412,9 +412,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 
 	protected void elementSetter(Seq<MenuList> list, Cons<Element> callback) {
-		list.add(MenuList.with(Icon.editSmall, "choose one", () -> {
-			topGroup.requestSelectElem(TopGroup.defaultDrawer, callback);
-		}));
+		list.add(DisabledList.withd(Icon.editSmall, "Select and Replace",
+		 topGroup::isSelecting,
+		 () -> topGroup.requestSelectElem(TopGroup.defaultDrawer, callback)
+		 ));
 	}
 
 	public abstract Object getObject();

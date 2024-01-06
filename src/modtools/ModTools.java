@@ -13,8 +13,10 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
 import modtools.graphics.MyShaders;
+import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.content.debug.Tester;
+import modtools.ui.control.HopeInput;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.ui.FileUtils;
@@ -29,7 +31,9 @@ import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
-	static boolean isImportFromGame = false;
+	static        boolean   isImportFromGame = false;
+	public static Throwable error            = null;
+	public static Fi        libs;
 
 	static {
 		if (ui != null && ui.hudGroup != null) {
@@ -43,18 +47,21 @@ public class ModTools extends Mod {
 
 		ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 		IntVars.meta = metas.get(ModTools.class);
-
 		try {
-			if (!isImportFromGame) IntVars.meta.hidden = false;
-			resolveLibsCatch();
-
-			// HopeCall.init();
-			if (isImportFromGame) resolveInputAndUI();
-			else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
+			load();
 		} catch (Throwable e) {
 			if (isImportFromGame) Vars.ui.showException("Cannot load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
 		}
+	}
+	void load() {
+		if (!isImportFromGame) IntVars.meta.hidden = false;
+		resolveLibsCatch();
+
+		HopeCall.init();
+
+		if (isImportFromGame) resolveInputAndUI();
+		else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
 	}
 
 
@@ -71,16 +78,11 @@ public class ModTools extends Mod {
 		if (OS.isAndroid) return findRootAndroid();
 		throw new UnsupportedOperationException();
 	}
-	private static String getFileName(String file) {
-		int index = file.lastIndexOf('/');
-		return file.substring(index).replace("/", "");
-	}
 	public static Fi findRootAndroid() {
 		Object pathList = Reflect.get(BaseDexClassLoader.class, ModTools.class.getClassLoader(),
 		 "pathList");
-		Object[] arr  = Reflect.get(pathList, "dexElements");
-		File     file = Reflect.get(arr[0], "path");
-		return new Fi(file);
+		Object[] arr = Reflect.get(pathList, "dexElements");
+		return new Fi((File) Reflect.get(arr[0], "path"));
 	}
 
 	private static void resolveLibsCatch() {
@@ -101,13 +103,9 @@ public class ModTools extends Mod {
 		libs = root.child("libs");
 
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
-		// setLoadRenderer();
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();
-
-		// MyReflect.classDefiner().defineClass();
 	}
-
 	private static void resolveInputAndUI() {
 		if (ui == null) return;
 		Time.mark();
@@ -115,6 +113,7 @@ public class ModTools extends Mod {
 			ui.showException(error);
 			return;
 		}
+		MyShaders.load();
 		HopeInput.load();
 		if (OS.isWindows || OS.isMac) {
 			ui.mods.addListener(new VisibilityListener() {
@@ -125,7 +124,6 @@ public class ModTools extends Mod {
 				}
 			});
 		}
-		MyShaders.load();
 		Time.runTask(6f, () -> {
 			IntUI.load();
 			AllTutorial.init();
@@ -171,9 +169,6 @@ public class ModTools extends Mod {
 
 	}
 
-	public static Throwable error = null;
-	public static Fi        libs;
-
 	public static boolean loadLib(String fileName, String mainClassName, boolean showError) {
 		return loadLib(fileName, mainClassName, showError, null);
 	}
@@ -212,5 +207,4 @@ public class ModTools extends Mod {
 	}
 
 	static class UnexpectedPlatform extends RuntimeException {}
-
 }

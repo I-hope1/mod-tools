@@ -17,9 +17,11 @@ allprojects {
 //		sourceCompatibility = 17
 		targetCompatibility = 9
 		sourceCompatibility = 9
-		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
-		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED")
-		options.compilerArgs.addAll("--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED")
+		options.compilerArgs.addAll(
+				"--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
+				"--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED",
+				"--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED"
+		)
 	}
 	repositories {
 		mavenLocal()
@@ -54,8 +56,8 @@ dependencies {
 	implementation files(
 			"_libs/AndroidField.jar",
 	)
-	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 }
 
 

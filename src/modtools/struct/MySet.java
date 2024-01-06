@@ -1,4 +1,4 @@
-package modtools.utils.array;
+package modtools.struct;
 
 import arc.func.Boolf;
 import arc.struct.*;

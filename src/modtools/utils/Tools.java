@@ -10,7 +10,7 @@ import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
-import modtools.utils.array.TaskSet;
+import modtools.struct.TaskSet;
 
 import java.lang.reflect.*;
 import java.util.List;
@@ -252,15 +252,6 @@ public class Tools {
 	}
 	public interface CProv<T> {
 		T get() throws Throwable;
-	}
-
-	// Reflection
-	public static Object invoke(Method m, Object obj, Object... args) {
-		try {
-			return m.invoke(obj, args);
-		} catch (IllegalAccessException | InvocationTargetException e) {
-			throw new RuntimeException(e);
-		}
 	}
 }
 

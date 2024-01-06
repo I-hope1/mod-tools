@@ -13,7 +13,7 @@ import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.*;
-import arc.scene.ui.ImageButton;
+import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
@@ -33,9 +33,10 @@ import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
-import modtools.ui.components.Window.NoTopWindow;
+import modtools.ui.components.Window.*;
 import modtools.ui.components.linstener.*;
 import modtools.ui.content.*;
+import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.IntUI;
 import modtools.utils.*;
@@ -47,6 +48,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
+import static arc.Core.scene;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.content.world.WFunction.buildPos;
@@ -278,7 +280,7 @@ public class Selection extends Content {
 					unit.team(team);
 				});
 			});
-			FunctionBuild("@heal", list -> {
+			FunctionBuild("@stat.healing", list -> {
 				each(list, Healthc::heal);
 			});
 			FunctionBuild("@kill", list -> {
@@ -636,7 +638,7 @@ public class Selection extends Content {
 		Draw.reset();
 	}
 
-	boolean focusDisabled;
+	boolean focusDisabled, focusLocked;
 	private      boolean           focusEnabled;
 	public       Element           focusElem;
 	public       Tile              focusTile;
@@ -656,9 +658,11 @@ public class Selection extends Content {
 			return true;
 		});
 		Tools.TASKS.add(() -> {
-			Element tmp = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
-			focusEnabled = !topGroup.isSelecting() && (
-			 tmp == null || tmp.isDescendantOf(focusW) || (!tmp.visible && tmp.touchable == Touchable.disabled)
+			Element tmp = HopeInput.mouseHit();
+			focusLocked = control.input.locked();
+			focusEnabled = !focusLocked && !scene.hasDialog() && (
+			 tmp == null || tmp.isDescendantOf(focusW) ||
+			 (!tmp.visible && tmp.touchable == Touchable.disabled)
 			 || tmp.isDescendantOf(el -> el instanceof IMenu)
 			 // || tmp.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
 			 /* || tmp instanceof IMenu */);
@@ -704,7 +708,7 @@ public class Selection extends Content {
 		}
 	}
 
-	public class FocusWindow extends NoTopWindow {
+	public class FocusWindow extends NoTopWindow implements IInfo {
 		public FocusWindow(String title) {
 			super(title, 0, 42, false);
 		}
@@ -719,7 +723,7 @@ public class Selection extends Content {
 		long    toggleDelay = 200, lastToggleTime = 0;
 
 		public Window show() {
-			return show(Core.scene, Actions.fadeIn(0.1f));
+			return show(scene, Actions.fadeIn(0.1f));
 		}
 
 		public Table pane;
@@ -871,8 +875,8 @@ public class Selection extends Content {
 			y = v1.y;
 		}
 		public void clampPosition() {
-			if (x + width > Core.scene.getWidth()) x -= width;
-			if (y + height > Core.scene.getHeight()) y -= height;
+			if (x + width > scene.getWidth()) x -= width;
+			if (y + height > scene.getHeight()) y -= height;
 		}
 		private void updatePosUI() {
 			Vec2 v1 = Core.input.mouse();

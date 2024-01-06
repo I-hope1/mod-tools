@@ -4,7 +4,7 @@ import arc.*;
 import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
-import arc.input.KeyCode;
+import arc.input.*;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
@@ -25,9 +25,10 @@ import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
+import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
-import modtools.utils.array.TaskSet;
+import modtools.struct.TaskSet;
 
 import java.util.*;
 
@@ -35,7 +36,7 @@ import static arc.Core.*;
 import static modtools.IntVars.modName;
 import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
-import static modtools.ui.components.Window.frontWindow;
+import static modtools.ui.components.Window.*;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
@@ -162,7 +163,6 @@ public final class TopGroup extends WidgetGroup {
 	public static boolean drawHiddenPad;
 
 
-	static final Mat mat = new Mat();
 	public static void drawPad(Element elem, Vec2 vec2) {
 		if (!drawHiddenPad && !elem.visible) return;
 		/* translation也得参与计算 */
@@ -206,7 +206,9 @@ public final class TopGroup extends WidgetGroup {
 		addSceneListener();
 		scene.addListener(new SwitchInputListener());
 		scene.addCaptureListener(new SwitchGestureListener());
-		if (OS.isWindows) scene.addListener(new CloseWindowListener());
+		if (OS.isWindows) {
+			scene.addCaptureListener(new HitterAndWindowCloseListener());
+		}
 
 		fillParent = true;
 		touchable = Touchable.childrenOnly;
@@ -329,16 +331,13 @@ public final class TopGroup extends WidgetGroup {
 	 * @param drawer 用于选择时渲染
 	 */
 	public void requestSelectElem(Drawer drawer, Cons<Element> callback) {
-		if (callback == null) throw new IllegalArgumentException("callback is null");
+		if (callback == null) throw new IllegalArgumentException("'callback' is null");
+		if (selecting) throw new IllegalStateException("Cannot call it twice.");
 		selected = null;
-		selecting = !selecting;
-		if (selecting) {
-			scene.unfocusAll();
-			elementDrawer = drawer;
-			elementCallback = callback;
-		} else {
-			resetSelectElem();
-		}
+		selecting = true;
+		scene.unfocusAll();
+		elementDrawer = drawer;
+		elementCallback = callback;
 	}
 
 	/* 过滤掉的选择元素 */
@@ -365,7 +364,7 @@ public final class TopGroup extends WidgetGroup {
 	private void addSceneListener() {
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
 			boolean locked = false;
-			final Element mask = new Hitter() {
+			final Element mask = new FillElement() {
 				public Element hit(float x, float y, boolean touchable) {
 					return cancelEvent ? this : null;
 				}
@@ -451,7 +450,7 @@ public final class TopGroup extends WidgetGroup {
 			}
 		});
 	}
-	private void resetSelectElem() {
+	public void resetSelectElem() {
 		selected = null;
 		elementDrawer = null;
 		elementCallback = null;
@@ -550,9 +549,16 @@ public final class TopGroup extends WidgetGroup {
 		}
 	}
 
-	private class CloseWindowListener extends InputListener {
+	private class HitterAndWindowCloseListener extends InputListener {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			if (keycode == KeyCode.f4 && input.shift() && shownWindows.size() > 0) frontWindow.hide();
+			hitter:
+			if (!Core.scene.hasField() && keycode == KeyCode.escape && Hitter.all.any()) {
+				Hitter peek = Hitter.all.peek();
+				if (!peek.isTouchable()) break hitter;
+				peek.fireClick();
+				HopeInput.justPressed.remove(KeyCode.escape.ordinal());
+			}
 			return super.keyDown(event, keycode);
 		}
 	}

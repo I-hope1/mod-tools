@@ -25,6 +25,7 @@ import mindustry.ui.*;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
+import modtools.ui.effect.ScreenSampler;
 import modtools.ui.menus.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
@@ -44,35 +45,14 @@ import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 import static modtools.utils.Tools.*;
 
-/**
- * The type Int ui.
- */
 public class IntUI {
-	/**
-	 * The constant whiteui.
-	 */
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
-	/**
-	 * The constant DEFAULT_WIDTH.
-	 */
 	public static final float DEFAULT_WIDTH = 150;
-	/**
-	 * The constant MAX_OFF.
-	 */
 	public static final float MAX_OFF       = 35f;
 
-	/**
-	 * The constant frag.
-	 */
 	public static final Frag        frag   = new Frag();
-	/**
-	 * The constant topGroup.
-	 */
 	public static final TopGroup    topGroup;
-	/**
-	 * The constant picker.
-	 */
 	public static       ColorPicker picker = new ColorPicker();
 
 	static {
@@ -92,14 +72,9 @@ public class IntUI {
 
 	/** 默认的动效时间（单位秒） */
 	public static final float DEF_DURATION  = 0.2f;
-	/**
-	 * The constant DEF_LONGPRESS.
-	 */
+	/** 默认的长按触发时间（单位ms） */
 	public static final long  DEF_LONGPRESS = 600L;
 
-	/**
-	 * The Last.
-	 */
 	static final Vec2 last = new Vec2();
 	/**
 	 * <p>创建一个双击事件</p>
@@ -189,14 +164,7 @@ public class IntUI {
 		elem.addListener(new LongPressListener());
 		return elem;
 	}
-	/**
-	 * Long press t.
-	 *
-	 * @param <T>  the type parameter
-	 * @param elem the elem
-	 * @param boolc the boolc
-	 * @return the t
-	 */
+
 	public static <T extends Element> T
 	longPress(T elem, final Boolc boolc) {
 		return longPress(elem, DEF_LONGPRESS, boolc);
@@ -215,14 +183,6 @@ public class IntUI {
 			if (b) run.run();
 		});
 	}
-	/**
-	 * Long press 0 t.
-	 *
-	 * @param <T>  the type parameter
-	 * @param elem the elem
-	 * @param run the run
-	 * @return the t
-	 */
 	public static <T extends Element> T
 	longPress0(T elem, final Runnable run) {
 		return longPress0(elem, DEF_LONGPRESS, run);
@@ -265,19 +225,19 @@ public class IntUI {
 	}
 
 	/**
-	 * Add show menu listenerp.
+	 * Add show menu listener.
 	 *
-	 * @param elem the elem
-	 * @param prov the prov
+	 * @param elem 元素
+	 * @param prov menu提供者
 	 */
 	public static void
 	addShowMenuListenerp(Element elem, Prov<Seq<MenuList>> prov) {
 		longPressOrRclick(elem, __ -> showMenuListDispose(prov));
 	}
 	/**
-	 * Show menu list dispose.
+	 * Dispose after close.
 	 *
-	 * @param prov the prov
+	 * @param prov menu提供者
 	 */
 	public static void showMenuListDispose(Prov<Seq<MenuList>> prov) {
 		Seq<MenuList> list = prov.get();
@@ -296,32 +256,15 @@ public class IntUI {
 			showMenuList(Seq.with(list));
 		});
 	}
-	/**
-	 * Add show menu listener.
-	 *
-	 * @param elem the elem
-	 * @param list the list
-	 */
 	public static void
 	addShowMenuListener(Element elem, Iterable<MenuList> list) {
 		longPressOrRclick(elem, __ -> {
 			showMenuList(list);
 		});
 	}
-	/**
-	 * Show menu list.
-	 *
-	 * @param list the list
-	 */
 	public static void showMenuList(Iterable<MenuList> list) {
 		showMenuList(list, null);
 	}
-	/**
-	 * Show menu list.
-	 *
-	 * @param list the list
-	 * @param hideMenu the hide menu
-	 */
 	public static void showMenuList(Iterable<MenuList> list, Runnable hideMenu) {
 		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
 			showMeniList(list, hideMenu, p, hide);
@@ -375,24 +318,16 @@ public class IntUI {
 		}).growY();
 	}
 	/**
-	 * Copy as js menu menu list.
+	 * Menu `Copy ${key} As Js` constructor.
 	 *
-	 * @param key the key
-	 * @param prov the prov
-	 * @return the menu list
+	 * @param prov 对象提供
+	 * @return a menu.
 	 */
 	public static MenuList copyAsJSMenu(String key, Prov<Object> prov) {
 		return MenuList.with(Icon.copySmall,
 		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
 		 storeRun(prov));
 	}
-	/**
-	 * Copy as js menu menu list.
-	 *
-	 * @param key the key
-	 * @param run the run
-	 * @return the menu list
-	 */
 	public static MenuList copyAsJSMenu(String key, Runnable run) {
 		return MenuList.with(Icon.copySmall,
 		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
@@ -400,24 +335,10 @@ public class IntUI {
 	}
 
 
-	/**
-	 * Add label button.
-	 *
-	 * @param table the table
-	 * @param prov the prov
-	 * @param clazz the clazz
-	 */
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
 		addDetailsButton(table, prov, clazz);
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
-	/**
-	 * Add details button.
-	 *
-	 * @param table the table
-	 * @param prov the prov
-	 * @param clazz the clazz
-	 */
 	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
 		/* table.button("@details", HopeStyles.flatBordert, () -> {
 			Object o = prov.get();
@@ -429,13 +350,6 @@ public class IntUI {
 		}).size(32, 32);
 	}
 
-	/**
-	 * Add store button.
-	 *
-	 * @param table the table
-	 * @param key the key
-	 * @param prov the prov
-	 */
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
 			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
@@ -445,12 +359,6 @@ public class IntUI {
 			 });
 		 });
 	}
-	/**
-	 * Build store key string.
-	 *
-	 * @param key the key
-	 * @return the string
-	 */
 	public static String buildStoreKey(String key) {
 		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
 		 : Core.bundle.format("jsfunc.store_as_js_var", key);
@@ -602,41 +510,12 @@ public class IntUI {
 		return t;
 	}
 
-	/**
-	 * Show select list table table.
-	 *
-	 * @param <T>  the type parameter
-	 * @param button the button
-	 * @param list the list
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param width the width
-	 * @param height the height
-	 * @param searchable the searchable
-	 * @param align
-	 * @return the table
-	 */
 	public static <T extends Element> Table
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
 											boolean searchable, int align) {
 		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, align);
 	}
-	/**
-	 * Show select list enum table table.
-	 *
-	 * @param <T>  the type parameter
-	 * @param <E>  the type parameter
-	 * @param button the button
-	 * @param list the list
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param width the width
-	 * @param height the height
-	 * @param searchable the searchable
-	 * @param align the align
-	 * @return the table
-	 */
 	public static <T extends Element, E extends Enum<E>> Table
 	showSelectListEnumTable(T button, Seq<E> list, Prov<E> holder,
 													Cons<E> cons, float width, float height,
@@ -644,22 +523,6 @@ public class IntUI {
 		return showSelectListTable(button, list, holder, cons,
 		 Enum::name, width, height, searchable, align);
 	}
-	/**
-	 * Show select list table table.
-	 *
-	 * @param <BTN>  the type parameter
-	 * @param <V>  the type parameter
-	 * @param button the button
-	 * @param list the list
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param stringify the stringify
-	 * @param minWidth the min width
-	 * @param height the height
-	 * @param searchable the searchable
-	 * @param align the align
-	 * @return the table
-	 */
 	public static <BTN extends Element, V> Table
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
@@ -707,21 +570,7 @@ public class IntUI {
 																boolean searchable) {
 		return showSelectTable(button, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable, Align.center);
 	}
-	/**
-	 * Show select image table with icons table.
-	 *
-	 * @param <T1>  the type parameter
-	 * @param vec2 the vec 2
-	 * @param items the items
-	 * @param icons the icons
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param size the size
-	 * @param imageSize the image size
-	 * @param cols the cols
-	 * @param searchable the searchable
-	 * @return the table
-	 */
+
 	public static <T1> Table
 	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,
 																Seq<? extends Drawable> icons,
@@ -759,14 +608,6 @@ public class IntUI {
 		};
 	}
 
-	/**
-	 * Show select table select table.
-	 *
-	 * @param vec2 the vec 2
-	 * @param f the f
-	 * @param searchable the searchable
-	 * @return the select table
-	 */
 	public static SelectTable
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
@@ -859,22 +700,6 @@ public class IntUI {
 		});
 		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
-	/**
-	 * {@literal }
-	 * 弹出一个可以选择内容的窗口（需你提供图标构造器）
-	 * @param <T>  the type parameter
-	 * @param <T1>  the type parameter
-	 * @param button the button
-	 * @param items the items
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param size the size
-	 * @param imageSize the image size
-	 * @param cols the cols
-	 * @param func the func
-	 * @param searchable the searchable
-	 * @return the table
-	 */
 	public static <T extends Button, T1> Table
 	showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder,
 															 Cons<T1> cons, float size, float imageSize,
@@ -896,50 +721,19 @@ public class IntUI {
 		return showException("", t);
 	}
 
-	/**
-	 * The Last exception.
-	 */
 	static ExceptionPopup lastException;
-	/**
-	 * Show exception window.
-	 *
-	 * @param text the text
-	 * @param exc the exc
-	 * @return the window
-	 */
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
 		return (lastException != null && lastException.isShown() ? lastException : new ExceptionPopup(exc, text)).setPosition(Core.input.mouse());
 	}
 
-	/**
-	 * Show info fade window.
-	 *
-	 * @param info the info
-	 * @return the window
-	 */
 	public static Window showInfoFade(String info) {
 		return showInfoFade(info, Core.input.mouse());
 	}
 
-	/**
-	 * Show info fade window.
-	 *
-	 * @param info the info
-	 * @param pos the pos
-	 * @return the window
-	 */
 	public static Window showInfoFade(String info, Vec2 pos) {
 		return showInfoFade(info, pos, Align.center);
 	}
-	/**
-	 * Show info fade window.
-	 *
-	 * @param info the info
-	 * @param pos the pos
-	 * @param align the align
-	 * @return the window
-	 */
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
 		return new InfoFadePopup("Info", 80, 64) {{
 			cont.add(info);
@@ -949,38 +743,12 @@ public class IntUI {
 		}}.show();
 	}
 
-	/**
-	 * Show confirm confirm window.
-	 *
-	 * @param text the text
-	 * @param confirmed the confirmed
-	 * @return the confirm window
-	 */
 	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {
 		return showConfirm("@confirm", text, null, confirmed);
 	}
-
-	/**
-	 * Show confirm confirm window.
-	 *
-	 * @param title the title
-	 * @param text the text
-	 * @param confirmed the confirmed
-	 * @return the confirm window
-	 */
 	public static ConfirmWindow showConfirm(String title, String text, Runnable confirmed) {
 		return showConfirm(title, text, null, confirmed);
 	}
-
-	/**
-	 * Show confirm confirm window.
-	 *
-	 * @param title the title
-	 * @param text the text
-	 * @param hide the hide
-	 * @param confirmed the confirmed
-	 * @return the confirm window
-	 */
 	public static ConfirmWindow showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
@@ -1007,13 +775,8 @@ public class IntUI {
 		window.setPosition(Core.input.mouse());
 		return window;
 	}
-	/**
-	 * Color block.
-	 *
-	 * @param cell the cell
-	 * @param color the color
-	 * @param needDouble the need double
-	 */
+
+
 	public static void colorBlock(Cell<?> cell, Color color, boolean needDouble) {
 		colorBlock(cell, color, null, needDouble);
 	}
@@ -1055,9 +818,7 @@ public class IntUI {
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
 
-	/**
-	 * The type Color container.
-	 */
+
 	public static class ColorContainer extends BorderImage {
 		private Color colorValue;
 		/**
@@ -1094,14 +855,7 @@ public class IntUI {
 	}
 
 
-	/**
-	 * Add check.
-	 *
-	 * @param cell the cell
-	 * @param boolp the boolp
-	 * @param valid the valid
-	 * @param unvalid the unvalid
-	 */
+
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 															String valid, String unvalid) {
 		cell.get().addListener(new IntUI.Tooltip(
@@ -1110,25 +864,13 @@ public class IntUI {
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
-	/**
-	 * Tips string.
-	 *
-	 * @param key the key
-	 * @return the string
-	 */
 	public static String tips(String key) {
 		return Core.bundle.format("mod-tools.tips", Core.bundle.get("mod-tools.tips." + key));
 	}
 
 
-	/**
-	 * The constant DEF_MASK_COLOR.
-	 */
 	public static final
 	Color DEF_MASK_COLOR = Color.black.cpy().a(0.5f),
-	/**
-	 * The Def focus color.
-	 */
 	DEF_FOCUS_COLOR = Color.blue.cpy().a(0.4f);
 
 	/**
@@ -1141,9 +883,6 @@ public class IntUI {
 	}
 
 
-	/**
-	 * The type Tooltip.
-	 */
 	public static class Tooltip extends arc.scene.ui.Tooltip {
 
 		/**
@@ -1192,9 +931,6 @@ public class IntUI {
 		}
 	}
 
-	/**
-	 * The interface Popup window.
-	 */
 	// ======-----弹窗------======
 	public interface PopupWindow extends INotice {}
 	/**
@@ -1255,9 +991,6 @@ public class IntUI {
 			//            closeOnBack();
 		}
 	}
-	/**
-	 * The type Confirm window.
-	 */
 	public static class ConfirmWindow extends Window implements IDisposable, PopupWindow {
 		/**
 		 * Instantiates a new Confirm window.
@@ -1294,9 +1027,6 @@ public class IntUI {
 			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
 		}
 	}
-	/**
-	 * The type Inside table.
-	 */
 	public static class InsideTable extends Table implements IMenu {
 		/**
 		 * Instantiates a new Inside table.
@@ -1332,9 +1062,6 @@ public class IntUI {
 		}
 	}
 
-	/**
-	 * The type Select table.
-	 */
 	public static class SelectTable extends AutoFitTable implements IMenu {
 		/**
 		 * Adds a hide() listener.

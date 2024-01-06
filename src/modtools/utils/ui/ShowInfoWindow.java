@@ -26,7 +26,7 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
 import modtools.ui.menus.MenuList;
 import modtools.utils.*;
-import modtools.utils.array.Pair;
+import modtools.struct.Pair;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
@@ -525,12 +525,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 					 });
 				 }),
 				 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
-					 MethodHandle handle;
-					 try {
-						 handle = lookup.unreflectSpecial(m, m.getDeclaringClass());
-					 } catch (IllegalAccessException e) {
-						 throw new RuntimeException(e);
-					 }
+					 MethodHandle handle = getHandle(m);
 					 if (isSingle) {
 						 catchRun(() -> dealInvokeResult(handle.invokeWithArguments(o), cell, l)
 							, l).run();
@@ -569,6 +564,20 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		methods.row();
 		methods.image().color(Tmp.c1.set(c_underline)).growX().colspan(7).row();
 	}
+	private static MethodHandle getHandle(Method m) {
+		try {
+			return lookup.unreflectSpecial(m, m.getDeclaringClass());
+		} catch (IllegalAccessException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	private static MethodHandle getHandle(Constructor<?> ctor) {
+		try {
+			return lookup.unreflectConstructor(ctor);
+		} catch (IllegalAccessException e) {
+			throw new RuntimeException(e);
+		}
+	}
 	private void foldUnwrap(ReflectTable table, Member member, MyLabel label, Element attribute) {
 		if (table.skip) return;
 		IntUI.doubleClick(label, () -> {
@@ -600,7 +609,20 @@ public class ShowInfoWindow extends Window implements IDisposable {
 					 return;
 				 }
 				 JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
-					 JSFunc.copyValue("instance", ctor.newInstance(
+					 JSFunc.copyValue("Instance", ctor.newInstance(
+						convertArgs(arr, ctor.getParameterTypes())
+					 ));
+				 });
+			 }),
+			 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
+				 MethodHandle handle = getHandle(ctor);
+				 if (isSingle) {
+					 catchRun(() -> JSFunc.copyValue("Instance", handle.invoke())
+						, label).run();
+					 return;
+				 }
+				 JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
+					 JSFunc.copyValue("Instance", handle.invokeWithArguments(
 						convertArgs(arr, ctor.getParameterTypes())
 					 ));
 				 });

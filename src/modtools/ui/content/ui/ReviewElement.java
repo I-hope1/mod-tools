@@ -33,6 +33,7 @@ import modtools.ui.components.review.CellDetailsWindow;
 import modtools.ui.components.utils.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
+import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menus.*;
 import modtools.utils.*;
@@ -72,7 +73,7 @@ public class ReviewElement extends Content {
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
-					topGroup.requestSelectElem(null, callback);
+					build();
 					HopeInput.justPressed.clear();
 					event.stop();
 				}
@@ -218,7 +219,8 @@ public class ReviewElement extends Content {
 
 	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
 	public void build() {
-		topGroup.requestSelectElem(null, callback);
+		if (topGroup.isSelecting()) topGroup.resetSelectElem();
+		else topGroup.requestSelectElem(null, callback);
 	}
 
 

@@ -5,14 +5,12 @@ import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
-import arc.math.Mat;
 import arc.math.geom.*;
 import arc.struct.ObjectSet;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
-import modtools.ui.effect.ScreenSampler;
 import modtools.utils.*;
-import modtools.utils.array.MySet;
+import modtools.struct.MySet;
 
 
 public class WorldDraw {

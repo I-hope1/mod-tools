@@ -36,7 +36,6 @@ import modtools.ui.content.Content;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.*;
-import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;

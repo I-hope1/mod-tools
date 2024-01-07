@@ -30,13 +30,12 @@ import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.content.ui.PositionProv;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.MenuList;
-import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.world.WorldDraw;
 
-import java.util.*;
 import java.util.Vector;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
 

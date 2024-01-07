@@ -22,7 +22,6 @@ import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.components.review.*;
 import modtools.ui.content.ui.*;
 import modtools.ui.menu.*;
-import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
 import modtools.utils.ui.FormatHelper;

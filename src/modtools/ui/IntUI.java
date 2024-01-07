@@ -26,7 +26,6 @@ import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.menu.*;
-import modtools.ui.menus.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
 import modtools.utils.JSFunc.MyProv;
@@ -51,13 +50,9 @@ public class IntUI {
 	public static final float DEFAULT_WIDTH = 150;
 	public static final float MAX_OFF       = 35f;
 
-	public static final Frag        frag   = new Frag();
-	public static final TopGroup    topGroup;
-	public static       ColorPicker picker = new ColorPicker();
-
-	static {
-		topGroup = new TopGroup();
-	}
+	public static final Frag        frag     = new Frag();
+	public static final TopGroup    topGroup = new TopGroup();
+	public static       ColorPicker picker   = new ColorPicker();
 
 	/**
 	 * Load.
@@ -855,7 +850,6 @@ public class IntUI {
 	}
 
 
-
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 															String valid, String unvalid) {
 		cell.get().addListener(new IntUI.Tooltip(
@@ -871,7 +865,7 @@ public class IntUI {
 
 	public static final
 	Color DEF_MASK_COLOR = Color.black.cpy().a(0.5f),
-	DEF_FOCUS_COLOR = Color.blue.cpy().a(0.4f);
+	 DEF_FOCUS_COLOR     = Color.blue.cpy().a(0.4f);
 
 	/**
 	 * 聚焦一个元素

@@ -24,7 +24,6 @@ import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.menu.*;
-import modtools.ui.menus.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.linstener.WorldSelectListener;
 import modtools.ui.components.utils.MyItemSelection;

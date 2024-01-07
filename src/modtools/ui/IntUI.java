@@ -25,7 +25,7 @@ import mindustry.ui.*;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
-import modtools.ui.effect.ScreenSampler;
+import modtools.ui.menu.*;
 import modtools.ui.menus.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
@@ -943,9 +943,6 @@ public class IntUI {
 	 */
 	public interface INotice extends IDisposable {}
 
-	/**
-	 * The type Info fade popup.
-	 */
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
 		/**
 		 * Instantiates a new Info fade popup.

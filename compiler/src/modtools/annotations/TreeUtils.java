@@ -1,17 +1,12 @@
 package modtools.annotations;
 
-import arc.struct.Seq;
-import arc.util.Log;
-import com.sun.source.tree.Tree;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
-import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.Name;
 
-import javax.lang.model.element.*;
+import javax.lang.model.element.TypeElement;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -29,7 +24,8 @@ public interface TreeUtils extends ParseUtils {
 	) {
 		JCVariableDecl fieldElem = findChild(classDecl, Tag.VARDEF, var -> var.name.toString().equals(fieldName));
 		if (fieldElem == null) {
-			Log.err(new IllegalStateException("You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") field."));
+			new IllegalStateException("You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") field.")
+			 .printStackTrace();
 			return false;
 		}
 		return true;
@@ -90,10 +86,10 @@ public interface TreeUtils extends ParseUtils {
 			 SettingUI().members(), SettingUI().members(), SettingUI()
 			); */
 			unit.namedImportScope.importType(sym.owner.members(), sym.owner.members(), sym);
-			Seq seq = Seq.with(unit.defs.toArray());
-			seq.insert(1, mMaker.Import(mMaker.Select(mMaker.Ident(
+			ArrayList list = new ArrayList<>(java.util.List.of(unit.defs.toArray()));
+			list.add(1, mMaker.Import(mMaker.Select(mMaker.Ident(
 			 sym.packge().fullname), sym), false));
-			unit.defs = List.from(seq);
+			unit.defs = List.from(list);
 		}
 	}
 }

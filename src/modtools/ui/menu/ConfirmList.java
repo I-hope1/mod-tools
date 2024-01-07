@@ -1,4 +1,4 @@
-package modtools.ui.menus;
+package modtools.ui.menu;
 
 import arc.scene.style.Drawable;
 import modtools.ui.IntUI;
@@ -17,7 +17,7 @@ public class ConfirmList extends MenuList {
 	 * @return the menu list
 	 */
 	public static MenuList with(Drawable icon, String name, String text, Runnable run) {
-		MenuList list = MenuList.with(icon, name, run);
+		MenuList list = with(icon, name, run);
 		list.cons = __ -> IntUI.showConfirm(text, run);
 		return list;
 	}

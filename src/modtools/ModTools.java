@@ -54,7 +54,7 @@ public class ModTools extends Mod {
 			Log.err("Failed to load ModTools.", e);
 		}
 	}
-	void load() {
+	private void load() {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
 
@@ -116,13 +116,7 @@ public class ModTools extends Mod {
 		MyShaders.load();
 		HopeInput.load();
 		if (OS.isWindows || OS.isMac) {
-			ui.mods.addListener(new VisibilityListener() {
-				public boolean shown() {
-					ui.mods.removeListener(this);
-					FileUtils.buildSelector(ui.mods.buttons.row());
-					return false;
-				}
-			});
+			addFileDragListener();
 		}
 		Time.runTask(6f, () -> {
 			IntUI.load();
@@ -133,6 +127,15 @@ public class ModTools extends Mod {
 			Tools.runIgnoredException(Background::main);
 		}
 		Log.info("Loaded ModTools input and ui in @ms", Time.elapsed());
+	}
+	private static void addFileDragListener() {
+		ui.mods.addListener(new VisibilityListener() {
+			public boolean shown() {
+				ui.mods.removeListener(this);
+				FileUtils.buildSelector(ui.mods.buttons.row());
+				return false;
+			}
+		});
 	}
 
 	/**

@@ -142,6 +142,7 @@ nb-configuration.xml
 .gradle/
 gradle-app.setting
 /build/
+/compiler/build/*
 /android/build/
 /core/build/
 /desktop/build/

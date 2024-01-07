@@ -1,31 +1,22 @@
 package modtools.annotations;
 
-import arc.struct.Seq;
-import arc.util.Log;
 import com.sun.tools.javac.api.JavacTrees;
-import com.sun.tools.javac.code.ClassFinder;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.code.Symtab;
-import com.sun.tools.javac.code.Type;
-import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.comp.Attr;
-import com.sun.tools.javac.jvm.ClassWriter;
-import com.sun.tools.javac.jvm.Gen;
+import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.parser.ParserFactory;
-import com.sun.tools.javac.processing.JavacFiler;
-import com.sun.tools.javac.processing.JavacProcessingEnvironment;
-import com.sun.tools.javac.tree.JCTree;
-import com.sun.tools.javac.tree.JCTree.JCClassDecl;
-import com.sun.tools.javac.tree.JCTree.Tag;
-import com.sun.tools.javac.tree.TreeMaker;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.Names;
+import com.sun.tools.javac.processing.*;
+import com.sun.tools.javac.tree.*;
+import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.*;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
-import java.util.Set;
+import java.util.List;
+import java.util.*;
 import java.util.function.Predicate;
 
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor implements TreeUtils, AnnotationUtils {
@@ -65,13 +56,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
 					dealElement((T) element);
-				} catch (Throwable e) {Log.err(e);}
+				} catch (Throwable e) {
+					e.printStackTrace();
+				}
 			}
 		}
 		try {
 			process();
 		} catch (Throwable e) {
-			Log.err(e);
+			e.printStackTrace();
 		}
 		return true;
 	}
@@ -97,7 +90,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		super.init(env);
 		try {
 			init();
-		} catch (Throwable e) {Log.err(e);}
+		} catch (Throwable e) {e.printStackTrace();}
 		if (elements != null) return;
 
 		__context = ((JavacProcessingEnvironment) processingEnv).getContext();
@@ -131,8 +124,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		}
 		return null;
 	}
-	public static Seq<Element> findAllChild(Element parent, String name, ElementKind kind) {
-		Seq<Element> set = new Seq<>();
+	public static List<Element> findAllChild(Element parent, String name, ElementKind kind) {
+		List<Element> set = new ArrayList<>();
 		for (Element member : parent.getEnclosedElements()) {
 			if (member.getKind() == kind && (name == null || member.getSimpleName().contentEquals(name))) {
 				set.add(member);
@@ -148,8 +141,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		}
 		return null;
 	}
-	public static <T extends JCTree> Seq<T> findAllChild(JCClassDecl parent, Tag tag, Predicate<T> predicate) {
-		Seq<T> seq = new Seq<>();
+	public static <T extends JCTree> List<T> findAllChild(JCClassDecl parent, Tag tag, Predicate<T> predicate) {
+		List<T> seq = new ArrayList<>();
 		for (JCTree def : parent.defs) {
 			if (def.getTag() == tag && predicate.test((T) def)) {
 				seq.add((T) def);
@@ -206,7 +199,41 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		try {
 			Class.forName("modtools.annotations.HopeReflect");
 		} catch (Throwable e) {
-			Log.err(e);
+			e.printStackTrace();
 		}
+	}
+
+
+	public static String kebabToCamel(String s) {
+		StringBuilder result = new StringBuilder(s.length());
+
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (c != '_' && c != '-') {
+				if (i != 0 && (s.charAt(i - 1) == '_' || s.charAt(i - 1) == '-')) {
+					result.append(Character.toUpperCase(c));
+				} else {
+					result.append(c);
+				}
+			}
+		}
+
+		return result.toString();
+	}
+	public static String capitalize(String s) {
+		StringBuilder result = new StringBuilder(s.length());
+
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (c == '_' || c == '-') {
+				result.append(" ");
+			} else if (i == 0 || s.charAt(i - 1) == '_' || s.charAt(i - 1) == '-') {
+				result.append(Character.toUpperCase(c));
+			} else {
+				result.append(c);
+			}
+		}
+
+		return result.toString();
 	}
 }

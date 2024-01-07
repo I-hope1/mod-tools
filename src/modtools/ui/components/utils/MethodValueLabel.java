@@ -2,7 +2,7 @@ package modtools.ui.components.utils;
 
 import arc.struct.Seq;
 import arc.util.Align;
-import modtools.ui.menus.MenuList;
+import modtools.ui.menu.MenuList;
 
 import java.lang.reflect.*;
 

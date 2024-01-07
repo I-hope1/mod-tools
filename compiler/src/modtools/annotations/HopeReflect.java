@@ -1,8 +1,5 @@
 package modtools.annotations;
 
-import arc.Core;
-import arc.struct.ObjectMap;
-import arc.util.*;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.code.Scope.WriteableScope;
 import com.sun.tools.javac.code.*;
@@ -23,6 +20,7 @@ import java.lang.invoke.MethodType;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.Map.Entry;
 
 import static modtools.annotations.BaseProcessor.*;
 
@@ -39,7 +37,7 @@ public class HopeReflect {
 			Module module = Object.class.getModule();
 			unsafe.putObject(BaseProcessor.class, off, module);
 			unsafe.putObject(HopeReflect.class, off, module);
-			unsafe.putObject(Reflect.class, off, module);
+			// unsafe.putObject(Reflect.class, off, module);
 			Class<?> reflect = Class.forName("jdk.internal.reflect.Reflection");
 			Map      map     = (Map) lookup.findStaticGetter(reflect, "fieldFilterMap", Map.class).invokeExact();
 			if (map != null) map.clear();
@@ -87,7 +85,7 @@ public class HopeReflect {
 			ObjectBytes = HopeReflect.class.getClassLoader()
 			 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class").readAllBytes();
 		} catch (IOException e) {
-			Log.err(e);
+			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
 	}
@@ -96,7 +94,7 @@ public class HopeReflect {
 	public static Class<?> mirrorTypes = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypesExceptionProxy");
 
 	/** 因为class不能完美复刻，所以这个表用于获取type */
-	public static ObjectMap<Class<?>, ClassType> classToType = new ObjectMap<>();
+	public static HashMap<Class<?>, ClassType> classToType = new HashMap<>();
 
 	// ---------------------定义类------------------------
 
@@ -105,11 +103,11 @@ public class HopeReflect {
 		if (!mirrorType.isInstance(proxy) && !mirrorTypes.isInstance(proxy))
 			throw new IllegalArgumentException("type (" + proxy + ") isn't MirroredType(s)ExceptionProxy");
 		if (mirrorTypes.isInstance(proxy)) {
-			List<Type> types = Reflect.get(mirrorTypes, proxy, "types");
+			List<Type> types = getAccess(mirrorTypes, proxy, "types");
 			return types.stream().map(HopeReflect::defineMirrorClass0)
 			 .toList().toArray(new Class[0]);
 		}
-		return defineMirrorClass1(Reflect.get(mirrorType, proxy, "type"));
+		return defineMirrorClass1(getAccess(mirrorType, proxy, "type"));
 	}
 	public static Class<?> defineMirrorClass0(Type type) {
 		if (type instanceof ClassType ct) {
@@ -149,14 +147,16 @@ public class HopeReflect {
 			throw new RuntimeException(e);
 		}
 	}
-	public static ClassLoader loader = new ClassLoader(Core.class.getClassLoader()) {};
+	public static ClassLoader loader = new ClassLoader(HopeReflect.class.getClassLoader()) {};
 
 	private static Class<?> defineMirrorClass0(ClassType type) {
 		Class<?> cl = classOrNull(type.tsym.flatName().toString(), loader);
 		// Log.info("t: @, @", type.tsym.flatName(), cl);
 
 		if (cl != null) return cl;
-		if ((cl = classToType.findKey(type, false)) != null) return cl;
+		cl = classToType.entrySet().stream().filter(e -> e.getValue() == type)
+		 .map(Entry::getKey).findAny().orElse(null);
+		if (cl != null) return cl;
 
 		try {
 			if (type.supertype_field != null && defineMirrorClass0(type.supertype_field) == null) return null;
@@ -172,7 +172,7 @@ public class HopeReflect {
 			classWriter.writeClassFile(out, symbol);
 			byte[] bytes = out.toByteArray();
 			cl = defineHiddenClass(bytes);
-			Reflect.set(Class.class, cl, "name", type.toString());
+			setAccess(Class.class, cl, "name", type.toString());
 			// cl = jdk.internal.misc.Unsafe.getUnsafe().defineClass(
 			//  null, bytes, 0, bytes.length, loader, null);
 			// if (cl != null) classToType.put(cl, type);
@@ -184,10 +184,23 @@ public class HopeReflect {
 		}
 	}
 	public static Class<?> defineHiddenClass(byte[] bytes) {
-		return Reflect.invoke((Object) Reflect.invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
+		return invoke((Object) invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
 			new Object[]{null, bytes}, String.class, byte[].class)
 		 , "defineClass", new Object[]{true}, boolean.class);
 	}
+	public static <T> T invoke(Object object, String name, Object[] args, Class<?>... parameterTypes) {
+		return invoke(object.getClass(), object, name, args, parameterTypes);
+	}
+	public static <T> T invoke(Class<?> type, Object object, String name, Object[] args, Class<?>... parameterTypes) {
+		try {
+			Method method = type.getDeclaredMethod(name, parameterTypes);
+			method.setAccessible(true);
+			return (T) method.invoke(object, args);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	private static boolean extracted(ClassType type, ClassSymbol symbol) {
 		boolean valid = false;
 		if (valid) for (Symbol sym : type.tsym.members().getSymbols()) {
@@ -218,7 +231,7 @@ public class HopeReflect {
 			Type    selfType            = ms.owner.type;
 			boolean generateConstructor = ms.isConstructor() && selfType != mSymtab.objectType;
 			if (generateConstructor) {
-				selfType = Reflect.invoke(
+				selfType = invoke(
 				 classOrThrow("com.sun.tools.javac.jvm.UninitializedType"),
 				 "uninitializedThis", new Object[]{selfType}, Type.class);
 			}
@@ -260,11 +273,28 @@ public class HopeReflect {
 
 		code.entryPoint();
 	}
+	public static <T> T getAccess(Class<?> cls, Object obj, String name) {
+		try {
+			Field field = cls.getDeclaredField(name);
+			field.setAccessible(true);
+			return (T) field.get(obj);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
 	public static <T> T get(Object obj, String name) {
 		try {
 			Field field = obj.getClass().getField(name);
 			field.setAccessible(true);
 			return (T) field.get(obj);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+	public static void setAccess(Class<?> clazz, Object obj, String name, Object value) {
+		try {
+			Field field = clazz.getDeclaredField(name);
+			unsafe.putObject(obj, unsafe.objectFieldOffset(field), value);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}

@@ -6,7 +6,7 @@ import mindustry.gen.Icon;
 import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
 import modtools.ui.components.input.JSRequest;
-import modtools.ui.menus.MenuList;
+import modtools.ui.menu.MenuList;
 import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.*;

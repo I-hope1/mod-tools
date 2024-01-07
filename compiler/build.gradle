@@ -30,11 +30,11 @@ dependencies {
 
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
-	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+//	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 //	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 
 	// only for document
 	compileOnly files(
-			new File(parent.buildDir0, "libs/${project.name}-1.0.jar")
+			new File(parent.buildDir0, "libs/${parent.group}.jar")
 	)
 }

@@ -1,4 +1,4 @@
-package modtools.ui.menus;
+package modtools.ui.menu;
 
 import arc.scene.style.Drawable;
 import arc.util.pooling.Pools;

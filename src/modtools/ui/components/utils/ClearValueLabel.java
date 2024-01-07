@@ -3,7 +3,7 @@ package modtools.ui.components.utils;
 import arc.func.*;
 import arc.scene.Element;
 import arc.struct.Seq;
-import modtools.ui.menus.MenuList;
+import modtools.ui.menu.MenuList;
 
 public class ClearValueLabel<T> extends PlainValueLabel<T> {
 

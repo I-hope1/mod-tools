@@ -35,6 +35,7 @@ import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
+import modtools.ui.menu.*;
 import modtools.ui.menus.*;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;

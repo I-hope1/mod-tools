@@ -4,7 +4,7 @@ import arc.func.*;
 import arc.struct.Seq;
 import mindustry.gen.Icon;
 import modtools.events.E_JSFunc;
-import modtools.ui.menus.MenuList;
+import modtools.ui.menu.MenuList;
 
 import static modtools.ui.IntUI.copyAsJSMenu;
 

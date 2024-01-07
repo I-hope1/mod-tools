@@ -1,12 +1,12 @@
 package modtools.annotations.processors.fieldinit;
 
-import arc.struct.*;
 import com.google.auto.service.AutoService;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
@@ -14,14 +14,14 @@ import modtools.annotations.builder.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.Set;
+import java.util.*;
 
 @AutoService({Processor.class})
 public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 	public Name selector;
 	/* method: settingColor */
-	ObjectMap<String, Symbol> map     = new ObjectMap<>();
-	Seq<Element>              methods = new Seq<>();
+	Map<String, Symbol>     map     = new HashMap<>();
+	java.util.List<Element> methods = new ArrayList<>();
 
 	public void dealElement(Element element) {
 		if (element.getKind() == ElementKind.METHOD) {
@@ -48,7 +48,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 		}
 	}
 	public void process() {
-		methods.each(this::process);
+		methods.forEach(this::process);
 	}
 	public void process(Element element) {
 		DataBoolSetting         anno         = element.getAnnotation(DataBoolSetting.class);

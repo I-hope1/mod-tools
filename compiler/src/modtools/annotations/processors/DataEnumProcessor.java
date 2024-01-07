@@ -1,6 +1,5 @@
 package modtools.annotations.processors;
 
-import arc.util.Strings;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.MethodSymbol;
@@ -40,14 +39,14 @@ public class DataEnumProcessor extends BaseProcessor<TypeElement> {
 
 		checkAndAddedData(element, clazz, newMainName);
 		findAllChild(clazz, Tag.METHODDEF, (JCMethodDecl m) -> m.name.equals(names.init))
-		 .each(t -> {
+		 .forEach(t -> {
 			 class Translator extends TreeTranslator {
 				 public void visitApply(JCMethodInvocation tree) {
 					 if (((JCIdent) tree.meth).name == names._super) result = null;
 					 else super.visitApply(tree);
 				 }
 			 }
-			 t.accept( new Translator());
+			 t.accept(new Translator());
 		 });
 		checkAndAddedEnabled(element, clazz);
 		checkAndAddedDef(element, clazz);
@@ -101,9 +100,24 @@ public class DataEnumProcessor extends BaseProcessor<TypeElement> {
 		methodDef.sym = symbol;
 		clazz.defs = clazz.defs.append(methodDef);
 	}
+	public static String insertSpaces(String s) {
+		StringBuilder result = new StringBuilder(s.length() + 1);
+
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+
+			if (i > 0 && Character.isUpperCase(c)) {
+				result.append(' ');
+			}
+
+			result.append(c);
+		}
+
+		return result.toString();
+	}
 	private void checkAndAddedData(TypeElement element, JCClassDecl clazz, String newMainName) {
 		if (findChild(element, "data", ElementKind.FIELD) != null) return;
-		String replace = Strings.insertSpaces(newMainName)
+		String replace = insertSpaces(newMainName)
 		 .replace(' ', '_');
 		addField(clazz, Flags.STATIC | Flags.PUBLIC | Flags.FINAL,
 		 dataType, "data",

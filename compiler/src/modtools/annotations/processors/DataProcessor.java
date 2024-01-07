@@ -1,15 +1,15 @@
 package modtools.annotations.processors;
 
-import arc.struct.*;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.Set;
+import java.util.*;
 
 @AutoService({Processor.class})
 // @SupportedOptions({"debug", "verify"})
@@ -17,7 +17,7 @@ public class DataProcessor extends BaseProcessor {
 	private static final String EVENT       = "modtools.events.MyEvents";
 	private static final String EVNET_FIELD = "$event-0";
 	public void process2() {
-		initMap.each((parent, selves) -> {
+		initMap.forEach((parent, selves) -> {
 			/* if (!parent.getSimpleName().toString().startsWith("E_"))
 				throw new IllegalArgumentException("class name must start with 'E_'"); */
 			var classDecl = (JCClassDecl) trees.getTree(parent);
@@ -26,8 +26,7 @@ public class DataProcessor extends BaseProcessor {
 			 classDecl,
 			 Flags.PRIVATE | Flags.FINAL,
 			 findType(EVENT),
-			 EVNET_FIELD,
-			 "new " + EVENT + "()");
+			 EVNET_FIELD, "new " + EVENT + "()");
 
 			String E_NAME = "modtools.events.E_" + parent.getSimpleName();
 			// classDecl.sym.members_field.enter(findSymbol(EVNET_FIELD));
@@ -35,7 +34,7 @@ public class DataProcessor extends BaseProcessor {
 			if (method == null) return;
 
 			ListBuffer<JCStatement> buffer = new ListBuffer<>();
-			selves.each(self -> {
+			selves.forEach(self -> {
 				String fieldName     = self.getSimpleName() + "";
 				String underlineName = getUnderlineName(fieldName).toString();
 				/* classDecl.defs = classDecl.defs.append(maker.MethodDef(
@@ -84,10 +83,10 @@ public class DataProcessor extends BaseProcessor {
 			// Log.info(classDecl);
 		});
 	}
-	public ObjectMap<Element, Seq<Element>> initMap = new ObjectMap<>();
+	public Map<Element, java.util.List<Element>> initMap = new HashMap<>();
 
 	public void dealElement(Element element) {
-		if (element.getKind() == ElementKind.FIELD) initMap.get(element.getEnclosingElement(), Seq::new).add(element);
+		if (element.getKind() == ElementKind.FIELD) initMap.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
 		else if (element.getKind() == ElementKind.ENUM) {
 			JCVariableDecl data = (JCVariableDecl) trees.getTree(findChild(element, "data", ElementKind.FIELD));
 			data.init = parseExpression("modtools.utils.MySettings.SETTINGS.child(\"%name%\")"

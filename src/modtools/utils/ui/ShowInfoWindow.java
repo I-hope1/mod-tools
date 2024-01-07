@@ -24,7 +24,7 @@ import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
-import modtools.ui.menus.MenuList;
+import modtools.ui.menu.MenuList;
 import modtools.utils.*;
 import modtools.struct.Pair;
 import modtools.utils.reflect.*;

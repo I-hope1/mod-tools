@@ -6,7 +6,7 @@ import arc.scene.ui.Button;
 import arc.struct.Seq;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
-import modtools.ui.menus.MenuList;
+import modtools.ui.menu.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;
 

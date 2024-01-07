@@ -1,9 +1,7 @@
 package modtools.annotations.processors.fieldinit;
 
-import arc.struct.Seq;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;

@@ -1,14 +1,12 @@
 package modtools.annotations.processors;
 
-import arc.struct.*;
-import arc.util.Log;
 import com.google.auto.service.AutoService;
 import com.sun.source.tree.*;
 import com.sun.source.util.TreeScanner;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import modtools.annotations.*;
+import modtools.annotations.BaseProcessor;
 import modtools.annotations.watch.*;
 
 import javax.annotation.processing.Processor;
@@ -27,7 +25,7 @@ public class WatchProcessor extends BaseProcessor {
 	public void process() {
 		if (timeSymbol == null) timeSymbol = findClassSymbol("arc.util.Time");
 		// Iterate over each class field
-		classFields.each((dcls, fieldSeq) -> {
+		classFields.forEach((dcls, fieldSeq) -> {
 			JCClassDecl classDecl = (JCClassDecl) trees.getTree(dcls);
 			// Add a constant field to the class
 			addConstantField(classDecl, mSymtab.stringType.tsym.type.constType(dcls), "NAME", dcls.toString()
@@ -47,18 +45,18 @@ public class WatchProcessor extends BaseProcessor {
 			// ------------------------fields--------------------------
 
 			/* group -> field[] */
-			ObjectMap<String, ObjectMap<Element, WatchField>> fieldMap = new ObjectMap<>();
+			HashMap<String, HashMap<Element, WatchField>> fieldMap = new HashMap<>();
 			// Iterate over each field in the field sequence
-			fieldSeq.each((field) -> {
+			fieldSeq.forEach((field) -> {
 				// Get the WatchField annotation for the field
 				WatchField watchField = getAnnotationByElement(WatchField.class, field, true);
 				Objects.requireNonNull(watchField);
 				// Add the field to the field map
-				fieldMap.get(watchField.group(), ObjectMap::new)
+				fieldMap.computeIfAbsent(watchField.group(), k -> new HashMap<>())
 				 .put(field, watchField);
 			});
 			// Iterate over each group in the field map
-			fieldMap.each((group, fields) -> {
+			fieldMap.forEach((group, fields) -> {
 				boolean isStatic  = false/* first.getModifiers().contains(Modifier.STATIC) */;
 				String  fieldName = (isStatic ? STATIC_SIG : "") + group + WATCH_SIG;
 				if (!checkField(classDecl, fieldName, group)) return;
@@ -68,11 +66,11 @@ public class WatchProcessor extends BaseProcessor {
 				// Check test_con whether is valid
 				if (test_con != null) {
 					if (!test_con.getModifiers().getFlags().contains(Modifier.STATIC)) {
-						Log.err("The method " + classDecl.name + "." + test_con.name + " must be static");
+						System.err.println("The method " + classDecl.name + "." + test_con.name + " must be static");
 						return;
 					}
 					if (test_con.params.length() != 1 || test_con.params.get(0).equals(classDecl)) {
-						Log.err("The method " + classDecl.name + "." + test_con.name + " sig must be ("
+						System.err.println("The method " + classDecl.name + "." + test_con.name + " sig must be ("
 										+ classDecl.name + ")Z");
 						return;
 					}
@@ -80,7 +78,7 @@ public class WatchProcessor extends BaseProcessor {
 
 				ArrayList<JCStatement> statements = new ArrayList<>();
 				// Iterate over each field in the group
-				fields.each((el, field) -> {
+				fields.forEach((el, field) -> {
 					/* 添加watch监控
 					 * Generate: field.watch("name", () -> field, @interval);
 					 **/
@@ -116,7 +114,7 @@ public class WatchProcessor extends BaseProcessor {
 
 			try {
 				buildVar(dcls, classDecl);
-			} catch (Throwable e) {Log.err(e);}
+			} catch (Throwable e) {e.printStackTrace();}
 			// Log.info(classDecl);
 		});
 
@@ -148,14 +146,13 @@ public class WatchProcessor extends BaseProcessor {
 				// Log.info(watchVar.classes()[0].getDeclaredMethods());
 
 				String fieldName = watchVar.group() + WATCH_SIG;
-				if (!checkField(classDecl, fieldName, "" + watchVar.group()))
+				if (!checkField(classDecl, fieldName, watchVar.group()))
 					return super.visitVariable(variable, parent);
-				Seq<JCStatement> seq = Seq.with(block.stats);
-
+				var list = new ArrayList<>(block.stats);
 				// StringBuilder sb = new StringBuilder();
 				// sb.append('{');
 
-				seq.insert(seq.indexOf(variable) + 1, execStatement(
+				list.add(list.indexOf(variable) + 1, execStatement(
 				 mMaker.Select(
 					mMaker.Apply(List.nil(),
 					 PSelect(fieldName, "watch"),
@@ -175,7 +172,7 @@ public class WatchProcessor extends BaseProcessor {
 				// sb.append('}');
 				// seq.insert(seq.indexOf((JCStatement) variable) + 1,
 				//  parseBlock(sb));
-				block.stats = List.from(seq);
+				block.stats = List.from(list);
 				// Log.info(block);
 				return super.visitVariable(variable, parent);
 			}
@@ -184,11 +181,11 @@ public class WatchProcessor extends BaseProcessor {
 	public void dealElement(Element element) {
 		// 对应WatchClass
 		if (element.getKind() == ElementKind.CLASS) {
-			classFields.put(element, new Seq<>());
+			classFields.put(element, new ArrayList<>());
 		}
 		// 对应WatchField
 		else if (element.getKind() == ElementKind.FIELD) {
-			classFields.get(element.getEnclosingElement(), Seq::new).add(element);
+			classFields.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
 		}
 	}
 	public Set<String> getSupportedAnnotationTypes() {
@@ -198,5 +195,5 @@ public class WatchProcessor extends BaseProcessor {
 		 WatchVar.class.getCanonicalName()
 		);
 	}
-	final ObjectMap<Element, Seq<Element>> classFields = new ObjectMap<>();
+	final Map<Element, ArrayList<Element>> classFields = new HashMap<>();
 }

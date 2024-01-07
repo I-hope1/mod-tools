@@ -1,8 +1,6 @@
 package modtools.annotations.processors;
 
 
-import arc.struct.Seq;
-import arc.util.Strings;
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.tree.JCTree.*;
@@ -14,7 +12,7 @@ import modtools.annotations.reflect.ReflectUtils;
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.lang.reflect.Modifier;
-import java.util.Set;
+import java.util.*;
 
 @AutoService({Processor.class})
 public class OptimizeReflectProcessor extends BaseProcessor<Element> implements ReflectUtils {
@@ -23,7 +21,7 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 		if (element instanceof TypeElement) {
 			var              unit      = trees.getPath(element).getCompilationUnit();
 			var              classDecl = (JCClassDecl) trees.getTree(element);
-			Seq<JCStatement> stats     = new Seq<>();
+			ArrayList<JCStatement> stats     = new ArrayList<>();
 			addImport((TypeElement) element, FIELD());
 			addImport((TypeElement) element, FIELD_UTILS());
 			classDecl.accept(new TreeScanner() {
@@ -46,7 +44,7 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 					boolean isSetter = annotationByTree.isSetter();
 					variable.init = mMaker.Apply(null,
 					 mMaker.Select(mMaker.Ident(FIELD_UTILS()),
-						names.fromString((isSetter ? "set" : "get") + (variable.type.isPrimitive() ? Strings.capitalize("" + variable.type) : ""))),
+						names.fromString((isSetter ? "set" : "get") + (variable.type.isPrimitive() ? capitalize("" + variable.type) : ""))),
 					 isSetter ? List.of(invocation.args.get(1), mMaker.Ident(x), invocation.args.get(3)) :
 						List.of(invocation.args.get(1), mMaker.Ident(x))
 					);
@@ -58,7 +56,7 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 		}
 	}
 	private JCVariableDecl newFieldVariable(String newFieldName, JCExpression clazz, JCExpression name, JCClassDecl tree,
-																					Seq<JCStatement> stats) {
+																					ArrayList<JCStatement> stats) {
 		JCVariableDecl x;
 		x = addField(tree, Modifier.PRIVATE | Modifier.STATIC,
 		 FIELD().type, newFieldName, null);

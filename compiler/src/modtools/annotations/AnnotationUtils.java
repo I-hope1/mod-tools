@@ -1,6 +1,5 @@
 package modtools.annotations;
 
-import arc.util.Reflect;
 import com.sun.source.tree.*;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.code.*;
@@ -73,8 +72,8 @@ public interface AnnotationUtils {
 		if (overwrite) overwrite(unit, tree);
 		T ann = el.getAnnotation(clazz);
 		if (ann == null) return null;
-		InvocationHandler h = Reflect.get(Proxy.class, ann, "h");
-		HashMap<String, Object> map = Reflect.get(AnnotationInvocationHandler,
+		InvocationHandler h = HopeReflect.getAccess(Proxy.class, ann, "h");
+		HashMap<String, Object> map = HopeReflect.getAccess(AnnotationInvocationHandler,
 		 h, "memberValues");
 		map.replaceAll((k, v) ->
 		 HopeReflect.mirrorTypes.isInstance(v) || HopeReflect.mirrorType.isInstance(v) ?

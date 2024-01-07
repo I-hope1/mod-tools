@@ -1,4 +1,4 @@
-package modtools.ui.menus;
+package modtools.ui.menu;
 
 import arc.func.Prov;
 import arc.scene.style.Drawable;

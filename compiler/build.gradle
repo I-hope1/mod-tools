@@ -23,10 +23,10 @@ tasks.withType(JavaCompile) {
 dependencies {
 	implementation project(":annotations")
 
-//	compileOnly 'com.google.auto.service:auto-service:1.0.1'
-//	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
-	compileOnly files("../_libs/auto-service-1.1.1.jar")
-	annotationProcessor files("../_libs/auto-service-1.1.1.jar")
+	compileOnly 'com.google.auto.service:auto-service:1.0.1'
+	annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+//	compileOnly files("../_libs/auto-service-1.1.1.jar")
+//	annotationProcessor files("../_libs/auto-service-1.1.1.jar")
 
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 

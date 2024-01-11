@@ -3,19 +3,21 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.func.Func;
-import arc.input.KeyCode;
+import arc.func.*;
+import arc.graphics.Color;
+import arc.input.*;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
+import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
-import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectMap.Entry;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
@@ -33,6 +35,7 @@ import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
+import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
@@ -43,8 +46,10 @@ import modtools.ui.components.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.IntUI;
+import modtools.ui.control.HopeInput;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import rhino.*;
 
@@ -57,8 +62,10 @@ import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
-	private static final int   bottomCenter = Align.center | Align.bottom;
-	public static final  float w            = Core.graphics.isPortrait() ? 400 : 420;
+	private static final int FADE_ALIGN = Align.bottomLeft;
+
+	private static final Vec2  tmpV = new Vec2();
+	public static final  float w    = Core.graphics.isPortrait() ? 400 : 420;
 
 	public static Scripts    scripts;
 	public static Scriptable topScope, scope;
@@ -150,13 +157,14 @@ public class Tester extends Content {
 	 * -1表示originalText<br>
 	 * -2表示倒数第一个
 	 */
-	public        int          historyIndex    = -1;
+	public        int          historyPos      = -1;
 	/** 位于0处的文本 */
 	public        StringBuffer originalText    = null;
 	@DataEventFieldInit
 	public static boolean      rollbackHistory = E_Tester.rollback_history.enabled();
 
-	public ScrollPane pane;
+	public ScrollPane  pane;
+	public SclListener logSclListener;
 	public void build(Table table) {
 		if (ui == null) _load();
 
@@ -169,16 +177,109 @@ public class Tester extends Content {
 				return element;
 			}
 		};
-		Runnable invalidate = () -> {
+		textarea.addListener(new InputListener() {
+			public boolean scrolled(InputEvent event, float x, float y, float amountX, float amountY) {
+				HopeInput.axes.clear();
+				return super.scrolled(event, x, y, amountX, amountY);
+			}
+		});
+
+		Runnable areaInvalidate = () -> {
 			// cont.invalidate();
 			textarea.getArea().invalidateHierarchy();
 			textarea.layout();
 		};
-		ui.maximized(isMax -> Time.runTask(0, invalidate));
-		ui.sclListener.listener = invalidate;
+		ui.maximized(isMax -> Time.runTask(0, areaInvalidate));
+		ui.sclListener.listener = areaInvalidate;
 
+		makeArea(textarea);
+		// textarea.pack();
+
+		Cell<?> areaCell = _cont.add(textarea).grow()/* .uniform() */;
+		_cont.row();
+		ui.cont.update(() -> {
+			// if (logSclListener != null && logSclListener.scling) return;
+			((JSSyntax) textarea.syntax).enableJSProp = JSProp;
+			// areaCell.maxHeight(ui.cont.getHeight() / Scl.scl());
+		});
+
+		_cont.table(t -> {
+			t.defaults()
+			 .padRight(4f).padRight(4f)
+			 .size(45, 42);
+			t.button(Icon.leftOpenSmall, Styles.clearNonei, area::left);
+			t.button("@ok", Styles.flatBordert, () -> {
+				error = false;
+				// area.setText(getMessage().replaceAll("\\r", "\\n"));
+				compileAndExec(() -> {});
+			}).width(64).disabled(__ -> !finished);
+			t.button(Icon.rightOpenSmall, Styles.clearNonei, area::right);
+			t.button(Icon.copySmall, Styles.clearNonei, area::copy);
+			t.button(Icon.pasteSmall, Styles.clearNonei, () ->
+			 area.paste(Core.app.getClipboardText(), true)
+			);
+		}).growX().row();
+		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(p -> {
+			p.left().top();
+			buildLog(p);
+			p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
+			p.add(new MyLabel(() -> log))
+			 .wrap().style(HopeStyles.defaultLabel)
+			 .labelAlign(Align.left).growX();
+		}).grow().with(p -> p.setScrollingDisabled(true, false))).growX().with(t -> t.touchable = Touchable.enabled).uniform();
+
+		ScrollPane pane = new ScrollPane(_cont);
+		Runnable invalid = () -> {
+			float height = pane.getHeight() - _cont.getChildren().sumf(
+			 e -> e == textarea ? 0 : e.getHeight()
+			) - 30;
+			areaCell.height(height);
+			_cont.layout();
+		};
+		pane.update(invalid);
+		logSclListener = new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
+			public boolean valid(float x, float y) {
+				super.valid(x, y);
+				return top && !isDisabled();
+			}
+			public void touchDragged(InputEvent event, float x, float y, int pointer) {
+				super.touchDragged(event, x, y, pointer);
+
+				float val = Mathf.clamp(bind.getHeight(), 0, table.getHeight() - 120);
+				// areaCell.height(sum - val / Scl.scl());
+				logCell.height(val / Scl.scl());
+				invalid.run();
+				pane.setScrollingDisabled(true, true);
+			}
+			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				super.touchUp(event, x, y, pointer, button);
+				pane.setScrollingDisabled(false, false);
+			}
+
+			{
+				Time.runTask(1, () -> {
+					Vec2       v1    = ElementUtils.getAbsolutePos(_cont);
+					InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
+					event.type = (InputEventType.touchDown);
+					event.stageX = v1.x;
+					event.stageY = v1.y;
+					event.pointer = 0;
+					event.keyCode = KeyCode.mouseLeft;
+					if (touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
+						touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
+					}
+				});
+			}
+		};
+		logCell.height(64f).padLeft(8f);
+
+		table.add(pane).grow();
+		table.row();
+
+		bottomBar(table, textarea);
+	}
+	private void makeArea(TextAreaTab textarea) {
 		textarea.syntax = new JSSyntax(textarea);
-		// JSSyntax.apply(textarea);
 		area = textarea.getArea();
 		boolean[] cancelEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
@@ -198,113 +299,94 @@ public class Tester extends Content {
 		};
 		textarea.keyTypedB = (event, keycode) -> cancelEvent[0];
 		textarea.keyUpB = (event, keycode) -> cancelEvent[0];
-		// textarea.pack();
-
-		Cell<?> areaCell = _cont.add(textarea).grow().uniform();
-		areaCell.row();
-		ui.cont.update(() -> {
-			((JSSyntax) textarea.syntax).enableJSProp = JSProp;
-			areaCell.maxHeight(ui.cont.getHeight() / Scl.scl());
-		});
-
-		_cont.table(t -> {
-			t.defaults()
-			 .padRight(4f).padRight(4f)
-			 .size(45, 42);
-			t.button(Icon.leftOpenSmall, Styles.clearNonei, area::left);
-			t.button("@ok", Styles.flatBordert, () -> {
-				error = false;
-				// area.setText(getMessage().replaceAll("\\r", "\\n"));
-				compileAndExec(() -> {});
-			}).width(64).disabled(__ -> !finished);
-			t.button(Icon.rightOpenSmall, Styles.clearNonei, area::right);
-			t.button(Icon.copySmall, Styles.clearNonei, area::copy);
-			t.button(Icon.pasteSmall, Styles.clearNonei, () ->
-			 area.paste(Core.app.getClipboardText(), true)
-			);
-		}).growX().row();
-		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(new PrefTable(p -> {
-			p.add(new MyLabel(() -> log)).style(HopeStyles.defaultLabel).wrap()
-			 .grow().labelAlign(Align.center, Align.left);
-		})).grow()).growX().with(t -> t.touchable = Touchable.enabled);
-
-		new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
-			public boolean valid(float x, float y) {
-				super.valid(x, y);
-				return top && !isDisabled();
-			}
-			public void touchDragged(InputEvent event, float x, float y, int pointer) {
-				super.touchDragged(event, x, y, pointer);
-
-				logCell.height(Mathf.clamp(bind.getHeight(), 0, _cont.getHeight()) / Scl.scl());
-				_cont.invalidate();
-				pane.setScrollingDisabled(false, false);
-			}
-
-			{
-				Time.runTask(1, () -> {
-					Vec2       v1    = ElementUtils.getAbsolutePos(_cont);
-					InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
-					event.type = (InputEventType.touchDown);
-					event.stageX = v1.x;
-					event.stageY = v1.y;
-					event.pointer = 0;
-					event.keyCode = KeyCode.mouseLeft;
-					if (touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
-						touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
-					}
-				});
-			}
-
-			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				super.touchUp(event, x, y, pointer, button);
-				pane.setScrollingDisabled(false, true);
-			}
-		};
-		logCell.height(64f);
-
-		table.add(_cont).grow()
-		 .self(c -> c.update(__ -> c.maxHeight(Core.graphics.getHeight() / Scl.scl())))
-		 .row();
-
-		table.add(new PrefPane(p -> {
-			 ImageButtonStyle istyle = HopeStyles.clearNonei;
-			 int              isize  = 26;
-			 p.defaults().size(45).padLeft(2f);
-			 p.button(Icon.starSmall, istyle, isize, this::star);
-
-			 IntUI.addCheck(p.button(HopeIcons.loop, istyle, isize, () -> {
-				 loop = !loop;
-			 }), () -> loop, "@tester.loop", "@tester.notloop");
-
-			 IntUI.addCheck(p.button(Icon.lockSmall, istyle, isize, () -> {
-				 strict = !strict;
-			 }), () -> strict, "@tester.strict", "@tester.notstrict");
-
-			 // highlight
-			 IntUI.addCheck(p.button(HopeIcons.highlight, istyle, isize, () -> {
-				 textarea.enableHighlighting = !textarea.enableHighlighting;
-			 }), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
-
-			 p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails).with(c -> {
-				 IntUI.longPress0(c, () -> JSFunc.showInfo(res));
-			 });
-			 p.button(HopeIcons.history, istyle, isize, history::show);
-			 p.button(HopeIcons.favorites, istyle, isize, bookmark::show);
-			 // p.button("@startup", bookmark::show);
-
-			 IntUI.addCheck(p.button(HopeIcons.interrupt, istyle, isize, () -> {
-				 stopIfOvertime = !stopIfOvertime;
-			 }), () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
-			 IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> {
-				 multiThread = !multiThread;
-			 }), () -> multiThread, "@tester.multiThread", "@tester.multiThread");
-		 }, sp -> Math.min(sp, w)))
-		 .height(56).growX()
-		 .get().setScrollingDisabledY(true);
-
-		buildEditTable();
 	}
+	private void buildLog(Table p) {
+		p.table(lg -> lg.left().update(() -> {
+			lg.getCells().clear();
+			lg.clearChildren();
+			logs.each(item -> {
+				lg.add("[" + item.charAt(0) + "]")
+				 .style(HopeStyles.defaultLabel)
+				 .color(switch (item.charAt(0)) {
+					 case 'D' -> Color.green;
+					 case 'I' -> Color.royal;
+					 case 'W' -> Color.yellow;
+					 case 'E' -> Color.scarlet;
+					 case ' ' -> Color.white;
+					 default -> throw new IllegalStateException("Unexpected value: " + item.charAt(0));
+				 }).top();
+				lg.add(item.substring(1))
+				 .wrap().growX().style(HopeStyles.defaultLabel)
+				 .labelAlign(Align.left).row();
+			});
+		})).growX().left().colspan(2).row();
+	}
+	private void bottomBar(Table table, TextAreaTab textarea) {
+		FoldedImageButton folder  = new FoldedImageButton(true, HopeStyles.hope_flati);
+		Table             p       = new Table();
+		PrefPane          resPane = new PrefPane(p);
+		int               height  = 56;
+		resPane.xp = x -> w;
+		resPane.yp = y -> folder.hasChildren() ? height : 0;
+		resPane.setScrollingDisabledY(true);
+		folder.setContainer(table.add(resPane).growX().padLeft(6f));
+
+		Table folderContainer = new Table();
+		folderContainer.left().bottom().add(folder).size(36f);
+		folderContainer.setFillParent(true);
+		folderContainer.update(() -> {
+			folderContainer.marginBottom(p.hasChildren() ? p.getHeight() : 0);
+		});
+		table.addChild(folderContainer);
+		folder.rebuild = () -> {
+			Time.runTask(1, folderContainer::toFront);
+			p.clearChildren();
+			p.getCells().clear();
+			ImageButtonStyle istyle = HopeStyles.clearNonei;
+			int              isize  = 26;
+			p.defaults().size(45).padLeft(2f);
+			p.button(Icon.starSmall, istyle, isize, this::star);
+
+			IntUI.addCheck(p.button(HopeIcons.loop, istyle, isize, () -> {
+				loop = !loop;
+			}), () -> loop, "@tester.loop", "@tester.notloop");
+
+			IntUI.addCheck(p.button(Icon.lockSmall, istyle, isize, () -> {
+				strict = !strict;
+			}), () -> strict, "@tester.strict", "@tester.notstrict");
+
+			// highlight
+			IntUI.addCheck(p.button(HopeIcons.highlight, istyle, isize, () -> {
+				textarea.enableHighlighting = !textarea.enableHighlighting;
+			}), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
+
+			p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails).with(c -> {
+				IntUI.longPress0(c, () -> JSFunc.showInfo(res));
+			});
+			p.button(HopeIcons.history, istyle, isize, history::show)
+			 .get().addCaptureListener(new ElementGestureListener() {
+				 public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {
+					 if (velocityY > 10) {
+						 rollHistory(false);
+					 }
+					 if (velocityY < -10) {
+						 rollHistory(true);
+					 }
+				 }
+			 });
+			p.button(HopeIcons.favorites, istyle, isize, bookmark::show);
+			// p.button("@startup", bookmark::show);
+
+			IntUI.addCheck(p.button(HopeIcons.interrupt, istyle, isize, () -> {
+				stopIfOvertime = !stopIfOvertime;
+			}), () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
+			IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> {
+				multiThread = !multiThread;
+			}), () -> multiThread, "@tester.multiThread", "@tester.multiThread");
+		};
+		Time.run(2, () -> folder.fireCheck(false));
+	}
+
 	private void showDetails() {
 		if (res instanceof Class) JSFunc.showInfo((Class<?>) res);
 		else JSFunc.showInfo(res);
@@ -315,44 +397,6 @@ public class Tester extends Content {
 			return true;
 		}
 		return false;
-	}
-	private void buildEditTable() {
-		// ui.buttons.row();
-/* 		FillTable editTable = ui.addFillTable(p -> p.table(Tex.pane, t -> {
-			TextButtonStyle style = IntStyles.cleart;
-			t.defaults().size(280, 60).left();
-			t.row();
-			t.button("@schematic.copy.import", Icon.download, style, () -> {
-				p.hide();
-				area.setText(Core.app.getClipboardText());
-			}).marginLeft(12);
-			t.row();
-			t.button("@schematic.copy", Icon.copy, style, () -> {
-				p.hide();
-				JSFunc.copyText(getMessage().replaceAll("\r", "\n"));
-			}).marginLeft(12);
-			t.row();
-			t.button("@back", Icon.left, style, p::hide).marginLeft(12);
-		})); */
-
-		/* ui.cont.marginBottom(4);
-		ui.cont.button(Icon.upOpenSmall, Styles.flati, 16f,
-			editTable::show)
-		 .visible(() -> !ui.isMinimize)
-		 .update(b -> {
-			 b.toFront();
-			 b.setSize(Scl.scl(32), Scl.scl(24));
-			 b.setPosition(ui.cont.getWidth() / 2f, 0, Align.center | Align.bottom);
-		 }).with(b -> {
-			 ui.cont.getCell(b).clearElement();
-			 b.remove();
-			 ui.cont.addChild(b);
-		 }).padBottom(-4); */
-		/* ui.buttons.button("@edit", Icon.edit, () -> {
-			ui.cont.addChild(editTable);
-			editTable.setPosition(0, 0);
-			ui.noButtons(true);
-		}).size(210, 64); */
 	}
 	private void star() {
 		new NameWindow(res -> {
@@ -382,36 +426,36 @@ public class Tester extends Content {
 		return false;
 	}
 	private boolean rollHistory(boolean forward) {
-		if (historyIndex == -1) originalText = area.getText0();
-		historyIndex += forward ? 1 : -1;
-		Vec2 pos = Tmp.v1.set(ui.x + ui.getWidth() / 2f, ui.y + 20);
-		if (historyIndex == -1 || (rollbackHistory && historyIndex >= maxHistorySize)) {
-			if (historyIndex != -1) showRollback(pos);
-			historyIndex = -1;
+		if (historyPos == -1) originalText = area.getText0();
+		historyPos += forward ? 1 : -1;
+		Vec2 pos = tmpV.set(ui.x, ui.y + 20);
+		if (historyPos == -1 || (rollbackHistory && historyPos >= maxHistorySize)) {
+			if (historyPos != -1) showRollback(pos);
+			historyPos = -1;
 			area.setText0(originalText);
 			log = "";
-			IntUI.showInfoFade("[accent]0/[lightgray]" + maxHistorySize, pos, bottomCenter);
+			IntUI.showInfoFade("[accent]0[]/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
 			return true;
 		}
 		if (rollbackHistory) {
-			historyIndex = Math.max(historyIndex, -1);
-			int last = historyIndex;
-			historyIndex = (historyIndex + maxHistorySize) % maxHistorySize;
-			if (last != historyIndex) {
+			historyPos = Math.max(historyPos, -1);
+			int last = historyPos;
+			historyPos = (historyPos + maxHistorySize) % maxHistorySize;
+			if (last != historyPos) {
 				showRollback(pos);
 			}
-		} else if (historyIndex < -1 || historyIndex >= maxHistorySize) {
-			historyIndex = forward ? history.list.size - 1 : -1;
+		} else if (historyPos < -1 || historyPos >= maxHistorySize) {
+			historyPos = forward ? history.list.size - 1 : -1;
 			return false;
 		}
-		IntUI.showInfoFade(historyIndex + 1 + "/[lightgray]" + maxHistorySize, pos, bottomCenter);
-		Fi dir = history.list.get(historyIndex);
+		IntUI.showInfoFade(historyPos + 1 + "/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
+		Fi dir = history.list.get(historyPos);
 		area.setText(readFiOrEmpty(dir.child("message.txt")));
 		log = readFiOrEmpty(dir.child("log.txt"));
 		return true;
 	}
 	private static void showRollback(Vec2 pos) {
-		IntUI.showInfoFade("@tester.rollback", Tmp.v2.set(pos).add(0, 80), bottomCenter);
+		IntUI.showInfoFade("@tester.rollback", pos.add(0, 80), FADE_ALIGN);
 	}
 	public void build() {
 		if (ui == null) {
@@ -429,6 +473,7 @@ public class Tester extends Content {
 	void setup() {
 		ui.cont.pane(this::build).grow().update(pane -> {
 			this.pane = pane;
+			pane.setScrollingDisabled(true, true);
 			pane.setOverscroll(false, false);
 		});
 	}
@@ -442,7 +487,7 @@ public class Tester extends Content {
 		compileScript();
 		execScript();
 
-		historyIndex = -1;
+		historyPos = -1;
 		originalText = area.getText0();
 		// 保存历史记录
 		lastDir = history.file.child(String.valueOf(Time.millis()));
@@ -510,10 +555,23 @@ public class Tester extends Content {
 			}
 		}, 4, 0.1f, -1);
 	}
+	Seq<String> logs = new Seq<>();
+	public final LogHandler logHandler = new DefaultLogHandler() {
+		public void log(LogLevel level, String text) {
+			if (level == LogLevel.err) super.log(level, text);
+			logs.add(format((
+											 level == LogLevel.debug ? "D" :
+												level == LogLevel.info ? "I" :
+												 level == LogLevel.warn ? "W" :
+													level == LogLevel.err ? "E" :
+													 " ") + text));
+		}
+	};
 	private void execAndDealRes() {
 		try {
 			if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
-			Object o = script.exec(cx, scope);
+			logs.clear();
+			Object o = setLogger(logHandler, () -> script.exec(cx, scope));
 			res = o = JSFunc.unwrap(o);
 
 			log = String.valueOf(o);
@@ -546,7 +604,7 @@ public class Tester extends Content {
 			log = readFiOrEmpty(f.child("log.txt"));
 		}, (f, p) -> {
 			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), HopeStyles.defaultLabel)).row();
-			p.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().padTop(6f).padBottom(6f).row();
+			p.image().color(Tmp.c1.set(JColor.c_underline)).growX().padTop(6f).padBottom(6f).row();
 			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), HopeStyles.defaultLabel)).row();
 		}, Tester::sort);
 		history.hide();
@@ -623,7 +681,7 @@ public class Tester extends Content {
 				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
 		try {
-			Object obj1 = cx.getWrapFactory().wrapJavaClass(cx, topScope, JSFunc.class);
+			Object obj1 = new NativeJavaClass(scope, JSFunc.class, true);
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
 			ScriptableObject.putProperty(scope, "$", obj1);
 			Object obj2 = new NativeJavaClass(topScope, MyReflect.class, false);
@@ -686,27 +744,7 @@ public class Tester extends Content {
 		Contents.settings_ui.add(localizedName(), icon, table);
 	}
 
-	public void dataInit() {
-		/* MyEvents events = new MyEvents();
-		events.onIns(E_Tester.ignore_popup_error, e -> {
-			ignorePopupError = e.enabled();
-		});
-		events.onIns(E_Tester.catch_outsize_error, e -> {
-			catchOutsizeError = e.enabled();
-		});
-		events.onIns(E_Tester.wrap_ref, e -> {
-			wrapRef = e.enabled();
-		});
-		events.onIns(E_Tester.multi_windows, e -> {
-			multiWindows = e.enabled();
-		});
-		events.onIns(E_Tester.rollback_history, e -> {
-			rollbackHistory = e.enabled();
-		});
-		events.onIns(E_Tester.js_prop, e -> {
-			JSProp = e.enabled();
-		}); */
-	}
+	public void dataInit() {}
 	public String getMessage() {
 		return area.getText();
 	}

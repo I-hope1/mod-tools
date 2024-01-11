@@ -3,7 +3,7 @@ package modtools.ui.control;
 import arc.Core;
 import arc.input.KeyboardDevice;
 import arc.scene.Element;
-import arc.struct.IntSet;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
 import modtools.ui.IntUI.IMenu;
@@ -15,6 +15,7 @@ import static modtools.ui.IntUI.topGroup;
 
 public class HopeInput {
 	public static IntSet justPressed, pressed;
+	public static IntFloatMap axes;
 	static Element hit;
 	public static Element mouseHit() {
 		if (hit == null) hit = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
@@ -27,11 +28,13 @@ public class HopeInput {
 		} catch (Throwable e) {
 			Log.err("Cannot load input.", e);
 			justPressed = pressed = new IntSet();
+			axes = new IntFloatMap();
 		}
 	}
 	static void load0() {
 		pressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "pressed");
 		justPressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "justPressed");
+		axes = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "axes");
 		Tools.TASKS.add(() -> hit = null);
 
 		Vars.control.input.addLock(() -> {

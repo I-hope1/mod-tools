@@ -30,6 +30,7 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
 import modtools.ui.IntUI;
 import modtools.utils.*;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 
 import static modtools.ui.IntUI.topGroup;
@@ -86,7 +87,7 @@ public class SettingsUI extends Content {
 				 s -> s.replaceAll("\\n", "\\\\n")).colspan(2);
 			}};
 			row();
-			JSFunc.settingColor(this);
+			JColor.settingColor(this);
 		}});
 		add("Effects", Icon.effectSmall, new LimitTable() {{
 			left().defaults().left();

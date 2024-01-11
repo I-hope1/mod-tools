@@ -8,6 +8,7 @@ import modtools.ui.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.IntUI;
 import modtools.utils.JSFunc;
+import modtools.utils.JSFunc.JColor;
 
 import java.lang.reflect.*;
 import java.util.StringJoiner;
@@ -28,7 +29,7 @@ public interface ReflectTools {
 	}
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
 		MyLabel label = new MyLabel(type.get(), HopeStyles.defaultLabel);
-		label.color.set(JSFunc.c_type);
+		label.color.set(JColor.c_type);
 		IntUI.doubleClick(label, null, details == null ? null : () -> {
 			applyChangedFx(label);
 			label.setText(label.getText().toString().equals(type.get())
@@ -101,21 +102,21 @@ public interface ReflectTools {
 	 * @see Class#getDeclaredMethod(String, Class[])
 	 */
 	static void copyExecutableReflection(Executable m) {
-		StringBuffer sb       = new StringBuffer();
-		Class<?>     dcl      = m.getDeclaringClass();
-		String       typeName = m.getClass().getSimpleName();
-		char         c        = Character.toLowerCase(typeName.charAt(0));
+		StringBuffer sb            = new StringBuffer();
+		Class<?>     dcl           = m.getDeclaringClass();
+		String       typeName      = m.getClass().getSimpleName();
+		char         c             = Character.toLowerCase(typeName.charAt(0));
+		boolean      isConstructor = c == 'c';
 
 		sb.append(typeName);
-		if (c == 'c') sb.append("<?>");
+		if (isConstructor) sb.append("<?>");
 		sb.append(" ").append(c)
 		 .append(" = ");
 		sb.append(getClassString0(dcl));
-		sb.append(".getDeclared").append(typeName)
-		 .append("(\"").append(m.getName())
-		 .append('"');
+		sb.append(".getDeclared").append(typeName).append('(');
+		if (!isConstructor) sb.append('"').append(m.getName()).append('"');
 		for (Class<?> type : m.getParameterTypes()) {
-			sb.append(", ");
+			if (!isConstructor) sb.append(", ");
 			sb.append(getClassString0(type));
 		}
 		sb.append(");");

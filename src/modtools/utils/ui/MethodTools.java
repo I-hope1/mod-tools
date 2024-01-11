@@ -97,7 +97,7 @@ public interface MethodTools {
 		for (int i = 0, length = args.length; i < length; i++) {
 			var ptype = args[i];
 			table.add(ReflectTools.makeGenericType(ptype, makeDetails(ptype, Tools.getOrNull(genericArgs, i))))
-			 .color(Tmp.c1.set(c_type));
+			 .color(Tmp.c1.set(JColor.c_type));
 			if (i != length - 1) {
 				table.add(", ");
 			}
@@ -107,7 +107,7 @@ public interface MethodTools {
 
 		if (exceptions.length > 0) {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
-			table.add(" throws ").color(Tmp.c1.set(c_keyword)).fontScale(0.9f)
+			table.add(" throws ").color(Tmp.c1.set(JColor.c_keyword)).fontScale(0.9f)
 			 .with(t -> IntUI.doubleClick(t, null, () -> {
 				 applyChangedFx(table);
 				 table.name ^= throwKey;
@@ -116,7 +116,7 @@ public interface MethodTools {
 			for (int i = 0, length = exceptions.length; i < length; i++) {
 				var eType = exceptions[i];
 				table.add(ReflectTools.makeGenericType(eType, makeDetails(eType, genericExceptions[i])))
-				 .color(Tmp.c1.set(c_type));
+				 .color(Tmp.c1.set(JColor.c_type));
 				if (i != length - 1) {
 					table.add(", ");
 				}

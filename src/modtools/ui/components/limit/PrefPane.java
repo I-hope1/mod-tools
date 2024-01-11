@@ -13,6 +13,11 @@ public class PrefPane extends ScrollPane {
 		this(cons);
 		this.xp = xp;
 	}
+	public PrefPane(Element widget, FloatFloatf xp) {
+		this(widget);
+		this.xp = xp;
+	}
+
 	public PrefPane(Cons<Table> cons) {
 		super(new Table(cons));
 	}

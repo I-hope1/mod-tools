@@ -30,9 +30,10 @@ import modtools.struct.Pair;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
+import test0.*;
 
 import java.io.StringWriter;
-import java.lang.invoke.MethodHandle;
+import java.lang.invoke.*;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.BiFunction;
@@ -43,6 +44,7 @@ import static modtools.IntVars.hasDecompiler;
 import static modtools.ui.HopeStyles.*;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.JSFunc.*;
+import static modtools.utils.JSFunc.JColor.*;
 import static modtools.utils.MySettings.*;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.MethodTools.*;
@@ -602,6 +604,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 MenuList.with(Icon.copySmall, "Cpy reflect getter", () -> {
 				 copyExecutableReflection(ctor);
 			 }),
+			 MenuList.with(Icon.copySmall, "Cpy <init> handle", catchRun(() -> {
+				 copyValue("Handle", InitH.findInit(ctor.getDeclaringClass(), ctor));
+			 })),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
 				 if (isSingle) {
 					 catchRun(() -> JSFunc.copyValue("Instance", ctor.newInstance())

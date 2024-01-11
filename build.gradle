@@ -140,7 +140,7 @@ task playAndroid {
 	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files";
 	doLast {
 		("$adb push ${buildDir0}/tmp/deploy/${archivesBaseName}-${version}.jar"
-				+ " $MDT_ANDROID_DIR/tmp/")
+				+ " $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)
 
 		/*def MindustryLogPath = "${MDT_ANDROID_DIR}/last_log.txt"

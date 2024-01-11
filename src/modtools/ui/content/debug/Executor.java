@@ -115,14 +115,13 @@ public class Executor extends Content {
 				}).row();
 				center.add("(" + node.source + ")").color(Color.gray).row();
 				FilterTable<Intp> table = new FilterTable<>();
-				foldedButton.table = table;
-				foldedButton.cell = center.add(table).grow();
-				foldedButton.fireCheck(true);
+				foldedButton.setContainer(center.add(table).grow());
 				foldedButton.rebuild = () -> {
 					table.clear();
 					build(table, node.children);
 				};
-				foldedButton.rebuild.run();
+				foldedButton.fireCheck(true);
+				// foldedButton.rebuild.run();
 			}).grow();
 			button.addListener(new InputListener() {
 				public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {

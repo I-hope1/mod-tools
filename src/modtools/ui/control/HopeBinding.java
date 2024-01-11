@@ -9,7 +9,7 @@ import modtools.HopeConstant;
 import java.lang.reflect.Array;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.HopeConstant.*;
+import static modtools.HopeConstant.BINDING.*;
 
 public enum HopeBinding {
 	close(KeyCode.escape);

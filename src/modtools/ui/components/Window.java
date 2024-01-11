@@ -31,6 +31,7 @@ import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.struct.MySet;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.ui.search.*;
 
 
@@ -74,7 +75,7 @@ public class Window extends Table {
 	}
 
 	public static Drawable myPane  = Tex.pane;
-	public static Drawable topPane = new TintDrawable(IntUI.whiteui, () -> JSFunc.c_window_title);
+	public static Drawable topPane = new TintDrawable(IntUI.whiteui, () -> JColor.c_window_title);
 
 	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);
@@ -194,7 +195,7 @@ public class Window extends Table {
 			 .with(b -> {
 				 b.resizeImage(32);
 				 b.clicked(this::toggleMinimize);
-			 }).update(b -> b.fireCheck(isMinimize)).padLeft(4f);
+			 }).padLeft(4f);
 			ImageButton button = titleTable.button(Tex.whiteui, HopeStyles.hope_clearNonei, 28, this::toggleMaximize).disabled(b -> !isShown()).padLeft(4f).get();
 			button.update(() -> {
 				button.getStyle().imageUp = isMaximize ? HopeIcons.normal : HopeIcons.maximize;

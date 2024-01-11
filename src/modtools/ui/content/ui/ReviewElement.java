@@ -37,6 +37,7 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.*;
 import modtools.utils.*;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;
 
@@ -231,7 +232,7 @@ public class ReviewElement extends Content {
 	};
 
 	public static class ReviewElementWindow extends Window implements IDisposable {
-		Table pane = new LimitTable() {};
+		Table   pane = new LimitTable() {};
 		Element element;
 		Pattern pattern;
 
@@ -333,7 +334,7 @@ public class ReviewElement extends Content {
 					makePosLabel(t, pos);
 					t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent);
 				}).growX().left().row();
-				table.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
+				table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 				return;
 			}
 			table.table(t -> {
@@ -344,7 +345,7 @@ public class ReviewElement extends Content {
 					t.row();
 				}
 			}).growX().left().row();
-			table.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
+			table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
@@ -431,7 +432,7 @@ public class ReviewElement extends Content {
 			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
 				/* 占位符 */
-				var button = new FoldedImageButton(true);
+				var button   = new FoldedImageButton(true);
 				int size     = 32;
 				var children = group.getChildren();
 				add(button).size(size).disabled(__ -> children.isEmpty());
@@ -459,9 +460,8 @@ public class ReviewElement extends Content {
 					if (children.size < 20) rebuild.run();
 					int[] lastChildrenSize = {children.size < 20 ? children.size : -1};
 
-					button.table = table1;
 					button.fireCheck(!children.isEmpty() && children.size < 20);
-					button.cell = t.add(table1).grow();
+					button.setContainer(t.add(table1).grow());
 					button.rebuild = () -> {
 						if (lastChildrenSize[0] == children.size) return;
 						rebuild.run();
@@ -478,7 +478,7 @@ public class ReviewElement extends Content {
 					makePosLabel(p0, prov);
 					p0.table(h -> h.left().table(Window.myPane, p -> {
 						try {
-							int size = 28;
+							int   size = 28;
 							float w    = Math.max(1, element.getWidth());
 							float mul  = element.getHeight() / w;
 							// float mul    = element.getHeight() / element.getHeight();
@@ -503,7 +503,10 @@ public class ReviewElement extends Content {
 			Runnable copy        = storeRun(() -> element);
 			IntUI.addShowMenuListenerp(window_elem, () -> Sr(Seq.with(
 			 copyAsJSMenu(null, copy),
-			 ConfirmList.with(Icon.trashSmall, "@clear", "@confirm.remove", () -> element.remove()),
+			 ConfirmList.with(Icon.trashSmall, "@clear", "@confirm.remove", () -> {
+				 remove();
+				 element.remove();
+			 }),
 			 MenuList.with(Icon.copySmall, "@copy.path", () -> {
 				 JSFunc.copyText(getPath(element));
 			 }),
@@ -519,7 +522,9 @@ public class ReviewElement extends Content {
 				MenuList.with(Icon.boxSmall, "Layout", element::layout),
 				MenuList.with(Icon.boxSmall, "Pack", element::pack),
 				MenuList.with(Icon.boxSmall, "Validate", element::validate),
-				MenuList.with(Icon.boxSmall, "Keep in stage", element::keepInStage)
+				MenuList.with(Icon.boxSmall, "Keep in stage", element::keepInStage),
+				MenuList.with(Icon.boxSmall, "To Front", element::toFront),
+				MenuList.with(Icon.boxSmall, "To Back", element::toBack)
 			 )),
 			 ValueLabel.newElementDetailsList(element)
 			))
@@ -634,7 +639,7 @@ public class ReviewElement extends Content {
 		 translationLabel = new NoMarkupLabel(valueScale),
 		 styleLabel       = new NoMarkupLabel(valueScale),
 
-		colspanLabel = new NoMarkupLabel(valueScale),
+		colspanLabel  = new NoMarkupLabel(valueScale),
 		 minSizeLabel = new Label(""), maxSizeLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 

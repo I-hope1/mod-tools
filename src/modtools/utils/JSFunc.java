@@ -13,7 +13,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
-import arc.util.Tmp;
+import arc.util.*;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
@@ -24,16 +24,14 @@ import mindustry.world.Tile;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.ui.*;
-import modtools.ui.components.*;
+import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.*;
-import modtools.ui.components.utils.*;
+import modtools.ui.components.utils.PlainValueLabel;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
-import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.*;
 import modtools.ui.effect.HopeFx;
-import modtools.ui.IntUI;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.Comparator;
 import modtools.utils.draw.InterpImage;
@@ -41,6 +39,7 @@ import modtools.utils.ui.*;
 import modtools.utils.world.WorldDraw;
 import rhino.*;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Array;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -50,19 +49,31 @@ import static modtools.utils.ElementUtils.*;
 
 /** for js */
 public class JSFunc {
-	public static       ClassLoader main;
-	public static       Scriptable  scope;
-	public static final Font        FONT = MyFonts.def;
+	public static       ClassLoader main   = Vars.mods.mainLoader();
+	public static       Scriptable  scope  = Vars.mods.getScripts().scope;
+	public static final Object      lookup = MyReflect.lookup;
+	public static Class<?> type(String s) {
+		if (s.equals("int")) return int.class;
+		if (s.equals("float")) return float.class;
+		if (s.equals("double")) return double.class;
+		if (s.equals("long")) return long.class;
+		if (s.equals("short")) return short.class;
+		if (s.equals("byte")) return byte.class;
+		if (s.equals("boolean")) return boolean.class;
+		if (s.equals("char")) return char.class;
+		if (s.equals("void")) return void.class;
+		return null;
+	}
+	public static final Font FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;
 	}
 	/* for js */
 	public static final Class<?> vars    = IntVars.class;
-	public static final Class<?> reflect = MyReflect.class;
 
 	public static final Fi data = MySettings.dataDirectory;
 
-	public static final ObjectMap<String, Scriptable> classes;
+	public static final ObjectMap<String, Scriptable> classes          = new ObjectMap<>();
 	public static final String                        defaultDelimiter = ", ";
 
 	/*public static Object eval(String code) {
@@ -77,15 +88,6 @@ public class JSFunc {
 	public static Window showInfo(Class<?> clazz) {
 		return showInfo(null, clazz);
 	}
-
-	@DataColorFieldInit(data = "D_JSFUNC", needSetting = true, fieldPrefix = "c_")
-	public static int
-	 c_keyword      = 0xF92672_FF,
-	 c_type         = 0x66D9EF_FF,
-	 c_underline    = Color.lightGray.cpy().a(0.5f).rgba(),
-	 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba();
-	/** 代码生成{@link ColorProcessor} */
-	public static void settingColor(Table t) {}
 
 
 	public static Window showInfo(Object o, Class<?> clazz) {
@@ -144,9 +146,10 @@ public class JSFunc {
 			});
 			c1.add(button).growX().minHeight(40);
 			IntUI.addWatchButton(c1, o + "#" + i, () -> Array.get(o, j)).row();
-			c1.image().color(Tmp.c1.set(c_underline)).colspan(2).growX().row();
+			c1.image().color(Tmp.c1.set(JColor.c_underline)).colspan(2).growX().row();
 		}
 	}
+
 
 	public static Window window(final Cons<Window> cons) {
 		class JSWindow extends HiddenTopWindow implements IDisposable {
@@ -175,11 +178,9 @@ public class JSFunc {
 	public static Window btn(String text, Runnable run) {
 		return dialog(t -> t.button(text, Styles.flatt, run).size(64, 45));
 	}
-
 	public static Window testDraw(Runnable draw) {
 		return testDraw0(__ -> draw.run());
 	}
-
 	private static Window testDraw0(Cons<Group> draw) {
 		return dialog(new Group() {
 			{transform = true;}
@@ -189,7 +190,6 @@ public class JSFunc {
 			}
 		});
 	}
-
 	// static FrameBuffer buffer = new FrameBuffer();
 	public static Window testShader(Shader shader, Runnable draw) {
 		return testDraw0(t -> {
@@ -200,8 +200,6 @@ public class JSFunc {
 			buffer.dispose();
 		});
 	}
-
-
 	public static Window dialog(Element element) {
 		return window(d -> d.cont.pane(element).grow());
 	}
@@ -232,7 +230,7 @@ public class JSFunc {
 		return dialog(new Table(cons));
 	}
 
-// ------------- ReviewElement --------------
+	// ------------- ReviewElement --------------
 	public static void inspect(Element element) {
 		new ReviewElementWindow().show(element);
 	}
@@ -245,6 +243,7 @@ public class JSFunc {
 		return Selection.allFunctions.get(name);
 	}
 
+	// 转换方法
 	public static Object unwrap(Object o) {
 		if (o instanceof Wrapper) {
 			return ((Wrapper) o).unwrap();
@@ -255,11 +254,25 @@ public class JSFunc {
 
 		return o;
 	}
+	public static Object cast(Object o, Class cl) {
+		return Context.jsToJava(o, cl);
+	}
 	public static Object asJS(Object o) {
 		return Context.javaToJS(o, scope);
 	}
-
-
+	public static Object toFloat(float f) {
+		return f;
+	}
+	public static Object toInt(int i) {
+		return i;
+	}
+	public static Object toDouble(double d) {
+		return d;
+	}
+	public static Object toLong(long l) {
+		return l;
+	}
+	// --------------
 	public static Scriptable findClass(String name) throws ClassNotFoundException {
 		if (classes.containsKey(name)) {
 			return classes.get(name);
@@ -273,6 +286,7 @@ public class JSFunc {
 		return Class.forName(name, false, Vars.mods.mainLoader());
 	}
 
+
 	public static void setDrawPadElem(Element elem) {
 		topGroup.setDrawPadElem(elem);
 	}
@@ -280,16 +294,6 @@ public class JSFunc {
 		topGroup.setDrawPadElem(topGroup.drawPadElem == elem ? null : elem);
 	}
 
-	// public static Window frameLabel(String text) {
-	// 	return testElement(new FrameLabel(text));
-	// }
-
-	static {
-		main = Vars.mods.mainLoader();
-		scope = Vars.mods.getScripts().scope;
-		classes = new ObjectMap<>();
-		// V8.createV8Runtime();
-	}
 
 	public static void addDClickCopy(Label label) {
 		IntUI.doubleClick(label, null, () -> {
@@ -337,22 +341,6 @@ public class JSFunc {
 		return watch == null ? new WatchWindow() : watch;
 	}
 
-	/** 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code>
-	 * <br>（不一定） */
-	public static boolean eq(Object a, Object b) {
-		return a == b;
-	}
-	private static final Object[] ONE_ARRAY = {null};
-	public static long addressOf(Object o) {
-		ONE_ARRAY[0] = o;
-		long baseOffset = unsafe.arrayBaseOffset(Object[].class);
-		return switch (unsafe.addressSize()) {
-			case 4 -> unsafe.getInt(ONE_ARRAY, baseOffset);
-			case 8 -> unsafe.getLong(ONE_ARRAY, baseOffset);
-			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
-		};
-	}
-
 	/*public static WatchWindow watch(String info, MyProv<Object> value) {
 		return watch(info, value, 0);
 	}
@@ -361,9 +349,9 @@ public class JSFunc {
 		w.show();
 		return w;
 	}*/
-	public static <T extends Group> void design(T element) {
+	/* public static <T extends Group> void design(T element) {
 		dialog(d -> d.add(new DesignTable<>(element)));
-	}
+	} */
 
 	public static class MyProvIns<T> implements MyProv<T> {
 		Func<Object, String> stringify;
@@ -397,24 +385,12 @@ public class JSFunc {
 		Core.scene.getCamera().mat.rotate(degree);
 	}
 
-	public static void focusWorld(Tile obj) {
-		selection.focusInternal.add(obj);
-	}
-	public static void focusWorld(Building obj) {
-		selection.focusInternal.add(obj);
-	}
-	public static void focusWorld(Unit obj) {
-		selection.focusInternal.add(obj);
-	}
-	public static void focusWorld(Bullet obj) {
-		selection.focusInternal.add(obj);
-	}
-	public static void focusWorld(Seq obj) {
-		selection.focusInternal.add(obj);
-	}
-	public static void removeFocusAll() {
-		selection.focusInternal.clear();
-	}
+	public static void focusWorld(Tile obj) {selection.focusInternal.add(obj);}
+	public static void focusWorld(Building obj) {selection.focusInternal.add(obj);}
+	public static void focusWorld(Unit obj) {selection.focusInternal.add(obj);}
+	public static void focusWorld(Bullet obj) {selection.focusInternal.add(obj);}
+	public static void focusWorld(Seq obj) {selection.focusInternal.add(obj);}
+	public static void removeFocusAll() {selection.focusInternal.clear();}
 
 	public static void focusElement(Element element) {
 		applyDraw(() -> AllTutorial.drawFocus(Tmp.c1.set(Color.black).a(0.4f), () -> {
@@ -425,15 +401,46 @@ public class JSFunc {
 	public static void applyDraw(Runnable run) {
 		Events.run(Trigger.uiDrawEnd, run);
 	}
-
-	/** 如果不用Object，安卓上会出问题 */
-	public static void openModule(Object module, String pn) throws Throwable {
-		MyReflect.openModule((Module) module, pn);
-	}
-
+	// Internal Method.
 	public static void compare(Object o1, Object o2) {
 		Comparator.compare(o1, o2);
 	}
+	/** 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code>
+	 * <br>（不一定） */
+	public static boolean eq(Object a, Object b) {
+		return a == b;
+	}
+
+	// UNSAFE method.
+	private static final Object[] ONE_ARRAY = {null};
+	public static long addressOf(Object o) {
+		ONE_ARRAY[0] = o;
+		long baseOffset = unsafe.arrayBaseOffset(Object[].class);
+		return switch (unsafe.addressSize()) {
+			case 4 -> unsafe.getInt(ONE_ARRAY, baseOffset);
+			case 8 -> unsafe.getLong(ONE_ARRAY, baseOffset);
+			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
+		};
+	}
+
+	/** 如果不用Object，安卓上会出问题 */
+	public static void openModule(Object module, String pn) throws Throwable {
+		if (OS.isAndroid) return;
+		MyReflect.openModule((Module) module, pn);
+	}
+	public static <T> T invoke(Object handle, Object... args) throws Throwable {
+		if (handle instanceof MethodHandle l) return (T) l.invokeWithArguments(args);
+		return null;
+	}
+	public static <T> T invoke(Object handle, Object arg1) throws Throwable {
+		if (handle instanceof MethodHandle l) return (T) l.invoke(arg1);
+		return null;
+	}
+	public static <T> T invoke(Object handle, Object arg1, Object arg2) throws Throwable {
+		if (handle instanceof MethodHandle l) return (T) l.invoke(arg1, arg2);
+		return null;
+	}
+
 
 	public static Element fx(String text) {
 		return HopeFx.colorFulText(text);
@@ -443,5 +450,16 @@ public class JSFunc {
 		default String stringify(Object o) {
 			return String.valueOf(o);
 		}
+	}
+
+	public static class JColor {
+		@DataColorFieldInit(data = "D_JSFUNC", needSetting = true, fieldPrefix = "c_")
+		public static int
+		 c_keyword      = 0xF92672_FF,
+		 c_type         = 0x66D9EF_FF,
+		 c_underline    = Color.lightGray.cpy().a(0.5f).rgba(),
+		 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba();
+		/** 代码生成{@link ColorProcessor} */
+		public static void settingColor(Table t) {}
 	}
 }

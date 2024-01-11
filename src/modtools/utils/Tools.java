@@ -6,6 +6,7 @@ import arc.func.*;
 import arc.scene.Element;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.Log.LogHandler;
 import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
 import modtools.ui.IntUI;
@@ -236,6 +237,16 @@ public class Tools {
 		};
 	}
 
+	public static <T> T setLogger(LogHandler logger, Prov<T> prov) {
+		var prev = Log.logger;
+		Log.logger = logger;
+		try {
+			return prov.get();
+		} finally {
+			Log.logger = prev;
+		}
+	}
+
 	public static <T> void each(List<T> list, Cons<T> cons) {
 		for (int i = list.size(); i-- > 0; ) {
 			cons.get(list.get(i));
@@ -250,8 +261,9 @@ public class Tools {
 	public interface CCons<T> {
 		void get(T t) throws Throwable;
 	}
-	public interface CProv<T> {
-		T get() throws Throwable;
+	public interface CProv<T> extends CProvT<T, Throwable> {}
+	public interface CProvT<T, E extends Throwable> {
+		T get() throws E;
 	}
 }
 

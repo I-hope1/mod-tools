@@ -145,7 +145,7 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 		label.interval = interval;
 		IntUI.addDetailsButton(template, () -> prov.value, Void.class);
 		template.add(label).name(info).style(HopeStyles.defaultLabel).growX().left().padLeft(6f).row();
-		template.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().colspan(2).row();
+		template.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 		template.unbind();
 		return this;
 	}

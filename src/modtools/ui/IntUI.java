@@ -28,7 +28,7 @@ import modtools.ui.components.Window.*;
 import modtools.ui.menu.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
-import modtools.utils.JSFunc.MyProv;
+import modtools.utils.JSFunc.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
@@ -535,7 +535,7 @@ public class IntUI {
 				 }).minWidth(minWidth).growX()
 				 .height(height).marginTop(6f).marginBottom(6f)
 				 .disabled(Objects.equals(holder.get(), item)).row();
-				p.image().color(Tmp.c1.set(JSFunc.c_underline)).growX().row();
+				p.image().color(Tmp.c1.set(JColor.c_underline)).growX().row();
 			}
 
 		}, searchable, align);

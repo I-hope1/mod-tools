@@ -19,7 +19,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
-import modtools.IntVars;
+import modtools.*;
 import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
@@ -121,9 +121,7 @@ public class SettingsUI extends Content {
 					 Vars.maxSchematicSize = val;
 				 });
 			 }
-			 button("clear mods restart", Styles.flatBordert, () -> {
-				 Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
-			 }).growX().height(42).row();
+			 button("clear mods restart", Styles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 
 			 button("FONT", Styles.flatBordert, () -> {
 				 new DisWindow("FONTS") {{
@@ -151,7 +149,13 @@ public class SettingsUI extends Content {
 				 }).height(42).growX();
 				 t.button("QQ", HopeIcons.QQ, Styles.flatt, () -> {
 					 Core.app.openURI(IntVars.QQ);
-				 }).height(42).growX();
+				 }).height(42).growX().row();
+				 /* t.button("@mod-tools.check", Icon.androidSmall, Styles.flatt, () -> {
+					 Updater.checkUpdate(b -> {});
+				 }).height(42).growX().colspan(2); */
+				 t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
+					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
+				 }).height(42).growX().colspan(2);
 			 }).growX();
 		 }}));
 		Content.all.forEach(cont -> {
@@ -160,6 +164,10 @@ public class SettingsUI extends Content {
 			}
 		});
 		// ui.addCloseButton();
+	}
+
+	public static void disabledRestart() {
+		Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
 	}
 	@DataBoolSetting
 	public void settingBool(Table t) {

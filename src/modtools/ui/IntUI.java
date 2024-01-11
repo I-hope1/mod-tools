@@ -50,9 +50,13 @@ public class IntUI {
 	public static final float DEFAULT_WIDTH = 150;
 	public static final float MAX_OFF       = 35f;
 
-	public static final Frag        frag     = new Frag();
-	public static final TopGroup    topGroup = new TopGroup();
-	public static       ColorPicker picker   = new ColorPicker();
+	public static final Frag     frag     = new Frag();
+	public static final TopGroup topGroup = new TopGroup();
+
+	private static ColorPicker _picker;
+	public static ColorPicker picker() {
+		return _picker == null ? _picker = new ColorPicker() : _picker;
+	}
 
 	/**
 	 * Load.
@@ -804,11 +808,11 @@ public class IntUI {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);
 		Runnable runnable = () -> {
-			IntUI.picker.show(color, c1 -> {
+			IntUI.picker().show(color, c1 -> {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
-			Core.app.post(() -> IntUI.picker.setPosition(getAbsolutePos(image), Align.left | Align.center));
+			Core.app.post(() -> IntUI.picker().setPosition(getAbsolutePos(image), Align.left | Align.center));
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}

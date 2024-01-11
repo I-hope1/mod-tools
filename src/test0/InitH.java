@@ -16,7 +16,7 @@ import static modtools.HopeConstant.DESKTOP.*;
 
 public class InitH {
 	/** for android */
-	public static final int INVOKE_SPECIAL = 1;
+	public static final int  INVOKE_SPECIAL    = 1;
 	/** for window */
 	public static final byte REF_invokeSpecial = 7;
 
@@ -27,7 +27,7 @@ public class InitH {
 	}
 
 	public static MethodHandle findInit
-	 (Class<?> refc, Constructor<?> ctor) throws Exception {
+	 (Class<?> refc, Constructor<?> ctor) throws Throwable {
 		if (OS.isAndroid) return findInitAndroid(refc, ctor);
 		return findInitDesktop(refc, ctor, refc);
 	}
@@ -42,8 +42,9 @@ public class InitH {
 	}
 	public static MethodHandle findInitDesktop
 	 (Class<?> refc, Constructor<?> ctor,
-		Class<?> specialCaller) throws Exception {
-		CProvT<Object, Exception> maker = () -> MEMBER_NAME_CTOR.newInstance(ctor);
+		Class<?> specialCaller) throws Throwable {
+		assert MEMBER_NAME_CTOR != null;
+		CProvT<Object, Throwable> maker = () -> MEMBER_NAME_CTOR.invoke(ctor);
 		Cons<Object> resolver = o -> {
 			int flags = unsafe.getInt(o, MEMBER_NAME_FLAGS);
 			unsafe.putInt(o, MEMBER_NAME_FLAGS, flags ^ 131072 | 65536);

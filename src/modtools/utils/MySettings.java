@@ -6,12 +6,13 @@ import arc.util.*;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
+import modtools.IntVars;
 import rhino.ScriptRuntime;
 
 import java.util.Objects;
 
 public class MySettings {
-	public static final Fi dataDirectory = Vars.dataDirectory.child("b0kkihope");
+	private static final Fi dataDirectory = IntVars.dataDirectory;
 
 	static {
 		try {

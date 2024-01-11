@@ -1,8 +1,12 @@
 package modtools;
 
 import arc.KeyBinds.KeybindValue;
-import arc.util.Reflect;
+import arc.files.Fi;
+import arc.struct.*;
+import arc.util.*;
+import mindustry.Vars;
 import mindustry.input.Binding;
+import mindustry.mod.Mods;
 import modtools.utils.Tools.CProv;
 import modtools.utils.reflect.FieldUtils;
 
@@ -25,16 +29,17 @@ public class HopeConstant {
 		long MEMBER_NAME_FLAGS =
 		 FieldUtils.fieldOffset(nl(() -> Class.forName("java.lang.invoke.MemberName").getDeclaredField("flags")));
 
-		//java.lang.invoke.MemberName.Factory#INSTANCE
+		/** @see java.lang.invoke.MemberName.Factory#INSTANCE */
 		Object         FACTORY          = nl(() ->
 		 Reflect.get(Class.forName("java.lang.invoke.MemberName$Factory"), "INSTANCE"));
-		//Constructor<?> c = Class.forName("java.lang.invoke.MemberName").getDeclaredConstructor(Constructor.class);
-		Constructor<?> MEMBER_NAME_CTOR = nl(() ->
-		 Class.forName("java.lang.invoke.MemberName").getDeclaredConstructor(Constructor.class));
+		/** @see java.lang.invoke.MemberName#MemberName(Constructor) */
+		MethodHandle MEMBER_NAME_CTOR = nl(() ->
+		 lookup.findConstructor(Class.forName("java.lang.invoke.MemberName"), MethodType.methodType(void.class, Constructor.class)));
 
+		/** @see java.lang.invoke.MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class)  */
 		Method RESOLVE_OR_FAIL   = nl(() ->
 		 Class.forName("java.lang.invoke.MemberName$Factory").getDeclaredMethod("resolveOrFail", byte.class, Class.forName("java.lang.invoke.MemberName"), Class.class, int.class, Class.class));
-		// Method m = Lookup.class.getDeclaredMethod("getDirectMethod", byte.class, Class.class, Class.forName("java.lang.invoke.MemberName"), Lookup.class);
+		/** @see Lookup#getDirectMethod(byte, Class, MemberName, Lookup)   */
 		Method GET_DIRECT_METHOD = nl(() ->
 		 Lookup.class.getDeclaredMethod("getDirectMethod", byte.class, Class.class, Class.forName("java.lang.invoke.MemberName"), Lookup.class));
 	}
@@ -44,6 +49,15 @@ public class HopeConstant {
 
 		long ART_METHOD = FieldUtils.fieldOffset(nl(() ->
 		 Class.forName("java.lang.reflect.Executable").getDeclaredField("artMethod")));
+	}
+
+	public interface MODS {
+		/** @see mindustry.mod.Mods#bundles */
+    ObjectMap<String, Seq<Fi>> bundles = nl(() -> Reflect.get(Mods.class, Vars.mods, "bundles"));
+	}
+	public interface STRING {
+		long VALUE = FieldUtils.fieldOffset(FieldUtils.getFieldAccess(String.class, "value"));
+		long CODER = FieldUtils.fieldOffset(FieldUtils.getFieldAccess(String.class, "coder"));
 	}
 
 	static <R> R nl(CProv<R> prov) {

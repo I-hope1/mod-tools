@@ -9,6 +9,7 @@ import mindustry.mod.ModClassLoader;
 import mindustry.mod.Mods.*;
 import modtools.ui.IntUI;
 import modtools.struct.MySet;
+import modtools.utils.MySettings;
 
 import java.util.concurrent.*;
 
@@ -17,10 +18,12 @@ import static mindustry.Vars.ui;
 public class IntVars {
 	public static final String  modName = "mod-tools";
 	public static       ModMeta meta;
-	public static       Fi      root;
 
-	public static final String QQ = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
-	public static ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
+	public static Fi root,
+	 dataDirectory = Vars.dataDirectory.child("b0kkihope");
+
+	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
+	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
 	public static final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor("hope-async", 1);
 

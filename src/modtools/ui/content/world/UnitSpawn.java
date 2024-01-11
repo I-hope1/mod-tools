@@ -1,7 +1,7 @@
 package modtools.ui.content.world;
 
 import arc.*;
-import arc.graphics.Gl;
+import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.scene.Element;
@@ -23,13 +23,14 @@ import modtools.events.ExecuteTree.TaskNode;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
+import modtools.ui.components.*;
 import modtools.ui.menu.*;
-import modtools.ui.components.Window;
 import modtools.ui.components.linstener.WorldSelectListener;
 import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
+import modtools.utils.SR.CatchSR;
 import modtools.utils.ui.FormatHelper;
 import modtools.utils.world.WorldUtils;
 
@@ -59,7 +60,7 @@ public class UnitSpawn extends Content {
 	TextField xField, yField, amountField, teamField;
 
 	// 用于获取点击的坐标
-	Element             el       = new Element();
+	Element             el       = new Hitter();
 	WorldSelectListener listener = new WorldSelectListener() {
 		protected void acquireWorldPos(float x, float y) {
 			super.acquireWorldPos(x, y);
@@ -74,15 +75,16 @@ public class UnitSpawn extends Content {
 			if (ui == null) return;
 			Gl.flush();
 			Draw.z(Layer.overlayUI);
-			Draw.color(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove, ui.isShown() ? 0.7f : 0.5f);
+			Draw.color();
 			Lines.stroke(2);
-			Lines.circle(x, y, 5);
+			Color color = Tmp.c1.set(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove)
+			 .a(ui.isShown() ? 0.7f : 0.5f);
+			Drawf.dashCircle(x, y, 5, color);
 			Draw.color();
 		}
 	};
 
 	{
-		el.fillParent = true;
 		el.addListener(listener);
 		WorldUtils.uiWD.drawSeq.add(() -> {
 			listener.draw();
@@ -241,14 +243,14 @@ public class UnitSpawn extends Content {
 		} catch (Throwable ignored) {}
 	}
 	public Runnable getSpawnRun() {
-		float x0      = x, y0 = y;
-		int   amount0 = amount;
-		Team  team0   = team;
+		float    x0          = x, y0 = y;
+		int      amount0     = amount;
+		Team     team0       = team;
 		UnitType selectUnit0 = selectUnit;
 		return () -> spawn(selectUnit0, amount0, team0, x0, y0);
 	}
 	public String generateCode() {
-		return "Packages.modtools.ui.Contents.unit_spawn.spawn(" +
+		return "$.Contents.unit_spawn.spawn(" +
 					 "Vars.content.getByID(ContentType.unit, " + selectUnit.id + ")," +
 					 amount + "," +
 					 "Team.get(" + team.id + ")," +

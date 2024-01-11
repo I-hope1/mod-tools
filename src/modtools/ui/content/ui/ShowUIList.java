@@ -250,9 +250,7 @@ public class ShowUIList extends Content {
 	public <T> FilterTable<T> newTable(boolean withDisabled, Cons<FilterTable<T>> cons) {
 		return new FilterTable<>(t -> {
 			t.clearChildren();
-			t.addChild(new Element() {
-				{fillParent = true;}
-
+			t.addChild(new FillElement() {
 				public void draw() {
 					Draw.color(bgColor, bgColor.a * parentAlpha);
 					IntUI.whiteui.draw(t.x, t.y, t.getWidth(), t.getHeight());

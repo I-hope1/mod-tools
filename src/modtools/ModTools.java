@@ -15,6 +15,7 @@ import mindustry.mod.Mods.*;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
+import modtools.ui.content.SettingsUI;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.tutorial.AllTutorial;
@@ -49,6 +50,11 @@ public class ModTools extends Mod {
 		IntVars.meta = metas.get(ModTools.class);
 		try {
 			load();
+			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
+				Vars.ui.showCustomConfirm("是否【关闭】重启 ", "Mindustry会重启来加载，\n但modtools不需要重启，\n是否不重启",
+				 "不重启", "重启",
+				 SettingsUI::disabledRestart, () -> {});
+			}
 		} catch (Throwable e) {
 			if (isImportFromGame) Vars.ui.showException("Cannot load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
@@ -118,15 +124,15 @@ public class ModTools extends Mod {
 		if (OS.isWindows || OS.isMac) {
 			addFileDragListener();
 		}
-		Time.runTask(6f, () -> {
+		Time.runTask(4f, () -> {
 			IntUI.load();
 			AllTutorial.init();
 			// Circle.draw();
+			Log.info("Loaded ModTools input and ui in @ms", Time.elapsed());
 		});
 		if (SETTINGS.getBool("ShowMainMenuBackground")) {
 			Tools.runIgnoredException(Background::main);
 		}
-		Log.info("Loaded ModTools input and ui in @ms", Time.elapsed());
 	}
 	private static void addFileDragListener() {
 		ui.mods.addListener(new VisibilityListener() {

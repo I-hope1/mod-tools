@@ -8,13 +8,14 @@ import arc.graphics.g2d.Font.Glyph;
 import arc.struct.Seq;
 import arc.util.Reflect;
 import mindustry.ui.Fonts;
+import modtools.IntVars;
 import modtools.utils.Tools;
 
-import static modtools.utils.MySettings.*;
+import static modtools.utils.MySettings.SETTINGS;
 
 public class MyFonts {
 	public static       Font def;
-	public static final Fi   fontDirectory = dataDirectory.child("fonts");
+	public static final Fi   fontDirectory = IntVars.dataDirectory.child("fonts");
 
 	static {
 		fontDirectory.mkdirs();

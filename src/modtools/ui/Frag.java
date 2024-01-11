@@ -46,26 +46,24 @@ public class Frag extends Table {
 
 
 		container = new ScrollPane(new LimitTable(table -> {
-			IntVars.async(() -> {
-				if (Content.all.isEmpty()) Contents.load();
-				Content.all.forEach(content -> {
-					if (content == null || !content.loadable()) return;
-					enabledContents.add(content);
-					String localizedName = content.localizedName();
-					var    style         = HopeStyles.cleart;
-					// var style = Styles.cleart;
-					// Objects.requireNonNull(cont);
-					content.btn = table.button(localizedName,
-						content.icon,
-						style, content.icon == Styles.none ? 0 : 20,
-						content::build)
-					 .marginLeft(6f).update(b ->
-						b.getChildren().get(1).setColor(b.isDisabled() ? Color.gray : Color.white))
-					 .size(120, 40).get();
-					Events.fire(content);
-					content.load();
-					table.row();
-				});
+			if (Content.all.isEmpty()) Contents.load();
+			Content.all.forEach(content -> {
+				if (content == null || !content.loadable()) return;
+				enabledContents.add(content);
+				String localizedName = content.localizedName();
+				var    style         = HopeStyles.cleart;
+				// var style = Styles.cleart;
+				// Objects.requireNonNull(cont);
+				content.btn = table.button(localizedName,
+					content.icon,
+					style, content.icon == Styles.none ? 0 : 20,
+					content::build)
+				 .marginLeft(6f).update(b ->
+					b.getChildren().get(1).setColor(b.isDisabled() ? Color.gray : Color.white))
+				 .size(120, 40).get();
+				Events.fire(content);
+				content.load();
+				table.row();
 			});
 		}), HopeStyles.noBarPane);
 		// lastIndex = getCells().indexOf(cell);

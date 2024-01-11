@@ -6,6 +6,7 @@ import arc.scene.Element;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
+import modtools.ui.Frag;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.IInfo;
@@ -16,7 +17,7 @@ import static modtools.ui.IntUI.topGroup;
 public class HopeInput {
 	public static IntSet justPressed, pressed;
 	public static IntFloatMap axes;
-	static Element hit;
+	static        Element     hit;
 	public static Element mouseHit() {
 		if (hit == null) hit = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
 		return hit;
@@ -41,10 +42,10 @@ public class HopeInput {
 			if (topGroup.isSelecting()) return true;
 			Element hit = HopeInput.mouseHit();
 			return hit != null && hit.visible
-						 && !hit.isDescendantOf(Vars.ui.hudGroup)
-						 && !hit.isDescendantOf(e -> e instanceof IInfo)
-						 && !hit.isDescendantOf(e -> e instanceof IMenu)
-						 && !hit.isDescendantOf(e -> e instanceof Window)
+						 && !hit.isDescendantOf(e ->
+			 e == Vars.ui.hudGroup || e instanceof IInfo
+			 || e instanceof IMenu || e instanceof Window
+			 || e instanceof Frag)
 			 // &&
 			 /* && hit.isDescendantOf(e -> e instanceof IMenu) */;
 		});

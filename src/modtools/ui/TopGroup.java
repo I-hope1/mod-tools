@@ -379,7 +379,6 @@ public final class TopGroup extends WidgetGroup {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (!selecting) return true;
 				if (keycode == KeyCode.escape) {
-					event.cancel();
 					cancel();
 				}
 				if (keycode == KeyCode.f && selected != null) {
@@ -558,7 +557,7 @@ public final class TopGroup extends WidgetGroup {
 				Hitter peek = Hitter.all.peek();
 				if (!peek.isTouchable()) break hitter;
 				peek.fireClick();
-				HopeInput.justPressed.remove(KeyCode.escape.ordinal());
+				if (!Hitter.all.contains(peek)) HopeInput.justPressed.remove(KeyCode.escape.ordinal());
 			}
 			return super.keyDown(event, keycode);
 		}

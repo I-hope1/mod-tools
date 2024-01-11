@@ -52,26 +52,15 @@ public class JSFunc {
 	public static       ClassLoader main   = Vars.mods.mainLoader();
 	public static       Scriptable  scope  = Vars.mods.getScripts().scope;
 	public static final Object      lookup = MyReflect.lookup;
-	public static Class<?> type(String s) {
-		if (s.equals("int")) return int.class;
-		if (s.equals("float")) return float.class;
-		if (s.equals("double")) return double.class;
-		if (s.equals("long")) return long.class;
-		if (s.equals("short")) return short.class;
-		if (s.equals("byte")) return byte.class;
-		if (s.equals("boolean")) return boolean.class;
-		if (s.equals("char")) return char.class;
-		if (s.equals("void")) return void.class;
-		return null;
-	}
-	public static final Font FONT = MyFonts.def;
+	public static final Font        FONT   = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;
 	}
 	/* for js */
-	public static final Class<?> vars    = IntVars.class;
+	public static final Object vars     = new NativeJavaClass(scope, IntVars.class);
+	public static final Object Contents = new NativeJavaClass(scope, Contents.class);
 
-	public static final Fi data = MySettings.dataDirectory;
+	public static final Fi data = IntVars.dataDirectory;
 
 	public static final ObjectMap<String, Scriptable> classes          = new ObjectMap<>();
 	public static final String                        defaultDelimiter = ", ";

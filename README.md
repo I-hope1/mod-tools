@@ -11,14 +11,17 @@ It provides many useful tools for developers.
 
 ## Tester
 
-- 提供 `js` 编辑器 `tester`
+![](./screenshots/tester.png)
+- 提供 `JS` 编辑器 `Tester`
 -
-    - `ctrl`+`shift`+`enter` 立即执行代码
+    - `Ctrl`+`Shift`+`Enter` 立即执行代码
 -
-    - `ctrl`+`shift`+`up/down` 切换历史记录
-    - `ctrl`+`shift`+`d` 查看详细信息
+    - `Ctrl`+`Shift`+`↑/↓` 切换历史记录
+    - `Ctrl`+`Shift`+`D` 查看详细信息
 - 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类 (缩写`$`)
+- - `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`)
+- `$p` 代表 `Packages`
 ```java
 public class JSFunc {
 	public static void showInfo(Object o);
@@ -41,7 +44,6 @@ public class JSFunc {
 	public static MyReflect Reflect;
 }
 ```
-
 - 长按收藏夹里的代码，可以添加到启动项
   ![](./screenshots/startup.png)
 -

@@ -3,16 +3,16 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.func.*;
+import arc.func.Func;
 import arc.graphics.Color;
-import arc.input.*;
+import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
-import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectMap.Entry;
 import arc.struct.Seq;
@@ -21,31 +21,29 @@ import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
-import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
 import modtools.events.ExecuteTree.TaskNode;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
-import modtools.ui.components.*;
+import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
-import modtools.ui.components.input.*;
+import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.components.input.highlight.JSSyntax;
-import modtools.ui.components.limit.*;
+import modtools.ui.components.limit.PrefPane;
 import modtools.ui.components.linstener.SclListener;
 import modtools.ui.components.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
-import modtools.ui.IntUI;
 import modtools.ui.control.HopeInput;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
@@ -59,6 +57,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
+import static modtools.utils.Tools.format;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
@@ -76,7 +75,7 @@ public class Tester extends Content {
 	private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor(name, 1);
 
 	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
-	public static final Fi   bookmarkDirectory = MySettings.dataDirectory.child("bookmarks");
+	public static final Fi   bookmarkDirectory = IntVars.dataDirectory.child("bookmarks");
 
 	private static TaskNode startupTask;
 	static TaskNode startupTask() {
@@ -86,10 +85,7 @@ public class Tester extends Content {
 	}
 
 	public static void initExecution() {
-		scripts = Vars.mods.getScripts();
-		topScope = scripts.scope;
-		scope = new BaseFunction(topScope, null);
-		cx = scripts.context;
+		initScript();
 		if (EXEC_DATA.isEmpty()) return;
 		ExecuteTree.context(startupTask(), () -> {
 			for (Entry<String, Object> entry : EXEC_DATA) {
@@ -111,6 +107,13 @@ public class Tester extends Content {
 				 .apply();
 			}
 		});
+	}
+	private static void initScript() {
+		if (scripts != null) return;
+		scripts = Vars.mods.getScripts();
+		topScope = scripts.scope;
+		scope = new BaseFunction(topScope, null);
+		cx = scripts.context;
 	}
 
 	// =------------------------------=
@@ -178,6 +181,13 @@ public class Tester extends Content {
 			}
 		};
 		textarea.addListener(new InputListener() {
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (keycode == KeyCode.escape && Core.scene.getKeyboardFocus() == area) {
+					Core.scene.unfocus(area);
+					HopeInput.justPressed.remove(KeyCode.escape.ordinal());
+				}
+				return super.keyDown(event, keycode);
+			}
 			public boolean scrolled(InputEvent event, float x, float y, float amountX, float amountY) {
 				HopeInput.axes.clear();
 				return super.scrolled(event, x, y, amountX, amountY);
@@ -232,7 +242,8 @@ public class Tester extends Content {
 		Runnable invalid = () -> {
 			float height = pane.getHeight() - _cont.getChildren().sumf(
 			 e -> e == textarea ? 0 : e.getHeight()
-			) - 30;
+			);
+			height /= Scl.scl();
 			areaCell.height(height);
 			_cont.layout();
 		};
@@ -598,7 +609,7 @@ public class Tester extends Content {
 		/*ui.update(() -> {
 			ui.setZIndex(frag.getZIndex() - 1);
 		});*/
-		history = new ListDialog("history", MySettings.dataDirectory.child("historical record"),
+		history = new ListDialog("history", IntVars.dataDirectory.child("historical record"),
 		 f -> f.child("message.txt"), f -> {
 			area.setText(readFiOrEmpty(f.child("message.txt")));
 			log = readFiOrEmpty(f.child("log.txt"));
@@ -676,21 +687,21 @@ public class Tester extends Content {
 	public void load() {
 		if (init) return;
 		init = true;
+		initScript();
 		loadSettings();
 		if (Kit.classOrNull(Tester.class.getClassLoader(), "modtools.rhino.ForRhino")
 				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
 		try {
-			Object obj1 = new NativeJavaClass(scope, JSFunc.class, true);
+			Object obj1 = new JSFuncClass(Tester.scope);
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
 			ScriptableObject.putProperty(scope, "$", obj1);
-			Object obj2 = new NativeJavaClass(topScope, MyReflect.class, false);
-			ScriptableObject.putProperty(scope, "MyReflect", obj2);
 			ScriptableObject.putProperty(scope, "unsafe", unsafe);
 			ScriptableObject.putProperty(topScope, "modName", "<null>");
 			ScriptableObject.putProperty(topScope, "scriptName", "console.js");
 
 			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
+			ScriptableObject.putProperty(scope, "$p", pkg);
 			ClassLoader       loader = Vars.mods.mainLoader();
 			Reflect.set(NativeJavaPackage.class, pkg, "classLoader", loader);
 			if (cx.getFactory() != ForRhino.factory) {
@@ -706,7 +717,7 @@ public class Tester extends Content {
 		}
 
 		// 启动脚本
-		Fi dir = MySettings.dataDirectory.child("startup");
+		Fi dir = IntVars.dataDirectory.child("startup");
 		if (dir.exists() && dir.isDirectory()) {
 			Log.info("Loading startup directory.");
 			ExecuteTree.context(startupTask(), () -> dir.walk(f -> {
@@ -779,5 +790,23 @@ public class Tester extends Content {
 	}
 	public void put(Vec2 vec2, Object val) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)), vec2);
+	}
+	private static class JSFuncClass extends NativeJavaClass {
+		public JSFuncClass(Scriptable scope) {super(scope, JSFunc.class, true);}
+		public Object get(String name, Scriptable start) {
+			RuntimeException ex;
+			try {
+				return super.get(name, start);
+			} catch (RuntimeException e) {ex = e;}
+			if (name.equals("void")) return void.class;
+			if (name.equals("boolean")) return boolean.class;
+			if (name.equals("byte")) return byte.class;
+			if (name.equals("short")) return short.class;
+			if (name.equals("int")) return int.class;
+			if (name.equals("long")) return long.class;
+			if (name.equals("float")) return float.class;
+			if (name.equals("double")) return double.class;
+			throw ex;
+		}
 	}
 }

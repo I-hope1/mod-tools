@@ -91,6 +91,7 @@ task playGame(dependsOn: classes, type: JavaExec) {
 			from "$buildDir0/libs"
 			into "${MdtDataDir}/mods"
 			include "$archivesBaseName-${version}.jar"
+			rename { oldName -> "$project.group-${version}.jar" }
 		}
 	}
 	//运行游戏目录

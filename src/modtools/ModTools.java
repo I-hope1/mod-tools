@@ -23,7 +23,8 @@ import modtools.utils.Tools;
 import modtools.utils.ui.FileUtils;
 
 import java.io.File;
-import java.net.URLClassLoader;
+import java.net.*;
+import java.nio.file.NoSuchFileException;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -79,7 +80,12 @@ public class ModTools extends Mod {
 	}
 	public static Fi findRoot() {
 		if (OS.isWindows || OS.isMac) {
-			return Fi.get(((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0].getFile());
+			URL    url  = ((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0];
+			try {
+				return Fi.get(url.toURI().getPath());
+			} catch (URISyntaxException e) {
+				throw new RuntimeException(e);
+			}
 		}
 		if (OS.isAndroid) return findRootAndroid();
 		throw new UnsupportedOperationException();
@@ -96,12 +102,17 @@ public class ModTools extends Mod {
 			resolveLibs();
 		} catch (UnexpectedPlatform e) {
 			Log.err("It seems you platform is special. (But don't worry.)");
-			Tools.forceRun(() -> {
-				if (Vars.mods.getMod(ModTools.class) == null) return false;
-				resolveLibs();
-				return true;
-			});
+			planB_resolveLibs();
+		} catch (Throwable e) {
+			planB_resolveLibs();
 		}
+	}
+	private static void planB_resolveLibs() {
+		Tools.forceRun(() -> {
+			if (Vars.mods.getMod(ModTools.class) == null) return false;
+			resolveLibs();
+			return true;
+		});
 	}
 	private static void resolveLibs() {
 		LoadedMod mod = Vars.mods.getMod(ModTools.class);

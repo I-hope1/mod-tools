@@ -80,7 +80,7 @@ public class ModTools extends Mod {
 	}
 	public static Fi findRoot() {
 		if (OS.isWindows || OS.isMac) {
-			URL    url  = ((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0];
+			URL url = ((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0];
 			try {
 				return Fi.get(url.toURI().getPath());
 			} catch (URISyntaxException e) {
@@ -146,6 +146,7 @@ public class ModTools extends Mod {
 		}
 	}
 	private static void addFileDragListener() {
+		if (!FileUtils.valid()) return;
 		ui.mods.addListener(new VisibilityListener() {
 			public boolean shown() {
 				ui.mods.removeListener(this);

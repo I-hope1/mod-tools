@@ -1,16 +1,11 @@
 package modtools.utils.ui;
 
-// import android.content.*;
-// import android.net.Uri;
-// import android.os.Build.*;
-// import android.provider.MediaStore.Files;
-// import android.provider.MediaStore.Files.FileColumns;
-
 import arc.files.Fi;
 import arc.func.Cons;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import modtools.ui.IntUI;
+import rhino.Kit;
 
 import javax.swing.*;
 import java.awt.datatransfer.DataFlavor;
@@ -19,6 +14,14 @@ import java.io.File;
 import java.util.List;
 
 public class FileUtils {
+	public static boolean valid(){
+		try {
+			Class.forName("javax.swing.JFrame");
+			return true;
+		} catch (ClassNotFoundException e) {
+			return false;
+		}
+	}
 	public static void openFiSelector(Cons<List<Fi>> fiCons) {
 		new JFrame() {{
 			new DropTarget(getContentPane(), DnDConstants.ACTION_COPY_OR_MOVE,

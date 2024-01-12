@@ -12,38 +12,21 @@ It provides many useful tools for developers.
 ## Tester
 
 ![](./screenshots/tester.png)
+
 - 提供 `JS` 编辑器 `Tester`
--
-    - `Ctrl`+`Shift`+`Enter` 立即执行代码
--
-    - `Ctrl`+`Shift`+`↑/↓` 切换历史记录
-    - `Ctrl`+`Shift`+`D` 查看详细信息
+- - `Ctrl`+`Shift`+`Enter` 立即执行代码
+- - `Ctrl`+`Shift`+`↑/↓` 切换历史记录
+  - `Ctrl`+`Shift`+`D` 查看详细信息
 - 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类 (缩写`$`)
-- - `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`)
-- `$p` 代表 `Packages`
+- + `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`;`$.J` 表示 long.class)
+- `$p` 代表 `Packages
+- [JSFunc](src/modtools/utils/JSFunc.java)
+
 ```java
-public class JSFunc {
-	public static void showInfo(Object o);
-	public static Window window(final Cons<Window> cons);
-	public static Window testElement(Element element);
-	public static Window testElement(String text);
-	public static void reviewElement(Element element);
-	public static void setDrawPadElem(Element elem);
-	public static Object asJS(Object o);
-	public static Function<?> getFunction(String name);
-	public static NativeJavaClass findClass(String name, boolean isAdapter);
-	public static NativeJavaClass findClass(String name);
-	public static Class<?> forName(String name);
-	public static Object unwrap(Object o);
-	public static WatchWindow watch(String info, MyProv<Object> value, float interval);
-	public static WatchWindow watch(String info, MyProv<Object> value);
-  public static boolean eq(Object a, Object b);
-  public static long addressOf(Object o);
-  public static void focusWorld(T o);
-	public static MyReflect Reflect;
-}
+
 ```
+
 - 长按收藏夹里的代码，可以添加到启动项
   ![](./screenshots/startup.png)
 -
@@ -62,10 +45,12 @@ public class JSFunc {
   ![selection](./screenshots/selection.png)
 
 ## ReviewElement
+
 显示元素列表，双击复制元素到js变量
 ![reviewElement](./screenshots/review_element.png)
 
 ## Window
+
 - `Ctrl`+`Tab` 切换窗口
 - `Shift`+`F4` 关闭当前窗口
 

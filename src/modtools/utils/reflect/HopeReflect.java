@@ -10,17 +10,7 @@ import java.lang.reflect.*;
 import java.security.ProtectionDomain;
 
 public class HopeReflect {
-	/**
-	 * @see jdk.internal.loader.NativeLibraries.LibraryPaths.SYS_PATHS
-	 * @see =
-	 * @see jdk.internal.loader.NativeLibraries.LibraryPaths.SYS_PATHS
-	 * @see
-	 * */
 	static {
-		// new SharedLibraryLoader(Vars.mods.getMod(ModTools.class).file.path())
-		//  .load("reflect");
-		// defineClass0(null, new byte[]{});
-
 		try {
 			clearReflectionFilter();
 		} catch (Throwable ignored) {}
@@ -63,20 +53,12 @@ public class HopeReflect {
 			}
 			return androidDefineClass(name, superClass.getClassLoader(), bytes);
 		}
-		try {
-			return UnsafeHandler.defineClass(null, bytes, superClass.getClassLoader());
-		} catch (Exception ex) {
-			throw new RuntimeException(ex);
-		}
+		return UnsafeHandler.defineClass(null, bytes, superClass.getClassLoader());
 	}
 
 	public static Class<?> defineClass(String name, ClassLoader loader, byte[] bytes) {
 		if (OS.isAndroid) return androidDefineClass(name, loader, bytes);
-		try {
-			return UnsafeHandler.defineClass(null, bytes, loader);
-		} catch (Exception ex) {
-			throw new RuntimeException(ex);
-		}
+		return UnsafeHandler.defineClass(null, bytes, loader);
 	}
 	private static Class<?> androidDefineClass(String name, ClassLoader loader, byte[] bytes) {
 		try {
@@ -90,11 +72,7 @@ public class HopeReflect {
 
 
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes, ProtectionDomain pd) {
-		try {
-			return UnsafeHandler.defineClass(null, bytes, loader, pd);
-		} catch (Exception ex) {
-			throw new RuntimeException(ex);
-		}
+		return UnsafeHandler.defineClass(null, bytes, loader, pd);
 	}
 
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes) {
@@ -110,6 +88,4 @@ public class HopeReflect {
 			return null;
 		}
 	}
-
-	// public static native Class<?> defineClass0(ClassLoader loader, byte[] bytes);
 }

@@ -29,6 +29,7 @@ import modtools.ui.menu.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
+import modtools.utils.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
@@ -345,7 +346,7 @@ public class IntUI {
 		}).size(96, 45); */
 		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 24, () -> {
 			Object o = prov.get();
-			Core.app.post(() -> JSFunc.showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
+			Core.app.post(() -> INFO_DIALOG.showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
 		}).size(32, 32);
 	}
 

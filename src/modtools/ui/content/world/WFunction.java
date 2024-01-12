@@ -31,6 +31,7 @@ import modtools.ui.content.ui.PositionProv;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
+import modtools.utils.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.world.WorldDraw;
 
@@ -496,7 +497,7 @@ public abstract class WFunction<T> {
 					buildTable(item, cont);
 					cont.row();
 					cont.button("@details", HopeStyles.blackt, () -> {
-						 JSFunc.showInfo(item);
+						 INFO_DIALOG.showInfo(item);
 					 }).growX().height(Selection.buttonHeight)
 					 .colspan(10);
 					if (++c % cols == 0) {

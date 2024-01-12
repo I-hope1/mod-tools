@@ -42,6 +42,7 @@ import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.array.ArrayUtils;
+import modtools.utils.jsfunc.INFO_DIALOG;
 import modtools.utils.world.*;
 
 import java.util.*;
@@ -797,7 +798,7 @@ public class Selection extends Content {
 
 		public Tile lastTile;
 		private void addMoreButton(Table t, Object o) {
-			t.button("More", Styles.flatBordert, () -> JSFunc.showInfo(o)).size(80, 24);
+			t.button("More", Styles.flatBordert, () -> INFO_DIALOG.showInfo(o)).size(80, 24);
 		}
 		private void buildCont(Table table, Tile tile) {
 			if (lastTile == tile) return;

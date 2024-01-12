@@ -41,7 +41,6 @@ public interface InterfaceReflect {
 		}
 	}
 	class DefaultImpl implements InterfaceReflect {
-
 		public Field[] getFields(Class<?> cls) {
 			return MyReflect.lookupGetFields(cls);
 		}

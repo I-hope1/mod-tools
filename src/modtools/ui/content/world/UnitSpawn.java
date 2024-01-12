@@ -30,7 +30,7 @@ import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.SR.CatchSR;
+import modtools.utils.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.FormatHelper;
 import modtools.utils.world.WorldUtils;
 
@@ -200,7 +200,7 @@ public class UnitSpawn extends Content {
 					+ team + "}[accent]×" + amount,
 					getSpawnRun()).code(generateCode()).resubmitted().worldTimer().apply()
 				);
-				Window dialog = JSFunc.dialog(t -> {
+				Window dialog = INFO_DIALOG.dialog(t -> {
 					t.add("已添加").row();
 					t.button("查看", () -> Contents.executor.build());
 				});

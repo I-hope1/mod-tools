@@ -15,6 +15,7 @@ import modtools.ui.IntUI;
 import modtools.ui.components.Window;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
+import modtools.utils.jsfunc.INFO_DIALOG;
 
 import java.util.Optional;
 
@@ -47,7 +48,7 @@ public class ElementUtils {
 	public static void quietScreenshot(Element element) {
 		// ui.update();
 		ScreenSampler.pause();
-		JSFunc.dialog(screenshot(element, true, (region, pixmap) -> {
+		INFO_DIALOG.dialog(screenshot(element, true, (region, pixmap) -> {
 			Fi fi = screenshotDirectory.child(
 			 Optional.ofNullable(element.name)
 				.orElseGet(() -> "" + Time.nanos()) + ".png");

@@ -6,6 +6,7 @@ import ihope_lib.MyReflect;
 import modtools.HopeConstant.ANDROID;
 import modtools.utils.JSFunc;
 import modtools.utils.Tools.*;
+import modtools.utils.jsfunc.UNSAFE;
 
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
@@ -22,7 +23,7 @@ public class InitH {
 
 	static {
 		try {
-			JSFunc.openModule(Object.class.getModule(), "java.lang.invoke");
+			UNSAFE.openModule(Object.class.getModule(), "java.lang.invoke");
 		} catch (Throwable ignored) {}
 	}
 

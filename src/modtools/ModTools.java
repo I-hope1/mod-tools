@@ -19,7 +19,7 @@ import modtools.ui.content.SettingsUI;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.utils.Tools;
+import modtools.utils.*;
 import modtools.utils.ui.FileUtils;
 
 import java.io.File;

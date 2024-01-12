@@ -11,7 +11,7 @@ import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.content.debug.Tester;
-import modtools.utils.JSFunc;
+import modtools.utils.jsfunc.CAST;
 import rhino.*;
 
 import static mindustry.Vars.mods;
@@ -57,7 +57,7 @@ public class JSRequest {
 		}
 		public Object eval() {
 			Object o = cx.evaluateString(scope, area.getText(), "mini_console.js", 1);
-			return JSFunc.unwrap(o);
+			return CAST.unwrap(o);
 		}
 	}
 

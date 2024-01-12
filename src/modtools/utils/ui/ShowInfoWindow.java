@@ -27,6 +27,7 @@ import modtools.ui.components.utils.*;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
 import modtools.struct.Pair;
+import modtools.utils.jsfunc.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
@@ -124,7 +125,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			t.button(Icon.refreshSmall, HopeStyles.clearNonei, rebuild0).size(42);
 			if (o != null) {
 				IntUI.addStoreButton(t, "", () -> o);
-				t.label(() -> "" + addressOf(o)).padLeft(8f);
+				t.label(() -> "" + UNSAFE.addressOf(o)).padLeft(8f);
 			}
 		}).height(42).row();
 		cont.table(t -> {
@@ -175,7 +176,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				);
 				TextAreaTab textarea = new TextAreaTab(stringWriter.toString());
 				textarea.syntax = new JavaSyntax(textarea);
-				window(d -> {
+				INFO_DIALOG.window(d -> {
 					d.cont.setSize(textarea.getArea().getPrefWidth(), textarea.getArea().getPrefHeight());
 					d.cont.add(textarea).grow();
 				});
@@ -246,11 +247,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private void buildAllByClass(Object o, Class<?> cls, Type type) {
 		if (!classSet.add(cls)) return;
-		Field[] fields1 = getFields1(cls);
+		Field[] fields1 = InterfaceReflect.impl.getFields(cls);
 		fieldsTable.build(cls, type, fields1);
-		Method[] methods1 = getMethods1(cls);
+		Method[] methods1 = InterfaceReflect.impl.getMethods(cls);
 		methodsTable.build(cls, type, methods1);
-		Constructor<?>[] constructors1 = getConstructors1(cls);
+		Constructor<?>[] constructors1 = InterfaceReflect.impl.getConstructors(cls);
 		consTable.build(cls, type, constructors1);
 		Class<?>[] classes1 = cls.getDeclaredClasses();
 		classesTable.build(cls, type, classes1);
@@ -276,15 +277,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private static void checkRemovePeek(ReflectTable table) {
 		if (!table.lastEmpty && table.current.hasChildren()) table.current.getChildren().peek().remove();
-	}
-	private static Field[] getFields1(Class<?> cls) {
-		return InterfaceReflect.impl.getFields(cls);
-	}
-	private static Method[] getMethods1(Class<?> cls) {
-		return InterfaceReflect.impl.getMethods(cls);
-	}
-	private static Constructor<?>[] getConstructors1(Class<?> cls) {
-		return InterfaceReflect.impl.getConstructors(cls);
 	}
 
 
@@ -589,7 +581,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				var   pair = table.map.get(member.getName());
 				Table one  = pair.getFirst(ShowInfoWindow::newPairTable);
 				p.add(one).right().grow().get();
-				Time.runTask(6f, () -> one.invalidateHierarchy());
+				Time.runTask(6f, one::invalidateHierarchy);
 			}, false, Align.topLeft);
 		}, null);
 	}

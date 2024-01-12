@@ -49,6 +49,7 @@ import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.jsfunc.*;
 import rhino.*;
 
 import java.lang.reflect.Method;
@@ -372,7 +373,7 @@ public class Tester extends Content {
 			}), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
 
 			p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails).with(c -> {
-				IntUI.longPress0(c, () -> JSFunc.showInfo(res));
+				IntUI.longPress0(c, () -> INFO_DIALOG.showInfo(res));
 			});
 			p.button(HopeIcons.history, istyle, isize, history::show)
 			 .get().addCaptureListener(new ElementGestureListener() {
@@ -399,8 +400,8 @@ public class Tester extends Content {
 	}
 
 	private void showDetails() {
-		if (res instanceof Class) JSFunc.showInfo((Class<?>) res);
-		else JSFunc.showInfo(res);
+		if (res instanceof Class) INFO_DIALOG.showInfo((Class<?>) res);
+		else INFO_DIALOG.showInfo(res);
 	}
 	public boolean detailsListener(KeyCode keycode) {
 		if (keycode == KeyCode.d && Core.input.ctrl() && Core.input.shift()) {
@@ -583,7 +584,7 @@ public class Tester extends Content {
 			if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
 			logs.clear();
 			Object o = setLogger(logHandler, () -> script.exec(cx, scope));
-			res = o = JSFunc.unwrap(o);
+			res = o = CAST.unwrap(o);
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
@@ -700,9 +701,9 @@ public class Tester extends Content {
 			ScriptableObject.putProperty(topScope, "modName", "<null>");
 			ScriptableObject.putProperty(topScope, "scriptName", "console.js");
 
-			NativeJavaPackage pkg    = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
+			NativeJavaPackage pkg = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
 			ScriptableObject.putProperty(scope, "$p", pkg);
-			ClassLoader       loader = Vars.mods.mainLoader();
+			ClassLoader loader = Vars.mods.mainLoader();
 			Reflect.set(NativeJavaPackage.class, pkg, "classLoader", loader);
 			if (cx.getFactory() != ForRhino.factory) {
 				Reflect.set(Context.class, cx, "factory", ForRhino.factory);
@@ -792,7 +793,9 @@ public class Tester extends Content {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)), vec2);
 	}
 	private static class JSFuncClass extends NativeJavaClass {
-		public JSFuncClass(Scriptable scope) {super(scope, JSFunc.class, true);}
+		public JSFuncClass(Scriptable scope) {
+			super(scope, JSFunc.class, true);
+		}
 		public Object get(String name, Scriptable start) {
 			RuntimeException ex;
 			try {
@@ -807,6 +810,12 @@ public class Tester extends Content {
 			if (name.equals("float")) return float.class;
 			if (name.equals("double")) return double.class;
 			throw ex;
+		}
+		public boolean hasInstance(Scriptable value) {
+			return false;
+		}
+		public Scriptable construct(Context cx, Scriptable scope, Object[] args) {
+			return null;
 		}
 	}
 }

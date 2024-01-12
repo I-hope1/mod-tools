@@ -39,6 +39,7 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.jsfunc.*;
 import modtools.utils.ui.search.BindCell;
 
 import java.lang.reflect.InvocationTargetException;
@@ -513,9 +514,9 @@ public class ReviewElement extends Content {
 			 MenuList.with(Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 				 ElementUtils.quietScreenshot(element);
 			 }),
-			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> JSFunc.toggleDrawPadElem(element)),
+			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
 			 MenuList.with(Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
-			 MenuList.with(Icon.infoSmall, "@details", () -> JSFunc.showInfo(element)),
+			 MenuList.with(Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
 			 FoldedList.withf(Icon.boxSmall, "Exec", () -> Seq.with(
 				MenuList.with(Icon.boxSmall, "Invalidate", element::invalidate),
 				MenuList.with(Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
@@ -530,7 +531,7 @@ public class ReviewElement extends Content {
 			))
 			 .ifRun(element instanceof Table, seq -> seq.add(
 				MenuList.with(Icon.waves, "Cells", () -> {
-					JSFunc.dialog(d -> {
+					INFO_DIALOG.dialog(d -> {
 						d.left().defaults().left();
 						for (var cell : ((Table) element).getCells()) {
 							d.table(Tex.pane, t0 -> {

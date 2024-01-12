@@ -24,6 +24,7 @@ import modtools.ui.content.ui.*;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
+import modtools.utils.jsfunc.*;
 import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.*;
@@ -339,7 +340,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
 		Vec2 pos = ElementUtils.getAbsolutePos(el);
 		try {
-			JSFunc.showInfo(val1, type).setPosition(pos);
+			INFO_DIALOG.showInfo(val1, type).setPosition(pos);
 		} catch (Throwable e) {
 			IntUI.showException(e).setPosition(pos);
 		}
@@ -375,9 +376,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		Sr(type).isExtend(__ -> {
 			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
 				SR.catchSatisfy(() -> Sr(val)
-				 .isInstance(TextureRegion.class, JSFunc::dialog)
-				 .isInstance(Texture.class, JSFunc::dialog)
-				 .isInstance(Drawable.class, JSFunc::dialog)
+				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
+				 .isInstance(Texture.class, INFO_DIALOG::dialog)
+				 .isInstance(Drawable.class, INFO_DIALOG::dialog)
 				)));
 		 }, TextureRegion.class, Texture.class, Drawable.class)
 		 /* .isExtend(__ -> {
@@ -387,7 +388,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 }, Drawable.class) */
 		 .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
-				 JSFunc.inspect((Element) val);
+				 REVIEW_ELEMENT.inspect((Element) val);
 			 }));
 			 list.add(newElementDetailsList((Element) val));
 			 elementSetter(list, this::setVal);

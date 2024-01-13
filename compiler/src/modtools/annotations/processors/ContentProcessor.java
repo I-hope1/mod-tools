@@ -1,23 +1,18 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.source.tree.Tree;
-import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
-import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.util.*;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
+import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
-import modtools.utils.MySettings;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
 @AutoService({Processor.class})

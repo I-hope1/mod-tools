@@ -1,3 +1,5 @@
+[English](README_en.md)|[中文](README.md)
+
 # Mod Tools
 
 A mod for mindustry v7.
@@ -22,10 +24,6 @@ It provides many useful tools for developers.
 - + `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`;`$.J` 表示 long.class)
 - `$p` 代表 `Packages
 - [JSFunc](src/modtools/utils/JSFunc.java)
-
-```java
-
-```
 
 - 长按收藏夹里的代码，可以添加到启动项
   ![](./screenshots/startup.png)

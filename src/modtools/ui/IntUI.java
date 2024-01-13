@@ -160,7 +160,7 @@ public class IntUI {
 				}
 			}
 		}
-		elem.addListener(new LongPressListener());
+		elem.addCaptureListener(new LongPressListener());
 		return elem;
 	}
 

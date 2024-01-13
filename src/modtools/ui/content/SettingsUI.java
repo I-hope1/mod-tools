@@ -13,8 +13,10 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.Log.LogLevel;
 import mindustry.Vars;
 import mindustry.core.Version;
+import mindustry.desktop.DesktopLauncher;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
@@ -142,6 +144,16 @@ public class SettingsUI extends Content {
 
 			 row();
 			 table(Tex.pane, t -> {
+				 t.add("@mod-tools.functions");
+				 t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
+					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
+				 }).height(42).growX().colspan(2);
+				 t.button("Enable Debug Parma", Icon.chatSmall, Styles.flatt, () -> {
+					 Log.level = LogLevel.debug;
+				 }).height(42).growX().colspan(2);
+			 }).growX();
+			 row();
+			 table(Tex.pane, t -> {
 				 t.add("@editor.author");
 				 t.add(IntVars.meta.author).row();
 				 t.button("Github", Icon.githubSmall, Styles.flatt, () -> {
@@ -153,9 +165,6 @@ public class SettingsUI extends Content {
 				 /* t.button("@mod-tools.check", Icon.androidSmall, Styles.flatt, () -> {
 					 Updater.checkUpdate(b -> {});
 				 }).height(42).growX().colspan(2); */
-				 t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
-					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-				 }).height(42).growX().colspan(2);
 			 }).growX();
 		 }}));
 		Content.all.forEach(cont -> {

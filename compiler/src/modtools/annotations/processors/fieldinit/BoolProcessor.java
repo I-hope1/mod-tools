@@ -68,10 +68,11 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 			DataBoolFieldInit fieldInit = symbol.getAnnotation(DataBoolFieldInit.class);
 
 			mMaker.at(method);
-			JCVariableDecl param = makeVar0(Flags.PARAMETER, null, "aoao", null, method.sym);
+			JCVariableDecl param = makeVar0(Flags.PARAMETER, null, "_p", null, method.sym);
 			param.startPos = 0;
 			JCExpression data = getData(fieldInit.data(), ((ClassSymbol) element.getEnclosingElement()).type);
 			JCLiteral    key  = mMaker.Literal(name);
+			// 下面这个代码是：SettingUI.bool("settingName", data, "key", node, _p -> node = _p)
 			buffer.add(mMaker.Exec(mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Ident(SettingUI()),
 				names.fromString("bool")),

@@ -33,7 +33,6 @@ public class MySettings {
 	 D_JSFUNC_DISPLAY = D_JSFUNC.child("Display"),
 	 D_BLUR           = SETTINGS.child("BLUR");
 
-
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
 

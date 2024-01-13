@@ -19,7 +19,8 @@ import java.util.List;
 import java.util.*;
 import java.util.function.Predicate;
 
-public abstract class BaseProcessor<T extends Element> extends AbstractProcessor implements TreeUtils, AnnotationUtils {
+public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
+ implements TreeUtils, AnnotationUtils, PrintHelper {
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
@@ -47,7 +48,11 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		if (firstFinished) {
 			if (!second) {
 				second = true;
-				process2();
+				try {
+					process2();
+				} catch (Throwable e) {
+					err(e);
+				}
 			}
 			return true;
 		}
@@ -57,14 +62,14 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 				try {
 					dealElement((T) element);
 				} catch (Throwable e) {
-					e.printStackTrace();
+					err(e);
 				}
 			}
 		}
 		try {
 			process();
 		} catch (Throwable e) {
-			e.printStackTrace();
+			err(e);
 		}
 		return true;
 	}
@@ -90,7 +95,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		super.init(env);
 		try {
 			init();
-		} catch (Throwable e) {e.printStackTrace();}
+		} catch (Throwable e) {err(e);}
 		if (elements != null) return;
 
 		__context = ((JavacProcessingEnvironment) processingEnv).getContext();
@@ -116,10 +121,10 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		return findChild(sibling.getEnclosingElement(), name, kind);
 	}
 
-	public static Element findChild(Element parent, String name, ElementKind kind) {
+	public static <T extends Element> T findChild(Element parent, String name, ElementKind kind) {
 		for (Element member : parent.getEnclosedElements()) {
 			if (member.getKind() == kind && member.getSimpleName().contentEquals(name)) {
-				return member;
+				return (T) member;
 			}
 		}
 		return null;
@@ -199,7 +204,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		try {
 			Class.forName("modtools.annotations.HopeReflect");
 		} catch (Throwable e) {
-			e.printStackTrace();
+			PrintHelper.errs(e);
 		}
 	}
 

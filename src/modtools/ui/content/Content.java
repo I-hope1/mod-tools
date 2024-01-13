@@ -4,9 +4,10 @@ package modtools.ui.content;
 import arc.Core;
 import arc.scene.style.Drawable;
 import arc.scene.ui.TextButton;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.events.E_DataInterface;
 import modtools.utils.MySettings.Data;
 
 import java.sql.Ref;
@@ -18,7 +19,7 @@ import static modtools.utils.MySettings.SETTINGS;
 public abstract class Content {
 	public static final ArrayList<Content> all = new ArrayList<>();
 
-	public final Drawable icon;
+	public final Drawable   icon;
 	public final String     name;
 	public       TextButton btn;
 
@@ -26,7 +27,7 @@ public abstract class Content {
 	public String localizedName() {
 		return Core.bundle.get(modName + "." + name, name);
 	}
-	public String getSettingName() {
+	public final String getSettingName() {
 		return name;
 	}
 
@@ -68,5 +69,29 @@ public abstract class Content {
 
 	public String toString() {
 		return "Content#" + name;
+	}
+
+	protected interface ISettings extends E_DataInterface {
+		default Data data() {
+			return null;
+		}
+		default String name() {
+			return null;
+		}
+		default void def(Object o) {
+			data().get(name(), o);
+		}
+		default void set(Object o) {
+			data().put(name(), o);
+		}
+		default void set(boolean o) {
+			data().put(name(), o);
+		}
+		default <T> T get() {
+			return (T) data().get(name());
+		}
+		default boolean enabled() {
+			return data().getBool(name());
+		}
 	}
 }

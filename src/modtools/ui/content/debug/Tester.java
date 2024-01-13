@@ -33,6 +33,7 @@ import modtools.events.*;
 import modtools.events.ExecuteTree.TaskNode;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
@@ -165,7 +166,7 @@ public class Tester extends Content {
 	/** 位于0处的文本 */
 	public        StringBuffer originalText    = null;
 	@DataEventFieldInit
-	public static boolean      rollbackHistory = E_Tester.rollback_history.enabled();
+	public static boolean      rollbackHistory = Settings.rollback_history.enabled();
 
 	public ScrollPane  pane;
 	public SclListener logSclListener;
@@ -535,7 +536,7 @@ public class Tester extends Content {
 	public void makeError(Throwable ex, boolean fromExecutor) {
 		error = true;
 		loop = false;
-		if (E_Tester.output_to_log.enabled()) Log.err(name, ex);
+		if (Settings.output_to_log.enabled()) Log.err(name, ex);
 		if (!ignorePopupError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
 	}
@@ -588,7 +589,7 @@ public class Tester extends Content {
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
-			if (E_Tester.output_to_log.enabled()) {
+			if (Settings.output_to_log.enabled()) {
 				Log.info("[[tester]: " + log);
 			}
 			if (lastDir != null) lastDir.child("log.txt").writeString(log);
@@ -751,7 +752,7 @@ public class Tester extends Content {
 		Table table = new Table();
 		table.defaults().growX();
 		dataInit();
-		addSettingsTable(table, null, n -> "tester." + n, settings, E_Tester.values(), true);
+		addSettingsTable(table, null, n -> "tester." + n, settings, Settings.values(), true);
 
 		Contents.settings_ui.add(localizedName(), icon, table);
 	}
@@ -792,30 +793,9 @@ public class Tester extends Content {
 	public void put(Vec2 vec2, Object val) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)), vec2);
 	}
-	private static class JSFuncClass extends NativeJavaClass {
-		public JSFuncClass(Scriptable scope) {
-			super(scope, JSFunc.class, true);
-		}
-		public Object get(String name, Scriptable start) {
-			RuntimeException ex;
-			try {
-				return super.get(name, start);
-			} catch (RuntimeException e) {ex = e;}
-			if (name.equals("void")) return void.class;
-			if (name.equals("boolean")) return boolean.class;
-			if (name.equals("byte")) return byte.class;
-			if (name.equals("short")) return short.class;
-			if (name.equals("int")) return int.class;
-			if (name.equals("long")) return long.class;
-			if (name.equals("float")) return float.class;
-			if (name.equals("double")) return double.class;
-			throw ex;
-		}
-		public boolean hasInstance(Scriptable value) {
-			return false;
-		}
-		public Scriptable construct(Context cx, Scriptable scope, Object[] args) {
-			return null;
-		}
+
+	public enum Settings implements ISettings {
+		ignore_popup_error, catch_outsize_error, wrap_ref,
+		rollback_history, multi_windows, output_to_log, js_prop
 	}
 }

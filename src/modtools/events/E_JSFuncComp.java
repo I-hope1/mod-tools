@@ -9,8 +9,6 @@ enum E_JSFuncComp implements E_DataInterface {
 	truncate_text, hidden_if_empty, display_synthetic, update_async,
 	folded_name;
 
-	// public static final Data data = MySettings.D_JSFUNC;
-	// public boolean enabled() {return data.getBool(name());}
 	static {
 		auto_refresh.def(true);
 		display_generic.def(true);

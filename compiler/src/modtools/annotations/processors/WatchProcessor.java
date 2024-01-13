@@ -114,7 +114,7 @@ public class WatchProcessor extends BaseProcessor {
 
 			try {
 				buildVar(dcls, classDecl);
-			} catch (Throwable e) {e.printStackTrace();}
+			} catch (Throwable e) {err(e);}
 			// Log.info(classDecl);
 		});
 

@@ -43,7 +43,8 @@ public interface TreeUtils extends ParseUtils {
 	default JCVariableDecl makeVar0(long flags, Type type, String name, JCExpression init, Symbol sym) {
 		return makeVar1(flags, type, name, init, sym, true);
 	}
-	private JCVariableDecl makeVar1(long flags, Type type, String name, JCExpression init, Symbol sym, boolean enterScope) {
+	private JCVariableDecl makeVar1(long flags, Type type, String name, JCExpression init, Symbol sym,
+																	boolean enterScope) {
 		if (!pattern.matcher(name).find())
 			throw new IllegalArgumentException("Name(" + name + ") contains illegal char.");
 		VarSymbol varSymbol = new VarSymbol(
@@ -56,7 +57,7 @@ public interface TreeUtils extends ParseUtils {
 	}
 	default JCVariableDecl addConstantField(JCClassDecl classDecl, Type type, String name, Object value) {
 		JCVariableDecl x = makeVar0(Flags.STATIC | Flags.FINAL | Flags.HASINIT,
-		 type, name, mMaker.Literal(value), classDecl.sym);
+		 type, name, value instanceof JCExpression ex ? ex : mMaker.Literal(value), classDecl.sym);
 		classDecl.defs = classDecl.defs.prepend(x);
 		return x;
 	}

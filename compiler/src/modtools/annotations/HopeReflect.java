@@ -85,7 +85,7 @@ public class HopeReflect {
 			ObjectBytes = HopeReflect.class.getClassLoader()
 			 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class").readAllBytes();
 		} catch (IOException e) {
-			e.printStackTrace();
+			PrintHelper.errs(e);
 			throw new RuntimeException(e);
 		}
 	}

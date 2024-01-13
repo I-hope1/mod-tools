@@ -16,7 +16,7 @@ import java.util.*;
 public class DataProcessor extends BaseProcessor {
 	private static final String EVENT       = "modtools.events.MyEvents";
 	private static final String EVNET_FIELD = "$event-0";
-	public void process2() {
+	public void process() {
 		initMap.forEach((parent, selves) -> {
 			/* if (!parent.getSimpleName().toString().startsWith("E_"))
 				throw new IllegalArgumentException("class name must start with 'E_'"); */
@@ -28,7 +28,6 @@ public class DataProcessor extends BaseProcessor {
 			 findType(EVENT),
 			 EVNET_FIELD, "new " + EVENT + "()");
 
-			String E_NAME = "modtools.events.E_" + parent.getSimpleName();
 			// classDecl.sym.members_field.enter(findSymbol(EVNET_FIELD));
 			JCMethodDecl method = findChild(classDecl, Tag.METHODDEF, m0 -> m0.name.contentEquals("dataInit"));
 			if (method == null) return;
@@ -58,7 +57,7 @@ public class DataProcessor extends BaseProcessor {
 				JCStatement x = execStatement(
 				 mMaker.Select(mMaker.Ident(event_f), names.fromString("onIns")),
 				 List.of(
-					mMaker.Select(mMaker.Ident(findClassSymbol(E_NAME)), names.fromString(underlineName)),
+					mMaker.Select(mMaker.Ident(names.fromString("Settings")), names.fromString(underlineName)),
 					mMaker.Lambda(
 					 List.of(t),
 					 mMaker.Assign(mMaker.Ident(names.fromString(fieldName)),
@@ -88,10 +87,8 @@ public class DataProcessor extends BaseProcessor {
 	public void dealElement(Element element) {
 		if (element.getKind() == ElementKind.FIELD) initMap.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
 		else if (element.getKind() == ElementKind.ENUM) {
-			JCVariableDecl data = (JCVariableDecl) trees.getTree(findChild(element, "data", ElementKind.FIELD));
-			data.init = parseExpression("modtools.utils.MySettings.SETTINGS.child(\"%name%\")"
-			 .replace("%name%", element.getSimpleName().toString().substring(2).toLowerCase())
-			);
+			JCVariableDecl data = (JCVariableDecl) trees.getTree((Element) findChild(element, "data", ElementKind.FIELD));
+			data.init = parseExpression("Settings.data()");
 		}
 	}
 

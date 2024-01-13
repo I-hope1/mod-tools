@@ -27,7 +27,6 @@ import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
-import modtools.events.E_Selection;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.IMenu;
@@ -102,7 +101,7 @@ public class Selection extends Content {
 	WFunction<Bullet>   bullets;
 	WFunction<Entityc>  others;
 
-	/** @see E_Selection */
+	/** @see Settings */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
 	private static void intField(Table t1) {
 		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::validPosInt);
@@ -149,7 +148,7 @@ public class Selection extends Content {
 				}).row();
 				table(t -> {
 					t.left().defaults().left();
-					SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", E_Selection.focusOnWorld).row();
+					SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", Settings.focusOnWorld).row();
 					t.check("@settings.drawSelect", 28, drawSelect, b -> drawSelect = b)
 					 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 				}).row();
@@ -330,7 +329,7 @@ public class Selection extends Content {
 		tab.icons = new Drawable[]{HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall};
 		pane.cont.update(() -> {
 			tab.labels.each((name, l) -> {
-				l.color.set(E_Selection.valueOf(name).enabled() ? Color.white : Color.lightGray);
+				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
 			});
 		});
 		pane.cont.left().add(tab.build()).grow().left();
@@ -692,7 +691,7 @@ public class Selection extends Content {
 	private void reacquireFocus() {
 		focusUnits.clear();
 		focusBullets.clear();
-		if (E_Selection.focusOnWorld.enabled()) {
+		if (Settings.focusOnWorld.enabled()) {
 			focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
 			focusBuild = focusTile != null ? focusTile.build : null;
 			Groups.unit.each(u -> {
@@ -743,7 +742,7 @@ public class Selection extends Content {
 			cont.pane(Styles.smallPane, p -> pane = p).grow();
 			buildCont0();
 			Tools.TASKS.add(() -> {
-				if (state.isMenu() || !E_Selection.focusOnWorld.enabled() || !focusEnabled) {
+				if (state.isMenu() || !Settings.focusOnWorld.enabled() || !focusEnabled) {
 					hide();
 				} else if (!isShown() && SclListener.fireElement == null) {
 					show();
@@ -929,7 +928,7 @@ public class Selection extends Content {
 				units.clearList();
 			} */
 
-			if (E_Selection.bullet.enabled()) {
+			if (Settings.bullet.enabled()) {
 				acquireExecutor().submit(() -> {
 					Groups.bullet.each(bullet -> {
 						// 返回单位是否在所选区域内
@@ -942,7 +941,7 @@ public class Selection extends Content {
 					});
 				});
 			}
-			if (E_Selection.unit.enabled()) {
+			if (Settings.unit.enabled()) {
 				Groups.unit.each(unit -> {
 					// 返回单位是否在所选区域内
 					return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
@@ -952,7 +951,7 @@ public class Selection extends Content {
 					}
 				});
 			}
-			if (E_Selection.others.enabled()) {
+			if (Settings.others.enabled()) {
 				Groups.all.each(unit -> {
 					if (unit instanceof Bullet) return false;
 					if (unit instanceof Unit) return false;
@@ -968,8 +967,8 @@ public class Selection extends Content {
 
 			clampWorld();
 
-			boolean enabledTile  = E_Selection.tile.enabled();
-			boolean enabledBuild = E_Selection.building.enabled();
+			boolean enabledTile  = Settings.tile.enabled();
+			boolean enabledBuild = Settings.building.enabled();
 			acquireExecutor().submit(() -> {
 				for (float y = start.y; y < end.y; y += tilesize) {
 					for (float x = start.x; x < end.x; x += tilesize) {
@@ -993,6 +992,11 @@ public class Selection extends Content {
 			pane.show();
 			show = false;
 		}
+	}
+
+	public enum Settings implements ISettings{
+		tile, building, unit, bullet, others
+		/* other */, focusOnWorld
 	}
 }
 

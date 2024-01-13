@@ -61,7 +61,7 @@ public abstract class WFunction<T> {
 	public        Seq<OrderedSet<T>> select      = new Seq<>();
 	private final Runnable           changeEvent = () -> MyEvents.fire(this);
 	public final  String             name;
-	E_Selection data;
+	Selection.Settings data;
 	public WorldDraw WD;
 
 	public TemplateTable<OrderedSet<T>> template;
@@ -74,7 +74,7 @@ public abstract class WFunction<T> {
 
 	public WFunction(String name, WorldDraw WD) {
 		this.name = name;
-		data = E_Selection.valueOf(name);
+		data = Selection.Settings.valueOf(name);
 		this.WD = WD;
 		Tools.TASKS.add(() -> WD.alpha = SC.selectFunc == this ? 0.7f : 0.1f);
 		executor = Threads.boundedExecutor(name + "-each", 1);

@@ -143,7 +143,6 @@ public class IntUI {
 				if (super.touchDown(event, x, y, pointer, button)) {
 					last.set(Core.input.mouse());
 					Timer.schedule(task, duration / 1000f);
-					event.stop();
 					return true;
 				}
 				return false;

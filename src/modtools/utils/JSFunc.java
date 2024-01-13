@@ -46,7 +46,7 @@ public class JSFunc
 	public static final Object vars     = new NativeJavaClass(scope, IntVars.class);
 	public static final Object Contents = new NativeJavaClass(scope, Contents.class);
 
-	public static final Fi     data             = IntVars.dataDirectory;
+	public static final Fi     dataDir          = IntVars.dataDirectory;
 	public static final String defaultDelimiter = ", ";
 
 

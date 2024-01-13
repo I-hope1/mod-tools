@@ -349,7 +349,6 @@ public class TextArea extends MyTextField {
 
 	/** Input listener for the text area */
 	public class TextAreaListener extends TextFieldClickListener {
-
 		@Override
 		protected void setCursorPosition(float x, float y) {
 			moveOffset = -1;
@@ -374,8 +373,6 @@ public class TextArea extends MyTextField {
 			super.setCursorPosition(x, y);
 			updateCurrentLine();
 		}
-
-
 		public boolean getFocusTraversal() {
 			if (focusTraversalField == null) return focusTraversal;
 			try {
@@ -388,7 +385,6 @@ public class TextArea extends MyTextField {
 		protected boolean checkFocusTraverse(char character) {
 			return getFocusTraversal() && character == TAB;
 		}
-
 		@Override
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			boolean result = super.keyDown(event, keycode);

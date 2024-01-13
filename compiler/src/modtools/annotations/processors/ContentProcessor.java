@@ -54,7 +54,7 @@ public class ContentProcessor extends BaseProcessor {
 				 names.fromString("SETTINGS")), names.fromString("child")),
 			 List.of(mMaker.Literal(C_name))));
 
-			System.out.println(settingsTree);
+			// System.out.println(settingsTree);
 		}
 		m.body.stats = list.toList();
 		// Log.info(m);

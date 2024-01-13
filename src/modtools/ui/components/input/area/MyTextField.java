@@ -62,12 +62,6 @@ public class MyTextField extends TextField implements Disableable {
 		super(text, style);
 	}
 
-	protected void initialize() {
-		addListener(inputListener = createInputListener());
-		addListener(new IbeamCursorListener());
-		addInputDialog();
-	}
-
 	class MyKeyRepeatTask extends Task {
 		KeyCode keycode;
 
@@ -126,60 +120,9 @@ public class MyTextField extends TextField implements Disableable {
 		return wordUnderCursor(letterUnderCursor(x));
 	}
 
-	boolean withinMaxLength(int size) {
-		return maxLength <= 0 || size < maxLength;
-	}
-
-	public void addInputDialog() {
-		//mobile only
-		if (!app.isMobile() || hasInputDialog) return;
-
-		hasInputDialog = true;
-
-		inputDialogListener = tapped(() -> {
-			if (input.useKeyboard()) return;
-
-			TextInput input = new TextInput();
-			input.text = getText();
-			if (maxLength > 0) input.maxLength = maxLength;
-			input.multiline = this instanceof TextArea;
-			input.accepted = text -> {
-				clearText();
-				appendText(text);
-				change();
-				Core.input.setOnscreenKeyboardVisible(false);
-			};
-			input.canceled = () -> {
-				if (hasKeyboard()) {
-					scene.setKeyboardFocus(null);
-				}
-				Core.input.setOnscreenKeyboardVisible(false);
-			};
-			Core.input.getTextInput(input);
-		});
-	}
-
 	public void clearText() {
 		text.setLength(0);
 	}
-
-	/**
-	 * When false, text set by {@link #setText(String)} may contain characters not in the font, a space will be displayed instead.
-	 * When true (the default), characters not in the font are stripped by setText. Characters not in the font are always stripped
-	 * when typed or pasted.
-	 */
-	public void setOnlyFontChars(boolean onlyFontChars) {
-		this.onlyFontChars = onlyFontChars;
-	}
-
-	/**
-	 * Returns the text field's style. Modifying the returned style may not have an effect until {@link #setStyle(TextFieldStyle)}
-	 * is called.
-	 */
-	public TextFieldStyle getStyle() {
-		return style;
-	}
-
 	protected void calculateOffsets() {
 		float    visibleWidth = getWidth();
 		Drawable background   = getBackgroundDrawable();
@@ -440,7 +383,7 @@ public class MyTextField extends TextField implements Disableable {
 
 		int textLength = text.length();
 		if (hasSelection) textLength -= Math.abs(cursor - selectionStart);
-		FontData data = style.font.getData();
+		FontData     data   = style.font.getData();
 		StringBuffer buffer = new StringBuffer(content.length());
 		for (int i = 0, n = content.length(); i < n; i++) {
 			if (!withinMaxLength(textLength + buffer.length())) break;
@@ -670,7 +613,7 @@ public class MyTextField extends TextField implements Disableable {
 		int index      = cursor + charOffset;
 		if (forward == (index >= limit)) return;
 		char    c      = text.charAt(index);
-		boolean isWord = continueCursor(c);
+		boolean isWord = isWordCharacter(c);
 		while ((forward ? ++cursor < limit : --cursor > limit) && jump) {
 			c = text.charAt(index);
 			if (c == '\n' || c == '\r') break;
@@ -678,11 +621,13 @@ public class MyTextField extends TextField implements Disableable {
 		}
 	}
 	protected boolean continueCursor(int index, int offset) {
-		return continueCursor(text.charAt(index + offset));
-	}
-	protected boolean continueCursor(char c) {
+		char c = text.charAt(index + offset);
 		return isWordCharacter(c);
 	}
+	public boolean withinMaxLength(int size) {
+		return maxLength <= 0 || size < maxLength;
+	}
+
 
 	/** Basic input listener for the text field */
 	public class TextFieldClickListener extends ClickListener {

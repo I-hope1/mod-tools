@@ -466,19 +466,14 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 		}
 		public class MyTextAreaListener extends TextAreaListener {
-			@Override
 			protected void goHome(boolean jump) {
 				super.goHome(jump);
 				trackCursor();
 			}
-
-			@Override
 			protected void goEnd(boolean jump) {
 				super.goEnd(jump);
 				trackCursor();
 			}
-
-			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (keyDownB != null && keyDownB.get(event, keycode)) {
 					return false;
@@ -492,7 +487,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				int     oldCursor = cursor;
 				boolean shift     = Core.input.shift();
 				boolean jump      = Core.input.ctrl();
-				Time.runTask(0f, () -> {
+				Core.app.post(() -> {
 					// 判断是否一样
 					if (oldCursor == cursor) {
 						// end: goEnd(jump);
@@ -522,8 +517,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					return false;
 				}
 			}
-
-			@Override
 			public boolean keyTyped(InputEvent event, char character) {
 				if (keyTypedB != null && keyTypedB.get(event, character)) {
 					event.cancel();
@@ -576,45 +569,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 		public void draw() {
 			super.draw();
-			/*int firstLineShowing = area.getRealFirstLineShowing();
-			font = area.getStyle().font;
-			boolean had = font.getData().markupEnabled;
-			font.getData().markupEnabled = false;
 
-			String text = area.getText();
-			float lineHeight = area.getFontLineHeight();
-			float scrollOffsetY = area.scrollY - (int) (area.scrollY / lineHeight) * lineHeight;
-			offsetY = getTop() - getBackground().getTopHeight() + scrollOffsetY;
-			// Log.info(scrollOffsetY);
-			// if (y2 == y) y2 += font.getLineHeight();
-
-			IntSeq linesBreak = area.getLinesBreak();
-			int linesShowing = area.getRealLinesShowing() + 1;
-			row = Strings.count(text.substring(0, linesBreak.size == 0 ? 0 : linesBreak.get(firstLineShowing * 2)), '\n') + 1;
-			cursorLine = area.getCursorLine() + 1;
-			if (firstLineShowing == 0) {
-				drawLine();
-				offsetY += font.getLineHeight();
-			}
-			// else cline[0]++;
-			for (int i = firstLineShowing * 2; i < (firstLineShowing + linesShowing) * 2 && i < linesBreak.size; i += 2) {
-				offsetY -= font.getLineHeight();
-				try {
-					if (text.charAt(linesBreak.get(i - 1)) == '\n') {
-						row++;
-						drawLine();
-					} else cursorLine--;
-				} catch (Exception e) {
-					// Log.err(e);
-				}
-			}
-			if (area.newLineAtEnd()) {
-				offsetY -= font.getLineHeight();
-				row++;
-				drawLine();
-			}
-
-			font.getData().markupEnabled = had;*/
 			int firstLineShowing = area.getRealFirstLineShowing();
 			int linesShowing     = area.getRealLinesShowing();
 			font = area.getStyle().font;
@@ -669,7 +624,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 	}
 
-	public static class CodeTooltip extends IntUI.Tooltip {
+	/* public static class CodeTooltip extends IntUI.Tooltip {
 		public Table p;
 		public CodeTooltip() {
 			super(t -> {});
@@ -700,7 +655,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			p.parent.act(30);
 			container.touchable(() -> Touchable.enabled);
 		}
-	}
+	} */
 
 
 	// 等宽字体样式（没有等宽字体默认样式）

@@ -10,8 +10,6 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.Code.StackMapFormat;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.TreeMaker;
-import modtools.jsfunc.reflect.UNSAFE;
-import modtools.utils.reflect.UnsafeHandler;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 import sun.reflect.annotation.ExceptionProxy;

@@ -249,24 +249,31 @@ public class Tester extends Content {
 
 		ScrollPane pane = new ScrollPane(_cont);
 		pane.setScrollingDisabled(true, true);
+		int areaSpace = 10;
 		Runnable invalid = () -> {
 			float height = pane.getHeight() - _cont.getChildren().sumf(
 			 e -> e == textarea ? 0 : e.getHeight()
 			);
-			height /= Scl.scl();
-			areaCell.height(height);
+			if (height < 0) {
+				logCell.height((pane.getHeight() - center.getHeight() - areaSpace) / Scl.scl());
+				return;
+			}
+			logCell.get().toBack();
+			areaCell.height(height / Scl.scl());
 			_cont.invalidate();
 		};
 		pane.update(invalid);
 		logSclListener = new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
 			public boolean valid(float x, float y) {
 				super.valid(x, y);
+				left = right = bottom = false;
 				return top && !isDisabled();
 			}
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				super.touchDragged(event, x, y, pointer);
 
-				float val = Mathf.clamp(bind.getHeight(), 0, table.getHeight() - 120);
+				float val = Mathf.clamp(bind.getHeight(), 0, pane.getHeight() - center.getHeight() - areaSpace);
+				bind.setHeight(val);
 				// areaCell.height(sum - val / Scl.scl());
 				logCell.height(val / Scl.scl());
 				invalid.run();

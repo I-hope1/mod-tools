@@ -4,12 +4,11 @@ import arc.util.Strings;
 import rhino.ScriptRuntime;
 
 public class NumberHelper {
-
-	public static boolean validPosInt(String text) {
+	public static boolean isPosInt(String text) {
 		return Strings.canParsePositiveInt(text);
 		// return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
 	}
-	public static boolean isNum(String text) {
+	public static boolean isNumber(String text) {
 		try {
 			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text));
 		} catch (Throwable ignored) {

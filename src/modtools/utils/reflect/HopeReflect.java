@@ -16,7 +16,6 @@ public class HopeReflect {
 		} catch (Throwable ignored) {}
 	}
 
-
 	public static void clearReflectionFilter() throws Throwable {
 		if (!OS.isAndroid) return;
 		// code: VMRuntime.getRuntime().setHiddenApiExemptions(new String[]{"L"});

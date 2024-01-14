@@ -43,7 +43,7 @@ import java.util.function.*;
 import static mindustry.Vars.tilesize;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.world.TmpVars.A.tmpList;
+import static modtools.utils.world.TmpVars.tmpList;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 public abstract class WFunction<T> {

@@ -7,10 +7,8 @@ import arc.scene.ui.TextButton;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
-import modtools.events.E_DataInterface;
 import modtools.utils.MySettings.Data;
 
-import java.sql.Ref;
 import java.util.ArrayList;
 
 import static modtools.IntVars.modName;
@@ -94,5 +92,10 @@ public abstract class Content {
 		default boolean enabled() {
 			return data().getBool(name());
 		}
+	}
+	public static interface E_DataInterface {
+		default void def(boolean value) {}
+		default boolean enabled() {return false;}
+		default void set(boolean value) {}
 	}
 }

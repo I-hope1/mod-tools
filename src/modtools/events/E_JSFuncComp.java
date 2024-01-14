@@ -1,10 +1,11 @@
 package modtools.events;
 
 import modtools.annotations.DataEnum;
+import modtools.ui.content.Content;
 
 @SuppressWarnings("unused")
 @DataEnum
-enum E_JSFuncComp implements E_DataInterface {
+enum E_JSFuncComp implements Content.E_DataInterface {
 	watch_multi, search_exact, auto_refresh, display_generic,
 	truncate_text, hidden_if_empty, display_synthetic, update_async,
 	folded_name;

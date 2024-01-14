@@ -102,7 +102,7 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 			o.add(new Image(icon)).size(32f).scaling(Scaling.fit);
 		}), new Table(t -> {
 			t.left().bottom();
-			ModifiedLabel.build(new CacheProv(value).getStringProv(), NumberHelper::isNum, (field, label) -> {
+			ModifiedLabel.build(new CacheProv(value).getStringProv(), NumberHelper::isNumber, (field, label) -> {
 				if (!field.isValid() || setter == null) return;
 				setter.get(field.getText());
 			}, t).style(Styles.outlineLabel);

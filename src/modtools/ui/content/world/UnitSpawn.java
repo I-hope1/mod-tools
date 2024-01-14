@@ -134,7 +134,7 @@ public class UnitSpawn extends Content {
 					 int id = (int) toInteger(text);
 					 team = Team.get(id);
 				 })
-				 .valid(val -> NumberHelper.validPosInt(val) && toInteger(val) < Team.all.length)
+				 .valid(val -> NumberHelper.isPosInt(val) && toInteger(val) < Team.all.length)
 				 .width(100)
 				 .get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
@@ -149,7 +149,7 @@ public class UnitSpawn extends Content {
 			table.table(t -> {
 				t.add("@filter.option.amount");
 				amountField = t.field("" + amount, text -> amount = (int) toInteger(text))
-				 .valid(val -> validNumber(val) && NumberHelper.validPosInt(val))
+				 .valid(val -> validNumber(val) && NumberHelper.isPosInt(val))
 				 .width(100)
 				 .get();
 			});

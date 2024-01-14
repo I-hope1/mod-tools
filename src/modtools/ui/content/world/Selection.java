@@ -95,7 +95,7 @@ public class Selection extends Content {
 	/** @see Settings */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
 	private static void intField(Table t1) {
-		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::validPosInt);
+		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::isPosInt);
 	}
 	private static void floatField(Table t1) {
 		t1.row().field("", s -> TmpVars.tmpAmount[0] = s).valid(NumberHelper::isPositiveFloat);

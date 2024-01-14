@@ -99,7 +99,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		// Runnable[] last = {null};
 		rebuild = text -> {
 			// build.clearChildren();
-			pattern = PatternUtils.compileRegExpCatch(text);
+			pattern = PatternUtils.compileRegExpOrNull(text);
 			rebuildReflect();
 		};
 		Runnable rebuild0 = () -> {
@@ -247,25 +247,25 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private void buildAllByClass(Object o, Class<?> cls, Type type) {
 		if (!classSet.add(cls)) return;
-		Field[] fields1 = InterfaceReflect.impl.getFields(cls);
-		fieldsTable.build(cls, type, fields1);
-		Method[] methods1 = InterfaceReflect.impl.getMethods(cls);
-		methodsTable.build(cls, type, methods1);
-		Constructor<?>[] constructors1 = InterfaceReflect.impl.getConstructors(cls);
+		Field[] fields = IReflect.impl.getFields(cls);
+		fieldsTable.build(cls, type, fields);
+		Method[] methods = IReflect.impl.getMethods(cls);
+		methodsTable.build(cls, type, methods);
+		Constructor<?>[] constructors1 = IReflect.impl.getConstructors(cls);
 		consTable.build(cls, type, constructors1);
-		Class<?>[] classes1 = cls.getDeclaredClasses();
-		classesTable.build(cls, type, classes1);
+		Class<?>[] classes = cls.getDeclaredClasses();
+		classesTable.build(cls, type, classes);
 		// 字段
-		for (Field f : fields1) {buildField(o, fieldsTable, f);}
+		for (Field f : fields) {buildField(o, fieldsTable, f);}
 		checkRemovePeek(fieldsTable);
 		// 函数
-		for (Method m : methods1) {buildMethod(o, methodsTable, m);}
+		for (Method m : methods) {buildMethod(o, methodsTable, m);}
 		checkRemovePeek(methodsTable);
 		// 构造器
 		for (Constructor<?> cons : constructors1) {buildConstructor(consTable, cons);}
 		checkRemovePeek(consTable);
 		// 类
-		for (Class<?> dcls : classes1) {buildClass(classesTable, dcls);}
+		for (Class<?> dcls : classes) {buildClass(classesTable, dcls);}
 		checkRemovePeek(classesTable);
 
 		// 实现接口
@@ -347,7 +347,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
 			});
-			field.setValidator(NumberHelper::isNum);
+			field.setValidator(NumberHelper::isNumber);
 			field.changed(() -> {
 				if (!field.isValid()) return;
 				l.setFieldValue(Context.jsToJava(

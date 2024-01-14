@@ -19,18 +19,18 @@ import static ihope_lib.MyReflect.lookup;
 /** 处理一些不安全的常量 */
 public class HopeConstant {
 	public interface BINDING {
-		MethodHandle BINDING_CTOR = nl(() ->
+		MethodHandle BINDING_CTOR   = nl(() ->
 		 lookup.findConstructor(Binding.class,
 			MethodType.methodType(void.class, String.class, int.class, KeybindValue.class, String.class)));
-		long         BINDING_VALUES = FieldUtils.fieldOffset(FieldUtils.getFieldAccess(Binding.class, "$VALUES"));
+		long         BINDING_VALUES = FieldUtils.fieldOffset(Binding.class, "$VALUES");
 	}
 
 	public interface DESKTOP {
 		long MEMBER_NAME_FLAGS =
-		 FieldUtils.fieldOffset(nl(() -> Class.forName("java.lang.invoke.MemberName").getDeclaredField("flags")));
+		 FieldUtils.fieldOffset(nl(() -> Class.forName("java.lang.invoke.MemberName")), "flags");
 
 		/** @see java.lang.invoke.MemberName.Factory#INSTANCE */
-		Object         FACTORY          = nl(() ->
+		Object       FACTORY          = nl(() ->
 		 Reflect.get(Class.forName("java.lang.invoke.MemberName$Factory"), "INSTANCE"));
 		/** @see java.lang.invoke.MemberName#MemberName(Constructor) */
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
@@ -53,11 +53,11 @@ public class HopeConstant {
 
 	public interface MODS {
 		/** @see mindustry.mod.Mods#bundles */
-    ObjectMap<String, Seq<Fi>> bundles = nl(() -> Reflect.get(Mods.class, Vars.mods, "bundles"));
+		ObjectMap<String, Seq<Fi>> bundles = nl(() -> Reflect.get(Mods.class, Vars.mods, "bundles"));
 	}
 	public interface STRING {
-		long VALUE = FieldUtils.fieldOffset(FieldUtils.getFieldAccess(String.class, "value"));
-		long CODER = FieldUtils.fieldOffset(FieldUtils.getFieldAccess(String.class, "coder"));
+		long VALUE = FieldUtils.fieldOffset(String.class, "value");
+		long CODER = FieldUtils.fieldOffset(String.class, "coder");
 	}
 
 	static <R> R nl(CProv<R> prov) {

@@ -19,11 +19,11 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 
 	public void dealElement(Element element) {
 		if (element instanceof TypeElement) {
-			var              unit      = trees.getPath(element).getCompilationUnit();
-			var              classDecl = (JCClassDecl) trees.getTree(element);
+			var                    unit      = trees.getPath(element).getCompilationUnit();
+			var                    classDecl = (JCClassDecl) trees.getTree(element);
 			ArrayList<JCStatement> stats     = new ArrayList<>();
-			addImport((TypeElement) element, FIELD());
-			addImport((TypeElement) element, FIELD_UTILS());
+			addImport(element, FIELD());
+			addImport(element, FIELD_UTILS());
 			classDecl.accept(new TreeScanner() {
 				public void visitVarDef(JCVariableDecl variable) {
 					OptimizeReflect annotationByTree = getAnnotationByTree(OptimizeReflect.class, unit, variable, true);
@@ -67,12 +67,6 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 			mMaker.Select(mMaker.Ident(FIELD_UTILS()), names.fromString("getFieldAccess")),
 			List.of(clazz, name))
 		)));
-		stats.add(mMaker.Exec(
-		 mMaker.Apply(List.nil(),
-			mMaker.Select(mMaker.Ident(x), names.fromString("setAccessible")),
-			List.of(mMaker.Literal(true))
-		 )
-		));
 		return x;
 	}
 	public Set<String> getSupportedAnnotationTypes() {

@@ -308,7 +308,7 @@ public class ReviewElement extends Content {
 			pane.clearChildren();
 
 			if (element == null) return;
-			Pattern pattern = PatternUtils.compileRegExpCatch(text);
+			Pattern pattern = PatternUtils.compileRegExpOrNull(text);
 			rebuild(element, pattern);
 		}
 

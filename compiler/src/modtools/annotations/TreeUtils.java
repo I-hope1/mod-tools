@@ -6,7 +6,7 @@ import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -76,11 +76,11 @@ public interface TreeUtils extends ParseUtils {
 		return mSymtab.getClass(mSymtab.unnamedModule, names.fromString(name));
 	}
 
-	default void addImport(TypeElement element, ClassType classType) {
+	default void addImport(Element element, ClassType classType) {
 		addImport(element, (ClassSymbol) classType.tsym);
 	}
 
-	default void addImport(TypeElement element, ClassSymbol sym) {
+	default void addImport(Element element, ClassSymbol sym) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		if (!unit.namedImportScope.includes(sym) && !unit.starImportScope.includes(sym)) {
 			/* unit.namedImportScope.importType(

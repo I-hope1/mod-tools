@@ -76,7 +76,7 @@ public class ShowUIList extends Content {
 		ui.cont.add(wrap).grow();
 		new Search((cont, text) -> {
 			if (!wrap.getChildren().isEmpty()) {
-				pattern = PatternUtils.compileRegExpCatch(text);
+				pattern = PatternUtils.compileRegExpOrNull(text);
 				return;
 			}
 			wrap.add(tab.build()).pad(10f).grow();

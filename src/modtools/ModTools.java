@@ -109,6 +109,7 @@ public class ModTools extends Mod {
 			return;
 		}
 		MyShaders.load();
+		MyFonts.load();
 		HopeInput.load();
 		// 加载HopeIcons
 		HopeIcons.load();

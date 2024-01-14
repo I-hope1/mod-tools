@@ -29,6 +29,7 @@ import modtools.ui.components.linstener.*;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.ui.IntUI;
+import modtools.ui.style.TintDrawable;
 import modtools.utils.*;
 import modtools.struct.MySet;
 import modtools.utils.JSFunc.JColor;
@@ -70,9 +71,7 @@ public class Window extends Table {
 		IntVars.addResizeListener(() -> {
 			all.each(Window::display);
 		});
-		Tools.TASKS.add(() -> {
-			frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1);
-		});
+		Tools.TASKS.add(() -> frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1));
 	}
 
 	public static Drawable myPane  = Tex.pane;
@@ -683,26 +682,6 @@ public class Window extends Table {
 	 */
 	public FillTable addFillTable(Cons<FillTable> cons) {
 		return new FillTable(Styles.black5, cons);
-	}
-	private static class TintDrawable extends TextureRegionDrawable {
-		int  last = tint.rgba();
-		Intp intp;
-		public TintDrawable(TextureRegionDrawable drawable, Intp intp) {
-			super(drawable);
-			this.intp = intp;
-		}
-		void updateTint() {
-			if (last != intp.get()) tint.set(last = intp.get());
-		}
-		public void draw(float x, float y, float width, float height) {
-			updateTint();
-			super.draw(x, y, width, height);
-		}
-		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
-										 float scaleY, float rotation) {
-			updateTint();
-			super.draw(x, y, originX, originY, width, height, scaleX, scaleY, rotation);
-		}
 	}
 
 	public class FillTable extends Table {

@@ -1,6 +1,7 @@
 package modtools.utils.reflect;
 
 import arc.util.OS;
+import ihope_lib.Desktop;
 
 import java.lang.reflect.*;
 
@@ -75,11 +76,24 @@ public class FieldUtils {
 			return null;
 		}
 	}
+	public static long fieldOffset(Class<?> cls, String name) {
+		try {
+			Desktop.unsafe.objectFieldOffset(cls, name);
+		} catch (Throwable ignored) {}
+		try {
+			return fieldOffset(cls.getDeclaredField(name));
+		} catch (NoSuchFieldException e) {
+			throw new RuntimeException(e);
+		}
+	}
 	public static long fieldOffset(Field f) {
 		return fieldOffset(Modifier.isStatic(f.getModifiers()), f);
 	}
 	public static long fieldOffset(boolean isStatic, Field f) {
-		return OS.isAndroid ? hope_android.FieldUtils.getFieldOffset(f) : isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+		try {
+			if (OS.isAndroid) return hope_android.FieldUtils.getFieldOffset(f);
+		} catch (Throwable ignored) {}
+		return isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
 	}
 	public static Object getFieldValue(Object o, long off, Class<?> type) {
 		if (int.class.equals(type)) {

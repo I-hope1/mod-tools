@@ -25,6 +25,7 @@ import static mindustry.Vars.*;
 public class ElementUtils {
 	private static final Vec2 v1 = new Vec2();
 	private static final Vec2 v2 = new Vec2();
+	/** 存在就remove，不存在就add  */
 	public static void addOrRemove(Element element, boolean show) {
 		if (show) {
 			Core.scene.add(element);
@@ -114,6 +115,7 @@ public class ElementUtils {
 		 : getSimpleName(element.getClass())
 			 + (element.name != null ? " ★" + element.name + "★" : "");
 	}
+
 
 	/** 具有code的接口 */
 	public interface MarkedCode {

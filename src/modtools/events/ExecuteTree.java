@@ -219,7 +219,7 @@ public class ExecuteTree {
 			else worldTimer.start();
 		});
 	}
-	public interface StatusInterface extends MarkedCode {
+	public sealed interface StatusInterface extends MarkedCode {
 		Color color();
 		default Drawable icon() {return Icon.warning.tint(color());}
 	}
@@ -250,7 +250,7 @@ public class ExecuteTree {
 		}
 	}
 	abstract
-	public static class Status implements StatusInterface {
+	public static sealed class Status implements StatusInterface {
 		public final StatusEnum enum_ = StatusEnum.values()[code()];
 		public String name() {
 			return enum_.name();

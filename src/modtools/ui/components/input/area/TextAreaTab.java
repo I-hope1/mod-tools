@@ -173,6 +173,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public MyTextArea(String text) {
 			super("", HopeStyles.defaultMultiArea);
+			focusTraversal = false;
 			onlyFontChars = false;
 			setText(text);
 		}
@@ -266,7 +267,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (font.getColor().a == 0) return;
 			/*start -= displayTextStart;
 			max -= displayTextEnd;*/
-			// StringBuffer sb = new StringBuffer();
+			// StringBuilder sb = new StringBuilder();
 			for (int cursor = start; cursor < max; cursor++) {
 				// 判断是否为换行（包括自动换行）
 				if (text.charAt(cursor) == '\n' || cursor + displayTextStart == linesBreak.get(row * 2 + 1)) {
@@ -358,7 +359,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return !readOnly && super.changeText();
 		}
 
-		boolean changeText(StringBuffer oldText, StringBuffer newText) {
+		boolean changeText(StringBuilder oldText, StringBuilder newText) {
 			return !readOnly && super.changeText(oldText, newText);
 		}
 		/* boolean changeText(String oldText, String newText){
@@ -438,14 +439,14 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					endIndex += Math.max(0, selectionEnd - offset);
 					// text.delete(startIndex, 2);
 					// text.delete(Math.min(endIndex + 2, maxLen), text.length());
-					changeText(text, new StringBuffer(text).delete(startIndex, startIndex + 2)
+					changeText(text, new StringBuilder(text).delete(startIndex, startIndex + 2)
 					 .delete(endIndex - 2, endIndex));
 					selectionStart = clamp(selectionStart - 2);
 					cursor = clamp(cursor - 2);
 				} else {
 					// text.insert(start, "/*");
 					// text.insert(selectionEnd + 2, "*/");
-					changeText(text, new StringBuffer(text)
+					changeText(text, new StringBuilder(text)
 					 .insert(selectionEnd, "*/")
 					 .insert(start, "/*"));
 					selectionStart = clamp(selectionStart + 2);
@@ -457,7 +458,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				if (startComment.matcher(text.substring(home, end)).find()) {
 					int start = home + text.substring(home, end).indexOf("//");
 					// text.delete(start, 2);
-					changeText(text, new StringBuffer(text).delete(start, start + 2));
+					changeText(text, new StringBuilder(text).delete(start, start + 2));
 					cursor = clamp(cursor - 2);
 				} else {
 					changeText(text, insert(home, "//", text));

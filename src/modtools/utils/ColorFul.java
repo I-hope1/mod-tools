@@ -16,7 +16,7 @@ public class ColorFul {
 
 	private static final float percent = 60;
 	public static Color color(int value) {
-		value %= (colors.length - 1) * percent;
+		value = (int) (value % ((colors.length - 1) * percent));
 		float fin   = value / percent;
 		int   index = (int) fin;
 		return Tmp.c1.set(colors[index]).lerp(colors[index + 1], fin - index);

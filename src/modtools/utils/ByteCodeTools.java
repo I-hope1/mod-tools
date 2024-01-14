@@ -4,9 +4,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.struct.*;
 import arc.util.*;
-import hope_android.FieldUtils;
-import mindustry.Vars;
-import modtools.utils.reflect.HopeReflect;
+import modtools.utils.reflect.*;
 import rhino.classfile.ClassFileWriter;
 
 import java.io.FileOutputStream;
@@ -24,8 +22,8 @@ public class ByteCodeTools {
 	}*/
 
 	public static final String
-	 functionsKey = "_KSINIA_Functions",
-	 TMP_CLASS    = "__BYTE_Class";
+	 FUNCTION_KEY = "_K_Fn",
+	 CLASS_FILE   = "_ihope_";
 	private static int lastID = 0;
 	private static int nextID() {
 		return lastID++;
@@ -43,7 +41,7 @@ public class ByteCodeTools {
 			this.superClass = superClass;
 			adapterName = name;
 			superName = nativeName(superClass);
-			writer = new ClassFileWriter(name, superName, TMP_CLASS + nextID());
+			writer = new ClassFileWriter(name, superName, CLASS_FILE + nextID());
 		}
 
 		public <V> void setFunc(String name, MyRun run, int flags, Class<V> returnType, Class<?>... args) {
@@ -66,7 +64,7 @@ public class ByteCodeTools {
 				writer.stopMethod((short) (args.length + 1));
 				return;
 			}
-			String fieldName = functionsKey + "$" + nextID();
+			String fieldName = FUNCTION_KEY + "$" + nextID();
 			short  max       = (short) (args.length + 1);
 			int    v1        = max++, v2 = max++;
 			queues.add(new Queue<>(fieldName, () -> func2, Func2.class));
@@ -282,46 +280,17 @@ public class ByteCodeTools {
 		}
 
 		public Class<? extends T> define(Class<?> superClass) {
-			var base = HopeReflect.defineClass(adapterName, superClass, writer.toByteArray());
-			// MyReflect.loader.addChild(base.getClassLoader());
-			/*try {
-				Class.forName(adapterName, true, base.getClassLoader());
-			} catch (Throwable e) {
-				throw new RuntimeException(e);
-			}*/
-			var  map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
-			long off;
-			for (var q : queues) {
-				off = OS.isAndroid ? FieldUtils.getFieldOffset(map.get(q.name)) : unsafe.staticFieldOffset(map.get(q.name));
-				unsafe.putObject(base, off, q.get());
-			}
-			/*var base = MyReflect.defineClass(adapterName, superClass, writer.toByteArray());
-			Field[] fields = base.getDeclaredFields();
-			for (var f : fields) {
-				if (!Modifier.isStatic(f.getModifiers())) continue;
-				queues.removeAll(q -> {
-					boolean b = q.name.equals(f.getName());
-					if (b) {
-						try {
-							f.setAccessible(true);
-							f.set(null, q.get());
-						} catch (Exception e) {
-							Log.err(e);
-						}
-					}
-					return b;
-				});
-			}*/
-			return (Class<? extends T>) base;
+			return putStatic(HopeReflect.defineClass(adapterName, superClass, writer.toByteArray()));
 		}
 
 		public Class<? extends T> define(ClassLoader loader) {
-			var base = HopeReflect.defineClass(adapterName, loader, writer.toByteArray());
-
-			ObjectMap<String, Field> map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
-			long                     off;
+			return putStatic(HopeReflect.defineClass(adapterName, loader, writer.toByteArray()));
+		}
+		private Class<? extends T> putStatic(Class<?> base) {
+			var  map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
+			long off;
 			for (var q : queues) {
-				off = Vars.mobile ? FieldUtils.getFieldOffset(map.get(q.name)) : unsafe.staticFieldOffset(map.get(q.name));
+				off = FieldUtils.fieldOffset(map.get(q.name));
 				unsafe.putObject(base, off, q.get());
 			}
 			return (Class<? extends T>) base;
@@ -345,10 +314,10 @@ public class ByteCodeTools {
 	public static class Queue<T> {
 		public String   name;
 		public Prov<T>  func;
-		// prov 应该返回的类
-		public Class<?> cls;
+		/** {@code func} 返回的类Class<T> */
+		public Class<T> cls;
 
-		public Queue(String name, Prov<T> func, Class<?> cls) {
+		public Queue(String name, Prov<T> func, Class<T> cls) {
 			this.name = name;
 			this.func = func;
 			this.cls = cls;
@@ -376,14 +345,14 @@ public class ByteCodeTools {
 
 	public static Class<?> box(Class<?> type) {
 		if (type == boolean.class) return Boolean.class;
-		else if (type == byte.class) return Byte.class;
-		else if (type == char.class) return Character.class;
-		else if (type == short.class) return Short.class;
-		else if (type == int.class) return Integer.class;
-		else if (type == float.class) return Float.class;
-		else if (type == long.class) return Long.class;
-		else if (type == double.class) return Double.class;
-		else return type;
+		if (type == byte.class) return Byte.class;
+		if (type == char.class) return Character.class;
+		if (type == short.class) return Short.class;
+		if (type == int.class) return Integer.class;
+		if (type == float.class) return Float.class;
+		if (type == long.class) return Long.class;
+		if (type == double.class) return Double.class;
+		return type;
 	}
 
 	public static void addCast(ClassFileWriter writer, Class<?> type) {
@@ -409,16 +378,16 @@ public class ByteCodeTools {
 
 	public static String typeToNative(Class<?> cls) {
 		if (cls.isArray()) return "[" + typeToNative(cls.getComponentType());
-		else if (cls == int.class) return "I";
-		else if (cls == long.class) return "J";
-		else if (cls == float.class) return "F";
-		else if (cls == double.class) return "D";
-		else if (cls == char.class) return "C";
-		else if (cls == short.class) return "S";
-		else if (cls == byte.class) return "B";
-		else if (cls == boolean.class) return "Z";
-		else if (cls == void.class) return "V";
-		else return "L" + nativeName(cls) + ";";
+		if (cls == int.class) return "I";
+		if (cls == long.class) return "J";
+		if (cls == float.class) return "F";
+		if (cls == double.class) return "D";
+		if (cls == char.class) return "C";
+		if (cls == short.class) return "S";
+		if (cls == byte.class) return "B";
+		if (cls == boolean.class) return "Z";
+		if (cls == void.class) return "V";
+		return "L" + nativeName(cls) + ";";
 	}
 
 	public static short buildReturn(Class<?> returnType) {
@@ -452,27 +421,6 @@ public class ByteCodeTools {
 			}
 		};
 	}
-
-	/*public interface Func2<P1, P2, R> {
-		R get(P1 param1, P2 param2);
-	}
-	public interface Prov<T> {
-		T get();
-	}
-	public interface Cons2<T, N> {
-		void get(T var1, N var2);
-	}*/
-
-
-	/*public interface Func2<P1, P2, R> {
-		R get(P1 var1, P2 var2);
-	}
-	public interface Cons2<T, N> {
-		void get(T var1, N var2);
-	}
-	public interface Prov<T> {
-		T get();
-	}*/
 
 	@Retention(RetentionPolicy.RUNTIME)
 	public @interface Exclude {}

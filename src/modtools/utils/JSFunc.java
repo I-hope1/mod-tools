@@ -38,7 +38,7 @@ public class JSFunc
  /* Interfaces for js */
  implements UNSAFE, WORLD, REFLECT,
  REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE,
- STRING {
+ StringUtils {
 	public static       ClassLoader main   = Vars.mods.mainLoader();
 	public static       Scriptable  scope  = Vars.mods.getScripts().scope;
 	public static final Object      lookup = MyReflect.lookup;

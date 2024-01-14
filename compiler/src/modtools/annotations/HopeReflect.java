@@ -10,6 +10,8 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.Code.StackMapFormat;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.TreeMaker;
+import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.reflect.UnsafeHandler;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 import sun.reflect.annotation.ExceptionProxy;
@@ -30,9 +32,7 @@ public class HopeReflect {
 
 	static {
 		try {
-			Field f;
-			f = Class.class.getDeclaredField("module");
-			f.setAccessible(true);
+			Field f = Class.class.getDeclaredField("module");
 			long   off    = unsafe.objectFieldOffset(f);
 			Module module = Object.class.getModule();
 			unsafe.putObject(BaseProcessor.class, off, module);
@@ -137,16 +137,6 @@ public class HopeReflect {
 		return defineMirrorClass0(type);
 	}
 
-	public static long offset(Class<?> cl, String fieldName) {
-		try {
-			Field field = cl.getDeclaredField(fieldName);
-			return Modifier.isStatic(field.getModifiers())
-			 ? unsafe.staticFieldOffset(field) :
-			 unsafe.objectFieldOffset(field);
-		} catch (NoSuchFieldException e) {
-			throw new RuntimeException(e);
-		}
-	}
 	public static ClassLoader loader = new ClassLoader(HopeReflect.class.getClassLoader()) {};
 
 	private static Class<?> defineMirrorClass0(ClassType type) {

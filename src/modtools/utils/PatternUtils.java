@@ -5,7 +5,7 @@ import mindustry.ctype.UnlockableContent;
 import java.util.regex.Pattern;
 
 public class PatternUtils {
-	public static Pattern compileRegExpCatch(String text) {
+	public static Pattern compileRegExpOrNull(String text) {
 		try {
 			return compileRegExp(text);
 		} catch (Throwable e) {

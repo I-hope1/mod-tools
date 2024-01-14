@@ -525,7 +525,7 @@ public class IntUI {
 		return showSelectTable(button, (p, hide, text) -> {
 			p.clearChildren();
 
-			Pattern pattern = PatternUtils.compileRegExpCatch(text);
+			Pattern pattern = PatternUtils.compileRegExpOrNull(text);
 			for (V item : list) {
 				if (!PatternUtils.test(pattern, stringify.get(item))) continue;
 				p.button(stringify.get(item), HopeStyles.cleart/*Styles.cleart*/, () -> {

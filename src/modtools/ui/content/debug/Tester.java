@@ -165,7 +165,7 @@ public class Tester extends Content {
 	 */
 	public        int          historyPos      = -1;
 	/** 位于0处的文本 */
-	public        StringBuffer originalText    = null;
+	public        StringBuilder originalText    = null;
 	@DataEventFieldInit
 	public static boolean      rollbackHistory = Settings.rollback_history.enabled();
 

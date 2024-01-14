@@ -1,7 +1,6 @@
 package modtools.ui.components.input.area;
 
 import arc.Core;
-import arc.Input.TextInput;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.Font.FontData;
@@ -18,6 +17,7 @@ import arc.struct.FloatSeq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
+import modtools.annotations.CostTimeLog;
 
 import static arc.Core.*;
 
@@ -42,13 +42,12 @@ import static arc.Core.*;
  */
 public class MyTextField extends TextField implements Disableable {
 
-	public StringBuffer text;
+	public StringBuilder text;
 
-	public          StringBuffer    undoText       = new StringBuffer();
-	protected final FloatSeq        glyphPositions = new FloatSeq();
-	public          MyKeyRepeatTask keyRepeatTask  = new MyKeyRepeatTask();
-	public          CharSequence    displayText    = new StringBuffer();
-	public          StringBuffer    passwordBuffer;
+	public    StringBuilder  undoText      = new StringBuilder();
+	public    CharSequence  displayText   = new StringBuilder();
+	protected KeyRepeatTask keyRepeatTask = new KeyRepeatTask();
+	public    StringBuilder  passwordBuffer;
 
 	public MyTextField() {
 		super("");
@@ -62,14 +61,6 @@ public class MyTextField extends TextField implements Disableable {
 		super(text, style);
 	}
 
-	class MyKeyRepeatTask extends Task {
-		KeyCode keycode;
-
-		@Override
-		public void run() {
-			inputListener.keyDown(null, keycode);
-		}
-	}
 	protected InputListener createInputListener() {
 		return new TextFieldClickListener();
 	}
@@ -94,7 +85,7 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	protected int[] wordUnderCursor(int at) {
-		StringBuffer text  = this.text;
+		StringBuilder text  = this.text;
 		int          right = text.length(), left = 0, index = at;
 		if (at >= text.length()) {
 			left = text.length();
@@ -195,7 +186,7 @@ public class MyTextField extends TextField implements Disableable {
 		 : ((focused && style.focusedBackground != null) ? style.focusedBackground : style.background);
 	}
 
-	@Override
+
 	public void draw() {
 		Scene   stage   = getScene();
 		boolean focused = stage != null && stage.getKeyboardFocus() == this;
@@ -292,11 +283,11 @@ public class MyTextField extends TextField implements Disableable {
 	protected void updateDisplayText() {
 		Font         font = style.font;
 		FontData     data = font.getData();
-		StringBuffer text = this.text;
+		StringBuilder text = this.text;
 
 		int textLength = Math.min(text.length(), displayTextEnd0());
 
-		StringBuffer newDisplayText = (StringBuffer) displayText;
+		StringBuilder newDisplayText = (StringBuilder) displayText;
 		newDisplayText.setLength(0);
 		for (int i = displayTextStart0(); i < textLength; i++) {
 			char c = text.charAt(i);
@@ -306,7 +297,7 @@ public class MyTextField extends TextField implements Disableable {
 		// Log.info(newDisplayText);
 
 		if (passwordMode && data.hasGlyph(passwordCharacter)) {
-			if (passwordBuffer == null) passwordBuffer = new StringBuffer(newDisplayText.length());
+			if (passwordBuffer == null) passwordBuffer = new StringBuilder(newDisplayText.length());
 			if (passwordBuffer.length() > textLength)
 				passwordBuffer.setLength(textLength);
 			else {
@@ -375,16 +366,16 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	public void paste(String content, boolean fireChangeEvent) {
-		paste(new StringBuffer(content), fireChangeEvent);
+		paste(content == null ? null : new StringBuilder(content), fireChangeEvent);
 	}
 
-	public void paste(StringBuffer content, boolean fireChangeEvent) {
+	public void paste(StringBuilder content, boolean fireChangeEvent) {
 		if (content == null || (content.length() == 0 && text.length() == 0)) return;
 
-		int textLength = text.length();
+		StringBuilder buffer     = new StringBuilder();
+		int           textLength = text.length();
 		if (hasSelection) textLength -= Math.abs(cursor - selectionStart);
-		FontData     data   = style.font.getData();
-		StringBuffer buffer = new StringBuffer(content.length());
+		FontData data = style.font.getData();
 		for (int i = 0, n = content.length(); i < n; i++) {
 			if (!withinMaxLength(textLength + buffer.length())) break;
 			char c = content.charAt(i);
@@ -408,14 +399,14 @@ public class MyTextField extends TextField implements Disableable {
 		cursor += content.length();
 	}
 
-	public StringBuffer insert(int position, CharSequence text, StringBuffer to) {
+	public StringBuilder insert(int position, CharSequence text, StringBuilder to) {
 		if (to.length() == 0) {
-			if (text instanceof StringBuffer) return (StringBuffer) text;
+			if (text instanceof StringBuilder) return (StringBuilder) text;
 			return to.append(text);
 		}
 		return to.insert(position, text);
 	}
-	StringBuffer insert(int position, char c, StringBuffer to) {
+	StringBuilder insert(int position, char c, StringBuilder to) {
 		return to.insert(position, c);
 	}
 
@@ -461,7 +452,7 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	/** @return Never null, might be an empty string. */
-	public StringBuffer getText0() {
+	public StringBuilder getText0() {
 		return text;
 	}
 	public String getText() {
@@ -470,12 +461,12 @@ public class MyTextField extends TextField implements Disableable {
 
 
 	/** @param str If null, "" is used. */
-	public void setText0(StringBuffer str) {
-		if (str == null) str = new StringBuffer();
+	public void setText0(StringBuilder str) {
+		if (str == null) str = new StringBuilder();
 		// if (str.equals(text)) return;
 
 		clearSelection();
-		text = new StringBuffer();
+		text = new StringBuilder();
 		paste(str, false);
 		if (programmaticChangeEvents) {
 			changeText();
@@ -485,7 +476,7 @@ public class MyTextField extends TextField implements Disableable {
 	public void setText(String str) {
 		if (str == null) str = "";
 		checkText();
-		if (str.equals(text.toString())) return;
+		if (str.contentEquals(text)) return;
 
 		clearSelection();
 		text.setLength(0);
@@ -496,15 +487,15 @@ public class MyTextField extends TextField implements Disableable {
 		cursor = 0;
 	}
 	private void checkText() {
-		if (text == null) text = new StringBuffer();
+		if (text == null) text = new StringBuilder();
 	}
 	/**
 	 * @param oldText May be null.
 	 *
 	 * @return True if the text was changed.
 	 */
-	boolean changeText(StringBuffer oldText, StringBuffer newText) {
-		if (newText.toString().equals(oldText.toString())) return false;
+	boolean changeText(StringBuilder oldText, StringBuilder newText) {
+		if (newText.toString().contentEquals(oldText)) return false;
 		text = newText;
 		ChangeEvent changeEvent = Pools.obtain(ChangeEvent.class, ChangeEvent::new);
 		boolean     cancelled   = fire(changeEvent);
@@ -518,22 +509,6 @@ public class MyTextField extends TextField implements Disableable {
 		fire(changeEvent);
 		Pools.free(changeEvent);
 		return true;
-	}
-
-	public boolean getProgrammaticChangeEvents() {
-		return programmaticChangeEvents;
-	}
-
-	/**
-	 * If false, methods that change the text will not fire {@link ChangeEvent}, the event will be fired only when user changes
-	 * the text.
-	 */
-	public void setProgrammaticChangeEvents(boolean programmaticChangeEvents) {
-		this.programmaticChangeEvents = programmaticChangeEvents;
-	}
-
-	public int getSelectionStart() {
-		return selectionStart;
 	}
 
 	public String getSelection() {
@@ -563,14 +538,6 @@ public class MyTextField extends TextField implements Disableable {
 
 	public void selectAll() {
 		setSelection(0, text.length());
-	}
-
-	public void clearSelection() {
-		hasSelection = false;
-	}
-
-	public int getCursorPosition() {
-		return cursor;
 	}
 
 	/** Sets the cursor position and clears any selection. */
@@ -629,9 +596,16 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 
+	class KeyRepeatTask extends Task {
+		KeyCode keycode;
+
+		public void run() {
+			inputListener.keyDown(null, keycode);
+		}
+	}
 	/** Basic input listener for the text field */
 	public class TextFieldClickListener extends ClickListener {
-		@Override
+
 		public void clicked(InputEvent event, float x, float y) {
 			if (imeData != null) return;
 			int count = getTapCount() % 4;
@@ -643,7 +617,7 @@ public class MyTextField extends TextField implements Disableable {
 			if (count == 3) selectAll();
 		}
 
-		@Override
+
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			if (!super.touchDown(event, x, y, pointer, button)) return false;
 			if (pointer == 0 && button != KeyCode.mouseLeft) return false;
@@ -659,13 +633,13 @@ public class MyTextField extends TextField implements Disableable {
 			return true;
 		}
 
-		@Override
+
 		public void touchDragged(InputEvent event, float x, float y, int pointer) {
 			super.touchDragged(event, x, y, pointer);
 			setCursorPosition(x, y);
 		}
 
-		@Override
+
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			if (selectionStart == cursor) hasSelection = false;
 			super.touchUp(event, x, y, pointer, button);
@@ -685,7 +659,7 @@ public class MyTextField extends TextField implements Disableable {
 			cursor = text.length();
 		}
 
-		@Override
+
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			if (disabled) return false;
 			if (imeData != null) return true;
@@ -718,7 +692,7 @@ public class MyTextField extends TextField implements Disableable {
 					return true;
 				}
 				if (keycode == KeyCode.z) {
-					StringBuffer oldText = text;
+					StringBuilder oldText = text;
 					setText0(undoText);
 					undoText = oldText;
 					updateDisplayText();
@@ -796,7 +770,7 @@ public class MyTextField extends TextField implements Disableable {
 			}
 		}
 
-		@Override
+
 		public boolean keyUp(InputEvent event, KeyCode keycode) {
 			if (disabled) return false;
 			if (imeData != null) return true;
@@ -808,7 +782,7 @@ public class MyTextField extends TextField implements Disableable {
 			return focusTraversal && (character == TAB || ((character == '\r' || character == '\n') && Core.app.isMobile()));
 		}
 
-		@Override
+
 		public boolean keyTyped(InputEvent event, char character) {
 			if (disabled) return false;
 
@@ -840,7 +814,7 @@ public class MyTextField extends TextField implements Disableable {
 				boolean remove    = backspace || delete;
 				boolean jump      = input.ctrl();
 				if (add || remove) {
-					StringBuffer oldText   = text;
+					StringBuilder oldText   = text;
 					int          oldCursor = cursor;
 					if (hasSelection) cursor = delete(false);
 					else {
@@ -862,7 +836,7 @@ public class MyTextField extends TextField implements Disableable {
 						if (filter != null && !filter.acceptChar(MyTextField.this, character)) return true;
 						if (!withinMaxLength(text.length())) return true;
 						char insertion = enter ? '\n' : character;
-						text = insert(cursor++, insertion, text);
+						text.insert(cursor++, insertion);
 					}
 					if (changeText()) {
 						long time = System.currentTimeMillis();

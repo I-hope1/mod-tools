@@ -1,19 +1,18 @@
 package modtools.utils.reflect;
 
-import arc.util.Log;
 import ihope_lib.MyReflect;
 import modtools.utils.SR.CatchSR;
 
 import java.lang.invoke.*;
 import java.lang.reflect.*;
 
-public interface InterfaceReflect {
+public interface IReflect {
 	Field[] getFields(Class<?> cls);
 	Method[] getMethods(Class<?> cls);
 	Constructor<?>[] getConstructors(Class<?> cls);
 
-	InterfaceReflect impl = CatchSR.apply(() -> CatchSR.<InterfaceReflect>of(DesktopImpl::new).get(DefaultImpl::new));
-	class DesktopImpl implements InterfaceReflect {
+	IReflect impl = CatchSR.apply(() -> CatchSR.<IReflect>of(DesktopImpl::new).get(DefaultImpl::new));
+	class DesktopImpl implements IReflect {
 		MethodHandle getFieldsHandle       = MyReflect.lookup.findVirtual(Class.class, "getDeclaredFields0", MethodType.methodType(Field[].class, boolean.class));
 		MethodHandle getMethodsHandle      = MyReflect.lookup.findVirtual(Class.class, "getDeclaredMethods0", MethodType.methodType(Method[].class, boolean.class));
 		MethodHandle getConstructorsHandle = MyReflect.lookup.findVirtual(Class.class, "getDeclaredConstructors0", MethodType.methodType(Constructor[].class, boolean.class));
@@ -40,7 +39,7 @@ public interface InterfaceReflect {
 			}
 		}
 	}
-	class DefaultImpl implements InterfaceReflect {
+	class DefaultImpl implements IReflect {
 		public Field[] getFields(Class<?> cls) {
 			return MyReflect.lookupGetFields(cls);
 		}

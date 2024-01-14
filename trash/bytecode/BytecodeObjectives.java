@@ -8,7 +8,6 @@ import arc.struct.Seq;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
-import mindustry.graphics.Pal;
 import mindustry.io.JsonIO;
 import mindustry.world.Block;
 import modtools.ui.windows.bytecode.BytecodeCanvas.ObjectiveTilemap.ObjectiveTile;

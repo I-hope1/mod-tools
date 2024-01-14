@@ -46,7 +46,7 @@ public class ContentList extends Content {
 		Table top = new Table();
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
-		new Search((__, text) -> pattern = PatternUtils.compileRegExpCatch(text))
+		new Search((__, text) -> pattern = PatternUtils.compileRegExpOrNull(text))
 		 .build(top, main);
 
 		fxs = fieldsToMap(Fx.class.getFields(), Effect.class);

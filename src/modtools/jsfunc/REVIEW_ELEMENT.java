@@ -1,4 +1,4 @@
-package modtools.utils.jsfunc;
+package modtools.jsfunc;
 
 import arc.func.Cons;
 import arc.scene.Element;

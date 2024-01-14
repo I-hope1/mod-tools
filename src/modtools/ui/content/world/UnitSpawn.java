@@ -30,9 +30,9 @@ import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.WORLD.UNIT;
 import modtools.utils.ui.FormatHelper;
-import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
 import static modtools.ui.Contents.tester;
@@ -58,39 +58,6 @@ public class UnitSpawn extends Content {
 	boolean unitUnlimited;
 	float   x, y;
 	TextField xField, yField, amountField, teamField;
-
-	// 用于获取点击的坐标
-	Element             el       = new Hitter();
-	WorldSelectListener listener = new WorldSelectListener() {
-		protected void acquireWorldPos(float x, float y) {
-			super.acquireWorldPos(x, y);
-			setX(end.x);
-			setY(end.y);
-		}
-		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
-			super.touchUp(event, mx, my, pointer, button);
-			el.remove();
-		}
-		public void draw() {
-			if (ui == null) return;
-			Gl.flush();
-			Draw.z(Layer.overlayUI);
-			Draw.color();
-			Lines.stroke(2);
-			Color color = Tmp.c1.set(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove)
-			 .a(ui.isShown() ? 0.7f : 0.5f);
-			Drawf.dashCircle(x, y, 5, color);
-			Draw.color();
-		}
-	};
-
-	{
-		el.addListener(listener);
-		WorldUtils.uiWD.drawSeq.add(() -> {
-			listener.draw();
-			return true;
-		});
-	}
 
 	public void setup() {
 		unitCont.clearChildren();
@@ -149,10 +116,9 @@ public class UnitSpawn extends Content {
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
-			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, () -> {
-				ElementUtils.addOrRemove(el, el.parent == null);
-			}).growX().height(32).update(b -> {
-				b.setChecked(el.parent != null);
+			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, listener::toggleSelect).growX().height(32)
+			 .update(b -> {
+				b.setChecked(listener.isSelecting());
 			});
 			table.button("@unitspawn.getfromplayer", HopeStyles.cleart, () -> {
 				setX(player.x);
@@ -209,9 +175,9 @@ public class UnitSpawn extends Content {
 			table.button(Icon.menuSmall, Styles.flati, 24, () -> {
 				IntUI.showMenuListDispose(() -> Seq.with(
 				 CheckboxList.withc(HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
-				 MenuList.with(Icon.eyeOffSmall, noScorchMarksKey, UnitSpawn::noScorchMarks),
-				 MenuList.with(Icon.cancelSmall, killAllUnitsKey, UnitSpawn::killAllUnits),
-				 MenuList.with(Icon.cancelSmall, removeAllUnitsKey, UnitSpawn::removeAllUnits)
+				 MenuList.with(Icon.eyeOffSmall, noScorchMarksKey, UNIT::noScorchMarks),
+				 MenuList.with(Icon.cancelSmall, killAllUnitsKey, UNIT::killAllUnits),
+				 MenuList.with(Icon.cancelSmall, removeAllUnitsKey, UNIT::removeAllUnits)
 				));
 			}).size(32);
 		}).growX();
@@ -221,6 +187,7 @@ public class UnitSpawn extends Content {
 	TaskNode root;
 	public void load() {
 		loadSettings();
+		listener = new UnitSpawnSelectListener();
 		btn.setDisabled(() -> Vars.state.isMenu());
 	}
 	public boolean isOk(float x, float y, int amount, Team team, UnitType selectUnit) {
@@ -293,34 +260,49 @@ public class UnitSpawn extends Content {
 			 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck))
 			 .row();
 			defaults().growX().height(42);
-			button(noScorchMarksKey, Styles.flatBordert, UnitSpawn::noScorchMarks).row();
-			button(killAllUnitsKey, Styles.flatBordert, UnitSpawn::killAllUnits).row();
-			button(removeAllUnitsKey, Styles.flatBordert, UnitSpawn::removeAllUnits);
+			button(noScorchMarksKey, Styles.flatBordert, UNIT::noScorchMarks).row();
+			button(killAllUnitsKey, Styles.flatBordert, UNIT::killAllUnits).row();
+			button(removeAllUnitsKey, Styles.flatBordert, UNIT::removeAllUnits);
 		}});
 	}
 	private void toggleUnitCap(boolean b) {
 		unitUnlimited = b;
 		Vars.state.rules.unitCap = b ? 0xffffff : defCap;
 	}
-	private static void removeAllUnits() {
-		Groups.unit.each(Unit::remove);
-		Groups.unit.clear();
-		// cont.check("服务器适配", b -> server = b);
-	}
-	private static void killAllUnits() {
-		Groups.unit.each(Unit::kill);
-	}
-
-	private static void noScorchMarks() {
-		Vars.content.units().each(u -> {
-			u.deathExplosionEffect = Fx.none;
-			u.createScorch = false;
-			u.createWreck = false;
-		});
-	}
 	public void build() {
 		if (ui == null) _load();
 		setup();
 		ui.show();
+	}
+	// 用于获取点击的坐标
+	UnitSpawnSelectListener listener;
+	private class UnitSpawnSelectListener extends WorldSelectListener {
+		Element hitter = new Hitter();
+		protected void acquireWorldPos(float x, float y) {
+			super.acquireWorldPos(x, y);
+			setX(end.x);
+			setY(end.y);
+		}
+		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
+			super.touchUp(event, mx, my, pointer, button);
+			hitter.remove();
+		}
+		public void draw() {
+			if (ui == null) return;
+			Gl.flush();
+			Draw.z(Layer.overlayUI);
+			Draw.color();
+			Lines.stroke(2);
+			Color color = Tmp.c1.set(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove)
+			 .a(ui.isShown() ? 0.7f : 0.5f);
+			Drawf.dashCircle(x, y, 5, color);
+			Draw.color();
+		}
+		public void toggleSelect() {
+			ElementUtils.addOrRemove(hitter, hitter.parent == null);
+		}
+		public boolean isSelecting() {
+			return hitter.getScene() != null;
+		}
 	}
 }

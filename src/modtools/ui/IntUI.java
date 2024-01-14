@@ -29,7 +29,8 @@ import modtools.ui.menu.*;
 import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
-import modtools.utils.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.INFO_DIALOG;
+import modtools.utils.array.ArrayUtils;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
@@ -147,13 +148,10 @@ public class IntUI {
 				}
 				return false;
 			}
-			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				super.touchUp(event, x, y, pointer, button);
-				task.cancel();
-			}
 			public void clicked(InputEvent event, float x, float y) {
 				// super.clicked(event, x, y);
 				if (task.isScheduled()) {
+					task.cancel();
 					if (pressed) {
 						boolc.get(false);
 					}
@@ -373,7 +371,7 @@ public class IntUI {
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
-			Sr((!WatchWindow.isMultiWatch() && Tools.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
+			Sr((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : JSFunc.watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
 		})).size(32);

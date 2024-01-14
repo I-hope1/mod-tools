@@ -11,7 +11,7 @@ import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.content.debug.Tester;
-import modtools.utils.jsfunc.CAST;
+import modtools.jsfunc.type.CAST;
 import rhino.*;
 
 import static mindustry.Vars.mods;

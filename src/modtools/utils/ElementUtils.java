@@ -15,7 +15,7 @@ import modtools.ui.IntUI;
 import modtools.ui.components.Window;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
-import modtools.utils.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.INFO_DIALOG;
 
 import java.util.Optional;
 

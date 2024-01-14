@@ -1,4 +1,4 @@
-package modtools.utils.jsfunc;
+package modtools.jsfunc.reflect;
 
 import arc.struct.ObjectMap;
 import mindustry.Vars;

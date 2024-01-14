@@ -17,10 +17,12 @@ import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
+import modtools.ui.tutorial.AllTutorial.Buffer;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 
 import static arc.Core.*;
+import static modtools.ui.tutorial.AllTutorial.Buffer.*;
 import static modtools.utils.Tools.TASKS;
 
 public class AllTutorial {
@@ -58,13 +60,15 @@ public class AllTutorial {
 		});
 	}
 
-	public static FrameBuffer pingpong1 = new FrameBuffer(), pingpong2 = new FrameBuffer();
+	static class Buffer {
+		public static final FrameBuffer pingpong1 = new FrameBuffer(), pingpong2 = new FrameBuffer();
 
-	static {
-		pingpong1.begin(Color.clear);
-		pingpong1.end();
-		pingpong2.begin(Color.clear);
-		pingpong2.end();
+		static {
+			pingpong1.begin(Color.clear);
+			pingpong1.end();
+			pingpong2.begin(Color.clear);
+			pingpong2.end();
+		}
 	}
 
 	public static void drawFocus(Color bgColor, Runnable draw) {

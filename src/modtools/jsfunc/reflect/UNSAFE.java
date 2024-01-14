@@ -1,4 +1,4 @@
-package modtools.utils.jsfunc;
+package modtools.jsfunc.reflect;
 
 import arc.util.OS;
 import ihope_lib.*;

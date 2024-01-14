@@ -5,7 +5,6 @@ import arc.func.Cons;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import modtools.ui.IntUI;
-import rhino.Kit;
 
 import javax.swing.*;
 import java.awt.datatransfer.DataFlavor;
@@ -13,7 +12,7 @@ import java.awt.dnd.*;
 import java.io.File;
 import java.util.List;
 
-public class FileUtils {
+public class DropFile {
 	public static boolean valid(){
 		try {
 			Class.forName("javax.swing.JFrame");
@@ -56,7 +55,7 @@ public class FileUtils {
 	}
 
 	public static void buildSelector(Table t) {
-		t.button("ImportFromSelector", () -> FileUtils.openFiSelector(
+		t.button("ImportFromSelector", () -> DropFile.openFiSelector(
 		 list -> {
 			 try {
 				 for (Fi fi : list) {

@@ -21,6 +21,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.OptimizeReflect;
 import modtools.annotations.builder.*;
+import modtools.jsfunc.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.TopGroup.FocusTask;
@@ -39,7 +40,6 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.jsfunc.*;
 import modtools.utils.ui.search.BindCell;
 
 import java.lang.reflect.InvocationTargetException;
@@ -72,16 +72,6 @@ public class ReviewElement extends Content {
 
 	public ReviewElement() {
 		super("reviewElement", HopeIcons.codeSmall);
-		scene.root.getCaptureListeners().insert(0, new InputListener() {
-			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
-					build();
-					HopeInput.justPressed.clear();
-					event.stop();
-				}
-				return true;
-			}
-		});
 	}
 
 	public static final boolean    hideSelf  = true;
@@ -126,6 +116,17 @@ public class ReviewElement extends Content {
 
 	public void load() {
 		loadSettings();
+		scene.root.getCaptureListeners().insert(0, new InputListener() {
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
+					build();
+					HopeInput.justPressed.clear();
+					event.stop();
+				}
+				return true;
+			}
+		});
+
 		ReviewFocusTask task = new ReviewFocusTask();
 		topGroup.focusOnElement(task);
 

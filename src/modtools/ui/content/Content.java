@@ -60,6 +60,7 @@ public abstract class Content {
 	public final Data data() {
 		return data == null ? data = SETTINGS.child(getSettingName()) : data;
 	}
+	/** 加载  */
 	public void load() {
 	}
 

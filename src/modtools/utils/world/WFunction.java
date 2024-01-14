@@ -1,4 +1,4 @@
-package modtools.ui.content.world;
+package modtools.utils.world;
 
 import arc.Core;
 import arc.func.*;
@@ -28,12 +28,12 @@ import modtools.ui.components.input.JSRequest;
 import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.content.ui.PositionProv;
+import modtools.ui.content.world.Selection;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
-import modtools.utils.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.LerpFun;
-import modtools.utils.world.WorldDraw;
 
 import java.util.Vector;
 import java.util.*;
@@ -43,12 +43,12 @@ import java.util.function.*;
 import static mindustry.Vars.tilesize;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.ui.content.world.Selection.tmpList;
+import static modtools.utils.world.TmpVars.A.tmpList;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 public abstract class WFunction<T> {
-	private static Selection SC;
-	static void init(Selection selection) {
+	private static      Selection SC;
+	public static void init(Selection selection) {
 		SC = selection;
 	}
 	public final Table   wrap    = new Table();
@@ -528,38 +528,38 @@ public abstract class WFunction<T> {
 	}
 
 	@SuppressWarnings("unchecked")
-	static Seq<MenuList> getMenuLists0(ObjectSet<Bullet> bulletSet) {
+	public static Seq<MenuList> getMenuLists0(ObjectSet<Bullet> bulletSet) {
 		tmpList.clear();
 		bulletSet.each(tmpList::add);
 		return getMenuLists(SC.bullets, tmpList);
 	}
 	@SuppressWarnings("unchecked")
-	static Seq<MenuList> getMenuLists(ObjectSet<Unit> unitSet) {
+	public static Seq<MenuList> getMenuLists(ObjectSet<Unit> unitSet) {
 		tmpList.clear();
 		unitSet.each(tmpList::add);
 		return getMenuLists(SC.units, tmpList);
 	}
 	@SuppressWarnings("unchecked")
-	static Seq<MenuList> getMenuLists(Building build) {
+	public static Seq<MenuList> getMenuLists(Building build) {
 		tmpList.clear();
 		tmpList.add(build);
 		return getMenuLists(SC.buildings, tmpList);
 	}
 	@SuppressWarnings("unchecked")
-	static Seq<MenuList> getMenuLists(Tile tile) {
+	public static Seq<MenuList> getMenuLists(Tile tile) {
 		tmpList.clear();
 		tmpList.add(tile);
 		return getMenuLists(SC.tiles, tmpList);
 	}
 
 
-	static void buildPos(Table table, Position u) {
+	public static void buildPos(Table table, Position u) {
 		table.label(new PositionProv(() -> Tmp.v1.set(u),
 			u instanceof Building || u instanceof Vec2 ? "," : "\n"))
 		 .fontScale(0.7f).color(Color.lightGray)
 		 .get().act(0.1f);
 	}
-	<U extends UnlockableContent, E> void sumItems(Seq<U> items, Func<U, E> func, Cons2<U, String> setter) {
+	protected <U extends UnlockableContent, E> void sumItems(Seq<U> items, Func<U, E> func, Cons2<U, String> setter) {
 		var watcher = JSFunc.watch();
 		watcher.addAllCheckbox();
 		items.each(i -> {

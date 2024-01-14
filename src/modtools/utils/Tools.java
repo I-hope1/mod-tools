@@ -180,16 +180,6 @@ public class Tools {
 		if (t != null) run.run();
 	}
 
-	/**
-	 * <p>返回List的第i个元素，如果越界就返回null</p>
-	 * 负数index为倒数第i个元素
-	 * @param list 列表
-	 * @param i    索引，可以为负数
-	 */
-	public static <T> T getBound(List<T> list, int i) {
-		if (i < 0) i += list.size();
-		return 0 <= i && i < list.size() ? list.get(i) : null;
-	}
 	public static <T> T getOrNull(T[] arr, int i) {
 		return 0 <= i && i < arr.length ? arr[i] : null;
 	}

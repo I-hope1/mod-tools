@@ -22,7 +22,7 @@ public class Background {
 		if (portrait == null) portrait = new Texture(root.child("竖屏.png"));
 		return portrait;
 	}
-	public static void main() {
+	public static void load() {
 		// EntityShow.main();
 		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
 		if (!(tmp instanceof Group group)) return;

@@ -41,45 +41,36 @@ import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.array.ArrayUtils;
-import modtools.utils.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.world.*;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
-import java.util.function.Consumer;
 
 import static arc.Core.scene;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
-import static modtools.ui.content.world.WFunction.buildPos;
+import static modtools.utils.world.TmpVars.*;
+import static modtools.utils.world.WFunction.buildPos;
 import static modtools.utils.world.WorldDraw.drawRegion;
 
 @SuppressWarnings({"rawtypes", "CodeBlock2Expr", "DanglingJavadoc"})
 public class Selection extends Content {
-	WFunction<?> selectFunc;
-	WFunction<?> focusElemType;
+	public WFunction<?> selectFunc;
+	public WFunction<?> focusElemType;
 	public Selection() {
 		super("selection", Icon.craftingSmall);
 		WFunction.init(this);
 	}
 
-	/* 临时变量 */
-	public static final List     tmpList   = new ArrayList<>(1) {
-		public void forEach(Consumer<? super Object> action) {
-			super.forEach(action);
-			clear();
-		}
-	};
-	public static final String[] tmpAmount = new String[1];
-
-	public static final Color focusColor = Color.cyan.cpy().a(0.4f);
-
-	public final WorldDraw
-	 unitWD   = new WorldDraw(Layer.weather, "unit"),
-	 tileWD   = new WorldDraw(Layer.darkness + 1, "tile"),
-	 buildWD  = new WorldDraw(Layer.darkness + 2, "build"),
-	 bulletWD = new WorldDraw(Layer.bullet + 5, "bullet"),
-	 otherWD  = new WorldDraw(Layer.darkness + 5, "other");
+	interface WDINSTANCE {
+		WorldDraw
+		 unit   = new WorldDraw(Layer.weather, "unit"),
+		 tile   = new WorldDraw(Layer.darkness + 1, "tile"),
+		 build  = new WorldDraw(Layer.darkness + 2, "build"),
+		 bullet = new WorldDraw(Layer.bullet + 5, "bullet"),
+		 other  = new WorldDraw(Layer.darkness + 5, "other");
+	}
 
 	public Element fragSelect;
 	public Window  pane;
@@ -87,18 +78,18 @@ public class Selection extends Content {
 	public Team    defaultTeam;
 	// show: select（用于选择）是否显示
 	// move: 是否移动
-	boolean show = false,
-	 move        = false,
-	 drawSelect  = true;
+	boolean show = false;
+	boolean move = false;
+	public boolean drawSelect = true;
 
-	static final int
+	public static final int
 	 buttonWidth  = 200,
 	 buttonHeight = 45;
 
-	WFunction<Tile>     tiles;
-	WFunction<Building> buildings;
-	WFunction<Unit>     units;
-	WFunction<Bullet>   bullets;
+	public WFunction<Tile>     tiles;
+	public WFunction<Building> buildings;
+	public WFunction<Unit>     units;
+	public WFunction<Bullet> bullets;
 	WFunction<Entityc>  others;
 
 	/** @see Settings */
@@ -107,7 +98,7 @@ public class Selection extends Content {
 		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::validPosInt);
 	}
 	private static void floatField(Table t1) {
-		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::isPositiveFloat);
+		t1.row().field("", s -> TmpVars.tmpAmount[0] = s).valid(NumberHelper::isPositiveFloat);
 	}
 
 	public void loadSettings(Data SETTINGS) {
@@ -164,6 +155,8 @@ public class Selection extends Content {
 
 		fragSelect.setFillParent(true);
 		fragSelect.addListener(new SelectListener());
+
+		initTask();
 
 		/*fragDraw = new FragDraw();
 		Core.scene.add(fragDraw);*/
@@ -359,9 +352,9 @@ public class Selection extends Content {
 		TMP_RECT.set(t.worldx(), t.worldy(), 32, 32);
 	}
 
-	public class EntityFunction<T extends Entityc> extends WFunction<T> {
+	public static class EntityFunction<T extends Entityc> extends WFunction<T> {
 		public EntityFunction(String name) {
-			super(name, otherWD);
+			super(name, WDINSTANCE.other);
 		}
 
 		public void buildTable(T t, Table table) {
@@ -393,9 +386,9 @@ public class Selection extends Content {
 			return !item.isAdded();
 		}
 	}
-	public class BulletFunction<T extends Bullet> extends WFunction<T> {
+	public static class BulletFunction<T extends Bullet> extends WFunction<T> {
 		public BulletFunction(String name) {
-			super(name, bulletWD);
+			super(name, WDINSTANCE.bullet);
 		}
 
 		public void buildTable(T bullet, Table table) {
@@ -420,9 +413,9 @@ public class Selection extends Content {
 			return !item.isAdded();
 		}
 	}
-	public class UnitFunction<T extends Unit> extends WFunction<T> {
+	public static class UnitFunction<T extends Unit> extends WFunction<T> {
 		public UnitFunction(String name) {
-			super(name, unitWD);
+			super(name, WDINSTANCE.unit);
 		}
 
 		public void buildTable(T unit, Table table) {
@@ -447,9 +440,9 @@ public class Selection extends Content {
 			return !item.isAdded();
 		}
 	}
-	public class BuildFunction<T extends Building> extends WFunction<T> {
+	public static class BuildFunction<T extends Building> extends WFunction<T> {
 		public BuildFunction(String name) {
-			super(name, buildWD);
+			super(name, WDINSTANCE.build);
 		}
 
 		@Override
@@ -498,9 +491,9 @@ public class Selection extends Content {
 		}
 
 	}
-	public class TileFunction<T extends Tile> extends WFunction<T> {
+	public static class TileFunction<T extends Tile> extends WFunction<T> {
 		public TileFunction(String name) {
-			super(name, tileWD);
+			super(name, WDINSTANCE.tile);
 		}
 		public float rotation(T item) {
 			return 30;
@@ -541,10 +534,6 @@ public class Selection extends Content {
 			return Tmp.v3.set(item.worldx(), item.worldy());
 		}
 	}
-
-	final                Vec2 mouse      = new Vec2();
-	final                Vec2 mouseWorld = new Vec2();
-	private static final Rect TMP_RECT   = new Rect();
 
 
 	public void drawFocus() {
@@ -638,7 +627,8 @@ public class Selection extends Content {
 		Draw.reset();
 	}
 
-	boolean focusDisabled, focusLocked;
+	public boolean focusDisabled;
+	boolean focusLocked;
 	private      boolean           focusEnabled;
 	public       Element           focusElem;
 	public       Tile              focusTile;
@@ -648,7 +638,7 @@ public class Selection extends Content {
 
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
 
-	{
+	public void initTask(){
 		WorldUtils.uiWD.drawSeq.add(() -> {
 			Gl.flush();
 			if (Core.input.alt()) {

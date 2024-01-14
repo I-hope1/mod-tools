@@ -1,12 +1,10 @@
-package test0;
+package modtools.jsfunc.reflect;
 
 import arc.func.*;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.HopeConstant.ANDROID;
-import modtools.utils.JSFunc;
 import modtools.utils.Tools.*;
-import modtools.utils.jsfunc.UNSAFE;
 
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
@@ -15,7 +13,8 @@ import java.lang.reflect.*;
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.HopeConstant.DESKTOP.*;
 
-public class InitH {
+/** 获取类的{@code <init>}句柄  */
+public class InitMethodHandle {
 	/** for android */
 	public static final int  INVOKE_SPECIAL    = 1;
 	/** for window */

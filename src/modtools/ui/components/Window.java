@@ -32,6 +32,7 @@ import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.struct.MySet;
 import modtools.utils.JSFunc.JColor;
+import modtools.utils.array.ArrayUtils;
 import modtools.utils.ui.search.*;
 
 
@@ -70,7 +71,7 @@ public class Window extends Table {
 			all.each(Window::display);
 		});
 		Tools.TASKS.add(() -> {
-			frontWindow = getBound(topGroup.acquireShownWindows(), -1);
+			frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1);
 		});
 	}
 

@@ -6,7 +6,6 @@ import arc.scene.event.VisibilityListener;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
-import dalvik.system.BaseDexClassLoader;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -15,16 +14,15 @@ import mindustry.mod.Mods.*;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.content.SettingsUI;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
-import modtools.utils.ui.FileUtils;
+import modtools.utils.io.FileUtils;
+import modtools.utils.ui.DropFile;
 
-import java.io.File;
-import java.net.*;
-import java.nio.file.NoSuchFileException;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -78,32 +76,12 @@ public class ModTools extends Mod {
 		Tester.initExecution();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
-	public static Fi findRoot() {
-		if (OS.isWindows || OS.isMac) {
-			URL url = ((URLClassLoader) ModTools.class.getClassLoader()).getURLs()[0];
-			try {
-				return Fi.get(url.toURI().getPath());
-			} catch (URISyntaxException e) {
-				throw new RuntimeException(e);
-			}
-		}
-		if (OS.isAndroid) return findRootAndroid();
-		throw new UnsupportedOperationException();
-	}
-	public static Fi findRootAndroid() {
-		Object pathList = Reflect.get(BaseDexClassLoader.class, ModTools.class.getClassLoader(),
-		 "pathList");
-		Object[] arr = Reflect.get(pathList, "dexElements");
-		return new Fi((File) Reflect.get(arr[0], "path"));
-	}
 
 	private static void resolveLibsCatch() {
 		try {
 			resolveLibs();
-		} catch (UnexpectedPlatform e) {
-			Log.err("It seems you platform is special. (But don't worry.)");
-			planB_resolveLibs();
 		} catch (Throwable e) {
+			if (e instanceof UnexpectedPlatform) Log.err("It seems you platform is special. (But don't worry.)");
 			planB_resolveLibs();
 		}
 	}
@@ -116,7 +94,7 @@ public class ModTools extends Mod {
 	}
 	private static void resolveLibs() {
 		LoadedMod mod = Vars.mods.getMod(ModTools.class);
-		root = mod != null ? mod.root : new ZipFi(findRoot());
+		root = mod != null ? mod.root : new ZipFi(FileUtils.findRoot());
 		libs = root.child("libs");
 
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
@@ -132,25 +110,27 @@ public class ModTools extends Mod {
 		}
 		MyShaders.load();
 		HopeInput.load();
+		// 加载HopeIcons
+		HopeIcons.load();
 		if (OS.isWindows || OS.isMac) {
 			addFileDragListener();
 		}
-		Time.runTask(4f, () -> {
+		;
+		IntVars.async(() -> {
 			IntUI.load();
 			AllTutorial.init();
 			// Circle.draw();
-			Log.info("Loaded ModTools input and ui in @ms", Time.elapsed());
-		});
-		if (SETTINGS.getBool("ShowMainMenuBackground")) {
-			Tools.runIgnoredException(Background::main);
-		}
+			if (SETTINGS.getBool("ShowMainMenuBackground")) {
+				Tools.runIgnoredException(Background::load);
+			}
+		}, () -> Log.info("Loaded ModTools input and ui in @ms", Time.elapsed()));
 	}
 	private static void addFileDragListener() {
-		if (!FileUtils.valid()) return;
+		if (!DropFile.valid()) return;
 		ui.mods.addListener(new VisibilityListener() {
 			public boolean shown() {
 				ui.mods.removeListener(this);
-				FileUtils.buildSelector(ui.mods.buttons.row());
+				DropFile.buildSelector(ui.mods.buttons.row());
 				return false;
 			}
 		});

@@ -1,11 +1,13 @@
 package modtools.ui;
 
 import arc.*;
+import arc.func.Prov;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.Touchable;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
@@ -23,7 +25,7 @@ import static modtools.IntVars.modName;
 import static modtools.ui.IntUI.topGroup;
 
 public class Frag extends Table {
-	public final Color defaultColor = Color.sky;
+	public static final Color defaultColor = Color.sky;
 
 	public boolean    hideCont = false;
 	public ScrollPane container;
@@ -44,7 +46,6 @@ public class Frag extends Table {
 		update(this::pack);
 		row();
 
-
 		container = new ScrollPane(new LimitTable(table -> {
 			if (Content.all.isEmpty()) Contents.load();
 			Content.all.forEach(content -> {
@@ -62,7 +63,7 @@ public class Frag extends Table {
 					b.getChildren().get(1).setColor(b.isDisabled() ? Color.gray : Color.white))
 				 .size(120, 40).get();
 				Events.fire(content);
-				content.load();
+				if (content.loadable()) content.load();
 				table.row();
 			});
 		}), HopeStyles.noBarPane);
@@ -74,14 +75,7 @@ public class Frag extends Table {
 		topGroup.addChild(this);
 		Log.info("Initialize TopGroup.");
 
-		var listener = new MoveListener(top, this) {
-			public void display(float x, float y) {
-				float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
-				float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
-				main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
-				main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
-			}
-		};
+		var listener = new MoveInsideListener();
 		// 添加双击变小
 		IntUI.doubleClick(top, () -> {
 			if (!hideCont) return;
@@ -139,6 +133,16 @@ public class Frag extends Table {
 			 top.getWidth() / 2f,
 			 top.getHeight() / 2f, 0.1f,
 			 Interp.smooth), Actions.remove());
+		}
+	}
+
+	private class MoveInsideListener extends MoveListener {
+		public MoveInsideListener() {super(Frag.this.top, Frag.this);}
+		public void display(float x, float y) {
+			float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
+			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
+			main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
+			main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
 		}
 	}
 }

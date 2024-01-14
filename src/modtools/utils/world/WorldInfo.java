@@ -1,4 +1,4 @@
-package modtools.ui.content.world;
+package modtools.utils.world;
 
 import arc.graphics.Color;
 import arc.scene.Element;

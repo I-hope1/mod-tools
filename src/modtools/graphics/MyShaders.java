@@ -7,7 +7,7 @@ import arc.graphics.g2d.*;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.*;
-import arc.util.Log;
+import arc.util.*;
 import modtools.*;
 
 

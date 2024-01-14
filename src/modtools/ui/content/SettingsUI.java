@@ -25,7 +25,6 @@ import modtools.*;
 import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
@@ -145,9 +144,9 @@ public class SettingsUI extends Content {
 			 row();
 			 table(Tex.pane, t -> {
 				 t.add("@mod-tools.functions");
-				 t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
+				 if (OS.isAndroid || OS.isWindows) t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
 					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-				 }).height(42).growX().colspan(2);
+				 }).height(42).growX().colspan(2).row();
 				 t.button("Enable Debug Parma", Icon.chatSmall, Styles.flatt, () -> {
 					 Log.level = LogLevel.debug;
 				 }).height(42).growX().colspan(2);

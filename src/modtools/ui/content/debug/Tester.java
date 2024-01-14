@@ -3,7 +3,7 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.func.Func;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.Mathf;
@@ -31,6 +31,7 @@ import modtools.IntVars;
 import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
 import modtools.events.ExecuteTree.TaskNode;
+import modtools.jsfunc.*;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
@@ -50,7 +51,7 @@ import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.jsfunc.*;
+import modtools.jsfunc.type.CAST;
 import rhino.*;
 
 import java.lang.reflect.Method;
@@ -241,6 +242,7 @@ public class Tester extends Content {
 		}).grow().with(p -> p.setScrollingDisabled(true, false))).growX().with(t -> t.touchable = Touchable.enabled).uniform();
 
 		ScrollPane pane = new ScrollPane(_cont);
+		pane.setScrollingDisabled(true, false);
 		Runnable invalid = () -> {
 			float height = pane.getHeight() - _cont.getChildren().sumf(
 			 e -> e == textarea ? 0 : e.getHeight()
@@ -266,7 +268,7 @@ public class Tester extends Content {
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
-				pane.setScrollingDisabled(false, false);
+				pane.setScrollingDisabled(true, false);
 			}
 
 			{
@@ -315,6 +317,7 @@ public class Tester extends Content {
 	}
 	private void buildLog(Table p) {
 		p.table(lg -> lg.left().update(() -> {
+			if (logs.resolved) return;
 			lg.getCells().clear();
 			lg.clearChildren();
 			logs.each(item -> {
@@ -497,6 +500,7 @@ public class Tester extends Content {
 			Context.enter();
 		}
 
+		logs.clear();
 		compileScript();
 		execScript();
 
@@ -568,7 +572,7 @@ public class Tester extends Content {
 			}
 		}, 4, 0.1f, -1);
 	}
-	Seq<String> logs = new Seq<>();
+	AddedSeq logs = new AddedSeq();
 	public final LogHandler logHandler = new DefaultLogHandler() {
 		public void log(LogLevel level, String text) {
 			if (level == LogLevel.err) super.log(level, text);
@@ -583,7 +587,6 @@ public class Tester extends Content {
 	private void execAndDealRes() {
 		try {
 			if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
-			logs.clear();
 			Object o = setLogger(logHandler, () -> script.exec(cx, scope));
 			res = o = CAST.unwrap(o);
 
@@ -797,5 +800,21 @@ public class Tester extends Content {
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log, js_prop
+	}
+	private static class AddedSeq extends Seq<String> {
+		/* 是否处理了log */
+		boolean resolved = true;
+		public Seq<String> add(String value) {
+			resolved = false;
+			return super.add(value);
+		}
+		public void each(Cons<? super String> consumer) {
+			resolved = true;
+			super.each(consumer);
+		}
+		public Seq<String> clear() {
+			resolved = false;
+			return super.clear();
+		}
 	}
 }

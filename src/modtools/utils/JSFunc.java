@@ -17,14 +17,17 @@ import mindustry.game.EventType.Trigger;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
+import modtools.jsfunc.*;
+import modtools.jsfunc.reflect.*;
+import modtools.jsfunc.type.*;
 import modtools.ui.*;
 import modtools.ui.content.world.*;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.Comparator;
 import modtools.utils.draw.InterpImage;
-import modtools.utils.jsfunc.*;
 import modtools.utils.ui.*;
+import modtools.utils.world.WFunction;
 import rhino.*;
 
 import static modtools.ui.Contents.*;
@@ -34,7 +37,8 @@ import static modtools.utils.ElementUtils.*;
 public class JSFunc
  /* Interfaces for js */
  implements UNSAFE, WORLD, REFLECT,
- REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE {
+ REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE,
+ STRING {
 	public static       ClassLoader main   = Vars.mods.mainLoader();
 	public static       Scriptable  scope  = Vars.mods.getScripts().scope;
 	public static final Object      lookup = MyReflect.lookup;
@@ -168,6 +172,8 @@ public class JSFunc
 	public static Element fx(String text) {
 		return HopeFx.colorFulText(text);
 	}
+
+
 	public interface MyProv<T> {
 		T get() throws Exception;
 		default String stringify(Object o) {

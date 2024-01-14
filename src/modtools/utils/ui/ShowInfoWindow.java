@@ -16,6 +16,8 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
+import modtools.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.reflect.*;
 import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.IDisposable;
@@ -27,11 +29,9 @@ import modtools.ui.components.utils.*;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
 import modtools.struct.Pair;
-import modtools.utils.jsfunc.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
 import rhino.*;
-import test0.*;
 
 import java.io.StringWriter;
 import java.lang.invoke.*;
@@ -597,7 +597,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 copyExecutableReflection(ctor);
 			 }),
 			 MenuList.with(Icon.copySmall, "Cpy <init> handle", catchRun(() -> {
-				 copyValue("Handle", InitH.findInit(ctor.getDeclaringClass(), ctor));
+				 copyValue("Handle", InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor));
 			 })),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
 				 if (isSingle) {

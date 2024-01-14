@@ -15,6 +15,7 @@ import mindustry.Vars;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
 import modtools.events.*;
+import modtools.jsfunc.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.input.*;
@@ -24,7 +25,6 @@ import modtools.ui.content.ui.*;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
-import modtools.utils.jsfunc.*;
 import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.*;

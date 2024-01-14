@@ -1,4 +1,4 @@
-package modtools.utils.jsfunc;
+package modtools.jsfunc.type;
 
 import modtools.utils.JSFunc;
 import rhino.*;

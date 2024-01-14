@@ -243,7 +243,7 @@ public final class TopGroup extends WidgetGroup {
 			}
 		});
 
-		ScreenSampler.init();
+		Core.app.post(() -> ScreenSampler.init());
 
 		update(() -> {
 			// Log.info(selected);

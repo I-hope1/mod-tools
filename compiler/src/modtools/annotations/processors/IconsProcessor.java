@@ -1,7 +1,7 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type.ClassType;
@@ -78,9 +78,15 @@ public class IconsProcessor extends BaseProcessor {
 			i++;
 		}
 
-		JCBlock x = parseBlock(Flags.STATIC, "{" + sb + "}");
-		x.pos = 1000;
-		root.defs = root.defs.append(x);
+		// 添加load方法
+		JCMethodDecl load = mMaker.MethodDef(
+			mMaker.Modifiers(Flags.STATIC | Flags.PUBLIC),
+			ns("load"), mMaker.TypeIdent(TypeTag.VOID), List.nil(), List.nil(),
+			List.nil(), parseBlock(0, "{" + sb + "}"), null);
+		root.defs = root.defs.append(load);
+		// JCBlock x = parseBlock(Flags.STATIC, "{" + sb + "}");
+		// x.pos = 1000;
+		// root.defs = root.defs.append(x);
 		// Log.info(root);
 		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 

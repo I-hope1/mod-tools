@@ -143,6 +143,7 @@ public class IntUI {
 				if (event.stopped) return false;
 				if (super.touchDown(event, x, y, pointer, button)) {
 					last.set(Core.input.mouse());
+					task.cancel();
 					Timer.schedule(task, duration / 1000f);
 					return true;
 				}
@@ -150,12 +151,8 @@ public class IntUI {
 			}
 			public void clicked(InputEvent event, float x, float y) {
 				// super.clicked(event, x, y);
-				if (task.isScheduled()) {
-					task.cancel();
-					if (pressed) {
-						boolc.get(false);
-					}
-				}
+				if (task.isScheduled() && pressed) boolc.get(false);
+				task.cancel();
 			}
 		}
 		elem.addCaptureListener(new LongPressListener());

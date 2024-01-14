@@ -216,7 +216,7 @@ public class Tester extends Content {
 			// areaCell.maxHeight(ui.cont.getHeight() / Scl.scl());
 		});
 
-		_cont.table(t -> {
+		Table center = _cont.table(t -> {
 			t.defaults()
 			 .padRight(4f).padRight(4f)
 			 .size(45, 42);
@@ -231,25 +231,31 @@ public class Tester extends Content {
 			t.button(Icon.pasteSmall, Styles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
 			);
-		}).growX().row();
-		Cell<?> logCell = _cont.table(t -> t.background(Tex.sliderBack).pane(p -> {
-			p.left().top();
-			buildLog(p);
-			p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
-			p.add(new MyLabel(() -> log))
-			 .wrap().style(HopeStyles.defaultLabel)
-			 .labelAlign(Align.left).growX();
-		}).grow().with(p -> p.setScrollingDisabled(true, false))).growX().with(t -> t.touchable = Touchable.enabled).uniform();
+		}).growX().minWidth(w).get();
+		_cont.row();
+		Cell<?> logCell = _cont.table(Tex.sliderBack, t -> {
+			Element actor = new Element();
+			t.addChild(actor);
+			actor.update(() -> actor.setBounds(0, t.getHeight(), t.getWidth(), center.getPrefHeight()));
+			t.pane(p -> {
+				p.left().top();
+				buildLog(p);
+				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
+				p.add(new MyLabel(() -> log))
+				 .wrap().style(HopeStyles.defaultLabel)
+				 .labelAlign(Align.left).growX();
+			}).grow().with(p -> p.setScrollingDisabled(true, false));
+		}).growX().touchable(Touchable.enabled);
 
 		ScrollPane pane = new ScrollPane(_cont);
-		pane.setScrollingDisabled(true, false);
+		pane.setScrollingDisabled(true, true);
 		Runnable invalid = () -> {
 			float height = pane.getHeight() - _cont.getChildren().sumf(
 			 e -> e == textarea ? 0 : e.getHeight()
 			);
 			height /= Scl.scl();
 			areaCell.height(height);
-			_cont.layout();
+			_cont.invalidate();
 		};
 		pane.update(invalid);
 		logSclListener = new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
@@ -268,24 +274,23 @@ public class Tester extends Content {
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
-				pane.setScrollingDisabled(true, false);
-			}
-
-			{
-				Time.runTask(1, () -> {
-					Vec2       v1    = ElementUtils.getAbsolutePos(_cont);
-					InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
-					event.type = (InputEventType.touchDown);
-					event.stageX = v1.x;
-					event.stageY = v1.y;
-					event.pointer = 0;
-					event.keyCode = KeyCode.mouseLeft;
-					if (touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
-						touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
-					}
-				});
+				// pane.setScrollingDisabled(true, false);
 			}
 		};
+		logSclListener.offset = center.getPrefHeight();
+		Time.runTask(1, () -> {
+			Vec2       v1    = ElementUtils.getAbsolutePos(_cont);
+			InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
+			event.type = (InputEventType.touchDown);
+			event.stageX = v1.x;
+			event.stageY = v1.y;
+			event.pointer = 0;
+			event.keyCode = KeyCode.mouseLeft;
+			if (logSclListener.touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
+				logSclListener.touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
+			}
+		});
+
 		logCell.height(64f).padLeft(8f);
 
 		table.add(pane).grow();
@@ -350,9 +355,7 @@ public class Tester extends Content {
 		Table folderContainer = new Table();
 		folderContainer.left().bottom().add(folder).size(36f);
 		folderContainer.setFillParent(true);
-		folderContainer.update(() -> {
-			folderContainer.marginBottom(p.hasChildren() ? p.getHeight() : 0);
-		});
+		folderContainer.update(() -> folderContainer.y = folder.cell.hasElement() ? resPane.getHeight() : 0);
 		table.addChild(folderContainer);
 		folder.rebuild = () -> {
 			Time.runTask(1, folderContainer::toFront);

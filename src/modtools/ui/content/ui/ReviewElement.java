@@ -814,6 +814,25 @@ public class ReviewElement extends Content {
 			};
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
+			posText:
+			{
+				if ((posTextColor & 0x000000FF) == 0) break posText;
+				/* // 相对坐标
+				// x: 0 -> x
+				if (elem.x != 0) MyDraw.drawText("x:" + fixed(vec2.x),
+				 vec2.x / 3f, vec2.y, Tmp.c1.set(posTextColor));
+				// y: 0 -> y
+				if (elem.y != 0) MyDraw.drawText("y:" + fixed(vec2.y),
+				 vec2.x, vec2.y / 3f, Tmp.c1.set(posTextColor)); */
+
+				// 绝对坐标
+				// x: 0 -> x
+				if (vec2.x != 0) MyDraw.drawText(fixed(vec2.x),
+				 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+				// y: 0 -> y
+				if (vec2.y != 0) MyDraw.drawText(fixed(vec2.y),
+				 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+			}
 			posLine:
 			{
 				if ((posLineColor & 0x000000FF) == 0) break posLine;
@@ -823,16 +842,6 @@ public class ReviewElement extends Content {
 				if (vec2.x != 0) Lines.line(0, vec2.y, vec2.x, vec2.y);
 				// y: 0 -> y
 				if (vec2.y != 0) Lines.line(vec2.x, 0, vec2.x, vec2.y);
-			}
-			posText:
-			{
-				if ((posTextColor & 0x000000FF) == 0) break posText;
-				// x: 0 -> x
-				if (vec2.x != 0) MyDraw.drawText(fixed(vec2.x),
-				 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
-				// y: 0 -> y
-				if (vec2.y != 0) MyDraw.drawText(fixed(vec2.y),
-				 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
 			}
 			sizeText:
 			{

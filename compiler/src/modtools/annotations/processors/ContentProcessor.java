@@ -1,25 +1,23 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
-import modtools.utils.MySettings.Data;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.*;
+import java.util.Set;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
 @AutoService({Processor.class})
-public class ContentProcessor extends BaseProcessor {
-	public void dealElement(Element element) {
+public class ContentProcessor extends BaseProcessor<ClassSymbol> {
+	public void dealElement(ClassSymbol element) {
 		if (element.getAnnotation(ContentInit.class) != null) {
 			contentLoad(element);
 			// print(element);
@@ -30,7 +28,7 @@ public class ContentProcessor extends BaseProcessor {
 				value = element.getSimpleName().toString();
 				if (value.startsWith("E_")) value = value.substring(2);
 			}
-			processSetting((ClassSymbol) element, (JCClassDecl) trees.getTree(element), value, annotation.parent());
+			processSetting(element, trees.getTree(element), value, annotation.parent());
 		}
 	}
 	Name      Name_Setting;
@@ -41,7 +39,7 @@ public class ContentProcessor extends BaseProcessor {
 		CL_MySettings = findType("modtools.utils.MySettings");
 		CL_Data = findType($_DATA);
 	}
-	public void contentLoad(Element element) {
+	public void contentLoad(ClassSymbol element) {
 		JCMethodDecl            m    = trees.getTree((ExecutableElement) findChild(element, "load", ElementKind.METHOD));
 		ListBuffer<JCStatement> list = new ListBuffer<>();
 

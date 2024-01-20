@@ -21,6 +21,8 @@ import java.util.function.Predicate;
 
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
  implements TreeUtils, AnnotationUtils, PrintHelper {
+	public static final String $_DATA = "modtools.utils.MySettings$Data";
+
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
@@ -91,12 +93,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		return name.substring(name.replace('$', '.').lastIndexOf('.') + 1);
 	}
 
-	public synchronized void init(ProcessingEnvironment env) {
+	public final synchronized void init(ProcessingEnvironment env) {
 		super.init(env);
+		initConst(env);
 		try {
 			init();
 		} catch (Throwable e) {err(e);}
-		if (elements != null) return;
+	}
+	public void initConst(ProcessingEnvironment env) {
+		if (__context != null) return;
 
 		__context = ((JavacProcessingEnvironment) processingEnv).getContext();
 		elements = JavacElements.instance(__context);

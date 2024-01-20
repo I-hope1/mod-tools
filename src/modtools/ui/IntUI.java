@@ -341,7 +341,7 @@ public class IntUI {
 		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 24, () -> {
 			Object o = prov.get();
 			Core.app.post(() -> INFO_DIALOG.showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
-		}).size(32, 32);
+		}).size(32, 32).disabled(__ -> clazz.isPrimitive() && prov.get() == null);
 	}
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {

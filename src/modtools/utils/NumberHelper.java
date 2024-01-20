@@ -36,4 +36,14 @@ public class NumberHelper {
 	public static int asInt(String text) {
 		return Strings.parseInt(text);
 	}
+
+	public static Number cast(String text, Class<?> type) {
+		if (type == Float.class) return asFloat(text);
+		if (type == Integer.class) return asInt(text);
+		if (type == Double.class) return Double.parseDouble(text);
+		if (type == Long.class) return Long.parseLong(text);
+		if (type == Short.class) return Short.parseShort(text);
+		if (type == Byte.class) return Byte.parseByte(text);
+		return Float.NaN;
+	}
 }

@@ -3,6 +3,7 @@ package modtools.annotations;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 
@@ -87,9 +88,9 @@ public interface TreeUtils extends ParseUtils {
 			 SettingUI().members(), SettingUI().members(), SettingUI()
 			); */
 			unit.namedImportScope.importType(sym.owner.members(), sym.owner.members(), sym);
-			ArrayList list = new ArrayList<>(java.util.List.of(unit.defs.toArray()));
-			list.add(1, mMaker.Import(mMaker.Select(mMaker.Ident(
-			 sym.packge().fullname), sym), false));
+
+			var list = new ArrayList<>(unit.defs);
+			list.add(1, mMaker.Import(mMaker.QualIdent(sym), false));
 			unit.defs = List.from(list);
 		}
 	}

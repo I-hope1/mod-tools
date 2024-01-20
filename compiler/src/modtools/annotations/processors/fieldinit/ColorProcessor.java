@@ -65,6 +65,4 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 	public Set<String> getSupportedAnnotationTypes() {
 		return Set.of(DataColorFieldInit.class.getCanonicalName());
 	}
-	public void init() {
-	}
 }

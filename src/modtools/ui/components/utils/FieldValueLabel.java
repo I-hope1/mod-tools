@@ -1,5 +1,6 @@
 package modtools.ui.components.utils;
 
+import arc.graphics.Color;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
@@ -44,11 +45,11 @@ public class FieldValueLabel extends ValueLabel {
 	}
 
 	public void setVal() {
-		if (field == null || (obj == null && !isStatic)) {
-			setVal0(null);
-		} else {
+		if (isValid()) {
 			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
 			setVal0(value);
+		} else {
+			setText0(null);
 		}
 	}
 	Long offset;
@@ -90,11 +91,20 @@ public class FieldValueLabel extends ValueLabel {
 		setVal(val);
 	}
 
+	protected Seq<MenuList> basicMenuLists(Seq<MenuList> list) {
+		return super.basicMenuLists(list).removeAll(l -> "@clear".equals(l.getName()));
+	}
 	public void addEnumSetter() {
 		clicked(() -> IntUI.showSelectListEnumTable(this,
 		 Seq.with(type.getEnumConstants()).<Enum>as(),
 		 () -> (Enum) val, this::setFieldValue,
 		 Float.NEGATIVE_INFINITY, 42,
 		 true, Align.left));
+	}
+	public boolean isFinal() {
+		return field == null || Modifier.isFinal(field.getModifiers());
+	}
+	public boolean isValid() {
+		return field != null && (obj != null || isStatic);
 	}
 }

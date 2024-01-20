@@ -59,6 +59,9 @@ public class HopeConstant {
 		long VALUE = FieldUtils.fieldOffset(String.class, "value");
 		long CODER = FieldUtils.fieldOffset(String.class, "coder");
 	}
+	public interface METHOD {
+		Method null_method = nl(() -> Object.class.getMethod("toString"));
+	}
 
 	static <R> R nl(CProv<R> prov) {
 		try {

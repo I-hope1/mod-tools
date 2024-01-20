@@ -37,15 +37,15 @@ public class IconsProcessor extends BaseProcessor {
 		ClassType map = (ClassType) findType("arc.struct.ObjectMap").constType(123);
 		map.typarams_field = List.of(stringType, pixmap);
 
-		addImport((TypeElement) element, map);
-		addImport((TypeElement) element, drawableSymbol);
-		addImport((TypeElement) element, fiType);
-		addImport((TypeElement) element, pixmap);
-		addImport((TypeElement) element, /* Pixmaps */findClassSymbol("arc.graphics.Pixmaps"));
-		addImport((TypeElement) element, /* TextureRegion */findClassSymbol("arc.graphics.g2d.TextureRegion"));
-		addImport((TypeElement) element, findClassSymbol("arc.graphics.Texture"));
-		addImport((TypeElement) element, findClassSymbol("mindustry.Vars"));
-		addImport((TypeElement) element, findClassSymbol("arc.Core"));
+		addImport(element, map);
+		addImport(element, drawableSymbol);
+		// addImport(element, fiType);
+		addImport(element, pixmap);
+		addImport(element, /* Pixmaps */findClassSymbol("arc.graphics.Pixmaps"));
+		addImport(element, /* TextureRegion */findClassSymbol("arc.graphics.g2d.TextureRegion"));
+		addImport(element, findClassSymbol("arc.graphics.Texture"));
+		addImport(element, findClassSymbol("mindustry.Vars"));
+		addImport(element, findClassSymbol("arc.Core"));
 
 		StringBuilder sb = new StringBuilder();
 		stringType.tsym.owner.kind = Kind.VAR;
@@ -60,7 +60,17 @@ public class IconsProcessor extends BaseProcessor {
 		texture.tsym.owner.kind = Kind.PCK;
 		map.tsym.owner.kind = Kind.PCK;
 
-		int i = 0;
+		// 添加TextureRegionDrawable的构造方法n()
+		// 添加参数name
+		JCVariableDecl name = makeVar(Flags.PARAMETER, stringType, "name", null, root.sym);
+		JCMethodDecl n = mMaker.MethodDef(
+		 mMaker.Modifiers(Flags.PRIVATE | Flags.STATIC),
+		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),
+		 List.nil(), parseBlock(0, "{Texture t = new Texture(dir.child(name));" +
+															 "t.setFilter(Texture.TextureFilter.linear);" +
+															 "return new TextureRegionDrawable(new TextureRegion(t));" +
+															 "}"), null);
+		root.defs = root.defs.append(n);
 		for (File fi : findAll(new File("./assets/" + icons.iconDir()))
 		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new)) {
 			Kind last = drawable.tsym.owner.kind;
@@ -69,20 +79,14 @@ public class IconsProcessor extends BaseProcessor {
 			addField(root, Flags.STATIC | Flags.PUBLIC,
 			 drawable, f_name, null);
 			drawable.tsym.owner.kind = last;
-			sb.append("Texture _").append(i).append("=new Texture(dir.child(\"")
-			 .append(fi.getName()).append("\"));");
-			// sb.append("Pixmaps.bleed(_").append(i).append(",2);");
-			sb.append('_').append(i).append(".setFilter(Texture.TextureFilter.linear);");
-			sb.append(f_name)
-			 .append("=new TextureRegionDrawable(new TextureRegion(_").append(i).append("));");
-			i++;
+			sb.append(f_name).append("=n(\"").append(fi.getName()).append("\");");
 		}
 
 		// 添加load方法
 		JCMethodDecl load = mMaker.MethodDef(
-			mMaker.Modifiers(Flags.STATIC | Flags.PUBLIC),
-			ns("load"), mMaker.TypeIdent(TypeTag.VOID), List.nil(), List.nil(),
-			List.nil(), parseBlock(0, "{" + sb + "}"), null);
+		 mMaker.Modifiers(Flags.STATIC | Flags.PUBLIC),
+		 ns("load"), mMaker.TypeIdent(TypeTag.VOID), List.nil(), List.nil(),
+		 List.nil(), parseBlock(0, "{" + sb + "}"), null);
 		root.defs = root.defs.append(load);
 		// JCBlock x = parseBlock(Flags.STATIC, "{" + sb + "}");
 		// x.pos = 1000;

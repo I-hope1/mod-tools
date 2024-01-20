@@ -24,6 +24,7 @@ import modtools.IntVars;
 import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
@@ -141,13 +142,13 @@ public class SettingsUI extends Content {
 
 			 row();
 			 table(Tex.pane, t -> {
-				 t.add("@mod-tools.functions");
+				 t.add("@mod-tools.functions").row();
 				 if (OS.isAndroid || OS.isWindows) t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
 					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-				 }).height(42).growX().colspan(2).row();
+				 }).height(42);
 				 t.button("Enable Debug Parma", Icon.chatSmall, Styles.flatt, () -> {
 					 Log.level = LogLevel.debug;
-				 }).height(42).growX().colspan(2);
+				 }).height(42);
 			 }).growX();
 			 row();
 			 table(Tex.pane, t -> {
@@ -184,7 +185,7 @@ public class SettingsUI extends Content {
 	 Runnable clear, Cons<Element> setter,
 	 Boolp condition) {
 		var vl = new ClearValueLabel<>(Element.class, prov, clear);
-		vl.setter = (Cons) setter;
+		vl.setter = setter;
 		vl.setAlignment(Align.right);
 		Label l = new Label(text);
 		table.stack(l, vl)

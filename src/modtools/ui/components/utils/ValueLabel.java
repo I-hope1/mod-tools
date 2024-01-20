@@ -88,7 +88,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 });
 	}
 	public static <T> MenuList newDetailsMenuList(Element el, T val, Class<T> type) {
-		return MenuList.with(Icon.infoCircleSmall, "@details", () -> {
+		return DisabledList.withd(Icon.infoCircleSmall, "@details",
+		 () -> type.isPrimitive() && val == null,
+		 () -> {
 			showNewInfo(el, val, type);
 		});
 	}
@@ -233,7 +235,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		String text = CatchSR.apply(() ->
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
-				: val instanceof Character ? "'" + val + "'"
+				: val instanceof Character ? "'" + val + "'" /* + (int) (Character) val */
 				: val instanceof Float ? FormatHelper.fixed((float) val, 2)
 				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
 
@@ -252,7 +254,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				ShowUIList.uiKeyMap.get((Group) val)
 
 				: String.valueOf(val))
-			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(hashCode()))
+			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> val.getClass().getName())
 		);
 		text = truncate(text);
@@ -437,5 +439,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		cleared = true;
 		super.clear();
 		clearVal();
+	}
+	public boolean isFinal() {
+		return false;
+	}
+	public boolean isValid() {
+		return true;
 	}
 }

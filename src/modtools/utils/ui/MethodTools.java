@@ -14,6 +14,7 @@ import modtools.utils.Tools;
 import modtools.utils.ui.search.FilterTable;
 import rhino.*;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -23,16 +24,22 @@ import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
 
 public interface MethodTools {
-	static Object invokeForMethod(Object o, Method m, ValueLabel l, NativeArray arr,
+	static Object invokeForMethod(Object o, Method m, ValueLabel l, NativeArray args0,
 																FuncT func)
 	 throws Throwable {
-		Object[] args = convertArgs(arr, m.getParameterTypes());
+		Object[] args = convertArgs(args0, m.getParameterTypes());
 		if (l.isStatic() || o != null) return func.get(args);
 		throw new NullPointerException("'obj' is null.");
 	}
+	static Object invokeForHandle(MethodHandle handle, Object[] arr) throws Throwable {
+		return handle.invokeWithArguments(convertArgs(arr, handle.type().parameterArray()));
+	}
 	static Object[] convertArgs(NativeArray arr, Class<?>[] types) {
+		return convertArgs(arr.toArray(), types);
+	}
+	static Object[] convertArgs(Object[] arr, Class<?>[] types) {
 		Iterator<Class<?>> iterator = Arrays.stream(types).iterator();
-		return Seq.with(arr.toArray())
+		return Arrays.stream(arr)
 		 .map(a -> JavaAdapter.convertResult(a, iterator.next()))
 		 .toArray();
 	}

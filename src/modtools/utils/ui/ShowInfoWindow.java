@@ -75,9 +75,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cont.add(String.valueOf(o));
 			return;
 		}
+		MyEvents prev = MyEvents.current;
 		MyEvents.current = events;
 		build();
-		MyEvents.current = null;
+		MyEvents.current = prev;
 	}
 
 
@@ -317,11 +318,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	public void buildFieldValue(Class<?> type, BindCell c_cell, FieldValueLabel l) {
 		if (!l.isStatic() && l.getObject() == null) return;
 		Cell<?> cell = c_cell.cell;
+		Boolp editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
+		/* Color的实现是Color#set方法 */
 		if (l.val instanceof Color) {
 			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
 			c_cell.require();
 		} else if (type == Boolean.TYPE || type == Boolean.class) {
 			var btn = new TextButton("", HopeStyles.flatTogglet);
+			btn.setDisabled(() -> !editable.get());
 			btn.update(() -> {
 				l.setVal();
 				btn.setText((boolean) l.val ? "TRUE" : "FALSE");
@@ -340,7 +344,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cell.setElement(btn);
 			cell.size(96, 42);
 			c_cell.require();
-		} else if (Number.class.isAssignableFrom(box(type))) {
+		} else if (Number.class.isAssignableFrom(box(type)) && editable.get()) {
 			var field = new AutoTextField();
 			l.afterSet = () -> field.setTextCheck(String.valueOf(l.getText()));
 			l.afterSet.run();
@@ -350,8 +354,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			field.setValidator(NumberHelper::isNumber);
 			field.changed(() -> {
 				if (!field.isValid()) return;
-				l.setFieldValue(Context.jsToJava(
-				 ScriptRuntime.toNumber(field.getText()), type));
+				l.setFieldValue(NumberHelper.cast(field.getText(), type));
 			});
 			cell.setElement(field);
 			cell.height(42);
@@ -360,7 +363,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				cell.setElement(edit.enabled() ? field : null);
 				c_cell.require();
 			});
-		} else if (D_JSFUNC_EDIT.getBool("string", false) && type == String.class) {
+		} else if (E_JSFuncEdit.string.enabled() && type == String.class && editable.get()) {
 			cell.row();
 			var field = new AutoTextField();
 			l.afterSet = () -> field.setTextCheck((String) l.val);
@@ -370,7 +373,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 			field.changed(() -> {
 				String text = field.getText();
-				l.setFieldValue(text.equals(AutoTextField.NULL_STR) ? null : text);
+				l.setFieldValue(AutoTextField.NULL_STR.equals(text) ? null : text);
 			});
 			cell.setElement(field);
 			cell.height(42);
@@ -444,8 +447,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		addDisplayListener(fields.add(new HoverTable(buttons -> {
 			buttons.right().top().defaults().right().top();
 			IntUI.addLabelButton(buttons, () -> l[0].val, type);
-			// addStoreButton(buttons, Core.bundle.get("jsfunc.field", "Field"), () -> f);
-			IntUI.addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o));
+			IntUI.addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o))
+			 .disabled(!l[0].isValid());
 		})).top().padRight(-10).width(64)/* .colspan(0) */, E_JSFuncDisplay.buttons);
 		fields.row();
 		fields.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
@@ -574,6 +577,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private void foldUnwrap(ReflectTable table, Member member, MyLabel label, Element attribute) {
 		if (table.skip) return;
+		Core.app.post(() -> {
+			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
+			if (size == 1) return;
+			label.setText(label.getText() + " [" + size + "]");
+		});
 		IntUI.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren()) return;
 			IntUI.showSelectTable(attribute, (p, hide, text) -> {

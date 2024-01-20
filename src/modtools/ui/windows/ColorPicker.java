@@ -70,7 +70,7 @@ public class ColorPicker extends Window {
 						x, y + height, first/* 左上角 */
 					 );
 
-					 Draw.color(Tmp.c1.fromHsv(h, s, v).inv());
+					 Draw.color(Tmp.c1.fromHsv(h, s, v).inv(), parentAlpha);
 					 Icon.cancelSmall.draw(x + s * width, y + v * height,
 						5 * Scl.scl(), 5 * Scl.scl());
 				 }
@@ -97,6 +97,7 @@ public class ColorPicker extends Window {
 			t.add(new Element() {
 				public void draw() {
 					Draw.color();
+					Draw.alpha(parentAlpha);
 					HopeIcons.alphaBgCircle.draw(x, y, width, height);
 					float x      = getX(Align.center);
 					float y      = getY(Align.center);

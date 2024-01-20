@@ -20,6 +20,7 @@ import arc.util.*;
 import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
+import arc.util.serialization.*;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import mindustry.game.EventType;
@@ -29,9 +30,10 @@ import mindustry.mod.Scripts;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.DataEventFieldInit;
-import modtools.events.*;
+import modtools.events.ExecuteTree;
 import modtools.events.ExecuteTree.TaskNode;
 import modtools.jsfunc.*;
+import modtools.jsfunc.type.CAST;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
@@ -51,15 +53,17 @@ import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.jsfunc.type.CAST;
+import modtools.utils.ui.MethodTools;
 import rhino.*;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
+import static modtools.ui.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.format;
 import static modtools.utils.Tools.*;
 
@@ -134,12 +138,6 @@ public class Tester extends Content {
 	 strict = false,
 	 error  = false;
 
-	@DataEventFieldInit
-	private static boolean
-	 ignorePopupError = false,
-	 wrapRef          = true,
-	 multiWindows     = false,
-	 JSProp           = false;
 
 	public Window ui;
 	ListDialog history, bookmark;
@@ -163,11 +161,9 @@ public class Tester extends Content {
 	 * -1表示originalText<br>
 	 * -2表示倒数第一个
 	 */
-	public        int          historyPos      = -1;
+	public int           historyPos   = -1;
 	/** 位于0处的文本 */
-	public        StringBuilder originalText    = null;
-	@DataEventFieldInit
-	public static boolean      rollbackHistory = Settings.rollback_history.enabled();
+	public StringBuilder originalText = null;
 
 	public ScrollPane  pane;
 	public SclListener logSclListener;
@@ -212,7 +208,7 @@ public class Tester extends Content {
 		_cont.row();
 		ui.cont.update(() -> {
 			// if (logSclListener != null && logSclListener.scling) return;
-			((JSSyntax) textarea.syntax).enableJSProp = JSProp;
+			((JSSyntax) textarea.syntax).enableJSProp = js_prop.enabled();
 			// areaCell.maxHeight(ui.cont.getHeight() / Scl.scl());
 		});
 
@@ -455,7 +451,7 @@ public class Tester extends Content {
 		if (historyPos == -1) originalText = area.getText0();
 		historyPos += forward ? 1 : -1;
 		Vec2 pos = tmpV.set(ui.x, ui.y + 20);
-		if (historyPos == -1 || (rollbackHistory && historyPos >= maxHistorySize)) {
+		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= maxHistorySize)) {
 			if (historyPos != -1) showRollback(pos);
 			historyPos = -1;
 			area.setText0(originalText);
@@ -463,7 +459,7 @@ public class Tester extends Content {
 			IntUI.showInfoFade("[accent]0[]/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
 			return true;
 		}
-		if (rollbackHistory) {
+		if (rollback_history.enabled()) {
 			historyPos = Math.max(historyPos, -1);
 			int last = historyPos;
 			historyPos = (historyPos + maxHistorySize) % maxHistorySize;
@@ -490,7 +486,7 @@ public class Tester extends Content {
 			return;
 		}
 
-		if (multiWindows) {
+		if (multi_windows.enabled()) {
 			var newTester = new Tester();
 			newTester.load();
 			newTester.build();
@@ -550,8 +546,8 @@ public class Tester extends Content {
 	public void makeError(Throwable ex, boolean fromExecutor) {
 		error = true;
 		loop = false;
-		if (Settings.output_to_log.enabled()) Log.err(name, ex);
-		if (!ignorePopupError) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
+		if (output_to_log.enabled()) Log.err(name, ex);
+		if (!ignore_popup_error.enabled()) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
 	}
 
@@ -602,7 +598,7 @@ public class Tester extends Content {
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
-			if (Settings.output_to_log.enabled()) {
+			if (output_to_log.enabled()) {
 				Log.info("[[tester]: " + log);
 			}
 			if (lastDir != null) lastDir.child("log.txt").writeString(log);
@@ -724,7 +720,7 @@ public class Tester extends Content {
 			}
 			setAppClassLoader(loader);
 		} catch (Exception ex) {
-			if (ignorePopupError) {
+			if (ignore_popup_error.enabled()) {
 				Log.err(ex);
 			} else {
 				Vars.ui.showException("IntFunc出错", ex);
@@ -778,6 +774,7 @@ public class Tester extends Content {
 		try {
 			if (val instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
 			if (val instanceof Method method) return new NativeJavaMethod(method, method.getName());
+			if (val instanceof MethodHandle handle) return new NativeJavaHandle(handle);
 			return Context.javaToJS(val, topScope);
 		} catch (Throwable e) {
 			return val;
@@ -785,7 +782,7 @@ public class Tester extends Content {
 	}
 
 	public void put(String name, Object val) {
-		if (wrapRef) {
+		if (wrap_ref.enabled()) {
 			val = getWrap(val);
 			//			else if (val instanceof Field) val = new NativeJavaObject(scope, val, Field.class);
 		}
@@ -809,7 +806,10 @@ public class Tester extends Content {
 
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
-		rollback_history, multi_windows, output_to_log, js_prop
+		rollback_history, multi_windows, output_to_log, js_prop;
+		static {
+			wrap_ref.defTrue();
+		}
 	}
 	private static class AddedSeq extends Seq<String> {
 		/* 是否处理了log */
@@ -825,6 +825,27 @@ public class Tester extends Content {
 		public Seq<String> clear() {
 			resolved = false;
 			return super.clear();
+		}
+	}
+	private static class NativeJavaHandle extends BaseFunction {
+		private final MethodHandle handle;
+		public NativeJavaHandle(MethodHandle handle) {
+			super(Tester.scope, null);
+			this.handle = handle;
+		}
+		public String toString() {
+			return handle.toString();
+		}
+		public Object get(Object key) {
+			if ("__javaObject__".equals(key)) return handle;
+			return super.get(key);
+		}
+		public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+			try {
+				return cx.getWrapFactory().wrap(cx, scope, MethodTools.invokeForHandle(handle, args), handle.type().returnType());
+			} catch (Throwable ex) {
+				throw new RuntimeException(ex);
+			}
 		}
 	}
 }

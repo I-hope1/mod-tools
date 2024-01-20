@@ -1,7 +1,7 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
@@ -16,6 +16,10 @@ import java.util.*;
 public class DataProcessor extends BaseProcessor {
 	private static final String EVENT       = "modtools.events.MyEvents";
 	private static final String EVNET_FIELD = "$event-0";
+	Type TY_Event;
+	public void init() throws Throwable {
+		TY_Event = findType(EVENT);
+	}
 	public void process() {
 		initMap.forEach((parent, selves) -> {
 			/* if (!parent.getSimpleName().toString().startsWith("E_"))
@@ -25,8 +29,7 @@ public class DataProcessor extends BaseProcessor {
 			JCVariableDecl event_f = addField(
 			 classDecl,
 			 Flags.PRIVATE | Flags.FINAL,
-			 findType(EVENT),
-			 EVNET_FIELD, "new " + EVENT + "()");
+			 TY_Event, EVNET_FIELD, "new " + EVENT + "()");
 
 			// classDecl.sym.members_field.enter(findSymbol(EVNET_FIELD));
 			JCMethodDecl method = findChild(classDecl, Tag.METHODDEF, m0 -> m0.name.contentEquals("dataInit"));

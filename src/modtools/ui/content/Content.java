@@ -4,6 +4,7 @@ package modtools.ui.content;
 import arc.Core;
 import arc.scene.style.Drawable;
 import arc.scene.ui.TextButton;
+import arc.scene.ui.layout.Table;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
@@ -70,15 +71,19 @@ public abstract class Content {
 		return "Content#" + name;
 	}
 
-	protected interface ISettings extends E_DataInterface {
+	public interface ISettings extends E_DataInterface {
 		default Data data() {
 			return null;
 		}
+		default Class<?> type() {return null;}
 		default String name() {
 			return null;
 		}
 		default void def(Object o) {
 			data().get(name(), o);
+		}
+		default void defTrue() {
+			data().get(name(), "true");
 		}
 		default void set(Object o) {
 			data().put(name(), o);
@@ -86,14 +91,20 @@ public abstract class Content {
 		default void set(boolean o) {
 			data().put(name(), o);
 		}
-		default <T> T get() {
+		/* default <T> T get() {
 			return (T) data().get(name());
-		}
+		} */
 		default boolean enabled() {
 			return data().getBool(name());
 		}
+
+		default void build(Table table) {
+			if (type() == boolean.class) {
+				SettingsUI.bool(table, name(), data(), name(),false, this::set);
+			}
+		}
 	}
-	public static interface E_DataInterface {
+	public interface E_DataInterface {
 		default void def(boolean value) {}
 		default boolean enabled() {return false;}
 		default void set(boolean value) {}

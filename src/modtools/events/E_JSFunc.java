@@ -1,11 +1,10 @@
 package modtools.events;
 
-import modtools.annotations.DataEnum;
-import modtools.ui.content.Content;
+import modtools.annotations.SettingsInit;
+import modtools.ui.content.Content.ISettings;
 
-@SuppressWarnings("unused")
-@DataEnum
-enum E_JSFuncComp implements Content.E_DataInterface {
+@SettingsInit
+public enum E_JSFunc implements ISettings {
 	watch_multi, search_exact, auto_refresh, display_generic,
 	truncate_text, hidden_if_empty, display_synthetic, update_async,
 	folded_name;
@@ -15,7 +14,6 @@ enum E_JSFuncComp implements Content.E_DataInterface {
 		display_generic.def(true);
 		truncate_text.def(true);
 		hidden_if_empty.def(true);
-		display_synthetic.def(false);
 		update_async.def(true);
 	}
 }

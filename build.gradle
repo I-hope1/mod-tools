@@ -35,8 +35,6 @@ allprojects {
 }
 
 sourceSets.main.java.srcDirs = ["src"]
-
-
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	compileOnly project(":annotations")
@@ -60,7 +58,6 @@ dependencies {
 	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 }
-
 
 mindustry {
 	dependency {}

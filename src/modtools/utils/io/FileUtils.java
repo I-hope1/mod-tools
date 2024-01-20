@@ -7,19 +7,14 @@ import modtools.ModTools;
 
 import java.io.File;
 import java.net.*;
+import java.util.Objects;
 
 public class FileUtils {
-	public static URI toURIOrFail(URL url) {
-		try {
-			return url.toURI();
-		} catch (URISyntaxException e) {
-			throw new IllegalArgumentException(e);
-		}
-	}
 	public static Fi findRoot() {
 		try {
-			URL url =  ModTools.class.getClassLoader().getResource("mod.hjson");
-			return new Fi(new File(url.getPath().split("!")[0].substring(5)));
+			URL    url  = ModTools.class.getClassLoader().getResource("mod.hjson");
+			String path = Objects.requireNonNull(url).toURI().toString();
+			return new Fi(new File(path.substring(path.indexOf(':') + 1, path.lastIndexOf('!'))));
 		} catch (Throwable ignored) {}
 
 		if (OS.isWindows || OS.isMac) {
@@ -33,7 +28,7 @@ public class FileUtils {
 		if (OS.isAndroid) return findRootAndroid();
 		throw new UnsupportedOperationException();
 	}
-	public static Fi findRootAndroid() {;
+	public static Fi findRootAndroid() {
 		Object pathList = Reflect.get(BaseDexClassLoader.class, ModTools.class.getClassLoader(),
 		 "pathList");
 		Object[] arr = Reflect.get(pathList, "dexElements");

@@ -14,7 +14,7 @@ allprojects {
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
-	tasks.withType(JavaCompile) {
+	tasks.withType(JavaCompile).configureEach {
 		options.encoding = 'UTF-8'
 //		targetCompatibility = 17
 //		sourceCompatibility = 17
@@ -82,7 +82,8 @@ mindustryAssets {
 	rootAt "$projectDir/assets"
 }
 
-task playGame(dependsOn: classes, type: JavaExec) {
+tasks.register('playGame', JavaExec) {
+	dependsOn classes
 	dependsOn jar
 
 	doFirst {
@@ -105,7 +106,7 @@ task playGame(dependsOn: classes, type: JavaExec) {
 			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
-task ZCompileAll(type: Copy) {
+tasks.register('ZCompileAll', Copy) {
 	dependsOn deploy
 
 	from("$buildDir0/tmp/deploy/") {
@@ -119,7 +120,7 @@ task ZCompileAll(type: Copy) {
 	}
 }
 
-task mergeLibs(type: Jar) {
+tasks.register('mergeLibs', Jar) {
 	archiveFileName = "$rootDir/assets/libs/reflect-core.jar"
 
 	def libsDir = new File("$rootDir/libs/build/libs")
@@ -134,11 +135,11 @@ task mergeLibs(type: Jar) {
 	}
 }
 
-task playAndroid {
+tasks.register('playAndroid') {
 	dependsOn deploy
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"
-	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files";
+	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files"
 	doLast {
 		("$adb push ${buildDir0}/tmp/deploy/${archivesBaseName}-${version}.jar"
 				+ " $MDT_ANDROID_DIR/mods/")

@@ -5,8 +5,6 @@ sourceSets.main.java.srcDirs = ["src"]
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
-//	implementation 'com.squareup:javapoet:1.12.1'
-
 	// only for document
 //	compileOnly files(new File(parent.buildDir0, "libs/${parent.name}-1.0.jar"))
 

@@ -105,7 +105,7 @@ public class WatchProcessor extends BaseProcessor {
 				 * */
 				classDecl.defs = classDecl.defs.append(PBlock(
 				 execStatement(
-					mMaker.Select(parseExpression(timeSymbol.className()), names.fromString("run")),
+					mMaker.Select(mMaker.Ident(timeSymbol), ns("run")),
 					List.of(mMaker.Literal(0),
 					 PLambda0(mMaker.Block(0, List.from(statements))))
 				 )
@@ -160,7 +160,7 @@ public class WatchProcessor extends BaseProcessor {
 						mMaker.Literal("lc-" + classDecl.getSimpleName().toString() + "-" + variable.getName()),
 						PLambda0(mMaker.Ident(variable)),
 						mMaker.Literal(watchVar.interval()))),
-					names.fromString("showIfOk")),
+					ns("showIfOk")),
 				 List.nil()));
 
 				// sb.append(fieldName).append(".watch(\"lc-%prefix%-%name%\",()->%name%,%interval%);"

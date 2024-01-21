@@ -1,7 +1,7 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
@@ -16,7 +16,45 @@ import java.util.Set;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
 @AutoService({Processor.class})
-public class ContentProcessor extends BaseProcessor<ClassSymbol> {
+// Inside the class:
+public class ContentProcessor extends BaseProcessor<ClassSymbol>
+ implements DataUtils {
+	private Name        nameSetting;
+	private ClassSymbol dataClass, mySettingsClass;
+
+	public void init() throws Throwable {
+		nameSetting = ns("Settings");
+		mySettingsClass = C_MySettings();
+		dataClass = C_Data();
+	}
+
+	public void contentLoad(ClassSymbol element) {
+		JCMethodDecl            loadMethod = trees.getTree((ExecutableElement) findChild(element, "load", ElementKind.METHOD));
+		ListBuffer<JCStatement> statements = new ListBuffer<>();
+
+		for (Element field : findAllChild(element, null, ElementKind.FIELD)) {
+			JCVariableDecl variableTree = (JCVariableDecl) trees.getTree(field);
+			statements.add(
+			 mMaker.Exec(mMaker.Assign(
+				mMaker.Ident((Name) field.getSimpleName()),
+				mMaker.NewClass(null, List.nil(),  variableTree.vartype, List.nil(), null)
+			 )));
+
+			TypeSymbol   contentTypeSymbol = variableTree.vartype.type.tsym;
+			JCMethodDecl initMethod        = (JCMethodDecl) trees.getTree(contentTypeSymbol.members().findFirst(names.init));
+			Object       literalName       = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
+
+			ClassSymbol settingsSymbol = (ClassSymbol) contentTypeSymbol.members().findFirst(nameSetting, t -> t.kind == Kind.TYP);
+			if (settingsSymbol != null) {
+				JCClassDecl settingsTree = trees.getTree(settingsSymbol);
+				processSetting(settingsSymbol, settingsTree, literalName, "");
+			}
+		}
+
+		loadMethod.body.stats = statements.toList();
+		print(loadMethod);
+	}
+
 	public void dealElement(ClassSymbol element) {
 		if (element.getAnnotation(ContentInit.class) != null) {
 			contentLoad(element);
@@ -31,91 +69,75 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol> {
 			processSetting(element, trees.getTree(element), value, annotation.parent());
 		}
 	}
-	Name      Name_Setting;
-	ClassType CL_MySettings;
-	ClassType CL_Data;
-	public void init() throws Throwable {
-		Name_Setting = names.fromString("Settings");
-		CL_MySettings = findType("modtools.utils.MySettings");
-		CL_Data = findType($_DATA);
-	}
-	public void contentLoad(ClassSymbol element) {
-		JCMethodDecl            m    = trees.getTree((ExecutableElement) findChild(element, "load", ElementKind.METHOD));
-		ListBuffer<JCStatement> list = new ListBuffer<>();
 
+	private void processSetting(ClassSymbol settings, JCClassDecl settingsTree, Object literalName, String parent) {
+		addImport(settings, dataClass);
 
-		for (Element field : findAllChild(element, null, ElementKind.FIELD)) {
-			JCVariableDecl tree = (JCVariableDecl) trees.getTree(field);
-			list.add(parseStatement(field.getSimpleName()
-															+ "=new " + tree.vartype + "();"));
+		addDataMethod(settingsTree);
+		if (parent.isEmpty()) addImport(settings, mySettingsClass);
 
-			TypeSymbol TP_Content = tree.vartype.type.tsym;
-			// 获取TP_Content的初始化的name
-			JCMethodDecl init_method  = (JCMethodDecl) trees.getTree(TP_Content.members().findFirst(names.fromString("<init>")));
-			Object       literal_name = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) init_method.body.stats.get(0)).expr).args.get(0)).value;
+		JCMethodInvocation initValue = createInitValue(parent, literalName);
 
+		addConstantField(settingsTree, dataClass.type, "data", initValue);
 
-			ClassSymbol settings = (ClassSymbol) TP_Content.members().findFirst(Name_Setting, t -> t.kind == Kind.TYP);
-			if (settings == null) continue;
-			JCClassDecl settingsTree = trees.getTree(settings);
-			processSetting(settings, settingsTree, literal_name, "");
-			// System.out.println(settingsTree);
-		}
-		m.body.stats = list.toList();
-		// Log.info(m);
-	}
-	// -------------------Settings-------------------
-	private void processSetting(ClassSymbol settings, JCClassDecl settingsTree, Object literal_name, String parent) {
-		addImport(settings, CL_Data);
-		// 给Settings添加方法data()和私有final字段data
-		// 添加data()方法
-		JCBlock body = mMaker.Block(0, List.of(mMaker.Return(mMaker.Ident(names.fromString("data")))));
-		JCMethodDecl m_data = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC | Flags.FINAL), names.fromString("data"), mMaker.TypeApply(mMaker.Ident(CL_Data.tsym), List.nil()),
-		 List.nil(), List.nil(), List.nil(),
-		 body, null);
-		settingsTree.defs = settingsTree.defs.append(m_data);
-
-		// 添加私有final字段data
-		JCMethodInvocation init_value;
-		if (parent.isEmpty()) {
-			addImport(settings, CL_MySettings);
-			init_value = mMaker.Apply(List.nil(),
-			 mMaker.Select(mMaker.Select(mMaker.Ident(CL_MySettings.tsym),
-				names.fromString("SETTINGS")), names.fromString("child")),
-			 List.of(mMaker.Literal(literal_name)));
-		} else {
-			// addImport(settings, findType(parent));
-			// Symbol symbol = settings.owner.members().findFirst(names.fromString(parent), t -> t.kind == Kind.TYP);
-			init_value = mMaker.Apply(List.nil(),
-			 mMaker.Select(mMaker.Select(mMaker.Ident(names.fromString(parent)),
-				names.fromString("data")), names.fromString("child")),
-			 List.of(mMaker.Literal(literal_name)));
-		}
-		addConstantField(settingsTree, CL_Data, "data", init_value);
-
-		// 在初始化中，给type字段赋值
 		settingsTree.defs.stream()
-		 .filter(t -> t instanceof JCMethodDecl m1 && m1.name.toString().equals("<init>") && m1.params.size() == 1)
+		 .filter(t -> t instanceof JCMethodDecl m1 && m1.name.equals(names.init) && m1.params.size() == 1)
 		 .findFirst().ifPresent(t -> {
-			 // 添加type()方法
-			 JCBlock body2 = mMaker.Block(0, List.of(mMaker.Return(mMaker.Select(mMaker.This(settings.type), names.fromString("type")))));
-			 JCMethodDecl m_type = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC | Flags.FINAL), names.fromString("type"), mMaker.Ident(mSymtab.classType.tsym),
-				List.nil(), List.nil(), List.nil(),
-				body2, null);
-			 settingsTree.defs = settingsTree.defs.append(m_type);
-			 // 添加type字段，初始化从初始化参数里获取
-			 addField(settingsTree, Flags.PRIVATE, mSymtab.classType, "type", null).vartype = mMaker.Ident(mSymtab.classType.tsym);
-			 // 给type字段赋值为第一个参数
+			 addTypeMethod(settingsTree);
+			 addTypeField(settingsTree);
+
 			 JCMethodDecl init = (JCMethodDecl) t;
 			 init.body.stats = init.body.stats.prepend(
-				mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), names.fromString("type")), mMaker.Ident(init.params.get(0).name)))
+				mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).name)))
 			 );
 		 });
-		// print(trees.getPath(settings).getCompilationUnit());
-	}
-	public void process() {
 	}
 
+	private void addDataMethod(JCClassDecl settingsTree) {
+		JCBlock body = mMaker.Block(0, List.of(mMaker.Return(mMaker.Ident(ns("data")))));
+		JCMethodDecl dataMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC | Flags.FINAL),
+		 ns("data"),
+		 mMaker.TypeApply(mMaker.Ident(dataClass), List.nil()),
+		 List.nil(), List.nil(), List.nil(),
+		 body, null);
+		settingsTree.defs = settingsTree.defs.append(dataMethod);
+	}
+
+	private JCMethodInvocation createInitValue(String parent, Object literalName) {
+		JCMethodInvocation initValue;
+		if (parent.isEmpty()) {
+			initValue = mMaker.Apply(List.nil(),
+			 mMaker.Select(mMaker.Select(mMaker.Ident(mySettingsClass),
+				ns("SETTINGS")), ns("child")),
+			 List.of(mMaker.Literal(literalName)));
+		} else {
+			initValue = mMaker.Apply(List.nil(),
+			 mMaker.Select(mMaker.Select(mMaker.Ident(ns(parent)),
+				ns("data")), ns("child")),
+			 List.of(mMaker.Literal(literalName)));
+		}
+		return initValue;
+	}
+
+	private void addTypeMethod(JCClassDecl settingsTree) {
+		JCBlock body2 = mMaker.Block(0, List.of(mMaker.Return(mMaker.Select(mMaker.This(settingsTree.sym.type), ns("type")))));
+		JCMethodDecl typeMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC | Flags.FINAL),
+		 ns("type"),
+		 mMaker.Ident(mSymtab.classType.tsym),
+		 List.nil(), List.nil(), List.nil(),
+		 body2, null);
+		settingsTree.defs = settingsTree.defs.append(typeMethod);
+	}
+
+	private void addTypeField(JCClassDecl settingsTree) {
+		addField(settingsTree, Flags.PRIVATE, mSymtab.classType, "type", null).vartype = mMaker.Ident(mSymtab.classType.tsym);
+	}
+
+	public void process() {
+		// Placeholder for any additional processing logic
+	}
+
+	@Override
 	public Set<String> getSupportedAnnotationTypes() {
 		return Set.of(ContentInit.class.getCanonicalName(), SettingsInit.class.getCanonicalName());
 	}

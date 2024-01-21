@@ -21,8 +21,6 @@ import java.util.function.Predicate;
 
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
  implements TreeUtils, AnnotationUtils, PrintHelper {
-	public static final String $_DATA = "modtools.utils.MySettings$Data";
-
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
@@ -52,30 +50,25 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 				second = true;
 				try {
 					process2();
-				} catch (Throwable e) {
-					err(e);
-				}
+				} catch (Throwable e) {err(e);}
 			}
 			return true;
 		}
 		firstFinished = true;
+
 		for (TypeElement annotation : annotations) {
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
 					dealElement((T) element);
-				} catch (Throwable e) {
-					err(e);
-				}
+				} catch (Throwable e) {err(e);}
 			}
 		}
 		try {
 			process();
-		} catch (Throwable e) {
-			err(e);
-		}
+		} catch (Throwable e) {err(e);}
 		return true;
 	}
-	public void process() throws Throwable {}
+	public void process() {}
 	protected static StringBuilder getUnderlineName(String fieldName) {
 		StringBuilder underlineName = new StringBuilder();
 		underlineName.append(Character.toLowerCase(fieldName.charAt(0)));
@@ -88,10 +81,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	}
 
 	public abstract void dealElement(T element) throws Throwable;
-
-	public static String simpleName(String name) {
-		return name.substring(name.replace('$', '.').lastIndexOf('.') + 1);
-	}
 
 	public final synchronized void init(ProcessingEnvironment env) {
 		super.init(env);

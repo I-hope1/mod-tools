@@ -2,6 +2,7 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
@@ -17,8 +18,10 @@ public class DataProcessor extends BaseProcessor {
 	private static final String EVENT       = "modtools.events.MyEvents";
 	private static final String EVNET_FIELD = "$event-0";
 	Type TY_Event;
+	Symbol EVENT_INIT;
 	public void init() throws Throwable {
 		TY_Event = findType(EVENT);
+		EVENT_INIT = TY_Event.tsym.members().findFirst(names.init);
 	}
 	public void process() {
 		initMap.forEach((parent, selves) -> {
@@ -26,10 +29,11 @@ public class DataProcessor extends BaseProcessor {
 				throw new IllegalArgumentException("class name must start with 'E_'"); */
 			var classDecl = (JCClassDecl) trees.getTree(parent);
 
-			JCVariableDecl event_f = addField(
+			JCVariableDecl event_f = addField0(
 			 classDecl,
 			 Flags.PRIVATE | Flags.FINAL,
-			 TY_Event, EVNET_FIELD, "new " + EVENT + "()");
+			 TY_Event, EVNET_FIELD,
+			 mMaker.Create(EVENT_INIT, List.nil()));
 
 			// classDecl.sym.members_field.enter(findSymbol(EVNET_FIELD));
 			JCMethodDecl method = findChild(classDecl, Tag.METHODDEF, m0 -> m0.name.contentEquals("dataInit"));
@@ -39,34 +43,21 @@ public class DataProcessor extends BaseProcessor {
 			selves.forEach(self -> {
 				String fieldName     = self.getSimpleName() + "";
 				String underlineName = getUnderlineName(fieldName).toString();
-				/* classDecl.defs = classDecl.defs.append(maker.MethodDef(
-				 maker.Modifiers(Flags.PUBLIC), //访问标志
-				 names.fromString("$$"+fieldName), //名字
-				 maker.TypeIdent(TypeTag.VOID), //返回类型
-				 List.nil(), //泛型形参列表
-				 List.of(maker.VarDef(maker.Modifiers(Flags.PARAMETER), // 访问标识
-                names.fromString("e"), // 名称
-                maker.Type(findType(E_NAME)), // 类型
-                null)), //参数列表
-				 List.nil(), //异常列表
-				 parseBlock("{"+fieldName+"=e.enabled();}"), //方法体
-				 null //默认方法（可能是interface中的那个default）
-				)); */
 
 				mMaker.at(method);
 				JCVariableDecl t = makeVar0(Flags.PARAMETER, null, "t", null, method.sym);
 				t.startPos = 0;
 				// Generate: %event%.onIns(%ECL%.%prop%, t->%field%=t.enabled());
 				JCStatement x = execStatement(
-				 mMaker.Select(mMaker.Ident(event_f), names.fromString("onIns")),
+				 mMaker.Select(mMaker.Ident(event_f), ns("onIns")),
 				 List.of(
-					mMaker.Select(mMaker.Ident(names.fromString("Settings")), names.fromString(underlineName)),
+					mMaker.Select(mMaker.Ident(ns("Settings")), ns(underlineName)),
 					mMaker.Lambda(
 					 List.of(t),
-					 mMaker.Assign(mMaker.Ident(names.fromString(fieldName)),
+					 mMaker.Assign(mMaker.Ident(ns(fieldName)),
 						mMaker.Apply(List.nil(),
 						 mMaker.Select(mMaker.Ident(t),
-							names.fromString("enabled")),
+							ns("enabled")),
 						 List.nil()))
 					 /* parseExpression(fieldName + "=t.enabled()") */
 					)
@@ -88,14 +79,11 @@ public class DataProcessor extends BaseProcessor {
 	public Map<Element, java.util.List<Element>> initMap = new HashMap<>();
 
 	public void dealElement(Element element) {
-		if (element.getKind() == ElementKind.FIELD) initMap.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
-		else if (element.getKind() == ElementKind.ENUM) {
-			JCVariableDecl data = (JCVariableDecl) trees.getTree((Element) findChild(element, "data", ElementKind.FIELD));
-			data.init = parseExpression("Settings.data()");
-		}
+		if (element.getKind() == ElementKind.FIELD)
+			initMap.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
 	}
 
 	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(DataEventFieldInit.class.getCanonicalName(), DataObjectInit.class.getCanonicalName());
+		return Set.of(DataEventFieldInit.class.getCanonicalName());
 	}
 }

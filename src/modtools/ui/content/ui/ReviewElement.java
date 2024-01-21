@@ -24,7 +24,7 @@ import modtools.annotations.builder.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
-import modtools.ui.TopGroup.FocusTask;
+import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.buttons.FoldedImageButton;
@@ -110,7 +110,7 @@ public class ReviewElement extends Content {
 	public void settingColor(Table t) {}
 	@DataBoolSetting
 	public void settingBool(Table t) {
-		boolean[] __ = {topGroup.selectInvisible, hoverInfoWindow};
+		boolean[] __ = {TSettings.selectInvisible, hoverInfoWindow};
 	}
 
 

@@ -44,7 +44,6 @@ public class IconsProcessor extends BaseProcessor {
 		addImport(element, /* Pixmaps */findClassSymbol("arc.graphics.Pixmaps"));
 		addImport(element, /* TextureRegion */findClassSymbol("arc.graphics.g2d.TextureRegion"));
 		addImport(element, findClassSymbol("arc.graphics.Texture"));
-		addImport(element, findClassSymbol("mindustry.Vars"));
 		addImport(element, findClassSymbol("arc.Core"));
 
 		StringBuilder sb = new StringBuilder();
@@ -52,7 +51,7 @@ public class IconsProcessor extends BaseProcessor {
 		texture.tsym.owner.kind = Kind.VAR;
 		map.tsym.owner.kind = Kind.VAR;
 		addField(root, Flags.STATIC | Flags.PUBLIC | Flags.FINAL, fiType,
-		 "dir", "Vars.mods.getMod(" + icons.mainClass().getName()
+		 "dir", "mindustry.Vars.mods.getMod(" + icons.mainClass().getName()
 						+ ".class).root.child(\"" + icons.iconDir()
 						+ "\")"
 		);
@@ -66,7 +65,7 @@ public class IconsProcessor extends BaseProcessor {
 		JCMethodDecl n = mMaker.MethodDef(
 		 mMaker.Modifiers(Flags.PRIVATE | Flags.STATIC),
 		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),
-		 List.nil(), parseBlock(0, "{Texture t = new Texture(dir.child(name));" +
+		 List.nil(), parseBlock("{Texture t = new Texture(dir.child(name));" +
 															 "t.setFilter(Texture.TextureFilter.linear);" +
 															 "return new TextureRegionDrawable(new TextureRegion(t));" +
 															 "}"), null);
@@ -86,7 +85,7 @@ public class IconsProcessor extends BaseProcessor {
 		JCMethodDecl load = mMaker.MethodDef(
 		 mMaker.Modifiers(Flags.STATIC | Flags.PUBLIC),
 		 ns("load"), mMaker.TypeIdent(TypeTag.VOID), List.nil(), List.nil(),
-		 List.nil(), parseBlock(0, "{" + sb + "}"), null);
+		 List.nil(), parseBlock("{" + sb + "}"), null);
 		root.defs = root.defs.append(load);
 		// JCBlock x = parseBlock(Flags.STATIC, "{" + sb + "}");
 		// x.pos = 1000;
@@ -141,8 +140,5 @@ public class IconsProcessor extends BaseProcessor {
 	}
 	public Set<String> getSupportedAnnotationTypes() {
 		return Set.of(IconAnn.class.getCanonicalName());
-	}
-	private static Name ns(String gen) {
-		return names.fromString(gen);
 	}
 }

@@ -17,7 +17,7 @@ public class LogCostTimeProcessor extends BaseProcessor<MethodSymbol> {
 		CL_Log = findClassSymbol("arc.util.Log");
 		CL_Time = findClassSymbol("arc.util.Time");
 	}
-	public void dealElement(MethodSymbol element) throws Throwable {
+	public void dealElement(MethodSymbol element) {
 		JCMethodDecl tree = trees.getTree(element);
 		addImport(element, CL_Log);
 		addImport(element, CL_Time);
@@ -30,20 +30,17 @@ public class LogCostTimeProcessor extends BaseProcessor<MethodSymbol> {
         Log.info("Costs in @ms", Time.elapsed());
     } */
 		tree.body.stats = List.of(mMaker.Exec(mMaker.Apply(List.nil(),
-			 mMaker.Select(mMaker.Ident(CL_Time), names.fromString("mark")),
+			 mMaker.Select(mMaker.Ident(CL_Time), ns("mark")),
 			 List.nil()
 			)
 		 ),
-		 mMaker.Try(mMaker.Block(0, tree.body.stats), List.nil(),
-			mMaker.Block(0,
-			 List.of(mMaker.Exec(mMaker.Apply(List.nil(),
-				 mMaker.Select(mMaker.Ident(CL_Log), names.fromString("info")),
-				 List.of(mMaker.Literal(anno.info()),
-					mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(CL_Time), names.fromString("elapsed")), List.nil())
-				 )
-				)
-			 ))
-			)
+		 mMaker.Try(PBlock(tree.body.stats), List.nil(),
+			PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
+			 mMaker.Select(mMaker.Ident(CL_Log), ns("info")),
+			 List.of(mMaker.Literal(anno.info()),
+				mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(CL_Time), ns("elapsed")), List.nil())
+			 )
+			)))
 		 )
 		);
 		print(tree);

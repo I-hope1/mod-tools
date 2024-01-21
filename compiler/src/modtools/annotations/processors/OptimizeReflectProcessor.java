@@ -16,12 +16,11 @@ import java.util.*;
 
 @AutoService({Processor.class})
 public class OptimizeReflectProcessor extends BaseProcessor<Element> implements ReflectUtils {
-
 	public void dealElement(Element element) {
 		if (element instanceof TypeElement) {
-			var                    unit      = trees.getPath(element).getCompilationUnit();
-			var                    classDecl = (JCClassDecl) trees.getTree(element);
-			ArrayList<JCStatement> stats     = new ArrayList<>();
+			var unit      = trees.getPath(element).getCompilationUnit();
+			var classDecl = (JCClassDecl) trees.getTree(element);
+			var stats     = new ArrayList<JCStatement>();
 			addImport(element, FIELD());
 			addImport(element, FIELD_UTILS());
 			classDecl.accept(new TreeScanner() {
@@ -35,7 +34,7 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 
 					String newFieldName = "F-" + ((JCLiteral) name).value;
 					JCVariableDecl x = (JCVariableDecl) trees.getTree(
-					 classDecl.sym.members().findFirst(names.fromString(newFieldName))
+					 classDecl.sym.members().findFirst(ns(newFieldName))
 					);
 					if (x == null) {
 						x = newFieldVariable(newFieldName, declaredType, name, classDecl, stats);
@@ -44,7 +43,7 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 					boolean isSetter = annotationByTree.isSetter();
 					variable.init = mMaker.Apply(null,
 					 mMaker.Select(mMaker.Ident(FIELD_UTILS()),
-						names.fromString((isSetter ? "set" : "get") + (variable.type.isPrimitive() ? capitalize("" + variable.type) : ""))),
+						ns((isSetter ? "set" : "get") + (variable.type.isPrimitive() ? capitalize("" + variable.type) : ""))),
 					 isSetter ? List.of(invocation.args.get(1), mMaker.Ident(x), invocation.args.get(3)) :
 						List.of(invocation.args.get(1), mMaker.Ident(x))
 					);
@@ -64,7 +63,7 @@ public class OptimizeReflectProcessor extends BaseProcessor<Element> implements 
 		stats.add(mMaker.Exec(mMaker.Assign(mMaker.Ident(x),
 		 mMaker.Apply(
 			List.nil(),
-			mMaker.Select(mMaker.Ident(FIELD_UTILS()), names.fromString("getFieldAccess")),
+			mMaker.Select(mMaker.Ident(FIELD_UTILS()), ns("getFieldAccess")),
 			List.of(clazz, name))
 		)));
 		return x;

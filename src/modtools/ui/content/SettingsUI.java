@@ -25,6 +25,7 @@ import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
+import modtools.ui.TopGroup.TSettings;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
@@ -107,7 +108,7 @@ public class SettingsUI extends Content {
 				() -> topGroup.drawPadElem,
 				() -> topGroup.setDrawPadElem(null),
 				topGroup::setDrawPadElem,
-				() -> topGroup.debugBounds);
+				() -> TSettings.debugBounds);
 			 float minZoom = Vars.renderer.minZoom;
 			 float maxZoom = Vars.renderer.maxZoom;
 			 SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
@@ -178,7 +179,7 @@ public class SettingsUI extends Content {
 	}
 	@DataBoolSetting
 	public void settingBool(Table t) {
-		boolean[] __ = {topGroup.checkUICount, topGroup.debugBounds, TopGroup.drawHiddenPad};
+		boolean[] __ = {TSettings.checkUICount, TSettings.debugBounds, TSettings.drawHiddenPad};
 	}
 	public static void addElemValueLabel(
 	 Table table, String text, Prov<Element> prov,

@@ -36,7 +36,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 			field.sym.complete();
 			map.put(element.getSimpleName() + "", field.sym);
 			String key = field.name.toString();
-			if (selector == null) selector = names.fromString("getBool");
+			if (selector == null) selector = ns("getBool");
 			field.init = mMaker.Apply(
 			 List.nil(),
 			 mMaker.Select(getData(anno.data(), decl.sym.type), selector),
@@ -75,7 +75,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 			// 下面这个代码是：SettingUI.bool("settingName", data, "key", node, _p -> node = _p)
 			buffer.add(mMaker.Exec(mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Ident(SettingUI()),
-				names.fromString("bool")),
+				ns("bool")),
 			 List.of(
 				mMaker.Ident(method.params.get(0))/* 参数t */,
 				mMaker.Literal(anno.prefix() + name.toLowerCase()),
@@ -85,7 +85,7 @@ public class BoolProcessor extends BaseProcessor<Element> implements DataUtils {
 				mMaker.Lambda(
 				 List.of(param),
 				 mMaker.Apply(List.nil(),
-					mMaker.Select(data, names.fromString("put")),
+					mMaker.Select(data, ns("put")),
 					List.of(
 					 key,
 					 mMaker.Assign(node, mMaker.Ident(param))

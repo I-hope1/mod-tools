@@ -25,7 +25,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 			field.init = mMaker.Apply(
 			 List.nil(),
 			 mMaker.Select(data,
-				names.fromString("get0xInt")),
+				ns("get0xInt")),
 			 List.of(
 				mMaker.Literal(key),
 				init
@@ -41,8 +41,8 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 			param.startPos = 0;
 			// Generate SettingsUI.colorBlock(t, "pad", data(), "padColor", padColor, c -> padColor = c.rgba());
 			JCExpressionStatement exec = mMaker.Exec(mMaker.Apply(List.nil(),
-			 mMaker.Select(mMaker.Ident(SettingUI()), names.fromString("colorBlock")),
-			 List.of(mMaker.Ident(names.fromString("t")),
+			 mMaker.Select(mMaker.Ident(SettingUI()), ns("colorBlock")),
+			 List.of(mMaker.Ident(ns("t")),
 				mMaker.Literal(key.replace("Color", "")),
 				data,
 				mMaker.Literal(key),
@@ -51,7 +51,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 				 List.of(param),
 				 mMaker.Assign(mMaker.Ident(field.sym),
 					mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(param),
-					 names.fromString("rgba")), List.nil()
+					 ns("rgba")), List.nil()
 					)
 				 )
 				 /* parseExpression(fieldName + "=t.enabled()") */

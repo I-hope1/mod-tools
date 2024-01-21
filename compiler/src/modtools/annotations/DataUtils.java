@@ -4,27 +4,36 @@ import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import modtools.annotations.builder.DataBoolFieldInit;
+import org.checkerframework.checker.units.qual.C;
 
 import static modtools.annotations.BaseProcessor.*;
 
-public interface DataUtils {
+public interface DataUtils extends NameString {
 	default JCMethodInvocation selfData(Type type) {
-		return mMaker.Apply(List.nil(), mMaker.Select(mMaker.This(type), names.fromString("data")), List.nil());
+		return mMaker.Apply(List.nil(), mMaker.Select(mMaker.This(type), ns("data")), List.nil());
 	}
 	ClassSymbol[] symbols = {
 	 null/* MySettings */,
-	 null/* SettingUI */
+	 null/* SettingUI */,
+	 null/* Data */
 	};
+	default ClassSymbol C_MySettings() {
+		return checkAndSet(0, "modtools.utils.MySettings");
+	}
 	default ClassSymbol SettingUI() {
-		if (symbols[1] == null)
-			symbols[1] = mSymtab.getClass(mSymtab.unnamedModule, names.fromString("modtools.ui.content.SettingsUI"));
-		return symbols[1];
+		return checkAndSet(1, "modtools.ui.content.SettingsUI");
+	}
+	default ClassSymbol C_Data() {
+		return checkAndSet(2, "modtools.utils.MySettings$Data");
+	}
+
+	private ClassSymbol checkAndSet(int i, String name) {
+		if (symbols[i] == null)
+			symbols[i] = mSymtab.getClass(mSymtab.unnamedModule, ns(name));
+		return symbols[i];
 	}
 	default JCFieldAccess internalData(String key) {
-		if (symbols[0] == null)
-			symbols[0] = mSymtab.getClass(mSymtab.unnamedModule, names.fromString("modtools.utils.MySettings"));
-		return mMaker.Select(mMaker.Ident(symbols[0]), names.fromString(key));
+		return mMaker.Select(mMaker.Ident(C_MySettings()), ns(key));
 	}
 	default JCExpression getData(String data, Type type) {
 		return data.isEmpty() ? selfData(type) : internalData(data);

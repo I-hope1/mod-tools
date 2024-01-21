@@ -6,6 +6,7 @@ import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.Name;
 
 import javax.lang.model.element.*;
 import java.util.*;
@@ -14,7 +15,7 @@ import java.util.regex.Pattern;
 import static modtools.annotations.BaseProcessor.*;
 
 @SuppressWarnings("UnusedReturnValue")
-public interface TreeUtils extends ParseUtils {
+public interface TreeUtils extends ParseUtils, NameString {
 	/**
 	 * 检测字段是否存在
 	 *
@@ -37,6 +38,12 @@ public interface TreeUtils extends ParseUtils {
 		classDecl.defs = classDecl.defs.prepend(x);
 		return x;
 	}
+	default JCVariableDecl addField0(JCClassDecl classDecl, int flags, Type type, String name, JCExpression init) {
+		JCVariableDecl x = makeVar0(flags, type, name, init, classDecl.sym);
+		x.pos = 0;
+		classDecl.defs = classDecl.defs.prepend(x);
+		return x;
+	}
 	default JCVariableDecl makeVar(long flags, Type type, String name, String init, Symbol sym) {
 		return makeVar0(flags, type, name, init == null ? null : parseExpression(init), sym);
 	}
@@ -49,7 +56,7 @@ public interface TreeUtils extends ParseUtils {
 		if (!pattern.matcher(name).find())
 			throw new IllegalArgumentException("Name(" + name + ") contains illegal char.");
 		VarSymbol varSymbol = new VarSymbol(
-		 flags, names.fromString(name), type, sym
+		 flags, ns(name), type, sym
 		);
 		if (enterScope && sym instanceof ClassSymbol csm) {
 			csm.members_field.enter(varSymbol);
@@ -64,17 +71,17 @@ public interface TreeUtils extends ParseUtils {
 	}
 
 	default Type findTypeBoot(String name) {
-		return mSymtab.getClass(mSymtab.java_base, names.fromString(name)).type;
+		return mSymtab.getClass(mSymtab.java_base, ns(name)).type;
 	}
 	default ClassType findType(String name) {
-		return (ClassType) mSymtab.getClass(mSymtab.unnamedModule, names.fromString(name)).type;
+		return (ClassType) mSymtab.getClass(mSymtab.unnamedModule, ns(name)).type;
 	}
 	default ClassSymbol findClassSymbolByBoot(String name) {
-		return mSymtab.getClass(mSymtab.java_base, names.fromString(name));
+		return mSymtab.getClass(mSymtab.java_base, ns(name));
 	}
 
 	default ClassSymbol findClassSymbol(String name) {
-		return mSymtab.getClass(mSymtab.unnamedModule, names.fromString(name));
+		return mSymtab.getClass(mSymtab.unnamedModule, ns(name));
 	}
 
 	default void addImport(Element element, ClassType classType) {

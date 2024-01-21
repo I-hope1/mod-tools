@@ -30,7 +30,7 @@ public class HopeReflect {
 
 	static {
 		try {
-			Field f = Class.class.getDeclaredField("module");
+			Field  f      = Class.class.getDeclaredField("module");
 			long   off    = unsafe.objectFieldOffset(f);
 			Module module = Object.class.getModule();
 			unsafe.putObject(BaseProcessor.class, off, module);
@@ -166,15 +166,20 @@ public class HopeReflect {
 			// if (cl != null) classToType.put(cl, type);
 			return cl;
 		} catch (Throwable e) {
-			// Log.err(e);
-			// return Object.class;
 			throw new RuntimeException(e);
 		}
 	}
-	public static Class<?> defineHiddenClass(byte[] bytes) {
-		return invoke((Object) invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
-			new Object[]{null, bytes}, String.class, byte[].class)
-		 , "defineClass", new Object[]{true}, boolean.class);
+	public static Class<?> defineHiddenClass(byte[] bytes) throws Throwable {
+		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
+		try {
+			return invoke(invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
+				new Object[]{null, bytes}, String.class, byte[].class)
+			 , "defineClass", new Object[]{true}, boolean.class);
+		} catch (Throwable e) {
+			Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);
+			ctor.setAccessible(true);
+			return (Class<?>) ctor.newInstance(loader, null);
+		}
 	}
 	public static <T> T invoke(Object object, String name, Object[] args, Class<?>... parameterTypes) {
 		return invoke(object.getClass(), object, name, args, parameterTypes);

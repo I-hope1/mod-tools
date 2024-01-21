@@ -20,7 +20,6 @@ import arc.util.*;
 import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
-import arc.util.serialization.*;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import mindustry.game.EventType;
@@ -36,7 +35,6 @@ import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
@@ -64,7 +62,6 @@ import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.ui.content.debug.Tester.Settings.*;
-import static modtools.utils.Tools.format;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
@@ -582,7 +579,7 @@ public class Tester extends Content {
 	public final LogHandler logHandler = new DefaultLogHandler() {
 		public void log(LogLevel level, String text) {
 			if (level == LogLevel.err) super.log(level, text);
-			logs.add(format((
+			logs.add(Tools.format((
 											 level == LogLevel.debug ? "D" :
 												level == LogLevel.info ? "I" :
 												 level == LogLevel.warn ? "W" :

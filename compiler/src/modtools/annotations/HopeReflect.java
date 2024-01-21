@@ -176,9 +176,8 @@ public class HopeReflect {
 				new Object[]{null, bytes}, String.class, byte[].class)
 			 , "defineClass", new Object[]{true}, boolean.class);
 		} catch (Throwable e) {
-			Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);
-			ctor.setAccessible(true);
-			return (Class<?>) ctor.newInstance(loader, null);
+			Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);;
+			return (Class<?>) lookup.unreflectConstructor(ctor).invoke(loader, null);
 		}
 	}
 	public static <T> T invoke(Object object, String name, Object[] args, Class<?>... parameterTypes) {

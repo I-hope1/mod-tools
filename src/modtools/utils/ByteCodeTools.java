@@ -403,25 +403,6 @@ public class ByteCodeTools {
 		else return ARETURN;
 	}
 
-	public static <T, V> Func2<V, ArrayList<Object>, T> getFunc(Class<V> cls, String name, Class<?>... args) {
-		Method m;
-		try {
-			m = cls.getDeclaredMethod(name, args);
-		} catch (NoSuchMethodException e) {
-			throw new RuntimeException(e);
-		}
-		m.setAccessible(true);
-
-		return (ins, _args) -> {
-			try {
-				return (T) m.invoke(ins, _args);
-			} catch (Exception e) {
-				Log.err(e);
-				return null;
-			}
-		};
-	}
-
 	@Retention(RetentionPolicy.RUNTIME)
 	public @interface Exclude {}
 

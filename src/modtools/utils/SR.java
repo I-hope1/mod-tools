@@ -220,23 +220,4 @@ public class SR<T> {
 		R apply(P p) throws Throwable;
 	}
 
-	public static class MatchSR<T, R> extends SR<T> {
-		public MatchSR(T value) {
-			super(value);
-		}
-		R matchValue;
-		/**
-		 * @param cons 如果满足就执行
-		 * @throws RuntimeException 当执行后抛出
-		 */
-		public <P extends T> MatchSR<T, R> match(Class<P> cls, Function<P, R> cons) throws SatisfyException {
-			if (matchValue == null && cls.isInstance(value)) {
-				matchValue = cons.apply(cls.cast(value));
-			}
-			return this;
-		}
-		public R matchValue() {
-			return matchValue;
-		}
-	}
 }

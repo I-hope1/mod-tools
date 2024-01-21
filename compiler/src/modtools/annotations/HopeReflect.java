@@ -172,20 +172,18 @@ public class HopeReflect {
 	}
 	public static Class<?> defineHiddenClass(byte[] bytes) throws Throwable {
 		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
+			Object definer;
 		try {
-			return invoke(invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
-				new Object[]{null, bytes}, String.class, byte[].class)
-			 , "defineClass", new Object[]{true}, boolean.class);
+			definer = invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
+			 new Object[]{null, bytes}, String.class, byte[].class);
 		} catch (Throwable e) {
-			Method definer = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
+			Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
 			 Class.forName("jdk.internal.util.ClassFileDumper"));
-			definer.setAccessible(true);
+			definerM.setAccessible(true);
 			var dumper = getAccess(Lookup.class, null, "DEFAULT_DUMPER");
-			return (Class<?>) definer.invoke(lookup, null, bytes, Set.of(), dumper);
-			/* Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);;
-			AccessSetter.setAccess(ctor);
-			return (Class<?>) ctor.newInstance(loader, null); */
+			definer = definerM.invoke(lookup, null, bytes, Set.of(), dumper);
 		}
+		return invoke(definer, "defineClass", new Object[]{true}, boolean.class);
 	}
 	public static <T> T invoke(Object object, String name, Object[] args, Class<?>... parameterTypes) {
 		return invoke(object.getClass(), object, name, args, parameterTypes);

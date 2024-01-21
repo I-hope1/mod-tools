@@ -61,11 +61,7 @@ dependencies {
 }
 
 mindustry {
-	dependency {}
-	client {}
-	meta << ModMeta(
-			version: version
-	)
+	meta << ModMeta(version: version)
 	meta.displayName = "mod-tools"
 	def name = project.archivesBaseName
 	deploy {

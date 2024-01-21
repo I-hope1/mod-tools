@@ -10,7 +10,7 @@ public enum E_JSFuncEdit implements ISettings {
 	final_modify;
 
 	static {
-		for (ISettings value : values()) {
+		for (E_JSFuncEdit value : values()) {
 			value.def(false);
 		}
 	}

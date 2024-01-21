@@ -35,6 +35,7 @@ public class HopeReflect {
 			Module module = Object.class.getModule();
 			unsafe.putObject(BaseProcessor.class, off, module);
 			unsafe.putObject(HopeReflect.class, off, module);
+			unsafe.putObject(AccessSetter.class, off, module);
 			// unsafe.putObject(Reflect.class, off, module);
 			Class<?> reflect = Class.forName("jdk.internal.reflect.Reflection");
 			Map      map     = (Map) lookup.findStaticGetter(reflect, "fieldFilterMap", Map.class).invokeExact();
@@ -177,7 +178,8 @@ public class HopeReflect {
 			 , "defineClass", new Object[]{true}, boolean.class);
 		} catch (Throwable e) {
 			Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);;
-			return (Class<?>) lookup.unreflectConstructor(ctor).invoke(loader, null);
+			AccessSetter.setAccess(ctor);
+			return (Class<?>) ctor.newInstance(loader, null);
 		}
 	}
 	public static <T> T invoke(Object object, String name, Object[] args, Class<?>... parameterTypes) {
@@ -299,6 +301,10 @@ public class HopeReflect {
 			throw new RuntimeException(e);
 		}
 	}
-	public static class NULL {
+	public static class NULL {}
+	static class AccessSetter {
+		public static void setAccess(AccessibleObject obj) {
+			obj.setAccessible(true);
+		}
 	}
 }

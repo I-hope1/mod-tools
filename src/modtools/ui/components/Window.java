@@ -33,7 +33,7 @@ import modtools.ui.style.TintDrawable;
 import modtools.utils.*;
 import modtools.struct.MySet;
 import modtools.utils.JSFunc.JColor;
-import modtools.utils.array.ArrayUtils;
+import modtools.utils.ArrayUtils;
 import modtools.utils.ui.search.*;
 
 

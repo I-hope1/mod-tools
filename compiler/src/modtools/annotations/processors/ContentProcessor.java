@@ -52,7 +52,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 
 		loadMethod.body.stats = statements.toList();
-		print(loadMethod);
+		// print(loadMethod);
 	}
 
 	public void dealElement(ClassSymbol element) {

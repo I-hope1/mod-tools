@@ -44,7 +44,7 @@ public class HopeConstant {
 		 Lookup.class.getDeclaredMethod("getDirectMethod", byte.class, Class.class, Class.forName("java.lang.invoke.MemberName"), Lookup.class));
 	}
 	public interface ANDROID {
-		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = (Constructor) nl(() ->
+		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = nl(() ->
 		 Class.forName("java.lang.invoke.MethodHandleImpl").getDeclaredConstructor(long.class, int.class, MethodType.class));
 
 		long ART_METHOD = FieldUtils.fieldOffset(nl(() ->
@@ -63,11 +63,11 @@ public class HopeConstant {
 		Method null_method = nl(() -> Object.class.getMethod("toString"));
 	}
 
-	static <R> R nl(CProv<R> prov) {
+	static <R> R nl(CProv<?> prov) {
 		try {
-			R r = prov.get();
+			Object r = prov.get();
 			if (r instanceof AccessibleObject ao) ao.setAccessible(true);
-			return r;
+			return (R)r;
 		} catch (Throwable e) {
 			return null;
 		}

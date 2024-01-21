@@ -68,21 +68,15 @@ public class MyFonts {
 		FreeTypeFontData data = new MyFontData();
 		generator.generateData(parameter, data);
 
-		Font font = new Font(data,
-		 (Seq<TextureRegion>) Reflect.get(FreeTypeFontData.class, data, "regions"),
-		 false) {
+		Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, data, "regions");
+		Font font = new Font(data, regions, false) {
 			public FontCache newFontCache() {
 				return new MyFontCache(this);
 			}
 		};
 		font.setOwnsTexture(parameter.packer == null);
-		// Font font = generator.generateFont(parameter, new MyFontData());
-
-		// Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, font.getData(), "regions");
+		// 添加默认字体，如果font没有就去def里找
 		font.getRegions().add(Fonts.def.getRegion());
-		// Fonts.def.getRegion().texture.setFilter(TextureFilter.linear, TextureFilter.linear);
-		// font.getRegion().texture.setFilter(TextureFilter.linear);
-		// font.getRegion().texture.setFilter(TextureFilter.mipMapLinearLinear, TextureFilter.mipMapLinearLinear); // linear filtering in nearest mipmap image
 		return font;
 	}
 

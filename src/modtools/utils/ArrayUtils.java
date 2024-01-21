@@ -1,4 +1,4 @@
-package modtools.utils.array;
+package modtools.utils;
 
 import arc.func.Func;
 import arc.struct.ObjectMap;

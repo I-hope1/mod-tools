@@ -97,7 +97,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 			unit.namedImportScope.importType(sym.owner.members(), sym.owner.members(), sym);
 
 			var list = new ArrayList<>(unit.defs);
-			list.add(1, mMaker.Import(mMaker.QualIdent(sym), false));
+			list.add(1, mMaker.Import((JCFieldAccess) mMaker.QualIdent(sym), false));
 			unit.defs = List.from(list);
 		}
 	}

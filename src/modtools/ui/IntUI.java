@@ -30,7 +30,7 @@ import modtools.ui.windows.ColorPicker;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.utils.array.ArrayUtils;
+import modtools.utils.ArrayUtils;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 

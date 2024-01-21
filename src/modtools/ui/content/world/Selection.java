@@ -40,7 +40,7 @@ import modtools.ui.effect.MyDraw;
 import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.array.ArrayUtils;
+import modtools.utils.ArrayUtils;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.world.*;
 

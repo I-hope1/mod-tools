@@ -7,6 +7,7 @@ import modtools.ui.content.ui.*;
 import modtools.ui.content.ui.design.DesignContent;
 import modtools.ui.content.world.*;
 
+@SuppressWarnings("unused")
 @ContentInit
 public class Contents {
 	public static SettingsUI    settings_ui;

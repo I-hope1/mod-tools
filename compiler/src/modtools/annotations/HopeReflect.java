@@ -177,9 +177,14 @@ public class HopeReflect {
 				new Object[]{null, bytes}, String.class, byte[].class)
 			 , "defineClass", new Object[]{true}, boolean.class);
 		} catch (Throwable e) {
-			Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);;
+			Method definer = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
+			 Class.forName("jdk.internal.util.ClassFileDumper"));
+			definer.setAccessible(true);
+			var dumper = getAccess(Lookup.class, null, "DEFAULT_DUMPER");
+			return (Class<?>) definer.invoke(lookup, null, bytes, Set.of(), dumper);
+			/* Constructor<?> ctor = Class.class.getDeclaredConstructor(ClassLoader.class, Class.class);;
 			AccessSetter.setAccess(ctor);
-			return (Class<?>) ctor.newInstance(loader, null);
+			return (Class<?>) ctor.newInstance(loader, null); */
 		}
 	}
 	public static <T> T invoke(Object object, String name, Object[] args, Class<?>... parameterTypes) {

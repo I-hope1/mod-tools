@@ -19,7 +19,7 @@ import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
 import modtools.events.ExecuteTree;
-import modtools.events.ExecuteTree.TaskNode;
+import modtools.events.TaskNode;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;

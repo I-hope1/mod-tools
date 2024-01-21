@@ -37,7 +37,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			statements.add(
 			 mMaker.Exec(mMaker.Assign(
 				mMaker.Ident((Name) field.getSimpleName()),
-				mMaker.NewClass(null, List.nil(),  variableTree.vartype, List.nil(), null)
+				mMaker.NewClass(null, List.nil(), variableTree.vartype, List.nil(), null)
 			 )));
 
 			TypeSymbol   contentTypeSymbol = variableTree.vartype.type.tsym;
@@ -78,7 +78,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		JCMethodInvocation initValue = createInitValue(parent, literalName);
 
-		addConstantField(settingsTree, dataClass.type, "data", initValue);
+		if (settings.members().findFirst(ns("data"), t -> t.kind == Kind.VAR) == null)
+			addConstantField(settingsTree, dataClass.type, "data", initValue);
 
 		settingsTree.defs.stream()
 		 .filter(t -> t instanceof JCMethodDecl m1 && m1.name.equals(names.init) && m1.params.size() == 1)
@@ -91,11 +92,13 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).name)))
 			 );
 		 });
+
+		// print(trees.getPath(settings).getCompilationUnit());
 	}
 
 	private void addDataMethod(JCClassDecl settingsTree) {
 		JCBlock body = mMaker.Block(0, List.of(mMaker.Return(mMaker.Ident(ns("data")))));
-		JCMethodDecl dataMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC | Flags.FINAL),
+		JCMethodDecl dataMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC),
 		 ns("data"),
 		 mMaker.TypeApply(mMaker.Ident(dataClass), List.nil()),
 		 List.nil(), List.nil(), List.nil(),
@@ -120,12 +123,12 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	private void addTypeMethod(JCClassDecl settingsTree) {
-		JCBlock body2 = mMaker.Block(0, List.of(mMaker.Return(mMaker.Select(mMaker.This(settingsTree.sym.type), ns("type")))));
-		JCMethodDecl typeMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC | Flags.FINAL),
+		JCBlock body = mMaker.Block(0, List.of(mMaker.Return(mMaker.Select(mMaker.This(settingsTree.sym.type), ns("type")))));
+		JCMethodDecl typeMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC),
 		 ns("type"),
 		 mMaker.Ident(mSymtab.classType.tsym),
 		 List.nil(), List.nil(), List.nil(),
-		 body2, null);
+		 body, null);
 		settingsTree.defs = settingsTree.defs.append(typeMethod);
 	}
 

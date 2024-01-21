@@ -27,6 +27,7 @@ import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
+import modtools.events.ISettings;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.IMenu;
@@ -984,7 +985,7 @@ public class Selection extends Content {
 		}
 	}
 
-	public enum Settings implements ISettings{
+	public enum Settings implements ISettings {
 		tile, building, unit, bullet, others
 		/* other */, focusOnWorld
 	}

@@ -1,4 +1,3 @@
-
 plugins {
 	id 'java'
 	id "io.github.liplum.mgpp" version "1.3.2"
@@ -6,6 +5,28 @@ plugins {
 group 'mod-tools'
 version '1.4.4'
 
+
+static def export(options) {
+	options.compilerArgs.addAll(
+			"--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
+			"--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED",
+			"--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED",
+			// compiler
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
+			"--add-exports", "jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
+			"--add-exports", "java.base/sun.reflect.annotation=ALL-UNNAMED",
+			"--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED",
+			"--add-exports", "jdk.jfr/jdk.jfr.internal=ALL-UNNAMED"
+	)
+}
 
 allprojects {
 	ext {
@@ -20,11 +41,7 @@ allprojects {
 //		sourceCompatibility = 17
 		targetCompatibility = 9
 		sourceCompatibility = 9
-		options.compilerArgs.addAll(
-				"--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-				"--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED",
-				"--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED"
-		)
+		export(options)
 	}
 	repositories {
 		mavenLocal()

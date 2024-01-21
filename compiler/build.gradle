@@ -2,24 +2,6 @@ apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
 
-tasks.withType(JavaCompile).configureEach {
-	options.compilerArgs.addAll(
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
-			"--add-exports", "java.base/sun.reflect.annotation=ALL-UNNAMED",
-			"--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED",
-			"--add-exports", "jdk.jfr/jdk.jfr.internal=ALL-UNNAMED"
-	)
-}
-
 dependencies {
 	implementation project(":annotations")
 

@@ -12,7 +12,7 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.events.ExecuteTree;
+import modtools.events.*;
 import modtools.events.ExecuteTree.*;
 import modtools.ui.*;
 import modtools.ui.menu.MenuList;
@@ -45,7 +45,7 @@ public class Executor extends Content {
 		}).size(72, 42);
 		ElementUtils.addCodedBtn(ui.cont, "status", 1,
 		 i -> statusCode = i, () -> statusCode,
-		 StatusEnum.values());
+		 StatusList.values());
 		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestCode(code -> ExecuteTree.context(customTask(), () -> {
 				BaseFunction scope = new BaseFunction(JSRequest.topScope, new BaseFunction());

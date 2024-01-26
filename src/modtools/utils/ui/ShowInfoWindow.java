@@ -388,7 +388,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			try {
 				l.setFieldValue(b);
 			} catch (Throwable e) {
-				IntUI.showException(e).setPosition(Core.input.mouse());
+				IntUI.showException(e).moveToMouse();
 			}
 			l.setVal(b);
 		});

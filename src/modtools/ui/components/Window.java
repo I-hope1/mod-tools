@@ -68,9 +68,7 @@ public class Window extends Table {
 	public static Window frontWindow;
 
 	static {
-		IntVars.addResizeListener(() -> {
-			all.each(Window::display);
-		});
+		IntVars.addResizeListener(() -> all.each(Window::display));
 		Tools.TASKS.add(() -> frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1));
 	}
 
@@ -105,6 +103,7 @@ public class Window extends Table {
 
 	public Label title;
 
+	/** 是否为一个完整的Window  */
 	public final boolean full;
 
 	/** 是否置顶 */
@@ -217,7 +216,7 @@ public class Window extends Table {
 		display();
 	}
 	public void act(float delta) {
-		super.act(delta);
+		Tools.runIgnoredException(() -> super.act(delta));
 		if (sticky) toFront();
 		sclListener.disabled0 = isMaximize;
 		moveListener.disabled = sclListener.scling;
@@ -271,21 +270,6 @@ public class Window extends Table {
 		if (!noButtons) add(buttons).name("buttons").growX().row();
 	}
 
-	public void noButtons(boolean val) {
-		if (noButtons == val) return;
-		noButtons = val;
-		if (noButtons) {
-			buttons.remove();
-			//			buttons.clear();
-			//			buttons = null;
-		} else {
-			if (buttons.parent != null) {
-				buttons.remove();
-			}
-			add(buttons).growX().row();
-		}
-	}
-
 	public void display() {
 		display(x, y);
 	}
@@ -318,11 +302,11 @@ public class Window extends Table {
 		return cache = isMinimize || cont == null ? cache : ElementUtils.screenshot(cont, true, null);
 	}
 
+
 	public float getPrefWidth() {
 		// 默认最小宽度为顶部的最小宽度
 		return Mathf.clamp(super.getPrefWidth(), minWidth, graphics.getWidth());
 	}
-
 	public float getPrefHeight() {
 		return Mathf.clamp(super.getPrefHeight(), minHeight, graphics.getHeight());
 	}
@@ -330,6 +314,7 @@ public class Window extends Table {
 	private static final Prov<Action>
 	 defaultShowAction = () -> Actions.sequence(Actions.alpha(0), Actions.fadeIn(0.2f, Interp.fade)),
 	 defaultHideAction = () -> Actions.fadeOut(0.2f, Interp.fade);
+
 	protected InputListener ignoreTouchDown = new InputListener() {
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			event.cancel();
@@ -515,7 +500,6 @@ public class Window extends Table {
 	public  Rect    lastRect        = new Rect();
 	private boolean disabledActions = true;
 
-
 	public ObjectSet<RunListener> maxlisteners = new ObjectSet<>();
 	public boolean                isMaximize   = false, lastMaximize = false;
 
@@ -663,12 +647,11 @@ public class Window extends Table {
 		return this;
 	}
 
-
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
 		Draw.alpha(parentAlpha);
 		MyDraw.blurRect(x, y, width, height);
-		super.draw();
+		Tools.runLoggedException(super::draw);
 	}
 	/** Adds a listener for back/escape keys to hide this dialog. */
 	public void closeOnBack() {
@@ -691,6 +674,10 @@ public class Window extends Table {
 	 */
 	public FillTable addFillTable(Cons<FillTable> cons) {
 		return new FillTable(Styles.black5, cons);
+	}
+
+	public Window moveToMouse() {
+		return setPosition(Core.input.mouse());
 	}
 
 	public class FillTable extends Table {
@@ -748,7 +735,6 @@ public class Window extends Table {
 	public interface DelayDisposable extends IDisposable {
 	}
 
-
 	public static class DisWindow extends Window implements IDisposable {
 		public DisWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
@@ -761,29 +747,6 @@ public class Window extends Table {
 		}
 		public DisWindow(String title) {
 			super(title);
-		}
-	}
-
-	/** show时移到鼠标位置 */
-	public static class FollowWindow extends Window implements PopupWindow {
-		public FollowWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
-			super(title, minWidth, minHeight, full, noButtons);
-		}
-		public FollowWindow(String title, float width, float height, boolean full) {
-			super(title, width, height, full);
-		}
-		public FollowWindow(String title, float width, float height) {
-			super(title, width, height);
-		}
-		public FollowWindow(String title) {
-			super(title);
-		}
-		{
-			shown(() -> {
-				Core.app.post(() -> {
-					setPosition(Core.input.mouse(), Align.center);
-				});
-			});
 		}
 	}
 

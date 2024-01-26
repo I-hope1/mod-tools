@@ -4,6 +4,7 @@ import arc.func.*;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.HopeConstant.ANDROID;
+import modtools.utils.Tools;
 import modtools.utils.Tools.*;
 
 import java.lang.invoke.*;
@@ -21,9 +22,7 @@ public class InitMethodHandle {
 	public static final byte REF_invokeSpecial = 7;
 
 	static {
-		try {
-			UNSAFE.openModule(Object.class.getModule(), "java.lang.invoke");
-		} catch (Throwable ignored) {}
+		Tools.runIgnoredException(() -> UNSAFE.openModule(Object.class.getModule(), "java.lang.invoke"));
 	}
 
 	public static MethodHandle findInit
@@ -51,10 +50,9 @@ public class InitMethodHandle {
 		};
 		return findSpecial(refc, maker, resolver, specialCaller);
 	}
-	public static <E extends Throwable> MethodHandle findSpecial
-	 (Class<?> refc, CProvT<Object, E> maker, Cons<Object> resolver,
-		Class<?> specialCaller)
-	 throws IllegalAccessException, InvocationTargetException, E {
+	public static MethodHandle findSpecial
+	 (Class<?> refc, CProvT<Object, Throwable> maker, Cons<Object> resolver,
+		Class<?> specialCaller) throws Throwable {
 		Lookup specialLookup = MyReflect.lookup.in(specialCaller);
 
 		assert RESOLVE_OR_FAIL != null;

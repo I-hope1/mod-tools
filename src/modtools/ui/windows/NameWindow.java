@@ -32,7 +32,7 @@ public class NameWindow extends Window implements PopupWindow {
 		if (valid != null) namef.setValidator(valid);
 		namef.setText(text);
 
-		setPosition(Core.input.mouse());
+		moveToMouse();
 	}
 
 	public Window show() {

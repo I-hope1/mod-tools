@@ -20,7 +20,6 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
-import modtools.annotations.DataObjectInit;
 import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
@@ -483,7 +482,7 @@ public final class TopGroup extends WidgetGroup {
 	}
 
 
-	boolean KAL_once = false;
+	boolean K_once = false;
 
 	/**
 	 * 用于切换窗口的事件侦听器
@@ -502,7 +501,7 @@ public final class TopGroup extends WidgetGroup {
 				currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
 			}
 			isSwitchWindows = true;
-			if (!KAL_once) {
+			if (!K_once) {
 				resolveOnce();
 			}
 		}
@@ -516,7 +515,7 @@ public final class TopGroup extends WidgetGroup {
 			// acquireShownWindows();
 			if (shownWindows.isEmpty()) return false;
 			if ((keycode == KeyCode.tab && Core.input.ctrl()) /* || (Vars.mobile && keycode == KeyCode.volumeDown) */) {
-				if (!KAL_once) {
+				if (!K_once) {
 					resolveOnce();
 				}
 				scene.setKeyboardFocus(TopGroup.this);
@@ -565,7 +564,7 @@ public final class TopGroup extends WidgetGroup {
 	}
 	private void resetSwitch() {
 		isSwitchWindows = false;
-		KAL_once = false;
+		K_once = false;
 	}
 
 
@@ -576,7 +575,7 @@ public final class TopGroup extends WidgetGroup {
 		}
 	}
 	private void resolveOnce() {
-		KAL_once = true;
+		K_once = true;
 		end.clearChildren();
 		Table paneTable = new Table();
 		end.pane(paneTable).grow().with(

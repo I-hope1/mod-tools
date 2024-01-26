@@ -119,7 +119,6 @@ public class ModTools extends Mod {
 		if (OS.isWindows || OS.isMac) {
 			addFileDragListener();
 		}
-		;
 		IntVars.async(() -> {
 			IntUI.load();
 			AllTutorial.init();

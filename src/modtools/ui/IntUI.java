@@ -718,7 +718,7 @@ public class IntUI {
 	static ExceptionPopup lastException;
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		return (lastException != null && lastException.isShown() ? lastException : new ExceptionPopup(exc, text)).setPosition(Core.input.mouse());
+		return (lastException != null && lastException.isShown() ? lastException : new ExceptionPopup(exc, text)).moveToMouse();
 	}
 
 	public static Window showInfoFade(String info) {
@@ -766,7 +766,7 @@ public class IntUI {
 		});
 		window.keyDown(KeyCode.escape, window::hide);
 		window.keyDown(KeyCode.back, window::hide);
-		window.setPosition(Core.input.mouse());
+		window.moveToMouse();
 		return window;
 	}
 

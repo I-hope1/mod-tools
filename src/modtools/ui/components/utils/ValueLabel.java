@@ -60,7 +60,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			 () -> val instanceof Element ? (Element) val : null);
 		} else if (Cell.class.isAssignableFrom(type)) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
-			 () -> val instanceof Cell<?> cell ?  cell.get() : null);
+			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
 
 		IntUI.addShowMenuListenerp(this, this::getMenuLists);
@@ -91,8 +91,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		return DisabledList.withd(Icon.infoCircleSmall, "@details",
 		 () -> type.isPrimitive() && val == null,
 		 () -> {
-			showNewInfo(el, val, type);
-		});
+			 showNewInfo(el, val, type);
+		 });
 	}
 
 	protected boolean isStatic;
@@ -144,34 +144,17 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 	@SuppressWarnings("ConstantConditions")
 	public CharSequence dealVal(Object val) {
-		if (val instanceof ObjectMap) {
+		if (val instanceof ObjectMap || val instanceof Map) {
 			StringBuilder sb = new StringBuilder();
 			sb.append('{');
 			boolean checkTail = false;
-			for (var o : ((ObjectMap<?, ?>) val)) {
-				sb.append(dealVal(o.key));
-				sb.append('=');
-				sb.append(dealVal(o.value));
-				sb.append(getArrayDelimiter());
+			if (val instanceof ObjectMap map) for (var o : ((ObjectMap<?, ?>) val)) {
+				appendMap(sb, o.key, o.value);
 				checkTail = true;
 				if (isTruncate(sb.length())) break;
 			}
-			if (checkTail) sb.deleteCharAt(sb.length() - 2);
-			sb.append('}');
-
-			// return mark_c_map + sb;
-			setColor(Syntax.c_map);
-			return sb;
-		}
-		if (val instanceof Map) {
-			StringBuilder sb = new StringBuilder();
-			sb.append('{');
-			boolean checkTail = false;
-			for (var entry : (Set<Entry>) ((Map) val).entrySet()) {
-				sb.append(entry.getKey());
-				sb.append('=');
-				sb.append(dealVal(entry.getValue()));
-				sb.append(getArrayDelimiter());
+			else for (var entry : (Set<Entry>) ((Map) val).entrySet()) {
+				appendMap(sb, entry.getKey(), entry.getValue());
 				checkTail = true;
 				if (isTruncate(sb.length())) break;
 			}
@@ -268,6 +251,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		setColor(mainColor);
 
 		return text;
+	}
+	private void appendMap(StringBuilder sb, Object key, Object value) {
+		sb.append(dealVal(key));
+		sb.append('=');
+		sb.append(dealVal(value));
+		sb.append(getArrayDelimiter());
 	}
 	private static String getArrayDelimiter() {
 		return MySettings.D_JSFUNC.getString("arrayDelimiter", JSFunc.defaultDelimiter);
@@ -418,7 +407,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		list.add(DisabledList.withd(Icon.editSmall, "Select and Replace",
 		 topGroup::isSelecting,
 		 () -> topGroup.requestSelectElem(TopGroup.defaultDrawer, callback)
-		 ));
+		));
 	}
 
 	public abstract Object getObject();

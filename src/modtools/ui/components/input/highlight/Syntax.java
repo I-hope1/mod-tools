@@ -318,15 +318,15 @@ public class Syntax {
 		}
 	}
 
-	/** key(字符char，用于判断是否为字符串) -> value(boolean是否为多行) */
-	@SuppressWarnings("StaticMethods")
-	public static final IntMap<Boolean> chars = IntMap.of(
-	 '\'', false,
-	 '"', false,
-	 '`', true
-	);
 
 	public class DrawString extends DrawTask {
+		/** key(字符char，用于判断是否为字符串) -> value(boolean是否为多行)
+		 * 目前的rhino都是单行 */
+		public static final IntMap<Boolean> chars = IntMap.of(
+		 '\'', false,
+		 '"', false,
+		 '`', false
+		);
 		public DrawString(Color color) {
 			this(color, chars);
 		}

@@ -107,7 +107,7 @@ public interface INFO_DIALOG {
 				cons.get(this);
 				// addCloseButton();
 				hidden(this::clearAll);
-				setPosition(Core.input.mouse());
+				moveToMouse();
 				show();
 			}
 

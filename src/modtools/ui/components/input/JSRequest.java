@@ -128,7 +128,7 @@ public class JSRequest {
 				callback.get(area.getText());
 				hide();
 			}).size(120, 45);
-			setPosition(Core.input.mouse());
+			moveToMouse();
 		}}.show();
 	}
 }

@@ -13,7 +13,6 @@ public class JSFuncClass extends NativeJavaClass {
 	public JSFuncClass(Scriptable scope) {
 		super(scope, JSFunc.class, true);
 	}
-	@CostTimeLog
 	protected void initMembers() {
 		super.initMembers();
 		Object members = Reflect.get(NativeJavaObject.class, this, "members");

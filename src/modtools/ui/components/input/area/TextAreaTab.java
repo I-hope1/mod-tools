@@ -23,6 +23,7 @@ import modtools.ui.*;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.InsideTable;
 import modtools.ui.components.input.highlight.*;
+import modtools.utils.Tools;
 
 import java.util.regex.*;
 
@@ -173,8 +174,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public MyTextArea(String text) {
 			super("", HopeStyles.defaultMultiArea);
-			focusTraversal = false;
-			onlyFontChars = false;
+			Tools.runIgnoredException(() -> {
+				focusTraversal = false;
+				onlyFontChars = false;
+			});
 			setText(text);
 		}
 		public float lineHeight() {
@@ -544,7 +547,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public MyTextArea area;
 
 		public LinesShow(MyTextArea area) {
-			super(Tex.paneRight);
+			super(HopeTex.paneRight);
 			image().color(Color.gray).marginRight(6f);
 			this.area = area;
 		}

@@ -14,9 +14,9 @@ import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
+import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
-import modtools.ui.IntUI;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 import static modtools.ui.windows.ColorPicker.*;
@@ -194,7 +194,7 @@ public class DrawablePicker extends Window {
 			}).get();
 
 			if (alpha) {
-				t.stack(new Image(Tex.alphaBgLine), new Element() {
+				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
 					@Override
 					public void draw() {
 						float first  = Tmp.c1.set(current).a(0f).toFloatBits();
@@ -220,8 +220,8 @@ public class DrawablePicker extends Window {
 
 		buttons.clear();
 		buttons.margin(6, 8, 6, 8).defaults().growX().height(32);
-		buttons.button("@cancel", Icon.cancel, Styles.flatt, this::hide);
-		buttons.button("@ok", Icon.ok, Styles.flatt, () -> {
+		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
+		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
 			cons.get(current);
 			hide();
 		});

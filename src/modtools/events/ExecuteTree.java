@@ -8,14 +8,15 @@ import arc.util.*;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.struct.MySet;
 import modtools.utils.ElementUtils.MarkedCode;
 import modtools.utils.Tools;
 
 public class ExecuteTree {
 	private static TaskNode context = null;
 
-	public static Seq<TaskNode> all   = new Seq<>();
-	public static Seq<TaskNode> roots = new Seq<>();
+	public static MySet<TaskNode> all   = new MySet<>();
+	public static MySet<TaskNode> roots = new MySet<>();
 
 	public static TaskNode nodeRoot(Runnable task, String name, String source, Drawable icon, Runnable children) {
 		var root = node(task, name, source, icon, children);

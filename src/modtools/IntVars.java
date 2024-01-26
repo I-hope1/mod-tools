@@ -7,6 +7,7 @@ import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
 import mindustry.mod.Mods.*;
+import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
 import modtools.struct.MySet;
 import modtools.utils.MySettings;
@@ -24,8 +25,6 @@ public class IntVars {
 
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
-
-	public static final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor("hope-async", 1);
 
 	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;
@@ -77,8 +76,11 @@ public class IntVars {
 		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
 	}
 
+	public interface Async {
+		ExecutorService executor = AThreads.impl.boundedExecutor("hope-async", 1);
+	}
+
 	static {
-		// new Not("aaa");
 		Events.on(ResizeEvent.class, __ -> {
 			for (var r : resizeListeners) r.run();
 		});

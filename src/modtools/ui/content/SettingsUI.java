@@ -122,9 +122,9 @@ public class SettingsUI extends Content {
 					 Vars.maxSchematicSize = val;
 				 });
 			 }
-			 button("clear mods restart", Styles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
+			 button("clear mods restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 
-			 button("FONT", Styles.flatBordert, () -> {
+			 button("FONT", HopeStyles.flatBordert, () -> {
 				 new DisWindow("FONTS") {{
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
@@ -134,7 +134,7 @@ public class SettingsUI extends Content {
 							.row();
 					 }
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
-					 cont.button("DIRECTORY", Styles.flatBordert, () -> {
+					 cont.button("DIRECTORY", HopeStyles.flatBordert, () -> {
 						 Core.app.openFolder(MyFonts.fontDirectory.path());
 					 }).growX().height(45);
 					 show();
@@ -144,10 +144,10 @@ public class SettingsUI extends Content {
 			 row();
 			 table(Tex.pane, t -> {
 				 t.add("@mod-tools.functions").row();
-				 if (OS.isAndroid || OS.isWindows) t.button("Switch Language", Icon.chatSmall, Styles.flatt, () -> {
+				 if (OS.isAndroid || OS.isWindows) t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
 					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
 				 }).height(42);
-				 t.button("Enable Debug Parma", Icon.chatSmall, Styles.flatt, () -> {
+				 t.button("Enable Debug Parma", Icon.chatSmall, HopeStyles.flatt, () -> {
 					 Log.level = LogLevel.debug;
 				 }).height(42);
 			 }).growX();
@@ -155,13 +155,13 @@ public class SettingsUI extends Content {
 			 table(Tex.pane, t -> {
 				 t.add("@editor.author");
 				 t.add(IntVars.meta.author).row();
-				 t.button("Github", Icon.githubSmall, Styles.flatt, () -> {
+				 t.button("Github", Icon.githubSmall, HopeStyles.flatt, () -> {
 					 Core.app.openURI("https://github.com/" + IntVars.meta.repo);
 				 }).height(42).growX();
-				 t.button("QQ", HopeIcons.QQ, Styles.flatt, () -> {
+				 t.button("QQ", HopeIcons.QQ, HopeStyles.flatt, () -> {
 					 Core.app.openURI(IntVars.QQ);
 				 }).height(42).growX().row();
-				 /* t.button("@mod-tools.check", Icon.androidSmall, Styles.flatt, () -> {
+				 /* t.button("@mod-tools.check", Icon.androidSmall, HopeStyles.flatt, () -> {
 					 Updater.checkUpdate(b -> {});
 				 }).height(42).growX().colspan(2); */
 			 }).growX();

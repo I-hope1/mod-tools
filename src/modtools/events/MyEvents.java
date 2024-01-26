@@ -2,6 +2,7 @@ package modtools.events;
 
 import arc.func.Cons;
 import arc.struct.*;
+import modtools.struct.v6.HSeq;
 
 import java.util.HashMap;
 
@@ -9,10 +10,10 @@ import static modtools.utils.Tools.Sr;
 
 /* copy from arc.Events */
 public class MyEvents {
-	private static final HashMap<Object, Seq> events = new HashMap<>();
+	private static final HashMap<Object, HSeq> events = new HashMap<>();
 
-	private final HashMap<Object, Seq> insEvents    = new HashMap<>();
-	public static Seq<MyEvents>        allInstances = new Seq<>();
+	private final HashMap<Object, HSeq> insEvents    = new HashMap<>();
+	public static HSeq<MyEvents>        allInstances = new HSeq<>();
 	public MyEvents() {
 		allInstances.add(this);
 	}
@@ -23,7 +24,7 @@ public class MyEvents {
 	}
 	/** Handle an event by class. */
 	public <T extends Enum<T>> void onIns(Enum<T> type, Cons<T> listener) {
-		insEvents.computeIfAbsent(type, k -> new Seq<>(Cons.class))
+		insEvents.computeIfAbsent(type, k -> new HSeq<>(Cons.class))
 		 .add(listener);
 	}
 	/** Fires an enum trigger. */
@@ -41,7 +42,7 @@ public class MyEvents {
 
 	/** Handle an event by class. */
 	public void onIns(Object type, Runnable listener) {
-		insEvents.computeIfAbsent(type, k -> new Seq<>(Runnable.class))
+		insEvents.computeIfAbsent(type, k -> new HSeq<>(Runnable.class))
 		 .add(listener);
 	}
 	/** Fires an enum trigger. */
@@ -73,7 +74,7 @@ public class MyEvents {
 	/** Handle an event by class. */
 	public static <T extends Enum<T>> void on(Enum<T> type, Cons<T> listener) {
 		(current != null ? current.insEvents : events)
-		 .computeIfAbsent(type, k -> new Seq<>(Cons.class))
+		 .computeIfAbsent(type, k -> new HSeq<>(Cons.class))
 		 .add(listener);
 	}
 
@@ -89,7 +90,7 @@ public class MyEvents {
 
 	/* ------------- for object ---------- */
 	public static void on(Object type, Runnable listener) {
-		events.computeIfAbsent(type, k -> new Seq<>()).add(listener);
+		events.computeIfAbsent(type, k -> new HSeq<>()).add(listener);
 	}
 	public static void fire(Object type) {
 		Sr((Seq<Runnable>) events.get(type))

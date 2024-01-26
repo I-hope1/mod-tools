@@ -172,7 +172,7 @@ public class UnitSpawn extends Content {
 				});
 				Time.runTask(2.5f * 60f, dialog::hide);
 			}).size(90, 50);
-			table.button(Icon.menuSmall, Styles.flati, 24, () -> {
+			table.button(Icon.menuSmall, HopeStyles.flati, 24, () -> {
 				IntUI.showMenuListDispose(() -> Seq.with(
 				 CheckboxList.withc(HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
 				 MenuList.with(Icon.eyeOffSmall, noScorchMarksKey, UNIT::noScorchMarks),
@@ -258,9 +258,9 @@ public class UnitSpawn extends Content {
 			 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck))
 			 .row();
 			defaults().growX().height(42);
-			button(noScorchMarksKey, Styles.flatBordert, UNIT::noScorchMarks).row();
-			button(killAllUnitsKey, Styles.flatBordert, UNIT::killAllUnits).row();
-			button(removeAllUnitsKey, Styles.flatBordert, UNIT::removeAllUnits);
+			button(noScorchMarksKey, HopeStyles.flatBordert, UNIT::noScorchMarks).row();
+			button(killAllUnitsKey, HopeStyles.flatBordert, UNIT::killAllUnits).row();
+			button(removeAllUnitsKey, HopeStyles.flatBordert, UNIT::removeAllUnits);
 		}});
 	}
 	private void toggleUnitCap(boolean b) {

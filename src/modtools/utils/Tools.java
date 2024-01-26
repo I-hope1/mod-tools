@@ -206,6 +206,14 @@ public class Tools {
 			Log.err(e);
 		}
 	}
+	public static void runLoggedException(CatchRun run, Runnable unexpected) {
+		try {
+			run.run();
+		} catch (Throwable e) {
+			Log.err(e);
+			unexpected.run();
+		}
+	}
 
 
 	public static Runnable catchRun(CatchRun run) {

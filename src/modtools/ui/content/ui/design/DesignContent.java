@@ -5,7 +5,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.Button;
 import arc.struct.Seq;
 import mindustry.ui.Styles;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.menu.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.content.Content;
@@ -17,7 +17,7 @@ public class DesignContent extends Content {
 	}
 	public void buildUI() {
 		ui = new Window(localizedName());
-		ui.cont.button("text", Styles.flatBordert, () -> {})
+		ui.cont.button("text", HopeStyles.flatBordert, () -> {})
 		 .height(42)
 		 .self(c -> IntUI.addShowMenuListenerp(c.get(), () -> Seq.with(
 			MenuList.with(null, "growX", () -> {

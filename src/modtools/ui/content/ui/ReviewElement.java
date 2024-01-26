@@ -248,7 +248,7 @@ public class ReviewElement extends Content {
 			pane.left().defaults().left();
 			cont.table(t -> {
 				Button[] bs = {null};
-				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, Styles.flatBordert, () -> {
+				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, HopeStyles.flatBordert, () -> {
 					 Runnable go = () -> {
 						 var window = new ReviewElementWindow();
 						 // Log.info(element.parent);

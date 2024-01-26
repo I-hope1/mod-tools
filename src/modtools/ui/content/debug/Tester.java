@@ -33,6 +33,7 @@ import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
 import modtools.rhino.ForRhino;
+import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
@@ -61,6 +62,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.SettingsUI.addSettingsTable;
+import static modtools.ui.content.debug.Tester.Async0.executor;
 import static modtools.ui.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
 
@@ -76,7 +78,9 @@ public class Tester extends Content {
 
 	private final int maxHistorySize = 40;
 
-	private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Threads.boundedExecutor(name, 1);
+	interface Async0 {
+		ThreadPoolExecutor executor = (ThreadPoolExecutor) AThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1);
+	}
 
 	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
 	public static final Fi   bookmarkDirectory = IntVars.dataDirectory.child("bookmarks");
@@ -213,15 +217,15 @@ public class Tester extends Content {
 			t.defaults()
 			 .padRight(4f).padRight(4f)
 			 .size(45, 42);
-			t.button(Icon.leftOpenSmall, Styles.clearNonei, area::left);
-			t.button("@ok", Styles.flatBordert, () -> {
+			t.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::left);
+			t.button("@ok", HopeStyles.flatBordert, () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
 				compileAndExec(() -> {});
 			}).width(64).disabled(__ -> !finished);
-			t.button(Icon.rightOpenSmall, Styles.clearNonei, area::right);
-			t.button(Icon.copySmall, Styles.clearNonei, area::copy);
-			t.button(Icon.pasteSmall, Styles.clearNonei, () ->
+			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::right);
+			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
+			t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
 			);
 		}).growX().minWidth(w).get();

@@ -22,6 +22,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import mindustry.world.Tile;
 import modtools.events.*;
+import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.input.JSRequest;
@@ -77,7 +78,7 @@ public abstract class WFunction<T> {
 		data = Selection.Settings.valueOf(name);
 		this.WD = WD;
 		Tools.TASKS.add(() -> WD.alpha = SC.selectFunc == this ? 0.7f : 0.1f);
-		executor = Threads.boundedExecutor(name + "-each", 1);
+		executor = AThreads.impl.boundedExecutor(name + "-each", 1);
 
 		main.button("show all", HopeStyles.blackt, this::showAll).growX().height(Selection.buttonHeight).row();
 		main.add(buttons).growX().row();
@@ -167,19 +168,19 @@ public abstract class WFunction<T> {
 	}
 	private void buildButtons() {
 		buttons.defaults().height(Selection.buttonHeight).growX();
-		buttons.button("Refresh", Icon.refreshSmall, Styles.flatt, () -> {
+		buttons.button("Refresh", Icon.refreshSmall,HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
-		buttons.button("All", Icon.menuSmall, Styles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
+		buttons.button("All", Icon.menuSmall, HopeStyles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
 			 boolean all = select.size != selectMap.size;
 			 select.clear();
 			 if (all) for (var entry : selectMap) select.add(entry.value);
 		 })).update(b -> b.setChecked(select.size == selectMap.size))
 		 .row();
-		buttons.button("Run", Icon.okSmall, Styles.flatt, () -> {}).with(b -> b.clicked(() -> {
+		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> {}).with(b -> b.clicked(() -> {
 			showMenuList(getMenuLists(this, mergeList()));
 		})).disabled(__ -> select.isEmpty());
-		buttons.button("Filter", Icon.filtersSmall, Styles.flatt, () -> {
+		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestForSelection(mergeList(), null, boolf -> {
 				int size = select.sum(seq -> seq.size);
 				select.each(seq -> {
@@ -193,10 +194,10 @@ public abstract class WFunction<T> {
 				 .sticky = true;
 			});
 		}).disabled(__ -> select.size == 0).row();
-		buttons.button("DrawAll", Icon.menuSmall, Styles.flatTogglet, () -> {
+		buttons.button("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
 			drawAll = !drawAll;
 		}).update(t -> t.setChecked(drawAll));
-		buttons.button("ClearAll", Icon.trash, Styles.flatt, () -> {
+		buttons.button("ClearAll", Icon.trash, HopeStyles.flatt, () -> {
 			clearList();
 			changeEvent.run();
 		}).update(t -> t.setChecked(drawAll)).row();
@@ -420,7 +421,7 @@ public abstract class WFunction<T> {
 		private final T item;
 
 		public SelectHover(T item) {
-			super(Styles.flati);
+			super(HopeStyles.flati);
 			margin(2, 4, 2, 4);
 			this.item = item;
 

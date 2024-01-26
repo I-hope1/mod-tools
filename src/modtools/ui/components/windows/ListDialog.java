@@ -11,17 +11,15 @@ import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
-import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.content.debug.Tester;
-import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.ui.search.*;
 
-import java.util.*;
+import java.util.Comparator;
 import java.util.regex.Pattern;
 
 public class ListDialog extends Window {
@@ -117,10 +115,10 @@ public class ListDialog extends Window {
 						}).grow().colspan(2);
 						cont.row();
 
-						cont.button(Icon.copy, Styles.flati, () -> {
+						cont.button(Icon.copy, HopeStyles.flati, () -> {
 							JSFunc.copyText(f.readString());
 						});
-						cont.button(Icon.trash, Styles.flati, () -> IntUI.showConfirm("@confirm.remove", () -> {
+						cont.button(Icon.trash, HopeStyles.flati, () -> IntUI.showConfirm("@confirm.remove", () -> {
 							ui.hide();
 							f.delete();
 						})).row();

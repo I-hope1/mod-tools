@@ -10,7 +10,7 @@ import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
@@ -20,6 +20,8 @@ import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.ui.search.BindCell;
+
+import java.util.*;
 
 import static modtools.IntVars.modName;
 import static modtools.ui.IntUI.topGroup;
@@ -33,7 +35,7 @@ public class Frag extends Table {
 	Group    circle;
 	Image    top;
 
-	Seq<Content> enabledContents = new Seq<>();
+	Set<Content> enabledContents = new HashSet<>();
 	public Frag() {
 		super(Styles.black8);
 	}

@@ -7,8 +7,10 @@ import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import modtools.IntVars;
+import modtools.IntVars.Async;
 import modtools.events.ExecuteTree.*;
 import modtools.events.ExecuteTree.Error;
+import modtools.struct.MySet;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 
@@ -34,8 +36,8 @@ public class TaskNode {
 
 	public @Nullable TaskNode parent;
 
-	public Status        status;
-	public Seq<TaskNode> children = new Seq<>();
+	public Status          status;
+	public MySet<TaskNode> children = new MySet<>();
 
 	float intervalSeconds = perTick;
 	public TaskNode intervalSeconds(float intervalSeconds) {
@@ -89,7 +91,7 @@ public class TaskNode {
 		if (async) {
 			DelegateRun newRun = new DelegateRun(task, () -> intervalSeconds);
 			((MyTask) task).delegate = newRun;
-			IntVars.executor.execute(newRun);
+			Async.executor.execute(newRun);
 			return;
 		}
 		timer.scheduleTask(task, 0, intervalSeconds, repeatCount);

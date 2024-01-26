@@ -23,14 +23,14 @@ public class FilterTable<E> extends LimitTable {
 	public FilterTable(Drawable background, Cons<FilterTable<E>> cons) {
 		super(background, (Cons) cons);
 	}
-	protected HashMap<E, Seq<BindCell>> map;
-	Seq<BindCell> current;
+	protected HashMap<E, ObjectSet<BindCell>> map;
+	ObjectSet<BindCell> current;
 
 	private Cons<Element> cons;
 
 	public void bind(E name) {
 		if (map == null) map = new HashMap<>();
-		current = map.computeIfAbsent(name, k -> new Seq<>());
+		current = map.computeIfAbsent(name, k -> new ObjectSet<>());
 	}
 	public void listener(Cons<Element> cons) {
 		this.cons = cons;

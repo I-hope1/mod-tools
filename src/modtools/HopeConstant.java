@@ -4,11 +4,14 @@ import arc.KeyBinds.KeybindValue;
 import arc.files.Fi;
 import arc.struct.*;
 import arc.util.*;
+import ihope_lib.*;
 import mindustry.Vars;
+import mindustry.core.Version;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
 import modtools.utils.Tools.CProv;
 import modtools.utils.reflect.FieldUtils;
+import rhino.Kit;
 
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;

@@ -15,6 +15,7 @@ import mindustry.ui.Styles;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
+import modtools.struct.MySet;
 import modtools.ui.*;
 import modtools.ui.menu.MenuList;
 import modtools.ui.components.Window;
@@ -65,7 +66,7 @@ public class Executor extends Content {
 	public void build(FilterTable<Intp> cont) {
 		build(cont, ExecuteTree.roots);
 	}
-	public void build(FilterTable<Intp> cont, Seq<TaskNode> children) {
+	public void build(FilterTable<Intp> cont, MySet<TaskNode> children) {
 		cont.addIntp_UpdateListener(() -> statusCode);
 		for (TaskNode node : children) {
 			cont.bind(() -> 1 << node.status.code());

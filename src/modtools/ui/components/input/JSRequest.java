@@ -7,7 +7,7 @@ import arc.scene.ui.Label;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.jsfunc.IScript;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
@@ -29,14 +29,14 @@ public class JSRequest {
 			 .colspan(3).padRight(100f).get().left();
 			buttons.row();
 
-			buttons.button("@cancel", Styles.flatt, this::hide).growX().height(42);
-			buttons.button("Test", Styles.flatt, catchRun(() -> {
+			buttons.button("@cancel", HopeStyles.flatt, this::hide).growX().height(42);
+			buttons.button("Test", HopeStyles.flatt, catchRun(() -> {
 				Object o   = eval();
 				String log = String.valueOf(o);
 				if (log == null) log = "null";
 				this.log = log;
 			})).growX().height(42);
-			buttons.button("@ok", Styles.flatt, catchRun(() -> {
+			buttons.button("@ok", HopeStyles.flatt, catchRun(() -> {
 				Object o = eval();
 				callback.get(as(o));
 				if (!notHideAuto) hide();

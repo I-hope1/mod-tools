@@ -1,0 +1,28 @@
+package modtools.struct.v6;
+
+import arc.util.*;
+import modtools.ModTools;
+
+import java.util.concurrent.*;
+
+public interface AThreads {
+	AThreads impl = ModTools.isV6 ? new V6() : new V7();
+	ExecutorService boundedExecutor(@Nullable String name, int max);
+	class V6 implements AThreads {
+		public ExecutorService boundedExecutor(String name, int max) {
+			return new ThreadPoolExecutor(1, max, 1, TimeUnit.MINUTES, new LinkedBlockingQueue<>(), r -> newThread(r, name, true));
+		}
+	}
+	class V7 implements AThreads {
+		public ExecutorService boundedExecutor(String name, int max) {
+			return Threads.boundedExecutor(name, max);
+		}
+	}
+
+	private static Thread newThread(Runnable r, @Nullable String name, boolean daemon) {
+		Thread thread = name == null ? new Thread(r) : new Thread(r, name);
+		thread.setDaemon(daemon);
+		thread.setUncaughtExceptionHandler((t, e) -> Log.err(e));
+		return thread;
+	}
+}

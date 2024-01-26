@@ -82,9 +82,9 @@ public class Window extends Table {
 		down = whiteui.tint(Tmp.c1.set(Pal.remove).lerp(Color.gray, 0.3f));
 	}};
 
-	public static final float buttonSize = 38f;
+	public static final  float buttonSize = 38f;
 	// 用于最小化时的最小宽度
-	private static final float topHeight = 45;
+	private static final float topHeight  = 45;
 
 	public Table
 	 titleTable = new Table(topPane) {
@@ -224,7 +224,7 @@ public class Window extends Table {
 	}
 	private FillTable getResizeFillTable() {
 		return addFillTable(p -> {
-			ImageButtonStyle style = Styles.flati;
+			ImageButtonStyle style = HopeStyles.flati;
 			final float      size  = 28;
 			p.shown = () -> sclListener.offset = size;
 			p.button(Icon.leftOpenSmall, style, () -> {}).size(size).get().getImage().rotation = -45;
@@ -262,7 +262,9 @@ public class Window extends Table {
 	/** 如果hit元素不是想要的，取消MoveListener事件 */
 	public Element hit(float x, float y, boolean touchable) {
 		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
-		return super.hit(x, y, touchable);
+		Element hit = super.hit(x, y, touchable);
+		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
+		return hit;
 	}
 	private void setup() {
 		add(cont).name("cont").grow().row();
@@ -384,7 +386,11 @@ public class Window extends Table {
 		return this;
 	}
 
-	public Window show0(Scene stage, Action action) {
+	Hitter hitter;
+	void show0(Scene stage, Action action) {
+		if (this instanceof IHitter) {
+			topGroup.addChild(hitter = new Hitter(this::hide));
+		}
 		setOrigin(Align.center);
 		setClip(false);
 
@@ -415,7 +421,6 @@ public class Window extends Table {
 		// stage.setKeyboardFocus(this);
 		invalidate();
 
-		return this;
 	}
 	public void pack() {
 		if (isMinimize) return;
@@ -463,6 +468,10 @@ public class Window extends Table {
 	 * Hides the dialog with the given action and then removes it from the stage.
 	 */
 	public void hide(Action action) {
+		if (hitter != null) {
+			hitter.remove();
+			hitter = null;
+		}
 		// bakRegion = screenshot();
 		this.fire(new VisibilityEvent(true));
 
@@ -656,7 +665,7 @@ public class Window extends Table {
 
 
 	public void draw() {
-		topGroup.drawResidentTasks.each(task -> task.beforeDraw(this));
+		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
 		Draw.alpha(parentAlpha);
 		MyDraw.blurRect(x, y, width, height);
 		super.draw();

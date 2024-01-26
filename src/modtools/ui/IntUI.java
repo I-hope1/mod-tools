@@ -925,15 +925,10 @@ public class IntUI {
 	}
 
 	// ======-----弹窗------======
+	/* 这会添加到others里 */
 	public interface PopupWindow extends INotice {}
-	/**
-	 * The interface Menu.
-	 */
-	public interface IMenu extends IDisposable {
-	}
-	/**
-	 * The interface Notice.
-	 */
+	public interface IMenu extends IDisposable {}
+	public interface IHitter {}
 	public interface INotice extends IDisposable {}
 
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {

@@ -1,9 +1,11 @@
 package modtools.ui.components.review;
 
 import arc.scene.*;
+import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
+import modtools.ui.HopeStyles;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.content.ui.ReviewElement;
@@ -35,6 +37,7 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 		}).growX().row();
 		Table table = cont.table().get();
 		table.defaults().growX();
+		TextButtonStyle style = HopeStyles.flatBordert;
 		l:
 		if (element.parent instanceof Table) {
 			var cl = ((Table) element.parent).getCell(element);
@@ -52,8 +55,8 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 				t.add();
 			}).colspan(2).row();
 			table.defaults().height(32).growX();
-			table.button("growX", Styles.flatBordert, cl::growX);
-			table.button("growY", Styles.flatBordert, cl::growY);
+			table.button("growX", style, cl::growX);
+			table.button("growY", style, cl::growY);
 			table.row();
 		}
 
@@ -63,9 +66,9 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 			CellDetailsWindow.checkboxField(table, Group.class, element, "transform", boolean.class).row();
 
 		cont.row().defaults().height(32).growX();
-		cont.button("invalidate", Styles.flatBordert, element::invalidate).row();
-		cont.button("invalidateHierarchy", Styles.flatBordert, element::invalidateHierarchy).row();
-		cont.button("layout", Styles.flatBordert, element::layout).row();
-		cont.button("pack", Styles.flatBordert, element::pack).row();
+		cont.button("invalidate", style, element::invalidate).row();
+		cont.button("invalidateHierarchy", style, element::invalidateHierarchy).row();
+		cont.button("layout", style, element::layout).row();
+		cont.button("pack", style, element::pack).row();
 	}
 }

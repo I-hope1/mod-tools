@@ -190,7 +190,7 @@ public class IntTab {
 		if (column) {
 			title.add().height(/** {@link Cell#unset} */Float.NEGATIVE_INFINITY).growY().row();
 			title.left().defaults().left();
-			title.fill().left().bottom().button(Icon.menuSmall, Styles.flati, () -> {
+			title.fill().left().bottom().button(Icon.menuSmall, HopeStyles.flati, () -> {
 				hideTitle = !hideTitle;
 				title.invalidateHierarchy();
 			}).size(24f);

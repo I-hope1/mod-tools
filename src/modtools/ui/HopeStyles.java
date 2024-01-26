@@ -16,6 +16,7 @@ import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.ModTools;
 
 import static modtools.ui.HopeIcons.*;
 import static mindustry.gen.Tex.*;
@@ -222,7 +223,7 @@ public class HopeStyles {
 	}
 
 	static void init() {
-		if (Version.number <= 135) {
+		if (ModTools.isV6) {
 			V6Adapter();
 			return;
 		}

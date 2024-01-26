@@ -8,6 +8,7 @@ import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
+import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
@@ -35,6 +36,8 @@ public class ModTools extends Mod {
 	public static Throwable error            = null;
 	public static Fi        libs;
 
+	public static boolean isV6 = Version.number <= 135;
+
 	static {
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -51,7 +54,7 @@ public class ModTools extends Mod {
 			load();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				Vars.ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
-			 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
+				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
 				 SettingsUI::disabledRestart, () -> {});
 			}
 		} catch (Throwable e) {

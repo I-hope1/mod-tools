@@ -11,7 +11,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
 import mindustry.ui.Styles;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
@@ -129,7 +129,7 @@ public class ElementUtils {
 	public static void addCodedBtn(
 	 Table t, String text, int cols,
 	 Intc cons, Intp prov, MarkedCode... seq) {
-		t.button("", Styles.flatt, null).with(tbtn -> {
+		t.button("", HopeStyles.flatt, null).with(tbtn -> {
 			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, hide, ___) -> {
 				buildModifier(p, cols, cons, prov, seq);
 			}, false, Align.center));
@@ -141,7 +141,7 @@ public class ElementUtils {
 	}
 
 	private static void buildModifier(Table p, int cols, Intc cons, Intp prov, MarkedCode... seq) {
-		p.button("all", Styles.flatToggleMenut,
+		p.button("all", HopeStyles.flatToggleMenut,
 			() -> cons.get(prov.get() != -1 ? -1 : 0))
 		 .growX().colspan(4).height(42)
 		 .update(b -> b.setChecked(prov.get() == -1))

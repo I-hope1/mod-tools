@@ -8,7 +8,7 @@ import java.util.Iterator;
 /**
  * 为了适配v6
  */
-public class MySet<T> extends ObjectSet<T> {
+public class MySet<T> extends OrderedSet<T> {
 	public void filter(Boolf<T> predicate) {
 		Iterator<T> iter = iterator();
 

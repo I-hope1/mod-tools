@@ -15,7 +15,7 @@ import mindustry.gen.Icon;
 import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.content.Content;
 import modtools.utils.*;
@@ -108,7 +108,7 @@ public class ContentList extends Content {
 				if (item instanceof UnlockableContent u) {
 					t.add(new Image(u.fullIcon)).size(32f);
 				} else t.add();
-				t.button(name, Styles.flatt, () -> {}).growX().height(42).with(button -> {
+				t.button(name, HopeStyles.flatt, () -> {}).growX().height(42).with(button -> {
 					IntUI.longPress(button, b -> {
 						if (b) JSFunc.copyText(name, button);
 						else if (longPress != null) longPress.get(item);

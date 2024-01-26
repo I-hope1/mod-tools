@@ -105,19 +105,19 @@ public final class TopGroup extends WidgetGroup {
 	public void draw() {
 		setTransform(false);
 		backDrawSeq.exec();
-		drawResidentTasks.each(ResidentDrawTask::backDraw);
+		drawResidentTasks.forEach(ResidentDrawTask::backDraw);
 		super.draw();
 
 		if (elementDrawer != null && selected != null) {
 			// Draw.flush();
 			elementDrawer.draw(selecting, selected);
 		}
-		drawResidentTasks.each(ResidentDrawTask::elemDraw);
+		drawResidentTasks.forEach(ResidentDrawTask::elemDraw);
 
 		Draw.flush();
 
 		drawSeq.exec();
-		drawResidentTasks.each(ResidentDrawTask::endDraw);
+		drawResidentTasks.forEach(ResidentDrawTask::endDraw);
 		Draw.flush();
 
 		if (!TSettings.debugBounds && drawPadElem == null) return;
@@ -454,11 +454,11 @@ public final class TopGroup extends WidgetGroup {
 	}
 
 
-	public final Seq<ResidentDrawTask> drawResidentTasks = new Seq<>();
+	public final List<ResidentDrawTask> drawResidentTasks = new ArrayList<>();
 
 	{
-		Events.run(Trigger.uiDrawBegin, () -> drawResidentTasks.each(ResidentDrawTask::init));
-		Events.run(Trigger.uiDrawEnd, () -> drawResidentTasks.each(ResidentDrawTask::afterAll));
+		Events.run(Trigger.uiDrawBegin, () -> drawResidentTasks.forEach(ResidentDrawTask::init));
+		Events.run(Trigger.uiDrawEnd, () -> drawResidentTasks.forEach(ResidentDrawTask::afterAll));
 	}
 
 	public void focusOnElement(FocusTask task) {
@@ -617,7 +617,7 @@ public final class TopGroup extends WidgetGroup {
 					currentIndex = t.getZIndex();
 					resolveSwitch();
 				});
-			}, Styles.flatToggleMenut, () -> {}).pad(6, 8, 6, 8).update(t -> {
+			}, HopeStyles.flatToggleMenut, () -> {}).pad(6, 8, 6, 8).update(t -> {
 				if (!w.isShown()) {
 					removeWindow(t);
 				}

@@ -168,7 +168,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	@SuppressWarnings("Convert2Lambda")
 	private void buildDeCompiler(Table t) {
-		t.button("Decompile", Styles.flatBordert, new Runnable() {
+		t.button("Decompile", HopeStyles.flatBordert, new Runnable() {
 			public void run() {
 				StringWriter stringWriter = new StringWriter();
 				com.strobel.decompiler.Decompiler.decompile(

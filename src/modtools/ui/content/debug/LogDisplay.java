@@ -12,6 +12,7 @@ import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.ui.HopeStyles;
 import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
@@ -63,7 +64,7 @@ public class LogDisplay extends Content {
 		String[]     text         = {getString.get()};
 		Label[] label = {null};
 		Table[] tables = {new LimitTable(t -> {
-			t.button("Source", Styles.flatBordert, () -> {
+			t.button("Source", HopeStyles.flatBordert, () -> {
 				Core.app.openFolder(last_log.path());
 			}).height(42).growX().row();
 			t.pane(p -> label[0] = p.label(() -> {

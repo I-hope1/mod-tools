@@ -1,13 +1,22 @@
 package modtools.ui.components;
 
 import arc.struct.Seq;
+import modtools.struct.v6.HSeq;
 import modtools.ui.IntUI.IMenu;
 
 public class Hitter extends FillElement implements IMenu {
-	public static Seq<Hitter> all = new Seq<>();
+	public static HSeq<Hitter> all = new HSeq<>();
 	public Hitter() {
 		all.add(this);
 	}
+	public Hitter(Runnable clicked) {
+		this();
+		this.clicked(() -> {
+			clicked.run();
+			remove();
+		});
+	}
+
 
 	public boolean remove() {
 		boolean b = super.remove();

@@ -14,13 +14,14 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.ui.*;
 import modtools.ui.HopeIcons;
-import modtools.ui.components.Window;
-import modtools.ui.IntUI;
+import modtools.ui.IntUI.*;
+import modtools.ui.components.*;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
-public class ColorPicker extends Window {
+public class ColorPicker extends Window implements IHitter, PopupWindow {
 	static       Texture hueTex;
 	static final Color   bgColor = Pal.gray;
 
@@ -57,7 +58,7 @@ public class ColorPicker extends Window {
 		a = color.a;
 
 		cont.clear();
-		cont.pane(newTable(t -> {
+		cont.add(newTable(t -> {
 			t.add(new Element() {
 				 public void draw() {
 					 float first  = Tmp.c1.set(current).value(1).saturation(0f).a(parentAlpha).toFloatBits();
@@ -189,7 +190,7 @@ public class ColorPicker extends Window {
 			}).get();
 
 			if (alpha) {
-				t.stack(new Image(Tex.alphaBgLine), new Element() {
+				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
 					@Override
 					public void draw() {
 						float first  = Tmp.c1.set(current).a(0f).toFloatBits();
@@ -215,8 +216,8 @@ public class ColorPicker extends Window {
 
 		buttons.clear();
 		buttons.margin(6, 8, 6, 8).defaults().growX().height(32);
-		buttons.button("@cancel", Icon.cancel, Styles.flatt, this::hide);
-		buttons.button("@ok", Icon.ok, Styles.flatt, () -> {
+		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
+		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
 			cons.get(current);
 			hide();
 		});

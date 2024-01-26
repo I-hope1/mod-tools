@@ -19,7 +19,7 @@ public class MyFonts {
 
 	static {
 		fontDirectory.mkdirs();
-		load();
+		Tools.runLoggedException(MyFonts::load, () -> def = Fonts.def);
 	}
 
 	public static void load() {
@@ -76,7 +76,7 @@ public class MyFonts {
 		};
 		font.setOwnsTexture(parameter.packer == null);
 		// 添加默认字体，如果font没有就去def里找
-		font.getRegions().add(Fonts.def.getRegion());
+		font.getRegions().addAll(Fonts.def.getRegion());
 		return font;
 	}
 

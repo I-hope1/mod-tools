@@ -118,7 +118,7 @@ public interface INFO_DIALOG {
 		return new JSWindow();
 	}
 	static Window btn(String text, Runnable run) {
-		return dialog(t -> t.button(text, Styles.flatt, run).size(64, 45));
+		return dialog(t -> t.button(text, HopeStyles.flatt, run).size(64, 45));
 	}
 	static Window testDraw(Runnable draw) {
 		return testDraw0(__ -> draw.run());

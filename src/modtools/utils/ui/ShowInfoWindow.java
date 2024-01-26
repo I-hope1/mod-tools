@@ -15,6 +15,7 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.jsfunc.reflect.*;
@@ -317,30 +318,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 	public void buildFieldValue(Class<?> type, BindCell c_cell, FieldValueLabel l) {
 		if (!l.isStatic() && l.getObject() == null) return;
-		Cell<?> cell = c_cell.cell;
-		Boolp editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
+		Cell<?> cell     = c_cell.cell;
+		Boolp   editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
 		/* Color的实现是Color#set方法 */
 		if (l.val instanceof Color) {
 			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
 			c_cell.require();
 		} else if (type == Boolean.TYPE || type == Boolean.class) {
-			var btn = new TextButton("", HopeStyles.flatTogglet);
-			btn.setDisabled(() -> !editable.get());
-			btn.update(() -> {
-				l.setVal();
-				btn.setText((boolean) l.val ? "TRUE" : "FALSE");
-				btn.setChecked((boolean) l.val);
-			});
-			btn.clicked(() -> {
-				boolean b = !(boolean) l.val;
-				btn.setText(b ? "TRUE" : "FALSE");
-				try {
-					l.setFieldValue(b);
-				} catch (Throwable e) {
-					IntUI.showException(e).setPosition(Core.input.mouse());
-				}
-				l.setVal(b);
-			});
+			var btn = getBoolButton(l, editable);
 			cell.setElement(btn);
 			cell.size(96, 42);
 			c_cell.require();
@@ -383,6 +368,31 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				c_cell.require();
 			});
 		}
+	}
+	private static TextButton getBoolButton(FieldValueLabel l, Boolp editable) {
+		var btn = new TextButton("", HopeStyles.flatTogglet);
+		btn.setDisabled(() -> !editable.get());
+		btn.update(() -> {
+			l.setVal();
+			if (l.val == null) {
+				btn.setDisabled(() -> true);
+				btn.setText("ERROR");
+				return;
+			}
+			btn.setText((boolean) l.val ? "TRUE" : "FALSE");
+			btn.setChecked((boolean) l.val);
+		});
+		btn.clicked(() -> {
+			boolean b = !(boolean) l.val;
+			btn.setText(b ? "TRUE" : "FALSE");
+			try {
+				l.setFieldValue(b);
+			} catch (Throwable e) {
+				IntUI.showException(e).setPosition(Core.input.mouse());
+			}
+			l.setVal(b);
+		});
+		return btn;
 	}
 
 	private void buildField(Object o, ReflectTable fields, Field f) {
@@ -720,6 +730,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 		final ObjectMap<String, Pair<Table, Seq<Member>>> map = new ObjectMap<>();
 
+		public void act(float delta) {
+			Tools.runLoggedException(() -> super.act(delta));
+		}
 		public ReflectTable() {
 			left().defaults().left().top();
 		}

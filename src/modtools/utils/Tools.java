@@ -199,6 +199,14 @@ public class Tools {
 			run.run();
 		} catch (Throwable ignored) {}
 	}
+	public static void runLoggedException(CatchRun run) {
+		try {
+			run.run();
+		} catch (Throwable e) {
+			Log.err(e);
+		}
+	}
+
 
 	public static Runnable catchRun(CatchRun run) {
 		return catchRun("", run, null);

@@ -205,9 +205,7 @@ public class UnitSpawn extends Content {
 		return Math.abs(d) < 1E6 && !isNaN(d);
 	}
 	public void spawnIgnored() {
-		try {
-			spawn(selectUnit, amount, team, x, y);
-		} catch (Throwable ignored) {}
+		Tools.runIgnoredException(() -> spawn(selectUnit, amount, team, x, y));
 	}
 	public Runnable getSpawnRun() {
 		float    x0          = x, y0 = y;

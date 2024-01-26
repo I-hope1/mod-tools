@@ -14,6 +14,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
+import modtools.jsfunc.IScript;
 import modtools.ui.*;
 import modtools.ui.menu.MenuList;
 import modtools.ui.components.Window;
@@ -50,7 +51,7 @@ public class Executor extends Content {
 			JSRequest.requestCode(code -> ExecuteTree.context(customTask(), () -> {
 				BaseFunction scope = new BaseFunction(JSRequest.topScope, new BaseFunction());
 				ExecuteTree.node("custom",
-					() -> JSRequest.cx.evaluateString(scope,
+					() -> IScript.cx.evaluateString(scope,
 					 code, "<custom>", 1))
 				 .code(code)
 				 .resubmitted().apply();

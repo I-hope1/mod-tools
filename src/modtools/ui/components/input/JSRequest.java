@@ -6,6 +6,7 @@ import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.util.*;
 import mindustry.ui.Styles;
+import modtools.jsfunc.IScript;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
@@ -62,8 +63,8 @@ public class JSRequest {
 	}
 
 	public static JSRequestWindow window   = new JSRequestWindow<>();
-	public static Context         cx       = mods.getScripts().context;
-	public static Scriptable      topScope = Tester.scope;
+	public static Context         cx       = IScript.cx;
+	public static Scriptable      topScope = IScript.scope;
 	public static Scriptable      scope;
 
 	public static Label tips;

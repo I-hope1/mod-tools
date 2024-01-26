@@ -23,8 +23,10 @@ public class ArrayUtils {
 		}
 		return map;
 	}
-	public static <K, V> Map<K, V> valueArr2Map(V[] values, Func< V, K> keyFunc) {
-		Map<K, V> map = new HashMap<>();
+	public static <K, V> Map<K, V> valueArr2Map(V[] values, Func<V, K> keyFunc) {
+		return valueArr2Map(values, keyFunc, new HashMap<>());
+	}
+	public static <K, V> Map<K, V> valueArr2Map(V[] values, Func<V, K> keyFunc, Map<K, V> map) {
 		for (V val : values) {
 			map.put(keyFunc.get(val), val);
 		}

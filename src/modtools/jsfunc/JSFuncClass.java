@@ -1,5 +1,6 @@
 package modtools.jsfunc;
 
+import arc.files.Fi;
 import arc.util.*;
 import modtools.annotations.*;
 import modtools.utils.*;
@@ -16,10 +17,11 @@ public class JSFuncClass extends NativeJavaClass {
 	protected void initMembers() {
 		super.initMembers();
 		Object members = Reflect.get(NativeJavaObject.class, this, "members");
-		Map<String, Object> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");
+
+		Map<String, Field> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");
 
 		for (Class<?> inter : JSFunc.class.getInterfaces()) {
-			map.putAll(ArrayUtils.valueArr2Map(inter.getFields(), Field::getName));
+			ArrayUtils.valueArr2Map(inter.getFields(), Field::getName, map);
 		}
 	}
 	public Object get(String name, Scriptable start) {

@@ -34,6 +34,7 @@ import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
 import modtools.rhino.ForRhino;
 import modtools.ui.*;
+import modtools.ui.HopeIcons;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
@@ -71,7 +72,7 @@ public class Tester extends Content {
 
 	public static Scripts    scripts;
 	public static Scriptable topScope, scope;
-	public static Context cx;
+	private static Context cx;
 
 	private final int maxHistorySize = 40;
 
@@ -579,11 +580,11 @@ public class Tester extends Content {
 		public void log(LogLevel level, String text) {
 			if (level == LogLevel.err) super.log(level, text);
 			logs.add(Tools.format((
-											 level == LogLevel.debug ? "D" :
-												level == LogLevel.info ? "I" :
-												 level == LogLevel.warn ? "W" :
-													level == LogLevel.err ? "E" :
-													 " ") + text));
+														 level == LogLevel.debug ? "D" :
+															level == LogLevel.info ? "I" :
+															 level == LogLevel.warn ? "W" :
+																level == LogLevel.err ? "E" :
+																 " ") + text));
 		}
 	};
 	private void execAndDealRes() {

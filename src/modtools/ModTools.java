@@ -50,8 +50,8 @@ public class ModTools extends Mod {
 		try {
 			load();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
-				Vars.ui.showCustomConfirm("是否【关闭】重启 ", "Mindustry会重启来加载，\n但modtools不需要重启，\n是否不重启",
-				 "不重启", "重启",
+				Vars.ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
+			 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
 				 SettingsUI::disabledRestart, () -> {});
 			}
 		} catch (Throwable e) {

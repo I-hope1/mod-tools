@@ -15,13 +15,13 @@ public class MySettings {
 	private static final Fi dataDirectory = IntVars.dataDirectory;
 
 	static {
-		try {
+		Tools.runIgnoredException(() -> {
 			Fi fi = Vars.dataDirectory.child("mods(I hope...)");
 			if (fi.exists() && fi.isDirectory()) {
 				fi.copyFilesTo(dataDirectory);
 				fi.deleteDirectory();
 			}
-		} catch (Throwable ignored) {}
+		});
 	}
 
 	static Fi config = dataDirectory.child("mod-tools-config.hjson");

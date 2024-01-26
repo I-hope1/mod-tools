@@ -7,12 +7,10 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.math.geom.Vec2;
-import arc.scene.*;
-import arc.scene.ui.*;
-import arc.scene.ui.layout.*;
-import arc.util.*;
-import ihope_lib.MyReflect;
-import mindustry.Vars;
+import arc.scene.Element;
+import arc.scene.ui.Label;
+import arc.scene.ui.layout.Table;
+import arc.util.Tmp;
 import mindustry.game.EventType.Trigger;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
@@ -21,16 +19,15 @@ import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.*;
 import modtools.jsfunc.type.*;
 import modtools.ui.*;
-import modtools.ui.content.world.*;
+import modtools.ui.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.Comparator;
 import modtools.utils.draw.InterpImage;
-import modtools.utils.ui.*;
+import modtools.utils.ui.WatchWindow;
 import modtools.utils.world.WFunction;
-import rhino.*;
 
-import static modtools.ui.Contents.*;
+import static modtools.ui.Contents.tester;
 import static modtools.utils.ElementUtils.*;
 
 /** for js */
@@ -38,17 +35,12 @@ public class JSFunc
  /* Interfaces for js */
  implements UNSAFE, WORLD, REFLECT,
  REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE,
- StringUtils {
-	public static       ClassLoader main   = Vars.mods.mainLoader();
-	public static       Scriptable  scope  = Vars.mods.getScripts().scope;
-	public static final Object      lookup = MyReflect.lookup;
+ StringUtils, IScript {
 	public static final Font        FONT   = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;
 	}
 	/* for js */
-	public static final Object vars     = new NativeJavaClass(scope, IntVars.class);
-	public static final Object Contents = new NativeJavaClass(scope, Contents.class);
 
 	public static final Fi     dataDir          = IntVars.dataDirectory;
 	public static final String defaultDelimiter = ", ";

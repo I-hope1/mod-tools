@@ -1,5 +1,7 @@
 package modtools.jsfunc.type;
 
+import java.util.List;
+
 /** 原始数据类型和基本的类
  * @see java.lang.Class#getName */
 public interface PTYPE {
@@ -16,4 +18,6 @@ public interface PTYPE {
 
 	Class<?> L = Object.class;
 	Class<?> STR = String.class;
+
+	Class<?> LIST = List.class;
 }

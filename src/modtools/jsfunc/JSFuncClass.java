@@ -1,11 +1,27 @@
 package modtools.jsfunc;
 
-import modtools.utils.JSFunc;
+import arc.util.*;
+import modtools.annotations.*;
+import modtools.utils.*;
 import rhino.*;
 
+import java.lang.reflect.Field;
+import java.util.*;
+
+// @OptimizeReflect
 public class JSFuncClass extends NativeJavaClass {
 	public JSFuncClass(Scriptable scope) {
 		super(scope, JSFunc.class, true);
+	}
+	@CostTimeLog
+	protected void initMembers() {
+		super.initMembers();
+		Object members = Reflect.get(NativeJavaObject.class, this, "members");
+		Map<String, Object> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");
+
+		for (Class<?> inter : JSFunc.class.getInterfaces()) {
+			map.putAll(ArrayUtils.valueArr2Map(inter.getFields(), Field::getName));
+		}
 	}
 	public Object get(String name, Scriptable start) {
 		RuntimeException ex;

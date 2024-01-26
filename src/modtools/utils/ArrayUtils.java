@@ -1,11 +1,11 @@
 package modtools.utils;
 
 import arc.func.Func;
-import arc.struct.ObjectMap;
+import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 
-import java.lang.reflect.Array;
-import java.util.List;
+import java.lang.reflect.*;
+import java.util.*;
 
 public class ArrayUtils {
 	public static <K, V, R> R[] map2Arr(Class<R> cl, ObjectMap<K, V> map, Func<Entry<K, V>, R> func) {
@@ -15,6 +15,20 @@ public class ArrayUtils {
 			tableSeq[c++] = func.get(entry);
 		}
 		return tableSeq;
+	}
+	public static <K, V> Map<K, V> keyArr2Map(K[] keys, Func<K, V> valueFunc) {
+		Map<K, V> map = new HashMap<>();
+		for (K key : keys) {
+			map.put(key, valueFunc.get(key));
+		}
+		return map;
+	}
+	public static <K, V> Map<K, V> valueArr2Map(V[] values, Func< V, K> keyFunc) {
+		Map<K, V> map = new HashMap<>();
+		for (V val : values) {
+			map.put(keyFunc.get(val), val);
+		}
+		return map;
 	}
 
 	public static <T> T getBound(T[] arr, int index) {

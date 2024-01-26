@@ -6,6 +6,9 @@ import ihope_lib.*;
 import static ihope_lib.MyReflect.unsafe;
 
 public interface UNSAFE {
+	/* /trust 不安全 */
+	Object lookup = MyReflect.lookup;
+
 	static void openModule(Object module, String pn) throws Throwable {
 		if (OS.isAndroid) return;
 		MyReflect.openModule((Module) module, pn);

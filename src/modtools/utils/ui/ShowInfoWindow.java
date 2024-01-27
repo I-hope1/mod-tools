@@ -586,7 +586,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 	}
 	private void foldUnwrap(ReflectTable table, Member member, MyLabel label, Element attribute) {
-		if (table.skip) return;
+		if (table.skip || !E_JSFunc.folded_name.enabled()) return;
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
 			if (size == 1) return;

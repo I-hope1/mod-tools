@@ -97,7 +97,7 @@ public class ModTools extends Mod {
 	}
 	private static void resolveLibs() {
 		LoadedMod mod = Vars.mods.getMod(ModTools.class);
-		root = mod != null ? mod.root : new ZipFi(FileUtils.findRoot());
+		root = mod != null && mod.root != null ? mod.root : new ZipFi(FileUtils.findRoot());
 		libs = root.child("libs");
 
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());

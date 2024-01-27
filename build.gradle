@@ -107,8 +107,8 @@ tasks.register('playGame', JavaExec) {
 		}
 	}
 	//运行游戏目录
-//	classpath(MdtDataDir + "/Mindustry.jar")
-	classpath("E:/应用/Mindustry/jre/desktop.jar")
+	classpath(MdtDataDir + "/Mindustry.jar")
+//	classpath("E:/应用/Mindustry/jre/desktop.jar")
 	args = [
 //	        '-testMobile'
 	]

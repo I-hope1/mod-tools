@@ -44,6 +44,9 @@ public class FieldValueLabel extends ValueLabel {
 		}
 	}
 
+	public void setNewVal(Object newVal) {
+		setFieldValue(newVal);
+	}
 	public void setVal() {
 		if (isValid()) {
 			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
@@ -72,7 +75,6 @@ public class FieldValueLabel extends ValueLabel {
 		}));
 		return list;
 	}
-
 
 	public void setFieldValue(Object val) {
 		// Tools.setFieldValue(field, obj, val);

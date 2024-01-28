@@ -302,6 +302,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 	public Runnable afterSet;
 	public abstract void setVal();
+	/** 这可能会设置字段值  */
+	public void setNewVal(Object newVal) {};
+
 	protected void setVal0(Object newVal) {
 		try {
 			setVal(valueFunc.get(newVal));
@@ -406,7 +409,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	private void addPickDrawable(Seq<MenuList> list) {
 		list.add(MenuList.with(Icon.editSmall, "@pickdrawable", () -> {
 			if (val instanceof Drawable d)
-				IntUI.drawablePicker().show(d, true, this::setVal);
+				IntUI.drawablePicker().show(d, true, this::setNewVal);
 		}));
 	}
 

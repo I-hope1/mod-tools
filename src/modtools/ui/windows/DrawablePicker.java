@@ -11,6 +11,7 @@ import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
+import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
@@ -65,7 +66,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 		isIconColor = true;
 		drawable = cloneDrawable(drawable0);
-		resetColor(iconCurrent.set(getTint(drawable0)));
+		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
+		resetColor(sourceColor);
 
 		cont.clear();
 		cont.pane(newTable(t -> {
@@ -77,9 +79,11 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				}
 			}).grow());
 			t.table(Styles.black6, wrap -> {
-				MyItemSelection.buildTable0(wrap, Icon.icons.values().toSeq().as().addAll(Arrays.stream(Styles.class.getFields())
-					.filter(f -> FieldUtils.isStatic(f) && f.getType() == Drawable.class)
-					.map(f -> (Drawable) FieldUtils.get(null, f)).toList()).as(),
+				Seq<Drawable> drawables = Icon.icons.values().toSeq().as().addAll(Arrays.stream(Styles.class.getFields())
+				 .filter(f -> FieldUtils.isStatic(f) && f.getType() == Drawable.class)
+				 .map(f -> (Drawable) FieldUtils.get(null, f)).toList()).as();
+				drawables.addUnique(drawable);
+				MyItemSelection.buildTable0(wrap, drawables,
 				 () -> drawable, drawable -> this.drawable = drawable, 8,
 				 d -> d);
 			}).grow().row();
@@ -208,7 +212,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		buttons.margin(6, 8, 6, 8).defaults().growX().height(32);
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
-			cons.get(drawable);
+			cons.get(iconCurrent.equals(sourceColor) ? drawable : new WrapTextureRegionDrawable(drawable, new Color(iconCurrent)));
 			hide();
 		});
 	}
@@ -284,6 +288,65 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				return add(stack);
 			}
 		};
+	}
+	private static class WrapTextureRegionDrawable implements Drawable {
+		Drawable drawable;
+		Color    color;
+		public WrapTextureRegionDrawable(Drawable drawable, Color color) {
+			this.drawable = drawable;
+			this.color = color;
+		}
+		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
+										 float scaleY, float rotation) {
+			if (drawable == null) return;
+			Draw.color(color);
+			drawable.draw(x, y, originX, originY, width, height, scaleX, scaleY, rotation);
+		}
+		public float getLeftWidth() {
+			return drawable.getLeftWidth();
+		}
+		public void setLeftWidth(float leftWidth) {
+			drawable.setLeftWidth(leftWidth);
+		}
+		public float getRightWidth() {
+			return drawable.getRightWidth();
+		}
+		public void setRightWidth(float rightWidth) {
+			drawable.setRightWidth(rightWidth);
+		}
+		public float getTopHeight() {
+			return drawable.getTopHeight();
+		}
+		public void setTopHeight(float topHeight) {
+			drawable.setTopHeight(topHeight);
+		}
+		public float getBottomHeight() {
+			return drawable.getBottomHeight();
+		}
+		public void setBottomHeight(float bottomHeight) {
+			drawable.setBottomHeight(bottomHeight);
+		}
+		public float getMinWidth() {
+			return drawable.getMinWidth();
+		}
+		public void setMinWidth(float minWidth) {
+			drawable.setMinWidth(minWidth);
+		}
+		public float getMinHeight() {
+			return drawable.getMinHeight();
+		}
+		public void setMinHeight(float minHeight) {
+			drawable.setMinHeight(minHeight);
+		}
+		public void draw(float x, float y, float width, float height) {
+			if (drawable == null) return;
+			Draw.color(color);
+			drawable.draw(x, y, width, height);
+		}
+
+		public String toString() {
+			return drawable.toString() + "#" + color.toString();
+		}
 	}
 	private class DelegetingColor extends Color {
 		public Color delegetor() {

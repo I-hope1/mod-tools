@@ -23,6 +23,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
+import modtools.ui.Frag.ClearScroll;
 import modtools.ui.HopeIcons;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
@@ -163,6 +164,8 @@ public class Window extends Table {
 			if (this instanceof IDisposable) show();
 		});
 		all.add(this);
+
+		addListener(new ClearScroll());
 	}
 	private void buildTitle(String title, boolean full) {
 		add(titleTable).growX().height(topHeight).name("titleTable");

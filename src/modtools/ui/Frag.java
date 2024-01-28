@@ -6,18 +6,20 @@ import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.components.buttons.CircleImageButton;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
+import modtools.utils.Tools;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.ui.search.BindCell;
 
@@ -38,6 +40,7 @@ public class Frag extends Table {
 	Set<Content> enabledContents = new HashSet<>();
 	public Frag() {
 		super(Styles.black8);
+		addListener(new ClearScroll());
 	}
 	public void load() {
 		touchable = Touchable.enabled;
@@ -60,7 +63,7 @@ public class Frag extends Table {
 				content.btn = table.button(localizedName,
 					content.icon,
 					style, content.icon == Styles.none ? 0 : 20,
-					content::build)
+					() -> Tools.runShowedException(content::build))
 				 .marginLeft(6f).update(b ->
 					b.getChildren().get(1).setColor(b.isDisabled() ? Color.gray : Color.white))
 				 .size(120, 40).get();
@@ -135,6 +138,12 @@ public class Frag extends Table {
 			 top.getWidth() / 2f,
 			 top.getHeight() / 2f, 0.1f,
 			 Interp.smooth), Actions.remove());
+		}
+	}
+	public static class ClearScroll extends InputListener {
+		public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+			super.exit(event, x, y, pointer, toActor);
+			if (Vars.state.isGame()) Core.scene.setScrollFocus(null);
 		}
 	}
 

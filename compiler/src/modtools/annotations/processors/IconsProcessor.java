@@ -47,14 +47,22 @@ public class IconsProcessor extends BaseProcessor {
 		addImport(element, findClassSymbol("arc.Core"));
 
 		StringBuilder sb = new StringBuilder();
+		sb.append("if (root == null) root = mindustry.Vars.mods.getMod(").append(icons.mainClass().getName()).append(".class).root;");
+		sb.append("dir = root.child(\"").append(icons.iconDir()).append("\");");
 		stringType.tsym.owner.kind = Kind.VAR;
 		texture.tsym.owner.kind = Kind.VAR;
 		map.tsym.owner.kind = Kind.VAR;
-		addField(root, Flags.STATIC | Flags.PUBLIC | Flags.FINAL, fiType,
-		 "dir", "mindustry.Vars.mods.getMod(" + icons.mainClass().getName()
-						+ ".class).root.child(\"" + icons.iconDir()
-						+ "\")"
-		);
+		addField(root, Flags.STATIC | Flags.PRIVATE, fiType,
+		 "root", null);
+		addField(root, Flags.STATIC | Flags.PRIVATE, fiType,
+		 "dir", null);
+		JCVariableDecl p1Fi = makeVar(Flags.PARAMETER, fiType, "p1Fi", null, root.sym);
+		JCMethodDecl setRoot = mMaker.MethodDef(
+		 mMaker.Modifiers(Flags.PUBLIC | Flags.STATIC),
+		 ns("setRoot"), mMaker.Ident(mSymtab.voidType.tsym),
+		 List.nil(), List.of(p1Fi),
+		 List.nil(), parseBlock("{root = p1Fi;}"), null);
+		root.defs = root.defs.append(setRoot);
 		stringType.tsym.owner.kind = Kind.PCK;
 		texture.tsym.owner.kind = Kind.PCK;
 		map.tsym.owner.kind = Kind.PCK;
@@ -66,9 +74,9 @@ public class IconsProcessor extends BaseProcessor {
 		 mMaker.Modifiers(Flags.PRIVATE | Flags.STATIC),
 		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),
 		 List.nil(), parseBlock("{Texture t = new Texture(dir.child(name));" +
-															 "t.setFilter(Texture.TextureFilter.linear);" +
-															 "return new TextureRegionDrawable(new TextureRegion(t));" +
-															 "}"), null);
+														"t.setFilter(Texture.TextureFilter.linear);" +
+														"return new TextureRegionDrawable(new TextureRegion(t));" +
+														"}"), null);
 		root.defs = root.defs.append(n);
 		for (File fi : findAll(new File("./assets/" + icons.iconDir()))
 		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new)) {

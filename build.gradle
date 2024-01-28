@@ -113,6 +113,7 @@ tasks.register('playGame', JavaExec) {
 //	        '-testMobile'
 	]
 	jvmArgs = [
+			'-Djava.library.path=E:/Users/ASUS/Desktop/Mods/mod-tools136/assets',
 			'-DsocksProxyHost=127.0.0.1',
 			'-DsocksProxyPort=1080',
 			'-DsocksNonProxyHosts="localhost|127.0.0.1"'

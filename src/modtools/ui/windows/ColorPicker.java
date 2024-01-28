@@ -18,6 +18,7 @@ import modtools.ui.*;
 import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
+import modtools.utils.Tools;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
@@ -120,66 +121,21 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 				});
 			}}).row();
 
-			/* t.stack(new Element() {
-				@Override
-				public void draw() {
-					float first  = Tmp.c1.set(current).saturation(0f).a(parentAlpha).toFloatBits();
-					float second = Tmp.c1.set(current).saturation(1f).a(parentAlpha).toFloatBits();
+			hexField = t.field(current.toString().toUpperCase(), Tools.catchCons(value -> {
+				current.set(Color.valueOf(value).a(a));
+				current.toHsv(values);
+				h = values[0];
+				s = values[1];
+				v = values[2];
+				a = current.a;
 
-					Fill.quad(
-					 x, y, first,
-					 x + width, y, second,
-					 x + width, y + height, second,
-					 x, y + height, first
-					);
+				hSlider.setValue(h);
+				if (aSlider != null) {
+					aSlider.setValue(a);
 				}
-			}, sSlider = new Slider(0f, 1f, 0.001f, false) {{
-				setValue(s);
-				moved(value -> {
-					s = value;
-					updateColor();
-				});
-			}}).row();
 
-			t.stack(new Element() {
-				@Override
-				public void draw() {
-					float first  = Tmp.c1.set(current).value(0f).a(parentAlpha).toFloatBits();
-					float second = Tmp.c1.fromHsv(h, s, 1f).a(parentAlpha).toFloatBits();
-
-					Fill.quad(
-					 x, y, first,
-					 x + width, y, second,
-					 x + width, y + height, second,
-					 x, y + height, first
-					);
-				}
-			}, vSlider = new Slider(0f, 1f, 0.001f, false) {{
-				setValue(v);
-				moved(value -> {
-					v = value;
-					updateColor();
-				});
-			}}).row(); */
-
-			hexField = t.field(current.toString().toUpperCase(), value -> {
-				try {
-					current.set(Color.valueOf(value).a(a));
-					current.toHsv(values);
-					h = values[0];
-					s = values[1];
-					v = values[2];
-					a = current.a;
-
-					hSlider.setValue(h);
-					if (aSlider != null) {
-						aSlider.setValue(a);
-					}
-
-					updateColor(false);
-				} catch (Exception ignored) {
-				}
-			}).size(130f, 40f).valid(text -> {
+				updateColor(false);
+			})).size(130f, 40f).valid(text -> {
 				//garbage performance but who cares this runs only every key type anyway
 				try {
 					Color.valueOf(text);

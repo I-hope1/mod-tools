@@ -137,7 +137,7 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 			return this;
 		}
 		template.bind(NORMAL);
-		template.add(info).color(Pal.accent).growX().left().colspan(2).row();
+		template.add(info).ellipsis(true).color(Pal.accent).growX().left().colspan(2).row();
 		template.image().color(Pal.accent).growX().colspan(2).row();
 		var prov  = new CacheProv(value);
 		var label = new MyLabel(prov.getStringProv());

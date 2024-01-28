@@ -123,22 +123,22 @@ public class FieldUtils {
 		long     offset   = fieldOffset(isStatic, f);
 		setValue(o, offset, value, type);
 	}
-	public static void setValue(Object o, long off, Object value, Class<?> type) {
-		if (int.class.equals(type)) {
+	public static void setValue(Object o, long off, Object value, Class<?> valType) {
+		if (int.class.equals(valType)) {
 			unsafe.putInt(o, off, ((Number) value).intValue());
-		} else if (float.class.equals(type)) {
+		} else if (float.class.equals(valType)) {
 			unsafe.putFloat(o, off, ((Number) value).floatValue());
-		} else if (double.class.equals(type)) {
+		} else if (double.class.equals(valType)) {
 			unsafe.putDouble(o, off, ((Number) value).doubleValue());
-		} else if (long.class.equals(type)) {
+		} else if (long.class.equals(valType)) {
 			unsafe.putLong(o, off, ((Number) value).longValue());
-		} else if (char.class.equals(type)) {
+		} else if (char.class.equals(valType)) {
 			unsafe.putChar(o, off, (char) value);
-		} else if (byte.class.equals(type)) {
+		} else if (byte.class.equals(valType)) {
 			unsafe.putByte(o, off, ((Number) value).byteValue());
-		} else if (short.class.equals(type)) {
+		} else if (short.class.equals(valType)) {
 			unsafe.putShort(o, off, ((Number) value).shortValue());
-		} else if (boolean.class.equals(type)) {
+		} else if (boolean.class.equals(valType)) {
 			unsafe.putBoolean(o, off, (boolean) value);
 		} else {
 			unsafe.putObject(o, off, value);
@@ -147,6 +147,11 @@ public class FieldUtils {
 			}*/
 		}
 	}
+	public static void setValue(Object obj, Class<?> cls, String name, Object val,
+	Class<?> valType) {
+		setValue(obj, fieldOffset(cls, name), val, valType);
+	}
+
 
 
 	public static boolean setBoolean(Object o, Field field, boolean val) {
@@ -160,5 +165,8 @@ public class FieldUtils {
 	public static boolean set$$(Class<?> cls, Object obj, String fieldName, Object value) {
 		/* nothing to do */
 		return false;
+	}
+	public static boolean isStatic(Field f) {
+		return Modifier.isStatic(f.getModifiers());
 	}
 }

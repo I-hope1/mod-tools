@@ -15,6 +15,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
@@ -28,6 +29,7 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
 import modtools.struct.TaskSet;
+import modtools.utils.reflect.*;
 
 import java.util.*;
 
@@ -45,7 +47,25 @@ public final class TopGroup extends WidgetGroup {
 		public static boolean
 		 checkUICount,
 		 debugBounds,
-		 selectInvisible, drawHiddenPad;
+		 selectInvisible, drawHiddenPad,
+		 overrideScene;
+	}
+	static {
+		if (TSettings.overrideScene) {
+			var prev = scene.root;
+			FieldUtils.setValue(scene, Scene.class, "root", new Group() {
+				public float getHeight() {
+					return scene.getHeight() - scene.marginTop - scene.marginBottom;
+				}
+				public float getWidth() {
+					return scene.getWidth() - scene.marginLeft - scene.marginRight;
+				}
+				public void drawChildren() {
+					Tools.runLoggedException(super::drawChildren);
+				}
+			}, Group.class);
+			Tools.clone(prev, scene.root, Group.class, (Seq<String>) null);
+		}
 	}
 
 	/* 渲染相关 */

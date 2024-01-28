@@ -2,6 +2,7 @@ package modtools;
 
 import arc.*;
 import arc.files.*;
+import arc.graphics.Color;
 import arc.scene.event.VisibilityListener;
 import arc.struct.*;
 import arc.util.*;
@@ -12,6 +13,7 @@ import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
+import modtools.android.HiddenApi;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
@@ -20,6 +22,7 @@ import modtools.ui.content.SettingsUI;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.tutorial.AllTutorial;
+import modtools.ui.windows.DrawablePicker;
 import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
@@ -66,9 +69,14 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
 
+		if (false) HiddenApi.setHiddenApiExemptions();
+
 		HopeCall.init();
 
-		if (isImportFromGame) resolveInputAndUI();
+		if (isImportFromGame) {
+			loadContent();
+			resolveInputAndUI();
+		}
 		else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
 	}
 
@@ -84,6 +92,7 @@ public class ModTools extends Mod {
 		try {
 			resolveLibs();
 		} catch (Throwable e) {
+			Log.err(e);
 			if (e instanceof UnexpectedPlatform) Log.err("It seems you platform is special. (But don't worry.)");
 			planB_resolveLibs();
 		}
@@ -115,7 +124,9 @@ public class ModTools extends Mod {
 		MyFonts.load();
 		HopeInput.load();
 		// 加载HopeIcons
+		HopeIcons.setRoot(root);
 		HopeIcons.load();
+		// new DrawablePicker().show(IntUI.whiteui, true, __ -> {});
 		if (OS.isWindows || OS.isMac) {
 			addFileDragListener();
 		}

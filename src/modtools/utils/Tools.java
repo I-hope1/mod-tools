@@ -9,6 +9,7 @@ import arc.util.*;
 import arc.util.Log.LogHandler;
 import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
+import modtools.ModTools;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
 import modtools.struct.TaskSet;
@@ -43,12 +44,15 @@ public class Tools {
 	}
 
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {
+		clone(from,to,cls, f -> blackList == null || blackList.contains(f.getName()));
+	}
+	public static void clone(Object from, Object to, Class<?> cls, Boolf<Field> boolf) {
 		if (from == to) throw new IllegalArgumentException("from == to");
 		if (from == null) return;
 		while (cls != null && Object.class.isAssignableFrom(cls)) {
 			Field[] fields = cls.getDeclaredFields();
 			for (Field f : fields) {
-				if (!Modifier.isStatic(f.getModifiers()) && (blackList == null || !blackList.contains(f.getName()))) {
+				if (!Modifier.isStatic(f.getModifiers()) && boolf.get(f)) {
 					// if (display) Log.debug(f);
 					copyValue(f, from, to);
 				}
@@ -56,6 +60,7 @@ public class Tools {
 			cls = cls.getSuperclass();
 		}
 	}
+
 	public static void copyValue(Field f, Object from, Object to) {
 		Class<?> type   = f.getType();
 		long     offset = modtools.utils.reflect.FieldUtils.fieldOffset(f);
@@ -199,6 +204,15 @@ public class Tools {
 			run.run();
 		} catch (Throwable ignored) {}
 	}
+	public static void runShowedException(CatchRun run) {
+		try {
+			run.run();
+		} catch (Throwable e) {
+			IntUI.showException(e);
+			Log.err(e);
+		}
+	}
+
 	public static void runLoggedException(CatchRun run) {
 		try {
 			run.run();
@@ -232,13 +246,16 @@ public class Tools {
 			}
 		};
 	}
+	public static <T> Cons<T> catchCons(CCons<T> cons) {
+		return catchCons(cons, null);
+	}
 
 	public static <T> Cons<T> catchCons(CCons<T> cons, Cons<Throwable> resolver) {
 		return t -> {
 			try {
 				cons.get(t);
 			} catch (Throwable e) {
-				resolver.get(e);
+				if(resolver != null) resolver.get(e);
 			}
 		};
 	}
@@ -264,6 +281,10 @@ public class Tools {
 	public interface CBoolp {
 		boolean get() throws Throwable;
 	}
+	public interface CBoolc {
+		void get(boolean b) throws Throwable;
+	}
+
 	public interface CCons<T> {
 		void get(T t) throws Throwable;
 	}

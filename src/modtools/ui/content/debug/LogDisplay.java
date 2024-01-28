@@ -72,9 +72,7 @@ public class LogDisplay extends Content {
 					text[0] = getString.get();
 				}
 				return text[0];
-			}).get()).self(pane -> pane.update(__ -> {
-				pane.width(ui.cont.getWidth() / Scl.scl());
-			}));
+			}).get()).grow();
 		}), crashes};
 		String[] names = {"last_log", "crashes"};
 		IntTab tab = new IntTab(-1, names, colors, tables);

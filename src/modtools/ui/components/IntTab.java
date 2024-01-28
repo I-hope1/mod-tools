@@ -47,7 +47,7 @@ public class IntTab {
 			t.pane(title).top().fill()
 			 .self(c -> c.update(__ -> c.minHeight(title.getMinHeight() / Scl.scl())));
 			if (!column) t.row();
-			t.add(pane).self(c -> c.width(totalWidth)).grow();
+			t.add(pane).self(c -> c.update(__ -> c.width(totalWidth))).grow();
 		}) {
 			public float getMinWidth() {
 				return prefW != -1 ? prefW : super.getMinWidth();

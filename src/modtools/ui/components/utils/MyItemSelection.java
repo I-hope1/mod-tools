@@ -1,9 +1,8 @@
 
 package modtools.ui.components.utils;
 
-import arc.func.Cons;
-import arc.func.Prov;
-import arc.scene.style.TextureRegionDrawable;
+import arc.func.*;
+import arc.scene.style.*;
 import arc.scene.ui.ButtonGroup;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.ScrollPane;
@@ -28,9 +27,15 @@ public class MyItemSelection {
 																															Cons<T> consumer, int cols) {
 		IntVars.async(() -> buildTable0(table, items, holder, consumer, cols), () -> {});
 	}
+	private static <T extends UnlockableContent> void buildTable0(
+	 Table table, Seq<T> items, Prov<T> holder,
+	 Cons<T> consumer, int cols) {
+		buildTable0(table, items, holder, consumer, cols, u -> new TextureRegionDrawable(u.uiIcon));
+	}
 
-	private static <T extends UnlockableContent> void buildTable0(Table table, Seq<T> items, Prov<T> holder,
-																																Cons<T> consumer, int cols) {
+	public static <T> void buildTable0(
+	 Table table, Seq<T> items, Prov<T> holder,
+	 Cons<T> consumer, int cols, Func<T, Drawable> drawableFunc) {
 		ButtonGroup<ImageButton> group = new ButtonGroup<>();
 		group.setMinCheckCount(0);
 		Table cont = new Table();
@@ -42,10 +47,8 @@ public class MyItemSelection {
 			try {
 				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, () -> {
 				}).group(group).get();
-				button.changed(() -> {
-					consumer.get(button.isChecked() ? item : null);
-				});
-				button.getStyle().imageUp = new TextureRegionDrawable(item.uiIcon);
+				button.changed(() -> consumer.get(button.isChecked() ? item : null));
+				button.getStyle().imageUp = drawableFunc.get(item);
 				if (item == holder.get()) button.setChecked(true);
 			} catch (Exception ignored) {}
 			if (++i % cols == 0) {

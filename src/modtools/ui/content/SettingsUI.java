@@ -143,11 +143,12 @@ public class SettingsUI extends Content {
 
 			 row();
 			 table(Tex.pane, t -> {
+				 t.defaults().growX().height(42);
 				 t.add("@mod-tools.functions").row();
 				 if (OS.isAndroid || OS.isWindows) t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
 					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-				 }).height(42);
-				 t.button("Enable Debug Parma", Icon.chatSmall, HopeStyles.flatt, () -> {
+				 }).height(42).row();
+				 t.button("Enable Debug Level", Icon.chatSmall, HopeStyles.flatt, () -> {
 					 Log.level = LogLevel.debug;
 				 }).height(42);
 			 }).growX();
@@ -179,7 +180,8 @@ public class SettingsUI extends Content {
 	}
 	@DataBoolSetting
 	public void settingBool(Table t) {
-		boolean[] __ = {TSettings.checkUICount, TSettings.debugBounds, TSettings.drawHiddenPad};
+		boolean[] __ = {TSettings.checkUICount, TSettings.debugBounds,
+										TSettings.drawHiddenPad, TSettings.overrideScene};
 	}
 	public static void addElemValueLabel(
 	 Table table, String text, Prov<Element> prov,

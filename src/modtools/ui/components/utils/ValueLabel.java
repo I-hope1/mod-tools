@@ -372,6 +372,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				 .isInstance(Drawable.class, INFO_DIALOG::dialog)
 				)));
 		 }, TextureRegion.class, Texture.class, Drawable.class)
+		 .isExtend(__ -> {
+			 if (val instanceof Drawable d)
+				 IntUI.drawablePicker().show(d, true, this::setVal);
+		 }, Drawable.class)
 		 /* .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
 

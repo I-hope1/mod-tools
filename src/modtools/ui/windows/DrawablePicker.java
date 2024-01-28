@@ -8,7 +8,7 @@ import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
@@ -16,31 +16,44 @@ import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
+import modtools.ui.IntUI.*;
 import modtools.ui.components.Window;
+import modtools.ui.components.utils.MyItemSelection;
+import modtools.ui.style.TintDrawable;
+import modtools.utils.SR.CatchSR;
+import modtools.utils.Tools;
+import modtools.utils.reflect.FieldUtils;
 
+import java.util.Arrays;
+
+import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 import static modtools.ui.windows.ColorPicker.*;
 
-public class DrawablePicker extends Window {
+public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	private Drawable drawable;
 
-	private Cons<Color> cons = c -> {};
-	Color current = new Color();
-	float h, s, v, a;
+	private Cons<Drawable> cons = c -> {};
+	Color iconCurrent  = new Color(Color.white),
+	 backgroundCurrent = new Color(bgColor);
+	boolean         isIconColor = true;
+	DelegetingColor current     = new DelegetingColor();
+	float           h, s, v, a;
 	TextField hexField;
 	Slider    hSlider, aSlider;
 
 	public DrawablePicker() {
 		super("@pickcolor", 0, 0, false, false);
+		background(null);
 
-		cont.background(IntUI.whiteui.tint(bgColor));
+		cont.background(new TintDrawable(IntUI.whiteui, backgroundCurrent));
 	}
 
-	public void show(Color color, Cons<Color> consumer) {
-		show(color, true, consumer);
+	public void show(Drawable drawable, Cons<Drawable> consumer) {
+		show(drawable, true, consumer);
 	}
 
-	public void show(Color color, boolean alpha, Cons<Color> consumer) {
+	public void show(Drawable drawable0, boolean alpha, Cons<Drawable> consumer) {
 		this.current.set(color);
 		this.cons = consumer;
 		show();
@@ -50,24 +63,47 @@ public class DrawablePicker extends Window {
 			hueTex.setFilter(TextureFilter.linear);
 		}
 
-		float[] values = color.toHsv(new float[3]);
-		h = values[0];
-		s = values[1];
-		v = values[2];
-		a = color.a;
+		isIconColor = true;
+		drawable = cloneDrawable(drawable0);
+		resetColor(iconCurrent.set(getTint(drawable0)));
 
 		cont.clear();
 		cont.pane(newTable(t -> {
-			t.add(new Element() {
+			t.table(i -> i.add(new Element() {
 				public void draw() {
 					if (drawable == null) return;
+					Draw.color(iconCurrent, iconCurrent.a * parentAlpha);
 					drawable.draw(x, y, width, height);
 				}
-			});
+			}).grow());
+			t.table(Styles.black6, wrap -> {
+				MyItemSelection.buildTable0(wrap, Icon.icons.values().toSeq().as().addAll(Arrays.stream(Styles.class.getFields())
+					.filter(f -> FieldUtils.isStatic(f) && f.getType() == Drawable.class)
+					.map(f -> (Drawable) FieldUtils.get(null, f)).toList()).as(),
+				 () -> drawable, drawable -> this.drawable = drawable, 8,
+				 d -> d);
+			}).grow().row();
+
+			t.table(Styles.black6, buttons -> {
+				buttons.left().defaults().growX().height(32);
+				buttons.check("Icon", b -> {}).row();
+				buttons.check("Background", b -> {});
+				buttons.getChildren().<CheckBox>as().each(b -> {
+					b.left();
+					b.setStyle(HopeStyles.hope_defaultCheck);
+				});
+				ButtonGroup<CheckBox> group = new ButtonGroup<>();
+				group.add(buttons.getChildren().toArray(CheckBox.class));
+				buttons.update(() -> {
+					if (isIconColor == (group.getChecked().getZIndex() == 0)) return;
+					isIconColor = group.getChecked().getZIndex() == 0;
+					resetColor(current);
+				});
+			}).padLeft(4f).padRight(6f);
 			t.add(new Element() {
 				 public void draw() {
-					 float first  = Tmp.c1.set(current).value(1).saturation(0f).a(parentAlpha).toFloatBits();
-					 float second = Tmp.c2.set(current).value(1).saturation(1f).a(parentAlpha).toFloatBits();
+					 float first  = Tmp.c1.set(current.delegetor()).value(1).saturation(0f).a(parentAlpha).toFloatBits();
+					 float second = Tmp.c2.set(current.delegetor()).value(1).saturation(1f).a(parentAlpha).toFloatBits();
 
 					 Fill.quad(
 						x, y, Tmp.c1.value(0).toFloatBits(),/* 左下角 */
@@ -80,7 +116,7 @@ public class DrawablePicker extends Window {
 					 Icon.cancelSmall.draw(x + s * width, y + v * height,
 						5 * Scl.scl(), 5 * Scl.scl());
 				 }
-			 }).growX().height(100).padBottom(6f).colspan(2)
+			 }).growX().height(100).padBottom(6f)
 			 .with(l -> l.addListener(new InputListener() {
 				 public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 					 apply(x, y);
@@ -97,8 +133,7 @@ public class DrawablePicker extends Window {
 			 }))
 			 .row();
 
-			t.defaults().width(140f).height(24f);
-
+			t.defaults().width(260f).height(24f);
 
 			t.add(new Element() {
 				public void draw() {
@@ -109,9 +144,9 @@ public class DrawablePicker extends Window {
 					float radius = width / 2;
 					float alpha  = a * parentAlpha;
 
-					Draw.color(Tmp.c1.fromHsv(h, s, v).inv(), alpha);
+					Draw.color(Tmp.c1.set(iconCurrent).inv(), alpha);
 					Fill.circle(x, y, radius);
-					Draw.color(Tmp.c1.fromHsv(h, s, v), alpha);
+					Draw.color(iconCurrent, alpha);
 					Fill.circle(x, y, radius - 1);
 				}
 			}).size(42);
@@ -124,66 +159,17 @@ public class DrawablePicker extends Window {
 				});
 			}}).row();
 
-			/* t.stack(new Element() {
-				@Override
-				public void draw() {
-					float first  = Tmp.c1.set(current).saturation(0f).a(parentAlpha).toFloatBits();
-					float second = Tmp.c1.set(current).saturation(1f).a(parentAlpha).toFloatBits();
+			hexField = t.field(current.toString().toUpperCase(), Tools.catchCons(value -> {
+				current.set(Color.valueOf(value).a(a));
+				resetColor(current);
 
-					Fill.quad(
-					 x, y, first,
-					 x + width, y, second,
-					 x + width, y + height, second,
-					 x, y + height, first
-					);
+				hSlider.setValue(h);
+				if (aSlider != null) {
+					aSlider.setValue(a);
 				}
-			}, sSlider = new Slider(0f, 1f, 0.001f, false) {{
-				setValue(s);
-				moved(value -> {
-					s = value;
-					updateColor();
-				});
-			}}).row();
 
-			t.stack(new Element() {
-				@Override
-				public void draw() {
-					float first  = Tmp.c1.set(current).value(0f).a(parentAlpha).toFloatBits();
-					float second = Tmp.c1.fromHsv(h, s, 1f).a(parentAlpha).toFloatBits();
-
-					Fill.quad(
-					 x, y, first,
-					 x + width, y, second,
-					 x + width, y + height, second,
-					 x, y + height, first
-					);
-				}
-			}, vSlider = new Slider(0f, 1f, 0.001f, false) {{
-				setValue(v);
-				moved(value -> {
-					v = value;
-					updateColor();
-				});
-			}}).row(); */
-
-			hexField = t.field(current.toString().toUpperCase(), value -> {
-				try {
-					current.set(Color.valueOf(value).a(a));
-					current.toHsv(values);
-					h = values[0];
-					s = values[1];
-					v = values[2];
-					a = current.a;
-
-					hSlider.setValue(h);
-					if (aSlider != null) {
-						aSlider.setValue(a);
-					}
-
-					updateColor(false);
-				} catch (Exception ignored) {
-				}
-			}).size(130f, 40f).valid(text -> {
+				updateColor(false);
+			})).size(130f, 40f).valid(text -> {
 				//garbage performance but who cares this runs only every key type anyway
 				try {
 					Color.valueOf(text);
@@ -197,8 +183,8 @@ public class DrawablePicker extends Window {
 				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
 					@Override
 					public void draw() {
-						float first  = Tmp.c1.set(current).a(0f).toFloatBits();
-						float second = Tmp.c1.set(current).a(parentAlpha).toFloatBits();
+						float first  = Tmp.c1.set(current.delegetor()).a(0f).toFloatBits();
+						float second = Tmp.c1.set(current.delegetor()).a(parentAlpha).toFloatBits();
 
 						Fill.quad(
 						 x, y, first,
@@ -222,9 +208,41 @@ public class DrawablePicker extends Window {
 		buttons.margin(6, 8, 6, 8).defaults().growX().height(32);
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
-			cons.get(current);
+			cons.get(drawable);
 			hide();
 		});
+	}
+	/** 复制drawable并设置{@code tint}为{@link Color#white}  */
+	private Drawable cloneDrawable(Drawable drawable) {
+		try {
+			Drawable newDrawable = (Drawable) unsafe.allocateInstance(drawable.getClass());
+			Tools.clone(drawable, newDrawable, drawable.getClass(), f -> {
+				if (!"tint".equals(f.getName()) || f.getType() != Color.class) return true;
+
+				FieldUtils.setValue(f, newDrawable, new Color());
+				return false;
+			});
+			return newDrawable;
+		} catch (Throwable e) {
+			return new TextureRegionDrawable(IntUI.whiteui.getRegion());
+		}
+	}
+	private Color getTint(Drawable drawable) {
+		return CatchSR.apply(() -> CatchSR.of(
+			() -> Reflect.get(TextureRegionDrawable.class, drawable, "tint"))
+		 .get(() -> Reflect.get(NinePatchDrawable.class, drawable, "tint"))
+		 .get(() -> Color.white)
+		 .get()
+		);
+	}
+	private void resetColor(Color color) {
+		if (color instanceof DelegetingColor d) color = d.delegetor();
+		float[] values = color.toHsv(new float[3]);
+		h = values[0];
+		s = values[1];
+		v = values[2];
+		a = color.a;
+		updateHexText(true);
 	}
 
 	void updateColor() {
@@ -236,11 +254,14 @@ public class DrawablePicker extends Window {
 		s = Mathf.clamp(s);
 		v = Mathf.clamp(v);
 		current.fromHsv(h, s, v);
-		current.a = a;
+		current.a(a);
 
+		updateHexText(updateField);
+	}
+	private void updateHexText(boolean updateField) {
 		if (hexField != null && updateField) {
 			String val = current.toString().toUpperCase();
-			if (current.a >= 0.9999f) {
+			if (current.a() >= 0.9999f) {
 				val = val.substring(0, 6);
 			}
 			hexField.setText(val);
@@ -263,5 +284,25 @@ public class DrawablePicker extends Window {
 				return add(stack);
 			}
 		};
+	}
+	private class DelegetingColor extends Color {
+		public Color delegetor() {
+			return isIconColor ? iconCurrent : backgroundCurrent;
+		}
+		public Color set(Color color) {
+			return delegetor().set(color);
+		}
+		public Color fromHsv(float h, float s, float v) {
+			return delegetor().fromHsv(h, s, v);
+		}
+		public String toString() {
+			return delegetor().toString();
+		}
+		public Color a(float a) {
+			return delegetor().a(a);
+		}
+		public float a() {
+			return delegetor().a;
+		}
 	}
 }

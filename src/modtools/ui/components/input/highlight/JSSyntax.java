@@ -3,6 +3,7 @@ package modtools.ui.components.input.highlight;
 import arc.graphics.Color;
 import arc.struct.*;
 import mindustry.Vars;
+import modtools.jsfunc.IScript;
 import modtools.utils.Tools;
 import rhino.*;
 
@@ -22,7 +23,7 @@ public class JSSyntax extends Syntax {
 		// defalutColor = __defalutColor__;
 	}
 
-	public static ImporterTopLevel scope = (ImporterTopLevel) Vars.mods.getScripts().scope;
+	public static ImporterTopLevel scope = (ImporterTopLevel) IScript.scope;
 
 	public static final ObjectSet<String> constantSet = new ObjectSet<>() {
 		// final ObjectSet<String> blackList = new ObjectSet<>();

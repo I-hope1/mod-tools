@@ -52,7 +52,7 @@ import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.ui.MethodTools;
+import modtools.utils.ui.*;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;
@@ -228,6 +228,14 @@ public class Tester extends Content {
 			t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
 			);
+			t.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {
+				compileScript();
+				Script script = this.script;
+				setContextToThread();
+				JSFunc.watch().watch(textarea.getText(), () -> {
+					return script.exec(cx, scope);
+				});
+			});
 		}).growX().minWidth(w).get();
 		_cont.row();
 		Cell<?> logCell = _cont.table(Tex.sliderBack, t -> {
@@ -593,7 +601,7 @@ public class Tester extends Content {
 	};
 	private void execAndDealRes() {
 		try {
-			if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
+			setContextToThread();
 			Object o = setLogger(logHandler, () -> script.exec(cx, scope));
 			res = o = CAST.unwrap(o);
 
@@ -609,6 +617,9 @@ public class Tester extends Content {
 		} finally {
 			finished = true;
 		}
+	}
+	private static void setContextToThread() {
+		if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
 	}
 	public void handleError(Throwable ex) {
 		makeError(ex, true);
@@ -705,7 +716,7 @@ public class Tester extends Content {
 				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
 		try {
-			Object obj1 = new JSFuncClass(Tester.scope);
+			Object obj1 = new JSFuncClass(scope);
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
 			ScriptableObject.putProperty(scope, "$", obj1);
 			ScriptableObject.putProperty(scope, "unsafe", unsafe);

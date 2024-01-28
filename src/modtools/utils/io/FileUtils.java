@@ -14,7 +14,9 @@ public class FileUtils {
 		try {
 			URL    url  = ModTools.class.getClassLoader().getResource("mod.hjson");
 			String path = Objects.requireNonNull(url).toURI().toString();
-			return new Fi(new File(path.substring(path.indexOf(':') + 1, path.lastIndexOf('!'))));
+			path = path.substring(path.indexOf("file:") + 5, path.lastIndexOf('!'));
+			// Log.info(path);
+			return new Fi(new File(path));
 		} catch (Throwable ignored) {}
 
 		if (OS.isWindows || OS.isMac) {

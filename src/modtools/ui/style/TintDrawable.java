@@ -1,7 +1,9 @@
 package modtools.ui.style;
 
 import arc.func.Intp;
+import arc.graphics.Color;
 import arc.scene.style.TextureRegionDrawable;
+import modtools.utils.reflect.FieldUtils;
 
 public class TintDrawable extends TextureRegionDrawable {
 	int  last = tint.rgba();
@@ -10,8 +12,14 @@ public class TintDrawable extends TextureRegionDrawable {
 		super(drawable);
 		this.intp = intp;
 	}
+	public TintDrawable(TextureRegionDrawable drawable, Color color) {
+		super(drawable);
+		FieldUtils.setValue(this, TextureRegionDrawable.class,
+		 "tint", color, Color.class);
+	}
+
 	void updateTint() {
-		if (last != intp.get()) tint.set(last = intp.get());
+		if (intp != null && last != intp.get()) tint.set(last = intp.get());
 	}
 	public void draw(float x, float y, float width, float height) {
 		updateTint();

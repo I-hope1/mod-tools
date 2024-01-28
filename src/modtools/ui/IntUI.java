@@ -26,7 +26,7 @@ import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.menu.*;
-import modtools.ui.windows.ColorPicker;
+import modtools.ui.windows.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
 import modtools.jsfunc.INFO_DIALOG;
@@ -55,9 +55,17 @@ public class IntUI {
 	public static final Frag     frag     = new Frag();
 	public static final TopGroup topGroup = new TopGroup();
 
-	private static ColorPicker _picker;
-	public static ColorPicker picker() {
-		return _picker == null ? _picker = new ColorPicker() : _picker;
+	private interface _a {
+		ColorPicker impl = new ColorPicker();
+	}
+	public static ColorPicker colorPicker() {
+		return _a.impl;
+	}
+	private interface _b {
+		DrawablePicker impl = new DrawablePicker();
+	}
+	public static DrawablePicker drawablePicker() {
+		return _b.impl;
 	}
 
 	/**
@@ -82,13 +90,15 @@ public class IntUI {
 	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
 	 * @param <T>  the type parameter
 	 * @param elem 被添加侦听器的元素
-	 * @param click 单击事件
-	 * @param d_click 双击事件
+	 * @param click0 单击事件
+	 * @param d_click0 双击事件
 	 * @return the t
 	 */
 	public static <T extends Element> T
-	doubleClick(T elem, Runnable click, Runnable d_click) {
-		if (click == null && d_click == null) return elem;
+	doubleClick(T elem, Runnable click0, Runnable d_click0) {
+		if (click0 == null && d_click0 == null) return elem;
+		final Runnable click = click0 == null ? null : catchRun(click0::run),
+		 d_click = d_click0 == null ? null : catchRun(d_click0::run);
 		class ClickTask extends Task {
 			public void run() {
 				if (click != null) click.run();
@@ -125,11 +135,12 @@ public class IntUI {
 	 * @param <T>  the type parameter
 	 * @param elem 被添加侦听器的元素
 	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param boolc {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+	 * @param boolc0 {@link Boolc#get(boolean b)}形参{@code b}为是否长按
 	 * @return the t
 	 */
 	public static <T extends Element> T
-	longPress(T elem, final long duration, final Boolc boolc) {
+	longPress(T elem, final long duration, final Boolc boolc0) {
+		Boolc boolc = b -> Tools.runLoggedException(() -> boolc0.get(b));
 		class LongPressListener extends ClickListener {
 			class LongPressTask extends Task {
 				public void run() {
@@ -803,11 +814,11 @@ public class IntUI {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);
 		Runnable runnable = () -> {
-			IntUI.picker().show(color, c1 -> {
+			IntUI.colorPicker().show(color, c1 -> {
 				color.set(c1);
 				if (callback != null) callback.get(c1);
 			});
-			Core.app.post(() -> IntUI.picker().setPosition(getAbsolutePos(image), Align.left | Align.center));
+			Core.app.post(() -> IntUI.colorPicker().setPosition(getAbsolutePos(image), Align.left | Align.center));
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}

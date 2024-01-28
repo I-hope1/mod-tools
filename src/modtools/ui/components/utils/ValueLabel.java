@@ -364,7 +364,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		list.add(newDetailsMenuList(this, val, (Class) type));
 	}
 	protected void specialBuild(Seq<MenuList> list) {
-		Sr(type).isExtend(__ -> {
+		Sr(type).isExtend(cl -> {
+			 if (cl == Drawable.class) addPickDrawable(list);
 			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
 				SR.catchSatisfy(() -> Sr(val)
 				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
@@ -372,10 +373,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				 .isInstance(Drawable.class, INFO_DIALOG::dialog)
 				)));
 		 }, TextureRegion.class, Texture.class, Drawable.class)
-		 .isExtend(__ -> {
-			 if (val instanceof Drawable d)
-				 IntUI.drawablePicker().show(d, true, this::setVal);
-		 }, Drawable.class)
 		 /* .isExtend(__ -> {
 			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
 
@@ -405,6 +402,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
 		 }, Building.class, Unit.class, Bullet.class);
+	}
+	private void addPickDrawable(Seq<MenuList> list) {
+		list.add(MenuList.with(Icon.editSmall, "@pickdrawable", () -> {
+			if (val instanceof Drawable d)
+				IntUI.drawablePicker().show(d, true, this::setVal);
+		}));
 	}
 
 	protected void elementSetter(Seq<MenuList> list, Cons<Element> callback) {

@@ -499,7 +499,7 @@ public class Tester extends Content {
 			var newTester = new Tester();
 			newTester.load();
 			newTester.build();
-		} else ui.toggle();
+		} else ui.show();
 	}
 	void setup() {
 		ui.cont.pane(this::build).grow().update(pane -> {

@@ -26,13 +26,13 @@ public interface IReflect {
 		MethodHandle getConstructorsHandle = MyReflect.lookup.findVirtual(Class.class, "getDeclaredConstructors0", MethodType.methodType(Constructor[].class, boolean.class));
 		public DesktopImpl() throws NoSuchMethodException, IllegalAccessException {}
 		public Field[] getFields(Class<?> cls) {
-			return nls(() -> getFieldsHandle.invokeExact(cls, false), () -> new Field[0]);
+			return nls(() -> getFieldsHandle.invoke(cls, false), () -> new Field[0]);
 		}
 		public Method[] getMethods(Class<?> cls) {
-			return nls(() -> getMethodsHandle.invokeExact(cls, false), () -> new Method[0]);
+			return nls(() -> getMethodsHandle.invoke(cls, false), () -> new Method[0]);
 		}
 		public Constructor<?>[] getConstructors(Class<?> cls) {
-			return nls(() -> (Constructor<?>[]) getConstructorsHandle.invokeExact(cls, false), () -> new Constructor[0]);
+			return nls(() -> getConstructorsHandle.invoke(cls, false), () -> new Constructor[0]);
 		}
 	}
 	class AndroidImpl implements IReflect {
@@ -70,6 +70,7 @@ public interface IReflect {
 		try {
 			return prov.get();
 		} catch (Throwable e) {
+			Log.err(e);
 			return def.get();
 		}
 	}

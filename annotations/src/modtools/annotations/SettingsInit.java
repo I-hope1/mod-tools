@@ -17,4 +17,6 @@ import java.lang.annotation.*;
 public @interface SettingsInit {
 	String value() default ".";
 	String parent() default "";
+	/** 如果data不为null，则到  */
+	String data() default "";
 }

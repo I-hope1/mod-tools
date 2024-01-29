@@ -4,15 +4,16 @@ import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.code.Type.ClassType;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.Set;
+import java.util.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
 @AutoService({Processor.class})
@@ -72,38 +73,37 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	private void processSetting(ClassSymbol settings, JCClassDecl settingsTree, Object literalName, String parent) {
 		addImport(settings, dataClass);
+		addImport(settings, mSymtab.objectType.tsym);
 
-		addDataMethod(settingsTree);
+		addMethod(settingsTree, "data", dataClass.type);
 		if (parent.isEmpty()) addImport(settings, mySettingsClass);
 
 		JCMethodInvocation initValue = createInitValue(parent, literalName);
 
 		if (settings.members().findFirst(ns("data"), t -> t.kind == Kind.VAR) == null)
-			addConstantField(settingsTree, dataClass.type, "data", initValue);
+			addConstantField(Flags.PUBLIC, settingsTree, dataClass.type, "data", initValue);
 
-		settingsTree.defs.stream()
-		 .filter(t -> t instanceof JCMethodDecl m1 && m1.name.equals(names.init) && m1.params.size() == 1)
-		 .findFirst().ifPresent(t -> {
-			 addTypeMethod(settingsTree);
-			 addTypeField(settingsTree);
+		java.util.List<JCMethodDecl> allInit = settingsTree.defs.stream()
+		 .filter(t -> t instanceof JCMethodDecl)
+		 .map(t -> (JCMethodDecl) t)
+		 .filter(m1 -> m1.name.equals(names.init)).toList();
 
-			 JCMethodDecl init = (JCMethodDecl) t;
-			 init.body.stats = init.body.stats.prepend(
-				mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).name)))
-			 );
-		 });
+		allInit.stream().filter(m1 -> !m1.params.isEmpty()).forEach(init -> {
+			addMethod(settingsTree, "type", mSymtab.classType);
+			addField(settingsTree, mSymtab.classType, "type", mMaker.ClassLiteral(mSymtab.booleanType));
 
-		// print(trees.getPath(settings).getCompilationUnit());
-	}
+			init.body.stats = init.body.stats.prepend(
+			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).sym)))
+			);
+		});
+		allInit.stream().filter(m1 -> m1.params.size() == 2).forEach(init -> {
+			addMethod(settingsTree, "args", mSymtab.objectType);
+			addField(settingsTree, mSymtab.objectType, "args", null);
 
-	private void addDataMethod(JCClassDecl settingsTree) {
-		JCBlock body = mMaker.Block(0, List.of(mMaker.Return(mMaker.Ident(ns("data")))));
-		JCMethodDecl dataMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC),
-		 ns("data"),
-		 mMaker.TypeApply(mMaker.Ident(dataClass), List.nil()),
-		 List.nil(), List.nil(), List.nil(),
-		 body, null);
-		settingsTree.defs = settingsTree.defs.append(dataMethod);
+			init.body.stats = init.body.stats.prepend(
+			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("args")), mMaker.Ident(init.params.get(1).sym)))
+			);
+		});
 	}
 
 	private JCMethodInvocation createInitValue(String parent, Object literalName) {
@@ -122,18 +122,20 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		return initValue;
 	}
 
-	private void addTypeMethod(JCClassDecl settingsTree) {
-		JCBlock body = mMaker.Block(0, List.of(mMaker.Return(mMaker.Select(mMaker.This(settingsTree.sym.type), ns("type")))));
-		JCMethodDecl typeMethod = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC),
-		 ns("type"),
-		 mMaker.Ident(mSymtab.classType.tsym),
-		 List.nil(), List.nil(), List.nil(),
-		 body, null);
-		settingsTree.defs = settingsTree.defs.append(typeMethod);
+	private void addMethod(JCClassDecl settingsTree, String fieldName, Type fieldType) {
+		if (findChild(settingsTree,Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(fieldName)) != null) return;
+		mMaker.at(settingsTree);
+		JCBlock body  = PBlock(List.of(mMaker.Return(mMaker.Ident(ns(fieldName)))));
+		int     flags = Flags.PUBLIC;
+		JCMethodDecl method = mMaker.MethodDef(mMaker.Modifiers(flags),
+		 ns(fieldName), mMaker.Ident(fieldType.tsym),
+		 List.nil(), List.nil(), List.nil(), body, null);
+		settingsTree.defs = settingsTree.defs.append(method);
 	}
 
-	private void addTypeField(JCClassDecl settingsTree) {
-		addField(settingsTree, Flags.PRIVATE, mSymtab.classType, "type", null).vartype = mMaker.Ident(mSymtab.classType.tsym);
+	private void addField(JCClassDecl settingsTree, Type type, String name, JCExpression init) {
+		if (findChild(settingsTree,Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals(name)) != null) return;
+		addField0(settingsTree, Flags.PRIVATE, type, name, init).vartype = mMaker.Ident(type.tsym);
 	}
 
 	public void process() {

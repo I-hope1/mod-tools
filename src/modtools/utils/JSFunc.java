@@ -23,6 +23,7 @@ import modtools.ui.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.Comparator;
+import modtools.utils.MySettings.Data;
 import modtools.utils.draw.InterpImage;
 import modtools.utils.ui.WatchWindow;
 import modtools.utils.world.*;
@@ -44,8 +45,7 @@ public class JSFunc
 	/* for js */
 
 	public static final Fi     dataDir          = IntVars.dataDirectory;
-	public static final String defaultDelimiter = ", ";
-
+	public static final Data   settings         = MySettings.SETTINGS;
 
 	public static WFunction<?> getFunc(String name) {
 		return Selection.allFunctions.get(name);

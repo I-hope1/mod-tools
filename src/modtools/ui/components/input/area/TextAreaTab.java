@@ -252,8 +252,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				float x1 = getRelativeX(virtualString.index);
 				float y1 = getRelativeY(virtualString.index) + font.getLineHeight();
 				// Log.info("(@, @)", x1, y1);
-				font.draw(virtualString.text,
-				 x1, y1);
+				font.draw(virtualString.text, x1, y1);
 			}
 
 			if (enableHighlighting && syntax != null) {
@@ -555,11 +554,15 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		/* 这会判断是否越界，绕过越界就返回false */
-		private boolean isWordCharacterCheck(int i) {
+		public boolean isWordCharacterCheck(int i) {
 			if (i < 0 || i >= text.length()) return false;
 			return isWordCharacter(text.charAt(i));
 		}
-		protected boolean isWordCharacter(char c) {
+		public boolean isCharCheck(int i, char c) {
+			if (i < 0 || i >= text.length()) return false;
+			return text.charAt(i) == c;
+		}
+		public boolean isWordCharacter(char c) {
 			return super.isWordCharacter(c) || c == '_';
 		}
 	}

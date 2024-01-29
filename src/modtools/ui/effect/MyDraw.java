@@ -8,10 +8,9 @@ import arc.math.geom.Vec2;
 import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Fonts;
+import modtools.events.E_Blur;
 
 import static arc.Core.graphics;
-import static modtools.utils.MySettings.D_BLUR;
-
 public class MyDraw {
 	public static void dashLine(float thick, Color color, float x, float y, float x2, float y2, int segments) {
 		Lines.stroke(thick);
@@ -70,7 +69,7 @@ public class MyDraw {
 		Draw.flush();
 	}
 	public static boolean isBlurEnable() {
-		return D_BLUR.getBool("enable", false);
+		return E_Blur.enabled.enabled();
 	}
 
 

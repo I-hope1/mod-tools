@@ -315,26 +315,34 @@ public class Tester extends Content {
 				if (event != null) event.cancel();
 				return true;
 			}
-			// Core.input.ctrl() && keycode == KeyCode.rightBracket
 			if (keycode == KeyCode.tab) {
 				stopEvent[0] = true;
 				area.paste("  ", true);
-				area.updateDisplayText();
 			}
 			return false;
 		};
-		textarea.keyTypedB = (event, keycode) -> stopEvent[0];
+		textarea.keyTypedB = (event, character) -> {
+			if (!(Core.input.ctrl() || Core.input.alt()) &&
+					(area.isWordCharacter(character) ||
+					 character == '.') &&
+					auto_complement.enabled()) {
+				stopEvent[0] = textarea.virtualString != null;
+				Core.app.post(() -> complement(textarea, syntax));
+			}
+			return stopEvent[0];
+		};
 		textarea.keyUpB = (event, keycode) -> stopEvent[0];
 	}
 	private void complement(TextAreaTab textarea, JSSyntax syntax) {
 		area.selectNearWord();
 		String selection = area.getSelection();
 		int    start     = area.getSelectionStart();
+		area.clearSelection();
 		int    cursor    = area.getCursorPosition();
 		if (lastCompletionCursor != cursor) lastCompletionIndex = 0;
 		lastCompletionCursor = cursor;
 		Scriptable obj;
-		Log.info(syntax.indexToObj);
+		// Log.info(syntax.indexToObj);
 		if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
 			obj = syntax.indexToObj.get(start - 1);
 		} else obj = scope;
@@ -843,9 +851,9 @@ public class Tester extends Content {
 
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
-		rollback_history, multi_windows, output_to_log, js_prop;
+		rollback_history, multi_windows, output_to_log, js_prop,
+		auto_complement;
 		static {
-			multi_windows.def(false);
 			wrap_ref.defTrue();
 		}
 	}

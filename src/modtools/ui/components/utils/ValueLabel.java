@@ -259,7 +259,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		sb.append(getArrayDelimiter());
 	}
 	private static String getArrayDelimiter() {
-		return MySettings.D_JSFUNC.getString("arrayDelimiter", JSFunc.defaultDelimiter);
+		return E_JSFunc.array_delimiter.getString();
 	}
 
 	private boolean isTruncate(int length) {

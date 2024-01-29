@@ -7,6 +7,7 @@ import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import modtools.IntVars;
+import modtools.events.E_Blur;
 import rhino.ScriptRuntime;
 
 import java.util.Objects;
@@ -28,10 +29,7 @@ public class MySettings {
 
 	public static final Data
 	 SETTINGS         = new Data(config),
-	 D_JSFUNC_EDIT    = SETTINGS.child("JSFuncEdit"),
-	 D_JSFUNC         = SETTINGS.child("JSFunc"),
-	 D_JSFUNC_DISPLAY = D_JSFUNC.child("Display"),
-	 D_BLUR           = SETTINGS.child("BLUR");
+	 D_JSFUNC         = SETTINGS.child("JSFunc");
 
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
@@ -108,7 +106,7 @@ public class MySettings {
 			return ScriptRuntime.toBoolean("" + v);
 		}
 		public boolean getBool(String name) {
-			return toBool(get(name, false));
+			return getBool(name, false);
 		}
 		public boolean getBool(String name, Object def) {
 			return toBool(get(name, def));

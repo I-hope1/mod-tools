@@ -10,11 +10,11 @@ import arc.scene.Element;
 import arc.util.Tmp;
 import mindustry.game.EventType.Trigger;
 import modtools.IntVars;
+import modtools.events.E_Blur;
 import modtools.graphics.MyShaders;
 import modtools.utils.ElementUtils;
 
 import static arc.Core.graphics;
-import static modtools.utils.MySettings.D_BLUR;
 
 public class ScreenSampler {
 	public static final FrameBuffer BUFFER = new FrameBuffer();
@@ -31,7 +31,7 @@ public class ScreenSampler {
 		BUFFER.begin(Color.clear);
 	};
 	private static boolean isEnabled() {
-		return D_BLUR.getBool("enable");
+		return E_Blur.enabled.enabled();
 	}
 
 	public static void init() {

@@ -14,8 +14,9 @@ import javax.lang.model.element.*;
 import java.lang.reflect.Modifier;
 import java.util.*;
 
+/** 奇怪的注解处理器。。。  */
 @AutoService({Processor.class})
-public class OptimizeReflectProcessor extends BaseProcessor<Element> implements ReflectUtils {
+public class AOptimizeReflectProcessor extends BaseProcessor<Element> implements ReflectUtils {
 	public void dealElement(Element element) {
 		if (element instanceof TypeElement) {
 			var unit      = trees.getPath(element).getCompilationUnit();

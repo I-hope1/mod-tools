@@ -21,7 +21,9 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
+import modtools.annotations.SettingsInit;
 import modtools.annotations.builder.DataBoolFieldInit;
+import modtools.events.ISettings;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
@@ -37,21 +39,21 @@ import static arc.Core.*;
 import static modtools.IntVars.modName;
 import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.components.Window.*;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
 public final class TopGroup extends WidgetGroup {
-	public static class TSettings {
-		@DataBoolFieldInit
-		public static boolean
+	@SettingsInit
+	public enum TSettings implements ISettings {
 		 checkUICount,
 		 debugBounds,
 		 selectInvisible, drawHiddenPad,
-		 overrideScene;
+		 overrideScene
 	}
 	static {
-		if (TSettings.overrideScene) {
+		if (overrideScene.enabled()) {
 			var prev = scene.root;
 			FieldUtils.setValue(scene, Scene.class, "root", new Group() {
 				public float getHeight() {
@@ -118,7 +120,7 @@ public final class TopGroup extends WidgetGroup {
 
 	public Element drawPadElem = null;
 	public void setDrawPadElem(Element drawPadElem) {
-		TSettings.debugBounds = drawPadElem != null;
+		debugBounds.set(drawPadElem != null);
 		this.drawPadElem = drawPadElem;
 	}
 	public void draw() {
@@ -139,7 +141,7 @@ public final class TopGroup extends WidgetGroup {
 		drawResidentTasks.forEach(ResidentDrawTask::endDraw);
 		Draw.flush();
 
-		if (!TSettings.debugBounds && drawPadElem == null) return;
+		if (!debugBounds.enabled() && drawPadElem == null) return;
 		Element drawPadElem = or(this.drawPadElem, scene.root);
 		Vec2    vec2;
 		if (drawPadElem.parent != null) {
@@ -180,7 +182,7 @@ public final class TopGroup extends WidgetGroup {
 
 
 	public static void drawPad(Element elem, Vec2 vec2) {
-		if (!TSettings.drawHiddenPad && !elem.visible) return;
+		if (!drawHiddenPad.enabled() && !elem.visible) return;
 		/* translation也得参与计算 */
 		elem.localToParentCoordinates(vec2);
 
@@ -242,7 +244,7 @@ public final class TopGroup extends WidgetGroup {
 
 		TASKS.add(() -> {
 			toFront();
-			if (TSettings.checkUICount) {
+			if (checkUICount.enabled()) {
 				if (scene.root.getChildren().count(el -> el.visible) > 70) {
 					tester.loop = false;
 					Dialog dialog;
@@ -360,7 +362,7 @@ public final class TopGroup extends WidgetGroup {
 	/* 过滤掉的选择元素 */
 	public ObjectFloatMap<Element> filterSelected = new ObjectFloatMap<>();
 	Element getSelected0(float x, float y) {
-		return scene.root.hit(x, y, !TSettings.selectInvisible);
+		return scene.root.hit(x, y, !selectInvisible.enabled());
 	}
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {

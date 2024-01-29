@@ -64,7 +64,11 @@ public interface TreeUtils extends ParseUtils, NameString {
 		return mMaker.VarDef(varSymbol, init);
 	}
 	default JCVariableDecl addConstantField(JCClassDecl classDecl, Type type, String name, Object value) {
-		JCVariableDecl x = makeVar0(Flags.STATIC | Flags.FINAL | Flags.HASINIT,
+		return addConstantField(0, classDecl, type, name, value);
+	}
+
+	default JCVariableDecl addConstantField(long flags, JCClassDecl classDecl, Type type, String name, Object value) {
+		JCVariableDecl x = makeVar0(flags | Flags.STATIC | Flags.FINAL | Flags.HASINIT,
 		 type, name, value instanceof JCExpression ex ? ex : mMaker.Literal(value), classDecl.sym);
 		classDecl.defs = classDecl.defs.prepend(x);
 		return x;
@@ -85,10 +89,10 @@ public interface TreeUtils extends ParseUtils, NameString {
 	}
 
 	default void addImport(Element element, ClassType classType) {
-		addImport(element, (ClassSymbol) classType.tsym);
+		addImport(element, classType.tsym);
 	}
 
-	default void addImport(Element element, ClassSymbol sym) {
+	default void addImport(Element element, TypeSymbol sym) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		if (!unit.namedImportScope.includes(sym) && !unit.starImportScope.includes(sym)) {
 			/* unit.namedImportScope.importType(

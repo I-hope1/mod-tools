@@ -124,15 +124,20 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		cont.left().defaults().left().growX();
 		cont.pane(t -> {
 			t.left().defaults().left();
-			t.button(Icon.settingsSmall, HopeStyles.clearNonei, () -> {
+			t.button(Icon.settingsSmall, clearNonei, () -> {
 				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
-					addSettingsTable(p, "", n -> "jsfunc." + n, D_JSFUNC, E_JSFunc.values());
-					addSettingsTable(p, "Display", n -> "jsfunc.display." + n, D_JSFUNC_DISPLAY, E_JSFuncDisplay.values());
-					addSettingsTable(p, "Edit", n -> "jsfunc.edit." + n, D_JSFUNC_EDIT, E_JSFuncEdit.values());
+					p.background(Styles.black6);
+					p.left().defaults().left();
+					for (E_JSFunc value : E_JSFunc.values()) {
+						value.build("@settings.jsfunc.", p);
+					}
+					// addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
+					addSettingsTable(p, "Display", n -> "jsfunc.display." + n, E_JSFuncDisplay.class);
+					addSettingsTable(p, "Edit", n -> "jsfunc.edit." + n, E_JSFuncEdit.class);
 				}, false);
 			}).size(42);
 			if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
-			t.button(Icon.refreshSmall, HopeStyles.clearNonei, rebuild0).size(42);
+			t.button(Icon.refreshSmall, clearNonei, rebuild0).size(42);
 			if (o != null) {
 				IntUI.addStoreButton(t, "", () -> o);
 				t.label(() -> "" + UNSAFE.addressOf(o)).padLeft(8f);

@@ -4,9 +4,8 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
 import modtools.IntVars;
+import modtools.events.E_Blur;
 import modtools.ui.effect.MyDraw.DrawEffect;
-
-import static modtools.utils.MySettings.D_BLUR;
 
 /** from EB-wilson */
 public class EBBlur implements DrawEffect {
@@ -59,7 +58,7 @@ public class EBBlur implements DrawEffect {
 	public float blurSpace = 2.26f;
 
 	public EBBlur() {
-		this(DEF.D.floats);
+		this(E_Blur.convolution_scheme.getEnum(DEF.class).floats);
 	}
 
 	public EBBlur(float... convolutions) {
@@ -168,7 +167,7 @@ public class EBBlur implements DrawEffect {
 	}
 
 	public void resize(int width, int height) {
-		blurScl = D_BLUR.getInt("缩放级别", 4);
+		blurScl = E_Blur.scale_level.getInt();
 		width /= blurScl;
 		height /= blurScl;
 

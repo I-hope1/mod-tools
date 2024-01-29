@@ -21,6 +21,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.OptimizeReflect;
 import modtools.annotations.builder.*;
+import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.ui.*;
 import modtools.ui.gen.HopeIcons;
@@ -49,6 +50,7 @@ import static arc.Core.scene;
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
+import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.FormatHelper.*;
 
@@ -64,11 +66,6 @@ public class ReviewElement extends Content {
 	 posLineColor    = Tmp.c1.set(Color.slate).a(0.6f).rgba(),
 	 posTextColor    = Color.lime.rgba(),
 	 sizeTextColor   = Color.magenta.rgba();
-
-
-	@DataBoolFieldInit(data = "")
-	private boolean
-	 hoverInfoWindow = true;
 
 	public ReviewElement() {
 		super("reviewElement", HopeIcons.codeSmall);
@@ -101,17 +98,12 @@ public class ReviewElement extends Content {
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			left().defaults().left();
-			settingBool(this);
 			table(t -> settingColor(t)).grow();
 		}});
 	}
 
 	/** 代码生成{@link ColorProcessor} */
 	public void settingColor(Table t) {}
-	@DataBoolSetting
-	public void settingBool(Table t) {
-		boolean[] __ = {TSettings.selectInvisible, hoverInfoWindow};
-	}
 
 
 	public void load() {
@@ -627,6 +619,10 @@ public class ReviewElement extends Content {
 		});
 	}
 
+	public enum Settings implements ISettings {
+		hoverInfoWindow
+	}
+
 	@OptimizeReflect
 	static class InfoDetails extends Table {
 		public static final float keyScale   = 0.7f;
@@ -787,7 +783,7 @@ public class ReviewElement extends Content {
 			MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
 			Gl.flush();
 
-			if (!hoverInfoWindow) return;
+			if (!hoverInfoWindow.enabled()) return;
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
 			table.sizeLabel.setText(fixed(elem.getWidth()) + " × " + fixed(elem.getHeight()));
 			table.touchableLabel.setText(toString(elem.touchable));

@@ -17,6 +17,9 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ModTools;
+import modtools.utils.reflect.FieldUtils;
+
+import java.util.Arrays;
 
 import static modtools.ui.gen.HopeIcons.*;
 import static mindustry.gen.Tex.*;
@@ -89,6 +92,8 @@ public class HopeStyles {
 			font = Fonts.def;
 			fontColor = Color.white;
 			disabledFontColor = Color.gray;
+			Arrays.stream(CheckBoxStyle.class.getDeclaredFields())
+			 .forEach(f -> setSize(FieldUtils.getOrNull(f, this)));
 		}};
 		/* hope_defaultSlider = new SliderStyle() {{
 			background = sliderBack;
@@ -101,6 +106,11 @@ public class HopeStyles {
 		defaultMultiArea = new TextFieldStyle(defaultField) {{
 			background = null;
 		}};
+	}
+	private static void setSize(Drawable drawable) {
+		if (drawable == null) return;
+		drawable.setMinWidth(28);
+		drawable.setMinHeight(28);
 	}
 
 	/* ---------TODO：以下是为了适配V6----------- */

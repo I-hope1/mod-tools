@@ -21,20 +21,20 @@ import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.ClearValueLabel;
+import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 
 import static modtools.ui.IntUI.topGroup;
+import static modtools.utils.MySettings.SETTINGS;
 
 public class SettingsUI extends Content {
 	Window ui;
@@ -51,7 +51,7 @@ public class SettingsUI extends Content {
 
 	public <T extends Content> void addLoad(T cont) {
 		loadTable.check(cont.localizedName(), 28, cont.loadable(), b -> {
-			MySettings.SETTINGS.put("load-" + cont.name, b);
+			SETTINGS.put("load-" + cont.name, b);
 		}).with(b -> b.setStyle(HopeStyles.hope_defaultCheck)).row();
 	}
 
@@ -81,19 +81,13 @@ public class SettingsUI extends Content {
 		add("Load", loadTable);
 		add("JSFunc", new LimitTable() {{
 			left().defaults().left();
-			bool(this, "@settings.jsfunc.auto_refresh", MySettings.D_JSFUNC, "auto_refresh");
-			new SettingsBuilder(this) {{
-				list("settings.jsfunc", "arrayDelimiter", MySettings.D_JSFUNC,
-				 Seq.with(JSFunc.defaultDelimiter, "\n", "\n\n", "\n▶▶▶▶", "\n★★★"),
-				 s -> s.replaceAll("\\n", "\\\\n")).colspan(2);
-			}};
-			row();
 			JColor.settingColor(this);
 		}});
 		add("Effects", Icon.effectSmall, new LimitTable() {{
 			left().defaults().left();
-			bool(this, "@enabled", MySettings.D_BLUR, "enable");
-			SettingsUI.slideri(this, MySettings.D_BLUR, "缩放级别", 1, 8, 4, 1, null);
+			for (E_Blur value : E_Blur.values()) {
+				value.build(this);
+			}
 		}});
 		/* add("Window", new LimitTable() {{
 			left().defaults().left();
@@ -102,13 +96,18 @@ public class SettingsUI extends Content {
 		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall,
 		 new LimitTable() {{
 			 left().defaults().left();
-			 bool(this, "@settings.mainmenubackground", MySettings.SETTINGS, "ShowMainMenuBackground");
-			 settingBool(this);
+			 SettingsBuilder.main = this;
+			 String key = "ShowMainMenuBackground";
+			 SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
+
+			 for (TSettings value : TSettings.values()) {
+				 value.build(this);
+			 }
 			 addElemValueLabel(this, "Bound Element",
 				() -> topGroup.drawPadElem,
 				() -> topGroup.setDrawPadElem(null),
 				topGroup::setDrawPadElem,
-				() -> TSettings.debugBounds);
+				TSettings.debugBounds::enabled);
 			 float minZoom = Vars.renderer.minZoom;
 			 float maxZoom = Vars.renderer.maxZoom;
 			 SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
@@ -128,9 +127,9 @@ public class SettingsUI extends Content {
 				 new DisWindow("FONTS") {{
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
-								MySettings.SETTINGS.put("font", fi.name());
+								SETTINGS.put("font", fi.name());
 							}).height(42).growX()
-							.checked(__ -> fi.name().equals(MySettings.SETTINGS.getString("font")))
+							.checked(__ -> fi.name().equals(SETTINGS.getString("font")))
 							.row();
 					 }
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
@@ -178,11 +177,6 @@ public class SettingsUI extends Content {
 	public static void disabledRestart() {
 		Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
 	}
-	@DataBoolSetting
-	public void settingBool(Table t) {
-		boolean[] __ = {TSettings.checkUICount, TSettings.debugBounds,
-										TSettings.drawHiddenPad, TSettings.overrideScene};
-	}
 	public static void addElemValueLabel(
 	 Table table, String text, Prov<Element> prov,
 	 Runnable clear, Cons<Element> setter,
@@ -200,7 +194,7 @@ public class SettingsUI extends Content {
 	}
 
 	public static Slider slider(Table table, String name, float min, float max, float def, float step, Floatc floatc) {
-		return slider(table, MySettings.SETTINGS, name, min, max, def, step, floatc);
+		return slider(table, SETTINGS, name, min, max, def, step, floatc);
 	}
 	public static Slider slider(Table table, Data data, String name, float min, float max, float def, float step,
 															Floatc floatc) {
@@ -209,7 +203,7 @@ public class SettingsUI extends Content {
 		Label value = new Label(slider.getValue() + "", Styles.outlineLabel);
 		slider.moved(val -> {
 			data.put(name, val);
-			value.setText(Strings.fixed(val, -Mathf.floor(Mathf.log(10, step))));
+			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
 			if (floatc != null) floatc.get(val);
 		});
 		Table content = new Table();
@@ -221,7 +215,7 @@ public class SettingsUI extends Content {
 		return slider;
 	}
 	public static Slider slideri(Table table, String name, int min, int max, int def, int step, Intc intc) {
-		return slideri(table, MySettings.SETTINGS, name, min, max, def, step, intc);
+		return slideri(table, SETTINGS, name, min, max, def, step, intc);
 	}
 	public static Slider slideri(Table table, Data data, String name, int min, int max, int def, int step, Intc intc) {
 		Slider slider = new Slider(min, max, step, false);
@@ -241,34 +235,6 @@ public class SettingsUI extends Content {
 		content.touchable = Touchable.disabled;
 		table.stack(slider, content).growX().padTop(4f).row();
 		return slider;
-	}
-	public static void bool(Table table, String text, Data data, boolean def, Boolc boolc) {
-		bool(table, text, data, null, def, boolc);
-	}
-	public static void bool(Table table, String text, Data data, String key, boolean def) {
-		bool(table, text, data, key, def, null);
-	}
-	public static void bool(Table table, String text, Data data, String key) {
-		bool(table, text, data, key, false, null);
-	}
-	public static void bool(Table table, String text, String key, boolean def, Boolc boolc) {
-		bool(table, text, MySettings.SETTINGS, key, def, boolc, null);
-	}
-	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc) {
-		bool(table, text, data, key, def, boolc, null);
-	}
-	public static void bool(Table table, String text, String key, boolean def, Boolc boolc, Boolp condition) {
-		bool(table, text, MySettings.SETTINGS, key, def, boolc, condition);
-	}
-
-	public static void bool(Table table, String text, Data data, String key, boolean def, Boolc boolc, Boolp condition) {
-		table.check(text, 28, key == null ? def : data.getBool(key, def), b -> {
-			if (key != null) data.put(key, b);
-			if (boolc != null) boolc.get(b);
-		}).with(t -> {
-			t.setStyle(HopeStyles.hope_defaultCheck);
-			if (condition != null) t.setDisabled(() -> !condition.get());
-		}).row();
 	}
 
 	public static Color colorBlock(
@@ -298,6 +264,16 @@ public class SettingsUI extends Content {
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
+
+	@SuppressWarnings("unchecked")
+	public static <T extends ISettings> void addSettingsTable(
+	 Table p, String name, Func<String, String> keyProvider,
+	 Class<T> enumClass) {
+		if (!enumClass.isEnum()) throw new IllegalArgumentException(enumClass + "is not enum");
+		T[] constants = enumClass.getEnumConstants();
+		addSettingsTable(p, name, keyProvider, constants[0].data(), (Enum[]) constants);
+	}
+
 	public static <T extends Enum<T>> void addSettingsTable(
 	 Table p, String name, Func<String, String> keyProvider,
 	 Data data, T[] values) {
@@ -310,9 +286,13 @@ public class SettingsUI extends Content {
 		p.table(name == null ? null : Tex.pane, dis -> {
 			dis.left().defaults().left();
 			if (name != null && !name.isEmpty()) dis.add(name).color(Pal.accent).row();
+			new SettingsBuilder(dis);
 			for (T value : values) {
-				SettingsUI.bool(dis, "@settings." + keyProvider.get(value.name()),
-				 data, value.name(), true, b -> MyEvents.fire(value));
+				SettingsBuilder.check("@settings." + keyProvider.get(value.name()),
+				 b -> {
+					 data.put(value.name(), b);
+					 MyEvents.fire(value);
+				 }, () -> data.getBool(value.name()));
 				if (fireAll) MyEvents.fire(value);
 			}
 		}).grow().left().row();
@@ -397,7 +377,7 @@ public class SettingsUI extends Content {
 		public static void numberi(String text, Data data, String key, int defaultValue, Boolp condition, int min,
 															 int max) {
 			if (defaultValue < min || defaultValue > max) {
-				throw new IllegalArgumentException("defaultValue 必须在 " + min + " 和 " + max + " 之间。当前值为: " + defaultValue);
+				throw new IllegalArgumentException("defaultValue(" + defaultValue + ") must be in (" + min + ", " + max + ")");
 			}
 			numberi(text, val -> data.put(key, val), () -> data.getInt(key, defaultValue), condition, min, max);
 		}
@@ -437,7 +417,10 @@ public class SettingsUI extends Content {
 
 
 		public static void check(String text, Boolc cons, Boolp prov, Boolp condition) {
-			main.check(text, cons).checked(prov.get()).update(a -> a.setDisabled(!condition.get())).padRight(100f).get().left();
+			CheckBox checkBox = main.check(text, cons).checked(prov.get()).update(a -> a.setDisabled(!condition.get()))
+			 .padLeft(10f).padRight(100f).get();
+			checkBox.setStyle(HopeStyles.hope_defaultCheck);
+			checkBox.left();
 			main.row();
 		}
 

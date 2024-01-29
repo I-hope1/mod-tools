@@ -408,7 +408,7 @@ public class MyTextField extends TextField implements Disableable {
 		}
 		return to.insert(position, text);
 	}
-	StringBuilder insert(int position, char c, StringBuilder to) {
+	public StringBuilder insert(int position, char c, StringBuilder to) {
 		return to.insert(position, c);
 	}
 

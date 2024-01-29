@@ -9,10 +9,10 @@ public enum E_JSFunc implements ISettings {
 	folded_name;
 
 	static {
-		auto_refresh.def(true);
-		display_generic.def(true);
-		truncate_text.def(true);
-		hidden_if_empty.def(true);
-		update_async.def(true);
+		auto_refresh.defTrue();
+		display_generic.defTrue();
+		truncate_text.defTrue();
+		hidden_if_empty.defTrue();
+		update_async.defTrue();
 	}
 }

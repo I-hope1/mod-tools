@@ -1,9 +1,7 @@
 package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
-import arc.math.geom.Vec2;
 import arc.struct.*;
-import arc.util.Tmp;
 import mindustry.graphics.Pal;
 
 /** 用于控制渲染，当然你也可以解析文本 */

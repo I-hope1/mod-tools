@@ -18,6 +18,7 @@ import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.Log.*;
+import arc.util.Timer;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
@@ -55,8 +56,9 @@ import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
-import java.util.Arrays;
+import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.stream.Collectors;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
@@ -332,12 +334,16 @@ public class Tester extends Content {
 		if (lastCompletionCursor != cursor) lastCompletionIndex = 0;
 		lastCompletionCursor = cursor;
 		Scriptable obj;
+		Log.info(syntax.indexToObj);
 		if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
 			obj = syntax.indexToObj.get(start - 1);
 		} else obj = scope;
+		if (obj == null) return;
 
-		Object[] keys = obj.getIds();
-		String[] array = Arrays.stream(keys)
+		List<Object> keys = new ArrayList<>(List.of(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds()));
+		if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
+
+		String[] array = keys.stream()
 		 .map(String::valueOf)
 		 .filter(key -> key.startsWith(selection)).toArray(String[]::new);
 		if (array.length == 0) return;

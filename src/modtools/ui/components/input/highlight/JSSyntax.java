@@ -106,29 +106,19 @@ public class JSSyntax extends Syntax {
 	 task -> {
 		 String token = task.token + "";
 		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
-			 if (operatesSymbol.lastSymbol == '.') {
-				 return dealJSProp(token);
-			 } else {
-				 obj = null;
-				 pkg = null;
-			 }
+			 if (operatesSymbol.lastSymbol == '.') return dealJSProp(token);
+
+			 obj = null;
+			 pkg = null;
 		 }
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
 			 if (!enableJSProp || (
 				entry.key != customConstantSet && entry.key != customVarSet
-			 ) || obj != null)
-				 return entry.value;
-			 Object o = customScope.get(token, customScope);
-			 if (indexToObj != null && o instanceof Scriptable sc) indexToObj.put(task.lastIndex + token.length(), sc);
-			 if (o instanceof NativeJavaPackage newPkg) {
-				 pkg = newPkg;
-				 obj = null;
-			 } else if (o instanceof Scriptable newObj) {
-				 pkg = null;
-				 obj = newObj;
-			 }
+			 ) || obj != null) return entry.value;
+
+			 resolveToken(customScope, task, token);
 			 return entry.value;
 		 }
 		 if (lastTask != task) return null;
@@ -150,25 +140,38 @@ public class JSSyntax extends Syntax {
 		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN") ? null : c_number;
 	 }
 	};
+	private void resolveToken(Scriptable scope, DrawToken task, String token) {
+		Object o = scope.get(token, scope);
+		appendIndexToObj(task, o);
+		if (o instanceof NativeJavaPackage newPkg) {
+			pkg = newPkg;
+			obj = null;
+		} else if (o instanceof Scriptable newObj) {
+			pkg = null;
+			obj = newObj;
+		}
+	}
+	private void appendIndexToObj(DrawToken task, Object o) {
+		if (indexToObj != null && o instanceof Scriptable sc) indexToObj.put(task.lastIndex + task.token.length(), sc);
+	}
 
 
 	HashMap<Object, HashMap<String, Object>> js_prop_map = new HashMap<>();
 	private Color dealJSProp(String token) {
 		if (!enableJSProp) return null;
-		Object o = pkg != null || !(obj instanceof NativeJavaObject nja) ? getPropOrNotFound(pkg, token)
-		 : js_prop_map.computeIfAbsent(nja.unwrap(), k -> new HashMap<>()).computeIfAbsent(token, k -> getPropOrNotFound(nja, token));
+		Object o = pkg == null && obj instanceof NativeJavaObject nja ?
+		 js_prop_map.computeIfAbsent(nja.unwrap(), k -> new HashMap<>()).computeIfAbsent(token, k -> getPropOrNotFound(nja, token))
+		 : getPropOrNotFound(pkg, token);
 		if (o == Scriptable.NOT_FOUND) {
 			obj = null;
 			return null;
 		}
-
+		appendIndexToObj(drawToken, o);
 		if (o instanceof NativeJavaPackage) {
 			pkg = (NativeJavaPackage) o;
 		} else if (o instanceof Scriptable) {
 			pkg = null;
 			obj = (Scriptable) o;
-			// showTooltipMouse(task);
-			// showTooltip(task);
 			return c_localvar;
 		}
 		obj = null;

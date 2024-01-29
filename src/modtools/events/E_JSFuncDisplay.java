@@ -8,7 +8,7 @@ public enum E_JSFuncDisplay implements ISettings {
 
 	static {
 		for (E_JSFuncDisplay value : values()) {
-			value.def(true);
+			value.defTrue();
 		}
 	}
 }

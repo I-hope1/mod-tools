@@ -266,6 +266,7 @@ public class Window extends Table {
 		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
+		if (hit != null && Core.scene.getKeyboardFocus() == null) requestKeyboard();
 		return hit;
 	}
 	private void setup() {

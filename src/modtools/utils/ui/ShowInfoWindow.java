@@ -797,11 +797,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 	}
 
-	public Element hit(float x, float y, boolean touchable) {
-		Element hit = super.hit(x, y, touchable);
-		if (hit != null && Core.scene.getKeyboardFocus() == null) requestKeyboard();
-		return hit;
-	}
 	static Table newPairTable() {
 		return new Table(t -> t.left().defaults().left().top());
 	}

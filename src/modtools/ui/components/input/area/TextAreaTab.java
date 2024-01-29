@@ -250,10 +250,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				font.getColor().set(virtualString.color).mulA(alpha());
 				if (font.getColor().a == 0) break l;
 				float x1 = getRelativeX(virtualString.index);
-				float y1 = getRelativeY(virtualString.index);
+				float y1 = getRelativeY(virtualString.index) + font.getLineHeight();
 				// Log.info("(@, @)", x1, y1);
 				font.draw(virtualString.text,
-				 x1, y1 + font.getLineHeight());
+				 x1, y1);
 			}
 
 			if (enableHighlighting && syntax != null) {
@@ -389,7 +389,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (readOnly) return to;
 			return super.insert(position, text, to);
 		}
-		StringBuilder insert(int position, char c, StringBuilder to) {
+		public StringBuilder insert(int position, char c, StringBuilder to) {
 			if (readOnly) return to;
 			return super.insert(position, c, to);
 		}
@@ -558,6 +558,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		private boolean isWordCharacterCheck(int i) {
 			if (i < 0 || i >= text.length()) return false;
 			return isWordCharacter(text.charAt(i));
+		}
+		protected boolean isWordCharacter(char c) {
+			return super.isWordCharacter(c) || c == '_';
 		}
 	}
 

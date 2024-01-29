@@ -112,9 +112,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	public Boolf2<InputEvent, Character> keyTypedB = null;
 	public Boolf2<InputEvent, KeyCode>   keyUpB    = null;
 
-	public void focus() {
-		requestKeyboard();
-	}
 	public float alpha() {
 		return parentAlpha;
 	}

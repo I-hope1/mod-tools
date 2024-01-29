@@ -44,7 +44,7 @@ public class Tools {
 	}
 
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {
-		clone(from,to,cls, f -> blackList == null || blackList.contains(f.getName()));
+		clone(from, to, cls, f -> blackList == null || blackList.contains(f.getName()));
 	}
 	public static void clone(Object from, Object to, Class<?> cls, Boolf<Field> boolf) {
 		if (from == to) throw new IllegalArgumentException("from == to");
@@ -202,7 +202,9 @@ public class Tools {
 	public static void runIgnoredException(CatchRun run) {
 		try {
 			run.run();
-		} catch (Throwable ignored) {}
+		} catch (Throwable th) {
+			if (true) Log.err(th);
+		}
 	}
 	public static void runShowedException(CatchRun run) {
 		try {
@@ -255,7 +257,7 @@ public class Tools {
 			try {
 				cons.get(t);
 			} catch (Throwable e) {
-				if(resolver != null) resolver.get(e);
+				if (resolver != null) resolver.get(e);
 			}
 		};
 	}

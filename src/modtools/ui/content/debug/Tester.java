@@ -171,8 +171,8 @@ public class Tester extends Content {
 		if (ui == null) _load();
 
 		TextAreaTab textarea = new TextAreaTab("");
-		Table _cont = new AutoFocusTable(textarea);
-		textarea.addListener(new InputListener() {
+		Table _cont = new AutoFocusTable(textarea.getArea());
+		if (!Vars.mobile) textarea.addListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (keycode == KeyCode.escape && Core.scene.getKeyboardFocus() == area) {
 					Core.scene.unfocus(area);

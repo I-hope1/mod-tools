@@ -20,8 +20,6 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
-import modtools.ui.IntUI;
-import modtools.ui.IntUI.InsideTable;
 import modtools.ui.components.input.highlight.*;
 import modtools.utils.Tools;
 
@@ -569,13 +567,13 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		/**
 		 * 光标实际行（每行以\n分隔）
 		 **/
-		public int realCurrorLine;
+		public int realCursorLine;
 
 		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
-			font.setColor(realCurrorLine == row ? Pal.accent : Color.lightGray);
-			MyFonts.underline = realCurrorLine == row;
+			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
+			MyFonts.underline = realCursorLine == row;
 			font.draw(String.valueOf(row), x, offsetY);
 			MyFonts.underline = false;
 		}
@@ -592,7 +590,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			IntSeq  linesBreak    = area.getLinesBreak();
 			int     row           = 1;
 			font.getData().markupEnabled = false;
-			realCurrorLine = 0;
+			realCursorLine = 0;
 			int      cursorLine = area.getCursorLine() * 2;
 			Runnable task       = getTask(offsetY, row);
 			int      i          = 0;
@@ -604,7 +602,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					task = getTask(offsetY, row);
 				}
 				if (i >= start) offsetY -= area.lineHeight();
-				if (i == cursorLine) realCurrorLine = row;
+				if (i == cursorLine) realCursorLine = row;
 				try {
 					if (text.charAt(linesBreak.get(i + 1)) == '\n') {
 						if (i >= start) task.run();
@@ -619,7 +617,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			}
 			if (area.newLineAtEnd()) {
-				if (linesBreak.size == cursorLine) realCurrorLine = row;
+				if (linesBreak.size == cursorLine) realCursorLine = row;
 				if (i >= linesBreak.size) task.run();
 			}
 			/* else {

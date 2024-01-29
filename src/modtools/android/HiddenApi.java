@@ -3,7 +3,6 @@ package modtools.android;
 
 import arc.util.Log;
 import dalvik.system.VMRuntime;
-import modtools.jsfunc.reflect.UNSAFE;
 
 import java.lang.reflect.*;
 
@@ -12,35 +11,42 @@ import static ihope_lib.MyReflect.unsafe;
 /** Only For Android  */
 public class HiddenApi {
 	public static void setHiddenApiExemptions() throws Throwable {
-		VMRuntime runtime = VMRuntime.getRuntime();
 		try {
 			// sdk_version <= 28
-			runtime.setHiddenApiExemptions(new String[]{"L"});
+			VMRuntime.getRuntime().setHiddenApiExemptions(new String[]{"L"});
 			return;
 		} catch (Throwable ignored) {}
 		// sdk_version > 28
-		Method setHiddenApiExemptions = null;
+		Method setHiddenApiExemptions = findMethod(VMRuntime.class, "setHiddenApiExemptions");
 
-		Method[] declaredMethods = VMRuntime.class.getDeclaredMethods();
-		int      length          = declaredMethods.length;
-		Method[] array           = (Method[]) runtime.newNonMovableArray(Method.class, length);
+		try {
+			if (setHiddenApiExemptions == null) {
+				throw new InternalError("setHiddenApiExemptions not found.");
+			}
+			setHiddenApiExemptions.setAccessible(true);
+			setHiddenApiExemptions.invoke(VMRuntime.getRuntime(), new Object[]{new String[]{"L"}});
+		} catch (Exception e) {
+			Log.err(e);
+		}
+	}
+	private static Method findMethod(Class<?> lookupClass, String lookupName) {
+		VMRuntime runtime         = VMRuntime.getRuntime();
+		Method[]  declaredMethods = lookupClass.getDeclaredMethods();
+		int       length          = declaredMethods.length;
+		Method[]  array           = (Method[]) runtime.newNonMovableArray(Method.class, length);
 		System.arraycopy(declaredMethods, 0, array, 0, length);
 
 		// http://aosp.opersys.com/xref/android-11.0.0_r3/xref/art/runtime/mirror/executable.h
 		// uint64_t Executable::art_method_
 		final int offset_art_method_ = 24;
+		@SuppressWarnings("RedundantCast")
+		long address = runtime.addressOf((Object[]) array);
 
-		// Field field_artMethod = Executable.class.getDeclaredField("artMethod");
-		// field_artMethod.setAccessible(true);
-		// Log.info("array[0].artMethod = " + field_artMethod.get(array[0]));
-		// long min_Address = field_artMethod.getLong(array[0]);
-		Log.info(runtime.addressOf(new int[]{1}));
-		final long address = UNSAFE.addressOf(array);
-		Log.info("address = " + address);
-		long       min     = Long.MAX_VALUE, min_second = Long.MAX_VALUE, max = Long.MIN_VALUE;
+		long min = Long.MAX_VALUE, min_second = Long.MAX_VALUE, max = Long.MIN_VALUE;
 		/* 查找artMethod，(min, min_second)  */
 		for (int k = 0; k < length; ++k) {
-			final long address_Method     = unsafe.getInt(address + k * Integer.BYTES);
+			long       k_address          = address + k * Integer.BYTES;
+			final long address_Method     = unsafe.getInt(k_address);
 			final long address_art_method = unsafe.getLong(address_Method + offset_art_method_);
 			if (min >= address_art_method) {
 				min = address_art_method;
@@ -57,23 +63,12 @@ public class HiddenApi {
 			for (min += size_art_method; min < max; min += size_art_method) {
 				final long address_Method = unsafe.getInt(address);
 				unsafe.putLong(address_Method + offset_art_method_, min);
-				final String name = array[0].getName();
-				if ("setHiddenApiExemptions".equals(name)) {
-					setHiddenApiExemptions = array[0];
-					break;
+				if (lookupName.equals(array[0].getName())) {
+					return array[0];
 				}
 			}
 		}
-
-		try {
-			if (setHiddenApiExemptions == null) {
-				throw new InternalError("setHiddenApiExemptions not found.");
-			}
-			setHiddenApiExemptions.setAccessible(true);
-			setHiddenApiExemptions.invoke(runtime, new Object[]{new String[]{"L"}});
-		} catch (Exception e) {
-			Log.err(e);
-		}
+		return null;
 	}
 	/* static {
 		// loadLibrary("hope");

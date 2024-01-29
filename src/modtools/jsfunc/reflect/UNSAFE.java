@@ -1,6 +1,7 @@
 package modtools.jsfunc.reflect;
 
 import arc.util.OS;
+import dalvik.system.VMRuntime;
 import ihope_lib.*;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -94,6 +95,7 @@ public interface UNSAFE {
 	// ---------ADDRESS operate---------
 	Object[] ONE_ARRAY = {null};
 	static long addressOf(Object o) {
+		// if (OS.isAndroid) return VMRuntime.getRuntime().addressOf(o);
 		ONE_ARRAY[0] = o;
 		long baseOffset = unsafe.arrayBaseOffset(Object[].class);
 		return switch (unsafe.addressSize()) {
@@ -101,6 +103,9 @@ public interface UNSAFE {
 			case 8 -> unsafe.getLong(ONE_ARRAY, baseOffset);
 			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
 		};
+	}
+	static long addressOf(Object[] arr, int index) {
+		return addressOf(arr) + index * unsafe.arrayIndexScale(Object[].class);
 	}
 	static Object getObject(long address) {
 		ONE_ARRAY[0] = null;

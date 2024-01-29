@@ -809,6 +809,7 @@ public class Tester extends Content {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log, js_prop;
 		static {
+			multi_windows.def(false);
 			wrap_ref.defTrue();
 		}
 	}

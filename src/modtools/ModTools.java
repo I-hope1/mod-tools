@@ -69,11 +69,11 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
 
-		/* try {
+		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
 		} catch (Throwable ignored) {
 			Log.err(ignored);
-		} */
+		}
 		HopeCall.init();
 
 		if (isImportFromGame) {

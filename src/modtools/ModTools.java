@@ -73,6 +73,7 @@ public class ModTools extends Mod {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
 		} catch (Throwable ignored) {
 			Log.err(ignored);
+			System.exit(-1);
 		}
 		HopeCall.init();
 

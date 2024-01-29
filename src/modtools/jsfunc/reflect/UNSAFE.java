@@ -6,6 +6,8 @@ import ihope_lib.*;
 
 import static ihope_lib.MyReflect.unsafe;
 
+import java.lang.reflect.Array;
+
 public interface UNSAFE {
 	/* /trust 不安全 */
 	Object lookup = MyReflect.lookup;
@@ -92,10 +94,9 @@ public interface UNSAFE {
 		}
 	}
 
-	// ---------ADDRESS operate---------
-	Object[] ONE_ARRAY = {null};
+	// ---------ADDRESS Poperate---------
 	static long addressOf(Object o) {
-		// if (OS.isAndroid) return VMRuntime.getRuntime().addressOf(o);
+		if (o == null) throw new IllegalArgumentException("o is null.");
 		ONE_ARRAY[0] = o;
 		long baseOffset = unsafe.arrayBaseOffset(Object[].class);
 		return switch (unsafe.addressSize()) {
@@ -104,9 +105,8 @@ public interface UNSAFE {
 			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
 		};
 	}
-	static long addressOf(Object[] arr, int index) {
-		return addressOf(arr) + index * unsafe.arrayIndexScale(Object[].class);
-	}
+
+	Object[] ONE_ARRAY = new Object[1];
 	static Object getObject(long address) {
 		ONE_ARRAY[0] = null;
 		long baseOffset = unsafe.arrayBaseOffset(Object[].class);

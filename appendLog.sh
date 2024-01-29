@@ -18,6 +18,7 @@ while true; do
   fi
   # Check if the process is running
   pid=$(pidof io.anuke.mindustry)
+  sleep 0.1
   if [ -z "$pid" ]; then
     echo "mindustry is not running, exiting..."
     # Find the newest file in the crashes directory
@@ -35,6 +36,4 @@ while true; do
     fi
     exit 0
   fi
-
-  sleep 0.1
 done

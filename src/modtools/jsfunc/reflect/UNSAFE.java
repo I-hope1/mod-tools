@@ -6,7 +6,7 @@ import ihope_lib.*;
 
 import static ihope_lib.MyReflect.unsafe;
 
-import java.lang.reflect.Array;
+import java.lang.reflect.*;
 
 public interface UNSAFE {
 	/* /trust 不安全 */

@@ -15,6 +15,7 @@ import mindustry.mod.*;
 import mindustry.mod.Mods.*;
 import modtools.android.HiddenApi;
 import modtools.graphics.MyShaders;
+import modtools.jsfunc.reflect.ANDROID_UNSAFE;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
@@ -27,6 +28,7 @@ import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -71,10 +73,8 @@ public class ModTools extends Mod {
 
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
-		} catch (Throwable ignored) {
-			Log.err(ignored);
-			System.exit(-1);
-		}
+		} catch (Throwable ignored) {}
+
 		HopeCall.init();
 
 		if (isImportFromGame) {

@@ -4,10 +4,11 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
+import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -15,12 +16,11 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.IntVars;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.jsfunc.reflect.*;
 import modtools.ui.*;
-import modtools.ui.components.Window;
+import modtools.ui.components.*;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
@@ -55,9 +55,10 @@ import static modtools.utils.ui.ReflectTools.*;
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable {
 	/* non-null */
-	private final Class<?> clazz;
-	private final Object   o;
-	private final MyEvents events = new MyEvents();
+	private final       Class<?> clazz;
+	private final       Object   o;
+	private final       MyEvents events = new MyEvents();
+	public static final Color    tmpC1  = new Color();
 
 	private ReflectTable
 	 fieldsTable,
@@ -72,7 +73,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		this.clazz = clazz;
 		if (clazz.isPrimitive()) {
 			cont.add("<PRIMITIVE>").color(Color.gray).row();
-			cont.add(clazz.getName()).color(Tmp.c1.set(c_type)).row();
+			cont.add(clazz.getName()).color(tmpC1.set(c_type)).row();
 			cont.add(String.valueOf(o));
 			return;
 		}
@@ -98,6 +99,13 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		// 默认左居中
 		build.left().top().defaults().left();
 		textField = new TextField();
+
+		addCaptureListener(new InputListener() {
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (Core.input.ctrl()) textField.requestKeyboard();
+				return false;
+			}
+		});
 		// Runnable[] last = {null};
 		rebuild = text -> {
 			// build.clearChildren();
@@ -289,7 +297,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private void addModifier(Table table, CharSequence string) {
 		addDisplayListener(table.add(new MyLabel(string, defaultLabel))
-		 .color(Tmp.c1.set(c_keyword)).fontScale(0.7f)
+		 .color(tmpC1.set(c_keyword)).fontScale(0.7f)
 		 .padRight(8), E_JSFuncDisplay.modifier);
 	}
 	private void addRType(Table table, Class<?> type, Prov<String> details) {
@@ -316,10 +324,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		});
 	}
 
-	public void buildFieldValue(Class<?> type, BindCell c_cell, FieldValueLabel l) {
+	public void buildFieldValue(BindCell c_cell, FieldValueLabel l) {
 		if (!l.isStatic() && l.getObject() == null) return;
-		Cell<?> cell     = c_cell.cell;
-		Boolp   editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
+		Class<?> type     = l.type;
+		Cell<?>  cell     = c_cell.cell;
+		Boolp    editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
 		/* Color的实现是Color#set方法 */
 		if (l.val instanceof Color) {
 			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
@@ -334,13 +343,13 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			l.afterSet = () -> field.setTextCheck(String.valueOf(l.getText()));
 			l.afterSet.run();
 			field.update(() -> {
-				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
+				l.enableUpdate = !field.hasKeyboard();
 			});
 			field.setValidator(NumberHelper::isNumber);
-			field.changed(() -> {
+			field.changed(catchRun(() -> {
 				if (!field.isValid()) return;
-				l.setFieldValue(NumberHelper.cast(field.getText(), type));
-			});
+				l.setFieldValue(NumberHelper.cast(field.getText(), l.type));
+			}));
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.require();
@@ -356,10 +365,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
 			});
-			field.changed(() -> {
+			field.changed(catchRun(() -> {
 				String text = field.getText();
 				l.setFieldValue(AutoTextField.NULL_STR.equals(text) ? null : text);
-			});
+			}));
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.require();
@@ -382,16 +391,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			btn.setText((boolean) l.val ? "TRUE" : "FALSE");
 			btn.setChecked((boolean) l.val);
 		});
-		btn.clicked(() -> {
+		btn.clicked(catchRun(() -> {
 			boolean b = !(boolean) l.val;
 			btn.setText(b ? "TRUE" : "FALSE");
-			try {
-				l.setFieldValue(b);
-			} catch (Throwable e) {
-				IntUI.showException(e).moveToMouse();
-			}
-			l.setVal(b);
-		});
+			l.setFieldValue(b);
+		}));
 		return btn;
 	}
 
@@ -447,7 +451,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 			try {
 				l[0].setVal();
-				buildFieldValue(type, c_cell, l[0]);
+				buildFieldValue(c_cell, l[0]);
 				t.add(l[0]).minWidth(42).growX().uniformX()
 				 .labelAlign(Align.topLeft);
 			} catch (Throwable e) {
@@ -461,7 +465,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .disabled(!l[0].isValid());
 		})).top().padRight(-10).width(64)/* .colspan(0) */, E_JSFuncDisplay.buttons);
 		fields.row();
-		fields.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
+		fields.image().color(tmpC1.set(c_underline)).growX().colspan(6).row();
 	}
 	private void buildMethod(Object o, ReflectTable methods, Method m) {
 		if (!E_JSFunc.display_synthetic.enabled() && m.isSynthetic()) return;
@@ -569,7 +573,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			Log.err(err);
 		}
 		methods.row();
-		methods.image().color(Tmp.c1.set(c_underline)).growX().colspan(7).row();
+		methods.image().color(tmpC1.set(c_underline)).growX().colspan(7).row();
 	}
 	private static MethodHandle getHandle(Method m) {
 		try {
@@ -657,7 +661,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		} catch (Throwable e) {
 			Log.err(e);
 		}
-		t.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
+		t.image().color(tmpC1.set(c_underline)).growX().colspan(6).row();
 	}
 	private void buildClass(ReflectTable table, Class<?> cls) {
 		table.bind(wrapClass(cls));
@@ -674,9 +678,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				));
 				Class<?>[] types = cls.getInterfaces();
 				if (types.length > 0) {
-					t.add(new MyLabel(" implements ", defaultLabel)).color(Tmp.c1.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
+					t.add(new MyLabel(" implements ", defaultLabel)).color(tmpC1.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
 					for (Class<?> interf : types) {
-						t.add(new MyLabel(getGenericString(interf), defaultLabel)).padRight(8f).color(Tmp.c1.set(c_type));
+						t.add(new MyLabel(getGenericString(interf), defaultLabel)).padRight(8f).color(tmpC1.set(c_type));
 					}
 				}
 
@@ -689,7 +693,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				Log.err(e);
 			}
 		}).pad(4).growX().left().top().row();
-		table.image().color(Tmp.c1.set(c_underline)).growX().colspan(6).row();
+		table.image().color(tmpC1.set(c_underline)).growX().colspan(6).row();
 	}
 
 	/** 双击复制文本内容 */
@@ -791,6 +795,12 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			labels.each(ValueLabel::clearVal);
 			labels.clear().shrink();
 		}
+	}
+
+	public Element hit(float x, float y, boolean touchable) {
+		Element hit = super.hit(x, y, touchable);
+		if (hit != null && Core.scene.getKeyboardFocus() == null) requestKeyboard();
+		return hit;
 	}
 	static Table newPairTable() {
 		return new Table(t -> t.left().defaults().left().top());

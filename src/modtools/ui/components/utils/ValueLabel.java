@@ -17,7 +17,7 @@ import mindustry.gen.*;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.components.review.*;

@@ -24,7 +24,7 @@ import modtools.IntVars;
 import modtools.annotations.builder.DataBoolSetting;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisWindow;

@@ -22,7 +22,7 @@ import modtools.events.ExecuteTree;
 import modtools.events.TaskNode;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.menu.*;
 import modtools.ui.components.linstener.WorldSelectListener;
@@ -31,11 +31,12 @@ import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.jsfunc.WORLD.UNIT;
 import modtools.utils.ui.FormatHelper;
+import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
 import static modtools.ui.Contents.tester;
+import static modtools.utils.world.WorldUtils.*;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {

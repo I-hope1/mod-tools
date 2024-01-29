@@ -1,4 +1,4 @@
-[English](README_en.md)|[中文](README.md)
+English|[中文](README.md)
 
 # Mod Tools
 
@@ -16,15 +16,16 @@ It provides many useful tools for developers.
 ![](./screenshots/tester.png)
 
 - Provides `JS` code editor `Tester`
+
   - Press `Ctrl`+`Shift`+`Enter` to execute code immediately
   - Press `Ctrl`+`Shift`+`↑/↓` to switch through history records
   - Press `Ctrl`+`Shift`+`D` to view detailed information
 - Built-in `unsafe`, `lookup`
 - Built-in `IntFunc` class (abbreviated as `$`)
+
   - Use `$.xxx` to represent basic data types (e.g., `$.void` represents `Void.TYPE`; `$.J` represents `long.class`)
   - `$p` represents `Packages`
 - [JSFunc](src/modtools/utils/JSFunc.java)
-
 - Long press on code in the favorites to add it to the startup items
   ![](./screenshots/startup.png)
 -
@@ -55,3 +56,4 @@ Displays a list of elements, double-click to copy the element to a js variable
 ## ShowInfoWindow
 
 - Use `'null` to represent the null string
+- `Ctrl`+`F` Focus search field

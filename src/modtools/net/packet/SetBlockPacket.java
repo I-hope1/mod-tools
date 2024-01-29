@@ -29,11 +29,11 @@ public class SetBlockPacket extends Packet {
 		write.i(team.id);
 	}
 	public void handleClient() {
-		WorldUtils.setBlock(tile, block, team);
+		tile.setBlock(block, team);
 	}
 	public void handleServer(NetConnection con) {
 		if (!HopeCall.checkPrivilege(con)) return;
-		WorldUtils.setBlock(tile, block, team);
+		tile.setBlock(block, team);
 		net.send(this, true);
 	}
 }

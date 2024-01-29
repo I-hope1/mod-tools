@@ -1,9 +1,11 @@
 package modtools.net.packet;
 
 import mindustry.game.Team;
+import mindustry.gen.Call;
 import mindustry.net.*;
 import mindustry.type.UnitType;
 import mindustry.world.*;
+import mindustry.world.blocks.environment.Floor;
 import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.net;
@@ -19,9 +21,9 @@ public class HopeCall {
 		return con.player.admin || con.player.isLocal();
 	}
 
-	public static void setBlock(Block block, Tile tile, Team team) {
+	public static void setBlock(Tile tile, Block block, Team team) {
 		if (net.server() || !net.active()) {
-			WorldUtils.setBlock(tile, block, team);
+			tile.setBlock(block, team);
 		}
 		if (net.server() || net.client()) {
 			net.send(new SetBlockPacket(block, tile, team), true);
@@ -35,5 +37,14 @@ public class HopeCall {
 			UnitSpawnPacket packet = new UnitSpawnPacket(selectUnit, team, x, y, amount);
 			net.send(packet, true);
 		}
+	}
+	public static void setFloor(Tile tile, Block floor) {
+		tile.setFloorNet(floor);
+	}
+	public static void setOverlay(Tile tile, Block overlay) {
+		Call.setOverlay(tile, overlay);
+	}
+	public static void setFloorUnder(Tile tile, Block floor) {
+		tile.setFloorNet(floor, tile.overlay());
 	}
 }

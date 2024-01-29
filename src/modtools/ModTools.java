@@ -2,7 +2,6 @@ package modtools;
 
 import arc.*;
 import arc.files.*;
-import arc.graphics.Color;
 import arc.scene.event.VisibilityListener;
 import arc.struct.*;
 import arc.util.*;
@@ -15,20 +14,17 @@ import mindustry.mod.*;
 import mindustry.mod.Mods.*;
 import modtools.android.HiddenApi;
 import modtools.graphics.MyShaders;
-import modtools.jsfunc.reflect.ANDROID_UNSAFE;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.content.SettingsUI;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.ui.windows.DrawablePicker;
-import modtools.utils.*;
+import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 
-import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;

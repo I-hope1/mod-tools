@@ -23,7 +23,7 @@ import modtools.annotations.OptimizeReflect;
 import modtools.annotations.builder.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.IDisposable;
@@ -717,11 +717,11 @@ public class ReviewElement extends Content {
 		}
 
 		public static final float padRight = 8f;
-		Table cells_ = new Table(c -> {
+		/* Table cells_ = new Table(c -> {
 			c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
 			c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
 			c.defaults().colspan(2);
-		});
+		}); */
 		private void build(Table t) {
 			t.table(top -> {
 				top.add(nameLabel).color(Color.violet).padLeft(-4f);

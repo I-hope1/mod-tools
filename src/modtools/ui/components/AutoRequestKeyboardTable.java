@@ -1,12 +1,12 @@
 package modtools.ui.components;
 
 import arc.scene.Element;
-import arc.scene.ui.layout.Table;
 import mindustry.Vars;
+import modtools.ui.components.limit.LimitTable;
 
-public class AutoFocusTable extends Table {
+public class AutoRequestKeyboardTable extends LimitTable {
 	private final Element focus;
-	public AutoFocusTable(Element focus) {this.focus = focus;}
+	public AutoRequestKeyboardTable(Element focus) {this.focus = focus;}
 	public Element hit(float x, float y, boolean touchable) {
 		Element element = super.hit(x, y, touchable);
 		if (element == null) return null;

@@ -28,8 +28,9 @@ import mindustry.ui.Styles;
 import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.events.ISettings;
+import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
@@ -188,29 +189,21 @@ public class Selection extends Content {
 				each(list, tile -> WorldUtils.setBlock(tile, block));
 			});
 			FunctionBuild("@clear", list -> {
-				each(list, tile -> {
-					if (tile.block() != Blocks.air) WorldUtils.setBlock(tile, Blocks.air);
-				});
+				each(list, WorldUtils::setAir);
 			});
 			ListFunction("@selection.setfloor",
 			 () -> content.blocks().select(block -> block instanceof Floor), null, (list, floor) -> {
-				 each(list, tile -> {
-					 tile.setFloor((Floor) floor);
-				 });
+				 each(list, tile -> HopeCall.setFloor(tile, floor));
 			 });
 			ListFunction("@selection.setfloorUnder",
 			 () -> content.blocks().select(block -> block instanceof Floor && !(block instanceof OverlayFloor)),
 			 null, (list, floor) -> {
-				 each(list, tile -> {
-					 tile.setFloorUnder((Floor) floor);
-				 });
+				 each(list, tile -> HopeCall.setFloorUnder(tile, floor));
 			 });
 			ListFunction("@selection.setoverlay",
 			 () -> content.blocks().select(block -> block instanceof OverlayFloor || block == Blocks.air),
 			 null, (list, overlay) -> {
-				 each(list, tile -> {
-					 tile.setOverlay(overlay);
-				 });
+				 each(list, tile -> HopeCall.setOverlay(tile, overlay));
 			 });
 		}};
 		buildings = new BuildFunction<>("building") {{
@@ -227,7 +220,7 @@ public class Selection extends Content {
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
 				each(list, b -> {
 					if (b.items != null) {
-						b.items.set(item, NumberHelper.asInt(tmpAmount[0]));
+						Call.setItem(b, item, NumberHelper.asInt(tmpAmount[0]));
 					}
 				});
 			});

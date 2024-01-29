@@ -18,7 +18,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ModTools;
 
-import static modtools.ui.HopeIcons.*;
+import static modtools.ui.gen.HopeIcons.*;
 import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
 import static modtools.ui.IntUI.whiteui;

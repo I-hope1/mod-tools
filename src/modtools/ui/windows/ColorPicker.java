@@ -11,13 +11,12 @@ import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
-import mindustry.gen.*;
+import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
-import mindustry.ui.Styles;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.IntUI.*;
-import modtools.ui.components.*;
+import modtools.ui.components.Window;
+import modtools.ui.gen.HopeIcons;
 import modtools.utils.Tools;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;

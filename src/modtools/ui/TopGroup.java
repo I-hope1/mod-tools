@@ -691,7 +691,13 @@ public final class TopGroup extends WidgetGroup {
 		public void draw() {
 			MyDraw.blurRect(x, y, width, height);
 			drawBack();
-			super.draw();
+			Tools.runLoggedException(super::draw);
+		}
+
+		public boolean fire(SceneEvent event) {
+			boolean[] b = {false};
+			Tools.runShowedException(() -> b[0] = super.fire(event));
+			return b[0];
 		}
 	}
 

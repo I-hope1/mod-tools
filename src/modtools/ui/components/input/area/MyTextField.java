@@ -17,7 +17,6 @@ import arc.struct.FloatSeq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
-import modtools.annotations.CostTimeLog;
 
 import static arc.Core.*;
 
@@ -40,6 +39,8 @@ import static arc.Core.*;
  * @author Nathan Sweet
  * @author i hope
  */
+// 安卓上不行
+@SuppressWarnings("SizeReplaceableByIsEmpty")
 public class MyTextField extends TextField implements Disableable {
 
 	public StringBuilder text;
@@ -370,8 +371,6 @@ public class MyTextField extends TextField implements Disableable {
 		paste(content == null ? null : new StringBuilder(content), fireChangeEvent);
 	}
 
-	// 安卓上不行
-	@SuppressWarnings("SizeReplaceableByIsEmpty")
 	public void paste(StringBuilder content, boolean fireChangeEvent) {
 		if (content == null || (content.length() == 0 && text.length() == 0)) return;
 
@@ -599,7 +598,7 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 
-	class KeyRepeatTask extends Task {
+	protected class KeyRepeatTask extends Task {
 		KeyCode keycode;
 
 		public void run() {

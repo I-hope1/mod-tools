@@ -45,13 +45,13 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	}
 	public void process2() {}
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		// long millis = System.currentTimeMillis();
 		if (firstFinished) {
-			if (!second) {
-				second = true;
-				try {
-					process2();
-				} catch (Throwable e) {err(e);}
-			}
+			if (second) return true;
+			second = true;
+			try {
+				process2();
+			} catch (Throwable e) {err(e);}
 			return true;
 		}
 		firstFinished = true;
@@ -66,6 +66,9 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		try {
 			process();
 		} catch (Throwable e) {err(e);}
+
+		// long v = System.currentTimeMillis() - millis;
+		// print("@: @", this, v);
 		return true;
 	}
 	public void process() {}

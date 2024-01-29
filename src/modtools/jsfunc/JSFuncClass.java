@@ -1,13 +1,12 @@
 package modtools.jsfunc;
 
-import arc.files.Fi;
-import arc.util.*;
-import modtools.annotations.*;
+import arc.util.Reflect;
+import modtools.annotations.CostTimeLog;
 import modtools.utils.*;
 import rhino.*;
 
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.Map;
 
 // @OptimizeReflect
 public class JSFuncClass extends NativeJavaClass {

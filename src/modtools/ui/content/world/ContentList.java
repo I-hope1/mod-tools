@@ -17,7 +17,7 @@ import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.content.Content;

@@ -1,4 +1,4 @@
-[English](README_en.md)|[中文](README.md)
+[English](README_en.md)|中文
 
 # Mod Tools
 
@@ -24,7 +24,6 @@ It provides many useful tools for developers.
 - + `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`;`$.J` 表示 long.class)
 - `$p` 代表 `Packages
 - [JSFunc](src/modtools/utils/JSFunc.java)
-
 - 长按收藏夹里的代码，可以添加到启动项
   ![](./screenshots/startup.png)
 -
@@ -54,4 +53,5 @@ It provides many useful tools for developers.
 
 ## ShowInfoWindow
 
-- `‘null`表示null字符串
+- `‘null` 表示null字符串
+- `Ctrl`+`F` 聚焦搜索框

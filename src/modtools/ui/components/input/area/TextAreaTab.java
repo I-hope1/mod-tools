@@ -98,13 +98,16 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		});
 		Time.runTask(2, area::updateDisplayText);
 	}
+	public VirtualString virtualString;
+	public static class VirtualString {
+		public String text;
+		public Color  color = Color.gray;
+		public int    index;
+		public VirtualString() {}
+	}
 	private LinesShow getLinesShow() {
 		linesShow = new LinesShow(area);
 		return linesShow;
-	}
-
-	public float parentAlpha() {
-		return parentAlpha;
 	}
 
 	/* 返回true，则cancel事件 */
@@ -143,30 +146,31 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 		}
 
-		@Override
 		public void visualScrollY(float pixelsY) {
 			area.scrollY = pixelsY;
 			super.visualScrollY(pixelsY);
 		}
-		public void draw() {
-			super.draw();
-		}
-
-		/*@Override
-		protected void drawChildren() {
-		}*/
 	}
 
+	public float getRelativeX(int pos) {
+		return area.getRelativeX(pos);
+	}
+	public float getRelativeY(int pos) {
+		return area.getRelativeY(pos);
+	}
 	public boolean enableHighlighting = true;
 
 	private static final Pattern startComment = Pattern.compile("\\s*//");
-	public static final  float   fontWidth    = 12;
 
-	public class MyTextArea extends modtools.ui.components.input.area.TextArea {
+	public class MyTextArea extends modtools.ui.components.input.area.MyTextArea {
 		public  float    parentHeight = 0;
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
+		public void paste(StringBuilder content, boolean fireChangeEvent) {
+			if (readOnly) return;
+			super.paste(content, fireChangeEvent);
+		}
 		public MyTextArea(String text) {
 			super("", HopeStyles.defaultMultiArea);
 			Tools.runIgnoredException(() -> {
@@ -188,6 +192,29 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return Math.max(super.getPrefHeight(), prefHeight + parentHeight / 2f);
 		}
 
+		float getRelativeX(int cursor) {
+			int prev = this.cursor;
+			super.setCursorPosition(cursor);
+			float textOffset = cursor >= glyphPositions.size || cursorLine * 2 >= linesBreak.size ? 0
+			 : glyphPositions.get(cursor) - glyphPositions.get(linesBreak.items[cursorLine * 2]);
+			float bgLeft = getBackground() == null ? 0 : getBackground().getLeftWidth();
+			float val    = x + bgLeft + textOffset + fontOffset + font.getData().cursorX;
+			super.setCursorPosition(prev);
+			return val;
+		}
+		/** @see arc.scene.ui.TextArea#drawCursor(Drawable, Font, float, float)   */
+		float getRelativeY(int cursor) {
+			int prev = this.cursor;
+			super.setCursorPosition(cursor);
+			float textY = getTextY(font, getBackground());
+			float val   = y + textY - (cursorLine - firstLineShowing + 1) * font.getLineHeight();
+			super.setCursorPosition(prev);
+			return val;
+		}
+		public void setCursorPosition(int cursorPosition) {
+			super.setCursorPosition(cursorPosition);
+			trackCursor();
+		}
 		public void setFirstLineShowing(int v) {
 			firstLineShowing = v;
 		}
@@ -218,10 +245,21 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			font.getData().markupEnabled = false;
 
 			this.font = font;
+			l:
+			if (virtualString != null && virtualString.text != null) {
+				font.getColor().set(virtualString.color).mulA(alpha());
+				if (font.getColor().a == 0) break l;
+				float x1 = getRelativeX(virtualString.index);
+				float y1 = getRelativeY(virtualString.index);
+				// Log.info("(@, @)", x1, y1);
+				font.draw(virtualString.text,
+				 x1, y1 + font.getLineHeight());
+			}
+
 			if (enableHighlighting && syntax != null) {
 				highlightingDraw(x, y);
 			} else {
-				font.setColor(Color.white);
+				font.getColor().set(Color.white).mulA(alpha());
 				int   firstLineShowing = getRealFirstLineShowing();
 				int   linesShowing     = getRealLinesShowing() + 1;
 				float offsetY          = -firstLineShowing * lineHeight();
@@ -347,12 +385,14 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			moveCursor(true, false);
 		}
 
-		public void insert(CharSequence itext) {
-			if (readOnly) return;
-			insert(cursor, itext, text);
-			changeText();
+		public StringBuilder insert(int position, CharSequence text, StringBuilder to) {
+			if (readOnly) return to;
+			return super.insert(position, text, to);
 		}
-
+		StringBuilder insert(int position, char c, StringBuilder to) {
+			if (readOnly) return to;
+			return super.insert(position, c, to);
+		}
 		boolean changeText() {
 			return !readOnly && super.changeText();
 		}
@@ -360,15 +400,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		boolean changeText(StringBuilder oldText, StringBuilder newText) {
 			return !readOnly && super.changeText(oldText, newText);
 		}
-		/* boolean changeText(String oldText, String newText){
-        if(readOnly || newText.equals(oldText)) return false;
-        text = newText;
-        ChangeEvent changeEvent = Pools.obtain(ChangeEvent.class, ChangeEvent::new);
-        boolean     cancelled   = fire(changeEvent);
-        text = cancelled ? oldText : newText;
-        Pools.free(changeEvent);
-        return !cancelled;
-    } */
 
 		public void trackCursor() {
 			if (trackCursor != null) {
@@ -380,43 +411,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			super.moveCursor(forward, jump);
 			trackCursor();
 		}
-
-		/* public float rx, ry;
-		public float getRelativeCursor() {
-			return cursor - area.getRealFirstLineShowing() * 2;
-
-		}
-		public float getRelativeX(int pos) {
-			if (newLineAtEnd()) return textOffset + fontOffset;
-			int firstLineShowing = area.getRealFirstLineShowing();
-			int linesShowing     = area.getRealLinesShowing();
-
-			int   i, end;
-			float x = 0;
-			for (i = firstLineShowing * 2, end = i + linesShowing * 2
-						; i <= end && i < linesBreak.size; i += 2) {
-				if (linesBreak.get(i) <= pos && pos <= linesBreak.get(i + 1)) {
-					x = glyphPositions.get(pos) - glyphPositions.get(linesBreak.get(i));
-					break;
-				}
-			}
-			rx = x;
-			return textOffset + fontOffset + x
-						 + (style.background != null ? style.background.getLeftWidth() : 0);
-		}
-		public float getRelativeY(int pos) {
-			if (style.font == null) return 0;
-			int firstLineShowing = area.getRealFirstLineShowing();
-			int linesShowing     = area.getRealLinesShowing();
-			int i, end;
-			for (i = firstLineShowing * 2, end = i + linesShowing * 2
-						; i <= end && i < linesBreak.size; i += 2) {
-				if (linesBreak.get(i) <= pos && pos <= linesBreak.get(i + 1)) break;
-			}
-			return ry = y + getTextY(style.font, area.style.background) +
-									(style.font.isFlipped() ? -textHeight : 0)
-									- (i / 2f) * lineHeight();
-		} */
 
 		public int clamp(int index) {
 			return Mathf.clamp(index, 0, text.length());
@@ -464,8 +458,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			}
 		}
+		public boolean checkIndex(int i) {
+			return 0 <= i && i < text.length();
+		}
 
-		// public void
 		public class MyTextAreaListener extends TextAreaListener {
 			protected void goHome(boolean jump) {
 				super.goHome(jump);
@@ -488,6 +484,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				boolean jump  = Core.input.ctrl();
 				fixNumLk(event, keycode);
 
+				if (jump && keycode == KeyCode.d) selectNearWord();
 				if (jump && keycode == KeyCode.slash) {
 					comment(shift);
 					updateDisplayText();
@@ -542,6 +539,25 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				trackCursor();
 				return super.keyUp(event, keycode);
 			}
+		}
+		public void selectNearWord() {
+			int i = hasSelection ? selectionStart : cursor - 1;
+			while (isWordCharacterCheck(i)) --i;
+			selectionStart = i + 1;
+			i = cursor;
+			while (isWordCharacterCheck(i)) ++i;
+			cursor = i;
+			hasSelection = selectionStart != cursor;
+		}
+
+		public char charAtUncheck(int i) {
+			return text.charAt(i);
+		}
+
+		/* 这会判断是否越界，绕过越界就返回false */
+		private boolean isWordCharacterCheck(int i) {
+			if (i < 0 || i >= text.length()) return false;
+			return isWordCharacter(text.charAt(i));
 		}
 	}
 

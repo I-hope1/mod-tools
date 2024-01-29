@@ -16,7 +16,7 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.utils.MyItemSelection;

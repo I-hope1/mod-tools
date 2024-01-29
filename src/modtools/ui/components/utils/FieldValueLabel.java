@@ -1,6 +1,5 @@
 package modtools.ui.components.utils;
 
-import arc.graphics.Color;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
@@ -69,9 +68,7 @@ public class FieldValueLabel extends ValueLabel {
 		Seq<MenuList> list = new Seq<>();
 		basicMenuLists(list);
 		if (field != null && !type.isPrimitive()) list.add(MenuList.with(Icon.editSmall, "@selection.reset", () -> {
-			JSRequest.requestForField(val, obj, o -> {
-				setFieldValue(type.cast(o));
-			});
+			JSRequest.requestForField(val, obj, o -> setFieldValue(type.cast(o)));
 		}));
 		return list;
 	}

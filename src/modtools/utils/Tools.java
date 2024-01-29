@@ -203,7 +203,7 @@ public class Tools {
 		try {
 			run.run();
 		} catch (Throwable th) {
-			if (true) Log.err(th);
+			// if (true) Log.err(th);
 		}
 	}
 	public static void runShowedException(CatchRun run) {

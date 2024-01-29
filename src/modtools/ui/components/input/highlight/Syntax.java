@@ -3,50 +3,21 @@ package modtools.ui.components.input.highlight;
 import arc.graphics.Color;
 import arc.math.geom.Vec2;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Tmp;
 import mindustry.graphics.Pal;
-import modtools.utils.Tools;
 
 /** 用于控制渲染，当然你也可以解析文本 */
 public class Syntax {
-
 	public static final Color
-	 c_string      = new Color(0xce9178FF),
-	 c_keyword     = new Color(0x569cd6FF),
-	 c_number      = new Color(0xb5cea8FF),
-	 c_comment     = new Color(0x6a9955FF),
-	 c_brackets    = new Color(0xffd704FF),
+	 c_string      = new Color(0xCE9178_FF),
+	 c_keyword     = new Color(0x569CD6_FF),
+	 c_number      = new Color(0xB5CEA8_FF),
+	 c_comment     = new Color(0x6A9955_FF),
+	 c_brackets    = new Color(0xFFD704_FF),
 	 c_operateChar = Pal.accentBack,
 	 c_functions   = Color.sky,//Color.valueOf("#ae81ff")
-	 c_objects     = new Color(0x66d9efFF),
-	 c_map         = new Color(0xadde68FF);
-	/*public static class Node {
-		public boolean has;
-		public Node parent;
-		public Node left;
-		public Node right;
-
-		public Node(boolean has, Node parent, Node left, Node right) {
-			this.has = has;
-			this.parent = parent;
-			this.left = left;
-			this.right = right;
-		}
-
-		static Node currentNode = null;
-
-		static Node node(boolean has, Node parent, Node left, Node right) {
-			Node node = new Node(has, parent, left, right);
-			currentNode = node;
-			return node;
-		}
-
-		static Node node(boolean has, Node left, Node right) {
-			return node(has, currentNode, left, right);
-		}
-
-	}*/
-	// public static JsonReader reader = new JsonReader();
+	 c_objects     = new Color(0x66D9EF_FF),
+	 c_map         = new Color(0xADDE68_FF);
 
 	public SyntaxDrawable drawable;
 	public DrawToken      drawToken;
@@ -57,19 +28,16 @@ public class Syntax {
 		this.drawable = drawable;
 	}
 
-	/** 判断指定index，是否为单词边界 */
+	/** 判断指定index对应的char，是否为单词边界 */
 	public boolean isWordBreak(int i) {
 		return isWordBreak(displayText.charAt(i));
 	}
 
+	/** 判断指定char，是否为单词边界 */
 	public boolean isWordBreak(char c) {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90)
 						 || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
 						 || c == '$' || c == '_');
-	}
-
-	public boolean isWhitespace(char ch) {
-		return !Character.isWhitespace(ch);
 	}
 
 	/** 用于文本解析 */
@@ -78,8 +46,7 @@ public class Syntax {
 	}
 	public DrawDefCons drawDefCons;
 	public void drawDefText(int start, int max) {
-		drawText0(drawable == null ? null : Tmp.c1.set(defaultColor).mulA(drawable.alpha()),
-		 start, max);
+		drawText0(drawable == null ? null : defaultColor, start, max);
 	}
 	public void drawText0(Color color, int start, int max) {
 		if (start == -1) return;
@@ -87,7 +54,7 @@ public class Syntax {
 			if (drawDefCons != null) drawDefCons.get(start, max);
 			return;
 		}
-		drawable.font().setColor(color);
+		drawable.font().getColor().set(color).mulA(drawable.alpha());
 		drawable.drawMultiText(displayText, start, max);
 	}
 
@@ -154,12 +121,12 @@ public class Syntax {
 		return i + 1;
 	}
 
-	protected Vec2 getCursorPos() {
+	/* protected Vec2 getCursorPos() {
 		return getRelativePos(drawable.cursor());
 	}
 	protected Vec2 getRelativePos(int pos) {
 		return Tmp.v3.set(drawable.getRelativeX(pos), drawable.getRelativeY(pos));
-	}
+	} */
 
 
 	public CharSequence displayText;
@@ -270,12 +237,10 @@ public class Syntax {
 		}
 
 		boolean draw(int i) {
-			if (symbols.contains(c)) {
-				lastSymbol = c;
-				lastIndex = i;
-				return true;
-			}
-			return false;
+			if (!symbols.contains(c)) return false;
+			lastSymbol = c;
+			lastIndex = i;
+			return true;
 		}
 	}
 
@@ -305,16 +270,13 @@ public class Syntax {
 				}
 				return true;
 			}
-			if (c == '/' && i + 1 < len) {
-				char next = displayText.charAt(i + 1);
-				if (next == '*' || next == '/') {
-					lastIndex = i;
-					multi = next == '*';
-					body = true;
-					return true;
-				}
-			}
-			return false;
+			if (c != '/' || i + 1 >= len) return false;
+			char next = displayText.charAt(i + 1);
+			if (next != '*' && next != '/') return false;
+			lastIndex = i;
+			multi = next == '*';
+			body = true;
+			return true;
 		}
 	}
 
@@ -372,15 +334,14 @@ public class Syntax {
 
 
 	public interface TokenDraw {
-		/**
-		 * @return Color 如果为null，则不渲染
-		 **/
+		/** @return Color 如果为null，则不渲染 */
 		Color draw(DrawToken task);
 	}
 
 	public abstract class DrawTask {
 		public final Color   color;
 		public       boolean crazy;
+		/** 这个为当前char或String的左边  */
 		public       int     lastIndex;
 
 		public DrawTask(Color color, boolean crazy) {
@@ -392,15 +353,11 @@ public class Syntax {
 			this(color, false);
 		}
 
-		/**
-		 * 循环开始时，执行
-		 */
+		/** 循环开始时，执行 */
 		void init() {
 		}
 
-		/**
-		 * 渲染结束（包括失败）时，执行
-		 */
+		/** 渲染结束（包括失败）时，执行 */
 		void reset() {
 			lastIndex = -1;
 		}

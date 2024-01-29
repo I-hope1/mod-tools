@@ -22,18 +22,18 @@ public class LogCostTimeProcessor extends BaseProcessor<MethodSymbol> {
 		addImport(element, CL_Log);
 		addImport(element, CL_Time);
 		CostTimeLog anno = element.getAnnotation(CostTimeLog.class);
-		/* 生成结果:
+		/* -生成结果-:
 		Time.mark();
     try {
         // 原始代码
     } finally {
         Log.info("Costs in @ms", Time.elapsed());
     } */
+		mMaker.at(tree.body);
 		tree.body.stats = List.of(mMaker.Exec(mMaker.Apply(List.nil(),
-			 mMaker.Select(mMaker.Ident(CL_Time), ns("mark")),
-			 List.nil()
-			)
-		 ),
+			mMaker.Select(mMaker.Ident(CL_Time), ns("mark")),
+			List.nil()
+		 )),
 		 mMaker.Try(PBlock(tree.body.stats), List.nil(),
 			PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Ident(CL_Log), ns("info")),

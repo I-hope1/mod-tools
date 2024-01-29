@@ -95,9 +95,11 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
-	public NativeJavaPackage pkg          = null;
-	public Scriptable        obj          = null;
-	public boolean           enableJSProp = false;
+	public NativeJavaPackage pkg = null;
+	public Scriptable        obj = null;
+
+	public IntMap<Scriptable> indexToObj;
+	public boolean            enableJSProp = false;
 
 	@SuppressWarnings("StringEqualsCharSequence")
 	public TokenDraw[] tokenDraws = {
@@ -119,6 +121,7 @@ public class JSSyntax extends Syntax {
 			 ) || obj != null)
 				 return entry.value;
 			 Object o = customScope.get(token, customScope);
+			 if (indexToObj != null && o instanceof Scriptable sc) indexToObj.put(task.lastIndex + token.length(), sc);
 			 if (o instanceof NativeJavaPackage newPkg) {
 				 pkg = newPkg;
 				 obj = null;
@@ -214,6 +217,7 @@ public class JSSyntax extends Syntax {
 			 super.init();
 			 localVars.clear();
 			 localConstants.clear();
+			 if (indexToObj != null) indexToObj.clear();
 			 pkg = null;
 			 obj = null;
 		 }

@@ -1,13 +1,11 @@
 package modtools.utils.world;
 
-import arc.util.Reflect;
 import mindustry.entities.units.UnitController;
 import mindustry.gen.*;
-import modtools.annotations.OptimizeReflect;
 import modtools.utils.reflect.FieldUtils;
 
-public class UnitUtils {
-	public static boolean forceRemove(Unit u) {
+public interface UnitUtils {
+	static boolean forceRemove(Unit u) {
 		u.remove();
 		if (!Groups.unit.contains(unit -> unit == u)) return true;
 		Groups.all.remove(u);
@@ -22,7 +20,7 @@ public class UnitUtils {
 		controller.removed(u);
 		return ok;
 	}
-	public static boolean kill(Unit u) {
+	static boolean kill(Unit u) {
 		Call.unitDeath(u.id);
 		return u.isAdded();
 	}

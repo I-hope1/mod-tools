@@ -21,23 +21,27 @@ import java.util.Optional;
 
 import static arc.Core.scene;
 import static mindustry.Vars.*;
+import static modtools.utils.ElementUtils._a.*;
 
-public class ElementUtils {
-	private static final Vec2 v1 = new Vec2();
-	private static final Vec2 v2 = new Vec2();
+
+public interface ElementUtils {
+	class _a {
+		static final Vec2 v1 = new Vec2();
+		static final Vec2 v2 = new Vec2();
+	}
 	/** 存在就remove，不存在就add  */
-	public static void addOrRemove(Element element, boolean show) {
+	static void addOrRemove(Element element, boolean show) {
 		if (show) {
 			Core.scene.add(element);
 		} else {
 			element.remove();
 		}
 	}
-	public static Vec2 getAbsPosCenter(Element el) {
+	static Vec2 getAbsPosCenter(Element el) {
 		return el.localToStageCoordinates(v2.set(el.getWidth() / 2f, el.getHeight() / 2f));
 	}
 
-	public static Vec2 getAbsolutePos(Element el) {
+	static Vec2 getAbsolutePos(Element el) {
 		if (true) return el.localToStageCoordinates(v1.set(0, 0));
 		Vec2 vec2 = Tmp.v1.set(el.x, el.y);
 		while (el.parent != null) {
@@ -46,7 +50,7 @@ public class ElementUtils {
 		}
 		return vec2;
 	}
-	public static void quietScreenshot(Element element) {
+	static void quietScreenshot(Element element) {
 		// ui.update();
 		ScreenSampler.pause();
 		INFO_DIALOG.dialog(screenshot(element, true, (region, pixmap) -> {
@@ -61,11 +65,11 @@ public class ElementUtils {
 		ScreenSampler._continue();
 		// Time.runTask(30, w::hide);
 	}
-	public static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {
+	static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {
 		return screenshot(element, false, callback);
 	}
 	/** 使用ScreenUtils截图 */
-	public static TextureRegion screenshot(Element el, boolean clear, Cons2<TextureRegion, Pixmap> callback) {
+	static TextureRegion screenshot(Element el, boolean clear, Cons2<TextureRegion, Pixmap> callback) {
 		int w = (int) el.getWidth(),
 		 h = (int) el.getHeight();
 
@@ -90,12 +94,12 @@ public class ElementUtils {
 		Draw.flush(); */
 		return textureRegion;
 	}
-	public static void clearScreen() {
+	static void clearScreen() {
 		Gl.clearColor(0, 0, 0, 0);
 		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
-	public static @Nullable Window getWindow(ValueLabel valueLabel) {
+	static @Nullable Window getWindow(ValueLabel valueLabel) {
 		Element el = valueLabel;
 		while (el != null) {
 			el = el.parent;
@@ -104,13 +108,13 @@ public class ElementUtils {
 		return null;
 	}
 
-	public static String getSimpleName(Class<?> clazz) {
+	static String getSimpleName(Class<?> clazz) {
 		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
 			clazz = clazz.getSuperclass();
 		}
 		return clazz.getSimpleName();
 	}
-	public static String getElementName(Element element) {
+	static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
 		 : getSimpleName(element.getClass())
 			 + (element.name != null ? " ★" + element.name + "★" : "");
@@ -118,7 +122,7 @@ public class ElementUtils {
 
 
 	/** 具有code的接口 */
-	public interface MarkedCode {
+	interface MarkedCode {
 		int code();
 		String name();
 		default Drawable icon() {
@@ -126,7 +130,7 @@ public class ElementUtils {
 		}
 	}
 
-	public static void addCodedBtn(
+	static void addCodedBtn(
 	 Table t, String text, int cols,
 	 Intc cons, Intp prov, MarkedCode... seq) {
 		t.button("", HopeStyles.flatt, null).with(tbtn -> {

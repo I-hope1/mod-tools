@@ -3,6 +3,10 @@ package modtools.utils;
 import arc.util.Strings;
 import rhino.ScriptRuntime;
 
+import java.lang.reflect.InvocationTargetException;
+
+import static modtools.utils.Tools.box;
+
 public class NumberHelper {
 	public static boolean isPosInt(String text) {
 		return Strings.canParsePositiveInt(text);
@@ -37,13 +41,18 @@ public class NumberHelper {
 		return Strings.parseInt(text);
 	}
 
-	public static Number cast(String text, Class<?> type) {
+	public static Number cast(String text, Class<?> type0) {
+		Class<?> type = box(type0);
 		if (type == Float.class) return asFloat(text);
 		if (type == Integer.class) return asInt(text);
 		if (type == Double.class) return Double.parseDouble(text);
 		if (type == Long.class) return Long.parseLong(text);
 		if (type == Short.class) return Short.parseShort(text);
 		if (type == Byte.class) return Byte.parseByte(text);
-		return Float.NaN;
+		try {
+			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
+		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+			throw new ClassCastException(text + " cannot be cast to " + type0);
+		}
 	}
 }

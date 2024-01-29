@@ -24,7 +24,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.Frag.ClearScroll;
-import modtools.ui.HopeIcons;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
 import modtools.ui.effect.*;

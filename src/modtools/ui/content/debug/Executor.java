@@ -17,6 +17,7 @@ import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.*;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.MenuList;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;

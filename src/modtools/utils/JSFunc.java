@@ -25,7 +25,7 @@ import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.Comparator;
 import modtools.utils.draw.InterpImage;
 import modtools.utils.ui.WatchWindow;
-import modtools.utils.world.WFunction;
+import modtools.utils.world.*;
 
 import static modtools.ui.Contents.tester;
 import static modtools.utils.ElementUtils.*;
@@ -33,10 +33,10 @@ import static modtools.utils.ElementUtils.*;
 /** for js */
 public class JSFunc
  /* Interfaces for js */
- implements UNSAFE, WORLD, REFLECT,
+ implements UNSAFE, REFLECT,
  REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE,
- StringUtils, IScript,
- ANDROID_UNSAFE {
+ StringUtils, IScript, ElementUtils,
+ ANDROID_UNSAFE, UnitUtils {
 	public static final Font FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;

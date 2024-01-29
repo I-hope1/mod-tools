@@ -11,19 +11,18 @@ import mindustry.Vars;
 import modtools.IntVars;
 
 import static modtools.IntVars.root;
+import static modtools.ui.Background.L0.*;
+import static modtools.ui.Background.L1.*;
 
 public class Background {
-	static Texture landscape, portrait;
-	static Texture landscape() {
-		if (landscape == null) landscape = new Texture(root.child("横屏.png"));
-		return landscape;
+	/* 懒加载 */
+	interface L0 {
+		Texture landscape = new Texture(root.child("横屏.png"));
 	}
-	static Texture portrait() {
-		if (portrait == null) portrait = new Texture(root.child("竖屏.png"));
-		return portrait;
+	interface L1 {
+		Texture portrait = new Texture(root.child("竖屏.png"));
 	}
 	public static void load() {
-		// EntityShow.main();
 		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
 		if (!(tmp instanceof Group group)) return;
 		Element childrenFirst = group.getChildren().first();
@@ -34,12 +33,13 @@ public class Background {
 		Image img = new Image(new TextureRegion());
 		//		img.rotation = Core.graphics.isPortrait() ? 90 : 0;
 		img.setFillParent(true);
-		IntVars.addResizeListener(() -> {
-			img.getRegion().set(Core.graphics.isPortrait() ? portrait() : landscape());
-		});
+		IntVars.addResizeListener(() -> setRegion(img));
 		Time.runTask(4f, () -> {
 			group.addChildAt(0, img);
-			img.getRegion().set(Core.graphics.isPortrait() ? portrait() : landscape());
+			setRegion(img);
 		});
+	}
+	private static void setRegion(Image img) {
+		img.getRegion().set(Core.graphics.isPortrait() ? portrait : landscape);
 	}
 }

@@ -22,6 +22,7 @@ import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
+import modtools.annotations.CostTimeLog;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;

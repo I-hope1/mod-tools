@@ -1,4 +1,4 @@
-package modtools.ui;
+package modtools.ui.gen;
 
 import modtools.*;
 import modtools.annotations.IconAnn;

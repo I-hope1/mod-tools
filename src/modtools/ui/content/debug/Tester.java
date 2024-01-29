@@ -12,10 +12,10 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
-import arc.scene.ui.ScrollPane;
+import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
+import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
-import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Log.*;
 import arc.util.Timer.Task;
@@ -34,28 +34,28 @@ import modtools.jsfunc.type.CAST;
 import modtools.rhino.ForRhino;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
-import modtools.ui.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
-import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
+import modtools.ui.components.input.area.TextAreaTab.*;
 import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.components.limit.PrefPane;
-import modtools.ui.components.linstener.SclListener;
+import modtools.ui.components.linstener.*;
 import modtools.ui.components.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
-import modtools.ui.control.HopeInput;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.ui.*;
+import modtools.utils.ui.MethodTools;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -119,7 +119,7 @@ public class Tester extends Content {
 		if (scripts != null) return;
 		scripts = Vars.mods.getScripts();
 		topScope = scripts.scope;
-		scope = new BaseFunction(topScope, null);
+		scope = new BaseFunction(topScope, topScope);
 		cx = scripts.context;
 	}
 
@@ -171,23 +171,10 @@ public class Tester extends Content {
 		if (ui == null) _load();
 
 		TextAreaTab textarea = new TextAreaTab("");
-		Table _cont = new AutoFocusTable(textarea.getArea());
-		if (!Vars.mobile) textarea.addListener(new InputListener() {
-			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (keycode == KeyCode.escape && Core.scene.getKeyboardFocus() == area) {
-					Core.scene.unfocus(area);
-					HopeInput.justPressed.remove(KeyCode.escape.ordinal());
-				}
-				return super.keyDown(event, keycode);
-			}
-			public boolean scrolled(InputEvent event, float x, float y, float amountX, float amountY) {
-				HopeInput.axes.clear();
-				return super.scrolled(event, x, y, amountX, amountY);
-			}
-		});
+		Table       _cont    = new AutoRequestKeyboardTable(textarea.getArea());
+		if (!Vars.mobile) textarea.addListener(new EscapeAndAxesClearListener(area));
 
 		Runnable areaInvalidate = () -> {
-			// cont.invalidate();
 			textarea.getArea().invalidateHierarchy();
 			textarea.layout();
 		};
@@ -221,7 +208,7 @@ public class Tester extends Content {
 				Script script = this.script;
 				setContextToThread();
 				JSFunc.watch().watch(textarea.getText(), () -> {
-					return script.exec(cx, scope);
+					return CAST.unwrap(script.exec(cx, scope));
 				});
 			});
 		}).growX().minWidth(w).get();
@@ -298,28 +285,69 @@ public class Tester extends Content {
 
 		bottomBar(table, textarea);
 	}
+	public int lastCompletionCursor = -1;
+	public int lastCompletionIndex  = 0;
 	private void makeArea(TextAreaTab textarea) {
-		textarea.syntax = new JSSyntax(textarea, scope);
+		JSSyntax syntax = new JSSyntax(textarea, scope);
+		syntax.indexToObj = new IntMap<>();
+		textarea.syntax = syntax;
 		area = textarea.getArea();
-		boolean[] cancelEvent = {false};
+		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
-			cancelEvent[0] = false;
+			stopEvent[0] = false;
+			if (Core.input.shift() && keycode == KeyCode.tab) {
+				stopEvent[0] = true;
+				complement(textarea, syntax);
+				area.clearSelection();
+				return true;
+			} else if (textarea.virtualString != null &&
+								 (keycode == KeyCode.right || keycode == KeyCode.tab)) {
+				stopEvent[0] = true;
+				area.selectNearWord();
+				area.paste(textarea.virtualString.text, true);
+				textarea.virtualString = null;
+				return true;
+			} else textarea.virtualString = null;
 			if (rollAndExec(keycode) || detailsListener(keycode)) {
-				cancelEvent[0] = true;
+				stopEvent[0] = true;
 				if (event != null) event.cancel();
 				return true;
 			}
 			// Core.input.ctrl() && keycode == KeyCode.rightBracket
 			if (keycode == KeyCode.tab) {
-				cancelEvent[0] = true;
+				stopEvent[0] = true;
 				area.paste("  ", true);
 				area.updateDisplayText();
 			}
 			return false;
 		};
-		textarea.keyTypedB = (event, keycode) -> cancelEvent[0];
-		textarea.keyUpB = (event, keycode) -> cancelEvent[0];
+		textarea.keyTypedB = (event, keycode) -> stopEvent[0];
+		textarea.keyUpB = (event, keycode) -> stopEvent[0];
 	}
+	private void complement(TextAreaTab textarea, JSSyntax syntax) {
+		area.selectNearWord();
+		String selection = area.getSelection();
+		int    start     = area.getSelectionStart();
+		int    cursor    = area.getCursorPosition();
+		if (lastCompletionCursor != cursor) lastCompletionIndex = 0;
+		lastCompletionCursor = cursor;
+		Scriptable obj;
+		if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
+			obj = syntax.indexToObj.get(start - 1);
+		} else obj = scope;
+
+		Object[] keys = obj.getIds();
+		String[] array = Arrays.stream(keys)
+		 .map(String::valueOf)
+		 .filter(key -> key.startsWith(selection)).toArray(String[]::new);
+		if (array.length == 0) return;
+		// Log.info(key);
+		if (textarea.virtualString == null) textarea.virtualString = new VirtualString();
+		textarea.virtualString.index = start;
+		textarea.virtualString.text = array[lastCompletionIndex++ % array.length];
+		// area.paste(array[lastCompletionIndex++ % array.length], true);
+	}
+
 	private void buildLog(Table p) {
 		p.table(lg -> lg.left().update(() -> {
 			if (logs.resolved) return;
@@ -499,9 +527,7 @@ public class Tester extends Content {
 
 	public boolean finished = true;
 	public void compileAndExec(Runnable callback) {
-		if (Context.getCurrentContext() == null) {
-			Context.enter();
-		}
+		setContextToThread();
 
 		logs.clear();
 		compileScript();
@@ -696,13 +722,17 @@ public class Tester extends Content {
 
 
 	public void load() {
-		if (init) return;
-		init = true;
+		if (loaded) return;
+		loaded = true;
 		initScript();
 		loadSettings();
 		if (Kit.classOrNull(Tester.class.getClassLoader(), "modtools.rhino.ForRhino")
 				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
 
+		Core.app.post(this::addJSInternalProperty);
+	}
+	void addJSInternalProperty() {
+		setContextToThread();
 		try {
 			Object obj1 = new JSFuncClass(scope);
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
@@ -756,7 +786,7 @@ public class Tester extends Content {
 		cx.setApplicationClassLoader(loader);
 	}
 
-	public static boolean init = false;
+	public static boolean loaded = false;
 	public void loadSettings(Data settings) {
 		Table table = new Table();
 		table.defaults().growX();

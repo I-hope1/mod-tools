@@ -16,7 +16,7 @@ import modtools.utils.reflect.FieldUtils;
 import java.lang.reflect.Field;
 
 /** A multiple-line text input field, entirely based on {@link arc.scene.ui.TextField} */
-public class TextArea extends MyTextField {
+public class MyTextArea extends MyTextField {
 
 	/** Array storing starting and ending positions of each line. */
 	protected IntSeq linesBreak;
@@ -40,11 +40,11 @@ public class TextArea extends MyTextField {
 		this.style = style;
 	}
 
-	public TextArea(String text) {
+	public MyTextArea(String text) {
 		super(text);
 	}
 
-	public TextArea(String text, TextFieldStyle style) {
+	public MyTextArea(String text, TextFieldStyle style) {
 		super(text, style);
 	}
 
@@ -338,15 +338,6 @@ public class TextArea extends MyTextField {
 		return linesShowing;
 	}
 
-	public float getCursorX() {
-		return textOffset + fontOffset + style.font.getData().cursorX;
-	}
-
-	public float getCursorY() {
-		Font font = style.font;
-		return -(-font.getDescent() / 2 - (cursorLine - firstLineShowing + 1) * font.getLineHeight());
-	}
-
 	/** Input listener for the text area */
 	public class TextAreaListener extends TextFieldClickListener {
 		@Override
@@ -376,7 +367,7 @@ public class TextArea extends MyTextField {
 		public boolean getFocusTraversal() {
 			if (focusTraversalField == null) return focusTraversal;
 			try {
-				return focusTraversalField.getBoolean(TextArea.this);
+				return focusTraversalField.getBoolean(MyTextArea.this);
 			} catch (IllegalAccessException e) {
 				return false;
 			}
@@ -389,7 +380,7 @@ public class TextArea extends MyTextField {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			boolean result = super.keyDown(event, keycode);
 			Scene   stage  = getScene();
-			if (stage != null && stage.getKeyboardFocus() == TextArea.this) {
+			if (stage != null && stage.getKeyboardFocus() == MyTextArea.this) {
 				boolean repeat = false;
 				boolean shift  = Core.input.keyDown(KeyCode.shiftLeft) || Core.input.keyDown(KeyCode.shiftRight);
 				if (keycode == KeyCode.down) {

@@ -115,7 +115,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	public Boolf2<InputEvent, KeyCode>   keyUpB    = null;
 
 	public void focus() {
-		Core.scene.setKeyboardFocus(area);
+		requestKeyboard();
 	}
 	public float alpha() {
 		return parentAlpha;
@@ -469,6 +469,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			}
 		}
+
+		// public void
 		public class MyTextAreaListener extends TextAreaListener {
 			protected void goHome(boolean jump) {
 				super.goHome(jump);
@@ -487,27 +489,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					trackCursor();
 				}
 
-				// 修复笔记本上不能使用的问题
-				int     oldCursor = cursor;
-				boolean shift     = Core.input.shift();
-				boolean jump      = Core.input.ctrl();
-				Core.app.post(() -> {
-					// 判断是否一样
-					if (oldCursor == cursor) {
-						// end: goEnd(jump);
-						if (keycode == KeyCode.num1) keyDown(event, KeyCode.end);
-						// home: goHome(jump);
-						if (keycode == KeyCode.num7) keyDown(event, KeyCode.home);
-						// left: moveCursor(false, jump);
-						if (keycode == KeyCode.num4) keyDown(event, KeyCode.left);
-						// right: moveCursor(true, jump);
-						if (keycode == KeyCode.num6) keyDown(event, KeyCode.right);
-						// down: moveCursorLine(cursorLine - 1);
-						if (keycode == KeyCode.num2) keyDown(event, KeyCode.down);
-						// up: moveCursorLine(cursorLine + 1);
-						if (keycode == KeyCode.num8) keyDown(event, KeyCode.up);
-					}
-				});
+				boolean shift = Core.input.shift();
+				boolean jump  = Core.input.ctrl();
+				fixNumLk(event, keycode);
 
 				if (jump && keycode == KeyCode.slash) {
 					comment(shift);
@@ -520,6 +504,30 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				} catch (IndexOutOfBoundsException e) {
 					return false;
 				}
+			}
+			private void fixNumLk(InputEvent event, KeyCode keycode) {
+				if (OS.isAndroid) return;
+				// 修复笔记本上不能使用的问题
+				int oldCursor = cursor;
+				Time.runTask(1, () -> {
+					// 判断是否一样
+					if (oldCursor != cursor) return;
+
+					// end: goEnd(jump);
+					if (keycode == KeyCode.num1) keyDown(event, KeyCode.end);
+					// home: goHome(jump);
+					if (keycode == KeyCode.num7) keyDown(event, KeyCode.home);
+					// left: moveCursor(false, jump);
+					if (keycode == KeyCode.num4) keyDown(event, KeyCode.left);
+					// right: moveCursor(true, jump);
+					if (keycode == KeyCode.num6) keyDown(event, KeyCode.right);
+					// down: moveCursorLine(cursorLine - 1);
+					if (keycode == KeyCode.num2) keyDown(event, KeyCode.down);
+					// up: moveCursorLine(cursorLine + 1);
+					if (keycode == KeyCode.num8) keyDown(event, KeyCode.up);
+					// delete: delete();
+					if (keycode == KeyCode.period) keyDown(event, KeyCode.del);
+				});
 			}
 			public boolean keyTyped(InputEvent event, char character) {
 				if (keyTypedB != null && keyTypedB.get(event, character)) {

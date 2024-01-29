@@ -69,15 +69,17 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
 
-		if (false) HiddenApi.setHiddenApiExemptions();
-
+		/* try {
+			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
+		} catch (Throwable ignored) {
+			Log.err(ignored);
+		} */
 		HopeCall.init();
 
 		if (isImportFromGame) {
 			loadContent();
 			resolveInputAndUI();
-		}
-		else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
+		} else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
 	}
 
 

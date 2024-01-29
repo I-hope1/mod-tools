@@ -44,10 +44,10 @@ public class MyTextField extends TextField implements Disableable {
 
 	public StringBuilder text;
 
-	public    StringBuilder  undoText      = new StringBuilder();
+	public    StringBuilder undoText      = new StringBuilder();
 	public    CharSequence  displayText   = new StringBuilder();
 	protected KeyRepeatTask keyRepeatTask = new KeyRepeatTask();
-	public    StringBuilder  passwordBuffer;
+	public    StringBuilder passwordBuffer;
 
 	public MyTextField() {
 		super("");
@@ -86,7 +86,7 @@ public class MyTextField extends TextField implements Disableable {
 
 	protected int[] wordUnderCursor(int at) {
 		StringBuilder text  = this.text;
-		int          right = text.length(), left = 0, index = at;
+		int           right = text.length(), left = 0, index = at;
 		if (at >= text.length()) {
 			left = text.length();
 			right = 0;
@@ -281,8 +281,8 @@ public class MyTextField extends TextField implements Disableable {
 		return text.length();
 	}
 	protected void updateDisplayText() {
-		Font         font = style.font;
-		FontData     data = font.getData();
+		Font          font = style.font;
+		FontData      data = font.getData();
 		StringBuilder text = this.text;
 
 		int textLength = Math.min(text.length(), displayTextEnd0());
@@ -366,9 +366,12 @@ public class MyTextField extends TextField implements Disableable {
 	}
 
 	public void paste(String content, boolean fireChangeEvent) {
+		if (content != null && content.isEmpty()) return;
 		paste(content == null ? null : new StringBuilder(content), fireChangeEvent);
 	}
 
+	// 安卓上不行
+	@SuppressWarnings("SizeReplaceableByIsEmpty")
 	public void paste(StringBuilder content, boolean fireChangeEvent) {
 		if (content == null || (content.length() == 0 && text.length() == 0)) return;
 
@@ -815,7 +818,7 @@ public class MyTextField extends TextField implements Disableable {
 				boolean jump      = input.ctrl();
 				if (add || remove) {
 					StringBuilder oldText   = text;
-					int          oldCursor = cursor;
+					int           oldCursor = cursor;
 					if (hasSelection) cursor = delete(false);
 					else {
 						if (backspace && cursor > 0) {

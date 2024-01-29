@@ -152,36 +152,15 @@ tasks.register('playAndroid') {
 	dependsOn deploy
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"
-	def MDT_ANDROID_DIR = "/sdcard/Android/data/io.anuke.mindustry/files"
+	def MDT_ANDROID_DIR = "/storage/emulated/0/Android/data/io.anuke.mindustry/files"
 	doLast {
 		("$adb push ${buildDir0}/tmp/deploy/${archivesBaseName}-${version}.jar"
 				+ " $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)
 
-		/*def MindustryLogPath = "${MDT_ANDROID_DIR}/last_log.txt"
-		new Fi("${project.rootDir}\\appendLog.sh")
-				.writeString("""
-#!/bin/sh
-# MADE By BING
-# 获取文件的初始修改时间
-old_time=-1
-# 循环检查文件的修改时间
-while true; do
-  # 获取文件的当前修改时间
-  new_time=\$(stat -c %y ${MindustryLogPath})
-  # 如果修改时间发生变化
-  if [ "\$new_time" != "\$old_time" ]; then
-    # 将文件的内容追加到控制台
-    tail -f ${MindustryLogPath}
-    # 更新修改时间
-    old_time=\$new_time
-  fi
-  # 等待一段时间（秒）
-  sleep 0.05
-done""")*/
 		"$adb push ${project.rootDir}/appendLog.sh ${MDT_ANDROID_DIR}/appendLog.sh"
 				.execute().waitForProcessOutput(System.out, System.err)
-		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -D -W -S"
+		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -W -S"
 				.execute().waitForProcessOutput(System.out, System.err)
 		"$adb shell sh ${MDT_ANDROID_DIR}/appendLog.sh"
 				.execute().waitForProcessOutput(System.out, System.err)

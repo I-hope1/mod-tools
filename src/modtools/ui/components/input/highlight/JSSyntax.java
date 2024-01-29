@@ -2,9 +2,7 @@ package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import mindustry.Vars;
 import modtools.jsfunc.IScript;
-import modtools.utils.Tools;
 import rhino.*;
 
 import java.util.*;
@@ -18,38 +16,48 @@ public class JSSyntax extends Syntax {
 	 // , __defalutColor__ = new Color(0xDCDCAAFF)
 	 ;
 
+	public Scriptable customScope;
+	ObjectSet<String> customConstantSet,
+	 customVarSet;
 	public JSSyntax(SyntaxDrawable drawable) {
+		this(drawable, null);
+	}
+	public JSSyntax(SyntaxDrawable drawable, Scriptable customScope) {
 		super(drawable);
-		// defalutColor = __defalutColor__;
+		this.customScope = customScope;
+		if (customScope == null) {
+			customConstantSet = constantSet;
+			customVarSet = varSet;
+		} else {
+			customConstantSet = new ScopeObjectSet(customScope);
+			customConstantSet.addAll(constantSet);
+			customVarSet = new ObjectSet<>(varSet);
+			addValueToSet(customScope, customVarSet, customConstantSet);
+		}
+		TOKEN_MAP.putAll(
+		 customConstantSet, c_constants,
+		 customVarSet, c_localvar
+		);
 	}
 
 	public static ImporterTopLevel scope = (ImporterTopLevel) IScript.scope;
 
-	public static final ObjectSet<String> constantSet = new ObjectSet<>() {
-		// final ObjectSet<String> blackList = new ObjectSet<>();
-		public boolean contains(String key) {
-			boolean contains = super.contains(key);
-			if (contains) return true;
-			char c = key.charAt(0);
-			if (!(('A' <= c && c <= 'Z') || c == '$')) return false;
-			Object o = scope.get(key, scope);
-			if (o != Scriptable.NOT_FOUND) {
-				add(key);
-				return true;
-			}
-
-			return false;
-		}
-	};
-	public static final ObjectSet<String> defVarSet   = new ObjectSet<>();
+	public static final ObjectSet<String> constantSet = new ScopeObjectSet(scope);
+	public static final ObjectSet<String> varSet      = new ObjectSet<>();
 
 	static {
-		defVarSet.addAll("arguments", "Infinity", "Packages");
+		varSet.addAll("arguments", "Infinity", "Packages");
+		addValueToSet(scope, varSet, constantSet);
+	}
+
+	private static void addValueToSet(
+	 Scriptable scope, ObjectSet<String> varSet, ObjectSet<String> constantSet) {
 		for (Object id : scope.getIds()) {
 			if (!(id instanceof String key)) continue;
 			try {
-				ScriptableObject.redefineProperty(scope, key, false);
-				defVarSet.add(key);
+				ScriptableObject.putProperty(scope, key,
+				 ScriptableObject.getProperty(scope, key));
+				varSet.add(key);
 			} catch (RuntimeException ignored) {
 				constantSet.add(key);
 			}
@@ -58,7 +66,7 @@ public class JSSyntax extends Syntax {
 
 	ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
 
-	ObjectMap<ObjectSet<CharSequence>, Color> TOKEN_MAP = ObjectMap.of(
+	ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = ObjectMap.of(
 	 ObjectSet.with(
 		"break", "case", "catch", "const", "continue",
 		"default", "delete", "do", "else",
@@ -70,9 +78,7 @@ public class JSSyntax extends Syntax {
 	 ), c_keyword,
 	 ObjectSet.with("null", "undefined", "true", "false"), c_keyword,
 	 localVars, c_localvar,
-	 localConstants, c_constants,
-	 constantSet, c_constants,
-	 defVarSet, c_localvar
+	 localConstants, c_constants
 	);
 
 	ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
@@ -108,9 +114,11 @@ public class JSSyntax extends Syntax {
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
-			 if (!enableJSProp || (entry.key != (ObjectSet) constantSet && entry.key != (ObjectSet) defVarSet) || obj != null)
+			 if (!enableJSProp || (
+				entry.key != customConstantSet && entry.key != customVarSet
+			 ) || obj != null)
 				 return entry.value;
-			 Object o = scope.get(token, scope);
+			 Object o = customScope.get(token, customScope);
 			 if (o instanceof NativeJavaPackage newPkg) {
 				 pkg = newPkg;
 				 obj = null;
@@ -212,10 +220,7 @@ public class JSSyntax extends Syntax {
 	 },
 	 };
 
-	{
-		taskArr = taskArr0;
-	}
-
+	{taskArr = taskArr0;}
 
 	public static IntSet operates = new IntSet();
 	public static IntSet brackets = new IntSet();
@@ -226,6 +231,23 @@ public class JSSyntax extends Syntax {
 		}
 		for (char c : "()[]{}".toCharArray()) {
 			brackets.add(c);
+		}
+	}
+	private static class ScopeObjectSet extends ObjectSet<String> {
+		Scriptable scope;
+		public ScopeObjectSet(Scriptable scope) {
+			this.scope = scope;
+		}
+		public boolean contains(String key) {
+			boolean contains = super.contains(key);
+			if (contains) return true;
+			char c = key.charAt(0);
+			if (!(('A' <= c && c <= 'Z') || c == '$')) return false;
+			Object o = scope.get(key, scope);
+			if (o == Scriptable.NOT_FOUND) return false;
+
+			add(key);
+			return true;
 		}
 	}
 }

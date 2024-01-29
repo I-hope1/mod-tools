@@ -26,7 +26,6 @@ import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
-import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
@@ -36,7 +35,7 @@ import modtools.rhino.ForRhino;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.HopeIcons;
-import modtools.ui.components.Window;
+import modtools.ui.components.*;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
@@ -172,14 +171,7 @@ public class Tester extends Content {
 		if (ui == null) _load();
 
 		TextAreaTab textarea = new TextAreaTab("");
-		Table _cont = new Table() {
-			public Element hit(float x, float y, boolean touchable) {
-				Element element = super.hit(x, y, touchable);
-				if (element == null) return null;
-				if (Vars.mobile && element.isDescendantOf(this)) textarea.focus();
-				return element;
-			}
-		};
+		Table _cont = new AutoFocusTable(textarea);
 		textarea.addListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (keycode == KeyCode.escape && Core.scene.getKeyboardFocus() == area) {
@@ -203,20 +195,16 @@ public class Tester extends Content {
 		ui.sclListener.listener = areaInvalidate;
 
 		makeArea(textarea);
-		// textarea.pack();
 
-		Cell<?> areaCell = _cont.add(textarea).grow()/* .uniform() */;
+		Cell<?> areaCell = _cont.add(textarea).grow();
 		_cont.row();
-		ui.cont.update(() -> {
-			// if (logSclListener != null && logSclListener.scling) return;
-			((JSSyntax) textarea.syntax).enableJSProp = js_prop.enabled();
-			// areaCell.maxHeight(ui.cont.getHeight() / Scl.scl());
-		});
+		ui.cont.update(() -> ((JSSyntax) textarea.syntax).enableJSProp = js_prop.enabled());
 
 		Table center = _cont.table(t -> {
 			t.defaults()
 			 .padRight(4f).padRight(4f)
 			 .size(45, 42);
+
 			t.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::left);
 			t.button("@ok", HopeStyles.flatBordert, () -> {
 				error = false;
@@ -311,7 +299,7 @@ public class Tester extends Content {
 		bottomBar(table, textarea);
 	}
 	private void makeArea(TextAreaTab textarea) {
-		textarea.syntax = new JSSyntax(textarea);
+		textarea.syntax = new JSSyntax(textarea, scope);
 		area = textarea.getArea();
 		boolean[] cancelEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
@@ -323,8 +311,8 @@ public class Tester extends Content {
 			}
 			// Core.input.ctrl() && keycode == KeyCode.rightBracket
 			if (keycode == KeyCode.tab) {
-				area.insert("  ");
-				area.setCursorPosition(area.getCursorPosition() + 2);
+				cancelEvent[0] = true;
+				area.paste("  ", true);
 				area.updateDisplayText();
 			}
 			return false;
@@ -782,11 +770,12 @@ public class Tester extends Content {
 	public String getMessage() {
 		return area.getText();
 	}
-	public Object getWrap(Object val) {
+
+	public Object wrap(Object val) {
 		try {
 			if (val instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
 			if (val instanceof Method method) return new NativeJavaMethod(method, method.getName());
-			if (val instanceof MethodHandle handle) return new NativeJavaHandle(handle);
+			if (val instanceof MethodHandle handle) return new NativeJavaHandle(scope, handle);
 			return Context.javaToJS(val, topScope);
 		} catch (Throwable e) {
 			return val;
@@ -795,7 +784,7 @@ public class Tester extends Content {
 
 	public void put(String name, Object val) {
 		if (wrap_ref.enabled()) {
-			val = getWrap(val);
+			val = wrap(val);
 			//			else if (val instanceof Field) val = new NativeJavaObject(scope, val, Field.class);
 		}
 		ScriptableObject.putProperty(topScope, name, val);
@@ -823,6 +812,7 @@ public class Tester extends Content {
 			wrap_ref.defTrue();
 		}
 	}
+
 	private static class AddedSeq extends Seq<String> {
 		/* 是否处理了log */
 		boolean resolved = true;
@@ -839,10 +829,11 @@ public class Tester extends Content {
 			return super.clear();
 		}
 	}
+
 	private static class NativeJavaHandle extends BaseFunction {
 		private final MethodHandle handle;
-		public NativeJavaHandle(MethodHandle handle) {
-			super(Tester.scope, null);
+		public NativeJavaHandle(Scriptable scope, MethodHandle handle) {
+			super(scope, null);
 			this.handle = handle;
 		}
 		public String toString() {

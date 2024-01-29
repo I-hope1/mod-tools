@@ -4,28 +4,13 @@ import arc.util.OS;
 import dalvik.system.VMRuntime;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
+import modtools.android.HiddenApi;
 import rhino.*;
 
 import java.lang.reflect.*;
 import java.security.ProtectionDomain;
 
 public class HopeReflect {
-	static {
-		try {
-			clearReflectionFilter();
-		} catch (Throwable ignored) {}
-	}
-
-	public static void clearReflectionFilter() throws Throwable {
-		if (!OS.isAndroid) return;
-		// code: VMRuntime.getRuntime().setHiddenApiExemptions(new String[]{"L"});
-		Method methodM = Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class);
-		methodM.setAccessible(true);
-		Method m2 = (Method) methodM.invoke(VMRuntime.class,
-		 "setHiddenApiExemptions", new Class[]{String[].class});
-		m2.setAccessible(true);
-		m2.invoke(VMRuntime.getRuntime(), (Object) new String[]{"L"});
-	}
 
 	/**
 	 * only for android

@@ -6,8 +6,7 @@ import ihope_lib.*;
 
 import static ihope_lib.MyReflect.unsafe;
 
-import java.lang.reflect.*;
-
+@SuppressWarnings("unused")
 public interface UNSAFE {
 	/* /trust 不安全 */
 	Object lookup = MyReflect.lookup;
@@ -106,7 +105,7 @@ public interface UNSAFE {
 		};
 	}
 
-	Object[] ONE_ARRAY = new Object[1];
+	Object[] ONE_ARRAY = OS.isAndroid ? (Object[]) VMRuntime.getRuntime().newNonMovableArray(Object.class, 1) : new Object[1];
 	static Object getObject(long address) {
 		ONE_ARRAY[0] = null;
 		long baseOffset = unsafe.arrayBaseOffset(Object[].class);

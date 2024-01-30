@@ -12,13 +12,13 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
-import arc.scene.ui.*;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
-import arc.util.Log.*;
 import arc.util.Timer;
+import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
@@ -41,8 +41,8 @@ import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.*;
-import modtools.ui.components.input.highlight.*;
-import modtools.ui.components.input.highlight.Syntax.*;
+import modtools.ui.components.input.highlight.JSSyntax;
+import modtools.ui.components.input.highlight.Syntax.DrawToken;
 import modtools.ui.components.limit.PrefPane;
 import modtools.ui.components.linstener.*;
 import modtools.ui.components.windows.ListDialog;
@@ -165,9 +165,9 @@ public class Tester extends Content {
 	 * -1表示originalText<br>
 	 * -2表示倒数第一个
 	 */
-	public int           historyPos   = -1;
+	public int    historyPos   = -1;
 	/** 位于0处的文本 */
-	public StringBuilder originalText = null;
+	public String originalText = null;
 
 	public ScrollPane  pane;
 	public SclListener logSclListener;
@@ -416,7 +416,8 @@ public class Tester extends Content {
 	private void star() {
 		new NameWindow(res -> {
 			Fi fi = bookmark.file.child(res);
-			bookmark.list.insert(0, fi);
+			//noinspection SequencedCollectionMethodCanBeUsed
+			bookmark.list.add(0, fi);
 			fi.writeString(getMessage());
 			bookmark.build();
 		}, t -> {
@@ -438,6 +439,7 @@ public class Tester extends Content {
 			}
 			if (keycode == KeyCode.up && rollHistory(true)) return true;
 			if (keycode == KeyCode.down && rollHistory(false)) return true;
+
 			return false;
 		}
 		return false;
@@ -445,13 +447,13 @@ public class Tester extends Content {
 
 	private static final Vec2 tmpV = new Vec2();
 	private boolean rollHistory(boolean forward) {
-		if (historyPos == -1) originalText = area.getText0();
+		if (historyPos == -1) originalText = area.getText();
 		historyPos += forward ? 1 : -1;
 		Vec2 pos = tmpV.set(ui.x, ui.y + 20);
 		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= maxHistorySize)) {
 			if (historyPos != -1) showRollback(pos);
 			historyPos = -1;
-			area.setText0(originalText);
+			area.setText(originalText);
 			log = "";
 			IntUI.showInfoFade("[accent]0[]/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
 			return true;
@@ -464,7 +466,7 @@ public class Tester extends Content {
 				showRollback(pos);
 			}
 		} else if (historyPos < -1 || historyPos >= maxHistorySize) {
-			historyPos = forward ? history.list.size - 1 : -1;
+			historyPos = forward ? history.list.size() - 1 : -1;
 			return false;
 		}
 		IntUI.showInfoFade(historyPos + 1 + "/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
@@ -506,18 +508,19 @@ public class Tester extends Content {
 		execScript();
 
 		historyPos = -1;
-		originalText = area.getText0();
+		originalText = area.getText();
 		// 保存历史记录
 		lastDir = history.file.child(String.valueOf(Time.millis()));
 		lastDir.child("message.txt").writeString(getMessage());
-		history.list.insert(0, lastDir);
+		//noinspection SequencedCollectionMethodCanBeUsed
+		history.list.add(0, lastDir);
 		if (history.isShown()) {
 			history.build();
 		}
 		//	history.build(d).with(b -> b.setZIndex(0));
 
-		int max = history.list.size - 1;
-		/* 判断是否大于边际（min：30），大于就删除 */
+		int max = history.list.size() - 1;
+		/* 判断是否大于边际（maxHistorySize），大于就删除 */
 		for (int i = max; i >= maxHistorySize; i--) {
 			history.list.get(i).deleteDirectory();
 			history.list.remove(i);
@@ -577,12 +580,12 @@ public class Tester extends Content {
 	public final LogHandler logHandler = new DefaultLogHandler() {
 		public void log(LogLevel level, String text) {
 			if (level == LogLevel.err) super.log(level, text);
-			logs.add(Tools.format((
-														 level == LogLevel.debug ? "D" :
-															level == LogLevel.info ? "I" :
-															 level == LogLevel.warn ? "W" :
-																level == LogLevel.err ? "E" :
-																 " ") + text));
+			String s = (level == LogLevel.debug ? "D"
+			 : level == LogLevel.info ? "I"
+			 : level == LogLevel.warn ? "W"
+			 : level == LogLevel.err ? "E"
+			 : " ") + text;
+			logs.add(Tools.format(s));
 		}
 	};
 	private void execAndDealRes() {
@@ -596,6 +599,7 @@ public class Tester extends Content {
 			if (output_to_log.enabled()) {
 				Log.info("[[tester]: " + log);
 			}
+
 			if (lastDir != null) lastDir.child("log.txt").writeString(log);
 			lastDir = null;
 		} catch (Throwable e) {
@@ -792,7 +796,7 @@ public class Tester extends Content {
 		}
 	}
 
-	public void put(String name, Object val) {
+	public void quietPut(String name, Object val) {
 		if (wrap_ref.enabled()) {
 			val = wrap(val);
 			//			else if (val instanceof Field) val = new NativeJavaObject(scope, val, Field.class);
@@ -800,19 +804,20 @@ public class Tester extends Content {
 		ScriptableObject.putProperty(topScope, name, val);
 	}
 	public static final String prefix = "tmp";
-	public String put(Object val) {
+	public String quietPut(Object val) {
 		int i = 0;
 		// 从0开始直到找到没有被定义的变量
 		while (ScriptableObject.hasProperty(topScope, prefix + i)) i++;
 		String key = prefix + i;
-		put(key, val);
+		quietPut(key, val);
 		return key;
 	}
 	public void put(Element element, Object val) {
 		put(ElementUtils.getAbsolutePos(element), val);
 	}
+	/** put之后，会弹窗提示 */
 	public void put(Vec2 vec2, Object val) {
-		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", put(val)), vec2);
+		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", quietPut(val)), vec2);
 	}
 
 	public enum Settings implements ISettings {

@@ -88,9 +88,9 @@ public class MenuList {
 	 * @param prov the prov
 	 * @return the menu list
 	 */
-	public static MenuList with(Drawable icon, String name, Prov prov) {
+	public static MenuList with(Drawable icon, String name, Prov<?> prov) {
 		return with(icon, name, () -> {
-			tester.put(prov.get());
+			tester.quietPut(prov.get());
 		});
 	}
 

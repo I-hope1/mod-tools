@@ -144,6 +144,7 @@ public class Tools {
 		return type;
 	}
 
+	/** 这个会自动强转  */
 	public static <T> T as(Object o) {
 		return (T) o;
 	}

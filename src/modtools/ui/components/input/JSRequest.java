@@ -4,25 +4,24 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
-import arc.util.*;
-import mindustry.ui.Styles;
+import arc.util.Align;
 import modtools.jsfunc.IScript;
+import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.highlight.JSSyntax;
-import modtools.ui.content.debug.Tester;
-import modtools.jsfunc.type.CAST;
+import modtools.utils.Tools;
 import rhino.*;
 
-import static mindustry.Vars.mods;
 import static modtools.utils.Tools.*;
 
+@SuppressWarnings("SpellCheckingInspection")
 public class JSRequest {
-	static class JSRequestWindow<R> extends HiddenTopWindow {
+	public static class JSRequestWindow<R> extends HiddenTopWindow {
 		TextAreaTab area = new TextAreaTab("", false);
-		String  log;
-		boolean notHideAuto;
+		String      log;
+		boolean     notHideAuto;
 
 		void buildButtons(ConsT<R, Throwable> callback) {
 			buttons.check("@jsrequest.nothideauto", b -> notHideAuto = b).checked(__ -> notHideAuto)
@@ -52,7 +51,7 @@ public class JSRequest {
 			cont.pane(t -> t.label(() -> log)).height(42);
 
 			shown(() -> {
-				area.getArea().setText0(null);
+				area.getArea().setText(null);
 				log = "";
 			});
 		}
@@ -62,10 +61,10 @@ public class JSRequest {
 		}
 	}
 
-	public static JSRequestWindow window   = new JSRequestWindow<>();
-	public static Context         cx       = IScript.cx;
-	public static Scriptable      topScope = IScript.scope;
-	public static Scriptable      scope;
+	public static JSRequestWindow<?> window   = new JSRequestWindow<>();
+	public static Context            cx       = IScript.cx;
+	public static Scriptable         topScope = IScript.scope;
+	public static Scriptable         scope;
 
 	public static Label tips;
 
@@ -113,7 +112,7 @@ public class JSRequest {
 		for (int i = 0; i < args.length; i += 2) {
 			parent.put((String) args[0], parent, args[1]);
 		}
-		window.buildButtons(callback);
+		window.buildButtons(Tools.as(callback));
 	}
 
 	private static Object eval() {

@@ -11,7 +11,7 @@ import arc.math.geom.Rect;
 import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.style.*;
-import arc.scene.ui.ScrollPane;
+import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.IntSeq;
@@ -152,22 +152,22 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 	}
 
-	public float getRelativeX(int pos) {
+	/* public float getRelativeX(int pos) {
 		return area.getRelativeX(pos);
 	}
 	public float getRelativeY(int pos) {
 		return area.getRelativeY(pos);
-	}
+	} */
 	public boolean enableHighlighting = true;
 
 	private static final Pattern startComment = Pattern.compile("\\s*//");
 
-	public class MyTextArea extends modtools.ui.components.input.area.MyTextArea {
+	public class MyTextArea extends GenTextArea {
 		public  float    parentHeight = 0;
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
-		public void paste(StringBuilder content, boolean fireChangeEvent) {
+		public void paste(String content, boolean fireChangeEvent) {
 			if (readOnly) return;
 			super.paste(content, fireChangeEvent);
 		}
@@ -275,12 +275,12 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		float offsetX, offsetY, baseOffsetX;
 		int row, displayTextStart, displayTextEnd;
 		public Font font = null;
-		public int displayTextStart0() {
+		/* public int displayTextStart0() {
 			return displayTextStart;
 		}
 		public int displayTextEnd0() {
 			return displayTextEnd;
-		}
+		} */
 		public void highlightingDraw(float x, float y) {
 			if (needsLayout()) return;
 			baseOffsetX = offsetX = x;
@@ -341,7 +341,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				int lineEnd   = linesBreak.get(i + 1);
 
 				if (!((minIndex < lineStart && minIndex < lineEnd && maxIndex < lineStart && maxIndex < lineEnd)
-							|| (minIndex > lineStart && minIndex > lineEnd && maxIndex > lineStart && maxIndex > lineEnd))) {
+							|| (minIndex > lineStart && minIndex > lineEnd))) {
 
 					int start = Math.min(Math.max(linesBreak.get(i), minIndex), glyphPositions.size - 1);
 					int end   = Math.min(Math.min(linesBreak.get(i + 1), maxIndex), glyphPositions.size - 1);
@@ -384,19 +384,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			moveCursor(true, false);
 		}
 
-		public StringBuilder insert(int position, CharSequence text, StringBuilder to) {
+		public String insert(int position, CharSequence text, String to) {
 			if (readOnly) return to;
 			return super.insert(position, text, to);
 		}
-		public StringBuilder insert(int position, char c, StringBuilder to) {
-			if (readOnly) return to;
-			return super.insert(position, c, to);
-		}
-		boolean changeText() {
-			return !readOnly && super.changeText();
-		}
-
-		boolean changeText(StringBuilder oldText, StringBuilder newText) {
+		public boolean changeText(String oldText, String newText) {
 			return !readOnly && super.changeText(oldText, newText);
 		}
 
@@ -431,7 +423,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					// text.delete(startIndex, 2);
 					// text.delete(Math.min(endIndex + 2, maxLen), text.length());
 					changeText(text, new StringBuilder(text).delete(startIndex, startIndex + 2)
-					 .delete(endIndex - 2, endIndex));
+					 .delete(endIndex - 2, endIndex).toString());
 					selectionStart = clamp(selectionStart - 2);
 					cursor = clamp(cursor - 2);
 				} else {
@@ -439,7 +431,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					// text.insert(selectionEnd + 2, "*/");
 					changeText(text, new StringBuilder(text)
 					 .insert(selectionEnd, "*/")
-					 .insert(start, "/*"));
+					 .insert(start, "/*").toString());
 					selectionStart = clamp(selectionStart + 2);
 					cursor = clamp(cursor + 2);
 				}
@@ -449,7 +441,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				if (startComment.matcher(text.substring(home, end)).find()) {
 					int start = home + text.substring(home, end).indexOf("//");
 					// text.delete(start, 2);
-					changeText(text, new StringBuilder(text).delete(start, start + 2));
+					changeText(text, new StringBuilder(text).delete(start, start + 2).toString());
 					cursor = clamp(cursor - 2);
 				} else {
 					changeText(text, insert(home, "//", text));
@@ -647,9 +639,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		private Runnable getTask(float offsetY, int row) {
-			return () -> {
-				drawLine(offsetY, row);
-			};
+			return () -> drawLine(offsetY, row);
 		}
 	}
 

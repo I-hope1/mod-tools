@@ -22,6 +22,7 @@ import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
@@ -30,8 +31,6 @@ import modtools.ui.menu.*;
 import modtools.ui.windows.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
-import modtools.jsfunc.INFO_DIALOG;
-import modtools.utils.ArrayUtils;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
@@ -47,6 +46,7 @@ import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 import static modtools.utils.Tools.*;
 
+@SuppressWarnings("UnusedReturnValue")
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
@@ -260,9 +260,7 @@ public class IntUI {
 	}
 	public static void
 	addShowMenuListener(Element elem, Iterable<MenuList> list) {
-		longPressOrRclick(elem, __ -> {
-			showMenuList(list);
-		});
+		longPressOrRclick(elem, __ -> showMenuList(list));
 	}
 	public static void showMenuList(Iterable<MenuList> list) {
 		showMenuList(list, null);
@@ -355,11 +353,7 @@ public class IntUI {
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
 			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
-		 .with(b -> {
-			 b.clicked(() -> {
-				 tester.put(b, prov.get());
-			 });
-		 });
+		 .with(b -> b.clicked(() -> tester.put(b, prov.get())));
 	}
 	public static String buildStoreKey(String key) {
 		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
@@ -384,10 +378,8 @@ public class IntUI {
 
 
 	/**
-	 * Store run runnable.
-	 *
 	 * @param prov the prov
-	 * @return the runnable
+	 * @return Runnable：将prov的值储存为js变量
 	 */
 	public static Runnable storeRun(Prov<Object> prov) {
 		return () -> tester.put(Core.input.mouse(), prov.get());
@@ -499,9 +491,7 @@ public class IntUI {
 		Table p = new Table();
 		p.top();
 		if (searchable) {
-			new Search((cont, text) -> {
-				f.get(cont, hide, text);
-			}).build(t, p);
+			newSearch(f, hide, t, p);
 		}
 
 		f.get(p, hide, "");
@@ -510,6 +500,10 @@ public class IntUI {
 		pane.setScrollingDisabled(true, false);
 		t.pack();
 		return t;
+	}
+	private static void newSearch(Cons3<Table, Runnable, String> rebuild, Runnable hide, SelectTable t, Table p) {
+		new Search((cont, text) -> rebuild.get(cont, hide, text))
+		 .build(t, p);
 	}
 
 	public static <T extends Element> Table
@@ -600,9 +594,8 @@ public class IntUI {
 				if (PatternUtils.testContent(text, pattern, item)) continue;
 
 				ImageButton btn = Hover.getImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
-				btn.update(() -> {
-					btn.setChecked(holder.get() == item);
-				});
+				btn.update(() -> btn.setChecked(holder.get() == item));
+
 				if (++c % cols == 0) {
 					p.row();
 				}
@@ -641,9 +634,7 @@ public class IntUI {
 		Table p = new Table();
 		p.top();
 		if (searchable) {
-			new Search((cont, text) -> {
-				f.get(cont, hide, text);
-			}).build(t, p);
+			newSearch(f, hide, t, p);
 		}
 
 		f.get(p, hide, "");
@@ -697,9 +688,7 @@ public class IntUI {
 															 int cols, Func<T1, Drawable> func,
 															 boolean searchable) {
 		Seq<Drawable> icons = new Seq<>(items.size);
-		items.each(item -> {
-			icons.add(func.get(item));
-		});
+		items.each(item -> icons.add(func.get(item)));
 		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
 	public static <T extends Button, T1> Table
@@ -708,9 +697,7 @@ public class IntUI {
 															 int cols, Func<T1, Drawable> func,
 															 boolean searchable) {
 		Seq<Drawable> icons = new Seq<>(items.size);
-		items.each(item -> {
-			icons.add(func.get(item));
-		});
+		items.each(item -> icons.add(func.get(item)));
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
 
@@ -1021,31 +1008,31 @@ public class IntUI {
 		}
 	}
 	public static class InsideTable extends Table implements IMenu {
-		/**
-		 * Instantiates a new Inside table.
-		 */
-		public InsideTable() {
-		}
-		/**
-		 * Instantiates a new Inside table.
-		 *
-		 * @param background the background
-		 */
-		public InsideTable(Drawable background) {
-			super(background);
-		}
-		/**
-		 * Instantiates a new Inside table.
-		 *
-		 * @param background the background
-		 * @param cons the cons
-		 */
-		public InsideTable(Drawable background, Cons<Table> cons) {
-			super(background, cons);
-		}
-		public InsideTable(Cons<Table> cons) {
-			super(cons);
-		}
+		// /**
+		//  * Instantiates a new Inside table.
+		//  */
+		// public InsideTable() {
+		// }
+		// /**
+		//  * Instantiates a new Inside table.
+		//  *
+		//  * @param background the background
+		//  */
+		// public InsideTable(Drawable background) {
+		// 	super(background);
+		// }
+		// /**
+		//  * Instantiates a new Inside table.
+		//  *
+		//  * @param background the background
+		//  * @param cons the cons
+		//  */
+		// public InsideTable(Drawable background, Cons<Table> cons) {
+		// 	super(background, cons);
+		// }
+		// public InsideTable(Cons<Table> cons) {
+		// 	super(cons);
+		// }
 		public float getPrefHeight() {
 			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
 		}

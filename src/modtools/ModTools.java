@@ -23,7 +23,6 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
-import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 
 import java.util.Arrays;
@@ -50,9 +49,9 @@ public class ModTools extends Mod {
 		Log.info("Loaded ModTools constructor" + (isImportFromGame ? " [[[from game]]]" : "") + ".");
 		if (headless) Log.info("Running in headless environment.");
 
-		ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
-		IntVars.meta = metas.get(ModTools.class);
 		try {
+			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
+			IntVars.meta = metas.get(ModTools.class);
 			load();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				Vars.ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
@@ -70,7 +69,9 @@ public class ModTools extends Mod {
 
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
-		} catch (Throwable ignored) {}
+		} catch (Throwable e) {
+			// Log.err(e);
+		}
 
 		HopeCall.init();
 
@@ -110,6 +111,7 @@ public class ModTools extends Mod {
 		root = mod != null && mod.root != null ? mod.root : new ZipFi(FileUtils.findRoot());
 		libs = root.child("libs");
 
+		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();

@@ -1,12 +1,13 @@
 package modtools.utils;
 
-import arc.func.Func;
+import arc.func.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 
 import java.lang.reflect.*;
 import java.util.*;
 
+@SuppressWarnings("unchecked")
 public class ArrayUtils {
 	public static <K, V, R> R[] map2Arr(Class<R> cl, ObjectMap<K, V> map, Func<Entry<K, V>, R> func) {
 		R[] tableSeq = (R[]) Array.newInstance(cl, map.size);
@@ -48,4 +49,20 @@ public class ArrayUtils {
 		if (i < 0) i += list.size();
 		return 0 <= i && i < list.size() ? list.get(i) : null;
 	}
+
+	public <T> float sumf(List<T> list, Floatf<T> summer) {
+		float sum = 0;
+		for (T t : list) {
+			sum += summer.get(t);
+		}
+		return sum;
+	}
+	public <T> int sum(List<T> list, Intf<T> summer) {
+		int sum = 0;
+		for (T t : list) {
+			sum += summer.get(t);
+		}
+		return sum;
+	}
+
 }

@@ -47,6 +47,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.world.TmpVars.tmpList;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
+@SuppressWarnings("CodeBlock2Expr")
 public abstract class WFunction<T> {
 	private static      Selection SC;
 	public static void init(Selection selection) {
@@ -120,7 +121,7 @@ public abstract class WFunction<T> {
 						}
 					}
 				}
-				;
+
 				var btn = new NewBtn();
 				btn.update(() -> {
 					btn.setChecked(btn.uiShowing || select.contains(value));
@@ -162,7 +163,7 @@ public abstract class WFunction<T> {
 		Selection.allFunctions.put(name, this);
 		main.update(() -> SC.selectFunc = this);
 
-		FunctionBuild("copy", list -> {
+		FunctionBuild("Copy", list -> {
 			tester.put(Core.input.mouse(), list.toArray());
 		});
 	}
@@ -228,22 +229,6 @@ public abstract class WFunction<T> {
 	public void remove() {
 		wrap.clearChildren();
 	}
-
-	public float sumf(List<T> list, Floatf<T> summer) {
-		float sum = 0;
-		for (T t : list) {
-			sum += summer.get(t);
-		}
-		return sum;
-	}
-	public int sum(List<T> list, Intf<T> summer) {
-		int sum = 0;
-		for (T t : list) {
-			sum += summer.get(t);
-		}
-		return sum;
-	}
-
 
 	public void each(Consumer<? super T> action) {
 		each(list, action);
@@ -434,9 +419,7 @@ public abstract class WFunction<T> {
 				clearFocusWorld.run();
 			});
 
-			clicked(() -> {
-				WorldInfo.showInfo(this, item);
-			});
+			clicked(() -> WorldInfo.showInfo(this, item));
 		}
 
 		public void updateVisibility() {

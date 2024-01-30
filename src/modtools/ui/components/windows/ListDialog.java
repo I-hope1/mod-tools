@@ -8,7 +8,6 @@ import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
@@ -19,11 +18,11 @@ import modtools.ui.content.debug.Tester;
 import modtools.utils.*;
 import modtools.utils.ui.search.*;
 
-import java.util.Comparator;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class ListDialog extends Window {
-	public Seq<Fi> list = new Seq<>();
+	public ArrayList<Fi> list = new ArrayList<>();
 
 	final FilterTable<String> p = new FilterTable<>();
 	Comparator<Fi> sorter;
@@ -42,7 +41,7 @@ public class ListDialog extends Window {
 		cont.pane(p).grow();
 
 		this.file = file;
-		list.addAll(file.list());
+		list.addAll(List.of(file.list()));
 		this.fileHolder = fileHolder;
 		this.consumer = consumer;
 		this.pane = pane;
@@ -59,7 +58,7 @@ public class ListDialog extends Window {
 	public void build() {
 		p.clear();
 
-		list.each(this::build);
+		list.forEach(this::build);
 	}
 
 	public static       Pattern            fileUnfair    = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*$)");
@@ -87,7 +86,7 @@ public class ListDialog extends Window {
 				} else if (field.isValid()) {
 					Fi toFi = f.sibling(field.getText());
 					f.moveTo(toFi);
-					list.replace(f, toFi);
+					list.set(list.indexOf(f), toFi);
 					f = toFi;
 					label.setText(field.getText());
 					ListDialog.this.build();
@@ -99,10 +98,11 @@ public class ListDialog extends Window {
 			p.row();
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
-					b.pane(c -> {
-						c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.defaultLabel)).left();
-					}).grow().left();
-				}, HopeStyles.clearb, () -> {}).height(70).minWidth(400).growX().left().get();
+					 b.pane(c -> {
+						 c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.defaultLabel)).left();
+					 }).grow().left();
+				 }, HopeStyles.clearb, () -> {})
+				 .height(70).minWidth(400).growX().left().get();
 				IntUI.longPress(btn, longPress -> {
 					if (longPress) {
 						Window ui   = new DisWindow("@info", 300, 80);
@@ -110,14 +110,13 @@ public class ListDialog extends Window {
 						cont.add(new MyLabel(f.name(), accentStyle)).left().colspan(2).row();
 						cont.image().color(Pal.accent).growX().colspan(2);
 						cont.row();
-						cont.pane(p1 -> {
-							pane.get(f, p1);
-						}).grow().colspan(2);
+						cont.pane(p1 -> pane.get(f, p1))
+						 .colspan(2)
+						 .grow();
 						cont.row();
 
-						cont.button(Icon.copy, HopeStyles.flati, () -> {
-							JSFunc.copyText(f.readString());
-						});
+						cont.button(Icon.copy, HopeStyles.flati,
+						 () -> JSFunc.copyText(f.readString()));
 						cont.button(Icon.trash, HopeStyles.flati, () -> IntUI.showConfirm("@confirm.remove", () -> {
 							ui.hide();
 							f.delete();

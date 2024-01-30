@@ -32,6 +32,7 @@ import static modtools.ui.Contents.tester;
 import static modtools.utils.ElementUtils.*;
 
 /** for js */
+@SuppressWarnings("unused")
 public class JSFunc
  /* Interfaces for js */
  implements UNSAFE, REFLECT,
@@ -41,6 +42,8 @@ public class JSFunc
 	public static final Font FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;
+		run.run();
+		MyFonts.strikethrough = false;
 	}
 	/* for js */
 
@@ -76,7 +79,7 @@ public class JSFunc
 	}
 	public static void copyValue(String text, Object value, Vec2 vec2) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.savedas", text,
-		 tester.put(value)), vec2);
+		 tester.quietPut(value)), vec2);
 	}
 
 
@@ -182,6 +185,7 @@ public class JSFunc
 		 c_underline    = Color.lightGray.cpy().a(0.5f).rgba(),
 		 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba();
 		/** 代码生成{@link ColorProcessor} */
+		@SuppressWarnings("JavadocReference")
 		public static void settingColor(Table t) {}
 	}
 }

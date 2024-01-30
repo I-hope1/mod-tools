@@ -12,7 +12,6 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Scl;
 import arc.util.Tmp;
-import mindustry.core.Version;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
@@ -107,10 +106,11 @@ public class HopeStyles {
 			background = null;
 		}};
 	}
-	static void setSize(Drawable drawable) {
+	static void setSize(Drawable drawable) {setSize(drawable, 28, 28);}
+	public static void setSize(Drawable drawable, float minWidth, float minHeight) {
 		if (drawable == null) return;
-		drawable.setMinWidth(28);
-		drawable.setMinHeight(28);
+		drawable.setMinWidth(minWidth);
+		drawable.setMinHeight(minHeight);
 	}
 
 	/* ---------TODO：以下是为了适配V6----------- */

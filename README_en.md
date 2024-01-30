@@ -5,7 +5,8 @@ English|[中文](README.md)
 A mod for mindustry v7.
 It provides many useful tools for developers.
 
-![icon.png](./assets/icon.png)
+<div align=center><img src="./assets/icon.png" width=50%></div>
+
 
 ## showUIList
 
@@ -45,8 +46,9 @@ It provides many useful tools for developers.
 
 ## ReviewElement
 
-Displays a list of elements, double-click to copy the element to a js variable
-![reviewElement](./screenshots/review_element.png)
+- Displays a list of elements, double-click to copy the element to a js variable
+- Press `i` on the element to display the details (Open the `ShowInfoWindow`).
+  ![reviewElement](./screenshots/review_element.png)
 
 ## Window
 

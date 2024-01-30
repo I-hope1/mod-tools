@@ -16,9 +16,10 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.ui.*;
+import modtools.ui.components.*;
+import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.IntUI.*;
-import modtools.ui.components.Window;
 import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.style.TintDrawable;
 import modtools.utils.SR.CatchSR;
@@ -71,13 +72,21 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 		cont.clear();
 		cont.pane(newTable(t -> {
-			t.table(i -> i.add(new Element() {
+			t.add(new Element() {
 				public void draw() {
 					if (drawable == null) return;
 					Draw.color(iconCurrent, iconCurrent.a * parentAlpha);
-					drawable.draw(x, y, width, height);
+					final float minWidth  = drawable.getMinWidth();
+					final float minHeight = drawable.getMinHeight();
+					switch (drawStyle) {
+						case normal -> Tmp.v1.set(minWidth, minHeight);
+						case large -> Tmp.v1.set(128, 128);
+						case full -> Tmp.v1.set(width, height);
+					}
+					drawable.draw(x, y, Tmp.v1.x, Tmp.v1.y);
+					// HopeStyles.setSize(drawable, minWidth, minHeight);
 				}
-			}).grow());
+			}).grow().pad(6, 8, 6, 8);
 			t.table(Styles.black6, wrap -> {
 				Seq<Drawable> drawables = Icon.icons.values().toSeq().as().addAll(Arrays.stream(Styles.class.getFields())
 				 .filter(f -> FieldUtils.isStatic(f) && f.getType() == Drawable.class)
@@ -91,7 +100,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			t.table(Styles.black6, buttons -> {
 				buttons.left().defaults().growX().height(32);
 				buttons.check("Icon", b -> {}).row();
-				buttons.check("Background", b -> {});
+				buttons.check("Background", b -> {}).row();
+
 				buttons.getChildren().<CheckBox>as().each(b -> {
 					b.left();
 					b.setStyle(HopeStyles.hope_defaultCheck);
@@ -102,6 +112,14 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 					if (isIconColor == (group.getChecked().getZIndex() == 0)) return;
 					isIconColor = group.getChecked().getZIndex() == 0;
 					resetColor(current);
+				});
+
+				SettingsBuilder.main = buttons;
+				Seq<DrawStyle> styles = new Seq<>(DrawStyle.values());
+				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, () -> {}).get();
+				button.clicked(() -> {
+					drawStyle = styles.get((styles.indexOf(drawStyle) + 1) % styles.size);
+					button.setText(drawStyle.name());
 				});
 			}).padLeft(4f).padRight(6f);
 			t.add(new Element() {
@@ -223,7 +241,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			Tools.clone(drawable, newDrawable, drawable.getClass(), f -> {
 				if (!"tint".equals(f.getName()) || f.getType() != Color.class) return true;
 
-				FieldUtils.setValue(f, newDrawable, new Color());
+				FieldUtils.setValue(f, newDrawable, Color.white);
 				return false;
 			});
 			return newDrawable;
@@ -368,4 +386,11 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			return delegetor().a;
 		}
 	}
+
+	enum DrawStyle {
+		normal,
+		large,
+		full
+	}
+	DrawStyle drawStyle = DrawStyle.large;
 }

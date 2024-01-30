@@ -4,7 +4,7 @@ import arc.*;
 import arc.func.Cons;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
-import arc.input.*;
+import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
@@ -15,33 +15,29 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import ihope_lib.MyReflect;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.SettingsInit;
-import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.events.ISettings;
-import modtools.ui.IntUI.*;
+import modtools.struct.TaskSet;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
-import modtools.struct.TaskSet;
-import modtools.utils.MySettings.Data;
-import modtools.utils.reflect.*;
+import modtools.utils.reflect.FieldUtils;
 
 import java.util.*;
 
 import static arc.Core.*;
 import static modtools.IntVars.modName;
 import static modtools.ui.Contents.*;
-import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.IntUI.*;
 import static modtools.ui.TopGroup.TSettings.*;
-import static modtools.ui.components.Window.*;
+import static modtools.ui.components.Window.frontWindow;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag

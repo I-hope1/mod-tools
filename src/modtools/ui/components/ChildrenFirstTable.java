@@ -23,7 +23,6 @@ public class ChildrenFirstTable extends LimitTable {
 	/** Adds a hover/mouse enter listener. */
 	public void hovered(Runnable r) {
 		addListener(new InputListener() {
-			@Override
 			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				r.run();
 				event.stop();
@@ -34,7 +33,6 @@ public class ChildrenFirstTable extends LimitTable {
 	/** Adds a hover/mouse exit listener. */
 	public void exited(Runnable r) {
 		addListener(new InputListener() {
-			@Override
 			public void exit(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				r.run();
 				event.stop();

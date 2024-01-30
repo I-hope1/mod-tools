@@ -2,10 +2,10 @@
 
 # Mod Tools
 
-A mod for mindustry v7.
-It provides many useful tools for developers.
+一个mindustry v7的mod.
+它为开发人员提供了许多有用的工具。
 
-![icon.png](./assets/icon.png)
+<div align=center><img src="./assets/icon.png" width=50%></div>
 
 ## showUIList
 
@@ -43,8 +43,9 @@ It provides many useful tools for developers.
 
 ## ReviewElement
 
-显示元素列表，双击复制元素到js变量
-![reviewElement](./screenshots/review_element.png)
+- 显示元素列表，双击复制元素到js变量
+- 对着元素按`i`，显示详情（打开ShowInfoWindow)
+  ![reviewElement](./screenshots/review_element.png)
 
 ## Window
 

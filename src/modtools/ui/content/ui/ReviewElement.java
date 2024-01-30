@@ -20,12 +20,11 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.OptimizeReflect;
-import modtools.annotations.builder.*;
+import modtools.annotations.builder.DataColorFieldInit;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
-import modtools.ui.TopGroup.*;
+import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.buttons.FoldedImageButton;
@@ -37,13 +36,13 @@ import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.regex.*;
 
 import static arc.Core.scene;
@@ -51,7 +50,7 @@ import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.FormatHelper.*;
 
 /** It should be `InspectElement`, but it's too late.  */
@@ -426,6 +425,8 @@ public class ReviewElement extends Content {
 		public MyWrapTable(ReviewElementWindow window, Element element) {
 			/* 用于下面的侦听器  */
 			int childIndex;
+			hovered(this::requestKeyboard);
+			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
 			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
 				/* 占位符 */
@@ -562,48 +563,6 @@ public class ReviewElement extends Content {
 			}
 			return element.getScene() != null ? "Core.scene.root" + sb : sb.delete(0, 0);
 		}
-
-		static int getDeep(Element element) {
-			int deep = 0;
-			while (element.parent != null) {
-				element = element.parent;
-				deep++;
-			}
-			return deep;
-		}
-		/** 获取最近的Wrap父节点 */
-		public MyWrapTable _getParent(Element element) {
-			Element element1 = element;
-			while (element1 != null) {
-				if (element1 instanceof MyWrapTable) return (MyWrapTable) element1;
-				element1 = element1.parent;
-			}
-			return null;
-		}
-
-		/*{
-			addListener(new InputListener() {
-				public final Vec2 lastMouse = new Vec2(), lastOff = new Vec2();
-				public boolean touchDown(InputEvent event, float x, float y, int __, KeyCode button) {
-					MyWrapTable p = _getParent(hit(x, y, true));
-					// Log.info(getDeep(event.listenerActor));
-					lastMouse.set(Core.input.mouse());
-					lastOff.set(event.listenerActor.translation);
-					if (p == MyWrapTable.this) {
-						((ScrollPane) window.pane.parent).setScrollingDisabledY(true);
-						toFront();
-						return true;
-					}
-					return false;
-				}
-				public void touchDragged(InputEvent event, float x, float y, int pointer) {
-					event.listenerActor.translation.y = Core.input.mouseY() - lastMouse.y + lastOff.y;
-				}
-				public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-					((ScrollPane) window.pane.parent).setScrollingDisabledY(false);
-				}
-			});
-		}*/
 	}
 
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {

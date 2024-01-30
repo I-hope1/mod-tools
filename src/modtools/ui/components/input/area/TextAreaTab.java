@@ -3,7 +3,7 @@ package modtools.ui.components.input.area;
 
 import arc.Core;
 import arc.func.Boolf2;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;

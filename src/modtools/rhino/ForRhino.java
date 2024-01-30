@@ -16,6 +16,7 @@ import java.util.concurrent.TimeoutException;
 import static modtools.ui.Contents.tester;
 import static modtools.utils.Tools.clName;
 
+@SuppressWarnings("unused")
 public class ForRhino {
 	public static final ContextFactory factory;
 
@@ -60,7 +61,7 @@ public class ForRhino {
 	}
 
 	public static void observeInstructionCount(ContextFactory factory, Context cx, int instructionCount) {
-		if (tester.killScript) throw new RuntimeException(new TimeoutException());
+		if (tester.killScript) throw new TimeoutException();
 	}
 	public static Object doTopCall(ContextFactory factory,
 																 Callable callable,
@@ -72,9 +73,10 @@ public class ForRhino {
 			// Log.err(t instanceof RhinoException ? ((RhinoException) t).getScriptStackTrace() : Strings.neatError(t));
 			if (!Tester.catchOutsizeError) throw t;
 			tester.handleError(t);
-			return t;
+			return null;
 		}
 	}
+	public static class TimeoutException extends RuntimeException {}
 
 	public interface MyRhino {
 		Object super$_doTopCall(Callable callable,

@@ -1,10 +1,9 @@
 package modtools.utils.reflect;
 
-import arc.util.OS;
+import arc.util.*;
 import dalvik.system.VMRuntime;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
-import modtools.android.HiddenApi;
 import rhino.*;
 
 import java.lang.reflect.*;

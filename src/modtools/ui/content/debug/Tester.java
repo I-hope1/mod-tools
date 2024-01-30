@@ -746,12 +746,11 @@ public class Tester extends Content {
 			dir.child("README.txt").writeString("这是一个用于启动脚本（js）的文件夹\n\n所有的js文件都会执行");
 		}
 	}
-	private void setAppClassLoader(ClassLoader loader) {
+	private static void setAppClassLoader(ClassLoader loader) {
 		try {
 			ForRhino.factory.getApplicationClassLoader().loadClass(ModTools.class.getName());
-		} catch (ClassNotFoundException __) {
-			loader = ForRhino.factory instanceof AndroidContextFactory acf ? acf.createClassLoader(loader)
-			 : loader;
+		} catch (Throwable __) {
+			loader = OS.isAndroid ? AndroidLoader.loader(loader) : loader;
 			try {
 				ForRhino.factory.initApplicationClassLoader(loader);
 			} catch (Throwable e) {
@@ -760,6 +759,11 @@ public class Tester extends Content {
 			}
 		}
 		cx.setApplicationClassLoader(loader);
+	}
+	static class AndroidLoader {
+		static ClassLoader loader(ClassLoader loader) {
+			return ((AndroidContextFactory) ForRhino.factory).createClassLoader(loader);
+		}
 	}
 
 	public static boolean loaded = false;

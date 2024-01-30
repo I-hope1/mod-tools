@@ -23,6 +23,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
+import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 
 import java.util.Arrays;
@@ -83,7 +84,8 @@ public class ModTools extends Mod {
 	public void loadContent() {
 		IntVars.meta.hidden = true;
 		// Time.mark();
-		Tester.initExecution();
+		Tools.runIgnoredException(Tester::initExecution);
+		// Log.info(HopeReflect.getCaller());
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 

@@ -24,4 +24,8 @@ public interface UnitUtils {
 		Call.unitDeath(u.id);
 		return u.isAdded();
 	}
+	static boolean clear(Unit u) {
+		u.remove();
+		return Groups.unit.contains(u0 -> u0 == u);
+	}
 }

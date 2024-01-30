@@ -179,20 +179,17 @@ public class Window extends Table {
 		this.title = titleTable.add(title)
 		 .grow().touchable(Touchable.disabled)
 		 .padLeft(6f).padRight(6f)
-		 .update(l -> {
-			 l.setColor(frontWindow == this ? Color.white : Color.lightGray);
-		 })
+		 .update(l -> l.setColor(frontWindow == this ? Color.white : Color.lightGray))
 		 .get();
 
 		titleTable.defaults().size(buttonSize);
 
 		if (full) {
 			//noinspection rawtypes
-			titleTable.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32, () -> {
-				 sticky = !sticky;
-			 }).padLeft(4f).name("sticky")
+			titleTable.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32,
+				() -> sticky = !sticky).padLeft(4f).name("sticky")
 			 /* 这是一个奇葩的bug */
-			 .checked((Boolf) t -> sticky);
+			 .checked((Boolf) __ -> sticky);
 			titleTable.add(new FoldedImageButton(false, HopeStyles.hope_clearNonei))
 			 .with(b -> {
 				 b.resizeImage(32);
@@ -235,12 +232,10 @@ public class Window extends Table {
 
 			p.row();
 			p.button(Icon.leftOpenSmall, style, () -> {}).growY().width(size);
-			p.table(t -> {
-				t.button(Icon.cancelSmall, style, () -> {
-					sclListener.offset = SclListener.defOffset;
-					p.hide();
-				}).size(32);
-			}).grow();
+			p.table(t -> t.button(Icon.cancelSmall, style, () -> {
+				sclListener.offset = SclListener.defOffset;
+				p.hide();
+			}).size(32)).grow();
 			p.button(Icon.rightOpenSmall, style, () -> {}).growY().width(size);
 
 			p.row();
@@ -296,13 +291,12 @@ public class Window extends Table {
 		} */
 	}
 
-
-	public static boolean Modible_Disabled = false;
+	public static boolean mobileDisabled = false;
 	/** 截图 */
 	public TextureRegion screenshot() {
 		// return getFrameBufferTexture((int) x, (int) y, (int) width, (int) height);
 		// return new TextureRegion(bufferCapture(this));
-		if (Vars.mobile && Modible_Disabled) return null;
+		if (Vars.mobile && mobileDisabled) return null;
 		return cache = isMinimize || cont == null ? cache : ElementUtils.screenshot(cont, true, null);
 	}
 
@@ -330,11 +324,9 @@ public class Window extends Table {
 		public void keyboardFocusChanged(FocusEvent event, Element actor, boolean focused) {
 			if (!focused) focusChanged(event);
 		}
-
 		public void scrollFocusChanged(FocusEvent event, Element actor, boolean focused) {
 			if (!focused) focusChanged(event);
 		}
-
 		private void focusChanged(FocusEvent event) {
 			Scene stage = getScene();
 			if (stage != null && stage.root.getChildren().size > 0
@@ -352,7 +344,6 @@ public class Window extends Table {
 		all.remove(this);
 	}
 
-	@Override
 	protected void setScene(Scene stage) {
 		if (stage == null) {
 			addListener(focusListener);
@@ -501,8 +492,8 @@ public class Window extends Table {
 	}
 
 	// 用于存储最小/大化前的位置和大小
-	public  Rect    lastRect        = new Rect();
-	private boolean disabledActions = true;
+	public Rect    lastRect        = new Rect();
+	public boolean disabledActions = true;
 
 	public ObjectSet<RunListener> maxlisteners = new ObjectSet<>();
 	public boolean                isMaximize   = false, lastMaximize = false;
@@ -516,38 +507,24 @@ public class Window extends Table {
 
 	public void toggleMaximize() {
 		boolean lastMin = isMinimize;
-		if (isMinimize) {
-			boolean l = disabledActions;
-			disabledActions = true;
-			toggleMinimize();
-			disabledActions = l;
-		}
+		if (isMinimize) toggleMinimize();
 		isMaximize = !isMaximize;
 		if (isMaximize) {
-			if (!lastMin) {
-				lastRect.set(x, y, width, height);
-			}
-			actions(Actions.sizeTo(graphics.getWidth(), graphics.getHeight(), disabledActions ? 0 : 0.06f),
-			 Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
-			// setSize(Core.graphics.getWidth(), Core.graphics.getHeight());
-			// setPosition(0, 0);
+			if (!lastMin) lastRect.set(x, y, width, height);
+
+			moveAndScaleAnimated(0, 0, graphics.getWidth(), graphics.getHeight());
 		} else {
-			actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.06f),
-			 Actions.moveTo(lastRect.x, lastRect.y, disabledActions ? 0 : 0.01f));
+			moveAndScaleAnimated(lastRect.x, lastRect.y, lastRect.width, lastRect.height);
 		}
 		act(0);
 
-		Timer.schedule(new Task() {
-			@Override
-			public void run() {
-				if (!hasActions()) {
-					maxlisteners.each(r -> r.fire(isMaximize));
-					lastMaximize = isMaximize;
-					cancel();
-				}
-			}
-		}, 0, 0.01f, -1);
-		// Time.runTask(0, () -> cont.invalidate());
+		Timer.schedule(new MyTask(false), 0, 0.01f, -1);
+	}
+	private void moveAndScaleAnimated(float x, float y, float width, float height) {
+		actions(
+		 Actions.sizeTo(width, height, disabledActions ? 0 : 0.06f),
+		 Actions.moveTo(x, y, disabledActions ? 0 : 0.01f)
+		);
 	}
 
 
@@ -563,19 +540,19 @@ public class Window extends Table {
 			}
 
 			actions(
-			 Actions.moveTo(x,
-				y + lastRect.height - topHeight, disabledActions ? 0 : 0.01f),
-			 Actions.sizeTo(getMinWidth(), topHeight, disabledActions ? 0 : 0.01f)
+			 Actions.moveTo(x, y + lastRect.height - topHeight,
+				disabledActions ? 0 : 0.01f),
+			 Actions.sizeTo(getMinWidth(), topHeight,
+				disabledActions ? 0 : 0.01f)
 			);
 
 			getCell(cont).set(BindCell.UNSET_CELL);
 			cont.remove();
-			if (!noButtons) {
-				Tools.runIgnoredException(() -> {
-					getCell(buttons).set(BindCell.UNSET_CELL);
-					buttons.remove();
-				});
-			}
+			if (!noButtons) Tools.runIgnoredException(() -> {
+				getCell(buttons).set(BindCell.UNSET_CELL);
+				buttons.remove();
+			});
+
 			sclListener.unbind();
 			sizeChanged();
 		} else {
@@ -590,21 +567,12 @@ public class Window extends Table {
 				 Actions.moveTo(lastRect.x = x,
 					lastRect.y = y - lastRect.height + topHeight,
 					disabledActions ? 0 : 0.01f));
-				// y -= height - topHeight;
 			}
 			sclListener.rebind();
 		}
 		act(0);
 
-		Timer.schedule(new Task() {
-			public void run() {
-				if (!hasActions()) {
-					if (!isMaximize) display();
-					minlisteners.each(r -> r.fire(isMinimize));
-					cancel();
-				}
-			}
-		}, 0, 0.01f, -1);
+		Timer.schedule(new MyTask(true), 0, 0.01f, -1);
 	}
 
 	/**
@@ -656,19 +624,6 @@ public class Window extends Table {
 		Draw.alpha(parentAlpha);
 		MyDraw.blurRect(x, y, width, height);
 		Tools.runLoggedException(super::draw);
-	}
-	/** Adds a listener for back/escape keys to hide this dialog. */
-	public void closeOnBack() {
-		closeOnBack(() -> {});
-	}
-
-	public void closeOnBack(Runnable callback) {
-		keyDown(key -> {
-			if (key == KeyCode.escape || key == KeyCode.back) {
-				Core.app.post(this::hide);
-				callback.run();
-			}
-		});
 	}
 
 	/**
@@ -736,8 +691,7 @@ public class Window extends Table {
 	 * 延迟几秒销毁的窗口
 	 * @see InfoFadePopup
 	 */
-	public interface DelayDisposable extends IDisposable {
-	}
+	public interface DelayDisposable extends IDisposable {}
 
 	public static class DisWindow extends Window implements IDisposable {
 		public DisWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
@@ -758,10 +712,6 @@ public class Window extends Table {
 		return ElementUtils.getElementName(this);
 	}
 	public static class NoTopWindow extends Window {
-
-		public NoTopWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
-			super(title, minWidth, minHeight, full, noButtons);
-		}
 		public NoTopWindow(String title, float width, float height, boolean full) {
 			super(title, width, height, full);
 		}
@@ -837,6 +787,23 @@ public class Window extends Table {
 			last.setDuration(0.3f);
 			last.setInterpolation(Interp.fastSlow);
 			titleTable.addAction(last);
+		}
+	}
+	private class MyTask extends Task {
+		boolean isMin;
+		public MyTask(boolean isMin) {
+			this.isMin = isMin;
+		}
+		public void run() {
+			if (!hasActions()) {
+				if (isMin && !isMaximize) display();
+
+				if (!isMin) lastMaximize = isMaximize;
+				(isMin ? minlisteners : maxlisteners)
+				 .each(r -> r.fire((isMin ? isMinimize : isMaximize)));
+
+				cancel();
+			}
 		}
 	}
 }

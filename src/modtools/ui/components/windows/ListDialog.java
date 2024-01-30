@@ -40,7 +40,7 @@ public class ListDialog extends Window {
 		 .build(cont, p);
 		p.addPatternUpdateListener(() -> pattern);
 		cont.pane(p).grow();
-		//			addCloseButton();
+
 		this.file = file;
 		list.addAll(file.list());
 		this.fileHolder = fileHolder;
@@ -155,15 +155,6 @@ public class ListDialog extends Window {
 	 * 可以修改的Label
 	 */
 	public static class ModifiedLabel {
-		public static final Boolf2<Fi, String> fiTest = (fi, text) -> {
-			try {
-				return !text.isBlank() && !fileUnfair.matcher(text).find()
-							 && (fi.name().equals(text) || !fi.sibling(text).exists());
-			} catch (Throwable e) {
-				return false;
-			}
-		};
-
 		public static Cell<?> build(
 		 Prov<CharSequence> def,
 		 TextFieldValidator validator,
@@ -177,9 +168,10 @@ public class ListDialog extends Window {
 		 Cons2<TextField, Label> modifier,
 		 Table t, Prov<TextField> fieldProv) {
 			NoMarkupLabel label = new NoMarkupLabel(def);
-			Cell<?>   cell  = t.add(label);
-			TextField field = fieldProv.get();
+			Cell<?>       cell  = t.add(label);
+			TextField     field = fieldProv.get();
 			if (validator != null) field.setValidator(validator);
+
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {
 					modifier.get(field, label);
@@ -198,6 +190,5 @@ public class ListDialog extends Window {
 	}
 
 	public static LabelStyle accentStyle = new LabelStyle(MyFonts.def, Pal.accent);
-
 	Pattern pattern = null;
 }

@@ -86,7 +86,7 @@ public class SettingsUI extends Content {
 		add("Effects", Icon.effectSmall, new LimitTable() {{
 			left().defaults().left();
 			for (E_Blur value : E_Blur.values()) {
-				value.build(this);
+				value.build("@settings.blur.", this);
 			}
 		}});
 		/* add("Window", new LimitTable() {{
@@ -101,7 +101,7 @@ public class SettingsUI extends Content {
 			 SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
 
 			 for (TSettings value : TSettings.values()) {
-				 value.build(this);
+				 value.build("@settings.", this);
 			 }
 			 addElemValueLabel(this, "Bound Element",
 				() -> topGroup.drawPadElem,
@@ -121,7 +121,7 @@ public class SettingsUI extends Content {
 					 Vars.maxSchematicSize = val;
 				 });
 			 }
-			 button("clear mods restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
+			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 
 			 button("FONT", HopeStyles.flatBordert, () -> {
 				 new DisWindow("FONTS") {{

@@ -67,6 +67,7 @@ public class Syntax {
 
 	public void highlightingDraw(CharSequence displayText) {
 		this.displayText = displayText;
+		cursorTask = null;
 		cTask = null;
 		reset();
 		// String result;
@@ -80,6 +81,7 @@ public class Syntax {
 		for (int i = 0; i < len; i++, lastChar = c) {
 			c = displayText.charAt(i);
 
+			if (i < drawable.cursor()) cursorTask = cTask;
 			if (cTask == null) {
 				for (DrawTask drawTask : taskArr) {
 					if (!drawTask.draw(i)) {
@@ -136,7 +138,8 @@ public class Syntax {
 	/**
 	 * 当前任务
 	 */
-	public DrawTask cTask, lastTask; // default for null.
+	public DrawTask cursorTask,
+	 cTask, lastTask; // default for null.
 	/**
 	 * 所有的任务
 	 */

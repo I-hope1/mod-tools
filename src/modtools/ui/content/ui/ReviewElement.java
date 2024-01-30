@@ -130,7 +130,7 @@ public class ReviewElement extends Content {
 	}
 	public void drawPadding(Element elem, Vec2 vec2, Table table) {
 		/* 如果a = 0就返回 */
-		if ((padColor & 0x000000FF) == 0) return;
+		if (checkA(padColor)) return;
 		Draw.color(padColor);
 		Cell<?> cl = table.getCell(elem);
 		if (cl == null) {
@@ -144,9 +144,12 @@ public class ReviewElement extends Content {
 
 		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
 	}
+	boolean checkA(int color) {
+		return (color & 0x000000FF) == 0;
+	}
 
 	public void drawMargin(Vec2 vec2, Table table) {
-		if ((marginColor & 0x000000FF) == 0) return;
+		if (checkA(marginColor)) return;
 		Draw.color(marginColor);
 
 		drawMarginOrPad(vec2, table, false,
@@ -628,7 +631,7 @@ public class ReviewElement extends Content {
 		public static final float keyScale   = 0.7f;
 		public static final float valueScale = 0.6f;
 		Label nameLabel = new NoMarkupLabel(0.75f),
-		 sizeLabel      = new NoMarkupLabel(0.7f),
+		 sizeLabel      = new NoMarkupLabel(valueScale),
 		 touchableLabel = new NoMarkupLabel(valueScale),
 
 		// transformLabel    = new MyLabel(""),
@@ -663,7 +666,7 @@ public class ReviewElement extends Content {
 				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
 				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
 					styleLabel.setText(ShowUIList.styleKeyMap.get(style));
-			} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+			} catch (Exception e) {
 				styleCell.remove();
 			}
 		}
@@ -812,7 +815,7 @@ public class ReviewElement extends Content {
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posText:
 			{
-				if ((posTextColor & 0x000000FF) == 0) break posText;
+				if (checkA(posTextColor)) break posText;
 				/* // 相对坐标
 				// x: 0 -> x
 				if (elem.x != 0) MyDraw.drawText("x:" + fixed(vec2.x),
@@ -831,7 +834,7 @@ public class ReviewElement extends Content {
 			}
 			posLine:
 			{
-				if ((posLineColor & 0x000000FF) == 0) break posLine;
+				if (checkA(posLineColor)) break posLine;
 				Lines.stroke(4);
 				Draw.color(posLineColor);
 				// x: 0 -> x

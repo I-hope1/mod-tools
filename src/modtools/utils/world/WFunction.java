@@ -254,21 +254,19 @@ public abstract class WFunction<T> {
 			IntUI.showException(new RejectedExecutionException("There's already 2 tasks running."));
 			return;
 		}
-		executor.submit(() -> {
-			Tools.each(list, t -> {
-				new LerpFun(Interp.fastSlow).onWorld().rev()
-				 .registerDispose(1 / 24f, fin -> {
-					 Draw.color(Pal.accent);
-					 Vec2 pos = getPos(t);
-					 Lines.stroke(3f - fin * 2f);
-					 TextureRegion region = getRegion(t);
-					 Lines.square(pos.x, pos.y,
-						fin * Mathf.dst(region.width, region.height) / tilesize);
-				 });
-				Core.app.post(() -> action.accept(t));
-				Threads.sleep(1);
-			});
-		});
+		executor.submit(() -> Tools.each(list, t -> {
+			new LerpFun(Interp.fastSlow).onWorld().rev()
+			 .registerDispose(1 / 24f, fin -> {
+				 Draw.color(Pal.accent);
+				 Vec2 pos = getPos(t);
+				 Lines.stroke(3f - fin * 2f);
+				 TextureRegion region = getRegion(t);
+				 Lines.square(pos.x, pos.y,
+					fin * Mathf.dst(region.width, region.height) / tilesize);
+			 });
+			Core.app.post(() -> action.accept(t));
+			Threads.sleep(1);
+		}));
 	}
 	public void removeAll(List<T> list, Predicate<? super T> action) {
 		list.removeIf(action);
@@ -341,14 +339,7 @@ public abstract class WFunction<T> {
 	}
 	/** 这个exec的list是用来枚举的 */
 	public void FunctionBuild(String name, Cons<List<T>> exec) {
-		// TextButton button = new TextButton(name);
-		// cont.add(button).height(buttonHeight).growX().row();
-
 		FUNCTIONS.put(name, exec);
-		// button.clicked(() -> {
-		// 	clickedBtn = button;
-		// 	exec.get(list);
-		// });
 	}
 	public void TeamFunctionBuild(String name, Cons2<List<T>, Team> cons) {
 		FunctionBuild(name, from -> {
@@ -556,7 +547,7 @@ public abstract class WFunction<T> {
 
 	public static void buildPos(Table table, Position u) {
 		table.label(new PositionProv(() -> Tmp.v1.set(u),
-			u instanceof Building || u instanceof Vec2 ? "," : "\n"))
+			u instanceof Building || u instanceof Vec2 ? ", " : "\n"))
 		 .fontScale(0.7f).color(Color.lightGray)
 		 .get().act(0.1f);
 	}
@@ -571,5 +562,4 @@ public abstract class WFunction<T> {
 		});
 		watcher.show();
 	}
-
 }

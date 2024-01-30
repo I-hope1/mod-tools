@@ -22,7 +22,7 @@ import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
-import modtools.annotations.CostTimeLog;
+import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
@@ -56,17 +56,13 @@ public class IntUI {
 	public static final Frag     frag     = new Frag();
 	public static final TopGroup topGroup = new TopGroup();
 
-	private interface _a {
-		ColorPicker impl = new ColorPicker();
-	}
+	private static final LazyValue<ColorPicker> _c = LazyValue.of(ColorPicker::new);
 	public static ColorPicker colorPicker() {
-		return _a.impl;
+		return _c.get();
 	}
-	private interface _b {
-		DrawablePicker impl = new DrawablePicker();
-	}
+	private static final LazyValue<DrawablePicker> _d = LazyValue.of(DrawablePicker::new);
 	public static DrawablePicker drawablePicker() {
-		return _b.impl;
+		return _d.get();
 	}
 
 	/**

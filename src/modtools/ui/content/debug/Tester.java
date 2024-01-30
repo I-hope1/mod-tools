@@ -23,11 +23,12 @@ import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
+import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
-import modtools.IntVars;
+import modtools.*;
 import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
 import modtools.jsfunc.*;
@@ -40,7 +41,8 @@ import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.*;
-import modtools.ui.components.input.highlight.JSSyntax;
+import modtools.ui.components.input.highlight.*;
+import modtools.ui.components.input.highlight.Syntax.*;
 import modtools.ui.components.limit.PrefPane;
 import modtools.ui.components.linstener.*;
 import modtools.ui.components.windows.ListDialog;
@@ -58,7 +60,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.stream.Collectors;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
@@ -70,8 +71,7 @@ import static modtools.utils.Tools.*;
 public class Tester extends Content {
 	private static final int FADE_ALIGN = Align.bottomLeft;
 
-	private static final Vec2  tmpV = new Vec2();
-	public static final  float w    = Core.graphics.isPortrait() ? 400 : 420;
+	public static final float w = Core.graphics.isPortrait() ? 400 : 420;
 
 	public static Scripts    scripts;
 	public static Scriptable topScope, scope;
@@ -127,9 +127,11 @@ public class Tester extends Content {
 
 	// =------------------------------=
 
-	Fi         lastDir;
-	String     log = "";
-	MyTextArea area;
+	Fi          lastDir;
+	String      log = "";
+	TextAreaTab textarea;
+	MyTextArea  area;
+
 	public boolean loop = false;
 	public Object  res;
 
@@ -172,8 +174,8 @@ public class Tester extends Content {
 	public void build(Table table) {
 		if (ui == null) _load();
 
-		TextAreaTab textarea = new TextAreaTab("");
-		Table       _cont    = new AutoRequestKeyboardTable(textarea.getArea());
+		textarea = new TextAreaTab("");
+		Table _cont = new AutoRequestKeyboardTable(textarea.getArea());
 		if (!Vars.mobile) textarea.addListener(new EscapeAndAxesClearListener(area));
 
 		Runnable areaInvalidate = () -> {
@@ -183,7 +185,7 @@ public class Tester extends Content {
 		ui.maximized(isMax -> Time.runTask(0, areaInvalidate));
 		ui.sclListener.listener = areaInvalidate;
 
-		makeArea(textarea);
+		addListenerToArea(textarea);
 
 		Cell<?> areaCell = _cont.add(textarea).grow();
 		_cont.row();
@@ -287,9 +289,7 @@ public class Tester extends Content {
 
 		bottomBar(table, textarea);
 	}
-	public int lastCompletionCursor = -1;
-	public int lastCompletionIndex  = 0;
-	private void makeArea(TextAreaTab textarea) {
+	private void addListenerToArea(TextAreaTab textarea) {
 		JSSyntax syntax = new JSSyntax(textarea, scope);
 		syntax.indexToObj = new IntMap<>();
 		textarea.syntax = syntax;
@@ -297,69 +297,23 @@ public class Tester extends Content {
 		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
 			stopEvent[0] = false;
-			if (Core.input.shift() && keycode == KeyCode.tab) {
-				stopEvent[0] = true;
-				complement(textarea, syntax);
-				area.clearSelection();
-				return true;
-			} else if (textarea.virtualString != null &&
-								 (keycode == KeyCode.right || keycode == KeyCode.tab)) {
-				stopEvent[0] = true;
-				area.selectNearWord();
-				area.paste(textarea.virtualString.text, true);
-				textarea.virtualString = null;
-				return true;
-			} else textarea.virtualString = null;
 			if (rollAndExec(keycode) || detailsListener(keycode)) {
 				stopEvent[0] = true;
 				if (event != null) event.cancel();
 				return true;
 			}
-			if (keycode == KeyCode.tab) {
+			if (!hasFunctionKey() && keycode == KeyCode.tab) {
 				stopEvent[0] = true;
 				area.paste("  ", true);
 			}
 			return false;
 		};
-		textarea.keyTypedB = (event, character) -> {
-			if (!(Core.input.ctrl() || Core.input.alt()) &&
-					(area.isWordCharacter(character) ||
-					 character == '.') &&
-					auto_complement.enabled()) {
-				stopEvent[0] = textarea.virtualString != null;
-				Core.app.post(() -> complement(textarea, syntax));
-			}
-			return stopEvent[0];
-		};
+		textarea.keyTypedB = (event, character) -> stopEvent[0];
 		textarea.keyUpB = (event, keycode) -> stopEvent[0];
+		area.addCaptureListener(new ComplementListener());
 	}
-	private void complement(TextAreaTab textarea, JSSyntax syntax) {
-		area.selectNearWord();
-		String selection = area.getSelection();
-		int    start     = area.getSelectionStart();
-		area.clearSelection();
-		int    cursor    = area.getCursorPosition();
-		if (lastCompletionCursor != cursor) lastCompletionIndex = 0;
-		lastCompletionCursor = cursor;
-		Scriptable obj;
-		// Log.info(syntax.indexToObj);
-		if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
-			obj = syntax.indexToObj.get(start - 1);
-		} else obj = scope;
-		if (obj == null) return;
-
-		List<Object> keys = new ArrayList<>(List.of(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds()));
-		if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
-
-		String[] array = keys.stream()
-		 .map(String::valueOf)
-		 .filter(key -> key.startsWith(selection)).toArray(String[]::new);
-		if (array.length == 0) return;
-		// Log.info(key);
-		if (textarea.virtualString == null) textarea.virtualString = new VirtualString();
-		textarea.virtualString.index = start;
-		textarea.virtualString.text = array[lastCompletionIndex++ % array.length];
-		// area.paste(array[lastCompletionIndex++ % array.length], true);
+	static boolean hasFunctionKey() {
+		return Core.input.shift() || Core.input.ctrl() || Core.input.alt();
 	}
 
 	private void buildLog(Table p) {
@@ -474,6 +428,8 @@ public class Tester extends Content {
 			}
 		}, "").show();
 	}
+
+
 	private boolean rollAndExec(KeyCode keycode) {
 		if (Core.input.ctrl() && Core.input.shift()) {
 			if (keycode == KeyCode.enter) {
@@ -486,6 +442,8 @@ public class Tester extends Content {
 		}
 		return false;
 	}
+
+	private static final Vec2 tmpV = new Vec2();
 	private boolean rollHistory(boolean forward) {
 		if (historyPos == -1) originalText = area.getText0();
 		historyPos += forward ? 1 : -1;
@@ -763,11 +721,11 @@ public class Tester extends Content {
 				Reflect.set(Context.class, cx, "factory", ForRhino.factory);
 			}
 			setAppClassLoader(loader);
-		} catch (Exception ex) {
+		} catch (Throwable th) {
 			if (ignore_popup_error.enabled()) {
-				Log.err(ex);
+				Log.err(th);
 			} else {
-				Vars.ui.showException("IntFunc出错", ex);
+				Vars.ui.showException("IntFunc出错", th);
 			}
 		}
 
@@ -789,7 +747,11 @@ public class Tester extends Content {
 		}
 	}
 	private void setAppClassLoader(ClassLoader loader) {
-		if (ForRhino.factory.getApplicationClassLoader() != loader) {
+		try {
+			ForRhino.factory.getApplicationClassLoader().loadClass(ModTools.class.getName());
+		} catch (ClassNotFoundException __) {
+			loader = ForRhino.factory instanceof AndroidContextFactory acf ? acf.createClassLoader(loader)
+			 : loader;
 			try {
 				ForRhino.factory.initApplicationClassLoader(loader);
 			} catch (Throwable e) {
@@ -894,6 +856,84 @@ public class Tester extends Content {
 			} catch (Throwable ex) {
 				throw new RuntimeException(ex);
 			}
+		}
+	}
+
+
+	public class ComplementListener extends InputListener {
+		public int lastCompletionCursor = -1;
+		public int lastCompletionIndex  = 0;
+		JSSyntax syntax = (JSSyntax) textarea.syntax;
+		boolean  cancel;
+		public boolean keyDown(InputEvent event, KeyCode keycode) {
+			cancel = false;
+			if (Core.input.shift() && keycode == KeyCode.tab) {
+				cancel = true;
+				area.clearSelection();
+			} else if (textarea.virtualString != null &&
+								 (keycode == KeyCode.right || keycode == KeyCode.tab)) {
+				cancel = true;
+				area.selectNearWord();
+				area.paste(textarea.virtualString.text, true);
+				textarea.virtualString = null;
+			} else textarea.virtualString = null;
+			check(event);
+			return true;
+		}
+		public boolean keyTyped(InputEvent event, char character) {
+			check(event);
+			return true;
+		}
+		private void complement() {
+			int lastCursor = area.getCursorPosition();
+			complement0();
+			area.setCursorPosition(lastCursor);
+		}
+		private void complement0() {
+			area.selectNearWord();
+			String searchingKey = area.getSelection();
+			int    start        = area.getSelectionStart();
+			area.clearSelection();
+			int cursor = area.getCursorPosition();
+			if (lastCompletionCursor != cursor) lastCompletionIndex = 0;
+			lastCompletionCursor = cursor;
+			Scriptable obj;
+			// Log.info(syntax.indexToObj);
+			if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
+				obj = syntax.indexToObj.get(start - 1);
+			} else obj = scope;
+			if (obj == null) return;
+
+			List<Object> keys = new ArrayList<>(List.of(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds()));
+			if (obj == scope) keys.addAll(JSSyntax.varSet.toSeq().list());
+			if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
+
+			String[] array = keys.stream()
+			 .map(String::valueOf)
+			 .filter(key -> key.startsWith(searchingKey)
+											&& searchingKey.length() < key.length()).toArray(String[]::new);
+			if (array.length == 0) return;
+			// Log.info(key);
+			if (textarea.virtualString == null) textarea.virtualString = new VirtualString();
+			textarea.virtualString.index = start;
+			textarea.virtualString.text = array[lastCompletionIndex++ % array.length];
+			// area.paste(array[lastCompletionIndex++ % array.length], true);
+		}
+		public boolean keyUp(InputEvent event, KeyCode keycode) {
+			check(event);
+			char character = event.character;
+			if (!hasFunctionKey() &&
+					(area.isWordCharacter(character) ||
+					 character == '.') &&
+					(syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
+					auto_complement.enabled()) {
+				if (textarea.virtualString != null) event.stop();
+				Core.app.post(this::complement);
+			}
+			return false;
+		}
+		private void check(InputEvent event) {
+			if (cancel) event.cancel();
 		}
 	}
 }

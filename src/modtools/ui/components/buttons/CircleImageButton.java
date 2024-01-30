@@ -13,10 +13,11 @@ public class CircleImageButton extends ImageButton {
 		return super.hit(x, y, touchable);
 	}
 
-	public CircleImageButton() {
-	}
 	public CircleImageButton(Drawable icon, ImageButtonStyle stylen) {
 		super(icon, stylen);
+	}
+	/*
+	public CircleImageButton() {
 	}
 	public CircleImageButton(TextureRegion region) {
 		super(region);
@@ -36,5 +37,5 @@ public class CircleImageButton extends ImageButton {
 	public CircleImageButton(Drawable imageUp, Drawable imageDown,
 													 Drawable imageChecked) {
 		super(imageUp, imageDown, imageChecked);
-	}
+	} */
 }

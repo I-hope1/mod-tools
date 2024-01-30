@@ -107,7 +107,7 @@ public class HopeStyles {
 			background = null;
 		}};
 	}
-	private static void setSize(Drawable drawable) {
+	static void setSize(Drawable drawable) {
 		if (drawable == null) return;
 		drawable.setMinWidth(28);
 		drawable.setMinHeight(28);

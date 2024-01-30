@@ -7,7 +7,8 @@ import modtools.IntVars;
 import modtools.events.E_Blur;
 import modtools.ui.effect.MyDraw.DrawEffect;
 
-/** from EB-wilson */
+/** from EB-wilson
+ * @author EB-wilson */
 public class EBBlur implements DrawEffect {
 	public enum DEF {
 		A(

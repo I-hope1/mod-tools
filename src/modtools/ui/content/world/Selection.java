@@ -48,6 +48,7 @@ import modtools.utils.world.*;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Predicate;
 
 import static arc.Core.scene;
 import static mindustry.Vars.*;
@@ -91,8 +92,8 @@ public class Selection extends Content {
 	public WFunction<Tile>     tiles;
 	public WFunction<Building> buildings;
 	public WFunction<Unit>     units;
-	public WFunction<Bullet> bullets;
-	WFunction<Entityc>  others;
+	public WFunction<Bullet>   bullets;
+	public WFunction<Entityc>  others;
 
 	/** @see Settings */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
@@ -100,53 +101,12 @@ public class Selection extends Content {
 		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::isPosInt);
 	}
 	private static void floatField(Table t1) {
-		t1.row().field("", s -> TmpVars.tmpAmount[0] = s).valid(NumberHelper::isPositiveFloat);
+		t1.row().field("", s -> TmpVars.tmpAmount[0] = s)
+		 .valid(NumberHelper::isPositiveFloat);
 	}
 
-	public void loadSettings(Data SETTINGS) {
-		Contents.settings_ui.add(localizedName(), icon, new Table() {
-			int lastIndex = 0;
-
-			{
-				defaults().growX().left();
-				table(t -> {
-					t.left().defaults().left().padRight(4f).growX();
-					allFunctions.each((k, func) -> {
-						if (lastIndex++ % 3 == 0) t.row();
-						func.setting(t);
-					});
-				}).row();
-				table(t -> {
-					defaultTeam = Team.get(SETTINGS.getInt("defaultTeam", 1));
-					t.left().defaults().left();
-					t.add("@selection.default.team").color(Pal.accent).growX().left().row();
-					t.table(t1 -> {
-						t1.left().defaults().left();
-						Team[] arr = Team.baseTeams;
-						int    c   = 0;
-
-						for (Team team : arr) {
-							ImageButton b = t1.button(IntUI.whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
-								SETTINGS.put("defaultTeam", team.id);
-								defaultTeam = team;
-							}).size(42).get();
-							b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
-							b.update(() -> b.setChecked(defaultTeam == team));
-							if (++c % 3 == 0) {
-								t1.row();
-							}
-						}
-
-					}).growX().left().padLeft(16);
-				}).row();
-				table(t -> {
-					t.left().defaults().left();
-					SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", Settings.focusOnWorld).row();
-					t.check("@settings.drawSelect", 28, drawSelect, b -> drawSelect = b)
-					 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
-				}).row();
-			}
-		});
+	public void loadSettings(Data data) {
+		Contents.settings_ui.add(localizedName(), icon, new SettingsTable(data));
 	}
 
 	public void load() {
@@ -227,7 +187,7 @@ public class Selection extends Content {
 			ListFunction("@selection.liquids", () -> content.liquids(), Selection::floatField, (list, liquid) -> {
 				each(list, b -> {
 					if (b.liquids != null) {
-						b.liquids.add(liquid, NumberHelper.asInt(tmpAmount[0]) - b.liquids.get(liquid));
+						b.liquids.add(liquid, NumberHelper.asFloat(tmpAmount[0]) - b.liquids.get(liquid));
 					}
 				});
 			});
@@ -240,10 +200,7 @@ public class Selection extends Content {
 				 list.size() == 1 ? getLiquidSetter(list.get(0)) : null);
 			});
 			FunctionBuild("@kill", list -> {
-				removeAll(list, b -> {
-					if (b.tile.build == b) b.kill();
-					return b.tile.build != null;
-				});
+				removeAll(list, killCons());
 			});
 			FunctionBuild("@clear", list -> {
 				removeAll(list, b -> {
@@ -274,12 +231,7 @@ public class Selection extends Content {
 				removeAll(list, UnitUtils::kill);
 			});
 			FunctionBuild("@clear", list -> {
-				removeAll(list, u -> {
-					u.remove();
-					return Groups.unit.contains(u0 -> u0 == u);
-					// return !addedField.getBoolean(u);
-					// return false;
-				});
+				removeAll(list, UnitUtils::clear);
 			});
 			FunctionBuild("@selection.forceClear", list -> {
 				removeAll(list, UnitUtils::forceRemove);
@@ -287,13 +239,7 @@ public class Selection extends Content {
 		}};
 		bullets = new BulletFunction<>("bullet") {{
 			FunctionBuild("@clear", list -> {
-				removeAll(list, bullet -> {
-					bullet.remove();
-					try {
-						return Groups.bullet.contains(b -> b == bullet);
-					} catch (Exception ignored) {}
-					return false;
-				});
+				removeAll(list, BulletUtils::clear);
 			});
 		}};
 		others = new EntityFunction<>("others") {{
@@ -324,6 +270,12 @@ public class Selection extends Content {
 		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
 		btn.setStyle(Styles.logicTogglet);
+	}
+	private static Predicate<Building> killCons() {
+		return b -> {
+			if (b.tile.build == b) b.kill();
+			return b.tile.build != null;
+		};
 	}
 
 	public void hide() {
@@ -477,11 +429,12 @@ public class Selection extends Content {
 		public boolean checkRemove(T item) {
 			return item.tile.build != item;
 		}
-		Cons2<Liquid, String> getLiquidSetter(T build) {
-			return (l, str) -> build.liquids.set(l, NumberHelper.asFloat(str));
-		}
+
 		Cons2<Item, String> getItemSetter(T build) {
 			return (i, str) -> build.items.set(i, NumberHelper.asInt(str));
+		}
+		Cons2<Liquid, String> getLiquidSetter(T build) {
+			return (l, str) -> build.liquids.set(l, NumberHelper.asFloat(str));
 		}
 
 	}
@@ -632,7 +585,7 @@ public class Selection extends Content {
 
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
 
-	public void initTask(){
+	public void initTask() {
 		WorldUtils.uiWD.drawSeq.add(() -> {
 			Gl.flush();
 			if (Core.input.alt()) {
@@ -982,5 +935,48 @@ public class Selection extends Content {
 		tile, building, unit, bullet, others
 		/* other */, focusOnWorld
 	}
-}
+	private class SettingsTable extends Table {
+		int lastIndex;
 
+		public SettingsTable(Data data) {
+			lastIndex = 0;
+			defaults().growX().left();
+			table(t -> {
+				t.left().defaults().left().padRight(4f).growX();
+				allFunctions.each((k, func) -> {
+					if (lastIndex++ % 3 == 0) t.row();
+					func.setting(t);
+				});
+			}).row();
+			table(t -> {
+				defaultTeam = Team.get(data.getInt("defaultTeam", 1));
+				t.left().defaults().left();
+				t.add("@selection.default.team").color(Pal.accent).growX().left().row();
+				t.table(t1 -> {
+					t1.left().defaults().left();
+					Team[] arr = Team.baseTeams;
+					int    c   = 0;
+
+					for (Team team : arr) {
+						ImageButton b = t1.button(IntUI.whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
+							data.put("defaultTeam", team.id);
+							defaultTeam = team;
+						}).size(42).get();
+						b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
+						b.update(() -> b.setChecked(defaultTeam == team));
+						if (++c % 3 == 0) {
+							t1.row();
+						}
+					}
+
+				}).growX().left().padLeft(16);
+			}).row();
+			table(t -> {
+				t.left().defaults().left();
+				SettingsUI.checkboxWithEnum(t, "@settings.focusOnWorld", Settings.focusOnWorld).row();
+				t.check("@settings.drawSelect", 28, drawSelect, b -> drawSelect = b)
+				 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
+			}).row();
+		}
+	}
+}

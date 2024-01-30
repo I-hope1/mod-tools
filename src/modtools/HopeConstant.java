@@ -72,6 +72,14 @@ public class HopeConstant {
 			return null;
 		}
 	}
+	public static <R> R iv(Method method, Object obj, Object... args) {
+		try {
+			return (R) method.invoke(obj, args);
+		} catch (IllegalAccessException | InvocationTargetException e) {
+			return null;
+		}
+	}
+
 	public static <R> R iv(MethodHandle handle, Object... args) {
 		try {
 			return (R) handle.invokeWithArguments(args);

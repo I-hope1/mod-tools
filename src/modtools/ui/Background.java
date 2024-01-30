@@ -9,19 +9,11 @@ import arc.scene.ui.Image;
 import arc.util.Time;
 import mindustry.Vars;
 import modtools.IntVars;
+import modtools.struct.LazyValue;
 
 import static modtools.IntVars.root;
-import static modtools.ui.Background.L0.*;
-import static modtools.ui.Background.L1.*;
 
 public class Background {
-	/* 懒加载 */
-	interface L0 {
-		Texture landscape = new Texture(root.child("横屏.png"));
-	}
-	interface L1 {
-		Texture portrait = new Texture(root.child("竖屏.png"));
-	}
 	public static void load() {
 		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
 		if (!(tmp instanceof Group group)) return;
@@ -31,7 +23,6 @@ public class Background {
 
 		// Draw.rect(Draw.wrap(Core.graphics.isPortrait() ? portrait : landscape), 0, 0);
 		Image img = new Image(new TextureRegion());
-		//		img.rotation = Core.graphics.isPortrait() ? 90 : 0;
 		img.setFillParent(true);
 		IntVars.addResizeListener(() -> setRegion(img));
 		Time.runTask(4f, () -> {
@@ -40,6 +31,14 @@ public class Background {
 		});
 	}
 	private static void setRegion(Image img) {
-		img.getRegion().set(Core.graphics.isPortrait() ? portrait : landscape);
+		img.getRegion().set(getTexture());
+	}
+
+	/* 懒加载 */
+	static LazyValue<Texture> landscape = LazyValue.of(() -> new Texture(root.child("横屏.png")));
+	static LazyValue<Texture> portrait  = LazyValue.of(() -> new Texture(root.child("竖屏.png")));
+	private static Texture getTexture() {
+		boolean isPortrait = Core.graphics.isPortrait();
+		return (isPortrait ? portrait : landscape).get();
 	}
 }

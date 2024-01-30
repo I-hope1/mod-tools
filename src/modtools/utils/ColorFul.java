@@ -21,7 +21,7 @@ public class ColorFul {
 		int   index = (int) fin;
 		return Tmp.c1.set(colors[index]).lerp(colors[index + 1], fin - index);
 	}
-	static {
+	static  {
 		Tools.TASKS.add(() -> {
 			timer += Time.delta;
 			color.lerp(colors[i], Mathf.clamp(timer / percent));

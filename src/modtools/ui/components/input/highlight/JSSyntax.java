@@ -25,14 +25,14 @@ public class JSSyntax extends Syntax {
 	public JSSyntax(SyntaxDrawable drawable, Scriptable customScope) {
 		super(drawable);
 		this.customScope = customScope;
-		if (customScope == null) {
+		if (customScope == null || customScope == scope) {
 			customConstantSet = constantSet;
 			customVarSet = varSet;
 		} else {
 			customConstantSet = new ScopeObjectSet(customScope);
 			customConstantSet.addAll(constantSet);
 			customVarSet = new ObjectSet<>(varSet);
-			addValueToSet(customScope, customVarSet, customConstantSet);
+			addValueToSet(customScope, customVarSet, customConstantSet, false);
 		}
 		TOKEN_MAP.putAll(
 		 customConstantSet, c_constants,
@@ -47,23 +47,29 @@ public class JSSyntax extends Syntax {
 
 	static {
 		varSet.addAll("arguments", "Infinity", "Packages");
-		addValueToSet(scope, varSet, constantSet);
+		addValueToSet(scope, varSet, constantSet, true);
 	}
 
 	private static void addValueToSet(
-	 Scriptable scope, ObjectSet<String> varSet, ObjectSet<String> constantSet) {
-		for (Object id : scope.getIds()) {
-			if (!(id instanceof String key)) continue;
-			try {
-				ScriptableObject.putProperty(scope, key,
-				 ScriptableObject.getProperty(scope, key));
-				varSet.add(key);
-			} catch (RuntimeException ignored) {
-				constantSet.add(key);
+	 Scriptable scope, ObjectSet<String> varSet, ObjectSet<String> constantSet,
+	 boolean searchParent) {
+		do {
+			for (Object id : scope.getIds()) {
+				if (!(id instanceof String key)) continue;
+				try {
+					ScriptableObject.putProperty(scope, key,
+					 ScriptableObject.getProperty(scope, key));
+					varSet.add(key);
+				} catch (RuntimeException ignored) {
+					constantSet.add(key);
+				}
 			}
-		}
+			if (!searchParent || scope.getParentScope() == null) break;
+			scope = scope.getParentScope();
+		} while (true);
 	}
 
+	// 根据代码，解析出的变量
 	ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
 
 	ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = ObjectMap.of(

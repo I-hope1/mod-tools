@@ -31,6 +31,7 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
 import modtools.struct.TaskSet;
+import modtools.utils.MySettings.Data;
 import modtools.utils.reflect.*;
 
 import java.util.*;

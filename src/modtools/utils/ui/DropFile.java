@@ -7,6 +7,7 @@ import mindustry.Vars;
 import modtools.ui.IntUI;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.dnd.*;
 import java.io.File;
@@ -22,7 +23,25 @@ public class DropFile {
 		}
 	}
 	public static void openFiSelector(Cons<List<Fi>> fiCons) {
-		new JFrame() {{
+		new FileSelector(fiCons);
+	}
+
+	public static void buildSelector(Table t) {
+		t.button("ImportFromSelector", () -> DropFile.openFiSelector(
+		 list -> {
+			 try {
+				 for (Fi fi : list) {
+					 if (!fi.extEquals("zip") && !fi.extEquals("jar"))
+						 throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
+					 Vars.mods.importMod(fi);
+				 }
+			 } catch (Throwable e) {
+				 IntUI.showException("Failed to import mod from selector", e);
+			 }
+		 }));
+	}
+	private static class FileSelector extends JFrame {
+		public FileSelector(Cons<List<Fi>> fiCons) throws HeadlessException {
 			new DropTarget(getContentPane(), DnDConstants.ACTION_COPY_OR_MOVE,
 			 new DropTargetAdapter() {
 				 public void drop(DropTargetDropEvent event) {
@@ -51,22 +70,7 @@ public class DropFile {
 			setLocationRelativeTo(null);
 			// setDefaultCloseOperation(EXIT_ON_CLOSE);
 			setVisible(true);
-		}};
-	}
-
-	public static void buildSelector(Table t) {
-		t.button("ImportFromSelector", () -> DropFile.openFiSelector(
-		 list -> {
-			 try {
-				 for (Fi fi : list) {
-					 if (!fi.extEquals("zip") && !fi.extEquals("jar"))
-						 throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
-					 Vars.mods.importMod(fi);
-				 }
-			 } catch (Throwable e) {
-				 IntUI.showException("Failed to import mod from selector", e);
-			 }
-		 }));
+		}
 	}
 	/* public static void shareFile(Fi file) {
 		Context app         = ((AndroidApplication) Core.app);

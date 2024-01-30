@@ -8,51 +8,64 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.layout.Table;
+import arc.util.Log;
 
 public class MoveListener extends InputListener {
-	// public float bx, by;
-	public final Table   main;
-	public final Element touch;
-	public       boolean disabled = false, isFiring = false;
-	public Runnable fire;
+	protected final Element  touch;
+	protected final Table    main;
+	public          boolean  disabled = false;
+	public          boolean  isFiring = false;
+	public          Runnable fire;
+
+	public final Vec2 lastMouse = new Vec2();
+	public final Vec2 lastMain  = new Vec2();
 
 	public MoveListener(Element touch, Table main) {
-		this.main = main;
 		this.touch = touch;
+		this.main = main;
 		touch.addListener(this);
 	}
+
 	public void remove() {
 		touch.removeListener(this);
 	}
 
-
-	public Vec2 lastMouse = new Vec2(), lastMain = new Vec2();
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		if (disabled) return false;
-		lastMouse.set(Core.input.mouse());
-		lastMain.set(main.x, main.y);
+
+		recordLastPositions();
+
+		// 标记正在进行拖动操作
 		isFiring = true;
+
 		return true;
 	}
 
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		if (disabled) return;
+
 		if (fire != null) fire.run();
 
-		Vec2 mouse = Core.input.mouse();
-		display(lastMain.x + mouse.x - lastMouse.x, lastMain.y + mouse.y - lastMouse.y);
+		updatePosition();
 	}
 
 	public void display(float x, float y) {
-		float mainWidth  = main.getWidth(), mainHeight = main.getHeight();
-		float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
+		float mainWidth   = main.getWidth();
+		float mainHeight  = main.getHeight();
+		float touchWidth  = touch.getWidth();
+		float touchHeight = touch.getHeight();
+
 		main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
 		main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
 	}
 
-	@Override
-	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-		// super.touchUp(event, x, y, pointer, button);
-		isFiring = false;
+	private void recordLastPositions() {
+		lastMouse.set(Core.input.mouse());
+		lastMain.set(main.x, main.y);
+	}
+
+	private void updatePosition() {
+		Vec2 mouse = Core.input.mouse();
+		display(lastMain.x + mouse.x - lastMouse.x, lastMain.y + mouse.y - lastMouse.y);
 	}
 }

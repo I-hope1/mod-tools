@@ -49,8 +49,7 @@ public class BindCell {
 		else remove();
 	}
 	public boolean toggle1(boolean b) {
-		if (b) build();
-		else remove();
+		toggle(b);
 		return b;
 	}
 

@@ -9,10 +9,9 @@ import arc.util.*;
 import arc.util.Log.LogHandler;
 import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
-import modtools.ModTools;
+import modtools.struct.TaskSet;
 import modtools.ui.IntUI;
 import modtools.ui.components.Window;
-import modtools.struct.TaskSet;
 
 import java.lang.reflect.*;
 import java.util.List;
@@ -20,6 +19,7 @@ import java.util.function.Consumer;
 
 import static ihope_lib.MyReflect.unsafe;
 
+@SuppressWarnings("unchecked")
 public class Tools {
 	public static TaskSet TASKS = new TaskSet();
 
@@ -40,7 +40,7 @@ public class Tools {
 
 	// 去除颜色
 	public static String format(String s) {
-		return s.replaceAll("\\[(\\w+?)\\]", "[\u0001$1]");
+		return s.replaceAll("\\[(\\w+?)]", "[\u0001$1]");
 	}
 
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {
@@ -103,17 +103,6 @@ public class Tools {
 				}
 			}
 		}, 0f, 1f, -1);
-		/*Runnable[] run = {null};
-		run[0] = () -> {
-			Time.runTask(0, () -> {
-				try {
-					toRun.run();
-				} catch (Exception e) {
-					run[0].run();
-				}
-			});
-		};
-		run[0].run();*/
 	}
 
 

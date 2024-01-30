@@ -50,14 +50,14 @@ public class ArrayUtils {
 		return 0 <= i && i < list.size() ? list.get(i) : null;
 	}
 
-	public <T> float sumf(List<T> list, Floatf<T> summer) {
+	public static <T> float sumf(List<T> list, Floatf<T> summer) {
 		float sum = 0;
 		for (T t : list) {
 			sum += summer.get(t);
 		}
 		return sum;
 	}
-	public <T> int sum(List<T> list, Intf<T> summer) {
+	public static <T> int sum(List<T> list, Intf<T> summer) {
 		int sum = 0;
 		for (T t : list) {
 			sum += summer.get(t);

@@ -192,11 +192,11 @@ public class Selection extends Content {
 				});
 			});
 			FunctionBuild("@selection.sumitems", list -> {
-				sumItems(content.items(), i -> sum(list, b -> b.items == null ? 0 : b.items.get(i)),
+				sumItems(content.items(), i -> ArrayUtils.sum(list, b -> b.items == null ? 0 : b.items.get(i)),
 				 list.size() == 1 ? getItemSetter(list.get(0)) : null);
 			});
 			FunctionBuild("@selection.sumliquids", list -> {
-				sumItems(content.liquids(), l -> sumf(list, b -> b.liquids == null ? 0 : b.liquids.get(l)),
+				sumItems(content.liquids(), l -> ArrayUtils.sumf(list, b -> b.liquids == null ? 0 : b.liquids.get(l)),
 				 list.size() == 1 ? getLiquidSetter(list.get(0)) : null);
 			});
 			FunctionBuild("@kill", list -> {

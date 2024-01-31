@@ -7,10 +7,9 @@ dependencies {
 
 	compileOnly 'com.google.auto.service:auto-service:1.1.1'
 	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
-//	compileOnly files("../_libs/auto-service-1.1.1.jar")
-//	annotationProcessor files("../_libs/auto-service-1.1.1.jar")
 
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+//	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 
 //	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 //	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"

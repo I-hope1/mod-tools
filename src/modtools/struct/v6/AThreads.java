@@ -2,6 +2,7 @@ package modtools.struct.v6;
 
 import arc.util.*;
 import modtools.ModTools;
+import modtools.utils.SR.CatchSR;
 
 import java.util.concurrent.*;
 
@@ -19,8 +20,14 @@ public interface AThreads {
 		}
 	}
 
+	ThreadFactory factory = CatchSR.apply(() ->
+	 CatchSR.of(() -> (ThreadFactory) Reflect.invoke(Class.forName("java.lang.Thread$Builder"),
+		Reflect.invoke(Thread.class, "ofVirtual"),
+	 "factory", new Object[0])).get(() -> Thread::new));
 	private static Thread newThread(Runnable r, @Nullable String name, boolean daemon) {
-		Thread thread = name == null ? new Thread(r) : new Thread(r, name);
+		Thread thread = factory.newThread(r);
+		if (name != null) thread.setName(name);
+
 		thread.setDaemon(daemon);
 		thread.setUncaughtExceptionHandler((t, e) -> Log.err(e));
 		return thread;

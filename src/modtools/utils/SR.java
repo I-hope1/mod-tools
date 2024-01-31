@@ -1,6 +1,7 @@
 package modtools.utils;
 
 import arc.func.*;
+import arc.struct.ObjectMap;
 import modtools.utils.Tools.CBoolp;
 
 import java.util.function.*;
@@ -89,7 +90,13 @@ public class SR<T> {
 		return this;
 	}
 	public Runnable asRun(Consumer<T> cons) {
+		T value = this.value;
 		return () -> cons.accept(value);
+	}
+	/** 绑定到单元格值  */
+	public <U> Cons<U> bindTo(Cons2<U, T> cons) {
+		T value = this.value;
+		return v -> cons.get(v,value);
 	}
 	public SR<T> cons(Predicate<T> boolf, Consumer<T> cons) {
 		if (boolf.test(value)) cons.accept(value);
@@ -116,13 +123,6 @@ public class SR<T> {
 	public <R> R get(Function<T, R> func) {
 		return func.apply(value);
 	}
-	public <R> R catchGet(FunctionCatch<T, R> func, Function<T, R> catchF) {
-		try {
-			return func.apply(value);
-		} catch (Throwable e) {
-			return catchF.apply(value);
-		}
-	}
 
 	/* ---- for classes ---- */
 	public static final SR NONE = new SR<>(null) {
@@ -145,12 +145,6 @@ public class SR<T> {
 			}
 		}
 		return this;
-	}
-
-	public static void catchSatisfy(Runnable run) {
-		try {
-			run.run();
-		} catch (SatisfyException ignored) {}
 	}
 
 	public static class SatisfyException extends RuntimeException {}
@@ -178,11 +172,13 @@ public class SR<T> {
 	 * .get(cls::getDeclaredMethods)
 	 * .get(() -> new Method[0])}</pre>
 	 */
+	@SuppressWarnings({"rawtypes", "unchecked"})
 	public static class CatchSR<R> {
 		private              R       value;
-		private static final CatchSR instance = new CatchSR();
 		private CatchSR() {}
+		public static ObjectMap<Thread, CatchSR> caches = new ObjectMap<>();
 		public static <R> CatchSR<R> of(ProvT<R> prov) {
+			CatchSR instance = caches.get(Thread.currentThread(), CatchSR::new);
 			instance.value = null;
 			return instance.get(prov);
 		}
@@ -191,7 +187,7 @@ public class SR<T> {
 				run.run();
 				throw new IllegalStateException("Cannot meet the requirements.");
 			} catch (SatisfyException e) {
-				return (R) instance.value;
+				return (R) caches.get(Thread.currentThread(), CatchSR::new).value;
 			}
 		}
 		public CatchSR<R> get(ProvT<R> prov) {
@@ -209,15 +205,4 @@ public class SR<T> {
 			R get() throws Throwable;
 		}
 	}
-	public static boolean getIgnoreException(CBoolp run, boolean def) {
-		try {
-			return run.get();
-		} catch (Throwable ignored) {
-			return def;
-		}
-	}
-	public interface FunctionCatch<P, R> {
-		R apply(P p) throws Throwable;
-	}
-
 }

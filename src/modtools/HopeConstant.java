@@ -4,14 +4,11 @@ import arc.KeyBinds.KeybindValue;
 import arc.files.Fi;
 import arc.struct.*;
 import arc.util.*;
-import ihope_lib.*;
 import mindustry.Vars;
-import mindustry.core.Version;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
 import modtools.utils.Tools.CProv;
 import modtools.utils.reflect.FieldUtils;
-import rhino.Kit;
 
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
@@ -29,17 +26,18 @@ public class HopeConstant {
 	}
 
 	public interface DESKTOP {
+		/** @see MemberName#flags */
 		long MEMBER_NAME_FLAGS =
 		 FieldUtils.fieldOffset(nl(() -> Class.forName("java.lang.invoke.MemberName")), "flags");
 
-		/** @see java.lang.invoke.MemberName.Factory#INSTANCE */
+		/** @see MemberName.Factory#INSTANCE */
 		Object       FACTORY          = nl(() ->
 		 Reflect.get(Class.forName("java.lang.invoke.MemberName$Factory"), "INSTANCE"));
-		/** @see java.lang.invoke.MemberName#MemberName(Constructor) */
+		/** @see MemberName#MemberName(Constructor) */
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
 		 lookup.findConstructor(Class.forName("java.lang.invoke.MemberName"), MethodType.methodType(void.class, Constructor.class)));
 
-		/** @see java.lang.invoke.MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class)  */
+		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class)  */
 		Method RESOLVE_OR_FAIL   = nl(() ->
 		 Class.forName("java.lang.invoke.MemberName$Factory").getDeclaredMethod("resolveOrFail", byte.class, Class.forName("java.lang.invoke.MemberName"), Class.class, int.class, Class.class));
 		/** @see Lookup#getDirectMethod(byte, Class, MemberName, Lookup)   */
@@ -47,11 +45,15 @@ public class HopeConstant {
 		 Lookup.class.getDeclaredMethod("getDirectMethod", byte.class, Class.class, Class.forName("java.lang.invoke.MemberName"), Lookup.class));
 	}
 	public interface ANDROID {
+		/** MethodHandleImpl(long artMethod, int ref, MethodType mt)  */
 		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = nl(() ->
 		 Class.forName("java.lang.invoke.MethodHandleImpl").getDeclaredConstructor(long.class, int.class, MethodType.class));
 
 		long ART_METHOD = FieldUtils.fieldOffset(nl(() ->
-		 Class.forName("java.lang.reflect.Executable").getDeclaredField("artMethod")));
+		 Executable.class.getDeclaredField("artMethod")));
+
+		long STRING_COUNT = FieldUtils.fieldOffset(nl(() ->
+		 String.class.getDeclaredField("count")));
 	}
 
 	public interface MODS {

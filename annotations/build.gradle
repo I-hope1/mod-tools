@@ -4,6 +4,7 @@ sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+//	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 
 	// only for document
 //	compileOnly files(new File(parent.buildDir0, "libs/${parent.name}-1.0.jar"))

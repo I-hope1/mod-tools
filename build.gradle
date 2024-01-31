@@ -5,43 +5,47 @@ plugins {
 group 'mod-tools'
 version '1.4.4'
 
+//java.sourceCompatibility = JavaVersion.VERSION_17
+//java.targetCompatibility = JavaVersion.VERSION_1_8
 
-static def export(options) {
-	options.compilerArgs.addAll(
-			"--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-			"--add-exports", "java.base/jdk.internal.loader=ALL-UNNAMED",
-			"--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED",
-			// compiler
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
-			"--add-exports", "jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
-			"--add-exports", "java.base/sun.reflect.annotation=ALL-UNNAMED",
-			"--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED",
-			"--add-exports", "jdk.jfr/jdk.jfr.internal=ALL-UNNAMED"
-	)
+def export(compiler) {
+	compiler.options.compilerArgs.addAll(new String[]{
+			"java.base/jdk.internal.misc",
+			"java.base/jdk.internal.loader",
+			"java.base/jdk.internal.reflect",
+			// ---------------
+			"jdk.compiler/com.sun.tools.javac.api",
+			"jdk.compiler/com.sun.tools.javac.code",
+			"jdk.compiler/com.sun.tools.javac.parser",
+			"jdk.compiler/com.sun.tools.javac.processing",
+			"jdk.compiler/com.sun.tools.javac.tree",
+			"jdk.compiler/com.sun.tools.javac.util",
+			"jdk.compiler/com.sun.tools.javac.comp",
+			"jdk.compiler/com.sun.tools.javac.model",
+			"jdk.compiler/com.sun.tools.javac.jvm",
+			"jdk.compiler/com.sun.tools.javac.main",
+			"java.base/sun.reflect.annotation",
+			"java.base/jdk.internal.module",
+			"jdk.jfr/jdk.jfr.internalD"
+	}.collect { "--add-exports=$it=ALL-UNNAMED" })
 }
 
 allprojects {
 	ext {
 		uncVersion = '1.8.9'
+//		jabelVersion = '0.9.0'
 		mindustryVersion = 'v146'
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
 	tasks.withType(JavaCompile).configureEach {
 		options.encoding = 'UTF-8'
-//		targetCompatibility = 17
 //		sourceCompatibility = 17
-		targetCompatibility = 9
+//		targetCompatibility = 17
 		sourceCompatibility = 9
-		export(options)
+		targetCompatibility = 9
+		export(it)
+		options.debug = false
 	}
 	repositories {
 		mavenLocal()
@@ -54,6 +58,7 @@ allprojects {
 sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
+//	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
@@ -162,6 +167,7 @@ tasks.register('playAndroid') {
 				.execute().waitForProcessOutput(System.out, System.err)
 		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -W -S"
 				.execute().waitForProcessOutput(System.out, System.err)
+		Thread.sleep(100)
 		"$adb shell sh ${MDT_ANDROID_DIR}/appendLog.sh"
 				.execute().waitForProcessOutput(System.out, System.err)
 	}

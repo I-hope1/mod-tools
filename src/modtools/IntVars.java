@@ -2,15 +2,14 @@ package modtools;
 
 import arc.Events;
 import arc.files.Fi;
-import arc.util.*;
+import arc.util.Log;
 import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
-import mindustry.mod.Mods.*;
+import mindustry.mod.Mods.ModMeta;
+import modtools.struct.MySet;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
-import modtools.struct.MySet;
-import modtools.utils.MySettings;
 
 import java.util.concurrent.*;
 
@@ -20,8 +19,9 @@ public class IntVars {
 	public static final String  modName = "mod-tools";
 	public static       ModMeta meta;
 
-	public static Fi root,
-	 dataDirectory = Vars.dataDirectory.child("b0kkihope");
+	/** mod的根目录，可能为目录（Fi），也可能为jar（ZipFi）  */
+	public static Fi root;
+	public static Fi dataDirectory = Vars.dataDirectory.child("b0kkihope");
 
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();

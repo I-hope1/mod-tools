@@ -370,7 +370,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		Sr(type).isExtend(cl -> {
 			 if (cl == Drawable.class) addPickDrawable(list);
 			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
-				SR.catchSatisfy(() -> Sr(val)
+				SR.apply(() -> Sr(val)
 				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
 				 .isInstance(Texture.class, INFO_DIALOG::dialog)
 				 .isInstance(Drawable.class, INFO_DIALOG::dialog)

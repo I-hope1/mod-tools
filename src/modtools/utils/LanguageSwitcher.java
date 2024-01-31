@@ -6,6 +6,8 @@ import arc.struct.Seq;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import modtools.HopeConstant.MODS;
+import modtools.IntVars;
+import modtools.struct.v6.AThreads;
 
 import java.util.Locale;
 
@@ -20,9 +22,11 @@ public class LanguageSwitcher {
 		Locale.setDefault(locale);
 		I18NBundle newBundle = I18NBundle.createBundle(handle, locale);
 		addKeyToBundle(newBundle);
-		for (var k : origin.getKeys()) {
-			StringUtils.changeByte(origin.get(k), newBundle.get(k));
-		}
+		IntVars.async(() -> {
+			for (var k : origin.getKeys()) {
+				StringUtils.changeByte(origin.get(k), newBundle.get(k));
+			}
+		});
 		// Core.bundle = newBundle;
 	}
 	private static void addKeyToBundle(I18NBundle bundle) {

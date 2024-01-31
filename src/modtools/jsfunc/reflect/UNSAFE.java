@@ -93,7 +93,7 @@ public interface UNSAFE {
 		}
 	}
 
-	// ---------ADDRESS Poperate---------
+	// ---------ADDRESS Operation---------
 	static long addressOf(Object o) {
 		if (o == null) throw new IllegalArgumentException("o is null.");
 		ONE_ARRAY[0] = o;

@@ -11,13 +11,16 @@ import static ihope_lib.MyReflect.unsafe;
 
 /** Only For Android  */
 public class HiddenApi {
-	public static final VMRuntime runtime            = VMRuntime.getRuntime();
-	public static final long      IBYTES             = Integer.BYTES;
+	public static final VMRuntime runtime = VMRuntime.getRuntime();
+
+	public static final long IBYTES              = Integer.BYTES;
 	// https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY
 	// uint64_t Executable::art_method_
-	public static final int       offset_art_method_ = 24;
+	public static final int  offset_art_method_  = 24;
+	public static final int  offset_string_value = 16;
+
 	public static void setHiddenApiExemptions() {
-		if (trySetHiddenApiExemptions()) return;
+		if (false && trySetHiddenApiExemptions()) return;
 		// 高版本中setHiddenApiExemptions方法直接反射获取不到，得修改artMethod
 		// sdk_version > 28
 		Method setHiddenApiExemptions = findMethod();
@@ -32,7 +35,6 @@ public class HiddenApi {
 	}
 	/** @return true if successful.  */
 	private static boolean trySetHiddenApiExemptions() {
-		// if (true) return false;
 		try {
 			// sdk_version <= 28
 			runtime.setHiddenApiExemptions(new String[]{"L"});
@@ -78,27 +80,33 @@ public class HiddenApi {
 		}
 
 		final long size_art_method = min_second - min;
-		// Log.info("size: " + size_art_method);
+		Log.debug("size_art_method: " + size_art_method);
 		if (size_art_method > 0 && size_art_method < 100) {
-			for (long artMethod = min + size_art_method; artMethod < max; artMethod += size_art_method) {
+			for (long artMethod = min_second; artMethod < max; artMethod += size_art_method) {
 				// 这获取的是array[0]的 *Method，大小32bit
 				final long address_Method = unsafe.getInt(address);
 				// 修改第一个方法的artMethod
 				unsafe.putLong(address_Method + offset_art_method_, artMethod);
 				// 安卓的getName是native实现，修改了artMethod，name自然会变
 				if ("setHiddenApiExemptions".equals(array[0].getName())) {
+					Log.debug("Got: " + array[0]);
 					return array[0];
 				}
 			}
 		}
 		return null;
 	}
-	public static long addressOf(Method[] array) {
+	public static long addressOf(Object[] array) {
 		try {
 			return runtime.addressOf(array);
 		} catch (Throwable ignored) {}
-		return UNSAFE.addressOf(array) + offset;
+		return addressOf((Object) array);
 	}
+	public static long addressOf(Object obj) {
+
+		return UNSAFE.addressOf(obj) + offset;
+	}
+
 	static long offset;
 
 	static {
@@ -106,4 +114,11 @@ public class HiddenApi {
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.addressOf(ints);
 	}
+
+	/* static {
+		String from = "还行";
+		String to = "japbbb哦爱家";
+		StringUtils.changeByte(from, to);
+		Log.info("@ -> @", from, to);
+	} */
 }

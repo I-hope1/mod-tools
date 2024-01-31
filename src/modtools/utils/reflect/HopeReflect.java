@@ -1,7 +1,7 @@
 package modtools.utils.reflect;
 
 import arc.util.*;
-import dalvik.system.VMRuntime;
+import dalvik.system.*;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
@@ -63,6 +63,7 @@ public class HopeReflect {
 	}
 
 	public static Class<?> getCaller() {
+		if (OS.isAndroid) return VMStack.getStackClass2();
 		Thread              thread = Thread.currentThread();
 		StackTraceElement[] trace  = thread.getStackTrace();
 		try {

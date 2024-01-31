@@ -185,7 +185,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			public void run() {
 				StringWriter stringWriter = new StringWriter();
 				com.strobel.decompiler.Decompiler.decompile(
-				 // clazz.getClassLoader().getResource()
 				 clazz.getName().replace('.', '/') + ".class",
 				 new com.strobel.decompiler.PlainTextOutput(stringWriter)
 				);
@@ -457,7 +456,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			try {
 				l[0].setVal();
 				buildFieldValue(c_cell, l[0]);
-				t.add(l[0]).minWidth(42).growX().uniformX()
+				t.add(l[0]).minWidth(42).grow()
+				 // .update(Element::validate)
 				 .labelAlign(Align.topLeft);
 			} catch (Throwable e) {
 				l[0].setError();

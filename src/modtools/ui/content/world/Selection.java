@@ -55,7 +55,7 @@ import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.world.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
-import static modtools.utils.world.WorldDraw.drawRegion;
+import static modtools.utils.world.WorldDraw.*;
 
 @SuppressWarnings({"rawtypes", "CodeBlock2Expr", "DanglingJavadoc"})
 public class Selection extends Content {
@@ -666,6 +666,7 @@ public class Selection extends Content {
 		public Table pane;
 
 		{
+			margin(4, 4, 4, 4);
 			titleTable.remove();
 			/* 禁用缩放和移动侦听器 */
 			touchable = Touchable.childrenOnly;

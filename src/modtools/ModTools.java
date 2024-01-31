@@ -48,6 +48,7 @@ public class ModTools extends Mod {
 	public ModTools() {
 		Log.info("Loaded ModTools constructor" + (isImportFromGame ? " [[[from game]]]" : "") + ".");
 		if (headless) Log.info("Running in headless environment.");
+		// Log.info(HopeReflect.getCaller());
 
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
@@ -70,7 +71,8 @@ public class ModTools extends Mod {
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
 		} catch (Throwable e) {
-			// Log.err(e);
+			/* Log.err(e);
+			System.exit(-1); */
 		}
 
 		HopeCall.init();
@@ -78,7 +80,8 @@ public class ModTools extends Mod {
 		if (isImportFromGame) {
 			loadContent();
 			resolveInputAndUI();
-		} else Events.on(ClientLoadEvent.class, e -> resolveInputAndUI());
+		} else Events.on(ClientLoadEvent.class,
+		 e -> Tools.runLoggedException(ModTools::resolveInputAndUI));
 	}
 
 
@@ -86,7 +89,6 @@ public class ModTools extends Mod {
 		IntVars.meta.hidden = true;
 		// Time.mark();
 		Tools.runIgnoredException(Tester::initExecution);
-		// Log.info(HopeReflect.getCaller());
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 
@@ -107,8 +109,9 @@ public class ModTools extends Mod {
 		});
 	}
 	private static void resolveLibs() {
-		LoadedMod mod = Vars.mods.getMod(ModTools.class);
-		root = mod != null && mod.root != null ? mod.root : new ZipFi(FileUtils.findRoot());
+		// Log.info(root.getClass() + ":" + root);
+		LoadedMod mod = mods.getMod(ModTools.class);
+		root = mod != null ? mod.root : new ZipFi(FileUtils.findRoot());
 		libs = root.child("libs");
 
 		//noinspection Convert2MethodRef
@@ -220,7 +223,7 @@ public class ModTools extends Mod {
 			}
 			return false;
 		} finally {
-			Log.info("Loaded '@' in @ms", sourceFi, Time.elapsed());
+			Log.info("Loaded '@' in @ms", sourceFi.name(), Time.elapsed());
 		}
 	}
 

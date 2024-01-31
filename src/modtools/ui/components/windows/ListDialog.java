@@ -22,7 +22,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 public class ListDialog extends Window {
-	public ArrayList<Fi> list = new ArrayList<>();
+	public List<Fi> list;
 
 	final FilterTable<String> p = new FilterTable<>();
 	Comparator<Fi> sorter;
@@ -41,7 +41,7 @@ public class ListDialog extends Window {
 		cont.pane(p).grow();
 
 		this.file = file;
-		list.addAll(List.of(file.list()));
+		list = new ArrayList<>(Arrays.asList(file.list()));
 		this.fileHolder = fileHolder;
 		this.consumer = consumer;
 		this.pane = pane;

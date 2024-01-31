@@ -35,7 +35,7 @@ public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
 	static        boolean   isImportFromGame = false;
 	public static Throwable error            = null;
-	public static Fi        libs;
+	public static Fi        libs = root.child("libs");
 
 	public static boolean isV6 = Version.number <= 135;
 
@@ -109,11 +109,6 @@ public class ModTools extends Mod {
 		});
 	}
 	private static void resolveLibs() {
-		// Log.info(root.getClass() + ":" + root);
-		LoadedMod mod = mods.getMod(ModTools.class);
-		root = mod != null ? mod.root : new ZipFi(FileUtils.findRoot());
-		libs = root.child("libs");
-
 		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);

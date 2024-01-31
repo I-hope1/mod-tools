@@ -80,13 +80,14 @@ public class MySettings {
 			if (!fi.exists()) {
 				fi.writeString("");
 				return;
-			} else {
-				fi.copyTo(fi.sibling("mod-tools-config.bak"));
 			}
+			Fi bak = fi.sibling("mod-tools-config.bak");
 			try {
 				loadJval(Jval.read(fi.readString()).asObject());
+				fi.copyTo(bak);
 			} catch (Exception e) {
 				Log.err(e);
+				bak.copyTo(fi);
 			}
 		}
 		public void loadJval(JsonMap jsonMap) {

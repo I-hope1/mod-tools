@@ -45,7 +45,6 @@ allprojects {
 		sourceCompatibility = 9
 		targetCompatibility = 9
 		export(it)
-		options.debug = false
 	}
 	repositories {
 		mavenLocal()
@@ -58,7 +57,6 @@ allprojects {
 sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
-//	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")

@@ -7,8 +7,7 @@ It provides many useful tools for developers.
 
 <div align=center><img src="./assets/icon.png" width=50%></div>
 
-
-## showUIList
+## ShowUIList
 
 - Display `icon`, `tex`, `styles`, `colors`, `interps`
 
@@ -47,6 +46,9 @@ It provides many useful tools for developers.
 ## ReviewElement
 
 - Displays a list of elements, double-click to copy the element to a js variable
+- Select untouchable elements.
+- + Mobile: Touch screen with another finger to filter the current element.
+  + Computer: Press ` F` to filter the current element.
 - Press `i` on the element to display the details (Open the `ShowInfoWindow`).
   ![reviewElement](./screenshots/review_element.png)
 

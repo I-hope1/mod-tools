@@ -1,7 +1,7 @@
 package modtools;
 
 import arc.*;
-import arc.files.*;
+import arc.files.Fi;
 import arc.scene.event.VisibilityListener;
 import arc.struct.*;
 import arc.util.*;
@@ -11,7 +11,7 @@ import mindustry.Vars;
 import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
-import mindustry.mod.Mods.*;
+import mindustry.mod.Mods.ModMeta;
 import modtools.android.HiddenApi;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
@@ -22,9 +22,9 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
-import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 
+import javax.management.ReflectionException;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -49,6 +49,7 @@ public class ModTools extends Mod {
 		Log.info("Loaded ModTools constructor" + (isImportFromGame ? " [[[from game]]]" : "") + ".");
 		if (headless) Log.info("Running in headless environment.");
 		// Log.info(HopeReflect.getCaller());
+
 
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");

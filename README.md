@@ -7,7 +7,7 @@
 
 <div align=center><img src="./assets/icon.png" width=50%></div>
 
-## showUIList
+## ShowUIList
 
 - 显示 `icon`, `tex`, `styles`, `colors`, `interps`
 
@@ -22,7 +22,7 @@
 - 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类 (缩写`$`)
 - + `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`;`$.J` 表示 long.class)
-- `$p` 代表 `Packages
+- `$p` 代表 `Packages`
 - [JSFunc](src/modtools/utils/JSFunc.java)
 - 长按收藏夹里的代码，可以添加到启动项
   ![](./screenshots/startup.png)
@@ -44,6 +44,9 @@
 ## ReviewElement
 
 - 显示元素列表，双击复制元素到js变量
+- 选择不可触摸的元素
+- + 移动端：双指过滤当前元素
+  + 电脑端：按`F`过滤当前元素
 - 对着元素按`i`，显示详情（打开ShowInfoWindow)
   ![reviewElement](./screenshots/review_element.png)
 

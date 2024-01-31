@@ -399,10 +399,19 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		public void moveCursor(boolean forward, boolean jump) {
-			super.moveCursor(forward, jump);
+			int limit      = forward ? text.length() : 0;
+			int charOffset = forward ? 0 : -1;
+			int index      = cursor + charOffset;
+			if (forward == (index >= limit)) return;
+			char    c      = text.charAt(index);
+			boolean isWord = isWordCharacter(c);
+			while ((forward ? ++cursor < limit : --cursor > limit) && jump) {
+				c = text.charAt(index);
+				if (c == '\n' || c == '\r') break;
+				if (isWord != continueCursor(cursor, charOffset)) break;
+			}
 			trackCursor();
 		}
-
 		public int clamp(int index) {
 			return Mathf.clamp(index, 0, text.length());
 		}
@@ -518,7 +527,13 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					return false;
 				}
 				trackCursor();
-				// tooltip.show(TextAreaTable.this, getCursorX(), getCursorY() - getRealFirstLineShowing() * lineHeight());
+				if (character == BACKSPACE && cursor > 0) {
+					int lastCursor = cursor;
+					moveCursor(false, Core.input.ctrl());
+					cursor++;
+					if (lastCursor > cursor)
+						changeText(text, new StringBuilder(text).delete(cursor, lastCursor).toString());
+				}
 				return super.keyTyped(event, character);
 			}
 
@@ -555,7 +570,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return text.charAt(i) == c;
 		}
 		public boolean isWordCharacter(char c) {
-			return super.isWordCharacter(c) || c == '_';
+			return super.isWordCharacter(c) || c == '_' || c == '$';
 		}
 	}
 

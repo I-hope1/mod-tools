@@ -115,13 +115,18 @@ public class CellDetailsWindow extends Window implements IDisposable {
 				 }, 2, t);
 			});
 		} */
-	public static Cell<CheckBox> checkboxField(Table cont, Cell<?> obj, String key, Class<?> valueType) {
+	public static Cell<CheckBox> checkboxField(Table cont, Cell<?> obj, String key,
+																						 Class<?> valueType) {
 		return checkboxField(cont, Cell.class, obj, key, valueType);
 	}
-	public static <T> Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
-																									Class<?> valueType) {
+
+	public static <T>
+	Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
+															 Class<?> valueType) {
 		return cont.check(key, 28, getChecked(ctype, obj, key), b -> {
 			 Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
+			 if (obj instanceof Table t) t.layout();
+			 else if (obj instanceof Cell<?> c) c.getTable().layout();
 		 })
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
 		 .checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();

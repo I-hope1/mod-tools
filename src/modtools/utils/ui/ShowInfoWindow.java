@@ -25,7 +25,7 @@ import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.*;
 import modtools.ui.components.input.highlight.JavaSyntax;
-import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.*;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
@@ -44,10 +44,8 @@ import java.util.regex.Pattern;
 import static ihope_lib.MyReflect.lookup;
 import static modtools.IntVars.hasDecompiler;
 import static modtools.ui.HopeStyles.*;
-import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.JSFunc.JColor.*;
-import static modtools.utils.MySettings.*;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
@@ -59,6 +57,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	private final       Object   o;
 	private final       MyEvents events = new MyEvents();
 	public static final Color    tmpC1  = new Color();
+
+	public static final String METHOD_COUNT_PREFIX = " [";
 
 	private ReflectTable
 	 fieldsTable,
@@ -73,7 +73,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		this.clazz = clazz;
 		if (clazz.isPrimitive()) {
 			cont.add("<PRIMITIVE>").color(Color.gray).row();
-			cont.add(clazz.getName()).color(tmpC1.set(c_type)).row();
+			cont.add(clazz.getName().toLowerCase()).color(tmpC1.set(c_type)).row();
 			cont.add(String.valueOf(o));
 			return;
 		}
@@ -127,20 +127,20 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			t.button(Icon.settingsSmall, clearNonei, () -> {
 				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
 					p.background(Styles.black6);
-					p.left().defaults().left();
-					for (E_JSFunc value : E_JSFunc.values()) {
-						value.build("@settings.jsfunc.", p);
-					}
+					p.left().defaults().left().growX();
+					ISettings.buildAll("jsfunc.", p, E_JSFunc.class);
 					// addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
-					addSettingsTable(p, "Display", n -> "jsfunc.display." + n, E_JSFuncDisplay.class);
-					addSettingsTable(p, "Edit", n -> "jsfunc.edit." + n, E_JSFuncEdit.class);
+					ISettings.buildAllWrap("jsfunc.display.", p, "Display", E_JSFuncDisplay.class);
+					ISettings.buildAllWrap("jsfunc.edit.", p, "Edit", E_JSFuncEdit.class);
 				}, false);
 			}).size(42);
 			if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, clearNonei, rebuild0).size(42);
 			if (o != null) {
 				IntUI.addStoreButton(t, "", () -> o);
-				t.label(() -> "" + UNSAFE.addressOf(o)).padLeft(8f);
+				addDisplayListener(
+				 t.label(() -> "" + UNSAFE.addressOf(o)).padLeft(8f),
+				 E_JSFuncDisplay.address);
 			}
 		}).height(42).row();
 		cont.table(t -> {
@@ -172,7 +172,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		// cont.add(build).grow();
 
 		this.cont.add(cont).row();
-		this.cont.add(new ScrollPane(build)).grow().row();
+		this.cont.add(new ScrollPane(build, Styles.smallPane))
+		 .with(p -> p.setOverscroll(false, true))
+		 .grow().row();
 
 		for (E_JSFuncDisplay value : E_JSFuncDisplay.values()) {
 			events.fireIns(value);
@@ -229,7 +231,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .growX().height(42).checked(c[index])
 			 .with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
 			 .row();
-			cont.image().color(Pal.accent).growX().height(2).row();
+			addUnderline(cont, 7, Pal.accent).height(2).row();
 			var table = new ReflectTable();
 			cont.collapser(table, true, () -> c[index])
 			 .pad(4, 6, 4, 6)
@@ -265,8 +267,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		fieldsTable.build(cls, type, fields);
 		Method[] methods = IReflect.impl.getMethods(cls);
 		methodsTable.build(cls, type, methods);
-		Constructor<?>[] constructors1 = IReflect.impl.getConstructors(cls);
-		consTable.build(cls, type, constructors1);
+		Constructor<?>[] constructors = IReflect.impl.getConstructors(cls);
+		consTable.build(cls, type, constructors);
 		Class<?>[] classes = cls.getDeclaredClasses();
 		classesTable.build(cls, type, classes);
 		// 字段
@@ -276,7 +278,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		for (Method m : methods) {buildMethod(o, methodsTable, m);}
 		checkRemovePeek(methodsTable);
 		// 构造器
-		for (Constructor<?> cons : constructors1) {buildConstructor(consTable, cons);}
+		for (Constructor<?> cons : constructors) {buildConstructor(o, consTable, cons);}
 		checkRemovePeek(consTable);
 		// 类
 		for (Class<?> dcls : classes) {buildClass(classesTable, dcls);}
@@ -290,21 +292,24 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
 	}
 	private static void checkRemovePeek(ReflectTable table) {
-		if (!table.lastEmpty && table.current.hasChildren()) table.current.getChildren().peek().remove();
+		if (!table.lastEmpty && table.current.hasChildren())
+			table.current.getChildren().peek().remove();
 	}
 
 
-	private BindCell addDisplayListener(Cell<?> cell0, E_JSFuncDisplay type) {
+	private static BindCell addDisplayListener(Cell<?> cell0, E_JSFuncDisplay type) {
 		BindCell cell = new BindCell(cell0);
-		events.onIns(type, b -> cell.toggle(b.enabled()));
+		MyEvents.on(type, b -> cell.toggle(b.enabled()));
 		return cell;
 	}
-	private void addModifier(Table table, CharSequence string) {
+	private static void addModifier(Table table,
+																	CharSequence string) {addModifier(table, string, 0.7f);}
+	private static void addModifier(Table table, CharSequence string, float scale) {
 		addDisplayListener(table.add(new MyLabel(string, defaultLabel))
-		 .color(tmpC1.set(c_keyword)).fontScale(0.7f)
+		 .color(tmpC1.set(c_keyword)).fontScale(scale)
 		 .padRight(8), E_JSFuncDisplay.modifier);
 	}
-	private void addRType(Table table, Class<?> type, Prov<String> details) {
+	private static void addRType(Table table, Class<?> type, Prov<String> details) {
 		MyLabel label = makeGenericType(type, details);
 		addDisplayListener(table.add(label)
 		 .fontScale(0.9f)
@@ -328,7 +333,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		});
 	}
 
-	public void buildFieldValue(BindCell c_cell, FieldValueLabel l) {
+	public static void buildFieldValue(BindCell c_cell, FieldValueLabel l) {
 		if (!l.isStatic() && l.getObject() == null) return;
 		Class<?> type     = l.type;
 		Cell<?>  cell     = c_cell.cell;
@@ -357,7 +362,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.require();
-			events.onIns(E_JSFuncEdit.number, edit -> {
+			MyEvents.on(E_JSFuncEdit.number, edit -> {
 				cell.setElement(edit.enabled() ? field : null);
 				c_cell.require();
 			});
@@ -376,7 +381,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.require();
-			events.onIns(E_JSFuncEdit.string, edit -> {
+			MyEvents.on(E_JSFuncEdit.string, edit -> {
 				cell.setElement(edit.enabled() ? field : null);
 				c_cell.require();
 			});
@@ -403,7 +408,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return btn;
 	}
 
-	private void buildField(Object o, ReflectTable fields, Field f) {
+	private static void buildField(Object o, ReflectTable fields, Field f) {
 		fields.bind(f);
 		setAccessible(f);
 
@@ -463,33 +468,19 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				l[0].setError();
 			}
 		}).pad(4).growX();
-		addDisplayListener(fields.add(new HoverTable(buttons -> {
-			buttons.right().top().defaults().right().top();
+		addDisplayListener(fields.add(new MyHoverTable(buttons -> {
 			IntUI.addLabelButton(buttons, () -> l[0].val, type);
-			IntUI.addWatchButton(buttons, f.getDeclaringClass().getSimpleName() + ": " + f.getName(), () -> f.get(o))
-			 .disabled(!l[0].isValid());
-		})).top().padRight(-10).width(64)/* .colspan(0) */, E_JSFuncDisplay.buttons);
+			IntUI.addWatchButton(buttons,
+				f.getDeclaringClass().getSimpleName() + ": " + f.getName(),
+				() -> f.get(o))
+			 .disabled(__ -> !l[0].isValid());
+		})).top()/* .colspan(0) */, E_JSFuncDisplay.buttons);
 		fields.row();
-		fields.image().color(tmpC1.set(c_underline)).growX().colspan(6).row();
+
+		addUnderline(fields, 8);
 	}
-	private void buildMethod(Object o, ReflectTable methods, Method m) {
+	private static void buildMethod(Object o, ReflectTable methods, Method m) {
 		if (!E_JSFunc.display_synthetic.enabled() && m.isSynthetic()) return;
-		/* if (m.getName().equals("insert") && m.getParameterCount() == 2 && m.getParameterTypes()[1].isPrimitive() &&
-				(
-				 // m.getParameterTypes()[1] == char.class ||
-				 m.getParameterTypes()[1] == boolean.class ||
-				 m.getParameterTypes()[1] == long.class ||
-				 // m.getParameterTypes()[1] == int.class ||
-				 m.getParameterTypes()[1] == double.class ||
-				 m.getParameterTypes()[1] == float.class ||
-				 // m.getParameterTypes()[1] == byte.class ||
-				 // m.getParameterTypes()[1] == short.class ||
-				 false
-				)) {
-			// methods.unbind();
-			methods.bind(m);
-			// return;
-		} else  */
 		methods.bind(m);
 		setAccessible(m);
 		try {
@@ -557,18 +548,16 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 ValueLabel.newDetailsMenuList(label, m, Method.class)
 				));
 				// float[] prefW = {0};
-				t.add(l).grow().uniformX();
+				t.add(l).grow();
 
-				buttonsCell = t.add(new HoverTable(buttons -> {
-					buttons.right().top().defaults().right().top();
+				buttonsCell = methods.add(new MyHoverTable(buttons -> {
 					if (isSingle && isValid) {
 						buttons.button(Icon.rightOpenOutSmall, flati, catchRun("invoke出错", () -> {
 							dealInvokeResult(m.invoke(o), cell, l);
-						}, l)).size(32, 32);
+						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 					}
 					IntUI.addLabelButton(buttons, () -> l.val, l.type);
-					// addStoreButton(buttons, Core.bundle.get("jsfunc.method", "Method"), () -> m);
-				})).grow().top().right().colspan(2);
+				}));
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow();
 		} catch (Throwable err) {
@@ -578,7 +567,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			Log.err(err);
 		}
 		methods.row();
-		methods.image().color(tmpC1.set(c_underline)).growX().colspan(7).row();
+
+		addUnderline(methods, 4);
 	}
 	private static MethodHandle getHandle(Method m) {
 		try {
@@ -594,15 +584,17 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			throw new RuntimeException(e);
 		}
 	}
-	private void foldUnwrap(ReflectTable table, Member member, MyLabel label, Element attribute) {
+	private static void foldUnwrap(ReflectTable table, Member member, MyLabel label,
+																 Element attribute) {
 		if (table.skip || !E_JSFunc.folded_name.enabled()) return;
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
 			if (size == 1) return;
-			label.setText(label.getText() + " [" + size + "]");
+			label.setText(label.getText() + METHOD_COUNT_PREFIX + size + "]");
 		});
 		IntUI.doubleClick(label, () -> {
-			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren()) return;
+			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren())
+				return;
 			IntUI.showSelectTable(attribute, (p, hide, text) -> {
 				table.left().top().defaults().left().top();
 				var   pair = table.map.get(member.getName());
@@ -612,7 +604,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			}, false, Align.topLeft);
 		}, null);
 	}
-	private void buildConstructor(ReflectTable t, Constructor<?> ctor) {
+	private static void buildConstructor(Object o, ReflectTable t, Constructor<?> ctor) {
 		setAccessible(ctor);
 		try {
 			addModifier(t, buildExecutableModifier(ctor));
@@ -666,14 +658,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		} catch (Throwable e) {
 			Log.err(e);
 		}
-		t.image().color(tmpC1.set(c_underline)).growX().colspan(6).row();
+		addUnderline(t, 7);
 	}
-	private void buildClass(ReflectTable table, Class<?> cls) {
+	private static void buildClass(ReflectTable table, Class<?> cls) {
 		table.bind(wrapClass(cls));
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
-				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ");
+				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ", 1);
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
@@ -689,16 +681,15 @@ public class ShowInfoWindow extends Window implements IDisposable {
 					}
 				}
 
-				addDisplayListener(t.add(new HoverTable(buttons -> {
-					buttons.right().defaults().right();
+				addDisplayListener(t.add(new MyHoverTable(buttons -> {
 					IntUI.addDetailsButton(buttons, () -> null, cls);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
-				})).grow().colspan(0), E_JSFuncDisplay.buttons);
+				})).grow()/* .colspan(0) */, E_JSFuncDisplay.buttons);
 			} catch (Throwable e) {
 				Log.err(e);
 			}
-		}).pad(4).growX().left().top().row();
-		table.image().color(tmpC1.set(c_underline)).growX().colspan(6).row();
+		}).growX().left().top().row();
+		addUnderline(table, 6);
 	}
 
 	/** 双击复制文本内容 */
@@ -707,7 +698,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
 			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));
 		}) */;
-		addDClickCopy(label);
+		addDClickCopy(label, s -> s.replaceAll(" \\[\\d+]", ""));
 		return label;
 	}
 
@@ -739,9 +730,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 		final ObjectMap<String, Pair<Table, Seq<Member>>> map = new ObjectMap<>();
 
-		public void act(float delta) {
-			Tools.runLoggedException(() -> super.act(delta));
-		}
 		public ReflectTable() {
 			left().defaults().left().top();
 		}
@@ -759,7 +747,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		public void bind(Member member) {
 			super.bind(member);
 			skip = false;
-			if (member.getClass().getClassLoader() != Class.class.getClassLoader()) return;
+			if (member instanceof Constructor || member instanceof ClassMember) return;
 
 			skip = E_JSFunc.folded_name.enabled() && map.containsKey(member.getName());
 			skipTable = skip ? map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable) : null;
@@ -778,14 +766,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 		public void build(Class<?> cls, Type type, Object[] arr) {
 			unbind();
-			current = table().name(cls.getSimpleName()).get();
+			current = table().growX().name(cls.getSimpleName()).get();
 			current.left().defaults().left().top();
 			super.row();
-			lastEmpty = false;
 			if (arr.length == 0 && E_JSFunc.hidden_if_empty.enabled()) {
 				lastEmpty = true;
 				return;
 			}
+			lastEmpty = false;
 			current.add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
 			 .style(defaultLabel)
 			 .labelAlign(Align.left).color(cls.isInterface() ? Color.lightGray : Pal.accent).colspan(colspan)
@@ -793,13 +781,30 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				Seq.with(arr).map(String::valueOf),
 				() -> null, __ -> {}, 400, 0, true, Align.left)))
 			 .row();
-			current.image().color(Color.lightGray)
-			 .growX().padTop(6).colspan(colspan).row();
+			addUnderline(current, colspan, Color.lightGray).padTop(6);
 		}
 		public void clear() {
 			labels.each(ValueLabel::clearVal);
 			labels.clear().shrink();
 		}
+	}
+	static class MyHoverTable extends HoverTable {
+		public MyHoverTable(Cons<Table> cons) {
+			super(cons);
+			right().top().defaults().right().top();
+			marginRight(6f);
+			stickX = true;
+		}
+	}
+	private static void addUnderline(ReflectTable table,
+																	 int colspan) {
+		addUnderline(table, colspan, tmpC1.set(c_underline));
+	}
+	private static Cell<Underline> addUnderline(Table table, int colspan, Color color) {
+		var cell = Underline.of(table, colspan);
+		cell.color(color);
+		table.row();
+		return cell;
 	}
 
 	static Table newPairTable() {

@@ -27,7 +27,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.annotations.builder.DataBoolFieldInit;
-import modtools.ui.IntUI;
+import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.utils.*;
 import modtools.ui.content.*;
@@ -53,11 +53,11 @@ public class ShowUIList extends Content {
 	}
 
 	public void _load() {
-		ui = new Window(localizedName(), getW(), 500, true);
+		ui = new Window(localizedName(), getW(), 400, true);
 		Table[] tables = {icons, tex, styles, colorsT, interps};
 		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command};
 
-		String[] names = {"icon", "tex", "styles", "colors", "interp"};
+		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp"};
 		tab = new IntTab(-1, names, colors, tables);
 		tab.setPrefSize(getW(), -1);
 		ui.cont.table(t -> {
@@ -65,7 +65,7 @@ public class ShowUIList extends Content {
 			t.add(bgColorWrap);
 			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
 			t.table(t0 -> t0.check("forceDisabled",
-				forceDisabled, val -> forceDisabled = val))
+				forceDisabled, val -> forceDisabled = val).with(c -> c.setStyle(HopeStyles.hope_defaultCheck)))
 			 .colspan(3).left()
 			 .growX().padTop(-4f);
 		}).row();
@@ -235,8 +235,8 @@ public class ShowUIList extends Content {
 		stack.hovered(() -> label.visible = false);
 		stack.exited(() -> label.visible = true);
 	}
-	private static int getW() {
-		return Core.graphics.isPortrait() ? 300 : 400;
+	private static float getW() {
+		return Core.graphics.isPortrait() ? 320 : 400;
 	}
 	public void build() {
 		if (ui == null) _load();

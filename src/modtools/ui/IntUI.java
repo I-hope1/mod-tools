@@ -56,6 +56,8 @@ public class IntUI {
 	public static final Frag     frag     = new Frag();
 	public static final TopGroup topGroup = new TopGroup();
 
+	public static final int FUNCTION_BUTTON_SIZE = 42;
+
 	private static final LazyValue<ColorPicker> _c = LazyValue.of(ColorPicker::new);
 	public static ColorPicker colorPicker() {
 		return _c.get();
@@ -283,7 +285,8 @@ public class IntUI {
 		}, false, align);
 	}
 	/** TODO: 多个FoldedList有问题 */
-	private static Cell<Table> showMeniList(Iterable<MenuList> list, Runnable hideMenu, Table p, Runnable hide) {
+	private static Cell<Table> showMeniList(Iterable<MenuList> list, Runnable hideMenu, Table p,
+																					Runnable hide) {
 		return p.table(Styles.black6, main -> {
 			for (var menu : list) {
 				Cons<Button> cons = menu.cons;
@@ -291,7 +294,7 @@ public class IntUI {
 				 menu instanceof CheckboxList || menu instanceof FoldedList ? HopeStyles.flatToggleMenut : HopeStyles.flatt,
 				 /** @see Cell#unset */
 				 menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> {}
-				).minSize(DEFAULT_WIDTH, 42).marginLeft(5f).marginRight(5f);
+				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
 				if (menu instanceof FoldedList foldedList) {
 					Core.app.post(() -> {
 						class MyRun implements Runnable {
@@ -348,10 +351,10 @@ public class IntUI {
 			Object o = prov.get();
 			Core.app.post(() -> showInfo(o, o != null ? o.getClass() : clazz));
 		}).size(96, 45); */
-		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 24, () -> {
+		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> {
 			Object o = prov.get();
 			Core.app.post(() -> INFO_DIALOG.showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
-		}).size(32, 32).disabled(__ -> clazz.isPrimitive() && prov.get() == null);
+		}).size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE).disabled(__ -> clazz.isPrimitive() && prov.get() == null);
 	}
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
@@ -377,7 +380,7 @@ public class IntUI {
 			Sr((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : JSFunc.watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
-		})).size(32);
+		})).size(FUNCTION_BUTTON_SIZE);
 	}
 
 
@@ -505,7 +508,8 @@ public class IntUI {
 		t.pack();
 		return t;
 	}
-	private static void newSearch(Cons3<Table, Runnable, String> rebuild, Runnable hide, SelectTable t, Table p) {
+	private static void newSearch(Cons3<Table, Runnable, String> rebuild, Runnable hide,
+																SelectTable t, Table p) {
 		new Search((cont, text) -> rebuild.get(cont, hide, text))
 		 .build(t, p);
 	}
@@ -742,7 +746,8 @@ public class IntUI {
 	public static ConfirmWindow showConfirm(String title, String text, Runnable confirmed) {
 		return showConfirm(title, text, null, confirmed);
 	}
-	public static ConfirmWindow showConfirm(String title, String text, Boolp hide, Runnable confirmed) {
+	public static ConfirmWindow showConfirm(String title, String text, Boolp hide,
+																					Runnable confirmed) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2f);
@@ -798,7 +803,8 @@ public class IntUI {
 	 * @param callback 回调函数，形参为修改后的{@link Color color}
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
-	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback, boolean needDclick) {
+	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback,
+																boolean needDclick) {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);
 		Runnable runnable = () -> {
@@ -985,7 +991,8 @@ public class IntUI {
 		 * @param full the full
 		 * @param noButtons the no buttons
 		 */
-		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full,
+												 boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
 

@@ -33,7 +33,7 @@ public class ListDialog extends Window {
 
 	public ListDialog(String title, Fi file, Func<Fi, Fi> fileHolder, Cons<Fi> consumer, Cons2<Fi, Table> pane,
 										Comparator<Fi> sorter) {
-		super(Core.bundle.get("title." + title, title), Tester.w, 600, true);
+		super(Core.bundle.get("title." + title, title), Tester.WIDTH, 600, true);
 		cont.add("@tester.tip").growX().left().row();
 		new Search((__, text) -> pattern = PatternUtils.compileRegExpOrNull(text))
 		 .build(cont, p);
@@ -138,7 +138,7 @@ public class ListDialog extends Window {
 					list.remove(f);
 					ListDialog.this.build();
 				}).fill().right();
-			}).width(Tester.w);
+			}).width(Tester.WIDTH);
 			p.row();
 			return tmp;
 		}

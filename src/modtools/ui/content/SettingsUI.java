@@ -7,7 +7,6 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.Element;
-import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
@@ -15,7 +14,6 @@ import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Log.LogLevel;
 import mindustry.Vars;
-import mindustry.core.Version;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
@@ -74,10 +72,10 @@ public class SettingsUI extends Content {
 	}
 
 	public void load() {
-		ui = new Window(localizedName(), 425, 90, true);
+		ui = new Window(localizedName(), 395, 90, true);
 		cont = new Table();
-		ui.cont.pane(cont).grow();
-		cont.defaults().minWidth(400).padTop(20);
+		ui.cont.pane(Styles.smallPane, cont).grow().padLeft(6f);
+		cont.defaults().minWidth(375).padTop(20);
 		add("Load", loadTable);
 		add("JSFunc", new LimitTable() {{
 			left().defaults().left();
@@ -85,9 +83,7 @@ public class SettingsUI extends Content {
 		}});
 		add("Effects", Icon.effectSmall, new LimitTable() {{
 			left().defaults().left();
-			for (E_Blur value : E_Blur.values()) {
-				value.build("@settings.blur.", this);
-			}
+			ISettings.buildAll("blur.", this, E_Blur.class);
 		}});
 		/* add("Window", new LimitTable() {{
 			left().defaults().left();
@@ -100,31 +96,18 @@ public class SettingsUI extends Content {
 			 String key = "ShowMainMenuBackground";
 			 SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
 
-			 for (TSettings value : TSettings.values()) {
-				 value.build("@settings.", this);
-			 }
+			 ISettings.buildAll("", this, TSettings.class);
 			 addElemValueLabel(this, "Bound Element",
 				() -> topGroup.drawPadElem,
 				() -> topGroup.setDrawPadElem(null),
 				topGroup::setDrawPadElem,
 				TSettings.debugBounds::enabled);
-			 float minZoom = Vars.renderer.minZoom;
-			 float maxZoom = Vars.renderer.maxZoom;
-			 SettingsUI.slider(this, "rendererMinZoom", Math.min(0.1f, minZoom), minZoom, minZoom, 0.1f, val -> {
-				 Vars.renderer.minZoom = val;
-			 }).change();
-			 SettingsUI.slider(this, "rendererMaxZoom", maxZoom, Math.max(14f, maxZoom), maxZoom, 0.1f, val -> {
-				 Vars.renderer.maxZoom = val;
-			 }).change();
-			 if (Version.number >= 136) {
-				 SettingsUI.slideri(this, "maxSchematicSize", Vars.maxSchematicSize, 500, Vars.maxSchematicSize, 1, val -> {
-					 Vars.maxSchematicSize = val;
-				 });
-			 }
+			 ISettings.buildAll("", this, E_Game.class);
+
 			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 
 			 button("FONT", HopeStyles.flatBordert, () -> {
-				 new DisWindow("FONTS") {{
+				 new DisWindow("FONTS", 120, 200) {{
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
 								SETTINGS.put("font", fi.name());
@@ -144,9 +127,10 @@ public class SettingsUI extends Content {
 			 table(Tex.pane, t -> {
 				 t.defaults().growX().height(42);
 				 t.add("@mod-tools.functions").row();
-				 if (OS.isAndroid || OS.isWindows) t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
-					 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-				 }).height(42).row();
+				 if (/* OS.isAndroid ||  */OS.isWindows || OS.isMac)
+					 t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
+						 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
+					 }).height(42).row();
 				 t.button("Enable Debug Level", Icon.chatSmall, HopeStyles.flatt, () -> {
 					 Log.level = LogLevel.debug;
 				 }).height(42);
@@ -193,50 +177,6 @@ public class SettingsUI extends Content {
 		 }).growX().row();
 	}
 
-	public static Slider slider(Table table, String name, float min, float max, float def, float step, Floatc floatc) {
-		return slider(table, SETTINGS, name, min, max, def, step, floatc);
-	}
-	public static Slider slider(Table table, Data data, String name, float min, float max, float def, float step,
-															Floatc floatc) {
-		Slider slider = new Slider(min, max, step, false);
-		slider.setValue(data.getFloat(name, def));
-		Label value = new Label(slider.getValue() + "", Styles.outlineLabel);
-		slider.moved(val -> {
-			data.put(name, val);
-			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
-			if (floatc != null) floatc.get(val);
-		});
-		Table content = new Table();
-		content.add(Core.bundle.get("settings." + name, name), Styles.outlineLabel).left().growX().wrap();
-		content.add(value).padLeft(10f).right();
-		content.margin(3f, 33f, 3f, 33f);
-		content.touchable = Touchable.disabled;
-		table.stack(slider, content).growX().padTop(4f).row();
-		return slider;
-	}
-	public static Slider slideri(Table table, String name, int min, int max, int def, int step, Intc intc) {
-		return slideri(table, SETTINGS, name, min, max, def, step, intc);
-	}
-	public static Slider slideri(Table table, Data data, String name, int min, int max, int def, int step, Intc intc) {
-		Slider slider = new Slider(min, max, step, false);
-		int    tmp    = data.getInt(name, def);
-		slider.setValue(tmp);
-		Label value = new Label(tmp + "", Styles.outlineLabel);
-		slider.moved(val0 -> {
-			int val = (int) val0;
-			data.put(name, val);
-			value.setText(String.valueOf(val));
-			if (intc != null) intc.get(val);
-		});
-		Table content = new Table();
-		content.add(Core.bundle.get("settings." + name, name), Styles.outlineLabel).left().growX().wrap();
-		content.add(value).padLeft(10f).right();
-		content.margin(3f, 33f, 3f, 33f);
-		content.touchable = Touchable.disabled;
-		table.stack(slider, content).growX().padTop(4f).row();
-		return slider;
-	}
-
 	public static Color colorBlock(
 	 Table table, String text,
 	 Data data, String key, int defaultColor,
@@ -264,41 +204,6 @@ public class SettingsUI extends Content {
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
-
-	@SuppressWarnings("unchecked")
-	public static <T extends ISettings> void addSettingsTable(
-	 Table p, String name, Func<String, String> keyProvider,
-	 Class<T> enumClass) {
-		if (!enumClass.isEnum()) throw new IllegalArgumentException(enumClass + "is not enum");
-		T[] constants = enumClass.getEnumConstants();
-		addSettingsTable(p, name, keyProvider, constants[0].data(), (Enum[]) constants);
-	}
-
-	public static <T extends Enum<T>> void addSettingsTable(
-	 Table p, String name, Func<String, String> keyProvider,
-	 Data data, T[] values) {
-		addSettingsTable(p, name, keyProvider, data, values, false);
-	}
-	/** @param name 为{@code null}就无背景，无name，为{@code ""}但有背景 */
-	public static <T extends Enum<T>> void addSettingsTable(
-	 Table p, String name, Func<String, String> keyProvider,
-	 Data data, T[] values, boolean fireAll) {
-		p.table(name == null ? null : Tex.pane, dis -> {
-			dis.left().defaults().left();
-			if (name != null && !name.isEmpty()) dis.add(name).color(Pal.accent).row();
-			new SettingsBuilder(dis);
-			for (T value : values) {
-				SettingsBuilder.check("@settings." + keyProvider.get(value.name()),
-				 b -> {
-					 data.put(value.name(), b);
-					 MyEvents.fire(value);
-				 }, () -> data.getBool(value.name()));
-				if (fireAll) MyEvents.fire(value);
-			}
-		}).grow().left().row();
-	}
-
-
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {
 		public static Table main;
@@ -307,7 +212,8 @@ public class SettingsUI extends Content {
 		}
 		public static void build(Table main) {SettingsBuilder.main = main;}
 
-		public static <T> void list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify) {
+		public static <T> void list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
+																Func<T, String> stringify) {
 			list(text, cons, prov, list, stringify, () -> true);
 		}
 		public static Cell<Table> list(String prefix, String key, Data data, Seq<String> list,
@@ -316,7 +222,8 @@ public class SettingsUI extends Content {
 			 () -> data.getString(key, list.get(0)), list,
 			 stringify, () -> true);
 		}
-		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify,
+		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
+																			 Func<T, String> stringify,
 																			 Boolp condition) {
 			Table t = new Table();
 			t.right();
@@ -351,7 +258,8 @@ public class SettingsUI extends Content {
 			number(text, false, cons, prov, () -> true, min, max);
 		}
 
-		public static void number(String text, boolean integer, Floatc cons, Floatp prov, Boolp condition) {
+		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
+															Boolp condition) {
 			number(text, integer, cons, prov, condition, 0, Float.MAX_VALUE);
 		}
 
@@ -363,7 +271,8 @@ public class SettingsUI extends Content {
 			numberi(text, cons, prov, () -> true, min, max);
 		}
 
-		public static void numberi(String text, Intc cons, Intp prov, Boolp condition, int min, int max) {
+		public static void numberi(String text, Intc cons, Intp prov, Boolp condition, int min,
+															 int max) {
 			main.table(t -> {
 				t.left();
 				t.add(text).left().padRight(5)
@@ -374,7 +283,8 @@ public class SettingsUI extends Content {
 				 .valid(f -> Strings.parseInt(f) >= min && Strings.parseInt(f) <= max).width(120f).left();
 			}).padTop(0).row();
 		}
-		public static void numberi(String text, Data data, String key, int defaultValue, Boolp condition, int min,
+		public static void numberi(String text, Data data, String key, int defaultValue,
+															 Boolp condition, int min,
 															 int max) {
 			if (defaultValue < min || defaultValue > max) {
 				throw new IllegalArgumentException("defaultValue(" + defaultValue + ") must be in (" + min + ", " + max + ")");
@@ -382,7 +292,8 @@ public class SettingsUI extends Content {
 			numberi(text, val -> data.put(key, val), () -> data.getInt(key, defaultValue), condition, min, max);
 		}
 
-		public static void number(String text, boolean integer, Floatc cons, Floatp prov, Boolp condition, float min,
+		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
+															Boolp condition, float min,
 															float max) {
 			main.table(t -> {
 				t.left();
@@ -395,7 +306,8 @@ public class SettingsUI extends Content {
 			}).padTop(0);
 			main.row();
 		}
-		public static void number(String text, Data data, String key, float defaultValue, Boolp condition, float min,
+		public static void number(String text, Data data, String key, float defaultValue,
+															Boolp condition, float min,
 															float max) {
 			if (defaultValue < min || defaultValue > max) {
 				throw new IllegalArgumentException("defaultValue 必须在 " + min + " 和 " + max + " 之间。当前值为: " + defaultValue);
@@ -411,7 +323,8 @@ public class SettingsUI extends Content {
 			check(text, data, key, false, condition);
 		}
 
-		public static void check(String text, Data data, String key, boolean defaultValue, Boolp condition) {
+		public static void check(String text, Data data, String key, boolean defaultValue,
+														 Boolp condition) {
 			check(text, val -> data.put(key, val), () -> data.getBool(key, defaultValue), condition);
 		}
 

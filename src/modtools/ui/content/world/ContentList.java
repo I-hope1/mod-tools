@@ -13,6 +13,7 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
 import mindustry.gen.*;
+import mindustry.graphics.Pal;
 import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
@@ -22,6 +23,7 @@ import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.content.Content;
 import modtools.utils.*;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.ui.search.*;
 
 import java.lang.reflect.Field;
@@ -44,7 +46,7 @@ public class ContentList extends Content {
 
 	Pattern pattern = null;
 	public void load0() {
-		ui = new Window(localizedName(), getWidth(), 100, true);
+		ui = new Window(localizedName(), 200, 420, true);
 		main = new Table();
 		Table top = new Table();
 		ui.cont.add(top).row();
@@ -76,9 +78,6 @@ public class ContentList extends Content {
 			}
 		}
 		return map;
-	}
-	private static int getWidth() {
-		return 200;
 	}
 	IntTab tab;
 	public void buildAll() {
@@ -117,28 +116,28 @@ public class ContentList extends Content {
 			map.each((name, item) -> {
 				t.bind(name);
 				MyLabel label = new MyLabel(name);
+				t.image().color(Tmp.c1.set(JColor.c_underline)).height(2).growX().colspan(2).row();
 				if (item instanceof UnlockableContent u) {
 					t.add(new Image(u.uiIcon == null ? HopeIcons.interrupt.getRegion() : u.uiIcon)).size(32f)
 					 .with(img -> IntUI.longPress(img, b -> {
-						if (b) {
-							u.load();
-							u.loadIcon();
-							u.init();
-							IntUI.showInfoFade("Loaded " + u.localizedName);
-						} else label.setText((label.getText() + "").equals(name) ? u.localizedName : name);
-					}));
+						 if (b) {
+							 u.load();
+							 u.loadIcon();
+							 u.init();
+							 IntUI.showInfoFade("Loaded " + u.localizedName);
+						 } else label.setText((label.getText() + "").equals(name) ? u.localizedName : name);
+					 }));
 				} else t.add();
-				t.table(Tex.pane,
-					wrap -> wrap.add(label).growX().left().padLeft(8f).padRight(8f)
-				 ).growX().height(42).with(button -> {
-					IntUI.longPress(button, b -> {
-						if (b) {
-							JSFunc.copyText(name, button);
-						} else {
-							if (clicked != null) clicked.get(item);
-						}
-					});
-				}).update(__ -> t.layout()).row();
+				t.button(b -> b.add(label).grow().padLeft(8f).padRight(8f),
+					HopeStyles.clearb, () -> {})
+				 .growX().height(42)
+				 .with(button -> IntUI.longPress(button, b -> {
+					if (b) {
+						JSFunc.copyText(name, button);
+					} else {
+						if (clicked != null) clicked.get(item);
+					}
+				})).update(__ -> t.layout()).row();
 			});
 			t.addPatternUpdateListener(() -> pattern);
 		});

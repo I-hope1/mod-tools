@@ -78,20 +78,7 @@ public interface ReflectTools {
 	}
 
 	static Member wrapClass(Class<?> cl) {
-		return new Member() {
-			public Class<?> getDeclaringClass() {
-				return cl.getDeclaringClass();
-			}
-			public String getName() {
-				return cl.getName();
-			}
-			public int getModifiers() {
-				return cl.getModifiers();
-			}
-			public boolean isSynthetic() {
-				return cl.isSynthetic();
-			}
-		};
+		return new ClassMember(cl);
 	}
 
 	/* -------reflection getter */
@@ -190,5 +177,21 @@ public interface ReflectTools {
 	private static String getClassString0(Class<?> dcl) {
 		return Modifier.isPublic(dcl.getModifiers())
 		 ? dcl.getSimpleName() + ".class" : "Class.forName(\"" + dcl.getName() + "\")";
+	}
+	class ClassMember implements Member {
+		private final Class<?> cl;
+		public ClassMember(Class<?> cl) {this.cl = cl;}
+		public Class<?> getDeclaringClass() {
+			return cl.getDeclaringClass();
+		}
+		public String getName() {
+			return cl.getName();
+		}
+		public int getModifiers() {
+			return cl.getModifiers();
+		}
+		public boolean isSynthetic() {
+			return cl.isSynthetic();
+		}
 	}
 }

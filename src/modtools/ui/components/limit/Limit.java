@@ -5,6 +5,7 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
 import arc.util.Log;
+import modtools.utils.ElementUtils;
 
 import java.util.Locale;
 
@@ -25,11 +26,8 @@ public interface Limit {
 	Vec2 v1 = new Vec2(), v2 = new Vec2();
 
 	static boolean isVisible(Element actor) {
-		Element pane = actor.parent;
-		while (!(pane instanceof ScrollPane)) {
-			if (pane == null) return false;
-			pane = pane.parent;
-		}
+		ScrollPane pane = ElementUtils.findParentPane(actor);
+		if (pane == null) return false;
 
 		pane.localToStageCoordinates(v1.set(0, 0));
 		boolean computeIfOverStage = v1.x + pane.getWidth() > Core.graphics.getWidth()

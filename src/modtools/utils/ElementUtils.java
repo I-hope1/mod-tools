@@ -8,7 +8,8 @@ import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.ScrollPane;
+import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.ui.*;
@@ -69,7 +70,8 @@ public interface ElementUtils {
 		return screenshot(element, false, callback);
 	}
 	/** 使用ScreenUtils截图 */
-	static TextureRegion screenshot(Element el, boolean clear, Cons2<TextureRegion, Pixmap> callback) {
+	static TextureRegion screenshot(Element el, boolean clear,
+																	Cons2<TextureRegion, Pixmap> callback) {
 		int w = (int) el.getWidth(),
 		 h = (int) el.getHeight();
 
@@ -99,6 +101,16 @@ public interface ElementUtils {
 		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
+	static @Nullable ScrollPane findParentPane(Element actor) {
+		while (true) {
+			actor = actor.parent;
+			if (actor instanceof ScrollPane p) return p;
+			if (actor == null) return null;
+		}
+	}
+	static int getColspan(Cell<?> cell) {
+		return Reflect.get(Cell.class, cell, "colspan");
+	}
 	static @Nullable Window getWindow(ValueLabel valueLabel) {
 		Element el = valueLabel;
 		while (el != null) {

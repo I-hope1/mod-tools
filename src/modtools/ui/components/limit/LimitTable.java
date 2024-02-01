@@ -8,6 +8,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
+import modtools.utils.Tools;
 
 import java.util.*;
 
@@ -25,6 +26,9 @@ public class LimitTable extends Table implements Limit {
 	}
 	public LimitTable(Cons<Table> cons) {
 		super(cons);
+	}
+	public void act(float delta) {
+		Tools.runLoggedException(() -> super.act(delta));
 	}
 
 	/* @Override

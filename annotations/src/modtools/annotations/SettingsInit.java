@@ -1,7 +1,6 @@
 package modtools.annotations;
 
 
-import javax.lang.model.element.Element;
 import java.lang.annotation.*;
 
 /**
@@ -9,7 +8,7 @@ import java.lang.annotation.*;
  * <pre>{@code @SettingsInit
  * enum Settings {
  * }}</pre>
- * @see modtools.annotations.processors.ContentProcessor#dealElement(Element) )
+ * @see modtools.annotations.processors.ContentProcessor#dealElement(com.sun.tools.javac.code.Symbol.ClassSymbol) )
  * @see modtools.utils.JSFunc
  */
 @Target(ElementType.TYPE)
@@ -19,4 +18,6 @@ public @interface SettingsInit {
 	String parent() default "";
 	/** 如果data不为null，则到  */
 	String data() default "";
+	/** 是否会触发事件，MyEvents.fire(this)  */
+	boolean fireEvent() default false;
 }

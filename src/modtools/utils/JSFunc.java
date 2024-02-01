@@ -56,8 +56,13 @@ public class JSFunc
 
 
 	public static void addDClickCopy(Label label) {
+		addDClickCopy(label, null);
+	}
+
+	public static void addDClickCopy(Label label, Func<String, String> func) {
 		IntUI.doubleClick(label, null, () -> {
-			copyText(String.valueOf(label.getText()), label);
+			String s = String.valueOf(label.getText());
+			copyText(func != null ? func.get(s) : s, label);
 		});
 	}
 

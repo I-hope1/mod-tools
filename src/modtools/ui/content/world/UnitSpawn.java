@@ -32,7 +32,6 @@ import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.FormatHelper;
-import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
 import static modtools.ui.Contents.tester;
@@ -189,13 +188,17 @@ public class UnitSpawn extends Content {
 	public void load() {
 		loadSettings();
 		listener = new UnitSpawnSelectListener();
-		btn.setDisabled(() -> Vars.state.isMenu());
 	}
 	public boolean isOk(float x, float y, int amount, Team team, UnitType selectUnit) {
 		return validNumber(x) && validNumber(y) && selectUnit != null
 					 && validNumber(amount) && amount > 0 && team != null;
 	}
 
+	public Button buildButton(boolean isSmallized) {
+		Button btn = super.buildButton(isSmallized);
+		btn.setDisabled(() -> Vars.state.isMenu());
+		return btn;
+	}
 	public boolean validNumber(String str) {
 		try {
 			return validNumber(NumberHelper.asFloat(str));

@@ -2,7 +2,6 @@ package modtools.utils;
 
 import arc.func.*;
 import arc.struct.ObjectMap;
-import modtools.utils.Tools.CBoolp;
 
 import java.util.function.*;
 
@@ -158,8 +157,11 @@ public class SR<T> {
 		void get(T p1, int p2);
 	}
 
-	public static <P1, V> Cons<V> makeCons(P1 p1, Cons2<V, P1> cons2) {
-		return v -> cons2.get(v, p1);
+	public static <V, P2> Cons<V> makeCons(P2 p2, Cons2<V, P2> cons2) {
+		return v -> cons2.get(v, p2);
+	}
+	public static <P1, V> Cons<V> makeCons1(P1 p1, Cons2<P1, V> cons2) {
+		return v -> cons2.get(p1, v);
 	}
 
 	/**

@@ -3,7 +3,7 @@ package modtools.events;
 import modtools.annotations.SettingsInit;
 import modtools.utils.JSFunc;
 
-@SettingsInit
+@SettingsInit(fireEvent = true)
 public enum E_JSFunc implements ISettings {
 	watch_multi, search_exact, auto_refresh, display_generic,
 	truncate_text, hidden_if_empty, display_synthetic, update_async,

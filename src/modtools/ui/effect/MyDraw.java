@@ -6,9 +6,11 @@ import arc.graphics.g2d.*;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.graphics.Pal;
 import mindustry.ui.Fonts;
 import modtools.events.E_Blur;
+import modtools.ui.MyFonts;
 
 import static arc.Core.graphics;
 public class MyDraw {
@@ -146,7 +148,7 @@ public class MyDraw {
 	public static float fontHeight() {
 		return font.getLineHeight() * fontScale;
 	}
-	public static Font  font      = Fonts.def;
+	public static Font  font      = MyFonts.def;
 	public static float fontScale = 0.6f;
 	public static void intoDraw(Runnable draw) {
 		float oldScaleX = font.getScaleX();

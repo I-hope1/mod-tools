@@ -45,7 +45,10 @@ public class IntTab {
 		pane = new ScrollPane(null, Styles.smallPane);
 		main = new Table(t -> {
 			t.pane(title).top().fill()
-			 .self(c -> c.update(__ -> c.minHeight(title.getMinHeight() / Scl.scl())));
+			 .self(c -> c.update(p -> {
+				 p.setScrollingDisabled(column, !column);
+				 c.minHeight(title.getMinHeight() / Scl.scl());
+			 }));
 			if (!column) t.row();
 			t.add(pane).self(c -> c.update(__ -> c.width(totalWidth))).grow();
 		}) {
@@ -130,8 +133,8 @@ public class IntTab {
 	float   prefW        = -1, prefH = -1;
 
 	public void setPrefSize(float w, float h) {
-		prefW = w;
-		prefH = h;
+		prefW = w * Scl.scl();
+		prefH = h * Scl.scl();
 		main.pack();
 	}
 	public void setIcons(Drawable... icons) {
@@ -142,6 +145,7 @@ public class IntTab {
 	boolean hideTitle;
 	public Table build() {
 		if (totalWidth == -1) title.defaults().growX();
+		// pane.setScrollingDisabled(!column, column);
 
 		for (int i = 0; i < tables.length; ) {
 			Table t = tables[i];

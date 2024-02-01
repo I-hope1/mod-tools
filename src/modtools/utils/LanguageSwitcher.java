@@ -22,11 +22,9 @@ public class LanguageSwitcher {
 		Locale.setDefault(locale);
 		I18NBundle newBundle = I18NBundle.createBundle(handle, locale);
 		addKeyToBundle(newBundle);
-		IntVars.async(() -> {
-			for (var k : origin.getKeys()) {
-				StringUtils.changeByte(origin.get(k), newBundle.get(k));
-			}
-		});
+		for (var k : origin.getKeys()) {
+			StringUtils.changeByte(origin.get(k), newBundle.get(k));
+		}
 		// Core.bundle = newBundle;
 	}
 	private static void addKeyToBundle(I18NBundle bundle) {

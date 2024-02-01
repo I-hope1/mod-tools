@@ -1,21 +1,18 @@
 package modtools.ui;
 
 import arc.*;
-import arc.func.Prov;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.ui.components.buttons.CircleImageButton;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
@@ -56,17 +53,10 @@ public class Frag extends Table {
 			Content.all.forEach(content -> {
 				if (content == null || !content.loadable()) return;
 				enabledContents.add(content);
-				String localizedName = content.localizedName();
-				var    style         = HopeStyles.cleart;
-				// var style = Styles.cleart;
-				// Objects.requireNonNull(cont);
-				content.btn = table.button(localizedName,
-					content.icon,
-					style, content.icon == Styles.none ? 0 : 20,
-					() -> Tools.runShowedException(content::build))
-				 .marginLeft(6f).update(b ->
-					b.getChildren().get(1).setColor(b.isDisabled() ? Color.gray : Color.white))
-				 .size(120, 40).get();
+				table.image().color(Pal.gray).growX().row();
+				table.add(content.buildButton(false))
+				 .marginLeft(6f)
+				 .size(120, 40);
 				Events.fire(content);
 				if (content.loadable()) Tools.runLoggedException(content::load);
 				table.row();
@@ -102,27 +92,25 @@ public class Frag extends Table {
 		});
 		IntVars.addResizeListener(() -> listener.display(x, y));
 	}
-	public       int hoverSize   = 45;
-	public final int hoverRadius = 96;
+	public       float hoverSize   = 45 * Scl.scl();
+	public final float hoverRadius = 96 * Scl.scl();
 	private void circleBuild() {
-		float angle = 90;
+		float angle          = 90;
+		int   angleReduction = 360 / enabledContents.size();
 		for (Content content : enabledContents) {
-			ImageButton image = new CircleImageButton(content.icon, HopeStyles.hope_flati);
-			image.setTransform(true);
-			float finalAngle = angle;
-			angle -= 30;
+			ImageButton image      = (ImageButton) content.buildButton(true);
+			float       finalAngle = angle;
+			angle -= angleReduction;
 			new LerpFun(Interp.smooth).onUI().registerDispose(1 / 24f, f -> {
 				float rotation1 = Mathf.lerp(0, finalAngle, f);
 				// image.setRotation(rotation1);
 				float radius = Mathf.lerp(0, hoverRadius, f);
 				Core.graphics.requestRendering();
+				image.setSize(hoverSize);
+				image.setOrigin(Align.center);
 				image.setPosition(
 				 top.getWidth() / 2f + radius * Mathf.cosDeg(rotation1),
 				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1));/* Align.center); */
-			});
-			image.update(() -> {
-				image.setSize(hoverSize * Scl.scl());
-				image.setOrigin(Align.center);
 			});
 			image.clicked(content::build);
 			circle.addChild(image);

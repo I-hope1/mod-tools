@@ -126,7 +126,8 @@ public class Window extends Table {
 		if ((OS.isWindows || OS.isMac) && full) IntUI.doubleClick(titleTable, null, this::toggleMaximize);
 		cont.margin(6f);
 		buttons.margin(0);
-		this.minHeight = minHeight;
+		this.minWidth = minWidth * Scl.scl();
+		this.minHeight = minHeight * Scl.scl();
 		this.full = full;
 		this.noButtons = noButtons;
 
@@ -156,16 +157,22 @@ public class Window extends Table {
 
 		Core.app.post(() -> {
 			// 默认最小宽度为pref宽度
-			this.minWidth = Math.max(minWidth, getMinWidth());
-			float minHeight0 = Math.max(minHeight, getMinHeight());
-			sclListener.set(this.minWidth, minHeight0);
-			setSize(Math.max(this.minWidth, getWidth()),
-			 Math.max(this.minHeight, getHeight()));
+			this.minWidth = Math.max(this.minWidth, getMinWidth());
+			float minHeight1 = Math.max(this.minHeight, getMinHeight());
+			sclListener.set(this.minWidth, minHeight1);
+			setSize(Math.max(this.minWidth, getPrefWidth()),
+			 Math.max(this.minHeight, getPrefHeight()));
 			if (this instanceof IDisposable) show();
 		});
 		all.add(this);
 
 		addListener(new ClearScroll());
+	}
+	public float getMinWidth() {
+		return Math.max(minWidth, super.getMaxWidth());
+	}
+	public float getMinHeight() {
+		return Math.max(minHeight, super.getMaxHeight());
 	}
 	private void buildTitle(String title, boolean full) {
 		add(titleTable).growX().height(topHeight).name("titleTable");
@@ -245,11 +252,11 @@ public class Window extends Table {
 		});
 	}
 
-	public Window(String title, float width, float height, boolean full) {
-		this(title, width, height, full, true);
+	public Window(String title, float minWidth, float minHeight, boolean full) {
+		this(title, minWidth, minHeight, full, true);
 	}
-	public Window(String title, float width, float height) {
-		this(title, width, height, false);
+	public Window(String title, float minWidth, float minHeight) {
+		this(title, minWidth, minHeight, false);
 	}
 	public Window(String title) {
 		this(title, 120, 80, false);
@@ -619,6 +626,11 @@ public class Window extends Table {
 		return this;
 	}
 
+	public boolean fire(SceneEvent event) {
+		boolean[] b = {false};
+		Tools.runLoggedException(() -> b[0] = super.fire(event));
+		return b[0];
+	}
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
 		Draw.alpha(parentAlpha);
@@ -694,14 +706,11 @@ public class Window extends Table {
 	public interface DelayDisposable extends IDisposable {}
 
 	public static class DisWindow extends Window implements IDisposable {
-		public DisWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
-			super(title, minWidth, minHeight, full, noButtons);
+		public DisWindow(String title, float minWidth, float minHeight, boolean full) {
+			super(title, minWidth, minHeight, full);
 		}
-		public DisWindow(String title, float width, float height, boolean full) {
-			super(title, width, height, full);
-		}
-		public DisWindow(String title, float width, float height) {
-			super(title, width, height);
+		public DisWindow(String title, float minWidth, float minHeight) {
+			super(title, minWidth, minHeight);
 		}
 		public DisWindow(String title) {
 			super(title);

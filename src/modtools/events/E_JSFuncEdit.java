@@ -2,7 +2,7 @@ package modtools.events;
 
 import modtools.annotations.*;
 
-@SettingsInit
+@SettingsInit(value = "Edit", parent = "E_JSFunc", fireEvent = true)
 public enum E_JSFuncEdit implements ISettings {
 	number, string,
 	final_modify;

@@ -2,13 +2,23 @@
 package modtools.ui.content;
 
 import arc.Core;
-import arc.scene.style.Drawable;
-import arc.scene.ui.TextButton;
+import arc.func.Boolp;
+import arc.graphics.Color;
+import arc.scene.Element;
+import arc.scene.style.*;
+import arc.scene.ui.*;
+import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.ui.ImageButton.ImageButtonStyle;
+import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
 import mindustry.gen.Icon;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.ui.HopeStyles;
+import modtools.ui.components.buttons.CircleImageButton;
 import modtools.utils.MySettings.Data;
+import modtools.utils.Tools;
 
 import java.util.ArrayList;
 
@@ -18,9 +28,9 @@ import static modtools.utils.MySettings.SETTINGS;
 public abstract class Content {
 	public static final ArrayList<Content> all = new ArrayList<>();
 
-	public final Drawable   icon;
-	public final String     name;
-	public       TextButton btn;
+	public final Drawable icon;
+	public final String   name;
+	public       Runnable update;
 
 	/** 显示名称 */
 	public String localizedName() {
@@ -69,5 +79,34 @@ public abstract class Content {
 
 	public String toString() {
 		return "Content#" + name;
+	}
+
+	public Button buildButton(boolean isSmallized) {
+		return buildButton(isSmallized, null);
+	}
+	public final Button buildButton(boolean isSmallized, Boolp checked) {
+		Button btn = makeButton(isSmallized,
+		 checked == null ?
+			/* un-toggle */isSmallized ? HopeStyles.hope_flati : HopeStyles.cleart
+		 :/* toggle */ isSmallized ? HopeStyles.hope_flatTogglei : HopeStyles.flatTogglet);
+		if (checked != null) {
+			btn.update(() -> btn.setChecked(checked.get()));
+		}
+		return btn;
+	}
+	private Button makeButton(boolean isSmallized, ButtonStyle style) {
+		if (isSmallized) {
+			Button btn = new CircleImageButton(icon, (ImageButtonStyle) style);
+			btn.setTransform(true);
+			return btn;
+		}
+		String     localizedName = localizedName();
+		TextButton button        = new TextButton(localizedName, (TextButtonStyle) style);
+		button.add(new Image(icon)).size(icon == Styles.none ? 0 : 20);
+		button.getCells().reverse();
+		button.clicked(() -> Tools.runShowedException(this::build));
+		button.update(() -> button.setColor(button.isDisabled() ? Color.gray : Color.white));
+		button.getLabel().setSize(0.9f);
+		return button;
 	}
 }

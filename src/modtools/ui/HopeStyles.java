@@ -25,6 +25,7 @@ import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
 import static modtools.ui.IntUI.whiteui;
 
+@SuppressWarnings("SpellCheckingInspection")
 public class HopeStyles {
 	public static final TextButtonStyle blackt;
 	public static final ButtonStyle     clearb;
@@ -38,7 +39,8 @@ public class HopeStyles {
 	public static ImageButtonStyle
 	 hope_clearNonei,
 	 hope_clearNoneTogglei,
-	 hope_flati;
+	 hope_flati,
+	 hope_flatTogglei;
 	public static TextButtonStyle
 	 hope_clearTogglet;
 	public static ButtonStyle
@@ -62,6 +64,9 @@ public class HopeStyles {
 		hope_flati = new ImageButtonStyle(flati) {{
 			up = paneCircle;
 			down = over = whiteuiCircle.tint(Tmp.c1.set(0x454545_FF));
+		}};
+		hope_flatTogglei = new ImageButtonStyle(hope_flati) {{
+			checked = whiteuiCircle.tint(Tmp.c1.set(Pal.accent).a(0.6f));
 		}};
 		hope_clearTogglet = new TextButtonStyle(cleart) {{
 			over = flatOver;
@@ -106,7 +111,7 @@ public class HopeStyles {
 			background = null;
 		}};
 	}
-	static void setSize(Drawable drawable) {setSize(drawable, 28, 28);}
+	static void setSize(Drawable drawable) {setSize(drawable, 28 * Scl.scl(), 28 * Scl.scl());}
 	public static void setSize(Drawable drawable, float minWidth, float minHeight) {
 		if (drawable == null) return;
 		drawable.setMinWidth(minWidth);

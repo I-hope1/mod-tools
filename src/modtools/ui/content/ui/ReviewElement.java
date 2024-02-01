@@ -1,8 +1,18 @@
 package modtools.ui.content.ui;
 
+import static arc.Core.scene;
+import static modtools.ui.Contents.review_element;
+import static modtools.ui.HopeStyles.defaultLabel;
+import static modtools.ui.IntUI.*;
+import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
+import static modtools.utils.Tools.Sr;
+import static modtools.utils.ui.FormatHelper.*;
+
+import java.util.regex.*;
+
 import arc.Core;
 import arc.func.*;
-import arc.graphics.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
@@ -43,16 +53,6 @@ import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;
 
-import java.util.regex.*;
-
-import static arc.Core.scene;
-import static modtools.ui.Contents.review_element;
-import static modtools.ui.HopeStyles.defaultLabel;
-import static modtools.ui.IntUI.*;
-import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
-import static modtools.utils.Tools.Sr;
-import static modtools.utils.ui.FormatHelper.*;
-
 /** It should be `InspectElement`, but it's too late.  */
 public class ReviewElement extends Content {
 	@DataColorFieldInit(data = "", needSetting = true)
@@ -81,15 +81,21 @@ public class ReviewElement extends Content {
 	public static Element FOCUS_FROM;
 	public static Window  FOCUS_WINDOW;
 
-	public static void addFocusSource(Element source, Prov<Window> windowProv, Prov<Element> focusProv) {
+	public static void addFocusSource(Element source, Prov<Window> windowProv,
+																		Prov<Element> focusProv) {
 		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
 		if (windowProv == null) throw new IllegalArgumentException("windowProv is null.");
-		source.hovered(() -> {
-			FOCUS_FROM = source;
-			FOCUS = focusProv.get();
-			FOCUS_WINDOW = windowProv.get();
+		source.addListener(new InputListener() {
+			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+				FOCUS_FROM = source;
+				FOCUS = focusProv.get();
+				FOCUS_WINDOW = windowProv.get();
+			}
+			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+				if (toActor != null && source.isAscendantOf(toActor)) return;
+				CANCEL_TASK.run();
+			}
 		});
-		source.exited(CANCEL_TASK);
 	}
 	public static final Color focusColor = DEF_FOCUS_COLOR;
 	public static final Color maskColor  = DEF_MASK_COLOR;
@@ -97,7 +103,10 @@ public class ReviewElement extends Content {
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			left().defaults().left();
-			table(t -> settingColor(t)).grow();
+			table(t -> {
+				ISettings.buildAll("", t, Settings.class);
+				settingColor(t);
+			}).grow();
 		}});
 	}
 
@@ -105,6 +114,7 @@ public class ReviewElement extends Content {
 	public void settingColor(Table t) {}
 
 
+	ReviewFocusTask task;
 	public void load() {
 		loadSettings();
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
@@ -118,14 +128,15 @@ public class ReviewElement extends Content {
 			}
 		});
 
-		ReviewFocusTask task = new ReviewFocusTask();
+		task = new ReviewFocusTask();
 		topGroup.focusOnElement(task);
 
-		btn.update(() -> btn.setChecked(task.isSelecting()));
-		btn.setStyle(HopeStyles.hope_clearTogglet);
-
-		TopGroup.searchBlackList.add(btn);
 		TopGroup.classBlackList.add(ReviewElementWindow.class);
+	}
+	public Button buildButton(boolean isSmallized) {
+		Button btn = buildButton(isSmallized, () -> task.isSelecting());
+		TopGroup.searchBlackList.add(btn);
+		return btn;
 	}
 	public void drawPadding(Element elem, Vec2 vec2, Table table) {
 		/* 如果a = 0就返回 */
@@ -250,8 +261,10 @@ public class ReviewElement extends Content {
 						 window.pattern = pattern;
 						 window.show(element.parent);
 						 window.shown(() -> {
-							 window.setSize(width, height);
-							 window.setPosition(x, getY(Align.topLeft), Align.topLeft);
+							 Time.runTask(4, () -> {
+								 window.setSize(width, height);
+								 window.setPosition(x, getY(Align.topLeft), Align.topLeft);
+							 });
 						 });
 						 hide();
 					 };
@@ -324,24 +337,15 @@ public class ReviewElement extends Content {
 		}
 		/** 结构： Label，Image（下划线） */
 		public void addMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
-			if (pattern == null) {
-				table.table(t -> {
-					t.left().defaults().left();
-					makePosLabel(t, pos);
-					t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent);
-				}).growX().left().row();
-				table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
-				return;
-			}
-			table.table(t -> {
-				t.left().defaults().left();
-				makePosLabel(t, pos);
-				for (var line : text.split("\\n")) {
-					highlightShow(t, pattern, line);
-					t.row();
-				}
-			}).growX().left().row();
-			table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
+			wrapTable(table, pos,
+			 pattern == null ?
+				t -> 	t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent)
+				: t -> {
+				 for (var line : text.split("\\n")) {
+					 highlightShow(t, pattern, line);
+					 t.row();
+				 }
+			 });
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
@@ -414,6 +418,14 @@ public class ReviewElement extends Content {
 			return elem;
 		}
 	}
+	private static void wrapTable(Table table, Prov<Vec2> pos, Cons<Table> cons) {
+		table.table(t -> {
+			t.left().defaults().left();
+			makePosLabel(t, pos);
+			cons.get(t);
+		}).growX().left().row();
+		table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
+	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
 		if (pos != null) t.label(new PositionProv(pos))
@@ -442,7 +454,7 @@ public class ReviewElement extends Content {
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
 				);
 				defaults().growX();
-				add(new LimitTable(t -> {
+				table(t -> {
 					/*if (children.isEmpty()) {
 							return;
 						}*/
@@ -464,7 +476,7 @@ public class ReviewElement extends Content {
 						if (lastChildrenSize[0] == children.size) return;
 						rebuild.run();
 					};
-				})).left();
+				}).left();
 				// Log.info(wrap);
 			} else if (element instanceof Image img) {
 				childIndex = 0;
@@ -533,8 +545,11 @@ public class ReviewElement extends Content {
 						for (var cell : ((Table) element).getCells()) {
 							d.table(Tex.pane, t0 -> {
 								t0.add(new PlainValueLabel<>(Cell.class, () -> cell));
-							});
-							if (cell.isEndRow()) d.row();
+							}).colspan(ElementUtils.getColspan(cell));
+							if (cell.isEndRow()) {
+								Underline.of(d.row(), 20);
+								d.row();
+							}
 						}
 					});
 				})))
@@ -567,7 +582,8 @@ public class ReviewElement extends Content {
 
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
-			if (name != null) t.add(name).color(Pal.accent).fontScale(0.7f).labelAlign(Align.topLeft).growY().padRight(8f);
+			if (name != null)
+				t.add(name).color(Pal.accent).fontScale(0.7f).labelAlign(Align.topLeft).growY().padRight(8f);
 			t.defaults().grow();
 			if (floatc == null) {
 				t.label(def);
@@ -674,12 +690,30 @@ public class ReviewElement extends Content {
 			table(Tex.pane, this::build);
 		}
 
+		void setPosition(Element elem, Vec2 vec2) {
+			bottom().left();
+			float x = vec2.x;
+			if (x + getPrefWidth() > Core.graphics.getWidth()) {
+				x = Core.graphics.getWidth();
+				right();
+			}
+			if (x < 0) {
+				x = 0;
+				left();
+			}
+			float y = vec2.y + elem.getHeight();
+			if (y + getPrefHeight() > Core.graphics.getHeight()) {
+				y = vec2.y;
+
+				top();
+				if (y - getPrefHeight() < 0) {
+					bottom();
+					y = 0;
+				}
+			}
+			setPosition(x, y);
+		}
 		public static final float padRight = 8f;
-		/* Table cells_ = new Table(c -> {
-			c.row().add("Cell").color(Pal.accent).left().fontScale(0.73f).padLeft(-2f);
-			c.image().color(Tmp.c1.set(Color.orange).lerp(Color.lightGray, 0.9f).a(0.3f)).padLeft(padRight / 2f).padRight(padRight / 2f).growX();
-			c.defaults().colspan(2);
-		}); */
 		private void build(Table t) {
 			t.table(top -> {
 				top.add(nameLabel).color(Color.violet).padLeft(-4f);
@@ -740,15 +774,13 @@ public class ReviewElement extends Content {
 		public void drawFocus(Element elem, Vec2 vec2) {
 			super.afterAll();
 			super.drawFocus(elem, vec2);
-			Gl.flush();
 
 			MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
-			Gl.flush();
 
 			if (!hoverInfoWindow.enabled()) return;
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
 			table.sizeLabel.setText(fixed(elem.getWidth()) + " × " + fixed(elem.getHeight()));
-			table.touchableLabel.setText(toString(elem.touchable));
+			table.touchableLabel.setText(ReviewElement.toString(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
@@ -762,14 +794,6 @@ public class ReviewElement extends Content {
 			}
 
 			showHover(elem, vec2);
-			Gl.flush();
-		}
-		private CharSequence toString(Touchable touchable) {
-			return switch (touchable) {
-				case enabled -> "Enabled";
-				case disabled -> "Disabled";
-				case childrenOnly -> "Children Only";
-			};
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posText:
@@ -837,38 +861,10 @@ public class ReviewElement extends Content {
 			table.cellCell.toggle(
 			 ((Table) table.cellCell.el).getChildren().size > 2/* 两个基础元素 */
 			);
-			// table.layout();
 			table.invalidate();
 			table.getPrefWidth();
 			table.act(0);
-			table.bottom().left();
-			float x = vec2.x;
-			if (x + table.getPrefWidth() > Core.graphics.getWidth()) {
-				x = Core.graphics.getWidth();
-				table.right();
-			}
-			if (x < 0) {
-				x = 0;
-				table.left();
-			}
-			float y = vec2.y + elem.getHeight();
-			if (y + table.getPrefHeight() > Core.graphics.getHeight()) {
-				y = vec2.y;
-				// if (y + table.getPrefHeight() > Core.graphics.getHeight()) y = 0;
-				table.top();
-				if (y - table.getPrefHeight() < 0) {
-					table.bottom();
-					y = 0;
-				}
-			}
-			/* if () {
-				table.bottom();
-				if (!(y < vec2.y && vec2.y + table.getPrefHeight() > y
-							&& y + table.getPrefHeight() < Core.graphics.getHeight())) {
-					y = 0;
-				}
-			} */
-			table.setPosition(x, y);
+			table.setPosition(elem, vec2);
 			table.draw();
 		}
 		final InfoDetails table = new InfoDetails();
@@ -882,5 +878,14 @@ public class ReviewElement extends Content {
 			elem = topGroup.getSelected();
 			if (elem != null) drawFocus(elem);
 		}
+	}
+
+
+	private static CharSequence toString(Touchable touchable) {
+		return switch (touchable) {
+			case enabled -> "Enabled";
+			case disabled -> "Disabled";
+			case childrenOnly -> "Children Only";
+		};
 	}
 }

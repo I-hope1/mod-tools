@@ -63,7 +63,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
-import static modtools.ui.content.SettingsUI.addSettingsTable;
 import static modtools.ui.content.debug.Tester.Async0.executor;
 import static modtools.ui.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
@@ -71,13 +70,11 @@ import static modtools.utils.Tools.*;
 public class Tester extends Content {
 	private static final int FADE_ALIGN = Align.bottomLeft;
 
-	public static final float w = Core.graphics.isPortrait() ? 400 : 420;
+	public static final float WIDTH = Core.graphics.isPortrait() ? 400 : 420;
 
 	public static Scripts    scripts;
 	public static Scriptable topScope, scope;
 	private static Context cx;
-
-	private final int maxHistorySize = 40;
 
 	interface Async0 {
 		ThreadPoolExecutor executor = (ThreadPoolExecutor) AThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1);
@@ -149,6 +146,7 @@ public class Tester extends Content {
 	public Script  script = null;
 	public boolean multiThread;
 	public boolean stopIfOvertime;
+	Task killTask;
 
 	public Tester() {
 		super("tester", Icon.terminalSmall);
@@ -215,7 +213,7 @@ public class Tester extends Content {
 					return CAST.unwrap(script.exec(cx, scope));
 				});
 			});
-		}).growX().minWidth(w).get();
+		}).growX().minWidth(WIDTH).get();
 		_cont.row();
 		Cell<?> logCell = _cont.table(Tex.sliderBack, t -> {
 			Element actor = new Element();
@@ -343,7 +341,7 @@ public class Tester extends Content {
 		Table             p       = new Table();
 		PrefPane          resPane = new PrefPane(p);
 		int               height  = 56;
-		resPane.xp = x -> w;
+		resPane.xp = x -> WIDTH * Scl.scl();
 		resPane.yp = y -> folder.hasChildren() ? height : 0;
 		resPane.setScrollingDisabledY(true);
 		folder.setContainer(table.add(resPane).growX().padLeft(6f));
@@ -450,6 +448,7 @@ public class Tester extends Content {
 		if (historyPos == -1) originalText = area.getText();
 		historyPos += forward ? 1 : -1;
 		Vec2 pos = tmpV.set(ui.x, ui.y + 20);
+		int maxHistorySize = max_history_size.getInt();
 		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= maxHistorySize)) {
 			if (historyPos != -1) showRollback(pos);
 			historyPos = -1;
@@ -521,7 +520,7 @@ public class Tester extends Content {
 
 		int max = history.list.size() - 1;
 		/* 判断是否大于边际（maxHistorySize），大于就删除 */
-		for (int i = max; i >= maxHistorySize; i--) {
+		for (int i = max, maxHistorySize = max_history_size.getInt(); i >= maxHistorySize; i--) {
 			history.list.get(i).deleteDirectory();
 			history.list.remove(i);
 		}
@@ -545,7 +544,8 @@ public class Tester extends Content {
 		error = true;
 		loop = false;
 		if (output_to_log.enabled()) Log.err(name, ex);
-		if (!ignore_popup_error.enabled()) IntUI.showException(Core.bundle.get("error_in_execution"), ex);
+		if (!ignore_popup_error.enabled())
+			IntUI.showException(Core.bundle.get("error_in_execution"), ex);
 		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
 	}
 
@@ -567,14 +567,7 @@ public class Tester extends Content {
 		} else {
 			Core.app.post(this::execAndDealRes);
 		}
-		Timer.schedule(new Task() {
-			public void run() {
-				if ((!multiThread || executor.getActiveCount() > 0) && stopIfOvertime) {
-					killScript = true;
-					cancel();
-				}
-			}
-		}, 4, 0.1f, -1);
+		if (!killTask.isScheduled()) Timer.schedule(killTask, 4, 0.1f, -1);
 	}
 	AddedSeq logs = new AddedSeq();
 	public final LogHandler logHandler = new DefaultLogHandler() {
@@ -609,7 +602,8 @@ public class Tester extends Content {
 		}
 	}
 	private static void setContextToThread() {
-		if (Context.getCurrentContext() != cx) VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
+		if (Context.getCurrentContext() != cx)
+			VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
 	}
 	public void handleError(Throwable ex) {
 		makeError(ex, true);
@@ -638,6 +632,15 @@ public class Tester extends Content {
 		bookmark.hide();
 
 		setup();
+
+		killTask = new Task() {
+			public void run() {
+				if ((!multiThread || executor.getActiveCount() > 0) && stopIfOvertime) {
+					killScript = true;
+					cancel();
+				}
+			}
+		};
 
 		TASKS.add(() -> {
 			if (loop && script != null) {
@@ -778,7 +781,7 @@ public class Tester extends Content {
 		Table table = new Table();
 		table.defaults().growX();
 		dataInit();
-		addSettingsTable(table, null, n -> "tester." + n, settings, Settings.values(), true);
+		ISettings.buildAll("tester.", table, Settings.class);
 
 		Contents.settings_ui.add(localizedName(), icon, table);
 	}
@@ -790,7 +793,8 @@ public class Tester extends Content {
 
 	public Object wrap(Object val) {
 		try {
-			if (val instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
+			if (val instanceof Class)
+				return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
 			if (val instanceof Method method) return new NativeJavaMethod(method, method.getName());
 			if (val instanceof MethodHandle handle) return new NativeJavaHandle(scope, handle);
 			return Context.javaToJS(val, topScope);
@@ -826,9 +830,13 @@ public class Tester extends Content {
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log, js_prop,
-		auto_complement;
+		auto_complement, max_history_size(int.class, 0, 100);
+
+		Settings() {}
+		Settings(Class<?> a, int... args) {}
 		static {
 			wrap_ref.defTrue();
+			max_history_size.def(30);
 		}
 	}
 

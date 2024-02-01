@@ -1,5 +1,7 @@
 package modtools;
 
+import static mindustry.Vars.*;
+
 import arc.Events;
 import arc.files.Fi;
 import arc.util.Log;
@@ -11,10 +13,10 @@ import modtools.files.HFi;
 import modtools.struct.MySet;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
+import modtools.utils.SR;
+import modtools.utils.Tools.CatchRun;
 
 import java.util.concurrent.*;
-
-import static mindustry.Vars.ui;
 
 public class IntVars {
 	public static final String  modName = "mod-tools";
@@ -31,13 +33,14 @@ public class IntVars {
 	public static       boolean hasDecompiler;
 
 
-	public static void showException(Exception e, boolean b) {
+	public static void showException(Throwable e, boolean b) {
 		if (b) {
 			IntUI.showException(e);
 		} else {
 			Log.err(e);
 		}
 	}
+
 	public static void async(Runnable runnable) {
 		async(runnable, null);
 	}
@@ -50,20 +53,19 @@ public class IntVars {
 	}
 	public static void async(String text, Runnable runnable, Runnable callback, boolean displayUI) {
 		if (displayUI) ui.loadfrag.show(text);
-		CompletableFuture<?> completableFuture = CompletableFuture.supplyAsync(() -> {
+		var completableFuture = CompletableFuture.runAsync(() -> {
 			try {
 				runnable.run();
-			} catch (Exception err) {
-				showException(err, displayUI);
+			} catch (Throwable th) {
+				showException(th, displayUI);
 			}
 			if (displayUI) ui.loadfrag.hide();
 			if (callback != null) callback.run();
-			return true;
 		});
 		try {
 			completableFuture.get();
-		} catch (Exception e) {
-			showException(e, displayUI);
+		} catch (Throwable th) {
+			showException(th, displayUI);
 		}
 	}
 

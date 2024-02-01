@@ -5,6 +5,7 @@ import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.Font.Glyph;
+import arc.scene.ui.layout.Scl;
 import arc.struct.Seq;
 import arc.util.Reflect;
 import mindustry.ui.Fonts;
@@ -42,6 +43,8 @@ public class MyFonts {
 		FreeTypeFontGenerator generator = new FreeTypeFontGenerator(fontFi);
 		FreeTypeFontParameter parameter = new FreeTypeFontParameter() {{
 			size = 20;
+			genMipMaps = true;
+			// 可以添加Fonts.def的glyph
 			incremental = true;
 		}};
 		// FreeTypeFontGenerator other = Reflect.get(FreeTypeFontData.class, Fonts.def.getData(), "generator");

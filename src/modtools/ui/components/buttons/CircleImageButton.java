@@ -5,7 +5,6 @@ import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.ImageButton;
-import arc.util.*;
 
 public class CircleImageButton extends ImageButton {
 	public Element hit(float x, float y, boolean touchable) {
@@ -16,8 +15,8 @@ public class CircleImageButton extends ImageButton {
 	public CircleImageButton(Drawable icon, ImageButtonStyle stylen) {
 		super(icon, stylen);
 	}
-	/*
-	public CircleImageButton() {
+
+	/* public CircleImageButton() {
 	}
 	public CircleImageButton(TextureRegion region) {
 		super(region);

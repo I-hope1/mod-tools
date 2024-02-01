@@ -79,10 +79,10 @@ public class Selection extends Content {
 	public Window  pane;
 	// public Table functions;
 	public Team    defaultTeam;
-	// show: select（用于选择）是否显示
+	// hasSelect: select元素（用于选择）是否显示
 	// move: 是否移动
-	boolean show = false;
-	boolean move = false;
+	boolean hasSelect = false;
+	boolean move      = false;
 	public boolean drawSelect = true;
 
 	public static final int
@@ -267,9 +267,7 @@ public class Selection extends Content {
 		});
 		pane.cont.left().add(tab.build()).grow().left();
 
-		btn.setDisabled(() -> Vars.state.isMenu());
 		loadSettings();
-		btn.setStyle(Styles.logicTogglet);
 	}
 	private static Predicate<Building> killCons() {
 		return b -> {
@@ -280,8 +278,7 @@ public class Selection extends Content {
 
 	public void hide() {
 		fragSelect.remove();
-		show = false;
-		btn.setChecked(false);
+		hasSelect = false;
 
 		tiles.clearList();
 		buildings.clearList();
@@ -290,9 +287,14 @@ public class Selection extends Content {
 
 		if (executor != null) executor.shutdownNow();
 	}
+	public Button buildButton(boolean isSmallized) {
+		Button btn = buildButton(isSmallized, () -> hasSelect);
+		btn.setDisabled(() -> Vars.state.isMenu());
+		return btn;
+	}
 	public void build() {
-		show = btn.isChecked();
-		ElementUtils.addOrRemove(fragSelect, show);
+		hasSelect = !hasSelect;
+		ElementUtils.addOrRemove(fragSelect, hasSelect);
 	}
 	public static void getWorldRect(Tile t) {
 		TMP_RECT.set(t.worldx(), t.worldy(), 32, 32);
@@ -845,18 +847,18 @@ public class Selection extends Content {
 					move = true;
 				});
 				WorldUtils.uiWD.drawSeq.add(() -> {
-					if (!show) return false;
+					if (!hasSelect) return false;
 					Draw.color(Pal.accent, 0.3f);
 					draw();
 					return true;
 				});
-				return show;
+				return hasSelect;
 			}
 		}
 		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
 			if (!move) return;
 			super.touchUp(event, mx, my, pointer, button);
-			btn.setChecked(false);
+			hasSelect = false;
 			fragSelect.remove();
 
 			/* if (!Core.input.alt()) {
@@ -928,7 +930,7 @@ public class Selection extends Content {
 				pane.setPosition(mx, my);
 			}
 			pane.show();
-			show = false;
+			hasSelect = false;
 		}
 	}
 

@@ -54,6 +54,9 @@ public class HopeConstant {
 
 		long STRING_COUNT = FieldUtils.fieldOffset(nl(() ->
 		 String.class.getDeclaredField("count")));
+
+		// long OBJECT_SIZE = FieldUtils.fieldOffset(nl(() ->
+		//  Class.class.getDeclaredField("objectSize")));
 	}
 
 	public interface MODS {

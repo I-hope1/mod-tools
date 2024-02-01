@@ -1,11 +1,11 @@
 package modtools.ui.components.input.highlight;
 
+import java.util.HashMap;
+
 import arc.graphics.Color;
 import arc.struct.*;
 import modtools.jsfunc.IScript;
 import rhino.*;
-
-import java.util.*;
 
 public class JSSyntax extends Syntax {
 

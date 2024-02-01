@@ -72,7 +72,7 @@ public interface AnnotationUtils {
 		if (overwrite) overwrite(unit, tree);
 		T ann = el.getAnnotation(clazz);
 		if (ann == null) return null;
-		InvocationHandler h = HopeReflect.getAccess(Proxy.class, ann, "h");
+		InvocationHandler h = Proxy.getInvocationHandler(ann);
 		HashMap<String, Object> map = HopeReflect.getAccess(AnnotationInvocationHandler,
 		 h, "memberValues");
 		map.replaceAll((k, v) ->

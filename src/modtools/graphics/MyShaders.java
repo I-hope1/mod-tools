@@ -7,6 +7,7 @@ import arc.graphics.g2d.*;
 import arc.graphics.gl.Shader;
 import arc.math.Mat;
 import arc.math.geom.*;
+import arc.struct.Seq;
 import arc.util.*;
 import modtools.*;
 
@@ -21,43 +22,10 @@ public class MyShaders {
 
 	public static Fi shaderFi = IntVars.root.child("shaders");
 	public static void load() {
-		/* specl = new Shader(shaderFi.child("screenspace.vert"), shaderFi.child("毛玻璃.frag")) {
-			public void apply() {
-				setUniformf("u_time", Time.time / Scl.scl(1f));
-				float width  = Core.camera.width;
-				float height = Core.camera.height;
-				setUniformf("u_offset",
-						Core.camera.position.x - width / 2,
-						Core.camera.position.y - height / 2);
-				setUniformf("u_texsize", width, height);
-				setUniformf("u_invsize", 1f / width, 1f / height);
-			}
-		}; */
 		baseShader = new Shader(
 		 Core.files.internal("shaders/screenspace.vert"),
 		 shaderFi.child("dist_base.frag"));
 		mixScreen = new MixScreen();
-		// maskShader = new MaskShader();
-		// maskBatch = Core.batch = new SpriteBatch(10, maskShader);
-		// frontShader = new FrontShader();
-
-		// blur = new BlurShader();
-
-		// FrameBuffer buffer = new FrameBuffer();
-		// Shaders.shield = shader;
-		/* Events.run(Trigger.draw, () -> {
-			// Draw.alpha(0.7f);
-			// Fill.rect(0, 0, 1000, 1000);
-			// Draw.shader(shader);
-			// Draw.blit(shader);
-			buffer.resize(graphics.getWidth(), graphics.getHeight());
-			// shader.bind();
-			Draw.drawRange(Layer.shields, 1f, () -> buffer.begin(Color.clear), () -> {
-				buffer.end();
-				buffer.blit(shader);
-				// shader.apply();
-			});
-		}); */
 	}
 
 	public static class MixScreen extends Shader {

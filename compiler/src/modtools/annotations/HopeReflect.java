@@ -24,6 +24,7 @@ import java.util.Map.Entry;
 
 import static modtools.annotations.BaseProcessor.*;
 
+@SuppressWarnings({"rawtypes", "unchecked"})
 public class HopeReflect {
 	public static Unsafe unsafe = getUnsafe();
 	public static Lookup lookup = getLookup();
@@ -81,8 +82,10 @@ public class HopeReflect {
 
 	static {
 		try {
-			ObjectBytes = HopeReflect.class.getClassLoader()
-			 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class").readAllBytes();
+			try (InputStream in = HopeReflect.class.getClassLoader()
+				 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class")) {
+				ObjectBytes = in.readAllBytes();
+			}
 		} catch (IOException e) {
 			PrintHelper.errs(e);
 			throw new RuntimeException(e);
@@ -180,7 +183,7 @@ public class HopeReflect {
 			Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
 			 Class.forName("jdk.internal.util.ClassFileDumper"));
 			definerM.setAccessible(true);
-			var dumper = getAccess(Lookup.class, null, "DEFAULT_DUMPER");
+			Object dumper = getAccess(Lookup.class, null, "DEFAULT_DUMPER");
 			definer = definerM.invoke(lookup, null, bytes, Set.of(), dumper);
 		}
 		return invoke(definer, "defineClass", new Object[]{true}, boolean.class);
@@ -243,9 +246,7 @@ public class HopeReflect {
 			code.setDefined(code.newLocal(l.head));
 		}
 		switch (ms.type.getReturnType().getTag()) {
-			case VOID -> {
-				code.emitop0(ByteCodes.return_);
-			}
+			case VOID -> code.emitop0(ByteCodes.return_);
 			case INT, BYTE, CHAR, SHORT, BOOLEAN -> {
 				code.emitop0(ByteCodes.iconst_0);
 				code.emitop0(ByteCodes.ireturn);

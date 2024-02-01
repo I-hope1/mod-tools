@@ -1,6 +1,5 @@
 package modtools.android;
 
-
 import arc.util.Log;
 import dalvik.system.VMRuntime;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -17,10 +16,9 @@ public class HiddenApi {
 	// https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY
 	// uint64_t Executable::art_method_
 	public static final int  offset_art_method_  = 24;
-	public static final int  offset_string_value = 16;
 
 	public static void setHiddenApiExemptions() {
-		if (false && trySetHiddenApiExemptions()) return;
+		if (trySetHiddenApiExemptions()) return;
 		// 高版本中setHiddenApiExemptions方法直接反射获取不到，得修改artMethod
 		// sdk_version > 28
 		Method setHiddenApiExemptions = findMethod();
@@ -58,6 +56,9 @@ public class HiddenApi {
 
 	private static Method findMethod() {
 		Method[] methods = VMRuntime.class.getDeclaredMethods();
+		if (methods[0].getName().equals("setHiddenApiExemptions")) {
+			return methods[0];
+		}
 		int      length  = methods.length;
 		Method[] array   = (Method[]) runtime.newNonMovableArray(Method.class, length);
 		System.arraycopy(methods, 0, array, 0, length);
@@ -79,6 +80,7 @@ public class HiddenApi {
 			}
 		}
 
+		// 两个artMethod的差值
 		final long size_art_method = min_second - min;
 		Log.debug("size_art_method: " + size_art_method);
 		if (size_art_method > 0 && size_art_method < 100) {
@@ -103,7 +105,6 @@ public class HiddenApi {
 		return addressOf((Object) array);
 	}
 	public static long addressOf(Object obj) {
-
 		return UNSAFE.addressOf(obj) + offset;
 	}
 

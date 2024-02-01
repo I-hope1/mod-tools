@@ -1,5 +1,11 @@
 package modtools;
 
+import static mindustry.Vars.*;
+import static modtools.IntVars.root;
+import static modtools.utils.MySettings.SETTINGS;
+
+import java.util.Arrays;
+
 import arc.*;
 import arc.files.Fi;
 import arc.scene.event.VisibilityListener;
@@ -23,13 +29,6 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.ui.DropFile;
-
-import javax.management.ReflectionException;
-import java.util.Arrays;
-
-import static mindustry.Vars.*;
-import static modtools.IntVars.root;
-import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
@@ -68,6 +67,7 @@ public class ModTools extends Mod {
 	private void load() {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
+		// TestRedefine.load();
 
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();

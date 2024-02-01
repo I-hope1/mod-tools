@@ -139,9 +139,11 @@ public class IntUI {
 	longPress(T elem, final long duration, final Boolc boolc0) {
 		Boolc boolc = b -> Tools.runLoggedException(() -> boolc0.get(b));
 		class LongPressListener extends ClickListener {
+			boolean longPress;
 			class LongPressTask extends Task {
 				public void run() {
 					if (pressed && Core.input.mouse().dst(last) < MAX_OFF) {
+						longPress = true;
 						boolc.get(true);
 					}
 				}
@@ -149,6 +151,7 @@ public class IntUI {
 			final Task task = new LongPressTask();
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (event.stopped) return false;
+				longPress = false;
 				if (super.touchDown(event, x, y, pointer, button)) {
 					last.set(Core.input.mouse());
 					task.cancel();
@@ -159,6 +162,7 @@ public class IntUI {
 			}
 			public void clicked(InputEvent event, float x, float y) {
 				// super.clicked(event, x, y);
+				if (longPress) return;
 				if (task.isScheduled() && pressed) boolc.get(false);
 				task.cancel();
 			}

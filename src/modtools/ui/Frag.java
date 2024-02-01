@@ -68,7 +68,7 @@ public class Frag extends Table {
 					b.getChildren().get(1).setColor(b.isDisabled() ? Color.gray : Color.white))
 				 .size(120, 40).get();
 				Events.fire(content);
-				if (content.loadable()) content.load();
+				if (content.loadable()) Tools.runLoggedException(content::load);
 				table.row();
 			});
 		}), HopeStyles.noBarPane);

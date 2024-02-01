@@ -1,4 +1,4 @@
-package modtools.rhino;
+package modtools.override;
 
 import arc.func.Func2;
 import arc.util.OS;
@@ -11,7 +11,6 @@ import rhino.*;
 
 import java.io.File;
 import java.lang.reflect.*;
-import java.util.concurrent.TimeoutException;
 
 import static modtools.ui.Contents.tester;
 import static modtools.utils.Tools.clName;

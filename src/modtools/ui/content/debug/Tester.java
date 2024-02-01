@@ -33,7 +33,7 @@ import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
-import modtools.rhino.ForRhino;
+import modtools.override.ForRhino;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.components.*;
@@ -702,8 +702,11 @@ public class Tester extends Content {
 		loaded = true;
 		initScript();
 		loadSettings();
-		if (Kit.classOrNull(Tester.class.getClassLoader(), "modtools.rhino.ForRhino")
-				== null) throw new RuntimeException("无法找到类(Class Not Found): modtools.rhino.ForRhino");
+		try {
+			Tester.class.getClassLoader().loadClass(ForRhino.class.getName());
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);
+		}
 
 		Core.app.post(this::addJSInternalProperty);
 	}

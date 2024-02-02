@@ -4,7 +4,7 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
-import arc.util.Align;
+import arc.util.*;
 import modtools.jsfunc.IScript;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;

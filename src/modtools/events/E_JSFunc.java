@@ -1,7 +1,6 @@
 package modtools.events;
 
 import modtools.annotations.SettingsInit;
-import modtools.utils.JSFunc;
 
 @SettingsInit(fireEvent = true)
 public enum E_JSFunc implements ISettings {

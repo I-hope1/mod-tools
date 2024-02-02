@@ -1,13 +1,12 @@
 package modtools.events;
 
-import arc.Core;
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Strings;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;

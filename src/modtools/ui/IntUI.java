@@ -289,6 +289,7 @@ public class IntUI {
 																					Runnable hide) {
 		return p.table(Styles.black6, main -> {
 			for (var menu : list) {
+				if (menu == null) continue;
 				Cons<Button> cons = menu.cons;
 				var cell = main.button(menu.getName(), menu.icon,
 				 menu instanceof CheckboxList || menu instanceof FoldedList ? HopeStyles.flatToggleMenut : HopeStyles.flatt,

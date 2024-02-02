@@ -214,7 +214,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
 			 (pattern == null || find(pattern, member.getName()) != isBlack)
-			 && containsMod(member.getModifiers()) != isBlack;
+			 && containsFlags(member.getModifiers()) != isBlack;
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::setVal);
 			methodsTable.filter(memberBoolf);
@@ -231,7 +231,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .growX().height(42).checked(c[index])
 			 .with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
 			 .row();
-			addUnderline(cont, 7, Pal.accent).height(2).row();
+			Underline.of(cont, 7, Pal.accent).height(2);
 			var table = new ReflectTable();
 			cont.collapser(table, true, () -> c[index])
 			 .pad(4, 6, 4, 6)
@@ -278,12 +278,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		for (Method m : methods) {buildMethod(o, methodsTable, m);}
 		checkRemovePeek(methodsTable);
 		// 构造器
-		for (Constructor<?> cons : constructors) {buildConstructor(o, consTable, cons);}
+		for (Constructor<?> ctor : constructors) {buildConstructor(o, consTable, ctor);}
 		checkRemovePeek(consTable);
 		// 类
 		for (Class<?> dcls : classes) {buildClass(classesTable, dcls);}
 		checkRemovePeek(classesTable);
-
 		// 实现接口
 		buildInterface(o, cls);
 	}
@@ -292,8 +291,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
 	}
 	private static void checkRemovePeek(ReflectTable table) {
-		if (!table.lastEmpty && table.current.hasChildren())
+		if (!table.lastEmpty && table.current.hasChildren()) {
 			table.current.getChildren().peek().remove();
+		}
 	}
 
 
@@ -303,7 +303,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return cell;
 	}
 	private static void addModifier(Table table,
-																	CharSequence string) {addModifier(table, string, 0.7f);}
+																	CharSequence string) {
+		addModifier(table, string, 0.7f);
+	}
 	private static void addModifier(Table table, CharSequence string, float scale) {
 		addDisplayListener(table.add(new MyLabel(string, defaultLabel))
 		 .color(tmpC1.set(c_keyword)).fontScale(scale)
@@ -474,7 +476,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				f.getDeclaringClass().getSimpleName() + ": " + f.getName(),
 				() -> f.get(o))
 			 .disabled(__ -> !l[0].isValid());
-		})).top()/* .colspan(0) */, E_JSFuncDisplay.buttons);
+		})).top().colspan(0), E_JSFuncDisplay.buttons);
 		fields.row();
 
 		addUnderline(fields, 8);
@@ -557,9 +559,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 					}
 					IntUI.addLabelButton(buttons, () -> l.val, l.type);
-				}));
+				})).colspan(0);
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
-			}).grow();
+			}).grow().left();
 		} catch (Throwable err) {
 			MyLabel label = new MyLabel("<" + err + ">", defaultLabel);
 			label.setColor(Color.red);
@@ -604,10 +606,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			}, false, Align.topLeft);
 		}, null);
 	}
-	private static void buildConstructor(Object o, ReflectTable t, Constructor<?> ctor) {
+	private static void buildConstructor(Object o, ReflectTable table, Constructor<?> ctor) {
+		table.bind(ctor);
 		setAccessible(ctor);
 		try {
-			addModifier(t, buildExecutableModifier(ctor));
+			addModifier(table, buildExecutableModifier(ctor));
 			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), defaultLabel);
 			label.color.set(c_type);
 			boolean isSingle = ctor.getParameterCount() == 0;
@@ -615,9 +618,20 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 MenuList.with(Icon.copySmall, "Cpy reflect getter", () -> {
 				 copyExecutableReflection(ctor);
 			 }),
-			 MenuList.with(Icon.copySmall, "Cpy <init> handle", catchRun(() -> {
-				 copyValue("Handle", InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor));
-			 })),
+			 MenuList.with(o == null ? Icon.copySmall : Icon.boxSmall,
+				o == null ? "Cpy <init> handle" : "Invoke <init> method", catchRun(() -> {
+					MethodHandle init = InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor);
+					if (o == null) {
+						copyValue("Handle", init);
+					}
+					if (isSingle) {
+						if (o != null) init.invoke(o);
+					} else JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
+						Seq<Class<?>> parmas = Seq.with(ctor.getParameterTypes());
+						parmas.insert(0, ctor.getDeclaringClass());
+						init.invokeWithArguments(convertArgs(arr, parmas.toArray()));
+					});
+				})),
 			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
 				 if (isSingle) {
 					 catchRun(() -> JSFunc.copyValue("Instance", ctor.newInstance())
@@ -639,29 +653,29 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 }
 				 JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
 					 JSFunc.copyValue("Instance", handle.invokeWithArguments(
-						convertArgs(arr, ctor.getParameterTypes())
-					 ));
+						 convertArgs(arr, ctor.getParameterTypes())
+						));
 				 });
 			 }),
 			 IntUI.copyAsJSMenu("constructor", () -> ctor),
 			 ValueLabel.newDetailsMenuList(label, ctor, Constructor.class)
 			));
-			t.add(label);
-			t.add(buildArgsAndExceptions(ctor)).growY();
+			table.add(label);
+			table.add(buildArgsAndExceptions(ctor)).growY();
 			/* 占位符 */
-			t.add().grow().top();
+			table.add().grow().top();
 
 			/* addDisplayListener(t.table(buttons -> {
 				addStoreButton(buttons, Core.bundle.get("jsfunc.constructor", "Constructor"), () -> cons);
 			}).grow().top().right(), JSFuncDisplay.buttons); */
-			t.row();
+			table.row();
 		} catch (Throwable e) {
 			Log.err(e);
 		}
-		addUnderline(t, 7);
+		addUnderline(table, 7);
 	}
 	private static void buildClass(ReflectTable table, Class<?> cls) {
-		table.bind(wrapClass(cls));
+		table.bind(new ClassMember(cls));
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
@@ -684,7 +698,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				addDisplayListener(t.add(new MyHoverTable(buttons -> {
 					IntUI.addDetailsButton(buttons, () -> null, cls);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
-				})).grow()/* .colspan(0) */, E_JSFuncDisplay.buttons);
+				})).grow().colspan(0), E_JSFuncDisplay.buttons);
 			} catch (Throwable e) {
 				Log.err(e);
 			}
@@ -715,7 +729,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		System.gc();
 	}
 
-	public boolean containsMod(int modifiers) {
+	public boolean containsFlags(int modifiers) {
 		// Log.info("f: @, r: @", Modifier.toString(modifiers), Modifier.toString((short) this.modifiers));
 		for (ModifierR value : ModifierR.values()) {
 			int mod = 1 << value.ordinal();
@@ -737,7 +751,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		Table   skipTable;
 
 		public <T extends Element> Cell<T> add(T element) {
-			var cell = skip ? skipTable.add(element) : (current == null || !isBound() ? super.add(element) : current.add(element));
+			var cell = skip ? skipTable.add(element) :
+			 (current == null || !isBound() ? super.add(element) : current.add(element));
 			bindCell(element, cell);
 			return cell;
 		}
@@ -776,12 +791,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			lastEmpty = false;
 			current.add(makeGenericType(() -> getName(cls), makeDetails(cls, type)))
 			 .style(defaultLabel)
-			 .labelAlign(Align.left).color(cls.isInterface() ? Color.lightGray : Pal.accent).colspan(colspan)
+			 .labelAlign(Align.left)
+			 .color(cls.isInterface() ? Color.lightGray : Pal.accent)
+			 .colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
 				() -> null, __ -> {}, 400, 0, true, Align.left)))
 			 .row();
-			addUnderline(current, colspan, Color.lightGray).padTop(6);
+			Underline.of(current, colspan, Color.lightGray).padTop(6);
 		}
 		public void clear() {
 			labels.each(ValueLabel::clearVal);
@@ -798,13 +815,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private static void addUnderline(ReflectTable table,
 																	 int colspan) {
-		addUnderline(table, colspan, tmpC1.set(c_underline));
-	}
-	private static Cell<Underline> addUnderline(Table table, int colspan, Color color) {
-		var cell = Underline.of(table, colspan);
-		cell.color(color);
-		table.row();
-		return cell;
+		Underline.of(table, colspan, tmpC1.set(c_underline));
 	}
 
 	static Table newPairTable() {

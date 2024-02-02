@@ -111,8 +111,7 @@ public interface ElementUtils {
 	static int getColspan(Cell<?> cell) {
 		return Reflect.get(Cell.class, cell, "colspan");
 	}
-	static @Nullable Window getWindow(ValueLabel valueLabel) {
-		Element el = valueLabel;
+	static @Nullable Window getWindow(Element el) {
 		while (el != null) {
 			el = el.parent;
 			if (el instanceof Window window) return window;

@@ -102,14 +102,14 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public long getOffset() {
 		throw new UnsupportedOperationException("Not implemented yet");
 	}
-	public float getPrefWidth() {
+	/* public float getPrefWidth() {
 		if (prefSizeInvalid) computePrefSize();
 		return getLastSize().x;
 	}
 	public float getPrefHeight() {
 		if (prefSizeInvalid) computePrefSize();
 		return getLastSize().y;
-	}
+	} */
 	// Method m = Label.class.getDeclaredMethod("scaleAndComputePrefSize");
 	void computePrefSize() {
 		prefSizeInvalid = true;

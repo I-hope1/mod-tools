@@ -339,7 +339,7 @@ public class ReviewElement extends Content {
 		public void addMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
 			wrapTable(table, pos,
 			 pattern == null ?
-				t -> 	t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent)
+				t -> t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent)
 				: t -> {
 				 for (var line : text.split("\\n")) {
 					 highlightShow(t, pattern, line);
@@ -541,11 +541,16 @@ public class ReviewElement extends Content {
 			 .ifRun(element instanceof Table, seq -> seq.add(
 				MenuList.with(Icon.waves, "Cells", () -> {
 					INFO_DIALOG.dialog(d -> {
+						Window window1 = ElementUtils.getWindow(this);
 						d.left().defaults().left();
 						for (var cell : ((Table) element).getCells()) {
 							d.table(Tex.pane, t0 -> {
-								t0.add(new PlainValueLabel<>(Cell.class, () -> cell));
-							}).colspan(ElementUtils.getColspan(cell));
+								 var l = new PlainValueLabel<>(Cell.class, () -> cell);
+								 ReviewElement.addFocusSource(l, () -> window1, cell::get);
+								 t0.add(l).grow();
+							 })
+							 .grow()
+							 .colspan(ElementUtils.getColspan(cell));
 							if (cell.isEndRow()) {
 								Underline.of(d.row(), 20);
 								d.row();

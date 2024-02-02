@@ -77,10 +77,6 @@ public interface ReflectTools {
 		return getGenericString(clazz);
 	}
 
-	static Member wrapClass(Class<?> cl) {
-		return new ClassMember(cl);
-	}
-
 	/* -------reflection getter */
 
 	/**

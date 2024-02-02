@@ -3,7 +3,10 @@ package modtools.ui.menu;
 import arc.func.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.Button;
+import arc.struct.Seq;
 import arc.util.pooling.Pools;
+
+import java.util.Iterator;
 
 import static modtools.ui.Contents.tester;
 

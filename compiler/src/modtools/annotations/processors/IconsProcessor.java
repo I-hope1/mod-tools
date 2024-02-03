@@ -17,8 +17,6 @@ import java.util.*;
 
 @AutoService({Processor.class})
 public class IconsProcessor extends BaseProcessor {
-	public static final String GEN_PREFIX = "modtools.gen.";
-
 	public void dealElement(Element element) throws Throwable {
 		JCClassDecl root = /* new JCClassDecl(maker.Modifiers(Flags.PUBLIC),
 		 ns(name), List.nil(), null, List.nil(), List.nil(),
@@ -110,7 +108,8 @@ public class IconsProcessor extends BaseProcessor {
 		root.mods = mMaker.Modifiers(0);
 		root.name = ns(s);
 		var source = /* unit.getSourceFile() */
-		 mFiler.createSourceFile(GEN_PREFIX + genName);
+		 mFiler.createSourceFile((icons.genPackage().equals(".") ? element.getEnclosingElement().toString() :icons.genPackage())
+			+ "." + genName);
 		Writer writer = source.openWriter();
 		writer.write(content);
 		root.defs = List.nil();

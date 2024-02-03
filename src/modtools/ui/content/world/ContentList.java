@@ -1,6 +1,5 @@
 package modtools.ui.content.world;
 
-import arc.Core;
 import arc.func.Cons;
 import arc.graphics.Color;
 import arc.scene.ui.*;
@@ -13,9 +12,7 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
 import mindustry.gen.*;
-import mindustry.graphics.Pal;
 import mindustry.type.*;
-import mindustry.ui.Styles;
 import mindustry.world.Block;
 import modtools.ui.*;
 import modtools.ui.gen.HopeIcons;

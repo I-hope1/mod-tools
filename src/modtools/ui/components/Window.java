@@ -66,6 +66,7 @@ public class Window extends Table {
 		}
 	};
 
+	/** 最前面的窗口  */
 	public static Window frontWindow;
 
 	static {

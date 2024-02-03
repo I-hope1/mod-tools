@@ -24,9 +24,10 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element> implements
 			var stats     = new ArrayList<JCStatement>();
 			addImport(element, FIELD());
 			addImport(element, FIELD_UTILS());
+
 			classDecl.accept(new TreeScanner() {
 				public void visitVarDef(JCVariableDecl variable) {
-					OptimizeReflect annotationByTree = getAnnotationByTree(OptimizeReflect.class, unit, variable, true);
+					OptimizeReflect annotationByTree = getAnnotationByTree(OptimizeReflect.class, unit, variable, false);
 					if (annotationByTree == null) return;
 
 					JCMethodInvocation invocation   = (JCMethodInvocation) variable.init;
@@ -48,7 +49,6 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element> implements
 					 isSetter ? List.of(invocation.args.get(1), mMaker.Ident(x), invocation.args.get(3)) :
 						List.of(invocation.args.get(1), mMaker.Ident(x))
 					);
-					// Log.info(variable);
 				}
 			});
 			mMaker.at(classDecl);
@@ -57,8 +57,7 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element> implements
 	}
 	private JCVariableDecl newFieldVariable(String newFieldName, JCExpression clazz, JCExpression name, JCClassDecl tree,
 																					ArrayList<JCStatement> stats) {
-		JCVariableDecl x;
-		x = addField(tree, Modifier.PRIVATE | Modifier.STATIC,
+		JCVariableDecl x = addField(tree, Modifier.PRIVATE | Modifier.STATIC,
 		 FIELD().type, newFieldName, null);
 		mMaker.at(x);
 		stats.add(mMaker.Exec(mMaker.Assign(mMaker.Ident(x),

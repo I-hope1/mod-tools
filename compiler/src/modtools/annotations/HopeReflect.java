@@ -10,6 +10,7 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.Code.StackMapFormat;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.TreeMaker;
+import jdk.internal.module.Modules;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 import sun.reflect.annotation.ExceptionProxy;
@@ -22,6 +23,7 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.Map.Entry;
 
+import static jdk.internal.module.Modules.*;
 import static modtools.annotations.BaseProcessor.*;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -68,23 +70,29 @@ public class HopeReflect {
 	}
 	public static void module() throws Throwable {
 		MethodHandle OPEN_MODULE = lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class));
-		OPEN_MODULE.invokeExact(Object.class.getModule(), "jdk.internal.module");
-		OPEN_MODULE.invokeExact(Object.class.getModule(), "jdk.internal.misc");
-		OPEN_MODULE.invokeExact(Object.class.getModule(), "sun.reflect.annotation");
-		OPEN_MODULE.invokeExact(Object.class.getModule(), "jdk.internal.access");
-		OPEN_MODULE.invokeExact(TreeMaker.class.getModule(), "com.sun.tools.javac.model");
-		OPEN_MODULE.invokeExact(TreeMaker.class.getModule(), "com.sun.tools.javac.jvm");
-		OPEN_MODULE.invokeExact(TreeMaker.class.getModule(), "com.sun.tools.javac.comp");
-		OPEN_MODULE.invokeExact(TreeMaker.class.getModule(), "com.sun.tools.javac.main");
+
+		Module javaBase = Object.class.getModule();
+		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.module");
+		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.misc");
+		OPEN_MODULE.invokeExact(javaBase, "sun.reflect.annotation");
+		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.access");
+
+		Module jdkCompiler = TreeMaker.class.getModule();
+		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.tree");
+		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.code");
+		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.model");
+		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.jvm");
+		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.comp");
+		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.main");
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
 	}
-	public static byte[] ObjectBytes;
+	public static byte[] defaultBytes;
 
 	static {
 		try {
 			try (InputStream in = HopeReflect.class.getClassLoader()
-				 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class")) {
-				ObjectBytes = in.readAllBytes();
+			 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class")) {
+				defaultBytes = in.readAllBytes();
 			}
 		} catch (IOException e) {
 			PrintHelper.errs(e);
@@ -106,12 +114,12 @@ public class HopeReflect {
 			throw new IllegalArgumentException("type (" + proxy + ") isn't MirroredType(s)ExceptionProxy");
 		if (mirrorTypes.isInstance(proxy)) {
 			List<Type> types = getAccess(mirrorTypes, proxy, "types");
-			return types.stream().map(HopeReflect::defineMirrorClass0)
-			 .toList().toArray(new Class[0]);
+			return types.stream().map(HopeReflect::defineMirrorType0)
+			 .toList().toArray(Class[]::new);
 		}
 		return defineMirrorClass1(getAccess(mirrorType, proxy, "type"));
 	}
-	public static Class<?> defineMirrorClass0(Type type) {
+	public static Class<?> defineMirrorType0(Type type) {
 		if (type instanceof ClassType ct) {
 			return defineMirrorClass1(ct);
 		}
@@ -129,21 +137,17 @@ public class HopeReflect {
 				default -> throw new IllegalArgumentException("type: " + type);
 			};
 		if (type instanceof ArrayType arrayType) {
-			return Array.newInstance(defineMirrorClass0(arrayType.elemtype), 0).getClass();
+			return Array.newInstance(defineMirrorType0(arrayType.elemtype), 0).getClass();
 		}
 		if (type.getTag() == TypeTag.NONE) return Object.class;
 		throw new IllegalArgumentException("type: " + type + "(" + type.getClass() + "," + type.getTag() + ")");
 	}
 
-	public static Class<?> defineMirrorClass1(ClassType type) {
-		return defineMirrorClass0(type);
-	}
 
 	public static ClassLoader loader = new ClassLoader(HopeReflect.class.getClassLoader()) {};
 
-	private static Class<?> defineMirrorClass0(ClassType type) {
+	public static Class<?> defineMirrorClass1(ClassType type) {
 		Class<?> cl = classOrNull(type.tsym.flatName().toString(), loader);
-		// Log.info("t: @, @", type.tsym.flatName(), cl);
 
 		if (cl != null) return cl;
 		cl = classToType.entrySet().stream().filter(e -> e.getValue() == type)
@@ -151,14 +155,13 @@ public class HopeReflect {
 		if (cl != null) return cl;
 
 		try {
-			if (type.supertype_field != null && defineMirrorClass0(type.supertype_field) == null) return null;
+			if (type.supertype_field != null && defineMirrorType0(type.supertype_field) == null) return null;
 			if (type.interfaces_field != null && type.interfaces_field.stream()
-			 .anyMatch(type1 -> defineMirrorClass0(type1) == null)) return null;
+			 .anyMatch(type1 -> defineMirrorType0(type1) == null)) return null;
 
 			ClassSymbol symbol = new ClassSymbol(type.tsym.flags_field, type.tsym.name, type.tsym.owner);
 			symbol.type.tsym = symbol;
-			// __gen__.genClass(Enter.instance(context).getEnv(type.tsym), (JCClassDecl) trees.getTree(type.tsym));
-			if (extracted(type, symbol)) return null;
+			if (tryCreate(type, symbol)) return null;
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			// byte[] bytes = ObjectBytes;
 			classWriter.writeClassFile(out, symbol);
@@ -175,7 +178,7 @@ public class HopeReflect {
 	}
 	public static Class<?> defineHiddenClass(byte[] bytes) throws Throwable {
 		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
-			Object definer;
+		Object definer;
 		try {
 			definer = invoke(Lookup.class, lookup, "makeHiddenClassDefiner",
 			 new Object[]{null, bytes}, String.class, byte[].class);
@@ -201,12 +204,12 @@ public class HopeReflect {
 		}
 	}
 
-	private static boolean extracted(ClassType type, ClassSymbol symbol) {
+	private static boolean tryCreate(ClassType type, ClassSymbol symbol) {
 		boolean valid = false;
 		if (valid) for (Symbol sym : type.tsym.members().getSymbols()) {
-			if (sym instanceof VarSymbol vs && defineMirrorClass0(vs.type) == null) return true;
+			if (sym instanceof VarSymbol vs && defineMirrorType0(vs.type) == null) return true;
 			if (sym instanceof MethodSymbol ms) {
-				if (defineMirrorClass0(ms.getReturnType()) == null) return true;
+				if (defineMirrorType0(ms.getReturnType()) == null) return true;
 				// if (ms.params.stream().anyMatch(
 				//  type1 -> type1.type.getTag() != TypeTag.TYPEVAR
 				// 					&& defineMirrorClass0(type1.type) == null)) return null;
@@ -289,6 +292,15 @@ public class HopeReflect {
 			throw new RuntimeException(e);
 		}
 	}
+	public static void replaceAccess(Class<?> clazz, Object obj, String targetName, String withName) {
+		try {
+			unsafe.putObject(obj, unsafe.objectFieldOffset(clazz.getDeclaredField(targetName)),
+			 unsafe.getObject(obj, unsafe.objectFieldOffset(clazz.getDeclaredField(withName))));
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	public static void setAccess(Class<?> clazz, Object obj, String name, Object value) {
 		try {
 			Field field = clazz.getDeclaredField(name);

@@ -2,8 +2,8 @@ package modtools.annotations;
 
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.comp.Attr;
+import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.parser.ParserFactory;
@@ -11,6 +11,7 @@ import com.sun.tools.javac.processing.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -31,7 +32,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static ClassFinder   classFinder;
 	public static JavacFiler    mFiler;
 	public static ClassWriter   classWriter;
-	public static Gen           __gen__;
 	public static Attr          __attr__;
 
 	public static Context __context;
@@ -39,16 +39,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static Type        stringType;
 	public static ClassSymbol timeSymbol;
 
-	private boolean firstFinished, second;
-	public boolean isFirstFinished() {
-		return firstFinished;
-	}
+	private boolean firstFinished, secondFinished;
 	public void process2() {}
+
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-		// long millis = System.currentTimeMillis();
 		if (firstFinished) {
-			if (second) return true;
-			second = true;
+			if (secondFinished)  {
+				return true;
+			}
+			secondFinished = true;
 			try {
 				process2();
 			} catch (Throwable e) {err(e);}
@@ -67,8 +66,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			process();
 		} catch (Throwable e) {err(e);}
 
-		// long v = System.currentTimeMillis() - millis;
-		// print("@: @", this, v);
 		return true;
 	}
 	public void process() {}
@@ -106,8 +103,11 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		classFinder = ClassFinder.instance(__context);
 		mFiler = (JavacFiler) env.getFiler();
 		classWriter = ClassWriter.instance(__context);
-		__gen__ = Gen.instance(__context);
 		__attr__ = Attr.instance(__context);
+
+		try {
+			Replace.extendingFunc();
+		} catch (Throwable e) {err(e);}
 
 		stringType = mSymtab.stringType;
 	}

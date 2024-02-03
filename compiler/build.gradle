@@ -9,6 +9,8 @@ dependencies {
 	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
 
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+
+//	implementation files("E:/Users/ASUS/Desktop/Mods/Rhino/build/libs/ClassFile.jar")
 //	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 
 //	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"

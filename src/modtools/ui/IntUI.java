@@ -735,10 +735,9 @@ public class IntUI {
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
 		return new InfoFadePopup("Info", 80, 64) {{
 			cont.add(info);
-			setPosition(pos, align);
 			// 1.2s
 			Time.runTask(60 * 1.2f, this::hide);
-		}}.show();
+		}}.show().setPosition(pos, align);
 	}
 
 	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {

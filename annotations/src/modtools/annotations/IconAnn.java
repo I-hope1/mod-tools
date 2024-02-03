@@ -13,4 +13,5 @@ import java.lang.annotation.*;
 public @interface IconAnn {
 	Class<?> mainClass();
 	String iconDir() default "icons";
+	String genPackage() default ".";
 }

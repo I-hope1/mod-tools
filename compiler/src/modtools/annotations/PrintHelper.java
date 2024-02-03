@@ -3,10 +3,8 @@ package modtools.annotations;
 import java.io.*;
 
 public interface PrintHelper {
-	default void print(Object... objects) {
-		for (Object object : objects) {
-			System.out.println(object);
-		}
+	default void println(Object... objects) {
+		SPrinter.println(objects);
 	}
 	static String format(String text, Object... args) {
 		if (args.length > 0) {
@@ -26,14 +24,11 @@ public interface PrintHelper {
 
 		return text;
 	}
-	default void print(String str, Object... objects) {
-		System.out.println(format(str, objects));
+	default void println(String str, Object... objects) {
+		SPrinter.println(str, objects);
 	}
 	default void err(Throwable th) {
-		StringWriter sw = new StringWriter();
-		PrintWriter  pw = new PrintWriter(sw);
-		th.printStackTrace(pw);
-		err(sw.toString());
+		SPrinter.err(th);
 	}
 	static void errs(Object... objects) {
 		for (Object object : objects) {
@@ -42,5 +37,25 @@ public interface PrintHelper {
 	}
 	default void err(Object... objects) {
 		errs(objects);
+	}
+
+	interface SPrinter {
+		static void err(Throwable th) {
+			StringWriter sw = new StringWriter();
+			PrintWriter  pw = new PrintWriter(sw);
+			th.printStackTrace(pw);
+			errs(sw.toString());
+		}
+		static void println(Object... objects) {
+			for (Object object : objects) {
+				System.out.println(object);
+			}
+		}
+		static void println(String str, Object... objects) {
+			System.out.println(format(str, objects));
+		}
+		static void println(String str) {
+			System.out.println(str);
+		}
 	}
 }

@@ -8,12 +8,12 @@ version '1.4.4'
 //java.sourceCompatibility = JavaVersion.VERSION_17
 //java.targetCompatibility = JavaVersion.VERSION_1_8
 
-def export(compiler) {
+static def export(compiler) {
+//	compiler.options.compilerArgs.addAll("-Xlint:deprecation")
 	compiler.options.compilerArgs.addAll(new String[]{
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.loader",
 			"java.base/jdk.internal.reflect",
-			"java.instrument/sun.instrument",
 			// ---------------
 			"jdk.compiler/com.sun.tools.javac.api",
 			"jdk.compiler/com.sun.tools.javac.code",

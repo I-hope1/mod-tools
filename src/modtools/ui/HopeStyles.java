@@ -20,9 +20,9 @@ import modtools.utils.reflect.FieldUtils;
 
 import java.util.Arrays;
 
-import static modtools.ui.gen.HopeIcons.*;
 import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
+import static modtools.ui.gen.HopeIcons.*;
 import static modtools.ui.IntUI.whiteui;
 
 @SuppressWarnings("SpellCheckingInspection")

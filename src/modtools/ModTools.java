@@ -1,11 +1,5 @@
 package modtools;
 
-import static mindustry.Vars.*;
-import static modtools.IntVars.root;
-import static modtools.utils.MySettings.SETTINGS;
-
-import java.util.Arrays;
-
 import arc.*;
 import arc.files.Fi;
 import arc.scene.event.VisibilityListener;
@@ -30,11 +24,17 @@ import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.ui.DropFile;
 
+import java.util.Arrays;
+
+import static mindustry.Vars.*;
+import static modtools.IntVars.root;
+import static modtools.utils.MySettings.SETTINGS;
+
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
 	static        boolean   isImportFromGame = false;
 	public static Throwable error            = null;
-	public static Fi        libs = root.child("libs");
+	public static Fi        libs             = root.child("libs");
 
 	public static boolean isV6 = Version.number <= 135;
 
@@ -45,7 +45,7 @@ public class ModTools extends Mod {
 	}
 
 	public ModTools() {
-		Log.info("Loaded ModTools constructor" + (isImportFromGame ? " [[[from game]]]" : "") + ".");
+		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
 		if (headless) Log.info("Running in headless environment.");
 		// Log.info(HopeReflect.getCaller());
 

@@ -4,7 +4,7 @@ import modtools.annotations.PrintHelper.SPrinter;
 
 import java.util.*;
 
-public interface TimeUtils {
+public interface Times {
 	Deque<Long> marks = new ArrayDeque<>();
 	static void mark() {
 		marks.add(System.nanoTime());
@@ -26,7 +26,14 @@ public interface TimeUtils {
 		return System.nanoTime() - prevTime;
 	}
 
-	static void elapsedAndPrint(String text, Object ...args) {
+	static void printElapsed(Object prev, String text, Object ...args) {
+		ArrayList<Object> list = new ArrayList<>(List.of(args));
+		list.add(0, prev);
+		list.add(0, elapsed());
+		SPrinter.println(text, list.toArray());
+	}
+
+	static void printElapsed(String text, Object ...args) {
 		ArrayList<Object> list = new ArrayList<>(List.of(args));
 		list.add(0, elapsed());
 		SPrinter.println(text, list.toArray());

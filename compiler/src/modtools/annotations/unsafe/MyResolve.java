@@ -1,7 +1,6 @@
 package modtools.annotations.unsafe;
 
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.TypeSymbol;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.util.Context;
 import modtools.annotations.NoAccessCheck;
@@ -22,7 +21,7 @@ public class MyResolve extends Resolve {
 		}
 		return super.isAccessible(env, site, sym, checkInner);
 	}
-	public boolean isAccessible(Env<AttrContext> env, TypeSymbol c, boolean checkInner) {
-		return true;
-	}
+	// public boolean isAccessible(Env<AttrContext> env, TypeSymbol c, boolean checkInner) {
+	// 	return true;
+	// }
 }

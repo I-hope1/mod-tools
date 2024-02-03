@@ -55,8 +55,8 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element> implements
 			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, List.from(stats)));
 		}
 	}
-	private JCVariableDecl newFieldVariable(String newFieldName, JCExpression clazz, JCExpression name, JCClassDecl tree,
-																					ArrayList<JCStatement> stats) {
+	JCVariableDecl newFieldVariable(String newFieldName, JCExpression clazz, JCExpression name, JCClassDecl tree,
+																	ArrayList<JCStatement> stats) {
 		JCVariableDecl x = addField(tree, Modifier.PRIVATE | Modifier.STATIC,
 		 FIELD().type, newFieldName, null);
 		mMaker.at(x);

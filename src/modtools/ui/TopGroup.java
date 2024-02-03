@@ -44,10 +44,10 @@ import static modtools.utils.Tools.*;
 public final class TopGroup extends WidgetGroup {
 	@SettingsInit
 	public enum TSettings implements ISettings {
-		 checkUICount,
-		 debugBounds,
-		 selectInvisible, drawHiddenPad,
-		 overrideScene
+		checkUICount,
+		debugBounds,
+		selectInvisible, drawHiddenPad,
+		overrideScene
 	}
 	static {
 		if (overrideScene.enabled()) {
@@ -113,7 +113,7 @@ public final class TopGroup extends WidgetGroup {
 				.addChild(actor);
 		 }
 	 };
-	private final Table end = new MyEnd();
+	final Table end = new MyEnd();
 
 	public Element drawPadElem = null;
 	public void setDrawPadElem(Element drawPadElem) {
@@ -507,7 +507,7 @@ public final class TopGroup extends WidgetGroup {
 	 * 用于切换窗口的事件侦听器
 	 * @see SwitchInputListener
 	 */
-	private class SwitchGestureListener extends ElementGestureListener {
+	class SwitchGestureListener extends ElementGestureListener {
 		int lastTouches;
 		public void touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			lastTouches = input.getTouches();
@@ -529,7 +529,7 @@ public final class TopGroup extends WidgetGroup {
 	 * 用于切换窗口的事件侦听器
 	 * @see SwitchGestureListener
 	 */
-	private class SwitchInputListener extends InputListener {
+	class SwitchInputListener extends InputListener {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			// acquireShownWindows();
 			if (shownWindows.isEmpty()) return false;
@@ -564,7 +564,7 @@ public final class TopGroup extends WidgetGroup {
 		}
 	}
 
-	private class HitterAndWindowCloseListener extends InputListener {
+	class HitterAndWindowCloseListener extends InputListener {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			if (keycode == KeyCode.f4 && input.shift() && shownWindows.size() > 0) frontWindow.hide();
 			hitter:
@@ -581,7 +581,7 @@ public final class TopGroup extends WidgetGroup {
 		resetSwitch();
 		if (currentIndex < shownWindows.size()) shownWindows.get(currentIndex).toFront();
 	}
-	private void resetSwitch() {
+	void resetSwitch() {
 		isSwitchWindows = false;
 		K_once = false;
 	}
@@ -647,7 +647,7 @@ public final class TopGroup extends WidgetGroup {
 		el.actions(Actions.fadeOut(0.2f, Interp.fade), Actions.remove());
 		currentIndex = 0;
 	}
-	private static class MyEnd extends Table {
+	static class MyEnd extends Table {
 		// final FrameBuffer buffer = new FrameBuffer();
 
 		Pixmap  pixmap;

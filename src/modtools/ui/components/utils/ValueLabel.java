@@ -334,7 +334,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
 		Vec2 pos = ElementUtils.getAbsolutePos(el);
 		try {
-			INFO_DIALOG.showInfo(val1, type).setPosition(pos);
+			INFO_DIALOG.showInfo(val1, val1 != null ? val1.getClass() : type).setPosition(pos);
 		} catch (Throwable e) {
 			IntUI.showException(e).setPosition(pos);
 		}

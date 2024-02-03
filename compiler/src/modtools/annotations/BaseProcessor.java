@@ -2,9 +2,9 @@ package modtools.annotations;
 
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.comp.*;
-import com.sun.tools.javac.jvm.*;
+import com.sun.tools.javac.code.Symbol.ClassSymbol;
+import com.sun.tools.javac.comp.Attr;
+import com.sun.tools.javac.jvm.ClassWriter;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.parser.ParserFactory;
 import com.sun.tools.javac.processing.*;

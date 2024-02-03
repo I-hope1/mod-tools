@@ -10,7 +10,6 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.Code.StackMapFormat;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.TreeMaker;
-import jdk.internal.module.Modules;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 import sun.reflect.annotation.ExceptionProxy;
@@ -23,7 +22,6 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.Map.Entry;
 
-import static jdk.internal.module.Modules.*;
 import static modtools.annotations.BaseProcessor.*;
 
 @SuppressWarnings({"rawtypes", "unchecked"})

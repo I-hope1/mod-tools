@@ -8,7 +8,7 @@ version '1.4.4'
 //java.sourceCompatibility = JavaVersion.VERSION_17
 //java.targetCompatibility = JavaVersion.VERSION_1_8
 
-static def export(compiler) {
+static def export(JavaCompile compiler) {
 //	compiler.options.compilerArgs.addAll("-Xlint:deprecation")
 	compiler.options.compilerArgs.addAll(new String[]{
 			"java.base/jdk.internal.misc",
@@ -41,8 +41,6 @@ allprojects {
 	}
 	tasks.withType(JavaCompile).configureEach {
 		options.encoding = 'UTF-8'
-//		sourceCompatibility = 17
-//		targetCompatibility = 17
 		sourceCompatibility = 9
 		targetCompatibility = 9
 		export(it)
@@ -54,6 +52,10 @@ allprojects {
 		maven { url 'https://www.jitpack.io' }
 	}
 }
+tasks.withType(JavaCompile).configureEach {
+	sourceCompatibility = 17
+	targetCompatibility = 17
+}
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -61,6 +63,7 @@ dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
+//	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 
 
 //	def sdkRoot = System.getenv("ANDROID_HOME")

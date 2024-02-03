@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.*;
 import java.util.function.Predicate;
 
+@SuppressWarnings("unchecked")
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
  implements TreeUtils, AnnotationUtils, PrintHelper {
 	public static JavacElements elements;

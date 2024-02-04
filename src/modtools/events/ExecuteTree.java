@@ -1,9 +1,8 @@
 package modtools.events;
 
-import arc.func.*;
+import arc.func.Floatp;
 import arc.graphics.Color;
-import arc.scene.style.*;
-import arc.struct.Seq;
+import arc.scene.style.Drawable;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.gen.Icon;
@@ -77,7 +76,7 @@ public class ExecuteTree {
 		Color color();
 		default Drawable icon() {return Icon.warning.tint(color());}
 	}
-	abstract
+	abstract sealed
 	public static class Status implements StatusInterface {
 		public final StatusList enum_ = StatusList.values()[code()];
 		public String name() {

@@ -41,45 +41,44 @@ public class Replace {
 		setAccess(Attr.class, __attr__, "rs", resolve);
 	}
 	static void forceJavaVersion() throws Throwable {
-		File       file       = new File("gradle.properties");
-		if (!file.exists()) file.createNewFile();
+		File file = new File("gradle.properties");
+		if (!file.exists()) {
+			if (file.createNewFile()) println("Created New File: @", file.getAbsoluteFile());
+			else {
+				println("Could not create file: @", file.getAbsoluteFile());
+				return;
+			}
+		}
 		Properties properties = new Properties();
 		properties.load(new FileInputStream(file));
 
 		// Target prev = Target.instance(__context);
 		setTarget(properties);
-		setAccess(Preview.class, Preview.instance(__context), "enabled", true);
+		forcePreview();
 
 		hasMindustry = !properties.containsKey("hasMindustry") || properties.getProperty("hasMindustry").equals("true");
 	}
+	private static void forcePreview() {
+		Preview preview = Preview.instance(__context);
+		if (!preview.isEnabled()) {
+			setAccess(Preview.class, preview, "enabled", true);
+			// setAccess(Preview.class, preview, "forcePreview", true);
+		}
+	}
 	private static void setTarget(Properties properties) throws Throwable {
 		String version = properties.getProperty("targetVersion");
-		Target target        = Target.lookup(version);
+		Target target  = Target.lookup(version);
 		if (target == null) return;
 		println("targetVersion: [@](@)", version, target);
-		// try {
-		// 	@SuppressWarnings("JavaLangInvokeHandleSignature")
-		// 	MethodHandle handle = lookup.findConstructor(Target.class, MethodType.methodType(void.class, String.class, int.class, String.class, int.class, int.class));
-		// 	target = (Target) handle.invoke(target.name() + Math.random(), 17, target.name, target.majorVersion, target.minorVersion);
-		// 	println(target);
-		// } catch (Throwable e) {
-		// 	return;
-		// }
 
 		removeKey(Target.class, target);
 		// jdk9才有
 		removeKey("concatKey", StringConcat.class, null);
 
-		// re_init(Check.class, Check.instance(__context));
-		// re_init(Resolve.class, Resolve.instance(__context));
 		// re_init(Arguments.class, Arguments.instance(__context));
 		// re_init(LambdaToMethod.class, LambdaToMethod.instance(__context));
 		// setAccess(RootPackageSymbol.class, mSymtab.rootPackage, "allowPrivateInvokeVirtual", target.runtimeUseNestAccess());
 
-		// setAccess(Gen.class, Gen.instance(__context), "concat", StringConcat.instance(__context));
-		// setAccess(Gen.class, Gen.instance(__context), "target", target);
-		// setAccess(Gen.class, Gen.instance(__context), "chk", Check.instance(__context));
-		// re_init(Gen.class, Gen.instance(__context));
 		// 用于适配低版本
 		setAccess(Lower.class, Lower.instance(__context), "target", target);
 		setAccess(ClassWriter.class, ClassWriter.instance(__context), "target", target);

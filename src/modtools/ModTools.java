@@ -49,7 +49,6 @@ public class ModTools extends Mod {
 		if (headless) Log.info("Running in headless environment.");
 		// Log.info(HopeReflect.getCaller());
 
-
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 			IntVars.meta = metas.get(ModTools.class);

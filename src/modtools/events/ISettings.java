@@ -1,5 +1,10 @@
 package modtools.events;
 
+import static modtools.events.ISettings.$$.text;
+import static modtools.ui.content.SettingsUI.SettingsBuilder.main;
+
+import java.lang.reflect.Method;
+
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.event.Touchable;
@@ -14,11 +19,6 @@ import modtools.ui.content.SettingsUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
-
-import java.lang.reflect.*;
-
-import static modtools.events.ISettings.$$.text;
-import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 
 @SuppressWarnings("unused")
 public interface ISettings extends E_DataInterface {

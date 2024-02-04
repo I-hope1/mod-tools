@@ -16,15 +16,15 @@ static def export(JavaCompile compiler) {
 			"java.base/jdk.internal.reflect",
 			// ---------------
 			"jdk.compiler/com.sun.tools.javac.api",
-			"jdk.compiler/com.sun.tools.javac.code",
-			"jdk.compiler/com.sun.tools.javac.parser",
-			"jdk.compiler/com.sun.tools.javac.processing",
-			"jdk.compiler/com.sun.tools.javac.tree",
-			"jdk.compiler/com.sun.tools.javac.util",
 			"jdk.compiler/com.sun.tools.javac.comp",
+			"jdk.compiler/com.sun.tools.javac.code",
+			"jdk.compiler/com.sun.tools.javac.tree",
+			"jdk.compiler/com.sun.tools.javac.main",
 			"jdk.compiler/com.sun.tools.javac.model",
 			"jdk.compiler/com.sun.tools.javac.jvm",
-			"jdk.compiler/com.sun.tools.javac.main",
+			"jdk.compiler/com.sun.tools.javac.parser",
+			"jdk.compiler/com.sun.tools.javac.processing",
+			"jdk.compiler/com.sun.tools.javac.util",
 			"java.base/sun.reflect.annotation",
 			"java.base/jdk.internal.module",
 			"jdk.jfr/jdk.jfr.internalD"
@@ -51,10 +51,7 @@ allprojects {
 		maven { url 'https://www.jitpack.io' }
 	}
 }
-tasks.withType(JavaCompile).configureEach {
-	sourceCompatibility = 17
-	targetCompatibility = 17
-}
+
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -90,7 +87,7 @@ mindustry {
 		baseName = name
 	}
 	dexJar {
-		options.minApi = '31'
+		options.minApi = '34'
 	}
 }
 mindustryAssets {
@@ -117,6 +114,7 @@ tasks.register('playGame', JavaExec) {
 //	        '-testMobile'
 	]
 	jvmArgs = [
+			'-XX:+UseParallelGC',
 			'-Djava.library.path=E:/Users/ASUS/Desktop/Mods/mod-tools136/assets',
 			'-DsocksProxyHost=127.0.0.1',
 			'-DsocksProxyPort=1080',

@@ -1,8 +1,8 @@
 package modtools.annotations;
 
-import modtools.annotations.PrintHelper.SPrinter;
-
 import java.util.*;
+
+import modtools.annotations.PrintHelper.SPrinter;
 
 public interface Times {
 	Deque<Long> marks = new ArrayDeque<>();
@@ -28,8 +28,8 @@ public interface Times {
 
 	static void printElapsed(Object prev, String text, Object ...args) {
 		ArrayList<Object> list = new ArrayList<>(List.of(args));
-		list.add(0, prev);
 		list.add(0, elapsed());
+		list.add(0, prev);
 		SPrinter.println(text, list.toArray());
 	}
 

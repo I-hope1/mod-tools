@@ -1,20 +1,20 @@
 package modtools;
 
-import arc.KeyBinds.KeybindValue;
-import arc.files.Fi;
-import arc.struct.*;
-import arc.util.*;
-import mindustry.Vars;
-import mindustry.input.Binding;
-import mindustry.mod.Mods;
-import modtools.utils.Tools.CProv;
-import modtools.utils.reflect.FieldUtils;
+import static ihope_lib.MyReflect.lookup;
 
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
 
-import static ihope_lib.MyReflect.lookup;
+import arc.KeyBinds.KeybindValue;
+import arc.files.Fi;
+import arc.struct.*;
+import arc.util.Reflect;
+import mindustry.Vars;
+import mindustry.input.Binding;
+import mindustry.mod.Mods;
+import modtools.utils.Tools.CProv;
+import modtools.utils.reflect.FieldUtils;
 
 /** 处理一些不安全的常量 */
 @SuppressWarnings("unchecked")
@@ -59,7 +59,6 @@ public class HopeConstant {
 
 		long STRING_COUNT = FieldUtils.fieldOffset(nl(() ->
 		 String.class.getDeclaredField("count")));
-
 		// long OBJECT_SIZE = FieldUtils.fieldOffset(nl(() ->
 		//  Class.class.getDeclaredField("objectSize")));
 	}

@@ -1,6 +1,7 @@
 package test0;
 
 import arc.util.Log;
+import mindustry.Vars;
 import modtools.annotations.NoAccessCheck;
 
 public class TestInit {
@@ -16,6 +17,6 @@ public class TestInit {
 class A {
 	static {
 		// Log.info(sun.nio.ByteBuffered.class);
-		// Vars.mods.parser.finishParsing();
+		Vars.mods.parser.finishParsing();
 	}
 }

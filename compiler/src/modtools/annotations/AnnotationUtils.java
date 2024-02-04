@@ -8,6 +8,7 @@ import com.sun.tools.javac.code.Attribute.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
+import modtools.annotations.reflect.VirtualClass;
 import sun.reflect.annotation.*;
 
 import javax.lang.model.element.Element;
@@ -76,8 +77,8 @@ public interface AnnotationUtils {
 		HashMap<String, Object> map = HopeReflect.getAccess(AnnotationInvocationHandler,
 		 h, "memberValues");
 		map.replaceAll((k, v) ->
-		 HopeReflect.mirrorTypes.isInstance(v) || HopeReflect.mirrorType.isInstance(v) ?
-			HopeReflect.defineMirrorClass((ExceptionProxy) v)
+		 VirtualClass.mirrorTypes.isInstance(v) || VirtualClass.mirrorType.isInstance(v) ?
+			VirtualClass.defineMirrorClass((ExceptionProxy) v)
 			: v);
 		return ann;
 	}

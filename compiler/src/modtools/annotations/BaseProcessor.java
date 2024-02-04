@@ -10,6 +10,7 @@ import com.sun.tools.javac.processing.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import modtools.annotations.processors.AAINIT;
 import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
@@ -23,7 +24,6 @@ import java.util.stream.Collectors;
 @SuppressWarnings("unchecked")
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
  implements TreeUtils, AnnotationUtils, PrintHelper {
-	public static boolean hasMindustry = true;
 
 	public static JavacElements elements;
 	public static JavacTrees    trees;
@@ -45,7 +45,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public void process2() {}
 
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-		if (!hasMindustry) return true;
+		if (!AAINIT.hasMindustry) return true;
 		if (firstFinished) {
 			if (secondFinished) {
 				return true;
@@ -88,7 +88,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public final synchronized void init(ProcessingEnvironment env) {
 		super.init(env);
 		initConst(env);
-		if (!hasMindustry) return;
+		if (!AAINIT.hasMindustry) return;
 		try {
 			init();
 		} catch (Throwable e) {err(e);}
@@ -201,7 +201,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		return SourceVersion.latestSupported();
 	}
 	public final Set<String> getSupportedAnnotationTypes() {
-		if (!hasMindustry) return Set.of();
+		if (!AAINIT.hasMindustry) return Set.of();
 		try {
 			return getSupportedAnnotationTypes0().stream()
 			 .map(Class::getCanonicalName).collect(Collectors.toSet());
@@ -210,13 +210,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		}
 	}
 	public abstract Set<Class<?>> getSupportedAnnotationTypes0();
-	static {
-		try {
-			Class.forName("modtools.annotations.HopeReflect");
-		} catch (Throwable e) {
-			PrintHelper.errs(e);
-		}
-	}
 
 
 	public static String kebabToCamel(String s) {

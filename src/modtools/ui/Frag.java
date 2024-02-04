@@ -113,8 +113,10 @@ public class Frag extends Table {
 				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1));/* Align.center); */
 			});
 			image.clicked(content::build);
+
 			circle.addChild(image);
 		}
+
 		top.actions(Actions.color(Color.pink, 0.1f));
 	}
 	private void circleRemove() {

@@ -8,8 +8,8 @@ import modtools.utils.Tools.CProv;
 
 import java.lang.invoke.*;
 import java.lang.reflect.*;
-import java.util.Locale;
 
+@SuppressWarnings("unchecked")
 public interface IReflect {
 	Field[] getFields(Class<?> cls);
 	Method[] getMethods(Class<?> cls);
@@ -52,16 +52,17 @@ public interface IReflect {
 	}
 	class DefaultImpl implements IReflect {
 		public Field[] getFields(Class<?> cls) {
-			return MyReflect.lookupGetFields(cls);
+			return cls.getDeclaredFields();
 		}
 		public Method[] getMethods(Class<?> cls) {
-			return MyReflect.lookupGetMethods(cls);
+			return cls.getDeclaredMethods();
 		}
 		public Constructor<?>[] getConstructors(Class<?> cls) {
-			return MyReflect.lookupGetConstructors(cls);
+			return cls.getDeclaredConstructors();
 		}
 	}
 
+	@SuppressWarnings("rawtypes")
 	static <T> T nls(CProv prov, Prov def) {
 		return (T) nl(prov, def);
 	}

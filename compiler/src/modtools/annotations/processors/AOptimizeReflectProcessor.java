@@ -9,7 +9,7 @@ import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 import modtools.annotations.reflect.ReflectUtils;
 
-import javax.annotation.processing.Processor;
+import javax.annotation.processing.*;
 import javax.lang.model.element.*;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -68,7 +68,7 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element> implements
 		)));
 		return x;
 	}
-	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(OptimizeReflect.class.getCanonicalName());
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
+		return Set.of(OptimizeReflect.class);
 	}
 }

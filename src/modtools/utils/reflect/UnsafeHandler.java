@@ -1,5 +1,6 @@
 package modtools.utils.reflect;
 
+import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
 
 import java.lang.reflect.*;
@@ -11,7 +12,7 @@ public class UnsafeHandler {
 		try {
 			return Unsafe.getUnsafe();
 		} catch (Throwable e) {
-			return sun.misc.Unsafe.getUnsafe();
+			return MyReflect.unsafe;
 		}
 	}
 
@@ -32,7 +33,7 @@ public class UnsafeHandler {
 	public static Class<?> defineClass(String name, byte[] b, ClassLoader loader, ProtectionDomain pd) {
 		try {
 			return ((Unsafe) unsafe).defineClass(name, b, 0, b.length, loader, pd);
-		} catch (ClassCastException ignored) {}
+		} catch (ClassCastException | NoClassDefFoundError ignored) {}
 		try {
 			return (Class<?>) getMethod().invoke(unsafe, name, b, 0, b.length, loader, pd);
 		} catch (Exception e) {

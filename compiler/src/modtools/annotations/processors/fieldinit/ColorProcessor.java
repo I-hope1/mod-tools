@@ -31,11 +31,12 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 				init
 			 )
 			);
-			addImport((TypeElement) element.getEnclosingElement(), SettingUI());
+			addImport(element.getEnclosingElement(), SettingUI());
 			// Log.info(field);
 			if (!anno.needSetting()) return;
 
 			JCMethodDecl method = findChild(decl, Tag.METHODDEF, d -> d.name.contentEquals("settingColor"));
+			if (method == null) throw new NullPointerException("could not find method: settingColor()");
 			mMaker.at(method);
 			JCVariableDecl param = makeVar0(Flags.PARAMETER, null, "c", null, method.sym);
 			param.startPos = 0;
@@ -62,7 +63,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 			method.body.stats = method.body.stats.append(exec);
 		}
 	}
-	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(DataColorFieldInit.class.getCanonicalName());
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
+		return Set.of(DataColorFieldInit.class);
 	}
 }

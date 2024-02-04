@@ -223,7 +223,7 @@ public class ShowUIList extends Content {
 			t.unbind();
 		}
 	});
-	private static void addImage(Table t, Drawable drawable) {
+	static void addImage(Table t, Drawable drawable) {
 		Image image = new Image(drawable);
 		image.fillParent = true;
 		Label label = new Label(drawable instanceof TextureRegionDrawable ? "texture" : "nine");

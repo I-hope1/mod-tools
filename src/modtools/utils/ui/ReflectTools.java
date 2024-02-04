@@ -7,7 +7,7 @@ import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.IntUI;
-import modtools.utils.JSFunc;
+import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 
 import java.lang.reflect.*;
@@ -64,7 +64,7 @@ public interface ReflectTools {
 		}
 		// }
 
-		sb.append("[]".repeat(arrayDepth));
+		sb.append(StringUtils.repeat("[]", arrayDepth));
 
 		return sb.toString();
 	}

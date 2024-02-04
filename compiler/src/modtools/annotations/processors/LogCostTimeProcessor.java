@@ -46,7 +46,7 @@ public class LogCostTimeProcessor extends BaseProcessor<MethodSymbol> {
 		println(tree);
 	}
 
-	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(CostTimeLog.class.getCanonicalName());
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
+		return Set.of(CostTimeLog.class);
 	}
 }

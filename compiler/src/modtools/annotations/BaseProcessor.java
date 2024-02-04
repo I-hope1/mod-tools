@@ -2,7 +2,6 @@ package modtools.annotations;
 
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.comp.Attr;
 import com.sun.tools.javac.jvm.ClassWriter;
 import com.sun.tools.javac.model.JavacElements;
@@ -19,10 +18,13 @@ import javax.lang.model.element.*;
 import java.util.List;
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 @SuppressWarnings("unchecked")
 public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
  implements TreeUtils, AnnotationUtils, PrintHelper {
+	public static boolean hasMindustry = true;
+
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
@@ -37,15 +39,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 	public static Context __context;
 
-	public static Type        stringType;
-	public static ClassSymbol timeSymbol;
+	public static Type stringType;
 
 	private boolean firstFinished, secondFinished;
 	public void process2() {}
 
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		if (!hasMindustry) return true;
 		if (firstFinished) {
-			if (secondFinished)  {
+			if (secondFinished) {
 				return true;
 			}
 			secondFinished = true;
@@ -86,6 +88,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public final synchronized void init(ProcessingEnvironment env) {
 		super.init(env);
 		initConst(env);
+		if (!hasMindustry) return;
 		try {
 			init();
 		} catch (Throwable e) {err(e);}
@@ -197,7 +200,16 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public final SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();
 	}
-
+	public final Set<String> getSupportedAnnotationTypes() {
+		if (!hasMindustry) return Set.of();
+		try {
+			return getSupportedAnnotationTypes0().stream()
+			 .map(Class::getCanonicalName).collect(Collectors.toSet());
+		} catch (Throwable e) {
+			return Set.of();
+		}
+	}
+	public abstract Set<Class<?>> getSupportedAnnotationTypes0();
 	static {
 		try {
 			Class.forName("modtools.annotations.HopeReflect");

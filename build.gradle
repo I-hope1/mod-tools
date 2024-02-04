@@ -34,7 +34,6 @@ static def export(JavaCompile compiler) {
 allprojects {
 	ext {
 		uncVersion = '1.8.9'
-//		jabelVersion = '0.9.0'
 		mindustryVersion = 'v146'
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
@@ -60,10 +59,8 @@ tasks.withType(JavaCompile).configureEach {
 sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
-	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
-//	annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 
 
 //	def sdkRoot = System.getenv("ANDROID_HOME")
@@ -116,7 +113,6 @@ tasks.register('playGame', JavaExec) {
 	}
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
-//	classpath("E:/应用/Mindustry/jre/desktop.jar")
 	args = [
 //	        '-testMobile'
 	]
@@ -142,16 +138,18 @@ tasks.register('ZCompileAll', Copy) {
 }
 
 tasks.register('mergeLibs', Jar) {
-	archiveFileName = "$rootDir/assets/libs/reflect-core.jar"
+	def libName = "reflect-core"
+	archiveFileName = "$rootDir/assets/libs/${libName}.jar"
 
-	def libsDir = new File("$rootDir/libs/build/libs")
+	def libProject = "$rootDir/../localLib/$libName"
+	def libsDir = new File("$libProject/build/libs")
 
-	from(zipTree("$libsDir/libs-desktop.jar")) {
+	from(zipTree("$libsDir/$libName-desktop.jar")) {
 		exclude "classes.dex"
 //		exclude "mod.hjson"
 		exclude "META-INF/META-INF.MF"
 	}
-	from(zipTree("$libsDir/libs-dx.jar")) {
+	from(zipTree("$libsDir/$libName-dx.jar")) {
 		include "**"
 	}
 }

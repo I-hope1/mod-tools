@@ -1,12 +1,9 @@
 package modtools.utils;
 
-import arc.Core;
 import arc.util.*;
 import dalvik.system.VMRuntime;
 import modtools.HopeConstant.*;
 import modtools.android.HiddenApi;
-
-import java.lang.reflect.Field;
 
 import static ihope_lib.MyReflect.unsafe;
 
@@ -37,6 +34,20 @@ public interface StringUtils {
 			 unsafe.getInt(address) + i, 3); */
 			Log.info("res[@]: @ -> @", i, from, to);
 			if (to.equals(from)) return;
+		}
+	}
+
+	@SuppressWarnings("StringRepeatCanBeUsed")
+	static String repeat(String str, int count) {
+		try {
+			return str.repeat(count);
+		} catch (Throwable e) {
+			if (count == 1) return str;
+			StringBuilder buffer = new StringBuilder();
+			for (int i = 0; i < count; i++) {
+				buffer.append(str);
+			}
+			return buffer.toString();
 		}
 	}
 

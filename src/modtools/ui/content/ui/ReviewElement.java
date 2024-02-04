@@ -1,15 +1,5 @@
 package modtools.ui.content.ui;
 
-import static arc.Core.scene;
-import static modtools.ui.Contents.review_element;
-import static modtools.ui.HopeStyles.defaultLabel;
-import static modtools.ui.IntUI.*;
-import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
-import static modtools.utils.Tools.Sr;
-import static modtools.utils.ui.FormatHelper.*;
-
-import java.util.regex.*;
-
 import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
@@ -52,6 +42,16 @@ import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.search.BindCell;
+
+import java.util.regex.*;
+
+import static arc.Core.scene;
+import static modtools.ui.Contents.review_element;
+import static modtools.ui.HopeStyles.defaultLabel;
+import static modtools.ui.IntUI.*;
+import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
+import static modtools.utils.Tools.Sr;
+import static modtools.utils.ui.FormatHelper.*;
 
 /** It should be `InspectElement`, but it's too late.  */
 public class ReviewElement extends Content {
@@ -764,7 +764,7 @@ public class ReviewElement extends Content {
 		}
 	}
 
-	private class ReviewFocusTask extends FocusTask {
+	class ReviewFocusTask extends FocusTask {
 		{drawSlightly = true;}
 
 		public ReviewFocusTask() {super(ReviewElement.maskColor, ReviewElement.focusColor);}

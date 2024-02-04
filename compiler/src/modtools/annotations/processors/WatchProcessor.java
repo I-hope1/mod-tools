@@ -3,6 +3,7 @@ package modtools.annotations.processors;
 import com.google.auto.service.AutoService;
 import com.sun.source.tree.*;
 import com.sun.source.util.TreeScanner;
+import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
@@ -16,14 +17,17 @@ import java.util.*;
 import static java.lang.reflect.Modifier.STATIC;
 
 @AutoService({Processor.class})
-public class WatchProcessor extends BaseProcessor {
+public class WatchProcessor extends BaseProcessor<Element> {
 	private static final String STATIC_SIG   = "$T$";
 	private static final String WATCH_STRING = "modtools.utils.ui.WatchWindow";
 	private static final String WATCH_SIG    = "$W-0";
 	private static final String TEST_CON     = "$condition_test$";
 
+	public static ClassSymbol timeSymbol;
+	public void init() throws Throwable {
+		timeSymbol = findClassSymbol("arc.util.Time");
+	}
 	public void process() {
-		if (timeSymbol == null) timeSymbol = findClassSymbol("arc.util.Time");
 		// Iterate over each class field
 		classFields.forEach((dcls, fieldSeq) -> {
 			JCClassDecl classDecl = (JCClassDecl) trees.getTree(dcls);
@@ -69,7 +73,7 @@ public class WatchProcessor extends BaseProcessor {
 						System.err.println("The method " + classDecl.name + "." + test_con.name + " must be static");
 						return;
 					}
-					if (test_con.params.length() != 1 || test_con.params.get(0).equals(classDecl)) {
+					if (test_con.params.length() != 1 || test_con.params.get(0).name.equals(classDecl.name)) {
 						System.err.println("The method " + classDecl.name + "." + test_con.name + " sig must be ("
 										+ classDecl.name + ")Z");
 						return;
@@ -188,11 +192,11 @@ public class WatchProcessor extends BaseProcessor {
 			classFields.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
 		}
 	}
-	public Set<String> getSupportedAnnotationTypes() {
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
 		return Set.of(
-		 WatchField.class.getCanonicalName(),
-		 WatchClass.class.getCanonicalName(),
-		 WatchVar.class.getCanonicalName()
+		 WatchField.class,
+		 WatchClass.class,
+		 WatchVar.class
 		);
 	}
 	final Map<Element, ArrayList<Element>> classFields = new HashMap<>();

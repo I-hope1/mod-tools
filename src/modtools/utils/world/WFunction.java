@@ -365,7 +365,7 @@ public abstract class WFunction<T> {
 			return obj == hashObj;
 		}
 	}
-	private class MyVector extends Vector<T> {
+	class MyVector extends Vector<T> {
 		protected void removeRange(int fromIndex, int toIndex) {
 			super.removeRange(fromIndex, toIndex);
 			onRemoved();
@@ -383,7 +383,7 @@ public abstract class WFunction<T> {
 			return super.remove(index);
 		}
 	}
-	private class SelectHover extends LimitButton {
+	class SelectHover extends LimitButton {
 		public final Task clearFocusWorld = new Task() {
 			public void run() {
 				if (item instanceof Tile) SC.focusTile = null;
@@ -461,7 +461,7 @@ public abstract class WFunction<T> {
 		}
 
 	}
-	private class ShowAllWindow extends DisWindow {
+	class ShowAllWindow extends DisWindow {
 		int c, cols = Vars.mobile ? 4 : 6;
 		public ShowAllWindow() {
 			super(WFunction.this.name, 0, 200, true);
@@ -482,7 +482,7 @@ public abstract class WFunction<T> {
 			})).grow();
 		}
 	}
-	private class SeqBind extends OrderedSet<T> {
+	class SeqBind extends OrderedSet<T> {
 		final Iterable<T> from;
 		public SeqBind(Iterable<T> from) {
 			this.from = from;

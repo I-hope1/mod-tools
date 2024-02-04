@@ -57,7 +57,7 @@ import static modtools.utils.world.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
 import static modtools.utils.world.WorldDraw.*;
 
-@SuppressWarnings({"rawtypes", "CodeBlock2Expr", "DanglingJavadoc"})
+@SuppressWarnings({"CodeBlock2Expr", "DanglingJavadoc"})
 public class Selection extends Content {
 	public WFunction<?> selectFunc;
 	public WFunction<?> focusElemType;
@@ -833,7 +833,7 @@ public class Selection extends Content {
 	private static ExecutorService acquireExecutor() {
 		return executor == null || executor.isShutdown() ? executor = Threads.executor() : executor;
 	}
-	private class SelectListener extends WorldSelectListener {
+	class SelectListener extends WorldSelectListener {
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			if (button != KeyCode.mouseLeft || Vars.state.isMenu()) {
 				hide();
@@ -938,7 +938,7 @@ public class Selection extends Content {
 		tile, building, unit, bullet, others
 		/* other */, focusOnWorld
 	}
-	private class SettingsTable extends Table {
+	class SettingsTable extends Table {
 		int lastIndex;
 
 		public SettingsTable(Data data) {

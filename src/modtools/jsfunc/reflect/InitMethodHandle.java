@@ -59,7 +59,6 @@ public class InitMethodHandle {
 		Object mb = RESOLVE_OR_FAIL.invoke(FACTORY, REF_invokeSpecial, maker.get(), refc, -1, NoSuchMethodException.class);
 		resolver.get(mb);
 		assert GET_DIRECT_METHOD != null;
-		return (MethodHandle) GET_DIRECT_METHOD.invoke(specialLookup, REF_invokeSpecial, refc, mb, specialLookup);
-		// return null;
+		return (MethodHandle) GET_DIRECT_METHOD.invoke(specialLookup, REF_invokeSpecial, refc, mb, false, true, specialLookup);
 	}
 }

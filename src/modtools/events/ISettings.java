@@ -5,8 +5,8 @@ import arc.math.Mathf;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
-import arc.util.Strings;
+import arc.struct.*;
+import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -15,11 +15,12 @@ import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 
 import static modtools.events.ISettings.$$.text;
-import static modtools.ui.content.SettingsUI.SettingsBuilder.main;
+import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 
+@SuppressWarnings("unused")
 public interface ISettings extends E_DataInterface {
 	/** 这会根据实现自动更改  */
 	Data data = null;
@@ -97,16 +98,27 @@ public interface ISettings extends E_DataInterface {
 	default void build(String prefix, Table table) {
 		main = table;
 		text = (prefix + name()).toLowerCase();
+		Class<?> type = type();
 
-		Method build = builds.find(m -> m.getParameterTypes()[0] == Tools.box(type()));
-		Tools.runLoggedException(() -> build.invoke(this, (Object) null));
+		Method build = builds.get(Tools.box(type));
+		try {
+			build.invoke(this, (Object) null);
+		} catch (Throwable e) {
+			Log.err(e.getCause());
+		}
 	}
 	class $$ {
 		static String text;
+
+		static {
+			builds.each((__, m) -> m.setAccessible(true));
+		}
 	}
 
 	// ----通过反射执行对应的方法----
-	Seq<Method> builds = new Seq<>(ISettings.class.getDeclaredMethods()).removeAll(b -> !b.getName().equals("b"));
+	ObjectMap<Class<?>, Method> builds = new Seq<>(ISettings.class.getDeclaredMethods())
+	 .removeAll(b -> !b.getName().equals("b"))
+	 .asMap(m -> m.getParameterTypes()[0]);
 
 	private void b(Boolean __) {
 		SettingsBuilder.check(text, this::set, this::enabled);

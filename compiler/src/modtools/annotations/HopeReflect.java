@@ -75,13 +75,18 @@ public class HopeReflect {
 		OPEN_MODULE.invokeExact(javaBase, "sun.reflect.annotation");
 		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.access");
 
+		String[] pkgs = {
+		 "com.sun.tools.javac.tree",
+		 "com.sun.tools.javac.code",
+		 "com.sun.tools.javac.model",
+		 "com.sun.tools.javac.jvm",
+		 "com.sun.tools.javac.comp",
+		 "com.sun.tools.javac.main"
+		};
 		Module jdkCompiler = TreeMaker.class.getModule();
-		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.tree");
-		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.code");
-		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.model");
-		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.jvm");
-		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.comp");
-		OPEN_MODULE.invokeExact(jdkCompiler, "com.sun.tools.javac.main");
+		for (String pkg : pkgs) {
+			OPEN_MODULE.invokeExact(jdkCompiler, pkg);
+		}
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
 	}
 	public static byte[] defaultBytes;
@@ -314,6 +319,9 @@ public class HopeReflect {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
+	}
+	public static long fieldOffset(Class<?> clazz, String fieldName) {
+		return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 	}
 	public static class NULL {}
 	static class AccessSetter {

@@ -4,18 +4,14 @@ import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
-
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-
-import java.util.*;
+import java.util.Set;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
 @AutoService({Processor.class})
@@ -174,7 +170,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	@Override
-	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(ContentInit.class.getCanonicalName(), SettingsInit.class.getCanonicalName());
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
+		return Set.of(ContentInit.class, SettingsInit.class);
 	}
 }

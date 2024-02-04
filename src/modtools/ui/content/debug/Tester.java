@@ -57,7 +57,7 @@ import modtools.utils.ui.MethodTools;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -840,7 +840,7 @@ public class Tester extends Content {
 		}
 	}
 
-	private static class AddedSeq extends Seq<String> {
+	static class AddedSeq extends Seq<String> {
 		/* 是否处理了log */
 		boolean resolved = true;
 		public Seq<String> add(String value) {
@@ -857,7 +857,7 @@ public class Tester extends Content {
 		}
 	}
 
-	private static class NativeJavaHandle extends BaseFunction {
+	public static class NativeJavaHandle extends BaseFunction {
 		private final MethodHandle handle;
 		public NativeJavaHandle(Scriptable scope, MethodHandle handle) {
 			super(scope, null);
@@ -924,7 +924,7 @@ public class Tester extends Content {
 			} else obj = scope;
 			if (obj == null) return;
 
-			List<Object> keys = new ArrayList<>(List.of(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds()));
+			List<Object> keys = new ArrayList<>(Arrays.asList(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds()));
 			if (obj == scope) keys.addAll(JSSyntax.varSet.toSeq().list());
 			if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
 

@@ -2,10 +2,9 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
@@ -14,7 +13,7 @@ import java.util.*;
 
 @AutoService({Processor.class})
 // @SupportedOptions({"debug", "verify"})
-public class DataProcessor extends BaseProcessor {
+public class DataProcessor extends BaseProcessor<Element> {
 	private static final String EVENT       = "modtools.events.MyEvents";
 	private static final String EVNET_FIELD = "$event-0";
 	Type TY_Event;
@@ -83,7 +82,7 @@ public class DataProcessor extends BaseProcessor {
 			initMap.computeIfAbsent(element.getEnclosingElement(), k -> new ArrayList<>()).add(element);
 	}
 
-	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(DataEventFieldInit.class.getCanonicalName());
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
+		return Set.of(DataEventFieldInit.class);
 	}
 }

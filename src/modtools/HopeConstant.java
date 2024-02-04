@@ -17,33 +17,38 @@ import java.lang.reflect.*;
 import static ihope_lib.MyReflect.lookup;
 
 /** 处理一些不安全的常量 */
+@SuppressWarnings("unchecked")
 public class HopeConstant {
 	public interface BINDING {
-		MethodHandle BINDING_CTOR   = nl(() ->
+		@SuppressWarnings("JavaLangInvokeHandleSignature")
+		MethodHandle BINDING_CTOR = nl(() ->
 		 lookup.findConstructor(Binding.class,
 			MethodType.methodType(void.class, String.class, int.class, KeybindValue.class, String.class)));
-		long         BINDING_VALUES = FieldUtils.fieldOffset(Binding.class, "$VALUES");
+		long BINDING_VALUES = FieldUtils.fieldOffset(Binding.class, "$VALUES");
 	}
 
 	public interface DESKTOP {
+		Class<?> MEMBER_NAME = nl(() -> Class.forName("java.lang.invoke.MemberName"));
+
 		/** @see MemberName#flags */
 		long MEMBER_NAME_FLAGS =
-		 FieldUtils.fieldOffset(nl(() -> Class.forName("java.lang.invoke.MemberName")), "flags");
+		 FieldUtils.fieldOffset(MEMBER_NAME, "flags");
 
 		/** @see MemberName.Factory#INSTANCE */
 		Object       FACTORY          = nl(() ->
 		 Reflect.get(Class.forName("java.lang.invoke.MemberName$Factory"), "INSTANCE"));
 		/** @see MemberName#MemberName(Constructor) */
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
-		 lookup.findConstructor(Class.forName("java.lang.invoke.MemberName"), MethodType.methodType(void.class, Constructor.class)));
+		 lookup.findConstructor(MEMBER_NAME, MethodType.methodType(void.class, Constructor.class)));
 
 		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class)  */
 		Method RESOLVE_OR_FAIL   = nl(() ->
-		 Class.forName("java.lang.invoke.MemberName$Factory").getDeclaredMethod("resolveOrFail", byte.class, Class.forName("java.lang.invoke.MemberName"), Class.class, int.class, Class.class));
-		/** @see Lookup#getDirectMethod(byte, Class, MemberName, Lookup)   */
+		 Class.forName("java.lang.invoke.MemberName$Factory").getDeclaredMethod("resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class));
+		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
 		Method GET_DIRECT_METHOD = nl(() ->
-		 Lookup.class.getDeclaredMethod("getDirectMethod", byte.class, Class.class, Class.forName("java.lang.invoke.MemberName"), Lookup.class));
+		 Lookup.class.getDeclaredMethod("getDirectMethodCommon", byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class));
 	}
+	@SuppressWarnings("JavaReflectionMemberAccess")
 	public interface ANDROID {
 		/** MethodHandleImpl(long artMethod, int ref, MethodType mt)  */
 		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = nl(() ->
@@ -72,7 +77,7 @@ public class HopeConstant {
 		try {
 			Object r = prov.get();
 			if (r instanceof AccessibleObject ao) ao.setAccessible(true);
-			return (R)r;
+			return (R) r;
 		} catch (Throwable e) {
 			return null;
 		}

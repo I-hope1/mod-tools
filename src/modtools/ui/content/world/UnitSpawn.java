@@ -278,7 +278,7 @@ public class UnitSpawn extends Content {
 	}
 	// 用于获取点击的坐标
 	UnitSpawnSelectListener listener;
-	private class UnitSpawnSelectListener extends WorldSelectListener {
+	class UnitSpawnSelectListener extends WorldSelectListener {
 		Element hitter = new Hitter();
 		protected void acquireWorldPos(float x, float y) {
 			super.acquireWorldPos(x, y);

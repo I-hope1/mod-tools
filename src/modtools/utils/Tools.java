@@ -129,7 +129,7 @@ public class Tools {
 		if (type == Float.class) return float.class;
 		if (type == Long.class) return long.class;
 		if (type == Double.class) return double.class;
-		// it will not reach
+		// it should not reach
 		return type;
 	}
 

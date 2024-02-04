@@ -7,16 +7,15 @@ import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.Name;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
-import javax.lang.model.element.*;
+import javax.lang.model.element.Element;
 import java.io.*;
 import java.util.*;
 
 @AutoService({Processor.class})
-public class IconsProcessor extends BaseProcessor {
+public class IconsProcessor extends BaseProcessor<Element> {
 	public void dealElement(Element element) throws Throwable {
 		JCClassDecl root = /* new JCClassDecl(maker.Modifiers(Flags.PUBLIC),
 		 ns(name), List.nil(), null, List.nil(), List.nil(),
@@ -145,7 +144,7 @@ public class IconsProcessor extends BaseProcessor {
 		if (dotIndex == -1) return name;
 		return name.substring(0, dotIndex);
 	}
-	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(IconAnn.class.getCanonicalName());
+	public Set<Class<?>> getSupportedAnnotationTypes0() {
+		return Set.of(IconAnn.class);
 	}
 }

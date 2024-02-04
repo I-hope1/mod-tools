@@ -1,7 +1,5 @@
 package modtools;
 
-import static mindustry.Vars.*;
-
 import arc.Events;
 import arc.files.Fi;
 import arc.util.Log;
@@ -13,10 +11,10 @@ import modtools.files.HFi;
 import modtools.struct.MySet;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
-import modtools.utils.SR;
-import modtools.utils.Tools.CatchRun;
 
 import java.util.concurrent.*;
+
+import static mindustry.Vars.ui;
 
 public class IntVars {
 	public static final String  modName = "mod-tools";
@@ -31,7 +29,6 @@ public class IntVars {
 
 	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;
-
 
 	public static void showException(Throwable e, boolean b) {
 		if (b) {

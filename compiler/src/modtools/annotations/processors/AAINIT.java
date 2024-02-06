@@ -2,6 +2,7 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import modtools.annotations.*;
+import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -21,6 +22,7 @@ public class AAINIT extends AbstractProcessor {
 			HopeReflect.load();
 			loadProperties();
 			hasMindustry = !properties.containsKey("hasMindustry") || properties.getProperty("hasMindustry").equals("true");
+			Replace.replaceSource();
 		} catch (Throwable e) {
 			err(e);
 		}

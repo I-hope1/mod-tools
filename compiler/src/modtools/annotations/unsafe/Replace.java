@@ -1,7 +1,8 @@
 package modtools.annotations.unsafe;
 
-import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.Source.Feature;
 import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.jvm.*;
@@ -39,9 +40,17 @@ public class Replace {
 		setAccess(Check.class, Check.instance(__context), "rs", resolve);
 		setAccess(Attr.class, __attr__, "rs", resolve);
 	}
+
 	static void forceJavaVersion() throws Throwable {
 		setTarget(properties);
-		forcePreview();
+	}
+	public static void replaceSource() {
+		long  off      = fieldOffset(Feature.class, "minLevel");
+		for (Feature feature : Feature.values()) {
+			if (!feature.allowedInSource(Source.JDK8)) {
+				unsafe.putObject(feature, off, Source.JDK8);
+			}
+		}
 	}
 	private static void forcePreview() {
 		Preview preview = Preview.instance(__context);
@@ -50,29 +59,16 @@ public class Replace {
 			// setAccess(Preview.class, preview, "forcePreview", true);
 		}
 	}
-	private static void setTarget(Properties properties) throws Throwable {
+	private static void setTarget(Properties properties) {
 		String version = properties.getProperty("targetVersion");
 		Target target  = Target.lookup(version);
 		if (target == null) return;
 		println("targetVersion: [@](@)", version, target);
 
-		removeKey(Target.class, target);
+		// removeKey(Target.class, target);
 		// jdk9才有
 		removeKey("concatKey", StringConcat.class, null);
 
-		// setAccess(JavaCompiler.class, JavaCompiler.instance(__context), "sourceOutput", true);
-		// setAccess(JavaCompiler.class, JavaCompiler.instance(__context), "genEndPos", false);
-		// setAccess(Gen.class, Gen.instance(__context),  "disableVirtualizedPrivateInvoke", lower);
-		// Object value = Class.forName("com.sun.tools.javac.main.JavaCompiler$CompilePolicy").getEnumConstants()[0];
-		// println(value);
-		// setAccess(JavaCompiler.class, JavaCompiler.instance(__context), "DEFAULT_COMPILE_POLICY", value);
-		// re_init(Arguments.class, Arguments.instance(__context));
-		// re_init(LambdaToMethod.class, LambdaToMethod.instance(__context));
-		// setAccess(RootPackageSymbol.class, mSymtab.rootPackage, "allowPrivateInvokeVirtual", target.runtimeUseNestAccess());
-		// setValue(Lower.class,"optimizeOuterThis", true);
-		// setValue(Lower.class,"debugLower", true);
-		// setValue(Gen.class, "disableVirtualizedPrivateInvoke", false);
-		// setValue(ClassWriter.class, "emitSourceFile", false);
 		// 用于适配低版本
 		setAccess(Lower.class, Lower.instance(__context), "target", target);
 		setAccess(ClassWriter.class, ClassWriter.instance(__context), "target", target);

@@ -1,7 +1,7 @@
 package modtools.override;
 
 import arc.Core;
-import arc.scene.*;
+import arc.scene.Group;
 import arc.util.Log;
 import modtools.utils.ByteCodeTools.*;
 

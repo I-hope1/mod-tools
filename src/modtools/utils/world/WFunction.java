@@ -13,7 +13,6 @@ import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
-import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.game.Team;
@@ -21,7 +20,8 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import mindustry.world.Tile;
-import modtools.events.*;
+import modtools.events.MyEvents;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.components.Window.DisWindow;
@@ -33,7 +33,6 @@ import modtools.ui.content.world.Selection;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.LerpFun;
 
 import java.util.Vector;
@@ -49,7 +48,7 @@ import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 @SuppressWarnings("CodeBlock2Expr")
 public abstract class WFunction<T> {
-	private static      Selection SC;
+	private static Selection SC;
 	public static void init(Selection selection) {
 		SC = selection;
 	}
@@ -169,7 +168,7 @@ public abstract class WFunction<T> {
 	}
 	private void buildButtons() {
 		buttons.defaults().height(Selection.buttonHeight).growX();
-		buttons.button("Refresh", Icon.refreshSmall,HopeStyles.flatt, () -> {
+		buttons.button("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
 		buttons.button("All", Icon.menuSmall, HopeStyles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
@@ -383,29 +382,28 @@ public abstract class WFunction<T> {
 			return super.remove(index);
 		}
 	}
-	class SelectHover extends LimitButton {
-		public final Task clearFocusWorld = new Task() {
-			public void run() {
-				if (item instanceof Tile) SC.focusTile = null;
-				else if (item instanceof Building) SC.focusBuild = null;
-				else if (item instanceof Unit) SC.focusUnits.remove((Unit) item);
-				else if (item instanceof Bullet) SC.focusBullets.remove((Bullet) item);
-				SC.focusDisabled = false;
-			}
+	public class SelectHover extends LimitButton {
+		private T item;
+
+		public final Runnable clearFocusWorld = () -> {
+			if (item instanceof Tile) SC.focusTile = null;
+			else if (item instanceof Building) SC.focusBuild = null;
+			else if (item instanceof Unit) SC.focusUnits.remove((Unit) item);
+			else if (item instanceof Bullet) SC.focusBullets.remove((Bullet) item);
+			SC.focusDisabled = false;
 		};
 
-		private final T item;
 
 		public SelectHover(T item) {
 			super(HopeStyles.flati);
-			margin(2, 4, 2, 4);
 			this.item = item;
+			margin(2, 4, 2, 4);
 
 			touchable = Touchable.enabled;
 
 			hovered(() -> {
 				if (SC.focusDisabled) return;
-				SC.focusElem = this;
+				Selection.focusElem = this;
 				SC.focusElemType = WFunction.this;
 				if (item instanceof Tile) SC.focusTile = (Tile) item;
 				else if (item instanceof Building) SC.focusBuild = (Building) item;
@@ -414,7 +412,7 @@ public abstract class WFunction<T> {
 				SC.focusDisabled = true;
 			});
 			exited(() -> {
-				SC.focusElem = null;
+				Selection.focusElem = null;
 				SC.focusElemType = null;
 				clearFocusWorld.run();
 			});
@@ -424,14 +422,14 @@ public abstract class WFunction<T> {
 
 		public void updateVisibility() {
 			super.updateVisibility();
-			if (SC.focusDisabled || SC.focusElem == this ||
+			if (SC.focusDisabled || Selection.focusElem == this ||
 					(SC.focusTile != item && SC.focusBuild != item
 					 && !(item instanceof Unit && SC.focusUnits.contains((Unit) item))
 					 && !(item instanceof Bullet && SC.focusBullets.contains((Bullet) item))
 					)
 			) return;
 
-			SC.focusElem = this;
+			Selection.focusElem = this;
 			SC.focusElemType = WFunction.this;
 		}
 
@@ -449,7 +447,7 @@ public abstract class WFunction<T> {
 
 		public void draw() {
 			super.draw();
-			if (SC.focusElem == this) {
+			if (Selection.focusElem == this) {
 				Draw.color(Pal.accent, Draw.getColor().a);
 				Lines.stroke(4f);
 				float w = width - 2;
@@ -489,7 +487,9 @@ public abstract class WFunction<T> {
 			for (var e : from) add(e);
 		}
 		public boolean equals(Object object) {
-			return this == object && ((SeqBind) object).from == from;
+			if (object == null) return false;
+			if (object.getClass() != SeqBind.class) return false;
+			return this == object || ((SeqBind)object).from == from;
 		}
 	}
 

@@ -2,6 +2,7 @@ package modtools.utils.ui;
 
 import arc.func.*;
 import arc.math.*;
+import arc.util.Time;
 import mindustry.graphics.Layer;
 import modtools.struct.*;
 import modtools.utils.Tools;
@@ -69,7 +70,7 @@ public class LerpFun {
 		if (drawSeq == null) throw new IllegalStateException("You don't set the drawSeq");
 		enabled = true;
 		drawSeq.add(() -> {
-			a = Mathf.clamp(a + step * (reverse ? -1 : 1));
+			a = Mathf.clamp(a + step * Time.delta * (reverse ? -1 : 1));
 			applyV = apply(a);
 			if (floatc != null) floatc.get(applyV);
 			return reverse ? a > 0 : a < 1;

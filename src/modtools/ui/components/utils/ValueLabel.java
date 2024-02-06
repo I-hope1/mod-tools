@@ -17,22 +17,23 @@ import mindustry.gen.*;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.input.*;
 import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.components.review.*;
 import modtools.ui.content.ui.*;
+import modtools.ui.content.world.Selection;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
 import modtools.utils.ui.FormatHelper;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Array;
 import java.util.*;
 import java.util.Map.Entry;
 
 import static modtools.events.E_JSFunc.truncate_text;
-import static modtools.ui.Contents.*;
+import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
@@ -62,6 +63,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
+
+		// while
+		// if (Entityc.class.isAssignableFrom(type) || val instanceof Entityc
+		// 		|| Entityc[].class.isAssignableFrom(type) || val instanceof Entityc[]) {
+		Selection.addFocusSource(this, () -> val);
+		// }
 
 		IntUI.addShowMenuListenerp(this, this::getMenuLists);
 	}
@@ -303,7 +310,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public Runnable afterSet;
 	public abstract void setVal();
 	/** 这可能会设置字段值  */
-	public void setNewVal(Object newVal) {};
+	public void setNewVal(Object newVal) {}
+	;
 
 	protected void setVal0(Object newVal) {
 		try {

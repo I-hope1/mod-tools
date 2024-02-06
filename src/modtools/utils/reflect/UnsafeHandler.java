@@ -1,5 +1,6 @@
 package modtools.utils.reflect;
 
+import arc.util.Nullable;
 import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
 
@@ -26,7 +27,7 @@ public class UnsafeHandler {
 		}
 		return method;
 	}
-	public static Class<?> defineClass(String name, byte[] b, ClassLoader loader) {
+	public static Class<?> defineClass(@Nullable String name, byte[] b, ClassLoader loader) {
 		return defineClass(name, b, loader, null);
 	}
 

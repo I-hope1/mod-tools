@@ -830,13 +830,12 @@ public class Tester extends Content {
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log, js_prop,
-		auto_complement, max_history_size(int.class, 0, 100);
+		auto_complement, max_history_size(int.class, 40/* def */, 0, 100);
 
 		Settings() {}
 		Settings(Class<?> a, int... args) {}
 		static {
 			wrap_ref.defTrue();
-			max_history_size.def(30);
 		}
 	}
 

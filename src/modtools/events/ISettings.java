@@ -1,10 +1,5 @@
 package modtools.events;
 
-import static modtools.events.ISettings.$$.text;
-import static modtools.ui.content.SettingsUI.SettingsBuilder.main;
-
-import java.lang.reflect.Method;
-
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.event.Touchable;
@@ -15,10 +10,16 @@ import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.ui.content.SettingsUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
+
+import java.lang.reflect.Method;
+
+import static modtools.events.ISettings.$$.text;
+import static modtools.ui.content.SettingsUI.SettingsBuilder.main;
 
 @SuppressWarnings("unused")
 public interface ISettings extends E_DataInterface {
@@ -74,7 +75,7 @@ public interface ISettings extends E_DataInterface {
 
 	/** @param prefix 用于显示设置文本 */
 	static void buildAll(String prefix, Table table, Class<? extends ISettings> cl) {
-		buildAll0("@settings." + prefix, table, cl);
+		IntVars.async(() -> buildAll0("@settings." + prefix, table, cl));
 	}
 	private static void buildAll0(String prefix, Table table, Class<? extends ISettings> cl) {
 		for (ISettings value : cl.getEnumConstants()) {
@@ -104,7 +105,7 @@ public interface ISettings extends E_DataInterface {
 		try {
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
-			Log.err(e.getCause());
+			Log.err("build " + this, e.getCause());
 		}
 	}
 	class $$ {
@@ -126,9 +127,10 @@ public interface ISettings extends E_DataInterface {
 	/** 默认step为1 */
 	private void b(Integer __) {
 		var    args   = (int[]) args();
-		float  min    = args[0];
-		float  max    = args[1];
-		float  step   = args.length == 2 ? 1f : args[2];
+		float  def    = args[0];
+		float  min    = args[1];
+		float  max    = args[2];
+		float  step   = args.length == 3 ? 1f : args[3];
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getInt());
 		Label value = new Label(getString(), Styles.outlineLabel);
@@ -147,9 +149,10 @@ public interface ISettings extends E_DataInterface {
 	/** 默认step为0.1 */
 	private void b(Float __) {
 		var    args   = (float[]) args();
-		float  min    = args[0];
-		float  max    = args[1];
-		float  step   = args.length == 2 ? 0.1f : args[2];
+		float  def    = args[0];
+		float  min    = args[1];
+		float  max    = args[2];
+		float  step   = args.length == 3 ? 0.1f : args[3];
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getFloat());
 		Label value = new Label(getString(), Styles.outlineLabel);

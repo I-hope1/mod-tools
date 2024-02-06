@@ -20,9 +20,9 @@ public class HopeReflect {
 			Field  f      = Class.class.getDeclaredField("module");
 			long   off    = unsafe.objectFieldOffset(f);
 			Module module = Object.class.getModule();
+
 			unsafe.putObject(BaseProcessor.class, off, module);
 			unsafe.putObject(HopeReflect.class, off, module);
-			unsafe.putObject(AccessSetter.class, off, module);
 			// unsafe.putObject(Reflect.class, off, module);
 			Class<?> reflect = Class.forName("jdk.internal.reflect.Reflection");
 			Map      map     = (Map) lookup.findStaticGetter(reflect, "fieldFilterMap", Map.class).invokeExact();
@@ -30,7 +30,7 @@ public class HopeReflect {
 			map = (Map) lookup.findStaticGetter(reflect, "methodFilterMap", Map.class).invokeExact();
 			if (map != null) map.clear();
 
-			module();
+			openModule();
 		} catch (Throwable e) {
 			throw new RuntimeException(e);
 		}
@@ -52,7 +52,7 @@ public class HopeReflect {
 			return lookup;
 		} catch (Exception e) {throw new RuntimeException(e);}
 	}
-	public static void module() throws Throwable {
+	public static void openModule() throws Throwable {
 		MethodHandle OPEN_MODULE = lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class));
 
 		Module javaBase = Object.class.getModule();
@@ -78,6 +78,7 @@ public class HopeReflect {
 		Module jdkCompiler = DocTrees.class.getModule();
 		for (String pkg : pkgs) {
 			Modules.addOpens(jdkCompiler, pkg, self);
+			/* debug模式可能不加载 编译参数（当然在 gradle.properties 里加也可以）  */
 			Modules.addExports(jdkCompiler, pkg);
 		}
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
@@ -163,9 +164,4 @@ public class HopeReflect {
 		return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 	}
 	public static void load() {}
-	static class AccessSetter {
-		public static void setAccess(AccessibleObject obj) {
-			obj.setAccessible(true);
-		}
-	}
 }

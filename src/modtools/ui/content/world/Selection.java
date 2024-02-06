@@ -7,8 +7,8 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.*;
-import arc.math.geom.QuadTree.QuadTreeObject;
 import arc.math.geom.*;
+import arc.math.geom.QuadTree.QuadTreeObject;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
@@ -25,12 +25,12 @@ import mindustry.graphics.*;
 import mindustry.input.InputHandler;
 import mindustry.type.*;
 import mindustry.ui.Styles;
-import mindustry.world.*;
+import mindustry.world.Tile;
 import mindustry.world.blocks.environment.*;
 import modtools.events.ISettings;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
@@ -39,14 +39,12 @@ import modtools.ui.components.linstener.*;
 import modtools.ui.content.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
-import modtools.ui.IntUI;
+import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.ArrayUtils;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.world.*;
 
-import java.util.*;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
 
@@ -55,7 +53,7 @@ import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.world.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
-import static modtools.utils.world.WorldDraw.*;
+import static modtools.utils.world.WorldDraw.drawRegion;
 
 @SuppressWarnings({"CodeBlock2Expr", "DanglingJavadoc"})
 public class Selection extends Content {
@@ -297,7 +295,7 @@ public class Selection extends Content {
 		ElementUtils.addOrRemove(fragSelect, hasSelect);
 	}
 	public static void getWorldRect(Tile t) {
-		TMP_RECT.set(t.worldx(), t.worldy(), 32, 32);
+		mr1.set(t.worldx(), t.worldy(), 32, 32);
 	}
 
 	public static class EntityFunction<T extends Entityc> extends WFunction<T> {
@@ -494,8 +492,10 @@ public class Selection extends Content {
 		focusBullets.each(this::drawFocus);
 	}
 
-	/** world -> ui(if transform) */
-	boolean drawArrow = false, transform = true;
+	/** <p>World -> UI (if transform)</p> */
+	private boolean transform = true;
+	private boolean drawArrow = false;
+
 	Mat mat = new Mat();
 	/** @see mindustry.graphics.OverlayRenderer#drawTop */
 	public void drawFocus(Object focus) {
@@ -509,28 +509,29 @@ public class Selection extends Content {
 		if (focus instanceof Tile) {
 			Selection.getWorldRect((Tile) focus);
 			region = Core.atlas.white();
-		} else if (focus instanceof QuadTreeObject) {
+		} else if (focus instanceof QuadTreeObject && focus instanceof Posc) {
 			/** @see InputHandler#selectedUnit() */
 			var box = (QuadTreeObject & Posc) focus;
 			/** {@link QuadTreeObject#hitbox}以中心对称
 			 * @see Rect#setCentered(float, float, float, float)
 			 * @see Rect#setCentered(float, float, float) */
-			box.hitbox(TMP_RECT);
+			box.hitbox(mr1);
 			region = focus instanceof Building ? ((Building) focus).block.fullIcon :
 			 focus instanceof Unit ? ((Unit) focus).icon() : Core.atlas.white();
-			if (region != Core.atlas.white()) TMP_RECT.setSize(region.width, region.height);
-			TMP_RECT.setPosition(box.x(), box.y());
+			if (region != Core.atlas.white()) mr1.setSize(region.width, region.height);
+			mr1.setPosition(box.x(), box.y());
 		} else return;
-		TMP_RECT.setSize(TMP_RECT.width / 4f, TMP_RECT.height / 4f);
+		mr1.setSize(mr1.width / 4f, mr1.height / 4f);
 
 		if (transform) {
 			mat.set(Draw.proj());
+			// world
 			Draw.proj(Core.camera);
 		}
 		Draw.color();
 		Draw.z(Layer.end);
-		float x = TMP_RECT.x, y = TMP_RECT.y;
-		float w = TMP_RECT.width, h = TMP_RECT.height;
+		float x = mr1.x, y = mr1.y;
+		float w = mr1.width, h = mr1.height;
 		Draw.mixcol(focusColor, 1);
 		Draw.alpha((region == Core.atlas.white() ? 0.7f : 0.9f) * focusColor.a);
 
@@ -546,7 +547,8 @@ public class Selection extends Content {
 		} */
 
 		Draw.rect(region, x, y, w, h,
-		 !(focus instanceof BlockUnitc) && focus instanceof Unit u ? u.rotation - 90f : 0f);
+		 !(focus instanceof BlockUnitc) && focus instanceof Unit u ? u.rotation - 90f
+			: 90f);
 
 		Draw.reset();
 		Draw.color(Pal.accent);
@@ -560,31 +562,72 @@ public class Selection extends Content {
 				Draw.rect("select-arrow", x + Angles.trnsx(rot, length), y + Angles.trnsy(rot, length), length / 1.9f, length / 1.9f, rot - 135f);
 			}
 		}
+		/* 恢复原来的proj */
 		if (transform) Draw.proj(mat);
+		// if (transform) Draw.proj(Core.camera.inv);
 
-		if (focusElem != null && focusElem.getScene() != null &&
-				focusElemType != null && focusElemType.list.contains(focus)) {
-			Lines.stroke(4f);
-			Vec2 tmp0 = Core.camera.project(x, y);
-			x = tmp0.x;
-			y = tmp0.y;
-			Vec2 vec2 = ElementUtils.getAbsPosCenter(focusElem);
-			Lines.line(vec2.x, vec2.y, x, y);
-			vec2 = ElementUtils.getAbsolutePos(focusElem);
-			Lines.line(vec2.x, vec2.y, x, y);
+		if (focusElem != null && focusElem.getScene() != null
+				&& ((!transform && focusAny != null) || (focusElemType != null && focusElemType.list.contains(focus)))
+		) {
+			if (transform) {
+				drawLineOnScreen(x, y);
+			} else {
+				// 将screen映射到world
+				Draw.proj(Core.camera.inv);
+				Fill.crect(0,0,100,100);
+				drawLineOnScreen(x, y);
+				Draw.proj(Core.camera);
+			}
 		}
+
 		Draw.reset();
+	}
+	private static void drawLineOnScreen(float worldX, float worldY) {
+		Lines.stroke(4f);
+		/* world -> screen */
+		Vec2 tmp0 = Core.camera.project(worldX, worldY);
+		Vec2  vec2 = ElementUtils.getAbsPosCenter(focusElem);
+		float x1   = vec2.x, y1 = vec2.y;
+		vec2 = ElementUtils.getAbsolutePos(focusElem);
+		float x2 = vec2.x, y2 = vec2.y;
+		Fill.tri(x1, y1, x2, y2, tmp0.x, tmp0.y);
+		// Lines.line(vec2.x, vec2.y, screenX, screenY);
 	}
 
 	public boolean focusDisabled;
 	boolean focusLocked;
-	private      boolean           focusEnabled;
-	public       Element           focusElem;
+	private       boolean  focusEnabled;
+	public static Element  focusElem;
+	/** 用于反应 元素 对应的 焦点  */
+	public static Object   focusAny;
+	static        Runnable CANCEL_TASK = () -> {
+		focusElem = null;
+		focusAny = null;
+	};
+
+	public static void addFocusSource(Element source, Prov<Object> focusProv) {
+		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
+		// Object stamp = focusProv.get();
+		// if (!(stamp instanceof Entityc || stamp instanceof Tile)) throw new IllegalArgumentException("focusProv value should be a Tile or an entity.");
+
+		source.addListener(new InputListener() {
+			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+				focusElem = source;
+				focusAny = focusProv;
+			}
+			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+				if (toActor != null && source.isAscendantOf(toActor)) return;
+				CANCEL_TASK.run();
+			}
+		});
+	}
+
 	public       Tile              focusTile;
 	public       Building          focusBuild;
 	public final ObjectSet<Unit>   focusUnits   = new ObjectSet<>();
 	public final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
 
+	/** 用于 ValueLabel 添加 焦点  */
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
 
 	public void initTask() {
@@ -622,9 +665,27 @@ public class Selection extends Content {
 	private void drawFocusInternal() {
 		drawArrow = true;
 		transform = false;
+		if (focusAny != null) {
+			Object focus = focusAny;
+			if (focus instanceof Prov<?> p) focus = p.get();
+			if (!drawFocusAny(focus)) focusAny = null;
+		}
 		focusInternal.each(this::drawFocus);
 		transform = true;
 		drawArrow = false;
+	}
+	public boolean drawFocusAny(Object focus) {
+		if (focus == null) return false;
+		if (!focus.getClass().isArray()) {
+			mr1.setPosition(Float.NaN, Float.NaN);
+			drawFocus(focus);
+			return !Float.isNaN(mr1.x) && !Float.isNaN(mr1.y);
+		}
+		boolean valid = false;
+		for (Object child : (Object[]) focus) {
+			if (drawFocusAny(child)) valid = true;
+		}
+		return valid;
 	}
 
 	private void reacquireFocus() {

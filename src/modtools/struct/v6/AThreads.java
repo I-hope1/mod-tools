@@ -9,6 +9,7 @@ import java.util.concurrent.*;
 public interface AThreads {
 	AThreads impl = ModTools.isV6 ? new V6() : new V7();
 	ExecutorService boundedExecutor(@Nullable String name, int max);
+
 	class V6 implements AThreads {
 		public ExecutorService boundedExecutor(String name, int max) {
 			return new ThreadPoolExecutor(1, max, 1, TimeUnit.MINUTES, new LinkedBlockingQueue<>(), r -> newThread(r, name, true));
@@ -22,8 +23,9 @@ public interface AThreads {
 
 	ThreadFactory factory = CatchSR.apply(() ->
 	 CatchSR.of(() -> (ThreadFactory) Reflect.invoke(Class.forName("java.lang.Thread$Builder"),
-		Reflect.invoke(Thread.class, "ofVirtual"),
-	 "factory", new Object[0])).get(() -> Thread::new));
+		 Reflect.invoke(Thread.class, "ofVirtual"),
+		 "factory", new Object[0]))
+		.get(() -> Thread::new));
 	private static Thread newThread(Runnable r, @Nullable String name, boolean daemon) {
 		Thread thread = factory.newThread(r);
 		if (name != null) thread.setName(name);

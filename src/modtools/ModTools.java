@@ -54,19 +54,18 @@ public class ModTools extends Mod {
 			IntVars.meta = metas.get(ModTools.class);
 			load();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
-				Vars.ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
+				ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
 				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
 				 SettingsUI::disabledRestart, () -> {});
 			}
 		} catch (Throwable e) {
-			if (isImportFromGame) Vars.ui.showException("Cannot load ModTools. (Don't worry.)", e);
+			if (isImportFromGame) ui.showException("Cannot load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
 		}
 	}
 	private void load() {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
-		// TestRedefine.load();
 
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
@@ -182,9 +181,9 @@ public class ModTools extends Mod {
 			}
 			bundle = bundle.getParent();
 		}
-
 	}
 
+	public static ClassLoader lastLoader;
 	public static boolean loadLib(String fileName, String mainClassName, boolean showError) {
 		return loadLib(fileName, mainClassName, showError, null);
 	}
@@ -208,6 +207,7 @@ public class ModTools extends Mod {
 			ClassLoader loader = Vars.platform.loadJar(toFi, IntVars.mainLoader);
 			IntVars.mainLoader.addChild(loader);
 			Class.forName(mainClassName, true, loader);
+			lastLoader = loader;
 			if (callback != null) callback.run();
 			toFi.delete();
 			return true;

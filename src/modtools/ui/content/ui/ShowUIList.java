@@ -8,8 +8,8 @@ import arc.graphics.g2d.Draw;
 import arc.math.Interp;
 import arc.scene.*;
 import arc.scene.style.*;
-import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.ui.*;
 import arc.scene.ui.Dialog.DialogStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
@@ -17,8 +17,8 @@ import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
-import arc.scene.ui.layout.*;
 import arc.scene.ui.layout.Stack;
+import arc.scene.ui.layout.*;
 import arc.scene.utils.Disableable;
 import arc.util.*;
 import mindustry.Vars;
@@ -26,7 +26,6 @@ import mindustry.core.UI;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.annotations.builder.DataBoolFieldInit;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.utils.*;
@@ -64,7 +63,7 @@ public class ShowUIList extends Content {
 			t.left().defaults().left();
 			t.add(bgColorWrap);
 			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
-			t.table(t0 -> t0.check("forceDisabled",
+			t.table(t0 -> t0.check("ForceDisabled",
 				forceDisabled, val -> forceDisabled = val).with(c -> c.setStyle(HopeStyles.hope_defaultCheck)))
 			 .colspan(3).left()
 			 .growX().padTop(-4f);
@@ -84,7 +83,6 @@ public class ShowUIList extends Content {
 		// ui.addCloseButton();
 	}
 
-	@DataBoolFieldInit(data = "")
 	boolean forceDisabled;
 	Pattern pattern;
 
@@ -102,16 +100,14 @@ public class ShowUIList extends Content {
 	public static HashMap<Style, String>    styleKeyMap = new HashMap<>();
 	public static HashMap<Group, String>    uiKeyMap    = new HashMap<>();
 
-	Table icons = newTable(t -> {
-		Icon.icons.each((k, icon) -> {
-			iconKeyMap.put(icon, k);
-			t.bind(k);
-			var region = icon.getRegion();
-			t.image(icon).size(32, region.height / (float) region.width * 32);
-			t.add(k).with(JSFunc::addDClickCopy).growY().row();
-			t.unbind();
-		});
-	}), tex     = newTable(t -> {
+	Table icons = newTable(t -> Icon.icons.each((k, icon) -> {
+		iconKeyMap.put(icon, k);
+		t.bind(k);
+		var region = icon.getRegion();
+		t.image(icon).size(32, region.height / (float) region.width * 32);
+		t.add(k).with(JSFunc::addDClickCopy).growY().row();
+		t.unbind();
+	})), tex  = newTable(t -> {
 		for (Field field : Tex.class.getFields()) {
 			try {
 				// 是否为Drawable

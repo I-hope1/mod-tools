@@ -3,38 +3,35 @@ package modtools.ui.menu;
 import arc.func.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.Button;
-import arc.struct.Seq;
+import arc.util.Nullable;
 import arc.util.pooling.Pools;
-
-import java.util.Iterator;
 
 import static modtools.ui.Contents.tester;
 
 /**
  * The type Menu list.
  */
-/* -----List------- */
 public class MenuList {
 	/**
 	 * The Max.
 	 */
-	public static int          max = 20;
+	public static    int          max = 20;
 	/**
 	 * The Icon.
 	 */
-	public        Drawable     icon;
+	public           Drawable     icon;
 	/**
 	 * The Name.
 	 */
-	public        String       name;
+	public           String       name;
 	/**
-	 * The Provider.
+	 * The name provider. (Nullable)
 	 */
-	public        Prov<String> provider;
+	public @Nullable Prov<String> provider;
 	/**
-	 * The Cons.
+	 * The cons will be call when clicked.
 	 */
-	public        Cons<Button> cons;
+	public           Cons<Button> cons;
 	/**
 	 * With menu list.
 	 *

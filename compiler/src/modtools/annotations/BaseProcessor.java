@@ -1,7 +1,10 @@
 package modtools.annotations;
 
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.TreePath;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.comp.Attr;
 import com.sun.tools.javac.jvm.ClassWriter;
 import com.sun.tools.javac.model.JavacElements;
@@ -208,6 +211,13 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		} catch (Throwable e) {
 			return Set.of();
 		}
+	}
+	protected static VarSymbol getSymbol(CompilationUnitTree unit, JCVariableDecl tree) {
+		return (VarSymbol)getSymbol(unit, (JCTree) tree);
+	}
+	protected static Symbol getSymbol(CompilationUnitTree unit, JCTree tree) {
+		TreePath path   = trees.getPath(unit, tree);
+		return trees.getElement(path);
 	}
 	public abstract Set<Class<?>> getSupportedAnnotationTypes0();
 

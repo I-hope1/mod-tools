@@ -39,12 +39,12 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element>
 		JCVariableDecl x = addField(tree, Modifier.PRIVATE | Modifier.STATIC,
 		 FIELD().type, newFieldName, null);
 		mMaker.at(x);
-		stats.add(mMaker.Exec(mMaker.Assign(mMaker.Ident(x),
+		stats.add(mMaker.Assignment(x.sym,
 		 mMaker.Apply(
 			List.nil(),
 			mMaker.Select(mMaker.Ident(FIELD_UTILS()), ns("getFieldAccess")),
 			List.of(clazz, name))
-		)));
+		));
 		return x;
 	}
 	public Set<Class<?>> getSupportedAnnotationTypes0() {

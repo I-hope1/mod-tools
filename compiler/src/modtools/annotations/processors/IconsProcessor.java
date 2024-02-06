@@ -10,16 +10,13 @@ import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
-import javax.lang.model.element.Element;
 import java.io.*;
 import java.util.*;
 
 @AutoService({Processor.class})
-public class IconsProcessor extends BaseProcessor<Element> {
-	public void dealElement(Element element) throws Throwable {
-		JCClassDecl root = /* new JCClassDecl(maker.Modifiers(Flags.PUBLIC),
-		 ns(name), List.nil(), null, List.nil(), List.nil(),
-		 List.nil(), symbol) {} */(JCClassDecl) trees.getTree(element);
+public class IconsProcessor extends BaseProcessor<ClassSymbol> {
+	public void dealElement(ClassSymbol element) throws Throwable {
+		JCClassDecl root = trees.getTree(element);
 		root.defs = List.nil();
 		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
 
@@ -27,33 +24,34 @@ public class IconsProcessor extends BaseProcessor<Element> {
 		ClassSymbol drawableSymbol = findClassSymbol("arc.scene.style.TextureRegionDrawable");
 		ClassType   drawable       = (ClassType) drawableSymbol.type;
 		ClassType   texture        = findType("arc.graphics.Texture");
-		ClassType   pixmap         = findType("arc.graphics.Pixmap");
+		// ClassType   pixmap         = findType("arc.graphics.Pixmap");
 		ClassType   fiType         = findType("arc.files.Fi");
 
 
-		ClassType map = (ClassType) findType("arc.struct.ObjectMap").constType(123);
+		/* ClassType map = (ClassType) findType("arc.struct.ObjectMap").constType(123);
 		map.typarams_field = List.of(stringType, pixmap);
 
-		addImport(element, map);
+		addImport(element, map); */
 		addImport(element, drawableSymbol);
-		// addImport(element, fiType);
-		addImport(element, pixmap);
-		addImport(element, /* Pixmaps */findClassSymbol("arc.graphics.Pixmaps"));
+		addImport(element, fiType);
+		// addImport(element, pixmap);
+		// addImport(element, /* Pixmaps */findClassSymbol("arc.graphics.Pixmaps"));
 		addImport(element, /* TextureRegion */findClassSymbol("arc.graphics.g2d.TextureRegion"));
 		addImport(element, findClassSymbol("arc.graphics.Texture"));
-		addImport(element, findClassSymbol("arc.Core"));
+		// addImport(element, findClassSymbol("arc.Core"));
 
 		StringBuilder sb = new StringBuilder();
 		sb.append("if (root == null) root = mindustry.Vars.mods.getMod(").append(icons.mainClass().getName()).append(".class).root;");
 		sb.append("dir = root.child(\"").append(icons.iconDir()).append("\");");
 		stringType.tsym.owner.kind = Kind.VAR;
 		texture.tsym.owner.kind = Kind.VAR;
-		map.tsym.owner.kind = Kind.VAR;
+		// map.tsym.owner.kind = Kind.VAR;
 		addField(root, Flags.STATIC | Flags.PRIVATE, fiType,
-		 "root", null);
+		 "root", null).vartype = mMaker.Ident(fiType.tsym);
 		addField(root, Flags.STATIC | Flags.PRIVATE, fiType,
-		 "dir", null);
-		JCVariableDecl p1Fi = makeVar(Flags.PARAMETER, fiType, "p1Fi", null, root.sym);
+		 "dir", null).vartype = mMaker.Ident(fiType.tsym);
+		var p1Fi = makeVar(Flags.PARAMETER, fiType, "p1Fi", null, root.sym);
+		p1Fi.vartype = mMaker.Ident(fiType.tsym);
 		JCMethodDecl setRoot = mMaker.MethodDef(
 		 mMaker.Modifiers(Flags.PUBLIC | Flags.STATIC),
 		 ns("setRoot"), mMaker.Ident(mSymtab.voidType.tsym),
@@ -62,11 +60,12 @@ public class IconsProcessor extends BaseProcessor<Element> {
 		root.defs = root.defs.append(setRoot);
 		stringType.tsym.owner.kind = Kind.PCK;
 		texture.tsym.owner.kind = Kind.PCK;
-		map.tsym.owner.kind = Kind.PCK;
+		// map.tsym.owner.kind = Kind.PCK;
 
 		// 添加TextureRegionDrawable的构造方法n()
 		// 添加参数name
 		JCVariableDecl name = makeVar(Flags.PARAMETER, stringType, "name", null, root.sym);
+		name.vartype = mMaker.Ident(stringType.tsym);
 		JCMethodDecl n = mMaker.MethodDef(
 		 mMaker.Modifiers(Flags.PRIVATE | Flags.STATIC),
 		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),

@@ -14,6 +14,7 @@ import modtools.utils.Tools;
 public class ExecuteTree {
 	private static TaskNode context = null;
 
+
 	public static MySet<TaskNode> all   = new MySet<>();
 	public static MySet<TaskNode> roots = new MySet<>();
 
@@ -140,6 +141,13 @@ public class ExecuteTree {
 	}
 
 
+	public static class JSRun extends DelegateRun {
+		public String code;
+		public JSRun(Runnable delegate, Floatp intervalSeconds, String code) {
+			super(delegate, intervalSeconds);
+			this.code = code;
+		}
+	}
 	public static class DelegateRun implements Runnable {
 		Runnable delegate;
 		Floatp   intervalSeconds;

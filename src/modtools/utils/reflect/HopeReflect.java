@@ -40,7 +40,7 @@ public class HopeReflect {
 
 	public static Class<?> defineClass(String name, ClassLoader loader, byte[] bytes) {
 		if (OS.isAndroid) return defineClassAndroid(name, loader, bytes);
-		return UnsafeHandler.defineClass(null, bytes, loader);
+		return UnsafeHandler.defineClass(name, bytes, loader);
 	}
 	private static Class<?> defineClassAndroid(String name, ClassLoader loader, byte[] bytes) {
 		return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())

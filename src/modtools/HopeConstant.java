@@ -1,11 +1,5 @@
 package modtools;
 
-import static ihope_lib.MyReflect.lookup;
-
-import java.lang.invoke.*;
-import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.reflect.*;
-
 import arc.KeyBinds.KeybindValue;
 import arc.files.Fi;
 import arc.struct.*;
@@ -16,18 +10,27 @@ import mindustry.mod.Mods;
 import modtools.utils.Tools.CProv;
 import modtools.utils.reflect.FieldUtils;
 
+import java.lang.invoke.*;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.reflect.*;
+
+import static ihope_lib.MyReflect.lookup;
+
 /** 处理一些不安全的常量 */
 @SuppressWarnings("unchecked")
 public class HopeConstant {
 	public interface BINDING {
+		/** @see Binding#Binding(KeybindValue, String)  */
 		@SuppressWarnings("JavaLangInvokeHandleSignature")
 		MethodHandle BINDING_CTOR = nl(() ->
 		 lookup.findConstructor(Binding.class,
 			MethodType.methodType(void.class, String.class, int.class, KeybindValue.class, String.class)));
+
 		long BINDING_VALUES = FieldUtils.fieldOffset(Binding.class, "$VALUES");
 	}
 
 	public interface DESKTOP {
+		/** @see MemberName  */
 		Class<?> MEMBER_NAME = nl(() -> Class.forName("java.lang.invoke.MemberName"));
 
 		/** @see MemberName#flags */
@@ -50,7 +53,7 @@ public class HopeConstant {
 	}
 	@SuppressWarnings("JavaReflectionMemberAccess")
 	public interface ANDROID {
-		/** MethodHandleImpl(long artMethod, int ref, MethodType mt)  */
+		/** {@code MethodHandleImpl(long artMethod, int ref, MethodType mt)}  */
 		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = nl(() ->
 		 Class.forName("java.lang.invoke.MethodHandleImpl").getDeclaredConstructor(long.class, int.class, MethodType.class));
 
@@ -59,6 +62,7 @@ public class HopeConstant {
 
 		long STRING_COUNT = FieldUtils.fieldOffset(nl(() ->
 		 String.class.getDeclaredField("count")));
+
 		// long OBJECT_SIZE = FieldUtils.fieldOffset(nl(() ->
 		//  Class.class.getDeclaredField("objectSize")));
 	}
@@ -68,7 +72,9 @@ public class HopeConstant {
 		ObjectMap<String, Seq<Fi>> bundles = nl(() -> Reflect.get(Mods.class, Vars.mods, "bundles"));
 	}
 	public interface STRING {
+		/** @see String#value  */
 		long VALUE = FieldUtils.fieldOffset(String.class, "value");
+		/** @see String#coder  */
 		long CODER = FieldUtils.fieldOffset(String.class, "coder");
 	}
 

@@ -4,16 +4,13 @@ package modtools.ui.content;
 import arc.Core;
 import arc.func.Boolp;
 import arc.graphics.Color;
-import arc.scene.Element;
-import arc.scene.style.*;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
-import arc.scene.ui.layout.Table;
-import arc.util.*;
+import arc.util.Reflect;
 import mindustry.gen.Icon;
-import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.buttons.CircleImageButton;
@@ -88,7 +85,7 @@ public abstract class Content {
 		Button btn = makeButton(isSmallized,
 		 checked == null ?
 			/* un-toggle */isSmallized ? HopeStyles.hope_flati : HopeStyles.cleart
-		 :/* toggle */ isSmallized ? HopeStyles.hope_flatTogglei : HopeStyles.flatTogglet);
+			:/* toggle */ isSmallized ? HopeStyles.hope_flatTogglei : HopeStyles.flatTogglet);
 		if (checked != null) {
 			btn.update(() -> btn.setChecked(checked.get()));
 		}

@@ -30,7 +30,7 @@ public class IntVars {
 	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;
 
-	public static void showException(Throwable e, boolean b) {
+	public static void showException(Throwable e, boolean b)  {
 		if (b) {
 			IntUI.showException(e);
 		} else {
@@ -53,11 +53,11 @@ public class IntVars {
 		var completableFuture = CompletableFuture.runAsync(() -> {
 			try {
 				runnable.run();
+				if (callback != null) callback.run();
 			} catch (Throwable th) {
 				showException(th, displayUI);
 			}
 			if (displayUI) ui.loadfrag.hide();
-			if (callback != null) callback.run();
 		});
 		try {
 			completableFuture.get();

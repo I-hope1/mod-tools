@@ -1,17 +1,21 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
+import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.code.Type.MethodType;
+import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.Set;
+import java.util.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
 @AutoService({Processor.class})
@@ -74,8 +78,56 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 															Object literalName, String parent, boolean fireEvents) {
+		CompilationUnitTree unit = trees.getPath(settings).getCompilationUnit();
+		classDecl.accept(new TreeScanner() {
+			public void visitVarDef(JCVariableDecl tree) {
+				if (!(tree.init instanceof JCNewClass newClass)) return;
+				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
+							&& newClass.args.get(1) instanceof JCFieldAccess access)) return;
+				VarSymbol symbol = getSymbol(unit, tree);
+				if (symbol.getAnnotation(FlushField.class) == null) return;
+
+				Iterable<Symbol> set = settings.members().getSymbols(
+				 t -> t instanceof MethodSymbol m && m.name.toString().equals("set") && !m.params.isEmpty() && m.params.get(0).type.equals(mSymtab.objectType)
+							&& m.getReturnType().equals(mSymtab.voidType));
+				MethodSymbol ms;
+
+				Iterator<Symbol> iterator = set.iterator();
+				if (!iterator.hasNext()) {
+					mMaker.at(classDecl.defs.last());
+					int flags = Flags.PUBLIC;
+					ms = new MethodSymbol(flags, ns("set"),
+					 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), settings),
+					 settings);
+
+					JCVariableDecl val = makeVar(Flags.PARAMETER, mSymtab.objectType, "val", null, ms);
+					JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
+					 mMaker.Select(mMaker.Select(mMaker.Ident(iSettings), ns("super")), ns("set")),
+					 List.of(mMaker.Ident(val.name)))));
+					ms.params = List.of(val.sym);
+
+					JCMethodDecl method = mMaker.MethodDef(ms, body);
+					settings.members().enter(ms);
+					classDecl.defs = classDecl.defs.append(method);
+				} else ms = (MethodSymbol) iterator.next();
+
+				JCMethodDecl methodDecl = trees.getTree(ms);
+				methodDecl.body.stats = methodDecl.body.stats.append(
+				 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
+					 mMaker.This(settings.type)),
+					mMaker.Exec(mMaker.Assign(access,
+						mMaker.Apply(List.nil(),
+						 mMaker.Select(mMaker.This(settings.type), ns("get" + kebabToBigCamel(classType.selected.toString()))),
+						 List.nil()
+						)
+					 )
+					), null)
+				);
+			}
+		});
 		addImport(settings, dataClass);
 
+		mMaker.at(classDecl.defs.last());
 		addMethod(classDecl, "data", dataClass.type);
 		if (parent.isEmpty()) addImport(settings, mySettingsClass);
 
@@ -88,7 +140,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 PBlock(
 				mMaker.Exec(mMaker.Apply(
 				 List.nil(), mMaker.Select(
-					 mMaker.Select(mMaker.Type(iSettings.type), ns("super")),
+					mMaker.Select(mMaker.Ident(iSettings), ns("super")),
 					ns("set")
 				 ), List.of(mMaker.Ident(ns("val")))
 				)),
@@ -163,10 +215,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		if (findChild(settingsTree, Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals(name)) != null)
 			return;
 		addField0(settingsTree, Flags.PRIVATE, type, name, init).vartype = mMaker.Ident(type.tsym);
-	}
-
-	public void process() {
-		// Placeholder for any additional processing logic
 	}
 
 	@Override

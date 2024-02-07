@@ -5,12 +5,9 @@ plugins {
 group 'mod-tools'
 version '1.4.4'
 
-//java.sourceCompatibility = JavaVersion.VERSION_17
-//java.targetCompatibility = JavaVersion.VERSION_1_8
-
-static def export(JavaCompile compiler) {
-//	compiler.options.compilerArgs.addAll("-Xlint:deprecation")
-	compiler.options.compilerArgs.addAll(new String[]{
+static def export(CompileOptions options) {
+// options.compilerArgs.addAll("-Xlint:deprecation")
+	options.compilerArgs.addAll(new String[]{
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.loader",
 			"java.base/jdk.internal.reflect",
@@ -27,14 +24,15 @@ static def export(JavaCompile compiler) {
 			"jdk.compiler/com.sun.tools.javac.util",
 			"java.base/sun.reflect.annotation",
 			"java.base/jdk.internal.module",
-			"jdk.jfr/jdk.jfr.internalD"
-	}.collect { "--add-exports=$it=ALL-UNNAMED" })
+			"jdk.jfr/jdk.jfr.internal"
+	}.collectMany { ["--add-exports", "$it=ALL-UNNAMED"] })
 }
 
 allprojects {
 	ext {
 		uncVersion = '1.8.9'
 		mindustryVersion = 'v146'
+
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
@@ -42,7 +40,7 @@ allprojects {
 		options.encoding = 'UTF-8'
 		sourceCompatibility = 9
 		targetCompatibility = 9
-		export(it)
+		export(options)
 	}
 	repositories {
 		mavenLocal()
@@ -51,14 +49,14 @@ allprojects {
 		maven { url 'https://www.jitpack.io' }
 	}
 }
-
+sourceCompatibility = 17
+targetCompatibility = 17
 
 sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
-
 
 //	def sdkRoot = System.getenv("ANDROID_HOME")
 //	println "AndroidHome: $sdkRoot"
@@ -81,8 +79,7 @@ dependencies {
 
 mindustry {
 	meta << ModMeta(version: version)
-	meta.displayName = "mod-tools"
-	def name = project.archivesBaseName
+	def name = meta.displayName = "mod-tools"
 	deploy {
 		baseName = name
 	}

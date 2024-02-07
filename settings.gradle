@@ -1,3 +1,4 @@
+rootProject.name = "mod-tools"
 
 include 'annotations'
 include 'compiler'

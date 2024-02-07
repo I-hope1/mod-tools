@@ -105,7 +105,7 @@ public interface ISettings extends E_DataInterface {
 		try {
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
-			Log.err("build " + this, e.getCause());
+			Log.err("Failed to build " + getClass() + "." + this, e.getCause());
 		}
 	}
 	class $$ {

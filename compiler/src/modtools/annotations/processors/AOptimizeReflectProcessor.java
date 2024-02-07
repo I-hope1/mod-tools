@@ -61,8 +61,8 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element>
 			this.stats = stats;
 		}
 		public void visitVarDef(JCVariableDecl variable) {
-			OptimizeReflect annotationByTree = getAnnotationByTree(OptimizeReflect.class, unit, variable, false);
-			if (annotationByTree == null) return;
+			OptimizeReflect annotation = getAnnotationByTree(OptimizeReflect.class, unit, variable, false);
+			if (annotation == null) return;
 
 			JCMethodInvocation invocation   = (JCMethodInvocation) variable.init;
 			JCExpression       declaredType = invocation.args.get(0);
@@ -76,11 +76,9 @@ public class AOptimizeReflectProcessor extends BaseProcessor<Element>
 				x = newFieldVariable(newFieldName, declaredType, name, classDecl, stats);
 			}
 			mMaker.at(variable.init);
-			boolean isSetter = annotationByTree.isSetter();
 			variable.init = mMaker.Apply(null,
 			 mMaker.Select(mMaker.Ident(FIELD_UTILS()),
-				ns((isSetter ? "set" : "get") + (variable.type.isPrimitive() ? capitalize("" + variable.type) : ""))),
-			 isSetter ? List.of(invocation.args.get(1), mMaker.Ident(x), invocation.args.get(3)) :
+				ns(("get") + (variable.type.isPrimitive() ? capitalize("" + variable.type) : ""))),
 				List.of(invocation.args.get(1), mMaker.Ident(x))
 			);
 		}

@@ -204,6 +204,7 @@ public class SettingsUI extends Content {
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
+
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {
 		public static Table main;

@@ -21,9 +21,8 @@ public class HopeReflect {
 			long   off    = unsafe.objectFieldOffset(f);
 			Module module = Object.class.getModule();
 
-			unsafe.putObject(BaseProcessor.class, off, module);
 			unsafe.putObject(HopeReflect.class, off, module);
-			// unsafe.putObject(Reflect.class, off, module);
+
 			Class<?> reflect = Class.forName("jdk.internal.reflect.Reflection");
 			Map      map     = (Map) lookup.findStaticGetter(reflect, "fieldFilterMap", Map.class).invokeExact();
 			if (map != null) map.clear();
@@ -53,15 +52,17 @@ public class HopeReflect {
 		} catch (Exception e) {throw new RuntimeException(e);}
 	}
 	public static void openModule() throws Throwable {
-		MethodHandle OPEN_MODULE = lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class));
-
 		Module javaBase = Object.class.getModule();
-		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.module");
-		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.misc");
-		OPEN_MODULE.invokeExact(javaBase, "sun.reflect.annotation");
-		OPEN_MODULE.invokeExact(javaBase, "jdk.internal.access");
+		lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class))
+		 .invokeExact(javaBase, "jdk.internal.module");
 
-		String[] pkgs = {
+		open(Object.class.getModule(),
+		 "jdk.internal.misc",
+		 "sun.reflect.annotation",
+		 "jdk.internal.access"
+		);
+
+		open(DocTrees.class.getModule(),
 		 "com.sun.tools.javac.api",
 		 "com.sun.tools.javac.code",
 		 "com.sun.tools.javac.comp",
@@ -71,17 +72,17 @@ public class HopeReflect {
 		 "com.sun.tools.javac.jvm",
 		 "com.sun.tools.javac.parser",
 		 "com.sun.tools.javac.processing",
-		 "com.sun.tools.javac.util",
-		 };
-
-		Module self        = HopeReflect.class.getModule();
-		Module jdkCompiler = DocTrees.class.getModule();
-		for (String pkg : pkgs) {
-			Modules.addOpens(jdkCompiler, pkg, self);
-			/* debug模式可能不加载 编译参数（当然在 gradle.properties 里加也可以）  */
-			Modules.addExports(jdkCompiler, pkg);
-		}
+		 "com.sun.tools.javac.util"
+		);
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
+	}
+	private static void open(Module module, String... pkgs) {
+		Module self = HopeReflect.class.getModule();
+		for (String pkg : pkgs) {
+			Modules.addOpens(module, pkg, self);
+			/* debug模式可能不加载 编译参数（当然在 gradle.properties 里加也可以）  */
+			Modules.addExports(module, pkg);
+		}
 	}
 
 
@@ -128,7 +129,7 @@ public class HopeReflect {
 	public static void setAccess(Class<?> clazz, Object obj, String name, Object value) {
 		Field field;
 		try {
-			 field= clazz.getDeclaredField(name);
+			field = clazz.getDeclaredField(name);
 		} catch (Throwable e) {
 			throw new RuntimeException(e);
 		}
@@ -163,5 +164,6 @@ public class HopeReflect {
 	public static long fieldOffset(Class<?> clazz, String fieldName) {
 		return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 	}
+	/** 主要是加载{@code <clinit>}  */
 	public static void load() {}
 }

@@ -6,5 +6,4 @@ import java.lang.annotation.*;
 @Target({ElementType.LOCAL_VARIABLE, ElementType.TYPE, ElementType.TYPE_USE})
 @Retention(RetentionPolicy.SOURCE)
 public @interface OptimizeReflect {
-	boolean isSetter() default false;
 }

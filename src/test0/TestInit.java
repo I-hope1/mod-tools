@@ -1,8 +1,10 @@
 package test0;
 
 import arc.util.Log;
+import jdk.internal.misc.Unsafe;
 import mindustry.Vars;
-import modtools.annotations.NoAccessCheck;
+import mindustry.mod.ContentParser;
+import modtools.annotations.*;
 
 public class TestInit {
 	public double a;
@@ -11,12 +13,9 @@ public class TestInit {
 		this.a = a * 1024;
 	}
 }
-
-
 @NoAccessCheck
 class A {
 	static {
-		// Log.info(sun.nio.ByteBuffered.class);
 		Vars.mods.parser.finishParsing();
 	}
 }

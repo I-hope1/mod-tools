@@ -3,13 +3,12 @@ package modtools.utils.ui.search;
 import arc.scene.Element;
 import arc.scene.ui.layout.Cell;
 
-public class BindCell {
+public final class BindCell {
 	public static final Cell<?> UNSET_CELL = new Cell<>();
 
 	public  Cell<?> cell;
 	private Cell<?> cpy;
 	public  Element el;
-
 
 	public BindCell(Cell<?> cell) {
 		this.cell = cell;
@@ -41,6 +40,8 @@ public class BindCell {
 		cpy = null;
 		cell = null;
 	}
+
+	// toggle
 	public void toggle() {
 		toggle(cell.get() != el);
 	}

@@ -14,7 +14,6 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.processors.AAINIT;
-import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -96,6 +95,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			init();
 		} catch (Throwable e) {err(e);}
 	}
+
 	public void initConst(ProcessingEnvironment env) {
 		if (__context != null) return;
 
@@ -111,10 +111,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		mFiler = (JavacFiler) env.getFiler();
 		classWriter = ClassWriter.instance(__context);
 		__attr__ = Attr.instance(__context);
-
-		try {
-			Replace.extendingFunc();
-		} catch (Throwable e) {err(e);}
 
 		stringType = mSymtab.stringType;
 	}

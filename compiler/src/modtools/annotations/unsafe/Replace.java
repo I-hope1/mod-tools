@@ -1,51 +1,111 @@
 package modtools.annotations.unsafe;
 
+import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Source.Feature;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
+import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
-import modtools.annotations.NoAccessCheck;
+import modtools.annotations.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 
-import static modtools.annotations.BaseProcessor.*;
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.println;
-import static modtools.annotations.processors.AAINIT.properties;
+import static modtools.annotations.processors.AAINIT.*;
 
 public class Replace {
-	public static void extendingFunc() throws Throwable {
+	static Context context;
+	public static void extendingFunc(Context context) {
+		Replace.context = context;
+		try {
+			extendingFunc0();
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static void extendingFunc0() {
 		accessOverride();
 
 		forceJavaVersion();
 	}
+
+	static Symbol NOT_FOUND;
 	private static void accessOverride() {
 		try {
 			NoAccessCheck.class.getClass();
 		} catch (NoClassDefFoundError error) {return;}
 		// Resolve prev = Resolve.instance(__context);
 		removeKey(Resolve.class);
-		Resolve resolve = new MyResolve(__context);
+		var resolve = new MyResolve(context);
 		// copyTo(prev, resolve);
+		ModuleFinder moduleFinder = ModuleFinder.instance(context);
+		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
 
+		final Symtab symtab = Symtab.instance(context);
+		setAccess(Resolve.class, resolve, "doRecoveryLoadClass", (RecoveryLoadClass) (env, name) -> {
+			var candidates = Convert.classCandidates(name);
+			// println("candidates: @", candidates);
+			Iterator<ClassSymbol> iterator = Iterators.createCompoundIterator(candidates,
+			 c -> symtab.getClassesForName(c).iterator());
+			// find def
+			while (iterator.hasNext()) {
+				ClassSymbol next = iterator.next();
+				if (next != null) return next;
+			}
+			// find in other module
+			Set<ModuleSymbol> recoverableModules = new HashSet<>(symtab.getAllModules());
+
+			recoverableModules.add(symtab.unnamedModule);
+			recoverableModules.remove(env.toplevel.modle);
+
+			for (ModuleSymbol ms : recoverableModules) {
+				//avoid overly eager completing classes from source-based modules, as those
+				//may not be completable with the current compiler settings:
+				if (ms.sourceLocation == null) {
+					if (ms.classLocation == null) {
+						ms = moduleFinder.findModule(ms);
+					}
+
+					Symbol sym = loadClass(ms, candidates);
+					if (sym != null) return sym;
+				}
+			}
+			return NOT_FOUND;
+		});
 		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
 			public Object visitType(Type t, Object o) {return t;}
 		});
-		setAccess(Check.class, Check.instance(__context), "rs", resolve);
-		setAccess(Attr.class, __attr__, "rs", resolve);
+		setAccess(Check.class, Check.instance(context), "rs", resolve);
+		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
+	}
+	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
+		for (Name candidate : candidates) {
+			if (ms.kind != Kind.ERR) {
+				try {
+					ClassSymbol symbol = BaseProcessor.classFinder.loadClass(ms, candidate);
+					if (symbol.exists()) return symbol;
+					// println("source: @", symbol.sourcefile);
+				} catch (CompletionFailure ignored) {}
+			}
+		}
+		return NOT_FOUND;
 	}
 
-	static void forceJavaVersion() throws Throwable {
+	static void forceJavaVersion() {
 		setTarget(properties);
 	}
 	public static void replaceSource() {
-		long  off      = fieldOffset(Feature.class, "minLevel");
+		long off = fieldOffset(Feature.class, "minLevel");
 		for (Feature feature : Feature.values()) {
 			if (!feature.allowedInSource(Source.JDK8)) {
 				unsafe.putObject(feature, off, Source.JDK8);
@@ -53,7 +113,7 @@ public class Replace {
 		}
 	}
 	private static void forcePreview() {
-		Preview preview = Preview.instance(__context);
+		Preview preview = Preview.instance(context);
 		if (!preview.isEnabled()) {
 			setAccess(Preview.class, preview, "enabled", true);
 			// setAccess(Preview.class, preview, "forcePreview", true);
@@ -70,16 +130,16 @@ public class Replace {
 		removeKey("concatKey", StringConcat.class, null);
 
 		// 用于适配低版本
-		setAccess(Lower.class, Lower.instance(__context), "target", target);
-		setAccess(ClassWriter.class, ClassWriter.instance(__context), "target", target);
+		setAccess(Lower.class, Lower.instance(context), "target", target);
+		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
 	static void setValue(Class<?> cl, String key, Object val) {
-		Object instance = invoke(cl, null, "instance", new Object[]{__context}, Context.class);
+		Object instance = invoke(cl, null, "instance", new Object[]{context}, Context.class);
 		setAccess(cl, instance, key, val);
 	}
 	private static <T> void re_init(Class<T> clazz, T instance) throws Throwable {
 		MethodHandle init = InitHandle.findInitDesktop(clazz, clazz.getDeclaredConstructor(Context.class), clazz);
-		init.invoke(instance, __context);
+		init.invoke(instance, context);
 	}
 
 	/// ------------------------------
@@ -92,7 +152,7 @@ public class Replace {
 	}
 	private static void removeKey(String name, Class<?> cls, Object newVal) {
 		Key<Resolve>            key = getAccess(cls, null, name);
-		HashMap<Key<?>, Object> ht  = getAccess(Context.class, __context, "ht");
+		HashMap<Key<?>, Object> ht  = getAccess(Context.class, context, "ht");
 		ht.remove(key);
 		if (newVal != null) ht.put(key, newVal);
 	}
@@ -101,7 +161,6 @@ public class Replace {
 		for (Field field : dest.getClass().getDeclaredFields()) {
 			int mod = field.getModifiers();
 			if (Modifier.isStatic(mod) || Modifier.isFinal(mod)) continue;
-			println(field);
 			field.setAccessible(true);
 			field.set(dest, field.get(src));
 		}

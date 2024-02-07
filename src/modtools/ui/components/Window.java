@@ -192,6 +192,7 @@ public class Window extends Table {
 
 		titleTable.defaults().size(buttonSize);
 
+
 		if (full) {
 			//noinspection rawtypes,unchecked
 			titleTable.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32,
@@ -214,7 +215,9 @@ public class Window extends Table {
 		 titleTable.button(Icon.cancel,
 			 cancel_clearNonei, 32, this::hide)
 			.padLeft(4f).padRight(4f)
-			.get(), __ -> resize.show());
+			.get(),
+		 __ -> resize.show());
+
 		setup();
 	}
 
@@ -290,6 +293,7 @@ public class Window extends Table {
 								 + graphics.getWidth();
 		float minY = (this instanceof PopupWindow ? 0 : -mainHeight + touchHeight / 3f * 2f);
 		float maxY = -mainHeight + graphics.getHeight();
+
 		super.setPosition(Mathf.clamp(x, minX, maxX),
 		 Mathf.clamp(y, minY, maxY));
 		/* if (lastMaximize) {
@@ -302,8 +306,6 @@ public class Window extends Table {
 	public static boolean mobileDisabled = false;
 	/** 截图 */
 	public TextureRegion screenshot() {
-		// return getFrameBufferTexture((int) x, (int) y, (int) width, (int) height);
-		// return new TextureRegion(bufferCapture(this));
 		if (Vars.mobile && mobileDisabled) return null;
 		return cache = isMinimize || cont == null ? cache : ElementUtils.screenshot(cont, true, null);
 	}
@@ -699,6 +701,7 @@ public class Window extends Table {
 			});
 		}
 	}
+
 	public interface IInfo {}
 	/**
 	 * 延迟几秒销毁的窗口

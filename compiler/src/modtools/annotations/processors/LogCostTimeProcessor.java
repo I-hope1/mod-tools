@@ -43,7 +43,7 @@ public class LogCostTimeProcessor extends BaseProcessor<MethodSymbol> {
 			)))
 		 )
 		);
-		println(tree);
+		println("[D]" + tree);
 	}
 
 	public Set<Class<?>> getSupportedAnnotationTypes0() {

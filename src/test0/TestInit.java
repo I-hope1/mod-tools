@@ -13,6 +13,7 @@ public class TestInit {
 		this.a = a * 1024;
 	}
 }
+
 @NoAccessCheck
 class A {
 	static {

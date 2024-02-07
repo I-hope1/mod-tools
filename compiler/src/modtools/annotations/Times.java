@@ -1,14 +1,16 @@
 package modtools.annotations;
 
-import java.util.*;
-
 import modtools.annotations.PrintHelper.SPrinter;
 
+import java.util.*;
+
+/** @see arc.util.Time  */
 public interface Times {
 	Deque<Long> marks = new ArrayDeque<>();
 	static void mark() {
 		marks.add(System.nanoTime());
 	}
+
 	/** A value of -1 means mark() wasn't called beforehand. */
 	static float elapsed() {
 		if (marks.isEmpty()) {

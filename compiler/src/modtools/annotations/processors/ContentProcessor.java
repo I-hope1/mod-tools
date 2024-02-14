@@ -16,7 +16,7 @@ import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.util.*;
 
-/** 添加new XXX()，并给对应Content的Settings（如果有）初始化  */
+/** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
 @AutoService({Processor.class})
 // Inside the class:
 public class ContentProcessor extends BaseProcessor<ClassSymbol>
@@ -94,6 +94,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				VarSymbol symbol = getSymbol(unit, tree);
 				if (symbol.getAnnotation(FlushField.class) == null) return;
 
+				mMaker.at(classDecl.defs.last());
+				classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC,
+				 List.of(buildAssignment(classType, access, mMaker.Ident(symbol)))));
 				Iterable<Symbol> set = settings.members().getSymbols(
 				 t -> t instanceof MethodSymbol m && m.name.toString().equals("set") && !m.params.isEmpty() && m.params.get(0).type.equals(mSymtab.objectType)
 							&& m.getReturnType().equals(mSymtab.voidType));
@@ -122,13 +125,17 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				methodDecl.body.stats = methodDecl.body.stats.append(
 				 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
 					 mMaker.This(settings.type)),
-					mMaker.Exec(mMaker.Assign(access,
-						mMaker.Apply(List.nil(),
-						 mMaker.Select(mMaker.This(settings.type), ns("get" + kebabToBigCamel(classType.selected.toString()))),
-						 List.nil()
-						)
-					 )
-					), null)
+					buildAssignment(classType, access, mMaker.This(settings.type)), null)
+				);
+			}
+			private JCExpressionStatement buildAssignment(JCFieldAccess classType, JCFieldAccess access,
+																										JCExpression selector) {
+				return mMaker.Exec(mMaker.Assign(access,
+					mMaker.Apply(List.nil(),
+					 mMaker.Select(selector, ns("get" + kebabToBigCamel(classType.selected.toString()))),
+					 List.nil()
+					)
+				 )
 				);
 			}
 		});

@@ -1,15 +1,20 @@
 package modtools.utils;
 
 import arc.util.Strings;
+import modtools.utils.SR.CatchSR;
 import rhino.ScriptRuntime;
 
 import java.lang.reflect.InvocationTargetException;
 
 import static modtools.utils.Tools.box;
 
+/** Positive: {@code num >= 0}
+ * @see Strings */
 public class NumberHelper {
-	public static boolean isPosInt(String text) {
-		return Strings.canParsePositiveInt(text);
+	public static boolean isPositiveInt(String text) {
+		if (asInt(text) >= 0) return true;
+		float res = asFloat(text);
+		return 0 <= res && res < (float) Integer.MAX_VALUE;
 		// return text.matches("^\\d+(\\.\\d*)?([Ee]\\d+)?$");
 	}
 	public static boolean isNumber(String text) {
@@ -29,16 +34,25 @@ public class NumberHelper {
 	}
 	public static boolean isPositiveFloat(String text) {
 		try {
-			return asFloat(text) > 0;
+			return asFloat(text) >= 0;
 		} catch (Throwable ignored) {
 			return false;
 		}
 	}
 	public static float asFloat(String text) {
-		return Strings.parseFloat(text.replaceAll("∞", "Infinity"), Float.NaN);
+		try {
+			return Strings.parseFloat(text.replaceAll("∞", "Infinity"), Float.NaN);
+		} catch (Throwable e) {
+			return Float.NaN;
+		}
 	}
 	public static int asInt(String text) {
-		return Strings.parseInt(text);
+		return CatchSR.apply(() ->
+		 CatchSR.of(() -> Strings.parseInt(text))
+			.get(() -> (int) asFloat(text))
+			.get(() -> 0)
+			.get()
+		);
 	}
 
 	public static Number cast(String text, Class<?> type0) {

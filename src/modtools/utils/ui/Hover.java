@@ -16,10 +16,10 @@ import modtools.ui.IntUI.Tooltip;
 import static mindustry.Vars.mobile;
 
 public class Hover {
-	public static <T> ImageButton getImageButton(Cons<T> cons, float size, float imageSize, Table p, Runnable hide,
-																							 T item, Drawable icon) {
+	public static <T> ImageButton buildImageButton(Cons<T> cons, float size, float imageSize, Table p, Runnable hide,
+																								 T item, Drawable icon) {
 		ImageButton btn = p.button(Tex.whiteui, HopeStyles.clearNoneTogglei, imageSize, () -> {}).size(size).get();
-		IntUI.longPress(btn, 500, b -> {
+		IntUI.longPress(btn, 800, b -> {
 			if (b) return;
 			cons.get(item);
 			hide.run();
@@ -27,10 +27,11 @@ public class Hover {
 
 		if (!mobile) addHover(imageSize, btn);
 		// if (!mobile) {
-		btn.addListener(new Tooltip(t -> {
-			t.background(Tex.pane).add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
-			 .right().bottom();
-		}));
+		btn.addListener(new Tooltip(t ->
+		 t.background(Tex.pane)
+			.add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
+			.right().bottom()
+		));
 		// }
 		btn.getStyle().imageUp = icon;
 		return btn;

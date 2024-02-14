@@ -109,6 +109,12 @@ public class WorldDraw {
 	public String toString() {
 		return "WorldDraw{name='" + name + "'}";
 	}
+	public void submit(Runnable r) {
+		drawSeq.add(() -> {
+			r.run();
+			return true;
+		});
+	}
 
 	/* static boolean $condition_test$(WorldDraw self) {
 		return self.name.equals("tile");

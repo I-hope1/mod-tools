@@ -30,6 +30,7 @@ import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.content.ui.PositionProv;
 import modtools.ui.content.world.Selection;
+import modtools.ui.content.world.Selection.Settings;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
@@ -43,6 +44,7 @@ import java.util.function.*;
 import static mindustry.Vars.tilesize;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
+import static modtools.utils.Tools.catchRun;
 import static modtools.utils.world.TmpVars.tmpList;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
@@ -62,7 +64,7 @@ public abstract class WFunction<T> {
 	public        Seq<OrderedSet<T>> select      = new Seq<>();
 	private final Runnable           changeEvent = () -> MyEvents.fire(this);
 	public final  String             name;
-	Selection.Settings data;
+	Settings data;
 	public WorldDraw WD;
 
 	public TemplateTable<OrderedSet<T>> template;
@@ -75,7 +77,7 @@ public abstract class WFunction<T> {
 
 	public WFunction(String name, WorldDraw WD) {
 		this.name = name;
-		data = Selection.Settings.valueOf(name);
+		data = Settings.valueOf(name);
 		this.WD = WD;
 		Tools.TASKS.add(() -> WD.alpha = SC.selectFunc == this ? 0.7f : 0.1f);
 		executor = AThreads.impl.boundedExecutor(name + "-each", 1);
@@ -248,7 +250,7 @@ public abstract class WFunction<T> {
 				 Lines.square(pos.x, pos.y,
 					fin * Mathf.dst(region.width, region.height) / tilesize);
 			 });
-			Core.app.post(() -> action.accept(t));
+			Core.app.post(catchRun(() -> action.accept(t)));
 			Threads.sleep(1);
 		}));
 	}
@@ -313,7 +315,7 @@ public abstract class WFunction<T> {
 
 	public <R extends UnlockableContent> void ListFunction(
 	 String name, Prov<Seq<R>> list,
-	 Cons<Table> builder, Cons2<List<T>, R> cons) {
+	 Cons<SelectTable> builder, Cons2<List<T>, R> cons) {
 		FunctionBuild(name, from -> {
 			var table = IntUI.showSelectImageTableWithFunc(
 			 Core.input.mouse().cpy(), list.get(), () -> null,
@@ -489,7 +491,7 @@ public abstract class WFunction<T> {
 		public boolean equals(Object object) {
 			if (object == null) return false;
 			if (object.getClass() != SeqBind.class) return false;
-			return this == object || ((SeqBind)object).from == from;
+			return this == object || ((SeqBind) object).from == from;
 		}
 	}
 

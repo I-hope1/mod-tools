@@ -72,6 +72,7 @@ public class HopeReflect {
 		 "com.sun.tools.javac.jvm",
 		 "com.sun.tools.javac.parser",
 		 "com.sun.tools.javac.processing",
+		 "com.sun.tools.javac.resources",
 		 "com.sun.tools.javac.util"
 		);
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
@@ -166,4 +167,8 @@ public class HopeReflect {
 	}
 	/** 主要是加载{@code <clinit>}  */
 	public static void load() {}
+
+	public static void setAccessible(AccessibleObject obj) {
+		obj.setAccessible(true);
+	}
 }

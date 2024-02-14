@@ -31,7 +31,7 @@ import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.IntUI.IMenu;
+import modtools.ui.IntUI.*;
 import modtools.ui.TopGroup.BackElement;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
@@ -95,12 +95,20 @@ public class Selection extends Content {
 
 	/** @see Settings */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
-	private static void intField(Table t1) {
-		t1.row().field("", s -> tmpAmount[0] = s).valid(NumberHelper::isPosInt);
+	static void intField(SelectTable t) {
+		buildValidate(t, t.row().field("0", s -> TmpAmount[0] = s)
+		 .valid(NumberHelper::isPositiveInt)
+		 .get());
 	}
-	private static void floatField(Table t1) {
-		t1.row().field("", s -> TmpVars.tmpAmount[0] = s)
-		 .valid(NumberHelper::isPositiveFloat);
+	static void floatField(SelectTable t) {
+		buildValidate(t, t.row().field("0", s -> TmpAmount[0] = s)
+		 .valid(NumberHelper::isPositiveFloat)
+		 .get());
+	}
+	static void buildValidate(SelectTable t, TextField field) {
+		field.update(() -> {
+			t.hide = field.isValid() ? null : () -> {};
+		});
 	}
 
 	public void loadSettings(Data data) {
@@ -176,17 +184,17 @@ public class Selection extends Content {
 				});
 			});
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
+				if (!NumberHelper.isPositiveInt(TmpAmount[0])) return;
 				each(list, b -> {
-					if (b.items != null) {
-						Call.setItem(b, item, NumberHelper.asInt(tmpAmount[0]));
-					}
+					if (b.items == null) return;
+					Call.setItem(b, item, NumberHelper.asInt(TmpAmount[0]));
 				});
 			});
 			ListFunction("@selection.liquids", () -> content.liquids(), Selection::floatField, (list, liquid) -> {
+				if (!NumberHelper.isPositiveFloat(TmpAmount[0])) return;
 				each(list, b -> {
-					if (b.liquids != null) {
-						b.liquids.add(liquid, NumberHelper.asFloat(tmpAmount[0]) - b.liquids.get(liquid));
-					}
+					if (b.liquids == null) return;
+					b.liquids.add(liquid, NumberHelper.asFloat(TmpAmount[0]) - b.liquids.get(liquid));
 				});
 			});
 			FunctionBuild("@selection.sumitems", list -> {
@@ -574,7 +582,7 @@ public class Selection extends Content {
 			} else {
 				// 将screen映射到world
 				Draw.proj(Core.camera.inv);
-				Fill.crect(0,0,100,100);
+				Fill.crect(0, 0, 100, 100);
 				drawLineOnScreen(x, y);
 				Draw.proj(Core.camera);
 			}
@@ -585,7 +593,7 @@ public class Selection extends Content {
 	private static void drawLineOnScreen(float worldX, float worldY) {
 		Lines.stroke(4f);
 		/* world -> screen */
-		Vec2 tmp0 = Core.camera.project(worldX, worldY);
+		Vec2  tmp0 = Core.camera.project(worldX, worldY);
 		Vec2  vec2 = ElementUtils.getAbsPosCenter(focusElem);
 		float x1   = vec2.x, y1 = vec2.y;
 		vec2 = ElementUtils.getAbsolutePos(focusElem);
@@ -631,13 +639,12 @@ public class Selection extends Content {
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
 
 	public void initTask() {
-		WorldUtils.uiWD.drawSeq.add(() -> {
+		WorldUtils.uiWD.submit(() -> {
 			Gl.flush();
 			if (Core.input.alt()) {
 				Draw.alpha(0.3f);
 			}
 			drawFocusInternal();
-			return true;
 		});
 		Tools.TASKS.add(() -> {
 			Element tmp = HopeInput.mouseHit();

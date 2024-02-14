@@ -19,7 +19,7 @@ public class PatternUtils {
 		return pattern == null || pattern.matcher(text).find();
 	}
 
-	public static <T> boolean testContent(String text, Pattern pattern, T item) {
+	public static <T> boolean testAny(String text, Pattern pattern, T item) {
 		if (text == null || text.isEmpty()) return false;
 		if (pattern == null) return true;
 		if (item instanceof UnlockableContent unlock) {

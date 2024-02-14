@@ -602,6 +602,7 @@ public class ReviewElement extends Content {
 		});
 	}
 
+
 	public enum Settings implements ISettings {
 		hoverInfoWindow
 	}

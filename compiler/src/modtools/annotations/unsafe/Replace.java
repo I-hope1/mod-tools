@@ -20,7 +20,7 @@ import java.util.*;
 
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.println;
-import static modtools.annotations.processors.AAINIT.*;
+import static modtools.annotations.processors.AAINIT.properties;
 
 public class Replace {
 	static Context context;
@@ -33,14 +33,14 @@ public class Replace {
 		}
 	}
 
-	private static void extendingFunc0() {
+	private static void extendingFunc0() throws Throwable {
 		accessOverride();
 
 		forceJavaVersion();
 	}
 
 	static Symbol NOT_FOUND;
-	private static void accessOverride() {
+	private static void accessOverride() throws IllegalAccessException {
 		try {
 			NoAccessCheck.class.getClass();
 		} catch (NoClassDefFoundError error) {return;}
@@ -87,6 +87,44 @@ public class Replace {
 		});
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
+
+		removeKey(MemberEnter.class);
+		MemberEnter memberEnter = new MyMemberEnter(context);
+		setAccess(TypeEnter.class, TypeEnter.instance(context), "memberEnter", memberEnter);
+		// final Log prevLog = Log.instance(context);
+		// removeKey(Log.class);
+		// final MyLog log = new MyLog(context);
+		// copyTo(prevLog, log);
+		// setAccess(Check.class, Check.instance(context), "log", log);
+
+		/* removeKey(Check.class);
+
+		try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("modtools/annotations/unsafe/MyCheck$1.class")) {
+			byte[] bytes = in.readAllBytes();
+			Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, Check.class.getClassLoader(), null);
+		} catch (IOException e) {
+			err(e);
+		}
+		try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("modtools/annotations/unsafe/SpecialTreeVisitor.class")) {
+			byte[] bytes = in.readAllBytes();
+			Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, Check.class.getClassLoader(), null);
+		} catch (IOException e) {
+			err(e);
+		}
+		try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("com/sun/tools/javac/comp/MyCheck.class")) {
+			byte[]         bytes       = in.readAllBytes();
+			Class<?>       newCheckClazz    = Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, Check.class.getClassLoader(), null);
+			Constructor<?> constructor = newCheckClazz.getDeclaredConstructor(Context.class);
+			setAccessible(constructor);
+			Check check = (Check) constructor.newInstance(context);
+			Method method = Check.class.getDeclaredMethod("checkFlags", DiagnosticPosition.class, long.class, Symbol.class, JCTree.class);
+			setAccessible(method);
+			println(method.invoke(check, null, 0, null, null));
+			setAccess(MemberEnter.class, MemberEnter.instance(context), "chk", check);
+		} catch (Throwable th) {
+			err(th);
+		} */
+		// Check check = new MyCheck(context);
 	}
 	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
 		for (Name candidate : candidates) {
@@ -148,7 +186,8 @@ public class Replace {
 		removeKey(cls, null);
 	}
 	private static void removeKey(Class<?> cls, Object newVal) {
-		removeKey(cls.getSimpleName().toLowerCase() + "Key", cls, newVal);
+		String s = cls.getSimpleName();
+		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1)  + "Key", cls, newVal);
 	}
 	private static void removeKey(String name, Class<?> cls, Object newVal) {
 		Key<Resolve>            key = getAccess(cls, null, name);
@@ -157,12 +196,18 @@ public class Replace {
 		if (newVal != null) ht.put(key, newVal);
 	}
 
-	private static <T> void copyTo(T src, T dest) throws IllegalAccessException {
-		for (Field field : dest.getClass().getDeclaredFields()) {
-			int mod = field.getModifiers();
-			if (Modifier.isStatic(mod) || Modifier.isFinal(mod)) continue;
-			field.setAccessible(true);
-			field.set(dest, field.get(src));
+	private static <T> void copyTo(T src, T dest) {
+		Class<?> clazz = src.getClass();
+		while (clazz != Object.class) {
+			for (Field field : clazz.getDeclaredFields()) {
+				if (field.getType().isPrimitive()) continue;
+				int mod = field.getModifiers();
+				if (Modifier.isStatic(mod)) continue;
+				long off = unsafe.objectFieldOffset(field);
+				unsafe.putObject(dest, off, unsafe.getObject(src, off));
+				println(unsafe.getObject(dest, off));
+			}
+			clazz = clazz.getSuperclass();
 		}
 	}
 }

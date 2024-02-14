@@ -16,7 +16,7 @@ public interface TmpVars {
 			clear();
 		}
 	};
-	String[] tmpAmount = new String[1];
+	String[] TmpAmount = new String[1];
 
 	Vec2 mouse      = new Vec2();
 	Vec2 mouseWorld = new Vec2();

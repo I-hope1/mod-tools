@@ -29,7 +29,7 @@ public interface AnnotationUtils {
 	}
 	private void overwrite(CompilationUnitTree unit, Tree tree) {
 		// unit.getTypeDecls().forEach(t -> typeAnnotations.organizeTypeAnnotationsBodies((JCClassDecl) t));
-		 JCModifiers mods = HopeReflect.get(tree, "mods");
+		JCModifiers mods = HopeReflect.get(tree, "mods");
 		mods.annotations.forEach(ann -> {
 			ann.args.forEach(arg -> {
 				covertTreeToAttribute(unit, ann.attribute, (JCAssign) arg);

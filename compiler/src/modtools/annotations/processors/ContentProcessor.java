@@ -1,13 +1,12 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.MethodType;
-import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
@@ -24,7 +23,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {
 	private Name        nameSetting;
 	private ClassSymbol dataClass, mySettingsClass,
-	 iSettings, myEvents;
+	 iSettings, myEvents, settingsImpl;
 
 	public void init() throws Throwable {
 		nameSetting = ns("Settings");
@@ -32,6 +31,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		dataClass = C_Data();
 		iSettings = findClassSymbol("modtools.events.ISettings");
 		myEvents = findClassSymbol("modtools.events.MyEvents");
+		// settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
 	}
 
 	public void contentLoad(ClassSymbol element) {
@@ -78,12 +78,19 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 															Object literalName, String parent, boolean fireEvents) {
-		CompilationUnitTree unit = trees.getPath(settings).getCompilationUnit();
+		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
+		// addImport(unit, settingsImpl);
+		// mMaker.at(classDecl.defs.get(0));
+		// classDecl.extending = mMaker.Ident(settingsImpl);
+
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
 							&& newClass.args.get(1) instanceof JCFieldAccess access)) return;
+				if (newClass.def != null) {
+					println(classDecl.mods.flags);
+				}
 				VarSymbol symbol = getSymbol(unit, tree);
 				if (symbol.getAnnotation(FlushField.class) == null) return;
 
@@ -181,6 +188,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("args")), mMaker.Ident(init.params.get(1).sym)))
 			);
 		});
+
+		// println(classDecl);
 	}
 
 	private JCMethodInvocation createInitValue(String parent, Object literalName) {

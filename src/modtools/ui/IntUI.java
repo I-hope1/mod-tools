@@ -400,49 +400,16 @@ public class IntUI {
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 * @return the table
 	 */
-	public static Table
+	public static SelectTable
 	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
 										boolean searchable) {
-		Table t = new InsideTable();
-		/* t.margin(6, 8, 6, 8); */
-		Element hitter = new Hitter();
-		Runnable hide = () -> {
-			hitter.remove();
-			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
-			 Actions.remove());
-		};
-		hitter.clicked(hide);
-		topGroup.addChild(hitter);
-		topGroup.addChild(t);
+		if (vec2 == null) throw new NullPointerException("vec2 cannot be null");
+		SelectTable t = basicSelectTable(searchable, f);
 		t.update(() -> {
 			Tmp.v1.set(vec2);
 			t.setPosition(Tmp.v1.x, Tmp.v1.y, Align.topLeft);
-			if (t.getWidth() > Core.scene.getWidth()) {
-				t.setWidth((float) graphics.getWidth());
-			}
-
-			if (t.getHeight() > Core.scene.getHeight()) {
-				t.setHeight((float) graphics.getHeight());
-			}
-
-			t.keepInStage();
-			t.invalidateHierarchy();
-			t.pack();
+			checkBound(t);
 		});
-		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
-		Table p = new Table();
-		p.top();
-		if (searchable) {
-			new Search((cont, text) -> {
-				f.get(cont, hide, text);
-			}).build(t, p);
-		}
-
-		f.get(p, hide, "");
-		ScrollPane pane = new ScrollPane(p);
-		t.top().add(p).pad(0.0f).top();
-		pane.setScrollingDisabled(true, false);
-		t.pack();
 		return t;
 	}
 
@@ -459,55 +426,60 @@ public class IntUI {
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
 									boolean searchable, int align) {
 		if (button == null) throw new NullPointerException("button cannot be null");
-		SelectTable t      = new SelectTable();
-		Element     hitter = new Hitter();
-		Runnable hide = () -> {
-			hitter.remove();
-			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
-			 Actions.run(() -> t.fire(new VisibilityEvent(true))),
-			 Actions.remove());
-		};
-		hitter.clicked(hide);
-		topGroup.addChild(hitter);
-		topGroup.addChild(t);
+		SelectTable t = basicSelectTable(searchable, f);
+		t.background(Tex.pane);
 		t.update(() -> {
-			if (button.parent != null && button.isDescendantOf(Core.scene.root)) {
-				button.localToStageCoordinates(
-				 Tmp.v1.set(button.getX(align), button.getY(align))
-					.sub(button.x, button.y));
-				if (Tmp.v1.y < graphics.getHeight() / 2f) {
-					t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, align | Align.bottom);
-				} else {
-					t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight() / 2f, align | Align.top);
-				}
-				if (t.getWidth() > Core.scene.getWidth()) {
-					t.setWidth((float) graphics.getWidth());
-				}
-				if (t.getHeight() >= Core.scene.getHeight()) {
-					t.setHeight((float) graphics.getHeight());
-					t.x += (t.x > graphics.getWidth() / 2f ? -1 : 1) * button.getWidth();
-				}
-
-				t.keepInStage();
-				t.invalidateHierarchy();
-				t.pack();
-			} else {
-				Core.app.post(hide);
+			if (button.parent == null || !button.isDescendantOf(Core.scene.root)) {
+				Core.app.post(t::hideInternal);
+				return;
 			}
+			button.localToStageCoordinates(
+			 Tmp.v1.set(button.getX(align), button.getY(align))
+				.sub(button.x, button.y));
+			if (Tmp.v1.y < graphics.getHeight() / 2f) {
+				t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, align | Align.bottom);
+			} else {
+				t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight() / 2f, align | Align.top);
+			}
+			if (t.getWidth() > Core.scene.getWidth()) {
+				t.setWidth((float) graphics.getWidth());
+			}
+			if (t.getHeight() >= Core.scene.getHeight()) {
+				t.setHeight((float) graphics.getHeight());
+				t.x += (t.x > graphics.getWidth() / 2f ? -1 : 1) * button.getWidth();
+			}
+
+			t.keepInStage();
+			t.invalidateHierarchy();
+			t.pack();
 		});
+		return t;
+	}
+	public static SelectTable basicSelectTable(boolean searchable, Cons3<Table, Runnable, String> f) {
+		SelectTable t    = new SelectTable();
+		Runnable    hide = t::hideInternal;
+		t.appendToGroup();
+
+		// 淡入
 		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
+
 		Table p = new Table();
 		p.top();
-		if (searchable) {
-			newSearch(f, hide, t, p);
-		}
 
-		f.get(p, hide, "");
+		Runnable hide0 = mergeHide(t, hide);
+		if (searchable) {
+			newSearch(f, hide0, t, p);
+		}
+		f.get(p, hide0, "");
+
 		ScrollPane pane = new ScrollPane(p, Styles.smallPane);
 		t.top().add(pane).grow().pad(0f).top();
 		pane.setScrollingDisabled(true, false);
 		t.pack();
 		return t;
+	}
+	private static Runnable mergeHide(SelectTable t, Runnable hide) {
+		return () -> (t.hide != null ? t.hide : hide).run();
 	}
 	private static void newSearch(Cons3<Table, Runnable, String> rebuild, Runnable hide,
 																SelectTable t, Table p) {
@@ -515,20 +487,20 @@ public class IntUI {
 		 .build(t, p);
 	}
 
-	public static <T extends Element> Table
+	public static <T extends Element> SelectTable
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
 											Cons<String> cons, int width, int height,
 											boolean searchable, int align) {
 		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, align);
 	}
-	public static <T extends Element, E extends Enum<E>> Table
+	public static <T extends Element, E extends Enum<E>> SelectTable
 	showSelectListEnumTable(T button, Seq<E> list, Prov<E> holder,
 													Cons<E> cons, float width, float height,
 													boolean searchable, int align) {
 		return showSelectListTable(button, list, holder, cons,
 		 Enum::name, width, height, searchable, align);
 	}
-	public static <BTN extends Element, V> Table
+	public static <BTN extends Element, V> SelectTable
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
 	 Cons<V> cons, Func<V, String> stringify, float minWidth, float height,
@@ -567,24 +539,24 @@ public class IntUI {
 	 * @param searchable the searchable
 	 * @return the table
 	 */
-	public static <T extends Button, T1> Table
+	public static <T extends Button, T1> SelectTable
 	showSelectImageTableWithIcons(T button, Seq<T1> items,
 																Seq<? extends Drawable> icons,
 																Prov<T1> holder, Cons<T1> cons, float size,
 																float imageSize, int cols,
 																boolean searchable) {
-		return showSelectTable(button, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable, Align.center);
+		return showSelectTable(button, builderWithIcons(items, icons, holder, cons, size, imageSize, cols), searchable, Align.center);
 	}
 
-	public static <T1> Table
+	public static <T1> SelectTable
 	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,
 																Seq<? extends Drawable> icons,
 																Prov<T1> holder, Cons<T1> cons, float size,
 																float imageSize, int cols,
 																boolean searchable) {
-		return showSelectTable(vec2, getCons3(items, icons, holder, cons, size, imageSize, cols), searchable);
+		return showSelectTable(vec2, builderWithIcons(items, icons, holder, cons, size, imageSize, cols), searchable);
 	}
-	private static <T1> Cons3<Table, Runnable, String> getCons3(
+	private static <T1> Cons3<Table, Runnable, String> builderWithIcons(
 	 Seq<T1> items, Seq<? extends Drawable> icons,
 	 Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols) {
 		return (p, hide, text) -> {
@@ -600,9 +572,9 @@ public class IntUI {
 
 			for (int c = 0, i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (PatternUtils.testContent(text, pattern, item)) continue;
+				if (PatternUtils.testAny(text, pattern, item)) continue;
 
-				ImageButton btn = Hover.getImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
+				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
 				btn.update(() -> btn.setChecked(holder.get() == item));
 
 				if (++c % cols == 0) {
@@ -615,60 +587,31 @@ public class IntUI {
 	public static SelectTable
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
 									boolean searchable) {
-		SelectTable t      = new SelectTable();
-		Element     hitter = new Hitter();
-		Runnable hide = () -> {
-			hitter.remove();
-			t.actions(Actions.fadeOut(DEF_DURATION, Interp.fade), Actions.remove());
-		};
-		hitter.clicked(hide);
-		topGroup.addChild(hitter);
-		topGroup.addChild(t);
+		SelectTable t = basicSelectTable(searchable, f);
+		t.background(Tex.pane);
 		t.update(() -> {
 			t.setPosition(vec2.x, vec2.y, 1);
-			if (t.getWidth() > Core.scene.getWidth()) {
-				t.setWidth((float) graphics.getWidth());
-			}
-
-			if (t.getHeight() > Core.scene.getHeight()) {
-				t.setHeight((float) graphics.getHeight());
-			}
-			// if (t.y < 0) t.x += (t.x > graphics.getWidth() / 2f ? -1 : 1) * t.getWidth();
-
-			t.keepInStage();
-			t.invalidateHierarchy();
-			t.pack();
+			checkBound(t);
 		});
-		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
-		Table p = new Table();
-		p.top();
-		if (searchable) {
-			newSearch(f, hide, t, p);
+		return t;
+	}
+	private static void checkBound(SelectTable t) {
+		if (t.getWidth() > Core.scene.getWidth()) {
+			t.setWidth((float) graphics.getWidth());
 		}
 
-		f.get(p, hide, "");
-		ScrollPane pane = new ScrollPane(p, Styles.smallPane);
-		t.top().add(pane).pad(0).top();
-		pane.setScrollingDisabled(true, false);
+		if (t.getHeight() > Core.scene.getHeight()) {
+			t.setHeight((float) graphics.getHeight());
+		}
+
+		t.keepInStage();
+		t.invalidateHierarchy();
 		t.pack();
-		return t;
 	}
 
 
-	/**
-	 * 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>）
-	 * @param <T1>  the type parameter
-	 * @param vec2 the vec 2
-	 * @param items the items
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param size the size
-	 * @param imageSize the image size
-	 * @param cols the cols
-	 * @param searchable the searchable
-	 * @return the table
-	 */
-	public static <T1 extends UnlockableContent> Table
+	/** 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>）*/
+	public static <T1 extends UnlockableContent> SelectTable
 	showSelectImageTable(Vec2 vec2, Seq<T1> items,
 											 Prov<T1> holder,
 											 Cons<T1> cons, float size,
@@ -677,21 +620,9 @@ public class IntUI {
 		return showSelectImageTableWithFunc(vec2, items, holder, cons, size, imageSize, cols,
 		 u -> new TextureRegionDrawable(u.uiIcon), searchable);
 	}
-	/**
-	 * 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}）
-	 * @param <T1>  the type parameter
-	 * @param vec2 the vec 2
-	 * @param items the items
-	 * @param holder the holder
-	 * @param cons the cons
-	 * @param size the size
-	 * @param imageSize the image size
-	 * @param cols the cols
-	 * @param func the func
-	 * @param searchable the searchable
-	 * @return the table
-	 */
-	public static <T1> Table
+
+	/** 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}）*/
+	public static <T1> SelectTable
 	showSelectImageTableWithFunc(Vec2 vec2, Seq<T1> items, Prov<T1> holder,
 															 Cons<T1> cons, float size, float imageSize,
 															 int cols, Func<T1, Drawable> func,
@@ -700,7 +631,7 @@ public class IntUI {
 		items.each(item -> icons.add(func.get(item)));
 		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
-	public static <T extends Button, T1> Table
+	public static <T extends Button, T1> SelectTable
 	showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder,
 															 Cons<T1> cons, float size, float imageSize,
 															 int cols, Func<T1, Drawable> func,
@@ -1006,44 +937,6 @@ public class IntUI {
 		}
 	}
 	private static class AutoFitTable extends Table implements PopupWindow {
-		/**
-		 * Instantiates a new Auto fit table.
-		 */
-		public AutoFitTable() {super(Tex.pane);}
-		public float getPrefHeight() {
-			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
-		}
-
-		public float getPrefWidth() {
-			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
-		}
-	}
-	public static class InsideTable extends Table implements IMenu {
-		// /**
-		//  * Instantiates a new Inside table.
-		//  */
-		// public InsideTable() {
-		// }
-		// /**
-		//  * Instantiates a new Inside table.
-		//  *
-		//  * @param background the background
-		//  */
-		// public InsideTable(Drawable background) {
-		// 	super(background);
-		// }
-		// /**
-		//  * Instantiates a new Inside table.
-		//  *
-		//  * @param background the background
-		//  * @param cons the cons
-		//  */
-		// public InsideTable(Drawable background, Cons<Table> cons) {
-		// 	super(background, cons);
-		// }
-		// public InsideTable(Cons<Table> cons) {
-		// 	super(cons);
-		// }
 		public float getPrefHeight() {
 			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
 		}
@@ -1054,6 +947,20 @@ public class IntUI {
 	}
 
 	public static class SelectTable extends AutoFitTable implements IMenu {
+		public SelectTable() {
+		}
+		Hitter hitter = new Hitter();
+		final void hideInternal() {
+			hitter.remove();
+			actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
+			 Actions.run(() -> fire(new VisibilityEvent(true))),
+			 Actions.remove());
+		}
+
+		/** 为null时，使用默认隐藏{@link #hideInternal}
+		 * 仅用于cons3参数的hide，内部依然是直接隐藏（即默认值）
+		 * */
+		public @Nullable Runnable hide;
 		/**
 		 * Adds a hide() listener.
 		 */
@@ -1065,6 +972,11 @@ public class IntUI {
 					return false;
 				}
 			});
+		}
+
+		public void appendToGroup() {
+			topGroup.addChild(hitter);
+			topGroup.addChild(this);
 		}
 	}
 

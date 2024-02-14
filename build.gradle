@@ -7,7 +7,7 @@ version '1.4.4'
 
 static def export(CompileOptions options) {
 // options.compilerArgs.addAll("-Xlint:deprecation")
-	options.compilerArgs.addAll(new String[]{
+	options.compilerArgs.addAll([
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.loader",
 			"java.base/jdk.internal.reflect",
@@ -22,10 +22,12 @@ static def export(CompileOptions options) {
 			"jdk.compiler/com.sun.tools.javac.parser",
 			"jdk.compiler/com.sun.tools.javac.processing",
 			"jdk.compiler/com.sun.tools.javac.util",
+			"jdk.compiler/com.sun.tools.javac.resources",
 			"java.base/sun.reflect.annotation",
 			"java.base/jdk.internal.module",
 			"jdk.jfr/jdk.jfr.internal"
-	}.collectMany { ["--add-exports", "$it=ALL-UNNAMED"] })
+	].collectMany { ["--add-exports", "$it=ALL-UNNAMED"] })
+//	println options.compilerArgs.join(" ")
 }
 
 allprojects {
@@ -36,7 +38,7 @@ allprojects {
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
-	tasks.withType(JavaCompile).configureEach {
+	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
 		sourceCompatibility = 9
 		targetCompatibility = 9
@@ -49,8 +51,11 @@ allprojects {
 		maven { url 'https://www.jitpack.io' }
 	}
 }
-sourceCompatibility = 17
-targetCompatibility = 17
+
+tasks.withType(JavaCompile) {
+	sourceCompatibility = 17
+	targetCompatibility = 17
+}
 
 sourceSets.main.java.srcDirs = ["src"]
 

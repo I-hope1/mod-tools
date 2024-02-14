@@ -11,6 +11,8 @@ dependencies {
 //	annotationProcessor files("../$compilerJar")
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
+	implementation files("libs/MyCheck.jar")
+
 //	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 //	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 

@@ -1,6 +1,6 @@
 package modtools.ui.content.world;
 
-import arc.*;
+import arc.Events;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -11,31 +11,31 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.Vars;
-import mindustry.content.*;
+import mindustry.content.UnitTypes;
 import mindustry.core.Version;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
-import modtools.events.ExecuteTree;
-import modtools.events.TaskNode;
+import modtools.events.*;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.*;
-import modtools.ui.menu.*;
 import modtools.ui.components.linstener.WorldSelectListener;
 import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.Content;
+import modtools.ui.gen.HopeIcons;
+import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.utils.ui.FormatHelper;
+import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
 import static modtools.ui.Contents.tester;
-import static modtools.utils.world.WorldUtils.*;
+import static modtools.utils.world.WorldUtils.UNIT;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {
@@ -103,7 +103,7 @@ public class UnitSpawn extends Content {
 		ui.cont.table(table -> unitCont = table).grow().row();
 		// Options1 (生成pos)
 		ui.cont.table(Window.myPane, table -> {
-			table.margin(-4f, 0f, -4f, 0f);
+			table.marginTop(-4f);
 			table.table(x0 -> {
 				x0.add("x:");
 				xField = x0.field(String.valueOf(x), newX -> x = NumberHelper.asFloat(newX))
@@ -116,14 +116,14 @@ public class UnitSpawn extends Content {
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
-			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, listener::toggleSelect).growX().height(32)
+			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, listener::toggleSelect).growX().height(42)
 			 .update(b -> {
-				b.setChecked(listener.isSelecting());
-			});
+				 b.setChecked(listener.isSelecting());
+			 });
 			table.button("@unitspawn.getfromplayer", HopeStyles.cleart, () -> {
 				setX(player.x);
 				setY(player.y);
-			}).growX().height(32);
+			}).growX().height(42);
 		}).growX().row();
 		// Options2
 		ui.cont.table(Window.myPane, table -> {
@@ -134,7 +134,7 @@ public class UnitSpawn extends Content {
 					 int id = (int) toInteger(text);
 					 team = Team.get(id);
 				 })
-				 .valid(val -> NumberHelper.isPosInt(val) && toInteger(val) < Team.all.length)
+				 .valid(val -> NumberHelper.isPositiveInt(val) && toInteger(val) < Team.all.length)
 				 .width(100)
 				 .get();
 				var btn = new ImageButton(Icon.edit, Styles.cleari);
@@ -149,7 +149,7 @@ public class UnitSpawn extends Content {
 			table.table(t -> {
 				t.add("@filter.option.amount");
 				amountField = t.field("" + amount, text -> amount = (int) toInteger(text))
-				 .valid(val -> validNumber(val) && NumberHelper.isPosInt(val))
+				 .valid(val -> validNumber(val) && NumberHelper.isPositiveInt(val))
 				 .width(100)
 				 .get();
 			});
@@ -280,6 +280,12 @@ public class UnitSpawn extends Content {
 	UnitSpawnSelectListener listener;
 	class UnitSpawnSelectListener extends WorldSelectListener {
 		Element hitter = new Hitter();
+
+		{
+			hitter.addListener(this);
+			WorldUtils.uiWD.submit(this::draw);
+		}
+
 		protected void acquireWorldPos(float x, float y) {
 			super.acquireWorldPos(x, y);
 			setX(end.x);
@@ -296,7 +302,7 @@ public class UnitSpawn extends Content {
 			Draw.color();
 			Lines.stroke(2);
 			Color color = Tmp.c1.set(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove)
-			 .a(ui.isShown() ? 0.7f : 0.5f);
+			 .a(ui.isShown() ? 0.7f : 0.3f);
 			Drawf.dashCircle(x, y, 5, color);
 			Draw.color();
 		}

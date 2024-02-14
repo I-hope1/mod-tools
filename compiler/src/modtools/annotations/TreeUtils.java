@@ -92,6 +92,9 @@ public interface TreeUtils extends ParseUtils, NameString {
 
 	default void addImport(Element element, TypeSymbol sym) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
+		addImport(unit, sym);
+	}
+	default void addImport(JCCompilationUnit unit, TypeSymbol sym) {
 		if (!unit.namedImportScope.includes(sym) && !unit.starImportScope.includes(sym)) {
 			/* unit.namedImportScope.importType(
 			 SettingUI().members(), SettingUI().members(), SettingUI()

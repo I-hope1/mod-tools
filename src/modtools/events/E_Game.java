@@ -30,6 +30,6 @@ public enum E_Game implements ISettings {
 		max_schematic_size.def(Vars.maxSchematicSize);
 	}
 
-	E_Game(Class<?> ccl, float... args) {}
-	E_Game(Class<?> ccl, int... args) {}
+	E_Game(Class<?> cl, float... args) {}
+	E_Game(Class<?> cl, int... args) {}
 }

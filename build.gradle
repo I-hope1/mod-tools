@@ -1,6 +1,8 @@
-apply plugin: 'java'
+plugins {
+	id 'java'
+	id "io.github.liplum.mgpp" version "1.3.2"
+}
 group 'mod-tools'
-// 这是文件版本
 version '1.4.5'
 
 static def export(CompileOptions options) {
@@ -35,7 +37,6 @@ allprojects {
 
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
-		sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 	}
 	tasks.withType(JavaCompile) {
 		options.encoding = 'UTF-8'
@@ -81,57 +82,24 @@ dependencies {
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 }
 
-// --------------------------
-//force arc version
-configurations.configureEach {
-	resolutionStrategy.eachDependency { details ->
-		if (details.requested.group == 'com.github.Anuken.Arc') {
-			details.useVersion "$mindustryVersion"
-		}
-	}
+mindustry {
+	meta << ModMeta(
+			name: project.name.replace('136', ''),
+			version: version,
+			author: 'I hope...',
+			hidden: true,
+			minGameVersion: 136,
+	)
+	def name = meta.displayName = "mod-tools"
+	deploy { baseName = name }
+	dexJar { options.minApi = '34' }
 }
-task jarAndroid {
-	dependsOn "jar"
-
-	doLast {
-		if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
-
-		def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
-
-		if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
-
-		//collect dependencies needed for desugaring
-		def dependencies = (configurations.compileClasspath.asList()).collect { "--classpath $it.path" }.join(" ")
-
-		def d8 = new File("$sdkRoot/build-tools/").listFiles().sort().reverse()
-				.collectMany { f -> [new File(f, "d8"), new File(f, "d8.bat")] }
-				.find {it.exists() }
-
-		//dex and desugar files - this requires d8 in your PATH
-		"$d8 $dependencies --min-api 30 --output ${project.archivesBaseName}Android.jar ${project.archivesBaseName}Desktop.jar"
-				.execute(null, new File("$buildDir0/libs"))
-				.waitForProcessOutput(System.out, System.err)
-	}
+mindustryAssets {
+	// Set the assets root
+	rootAt "$projectDir/assets"
 }
-jar {
-	archiveFileName = "${archivesBaseName}Desktop.jar"
 
-	from {
-		configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-	}
-	from(rootDir) { include "mod.hjson" }
-	from("assets/") { include "**" }
-}
-task deploy(type: Jar) {
-	dependsOn jar
-	dependsOn jarAndroid
-	archiveFileName = "${archivesBaseName}.jar"
-
-	from { [zipTree("$buildDir0/libs/${project.archivesBaseName}Desktop.jar"), zipTree("$buildDir/libs/${project.archivesBaseName}Android.jar")] }
-}
-// ---------------------------------
-
-task playGame(type: JavaExec) {
+tasks.register('playGame', JavaExec) {
 	dependsOn classes
 	dependsOn jar
 
@@ -157,13 +125,17 @@ task playGame(type: JavaExec) {
 			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
-task ZCompileAll {
+tasks.register('ZCompileAll', Copy) {
 	dependsOn deploy
 
-	doLast {
-		def libs = file("$buildDir0/libs/")
-		file(libs, "${rootProject.name}-${version}.jar")
-				.renameTo(file(libs, "${rootProject.name.replace("136", "")}-$version"))
+	from("$buildDir0/tmp/deploy/") {
+		include "${rootProject.name}-${version}.jar"
+	}
+	into("$buildDir0/libs")
+	rename { fileName ->
+		// a simple way is to remove the "-$version" from the jar filename
+		// but you can customize the filename replacement rule as you wish.
+		fileName.replace("136-$version", "").replace("-$version", "")
 	}
 }
 
@@ -184,7 +156,7 @@ tasks.register('mergeLibs', Jar) {
 	}
 }
 
-task playAndroid {
+tasks.register('playAndroid') {
 	dependsOn deploy
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"

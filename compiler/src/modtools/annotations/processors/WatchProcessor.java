@@ -27,6 +27,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 	public void init() throws Throwable {
 		timeSymbol = findClassSymbol("arc.util.Time");
 	}
+
 	public void process() {
 		// Iterate over each class field
 		classFields.forEach((dcls, fieldSeq) -> {

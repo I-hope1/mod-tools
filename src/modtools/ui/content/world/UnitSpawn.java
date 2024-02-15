@@ -39,11 +39,11 @@ import static modtools.utils.world.WorldUtils.UNIT;
 import static rhino.ScriptRuntime.*;
 
 public class UnitSpawn extends Content {
-
 	public static final String noScorchMarksKey  = "@settings.noScorchMarks";
 	public static final String killAllUnitsKey   = "@unitspawn.killAllUnits";
 	public static final String removeAllUnitsKey = "@unitspawn.removeAllUnits";
 	public static final String unitUnlimitedKey  = "@settings.unitUnlimited";
+
 	public UnitSpawn() {
 		super("unitSpawn", Icon.unitsSmall);
 		defLoadable = false;

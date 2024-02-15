@@ -88,9 +88,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
 							&& newClass.args.get(1) instanceof JCFieldAccess access)) return;
-				if (newClass.def != null) {
-					println(classDecl.mods.flags);
-				}
 				VarSymbol symbol = getSymbol(unit, tree);
 				if (symbol.getAnnotation(FlushField.class) == null) return;
 

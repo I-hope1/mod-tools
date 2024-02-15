@@ -205,7 +205,7 @@ public class Replace {
 				if (Modifier.isStatic(mod)) continue;
 				long off = unsafe.objectFieldOffset(field);
 				unsafe.putObject(dest, off, unsafe.getObject(src, off));
-				println(unsafe.getObject(dest, off));
+				// println(unsafe.getObject(dest, off));
 			}
 			clazz = clazz.getSuperclass();
 		}

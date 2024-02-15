@@ -70,12 +70,12 @@ public class WatchProcessor extends BaseProcessor<Element> {
 				// Check test_con whether is valid
 				if (test_con != null) {
 					if (!test_con.getModifiers().getFlags().contains(Modifier.STATIC)) {
-						System.err.println("The method " + classDecl.name + "." + test_con.name + " must be static");
+						err(new IllegalStateException("The method " + classDecl.name + "." + test_con.name + " must be static"));
 						return;
 					}
 					if (test_con.params.length() != 1 || test_con.params.get(0).name.equals(classDecl.name)) {
-						System.err.println("The method " + classDecl.name + "." + test_con.name + " sig must be ("
-										+ classDecl.name + ")Z");
+						err(new IllegalStateException("The method " + classDecl.name + "." + test_con.name + " sig must be ("
+																					+ classDecl.name + ")Z"));
 						return;
 					}
 				}

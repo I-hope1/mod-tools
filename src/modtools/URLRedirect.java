@@ -32,7 +32,10 @@ public class URLRedirect {
 					handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
 					handler.addInterface(RedirectHandler.class);
 					handler.visit(URLRedirect.class);
-					if (OS.isAndroid) MyReflect.setPublic(value.getClass());
+					if (OS.isAndroid) {
+						/* 同时去除final */
+						MyReflect.setPublic(value.getClass());
+					}
 					try {
 						value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
 					} catch (Exception e) {

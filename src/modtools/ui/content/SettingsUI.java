@@ -103,6 +103,7 @@ public class SettingsUI extends Content {
 				topGroup::setDrawPadElem,
 				TSettings.debugBounds::enabled);
 			 ISettings.buildAll("", this, E_Game.class);
+			 ISettings.buildAll("", this, E_Extending.class);
 
 			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 

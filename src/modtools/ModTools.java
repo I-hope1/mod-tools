@@ -13,6 +13,7 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
 import modtools.android.HiddenApi;
+import modtools.events.E_Extending;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
@@ -53,6 +54,7 @@ public class ModTools extends Mod {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 			IntVars.meta = metas.get(ModTools.class);
 			load();
+			extending();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
 				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
@@ -61,6 +63,12 @@ public class ModTools extends Mod {
 		} catch (Throwable e) {
 			if (isImportFromGame) ui.showException("Cannot load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
+		}
+
+	}
+	private void extending() {
+		if (E_Extending.http_redirect.enabled()) {
+			Tools.runLoggedException(URLRedirect::load);
 		}
 	}
 	private void load() {

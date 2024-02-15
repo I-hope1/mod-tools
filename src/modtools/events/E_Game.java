@@ -20,6 +20,7 @@ public enum E_Game implements ISettings {
 			super.build(prefix, table);
 		}
 	};
+
 	interface DEF {
 		float minZoom = Vars.renderer.minZoom;
 		float maxZoom = Vars.renderer.maxZoom;
@@ -30,6 +31,7 @@ public enum E_Game implements ISettings {
 		max_schematic_size.def(Vars.maxSchematicSize);
 	}
 
+	E_Game() {}
 	E_Game(Class<?> cl, float... args) {}
 	E_Game(Class<?> cl, int... args) {}
 }

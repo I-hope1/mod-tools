@@ -66,3 +66,14 @@
 
 - `‘null` 表示null字符串
 - `Ctrl`+`F` 聚焦搜索框
+
+
+## 其他
+### 扩展
+
+- Override Scene
+> 替换原始的scene，捕获渲染报错，可能不好
+
+- Http Redirect
+> 重定向一些网站，例如：github\
+> 配置文件: b0kkihope/http_redirect.properties

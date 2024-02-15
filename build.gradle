@@ -11,6 +11,8 @@ static def export(CompileOptions options) {
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.loader",
 			"java.base/jdk.internal.reflect",
+			"java.base/sun.net.www.protocol.http",
+			"java.base/sun.net.www.protocol.https",
 			// ---------------
 			"jdk.compiler/com.sun.tools.javac.api",
 			"jdk.compiler/com.sun.tools.javac.comp",
@@ -25,7 +27,7 @@ static def export(CompileOptions options) {
 			"jdk.compiler/com.sun.tools.javac.resources",
 			"java.base/sun.reflect.annotation",
 			"java.base/jdk.internal.module",
-			"jdk.jfr/jdk.jfr.internal"
+			"jdk.jfr/jdk.jfr.internal",
 	].collectMany { ["--add-exports", "$it=ALL-UNNAMED"] })
 //	println options.compilerArgs.join(" ")
 }
@@ -33,7 +35,7 @@ static def export(CompileOptions options) {
 allprojects {
 	ext {
 		uncVersion = '1.8.9'
-		mindustryVersion = 'v146'
+		mindustryVersion = 'v145.1'
 
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
@@ -46,8 +48,8 @@ allprojects {
 	}
 	repositories {
 		mavenLocal()
+		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
 		mavenCentral()
-		maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
 		maven { url 'https://www.jitpack.io' }
 	}
 }
@@ -58,6 +60,15 @@ tasks.withType(JavaCompile) {
 }
 
 sourceSets.main.java.srcDirs = ["src"]
+
+//force arc version
+configurations.configureEach {
+	resolutionStrategy.eachDependency { details ->
+		if (details.requested.group == 'com.github.Anuken.Arc') {
+			details.useVersion "$mindustryVersion"
+		}
+	}
+}
 
 dependencies {
 	compileOnly project(":annotations")
@@ -79,7 +90,9 @@ dependencies {
 			"_libs/AndroidField.jar",
 	)
 	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+	compileOnly("com.github.Anuken.Arc:arc-core:$mindustryVersion") {
+		exclude group: 'com.github.Anuken.Arc', module: 'flabel'
+	}
 }
 
 mindustry {
@@ -119,10 +132,9 @@ tasks.register('playGame', JavaExec) {
 	]
 	jvmArgs = [
 			'-XX:+UseParallelGC',
-			'-Djava.library.path=E:/Users/ASUS/Desktop/Mods/mod-tools136/assets',
-			'-DsocksProxyHost=127.0.0.1',
-			'-DsocksProxyPort=1080',
-			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
+//			'-DsocksProxyHost=127.0.0.1',
+//			'-DsocksProxyPort=1080',
+//			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
 tasks.register('ZCompileAll', Copy) {

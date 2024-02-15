@@ -66,3 +66,13 @@ It provides many useful tools for developers.
 
 - Use `'null` to represent the null string
 - `Ctrl`+`F` Focus search field
+
+## Other
+### Extending
+
+- Override Scene
+> Replace the original scene and capture the rendering error. (Maybe not good)
+
+- Http Redirect
+> Redirect some websites, such as github.\
+> Config file: b0kkihope/http_redirect.properties

@@ -1,13 +1,18 @@
 package modtools.utils.reflect;
 
-import arc.util.Nullable;
+import arc.util.*;
 import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
+import modtools.jsfunc.reflect.UNSAFE;
 
 import java.lang.reflect.*;
 import java.security.ProtectionDomain;
 
 public class UnsafeHandler {
+	static {
+		UNSAFE.openModule(Object.class, "jdk.internal.misc");
+	}
+
 	private static final Object unsafe = getUnsafe();
 	static Object getUnsafe() {
 		try {
@@ -32,9 +37,13 @@ public class UnsafeHandler {
 	}
 
 	public static Class<?> defineClass(String name, byte[] b, ClassLoader loader, ProtectionDomain pd) {
+		boolean hasJDKUnsafe;
 		try {
-			return ((Unsafe) unsafe).defineClass(name, b, 0, b.length, loader, pd);
-		} catch (ClassCastException | NoClassDefFoundError ignored) {}
+			((Unsafe) unsafe).getClass();
+			hasJDKUnsafe = true;
+		} catch (ClassCastException | NoClassDefFoundError ignored) {hasJDKUnsafe = false;}
+
+		if (hasJDKUnsafe) return ((Unsafe) unsafe).defineClass(name, b, 0, b.length, loader, pd);
 		try {
 			return (Class<?>) getMethod().invoke(unsafe, name, b, 0, b.length, loader, pd);
 		} catch (Exception e) {

@@ -11,6 +11,12 @@ public interface UNSAFE {
 	/* /trust 不安全 */
 	Object lookup = MyReflect.lookup;
 
+	static void openModule(Class<?> cls, String pn) {
+		if (OS.isAndroid) return;
+		try {
+			MyReflect.openModule(cls.getModule(), pn);
+		} catch (Throwable ignored) {}
+	}
 	static void openModule(Object module, String pn) throws Throwable {
 		if (OS.isAndroid) return;
 		MyReflect.openModule((Module) module, pn);

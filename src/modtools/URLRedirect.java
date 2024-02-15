@@ -2,6 +2,7 @@ package modtools;
 
 import arc.files.Fi;
 import arc.func.Func2;
+import arc.util.OS;
 import ihope_lib.MyReflect;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.ByteCodeTools.MyClass;
@@ -27,10 +28,11 @@ public class URLRedirect {
 		field.set(null, new Hashtable<>(hashtable) {
 			public synchronized URLStreamHandler put(String key, URLStreamHandler value) {
 				if (key.equals("http") || key.equals("https")) {
-					var handler = new MyClass<>(value.getClass() + "_1", value.getClass());
+					var handler = new MyClass<>(value.getClass().getName() + "_1", value.getClass());
 					handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
 					handler.addInterface(RedirectHandler.class);
 					handler.visit(URLRedirect.class);
+					if (OS.isAndroid) MyReflect.setPublic(value.getClass());
 					try {
 						value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
 					} catch (Exception e) {
@@ -50,14 +52,14 @@ public class URLRedirect {
 		return true;
 	}
 
-	public static URLConnection openConnection(URLStreamHandler self, URL u, Proxy p) throws IOException {
+	public static URLConnection openConnection(URLStreamHandler self, URL u) throws IOException {
 		String def_url  = u.toString().substring(u.getProtocol().length());
 		String file_url = def_url.substring(3 + u.getHost().length());
 		u = new URL(u.getProtocol() + "://" + replacer.getOrDefault(u.getHost(), u.getHost()) + "/" + file_url);
 		// Log.info(u);
-		return ((RedirectHandler) self).super$_openConnection(u, p);
+		return ((RedirectHandler) self).super$_openConnection(u);
 	}
 	public interface RedirectHandler {
-		URLConnection super$_openConnection(URL u, Proxy p) throws IOException;
+		URLConnection super$_openConnection(URL u) throws IOException;
 	}
 }

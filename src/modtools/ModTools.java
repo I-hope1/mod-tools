@@ -28,7 +28,7 @@ import modtools.utils.ui.DropFile;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
-import static modtools.IntVars.root;
+import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
@@ -54,7 +54,6 @@ public class ModTools extends Mod {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 			IntVars.meta = metas.get(ModTools.class);
 			load();
-			extending();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
 				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
@@ -96,6 +95,8 @@ public class ModTools extends Mod {
 		IntVars.meta.hidden = true;
 		// Time.mark();
 		Tools.runIgnoredException(Tester::initExecution);
+
+		extending();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 

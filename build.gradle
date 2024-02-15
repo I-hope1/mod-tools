@@ -97,11 +97,7 @@ dependencies {
 
 mindustry {
 	meta << ModMeta(
-			name: project.name.replace('136', ''),
-			version: version,
-			author: 'I hope...',
 			hidden: true,
-			minGameVersion: 136,
 	)
 	def name = meta.displayName = "mod-tools"
 	deploy { baseName = name }

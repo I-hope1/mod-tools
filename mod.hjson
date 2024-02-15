@@ -1,4 +1,5 @@
 
+name: mod-tools
 displayName: "mod工具"
 description: '''
              - 修复UnitSpawn无法选择指定坐标的bug
@@ -6,5 +7,8 @@ description: '''
              - Selection支持ValueLabel焦点
              - 修复Settings无法自动更新字段的bug
              '''
+author: 'I hope...'
+version: 1.4.5
+minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

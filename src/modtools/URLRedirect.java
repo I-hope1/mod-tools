@@ -32,8 +32,8 @@ public class URLRedirect {
 					handler.addInterface(RedirectHandler.class);
 					handler.visit(URLRedirect.class);
 					try {
-						value = handler.define(URLRedirect.class.getClassLoader()).newInstance();
-					} catch (InstantiationException | IllegalAccessException e) {
+						value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
+					} catch (Exception e) {
 						throw new RuntimeException(e);
 					}
 				}

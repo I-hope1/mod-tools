@@ -11,6 +11,7 @@ public interface UNSAFE {
 	/* /trust 不安全 */
 	Object lookup = MyReflect.lookup;
 
+	/** 开放类的模块的{@code pn} */
 	static void openModule(Class<?> cls, String pn) {
 		if (OS.isAndroid) return;
 		try {

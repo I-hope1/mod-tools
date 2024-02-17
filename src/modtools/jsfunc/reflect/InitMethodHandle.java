@@ -28,7 +28,6 @@ public class InitMethodHandle {
 	 */
 	public static final byte REF_invokeSpecial = 7;
 
-	public static void load() {}
 	static {
 		Tools.runIgnoredException(() -> UNSAFE.openModule(Object.class, "java.lang.invoke"));
 	}

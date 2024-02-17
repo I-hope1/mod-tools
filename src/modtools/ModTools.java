@@ -24,6 +24,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.ui.DropFile;
+import modtools.utils.world.WorldDraw;
 
 import java.util.Arrays;
 
@@ -80,7 +81,7 @@ public class ModTools extends Mod {
 			/* Log.err(e);
 			System.exit(-1); */
 		}
-
+		WorldDraw.registerEvent();
 		HopeCall.init();
 
 		if (isImportFromGame) {

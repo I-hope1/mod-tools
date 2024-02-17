@@ -949,7 +949,7 @@ public class IntUI {
 	public static class SelectTable extends AutoFitTable implements IMenu {
 		public SelectTable() {
 		}
-		Hitter hitter = new Hitter();
+		Hitter hitter = new Hitter(this::hideInternal);
 		final void hideInternal() {
 			hitter.remove();
 			actions(Actions.fadeOut(DEF_DURATION, Interp.fade),

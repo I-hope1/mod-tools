@@ -1,16 +1,16 @@
 package modtools.utils.world;
 
 import arc.*;
-import arc.func.*;
-import arc.graphics.*;
+import arc.func.Boolp;
+import arc.graphics.Texture;
 import arc.graphics.g2d.*;
-import arc.graphics.gl.*;
+import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.*;
 import arc.struct.ObjectSet;
 import mindustry.Vars;
-import mindustry.game.EventType.Trigger;
-import modtools.utils.*;
+import mindustry.game.EventType.*;
 import modtools.struct.MySet;
+import modtools.utils.ElementUtils;
 
 
 public class WorldDraw {
@@ -63,7 +63,7 @@ public class WorldDraw {
 		});*/
 	}
 
-	static {
+	public static void registerEvent() {
 		Events.run(Trigger.postDraw, () -> {
 			Draw.reset();
 			Draw.flush();

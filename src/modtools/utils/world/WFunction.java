@@ -44,7 +44,6 @@ import java.util.function.*;
 import static mindustry.Vars.tilesize;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.catchRun;
 import static modtools.utils.world.TmpVars.tmpList;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
@@ -240,7 +239,7 @@ public abstract class WFunction<T> {
 			IntUI.showException(new RejectedExecutionException("There's already 2 tasks running."));
 			return;
 		}
-		executor.submit(() -> Tools.each(list, t -> {
+		executor.submit(() -> Tools.each(list, Tools.catchCons(t -> {
 			new LerpFun(Interp.fastSlow).onWorld().rev()
 			 .registerDispose(1 / 24f, fin -> {
 				 Draw.color(Pal.accent);
@@ -250,9 +249,9 @@ public abstract class WFunction<T> {
 				 Lines.square(pos.x, pos.y,
 					fin * Mathf.dst(region.width, region.height) / tilesize);
 			 });
-			Core.app.post(catchRun(() -> action.accept(t)));
+			action.accept(t);
 			Threads.sleep(1);
-		}));
+		})));
 	}
 	public void removeAll(List<T> list, Predicate<? super T> action) {
 		list.removeIf(action);

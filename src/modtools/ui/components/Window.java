@@ -65,7 +65,7 @@ public class Window extends Table {
 		}
 	};
 
-	/** 最前面的窗口  */
+	/** 最前面的窗口 */
 	public static Window frontWindow;
 
 	static {
@@ -104,7 +104,7 @@ public class Window extends Table {
 
 	public Label title;
 
-	/** 是否为一个完整的Window  */
+	/** 是否为一个完整的Window */
 	public final boolean full;
 
 	/** 是否置顶 */
@@ -167,6 +167,9 @@ public class Window extends Table {
 		all.add(this);
 
 		addListener(new ClearScroll());
+		IntVars.addResizeListener(() -> {
+			if (isMaximize) maximizeAnimated();
+		});
 	}
 	public float getMinWidth() {
 		return Math.max(minWidth, super.getMaxWidth());
@@ -497,13 +500,16 @@ public class Window extends Table {
 		if (isMaximize) {
 			if (!lastMin) lastRect.set(x, y, width, height);
 
-			moveAndScaleAnimated(0, 0, graphics.getWidth(), graphics.getHeight());
+			maximizeAnimated();
 		} else {
 			moveAndScaleAnimated(lastRect.x, lastRect.y, lastRect.width, lastRect.height);
 		}
 		act(0);
 
 		Timer.schedule(new MyTask(false), 0, 0.01f, -1);
+	}
+	private void maximizeAnimated() {
+		moveAndScaleAnimated(0, 0, graphics.getWidth(), graphics.getHeight());
 	}
 	private void moveAndScaleAnimated(float x, float y, float width, float height) {
 		actions(
@@ -524,12 +530,8 @@ public class Window extends Table {
 				lastRect.setSize(getWidth(), getHeight());
 			}
 
-			actions(
-			 Actions.moveTo(x, y + lastRect.height - topHeight,
-				disabledActions ? 0 : 0.01f),
-			 Actions.sizeTo(getMinWidth(), topHeight,
-				disabledActions ? 0 : 0.01f)
-			);
+			moveAndScaleAnimated(x, y + lastRect.height - topHeight,
+			 getMinWidth(), topHeight);
 
 			getCell(cont).set(BindCell.UNSET_CELL);
 			cont.remove();
@@ -545,13 +547,11 @@ public class Window extends Table {
 
 			left().top();
 			if (isMaximize) {
-				actions(Actions.sizeTo(graphics.getWidth(), graphics.getHeight(), disabledActions ? 0 : 0.1f),
-				 Actions.moveTo(0, 0, disabledActions ? 0 : 0.01f));
+				maximizeAnimated();
 			} else {
-				actions(Actions.sizeTo(lastRect.width, lastRect.height, disabledActions ? 0 : 0.01f),
-				 Actions.moveTo(lastRect.x = x,
-					lastRect.y = y - lastRect.height + topHeight,
-					disabledActions ? 0 : 0.01f));
+				moveAndScaleAnimated(lastRect.x = x,
+				 lastRect.y = y - lastRect.height + topHeight,
+				 lastRect.width, lastRect.height);
 			}
 			sclListener.rebind();
 		}
@@ -795,6 +795,8 @@ public class Window extends Table {
 				if (!isMin) lastMaximize = isMaximize;
 				(isMin ? minlisteners : maxlisteners)
 				 .each(r -> r.fire((isMin ? isMinimize : isMaximize)));
+
+				display();
 
 				cancel();
 			}

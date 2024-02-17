@@ -4,10 +4,7 @@ import arc.Core;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
-import arc.util.Log;
 import modtools.utils.ElementUtils;
-
-import java.util.Locale;
 
 public interface Limit {
 	/*static boolean isVisible(Element actor) {

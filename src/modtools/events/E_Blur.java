@@ -5,7 +5,7 @@ import modtools.ui.effect.EBBlur.DEF;
 
 @SettingsInit
 public enum E_Blur implements ISettings {
-	enabled, scale_level(int.class, 4, 0, 16),
+	enabled, scale_level(int.class, 4, 1, 16),
 	convolution_scheme(Enum.class, DEF.class);
 	static {
 		convolution_scheme.def(DEF.D);

@@ -47,6 +47,7 @@
 - 选择器
 - 支持 `Tile`, `Building`, `Bullet`, `Unit`
   ![selection](./screenshots/selection.png)
+- `Ctrl`+`Alt`固定Focus Window
 
 ## ReviewElement
 

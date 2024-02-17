@@ -9,10 +9,10 @@ import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
-import mindustry.Vars;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.ui.components.Window.ClearScroll;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
@@ -128,12 +128,6 @@ public class Frag extends Table {
 			 top.getWidth() / 2f,
 			 top.getHeight() / 2f, 0.1f,
 			 Interp.smooth), Actions.remove());
-		}
-	}
-	public static class ClearScroll extends InputListener {
-		public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
-			super.exit(event, x, y, pointer, toActor);
-			if (Vars.state.isGame()) Core.scene.setScrollFocus(null);
 		}
 	}
 

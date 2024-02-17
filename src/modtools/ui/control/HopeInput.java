@@ -5,14 +5,7 @@ import arc.input.KeyboardDevice;
 import arc.scene.Element;
 import arc.struct.*;
 import arc.util.*;
-import mindustry.Vars;
-import modtools.ui.Frag;
-import modtools.ui.IntUI.IMenu;
-import modtools.ui.components.Window;
-import modtools.ui.components.Window.IInfo;
 import modtools.utils.Tools;
-
-import static modtools.ui.IntUI.topGroup;
 
 public class HopeInput {
 	public static IntSet justPressed, pressed;
@@ -38,17 +31,17 @@ public class HopeInput {
 		axes = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "axes");
 		Tools.TASKS.add(() -> hit = null);
 
-		Vars.control.input.addLock(() -> {
-			if (topGroup.isSelecting()) return true;
-			Element hit = HopeInput.mouseHit();
-			return hit != null && hit.visible
-						 && !hit.isDescendantOf(e ->
-			 e == Vars.ui.hudGroup || e instanceof IInfo
-			 || e instanceof IMenu || e instanceof Window
-			 || e instanceof Frag)
-			 // &&
-			 /* && hit.isDescendantOf(e -> e instanceof IMenu) */;
-		});
+		// Vars.control.input.addLock(() -> {
+		// 	if (topGroup.isSelecting()) return true;
+		// 	Element hit = HopeInput.mouseHit();
+		// 	return hit != null && hit.visible
+		// 				 && !hit.isDescendantOf(e ->
+		// 	 e == Vars.ui.hudGroup || e instanceof IInfo
+		// 	 || e instanceof IMenu || e instanceof Window
+		// 	 || e instanceof Frag)
+		// 	 // &&
+		// 	 /* && hit.isDescendantOf(e -> e instanceof IMenu) */;
+		// });
 	}
 	/* static {
 		((AndroidInput) Core.input).addKeyListener((view, i, keyEvent) -> {

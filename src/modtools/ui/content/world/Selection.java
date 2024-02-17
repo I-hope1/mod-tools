@@ -77,10 +77,10 @@ public class Selection extends Content {
 	public Window  pane;
 	// public Table functions;
 	public Team    defaultTeam;
-	// hasSelect: select元素（用于选择）是否显示
-	// move: 是否移动
-	boolean hasSelect = false;
-	boolean move      = false;
+	/** select元素（用于选择）是否显示 **/
+	boolean isSelecting  = false;
+	/** 鼠标是否移动，形成矩形 */
+	boolean mouseChanged = false;
 	public boolean drawSelect = true;
 
 	public static final int
@@ -284,7 +284,7 @@ public class Selection extends Content {
 
 	public void hide() {
 		fragSelect.remove();
-		hasSelect = false;
+		isSelecting = false;
 
 		tiles.clearList();
 		buildings.clearList();
@@ -294,13 +294,13 @@ public class Selection extends Content {
 		if (executor != null) executor.shutdownNow();
 	}
 	public Button buildButton(boolean isSmallized) {
-		Button btn = buildButton(isSmallized, () -> hasSelect);
+		Button btn = buildButton(isSmallized, () -> isSelecting);
 		btn.setDisabled(() -> Vars.state.isMenu());
 		return btn;
 	}
 	public void build() {
-		hasSelect = !hasSelect;
-		ElementUtils.addOrRemove(fragSelect, hasSelect);
+		isSelecting = !isSelecting;
+		ElementUtils.addOrRemove(fragSelect, isSelecting);
 	}
 	public static void getWorldRect(Tile t) {
 		mr1.set(t.worldx(), t.worldy(), 32, 32);
@@ -606,7 +606,7 @@ public class Selection extends Content {
 	boolean focusLocked;
 	private       boolean  focusEnabled;
 	public static Element  focusElem;
-	/** 用于反应 元素 对应的 焦点  */
+	/** 用于反应 元素 对应的 焦点 */
 	public static Object   focusAny;
 	static        Runnable CANCEL_TASK = () -> {
 		focusElem = null;
@@ -635,7 +635,7 @@ public class Selection extends Content {
 	public final ObjectSet<Unit>   focusUnits   = new ObjectSet<>();
 	public final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
 
-	/** 用于 ValueLabel 添加 焦点  */
+	/** 用于 ValueLabel 添加 焦点 */
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
 
 	public void initTask() {
@@ -743,8 +743,8 @@ public class Selection extends Content {
 			sclListener.disabled1 = true;
 			moveListener.disabled = true;
 			cont.update(() -> {
-				if (updatePosUI && focusEnabled) updatePosUI();
-				else updatePosWorld();
+				if (updatePosUI && focusEnabled) updatePosUIAndWorld();
+				else updatePosOnlyWorld();
 				clampPosition();
 			});
 			cont.pane(Styles.smallPane, p -> pane = p).grow();
@@ -766,7 +766,7 @@ public class Selection extends Content {
 		}
 
 		public void hide() {
-			remove();
+			super.hide(null);
 		}
 		public Element hit(float x, float y, boolean touchable) {
 			Element el = super.hit(x, y, touchable);
@@ -877,7 +877,7 @@ public class Selection extends Content {
 		}
 
 		private final Vec2 world = new Vec2();
-		private void updatePosWorld() {
+		private void updatePosOnlyWorld() {
 			Vec2 v1 = Core.camera.project(Tmp.v1.set(world));
 			x = v1.x;
 			y = v1.y;
@@ -886,13 +886,13 @@ public class Selection extends Content {
 			if (x + width > scene.getWidth()) x -= width;
 			if (y + height > scene.getHeight()) y -= height;
 		}
-		private void updatePosUI() {
-			Vec2 v1 = Core.input.mouse();
-			/* 向右上偏移 */
-			v1.add(2, 2);
-			world.set(Core.camera.unproject(Tmp.v1.set(v1)));
+		private void updatePosUIAndWorld() {
+			Vec2 v1 = Tmp.v1.set(Core.input.mouse())
+			 /* 向右上偏移 */
+			 .add(2, 2);
 			x = v1.x;
 			y = v1.y;
+			world.set(Core.camera.unproject(v1));
 		}
 	}
 
@@ -905,28 +905,27 @@ public class Selection extends Content {
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			if (button != KeyCode.mouseLeft || Vars.state.isMenu()) {
 				hide();
-				move = false;
+				mouseChanged = false;
 				return false;
-			} else {
-				super.touchDown(event, x, y, pointer, button);
-				start.set(end);
-				move = true;
-				Time.runTask(2f, () -> {
-					move = true;
-				});
-				WorldUtils.uiWD.drawSeq.add(() -> {
-					if (!hasSelect) return false;
-					Draw.color(Pal.accent, 0.3f);
-					draw();
-					return true;
-				});
-				return hasSelect;
 			}
+			super.touchDown(event, x, y, pointer, button);
+			start.set(end);
+			mouseChanged = true;
+			Time.runTask(0f, () -> {
+				mouseChanged = true;
+			});
+			WorldUtils.uiWD.drawSeq.add(() -> {
+				if (!isSelecting) return false;
+				Draw.color(Pal.accent, 0.3f);
+				draw();
+				return true;
+			});
+			return isSelecting;
 		}
 		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
-			if (!move) return;
+			if (!mouseChanged) return;
 			super.touchUp(event, mx, my, pointer, button);
-			hasSelect = false;
+			isSelecting = false;
 			fragSelect.remove();
 
 			/* if (!Core.input.alt()) {
@@ -998,7 +997,7 @@ public class Selection extends Content {
 				pane.setPosition(mx, my);
 			}
 			pane.show();
-			hasSelect = false;
+			isSelecting = false;
 		}
 	}
 

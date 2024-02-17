@@ -23,7 +23,6 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.Frag.ClearScroll;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
@@ -272,6 +271,10 @@ public class Window extends Table {
 		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
+		if (hit == null) {
+			Core.scene.setKeyboardFocus(previousKeyboardFocus);
+			Core.scene.setScrollFocus(previousScrollFocus);
+		}
 		if (hit != null && Core.scene.getKeyboardFocus() == null) requestKeyboard();
 		return hit;
 	}
@@ -330,37 +333,10 @@ public class Window extends Table {
 		}
 	};
 	Element previousKeyboardFocus, previousScrollFocus;
-	FocusListener focusListener = new FocusListener() {
-		public void keyboardFocusChanged(FocusEvent event, Element actor, boolean focused) {
-			if (!focused) focusChanged(event);
-		}
-		public void scrollFocusChanged(FocusEvent event, Element actor, boolean focused) {
-			if (!focused) focusChanged(event);
-		}
-		private void focusChanged(FocusEvent event) {
-			Scene stage = getScene();
-			if (stage != null && stage.root.getChildren().size > 0
-					&& stage.root.getChildren().peek() == Window.this) { // Dialog is top most actor.
-				Element newFocusedActor = event.relatedActor;
-				if (newFocusedActor != null && !newFocusedActor.isDescendantOf(Window.this) &&
-						!(newFocusedActor.equals(previousKeyboardFocus) || newFocusedActor.equals(previousScrollFocus)))
-					event.cancel();
-			}
-		}
-	};
 
 	public void clear() {
 		super.clear();
 		all.remove(this);
-	}
-
-	protected void setScene(Scene stage) {
-		if (stage == null) {
-			addListener(focusListener);
-		} else {
-			removeListener(focusListener);
-		}
-		super.setScene(stage);
 	}
 
 	public boolean isShown() {
@@ -467,7 +443,6 @@ public class Window extends Table {
 
 		Scene stage = getScene();
 		if (stage != null) {
-			removeListener(focusListener);
 			if (previousKeyboardFocus != null && previousKeyboardFocus.getScene() == null) previousKeyboardFocus = null;
 			Element actor = stage.getKeyboardFocus();
 			if (actor == null || actor.isDescendantOf(this)) stage.setKeyboardFocus(previousKeyboardFocus);
@@ -652,6 +627,12 @@ public class Window extends Table {
 
 	public Window moveToMouse() {
 		return setPosition(Core.input.mouse());
+	}
+	public static class ClearScroll extends InputListener {
+		public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+			super.exit(event, x, y, pointer, toActor);
+			if (Vars.state.isGame()) Core.scene.setScrollFocus(null);
+		}
 	}
 
 	public class FillTable extends Table {

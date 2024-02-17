@@ -47,6 +47,7 @@ It provides many useful tools for developers.
 - Selector
 - Supports `Tile`, `Building`, `Bullet`, `Unit`
   ![selection](./screenshots/selection.png)
+- `Ctrl`+`Alt` to fixed `Focus Window`
 
 ## ReviewElement
 

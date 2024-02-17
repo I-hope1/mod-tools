@@ -1,13 +1,12 @@
 package modtools.ui.components.linstener;
 
 import arc.Core;
-import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.event.*;
-import arc.util.*;
+import arc.util.Strings;
 import mindustry.graphics.Pal;
 import modtools.ui.effect.MyDraw;
 

@@ -247,8 +247,8 @@ public class Tester extends Content {
 		pane.update(invalid);
 		logSclListener = new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
 			public boolean valid(float x, float y) {
-				super.valid(x, y);
-				left = right = bottom = false;
+				y -= bind.getHeight();
+				top = 0 < y && y < offset;
 				return top && !isDisabled();
 			}
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
@@ -393,9 +393,7 @@ public class Tester extends Content {
 			IntUI.addCheck(p.button(HopeIcons.interrupt, istyle, isize, () -> {
 				stopIfOvertime = !stopIfOvertime;
 			}), () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
-			IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> {
-				multiThread = !multiThread;
-			}), () -> multiThread, "@tester.multiThread", "@tester.multiThread");
+			IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> multiThread = !multiThread), () -> multiThread, "@tester.multiThread", "@tester.multiThread");
 		};
 		Time.run(2, () -> folder.fireCheck(false));
 	}
@@ -550,6 +548,7 @@ public class Tester extends Content {
 	}
 
 	public boolean killScript;
+	public long startTime;
 	// 执行脚本
 	public void execScript() {
 		if (!finished) return;
@@ -565,9 +564,12 @@ public class Tester extends Content {
 		if (multiThread) {
 			executor.submit(this::execAndDealRes);
 		} else {
+			startTime = Time.millis();
 			Core.app.post(this::execAndDealRes);
 		}
-		if (!killTask.isScheduled()) Timer.schedule(killTask, 4, 0.1f, -1);
+		if (!killTask.isScheduled()) {
+			Timer.schedule(killTask, 4, 0.1f, -1);
+		}
 	}
 	AddedSeq logs = new AddedSeq();
 	public final LogHandler logHandler = new DefaultLogHandler() {

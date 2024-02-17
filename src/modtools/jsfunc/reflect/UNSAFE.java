@@ -104,10 +104,10 @@ public interface UNSAFE {
 		if (o == null) throw new IllegalArgumentException("o is null.");
 		ONE_ARRAY[0] = o;
 		long baseOffset = unsafe.arrayBaseOffset(Object[].class);
-		return switch (unsafe.addressSize()) {
-			case 4 -> unsafe.getInt(ONE_ARRAY, baseOffset);
+		return switch (unsafe.arrayIndexScale(Object[].class)) {
+			case 4 -> (unsafe.getInt(ONE_ARRAY, baseOffset) & 0xFFFFFFFFL) * (OS.is64Bit ? 8 : 1);
 			case 8 -> unsafe.getLong(ONE_ARRAY, baseOffset);
-			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
+			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.arrayIndexScale(Object[].class));
 		};
 	}
 

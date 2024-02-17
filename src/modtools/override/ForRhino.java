@@ -1,7 +1,7 @@
 package modtools.override;
 
 import arc.func.Func2;
-import arc.util.OS;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.mod.ModClassLoader;
 import modtools.ui.content.debug.Tester;
@@ -60,7 +60,8 @@ public class ForRhino {
 	}
 
 	public static void observeInstructionCount(ContextFactory factory, Context cx, int instructionCount) {
-		if (tester.killScript) throw new TimeoutException();
+		if (tester.multiThread ? tester.killScript : Time.timeSinceMillis(tester.startTime) > 2000)
+			throw new TimeoutException();
 	}
 	public static Object doTopCall(ContextFactory factory,
 																 Callable callable,

@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.unsafe.InitHandle.DESKTOP.*;
 
+/* 获取<init>的方法句柄  */
 @SuppressWarnings("unchecked")
 public class InitHandle {
 	public static MethodHandle findInitDesktop

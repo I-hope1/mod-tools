@@ -15,6 +15,7 @@ import mindustry.mod.Mods.ModMeta;
 import modtools.android.HiddenApi;
 import modtools.events.E_Extending;
 import modtools.graphics.MyShaders;
+import modtools.jsfunc.reflect.InitMethodHandle;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.content.SettingsUI;
@@ -81,6 +82,7 @@ public class ModTools extends Mod {
 			/* Log.err(e);
 			System.exit(-1); */
 		}
+		InitMethodHandle.load();
 		WorldDraw.registerEvent();
 		HopeCall.init();
 

@@ -35,7 +35,7 @@ static def export(CompileOptions options) {
 allprojects {
 	ext {
 		uncVersion = '1.8.9'
-		mindustryVersion = 'v145.1'
+		mindustryVersion = 'v146'
 
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
@@ -89,10 +89,10 @@ dependencies {
 	implementation files(
 			"_libs/AndroidField.jar",
 	)
-	compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-	compileOnly("com.github.Anuken.Arc:arc-core:$mindustryVersion") {
-		exclude group: 'com.github.Anuken.Arc', module: 'flabel'
+	compileOnly("com.github.Anuken.Mindustry:core:$mindustryVersion") {
+		exclude module: "flabel"
 	}
+	compileOnly("com.github.Anuken.Arc:arc-core:$mindustryVersion")
 }
 
 mindustry {

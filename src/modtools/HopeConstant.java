@@ -20,7 +20,7 @@ import static ihope_lib.MyReflect.lookup;
 @SuppressWarnings("unchecked")
 public class HopeConstant {
 	public interface BINDING {
-		/** @see Binding#Binding(KeybindValue, String)  */
+		/** @see Binding#Binding(KeybindValue, String) */
 		@SuppressWarnings("JavaLangInvokeHandleSignature")
 		MethodHandle BINDING_CTOR = nl(() ->
 		 lookup.findConstructor(Binding.class,
@@ -29,8 +29,9 @@ public class HopeConstant {
 		long BINDING_VALUES = FieldUtils.fieldOffset(Binding.class, "$VALUES");
 	}
 
+	@SuppressWarnings("DataFlowIssue")
 	public interface DESKTOP {
-		/** @see MemberName  */
+		/** @see MemberName */
 		Class<?> MEMBER_NAME = nl(() -> Class.forName("java.lang.invoke.MemberName"));
 
 		/** @see MemberName#flags */
@@ -44,16 +45,30 @@ public class HopeConstant {
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
 		 lookup.findConstructor(MEMBER_NAME, MethodType.methodType(void.class, Constructor.class)));
 
-		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class)  */
+		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class) */
 		Method RESOLVE_OR_FAIL   = nl(() ->
 		 Class.forName("java.lang.invoke.MemberName$Factory").getDeclaredMethod("resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class));
 		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
 		Method GET_DIRECT_METHOD = nl(() ->
 		 Lookup.class.getDeclaredMethod("getDirectMethodCommon", byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class));
+
+
+		// /** @see MemberName#MemberName(Method, boolean) */
+		// MethodHandle MEMBER_NAME_MH_CTOR = nl(() ->
+		//  lookup.findConstructor(MEMBER_NAME, MethodType.methodType(void.class, Method.class, boolean.class)));
+		//
+		// /** @see Method#Method(Class, String, Class[], Class, Class[], int, int, String, byte[], byte[], byte[]) */
+		// Constructor<Method> METHOD_CTOR = nl(() ->
+		//  Method.class.getDeclaredConstructors()[0]);
+		// /** @see DirectMethodHandle#make(byte, Class, MemberName, Class) */
+		// MethodHandle METHOD_HANDLE_MAKE = nl(() -> {
+		// 	Class<?> direct = Class.forName("java.lang.invoke.DirectMethodHandle");
+		// 	return lookup.findStatic(direct, "make", MethodType.methodType(direct, byte.class, Class.class, MEMBER_NAME, Class.class));
+		// });
 	}
 	@SuppressWarnings("JavaReflectionMemberAccess")
 	public interface ANDROID {
-		/** {@code MethodHandleImpl(long artMethod, int ref, MethodType mt)}  */
+		/** {@code MethodHandleImpl(long artMethod, int ref, MethodType mt)} */
 		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = nl(() ->
 		 Class.forName("java.lang.invoke.MethodHandleImpl").getDeclaredConstructor(long.class, int.class, MethodType.class));
 
@@ -72,9 +87,9 @@ public class HopeConstant {
 		ObjectMap<String, Seq<Fi>> bundles = nl(() -> Reflect.get(Mods.class, Vars.mods, "bundles"));
 	}
 	public interface STRING {
-		/** @see String#value  */
+		/** @see String#value */
 		long VALUE = FieldUtils.fieldOffset(String.class, "value");
-		/** @see String#coder  */
+		/** @see String#coder */
 		long CODER = FieldUtils.fieldOffset(String.class, "coder");
 	}
 

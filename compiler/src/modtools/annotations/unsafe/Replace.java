@@ -9,6 +9,7 @@ import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
+import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
@@ -17,6 +18,7 @@ import modtools.annotations.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.function.Supplier;
 
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.println;
@@ -36,6 +38,8 @@ public class Replace {
 	private static void extendingFunc0() throws Throwable {
 		accessOverride();
 
+		other();
+
 		forceJavaVersion();
 	}
 
@@ -46,7 +50,7 @@ public class Replace {
 		} catch (NoClassDefFoundError error) {return;}
 		// Resolve prev = Resolve.instance(__context);
 		removeKey(Resolve.class);
-		var resolve = new MyResolve(context);
+		Resolve resolve = new MyResolve(context);
 		// copyTo(prev, resolve);
 		ModuleFinder moduleFinder = ModuleFinder.instance(context);
 		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
@@ -88,9 +92,14 @@ public class Replace {
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
 
-		removeKey(MemberEnter.class);
-		MemberEnter memberEnter = new MyMemberEnter(context);
-		setAccess(TypeEnter.class, TypeEnter.instance(context), "memberEnter", memberEnter);
+	}
+	private static void other() {
+		removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
+
+		Options.instance(context).put(Option.PARAMETERS, "");
+		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
+		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
+		// ClassWriter.instance(context);
 		// final Log prevLog = Log.instance(context);
 		// removeKey(Log.class);
 		// final MyLog log = new MyLog(context);
@@ -185,15 +194,15 @@ public class Replace {
 	private static void removeKey(Class<?> cls) {
 		removeKey(cls, null);
 	}
-	private static void removeKey(Class<?> cls, Object newVal) {
+	private static void removeKey(Class<?> cls, Supplier<Object> newVal) {
 		String s = cls.getSimpleName();
-		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1)  + "Key", cls, newVal);
+		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1) + "Key", cls, newVal);
 	}
-	private static void removeKey(String name, Class<?> cls, Object newVal) {
+	private static void removeKey(String name, Class<?> cls, Supplier<Object> newVal) {
 		Key<Resolve>            key = getAccess(cls, null, name);
 		HashMap<Key<?>, Object> ht  = getAccess(Context.class, context, "ht");
 		ht.remove(key);
-		if (newVal != null) ht.put(key, newVal);
+		if (newVal != null) ht.put(key, newVal.get());
 	}
 
 	private static <T> void copyTo(T src, T dest) {

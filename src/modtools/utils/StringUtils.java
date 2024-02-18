@@ -2,7 +2,7 @@ package modtools.utils;
 
 import arc.util.*;
 import dalvik.system.VMRuntime;
-import modtools.HopeConstant.*;
+import modtools.HopeConstant.STRING;
 import modtools.android.HiddenApi;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -12,28 +12,33 @@ public interface StringUtils {
 		if (OS.isAndroid) changeByteAndroid(from, to);
 		else changeByteDesktop(from, to);
 	}
-	/** For Desktop  */
+	/** For Desktop */
 	private static void changeByteDesktop(String from, String to) {
 		unsafe.putObject(from, STRING.VALUE, unsafe.getObject(to, STRING.VALUE));
 		unsafe.putByte(from, STRING.CODER, unsafe.getByte(to, STRING.CODER));
 	}
-	/** For Android  */
+	/** For Android */
 	private static void changeByteAndroid(String from, String to) {
 		String[] tmp     = {from, to};
 		String[] strings = (String[]) VMRuntime.getRuntime().newNonMovableArray(String.class, 2);
 		System.arraycopy(tmp, 0, strings, 0, 2);
 
-		unsafe.putInt(from, ANDROID.STRING_COUNT, unsafe.getInt(to, ANDROID.STRING_COUNT));
-		long  address  = HiddenApi.addressOf(strings);
-		long  address2 = address + HiddenApi.IBYTES;
+		// Log.info("prev count: " + from.length());
+		// unsafe.putInt(from, STRING_COUNT, unsafe.getInt(to, STRING_COUNT));
+		// Log.info("now count: " + from.length());
+		// Log.info("COUNT_OFF: @", STRING_COUNT);
+		long src_address  = HiddenApi.addressOf(strings);
+		long dest_address = src_address + HiddenApi.IBYTES;
+		// unsafe.putLong(unsafe.getInt(src_address) + 12, unsafe.getLong(
+		// 	 unsafe.getInt(dest_address) + 12));
 		/* unsafe.copyMemory(unsafe.getInt(address2) + 8,
 			 unsafe.getInt(address) + 8, 2); */
-		for (int i = 0; i < 100; i++) {
-			unsafe.putLong(from,i, unsafe.getLong(to, i));
-			/* unsafe.copyMemory(unsafe.getInt(address2) + i,
-			 unsafe.getInt(address) + i, 3); */
+		for (int i = 8; i < 100; i += 2) {
+			// unsafe.putLong(from, i, unsafe.getLong(to, i));
 			Log.info("res[@]: @ -> @", i, from, to);
-			if (to.equals(from)) return;
+			if (to.equals(from)) break;
+			unsafe.copyMemory(unsafe.getInt(dest_address) + i,
+			 unsafe.getInt(src_address) + i, 2);
 		}
 	}
 

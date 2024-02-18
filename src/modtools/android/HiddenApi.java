@@ -3,19 +3,21 @@ package modtools.android;
 import arc.util.Log;
 import dalvik.system.VMRuntime;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.StringUtils;
 
 import java.lang.reflect.*;
 
 import static ihope_lib.MyReflect.unsafe;
 
-/** Only For Android  */
+/** Only For Android */
 public class HiddenApi {
 	public static final VMRuntime runtime = VMRuntime.getRuntime();
 
-	public static final long IBYTES              = Integer.BYTES;
-	// https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY
-	// uint64_t Executable::art_method_
-	public static final int  offset_art_method_  = 24;
+	public static final long IBYTES             = Integer.BYTES;
+	/** <a href="https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY">
+	 * uint64_t Executable::art_method_</a>*/
+	public static final int  offset_art_method_ = 24;
+
 
 	public static void setHiddenApiExemptions() {
 		if (trySetHiddenApiExemptions()) return;
@@ -31,7 +33,7 @@ public class HiddenApi {
 			Log.err(e);
 		}
 	}
-	/** @return true if successful.  */
+	/** @return true if successful. */
 	private static boolean trySetHiddenApiExemptions() {
 		try {
 			// sdk_version <= 28
@@ -59,8 +61,8 @@ public class HiddenApi {
 		if (methods[0].getName().equals("setHiddenApiExemptions")) {
 			return methods[0];
 		}
-		int      length  = methods.length;
-		Method[] array   = (Method[]) runtime.newNonMovableArray(Method.class, length);
+		int      length = methods.length;
+		Method[] array  = (Method[]) runtime.newNonMovableArray(Method.class, length);
 		System.arraycopy(methods, 0, array, 0, length);
 
 		long address = addressOf(array);
@@ -116,10 +118,11 @@ public class HiddenApi {
 		offset = runtime.addressOf(ints) - UNSAFE.addressOf(ints);
 	}
 
-	/* static {
-		String from = "还行";
-		String to = "japbbb哦爱家";
+	static {
+		String from = "'$e$' is the param event (if it is Trigger, '$e$' is undefined).";
+		String to   = "$e$ 是参数event (如果是Trigger, 则 $e$ 是 undefined). ";
 		StringUtils.changeByte(from, to);
-		Log.info("@ -> @", from, to);
-	} */
+		Log.info("successfully changed ");
+		System.exit(0);
+	}
 }

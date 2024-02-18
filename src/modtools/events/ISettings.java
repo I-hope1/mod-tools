@@ -1,5 +1,6 @@
 package modtools.events;
 
+import arc.func.*;
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.event.Touchable;
@@ -21,9 +22,9 @@ import java.lang.reflect.Method;
 import static modtools.events.ISettings.$$.text;
 import static modtools.ui.content.SettingsUI.SettingsBuilder.main;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */})
 public interface ISettings extends E_DataInterface {
-	/** 这会根据实现自动更改  */
+	/** 这会根据实现自动更改 */
 	Data data = null;
 	default Data data() {
 		return null;
@@ -95,7 +96,7 @@ public interface ISettings extends E_DataInterface {
 	 * Enum: ()
 	 * String[]: (...String)
 	 * </pre>
-	 * */
+	 */
 	default void build(String prefix, Table table) {
 		main = table;
 		text = (prefix + name()).toLowerCase();
@@ -105,7 +106,8 @@ public interface ISettings extends E_DataInterface {
 		try {
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
-			Log.err("Failed to build " + getClass() + "." + this, e.getCause());
+			e.fillInStackTrace();
+			Log.err("Failed to build " + getClass() + "." + this, e);
 		}
 	}
 	class $$ {
@@ -114,12 +116,14 @@ public interface ISettings extends E_DataInterface {
 		static {
 			builds.each((__, m) -> m.setAccessible(true));
 		}
+
 	}
 
 	// ----通过反射执行对应的方法----
 	ObjectMap<Class<?>, Method> builds = new Seq<>(ISettings.class.getDeclaredMethods())
 	 .removeAll(b -> !b.getName().equals("b"))
 	 .asMap(m -> m.getParameterTypes()[0]);
+
 
 	private void b(Boolean __) {
 		SettingsBuilder.check(text, this::set, this::enabled);
@@ -134,10 +138,12 @@ public interface ISettings extends E_DataInterface {
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getInt());
 		Label value = new Label(getString(), Styles.outlineLabel);
-		slider.moved(val0 -> {
-			int val = (int) val0;
-			set(val);
-			value.setText(String.valueOf(val));
+		slider.moved(new Floatc() {
+			public void get(float val0) {
+				int val = (int) val0;
+				ISettings.this.set(val);
+				value.setText(String.valueOf(val));
+			}
 		});
 		Table content = new Table();
 		content.add(text, Styles.outlineLabel).left().growX().wrap();
@@ -155,10 +161,12 @@ public interface ISettings extends E_DataInterface {
 		float  step   = args.length == 3 ? 0.1f : args[3];
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getFloat());
-		Label value = new Label(getString(), Styles.outlineLabel);
-		slider.moved(val -> {
-			set(val);
-			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
+		final Label value = new Label(getString(), Styles.outlineLabel);
+		slider.moved(new Floatc() {
+			public void get(float val) {
+				ISettings.this.set(val);
+				value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
+			}
 		});
 		Table content = new Table();
 		content.add(text, Styles.outlineLabel).left().growX().wrap();
@@ -173,8 +181,11 @@ public interface ISettings extends E_DataInterface {
 	private void b(Enum<?> __) {
 		var enumClass = (Class) args();
 		var enums     = new Seq<>((Enum<?>[]) enumClass.getEnumConstants());
-		SettingsBuilder.list(text, this::set, () -> Enum.valueOf(enumClass, data().getString(name())),
-		 enums, Enum::name);
+		SettingsBuilder.list(text, this::set, new Prov<Enum<?>>() {
+			public Enum<?> get() {
+				return Enum.valueOf(enumClass, ISettings.this.data().getString(ISettings.this.name()));
+			}
+		}, enums, Enum::name);
 	}
 	private void b(String[] __) {
 		var list = new Seq<>((String[]) args());

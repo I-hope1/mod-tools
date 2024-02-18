@@ -106,7 +106,7 @@ mindustryAssets {
 	rootAt "$projectDir/assets"
 }
 
-tasks.register('playGame', JavaExec) {
+task playGame(type: JavaExec) {
 	dependsOn classes
 	dependsOn jar
 

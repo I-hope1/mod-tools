@@ -22,9 +22,7 @@ public interface AThreads {
 	}
 
 	ThreadFactory factory = CatchSR.apply(() ->
-	 CatchSR.of(() -> (ThreadFactory) Reflect.invoke(Class.forName("java.lang.Thread$Builder"),
-		 Reflect.invoke(Thread.class, "ofVirtual"),
-		 "factory", new Object[0]))
+	 CatchSR.of(() -> Thread.ofVirtual().factory())
 		.get(() -> Thread::new));
 	private static Thread newThread(Runnable r, @Nullable String name, boolean daemon) {
 		Thread thread = factory.newThread(r);

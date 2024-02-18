@@ -91,11 +91,11 @@ public class Replace {
 		});
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
-
 	}
 	private static void other() {
 		removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
+		// println(Source.instance(context));
 		Options.instance(context).put(Option.PARAMETERS, "");
 		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
@@ -151,11 +151,13 @@ public class Replace {
 	static void forceJavaVersion() {
 		setTarget(properties);
 	}
+	/** 使source8就可以支持所有特性 */
 	public static void replaceSource() {
-		long off = fieldOffset(Feature.class, "minLevel");
+		long   off    = fieldOffset(Feature.class, "minLevel");
+		Source source = Source.JDK8;
 		for (Feature feature : Feature.values()) {
-			if (!feature.allowedInSource(Source.JDK8)) {
-				unsafe.putObject(feature, off, Source.JDK8);
+			if (!feature.allowedInSource(source)) {
+				unsafe.putObject(feature, off, source);
 			}
 		}
 	}
@@ -170,6 +172,7 @@ public class Replace {
 		String version = properties.getProperty("targetVersion");
 		Target target  = Target.lookup(version);
 		if (target == null) return;
+		removeKey(Target.class, () -> target);
 		println("targetVersion: [@](@)", version, target);
 
 		// removeKey(Target.class, target);
@@ -177,9 +180,18 @@ public class Replace {
 		removeKey("concatKey", StringConcat.class, null);
 
 		// 用于适配低版本
+		// Symtab syms = Symtab.instance(context);
+		// setAccess(Symtab.class, syms, "matchExceptionType", syms.incompatibleClassChangeErrorType);
+		runIgnoredException(() -> {
+			setValue(Lower.class, "useMatchException", false);
+			setValue(TransPatterns.class, "target", target);
+		});
 		setAccess(Lower.class, Lower.instance(context), "target", target);
+		setAccess(Gen.class, Gen.instance(context), "concat", StringConcat.instance(context));
 		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
+
+	private static void runIgnoredException(Runnable r) {try {r.run();} catch (Throwable ignored) {}}
 	static void setValue(Class<?> cl, String key, Object val) {
 		Object instance = invoke(cl, null, "instance", new Object[]{context}, Context.class);
 		setAccess(cl, instance, key, val);

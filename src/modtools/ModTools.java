@@ -22,7 +22,8 @@ import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.utils.Tools;
+import modtools.utils.*;
+import modtools.utils.ByteCodeTools.MyClass;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
@@ -71,6 +72,14 @@ public class ModTools extends Mod {
 			Tools.runLoggedException(URLRedirect::load);
 		}
 	}
+	private void lower() {
+		try {
+			Class.forName("java.lang.MatchException");
+		} catch (ClassNotFoundException e) {
+			var myClass = new MyClass<>("java/lang/MatchException", Exception.class);
+			myClass.define();
+		}
+	}
 	private void load() {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
@@ -81,6 +90,7 @@ public class ModTools extends Mod {
 			/* Log.err(e);
 			System.exit(-1); */
 		}
+		lower();
 		WorldDraw.registerEvent();
 		HopeCall.init();
 

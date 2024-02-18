@@ -9,7 +9,7 @@ import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.*;
+import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
@@ -68,15 +68,14 @@ public class Replace {
 				if (next != null) return next;
 			}
 			// find in other module
-			Set<ModuleSymbol> recoverableModules = new HashSet<>(symtab.getAllModules());
+			final Set<ModuleSymbol> recoverableModules = new HashSet<>(symtab.getAllModules());
 
 			recoverableModules.add(symtab.unnamedModule);
 			recoverableModules.remove(env.toplevel.modle);
 
-			for (ModuleSymbol ms0 : recoverableModules) {
+			for (ModuleSymbol ms : recoverableModules) {
 				//avoid overly eager completing classes from source-based modules, as those
 				//may not be completable with the current compiler settings:
-				ModuleSymbol ms = ms0;
 				if (ms.sourceLocation == null) {
 					if (ms.classLocation == null) {
 						ms = moduleFinder.findModule(ms);
@@ -148,9 +147,8 @@ public class Replace {
 					// println("source: @", symbol.sourcefile);
 				} catch (CompletionFailure ignored) {}
 			}
-			println(ms);
 		}
-		return NOT_FOUND;
+		return null;
 	}
 
 	static void forceJavaVersion() {

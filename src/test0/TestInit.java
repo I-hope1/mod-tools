@@ -11,6 +11,8 @@ public class TestInit {
 	public TestInit(double a) {
 		Log.info("<init>");
 		this.a = a * 1024;
+		Log.info(sun.reflect.misc.FieldUtil.class);
+		Log.info(sun.reflect.generics.visitor.Visitor.class);
 	}
 }
 

@@ -12,7 +12,6 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.Tmp;
 import mindustry.gen.Icon;
-import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
@@ -121,7 +120,7 @@ public interface INFO_DIALOG {
 		return dialog(t -> t.button(text, HopeStyles.flatt, run).size(64, 45));
 	}
 	static Window testDraw(Runnable draw) {
-		return testDraw0(__ -> draw.run());
+		return testDraw0(_ -> draw.run());
 	}
 	static Window testDraw0(Cons<Group> draw) {
 		return dialog(new Group() {

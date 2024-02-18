@@ -240,7 +240,7 @@ public class IntUI {
 	 */
 	public static void
 	addShowMenuListenerp(Element elem, Prov<Seq<MenuList>> prov) {
-		longPressOrRclick(elem, __ -> showMenuListDispose(prov));
+		longPressOrRclick(elem, _ -> showMenuListDispose(prov));
 	}
 	/**
 	 * Dispose after close.
@@ -260,19 +260,19 @@ public class IntUI {
 	 */
 	public static void
 	addShowMenuListener(Element elem, MenuList... list) {
-		longPressOrRclick(elem, __ -> {
+		longPressOrRclick(elem, _ -> {
 			showMenuList(Seq.with(list));
 		});
 	}
 	public static void
 	addShowMenuListener(Element elem, Iterable<MenuList> list) {
-		longPressOrRclick(elem, __ -> showMenuList(list));
+		longPressOrRclick(elem, _ -> showMenuList(list));
 	}
 	public static void showMenuList(Iterable<MenuList> list) {
 		showMenuList(list, null);
 	}
 	public static void showMenuList(Iterable<MenuList> list, Runnable hideMenu) {
-		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, _) -> {
 			showMeniList(list, hideMenu, p, hide);
 		}, false);
 	}

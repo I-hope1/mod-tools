@@ -445,7 +445,7 @@ public class ReviewElement extends Content {
 				var button   = new FoldedImageButton(true);
 				int size     = 32;
 				var children = group.getChildren();
-				add(button).size(size).disabled(__ -> children.isEmpty());
+				add(button).size(size).disabled(_ -> children.isEmpty());
 				childIndex = 1;
 				window.addMultiRowWithPos(this,
 				 ElementUtils.getElementName(element),

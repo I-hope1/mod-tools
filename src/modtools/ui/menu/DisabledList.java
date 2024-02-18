@@ -27,7 +27,7 @@ public class DisabledList extends MenuList {
 		list.name = name;
 		list.disabled = disabled;
 		// Log.info("0) check: @, list.checked: @", checked, list.checked);
-		list.cons = __ -> run.run();
+		list.cons = _ -> run.run();
 		return list;
 	}
 }

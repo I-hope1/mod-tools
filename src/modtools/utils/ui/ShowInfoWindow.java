@@ -125,7 +125,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		cont.pane(t -> {
 			t.left().defaults().left();
 			t.button(Icon.settingsSmall, clearNonei, () -> {
-				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, hide, ___) -> {
+				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, _, _) -> {
 					p.background(Styles.black6);
 					p.left().defaults().left().growX();
 					ISettings.buildAll("jsfunc.", p, E_JSFunc.class);
@@ -473,7 +473,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		addDisplayListener(fields.add(new MyHoverTable(buttons -> {
 			IntUI.addLabelButton(buttons, () -> l[0].val, type);
 			IntUI.addWatchButton(buttons,
-				f.getDeclaringClass().getSimpleName() + ": " + f.getName(),
+				STR."\{f.getDeclaringClass().getSimpleName()}: \{f.getName()}",
 				() -> f.get(o))
 			 .disabled(__ -> !l[0].isValid());
 		})).top().colspan(0), E_JSFuncDisplay.buttons);

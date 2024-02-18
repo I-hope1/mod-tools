@@ -114,9 +114,8 @@ public interface ISettings extends E_DataInterface {
 		static String text;
 
 		static {
-			builds.each((__, m) -> m.setAccessible(true));
+			builds.each((_, m) -> m.setAccessible(true));
 		}
-
 	}
 
 	// ----通过反射执行对应的方法----

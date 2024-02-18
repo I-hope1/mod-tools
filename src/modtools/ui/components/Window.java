@@ -200,7 +200,7 @@ public class Window extends Table {
 			titleTable.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32,
 				() -> sticky = !sticky).padLeft(4f).name("sticky")
 			 /* 这是一个奇葩的bug（编译） */
-			 .checked((Boolf) __ -> sticky);
+			 .checked((Boolf) _ -> sticky);
 			titleTable.add(new FoldedImageButton(false, HopeStyles.hope_clearNonei))
 			 .with(b -> {
 				 b.resizeImage(32);

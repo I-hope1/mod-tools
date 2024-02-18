@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.function.Supplier;
 
 import static modtools.annotations.HopeReflect.*;
-import static modtools.annotations.PrintHelper.SPrinter.println;
+import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.processors.AAINIT.properties;
 
 public class Replace {
@@ -30,9 +30,7 @@ public class Replace {
 		Replace.context = context;
 		try {
 			extendingFunc0();
-		} catch (Throwable e) {
-			throw new RuntimeException(e);
-		}
+		} catch (Throwable e) {err(e);}
 	}
 
 	private static void extendingFunc0() throws Throwable {
@@ -40,6 +38,7 @@ public class Replace {
 
 		other();
 
+		forcePreview();
 		forceJavaVersion();
 	}
 
@@ -167,6 +166,12 @@ public class Replace {
 			setAccess(Preview.class, preview, "enabled", true);
 			// setAccess(Preview.class, preview, "forcePreview", true);
 		}
+		setAccess(Preview.class, preview, "sourcesWithPreviewFeatures", new HashSet<>() {
+			public boolean contains(Object o) {
+				return false;
+			}
+		});
+		// setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
 	private static void setTarget(Properties properties) {
 		String version = properties.getProperty("targetVersion");
@@ -183,7 +188,7 @@ public class Replace {
 		// Symtab syms = Symtab.instance(context);
 		// setAccess(Symtab.class, syms, "matchExceptionType", syms.incompatibleClassChangeErrorType);
 		runIgnoredException(() -> {
-			setValue(Lower.class, "useMatchException", false);
+			setAccess(Lower.class, Lower.instance(context), "useMatchException", false);
 			setValue(TransPatterns.class, "target", target);
 		});
 		setAccess(Lower.class, Lower.instance(context), "target", target);

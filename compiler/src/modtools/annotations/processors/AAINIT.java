@@ -38,9 +38,7 @@ public class AAINIT extends AbstractProcessor {
 		properties.load(new FileInputStream(file));
 	}
 	public synchronized void init(ProcessingEnvironment processingEnv) {
-		try {
-			Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
-		} catch (Throwable e) {err(e);}
+		Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
 	}
 
 

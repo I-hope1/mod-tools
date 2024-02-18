@@ -389,24 +389,24 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 			 }));
 		 }, Drawable.class) */
-		 .isExtend(__ -> {
+		 .isExtend(_ -> {
 			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
 				 REVIEW_ELEMENT.inspect((Element) val);
 			 }));
 			 list.add(newElementDetailsList((Element) val));
 			 elementSetter(list, this::setVal);
 		 }, Element.class)
-		 .isExtend(__ -> {
+		 .isExtend(_ -> {
 			 list.add(MenuList.with(Icon.infoSmall, "At player", () -> {
 				 ((Effect) val).at(Vars.player);
 			 }));
 		 }, Effect.class)
-		 .isExtend(__ -> {
+		 .isExtend(_ -> {
 			 list.add(MenuList.with(Icon.infoCircleSmall, "Cell details", b -> {
 				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
 			 }));
 		 }, Cell.class)
-		 .isExtend(__ -> {
+		 .isExtend(_ -> {
 			 list.add(DisabledList.withd(HopeIcons.position,
 				(val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on")
 				+ " world", () -> val == null, () -> {

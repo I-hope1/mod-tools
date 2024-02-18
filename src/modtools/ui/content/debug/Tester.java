@@ -199,7 +199,7 @@ public class Tester extends Content {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
 				compileAndExec(() -> {});
-			}).width(64).disabled(__ -> !finished);
+			}).width(64).disabled(_ -> !finished);
 			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::right);
 			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
 			t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->

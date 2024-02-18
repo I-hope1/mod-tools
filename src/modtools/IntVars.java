@@ -81,7 +81,7 @@ public class IntVars {
 	}
 
 	static {
-		Events.on(ResizeEvent.class, __ -> {
+		Events.on(ResizeEvent.class, _ -> {
 			for (var r : resizeListeners) r.run();
 		});
 	}

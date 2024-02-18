@@ -18,7 +18,7 @@ public class ConfirmList extends MenuList {
 	 */
 	public static MenuList with(Drawable icon, String name, String text, Runnable run) {
 		MenuList list = with(icon, name, run);
-		list.cons = __ -> IntUI.showConfirm(text, run);
+		list.cons = _ -> IntUI.showConfirm(text, run);
 		return list;
 	}
 }

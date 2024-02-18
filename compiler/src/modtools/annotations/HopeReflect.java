@@ -5,8 +5,8 @@ import jdk.internal.module.Modules;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 
-import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.*;
 import java.util.Map;
 
@@ -143,15 +143,21 @@ public class HopeReflect {
 			return;
 		}
 
-		switch (field.getType().getName().charAt(0)) {
-			case 'I' -> unsafe.putInt(o, offset, (int) value);
-			case 'J' -> unsafe.putLong(o, offset, (long) value);
-			case 'F' -> unsafe.putFloat(o, offset, (float) value);
-			case 'D' -> unsafe.putDouble(o, offset, (double) value);
-			case 'B' -> unsafe.putByte(o, offset, (byte) value);
-			case 'S' -> unsafe.putShort(o, offset, (short) value);
-			case 'C' -> unsafe.putChar(o, offset, (char) value);
-			case 'Z' -> unsafe.putBoolean(o, offset, (boolean) value);
+		switch (field.getType().getSimpleName().charAt(0)) {
+			case 'i' -> unsafe.putInt(o, offset, (int) value);
+			case 'l' -> unsafe.putLong(o, offset, (long) value);
+			case 'f' -> unsafe.putFloat(o, offset, (float) value);
+			case 'd' -> unsafe.putDouble(o, offset, (double) value);
+			case 's' -> unsafe.putShort(o, offset, (short) value);
+			case 'c' -> unsafe.putChar(o, offset, (char) value);
+			case 'b' -> {
+				if (field.getType() == Boolean.TYPE) {
+					unsafe.putBoolean(o, offset, (boolean) value);
+				} else {
+					unsafe.putByte(o, offset, (byte) value);
+				}
+			}
+			default -> throw new RuntimeException("Unexpected type: " + field.getType().getTypeName());
 		}
 	}
 	public static void set(Class<?> clazz, Object obj, String name, Object value) {
@@ -165,7 +171,7 @@ public class HopeReflect {
 	public static long fieldOffset(Class<?> clazz, String fieldName) {
 		return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 	}
-	/** 主要是加载{@code <clinit>}  */
+	/** 主要是加载{@code <clinit>} */
 	public static void load() {}
 
 	public static void setAccessible(AccessibleObject obj) {

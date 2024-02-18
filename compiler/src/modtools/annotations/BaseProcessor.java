@@ -39,7 +39,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static ClassWriter   classWriter;
 	public static Attr          __attr__;
 
-	public static Context __context;
+	public static Context _context;
 
 	public static Type stringType;
 
@@ -97,20 +97,20 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	}
 
 	public void initConst(ProcessingEnvironment env) {
-		if (__context != null) return;
+		if (_context != null) return;
 
-		__context = ((JavacProcessingEnvironment) processingEnv).getContext();
-		elements = JavacElements.instance(__context);
-		trees = JavacTrees.instance(__context);
-		mMaker = TreeMaker.instance(__context);
-		names = Names.instance(__context);
-		types = Types.instance(__context);
-		parsers = ParserFactory.instance(__context);
-		mSymtab = Symtab.instance(__context);
-		classFinder = ClassFinder.instance(__context);
+		_context = ((JavacProcessingEnvironment) processingEnv).getContext();
+		elements = JavacElements.instance(_context);
+		trees = JavacTrees.instance(_context);
+		mMaker = TreeMaker.instance(_context);
+		names = Names.instance(_context);
+		types = Types.instance(_context);
+		parsers = ParserFactory.instance(_context);
+		mSymtab = Symtab.instance(_context);
+		classFinder = ClassFinder.instance(_context);
 		mFiler = (JavacFiler) env.getFiler();
-		classWriter = ClassWriter.instance(__context);
-		__attr__ = Attr.instance(__context);
+		classWriter = ClassWriter.instance(_context);
+		__attr__ = Attr.instance(_context);
 
 		stringType = mSymtab.stringType;
 	}

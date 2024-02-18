@@ -131,7 +131,7 @@ public class Executor extends Content {
 					event.stop();
 				}
 			});
-			IntUI.longPressOrRclick(button, __ -> {
+			IntUI.longPressOrRclick(button, _ -> {
 				IntUI.showMenuListDispose(() -> Seq.with(MenuList.with(Icon.copySmall, "cpy as JS", () -> {
 					if (node.code != null) JSFunc.copyText(node.code);
 				})));

@@ -33,7 +33,7 @@ public class Replace {
 		} catch (Throwable e) {err(e);}
 	}
 
-	private static void extendingFunc0() throws Throwable {
+	private static void extendingFunc0() {
 		accessOverride();
 
 		other();
@@ -43,15 +43,16 @@ public class Replace {
 	}
 
 	static Symbol NOT_FOUND;
-	/** 包括包访问 */
-	private static void accessOverride() throws IllegalAccessException {
+	/** 包括包访问
+	 * @see Resolve#doRecoveryLoadClass */
+	private static void accessOverride() {
+		Resolve resolve = Resolve.instance(context);
 		try {
 			NoAccessCheck.class.getClass();
-		} catch (NoClassDefFoundError error) {return;}
-		// Resolve prev = Resolve.instance(__context);
-		removeKey(Resolve.class);
-		Resolve resolve = new MyResolve(context);
-		// copyTo(prev, resolve);
+			removeKey(Resolve.class);
+			resolve = new MyResolve(context);
+		} catch (NoClassDefFoundError ignored) {}
+
 		ModuleFinder moduleFinder = ModuleFinder.instance(context);
 		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
 

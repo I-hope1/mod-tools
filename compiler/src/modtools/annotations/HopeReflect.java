@@ -8,7 +8,6 @@ import sun.reflect.ReflectionFactory;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.*;
-import java.util.Map;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class HopeReflect {
@@ -22,12 +21,6 @@ public class HopeReflect {
 			Module module = Object.class.getModule();
 
 			unsafe.putObject(HopeReflect.class, off, module);
-
-			Class<?> reflect = Class.forName("jdk.internal.reflect.Reflection");
-			Map      map     = (Map) lookup.findStaticGetter(reflect, "fieldFilterMap", Map.class).invokeExact();
-			if (map != null) map.clear();
-			map = (Map) lookup.findStaticGetter(reflect, "methodFilterMap", Map.class).invokeExact();
-			if (map != null) map.clear();
 
 			openModule();
 		} catch (Throwable e) {

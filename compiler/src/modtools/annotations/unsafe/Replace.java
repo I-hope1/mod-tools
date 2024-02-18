@@ -9,7 +9,7 @@ import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
@@ -43,6 +43,7 @@ public class Replace {
 	}
 
 	static Symbol NOT_FOUND;
+	/** 包括包访问 */
 	private static void accessOverride() throws IllegalAccessException {
 		try {
 			NoAccessCheck.class.getClass();
@@ -71,16 +72,19 @@ public class Replace {
 			recoverableModules.add(symtab.unnamedModule);
 			recoverableModules.remove(env.toplevel.modle);
 
-			for (ModuleSymbol ms : recoverableModules) {
+			for (ModuleSymbol ms0 : recoverableModules) {
 				//avoid overly eager completing classes from source-based modules, as those
 				//may not be completable with the current compiler settings:
+				ModuleSymbol ms = ms0;
 				if (ms.sourceLocation == null) {
 					if (ms.classLocation == null) {
 						ms = moduleFinder.findModule(ms);
 					}
 
 					Symbol sym = loadClass(ms, candidates);
-					if (sym != null) return sym;
+					if (sym != null) {
+						return sym;
+					}
 				}
 			}
 			return NOT_FOUND;
@@ -143,6 +147,7 @@ public class Replace {
 					// println("source: @", symbol.sourcefile);
 				} catch (CompletionFailure ignored) {}
 			}
+			println(ms);
 		}
 		return NOT_FOUND;
 	}
@@ -184,13 +189,13 @@ public class Replace {
 		// jdk9才有
 		removeKey("concatKey", StringConcat.class, null);
 
+		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
+		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
+
 		// 用于适配低版本
 		// Symtab syms = Symtab.instance(context);
 		// setAccess(Symtab.class, syms, "matchExceptionType", syms.incompatibleClassChangeErrorType);
-		runIgnoredException(() -> {
-			setAccess(Lower.class, Lower.instance(context), "useMatchException", false);
-			setValue(TransPatterns.class, "target", target);
-		});
+		runIgnoredException(() -> setAccess(Lower.class, Lower.instance(context), "useMatchException", false));
 		setAccess(Lower.class, Lower.instance(context), "target", target);
 		setAccess(Gen.class, Gen.instance(context), "concat", StringConcat.instance(context));
 		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
@@ -219,7 +224,10 @@ public class Replace {
 		Key<Resolve>            key = getAccess(cls, null, name);
 		HashMap<Key<?>, Object> ht  = getAccess(Context.class, context, "ht");
 		ht.remove(key);
-		if (newVal != null) ht.put(key, newVal.get());
+		if (newVal != null) {
+			Object value = newVal.get();
+			if (!ht.containsKey(key)) ht.put(key, value);
+		}
 	}
 
 	private static <T> void copyTo(T src, T dest) {

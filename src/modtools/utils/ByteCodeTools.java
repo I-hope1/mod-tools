@@ -14,7 +14,7 @@ import java.util.*;
 
 import static ihope_lib.MyReflect.unsafe;
 import static rhino.classfile.ByteCode.*;
-import static rhino.classfile.ClassFileWriter.ACC_PUBLIC;
+import static rhino.classfile.ClassFileWriter.*;
 
 public class ByteCodeTools {
 	/*public static <T> MyClass<T> newClass(String name, String superName) {
@@ -53,6 +53,10 @@ public class ByteCodeTools {
 														Class<V> returnType, Class<?>... args) {
 			if (func2 == null) {
 				writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
+				if ((flags & ACC_ABSTRACT) != 0) {
+					writer.stopMethod((short) (args.length + 1));
+					return;
+				}
 				writer.addLoadThis();
 				for (int i = 1; i <= args.length; i++) {
 					writer.add(addLoad(args[i - 1]), i);
@@ -148,7 +152,7 @@ public class ByteCodeTools {
 
 		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, boolean buildSuper,
 												Class<?>... args) {
-			setFunc(name, (self, a) -> {
+			setFunc(name, cons2 == null ? null : (self, a) -> {
 				cons2.get(self, a);
 				return null;
 			}, flags, buildSuper, void.class, args);

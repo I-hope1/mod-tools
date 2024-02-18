@@ -14,7 +14,7 @@ public class MyResolve extends Resolve {
 				&& (sym.flags_field & Flags.PARAMETER) == 0 &&
 				env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null) {
 			sym.flags_field |= Flags.PUBLIC;
-			sym.flags_field &= ~Flags.PRIVATE;
+			sym.flags_field &= ~(Flags.PRIVATE | Flags.PROTECTED);
 		}
 		return super.isAccessible(env, site, sym, checkInner);
 	}

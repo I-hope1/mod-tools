@@ -17,7 +17,7 @@ public interface AThreads {
 	}
 	class V7 implements AThreads {
 		public ExecutorService boundedExecutor(String name, int max) {
-			return Threads.boundedExecutor(name, max);
+			return new ThreadPoolExecutor(1, max, 1, TimeUnit.MINUTES, new LinkedBlockingQueue<>(), r -> newThread(r, name, true));
 		}
 	}
 

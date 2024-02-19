@@ -1,14 +1,50 @@
-
 name: mod-tools
 displayName: "mod工具"
 description: '''
-             - 修复UnitSpawn无法选择指定坐标的bug
-             - 修复Selection解析错误数字崩溃的bug
-             - Selection支持ValueLabel焦点
-             - 修复Settings无法自动更新字段的bug
+             兼容性 & 功能
+             - 支持虚拟线程（如果支持）
+             - 兼容java8
+             - 渲染优化
+             - 自定义Http重定向（Config: b0kkihope/http_redirect.properties）
+
+             Bug修复
+             - 修复了Tester的sidebar在log上端也能移动的bug
+             - 修复了Tester的在单线程无法超时停止的bug
+             - 修复了addressOf的实现
+             - 修复Selection的WorldDraw有时不显示的bug
+             - 修复Selection更新延迟的bug
+             - 修复菜单无法点击旁边隐藏的bug
+             - 修复HoverTable在屏幕外不显示的bug
+             - 修复Window，游戏窗口改变时，不更新最大化的bug
+             - 修复Window阻塞输入的bug
+             - 修复模糊等级调0会 / by zero
+
+             其他
+             - 删除了MyFLabel.java
+
+             Compatibility & Features
+             - Added support for virtual threads (if supported).
+             - Compatible with Java 8.
+             - Render optimization.
+             - Customizable HTTP redirection (Config: b0kkihope/http_redirect.properties).
+
+             Bug Fixes
+             - Fixed a bug where the Tester's sidebar could be moved above the log.
+             - Addressed an issue in Tester where timeouts were not working in single-threaded mode.
+             - Fixed the implementation of `addressOf`.
+             - Resolved a bug where Selection's WorldDraw would sometimes not display.
+             - Fixed the delay issue in Selection updates.
+             - Corrected a bug where menus couldn't be clicked when partially hidden.
+             - Fixed the bug where HoverTable wouldn't display when outside the screen.
+             - Addressed the bug where the Window wouldn't update maximization when the game window changes.
+             - Resolved the bug where Window would block input.
+             - Fixed the issue where setting blur level to 0 would result in a division by zero.
+
+             Others
+             - Removed MyFLabel.java.
              '''
-author: 'I hope...'
-version: 1.4.5
+author: “I hope...”
+version: “1.4.5.1”
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

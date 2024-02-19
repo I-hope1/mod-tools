@@ -44,7 +44,7 @@ description: '''
              - Removed MyFLabel.java.
              '''
 author: “I hope...”
-version: “1.4.5.1”
+version: 1.4.5.1
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

@@ -249,8 +249,8 @@ public abstract class WFunction<T> {
 				 Lines.square(pos.x, pos.y,
 					fin * Mathf.dst(region.width, region.height) / tilesize);
 			 });
-			action.accept(t);
 			Threads.sleep(1);
+			action.accept(t);
 		})));
 	}
 	public void removeAll(List<T> list, Predicate<? super T> action) {

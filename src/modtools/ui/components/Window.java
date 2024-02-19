@@ -611,9 +611,12 @@ public class Window extends Table {
 	}
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
-		Draw.alpha(parentAlpha);
-		MyDraw.blurRect(x, y, width, height);
-		Tools.runLoggedException(super::draw);
+		float prev = Draw.z();
+		Draw.draw(getZIndex() + 10, () -> {
+			Draw.alpha(parentAlpha);
+			MyDraw.blurRect(x, y, width, height);
+		});
+		Draw.draw(prev,() -> Tools.runLoggedException(super::draw));
 	}
 
 	/**

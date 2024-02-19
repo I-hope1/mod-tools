@@ -159,9 +159,7 @@ public class EBBlur implements DrawEffect {
 		 .replace("%varying%", varyings)
 		 .replace("%convolution%", convolution);
 
-		/* if (Sgl.config.loadInfo && Sgl.config.debugMode) {
-			Log.info("[DEBUG] [Singularity] blur shader generate, shader content:" + Sgl.NL + "=vertexShader=" + Sgl.NL + vertexShader + Sgl.NL + "=fragShader=" + Sgl.NL + fragmentShader);
-		} */
+		// Log.info("vert: @\n\nfrag: @", 	(vertexShader, fragmentShader);
 
 		return new Shader(vertexShader, fragmentShader);
 		// return null;

@@ -23,7 +23,7 @@ public class WorldDraw {
 	public final MySet<Boolp> drawSeq = new MySet<>();
 	public       float        alpha   = 1;
 
-	public WorldDraw(float z) {
+	WorldDraw(float z) {
 		this(z, null);
 	}
 

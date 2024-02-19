@@ -31,6 +31,7 @@ import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import static arc.Core.*;
 import static modtools.IntVars.modName;
@@ -123,20 +124,21 @@ public final class TopGroup extends WidgetGroup {
 	public void draw() {
 		setTransform(false);
 		backDrawSeq.exec();
-		drawResidentTasks.forEach(ResidentDrawTask::backDraw);
+		drawTask(-1, ResidentDrawTask::backDraw);
 		super.draw();
 
 		if (elementDrawer != null && selected != null) {
 			// Draw.flush();
 			elementDrawer.draw(selecting, selected);
 		}
-		drawResidentTasks.forEach(ResidentDrawTask::elemDraw);
+		drawTask(0, ResidentDrawTask::elemDraw);
 
 		Draw.flush();
 
 		drawSeq.exec();
-		drawResidentTasks.forEach(ResidentDrawTask::endDraw);
+		drawTask(20, ResidentDrawTask::endDraw);
 		Draw.flush();
+		Draw.z(21);
 
 		if (!debugBounds.enabled() && drawPadElem == null) return;
 		Element drawPadElem = or(this.drawPadElem, scene.root);
@@ -151,6 +153,9 @@ public final class TopGroup extends WidgetGroup {
 		ScreenSampler.pause();
 		drawPad(drawPadElem, vec2);
 		ScreenSampler._continue();
+	}
+	private void drawTask(float z, Consumer<ResidentDrawTask> drawTaskCons) {
+		Draw.draw(z, () -> drawResidentTasks.forEach(drawTaskCons));
 	}
 	/** 如果选中的元素太小，会在边缘显示 */
 	private void drawSlightlyIfSmall() {

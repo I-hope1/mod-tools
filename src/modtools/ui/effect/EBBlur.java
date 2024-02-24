@@ -167,6 +167,7 @@ public class EBBlur implements DrawEffect {
 
 	public void resize(int width, int height) {
 		blurScl = E_Blur.scale_level.getInt();
+		if (blurScl == 0) blurScl = 1;
 		width /= blurScl;
 		height /= blurScl;
 

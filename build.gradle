@@ -34,6 +34,7 @@ static def export(CompileOptions options) {
 allprojects {
 	ext {
 		uncVersion = '1.8.9'
+		compilerJar = '_libs/compiler.jar'
 		mindustryVersion = 'v146'
 
 		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
@@ -47,8 +48,8 @@ allprojects {
 	}
 	repositories {
 		mavenLocal()
-		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
 		mavenCentral()
+		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
 		maven { url 'https://www.jitpack.io' }
 	}
 }

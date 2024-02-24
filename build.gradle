@@ -97,7 +97,7 @@ dependencies {
 }
 
 mindustry {
-//	meta << ModMeta(hidden: true)
+	meta << ModMeta(hidden: true)
 	def name = meta.displayName = "mod-tools"
 	deploy { baseName = name }
 	dexJar { options.minApi = '34' }

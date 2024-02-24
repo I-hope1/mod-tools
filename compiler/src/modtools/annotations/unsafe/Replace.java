@@ -95,6 +95,8 @@ public class Replace {
 		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
 			public Object visitType(Type t, Object o) {return t;}
 		});
+
+		if (resolve.getClass() == Resolve.class) return;
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
 	}

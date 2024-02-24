@@ -1,7 +1,7 @@
 name: mod-tools
 displayName: "mod工具"
-description: ''''''
-author: “I hope...”
+description: ""
+author: "I hope..."
 hidden: true
 version: 1.4.5.1
 minGameVersion: 136

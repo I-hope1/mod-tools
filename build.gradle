@@ -6,7 +6,8 @@ group 'mod-tools'
 version '1.4.5.1'
 
 static def export(CompileOptions options) {
-// options.compilerArgs.addAll("-Xlint:deprecation")
+//    options.compilerArgs.addAll("-Xlint:deprecation")
+	// 只是访问
 	options.compilerArgs.addAll([
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.loader",
@@ -55,6 +56,7 @@ allprojects {
 tasks.withType(JavaCompile) {
 	sourceCompatibility = 21
 	targetCompatibility = 21
+	options.compilerArgs.addAll("-AtargetVersion=8")
 	options.compilerArgs.add("--enable-preview")
 }
 
@@ -95,7 +97,7 @@ dependencies {
 }
 
 mindustry {
-	meta << ModMeta(hidden: true)
+//	meta << ModMeta(hidden: true)
 	def name = meta.displayName = "mod-tools"
 	deploy { baseName = name }
 	dexJar { options.minApi = '34' }

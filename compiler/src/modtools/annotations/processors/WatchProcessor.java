@@ -16,7 +16,7 @@ import java.util.*;
 
 import static java.lang.reflect.Modifier.STATIC;
 
-@AutoService({Processor.class})
+@AutoService(Processor.class)
 public class WatchProcessor extends BaseProcessor<Element> {
 	private static final String STATIC_SIG   = "$T$";
 	private static final String WATCH_STRING = "modtools.utils.ui.WatchWindow";

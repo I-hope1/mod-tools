@@ -8,36 +8,23 @@ import modtools.annotations.unsafe.Replace;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
-import java.io.*;
-import java.util.*;
+import java.util.Set;
 
-import static modtools.annotations.PrintHelper.SPrinter.*;
+import static modtools.annotations.PrintHelper.SPrinter.err;
 
 @AutoService({Processor.class})
-public class AAINIT extends AbstractProcessor {
+public class AINIT extends AbstractProcessor {
 	public static boolean    hasMindustry = true;
-	public static Properties properties   = new Properties();
 
 	static {
 		try {
 			HopeReflect.load();
 			Replace.replaceSource();
-			loadProperties();
-			hasMindustry = !properties.containsKey("hasMindustry") || properties.getProperty("hasMindustry").equals("true");
 		} catch (Throwable e) {err(e);}
 	}
 
-	static void loadProperties() throws IOException {
-		File file = new File("gradle.properties");
-		if (!file.exists()) {
-			println(file.createNewFile()
-			 ? "Created New File: @"
-			 : "Could not create file: @", file.getAbsoluteFile());
-			return;
-		}
-		properties.load(new FileInputStream(file));
-	}
 	public synchronized void init(ProcessingEnvironment processingEnv) {
+		super.init(processingEnv);
 		Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
 	}
 
@@ -48,5 +35,8 @@ public class AAINIT extends AbstractProcessor {
 	}
 	public Set<String> getSupportedAnnotationTypes() {
 		return Set.of();
+	}
+	public Set<String> getSupportedOptions() {
+		return Set.of("targetVersion");
 	}
 }

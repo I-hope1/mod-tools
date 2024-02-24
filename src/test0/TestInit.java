@@ -1,10 +1,8 @@
 package test0;
 
 import arc.util.Log;
-import jdk.internal.misc.Unsafe;
 import mindustry.Vars;
-import mindustry.mod.ContentParser;
-import modtools.annotations.*;
+import modtools.annotations.NoAccessCheck;
 
 public class TestInit {
 	public double a;

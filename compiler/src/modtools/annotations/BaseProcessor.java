@@ -13,7 +13,7 @@ import com.sun.tools.javac.processing.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
-import modtools.annotations.processors.AAINIT;
+import modtools.annotations.processors.AINIT;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -43,23 +43,23 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 	public static Type stringType;
 
-	private boolean firstFinished, secondFinished;
+	private int runTimes;
+	protected RoundEnvironment roundEnv;
 	public void process2() {}
-
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-		if (!AAINIT.hasMindustry) return true;
-		if (firstFinished) {
-			if (secondFinished) {
-				return true;
-			}
-			secondFinished = true;
+		if (!AINIT.hasMindustry) return true;
+		this.roundEnv = roundEnv;
+		runTimes++;
+		if (runTimes > 2) {
+			return true;
+		}
+		if (runTimes > 1) {
 			try {
 				process2();
 			} catch (Throwable e) {err(e);}
 			return true;
 		}
-		firstFinished = true;
-
+		// 第一次
 		for (TypeElement annotation : annotations) {
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
@@ -89,8 +89,9 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 	public final synchronized void init(ProcessingEnvironment env) {
 		super.init(env);
+		// println("initialized");
 		initConst(env);
-		if (!AAINIT.hasMindustry) return;
+		if (!AINIT.hasMindustry) return;
 		try {
 			init();
 		} catch (Throwable e) {err(e);}
@@ -200,7 +201,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		return SourceVersion.latestSupported();
 	}
 	public final Set<String> getSupportedAnnotationTypes() {
-		if (!AAINIT.hasMindustry) return Set.of();
+		if (!AINIT.hasMindustry) return Set.of();
 		try {
 			return getSupportedAnnotationTypes0().stream()
 			 .map(Class::getCanonicalName).collect(Collectors.toSet());
@@ -209,10 +210,10 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		}
 	}
 	protected static VarSymbol getSymbol(CompilationUnitTree unit, JCVariableDecl tree) {
-		return (VarSymbol)getSymbol(unit, (JCTree) tree);
+		return (VarSymbol) getSymbol(unit, (JCTree) tree);
 	}
 	protected static Symbol getSymbol(CompilationUnitTree unit, JCTree tree) {
-		TreePath path   = trees.getPath(unit, tree);
+		TreePath path = trees.getPath(unit, tree);
 		return trees.getElement(path);
 	}
 	public abstract Set<Class<?>> getSupportedAnnotationTypes0();

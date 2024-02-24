@@ -9,7 +9,7 @@ import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
@@ -22,7 +22,6 @@ import java.util.function.Supplier;
 
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.*;
-import static modtools.annotations.processors.AAINIT.properties;
 
 public class Replace {
 	static Context context;
@@ -43,8 +42,10 @@ public class Replace {
 	}
 
 	static Symbol NOT_FOUND;
-	/** 包括包访问
-	 * @see Resolve#doRecoveryLoadClass */
+	/**
+	 * 包括{@code Module}访问
+	 * @see Resolve#doRecoveryLoadClass
+	 */
 	private static void accessOverride() {
 		Resolve resolve = Resolve.instance(context);
 		try {
@@ -83,6 +84,8 @@ public class Replace {
 
 					Symbol sym = loadClass(ms, candidates);
 					if (sym != null) {
+						println("Found invisible symbol: @", sym);
+						// invisibleSymbols.add((ClassSymbol) sym);
 						return sym;
 					}
 				}
@@ -98,16 +101,9 @@ public class Replace {
 	private static void other() {
 		removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
-		// println(Source.instance(context));
 		Options.instance(context).put(Option.PARAMETERS, "");
 		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
-		// ClassWriter.instance(context);
-		// final Log prevLog = Log.instance(context);
-		// removeKey(Log.class);
-		// final MyLog log = new MyLog(context);
-		// copyTo(prevLog, log);
-		// setAccess(Check.class, Check.instance(context), "log", log);
 
 		/* removeKey(Check.class);
 
@@ -152,7 +148,10 @@ public class Replace {
 	}
 
 	static void forceJavaVersion() {
-		setTarget(properties);
+		Options.instance(context).keySet().stream()
+		 .filter(f -> f.startsWith("-AtargetVersion=")).findFirst()
+		 .map(v -> v.substring("-AtargetVersion=".length()))
+		 .map(Target::lookup).ifPresent(Replace::setTarget);
 	}
 	/** 使source8就可以支持所有特性 */
 	public static void replaceSource() {
@@ -177,12 +176,10 @@ public class Replace {
 		});
 		// setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
-	private static void setTarget(Properties properties) {
-		String version = properties.getProperty("targetVersion");
-		Target target  = Target.lookup(version);
+	private static void setTarget(Target target) {
 		if (target == null) return;
 		removeKey(Target.class, () -> target);
-		println("targetVersion: [@](@)", version, target);
+		println("targetVersion: @ (@)", target.ordinal() + 1, target);
 
 		// removeKey(Target.class, target);
 		// jdk9才有
@@ -215,7 +212,7 @@ public class Replace {
 	private static void removeKey(Class<?> cls) {
 		removeKey(cls, null);
 	}
-	private static void removeKey(Class<?> cls, Supplier<Object> newVal) {
+	public static void removeKey(Class<?> cls, Supplier<Object> newVal) {
 		String s = cls.getSimpleName();
 		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1) + "Key", cls, newVal);
 	}

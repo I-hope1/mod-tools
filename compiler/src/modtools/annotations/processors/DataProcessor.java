@@ -11,7 +11,7 @@ import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.util.*;
 
-@AutoService({Processor.class})
+@AutoService(Processor.class)
 // @SupportedOptions({"debug", "verify"})
 public class DataProcessor extends BaseProcessor<Element> {
 	private static final String EVENT       = "modtools.events.MyEvents";

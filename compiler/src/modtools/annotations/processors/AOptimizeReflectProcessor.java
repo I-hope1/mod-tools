@@ -16,7 +16,7 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 
 /** 奇怪的注解处理器。。。  */
-@AutoService({Processor.class})
+@AutoService(Processor.class)
 public class AOptimizeReflectProcessor extends BaseProcessor<Element>
  implements ReflectUtils {
 	public void dealElement(Element element) {

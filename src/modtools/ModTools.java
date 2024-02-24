@@ -50,7 +50,6 @@ public class ModTools extends Mod {
 	public ModTools() {
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
 		if (headless) Log.info("Running in headless environment.");
-		// Log.info(HopeReflect.getCaller());
 
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");

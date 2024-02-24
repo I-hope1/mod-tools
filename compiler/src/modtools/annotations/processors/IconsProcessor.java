@@ -13,7 +13,7 @@ import javax.annotation.processing.Processor;
 import java.io.*;
 import java.util.*;
 
-@AutoService({Processor.class})
+@AutoService(Processor.class)
 public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 	public void dealElement(ClassSymbol element) throws Throwable {
 		JCClassDecl root = trees.getTree(element);

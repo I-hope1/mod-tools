@@ -17,7 +17,7 @@ import javax.lang.model.element.*;
 import java.util.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
-@AutoService({Processor.class})
+@AutoService(Processor.class)
 // Inside the class:
 public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {

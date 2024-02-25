@@ -57,10 +57,17 @@ public class Replace {
 	 * @see Resolve#doRecoveryLoadClass
 	 */
 	private static void accessOverride() {
-		Resolve prev = Resolve.instance(context);
-		Resolve resolve = tryDefineOne(prev);
+		Resolve prev    = Resolve.instance(context);
+		removeKey(Resolve.class, () -> tryDefineOne(prev));
+		Resolve resolve = Resolve.instance(context);
 		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
 
+		setRecovery(resolve);
+
+		setAccess(Check.class, Check.instance(context), "rs", resolve);
+		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
+	}
+	private static void setRecovery(Resolve resolve) {
 		setAccess(Resolve.class, resolve, "doRecoveryLoadClass", (RecoveryLoadClass) (env, name) -> {
 			List<Name> candidates = Convert.classCandidates(name);
 			return lookupInvisibleSymbol(env, name,
@@ -91,31 +98,31 @@ public class Replace {
 		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
 			public Object visitType(Type t, Object o) {return t;}
 		});
-
-		if (resolve.getClass() == Resolve.class) return;
-		setAccess(Check.class, Check.instance(context), "rs", resolve);
-		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
 	}
 	private static Resolve tryDefineOne(Resolve resolve) {
-		l:try {
+		boolean hasAnnotation = true;
+		try {
 			NoAccessCheck.class.getClass();
-			removeKey(Resolve.class);
-			String name = Resolve.class.getName() + "0";
+		} catch (NoClassDefFoundError e) {hasAnnotation = false;}
+
+		try {
+			String   name = Resolve.class.getName() + "0";
 			Class<?> class0;
-			try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("MyResolve0.class")) {
-				byte[]   bytes  = in.readAllBytes();
+			try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("MyResolve.class")) {
+				byte[] bytes = in.readAllBytes();
 				class0 = Unsafe.getUnsafe().defineClass0(name, bytes, 0, bytes.length, Resolve.class.getClassLoader(), null);
 			} catch (Exception e) {
 				err(e);
-				break l;
+				return resolve;
 			} catch (LinkageError ignored) {
 				class0 = Resolve.class.getClassLoader().loadClass(name);
 			}
-			// println(class0);
-			resolve = (Resolve) class0.getDeclaredConstructors()[0].newInstance(context,
-				 (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null);
-			// resolve = new MyResolve(context);
+
+			boolean finalHasAnnotation = hasAnnotation;
+			return (Resolve) class0.getDeclaredConstructors()[0].newInstance(context,
+			 (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null);
 		} catch (Exception ignored) {}
+
 		return resolve;
 	}
 	private static void other() {

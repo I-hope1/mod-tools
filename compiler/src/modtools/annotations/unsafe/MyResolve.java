@@ -36,6 +36,7 @@ public class MyResolve extends Resolve {
 	ModuleFinder moduleFinder;
 	Names        names;
 
+	/** @see Resolve#lookupPackage(Env, Name)  */
 	Symbol lookupPackage(Env<AttrContext> env, Name name) {
 		PackageSymbol pack = syms.lookupPackage(env.toplevel.modle, name);
 

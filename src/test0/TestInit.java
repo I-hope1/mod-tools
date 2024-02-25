@@ -10,14 +10,16 @@ public class TestInit {
 	public TestInit(double a) {
 		Log.info("<init>");
 		this.a = a * 1024;
+
+		Log.info(FieldUtil.class);
+		Log.info(ConstructorUtil.class);
+		Log.info(sun.reflect.generics.visitor.Visitor.class);
 	}
 }
 
 @NoAccessCheck
 class A {
 	static {
-		Log.info(FieldUtil.class);
-		Log.info(sun.reflect.generics.visitor.Visitor.class);
 		Vars.mods.parser.finishParsing();
 	}
 }

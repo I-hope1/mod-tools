@@ -1,7 +1,7 @@
 package modtools.annotations.unsafe;
 
-import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Source.Feature;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Symbol.*;
@@ -9,24 +9,34 @@ import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.*;
+import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
-import modtools.annotations.*;
+import jdk.internal.misc.Unsafe;
+import modtools.annotations.NoAccessCheck;
 
+import java.io.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.function.Supplier;
+import java.util.function.*;
 
+import static com.sun.tools.javac.code.Kinds.Kind.ERR;
+import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.*;
 
 public class Replace {
-	static Context context;
+	static Context      context;
+	static ClassFinder  classFinder;
+	static Symtab       syms;
+	static ModuleFinder moduleFinder;
 	public static void extendingFunc(Context context) {
 		Replace.context = context;
+		classFinder = ClassFinder.instance(context);
+		syms = Symtab.instance(context);
+		moduleFinder = ModuleFinder.instance(context);
 		try {
 			extendingFunc0();
 		} catch (Throwable e) {err(e);}
@@ -47,50 +57,36 @@ public class Replace {
 	 * @see Resolve#doRecoveryLoadClass
 	 */
 	private static void accessOverride() {
-		Resolve resolve = Resolve.instance(context);
-		try {
-			NoAccessCheck.class.getClass();
-			removeKey(Resolve.class);
-			resolve = new MyResolve(context);
-		} catch (NoClassDefFoundError ignored) {}
-
-		ModuleFinder moduleFinder = ModuleFinder.instance(context);
+		Resolve prev = Resolve.instance(context);
+		Resolve resolve = tryDefineOne(prev);
 		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
 
-		final Symtab symtab = Symtab.instance(context);
 		setAccess(Resolve.class, resolve, "doRecoveryLoadClass", (RecoveryLoadClass) (env, name) -> {
-			var candidates = Convert.classCandidates(name);
-			// println("candidates: @", candidates);
-			Iterator<ClassSymbol> iterator = Iterators.createCompoundIterator(candidates,
-			 c -> symtab.getClassesForName(c).iterator());
-			// find def
-			while (iterator.hasNext()) {
-				ClassSymbol next = iterator.next();
-				if (next != null) return next;
-			}
-			// find in other module
-			final Set<ModuleSymbol> recoverableModules = new HashSet<>(symtab.getAllModules());
-
-			recoverableModules.add(symtab.unnamedModule);
-			recoverableModules.remove(env.toplevel.modle);
-
-			for (ModuleSymbol ms : recoverableModules) {
-				//avoid overly eager completing classes from source-based modules, as those
-				//may not be completable with the current compiler settings:
-				if (ms.sourceLocation == null) {
-					if (ms.classLocation == null) {
-						ms = moduleFinder.findModule(ms);
-					}
-
-					Symbol sym = loadClass(ms, candidates);
-					if (sym != null) {
-						println("Found invisible symbol: @", sym);
-						// invisibleSymbols.add((ClassSymbol) sym);
-						return sym;
-					}
-				}
-			}
-			return NOT_FOUND;
+			List<Name> candidates = Convert.classCandidates(name);
+			return lookupInvisibleSymbol(env, name,
+			 n -> () -> createCompoundIterator(candidates,
+				c -> syms.getClassesForName(c).iterator()),
+			 (ms, n) -> {
+				 for (Name candidate : candidates) {
+					 try {
+						 return classFinder.loadClass(ms, candidate);
+					 } catch (CompletionFailure cf) {
+						 //ignore
+					 }
+				 }
+				 return null;
+			 }, sym -> sym.kind == Kind.TYP, NOT_FOUND);
+		});
+		setAccess(Resolve.class, resolve, "namedImportScopeRecovery", (RecoveryLoadClass) (env, name) -> {
+			Scope importScope = env.toplevel.namedImportScope;
+			Symbol existing = importScope.findFirst(Convert.shortName(name),
+			 sym -> sym.kind == Kind.TYP && sym.flatName() == name);
+			return existing;
+		});
+		setAccess(Resolve.class, resolve, "starImportScopeRecovery", (RecoveryLoadClass) (env, name) -> {
+			Scope importScope = env.toplevel.starImportScope;
+			return importScope.findFirst(Convert.shortName(name),
+			 sym -> sym.kind == Kind.TYP && sym.flatName() == name);
 		});
 		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
 			public Object visitType(Type t, Object o) {return t;}
@@ -100,47 +96,41 @@ public class Replace {
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
 	}
+	private static Resolve tryDefineOne(Resolve resolve) {
+		l:try {
+			NoAccessCheck.class.getClass();
+			removeKey(Resolve.class);
+			String name = Resolve.class.getName() + "0";
+			Class<?> class0;
+			try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("MyResolve0.class")) {
+				byte[]   bytes  = in.readAllBytes();
+				class0 = Unsafe.getUnsafe().defineClass0(name, bytes, 0, bytes.length, Resolve.class.getClassLoader(), null);
+			} catch (Exception e) {
+				err(e);
+				break l;
+			} catch (LinkageError ignored) {
+				class0 = Resolve.class.getClassLoader().loadClass(name);
+			}
+			// println(class0);
+			resolve = (Resolve) class0.getDeclaredConstructors()[0].newInstance(context,
+				 (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null);
+			// resolve = new MyResolve(context);
+		} catch (Exception ignored) {}
+		return resolve;
+	}
 	private static void other() {
-		removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
+		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
+		// 适配d8无法编译jdk21的枚举字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
 		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
-
-		/* removeKey(Check.class);
-
-		try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("modtools/annotations/unsafe/MyCheck$1.class")) {
-			byte[] bytes = in.readAllBytes();
-			Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, Check.class.getClassLoader(), null);
-		} catch (IOException e) {
-			err(e);
-		}
-		try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("modtools/annotations/unsafe/SpecialTreeVisitor.class")) {
-			byte[] bytes = in.readAllBytes();
-			Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, Check.class.getClassLoader(), null);
-		} catch (IOException e) {
-			err(e);
-		}
-		try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("com/sun/tools/javac/comp/MyCheck.class")) {
-			byte[]         bytes       = in.readAllBytes();
-			Class<?>       newCheckClazz    = Unsafe.getUnsafe().defineClass0(null, bytes, 0, bytes.length, Check.class.getClassLoader(), null);
-			Constructor<?> constructor = newCheckClazz.getDeclaredConstructor(Context.class);
-			setAccessible(constructor);
-			Check check = (Check) constructor.newInstance(context);
-			Method method = Check.class.getDeclaredMethod("checkFlags", DiagnosticPosition.class, long.class, Symbol.class, JCTree.class);
-			setAccessible(method);
-			println(method.invoke(check, null, 0, null, null));
-			setAccess(MemberEnter.class, MemberEnter.instance(context), "chk", check);
-		} catch (Throwable th) {
-			err(th);
-		} */
-		// Check check = new MyCheck(context);
 	}
 	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
 		for (Name candidate : candidates) {
-			if (ms.kind != Kind.ERR) {
+			if (ms.kind != ERR) {
 				try {
-					ClassSymbol symbol = BaseProcessor.classFinder.loadClass(ms, candidate);
+					ClassSymbol symbol = classFinder.loadClass(ms, candidate);
 					if (symbol.exists()) return symbol;
 					// println("source: @", symbol.sourcefile);
 				} catch (CompletionFailure ignored) {}
@@ -199,6 +189,51 @@ public class Replace {
 		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
 
+
+	public static <S extends Symbol> Symbol lookupInvisibleSymbol(
+	 Env<AttrContext> env,
+	 Name name,
+	 Function<Name, Iterable<S>> get,
+	 BiFunction<ModuleSymbol, Name, S> load,
+	 Predicate<S> validate,
+	 Symbol defaultResult) {
+		//even if a class/package cannot be found in the current module and among packages in modules
+		//it depends on that are exported for any or this module, the class/package may exist internally
+		//in some of these modules, or may exist in a module on which this module does not depend.
+		//Provide better diagnostic in such cases by looking for the class in any module:
+		Iterable<? extends S> candidates = get.apply(name);
+
+		for (S sym : candidates) {
+			if (validate.test(sym))
+				return sym;
+		}
+
+		Set<ModuleSymbol> recoverableModules = new HashSet<>(syms.getAllModules());
+
+		recoverableModules.add(syms.unnamedModule);
+		recoverableModules.remove(env.toplevel.modle);
+
+		for (ModuleSymbol ms : recoverableModules) {
+			//avoid overly eager completing classes from source-based modules, as those
+			//may not be completable with the current compiler settings:
+			if (ms.sourceLocation == null) {
+				if (ms.classLocation == null) {
+					ms = moduleFinder.findModule(ms);
+				}
+
+				if (ms.kind != ERR) {
+					S sym = load.apply(ms, name);
+
+					if (sym != null && validate.test(sym)) {
+						return sym;
+					}
+				}
+			}
+		}
+
+		return defaultResult;
+	}
+
 	private static void runIgnoredException(Runnable r) {try {r.run();} catch (Throwable ignored) {}}
 	static void setValue(Class<?> cl, String key, Object val) {
 		Object instance = invoke(cl, null, "instance", new Object[]{context}, Context.class);
@@ -243,32 +278,3 @@ public class Replace {
 		}
 	}
 }
-
-
-/*
-class Unset {
-	static void a() {
-		for (ModuleSymbol module : mSymtab.getAllModules()) {
-			module.complete();
-			module.readModules = new HashSet<>() {
-				public boolean contains(Object o) {
-					return true;
-				}
-			};
-			Map<Name, PackageSymbol> map = new HashMap<>(module.visiblePackages);
-			module.visiblePackages = new LinkedHashMap<>(map) {
-				public boolean containsKey(Object key) {
-					return true;
-				}
-				public PackageSymbol get(Object key) {
-					return map.computeIfAbsent((Name) key, __ -> {
-						PackageSymbol symbol = mSymtab.enterPackage(module, (Name) key);
-						if (symbol.name != key) put(symbol.name, symbol);
-						symbol.modle = module;
-						return symbol;
-					});
-				}
-			};
-		}
-	}
-}*/

@@ -12,9 +12,9 @@ import java.util.Set;
 
 import static modtools.annotations.PrintHelper.SPrinter.err;
 
-@AutoService({Processor.class})
+@AutoService(Processor.class)
 public class AINIT extends AbstractProcessor {
-	public static boolean    hasMindustry = true;
+	public static boolean hasMindustry = true;
 
 	static {
 		try {

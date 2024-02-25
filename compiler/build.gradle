@@ -1,6 +1,7 @@
 apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
+sourceSets.main.resources.srcDirs = ["res"]
 
 dependencies {
 	implementation project(":annotations")

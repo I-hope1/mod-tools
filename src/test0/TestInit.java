@@ -3,6 +3,7 @@ package test0;
 import arc.util.Log;
 import mindustry.Vars;
 import modtools.annotations.NoAccessCheck;
+import sun.reflect.misc.*;
 
 public class TestInit {
 	public double a;
@@ -15,9 +16,8 @@ public class TestInit {
 @NoAccessCheck
 class A {
 	static {
-		Vars.mods.parser.finishParsing();
-
-		Log.info(sun.reflect.misc.FieldUtil.class);
+		Log.info(FieldUtil.class);
 		Log.info(sun.reflect.generics.visitor.Visitor.class);
+		Vars.mods.parser.finishParsing();
 	}
 }

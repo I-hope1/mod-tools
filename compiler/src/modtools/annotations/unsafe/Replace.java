@@ -112,7 +112,6 @@ public class Replace {
 				byte[] bytes = in.readAllBytes();
 				class0 = Unsafe.getUnsafe().defineClass0(name, bytes, 0, bytes.length, Resolve.class.getClassLoader(), null);
 			} catch (Exception e) {
-				err(e);
 				return resolve;
 			} catch (LinkageError ignored) {
 				class0 = Resolve.class.getClassLoader().loadClass(name);

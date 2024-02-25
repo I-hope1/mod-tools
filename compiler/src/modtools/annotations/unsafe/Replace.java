@@ -57,7 +57,7 @@ public class Replace {
 	 * @see Resolve#doRecoveryLoadClass
 	 */
 	private static void accessOverride() {
-		Resolve prev    = Resolve.instance(context);
+		Resolve prev = Resolve.instance(context);
 		removeKey(Resolve.class, () -> tryDefineOne(prev));
 		Resolve resolve = Resolve.instance(context);
 		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
@@ -105,6 +105,8 @@ public class Replace {
 			NoAccessCheck.class.getClass();
 		} catch (NoClassDefFoundError e) {hasAnnotation = false;}
 
+		boolean finalHasAnnotation = hasAnnotation;
+		var     predicate          = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
 		try {
 			String   name = Resolve.class.getName() + "0";
 			Class<?> class0;
@@ -112,14 +114,13 @@ public class Replace {
 				byte[] bytes = in.readAllBytes();
 				class0 = Unsafe.getUnsafe().defineClass0(name, bytes, 0, bytes.length, Resolve.class.getClassLoader(), null);
 			} catch (Exception e) {
-				return resolve;
+				return new MyResolve(context, predicate);
 			} catch (LinkageError ignored) {
 				class0 = Resolve.class.getClassLoader().loadClass(name);
 			}
 
-			boolean finalHasAnnotation = hasAnnotation;
 			return (Resolve) class0.getDeclaredConstructors()[0].newInstance(context,
-			 (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null);
+			 predicate);
 		} catch (Exception ignored) {}
 
 		return resolve;

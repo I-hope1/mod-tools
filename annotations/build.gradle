@@ -3,6 +3,6 @@ apply plugin: 'java'
 sourceSets.main.java.srcDirs = ["src"]
 
 dependencies {
-	annotationProcessor files("../$compilerJar")
+	annotationProcessor files("$compilerJar")
 //	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 }

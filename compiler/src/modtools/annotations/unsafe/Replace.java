@@ -1,5 +1,6 @@
 package modtools.annotations.unsafe;
 
+import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Source.Feature;
@@ -29,11 +30,15 @@ public class Replace {
 	static Context      context;
 	static ClassFinder  classFinder;
 	static Symtab       syms;
+	static Enter        enter;
+	static JavacTrees   trees;
 	static ModuleFinder moduleFinder;
 	public static void extendingFunc(Context context) {
 		Replace.context = context;
 		classFinder = ClassFinder.instance(context);
 		syms = Symtab.instance(context);
+		enter = Enter.instance(context);
+		trees = JavacTrees.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
 		try {
 			extendingFunc0();
@@ -90,8 +95,18 @@ public class Replace {
 		});
 		setAccess(Resolve.class, resolve, "starImportScopeRecovery", (RecoveryLoadClass) (env, name) -> {
 			Scope importScope = env.toplevel.starImportScope;
-			return importScope.findFirst(Convert.shortName(name),
+			Symbol existing = importScope.findFirst(Convert.shortName(name),
 			 sym -> sym.kind == Kind.TYP && sym.flatName() == name);
+			if (existing != null) {
+				try {
+					existing = classFinder.loadClass(existing.packge().modle, name);
+
+					return existing;
+				} catch (CompletionFailure cf) {
+					//ignore
+				}
+			}
+			return null;
 		});
 		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
 			public Object visitType(Type t, Object o) {return t;}
@@ -204,7 +219,7 @@ public class Replace {
 		Set<ModuleSymbol> recoverableModules = new HashSet<>(syms.getAllModules());
 
 		recoverableModules.add(syms.unnamedModule);
-		recoverableModules.remove(env.toplevel.modle);
+		if (env != null) recoverableModules.remove(env.toplevel.modle);
 
 		for (ModuleSymbol ms : recoverableModules) {
 			//avoid overly eager completing classes from source-based modules, as those

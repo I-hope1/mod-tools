@@ -32,13 +32,15 @@ static def export(CompileOptions options) {
 //	println options.compilerArgs.join(" ")
 }
 
+ext {
+	uncVersion = '1.8.9'
+	mindustryVersion = 'v146'
+
+	MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
+	compilerJar = new File('_libs/compiler.jar').absolutePath
+}
 allprojects {
 	ext {
-		uncVersion = '1.8.9'
-		compilerJar = '_libs/compiler.jar'
-		mindustryVersion = 'v146'
-
-		MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
 	tasks.withType(JavaCompile) {

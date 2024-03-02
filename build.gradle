@@ -37,7 +37,7 @@ ext {
 	mindustryVersion = 'v146'
 
 	MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
-	compilerJar = new File('_libs/compiler.jar').absolutePath
+	compilerJar = "$rootDir/_libs/compiler.jar"
 }
 allprojects {
 	ext {

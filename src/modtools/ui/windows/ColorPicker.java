@@ -25,8 +25,8 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 	static       Texture hueTex;
 	static final Color   bgColor = Pal.gray;
 
-	private Cons<Color> cons = c -> {};
-	Color current = new Color();
+	private Cons<Color> cons    = c -> {};
+	final   Color       current = new Color();
 	float h, s, v, a;
 	TextField hexField;
 	Slider    hSlider, aSlider;
@@ -35,6 +35,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		super("@pickcolor", 0, 0, false, false);
 
 		cont.background(IntUI.whiteui.tint(bgColor));
+		sclListener.unbind();
 	}
 
 	public void show(Color color, Cons<Color> consumer) {
@@ -61,8 +62,8 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		cont.add(newTable(t -> {
 			t.add(new Element() {
 				 public void draw() {
-					 float first  = Tmp.c1.set(current).value(1).saturation(0f).a(parentAlpha).toFloatBits();
-					 float second = Tmp.c2.set(current).value(1).saturation(1f).a(parentAlpha).toFloatBits();
+					 float first  = Tmp.c1.fromHsv(h, 0, 1).a(parentAlpha).toFloatBits();
+					 float second = Tmp.c2.fromHsv(h, 1, 1).a(parentAlpha).toFloatBits();
 
 					 Fill.quad(
 						x, y, Tmp.c1.value(0).toFloatBits(),/* 左下角 */
@@ -170,12 +171,13 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		})).grow();
 
 		buttons.clear();
-		buttons.margin(6, 8, 6, 8).defaults().growX().height(32);
-		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
+		buttons.margin(0).defaults().growX().height(32);
+		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
+		 .marginLeft(4f).marginRight(4f);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
 			cons.get(current);
 			hide();
-		});
+		}).marginLeft(4f).marginRight(4f);
 	}
 
 	void updateColor() {
@@ -186,6 +188,8 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		h = Mathf.clamp(h, 0, 360);
 		s = Mathf.clamp(s);
 		v = Mathf.clamp(v);
+
+		current.a = 1;
 		current.fromHsv(h, s, v);
 		current.a = a;
 

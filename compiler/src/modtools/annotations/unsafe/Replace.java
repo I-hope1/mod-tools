@@ -13,10 +13,8 @@ import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
-import jdk.internal.misc.Unsafe;
 import modtools.annotations.NoAccessCheck;
 
-import java.io.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
@@ -108,19 +106,7 @@ public class Replace {
 		boolean finalHasAnnotation = hasAnnotation;
 		var     predicate          = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
 		try {
-			String   name = Resolve.class.getName() + "0";
-			Class<?> class0;
-			try (InputStream in = Replace.class.getClassLoader().getResourceAsStream("MyResolve.class")) {
-				byte[] bytes = in.readAllBytes();
-				class0 = Unsafe.getUnsafe().defineClass0(name, bytes, 0, bytes.length, Resolve.class.getClassLoader(), null);
-			} catch (Exception e) {
-				return new MyResolve(context, predicate);
-			} catch (LinkageError ignored) {
-				class0 = Resolve.class.getClassLoader().loadClass(name);
-			}
-
-			return (Resolve) class0.getDeclaredConstructors()[0].newInstance(context,
-			 predicate);
+			return new MyResolve(context, predicate);
 		} catch (Exception ignored) {}
 
 		return resolve;

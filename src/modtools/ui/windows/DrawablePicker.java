@@ -49,6 +49,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		background(null);
 
 		cont.background(new TintDrawable(IntUI.whiteui, backgroundCurrent));
+		sclListener.unbind();
 	}
 
 	public void show(Drawable drawable, Cons<Drawable> consumer) {
@@ -124,8 +125,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}).padLeft(4f).padRight(6f);
 			t.add(new Element() {
 				 public void draw() {
-					 float first  = Tmp.c1.set(current.delegetor()).value(1).saturation(0f).a(parentAlpha).toFloatBits();
-					 float second = Tmp.c2.set(current.delegetor()).value(1).saturation(1f).a(parentAlpha).toFloatBits();
+					 float first  = Tmp.c1.fromHsv(h, 0, 1).a(parentAlpha).toFloatBits();
+					 float second = Tmp.c2.fromHsv(h, 1, 1).a(parentAlpha).toFloatBits();
 
 					 Fill.quad(
 						x, y, Tmp.c1.value(0).toFloatBits(),/* 左下角 */
@@ -227,12 +228,14 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		})).grow();
 
 		buttons.clear();
-		buttons.margin(6, 8, 6, 8).defaults().growX().height(32);
-		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
+		buttons.margin(0).defaults().growX().height(32);
+		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
+		 .marginLeft(4f).marginRight(4f);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
-			cons.get(iconCurrent.equals(sourceColor) ? drawable : new WrapTextureRegionDrawable(drawable, new Color(iconCurrent)));
-			hide();
-		});
+			 cons.get(iconCurrent.equals(sourceColor) ? drawable : new WrapTextureRegionDrawable(drawable, new Color(iconCurrent)));
+			 hide();
+		 })
+		 .marginLeft(4f).marginRight(4f);
 	}
 	/** 复制drawable并设置{@code tint}为{@link Color#white}  */
 	private Drawable cloneDrawable(Drawable drawable) {
@@ -264,6 +267,12 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		s = values[1];
 		v = values[2];
 		a = color.a;
+
+		// 更新元素
+		if (hSlider != null && aSlider != null) {
+			hSlider.setValue(h);
+			aSlider.setValue(a);
+		}
 		updateHexText(true);
 	}
 
@@ -375,6 +384,9 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 		public Color fromHsv(float h, float s, float v) {
 			return delegetor().fromHsv(h, s, v);
+		}
+		public float[] toHsv(float[] hsv) {
+			return delegetor().toHsv(hsv);
 		}
 		public String toString() {
 			return delegetor().toString();

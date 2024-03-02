@@ -1,6 +1,5 @@
 package modtools.ui.components;
 
-import arc.struct.Seq;
 import modtools.struct.v6.HSeq;
 import modtools.ui.IntUI.IMenu;
 
@@ -16,7 +15,6 @@ public class Hitter extends FillElement implements IMenu {
 			remove();
 		});
 	}
-
 
 	public boolean remove() {
 		boolean b = super.remove();

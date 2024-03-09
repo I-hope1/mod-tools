@@ -120,8 +120,6 @@ public class Replace {
 		boolean finalHasAnnotation = hasAnnotation;
 		var     predicate          = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
 
-		jdk.internal.org.objectweb.asm.ClassReader
-
 		try {
 			return new MyResolve(context, predicate);
 		} catch (Exception ignored) {}

@@ -13,6 +13,7 @@ static def export(CompileOptions options) {
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.loader",
 			"java.base/jdk.internal.reflect",
+			"java.base/jdk.internal.access",
 			// ---------------
 			"jdk.compiler/com.sun.tools.javac.api",
 			"jdk.compiler/com.sun.tools.javac.comp",

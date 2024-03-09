@@ -18,7 +18,6 @@ public class TestRedefine {
 			load0();
 		} catch (Throwable e) {
 			Log.err(e);
-			System.exit(0);
 		}
 	}
 	public static void load() {}

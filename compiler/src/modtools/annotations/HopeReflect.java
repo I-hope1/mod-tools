@@ -49,13 +49,13 @@ public class HopeReflect {
 		lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class))
 		 .invokeExact(javaBase, "jdk.internal.module");
 
-		open(Object.class.getModule(),
+		openTrust(Object.class.getModule(),
 		 "jdk.internal.misc",
 		 "sun.reflect.annotation",
 		 "jdk.internal.access"
 		);
 
-		open(DocTrees.class.getModule(),
+		openTrust(DocTrees.class.getModule(),
 		 "com.sun.tools.javac.api",
 		 "com.sun.tools.javac.code",
 		 "com.sun.tools.javac.comp",
@@ -70,7 +70,7 @@ public class HopeReflect {
 		);
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
 	}
-	private static void open(Module module, String... pkgs) {
+	public static void openTrust(Module module, String... pkgs) {
 		Module self = HopeReflect.class.getModule();
 		for (String pkg : pkgs) {
 			Modules.addOpens(module, pkg, self);

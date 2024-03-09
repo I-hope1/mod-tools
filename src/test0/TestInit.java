@@ -1,7 +1,7 @@
 package test0;
 
 import arc.util.Log;
-import jdk.internal.classfile.AccessFlags;
+import jdk.internal.classfile.*;
 import mindustry.Vars;
 import modtools.annotations.NoAccessCheck;
 import sun.reflect.misc.FieldUtil;

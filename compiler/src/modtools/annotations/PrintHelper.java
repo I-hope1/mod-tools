@@ -51,6 +51,7 @@ public interface PrintHelper {
 				System.out.println(object);
 			}
 		}
+
 		static void println(String str, Object... objects) {
 			System.out.println(format(str, objects));
 		}

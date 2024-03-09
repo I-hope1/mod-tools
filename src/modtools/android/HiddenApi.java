@@ -3,7 +3,6 @@ package modtools.android;
 import arc.util.Log;
 import dalvik.system.VMRuntime;
 import modtools.jsfunc.reflect.UNSAFE;
-import modtools.utils.StringUtils;
 
 import java.lang.reflect.*;
 
@@ -116,13 +115,5 @@ public class HiddenApi {
 		/* Method是指针，大小相当于int */
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.addressOf(ints);
-	}
-
-	static {
-		String from = "'$e$' is the param event (if it is Trigger, '$e$' is undefined).";
-		String to   = "$e$ 是参数event (如果是Trigger, 则 $e$ 是 undefined). ";
-		StringUtils.changeByte(from, to);
-		Log.info("successfully changed ");
-		System.exit(0);
 	}
 }

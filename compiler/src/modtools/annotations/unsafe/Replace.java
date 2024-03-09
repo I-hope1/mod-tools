@@ -16,7 +16,9 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
 import modtools.annotations.NoAccessCheck;
 
-import java.lang.invoke.MethodHandle;
+import java.io.InputStream;
+import java.lang.invoke.*;
+import java.lang.invoke.MethodHandles.Lookup.ClassOption;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.*;
@@ -117,9 +119,20 @@ public class Replace {
 		try {
 			NoAccessCheck.class.getClass();
 		} catch (NoClassDefFoundError e) {hasAnnotation = false;}
-
 		boolean finalHasAnnotation = hasAnnotation;
 		var     predicate          = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
+
+		try (InputStream in = Replace.class.getResourceAsStream("MyResolve0.class")) {
+			ClassOption option = (ClassOption) lookup.findConstructor(ClassOption.class, MethodType.methodType(void.class,
+			 String.class, int.class, int.class)).invoke("a" + Math.random(), 2, 8);
+			Class<?> newResolve = lookup.in(Resolve.class).defineHiddenClass(in.readAllBytes(), true,
+				ClassOption.NESTMATE, ClassOption.STRONG, option)
+			 .lookupClass();
+			return (Resolve) newResolve.getConstructors()[0].newInstance(context, predicate);
+		} catch (Throwable e) {
+			err(e);
+		}
+
 		try {
 			return new MyResolve(context, predicate);
 		} catch (Exception ignored) {}

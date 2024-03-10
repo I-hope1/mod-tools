@@ -320,7 +320,7 @@ public class Tester extends Content {
 			lg.getCells().clear();
 			lg.clearChildren();
 			logs.each(item -> {
-				lg.add("[" + item.charAt(0) + "]")
+				lg.add(STR."[\{item.charAt(0)}]")
 				 .style(HopeStyles.defaultLabel)
 				 .color(switch (item.charAt(0)) {
 					 case 'D' -> Color.green;
@@ -445,8 +445,8 @@ public class Tester extends Content {
 	private boolean rollHistory(boolean forward) {
 		if (historyPos == -1) originalText = area.getText();
 		historyPos += forward ? 1 : -1;
-		Vec2 pos = tmpV.set(ui.x, ui.y + 20);
-		int maxHistorySize = max_history_size.getInt();
+		Vec2 pos            = tmpV.set(ui.x, ui.y + 20);
+		int  maxHistorySize = max_history_size.getInt();
 		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= maxHistorySize)) {
 			if (historyPos != -1) showRollback(pos);
 			historyPos = -1;
@@ -544,11 +544,13 @@ public class Tester extends Content {
 		if (output_to_log.enabled()) Log.err(name, ex);
 		if (!ignore_popup_error.enabled())
 			IntUI.showException(Core.bundle.get("error_in_execution"), ex);
-		log = fromExecutor && ex instanceof RhinoException ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace() : Strings.neatError(ex);
+		log = fromExecutor && ex instanceof RhinoException
+		 ? STR."\{ex.getMessage()}\n\{((RhinoException) ex).getScriptStackTrace()}"
+		 : Strings.neatError(ex);
 	}
 
 	public boolean killScript;
-	public long startTime;
+	public long    startTime;
 	// 执行脚本
 	public void execScript() {
 		if (!finished) return;
@@ -586,13 +588,15 @@ public class Tester extends Content {
 	private void execAndDealRes() {
 		try {
 			setContextToThread();
-			Object o = setLogger(logHandler, () -> script.exec(cx, scope));
+			Object o = capture_logger.enabled() ?
+			 setLogger(logHandler, () -> script.exec(cx, scope))
+			 : script.exec(cx, scope);
 			res = o = CAST.unwrap(o);
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";
 			if (output_to_log.enabled()) {
-				Log.info("[[tester]: " + log);
+				Log.info("[[TESTER]: " + log);
 			}
 
 			if (lastDir != null) lastDir.child("log.txt").writeString(log);
@@ -832,12 +836,14 @@ public class Tester extends Content {
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log, js_prop,
+		capture_logger,
 		auto_complement, max_history_size(int.class, 40/* def */, 0, 100);
 
 		Settings() {}
 		Settings(Class<?> a, int... args) {}
 		static {
 			wrap_ref.defTrue();
+			capture_logger.defTrue();
 		}
 	}
 

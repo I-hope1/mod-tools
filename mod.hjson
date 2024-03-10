@@ -1,9 +1,9 @@
 name: mod-tools
 displayName: "mod工具"
-description: ""
+description: "修复安卓上无法使用的bug"
 author: "I hope..."
 hidden: true
-version: 1.4.5.1
+version: 1.4.5.2
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

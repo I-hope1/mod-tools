@@ -64,7 +64,7 @@ public class SettingsUI extends Content {
 		table.image().color(Pal.accent).growX().colspan(2).left().row();
 		t.left().defaults().left();
 		table.add(t).growX().colspan(2).left().padLeft(16);
-		cont.add(table).row();
+		cont.add(table).growX().left().row();
 		return table;
 	}
 	public void add(Table t) {
@@ -72,7 +72,7 @@ public class SettingsUI extends Content {
 	}
 
 	public void load() {
-		ui = new Window(localizedName(), 395, 90, true);
+		ui = new Window(localizedName(), 390, 90, true);
 		cont = new Table();
 		ui.cont.pane(Styles.smallPane, cont).grow().padLeft(6f);
 		cont.defaults().minWidth(375).padTop(20);
@@ -85,10 +85,7 @@ public class SettingsUI extends Content {
 			left().defaults().left();
 			ISettings.buildAll("blur.", this, E_Blur.class);
 		}});
-		/* add("Window", new LimitTable() {{
-			left().defaults().left();
-			// add("", );
-		}}); */
+
 		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall,
 		 new LimitTable() {{
 			 left().defaults().left();
@@ -117,7 +114,7 @@ public class SettingsUI extends Content {
 							.row();
 					 }
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
-					 cont.button("DIRECTORY", HopeStyles.flatBordert, () -> {
+					 cont.button("OPEN DIRECTORY", HopeStyles.flatBordert, () -> {
 						 Core.app.openFolder(MyFonts.fontDirectory.path());
 					 }).growX().height(45);
 					 show();
@@ -131,21 +128,22 @@ public class SettingsUI extends Content {
 				 if (/* OS.isAndroid ||  */OS.isWindows || OS.isMac)
 					 t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
 						 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-					 }).height(42).row();
+					 }).row();
 				 t.button("Enable Debug Level", Icon.chatSmall, HopeStyles.flatt, () -> {
 					 Log.level = LogLevel.debug;
-				 }).height(42);
+				 });
 			 }).growX();
 			 row();
 			 table(Tex.pane, t -> {
 				 t.add("@editor.author");
 				 t.add(IntVars.meta.author).row();
+				 t.defaults().growX().height(42);
 				 t.button("Github", Icon.githubSmall, HopeStyles.flatt, () -> {
 					 Core.app.openURI("https://github.com/" + IntVars.meta.repo);
-				 }).height(42).growX();
+				 });
 				 t.button("QQ", HopeIcons.QQ, HopeStyles.flatt, () -> {
 					 Core.app.openURI(IntVars.QQ);
-				 }).height(42).growX().row();
+				 }).row();
 				 /* t.button("@mod-tools.check", Icon.androidSmall, HopeStyles.flatt, () -> {
 					 Updater.checkUpdate(b -> {});
 				 }).height(42).growX().colspan(2); */

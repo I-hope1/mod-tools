@@ -622,12 +622,14 @@ public class ReviewElement extends Content {
 		 styleLabel       = new NoMarkupLabel(valueScale),
 
 		colspanLabel  = new NoMarkupLabel(valueScale),
-		 minSizeLabel = new Label(""), maxSizeLabel = new Label("");
+		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
+		 fillLabel = new Label(""), expandLabel  = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
 		BindCell rotCell, translationCell, styleCell,
 		 cellCell,
-		 colspanCell, minSizeCell, maxSizeCell;
+		 colspanCell, minSizeCell, maxSizeCell,
+		 fillCell, expandCell;
 
 
 		void color(Color color) {
@@ -683,16 +685,39 @@ public class ReviewElement extends Content {
 			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset))
 				maxSizeLabel.setText(sizeText(maxWidth, maxHeight));
 		}
+		void fill(Cell<?> cell) {
+			if (cell == null) {
+				fillCell.remove();
+				return;
+			}
+			@OptimizeReflect
+			float fillX = Reflect.get(Cell.class, cell, "fillX"),
+			 fillY = Reflect.get(Cell.class, cell, "fillY");
+			if (fillCell.toggle1(fillX != 0 || fillY != 0))
+				fillLabel.setText(STR."\{enabledMark((int) fillX)}x []| \{enabledMark((int) fillY)}y");
+		}
+		void expand(Cell<?> cell) {
+			if (cell == null) {
+				expandCell.remove();
+				return;
+			}
+			@OptimizeReflect
+			int expandX = Reflect.get(Cell.class, cell, "expandX"),
+			 expandY = Reflect.get(Cell.class, cell, "expandY");
+			if (expandCell.toggle1(expandX != 0 || expandY != 0))
+				expandLabel.setText(STR."\{enabledMark(expandX)}x []| \{enabledMark(expandY)}y");
+		}
+		private static String enabledMark(int i) {
+			return i == 1 ? "[accent]" : "[gray]";
+		}
 
 		private static String sizeText(float w, float h) {
 			return fixedUnlessUnset(w / Scl.scl()) + "[accent]×[]" + fixedUnlessUnset(h / Scl.scl());
 		}
 
-		{
+		InfoDetails() {
 			margin(4, 4, 4, 4);
 			touchableLabel.setColor(Color.acid);
-			minSizeLabel.setFontScale(valueScale);
-			maxSizeLabel.setFontScale(valueScale);
 			table(Tex.pane, this::build);
 		}
 
@@ -727,41 +752,55 @@ public class ReviewElement extends Content {
 				 .growX().right().labelAlign(Align.right).color(Color.lightGray);
 			}).growX();
 			t.row().table(touch -> {
-				touch.add("Touchable").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+				key(touch, "Touchable");
 				touch.add(touchableLabel).row();
 			}).growX();
 			t.row().table(color -> {
-				color.add("Color").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+				key(color, "Color");
 				color.add(colorContainer).size(16).padRight(4f);
 				color.add(colorLabel).row();
 			}).growX();
-			rotCell = new BindCell(t.row().table(rot -> {
-				rot.add("Rotation").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+			rotCell = makeBindCell(t, rot -> {
+				key(rot, "Rotation");
 				rot.add(rotationLabel).row();
-			}).growX());
-			translationCell = new BindCell(t.row().table(tran -> {
-				tran.add("Translation").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+			});
+			translationCell = makeBindCell(t, tran -> {
+				key(tran, "Translation");
 				tran.add(translationLabel).row();
-			}).growX());
-			styleCell = new BindCell(t.row().table(tran -> {
-				tran.add("Style").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+			});
+			styleCell = makeBindCell(t, tran -> {
+				key(tran, "Style");
 				tran.add(styleLabel).color(Color.orange).row();
-			}).growX());
+			});
 
-			cellCell = new BindCell(t.row().table(c -> {
-				colspanCell = new BindCell(c.row().table(col -> {
-					col.add("Colspan").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-					col.add(colspanLabel).row();
-				}).growX());
-				minSizeCell = new BindCell(c.row().table(col -> {
-					col.add("MinSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-					col.add(minSizeLabel).row();
-				}).growX());
-				maxSizeCell = new BindCell(c.row().table(col -> {
-					col.add("MaxSize").fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-					col.add(maxSizeLabel).row();
-				}).growX());
-			}).growX());
+			cellCell = makeBindCell(t, c -> {
+				colspanCell = makeBindCell(t, col -> {
+					key(col, "Colspan");
+					col.add(colspanLabel).fontScale(valueScale).row();
+				});
+				minSizeCell = makeBindCell(t, col -> {
+					key(col, "MinSize");
+					col.add(minSizeLabel).fontScale(valueScale).row();
+				});
+				maxSizeCell = makeBindCell(t, col -> {
+					key(col, "MaxSize");
+					col.add(maxSizeLabel).fontScale(valueScale).row();
+				});
+				expandCell = makeBindCell(t, col -> {
+					key(col, "Expand");
+					col.add(expandLabel).fontScale(valueScale).row();
+				});
+				fillCell = makeBindCell(t, col -> {
+					key(col, "Fill");
+					col.add(fillLabel).fontScale(valueScale).row();
+				});
+			});
+		}
+		private static void key(Table col, String Fill) {
+			col.add(Fill).fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+		}
+		private BindCell makeBindCell(Table t, Cons<Table> cons) {
+			return new BindCell(t.row().table(cons).growX());
 		}
 	}
 
@@ -797,6 +836,8 @@ public class ReviewElement extends Content {
 				table.colspan(cell);
 				table.minSize(cell);
 				table.maxSize(cell);
+				table.fill(cell);
+				table.expand(cell);
 			}
 
 			showHover(elem, vec2);

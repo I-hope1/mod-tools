@@ -35,7 +35,7 @@ public class HiddenApi {
 	/** @return true if successful. */
 	private static boolean trySetHiddenApiExemptions() {
 		try {
-			// sdk_version <= 28
+			// MAYBE: sdk_version < 28
 			runtime.setHiddenApiExemptions(new String[]{"L"});
 			return true;
 		} catch (Throwable ignored) {}

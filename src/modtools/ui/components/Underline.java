@@ -11,7 +11,8 @@ public class Underline extends LimitImage {
 	public static Cell<Underline> of(Table table, int colspan, Color color) {
 		Underline underline = new Underline();
 		underline.setColor(color);
-		Cell<Underline> cell = table.row().add(underline).growX().colspan(colspan);
+		table.row();
+		Cell<Underline> cell = table.add(underline).growX().colspan(colspan);
 		table.row();
 		return cell;
 	}

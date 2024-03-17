@@ -10,7 +10,7 @@ import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
@@ -131,8 +131,8 @@ public class Replace {
 
 		// 适配d8无法编译jdk21的枚举字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
-		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
-		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
+		removeKey(ClassWriter.class, () -> new MyClassWriter(context));
+		setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
 	}
 	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
 		for (Name candidate : candidates) {

@@ -99,13 +99,13 @@ public class Tester extends Content {
 				if (!(entry.value instanceof Data map)) continue;
 
 				String taskName = startupTask().name;
-				String source = "(()=>{modName='" + taskName + "';scriptName=`" + entry.key + "`;" +
-												(map.getBool("disposable") && map.containsKey("type") ?
-												 "Events.on(" + map.get("type") + ", $e$ => {try{\n" + bookmarkDirectory.child(entry.key).readString() + ";}catch(e){Log.err(e);}});"
-												 : bookmarkDirectory.child(entry.key).readString())
-												+ "\n})()";
+				String source = STR."(()=>{modName='\{taskName}';scriptName=`\{entry.key}`;\{
+				 map.getBool("disposable") && map.containsKey("type") ?
+					STR."Events.on(\{map.get("type")}, $e$ => {try{\n\{bookmarkDirectory.child(entry.key).readString()};}catch(e){Log.err(e);}});"
+					: bookmarkDirectory.child(entry.key).readString()
+				 }\n})()";
 				ExecuteTree.node(() -> {
-					 cx.evaluateString(scope, source, "<" + taskName + ">" + entry.key, 1);
+					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);
 				 }, taskName, entry.key, Icon.none, () -> {})
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
@@ -685,7 +685,7 @@ public class Tester extends Content {
 					 JS, "intervalSeconds", 0.1f
 					 , () -> enabled, 0.01f, Float.MAX_VALUE);
 
-					check("Disposable", JS, "disposable", () -> enabled);
+					check("@task.trigger", JS, "disposable", () -> enabled);
 					numberi("@task.repeatcount",
 					 JS, "repeatCount", 0,
 					 () -> enabled && !JS.getBool("disposable"),
@@ -694,7 +694,7 @@ public class Tester extends Content {
 					Func<Object, String> stringify =
 					 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
 					Func<Object, String> valuify = val -> val instanceof Class<?> cl ? cl.getSimpleName()
-					 : val instanceof Content ? "Vars.mods.mainLoader().loadClass('" + val.getClass().getName() + "')"
+					 : val instanceof Content ? STR."Vars.mods.mainLoader().loadClass('\{val.getClass().getName()}')"
 					 : String.valueOf(val);
 					list("Event", val -> JS.put("type", valuify.get(val)),
 					 () -> JS.get("type"), classes,
@@ -913,7 +913,9 @@ public class Tester extends Content {
 		}
 		private void complement() {
 			int lastCursor = area.getCursorPosition();
-			complement0();
+			try {
+				complement0();
+			} catch (Throwable _) {return;}
 			area.setCursorPosition(lastCursor);
 		}
 		private void complement0() {

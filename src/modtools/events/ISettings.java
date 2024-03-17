@@ -11,7 +11,6 @@ import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.IntVars;
 import modtools.ui.content.SettingsUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.utils.MySettings.Data;
@@ -76,7 +75,7 @@ public interface ISettings extends E_DataInterface {
 
 	/** @param prefix 用于显示设置文本 */
 	static void buildAll(String prefix, Table table, Class<? extends ISettings> cl) {
-		IntVars.async(() -> buildAll0("@settings." + prefix, table, cl));
+		buildAll0("@settings." + prefix, table, cl);
 	}
 	private static void buildAll0(String prefix, Table table, Class<? extends ISettings> cl) {
 		for (ISettings value : cl.getEnumConstants()) {

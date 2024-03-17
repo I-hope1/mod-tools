@@ -107,7 +107,7 @@ public class WorldDraw {
 		return buffer.getTexture();
 	}
 	public String toString() {
-		return "WorldDraw{name='" + name + "'}";
+		return STR."WorldDraw{name='\{name}'}";
 	}
 	public void submit(Runnable r) {
 		drawSeq.add(() -> {

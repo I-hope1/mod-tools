@@ -444,7 +444,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .color(Color.lightGray).top()
 			 .touchable(Touchable.disabled);
 		} catch (Throwable e) {
-			MyLabel label = new MyLabel("<" + e + ">", defaultLabel);
+			MyLabel label = new MyLabel(STR."<\{e}>", defaultLabel);
 			label.setColor(Color.red);
 			fields.add(label);
 			Log.err(e);
@@ -475,7 +475,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			IntUI.addWatchButton(buttons,
 				STR."\{f.getDeclaringClass().getSimpleName()}: \{f.getName()}",
 				() -> f.get(o))
-			 .disabled(__ -> !l[0].isValid());
+			 .disabled(_ -> !l[0].isValid());
 		})).top().colspan(0), E_JSFuncDisplay.buttons);
 		fields.row();
 
@@ -563,7 +563,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow().left();
 		} catch (Throwable err) {
-			MyLabel label = new MyLabel("<" + err + ">", defaultLabel);
+			MyLabel label = new MyLabel(STR."<\{err}>", defaultLabel);
 			label.setColor(Color.red);
 			methods.add(label);
 			Log.err(err);
@@ -592,7 +592,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
 			if (size == 1) return;
-			label.setText(label.getText() + METHOD_COUNT_PREFIX + size + "]");
+			label.setText(STR."\{label.getText()}\{METHOD_COUNT_PREFIX}\{size}]");
 		});
 		IntUI.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren())
@@ -679,7 +679,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
-				addModifier(t, Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()) + " class ", 1);
+				addModifier(t, STR."\{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())} class ", 1);
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
@@ -718,7 +718,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 
 	public String toString() {
-		return getClass().getSimpleName() + "#" + title.getText();
+		return STR."\{getClass().getSimpleName()}#\{title.getText()}";
 	}
 	public void hide() {
 		super.hide();
@@ -796,7 +796,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
-				() -> null, __ -> {}, 400, 0, true, Align.left)))
+				() -> null, _ -> {}, 400, 0, true, Align.left)))
 			 .row();
 			Underline.of(current, colspan, Color.lightGray).padTop(6);
 		}

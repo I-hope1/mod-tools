@@ -212,7 +212,7 @@ public class ModTools extends Mod {
 		Time.mark();
 		// 加载前置
 		try {
-			Fi toFi = Vars.dataDirectory.child("tmp/mod-tools-" + fileName + ".jar");
+			Fi toFi = Vars.dataDirectory.child(STR."tmp/mod-tools-\{fileName}.jar");
 			IntVars.delete(toFi);
 			sourceFi.copyTo(toFi);
 			ClassLoader loader = Vars.platform.loadJar(toFi, IntVars.mainLoader);

@@ -256,7 +256,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 
 			if (enableHighlighting && syntax != null) {
-				highlightingDraw(x, y);
+				try {
+					highlightingDraw(x, y);
+				} catch (Throwable e) {
+					enableHighlighting = false;
+				}
 			} else {
 				font.getColor().set(Color.white).mulA(alpha());
 				int   firstLineShowing = getRealFirstLineShowing();

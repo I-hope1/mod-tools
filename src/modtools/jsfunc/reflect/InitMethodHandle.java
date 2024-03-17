@@ -3,7 +3,6 @@ package modtools.jsfunc.reflect;
 import arc.func.Cons;
 import arc.util.OS;
 import modtools.HopeConstant.ANDROID;
-import modtools.utils.Tools;
 import modtools.utils.Tools.CProvT;
 
 import java.lang.invoke.*;
@@ -29,7 +28,7 @@ public class InitMethodHandle {
 	public static final byte REF_invokeSpecial = 7;
 
 	static {
-		Tools.runIgnoredException(() -> UNSAFE.openModule(Object.class, "java.lang.invoke"));
+		UNSAFE.openModule(Object.class, "java.lang.invoke");
 	}
 
 	public static MethodHandle findInit

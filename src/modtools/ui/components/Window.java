@@ -275,10 +275,11 @@ public class Window extends Table {
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
 		if (hit == null) {
-			Core.scene.setKeyboardFocus(previousKeyboardFocus);
 			Core.scene.setScrollFocus(previousScrollFocus);
 		}
-		if (hit != null && Core.scene.getKeyboardFocus() == null) requestKeyboard();
+		if (hit != null && Core.scene.getKeyboardFocus() == null) {
+			requestKeyboard();
+		}
 		return hit;
 	}
 	private void setup() {

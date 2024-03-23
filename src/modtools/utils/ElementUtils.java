@@ -12,11 +12,10 @@ import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.ui.Styles;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.*;
 import modtools.ui.components.Window;
-import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.effect.ScreenSampler;
-import modtools.jsfunc.INFO_DIALOG;
 
 import java.util.Optional;
 

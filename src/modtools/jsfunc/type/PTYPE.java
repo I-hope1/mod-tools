@@ -17,6 +17,8 @@ public interface PTYPE {
 	Class<?> V = void.class;
 
 	Class<?> L = Object.class;
+	Class<?> CLS = Class.class;
+	Class<?> CL = ClassLoader.class;
 	Class<?> STR = String.class;
 
 	Class<?> LIST = List.class;

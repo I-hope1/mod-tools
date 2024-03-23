@@ -38,7 +38,9 @@ public class JSFunc
  implements UNSAFE, REFLECT,
  REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE,
  StringUtils, IScript, ElementUtils,
- ANDROID_UNSAFE, UnitUtils {
+ ANDROID_UNSAFE,
+ /* world */
+ UnitUtils, BulletUtils, WorldUtils {
 	public static final Font FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;

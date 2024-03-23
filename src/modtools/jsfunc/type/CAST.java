@@ -15,7 +15,8 @@ public interface CAST {
 		}
 		return o;
 	}
-	static Object cast(Object o, Class cl) {
+
+	static Object cast(Object o, Class<?> cl) {
 		return Context.jsToJava(o, cl);
 	}
 	static Object asJS(Object o) {
@@ -32,5 +33,11 @@ public interface CAST {
 	}
 	static Object toLong(long l) {
 		return l;
+	}
+	static Object toByte(byte i) {
+		return i;
+	}
+	static Object toShort(short i) {
+		return i;
 	}
 }

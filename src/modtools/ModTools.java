@@ -187,7 +187,7 @@ public class ModTools extends Mod {
 				try {
 					PropertiesUtils.load(bundle.getProperties(), file.reader());
 				} catch (Throwable e) {
-					Log.err("Error loading bundle: " + file + "/" + locale, e);
+					Log.err(STR."Error loading bundle: \{file}/\{locale}", e);
 				}
 			}
 			bundle = bundle.getParent();

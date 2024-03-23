@@ -30,9 +30,10 @@ public class InterpImage extends Element {
 		Draw.alpha(parentAlpha * color.a);
 		selfPointAmount++;
 		if (selfPointAmount > pointAmount + 30) selfPointAmount = 0;
+		/* 左下角 */
 		float x0 = this.x + width / 8f, y0 = this.y + height / 8f,
 		 w = width / 8f * 6f, h = height / 8f * 6f;
-		float lastX = x0 + 0, lastY = y0 + interp.apply(0);
+		float lastX = x0 + 0, lastY = y0 + h * interp.apply(0);
 		Lines.stroke(3f);
 		Draw.color(Color.lightGray);
 		Lines.rect(x0, y0, w, h);

@@ -627,24 +627,29 @@ public class Window extends Table implements Position {
 	}
 
 	protected void drawChildren() {
-		if (unexpectedDrawException) {
-			return;
-		}
+		if (unexpectedDrawException) return;
+
 		oldTransform.set(Draw.trans());
 		Tools.runLoggedException(super::drawChildren, () -> {
 			unexpectedDrawException = true;
+			children.end();
+
 			Tools.runIgnoredException(() -> {
 				while (true) clipEnd();
 			});
-			children.end();
 			Draw.trans(oldTransform);
 			confirm = showCustomConfirm("@settings.exception", "@settings.exception.draw",
-			 "@settings.window.close", "@mod-tools.ignore",
-			 this::remove, () -> { });
+			 "@settings.window.close", "@settings.window.close",
+			 this::remove, this::remove);
 			confirm.moveListener.remove();
 			confirm.sclListener.unbind();
+			Boolp boolp = () -> confirm.isShown();
+			topGroup.disabledSwitchPreviewSeq.add(boolp);
 			confirm.update(() -> confirm.setPosition(this));
-			confirm.hidden(() -> confirm = null);
+			confirm.hidden(() -> {
+				topGroup.disabledSwitchPreviewSeq.remove(boolp, true);
+				confirm = null;
+			});
 		});
 	}
 

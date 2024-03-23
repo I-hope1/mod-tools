@@ -1,7 +1,7 @@
 package modtools.ui;
 
 import arc.*;
-import arc.func.Cons;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -225,6 +225,7 @@ public final class TopGroup extends WidgetGroup {
 		//noinspection ConstantValue
 		if (topGroup != null) throw new IllegalStateException("topGroup已被加载");
 		addSceneListener();
+
 		scene.addListener(new SwitchInputListener());
 		scene.addCaptureListener(new SwitchGestureListener());
 		if (OS.isWindows) {
@@ -496,9 +497,9 @@ public final class TopGroup extends WidgetGroup {
 	 * just a flag
 	 * @see modtools.ui.TopGroup#addChild
 	 */
-	public static class BackElement extends Element implements BackInterface {}
+	public static class BackElement extends Element implements BackInterface { }
 
-	public interface BackInterface {}
+	public interface BackInterface { }
 
 
 	public interface Drawer {
@@ -520,7 +521,6 @@ public final class TopGroup extends WidgetGroup {
 		public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {
 			// Log.info("fling: (@, @, @) ", velocityX, velocityY, lastTouches);
 			if (velocityX < 1000 || lastTouches != 3) return;
-			Log.info("valid");
 			if (!isSwitchWindows) {
 				currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
 			}
@@ -598,9 +598,16 @@ public final class TopGroup extends WidgetGroup {
 			clicked(TopGroup.this::resetSwitch);
 		}
 	}
+
+	public Seq<Boolp> disabledSwitchPreviewSeq = new Seq<>();
 	private void resolveOnce() {
-		K_once = true;
 		end.clearChildren();
+		boolean disabled = false;
+		for (Boolp boolp : disabledSwitchPreviewSeq) {
+			disabled |= boolp.get();
+		}
+		if (disabled) return;
+		K_once = true;
 		Table paneTable = new Table();
 		end.pane(paneTable).grow().with(
 		 s -> s.setScrollingDisabled(OS.isWindows, false));
@@ -640,7 +647,7 @@ public final class TopGroup extends WidgetGroup {
 					currentIndex = t.getZIndex();
 					resolveSwitch();
 				});
-			}, HopeStyles.flatToggleMenut, () -> {}).pad(6, 8, 6, 8).update(t -> {
+			}, HopeStyles.flatToggleMenut, () -> { }).pad(6, 8, 6, 8).update(t -> {
 				if (!w.isShown()) {
 					removeWindow(t);
 				}
@@ -705,20 +712,20 @@ public final class TopGroup extends WidgetGroup {
 		}
 	}
 
-	public static class BoolfDrawTasks extends TaskSet {}
+	public static class BoolfDrawTasks extends TaskSet { }
 
 	public interface ResidentDrawTask {
-		default void backDraw() {}
+		default void backDraw() { }
 
-		default void elemDraw() {}
+		default void elemDraw() { }
 		/**
 		 * 在{@code drawer}渲染之前渲染
 		 * @param drawer 等一会会渲染的元素
 		 */
-		default void beforeDraw(Window drawer) {}
-		default void endDraw() {}
-		default void init() {}
-		default void afterAll() {}
+		default void beforeDraw(Window drawer) { }
+		default void endDraw() { }
+		default void init() { }
+		default void afterAll() { }
 	}
 
 	public static class NGroup extends Group {

@@ -28,7 +28,7 @@ public class URLRedirect {
 		field.set(null, new Hashtable<>(hashtable) {
 			public synchronized URLStreamHandler put(String key, URLStreamHandler value) {
 				if (key.equals("http") || key.equals("https")) {
-					var handler = new MyClass<>(value.getClass().getName() + "_1", value.getClass());
+					var handler = new MyClass<>(value.getClass().getName() + "-r0", value.getClass());
 					handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
 					handler.addInterface(RedirectHandler.class);
 					handler.visit(URLRedirect.class);
@@ -38,9 +38,7 @@ public class URLRedirect {
 					}
 					try {
 						value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
-					} catch (Exception e) {
-						throw new RuntimeException(e);
-					}
+					} catch (Throwable _) { }
 				}
 				return super.put(key, value);
 			}
@@ -58,7 +56,8 @@ public class URLRedirect {
 	public static URLConnection openConnection(URLStreamHandler self, URL u) throws IOException {
 		String def_url  = u.toString().substring(u.getProtocol().length());
 		String file_url = def_url.substring(3 + u.getHost().length());
-		u = new URL(u.getProtocol() + "://" + replacer.getOrDefault(u.getHost(), u.getHost()) + "/" + file_url);
+		u = new URL(
+		 STR."\{u.getProtocol()}://\{replacer.getOrDefault(u.getHost(), u.getHost())}/\{file_url}");
 		// Log.info(u);
 		return ((RedirectHandler) self).super$_openConnection(u);
 	}

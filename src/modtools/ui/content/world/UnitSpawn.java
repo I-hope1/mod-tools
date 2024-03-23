@@ -154,20 +154,21 @@ public class UnitSpawn extends Content {
 				 .get();
 			});
 		}).growX().row();
+		// Buttons
 		ui.cont.table(Window.myPane, table -> {
 			table.margin(-4f, 0f, -4f, 0f);
 			table.button("@ok", HopeStyles.cleart, this::spawnIgnored)
 			 .size(90, 50)
 			 .disabled(b -> !isOk(x, y, amount, team, selectUnit));
-			table.button("post task", HopeStyles.cleart, () -> {
+			table.button("Post task", HopeStyles.cleart, () -> {
 				ExecuteTree.context(root, () ->
 				 ExecuteTree.node(selectUnit.localizedName,
 					STR."(\{ x},\{y})\n{\{team}}[accent]×\{amount}",
 					getSpawnRun()).code(generateCode()).resubmitted().worldTimer().apply()
 				);
 				Window dialog = INFO_DIALOG.dialog(t -> {
-					t.add("已添加").row();
-					t.button("查看", () -> Contents.executor.build());
+					t.add("Posted").row();
+					t.button("View", () -> Contents.executor.build());
 				});
 				Time.runTask(2.5f * 60f, dialog::hide);
 			}).size(90, 50);
@@ -218,13 +219,8 @@ public class UnitSpawn extends Content {
 		return () -> spawn(selectUnit0, amount0, team0, x0, y0);
 	}
 	public String generateCode() {
-		return "$.Contents.unit_spawn.spawn(" +
-					 "Vars.content.getByID(ContentType.unit, " + selectUnit.id + ")," +
-					 amount + "," +
-					 "Team.get(" + team.id + ")," +
-					 x + "," +
-					 y +
-					 ")";
+		return STR."$.Contents.unit_spawn.spawn(Vars.content.getByID(ContentType.unit, \{
+		 selectUnit.id}),\{amount},Team.get(\{team.id}),\{x},\{y})";
 	}
 
 	public void spawn(UnitType selectUnit, int amount, Team team, float x, float y) {

@@ -26,6 +26,7 @@ public class ForRhino {
 			throw new RuntimeException(e);
 		}
 	}
+
 	static ContextFactory createFactory() throws Exception {
 		ContextFactory                    global         = ContextFactory.getGlobal();
 		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(clName(global).replace('.', '/') + "_aa1", global.getClass());
@@ -71,7 +72,7 @@ public class ForRhino {
 			return ((ContextFactory & MyRhino) factory).super$_doTopCall(callable, cx, scope, thisObj, args);
 		} catch (Throwable t) {
 			// Log.err(t instanceof RhinoException ? ((RhinoException) t).getScriptStackTrace() : Strings.neatError(t));
-			if (!Tester.catchOutsizeError) throw t;
+			if (!Tester.catchOutsizeError && !(t instanceof TimeoutException)) throw t;
 			tester.handleError(t);
 			return null;
 		}

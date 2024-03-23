@@ -29,7 +29,6 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import modtools.*;
-import modtools.annotations.DataEventFieldInit;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
@@ -57,7 +56,7 @@ import modtools.utils.ui.MethodTools;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.reflect.*;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -131,9 +130,6 @@ public class Tester extends Content {
 
 	public boolean loop = false;
 	public Object  res;
-
-	@DataEventFieldInit
-	public static boolean catchOutsizeError;
 
 	private boolean
 	 strict = false,

@@ -4,7 +4,6 @@ import arc.func.Func2;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.mod.ModClassLoader;
-import modtools.ui.content.debug.Tester;
 import modtools.utils.ByteCodeTools.MyClass;
 import modtools.utils.reflect.FieldUtils;
 import rhino.*;
@@ -13,6 +12,7 @@ import java.io.File;
 import java.lang.reflect.*;
 
 import static modtools.ui.Contents.tester;
+import static modtools.ui.content.debug.Tester.Settings.catch_outsize_error;
 import static modtools.utils.Tools.clName;
 
 @SuppressWarnings("unused")
@@ -71,13 +71,12 @@ public class ForRhino {
 		try {
 			return ((ContextFactory & MyRhino) factory).super$_doTopCall(callable, cx, scope, thisObj, args);
 		} catch (Throwable t) {
-			// Log.err(t instanceof RhinoException ? ((RhinoException) t).getScriptStackTrace() : Strings.neatError(t));
-			if (!Tester.catchOutsizeError && !(t instanceof TimeoutException)) throw t;
+			if (!(catch_outsize_error.enabled() || t instanceof TimeoutException)) throw t;
 			tester.handleError(t);
 			return null;
 		}
 	}
-	public static class TimeoutException extends RuntimeException {}
+	public static class TimeoutException extends RuntimeException { }
 
 	public interface MyRhino {
 		Object super$_doTopCall(Callable callable,

@@ -92,7 +92,7 @@ public class UnitSpawn extends Content {
 	}
 
 	public void _load() {
-		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, () -> {});
+		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, () -> { });
 		x = player.x;
 		y = player.y;
 
@@ -162,8 +162,7 @@ public class UnitSpawn extends Content {
 			table.button("post task", HopeStyles.cleart, () -> {
 				ExecuteTree.context(root, () ->
 				 ExecuteTree.node(selectUnit.localizedName,
-					"(" + x + "," + +y + ")\n{"
-					+ team + "}[accent]×" + amount,
+					STR."(\{ x},\{y})\n{\{team}}[accent]×\{amount}",
 					getSpawnRun()).code(generateCode()).resubmitted().worldTimer().apply()
 				);
 				Window dialog = INFO_DIALOG.dialog(t -> {
@@ -202,7 +201,7 @@ public class UnitSpawn extends Content {
 	public boolean validNumber(String str) {
 		try {
 			return validNumber(NumberHelper.asFloat(str));
-		} catch (Exception ignored) {}
+		} catch (Exception ignored) { }
 		return false;
 	}
 	public boolean validNumber(float d) {

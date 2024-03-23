@@ -1,9 +1,27 @@
 name: mod-tools
 displayName: "mod工具"
-description: "修复安卓上无法使用的bug"
+description: '''
+## 还是修Bug
+- 修复`Window`阻塞`TextField`输入的bug
+- 将`TimeoutException`视为内部错误
+（没有开启捕获外部错误，也可以捕获`TimeoutException`）
+- 修复`TextAreaTab`补全时可能发生报错
+- 修复`Underline`搜索时仍保留的bug
+- 修复设置ui中的字体可能显示不全
+- `ReviewElement`添加`Touchable`颜色区分
+
+## Still Fixing Bugs
+- Fixed bug blocking TextField input in `Window`.
+- Treat `TimeoutException` as an internal error
+ (TimeoutException can be captured not matter whether or not `capturing external errors` is enabled).
+- Fixed possible errors that may occur during `TextAreaTab` completion.
+- Fixed bug where `Underline` search would still remain.
+- Fixed issue where font in UI settings may not display completely.
+- Added color differentiation for `Touchable` to Review Element.
+'''
 author: "I hope..."
 hidden: true
-version: 1.4.5.2
+version: 1.4.5.3
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

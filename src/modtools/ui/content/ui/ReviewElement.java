@@ -111,7 +111,7 @@ public class ReviewElement extends Content {
 	}
 
 	/** 代码生成{@link ColorProcessor} */
-	public void settingColor(Table t) {}
+	public void settingColor(Table t) { }
 
 
 	ReviewFocusTask task;
@@ -239,7 +239,7 @@ public class ReviewElement extends Content {
 	};
 
 	public static class ReviewElementWindow extends Window implements IDisposable {
-		Table   pane = new LimitTable() {};
+		Table   pane = new LimitTable() { };
 		Element element;
 		Pattern pattern;
 
@@ -623,7 +623,7 @@ public class ReviewElement extends Content {
 
 		colspanLabel  = new NoMarkupLabel(valueScale),
 		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
-		 fillLabel = new Label(""), expandLabel  = new Label("");
+		 fillLabel    = new Label(""), expandLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
 		BindCell rotCell, translationCell, styleCell,
@@ -642,7 +642,7 @@ public class ReviewElement extends Content {
 		}
 		void translation(Vec2 translation) {
 			if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
-				translationLabel.setText(fixed(translation.x) + " × " + fixed(translation.y));
+				translationLabel.setText(STR."\{fixed(translation.x)} × \{fixed(translation.y)}");
 		}
 		void style(Element element) {
 			try {
@@ -712,12 +712,15 @@ public class ReviewElement extends Content {
 		}
 
 		private static String sizeText(float w, float h) {
-			return fixedUnlessUnset(w / Scl.scl()) + "[accent]×[]" + fixedUnlessUnset(h / Scl.scl());
+			return STR."\{
+			 fixedUnlessUnset(w / Scl.scl())
+			 }[accent]×[]\{
+			 fixedUnlessUnset(h / Scl.scl())
+			 }";
 		}
 
 		InfoDetails() {
 			margin(4, 4, 4, 4);
-			touchableLabel.setColor(Color.acid);
 			table(Tex.pane, this::build);
 		}
 
@@ -805,12 +808,12 @@ public class ReviewElement extends Content {
 	}
 
 	class ReviewFocusTask extends FocusTask {
-		{drawSlightly = true;}
+		{ drawSlightly = true; }
 
-		public ReviewFocusTask() {super(ReviewElement.maskColor, ReviewElement.focusColor);}
+		public ReviewFocusTask() { super(ReviewElement.maskColor, ReviewElement.focusColor); }
 
 		/** 清除elemDraw */
-		public void elemDraw() {}
+		public void elemDraw() { }
 		public void beforeDraw(Window drawer) {
 			if (drawer == FOCUS_WINDOW && FOCUS != null) {
 				drawFocus(FOCUS);
@@ -824,8 +827,9 @@ public class ReviewElement extends Content {
 
 			if (!hoverInfoWindow.enabled()) return;
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
-			table.sizeLabel.setText(fixed(elem.getWidth()) + " × " + fixed(elem.getHeight()));
-			table.touchableLabel.setText(ReviewElement.toString(elem.touchable));
+			table.sizeLabel.setText(posText(elem));
+			table.touchableLabel.setText(touchableToString(elem.touchable));
+			table.touchableLabel.setColor(touchableToColor(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
@@ -841,6 +845,9 @@ public class ReviewElement extends Content {
 			}
 
 			showHover(elem, vec2);
+		}
+		private static String posText(Element elem) {
+			return STR."\{fixed(elem.getWidth())} × \{fixed(elem.getHeight())}";
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posText:
@@ -926,9 +933,17 @@ public class ReviewElement extends Content {
 			if (elem != null) drawFocus(elem);
 		}
 	}
+	static Color disabledColor = new Color(0xFF0000_FF);
+	private Color touchableToColor(Touchable touchable) {
+		return switch (touchable) {
+			case enabled -> Color.green;
+			case disabled -> disabledColor;
+			case childrenOnly -> Pal.accent;
+		};
+	}
 
 
-	private static CharSequence toString(Touchable touchable) {
+	private static CharSequence touchableToString(Touchable touchable) {
 		return switch (touchable) {
 			case enabled -> "Enabled";
 			case disabled -> "Disabled";

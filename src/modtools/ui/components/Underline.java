@@ -16,5 +16,7 @@ public class Underline extends LimitImage {
 		table.row();
 		return cell;
 	}
-
+	public float getHeight() {
+		return 1;
+	}
 }

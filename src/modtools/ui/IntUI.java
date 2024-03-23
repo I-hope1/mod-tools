@@ -206,7 +206,7 @@ public class IntUI {
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
 		class HClickListener extends ClickListener {
-			HClickListener() {super(KeyCode.mouseRight);}
+			HClickListener() { super(KeyCode.mouseRight); }
 			public void clicked(InputEvent event, float x, float y) {
 				if (event.stopped) return;
 				run.run();
@@ -294,7 +294,7 @@ public class IntUI {
 				var cell = main.button(menu.getName(), menu.icon,
 				 menu instanceof CheckboxList || menu instanceof FoldedList ? HopeStyles.flatToggleMenut : HopeStyles.flatt,
 				 /** @see Cell#unset */
-				 menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> {}
+				 menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> { }
 				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
 				if (menu instanceof FoldedList foldedList) {
 					Core.app.post(() -> {
@@ -360,7 +360,7 @@ public class IntUI {
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
-			HopeStyles.flatBordert, () -> {}).padLeft(8f).size(180, 40)
+			HopeStyles.flatBordert, () -> { }).padLeft(8f).size(180, 40)
 		 .with(b -> b.clicked(() -> tester.put(b, prov.get())));
 	}
 	public static String buildStoreKey(String key) {
@@ -377,7 +377,7 @@ public class IntUI {
 	 * @return the cell
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
-		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {}).with(b -> b.clicked(() -> {
+		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> { }).with(b -> b.clicked(() -> {
 			Sr((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : JSFunc.watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
@@ -568,7 +568,7 @@ public class IntUI {
 			Pattern pattern;
 			try {
 				pattern = PatternUtils.compileRegExp(text);
-			} catch (Exception ex) {return;}
+			} catch (Exception ex) { return; }
 
 			for (int c = 0, i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
@@ -704,6 +704,28 @@ public class IntUI {
 		window.moveToMouse();
 		return window;
 	}
+	/**
+	 * @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable)
+	 * */
+	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
+																			 Runnable denied) {
+		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
+		window.cont.add(text).width(Vars.mobile ? 400f : 500f).wrap().pad(4).get().setAlignment(Align.center, Align.center);
+		window.buttons.defaults().size(200f, 54f).pad(2);
+		window.setFillParent(false);
+		window.buttons.button(no, () -> {
+			window.hide();
+			denied.run();
+		});
+		window.buttons.button(yes, () -> {
+			window.hide();
+			confirmed.run();
+		});
+		window.keyDown(KeyCode.escape, window::hide);
+		window.keyDown(KeyCode.back, window::hide);
+		window.show();
+		return window;
+	}
 
 
 	public static void colorBlock(Cell<?> cell, Color color, boolean needDouble) {
@@ -820,7 +842,7 @@ public class IntUI {
 		 * @param contents the contents
 		 */
 		public Tooltip(Cons<Table> contents) {
-			super(t -> {});
+			super(t -> { });
 			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
 			show = () -> {
@@ -853,7 +875,7 @@ public class IntUI {
 			if (mobile) Time.runTask(60 * 1.2f, this::hide);
 		}
 		/** 禁用原本的mobile自动隐藏 */
-		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {}
+		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) { }
 
 		static {
 			Tooltips.getInstance().textProvider = text -> new Tooltip(t -> t.background(Styles.black6).margin(4f).add(text));
@@ -862,10 +884,10 @@ public class IntUI {
 
 	// ======-----弹窗------======
 	/* 这会添加到others里 */
-	public interface PopupWindow extends INotice {}
-	public interface IMenu extends IDisposable {}
-	public interface IHitter {}
-	public interface INotice extends IDisposable {}
+	public interface PopupWindow extends INotice { }
+	public interface IMenu extends IDisposable { }
+	public interface IHitter { }
+	public interface INotice extends IDisposable { }
 
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
 		/**
@@ -994,7 +1016,7 @@ public class IntUI {
 			super.drawFocus(elem);
 			Draw.blit(bufferCaptureAll(getAbsolutePos(elem), elem), baseShader);
 		}
-		public void elemDraw() {}
+		public void elemDraw() { }
 		public void endDraw() {
 			super.endDraw();
 			drawFocus(elem);

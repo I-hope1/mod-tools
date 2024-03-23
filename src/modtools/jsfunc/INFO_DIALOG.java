@@ -95,6 +95,7 @@ public interface INFO_DIALOG {
 	static Window window(final Cons<Window> cons) {
 		class JSWindow extends HiddenTopWindow implements IDisposable {
 			{
+				show();
 				title.setFontScale(0.7f);
 				for (Cell<?> child : titleTable.getCells()) {
 					if (child.get() instanceof ImageButton) {
@@ -107,7 +108,6 @@ public interface INFO_DIALOG {
 				// addCloseButton();
 				hidden(this::clearAll);
 				moveToMouse();
-				show();
 			}
 
 			public JSWindow() {

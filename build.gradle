@@ -164,7 +164,7 @@ tasks.register('mergeLibs', Jar) {
 	}
 }
 
-tasks.register('playAndroid') {
+task playAndroid {
 	dependsOn deploy
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"

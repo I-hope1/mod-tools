@@ -48,7 +48,7 @@ import static modtools.utils.Tools.*;
  * 记住左下角是{@code (0, 0)}
  * @author I hope...
  **/
-public class Window extends Table {
+public class Window extends Table implements Position {
 	public static final MySet<Window> all = new MySet<>() {
 		public boolean add(Window value) {
 			boolean ok = super.add(value);
@@ -239,22 +239,22 @@ public class Window extends Table {
 			ImageButtonStyle style = HopeStyles.flati;
 			final float      size  = 28;
 			p.shown = () -> sclListener.offset = size;
-			p.button(Icon.leftOpenSmall, style, () -> {}).size(size).get().getImage().rotation = -45;
-			p.button(Icon.upOpenSmall, style, () -> {}).growX().height(size);
-			p.button(Icon.rightOpenSmall, style, () -> {}).size(size).get().getImage().rotation = 45;
+			p.button(Icon.leftOpenSmall, style, () -> { }).size(size).get().getImage().rotation = -45;
+			p.button(Icon.upOpenSmall, style, () -> { }).growX().height(size);
+			p.button(Icon.rightOpenSmall, style, () -> { }).size(size).get().getImage().rotation = 45;
 
 			p.row();
-			p.button(Icon.leftOpenSmall, style, () -> {}).growY().width(size);
+			p.button(Icon.leftOpenSmall, style, () -> { }).growY().width(size);
 			p.table(t -> t.button(Icon.cancelSmall, style, () -> {
 				sclListener.offset = SclListener.defOffset;
 				p.hide();
 			}).size(32)).grow();
-			p.button(Icon.rightOpenSmall, style, () -> {}).growY().width(size);
+			p.button(Icon.rightOpenSmall, style, () -> { }).growY().width(size);
 
 			p.row();
-			p.button(Icon.leftOpenSmall, style, () -> {}).size(size).get().getImage().rotation = 45;
-			p.button(Icon.downOpenSmall, style, () -> {}).growX().height(size);
-			p.button(Icon.rightOpenSmall, style, () -> {}).size(size).get().getImage().rotation = -45;
+			p.button(Icon.leftOpenSmall, style, () -> { }).size(size).get().getImage().rotation = 45;
+			p.button(Icon.downOpenSmall, style, () -> { }).growX().height(size);
+			p.button(Icon.rightOpenSmall, style, () -> { }).size(size).get().getImage().rotation = -45;
 		});
 	}
 
@@ -442,6 +442,7 @@ public class Window extends Table {
 			hitter.remove();
 			hitter = null;
 		}
+		unexpectedDrawException = false;
 		// bakRegion = screenshot();
 		this.fire(new VisibilityEvent(true));
 
@@ -610,14 +611,41 @@ public class Window extends Table {
 		Tools.runLoggedException(() -> b[0] = super.fire(event));
 		return b[0];
 	}
+
+	boolean unexpectedDrawException;
+	Window  confirm;
+	final Mat oldTransform = new Mat();
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
 		float prev = Draw.z();
-		Draw.draw(getZIndex() + 10, () -> {
+		Draw.draw(getZIndex() + 11, () -> {
 			Draw.alpha(parentAlpha);
 			MyDraw.blurRect(x, y, width, height);
 		});
-		Draw.draw(prev,() -> Tools.runLoggedException(super::draw));
+		Draw.z(prev);
+		super.draw();
+	}
+
+	protected void drawChildren() {
+		if (unexpectedDrawException) {
+			return;
+		}
+		oldTransform.set(Draw.trans());
+		Tools.runLoggedException(super::drawChildren, () -> {
+			unexpectedDrawException = true;
+			Tools.runIgnoredException(() -> {
+				while (true) clipEnd();
+			});
+			children.end();
+			Draw.trans(oldTransform);
+			confirm = showCustomConfirm("@settings.exception", "@settings.exception.draw",
+			 "@settings.window.close", "@mod-tools.ignore",
+			 this::remove, () -> { });
+			confirm.moveListener.remove();
+			confirm.sclListener.unbind();
+			confirm.update(() -> confirm.setPosition(this));
+			confirm.hidden(() -> confirm = null);
+		});
 	}
 
 	/**
@@ -631,6 +659,12 @@ public class Window extends Table {
 
 	public Window moveToMouse() {
 		return setPosition(Core.input.mouse());
+	}
+	public float getX() {
+		return x;
+	}
+	public float getY() {
+		return y;
 	}
 	public static class ClearScroll extends InputListener {
 		public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
@@ -650,7 +684,7 @@ public class Window extends Table {
 			 .set(e -> e == this, titleTable)
 			 .get();
 		}
-		public FillTable() {}
+		public FillTable() { }
 		public FillTable(Drawable background) {
 			super(background);
 		}
@@ -687,12 +721,12 @@ public class Window extends Table {
 		}
 	}
 
-	public interface IInfo {}
+	public interface IInfo { }
 	/**
 	 * 延迟几秒销毁的窗口
 	 * @see InfoFadePopup
 	 */
-	public interface DelayDisposable extends IDisposable {}
+	public interface DelayDisposable extends IDisposable { }
 
 	public static class DisWindow extends Window implements IDisposable {
 		public DisWindow(String title, float minWidth, float minHeight, boolean full) {

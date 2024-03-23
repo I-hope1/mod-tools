@@ -61,7 +61,7 @@ public class ForRhino {
 	}
 
 	public static void observeInstructionCount(ContextFactory factory, Context cx, int instructionCount) {
-		if (tester.multiThread ? tester.killScript : Time.timeSinceMillis(tester.startTime) > 2000)
+		if (tester.stopIfOvertime && (tester.multiThread ? tester.killScript : Time.timeSinceMillis(tester.startTime) > 2000))
 			throw new TimeoutException();
 	}
 	public static Object doTopCall(ContextFactory factory,

@@ -3,7 +3,7 @@
 ## ShowUIList
 
 - 显示 `icon`, `tex`, `styles`, `colors`, `interps`\
-![](../screenshots/UIList.png)
+![](https://github.com/I-hope1/mod-tools/blob/main/screenshots/UIList.png)
 
 ## Tester
 ![](../screenshots/tester.png)

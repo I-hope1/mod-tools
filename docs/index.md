@@ -2,7 +2,7 @@
 
 ## ShowUIList
 
-- 显示 `icon`, `tex`, `styles`, `colors`, `interps`
+- 显示 `icon`, `tex`, `styles`, `colors`, `interps`\
 ![](../screenshots/UIList.png)
 
 ## Tester

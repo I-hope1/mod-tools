@@ -6,7 +6,7 @@
 ![](https://github.com/I-hope1/mod-tools/blob/main/screenshots/UIList.png)
 
 ## Tester
-![](../screenshots/tester.png)
+![](https://github.com/I-hope1/mod-tools/blob/main/screenshots/tester.png)
 
 - 提供 `JS` 编辑器 `Tester`
 - - `Ctrl`+`Shift`+`Enter` 立即执行代码

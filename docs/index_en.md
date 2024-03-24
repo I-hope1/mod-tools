@@ -1,3 +1,5 @@
+English|[中文](index.md)
+
 ## ShowUIList
 
 - Display `icon`, `tex`, `styles`, `colors`, `interps`\

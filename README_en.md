@@ -18,7 +18,7 @@ It provides many useful tools for developers.
 
 ## Tester
 
-![](./screenshots/tester.png)
+![](./docs/screenshots/tester.png)
 
 - Provides `JS` code editor `Tester`
   - Press `Ctrl`+`Shift`+`Enter` to execute code immediately
@@ -29,19 +29,23 @@ It provides many useful tools for developers.
   - Use `$.xxx` to represent basic data types (e.g., `$.void` represents `Void.TYPE`; `$.J` represents `long.class`)
   - `$p` represents `Packages`
 - [JSFunc](src/modtools/utils/JSFunc.java)
-- Long press on code in the favorites to add it to the startup items<br>![](./screenshots/startup.png)
-- Quick switching history<br>![截图2024-03-10 14-45-37](https://github.com/I-hope1/mod-tools/assets/78016895/4918af35-19af-4fab-b961-70bdc8679fe8)
+- Long press on code in the favorites to add it to the startup items\
+![](./docs/screenshots/startup.png)
+- Quick switching history\
+![截图2024-03-10 14-45-37](https://github.com/I-hope1/mod-tools/assets/78016895/4918af35-19af-4fab-b961-70bdc8679fe8)
 
 ## UnitSpawn
 
 - Multiple team selection
 - Supports spawning at specific points
-- Displays `name` and `localizedName`<br>![unitSpawn](./screenshots/unit_spawn.png)
+- Displays `name` and `localizedName`\
+![unitSpawn](./docs/screenshots/unit_spawn.png)
 
 ## Selection
 
 - Selector
-- Supports `Tile`, `Building`, `Bullet`, `Unit`<br>![selection](./screenshots/selection.png)
+- Supports `Tile`, `Building`, `Bullet`, `Unit`\
+![selection](./docs/screenshots/selection.png)
 - `Ctrl`+`Alt` to fixed `Focus Window`
 
 ## ReviewElement
@@ -50,7 +54,8 @@ It provides many useful tools for developers.
 - Select untouchable elements.
 - + Mobile: Touch screen with another finger to filter the current element.
   + Computer: Press ` F` to filter the current element.
-- Press `i` on the element to display the details (Open the `ShowInfoWindow`).<br>![reviewElement](./screenshots/review_element.png)
+- Press `i` on the element to display the details (Open the `ShowInfoWindow`).\
+![reviewElement](./docs/screenshots/review_element.png)
 
 ## Window
 

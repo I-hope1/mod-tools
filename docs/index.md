@@ -3,9 +3,10 @@
 ## ShowUIList
 
 - 显示 `icon`, `tex`, `styles`, `colors`, `interps`
+![](../screenshots/UIList.png)
 
 ## Tester
-![image](https://github.com/I-hope1/mod-tools/assets/78016895/08dd4a6f-025e-429c-9567-1f133fa82ad9)
+![](../screenshots/tester.png)
 
 - 提供 `JS` 编辑器 `Tester`
 - - `Ctrl`+`Shift`+`Enter` 立即执行代码

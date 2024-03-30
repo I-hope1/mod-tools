@@ -25,7 +25,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.*;
-import java.util.stream.Collectors;
 
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
@@ -149,23 +148,31 @@ public class Replace {
 	}
 	private static void fixSyntaxError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
-		handler.getDiagnostics()
+		ListBuffer<JCDiagnostic>  buffer  = new ListBuffer<>();
+
+		int[] positionOffset = {0};
+
+		buffer.addAll(handler.getDiagnostics()
 		 .stream().filter(diag -> diag.isFlagSet(DiagnosticFlag.SYNTAX))
-		 .collect(Collectors.toSet()).forEach(t -> {
+		 .filter(t -> {
 			 try {
 				 JavaFileObject filer = t.getSource();
-				 String[]         args   = Arrays.stream(t.getArgs()).map(String::valueOf).toArray(String[]::new);
-				 if (args.length == 0) return;
-				 println(args[0]);
-				 StringBuilder  target = new StringBuilder(filer.getCharContent(true));
-				 target.insert((int) t.getPosition(),args[0].charAt(1));
+				 String[]       args  = Arrays.stream(t.getArgs()).map(String::valueOf).toArray(String[]::new);
+				 if (args.length == 0) return true;
+				 println("Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")");
+				 StringBuilder target = new StringBuilder(filer.getCharContent(true));
+				 target.insert((int) t.getPosition() + positionOffset[0], args[0].charAt(1));
+				 positionOffset[0]++;
 				 // println(target);
 				 new FileOutputStream(new File(filer.toUri())).write(target.toString().getBytes());
+				 return false;
 				 // filer.openWriter().write(target.toString());
 			 } catch (Throwable e) {
 				 err(e);
 			 }
-		 });
+			 return true;
+		 }).toList());
+		setAccess(DeferredDiagnosticHandler.class, handler, "deferred", buffer);
 	}
 	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
 		for (Name candidate : candidates) {

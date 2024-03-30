@@ -58,7 +58,7 @@ public class ModTools extends Mod {
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
 				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
-				 SettingsUI::disabledRestart, () -> {});
+				 SettingsUI::disabledRestart, () -> { });
 			}
 		} catch (Throwable e) {
 			if (isImportFromGame) ui.showException("Cannot load ModTools. (Don't worry.)", e);
@@ -203,7 +203,7 @@ public class ModTools extends Mod {
 			// 没报错的话，证明已经加载
 			IntVars.mainLoader.loadClass(mainClassName);
 			return true;
-		} catch (Exception ignored) {}
+		} catch (Exception ignored) { }
 
 		Fi sourceFi = libs.child(fileName + ".jar");
 		if (!sourceFi.exists()) return false;
@@ -233,5 +233,5 @@ public class ModTools extends Mod {
 		}
 	}
 
-	static class UnexpectedPlatform extends RuntimeException {}
+	static class UnexpectedPlatform extends RuntimeException { }
 }

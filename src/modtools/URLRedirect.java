@@ -15,6 +15,7 @@ import java.util.*;
 public class URLRedirect {
 	static Properties replacer = new Properties();
 	static Fi         defaultConfig;
+
 	static void load() throws Throwable {
 		defaultConfig = IntVars.dataDirectory.child("http_redirect.properties");
 		if (loadConfig(defaultConfig)
@@ -57,7 +58,8 @@ public class URLRedirect {
 		String def_url  = u.toString().substring(u.getProtocol().length());
 		String file_url = def_url.substring(3 + u.getHost().length());
 		u = new URL(
-		 STR."\{u.getProtocol()}://\{replacer.getOrDefault(u.getHost(), u.getHost())}/\{file_url}");
+		 STR."\{u.getProtocol()}://\{replacer.getOrDefault(u.getHost(), u.getHost())}/\{file_url}"
+		);
 		// Log.info(u);
 		return ((RedirectHandler) self).super$_openConnection(u);
 	}

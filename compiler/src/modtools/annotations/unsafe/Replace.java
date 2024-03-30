@@ -8,18 +8,24 @@ import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
+import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.util.*;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Context.Key;
+import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
+import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.NoAccessCheck;
 
+import javax.tools.JavaFileObject;
+import java.io.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.*;
+import java.util.stream.Collectors;
 
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
@@ -34,6 +40,8 @@ public class Replace {
 	static JavacTrees   trees;
 	static ModuleFinder moduleFinder;
 	public static void extendingFunc(Context context) {
+		/* 恢复初始状态 */
+		unsafe.putInt(CompileState.INIT, off_value, 0);
 		Replace.context = context;
 		classFinder = ClassFinder.instance(context);
 		syms = Symtab.instance(context);
@@ -42,7 +50,7 @@ public class Replace {
 		moduleFinder = ModuleFinder.instance(context);
 		try {
 			extendingFunc0();
-		} catch (Throwable e) {err(e);}
+		} catch (Throwable e) { err(e); }
 	}
 
 	private static void extendingFunc0() {
@@ -109,20 +117,20 @@ public class Replace {
 			return null;
 		});
 		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
-			public Object visitType(Type t, Object o) {return t;}
+			public Object visitType(Type t, Object o) { return t; }
 		});
 	}
 	private static Resolve tryDefineOne(Resolve resolve) {
 		boolean hasAnnotation = true;
 		try {
 			NoAccessCheck.class.getClass();
-		} catch (NoClassDefFoundError e) {hasAnnotation = false;}
+		} catch (NoClassDefFoundError e) { hasAnnotation = false; }
 		boolean finalHasAnnotation = hasAnnotation;
 		var     predicate          = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
 
 		try {
 			return new MyResolve(context, predicate);
-		} catch (Exception ignored) {}
+		} catch (Exception ignored) { }
 
 		return resolve;
 	}
@@ -133,6 +141,31 @@ public class Replace {
 		Options.instance(context).put(Option.PARAMETERS, "");
 		removeKey(ClassWriter.class, () -> new MyClassWriter(context));
 		setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
+
+		// println("aioksolosklkskms");
+		fixSyntaxError();
+		// removeKey(Log.class, () -> new MyLog(context));
+		// setAccess(ParserFactory.class, ParserFactory.instance(context), "log", Log.instance(context));
+	}
+	private static void fixSyntaxError() {
+		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
+		handler.getDiagnostics()
+		 .stream().filter(diag -> diag.isFlagSet(DiagnosticFlag.SYNTAX))
+		 .collect(Collectors.toSet()).forEach(t -> {
+			 try {
+				 JavaFileObject filer = t.getSource();
+				 String[]         args   = Arrays.stream(t.getArgs()).map(String::valueOf).toArray(String[]::new);
+				 if (args.length == 0) return;
+				 println(args[0]);
+				 StringBuilder  target = new StringBuilder(filer.getCharContent(true));
+				 target.insert((int) t.getPosition(),args[0].charAt(1));
+				 // println(target);
+				 new FileOutputStream(new File(filer.toUri())).write(target.toString().getBytes());
+				 // filer.openWriter().write(target.toString());
+			 } catch (Throwable e) {
+				 err(e);
+			 }
+		 });
 	}
 	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
 		for (Name candidate : candidates) {
@@ -141,7 +174,7 @@ public class Replace {
 					ClassSymbol symbol = classFinder.loadClass(ms, candidate);
 					if (symbol.exists()) return symbol;
 					// println("source: @", symbol.sourcefile);
-				} catch (CompletionFailure ignored) {}
+				} catch (CompletionFailure ignored) { }
 			}
 		}
 		return null;
@@ -242,7 +275,7 @@ public class Replace {
 		return defaultResult;
 	}
 
-	private static void runIgnoredException(Runnable r) {try {r.run();} catch (Throwable ignored) {}}
+	private static void runIgnoredException(Runnable r) { try { r.run(); } catch (Throwable ignored) { } }
 	static void setValue(Class<?> cl, String key, Object val) {
 		Object instance = invoke(cl, null, "instance", new Object[]{context}, Context.class);
 		setAccess(cl, instance, key, val);
@@ -284,5 +317,14 @@ public class Replace {
 			}
 			clazz = clazz.getSuperclass();
 		}
+	}
+
+
+	static long off_value;
+	public static void init() throws Throwable {
+		off_value = unsafe.objectFieldOffset(CompileState.class.getDeclaredField("value"));
+		/* 使语法解析不会stop继续编译 */
+		unsafe.putInt(CompileState.INIT, off_value, 100);
+		replaceSource();
 	}
 }

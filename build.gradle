@@ -101,7 +101,7 @@ dependencies {
 
 mindustry {
 	deploy { baseName = name }
-	dexJar { options.minApi = '34' }
+	dexJar { options.minApi = '26' }
 }
 mindustryAssets {
 	// Set the assets root

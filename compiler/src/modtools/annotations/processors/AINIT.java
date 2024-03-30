@@ -19,17 +19,16 @@ public class AINIT extends AbstractProcessor {
 	static {
 		try {
 			HopeReflect.load();
-			Replace.replaceSource();
-		} catch (Throwable e) {err(e);}
+			Replace.init();
+		} catch (Throwable e) { err(e); }
 	}
 
 	public synchronized void init(ProcessingEnvironment processingEnv) {
-		super.init(processingEnv);
 		Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
 	}
 
 
-	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {return true;}
+	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) { return true; }
 	public SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();
 	}

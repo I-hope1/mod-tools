@@ -4,7 +4,6 @@ import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import org.checkerframework.checker.units.qual.C;
 
 import static modtools.annotations.BaseProcessor.*;
 

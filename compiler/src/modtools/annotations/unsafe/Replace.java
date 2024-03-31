@@ -121,18 +121,20 @@ public class Replace {
 		});
 	}
 	private static Resolve tryDefineOne(Resolve resolve) {
-		boolean hasAnnotation = true;
-		try {
-			NoAccessCheck.class.getClass();
-		} catch (NoClassDefFoundError e) { hasAnnotation = false; }
-		boolean finalHasAnnotation = hasAnnotation;
-		var     predicate          = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> finalHasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
+		boolean hasAnnotation = isHasAnnotation();
+		var     predicate     = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> hasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
 
 		try {
 			return new MyResolve(context, predicate);
 		} catch (Exception ignored) { }
 
 		return resolve;
+	}
+	private static boolean isHasAnnotation() {
+		try {
+			NoAccessCheck.class.getClass();
+		} catch (NoClassDefFoundError e) { return false; }
+		return true;
 	}
 	private static void other() throws ClassNotFoundException {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
@@ -171,6 +173,7 @@ public class Replace {
 				 JavaFileObject filer = t.getSource();
 				 String[]       args  = Arrays.stream(t.getArgs()).map(String::valueOf).toArray(String[]::new);
 				 if (args.length == 0) return true;
+				 if (!(args[0].length() == 3 && args[0].charAt(0) == '\'' && args[0].charAt(2) == '\'')) return true;
 
 				 errs("Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")");
 				 StringBuilder target = new StringBuilder(filer.getCharContent(true));
@@ -227,6 +230,7 @@ public class Replace {
 			setAccess(Preview.class, preview, "enabled", true);
 			// setAccess(Preview.class, preview, "forcePreview", true);
 		}
+		Check.instance(context).disablePreviewCheck = true;
 		setAccess(Preview.class, preview, "sourcesWithPreviewFeatures", new HashSet<>() {
 			public boolean contains(Object o) {
 				return false;

@@ -9,6 +9,7 @@ import com.sun.tools.javac.code.Type.*;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.Code.StackMapFormat;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
+import jdk.internal.access.SharedSecrets;
 import modtools.annotations.*;
 import sun.reflect.annotation.ExceptionProxy;
 
@@ -108,8 +109,10 @@ public class VirtualClass {
 		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
 		Object definer;
 		try {
-			definer = HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
-			 new Object[]{null, bytes}, String.class, byte[].class);
+			return SharedSecrets.getJavaLangAccess().defineClass(
+			 null, Object.class, null, bytes, null, true, -1, null);
+			 // HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
+			 // new Object[]{null, bytes}, String.class, byte[].class);
 		} catch (Throwable e) {
 			Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
 			 Class.forName("jdk.internal.util.ClassFileDumper"));

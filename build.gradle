@@ -12,6 +12,7 @@ static def export(CompileOptions options) {
 	// 只是访问
 	options.compilerArgs.addAll([
 			"java.base/jdk.internal.misc",
+			"java.base/jdk.internal.access",
 			// ---------------
 			"jdk.compiler/com.sun.tools.javac.api",
 			"jdk.compiler/com.sun.tools.javac.comp",

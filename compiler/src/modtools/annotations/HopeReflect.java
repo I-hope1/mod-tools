@@ -9,7 +9,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.*;
 
-@SuppressWarnings({"rawtypes", "unchecked"})
+@SuppressWarnings({"unchecked"})
 public class HopeReflect {
 	public static Unsafe unsafe = getUnsafe();
 	public static Lookup lookup = getLookup();

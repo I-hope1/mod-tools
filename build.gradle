@@ -12,9 +12,6 @@ static def export(CompileOptions options) {
 	// 只是访问
 	options.compilerArgs.addAll([
 			"java.base/jdk.internal.misc",
-			"java.base/jdk.internal.loader",
-			"java.base/jdk.internal.reflect",
-			"java.base/jdk.internal.access",
 			// ---------------
 			"jdk.compiler/com.sun.tools.javac.api",
 			"jdk.compiler/com.sun.tools.javac.comp",
@@ -133,7 +130,7 @@ task playGame(type: JavaExec) {
 //			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
-tasks.register('ZCompileAll', Copy) {
+task ZCompileAll(type: Copy) {
 	dependsOn deploy
 
 	from("$buildDir0/tmp/deploy/") {

@@ -4,7 +4,7 @@ import arc.util.Log;
 import jdk.internal.classfile.AccessFlags;
 import mindustry.Vars;
 import modtools.annotations.NoAccessCheck;
-import sun.reflect.misc.FieldUtil;
+import sun.reflect.misc.*;
 
 public class TestInit {
 	public double a;

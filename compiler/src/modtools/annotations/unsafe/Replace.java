@@ -14,8 +14,8 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
+import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.NoAccessCheck;
 
@@ -53,7 +53,7 @@ public class Replace {
 		} catch (Throwable e) { err(e); }
 	}
 
-	private static void extendingFunc0() {
+	private static void extendingFunc0() throws ClassNotFoundException {
 		accessOverride();
 
 		other();
@@ -134,7 +134,7 @@ public class Replace {
 
 		return resolve;
 	}
-	private static void other() {
+	private static void other() throws ClassNotFoundException {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
 		// 适配d8无法编译jdk21的枚举字节码
@@ -144,8 +144,19 @@ public class Replace {
 
 		// println("aioksolosklkskms");
 		fixSyntaxError();
-		// removeKey(Log.class, () -> new MyLog(context));
-		// setAccess(ParserFactory.class, ParserFactory.instance(context), "log", Log.instance(context));
+
+		// 忽略模块访问检查
+		Object prev = getAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper");
+		setAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper",
+		 Proxy.newProxyInstance(Resolve.class.getClassLoader(), new Class[]{Class.forName("com.sun.tools.javac.comp.Resolve$LogResolveHelper")},
+			(proxy, method, args) -> {
+				if (method.getName().equals("resolveDiagnosticNeeded")) {
+					return false;
+				}
+				setAccessible(method);
+				return method.invoke(prev, args);
+			}
+		 ));
 	}
 	private static void fixSyntaxError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");

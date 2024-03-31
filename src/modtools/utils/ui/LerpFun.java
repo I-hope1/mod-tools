@@ -1,11 +1,15 @@
 package modtools.utils.ui;
 
+import arc.Core;
 import arc.func.*;
+import arc.graphics.g2d.Draw;
 import arc.math.*;
-import arc.util.Time;
+import arc.math.geom.Vec2;
+import arc.scene.Element;
+import arc.util.*;
 import mindustry.graphics.Layer;
 import modtools.struct.*;
-import modtools.utils.Tools;
+import modtools.utils.*;
 import modtools.utils.world.WorldDraw;
 
 import static modtools.ui.IntUI.topGroup;
@@ -43,11 +47,13 @@ public class LerpFun {
 	}
 	static WorldDraw worldDraw = new WorldDraw(Layer.overlayUI + 1f, "lerp");
 	static TaskSet   uiDraw    = new TaskSet();
+
 	static {
 		topGroup.drawSeq.add(() -> {
 			uiDraw.exec();
 		});
 	}
+
 	MySet<Boolp> drawSeq;
 	public LerpFun onWorld() {
 		drawSeq = worldDraw.drawSeq;
@@ -57,10 +63,15 @@ public class LerpFun {
 		drawSeq = uiDraw;
 		return this;
 	}
+	public Element onElement;
+	public LerpFun onUI(Element element) {
+		this.onElement = element;
+		return onUI();
+	}
+	public static Mat mat = new Mat();
 	/**
 	 * 注册立即执行事件，到极点就销毁
-	 *
-	 * @param step 每帧递进的值
+	 * @param step   每帧递进的值
 	 * @param floatc 形参就是经过{@link #in in}或{@link #out out}转换后的值
 	 * @throws IllegalStateException 如果没有设置drawSeq
 	 * @see #onUI()
@@ -70,9 +81,17 @@ public class LerpFun {
 		if (drawSeq == null) throw new IllegalStateException("You don't set the drawSeq");
 		enabled = true;
 		drawSeq.add(() -> {
+			if (drawSeq == uiDraw && onElement != null) {
+				Tmp.m1.set(Draw.proj());
+				Vec2 pos = ElementUtils.getAbsolutePos(onElement);
+				Draw.proj(mat.setOrtho(-pos.x, -pos.y, Core.graphics.getWidth(), Core.graphics.getHeight()));
+			}
 			a = Mathf.clamp(a + step * Time.delta * (reverse ? -1 : 1));
 			applyV = apply(a);
 			if (floatc != null) floatc.get(applyV);
+			if (drawSeq == uiDraw && onElement != null) {
+				Draw.proj(Tmp.m1);
+			}
 			return reverse ? a > 0 : a < 1;
 		});
 	}

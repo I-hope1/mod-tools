@@ -19,6 +19,7 @@ import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.*;
 import modtools.jsfunc.type.*;
 import modtools.ui.*;
+import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
@@ -176,6 +177,9 @@ public class JSFunc
 		return HopeFx.colorFulText(text);
 	}
 
+	public static<T extends Table> DesignTable<T> designTable(T t) {
+		return new DesignTable<>(t);
+	}
 
 	public interface MyProv<T> {
 		T get() throws Exception;

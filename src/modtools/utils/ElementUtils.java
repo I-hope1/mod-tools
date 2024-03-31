@@ -42,13 +42,7 @@ public interface ElementUtils {
 	}
 
 	static Vec2 getAbsolutePos(Element el) {
-		if (true) return el.localToStageCoordinates(v1.set(0, 0));
-		Vec2 vec2 = Tmp.v1.set(el.x, el.y);
-		while (el.parent != null) {
-			el = el.parent;
-			vec2.add(el.x, el.y);
-		}
-		return vec2;
+		return el.localToStageCoordinates(v1.set(0, 0));
 	}
 	static void quietScreenshot(Element element) {
 		// ui.update();

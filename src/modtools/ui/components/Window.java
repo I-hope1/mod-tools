@@ -180,9 +180,12 @@ public class Window extends Table implements Position {
 	private void buildTitle(String title, boolean full) {
 		add(titleTable).growX().height(topHeight).name("titleTable");
 		row();
-		moveListener = new MoveListener(titleTable, this) {
+		moveListener = new ReferringMoveListener(titleTable, this,
+		 new float[]{0, 0.5f, 1},
+		  new float[]{0, 0.5f, 1}) {
 			public void display(float x, float y) {
-				Window.this.display(x, y);
+				Vec2 pos = snap(x, y);
+				Window.this.display(pos.x, pos.y);
 			}
 		};
 

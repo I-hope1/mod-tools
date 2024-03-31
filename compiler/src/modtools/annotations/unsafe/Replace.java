@@ -30,6 +30,7 @@ import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.*;
+import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
 	static Context      context;
@@ -159,14 +160,14 @@ public class Replace {
 				 JavaFileObject filer = t.getSource();
 				 String[]       args  = Arrays.stream(t.getArgs()).map(String::valueOf).toArray(String[]::new);
 				 if (args.length == 0) return true;
-				 println("Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")");
+
+				 errs("Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")");
 				 StringBuilder target = new StringBuilder(filer.getCharContent(true));
 				 target.insert((int) t.getPosition() + positionOffset[0], args[0].charAt(1));
 				 positionOffset[0]++;
-				 // println(target);
+
 				 new FileOutputStream(new File(filer.toUri())).write(target.toString().getBytes());
 				 return false;
-				 // filer.openWriter().write(target.toString());
 			 } catch (Throwable e) {
 				 err(e);
 			 }
@@ -204,6 +205,12 @@ public class Replace {
 		}
 	}
 	private static void forcePreview() {
+		try {
+			forcePreview0();
+		} catch (NoClassDefFoundError ignored) { }
+	}
+
+	private static void forcePreview0() {
 		Preview preview = Preview.instance(context);
 		if (!preview.isEnabled()) {
 			setAccess(Preview.class, preview, "enabled", true);

@@ -64,7 +64,6 @@ public class ModTools extends Mod {
 			if (isImportFromGame) ui.showException("Cannot load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
 		}
-
 	}
 	private void extending() {
 		if (E_Extending.http_redirect.enabled()) {
@@ -81,6 +80,7 @@ public class ModTools extends Mod {
 			/* Log.err(e);
 			System.exit(-1); */
 		}
+
 		ClassLower.lower();
 		WorldDraw.registerEvent();
 		HopeCall.init();
@@ -89,7 +89,7 @@ public class ModTools extends Mod {
 			loadContent();
 			resolveInputAndUI();
 		} else Events.on(ClientLoadEvent.class,
-		 e -> Tools.runLoggedException(ModTools::resolveInputAndUI));
+		 _ -> Tools.runLoggedException(ModTools::resolveInputAndUI));
 	}
 
 

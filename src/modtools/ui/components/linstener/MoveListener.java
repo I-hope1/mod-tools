@@ -8,7 +8,6 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.layout.Table;
-import arc.util.Log;
 
 public class MoveListener extends InputListener {
 	protected final Element  touch;

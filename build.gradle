@@ -59,7 +59,7 @@ allprojects {
 
 tasks.withType(JavaCompile) {
 	options.compilerArgs.add("--enable-preview")
-	options.compilerArgs.add("-verbose")
+//	options.compilerArgs.add("-verbose")
 }
 
 sourceSets.main.java.srcDirs = ["src"]

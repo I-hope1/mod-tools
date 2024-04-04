@@ -50,7 +50,6 @@ public class Replace {
 		moduleFinder = ModuleFinder.instance(context);
 		try {
 			extendingFunc0();
-			setAccess(JavaCompiler.class,JavaCompiler.instance(context), "devVerbose", true);
 		} catch (Throwable e) { err(e); }
 	}
 

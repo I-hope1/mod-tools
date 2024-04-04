@@ -5,7 +5,6 @@ import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.Font.Glyph;
-import arc.scene.ui.layout.Scl;
 import arc.struct.Seq;
 import arc.util.Reflect;
 import mindustry.ui.Fonts;

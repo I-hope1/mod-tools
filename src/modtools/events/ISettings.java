@@ -131,8 +131,8 @@ public interface ISettings extends E_DataInterface {
 	}
 	/** 默认step为1 */
 	private void $(Integer __) {
-		var    args   = (int[]) args();
-		float  def    = args[0];
+		var   args = (int[]) args();
+		float def  = args[0];
 		def(def);
 		float  min    = args[1];
 		float  max    = args[2];
@@ -156,8 +156,8 @@ public interface ISettings extends E_DataInterface {
 	}
 	/** 默认step为0.1 */
 	private void $(Float __) {
-		var    args   = (float[]) args();
-		float  def    = args[0];
+		var   args = (float[]) args();
+		float def  = args[0];
 		def(def);
 		float  min    = args[1];
 		float  max    = args[2];
@@ -201,7 +201,8 @@ public interface ISettings extends E_DataInterface {
 		var all = (Prov<Seq<MenuList>>) args();
 
 		TextButton button = new LimitTextButton("Manage", HopeStyles.flatt);
-		main.stack(new LimitLabel(text), button.right()).grow().row();
+		main.add(text);
+		main.add(button.right()).size(96, 42).row();
 		button.clicked(() -> showSelectTable(button, (p, hide, searchText) -> {
 			Seq<MenuList> lists = all.get();
 			for (MenuList menu : lists) {

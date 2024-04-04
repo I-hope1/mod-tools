@@ -5,7 +5,6 @@ version '1.4.5.3'
 
 static def export(CompileOptions options) {
 //    options.compilerArgs.addAll("-Xlint:deprecation")
-	options.incremental = true
 	options.compilerArgs.addAll("-AtargetVersion=8")
 	// 只是访问
 	options.compilerArgs.addAll([
@@ -143,12 +142,6 @@ task playGame(type: JavaExec) {
 	classpath(MdtDataDir + "/Mindustry.jar")
 	args = [
 //	        '-testMobile'
-	]
-	jvmArgs = [
-			'-XX:+UseParallelGC',
-//			'-DsocksProxyHost=127.0.0.1',
-//			'-DsocksProxyPort=1080',
-//			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
 task ZCompileAll(type: Jar) {

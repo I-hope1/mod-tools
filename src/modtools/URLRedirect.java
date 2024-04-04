@@ -12,6 +12,7 @@ import java.lang.reflect.Field;
 import java.net.*;
 import java.util.*;
 
+@SuppressWarnings("deprecation")
 public class URLRedirect {
 	static Properties replacer = new Properties();
 	static Fi         defaultConfig;

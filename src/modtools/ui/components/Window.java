@@ -49,6 +49,7 @@ import static modtools.utils.Tools.*;
  * @author I hope...
  **/
 public class Window extends Table implements Position {
+
 	public static final MySet<Window> all = new MySet<>() {
 		public boolean add(Window value) {
 			boolean ok = super.add(value);
@@ -221,7 +222,7 @@ public class Window extends Table implements Position {
 			 cancel_clearNonei, 32, this::hide)
 			.padLeft(4f).padRight(4f)
 			.get(),
-		 __ -> resize.show());
+		 _ -> resize.show());
 
 		setup();
 	}

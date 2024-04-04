@@ -78,7 +78,7 @@ public class MenuList {
 		list.icon = icon;
 		list.name = null;
 		list.provider = provider;
-		list.cons = __ -> run.run();
+		list.cons = _ -> run.run();
 		return list;
 	}
 	/**

@@ -2,7 +2,7 @@ package modtools.jsfunc;
 
 
 import arc.Core;
-import arc.func.Cons;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
@@ -124,7 +124,7 @@ public interface INFO_DIALOG {
 	}
 	static Window testDraw0(Cons<Group> draw) {
 		return dialog(new Group() {
-			{transform = true;}
+			{ transform = true; }
 
 			public void drawChildren() {
 				draw.get(this);
@@ -168,5 +168,12 @@ public interface INFO_DIALOG {
 	}
 	static Window dialog(Cons<Table> cons) {
 		return dialog(new Table(cons));
+	}
+
+	class $ {
+		@SuppressWarnings("rawtypes")
+		public static void buildLongPress(ImageButton button, Prov o) {
+			IntUI.longPress0(button, () -> INFO_DIALOG.showInfo(o));
+		}
 	}
 }

@@ -48,7 +48,7 @@ public class ContentList extends Content {
 		Table top = new Table();
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
-		new Search((__, text) -> pattern = PatternUtils.compileRegExpOrNull(text))
+		new Search((_, text) -> pattern = PatternUtils.compileRegExpOrNull(text))
 		 .build(top, main);
 	}
 	void loadFields() {
@@ -134,7 +134,7 @@ public class ContentList extends Content {
 					} else {
 						if (clicked != null) clicked.get(item);
 					}
-				})).update(__ -> t.layout()).row();
+				})).update(_ -> t.layout()).row();
 			});
 			t.addPatternUpdateListener(() -> pattern);
 		});

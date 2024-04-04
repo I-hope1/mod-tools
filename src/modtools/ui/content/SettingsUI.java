@@ -103,18 +103,17 @@ public class SettingsUI extends Content {
 			 ISettings.buildAll("", this, E_Extending.class);
 
 			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
-
-			 button("FONT", HopeStyles.flatBordert, () -> {
-				 new DisWindow("FONTS", 120, 200) {{
+			 button("Font", HopeStyles.flatBordert, () -> {
+				 new DisWindow("Fonts", 220, 200) {{
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
 								SETTINGS.put("font", fi.name());
 							}).height(42).growX()
-							.checked(__ -> fi.name().equals(SETTINGS.getString("font")))
+							.checked(_ -> fi.name().equals(SETTINGS.getString("font")))
 							.row();
 					 }
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
-					 cont.button("OPEN DIRECTORY", HopeStyles.flatBordert, () -> {
+					 cont.button("Open Directory", HopeStyles.flatBordert, () -> {
 						 Core.app.openFolder(MyFonts.fontDirectory.path());
 					 }).growX().height(45);
 					 show();
@@ -169,7 +168,7 @@ public class SettingsUI extends Content {
 		vl.setAlignment(Align.right);
 		Label l = new Label(text);
 		table.stack(l, vl)
-		 .update(t -> {
+		 .update(_ -> {
 			 vl.setVal(prov.get());
 			 Color color = condition.get() ? Color.white : Color.gray;
 			 l.setColor(color);

@@ -11,8 +11,8 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
+import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
-import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
@@ -369,9 +369,11 @@ public class Tester extends Content {
 				textarea.enableHighlighting = !textarea.enableHighlighting;
 			}), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
 
-			p.button(Icon.infoCircleSmall, istyle, isize, this::showDetails).with(c -> {
-				IntUI.longPress0(c, () -> INFO_DIALOG.showInfo(res));
-			});
+			ImageButton details = IntUI.addDetailsButton(p, () -> res, null);
+			if (details.getStyle() != istyle) details.setStyle(istyle);
+			details.resizeImage(isize);
+			p.getCell(details).size(45);
+
 			p.button(HopeIcons.history, istyle, isize, history::show)
 			 .get().addCaptureListener(new ElementGestureListener() {
 				 public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {

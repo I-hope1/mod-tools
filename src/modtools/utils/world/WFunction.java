@@ -180,7 +180,7 @@ public abstract class WFunction<T> {
 		 .row();
 		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> {}).with(b -> b.clicked(() -> {
 			showMenuList(getMenuLists(this, mergeList()));
-		})).disabled(__ -> select.isEmpty());
+		})).disabled(_ -> select.isEmpty());
 		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestForSelection(mergeList(), null, boolf -> {
 				int size = select.sum(seq -> seq.size);
@@ -194,7 +194,7 @@ public abstract class WFunction<T> {
 				showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
 				 .sticky = true;
 			});
-		}).disabled(__ -> select.size == 0).row();
+		}).disabled(_ -> select.size == 0).row();
 		buttons.button("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
 			drawAll = !drawAll;
 		}).update(t -> t.setChecked(drawAll));

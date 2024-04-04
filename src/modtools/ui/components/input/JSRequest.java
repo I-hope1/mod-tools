@@ -24,7 +24,7 @@ public class JSRequest {
 		boolean     notHideAuto;
 
 		void buildButtons(ConsT<R, Throwable> callback) {
-			buttons.check("@jsrequest.nothideauto", b -> notHideAuto = b).checked(__ -> notHideAuto)
+			buttons.check("@jsrequest.nothideauto", b -> notHideAuto = b).checked(_ -> notHideAuto)
 			 .colspan(3).padRight(100f).get().left();
 			buttons.row();
 

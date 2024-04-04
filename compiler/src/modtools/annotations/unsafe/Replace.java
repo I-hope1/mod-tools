@@ -3,6 +3,7 @@ package modtools.annotations.unsafe;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
+import com.sun.tools.javac.code.Lint.LintCategory;
 import com.sun.tools.javac.code.Source.Feature;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Symbol.*;
@@ -141,15 +142,12 @@ public class Replace {
 
 		// 适配d8无法编译jdk21的枚举(enum)的字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
-		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
-		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
 
 		fixSyntaxError();
 
 		// replaceAccess(Resolve.class,Resolve.instance(context), "resolveMethodCheck", "nilMethodCheck");
 
 		// 忽略模块访问检查
-		if (true) return;
 		Object prev = getAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper");
 		setAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper",
 		 Proxy.newProxyInstance(Resolve.class.getClassLoader(), new Class[]{Class.forName("com.sun.tools.javac.comp.Resolve$LogResolveHelper")},
@@ -221,15 +219,14 @@ public class Replace {
 		Preview preview = Preview.instance(context);
 		if (!preview.isEnabled()) {
 			setAccess(Preview.class, preview, "enabled", true);
-			// setAccess(Preview.class, preview, "forcePreview", true);
 		}
+		Lint.instance(context).suppress(LintCategory.PREVIEW);
 		Check.instance(context).disablePreviewCheck = true;
 		setAccess(Preview.class, preview, "sourcesWithPreviewFeatures", new HashSet<>() {
 			public boolean contains(Object o) {
 				return false;
 			}
 		});
-		// setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
 	private static void setTarget(Target target) {
 		if (target == null) return;

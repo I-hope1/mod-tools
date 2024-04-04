@@ -46,7 +46,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	showLine;
 	public Syntax syntax;
 
-	public static float numWidth = Sr(0f).setOpt(__ -> {
+	public static float numWidth = Sr(0f).setOpt(_ -> {
 		var layout = new GlyphLayout();
 		layout.setText(Fonts.def, "0");
 		return layout.width;

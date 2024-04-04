@@ -97,8 +97,10 @@ public class MyFonts {
 
 			Draw.color();
 			float[] vertices = getVertices();
-			Fill.crect(getX() + vertices[0] - 1, getY() + vertices[1] - 4 + (strikethrough ? layout.height / 2f : 0),
+			Fill.crect(getX() + vertices[0] - 1,
+			 getY() + vertices[1] - 4 + (strikethrough ? layout.height / 2f : 0),
 			 Math.max(4, getLayouts().sumf(l -> l.width) + 1), 2);
 		}
 	}
+
 }

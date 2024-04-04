@@ -1,6 +1,5 @@
 package modtools.ui.windows;
 
-import arc.Core;
 import arc.func.Cons;
 import arc.input.KeyCode;
 import arc.scene.event.*;
@@ -22,7 +21,7 @@ public class NameWindow extends Window implements PopupWindow {
 		buttons.button("@ok", () -> {
 			okCons.get(namef.getText());
 			hide();
-		}).growX().disabled(__ -> !namef.isValid());
+		}).growX().disabled(_ -> !namef.isValid());
 		// closeOnBack();
 	}
 

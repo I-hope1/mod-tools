@@ -325,15 +325,18 @@ public class IntUI {
 		addDetailsButton(table, prov, clazz);
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
-	public static void addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
-		/* table.button("@details", HopeStyles.flatBordert, () -> {
-			Object o = prov.get();
-			Core.app.post(() -> showInfo(o, o != null ? o.getClass() : clazz));
-		}).size(96, 45); */
-		table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> {
-			Object o = prov.get();
-			Core.app.post(() -> INFO_DIALOG.showInfo(o, !clazz.isPrimitive() && o != null ? o.getClass() : clazz));
-		}).size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE).disabled(__ -> clazz.isPrimitive() && prov.get() == null);
+	public static ImageButton addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
+		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> {
+			 Object o = prov.get();
+			 Core.app.post(() ->
+				INFO_DIALOG.showInfo(o,
+				 clazz == null || (!clazz.isPrimitive() && o != null) ?
+					o.getClass() : clazz)
+			 );
+		 })
+		 .size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE)
+		 .disabled(_ -> clazz.isPrimitive() && prov.get() == null)
+		 .get();
 	}
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
@@ -436,18 +439,20 @@ public class IntUI {
 		Table p = new Table();
 		p.top();
 
-		SelectTable t    = new SelectTable(p);
-		Runnable    hide = t::hideInternal;
-		t.appendToGroup();
+		SelectTable t     = new SelectTable(p);
 
 		// 淡入
 		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
 
-		Runnable hide0 = mergeHide(t, hide);
+		Runnable    hide  = t::hideInternal;
+		Runnable    hide0 = mergeHide(t, hide);
 		if (searchable) {
 			newSearch(f, hide0, t, p);
 		}
-		f.get(p, hide0, "");
+
+		t.init();
+		f.get(p.row(), hide0, "");
+		t.appendToGroup();
 
 		return t;
 	}
@@ -939,6 +944,8 @@ public class IntUI {
 	public static class SelectTable extends AutoFitTable implements IMenu {
 		public SelectTable(Table table) {
 			this.table = table;
+		}
+		public void init() {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
 			top().add(pane).grow().pad(0f).top();
 			pane.setScrollingDisabled(true, false);

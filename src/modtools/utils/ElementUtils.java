@@ -138,7 +138,7 @@ public interface ElementUtils {
 	 Table t, String text, int cols,
 	 Intc cons, Intp prov, MarkedCode... seq) {
 		t.button("", HopeStyles.flatt, null).with(tbtn -> {
-			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, hide, ___) -> {
+			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, _, _) -> {
 				buildModifier(p, cols, cons, prov, seq);
 			}, false, Align.center));
 			Table fill = tbtn.fill();

@@ -8,7 +8,6 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.util.Reflect;
 import mindustry.gen.Tex;
-import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.IDisposable;
@@ -129,6 +128,6 @@ public class CellDetailsWindow extends Window implements IDisposable {
 			 else if (obj instanceof Cell<?> c) c.getTable().layout();
 		 })
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
-		 .checked(__ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
+		 .checked(_ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
 	}
 }

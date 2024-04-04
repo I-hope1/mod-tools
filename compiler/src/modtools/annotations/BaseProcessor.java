@@ -37,15 +37,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static ClassFinder   classFinder;
 	public static JavacFiler    mFiler;
 	public static ClassWriter   classWriter;
-	public static Attr          __attr__;
+	public static Attr          _attr_;
 
 	public static Context _context;
 
 	public static Type stringType;
 
-	private int runTimes;
+	private   int              runTimes;
 	protected RoundEnvironment roundEnv;
-	public void process2() {}
+	public void process2() { }
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		if (!AINIT.hasMindustry) return true;
 		this.roundEnv = roundEnv;
@@ -56,7 +56,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		if (runTimes > 1) {
 			try {
 				process2();
-			} catch (Throwable e) {err(e);}
+			} catch (Throwable e) { err(e); }
 			return true;
 		}
 		// 第一次
@@ -64,16 +64,16 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
 					dealElement((T) element);
-				} catch (Throwable e) {err(e);}
+				} catch (Throwable e) { err(e); }
 			}
 		}
 		try {
 			process();
-		} catch (Throwable e) {err(e);}
+		} catch (Throwable e) { err(e); }
 
 		return true;
 	}
-	public void process() {}
+	public void process() { }
 	protected static StringBuilder getUnderlineName(String fieldName) {
 		StringBuilder underlineName = new StringBuilder();
 		underlineName.append(Character.toLowerCase(fieldName.charAt(0)));
@@ -94,7 +94,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		if (!AINIT.hasMindustry) return;
 		try {
 			init();
-		} catch (Throwable e) {err(e);}
+		} catch (Throwable e) { err(e); }
 	}
 
 	public void initConst(ProcessingEnvironment env) {
@@ -111,11 +111,11 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		classFinder = ClassFinder.instance(_context);
 		mFiler = (JavacFiler) env.getFiler();
 		classWriter = ClassWriter.instance(_context);
-		__attr__ = Attr.instance(_context);
+		_attr_ = Attr.instance(_context);
 
 		stringType = mSymtab.stringType;
 	}
-	public void init() throws Throwable {}
+	public void init() throws Throwable { }
 
 
 	public static Element findSibling(Element sibling, String name, ElementKind kind) {

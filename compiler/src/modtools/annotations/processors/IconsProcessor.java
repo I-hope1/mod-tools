@@ -27,7 +27,6 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		// ClassType   pixmap         = findType("arc.graphics.Pixmap");
 		ClassType   fiType         = findType("arc.files.Fi");
 
-
 		/* ClassType map = (ClassType) findType("arc.struct.ObjectMap").constType(123);
 		map.typarams_field = List.of(stringType, pixmap);
 

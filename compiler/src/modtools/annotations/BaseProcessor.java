@@ -147,15 +147,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		}
 		return null;
 	}
-	public static <T extends JCTree> List<T> findAllChild(JCClassDecl parent, Tag tag, Predicate<T> predicate) {
-		List<T> seq = new ArrayList<>();
-		for (JCTree def : parent.defs) {
-			if (def.getTag() == tag && predicate.test((T) def)) {
-				seq.add((T) def);
-			}
-		}
-		return seq;
-	}
 
 	/** test_ui -> TestUI */
 	public static String kebabToBigCamel(CharSequence kebab) {

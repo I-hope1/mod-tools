@@ -85,7 +85,7 @@ public class Tester extends Content {
 	private static TaskNode startupTask;
 	static TaskNode startupTask() {
 		if (startupTask == null) startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
-		 Icon.craftingSmall, () -> {});
+		 Icon.craftingSmall, () -> { });
 		return startupTask;
 	}
 
@@ -105,7 +105,7 @@ public class Tester extends Content {
 				 }\n})()";
 				ExecuteTree.node(() -> {
 					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);
-				 }, taskName, entry.key, Icon.none, () -> {})
+				 }, taskName, entry.key, Icon.none, () -> { })
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
 				 .code(source)
@@ -194,7 +194,7 @@ public class Tester extends Content {
 			t.button("@ok", HopeStyles.flatBordert, () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
-				compileAndExec(() -> {});
+				compileAndExec(() -> { });
 			}).width(64).disabled(_ -> !finished);
 			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::right);
 			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
@@ -426,7 +426,7 @@ public class Tester extends Content {
 	private boolean rollAndExec(KeyCode keycode) {
 		if (Core.input.ctrl() && Core.input.shift()) {
 			if (keycode == KeyCode.enter) {
-				compileAndExec(() -> {});
+				compileAndExec(() -> { });
 				return true;
 			}
 			if (keycode == KeyCode.up && rollHistory(true)) return true;
@@ -439,6 +439,7 @@ public class Tester extends Content {
 
 	private static final Vec2 tmpV = new Vec2();
 	private boolean rollHistory(boolean forward) {
+		if (max_history_size.getInt() == 0) return false;
 		if (historyPos == -1) originalText = area.getText();
 		historyPos += forward ? 1 : -1;
 		Vec2 pos            = tmpV.set(ui.x, ui.y + 20);
@@ -462,7 +463,7 @@ public class Tester extends Content {
 			historyPos = forward ? history.list.size() - 1 : -1;
 			return false;
 		}
-		IntUI.showInfoFade(historyPos + 1 + "/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
+		IntUI.showInfoFade(STR."\{historyPos + 1}/[lightgray]\{maxHistorySize}", pos, FADE_ALIGN);
 		Fi dir = history.list.get(historyPos);
 		area.setText(readFiOrEmpty(dir.child("message.txt")));
 		log = readFiOrEmpty(dir.child("log.txt"));
@@ -502,6 +503,10 @@ public class Tester extends Content {
 
 		historyPos = -1;
 		originalText = area.getText();
+		if (max_history_size.getInt() <= 0) {
+			lastDir = null;
+			return;
+		}
 		// 保存历史记录
 		lastDir = history.file.child(String.valueOf(Time.millis()));
 		lastDir.child("message.txt").writeString(getMessage());
@@ -510,8 +515,6 @@ public class Tester extends Content {
 		if (history.isShown()) {
 			history.build();
 		}
-		//	history.build(d).with(b -> b.setZIndex(0));
-
 		int max = history.list.size() - 1;
 		/* 判断是否大于边际（maxHistorySize），大于就删除 */
 		for (int i = max, maxHistorySize = max_history_size.getInt(); i >= maxHistorySize; i--) {
@@ -788,7 +791,7 @@ public class Tester extends Content {
 		Contents.settings_ui.add(localizedName(), icon, table);
 	}
 
-	public void dataInit() {}
+	public void dataInit() { }
 	public String getMessage() {
 		return area.getText();
 	}
@@ -835,8 +838,8 @@ public class Tester extends Content {
 		capture_logger,
 		auto_complement, max_history_size(int.class, 40/* def */, 0, 100);
 
-		Settings() {}
-		Settings(Class<?> a, int... args) {}
+		Settings() { }
+		Settings(Class<?> a, int... args) { }
 		static {
 			wrap_ref.defTrue();
 			capture_logger.defTrue();
@@ -911,7 +914,7 @@ public class Tester extends Content {
 			int lastCursor = area.getCursorPosition();
 			try {
 				complement0();
-			} catch (Throwable _) {return;}
+			} catch (Throwable _) { return; }
 			area.setCursorPosition(lastCursor);
 		}
 		private void complement0() {

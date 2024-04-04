@@ -153,7 +153,7 @@ public class ListDialog extends Window {
 	/**
 	 * 可以修改的Label
 	 */
-	public static class ModifiedLabel {
+	public static class ModifiedLabel extends NoMarkupLabel{
 		public static Cell<?> build(
 		 Prov<CharSequence> def,
 		 TextFieldValidator validator,
@@ -161,30 +161,41 @@ public class ListDialog extends Window {
 		 Table t) {
 			return build(def, validator, modifier, t, AutoTextField::new);
 		}
+
+		TextField field;
+		Cell<?> cell;
+		Cons2<TextField, Label> modifier;
+		public ModifiedLabel(Prov<CharSequence> sup) {
+			super(sup);
+		}
+
 		public static Cell<?> build(
 		 Prov<CharSequence> def,
 		 TextFieldValidator validator,
 		 Cons2<TextField, Label> modifier,
 		 Table t, Prov<TextField> fieldProv) {
-			NoMarkupLabel label = new NoMarkupLabel(def);
-			Cell<?>       cell  = t.add(label);
-			TextField     field = fieldProv.get();
-			if (validator != null) field.setValidator(validator);
-
+			var label = new ModifiedLabel(def);
+			label.cell  = t.add(label).height(label.getPrefHeight() / Scl.scl());
+			label.field = fieldProv.get();
+			if (validator != null) label.field.setValidator(validator);
+			label.modifier = modifier;
+			label.init();
+			return label.cell;
+		}
+		public void init() {
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {
-					modifier.get(field, label);
-					label.setText(field.getText());
-					cell.setElement(label);
+					modifier.get(field, this);
+					setText(field.getText());
+					cell.setElement(this);
 				}
 			});
-			label.clicked(() -> {
+			clicked(() -> {
 				Core.scene.setKeyboardFocus(field);
-				field.setText(label.getText() + "");
-				field.setCursorPosition(label.getText().length());
+				field.setText(getText() + "");
+				field.setCursorPosition(getText().length());
 				cell.setElement(field);
 			});
-			return cell;
 		}
 	}
 

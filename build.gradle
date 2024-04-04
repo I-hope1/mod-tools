@@ -1,7 +1,4 @@
-plugins {
-	id 'java'
-	id "io.github.liplum.mgpp" version "1.3.2"
-}
+apply plugin: "java"
 
 group 'mod-tools'
 version '1.4.5.3'
@@ -37,7 +34,7 @@ ext {
 	mindustryVersion = 'v146'
 
 	MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
-//	platformRoot = System.getenv("ANDROID_HOME")
+	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
 }
 allprojects {
@@ -60,6 +57,7 @@ allprojects {
 
 tasks.withType(JavaCompile) {
 	options.compilerArgs.add("--enable-preview")
+//	options.compilerArgs.add("-verbose")
 }
 
 sourceSets.main.java.srcDirs = ["src"]
@@ -67,9 +65,7 @@ sourceSets.main.java.srcDirs = ["src"]
 //force arc version
 configurations.configureEach {
 	resolutionStrategy.eachDependency { details ->
-		if (details.requested.group == 'com.github.Anuken.Arc') {
-			details.useVersion "$mindustryVersion"
-		}
+		if (details.requested.group == 'com.github.Anuken.Arc') details.useVersion "$mindustryVersion"
 	}
 }
 
@@ -97,13 +93,42 @@ dependencies {
 	compileOnly("com.github.Anuken.Arc:arc-core:$mindustryVersion")
 }
 
-mindustry {
-	deploy { baseName = name }
-	dexJar { options.minApi = '26' }
+task jarAndroid {
+	dependsOn "jar"
+
+	doLast {
+		if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
+
+		def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
+
+		if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
+
+		//collect dependencies needed for desugaring
+		def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect { "--classpath $it.path" }.join(" ")
+
+		def d8 = new File("$sdkRoot/build-tools/").listFiles().find {
+			it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= minApi
+		}.listFiles().find { it.name.contains("d8") }
+		//dex and desugar files - this requires d8 in your PATH
+		"$d8 $dependencies --min-api 26 --output ${project.archivesBaseName}-android.jar ${project.archivesBaseName}-${version}.jar"
+				.execute(null, new File("$buildDir0/libs")).waitForProcessOutput(System.out, System.err)
+	}
 }
-mindustryAssets {
-	// Set the assets root
-	rootAt "$projectDir/assets"
+
+jar {
+	archiveFileName = "${project.archivesBaseName}-${version}.jar"
+
+	from {
+		configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+	}
+
+	from(rootDir) {
+		include "mod.hjson"
+	}
+
+	from("assets/") {
+		include "**"
+	}
 }
 
 task playGame(type: JavaExec) {
@@ -131,18 +156,14 @@ task playGame(type: JavaExec) {
 //			'-DsocksNonProxyHosts="localhost|127.0.0.1"'
 	]
 }
-task ZCompileAll(type: Copy) {
-	dependsOn deploy
+task ZCompileAll(type: Jar) {
+	dependsOn jarAndroid
 
-	from("$buildDir0/tmp/deploy/") {
-		include "${rootProject.name}-${version}.jar"
+	from("$buildDir0/libs") {
+		include "$project.group-${version}.jar"
+		include "$project.group-android.jar"
 	}
-	into("$buildDir0/libs")
-	rename { fileName ->
-		// a simple way is to remove the "-$version" from the jar filename
-		// but you can customize the filename replacement rule as you wish.
-		fileName.replace("136-$version", "").replace("-$version", "")
-	}
+	archiveFileName = "$buildDir0/libs/$project.group[$version].jar"
 }
 
 tasks.register('mergeLibs', Jar) {
@@ -163,15 +184,15 @@ tasks.register('mergeLibs', Jar) {
 }
 
 task playAndroid {
-	dependsOn deploy
+	dependsOn ZCompileAll
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"
 	def MDT_ANDROID_DIR = "/storage/emulated/0/Android/data/io.anuke.mindustry/files"
 
 	def buildDir = buildDir0
-	def fileName = "$archivesBaseName-${version}.jar"
+	def fileName = "$archivesBaseName-[$version].jar"
 	doLast {
-		("$adb push $buildDir/tmp/deploy/$fileName $MDT_ANDROID_DIR/mods/")
+		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)
 
 		"$adb push $project.rootDir/appendLog.sh $MDT_ANDROID_DIR/appendLog.sh"

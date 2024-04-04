@@ -5,8 +5,6 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.util.*;
 import arc.util.serialization.Jval;
-import arc.util.serialization.Jval.Jformat;
-import mindustry.Vars;
 import mindustry.core.Version;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
@@ -26,9 +24,9 @@ public class Updater {
 
 	/** asynchronously checks for updates. */
 	public static void checkUpdate(Boolc done) {
-		Http.get("https://api.github.com/repos/" + IntVars.meta.repo + "/releases/latest")
+		Http.get(STR."https://api.github.com/repos/\{IntVars.meta.repo}/releases/latest")
 		 .error(e -> {
-			 //don't log the error, as it would clog output if there is no internet. make sure it's handled to prevent infinite loading.
+			 Log.err(e);
 			 done.get(false);
 		 })
 		 .submit(res -> {
@@ -40,7 +38,7 @@ public class Updater {
 						.compareTo(Runtime.Version.parse(IntVars.meta.version)) > 0) {
 				 Jval   asset = val.get("assets").asArray().find(v -> v.getString("name", "").endsWith(".jar"));
 				 String url   = asset.getString("browser_download_url", "");
-				 Log.info(url);
+				 Log.info(STR."Downloading mod-tools from: \{url}");
 				 updateAvailable = true;
 				 updateBuild = newBuild;
 				 updateUrl = url;
@@ -66,14 +64,14 @@ public class Updater {
 
 		if (!headless) {
 			checkUpdates = false;
-			ui.showCustomConfirm(Core.bundle.format("mod-tools.update", "") + " " + updateBuild, "@mod-tools.update.confirm", "@ok", "@mod-tools.ignore", () -> {
+			ui.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}", "@mod-tools.update.confirm", "@ok", "@mod-tools.ignore", () -> {
 				try {
 					boolean[] cancel   = {false};
 					float[]   progress = {0};
 					int[]     length   = {0};
 
 					Fi fileDest = IntVars.dataDirectory.child("versions");
-					Fi file     = fileDest.child("mod-tools_v" + updateBuild);
+					Fi file     = fileDest.child(STR."mod-tools.\{updateBuild}");
 
 					BaseDialog dialog = new BaseDialog("@mod-tools.updating");
 					download(updateUrl, fileDest, i -> length[0] = i, v -> progress[0] = v, () -> cancel[0], () -> {

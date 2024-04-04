@@ -272,13 +272,14 @@ public class Window extends Table implements Position {
 	}
 
 
-	/** 如果hit元素不是想要的，取消MoveListener事件 */
+	/** 自动解除focus */
 	public Element hit(float x, float y, boolean touchable) {
 		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
 		if (hit == null) {
 			Core.scene.setScrollFocus(previousScrollFocus);
+			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(previousKeyboardFocus);
 		}
 		if (hit != null && Core.scene.getKeyboardFocus() == null) {
 			requestKeyboard();

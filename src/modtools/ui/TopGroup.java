@@ -336,9 +336,9 @@ public final class TopGroup extends WidgetGroup {
 
 	public Element hit(float x, float y, boolean touchable) {
 		/*isSwicthWindows ? end.hit(x, y, touchable) : */
-		return Sr(super.hit(x, y, touchable))
-		 .setnull(el -> el == this || el == null || el.touchable == Touchable.disabled)
-		 .get();
+		Element el = super.hit(x, y, touchable);
+		if (el == null || el == this || el.touchable == Touchable.disabled) return null;
+		return el;
 	}
 
 /* 	public void requestSelectRegion

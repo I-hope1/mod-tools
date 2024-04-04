@@ -2,6 +2,8 @@ package modtools.ui.menu;
 
 import arc.func.Boolp;
 import arc.scene.style.Drawable;
+import arc.scene.ui.TextButton;
+import arc.scene.ui.layout.*;
 import arc.util.pooling.Pools;
 
 /**
@@ -29,5 +31,10 @@ public class DisabledList extends MenuList {
 		// Log.info("0) check: @, list.checked: @", checked, list.checked);
 		list.cons = _ -> run.run();
 		return list;
+	}
+
+	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
+		super.build(p, cell, hide);
+		cell.disabled(_ -> disabled.get()).row();
 	}
 }

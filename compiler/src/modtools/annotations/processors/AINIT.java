@@ -2,7 +2,7 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.processing.JavacProcessingEnvironment;
-import modtools.annotations.HopeReflect;
+import modtools.annotations.*;
 import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
@@ -18,6 +18,7 @@ public class AINIT extends AbstractProcessor {
 
 	static {
 		try {
+			Times.mark();
 			HopeReflect.load();
 			Replace.init();
 		} catch (Throwable e) { err(e); }
@@ -25,6 +26,7 @@ public class AINIT extends AbstractProcessor {
 
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
+		Times.printElapsed("Take @ms");
 	}
 
 

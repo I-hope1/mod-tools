@@ -26,9 +26,10 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
+import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
 
-import java.lang.reflect.Array;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.Map.Entry;
 
@@ -141,7 +142,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			try {
 				setText0(defFunc.get(val));
 				return;
-			} catch (Throwable ignored) {}
+			} catch (Throwable ignored) { }
 		}
 		setText0(val.getClass().getName());
 	}
@@ -231,19 +232,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 				: val instanceof Element ? ElementUtils.getElementName((Element) val)
 
-				: val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
-				ShowUIList.iconKeyMap.get(icon)
-
-				: val instanceof Style style1 && ShowUIList.styleKeyMap.containsKey(style1) ?
-				ShowUIList.styleKeyMap.get(style1)
-
-				: val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
-				ShowUIList.colorKeyMap.get((Color) val)
-
-				: val instanceof Group && ShowUIList.uiKeyMap.containsKey((Group) val) ?
-				ShowUIList.uiKeyMap.get((Group) val)
-
-				: String.valueOf(val))
+				: getUIKey(val))
 			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> val.getClass().getName())
 		);
@@ -258,6 +247,21 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		setColor(mainColor);
 
 		return text;
+	}
+	private static String getUIKey(Object val) {
+		return val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
+		 ShowUIList.iconKeyMap.get(icon)
+
+		 : val instanceof Style style1 && ShowUIList.styleKeyMap.containsKey(style1) ?
+		 ShowUIList.styleKeyMap.get(style1)
+
+		 : val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
+		 ShowUIList.colorKeyMap.get((Color) val)
+
+		 : val instanceof Group && ShowUIList.uiKeyMap.containsKey((Group) val) ?
+		 ShowUIList.uiKeyMap.get((Group) val)
+
+		 : String.valueOf(val);
 	}
 	private void appendMap(StringBuilder sb, Object key, Object value) {
 		sb.append(dealVal(key));
@@ -309,8 +313,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 	public Runnable afterSet;
 	public abstract void setVal();
-	/** 这可能会设置字段值  */
-	public void setNewVal(Object newVal) {}
+	/** 这可能会设置字段值 */
+	public void setNewVal(Object newVal) { }
 	;
 
 	protected void setVal0(Object newVal) {
@@ -351,13 +355,29 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	protected Seq<MenuList> basicMenuLists(Seq<MenuList> list) {
 		specialBuild(list);
 		detailsBuild(list);
+
+		if (Style.class.isAssignableFrom(type)) {
+			list.add(DisabledList.withd(Icon.copySmall, "Copy Style", () -> val == null, () -> {
+				Class<?>      cls     = val.getClass();
+				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls)}() {{");
+				ClassUtils.getClassAndParents(cls).forEach(subclass -> {
+					for (Field field : subclass.getDeclaredFields()) {
+						int mod = field.getModifiers();
+						if (Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
+						builder.append(STR."\{field.getName()} = \{getUIKey(FieldUtils.getOrNull(field, val))};\n");
+					}
+				});
+				builder.append("}}");
+			}));
+		}
+
 		list.add(MenuList.with(Icon.diagonalSmall, "stringifyFunc", () -> {
 			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc,
 			 getObject(), o -> func = o);
 		}));
 
 		list.add(MenuList.with(Icon.eraserSmall, "@clear", this::clearVal));
-		list.add(MenuList.with(Icon.listSmall, () -> (enableTruncate ? "disable" : "enable") + " truncate", () -> {
+		list.add(MenuList.with(Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
 			enableTruncate = !enableTruncate;
 		}));
 

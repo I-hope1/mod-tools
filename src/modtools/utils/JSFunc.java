@@ -8,10 +8,11 @@ import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.ui.Label;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.*;
+import arc.scene.ui.layout.*;
 import arc.util.Tmp;
 import mindustry.game.EventType.Trigger;
+import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
@@ -179,6 +180,23 @@ public class JSFunc
 
 	public static<T extends Table> DesignTable<T> designTable(T t) {
 		return new DesignTable<>(t);
+	}
+	public static void design() {
+		DesignTable<?> table = new DesignTable<>(new WidgetGroup());
+		table.addChild(new Label("Nothing"));
+		INFO_DIALOG.dialog(d -> {
+			d.add(table).grow().minSize(376, 256).row();
+			d.table(buttons -> {
+				buttons.button("Text", Icon.addSmall, () -> {
+					table.addChild(new Label("Some Text"));
+				}).growX();
+				buttons.button("Image", Icon.addSmall, () -> {
+					Image actor = new Image(Tex.nomap);
+					actor.setSize(42);
+					table.addChild(actor);
+				}).growX();
+			}).growX();
+		});
 	}
 
 	public interface MyProv<T> {

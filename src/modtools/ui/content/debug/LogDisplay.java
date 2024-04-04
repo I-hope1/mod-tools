@@ -12,7 +12,7 @@ import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.ui.HopeStyles;
+import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.LimitTable;
@@ -67,6 +67,9 @@ public class LogDisplay extends Content {
 			t.button("Source", HopeStyles.flatBordert, () -> {
 				Core.app.openFolder(last_log.path());
 			}).height(42).growX().row();
+			t.button("Clear All", HopeStyles.flatBordert, () -> IntUI.showConfirm("Confirm to clear",
+			 "Are you sure to clear?",
+			 () -> Vars.ui.consolefrag.clearMessages())).height(42).growX().row();
 			t.pane(p -> label[0] = p.label(() -> {
 				if (last_log.exists() && Tools.CAS(lastModified, last_log.lastModified())) {
 					text[0] = getString.get();

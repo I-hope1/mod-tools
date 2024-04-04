@@ -45,8 +45,8 @@ public class LerpFun {
 			if (floatc != null) floatc.get(applyV);
 		});
 	}
-	static WorldDraw worldDraw = new WorldDraw(Layer.overlayUI + 1f, "lerp");
-	static TaskSet   uiDraw    = new TaskSet();
+	public static WorldDraw worldDraw = new WorldDraw(Layer.overlayUI + 1f, "lerp");
+	public static TaskSet   uiDraw    = new TaskSet();
 
 	static {
 		topGroup.drawSeq.add(() -> {

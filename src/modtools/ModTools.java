@@ -12,10 +12,10 @@ import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
+import mindustry.ui.Fonts;
 import modtools.android.HiddenApi;
 import modtools.events.E_Extending;
 import modtools.graphics.MyShaders;
-import modtools.lower.ClassLower;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.content.SettingsUI;
@@ -65,6 +65,12 @@ public class ModTools extends Mod {
 			Log.err("Failed to load ModTools.", e);
 		}
 	}
+
+	public static void disposeAll() {
+		IntUI.disposeAll();
+		IntVars.resizeListeners.clear();
+		if (MyFonts.def != Fonts.def ) MyFonts.def.dispose();
+	}
 	private void extending() {
 		if (E_Extending.http_redirect.enabled()) {
 			Tools.runLoggedException(URLRedirect::load);
@@ -81,7 +87,6 @@ public class ModTools extends Mod {
 			System.exit(-1); */
 		}
 
-		ClassLower.lower();
 		WorldDraw.registerEvent();
 		HopeCall.init();
 
@@ -127,6 +132,9 @@ public class ModTools extends Mod {
 	private static void resolveInputAndUI() {
 		if (ui == null) return;
 		Time.mark();
+		Tools.TASKS.add(() -> {
+			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();
+		});
 		if (error != null) {
 			ui.showException(error);
 			return;

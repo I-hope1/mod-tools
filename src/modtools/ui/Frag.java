@@ -5,13 +5,15 @@ import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.*;
+import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.ui.IntUI.IMenu;
+import modtools.ui.components.Hitter;
 import modtools.ui.components.Window.ClearScroll;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
@@ -131,8 +133,20 @@ public class Frag extends Table {
 		}
 	}
 
+	/** 自动解除focus */
+	public Element hit(float x, float y, boolean touchable) {
+		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
+		Element hit = super.hit(x, y, touchable);
+		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
+		if (hit == null) {
+			if (Core.scene.getScrollFocus() == this) Core.scene.setScrollFocus(null);
+			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);
+		}
+		return hit;
+	}
+
 	private class MoveInsideListener extends MoveListener {
-		public MoveInsideListener() {super(Frag.this.top, Frag.this);}
+		public MoveInsideListener() { super(Frag.this.top, Frag.this); }
 		public void display(float x, float y) {
 			float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
 			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();

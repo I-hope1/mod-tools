@@ -53,7 +53,7 @@ import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
 import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.FormatHelper.*;
 
-/** It should be `InspectElement`, but it's too late.  */
+/** It should be `InspectElement`, but it's too late. */
 public class ReviewElement extends Content {
 	@DataColorFieldInit(data = "", needSetting = true)
 	public int
@@ -138,6 +138,7 @@ public class ReviewElement extends Content {
 		TopGroup.searchBlackList.add(btn);
 		return btn;
 	}
+
 	public void drawPadding(Element elem, Vec2 vec2, Table table) {
 		/* 如果a = 0就返回 */
 		if (checkA(padColor)) return;
@@ -249,7 +250,6 @@ public class ReviewElement extends Content {
 
 			name = "ReviewElementWindow";
 
-			//			addCloseButton();
 			pane.left().defaults().left();
 			cont.table(t -> {
 				Button[] bs = {null};
@@ -511,10 +511,18 @@ public class ReviewElement extends Content {
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
 			Element  window_elem = getChildren().get(childIndex);
 			Runnable copy        = storeRun(() -> element);
-			IntUI.addShowMenuListenerp(window_elem, () -> Sr(Seq.with(
+			IntUI.addShowMenuListenerp(window_elem, getContextMenu(this, element, copy));
+			IntUI.doubleClick(window_elem, null, copy);
+			touchable = Touchable.enabled;
+
+			update(() -> background(FOCUS_FROM == this ? Styles.flatDown : Styles.none));
+			addFocusSource(this, () -> window, () -> element);
+		}
+		private static Prov<Seq<MenuList>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
+			return () -> Sr(Seq.with(
 			 copyAsJSMenu(null, copy),
 			 ConfirmList.with(Icon.trashSmall, "@clear", "@confirm.remove", () -> {
-				 remove();
+				 self.remove();
 				 element.remove();
 			 }),
 			 MenuList.with(Icon.copySmall, "@copy.path", () -> {
@@ -541,15 +549,14 @@ public class ReviewElement extends Content {
 			 .ifRun(element instanceof Table, seq -> seq.add(
 				MenuList.with(Icon.waves, "Cells", () -> {
 					INFO_DIALOG.dialog(d -> {
-						Window window1 = ElementUtils.getWindow(this);
+						Window window1 = ElementUtils.getWindow(self);
 						d.left().defaults().left();
 						for (var cell : ((Table) element).getCells()) {
 							d.table(Tex.pane, t0 -> {
 								 var l = new PlainValueLabel<>(Cell.class, () -> cell);
 								 ReviewElement.addFocusSource(l, () -> window1, cell::get);
 								 t0.add(l).grow();
-							 })
-							 .grow()
+							 }).grow()
 							 .colspan(ElementUtils.getColspan(cell));
 							if (cell.isEndRow()) {
 								Underline.of(d.row(), 20);
@@ -558,16 +565,11 @@ public class ReviewElement extends Content {
 						}
 					});
 				})))
-			 .ifRun(element.parent instanceof Table, seq -> seq.add(
+			 .ifRun(element == null || element.parent instanceof Table, seq -> seq.add(
 				DisabledList.withd(Icon.waves, "This Cell",
-				 () -> !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
+				 () -> element == null || !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
 					 new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
-				 }))).get());
-			IntUI.doubleClick(window_elem, null, copy);
-			touchable = Touchable.enabled;
-
-			update(() -> background(FOCUS_FROM == this ? Styles.flatDown : Styles.none));
-			addFocusSource(this, () -> window, () -> element);
+				 }))).get();
 		}
 		private static CharSequence getPath(Element element) {
 			if (element == null) return "null";
@@ -604,7 +606,10 @@ public class ReviewElement extends Content {
 
 
 	public enum Settings implements ISettings {
-		hoverInfoWindow
+		hoverInfoWindow, contextMenu(MenuList[].class, MyWrapTable.getContextMenu(null, null, null));
+
+		Settings() { }
+		Settings(Class<?> a, Prov<Seq<MenuList>> prov) { }
 	}
 
 	@OptimizeReflect
@@ -933,6 +938,7 @@ public class ReviewElement extends Content {
 			if (elem != null) drawFocus(elem);
 		}
 	}
+
 	static Color disabledColor = new Color(0xFF0000_FF);
 	private Color touchableToColor(Touchable touchable) {
 		return switch (touchable) {

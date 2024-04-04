@@ -11,15 +11,18 @@ import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.ui.content.SettingsUI;
-import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.ui.HopeStyles;
+import modtools.ui.components.limit.*;
+import modtools.ui.menu.MenuList;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
 
 import java.lang.reflect.Method;
 
 import static modtools.events.ISettings.$$.text;
-import static modtools.ui.content.SettingsUI.SettingsBuilder.main;
+import static modtools.ui.IntUI.*;
+import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
+import static modtools.ui.content.SettingsUI.colorBlock;
 
 @SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */})
 public interface ISettings extends E_DataInterface {
@@ -28,8 +31,8 @@ public interface ISettings extends E_DataInterface {
 	default Data data() {
 		return null;
 	}
-	default Class<?> type() {return boolean.class;}
-	default Object args() {return null;}
+	default Class<?> type() { return boolean.class; }
+	default Object args() { return null; }
 	default String name() {
 		return null;
 	}
@@ -42,15 +45,15 @@ public interface ISettings extends E_DataInterface {
 	default void set(Object o) {
 		data().put(name(), o);
 	}
-	default void set(boolean b) {set((Boolean) b);}
+	default void set(boolean b) { set((Boolean) b); }
 	/* default <T> T get() {
 		return (T) data().get(name());
 	} */
 	default boolean enabled() {
 		return data().getBool(name());
 	}
-	default Object get() {return data().get(name());}
-	default String getString() {return data().getString(name());}
+	default Object get() { return data().get(name()); }
+	default String getString() { return data().getString(name()); }
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
 		return Enum.valueOf(cl, data().getString(name()));
@@ -101,7 +104,7 @@ public interface ISettings extends E_DataInterface {
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
-		Method build = builds.get(Tools.box(type));
+		Method build = $builds.get(Tools.box(type));
 		try {
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
@@ -112,23 +115,25 @@ public interface ISettings extends E_DataInterface {
 		static String text;
 
 		static {
-			builds.each((_, m) -> m.setAccessible(true));
+			$builds.each((_, m) -> m.setAccessible(true));
 		}
 	}
 
 	// ----通过反射执行对应的方法----
-	ObjectMap<Class<?>, Method> builds = new Seq<>(ISettings.class.getDeclaredMethods())
-	 .removeAll(b -> !b.getName().equals("b"))
+	ObjectMap<Class<?>, Method> $builds = new Seq<>(ISettings.class.getDeclaredMethods())
+	 .removeAll(b -> !b.getName().equals("$"))
 	 .asMap(m -> m.getParameterTypes()[0]);
 
 
-	private void b(Boolean __) {
-		SettingsBuilder.check(text, this::set, this::enabled);
+	// 方法
+	private void $(Boolean __) {
+		check(text, this::set, this::enabled);
 	}
 	/** 默认step为1 */
-	private void b(Integer __) {
+	private void $(Integer __) {
 		var    args   = (int[]) args();
 		float  def    = args[0];
+		def(def);
 		float  min    = args[1];
 		float  max    = args[2];
 		float  step   = args.length == 3 ? 1f : args[3];
@@ -150,9 +155,10 @@ public interface ISettings extends E_DataInterface {
 		main.stack(slider, content).growX().padTop(4f).row();
 	}
 	/** 默认step为0.1 */
-	private void b(Float __) {
+	private void $(Float __) {
 		var    args   = (float[]) args();
 		float  def    = args[0];
+		def(def);
 		float  min    = args[1];
 		float  max    = args[2];
 		float  step   = args.length == 3 ? 0.1f : args[3];
@@ -172,21 +178,44 @@ public interface ISettings extends E_DataInterface {
 		content.touchable = Touchable.disabled;
 		main.stack(slider, content).growX().padTop(4f).row();
 	}
-	private void b(Color __) {
-		SettingsUI.colorBlock(main, text, data(), name(), getColor(), this::set);
+	private void $(Color __) {
+		colorBlock(main, text, data(), name(), getColor(), this::set);
 	}
-	private void b(Enum<?> __) {
+	private void $(Enum<?> __) {
 		var enumClass = (Class) args();
 		var enums     = new Seq<>((Enum<?>[]) enumClass.getEnumConstants());
-		SettingsBuilder.list(text, this::set, new Prov<Enum<?>>() {
+		list(text, this::set, new Prov<>() {
 			public Enum<?> get() {
 				return Enum.valueOf(enumClass, ISettings.this.data().getString(ISettings.this.name()));
 			}
 		}, enums, Enum::name);
 	}
-	private void b(String[] __) {
+	private void $(String[] __) {
 		var list = new Seq<>((String[]) args());
-		SettingsBuilder.list(text, this::set, this::getString,
+		list(text, this::set, this::getString,
 		 list, s -> s.replaceAll("\\n", "\\\\n"));
+	}
+
+	// ContextMenu
+	private void $(MenuList[] __) {
+		var all = (Prov<Seq<MenuList>>) args();
+
+		TextButton button = new LimitTextButton("Manage", HopeStyles.flatt);
+		main.stack(new LimitLabel(text), button.right()).grow().row();
+		button.clicked(() -> showSelectTable(button, (p, hide, searchText) -> {
+			Seq<MenuList> lists = all.get();
+			for (MenuList menu : lists) {
+				if (menu == null) continue;
+
+				var cell = p.button(menu.getName(), menu.icon, menu.style(),
+				 menu.iconSize(), () -> { }
+				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
+
+				cell.get().clicked(() -> {
+					Log.info(menu);
+				});
+				cell.row();
+			}
+		}, false, Align.center));
 	}
 }

@@ -87,9 +87,9 @@ public class IntUI {
 	/**
 	 * <p>创建一个双击事件</p>
 	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
-	 * @param <T>  the type parameter
-	 * @param elem 被添加侦听器的元素
-	 * @param click0 单击事件
+	 * @param <T>      the type parameter
+	 * @param elem     被添加侦听器的元素
+	 * @param click0   单击事件
 	 * @param d_click0 双击事件
 	 * @return the t
 	 */
@@ -131,10 +131,10 @@ public class IntUI {
 
 	/**
 	 * 长按事件
-	 * @param <T>  the type parameter
-	 * @param elem 被添加侦听器的元素
+	 * @param <T>      the type parameter
+	 * @param elem     被添加侦听器的元素
 	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param boolc0 {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+	 * @param boolc0   {@link Boolc#get(boolean b)}形参{@code b}为是否长按
 	 * @return the t
 	 */
 	public static <T extends Element> T
@@ -179,10 +179,10 @@ public class IntUI {
 	}
 	/**
 	 * 长按事件
-	 * @param <T>  the type parameter
-	 * @param elem 被添加侦听器的元素
+	 * @param <T>      the type parameter
+	 * @param elem     被添加侦听器的元素
 	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param run 长按时调用
+	 * @param run      长按时调用
 	 * @return the t
 	 */
 	public static <T extends Element> T
@@ -200,7 +200,7 @@ public class IntUI {
 	 * 添加右键事件
 	 * @param <T>  the type parameter
 	 * @param elem 被添加侦听器的元素
-	 * @param run 右键执行的代码
+	 * @param run  右键执行的代码
 	 * @return the t
 	 */
 	public static <T extends Element> T
@@ -220,9 +220,9 @@ public class IntUI {
 	/**
 	 * <p>long press for {@link Vars#mobile moblie}</p>
 	 * <p>r-click for desktop</p>
-	 * @param <T>  the type parameter
+	 * @param <T>     the type parameter
 	 * @param element the element
-	 * @param run the run
+	 * @param run     the run
 	 * @return the t
 	 */
 	@SuppressWarnings("UnusedReturnValue")
@@ -234,7 +234,6 @@ public class IntUI {
 
 	/**
 	 * Add show menu listener.
-	 *
 	 * @param elem 元素
 	 * @param prov menu提供者
 	 */
@@ -244,7 +243,6 @@ public class IntUI {
 	}
 	/**
 	 * Dispose after close.
-	 *
 	 * @param prov menu提供者
 	 */
 	public static void showMenuListDispose(Prov<Seq<MenuList>> prov) {
@@ -254,7 +252,6 @@ public class IntUI {
 
 	/**
 	 * Add show menu listener.
-	 *
 	 * @param elem the elem
 	 * @param list the list
 	 */
@@ -271,63 +268,44 @@ public class IntUI {
 	public static void showMenuList(Iterable<MenuList> list) {
 		showMenuList(list, null);
 	}
-	public static void showMenuList(Iterable<MenuList> list, Runnable hideMenu) {
+	public static void showMenuList(Iterable<MenuList> list, Runnable hiddenListener) {
 		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, _) -> {
-			showMeniList(list, hideMenu, p, hide);
+			showMenuList(list, hiddenListener, p, hide);
 		}, false);
 	}
 	public static SelectTable showMenuListFor(
 	 Element elem,
 	 int align, Prov<Seq<MenuList>> prov) {
-		return showSelectTable(elem, (p, hide, ___) -> {
+		return showSelectTable(elem, (p, hide, _) -> {
 			Seq<MenuList> list = prov.get();
-			showMeniList(list, () -> Pools.freeAll(list, false), p, hide);
+			showMenuList(list, freeAllMenu(list), p, hide);
 		}, false, align);
 	}
+	public static Runnable freeAllMenu(Seq<MenuList> list) {
+		return () -> Pools.freeAll(list, false);
+	}
+
 	/** TODO: 多个FoldedList有问题 */
-	private static Cell<Table> showMeniList(Iterable<MenuList> list, Runnable hideMenu, Table p,
-																					Runnable hide) {
+	public static Cell<Table> showMenuList(Iterable<MenuList> list, Runnable hiddenListener,
+																				 Table p, Runnable hideRun) {
 		return p.table(Styles.black6, main -> {
 			for (var menu : list) {
 				if (menu == null) continue;
-				Cons<Button> cons = menu.cons;
-				var cell = main.button(menu.getName(), menu.icon,
-				 menu instanceof CheckboxList || menu instanceof FoldedList ? HopeStyles.flatToggleMenut : HopeStyles.flatt,
-				 /** @see Cell#unset */
-				 menu.icon != null ? 24 : Float.NEGATIVE_INFINITY/* unset */, () -> { }
+
+				var cell = main.button(menu.getName(), menu.icon, menu.style(),
+				 menu.iconSize(), () -> { }
 				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
-				if (menu instanceof FoldedList foldedList) {
-					Core.app.post(() -> {
-						class MyRun implements Runnable {
-							Cell<Table> newCell;
-							BindCell    bcell;
-							public void run() {
-								if (newCell == null) {
-									newCell = showMeniList(foldedList.getChildren(), hideMenu, p, hide);
-									bcell = new BindCell(newCell);
-								} else bcell.toggle();
-							}
-						}
-						cell.get().clicked(new MyRun());
-					});
-					// newCell
-				} else {
-					cell.with(b -> b.clicked(catchRun(() -> {
-						if (cons != null) cons.get(b);
-						hide.run();
-						if (hideMenu != null) hideMenu.run();
-					}))).checked(menu instanceof CheckboxList l && l.checked);
-				}
+
+				menu.build(p, cell, () -> {
+					hideRun.run();
+					if (hiddenListener != null) hiddenListener.run();
+				});
 				cell.row();
-				if (menu instanceof DisabledList) {
-					cell.disabled(__ -> ((DisabledList) menu).disabled.get()).row();
-				}
 			}
 		}).growY();
 	}
 	/**
 	 * Menu `Copy ${key} As Js` constructor.
-	 *
 	 * @param prov 对象提供
 	 * @return a menu.
 	 */
@@ -370,10 +348,9 @@ public class IntUI {
 
 	/**
 	 * Add watch button cell.
-	 *
 	 * @param buttons the buttons
-	 * @param info the info
-	 * @param value the value
+	 * @param info    the info
+	 * @param value   the value
 	 * @return the cell
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
@@ -395,8 +372,8 @@ public class IntUI {
 
 	/**
 	 * 在鼠标右下弹出一个小窗，自己设置内容
-	 * @param vec2 用于定位弹窗的位置
-	 * @param f (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param vec2       用于定位弹窗的位置
+	 * @param f          (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 * @return the table
 	 */
@@ -415,11 +392,11 @@ public class IntUI {
 
 	/**
 	 * 弹出一个小窗，自己设置内容
-	 * @param <T>  the type parameter
-	 * @param button 用于定位弹窗的位置
-	 * @param f (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param <T>        the type parameter
+	 * @param button     用于定位弹窗的位置
+	 * @param f          (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
-	 * @param align the align
+	 * @param align      the align
 	 * @return the select table
 	 */
 	public static <T extends Element> SelectTable
@@ -456,15 +433,15 @@ public class IntUI {
 		return t;
 	}
 	public static SelectTable basicSelectTable(boolean searchable, Cons3<Table, Runnable, String> f) {
-		SelectTable t    = new SelectTable();
+		Table p = new Table();
+		p.top();
+
+		SelectTable t    = new SelectTable(p);
 		Runnable    hide = t::hideInternal;
 		t.appendToGroup();
 
 		// 淡入
 		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
-
-		Table p = new Table();
-		p.top();
 
 		Runnable hide0 = mergeHide(t, hide);
 		if (searchable) {
@@ -472,10 +449,6 @@ public class IntUI {
 		}
 		f.get(p, hide0, "");
 
-		ScrollPane pane = new ScrollPane(p, Styles.smallPane);
-		t.top().add(pane).grow().pad(0f).top();
-		pane.setScrollingDisabled(true, false);
-		t.pack();
 		return t;
 	}
 	private static Runnable mergeHide(SelectTable t, Runnable hide) {
@@ -526,16 +499,16 @@ public class IntUI {
 	/**
 	 * 弹出一个可以选择内容的窗口（类似物品液体源的选择）
 	 * （需要提供图标）
-	 * @param <T>  the type parameter
-	 * @param <T1>  the type parameter
-	 * @param button the button
-	 * @param items 用于展示可选的内容
-	 * @param icons 可选内容的图标
-	 * @param holder 选中的内容，null就没有选中任何
-	 * @param cons 选中内容就会调用
-	 * @param size 每个内容的元素大小
-	 * @param imageSize 每个内容的图标大小
-	 * @param cols 一行的元素数量
+	 * @param <T>        the type parameter
+	 * @param <T1>       the type parameter
+	 * @param button     the button
+	 * @param items      用于展示可选的内容
+	 * @param icons      可选内容的图标
+	 * @param holder     选中的内容，null就没有选中任何
+	 * @param cons       选中内容就会调用
+	 * @param size       每个内容的元素大小
+	 * @param imageSize  每个内容的图标大小
+	 * @param cols       一行的元素数量
 	 * @param searchable the searchable
 	 * @return the table
 	 */
@@ -610,7 +583,7 @@ public class IntUI {
 	}
 
 
-	/** 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>）*/
+	/** 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>） */
 	public static <T1 extends UnlockableContent> SelectTable
 	showSelectImageTable(Vec2 vec2, Seq<T1> items,
 											 Prov<T1> holder,
@@ -621,7 +594,7 @@ public class IntUI {
 		 u -> new TextureRegionDrawable(u.uiIcon), searchable);
 	}
 
-	/** 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}）*/
+	/** 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}） */
 	public static <T1> SelectTable
 	showSelectImageTableWithFunc(Vec2 vec2, Seq<T1> items, Prov<T1> holder,
 															 Cons<T1> cons, float size, float imageSize,
@@ -706,9 +679,9 @@ public class IntUI {
 	}
 	/**
 	 * @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable)
-	 * */
+	 */
 	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
-																			 Runnable denied) {
+																								Runnable denied) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.cont.add(text).width(Vars.mobile ? 400f : 500f).wrap().pad(4).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2);
@@ -740,8 +713,8 @@ public class IntUI {
 	 * callback,
 	 * needDclick: boolean = true
 	 * )}*
-	 * @param cell the cell
-	 * @param color the color
+	 * @param cell     the cell
+	 * @param color    the color
 	 * @param callback the callback
 	 * @see #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick) #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick)
 	 */
@@ -751,9 +724,9 @@ public class IntUI {
 
 	/**
 	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
-	 * @param cell 被修改成颜色块的cell
-	 * @param color 初始化颜色
-	 * @param callback 回调函数，形参为修改后的{@link Color color}
+	 * @param cell       被修改成颜色块的cell
+	 * @param color      初始化颜色
+	 * @param callback   回调函数，形参为修改后的{@link Color color}
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback,
@@ -769,13 +742,16 @@ public class IntUI {
 		};
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
+	public static void disposeAll() {
+		topGroup.clear();
+		frag.clear();
+	}
 
 
 	public static class ColorContainer extends BorderImage {
 		private Color colorValue;
 		/**
 		 * Instantiates a new Color container.
-		 *
 		 * @param color the color
 		 */
 		public ColorContainer(Color color) {
@@ -798,7 +774,6 @@ public class IntUI {
 		}
 		/**
 		 * Sets color value.
-		 *
 		 * @param color the color
 		 */
 		public void setColorValue(Color color) {
@@ -827,7 +802,7 @@ public class IntUI {
 	/**
 	 * 聚焦一个元素
 	 * @param element 要聚焦的元素
-	 * @param boolp {@link Boolp#get()}的返回值如果为{@code false}则移除聚焦
+	 * @param boolp   {@link Boolp#get()}的返回值如果为{@code false}则移除聚焦
 	 */
 	public static void focusOnElement(Element element, Boolp boolp) {
 		topGroup.focusOnElement(new MyFocusTask(element, boolp));
@@ -838,7 +813,6 @@ public class IntUI {
 
 		/**
 		 * Instantiates a new Tooltip.
-		 *
 		 * @param contents the contents
 		 */
 		public Tooltip(Cons<Table> contents) {
@@ -854,18 +828,16 @@ public class IntUI {
 		}
 		/**
 		 * Instantiates a new Tooltip.
-		 *
 		 * @param contents the contents
-		 * @param show the show
+		 * @param show     the show
 		 */
 		public Tooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
 		}
 		/**
 		 * Instantiates a new Tooltip.
-		 *
 		 * @param contents the contents
-		 * @param manager the manager
+		 * @param manager  the manager
 		 */
 		public Tooltip(Cons<Table> contents, Tooltips manager) {
 			super(contents, manager);
@@ -892,9 +864,8 @@ public class IntUI {
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
 		/**
 		 * Instantiates a new Info fade popup.
-		 *
-		 * @param title the title
-		 * @param width the width
+		 * @param title  the title
+		 * @param width  the width
 		 * @param height the height
 		 */
 		public InfoFadePopup(String title, float width, float height) {
@@ -905,8 +876,7 @@ public class IntUI {
 	private static class ExceptionPopup extends Window implements PopupWindow {
 		/**
 		 * Instantiates a new Exception popup.
-		 *
-		 * @param exc the exc
+		 * @param exc  the exc
 		 * @param text the text
 		 */
 		public ExceptionPopup(Throwable exc, String text) {
@@ -937,11 +907,10 @@ public class IntUI {
 	public static class ConfirmWindow extends Window implements IDisposable, PopupWindow {
 		/**
 		 * Instantiates a new Confirm window.
-		 *
-		 * @param title the title
-		 * @param minWidth the min width
+		 * @param title     the title
+		 * @param minWidth  the min width
 		 * @param minHeight the min height
-		 * @param full the full
+		 * @param full      the full
 		 * @param noButtons the no buttons
 		 */
 		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full,
@@ -951,7 +920,6 @@ public class IntUI {
 
 		/**
 		 * Sets center.
-		 *
 		 * @param vec2 the vec 2
 		 */
 		public void setCenter(Vec2 vec2) {
@@ -969,7 +937,12 @@ public class IntUI {
 	}
 
 	public static class SelectTable extends AutoFitTable implements IMenu {
-		public SelectTable() {
+		public SelectTable(Table table) {
+			this.table = table;
+			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
+			top().add(pane).grow().pad(0f).top();
+			pane.setScrollingDisabled(true, false);
+			pack();
 		}
 		Hitter hitter = new Hitter(this::hideInternal);
 		final void hideInternal() {
@@ -979,9 +952,11 @@ public class IntUI {
 			 Actions.remove());
 		}
 
-		/** 为null时，使用默认隐藏{@link #hideInternal}
+		public final     Table    table;
+		/**
+		 * 为null时，使用默认隐藏{@link #hideInternal}
 		 * 仅用于cons3参数的hide，内部依然是直接隐藏（即默认值）
-		 * */
+		 */
 		public @Nullable Runnable hide;
 		/**
 		 * Adds a hide() listener.

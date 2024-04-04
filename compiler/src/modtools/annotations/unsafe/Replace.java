@@ -11,11 +11,11 @@ import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.*;
+import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
-import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.NoAccessCheck;
 
@@ -41,7 +41,7 @@ public class Replace {
 	static ModuleFinder moduleFinder;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
-		unsafe.putInt(CompileState.INIT, off_value, 0);
+		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
 		Replace.context = context;
 		classFinder = ClassFinder.instance(context);
 		syms = Symtab.instance(context);
@@ -109,7 +109,7 @@ public class Replace {
 				try {
 					existing = classFinder.loadClass(existing.packge().modle, name);
 
-					return existing;
+					if (existing.exists()) return existing;
 				} catch (CompletionFailure cf) {
 					//ignore
 				}
@@ -139,15 +139,17 @@ public class Replace {
 	private static void other() throws ClassNotFoundException {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
-		// 适配d8无法编译jdk21的枚举字节码
+		// 适配d8无法编译jdk21的枚举(enum)的字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
-		removeKey(ClassWriter.class, () -> new MyClassWriter(context));
-		setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
+		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
+		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
 
-		// println("aioksolosklkskms");
 		fixSyntaxError();
 
+		// replaceAccess(Resolve.class,Resolve.instance(context), "resolveMethodCheck", "nilMethodCheck");
+
 		// 忽略模块访问检查
+		if (true) return;
 		Object prev = getAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper");
 		setAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper",
 		 Proxy.newProxyInstance(Resolve.class.getClassLoader(), new Class[]{Class.forName("com.sun.tools.javac.comp.Resolve$LogResolveHelper")},
@@ -167,7 +169,8 @@ public class Replace {
 		int[] positionOffset = {0};
 
 		buffer.addAll(handler.getDiagnostics()
-		 .stream().filter(diag -> diag.isFlagSet(DiagnosticFlag.SYNTAX))
+		 .stream()
+		 .filter(diag -> diag.isFlagSet(DiagnosticFlag.SYNTAX))
 		 .filter(t -> {
 			 try {
 				 JavaFileObject filer = t.getSource();
@@ -180,7 +183,9 @@ public class Replace {
 				 target.insert((int) t.getPosition() + positionOffset[0], args[0].charAt(1));
 				 positionOffset[0]++;
 
-				 new FileOutputStream(new File(filer.toUri())).write(target.toString().getBytes());
+				 try (var input = new FileOutputStream(new File(filer.toUri()))) {
+					 input.write(target.toString().getBytes());
+				 }
 				 return false;
 			 } catch (Throwable e) {
 				 err(e);
@@ -188,18 +193,6 @@ public class Replace {
 			 return true;
 		 }).toList());
 		setAccess(DeferredDiagnosticHandler.class, handler, "deferred", buffer);
-	}
-	static Symbol loadClass(ModuleSymbol ms, List<Name> candidates) {
-		for (Name candidate : candidates) {
-			if (ms.kind != ERR) {
-				try {
-					ClassSymbol symbol = classFinder.loadClass(ms, candidate);
-					if (symbol.exists()) return symbol;
-					// println("source: @", symbol.sourcefile);
-				} catch (CompletionFailure ignored) { }
-			}
-		}
-		return null;
 	}
 
 	static void forceJavaVersion() {
@@ -220,11 +213,11 @@ public class Replace {
 	}
 	private static void forcePreview() {
 		try {
-			forcePreview0();
+			forceEnabledPreview0();
 		} catch (NoClassDefFoundError ignored) { }
 	}
 
-	private static void forcePreview0() {
+	private static void forceEnabledPreview0() {
 		Preview preview = Preview.instance(context);
 		if (!preview.isEnabled()) {
 			setAccess(Preview.class, preview, "enabled", true);
@@ -255,6 +248,7 @@ public class Replace {
 		// setAccess(Symtab.class, syms, "matchExceptionType", syms.incompatibleClassChangeErrorType);
 		runIgnoredException(() -> setAccess(Lower.class, Lower.instance(context), "useMatchException", false));
 		setAccess(Lower.class, Lower.instance(context), "target", target);
+		setAccess(LambdaToMethod.class, LambdaToMethod.instance(context), "nestmateLambdas", false);
 		setAccess(Gen.class, Gen.instance(context), "concat", StringConcat.instance(context));
 		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
@@ -349,11 +343,11 @@ public class Replace {
 	}
 
 
-	static long off_value;
+	static long off_stateValue;
 	public static void init() throws Throwable {
-		off_value = unsafe.objectFieldOffset(CompileState.class.getDeclaredField("value"));
+		off_stateValue = unsafe.objectFieldOffset(CompileState.class.getDeclaredField("value"));
 		/* 使语法解析不会stop继续编译 */
-		unsafe.putInt(CompileState.INIT, off_value, 100);
+		unsafe.putInt(CompileState.INIT, off_stateValue, 100);
 		replaceSource();
 	}
 }

@@ -11,13 +11,16 @@ import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.dnd.*;
 import java.io.File;
+import java.util.*;
 import java.util.List;
+
+import static mindustry.Vars.ui;
 
 public class DropFile {
 	public static boolean valid(){
 		try {
 			Class.forName("javax.swing.JFrame");
-			return true;
+			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, "ImportFromSelector");
 		} catch (ClassNotFoundException e) {
 			return false;
 		}
@@ -38,7 +41,7 @@ public class DropFile {
 			 } catch (Throwable e) {
 				 IntUI.showException("Failed to import mod from selector", e);
 			 }
-		 }));
+		 })).name("ImportFromSelector");
 	}
 	private static class FileSelector extends JFrame {
 		public FileSelector(Cons<List<Fi>> fiCons) throws HeadlessException {

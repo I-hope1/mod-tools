@@ -218,7 +218,7 @@ public class SettingsUI extends Content {
 		}
 		public static Cell<Table> list(String prefix, String key, Data data, Seq<String> list,
 																	 Func<String, String> stringify) {
-			return list("@" + prefix + "." + key.toLowerCase(), v -> data.put(key, v),
+			return list(STR."@\{prefix}.\{key.toLowerCase()}", v -> data.put(key, v),
 			 () -> data.getString(key, list.get(0)), list,
 			 stringify, () -> true);
 		}

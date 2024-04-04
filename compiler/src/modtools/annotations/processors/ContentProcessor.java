@@ -180,7 +180,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			addMethod(classDecl, "type", mSymtab.classType);
 			addField(classDecl, mSymtab.classType, "type", mMaker.ClassLiteral(mSymtab.booleanType));
 
-			init.body.stats = init.body.stats.prepend(
+			init.body.stats = init.body.stats.append(
 			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).sym)))
 			);
 		});
@@ -188,7 +188,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			addMethod(classDecl, "args", mSymtab.objectType);
 			addField(classDecl, mSymtab.objectType, "args", null);
 
-			init.body.stats = init.body.stats.prepend(
+			init.body.stats = init.body.stats.append(
 			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("args")), mMaker.Ident(init.params.get(1).sym)))
 			);
 		});

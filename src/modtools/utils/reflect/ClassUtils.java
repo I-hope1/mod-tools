@@ -22,4 +22,9 @@ public class ClassUtils {
 		return seq;
 	}
 
+	public static Class<?> getSuperExceptAnonymous(Class<?> cls) {
+		while (cls.isAnonymousClass()) cls = cls.getSuperclass();
+		return cls;
+	}
+
 }

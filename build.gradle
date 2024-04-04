@@ -152,6 +152,13 @@ task ZCompileAll(type: Jar) {
 		include "$project.group-android.jar"
 	}
 	archiveFileName = "$buildDir0/libs/$project.group[$version].jar"
+	doLast {
+		copy {
+			from "$buildDir0/libs/$project.group[$version].jar"
+			into "$buildDir0/libs/"
+			rename("\\[$version]", "-deploy")
+		}
+	}
 }
 
 tasks.register('mergeLibs', Jar) {

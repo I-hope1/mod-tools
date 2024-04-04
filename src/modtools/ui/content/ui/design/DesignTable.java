@@ -11,9 +11,7 @@ import modtools.utils.ElementUtils;
 import static modtools.ui.components.linstener.ReferringMoveListener.snap;
 
 public class DesignTable<T extends Group> extends WidgetGroup {
-	private Element selected;
-	public  T       template;
-	final   Vec2    delta = new Vec2(), last = new Vec2();
+	public T template;
 	float[] horizontalLines = new float[]{0, 0.5f, 1f}, verticalLines = new float[]{0, 0.5f, 1f};
 	VirtualGroup virtualGroup = new VirtualGroup();
 	public DesignTable(T template) {
@@ -45,6 +43,8 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 	private void init() {
 		changeStatus(Status.move);
 		addCaptureListener(new InputListener() {
+			private Element selected;
+			final Vec2 delta = new Vec2(), last = new Vec2();
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (status == Status.edit) return false;
 				selected = template.hit(x, y, false);

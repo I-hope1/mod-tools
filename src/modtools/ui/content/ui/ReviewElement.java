@@ -518,36 +518,36 @@ public class ReviewElement extends Content {
 			update(() -> background(FOCUS_FROM == this ? Styles.flatDown : Styles.none));
 			addFocusSource(this, () -> window, () -> element);
 		}
-		private static Prov<Seq<MenuList>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
+		private static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
 			return () -> Sr(Seq.with(
 			 copyAsJSMenu(null, copy),
-			 ConfirmList.with(Icon.trashSmall, "@clear", "@confirm.remove", () -> {
+			 ConfirmList.with("clear", Icon.trashSmall, "@clear", "@confirm.remove", () -> {
 				 self.remove();
 				 element.remove();
 			 }),
-			 MenuList.with(Icon.copySmall, "@copy.path", () -> {
+			 MenuItem.with("path.copy", Icon.copySmall, "@copy.path", () -> {
 				 JSFunc.copyText(getPath(element));
 			 }),
-			 MenuList.with(Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
+			 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 				 ElementUtils.quietScreenshot(element);
 			 }),
-			 MenuList.with(Icon.adminSmall, "@settings.debugbounds", () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
-			 MenuList.with(Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
-			 MenuList.with(Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
-			 FoldedList.withf(Icon.boxSmall, "Exec", () -> Seq.with(
-				MenuList.with(Icon.boxSmall, "Invalidate", element::invalidate),
-				MenuList.with(Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
-				MenuList.with(Icon.boxSmall, "Layout", element::layout),
-				MenuList.with(Icon.boxSmall, "Pack", element::pack),
-				MenuList.with(Icon.boxSmall, "Validate", element::validate),
-				MenuList.with(Icon.boxSmall, "Keep in stage", element::keepInStage),
-				MenuList.with(Icon.boxSmall, "To Front", element::toFront),
-				MenuList.with(Icon.boxSmall, "To Back", element::toBack)
+			 MenuItem.with("debug.bounds", Icon.adminSmall, "@settings.debugbounds", () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
+			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
+			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
+			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> Seq.with(
+				MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
+				MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
+				MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
+				MenuItem.with("pack", Icon.boxSmall, "Pack", element::pack),
+				MenuItem.with("validate", Icon.boxSmall, "Validate", element::validate),
+				MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
+				MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
+				MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack)
 			 )),
 			 ValueLabel.newElementDetailsList(element)
 			))
 			 .ifRun(element instanceof Table, seq -> seq.add(
-				MenuList.with(Icon.waves, "Cells", () -> {
+				MenuItem.with("allcells", Icon.waves, "Cells", () -> {
 					INFO_DIALOG.dialog(d -> {
 						Window window1 = ElementUtils.getWindow(self);
 						d.left().defaults().left();
@@ -566,7 +566,7 @@ public class ReviewElement extends Content {
 					});
 				})))
 			 .ifRun(element == null || element.parent instanceof Table, seq -> seq.add(
-				DisabledList.withd(Icon.waves, "This Cell",
+				DisabledList.withd("this.cell", Icon.waves, "This Cell",
 				 () -> element == null || !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
 					 new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
 				 }))).get();
@@ -606,10 +606,10 @@ public class ReviewElement extends Content {
 
 
 	public enum Settings implements ISettings {
-		hoverInfoWindow, contextMenu(MenuList[].class, MyWrapTable.getContextMenu(null, null, null));
+		hoverInfoWindow, contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null));
 
 		Settings() { }
-		Settings(Class<?> a, Prov<Seq<MenuList>> prov) { }
+		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }
 	}
 
 	@OptimizeReflect

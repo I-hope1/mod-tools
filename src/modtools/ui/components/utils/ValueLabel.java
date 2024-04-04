@@ -30,14 +30,14 @@ import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.*;
-import java.util.*;
-import java.util.Map.Entry;
+import java.util.Map;
 
 import static modtools.events.E_JSFunc.truncate_text;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
 
+@SuppressWarnings("SizeReplaceableByIsEmpty")
 public abstract class ValueLabel extends NoMarkupLabel {
 	public static Object unset          = new Object();
 	public static Color  c_enum         = new Color(0xFFC66DFF);
@@ -88,19 +88,15 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public       Func<Object, CharSequence> func;
 	public       Func<Object, Object>       valueFunc = o -> o;
 
-	public abstract Seq<MenuList> getMenuLists();
-	public static MenuList newElementDetailsList(Element element) {
-		return DisabledList.withd(Icon.crafting, "Elem Details", () -> element == null,
-		 () -> {
-			 new ElementDetailsWindow(element);
-		 });
+	public abstract Seq<MenuItem> getMenuLists();
+	public static MenuItem newElementDetailsList(Element element) {
+		return DisabledList.withd("elem.details", Icon.crafting, "Elem Details", () -> element == null,
+		 () -> new ElementDetailsWindow(element));
 	}
-	public static <T> MenuList newDetailsMenuList(Element el, T val, Class<T> type) {
-		return DisabledList.withd(Icon.infoCircleSmall, "@details",
+	public static <T> MenuItem newDetailsMenuList(Element el, T val, Class<T> type) {
+		return DisabledList.withd("details", Icon.infoCircleSmall, "@details",
 		 () -> type.isPrimitive() && val == null,
-		 () -> {
-			 showNewInfo(el, val, type);
-		 });
+		 () -> showNewInfo(el, val, type));
 	}
 
 	protected boolean isStatic;
@@ -156,12 +152,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			StringBuilder sb = new StringBuilder();
 			sb.append('{');
 			boolean checkTail = false;
-			if (val instanceof ObjectMap map) for (var o : ((ObjectMap<?, ?>) val)) {
+			if (val instanceof ObjectMap<?, ?> map) for (var o : map) {
 				appendMap(sb, o.key, o.value);
 				checkTail = true;
 				if (isTruncate(sb.length())) break;
 			}
-			else for (var entry : (Set<Entry>) ((Map) val).entrySet()) {
+			else for (var entry : ((Map<?, ?>) val).entrySet()) {
 				appendMap(sb, entry.getKey(), entry.getValue());
 				checkTail = true;
 				if (isTruncate(sb.length())) break;
@@ -287,6 +283,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
 	private String truncate(String text) {
+		//noinspection StringTemplateMigration
 		return isTruncate(text.length()) ? text.substring(0, truncateLength) + "  ..." : text;
 	}
 	public static final Object[] EMPTY_ARRAY = new Object[0];
@@ -325,7 +322,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public abstract void setVal();
 	/** 这可能会设置字段值 */
 	public void setNewVal(Object newVal) { }
-	;
 
 	protected void setVal0(Object newVal) {
 		try {
@@ -362,12 +358,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}
 	}
 
-	protected Seq<MenuList> basicMenuLists(Seq<MenuList> list) {
+	protected Seq<MenuItem> basicMenuLists(Seq<MenuItem> list) {
 		specialBuild(list);
 		detailsBuild(list);
 
 		if (Style.class.isAssignableFrom(type)) {
-			list.add(DisabledList.withd(Icon.copySmall, "Copy Style", () -> val == null, () -> {
+			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
 				Class<?>      cls     = val.getClass();
 				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
 				ClassUtils.getClassAndParents(cls).forEach(subclass -> {
@@ -388,18 +384,18 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			}));
 		}
 
-		list.add(MenuList.with(Icon.diagonalSmall, "stringifyFunc", () -> {
+		list.add(MenuItem.with("func.stringify", Icon.diagonalSmall, "StringifyFunc", () -> {
 			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc,
 			 getObject(), o -> func = o);
 		}));
 
-		list.add(MenuList.with(Icon.eraserSmall, "@clear", this::clearVal));
-		list.add(MenuList.with(Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
+		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
+		list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
 			enableTruncate = !enableTruncate;
 		}));
 
 		if (enabledUpdateMenu()) {
-			CheckboxList checkboxList = CheckboxList.withc(Icon.refresh1Small, "Auto Refresh", enableUpdate, () -> {
+			CheckboxList checkboxList = CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", enableUpdate, () -> {
 				enableUpdate = !enableUpdate;
 			});
 			list.add(checkboxList);
@@ -408,13 +404,13 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		return list;
 	}
 
-	protected void detailsBuild(Seq<MenuList> list) {
+	protected void detailsBuild(Seq<MenuItem> list) {
 		list.add(newDetailsMenuList(this, val, (Class) type));
 	}
-	protected void specialBuild(Seq<MenuList> list) {
+	protected void specialBuild(Seq<MenuItem> list) {
 		Sr(type).isExtend(cl -> {
 			 if (cl == Drawable.class) addPickDrawable(list);
-			 list.add(MenuList.with(Icon.imageSmall, "img", () ->
+			 list.add(MenuItem.with("img.show", Icon.imageSmall, "img", () ->
 				SR.apply(() -> Sr(val)
 				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
 				 .isInstance(Texture.class, INFO_DIALOG::dialog)
@@ -427,39 +423,41 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			 }));
 		 }, Drawable.class) */
 		 .isExtend(_ -> {
-			 list.add(MenuList.with(Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
+			 list.add(MenuItem.with("element.inspect", Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
 				 REVIEW_ELEMENT.inspect((Element) val);
 			 }));
 			 list.add(newElementDetailsList((Element) val));
 			 elementSetter(list, this::setVal);
 		 }, Element.class)
 		 .isExtend(_ -> {
-			 list.add(MenuList.with(Icon.infoSmall, "At player", () -> {
+			 list.add(MenuItem.with("effect.spawnAtPlayer", Icon.infoSmall, "At player", () -> {
 				 ((Effect) val).at(Vars.player);
 			 }));
 		 }, Effect.class)
 		 .isExtend(_ -> {
-			 list.add(MenuList.with(Icon.infoCircleSmall, "Cell details", b -> {
+			 list.add(MenuItem.with("cell.inspect", Icon.infoCircleSmall, "Cell details", b -> {
 				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
 			 }));
 		 }, Cell.class)
 		 .isExtend(_ -> {
-			 list.add(DisabledList.withd(HopeIcons.position,
-				(val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on")
-				+ " world", () -> val == null, () -> {
+			 list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
+				STR."\{
+				 val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
+				 } world",
+				() -> val == null, () -> {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
 		 }, Building.class, Unit.class, Bullet.class);
 	}
-	private void addPickDrawable(Seq<MenuList> list) {
-		list.add(MenuList.with(Icon.editSmall, "@pickdrawable", () -> {
+	private void addPickDrawable(Seq<MenuItem> list) {
+		list.add(MenuItem.with("drawable.pick", Icon.editSmall, "@pickdrawable", () -> {
 			if (val instanceof Drawable d)
 				IntUI.drawablePicker().show(d, true, this::setNewVal);
 		}));
 	}
 
-	protected void elementSetter(Seq<MenuList> list, Cons<Element> callback) {
-		list.add(DisabledList.withd(Icon.editSmall, "Select and Replace",
+	protected void elementSetter(Seq<MenuItem> list, Cons<Element> callback) {
+		list.add(DisabledList.withd("element.pick", Icon.editSmall, "Select and Replace",
 		 topGroup::isSelecting,
 		 () -> topGroup.requestSelectElem(TopGroup.defaultDrawer, callback)
 		));

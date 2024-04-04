@@ -174,10 +174,10 @@ public class UnitSpawn extends Content {
 			}).size(90, 50);
 			table.button(Icon.menuSmall, HopeStyles.flati, 24, () -> {
 				IntUI.showMenuListDispose(() -> Seq.with(
-				 CheckboxList.withc(HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
-				 MenuList.with(Icon.eyeOffSmall, noScorchMarksKey, UNIT::noScorchMarks),
-				 MenuList.with(Icon.cancelSmall, killAllUnitsKey, UNIT::killAllUnits),
-				 MenuList.with(Icon.cancelSmall, removeAllUnitsKey, UNIT::removeAllUnits)
+				 CheckboxList.withc("loop", HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
+				 MenuItem.with("noScorchMarks", Icon.eyeOffSmall, noScorchMarksKey, UNIT::noScorchMarks),
+				 MenuItem.with("all.kill", Icon.cancelSmall, killAllUnitsKey, UNIT::killAllUnits),
+				 MenuItem.with("all.remove", Icon.cancelSmall, removeAllUnitsKey, UNIT::removeAllUnits)
 				));
 			}).size(32);
 		}).growX();

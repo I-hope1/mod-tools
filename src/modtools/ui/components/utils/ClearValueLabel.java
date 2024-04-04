@@ -3,7 +3,7 @@ package modtools.ui.components.utils;
 import arc.func.*;
 import arc.scene.Element;
 import arc.struct.Seq;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 
 public class ClearValueLabel<T> extends PlainValueLabel<T> {
 
@@ -16,10 +16,10 @@ public class ClearValueLabel<T> extends PlainValueLabel<T> {
 	public void clearVal() {
 		clear.run();
 	}
-	public Seq<MenuList> getMenuLists() {
+	public Seq<MenuItem> getMenuLists() {
 		return super.getMenuLists();
 	}
-	protected void elementSetter(Seq<MenuList> list, Cons<Element> callback) {
+	protected void elementSetter(Seq<MenuItem> list, Cons<Element> callback) {
 		super.elementSetter(list, (Cons<Element>) setter);
 	}
 }

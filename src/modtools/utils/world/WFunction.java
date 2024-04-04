@@ -32,7 +32,7 @@ import modtools.ui.content.ui.PositionProv;
 import modtools.ui.content.world.Selection;
 import modtools.ui.content.world.Selection.Settings;
 import modtools.ui.effect.MyDraw;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 
@@ -495,34 +495,34 @@ public abstract class WFunction<T> {
 	}
 
 
-	static <R> Seq<MenuList> getMenuLists(WFunction<R> function, List<R> list) {
-		Seq<MenuList> seq = new Seq<>(function.FUNCTIONS.size);
+	static <R> Seq<MenuItem> getMenuLists(WFunction<R> function, List<R> list) {
+		Seq<MenuItem> seq = new Seq<>(function.FUNCTIONS.size);
 		function.FUNCTIONS.each((k, r) -> {
-			seq.add(MenuList.with(null, k, () -> r.get(list)));
+			seq.add(MenuItem.with(k.replace("@", ""), null, k, () -> r.get(list)));
 		});
 		return seq;
 	}
 
 	@SuppressWarnings("unchecked")
-	public static Seq<MenuList> getMenuLists0(ObjectSet<Bullet> bulletSet) {
+	public static Seq<MenuItem> getMenuLists0(ObjectSet<Bullet> bulletSet) {
 		tmpList.clear();
 		bulletSet.each(tmpList::add);
 		return getMenuLists(SC.bullets, tmpList);
 	}
 	@SuppressWarnings("unchecked")
-	public static Seq<MenuList> getMenuLists(ObjectSet<Unit> unitSet) {
+	public static Seq<MenuItem> getMenuLists(ObjectSet<Unit> unitSet) {
 		tmpList.clear();
 		unitSet.each(tmpList::add);
 		return getMenuLists(SC.units, tmpList);
 	}
 	@SuppressWarnings("unchecked")
-	public static Seq<MenuList> getMenuLists(Building build) {
+	public static Seq<MenuItem> getMenuLists(Building build) {
 		tmpList.clear();
 		tmpList.add(build);
 		return getMenuLists(SC.buildings, tmpList);
 	}
 	@SuppressWarnings("unchecked")
-	public static Seq<MenuList> getMenuLists(Tile tile) {
+	public static Seq<MenuItem> getMenuLists(Tile tile) {
 		tmpList.clear();
 		tmpList.add(tile);
 		return getMenuLists(SC.tiles, tmpList);

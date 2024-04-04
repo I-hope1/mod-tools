@@ -18,7 +18,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
-import modtools.IntVars;
+import modtools.*;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.TSettings;
@@ -143,6 +143,7 @@ public class SettingsUI extends Content {
 				 t.button("QQ", HopeIcons.QQ, HopeStyles.flatt, () -> {
 					 Core.app.openURI(IntVars.QQ);
 				 }).row();
+				 // t.button("CheckUpdate", Icon.up, HopeStyles.flatt, Updater::checkUpdate).row();
 				 /* t.button("@mod-tools.check", Icon.androidSmall, HopeStyles.flatt, () -> {
 					 Updater.checkUpdate(b -> {});
 				 }).height(42).growX().colspan(2); */

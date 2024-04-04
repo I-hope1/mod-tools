@@ -2,7 +2,7 @@ package modtools.ui.components.utils;
 
 import arc.struct.Seq;
 import arc.util.Align;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 
 import java.lang.reflect.*;
 
@@ -21,7 +21,7 @@ public class MethodValueLabel extends ValueLabel {
 		clearVal();
 		update(null);
 	}
-	public Seq<MenuList> getMenuLists() {
+	public Seq<MenuItem> getMenuLists() {
 		return basicMenuLists(new Seq<>());
 	}
 	public void setVal() {

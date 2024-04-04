@@ -8,11 +8,10 @@ import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.ui.*;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.Label;
+import arc.scene.ui.layout.Table;
 import arc.util.Tmp;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
@@ -20,11 +19,10 @@ import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.*;
 import modtools.jsfunc.type.*;
 import modtools.ui.*;
-import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.ui.windows.utils.Comparator;
+import modtools.ui.windows.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.draw.InterpImage;
 import modtools.utils.ui.WatchWindow;
@@ -51,8 +49,8 @@ public class JSFunc
 	}
 	/* for js */
 
-	public static final Fi     dataDir          = IntVars.dataDirectory;
-	public static final Data   settings         = MySettings.SETTINGS;
+	public static final Fi   dataDir  = IntVars.dataDirectory;
+	public static final Data settings = MySettings.SETTINGS;
 
 	public static WFunction<?> getFunc(String name) {
 		return Selection.allFunctions.get(name);
@@ -168,8 +166,10 @@ public class JSFunc
 	public static void compare(Object o1, Object o2) {
 		Comparator.compare(o1, o2);
 	}
-	/** 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code>
-	 * <br>（不一定） */
+	/**
+	 * 相当于js中的严格等于：<code><b><i>{@code ===}</i></b></code>
+	 * <br>（不一定）
+	 */
 	public static boolean eq(Object a, Object b) {
 		return a == b;
 	}
@@ -178,25 +178,8 @@ public class JSFunc
 		return HopeFx.colorFulText(text);
 	}
 
-	public static<T extends Table> DesignTable<T> designTable(T t) {
-		return new DesignTable<>(t);
-	}
 	public static void design() {
-		DesignTable<?> table = new DesignTable<>(new WidgetGroup());
-		table.addChild(new Label("Nothing"));
-		INFO_DIALOG.dialog(d -> {
-			d.add(table).grow().minSize(376, 256).row();
-			d.table(buttons -> {
-				buttons.button("Text", Icon.addSmall, () -> {
-					table.addChild(new Label("Some Text"));
-				}).growX();
-				buttons.button("Image", Icon.addSmall, () -> {
-					Image actor = new Image(Tex.nomap);
-					actor.setSize(42);
-					table.addChild(actor);
-				}).growX();
-			}).growX();
-		});
+		DesignHelper.design();
 	}
 
 	public interface MyProv<T> {
@@ -215,6 +198,6 @@ public class JSFunc
 		 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba();
 		/** 代码生成{@link ColorProcessor} */
 		@SuppressWarnings("JavadocReference")
-		public static void settingColor(Table t) {}
+		public static void settingColor(Table t) { }
 	}
 }

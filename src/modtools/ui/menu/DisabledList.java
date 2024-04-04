@@ -9,7 +9,7 @@ import arc.util.pooling.Pools;
 /**
  * The type Disabled list.
  */
-public class DisabledList extends MenuList {
+public class DisabledList extends MenuItem {
 	/**
 	 * The Disabled.
 	 */
@@ -23,8 +23,9 @@ public class DisabledList extends MenuList {
 	 * @param run the run
 	 * @return the disabled list
 	 */
-	public static DisabledList withd(Drawable icon, String name, Boolp disabled, Runnable run) {
+	public static DisabledList withd(String key, Drawable icon, String name, Boolp disabled, Runnable run) {
 		DisabledList list = Pools.get(DisabledList.class,DisabledList::new, max).obtain();
+		list.key = key;
 		list.icon = icon;
 		list.name = name;
 		list.disabled = disabled;

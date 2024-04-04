@@ -182,6 +182,7 @@ public class ListDialog extends Window {
 			label.init();
 			return label.cell;
 		}
+
 		public void init() {
 			field.update(() -> {
 				if (Core.scene.getKeyboardFocus() != field) {

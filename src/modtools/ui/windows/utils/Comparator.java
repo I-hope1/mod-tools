@@ -7,7 +7,7 @@ import arc.struct.*;
 import ihope_lib.MyReflect;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 import modtools.ui.components.Window;
 import modtools.ui.components.utils.PlainValueLabel;
 import modtools.utils.reflect.*;
@@ -34,7 +34,7 @@ public class Comparator extends Window {
 			return;
 		}
 		if (o1 == null || o2 == null) {
-			comparator.cont.add((o1 == null ? "o1" : "o2") + " is null.");
+			comparator.cont.add(STR."\{o1 == null ? "o1" : "o2"} is null.");
 			Core.app.post(comparator::show);
 			return;
 		}
@@ -64,18 +64,18 @@ public class Comparator extends Window {
 		Core.app.post(comparator::show);
 	}
 
-	public static class ComparatorLabel extends PlainValueLabel {
+	public static class ComparatorLabel<T> extends PlainValueLabel<T> {
 		Object o1, o2;
 		Field field;
-		public ComparatorLabel(Class type, Prov prov, Object o1, Object o2, Field field) {
+		public ComparatorLabel(Class<T> type, Prov<T> prov, Object o1, Object o2, Field field) {
 			super(type, prov);
 			this.o1 = o1;
 			this.o2 = o2;
 			this.field = field;
 		}
-		public Seq<MenuList> getMenuLists() {
-			Seq<MenuList> lists = super.getMenuLists();
-			lists.add(MenuList.with(Icon.chartBarSmall, "Compare",
+		public Seq<MenuItem> getMenuLists() {
+			Seq<MenuItem> lists = super.getMenuLists();
+			lists.add(MenuItem.with("val.compare", Icon.chartBarSmall, "Compare",
 			 () -> Comparator.compare(FieldUtils.getOrNull(field, o1), FieldUtils.getOrNull(field, o2))));
 			return lists;
 		}

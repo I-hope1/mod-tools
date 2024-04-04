@@ -1,9 +1,8 @@
 package modtools.annotations.unsafe;
 
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Symbol.TypeSymbol;
 import com.sun.tools.javac.comp.*;
-import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.Context;
 import modtools.annotations.NoAccessCheck;
 
 import java.util.function.BiPredicate;
@@ -27,9 +26,6 @@ public class MyResolve extends Resolve {
 			sym.flags_field &= ~(Flags.PRIVATE | Flags.PROTECTED);
 		}
 		return super.isAccessible(env, site, sym, checkInner);
-	}
-	public boolean isAccessible(Env<AttrContext> env, TypeSymbol c, boolean checkInner) {
-		return true;
 	}
 
 	// Symtab       syms;

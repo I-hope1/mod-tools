@@ -16,15 +16,15 @@ import static modtools.ui.IntUI.*;
 /**
  * The type Folded list.
  */
-public class FoldedList extends MenuList implements Poolable {
+public class FoldedList extends MenuItem implements Poolable {
 	/**
 	 * The Children getter.
 	 */
-	Prov<Seq<MenuList>> childrenGetter;
+	Prov<Seq<MenuItem>> childrenGetter;
 	/**
 	 * The Children.
 	 */
-	Seq<MenuList>       children;
+	Seq<MenuItem>       children;
 	/**
 	 * Withf folded list.
 	 *
@@ -33,8 +33,9 @@ public class FoldedList extends MenuList implements Poolable {
 	 * @param children the children
 	 * @return the folded list
 	 */
-	public static FoldedList withf(Drawable icon, String name, Prov<Seq<MenuList>> children) {
+	public static FoldedList withf(String key, Drawable icon, String name, Prov<Seq<MenuItem>> children) {
 		FoldedList list = Pools.get(FoldedList.class,FoldedList::new, max).obtain();
+		list.key = key;
 		list.icon = icon;
 		list.name = name;
 		list.children = null;
@@ -63,7 +64,7 @@ public class FoldedList extends MenuList implements Poolable {
 				BindCell    bcell;
 				public void run() {
 					if (newCell == null) {
-						Seq<MenuList> list = childrenGetter.get();
+						Seq<MenuItem> list = childrenGetter.get();
 						newCell = IntUI.showMenuList(list,freeAllMenu(list), p, hide);
 						bcell = new BindCell(newCell);
 					} else bcell.toggle();

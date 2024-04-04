@@ -5,15 +5,17 @@ import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
+import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
-import modtools.ui.components.limit.*;
-import modtools.ui.menu.MenuList;
+import modtools.ui.components.limit.LimitTextButton;
+import modtools.ui.menu.MenuItem;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
 
@@ -36,6 +38,9 @@ public interface ISettings extends E_DataInterface {
 	default String name() {
 		return null;
 	}
+	default void lazyDefault(Prov<Object> o) {
+		data().get(name(), o);
+	}
 	default void def(Object o) {
 		data().get(name(), o);
 	}
@@ -52,7 +57,9 @@ public interface ISettings extends E_DataInterface {
 	default boolean enabled() {
 		return data().getBool(name());
 	}
-	default Object get() { return data().get(name()); }
+	default Object get() {
+		return data().get(name());
+	}
 	default String getString() { return data().getString(name()); }
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
@@ -197,23 +204,38 @@ public interface ISettings extends E_DataInterface {
 	}
 
 	// ContextMenu
-	private void $(MenuList[] __) {
-		var all = (Prov<Seq<MenuList>>) args();
+	@SuppressWarnings("StringTemplateMigration")
+	private void $(MenuItem[] __) {
+		var all = (Prov<Seq<MenuItem>>) args();
+		lazyDefault(() -> new Data(data(), new JsonMap()));
 
 		TextButton button = new LimitTextButton("Manage", HopeStyles.flatt);
-		main.add(text);
+		main.add(text).left();
 		main.add(button.right()).size(96, 42).row();
 		button.clicked(() -> showSelectTable(button, (p, hide, searchText) -> {
-			Seq<MenuList> lists = all.get();
-			for (MenuList menu : lists) {
+			Seq<MenuItem> lists = all.get();
+			for (int i = 0; i < lists.size; i++) {
+				MenuItem menu = lists.get(i);
 				if (menu == null) continue;
 
-				var cell = p.button(menu.getName(), menu.icon, menu.style(),
+				TextButtonStyle style = new TextButtonStyle(menu.style());
+				style.checkedFontColor = Color.gray;
+				var cell = p.button(menu.getName(), menu.icon, style,
 				 menu.iconSize(), () -> { }
 				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
 
-				cell.get().clicked(() -> {
-					Log.info(menu);
+				TextButton btn = cell.get();
+				Image      img = (Image) btn.getChildren().peek();
+				int        j   = i;
+				String     k_j = "" + i;
+				Boolc updateState = enabled -> {
+					img.setColor(enabled ? Color.gray : Color.white);
+					var o = (Data) get();
+					o.put(k_j, (enabled ? 1 : -1) * o.getInt(k_j, j + 1));
+				};
+				btn.clicked(() -> {
+					btn.toggle();
+					updateState.get(btn.isChecked());
 				});
 				cell.row();
 			}

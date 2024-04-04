@@ -6,7 +6,7 @@ import mindustry.gen.Icon;
 import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
 import modtools.ui.components.input.JSRequest;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.*;
@@ -64,12 +64,14 @@ public class FieldValueLabel extends ValueLabel {
 	public float getMinWidth() {
 		return 96;
 	}
-	public Seq<MenuList> getMenuLists() {
-		Seq<MenuList> list = new Seq<>();
+	public Seq<MenuItem> getMenuLists() {
+		Seq<MenuItem> list = new Seq<>();
 		basicMenuLists(list);
-		if (field != null && !type.isPrimitive()) list.add(MenuList.with(Icon.editSmall, "@selection.reset", () -> {
-			JSRequest.requestForField(val, obj, o -> setFieldValue(type.cast(o)));
-		}));
+		if (field != null && !type.isPrimitive()) {
+			list.add(MenuItem.with("selection.set", Icon.editSmall, "@selection.reset", () -> {
+				JSRequest.requestForField(val, obj, o -> setFieldValue(type.cast(o)));
+			}));
+		}
 		return list;
 	}
 
@@ -90,7 +92,7 @@ public class FieldValueLabel extends ValueLabel {
 		setVal(val);
 	}
 
-	protected Seq<MenuList> basicMenuLists(Seq<MenuList> list) {
+	protected Seq<MenuItem> basicMenuLists(Seq<MenuItem> list) {
 		return super.basicMenuLists(list).removeAll(l -> "@clear".equals(l.getName()));
 	}
 	public void addEnumSetter() {

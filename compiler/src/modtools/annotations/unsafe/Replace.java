@@ -147,6 +147,7 @@ public class Replace {
 
 		// replaceAccess(Resolve.class,Resolve.instance(context), "resolveMethodCheck", "nilMethodCheck");
 
+		if (true) return;
 		// 忽略模块访问检查
 		Object prev = getAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper");
 		setAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper",

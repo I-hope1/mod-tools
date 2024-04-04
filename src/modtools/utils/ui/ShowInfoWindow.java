@@ -26,7 +26,7 @@ import modtools.ui.components.input.*;
 import modtools.ui.components.input.area.AutoTextField;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
@@ -408,13 +408,13 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			foldUnwrap(fields, f, label, attribute);
 			IntUI.addShowMenuListenerp(label, () -> Seq.with(
 			 IntUI.copyAsJSMenu("Field", () -> f),
-			 MenuList.with(Icon.copySmall, "Cpy offset", () -> {
+			 MenuItem.with("field.offset.copy", Icon.copySmall, "Cpy offset", () -> {
 				 JSFunc.copyText("" + FieldUtils.fieldOffset(f));
 			 }),
-			 MenuList.with(Icon.copySmall, "Cpy field getter", () -> {
+			 MenuItem.with("field.getter.copy", Icon.copySmall, "Cpy field getter", () -> {
 				 copyFieldReflection(f);
 			 }),
-			 MenuList.with(Icon.copySmall, "Cpy value getter", () -> {
+			 MenuItem.with("val.getter.copy", Icon.copySmall, "Cpy value getter", () -> {
 				 copyFieldArcReflection(f);
 			 }),
 			 ValueLabel.newDetailsMenuList(label, f, Field.class)
@@ -495,13 +495,13 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				methods.labels.add(l);
 				IntUI.addShowMenuListenerp(label, () -> Seq.with(
 				 IntUI.copyAsJSMenu("method", () -> m),
-				 MenuList.with(Icon.copySmall, "Cpy method getter", () -> {
+				 MenuItem.with("method.getter.copy", Icon.copySmall, "Cpy method getter", () -> {
 					 copyExecutableReflection(m);
 				 }),
-				 MenuList.with(Icon.copySmall, "Cpy value getter", () -> {
+				 MenuItem.with("val.getter.copy",Icon.copySmall, "Cpy value getter", () -> {
 					 copyExecutableArcReflection(m);
 				 }),
-				 MenuList.with(Icon.boxSmall, "Invoke", () -> {
+				 MenuItem.with("method.invoke",Icon.boxSmall, "Invoke", () -> {
 					 if (isSingle) {
 						 catchRun(() -> dealInvokeResult(m.invoke(o), cell, l),
 							l).run();
@@ -512,7 +512,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 							args -> m.invoke(o, args)), cell, l);
 					 });
 				 }),
-				 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
+				 MenuItem.with("method.invokeSpecial", Icon.boxSmall, "InvokeSpecial", () -> {
 					 MethodHandle handle = getHandle(m);
 					 if (isSingle) {
 						 catchRun(() -> dealInvokeResult(handle.invokeWithArguments(o), cell, l)
@@ -594,10 +594,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			label.color.set(c_type);
 			boolean isSingle = ctor.getParameterCount() == 0;
 			IntUI.addShowMenuListenerp(label, () -> Seq.with(
-			 MenuList.with(Icon.copySmall, "Cpy reflect getter", () -> {
+			 MenuItem.with("ctor.getter.copy", Icon.copySmall, "Cpy reflect getter", () -> {
 				 copyExecutableReflection(ctor);
 			 }),
-			 MenuList.with(o == null ? Icon.copySmall : Icon.boxSmall,
+			 MenuItem.with("<init>handle.copy", o == null ? Icon.copySmall : Icon.boxSmall,
 				o == null ? "Cpy <init> handle" : "Invoke <init> method", catchRun(() -> {
 					MethodHandle init = InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor);
 					if (o == null) {
@@ -611,7 +611,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 						init.invokeWithArguments(convertArgs(arr, parmas.toArray()));
 					});
 				})),
-			 MenuList.with(Icon.boxSmall, "Invoke", () -> {
+			 MenuItem.with("constructor.invoke", Icon.boxSmall, "Invoke", () -> {
 				 if (isSingle) {
 					 catchRun(() -> JSFunc.copyValue("Instance", ctor.newInstance())
 						, label).run();
@@ -623,7 +623,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 					 ));
 				 });
 			 }),
-			 MenuList.with(Icon.boxSmall, "InvokeSpecial", () -> {
+			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", () -> {
 				 MethodHandle handle = getHandle(ctor);
 				 if (isSingle) {
 					 catchRun(() -> JSFunc.copyValue("Instance", handle.invoke())

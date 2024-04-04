@@ -18,7 +18,7 @@ import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.*;
 import modtools.ui.gen.HopeIcons;
-import modtools.ui.menu.MenuList;
+import modtools.ui.menu.MenuItem;
 import modtools.ui.components.Window;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.JSRequest;
@@ -132,7 +132,8 @@ public class Executor extends Content {
 				}
 			});
 			IntUI.longPressOrRclick(button, _ -> {
-				IntUI.showMenuListDispose(() -> Seq.with(MenuList.with(Icon.copySmall, "cpy as JS", () -> {
+				IntUI.showMenuListDispose(() -> Seq.with(
+				 MenuItem.with("copy.asjs",Icon.copySmall, "cpy as JS", () -> {
 					if (node.code != null) JSFunc.copyText(node.code);
 				})));
 			});

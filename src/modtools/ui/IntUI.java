@@ -238,15 +238,15 @@ public class IntUI {
 	 * @param prov menu提供者
 	 */
 	public static void
-	addShowMenuListenerp(Element elem, Prov<Seq<MenuList>> prov) {
+	addShowMenuListenerp(Element elem, Prov<Seq<MenuItem>> prov) {
 		longPressOrRclick(elem, _ -> showMenuListDispose(prov));
 	}
 	/**
 	 * Dispose after close.
 	 * @param prov menu提供者
 	 */
-	public static void showMenuListDispose(Prov<Seq<MenuList>> prov) {
-		Seq<MenuList> list = prov.get();
+	public static void showMenuListDispose(Prov<Seq<MenuItem>> prov) {
+		Seq<MenuItem> list = prov.get();
 		showMenuList(list, () -> Pools.freeAll(list, false));
 	}
 
@@ -256,37 +256,37 @@ public class IntUI {
 	 * @param list the list
 	 */
 	public static void
-	addShowMenuListener(Element elem, MenuList... list) {
+	addShowMenuListener(Element elem, MenuItem... list) {
 		longPressOrRclick(elem, _ -> {
 			showMenuList(Seq.with(list));
 		});
 	}
 	public static void
-	addShowMenuListener(Element elem, Iterable<MenuList> list) {
+	addShowMenuListener(Element elem, Iterable<MenuItem> list) {
 		longPressOrRclick(elem, _ -> showMenuList(list));
 	}
-	public static void showMenuList(Iterable<MenuList> list) {
+	public static void showMenuList(Iterable<MenuItem> list) {
 		showMenuList(list, null);
 	}
-	public static void showMenuList(Iterable<MenuList> list, Runnable hiddenListener) {
+	public static void showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
 		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, _) -> {
 			showMenuList(list, hiddenListener, p, hide);
 		}, false);
 	}
 	public static SelectTable showMenuListFor(
 	 Element elem,
-	 int align, Prov<Seq<MenuList>> prov) {
+	 int align, Prov<Seq<MenuItem>> prov) {
 		return showSelectTable(elem, (p, hide, _) -> {
-			Seq<MenuList> list = prov.get();
+			Seq<MenuItem> list = prov.get();
 			showMenuList(list, freeAllMenu(list), p, hide);
 		}, false, align);
 	}
-	public static Runnable freeAllMenu(Seq<MenuList> list) {
+	public static Runnable freeAllMenu(Seq<MenuItem> list) {
 		return () -> Pools.freeAll(list, false);
 	}
 
 	/** TODO: 多个FoldedList有问题 */
-	public static Cell<Table> showMenuList(Iterable<MenuList> list, Runnable hiddenListener,
+	public static Cell<Table> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
 																				 Table p, Runnable hideRun) {
 		return p.table(Styles.black6, main -> {
 			for (var menu : list) {
@@ -309,13 +309,15 @@ public class IntUI {
 	 * @param prov 对象提供
 	 * @return a menu.
 	 */
-	public static MenuList copyAsJSMenu(String key, Prov<Object> prov) {
-		return MenuList.with(Icon.copySmall,
+	@SuppressWarnings("StringTemplateMigration")
+	public static MenuItem copyAsJSMenu(String key, Prov<Object> prov) {
+		return MenuItem.with(key + ".copy", Icon.copySmall,
 		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
 		 storeRun(prov));
 	}
-	public static MenuList copyAsJSMenu(String key, Runnable run) {
-		return MenuList.with(Icon.copySmall,
+	@SuppressWarnings("StringTemplateMigration")
+	public static MenuItem copyAsJSMenu(String key, Runnable run) {
+		return MenuItem.with(key + ".copy", Icon.copySmall,
 		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
 		 run);
 	}
@@ -439,13 +441,13 @@ public class IntUI {
 		Table p = new Table();
 		p.top();
 
-		SelectTable t     = new SelectTable(p);
+		SelectTable t = new SelectTable(p);
 
 		// 淡入
 		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
 
-		Runnable    hide  = t::hideInternal;
-		Runnable    hide0 = mergeHide(t, hide);
+		Runnable hide  = t::hideInternal;
+		Runnable hide0 = mergeHide(t, hide);
 		if (searchable) {
 			newSearch(f, hide0, t, p);
 		}

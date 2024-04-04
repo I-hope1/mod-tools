@@ -370,9 +370,7 @@ public class Tester extends Content {
 			}), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
 
 			ImageButton details = IntUI.addDetailsButton(p, () -> res, null);
-			if (details.getStyle() != istyle) details.setStyle(istyle);
 			details.resizeImage(isize);
-			p.getCell(details).size(45);
 
 			p.button(HopeIcons.history, istyle, isize, history::show)
 			 .get().addCaptureListener(new ElementGestureListener() {

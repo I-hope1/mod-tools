@@ -6,18 +6,9 @@ import modtools.ui.IntUI;
 /**
  * The type Confirm list.
  */
-public class ConfirmList extends MenuList {
-	/**
-	 * With menu list.
-	 *
-	 * @param icon the icon
-	 * @param name the name
-	 * @param text the text
-	 * @param run the run
-	 * @return the menu list
-	 */
-	public static MenuList with(Drawable icon, String name, String text, Runnable run) {
-		MenuList list = with(icon, name, run);
+public class ConfirmList extends MenuItem {
+	public static MenuItem with(String key, Drawable icon, String name, String text, Runnable run) {
+		MenuItem list = with(key, icon, name, run);
 		list.cons = _ -> IntUI.showConfirm(text, run);
 		return list;
 	}

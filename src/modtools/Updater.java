@@ -15,9 +15,11 @@ import java.io.*;
 import java.net.*;
 
 import static mindustry.Vars.*;
+import static modtools.ui.IntUI.topGroup;
 
 public class Updater {
 	private static boolean checkUpdates = true;
+
 	private static boolean updateAvailable;
 	private static String  updateUrl;
 	private static String  updateBuild;
@@ -50,6 +52,11 @@ public class Updater {
 				 Core.app.post(() -> done.get(false));
 			 }
 		 });
+	}
+	public static void checkUpdate() {
+		checkUpdate(hasUpdated -> {
+			if (hasUpdated) showUpdateDialog();
+		});
 	}
 
 
@@ -96,6 +103,8 @@ public class Updater {
 					}).size(210f, 64f);
 					dialog.setFillParent(false);
 					dialog.show();
+
+					topGroup.addChild(dialog);
 				} catch (Exception e) {
 					ui.showException(e);
 				}

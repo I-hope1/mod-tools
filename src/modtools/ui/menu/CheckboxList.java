@@ -6,7 +6,7 @@ import arc.util.pooling.Pools;
 /**
  * The type Checkbox list.
  */
-public class CheckboxList extends MenuList {
+public class CheckboxList extends MenuItem {
 	/**
 	 * The Checked.
 	 */
@@ -20,8 +20,9 @@ public class CheckboxList extends MenuList {
 	 * @param run the run
 	 * @return the checkbox list
 	 */
-	public static CheckboxList withc(Drawable icon, String name, boolean checked, Runnable run) {
+	public static CheckboxList withc(String key, Drawable icon, String name, boolean checked, Runnable run) {
 		CheckboxList list = Pools.get(CheckboxList.class,CheckboxList::new, max).obtain();
+		list.key = key;
 		list.icon = icon;
 		list.name = name;
 		list.checked = checked;

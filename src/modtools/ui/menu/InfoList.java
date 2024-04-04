@@ -7,7 +7,7 @@ import arc.util.pooling.Pools;
 /**
  * The type Info list.
  */
-public class InfoList extends MenuList {
+public class InfoList extends MenuItem {
 	/**
 	 * Withi info list.
 	 *
@@ -15,8 +15,9 @@ public class InfoList extends MenuList {
 	 * @param name the name
 	 * @return the info list
 	 */
-	public static InfoList withi(Drawable icon, Prov<String> name) {
+	public static InfoList withi(String key, Drawable icon, Prov<String> name) {
 		InfoList list = Pools.get(InfoList.class, InfoList::new, max).obtain();
+		list.key = key;
 		list.icon = icon;
 		list.provider = name;
 		list.cons = null;

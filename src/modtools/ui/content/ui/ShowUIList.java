@@ -4,7 +4,7 @@ package modtools.ui.content.ui;
 import arc.Core;
 import arc.func.Cons;
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.*;
 import arc.math.Interp;
 import arc.scene.*;
 import arc.scene.style.*;
@@ -96,9 +96,22 @@ public class ShowUIList extends Content {
 	}
 
 	public static HashMap<Drawable, String> iconKeyMap  = new HashMap<>();
+	public static HashMap<Drawable, String> texKeyMap  = new HashMap<>();
 	public static HashMap<Color, String>    colorKeyMap = new HashMap<>();
-	public static HashMap<Style, String>    styleKeyMap = new HashMap<>();
-	public static HashMap<Group, String>    uiKeyMap    = new HashMap<>();
+
+	public static HashMap<Style, String>    styleKeyMap     = new HashMap<>();
+	public static HashMap<Drawable, String> styleIconKeyMap = new HashMap<>();
+
+	public static HashMap<Group, String> uiKeyMap   = new HashMap<>();
+	public static HashMap<Font, String>  fontKeyMap = new HashMap<>();
+
+	static {
+		fontKeyMap.put(Fonts.icon, "icon");
+		fontKeyMap.put(Fonts.def, "def");
+		fontKeyMap.put(Fonts.iconLarge, "iconLarge");
+		fontKeyMap.put(Fonts.tech, "tech");
+		fontKeyMap.put(Fonts.outline, "outline");
+	}
 
 	Table icons = newTable(t -> Icon.icons.each((k, icon) -> {
 		iconKeyMap.put(icon, k);
@@ -107,7 +120,7 @@ public class ShowUIList extends Content {
 		t.image(icon).size(32, region.height / (float) region.width * 32);
 		t.add(k).with(JSFunc::addDClickCopy).growY().row();
 		t.unbind();
-	})), tex  = newTable(t -> {
+	})), tex    = newTable(t -> {
 		for (Field field : Tex.class.getFields()) {
 			try {
 				// 是否为Drawable
@@ -115,7 +128,9 @@ public class ShowUIList extends Content {
 				t.bind(field.getName());
 				// 跳过private检查，减少时间
 				field.setAccessible(true);
-				addImage(t, (Drawable) field.get(null));
+				Drawable drawable = (Drawable) field.get(null);
+				texKeyMap.put(drawable, field.getName());
+				addImage(t, drawable);
 			} catch (Exception err) {
 				t.add();// 占位
 				Log.err(err);
@@ -127,9 +142,10 @@ public class ShowUIList extends Content {
 		}
 	}), styles  = newTable(true, t -> {
 		Builder.t = t;
-		Field[] fields = OS.isAndroid ? Arrays.stream(Styles.class.getFields()).sorted((a, b) -> {
-			return a.getType().hashCode() - b.getType().hashCode();
-		}).toArray(Field[]::new) : Styles.class.getFields();
+		@SuppressWarnings("ComparatorCombinators")
+		Field[] fields = OS.isAndroid ? Arrays.stream(Styles.class.getFields())
+		 .sorted((a, b) -> a.getType().hashCode() - b.getType().hashCode())
+		 .toArray(Field[]::new) : Styles.class.getFields();
 		for (Field field : fields) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;
 			try {
@@ -137,6 +153,7 @@ public class ShowUIList extends Content {
 				field.setAccessible(true);
 				Object style = field.get(null);
 				if (style instanceof Style style1) styleKeyMap.put(style1, field.getName());
+				if (style instanceof Drawable d) styleIconKeyMap.put(d, field.getName());
 				t.bind(field.getName());
 				Sr(style)
 				 .isInstance(ScrollPaneStyle.class, Builder::build)
@@ -152,7 +169,7 @@ public class ShowUIList extends Content {
 			} catch (IllegalAccessException | IllegalArgumentException err) {
 				Log.err(err);
 				continue;
-			} catch (SatisfyException ignored) {}
+			} catch (SatisfyException ignored) { }
 
 			t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
 			t.unbind();
@@ -280,22 +297,22 @@ public class ShowUIList extends Content {
 			t.add("label", style).size(32);
 		}
 		static void build(SliderStyle style) {
-			t.slider(0, 10, 1, f -> {})
+			t.slider(0, 10, 1, f -> { })
 			 .get().setStyle(style);
 		}
 		static void build(TextButtonStyle style) {
-			t.button("text button", style, () -> {}).size(96, 42);
+			t.button("text button", style, () -> { }).size(96, 42);
 		}
 		static void build(ImageButtonStyle style) {
-			t.button(Icon.ok, style, () -> {}).size(96, 42);
+			t.button(Icon.ok, style, () -> { }).size(96, 42);
 		}
 		static void build(ButtonStyle style) {
 			t.button(b -> {
 				b.add("button");
-			}, style, () -> {}).size(96, 42);
+			}, style, () -> { }).size(96, 42);
 		}
 		static void build(TextFieldStyle style) {
-			t.field("field", style, text -> {});
+			t.field("field", style, text -> { });
 		}
 		static void build(CheckBoxStyle style) {
 			t.add(new CheckBox("checkbox", style)).height(42);

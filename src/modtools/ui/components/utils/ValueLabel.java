@@ -2,7 +2,7 @@ package modtools.ui.components.utils;
 
 import arc.func.*;
 import arc.graphics.*;
-import arc.graphics.g2d.TextureRegion;
+import arc.graphics.g2d.*;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
@@ -226,13 +226,13 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		String text = CatchSR.apply(() ->
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
-				: val instanceof Character ? "'" + val + "'" /* + (int) (Character) val */
+				: val instanceof Character ? STR."'\{val}'" /* + (int) (Character) val */
 				: val instanceof Float ? FormatHelper.fixed((float) val, 2)
 				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
 
 				: val instanceof Element ? ElementUtils.getElementName((Element) val)
-
 				: getUIKey(val))
+			.get(() -> String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> val.getClass().getName())
 		);
@@ -248,20 +248,30 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 		return text;
 	}
+	private static final boolean withPrefix = true;
 	private static String getUIKey(Object val) {
-		return val instanceof TextureRegionDrawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
-		 ShowUIList.iconKeyMap.get(icon)
+		return val instanceof Drawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
+		 (withPrefix ? "Icon." : "") + ShowUIList.iconKeyMap.get(icon)
 
-		 : val instanceof Style style1 && ShowUIList.styleKeyMap.containsKey(style1) ?
-		 ShowUIList.styleKeyMap.get(style1)
+		 : val instanceof Drawable drawable && ShowUIList.styleIconKeyMap.containsKey(drawable) ?
+		 (withPrefix ? "Styles." : "") + ShowUIList.styleIconKeyMap.get(drawable)
 
-		 : val instanceof Color && ShowUIList.colorKeyMap.containsKey((Color) val) ?
-		 ShowUIList.colorKeyMap.get((Color) val)
+		 : val instanceof Drawable drawable && ShowUIList.texKeyMap.containsKey(drawable) ?
+		 (withPrefix ? "Tex." : "") + ShowUIList.texKeyMap.get(drawable)
 
-		 : val instanceof Group && ShowUIList.uiKeyMap.containsKey((Group) val) ?
-		 ShowUIList.uiKeyMap.get((Group) val)
+		 : val instanceof Style s && ShowUIList.styleKeyMap.containsKey(s) ?
+		 (withPrefix ? "Styles." : "") + ShowUIList.styleKeyMap.get(s)
 
-		 : String.valueOf(val);
+		 : val instanceof Color c && ShowUIList.colorKeyMap.containsKey(c) ?
+		 ShowUIList.colorKeyMap.get(c)
+
+		 : val instanceof Group g && ShowUIList.uiKeyMap.containsKey(g) ?
+		 (withPrefix ? "Vars.ui." : "") + ShowUIList.uiKeyMap.get(g)
+
+		 : val instanceof Font f && ShowUIList.fontKeyMap.containsKey(f) ?
+		 (withPrefix ? "Fonts." : "") + ShowUIList.fontKeyMap.get(f)
+
+		 : Tools._throw();
 	}
 	private void appendMap(StringBuilder sb, Object key, Object value) {
 		sb.append(dealVal(key));
@@ -359,15 +369,22 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		if (Style.class.isAssignableFrom(type)) {
 			list.add(DisabledList.withd(Icon.copySmall, "Copy Style", () -> val == null, () -> {
 				Class<?>      cls     = val.getClass();
-				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls)}() {{");
+				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
 				ClassUtils.getClassAndParents(cls).forEach(subclass -> {
 					for (Field field : subclass.getDeclaredFields()) {
 						int mod = field.getModifiers();
 						if (Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
-						builder.append(STR."\{field.getName()} = \{getUIKey(FieldUtils.getOrNull(field, val))};\n");
+						Object fieldVal = FieldUtils.getOrNull(field, val);
+						if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) continue;
+						String uiKey = CatchSR.apply(() ->
+						 CatchSR.of(() -> getUIKey(fieldVal))
+							.get(() -> String.valueOf(fieldVal))
+						);
+						builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
 					}
 				});
 				builder.append("}}");
+				JSFunc.copyText(builder);
 			}));
 		}
 
@@ -382,7 +399,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}));
 
 		if (enabledUpdateMenu()) {
-			CheckboxList checkboxList = CheckboxList.withc(Icon.refresh1Small, "auto refresh", enableUpdate, () -> {
+			CheckboxList checkboxList = CheckboxList.withc(Icon.refresh1Small, "Auto Refresh", enableUpdate, () -> {
 				enableUpdate = !enableUpdate;
 			});
 			list.add(checkboxList);

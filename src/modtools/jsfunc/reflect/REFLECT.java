@@ -1,11 +1,7 @@
 package modtools.jsfunc.reflect;
 
-import arc.struct.ObjectMap;
-import ihope_lib.MyReflect;
 import mindustry.Vars;
 import modtools.jsfunc.IScript;
-import modtools.ui.content.debug.Tester;
-import modtools.utils.JSFunc;
 import rhino.Scriptable;
 
 import java.lang.invoke.MethodHandle;
@@ -27,7 +23,7 @@ public interface REFLECT {
 	}
 	// --------------
 	static Scriptable findClass(String name) throws ClassNotFoundException {
-		return IScript.cx.getWrapFactory().wrapJavaClass(IScript.cx, JSFunc.scope, JSFunc.main.loadClass(name));
+		return IScript.cx.getWrapFactory().wrapJavaClass(IScript.cx, IScript.scope, IScript.main.loadClass(name));
 	}
 	static Class<?> forName(String name) throws ClassNotFoundException {
 		return Class.forName(name, false, Vars.mods.mainLoader());

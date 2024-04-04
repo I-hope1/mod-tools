@@ -4,7 +4,6 @@ package modtools.utils.reflect;
 import arc.struct.ObjectSet;
 
 public class ClassUtils {
-
 	/**
 	 * 获取给定类及其父类的所有类对象的集合
 	 * @param cls 给定的类对象
@@ -26,5 +25,4 @@ public class ClassUtils {
 		while (cls.isAnonymousClass()) cls = cls.getSuperclass();
 		return cls;
 	}
-
 }

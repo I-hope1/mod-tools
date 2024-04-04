@@ -1,6 +1,6 @@
 package modtools.jsfunc.type;
 
-import modtools.utils.JSFunc;
+import modtools.jsfunc.IScript;
 import rhino.*;
 
 public interface CAST {
@@ -20,7 +20,7 @@ public interface CAST {
 		return Context.jsToJava(o, cl);
 	}
 	static Object asJS(Object o) {
-		return Context.javaToJS(o, JSFunc.scope);
+		return Context.javaToJS(o, IScript.scope);
 	}
 	static Object toFloat(float f) {
 		return f;

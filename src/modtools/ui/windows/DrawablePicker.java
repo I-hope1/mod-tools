@@ -257,7 +257,6 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			() -> Reflect.get(TextureRegionDrawable.class, drawable, "tint"))
 		 .get(() -> Reflect.get(NinePatchDrawable.class, drawable, "tint"))
 		 .get(() -> Color.white)
-		 .get()
 		);
 	}
 	private void resetColor(Color color) {

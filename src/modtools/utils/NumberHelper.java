@@ -51,7 +51,6 @@ public class NumberHelper {
 		 CatchSR.of(() -> Strings.parseInt(text))
 			.get(() -> (int) asFloat(text))
 			.get(() -> 0)
-			.get()
 		);
 	}
 

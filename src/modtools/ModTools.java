@@ -241,5 +241,6 @@ public class ModTools extends Mod {
 		}
 	}
 
+
 	static class UnexpectedPlatform extends RuntimeException { }
 }

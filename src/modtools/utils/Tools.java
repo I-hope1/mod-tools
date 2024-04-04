@@ -267,6 +267,9 @@ public class Tools {
 			cons.get(list.get(i));
 		}
 	}
+	public static <T> T _throw() {
+		throw new RuntimeException();
+	}
 	public interface CatchRun {
 		void run() throws Throwable;
 	}

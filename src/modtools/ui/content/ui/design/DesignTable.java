@@ -24,6 +24,7 @@ public class DesignTable<T extends Group> extends Group {
 		virtualGroup.addChild(template);
 		init();
 	}
+
 	public float getPrefWidth() {
 		return template.getPrefWidth();
 	}

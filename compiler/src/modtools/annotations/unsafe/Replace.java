@@ -11,7 +11,7 @@ import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
 import com.sun.tools.javac.util.List;
@@ -50,6 +50,7 @@ public class Replace {
 		moduleFinder = ModuleFinder.instance(context);
 		try {
 			extendingFunc0();
+			setAccess(JavaCompiler.class,JavaCompiler.instance(context), "devVerbose", true);
 		} catch (Throwable e) { err(e); }
 	}
 
@@ -341,7 +342,6 @@ public class Replace {
 			clazz = clazz.getSuperclass();
 		}
 	}
-
 
 	static long off_stateValue;
 	public static void init() throws Throwable {

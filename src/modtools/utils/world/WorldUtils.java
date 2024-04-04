@@ -8,7 +8,6 @@ import mindustry.gen.*;
 import mindustry.graphics.Layer;
 import mindustry.type.*;
 import mindustry.world.*;
-import mindustry.world.blocks.environment.Floor;
 import modtools.net.packet.HopeCall;
 import modtools.ui.Contents;
 
@@ -62,6 +61,7 @@ public interface WorldUtils {
 	static void focusWorld(Bullet obj) {selection.focusInternal.add(obj);}
 	static void focusWorld(Seq<?> obj) {selection.focusInternal.add(obj);}
 	static void removeFocusAll() {selection.focusInternal.clear();}
+
 	interface UNIT {
 		static void removeAllUnits() {
 			Groups.unit.each(Unit::remove);

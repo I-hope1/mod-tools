@@ -17,35 +17,32 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.jsfunc.reflect.*;
+import modtools.struct.Pair;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.input.*;
-import modtools.ui.components.input.area.*;
-import modtools.ui.components.input.highlight.JavaSyntax;
-import modtools.ui.components.limit.*;
+import modtools.ui.components.input.area.AutoTextField;
+import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.*;
 import modtools.ui.menu.MenuList;
 import modtools.utils.*;
-import modtools.struct.Pair;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
-import rhino.*;
+import rhino.NativeArray;
 
-import java.io.StringWriter;
-import java.lang.invoke.*;
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static modtools.IntVars.hasDecompiler;
 import static modtools.ui.HopeStyles.*;
-import static modtools.utils.JSFunc.*;
 import static modtools.utils.JSFunc.JColor.*;
+import static modtools.utils.JSFunc.copyValue;
+import static modtools.utils.JSFunc.*;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
@@ -134,7 +131,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 					ISettings.buildAllWrap("jsfunc.edit.", p, "Edit", E_JSFuncEdit.class);
 				}, false);
 			}).size(42);
-			if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
+			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, clearNonei, rebuild0).size(42);
 			if (o != null) {
 				IntUI.addStoreButton(t, "", () -> o);
@@ -180,24 +177,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			events.fireIns(value);
 		}
 		pack();
-	}
-	@SuppressWarnings("Convert2Lambda")
-	private void buildDeCompiler(Table t) {
-		t.button("Decompile", HopeStyles.flatBordert, new Runnable() {
-			public void run() {
-				StringWriter stringWriter = new StringWriter();
-				com.strobel.decompiler.Decompiler.decompile(
-				 clazz.getName().replace('.', '/') + ".class",
-				 new com.strobel.decompiler.PlainTextOutput(stringWriter)
-				);
-				TextAreaTab textarea = new TextAreaTab(stringWriter.toString());
-				textarea.syntax = new JavaSyntax(textarea);
-				INFO_DIALOG.window(d -> {
-					d.cont.setSize(textarea.getArea().getPrefWidth(), textarea.getArea().getPrefHeight());
-					d.cont.add(textarea).grow();
-				});
-			}
-		}).size(100, 42);
 	}
 
 

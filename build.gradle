@@ -5,6 +5,7 @@ version '1.4.5.3'
 
 static def export(CompileOptions options) {
 //    options.compilerArgs.addAll("-Xlint:deprecation")
+	options.incremental = true
 	options.compilerArgs.addAll("-AtargetVersion=8")
 	// 只是访问
 	options.compilerArgs.addAll([
@@ -58,7 +59,7 @@ allprojects {
 
 tasks.withType(JavaCompile) {
 	options.compilerArgs.add("--enable-preview")
-//	options.compilerArgs.add("-verbose")
+	options.compilerArgs.add("-verbose")
 }
 
 sourceSets.main.java.srcDirs = ["src"]
@@ -77,17 +78,15 @@ dependencies {
 //	def sdkRoot = System.getenv("ANDROID_HOME")
 //	println "AndroidHome: $sdkRoot"
 //	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
-	if (new File("${MdtDataDir}/Mindustry_desktop.jar").exists())
-		compileOnly files("${MdtDataDir}/Mindustry_desktop.jar")
+//	if (new File("${MdtDataDir}/Mindustry_desktop.jar").exists())
+//		compileOnly files("${MdtDataDir}/Mindustry_desktop.jar")
 	compileOnly files(
 			"_libs/Mindustry_android.jar",
 			"assets/libs/reflect-core.jar",
-			"trash/procyon-0.6.jar",
+//			"trash/procyon-0.6.jar",
 			"_libs/Android_dalvik-1.0.jar",
 	)
-	implementation files(
-			"_libs/AndroidField.jar",
-	)
+	implementation files("_libs/AndroidField.jar")
 	compileOnly("com.github.Anuken.Mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
 	}
@@ -119,10 +118,6 @@ task jarAndroid {
 jar {
 	archiveFileName = "${project.archivesBaseName}-${version}.jar"
 
-	from {
-		configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-	}
-
 	from(rootDir) {
 		include "mod.hjson"
 	}
@@ -133,7 +128,6 @@ jar {
 }
 
 task playGame(type: JavaExec) {
-	dependsOn classes
 	dependsOn jar
 
 	println "buildDir: $buildDir0; version: $version"
@@ -191,7 +185,7 @@ task playAndroid {
 	def MDT_ANDROID_DIR = "/storage/emulated/0/Android/data/io.anuke.mindustry/files"
 
 	def buildDir = buildDir0
-	def fileName = "$archivesBaseName-[$version].jar"
+	def fileName = "$archivesBaseName[$version].jar"
 	doLast {
 		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)

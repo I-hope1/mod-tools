@@ -200,7 +200,7 @@ public class SR<T> {
 			}
 			throw new SatisfyException();
 		}
-		public R get() {
+		private R get() {
 			return value;
 		}
 		public interface ProvT<R> {

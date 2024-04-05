@@ -13,11 +13,11 @@ import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.jsfunc.type.CAST;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.utils.MySettings.Data;
-import modtools.utils.Tools;
 
 import java.lang.reflect.Method;
 
@@ -111,7 +111,7 @@ public interface ISettings extends E_DataInterface {
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
-		Method build = $builds.get(Tools.box(type));
+		Method build = $builds.get(CAST.box(type));
 		try {
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {

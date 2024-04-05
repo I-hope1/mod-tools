@@ -95,15 +95,15 @@ public class ShowUIList extends Content {
 		 0x877F5E_FF, null);
 	}
 
-	public static HashMap<Drawable, String> iconKeyMap  = new HashMap<>();
-	public static HashMap<Drawable, String> texKeyMap  = new HashMap<>();
-	public static HashMap<Color, String>    colorKeyMap = new HashMap<>();
+	public static Map<Drawable, String> iconKeyMap  = new HashMap<>();
+	public static Map<Drawable, String> texKeyMap   = new HashMap<>();
+	public static Map<Color, String>    colorKeyMap = new HashMap<>();
 
-	public static HashMap<Style, String>    styleKeyMap     = new HashMap<>();
-	public static HashMap<Drawable, String> styleIconKeyMap = new HashMap<>();
+	public static Map<Style, String>    styleKeyMap     = new HashMap<>();
+	public static Map<Drawable, String> styleIconKeyMap = new HashMap<>();
 
-	public static HashMap<Group, String> uiKeyMap   = new HashMap<>();
-	public static HashMap<Font, String>  fontKeyMap = new HashMap<>();
+	public static Map<Group, String> uiKeyMap   = new HashMap<>();
+	public static Map<Font, String>  fontKeyMap = new HashMap<>();
 
 	static {
 		fontKeyMap.put(Fonts.icon, "icon");

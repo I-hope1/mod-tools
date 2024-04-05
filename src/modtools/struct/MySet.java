@@ -22,7 +22,7 @@ public class MySet<T> extends OrderedSet<T> {
 			}
 		});
 	}
-	public int getIndex(T t) {
+	public int indexOf(T t) {
 		int c = 0;
 		for (var v : this) {
 			if (v == t) return c;

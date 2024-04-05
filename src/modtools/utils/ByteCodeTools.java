@@ -4,6 +4,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.struct.*;
 import arc.util.*;
+import modtools.jsfunc.type.CAST;
 import modtools.utils.reflect.*;
 import rhino.classfile.ClassFileWriter;
 
@@ -23,7 +24,7 @@ public class ByteCodeTools {
 
 	public static final String
 	 FUNCTION_KEY = "_K_Fn",
-	 CLASS_FILE   = "_ihope_";
+	 CLASS_FILE   = "_ihope";
 	private static int lastID = 0;
 	private static int nextID() {
 		return lastID++;
@@ -229,7 +230,7 @@ public class ByteCodeTools {
 		public <T2> void setField(int flags, Class<T2> type, String name, T2 val) {
 			writer.addField(name, typeToNative(type), (short) flags);
 			if (val != null) {
-				if (!Modifier.isStatic(flags)) throw new IllegalArgumentException("field " + name + " isn't static");
+				if (!Modifier.isStatic(flags)) throw new IllegalArgumentException("Field " + name + " isn't static");
 				queues.add(new Queue<>(name, () -> val, type));
 			}
 		}
@@ -347,16 +348,8 @@ public class ByteCodeTools {
 		return builder.toString();
 	}
 
-	public static Class<?> box(Class<?> type) {
-		if (type == boolean.class) return Boolean.class;
-		if (type == byte.class) return Byte.class;
-		if (type == char.class) return Character.class;
-		if (type == short.class) return Short.class;
-		if (type == int.class) return Integer.class;
-		if (type == float.class) return Float.class;
-		if (type == long.class) return Long.class;
-		if (type == double.class) return Double.class;
-		return type;
+	static Class<?> box(Class<?> type) {
+		return CAST.box(type);
 	}
 
 	public static void addCast(ClassFileWriter writer, Class<?> type) {
@@ -408,7 +401,7 @@ public class ByteCodeTools {
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)
-	public @interface Exclude {}
+	public @interface Exclude { }
 
 	public interface MyRun {
 		int get(ClassFileWriter cfw);

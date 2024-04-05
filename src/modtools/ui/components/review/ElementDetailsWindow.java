@@ -4,7 +4,6 @@ import arc.scene.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.Tex;
-import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.IDisposable;
@@ -55,8 +54,8 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 				t.add();
 			}).colspan(2).row();
 			table.defaults().height(32).growX();
-			table.button("growX", style, cl::growX);
-			table.button("growY", style, cl::growY);
+			table.button("GrowX", style, cl::growX);
+			table.button("GrowY", style, cl::growY);
 			table.row();
 		}
 
@@ -66,9 +65,9 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 			CellDetailsWindow.checkboxField(table, Group.class, element, "transform", boolean.class).row();
 
 		cont.row().defaults().height(32).growX();
-		cont.button("invalidate", style, element::invalidate).row();
-		cont.button("invalidateHierarchy", style, element::invalidateHierarchy).row();
-		cont.button("layout", style, element::layout).row();
-		cont.button("pack", style, element::pack).row();
+		cont.button("Invalidate", style, element::invalidate).row();
+		cont.button("InvalidateHierarchy", style, element::invalidateHierarchy).row();
+		cont.button("Layout", style, element::layout).row();
+		cont.button("Pack", style, element::pack).row();
 	}
 }

@@ -39,6 +39,7 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
+import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
 import static modtools.utils.JSFunc.copyValue;

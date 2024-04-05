@@ -1,12 +1,11 @@
 package modtools.utils;
 
 import arc.util.Strings;
+import modtools.jsfunc.type.CAST;
 import modtools.utils.SR.CatchSR;
 import rhino.ScriptRuntime;
 
 import java.lang.reflect.InvocationTargetException;
-
-import static modtools.utils.Tools.box;
 
 /** Positive: {@code num >= 0}
  * @see Strings */
@@ -55,7 +54,7 @@ public class NumberHelper {
 	}
 
 	public static Number cast(String text, Class<?> type0) {
-		Class<?> type = box(type0);
+		Class<?> type = CAST.box(type0);
 		if (type == Float.class) return asFloat(text);
 		if (type == Integer.class) return asInt(text);
 		if (type == Double.class) return Double.parseDouble(text);
@@ -65,7 +64,7 @@ public class NumberHelper {
 		try {
 			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
 		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-			throw new ClassCastException(text + " cannot be cast to " + type0);
+			throw new ClassCastException(STR."\{text} cannot be cast to \{type0}");
 		}
 	}
 }

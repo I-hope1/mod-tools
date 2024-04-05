@@ -21,11 +21,11 @@ import java.util.Optional;
 
 import static arc.Core.scene;
 import static mindustry.Vars.*;
-import static modtools.utils.ElementUtils.$$.*;
+import static modtools.utils.ElementUtils.$.*;
 
 
 public interface ElementUtils {
-	class $$ {
+	class $ {
 		static final Vec2 v1 = new Vec2();
 		static final Vec2 v2 = new Vec2();
 	}

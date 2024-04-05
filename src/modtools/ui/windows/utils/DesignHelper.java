@@ -2,31 +2,29 @@ package modtools.ui.windows.utils;
 
 import arc.Core;
 import arc.scene.ui.*;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.WidgetGroup;
 import arc.struct.Seq;
+import arc.util.Align;
 import mindustry.gen.*;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.ui.components.windows.ListDialog.ModifiedLabel;
-import modtools.ui.content.ui.ShowUIList;
+import modtools.ui.*;
 import modtools.ui.content.ui.design.DesignTable;
-import modtools.ui.content.ui.design.DesignTable.Status;
+import modtools.ui.content.ui.design.DesignTable.*;
+import modtools.ui.menu.MenuItem;
 
 public class DesignHelper {
 	public static void design() {
 		DesignTable<?> table = new DesignTable<>(new WidgetGroup());
 
-		Table label = modifiedLabel("Nothing");
+		DesignLabel label = new DesignLabel("Nothing");
 		INFO_DIALOG.dialog(d -> {
 			d.add(table).grow().minSize(376, 256).row();
 			d.table(Tex.pane, buttons -> {
 				buttons.button("Text", Icon.addSmall, () -> {
-					table.addChild(modifiedLabel("Some Text"));
+					table.addChild(new DesignLabel("Some Text"));
 				}).growX();
 				buttons.button("Image", Icon.addSmall, () -> {
-					Image actor = new Image(Tex.nomap);
-					actor.setSize(42);
-					actor.clicked(() -> actor.setDrawable(Seq.with(ShowUIList.iconKeyMap.keySet()).random()));
-					table.addChild(actor);
+					table.addChild(new DesignImage());
 				}).growX();
 			}).growX().row();
 			d.table(Tex.pane, buttons -> {
@@ -49,6 +47,12 @@ public class DesignHelper {
 				for (CheckBox button : group.getButtons()) {
 					buttons.add(button).growX();
 				}
+				buttons.button(Icon.menu, HopeStyles.flati, () -> {})
+				 .with(b -> b.clicked(() -> IntUI.showMenuListFor(b, Align.top, () -> Seq.with(
+					MenuItem.with("save", Icon.saveSmall, "Save", table::save),
+					MenuItem.with("load", Icon.download, "Load", table::load),
+					MenuItem.with("export.code", Icon.export, "Export As Java", table::export)
+				 ))));
 			}).growX();
 		});
 		Core.app.post(() -> table.addChild(label));
@@ -57,13 +61,5 @@ public class DesignHelper {
 		CheckBox box = new CheckBox(text);
 		box.name = name;
 		return box;
-	}
-	private static Table modifiedLabel(String defaultText) {
-		String[] text = {defaultText};
-		Table    t    = new Table();
-		ModifiedLabel.build(() -> text[0], _ -> true, (f, l) -> {
-			text[0] = f.getText();
-		}, t);
-		return t;
 	}
 }

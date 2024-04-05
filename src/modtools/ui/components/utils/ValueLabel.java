@@ -33,6 +33,7 @@ import java.lang.reflect.*;
 import java.util.Map;
 
 import static modtools.events.E_JSFunc.truncate_text;
+import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
@@ -366,18 +367,14 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
 				Class<?>      cls     = val.getClass();
 				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
-				ClassUtils.getClassAndParents(cls).forEach(subclass -> {
-					for (Field field : subclass.getDeclaredFields()) {
-						int mod = field.getModifiers();
-						if (Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
-						Object fieldVal = FieldUtils.getOrNull(field, val);
-						if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) continue;
-						String uiKey = CatchSR.apply(() ->
-						 CatchSR.of(() -> getUIKey(fieldVal))
-							.get(() -> String.valueOf(fieldVal))
-						);
-						builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
-					}
+				ClassUtils.walkPublicNotStaticKeys(cls, field -> {
+					Object fieldVal = FieldUtils.getOrNull(field, val);
+					if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
+					String uiKey = CatchSR.apply(() ->
+					 CatchSR.of(() -> getUIKey(fieldVal))
+						.get(() -> String.valueOf(fieldVal))
+					);
+					builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
 				});
 				builder.append("}}");
 				JSFunc.copyText(builder);

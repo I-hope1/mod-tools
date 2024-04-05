@@ -31,7 +31,7 @@ public class Tools {
 		try {
 			return fi.exists() ? fi.readString() : "";
 		} catch (Throwable ignored) {}
-		return ">>>><ERROR><<<<";
+		return "<ERROR>";
 	}
 
 	public static String clName(Object o) {
@@ -103,34 +103,6 @@ public class Tools {
 				}
 			}
 		}, 0f, 1f, -1);
-	}
-
-
-	public static Class<?> box(Class<?> type) {
-		if (!type.isPrimitive()) return type;
-		if (type == boolean.class) return Boolean.class;
-		if (type == byte.class) return Byte.class;
-		if (type == char.class) return Character.class;
-		if (type == short.class) return Short.class;
-		if (type == int.class) return Integer.class;
-		if (type == float.class) return Float.class;
-		if (type == long.class) return Long.class;
-		if (type == double.class) return Double.class;
-		return type;
-		// return TO_BOX_MAP.get(type, type);
-	}
-	public static Class<?> unbox(Class<?> type) {
-		if (type.isPrimitive()) return type;
-		if (type == Boolean.class) return boolean.class;
-		if (type == Byte.class) return byte.class;
-		if (type == Character.class) return char.class;
-		if (type == Short.class) return short.class;
-		if (type == Integer.class) return int.class;
-		if (type == Float.class) return float.class;
-		if (type == Long.class) return long.class;
-		if (type == Double.class) return double.class;
-		// it should not reach
-		return type;
 	}
 
 	/** 这个会自动强转  */

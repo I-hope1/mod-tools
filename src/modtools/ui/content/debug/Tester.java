@@ -98,11 +98,14 @@ public class Tester extends Content {
 				if (!(entry.value instanceof Data map)) continue;
 
 				String taskName = startupTask().name;
-				String source = STR."(()=>{modName='\{taskName}';scriptName=`\{entry.key}`;\{
+				String mainCode =
 				 map.getBool("disposable") && map.containsKey("type") ?
-					STR."Events.on(\{map.get("type")}, $e$ => {try{\n\{bookmarkDirectory.child(entry.key).readString()};}catch(e){Log.err(e);}});"
-					: bookmarkDirectory.child(entry.key).readString()
-				 }\n})()";
+					STR."""
+					Events.on(\{map.get("type")}, $e$=>{ try { \n\{bookmarkDirectory.child(entry.key).readString()};
+					} catch(e) { Log.err(e); }});
+					"""
+					: bookmarkDirectory.child(entry.key).readString();
+				String source = STR."(()=>{modName='\{taskName}';scriptName=`\{entry.key}`;\{mainCode}\n})()";
 				ExecuteTree.node(() -> {
 					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);
 				 }, taskName, entry.key, Icon.none, () -> { })
@@ -576,11 +579,13 @@ public class Tester extends Content {
 	public final LogHandler logHandler = new DefaultLogHandler() {
 		public void log(LogLevel level, String text) {
 			if (level == LogLevel.err) super.log(level, text);
-			String s = (level == LogLevel.debug ? "D"
-			 : level == LogLevel.info ? "I"
-			 : level == LogLevel.warn ? "W"
-			 : level == LogLevel.err ? "E"
-			 : " ") + text;
+			String s = switch (level) {
+				case debug -> "D";
+				case info -> "I";
+				case warn -> "W";
+				case err -> "E";
+				default -> " ";
+			} + text;
 			logs.add(Tools.format(s));
 		}
 	};

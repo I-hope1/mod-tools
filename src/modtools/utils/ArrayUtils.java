@@ -1,10 +1,10 @@
 package modtools.utils;
 
 import arc.func.*;
-import arc.struct.*;
+import arc.struct.ObjectMap;
 import arc.struct.ObjectMap.Entry;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Array;
 import java.util.*;
 
 @SuppressWarnings("unchecked")
@@ -64,5 +64,4 @@ public class ArrayUtils {
 		}
 		return sum;
 	}
-
 }

@@ -1,7 +1,10 @@
 package modtools.utils.reflect;
 
 
+import arc.func.Cons;
 import arc.struct.ObjectSet;
+
+import java.lang.reflect.*;
 
 public class ClassUtils {
 	/**
@@ -24,5 +27,12 @@ public class ClassUtils {
 	public static Class<?> getSuperExceptAnonymous(Class<?> cls) {
 		while (cls.isAnonymousClass()) cls = cls.getSuperclass();
 		return cls;
+	}
+	public static void walkPublicNotStaticKeys(Class<?> cls, Cons<Field> cons) {
+		for (Field field : cls.getFields()) {
+			int mod = field.getModifiers();
+			if (Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
+			cons.get(field);
+		}
 	}
 }

@@ -2,7 +2,7 @@ package modtools.ui.components.limit;
 
 import arc.Core;
 import arc.math.geom.Vec2;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.ui.ScrollPane;
 import modtools.utils.ElementUtils;
 
@@ -26,6 +26,7 @@ public interface Limit {
 		ScrollPane pane = ElementUtils.findParentPane(actor);
 		if (pane == null) return false;
 
+		/* 获取pane的绝对坐标 */
 		pane.localToStageCoordinates(v1.set(0, 0));
 		boolean computeIfOverStage = v1.x + pane.getWidth() > Core.graphics.getWidth()
 																 || v1.y + pane.getHeight() < Core.graphics.getHeight()
@@ -34,13 +35,21 @@ public interface Limit {
 		/* w, h > 0 */
 		float w = actor.getWidth(), h = actor.getHeight();
 		if (computeIfOverStage) {
-			actor.localToStageCoordinates(v2.set(0, 0));
+			actor.localToStageCoordinates(v2.set(pane.getVelocityX(), pane.getVelocityY()));
 			if (v2.x < -w || v2.y < -h || v2.x > Core.graphics.getWidth() || v2.y > Core.graphics.getHeight()) {
 				return false;
 			}
 		}
-		actor.localToAscendantCoordinates(pane, v1.set(0, 0));
+		/* 获取actor相对于pane的坐标 */
+		actor.localToAscendantCoordinates(pane, v1.set(pane.getVelocityX(), pane.getVelocityY()));
 		return v1.x > -w && v1.y > -h && v1.x < pane.getWidth() && v1.y < pane.getHeight();
 		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();
+	}
+	static Limit findClosetParent(Element actor) {
+		Group p = actor.parent;
+		while (!(p instanceof Limit || p == null)) {
+			p = p.parent;
+		}
+		return (Limit) p;
 	}
 }

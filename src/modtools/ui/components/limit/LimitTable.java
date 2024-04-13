@@ -1,7 +1,6 @@
 package modtools.ui.components.limit;
 
 import arc.func.Cons;
-import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
@@ -10,13 +9,14 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import modtools.utils.Tools;
 
-import java.util.*;
+import java.util.HashSet;
 
 import static modtools.ui.components.limit.Limit.isVisible;
 
 
 public class LimitTable extends Table implements Limit {
 	private HashSet<Element> limitElems;
+
 	public LimitTable() {}
 	public LimitTable(Drawable background) {
 		super(background);
@@ -88,19 +88,16 @@ public class LimitTable extends Table implements Limit {
 		return add(new LimitImage(name));
 	}
 
-	HashSet<Element> acquireLimitElems() {
-		return limitElems == null ? limitElems = new HashSet<>() : limitElems;
-	}
 	public <T extends Element> Cell<T> add(T element) {
-		if (!(element instanceof Limit) && element != null) acquireLimitElems().add(element);
 		return super.add(element);
 	}
-	// final Vec2 absPos = new Vec2();
 
 	public void updateVisibility() {
 		// Limit.absPos(this, absPos);
-
 		visible = isVisible(this);
-		if (visible) acquireLimitElems().forEach(el -> el.visible = isVisible(el));
+		children.each(t -> {
+			if (t instanceof Limit) return;
+			t.visible = isVisible(t);
+		});
 	}
 }

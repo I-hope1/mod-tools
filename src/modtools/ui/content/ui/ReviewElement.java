@@ -439,6 +439,17 @@ public class ReviewElement extends Content {
 			int childIndex;
 			hovered(this::requestKeyboard);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
+			keyDown(KeyCode.del, () -> {
+				Runnable go = () -> {
+					remove();
+					element.remove();
+				};
+				if (Core.input.shift()) {
+					go.run();
+				} else {
+					IntUI.showConfirm("@confirm.remove", go);
+				}
+			});
 			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
 				/* 占位符 */
@@ -577,13 +588,15 @@ public class ReviewElement extends Content {
 			StringBuilder sb = new StringBuilder();
 			while (el != null) {
 				if (el.name != null) {
-					return "Core.scene.find(\"" + el.name + "\")" + sb;
-				} else {
+					return STR."Core.scene.find(\"\{el.name}\")\{sb}";
+				}else if (el instanceof Group && ShowUIList.uiKeyMap.containsKey(el)) {
+					return STR."Vars.ui.\{ShowUIList.uiKeyMap.get(el)}\{sb}";
+				}else {
 					sb.append(".children.get(").append(el.getZIndex()).append(')');
 					el = el.parent;
 				}
 			}
-			return element.getScene() != null ? "Core.scene.root" + sb : sb.delete(0, 0);
+			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 		}
 	}
 

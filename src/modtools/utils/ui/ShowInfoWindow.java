@@ -252,16 +252,16 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		Class<?>[] classes = cls.getDeclaredClasses();
 		classesTable.build(cls, type, classes);
 		// 字段
-		for (Field f : fields) {buildField(o, fieldsTable, f);}
+		for (Field f : fields) { buildField(o, fieldsTable, f); }
 		checkRemovePeek(fieldsTable);
 		// 函数
-		for (Method m : methods) {buildMethod(o, methodsTable, m);}
+		for (Method m : methods) { buildMethod(o, methodsTable, m); }
 		checkRemovePeek(methodsTable);
 		// 构造器
-		for (Constructor<?> ctor : constructors) {buildConstructor(o, consTable, ctor);}
+		for (Constructor<?> ctor : constructors) { buildConstructor(o, consTable, ctor); }
 		checkRemovePeek(consTable);
 		// 类
-		for (Class<?> dcls : classes) {buildClass(classesTable, dcls);}
+		for (Class<?> dcls : classes) { buildClass(classesTable, dcls); }
 		checkRemovePeek(classesTable);
 		// 实现接口
 		buildInterface(o, cls);
@@ -283,7 +283,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return cell;
 	}
 	private static void addModifier(Table table,
-																	CharSequence string) {
+	                                CharSequence string) {
 		addModifier(table, string, 0.7f);
 	}
 	private static void addModifier(Table table, CharSequence string, float scale) {
@@ -499,10 +499,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 MenuItem.with("method.getter.copy", Icon.copySmall, "Cpy method getter", () -> {
 					 copyExecutableReflection(m);
 				 }),
-				 MenuItem.with("val.getter.copy",Icon.copySmall, "Cpy value getter", () -> {
+				 MenuItem.with("val.getter.copy", Icon.copySmall, "Cpy value getter", () -> {
 					 copyExecutableArcReflection(m);
 				 }),
-				 MenuItem.with("method.invoke",Icon.boxSmall, "Invoke", () -> {
+				 MenuItem.with("method.invoke", Icon.boxSmall, "Invoke", () -> {
 					 if (isSingle) {
 						 catchRun(() -> dealInvokeResult(m.invoke(o), cell, l),
 							l).run();
@@ -567,7 +567,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 	}
 	private static void foldUnwrap(ReflectTable table, Member member, MyLabel label,
-																 Element attribute) {
+	                               Element attribute) {
 		if (table.skip || !E_JSFunc.folded_name.enabled()) return;
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
@@ -581,9 +581,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				table.left().top().defaults().left().top();
 				var   pair = table.map.get(member.getName());
 				Table one  = pair.getFirst(ShowInfoWindow::newPairTable);
-				p.add(one).right().grow().get();
+				p.add(one).self(c -> c.update(_ -> {
+					c.width(table.getWidth());
+				}).right().grow().get());
 				Time.runTask(6f, one::invalidateHierarchy);
-			}, false, Align.topLeft);
+			}, false, Align.topLeft).table.background(Styles.black6);
 		}, null);
 	}
 	private static void buildConstructor(Object o, ReflectTable table, Constructor<?> ctor) {
@@ -612,18 +614,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 						init.invokeWithArguments(convertArgs(arr, parmas.toArray()));
 					});
 				})),
-			 MenuItem.with("constructor.invoke", Icon.boxSmall, "Invoke", () -> {
-				 if (isSingle) {
-					 catchRun(() -> JSFunc.copyValue("Instance", ctor.newInstance())
-						, label).run();
-					 return;
-				 }
-				 JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
-					 JSFunc.copyValue("Instance", ctor.newInstance(
-						convertArgs(arr, ctor.getParameterTypes())
-					 ));
-				 });
-			 }),
 			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", () -> {
 				 MethodHandle handle = getHandle(ctor);
 				 if (isSingle) {
@@ -633,8 +623,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 }
 				 JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
 					 JSFunc.copyValue("Instance", handle.invokeWithArguments(
-						 convertArgs(arr, ctor.getParameterTypes())
-						));
+						convertArgs(arr, ctor.getParameterTypes())
+					 ));
 				 });
 			 }),
 			 IntUI.copyAsJSMenu("constructor", () -> ctor),
@@ -659,7 +649,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
-				addModifier(t, STR."\{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())} class ", 1);
+				addModifier(t, STR."\{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())} \{cls.isInterface() ? "" : "class"}", 1);
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
@@ -753,7 +743,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .getSecond(Seq::new).add(member);
 		}
 		public Table row() {
-			return current == null || !isBound() ? super.row() : current.row();
+			return current == null || !isBound() ? super.row() :
+			 (skip ? skipTable : current).row();
 		}
 		public void unbind() {
 			super.unbind();
@@ -776,7 +767,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .colspan(colspan)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).map(String::valueOf),
-				() -> null, _ -> {}, 400, 0, true, Align.left)))
+				() -> null, _ -> { }, 400, 0, true, Align.left)))
 			 .row();
 			Underline.of(current, colspan, Color.lightGray).padTop(6);
 		}
@@ -794,7 +785,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 	}
 	private static void addUnderline(ReflectTable table,
-																	 int colspan) {
+	                                 int colspan) {
 		Underline.of(table, colspan, tmpC1.set(c_underline));
 	}
 

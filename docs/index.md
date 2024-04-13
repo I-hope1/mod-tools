@@ -43,7 +43,9 @@
 - 选择不可触摸的元素
 - + 移动端：双指过滤当前元素
   + 电脑端：按`F`过滤当前元素
-- 对着元素按`i`，显示详情（打开ShowInfoWindow)\
+- 指着元素按`i`，显示详情（打开ShowInfoWindow)\
+- 指着元素按`del`，（`shift`不显示确认），删除元素
+- 指着元素按`<` / `>`，折叠Group
 ![reviewElement](./screenshots/review_element.png)
 
 ## Window

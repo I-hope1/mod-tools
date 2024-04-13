@@ -45,6 +45,7 @@ public class FoldedImageButton extends ImageButton {
 	}
 
 	public void fireCheck(boolean checked, boolean fireEvents) {
+		if (isDisabled()) return;
 		this.checked = checked;
 		if (fireEvents) onChange();
 		else getImage().rotation = checked ? -90 : 0;

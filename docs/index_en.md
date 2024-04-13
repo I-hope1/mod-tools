@@ -9,52 +9,54 @@ English|[中文](index.md)
 ![](./screenshots/tester.png)
 
 - Provide `JS` editor `Tester`
-- - `Ctrl`+`Shift`+`Enter` to execute code immediately
-- - `Ctrl`+`Shift`+`↑/↓` to switch history
-  - `Ctrl`+`Shift`+`D` to view detailed information
+- - Press `Ctrl`+`Shift`+`Enter` to execute code immediately
+- - Press `Ctrl`+`Shift`+`↑/↓` to switch history records
+  - Press `Ctrl`+`Shift`+`D` to view detailed information
 - Built-in `unsafe`, `lookup`
 - Built-in `IntFunc` class (abbreviated as `$`)
-- + `$.xxx` can represent basic data types (e.g. `$.void` represents `Void.TYPE`; `$.J` represents long.class)
+- + `$.xxx` can represent primitive data types (e.g., `$.void` represents `Void.TYPE`;`$.J` represents long.class)
 - `$p` represents `Packages`
 - Code: [JSFunc](https://github.com/i-hope1/mod-tools/src/modtools/utils/JSFunc.java)
-- Long press on code in the favorites to add it to the startup items\
+- Long press on code in the favorites to add to startup items\
 ![](./screenshots/startup.png)
-- Quickly switch history\
+- Quick switch history\
 ![Screenshot 2024-03-10 14-45-37](https://github.com/I-hope1/mod-tools/assets/78016895/4918af35-19af-4fab-b961-70bdc8679fe8)
 
 ## UnitSpawn
 
-- Multi-team selection
-- Support for fixed-point generation
+- Multiple team selection
+- Support for fixed point spawning
 - Display `name` and `localizedName`\
 ![unitSpawn](./screenshots/unit_spawn.png)
 
 
 ## Selection
 - Selector
-- Support `Tile`, `Building`, `Bullet`, `Unit`\
+- Supports `Tile`, `Building`, `Bullet`, `Unit`\
 ![selection](./screenshots/selection.png)
 
-- `Ctrl`+`Alt` fix Focus Window
+- Press `Ctrl`+`Alt` to fix Focus Window
 
 ## ReviewElement
 
 - Display element list, double-click to copy element to js variable
 - Select untouchable elements
 - + Mobile: Filter current element with two fingers
-  + Computer: Filter current element by pressing `F`
-- Press `i` on the element to display details (open ShowInfoWindow)\
+  + PC: Press `F` to filter current element
+- Press `i` on an element to display details (open ShowInfoWindow)\
+- Press `del` on an element (`shift` hides confirmation), delete element
+- Press `<` / `>` on an element to collapse Group
 ![reviewElement](./screenshots/review_element.png)
 
 ## Window
 
-- `Ctrl`+`Tab` to switch windows
-- `Shift`+`F4` to close the current window
+- Press `Ctrl`+`Tab` to switch windows
+- Press `Shift`+`F4` to close current window
 
 ## ShowInfoWindow
 
 - `'null` represents null string
-- `Ctrl`+`F` to focus on search box
+- Press `Ctrl`+`F` to focus search box
 
 
 ## Others

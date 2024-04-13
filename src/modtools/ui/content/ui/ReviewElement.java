@@ -250,7 +250,7 @@ public class ReviewElement extends Content {
 
 			name = "ReviewElementWindow";
 
-			pane.left().defaults().left();
+			pane.top().left().defaults().left().top();
 			cont.table(t -> {
 				Button[] bs = {null};
 				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, HopeStyles.flatBordert, () -> {
@@ -302,7 +302,9 @@ public class ReviewElement extends Content {
 					if (hideSelf) return name;
 					return super.toString();
 				}
-			}).grow().minHeight(90);
+			}).grow().minHeight(120);
+
+			// shown(pane::invalidateHierarchy);
 
 			/* update(() -> {
 				if (focusWindow instanceof ReviewElementWindow && !CANCEL_TASK.isScheduled()) {
@@ -326,8 +328,8 @@ public class ReviewElement extends Content {
 			this.pattern = pattern;
 			build(element, pane);
 
-			pane.row();
-			pane.image().color(Pal.accent).growX().padTop(8).padBottom(8).row();
+			// pane.row();
+			// pane.image().color(Pal.accent).growX().padTop(8).padBottom(8).row();
 			// highlightShowMultiRow(pane, pattern, element + "");
 		}
 
@@ -381,7 +383,7 @@ public class ReviewElement extends Content {
 		public void build(Element element, Table table) {
 			if (element == null) throw new IllegalArgumentException("element is null");
 			if (hideSelf && element instanceof ReviewElementWindow) {
-				table.add("----" + name + "-----", defaultLabel).row();
+				table.add(STR."----\{name}-----", defaultLabel).row();
 				return;
 			}
 			table.left().defaults().left().growX();
@@ -464,6 +466,8 @@ public class ReviewElement extends Content {
 				image().growY().left().update(
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
 				);
+				keyDown(KeyCode.left, () -> button.fireCheck(false));
+				keyDown(KeyCode.right, () -> button.fireCheck(true));
 				defaults().growX();
 				table(t -> {
 					/*if (children.isEmpty()) {

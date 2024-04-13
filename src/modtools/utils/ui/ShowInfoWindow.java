@@ -451,7 +451,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			}
 		}).pad(4).growX();
 		addDisplayListener(fields.add(new MyHoverTable(buttons -> {
-			IntUI.addLabelButton(buttons, () -> l[0].val, type);
+			if (!l[0].type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l[0].val, type);
 			IntUI.addWatchButton(buttons,
 				STR."\{f.getDeclaringClass().getSimpleName()}: \{f.getName()}",
 				() -> f.get(o))
@@ -538,7 +538,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 							dealInvokeResult(m.invoke(o), cell, l);
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 					}
-					IntUI.addLabelButton(buttons, () -> l.val, l.type);
+					if (!l.type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l.val, l.type);
 				})).colspan(0);
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow().left();

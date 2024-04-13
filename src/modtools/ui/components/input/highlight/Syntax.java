@@ -234,7 +234,7 @@ public class Syntax {
 		}
 		void init() {
 			super.init();
-			lastSymbol = '\u0000';
+			lastSymbol = '\0';
 		}
 
 		boolean draw(int i) {

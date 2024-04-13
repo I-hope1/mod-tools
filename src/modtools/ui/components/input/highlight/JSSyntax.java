@@ -1,11 +1,11 @@
 package modtools.ui.components.input.highlight;
 
-import java.util.HashMap;
-
 import arc.graphics.Color;
 import arc.struct.*;
 import modtools.jsfunc.IScript;
 import rhino.*;
+
+import java.util.HashMap;
 
 public class JSSyntax extends Syntax {
 
@@ -109,40 +109,53 @@ public class JSSyntax extends Syntax {
 
 	@SuppressWarnings("StringEqualsCharSequence")
 	public TokenDraw[] tokenDraws = {
-	 task -> {
-		 String token = task.token + "";
-		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000') {
-			 if (operatesSymbol.lastSymbol == '.') return dealJSProp(token);
+	 new TokenDraw() {
+		 String variableToken;
+		 public Color draw(DrawToken task) {
+			 String token = task.token + "";
+			 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
+				 if (operatesSymbol.lastSymbol == '.') return JSSyntax.this.dealJSProp(token);
 
-			 obj = null;
-			 pkg = null;
-		 }
+				 obj = null;
+				 pkg = null;
+			 }
 
-		 for (var entry : TOKEN_MAP) {
-			 if (!entry.key.contains(token)) continue;
-			 if (!enableJSProp || (
-				entry.key != customConstantSet && entry.key != customVarSet
-			 ) || obj != null) return entry.value;
+			 for (var entry : TOKEN_MAP) {
+				 if (!entry.key.contains(token)) continue;
+				 if (!enableJSProp || (
+					entry.key != customConstantSet && entry.key != customVarSet
+				 ) || obj != null) return entry.value;
 
-			 resolveToken(customScope, task, token);
-			 return entry.value;
+				 JSSyntax.this.resolveToken(customScope, task, token);
+				 return entry.value;
+			 }
+			 if (lastTask != task) return null;
+			 String lastToken = task.lastToken + "";
+			 if (localKeywords.contains(lastToken)) {
+				 variableToken = lastToken;
+				 localVars.add(token);
+				 return c_localvar;
+			 }
+			 if ("const".equals(lastToken)) {
+				 variableToken = lastToken;
+				 localConstants.add(token);
+				 return c_constants;
+			 }
+			 if (lastTask != operatesSymbol || operatesSymbol.lastSymbol != ',') { return null; }
+			 if (localKeywords.contains(variableToken)) {
+				 localVars.add(token);
+				 return c_localvar;
+			 }
+			 if ("const".equals(variableToken)) {
+				 localConstants.add(token);
+				 return c_constants;
+			 }
+			 return null;
 		 }
-		 if (lastTask != task) return null;
-		 String lastToken = task.lastToken + "";
-		 if (localKeywords.contains(lastToken)) {
-			 localVars.add(token);
-			 return c_localvar;
-		 }
-		 if ("const".equals(lastToken)) {
-			 localConstants.add(token);
-			 return c_constants;
-		 }
-
-		 return null;
 	 },
 	 task -> "function".equals(task.lastToken) && lastTask == task ? c_functions : null,
 	 task -> {
-		 CharSequence s = operatesSymbol.lastSymbol != '\u0000' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
+		 CharSequence s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
 		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN") ? null : c_number;
 	 }
 	};
@@ -233,7 +246,7 @@ public class JSSyntax extends Syntax {
 	 },
 	 };
 
-	{taskArr = taskArr0;}
+	{ taskArr = taskArr0; }
 
 	public static IntSet operates = new IntSet();
 	public static IntSet brackets = new IntSet();

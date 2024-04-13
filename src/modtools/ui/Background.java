@@ -21,7 +21,7 @@ public class Background {
 		if (!(render.getClass().isAnonymousClass()
 		      && render.getClass().getEnclosingClass() == Group.class
 		      && render.getClass().getSuperclass() == Element.class)) return;
-		render.clear();
+		render.visible = false;
 		// render.remove();
 
 		// Draw.rect(Draw.wrap(Core.graphics.isPortrait() ? portrait : landscape), 0, 0);

@@ -120,7 +120,11 @@ public class Tester extends Content {
 		if (scripts != null) return;
 		scripts = Vars.mods.getScripts();
 		topScope = scripts.scope;
-		scope = new BaseFunction(topScope, topScope);
+		scope = new ScriptableObject(topScope, topScope) {
+			public String getClassName() {
+				return "TesterScope";
+			}
+		};
 		cx = scripts.context;
 	}
 
@@ -418,7 +422,7 @@ public class Tester extends Content {
 		}, t -> {
 			try {
 				return !t.isBlank() && !fileUnfair.matcher(t).find()
-							 && !bookmark.file.child(t).exists();
+				       && !bookmark.file.child(t).exists();
 			} catch (Throwable e) {
 				return false;
 			}
@@ -902,7 +906,7 @@ public class Tester extends Content {
 				cancel = true;
 				area.clearSelection();
 			} else if (textarea.virtualString != null &&
-								 (keycode == KeyCode.right || keycode == KeyCode.tab)) {
+			           keycode == KeyCode.tab) {
 				cancel = true;
 				area.selectNearWord();
 				area.paste(textarea.virtualString.text, true);
@@ -911,15 +915,14 @@ public class Tester extends Content {
 			check(event);
 			return true;
 		}
-		public boolean keyTyped(InputEvent event, char character) {
-			check(event);
-			return true;
-		}
 		private void complement() {
 			int lastCursor = area.getCursorPosition();
 			try {
 				complement0();
-			} catch (Throwable _) { return; }
+			} catch (Throwable err) {
+				Log.err(err);
+				return;
+			}
 			area.setCursorPosition(lastCursor);
 		}
 		private void complement0() {
@@ -944,7 +947,7 @@ public class Tester extends Content {
 			String[] array = keys.stream()
 			 .map(String::valueOf)
 			 .filter(key -> key.startsWith(searchingKey)
-											&& searchingKey.length() < key.length()).toArray(String[]::new);
+			                && searchingKey.length() < key.length()).toArray(String[]::new);
 			if (array.length == 0) return;
 			// Log.info(key);
 			if (textarea.virtualString == null) textarea.virtualString = new VirtualString();
@@ -952,18 +955,22 @@ public class Tester extends Content {
 			textarea.virtualString.text = array[lastCompletionIndex++ % array.length];
 			// area.paste(array[lastCompletionIndex++ % array.length], true);
 		}
-		public boolean keyUp(InputEvent event, KeyCode keycode) {
+
+		public boolean keyTyped(InputEvent event, char character) {
 			check(event);
-			char character = event.character;
 			if (!hasFunctionKey() &&
-					(area.isWordCharacter(character) ||
-					 character == '.') &&
-					(syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
-					auto_complement.enabled()) {
+			    (area.isWordCharacter(character) ||
+			     character == '.') &&
+			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
+			    auto_complement.enabled()) {
 				if (textarea.virtualString != null) event.stop();
 				Core.app.post(this::complement);
 			}
 			return false;
+		}
+		public boolean keyUp(InputEvent event, KeyCode keycode) {
+			check(event);
+			return super.keyUp(event, keycode);
 		}
 		private void check(InputEvent event) {
 			if (cancel) event.cancel();

@@ -45,11 +45,4 @@ public interface Limit {
 		return v1.x > -w && v1.y > -h && v1.x < pane.getWidth() && v1.y < pane.getHeight();
 		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();
 	}
-	static Limit findClosetParent(Element actor) {
-		Group p = actor.parent;
-		while (!(p instanceof Limit || p == null)) {
-			p = p.parent;
-		}
-		return (Limit) p;
-	}
 }

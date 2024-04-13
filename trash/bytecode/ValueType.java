@@ -1,7 +1,7 @@
 package modtools.ui.windows.bytecode;
 
 public enum ValueType {
-	_object(Object.class, '\u0000'),
+	_object(Object.class, '\0'),
 	_int(int.class, 'I'),
 	_float(float.class, 'F'),
 	_double(double.class, 'D'),

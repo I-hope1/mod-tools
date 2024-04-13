@@ -34,7 +34,7 @@ public class JavaSyntax extends Syntax {
 	  bracketsSymbol = new DrawSymbol(brackets, c_brackets);
 
 	public        TokenDraw[] tokenDraws = {/* tokon map */task -> {
-		if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\u0000' && operatesSymbol.lastSymbol == '.') {
+		if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.') {
 			return null;
 		}
 		for (var entry : TOKEN_MAP) {
@@ -47,7 +47,7 @@ public class JavaSyntax extends Syntax {
 		CharSequence token = Sr(task.token.charAt(task.token.length() - 1))
 		                       .get(t -> t == 'F' || t == 'f' || t == 'l' || t == 'L'
 			                               ? task.token.subSequence(0, task.token.length() - 1) : task.token);
-		CharSequence s = operatesSymbol.lastSymbol != '\u0000' && operatesSymbol.lastSymbol == '.'
+		CharSequence s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.'
 		                 && task.token.charAt(0) == 'e' && task.lastToken != null
 		                   ? task.lastToken + "." + token : token;
 		return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) ? null : c_number;

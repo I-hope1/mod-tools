@@ -40,7 +40,7 @@ public class Tools {
 
 	// 去除颜色
 	public static String format(String s) {
-		return s.replaceAll("\\[(\\w+?)]", "[\u0001$1]");
+		return s.replaceAll("\\[(\\w+?)]", "[\1$1]");
 	}
 
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {

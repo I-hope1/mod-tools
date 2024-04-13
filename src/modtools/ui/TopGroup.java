@@ -20,7 +20,7 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.Icon;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
-import modtools.annotations.SettingsInit;
+import modtools.annotations.settings.SettingsInit;
 import modtools.events.ISettings;
 import modtools.struct.TaskSet;
 import modtools.ui.components.*;

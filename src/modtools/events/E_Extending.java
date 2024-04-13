@@ -1,6 +1,6 @@
 package modtools.events;
 
-import modtools.annotations.SettingsInit;
+import modtools.annotations.settings.SettingsInit;
 
 @SettingsInit
 public enum E_Extending implements ISettings {

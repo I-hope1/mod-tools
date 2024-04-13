@@ -82,7 +82,7 @@ public class ReviewElement extends Content {
 	public static Window  FOCUS_WINDOW;
 
 	public static void addFocusSource(Element source, Prov<Window> windowProv,
-																		Prov<Element> focusProv) {
+	                                  Prov<Element> focusProv) {
 		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
 		if (windowProv == null) throw new IllegalArgumentException("windowProv is null.");
 		source.addListener(new InputListener() {

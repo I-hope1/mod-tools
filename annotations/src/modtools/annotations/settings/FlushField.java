@@ -1,4 +1,4 @@
-package modtools.annotations;
+package modtools.annotations.settings;
 
 
 import java.lang.annotation.*;

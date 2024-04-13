@@ -21,6 +21,7 @@ import mindustry.ui.Styles;
 import modtools.*;
 import modtools.events.*;
 import modtools.ui.*;
+import modtools.ui.Frag.Settings;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisWindow;
@@ -83,7 +84,7 @@ public class SettingsUI extends Content {
 		}});
 		add("Effects", Icon.effectSmall, new LimitTable() {{
 			left().defaults().left();
-			ISettings.buildAll("blur.", this, E_Blur.class);
+			ISettings.buildAll("blur", this, E_Blur.class);
 		}});
 
 		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall,
@@ -101,6 +102,7 @@ public class SettingsUI extends Content {
 				TSettings.debugBounds::enabled);
 			 ISettings.buildAll("", this, E_Game.class);
 			 ISettings.buildAll("", this, E_Extending.class);
+			 Settings.position.buildSwitch("frag", this);
 
 			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 			 button("Font", HopeStyles.flatBordert, () -> {

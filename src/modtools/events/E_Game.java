@@ -3,7 +3,7 @@ package modtools.events;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import mindustry.core.Version;
-import modtools.annotations.*;
+import modtools.annotations.settings.*;
 
 import static modtools.events.E_Game.DEF.*;
 

@@ -3,6 +3,7 @@ package modtools.ui;
 import arc.*;
 import arc.graphics.Color;
 import arc.math.*;
+import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.Touchable;
@@ -12,6 +13,8 @@ import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.annotations.settings.SettingsInit;
+import modtools.events.ISettings;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Hitter;
 import modtools.ui.components.Window.ClearScroll;
@@ -25,6 +28,7 @@ import modtools.utils.ui.search.BindCell;
 import java.util.*;
 
 import static modtools.IntVars.modName;
+import static modtools.ui.Frag.Settings.position;
 import static modtools.ui.IntUI.topGroup;
 
 public class Frag extends Table {
@@ -70,6 +74,10 @@ public class Frag extends Table {
 
 		left().bottom();
 		topGroup.addChild(this);
+		if (position.isSwitchOn()) {
+			Vec2 pos = position.getPosition();
+			setPosition(pos.x, pos.y);
+		}
 		Log.info("Initialize TopGroup.");
 
 		var listener = new MoveInsideListener();
@@ -152,6 +160,16 @@ public class Frag extends Table {
 			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
 			main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
 			main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
+			position.set(STR."(\{x},\{y})");
+		}
+	}
+
+	@SettingsInit()
+	public enum Settings implements ISettings {
+		position(Position.class, 0, 0, 1, 1);
+		Settings(Class<?> c, float... args) { }
+		static {
+			position.defSwitchOn(false);
 		}
 	}
 }

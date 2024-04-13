@@ -1,6 +1,7 @@
 package modtools.ui.components;
 
 import arc.func.Cons;
+import arc.input.KeyCode;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
@@ -20,7 +21,8 @@ public class ChildrenFirstTable extends LimitTable {
 	public ChildrenFirstTable(Cons<Table> cons) {
 		super(cons);
 	}
-	/** Adds a hover/mouse enter listener. */
+
+	/** {@inheritDoc}  */
 	public void hovered(Runnable r) {
 		addListener(new InputListener() {
 			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
@@ -30,7 +32,7 @@ public class ChildrenFirstTable extends LimitTable {
 		});
 	}
 
-	/** Adds a hover/mouse exit listener. */
+	/** {@inheritDoc}  */
 	public void exited(Runnable r) {
 		addListener(new InputListener() {
 			public void exit(InputEvent event, float x, float y, int pointer, Element fromActor) {
@@ -39,4 +41,16 @@ public class ChildrenFirstTable extends LimitTable {
 			}
 		});
 	}
+
+	/** {@inheritDoc}  */
+	public void keyDown(Cons<KeyCode> cons) {
+			addListener(new InputListener() {
+				@Override
+				public boolean keyDown(InputEvent event, KeyCode keycode) {
+					cons.get(keycode);
+					event.stop();
+					return true;
+				}
+			});
+		}
 }

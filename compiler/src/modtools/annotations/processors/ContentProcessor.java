@@ -11,6 +11,7 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
+import modtools.annotations.settings.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;

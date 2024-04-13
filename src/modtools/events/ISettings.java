@@ -3,6 +3,7 @@ package modtools.events;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.math.Mathf;
+import arc.math.geom.Vec2;
 import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
@@ -13,6 +14,7 @@ import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.annotations.settings.*;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.limit.LimitTextButton;
@@ -21,23 +23,50 @@ import modtools.utils.MySettings.Data;
 
 import java.lang.reflect.Method;
 
-import static modtools.events.ISettings.$$.text;
+import static modtools.events.ISettings.$$.*;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 import static modtools.ui.content.SettingsUI.colorBlock;
 
-@SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */})
+/**
+ * @see SettingsInit
+ */
+@SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */, "StringTemplateMigration"})
 public interface ISettings extends E_DataInterface {
 	/** 这会根据实现自动更改 */
-	Data data = null;
+	Data   data           = null;
+	String SUFFIX_ENABLED = "$enabled";
 	default Data data() {
 		return null;
 	}
+
 	default Class<?> type() { return boolean.class; }
+
+	/* class Switch {
+		boolean enabled() { }
+		void def(boolean b) { }
+		void set(boolean b) { }
+	}
+	default Switch _switch() {
+
+	} */
+	/** 是否为开关，用于某一个设置的开启/关闭 */
+	default boolean isSwitchOn() {
+		return data().getBool(name() + SUFFIX_ENABLED, true);
+	}
+	default void defSwitchOn(boolean b) {
+		data().get(name() + SUFFIX_ENABLED, b);
+	}
+	default void setSwitchOn(boolean b) {
+		data().put(name() + SUFFIX_ENABLED, b);
+	}
+
 	default Object args() { return null; }
 	default String name() {
 		return null;
 	}
+
+
 	default void lazyDefault(Prov<Object> o) {
 		data().get(name(), o);
 	}
@@ -74,6 +103,14 @@ public interface ISettings extends E_DataInterface {
 	default int getColor() {
 		return data().get0xInt(name(), -1);
 	}
+	default Vec2 getPosition() {
+		String s = getString();
+		int    i = s.indexOf(',');
+		if (i == -1) return Tmp.v3.set(0, 0);
+		return Tmp.v3.set(Float.parseFloat(s.substring(1, i)),
+		 Float.parseFloat(s.substring(i + 1, s.length() - 1)));
+	}
+
 
 	static void buildAllWrap(String prefix, Table p, String title, Class<? extends ISettings> cl) {
 		p.row().table(Tex.pane, table -> {
@@ -83,20 +120,27 @@ public interface ISettings extends E_DataInterface {
 		});
 	}
 
-	/** @param prefix 用于显示设置文本 */
+	/**
+	 * 使用的入口
+	 * @param prefix 用于显示设置文本
+	 */
 	static void buildAll(String prefix, Table table, Class<? extends ISettings> cl) {
-		buildAll0("@settings." + prefix, table, cl);
+		buildAll0("@settings." + autoAddComma(prefix), table, cl);
 	}
+	/* Internal  */
 	private static void buildAll0(String prefix, Table table, Class<? extends ISettings> cl) {
 		for (ISettings value : cl.getEnumConstants()) {
 			value.build(prefix, table);
 		}
 	}
 
+	default void buildSwitch(String prefix, Table table) {
+		main = table;
+		check(STR."@settings.\{autoAddComma(prefix)}\{name()}\{SUFFIX_ENABLED}", this::setSwitchOn, this::isSwitchOn);
+	}
 	default void build(Table table) {
 		build("", table);
 	}
-
 	/**
 	 * <pre>
 	 * int: (min, max, step)
@@ -119,8 +163,13 @@ public interface ISettings extends E_DataInterface {
 		}
 	}
 	class $$ {
-		static String text;
+		static String  text;
+		static boolean isSwitch;
 
+		@SuppressWarnings("StringTemplateMigration")
+		static String autoAddComma(String s) {
+			return s.isEmpty() ? s : s + ".";
+		}
 		static {
 			$builds.each((_, m) -> m.setAccessible(true));
 		}

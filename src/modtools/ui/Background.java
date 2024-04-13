@@ -16,7 +16,9 @@ import static modtools.IntVars.root;
 public class Background {
 	public static void load() {
 		Element tmp = Vars.ui.menuGroup.getChildren().get(0);
-		if (!(tmp instanceof Group group)) return;
+		if (!(tmp instanceof Group group && tmp.getClass().isAnonymousClass()
+		      && tmp.getClass().getEnclosingClass() == Group.class
+		      && tmp.getClass().getSuperclass() == Element.class)) return;
 		Element childrenFirst = group.getChildren().first();
 		childrenFirst.clear();
 		childrenFirst.remove();

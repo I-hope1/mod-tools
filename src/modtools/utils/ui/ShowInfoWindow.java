@@ -126,10 +126,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, _, _) -> {
 					p.background(Styles.black6);
 					p.left().defaults().left().growX();
-					ISettings.buildAll("jsfunc.", p, E_JSFunc.class);
+					ISettings.buildAll("jsfunc", p, E_JSFunc.class);
 					// addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
-					ISettings.buildAllWrap("jsfunc.display.", p, "Display", E_JSFuncDisplay.class);
-					ISettings.buildAllWrap("jsfunc.edit.", p, "Edit", E_JSFuncEdit.class);
+					ISettings.buildAllWrap("jsfunc.display", p, "Display", E_JSFuncDisplay.class);
+					ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
 				}, false);
 			}).size(42);
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);

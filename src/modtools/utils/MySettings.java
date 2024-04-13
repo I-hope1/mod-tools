@@ -7,7 +7,6 @@ import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import modtools.IntVars;
-import modtools.events.E_Blur;
 import rhino.ScriptRuntime;
 
 import java.util.Objects;
@@ -69,7 +68,7 @@ public class MySettings {
 			} else parent.write();
 		};
 		public void write() {
-			TaskManager.acquireTask(24, task);
+			TaskManager.acquireTask(12, task);
 		}
 
 		public Object get(String key, Object defaultValue) {

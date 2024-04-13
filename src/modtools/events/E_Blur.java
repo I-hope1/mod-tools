@@ -1,6 +1,6 @@
 package modtools.events;
 
-import modtools.annotations.SettingsInit;
+import modtools.annotations.settings.SettingsInit;
 import modtools.ui.effect.EBBlur.DEF;
 
 @SettingsInit

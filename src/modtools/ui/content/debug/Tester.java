@@ -791,7 +791,7 @@ public class Tester extends Content {
 		Table table = new Table();
 		table.defaults().growX();
 		dataInit();
-		ISettings.buildAll("tester.", table, Settings.class);
+		ISettings.buildAll("tester", table, Settings.class);
 
 		Contents.settings_ui.add(localizedName(), icon, table);
 	}

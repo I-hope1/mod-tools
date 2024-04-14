@@ -35,13 +35,13 @@ public interface Limit {
 		/* w, h > 0 */
 		float w = actor.getWidth(), h = actor.getHeight();
 		if (computeIfOverStage) {
-			actor.localToStageCoordinates(v2.set(pane.getVelocityX(), pane.getVelocityY()));
+			actor.localToStageCoordinates(v2.set(0, 0));
 			if (v2.x < -w || v2.y < -h || v2.x > Core.graphics.getWidth() || v2.y > Core.graphics.getHeight()) {
 				return false;
 			}
 		}
 		/* 获取actor相对于pane的坐标 */
-		actor.localToAscendantCoordinates(pane, v1.set(pane.getVelocityX(), pane.getVelocityY()));
+		actor.localToAscendantCoordinates(pane, v1.set(0, 0));
 		return v1.x > -w && v1.y > -h && v1.x < pane.getWidth() && v1.y < pane.getHeight();
 		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();
 	}

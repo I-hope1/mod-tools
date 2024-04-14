@@ -101,10 +101,10 @@ public class Tester extends Content {
 				String mainCode =
 				 map.getBool("disposable") && map.containsKey("type") ?
 					STR."""
-					Events.on(\{map.get("type")}, $e$=>{ try { \n\{bookmarkDirectory.child(entry.key).readString()};
+					Events.on(\{map.get("type")}, $e$=>{ try { \n\{readFiOrEmpty(bookmarkDirectory.child(entry.key))};
 					} catch(e) { Log.err(e); }});
 					"""
-					: bookmarkDirectory.child(entry.key).readString();
+					: readFiOrEmpty(bookmarkDirectory.child(entry.key));
 				String source = STR."(()=>{modName='\{taskName}';scriptName=`\{entry.key}`;\{mainCode}\n})()";
 				ExecuteTree.node(() -> {
 					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);

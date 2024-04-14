@@ -61,7 +61,7 @@ public class ShowUIList extends Content {
 		tab.setPrefSize(getW(), -1);
 		ui.cont.table(t -> {
 			t.left().defaults().left();
-			t.add(bgColorWrap);
+			t.add(colorWrap);
 			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
 			t.table(t0 -> t0.check("ForceDisabled",
 				forceDisabled, val -> forceDisabled = val).with(c -> c.setStyle(HopeStyles.hope_defaultCheck)))
@@ -73,7 +73,7 @@ public class ShowUIList extends Content {
 		Table wrap = new Table();
 		ui.cont.add(top).growX().row();
 		ui.cont.add(wrap).grow();
-		new Search((cont, text) -> {
+		new Search((_, text) -> {
 			if (!wrap.getChildren().isEmpty()) {
 				pattern = PatternUtils.compileRegExpOrNull(text);
 				return;
@@ -87,12 +87,16 @@ public class ShowUIList extends Content {
 	Pattern pattern;
 
 	Color bgColor;
-	Table bgColorWrap = new Table();
+	static Color iconColor;
+	Table colorWrap = new Table();
 
 	{
-		bgColor = SettingsUI.colorBlock(bgColorWrap,
-		 "bgColor", data(), "bgColor",
+		bgColor = SettingsUI.colorBlock(colorWrap.table().get(),
+		 "bg", data(), "bgColor",
 		 0x877F5E_FF, null);
+		iconColor = SettingsUI.colorBlock(colorWrap.table().get(),
+		 "icon", data(), "iconColor",
+		 -1/* white */, null);
 	}
 
 	public static Map<Drawable, String> iconKeyMap  = new HashMap<>();
@@ -113,14 +117,21 @@ public class ShowUIList extends Content {
 		fontKeyMap.put(Fonts.outline, "outline");
 	}
 
+	static Field colorField = FieldUtils.getFieldAccess(Element.class, "color");
+	private static void setColor(Image image) {
+		FieldUtils.setValue(colorField, image, iconColor);
+	}
+
 	Table icons = newTable(t -> Icon.icons.each((k, icon) -> {
 		iconKeyMap.put(icon, k);
 		t.bind(k);
 		var region = icon.getRegion();
-		t.image(icon).size(32, region.height / (float) region.width * 32);
+		setColor(t.image(icon)
+		 .size(32, region.height / (float) region.width * 32).get());
 		t.add(k).with(JSFunc::addDClickCopy).growY().row();
 		t.unbind();
-	})), tex    = newTable(t -> {
+	}))
+	, tex = newTable(t -> {
 		for (Field field : Tex.class.getFields()) {
 			try {
 				// 是否为Drawable
@@ -238,6 +249,7 @@ public class ShowUIList extends Content {
 	});
 	static void addImage(Table t, Drawable drawable) {
 		Image image = new Image(drawable);
+		setColor(image);
 		image.fillParent = true;
 		Label label = new Label(drawable instanceof TextureRegionDrawable ? "texture" : "nine");
 		label.setColor(Color.lightGray);
@@ -288,7 +300,7 @@ public class ShowUIList extends Content {
 				p.add("pane").row();
 				p.add("test-test-test").color(Color.gray).row();
 				p.add("test-test-test").color(Color.gray).row();
-			}).growX().maxWidth(96).height(42);
+			}).growX().maxWidth(144).height(64);
 		}
 		static void build(DialogStyle style) {
 			t.pane(p -> p.add(new Dialog("dialog", style))).growX().height(42);

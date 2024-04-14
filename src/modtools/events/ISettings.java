@@ -242,7 +242,7 @@ public interface ISettings extends E_DataInterface {
 		var enums     = new Seq<>((Enum<?>[]) enumClass.getEnumConstants());
 		list(text, this::set, new Prov<>() {
 			public Enum<?> get() {
-				return Enum.valueOf(enumClass, ISettings.this.data().getString(ISettings.this.name()));
+				return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
 			}
 		}, enums, Enum::name);
 	}

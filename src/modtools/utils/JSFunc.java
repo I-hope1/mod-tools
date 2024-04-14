@@ -195,7 +195,10 @@ public class JSFunc
 		 c_keyword      = 0xF92672_FF,
 		 c_type         = 0x66D9EF_FF,
 		 c_underline    = Color.lightGray.cpy().a(0.5f).rgba(),
-		 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba();
+		 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba()
+		 // c_pane         = Color.black.rgba()
+		                  //
+		  ;
 		/** 代码生成{@link ColorProcessor} */
 		@SuppressWarnings("JavadocReference")
 		public static void settingColor(Table t) { }

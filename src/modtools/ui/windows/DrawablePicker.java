@@ -13,14 +13,14 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import mindustry.gen.*;
+import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.*;
-import modtools.ui.components.*;
+import modtools.ui.IntUI.*;
+import modtools.ui.components.Window;
+import modtools.ui.components.utils.*;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.gen.HopeIcons;
-import modtools.ui.IntUI.*;
-import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.style.TintDrawable;
 import modtools.utils.SR.CatchSR;
 import modtools.utils.Tools;
@@ -371,7 +371,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 
 		public String toString() {
-			return drawable.toString() + "#" + color.toString();
+			return STR."\{ValueLabel.getUIKey(drawable)}#\{color.toString()}";
 		}
 	}
 	private class DelegetingColor extends Color {

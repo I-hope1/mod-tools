@@ -18,7 +18,7 @@ public class FieldUtils {
 			return null;
 		}
 	}
-	/** 查找包括自类的字段  */
+	/** 查找包括自类的字段 */
 	public static Field getFieldAccessAll(Class<?> cls, String name) {
 		Field field;
 		while (cls != null) {
@@ -60,7 +60,7 @@ public class FieldUtils {
 	}
 
 
-	/** @return {@code null} if field isn't static or getting an exception.  */
+	/** @return {@code null} if field isn't static or getting an exception. */
 	public static <T> T getOrNull(Field field) {
 		try {
 			return Modifier.isStatic(field.getModifiers()) ? (T) field.get(null) : null;
@@ -68,7 +68,7 @@ public class FieldUtils {
 			return null;
 		}
 	}
-	/** @return {@code null} if getting an exception.  */
+	/** @return {@code null} if getting an exception. */
 	public static <T> T getOrNull(Field field, Object o) {
 		try {
 			return (T) field.get(o);
@@ -76,10 +76,11 @@ public class FieldUtils {
 			return null;
 		}
 	}
+
 	public static long fieldOffset(Class<?> cls, String name) {
-		try {
-			Desktop.unsafe.objectFieldOffset(cls, name);
-		} catch (Throwable ignored) {}
+		// 尝试使用jdk中的unsafe获取offset
+		try { Desktop.unsafe.objectFieldOffset(cls, name); } catch (Throwable ignored) { }
+
 		try {
 			return fieldOffset(cls.getDeclaredField(name));
 		} catch (NoSuchFieldException e) {
@@ -89,11 +90,22 @@ public class FieldUtils {
 	public static long fieldOffset(Field f) {
 		return fieldOffset(Modifier.isStatic(f.getModifiers()), f);
 	}
+	private interface OffsetGetter {
+		long fieldOffset(boolean isStatic, Field f);
+		class DefaultImpl implements OffsetGetter {
+			public long fieldOffset(boolean isStatic, Field f) {
+				return isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+			}
+		}
+		class AndroidImpl implements OffsetGetter {
+			public long fieldOffset(boolean isStatic, Field f) {
+				return hope_android.FieldUtils.getFieldOffset(f);
+			}
+		}
+		OffsetGetter impl = OS.isAndroid ? new AndroidImpl() : new DefaultImpl();
+	}
 	public static long fieldOffset(boolean isStatic, Field f) {
-		try {
-			if (OS.isAndroid) return hope_android.FieldUtils.getFieldOffset(f);
-		} catch (Throwable ignored) {}
-		return isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+		return OffsetGetter.impl.fieldOffset(isStatic, f);
 	}
 	public static Object getFieldValue(Object o, long off, Class<?> type) {
 		if (int.class.equals(type)) {
@@ -148,17 +160,16 @@ public class FieldUtils {
 		}
 	}
 	public static void setValue(Object obj, Class<?> cls, String name, Object val,
-	Class<?> valType) {
+	                            Class<?> valType) {
 		setValue(obj, fieldOffset(cls, name), val, valType);
 	}
-
 
 
 	public static boolean setBoolean(Object o, Field field, boolean val) {
 		try {
 			field.setBoolean(o, val);
 			return true;
-		} catch (IllegalAccessException ignored) {}
+		} catch (IllegalAccessException ignored) { }
 		return false;
 	}
 	/** for compiler */

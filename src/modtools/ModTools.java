@@ -233,7 +233,7 @@ public class ModTools extends Mod {
 		} catch (Throwable e) {
 			if (showError) {
 				error = e;
-				Log.err("Unexpected exception when loading '" + sourceFi + "'", e);
+				Log.err(STR."Unexpected exception when loading '\{sourceFi}'", e);
 			}
 			return false;
 		} finally {

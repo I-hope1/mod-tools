@@ -1,10 +1,10 @@
 package modtools.ui.components;
 
-import modtools.struct.v6.HSeq;
+import arc.struct.Seq;
 import modtools.ui.IntUI.IMenu;
 
 public class Hitter extends FillElement implements IMenu {
-	public static HSeq<Hitter> all = new HSeq<>();
+	public static Seq<Hitter> all = new Seq<>();
 	public Hitter() {
 		all.add(this);
 	}

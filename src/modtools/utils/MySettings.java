@@ -9,7 +9,7 @@ import mindustry.Vars;
 import modtools.IntVars;
 import rhino.ScriptRuntime;
 
-import java.util.Objects;
+import java.util.*;
 
 public class MySettings {
 	private static final Fi dataDirectory = IntVars.dataDirectory;
@@ -124,8 +124,8 @@ public class MySettings {
 				 .append(k.replaceAll("\"", "\\\\\""))
 				 .append('"').append(": ")
 				 .append(v instanceof Data ? ((Data) v).toString(tab) :
-					(Reflect.isWrapper(v.getClass()) ? v : "\"" + v.toString()
-					 .replaceAll("\\\\", "\\\\") + "\""))
+					(Reflect.isWrapper(v.getClass()) ? v :
+					 STR."\"\{v.toString().replaceAll("\\\\", "\\\\")}\""))
 				 .append('\n');
 			});
 			builder.deleteCharAt(builder.length() - 1);

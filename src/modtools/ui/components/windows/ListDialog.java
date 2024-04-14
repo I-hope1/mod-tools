@@ -21,6 +21,8 @@ import modtools.utils.ui.search.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import static modtools.utils.Tools.readFiOrEmpty;
+
 public class ListDialog extends Window {
 	public List<Fi> list;
 
@@ -99,7 +101,7 @@ public class ListDialog extends Window {
 			var tmp = p.table(Window.myPane, t -> {
 				Button btn = t.left().button(b -> {
 					 b.pane(c -> {
-						 c.add(new MyLabel(fileHolder.get(f).readString(), HopeStyles.defaultLabel)).left();
+						 c.add(new MyLabel(readFiOrEmpty(fileHolder.get(f)), HopeStyles.defaultLabel)).left();
 					 }).grow().left();
 				 }, HopeStyles.clearb, () -> {})
 				 .height(70).minWidth(400).growX().left().get();
@@ -116,7 +118,7 @@ public class ListDialog extends Window {
 						cont.row();
 
 						cont.button(Icon.copy, HopeStyles.flati,
-						 () -> JSFunc.copyText(f.readString()));
+						 () -> JSFunc.copyText(readFiOrEmpty(f)));
 						cont.button(Icon.trash, HopeStyles.flati, () -> IntUI.showConfirm("@confirm.remove", () -> {
 							ui.hide();
 							f.delete();

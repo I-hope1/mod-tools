@@ -223,7 +223,7 @@ public final class TopGroup extends WidgetGroup {
 
 	public TopGroup() {
 		//noinspection ConstantValue
-		if (topGroup != null) throw new IllegalStateException("topGroup已被加载");
+		// if (topGroup != null) throw new IllegalStateException("topGroup已被加载");
 		addSceneListener();
 
 		scene.addListener(new SwitchInputListener());

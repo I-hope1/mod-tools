@@ -246,7 +246,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		return text;
 	}
 	private static final boolean withPrefix = true;
-	private static String getUIKey(Object val) {
+	public static String getUIKey(Object val) {
 		return val instanceof Drawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
 		 (withPrefix ? "Icon." : "") + ShowUIList.iconKeyMap.get(icon)
 

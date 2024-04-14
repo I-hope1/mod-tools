@@ -167,10 +167,11 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			classDecl.defs = classDecl.defs.append(put);
 		}
 
-		JCMethodInvocation initValue = createInitValue(parent, literalName);
 
-		if (settings.members().findFirst(ns("data"), t -> t.kind == Kind.VAR) == null)
-			addConstantField(Flags.PUBLIC, classDecl, dataClass.type, "data", initValue);
+		if (settings.members().findFirst(ns("data"), t -> t.kind == Kind.VAR) == null) {
+			addConstantField(Flags.PUBLIC, classDecl, dataClass.type,
+			 "data", createInitValue(parent, literalName));
+		}
 
 		java.util.List<JCMethodDecl> allInit = classDecl.defs.stream()
 		 .filter(t -> t instanceof JCMethodDecl)

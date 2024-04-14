@@ -19,6 +19,8 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.content.Content;
 import modtools.utils.Tools;
 
+import static modtools.utils.Tools.readFiOrEmpty;
+
 public class LogDisplay extends Content {
 	public LogDisplay() {
 		super("logdisplay", Icon.fileTextSmall);
@@ -40,7 +42,7 @@ public class LogDisplay extends Content {
 					var label = new MyLabel("");
 					TextButton button = p.button(fi.nameWithoutExtension(), new TextButtonStyle(Styles.logicTogglet), () -> {
 						if (label.getText().length() == 0) {
-							label.setText(fi.readString());
+							label.setText(readFiOrEmpty(fi));
 						}
 					}).size(Core.graphics.isPortrait() ? 450 : 650, 45).get();
 					button.getStyle().up = Tex.underline;
@@ -60,7 +62,7 @@ public class LogDisplay extends Content {
 		Color[]      colors       = {Color.sky, Color.gold};
 		Fi           last_log     = Vars.dataDirectory.child("last_log.txt");
 		long[]       lastModified = {last_log.lastModified()};
-		Prov<String> getString    = () -> last_log.exists() ? last_log.readString() : "";
+		Prov<String> getString    = () -> readFiOrEmpty(last_log);
 		String[]     text         = {getString.get()};
 		Label[] label = {null};
 		Table[] tables = {new LimitTable(t -> {

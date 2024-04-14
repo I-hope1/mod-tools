@@ -495,6 +495,7 @@ public class ReviewElement extends Content {
 				// Log.info(wrap);
 			} else if (element instanceof Image img) {
 				childIndex = 0;
+				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
 				table(p0 -> {
 					// Tooltip tooltip = new Tooltip(t -> t.image(((Image) element).getDrawable())) ;
 					// tooltip.allowMobile = true;
@@ -623,7 +624,7 @@ public class ReviewElement extends Content {
 
 
 	public enum Settings implements ISettings {
-		hoverInfoWindow, contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null));
+		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */;
 
 		Settings() { }
 		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }

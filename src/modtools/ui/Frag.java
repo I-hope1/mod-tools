@@ -13,7 +13,7 @@ import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.settings.SettingsInit;
+import modtools.annotations.settings.*;
 import modtools.events.ISettings;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Hitter;
@@ -167,6 +167,7 @@ public class Frag extends Table {
 	@SettingsInit()
 	public enum Settings implements ISettings {
 		position(Position.class, 0, 0, 1, 1);
+
 		Settings(Class<?> c, float... args) { }
 		static {
 			position.defSwitchOn(false);

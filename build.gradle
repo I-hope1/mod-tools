@@ -84,8 +84,8 @@ dependencies {
 			"assets/libs/reflect-core.jar",
 //			"trash/procyon-0.6.jar",
 			"_libs/Android_dalvik-1.0.jar",
+			"_libs/AndroidField.jar"
 	)
-	implementation files("_libs/AndroidField.jar")
 	compileOnly("com.github.Anuken.Mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
 	}
@@ -103,7 +103,9 @@ task jarAndroid {
 		if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
 
 		//collect dependencies needed for desugaring
-		def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect { "--classpath $it.path" }.join(" ")
+		def dependencies = (configurations.compileClasspath.asList()
+				+ configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]
+		).collect { "--classpath $it.path" }.join(" ")
 
 		def d8 = new File("$sdkRoot/build-tools/").listFiles().find {
 			it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= minApi
@@ -117,13 +119,9 @@ task jarAndroid {
 jar {
 	archiveFileName = "${project.archivesBaseName}-${version}.jar"
 
-	from(rootDir) {
-		include "mod.hjson"
-	}
-
-	from("assets/") {
-		include "**"
-	}
+	from(rootDir) { include "mod.hjson" }
+	from("assets/") { include "**" }
+	from(zipTree("_libs/AndroidField.jar").getAsFileTree()) { include "**" }
 }
 
 task playGame(type: JavaExec) {
@@ -147,10 +145,8 @@ task playGame(type: JavaExec) {
 task ZCompileAll(type: Jar) {
 	dependsOn jarAndroid
 
-	from("$buildDir0/libs") {
-		include "$project.group-${version}.jar"
-		include "$project.group-android.jar"
-	}
+	from(zipTree("$buildDir0/libs/$project.group-${version}.jar")) { include "**" }
+	from(zipTree("$buildDir0/libs/$project.group-android.jar")) { include "classes.dex" }
 	archiveFileName = "$buildDir0/libs/$project.group[$version].jar"
 	doLast {
 		copy {

@@ -75,7 +75,7 @@ public class Window extends Table implements Position {
 	}
 
 	public static Drawable myPane  = Tex.pane;
-	public static Drawable topPane = new TintDrawable(IntUI.whiteui, () -> JColor.c_window_title);
+	public static Drawable topPane = new TintDrawable(whiteui, () -> JColor.c_window_title);
 
 	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);

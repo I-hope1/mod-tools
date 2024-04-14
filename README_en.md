@@ -12,4 +12,6 @@ English|[中文](README.md)
 A mod for mindustry v7.
 It provides many useful tools for developers.
 
-<a href="https://i-hope1.github.io/mod-tools/"><h2 align="center">WIKI?</h2></a>
+<div align="center"><img src="./assets/icon.png" width=50%></div>
+
+<p style="font-size: 2em" align="center"><a href="https://i-hope1.github.io/mod-tools/">WIKI?</a></p>

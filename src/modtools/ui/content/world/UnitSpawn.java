@@ -88,7 +88,6 @@ public class UnitSpawn extends Content {
 		if (!validNumber(y)) return;
 		yField.setText(FormatHelper.fixed(y, 1));
 		this.y = y;
-		//		swapnY = y;
 	}
 
 	public void _load() {

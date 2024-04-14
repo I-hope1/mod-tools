@@ -40,6 +40,7 @@ English|[中文](index.md)
 ## ReviewElement
 
 - Display element list, double-click to copy element to js variable
+- `Ctrl`+`Shift`+`C` to Inspect Element
 - Select untouchable elements
 - + Mobile: Filter current element with two fingers
   + PC: Press `F` to filter current element

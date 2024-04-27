@@ -8,6 +8,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
+import arc.util.Tmp;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
@@ -22,6 +23,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 import static modtools.utils.Tools.readFiOrEmpty;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 public class ListDialog extends Window {
 	public List<Fi> list;
@@ -124,7 +126,7 @@ public class ListDialog extends Window {
 							f.delete();
 						})).row();
 						ui.show();
-						ui.setPosition(Core.input.mouse().sub(ui.getWidth() / 2, ui.getHeight() / 2));
+						ui.setPosition(Tmp.v1.set(mouseVec).sub(ui.getWidth() / 2, ui.getHeight() / 2));
 					} else {
 						consumer.get(f);
 						ListDialog.this.build();

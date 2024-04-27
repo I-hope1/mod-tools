@@ -492,8 +492,7 @@ public class Selection extends Content {
 
 
 	public void drawFocus() {
-		mouse.set(Core.input.mouse());
-		mouseWorld.set(Core.camera.unproject(mouse));
+		mouseWorld.set(Core.camera.unproject(mouseVec));
 		drawFocus(focusTile);
 		drawFocus(focusBuild);
 		focusUnits.each(this::drawFocus);
@@ -887,7 +886,7 @@ public class Selection extends Content {
 			if (y + height > scene.getHeight()) y -= height;
 		}
 		private void updatePosUIAndWorld() {
-			Vec2 v1 = Tmp.v1.set(Core.input.mouse())
+			Vec2 v1 = Tmp.v1.set(mouseVec)
 			 /* 向右上偏移 */
 			 .add(2, 2);
 			x = v1.x;

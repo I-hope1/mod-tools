@@ -7,12 +7,14 @@ import arc.struct.*;
 import arc.util.*;
 import modtools.utils.Tools;
 
+import static modtools.utils.world.TmpVars.mouseVec;
+
 public class HopeInput {
 	public static IntSet justPressed, pressed;
 	public static IntFloatMap axes;
 	static        Element     hit;
 	public static Element mouseHit() {
-		if (hit == null) hit = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
+		if (hit == null) hit = Core.scene.hit(mouseVec.x, mouseVec.y, true);
 		return hit;
 	}
 

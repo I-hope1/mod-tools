@@ -27,14 +27,18 @@ public class HoverTable extends LimitTable {
 	public void updateVisibility() {
 		super.updateVisibility();
 		ScrollPane pane = ElementUtils.findParentPane(this);
-		if (pane != null) {
-			if (stickX) {
-				translation.x = -getX(Align.right) + pane.getVisualScrollX() + pane.getScrollWidth();
-				localToStageCoordinates(Tmp.v1.set(width, 0));
-				translation.x += Math.min(0, Core.graphics.getWidth() - Tmp.v1.x);
-			}
+		if (pane == null) return;
+		int align = getAlign();
+		if (stickX) {
+			translation.x = -getX(align) + pane.getVisualScrollX() + pane.getScrollWidth();
+			localToStageCoordinates(Tmp.v1.set(getX(align), 0));
+			translation.x += Math.min(0, Core.graphics.getWidth() - Tmp.v1.x);
 		}
-		// if (stickY) translation.y = -getX(Align.right) + pane.getVisualScrollX() + pane.getScrollWidth();
+		if (stickY) {
+			translation.y = -getY(align) + pane.getVisualScrollY() + pane.getScrollHeight();
+			localToStageCoordinates(Tmp.v1.set(0, getY(align)));
+			translation.y += Math.min(0, Core.graphics.getHeight() - Tmp.v1.y);
+		}
 	}
 	public void draw() {
 		parentAlpha *= hovered ? 1 : 0.3f;

@@ -1,7 +1,7 @@
 package modtools.ui.tutorial;
 
 
-import arc.*;
+import arc.Events;
 import arc.func.Boolp;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -17,13 +17,13 @@ import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
-import modtools.ui.tutorial.AllTutorial.Buffer;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 
 import static arc.Core.*;
 import static modtools.ui.tutorial.AllTutorial.Buffer.*;
 import static modtools.utils.Tools.TASKS;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 public class AllTutorial {
 	public static void focusOn(Element elem, Boolp boolp) {
@@ -130,7 +130,7 @@ public class AllTutorial {
 				fun.reverse = !enableFocusMouse;
 				float aLerp = Mathf.lerp(0.1f, 0.5f, fun.applyV);
 				drawFocus(Tmp.c1.set(Color.black).a(aLerp), () -> {
-					Fill.circle(Core.input.mouseX(), Core.input.mouseY(),
+					Fill.circle(mouseVec.x, mouseVec.y,
 					 Mathf.lerp(1000f, 80f, fun.applyV)
 					);
 				}, Tmp.c2.set(Color.white).a(aLerp));

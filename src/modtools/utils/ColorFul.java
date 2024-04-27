@@ -7,7 +7,8 @@ import arc.util.*;
 public class ColorFul {
 	private static final Color[] colors = {
 	 Color.red, Color.orange, Color.yellow,
-	 Color.green, Color.cyan, Color.sky, Color.pink
+	 Color.green, Color.cyan, Color.sky, Color.pink,
+	 Color.purple
 	};
 
 	public static final Color color = new Color(colors[0]);

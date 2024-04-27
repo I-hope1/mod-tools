@@ -1,18 +1,17 @@
 package modtools.events;
 
-import arc.Core;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
-import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
-import modtools.IntVars;
 import modtools.IntVars.Async;
-import modtools.events.ExecuteTree.*;
 import modtools.events.ExecuteTree.Error;
+import modtools.events.ExecuteTree.*;
 import modtools.struct.MySet;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
+
+import static modtools.utils.world.TmpVars.mouseVec;
 
 public class TaskNode {
 	public static final float perTick = 1 / 60f;
@@ -149,7 +148,7 @@ public class TaskNode {
 			number("@task.intervalseconds", f -> intervalSeconds = f, () -> intervalSeconds, 0.01f, Float.MAX_VALUE);
 			check("@task.worldtimer", b -> timer = b ? Timer.instance() : ExecuteTree.worldTimer, () -> timer != Timer.instance());
 			numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
-			IntUI.showSelectTable(Core.input.mouse().cpy(), (p, hide, search) -> {
+			IntUI.showSelectTable(mouseVec.cpy(), (p, hide, search) -> {
 				p.add(main).grow();
 			}, false).hidden(() -> main.clearChildren());
 		}};

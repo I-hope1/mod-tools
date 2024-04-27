@@ -45,6 +45,7 @@ import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 import static modtools.utils.Tools.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
@@ -106,22 +107,21 @@ public class IntUI {
 		class DoubleClick extends ClickListener {
 			final Task clickTask = new ClickTask();
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				last.set(Core.input.mouse());
+				last.set(mouseVec);
 				return super.touchDown(event, x, y, pointer, button);
 			}
 			public void clicked(InputEvent event, float x, float y) {
-				if (last.dst(Core.input.mouse()) > MAX_OFF) return;
+				if (last.dst(mouseVec) > MAX_OFF) return;
 				super.clicked(event, x, y);
 				if (click != null && d_click == null) {
 					click.run();
 					return;
 				}
-				Vec2 mouse = Core.input.mouse();
 				if (TaskManager.reScheduled(0.3f, clickTask)) {
-					last.set(mouse);
+					last.set(mouseVec);
 					return;
 				}
-				if (mouse.dst(last) < MAX_OFF) d_click.run();
+				if (mouseVec.dst(last) < MAX_OFF) d_click.run();
 			}
 		}
 		elem.addListener(new DoubleClick());
@@ -144,7 +144,7 @@ public class IntUI {
 			boolean longPress;
 			class LongPressTask extends Task {
 				public void run() {
-					if (pressed && Core.input.mouse().dst(last) < MAX_OFF) {
+					if (pressed && mouseVec.dst(last) < MAX_OFF) {
 						longPress = true;
 						boolc.get(true);
 					}
@@ -155,7 +155,7 @@ public class IntUI {
 				if (event.stopped) return false;
 				longPress = false;
 				if (super.touchDown(event, x, y, pointer, button)) {
-					last.set(Core.input.mouse());
+					last.set(mouseVec);
 					task.cancel();
 					Timer.schedule(task, duration / 1000f);
 					return true;
@@ -269,7 +269,7 @@ public class IntUI {
 		showMenuList(list, null);
 	}
 	public static void showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
-		showSelectTableRB(Core.input.mouse().cpy(), (p, hide, _) -> {
+		showSelectTableRB(mouseVec.cpy(), (p, hide, _) -> {
 			showMenuList(list, hiddenListener, p, hide);
 		}, false);
 	}
@@ -375,7 +375,7 @@ public class IntUI {
 	 * @return Runnable：将prov的值储存为js变量
 	 */
 	public static Runnable storeRun(Prov<Object> prov) {
-		return () -> tester.put(Core.input.mouse(), prov.get());
+		return () -> tester.put(mouseVec, prov.get());
 	}
 
 	/**
@@ -640,7 +640,7 @@ public class IntUI {
 	}
 
 	public static Window showInfoFade(String info) {
-		return showInfoFade(info, Core.input.mouse());
+		return showInfoFade(info, mouseVec);
 	}
 
 	public static Window showInfoFade(String info, Vec2 pos) {

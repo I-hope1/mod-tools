@@ -21,17 +21,19 @@ import static ihope_lib.MyReflect.lookup;
 public class HopeConstant {
 	public interface BINDING {
 		/** @see Binding#Binding(KeybindValue, String) */
-		@SuppressWarnings("JavaLangInvokeHandleSignature")
+		// @SuppressWarnings("JavaLangInvokeHandleSignature")
 		MethodHandle BINDING_CTOR = nl(() ->
-		 lookup.findConstructor(Binding.class,
-			MethodType.methodType(void.class, String.class, int.class, KeybindValue.class, String.class)));
+		 null
+		 // lookup.findConstructor(Binding.class,
+			// MethodType.methodType(void.class, String.class, int.class, KeybindValue.class, String.class))
+		);
 
 		long BINDING_VALUES = FieldUtils.fieldOffset(Binding.class, "$VALUES");
 	}
 
 	@SuppressWarnings("DataFlowIssue")
 	public interface DESKTOP {
-		/** @see MemberName */
+		/** @see java.lang.invoke.MemberName */
 		Class<?> MEMBER_NAME = nl(() -> Class.forName("java.lang.invoke.MemberName"));
 
 		/** @see MemberName#flags */

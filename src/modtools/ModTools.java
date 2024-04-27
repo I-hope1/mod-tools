@@ -32,6 +32,7 @@ import java.util.Arrays;
 import static mindustry.Vars.*;
 import static modtools.IntVars.root;
 import static modtools.utils.MySettings.SETTINGS;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
@@ -69,7 +70,7 @@ public class ModTools extends Mod {
 	public static void disposeAll() {
 		IntUI.disposeAll();
 		IntVars.resizeListeners.clear();
-		if (MyFonts.def != Fonts.def ) MyFonts.def.dispose();
+		if (MyFonts.def != Fonts.def) MyFonts.def.dispose();
 	}
 	private void extending() {
 		if (E_Extending.http_redirect.enabled()) {
@@ -133,6 +134,7 @@ public class ModTools extends Mod {
 		if (ui == null) return;
 		Time.mark();
 		Tools.TASKS.add(() -> {
+			mouseVec.set(Core.input.mouse());
 			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();
 		});
 		if (error != null) {
@@ -151,11 +153,15 @@ public class ModTools extends Mod {
 		}
 		IntVars.async(() -> {
 			IntUI.load();
+			// Updater.checkUpdate();
 			AllTutorial.init();
 			// Circle.draw();
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
 				Tools.runIgnoredException(Background::load);
 			}
+			// Core.batch = new SortedSpriteBatch() {
+			// 	{ setSort(true); }
+			// };
 		}, () -> Log.info("Loaded ModTools input and ui in @ms", Time.elapsed()));
 	}
 	private static void addFileDragListener() {

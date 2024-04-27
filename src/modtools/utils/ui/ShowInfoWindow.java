@@ -39,6 +39,7 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
+import static modtools.events.E_JSFunc.display_synthetic;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
@@ -47,6 +48,7 @@ import static modtools.utils.JSFunc.*;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable {
@@ -123,7 +125,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		cont.pane(t -> {
 			t.left().defaults().left();
 			t.button(Icon.settingsSmall, clearNonei, () -> {
-				IntUI.showSelectTableRB(Core.input.mouse().cpy(), (p, _, _) -> {
+				IntUI.showSelectTableRB(mouseVec.cpy(), (p, _, _) -> {
 					p.background(Styles.black6);
 					p.left().defaults().left().growX();
 					ISettings.buildAll("jsfunc", p, E_JSFunc.class);
@@ -231,6 +233,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		for (Class<?> cls = clazz; cls != null; type = cls.getGenericSuperclass(), cls = cls.getSuperclass()) {
 			buildAllByClass(o, cls, type);
 		}
+
+		// classSet.clear();
 
 		// return mainRun;
 	}
@@ -462,7 +466,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		addUnderline(fields, 8);
 	}
 	private static void buildMethod(Object o, ReflectTable methods, Method m) {
-		if (!E_JSFunc.display_synthetic.enabled() && m.isSynthetic()) return;
+		if (!display_synthetic.enabled() && m.isSynthetic()) return;
 		methods.bind(m);
 		setAccessible(m);
 		try {
@@ -577,7 +581,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		IntUI.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren())
 				return;
-			IntUI.showSelectTable(attribute, (p, hide, text) -> {
+			IntUI.showSelectTable(attribute, (p, _, _) -> {
 				table.left().top().defaults().left().top();
 				var   pair = table.map.get(member.getName());
 				Table one  = pair.getFirst(ShowInfoWindow::newPairTable);

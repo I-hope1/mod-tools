@@ -156,6 +156,9 @@ public interface INFO_DIALOG {
 	static Window dialog(Drawable drawable) {
 		return dialog(new Image(drawable));
 	}
+	static Window dialog(Color color) {
+		return dialog(new ColorImage(color));
+	}
 	static Window pixmap(int size, Cons<Pixmap> cons) {
 		return pixmap(size, size, cons);
 	}

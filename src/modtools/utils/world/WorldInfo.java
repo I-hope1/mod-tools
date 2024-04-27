@@ -1,23 +1,26 @@
 package modtools.utils.world;
 
+import arc.Core;
 import arc.graphics.Color;
 import arc.scene.Element;
 import arc.scene.ui.layout.Table;
 import arc.util.Align;
-import mindustry.gen.Building;
+import mindustry.gen.*;
 import mindustry.graphics.Pal;
+import mindustry.ui.Bar;
 import mindustry.world.Tile;
 import modtools.ui.IntUI;
 import modtools.utils.*;
 
 public class WorldInfo {
 	public static void showInfo(Element element, Object o) {
-		IntUI.showSelectTable(element, (p, hide, cont) -> SR.apply(() ->
+		IntUI.showSelectTable(element, (p, _, _) -> SR.apply(() ->
 			Tools.Sr(o)
 			 .isInstance(Tile.class, x -> build(p, x))
 			 .isInstance(Building.class, x -> build(p, x))
+			 .isInstance(Unit.class, x -> build(p, x))
 			 .isInstance(Object.class, x -> p.add("TODO")))
-		, false, Align.center);
+		 , false, Align.center);
 	}
 	public static void build(Table p, Tile tile) {
 		p.left().defaults().left();
@@ -62,5 +65,11 @@ public class WorldInfo {
 				});
 			});
 		}
+		// 显示build的血量
+		p.add(new Bar(() -> Core.bundle.format("@stat.health", build.health), () -> Pal.health, () -> build.health / build.maxHealth));
+	}
+	public static void build(Table p, Unit unit) {
+		// 显示unit的血量
+		p.add(new Bar(() -> Core.bundle.format("@stat.health", unit.health), () -> Pal.health, () -> unit.health / unit.maxHealth));
 	}
 }

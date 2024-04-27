@@ -35,7 +35,7 @@ public interface StringUtils {
 			 unsafe.getInt(address) + 8, 2); */
 		for (int i = 8; i < 100; i += 2) {
 			// unsafe.putLong(from, i, unsafe.getLong(to, i));
-			Log.info("res[@]: @ -> @", i, from, to);
+			// Log.info("res[@]: @ -> @", i, from, to);
 			if (to.equals(from)) break;
 			unsafe.copyMemory(unsafe.getInt(dest_address) + i,
 			 unsafe.getInt(src_address) + i, 2);

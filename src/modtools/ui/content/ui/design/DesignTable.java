@@ -114,7 +114,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 		Jval array = Jval.newArray();
 		for (Element child : template.getChildren()) {
 			Jval obj = Jval.newObject();
-			obj.put("$type$", ((DesignElement)child).$type$().name());
+			obj.put("$type", ((DesignElement)child).$type().name());
 			ClassUtils.walkPublicNotStaticKeys(child.getClass(), field -> {
 				Object val = FieldUtils.getOrNull(field, child);
 				if (val == null) return;
@@ -136,7 +136,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 		JsonArray array = Jval.read(text).asArray();
 		template.clear();
 		for (Jval jval : array) {
-			Jval type = jval.remove("$type$");
+			Jval type = jval.remove("$type");
 			Element actor = switch (ElementType.valueOf(type.asString())) {
 				case label -> new DesignLabel(jval.remove("$text").asString());
 				case img -> new DesignImage();
@@ -179,7 +179,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 				$text = f.getText();
 			}, this);
 		}
-		public ElementType $type$() {
+		public ElementType $type() {
 			return ElementType.label;
 		}
 	}
@@ -195,7 +195,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 			super.act(delta);
 			setDrawable(drawable);
 		}
-		public ElementType $type$() {
+		public ElementType $type() {
 			return ElementType.img;
 		}
 	}
@@ -223,7 +223,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 		label, img
 	}
 	public interface DesignElement {
-		ElementType $type$();
+		ElementType $type();
 	}
 	private static class VirtualGroup extends WidgetGroup {
 		public void setScene(Scene stage) {

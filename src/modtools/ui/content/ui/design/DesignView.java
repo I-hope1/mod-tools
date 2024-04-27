@@ -16,6 +16,7 @@ import mindustry.ui.*;
 import arc.scene.Element;
 
 import static mindustry.Vars.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 public class DesignView extends Element implements GestureListener {
 	DesignTool tool = DesignTool.hand;
@@ -306,7 +307,7 @@ public class DesignView extends Element implements GestureListener {
 		return Core.scene != null && Core.scene.getKeyboardFocus() != null
 				&& Core.scene.getKeyboardFocus().isDescendantOf(ui.editor)
 				&& ui.editor.isShown() && tool == DesignTool.hand &&
-				Core.scene.hit(Core.input.mouse().x, Core.input.mouse().y, true) == this;
+				Core.scene.hit(mouseVec.x, mouseVec.y, true) == this;
 	}
 
 	@Override

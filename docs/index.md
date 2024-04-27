@@ -9,9 +9,10 @@
 ![](./screenshots/tester.png)
 
 - 提供 `JS` 编辑器 `Tester`
-- - `Ctrl`+`Shift`+`Enter` 立即执行代码
-- - `Ctrl`+`Shift`+`↑/↓` 切换历史记录
-  - `Ctrl`+`Shift`+`D` 查看详细信息
+- - `Ctrl`+`Shift`+`Enter` 立即`执行`代码
+- - `Ctrl`+`Shift`+`↑/↓` 切换`历史`记录
+- - `Ctrl`+`Shift`+`D` `查看`详细信息
+- - `Alt`+`V` `展示`图集和元素？
 - 内置 `unsafe`, `lookup`
 - 内置 `IntFunc` 类 (缩写`$`)
 - + `$.xxx` 可以表示基本数据类型 (e.g `$.void` 表示 `Void.TYPE`;`$.J` 表示 long.class)
@@ -28,7 +29,7 @@
 - 支持定点生成
 - 显示`name`和`localizedName`\
 ![unitSpawn](./screenshots/unit_spawn.png)
-
+![unitSpawnPoint](./screenshots/unitspawnpoint.gif)
 
 ## Selection
 - 选择器
@@ -53,6 +54,7 @@
 
 - `Ctrl`+`Tab` 切换窗口
 - `Shift`+`F4` 关闭当前窗口
+- `右键` 关闭按钮，移动和缩放窗口
 
 ## ShowInfoWindow
 

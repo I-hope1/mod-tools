@@ -44,7 +44,7 @@ import java.util.function.*;
 import static mindustry.Vars.tilesize;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.world.TmpVars.tmpList;
+import static modtools.utils.world.TmpVars.*;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 @SuppressWarnings("CodeBlock2Expr")
@@ -75,6 +75,7 @@ public abstract class WFunction<T> {
 	private       boolean                                 drawAll   = true;
 
 	public WFunction(String name, WorldDraw WD) {
+		super();
 		this.name = name;
 		data = Settings.valueOf(name);
 		this.WD = WD;
@@ -164,7 +165,7 @@ public abstract class WFunction<T> {
 		main.update(() -> SC.selectFunc = this);
 
 		FunctionBuild("Copy", list -> {
-			tester.put(Core.input.mouse(), list.toArray());
+			tester.put(mouseVec, list.toArray());
 		});
 	}
 	private void buildButtons() {
@@ -172,7 +173,7 @@ public abstract class WFunction<T> {
 		buttons.button("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
-		buttons.button("All", Icon.menuSmall, HopeStyles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
+		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
 			 boolean all = select.size != selectMap.size;
 			 select.clear();
 			 if (all) for (var entry : selectMap) select.add(entry.value);
@@ -198,7 +199,7 @@ public abstract class WFunction<T> {
 		buttons.button("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
 			drawAll = !drawAll;
 		}).update(t -> t.setChecked(drawAll));
-		buttons.button("ClearAll", Icon.trash, HopeStyles.flatt, () -> {
+		buttons.button("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
 			clearList();
 			changeEvent.run();
 		}).update(t -> t.setChecked(drawAll)).row();
@@ -317,7 +318,7 @@ public abstract class WFunction<T> {
 	 Cons<SelectTable> builder, Cons2<List<T>, R> cons) {
 		FunctionBuild(name, from -> {
 			var table = IntUI.showSelectImageTableWithFunc(
-			 Core.input.mouse().cpy(), list.get(), () -> null,
+			 mouseVec.cpy(), list.get(), () -> null,
 			 n -> cons.get(from, n), 42f, 32, 6, t -> new TextureRegionDrawable(t.uiIcon), true);
 			if (builder != null) builder.get(table);
 		});
@@ -335,7 +336,7 @@ public abstract class WFunction<T> {
 				icons.add(IntUI.whiteui.tint(team.color));
 			}
 
-			IntUI.showSelectImageTableWithIcons(Core.input.mouse().cpy(), new Seq<>(arr), icons, () -> null,
+			IntUI.showSelectImageTableWithIcons(mouseVec.cpy(), new Seq<>(arr), icons, () -> null,
 			 n -> cons.get(from, n), 42f, 32f, 3, false);
 		});
 	}

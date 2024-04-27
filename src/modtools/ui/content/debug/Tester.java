@@ -4,13 +4,15 @@ package modtools.ui.content.debug;
 import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
-import arc.graphics.Color;
+import arc.graphics.*;
+import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.layout.*;
@@ -408,6 +410,18 @@ public class Tester extends Content {
 	public boolean detailsListener(KeyCode keycode) {
 		if (keycode == KeyCode.d && Core.input.ctrl() && Core.input.shift()) {
 			showDetails();
+			return true;
+		}
+		if (keycode == KeyCode.v && Core.input.alt()) {
+			Tools.runIgnoredException(() -> Sr(res)
+			 .isInstance(Element.class, INFO_DIALOG::dialog)
+			 .isInstance(String.class, INFO_DIALOG::dialog)
+			 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
+			 .isInstance(Texture.class, INFO_DIALOG::dialog)
+			 .isInstance(Drawable.class, INFO_DIALOG::dialog)
+			 .isInstance(Color.class, INFO_DIALOG::dialog)
+			);
+
 			return true;
 		}
 		return false;

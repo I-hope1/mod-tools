@@ -1,10 +1,9 @@
 package modtools.ui.components.input;
 
-import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
-import arc.util.*;
+import arc.util.Align;
 import modtools.jsfunc.IScript;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
@@ -15,6 +14,7 @@ import modtools.utils.Tools;
 import rhino.*;
 
 import static modtools.utils.Tools.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 @SuppressWarnings("SpellCheckingInspection")
 public class JSRequest {
@@ -106,7 +106,7 @@ public class JSRequest {
 			scope = selfScope;
 		} else scope = parent;
 		// scope = new Delegator(parent);
-		window.show().setPosition(Core.input.mouse(), Align.center);
+		window.show().setPosition(mouseVec, Align.center);
 		window.buttons.clearChildren();
 
 		for (int i = 0; i < args.length; i += 2) {

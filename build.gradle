@@ -138,8 +138,12 @@ task playGame(type: JavaExec) {
 	}
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
+//	jvmArgs = [
+//			'-D' + 'socksProxyHost=127.0.0.1',
+//			'-D' + 'socksProxyPort=1080']
 	args = [
 //	        '-testMobile'
+//			'-debug'
 	]
 }
 task ZCompileAll(type: Jar) {

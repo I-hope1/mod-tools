@@ -52,6 +52,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
 import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.FormatHelper.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 /** It should be `InspectElement`, but it's too late. */
 public class ReviewElement extends Content {
@@ -220,10 +221,9 @@ public class ReviewElement extends Content {
 		if (FOCUS == null) return;
 
 		Vec2 vec2  = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
-		Vec2 mouse = Core.input.mouse();
 		Draw.color(ColorFul.color);
 		Lines.stroke(4f);
-		Lines.line(mouse.x, mouse.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
+		Lines.line(mouseVec.x, mouseVec.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
 	}
 
 	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);

@@ -18,7 +18,7 @@ public interface TmpVars {
 	};
 	String[] TmpAmount = new String[1];
 
-	Vec2 mouse      = new Vec2();
+	Vec2 mouseVec   = new Vec2();
 	Vec2 mouseWorld = new Vec2();
 	Rect mr1        = new Rect();
 }

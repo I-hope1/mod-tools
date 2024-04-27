@@ -30,6 +30,7 @@ import modtools.utils.world.*;
 
 import static modtools.ui.Contents.tester;
 import static modtools.utils.ElementUtils.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 /** for js */
 @SuppressWarnings("unused")
@@ -72,7 +73,7 @@ public class JSFunc
 		copyText(text, getAbsolutePos(element));
 	}
 	public static void copyText(CharSequence text) {
-		copyText(text, Core.input.mouse());
+		copyText(text, mouseVec);
 	}
 	public static void copyText(CharSequence text, Vec2 vec2) {
 		Core.app.setClipboardText(String.valueOf(text));
@@ -82,7 +83,7 @@ public class JSFunc
 		copyValue(value, Tools.getAbsPos(element));
 	} */
 	public static void copyValue(String text, Object value) {
-		copyValue(text, value, Core.input.mouse());
+		copyValue(text, value, mouseVec);
 	}
 	public static void copyValue(String text, Object value, Vec2 vec2) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.savedas", text,
@@ -138,7 +139,7 @@ public class JSFunc
 	public static void scl() {
 		Camera camera = Core.scene.getCamera();
 		float  mul    = camera.height / camera.width;
-		camera.position.set(Core.input.mouse());
+		camera.position.set(mouseVec);
 		camera.width = 200;
 		camera.height = 200 * mul;
 	}

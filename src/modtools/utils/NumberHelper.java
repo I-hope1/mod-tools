@@ -7,8 +7,11 @@ import rhino.ScriptRuntime;
 
 import java.lang.reflect.InvocationTargetException;
 
-/** Positive: {@code num >= 0}
- * @see Strings */
+/**
+ * Positive: {@code num >= 0}<br>
+ * ∞: {@link Float#POSITIVE_INFINITY}<br>
+ * @see Strings
+ */
 public class NumberHelper {
 	public static boolean isPositiveInt(String text) {
 		if (asInt(text) >= 0) return true;
@@ -64,7 +67,12 @@ public class NumberHelper {
 		try {
 			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
 		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-			throw new ClassCastException(STR."\{text} cannot be cast to \{type0}");
+			throw new NumberParseException(STR."\{text} cannot be cast to \{type0}", e);
+		}
+	}
+	public static class NumberParseException extends RuntimeException {
+		public NumberParseException(String message, Throwable cause) {
+			super(message, cause);
 		}
 	}
 }

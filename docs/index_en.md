@@ -9,9 +9,10 @@ English|[中文](index.md)
 ![](./screenshots/tester.png)
 
 - Provide `JS` editor `Tester`
-- - Press `Ctrl`+`Shift`+`Enter` to execute code immediately
-- - Press `Ctrl`+`Shift`+`↑/↓` to switch history records
-  - Press `Ctrl`+`Shift`+`D` to view detailed information
+- - Press `Ctrl`+`Shift`+`Enter` to `execute` code immediately
+- - Press `Ctrl`+`Shift`+`↑/↓` to switch `history` records
+- - Press `Ctrl`+`Shift`+`D` to `view` detailed information
+- - Press `Alt`+`V` to preview `Texture`
 - Built-in `unsafe`, `lookup`
 - Built-in `IntFunc` class (abbreviated as `$`)
 - + `$.xxx` can represent primitive data types (e.g., `$.void` represents `Void.TYPE`;`$.J` represents long.class)
@@ -28,7 +29,8 @@ English|[中文](index.md)
 - Support for fixed point spawning
 - Display `name` and `localizedName`\
 ![unitSpawn](./screenshots/unit_spawn.png)
-
+![unitSpawnPoint](./screenshots/unitspawnpoint.gif)
+- 
 
 ## Selection
 - Selector
@@ -53,6 +55,7 @@ English|[中文](index.md)
 
 - Press `Ctrl`+`Tab` to switch windows
 - Press `Shift`+`F4` to close current window
+- RClick the close button to move and scl window.
 
 ## ShowInfoWindow
 

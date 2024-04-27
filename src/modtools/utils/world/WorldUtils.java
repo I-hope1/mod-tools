@@ -51,6 +51,7 @@ public interface WorldUtils {
 	}
 
 	static void spawnUnit(UnitType selectUnit, float x, float y, int amount, Team team) {
+		if (selectUnit == null) return;
 		for (int i = 0; i < amount; i++) {
 			selectUnit.spawn(team, x, y);
 		}

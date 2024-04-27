@@ -9,6 +9,8 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.layout.Table;
 
+import static modtools.utils.world.TmpVars.mouseVec;
+
 public class MoveListener extends InputListener {
 	protected final Element  touch;
 	protected final Table    main;
@@ -59,12 +61,11 @@ public class MoveListener extends InputListener {
 	}
 
 	private void recordLastPositions() {
-		lastMouse.set(Core.input.mouse());
+		lastMouse.set(mouseVec);
 		lastMain.set(main.x, main.y);
 	}
 
 	private void updatePosition() {
-		Vec2 mouse = Core.input.mouse();
-		display(lastMain.x + mouse.x - lastMouse.x, lastMain.y + mouse.y - lastMouse.y);
+		display(lastMain.x + mouseVec.x - lastMouse.x, lastMain.y + mouseVec.y - lastMouse.y);
 	}
 }

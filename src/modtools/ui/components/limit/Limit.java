@@ -29,8 +29,8 @@ public interface Limit {
 		/* 获取pane的绝对坐标 */
 		pane.localToStageCoordinates(v1.set(0, 0));
 		boolean computeIfOverStage = v1.x + pane.getWidth() > Core.graphics.getWidth()
-																 || v1.y + pane.getHeight() < Core.graphics.getHeight()
-																 || v1.x < 0 || v1.y < 0;
+		                             || v1.y + pane.getHeight() < Core.graphics.getHeight()
+		                             || v1.x < 0 || v1.y < 0;
 
 		/* w, h > 0 */
 		float w = actor.getWidth(), h = actor.getHeight();
@@ -42,7 +42,8 @@ public interface Limit {
 		}
 		/* 获取actor相对于pane的坐标 */
 		actor.localToAscendantCoordinates(pane, v1.set(0, 0));
-		return v1.x > -w && v1.y > -h && v1.x < pane.getWidth() && v1.y < pane.getHeight();
+		return v1.x > -w && v1.y > -h &&
+		       v1.x < pane.getWidth() && v1.y < pane.getHeight();
 		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();
 	}
 }

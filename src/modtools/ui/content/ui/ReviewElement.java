@@ -220,7 +220,7 @@ public class ReviewElement extends Content {
 	public void drawLine() {
 		if (FOCUS == null) return;
 
-		Vec2 vec2  = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
+		Vec2 vec2 = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
 		Draw.color(ColorFul.color);
 		Lines.stroke(4f);
 		Lines.line(mouseVec.x, mouseVec.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
@@ -594,9 +594,9 @@ public class ReviewElement extends Content {
 			while (el != null) {
 				if (el.name != null) {
 					return STR."Core.scene.find(\"\{el.name}\")\{sb}";
-				}else if (el instanceof Group && ShowUIList.uiKeyMap.containsKey(el)) {
+				} else if (el instanceof Group && ShowUIList.uiKeyMap.containsKey(el)) {
 					return STR."Vars.ui.\{ShowUIList.uiKeyMap.get(el)}\{sb}";
-				}else {
+				} else {
 					sb.append(".children.get(").append(el.getZIndex()).append(')');
 					el = el.parent;
 				}
@@ -643,13 +643,14 @@ public class ReviewElement extends Content {
 		 rotationLabel    = new NoMarkupLabel(valueScale),
 		 translationLabel = new NoMarkupLabel(valueScale),
 		 styleLabel       = new NoMarkupLabel(valueScale),
+		 alignLabel       = new NoMarkupLabel(valueScale),
 
 		colspanLabel  = new NoMarkupLabel(valueScale),
 		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
 		 fillLabel    = new Label(""), expandLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
-		BindCell rotCell, translationCell, styleCell,
+		BindCell rotCell, translationCell, styleCell, alignCell,
 		 cellCell,
 		 colspanCell, minSizeCell, maxSizeCell,
 		 fillCell, expandCell;
@@ -675,6 +676,10 @@ public class ReviewElement extends Content {
 			} catch (Exception e) {
 				styleCell.remove();
 			}
+		}
+		void align(Element element) {
+			if (alignCell.toggle1(element instanceof Table))
+				alignLabel.setText(Strings.capitalize(Align.toString(((Table) element).getAlign()).replace(',', '-')));
 		}
 		void colspan(Cell<?> cell) {
 			if (cell == null) {
@@ -749,18 +754,14 @@ public class ReviewElement extends Content {
 
 		void setPosition(Element elem, Vec2 vec2) {
 			bottom().left();
+
+			// 初始在元素的左上角
 			float x = vec2.x;
-			if (x + getPrefWidth() > Core.graphics.getWidth()) {
-				x = Core.graphics.getWidth();
-				right();
-			}
-			if (x < 0) {
-				x = 0;
-				left();
-			}
 			float y = vec2.y + elem.getHeight();
+
+			x = Mathf.clamp(x, 0, Core.graphics.getWidth() - getPrefWidth());
 			if (y + getPrefHeight() > Core.graphics.getHeight()) {
-				y = vec2.y;
+				y = Math.min(vec2.y, Core.graphics.getHeight());
 
 				top();
 				if (y - getPrefHeight() < 0) {
@@ -797,6 +798,10 @@ public class ReviewElement extends Content {
 			styleCell = makeBindCell(t, tran -> {
 				key(tran, "Style");
 				tran.add(styleLabel).color(Color.orange).row();
+			});
+			alignCell = makeBindCell(t, tran -> {
+				key(tran, "Align");
+				tran.add(alignLabel).color(Color.cyan).row();
 			});
 
 			cellCell = makeBindCell(t, c -> {
@@ -857,6 +862,7 @@ public class ReviewElement extends Content {
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
 			table.style(elem);
+			table.align(elem);
 			{
 				Cell cell = null;
 				if (elem.parent instanceof Table parent) cell = parent.getCell(elem);

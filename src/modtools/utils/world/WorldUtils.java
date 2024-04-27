@@ -11,15 +11,41 @@ import mindustry.world.*;
 import modtools.net.packet.HopeCall;
 import modtools.ui.Contents;
 
+import static mindustry.Vars.content;
 import static modtools.ui.Contents.selection;
 
 public interface WorldUtils {
-	Seq<Item>     items   = Vars.content.items();
-	Seq<Liquid>   liquids = Vars.content.liquids();
-	Seq<UnitType> units   = Vars.content.units();
-	Seq<Block>    blocks  = Vars.content.blocks();
+	Seq<Item>     items   = content.items();
+	Seq<Liquid>   liquids = content.liquids();
+	Seq<UnitType> units   = content.units();
+	Seq<Block>    blocks  = content.blocks();
 
 	WorldDraw uiWD = new WorldDraw(Layer.overlayUI, "ui");
+
+	static UnitType unit(int id) {
+		return content.unit(id);
+	}
+	static UnitType unit(String name) {
+		return content.unit(name);
+	}
+	static Block block(int id) {
+		return content.block(id);
+	}
+	static Block block(String name) {
+		return content.block(name);
+	}
+	static Liquid liquid(int id) {
+		return content.liquid(id);
+	}
+	static Liquid liquid(String name) {
+		return content.liquid(name);
+	}
+	static Item item(int id) {
+		return content.item(id);
+	}
+	static Item item(String name) {
+		return content.item(name);
+	}
 
 	static void setAir(Tile tile) {
 		if (tile.block() != Blocks.air) setBlock(tile, Blocks.air);
@@ -73,7 +99,7 @@ public interface WorldUtils {
 			Groups.unit.each(Unit::kill);
 		}
 		static void noScorchMarks() {
-			Vars.content.units().each(u -> {
+			content.units().each(u -> {
 				u.deathExplosionEffect = Fx.none;
 				u.createScorch = false;
 				u.createWreck = false;

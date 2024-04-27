@@ -226,7 +226,7 @@ public final class TopGroup extends WidgetGroup {
 		// if (topGroup != null) throw new IllegalStateException("topGroup已被加载");
 		addSceneListener();
 
-		scene.addListener(new SwitchInputListener());
+		scene.addCaptureListener(new SwitchInputListener());
 		scene.addCaptureListener(new SwitchGestureListener());
 		if (OS.isWindows) {
 			scene.addCaptureListener(new HitterAndWindowCloseListener());

@@ -48,7 +48,7 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
 
-import static arc.Core.scene;
+import static arc.Core.*;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.world.TmpVars.*;
@@ -492,7 +492,7 @@ public class Selection extends Content {
 
 
 	public void drawFocus() {
-		mouseWorld.set(Core.camera.unproject(mouseVec));
+		mouseWorld.set(Core.camera.unproject(input.mouse()));
 		drawFocus(focusTile);
 		drawFocus(focusBuild);
 		focusUnits.each(this::drawFocus);

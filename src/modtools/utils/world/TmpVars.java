@@ -1,7 +1,9 @@
 package modtools.utils.world;
 
+import arc.Core;
 import arc.graphics.Color;
 import arc.math.geom.*;
+import mindustry.Vars;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -16,9 +18,21 @@ public interface TmpVars {
 			clear();
 		}
 	};
-	String[] TmpAmount = new String[1];
+	String[] tmpAmount = new String[1];
 
-	Vec2 mouseVec   = new Vec2();
-	Vec2 mouseWorld = new Vec2();
-	Rect mr1        = new Rect();
+	MouseVec mouseVec   = new MouseVec();
+	Vec2     mouseWorld = new Vec2();
+	Rect     mr1        = new Rect();
+
+	class MouseVec extends Vec2 {
+		public void require() {
+			super.set(Core.input.mouse());
+			if (Vars.state.isGame()) { mouseWorld.set(Core.camera.unproject(Core.input.mouse())); }
+		}
+		/* 禁止外部设置 */
+		public Vec2 set(Vec2 v) {
+			return this;
+		}
+	}
+
 }

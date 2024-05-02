@@ -7,6 +7,7 @@ import rhino.*;
 
 import java.util.HashMap;
 
+@SuppressWarnings("StringTemplateMigration")
 public class JSSyntax extends Syntax {
 
 	public static Color
@@ -109,49 +110,36 @@ public class JSSyntax extends Syntax {
 
 	@SuppressWarnings("StringEqualsCharSequence")
 	public TokenDraw[] tokenDraws = {
-	 new TokenDraw() {
-		 String variableToken;
-		 public Color draw(DrawToken task) {
-			 String token = task.token + "";
-			 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
-				 if (operatesSymbol.lastSymbol == '.') return JSSyntax.this.dealJSProp(token);
+	 task -> {
+		 String token = task.token + "";
+		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
+			 if (operatesSymbol.lastSymbol == '.') return JSSyntax.this.dealJSProp(token);
 
-				 obj = null;
-				 pkg = null;
-			 }
-
-			 for (var entry : TOKEN_MAP) {
-				 if (!entry.key.contains(token)) continue;
-				 if (!enableJSProp || (
-					entry.key != customConstantSet && entry.key != customVarSet
-				 ) || obj != null) return entry.value;
-
-				 JSSyntax.this.resolveToken(customScope, task, token);
-				 return entry.value;
-			 }
-			 if (lastTask != task) return null;
-			 String lastToken = task.lastToken + "";
-			 if (localKeywords.contains(lastToken)) {
-				 variableToken = lastToken;
-				 localVars.add(token);
-				 return c_localvar;
-			 }
-			 if ("const".equals(lastToken)) {
-				 variableToken = lastToken;
-				 localConstants.add(token);
-				 return c_constants;
-			 }
-			 if (lastTask != operatesSymbol || operatesSymbol.lastSymbol != ',') { return null; }
-			 if (localKeywords.contains(variableToken)) {
-				 localVars.add(token);
-				 return c_localvar;
-			 }
-			 if ("const".equals(variableToken)) {
-				 localConstants.add(token);
-				 return c_constants;
-			 }
-			 return null;
+			 obj = null;
+			 pkg = null;
 		 }
+
+		 for (var entry : TOKEN_MAP) {
+			 if (!entry.key.contains(token)) continue;
+			 if (!enableJSProp || (
+				entry.key != customConstantSet && entry.key != customVarSet
+			 ) || obj != null) return entry.value;
+
+			 JSSyntax.this.resolveToken(customScope, task, token);
+			 return entry.value;
+		 }
+		 if (lastTask != task) return null;
+		 String lastToken = task.lastToken + "";
+		 if (localKeywords.contains(lastToken)) {
+			 localVars.add(token);
+			 return c_localvar;
+		 }
+		 if ("const".equals(lastToken)) {
+			 localConstants.add(token);
+			 return c_constants;
+		 }
+
+		 return null;
 	 },
 	 task -> "function".equals(task.lastToken) && lastTask == task ? c_functions : null,
 	 task -> {
@@ -179,7 +167,8 @@ public class JSSyntax extends Syntax {
 	private Color dealJSProp(String token) {
 		if (!enableJSProp) return null;
 		Object o = pkg == null && obj instanceof NativeJavaObject nja ?
-		 js_prop_map.computeIfAbsent(nja.unwrap(), k -> new HashMap<>()).computeIfAbsent(token, k -> getPropOrNotFound(nja, token))
+		 js_prop_map.computeIfAbsent(nja.unwrap(), _ -> new HashMap<>())
+		  .computeIfAbsent(token, _ -> getPropOrNotFound(nja, token))
 		 : getPropOrNotFound(pkg, token);
 		if (o == Scriptable.NOT_FOUND) {
 			obj = null;

@@ -23,7 +23,7 @@ public interface Limit {
 	Vec2 v1 = new Vec2(), v2 = new Vec2();
 
 	static boolean isVisible(Element actor) {
-		ScrollPane pane = ElementUtils.findParentPane(actor);
+		ScrollPane pane = ElementUtils.findClosestPane(actor);
 		if (pane == null) return false;
 
 		/* 获取pane的绝对坐标 */

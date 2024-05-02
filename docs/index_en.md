@@ -51,6 +51,11 @@ English|[中文](index.md)
 - Press `<` / `>` on an element to collapse Group
 ![reviewElement](./screenshots/review_element.png)
 
+# Frag
+- Double-click the blue part of Frag to minimize/restore Frag
+- In the minimized state, click the blue part, it will behave like a floating ball
+
+
 ## Window
 
 - Press `Ctrl`+`Tab` to switch windows
@@ -61,7 +66,7 @@ English|[中文](index.md)
 
 - `'null` represents null string
 - Press `Ctrl`+`F` to focus search box
-
+- Press `Ctrl`+`Shift`+`F` to focus search box and clear search box
 
 ## Others
 ### Extensions

@@ -27,7 +27,7 @@ public class HoverTable extends LimitTable {
 	// float paneLastX = Float.NaN, paneLastY = Float.NaN;
 	public void updateVisibility() {
 		super.updateVisibility();
-		ScrollPane pane = ElementUtils.findParentPane(this);
+		ScrollPane pane = ElementUtils.findClosestPane(this);
 		if (pane == null) return;
 		int align = getAlign();
 		translation.setZero();

@@ -31,7 +31,7 @@ import modtools.ui.components.utils.TemplateTable;
 import modtools.ui.content.ui.PositionProv;
 import modtools.ui.content.world.Selection;
 import modtools.ui.content.world.Selection.Settings;
-import modtools.ui.effect.MyDraw;
+import modtools.ui.effect.*;
 import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
@@ -229,6 +229,7 @@ public abstract class WFunction<T> {
 
 	public void remove() {
 		wrap.clearChildren();
+		HopeFx.changedFx(wrap);
 	}
 
 	public void each(Consumer<? super T> action) {

@@ -23,13 +23,12 @@ import static arc.Core.scene;
 import static mindustry.Vars.*;
 import static modtools.utils.ElementUtils.$.*;
 
-
 public interface ElementUtils {
 	class $ {
 		static final Vec2 v1 = new Vec2();
 		static final Vec2 v2 = new Vec2();
 	}
-	/** 存在就remove，不存在就add  */
+	/** 存在就remove，不存在就add */
 	static void addOrRemove(Element element, boolean show) {
 		if (show) {
 			Core.scene.add(element);
@@ -64,7 +63,7 @@ public interface ElementUtils {
 	}
 	/** 使用ScreenUtils截图 */
 	static TextureRegion screenshot(Element el, boolean clear,
-																	Cons2<TextureRegion, Pixmap> callback) {
+	                                Cons2<TextureRegion, Pixmap> callback) {
 		int w = (int) el.getWidth(),
 		 h = (int) el.getHeight();
 
@@ -94,7 +93,7 @@ public interface ElementUtils {
 		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
-	static @Nullable ScrollPane findParentPane(Element actor) {
+	static @Nullable ScrollPane findClosestPane(Element actor) {
 		while (true) {
 			actor = actor.parent;
 			if (actor instanceof ScrollPane p) return p;
@@ -121,7 +120,7 @@ public interface ElementUtils {
 	static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
 		 : getSimpleName(element.getClass())
-			 + (element.name != null ? " ★" + element.name + "★" : "");
+		   + (element.name != null ? " ★" + element.name + "★" : "");
 	}
 
 

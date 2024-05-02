@@ -5,11 +5,10 @@ import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.ui.Image;
 import arc.scene.ui.layout.Cell;
-import arc.struct.Seq;
 import arc.util.*;
 import modtools.ui.IntUI;
-import modtools.ui.components.utils.ValueLabel;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.utils.ValueLabel;
 import modtools.utils.Tools;
 import modtools.utils.ui.search.FilterTable;
 import rhino.*;
@@ -19,9 +18,9 @@ import java.lang.reflect.*;
 import java.util.*;
 
 import static modtools.ui.HopeStyles.defaultLabel;
-import static modtools.utils.JSFunc.*;
+import static modtools.ui.effect.HopeFx.changedFx;
+import static modtools.utils.JSFunc.JColor;
 import static modtools.utils.ui.ReflectTools.makeDetails;
-import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
 
 public interface MethodTools {
 	static Object invokeForMethod(Object o, Method m, ValueLabel l, NativeArray args0,
@@ -95,7 +94,7 @@ public interface MethodTools {
 			table.add("<args>").fontScale(0.8f)
 			 .color(Color.gray).with(t ->
 				IntUI.doubleClick(t, null, () -> {
-					applyChangedFx(table);
+					changedFx(table);
 					table.name ^= argKey;
 				}));
 			table.bind(argKey);
@@ -116,7 +115,7 @@ public interface MethodTools {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
 			table.add(" throws ").color(Tmp.c1.set(JColor.c_keyword)).fontScale(0.9f)
 			 .with(t -> IntUI.doubleClick(t, null, () -> {
-				 applyChangedFx(table);
+				 changedFx(table);
 				 table.name ^= throwKey;
 			 }));
 			table.bind(throwKey);

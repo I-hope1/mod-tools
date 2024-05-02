@@ -40,6 +40,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.components.Window.frontWindow;
 import static modtools.utils.Tools.*;
+import static modtools.utils.world.TmpVars.mouseVec;
 
 // 存储mod的窗口和Frag
 public final class TopGroup extends WidgetGroup {
@@ -101,7 +102,7 @@ public final class TopGroup extends WidgetGroup {
 				 ? el -> or(el, this) : null)
 				.get();
 		 }
-		 final Group menus = new NGroup(this, "menus");
+		 final Group menus   = new NGroup(this, "menus");
 		 final Group notices = new NGroup(this, "notices");
 		 final Group _others = new NGroup(this, "others");
 		 public void addChild(Element actor) {
@@ -418,6 +419,8 @@ public final class TopGroup extends WidgetGroup {
 				element.translation.x = scene.getWidth() * 2;
 			}
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				mouseVec.require();
+
 				if (locked) {
 					if (Vars.android) {
 						filterElem(getSelected0(x, y));
@@ -775,15 +778,19 @@ public final class TopGroup extends WidgetGroup {
 	public static void drawFocus(Element elem, Vec2 vec2, Color focusColor) {
 		Gl.flush();
 		if (focusColor.a > 0) {
-			float alpha = focusColor.a * (elem.visible ? 1 : 0.6f);
-			Draw.color(focusColor, alpha);
-			// Tmp.m1.set(Draw.trans());
-			Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+			float alpha = focusColor.a * (elem.visible ? 0.9f : 0.6f);
+			if (alpha != 0 && Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(vec2)) {
+				Draw.color(focusColor, alpha);
+				// Tmp.m1.set(Draw.trans());
+				Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+			}
 		}
 		if (!elem.visible) {
 			Draw.color(Pal.accent);
 			TextureRegionDrawable icon = Icon.eyeOffSmall;
-			icon.draw(vec2.x, vec2.y, 16, 16);
+			icon.draw(Mathf.clamp(vec2.x, 7, graphics.getWidth() - 7),
+			 Mathf.clamp(vec2.y, 7, graphics.getHeight() - 7),
+			 14, 14);
 		}
 
 		Draw.color(Pal.accent);

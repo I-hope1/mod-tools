@@ -21,7 +21,7 @@ public class HiddenApi {
 	public static void setHiddenApiExemptions() {
 		if (trySetHiddenApiExemptions()) return;
 		// 高版本中setHiddenApiExemptions方法直接反射获取不到，得修改artMethod
-		// sdk_version > 28
+		// sdk_version > 28（具体多少不知道）
 		Method setHiddenApiExemptions = findMethod();
 
 		try {
@@ -81,7 +81,7 @@ public class HiddenApi {
 			}
 		}
 
-		// 两个artMethod的差值
+		// 两个artMethod的差值（因为连续）
 		final long size_art_method = min_second - min;
 		Log.debug("size_art_method: " + size_art_method);
 		if (size_art_method > 0 && size_art_method < 100) {
@@ -106,7 +106,7 @@ public class HiddenApi {
 		return addressOf((Object) array);
 	}
 	public static long addressOf(Object obj) {
-		return UNSAFE.addressOf(obj) + offset;
+		return UNSAFE.vaddressOf(obj) + offset;
 	}
 
 	static long offset;
@@ -114,6 +114,6 @@ public class HiddenApi {
 	static {
 		/* Method是指针，大小相当于int */
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
-		offset = runtime.addressOf(ints) - UNSAFE.addressOf(ints);
+		offset = runtime.addressOf(ints) - UNSAFE.vaddressOf(ints);
 	}
 }

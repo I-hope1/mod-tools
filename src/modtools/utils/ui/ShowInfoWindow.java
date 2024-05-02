@@ -3,10 +3,7 @@ package modtools.utils.ui;
 import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
-import arc.graphics.g2d.*;
 import arc.input.KeyCode;
-import arc.math.Interp;
-import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.*;
@@ -43,9 +40,8 @@ import static modtools.events.E_JSFunc.display_synthetic;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
-import static modtools.utils.JSFunc.copyValue;
 import static modtools.utils.JSFunc.*;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.catchRun;
 import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
 import static modtools.utils.world.TmpVars.mouseVec;
@@ -102,7 +98,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 		addCaptureListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (Core.input.ctrl()) textField.requestKeyboard();
+				if (Core.input.ctrl() && keycode == KeyCode.f) {
+					textField.requestKeyboard();
+					textField.setCursorPosition(Integer.MAX_VALUE);
+					if (Core.input.shift()) textField.clear();
+				}
 				return false;
 			}
 		});
@@ -139,7 +139,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			if (o != null) {
 				IntUI.addStoreButton(t, "", () -> o);
 				addDisplayListener(
-				 t.label(() -> "" + UNSAFE.addressOf(o)).padLeft(8f),
+				 t.label(() -> "" + UNSAFE.vaddressOf(o)).padLeft(8f),
 				 E_JSFuncDisplay.address);
 			}
 		}).height(42).row();
@@ -302,23 +302,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		 .padRight(16), E_JSFuncDisplay.type);
 	}
 
-	static void applyChangedFx(Element element) {
-		new LerpFun(Interp.slowFast).rev().onUI().registerDispose(0.05f, fin -> {
-			Draw.color(Pal.heal, fin);
-			Lines.stroke(3f - fin * 2f);
-			Vec2  e    = ElementUtils.getAbsPosCenter(element);
-			float fout = 1 - fin;
-			Fill.rect(e.x, e.y, fout * element.getWidth() * 1.2f, fout * element.getHeight() * 1.2f);
-
-			/* Draw.color(Pal.powerLight, fout);
-			Angles.randLenVectors(new Rand().nextInt(), 4, element.getWidth(), (x, __) -> {
-				Angles.randLenVectors(new Rand().nextInt(), 4, element.getHeight(), (___, y) -> {
-					Fill.circle(e.x + x, e.y + y, fin * 2);
-				});
-			}); */
-		});
-	}
-
 	public static void buildFieldValue(BindCell c_cell, FieldValueLabel l) {
 		if (!l.isStatic() && l.getObject() == null) return;
 		Class<?> type     = l.type;
@@ -460,7 +443,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				STR."\{f.getDeclaringClass().getSimpleName()}: \{f.getName()}",
 				() -> f.get(o))
 			 .disabled(_ -> !l[0].isValid());
-		})).top().colspan(0), E_JSFuncDisplay.buttons);
+		})).right().top().colspan(0), E_JSFuncDisplay.buttons);
 		fields.row();
 
 		addUnderline(fields, 8);
@@ -536,14 +519,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				// float[] prefW = {0};
 				t.add(l).grow();
 
-				buttonsCell = methods.add(new MyHoverTable(buttons -> {
+				buttonsCell = t.add(new MyHoverTable(buttons -> {
 					if (isSingle && isValid) {
 						buttons.button(Icon.rightOpenOutSmall, flati, catchRun("invoke出错", () -> {
 							dealInvokeResult(m.invoke(o), cell, l);
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 					}
 					if (!l.type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l.val, l.type);
-				})).colspan(0);
+				})).right().colspan(1);
 				if (buttonsCell != null) addDisplayListener(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow().left();
 		} catch (Throwable err) {

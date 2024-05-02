@@ -50,6 +50,10 @@
 - 指着元素按`<` / `>`，折叠Group
 ![reviewElement](./screenshots/review_element.png)
 
+## Frag
+- 双击Frag的蓝色部分，缩小/恢复 Frag
+- 在缩小状态下，点击蓝色部分，类似悬浮球
+
 ## Window
 
 - `Ctrl`+`Tab` 切换窗口
@@ -60,7 +64,7 @@
 
 - `‘null` 表示null字符串
 - `Ctrl`+`F` 聚焦搜索框
-
+- `Ctrl`+`Shift`+`F` 聚焦搜索框并清空
 
 ## 其他
 ### 扩展

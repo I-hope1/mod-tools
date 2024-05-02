@@ -35,7 +35,7 @@ import modtools.ui.components.utils.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
 import modtools.ui.control.HopeInput;
-import modtools.ui.effect.MyDraw;
+import modtools.ui.effect.*;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
@@ -220,10 +220,10 @@ public class ReviewElement extends Content {
 	public void drawLine() {
 		if (FOCUS == null) return;
 
-		Vec2 vec2 = FOCUS.localToStageCoordinates(Tmp.v2.set(0, 0));
+		Vec2 vec2 = ElementUtils.getAbsPosCenter(FOCUS);
 		Draw.color(ColorFul.color);
-		Lines.stroke(4f);
-		Lines.line(mouseVec.x, mouseVec.y, vec2.x + FOCUS.getWidth() / 2f, vec2.y + FOCUS.getHeight() / 2f);
+		Lines.stroke(3f);
+		Lines.line(mouseVec.x, mouseVec.y, vec2.x, vec2.y);
 	}
 
 	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
@@ -240,6 +240,7 @@ public class ReviewElement extends Content {
 	};
 
 	public static class ReviewElementWindow extends Window implements IDisposable {
+		private static final String SEARCH_RESULT = "SRCH_RS";
 		Table   pane = new LimitTable() { };
 		Element element;
 		Pattern pattern;
@@ -368,13 +369,12 @@ public class ReviewElement extends Content {
 					if (lastIndex != index) t.add(text.substring(lastIndex, index)).color(Pal.accent);
 					lastIndex = matcher.end();
 					if (index == lastIndex) {
-						IntUI.showException(new Exception("too many"));
-						break;
+						lastIndex++;
 					}
 					// Log.info("i: @, l: @", index, lastIndex);
 					t.table(IntUI.whiteui.tint(Pal.logicWorld), t1 -> {
 						t1.add(new MyLabel(curText, skyMyFont)).padRight(1);
-					});
+					}).name(SEARCH_RESULT);
 				}
 				if (text.length() - lastIndex > 0)
 					t.add(text.substring(lastIndex), defaultLabel).color(Pal.accent);
@@ -436,9 +436,11 @@ public class ReviewElement extends Content {
 	}
 
 	private static class MyWrapTable extends ChildrenFirstTable {
+		boolean stopEvent;
 		public MyWrapTable(ReviewElementWindow window, Element element) {
 			/* 用于下面的侦听器  */
-			int childIndex;
+			int eventChildIndex;
+			userObject = element;
 			hovered(this::requestKeyboard);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
 			keyDown(KeyCode.del, () -> {
@@ -459,7 +461,7 @@ public class ReviewElement extends Content {
 				int size     = 32;
 				var children = group.getChildren();
 				add(button).size(size).disabled(_ -> children.isEmpty());
-				childIndex = 1;
+				eventChildIndex = 1;
 				window.addMultiRowWithPos(this,
 				 ElementUtils.getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
@@ -470,31 +472,65 @@ public class ReviewElement extends Content {
 				keyDown(KeyCode.right, () -> button.fireCheck(true));
 				defaults().growX();
 				table(t -> {
-					/*if (children.isEmpty()) {
-							return;
-						}*/
-					// t.marginLeft(size / 4f);
 					Table table1 = new Table();
 					Runnable rebuild = () -> {
-						table1.clearChildren();
-						for (var child : children) {
-							if (child == null) continue;
-							window.build(child, table1);
+						if (!table1.hasChildren()) {
+							children.each(c -> window.build(c, table1));
+							return;
 						}
+						Cell<?>[] cells = new Cell<?>[children.size];
+						table1.getChildren().each(vchild -> {
+							if (vchild instanceof MyWrapTable wrapTable) {
+								Element data = (Element) wrapTable.userObject;
+								if (data == null || data.parent != group) return;
+								int index = data.getZIndex();
+								if (index == -1) return;
+								Cell cell = table1.getCell(vchild);
+								cells[index] = cell;
+							}
+						});
+						for (int i = 0; i < cells.length; i++) {
+							if (cells[i] == null) {
+								window.build(children.get(i), table1);
+								int j = i, lastSize = table1.getCells().size;
+								Core.app.post(() -> cells[j] = table1.getCells().get(lastSize + j));
+							}
+						}
+						Core.app.post(() -> table1.getCells().set(cells));
 					};
-					if (children.size < 20) rebuild.run();
-					int[] lastChildrenSize = {children.size < 20 ? children.size : -1};
+					if (children.size < 30) rebuild.run();
 
 					button.fireCheck(!children.isEmpty() && children.size < 20);
 					button.setContainer(t.add(table1).grow());
+					table1.update(() -> {
+						if (stopEvent) {
+							stopEvent = false;
+							return;
+						}
+
+						if (!group.needsLayout() || group.getScene() == null) return;
+
+						find(ancestor -> {
+							if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
+							if (ancestor instanceof Window) return true;
+							return false;
+						});
+						button.rebuild.run();
+					});
 					button.rebuild = () -> {
-						if (lastChildrenSize[0] == children.size) return;
-						rebuild.run();
+						if (group.getScene() != null && (
+						 group.needsLayout() ||
+						 (!table1.hasChildren() && group.hasChildren())
+						)) {
+							rebuild.run();
+							// if (group.needsLayout()) HopeFx.changedFx(group);
+							HopeFx.changedFx(table1);
+						}
 					};
 				}).left();
 				// Log.info(wrap);
 			} else if (element instanceof Image img) {
-				childIndex = 0;
+				eventChildIndex = 0;
 				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
 				table(p0 -> {
 					// Tooltip tooltip = new Tooltip(t -> t.image(((Image) element).getDrawable())) ;
@@ -520,12 +556,12 @@ public class ReviewElement extends Content {
 				}).growX().get();
 			} else {
 				defaults().growX();
-				childIndex = 0;
+				eventChildIndex = 0;
 				window.addMultiRowWithPos(this, String.valueOf(element),
 				 () -> Tmp.v1.set(element.x, element.y));
 			}
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
-			Element  window_elem = getChildren().get(childIndex);
+			Element  window_elem = getChildren().get(eventChildIndex);
 			Runnable copy        = storeRun(() -> element);
 			IntUI.addShowMenuListenerp(window_elem, getContextMenu(this, element, copy));
 			IntUI.doubleClick(window_elem, null, copy);
@@ -533,6 +569,10 @@ public class ReviewElement extends Content {
 
 			update(() -> background(FOCUS_FROM == this ? Styles.flatDown : Styles.none));
 			addFocusSource(this, () -> window, () -> element);
+		}
+		public void clear() {
+			super.clear();
+			userObject = null;
 		}
 		private static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
 			return () -> Sr(Seq.with(

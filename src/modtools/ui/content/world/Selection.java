@@ -96,12 +96,12 @@ public class Selection extends Content {
 	/** @see Settings */
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
 	static void intField(SelectTable t) {
-		buildValidate(t, t.row().field("0", s -> TmpAmount[0] = s)
+		buildValidate(t, t.row().field("0", s -> tmpAmount[0] = s)
 		 .valid(NumberHelper::isPositiveInt)
 		 .get());
 	}
 	static void floatField(SelectTable t) {
-		buildValidate(t, t.row().field("0", s -> TmpAmount[0] = s)
+		buildValidate(t, t.row().field("0", s -> tmpAmount[0] = s)
 		 .valid(NumberHelper::isPositiveFloat)
 		 .get());
 	}
@@ -184,17 +184,17 @@ public class Selection extends Content {
 				});
 			});
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
-				if (!NumberHelper.isPositiveInt(TmpAmount[0])) return;
+				if (!NumberHelper.isPositiveInt(tmpAmount[0])) return;
 				each(list, b -> {
 					if (b.items == null) return;
-					Call.setItem(b, item, NumberHelper.asInt(TmpAmount[0]));
+					Call.setItem(b, item, NumberHelper.asInt(tmpAmount[0]));
 				});
 			});
 			ListFunction("@selection.liquids", () -> content.liquids(), Selection::floatField, (list, liquid) -> {
-				if (!NumberHelper.isPositiveFloat(TmpAmount[0])) return;
+				if (!NumberHelper.isPositiveFloat(tmpAmount[0])) return;
 				each(list, b -> {
 					if (b.liquids == null) return;
-					b.liquids.add(liquid, NumberHelper.asFloat(TmpAmount[0]) - b.liquids.get(liquid));
+					b.liquids.add(liquid, NumberHelper.asFloat(tmpAmount[0]) - b.liquids.get(liquid));
 				});
 			});
 			FunctionBuild("@selection.sumitems", list -> {
@@ -492,7 +492,6 @@ public class Selection extends Content {
 
 
 	public void drawFocus() {
-		mouseWorld.set(Core.camera.unproject(input.mouse()));
 		drawFocus(focusTile);
 		drawFocus(focusBuild);
 		focusUnits.each(this::drawFocus);

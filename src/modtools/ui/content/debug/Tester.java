@@ -365,16 +365,16 @@ public class Tester extends Content {
 			p.defaults().size(45).padLeft(2f);
 			p.button(Icon.starSmall, istyle, isize, this::star);
 
-			IntUI.addCheck(p.button(HopeIcons.loop, istyle, isize, () -> {
+			IntUI.addCheck(p.button(HopeIcons.loop, new ImageButtonStyle(istyle), isize, () -> {
 				loop = !loop;
 			}), () -> loop, "@tester.loop", "@tester.notloop");
 
-			IntUI.addCheck(p.button(Icon.lockSmall, istyle, isize, () -> {
+			IntUI.addCheck(p.button(Icon.lockSmall, new ImageButtonStyle(istyle), isize, () -> {
 				strict = !strict;
 			}), () -> strict, "@tester.strict", "@tester.notstrict");
 
 			// highlight
-			IntUI.addCheck(p.button(HopeIcons.highlight, istyle, isize, () -> {
+			IntUI.addCheck(p.button(HopeIcons.highlight, new ImageButtonStyle(istyle), isize, () -> {
 				textarea.enableHighlighting = !textarea.enableHighlighting;
 			}), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
 
@@ -395,10 +395,12 @@ public class Tester extends Content {
 			p.button(HopeIcons.favorites, istyle, isize, bookmark::show);
 			// p.button("@startup", bookmark::show);
 
-			IntUI.addCheck(p.button(HopeIcons.interrupt, istyle, isize, () -> {
-				stopIfOvertime = !stopIfOvertime;
-			}), () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
-			IntUI.addCheck(p.button(Icon.waves, istyle, isize, () -> multiThread = !multiThread), () -> multiThread, "@tester.multiThread", "@tester.multiThread");
+			IntUI.addCheck(p.button(HopeIcons.interrupt, new ImageButtonStyle(istyle), isize,
+			 () -> stopIfOvertime = !stopIfOvertime),
+			 () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
+			IntUI.addCheck(p.button(Icon.waves, new ImageButtonStyle(istyle), isize,
+				() -> multiThread = !multiThread),
+			 () -> multiThread, "@tester.multiThread", "@tester.mainThread");
 		};
 		Time.run(2, () -> folder.fireCheck(false));
 	}
@@ -613,7 +615,9 @@ public class Tester extends Content {
 			Object o = capture_logger.enabled() ?
 			 setLogger(logHandler, () -> script.exec(cx, scope))
 			 : script.exec(cx, scope);
-			res = o = CAST.unwrap(o);
+			o = CAST.unwrap(o);
+			if (finished) return;
+			res = o;
 
 			log = String.valueOf(o);
 			if (log == null) log = "null";

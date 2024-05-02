@@ -13,7 +13,7 @@ import modtools.utils.JSFunc.JColor;
 import java.lang.reflect.*;
 import java.util.StringJoiner;
 
-import static modtools.utils.ui.ShowInfoWindow.applyChangedFx;
+import static modtools.ui.effect.HopeFx.changedFx;
 
 public interface ReflectTools {
 	static void setAccessible(AccessibleObject object) {
@@ -31,7 +31,7 @@ public interface ReflectTools {
 		MyLabel label = new MyLabel(type.get(), HopeStyles.defaultLabel);
 		label.color.set(JColor.c_type);
 		IntUI.doubleClick(label, null, details == null ? null : () -> {
-			applyChangedFx(label);
+			changedFx(label);
 			label.setText(label.getText().toString().equals(type.get())
 			 ? details.get() : type.get());
 		});

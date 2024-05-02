@@ -100,8 +100,8 @@ public interface UNSAFE {
 		}
 	}
 
-	// ---------ADDRESS Operation---------
-	static long addressOf(Object o) {
+	// ---------Address/Memory Operation---------
+	static long vaddressOf(Object o) {
 		if (o == null) throw new IllegalArgumentException("o is null.");
 		ONE_ARRAY[0] = o;
 		long baseOffset = unsafe.arrayBaseOffset(Object[].class);
@@ -132,6 +132,7 @@ public interface UNSAFE {
 			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.addressSize());
 		}
 	}
+
 	static void putInt(long address, int x) {
 		unsafe.putInt(address, x);
 	}
@@ -153,6 +154,7 @@ public interface UNSAFE {
 	static void putShort(long address, short x) {
 		unsafe.putShort(address, x);
 	}
+
 	static int getInt(long address) {
 		return unsafe.getInt(address);
 	}
@@ -174,7 +176,18 @@ public interface UNSAFE {
 	static short getShort(long address) {
 		return unsafe.getShort(address);
 	}
+
 	static long allocateMemory(long bytes) {
 		return unsafe.allocateMemory(bytes);
+	}
+	static void freeMemory(long address) {
+		unsafe.freeMemory(address);
+	}
+
+	static void park(boolean isAbsolute, long time) {
+		unsafe.park(isAbsolute, time);
+	}
+	static void unpark(Object thread) {
+		unsafe.unpark(thread);
 	}
 }

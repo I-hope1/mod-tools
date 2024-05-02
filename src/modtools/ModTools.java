@@ -89,7 +89,7 @@ public class ModTools extends Mod {
 		}
 
 		WorldDraw.registerEvent();
-		HopeCall.init();
+		HopeCall.registerPacket();
 
 		if (isImportFromGame) {
 			loadContent();
@@ -134,7 +134,7 @@ public class ModTools extends Mod {
 		if (ui == null) return;
 		Time.mark();
 		Tools.TASKS.add(() -> {
-			mouseVec.set(Core.input.mouse());
+			mouseVec.require();
 			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();
 		});
 		if (error != null) {

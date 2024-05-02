@@ -10,7 +10,7 @@ import modtools.utils.world.WorldUtils;
 import static mindustry.Vars.net;
 
 public class HopeCall {
-	public static void init() {
+	public static void registerPacket() {
 		Net.registerPacket(UnitSpawnPacket::new);
 		Net.registerPacket(SetBlockPacket::new);
 	}

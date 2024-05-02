@@ -14,7 +14,7 @@ import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
@@ -287,7 +287,7 @@ public class IntUI {
 
 	/** TODO: 多个FoldedList有问题 */
 	public static Cell<Table> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
-																				 Table p, Runnable hideRun) {
+	                                       Table p, Runnable hideRun) {
 		return p.table(Styles.black6, main -> {
 			for (var menu : list) {
 				if (menu == null) continue;
@@ -328,8 +328,8 @@ public class IntUI {
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
 	public static ImageButton addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
-		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> {})
-		 .with(button -> IntUI.longPress(button,b -> {
+		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> { })
+		 .with(button -> IntUI.longPress(button, b -> {
 			 Object o = prov.get();
 			 if (o == null) return;
 			 Core.app.post(() ->
@@ -387,7 +387,7 @@ public class IntUI {
 	 */
 	public static SelectTable
 	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
-										boolean searchable) {
+	                  boolean searchable) {
 		if (vec2 == null) throw new NullPointerException("vec2 cannot be null");
 		SelectTable t = basicSelectTable(searchable, f);
 		t.update(() -> {
@@ -409,7 +409,7 @@ public class IntUI {
 	 */
 	public static <T extends Element> SelectTable
 	showSelectTable(T button, Cons3<Table, Runnable, String> f,
-									boolean searchable, int align) {
+	                boolean searchable, int align) {
 		if (button == null) throw new NullPointerException("button cannot be null");
 		SelectTable t = basicSelectTable(searchable, f);
 		t.background(Tex.pane);
@@ -465,21 +465,21 @@ public class IntUI {
 		return () -> (t.hide != null ? t.hide : hide).run();
 	}
 	private static void newSearch(Cons3<Table, Runnable, String> rebuild, Runnable hide,
-																SelectTable t, Table p) {
+	                              SelectTable t, Table p) {
 		new Search((cont, text) -> rebuild.get(cont, hide, text))
 		 .build(t, p);
 	}
 
 	public static <T extends Element> SelectTable
 	showSelectListTable(T button, Seq<String> list, Prov<String> holder,
-											Cons<String> cons, int width, int height,
-											boolean searchable, int align) {
+	                    Cons<String> cons, int width, int height,
+	                    boolean searchable, int align) {
 		return showSelectListTable(button, list, holder, cons, s -> s, width, height, searchable, align);
 	}
 	public static <T extends Element, E extends Enum<E>> SelectTable
 	showSelectListEnumTable(T button, Seq<E> list, Prov<E> holder,
-													Cons<E> cons, float width, float height,
-													boolean searchable, int align) {
+	                        Cons<E> cons, float width, float height,
+	                        boolean searchable, int align) {
 		return showSelectListTable(button, list, holder, cons,
 		 Enum::name, width, height, searchable, align);
 	}
@@ -524,19 +524,19 @@ public class IntUI {
 	 */
 	public static <T extends Button, T1> SelectTable
 	showSelectImageTableWithIcons(T button, Seq<T1> items,
-																Seq<? extends Drawable> icons,
-																Prov<T1> holder, Cons<T1> cons, float size,
-																float imageSize, int cols,
-																boolean searchable) {
+	                              Seq<? extends Drawable> icons,
+	                              Prov<T1> holder, Cons<T1> cons, float size,
+	                              float imageSize, int cols,
+	                              boolean searchable) {
 		return showSelectTable(button, builderWithIcons(items, icons, holder, cons, size, imageSize, cols), searchable, Align.center);
 	}
 
 	public static <T1> SelectTable
 	showSelectImageTableWithIcons(Vec2 vec2, Seq<T1> items,
-																Seq<? extends Drawable> icons,
-																Prov<T1> holder, Cons<T1> cons, float size,
-																float imageSize, int cols,
-																boolean searchable) {
+	                              Seq<? extends Drawable> icons,
+	                              Prov<T1> holder, Cons<T1> cons, float size,
+	                              float imageSize, int cols,
+	                              boolean searchable) {
 		return showSelectTable(vec2, builderWithIcons(items, icons, holder, cons, size, imageSize, cols), searchable);
 	}
 	private static <T1> Cons3<Table, Runnable, String> builderWithIcons(
@@ -569,7 +569,7 @@ public class IntUI {
 
 	public static SelectTable
 	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
-									boolean searchable) {
+	                boolean searchable) {
 		SelectTable t = basicSelectTable(searchable, f);
 		t.background(Tex.pane);
 		t.update(() -> {
@@ -596,10 +596,10 @@ public class IntUI {
 	/** 弹出一个可以选择内容的窗口（无需你提供图标，需要 <i>{@link UnlockableContent}</i>） */
 	public static <T1 extends UnlockableContent> SelectTable
 	showSelectImageTable(Vec2 vec2, Seq<T1> items,
-											 Prov<T1> holder,
-											 Cons<T1> cons, float size,
-											 float imageSize, int cols,
-											 boolean searchable) {
+	                     Prov<T1> holder,
+	                     Cons<T1> cons, float size,
+	                     float imageSize, int cols,
+	                     boolean searchable) {
 		return showSelectImageTableWithFunc(vec2, items, holder, cons, size, imageSize, cols,
 		 u -> new TextureRegionDrawable(u.uiIcon), searchable);
 	}
@@ -607,18 +607,18 @@ public class IntUI {
 	/** 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}） */
 	public static <T1> SelectTable
 	showSelectImageTableWithFunc(Vec2 vec2, Seq<T1> items, Prov<T1> holder,
-															 Cons<T1> cons, float size, float imageSize,
-															 int cols, Func<T1, Drawable> func,
-															 boolean searchable) {
+	                             Cons<T1> cons, float size, float imageSize,
+	                             int cols, Func<T1, Drawable> func,
+	                             boolean searchable) {
 		Seq<Drawable> icons = new Seq<>(items.size);
 		items.each(item -> icons.add(func.get(item)));
 		return showSelectImageTableWithIcons(vec2, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
 	public static <T extends Button, T1> SelectTable
 	showSelectImageTableWithFunc(T button, Seq<T1> items, Prov<T1> holder,
-															 Cons<T1> cons, float size, float imageSize,
-															 int cols, Func<T1, Drawable> func,
-															 boolean searchable) {
+	                             Cons<T1> cons, float size, float imageSize,
+	                             int cols, Func<T1, Drawable> func,
+	                             boolean searchable) {
 		Seq<Drawable> icons = new Seq<>(items.size);
 		items.each(item -> icons.add(func.get(item)));
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, imageSize, cols, searchable);
@@ -633,10 +633,9 @@ public class IntUI {
 		return showException("", t);
 	}
 
-	static ExceptionPopup lastException;
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
-		return (lastException != null && lastException.isShown() ? lastException : new ExceptionPopup(exc, text)).moveToMouse();
+		return ExceptionPopup.of(exc, text);
 	}
 
 	public static Window showInfoFade(String info) {
@@ -661,7 +660,7 @@ public class IntUI {
 		return showConfirm(title, text, null, confirmed);
 	}
 	public static ConfirmWindow showConfirm(String title, String text, Boolp hide,
-																					Runnable confirmed) {
+	                                        Runnable confirmed) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.cont.add(text).width(mobile ? 400f : 500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2f);
@@ -691,7 +690,7 @@ public class IntUI {
 	 * @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable)
 	 */
 	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
-																								Runnable denied) {
+	                                              Runnable denied) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
 		window.cont.add(text).width(Vars.mobile ? 400f : 500f).wrap().pad(4).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2);
@@ -740,7 +739,7 @@ public class IntUI {
 	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
 	 */
 	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback,
-																boolean needDclick) {
+	                              boolean needDclick) {
 		BorderImage image = new ColorContainer(color);
 		cell.setElement(image).size(42f);
 		Runnable runnable = () -> {
@@ -793,7 +792,7 @@ public class IntUI {
 
 
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
-															String valid, String unvalid) {
+	                            String valid, String unvalid) {
 		cell.get().addListener(new IntUI.Tooltip(
 		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : unvalid)
 		));
@@ -884,14 +883,12 @@ public class IntUI {
 		}
 	}
 	private static class ExceptionPopup extends Window implements PopupWindow {
-		/**
-		 * Instantiates a new Exception popup.
-		 * @param exc  the exc
-		 * @param text the text
-		 */
-		public ExceptionPopup(Throwable exc, String text) {
+		static final ObjectMap<Signature, ExceptionPopup> instances = new ObjectMap<>();
+		private ExceptionPopup(Signature signature, Throwable th) {
 			super("", 0, 200, false);
-			String message = Strings.getFinalMessage(exc);
+			String text = signature.text, message = signature.message;
+			instances.put(signature, this);
+			hidden(() -> instances.remove(signature));
 
 			cont.margin(15);
 			cont.add("@error.title").colspan(2);
@@ -903,7 +900,7 @@ public class IntUI {
 			 .get().setAlignment(Align.center);
 			cont.row();
 
-			Collapser col = new Collapser(base -> base.pane(t -> t.margin(14f).add(Strings.neatError(exc)).color(Color.lightGray).left()), true);
+			Collapser col = new Collapser(base -> base.pane(t -> t.margin(14f).add(Strings.neatError(th)).color(Color.lightGray).left()), true);
 
 			cont.button("@details", Styles.togglet, col::toggle).size(180f, 50f).checked(b -> !col.isCollapsed()).growX().right();
 			col.setDuration(0.2f);
@@ -912,6 +909,25 @@ public class IntUI {
 			col.setCollapsed(false, false);
 			cont.add(col).colspan(2).pad(2);
 			//            closeOnBack();
+		}
+		public static Window of(Throwable th, String text) {
+			Signature signature = new Signature(Strings.getFinalMessage(th), text);
+			if (instances.containsKey(signature)) return instances.get(signature);
+			return new ExceptionPopup(signature, th).moveToMouse();
+		}
+		static class Signature {
+			String message, text;
+			public Signature(String message, String text) {
+				this.message = message;
+				this.text = text;
+			}
+			public boolean equals(Object obj) {
+				if (!(obj instanceof Signature sig)) return false;
+				return Objects.equals(sig.message, message) && Objects.equals(sig.text, text);
+			}
+			public int hashCode() {
+				return Objects.hash(message, text);
+			}
 		}
 	}
 	public static class ConfirmWindow extends Window implements IDisposable, PopupWindow {
@@ -924,7 +940,7 @@ public class IntUI {
 		 * @param noButtons the no buttons
 		 */
 		public ConfirmWindow(String title, float minWidth, float minHeight, boolean full,
-												 boolean noButtons) {
+		                     boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
 

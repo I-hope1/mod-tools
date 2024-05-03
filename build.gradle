@@ -33,7 +33,7 @@ ext {
 	uncVersion = '1.8.9'
 	mindustryVersion = 'v146'
 
-	minApi = 26
+	minApi = 14
 	MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
@@ -92,28 +92,33 @@ dependencies {
 	compileOnly("com.github.Anuken.Arc:arc-core:$mindustryVersion")
 }
 
-task jarAndroid {
+task jarAndroid(type: JavaExec) {
 	dependsOn "jar"
 
-	doLast {
-		if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
+	if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
 
-		def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
+	def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 
-		if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
+	if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
 
-		//collect dependencies needed for desugaring
-		def dependencies = (configurations.compileClasspath.asList()
-				+ configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]
-		).collect { "--classpath $it.path" }.join(" ")
+	//collect dependencies needed for desugaring
+	def dependencies = (configurations.compileClasspath.asList()
+//			+ configurations.runtimeClasspath.asList()
+//			+ [new File(platformRoot, "android.jar")]
+	).collectMany { ["--classpath", "$it.path"] }
 
-		def d8 = new File("$sdkRoot/build-tools/").listFiles().find {
-			it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= minApi
-		}.listFiles().find { it.name.contains("d8") }
-		//dex and desugar files - this requires d8 in your PATH
-		"$d8 $dependencies --min-api 26 --output ${project.archivesBaseName}-android.jar ${project.archivesBaseName}-${version}.jar"
-				.execute(null, new File("$buildDir0/libs")).waitForProcessOutput(System.out, System.err)
+	def d8Root = file("$sdkRoot/build-tools/").listFiles().find {
+		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= minApi
 	}
+
+	classpath("$d8Root/lib/d8.jar")
+	main("com.android.tools.r8.D8")
+	//dex and desugar files - this requires d8 in your PATH
+	args = dependencies + [
+			"--min-api", "26",
+			"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
+			"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
+	]
 }
 
 jar {

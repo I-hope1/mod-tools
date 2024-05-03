@@ -22,6 +22,7 @@ public interface REFLECT {
 		return (T) ((MethodHandle) l).invoke(arg1, arg2, arg3);
 	}
 	// --------------
+	/**  */
 	static Scriptable findClass(String name) throws ClassNotFoundException {
 		return IScript.cx.getWrapFactory().wrapJavaClass(IScript.cx, IScript.scope, IScript.main.loadClass(name));
 	}

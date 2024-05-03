@@ -1,12 +1,15 @@
 package modtools.utils.reflect;
 
+import java.io.File;
+import java.lang.reflect.*;
+
+import arc.Core;
 import arc.util.OS;
 import dalvik.system.VMStack;
 import mindustry.Vars;
+import mindustry.android.AndroidRhinoContext;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
-
-import java.lang.reflect.*;
 
 public class HopeReflect {
 
@@ -43,6 +46,7 @@ public class HopeReflect {
 		return UnsafeHandler.defineClass(name, bytes, loader);
 	}
 	private static Class<?> defineClassAndroid(String name, ClassLoader loader, byte[] bytes) {
+		if (!(ContextFactory.getGlobal() instanceof AndroidContextFactory)) AndroidRhinoContext.enter(new File(Core.settings.getDataDirectory() + "/rhino/"));
 		return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
 		 .createClassLoader(loader))
 		 .defineClass(name, bytes);

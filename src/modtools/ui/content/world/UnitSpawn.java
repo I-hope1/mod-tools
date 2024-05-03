@@ -67,10 +67,11 @@ public class UnitSpawn extends Content {
 		unitCont.clearChildren();
 		group = MyItemSelection.buildTable0(unitCont, Vars.content.units(), Vars.mobile ? 8 : 10,
 		 u -> new TextureRegionDrawable(u.uiIcon));
+
 		unitCont.find(el -> el.userObject == UnitTypes.alpha).fireClick();
-		unitCont.update(() -> {
-			group.setMaxCheckCount(multi ? -1 : 1);
-		});
+
+		unitCont.update(() -> group.setMaxCheckCount(multi ? -1 : 1));
+
 		unitCont.row();
 		unitCont.table(right -> {
 			nameL = new Label("");
@@ -81,8 +82,8 @@ public class UnitSpawn extends Content {
 			right.update(() -> {
 				selectUnit = (UnitType) group.getChecked().userObject;
 				Seq<ImageButton> allChecked = group.getAllChecked();
-				nameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.name}\{allChecked.size > 1 ? "..." : ""}");
-				localizedNameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.localizedName}\{allChecked.size > 1 ? "..." : ""}");
+				nameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.name}\{allChecked.size > 1 ? "[]..." : ""}");
+				localizedNameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.localizedName}\{allChecked.size > 1 ? "[]..." : ""}");
 			});
 			right.add(nameL).wrap().growX().row();
 			right.add(localizedNameL).growX().wrap().row();
@@ -278,8 +279,10 @@ public class UnitSpawn extends Content {
 		Vars.state.rules.unitCap = b ? 0xffffff : defCap;
 	}
 	public void build() {
-		if (ui == null) _load();
-		setup();
+		if (ui == null) {
+			_load();
+			setup();
+		}
 		ui.show();
 	}
 	// 用于获取点击的坐标

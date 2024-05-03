@@ -3,10 +3,13 @@ package modtools.android;
 import arc.util.Log;
 import dalvik.system.VMRuntime;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.ByteCodeTools.MyClass;
+import rhino.classfile.ByteCode;
 
 import java.lang.reflect.*;
 
 import static ihope_lib.MyReflect.unsafe;
+import static modtools.utils.ByteCodeTools.nativeName;
 
 /** Only For Android */
 public class HiddenApi {
@@ -25,7 +28,8 @@ public class HiddenApi {
 		Method setHiddenApiExemptions = findMethod();
 
 		try {
-			if (setHiddenApiExemptions == null) throw new InternalError("setHiddenApiExemptions not found.");
+			if (setHiddenApiExemptions == null)
+				throw new InternalError("setHiddenApiExemptions not found.");
 
 			invoke(setHiddenApiExemptions);
 		} catch (Exception e) {
@@ -115,5 +119,115 @@ public class HiddenApi {
 		/* Method是指针，大小相当于int */
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.vaddressOf(ints);
+
+		// try {
+		// 	// testReplaceModifier();
+		// 	replaceMethod();
+		// } catch (Throwable e) {
+		// 	Log.err(e);
+		// }
+	}
+
+
+	public static class A {
+		private void _private() {
+			Log.info("private");
+		}
+		public void _public() {
+			Log.info("original");
+		}
+	}
+	public static class Target extends A {
+		public void _public() {
+			Log.info("successful: @", this);
+		}
+	}
+	static void testReplaceModifier() throws Exception {
+		// Method aPrivate                  = A.class.getDeclaredMethod("_private");
+		// Method aPublic                   = A.class.getDeclaredMethod("_public");
+		// long   address_artMethod_private = unsafe.getLong(aPrivate, offset_art_method_);
+		// long   address_artMethod_public  = unsafe.getLong(aPublic, offset_art_method_);
+		// Log.info("Origin: @",A.class.getDeclaredMethod("_private"));
+		//
+		// unsafe.copyMemory(address_artMethod_public + 4, address_artMethod_private + 4, 4);
+		// Log.info("Result: @",A.class.getDeclaredMethod("_private"));
+		MyClass<Object> testA = new MyClass<>("testA", Object.class);
+		testA.addInterface(Runnable.class);
+		testA.setFunc("run", cfw -> {
+			cfw.add(ByteCode.NEW, nativeName(A.class));
+			cfw.add(ByteCode.DUP);
+			cfw.addInvoke(ByteCode.INVOKESPECIAL, nativeName(Object.class), "<init>", "()V");
+			cfw.addInvoke(ByteCode.INVOKEVIRTUAL, nativeName(A.class), "_public", "()V");
+			cfw.add(ByteCode.RETURN);
+			return 1;
+		}, 1, void.class);
+
+		Runnable r = (Runnable) unsafe.allocateInstance(testA.define(A.class));
+		Log.info("Runnable: @", r);
+		r.run();
+		Log.info("After run");
+	}
+
+
+	public static class Super {
+		public Class findLoadedClass(String name) {
+			System.out.println("Not impl yet");
+			return null;
+		}
+	}
+	static Method   vm;
+	static Class<?> Exception            = java.lang.Exception.class;
+	static Class<?> NullPointerException = java.lang.NullPointerException.class;
+
+	public static class Delegator extends Super {
+		public Class findLoadedClass(String name) {
+			if (name.equals("java.lang.Exception")) return Exception;
+			if (name.equals("java.lang.NullPointerException")) return NullPointerException;
+
+			try {
+				Class res = (Class) vm.invoke(this, name);
+				Log.info(res);
+				return res;
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
+	}
+
+	static void replaceMethod() throws Exception {
+		// {
+		// 	new A()._public();
+		// 	replaceAMethod(A.class.getDeclaredMethod("_public"), Target.class.getDeclaredMethod("_public"));
+		// 	new A()._public();
+		// }
+
+		{
+			/* MyClass<Object> testA = new MyClass<>("testReplace", Object.class);
+			testA.addInterface(Runnable.class);
+			Class<?> error=NoSuchMethodError.class;
+			testA.setFunc("findLoadedClass", (self, args) -> {
+				String name = (String) args.get(0);
+				System.out.println(args);
+				if (name.equals("java.lang.NoSuchMethodError")) return error;
+				return Tools.<Super>as(self).findLoadedClass(name);
+			}, 1, Class.class, String.class);
+			Class<?> delegator = testA.define(Vars.class.getClassLoader()); */
+			vm = Class.forName("java.lang.ClassLoader").getDeclaredMethod("findLoadedClass", String.class);
+			vm.setAccessible(true);
+
+			//			replaceAMethod(Super.class.getDeclaredMethod("findLoadedClass", String.class)
+			//		 , vm);
+
+			replaceAMethod(vm
+			 , Delegator.class.getDeclaredMethod("findLoadedClass", String.class));
+		}
+
+		// new A()._private();
+	}
+	private static void replaceAMethod(Method dest, Method src) {
+		long address_dest = unsafe.getLong(dest, offset_art_method_);
+		long address_src  = unsafe.getLong(src, offset_art_method_);
+
+		unsafe.copyMemory(address_src + 4, address_dest + 4, 24);
 	}
 }

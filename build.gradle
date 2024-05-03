@@ -33,7 +33,7 @@ ext {
 	uncVersion = '1.8.9'
 	mindustryVersion = 'v146'
 
-	minApi = 14
+	minApi = 26
 	MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
@@ -115,7 +115,8 @@ task jarAndroid(type: JavaExec) {
 	main("com.android.tools.r8.D8")
 	//dex and desugar files - this requires d8 in your PATH
 	args = dependencies + [
-			"--min-api", "26",
+			"--min-api", "$minApi",
+//			"--file-per-class",
 			"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
 			"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
 	]

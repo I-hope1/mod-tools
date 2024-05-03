@@ -59,6 +59,7 @@ public class MyItemSelection {
 		pane.setOverscroll(false, false);
 		table.add(pane).maxHeight(40 * 5).grow();
 	}
+
 	/** 支持多元素选择 */
 	public static <T> ButtonGroup<ImageButton> buildTable0(
 	 Table table, Seq<T> items, int cols, Func<T, Drawable> drawableFunc) {

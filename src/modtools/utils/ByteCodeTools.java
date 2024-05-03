@@ -1,21 +1,21 @@
 package modtools.utils;
 
-import arc.files.Fi;
-import arc.func.*;
-import arc.struct.*;
-import arc.util.*;
-import modtools.jsfunc.type.CAST;
-import modtools.utils.reflect.*;
-import rhino.classfile.ClassFileWriter;
+import static ihope_lib.MyReflect.unsafe;
+import static rhino.classfile.ByteCode.*;
+import static rhino.classfile.ClassFileWriter.*;
 
 import java.io.FileOutputStream;
 import java.lang.annotation.*;
 import java.lang.reflect.*;
 import java.util.*;
 
-import static ihope_lib.MyReflect.unsafe;
-import static rhino.classfile.ByteCode.*;
-import static rhino.classfile.ClassFileWriter.*;
+import arc.files.Fi;
+import arc.func.*;
+import arc.struct.Seq;
+import arc.util.Log;
+import modtools.jsfunc.type.CAST;
+import modtools.utils.reflect.*;
+import rhino.classfile.ClassFileWriter;
 
 public class ByteCodeTools {
 	/*public static <T> MyClass<T> newClass(String name, String superName) {
@@ -341,7 +341,7 @@ public class ByteCodeTools {
 		StringBuilder builder = new StringBuilder("(");
 		for (var arg : args) {
 			if (arg == void.class)
-				unsafe.throwException(new IllegalArgumentException("args: " + Arrays.toString(args) + " contains void.class"));
+				throw new IllegalArgumentException("args: " + Arrays.toString(args) + " contains void.class");
 			builder.append(typeToNative(arg));
 		}
 		builder.append(")").append(typeToNative(returnType));

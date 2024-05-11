@@ -6,7 +6,7 @@ import arc.math.*;
 import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
@@ -19,7 +19,7 @@ import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Hitter;
 import modtools.ui.components.Window.ClearScroll;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.linstener.MoveListener;
+import modtools.ui.components.linstener.*;
 import modtools.ui.content.Content;
 import modtools.utils.Tools;
 import modtools.utils.ui.LerpFun;
@@ -29,7 +29,7 @@ import java.util.*;
 
 import static modtools.IntVars.modName;
 import static modtools.ui.Frag.Settings.position;
-import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.IntUI.*;
 
 public class Frag extends Table {
 	public static final Color defaultColor = Color.sky;
@@ -79,6 +79,9 @@ public class Frag extends Table {
 			setPosition(pos.x, pos.y);
 		}
 		Log.info("Initialize TopGroup.");
+
+		// focusListener = new CancelFocusListener();
+		// container.addCaptureListener(focusListener);
 
 		var listener = new MoveInsideListener();
 		// 添加双击变小
@@ -143,9 +146,8 @@ public class Frag extends Table {
 
 	/** 自动解除focus */
 	public Element hit(float x, float y, boolean touchable) {
-		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
 		Element hit = super.hit(x, y, touchable);
-		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
+		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
 			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) Core.scene.setScrollFocus(null);
 			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);

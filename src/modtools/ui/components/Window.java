@@ -278,10 +278,10 @@ public class Window extends Table implements Position {
 	public Element hit(float x, float y, boolean touchable) {
 		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
 		Element hit = super.hit(x, y, touchable);
-		if (hit == null && this instanceof IMenu) hit = Hitter.all.first();
+		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
-			Core.scene.setScrollFocus(previousScrollFocus);
-			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(previousKeyboardFocus);
+			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) Core.scene.setScrollFocus(null);
+			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);
 		}
 		if (hit != null && Core.scene.getKeyboardFocus() == null) {
 			requestKeyboard();
@@ -342,7 +342,6 @@ public class Window extends Table implements Position {
 			return false;
 		}
 	};
-	Element previousKeyboardFocus, previousScrollFocus;
 
 	public void clear() {
 		super.clear();
@@ -374,14 +373,6 @@ public class Window extends Table implements Position {
 
 		clearActions();
 		removeCaptureListener(ignoreTouchDown);
-
-		previousKeyboardFocus = null;
-		Element actor = stage.getKeyboardFocus();
-		if (actor != null && !actor.isDescendantOf(this)) previousKeyboardFocus = actor;
-
-		previousScrollFocus = null;
-		actor = stage.getScrollFocus();
-		if (actor != null && !actor.isDescendantOf(this)) previousScrollFocus = actor;
 
 		pack();
 		topGroup.addChild(this);
@@ -452,16 +443,6 @@ public class Window extends Table implements Position {
 		// bakRegion = screenshot();
 		this.fire(new VisibilityEvent(true));
 
-		Scene stage = getScene();
-		if (stage != null) {
-			if (previousKeyboardFocus != null && previousKeyboardFocus.getScene() == null) previousKeyboardFocus = null;
-			Element actor = stage.getKeyboardFocus();
-			if (actor == null || actor.isDescendantOf(this)) stage.setKeyboardFocus(previousKeyboardFocus);
-
-			if (previousScrollFocus != null && previousScrollFocus.getScene() == null) previousScrollFocus = null;
-			actor = stage.getScrollFocus();
-			if (actor == null || actor.isDescendantOf(this)) stage.setScrollFocus(previousScrollFocus);
-		}
 		if (action != null) {
 			addCaptureListener(ignoreTouchDown);
 			addAction(Actions.sequence(action, Actions.removeListener(ignoreTouchDown, true), Actions.remove()));

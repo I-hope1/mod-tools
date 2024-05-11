@@ -1,10 +1,11 @@
 package modtools.ui.components;
 
+import arc.scene.event.Touchable;
 import arc.struct.Seq;
 import modtools.ui.IntUI.IMenu;
 
 public class Hitter extends FillElement implements IMenu {
-	public static Seq<Hitter> all = new Seq<>();
+	private static final Seq<Hitter> all = new Seq<>();
 	public Hitter() {
 		all.add(this);
 	}
@@ -20,5 +21,18 @@ public class Hitter extends FillElement implements IMenu {
 		boolean b = super.remove();
 		if (b) all.remove(this, true);
 		return b;
+	}
+
+	public static Hitter firstTouchable() {
+		return all.find(h -> h.touchable == Touchable.enabled);
+	}
+	public static boolean any() {
+		return firstTouchable() != null;
+	}
+	public static Hitter peek() {
+		return all.peek();
+	}
+	public static boolean contains(Hitter hitter) {
+		return all.contains(hitter);
 	}
 }

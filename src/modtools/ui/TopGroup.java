@@ -575,11 +575,11 @@ public final class TopGroup extends WidgetGroup {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			if (keycode == KeyCode.f4 && input.shift() && shownWindows.size() > 0) frontWindow.hide();
 			hitter:
-			if (!Core.scene.hasField() && keycode == KeyCode.escape && Hitter.all.any()) {
-				Hitter peek = Hitter.all.peek();
+			if (!Core.scene.hasField() && keycode == KeyCode.escape && Hitter.any()) {
+				Hitter peek = Hitter.peek();
 				if (!peek.isTouchable()) break hitter;
 				peek.fireClick();
-				if (!Hitter.all.contains(peek)) HopeInput.justPressed.remove(KeyCode.escape.ordinal());
+				if (!Hitter.contains(peek)) HopeInput.justPressed.remove(KeyCode.escape.ordinal());
 			}
 			return super.keyDown(event, keycode);
 		}

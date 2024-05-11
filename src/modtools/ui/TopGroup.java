@@ -28,7 +28,6 @@ import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
-import modtools.utils.reflect.FieldUtils;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -49,9 +48,9 @@ public final class TopGroup extends WidgetGroup {
 		checkUICount,
 		debugBounds,
 		selectInvisible, drawHiddenPad,
-		overrideScene
+		// overrideScene
 	}
-	static {
+	/* static {
 		if (overrideScene.enabled()) {
 			var prev = scene.root;
 			FieldUtils.setValue(scene, Scene.class, "root", new Group() {
@@ -67,7 +66,7 @@ public final class TopGroup extends WidgetGroup {
 			}, Group.class);
 			Tools.clone(prev, scene.root, Group.class, (Seq<String>) null);
 		}
-	}
+	 } */
 
 	/* 渲染相关 */
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();

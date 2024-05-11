@@ -151,8 +151,8 @@ public class ModTools extends Mod {
 		if (OS.isWindows || OS.isMac) {
 			addFileDragListener();
 		}
+		IntUI.load();
 		IntVars.async(() -> {
-			IntUI.load();
 			// Updater.checkUpdate();
 			AllTutorial.init();
 			// Circle.draw();

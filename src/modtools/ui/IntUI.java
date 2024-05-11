@@ -90,18 +90,18 @@ public class IntUI {
 	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
 	 * @param <T>      the type parameter
 	 * @param elem     被添加侦听器的元素
-	 * @param click0   单击事件
-	 * @param d_click0 双击事件
+	 * @param click   单击事件
+	 * @param d_click 双击事件
 	 * @return the t
 	 */
 	public static <T extends Element> T
-	doubleClick(T elem, Runnable click0, Runnable d_click0) {
-		if (click0 == null && d_click0 == null) return elem;
-		final Runnable click = click0 == null ? null : catchRun(click0::run),
-		 d_click = d_click0 == null ? null : catchRun(d_click0::run);
+	doubleClick(T elem, Runnable click, Runnable d_click) {
+		if (click == null && d_click == null) return elem;
+		final Runnable click1 = click == null ? null : catchRun(click::run),
+		 d_click1 = d_click == null ? null : catchRun(d_click::run);
 		class ClickTask extends Task {
 			public void run() {
-				if (click != null) click.run();
+				if (click1 != null) click1.run();
 			}
 		}
 		class DoubleClick extends ClickListener {
@@ -113,15 +113,15 @@ public class IntUI {
 			public void clicked(InputEvent event, float x, float y) {
 				if (last.dst(mouseVec) > MAX_OFF) return;
 				super.clicked(event, x, y);
-				if (click != null && d_click == null) {
-					click.run();
+				if (click1 != null && d_click1 == null) {
+					click1.run();
 					return;
 				}
 				if (TaskManager.reScheduled(0.3f, clickTask)) {
 					last.set(mouseVec);
 					return;
 				}
-				if (mouseVec.dst(last) < MAX_OFF) d_click.run();
+				if (mouseVec.dst(last) < MAX_OFF) d_click1.run();
 			}
 		}
 		elem.addListener(new DoubleClick());

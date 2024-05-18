@@ -9,6 +9,8 @@ import modtools.utils.world.WorldUtils;
 import static mindustry.Vars.content;
 
 public class UnitSpawnPacket extends Packet {
+	private byte[] DATA = NODATA;
+
 	UnitType unit;
 	Team     team;
 	float    x, y;
@@ -21,12 +23,17 @@ public class UnitSpawnPacket extends Packet {
 		this.amount = amount;
 	}
 	public UnitSpawnPacket() {}
-	public void read(Reads read) {
-		unit = content.unit(read.i());
-		team = Team.get(read.i());
-		x = read.f();
-		y = read.f();
-		amount = read.i();
+	public void read(Reads read, int LENGTH) {
+		this.DATA = read.b(LENGTH);
+	}
+	public void handled(){
+    BAIS.setBytes(this.DATA);
+
+		unit = content.unit(READ.i());
+		team = Team.get(READ.i());
+		x = READ.f();
+		y = READ.f();
+		amount = READ.i();
 	}
 	public void handleServer(NetConnection con) {
 		if (!HopeCall.checkPrivilege(con)) return;

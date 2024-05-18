@@ -4,11 +4,12 @@ import arc.util.io.*;
 import mindustry.game.Team;
 import mindustry.net.*;
 import mindustry.world.*;
-import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.*;
 
 public class SetBlockPacket extends Packet {
+	private byte[] DATA = NODATA;
+
 	Block block;
 	Tile  tile;
 	Team  team;
@@ -18,10 +19,14 @@ public class SetBlockPacket extends Packet {
 		this.tile = tile;
 		this.team = team;
 	}
-	public void read(Reads read) {
-		block = content.block(read.i());
-		tile = world.tile(read.i());
-		team = Team.get(read.i());
+	public void read(Reads read, int LENGTH) {
+		DATA = read.b(LENGTH);
+	}
+	public void handled(){
+    BAIS.setBytes(this.DATA);
+		block = content.block(READ.i());
+		tile = world.tile(READ.i());
+		team = Team.get(READ.i());
 	}
 	public void write(Writes write) {
 		write.i(block.id);

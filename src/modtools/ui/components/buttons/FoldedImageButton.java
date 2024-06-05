@@ -22,13 +22,13 @@ public class FoldedImageButton extends ImageButton {
 		clicked(() -> {
 			checked = !checked;
 			if (fireOnlyClick) {
-				imageChange();
+				applyChanged();
 			}
 		});
 		update(() -> {
 			if (fireOnlyClick) return;
 			setOrigin(Align.center);
-			imageChange();
+			applyChanged();
 		});
 		addListener(new InputListener() {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
@@ -47,10 +47,10 @@ public class FoldedImageButton extends ImageButton {
 	public void fireCheck(boolean checked, boolean fireEvents) {
 		if (isDisabled()) return;
 		this.checked = checked;
-		if (fireEvents) imageChange();
+		if (fireEvents) applyChanged();
 		else getImage().rotation = checked ? -90 : 0;
 	}
-	private void imageChange() {
+	private void applyChanged() {
 		Image image = getImage();
 		if (checked) {
 			if (rebuild != null) rebuild.run();

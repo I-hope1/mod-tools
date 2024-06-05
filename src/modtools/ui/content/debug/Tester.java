@@ -185,7 +185,7 @@ public class Tester extends Content {
 			textarea.getArea().invalidateHierarchy();
 			textarea.layout();
 		};
-		ui.maximized(isMax -> Time.runTask(0, areaInvalidate));
+		ui.maximized(_ -> Time.runTask(0, areaInvalidate));
 		ui.sclListener.listener = areaInvalidate;
 
 		addListenerToArea(textarea);
@@ -346,8 +346,8 @@ public class Tester extends Content {
 		Table             p       = new Table();
 		PrefPane          resPane = new PrefPane(p);
 		int               height  = 56;
-		resPane.xp = x -> WIDTH * Scl.scl();
-		resPane.yp = y -> folder.hasChildren() ? height : 0;
+		resPane.xp = _ -> WIDTH * Scl.scl();
+		resPane.yp = _ -> folder.hasChildren() ? height : 0;
 		resPane.setScrollingDisabledY(true);
 		folder.setContainer(table.add(resPane).growX().padLeft(6f));
 

@@ -13,7 +13,7 @@ import arc.scene.style.Style;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -256,17 +256,16 @@ public class ReviewElement extends Content {
 				Button[] bs = {null};
 				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, HopeStyles.flatBordert, () -> {
 					 Runnable go = () -> {
-						 var window = new ReviewElementWindow();
+						 var parentWindow = new ReviewElementWindow();
 						 // Log.info(element.parent);
 						 /* 左上角对齐 */
-						 window.pattern = pattern;
-						 window.show(element.parent);
-						 window.shown(() -> {
-							 Time.runTask(4, () -> {
-								 window.setSize(width, height);
-								 window.setPosition(x, getY(Align.topLeft), Align.topLeft);
-							 });
-						 });
+						 parentWindow.pattern = pattern;
+						 parentWindow.shown(() -> Core.app.post(() -> {
+							 parentWindow.pane.parent.setSize(pane.parent.getWidth(), pane.parent.getHeight());
+							 parentWindow.setSize(width, height);
+							 parentWindow.setPosition(x, getY(Align.topLeft), Align.topLeft);
+						 }));
+						 parentWindow.show(element.parent);
 						 hide();
 					 };
 					 if (element.parent == scene.root) {
@@ -387,8 +386,7 @@ public class ReviewElement extends Content {
 				return;
 			}
 			table.left().defaults().left().growX();
-
-			Core.app.post(() -> {
+			IntVars.postToMain(() -> {
 				try {
 					table.add(new MyWrapTable(this, element));
 				} catch (Exception e) {
@@ -403,8 +401,8 @@ public class ReviewElement extends Content {
 			if (isShown()) return;
 			this.element = element;
 			((ScrollPane) pane.parent).setScrollY(0);
-			IntVars.async(() -> rebuild(element, pattern),
-			 this::show);
+			rebuild(element, pattern);
+			show();
 		}
 
 		public String toString() {
@@ -436,12 +434,13 @@ public class ReviewElement extends Content {
 	}
 
 	private static class MyWrapTable extends ChildrenFirstTable {
-		boolean stopEvent;
+		boolean stopEvent, needUpdate;
 		public MyWrapTable(ReviewElementWindow window, Element element) {
 			/* 用于下面的侦听器  */
 			int eventChildIndex;
 			userObject = element;
 			hovered(this::requestKeyboard);
+			exited(() -> scene.setKeyboardFocus(null));
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
 			keyDown(KeyCode.del, () -> {
 				Runnable go = () -> {
@@ -465,6 +464,8 @@ public class ReviewElement extends Content {
 				window.addMultiRowWithPos(this,
 				 ElementUtils.getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
+				Element textElement = this.children.get(this.children.size - 2);
+
 				image().growY().left().update(
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
 				);
@@ -472,43 +473,34 @@ public class ReviewElement extends Content {
 				keyDown(KeyCode.right, () -> button.fireCheck(true));
 				defaults().growX();
 				table(t -> {
-					Table table1 = new Table();
-					Runnable rebuild = () -> {
-						if (!table1.hasChildren()) {
-							children.each(c -> window.build(c, table1));
+					Table    table1  = new Table();
+					Runnable rebuild = () -> watchChildren(window, group, table1, children);
+
+					boolean b = children.size < 20
+					            || group.parent.getChildren().size == 1
+					            || window.element == group;
+					if (b) rebuild.run();
+					button.setContainer(t.add(table1).grow());
+					boolean[] lastEmpty = {children.isEmpty()};
+					t.update(() -> {
+						if (children.isEmpty() != lastEmpty[0]) {
+							lastEmpty[0] = children.isEmpty();
+							HopeFx.changedFx(textElement);
+						}
+					});
+					table1.update(() -> {
+						if (needUpdate) {
+							button.rebuild.run();
+							needUpdate = false;
 							return;
 						}
-						Cell<?>[] cells = new Cell<?>[children.size];
-						table1.getChildren().each(vchild -> {
-							if (vchild instanceof MyWrapTable wrapTable) {
-								Element data = (Element) wrapTable.userObject;
-								if (data == null || data.parent != group) return;
-								int index = data.getZIndex();
-								if (index == -1) return;
-								Cell cell = table1.getCell(vchild);
-								cells[index] = cell;
-							}
-						});
-						for (int i = 0; i < cells.length; i++) {
-							if (cells[i] == null) {
-								window.build(children.get(i), table1);
-								int j = i, lastSize = table1.getCells().size;
-								Core.app.post(() -> cells[j] = table1.getCells().get(lastSize + j));
-							}
-						}
-						Core.app.post(() -> table1.getCells().set(cells));
-					};
-					if (children.size < 30) rebuild.run();
-
-					button.fireCheck(!children.isEmpty() && children.size < 20);
-					button.setContainer(t.add(table1).grow());
-					table1.update(() -> {
+						button.fireCheck(!children.isEmpty() && b);
 						if (stopEvent) {
 							stopEvent = false;
 							return;
 						}
 
-						if (!group.needsLayout() || group.getScene() == null) return;
+						if (!group.needsLayout() || group.parent == null) return;
 
 						find(ancestor -> {
 							if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
@@ -518,13 +510,13 @@ public class ReviewElement extends Content {
 						button.rebuild.run();
 					});
 					button.rebuild = () -> {
-						if (group.getScene() != null && (
-						 group.needsLayout() ||
+						if (group.parent != null && (
+						 needUpdate || group.needsLayout() ||
 						 (!table1.hasChildren() && group.hasChildren())
 						)) {
 							rebuild.run();
 							// if (group.needsLayout()) HopeFx.changedFx(group);
-							HopeFx.changedFx(table1);
+							HopeFx.changedFx(textElement);
 						}
 					};
 				}).left();
@@ -567,12 +559,21 @@ public class ReviewElement extends Content {
 			IntUI.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;
 
-			update(() -> background(FOCUS_FROM == this ? Styles.flatDown : Styles.none));
+			update(() -> {
+				if (element.parent == null) remove();
+				background(FOCUS_FROM == this ? Styles.flatDown : Styles.none);
+			});
 			addFocusSource(this, () -> window, () -> element);
 		}
 		public void clear() {
 			super.clear();
 			userObject = null;
+		}
+		public boolean remove() {
+			MyWrapTable table = ElementUtils.findParent(this, e -> e instanceof MyWrapTable);
+			if (table != null) table.needUpdate = true;
+			userObject = null;
+			return super.remove();
 		}
 		private static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
 			return () -> Sr(Seq.with(
@@ -643,6 +644,34 @@ public class ReviewElement extends Content {
 			}
 			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 		}
+	}
+	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
+	                                  SnapshotSeq<Element> children) {
+		if (!container.hasChildren()) {
+			children.each(c -> window.build(c, container));
+			return;
+		}
+		Cell<?>[] cells = new Cell<?>[children.size];
+		// Seq<Element> toRemoved = new Seq<>();
+		container.getChildren().each(item -> {
+			if (item instanceof MyWrapTable wrapTable) {
+				Element data = (Element) wrapTable.userObject;
+				if (data == null || data.parent != group) return;
+				int index = data.getZIndex();
+				if (index == -1) return;
+
+				Cell cell = container.getCell(item);
+				cells[index] = cell;
+			}
+		});
+		// Seq<Runnable> runs = new Seq<>();
+		for (int i = 0; i < cells.length; i++) {
+			if (cells[i] != null) continue;
+			window.build(children.get(i), container);
+			cells[i] = container.getCells().get(container.getCells().size - 1);
+		}
+		// runs.each(Runnable::run);
+		container.getCells().set(cells);
 	}
 
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {

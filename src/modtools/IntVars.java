@@ -1,6 +1,6 @@
 package modtools;
 
-import arc.Events;
+import arc.*;
 import arc.files.Fi;
 import arc.util.Log;
 import mindustry.Vars;
@@ -74,6 +74,13 @@ public class IntVars {
 	/** @return {@code true} if the file be deleted successfully */
 	public static boolean delete(Fi fi) {
 		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
+	}
+
+	/** 提交到主线程运行  */
+	public static void postToMain(Runnable run) {
+		if (Thread.currentThread().getContextClassLoader() == Vars.class.getClassLoader()) {
+			run.run();
+		} else Core.app.post(run);
 	}
 
 	public interface Async {

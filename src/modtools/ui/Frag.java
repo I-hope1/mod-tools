@@ -17,7 +17,6 @@ import modtools.annotations.settings.*;
 import modtools.events.ISettings;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Hitter;
-import modtools.ui.components.Window.ClearScroll;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.*;
 import modtools.ui.content.Content;
@@ -43,7 +42,6 @@ public class Frag extends Table {
 	Set<Content> enabledContents = new HashSet<>();
 	public Frag() {
 		super(Styles.black8);
-		addListener(new ClearScroll());
 	}
 	public void load() {
 		touchable = Touchable.enabled;

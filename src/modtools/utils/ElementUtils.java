@@ -24,6 +24,13 @@ import static mindustry.Vars.*;
 import static modtools.utils.ElementUtils.$.*;
 
 public interface ElementUtils {
+	static <T> T findParent(Element actor, Boolf<Element> condition) {
+		while (true) {
+			actor = actor.parent;
+			if (condition.get(actor)) return (T) actor;
+			if (actor == null) return null;
+		}
+	}
 	class $ {
 		static final Vec2 v1 = new Vec2();
 		static final Vec2 v2 = new Vec2();
@@ -94,21 +101,13 @@ public interface ElementUtils {
 	}
 
 	static @Nullable ScrollPane findClosestPane(Element actor) {
-		while (true) {
-			actor = actor.parent;
-			if (actor instanceof ScrollPane p) return p;
-			if (actor == null) return null;
-		}
+		return findParent(actor, e -> e instanceof ScrollPane);
 	}
 	static int getColspan(Cell<?> cell) {
 		return Reflect.get(Cell.class, cell, "colspan");
 	}
 	static @Nullable Window getWindow(Element el) {
-		while (el != null) {
-			el = el.parent;
-			if (el instanceof Window window) return window;
-		}
-		return null;
+		return findParent(el, e -> e instanceof Window);
 	}
 
 	static String getSimpleName(Class<?> clazz) {

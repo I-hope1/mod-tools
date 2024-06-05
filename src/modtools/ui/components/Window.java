@@ -122,6 +122,9 @@ public class Window extends Table implements Position {
 		super();
 
 		cont.setClip(true);
+		exited(() -> {
+			if (!Core.scene.hasField()) Core.scene.setKeyboardFocus(null);
+		});
 		tapped(this::toFront);
 		touchable = titleTable.touchable/* = cont.touchable */ = Touchable.enabled;
 		titleTable.margin(0);
@@ -168,7 +171,6 @@ public class Window extends Table implements Position {
 		});
 		all.add(this);
 
-		addListener(new ClearScroll());
 		IntVars.addResizeListener(() -> {
 			if (isMaximize) maximizeAnimated();
 		});
@@ -283,9 +285,6 @@ public class Window extends Table implements Position {
 			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) Core.scene.setScrollFocus(null);
 			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);
 		}
-		if (hit != null && Core.scene.getKeyboardFocus() == null) {
-			requestKeyboard();
-		}
 		return hit;
 	}
 	private void setup() {
@@ -357,7 +356,7 @@ public class Window extends Table implements Position {
 	 * {@link #pack() Packs} the dialog and adds it to the stage with custom action which can be null for instant show
 	 */
 	public Window show(Scene stage, Action action) {
-		Core.app.post(() -> show0(stage, action));
+		IntVars.postToMain(() -> show0(stage, action));
 		return this;
 	}
 
@@ -384,7 +383,7 @@ public class Window extends Table implements Position {
 			Window.all.add(this);
 		}
 
-		if (!(this instanceof InfoFadePopup)) Core.scene.unfocusAll();
+		// if (!(this instanceof InfoFadePopup)) Core.scene.unfocusAll();
 		// stage.setKeyboardFocus(this);
 		invalidate();
 
@@ -657,12 +656,6 @@ public class Window extends Table implements Position {
 	}
 	public float getY() {
 		return y;
-	}
-	public static class ClearScroll extends InputListener {
-		public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
-			super.exit(event, x, y, pointer, toActor);
-			if (Vars.state.isGame()) Core.scene.setScrollFocus(null);
-		}
 	}
 
 	public class FillTable extends Table {

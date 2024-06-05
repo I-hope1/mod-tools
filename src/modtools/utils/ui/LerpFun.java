@@ -77,7 +77,7 @@ public class LerpFun {
 	 * @see #onUI()
 	 * @see #onWorld()
 	 */
-	public void registerDispose(float step, Floatc floatc) {
+	public LerpFun registerDispose(float step, Floatc floatc) {
 		if (drawSeq == null) throw new IllegalStateException("You don't set the drawSeq");
 		enabled = true;
 		drawSeq.add(() -> {
@@ -92,12 +92,26 @@ public class LerpFun {
 			if (drawSeq == uiDraw && onElement != null) {
 				Draw.proj(Tmp.m1);
 			}
-			return reverse ? a > 0 : a < 1;
+			if (reverse ? a > 0 : a < 1) return true;
+
+			onDispose.run();
+			return true;
 		});
+		return this;
+	}
+	Runnable onDispose;
+	public LerpFun onDispose(Runnable r) {
+		onDispose = r;
+		return this;
 	}
 	public LerpFun rev() {
 		a = 1 - a;
 		reverse = true;
+		return this;
+	}
+
+	public LerpFun back(float to) {
+		if (reverse ? a < to : a > to) a = to;
 		return this;
 	}
 

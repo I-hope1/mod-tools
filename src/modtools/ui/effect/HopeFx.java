@@ -8,6 +8,7 @@ import arc.scene.Element;
 import arc.scene.actions.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
+import arc.struct.ObjectMap;
 import arc.util.Tmp;
 import modtools.utils.ElementUtils;
 import modtools.utils.ui.LerpFun;
@@ -54,9 +55,10 @@ public class HopeFx {
 		return action;
 	}
 
-
+	static final ObjectMap<Element, LerpFun> all = new ObjectMap<>();
 	public static void changedFx(Element element) {
-		new LerpFun(Interp.fastSlow).rev().onUI().registerDispose(0.1f, fin -> {
+		all.get(element, () -> new LerpFun(Interp.fastSlow)
+		 .rev().onUI().registerDispose(0.1f, fin -> {
 			Draw.color(Color.sky, fin * 0.4f);
 			Lines.stroke(3f - fin * 2f);
 			ScrollPane pane   = ElementUtils.findClosestPane(element);
@@ -96,7 +98,7 @@ public class HopeFx {
 					Fill.circle(e.x + x, e.y + y, fin * 2);
 				});
 			}); */
-		});
+		}).onDispose(() -> all.remove(element))).back(0.4f);
 	}
 
 	public static class TranslateToAction extends TemporalAction {

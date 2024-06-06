@@ -11,6 +11,7 @@ import modtools.files.HFi;
 import modtools.struct.MySet;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
+import modtools.utils.io.FileUtils;
 
 import java.util.concurrent.*;
 
@@ -22,7 +23,7 @@ public class IntVars {
 
 	/** mod的根目录  */
 	public static Fi root          = new HFi(IntVars.class.getClassLoader());
-	public static Fi dataDirectory = Vars.dataDirectory.child("b0kkihope");
+	public static Fi dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
 
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();

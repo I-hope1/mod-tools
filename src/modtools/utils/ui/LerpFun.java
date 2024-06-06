@@ -31,7 +31,7 @@ public class LerpFun {
 	public float apply(float from, float to, float a) {
 		return (last <= a ? in : out).apply(from, to, last = a);
 	}
-	public float a, applyV;
+	public float a = 0, applyV;
 	public boolean enabled;
 	public void register(float step) {
 		register(step, null);
@@ -95,7 +95,7 @@ public class LerpFun {
 			if (reverse ? a > 0 : a < 1) return true;
 
 			onDispose.run();
-			return true;
+			return false;
 		});
 		return this;
 	}
@@ -106,12 +106,13 @@ public class LerpFun {
 	}
 	public LerpFun rev() {
 		a = 1 - a;
-		reverse = true;
+		reverse = !reverse;
 		return this;
 	}
 
 	public LerpFun back(float to) {
-		if (reverse ? a < to : a > to) a = to;
+		// reverse ? 1 -> 0 : 0 -> 1
+		if (reverse ? a <= to : a >= to) a = to;
 		return this;
 	}
 

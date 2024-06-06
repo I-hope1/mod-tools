@@ -57,40 +57,36 @@ public class HopeFx {
 
 	static final ObjectMap<Element, LerpFun> all = new ObjectMap<>();
 	public static void changedFx(Element element) {
+		// if (true) return;
 		all.get(element, () -> new LerpFun(Interp.fastSlow)
-		 .rev().onUI().registerDispose(0.1f, fin -> {
-			Draw.color(Color.sky, fin * 0.4f);
-			Lines.stroke(3f - fin * 2f);
-			ScrollPane pane   = ElementUtils.findClosestPane(element);
-			Vec2       position;// left-bottom
-			float      width  = element.getWidth();
-			float      height = element.getHeight();
-			if (pane != null) {
-				position = Tmp.v1;
-				float maxX, maxY;
-				maxX = pane.getWidth();
-				maxY = pane.getHeight();
-				element.localToAscendantCoordinates(pane, position.set(0, 0));
-				if (position.x > maxX || position.y > maxY) return;
+		 // 1 -> 0
+		 .rev().onUI(element).registerDispose(0.1f, fin -> {
+			 if (!element.visible) return;
+			 Draw.color(Color.sky, fin * 0.4f);
+			 Lines.stroke(3f - fin * 2f);
+			 ScrollPane pane   = ElementUtils.findClosestPane(element);
+			 Vec2       position;// left-bottom
+			 float      width  = element.getWidth();
+			 float      height = element.getHeight();
+			 if (pane != null) {
+				 position = Tmp.v1;
+				 float maxX, maxY;
+				 maxX = pane.getWidth();
+				 maxY = pane.getHeight();
+				 element.localToAscendantCoordinates(pane, position.set(0, 0));
+				 if (position.x > maxX || position.y > maxY) return;
 
-				float lx = position.x, ly = position.y;
-				position.clamp(0, 0, maxX, maxY);
-				if (lx < 0) width += lx;
-				if (ly < 0) height += ly;
-				if (position.x + width > maxX) width = maxX - position.x;
-				if (position.y + height > maxY) height = maxY - position.y;
+				 float lx = position.x, ly = position.y;
+				 position.clamp(0, 0, maxX, maxY);
+				 if (lx < 0) width += lx;
+				 if (ly < 0) height += ly;
+				 if (position.x + width > maxX) width = maxX - position.x;
+				 if (position.y + height > maxY) height = maxY - position.y;
 
-				pane.localToStageCoordinates(position);
-			} else {
-				// maxX = Core.graphics.getWidth();
-				// maxY = Core.graphics.getHeight();
-				position = ElementUtils.getAbsolutePos(element);
-			}
-			// float fout = 1 - fin;
-			Fill.crect(Math.max(0, position.x),
-			 Math.max(0, position.y),
-			 width,
-			 height);
+				 pane.localToStageCoordinates(position);
+			 }
+			 // float fout = 1 - fin;
+			 Fill.crect(0, 0, width, height);
 
 			/* Draw.color(Pal.powerLight, fout);
 			Angles.randLenVectors(new Rand().nextInt(), 4, element.getWidth(), (x, __) -> {
@@ -98,7 +94,7 @@ public class HopeFx {
 					Fill.circle(e.x + x, e.y + y, fin * 2);
 				});
 			}); */
-		}).onDispose(() -> all.remove(element))).back(0.4f);
+		 }).onDispose(() -> all.remove(element))).back(0.8f);
 	}
 
 	public static class TranslateToAction extends TemporalAction {

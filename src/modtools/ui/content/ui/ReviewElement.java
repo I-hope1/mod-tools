@@ -297,7 +297,7 @@ public class ReviewElement extends Content {
 				}).growX().padLeft(2f);
 			}).growX().row();
 
-			cont.add(new ScrollPane(pane) {
+			cont.add(new ScrollPane(pane, Styles.smallPane) {
 				public String toString() {
 					if (hideSelf) return name;
 					return super.toString();
@@ -423,7 +423,7 @@ public class ReviewElement extends Content {
 			t.left().defaults().left();
 			makePosLabel(t, pos);
 			cons.get(t);
-		}).growX().left().row();
+		}).left().row();
 		table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 	}
 
@@ -464,7 +464,7 @@ public class ReviewElement extends Content {
 				window.addMultiRowWithPos(this,
 				 ElementUtils.getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
-				Element textElement = this.children.get(this.children.size - 2);
+				Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().peek();
 
 				image().growY().left().update(
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
@@ -488,21 +488,22 @@ public class ReviewElement extends Content {
 							HopeFx.changedFx(textElement);
 						}
 					});
+					// button.setChecked(!children.isEmpty() && b);
 					table1.update(() -> {
 						if (needUpdate) {
 							button.rebuild.run();
 							needUpdate = false;
 							return;
 						}
-						button.fireCheck(!children.isEmpty() && b);
+						button.fireCheck(!children.isEmpty() && b, false);
 						if (stopEvent) {
 							stopEvent = false;
 							return;
 						}
 
-						if (!group.needsLayout() || group.parent == null) return;
+						if (!group.needsLayout() || !parentValid(group)) return;
 
-						find(ancestor -> {
+						ElementUtils.findParent(this, ancestor -> {
 							if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
 							if (ancestor instanceof Window) return true;
 							return false;
@@ -510,7 +511,7 @@ public class ReviewElement extends Content {
 						button.rebuild.run();
 					});
 					button.rebuild = () -> {
-						if (group.parent != null && (
+						if (parentValid(group) && (
 						 needUpdate || group.needsLayout() ||
 						 (!table1.hasChildren() && group.hasChildren())
 						)) {
@@ -520,7 +521,6 @@ public class ReviewElement extends Content {
 						}
 					};
 				}).left();
-				// Log.info(wrap);
 			} else if (element instanceof Image img) {
 				eventChildIndex = 0;
 				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
@@ -560,7 +560,7 @@ public class ReviewElement extends Content {
 			touchable = Touchable.enabled;
 
 			update(() -> {
-				if (element.parent == null) remove();
+				if (!parentValid(element)) remove();
 				background(FOCUS_FROM == this ? Styles.flatDown : Styles.none);
 			});
 			addFocusSource(this, () -> window, () -> element);
@@ -570,10 +570,13 @@ public class ReviewElement extends Content {
 			userObject = null;
 		}
 		public boolean remove() {
-			MyWrapTable table = ElementUtils.findParent(this, e -> e instanceof MyWrapTable);
-			if (table != null) table.needUpdate = true;
+			parentNeedUpdate();
 			userObject = null;
 			return super.remove();
+		}
+		private void parentNeedUpdate() {
+			MyWrapTable table = ElementUtils.findParent(this, e -> e instanceof MyWrapTable);
+			if (table != null) table.needUpdate = true;
 		}
 		private static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
 			return () -> Sr(Seq.with(
@@ -645,12 +648,16 @@ public class ReviewElement extends Content {
 			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 		}
 	}
+	private static boolean parentValid(Element element) {
+		return element.parent != null || element == scene.root;
+	}
 	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
 	                                  SnapshotSeq<Element> children) {
 		if (!container.hasChildren()) {
 			children.each(c -> window.build(c, container));
 			return;
 		}
+		// if (true) return;
 		Cell<?>[] cells = new Cell<?>[children.size];
 		// Seq<Element> toRemoved = new Seq<>();
 		container.getChildren().each(item -> {

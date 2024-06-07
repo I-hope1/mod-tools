@@ -16,4 +16,5 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.SOURCE)
 public @interface WatchClass {
 	String[] groups() default {};
+	boolean _static() default false;
 }

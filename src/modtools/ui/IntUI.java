@@ -88,8 +88,8 @@ public class IntUI {
 	/**
 	 * <p>创建一个双击事件</p>
 	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
-	 * @param <T>      the type parameter
-	 * @param elem     被添加侦听器的元素
+	 * @param <T>     the type parameter
+	 * @param elem    被添加侦听器的元素
 	 * @param click   单击事件
 	 * @param d_click 双击事件
 	 * @return the t

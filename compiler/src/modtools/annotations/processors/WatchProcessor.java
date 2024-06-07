@@ -41,7 +41,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 			Objects.requireNonNull(watchClass);
 			// Iterate over the groups in the WatchClass annotation
 			for (String s : watchClass.groups()) {
-				boolean isStatic = false;
+				boolean isStatic = watchClass._static();
 				// Log.info("s: @" ,s);
 				// Add a field to the class for each group
 				addField(classDecl, isStatic ? STATIC : 0,
@@ -76,7 +76,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 					}
 					if (test_con.params.length() != 1 || test_con.params.get(0).name.equals(classDecl.name)) {
 						err(new IllegalStateException("The method " + classDecl.name + "." + test_con.name + " sig must be ("
-																					+ classDecl.name + ")Z"));
+						                              + classDecl.name + ")Z"));
 						return;
 					}
 				}
@@ -119,7 +119,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 
 			try {
 				buildVar(dcls, classDecl);
-			} catch (Throwable e) {err(e);}
+			} catch (Throwable e) { err(e); }
 			// Log.info(classDecl);
 		});
 
@@ -150,9 +150,14 @@ public class WatchProcessor extends BaseProcessor<Element> {
 				if (watchVar == null) return super.visitVariable(variable, parent);
 				// Log.info(watchVar.classes()[0].getDeclaredMethods());
 
-				String fieldName = watchVar.group() + WATCH_SIG;
-				if (!checkField(classDecl, fieldName, watchVar.group()))
-					return super.visitVariable(variable, parent);
+				String      fieldName = watchVar.group() + WATCH_SIG;
+				boolean     valid     = false;
+				JCClassDecl cldl      = classDecl;
+				while (cldl != null) {
+					valid |= checkField(cldl, fieldName, watchVar.group());
+					cldl = (JCClassDecl) trees.getTree(cldl.sym.owner);
+				}
+				if (!valid) return super.visitVariable(node, parent);
 				var list = new ArrayList<>(block.stats);
 				// StringBuilder sb = new StringBuilder();
 				// sb.append('{');

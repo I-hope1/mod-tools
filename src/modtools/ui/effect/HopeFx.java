@@ -2,7 +2,7 @@ package modtools.ui.effect;
 
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
-import arc.math.Interp;
+import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.*;
@@ -121,7 +121,8 @@ public class HopeFx {
 			endY = y;
 		}
 		protected void update(float percent) {
-			target.setTranslation(startX + (endX - startX) * percent, startY + (endY - startY) * percent);
+			target.setTranslation(Mathf.lerp(startX, endX, percent)
+			 , Mathf.lerp(startY, endY, percent));
 		}
 	}
 }

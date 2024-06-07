@@ -17,6 +17,7 @@ import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.Timer.Task;
+import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -795,12 +796,13 @@ public class Window extends Table implements Position {
 			if (last == null || toValue != last.getY()) applyAction(toValue);
 		}
 		private void applyAction(float toValue) {
-			float time = last == null ? 0 : Math.max(0, last.getDuration() - last.getTime())/* 反过来 */;
-			if (last != null) titleTable.removeAction(last);
-			if (last == null) last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);
+			if (last != null) {
+				titleTable.removeAction(last);
+				Pools.free(last);
+			} else last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);
 			last.reset();
-			last.setTime(time);
-			last.setTranslation(0, toValue);
+			last.setTime(0);
+			last.setTranslation(0 , toValue);
 			last.setDuration(0.3f);
 			last.setInterpolation(Interp.fastSlow);
 			titleTable.addAction(last);

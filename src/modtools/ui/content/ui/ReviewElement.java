@@ -245,6 +245,8 @@ public class ReviewElement extends Content {
 		Element element;
 		Pattern pattern;
 
+		MyWrapTable fixedFocus;
+
 		public ReviewElementWindow() {
 			super(review_element.localizedName(), 20, 160, true);
 			getCell(cont).maxWidth(Core.graphics.getWidth());
@@ -306,11 +308,14 @@ public class ReviewElement extends Content {
 
 			// shown(pane::invalidateHierarchy);
 
-			/* update(() -> {
-				if (focusWindow instanceof ReviewElementWindow && !CANCEL_TASK.isScheduled()) {
-					Timer.schedule(CANCEL_TASK, Time.delta / 60f);
+			update(() -> {
+				if (fixedFocus != null) {
+					FOCUS = (Element) fixedFocus.userObject;
+					FOCUS_WINDOW = this;
+					FOCUS_FROM = fixedFocus;
 				}
-			}); */
+			});
+			hidden(CANCEL_TASK);
 		}
 
 		public void rebuild(Element element, String text) {
@@ -435,12 +440,14 @@ public class ReviewElement extends Content {
 
 	private static class MyWrapTable extends ChildrenFirstTable {
 		boolean stopEvent, needUpdate;
+		ReviewElementWindow window;
 		public MyWrapTable(ReviewElementWindow window, Element element) {
-			/* 用于下面的侦听器  */
-			int eventChildIndex;
+			this.window = window;
 			userObject = element;
+
 			hovered(this::requestKeyboard);
 			exited(() -> scene.setKeyboardFocus(null));
+			keyDown(KeyCode.f, () -> window.fixedFocus = window.fixedFocus == this ? null : this);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
 			keyDown(KeyCode.del, () -> {
 				Runnable go = () -> {
@@ -453,6 +460,10 @@ public class ReviewElement extends Content {
 					IntUI.showConfirm("@confirm.remove", go);
 				}
 			});
+
+
+			/* 用于下面的侦听器  */
+			int eventChildIndex;
 			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
 				/* 占位符 */
@@ -572,6 +583,7 @@ public class ReviewElement extends Content {
 		public boolean remove() {
 			parentNeedUpdate();
 			userObject = null;
+			if (window.fixedFocus == this) CANCEL_TASK.run();
 			return super.remove();
 		}
 		private void parentNeedUpdate() {
@@ -1040,16 +1052,14 @@ public class ReviewElement extends Content {
 	}
 
 	static Color disabledColor = new Color(0xFF0000_FF);
-	private Color touchableToColor(Touchable touchable) {
+	static Color touchableToColor(Touchable touchable) {
 		return switch (touchable) {
 			case enabled -> Color.green;
 			case disabled -> disabledColor;
 			case childrenOnly -> Pal.accent;
 		};
 	}
-
-
-	private static CharSequence touchableToString(Touchable touchable) {
+	static CharSequence touchableToString(Touchable touchable) {
 		return switch (touchable) {
 			case enabled -> "Enabled";
 			case disabled -> "Disabled";

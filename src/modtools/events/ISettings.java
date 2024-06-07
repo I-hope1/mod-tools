@@ -86,6 +86,7 @@ public interface ISettings extends E_DataInterface {
 	default boolean enabled() {
 		return data().getBool(name());
 	}
+	default void toggle() { set(!enabled()); }
 	default Object get() {
 		return data().get(name());
 	}

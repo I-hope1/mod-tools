@@ -24,7 +24,7 @@ import modtools.annotations.builder.DataColorFieldInit;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.TopGroup.FocusTask;
+import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.buttons.FoldedImageButton;
@@ -124,6 +124,9 @@ public class ReviewElement extends Content {
 					build();
 					HopeInput.justPressed.clear();
 					event.stop();
+				}
+				if (Core.input.ctrl() && Core.input.alt() && keycode == KeyCode.d) {
+					TSettings.debugBounds.toggle();
 				}
 				return true;
 			}
@@ -346,7 +349,7 @@ public class ReviewElement extends Content {
 		public void addMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
 			wrapTable(table, pos,
 			 pattern == null ?
-				t -> t.add(new MyLabel(text, defaultLabel)).growX().left().color(Pal.accent)
+				t -> t.add(new MyLabel(text, defaultLabel)).left().color(Pal.accent)
 				: t -> {
 				 for (var line : text.split("\\n")) {
 					 highlightShow(t, pattern, line);
@@ -428,7 +431,7 @@ public class ReviewElement extends Content {
 			t.left().defaults().left();
 			makePosLabel(t, pos);
 			cons.get(t);
-		}).left().row();
+		}).growX().left().row();
 		table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 	}
 
@@ -476,6 +479,7 @@ public class ReviewElement extends Content {
 				 ElementUtils.getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
 				Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().peek();
+				// Log.info(textElement);
 
 				image().growY().left().update(
 				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
@@ -512,7 +516,7 @@ public class ReviewElement extends Content {
 							return;
 						}
 
-						if (!group.needsLayout() || !parentValid(group)) return;
+						if (!group.needsLayout() || !parentValid(group, window)) return;
 
 						ElementUtils.findParent(this, ancestor -> {
 							if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
@@ -522,7 +526,7 @@ public class ReviewElement extends Content {
 						button.rebuild.run();
 					});
 					button.rebuild = () -> {
-						if (parentValid(group) && (
+						if (parentValid(group, window) && (
 						 needUpdate || group.needsLayout() ||
 						 (!table1.hasChildren() && group.hasChildren())
 						)) {
@@ -564,14 +568,15 @@ public class ReviewElement extends Content {
 				 () -> Tmp.v1.set(element.x, element.y));
 			}
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
-			Element  window_elem = getChildren().get(eventChildIndex);
+			Element  window_elem = this.children.get(eventChildIndex);
+			window_elem.touchable = Touchable.enabled;
 			Runnable copy        = storeRun(() -> element);
 			IntUI.addShowMenuListenerp(window_elem, getContextMenu(this, element, copy));
 			IntUI.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;
 
 			update(() -> {
-				if (!parentValid(element)) remove();
+				if (!parentValid(element, window)) remove();
 				background(FOCUS_FROM == this ? Styles.flatDown : Styles.none);
 			});
 			addFocusSource(this, () -> window, () -> element);
@@ -660,8 +665,8 @@ public class ReviewElement extends Content {
 			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 		}
 	}
-	private static boolean parentValid(Element element) {
-		return element.parent != null || element == scene.root;
+	private static boolean parentValid(Element element, ReviewElementWindow window) {
+		return element.parent != null || element == window.element;
 	}
 	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
 	                                  SnapshotSeq<Element> children) {
@@ -669,7 +674,6 @@ public class ReviewElement extends Content {
 			children.each(c -> window.build(c, container));
 			return;
 		}
-		// if (true) return;
 		Cell<?>[] cells = new Cell<?>[children.size];
 		// Seq<Element> toRemoved = new Seq<>();
 		container.getChildren().each(item -> {

@@ -43,6 +43,7 @@ English|[中文](index.md)
 
 - Display element list, double-click to copy element to js variable
 - `Ctrl`+`Shift`+`C` to Inspect Element
+- `Ctrl`+`Alt`+`D` to display bounds of Element
 - Select untouchable elements
 - + Mobile: Filter current element with two fingers
   + PC: Press `F` to filter current element

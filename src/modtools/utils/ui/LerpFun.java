@@ -93,8 +93,7 @@ public class LerpFun {
 				Draw.proj(Tmp.m1);
 			}
 			if (reverse ? a > 0 : a < 1) return true;
-
-			onDispose.run();
+			if (onDispose != null) onDispose.run();
 			return false;
 		});
 		return this;
@@ -112,7 +111,7 @@ public class LerpFun {
 
 	public LerpFun back(float to) {
 		// reverse ? 1 -> 0 : 0 -> 1
-		if (reverse ? a <= to : a >= to) a = to;
+		if (reverse ? a < to : a > to) a = to;
 		return this;
 	}
 

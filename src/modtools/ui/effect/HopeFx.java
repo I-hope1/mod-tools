@@ -60,9 +60,9 @@ public class HopeFx {
 		// if (true) return;
 		all.get(element, () -> new LerpFun(Interp.fastSlow)
 		 // 1 -> 0
-		 .rev().onUI(element).registerDispose(0.1f, fin -> {
+		 .rev().onUI(element).registerDispose(0.05f, fin -> {
 			 if (!element.visible) return;
-			 Draw.color(Color.sky, fin * 0.4f);
+			 Draw.color(Color.sky, fin * 0.5f);
 			 Lines.stroke(3f - fin * 2f);
 			 ScrollPane pane   = ElementUtils.findClosestPane(element);
 			 Vec2       position;// left-bottom

@@ -45,8 +45,8 @@ public class FoldedImageButton extends ImageButton {
 	}
 
 	public void fireCheck(boolean checked, boolean fireEvents) {
+		if (this.checked == checked && cell != null && cell.hasElement() == checked) return;
 		if (isDisabled()) return;
-		if (this.checked == checked) return;
 
 		this.checked = checked;
 		if (fireEvents) applyChanged();

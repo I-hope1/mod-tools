@@ -1,7 +1,9 @@
 package modtools.ui.menu;
 
 import arc.scene.style.Drawable;
+import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.util.pooling.Pools;
+import modtools.ui.HopeStyles;
 
 /**
  * The type Checkbox list.
@@ -29,5 +31,9 @@ public class CheckboxList extends MenuItem {
 		// Log.info("0) check: @, list.checked: @", checked, list.checked);
 		list.cons = _ -> run.run();
 		return list;
+	}
+
+	public TextButtonStyle style() {
+		return HopeStyles.flatTogglet;
 	}
 }

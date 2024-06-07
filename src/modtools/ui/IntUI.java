@@ -43,7 +43,7 @@ import static mindustry.Vars.*;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
-import static modtools.utils.ElementUtils.getAbsolutePos;
+import static modtools.utils.ElementUtils.*;
 import static modtools.utils.Tools.*;
 import static modtools.utils.world.TmpVars.mouseVec;
 
@@ -286,23 +286,29 @@ public class IntUI {
 	}
 
 	/** TODO: 多个FoldedList有问题 */
-	public static Cell<Table> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
-	                                       Table p, Runnable hideRun) {
-		return p.table(Styles.black6, main -> {
-			for (var menu : list) {
-				if (menu == null) continue;
+	public static Cell<ScrollPane> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
+	                                            Table p, Runnable hideRun) {
+		ScrollPane pane = findClosestPane(p);
+		if (pane != null) {
+			p = (Table) pane.parent;
+		}
+		Table main = new Table();
 
-				var cell = main.button(menu.getName(), menu.icon, menu.style(),
-				 menu.iconSize(), () -> { }
-				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
+		for (var menu : list) {
+			if (menu == null) continue;
 
-				menu.build(p, cell, () -> {
-					hideRun.run();
-					if (hiddenListener != null) hiddenListener.run();
-				});
-				cell.row();
-			}
-		}).growY();
+			var cell = main.button(menu.getName(), menu.icon, menu.style(),
+			 menu.iconSize(), () -> { }
+			).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
+
+			menu.build(p, cell, () -> {
+				hideRun.run();
+				if (hiddenListener != null) hiddenListener.run();
+			});
+			cell.row();
+		}
+
+		return p.pane(Styles.smallPane, main).growY();
 	}
 	/**
 	 * Menu `Copy ${key} As Js` constructor.

@@ -72,8 +72,7 @@ public class MenuItem {
 
 	/** The style of Button  */
 	public TextButtonStyle style() {
-		return this instanceof CheckboxList || this instanceof FoldedList
-		 ? HopeStyles.flatToggleMenut : HopeStyles.flatt;
+		return HopeStyles.flatt;
 	}
 
 	/** @see Cell#unset */

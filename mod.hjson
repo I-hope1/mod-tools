@@ -2,32 +2,44 @@ name: mod-tools
 displayName: "mod工具"
 description: '''
 ## Bug修复
-- 修复`Window`阻塞`TextField`输入的bug
-- 将`TimeoutException`视为内部错误
-（没有开启捕获外部错误，也可以捕获`TimeoutException`）
-- 修复`TextAreaTab`补全时可能发生报错
-- 修复`Underline`搜索时仍保留的bug
-- 修复设置ui中的字体可能显示不全
+- 修复ReviewElement监视元素崩溃的bug
+- 修复发包异常的bug
+- 修复Tester无法使用的bug
+- 修复HiddenTopWindow隐藏top缺少动画的bug
+- 修复LerpFun不自动删除的bug(true -> false)
+- 修复一些其他已知bug
 
-## 新特性
-- `ReviewElement`添加`Touchable`颜色区分
-- 自动捕获`Window`的渲染报错
+## 改进与优化
+- ReviewElement的UI小改动
+- 审查元素对按f固定元素信息的显示
+- 更新特效渲染区域减小
+- 优化代码逻辑和性能
+- 数据目录b0kkihope -> mod_tools
+- Ctrl+Alt+D 来 debug边界
+- 优化代码结构
+- 更流畅的动画
 
 ## Bug Fixes
-- Fixed the bug that `Window` was blocking `TextField` input
-- Consider `TimeoutException` as an internal error
-(No external error handling enabled, but `TimeoutException` can be caught)
-- Fixed the potential error that may occur during autocompletion in `TextAreaTab`
-- Fixed the bug where `Underline` remains during search
-- Fixed the issue where fonts in the UI may not display completely
+- Fixed the crash issue with ReviewElement monitoring elements
+- Fixed the packet sending anomaly issue
+- Fixed the issue where Tester was unusable
+- Fixed the lack of animation when hiding the top of HiddenTopWindow
+- Fixed the issue where LerpFun did not automatically delete (changed from true to false)
+- Fixed several other known issues
 
-## New Features
-- Added color differentiation for `Touchable` in `ReviewElement`
-- Automatically capture rendering errors of `Window`
+## Improvements and Optimizations
+- Minor UI adjustments for ReviewElement
+- Fixed element information display with F key in element inspection
+- Updated effect rendering area to reduce the rendering range
+- Optimized code logic and performance
+- Changed data directory from b0kkihope to mod_tools
+- Use Ctrl+Alt+D to debug boundaries
+- Optimized code structure
+- Smoother animations
 '''
 author: "I hope..."
 hidden: true
-version: 1.4.5.2
+version: 1.4.6.1
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

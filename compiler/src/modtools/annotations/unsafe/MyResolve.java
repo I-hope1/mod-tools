@@ -19,7 +19,7 @@ public class MyResolve extends Resolve {
 		// names = Names.instance(context);
 	}
 	public boolean isAccessible(Env<AttrContext> env, Type site, Symbol sym, boolean checkInner) {
-		if (!sym.owner.isAbstract() && !sym.isInner() && !sym.isAnonymous()
+		if (!sym.owner.isAbstract() && !sym.isInner() && !sym.isAnonymous() && sym.exists()
 				&& (sym.flags_field & Flags.PARAMETER) == 0 &&
 				accessValidator.test(env, sym)) {
 			sym.flags_field |= Flags.PUBLIC;

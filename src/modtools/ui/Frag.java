@@ -47,8 +47,10 @@ public class Frag extends Table {
 		touchable = Touchable.enabled;
 		//		MyPacket.register();
 		name = modName + "-frag";
-		top = image().color(defaultColor).margin(0).pad(0)
-		 .fillX().minWidth(40).height(40).get();
+		top = new Image();
+		add(top).color(defaultColor)
+		 .margin(0).pad(0)
+		 .fillX().minWidth(40).height(40);
 		update(this::pack);
 		row();
 
@@ -108,6 +110,11 @@ public class Frag extends Table {
 	private void circleBuild() {
 		float angle          = 90;
 		int   angleReduction = 360 / enabledContents.size();
+
+		float toX = Mathf.clamp(x, hoverRadius + width / 4f, Core.graphics.getWidth() - hoverRadius - width / 4f);
+		float toY = Mathf.clamp(y, hoverRadius + height / 4f, Core.graphics.getHeight() - hoverRadius - height / 4f);
+
+		addAction(Actions.moveTo(toX, toY, 0.1f));
 		for (Content content : enabledContents) {
 			ImageButton image      = (ImageButton) content.buildButton(true);
 			float       finalAngle = angle;
@@ -147,21 +154,26 @@ public class Frag extends Table {
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
-			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) Core.scene.setScrollFocus(null);
+			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this))
+				Core.scene.setScrollFocus(null);
 			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);
 		}
 		return hit;
 	}
-
 	private class MoveInsideListener extends MoveListener {
 		public MoveInsideListener() { super(Frag.this.top, Frag.this); }
 		public void display(float x, float y) {
 			float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
 			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
-			main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
-			main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
-			position.set(STR."(\{x},\{y})");
+			main.setPosition(
+			 Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
+			 Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight)
+			);
 		}
+	}
+	public void setPosition(float x, float y) {
+		super.setPosition(x, y);
+		position.set(STR."(\{x},\{y})");
 	}
 
 	@SettingsInit()

@@ -9,7 +9,7 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
-import arc.scene.style.Style;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
@@ -429,14 +429,14 @@ public class ReviewElement extends Content {
 	private static void wrapTable(Table table, Prov<Vec2> pos, Cons<Table> cons) {
 		table.table(t -> {
 			t.left().defaults().left();
-			makePosLabel(t, pos);
 			cons.get(t);
+			makePosLabel(t, pos);
 		}).growX().left().row();
 		table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
-		if (pos != null) t.label(new PositionProv(pos))
+		if (pos != null) t.label(new PositionProv(pos, ", "))
 		 .style(defaultLabel).color(Color.lightGray)
 		 .fontScale(0.7f).padLeft(4f).padRight(4f);
 	}
@@ -478,7 +478,7 @@ public class ReviewElement extends Content {
 				window.addMultiRowWithPos(this,
 				 ElementUtils.getElementName(element),
 				 () -> Tmp.v1.set(element.x, element.y));
-				Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().peek();
+				Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().first();
 				// Log.info(textElement);
 
 				image().growY().left().update(
@@ -536,31 +536,6 @@ public class ReviewElement extends Content {
 						}
 					};
 				}).left();
-			} else if (element instanceof Image img) {
-				eventChildIndex = 0;
-				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
-				table(p0 -> {
-					// Tooltip tooltip = new Tooltip(t -> t.image(((Image) element).getDrawable())) ;
-					// tooltip.allowMobile = true;
-					// p0.addListener(tooltip);
-					Prov<Vec2> prov = () -> Tmp.v1.set(element.x, element.y);
-					makePosLabel(p0, prov);
-					p0.table(h -> h.left().table(Window.myPane, p -> {
-						try {
-							int   size = 28;
-							float w    = Math.max(1, element.getWidth());
-							float mul  = element.getHeight() / w;
-							// float mul    = element.getHeight() / element.getHeight();
-							p.add(new Image(img.getDrawable()))
-							 .update(t -> t.setColor(element.color))
-							 .size(size, size * mul);
-						} catch (Throwable e) {
-							p.add("空图像").labelAlign(Align.left);
-						}
-					})).growX().touchable(Touchable.enabled);
-					// 用于补位
-					p0.add();
-				}).growX().get();
 			} else {
 				defaults().growX();
 				eventChildIndex = 0;
@@ -568,9 +543,27 @@ public class ReviewElement extends Content {
 				 () -> Tmp.v1.set(element.x, element.y));
 			}
 			// JSFunc.addStoreButton(wrap, "element", () -> element);
-			Element  window_elem = this.children.get(eventChildIndex);
+			Element window_elem = this.children.get(eventChildIndex);
+			if (element instanceof Image img) {
+				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
+				((Table) window_elem).button(Icon.imageSmall, Styles.clearNonei, () -> { })
+				 .with(b -> IntUI.addPreview(b, p -> {
+					 p.top();
+					 try {
+						 int   size = 100;
+						 float w    = Math.max(2, element.getWidth());
+						 float mul  = element.getHeight() / w;
+						 p.add(new Image(img.getDrawable()))
+							.update(t -> t.setColor(element.color))
+							.size(size, size * mul);
+					 } catch (Throwable e) {
+						 p.add("ERROR").labelAlign(Align.left).row();
+						 p.image(Core.atlas.drawable("error"));
+					 }
+				 }));
+			}
 			window_elem.touchable = Touchable.enabled;
-			Runnable copy        = storeRun(() -> element);
+			Runnable copy = storeRun(() -> element);
 			IntUI.addShowMenuListenerp(window_elem, getContextMenu(this, element, copy));
 			IntUI.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;

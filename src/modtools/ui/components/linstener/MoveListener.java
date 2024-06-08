@@ -56,8 +56,10 @@ public class MoveListener extends InputListener {
 		float touchWidth  = touch.getWidth();
 		float touchHeight = touch.getHeight();
 
-		main.x = Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
-		main.y = Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
+		main.setPosition(
+		 Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
+		Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight)
+		);
 	}
 
 	private void recordLastPositions() {

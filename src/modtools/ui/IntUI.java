@@ -428,9 +428,9 @@ public class IntUI {
 			 Tmp.v1.set(button.getX(align), button.getY(align))
 				.sub(button.x, button.y));
 			if (Tmp.v1.y < graphics.getHeight() / 2f) {
-				t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight() / 2f, align | Align.bottom);
+				t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight(), align | Align.bottom);
 			} else {
-				t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight() / 2f, align | Align.top);
+				t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight(), align | Align.top);
 			}
 			if (t.getWidth() > Core.scene.getWidth()) {
 				t.setWidth((float) graphics.getWidth());
@@ -453,7 +453,7 @@ public class IntUI {
 		SelectTable t = new SelectTable(p);
 
 		// 淡入
-		t.actions(Actions.alpha(0f), Actions.fadeIn(DEF_DURATION, Interp.fade));
+		t.actions(Actions.alpha(0f), Actions.fadeIn(0.1f, Interp.fade));
 
 		Runnable hide  = t::hideInternal;
 		Runnable hide0 = mergeHide(t, hide);
@@ -821,6 +821,17 @@ public class IntUI {
 	 */
 	public static void focusOnElement(Element element, Boolp boolp) {
 		topGroup.focusOnElement(new MyFocusTask(element, boolp));
+	}
+
+
+	public static void addPreview(Element element, Cons<Table> cons) {
+		Hitter[] hitter = {null};
+		element.hovered(() -> {
+			IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
+			hitter[0] = Hitter.peek();
+			hitter[0].remove();
+		});
+		element.exited(() -> hitter[0].fireClick());
 	}
 
 

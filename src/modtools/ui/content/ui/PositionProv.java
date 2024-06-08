@@ -21,7 +21,7 @@ public class PositionProv implements Prov<CharSequence> {
 	public String get() {
 		Vec2 pos = posProv.get();
 		if (lastPos == null || !Mathf.equal(lastX, pos.x) || !Mathf.equal(lastY, pos.y)) {
-			lastPos = "(" + fixed(pos.x) + delimiter + fixed(pos.y) + ')';
+			lastPos = STR."(\{fixed(pos.x)}\{delimiter}\{fixed(pos.y)}\{')'}";
 		}
 		return lastPos;
 	}

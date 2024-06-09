@@ -117,7 +117,7 @@ public class IntUI {
 					click1.run();
 					return;
 				}
-				if (TaskManager.reScheduled(0.3f, clickTask)) {
+				if (TaskManager.scheduleOrCancel(0.3f, clickTask)) {
 					last.set(mouseVec);
 					return;
 				}
@@ -825,13 +825,65 @@ public class IntUI {
 
 
 	public static void addPreview(Element element, Cons<Table> cons) {
-		Hitter[] hitter = {null};
-		element.hovered(() -> {
-			IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
-			hitter[0] = Hitter.peek();
-			hitter[0].remove();
+		element.addListener(new HoverAndExitListener() {
+			final Task hideTask = new Task() {
+				public void run() {
+					if (hitter == null) return;
+					hitter.fireClick();
+					hitter = null;
+				}
+			};
+			void hide() {
+				TaskManager.reSchedule(0.15f, hideTask);
+			}
+			Hitter      hitter = null;
+			SelectTable table;
+			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
+				if (hideTask.isScheduled()) {
+					hideTask.cancel();
+					return;
+				}
+				if (hitter != null) hitter.fireClick(); // 移除上一次的
+				table = IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
+				table.clearChildren();
+				table.add(table.table);
+				table.touchable = Touchable.enabled;
+				table.addListener(new HoverAndExitListener() {
+					public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
+						hideTask.cancel();
+					}
+					public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
+						hide();
+					}
+				});
+				hitter = Hitter.peek();
+				hitter.remove();
+			}
+			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
+				hide();
+			}
 		});
-		element.exited(() -> hitter[0].fireClick());
+	}
+
+	static class HoverAndExitListener extends InputListener {
+		public final void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+			// touchDown也会触发
+			if (fromActor != null) enter0(event, x, y, pointer, fromActor);
+		}
+		public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) { }
+		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			return true;
+		}
+		boolean cancel;
+		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			cancel = true;
+		}
+		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+			// touchUp也会触发
+			if (!cancel) exit0(event, x, y, pointer, toActor);
+			cancel = false;
+		}
+		public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) { }
 	}
 
 

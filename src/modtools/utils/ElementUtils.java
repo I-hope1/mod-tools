@@ -118,8 +118,9 @@ public interface ElementUtils {
 	}
 	static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
-		 : getSimpleName(element.getClass())
-		   + (element.name != null ? " ★" + element.name + "★" : "");
+		 : STR."\{getSimpleName(element.getClass())}\{
+		 element.name != null ? " ★" + element.name + "★" : ""
+		 }";
 	}
 
 
@@ -147,7 +148,7 @@ public interface ElementUtils {
 	}
 
 	private static void buildModifier(Table p, int cols, Intc cons, Intp prov, MarkedCode... seq) {
-		p.button("all", HopeStyles.flatToggleMenut,
+		p.button("All", HopeStyles.flatToggleMenut,
 			() -> cons.get(prov.get() != -1 ? -1 : 0))
 		 .growX().colspan(4).height(42)
 		 .update(b -> b.setChecked(prov.get() == -1))

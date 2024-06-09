@@ -72,7 +72,7 @@ public interface ReflectTools {
 	static String getName(Class<?> clazz) {
 		if (clazz == null) throw new IllegalArgumentException("clazz is null");
 		if (clazz.isAnonymousClass()) {
-			return "[Anonymous]:" + getGenericString(clazz);
+			return "[Anonymous]:" + getName(clazz.getSuperclass());
 		}
 		return getGenericString(clazz);
 	}

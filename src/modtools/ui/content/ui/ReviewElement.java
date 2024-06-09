@@ -9,7 +9,7 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
-import arc.scene.style.*;
+import arc.scene.style.Style;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
@@ -34,6 +34,7 @@ import modtools.ui.components.review.CellDetailsWindow;
 import modtools.ui.components.utils.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
 import modtools.ui.content.Content;
+import modtools.ui.content.ui.PairProv.SizeProv;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.ui.gen.HopeIcons;
@@ -41,6 +42,7 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.ui.*;
 import modtools.utils.ui.search.BindCell;
 
 import java.util.regex.*;
@@ -111,7 +113,7 @@ public class ReviewElement extends Content {
 		}});
 	}
 
-	/** 代码生成{@link ColorProcessor} */
+	/** 代码生成{@link  ColorProcessor} */
 	public void settingColor(Table t) { }
 
 
@@ -160,7 +162,8 @@ public class ReviewElement extends Content {
 		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
 	}
 	boolean checkA(int color) {
-		return (color & 0x000000FF) == 0;
+		// 检查后两位是否为0
+		return (color & 0xFF) == 0;
 	}
 
 	public void drawMargin(Vec2 vec2, Table table) {
@@ -436,12 +439,12 @@ public class ReviewElement extends Content {
 	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
-		if (pos != null) t.label(new PositionProv(pos, ", "))
+		if (pos != null) t.label(new PairProv(pos, ", "))
 		 .style(defaultLabel).color(Color.lightGray)
 		 .fontScale(0.7f).padLeft(4f).padRight(4f);
 	}
 
-	private static class MyWrapTable extends ChildrenFirstTable {
+	private static class MyWrapTable extends ChildrenFirstTable implements KeyValue {
 		boolean stopEvent, needUpdate;
 		ReviewElementWindow window;
 		public MyWrapTable(ReviewElementWindow window, Element element) {
@@ -555,7 +558,14 @@ public class ReviewElement extends Content {
 						 float mul  = element.getHeight() / w;
 						 p.add(new Image(img.getDrawable()))
 							.update(t -> t.setColor(element.color))
-							.size(size, size * mul);
+							.size(size, size * mul).row();
+						 p.add(ReflectTools.getName(img.getDrawable().getClass()), 0.6f).left().row();
+						 p.table(tableCons("Orginal Size", new SizeProv(() ->
+							Tmp.v1.set(img.getDrawable().getMinWidth(), img.getDrawable().getMinHeight())
+						 ))).growX().row();
+						 p.button(Icon.pickSmall, Styles.clearNonei, () -> {
+							 IntUI.drawablePicker().show(img.getDrawable(), img::setDrawable);
+						 }).size(42);
 					 } catch (Throwable e) {
 						 p.add("ERROR").labelAlign(Align.left).row();
 						 p.image(Core.atlas.drawable("error"));
@@ -716,21 +726,19 @@ public class ReviewElement extends Content {
 	}
 
 	@OptimizeReflect
-	static class InfoDetails extends Table {
-		public static final float keyScale   = 0.7f;
-		public static final float valueScale = 0.6f;
-		Label nameLabel = new NoMarkupLabel(0.75f),
-		 sizeLabel      = new NoMarkupLabel(valueScale),
+	static class InfoDetails extends Table implements KeyValue {
+		Label nameLabel = new VLabel(0.75f, Color.violet),
+		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
 		 touchableLabel = new NoMarkupLabel(valueScale),
 
 		// transformLabel    = new MyLabel(""),
 		colorLabel        = new NoMarkupLabel(valueScale),
-		 rotationLabel    = new NoMarkupLabel(valueScale),
-		 translationLabel = new NoMarkupLabel(valueScale),
-		 styleLabel       = new NoMarkupLabel(valueScale),
-		 alignLabel       = new NoMarkupLabel(valueScale),
+		 rotationLabel    = new VLabel(valueScale, Color.lightGray),
+		 translationLabel = new VLabel(valueScale, Color.orange),
+		 styleLabel       = new VLabel(valueScale, Pal.accent),
+		 alignLabel       = new VLabel(valueScale, Color.sky),
 
-		colspanLabel  = new NoMarkupLabel(valueScale),
+		colspanLabel  = new VLabel(valueScale, Color.lightGray),
 		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
 		 fillLabel    = new Label(""), expandLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
@@ -740,10 +748,10 @@ public class ReviewElement extends Content {
 		 colspanCell, minSizeCell, maxSizeCell,
 		 fillCell, expandCell;
 
-
 		void color(Color color) {
 			colorContainer.setColorValue(color);
-			colorLabel.setText(color.toString().toUpperCase());
+			String string = color.toString().toUpperCase();
+			colorLabel.setText(color.a == 1 ? string.substring(0, 6) : string);
 		}
 		void rotation(float rotation) {
 			if (rotCell.toggle1(rotation % 360 != 0))
@@ -758,13 +766,11 @@ public class ReviewElement extends Content {
 				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
 				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
 					styleLabel.setText(ShowUIList.styleKeyMap.get(style));
-			} catch (Exception e) {
-				styleCell.remove();
-			}
+			} catch (Throwable e) { styleCell.remove(); }
 		}
 		void align(Element element) {
 			if (alignCell.toggle1(element instanceof Table))
-				alignLabel.setText(Strings.capitalize(Align.toString(((Table) element).getAlign()).replace(',', '-')));
+				alignLabel.setText(StringHelper.align(((Table) element).getAlign()));
 		}
 		void colspan(Cell<?> cell) {
 			if (cell == null) {
@@ -776,6 +782,9 @@ public class ReviewElement extends Content {
 			if (colspanCell.toggle1(colspan != 1))
 				colspanLabel.setText("" + colspan);
 		}
+		Vec2 minSizeVec = new Vec2(), maxSizeVec = new Vec2();
+		SizeProv minSizeProv = new SizeProv(() -> minSizeVec.scl(1 / Scl.scl()));
+		SizeProv maxSizeProv = new SizeProv(() -> maxSizeVec.scl(1 / Scl.scl()));
 		void minSize(Cell<?> cell) {
 			if (cell == null) {
 				minSizeCell.remove();
@@ -784,8 +793,10 @@ public class ReviewElement extends Content {
 			@OptimizeReflect
 			float minWidth = Reflect.get(Cell.class, cell, "minWidth"),
 			 minHeight = Reflect.get(Cell.class, cell, "minHeight");
-			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset))
-				minSizeLabel.setText(sizeText(minWidth, minHeight));
+			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset)) {
+				minSizeVec.set(minWidth, minHeight);
+				minSizeLabel.setText(minSizeProv.get());
+			}
 		}
 		void maxSize(Cell<?> cell) {
 			if (cell == null) {
@@ -795,8 +806,10 @@ public class ReviewElement extends Content {
 			@OptimizeReflect
 			float maxWidth = Reflect.get(Cell.class, cell, "maxWidth"),
 			 maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
-			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset))
-				maxSizeLabel.setText(sizeText(maxWidth, maxHeight));
+			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset)) {
+				maxSizeVec.set(maxWidth, maxHeight);
+				maxSizeLabel.setText(maxSizeProv.get());
+			}
 		}
 		void fill(Cell<?> cell) {
 			if (cell == null) {
@@ -824,14 +837,6 @@ public class ReviewElement extends Content {
 			return i == 1 ? "[accent]" : "[gray]";
 		}
 
-		private static String sizeText(float w, float h) {
-			return STR."\{
-			 fixedUnlessUnset(w / Scl.scl())
-			 }[accent]×[]\{
-			 fixedUnlessUnset(h / Scl.scl())
-			 }";
-		}
-
 		InfoDetails() {
 			margin(4, 4, 4, 4);
 			table(Tex.pane, this::build);
@@ -856,67 +861,29 @@ public class ReviewElement extends Content {
 			}
 			setPosition(x, y);
 		}
-		public static final float padRight = 8f;
 		private void build(Table t) {
 			t.table(top -> {
-				top.add(nameLabel).color(Color.violet).padLeft(-4f);
+				top.add(nameLabel).padLeft(-4f);
 				top.add(sizeLabel).padLeft(10f)
-				 .growX().right().labelAlign(Align.right).color(Color.lightGray);
+				 .growX().right().labelAlign(Align.right);
 			}).growX();
-			t.row().table(touch -> {
-				key(touch, "Touchable");
-				touch.add(touchableLabel).row();
-			}).growX();
+			t.row().table(tableCons("Touchable", touchableLabel)).growX();
 			t.row().table(color -> {
 				key(color, "Color");
 				color.add(colorContainer).size(16).padRight(4f);
-				color.add(colorLabel).row();
+				color.add(colorLabel);
 			}).growX();
-			rotCell = makeBindCell(t, rot -> {
-				key(rot, "Rotation");
-				rot.add(rotationLabel).row();
+			rotCell = makeBindCell(t, tableCons("Rotation", rotationLabel));
+			translationCell = makeBindCell(t, tableCons("Translation", translationLabel));
+			styleCell = makeBindCell(t, tableCons("Style", styleLabel));
+			alignCell = makeBindCell(t, tableCons("Align", alignLabel));
+			cellCell = makeBindCell(t, _ -> {
+				colspanCell = makeBindCell(t, tableCons("Colspan", colspanLabel));
+				minSizeCell = makeBindCell(t, tableCons("MinSize", minSizeLabel));
+				maxSizeCell = makeBindCell(t, tableCons("MaxSize", maxSizeLabel));
+				expandCell = makeBindCell(t, tableCons("Expand", expandLabel));
+				fillCell = makeBindCell(t, tableCons("Fill", fillLabel));
 			});
-			translationCell = makeBindCell(t, tran -> {
-				key(tran, "Translation");
-				tran.add(translationLabel).row();
-			});
-			styleCell = makeBindCell(t, tran -> {
-				key(tran, "Style");
-				tran.add(styleLabel).color(Color.orange).row();
-			});
-			alignCell = makeBindCell(t, tran -> {
-				key(tran, "Align");
-				tran.add(alignLabel).color(Color.cyan).row();
-			});
-
-			cellCell = makeBindCell(t, c -> {
-				colspanCell = makeBindCell(t, col -> {
-					key(col, "Colspan");
-					col.add(colspanLabel).fontScale(valueScale).row();
-				});
-				minSizeCell = makeBindCell(t, col -> {
-					key(col, "MinSize");
-					col.add(minSizeLabel).fontScale(valueScale).row();
-				});
-				maxSizeCell = makeBindCell(t, col -> {
-					key(col, "MaxSize");
-					col.add(maxSizeLabel).fontScale(valueScale).row();
-				});
-				expandCell = makeBindCell(t, col -> {
-					key(col, "Expand");
-					col.add(expandLabel).fontScale(valueScale).row();
-				});
-				fillCell = makeBindCell(t, col -> {
-					key(col, "Fill");
-					col.add(fillLabel).fontScale(valueScale).row();
-				});
-			});
-		}
-		private static void key(Table col, String Fill) {
-			col.add(Fill).fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
-		}
-		private BindCell makeBindCell(Table t, Cons<Table> cons) {
-			return new BindCell(t.row().table(cons).growX());
 		}
 	}
 
@@ -939,9 +906,10 @@ public class ReviewElement extends Content {
 			MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
 
 			if (!hoverInfoWindow.enabled()) return;
+
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
 			table.sizeLabel.setText(posText(elem));
-			table.touchableLabel.setText(touchableToString(elem.touchable));
+			table.touchableLabel.setText(StringHelper.touchable(elem.touchable));
 			table.touchableLabel.setColor(touchableToColor(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);
@@ -957,7 +925,6 @@ public class ReviewElement extends Content {
 				table.fill(cell);
 				table.expand(cell);
 			}
-
 			showHover(elem, vec2);
 		}
 		private static String posText(Element elem) {
@@ -1047,20 +1014,12 @@ public class ReviewElement extends Content {
 			if (elem != null) drawFocus(elem);
 		}
 	}
-
 	static Color disabledColor = new Color(0xFF0000_FF);
 	static Color touchableToColor(Touchable touchable) {
 		return switch (touchable) {
 			case enabled -> Color.green;
 			case disabled -> disabledColor;
 			case childrenOnly -> Pal.accent;
-		};
-	}
-	static CharSequence touchableToString(Touchable touchable) {
-		return switch (touchable) {
-			case enabled -> "Enabled";
-			case disabled -> "Disabled";
-			case childrenOnly -> "Children Only";
 		};
 	}
 }

@@ -9,7 +9,7 @@ import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.*;
 import arc.math.geom.QuadTree.QuadTreeObject;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.*;
@@ -107,7 +107,7 @@ public class Selection extends Content {
 	}
 	static void buildValidate(SelectTable t, TextField field) {
 		field.update(() -> {
-			t.hide = field.isValid() ? null : () -> {};
+			t.hide = field.isValid() ? null : () -> { };
 		});
 	}
 
@@ -254,7 +254,7 @@ public class Selection extends Content {
 					try {
 						entity.remove();
 						return !entity.isAdded();
-					} catch (Exception ignored) {}
+					} catch (Exception ignored) { }
 					return false;
 				});
 			});
@@ -306,7 +306,7 @@ public class Selection extends Content {
 		mr1.set(t.worldx(), t.worldy(), 32, 32);
 	}
 
-	public static class EntityFunction<T extends Entityc> extends WFunction<T> {
+	public class EntityFunction<T extends Entityc> extends WFunction<T> {
 		public EntityFunction(String name) {
 			super(name, WDINSTANCE.other);
 		}
@@ -339,8 +339,15 @@ public class Selection extends Content {
 		public boolean checkRemove(T item) {
 			return !item.isAdded();
 		}
+
+		public void setFocus(T t) {
+			focusEntities.add(t);
+		}
+		public boolean checkFocus(T item) {
+			return focusEntities.contains(item);
+		}
 	}
-	public static class BulletFunction<T extends Bullet> extends WFunction<T> {
+	public class BulletFunction<T extends Bullet> extends WFunction<T> {
 		public BulletFunction(String name) {
 			super(name, WDINSTANCE.bullet);
 		}
@@ -366,8 +373,14 @@ public class Selection extends Content {
 		public boolean checkRemove(T item) {
 			return !item.isAdded();
 		}
+		public void setFocus(T t) {
+			focusBullets.add(t);
+		}
+		public boolean checkFocus(T item) {
+			return focusBullets.contains(item);
+		}
 	}
-	public static class UnitFunction<T extends Unit> extends WFunction<T> {
+	public class UnitFunction<T extends Unit> extends WFunction<T> {
 		public UnitFunction(String name) {
 			super(name, WDINSTANCE.unit);
 		}
@@ -393,8 +406,15 @@ public class Selection extends Content {
 		public boolean checkRemove(T item) {
 			return !item.isAdded();
 		}
+
+		public void setFocus(T t) {
+			focusUnits.add(t);
+		}
+		public boolean checkFocus(T item) {
+			return focusUnits.contains(item);
+		}
 	}
-	public static class BuildFunction<T extends Building> extends WFunction<T> {
+	public class BuildFunction<T extends Building> extends WFunction<T> {
 		public BuildFunction(String name) {
 			super(name, WDINSTANCE.build);
 		}
@@ -445,8 +465,14 @@ public class Selection extends Content {
 			return (l, str) -> build.liquids.set(l, NumberHelper.asFloat(str));
 		}
 
+		public void setFocus(T t) {
+			focusBuild = t;
+		}
+		public boolean checkFocus(T item) {
+			return focusBuild == item;
+		}
 	}
-	public static class TileFunction<T extends Tile> extends WFunction<T> {
+	public class TileFunction<T extends Tile> extends WFunction<T> {
 		public TileFunction(String name) {
 			super(name, WDINSTANCE.tile);
 		}
@@ -488,6 +514,13 @@ public class Selection extends Content {
 		public Vec2 getPos(T item) {
 			return Tmp.v3.set(item.worldx(), item.worldy());
 		}
+
+		public void setFocus(T t) {
+			focusTile = t;
+		}
+		public boolean checkFocus(T item) {
+			return focusTile == item;
+		}
 	}
 
 
@@ -496,6 +529,7 @@ public class Selection extends Content {
 		drawFocus(focusBuild);
 		focusUnits.each(this::drawFocus);
 		focusBullets.each(this::drawFocus);
+		focusEntities.each(this::drawFocus);
 	}
 
 	/** <p>World -> UI (if transform)</p> */
@@ -573,7 +607,7 @@ public class Selection extends Content {
 		// if (transform) Draw.proj(Core.camera.inv);
 
 		if (focusElem != null && focusElem.getScene() != null
-				&& ((!transform && focusAny != null) || (focusElemType != null && focusElemType.list.contains(focus)))
+		    && ((!transform && focusAny != null) || (focusElemType != null && focusElemType.list.contains(focus)))
 		) {
 			if (transform) {
 				drawLineOnScreen(x, y);
@@ -628,10 +662,11 @@ public class Selection extends Content {
 		});
 	}
 
-	public       Tile              focusTile;
-	public       Building          focusBuild;
-	public final ObjectSet<Unit>   focusUnits   = new ObjectSet<>();
-	public final ObjectSet<Bullet> focusBullets = new ObjectSet<>();
+	public       Tile               focusTile;
+	public       Building           focusBuild;
+	public final ObjectSet<Unit>    focusUnits    = new ObjectSet<>();
+	public final ObjectSet<Bullet>  focusBullets  = new ObjectSet<>();
+	public final ObjectSet<Entityc> focusEntities = new ObjectSet<>();
 
 	/** 用于 ValueLabel 添加 焦点 */
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
@@ -696,6 +731,7 @@ public class Selection extends Content {
 	private void reacquireFocus() {
 		focusUnits.clear();
 		focusBullets.clear();
+		focusEntities.clear();
 		if (Settings.focusOnWorld.enabled()) {
 			focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
 			focusBuild = focusTile != null ? focusTile.build : null;
@@ -756,7 +792,7 @@ public class Selection extends Content {
 				toBack();
 
 				if (Vars.mobile || Time.millis() - lastToggleTime <= toggleDelay
-						|| !Core.input.alt() || !Core.input.ctrl()) return;
+				    || !Core.input.alt() || !Core.input.ctrl()) return;
 				lastToggleTime = Time.millis();
 				updatePosUI = !updatePosUI;
 				focusDisabled = !updatePosUI;

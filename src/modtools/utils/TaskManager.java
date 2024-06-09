@@ -18,27 +18,33 @@ public class TaskManager {
 		 .consNot(Task::isScheduled, task -> Timer.schedule(task, delay / 60f)).get();
 	}
 	/** @param delay 延迟的帧（tick，60tick/s) */
-	public static boolean reScheduled(int delay, Runnable run) {
-		return reScheduled(delay / 60f, run);
+	public static boolean scheduleOrCancel(int delay, Runnable run) {
+		return scheduleOrCancel(delay / 60f, run);
 	}
 
 
-	public static boolean reScheduled(float delaySeconds, Runnable run) {
-		return reScheduled(delaySeconds, map.get(run, () -> Timer.schedule(run, delaySeconds)));
+	public static boolean scheduleOrCancel(float delaySeconds, Runnable run) {
+		return scheduleOrCancel(delaySeconds, map.get(run, () -> Timer.schedule(run, delaySeconds)));
 	}
 	/**
 	 * @param task 执行代码
 	 *
 	 * @return 是否新建了任务
 	 */
-	public static boolean reScheduled(float delaySeconds, Task task) {
+	public static boolean scheduleOrCancel(float delaySeconds, Task task) {
+		if (reSchedule(delaySeconds, task)) {
+			return true;
+		}
+		task.cancel();
+		return false;
+	}
+
+	public static boolean reSchedule(float delaySeconds, Task task) {
 		if (task.isScheduled()) {
-			task.cancel();
 			return false;
 		} else {
 			Timer.schedule(task, delaySeconds);
 			return true;
 		}
 	}
-
 }

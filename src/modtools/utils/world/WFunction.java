@@ -28,7 +28,7 @@ import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.input.JSRequest;
 import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.TemplateTable;
-import modtools.ui.content.ui.PositionProv;
+import modtools.ui.content.ui.PairProv;
 import modtools.ui.content.world.Selection;
 import modtools.ui.content.world.Selection.Settings;
 import modtools.ui.effect.*;
@@ -173,13 +173,13 @@ public abstract class WFunction<T> {
 		buttons.button("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
-		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {}).with(b -> b.clicked(() -> {
+		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> { }).with(b -> b.clicked(() -> {
 			 boolean all = select.size != selectMap.size;
 			 select.clear();
 			 if (all) for (var entry : selectMap) select.add(entry.value);
 		 })).update(b -> b.setChecked(select.size == selectMap.size))
 		 .row();
-		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> {}).with(b -> b.clicked(() -> {
+		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> { }).with(b -> b.clicked(() -> {
 			showMenuList(getMenuLists(this, mergeList()));
 		})).disabled(_ -> select.isEmpty());
 		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
@@ -385,6 +385,9 @@ public abstract class WFunction<T> {
 			return super.remove(index);
 		}
 	}
+
+	public abstract void setFocus(T t);
+	public abstract boolean checkFocus(T item);
 	public class SelectHover extends LimitButton {
 		private T item;
 
@@ -408,10 +411,7 @@ public abstract class WFunction<T> {
 				if (SC.focusDisabled) return;
 				Selection.focusElem = this;
 				SC.focusElemType = WFunction.this;
-				if (item instanceof Tile) SC.focusTile = (Tile) item;
-				else if (item instanceof Building) SC.focusBuild = (Building) item;
-				else if (item instanceof Unit) SC.focusUnits.add((Unit) item);
-				else if (item instanceof Bullet) SC.focusBullets.add((Bullet) item);
+				setFocus(item);
 				SC.focusDisabled = true;
 			});
 			exited(() -> {
@@ -425,12 +425,15 @@ public abstract class WFunction<T> {
 
 		public void updateVisibility() {
 			super.updateVisibility();
-			if (SC.focusDisabled || Selection.focusElem == this ||
-					(SC.focusTile != item && SC.focusBuild != item
-					 && !(item instanceof Unit && SC.focusUnits.contains((Unit) item))
-					 && !(item instanceof Bullet && SC.focusBullets.contains((Bullet) item))
-					)
-			) return;
+			// 检查链接是否有效
+			if (!checkFocus(item)) {
+				if (Selection.focusElem == this) {
+					Selection.focusElem = null;
+					return;
+				}
+				return;
+			}
+			if (SC.focusDisabled) return;
 
 			Selection.focusElem = this;
 			SC.focusElemType = WFunction.this;
@@ -532,7 +535,7 @@ public abstract class WFunction<T> {
 
 
 	public static void buildPos(Table table, Position u) {
-		table.label(new PositionProv(() -> Tmp.v1.set(u),
+		table.label(new PairProv(() -> Tmp.v1.set(u),
 			u instanceof Building || u instanceof Vec2 ? ", " : "\n"))
 		 .fontScale(0.7f).color(Color.lightGray)
 		 .get().act(0.1f);

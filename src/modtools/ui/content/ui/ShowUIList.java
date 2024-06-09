@@ -306,7 +306,7 @@ public class ShowUIList extends Content {
 			t.pane(p -> p.add(new Dialog("dialog", style))).growX().height(42);
 		}
 		static void build(LabelStyle style) {
-			t.add("label", style).size(32);
+			t.add("label", style);
 		}
 		static void build(SliderStyle style) {
 			t.slider(0, 10, 1, f -> { })

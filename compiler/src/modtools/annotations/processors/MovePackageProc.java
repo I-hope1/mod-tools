@@ -8,7 +8,7 @@ import java.util.*;
 // @AutoService(Processor.class)
 public class MovePackageProc extends BaseProcessor<PackageSymbol> {
 	public static Map<String, String> mapping = new HashMap<>();
-	public void dealElement(PackageSymbol element) throws Throwable {
+	public void dealElement(PackageSymbol element) {
 		MoveToPackage move = element.getAnnotation(MoveToPackage.class);
 		if (move == null) return;
 		mapping.put(element.toString(), move.targetPackage());

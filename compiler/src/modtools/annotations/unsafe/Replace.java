@@ -340,7 +340,7 @@ public class Replace {
 		}
 	}
 
-	static long off_stateValue;
+	private static long off_stateValue;
 	public static void init() throws Throwable {
 		off_stateValue = unsafe.objectFieldOffset(CompileState.class.getDeclaredField("value"));
 		/* 使语法解析不会stop继续编译 */

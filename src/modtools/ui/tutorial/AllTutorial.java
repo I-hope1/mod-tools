@@ -104,7 +104,7 @@ public class AllTutorial {
 			};
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (keycode == KeyCode.shiftLeft) {
-					if (!TaskManager.reScheduled(0.4f, task)) {
+					if (!TaskManager.scheduleOrCancel(0.4f, task)) {
 						enableFocusMouse = !enableFocusMouse;
 					}
 				}

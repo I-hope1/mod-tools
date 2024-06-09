@@ -12,7 +12,7 @@ import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.*;
+import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
 import com.sun.tools.javac.util.List;
@@ -98,9 +98,8 @@ public class Replace {
 		});
 		setAccess(Resolve.class, resolve, "namedImportScopeRecovery", (RecoveryLoadClass) (env, name) -> {
 			Scope importScope = env.toplevel.namedImportScope;
-			Symbol existing = importScope.findFirst(Convert.shortName(name),
+			return importScope.findFirst(Convert.shortName(name),
 			 sym -> sym.kind == Kind.TYP && sym.flatName() == name);
-			return existing;
 		});
 		setAccess(Resolve.class, resolve, "starImportScopeRecovery", (RecoveryLoadClass) (env, name) -> {
 			Scope importScope = env.toplevel.starImportScope;

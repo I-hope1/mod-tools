@@ -35,7 +35,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		super("@pickcolor", 0, 0, false, false);
 
 		cont.background(IntUI.whiteui.tint(bgColor));
-		sclListener.unbind();
+		sclListener.remove();
 	}
 
 	public void show(Color color, Cons<Color> consumer) {

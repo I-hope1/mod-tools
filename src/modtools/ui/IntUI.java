@@ -128,7 +128,6 @@ public class IntUI {
 		return elem;
 	}
 
-
 	/**
 	 * 长按事件
 	 * @param <T>      the type parameter
@@ -864,28 +863,31 @@ public class IntUI {
 			}
 		});
 	}
+	public static void hoverAndExit(Element element, Runnable hovered, Runnable exit) {
+		element.addListener(new HoverAndExitListener(){
+			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
+				hovered.run();
+			}
+			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
+				exit.run();
+			}
+		});
+	}
 
-	static class HoverAndExitListener extends InputListener {
+	public static class HoverAndExitListener extends InputListener {
+		/** {@inheritDoc}  */
 		public final void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
 			// touchDown也会触发
-			if (fromActor != null) enter0(event, x, y, pointer, fromActor);
+			if (pointer == -1) enter0(event, x, y, pointer, fromActor);
 		}
 		public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) { }
-		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			return true;
-		}
-		boolean cancel;
-		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			cancel = true;
-		}
+		/** {@inheritDoc}  */
 		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 			// touchUp也会触发
-			if (!cancel) exit0(event, x, y, pointer, toActor);
-			cancel = false;
+			if (pointer == -1) exit0(event, x, y, pointer, toActor);
 		}
 		public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) { }
 	}
-
 
 	public static class Tooltip extends arc.scene.ui.Tooltip {
 

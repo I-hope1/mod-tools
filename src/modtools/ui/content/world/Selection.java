@@ -126,8 +126,6 @@ public class Selection extends Content {
 
 		initTask();
 
-		/*fragDraw = new FragDraw();
-		Core.scene.add(fragDraw);*/
 		loadUI();
 		loadFocusWindow();
 	}
@@ -346,6 +344,9 @@ public class Selection extends Content {
 		public boolean checkFocus(T item) {
 			return focusEntities.contains(item);
 		}
+		public void clearFocus(T item) {
+			focusEntities.remove(item);
+		}
 	}
 	public class BulletFunction<T extends Bullet> extends WFunction<T> {
 		public BulletFunction(String name) {
@@ -378,6 +379,9 @@ public class Selection extends Content {
 		}
 		public boolean checkFocus(T item) {
 			return focusBullets.contains(item);
+		}
+		public void clearFocus(T item) {
+			focusBullets.remove(item);
 		}
 	}
 	public class UnitFunction<T extends Unit> extends WFunction<T> {
@@ -413,13 +417,15 @@ public class Selection extends Content {
 		public boolean checkFocus(T item) {
 			return focusUnits.contains(item);
 		}
+		public void clearFocus(T item) {
+			focusUnits.remove(item);
+		}
 	}
 	public class BuildFunction<T extends Building> extends WFunction<T> {
 		public BuildFunction(String name) {
 			super(name, WDINSTANCE.build);
 		}
 
-		@Override
 		public TextureRegion getRegion(T building) {
 			return iconMap.get((float) building.block.size, () -> {
 				int size  = building.block.size * 32;
@@ -471,6 +477,9 @@ public class Selection extends Content {
 		public boolean checkFocus(T item) {
 			return focusBuild == item;
 		}
+		public void clearFocus(T item) {
+			focusBuild = null;
+		}
 	}
 	public class TileFunction<T extends Tile> extends WFunction<T> {
 		public TileFunction(String name) {
@@ -520,6 +529,9 @@ public class Selection extends Content {
 		}
 		public boolean checkFocus(T item) {
 			return focusTile == item;
+		}
+		public void clearFocus(T item) {
+			focusTile = null;
 		}
 	}
 
@@ -575,17 +587,6 @@ public class Selection extends Content {
 		Draw.mixcol(focusColor, 1);
 		Draw.alpha((region == Core.atlas.white() ? 0.7f : 0.9f) * focusColor.a);
 
-		/* Vec2  tmp = transform ? Core.camera.project(TMP_RECT.x, TMP_RECT.y) : Tmp.v3.set(TMP_RECT.x, TMP_RECT.y);
-		float x   = tmp.x, y = tmp.y, w, h;
-		if (transform) {
-			tmp = Core.camera.project(TMP_RECT.x + TMP_RECT.width, TMP_RECT.y + TMP_RECT.height);
-			w = tmp.x - x;
-			h = tmp.y - y;
-		} else {
-			w = TMP_RECT.width;
-			h = TMP_RECT.height;
-		} */
-
 		Draw.rect(region, x, y, w, h,
 		 !(focus instanceof BlockUnitc) && focus instanceof Unit u ? u.rotation - 90f
 			: 90f);
@@ -607,8 +608,7 @@ public class Selection extends Content {
 		// if (transform) Draw.proj(Core.camera.inv);
 
 		if (focusElem != null && focusElem.getScene() != null
-		    && ((!transform && focusAny != null) || (focusElemType != null && focusElemType.list.contains(focus)))
-		) {
+		    && ((!transform && focusAny != null) || (focusElemType != null && focusElemType.list.contains(focus)))) {
 			if (transform) {
 				drawLineOnScreen(x, y);
 			} else {
@@ -636,19 +636,13 @@ public class Selection extends Content {
 
 	public boolean focusDisabled;
 	boolean focusLocked;
-	private       boolean  focusEnabled;
-	public static Element  focusElem;
+	private       boolean focusEnabled;
+	public static Element focusElem;
 	/** 用于反应 元素 对应的 焦点 */
-	public static Object   focusAny;
-	static        Runnable CANCEL_TASK = () -> {
-		focusElem = null;
-		focusAny = null;
-	};
+	public static Object  focusAny;
 
 	public static void addFocusSource(Element source, Prov<Object> focusProv) {
 		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
-		// Object stamp = focusProv.get();
-		// if (!(stamp instanceof Entityc || stamp instanceof Tile)) throw new IllegalArgumentException("focusProv value should be a Tile or an entity.");
 
 		source.addListener(new InputListener() {
 			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
@@ -657,7 +651,8 @@ public class Selection extends Content {
 			}
 			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 				if (toActor != null && source.isAscendantOf(toActor)) return;
-				CANCEL_TASK.run();
+				focusElem = null;
+				focusAny = null;
 			}
 		});
 	}
@@ -721,6 +716,7 @@ public class Selection extends Content {
 			drawFocus(focus);
 			return !Float.isNaN(mr1.x) && !Float.isNaN(mr1.y);
 		}
+
 		boolean valid = false;
 		for (Object child : (Object[]) focus) {
 			if (drawFocusAny(child)) valid = true;
@@ -732,6 +728,7 @@ public class Selection extends Content {
 		focusUnits.clear();
 		focusBullets.clear();
 		focusEntities.clear();
+
 		if (Settings.focusOnWorld.enabled()) {
 			focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
 			focusBuild = focusTile != null ? focusTile.build : null;
@@ -762,20 +759,19 @@ public class Selection extends Content {
 		}
 		boolean updatePosUI = true;
 		long    toggleDelay = 200, lastToggleTime = 0;
+		public Table pane;
 
 		public Window show() {
 			return show(scene, Actions.fadeIn(0.1f));
 		}
-
-		public Table pane;
 
 		{
 			margin(4, 4, 4, 4);
 			titleTable.remove();
 			/* 禁用缩放和移动侦听器 */
 			touchable = Touchable.childrenOnly;
-			sclListener.disabled1 = true;
-			moveListener.disabled = true;
+			sclListener.remove();
+			moveListener.remove();
 			cont.update(() -> {
 				if (updatePosUI && focusEnabled) updatePosUIAndWorld();
 				else updatePosOnlyWorld();
@@ -793,6 +789,7 @@ public class Selection extends Content {
 
 				if (Vars.mobile || Time.millis() - lastToggleTime <= toggleDelay
 				    || !Core.input.alt() || !Core.input.ctrl()) return;
+
 				lastToggleTime = Time.millis();
 				updatePosUI = !updatePosUI;
 				focusDisabled = !updatePosUI;

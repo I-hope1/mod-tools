@@ -388,17 +388,9 @@ public abstract class WFunction<T> {
 
 	public abstract void setFocus(T t);
 	public abstract boolean checkFocus(T item);
+	public abstract void clearFocus(T item);
 	public class SelectHover extends LimitButton {
 		private T item;
-
-		public final Runnable clearFocusWorld = () -> {
-			if (item instanceof Tile) SC.focusTile = null;
-			else if (item instanceof Building) SC.focusBuild = null;
-			else if (item instanceof Unit) SC.focusUnits.remove((Unit) item);
-			else if (item instanceof Bullet) SC.focusBullets.remove((Bullet) item);
-			SC.focusDisabled = false;
-		};
-
 
 		public SelectHover(T item) {
 			super(HopeStyles.flati);
@@ -407,17 +399,16 @@ public abstract class WFunction<T> {
 
 			touchable = Touchable.enabled;
 
-			hovered(() -> {
+			IntUI.hoverAndExit(this,() -> {
 				if (SC.focusDisabled) return;
 				Selection.focusElem = this;
 				SC.focusElemType = WFunction.this;
 				setFocus(item);
 				SC.focusDisabled = true;
-			});
-			exited(() -> {
+			}, () -> {
 				Selection.focusElem = null;
 				SC.focusElemType = null;
-				clearFocusWorld.run();
+				clearFocus(item);
 			});
 
 			clicked(() -> WorldInfo.showInfo(this, item));

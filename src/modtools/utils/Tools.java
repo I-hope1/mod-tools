@@ -93,16 +93,15 @@ public class Tools {
 	public static void forceRun(Boolp boolp) {
 		// Log.info(Time.deltaimpl);
 		Timer.schedule(new Task() {
-			@Override
 			public void run() {
 				try {
 					if (boolp.get()) cancel();
-				} catch (Exception e) {
+				} catch (Throwable e) {
 					Log.err(e);
 					cancel();
 				}
 			}
-		}, 0f, 1f, -1);
+		}, 0f, 0.5f, -1);
 	}
 
 	/** 这个会自动强转  */

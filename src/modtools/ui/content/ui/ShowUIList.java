@@ -130,8 +130,7 @@ public class ShowUIList extends Content {
 		 .size(32, region.height / (float) region.width * 32).get());
 		t.add(k).with(JSFunc::addDClickCopy).growY().row();
 		t.unbind();
-	}))
-	, tex = newTable(t -> {
+	})), tex    = newTable(t -> {
 		for (Field field : Tex.class.getFields()) {
 			try {
 				// 是否为Drawable
@@ -194,7 +193,7 @@ public class ShowUIList extends Content {
 
 			for (Field field : cls.getFields()) {
 				if (!Modifier.isStatic(field.getModifiers())
-						|| !Color.class.isAssignableFrom(field.getType())) continue;
+				    || !Color.class.isAssignableFrom(field.getType())) continue;
 				try {
 					// 跳过private检查，减少时间
 					field.setAccessible(true);
@@ -257,8 +256,9 @@ public class ShowUIList extends Content {
 		label.fillParent = true;
 		label.setAlignment(Align.topLeft);
 		Stack stack = t.stack(image, label).size(32).get();
-		stack.hovered(() -> label.visible = false);
-		stack.exited(() -> label.visible = true);
+		IntUI.hoverAndExit(stack,
+		 () -> label.visible = false,
+		 () -> label.visible = true);
 	}
 	private static float getW() {
 		return Core.graphics.isPortrait() ? 320 : 400;

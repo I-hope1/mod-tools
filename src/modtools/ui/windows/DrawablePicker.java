@@ -49,7 +49,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		background(null);
 
 		cont.background(new TintDrawable(IntUI.whiteui, backgroundCurrent));
-		sclListener.unbind();
+		sclListener.remove();
 	}
 
 	public void show(Drawable drawable, Cons<Drawable> consumer) {

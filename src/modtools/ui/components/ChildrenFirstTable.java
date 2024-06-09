@@ -6,6 +6,7 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
+import modtools.ui.IntUI.HoverAndExitListener;
 import modtools.ui.components.limit.LimitTable;
 
 /** 子节点优先 */
@@ -24,8 +25,8 @@ public class ChildrenFirstTable extends LimitTable {
 
 	/** {@inheritDoc}  */
 	public void hovered(Runnable r) {
-		addListener(new InputListener() {
-			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+		addListener(new HoverAndExitListener() {
+			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				r.run();
 				event.stop();
 			}
@@ -34,8 +35,8 @@ public class ChildrenFirstTable extends LimitTable {
 
 	/** {@inheritDoc}  */
 	public void exited(Runnable r) {
-		addListener(new InputListener() {
-			public void exit(InputEvent event, float x, float y, int pointer, Element fromActor) {
+		addListener(new HoverAndExitListener() {
+			public void exit0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				r.run();
 				event.stop();
 			}

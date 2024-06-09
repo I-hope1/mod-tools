@@ -117,24 +117,26 @@ public class ContentList extends Content {
 				if (item instanceof UnlockableContent u) {
 					t.add(new Image(u.uiIcon == null ? HopeIcons.interrupt.getRegion() : u.uiIcon)).size(32f)
 					 .with(img -> IntUI.longPress(img, b -> {
-						 if (b) {
+						 if (!b) {
+							 label.setText((label.getText() + "").equals(name) ? u.localizedName : name);
+						 } else {
 							 u.load();
 							 u.loadIcon();
 							 u.init();
 							 IntUI.showInfoFade("Loaded " + u.localizedName);
-						 } else label.setText((label.getText() + "").equals(name) ? u.localizedName : name);
+						 }
 					 }));
 				} else t.add();
 				t.button(b -> b.add(label).grow().padLeft(8f).padRight(8f),
-					HopeStyles.clearb, () -> {})
+					HopeStyles.clearb, () -> { })
 				 .growX().height(42)
 				 .with(button -> IntUI.longPress(button, b -> {
-					if (b) {
-						JSFunc.copyText(name, button);
-					} else {
-						if (clicked != null) clicked.get(item);
-					}
-				})).update(_ -> t.layout()).row();
+					 if (b) {
+						 JSFunc.copyText(name, button);
+					 } else {
+						 if (clicked != null) clicked.get(item);
+					 }
+				 })).update(_ -> t.layout()).row();
 			});
 			t.addPatternUpdateListener(() -> pattern);
 		});

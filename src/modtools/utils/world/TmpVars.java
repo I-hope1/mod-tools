@@ -21,8 +21,8 @@ public interface TmpVars {
 	String[] tmpAmount = new String[1];
 
 	MouseVec mouseVec   = new MouseVec();
-	Vec2     mouseWorld = new Vec2();
-	Rect     mr1        = new Rect();
+	Vec2 mouseWorld = new Vec2();
+	Rect mr1        = new Rect();
 
 	class MouseVec extends Vec2 {
 		public void require() {

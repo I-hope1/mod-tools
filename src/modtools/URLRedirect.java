@@ -29,19 +29,19 @@ public class URLRedirect {
 		UNSAFE.openModule(Object.class, "sun.net.www.protocol.http");
 		field.set(null, new Hashtable<>(hashtable) {
 			public synchronized URLStreamHandler put(String key, URLStreamHandler value) {
-				if (key.equals("http") || key.equals("https")) {
-					var handler = new MyClass<>(value.getClass().getName() + "-r0", value.getClass());
-					handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
-					handler.addInterface(RedirectHandler.class);
-					handler.visit(URLRedirect.class);
-					if (OS.isAndroid) {
-						/* 同时去除final */
-						MyReflect.setPublic(value.getClass());
-					}
-					try {
-						value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
-					} catch (Throwable _) { }
+				if (!key.equals("http") && !key.equals("https")) return super.put(key, value);
+
+				var handler = new MyClass<>(value.getClass().getName() + "-r0", value.getClass());
+				handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
+				handler.addInterface(RedirectHandler.class);
+				handler.visit(URLRedirect.class);
+				if (OS.isAndroid) {
+					/* 同时去除final */
+					MyReflect.setPublic(value.getClass());
 				}
+				try {
+					value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
+				} catch (Throwable _) { }
 				return super.put(key, value);
 			}
 		});
@@ -50,8 +50,10 @@ public class URLRedirect {
 	}
 	private static boolean loadConfig(Fi config) throws IOException {
 		if (!config.exists()) return false;
+
 		replacer.load(config.read());
 		if (!defaultConfig.exists()) config.copyTo(defaultConfig);
+
 		return true;
 	}
 

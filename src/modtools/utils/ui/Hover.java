@@ -26,33 +26,30 @@ public class Hover {
 		});
 
 		if (!mobile) addHover(imageSize, btn);
-		// if (!mobile) {
 		btn.addListener(new Tooltip(t ->
 		 t.background(Tex.pane)
 			.add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
 			.right().bottom()
 		));
-		// }
 		btn.getStyle().imageUp = icon;
 		return btn;
 	}
 	private static void addHover(float imageSize, ImageButton btn) {
-		var task = new MyTask(btn, imageSize);
-		btn.hovered(() -> {
+		var task = new SizeTask(btn, imageSize);
+		IntUI.hoverAndExit(btn, () -> {
 			task.reverse = false;
 			if (!task.isScheduled()) Timer.schedule(task, 0, 0.02f, -1);
-		});
-		btn.exited(() -> {
+		}, () -> {
 			task.reverse = true;
 			if (!task.isScheduled()) Timer.schedule(task, 0, 0.02f, -1);
 		});
 	}
-	private static class MyTask extends Task {
+	private static class SizeTask extends Task {
 		private final ImageButton btn;
 		private final float       imageSize;
 		private       boolean     reverse;
 		private       float       a;
-		public MyTask(ImageButton btn, float imageSize) {
+		public SizeTask(ImageButton btn, float imageSize) {
 			this.btn = btn;
 			this.imageSize = imageSize;
 			reverse = false;

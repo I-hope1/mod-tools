@@ -19,7 +19,6 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.OptimizeReflect;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
@@ -88,13 +87,13 @@ public class ReviewElement extends Content {
 	                                  Prov<Element> focusProv) {
 		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
 		if (windowProv == null) throw new IllegalArgumentException("windowProv is null.");
-		source.addListener(new InputListener() {
-			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+		source.addListener(new HoverAndExitListener() {
+			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				FOCUS_FROM = source;
 				FOCUS = focusProv.get();
 				FOCUS_WINDOW = windowProv.get();
 			}
-			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
 				if (toActor != null && source.isAscendantOf(toActor)) return;
 				CANCEL_TASK.run();
 			}
@@ -153,7 +152,6 @@ public class ReviewElement extends Content {
 		if (cl == null) {
 			return;
 		}
-		@OptimizeReflect
 		float padLeft = Reflect.get(Cell.class, cl, "padLeft"),
 		 padTop = Reflect.get(Cell.class, cl, "padTop"),
 		 padBottom = Reflect.get(Cell.class, cl, "padBottom"),
@@ -725,7 +723,6 @@ public class ReviewElement extends Content {
 		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }
 	}
 
-	@OptimizeReflect
 	static class InfoDetails extends Table implements KeyValue {
 		Label nameLabel = new VLabel(0.75f, Color.violet),
 		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
@@ -777,7 +774,6 @@ public class ReviewElement extends Content {
 				colspanCell.remove();
 				return;
 			}
-			@OptimizeReflect
 			int colspan = Reflect.get(Cell.class, cell, "colspan");
 			if (colspanCell.toggle1(colspan != 1))
 				colspanLabel.setText("" + colspan);
@@ -790,7 +786,6 @@ public class ReviewElement extends Content {
 				minSizeCell.remove();
 				return;
 			}
-			@OptimizeReflect
 			float minWidth = Reflect.get(Cell.class, cell, "minWidth"),
 			 minHeight = Reflect.get(Cell.class, cell, "minHeight");
 			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset)) {
@@ -803,7 +798,6 @@ public class ReviewElement extends Content {
 				maxSizeCell.remove();
 				return;
 			}
-			@OptimizeReflect
 			float maxWidth = Reflect.get(Cell.class, cell, "maxWidth"),
 			 maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
 			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset)) {
@@ -816,7 +810,6 @@ public class ReviewElement extends Content {
 				fillCell.remove();
 				return;
 			}
-			@OptimizeReflect
 			float fillX = Reflect.get(Cell.class, cell, "fillX"),
 			 fillY = Reflect.get(Cell.class, cell, "fillY");
 			if (fillCell.toggle1(fillX != 0 || fillY != 0))
@@ -827,7 +820,6 @@ public class ReviewElement extends Content {
 				expandCell.remove();
 				return;
 			}
-			@OptimizeReflect
 			int expandX = Reflect.get(Cell.class, cell, "expandX"),
 			 expandY = Reflect.get(Cell.class, cell, "expandY");
 			if (expandCell.toggle1(expandX != 0 || expandY != 0))

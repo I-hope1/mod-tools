@@ -32,8 +32,7 @@ public class SclListener extends ClickListener {
 	public void rebind() {
 		bind.addCaptureListener(this);
 	}
-	public void unbind() {
-		;
+	public void remove() {
 		bind.removeCaptureListener(this);
 	}
 

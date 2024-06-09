@@ -148,6 +148,7 @@ public final class TopGroup extends WidgetGroup {
 		} else if (drawPadElem == scene.root) {
 			vec2 = Tmp.v1.set(0, 0);
 		} else return;
+
 		Draw.color(Color.white);
 		Draw.alpha(0.7f);
 		ScreenSampler.pause();
@@ -166,9 +167,7 @@ public final class TopGroup extends WidgetGroup {
 		Tmp.v1.x = right ? width - selected.getWidth() : 0;
 		boolean top = mouse.y < height / 2f;
 		Tmp.v1.y = top ? height - selected.getHeight() : 0;
-		// Tools.screenshot(selected, true, null).texture;
-		// buffer.blit(MyShaders.Specl);
-		// scene.getCamera().bounds(Tmp.r1.set(selected.x, selected.y, selected.getWidth(), selected.getHeight()));
+
 		Draw.rect(Draw.wrap(ScreenSampler.bufferCapture(selected)),
 		 Tmp.v1.x + selected.getWidth() / 2f,
 		 Tmp.v1.y + selected.getHeight() / 2f,
@@ -221,9 +220,8 @@ public final class TopGroup extends WidgetGroup {
 		);
 	}
 
+	Element previousKeyboardFocus = null;
 	public TopGroup() {
-		//noinspection ConstantValue
-		// if (topGroup != null) throw new IllegalStateException("topGroup已被加载");
 		addSceneListener();
 
 		scene.addCaptureListener(new SwitchInputListener());
@@ -268,9 +266,6 @@ public final class TopGroup extends WidgetGroup {
 
 		update(() -> {
 			// Log.info(selected);
-			if (selecting) {
-				scene.setKeyboardFocus(topGroup);
-			}
 			if (shownWindows.isEmpty()) {
 				resetSwitch();
 			}
@@ -340,8 +335,10 @@ public final class TopGroup extends WidgetGroup {
 		if (el == null || el == this || el.touchable == Touchable.disabled) return null;
 		return el;
 	}
-
-/* 	public void requestSelectRegion
+	public String toString() {
+		return "TopGroup[mod-tools]";
+	}
+	/* 	public void requestSelectRegion
 			(TouchDown touchDown,
 			 TouchDragged touchDragged,
 			 TouchUp touchUp) {
@@ -357,7 +354,8 @@ public final class TopGroup extends WidgetGroup {
 		if (selecting) throw new IllegalStateException("Cannot call it twice.");
 		selected = null;
 		selecting = true;
-		scene.unfocusAll();
+		previousKeyboardFocus = scene.getKeyboardFocus();
+		scene.setKeyboardFocus(topGroup);
 		elementDrawer = drawer;
 		elementCallback = callback;
 	}
@@ -391,8 +389,13 @@ public final class TopGroup extends WidgetGroup {
 					return cancelEvent ? this : null;
 				}
 			};
+			void unfocus() {
+				scene.setKeyboardFocus(previousKeyboardFocus);
+				previousKeyboardFocus = null;
+			}
 			public void cancel() {
 				selecting = false;
+				unfocus();
 				resetSelectElem();
 			}
 
@@ -467,9 +470,8 @@ public final class TopGroup extends WidgetGroup {
 				});
 				filterSelected.clear();
 
-				selecting = false;
 				if (elementCallback != null && filter()) elementCallback.get(selected);
-				resetSelectElem();
+				cancel(); // reset
 			}
 		});
 	}
@@ -544,7 +546,6 @@ public final class TopGroup extends WidgetGroup {
 				if (!K_once) {
 					resolveOnce();
 				}
-				scene.setKeyboardFocus(TopGroup.this);
 				if (!isSwitchWindows) {
 					currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
 				}
@@ -609,14 +610,15 @@ public final class TopGroup extends WidgetGroup {
 			disabled |= boolp.get();
 		}
 		if (disabled) return;
+
 		K_once = true;
 		Table paneTable = new Table();
 		end.pane(paneTable).grow().with(
 		 s -> s.setScrollingDisabled(OS.isWindows, false));
-		int             W          = graphics.getWidth(), H = graphics.getHeight();
-		float           eachW      = W > H ? W / 3f : W / 4f - 16f, eachH = H / 3f;
-		final Element[] tappedElem = {null}, hoveredElem = {null};
-		Table           table      = paneTable.row().table().get();
+		int       W          = graphics.getWidth(), H = graphics.getHeight();
+		float     eachW      = W > H ? W / 3f : W / 4f - 16f, eachH = H / 3f;
+		Element[] tappedElem = {null}, hoveredElem = {null};
+		Table     table      = paneTable.row().table().get();
 		for (Window w : shownWindows) {
 			Image el = new Image(w.screenshot());
 
@@ -629,8 +631,9 @@ public final class TopGroup extends WidgetGroup {
 				t.margin(4, 6, 4, 6);
 				t.act(0);
 				t.tapped(() -> tappedElem[0] = t);
-				t.hovered(() -> hoveredElem[0] = t);
-				t.exited(() -> hoveredElem[0] = null);
+				IntUI.hoverAndExit(t,
+				 () -> hoveredElem[0] = t,
+				 () -> hoveredElem[0] = null);
 				t.released(() -> tappedElem[0] = null);
 				t.table(t1 -> {
 					t1.add(w.title.getText(), Pal.accent).left().growX();
@@ -774,6 +777,7 @@ public final class TopGroup extends WidgetGroup {
 			if (drawSlightly) topGroup.drawSlightlyIfSmall();
 		}
 	}
+
 	public static void drawFocus(Element elem, Vec2 vec2, Color focusColor) {
 		Gl.flush();
 		if (focusColor.a > 0) {
@@ -797,6 +801,7 @@ public final class TopGroup extends WidgetGroup {
 		Lines.stroke(thick);
 		Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
 	}
+
 	private class FillEnd extends Table {
 		public FillEnd() {
 			super(t -> {

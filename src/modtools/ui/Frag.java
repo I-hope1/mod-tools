@@ -156,7 +156,9 @@ public class Frag extends Table {
 		if (hit == null) {
 			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this))
 				Core.scene.setScrollFocus(null);
-			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);
+			if (Core.scene.getKeyboardFocus() != null && Core.scene.getKeyboardFocus().isDescendantOf(this)) {
+				Core.scene.setKeyboardFocus(null);
+			}
 		}
 		return hit;
 	}

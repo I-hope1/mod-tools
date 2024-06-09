@@ -5,7 +5,8 @@ import arc.func.Cons;
 import arc.math.Mathf;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Table;
-import arc.util.*;
+import arc.util.Tmp;
+import modtools.ui.IntUI;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.ElementUtils;
 
@@ -19,9 +20,10 @@ public class HoverTable extends LimitTable {
 	boolean hovered = false;
 
 	{
-		hovered(() -> hovered = true);
-		exited(() -> hovered = false);
-		Time.runTask(0, this::toFront);
+		IntUI.hoverAndExit(this,
+		 () -> hovered = true,
+		 () -> hovered = false);
+		Core.app.post(this::toFront);
 	}
 
 	// float paneLastX = Float.NaN, paneLastY = Float.NaN;

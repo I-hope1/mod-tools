@@ -123,9 +123,6 @@ public class Window extends Table implements Position {
 		super();
 
 		cont.setClip(true);
-		exited(() -> {
-			if (!Core.scene.hasField()) Core.scene.setKeyboardFocus(null);
-		});
 		tapped(this::toFront);
 		touchable = titleTable.touchable/* = cont.touchable */ = Touchable.enabled;
 		titleTable.margin(0);
@@ -204,11 +201,9 @@ public class Window extends Table implements Position {
 
 
 		if (full) {
-			//noinspection rawtypes,unchecked
 			titleTable.button(HopeIcons.sticky, HopeStyles.hope_clearNoneTogglei, 32,
 				() -> sticky = !sticky).padLeft(4f).name("sticky")
-			 /* 这是一个奇葩的bug（编译） */
-			 .checked((Boolf) _ -> sticky);
+			 .checked(_ -> sticky);
 			titleTable.add(new FoldedImageButton(false, HopeStyles.hope_clearNonei))
 			 .with(b -> {
 				 b.resizeImage(32);
@@ -284,7 +279,7 @@ public class Window extends Table implements Position {
 		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
 			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) Core.scene.setScrollFocus(null);
-			if (Core.scene.getKeyboardFocus() == this) Core.scene.setKeyboardFocus(null);
+			if (Core.scene.getKeyboardFocus() != null && Core.scene.getKeyboardFocus().isDescendantOf(this)) Core.scene.setKeyboardFocus(null);
 		}
 		return hit;
 	}
@@ -495,7 +490,10 @@ public class Window extends Table implements Position {
 		}
 		act(0);
 
-		Timer.schedule(new MyTask(false), 0, 0.01f, -1);
+		loopTask(false);
+	}
+	private void loopTask(boolean isMin) {
+		Timer.schedule(new MyTask(isMin), 0, 0.01f, -1);
 	}
 	private void maximizeAnimated() {
 		moveAndScaleAnimated(0, 0, graphics.getWidth(), graphics.getHeight());
@@ -529,7 +527,7 @@ public class Window extends Table implements Position {
 				buttons.remove();
 			});
 
-			sclListener.unbind();
+			sclListener.remove();
 			sizeChanged();
 		} else {
 			setup();
@@ -546,7 +544,7 @@ public class Window extends Table implements Position {
 		}
 		act(0);
 
-		Timer.schedule(new MyTask(true), 0, 0.01f, -1);
+		loopTask(true);
 	}
 
 	/**
@@ -629,7 +627,7 @@ public class Window extends Table implements Position {
 			 "@settings.window.close", "@settings.window.close",
 			 this::remove, this::remove);
 			confirm.moveListener.remove();
-			confirm.sclListener.unbind();
+			confirm.sclListener.remove();
 			Boolp boolp = () -> confirm.isShown();
 			topGroup.disabledSwitchPreviewSeq.add(boolp);
 			confirm.update(() -> confirm.setPosition(this));

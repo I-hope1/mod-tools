@@ -2,10 +2,10 @@ package modtools.ui.components.utils;
 
 import arc.func.*;
 import arc.graphics.*;
-import arc.graphics.g2d.*;
+import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
-import arc.scene.*;
+import arc.scene.Element;
 import arc.scene.style.*;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
@@ -29,14 +29,14 @@ import modtools.utils.SR.CatchSR;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Array;
 import java.util.Map;
 
 import static modtools.events.E_JSFunc.truncate_text;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.Sr;
 
 @SuppressWarnings("SizeReplaceableByIsEmpty")
 public abstract class ValueLabel extends NoMarkupLabel {
@@ -310,8 +310,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	public void setVal(Object val) {
 		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
 		if (this.val != null && val != null &&
-				this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
-				this.val.equals(val)) return;
+		    this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
+		    this.val.equals(val)) return;
 
 		this.val = val;
 		if (afterSet != null) afterSet.run();
@@ -354,6 +354,15 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				builder.append("}}");
 				JSFunc.copyText(builder);
 			}));
+			list.add(DisabledList.withd("style.set", Icon.copySmall, "Set Style", () -> val == null, () -> {
+				IntUI.showSelectListTable(this,
+				 Seq.with(ShowUIList.styleKeyMap.keySet())
+					.retainAll(type::isInstance),
+				 () -> (Style) val, this::setNewVal,
+				 s -> ShowUIList.styleKeyMap.get(s),
+				 Float.NEGATIVE_INFINITY, 38,
+				 true, Align.top);
+			}));
 		}
 
 		list.add(MenuItem.with("func.stringify", Icon.diagonalSmall, "StringifyFunc", () -> {
@@ -362,9 +371,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}));
 
 		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
-		list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
+		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
 			enableTruncate = !enableTruncate;
-		}));
+		})); */
 
 		if (enabledUpdateMenu()) {
 			CheckboxList checkboxList = CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", enableUpdate, () -> {

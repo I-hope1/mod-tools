@@ -1,5 +1,11 @@
 package modtools.ui.components.utils;
 
+import arc.scene.ui.*;
+import arc.scene.ui.Button.ButtonStyle;
+import arc.scene.ui.Dialog.DialogStyle;
+import arc.scene.ui.ImageButton.ImageButtonStyle;
+import arc.scene.ui.ScrollPane.ScrollPaneStyle;
+import arc.scene.ui.TextField.TextFieldStyle;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
@@ -44,6 +50,29 @@ public class FieldValueLabel extends ValueLabel {
 	}
 
 	public void setNewVal(Object newVal) {
+		if (obj instanceof Button b && newVal instanceof ButtonStyle s) {
+			if (s instanceof ImageButtonStyle is) {
+				is = new ImageButtonStyle(is);
+				ImageButtonStyle previous = (ImageButtonStyle) b.getStyle();
+				is.imageUp = previous.imageUp;
+				is.imageDown = previous.imageDown;
+				is.imageOver = previous.imageOver;
+				is.imageUpColor = previous.imageUpColor;
+				is.imageDownColor = previous.imageDownColor;
+				is.imageOverColor = previous.imageOverColor;
+				newVal = s = is;
+			}
+			b.setStyle(s);
+		} else if (obj instanceof ScrollPane p && newVal instanceof ScrollPaneStyle s) {
+			p.setStyle(s);
+		} else if (obj instanceof TextField f && newVal instanceof TextFieldStyle s) {
+			f.setStyle(s);
+		} else if (obj instanceof ProgressBar p && newVal instanceof ProgressBar.ProgressBarStyle s) {
+			p.setStyle(s);
+		} else if (obj instanceof Dialog d && newVal instanceof DialogStyle s) {
+			d.setStyle(s);
+		}
+
 		setFieldValue(newVal);
 	}
 	public void setVal() {

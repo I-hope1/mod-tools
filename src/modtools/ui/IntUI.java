@@ -51,7 +51,7 @@ import static modtools.utils.world.TmpVars.mouseVec;
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
-	public static final float DEFAULT_WIDTH = 150;
+	public static final float DEFAULT_WIDTH = 180;
 	public static final float MAX_OFF       = 35f;
 
 	public static final Frag     frag     = new Frag();
@@ -299,6 +299,7 @@ public class IntUI {
 			var cell = main.button(menu.getName(), menu.icon, menu.style(),
 			 menu.iconSize(), () -> { }
 			).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
+			cell.get().getLabel().setFontScale(0.9f);
 
 			menu.build(p, cell, () -> {
 				hideRun.run();
@@ -436,7 +437,7 @@ public class IntUI {
 			}
 			if (t.getHeight() >= Core.scene.getHeight()) {
 				t.setHeight((float) graphics.getHeight());
-				t.x += (t.x > graphics.getWidth() / 2f ? -1 : 1) * button.getWidth();
+				t.y += (t.y > graphics.getWidth() / 2f ? -1 : 1) * button.getHeight();
 			}
 
 			t.keepInStage();

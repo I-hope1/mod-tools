@@ -680,8 +680,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	public void hide() {
 		super.hide();
 
-		clearAll();
-		clearChildren();
 		events.removeIns();
 		System.gc();
 	}

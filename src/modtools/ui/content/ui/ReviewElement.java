@@ -676,7 +676,6 @@ public class ReviewElement extends Content {
 			return;
 		}
 		Cell<?>[] cells = new Cell<?>[children.size];
-		// Seq<Element> toRemoved = new Seq<>();
 		container.getChildren().each(item -> {
 			if (item instanceof MyWrapTable wrapTable) {
 				Element data = (Element) wrapTable.userObject;
@@ -688,8 +687,7 @@ public class ReviewElement extends Content {
 				cells[index] = cell;
 			}
 		});
-		// Seq<Runnable> runs = new Seq<>();
-		for (int i = 0; i < cells.length; i++) {
+		for (int i = 0; i < children.size; i++) {
 			if (cells[i] != null) continue;
 			window.build(children.get(i), container);
 			cells[i] = container.getCells().get(container.getCells().size - 1);
@@ -865,16 +863,16 @@ public class ReviewElement extends Content {
 				color.add(colorContainer).size(16).padRight(4f);
 				color.add(colorLabel);
 			}).growX();
-			rotCell = makeBindCell(t, tableCons("Rotation", rotationLabel));
-			translationCell = makeBindCell(t, tableCons("Translation", translationLabel));
-			styleCell = makeBindCell(t, tableCons("Style", styleLabel));
-			alignCell = makeBindCell(t, tableCons("Align", alignLabel));
-			cellCell = makeBindCell(t, _ -> {
-				colspanCell = makeBindCell(t, tableCons("Colspan", colspanLabel));
-				minSizeCell = makeBindCell(t, tableCons("MinSize", minSizeLabel));
-				maxSizeCell = makeBindCell(t, tableCons("MaxSize", maxSizeLabel));
-				expandCell = makeBindCell(t, tableCons("Expand", expandLabel));
-				fillCell = makeBindCell(t, tableCons("Fill", fillLabel));
+			rotCell = makeCell(t, tableCons("Rotation", rotationLabel));
+			translationCell = makeCell(t, tableCons("Translation", translationLabel));
+			styleCell = makeCell(t, tableCons("Style", styleLabel));
+			alignCell = makeCell(t, tableCons("Align", alignLabel));
+			cellCell = makeCell(t, _ -> {
+				colspanCell = makeCell(t, tableCons("Colspan", colspanLabel));
+				minSizeCell = makeCell(t, tableCons("MinSize", minSizeLabel));
+				maxSizeCell = makeCell(t, tableCons("MaxSize", maxSizeLabel));
+				expandCell = makeCell(t, tableCons("Expand", expandLabel));
+				fillCell = makeCell(t, tableCons("Fill", fillLabel));
 			});
 		}
 	}

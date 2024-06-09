@@ -29,7 +29,8 @@ public class SclListener extends ClickListener {
 		bind.addCaptureListener(this);
 		set(minW, minH);
 	}
-	public void rebind() {
+	public void bind() {
+		if (bind.getCaptureListeners().contains(this)) return;
 		bind.addCaptureListener(this);
 	}
 	public void remove() {

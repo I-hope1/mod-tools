@@ -22,6 +22,7 @@
 ![](./screenshots/startup.png)
 - 快捷切换历史\
 ![截图2024-03-10 14-45-37](https://github.com/I-hope1/mod-tools/assets/78016895/4918af35-19af-4fab-b961-70bdc8679fe8)
+- `$.item`, `$.liquid`, `$.unit`等
 
 ## UnitSpawn
 

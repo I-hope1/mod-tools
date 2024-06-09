@@ -398,7 +398,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public void trackCursor() {
 			if (trackCursor != null) {
-				Time.runTask(1f, trackCursor);
+				Core.app.post(trackCursor);
 			}
 		}
 

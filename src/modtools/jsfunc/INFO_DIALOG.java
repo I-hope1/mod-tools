@@ -18,6 +18,7 @@ import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.PlainValueLabel;
 import modtools.utils.JSFunc.JColor;
+import modtools.utils.Tools;
 import modtools.utils.ui.ShowInfoWindow;
 import modtools.utils.world.WorldDraw;
 
@@ -43,16 +44,14 @@ public interface INFO_DIALOG {
 			_cont.add("Length: " + length).left();
 
 			_cont.button(Icon.refresh, HopeStyles.clearNonei, () -> {
-				Core.app.post(() -> {
-					dialog[0].hide();
-					var pos = getAbsolutePos(dialog[0]);
-					try {
-						showInfo(o, clazz).setPosition(pos);
-					} catch (Throwable e) {
-						IntUI.showException(e).setPosition(pos);
-					}
-					dialog[0] = null;
-				});
+				dialog[0].hide();
+				var pos = getAbsolutePos(dialog[0]);
+				try {
+					showInfo(o, clazz).setPosition(pos);
+				} catch (Throwable e) {
+					IntUI.showException(e).setPosition(pos);
+				}
+				dialog[0] = null;
 			}).left().size(50).row();
 
 
@@ -84,7 +83,8 @@ public interface INFO_DIALOG {
 			button.clicked(() -> {
 				Object item = Array.get(o, j);
 				// 使用post避免stack overflow
-				if (item != null) Core.app.post(() -> showInfo(item).setPosition(getAbsolutePos(button)));
+				if (item != null) Core.app.post(Tools.catchRun0(() ->
+				 showInfo(item).setPosition(getAbsolutePos(button))));
 				else IntUI.showException(new NullPointerException("item is null"));
 			});
 			c1.add(button).growX().minHeight(40);
@@ -105,8 +105,6 @@ public interface INFO_DIALOG {
 				titleHeight = 28;
 				((Table) titleTable.parent).getCell(titleTable).height(titleHeight);
 				cons.get(this);
-				// addCloseButton();
-				hidden(this::clearAll);
 				moveToMouse();
 			}
 

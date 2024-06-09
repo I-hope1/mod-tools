@@ -337,12 +337,12 @@ public class IntUI {
 		 .with(button -> IntUI.longPress(button, b -> {
 			 Object o = prov.get();
 			 if (o == null) return;
-			 Core.app.post(() ->
+			 Core.app.post(Tools.catchRun0(() ->
 				INFO_DIALOG.showInfo(b ? null : o,
 				 b && o instanceof Class<?> cls ? cls :
 					clazz == null || !clazz.isPrimitive() ? o.getClass() : clazz
 				)
-			 );
+			 ));
 		 }))
 		 .size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE)
 		 .disabled(_ -> clazz.isPrimitive() && prov.get() == null)
@@ -939,7 +939,7 @@ public class IntUI {
 	public interface PopupWindow extends INotice { }
 	public interface IMenu extends IDisposable { }
 	public interface IHitter { }
-	public interface INotice extends IDisposable { }
+	public interface INotice { }
 
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
 		/**
@@ -950,7 +950,10 @@ public class IntUI {
 		 */
 		public InfoFadePopup(String title, float width, float height) {
 			super(title, width, height);
-			removeCaptureListener(sclListener);
+			sclListener.remove();
+		}
+		public void clearAll() {
+			Time.runTask(10f, DelayDisposable.super::clearAll);
 		}
 	}
 	private static class ExceptionPopup extends Window implements PopupWindow {

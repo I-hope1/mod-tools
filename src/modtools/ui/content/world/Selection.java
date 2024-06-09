@@ -942,7 +942,7 @@ public class Selection extends Content {
 			super.touchDown(event, x, y, pointer, button);
 			start.set(end);
 			mouseChanged = true;
-			Time.runTask(0f, () -> {
+			Core.app.post(() -> {
 				mouseChanged = true;
 			});
 			WorldUtils.uiWD.drawSeq.add(() -> {

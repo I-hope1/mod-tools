@@ -22,8 +22,8 @@ import modtools.ui.components.utils.*;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.TintDrawable;
+import modtools.utils.*;
 import modtools.utils.SR.CatchSR;
-import modtools.utils.Tools;
 import modtools.utils.reflect.FieldUtils;
 
 import java.util.Arrays;
@@ -371,7 +371,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 
 		public String toString() {
-			return STR."\{ValueLabel.getUIKey(drawable)}#\{color.toString()}";
+			return STR."\{StringHelper.getUIKey(drawable)}#\{color.toString()}";
 		}
 	}
 	private class DelegetingColor extends Color {

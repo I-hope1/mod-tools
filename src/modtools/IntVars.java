@@ -11,6 +11,7 @@ import modtools.files.HFi;
 import modtools.struct.MySet;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
+import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
 
 import java.util.concurrent.*;
@@ -81,7 +82,7 @@ public class IntVars {
 	public static void postToMain(Runnable run) {
 		if (Thread.currentThread().getContextClassLoader() == Vars.class.getClassLoader()) {
 			run.run();
-		} else Core.app.post(run);
+		} else Core.app.post(Tools.catchRun0(run));
 	}
 
 	public interface Async {

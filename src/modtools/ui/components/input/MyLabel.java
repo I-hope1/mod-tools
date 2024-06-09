@@ -30,7 +30,7 @@ public class MyLabel extends LimitLabel {
 		/* for (int i = 0, len = text.length(); i < len; i++) {
 			style.font.getData().hasGlyph(text.charAt(i));
 		}*/
-		/* 有主程序运行，防止不显示 */
+		/* 用主程序运行，防止不显示 */
 		Core.app.post(() -> setText(text));
 	}
 

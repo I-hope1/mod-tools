@@ -28,7 +28,7 @@ public interface KeyValue {
 		return tableCons(key, new Label(value));
 	}
 
-	default BindCell makeBindCell(Table t, Cons<Table> cons) {
+	default BindCell makeCell(Table t, Cons<Table> cons) {
 		return new BindCell(t.row().table(cons).growX());
 	}
 

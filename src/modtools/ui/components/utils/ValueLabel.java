@@ -228,7 +228,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
 
 				: val instanceof Element ? ElementUtils.getElementName((Element) val)
-				: getUIKey(val))
+				: StringHelper.getUIKey(val))
 			.get(() -> String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> val.getClass().getName())
@@ -244,31 +244,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		setColor(mainColor);
 
 		return text;
-	}
-	private static final boolean withPrefix = true;
-	public static String getUIKey(Object val) {
-		return val instanceof Drawable icon && ShowUIList.iconKeyMap.containsKey(icon) ?
-		 (withPrefix ? "Icon." : "") + ShowUIList.iconKeyMap.get(icon)
-
-		 : val instanceof Drawable drawable && ShowUIList.styleIconKeyMap.containsKey(drawable) ?
-		 (withPrefix ? "Styles." : "") + ShowUIList.styleIconKeyMap.get(drawable)
-
-		 : val instanceof Drawable drawable && ShowUIList.texKeyMap.containsKey(drawable) ?
-		 (withPrefix ? "Tex." : "") + ShowUIList.texKeyMap.get(drawable)
-
-		 : val instanceof Style s && ShowUIList.styleKeyMap.containsKey(s) ?
-		 (withPrefix ? "Styles." : "") + ShowUIList.styleKeyMap.get(s)
-
-		 : val instanceof Color c && ShowUIList.colorKeyMap.containsKey(c) ?
-		 ShowUIList.colorKeyMap.get(c)
-
-		 : val instanceof Group g && ShowUIList.uiKeyMap.containsKey(g) ?
-		 (withPrefix ? "Vars.ui." : "") + ShowUIList.uiKeyMap.get(g)
-
-		 : val instanceof Font f && ShowUIList.fontKeyMap.containsKey(f) ?
-		 (withPrefix ? "Fonts." : "") + ShowUIList.fontKeyMap.get(f)
-
-		 : Tools._throw();
 	}
 	private void appendMap(StringBuilder sb, Object key, Object value) {
 		sb.append(dealVal(key));
@@ -371,7 +346,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 					Object fieldVal = FieldUtils.getOrNull(field, val);
 					if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
 					String uiKey = CatchSR.apply(() ->
-					 CatchSR.of(() -> getUIKey(fieldVal))
+					 CatchSR.of(() -> StringHelper.getUIKey(fieldVal))
 						.get(() -> String.valueOf(fieldVal))
 					);
 					builder.append(STR."\t\{field.getName()} = \{uiKey};\n");

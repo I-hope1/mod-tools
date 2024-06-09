@@ -8,7 +8,7 @@ import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.*;
 import arc.scene.*;
-import arc.scene.actions.Actions;
+import arc.scene.actions.*;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -184,7 +184,7 @@ public class Window extends Table implements Position {
 		row();
 		moveListener = new ReferringMoveListener(titleTable, this,
 		 new float[]{0, 0.5f, 1},
-		  new float[]{0, 0.5f, 1}) {
+		 new float[]{0, 0.5f, 1}) {
 			public void display(float x, float y) {
 				Vec2 pos = snap(x, y);
 				Window.this.display(pos.x, pos.y);
@@ -278,8 +278,10 @@ public class Window extends Table implements Position {
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
-			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) Core.scene.setScrollFocus(null);
-			if (Core.scene.getKeyboardFocus() != null && Core.scene.getKeyboardFocus().isDescendantOf(this)) Core.scene.setKeyboardFocus(null);
+			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this))
+				Core.scene.setScrollFocus(null);
+			if (Core.scene.getKeyboardFocus() != null && Core.scene.getKeyboardFocus().isDescendantOf(this))
+				Core.scene.setKeyboardFocus(null);
 		}
 		return hit;
 	}
@@ -298,7 +300,7 @@ public class Window extends Table implements Position {
 		float offset = Scl.scl(45 * 4);
 		float minX   = (this instanceof PopupWindow ? 0 : Math.min(-touchWidth / 3f, -mainWidth + offset));
 		float maxX = (this instanceof PopupWindow ? 0 : Math.max(-mainWidth + touchWidth / 2f, -offset))
-								 + graphics.getWidth();
+		             + graphics.getWidth();
 		float minY = (this instanceof PopupWindow ? 0 : -mainHeight + touchHeight / 3f * 2f);
 		float maxY = -mainHeight + graphics.getHeight();
 
@@ -438,15 +440,21 @@ public class Window extends Table implements Position {
 		// bakRegion = screenshot();
 		this.fire(new VisibilityEvent(true));
 
+		SequenceAction sq;
 		if (action != null) {
 			addCaptureListener(ignoreTouchDown);
-			addAction(Actions.sequence(action, Actions.removeListener(ignoreTouchDown, true), Actions.remove()));
-		} else
-			remove();
-
-		if (this instanceof IDisposable) {
-			all.remove(this);
+			sq = Actions.sequence(action, Actions.removeListener(ignoreTouchDown, true));
+		} else {
+			sq = Actions.sequence();
 		}
+		if (this instanceof IDisposable dis) {
+			sq.addAction(Actions.run(() -> {
+				all.remove(this);
+				dis.clearAll();
+			}));
+		}
+		sq.addAction(Actions.remove());
+		addAction(sq);
 	}
 
 	public TextureRegion cache = null;
@@ -540,7 +548,7 @@ public class Window extends Table implements Position {
 				 lastRect.y = y - lastRect.height + topHeight,
 				 lastRect.width, lastRect.height);
 			}
-			sclListener.rebind();
+			sclListener.bind();
 		}
 		act(0);
 
@@ -696,12 +704,16 @@ public class Window extends Table implements Position {
 	/** 窗口会自动销毁 */
 	public interface IDisposable {
 		default void clearAll() {
-			if (this instanceof Group) ((Group) this).find(e -> {
-				if (e instanceof FilterTable) {
-					Core.app.post(e::clear);
+			if (!(this instanceof Group g)) return;
+			g.find(el -> {
+				if (el instanceof FilterTable) {
+					Core.app.post(el::clear);
 				}
+				el.userObject = null;
 				return false;
 			});
+			g.clearChildren();
+			g.clearListeners();
 		}
 	}
 
@@ -800,7 +812,7 @@ public class Window extends Table implements Position {
 			} else last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);
 			last.reset();
 			last.setTime(0);
-			last.setTranslation(0 , toValue);
+			last.setTranslation(0, toValue);
 			last.setDuration(0.3f);
 			last.setInterpolation(Interp.fastSlow);
 			titleTable.addAction(last);

@@ -30,7 +30,7 @@ public class Tools {
 	public static String readFiOrEmpty(Fi fi) {
 		try {
 			return fi.exists() ? fi.readString() : "";
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		return "<ERROR>";
 	}
 
@@ -104,7 +104,7 @@ public class Tools {
 		}, 0f, 0.5f, -1);
 	}
 
-	/** 这个会自动强转  */
+	/** 这个会自动强转 */
 	public static <T> T as(Object o) {
 		return (T) o;
 	}
@@ -192,7 +192,15 @@ public class Tools {
 		}
 	}
 
-
+	public static Runnable catchRun0(Runnable run) {
+		return () -> {
+			try {
+				run.run();
+			} catch (Throwable e) {
+				IntUI.showException(e);
+			}
+		};
+	}
 	public static Runnable catchRun(CatchRun run) {
 		return catchRun("", run, null);
 	}
@@ -254,7 +262,7 @@ public class Tools {
 	public interface CCons<T> {
 		void get(T t) throws Throwable;
 	}
-	public interface CProv<T> extends CProvT<T, Throwable> {}
+	public interface CProv<T> extends CProvT<T, Throwable> { }
 	public interface CProvT<T, E extends Throwable> {
 		T get() throws E;
 	}

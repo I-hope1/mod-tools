@@ -144,6 +144,10 @@ public class Replace {
 
 		fixSyntaxError();
 
+		// setAccess(ClassType.class, syms.recordType, "outer_field", classFinder.loadClass(syms.unnamedModule,
+		//  Names.instance(context).fromString("modtools.TestFeature")));
+		// println(syms.toString());
+
 		// replaceAccess(Resolve.class,Resolve.instance(context), "resolveMethodCheck", "nilMethodCheck");
 
 		if (true) return;

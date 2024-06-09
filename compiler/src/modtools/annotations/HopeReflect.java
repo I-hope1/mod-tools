@@ -120,7 +120,7 @@ public class HopeReflect {
 		}
 	}
 
-	public static void setAccess(Class<?> clazz, Object obj, String name, Object value) {
+	public static<T> void setAccess(Class<? extends T> clazz, T obj, String name, Object value) {
 		Field field;
 		try {
 			field = clazz.getDeclaredField(name);

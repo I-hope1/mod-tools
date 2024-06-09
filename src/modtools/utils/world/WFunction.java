@@ -274,7 +274,7 @@ public abstract class WFunction<T> {
 
 	public final void add(T item) {
 		Core.app.post(() -> {
-			TaskManager.acquireTask(15, changeEvent);
+			TaskManager.acquireTask(15f, changeEvent);
 		});
 		list.add(item);
 		if (SC.drawSelect) {

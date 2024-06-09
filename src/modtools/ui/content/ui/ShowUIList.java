@@ -2,6 +2,7 @@
 package modtools.ui.content.ui;
 
 import arc.Core;
+import arc.files.Fi;
 import arc.func.Cons;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
@@ -26,6 +27,7 @@ import mindustry.core.UI;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.utils.*;
@@ -99,6 +101,8 @@ public class ShowUIList extends Content {
 		 -1/* white */, null);
 	}
 
+	public static Fi uiConfig = IntVars.dataDirectory.child("ui");
+
 	public static Map<Drawable, String> iconKeyMap  = new HashMap<>();
 	public static Map<Drawable, String> texKeyMap   = new HashMap<>();
 	public static Map<Color, String>    colorKeyMap = new HashMap<>();
@@ -152,38 +156,15 @@ public class ShowUIList extends Content {
 		}
 	}), styles  = newTable(true, t -> {
 		Builder.t = t;
-		@SuppressWarnings("ComparatorCombinators")
-		Field[] fields = OS.isAndroid ? Arrays.stream(Styles.class.getFields())
-		 .sorted((a, b) -> a.getType().hashCode() - b.getType().hashCode())
-		 .toArray(Field[]::new) : Styles.class.getFields();
-		for (Field field : fields) {
-			if (!Modifier.isStatic(field.getModifiers())) continue;
-			try {
-				// 跳过访问检查，减少时间
-				field.setAccessible(true);
-				Object style = field.get(null);
-				if (style instanceof Style style1) styleKeyMap.put(style1, field.getName());
-				if (style instanceof Drawable d) styleIconKeyMap.put(d, field.getName());
-				t.bind(field.getName());
-				Sr(style)
-				 .isInstance(ScrollPaneStyle.class, Builder::build)
-				 .isInstance(DialogStyle.class, Builder::build)
-				 .isInstance(LabelStyle.class, Builder::build)
-				 .isInstance(SliderStyle.class, Builder::build)
-				 .isInstance(TextFieldStyle.class, Builder::build)
-				 .isInstance(CheckBoxStyle.class, Builder::build)
-				 .isInstance(TextButtonStyle.class, Builder::build)
-				 .isInstance(ImageButtonStyle.class, Builder::build)
-				 .isInstance(ButtonStyle.class, Builder::build)
-				 .isInstance(Drawable.class, Builder::build);
-			} catch (IllegalAccessException | IllegalArgumentException err) {
-				Log.err(err);
-				continue;
-			} catch (SatisfyException ignored) { }
-
-			t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
-			t.unbind();
-		}
+		listAllStyles(t, Styles.class);
+		Tools.runLoggedException(() -> {
+			Fi json = uiConfig.child("styles.json");
+			if (!json.exists()) json.writeString("[\n]");
+			Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
+			for (Class<?> cl : classes) {
+				listAllStyles(t, cl);
+			}
+		});
 	}), colorsT = newTable(t -> {
 		t.defaults().left().growX();
 
@@ -246,6 +227,45 @@ public class ShowUIList extends Content {
 			t.unbind();
 		}
 	});
+	static void listAllStyles(FilterTable<Object> t, Class<?> stylesClass) {
+		String  prefix = stylesClass == Styles.class ? "" : stylesClass.getSimpleName() + ".";
+		Field[] fields = getStyleFields(stylesClass);
+		for (Field field : fields) {
+			if (!Modifier.isStatic(field.getModifiers())) continue;
+			try {
+				// 跳过访问检查，减少时间
+				field.setAccessible(true);
+				Object style = field.get(null);
+				if (style instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
+				if (style instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
+				t.bind(field.getName());
+				Sr(style)
+				 .isInstance(ScrollPaneStyle.class, Builder::build)
+				 .isInstance(DialogStyle.class, Builder::build)
+				 .isInstance(LabelStyle.class, Builder::build)
+				 .isInstance(SliderStyle.class, Builder::build)
+				 .isInstance(TextFieldStyle.class, Builder::build)
+				 .isInstance(CheckBoxStyle.class, Builder::build)
+				 .isInstance(TextButtonStyle.class, Builder::build)
+				 .isInstance(ImageButtonStyle.class, Builder::build)
+				 .isInstance(ButtonStyle.class, Builder::build)
+				 .isInstance(Drawable.class, Builder::build);
+			} catch (IllegalAccessException | IllegalArgumentException err) {
+				Log.err(err);
+				continue;
+			} catch (SatisfyException ignored) { }
+
+			t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
+			t.unbind();
+		}
+	}
+
+	@SuppressWarnings("ComparatorCombinators")
+	private static Field[] getStyleFields(Class<?> stylesClass) {
+		return OS.isAndroid ? Arrays.stream(stylesClass.getFields())
+		 .sorted((a, b) -> a.getType().hashCode() - b.getType().hashCode())
+		 .toArray(Field[]::new) : stylesClass.getFields();
+	}
 	static void addImage(Table t, Drawable drawable) {
 		Image image = new Image(drawable);
 		setColor(image);

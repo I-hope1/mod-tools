@@ -81,8 +81,8 @@ public class MenuItem {
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 		cell.with(b -> b.clicked(catchRun(() -> {
-			if (cons != null) cons.get(b);
 			hide.run();
+			if (cons != null) cons.get(b);
 		}))).checked(this instanceof CheckboxList l && l.checked);
 	}
 }

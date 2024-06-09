@@ -25,23 +25,27 @@ public class StringHelper {
 		 (withPrefix ? "Icon." : "") + ShowUIList.iconKeyMap.get(icon)
 
 		 : val instanceof Drawable drawable && ShowUIList.styleIconKeyMap.containsKey(drawable) ?
-		 (withPrefix ? "Styles." : "") + ShowUIList.styleIconKeyMap.get(drawable)
+		 ShowUIList.styleIconKeyMap.get(drawable)
 
 		 : val instanceof Drawable drawable && ShowUIList.texKeyMap.containsKey(drawable) ?
 		 (withPrefix ? "Tex." : "") + ShowUIList.texKeyMap.get(drawable)
 
 		 : val instanceof Style s && ShowUIList.styleKeyMap.containsKey(s) ?
-		 (withPrefix ? "Styles." : "") + ShowUIList.styleKeyMap.get(s)
+		 ShowUIList.styleKeyMap.get(s)
 
 		 : val instanceof Color c && ShowUIList.colorKeyMap.containsKey(c) ?
 		 ShowUIList.colorKeyMap.get(c)
 
 		 : val instanceof Group g && ShowUIList.uiKeyMap.containsKey(g) ?
-		 (withPrefix ? "Vars.ui." : "") + ShowUIList.uiKeyMap.get(g)
+		 (withPrefix ? "ui." : "") + ShowUIList.uiKeyMap.get(g)
 
 		 : val instanceof Font f && ShowUIList.fontKeyMap.containsKey(f) ?
 		 (withPrefix ? "Fonts." : "") + ShowUIList.fontKeyMap.get(f)
 
 		 : Tools._throw();
+	}
+	public static String fieldFormat(String s) {
+		if (s.indexOf('.') == -1) return "[accent]" + s;
+		return s.replaceAll("^(\\w+?)\\.(\\w+)", "[accent]$2 [SLATE]$1");
 	}
 }

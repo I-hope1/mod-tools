@@ -19,7 +19,6 @@ public class Hitter extends FillElement implements IMenu {
 
 	public boolean remove() {
 		boolean b = super.remove();
-		if (b) clear();
 		return b && all.remove(this, true);
 	}
 

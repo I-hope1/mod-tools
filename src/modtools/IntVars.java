@@ -3,6 +3,7 @@ package modtools;
 import arc.*;
 import arc.files.Fi;
 import arc.util.Log;
+import arc.util.serialization.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
@@ -31,6 +32,16 @@ public class IntVars {
 
 	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;
+	public static Json json = new Json(){
+		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
+			if (type == Class.class) try {
+				return (T) Vars.mods.mainLoader().loadClass(jsonData.asString());
+			} catch (ClassNotFoundException e) {
+				throw new RuntimeException(e);
+			}
+			return super.readValue(type, elementType, jsonData, keytype);
+		}
+	};
 
 	public static void showException(Throwable e, boolean b)  {
 		if (b) {

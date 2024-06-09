@@ -66,11 +66,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
 
-		// while
-		// if (Entityc.class.isAssignableFrom(type) || val instanceof Entityc
-		// 		|| Entityc[].class.isAssignableFrom(type) || val instanceof Entityc[]) {
 		Selection.addFocusSource(this, () -> val);
-		// }
 
 		IntUI.addShowMenuListenerp(this, this::getMenuLists);
 	}
@@ -91,7 +87,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 	public abstract Seq<MenuItem> getMenuLists();
 	public static MenuItem newElementDetailsList(Element element) {
-		return DisabledList.withd("elem.details", Icon.crafting, "Elem Details", () -> element == null,
+		return DisabledList.withd("elem.details", Icon.craftingSmall, "Elem Details", () -> element == null,
 		 () -> new ElementDetailsWindow(element));
 	}
 	public static <T> MenuItem newDetailsMenuList(Element el, T val, Class<T> type) {
@@ -359,8 +355,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				 Seq.with(ShowUIList.styleKeyMap.keySet())
 					.retainAll(type::isInstance),
 				 () -> (Style) val, this::setNewVal,
-				 s -> ShowUIList.styleKeyMap.get(s),
-				 Float.NEGATIVE_INFINITY, 38,
+				 s -> StringHelper.fieldFormat(ShowUIList.styleKeyMap.get(s)),
+				 Float.NEGATIVE_INFINITY, 32,
 				 true, Align.top);
 			}));
 		}

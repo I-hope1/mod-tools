@@ -702,6 +702,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		public ReflectTable() {
 			left().defaults().left().top();
 		}
+		public void act(float delta) {
+			super.act(delta);
+			children.sort(el -> el instanceof MyHoverTable ? -1 : 1);
+		}
 		boolean skip;
 		Table   skipTable;
 

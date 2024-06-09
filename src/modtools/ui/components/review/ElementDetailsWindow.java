@@ -25,14 +25,14 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 
 		cont.defaults().growX();
 		cont.table(setter -> {
-			setter.defaults().height(42).growX();
+			setter.left().defaults().height(32).left();
 			setter.add(ReviewElement.floatSetter("x", () -> fixed(element.x), val -> element.x = val)).row();
 			setter.add(ReviewElement.floatSetter("y", () -> fixed(element.y), val -> element.y = val)).row();
-			setter.add(ReviewElement.floatSetter("width", () -> fixed(element.getWidth()), element::setWidth)).row();
-			setter.add(ReviewElement.floatSetter("height", () -> fixed(element.getHeight()), element::setHeight)).row();
-			setter.add(ReviewElement.floatSetter("prefWidth", () -> fixed(element.getPrefWidth()), null)).row();
-			setter.add(ReviewElement.floatSetter("preHeight", () -> fixed(element.getPrefHeight()), null)).row();
-			setter.add(ReviewElement.floatSetter("rot", () -> fixed(element.getRotation()), element::setRotation)).row();
+			setter.add(ReviewElement.floatSetter("Width", () -> fixed(element.getWidth()), element::setWidth)).row();
+			setter.add(ReviewElement.floatSetter("Height", () -> fixed(element.getHeight()), element::setHeight)).row();
+			setter.add(ReviewElement.floatSetter("PrefWidth", () -> fixed(element.getPrefWidth()), null)).row();
+			setter.add(ReviewElement.floatSetter("PrefHeight", () -> fixed(element.getPrefHeight()), null)).row();
+			setter.add(ReviewElement.floatSetter("Rotation", () -> fixed(element.getRotation()), element::setRotation)).row();
 		}).growX().row();
 		Table table = cont.table().get();
 		table.defaults().growX();
@@ -59,10 +59,10 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 			table.row();
 		}
 
-		CellDetailsWindow.checkboxField(table, Element.class, element, "fillParent", boolean.class);
-		CellDetailsWindow.checkboxField(table, Element.class, element, "visible", boolean.class).row();
+		CellDetailsWindow.checkboxField(table, Element.class, element, "FillParent", boolean.class);
+		CellDetailsWindow.checkboxField(table, Element.class, element, "Visible", boolean.class).row();
 		if (element instanceof Group)
-			CellDetailsWindow.checkboxField(table, Group.class, element, "transform", boolean.class).row();
+			CellDetailsWindow.checkboxField(table, Group.class, element, "Transform", boolean.class).row();
 
 		cont.row().defaults().height(32).growX();
 		cont.button("Invalidate", style, element::invalidate).row();

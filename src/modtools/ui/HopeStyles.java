@@ -59,7 +59,7 @@ public class HopeStyles {
 		hope_clearNoneTogglei = new ImageButtonStyle(clearNoneTogglei) {{
 			over = flatOver;
 			checkedOver = flatDown;
-			checked = down = buttonSelect;
+			checked = down = flatDown;
 		}};
 		hope_flati = new ImageButtonStyle(flati) {{
 			up = paneCircle;

@@ -299,7 +299,8 @@ public class IntUI {
 			var cell = main.button(menu.getName(), menu.icon, menu.style(),
 			 menu.iconSize(), () -> { }
 			).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
-			cell.get().getLabel().setFontScale(0.9f);
+			// cell.get().getLabel().setFontScale(0.9f);
+			cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
 
 			menu.build(p, cell, () -> {
 				hideRun.run();
@@ -503,9 +504,14 @@ public class IntUI {
 				p.button(stringify.get(item), HopeStyles.cleart/*Styles.cleart*/, () -> {
 					 cons.get(item);
 					 hide.run();
-				 }).minWidth(minWidth).growX()
-				 .height(height).marginTop(6f).marginBottom(6f)
-				 .disabled(Objects.equals(holder.get(), item)).row();
+				 }).with(t ->
+					t.getLabelCell()
+					 .padLeft(8f).padRight(8)
+					 .labelAlign(Align.left)
+				 ).wrapLabel(false)
+				 .minWidth(minWidth).growX().height(height)
+				 .disabled(_ -> Objects.equals(holder.get(), item)).row();
+
 				p.image().color(Tmp.c1.set(JColor.c_underline)).growX().row();
 			}
 
@@ -834,7 +840,7 @@ public class IntUI {
 				}
 			};
 			void hide() {
-				TaskManager.reSchedule(0.15f, hideTask);
+				TaskManager.reSchedule(0.1f, hideTask);
 			}
 			Hitter      hitter = null;
 			SelectTable table;
@@ -865,7 +871,7 @@ public class IntUI {
 		});
 	}
 	public static void hoverAndExit(Element element, Runnable hovered, Runnable exit) {
-		element.addListener(new HoverAndExitListener(){
+		element.addListener(new HoverAndExitListener() {
 			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				hovered.run();
 			}
@@ -876,13 +882,13 @@ public class IntUI {
 	}
 
 	public static class HoverAndExitListener extends InputListener {
-		/** {@inheritDoc}  */
+		/** {@inheritDoc} */
 		public final void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
 			// touchDown也会触发
 			if (pointer == -1) enter0(event, x, y, pointer, fromActor);
 		}
 		public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) { }
-		/** {@inheritDoc}  */
+		/** {@inheritDoc} */
 		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 			// touchUp也会触发
 			if (pointer == -1) exit0(event, x, y, pointer, toActor);

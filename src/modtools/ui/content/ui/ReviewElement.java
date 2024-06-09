@@ -51,7 +51,7 @@ import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
-import static modtools.utils.Tools.Sr;
+import static modtools.utils.Tools.*;
 import static modtools.utils.ui.FormatHelper.*;
 import static modtools.utils.world.TmpVars.mouseVec;
 
@@ -453,6 +453,7 @@ public class ReviewElement extends Content {
 			exited(() -> scene.setKeyboardFocus(null));
 			keyDown(KeyCode.f, () -> window.fixedFocus = window.fixedFocus == this ? null : this);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
+			keyDown(KeyCode.r, () -> IntUI.showMenuList(execChildren(element)));
 			keyDown(KeyCode.del, () -> {
 				Runnable go = () -> {
 					remove();
@@ -612,20 +613,11 @@ public class ReviewElement extends Content {
 			 MenuItem.with("debug.bounds", Icon.adminSmall, "@settings.debugbounds", () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
 			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
 			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
-			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> Seq.with(
-				MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
-				MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
-				MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
-				MenuItem.with("pack", Icon.boxSmall, "Pack", element::pack),
-				MenuItem.with("validate", Icon.boxSmall, "Validate", element::validate),
-				MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
-				MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
-				MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack)
-			 )),
+			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
 			 ValueLabel.newElementDetailsList(element)
 			))
 			 .ifRun(element instanceof Table, seq -> seq.add(
-				MenuItem.with("allcells", Icon.waves, "Cells", () -> {
+				MenuItem.with("allcells", Icon.wavesSmall, "Cells", () -> {
 					INFO_DIALOG.dialog(d -> {
 						Window window1 = ElementUtils.getWindow(self);
 						d.left().defaults().left();
@@ -644,10 +636,22 @@ public class ReviewElement extends Content {
 					});
 				})))
 			 .ifRun(element == null || element.parent instanceof Table, seq -> seq.add(
-				DisabledList.withd("this.cell", Icon.waves, "This Cell",
+				DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
 				 () -> element == null || !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
 					 new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
 				 }))).get();
+		}
+		private static Seq<MenuItem> execChildren(Element element) {
+			return Seq.with(
+			 MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
+			 MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
+			 MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
+			 MenuItem.with("pack", Icon.boxSmall, "Pack", element::pack),
+			 MenuItem.with("validate", Icon.boxSmall, "Validate", element::validate),
+			 MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
+			 MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
+			 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack)
+			);
 		}
 		private static CharSequence getPath(Element element) {
 			if (element == null) return "null";
@@ -699,8 +703,7 @@ public class ReviewElement extends Content {
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
 			if (name != null)
-				t.add(name).color(Pal.accent).fontScale(0.7f).labelAlign(Align.topLeft).growY().padRight(8f);
-			t.defaults().grow();
+				t.add(name).color(Pal.accent).fontScale(0.7f).padRight(8f);
 			if (floatc == null) {
 				t.label(def);
 				return;
@@ -730,7 +733,7 @@ public class ReviewElement extends Content {
 		colorLabel        = new NoMarkupLabel(valueScale),
 		 rotationLabel    = new VLabel(valueScale, Color.lightGray),
 		 translationLabel = new VLabel(valueScale, Color.orange),
-		 styleLabel       = new VLabel(valueScale, Pal.accent),
+		 styleLabel       = new Label(""),
 		 alignLabel       = new VLabel(valueScale, Color.sky),
 
 		colspanLabel  = new VLabel(valueScale, Color.lightGray),
@@ -760,7 +763,7 @@ public class ReviewElement extends Content {
 			try {
 				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
 				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
-					styleLabel.setText(ShowUIList.styleKeyMap.get(style));
+					styleLabel.setText(StringHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));
 			} catch (Throwable e) { styleCell.remove(); }
 		}
 		void align(Element element) {
@@ -830,6 +833,7 @@ public class ReviewElement extends Content {
 		InfoDetails() {
 			margin(4, 4, 4, 4);
 			table(Tex.pane, this::build);
+			styleLabel.setFontScale(valueScale);
 		}
 
 		void setPosition(Element elem, Vec2 vec2) {

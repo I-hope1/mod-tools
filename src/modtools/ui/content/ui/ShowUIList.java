@@ -96,7 +96,7 @@ public class ShowUIList extends Content {
 		bgColor = SettingsUI.colorBlock(colorWrap.table().get(),
 		 "bg", data(), "bgColor",
 		 0x877F5E_FF, null);
-		iconColor = SettingsUI.colorBlock(colorWrap.table().get(),
+		iconColor = SettingsUI.colorBlock(colorWrap.table().padLeft(4f).get(),
 		 "icon", data(), "iconColor",
 		 -1/* white */, null);
 	}

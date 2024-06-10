@@ -8,7 +8,6 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.scene.ui.layout.Scl;
 import arc.util.Reflect;
 
 public class SclListener extends ClickListener {
@@ -38,8 +37,8 @@ public class SclListener extends ClickListener {
 	}
 
 	public void set(float minW, float minH) {
-		this.minW = Scl.scl(minW);
-		this.minH = Scl.scl(minH);
+		this.minW = minW;
+		this.minH = minH;
 	}
 
 	public boolean left, bottom, right, top;

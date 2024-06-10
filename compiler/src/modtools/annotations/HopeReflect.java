@@ -44,10 +44,12 @@ public class HopeReflect {
 			return lookup;
 		} catch (Exception e) {throw new RuntimeException(e);}
 	}
+	static Module EVERYONE_MODULE;
 	public static void openModule() throws Throwable {
 		Module javaBase = Object.class.getModule();
 		lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class))
 		 .invokeExact(javaBase, "jdk.internal.module");
+		EVERYONE_MODULE = (Module) lookup.findStaticGetter(Module.class, "EVERYONE_MODULE", Module.class).invoke();
 
 		openTrust(Object.class.getModule(),
 		 "jdk.internal.misc",
@@ -71,9 +73,8 @@ public class HopeReflect {
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
 	}
 	public static void openTrust(Module module, String... pkgs) {
-		Module self = HopeReflect.class.getModule();
 		for (String pkg : pkgs) {
-			Modules.addOpens(module, pkg, self);
+			Modules.addOpens(module, pkg, EVERYONE_MODULE);
 			/* debug模式可能不加载 编译参数（当然在 gradle.properties 里加也可以）  */
 			Modules.addExports(module, pkg);
 		}

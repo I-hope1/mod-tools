@@ -2,10 +2,12 @@ package modtools.utils.ui;
 
 import arc.Core;
 import arc.func.*;
-import arc.graphics.Color;
+import arc.graphics.*;
+import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.scene.Element;
 import arc.scene.event.*;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -27,6 +29,7 @@ import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
+import modtools.utils.world.TmpVars;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
@@ -158,7 +161,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 			t.image(Icon.zoom).size(42);
 			t.add(textField).growX();
-		}).row();
+		}).growX().row();
 		cont.table(t -> {
 			t.left().defaults().left();
 			t.pane(t0 -> t0.left().add(clazz.getTypeName(), defaultLabel).left())
@@ -420,7 +423,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		fields.table(t -> {
 			t.left().defaults().left();
 			// 占位符
-			Cell<?>  cell   = t.add().top();
+			Cell<?>  cell   = buildCell(t, type, l);
 			BindCell c_cell = addDisplayListener(cell, E_JSFuncDisplay.value);
 			/*Cell<?> lableCell = */
 			l[0] = new FieldValueLabel(ValueLabel.unset, type, f, o);
@@ -448,6 +451,29 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 		addUnderline(fields, 8);
 	}
+	private static Cell<?> buildCell(Table t, Class<?> type, ValueLabel[] l) {
+		Cell<?> cell;
+		if (Drawable.class.isAssignableFrom(type)) {
+			cell = IntUI.imagePreviewButton(null, t,
+				() -> (Drawable) l[0].val,
+				v -> l[0].setNewVal(v))
+			 .padRight(4f);
+		} else if (Texture.class.isAssignableFrom(type)) {
+			cell = IntUI.imagePreviewButton(null, t,
+				() -> TmpVars.trd.set(Draw.wrap((Texture) l[0].val)),
+				null)
+			 .padRight(4f);
+		} else if (TextureRegion.class.isAssignableFrom(type)) {
+			cell = IntUI.imagePreviewButton(null, t,
+				() -> TmpVars.trd.set((TextureRegion) l[0].val),
+				null)
+			 .padRight(4f);
+		} else {
+			cell = t.add().top();
+		}
+		return cell;
+	}
+
 	private static void buildMethod(Object o, ReflectTable methods, Method m) {
 		if (!display_synthetic.enabled() && m.isSynthetic()) return;
 		methods.bind(m);
@@ -471,8 +497,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				t.left().defaults().left();
 				t.add(buildArgsAndExceptions(m)).growY().pad(4).left();
 
+				ValueLabel[] array = {null};
 				// 占位符
-				Cell<?> cell = t.add().top();
+				Cell<?> cell = buildCell(t, m.getReturnType(), array);
 				Cell<?> buttonsCell;
 
 				boolean isSingle = m.getParameterCount() == 0;
@@ -480,6 +507,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				// if (isSingle && !isValid) methods.add();
 
 				ValueLabel l = new MethodValueLabel(o, m);
+				array[0] = l;
 				methods.labels.add(l);
 				IntUI.addShowMenuListenerp(label, () -> Seq.with(
 				 IntUI.copyAsJSMenu("method", () -> m),

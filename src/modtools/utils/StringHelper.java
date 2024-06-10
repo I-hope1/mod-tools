@@ -46,6 +46,6 @@ public class StringHelper {
 	}
 	public static String fieldFormat(String s) {
 		if (s.indexOf('.') == -1) return "[accent]" + s;
-		return s.replaceAll("^(\\w+?)\\.(\\w+)", "[accent]$2 [SLATE]$1");
+		return s.replaceAll("^(\\w+?)\\.(\\w+)", "[accent]$2 []([slatew]$1[])");
 	}
 }

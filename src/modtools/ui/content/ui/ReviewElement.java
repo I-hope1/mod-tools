@@ -282,25 +282,23 @@ public class ReviewElement extends Content {
 				 .with(b -> {
 					 t.update(() -> b.setDisabled(element == null || element.parent == null));
 					 b.getLabel().setFontScale(0.9f);
-				 })
-				 .size(130, 35).get();
+				 }).size(130, 35)
+				 .padRight(3f).get();
 				t.button(Icon.copySmall, HopeStyles.clearNonei, 28, () -> {
 					 var window = new ReviewElementWindow();
 					 window.pattern = pattern;
 					 window.show(element);
 					 window.shown(() -> window.setSize(width, height));
 				 })
-				 .size(35)
-				 .padLeft(4f).padRight(4f);
+				 .size(35).padRight(3f);
 				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element, pattern))
-				 .size(35)
-				 .padLeft(4f).padRight(4f);
+				 .size(35).padRight(3f);
 				t.table(search -> {
-					search.image(Icon.zoomSmall);
+					search.image(Icon.zoomSmall).size(35);
 					search.field("", str -> rebuild(element, str))
 					 .with(f -> f.setMessageText("@players.search"))
 					 .growX();
-				}).growX().padLeft(2f);
+				}).growX();
 			}).growX().row();
 
 			cont.add(new ScrollPane(pane, Styles.smallPane) {
@@ -548,28 +546,7 @@ public class ReviewElement extends Content {
 			Element window_elem = this.children.get(eventChildIndex);
 			if (element instanceof Image img) {
 				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
-				((Table) window_elem).button(Icon.imageSmall, Styles.clearNonei, () -> { })
-				 .with(b -> IntUI.addPreview(b, p -> {
-					 p.top();
-					 try {
-						 int   size = 100;
-						 float w    = Math.max(2, element.getWidth());
-						 float mul  = element.getHeight() / w;
-						 p.add(new Image(img.getDrawable()))
-							.update(t -> t.setColor(element.color))
-							.size(size, size * mul).row();
-						 p.add(ReflectTools.getName(img.getDrawable().getClass()), 0.6f).left().row();
-						 p.table(tableCons("Orginal Size", new SizeProv(() ->
-							Tmp.v1.set(img.getDrawable().getMinWidth(), img.getDrawable().getMinHeight())
-						 ))).growX().row();
-						 p.button(Icon.pickSmall, Styles.clearNonei, () -> {
-							 IntUI.drawablePicker().show(img.getDrawable(), img::setDrawable);
-						 }).size(42);
-					 } catch (Throwable e) {
-						 p.add("ERROR").labelAlign(Align.left).row();
-						 p.image(Core.atlas.drawable("error"));
-					 }
-				 }));
+				imagePreviewButton(element, (Table) window_elem, img::getDrawable, img::setDrawable);
 			}
 			window_elem.touchable = Touchable.enabled;
 			Runnable copy = storeRun(() -> element);
@@ -724,7 +701,7 @@ public class ReviewElement extends Content {
 		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }
 	}
 
-	static class InfoDetails extends Table implements KeyValue {
+	public static class InfoDetails extends Table implements KeyValue {
 		Label nameLabel = new VLabel(0.75f, Color.violet),
 		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
 		 touchableLabel = new NoMarkupLabel(valueScale),

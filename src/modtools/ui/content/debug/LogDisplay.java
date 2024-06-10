@@ -49,7 +49,7 @@ public class LogDisplay extends Content {
 					p.row();
 					p.collapser(new Table(Tex.pane, cont -> cont.left().add(label).growX().wrap().left()), true, button::isChecked).growX().row();
 				}
-			}, () -> {});
+			}, () -> { });
 		});
 	}
 
@@ -64,23 +64,24 @@ public class LogDisplay extends Content {
 		long[]       lastModified = {last_log.lastModified()};
 		Prov<String> getString    = () -> readFiOrEmpty(last_log);
 		String[]     text         = {getString.get()};
-		Label[] label = {null};
+		Label[]      label        = {null};
 		Table[] tables = {new LimitTable(t -> {
 			t.button("Source", HopeStyles.flatBordert, () -> {
 				Core.app.openFolder(last_log.path());
 			}).height(42).growX().row();
-			t.button("Clear All", HopeStyles.flatBordert, () -> IntUI.showConfirm("Confirm to clear",
-			 "Are you sure to clear?",
-			 () -> Vars.ui.consolefrag.clearMessages())).height(42).growX().row();
+			t.button("Clear All", HopeStyles.flatBordert, () ->
+			 IntUI.showConfirm("Confirm to clear",
+				"Are you sure to clear?",
+				() -> Vars.ui.consolefrag.clearMessages())).height(42).growX().row();
 			t.pane(p -> label[0] = p.label(() -> {
 				if (last_log.exists() && Tools.CAS(lastModified, last_log.lastModified())) {
 					text[0] = getString.get();
 				}
 				return text[0];
-			}).get()).grow();
+			}).wrap().grow().get()).grow();
 		}), crashes};
 		String[] names = {"last_log", "crashes"};
-		IntTab tab = new IntTab(-1, names, colors, tables);
+		IntTab   tab   = new IntTab(-1, names, colors, tables);
 		tab.setPrefSize(w, -1);
 		ui.cont.add(tab.build()).grow();
 		ui.shown(() -> Core.app.post(() -> label[0].invalidateHierarchy()));

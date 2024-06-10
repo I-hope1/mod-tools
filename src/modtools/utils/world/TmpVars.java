@@ -3,6 +3,7 @@ package modtools.utils.world;
 import arc.Core;
 import arc.graphics.Color;
 import arc.math.geom.*;
+import arc.scene.style.TextureRegionDrawable;
 import mindustry.Vars;
 
 import java.util.*;
@@ -22,7 +23,8 @@ public interface TmpVars {
 
 	MouseVec mouseVec   = new MouseVec();
 	Vec2 mouseWorld = new Vec2();
-	Rect mr1        = new Rect();
+	Rect                  mr1 = new Rect();
+	TextureRegionDrawable trd = new TextureRegionDrawable();
 
 	class MouseVec extends Vec2 {
 		public void require() {

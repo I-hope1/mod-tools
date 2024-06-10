@@ -4,11 +4,11 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
-import modtools.ui.components.input.NoMarkupLabel;
 import modtools.utils.ui.search.BindCell;
 
 public interface KeyValue {
-	float padRight   = 8f;
+	KeyValue THE_ONE = new $KeyValue();
+	float    padRight = 8f;
 	float keyScale   = 0.7f;
 	float valueScale = 0.6f;
 	default void key(Table col, String key) {
@@ -22,24 +22,13 @@ public interface KeyValue {
 		value(col, value);
 	}
 	default Cons<Table> tableCons(String key, Label value) {
-		return touch -> keyValue(touch, key, value);
+		return touch -> THE_ONE.keyValue(touch, key, value);
 	}
 	default Cons<Table> tableCons(String key, Prov<CharSequence> value) {
 		return tableCons(key, new Label(value));
 	}
-
 	default BindCell makeCell(Table t, Cons<Table> cons) {
 		return new BindCell(t.row().table(cons).growX());
 	}
-
-	class VLabel extends NoMarkupLabel {
-		public VLabel(float scale, Color color) {
-			super(scale);
-			setColor(color);
-		}
-		public VLabel(CharSequence text, Color color) {
-			super(text);
-			setColor(color);
-		}
-	}
+	class $KeyValue implements KeyValue { }
 }

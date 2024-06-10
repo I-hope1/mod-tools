@@ -5,9 +5,9 @@ version '1.4.6.1'
 
 static def export(CompileOptions options) {
 //    options.compilerArgs.addAll("-Xlint:deprecation")
-	options.compilerArgs.addAll("-AtargetVersion=8")
+	options.compilerArgs += "-AtargetVersion=8"
 	// 只是访问
-	options.compilerArgs.addAll([
+	options.compilerArgs += [
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.access",
 			// ---------------
@@ -22,10 +22,11 @@ static def export(CompileOptions options) {
 			"jdk.compiler/com.sun.tools.javac.processing",
 			"jdk.compiler/com.sun.tools.javac.util",
 			"jdk.compiler/com.sun.tools.javac.resources",
+			"jdk.compiler/com.sun.source.tree",
 			"java.base/sun.reflect.annotation",
 			"java.base/jdk.internal.module",
 			"jdk.jfr/jdk.jfr.internal",
-	].collectMany { ["--add-exports", "$it=ALL-UNNAMED"] })
+	].collectMany { ["--add-exports", "$it=ALL-UNNAMED"] }
 //	println options.compilerArgs.join(" ")
 }
 

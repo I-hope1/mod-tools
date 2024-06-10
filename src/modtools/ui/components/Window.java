@@ -138,7 +138,7 @@ public class Window extends Table implements Position {
 
 		buildTitle(title, full);
 
-		sclListener = new SclListener(this, this.minWidth, minHeight);
+		sclListener = new SclListener(this, this.minWidth, this.minHeight);
 		moveListener.fire = () -> {
 			if (isMaximize && !isMinimize) {
 				float mulxw = moveListener.lastMouse.x / width;

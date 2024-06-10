@@ -14,6 +14,7 @@ public class MyEvents {
 
 	private final HashMap<Object, Seq> insEvents    = new HashMap<>();
 	public static Seq<MyEvents>        allInstances = new Seq<>();
+
 	public MyEvents() {
 		allInstances.add(this);
 	}

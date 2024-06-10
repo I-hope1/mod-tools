@@ -62,17 +62,17 @@ public class CellDetailsWindow extends Window implements IDisposable {
 		checkboxField(cont, cell, "uniformY", boolean.class);
 		cont.row();
 		TextButtonStyle style = HopeStyles.flatBordert;
-		cont.button("layout", style, catchRun(() -> cell.getTable().layout()));
-		cont.button("invalidate", style, catchRun(() -> cell.getTable().invalidateHierarchy()));
+		cont.button("Layout", style, catchRun(() -> cell.getTable().layout()));
+		cont.button("Invalidate", style, catchRun(() -> cell.getTable().invalidateHierarchy()));
 		cont.row();
-		cont.button("growX", style, cell::growX);
-		cont.button("growY", style, cell::growY);
+		cont.button("GrowX", style, cell::growX);
+		cont.button("GrowY", style, cell::growY);
 		cont.row();
-		cont.button("left", style, cell::left);
-		cont.button("right", style, cell::right);
+		cont.button("Left", style, cell::left);
+		cont.button("Right", style, cell::right);
 		cont.row();
-		cont.button("top", style, cell::top);
-		cont.button("bottom", style, cell::bottom);
+		cont.button("Top", style, cell::top);
+		cont.button("Bottom", style, cell::bottom);
 		cont.row();
 		checkboxField(cont, cell, "endRow", boolean.class).colspan(2);
 

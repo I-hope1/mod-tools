@@ -27,6 +27,7 @@ import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.FocusTask;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
+import modtools.ui.content.ui.PairProv.SizeProv;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.windows.*;
 import modtools.utils.*;
@@ -42,6 +43,7 @@ import static arc.Core.graphics;
 import static mindustry.Vars.*;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
+import static modtools.ui.components.utils.ValueLabel.DEBUG;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.*;
 import static modtools.utils.Tools.*;
@@ -297,8 +299,11 @@ public class IntUI {
 			if (menu == null) continue;
 
 			var cell = main.button(menu.getName(), menu.icon, menu.style(),
-			 menu.iconSize(), () -> { }
-			).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
+				menu.iconSize(), () -> { }
+			 ).minSize(Float.NEGATIVE_INFINITY, FUNCTION_BUTTON_SIZE)
+			 .growX().left()
+			 .marginLeft(5f).marginRight(5f)
+			 .wrapLabel(false);
 			// cell.get().getLabel().setFontScale(0.9f);
 			cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
 
@@ -308,6 +313,7 @@ public class IntUI {
 			});
 			cell.row();
 		}
+		main.pack();
 
 		return p.pane(Styles.smallPane, main).growY();
 	}
@@ -830,7 +836,44 @@ public class IntUI {
 	}
 
 
-	public static void addPreview(Element element, Cons<Table> cons) {
+	public static Cell<?> imagePreviewButton(Element element, Table table,
+	                                         Prov<Drawable> prov, Cons<Drawable> consumer) {
+		return IntUI.addPreviewButton(table, p -> {
+			p.top();
+			try {
+				prov.get().getClass(); // null check
+				int   size = 100;
+				float mul;
+				if (element != null) {
+					float w = Math.max(2, element.getWidth());
+					mul = element.getHeight() / w;
+				} else {
+					mul = 1;
+				}
+				Image alphaBg = new Image(Tex.alphaBg);
+				alphaBg.color.a = 0.7f;
+				p.stack(alphaBg, new Image(prov.get()))
+				 .update(t -> t.setColor(element != null ? element.color : Color.white))
+				 .size(size, size * mul).row();
+				p.add(ReflectTools.getName(prov.get().getClass()), 0.6f).left().row();
+				p.table(KeyValue.THE_ONE.tableCons("Orginal Size", new SizeProv(() ->
+				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
+				))).growX().row();
+				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {
+					IntUI.drawablePicker().show(prov.get(), consumer);
+				}).size(42);
+			} catch (Throwable e) {
+				if (DEBUG) Log.err(e);
+				p.add("ERROR").labelAlign(Align.left).row();
+				p.image(Core.atlas.drawable("error"));
+			}
+		});
+	}
+	public static Cell<ImageButton> addPreviewButton(Table table, Cons<Table> cons) {
+		return table.button(Icon.imageSmall, Styles.clearNonei, () -> { })
+		 .with(b -> addPreviewListener(b, cons));
+	}
+	public static void addPreviewListener(Element element, Cons<Table> cons) {
 		element.addListener(new HoverAndExitListener() {
 			final Task hideTask = new Task() {
 				public void run() {
@@ -885,13 +928,13 @@ public class IntUI {
 		/** {@inheritDoc} */
 		public final void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
 			// touchDown也会触发
-			if (pointer == -1) enter0(event, x, y, pointer, fromActor);
+			if (mobile != (pointer == -1)) enter0(event, x, y, pointer, fromActor);
 		}
 		public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) { }
 		/** {@inheritDoc} */
 		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 			// touchUp也会触发
-			if (pointer == -1) exit0(event, x, y, pointer, toActor);
+			if (mobile != (pointer == -1)) exit0(event, x, y, pointer, toActor);
 		}
 		public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) { }
 	}

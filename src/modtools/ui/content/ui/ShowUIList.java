@@ -135,6 +135,7 @@ public class ShowUIList extends Content {
 		t.add(k).with(JSFunc::addDClickCopy).growY().row();
 		t.unbind();
 	})), tex    = newTable(t -> {
+		String prefix = "Tex.";
 		for (Field field : Tex.class.getFields()) {
 			try {
 				// 是否为Drawable
@@ -143,7 +144,7 @@ public class ShowUIList extends Content {
 				// 跳过private检查，减少时间
 				field.setAccessible(true);
 				Drawable drawable = (Drawable) field.get(null);
-				texKeyMap.put(drawable, field.getName());
+				texKeyMap.put(drawable, prefix + field.getName());
 				addImage(t, drawable);
 			} catch (Exception err) {
 				t.add();// 占位
@@ -172,6 +173,7 @@ public class ShowUIList extends Content {
 			t.add(cls.getSimpleName()).color(Pal.accent).colspan(2).row();
 			t.image().color(Pal.accent).colspan(2).row();
 
+			String prefix = cls.getSimpleName() + ".";
 			for (Field field : cls.getFields()) {
 				if (!Modifier.isStatic(field.getModifiers())
 				    || !Color.class.isAssignableFrom(field.getType())) continue;
@@ -179,7 +181,7 @@ public class ShowUIList extends Content {
 					// 跳过private检查，减少时间
 					field.setAccessible(true);
 					Color color = (Color) field.get(null);
-					colorKeyMap.put(color, field.getName());
+					colorKeyMap.put(color, prefix + field.getName());
 
 					t.bind(field.getName());
 					var tooltip = new IntUI.Tooltip(tl -> tl.table(Tex.pane, t2 -> t2.add("" + color)));
@@ -228,7 +230,7 @@ public class ShowUIList extends Content {
 		}
 	});
 	static void listAllStyles(FilterTable<Object> t, Class<?> stylesClass) {
-		String  prefix = stylesClass == Styles.class ? "" : stylesClass.getSimpleName() + ".";
+		String  prefix = stylesClass.getSimpleName() + ".";
 		Field[] fields = getStyleFields(stylesClass);
 		for (Field field : fields) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;

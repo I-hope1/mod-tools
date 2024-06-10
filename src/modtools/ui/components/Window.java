@@ -10,11 +10,11 @@ import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.actions.*;
 import arc.scene.event.*;
-import arc.scene.style.*;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.*;
+import arc.struct.ObjectSet;
 import arc.util.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
@@ -23,20 +23,18 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.struct.MySet;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
+import modtools.ui.TopGroup.TSettings;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.linstener.*;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
-import modtools.ui.IntUI;
-import modtools.ui.style.TintDrawable;
+import modtools.ui.gen.HopeIcons;
+import modtools.ui.style.*;
 import modtools.utils.*;
-import modtools.struct.MySet;
 import modtools.utils.JSFunc.JColor;
-import modtools.utils.ArrayUtils;
 import modtools.utils.ui.search.*;
-
 
 import static arc.Core.graphics;
 import static modtools.ui.Contents.window_manager;
@@ -76,8 +74,11 @@ public class Window extends Table implements Position {
 		Tools.TASKS.add(() -> frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1));
 	}
 
-	public static Drawable myPane  = Tex.pane;
-	public static Drawable topPane = new TintDrawable(whiteui, () -> JColor.c_window_title);
+	public static DelegetingDrawable myPane =
+	 new DelegetingDrawable(TSettings.paneDrawable.getDrawable(Tex.pane), Color.white);
+
+	public static Drawable topPane
+	 = new TintDrawable(whiteui, () -> JColor.c_window_title);
 
 	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);

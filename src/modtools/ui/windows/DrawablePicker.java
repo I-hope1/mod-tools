@@ -18,15 +18,14 @@ import mindustry.ui.Styles;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.components.Window;
-import modtools.ui.components.utils.*;
+import modtools.ui.components.utils.MyItemSelection;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
-import modtools.ui.style.TintDrawable;
-import modtools.utils.*;
+import modtools.ui.style.*;
 import modtools.utils.SR.CatchSR;
+import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
-
-import java.util.Arrays;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
@@ -35,7 +34,7 @@ import static modtools.ui.windows.ColorPicker.*;
 public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	private Drawable drawable;
 
-	private Cons<Drawable> cons = c -> {};
+	private Cons<Drawable> cons = c -> { };
 	Color iconCurrent  = new Color(Color.white),
 	 backgroundCurrent = new Color(bgColor);
 	boolean         isIconColor = true;
@@ -67,8 +66,15 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 
 		isIconColor = true;
-		drawable = cloneDrawable(drawable0);
-		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
+		Color sourceColor;
+		if (drawable instanceof DelegetingDrawable d) {
+			drawable = cloneDrawable(d.drawable);
+			Color color = d.color instanceof DelegetingColor c ? c.delegetor() : d.color;
+			sourceColor = new Color(iconCurrent.set(getTint(drawable0))).mul(color);
+		} else {
+			drawable = cloneDrawable(drawable0);
+			sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
+		}
 		resetColor(sourceColor);
 
 		cont.clear();
@@ -89,9 +95,9 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				}
 			}).grow().pad(6, 8, 6, 8);
 			t.table(Styles.black6, wrap -> {
-				Seq<Drawable> drawables = Icon.icons.values().toSeq().as().addAll(Arrays.stream(Styles.class.getFields())
-				 .filter(f -> FieldUtils.isStatic(f) && f.getType() == Drawable.class)
-				 .map(f -> (Drawable) FieldUtils.get(null, f)).toList()).as();
+				Seq<Drawable> drawables = Icon.icons.values().toSeq()
+				 .as().addAll(ShowUIList.styleIconKeyMap.keySet())
+				 .addAll(ShowUIList.texKeyMap.keySet()).as();
 				drawables.addUnique(drawable);
 				MyItemSelection.buildTable0(wrap, drawables,
 				 () -> drawable, drawable -> this.drawable = drawable, 8,
@@ -99,25 +105,28 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}).grow().row();
 
 			t.table(Styles.black6, buttons -> {
+				buttons.label(() -> StringHelper.getUIKey(drawable)).fontScale(0.6f).row();
 				buttons.left().defaults().growX().height(32);
-				buttons.check("Icon", b -> {}).row();
-				buttons.check("Background", b -> {}).row();
+				buttons.check("Icon", _ -> { }).row();
+				buttons.check("Background", _ -> { }).row();
 
-				buttons.getChildren().<CheckBox>as().each(b -> {
+				Seq<CheckBox> allButtons = buttons.getChildren().select(el -> el instanceof CheckBox).as();
+				allButtons.each(b -> {
 					b.left();
 					b.setStyle(HopeStyles.hope_defaultCheck);
 				});
+
 				ButtonGroup<CheckBox> group = new ButtonGroup<>();
-				group.add(buttons.getChildren().toArray(CheckBox.class));
+				group.add(allButtons.toArray(CheckBox.class));
 				buttons.update(() -> {
-					if (isIconColor == (group.getChecked().getZIndex() == 0)) return;
-					isIconColor = group.getChecked().getZIndex() == 0;
+					if (isIconColor == (group.getChecked().getZIndex() == 1)) return;
+					isIconColor = group.getChecked().getZIndex() == 1;
 					resetColor(current);
 				});
 
 				SettingsBuilder.main = buttons;
 				Seq<DrawStyle> styles = new Seq<>(DrawStyle.values());
-				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, () -> {}).get();
+				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, () -> { }).get();
 				button.clicked(() -> {
 					drawStyle = styles.get((styles.indexOf(drawStyle) + 1) % styles.size);
 					button.setText(drawStyle.name());
@@ -232,13 +241,14 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
 		 .marginLeft(4f).marginRight(4f);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
-			 cons.get(iconCurrent.equals(sourceColor) ? drawable : new WrapTextureRegionDrawable(drawable, new Color(iconCurrent)));
+			 cons.get(iconCurrent.equals(sourceColor) ? drawable : new DelegetingDrawable(drawable, new Color(iconCurrent)));
 			 hide();
 		 })
 		 .marginLeft(4f).marginRight(4f);
 	}
-	/** 复制drawable并设置{@code tint}为{@link Color#white}  */
+	/** 复制drawable并设置{@code tint}为{@link Color#white} */
 	private Drawable cloneDrawable(Drawable drawable) {
+		if (drawable instanceof DelegetingDrawable d) return d.drawable;
 		try {
 			Drawable newDrawable = (Drawable) unsafe.allocateInstance(drawable.getClass());
 			Tools.clone(drawable, newDrawable, drawable.getClass(), f -> {
@@ -314,65 +324,6 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				return add(stack);
 			}
 		};
-	}
-	private static class WrapTextureRegionDrawable implements Drawable {
-		Drawable drawable;
-		Color    color;
-		public WrapTextureRegionDrawable(Drawable drawable, Color color) {
-			this.drawable = drawable;
-			this.color = color;
-		}
-		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
-										 float scaleY, float rotation) {
-			if (drawable == null) return;
-			Draw.color(color);
-			drawable.draw(x, y, originX, originY, width, height, scaleX, scaleY, rotation);
-		}
-		public float getLeftWidth() {
-			return drawable.getLeftWidth();
-		}
-		public void setLeftWidth(float leftWidth) {
-			drawable.setLeftWidth(leftWidth);
-		}
-		public float getRightWidth() {
-			return drawable.getRightWidth();
-		}
-		public void setRightWidth(float rightWidth) {
-			drawable.setRightWidth(rightWidth);
-		}
-		public float getTopHeight() {
-			return drawable.getTopHeight();
-		}
-		public void setTopHeight(float topHeight) {
-			drawable.setTopHeight(topHeight);
-		}
-		public float getBottomHeight() {
-			return drawable.getBottomHeight();
-		}
-		public void setBottomHeight(float bottomHeight) {
-			drawable.setBottomHeight(bottomHeight);
-		}
-		public float getMinWidth() {
-			return drawable.getMinWidth();
-		}
-		public void setMinWidth(float minWidth) {
-			drawable.setMinWidth(minWidth);
-		}
-		public float getMinHeight() {
-			return drawable.getMinHeight();
-		}
-		public void setMinHeight(float minHeight) {
-			drawable.setMinHeight(minHeight);
-		}
-		public void draw(float x, float y, float width, float height) {
-			if (drawable == null) return;
-			Draw.color(color);
-			drawable.draw(x, y, width, height);
-		}
-
-		public String toString() {
-			return STR."\{StringHelper.getUIKey(drawable)}#\{color.toString()}";
-		}
 	}
 	private class DelegetingColor extends Color {
 		public Color delegetor() {

@@ -855,8 +855,9 @@ public class IntUI {
 				p.stack(alphaBg, new Image(prov.get()))
 				 .update(t -> t.setColor(element != null ? element.color : Color.white))
 				 .size(size, size * mul).row();
+
 				p.add(ReflectTools.getName(prov.get().getClass()), 0.6f).left().row();
-				p.table(KeyValue.THE_ONE.tableCons("Orginal Size", new SizeProv(() ->
+				p.table(KeyValue.THE_ONE.tableCons("Original Size", new SizeProv(() ->
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
 				))).growX().row();
 				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {

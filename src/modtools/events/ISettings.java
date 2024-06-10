@@ -5,6 +5,7 @@ import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.event.Touchable;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
@@ -14,12 +15,14 @@ import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.annotations.settings.*;
+import modtools.annotations.settings.SettingsInit;
 import modtools.jsfunc.type.CAST;
-import modtools.ui.HopeStyles;
+import modtools.ui.*;
 import modtools.ui.components.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
+import modtools.ui.style.DelegetingDrawable;
 import modtools.utils.MySettings.Data;
+import modtools.utils.*;
 
 import java.lang.reflect.Method;
 
@@ -27,6 +30,7 @@ import static modtools.events.ISettings.$$.*;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 import static modtools.ui.content.SettingsUI.colorBlock;
+import static modtools.utils.Tools.as;
 
 /**
  * @see SettingsInit
@@ -163,6 +167,16 @@ public interface ISettings extends E_DataInterface {
 			Log.err(STR."Failed to build \{getClass()}.\{this}", e);
 		}
 	}
+	default Drawable getDrawable(Drawable def) {
+		String s     = getString();
+		int    index = s.indexOf('#');
+		String key   = index == -1 ? s : s.substring(0, index);
+		return Tools.or(new DelegetingDrawable(StringHelper.lookupUI(key),
+			index == -1 ? Color.white : Color.valueOf(s.substring(index + 1))),
+		 def);
+	}
+
+
 	class $$ {
 		static String  text;
 		static boolean isSwitch;
@@ -251,6 +265,22 @@ public interface ISettings extends E_DataInterface {
 		var list = new Seq<>((String[]) args());
 		list(text, this::set, this::getString,
 		 list, s -> s.replaceAll("\\n", "\\\\n"));
+	}
+
+	private void $(Drawable __) {
+		Object[]       args     = (Object[]) args();
+		Drawable[]     drawable = {getDrawable((Drawable) args[0])};
+		Cons<Drawable> cons     = as(args[1]);
+		main.table(t -> {
+			t.add(text).left().padRight(10).growX().labelAlign(Align.left);
+			t.label(() -> StringHelper.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
+			IntUI.imagePreviewButton(null, t, () -> drawable[0], d -> {
+				set(StringHelper.getUIKey(d));
+
+				cons.get(d);
+				drawable[0] = d;
+			});
+		}).growX().row();
 	}
 
 	// ContextMenu

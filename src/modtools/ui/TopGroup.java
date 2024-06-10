@@ -10,14 +10,14 @@ import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.style.TextureRegionDrawable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
-import mindustry.gen.Icon;
+import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.annotations.settings.SettingsInit;
@@ -48,7 +48,11 @@ public final class TopGroup extends WidgetGroup {
 		checkUICount,
 		debugBounds,
 		selectInvisible, drawHiddenPad,
+		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.drawable = d),
+		;
 		// overrideScene
+		TSettings() { }
+		TSettings(Class<?> type, Object ...args) { }
 	}
 	/* static {
 		if (overrideScene.enabled()) {

@@ -52,7 +52,7 @@ public final class TopGroup extends WidgetGroup {
 		;
 		// overrideScene
 		TSettings() { }
-		TSettings(Class<?> type, Object ...args) { }
+		TSettings(Class<?> c, Object ...args) { }
 	}
 	/* static {
 		if (overrideScene.enabled()) {

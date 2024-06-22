@@ -18,18 +18,17 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
-import modtools.*;
+import modtools.IntVars;
 import modtools.events.*;
 import modtools.ui.*;
-import modtools.ui.Frag.Settings;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.DisWindow;
 import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
-import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
+import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 
 import static modtools.ui.IntUI.topGroup;
@@ -102,7 +101,7 @@ public class SettingsUI extends Content {
 				TSettings.debugBounds::enabled);
 			 ISettings.buildAll("", this, E_Game.class);
 			 ISettings.buildAll("", this, E_Extending.class);
-			 Settings.position.buildSwitch("frag", this);
+			 ISettings.buildAll("frag", this, Frag.Settings.class);
 
 			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 			 button("Font", HopeStyles.flatBordert, () -> {

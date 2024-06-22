@@ -3,7 +3,7 @@ package modtools.events;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.math.Mathf;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
@@ -162,18 +162,19 @@ public interface ISettings extends E_DataInterface {
 
 		Method build = $builds.get(CAST.box(type));
 		try {
+			// Log.info(text);
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
-			Log.err(STR."Failed to build \{getClass()}.\{this}", e);
+			Log.err(e);
 		}
 	}
 	default Drawable getDrawable(Drawable def) {
-		String s     = getString();
-		int    index = s.indexOf('#');
-		String key   = index == -1 ? s : s.substring(0, index);
+		String   s        = getString();
+		int      index    = s.indexOf('#');
+		String   key      = index == -1 ? s : s.substring(0, index);
 		Drawable drawable = StringHelper.lookupUI(key);
 		return new DelegatingDrawable(or(drawable, def),
-			index == -1 ? Color.white : Color.valueOf(s.substring(index + 1)));
+		 index == -1 ? Color.white : Color.valueOf(s.substring(index + 1)));
 	}
 
 
@@ -267,19 +268,23 @@ public interface ISettings extends E_DataInterface {
 		 list, s -> s.replaceAll("\\n", "\\\\n"));
 	}
 
+	private void $(Position __) { }
+
 	private void $(Drawable __) {
 		Object[]       args     = (Object[]) args();
 		Drawable[]     drawable = {getDrawable((Drawable) args[0])};
 		Cons<Drawable> cons     = as(args[1]);
-		main.table(t -> {
-			t.add(text).left().padRight(10).growX().labelAlign(Align.left);
-			t.label(() -> StringHelper.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
-			IntUI.imagePreviewButton(null, t, () -> drawable[0], d -> {
-				set(StringHelper.getUIKey(d));
+		main.table(new Cons<>() {
+			public void get(Table t) {
+				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
+				t.label(() -> StringHelper.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
+				IntUI.imagePreviewButton(null, t, () -> drawable[0], d -> {
+					set(StringHelper.getUIKey(d));
 
-				cons.get(d);
-				drawable[0] = d;
-			});
+					cons.get(d);
+					drawable[0] = d;
+				});
+			}
 		}).growX().row();
 	}
 

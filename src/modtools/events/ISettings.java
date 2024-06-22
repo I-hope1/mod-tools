@@ -30,7 +30,7 @@ import static modtools.events.ISettings.$$.*;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 import static modtools.ui.content.SettingsUI.colorBlock;
-import static modtools.utils.Tools.as;
+import static modtools.utils.Tools.*;
 
 /**
  * @see SettingsInit
@@ -171,9 +171,9 @@ public interface ISettings extends E_DataInterface {
 		String s     = getString();
 		int    index = s.indexOf('#');
 		String key   = index == -1 ? s : s.substring(0, index);
-		return Tools.or(new DelegetingDrawable(StringHelper.lookupUI(key),
-			index == -1 ? Color.white : Color.valueOf(s.substring(index + 1))),
-		 def);
+		Drawable drawable = StringHelper.lookupUI(key);
+		return new DelegetingDrawable(or(drawable, def),
+			index == -1 ? Color.white : Color.valueOf(s.substring(index + 1)));
 	}
 
 

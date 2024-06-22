@@ -452,8 +452,6 @@ public class IntUI {
 				t.y += (t.y > graphics.getWidth() / 2f ? -1 : 1) * button.getHeight();
 			}
 
-			if (t.hasActions()) return;
-
 			t.keepInStage();
 			t.invalidateHierarchy();
 			t.pack();

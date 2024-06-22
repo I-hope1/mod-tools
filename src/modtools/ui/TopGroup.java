@@ -48,7 +48,7 @@ public final class TopGroup extends WidgetGroup {
 		checkUICount,
 		debugBounds,
 		selectInvisible, drawHiddenPad,
-		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.drawable = d),
+		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.reset(d, Color.white)),
 		;
 		// overrideScene
 		TSettings() { }

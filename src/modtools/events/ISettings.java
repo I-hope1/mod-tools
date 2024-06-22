@@ -20,7 +20,7 @@ import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.components.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
-import modtools.ui.style.DelegetingDrawable;
+import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
 import modtools.utils.*;
 
@@ -172,7 +172,7 @@ public interface ISettings extends E_DataInterface {
 		int    index = s.indexOf('#');
 		String key   = index == -1 ? s : s.substring(0, index);
 		Drawable drawable = StringHelper.lookupUI(key);
-		return new DelegetingDrawable(or(drawable, def),
+		return new DelegatingDrawable(or(drawable, def),
 			index == -1 ? Color.white : Color.valueOf(s.substring(index + 1)));
 	}
 

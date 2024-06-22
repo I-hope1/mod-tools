@@ -37,9 +37,9 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	private Cons<Drawable> cons = c -> { };
 	Color iconCurrent  = new Color(Color.white),
 	 backgroundCurrent = new Color(bgColor);
-	boolean         isIconColor = true;
-	DelegetingColor current     = new DelegetingColor();
-	float           h, s, v, a;
+	boolean        isIconColor = true;
+	DelegatorColor current     = new DelegatorColor();
+	float          h, s, v, a;
 	TextField hexField;
 	Slider    hSlider, aSlider;
 
@@ -66,15 +66,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 
 		isIconColor = true;
-		Color sourceColor;
-		if (drawable instanceof DelegetingDrawable d) {
-			drawable = cloneDrawable(d.drawable);
-			Color color = d.color instanceof DelegetingColor c ? c.delegetor() : d.color;
-			sourceColor = new Color(iconCurrent.set(getTint(drawable0))).mul(color);
-		} else {
-			drawable = cloneDrawable(drawable0);
-			sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
-		}
+		drawable = cloneDrawable(drawable0);
+		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
 		resetColor(sourceColor);
 
 		cont.clear();
@@ -215,8 +208,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
 					@Override
 					public void draw() {
-						float first  = Tmp.c1.set(current.delegetor()).a(0f).toFloatBits();
-						float second = Tmp.c1.set(current.delegetor()).a(parentAlpha).toFloatBits();
+						float first  = Tmp.c1.set(current.delegator()).a(0f).toFloatBits();
+						float second = Tmp.c1.set(current.delegator()).a(parentAlpha).toFloatBits();
 
 						Fill.quad(
 						 x, y, first,
@@ -241,14 +234,14 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
 		 .marginLeft(4f).marginRight(4f);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
-			 cons.get(iconCurrent.equals(sourceColor) ? drawable : new DelegetingDrawable(drawable, new Color(iconCurrent)));
+			 cons.get(iconCurrent.equals(sourceColor) ? drawable : new DelegatingDrawable(drawable, new Color(iconCurrent)));
 			 hide();
 		 })
 		 .marginLeft(4f).marginRight(4f);
 	}
 	/** 复制drawable并设置{@code tint}为{@link Color#white} */
 	private Drawable cloneDrawable(Drawable drawable) {
-		if (drawable instanceof DelegetingDrawable d) return d.drawable;
+		if (drawable instanceof DelegatingDrawable d) return d.drawable;
 		try {
 			Drawable newDrawable = (Drawable) unsafe.allocateInstance(drawable.getClass());
 			Tools.clone(drawable, newDrawable, drawable.getClass(), f -> {
@@ -263,6 +256,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 	}
 	private Color getTint(Drawable drawable) {
+		if (drawable instanceof DelegatingDrawable d) return d.color;
 		return CatchSR.apply(() -> CatchSR.of(
 			() -> Reflect.get(TextureRegionDrawable.class, drawable, "tint"))
 		 .get(() -> Reflect.get(NinePatchDrawable.class, drawable, "tint"))
@@ -270,12 +264,12 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		);
 	}
 	private void resetColor(Color color) {
-		if (color instanceof DelegetingColor d) color = d.delegetor();
+		// if (color instanceof AutoColor d) color = d.delegetor();
 		float[] values = color.toHsv(new float[3]);
 		h = values[0];
 		s = values[1];
 		v = values[2];
-		a = color.a;
+		a = current.rgba() & 0xFF;
 
 		// 更新元素
 		if (hSlider != null && aSlider != null) {
@@ -301,7 +295,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	private void updateHexText(boolean updateField) {
 		if (hexField != null && updateField) {
 			String val = current.toString().toUpperCase();
-			if (current.a() >= 0.9999f) {
+			if ((current.rgba() & 0xFF) >= 0.9999f) {
 				val = val.substring(0, 6);
 			}
 			hexField.setText(val);
@@ -325,27 +319,28 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}
 		};
 	}
-	private class DelegetingColor extends Color {
-		public Color delegetor() {
+	/** 仅用于picker  */
+	private class DelegatorColor extends Color {
+		public Color delegator() {
 			return isIconColor ? iconCurrent : backgroundCurrent;
 		}
 		public Color set(Color color) {
-			return delegetor().set(color);
+			return delegator().set(color);
 		}
 		public Color fromHsv(float h, float s, float v) {
-			return delegetor().fromHsv(h, s, v);
+			return delegator().fromHsv(h, s, v);
 		}
 		public float[] toHsv(float[] hsv) {
-			return delegetor().toHsv(hsv);
+			return delegator().toHsv(hsv);
 		}
 		public String toString() {
-			return delegetor().toString();
+			return delegator().toString();
 		}
 		public Color a(float a) {
-			return delegetor().a(a);
+			return delegator().a(a);
 		}
-		public float a() {
-			return delegetor().a;
+		public int rgba() {
+			return delegator().rgba();
 		}
 	}
 

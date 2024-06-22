@@ -5,10 +5,17 @@ import arc.graphics.g2d.Draw;
 import arc.scene.style.Drawable;
 import modtools.utils.StringHelper;
 
-public class DelegetingDrawable implements Drawable {
+public class DelegatingDrawable implements Drawable {
 	public Drawable drawable;
 	public Color    color;
-	public DelegetingDrawable(Drawable drawable, Color color) {
+	public DelegatingDrawable(Drawable drawable, Color color) {
+		reset(drawable, color);
+	}
+	public void reset(Drawable drawable, Color color) {
+		if (drawable instanceof DelegatingDrawable d) {
+			drawable = d.drawable;
+			color = d.color;
+		}
 		this.drawable = drawable;
 		this.color = color;
 	}
@@ -61,8 +68,12 @@ public class DelegetingDrawable implements Drawable {
 	}
 
 	public String toString() {
-		if (color == Color.white) return StringHelper.getUIKey(drawable);
+		try {
+			if (color == Color.white) return StringHelper.getUIKey(drawable);
 
-		return STR."\{StringHelper.getUIKey(drawable)}#\{color.toString()}";
+			return STR."\{StringHelper.getUIKey(drawable)}#\{color.toString()}";
+		} catch (Throwable e) {
+			return drawable + "#" + color;
+		}
 	}
 }

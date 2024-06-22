@@ -10,7 +10,7 @@ import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.ui.style.DelegetingDrawable;
+import modtools.ui.style.DelegatingDrawable;
 
 import java.util.Map;
 
@@ -29,7 +29,7 @@ public class StringHelper {
 		return Strings.capitalize(Align.toString(align).replace(',', '-'));
 	}
 	public static String getUIKey(Object val) {
-		if (val instanceof DelegetingDrawable delegting) return delegting.toString();
+		if (val instanceof DelegatingDrawable delegting) return delegting.toString();
 		return val instanceof Drawable icon && iconKeyMap.containsKey(icon) ?
 		 iconKeyMap.get(icon)
 

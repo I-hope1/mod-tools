@@ -144,8 +144,7 @@ public final class TopGroup extends WidgetGroup {
 		Draw.flush();
 		Draw.z(21);
 
-		if (!debugBounds.enabled() && drawPadElem == null) return;
-		Element drawPadElem = or(this.drawPadElem, scene.root);
+		if (!debugBounds.enabled() || drawPadElem == null) return;
 		Vec2    vec2;
 		if (drawPadElem.parent != null) {
 			vec2 = ElementUtils.getAbsolutePos(drawPadElem.parent);

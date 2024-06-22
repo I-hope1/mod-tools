@@ -118,6 +118,8 @@ public class ReviewElement extends Content {
 
 	ReviewFocusTask task;
 	public void load() {
+		task = new ReviewFocusTask();
+
 		loadSettings();
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
@@ -133,7 +135,6 @@ public class ReviewElement extends Content {
 			}
 		});
 
-		task = new ReviewFocusTask();
 		topGroup.focusOnElement(task);
 
 		TopGroup.classBlackList.add(ReviewElementWindow.class);
@@ -425,7 +426,7 @@ public class ReviewElement extends Content {
 			return elem;
 		}
 	}
-	private static void wrapTable(Table table, Prov<Vec2> pos, Cons<Table> cons) {
+	static void wrapTable(Table table, Prov<Vec2> pos, Cons<Table> cons) {
 		table.table(t -> {
 			t.left().defaults().left();
 			cons.get(t);
@@ -570,11 +571,11 @@ public class ReviewElement extends Content {
 			if (window.fixedFocus == this) CANCEL_TASK.run();
 			return super.remove();
 		}
-		private void parentNeedUpdate() {
+		void parentNeedUpdate() {
 			MyWrapTable table = ElementUtils.findParent(this, e -> e instanceof MyWrapTable);
 			if (table != null) table.needUpdate = true;
 		}
-		private static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
+		static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
 			return () -> Sr(Seq.with(
 			 copyAsJSMenu(null, copy),
 			 ConfirmList.with("clear", Icon.trashSmall, "@clear", "@confirm.remove", () -> {
@@ -594,24 +595,8 @@ public class ReviewElement extends Content {
 			 ValueLabel.newElementDetailsList(element)
 			))
 			 .ifRun(element instanceof Table, seq -> seq.add(
-				MenuItem.with("allcells", Icon.wavesSmall, "Cells", () -> {
-					INFO_DIALOG.dialog(d -> {
-						Window window1 = ElementUtils.getWindow(self);
-						d.left().defaults().left();
-						for (var cell : ((Table) element).getCells()) {
-							d.table(Tex.pane, t0 -> {
-								 var l = new PlainValueLabel<>(Cell.class, () -> cell);
-								 ReviewElement.addFocusSource(l, () -> window1, cell::get);
-								 t0.add(l).grow();
-							 }).grow()
-							 .colspan(ElementUtils.getColspan(cell));
-							if (cell.isEndRow()) {
-								Underline.of(d.row(), 20);
-								d.row();
-							}
-						}
-					});
-				})))
+				MenuItem.with("allcells", Icon.wavesSmall, "Cells", () -> viewAllCells(self, (Table) element))
+			 ))
 			 .ifRun(element == null || element.parent instanceof Table, seq -> seq.add(
 				DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
 				 () -> element == null || !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
@@ -646,6 +631,24 @@ public class ReviewElement extends Content {
 			}
 			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 		}
+	}
+	private static Window viewAllCells(MyWrapTable self, Table element) {
+		return INFO_DIALOG.dialog(d -> {
+			Window window1 = ElementUtils.getWindow(self);
+			d.left().defaults().left();
+			for (var cell : element.getCells()) {
+				d.table(Tex.pane, t0 -> {
+					 var l = new PlainValueLabel<>(Cell.class, () -> cell);
+					 ReviewElement.addFocusSource(l, () -> window1, cell::get);
+					 t0.add(l).grow();
+				 }).grow()
+				 .colspan(ElementUtils.getColspan(cell));
+				if (cell.isEndRow()) {
+					Underline.of(d.row(), 20);
+					d.row();
+				}
+			}
+		});
 	}
 	private static boolean parentValid(Element element, ReviewElementWindow window) {
 		return element.parent != null || element == window.element;
@@ -803,7 +806,7 @@ public class ReviewElement extends Content {
 			if (expandCell.toggle1(expandX != 0 || expandY != 0))
 				expandLabel.setText(STR."\{enabledMark(expandX)}x []| \{enabledMark(expandY)}y");
 		}
-		private static String enabledMark(int i) {
+		static String enabledMark(int i) {
 			return i == 1 ? "[accent]" : "[gray]";
 		}
 

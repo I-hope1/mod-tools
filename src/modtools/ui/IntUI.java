@@ -22,6 +22,7 @@ import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
+import modtools.IntVars;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.FocusTask;
@@ -289,10 +290,13 @@ public class IntUI {
 	/** TODO: 多个FoldedList有问题 */
 	public static Cell<ScrollPane> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
 	                                            Table p, Runnable hideRun) {
-		ScrollPane pane = findClosestPane(p);
-		if (pane != null) {
-			p = (Table) pane.parent;
+		{// 修改p
+			ScrollPane pane = findClosestPane(p);
+			if (pane != null) {
+				p = (Table) pane.parent;
+			}
 		}
+
 		Table main = new Table();
 
 		for (var menu : list) {
@@ -415,20 +419,21 @@ public class IntUI {
 	 * 弹出一个小窗，自己设置内容
 	 * @param <T>        the type parameter
 	 * @param button     用于定位弹窗的位置
-	 * @param f          (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param builder          (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 * @param align      the align
 	 * @return the select table
 	 */
 	public static <T extends Element> SelectTable
-	showSelectTable(T button, Cons3<Table, Runnable, String> f,
+	showSelectTable(T button, Cons3<Table, Runnable, String> builder,
 	                boolean searchable, int align) {
 		if (button == null) throw new NullPointerException("button cannot be null");
-		SelectTable t = basicSelectTable(searchable, f);
+		SelectTable t = basicSelectTable(searchable, builder);
 		t.background(Tex.pane);
+		// t.actions(Actions.sizeTo(0, 0), Actions.sizeTo(t.getPrefWidth(), t.getPrefHeight(), 12 ));
 		t.update(() -> {
 			if (button.parent == null || !button.isDescendantOf(Core.scene.root)) {
-				Core.app.post(t::hideInternal);
+				IntVars.postToMain(t::hideInternal);
 				return;
 			}
 			button.localToStageCoordinates(
@@ -446,6 +451,8 @@ public class IntUI {
 				t.setHeight((float) graphics.getHeight());
 				t.y += (t.y > graphics.getWidth() / 2f ? -1 : 1) * button.getHeight();
 			}
+
+			if (t.hasActions()) return;
 
 			t.keepInStage();
 			t.invalidateHierarchy();
@@ -810,9 +817,9 @@ public class IntUI {
 
 
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
-	                            String valid, String unvalid) {
+	                            String valid, String invalid) {
 		cell.get().addListener(new IntUI.Tooltip(
-		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : unvalid)
+		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : invalid)
 		));
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}

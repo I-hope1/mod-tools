@@ -22,7 +22,8 @@ public interface TmpVars {
 	String[] tmpAmount = new String[1];
 
 	MouseVec mouseVec   = new MouseVec();
-	Vec2 mouseWorld = new Vec2();
+	Vec2     mouseWorld = new Vec2();
+
 	Rect                  mr1 = new Rect();
 	TextureRegionDrawable trd = new TextureRegionDrawable();
 

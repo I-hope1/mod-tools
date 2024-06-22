@@ -60,11 +60,11 @@ public class Frag extends Table {
 				if (content == null || !content.loadable()) return;
 				enabledContents.add(content);
 				table.image().color(Pal.gray).growX().row();
+				Events.fire(content);
+				if (content.loadable()) Tools.runLoggedException(content::load);
 				table.add(content.buildButton(false))
 				 .marginLeft(6f)
 				 .size(120, 40);
-				Events.fire(content);
-				if (content.loadable()) Tools.runLoggedException(content::load);
 				table.row();
 			});
 		}), HopeStyles.noBarPane);

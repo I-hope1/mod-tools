@@ -24,6 +24,7 @@ import static modtools.annotations.PrintHelper.errs;
 
 public class VirtualClass {
 	public static byte[] defaultBytes;
+
 	static {
 		try {
 			try (InputStream in = HopeReflect.class.getClassLoader()
@@ -35,13 +36,14 @@ public class VirtualClass {
 			throw new RuntimeException(e);
 		}
 	}
-	public static class NULL {}
+	public static class NULL { }
 
 	public static Class<?> mirrorType  = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypeExceptionProxy");
-	public static Class<?>                     mirrorTypes = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypesExceptionProxy");
+	public static Class<?> mirrorTypes = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypesExceptionProxy");
+
 	/** 因为class不能完美复刻，所以这个表用于获取type */
 	public static HashMap<Class<?>, ClassType> classToType = new HashMap<>();
-	public static ClassLoader                  loader      = new ClassLoader(HopeReflect.class.getClassLoader()) {};
+	public static ClassLoader                  loader      = new ClassLoader(HopeReflect.class.getClassLoader()) { };
 	public static Object defineMirrorClass(ExceptionProxy proxy) {
 		if (!mirrorType.isInstance(proxy) && !mirrorTypes.isInstance(proxy))
 			throw new IllegalArgumentException("type (" + proxy + ") isn't MirroredType(s)ExceptionProxy");
@@ -107,19 +109,19 @@ public class VirtualClass {
 	}
 	public static Class<?> defineHiddenClass(byte[] bytes) throws Throwable {
 		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
-		Object definer;
 		try {
 			return SharedSecrets.getJavaLangAccess().defineClass(
-			 null, Object.class, null, bytes, null, true, -1, null);
-			 // HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
-			 // new Object[]{null, bytes}, String.class, byte[].class);
-		} catch (Throwable e) {
-			Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
-			 Class.forName("jdk.internal.util.ClassFileDumper"));
-			definerM.setAccessible(true);
-			Object dumper = HopeReflect.getAccess(Lookup.class, null, "DEFAULT_DUMPER");
-			definer = definerM.invoke(HopeReflect.lookup, null, bytes, Set.of(), dumper);
-		}
+			 VirtualClass.class.getClassLoader(), Object.class, null, bytes, null, true, -1, null);
+			// HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
+			// new Object[]{null, bytes}, String.class, byte[].class);
+		} catch (Throwable e) { }
+
+		Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
+		 Class.forName("jdk.internal.util.ClassFileDumper"));
+		definerM.setAccessible(true);
+		Object dumper  = HopeReflect.getAccess(Lookup.class, null, "DEFAULT_DUMPER");
+		Object definer = definerM.invoke(HopeReflect.lookup, null, bytes, Set.of(), dumper);
+
 		return HopeReflect.invoke(definer, "defineClass", new Object[]{true}, boolean.class);
 	}
 	private static boolean tryCreate(ClassType type, ClassSymbol symbol) {

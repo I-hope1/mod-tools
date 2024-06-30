@@ -6,7 +6,7 @@ import ihope_lib.*;
 
 import static ihope_lib.MyReflect.unsafe;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "deprecation"})
 public interface UNSAFE {
 	/* /trust 不安全 */
 	Object lookup = MyReflect.lookup;

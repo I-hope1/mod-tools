@@ -296,6 +296,7 @@ public class ShowUIList extends Content {
 
 	public <T> FilterTable<T> newTable(boolean withDisabled, Cons<FilterTable<T>> cons) {
 		return new FilterTable<>(t -> {
+			t.left().defaults().left().padLeft(6f);
 			t.clearChildren();
 			t.addChild(new FillElement() {
 				public void draw() {

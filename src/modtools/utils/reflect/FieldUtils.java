@@ -92,6 +92,7 @@ public class FieldUtils {
 	}
 	private interface OffsetGetter {
 		long fieldOffset(boolean isStatic, Field f);
+		@SuppressWarnings("deprecation")
 		class DefaultImpl implements OffsetGetter {
 			public long fieldOffset(boolean isStatic, Field f) {
 				return isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);

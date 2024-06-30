@@ -69,8 +69,8 @@ public interface AnnotationUtils {
 
 	private <T extends Annotation> T
 	getAnnotation0(Class<T> clazz, CompilationUnitTree unit,
-								 Tree tree, Element el, boolean overwrite) {
-		if (overwrite) overwrite(unit, tree);
+								 Tree tree, Element el, boolean overwriteValue) {
+		if (overwriteValue) overwrite(unit, tree);
 		T ann = el.getAnnotation(clazz);
 		if (ann == null) return null;
 		InvocationHandler h = Proxy.getInvocationHandler(ann);

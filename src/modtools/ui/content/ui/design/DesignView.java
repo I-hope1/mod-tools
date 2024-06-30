@@ -221,12 +221,12 @@ public class DesignView extends Element implements GestureListener {
 
 	private Vec2 unproject(int x, int y) {
 		float ratio = 1f / ((float) editor.width() / editor.height());
-		float size = Math.min(width, height);
-		float sclwidth = size * zoom;
-		float sclheight = size * zoom * ratio;
-		float px = ((float) x / editor.width()) * sclwidth + offsetx * zoom - sclwidth / 2 + getWidth() / 2;
-		float py = ((float) (y) / editor.height()) * sclheight
-				+ offsety * zoom - sclheight / 2 + getHeight() / 2;
+		float size      = Math.min(width, height);
+		float sclWidth  = size * zoom;
+		float sclHeight = size * zoom * ratio;
+		float px        = ((float) x / editor.width()) * sclWidth + offsetx * zoom - sclWidth / 2 + getWidth() / 2;
+		float py = ((float) (y) / editor.height()) * sclHeight
+				+ offsety * zoom - sclHeight / 2 + getHeight() / 2;
 		return vec.set(px, py);
 	}
 
@@ -234,10 +234,10 @@ public class DesignView extends Element implements GestureListener {
 	public void draw() {
 		float ratio = 1f / ((float) editor.width() / editor.height());
 		float size = Math.min(width, height);
-		float sclwidth = size * zoom;
-		float sclheight = size * zoom * ratio;
-		float centerx = x + width / 2 + offsetx * zoom;
-		float centery = y + height / 2 + offsety * zoom;
+		float sclWidth = size * zoom;
+		float sclHeight = size * zoom * ratio;
+		float centerX = x + width / 2 + offsetx * zoom;
+		float centerY = y + height / 2 + offsety * zoom;
 
 		image.setImageSize(editor.width(), editor.height());
 
@@ -247,26 +247,26 @@ public class DesignView extends Element implements GestureListener {
 
 		Draw.color(Pal.remove);
 		Lines.stroke(2f);
-		Lines.rect(centerx - sclwidth / 2 - 1, centery - sclheight / 2 - 1, sclwidth + 2, sclheight + 2);
-		editor.renderer.draw(centerx - sclwidth / 2 + Core.scene.marginLeft, centery - sclheight / 2 + Core.scene.marginBottom, sclwidth, sclheight);
+		Lines.rect(centerX - sclWidth / 2 - 1, centerY - sclHeight / 2 - 1, sclWidth + 2, sclHeight + 2);
+		editor.renderer.draw(centerX - sclWidth / 2 + Core.scene.marginLeft, centerY - sclHeight / 2 + Core.scene.marginBottom, sclWidth, sclHeight);
 		Draw.reset();
 
 		if (grid) {
 			Draw.color(Color.gray);
-			image.setBounds(centerx - sclwidth / 2, centery - sclheight / 2, sclwidth, sclheight);
+			image.setBounds(centerX - sclWidth / 2, centerY - sclHeight / 2, sclWidth, sclHeight);
 			image.draw();
 
 			Lines.stroke(2f);
 			Draw.color(Pal.bulletYellowBack);
-			Lines.line(centerx - sclwidth / 2f, centery - sclheight / 4f, centerx + sclwidth / 2f, centery - sclheight / 4f);
-			Lines.line(centerx - sclwidth / 4f, centery - sclheight / 2f, centerx - sclwidth / 4f, centery + sclheight / 2f);
-			Lines.line(centerx - sclwidth / 2f, centery + sclheight / 4f, centerx + sclwidth / 2f, centery + sclheight / 4f);
-			Lines.line(centerx + sclwidth / 4f, centery - sclheight / 2f, centerx + sclwidth / 4f, centery + sclheight / 2f);
+			Lines.line(centerX - sclWidth / 2f, centerY - sclHeight / 4f, centerX + sclWidth / 2f, centerY - sclHeight / 4f);
+			Lines.line(centerX - sclWidth / 4f, centerY - sclHeight / 2f, centerX - sclWidth / 4f, centerY + sclHeight / 2f);
+			Lines.line(centerX - sclWidth / 2f, centerY + sclHeight / 4f, centerX + sclWidth / 2f, centerY + sclHeight / 4f);
+			Lines.line(centerX + sclWidth / 4f, centerY - sclHeight / 2f, centerX + sclWidth / 4f, centerY + sclHeight / 2f);
 
 			Lines.stroke(3f);
 			Draw.color(Pal.accent);
-			Lines.line(centerx - sclwidth / 2f, centery, centerx + sclwidth / 2f, centery);
-			Lines.line(centerx, centery - sclheight / 2f, centerx, centery + sclheight / 2f);
+			Lines.line(centerX - sclWidth / 2f, centerY, centerX + sclWidth / 2f, centerY);
+			Lines.line(centerX, centerY - sclHeight / 2f, centerX, centerY + sclHeight / 2f);
 
 			Draw.reset();
 		}

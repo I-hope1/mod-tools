@@ -1041,6 +1041,9 @@ public class IntUI {
 			//            closeOnBack();
 		}
 		public static Window of(Throwable th, String text) {
+			return get(th, text).show();
+		}
+		private static Window get(Throwable th, String text) {
 			Signature signature = new Signature(Strings.getFinalMessage(th), text);
 			if (instances.containsKey(signature)) return instances.get(signature);
 			return new ExceptionPopup(signature, th).moveToMouse();

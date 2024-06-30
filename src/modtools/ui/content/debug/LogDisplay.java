@@ -34,7 +34,7 @@ public class LogDisplay extends Content {
 
 	public void load() {
 		crashes = new LimitTable(p -> {
-			p.defaults().grow();
+			p.defaults().top().grow();
 			IntVars.async(() -> {
 				Seq<Fi> list = new Seq<>(Vars.dataDirectory.child("crashes").list()).reverse();
 				p.left().defaults().left();

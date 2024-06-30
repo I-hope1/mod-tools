@@ -75,6 +75,7 @@ public class SclListener extends ClickListener {
 
 	/** 用于移动时改变坐标的元素（left|bottom） */
 	public Vec2 change = new Vec2();
+	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		if (isDisabled()) return;
 		scling = true;
@@ -108,6 +109,7 @@ public class SclListener extends ClickListener {
 		if (listener != null) listener.run();
 	}
 
+	@Override
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		super.touchUp(event, x, y, pointer, button);
 		change.set(0, 0);
@@ -117,6 +119,7 @@ public class SclListener extends ClickListener {
 		event.cancel();
 	}
 
+	@Override
 	public boolean mouseMoved(InputEvent event, float x, float y) {
 		if (isDisabled()) return false;
 

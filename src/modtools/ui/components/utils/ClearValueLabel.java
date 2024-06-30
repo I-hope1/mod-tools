@@ -7,7 +7,7 @@ import modtools.ui.menu.MenuItem;
 
 public class ClearValueLabel<T> extends PlainValueLabel<T> {
 
-	Runnable clear;
+	final Runnable clear;
 	public Cons<T> setter;
 	public ClearValueLabel(Class<T> type, Prov<T> prov, Runnable clear) {
 		super(type, prov);

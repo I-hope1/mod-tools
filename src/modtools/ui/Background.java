@@ -57,8 +57,8 @@ public class Background {
 		}
 	}
 
-	static LazyValue<Texture> landscape = LazyValue.of(() -> new Texture(landscapeDir.findAll().random()));
-	static LazyValue<Texture> portrait  = LazyValue.of(() -> new Texture(portraitDir.findAll().random()));
+	static final LazyValue<Texture> landscape = LazyValue.of(() -> new Texture(landscapeDir.findAll().random()));
+	static final LazyValue<Texture> portrait  = LazyValue.of(() -> new Texture(portraitDir.findAll().random()));
 	private static Texture getTexture() {
 		boolean isPortrait = Core.graphics.isPortrait();
 		return (isPortrait ? portrait : landscape).get();

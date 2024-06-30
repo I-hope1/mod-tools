@@ -1,7 +1,6 @@
 package modtools.jsfunc;
 
 import arc.util.Reflect;
-import modtools.annotations.CostTimeLog;
 import modtools.utils.*;
 import rhino.*;
 
@@ -28,15 +27,17 @@ public class JSFuncClass extends NativeJavaClass {
 		try {
 			return super.get(name, start);
 		} catch (RuntimeException e) {ex = e;}
-		if (name.equals("void")) return void.class;
-		if (name.equals("boolean")) return boolean.class;
-		if (name.equals("byte")) return byte.class;
-		if (name.equals("short")) return short.class;
-		if (name.equals("int")) return int.class;
-		if (name.equals("long")) return long.class;
-		if (name.equals("float")) return float.class;
-		if (name.equals("double")) return double.class;
-		throw ex;
+		return switch (name) {
+			case "void" -> void.class;
+			case "boolean" -> boolean.class;
+			case "byte" -> byte.class;
+			case "short" -> short.class;
+			case "int" -> int.class;
+			case "long" -> long.class;
+			case "float" -> float.class;
+			case "double" -> double.class;
+			default -> throw ex;
+		};
 	}
 	public boolean hasInstance(Scriptable value) {
 		return false;

@@ -1,14 +1,5 @@
 package modtools.utils;
 
-import static ihope_lib.MyReflect.unsafe;
-import static rhino.classfile.ByteCode.*;
-import static rhino.classfile.ClassFileWriter.*;
-
-import java.io.FileOutputStream;
-import java.lang.annotation.*;
-import java.lang.reflect.*;
-import java.util.*;
-
 import arc.files.Fi;
 import arc.func.*;
 import arc.struct.Seq;
@@ -16,6 +7,15 @@ import arc.util.Log;
 import modtools.jsfunc.type.CAST;
 import modtools.utils.reflect.*;
 import rhino.classfile.ClassFileWriter;
+
+import java.io.FileOutputStream;
+import java.lang.annotation.*;
+import java.lang.reflect.*;
+import java.util.*;
+
+import static ihope_lib.MyReflect.unsafe;
+import static rhino.classfile.ByteCode.*;
+import static rhino.classfile.ClassFileWriter.*;
 
 public class ByteCodeTools {
 	/*public static <T> MyClass<T> newClass(String name, String superName) {
@@ -298,6 +298,7 @@ public class ByteCodeTools {
 				off = FieldUtils.fieldOffset(map.get(q.name));
 				unsafe.putObject(base, off, q.get());
 			}
+			//noinspection unchecked
 			return (Class<? extends T>) base;
 		}
 
@@ -317,10 +318,10 @@ public class ByteCodeTools {
 	}
 
 	public static class Queue<T> {
-		public String   name;
-		public Prov<T>  func;
+		public final String   name;
+		public final Prov<T>  func;
 		/** {@code func} 返回的类Class<T> */
-		public Class<T> cls;
+		public final Class<T> cls;
 
 		public Queue(String name, Prov<T> func, Class<T> cls) {
 			this.name = name;

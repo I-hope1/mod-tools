@@ -4,8 +4,7 @@ import arc.func.*;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
-import arc.struct.*;
-import arc.util.Log;
+import arc.struct.ObjectSet;
 import arc.util.pooling.Pools;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.PatternUtils;
@@ -92,8 +91,8 @@ public class FilterTable<E> extends LimitTable {
 	}
 
 	public static final class Compound<P1, P2> {
-		P1 p1;
-		P2 p2;
+		final P1 p1;
+		final P2 p2;
 		private Compound(P1 p1, P2 p2) {
 			this.p1 = p1;
 			this.p2 = p2;

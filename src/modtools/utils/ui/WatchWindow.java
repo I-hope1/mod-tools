@@ -156,10 +156,12 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 		return template.find(info);
 	}
 
+	@Override
 	public WatchWindow show() {
 		template.updateNow();
 		return (WatchWindow) super.show();
 	}
+
 	public WatchWindow showIfOk() {
 		if (Core.scene.root != null && !isEmpty()) show();
 		return this;
@@ -171,6 +173,8 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 	public boolean isEmpty() {
 		return template.isEmpty();
 	}
+
+	@Override
 	public String toString() {
 		return "Watch@" + hashCode();
 	}

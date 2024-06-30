@@ -624,9 +624,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 					if (isSingle) {
 						if (o != null) init.invoke(o);
 					} else JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
-						Seq<Class<?>> parmas = Seq.with(ctor.getParameterTypes());
-						parmas.insert(0, ctor.getDeclaringClass());
-						init.invokeWithArguments(convertArgs(arr, parmas.toArray()));
+						init.bindTo(o).invokeWithArguments(convertArgs(arr, ctor.getParameterTypes()));
 					});
 				})),
 			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", () -> {

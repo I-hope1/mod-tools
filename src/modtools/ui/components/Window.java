@@ -74,7 +74,7 @@ public class Window extends Table implements Position {
 		Tools.TASKS.add(() -> frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1));
 	}
 
-	public static DelegatingDrawable myPane = (DelegatingDrawable) TSettings.paneDrawable.getDrawable(Tex.pane);
+	public static final DelegatingDrawable myPane = (DelegatingDrawable) TSettings.paneDrawable.getDrawable(Tex.pane);
 
 	public static Drawable topPane
 	 = new TintDrawable(whiteui, () -> JColor.c_window_title);

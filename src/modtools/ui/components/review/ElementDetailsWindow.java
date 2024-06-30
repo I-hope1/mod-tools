@@ -59,10 +59,10 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 			table.row();
 		}
 
-		CellDetailsWindow.checkboxField(table, Element.class, element, "FillParent", boolean.class);
-		CellDetailsWindow.checkboxField(table, Element.class, element, "Visible", boolean.class).row();
+		CellDetailsWindow.checkboxField(table, Element.class, element, "fillParent", boolean.class);
+		CellDetailsWindow.checkboxField(table, Element.class, element, "visible", boolean.class).row();
 		if (element instanceof Group)
-			CellDetailsWindow.checkboxField(table, Group.class, element, "Transform", boolean.class).row();
+			CellDetailsWindow.checkboxField(table, Group.class, element, "transform", boolean.class).row();
 
 		cont.row().defaults().height(32).growX();
 		cont.button("Invalidate", style, element::invalidate).row();

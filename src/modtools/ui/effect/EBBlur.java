@@ -7,8 +7,10 @@ import modtools.IntVars;
 import modtools.events.E_Blur;
 import modtools.ui.effect.MyDraw.DrawEffect;
 
-/** from EB-wilson
- * @author EB-wilson */
+/**
+ * from EB-wilson
+ * @author EB-wilson
+ */
 public class EBBlur implements DrawEffect {
 	public enum DEF {
 		A(
@@ -115,24 +117,26 @@ public class EBBlur implements DrawEffect {
 		}
 		convolution.append(";");
 
-		String vertexShader = (
-		 "attribute vec4 a_position;\n" +
-		 "attribute vec2 a_texCoord0;\n" +
-		 "\n" +
-		 "uniform vec2 dir;\n" +
-		 "uniform vec2 size;\n" +
-		 "\n" +
-		 "varying vec2 v_texCoords;\n" +
-		 "%varying%\n" +
-		 "void main(){\n" +
-		 "  vec2 len = dir/size;\n" +
-		 "\n" +
-		 "  v_texCoords = a_texCoord0;\n" +
-		 "  %assignVar%\n" +
-		 "  gl_Position = a_position;\n" +
-		 "}\n")
-		 .replace("%varying%", varyings)
-		 .replace("%assignVar%", assignVar);
+		String vertexShader =
+		 """
+			attribute vec4 a_position;
+			attribute vec2 a_texCoord0;
+
+			uniform vec2 dir;
+			uniform vec2 size;
+
+			varying vec2 v_texCoords;
+			%varying%
+			void main(){
+			  vec2 len = dir/size;
+
+			  v_texCoords = a_texCoord0;
+			  %assignVar%
+			  gl_Position = a_position;
+			}
+			"""
+			.replace("%varying%", varyings)
+			.replace("%assignVar%", assignVar);
 		String fragmentShader = (
 		 "uniform lowp sampler2D u_texture0;\n" +
 		 "uniform lowp sampler2D u_texture1;\n" +

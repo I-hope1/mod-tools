@@ -10,7 +10,7 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.Code.StackMapFormat;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import jdk.internal.access.SharedSecrets;
-import modtools.annotations.*;
+import modtools.annotations.HopeReflect;
 import sun.reflect.annotation.ExceptionProxy;
 
 import java.io.*;
@@ -45,14 +45,20 @@ public class VirtualClass {
 	public static HashMap<Class<?>, ClassType> classToType = new HashMap<>();
 	public static ClassLoader                  loader      = new ClassLoader(HopeReflect.class.getClassLoader()) { };
 	public static Object defineMirrorClass(ExceptionProxy proxy) {
-		if (!mirrorType.isInstance(proxy) && !mirrorTypes.isInstance(proxy))
+		if (!mirrorType.isInstance(proxy) && !mirrorTypes.isInstance(proxy)) {
 			throw new IllegalArgumentException("type (" + proxy + ") isn't MirroredType(s)ExceptionProxy");
-		if (mirrorTypes.isInstance(proxy)) {
-			List<Type> types = HopeReflect.getAccess(mirrorTypes, proxy, "types");
-			return types.stream().map(VirtualClass::defineMirrorType0)
-			 .toList().toArray(Class[]::new);
 		}
-		return defineMirrorClass1(HopeReflect.getAccess(mirrorType, proxy, "type"));
+		try {
+			if (mirrorTypes.isInstance(proxy)) {
+				List<Type> types = HopeReflect.getAccess(mirrorTypes, proxy, "types");
+				return types.stream().map(VirtualClass::defineMirrorType0)
+				 .toList().toArray(Class[]::new);
+			}
+			return defineMirrorClass1(HopeReflect.getAccess(mirrorType, proxy, "type"));
+		} catch (Throwable e) {
+			errs(e);
+			return proxy;
+		}
 	}
 	public static Class<?> defineMirrorType0(Type type) {
 		if (type instanceof ClassType ct) {
@@ -79,8 +85,8 @@ public class VirtualClass {
 	}
 	public static Class<?> defineMirrorClass1(ClassType type) {
 		Class<?> cl = classOrNull(type.tsym.flatName().toString(), loader);
-
 		if (cl != null) return cl;
+
 		cl = classToType.entrySet().stream().filter(e -> e.getValue() == type)
 		 .map(Entry::getKey).findAny().orElse(null);
 		if (cl != null) return cl;
@@ -93,10 +99,15 @@ public class VirtualClass {
 			ClassSymbol symbol = new ClassSymbol(type.tsym.flags_field, type.tsym.name, type.tsym.owner);
 			symbol.type.tsym = symbol;
 			if (tryCreate(type, symbol)) return null;
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			// byte[] bytes = ObjectBytes;
-			classWriter.writeClassFile(out, symbol);
-			byte[] bytes = out.toByteArray();
+			byte[] bytes;
+			try {
+				ByteArrayOutputStream out = new ByteArrayOutputStream();
+				classWriter.writeClassFile(out, symbol);
+				bytes = out.toByteArray();
+			} catch (Throwable e) {
+				errs(e);
+				bytes = defaultBytes;
+			}
 			cl = defineHiddenClass(bytes);
 			HopeReflect.setAccess(Class.class, cl, "name", type.toString());
 			// cl = jdk.internal.misc.Unsafe.getUnsafe().defineClass(

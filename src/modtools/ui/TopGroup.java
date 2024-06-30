@@ -95,10 +95,6 @@ public final class TopGroup extends WidgetGroup {
 	 windows = new NGroup("windows"),
 	 frag    = new NGroup("frag"),
 	 others  = new NGroup("others") {
-		 public void draw() {
-			 // validate();
-			 super.draw();
-		 }
 		 public Element hit(float x, float y, boolean touchable) {
 			 return Sr(super.hit(x, y, touchable))
 				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)

@@ -62,7 +62,7 @@ public class InitMethodHandle {
 	static final int MN_IS_CONSTRUCTOR = 0x00020000;
 	public static MethodHandle findInitDesktop
 	 (Class<?> refc, Constructor<?> ctor,
-		Class<?> specialCaller) throws Throwable {
+	  Class<?> specialCaller) throws Throwable {
 		assert MEMBER_NAME_CTOR != null;
 		CProvT<Object, Throwable> maker = () -> MEMBER_NAME_CTOR.invoke(ctor);
 		/* 将memberName的flags的isConstructor改成isMethod */
@@ -77,7 +77,7 @@ public class InitMethodHandle {
 	}
 	public static MethodHandle findSpecial
 	 (Class<?> refc, CProvT<Object, Throwable> maker, Cons<Object> resolver,
-		Class<?> specialCaller) throws Throwable {
+	  Class<?> specialCaller) throws Throwable {
 		Lookup specialLookup = lookup.in(specialCaller);
 
 		assert RESOLVE_OR_FAIL != null;
@@ -86,6 +86,14 @@ public class InitMethodHandle {
 		 NoSuchMethodException.class);
 		resolver.get(mb);
 		assert GET_DIRECT_METHOD != null;
-		return (MethodHandle) GET_DIRECT_METHOD.invoke(specialLookup, REF_invokeSpecial, refc, mb, false, true, specialLookup);
+		return (MethodHandle) GET_DIRECT_METHOD.invoke(
+		 specialLookup,
+		 REF_invokeSpecial, // refKind
+		 refc,// ReferringClass
+		 mb, // method
+		 false, // checkSecurity
+		 true, // doRestrict
+		 specialLookup // boundCaller
+		);
 	}
 }

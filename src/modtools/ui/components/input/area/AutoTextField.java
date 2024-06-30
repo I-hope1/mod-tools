@@ -1,11 +1,9 @@
 package modtools.ui.components.input.area;
 
 import arc.Core;
-import arc.graphics.g2d.Font;
 import arc.scene.Scene;
 import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
-import arc.util.Time;
 
 import static modtools.ui.components.input.area.TextAreaTab.MOMO_STYLE;
 
@@ -55,12 +53,6 @@ public class AutoTextField extends TextField {
 		return (disabled && style.disabledBackground != null) ? style.disabledBackground
 		 : (!isValid() && style.invalidBackground != null) ? style.invalidBackground
 		 : ((focused && style.focusedBackground != null) ? style.focusedBackground : style.background);
-	}
-
-	protected void drawCursor(Drawable cursorPatch, Font font, float x, float y) {
-		cursorPatch.draw(
-		 x + textOffset + glyphPositions.get(cursor) - glyphPositions.get(visibleTextStart) + fontOffset + font.getData().cursorX,
-		 y - textHeight - font.getDescent(), cursorPatch.getMinWidth(), textHeight);
 	}
 
 	/*public static Font luculent;

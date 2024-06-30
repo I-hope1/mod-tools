@@ -1,6 +1,5 @@
 package modtools.ui.components.buttons;
 
-import arc.graphics.g2d.TextureRegion;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
@@ -12,8 +11,8 @@ public class CircleImageButton extends ImageButton {
 		return super.hit(x, y, touchable);
 	}
 
-	public CircleImageButton(Drawable icon, ImageButtonStyle stylen) {
-		super(icon, stylen);
+	public CircleImageButton(Drawable icon, ImageButtonStyle style) {
+		super(icon, style);
 	}
 
 	/* public CircleImageButton() {

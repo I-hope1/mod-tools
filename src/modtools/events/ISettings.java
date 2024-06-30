@@ -174,7 +174,7 @@ public interface ISettings extends E_DataInterface {
 		String   key      = index == -1 ? s : s.substring(0, index);
 		Drawable drawable = StringHelper.lookupUI(key);
 		return new DelegatingDrawable(or(drawable, def),
-		 index == -1 ? Color.white : Color.valueOf(s.substring(index + 1)));
+		 index == -1 ? Color.white : Color.valueOf(s.substring(index)));
 	}
 
 

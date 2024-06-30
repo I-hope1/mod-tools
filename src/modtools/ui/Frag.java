@@ -105,7 +105,7 @@ public class Frag extends Table {
 		});
 		IntVars.addResizeListener(() -> listener.display(x, y));
 	}
-	public       float hoverSize   = 45 * Scl.scl();
+	public final float hoverSize   = 45 * Scl.scl();
 	public final float hoverRadius = 96 * Scl.scl();
 	private void circleBuild() {
 		float angle          = 90;

@@ -33,6 +33,7 @@ public class HopeStyles {
 
 	/** 默认使用等宽字体，没有的话使用默认字体 */
 	public static final LabelStyle defaultLabel;
+	public static final int circleColor = 0x454545_FF;
 	// public static final CheckBoxStyle checkbox;
 
 
@@ -42,15 +43,15 @@ public class HopeStyles {
 	 hope_flati,
 	 hope_flatTogglei;
 	public static TextButtonStyle
-	 hope_clearTogglet;
+	                  hope_clearTogglet;
 	public static ButtonStyle
-	 hope_defaultb;
+	                  hope_defaultb;
 	public static SliderStyle
-	 hope_defaultSlider;
+	                  hope_defaultSlider;
 	public static CheckBoxStyle
-	 hope_defaultCheck;
+	                  hope_defaultCheck;
 	public static TextFieldStyle
-	 defaultMultiArea;
+	                  defaultMultiArea;
 
 	static void loadHopeStyles() {
 		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
@@ -63,7 +64,7 @@ public class HopeStyles {
 		}};
 		hope_flati = new ImageButtonStyle(flati) {{
 			up = paneCircle;
-			down = over = whiteuiCircle.tint(Tmp.c1.set(0x454545_FF));
+			down = over = whiteuiCircle.tint(Tmp.c1.set(circleColor));
 		}};
 		hope_flatTogglei = new ImageButtonStyle(hope_flati) {{
 			checked = whiteuiCircle.tint(Tmp.c1.set(Pal.accent).a(0.6f));
@@ -88,7 +89,7 @@ public class HopeStyles {
 			Color off = Color.lightGray;
 			checkboxOn = squareInset.tint(on);
 			checkboxOff = lineSquare.tint(off);
-			Color over = Tmp.c1.set(on).lerp(Color.white, 0.4f);
+			Color over = on.lerp(Color.white, 0.4f);
 			checkboxOnOver = squareInset.tint(over);
 			checkboxOver = lineSquare.tint(over);
 			checkboxOnDisabled = squareInset.tint(Color.gray);

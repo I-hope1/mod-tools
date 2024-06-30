@@ -6,7 +6,7 @@ import arc.scene.Element;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.gen.Tex;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.Window;
@@ -14,13 +14,14 @@ import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.utils.*;
 import modtools.ui.content.ui.ReviewElement;
+import modtools.utils.ui.FormatHelper;
 
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.FormatHelper.fixedAny;
 
 public class CellDetailsWindow extends Window implements IDisposable {
-	Cell<?> cl;
+	final Cell<?> cl;
 	public CellDetailsWindow(Cell<?> cell) {
 		super("cell");
 		this.cl = cell;
@@ -43,8 +44,8 @@ public class CellDetailsWindow extends Window implements IDisposable {
 			t.add();
 			getAndAdd(t, cell, "padBottom");
 			t.add();
-		}).colspan(2).row();
-		cont.defaults().height(32).growX();
+		}).colspan(2).growX().row();
+		cont.left().defaults().height(32).growX().left();
 		cont.defaults().colspan(2);
 		getAddWithName(cont, cell, "minWidth").row();
 		getAddWithName(cont, cell, "minHeight").row();
@@ -79,7 +80,7 @@ public class CellDetailsWindow extends Window implements IDisposable {
 		ReviewElement.addFocusSource(this, () -> this, cell::get);
 	}
 	static Cell<Table> getAndAdd(Table t, Cell cell, String name) {
-		return t.add(ReviewElement.floatSetter(null, () -> "" + Reflect.get(Cell.class, cell, name), f -> {
+		return t.add(ReviewElement.floatSetter(null, () -> FormatHelper.fixed(Reflect.get(Cell.class, cell, name)), f -> {
 			Reflect.set(Cell.class, cell, name, f);
 			if (cell.get() != null) cell.get().invalidateHierarchy();
 		}));
@@ -95,12 +96,14 @@ public class CellDetailsWindow extends Window implements IDisposable {
 	}
 	static <T extends Number> Cell<Table> getAddWithName(Table t, Cell cell, String name,
 																											 Func<Float, T> valueOf) {
-		return t.add(ReviewElement.floatSetter(name + ": ", () -> fixedAny(Reflect.get(Cell.class, cell, name)), f -> {
+		Table table = ReviewElement.floatSetter(name + ": ", () -> fixedAny(Reflect.get(Cell.class, cell, name)), f -> {
 			Reflect.set(Cell.class, cell, name, valueOf.get(f));
 			Core.app.post(() -> {
 				if (cell.get() != null) cell.get().invalidateHierarchy();
 			});
-		}));
+		});
+		table.left();
+		return t.add(table);
 	}
 	/* private static <T> void field(Table cont, Cell<?> cell, String key, TextFieldValidator validator,
 																	Func<String, T> func) {
@@ -122,7 +125,7 @@ public class CellDetailsWindow extends Window implements IDisposable {
 	public static <T>
 	Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
 															 Class<?> valueType) {
-		return cont.check(key, 28, getChecked(ctype, obj, key), b -> {
+		return cont.check(Strings.capitalize(key), 28, getChecked(ctype, obj, key), b -> {
 			 Reflect.set(ctype, obj, key, valueType == Boolean.TYPE ? b : b ? 1 : 0);
 			 if (obj instanceof Table t) t.layout();
 			 else if (obj instanceof Cell<?> c) c.getTable().layout();

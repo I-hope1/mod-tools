@@ -6,12 +6,15 @@ import arc.util.Log;
 public class TestInit {
 	public double a;
 	public TestInit(double a) {
-		Log.info("<init>");
+		this();
 		this.a = a * 1024;
 
 		// Log.info(FieldUtil.class);
 		// Log.info(AccessFlags.class);
 		// Log.info(sun.reflect.generics.visitor.Visitor.class);
+	}
+	public TestInit() {
+		Log.info("<init>");
 	}
 }
 

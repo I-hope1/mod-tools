@@ -95,7 +95,7 @@ public class HopeConstant {
 		long CODER = FieldUtils.fieldOffset(String.class, "coder");
 	}
 
-	static <R> R nl(CProv<?> prov) {
+	public static <R> R nl(CProv<?> prov) {
 		try {
 			Object r = prov.get();
 			if (r instanceof AccessibleObject ao) ao.setAccessible(true);

@@ -212,6 +212,7 @@ public class Tools {
 			try {
 				run.run();
 			} catch (Throwable th) {
+				Log.err(th);
 				Window window = IntUI.showException(text, th);
 				if (el != null) window.setPosition(ElementUtils.getAbsolutePos(el));
 			}

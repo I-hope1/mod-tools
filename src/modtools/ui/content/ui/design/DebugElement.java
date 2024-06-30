@@ -1,6 +1,5 @@
 package modtools.ui.content.ui.design;
 
-import modtools.ui.components.Window;
 import modtools.ui.content.Content;
 
 public class DebugElement extends Content {
@@ -10,7 +9,10 @@ public class DebugElement extends Content {
 
 	@Override
 	public void load() {
+		super.load();
 	}
+	@Override
 	public void build() {
+		super.build();
 	}
 }

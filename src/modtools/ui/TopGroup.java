@@ -52,7 +52,7 @@ public final class TopGroup extends WidgetGroup {
 		;
 		// overrideScene
 		TSettings() { }
-		TSettings(Class<?> c, Object ...args) { }
+		TSettings(Class<?> c, Object... args) { }
 	}
 	/* static {
 		if (overrideScene.enabled()) {
@@ -141,7 +141,7 @@ public final class TopGroup extends WidgetGroup {
 		Draw.z(21);
 
 		if (!debugBounds.enabled() || drawPadElem == null) return;
-		Vec2    vec2;
+		Vec2 vec2;
 		if (drawPadElem.parent != null) {
 			vec2 = ElementUtils.getAbsolutePos(drawPadElem.parent);
 		} else if (drawPadElem == scene.root) {
@@ -777,28 +777,28 @@ public final class TopGroup extends WidgetGroup {
 		}
 	}
 
-	public static void drawFocus(Element elem, Vec2 vec2, Color focusColor) {
+	public static void drawFocus(Element elem, Vec2 pos, Color focusColor) {
 		Gl.flush();
 		if (focusColor.a > 0) {
 			float alpha = focusColor.a * (elem.visible ? 0.9f : 0.6f);
-			if (alpha != 0 && Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(vec2)) {
+			if (alpha != 0 && Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(pos)) {
 				Draw.color(focusColor, alpha);
 				// Tmp.m1.set(Draw.trans());
-				Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
+				Fill.crect(pos.x, pos.y, elem.getWidth(), elem.getHeight());
 			}
 		}
 		if (!elem.visible) {
 			Draw.color(Pal.accent);
 			TextureRegionDrawable icon = Icon.eyeOffSmall;
-			icon.draw(Mathf.clamp(vec2.x, 7, graphics.getWidth() - 7),
-			 Mathf.clamp(vec2.y, 7, graphics.getHeight() - 7),
+			icon.draw(Mathf.clamp(pos.x, 7, graphics.getWidth() - 7),
+			 Mathf.clamp(pos.y, 7, graphics.getHeight() - 7),
 			 14, 14);
 		}
 
 		Draw.color(Pal.accent);
 		float thick = 1f;
 		Lines.stroke(thick);
-		Drawf.dashRectBasic(vec2.x, vec2.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+		Drawf.dashRectBasic(pos.x, pos.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
 	}
 
 	private class FillEnd extends Table {

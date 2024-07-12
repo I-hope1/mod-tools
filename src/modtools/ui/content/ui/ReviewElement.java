@@ -9,14 +9,14 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.event.*;
-import arc.scene.style.Style;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.*;
-import mindustry.graphics.Pal;
+import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
@@ -41,9 +41,11 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.BindCell;
 
+import java.lang.reflect.Field;
 import java.util.regex.*;
 
 import static arc.Core.scene;
@@ -51,7 +53,7 @@ import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.FormatHelper.*;
 import static modtools.utils.world.TmpVars.mouseVec;
 
@@ -94,7 +96,8 @@ public class ReviewElement extends Content {
 				FOCUS_WINDOW = windowProv.get();
 			}
 			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
-				if (toActor != null && source.isAscendantOf(toActor)) return;
+				if (toActor != null && source.isAscendantOf(toActor)
+					/*  && source.getListeners().find(t -> this.getClass().isInstance(t)) == null */) return;
 				CANCEL_TASK.run();
 			}
 		});
@@ -595,7 +598,7 @@ public class ReviewElement extends Content {
 			 ValueLabel.newElementDetailsList(element)
 			))
 			 .ifRun(element instanceof Table, seq -> seq.add(
-				MenuItem.with("allcells", Icon.wavesSmall, "Cells", () -> viewAllCells(self, (Table) element))
+				MenuItem.with("allcells", Icon.wavesSmall, "All Cells", () -> viewAllCells(self, (Table) element))
 			 ))
 			 .ifRun(element == null || element.parent instanceof Table, seq -> seq.add(
 				DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
@@ -633,24 +636,34 @@ public class ReviewElement extends Content {
 		}
 	}
 	private static Window viewAllCells(MyWrapTable self, Table element) {
-		return INFO_DIALOG.dialog(d -> {
-			Window window1 = ElementUtils.getWindow(self);
-			d.left().defaults().left();
-			for (var cell : element.getCells()) {
-				d.table(Tex.pane, t0 -> {
-					 var l = new PlainValueLabel<>(Cell.class, () -> cell);
-					 ReviewElement.addFocusSource(l, () -> window1, cell::get);
-					 t0.add(l).grow();
-				 }).grow()
-				 .colspan(ElementUtils.getColspan(cell));
-				if (cell.isEndRow()) {
-					Underline.of(d.row(), 20);
-					d.row();
-				}
+		class AllCellsWindow extends Window implements IDisposable {
+			public AllCellsWindow() { super("All Cells"); }
+		}
+
+		class CellItem extends Table implements CellView {
+			public CellItem(Drawable background, Cons<Table> cons) {
+				super(background, cons);
 			}
-		});
+		}
+		Window d         = new AllCellsWindow();
+		Table  container = new Table();
+		d.cont.pane(container).grow();
+		container.left().defaults().left();
+		for (var cell : element.getCells()) {
+			container.add(new CellItem(Tex.pane, t0 -> {
+				 var l = new PlainValueLabel<>(Cell.class, () -> cell);
+				 ReviewElement.addFocusSource(t0, () -> d, cell::get);
+				 t0.add(l).grow();
+			 })).grow()
+			 .colspan(ElementUtils.getColspan(cell));
+			if (cell.isEndRow()) {
+				Underline.of(container.row(), 20);
+			}
+		}
+		d.update(() -> d.display());
+		return d;
 	}
-	private static boolean parentValid(Element element, ReviewElementWindow window) {
+	private static boolean parentValid(Element element, ReviewElement.ReviewElementWindow window) {
 		return element.parent != null || element == window.element;
 	}
 	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
@@ -870,7 +883,14 @@ public class ReviewElement extends Content {
 		public void elemDraw() { }
 		public void beforeDraw(Window drawer) {
 			if (drawer == FOCUS_WINDOW && FOCUS != null) {
-				drawFocus(FOCUS);
+				if (FOCUS_FROM instanceof CellView cw) {
+					cw.drawFocus(FOCUS);
+					Vec2 pos = ElementUtils.getAbsolutePos(FOCUS);
+					// super.drawFocus(FOCUS, pos);
+					MyDraw.intoDraw(() -> drawGeneric(FOCUS, pos));
+				} else {
+					drawFocus(FOCUS);
+				}
 			}
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
@@ -899,7 +919,7 @@ public class ReviewElement extends Content {
 				table.fill(cell);
 				table.expand(cell);
 			}
-			showHover(elem, vec2);
+			showInfoTable(elem, vec2);
 		}
 		private static String posText(Element elem) {
 			return STR."\{fixed(elem.getWidth())} × \{fixed(elem.getHeight())}";
@@ -966,7 +986,7 @@ public class ReviewElement extends Content {
 		}
 
 		// ---------------------
-		private void showHover(Element elem, Vec2 vec2) {
+		private void showInfoTable(Element elem, Vec2 vec2) {
 			table.cellCell.toggle(
 			 ((Table) table.cellCell.el).getChildren().size > 2/* 两个基础元素 */
 			);
@@ -995,5 +1015,64 @@ public class ReviewElement extends Content {
 			case disabled -> disabledColor;
 			case childrenOnly -> Pal.accent;
 		};
+	}
+
+	public interface CellView {
+		default void drawFocus(Element focus) {
+			if (focus == null || !(focus.parent instanceof Table table)) return;
+			drawFocus(table.getCell(focus), focus);
+		}
+		default void drawFocus(Cell<?> cl, Element focus) {
+			int   column =  CellTools.column(cl);
+			int   row    =  CellTools.row(cl);
+			Table table  = cl.getTable();
+			float spanW  = table.getColumnWidth(column), spanH = table.getRowHeight(row);
+
+			// 父元素的坐标
+			Vec2 offset = ElementUtils.getAbsolutePos(table);
+
+			float thick = 2f;
+			Lines.stroke(thick);
+
+			//逆运算下面过程
+			/* align = c.align;
+            if((align & Align.left) != 0)
+                c.elementX = currentX;
+            else if((align & Align.right) != 0)
+                c.elementX = currentX + spannedCellWidth - c.elementWidth;
+            else
+                c.elementX = currentX + (spannedCellWidth - c.elementWidth) / 2;
+
+            if((align & Align.top) != 0)
+                c.elementY = currentY + c.computedPadTop;
+            else if((align & Align.bottom) != 0)
+                c.elementY = currentY + rowHeight[c.row] - c.elementHeight - c.computedPadBottom;
+            else
+                c.elementY = currentY + (rowHeight[c.row] - c.elementHeight + c.computedPadTop - c.computedPadBottom) / 2;
+                 */
+			int align = CellTools.align(cl);
+			float padTop = CellTools.padTop(cl),
+			 padBottom = CellTools.padBottom(cl) ,
+			 padLeft =  CellTools.padLeft(cl),
+			 padRight =  CellTools.padRight(cl);
+			// Log.info(padTop);
+
+			// 左下角为 (0, 0)
+			float spanX = (align & Align.left) != 0 ? -padLeft :
+			 (align & Align.right) != 0 ? padRight - spanW :
+				// center
+				(focus.getWidth() - spanW - padLeft + padRight) / 2f;
+			float spanY = (align & Align.top) != 0 ? padTop - spanH + focus.getHeight() :
+			 (align & Align.bottom) != 0 ? -padBottom :
+				(focus.getHeight() - spanH - padBottom + padTop) / 2f;
+
+
+			Draw.color(Pal.remove);
+			Drawf.dashRectBasic(focus.x + spanX + offset.x, focus.y + spanY + offset.y, spanW + thick, spanH + thick);
+
+			thick = 1f;
+			Draw.color(Pal.heal);
+			Drawf.dashRectBasic(focus.x + offset.x, focus.y + offset.y, focus.getWidth() + thick, focus.getHeight() + thick);
+		}
 	}
 }

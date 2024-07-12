@@ -6,29 +6,28 @@ import arc.math.*;
 import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.*;
+import arc.scene.event.Touchable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.settings.*;
+import modtools.annotations.settings.SettingsInit;
 import modtools.events.ISettings;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Hitter;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.linstener.*;
+import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
 import modtools.utils.Tools;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.ui.search.BindCell;
 
-import java.util.*;
-
 import static modtools.IntVars.modName;
 import static modtools.ui.Frag.Settings.position;
-import static modtools.ui.IntUI.*;
+import static modtools.ui.IntUI.topGroup;
 
 public class Frag extends Table {
 	public static final Color defaultColor = Color.sky;
@@ -39,7 +38,7 @@ public class Frag extends Table {
 	Group    circle;
 	Image    top;
 
-	Set<Content> enabledContents = new HashSet<>();
+	ObjectSet<Content> enabledContents = new OrderedSet<>();
 	public Frag() {
 		super(Styles.black8);
 	}
@@ -109,7 +108,7 @@ public class Frag extends Table {
 	public final float hoverRadius = 96 * Scl.scl();
 	private void circleBuild() {
 		float angle          = 90;
-		int   angleReduction = 360 / enabledContents.size();
+		int   angleReduction = 360 / enabledContents.size;
 
 		float toX = Mathf.clamp(x, hoverRadius + width / 4f, Core.graphics.getWidth() - hoverRadius - width / 4f);
 		float toY = Mathf.clamp(y, hoverRadius + height / 4f, Core.graphics.getHeight() - hoverRadius - height / 4f);

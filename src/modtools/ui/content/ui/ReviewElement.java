@@ -41,11 +41,9 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.BindCell;
 
-import java.lang.reflect.Field;
 import java.util.regex.*;
 
 import static arc.Core.scene;
@@ -550,7 +548,7 @@ public class ReviewElement extends Content {
 			Element window_elem = this.children.get(eventChildIndex);
 			if (element instanceof Image img) {
 				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
-				imagePreviewButton(element, (Table) window_elem, img::getDrawable, img::setDrawable);
+				buildImagePreviewButton(element, (Table) window_elem, img::getDrawable, img::setDrawable);
 			}
 			window_elem.touchable = Touchable.enabled;
 			Runnable copy = storeRun(() -> element);

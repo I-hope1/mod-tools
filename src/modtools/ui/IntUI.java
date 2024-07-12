@@ -841,8 +841,8 @@ public class IntUI {
 	}
 
 
-	public static Cell<?> imagePreviewButton(Element element, Table table,
-	                                         Prov<Drawable> prov, Cons<Drawable> consumer) {
+	public static Cell<?> buildImagePreviewButton(Element element, Table table,
+	                                              Prov<Drawable> prov, Cons<Drawable> consumer) {
 		return IntUI.addPreviewButton(table, p -> {
 			p.top();
 			try {

@@ -278,7 +278,7 @@ public interface ISettings extends E_DataInterface {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
 				t.label(() -> StringHelper.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
-				IntUI.imagePreviewButton(null, t, () -> drawable[0], d -> {
+				IntUI.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
 					set(StringHelper.getUIKey(d));
 
 					cons.get(d);

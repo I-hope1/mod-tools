@@ -11,14 +11,14 @@ import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
-import modtools.ui.HopeStyles;
+import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.utils.*;
 import modtools.ui.content.ui.ReviewElement;
 import modtools.ui.content.ui.ReviewElement.CellView;
-import modtools.utils.StringHelper;
+import modtools.utils.*;
 import modtools.utils.ui.*;
 
 import static modtools.ui.HopeStyles.defaultLabel;
@@ -87,11 +87,11 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		fnButton("Center", style, cell::center);
 		checkboxField(cont, cell, "endRow", boolean.class);
 		cont.row();
-		cont.table(Tex.pane, t -> {
-			t.touchable = Touchable.enabled;
-			t.add("Element");
-			ReviewElement.addFocusSource(t, () -> this, cell::get);
-		}).growX().colspan(2);
+		// cont.table(Tex.pane, t -> {
+		// 	t.touchable = Touchable.enabled;
+		// 	t.add("Element");
+		// 	ReviewElement.addFocusSource(t, () -> this, cell::get);
+		// }).growX().colspan(2);
 
 		ReviewElement.addFocusSource(this, () -> this, cell::get);
 
@@ -154,7 +154,45 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			 else if (obj instanceof Cell<?> c) c.getTable().layout();
 		 })
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
-		 .checked(_ -> getChecked(ctype, obj, key)).fill(false).expand(false, false).left();
+		 .with(t -> {
+			 if (valueType == float.class || valueType == int.class) {
+				 addFloatSetter(ctype, obj, key, t, valueType == int.class);
+			 }
+		 }).checked(_ -> getChecked(ctype, obj, key))
+		 .fill(false)
+		 .expand(false, false).left();
+	}
+	private static <T> void addFloatSetter(Class<? extends T> ctype, T obj, String key,
+	                                       CheckBox elem, boolean useInt) {
+		IntUI.longPressOrRclick(elem, _ -> {
+			IntUI.showSelectTable(elem, (p, _, _) -> {
+				Number defvalue = Reflect.get(ctype, obj, key);
+				Slider slider   = new Slider(useInt ? -2 : -1, 2, useInt ? 1 : 0.01f, false);
+				slider.setValue(defvalue.floatValue());
+				TextField field = new TextField(FormatHelper.fixed(defvalue.floatValue()));
+				field.setValidator(useInt ? Strings::canParseInt : NumberHelper::isFloat);
+				slider.moved(v -> {
+					Number val;
+
+					// 装箱时最好别用三目表达式
+					if (useInt) val = (int) v;
+					else val = v;
+
+					Reflect.set(ctype, obj, key, val);
+					field.setText(FormatHelper.fixed(v));
+				});
+				field.changed(() -> {
+					Number value = useInt ? NumberHelper.asInt(field.getText()) : NumberHelper.asFloat(field.getText());
+					Reflect.set(ctype, obj, key, value);
+					slider.setValue(value.floatValue());
+				});
+				Label label = new Label(() -> FormatHelper.fixedAny(Reflect.get(ctype, obj, key)));
+				label.setAlignment(Align.center);
+				label.touchable = Touchable.disabled;
+				p.stack(slider, label).growX().row();
+				p.add(field);
+			}, false, Align.top);
+		});
 	}
 	private static Object castBoolean(Class<?> valueType, boolean b) {
 		return valueType == Boolean.TYPE ? b : b ? 1 : 0;

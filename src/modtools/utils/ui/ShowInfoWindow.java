@@ -216,7 +216,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 .growX().height(42).checked(c[index])
 			 .with(b -> b.getLabelCell().padLeft(10).growX().labelAlign(Align.left))
 			 .row();
-			Underline.of(cont, 7, Pal.accent).height(2);
+			Underline.of(cont, 7, Pal.accent).height(2).fill(0.75f, 0);
 			var table = new ReflectTable();
 			cont.collapser(table, true, () -> c[index])
 			 .pad(4, 6, 4, 6)
@@ -454,17 +454,17 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	private static Cell<?> buildCell(Table t, Class<?> type, ValueLabel[] l) {
 		Cell<?> cell;
 		if (Drawable.class.isAssignableFrom(type)) {
-			cell = IntUI.imagePreviewButton(null, t,
+			cell = IntUI.buildImagePreviewButton(null, t,
 				() -> (Drawable) l[0].val,
 				v -> l[0].setNewVal(v))
 			 .padRight(4f);
 		} else if (Texture.class.isAssignableFrom(type)) {
-			cell = IntUI.imagePreviewButton(null, t,
+			cell = IntUI.buildImagePreviewButton(null, t,
 				() -> TmpVars.trd.set(Draw.wrap((Texture) l[0].val)),
 				null)
 			 .padRight(4f);
 		} else if (TextureRegion.class.isAssignableFrom(type)) {
-			cell = IntUI.imagePreviewButton(null, t,
+			cell = IntUI.buildImagePreviewButton(null, t,
 				() -> TmpVars.trd.set((TextureRegion) l[0].val),
 				null)
 			 .padRight(4f);

@@ -356,6 +356,7 @@ public class IntUI {
 				)
 			 ));
 		 }))
+		 .with(makeTipListener("details_button"))
 		 .size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE)
 		 .disabled(_ -> clazz.isPrimitive() && prov.get() == null)
 		 .get();
@@ -419,7 +420,7 @@ public class IntUI {
 	 * 弹出一个小窗，自己设置内容
 	 * @param <T>        the type parameter
 	 * @param button     用于定位弹窗的位置
-	 * @param builder          (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
+	 * @param builder    (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 * @param align      the align
 	 * @return the select table
@@ -822,8 +823,17 @@ public class IntUI {
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
+	public static <T extends Element> Cons<T> makeTipListener(String tipKey) {
+		return elem -> addTooltipListener(elem, tips(tipKey));
+	}
+	public static void addTooltipListener(Element element, String text) {
+		element.addListener(new Tooltip(t -> t.background(Tex.pane).add(text)));
+	}
 	public static String tips(String key) {
 		return Core.bundle.format("mod-tools.tips", Core.bundle.get("mod-tools.tips." + key));
+	}
+	public static String tips(String key, String arg1) {
+		return Core.bundle.format("mod-tools.tips", Core.bundle.format("mod-tools.tips." + key, arg1));
 	}
 
 

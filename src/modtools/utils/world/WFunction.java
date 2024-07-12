@@ -136,7 +136,7 @@ public abstract class WFunction<T> {
 						int c = 0;
 						for (T item : value) {
 							p.add(new SelectHover(item, t -> {
-								t.image(getIcon(item)).size(45);
+								t.image(getIcon(item)).size(42);
 							}));
 							if (++c % 6 == 0) p.row();
 						}
@@ -390,24 +390,27 @@ public abstract class WFunction<T> {
 	public abstract boolean checkFocus(T item);
 	public abstract void clearFocus(T item);
 	public class SelectHover extends LimitButton {
-		private T item;
+		private final T item;
 
 		public SelectHover(T item) {
 			super(HopeStyles.flati);
 			this.item = item;
+			init();
+		}
+		void init(){
 			margin(2, 4, 2, 4);
 
 			touchable = Touchable.enabled;
 
 			IntUI.hoverAndExit(this,() -> {
-				if (SC.focusDisabled) return;
 				Selection.focusElem = this;
 				SC.focusElemType = WFunction.this;
-				setFocus(item);
 				SC.focusDisabled = true;
+				setFocus(item);
 			}, () -> {
 				Selection.focusElem = null;
 				SC.focusElemType = null;
+				SC.focusDisabled = false;
 				clearFocus(item);
 			});
 

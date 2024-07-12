@@ -98,9 +98,7 @@ public class Executor extends Content {
 			 , "color", color);
 			cont.row();
 			cont.unbind();
-			button.getImage().addListener(new IntUI.Tooltip(
-			 t -> t.background(Tex.pane).label(() -> node.status.name()).pad(4f)
-			));
+			IntUI.addTooltipListener(button.getImage(), node.status.name());
 
 			button.table(center -> {
 				center.marginLeft(4f);

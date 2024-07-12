@@ -164,6 +164,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 	private static <T> void addFloatSetter(Class<? extends T> ctype, T obj, String key,
 	                                       CheckBox elem, boolean useInt) {
+		IntUI.addTooltipListener(elem, IntUI.tips("exact_setter"));
 		IntUI.longPressOrRclick(elem, _ -> {
 			IntUI.showSelectTable(elem, (p, _, _) -> {
 				Number defvalue = Reflect.get(ctype, obj, key);

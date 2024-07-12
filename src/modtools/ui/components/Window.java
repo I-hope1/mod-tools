@@ -799,7 +799,7 @@ public class Window extends Table implements Position {
 		TranslateToAction last;
 		public Element hit(float x, float y, boolean touchable) {
 			Element element = super.hit(x, y, touchable);
-			translateTo(height - titleHeight <= y && element != null ? 0 : titleHeight);
+			translateTo(height - titleHeight <= y && element != null && !isMinimize ? 0 : titleHeight);
 			return element;
 		}
 		private void translateTo(float toValue) {

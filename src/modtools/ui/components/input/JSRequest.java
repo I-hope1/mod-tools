@@ -26,6 +26,7 @@ public class JSRequest {
 		void buildButtons(ConsT<R, Throwable> callback) {
 			buttons.check("@jsrequest.nothideauto", b -> notHideAuto = b).checked(_ -> notHideAuto)
 			 .colspan(3).padRight(100f).get().left();
+			buttons.margin(6, 8, 6, 8);
 			buttons.row();
 
 			buttons.button("@cancel", HopeStyles.flatt, this::hide).growX().height(42);
@@ -90,6 +91,13 @@ public class JSRequest {
 		request0(callback, self, "list", value);
 	}
 
+	public static <R> void requestFor(Object self, Class<R> expect, ConsT<R, Throwable> callback) {
+		tips.setText(IntUI.tips("jsrequest.any", expect.getSimpleName()));
+		request0(v -> {
+			callback.get(as(ScriptRuntime.doTopCall((_, _, _, _) -> Context.jsToJava(v, expect),
+			 cx, scope, null, null, false)));
+		}, self);
+	}
 	/**
 	 * 请求js
 	 * @param callback 提供js执行的返回值

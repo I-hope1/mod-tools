@@ -8,7 +8,7 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.*;
 import arc.scene.ui.Label;
-import arc.scene.ui.layout.Cell;
+import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;

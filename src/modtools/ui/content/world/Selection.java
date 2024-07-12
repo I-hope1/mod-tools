@@ -644,12 +644,12 @@ public class Selection extends Content {
 	public static void addFocusSource(Element source, Prov<Object> focusProv) {
 		if (focusProv == null) throw new IllegalArgumentException("focusProv is null.");
 
-		source.addListener(new InputListener() {
-			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+		source.addListener(new HoverAndExitListener() {
+			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				focusElem = source;
-				focusAny = focusProv;
+				focusAny = focusProv.get();
 			}
-			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
 				if (toActor != null && source.isAscendantOf(toActor)) return;
 				focusElem = null;
 				focusAny = null;

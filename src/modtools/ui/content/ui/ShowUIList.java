@@ -30,6 +30,7 @@ import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.components.*;
+import modtools.ui.components.input.JSRequest;
 import modtools.ui.components.utils.*;
 import modtools.ui.content.*;
 import modtools.utils.*;
@@ -125,13 +126,14 @@ public class ShowUIList extends Content {
 	private static void setColor(Image image) {
 		FieldUtils.setValue(colorField, image, iconColor);
 	}
+	public static final int imageSize = 36;
 
 	Table icons = newTable(t -> Icon.icons.each((k, icon) -> {
 		iconKeyMap.put(icon, k);
 		t.bind(k);
 		var region = icon.getRegion();
 		setColor(t.image(icon)
-		 .size(32, region.height / (float) region.width * 32).get());
+		 .size(imageSize, region.height / (float) region.width * imageSize).get());
 		t.add(k).with(JSFunc::addDClickCopy).growY().row();
 		t.unbind();
 	})), tex    = newTable(t -> {
@@ -184,8 +186,7 @@ public class ShowUIList extends Content {
 					colorKeyMap.put(color, prefix + field.getName());
 
 					t.bind(field.getName());
-					var tooltip = new IntUI.Tooltip(tl -> tl.table(Tex.pane, t2 -> t2.add("" + color)));
-					t.listener(el -> el.addListener(tooltip));
+					t.listener(el -> IntUI.addTooltipListener(el, "" + color));
 					t.add(new BorderImage(Core.atlas.white(), 2f)
 					 .border(color.cpy().inv())).color(color).size(42f);
 					t.add(field.getName()).with(JSFunc::addDClickCopy).growY();
@@ -203,20 +204,29 @@ public class ShowUIList extends Content {
 	}),
 	 interps    = newTable(t -> {
 		 Table table = new Table();
-		 t.pane(table).pad(10f).grow().get();
+		 t.pane(table).pad(10f).grow().colspan(2).get();
 		 t.row();
-		 t.button("fun", () -> {
+		 t.defaults().growX();
+		 int[] c = {0};
+		 t.button("Built-in", () -> {
 			 table.clearChildren();
-			 int c = 0;
+			 c[0] = 0;
 			 for (Field field : Interp.class.getDeclaredFields()) {
 				 Object o = FieldUtils.getOrNull(field);
 				 if (o instanceof Interp interp) {
 					 table.add(new InterpImage(interp))
 						.tooltip(field.getName())
 						.size(120).padBottom(32f);
-					 if (++c % 3 == 0) table.row();
+					 if (++c[0] % 3 == 0) table.row();
 				 }
 			 }
+		 });
+		 t.button("@add", () -> {
+			 JSRequest.requestFor(Interp.class, Interp.class, interp -> {
+				 table.add(new InterpImage(interp))
+					.size(120).padBottom(32f);
+					 if (++c[0] % 3 == 0) table.row();
+			 });
 		 });
 	 }), uis    = newTable(t -> {
 		for (Field f : UI.class.getFields()) {
@@ -347,7 +357,7 @@ public class ShowUIList extends Content {
 			}, style, () -> { }).size(96, 42);
 		}
 		static void build(TextFieldStyle style) {
-			t.field("field", style, text -> { });
+			t.field("field", style, _ -> { });
 		}
 		static void build(CheckBoxStyle style) {
 			t.add(new CheckBox("checkbox", style)).height(42);

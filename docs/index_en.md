@@ -53,10 +53,11 @@ English|[中文](index.md)
     - PC: Press `F` to filter current element
 - Functions key-shot for Element
     - `i`: display details (open ShowInfoWindow)\
-    - `p`:  show `DrawablePicker`
+    - `p`(for Image):  show `DrawablePicker`
     - `del`: (`shift` to ignore confirmation), delete element
     - `<` / `>`: collapse Group
     - `f`: fix floating Info column
+    - `r`: invoke element's method
 
 - ![reviewElement](./screenshots/review_element.png)
 

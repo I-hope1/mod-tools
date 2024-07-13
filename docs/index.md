@@ -56,6 +56,7 @@
     - `del`:（`shift`不显示确认）删除元素
     - `<` / `>`: 折叠Group
     - `f`: 固定悬浮Info栏 
+    - `r`: 运行函数
 - ![reviewElement](./screenshots/review_element.png)
 
 ## Frag

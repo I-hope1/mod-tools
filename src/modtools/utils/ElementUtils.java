@@ -103,9 +103,6 @@ public interface ElementUtils {
 	static @Nullable ScrollPane findClosestPane(Element actor) {
 		return findParent(actor, e -> e instanceof ScrollPane);
 	}
-	static int getColspan(Cell<?> cell) {
-		return Reflect.get(Cell.class, cell, "colspan");
-	}
 	static @Nullable Window getWindow(Element el) {
 		return findParent(el, e -> e instanceof Window);
 	}

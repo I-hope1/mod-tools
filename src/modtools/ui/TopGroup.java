@@ -501,7 +501,8 @@ public final class TopGroup extends WidgetGroup {
 
 
 	/**
-	 * just a flag
+	 * <p>just a flag</p>
+	 * 这会被添加到TopGroup的最底层
 	 * @see modtools.ui.TopGroup#addChild
 	 */
 	public static class BackElement extends Element implements BackInterface { }

@@ -6,15 +6,27 @@ import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.Field;
 
-@SuppressWarnings("DataFlowIssue")
 public interface CellTools {
-	Field f_column       = FieldUtils.getFieldAccess(Cell.class, "column"),
-	 f_row               = FieldUtils.getFieldAccess(Cell.class, "row"),
-	 f_align             = FieldUtils.getFieldAccess(Cell.class, "align"),
-	 f_computedPadLeft   = FieldUtils.getFieldAccess(Cell.class, "computedPadLeft"),
-	 f_computedPadTop    = FieldUtils.getFieldAccess(Cell.class, "computedPadTop"),
-	 f_computedPadRight  = FieldUtils.getFieldAccess(Cell.class, "computedPadRight"),
-	 f_computedPadBottom = FieldUtils.getFieldAccess(Cell.class, "computedPadBottom");
+	Field f_column       = f("column"),
+	 f_row               = f("row"),
+	 f_align             = f("align"),
+	 f_computedPadLeft   = f("computedPadLeft"),
+	 f_computedPadTop    = f("computedPadTop"),
+	 f_computedPadRight  = f("computedPadRight"),
+	 f_computedPadBottom = f("computedPadBottom"),
+	 f_colspan           = f("colspan"),
+	 f_minWidth          = f("minWidth"),
+	 f_minHeight         = f("minHeight"),
+	 f_maxWidth          = f("maxWidth"),
+	 f_maxHeight         = f("maxHeight"),
+	 f_fillX             = f("fillX"),
+	 f_fillY             = f("fillY"),
+	 f_expandX           = f("expandX"),
+	 f_expandY           = f("expandY");
+
+	private static Field f(String name) {
+		return FieldUtils.getFieldAccess(Cell.class, name);
+	}
 
 	static int column(Cell<?> cell) {
 		return Reflect.get(cell, f_column);
@@ -35,32 +47,46 @@ public interface CellTools {
 	static int align(Cell<?> cell) {
 		return Reflect.get(cell, f_align);
 	}
-	static void align(Cell<?> cell, int value) {
-		Reflect.set(cell, f_align, value);
-	}
 
+	// 下面的不用setter
 	static float padLeft(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadLeft);
-	}
-	static void padLeft(Cell<?> cell, float value) {
-		Reflect.set(cell, f_computedPadLeft, value);
 	}
 	static float padTop(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadTop);
 	}
-	static void padTop(Cell<?> cell, float value) {
-		Reflect.set(cell, f_computedPadTop, value);
-	}
 	static float padRight(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadRight);
-	}
-	static void padRight(Cell<?> cell, float value) {
-		Reflect.set(cell, f_computedPadRight, value);
 	}
 	static float padBottom(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadBottom);
 	}
-	static void padBottom(Cell<?> cell, float value) {
-		Reflect.set(cell, f_computedPadBottom, value);
+
+	static int colspan(Cell<?> cell) {
+		return Reflect.get(cell, f_colspan);
+	}
+	static float minWidth(Cell<?> cell) {
+		return Reflect.get(cell, f_minWidth);
+	}
+	static float minHeight(Cell<?> cell) {
+		return Reflect.get(cell, f_minHeight);
+	}
+	static float maxWidth(Cell<?> cell) {
+		return Reflect.get(cell, f_maxWidth);
+	}
+	static float maxHeight(Cell<?> cell) {
+		return Reflect.get(cell, f_maxHeight);
+	}
+	static float fillX(Cell<?> cell) {
+		return Reflect.get(cell, f_fillX);
+	}
+	static float fillY(Cell<?> cell) {
+		return Reflect.get(cell, f_fillY);
+	}
+	static int expandX(Cell<?> cell) {
+		return Reflect.get(cell, f_expandX);
+	}
+	static int expandY(Cell<?> cell) {
+		return Reflect.get(cell, f_expandY);
 	}
 }

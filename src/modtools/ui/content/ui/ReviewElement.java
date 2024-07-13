@@ -669,7 +669,7 @@ public class ReviewElement extends Content {
 				 ReviewElement.addFocusSource(t0, () -> d, cell::get);
 				 t0.add(l).grow();
 			 })).grow()
-			 .colspan(ElementUtils.getColspan(cell));
+			 .colspan(CellTools.colspan(cell));
 			if (cell.isEndRow()) {
 				Underline.of(container.row(), 20);
 			}
@@ -785,7 +785,7 @@ public class ReviewElement extends Content {
 				colspanCell.remove();
 				return;
 			}
-			int colspan = Reflect.get(Cell.class, cell, "colspan");
+			int colspan = CellTools.colspan(cell);
 			if (colspanCell.toggle1(colspan != 1))
 				colspanLabel.setText("" + colspan);
 		}
@@ -797,8 +797,8 @@ public class ReviewElement extends Content {
 				minSizeCell.remove();
 				return;
 			}
-			float minWidth = Reflect.get(Cell.class, cell, "minWidth"),
-			 minHeight = Reflect.get(Cell.class, cell, "minHeight");
+			float minWidth = CellTools.minWidth(cell),
+			 minHeight = CellTools.minHeight(cell);
 			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset)) {
 				minSizeVec.set(minWidth, minHeight);
 				minSizeLabel.setText(minSizeProv.get());
@@ -809,8 +809,8 @@ public class ReviewElement extends Content {
 				maxSizeCell.remove();
 				return;
 			}
-			float maxWidth = Reflect.get(Cell.class, cell, "maxWidth"),
-			 maxHeight = Reflect.get(Cell.class, cell, "maxHeight");
+			float maxWidth = CellTools.maxWidth(cell),
+			 maxHeight = CellTools.maxHeight(cell);
 			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset)) {
 				maxSizeVec.set(maxWidth, maxHeight);
 				maxSizeLabel.setText(maxSizeProv.get());
@@ -821,8 +821,8 @@ public class ReviewElement extends Content {
 				fillCell.remove();
 				return;
 			}
-			float fillX = Reflect.get(Cell.class, cell, "fillX"),
-			 fillY = Reflect.get(Cell.class, cell, "fillY");
+			float fillX = CellTools.fillX(cell),
+			 fillY = CellTools.fillY(cell);
 			if (fillCell.toggle1(fillX != 0 || fillY != 0))
 				fillLabel.setText(STR."\{enabledMark((int) fillX)}x []| \{enabledMark((int) fillY)}y");
 		}
@@ -831,8 +831,8 @@ public class ReviewElement extends Content {
 				expandCell.remove();
 				return;
 			}
-			int expandX = Reflect.get(Cell.class, cell, "expandX"),
-			 expandY = Reflect.get(Cell.class, cell, "expandY");
+			int expandX = CellTools.expandX(cell),
+			 expandY = CellTools.expandY(cell);
 			if (expandCell.toggle1(expandX != 0 || expandY != 0))
 				expandLabel.setText(STR."\{enabledMark(expandX)}x []| \{enabledMark(expandY)}y");
 		}

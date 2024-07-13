@@ -113,18 +113,24 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 	public static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
 		return Sr(Reflect.get(ctype, obj, key))
-		 .reset(t -> t instanceof Boolean ? (Boolean) t :
-			t instanceof Number n && n.intValue() == 1)
+		 .reset(CellDetailsWindow::asBoolean)
 		 .get();
+	}
+
+	private static boolean asBoolean(Object t) {
+		return t instanceof Boolean ? (Boolean) t :
+		 t instanceof Number n && n.intValue() == 1;
 	}
 	static <T extends Number> Cell<Table> getAddWithName(Table t, Cell cell, String name,
 	                                                     Func<Float, T> valueOf) {
-		Table table = ReviewElement.floatSetter(name + ": ", () -> fixedAny(Reflect.get(Cell.class, cell, name)), f -> {
-			Reflect.set(Cell.class, cell, name, valueOf.get(f));
-			Core.app.post(() -> {
-				if (cell.get() != null) cell.get().invalidateHierarchy();
-			});
-		});
+		Table table = ReviewElement.floatSetter(name + ": ",
+		 () -> fixedAny(Reflect.get(Cell.class, cell, name)),
+		 f -> {
+			 Reflect.set(Cell.class, cell, name, valueOf.get(f));
+			 Core.app.post(() -> {
+				 if (cell.get() != null) cell.get().invalidateHierarchy();
+			 });
+		 });
 		table.left();
 		return t.add(table);
 	}

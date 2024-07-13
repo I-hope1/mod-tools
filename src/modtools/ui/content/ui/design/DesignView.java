@@ -1,22 +1,22 @@
 package modtools.ui.content.ui.design;
 
-import arc.*;
-import arc.graphics.*;
+import arc.Core;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.*;
-import arc.input.GestureDetector.*;
-import arc.math.*;
+import arc.input.GestureDetector.GestureListener;
+import arc.math.Mathf;
 import arc.math.geom.*;
-import arc.scene.event.*;
-import arc.scene.ui.layout.*;
-import arc.util.*;
-import mindustry.graphics.*;
-import mindustry.input.*;
-import mindustry.ui.*;
 import arc.scene.Element;
+import arc.scene.event.*;
+import arc.scene.ui.layout.Scl;
+import arc.util.*;
+import mindustry.graphics.Pal;
+import mindustry.input.Binding;
+import mindustry.ui.GridImage;
+import modtools.ui.control.HopeInput;
 
 import static mindustry.Vars.*;
-import static modtools.IntVars.mouseVec;
 
 public class DesignView extends Element implements GestureListener {
 	DesignTool tool = DesignTool.hand;
@@ -305,9 +305,9 @@ public class DesignView extends Element implements GestureListener {
 
 	private boolean active() {
 		return Core.scene != null && Core.scene.getKeyboardFocus() != null
-				&& Core.scene.getKeyboardFocus().isDescendantOf(ui.editor)
-				&& ui.editor.isShown() && tool == DesignTool.hand &&
-				Core.scene.hit(mouseVec.x, mouseVec.y, true) == this;
+		       && Core.scene.getKeyboardFocus().isDescendantOf(ui.editor)
+		       && ui.editor.isShown() && tool == DesignTool.hand &&
+		       HopeInput.mouseHit() == this;
 	}
 
 	@Override

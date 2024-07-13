@@ -49,6 +49,7 @@ allprojects {
 		targetCompatibility = 21
 		export(options)
 	}
+
 	repositories {
 		mavenLocal()
 		mavenCentral()

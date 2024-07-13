@@ -676,14 +676,14 @@ public class Selection extends Content {
 			drawFocusInternal();
 		});
 		Tools.TASKS.add(() -> {
-			Element tmp = HopeInput.mouseHit();
+			Element hit  = HopeInput.mouseHit();
 			focusLocked = control.input.locked();
 			focusEnabled = !focusLocked && !scene.hasDialog() && (
-			 tmp == null || tmp.isDescendantOf(focusW) ||
-			 (!tmp.visible && tmp.touchable == Touchable.disabled)
-			 || tmp.isDescendantOf(el -> el instanceof IMenu)
-			 // || tmp.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
-			 /* || tmp instanceof IMenu */);
+			 hit == null || hit.isDescendantOf(focusW) ||
+			 (!hit.visible && hit.touchable == Touchable.disabled)
+			 || hit.isDescendantOf(el -> el instanceof IMenu)
+			 // || hit.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
+			 /* || hit instanceof IMenu */);
 			if (!focusEnabled) return;
 			if (!focusDisabled) {
 				reacquireFocus();

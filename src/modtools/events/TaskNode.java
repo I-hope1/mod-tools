@@ -11,7 +11,7 @@ import modtools.struct.MySet;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class TaskNode {
 	public static final float perTick = 1 / 60f;

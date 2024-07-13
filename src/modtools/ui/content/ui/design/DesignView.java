@@ -16,7 +16,7 @@ import mindustry.ui.*;
 import arc.scene.Element;
 
 import static mindustry.Vars.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class DesignView extends Element implements GestureListener {
 	DesignTool tool = DesignTool.hand;

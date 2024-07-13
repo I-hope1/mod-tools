@@ -32,7 +32,7 @@ import java.util.Arrays;
 import static mindustry.Vars.*;
 import static modtools.IntVars.root;
 import static modtools.utils.MySettings.SETTINGS;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */

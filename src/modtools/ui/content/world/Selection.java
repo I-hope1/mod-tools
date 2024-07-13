@@ -27,6 +27,7 @@ import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Tile;
 import mindustry.world.blocks.environment.*;
+import modtools.IntVars;
 import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -51,7 +52,7 @@ import java.util.function.Predicate;
 import static arc.Core.*;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
-import static modtools.utils.world.TmpVars.*;
+import static modtools.utils.ui.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
 import static modtools.utils.world.WorldDraw.drawRegion;
 
@@ -730,14 +731,14 @@ public class Selection extends Content {
 		focusEntities.clear();
 
 		if (Settings.focusOnWorld.enabled()) {
-			focusTile = world.tileWorld(mouseWorld.x, mouseWorld.y);
+			focusTile = world.tileWorld(IntVars.mouseWorld.x, IntVars.mouseWorld.y);
 			focusBuild = focusTile != null ? focusTile.build : null;
 			Groups.unit.each(u -> {
-				if (mouseWorld.dst(u.x, u.y) < u.hitSize / 2f + 2)
+				if (IntVars.mouseWorld.dst(u.x, u.y) < u.hitSize / 2f + 2)
 					focusUnits.add(u);
 			});
 			Groups.bullet.each(b -> {
-				if (mouseWorld.dst(b.x, b.y) < b.hitSize / 2f + 4)
+				if (IntVars.mouseWorld.dst(b.x, b.y) < b.hitSize / 2f + 4)
 					focusBullets.add(b);
 			});
 		} else {
@@ -918,7 +919,7 @@ public class Selection extends Content {
 			if (y + height > scene.getHeight()) y -= height;
 		}
 		private void updatePosUIAndWorld() {
-			Vec2 v1 = Tmp.v1.set(mouseVec)
+			Vec2 v1 = Tmp.v1.set(IntVars.mouseVec)
 			 /* 向右上偏移 */
 			 .add(2, 2);
 			x = v1.x;

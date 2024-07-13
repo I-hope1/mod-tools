@@ -7,7 +7,7 @@ import arc.struct.*;
 import arc.util.*;
 import modtools.utils.Tools;
 
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class HopeInput {
 	public static IntSet justPressed, pressed;

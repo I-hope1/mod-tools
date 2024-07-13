@@ -30,7 +30,7 @@ import modtools.utils.world.*;
 
 import static modtools.ui.Contents.tester;
 import static modtools.utils.ElementUtils.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 /** for js */
 @SuppressWarnings("unused")

@@ -29,7 +29,6 @@ import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
-import modtools.utils.world.TmpVars;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
@@ -47,17 +46,20 @@ import static modtools.utils.JSFunc.*;
 import static modtools.utils.Tools.catchRun;
 import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable {
+	public static final String   whenExecuting = "An exception occurred when executing";
+	public static final String METHOD_COUNT_PREFIX = " [";
+
+
 	/* non-null */
 	private final       Class<?> clazz;
 	private final       Object   obj;
 	private final       MyEvents events   = new MyEvents();
 	public static final Color    tmpColor = new Color();
 
-	public static final String METHOD_COUNT_PREFIX = " [";
 
 	private ReflectTable
 	 fieldsTable,
@@ -515,7 +517,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 				buttonsCell = t.add(new MyHoverTable(buttons -> {
 					if (noParam && isValid) {
-						buttons.button(Icon.rightOpenOutSmall, flati, catchRun("invoke出错", () -> {
+						buttons.button(Icon.rightOpenOutSmall, flati, catchRun(whenExecuting, () -> {
 							dealInvokeResult(m.invoke(o), cell, l);
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 					}

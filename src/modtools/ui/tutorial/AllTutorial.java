@@ -23,7 +23,7 @@ import modtools.utils.ui.LerpFun;
 import static arc.Core.*;
 import static modtools.ui.tutorial.AllTutorial.Buffer.*;
 import static modtools.utils.Tools.TASKS;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class AllTutorial {
 	public static void focusOn(Element elem, Boolp boolp) {

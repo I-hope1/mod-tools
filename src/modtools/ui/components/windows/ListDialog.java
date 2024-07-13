@@ -23,7 +23,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 import static modtools.utils.Tools.readFiOrEmpty;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class ListDialog extends Window {
 	public List<Fi> list;

@@ -1,4 +1,4 @@
-package modtools.utils.ui;
+package modtools.ui.components;
 
 import arc.Core;
 import arc.func.Cons;

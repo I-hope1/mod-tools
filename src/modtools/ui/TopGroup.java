@@ -28,6 +28,7 @@ import modtools.ui.components.Window.DelayDisposable;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
+import modtools.utils.ui.ColorFul;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -39,7 +40,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.components.Window.frontWindow;
 import static modtools.utils.Tools.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 // 存储mod的窗口和Frag
 public final class TopGroup extends WidgetGroup {

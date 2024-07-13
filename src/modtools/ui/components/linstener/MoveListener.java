@@ -9,7 +9,7 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.layout.Table;
 
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 public class MoveListener extends InputListener {
 	protected final Element  touch;

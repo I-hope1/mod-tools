@@ -98,7 +98,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}).grow().row();
 
 			t.table(Styles.black6, buttons -> {
-				buttons.label(() -> StringHelper.getUIKey(drawable)).fontScale(0.6f).row();
+				buttons.label(() -> StringUtils.getUIKey(drawable)).fontScale(0.6f).row();
 				buttons.left().defaults().growX().height(32);
 				buttons.check("Icon", _ -> { }).row();
 				buttons.check("Background", _ -> { }).row();

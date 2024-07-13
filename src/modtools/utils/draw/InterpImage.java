@@ -6,7 +6,7 @@ import arc.graphics.g2d.*;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import modtools.utils.ColorFul;
+import modtools.utils.ui.ColorFul;
 
 public class InterpImage extends Element {
 	Interp interp;

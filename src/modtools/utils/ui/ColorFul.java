@@ -1,8 +1,9 @@
-package modtools.utils;
+package modtools.utils.ui;
 
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.util.*;
+import modtools.utils.Tools;
 
 public class ColorFul {
 	private static final Color[] colors = {

@@ -48,7 +48,7 @@ import static modtools.ui.components.utils.ValueLabel.DEBUG;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.*;
 import static modtools.utils.Tools.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {

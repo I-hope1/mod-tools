@@ -54,7 +54,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
 import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.FormatHelper.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 /** It should be `InspectElement`, but it's too late. */
 public class ReviewElement extends Content {
@@ -773,12 +773,12 @@ public class ReviewElement extends Content {
 			try {
 				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
 				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
-					styleLabel.setText(StringHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));
+					styleLabel.setText(StringUtils.fieldFormat(ShowUIList.styleKeyMap.get(style)));
 			} catch (Throwable e) { styleCell.remove(); }
 		}
 		void align(Element element) {
 			if (alignCell.toggle1(element instanceof Table))
-				alignLabel.setText(StringHelper.align(((Table) element).getAlign()));
+				alignLabel.setText(StringUtils.align(((Table) element).getAlign()));
 		}
 		void colspan(Cell<?> cell) {
 			if (cell == null) {
@@ -920,7 +920,7 @@ public class ReviewElement extends Content {
 
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
 			table.sizeLabel.setText(posText(elem));
-			table.touchableLabel.setText(StringHelper.touchable(elem.touchable));
+			table.touchableLabel.setText(StringUtils.touchable(elem.touchable));
 			table.touchableLabel.setColor(touchableToColor(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);

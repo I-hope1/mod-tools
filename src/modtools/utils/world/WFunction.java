@@ -20,6 +20,7 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import mindustry.world.Tile;
+import modtools.IntVars;
 import modtools.events.MyEvents;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.v6.AThreads;
@@ -44,7 +45,7 @@ import java.util.function.*;
 import static mindustry.Vars.tilesize;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.world.TmpVars.*;
+import static modtools.utils.ui.TmpVars.*;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 @SuppressWarnings("CodeBlock2Expr")
@@ -165,7 +166,7 @@ public abstract class WFunction<T> {
 		main.update(() -> SC.selectFunc = this);
 
 		FunctionBuild("Copy", list -> {
-			tester.put(mouseVec, list.toArray());
+			tester.put(IntVars.mouseVec, list.toArray());
 		});
 	}
 	private void buildButtons() {
@@ -319,7 +320,7 @@ public abstract class WFunction<T> {
 	 Cons<SelectTable> builder, Cons2<List<T>, R> cons) {
 		FunctionBuild(name, from -> {
 			var table = IntUI.showSelectImageTableWithFunc(
-			 mouseVec.cpy(), list.get(), () -> null,
+			 IntVars.mouseVec.cpy(), list.get(), () -> null,
 			 n -> cons.get(from, n), 42f, 32, 6, t -> new TextureRegionDrawable(t.uiIcon), true);
 			if (builder != null) builder.get(table);
 		});
@@ -337,7 +338,7 @@ public abstract class WFunction<T> {
 				icons.add(IntUI.whiteui.tint(team.color));
 			}
 
-			IntUI.showSelectImageTableWithIcons(mouseVec.cpy(), new Seq<>(arr), icons, () -> null,
+			IntUI.showSelectImageTableWithIcons(IntVars.mouseVec.cpy(), new Seq<>(arr), icons, () -> null,
 			 n -> cons.get(from, n), 42f, 32f, 3, false);
 		});
 	}

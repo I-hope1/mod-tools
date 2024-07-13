@@ -63,7 +63,7 @@ public class ByteCodeTools {
 					writer.add(addLoad(args[i - 1]), i);
 				}
 				writer.addInvoke(INVOKESPECIAL, superName, name, nativeMethod(returnType, args));
-				addCast(writer, returnType);
+				emitCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
 				writer.stopMethod((short) (args.length + 1));
@@ -100,14 +100,14 @@ public class ByteCodeTools {
 			for (int i = 0; i < args.length; i++) {
 				writer.add(ALOAD, v2); // list
 				writer.add(addLoad(args[i]), i + 1);
-				addBox(writer, args[i]);
+				emitBox(writer, args[i]);
 				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add", nativeMethod(boolean.class, Object.class));
 			}
 			// 将super的返回值存入seq
 			if (buildSuper && returnType != void.class) {
 				writer.add(ALOAD, v2); // list
 				writer.add(addLoad(returnType), v1); // super return
-				addBox(writer, returnType);
+				emitBox(writer, returnType);
 				// add
 				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add", nativeMethod(boolean.class, Object.class));
 			}
@@ -120,7 +120,7 @@ public class ByteCodeTools {
 
 			// V get(args)
 			writer.addInvoke(INVOKEINTERFACE, nativeName(Func2.class), "get", nativeMethod(Object.class, Object.class, Object.class));
-			addCast(writer, returnType);
+			emitCast(writer, returnType);
 			// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 			writer.add(buildReturn(returnType));
 
@@ -191,7 +191,7 @@ public class ByteCodeTools {
 				writer.add(ALOAD_1);
 				writer.addPush(i);
 				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "get", nativeMethod(Object.class, int.class));
-				addCast(writer, args[i]);
+				emitCast(writer, args[i]);
 			}
 			writer.addInvoke(INVOKESPECIAL, this.superName, superMethodName, nativeMethod(returnType, args));
 			// addCast(returnType);
@@ -273,7 +273,7 @@ public class ByteCodeTools {
 				}
 				writer.addInvoke(INVOKESTATIC, className,
 				 m.getName(), nativeMethod(returnType, types));
-				addCast(writer, returnType);
+				emitCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
 				writer.stopMethod((short) (realTypes.length + 1));
@@ -353,7 +353,7 @@ public class ByteCodeTools {
 		return CAST.box(type);
 	}
 
-	public static void addCast(ClassFileWriter writer, Class<?> type) {
+	public static void emitCast(ClassFileWriter writer, Class<?> type) {
 		if (type == void.class) return;
 		if (type.isPrimitive()) {
 			String tmp = nativeName(box(type));
@@ -365,8 +365,8 @@ public class ByteCodeTools {
 		}
 	}
 
-	// int -> Integer (装箱
-	public static void addBox(ClassFileWriter writer, Class<?> type) {
+	// int -> Integer (装箱)
+	public static void emitBox(ClassFileWriter writer, Class<?> type) {
 		if (type.isPrimitive()) {
 			Class<?> boxCls = box(type);
 			// Log.debug(type);

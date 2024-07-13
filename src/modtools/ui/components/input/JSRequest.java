@@ -14,7 +14,7 @@ import modtools.utils.Tools;
 import rhino.*;
 
 import static modtools.utils.Tools.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("SpellCheckingInspection")
 public class JSRequest {

@@ -2,6 +2,7 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
+import arc.math.geom.Vec2;
 import arc.util.Log;
 import arc.util.serialization.*;
 import mindustry.Vars;
@@ -20,8 +21,10 @@ import java.util.concurrent.*;
 import static mindustry.Vars.ui;
 
 public class IntVars {
-	public static final String  modName = "mod-tools";
-	public static       ModMeta meta;
+	public static final String   modName    = "mod-tools";
+	public static final MouseVec mouseVec   = new MouseVec();
+	public static final Vec2     mouseWorld = new Vec2();
+	public static       ModMeta  meta;
 
 	/** mod的根目录  */
 	public static Fi root          = new HFi(IntVars.class.getClassLoader());
@@ -104,5 +107,15 @@ public class IntVars {
 		Events.on(ResizeEvent.class, _ -> {
 			for (var r : resizeListeners) r.run();
 		});
+	}
+	public static class MouseVec extends Vec2 {
+		public void require() {
+			super.set(Core.input.mouse());
+			if (Vars.state.isGame()) { mouseWorld.set(Core.camera.unproject(Core.input.mouse())); }
+		}
+		/* 禁止外部设置 */
+		public Vec2 set(Vec2 v) {
+			return this;
+		}
 	}
 }

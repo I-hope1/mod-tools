@@ -175,7 +175,7 @@ public interface ISettings extends E_DataInterface {
 		String   s        = getString();
 		int      index    = s.indexOf('#');
 		String   key      = index == -1 ? s : s.substring(0, index);
-		Drawable drawable = StringHelper.lookupUI(key);
+		Drawable drawable = StringUtils.lookupUI(key);
 		return new DelegatingDrawable(or(drawable, def),
 		 index == -1 ? Color.white : Color.valueOf(s.substring(index)));
 	}
@@ -280,9 +280,9 @@ public interface ISettings extends E_DataInterface {
 		main.table(new Cons<>() {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
-				t.label(() -> StringHelper.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
+				t.label(() -> StringUtils.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
 				IntUI.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
-					set(StringHelper.getUIKey(d));
+					set(StringUtils.getUIKey(d));
 
 					cons.get(d);
 					drawable[0] = d;

@@ -59,10 +59,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
 
 		if (Element.class.isAssignableFrom(type) || val instanceof Element) {
-			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
+			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Element ? (Element) val : null);
 		} else if (Cell.class.isAssignableFrom(type)) {
-			ReviewElement.addFocusSource(this, () -> ElementUtils.getWindow(this),
+			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
 
@@ -224,7 +224,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
 
 				: val instanceof Element ? ElementUtils.getElementName((Element) val)
-				: StringHelper.getUIKey(val))
+				: StringUtils.getUIKey(val))
 			.get(() -> String.valueOf(val))
 			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> val.getClass().getName())
@@ -342,7 +342,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 					Object fieldVal = FieldUtils.getOrNull(field, val);
 					if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
 					String uiKey = CatchSR.apply(() ->
-					 CatchSR.of(() -> StringHelper.getUIKey(fieldVal))
+					 CatchSR.of(() -> StringUtils.getUIKey(fieldVal))
 						.get(() -> String.valueOf(fieldVal))
 					);
 					builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
@@ -355,7 +355,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				 Seq.with(ShowUIList.styleKeyMap.keySet())
 					.retainAll(type::isInstance),
 				 () -> (Style) val, this::setNewVal,
-				 s -> StringHelper.fieldFormat(ShowUIList.styleKeyMap.get(s)),
+				 s -> StringUtils.fieldFormat(ShowUIList.styleKeyMap.get(s)),
 				 Float.NEGATIVE_INFINITY, 32,
 				 true, Align.top);
 			}));

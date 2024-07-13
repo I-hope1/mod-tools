@@ -26,6 +26,7 @@ public class MyFonts {
 		def = acquireFont();
 	}
 
+	/* some config */
 	// public static boolean italic = true;
 	public static boolean
 	 underline     = false,

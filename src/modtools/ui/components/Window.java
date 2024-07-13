@@ -40,7 +40,7 @@ import static arc.Core.graphics;
 import static modtools.ui.Contents.window_manager;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.*;
-import static modtools.utils.world.TmpVars.mouseVec;
+import static modtools.IntVars.mouseVec;
 
 /**
  * <p>浮动的窗口，可以缩放，{@link #toggleMinimize() 最小化}，{@link #toggleMaximize() 最大化}</p>

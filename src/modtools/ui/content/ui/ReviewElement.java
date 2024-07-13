@@ -130,9 +130,14 @@ public class ReviewElement extends Content {
 					HopeInput.justPressed.clear();
 					event.stop();
 				}
-				if (Core.input.ctrl() && Core.input.alt() && keycode == KeyCode.d) {
-					TSettings.debugBounds.toggle();
-				}
+				if (!(Core.input.ctrl() && Core.input.alt() && keycode == KeyCode.d)) return true;
+				if (Core.input.shift()) {
+					if (topGroup.isSelecting()) {
+						return false;
+					}
+					TSettings.debugBounds.set(true);
+					topGroup.requestSelectElem(TopGroup.defaultDrawer, topGroup::setDrawPadElem);
+				} else TSettings.debugBounds.toggle();
 				return true;
 			}
 		});

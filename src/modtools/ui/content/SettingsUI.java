@@ -100,6 +100,7 @@ public class SettingsUI extends Content {
 			 SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
 
 			 ISettings.buildAll("", this, TSettings.class);
+			 // find()
 			 addElemValueLabel(this, "Bound Element",
 				() -> topGroup.drawPadElem,
 				() -> topGroup.setDrawPadElem(null),
@@ -210,28 +211,33 @@ public class SettingsUI extends Content {
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
+	public static void tryAddTip(Element element, String tipKey) {
+		// Log.info(tipKey);
+		if (!Core.bundle.has("settings.tip." + tipKey)) return;
 
+		IntUI.addTooltipListener(element, Core.bundle.get("settings.tip." + tipKey));
+	}
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {
 		public static Table main;
 		public SettingsBuilder(Table main) {
 			build(main);
 		}
-		public static void build(Table main) {SettingsBuilder.main = main;}
+		public static void build(Table main) { SettingsBuilder.main = main; }
 
 		public static <T> void list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
-																Func<T, String> stringify) {
+		                            Func<T, String> stringify) {
 			list(text, cons, prov, list, stringify, () -> true);
 		}
 		public static Cell<Table> list(String prefix, String key, Data data, Seq<String> list,
-																	 Func<String, String> stringify) {
+		                               Func<String, String> stringify) {
 			return list(STR."@\{prefix}.\{key.toLowerCase()}", v -> data.put(key, v),
 			 () -> data.getString(key, list.get(0)), list,
 			 stringify, () -> true);
 		}
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
-																			 Func<T, String> stringify,
-																			 Boolp condition) {
+		                                   Func<T, String> stringify,
+		                                   Boolp condition) {
 			Table t = new Table();
 			t.right();
 			t.add(text).left().padRight(10).growX().labelAlign(Align.left)
@@ -248,7 +254,7 @@ public class SettingsUI extends Content {
 					true,
 					Align.left));
 				 b.update(condition == null ? null : () -> b.setDisabled(!condition.get()));
-			 }, HopeStyles.hope_defaultb, () -> {})
+			 }, HopeStyles.hope_defaultb, () -> { })
 			 .height(42).self(c -> c.update(b ->
 				c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))
 			 ));
@@ -266,7 +272,7 @@ public class SettingsUI extends Content {
 		}
 
 		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
-															Boolp condition) {
+		                          Boolp condition) {
 			number(text, integer, cons, prov, condition, 0, Float.MAX_VALUE);
 		}
 
@@ -279,7 +285,7 @@ public class SettingsUI extends Content {
 		}
 
 		public static void numberi(String text, Intc cons, Intp prov, Boolp condition, int min,
-															 int max) {
+		                           int max) {
 			main.table(t -> {
 				t.left();
 				t.add(text).left().padRight(5)
@@ -291,8 +297,8 @@ public class SettingsUI extends Content {
 			}).padTop(0).row();
 		}
 		public static void numberi(String text, Data data, String key, int defaultValue,
-															 Boolp condition, int min,
-															 int max) {
+		                           Boolp condition, int min,
+		                           int max) {
 			if (defaultValue < min || defaultValue > max) {
 				throw new IllegalArgumentException("defaultValue(" + defaultValue + ") must be in (" + min + ", " + max + ")");
 			}
@@ -300,8 +306,8 @@ public class SettingsUI extends Content {
 		}
 
 		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
-															Boolp condition, float min,
-															float max) {
+		                          Boolp condition, float min,
+		                          float max) {
 			main.table(t -> {
 				t.left();
 				t.add(text).left().padRight(5)
@@ -314,8 +320,8 @@ public class SettingsUI extends Content {
 			main.row();
 		}
 		public static void number(String text, Data data, String key, float defaultValue,
-															Boolp condition, float min,
-															float max) {
+		                          Boolp condition, float min,
+		                          float max) {
 			if (defaultValue < min || defaultValue > max) {
 				throw new IllegalArgumentException("defaultValue 必须在 " + min + " 和 " + max + " 之间。当前值为: " + defaultValue);
 			}
@@ -331,7 +337,7 @@ public class SettingsUI extends Content {
 		}
 
 		public static void check(String text, Data data, String key, boolean defaultValue,
-														 Boolp condition) {
+		                         Boolp condition) {
 			check(text, val -> data.put(key, val), () -> data.getBool(key, defaultValue), condition);
 		}
 
@@ -341,6 +347,7 @@ public class SettingsUI extends Content {
 			 .padLeft(10f).padRight(100f).get();
 			checkBox.setStyle(HopeStyles.hope_defaultCheck);
 			checkBox.left();
+			tryAddTip(checkBox, text.substring(text.indexOf('.') + 1));
 			main.row();
 		}
 

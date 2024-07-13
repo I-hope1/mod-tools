@@ -37,13 +37,16 @@ import static modtools.utils.Tools.*;
  */
 @SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */, "StringTemplateMigration"})
 public interface ISettings extends E_DataInterface {
-	/** 这会根据实现自动更改 */
-	Data   data           = null;
 	String SUFFIX_ENABLED = "$enabled";
+
+	/** 这会根据实现自动更改 */
+	Data data = null;
+
+
+	/* 获取数据  */
 	default Data data() {
 		return null;
 	}
-
 	default Class<?> type() { return boolean.class; }
 
 	/* class Switch {
@@ -84,9 +87,9 @@ public interface ISettings extends E_DataInterface {
 		data().put(name(), o);
 	}
 	default void set(boolean b) { set((Boolean) b); }
-	/* default <T> T get() {
-		return (T) data().get(name());
-	} */
+
+
+	// getter
 	default boolean enabled() {
 		return data().getBool(name());
 	}

@@ -123,6 +123,8 @@ public final class TopGroup extends WidgetGroup {
 	}
 	public void draw() {
 		setTransform(false);
+		if (elementDrawer != null) elementDrawer.drawMask();
+
 		backDrawSeq.exec();
 		drawTask(-1, ResidentDrawTask::backDraw);
 		super.draw();
@@ -374,8 +376,10 @@ public final class TopGroup extends WidgetGroup {
 
 	public              Cons<Element> elementCallback = null;
 	public              Drawer        elementDrawer   = null;
+	public static final Color         maskColor       = Color.valueOf("#00000033");
 	public static final Drawer        defaultDrawer   = (selecting, el) -> {
 		if (!selecting) return;
+		Draw.color();
 		TopGroup.drawFocus(el, ElementUtils.getAbsolutePos(el), IntUI.DEF_FOCUS_COLOR);
 	};
 
@@ -506,6 +510,10 @@ public final class TopGroup extends WidgetGroup {
 
 
 	public interface Drawer {
+		default void drawMask() {
+			Draw.color(maskColor);
+			Fill.crect(0, 0, graphics.getWidth(), graphics.getHeight());
+		}
 		void draw(boolean selecting, Element selected);
 	}
 

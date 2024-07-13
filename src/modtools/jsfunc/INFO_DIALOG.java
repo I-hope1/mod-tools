@@ -12,6 +12,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.Tmp;
 import mindustry.gen.Icon;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
@@ -82,8 +83,7 @@ public interface INFO_DIALOG {
 			button.add(new PlainValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
 			button.clicked(() -> {
 				Object item = Array.get(o, j);
-				// 使用post避免stack overflow
-				if (item != null) Core.app.post(Tools.catchRun0(() ->
+				if (item != null) IntVars.postToMain(Tools.catchRun0(() ->
 				 showInfo(item).setPosition(getAbsolutePos(button))));
 				else IntUI.showException(new NullPointerException("item is null"));
 			});

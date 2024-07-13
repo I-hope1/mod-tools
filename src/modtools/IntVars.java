@@ -97,7 +97,7 @@ public class IntVars {
 	}
 
 	public interface Async {
-		ExecutorService executor = AThreads.impl.boundedExecutor("hope-async", 1);
+		ExecutorService EXECUTOR = AThreads.impl.boundedExecutor("hope-async", 1);
 	}
 
 	static {

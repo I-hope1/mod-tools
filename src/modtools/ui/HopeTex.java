@@ -5,7 +5,7 @@ import arc.scene.style.Drawable;
 import mindustry.gen.Tex;
 
 public interface HopeTex {
-	Drawable alphaBgLine = nl(() -> Tex.alphaBgLine);
+	Drawable alphaBgLine = nl(() -> Tex.alphaBgLine, Tex.alphaBg);
 	Drawable paneRight   = nl(() -> Tex.paneRight, Tex.pane);
 	static Drawable nl(Prov<Drawable> prov) {
 		return nl(prov, null);

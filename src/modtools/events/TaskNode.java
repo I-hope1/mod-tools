@@ -90,7 +90,7 @@ public class TaskNode {
 		if (async) {
 			DelegateRun newRun = new DelegateRun(task, () -> intervalSeconds);
 			((MyTask) task).delegate = newRun;
-			Async.executor.execute(newRun);
+			Async.EXECUTOR.execute(newRun);
 			return;
 		}
 		timer.scheduleTask(task, 0, intervalSeconds, repeatCount);

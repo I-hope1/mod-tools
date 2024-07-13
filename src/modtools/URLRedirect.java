@@ -12,6 +12,8 @@ import java.lang.reflect.Field;
 import java.net.*;
 import java.util.*;
 
+/** 切换镜像
+ * 从访问一个网站改成访问另一个网站（镜像站） */
 @SuppressWarnings("deprecation")
 public class URLRedirect {
 	static Properties replacer = new Properties();

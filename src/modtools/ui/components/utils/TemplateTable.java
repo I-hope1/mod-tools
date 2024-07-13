@@ -48,7 +48,7 @@ public class TemplateTable<R> extends Table {
 	}
 	/** 添加用于切换是否显示所有的单选框 */
 	public void addAllCheckbox(Table cont) {
-		cont.check("all", all, b -> all = b).growX();
+		cont.check("View All", all, b -> all = b).growX();
 	}
 
 	public void updateNow() {

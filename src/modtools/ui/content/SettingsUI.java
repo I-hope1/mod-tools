@@ -58,10 +58,16 @@ public class SettingsUI extends Content {
 	}
 	public Table add(String title, Drawable icon, Table t) {
 		Table table = new LimitTable();
+
+		// add icon
 		if (icon != null) table.image(icon).size(24).padRight(4f);
 		else table.add(); /* 占位符 */
+
+		// title
 		table.add(title).color(Pal.accent).growX().left().row();
 		table.image().color(Pal.accent).growX().colspan(2).left().row();
+
+		// container
 		t.left().defaults().left();
 		table.add(t).growX().colspan(2).left().padLeft(16);
 		cont.add(table).growX().left().row();

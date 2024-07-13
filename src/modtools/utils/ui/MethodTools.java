@@ -21,11 +21,11 @@ import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.effect.HopeFx.changedFx;
 import static modtools.utils.JSFunc.JColor;
 import static modtools.utils.ui.ReflectTools.makeDetails;
+import static modtools.utils.ui.ShowInfoWindow.keyword;
 
 public interface MethodTools {
 	static Object invokeForMethod(Object o, Method m, ValueLabel l, NativeArray args0,
-																FuncT func)
-	 throws Throwable {
+																FuncT func) throws Throwable {
 		Object[] args = convertArgs(args0, m.getParameterTypes());
 		if (l.isStatic() || o != null) return func.get(args);
 		throw new NullPointerException("'obj' is null.");
@@ -33,6 +33,7 @@ public interface MethodTools {
 	static Object invokeForHandle(MethodHandle handle, Object[] arr) throws Throwable {
 		return handle.invokeWithArguments(convertArgs(arr, handle.type().parameterArray()));
 	}
+
 	static Object[] convertArgs(NativeArray arr, Class<?>[] types) {
 		return convertArgs(arr.toArray(), types);
 	}
@@ -42,9 +43,11 @@ public interface MethodTools {
 		 .map(a -> JavaAdapter.convertResult(a, iterator.next()))
 		 .toArray();
 	}
+
 	/** value: {@value ACCESS_MODIFIERS */
 	int ACCESS_MODIFIERS =
 	 Modifier.PUBLIC | Modifier.PROTECTED | Modifier.PRIVATE;
+
 	/**
 	 * copy from {@link Executable#sharedToGenericString(int, boolean)}
 	 * @see Executable#sharedToGenericString(int, boolean)
@@ -70,6 +73,7 @@ public interface MethodTools {
 	}
 	int argKey = 0b01,
 	 throwKey  = 0b10;
+
 	static LimitTable
 	buildArgsAndExceptions(Executable executable) {
 		Class<?>[] args = executable.getParameterTypes(),
@@ -113,7 +117,7 @@ public interface MethodTools {
 
 		if (exceptions.length > 0) {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
-			table.add(" throws ").color(Tmp.c1.set(JColor.c_keyword)).fontScale(0.9f)
+			keyword(table, "throws ").fontScale(0.9f)
 			 .with(t -> IntUI.doubleClick(t, null, () -> {
 				 changedFx(table);
 				 table.name ^= throwKey;

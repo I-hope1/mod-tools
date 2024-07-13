@@ -29,6 +29,7 @@ import modtools.ui.components.Window.IDisposable;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.*;
 import modtools.ui.components.limit.LimitTable;
+import modtools.ui.components.linstener.FocusSearchListener;
 import modtools.ui.components.review.CellDetailsWindow;
 import modtools.ui.components.utils.*;
 import modtools.ui.components.windows.ListDialog.ModifiedLabel;
@@ -72,8 +73,8 @@ public class ReviewElement extends Content {
 		super("reviewElement", HopeIcons.codeSmall);
 	}
 
-	public static final boolean    hideSelf  = true;
-	public static final LabelStyle skyMyFont = new LabelStyle(MyFonts.def, Color.sky);
+	public static final boolean    DEBUG       = false;
+	public static final LabelStyle LABEL_STYLE = new LabelStyle(MyFonts.def, Color.sky);
 
 
 	public static Element FOCUS;
@@ -94,14 +95,14 @@ public class ReviewElement extends Content {
 				FOCUS_WINDOW = windowProv.get();
 			}
 			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
-				if (toActor != null && source.isAscendantOf(toActor)
+				if (toActor != null && source.isAscendantOf(toActor) && toActor.getScene() != null
 					/*  && source.getListeners().find(t -> this.getClass().isInstance(t)) == null */) return;
 				CANCEL_TASK.run();
 			}
 		});
 	}
-	public static final Color focusColor = DEF_FOCUS_COLOR;
-	public static final Color maskColor  = DEF_MASK_COLOR;
+	public static final Color FOCUS_COLOR = DEF_FOCUS_COLOR;
+	public static final Color MASK_COLOR  = DEF_MASK_COLOR;
 
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
@@ -299,14 +300,14 @@ public class ReviewElement extends Content {
 					search.image(Icon.zoomSmall).size(35);
 					search.field("", str -> rebuild(element, str))
 					 .with(f -> f.setMessageText("@players.search"))
+					 .with(f -> ReviewElementWindow.this.addCaptureListener(new FocusSearchListener(f)))
 					 .growX();
 				}).growX();
 			}).growX().row();
 
 			cont.add(new ScrollPane(pane, Styles.smallPane) {
 				public String toString() {
-					if (hideSelf) return name;
-					return super.toString();
+					return DEBUG ? super.toString() : name;
 				}
 			}).grow().minHeight(120);
 
@@ -353,8 +354,7 @@ public class ReviewElement extends Content {
 				t -> t.add(new MyLabel(text, defaultLabel)).left().color(Pal.accent)
 				: t -> {
 				 for (var line : text.split("\\n")) {
-					 highlightShow(t, pattern, line);
-					 t.row();
+					 highlightShow(t.row(), pattern, line);
 				 }
 			 });
 		}
@@ -381,7 +381,7 @@ public class ReviewElement extends Content {
 					}
 					// Log.info("i: @, l: @", index, lastIndex);
 					t.table(IntUI.whiteui.tint(Pal.logicWorld), t1 -> {
-						t1.add(new MyLabel(curText, skyMyFont)).padRight(1);
+						t1.add(new MyLabel(curText, LABEL_STYLE)).padRight(1);
 					}).name(SEARCH_RESULT);
 				}
 				if (text.length() - lastIndex > 0)
@@ -390,7 +390,7 @@ public class ReviewElement extends Content {
 		}
 		public void build(Element element, Table table) {
 			if (element == null) throw new IllegalArgumentException("element is null");
-			if (hideSelf && element instanceof ReviewElementWindow) {
+			if (!DEBUG && element instanceof ReviewElementWindow) {
 				table.add(STR."----\{name}-----", defaultLabel).row();
 				return;
 			}
@@ -415,7 +415,7 @@ public class ReviewElement extends Content {
 		}
 
 		public String toString() {
-			if (hideSelf) return name;
+			if (DEBUG) return name;
 			return super.toString();
 		}
 
@@ -445,12 +445,22 @@ public class ReviewElement extends Content {
 	private static class MyWrapTable extends ChildrenFirstTable implements KeyValue {
 		boolean stopEvent, needUpdate;
 		ReviewElementWindow window;
+
+		Element previousKeyboardFocus;
+		public void requestKeyboard() {
+			if (scene.hasField()) return;
+			previousKeyboardFocus = scene.getKeyboardFocus();
+			super.requestKeyboard();
+		}
+		public void unfocus() {
+			if (scene.getKeyboardFocus() == this) scene.setKeyboardFocus(previousKeyboardFocus);
+		}
 		public MyWrapTable(ReviewElementWindow window, Element element) {
 			this.window = window;
 			userObject = element;
 
 			hovered(this::requestKeyboard);
-			exited(() -> scene.setKeyboardFocus(null));
+			exited(this::unfocus);
 			keyDown(KeyCode.f, () -> window.fixedFocus = window.fixedFocus == this ? null : this);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
 			keyDown(KeyCode.r, () -> IntUI.showMenuList(execChildren(element)));
@@ -633,6 +643,7 @@ public class ReviewElement extends Content {
 			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 		}
 	}
+
 	private static Window viewAllCells(MyWrapTable self, Table element) {
 		class AllCellsWindow extends Window implements IDisposable {
 			public AllCellsWindow() { super("All Cells"); }
@@ -661,9 +672,13 @@ public class ReviewElement extends Content {
 		d.update(() -> d.display());
 		return d;
 	}
-	private static boolean parentValid(Element element, ReviewElement.ReviewElementWindow window) {
+
+
+	static boolean parentValid(Element element, ReviewElement.ReviewElementWindow window) {
 		return element.parent != null || element == window.element;
 	}
+
+	/** 监视children的变化  */
 	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
 	                                  SnapshotSeq<Element> children) {
 		if (!container.hasChildren()) {
@@ -687,7 +702,6 @@ public class ReviewElement extends Content {
 			window.build(children.get(i), container);
 			cells[i] = container.getCells().get(container.getCells().size - 1);
 		}
-		// runs.each(Runnable::run);
 		container.getCells().set(cells);
 	}
 
@@ -875,7 +889,7 @@ public class ReviewElement extends Content {
 	class ReviewFocusTask extends FocusTask {
 		{ drawSlightly = true; }
 
-		public ReviewFocusTask() { super(ReviewElement.maskColor, ReviewElement.focusColor); }
+		public ReviewFocusTask() { super(ReviewElement.MASK_COLOR, ReviewElement.FOCUS_COLOR); }
 
 		/** 清除elemDraw */
 		public void elemDraw() { }
@@ -1006,15 +1020,16 @@ public class ReviewElement extends Content {
 			if (elem != null) drawFocus(elem);
 		}
 	}
-	static Color disabledColor = new Color(0xFF0000_FF);
+	static Color DISABLED_COLOR = new Color(0xFF0000_FF);
 	static Color touchableToColor(Touchable touchable) {
 		return switch (touchable) {
 			case enabled -> Color.green;
-			case disabled -> disabledColor;
+			case disabled -> DISABLED_COLOR;
 			case childrenOnly -> Pal.accent;
 		};
 	}
 
+	/** 如果source元素有CellView接口，drawFocus按照下面来  */
 	public interface CellView {
 		default void drawFocus(Element focus) {
 			if (focus == null || !(focus.parent instanceof Table table)) return;

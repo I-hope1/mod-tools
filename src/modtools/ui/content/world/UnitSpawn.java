@@ -67,10 +67,19 @@ public class UnitSpawn extends Content {
 		unitCont.clearChildren();
 		group = MyItemSelection.buildTable0(unitCont, Vars.content.units(), Vars.mobile ? 8 : 10,
 		 u -> new TextureRegionDrawable(u.uiIcon));
+		group.setMinCheckCount(1);
 
 		unitCont.find(el -> el.userObject == UnitTypes.alpha).fireClick();
 
-		unitCont.update(() -> group.setMaxCheckCount(multi ? -1 : 1));
+		unitCont.update(() -> {
+			group.setMaxCheckCount(multi ? -1 : 1);
+			if (multi) return;
+
+			Seq<ImageButton> allChecked = group.getAllChecked();
+			for (int i = 1; i < allChecked.size; i++) {
+				allChecked.get(i).setChecked(false);
+			}
+		});
 
 		unitCont.row();
 		unitCont.table(right -> {

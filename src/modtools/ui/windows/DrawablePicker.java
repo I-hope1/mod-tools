@@ -34,7 +34,8 @@ import static modtools.ui.windows.ColorPicker.*;
 public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	private Drawable drawable;
 
-	private Cons<Drawable> cons = c -> { };
+	private Cons<Drawable> cons = color -> { };
+
 	Color iconCurrent  = new Color(Color.white),
 	 backgroundCurrent = new Color(bgColor);
 	boolean        isIconColor = true;
@@ -95,11 +96,11 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				MyItemSelection.buildTable0(wrap, drawables,
 				 () -> drawable, drawable -> this.drawable = drawable, 8,
 				 d -> d);
-			}).grow().row();
+			}).grow().padBottom(4f).row();
 
 			t.table(Styles.black6, buttons -> {
 				buttons.label(() -> StringUtils.getUIKey(drawable)).fontScale(0.6f).row();
-				buttons.left().defaults().growX().height(32);
+				buttons.left().defaults().growX().height(32).padRight(4f);
 				buttons.check("Icon", _ -> { }).row();
 				buttons.check("Background", _ -> { }).row();
 
@@ -141,7 +142,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 					 Icon.cancelSmall.draw(x + s * width, y + v * height,
 						5 * Scl.scl(), 5 * Scl.scl());
 				 }
-			 }).growX().height(100).padBottom(6f)
+			 }).growX().growY().padBottom(6f)
 			 .with(l -> l.addListener(new InputListener() {
 				 public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 					 apply(x, y);
@@ -230,7 +231,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		})).grow();
 
 		buttons.clear();
-		buttons.margin(0).defaults().growX().height(32);
+		buttons.margin(4f).defaults().growX().height(32);
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
 		 .marginLeft(4f).marginRight(4f);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {

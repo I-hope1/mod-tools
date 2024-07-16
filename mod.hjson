@@ -1,45 +1,59 @@
 name: mod-tools
 displayName: "mod工具"
 description: '''
-## Bug修复
-- 修复ReviewElement监视元素崩溃的bug
-- 修复发包异常的bug
-- 修复Tester无法使用的bug
-- 修复HiddenTopWindow隐藏top缺少动画的bug
-- 修复LerpFun不自动删除的bug(true -> false)
-- 修复一些其他已知bug
+# Bug Fixes
+  - Fixed the bug ShowInfoWindow class button was covered by label
+  - UnitSpawn automatically cancels the redundant selections.
+  - Fixed the bug caused by async set block (Selection)
+  - Fixed a crash led by ISettings
+  - Fixed a great number of bugs about DrawablePicker
+  - Fixed the abnormal keyboard focus of `ReviewElement`
+  - Fixed a bug about `enter` and `exit`
+  - More bug
 
-## 改进与优化
-- ReviewElement的UI小改动
-- 审查元素对按f固定元素信息的显示
-- 更新特效渲染区域减小
-- 优化代码逻辑和性能
-- 数据目录b0kkihope -> mod_tools
-- Ctrl+Alt+D 来 debug边界
-- 优化代码结构
-- 更流畅的动画
+# Features
+  - Tester you can use $.contentName to get Content
+  - Better ReviewElement to inspect element and cell
+  - More key-shots for plenty of functions
+  - Interp can be added by customization
+  - Added some tips
+  - Better LogDisplay
+  - DrawString draw escape string
+  - Ability to customize Styles
+  - Image Preview can view the AtlasRegion name and page
 
-## Bug Fixes
-- Fixed the crash issue with ReviewElement monitoring elements
-- Fixed the packet sending anomaly issue
-- Fixed the issue where Tester was unusable
-- Fixed the lack of animation when hiding the top of HiddenTopWindow
-- Fixed the issue where LerpFun did not automatically delete (changed from true to false)
-- Fixed several other known issues
+# Adjustment & Optimization
+  - Adjust the info's key and value scale
+  - Better performance for Tester
+  - Review some code
 
-## Improvements and Optimizations
-- Minor UI adjustments for ReviewElement
-- Fixed element information display with F key in element inspection
-- Updated effect rendering area to reduce the rendering range
-- Optimized code logic and performance
-- Changed data directory from b0kkihope to mod_tools
-- Use Ctrl+Alt+D to debug boundaries
-- Optimized code structure
-- Smoother animations
+# 错误修复
+  - 修复了 ShowInfoWindow 类按钮被标签覆盖的bug
+  - 修复了 UnitSpawn 不能自动取消多余的选择的bug
+  - 修复了 Selection 异步设置 block 引起的bug
+  - 修复了ISettings导致的崩溃
+  - 修复了DrawablePicker的大量错误
+  - 修复了`ReviewElement`键盘焦点异常
+  - 修复了有关`enter`和`exit`的错误
+  - 更多错误
+# 功能
+  - 测试者可以使用 `$.contentName` 来获取Content
+  - 更好的 ReviewElement 来检查元素和单元格
+  - 更多功能的快捷键
+  - 可以通过自定义添加 Interp
+  - 添加了一些提示
+  - 更好的 LogDisplay
+  - DrawString 绘制转义字符串
+  - 能够自定义样式
+  - 图像预览可以查看 AtlasRegion 名称和页面
+# 调整和优化
+  - 调整信息的键和值比例
+  - 为测试人员提供更好的性能
+  - 重构一些代码
 '''
 author: "I hope..."
 hidden: true
-version: 1.4.6.1
+version: 1.4.6.2
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

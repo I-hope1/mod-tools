@@ -10,7 +10,7 @@ English|[中文](index.md)
 ![](./screenshots/tester.png)
 
 - Provide `JS` editor `Tester`
-- Key-shots
+- Shortcuts
     - Press `Ctrl`+`Shift`+`Enter` to `execute` code immediately
     - Press `Ctrl`+`Shift`+`↑/↓` to switch `history` records
     - Press `Ctrl`+`Shift`+`D` to `view` detailed information
@@ -51,7 +51,7 @@ English|[中文](index.md)
 - Select untouchable elements
     - Mobile: Filter current element with two fingers
     - PC: Press `F` to filter current element
-- Functions key-shot for Element
+- Functions shortcuts for Element
     - `i`: display details (open ShowInfoWindow)\
     - `p`(for Image):  show `DrawablePicker`
     - `del`: (`shift` to ignore confirmation), delete element

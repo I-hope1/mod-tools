@@ -2,6 +2,7 @@ package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import arc.util.*;
 import mindustry.graphics.Pal;
 
 /** 用于控制渲染，当然你也可以解析文本 */
@@ -15,7 +16,8 @@ public class Syntax {
 	 c_operateChar = Pal.accentBack,
 	 c_functions   = Color.sky,//Color.valueOf("#ae81ff")
 	 c_objects     = new Color(0x66D9EF_FF),
-	 c_map         = new Color(0xADDE68_FF);
+	 c_map         = new Color(0xADDE68_FF),
+	 c_error       = Color.red;
 
 	public SyntaxDrawable drawable;
 	public DrawToken      drawToken;
@@ -34,8 +36,8 @@ public class Syntax {
 	/** 判断指定char，是否为单词边界 */
 	public boolean isWordBreak(char c) {
 		return !((48 <= c && c <= 57) || (65 <= c && c <= 90)
-						 || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
-						 || c == '$' || c == '_');
+		         || (97 <= c && c <= 122) || (19968 <= c && c <= 40869)
+		         || c == '$' || c == '_');
 	}
 
 	/** 用于文本解析 */
@@ -52,16 +54,16 @@ public class Syntax {
 			if (drawDefCons != null) drawDefCons.get(start, max);
 			return;
 		}
+		if (start == max) return;
 		drawable.font().getColor().set(color).mulA(drawable.alpha());
 		drawable.drawMultiText(displayText, start, max);
 	}
 
 
 	void reset() {
-		if (cTask != null) {
-			cTask.reset();
-			lastTask = cTask;
-		}
+		if (cTask == null) return;
+		cTask.reset();
+		lastTask = cTask;
 		cTask = null;
 	}
 
@@ -89,15 +91,17 @@ public class Syntax {
 						continue;
 					}
 					cTask = drawTask;
-					if (cTask.isFinished()) {
+					// 单字符高亮
+					if (cTask.isFinished() || cTask.withdraw) {
 						lastIndex = drawAndReset(i);
 						continue outer;
 					}
 					break;
 				}
-			} else l1:if (cTask.draw(i)) {
-				if (!cTask.isFinished()) break l1;
-				lastIndex = drawAndReset(i);
+			} else if (cTask.draw(i)) {
+				if (cTask.isFinished() || cTask.withdraw) {
+					lastIndex = drawAndReset(i);
+				}
 			} else {
 				reset();
 			}
@@ -115,9 +119,11 @@ public class Syntax {
 			drawDefText(lastIndex, len);
 		}
 	}
+	/** 返回下一个index，{@link DrawTask#withdraw}时不{@link #reset()} */
 	private int drawAndReset(int i) {
 		cTask.drawText(i);
-		reset();
+		if (!cTask.withdraw) reset();
+		else cTask.withdraw = false;
 		return i + 1;
 	}
 
@@ -266,7 +272,8 @@ public class Syntax {
 		@Override
 		boolean draw(int i) {
 			if (body) {
-				if (multi ? lastChar == '*' && c == '/' : c == '\n' || i + 1 >= len) {
+				if (multi ? (lastChar == '*' && c == '/')
+				 : (c == '\n' || i + 1 >= len)) {
 					finished = true;
 				}
 				return true;
@@ -283,22 +290,29 @@ public class Syntax {
 
 
 	public class DrawString extends DrawTask {
-		/** <p>key(字符char，用于判断是否为字符串) -> value(boolean是否为多行)</p>
-		 * mindustry目前的rhino都是单行 */
-		public static final IntMap<Boolean> chars = IntMap.of(
+		/**
+		 * <p>key(字符char，用于判断是否为字符串) -> value(boolean是否为多行)</p>
+		 * mindustry目前的rhino都是单行
+		 */
+		public static final IntMap<Boolean> chars     = IntMap.of(
 		 '\'', false,
 		 '"', false,
 		 '`', false
 		);
-		public Color textColor, escapeColor;
+		/** 可以转义的字符 */
+		public static final IntSeq          escapeMap = IntSeq.with(
+		 'n', 'b', 'c', 'r', 't', 'f', '\\', '"'
+		);
+
+		public int textColor, escapeColor;
 		public DrawString(Color color) {
 			this(color, chars);
 		}
 		public DrawString(Color color, IntMap<Boolean> chars) {
 			super(new Color(), true);
 			this.color.set(color);
-			textColor = color;
-			escapeColor = color.cpy().hue(0.5f);
+			textColor = color.rgba();
+			escapeColor = Tmp.c1.set(color).saturation(0.75f).rgba();
 			map = chars;
 		}
 
@@ -306,12 +320,14 @@ public class Syntax {
 		@Override
 		void reset() {
 			super.reset();
-			leftQuote = rightQuote = escape = false;
+			color.set(textColor);
+			leftQuote = rightQuote = false;
+			escape = false;
 		}
 
 		@Override
 		boolean isFinished() {
-			return rightQuote;
+			return rightQuote /* 表示引号是否结束 */;
 		}
 
 		boolean leftQuote, rightQuote;
@@ -320,30 +336,50 @@ public class Syntax {
 		boolean escape;
 		@Override
 		boolean draw(int i) {
+			/* left边的引号  */
+			if (!leftQuote) return searchQuote(i);
+
 			if (escape) {
-				color.set(escapeColor);
-				return true;
-			}
-			if (!leftQuote) {
-				if (map.containsKey(c)) {
-					quote = c;
-					leftQuote = true;
-					lastIndex = i;
-					return true;
-				} else {
-					return false;
+				if (lastChar == '\\') {
+					color.set(escapeColor);
+					withdraw = true;
+					escape = false;
+					// 判断是否可以转义
+					if (!escapeMap.contains(c) && !Character.isDigit(c)) color.set(c_error);
+					checkEscape(i);
 				}
-			}
-			if (quote == c || c == '\n' && !map.get(quote)) {
-				rightQuote = true;
-				leftQuote = false;
 				return true;
 			}
-			if (quote == '\\') {
-				escape = true;
-				return false;
+			/* 表示转义结束 */
+			if (color.rgba() != textColor) {
+				color.set(textColor);
+			}
+			if (checkEscape(i)) return true;
+
+			if ((lastChar != '\\' && quote == c) || (c == '\n' && !map.get(quote))) {
+				rightQuote = true;
 			}
 			return true;
+		}
+
+		private boolean checkEscape(int i) {
+			if (nextIs(i, '\\')) {
+				escape = true;
+				withdraw = true;
+				return true;
+			}
+			return false;
+		}
+		private boolean searchQuote(int i) {
+			if (map.containsKey(c)) {
+				quote = c;
+				leftQuote = true;
+				lastIndex = i;
+				checkEscape(i);
+				return true;
+			} else {
+				return false;
+			}
 		}
 	}
 
@@ -356,8 +392,12 @@ public class Syntax {
 	public abstract class DrawTask {
 		public final Color   color;
 		public       boolean crazy;
-		/** 这个为当前char或String的左边  */
-		public       int     lastIndex;
+
+		/* 运行时变量 */
+		/** 是否为暂时退出，draw包含本次字符 */
+		public boolean withdraw = false;
+		/** 这个为当前char或String的左边 */
+		public int     lastIndex;
 
 		public DrawTask(Color color, boolean crazy) {
 			this.color = color;
@@ -375,6 +415,7 @@ public class Syntax {
 		/** 渲染结束（包括失败）时，执行 */
 		void reset() {
 			lastIndex = -1;
+			withdraw = false;
 		}
 
 		abstract boolean isFinished();
@@ -383,10 +424,11 @@ public class Syntax {
 
 		public void drawText(int i) {
 			drawText0(color, lastIndex, i + 1);
+			lastIndex = i + 1;
 		}
 
-		public boolean nextIs(int i, char c) {
-			return i + 1 < len && c == displayText.charAt(i + 1);
+		public boolean nextIs(int currentIndex, char expectChar) {
+			return currentIndex + 1 < len && expectChar == displayText.charAt(currentIndex + 1);
 		}
 	}
 }

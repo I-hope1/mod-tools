@@ -5,6 +5,7 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.TextureAtlas.AtlasRegion;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
@@ -21,6 +22,8 @@ import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
+import mindustry.graphics.MultiPacker.PageType;
+import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.jsfunc.INFO_DIALOG;
@@ -348,11 +351,11 @@ public class IntUI {
 		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> { })
 		 .with(button -> IntUI.longPress(button, b -> {
 			 Object o = prov.get();
-			 if (o == null) return;
+			 if (o == null && clazz == null) return;
 			 Core.app.post(Tools.runT0(() ->
 				INFO_DIALOG.showInfo(b ? null : o,
 				 b && o instanceof Class<?> cls ? cls :
-					clazz == null || !clazz.isPrimitive() ? o.getClass() : clazz
+					clazz == null ? o.getClass() : clazz
 				)
 			 ));
 		 }))
@@ -850,7 +853,6 @@ public class IntUI {
 		topGroup.focusOnElement(new MyFocusTask(element, boolp));
 	}
 
-
 	public static Cell<?> buildImagePreviewButton(Element element, Table table,
 	                                              Prov<Drawable> prov, Cons<Drawable> consumer) {
 		return IntUI.addPreviewButton(table, p -> {
@@ -865,16 +867,28 @@ public class IntUI {
 				} else {
 					mul = 1;
 				}
-				Image alphaBg = new Image(Tex.alphaBg);
+				Drawable drawable = prov.get();
+				Image    alphaBg  = new Image(Tex.alphaBg);
 				alphaBg.color.a = 0.7f;
-				p.stack(alphaBg, new Image(prov.get()))
+				p.stack(alphaBg, new Image(drawable))
 				 .update(t -> t.setColor(element != null ? element.color : Color.white))
 				 .size(size, size * mul).row();
 
-				p.add(ReflectTools.getName(prov.get().getClass()), 0.6f).left().row();
-				p.table(KeyValue.THE_ONE.tableCons("Original Size", new SizeProv(() ->
+				p.add(ReflectTools.getName(drawable.getClass()))
+				 .color(KeyValue.stressColor)
+				 .left().row();
+				KeyValue keyValue = KeyValue.THE_ONE;
+				p.defaults().growX();
+				if (drawable instanceof TextureRegionDrawable trd && trd.getRegion() instanceof AtlasRegion atg) {
+					p.table(keyValue.tableCons("Name", () -> atg.name)).row();
+					String   str  = String.valueOf(atg.texture);
+					char     c    = str.charAt(str.length() - 1);
+					PageType type = PageType.all[Character.isDigit(c) ? c - '0' : 0];
+					p.table(keyValue.tableCons("Page", type::name, Pal.accent)).row();
+				}
+				p.table(keyValue.tableCons("Original Size", new SizeProv(() ->
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
-				))).growX().row();
+				))).row();
 				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {
 					IntUI.drawablePicker().show(prov.get(), consumer);
 				}).size(42);

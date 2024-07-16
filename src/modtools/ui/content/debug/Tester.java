@@ -984,8 +984,7 @@ public class Tester extends Content {
 		public boolean keyTyped(InputEvent event, char character) {
 			check(event);
 			if (!hasFunctionKey() &&
-			    (area.isWordCharacter(character) ||
-			     character == '.') &&
+			    (area.isWordCharacter(character) || character == '.') &&
 			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
 			    auto_complement.enabled()) {
 				if (textarea.virtualString != null) event.stop();

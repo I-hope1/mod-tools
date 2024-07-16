@@ -7,10 +7,11 @@ import arc.scene.ui.layout.Table;
 import modtools.utils.ui.search.BindCell;
 
 public interface KeyValue {
-	KeyValue THE_ONE    = new $KeyValue();
+	Color    stressColor = Color.violet;
+	KeyValue THE_ONE     = new $KeyValue();
 	float    padRight   = 8f;
-	float    keyScale   = 0.7f;
-	float    valueScale = 0.6f;
+	float    keyScale   = 0.8f;
+	float    valueScale = 0.7f;
 	default void key(Table col, String key) {
 		col.add(key).fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 	}
@@ -30,6 +31,12 @@ public interface KeyValue {
 	default Cons<Table> tableCons(String key, Prov<CharSequence> value) {
 		return tableCons(key, new Label(value));
 	}
+	default Cons<Table> tableCons(String key, Prov<CharSequence> value, Color color) {
+		Label label = new Label(value);
+		label.setColor(color);
+		return tableCons(key, label);
+	}
+
 	default BindCell makeCell(Table t, Cons<Table> cons) {
 		return new BindCell(t.row().table(cons).growX());
 	}

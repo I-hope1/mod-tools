@@ -735,7 +735,7 @@ public class ReviewElement extends Content {
 	}
 
 	public static class InfoDetails extends Table implements KeyValue {
-		Label nameLabel = new VLabel(0.75f, Color.violet),
+		Label nameLabel = new VLabel(0.85f, KeyValue.stressColor),
 		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
 		 touchableLabel = new NoMarkupLabel(valueScale),
 

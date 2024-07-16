@@ -76,8 +76,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		Cell<?> cell = add(showLine ? getLinesShow() : null).growY().left();
 		add(pane).grow();
 		area.setPrefRows(8);
-		area.x += pane.x;
-		area.y += pane.y;
 		area.changed(() -> {
 			pane.trackCursor();
 			// 刷新Area
@@ -85,7 +83,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			// invalidateHierarchy();
 			Core.app.post(this::invalidate);
 			cell.setElement(showLine ? linesShow : null);
-			// if (last == area) focus();
 		});
 		Rect rect = new Rect();
 		margin(0);
@@ -103,7 +100,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public String text;
 		public Color  color = Color.gray;
 		public int    index;
-		public VirtualString() {}
+		public VirtualString() { }
 	}
 	private LinesShow getLinesShow() {
 		linesShow = new LinesShow(area);
@@ -130,6 +127,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			super(area);
 		}
 
+		protected void drawChildren() {
+			getWidget().x = 8f;
+			super.drawChildren();
+		}
 		public void trackCursor() {
 			// Time.runTask(0f, () -> {
 			int cursorLine       = area.getCursorLine();
@@ -164,6 +165,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 	public class MyTextArea extends GenTextArea {
 		public  float    parentHeight = 0;
+		public  float    padTop       = 8f;
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
@@ -191,6 +193,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 			return Math.max(super.getPrefHeight(), prefHeight + parentHeight / 2f);
 		}
+		public Drawable getBackground() {
+			return style.background;
+		}
 
 		float getRelativeX(int cursor) {
 			int prev = this.cursor;
@@ -202,7 +207,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			super.setCursorPosition(prev);
 			return val;
 		}
-		/** @see arc.scene.ui.TextArea#drawCursor(Drawable, Font, float, float)   */
+		/** @see arc.scene.ui.TextArea#drawCursor(Drawable, Font, float, float) */
 		float getRelativeY(int cursor) {
 			int prev = this.cursor;
 			super.setCursorPosition(cursor);
@@ -239,6 +244,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return firstLineShowing;
 		}
 
+		protected float getTextY(Font font, Drawable background) {
+			return super.getTextY(font, background) - padTop;
+		}
 		public void drawText(Font font, float x, float y) {
 			boolean had       = font.getData().markupEnabled;
 			Color   lastColor = font.getColor();
@@ -259,6 +267,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				try {
 					highlightingDraw(x, y);
 				} catch (Throwable e) {
+					Log.err(e);
 					enableHighlighting = false;
 				}
 			} else {
@@ -309,9 +318,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			// StringBuilder sb = new StringBuilder();
 			for (int cursor = start; cursor < max; cursor++) {
 				// 判断是否为换行（包括自动换行）
-				if (text.charAt(cursor) == '\n' || cursor + displayTextStart == linesBreak.get(row * 2 + 1)) {
+				char c = text.charAt(cursor);
+				if (c == '\n' || c == '\r' || cursor + displayTextStart == linesBreak.get(row * 2 + 1)) {
 					drawText(text, start, cursor);
-					start = text.charAt(cursor) == '\n' ? cursor + 1 : cursor;
+					start = c == '\n' || c == '\r' ? cursor + 1 : cursor;
 					offsetX = baseOffsetX;
 					offsetY -= area.lineHeight();
 					row++;
@@ -345,7 +355,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				int lineEnd   = linesBreak.get(i + 1);
 
 				if (!((minIndex < lineStart && minIndex < lineEnd && maxIndex < lineStart && maxIndex < lineEnd)
-							|| (minIndex > lineStart && minIndex > lineEnd))) {
+				      || (minIndex > lineStart && minIndex > lineEnd))) {
 
 					int start = Math.min(Math.max(linesBreak.get(i), minIndex), glyphPositions.size - 1);
 					int end   = Math.min(Math.min(linesBreak.get(i + 1), maxIndex), glyphPositions.size - 1);
@@ -430,7 +440,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				int startIndex, endIndex;
 				int offset       = 2;
 				if (((startIndex = text.substring(Math.max(0, start - offset), Math.min(start + offset, maxLen)).indexOf("/*")) >= 0)
-						&& ((endIndex = text.substring(Math.max(0, selectionEnd - offset), Math.min(selectionEnd + offset, maxLen)).indexOf("*/")) >= 0)) {
+				    && ((endIndex = text.substring(Math.max(0, selectionEnd - offset), Math.min(selectionEnd + offset, maxLen)).indexOf("*/")) >= 0)) {
 					startIndex += Math.max(0, start - offset);
 					endIndex += Math.max(0, selectionEnd - offset);
 					// text.delete(startIndex, 2);
@@ -574,7 +584,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return text.charAt(i) == c;
 		}
 		public boolean isWordCharacter(char c) {
-			return super.isWordCharacter(c) || c == '_' || c == '$';
+			return Character.isUnicodeIdentifierPart(c);
 		}
 	}
 
@@ -613,12 +623,15 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			int firstLineShowing = area.getRealFirstLineShowing();
 			int linesShowing     = area.getRealLinesShowing();
 			font = area.getStyle().font;
-			boolean had           = font.getData().markupEnabled;
-			String  text          = area.getText();
-			float   scrollOffsetY = area.scrollY - (int) (area.scrollY / area.lineHeight()) * area.lineHeight();
-			float   offsetY       = getTop() - getBackground().getTopHeight() + scrollOffsetY;
-			IntSeq  linesBreak    = area.getLinesBreak();
-			int     row           = 1;
+			boolean  had           = font.getData().markupEnabled;
+			String   text          = area.getText();
+			float    scrollOffsetY = area.scrollY - (int) (area.scrollY / area.lineHeight()) * area.lineHeight();
+			Drawable background    = area.getBackground();
+			float offsetY = getTop() -
+			                (background == null ? 0 : background.getTopHeight())
+			                + scrollOffsetY - area.padTop;
+			IntSeq linesBreak = area.getLinesBreak();
+			int    row        = 1;
 			font.getData().markupEnabled = false;
 			realCursorLine = 0;
 			int      cursorLine = area.getCursorLine() * 2;
@@ -696,9 +709,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	} */
 
 
-	// 等宽字体样式（没有等宽字体默认样式）
+	// 等宽字体样式（没有等宽字体就默认字体）
 	public static TextFieldStyle MOMO_STYLE = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.def;
+		background = null;
 		selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}};
 }

@@ -441,7 +441,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				STR."\{f.getDeclaringClass().getSimpleName()}: \{f.getName()}",
 				() -> f.get(o))
 			 .disabled(_ -> !l[0].isValid());
-		})).right().top().colspan(0), E_JSFuncDisplay.buttons);
+		})).right().top(), E_JSFuncDisplay.buttons);
 		fields.row();
 
 		addUnderline(fields, 8);
@@ -572,13 +572,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
-				buildModifier(t, STR."\{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())} \{cls.isInterface() ? "" : "class"}", 1);
+				buildModifier(t,
+				 STR."\{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())} \{cls.isInterface() ? "" : "class"}", 1);
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
 				IntUI.addShowMenuListenerp(l, () -> Seq.with(
 				 IntUI.copyAsJSMenu("class", () -> cls),
-				 ValueLabel.newDetailsMenuList(l, cls, Class.class)
+				 ValueLabel.newDetailsMenuList(l, null, cls)
 				));
 				Class<?>[] types = cls.getInterfaces();
 				if (types.length > 0) {
@@ -589,9 +590,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				}
 
 				markDisplay(t.add(new MyHoverTable(buttons -> {
-					IntUI.addDetailsButton(buttons, () -> null, cls);
+					IntUI.addDetailsButton(buttons, () -> cls, cls);
 					// addStoreButton(buttons, Core.bundle.get("jsfunc.class", "Class"), () -> cls);
-				})).grow().colspan(0), E_JSFuncDisplay.buttons);
+				})).right(), E_JSFuncDisplay.buttons);
 			} catch (Throwable e) {
 				Log.err(e);
 			}

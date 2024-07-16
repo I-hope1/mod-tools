@@ -118,7 +118,7 @@ public class EBBlur implements DrawEffect {
 		convolution.append(";");
 
 		String vertexShader =
-		 """
+		 STR."""
 			attribute vec4 a_position;
 			attribute vec2 a_texCoord0;
 
@@ -126,42 +126,39 @@ public class EBBlur implements DrawEffect {
 			uniform vec2 size;
 
 			varying vec2 v_texCoords;
-			%varying%
+			\{varyings}
 			void main(){
 			  vec2 len = dir/size;
 
 			  v_texCoords = a_texCoord0;
-			  %assignVar%
+			  \{assignVar}
 			  gl_Position = a_position;
 			}
-			"""
-			.replace("%varying%", varyings)
-			.replace("%assignVar%", assignVar);
-		String fragmentShader = (
-		 "uniform lowp sampler2D u_texture0;\n" +
-		 "uniform lowp sampler2D u_texture1;\n" +
-		 "\n" +
-		 "uniform lowp float def_alpha;\n" +
-		 "\n" +
-		 "varying vec2 v_texCoords;\n" +
-		 "%varying%\n" +
-		 "void main(){\n" +
-		 "  vec4 blur = texture2D(u_texture0, v_texCoords);\n" +
-		 "  vec3 color = texture2D(u_texture1, v_texCoords).rgb;\n" +
-		 "\n" +
-		 "  if(blur.a > 0.0){\n" +
-		 "    vec3 blurColor =\n" +
-		 "        %convolution%\n" +
-		 "\n" +
-		 "    gl_FragColor.rgb = blurColor;\n" +
-		 "    gl_FragColor.a = blur.a;\n" +
-		 "  } else {\n" +
-		 "    gl_FragColor.rgb = color;\n" +
-		 "    gl_FragColor.a = def_alpha;\n" +
-		 "  }\n" +
-		 "}\n")
-		 .replace("%varying%", varyings)
-		 .replace("%convolution%", convolution);
+			""";
+		String fragmentShader =
+		 STR."""
+			uniform lowp sampler2D u_texture0;
+			uniform lowp sampler2D u_texture1;
+
+			uniform lowp float def_alpha;
+
+			varying vec2 v_texCoords;
+			\{varyings}
+			void main(){
+			  vec4 blur = texture2D(u_texture0, v_texCoords);
+			  vec3 color = texture2D(u_texture1, v_texCoords).rgb;
+
+			  if(blur.a > 0.0){
+			    vec3 blurColor = \{convolution}
+
+			    gl_FragColor.rgb = blurColor;
+			    gl_FragColor.a = blur.a;
+			  } else {
+			    gl_FragColor.rgb = color;
+			    gl_FragColor.a = def_alpha;
+			  }
+			}
+			""";
 
 		// Log.info("vert: @\n\nfrag: @", 	(vertexShader, fragmentShader);
 

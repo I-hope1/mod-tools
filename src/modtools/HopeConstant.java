@@ -2,9 +2,11 @@ package modtools;
 
 import arc.KeyBinds.KeybindValue;
 import arc.files.Fi;
+import arc.graphics.g2d.PixmapPacker;
 import arc.struct.*;
 import arc.util.Reflect;
 import mindustry.Vars;
+import mindustry.graphics.MultiPacker;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
 import modtools.utils.Tools.CProv;
@@ -82,6 +84,12 @@ public class HopeConstant {
 
 		// long OBJECT_SIZE = FieldUtils.fieldOffset(nl(() ->
 		//  Class.class.getDeclaredField("objectSize")));
+	}
+	public interface PACKER {
+		/** @see Mods#packer  */
+		MultiPacker multiPacker = nl(() -> Reflect.get(Mods.class, Vars.mods, "packer"));
+		/** @see MultiPacker#packers  */
+		PixmapPacker[] packers = nl(() -> Reflect.get(MultiPacker.class, multiPacker, "packers"));
 	}
 
 	public interface MODS {

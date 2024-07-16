@@ -921,6 +921,11 @@ public class Tester extends Content {
 
 
 	public class ComplementListener extends InputListener {
+		/** @see TextField#BACKSPACE  */
+    static  final char BACKSPACE = 8;
+		/** @see TextField#DELETE  */
+		static final char DELETE = 127;
+
 		public int lastCompletionCursor = -1;
 		public int lastCompletionIndex  = 0;
 		JSSyntax syntax = (JSSyntax) textarea.syntax;
@@ -983,8 +988,8 @@ public class Tester extends Content {
 
 		public boolean keyTyped(InputEvent event, char character) {
 			check(event);
-			if (!hasFunctionKey() &&
-			    (area.isWordCharacter(character) || character == '.') &&
+			if (!hasFunctionKey() && character != DELETE && character != BACKSPACE &&
+			 (area.isWordCharacter(character) || character == '.') &&
 			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
 			    auto_complement.enabled()) {
 				if (textarea.virtualString != null) event.stop();

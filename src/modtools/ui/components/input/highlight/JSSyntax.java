@@ -5,7 +5,7 @@ import arc.struct.*;
 import modtools.jsfunc.IScript;
 import rhino.*;
 
-import java.util.HashMap;
+import java.util.*;
 
 @SuppressWarnings("StringTemplateMigration")
 public class JSSyntax extends Syntax {
@@ -92,7 +92,38 @@ public class JSSyntax extends Syntax {
 
 	protected final DrawSymbol
 	 operatesSymbol = new DrawSymbol(operates, c_operateChar),
-	 bracketsSymbol = new DrawSymbol(brackets, c_brackets);
+	 bracketsSymbol = new DrawSymbol(brackets, new Color()) {
+		 static final IntIntMap leftBracket = IntIntMap.of(
+			'(', ')',
+			'[', ']',
+			'{', '}');
+
+		 final Color            textColor = c_brackets;
+		 final Stack<Character> stack     = new Stack<>();
+		 void init() {
+			 super.init();
+			 stack.clear();
+		 }
+		 @Override
+		 boolean draw(int i) {
+			 if (!super.draw(i)) return false;
+			 if (leftBracket.containsKey(c)) {
+				 stack.push(c);
+				 color.set(textColor);
+			 } else if (stack.isEmpty()) {
+				 color.set(c_error);
+			 } else if (leftBracket.get(stack.peek()) == c) {
+				 stack.pop();
+				 color.set(textColor);
+			 } else {
+				 color.set(c_error);
+			 }
+			 return true;
+		 }
+		 {
+			 color.set(textColor);
+		 }
+	 };
 
 	public Object getPropOrNotFound(Scriptable scope, String key) {
 		try {
@@ -168,7 +199,7 @@ public class JSSyntax extends Syntax {
 		if (!enableJSProp) return null;
 		Object o = pkg == null && obj instanceof NativeJavaObject nja ?
 		 js_prop_map.computeIfAbsent(nja.unwrap(), _ -> new HashMap<>())
-		  .computeIfAbsent(token, _ -> getPropOrNotFound(nja, token))
+			.computeIfAbsent(token, _ -> getPropOrNotFound(nja, token))
 		 : getPropOrNotFound(pkg, token);
 		if (o == Scriptable.NOT_FOUND) {
 			obj = null;

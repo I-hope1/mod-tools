@@ -48,11 +48,13 @@ public interface WorldUtils {
 	}
 
 	static void setAir(Tile tile) {
+		if (tile.build != null) tile.build.remove();
 		if (tile.block() != Blocks.air) setBlock(tile, Blocks.air);
 	}
 
 	static void setBlock(Tile tile, Block block) {
 		if (tile.block() == block) return;
+		if (tile.build != null) tile.build.remove();
 		if (!block.isMultiblock()) {
 			setBlock0(tile, block);
 			return;

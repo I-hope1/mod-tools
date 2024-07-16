@@ -83,7 +83,7 @@ public abstract class WFunction<T> {
 		Tools.TASKS.add(() -> WD.alpha = SC.selectFunc == this ? 0.7f : 0.1f);
 		executor = AThreads.impl.boundedExecutor(name + "-each", 1);
 
-		main.button("show all", HopeStyles.blackt, this::showAll).growX().height(Selection.buttonHeight).row();
+		main.button("Show All", HopeStyles.blackt, this::showAll).growX().height(Selection.buttonHeight).row();
 		main.add(buttons).growX().row();
 		buildButtons();
 
@@ -253,7 +253,7 @@ public abstract class WFunction<T> {
 					fin * Mathf.dst(region.width, region.height) / tilesize);
 			 });
 			Threads.sleep(1);
-			action.accept(t);
+			Core.app.post(() -> action.accept(t));
 		})));
 	}
 	public void removeAll(List<T> list, Predicate<? super T> action) {

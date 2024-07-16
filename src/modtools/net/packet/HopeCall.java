@@ -21,7 +21,7 @@ public class HopeCall {
 	}
 
 	public static void setBlock(Tile tile, Block block, Team team) {
-		if (net.server() || !net.active()) {
+		if (!net.active() || net.server()) {
 			tile.setBlock(block, team);
 		}
 		if (net.server() || net.client()) {

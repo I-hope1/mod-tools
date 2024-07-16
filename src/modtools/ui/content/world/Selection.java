@@ -277,7 +277,7 @@ public class Selection extends Content {
 	private static Predicate<Building> killCons() {
 		return b -> {
 			if (b.tile.build == b) b.kill();
-			return b.tile.build != null;
+			return b.tile.build == null;
 		};
 	}
 

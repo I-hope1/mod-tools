@@ -43,7 +43,7 @@ import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
 import static modtools.utils.JSFunc.*;
-import static modtools.utils.Tools.catchRun;
+import static modtools.utils.Tools.runT;
 import static modtools.utils.ui.MethodTools.*;
 import static modtools.utils.ui.ReflectTools.*;
 import static modtools.IntVars.mouseVec;
@@ -322,7 +322,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				l.enableUpdate = !field.hasKeyboard();
 			});
 			field.setValidator(NumberHelper::isNumber);
-			field.changed(catchRun(() -> {
+			field.changed(Tools.runT(() -> {
 				if (!field.isValid()) return;
 				l.setFieldValue(NumberHelper.cast(field.getText(), l.type));
 			}));
@@ -341,7 +341,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			field.update(() -> {
 				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
 			});
-			field.changed(catchRun(() -> {
+			field.changed(Tools.runT(() -> {
 				String text = field.getText();
 				l.setFieldValue(AutoTextField.NULL_STR.equals(text) ? null : text);
 			}));
@@ -367,7 +367,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			btn.setText((boolean) l.val ? "TRUE" : "FALSE");
 			btn.setChecked((boolean) l.val);
 		});
-		btn.clicked(catchRun(() -> {
+		btn.clicked(Tools.runT(() -> {
 			boolean b = !(boolean) l.val;
 			btn.setText(b ? "TRUE" : "FALSE");
 			l.setFieldValue(b);
@@ -517,7 +517,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 				buttonsCell = t.add(new MyHoverTable(buttons -> {
 					if (noParam && isValid) {
-						buttons.button(Icon.rightOpenOutSmall, flati, catchRun(whenExecuting, () -> {
+						buttons.button(Icon.rightOpenOutSmall, flati, Tools.runT(whenExecuting, () -> {
 							dealInvokeResult(m.invoke(o), cell, l);
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 					}
@@ -762,7 +762,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	private static Runnable methodInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ValueLabel l) {
 		return () -> {
 			if (noParam) {
-				catchRun(() -> dealInvokeResult(m.invoke(o), cell, l),
+				runT(() -> dealInvokeResult(m.invoke(o), cell, l),
 				 l).run();
 				return;
 			}
@@ -776,7 +776,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return () -> {
 			MethodHandle handle = getHandle(m);
 			if (noParam) {
-				catchRun(() -> dealInvokeResult(handle.invokeWithArguments(o), cell, l)
+				runT(() -> dealInvokeResult(handle.invokeWithArguments(o), cell, l)
 				 , l).run();
 				return;
 			}
@@ -790,7 +790,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 
 	private static Runnable ctorInitInvoker(Object o, Constructor<?> ctor, boolean noParam) {
-		return catchRun(() -> {
+		return Tools.runT(() -> {
 			MethodHandle init = InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor);
 			if (o == null) {
 				copyValue("Handle", init);
@@ -806,7 +806,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return () -> {
 			MethodHandle handle = getHandle(ctor);
 			if (noParam) {
-				catchRun(() -> JSFunc.copyValue("Instance", handle.invoke()),
+				runT(() -> JSFunc.copyValue("Instance", handle.invoke()),
 				 label).run();
 				return;
 			}

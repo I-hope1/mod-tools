@@ -37,6 +37,7 @@ import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.draw.InterpImage;
 import modtools.utils.reflect.FieldUtils;
+import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
 import java.lang.reflect.*;
@@ -45,7 +46,9 @@ import java.util.regex.Pattern;
 
 import static arc.scene.ui.CheckBox.CheckBoxStyle;
 import static modtools.utils.Tools.Sr;
+import static modtools.utils.ui.FormatHelper.fixed;
 
+@SuppressWarnings("StringTemplateMigration")
 public class ShowUIList extends Content {
 	public IntTab tab;
 	Window ui;
@@ -134,31 +137,32 @@ public class ShowUIList extends Content {
 		var region = icon.getRegion();
 		setColor(t.image(icon)
 		 .size(imageSize, region.height / (float) region.width * imageSize).get());
-		t.add(k).with(JSFunc::addDClickCopy).growY().row();
+		field(t, k).row();
 		t.unbind();
 	})), tex    = newTable(t -> {
 		String prefix = "Tex.";
 		for (Field field : Tex.class.getFields()) {
+			Drawable drawable = null;
 			try {
 				// 是否为Drawable
 				if (!Drawable.class.isAssignableFrom(field.getType())) continue;
 				t.bind(field.getName());
 				// 跳过private检查，减少时间
 				field.setAccessible(true);
-				Drawable drawable = (Drawable) field.get(null);
+				drawable = (Drawable) field.get(null);
 				texKeyMap.put(drawable, prefix + field.getName());
 				addImage(t, drawable);
 			} catch (Exception err) {
 				t.add();// 占位
 				Log.err(err);
 			} finally {
-				t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
+				fieldWithView(t, field, drawable);
+				t.row();
 				t.unbind();
 			}
 
 		}
 	}), styles  = newTable(true, t -> {
-		Builder.t = t;
 		listAllStyles(t, Styles.class);
 		Tools.runLoggedException(() -> {
 			Fi json = uiConfig.child("styles.json");
@@ -169,11 +173,9 @@ public class ShowUIList extends Content {
 			}
 		});
 	}), colorsT = newTable(t -> {
-		t.defaults().left().growX();
-
 		Cons<Class<?>> buildColor = cls -> {
-			t.add(cls.getSimpleName()).color(Pal.accent).colspan(2).row();
-			t.image().color(Pal.accent).colspan(2).row();
+			t.add(cls.getSimpleName()).colspan(2).color(Pal.accent).growX().row();
+			t.image().color(Pal.accent).colspan(2).growX().row();
 
 			String prefix = cls.getSimpleName() + ".";
 			for (Field field : cls.getFields()) {
@@ -189,7 +191,7 @@ public class ShowUIList extends Content {
 					t.listener(el -> IntUI.addTooltipListener(el, "" + color));
 					t.add(new BorderImage(Core.atlas.white(), 2f)
 					 .border(color.cpy().inv())).color(color).size(42f);
-					t.add(field.getName()).with(JSFunc::addDClickCopy).growY();
+					field(t, field.getName()).growX();
 					t.listener(null);
 				} catch (IllegalAccessException | IllegalArgumentException | ClassCastException err) {
 					Log.err(err);
@@ -225,7 +227,7 @@ public class ShowUIList extends Content {
 			 JSRequest.requestFor(Interp.class, Interp.class, interp -> {
 				 table.add(new InterpImage(interp))
 					.size(120).padBottom(32f);
-					 if (++c[0] % 3 == 0) table.row();
+				 if (++c[0] % 3 == 0) table.row();
 			 });
 		 });
 	 }), uis    = newTable(t -> {
@@ -239,39 +241,68 @@ public class ShowUIList extends Content {
 			t.unbind();
 		}
 	});
+	private static void fieldWithView(FilterTable<Object> t, Field field, Drawable drawable) {
+		if (drawable != null) {
+			t.table(p -> {
+				field(p, field.getName());
+				viewDrawable(p, drawable);
+			}).growY();
+		} else {
+			field(t, field.getName());
+		}
+	}
+	private static Cell<Label> field(Table p, String fieldName) {
+		return p.add(fieldName).with(JSFunc::addDClickCopy).growY();
+	}
 	static void listAllStyles(FilterTable<Object> t, Class<?> stylesClass) {
 		String  prefix = stylesClass.getSimpleName() + ".";
 		Field[] fields = getStyleFields(stylesClass);
 		for (Field field : fields) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;
+			Object style = null;
 			try {
 				// 跳过访问检查，减少时间
 				field.setAccessible(true);
-				Object style = field.get(null);
+				style = field.get(null);
 				if (style instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
 				if (style instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
 				t.bind(field.getName());
 				Sr(style)
-				 .isInstance(ScrollPaneStyle.class, Builder::build)
-				 .isInstance(DialogStyle.class, Builder::build)
-				 .isInstance(LabelStyle.class, Builder::build)
-				 .isInstance(SliderStyle.class, Builder::build)
-				 .isInstance(TextFieldStyle.class, Builder::build)
-				 .isInstance(CheckBoxStyle.class, Builder::build)
-				 .isInstance(TextButtonStyle.class, Builder::build)
-				 .isInstance(ImageButtonStyle.class, Builder::build)
-				 .isInstance(ButtonStyle.class, Builder::build)
-				 .isInstance(Drawable.class, Builder::build);
+				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
+				 .isInstance(DialogStyle.class, t,Builder::build)
+				 .isInstance(LabelStyle.class, t,Builder::build)
+				 .isInstance(SliderStyle.class, t,Builder::build)
+				 .isInstance(TextFieldStyle.class, t,Builder::build)
+				 .isInstance(CheckBoxStyle.class, t,Builder::build)
+				 .isInstance(TextButtonStyle.class, t,Builder::build)
+				 .isInstance(ImageButtonStyle.class, t,Builder::build)
+				 .isInstance(ButtonStyle.class, t,Builder::build)
+				 .isInstance(Drawable.class, t,Builder::build);
 			} catch (IllegalAccessException | IllegalArgumentException err) {
 				Log.err(err);
 				continue;
 			} catch (SatisfyException ignored) { }
 
-			t.add(field.getName()).with(JSFunc::addDClickCopy).growY().row();
+			Object finalStyle = style;
+			t.table(t1 -> {
+				field(t1, field.getName());
+				IntUI.addPreviewButton(t1, p -> SR.apply(() -> Sr(finalStyle)
+				 .isInstance(ScrollPaneStyle.class, p, Builder::view)
+				 .isInstance(DialogStyle.class, p, Builder::view)
+				 .isInstance(LabelStyle.class, p, Builder::view)
+				 .isInstance(SliderStyle.class, p, Builder::view)
+				 .isInstance(TextFieldStyle.class, p, Builder::view)
+				 .isInstance(CheckBoxStyle.class, p, Builder::view)
+				 .isInstance(TextButtonStyle.class, p, Builder::view)
+				 .isInstance(ImageButtonStyle.class, p, Builder::view)
+				 .isInstance(ButtonStyle.class, p, Builder::view)
+				 .isInstance(Drawable.class, p, Builder::view))).padLeft(8f);
+			}).growY().row();
 			t.unbind();
 		}
 	}
 
+	// 安卓上不支持Comparator
 	@SuppressWarnings("ComparatorCombinators")
 	private static Field[] getStyleFields(Class<?> stylesClass) {
 		return OS.isAndroid ? Arrays.stream(stylesClass.getFields())
@@ -327,44 +358,60 @@ public class ShowUIList extends Content {
 	}
 
 	public static class Builder {
-		static Table t;
-		static void build(ScrollPaneStyle style) {
+		static void build(ScrollPaneStyle style, Table t) {
 			t.pane(style, p -> {
 				p.add("pane").row();
 				p.add("test-test-test").color(Color.gray).row();
 				p.add("test-test-test").color(Color.gray).row();
 			}).growX().maxWidth(144).height(64);
 		}
-		static void build(DialogStyle style) {
+		static void build(DialogStyle style, Table t) {
 			t.pane(p -> p.add(new Dialog("dialog", style))).growX().height(42);
 		}
-		static void build(LabelStyle style) {
+		static void build(LabelStyle style, Table t) {
 			t.add("label", style);
 		}
-		static void build(SliderStyle style) {
+		static void build(SliderStyle style, Table t) {
 			t.slider(0, 10, 1, f -> { })
 			 .get().setStyle(style);
 		}
-		static void build(TextButtonStyle style) {
+		static void build(TextButtonStyle style, Table t) {
 			t.button("text button", style, () -> { }).size(96, 42);
 		}
-		static void build(ImageButtonStyle style) {
+		static void build(ImageButtonStyle style, Table t) {
 			t.button(Icon.ok, style, () -> { }).size(96, 42);
 		}
-		static void build(ButtonStyle style) {
+		static void build(ButtonStyle style, Table t) {
 			t.button(b -> {
 				b.add("button");
 			}, style, () -> { }).size(96, 42);
 		}
-		static void build(TextFieldStyle style) {
+		static void build(TextFieldStyle style, Table t) {
 			t.field("field", style, _ -> { });
 		}
-		static void build(CheckBoxStyle style) {
+		static void build(CheckBoxStyle style, Table t) {
 			t.add(new CheckBox("checkbox", style)).height(42);
 		}
-		static void build(Drawable drawable) {
+		static void build(Drawable drawable, Table t) {
 			addImage(t, drawable);
+		}
+
+		static void view(Style style, Table t) {
+		}
+
+		static void view(Drawable drawable, Table t) {
+			KeyValue keyValue = KeyValue.THE_ONE;
+			keyValue.keyValue(t, "Left", () -> fixed(drawable.getLeftWidth()));
+			keyValue.keyValue(t, "Right", () -> fixed(drawable.getRightWidth()));
+			keyValue.keyValue(t, "Top", () -> fixed(drawable.getTopHeight()));
+			keyValue.keyValue(t, "Bottom", () -> fixed(drawable.getBottomHeight()));
+			keyValue.keyValue(t, "MinWidth", () -> fixed(drawable.getMinHeight()));
+			keyValue.keyValue(t, "MinHeight", () -> fixed(drawable.getMinHeight()));
+			keyValue.keyValue(t, "ImageSize", () -> fixed(drawable.imageSize()));
 		}
 	}
 
+	static void viewDrawable(Table table, Drawable drawable) {
+		IntUI.addPreviewButton(table, p -> Builder.view(drawable, p)).padLeft(8f);
+	}
 }

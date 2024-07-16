@@ -1,6 +1,9 @@
 package modtools.jsfunc;
 
+import arc.Core;
 import arc.util.Reflect;
+import mindustry.Vars;
+import mindustry.ctype.ContentType;
 import modtools.utils.*;
 import rhino.*;
 
@@ -26,7 +29,10 @@ public class JSFuncClass extends NativeJavaClass {
 		RuntimeException ex;
 		try {
 			return super.get(name, start);
-		} catch (RuntimeException e) {ex = e;}
+		} catch (RuntimeException e) { ex = e; }
+		Object res = resolveNamedContent(name);
+		if (res != null) return res;
+
 		return switch (name) {
 			case "void" -> void.class;
 			case "boolean" -> boolean.class;
@@ -38,6 +44,18 @@ public class JSFuncClass extends NativeJavaClass {
 			case "double" -> double.class;
 			default -> throw ex;
 		};
+	}
+	private Object resolveNamedContent(String name) {
+		String key = Core.bundle.getProperties().findKey(name, false);
+		String contentName = key != null ? key.split("\\.")[1] : name;
+		if (contentName != null) {
+			for (ContentType ctype : ContentType.all) {
+				if (Vars.content.getByName(ctype, contentName) != null) {
+					return Vars.content.getByName(ctype, contentName);
+				}
+			}
+		}
+		return null;
 	}
 	public boolean hasInstance(Scriptable value) {
 		return false;

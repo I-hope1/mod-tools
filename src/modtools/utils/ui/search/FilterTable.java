@@ -9,7 +9,7 @@ import arc.util.pooling.Pools;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.PatternUtils;
 
-import java.util.HashMap;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class FilterTable<E> extends LimitTable {
@@ -22,7 +22,7 @@ public class FilterTable<E> extends LimitTable {
 	public FilterTable(Drawable background, Cons<FilterTable<E>> cons) {
 		super(background, (Cons) cons);
 	}
-	protected HashMap<E, ObjectSet<BindCell>> map;
+	protected Map<E, ObjectSet<BindCell>> map;
 	ObjectSet<BindCell> current;
 
 	private Cons<Element> cons;

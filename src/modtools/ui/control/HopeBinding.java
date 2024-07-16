@@ -12,7 +12,9 @@ import static ihope_lib.MyReflect.unsafe;
 import static modtools.HopeConstant.BINDING.*;
 
 public enum HopeBinding {
-	close(KeyCode.escape);
+	close(KeyCode.escape),
+	view(KeyCode.v);
+
 	public final KeybindValue keyCode;
 	public final String       category;
 	public final Binding      binding;
@@ -34,4 +36,10 @@ public enum HopeBinding {
 	public static void load() {
 		Core.keybinds.setDefaults(Binding.values());
 	}
+
+	/* static KeybindValue pair(KeyCode keyCode, boolean isShift, boolean isCtrl, boolean isAlt)  {
+		new KeybindValue(){
+			keyCode
+		}, isShift, isCtrl, isAlt);
+	} */
 }

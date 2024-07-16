@@ -91,7 +91,6 @@ public class Tools {
 
 	/** 重复运行直到返回{@code true} */
 	public static void forceRun(Boolp boolp) {
-		// Log.info(Time.deltaimpl);
 		Timer.schedule(new Task() {
 			public void run() {
 				try {
@@ -192,7 +191,8 @@ public class Tools {
 		}
 	}
 
-	public static Runnable catchRun0(Runnable run) {
+	/** 对run封装，捕获报错  */
+	public static Runnable runT0(Runnable run) {
 		return () -> {
 			try {
 				run.run();
@@ -201,13 +201,13 @@ public class Tools {
 			}
 		};
 	}
-	public static Runnable catchRun(CatchRun run) {
-		return catchRun("", run, null);
+	public static Runnable runT(CatchRun run) {
+		return runT("", run, null);
 	}
-	public static Runnable catchRun(CatchRun run, Element el) {
-		return catchRun("", run, el);
+	public static Runnable runT(CatchRun run, Element el) {
+		return runT("", run, el);
 	}
-	public static Runnable catchRun(String text, CatchRun run, Element el) {
+	public static Runnable runT(String text, CatchRun run, Element el) {
 		return () -> {
 			try {
 				run.run();
@@ -218,11 +218,11 @@ public class Tools {
 			}
 		};
 	}
-	public static <T> Cons<T> catchCons(CCons<T> cons) {
-		return catchCons(cons, null);
+	public static <T> Cons<T> consT(CCons<T> cons) {
+		return consT(cons, null);
 	}
 
-	public static <T> Cons<T> catchCons(CCons<T> cons, Cons<Throwable> resolver) {
+	public static <T> Cons<T> consT(CCons<T> cons, Cons<Throwable> resolver) {
 		return t -> {
 			try {
 				cons.get(t);

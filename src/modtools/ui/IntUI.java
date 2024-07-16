@@ -100,8 +100,8 @@ public class IntUI {
 	public static <T extends Element> T
 	doubleClick(T elem, Runnable click, Runnable d_click) {
 		if (click == null && d_click == null) return elem;
-		final Runnable click1 = click == null ? null : catchRun(click::run),
-		 d_click1 = d_click == null ? null : catchRun(d_click::run);
+		final Runnable click1 = click == null ? null : runT(click::run),
+		 d_click1 = d_click == null ? null : runT(d_click::run);
 		class ClickTask extends Task {
 			public void run() {
 				if (click1 != null) click1.run();
@@ -349,7 +349,7 @@ public class IntUI {
 		 .with(button -> IntUI.longPress(button, b -> {
 			 Object o = prov.get();
 			 if (o == null) return;
-			 Core.app.post(Tools.catchRun0(() ->
+			 Core.app.post(Tools.runT0(() ->
 				INFO_DIALOG.showInfo(b ? null : o,
 				 b && o instanceof Class<?> cls ? cls :
 					clazz == null || !clazz.isPrimitive() ? o.getClass() : clazz
@@ -443,7 +443,7 @@ public class IntUI {
 			if (Tmp.v1.y < graphics.getHeight() / 2f) {
 				t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight(), align | Align.bottom);
 			} else {
-				t.setPosition(Tmp.v1.x, Tmp.v1.y - button.getHeight(), align | Align.top);
+				t.setPosition(Tmp.v1.x, Tmp.v1.y, align | Align.top);
 			}
 			if (t.getWidth() > Core.scene.getWidth()) {
 				t.setWidth((float) graphics.getWidth());

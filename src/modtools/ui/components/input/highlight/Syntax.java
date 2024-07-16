@@ -77,7 +77,7 @@ public class Syntax {
 		int lastIndex = 0;
 		len = displayText.length();
 		lastChar = '\n';
-		out:
+		outer:
 		for (int i = 0; i < len; i++, lastChar = c) {
 			c = displayText.charAt(i);
 
@@ -91,7 +91,7 @@ public class Syntax {
 					cTask = drawTask;
 					if (cTask.isFinished()) {
 						lastIndex = drawAndReset(i);
-						continue out;
+						continue outer;
 					}
 					break;
 				}
@@ -283,25 +283,30 @@ public class Syntax {
 
 
 	public class DrawString extends DrawTask {
-		/** key(字符char，用于判断是否为字符串) -> value(boolean是否为多行)
-		 * 目前的rhino都是单行 */
+		/** <p>key(字符char，用于判断是否为字符串) -> value(boolean是否为多行)</p>
+		 * mindustry目前的rhino都是单行 */
 		public static final IntMap<Boolean> chars = IntMap.of(
 		 '\'', false,
 		 '"', false,
 		 '`', false
 		);
+		public Color textColor, escapeColor;
 		public DrawString(Color color) {
 			this(color, chars);
 		}
 		public DrawString(Color color, IntMap<Boolean> chars) {
-			super(color, true);
+			super(new Color(), true);
+			this.color.set(color);
+			textColor = color;
+			escapeColor = color.cpy().hue(0.5f);
 			map = chars;
 		}
 
 		public IntMap<Boolean> map;
+		@Override
 		void reset() {
 			super.reset();
-			leftQuote = rightQuote = false;
+			leftQuote = rightQuote = escape = false;
 		}
 
 		@Override
@@ -312,8 +317,13 @@ public class Syntax {
 		boolean leftQuote, rightQuote;
 		char quote;
 
+		boolean escape;
 		@Override
 		boolean draw(int i) {
+			if (escape) {
+				color.set(escapeColor);
+				return true;
+			}
 			if (!leftQuote) {
 				if (map.containsKey(c)) {
 					quote = c;
@@ -324,10 +334,14 @@ public class Syntax {
 					return false;
 				}
 			}
-			if ((quote == c && lastChar != '\\') || (c == '\n' && !map.get(quote))) {
+			if (quote == c || c == '\n' && !map.get(quote)) {
 				rightQuote = true;
 				leftQuote = false;
 				return true;
+			}
+			if (quote == '\\') {
+				escape = true;
+				return false;
 			}
 			return true;
 		}

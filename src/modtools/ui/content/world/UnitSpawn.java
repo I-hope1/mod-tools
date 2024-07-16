@@ -94,7 +94,7 @@ public class UnitSpawn extends Content {
 				nameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.name}\{allChecked.size > 1 ? "[]..." : ""}");
 				localizedNameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.localizedName}\{allChecked.size > 1 ? "[]..." : ""}");
 			});
-			right.add(nameL).wrap().growX().row();
+			right.add(nameL).growX().wrap().row();
 			right.add(localizedNameL).growX().wrap().row();
 		}).growX();
 	}

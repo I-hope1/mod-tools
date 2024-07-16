@@ -8,9 +8,10 @@ import arc.scene.ui.layout.*;
 import arc.util.Nullable;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
+import modtools.utils.Tools;
 
 import static modtools.ui.Contents.tester;
-import static modtools.utils.Tools.catchRun;
+import static modtools.utils.Tools.runT;
 
 /**
  * The type Menu list.
@@ -80,7 +81,7 @@ public class MenuItem {
 		return icon != null ? 24 : Float.NEGATIVE_INFINITY;/* unset */
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
-		cell.with(b -> b.clicked(catchRun(() -> {
+		cell.with(b -> b.clicked(Tools.runT(() -> {
 			hide.run();
 			if (cons != null) cons.get(b);
 		}))).checked(this instanceof CheckboxList l && l.checked);

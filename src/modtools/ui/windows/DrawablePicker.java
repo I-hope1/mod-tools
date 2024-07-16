@@ -185,7 +185,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				});
 			}}).row();
 
-			hexField = t.field(current.toString().toUpperCase(), Tools.catchCons(value -> {
+			hexField = t.field(current.toString().toUpperCase(), Tools.consT(value -> {
 				current.set(Color.valueOf(value).a(a));
 				resetColor(current);
 

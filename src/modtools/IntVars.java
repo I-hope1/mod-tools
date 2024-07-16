@@ -96,7 +96,7 @@ public class IntVars {
 	public static void postToMain(Runnable run) {
 		if (Thread.currentThread().getContextClassLoader() == Vars.class.getClassLoader()) {
 			run.run();
-		} else Core.app.post(Tools.catchRun0(run));
+		} else Core.app.post(Tools.runT0(run));
 	}
 
 	public interface Async {

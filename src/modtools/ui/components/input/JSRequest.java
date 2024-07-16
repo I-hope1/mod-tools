@@ -30,13 +30,13 @@ public class JSRequest {
 			buttons.row();
 
 			buttons.button("@cancel", HopeStyles.flatt, this::hide).growX().height(42);
-			buttons.button("Test", HopeStyles.flatt, catchRun(() -> {
+			buttons.button("Test", HopeStyles.flatt, runT(() -> {
 				Object o   = eval();
 				String log = String.valueOf(o);
 				if (log == null) log = "null";
 				this.log = log;
 			})).growX().height(42);
-			buttons.button("@ok", HopeStyles.flatt, catchRun(() -> {
+			buttons.button("@ok", HopeStyles.flatt, runT(() -> {
 				Object o = eval();
 				callback.get(as(o));
 				if (!notHideAuto) hide();

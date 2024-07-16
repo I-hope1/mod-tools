@@ -10,7 +10,7 @@ import arc.scene.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.gen.Icon;
 import modtools.IntVars;
 import modtools.ui.*;
@@ -18,6 +18,7 @@ import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.*;
 import modtools.ui.components.utils.PlainValueLabel;
+import modtools.ui.control.HopeInput;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.Tools;
 import modtools.utils.ui.ShowInfoWindow;
@@ -71,7 +72,7 @@ public interface INFO_DIALOG {
 		assert dialog[0] != null;
 		return dialog[0];
 	}
-	static void buildArrayCont(Object o, Class<?> clazz, int length, Table cont) {
+	private static void buildArrayCont(Object o, Class<?> clazz, int length, Table cont) {
 		Class<?> componentType = clazz.getComponentType();
 		Table    c1            = null;
 		for (int i = 0; i < length; i++) {
@@ -83,7 +84,7 @@ public interface INFO_DIALOG {
 			button.add(new PlainValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
 			button.clicked(() -> {
 				Object item = Array.get(o, j);
-				if (item != null) IntVars.postToMain(Tools.catchRun0(() ->
+				if (item != null) IntVars.postToMain(Tools.runT0(() ->
 				 showInfo(item).setPosition(getAbsolutePos(button))));
 				else IntUI.showException(new NullPointerException("item is null"));
 			});
@@ -92,35 +93,17 @@ public interface INFO_DIALOG {
 			c1.image().color(Tmp.c1.set(JColor.c_underline)).colspan(2).growX().row();
 		}
 	}
-	static Window window(final Cons<Window> cons) {
-		class JSWindow extends HiddenTopWindow implements IDisposable {
-			{
-				show();
-				title.setFontScale(0.7f);
-				for (Cell<?> child : titleTable.getCells()) {
-					if (child.get() instanceof ImageButton) {
-						child.size(24);
-					}
-				}
-				titleHeight = 28;
-				((Table) titleTable.parent).getCell(titleTable).height(titleHeight);
-				cons.get(this);
-				moveToMouse();
-			}
 
-			public JSWindow() {
-				super("TEST", 64, 64);
-			}
-		}
-		return new JSWindow();
+	static JSWindow window(final Cons<Window> cons) {
+		return new JSWindow(cons);
 	}
-	static Window btn(String text, Runnable run) {
+	static JSWindow btn(String text, Runnable run) {
 		return dialog(t -> t.button(text, HopeStyles.flatt, run).size(64, 45));
 	}
-	static Window testDraw(Runnable draw) {
+	static JSWindow testDraw(Runnable draw) {
 		return testDraw0(_ -> draw.run());
 	}
-	static Window testDraw0(Cons<Group> draw) {
+	static JSWindow testDraw0(Cons<Group> draw) {
 		return dialog(new Group() {
 			{ transform = true; }
 
@@ -130,7 +113,7 @@ public interface INFO_DIALOG {
 		});
 	}
 	// static FrameBuffer buffer = new FrameBuffer();
-	static Window testShader(Shader shader, Runnable draw) {
+	static JSWindow testShader(Shader shader, Runnable draw) {
 		return testDraw0(t -> {
 			// buffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
 			FrameBuffer buffer  = new FrameBuffer(Core.graphics.getWidth(), Core.graphics.getHeight());
@@ -139,42 +122,101 @@ public interface INFO_DIALOG {
 			buffer.dispose();
 		});
 	}
-	static Window dialog(Element element) {
+	static JSWindow dialog(Element element) {
 		return window(d -> d.cont.pane(element).grow());
 	}
-	static Window dialog(String text) {
+	static JSWindow dialog(String text) {
 		return dialog(new Label(text));
 	}
-	static Window dialog(TextureRegion region) {
+	static JSWindow dialog(TextureRegion region) {
 		return dialog(new Image(region));
 	}
-	static Window dialog(Texture texture) {
+	static JSWindow dialog(Texture texture) {
 		return dialog(new TextureRegion(texture));
 	}
-	static Window dialog(Drawable drawable) {
+	static JSWindow dialog(Drawable drawable) {
 		return dialog(new Image(drawable));
 	}
-	static Window dialog(Color color) {
+	static JSWindow dialog(Color color) {
 		return dialog(new ColorImage(color));
 	}
-	static Window pixmap(int size, Cons<Pixmap> cons) {
+	static JSWindow pixmap(int size, Cons<Pixmap> cons) {
 		return pixmap(size, size, cons);
 	}
-	static Window pixmap(int width, int height, Cons<Pixmap> cons) {
+	static JSWindow pixmap(int width, int height, Cons<Pixmap> cons) {
 		Pixmap pixmap = new Pixmap(width, height);
 		cons.get(pixmap);
-		Window dialog = dialog(new TextureRegion(new Texture(pixmap)));
+		JSWindow dialog = dialog(new TextureRegion(new Texture(pixmap)));
 		dialog.hidden(pixmap::dispose);
 		return dialog;
 	}
-	static Window dialog(Cons<Table> cons) {
+	static JSWindow dialog(Cons<Table> cons) {
 		return dialog(new Table(cons));
 	}
+	static void dialog(Element element, boolean disposable) {
+		dialog(element).autoDispose = disposable;
+	}
+	static void dialog(String text, boolean disposable) {
+		dialog(text).autoDispose = disposable;
+	}
+	static void dialog(TextureRegion region, boolean disposable) {
+		dialog(region).autoDispose = disposable;
+	}
+
+	static void dialog(Texture texture, boolean disposable) {
+		dialog(texture).autoDispose = disposable;
+	}
+
+	static void dialog(Drawable drawable, boolean disposable) {
+		dialog(drawable).autoDispose = disposable;
+	}
+	static void dialog(Color color, boolean disposable) {
+		dialog(color).autoDispose = disposable;
+	}
+	static void dialog(Pixmap pixmap, boolean disposable) {
+		dialog(new TextureRegion(new Texture(pixmap))).autoDispose = disposable;
+	}
+
+
 
 	class $ {
 		@SuppressWarnings("rawtypes")
 		public static void buildLongPress(ImageButton button, Prov o) {
 			IntUI.longPress0(button, () -> INFO_DIALOG.showInfo(o));
+		}
+	}
+
+	class JSWindow extends HiddenTopWindow implements IDisposable {
+		Cons<Window> cons;
+		/** 是否会自动关闭并销毁 */
+		boolean      autoDispose = false;
+		Runnable autoDisposeRun;
+		private void dispose(){
+			if (autoDispose && !HopeInput.pressed.isEmpty()) {
+				hide();
+			}
+		}
+		public void act(float delta) {
+			super.act(delta);
+			if (autoDisposeRun != null) autoDisposeRun.run();
+		}
+		public JSWindow(Cons<Window> cons) {
+			super("TEST", 64, 64);
+			this.cons = cons;
+			show();
+			title.setFontScale(0.7f);
+			for (Cell<?> child : titleTable.getCells()) {
+				if (child.get() instanceof ImageButton) {
+					child.size(24);
+				}
+			}
+			titleHeight = 28;
+			((Table) titleTable.parent).getCell(titleTable).height(titleHeight);
+			cons.get(this);
+			moveToMouse();
+			Time.runTask(20, () -> {
+				if (autoDispose) autoDisposeRun = this::dispose;
+			});
 		}
 	}
 }

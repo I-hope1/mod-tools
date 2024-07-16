@@ -30,9 +30,8 @@ import modtools.utils.world.WorldDraw;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
-import static modtools.IntVars.root;
+import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
-import static modtools.IntVars.mouseVec;
 
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
@@ -105,6 +104,20 @@ public class ModTools extends Mod {
 		Tools.runIgnoredException(Tester::initExecution);
 
 		extending();
+
+		/* new Block("building") {{
+			update = true;
+			requirements(Category.effect, ItemStack.empty);
+		}};
+
+		Tools.forceRun(() -> {
+			if (!Core.atlas.has("duo")) return false;
+			// region
+			Core.atlas.addRegion(NPX."building", Core.atlas.find("duo"));
+			// icon
+			Core.atlas.addRegion("block-" + NPX."building-full", Core.atlas.find("block-duo-full"));
+			return true;
+		}); */
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 

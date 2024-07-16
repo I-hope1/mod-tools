@@ -66,6 +66,13 @@ public class SR<T> {
 		}
 		return this;
 	}
+	public <R, A> SR<T> isInstance(Class<R> cls, A arg1, BiConsumer<R, A> cons) throws SatisfyException {
+		if (cls.isInstance(value)) {
+			cons.accept(cls.cast(value), arg1);
+			throw new SatisfyException();
+		}
+		return this;
+	}
 
 	public SR<T> cons(boolean b, TBoolc<T> cons) {
 		cons.get(value, b);

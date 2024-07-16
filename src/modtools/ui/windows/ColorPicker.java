@@ -121,7 +121,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 				});
 			}}).row();
 
-			hexField = t.field(current.toString().toUpperCase(), Tools.catchCons(value -> {
+			hexField = t.field(current.toString().toUpperCase(), Tools.consT(value -> {
 				current.set(Color.valueOf(value).a(a));
 				current.toHsv(values);
 				h = values[0];
@@ -135,7 +135,9 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 				}
 
 				updateColor(false);
-			})).size(130f, 40f).valid(text -> {
+			}))
+			 .size(150f, 40f)
+			 .valid(text -> {
 				//garbage performance but who cares this runs only every key type anyway
 				try {
 					Color.valueOf(text);

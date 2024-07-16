@@ -10,7 +10,7 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.game.EventType.Trigger;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
@@ -28,9 +28,9 @@ import modtools.utils.draw.InterpImage;
 import modtools.utils.ui.WatchWindow;
 import modtools.utils.world.*;
 
+import static modtools.IntVars.mouseVec;
 import static modtools.ui.Contents.tester;
 import static modtools.utils.ElementUtils.*;
-import static modtools.IntVars.mouseVec;
 
 /** for js */
 @SuppressWarnings("unused")
@@ -58,6 +58,7 @@ public class JSFunc
 	}
 
 
+	/** 双击复制文本内容  */
 	public static void addDClickCopy(Label label) {
 		addDClickCopy(label, null);
 	}
@@ -82,6 +83,8 @@ public class JSFunc
 	/* public static void copyValue(Object value, Element element) {
 		copyValue(value, Tools.getAbsPos(element));
 	} */
+
+	/** 复制值到js  */
 	public static void copyValue(String text, Object value) {
 		copyValue(text, value, mouseVec);
 	}
@@ -172,6 +175,7 @@ public class JSFunc
 	 * <br>（不一定）
 	 */
 	public static boolean eq(Object a, Object b) {
+		if (a != null && Reflect.isWrapper(a.getClass())) return a.equals(b);
 		return a == b;
 	}
 

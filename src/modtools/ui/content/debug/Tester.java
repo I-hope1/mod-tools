@@ -103,11 +103,18 @@ public class Tester extends Content {
 				String mainCode =
 				 map.getBool("disposable") && map.containsKey("type") ?
 					STR."""
-					Events.on(\{map.get("type")}, $e$=>{ try { \n\{readFiOrEmpty(bookmarkDirectory.child(entry.key))};
+					Events.on(\{map.get("type")}, $e$ => {\
+					 try {\
+					  \{readFiOrEmpty(bookmarkDirectory.child(entry.key))};
 					} catch(e) { Log.err(e); }});
 					"""
 					: readFiOrEmpty(bookmarkDirectory.child(entry.key));
-				String source = STR."(()=>{modName='\{taskName}';scriptName=`\{entry.key}`;\{mainCode}\n})()";
+				String source = STR."""
+				(() => {\
+				modName='\{taskName}';\
+				scriptName=`\{entry.key}`;\
+				\{mainCode}
+				})()""";
 				ExecuteTree.node(() -> {
 					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);
 				 }, taskName, entry.key, Icon.none, () -> { })
@@ -396,7 +403,7 @@ public class Tester extends Content {
 			// p.button("@startup", bookmark::show);
 
 			IntUI.addCheck(p.button(HopeIcons.interrupt, new ImageButtonStyle(istyle), isize,
-			 () -> stopIfOvertime = !stopIfOvertime),
+				() -> stopIfOvertime = !stopIfOvertime),
 			 () -> stopIfOvertime, "@tester.stopIfOvertime", "@tester.neverStop");
 			IntUI.addCheck(p.button(Icon.waves, new ImageButtonStyle(istyle), isize,
 				() -> multiThread = !multiThread),
@@ -414,14 +421,14 @@ public class Tester extends Content {
 			showDetails();
 			return true;
 		}
-		if (keycode == KeyCode.v && Core.input.alt()) {
+		if (Core.input.alt() && keycode == KeyCode.v) {
 			Tools.runIgnoredException(() -> Sr(res)
-			 .isInstance(Element.class, INFO_DIALOG::dialog)
-			 .isInstance(String.class, INFO_DIALOG::dialog)
-			 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
-			 .isInstance(Texture.class, INFO_DIALOG::dialog)
-			 .isInstance(Drawable.class, INFO_DIALOG::dialog)
-			 .isInstance(Color.class, INFO_DIALOG::dialog)
+			 .isInstance(Element.class, true, INFO_DIALOG::dialog)
+			 .isInstance(String.class, true, INFO_DIALOG::dialog)
+			 .isInstance(TextureRegion.class, true, INFO_DIALOG::dialog)
+			 .isInstance(Texture.class, true, INFO_DIALOG::dialog)
+			 .isInstance(Drawable.class, true, INFO_DIALOG::dialog)
+			 .isInstance(Color.class, true, INFO_DIALOG::dialog)
 			);
 
 			return true;

@@ -72,8 +72,8 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		checkboxField(cont, cell, "uniformY", boolean.class);
 		cont.row();
 		TextButtonStyle style = HopeStyles.flatBordert;
-		fnButton("Layout", style, catchRun(() -> cell.getTable().layout()));
-		fnButton("Invalidate", style, catchRun(() -> cell.getTable().invalidateHierarchy()));
+		fnButton("Layout", style, runT(() -> cell.getTable().layout()));
+		fnButton("Invalidate", style, runT(() -> cell.getTable().invalidateHierarchy()));
 		cont.row();
 		fnButton("GrowX", style, cell::growX);
 		fnButton("GrowY", style, cell::growY);
@@ -201,7 +201,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			}, false, Align.top);
 		});
 	}
-	private static Object castBoolean(Class<?> valueType, boolean b) {
+	static Object castBoolean(Class<?> valueType, boolean b) {
 		return valueType == Boolean.TYPE ? b : b ? 1 : 0;
 	}
 

@@ -242,7 +242,7 @@ public abstract class WFunction<T> {
 			IntUI.showException(new RejectedExecutionException("There's already 2 tasks running."));
 			return;
 		}
-		executor.submit(() -> Tools.each(list, Tools.catchCons(t -> {
+		executor.submit(() -> Tools.each(list, Tools.consT(t -> {
 			new LerpFun(Interp.fastSlow).onWorld().rev()
 			 .registerDispose(1 / 24f, fin -> {
 				 Draw.color(Pal.accent);

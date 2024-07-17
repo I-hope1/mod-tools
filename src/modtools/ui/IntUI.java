@@ -350,15 +350,16 @@ public class IntUI {
 	}
 	public static ImageButton addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
 		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> { })
-		 .with(button -> IntUI.longPress(button, b -> {
+		 .with(button -> IntUI.longPress(button, isLongPress -> {
 			 Object o = prov.get();
 			 if (o == null && clazz == null) return;
-			 Core.app.post(Tools.runT0(() ->
-				INFO_DIALOG.showInfo(b ? null : o,
-				 b && o instanceof Class<?> cls ? cls :
-					clazz == null ? o.getClass() : clazz
-				)
-			 ));
+			 Core.app.post(Tools.runT0(() -> {
+				 if (isLongPress) {
+					 INFO_DIALOG.showInfo(o instanceof Class<?> c ? c : clazz);
+				 } else {
+					 INFO_DIALOG.showInfo(o);
+				 }
+			 }));
 		 }))
 		 .with(makeTipListener("details_button"))
 		 .size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE)

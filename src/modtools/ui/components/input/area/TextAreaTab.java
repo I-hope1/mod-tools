@@ -126,11 +126,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public MyScrollPane() {
 			super(area);
 		}
-
-		protected void drawChildren() {
-			getWidget().x = 8f;
-			super.drawChildren();
-		}
 		public void trackCursor() {
 			// Time.runTask(0f, () -> {
 			int cursorLine       = area.getCursorLine();
@@ -165,7 +160,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 	public class MyTextArea extends GenTextArea {
 		public  float    parentHeight = 0;
-		public  float    padTop       = 8f;
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
@@ -244,9 +238,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return firstLineShowing;
 		}
 
-		protected float getTextY(Font font, Drawable background) {
-			return super.getTextY(font, background) - padTop;
-		}
 		public void drawText(Font font, float x, float y) {
 			boolean had       = font.getData().markupEnabled;
 			Color   lastColor = font.getColor();
@@ -629,7 +620,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			Drawable background    = area.getBackground();
 			float offsetY = getTop() -
 			                (background == null ? 0 : background.getTopHeight())
-			                + scrollOffsetY - area.padTop;
+			                + scrollOffsetY;
 			IntSeq linesBreak = area.getLinesBreak();
 			int    row        = 1;
 			font.getData().markupEnabled = false;
@@ -710,9 +701,21 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 
 	// 等宽字体样式（没有等宽字体就默认字体）
-	public static TextFieldStyle MOMO_STYLE = new TextFieldStyle(Styles.defaultField) {{
+	public static TextFieldStyle MOMO_STYLE  = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.def;
-		background = null;
+		background = new TextureRegionDrawable() {
+			public void draw(float x, float y, float width, float height) {
+			}
+			public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
+			                 float scaleY, float rotation) {
+			}
+			{
+				setTopHeight(8f);
+				setLeftWidth(8f);
+				setBottomHeight(8f);
+				setRightWidth(8f);
+			}
+		};
 		selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}};
 }

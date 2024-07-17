@@ -50,7 +50,7 @@ import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable {
-	public static final String   whenExecuting = "An exception occurred when executing";
+	public static final String whenExecuting       = "An exception occurred when executing";
 	public static final String METHOD_COUNT_PREFIX = " [";
 
 
@@ -576,7 +576,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			t.left().top().defaults().top();
 			try {
 				buildModifier(t,
-				 STR."\{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())} \{cls.isInterface() ? "" : "class"}", 1);
+				 STR."""
+				 \{isNestStatic(cls) ? "static" : ""}\
+				 \{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())}\
+				 \{cls.isInterface() ? "" : " class"}
+				 """, 1);
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
@@ -601,6 +605,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			}
 		}).growX().left().top().row();
 		addUnderline(table, 6);
+	}
+	private static boolean isNestStatic(Class<?> cls) {
+		if (cls.getConstructors().length == 0) return true;
+		Class<?>[] parameterTypes = cls.getConstructors()[0].getParameterTypes();
+		return parameterTypes.length == 0 || parameterTypes[0] != cls.getNestHost();
 	}
 	static Cell<MyLabel> keyword(Table t, CharSequence text) {
 		return t.add(new MyLabel(text, defaultLabel)).color(tmpColor.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);

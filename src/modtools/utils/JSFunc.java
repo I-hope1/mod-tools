@@ -43,7 +43,7 @@ public class JSFunc
  /* world */
  UnitUtils, BulletUtils, WorldUtils,
  /* other */
- IAsset, IUtils, IPixmap {
+ IAsset, IUtils, IPixmap, IEvent {
 	public static final Font FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;

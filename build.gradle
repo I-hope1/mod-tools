@@ -3,11 +3,6 @@ apply plugin: 'java'
 group 'mod-tools'
 version '1.4.6.2'
 
-static def export(CompileOptions options) {
-//    options.compilerArgs.addAll("-Xlint:deprecation")
-	options.compilerArgs += "-AtargetVersion=8"
-}
-
 ext {
 	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
@@ -20,7 +15,9 @@ allprojects {
 		options.encoding = 'UTF-8'
 		sourceCompatibility = 21
 		targetCompatibility = 21
-		export(options)
+
+		options.compilerArgs += "-AtargetVersion=8"
+		options.compilerArgs.add("--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED")
 	}
 
 	repositories {

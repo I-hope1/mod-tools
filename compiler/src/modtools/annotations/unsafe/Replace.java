@@ -16,8 +16,8 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
+import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
 
@@ -68,11 +68,17 @@ public class Replace {
 		moduleExports();
 	}
 	private static void moduleExports() throws Exception {
+		removeKey(JCDiagnostic.Factory.class, () -> new JCDiagnostic.Factory(context) {
+			public JCDiagnostic fragment(Fragment fragmentKey) {
+				println(fragmentKey);
+				return super.fragment(fragmentKey);
+			}
+		});
 		Method initModule = Modules.class.getDeclaredMethod("setupAutomaticModule", ModuleSymbol.class);
 		initModule.setAccessible(true);
-		long    off_export = HopeReflect.fieldOffset(ExportsDirective.class, "modules");
+		long off_export = HopeReflect.fieldOffset(ExportsDirective.class, "modules");
 		// long    off_open   = HopeReflect.fieldOffset(OpensDirective.class, "modules");
-		Modules modules    = Modules.instance(context);
+		Modules modules = Modules.instance(context);
 		Consumer<ModuleSymbol> exportAll = m -> {
 			var prev = m.exports;
 			try {
@@ -89,6 +95,9 @@ public class Replace {
 				if (export.modules == null || !export.modules.contains(syms.unnamedModule)) {
 					unsafe.putObject(export, off_export, export.modules != null ? export.modules.append(syms.unnamedModule) : List.of(syms.unnamedModule));
 				}
+				m.visiblePackages.put(export.packge.fullname, export.packge);
+
+				println(export.packge);
 			}
 		};
 		exportAll.accept(syms.java_base);
@@ -349,7 +358,8 @@ public class Replace {
 		removeKey(cls, null);
 	}
 	public static void removeKey(Class<?> cls, Supplier<Object> newVal) {
-		String s = cls.getSimpleName();
+		String s = (cls.isMemberClass() ? cls.getNestHost().getSimpleName() : "") + cls.getSimpleName();
+		if (s.startsWith("JC")) s = s.substring(2);
 		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1) + "Key", cls, newVal);
 	}
 	private static void removeKey(String name, Class<?> cls, Supplier<Object> newVal) {

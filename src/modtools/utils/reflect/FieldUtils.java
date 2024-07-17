@@ -1,7 +1,7 @@
 package modtools.utils.reflect;
 
 import arc.util.OS;
-import ihope_lib.Desktop;
+import jdk.internal.misc.Unsafe;
 
 import java.lang.reflect.*;
 
@@ -79,7 +79,7 @@ public class FieldUtils {
 
 	public static long fieldOffset(Class<?> cls, String name) {
 		// 尝试使用jdk中的unsafe获取offset
-		try { Desktop.unsafe.objectFieldOffset(cls, name); } catch (Throwable ignored) { }
+		try { return Unsafe.getUnsafe().objectFieldOffset(cls, name); } catch (Throwable ignored) { }
 
 		try {
 			return fieldOffset(cls.getDeclaredField(name));

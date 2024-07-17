@@ -4,14 +4,15 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
+import modtools.ui.components.utils.*;
 import modtools.utils.ui.search.BindCell;
 
 public interface KeyValue {
 	Color    stressColor = Color.violet;
 	KeyValue THE_ONE     = new $KeyValue();
-	float    padRight   = 8f;
-	float    keyScale   = 0.8f;
-	float    valueScale = 0.7f;
+	float    padRight    = 8f;
+	float    keyScale    = 0.8f;
+	float    valueScale  = 0.7f;
 	default void key(Table col, String key) {
 		col.add(key).fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
 	}
@@ -36,6 +37,10 @@ public interface KeyValue {
 		label.setColor(color);
 		return tableCons(key, label);
 	}
+	default <T> Cons<Table> consValueLabel(String key, Prov<T> prov, Class<T> type) {
+		return tableCons(key, new ClearValueLabel<>(type, prov, null));
+	}
+
 
 	default BindCell makeCell(Table t, Cons<Table> cons) {
 		return new BindCell(t.row().table(cons).growX());

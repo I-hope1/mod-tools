@@ -18,7 +18,6 @@ allprojects {
 
 		options.compilerArgs += "-AtargetVersion=8"
 		options.compilerArgs.add("--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED")
-		options.compilerArgs.add("--add-exports=java.bas/jdk.internal.misc=ALL-UNNAMED")
 	}
 
 	repositories {

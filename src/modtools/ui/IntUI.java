@@ -3,9 +3,10 @@ package modtools.ui;
 
 import arc.Core;
 import arc.func.*;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.TextureAtlas.AtlasRegion;
+import arc.graphics.gl.FileTextureData;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
@@ -853,8 +854,9 @@ public class IntUI {
 		topGroup.focusOnElement(new MyFocusTask(element, boolp));
 	}
 
-	public static Cell<?> buildImagePreviewButton(Element element, Table table,
-	                                              Prov<Drawable> prov, Cons<Drawable> consumer) {
+	public static Cell<?> buildImagePreviewButton(
+	 Element element, Table table,
+	 Prov<Drawable> prov, Cons<Drawable> consumer) {
 		return IntUI.addPreviewButton(table, p -> {
 			p.top();
 			try {
@@ -881,10 +883,13 @@ public class IntUI {
 				p.defaults().growX();
 				if (drawable instanceof TextureRegionDrawable trd && trd.getRegion() instanceof AtlasRegion atg) {
 					p.table(keyValue.tableCons("Name", () -> atg.name)).row();
-					String   str  = String.valueOf(atg.texture);
-					char     c    = str.charAt(str.length() - 1);
-					PageType type = PageType.all[Character.isDigit(c) ? c - '0' : 0];
-					p.table(keyValue.tableCons("Page", type::name, Pal.accent)).row();
+					if (atg.texture.getTextureData() instanceof FileTextureData) {
+						String   str  = String.valueOf(atg.texture);
+						char     c    = str.charAt(str.length() - 1);
+						PageType type = PageType.all[Character.isDigit(c) ? c - '0' : 0];
+						p.table(keyValue.tableCons("Page", type::name, Pal.accent)).row();
+					}
+					p.table(keyValue.consValueLabel("Texture", () -> atg.texture, Texture.class));
 				}
 				p.table(keyValue.tableCons("Original Size", new SizeProv(() ->
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())

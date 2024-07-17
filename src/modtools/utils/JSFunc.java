@@ -41,7 +41,9 @@ public class JSFunc
  StringUtils, IScript, ElementUtils,
  ANDROID_UNSAFE,
  /* world */
- UnitUtils, BulletUtils, WorldUtils {
+ UnitUtils, BulletUtils, WorldUtils,
+ /* other */
+ IAsset, IUtils, IPixmap {
 	public static final Font FONT = MyFonts.def;
 	public static void strikethrough(Runnable run) {
 		MyFonts.strikethrough = true;
@@ -58,7 +60,7 @@ public class JSFunc
 	}
 
 
-	/** 双击复制文本内容  */
+	/** 双击复制文本内容 */
 	public static void addDClickCopy(Label label) {
 		addDClickCopy(label, null);
 	}
@@ -84,7 +86,7 @@ public class JSFunc
 		copyValue(value, Tools.getAbsPos(element));
 	} */
 
-	/** 复制值到js  */
+	/** 复制值到js */
 	public static void copyValue(String text, Object value) {
 		copyValue(text, value, mouseVec);
 	}
@@ -201,9 +203,9 @@ public class JSFunc
 		 c_type         = 0x66D9EF_FF,
 		 c_underline    = Color.lightGray.cpy().a(0.5f).rgba(),
 		 c_window_title = Pal.accent.cpy().lerp(Color.gray, 0.6f).a(0.9f).rgba()
-		 // c_pane         = Color.black.rgba()
-		                  //
-		  ;
+			// c_pane         = Color.black.rgba()
+			//
+			;
 		/** 代码生成{@link ColorProcessor} */
 		@SuppressWarnings("JavadocReference")
 		public static void settingColor(Table t) { }

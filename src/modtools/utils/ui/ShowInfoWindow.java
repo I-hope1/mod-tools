@@ -29,7 +29,7 @@ import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
-import rhino.NativeArray;
+import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
@@ -508,6 +508,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 IntUI.copyAsJSMenu("method", () -> m),
 				 MenuItem.with("method.getter.copy", Icon.copySmall, "Cpy method getter", () -> copyExecutableReflection(m)),
 				 MenuItem.with("val.getter.copy", Icon.copySmall, "Cpy value getter", () -> copyExecutableArcReflection(m)),
+				 /* o == null ? null : MenuItem.with("method.override", Icon.editSmall, "Override", () -> {
+					 JavaAdapter.getAdapterSelf()
+				 }), */
 				 MenuItem.with("method.invoke", Icon.boxSmall, "Invoke", methodInvoker(o, m, noParam, cell, l)),
 				 MenuItem.with("method.invokeSpecial", Icon.boxSmall, "InvokeSpecial", methodSpecialInvoker(o, m, noParam, cell, l)),
 				 ValueLabel.newDetailsMenuList(label, m, Method.class)

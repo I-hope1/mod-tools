@@ -3,6 +3,7 @@ package modtools;
 import arc.KeyBinds.KeybindValue;
 import arc.files.Fi;
 import arc.graphics.g2d.PixmapPacker;
+import arc.graphics.gl.FileTextureData;
 import arc.struct.*;
 import arc.util.Reflect;
 import mindustry.Vars;
@@ -90,6 +91,10 @@ public class HopeConstant {
 		MultiPacker multiPacker = nl(() -> Reflect.get(Mods.class, Vars.mods, "packer"));
 		/** @see MultiPacker#packers  */
 		PixmapPacker[] packers = nl(() -> Reflect.get(MultiPacker.class, multiPacker, "packers"));
+	}
+	public interface PIXMAP {
+		/** @see FileTextureData#pixmap  */
+		long PIXMAP = FieldUtils.fieldOffset(FileTextureData.class, "pixmap");
 	}
 
 	public interface MODS {

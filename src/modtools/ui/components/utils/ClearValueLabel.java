@@ -7,14 +7,14 @@ import modtools.ui.menu.MenuItem;
 
 public class ClearValueLabel<T> extends PlainValueLabel<T> {
 
-	final Runnable clear;
-	public Cons<T> setter;
+	final  Runnable clear;
+	public Cons<T>  setter;
 	public ClearValueLabel(Class<T> type, Prov<T> prov, Runnable clear) {
 		super(type, prov);
 		this.clear = clear;
 	}
 	public void clearVal() {
-		clear.run();
+		if (clear != null) clear.run();
 	}
 	public Seq<MenuItem> getMenuLists() {
 		return super.getMenuLists();

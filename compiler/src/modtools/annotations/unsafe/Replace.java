@@ -27,6 +27,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.*;
+import java.util.stream.Collectors;
 
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
@@ -76,9 +77,9 @@ public class Replace {
 		});
 		Method initModule = Modules.class.getDeclaredMethod("setupAutomaticModule", ModuleSymbol.class);
 		initModule.setAccessible(true);
-		long off_export = HopeReflect.fieldOffset(ExportsDirective.class, "modules");
-		// long    off_open   = HopeReflect.fieldOffset(OpensDirective.class, "modules");
 		Modules modules = Modules.instance(context);
+
+		Map<ModuleSymbol, Set<ExportsDirective>> addExports = getAccess(Modules.class, modules, "addExports");
 		Consumer<ModuleSymbol> exportAll = m -> {
 			var prev = m.exports;
 			try {
@@ -86,23 +87,19 @@ public class Replace {
 			} catch (IllegalAccessException | InvocationTargetException e) {
 				throw new RuntimeException(e);
 			}
-			Set<ExportsDirective> set = new LinkedHashSet<>();
-			set.addAll(prev);
-			set.addAll(m.exports);
+			Set<ExportsDirective> set = m.exports.stream().collect(Collectors.toSet());
 			set.removeIf(d -> d.packge.fullname.isEmpty());
 			m.exports = List.from(set);
-			for (ExportsDirective export : m.exports) {
-				if (export.modules == null || !export.modules.contains(syms.unnamedModule)) {
-					unsafe.putObject(export, off_export, export.modules != null ? export.modules.append(syms.unnamedModule) : List.of(syms.unnamedModule));
-				}
-				m.visiblePackages.put(export.packge.fullname, export.packge);
 
-				// println(export.packge);
+			for (ExportsDirective export : m.exports) {
+				export.packge.modle = m;
+				addExports.computeIfAbsent(m, _ -> new HashSet<>()).add(new ExportsDirective(export.packge, List.of(syms.unnamedModule)));
 			}
+			m.exports = prev;
 		};
-		exportAll.accept(syms.java_base);
-		exportAll.accept(moduleFinder.findModule(ns.fromString("java.compiler")));
-		exportAll.accept(moduleFinder.findModule(ns.fromString("jdk.compiler")));
+		for (ModuleSymbol m : modules.allModules()) {
+			exportAll.accept(m);
+		}
 		// exportAll.accept(moduleFinder.findModule(ns.fromString("jdk.unsupported")));
 	}
 

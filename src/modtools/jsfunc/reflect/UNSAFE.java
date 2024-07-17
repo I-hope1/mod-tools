@@ -3,6 +3,7 @@ package modtools.jsfunc.reflect;
 import arc.util.OS;
 import dalvik.system.VMRuntime;
 import ihope_lib.*;
+import jdk.internal.misc.Unsafe;
 
 import static ihope_lib.MyReflect.unsafe;
 
@@ -80,7 +81,7 @@ public interface UNSAFE {
 	}
 	static long objectFieldOffset(Class<?> cls, String fieldName) {
 		try {
-			return Desktop.unsafe.objectFieldOffset(cls, fieldName);
+			return Unsafe.getUnsafe().objectFieldOffset(cls, fieldName);
 		} catch (Throwable ignored) {}
 		try {
 			return unsafe.objectFieldOffset(cls.getDeclaredField(fieldName));
@@ -91,7 +92,7 @@ public interface UNSAFE {
 	static long staticFieldOffset(Class<?> cls, String fieldName) {
 		try {
 			/* 这个也可以获取static的  */
-			return Desktop.unsafe.objectFieldOffset(cls, fieldName);
+			return Unsafe.getUnsafe().objectFieldOffset(cls, fieldName);
 		} catch (Throwable ignored) {}
 		try {
 			return unsafe.staticFieldOffset(cls.getDeclaredField(fieldName));

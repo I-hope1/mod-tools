@@ -321,7 +321,9 @@ public abstract class WFunction<T> {
 		FunctionBuild(name, from -> {
 			var table = IntUI.showSelectImageTableWithFunc(
 			 IntVars.mouseVec.cpy(), list.get(), () -> null,
-			 n -> cons.get(from, n), 42f, 32, 6, t -> new TextureRegionDrawable(t.uiIcon), true);
+			 n -> cons.get(from, n), 42f, 32, 6,
+			 t -> new TextureRegionDrawable(t.uiIcon == null ? Core.atlas.find("error") : t.uiIcon),
+			 true);
 			if (builder != null) builder.get(table);
 		});
 	}
@@ -398,12 +400,12 @@ public abstract class WFunction<T> {
 			this.item = item;
 			init();
 		}
-		void init(){
+		void init() {
 			margin(2, 4, 2, 4);
 
 			touchable = Touchable.enabled;
 
-			IntUI.hoverAndExit(this,() -> {
+			IntUI.hoverAndExit(this, () -> {
 				Selection.focusElem = this;
 				SC.focusElemType = WFunction.this;
 				SC.focusDisabled = true;

@@ -97,7 +97,7 @@ public class Replace {
 				}
 				m.visiblePackages.put(export.packge.fullname, export.packge);
 
-				println(export.packge);
+				// println(export.packge);
 			}
 		};
 		exportAll.accept(syms.java_base);

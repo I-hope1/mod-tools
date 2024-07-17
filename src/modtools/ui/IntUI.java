@@ -883,18 +883,18 @@ public class IntUI {
 				KeyValue keyValue = KeyValue.THE_ONE;
 				p.defaults().growX();
 				if (drawable instanceof TextureRegionDrawable trd && trd.getRegion() instanceof AtlasRegion atg) {
-					p.table(keyValue.tableCons("Name", () -> atg.name)).row();
+					keyValue.label(p, "Name", () -> atg.name) ;
 					if (atg.texture.getTextureData() instanceof FileTextureData) {
 						String   str  = String.valueOf(atg.texture);
 						char     c    = str.charAt(str.length() - 1);
 						PageType type = PageType.all[Character.isDigit(c) ? c - '0' : 0];
-						p.table(keyValue.tableCons("Page", type::name, Pal.accent)).row();
+						keyValue.label(p, "Page", type::name, Pal.accent);
 					}
-					p.table(keyValue.consValueLabel("Texture", () -> atg.texture, Texture.class));
+					keyValue.valueLabel(p, "Texture", () -> atg.texture, Texture.class);
 				}
-				p.table(keyValue.tableCons("Original Size", new SizeProv(() ->
+				keyValue.label(p, "Original Size", new SizeProv(() ->
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
-				))).row();
+				));
 				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {
 					IntUI.drawablePicker().show(prov.get(), consumer);
 				}).size(42);

@@ -6,7 +6,7 @@ import arc.func.Boolf2;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
-import arc.math.Mathf;
+import arc.math.*;
 import arc.math.geom.Rect;
 import arc.scene.*;
 import arc.scene.event.*;

@@ -459,8 +459,8 @@ public class Tester extends Content {
 				compileAndExec(() -> { });
 				return true;
 			}
-			if (keycode == KeyCode.up && rollHistory(true)) return true;
-			if (keycode == KeyCode.down && rollHistory(false)) return true;
+			if (Core.input.alt() && keycode == KeyCode.up && rollHistory(true)) return true;
+			if (Core.input.alt() && keycode == KeyCode.down && rollHistory(false)) return true;
 
 			return false;
 		}

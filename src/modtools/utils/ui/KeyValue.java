@@ -3,7 +3,7 @@ package modtools.utils.ui;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import modtools.ui.components.utils.*;
 import modtools.utils.ui.search.BindCell;
 
@@ -37,8 +37,18 @@ public interface KeyValue {
 		label.setColor(color);
 		return tableCons(key, label);
 	}
-	default <T> Cons<Table> consValueLabel(String key, Prov<T> prov, Class<T> type) {
-		return tableCons(key, new ClearValueLabel<>(type, prov, null));
+	/* 上面的，需要table的版本 */
+	default Cell<Table> label(Table col, String key, Label value) {
+		return col.row().table(tableCons(key, value));
+	}
+	default Cell<Table> label(Table col, String key, Prov<CharSequence> value) {
+		return col.row().table(tableCons(key, value));
+	}
+	default Cell<Table> label(Table col, String key, Prov<CharSequence> value, Color color) {
+		return col.row().table(tableCons(key, value, color));
+	}
+	default <T> Cell<Table> valueLabel(Table col, String key, Prov<T> prov, Class<T> type) {
+		return col.row().table(tableCons(key, new ClearValueLabel<>(type, prov, null)));
 	}
 
 

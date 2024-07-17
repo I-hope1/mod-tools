@@ -1,59 +1,11 @@
 name: mod-tools
 displayName: "mod工具"
 description: '''
-# Bug Fixes
-  - Fixed the bug ShowInfoWindow class button was covered by label
-  - UnitSpawn automatically cancels the redundant selections.
-  - Fixed the bug caused by async set block (Selection)
-  - Fixed a crash led by ISettings
-  - Fixed a great number of bugs about DrawablePicker
-  - Fixed the abnormal keyboard focus of `ReviewElement`
-  - Fixed a bug about `enter` and `exit`
-  - More bug
-
-# Features
-  - Tester you can use $.contentName to get Content
-  - Better ReviewElement to inspect element and cell
-  - More key-shots for plenty of functions
-  - Interp can be added by customization
-  - Added some tips
-  - Better LogDisplay
-  - DrawString draw escape string
-  - Ability to customize Styles
-  - Image Preview can view the AtlasRegion name and page
-
-# Adjustment & Optimization
-  - Adjust the info's key and value scale
-  - Better performance for Tester
-  - Review some code
-
-# 错误修复
-  - 修复了 ShowInfoWindow 类按钮被标签覆盖的bug
-  - 修复了 UnitSpawn 不能自动取消多余的选择的bug
-  - 修复了 Selection 异步设置 block 引起的bug
-  - 修复了ISettings导致的崩溃
-  - 修复了DrawablePicker的大量错误
-  - 修复了`ReviewElement`键盘焦点异常
-  - 修复了有关`enter`和`exit`的错误
-  - 更多错误
-# 功能
-  - 测试者可以使用 `$.contentName` 来获取Content
-  - 更好的 ReviewElement 来检查元素和单元格
-  - 更多功能的快捷键
-  - 可以通过自定义添加 Interp
-  - 添加了一些提示
-  - 更好的 LogDisplay
-  - DrawString 绘制转义字符串
-  - 能够自定义样式
-  - 图像预览可以查看 AtlasRegion 名称和页面
-# 调整和优化
-  - 调整信息的键和值比例
-  - 为测试人员提供更好的性能
-  - 重构一些代码
+Some Bug Fixes
 '''
 author: "I hope..."
 hidden: true
-version: 1.4.6.2
+version: 1.4.6.3
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

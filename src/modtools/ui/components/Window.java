@@ -628,12 +628,13 @@ public class Window extends Table implements Position {
 			children.end();
 
 			Tools.runIgnoredException(() -> {
-				while (true) clipEnd();
+				/* 尽可能的退出clip */
+				for (int i = 0; i < 100; i++) clipEnd();
 			});
 			Draw.trans(oldTransform);
 			confirm = showCustomConfirm("@settings.exception", "@settings.exception.draw",
-			 "@settings.window.close", "@settings.window.close",
-			 this::remove, this::remove);
+			 "@settings.window.close", "@settings.window.keep",
+			 this::remove, () -> unexpectedDrawException = false);
 			confirm.moveListener.remove();
 			confirm.sclListener.remove();
 			Boolp boolp = () -> confirm.isShown();

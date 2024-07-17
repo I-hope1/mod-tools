@@ -38,9 +38,7 @@ public interface AnnotationUtils {
 	}
 	/* 标识，以免冲突 */
 	class MyList<T> extends ArrayList<T> {
-		public MyList(int initialCapacity) {super(initialCapacity);}
 		public MyList() {}
-		public MyList(Collection<? extends T> c) {super(c);}
 	}
 	private static void covertTreeToAttribute(Attribute attribute, Object value) {
 		if (attribute instanceof Constant) HopeReflect.set(Constant.class, attribute, "value", value);

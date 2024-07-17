@@ -39,15 +39,15 @@ public class ModTools extends Mod {
 	public static Throwable error            = null;
 	public static Fi        libs             = root.child("libs");
 
-	public static boolean isV6 = Version.number <= 135;
+	public static  boolean isV6   = Version.number <= 135;
+	private static boolean loaded = false;
 
-	static {
+	public ModTools() {
+		if (loaded) throw new IllegalStateException("ModTools already loaded.");
+		loaded = true;
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
 		}
-	}
-
-	public ModTools() {
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
 		if (headless) Log.info("Running in headless environment.");
 
@@ -67,6 +67,7 @@ public class ModTools extends Mod {
 	}
 
 	public static void disposeAll() {
+		Tools.TASKS.clear();
 		IntUI.disposeAll();
 		IntVars.resizeListeners.clear();
 		if (MyFonts.def != Fonts.def) MyFonts.def.dispose();

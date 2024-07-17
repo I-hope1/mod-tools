@@ -1,4 +1,4 @@
-apply plugin: "java"
+apply plugin: 'java'
 
 group 'mod-tools'
 version '1.4.6.2'
@@ -6,36 +6,9 @@ version '1.4.6.2'
 static def export(CompileOptions options) {
 //    options.compilerArgs.addAll("-Xlint:deprecation")
 	options.compilerArgs += "-AtargetVersion=8"
-	// 只是访问
-	options.compilerArgs += [
-			"java.base/jdk.internal.misc",
-			"java.base/jdk.internal.access",
-			// ---------------
-			"jdk.compiler/com.sun.tools.javac.api",
-			"jdk.compiler/com.sun.tools.javac.comp",
-			"jdk.compiler/com.sun.tools.javac.code",
-			"jdk.compiler/com.sun.tools.javac.tree",
-			"jdk.compiler/com.sun.tools.javac.main",
-			"jdk.compiler/com.sun.tools.javac.model",
-			"jdk.compiler/com.sun.tools.javac.jvm",
-			"jdk.compiler/com.sun.tools.javac.parser",
-			"jdk.compiler/com.sun.tools.javac.processing",
-			"jdk.compiler/com.sun.tools.javac.util",
-			"jdk.compiler/com.sun.tools.javac.resources",
-			"jdk.compiler/com.sun.source.tree",
-			"java.base/sun.reflect.annotation",
-			"java.base/jdk.internal.module",
-			"jdk.jfr/jdk.jfr.internal",
-	].collectMany { ["--add-exports", "$it=ALL-UNNAMED"] }
-//	println options.compilerArgs.join(" ")
 }
 
 ext {
-	uncVersion = '1.8.9'
-	mindustryVersion = 'v146'
-
-	minApi = 26
-	MdtDataDir = 'E:/Users/ASUS/Desktop/Mindustry136'
 	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
 }
@@ -110,7 +83,7 @@ task jarAndroid(type: JavaExec) {
 	).collectMany { ["--classpath", "$it.path"] }
 
 	def d8Root = file("$sdkRoot/build-tools/").listFiles().find {
-		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= minApi
+		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= Integer.parseInt(minApi)
 	}
 
 	classpath("$d8Root/lib/d8.jar")

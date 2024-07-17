@@ -26,7 +26,6 @@ public class AINIT extends AbstractProcessor {
 
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
-
 		// Times.printElapsed("Take @ms");
 	}
 

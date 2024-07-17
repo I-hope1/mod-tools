@@ -2,6 +2,7 @@ package modtools.annotations.unsafe;
 
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Directive.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Lint.LintCategory;
 import com.sun.tools.javac.code.Source.Feature;
@@ -18,7 +19,7 @@ import com.sun.tools.javac.util.Context.Key;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
-import modtools.annotations.NoAccessCheck;
+import modtools.annotations.*;
 
 import javax.tools.JavaFileObject;
 import java.io.*;
@@ -39,6 +40,7 @@ public class Replace {
 	static Symtab       syms;
 	static Enter        enter;
 	static JavacTrees   trees;
+	static Names        ns;
 	static ModuleFinder moduleFinder;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
@@ -48,19 +50,51 @@ public class Replace {
 		syms = Symtab.instance(context);
 		enter = Enter.instance(context);
 		trees = JavacTrees.instance(context);
+		ns = Names.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }
 	}
 
-	private static void extendingFunc0() throws ClassNotFoundException {
+	private static void extendingFunc0() throws Exception {
 		accessOverride();
 
 		other();
 
 		forcePreview();
 		forceJavaVersion();
+
+		moduleExports();
+	}
+	private static void moduleExports() throws Exception {
+		Method initModule = Modules.class.getDeclaredMethod("setupAutomaticModule", ModuleSymbol.class);
+		initModule.setAccessible(true);
+		long    off_export = HopeReflect.fieldOffset(ExportsDirective.class, "modules");
+		// long    off_open   = HopeReflect.fieldOffset(OpensDirective.class, "modules");
+		Modules modules    = Modules.instance(context);
+		Consumer<ModuleSymbol> exportAll = m -> {
+			var prev = m.exports;
+			try {
+				initModule.invoke(modules, m);
+			} catch (IllegalAccessException | InvocationTargetException e) {
+				throw new RuntimeException(e);
+			}
+			Set<ExportsDirective> set = new LinkedHashSet<>();
+			set.addAll(prev);
+			set.addAll(m.exports);
+			set.removeIf(d -> d.packge.fullname.isEmpty());
+			m.exports = List.from(set);
+			for (ExportsDirective export : m.exports) {
+				if (export.modules == null || !export.modules.contains(syms.unnamedModule)) {
+					unsafe.putObject(export, off_export, export.modules != null ? export.modules.append(syms.unnamedModule) : List.of(syms.unnamedModule));
+				}
+			}
+		};
+		exportAll.accept(syms.java_base);
+		exportAll.accept(moduleFinder.findModule(ns.fromString("java.compiler")));
+		exportAll.accept(moduleFinder.findModule(ns.fromString("jdk.compiler")));
+		// exportAll.accept(moduleFinder.findModule(ns.fromString("jdk.unsupported")));
 	}
 
 	static Symbol NOT_FOUND;

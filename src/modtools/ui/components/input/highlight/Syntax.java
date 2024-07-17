@@ -98,11 +98,11 @@ public class Syntax {
 					}
 					break;
 				}
-			} else if (cTask.draw(i)) {
+			} else /* 继续解析直到结束 */ if (cTask.draw(i)) {
 				if (cTask.isFinished() || cTask.withdraw) {
 					lastIndex = drawAndReset(i);
 				}
-			} else {
+			}/* 结束就重置 */ else {
 				reset();
 			}
 			if (cTask == null) {
@@ -300,8 +300,9 @@ public class Syntax {
 		 '`', false
 		);
 		/** 可以转义的字符 */
-		public static final IntSeq          escapeMap = IntSeq.with(
-		 'n', 'b', 'c', 'r', 't', 'f', '\\', '"'
+		public static final IntSet          escapeMap = IntSet.with(
+		 'n', 'b', 'c', 'r', 't', 'f', '\\',
+		 '"', '\'', '`'
 		);
 
 		public int textColor, escapeColor;

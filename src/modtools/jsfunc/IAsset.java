@@ -6,7 +6,6 @@ import arc.struct.Seq;
 import static mindustry.Vars.mods;
 
 public interface IAsset {
-
 	static Fi[] file(String path) {
 		Seq<Fi> searched = new Seq<>();
 		mods.eachEnabled(m -> {
@@ -17,4 +16,8 @@ public interface IAsset {
 		});
 		return searched.toArray(Fi.class);
 	}
+
+  static Fi file(String modName, String path) {
+		return mods.getMod(modName).root.child(path);
+  }
 }

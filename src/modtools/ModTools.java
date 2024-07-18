@@ -93,9 +93,9 @@ public class ModTools extends Mod {
 
 		if (isImportFromGame) {
 			loadContent();
-			resolveInputAndUI();
+			loadInputAndUI();
 		} else Events.on(ClientLoadEvent.class,
-		 _ -> Tools.runLoggedException(ModTools::resolveInputAndUI));
+		 _ -> Tools.runLoggedException(ModTools::loadInputAndUI));
 	}
 
 
@@ -124,7 +124,7 @@ public class ModTools extends Mod {
 
 	private static void resolveLibsCatch() {
 		try {
-			resolveLibs();
+			loadLibs();
 		} catch (Throwable e) {
 			Log.err(e);
 			if (e instanceof UnexpectedPlatform) Log.err("It seems you platform is special. (But don't worry.)");
@@ -134,17 +134,17 @@ public class ModTools extends Mod {
 	private static void planB_resolveLibs() {
 		Tools.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
-			resolveLibs();
+			loadLibs();
 			return true;
 		});
 	}
-	private static void resolveLibs() {
+	private static void loadLibs() {
 		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();
 	}
-	private static void resolveInputAndUI() {
+	private static void loadInputAndUI() {
 		if (ui == null) return;
 		Time.mark();
 		Tools.TASKS.add(() -> {
@@ -155,6 +155,7 @@ public class ModTools extends Mod {
 			ui.showException(error);
 			return;
 		}
+		Updater.checkUpdate();
 		MyShaders.load();
 		MyFonts.load();
 		HopeInput.load();

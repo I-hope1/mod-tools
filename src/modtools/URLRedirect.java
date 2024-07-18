@@ -4,6 +4,7 @@ import arc.files.Fi;
 import arc.func.Func2;
 import arc.util.OS;
 import ihope_lib.MyReflect;
+import modtools.HopeConstant.CURL;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.ByteCodeTools.MyClass;
 
@@ -12,8 +13,10 @@ import java.lang.reflect.Field;
 import java.net.*;
 import java.util.*;
 
-/** 切换镜像
- * 从访问一个网站改成访问另一个网站（镜像站） */
+/**
+ * 切换镜像
+ * 从访问一个网站改成访问另一个网站（镜像站）
+ */
 @SuppressWarnings("deprecation")
 public class URLRedirect {
 	static Properties replacer = new Properties();
@@ -22,7 +25,7 @@ public class URLRedirect {
 	static void load() throws Throwable {
 		defaultConfig = IntVars.dataDirectory.child("http_redirect.properties");
 		if (loadConfig(defaultConfig)
-				|| loadConfig(IntVars.root.child("http_redirect.properties"))) ;
+		    || loadConfig(IntVars.root.child("http_redirect.properties"))) ;
 
 		final Field field = URL.class.getDeclaredField("handlers");
 		MyReflect.setOverride(field);
@@ -60,11 +63,9 @@ public class URLRedirect {
 	}
 
 	public static URLConnection openConnection(URLStreamHandler self, URL u) throws IOException {
-		String def_url  = u.toString().substring(u.getProtocol().length());
-		String file_url = def_url.substring(3 + u.getHost().length());
-		u = new URL(
-		 STR."\{u.getProtocol()}://\{replacer.getOrDefault(u.getHost(), u.getHost())}/\{file_url}"
-		);
+		if (replacer.contains(u.getHost())) {
+			UNSAFE.putObject(u, CURL.host, replacer.getProperty(u.getHost()));
+		}
 		// Log.info(u);
 		return ((RedirectHandler) self).super$_openConnection(u);
 	}

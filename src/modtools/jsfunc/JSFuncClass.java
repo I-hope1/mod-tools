@@ -17,6 +17,8 @@ public class JSFuncClass extends NativeJavaClass {
 	}
 	protected void initMembers() {
 		super.initMembers();
+
+		// 原生不支持访问接口的字段，这里特殊化
 		Object members = Reflect.get(NativeJavaObject.class, this, "members");
 
 		Map<String, Field> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");

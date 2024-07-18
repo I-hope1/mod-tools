@@ -252,7 +252,7 @@ public abstract class WFunction<T> {
 				 Lines.square(pos.x, pos.y,
 					fin * Mathf.dst(region.width, region.height) / tilesize);
 			 });
-			Threads.sleep(1);
+			Threads.sleep(0, 200000); // 0.2 ms
 			Core.app.post(() -> action.accept(t));
 		})));
 	}

@@ -16,6 +16,7 @@ import modtools.utils.reflect.FieldUtils;
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
+import java.net.URL;
 
 import static ihope_lib.MyReflect.lookup;
 
@@ -92,6 +93,7 @@ public class HopeConstant {
 		/** @see MultiPacker#packers  */
 		PixmapPacker[] packers = nl(() -> Reflect.get(MultiPacker.class, multiPacker, "packers"));
 	}
+
 	public interface PIXMAP {
 		/** @see FileTextureData#pixmap  */
 		long PIXMAP = FieldUtils.fieldOffset(FileTextureData.class, "pixmap");
@@ -100,12 +102,18 @@ public class HopeConstant {
 	public interface MODS {
 		/** @see mindustry.mod.Mods#bundles */
 		ObjectMap<String, Seq<Fi>> bundles = nl(() -> Reflect.get(Mods.class, Vars.mods, "bundles"));
+		/** @see Mods#loadMod(Fi, boolean, boolean)   */
+		Method loadMod = nl(() -> Mods.class.getDeclaredMethod("loadMod", Fi.class, boolean.class, boolean.class));
 	}
 	public interface STRING {
 		/** @see String#value */
 		long VALUE = FieldUtils.fieldOffset(String.class, "value");
 		/** @see String#coder */
 		long CODER = FieldUtils.fieldOffset(String.class, "coder");
+	}
+	public interface CURL {
+		/** @see URL#host */
+		long host = FieldUtils.fieldOffset(URL.class, "host");
 	}
 
 	public static <R> R nl(CProv<?> prov) {

@@ -1,7 +1,100 @@
 name: mod-tools
 displayName: "mod工具"
 description: '''
-Some Bug Fixes
+A mod provides a variety of tools for modding.
+## Tester
+English|[中文](index.md)
+
+## ShowUIList
+
+- Display `icon`, `tex`, `styles`, `colors`, `interps`\
+  ![](./screenshots/UIList.png)
+
+## Tester
+
+![](./screenshots/tester.png)
+
+- Provide `JS` editor `Tester`
+- Shortcuts
+    - Press `Ctrl`+`Shift`+`Enter` to `execute` code immediately
+    - Press `Ctrl`+`Shift`+`↑/↓` to switch `history` records
+    - Press `Ctrl`+`Shift`+`D` to `view` detailed information
+    - Press `Alt`+`V` to preview `Texture`
+- Built-in `unsafe`, `lookup`
+- Built-in `IntFunc` class (abbreviated as `$`)
+- `$.xxx` can represent primitive data types (e.g., `$.void` represents `Void.TYPE`;`$.J` represents long.class)
+- `$p` represents `Packages`
+- Code: [JSFunc](https://github.com/i-hope1/mod-tools/src/modtools/utils/JSFunc.java)
+- Long press on code in the favorites to add to startup items\
+  ![](./screenshots/startup.png)
+- Quick switch history\
+  ![Screenshot 2024-03-10 14-45-37](https://github.com/I-hope1/mod-tools/assets/78016895/4918af35-19af-4fab-b961-70bdc8679fe8)
+- `$.item`, `$.liquid`, `$.unit` and so on.
+
+## UnitSpawn
+
+- Multiple team selection
+- Support for fixed point spawning
+- Display `name` and `localizedName`
+- Rightclick the name Label to copy save as JS var.
+
+## Selection
+
+- Selector
+- Supports `Tile`, `Building`, `Bullet`, `Unit`
+	- Kill
+	- Set Item/Liquid/Team
+- Press `Ctrl`+`Alt` to fix Focus Window
+
+## ReviewElement
+
+- Display element list, double-click to copy element to js variable
+- `Ctrl`+`Shift`+`C` to Inspect Element
+- `Ctrl`+`Alt`+`D` to display bounds of Element
+- Select untouchable elements
+    - Mobile: Filter current element with two fingers
+    - PC: Press `F` to filter current element
+- Functions shortcuts for Element
+    - `i`: display details (open ShowInfoWindow)\
+    - `p`(for Image):  show `DrawablePicker`
+    - `del`: (`shift` to ignore confirmation), delete element
+    - `<` / `>`: collapse Group
+    - `f`: fix floating Info column
+    - `r`: invoke element's method
+
+- ![reviewElement](./screenshots/review_element.png)
+
+# Frag
+
+- Double-click the blue part of Frag to minimize/restore Frag
+- In the minimized state, click the blue part, it will behave like a floating ball
+
+## Window
+
+- Press `Ctrl`+`Tab` to switch windows
+- Press `Shift`+`F4` to close current window
+- RClick the close button to move and scl window.
+
+## ShowInfoWindow
+
+- Show all fields, methods, constructors and nested classes of a obj.
+- Field can be modified.
+- Method can be Invoked(Special).
+- Constructor can be invoked to new a instance.
+
+## Others
+
+### Extensions
+
+- Override Scene
+
+> Replace the original scene, capture rendering errors, may not be good
+
+- Http Redirect
+
+> Redirect some websites, such as: github\
+> Configuration file: b0kkihope/http_redirect.properties
+
 '''
 author: "I hope..."
 hidden: true

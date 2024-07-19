@@ -10,6 +10,7 @@ import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
+import arc.scene.event.EventListener;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
@@ -20,6 +21,7 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.annotations.settings.SettingsInit;
 import modtools.events.ISettings;
 import modtools.struct.TaskSet;
@@ -43,7 +45,7 @@ import static modtools.utils.Tools.*;
 import static modtools.IntVars.mouseVec;
 
 // 存储mod的窗口和Frag
-public final class TopGroup extends WidgetGroup {
+public final class TopGroup extends WidgetGroup implements Disposable {
 	@SettingsInit
 	public enum TSettings implements ISettings {
 		checkUICount,
@@ -221,14 +223,19 @@ public final class TopGroup extends WidgetGroup {
 		);
 	}
 
-	Element previousKeyboardFocus = null;
+	Element            previousKeyboardFocus = null;
+	/** used to dispose */
+	Seq<EventListener> listeners             = new Seq<>();
+	public boolean addCaptureListener(EventListener listener) {
+		listeners.add(listener);
+		return scene.addCaptureListener(listener);
+	}
 	public TopGroup() {
 		addSceneListener();
 
-		scene.addCaptureListener(new SwitchInputListener());
-		scene.addCaptureListener(new SwitchGestureListener());
-		if (OS.isWindows) {
-			scene.addCaptureListener(new HitterAndWindowCloseListener());
+		addCaptureListener(Vars.mobile ? new SwitchGestureListener() : new SwitchInputListener());
+		if (IntVars.isDesktop()) {
+			addCaptureListener(new HitterAndWindowCloseListener());
 		}
 
 		fillParent = true;
@@ -488,8 +495,12 @@ public final class TopGroup extends WidgetGroup {
 	public final List<ResidentDrawTask> drawResidentTasks = new ArrayList<>();
 
 	{
-		Events.run(Trigger.uiDrawBegin, () -> drawResidentTasks.forEach(ResidentDrawTask::init));
-		Events.run(Trigger.uiDrawEnd, () -> drawResidentTasks.forEach(ResidentDrawTask::afterAll));
+		Events.run(Trigger.uiDrawBegin, delegate(
+		 () -> drawResidentTasks.forEach(ResidentDrawTask::init), drawResidentTasks::isEmpty)
+		);
+		Events.run(Trigger.uiDrawEnd, delegate(
+		 () -> drawResidentTasks.forEach(ResidentDrawTask::afterAll), drawResidentTasks::isEmpty)
+		);
 	}
 
 	public void focusOnElement(FocusTask task) {
@@ -602,6 +613,17 @@ public final class TopGroup extends WidgetGroup {
 		K_once = false;
 	}
 
+	@Override
+	public void dispose() {
+		listeners.each(l -> scene.removeCaptureListener(l));
+		drawResidentTasks.clear();
+		remove();
+		clear();
+	}
+	@Override
+	public boolean isDisposed() {
+		return getScene() == null;
+	}
 
 	public class GroupHitter extends Hitter {
 		{

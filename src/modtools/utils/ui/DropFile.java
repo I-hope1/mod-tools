@@ -2,6 +2,7 @@ package modtools.utils.ui;
 
 import arc.files.Fi;
 import arc.func.Cons;
+import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import modtools.ui.IntUI;
@@ -17,10 +18,11 @@ import java.util.List;
 import static mindustry.Vars.ui;
 
 public class DropFile {
+	public static final String LABLE_NAME = "ImportFromSelector";
 	public static boolean valid(){
 		try {
 			Class.forName("javax.swing.JFrame");
-			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, "ImportFromSelector");
+			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, LABLE_NAME);
 		} catch (ClassNotFoundException e) {
 			return false;
 		}
@@ -30,7 +32,8 @@ public class DropFile {
 	}
 
 	public static void buildSelector(Table t) {
-		t.button("ImportFromSelector", () -> DropFile.openFiSelector(
+		if (t.getChildren().peek() instanceof TextButton tb && tb.getText().equals(LABLE_NAME)) return;
+		t.button(LABLE_NAME, () -> DropFile.openFiSelector(
 		 list -> {
 			 try {
 				 for (Fi fi : list) {
@@ -41,7 +44,7 @@ public class DropFile {
 			 } catch (Throwable e) {
 				 IntUI.showException("Failed to import mod from selector", e);
 			 }
-		 })).name("ImportFromSelector");
+		 })).name(LABLE_NAME);
 	}
 	private static class FileSelector extends JFrame {
 		public FileSelector(Cons<List<Fi>> fiCons) throws HeadlessException {

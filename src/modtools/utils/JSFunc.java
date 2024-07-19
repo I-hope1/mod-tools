@@ -1,6 +1,6 @@
 package modtools.utils;
 
-import arc.*;
+import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
@@ -11,7 +11,6 @@ import arc.scene.Element;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
-import mindustry.game.EventType.Trigger;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
@@ -19,6 +18,7 @@ import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.*;
 import modtools.jsfunc.type.*;
 import modtools.ui.*;
+import modtools.ui.TopGroup.ResidentDrawTask;
 import modtools.ui.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
@@ -30,6 +30,7 @@ import modtools.utils.world.*;
 
 import static modtools.IntVars.mouseVec;
 import static modtools.ui.Contents.tester;
+import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.*;
 
 /** for js */
@@ -165,7 +166,11 @@ public class JSFunc
 		}));
 	}
 	public static void applyDraw(Runnable run) {
-		Events.run(Trigger.uiDrawEnd, run);
+		topGroup.drawResidentTasks.add(new ResidentDrawTask() {
+			public void afterAll() {
+				 run.run();
+			}
+		});
 	}
 
 	// Internal Method.

@@ -8,7 +8,7 @@ import modtools.ui.control.HopeInput;
 
 public class Hitter extends FillElement implements IMenu {
 	private static final Seq<Hitter> all = new Seq<>();
-	public boolean autoClose;
+	public               boolean     autoClose;
 	public Hitter() {
 		all.add(this);
 		autoClose = false;
@@ -18,10 +18,19 @@ public class Hitter extends FillElement implements IMenu {
 		clicked(clicked);
 		autoClose = true;
 	}
+	public boolean canHide() {
+		return this == Hitter.peek() || this.getZIndex() > Hitter.peek().getZIndex();
+	}
+	/** @return true if the hitter hide successfully.  */
+	public boolean hide() {
+		boolean b = canHide();
+		if (b) fireClick();
+		return b;
+	}
 	public Element hit(float x, float y, boolean touchable) {
 		if (autoClose && HopeInput.mouseDown()
-		    && super.hit(x, y, touchable) == this) {
-			fireClick();
+		    && super.hit(x, y, touchable) == this
+		    && hide()) {
 			remove();
 		}
 

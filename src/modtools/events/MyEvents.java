@@ -18,6 +18,9 @@ public class MyEvents {
 	public MyEvents() {
 		allInstances.add(this);
 	}
+	public static void dispose() {
+		allInstances.clear();
+	}
 	public void removeIns() {
 		insEvents.forEach((_, seq) -> seq.clear());
 		insEvents.clear();

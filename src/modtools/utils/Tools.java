@@ -24,7 +24,7 @@ public class Tools {
 	public static TaskSet TASKS = new TaskSet();
 
 	static {
-		Events.run(Trigger.update, TASKS::exec);
+		Events.run(Trigger.update, delegate(TASKS::exec, TASKS::isEmpty));
 	}
 
 	public static String readFiOrEmpty(Fi fi) {
@@ -239,6 +239,17 @@ public class Tools {
         Log.err(e);
 				return null;
       }
+		};
+	}
+	public static Runnable delegate(Runnable r, Boolp stopBoolp){
+		return new Runnable() {
+			Runnable r0 = () -> {
+				if (stopBoolp.get()) r0 = () -> {};
+				r.run();
+			};
+			public void run() {
+				r0.run();
+			}
 		};
 	}
 

@@ -79,8 +79,14 @@ public class MyFonts {
 		};
 		font.setOwnsTexture(parameter.packer == null);
 		// 添加默认字体，如果font没有就去def里找
-		font.getRegions().addAll(Fonts.def.getRegion());
+		font.getRegions().addAll(Fonts.def.getRegions());
 		return font;
+	}
+	public static void dispose() {
+		if (MyFonts.def != Fonts.def) {
+			MyFonts.def.getRegions().removeAll(Fonts.def.getRegions());
+			MyFonts.def.dispose();
+		}
 	}
 
 	private static class MyFontCache extends FontCache {

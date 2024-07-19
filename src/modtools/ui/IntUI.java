@@ -785,8 +785,9 @@ public class IntUI {
 		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
 	}
 	public static void disposeAll() {
-		topGroup.clear();
+		topGroup.dispose();
 		frag.clear();
+		Background.dispose();
 	}
 	public static <U extends UnlockableContent> Drawable icon(U i) {
 		return new TextureRegionDrawable(i == null ? Core.atlas.find("error") : i.uiIcon);
@@ -925,13 +926,13 @@ public class IntUI {
 		element.addListener(new HoverAndExitListener() {
 			final Task hideTask = new Task() {
 				public void run() {
-					if (hitter == null) return;
-					hitter.fireClick();
-					hitter = null;
+					if (hitter != null && hitter.hide()) hitter = null;
 				}
 			};
 			void hide() {
-				TaskManager.reSchedule(0.1f, hideTask);
+				if (hitter != null && hitter.canHide()) {
+					TaskManager.reSchedule(0.1f, hideTask);
+				}
 			}
 			Hitter      hitter = null;
 			SelectTable table;
@@ -940,8 +941,9 @@ public class IntUI {
 					hideTask.cancel();
 					return;
 				}
-				if (hitter != null) hitter.fireClick(); // 移除上一次的
-				if (Hitter.peek() != hitter) Hitter.peek().fireClick();
+				if (hitter != null) hitter.hide(); // 移除上一次的
+				if (Hitter.peek() != hitter) Hitter.peek().hide();
+
 				table = IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
 				hitter = Hitter.peek();
 				table.clearChildren();
@@ -952,14 +954,9 @@ public class IntUI {
 						hideTask.cancel();
 					}
 					public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
-						if (stopExit()) return;
 						hide();
 					}
 				});
-			}
-			boolean stopExit() {
-				Hitter peek = Hitter.peek();
-				return peek != null && peek.getZIndex() > table.getZIndex();
 			}
 			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
 				hide();

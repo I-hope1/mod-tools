@@ -126,7 +126,7 @@ public class Window extends Table implements Position {
 		tapped(this::toFront);
 		touchable = titleTable.touchable/* = cont.touchable */ = Touchable.enabled;
 		titleTable.margin(0);
-		if ((OS.isWindows || OS.isMac) && full) IntUI.doubleClick(titleTable, null, this::toggleMaximize);
+		if ((IntVars.isDesktop()) && full) IntUI.doubleClick(titleTable, null, this::toggleMaximize);
 		cont.margin(6f);
 		buttons.margin(0);
 		this.minWidth = minWidth * Scl.scl();

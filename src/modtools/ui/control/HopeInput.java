@@ -24,9 +24,12 @@ public class HopeInput {
 	}
 
 	public static void load() {
-		Tools.TASKS.add(() -> hit = null);
 		listener = new MouseListener();
 		Core.scene.addCaptureListener(listener);
+		Tools.TASKS.add(() -> {
+			hit = null;
+			listener.down = false;
+		});
 		try {
 			load0();
 		} catch (Throwable e) {
@@ -34,6 +37,12 @@ public class HopeInput {
 			justPressed = pressed = new IntSet();
 			axes = new IntFloatMap();
 		}
+	}
+	public static void dispose() {
+		Core.scene.removeCaptureListener(listener);
+		pressed.clear();
+		justPressed.clear();
+		axes.clear();
 	}
 	static void load0() {
 		pressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "pressed");

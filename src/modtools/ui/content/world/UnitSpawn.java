@@ -37,6 +37,7 @@ import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
 import static modtools.ui.Contents.tester;
+import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.world.WorldUtils.UNIT;
 import static rhino.ScriptRuntime.*;
 
@@ -268,12 +269,12 @@ public class UnitSpawn extends Content {
 
 	int defCap;
 	public void loadSettings(Data SETTINGS) {
+		Events.run(EventType.WorldLoadEvent.class, Tools.delegate(() -> {
+			defCap = Vars.state.rules.unitCap;
+			Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
+		}, topGroup::isDisposed));
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			left().defaults().left();
-			Events.run(EventType.WorldLoadEvent.class, () -> {
-				defCap = Vars.state.rules.unitCap;
-				Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
-			});
 			check(unitUnlimitedKey, 28, unitUnlimited, b -> toggleUnitCap(b))
 			 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck))
 			 .row();

@@ -15,9 +15,11 @@ import modtools.struct.LazyValue;
 import static modtools.IntVars.*;
 
 public class Background {
+	static Group group;
 	public static void load() {
 		Element tmp = Vars.ui.menuGroup.getChildren().first();
-		if (!(tmp instanceof Group group)) return;
+		if (!(tmp instanceof Group g)) return;
+		group = g;
 		Element render = group.getChildren().first();
 		if (!(render.getClass().isAnonymousClass()
 		      && render.getClass().getEnclosingClass() == Group.class
@@ -26,7 +28,7 @@ public class Background {
 		// render.remove();
 
 		// Draw.rect(Draw.wrap(Core.graphics.isPortrait() ? portrait : landscape), 0, 0);
-		Image img = new Image(new TextureRegion());
+		Image img = new Image(new TextureRegion()) {};
 		img.setFillParent(true);
 		IntVars.addResizeListener(() -> setRegion(img));
 		Time.runTask(4f, () -> {
@@ -62,5 +64,14 @@ public class Background {
 	private static Texture getTexture() {
 		boolean isPortrait = Core.graphics.isPortrait();
 		return (isPortrait ? portrait : landscape).get();
+	}
+	public static void dispose() {
+		landscape.get().dispose();
+		portrait.get().dispose();
+		Element first = group.getChildren().first();
+		if (first != null && first.getClass().getClassLoader() == Background.class.getClassLoader()) {
+			first.remove();
+		}
+		group.getChildren().first().visible = true;
 	}
 }

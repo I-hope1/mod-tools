@@ -2,8 +2,9 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
+import arc.func.Cons;
 import arc.math.geom.Vec2;
-import arc.util.Log;
+import arc.util.*;
 import arc.util.serialization.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
@@ -34,8 +35,9 @@ public class IntVars {
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
 	public static final String  NL = System.lineSeparator();
-	public static       boolean hasDecompiler;
-	public static Json json = new Json(){
+	public static boolean           hasDecompiler;
+	public static Json              json = new Json(){
+		@SuppressWarnings("unchecked")
 		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
 			if (type == Class.class) try {
 				return (T) Vars.mods.mainLoader().loadClass(jsonData.asString());
@@ -98,15 +100,24 @@ public class IntVars {
 			run.run();
 		} else Core.app.post(Tools.runT0(run));
 	}
+	public static boolean isDesktop() {
+		return OS.isWindows || OS.isMac;
+	}
 
 	public interface Async {
 		ExecutorService EXECUTOR = AThreads.impl.boundedExecutor("hope-async", 1);
 	}
 
+	public static void dispose() {
+		resizeListeners.clear();
+		Events.remove(ResizeEvent.class, resizeEventCons);
+	}
+
+	public static final Cons<ResizeEvent> resizeEventCons = _ -> {
+		for (var r : resizeListeners) r.run();
+	};
 	static {
-		Events.on(ResizeEvent.class, _ -> {
-			for (var r : resizeListeners) r.run();
-		});
+		Events.on(ResizeEvent.class, resizeEventCons);
 	}
 	public static class MouseVec extends Vec2 {
 		public void require() {

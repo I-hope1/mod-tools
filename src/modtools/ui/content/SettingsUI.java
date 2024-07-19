@@ -132,7 +132,7 @@ public class SettingsUI extends Content {
 			 table(Tex.pane, t -> {
 				 t.defaults().growX().height(42);
 				 t.add("@mod-tools.functions").row();
-				 if (/* OS.isAndroid ||  */OS.isWindows || OS.isMac)
+				 if (/* OS.isAndroid ||  */IntVars.isDesktop())
 					 t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
 						 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
 					 }).row();

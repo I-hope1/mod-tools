@@ -1,7 +1,6 @@
 package modtools.ui.tutorial;
 
 
-import arc.Events;
 import arc.func.Boolp;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -14,16 +13,15 @@ import arc.scene.event.*;
 import arc.util.Timer.Task;
 import arc.util.Tmp;
 import mindustry.Vars;
-import mindustry.game.EventType.Trigger;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 
 import static arc.Core.*;
+import static modtools.IntVars.mouseVec;
 import static modtools.ui.tutorial.AllTutorial.Buffer.*;
 import static modtools.utils.Tools.TASKS;
-import static modtools.IntVars.mouseVec;
 
 public class AllTutorial {
 	public static void focusOn(Element elem, Boolp boolp) {
@@ -123,7 +121,7 @@ public class AllTutorial {
 		scene.root.getCaptureListeners().insert(0, listener);
 		LerpFun fun = new LerpFun(Interp.fastSlow, Interp.slowFast);
 		fun.register(0.05f);
-		Events.run(Trigger.uiDrawEnd, () -> {
+		JSFunc.applyDraw(() -> {
 			if (enableFocusMouse || fun.a > 0) {
 				graphics.requestRendering();
 				fun.enabled = true;

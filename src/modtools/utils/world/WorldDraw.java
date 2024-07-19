@@ -18,7 +18,19 @@ public class WorldDraw {
 	public static final Rect CAMERA_RECT = new Rect();
 	public static final Vec2 center      = new Vec2();
 
-	public static ObjectSet<Runnable> tasks = new ObjectSet<>();
+	public static ObjectSet<Runnable> tasks       = new ObjectSet<>();
+	public static Runnable            postDrawRun = () -> {
+		// check disposed.
+		if (tasks.isEmpty()) return;
+		Draw.reset();
+		Draw.flush();
+		CAMERA_RECT.setPosition(Core.camera.unproject(0, 0));
+		Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
+		CAMERA_RECT.setSize(v2.x - CAMERA_RECT.x, v2.y - CAMERA_RECT.y);
+		CAMERA_RECT.getCenter(center);
+		tasks.each(Runnable::run);
+		Draw.reset();
+	};
 
 	public final MySet<Boolp> drawSeq = new MySet<>();
 	public       float        alpha   = 1;
@@ -64,16 +76,7 @@ public class WorldDraw {
 	}
 
 	public static void registerEvent() {
-		Events.run(Trigger.postDraw, () -> {
-			Draw.reset();
-			Draw.flush();
-			CAMERA_RECT.setPosition(Core.camera.unproject(0, 0));
-			Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
-			CAMERA_RECT.setSize(v2.x - CAMERA_RECT.x, v2.y - CAMERA_RECT.y);
-			CAMERA_RECT.getCenter(center);
-			tasks.each(Runnable::run);
-			Draw.reset();
-		});
+		Events.run(Trigger.postDraw, postDrawRun);
 	}
 
 	public static TextureRegion drawRegion(int width, int height, Runnable draw) {

@@ -12,9 +12,8 @@ import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
-import mindustry.ui.Fonts;
 import modtools.android.HiddenApi;
-import modtools.events.E_Extending;
+import modtools.events.*;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
@@ -69,9 +68,12 @@ public class ModTools extends Mod {
 
 	public static void disposeAll() {
 		Tools.TASKS.clear();
+		WorldDraw.tasks.clear();
 		IntUI.disposeAll();
-		IntVars.resizeListeners.clear();
-		if (MyFonts.def != Fonts.def) MyFonts.def.dispose();
+		HopeInput.dispose();
+		IntVars.dispose();
+		MyEvents.dispose();
+		MyFonts.dispose();
 	}
 	private void extending() {
 		if (E_Extending.http_redirect.enabled()) {
@@ -164,7 +166,7 @@ public class ModTools extends Mod {
 		HopeIcons.setRoot(root);
 		HopeIcons.load();
 		// new DrawablePicker().show(IntUI.whiteui, true, _ -> {});
-		if (OS.isWindows || OS.isMac) {
+		if (isDesktop()) {
 			addFileDragListener();
 		}
 		IntUI.load();

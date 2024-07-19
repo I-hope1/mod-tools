@@ -2,7 +2,7 @@ package modtools.ui.components.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Tmp;
 import mindustry.graphics.Pal;
 
 /** 用于控制渲染，当然你也可以解析文本 */
@@ -21,6 +21,7 @@ public class Syntax {
 
 	public SyntaxDrawable drawable;
 	public DrawToken      drawToken;
+	public VirtualString  virtualString;
 
 	public Syntax(SyntaxDrawable drawable) {
 		/* 为null时文本解析，不渲染 */
@@ -67,7 +68,9 @@ public class Syntax {
 		cTask = null;
 	}
 
+	boolean hasChanged;
 	public void highlightingDraw(CharSequence displayText) {
+		hasChanged = this.displayText != displayText;
 		this.displayText = displayText;
 		cursorTask = null;
 		cTask = null;
@@ -431,5 +434,13 @@ public class Syntax {
 		public boolean nextIs(int currentIndex, char expectChar) {
 			return currentIndex + 1 < len && expectChar == displayText.charAt(currentIndex + 1);
 		}
+	}
+
+
+	public static class VirtualString {
+		public String text;
+		public Color  color = Color.gray;
+		public int    index;
+		public VirtualString() { }
 	}
 }

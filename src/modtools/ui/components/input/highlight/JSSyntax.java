@@ -100,16 +100,20 @@ public class JSSyntax extends Syntax {
 
 		 final Color            textColor = c_brackets;
 		 final Stack<Character> stack     = new Stack<>();
+
+		 int surpassSize = 0;
 		 void init() {
 			 super.init();
+			 surpassSize = hasChanged ? 0 : stack.size();
 			 stack.clear();
 		 }
+		 // ['(1', '(2', '2)' ] -> [ '(1' ]
 		 @Override
 		 boolean draw(int i) {
 			 if (!super.draw(i)) return false;
 			 if (leftBracket.containsKey(c)) {
+				 color.set(stack.size() < surpassSize ? c_error : textColor);
 				 stack.push(c);
-				 color.set(textColor);
 			 } else if (stack.isEmpty()) {
 				 color.set(c_error);
 			 } else if (leftBracket.get(stack.peek()) == c) {
@@ -144,8 +148,7 @@ public class JSSyntax extends Syntax {
 	 task -> {
 		 String token = task.token + "";
 		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
-			 if (operatesSymbol.lastSymbol == '.') return JSSyntax.this.dealJSProp(token);
-
+			 if (operatesSymbol.lastSymbol == '.') return dealJSProp(token);
 			 obj = null;
 			 pkg = null;
 		 }
@@ -156,7 +159,7 @@ public class JSSyntax extends Syntax {
 				entry.key != customConstantSet && entry.key != customVarSet
 			 ) || obj != null) return entry.value;
 
-			 JSSyntax.this.resolveToken(customScope, task, token);
+			 resolveToken(customScope, task, token);
 			 return entry.value;
 		 }
 		 if (lastTask != task) return null;
@@ -179,7 +182,7 @@ public class JSSyntax extends Syntax {
 	 }
 	};
 	private void resolveToken(Scriptable scope, DrawToken task, String token) {
-		Object o = scope.get(token, scope);
+		Object o = ScriptableObject.getProperty(scope, token);
 		appendIndexToObj(task, o);
 		if (o instanceof NativeJavaPackage newPkg) {
 			pkg = newPkg;
@@ -208,9 +211,9 @@ public class JSSyntax extends Syntax {
 		appendIndexToObj(drawToken, o);
 		if (o instanceof NativeJavaPackage) {
 			pkg = (NativeJavaPackage) o;
-		} else if (o instanceof Scriptable) {
+		} else if (o instanceof Scriptable sc) {
 			pkg = null;
-			obj = (Scriptable) o;
+			obj = sc;
 			return c_localvar;
 		}
 		obj = null;
@@ -257,11 +260,11 @@ public class JSSyntax extends Syntax {
 	 drawToken = new DrawToken(tokenDraws) {
 		 void init() {
 			 super.init();
+			 pkg = null;
+			 obj = null;
 			 localVars.clear();
 			 localConstants.clear();
 			 if (indexToObj != null) indexToObj.clear();
-			 pkg = null;
-			 obj = null;
 		 }
 	 },
 	 };

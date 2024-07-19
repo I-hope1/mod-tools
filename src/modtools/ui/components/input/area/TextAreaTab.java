@@ -20,7 +20,9 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
+import modtools.ui.IntUI.SelectTable;
 import modtools.ui.components.input.highlight.*;
+import modtools.ui.components.input.highlight.Syntax.VirtualString;
 import modtools.utils.Tools;
 
 import java.util.regex.*;
@@ -94,13 +96,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			area.setFirstLineShowing(0);
 		});
 		Time.runTask(2, area::updateDisplayText);
-	}
-	public VirtualString virtualString;
-	public static class VirtualString {
-		public String text;
-		public Color  color = Color.gray;
-		public int    index;
-		public VirtualString() { }
 	}
 	private LinesShow getLinesShow() {
 		linesShow = new LinesShow(area);
@@ -191,7 +186,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return style.background;
 		}
 
-		float getRelativeX(int cursor) {
+		public float getRelativeX(int cursor) {
 			int prev = this.cursor;
 			super.setCursorPosition(cursor);
 			float textOffset = cursor >= glyphPositions.size || cursorLine * 2 >= linesBreak.size ? 0
@@ -202,7 +197,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return val;
 		}
 		/** @see arc.scene.ui.TextArea#drawCursor(Drawable, Font, float, float) */
-		float getRelativeY(int cursor) {
+		public float getRelativeY(int cursor) {
 			int prev = this.cursor;
 			super.setCursorPosition(cursor);
 			float textY = getTextY(font, getBackground());
@@ -244,16 +239,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			font.getData().markupEnabled = false;
 
 			this.font = font;
-			l:
-			if (virtualString != null && virtualString.text != null) {
-				font.getColor().set(virtualString.color).mulA(alpha());
-				if (font.getColor().a == 0) break l;
-				float x1 = getRelativeX(virtualString.index);
-				float y1 = getRelativeY(virtualString.index) + font.getLineHeight();
-				// Log.info("(@, @)", x1, y1);
-				font.draw(virtualString.text, x1, y1);
-			}
 
+			drawVirtualText(font);
 			if (enableHighlighting && syntax != null) {
 				try {
 					highlightingDraw(x, y);
@@ -263,6 +250,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			} else {
 				font.getColor().set(Color.white).mulA(alpha());
+
+				if (font.getColor().a == 0) return;
 				int   firstLineShowing = getRealFirstLineShowing();
 				int   linesShowing     = getRealLinesShowing() + 1;
 				float offsetY          = -firstLineShowing * lineHeight();
@@ -276,6 +265,19 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			font.setColor(lastColor);
 			font.getData().markupEnabled = had;
 		}
+
+		private void drawVirtualText(Font font) {
+			VirtualString virtualString = syntax.virtualString;
+			if (virtualString != null && virtualString.text != null) {
+				font.getColor().set(virtualString.color).mulA(alpha());
+				if (font.getColor().a == 0) return;
+				float x1 = getRelativeX(virtualString.index);
+				float y1 = getRelativeY(virtualString.index) + font.getLineHeight();
+				// Log.info("(@, @)", x1, y1);
+				font.draw(virtualString.text, x1, y1);
+			}
+		}
+
 		float offsetX, offsetY, baseOffsetX;
 		int row, displayTextStart, displayTextEnd;
 		public Font font = null;
@@ -667,24 +669,24 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 	}
 
-	/* public static class CodeTooltip extends IntUI.Tooltip {
-		public Table p;
+	public static class CodeTooltip extends IntUI.Tooltip {
+		public Table p = new SelectTable(new Table(p -> {
+			p.left().defaults().left();
+			p.update(() -> {
+				int w = Core.graphics.getWidth();
+				int h = Core.graphics.getHeight();
+				container.setBounds(
+				 Mathf.clamp(container.x, 0, w),
+				 Mathf.clamp(container.y, 0, h),
+				 Math.min(w, p.parent.getPrefWidth()),
+				 Math.min(h, p.parent.getPrefHeight())
+				);
+			});
+		}));
 		public CodeTooltip() {
-			super(t -> {});
+			super(_ -> { });
 			always = true;
-			container.background(Tex.pane).pane(p = new InsideTable(p -> {
-				p.left().defaults().left();
-				p.update(() -> {
-					int w = Core.graphics.getWidth();
-					int h = Core.graphics.getHeight();
-					container.setBounds(
-					 Mathf.clamp(container.x, 0, w),
-					 Mathf.clamp(container.y, 0, h),
-					 Math.min(w, p.parent.getPrefWidth()),
-					 Math.min(h, p.parent.getPrefHeight())
-					);
-				});
-			})).pad(0);
+			container.background(Tex.pane).pane(p).pad(0);
 			show.run();
 		}
 		public void hide() {
@@ -698,11 +700,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			p.parent.act(30);
 			container.touchable(() -> Touchable.enabled);
 		}
-	} */
+	}
 
 
 	// 等宽字体样式（没有等宽字体就默认字体）
-	public static TextFieldStyle MOMO_STYLE  = new TextFieldStyle(Styles.defaultField) {{
+	public static TextFieldStyle MOMO_STYLE = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.def;
 		background = new TextureRegionDrawable() {
 			public void draw(float x, float y, float width, float height) {

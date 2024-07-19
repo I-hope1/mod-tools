@@ -43,7 +43,7 @@ import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
 import modtools.ui.components.input.area.TextAreaTab.*;
 import modtools.ui.components.input.highlight.JSSyntax;
-import modtools.ui.components.input.highlight.Syntax.DrawToken;
+import modtools.ui.components.input.highlight.Syntax.*;
 import modtools.ui.components.limit.PrefPane;
 import modtools.ui.components.linstener.*;
 import modtools.ui.components.windows.ListDialog;
@@ -931,18 +931,20 @@ public class Tester extends Content {
 		public int lastCompletionIndex  = 0;
 		JSSyntax syntax = (JSSyntax) textarea.syntax;
 		boolean  cancel;
+		// CodeTooltip codeTooltip = new CodeTooltip();
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			cancel = false;
 			if (Core.input.shift() && keycode == KeyCode.tab) {
 				cancel = true;
 				area.clearSelection();
-			} else if (textarea.virtualString != null &&
+				// codeTooltip.show(area, area.getRelativeX(syntax.virtualString.index), area.getRelativeX(syntax.virtualString.index));
+			} else if (syntax.virtualString != null &&
 			           keycode == KeyCode.tab) {
 				cancel = true;
 				area.selectNearWord();
-				area.paste(textarea.virtualString.text, true);
-				textarea.virtualString = null;
-			} else textarea.virtualString = null;
+				area.paste(syntax.virtualString.text, true);
+				syntax.virtualString = null;
+			} else syntax.virtualString = null;
 			check(event);
 			return true;
 		}
@@ -981,9 +983,9 @@ public class Tester extends Content {
 			                && searchingKey.length() < key.length()).toArray(String[]::new);
 			if (array.length == 0) return;
 			// Log.info(key);
-			if (textarea.virtualString == null) textarea.virtualString = new VirtualString();
-			textarea.virtualString.index = start;
-			textarea.virtualString.text = array[lastCompletionIndex++ % array.length];
+			if (syntax.virtualString == null) syntax.virtualString = new VirtualString();
+			syntax.virtualString.index = start;
+			syntax.virtualString.text = array[lastCompletionIndex++ % array.length];
 			// area.paste(array[lastCompletionIndex++ % array.length], true);
 		}
 
@@ -993,7 +995,7 @@ public class Tester extends Content {
 			    (area.isWordCharacter(character) || character == '.') &&
 			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
 			    auto_complement.enabled()) {
-				if (textarea.virtualString != null) event.stop();
+				if (syntax.virtualString != null) event.stop();
 				Core.app.post(this::complement);
 			}
 			return false;

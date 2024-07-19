@@ -1,5 +1,8 @@
 package modtools.jsfunc.type;
 
+import modtools.jsfunc.IScript;
+import rhino.*;
+
 import java.util.List;
 
 /** 原始数据类型和基本的类
@@ -22,4 +25,6 @@ public interface PTYPE {
 	Class<?> STR = String.class;
 
 	Class<?> LIST = List.class;
+
+	Object JL = ScriptableObject.getProperty((Scriptable) ScriptableObject.getProperty(IScript.scope, "java"), "lang");
 }

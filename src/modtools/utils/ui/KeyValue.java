@@ -4,7 +4,8 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
-import modtools.ui.components.utils.*;
+import arc.util.Align;
+import modtools.ui.components.utils.ClearValueLabel;
 import modtools.utils.ui.search.BindCell;
 
 public interface KeyValue {
@@ -14,10 +15,10 @@ public interface KeyValue {
 	float    keyScale    = 0.8f;
 	float    valueScale  = 0.7f;
 	default void key(Table col, String key) {
-		col.add(key).fontScale(keyScale).color(Color.lightGray).growX().padRight(padRight);
+		col.add(key).fontScale(keyScale).color(Color.lightGray).left().padRight(padRight);
 	}
 	default void value(Table col, Label value) {
-		col.add(value).fontScale(valueScale).right().row();
+		col.add(value).fontScale(valueScale).growX().labelAlign(Align.right).padRight(padRight).row();
 	}
 	default void keyValue(Table col, String key, Label value) {
 		key(col, key);
@@ -48,7 +49,8 @@ public interface KeyValue {
 		return col.row().table(tableCons(key, value, color));
 	}
 	default <T> Cell<Table> valueLabel(Table col, String key, Prov<T> prov, Class<T> type) {
-		return col.row().table(tableCons(key, new ClearValueLabel<>(type, prov, null)));
+		ClearValueLabel<T> label = new ClearValueLabel<>(type, prov, null);
+		return col.row().table(tableCons(key, label));
 	}
 
 

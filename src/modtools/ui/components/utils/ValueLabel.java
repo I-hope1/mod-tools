@@ -17,7 +17,7 @@ import mindustry.gen.*;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.components.input.*;
+import modtools.ui.components.input.JSRequest;
 import modtools.ui.components.input.highlight.Syntax;
 import modtools.ui.components.review.*;
 import modtools.ui.content.ui.*;
@@ -39,7 +39,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.Sr;
 
 @SuppressWarnings("SizeReplaceableByIsEmpty")
-public abstract class ValueLabel extends NoMarkupLabel {
+public abstract class ValueLabel extends ElementInlineLabel {
 	public static Object unset          = new Object();
 	public static Color  c_enum         = new Color(0xFFC66DFF);
 	public final  int    truncateLength = 2000;
@@ -96,10 +96,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 () -> showNewInfo(el, val, type));
 	}
 
-	protected boolean isStatic;
-	public boolean isStatic() {
-		return isStatic;
-	}
 	public long getOffset() {
 		throw new UnsupportedOperationException("Not implemented yet");
 	}
@@ -118,10 +114,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		Reflect.invoke(Label.class, this, "scaleAndComputePrefSize", null);
 		prefSizeInvalid = false;
 		wrap = false;
-		getLastSize().x = Mathf.clamp(super.getPrefWidth(), 80, 1000);
+		getLastSize().x = Mathf.clamp(super.getPrefWidth(), 64, 800);
 		getLastSize().y = Math.max(Math.max(super.getPrefHeight(), getHeight()), 40);
 		wrap = true;
 	}
+
 	private Vec2 lastSize;
 	public Vec2 getLastSize() {
 		if (lastSize == null) lastSize = new Vec2();
@@ -143,6 +140,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		func = defFunc;
 	}
 
+	public void layout() {
+		super.layout();
+	}
+
 	@SuppressWarnings("ConstantConditions")
 	public CharSequence dealVal(Object val) {
 		if (val instanceof ObjectMap || val instanceof Map) {
@@ -157,13 +158,13 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			else for (var entry : ((Map<?, ?>) val).entrySet()) {
 				appendMap(sb, entry.getKey(), entry.getValue());
 				checkTail = true;
-				if (isTruncate(sb.length())) break;
+				 if (isTruncate(sb.length())) break;
 			}
 			if (checkTail) sb.deleteCharAt(sb.length() - 2);
 			sb.append('}');
 
 			setColor(Syntax.c_map);
-			return sb;
+			return getTextFromItem();
 		}
 		iter:
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
@@ -291,7 +292,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		super.setText(newText);
 	}
 	public Runnable afterSet;
-	public abstract void setVal();
+	public abstract void flushVal();
 	/** 这可能会设置字段值 */
 	public void setNewVal(Object newVal) { }
 
@@ -459,10 +460,14 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		super.clear();
 		clearVal();
 	}
+
 	public boolean isFinal() {
 		return false;
 	}
 	public boolean isValid() {
+		return true;
+	}
+	public boolean readOnly() {
 		return true;
 	}
 }

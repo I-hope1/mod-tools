@@ -4,7 +4,7 @@ package modtools.ui;
 import arc.Core;
 import arc.func.*;
 import arc.graphics.*;
-import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.*;
 import arc.graphics.g2d.TextureAtlas.AtlasRegion;
 import arc.graphics.gl.FileTextureData;
 import arc.input.KeyCode;
@@ -27,12 +27,13 @@ import mindustry.graphics.MultiPacker.PageType;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
-import modtools.jsfunc.INFO_DIALOG;
+import modtools.jsfunc.*;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.content.ui.PairProv.SizeProv;
+import modtools.ui.control.HopeInput;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.windows.*;
 import modtools.utils.*;
@@ -409,10 +410,10 @@ public class IntUI {
 	 * @return the table
 	 */
 	public static SelectTable
-	showSelectTableRB(Vec2 vec2, Cons3<Table, Runnable, String> f,
+	showSelectTableRB(Vec2 vec2, Builder f,
 	                  boolean searchable) {
 		if (vec2 == null) throw new NullPointerException("vec2 cannot be null");
-		SelectTable t = basicSelectTable(searchable, f);
+		SelectTable t = basicSelectTable(vec2, searchable, f);
 		t.update(() -> {
 			Tmp.v1.set(vec2);
 			t.setPosition(Tmp.v1.x, Tmp.v1.y, Align.topLeft);
@@ -431,10 +432,10 @@ public class IntUI {
 	 * @return the select table
 	 */
 	public static <T extends Element> SelectTable
-	showSelectTable(T button, Cons3<Table, Runnable, String> builder,
+	showSelectTable(T button, Builder builder,
 	                boolean searchable, int align) {
 		if (button == null) throw new NullPointerException("button cannot be null");
-		SelectTable t = basicSelectTable(searchable, builder);
+		SelectTable t = basicSelectTable(button, searchable, builder);
 		t.background(Tex.pane);
 		// t.actions(Actions.sizeTo(0, 0), Actions.sizeTo(t.getPrefWidth(), t.getPrefHeight(), 12 ));
 		t.update(() -> {
@@ -464,11 +465,14 @@ public class IntUI {
 		});
 		return t;
 	}
-	public static SelectTable basicSelectTable(boolean searchable, Cons3<Table, Runnable, String> f) {
+	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder f) {
+		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, f);
+	}
+	public static SelectTable basicSelectTable(Element button, boolean searchable, Builder f) {
 		Table p = new Table();
 		p.top();
 
-		SelectTable t = new SelectTable(p);
+		SelectTable t = new SelectTable(p, button);
 
 		// 淡入
 		t.actions(Actions.alpha(0f), Actions.fadeIn(0.1f, Interp.fade));
@@ -488,7 +492,7 @@ public class IntUI {
 	private static Runnable mergeHide(SelectTable t, Runnable hide) {
 		return () -> (t.hide != null ? t.hide : hide).run();
 	}
-	private static void newSearch(Cons3<Table, Runnable, String> rebuild, Runnable hide,
+	private static void newSearch(Builder rebuild, Runnable hide,
 	                              SelectTable t, Table p) {
 		new Search((cont, text) -> rebuild.get(cont, hide, text))
 		 .build(t, p);
@@ -568,7 +572,7 @@ public class IntUI {
 	                              boolean searchable) {
 		return showSelectTable(vec2, builderWithIcons(items, icons, holder, cons, size, imageSize, cols), searchable);
 	}
-	private static <T1> Cons3<Table, Runnable, String> builderWithIcons(
+	private static <T1> Builder builderWithIcons(
 	 Seq<T1> items, Seq<? extends Drawable> icons,
 	 Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols) {
 		return (p, hide, text) -> {
@@ -597,9 +601,9 @@ public class IntUI {
 	}
 
 	public static SelectTable
-	showSelectTable(Vec2 vec2, Cons3<Table, Runnable, String> f,
+	showSelectTable(Vec2 vec2, Builder f,
 	                boolean searchable) {
-		SelectTable t = basicSelectTable(searchable, f);
+		SelectTable t = basicSelectTable(vec2, searchable, f);
 		t.background(Tex.pane);
 		t.update(() -> {
 			t.setPosition(vec2.x, vec2.y, 1);
@@ -784,7 +788,7 @@ public class IntUI {
 		topGroup.clear();
 		frag.clear();
 	}
-	public static  <U extends UnlockableContent> Drawable icon(U i) {
+	public static <U extends UnlockableContent> Drawable icon(U i) {
 		return new TextureRegionDrawable(i == null ? Core.atlas.find("error") : i.uiIcon);
 	}
 
@@ -894,10 +898,15 @@ public class IntUI {
 						keyValue.label(p, "Page", type::name, Pal.accent);
 					}
 					keyValue.valueLabel(p, "Texture", () -> atg.texture, Texture.class);
+				} else if (drawable instanceof ScaledNinePatchDrawable snpd) {
+					NinePatch patch = snpd.getPatch();
+
+					keyValue.valueLabel(p, "Texture", patch::getTexture, Texture.class);
 				}
 				keyValue.label(p, "Original Size", new SizeProv(() ->
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
 				));
+				p.row();
 				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {
 					IntUI.drawablePicker().show(prov.get(), consumer);
 				}).size(42);
@@ -932,7 +941,9 @@ public class IntUI {
 					return;
 				}
 				if (hitter != null) hitter.fireClick(); // 移除上一次的
+				if (Hitter.peek() != hitter) Hitter.peek().fireClick();
 				table = IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
+				hitter = Hitter.peek();
 				table.clearChildren();
 				table.add(table.table);
 				table.touchable = Touchable.enabled;
@@ -941,11 +952,14 @@ public class IntUI {
 						hideTask.cancel();
 					}
 					public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
+						if (stopExit()) return;
 						hide();
 					}
 				});
-				hitter = Hitter.peek();
-				hitter.remove();
+			}
+			boolean stopExit() {
+				Hitter peek = Hitter.peek();
+				return peek != null && peek.getZIndex() > table.getZIndex();
 			}
 			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
 				hide();
@@ -1133,8 +1147,9 @@ public class IntUI {
 	}
 
 	public static class SelectTable extends AutoFitTable implements IMenu {
-		public SelectTable(Table table) {
+		public SelectTable(Table table, Element button) {
 			this.table = table;
+			this.button = button;
 		}
 		public void init() {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
@@ -1151,9 +1166,10 @@ public class IntUI {
 		}
 
 		public final     Table    table;
+		public final     Element  button;
 		/**
 		 * 为null时，使用默认隐藏{@link #hideInternal}
-		 * 仅用于cons3参数的hide，内部依然是直接隐藏（即默认值）
+		 * 仅用于builder参数的hide，内部依然是直接隐藏（即默认值）
 		 */
 		public @Nullable Runnable hide;
 		/**
@@ -1174,6 +1190,7 @@ public class IntUI {
 			topGroup.addChild(this);
 		}
 	}
+	public interface Builder extends Cons3<Table, Runnable, String> { }
 
 	private static class MyFocusTask extends FocusTask {
 		private final Boolp boolp;

@@ -6,6 +6,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
 import arc.struct.ObjectSet;
 import arc.util.pooling.Pools;
+import mindustry.ctype.UnlockableContent;
 import modtools.ui.components.limit.LimitTable;
 import modtools.utils.PatternUtils;
 
@@ -128,6 +129,10 @@ public class FilterTable<E> extends LimitTable {
 			return last != provider.get();
 		}
 		public boolean valid(E name) {
+			if (name instanceof UnlockableContent u) {
+				return PatternUtils.test(last = provider.get(), u.localizedName)
+				 || PatternUtils.test(last, String.valueOf(u.name));
+			}
 			return PatternUtils.test(last = provider.get(), String.valueOf(name));
 		}
 	}

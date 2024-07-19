@@ -17,10 +17,10 @@ public class PlainValueLabel<T> extends ValueLabel {
 		super(type);
 		this.prov = prov;
 		val = unset;
-		setVal();
+		flushVal();
 		if (prov != null) update(() -> {
 			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
-				setVal();
+				flushVal();
 			}
 		});
 	}
@@ -35,7 +35,7 @@ public class PlainValueLabel<T> extends ValueLabel {
 		list.add(copyAsJSMenu("value", () -> val));
 		return list;
 	}
-	public void setVal() {
+	public void flushVal() {
 		if (prov == null) return;
 		setVal(prov.get());
 	}

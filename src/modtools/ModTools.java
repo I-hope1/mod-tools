@@ -45,6 +45,7 @@ public class ModTools extends Mod {
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");
 		loaded = true;
+
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
 		}

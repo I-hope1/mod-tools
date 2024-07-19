@@ -17,11 +17,12 @@ import modtools.ui.*;
 import modtools.ui.components.Window;
 import modtools.ui.components.Window.*;
 import modtools.ui.components.limit.*;
-import modtools.ui.components.utils.PlainValueLabel;
+import modtools.ui.components.utils.*;
 import modtools.ui.control.HopeInput;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.Tools;
 import modtools.utils.ui.ShowInfoWindow;
+import modtools.utils.ui.search.BindCell;
 import modtools.utils.world.WorldDraw;
 
 import java.lang.reflect.Array;
@@ -72,24 +73,31 @@ public interface INFO_DIALOG {
 		assert dialog[0] != null;
 		return dialog[0];
 	}
-	private static void buildArrayCont(Object o, Class<?> clazz, int length, Table cont) {
+	private static void buildArrayCont(Object arr, Class<?> clazz, int length, Table cont) {
 		Class<?> componentType = clazz.getComponentType();
 		Table    c1            = null;
 		for (int i = 0; i < length; i++) {
+			int j = i;
 			if (i % 100 == 0) c1 = cont.row().table().grow().colspan(2).get();
+
 			var button = new LimitTextButton("", HopeStyles.cleart);
 			button.clearChildren();
 			button.add(i + "[lightgray]:", HopeStyles.defaultLabel).padRight(8f);
-			int j = i;
-			button.add(new PlainValueLabel<Object>((Class) componentType, () -> Array.get(o, j))).grow();
+			var label = new ArrayItemLabel(componentType, arr, i);
+
+			var cell  = new BindCell(ShowInfoWindow.extentCell(button,
+			 componentType == Object.class && label.val != null ? label.val.getClass() : componentType,
+			 () -> label));
+			ShowInfoWindow.buildExtendingField(cell, label);
+
+			button.add(label).grow();
 			button.clicked(() -> {
-				Object item = Array.get(o, j);
-				if (item != null) IntVars.postToMain(Tools.runT0(() ->
-				 showInfo(item).setPosition(getAbsolutePos(button))));
+				if (label.val != null) IntVars.postToMain(Tools.runT0(() ->
+				 showInfo(label.val).setPosition(getAbsolutePos(button))));
 				else IntUI.showException(new NullPointerException("item is null"));
 			});
 			c1.add(button).growX().minHeight(40);
-			IntUI.addWatchButton(c1, o + "#" + i, () -> Array.get(o, j)).row();
+			IntUI.addWatchButton(c1, arr + "#" + i, () -> Array.get(arr, j)).row();
 			c1.image().color(Tmp.c1.set(JColor.c_underline)).colspan(2).growX().row();
 		}
 	}
@@ -178,7 +186,6 @@ public interface INFO_DIALOG {
 	}
 
 
-
 	class $ {
 		@SuppressWarnings("rawtypes")
 		public static void buildLongPress(ImageButton button, Prov o) {
@@ -190,8 +197,8 @@ public interface INFO_DIALOG {
 		Cons<Window> cons;
 		/** 是否会自动关闭并销毁 */
 		boolean      autoDispose = false;
-		Runnable autoDisposeRun;
-		private void dispose(){
+		Runnable     autoDisposeRun;
+		private void dispose() {
 			if (autoDispose && !HopeInput.pressed.isEmpty()) {
 				hide();
 			}

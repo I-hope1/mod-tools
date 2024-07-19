@@ -102,7 +102,7 @@ public final class TopGroup extends WidgetGroup {
 				 ? el -> or(el, this) : null)
 				.get();
 		 }
-		 final Group info   = new NGroup(this, "infos");
+		 final Group info    = new NGroup(this, "infos");
 		 final Group _others = new NGroup(this, "others");
 		 public void addChild(Element actor) {
 			 if (_others == null) {
@@ -113,7 +113,7 @@ public final class TopGroup extends WidgetGroup {
 				.addChild(actor);
 		 }
 	 };
-	public interface IInfo {}
+	public interface IInfo { }
 	final Table end = new MyEnd();
 
 	public Element drawPadElem = null;
@@ -522,7 +522,7 @@ public final class TopGroup extends WidgetGroup {
 	boolean K_once = false;
 
 	/**
-	 * 用于切换窗口的事件侦听器
+	 * 移动端用于切换窗口的事件侦听器
 	 * @see SwitchInputListener
 	 */
 	class SwitchGestureListener extends ElementGestureListener {
@@ -543,7 +543,7 @@ public final class TopGroup extends WidgetGroup {
 		}
 	}
 	/**
-	 * 用于切换窗口的事件侦听器
+	 * 电脑端用于切换窗口的事件侦听器
 	 * @see SwitchGestureListener
 	 */
 	class SwitchInputListener extends InputListener {

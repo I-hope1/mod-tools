@@ -6,25 +6,18 @@ import modtools.ui.menu.MenuItem;
 
 import java.lang.reflect.*;
 
-public class MethodValueLabel extends ValueLabel {
-
-	Object obj;
-	public Object getObject() {
-		return obj;
-	}
+public class MethodValueLabel extends ReflectValueLabel {
 	public MethodValueLabel(Object obj, Method method) {
-		super(method.getReturnType());
-		this.obj = obj;
+		super(method.getReturnType(), obj, method.getModifiers());
 		labelAlign = Align.left;
 		lineAlign = Align.topLeft;
-		isStatic = Modifier.isStatic(method.getModifiers());
 		clearVal();
 		update(null);
 	}
 	public Seq<MenuItem> getMenuLists() {
 		return basicMenuLists(new Seq<>());
 	}
-	public void setVal() {
+	public void flushVal() {
 		setVal(unset);
 	}
 

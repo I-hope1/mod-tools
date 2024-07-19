@@ -2,6 +2,7 @@ package modtools.jsfunc;
 
 import arc.func.Cons;
 import arc.struct.Seq;
+import mindustry.ctype.Content;
 import modtools.struct.LazyValue;
 import rhino.*;
 
@@ -51,5 +52,11 @@ public interface IUtils {
 	static <T> void forEach(Iterable<T> obj, Cons<T> func) {
 		Iterator<T> iter = obj.iterator();
 		while (iter.hasNext()) func.get(iter.next());
+	}
+
+	static void load(Content content) {
+		content.load();
+		content.loadIcon();
+		content.init();
 	}
 }

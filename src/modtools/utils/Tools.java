@@ -231,6 +231,16 @@ public class Tools {
 			}
 		};
 	}
+	public static <T> Prov<T> provT(Prov<T> prov) {
+		return () -> {
+      try {
+        return prov.get();
+      } catch (Throwable e) {
+        Log.err(e);
+				return null;
+      }
+		};
+	}
 
 	public static <T> T setLogger(LogHandler logger, Prov<T> prov) {
 		var prev = Log.logger;

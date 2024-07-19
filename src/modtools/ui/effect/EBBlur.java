@@ -3,9 +3,10 @@ package modtools.ui.effect;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
-import modtools.IntVars;
 import modtools.events.E_Blur;
 import modtools.ui.effect.MyDraw.DrawEffect;
+
+import static modtools.IntVars.NL;
 
 /**
  * from EB-wilson
@@ -58,7 +59,7 @@ public class EBBlur implements DrawEffect {
 	boolean capturing;
 
 	public int   blurScl   = 4;
-	public float blurSpace = 2.26f;
+	public float blurSpace = 1.26f;
 
 	public EBBlur() {
 		this(E_Blur.convolution_scheme.getEnum(DEF.class).floats);
@@ -91,7 +92,7 @@ public class EBBlur implements DrawEffect {
 			varyings.append("varying vec2 v_texCoords")
 			 .append(c)
 			 .append(";")
-			 .append(IntVars.NL);
+			 .append(NL);
 
 			assignVar.append("v_texCoords")
 			 .append(c)
@@ -103,7 +104,7 @@ public class EBBlur implements DrawEffect {
 				 .append("*len");
 			}
 			assignVar.append(";")
-			 .append(IntVars.NL).append("  ");
+			 .append(NL).append("  ");
 
 			if (c > 0) convolution.append("        + ");
 			convolution.append(v)
@@ -111,7 +112,7 @@ public class EBBlur implements DrawEffect {
 			 .append(c)
 			 .append(")")
 			 .append(".rgb")
-			 .append(IntVars.NL);
+			 .append(NL);
 
 			c++;
 		}
@@ -206,8 +207,9 @@ public class EBBlur implements DrawEffect {
 		pingpong.begin();
 		blurShader.bind();
 		blurShader.setUniformf("dir", blurSpace, 0f);
-		blurShader.setUniformi("def_alpha", 1);
+		blurShader.setUniformf("def_alpha", 1);
 		ScreenSampler.getSampler().bind(1);
+		Draw.shader();
 		buffer.blit(blurShader);
 		pingpong.end();
 

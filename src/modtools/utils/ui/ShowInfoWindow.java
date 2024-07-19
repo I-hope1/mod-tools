@@ -198,7 +198,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 (pattern == null || find(pattern, member.getName()) != isBlack)
 			 && containsFlags(member.getModifiers()) != isBlack;
 			fieldsTable.filter(memberBoolf);
-			fieldsTable.labels.each(ValueLabel::setVal);
+			fieldsTable.labels.each(ValueLabel::flushVal);
 			methodsTable.filter(memberBoolf);
 			methodsTable.labels.each(ValueLabel::clearVal);
 			consTable.filter(memberBoolf);
@@ -300,8 +300,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		 .padRight(16), E_JSFuncDisplay.type);
 	}
 
-	public static void buildExtendingField(BindCell c_cell, FieldValueLabel l) {
-		if (!l.isStatic() && l.getObject() == null) return;
+	public static void buildExtendingField(BindCell c_cell, ValueLabel l) {
+		if (l.readOnly()) return;
 		Class<?> type     = l.type;
 		Cell<?>  cell     = c_cell.cell;
 		Boolp    editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
@@ -324,7 +324,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			field.setValidator(NumberHelper::isNumber);
 			field.changed(Tools.runT(() -> {
 				if (!field.isValid()) return;
-				l.setFieldValue(NumberHelper.cast(field.getText(), l.type));
+				l.setNewVal(NumberHelper.cast(field.getText(), l.type));
 			}));
 			cell.setElement(field);
 			cell.height(42);
@@ -343,7 +343,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 			field.changed(Tools.runT(() -> {
 				String text = field.getText();
-				l.setFieldValue(AutoTextField.NULL_STR.equals(text) ? null : text);
+				l.setNewVal(AutoTextField.NULL_STR.equals(text) ? null : text);
 			}));
 			cell.setElement(field);
 			cell.height(42);
@@ -354,11 +354,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 		}
 	}
-	private static TextButton newBoolButton(FieldValueLabel l, Boolp editable) {
+	private static TextButton newBoolButton(ValueLabel l, Boolp editable) {
 		var btn = new TextButton("", HopeStyles.flatTogglet);
 		btn.setDisabled(() -> !editable.get());
 		btn.update(() -> {
-			l.setVal();
+			l.flushVal();
 			if (l.val == null) {
 				btn.setDisabled(() -> true);
 				btn.setText("ERROR");
@@ -370,7 +370,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		btn.clicked(Tools.runT(() -> {
 			boolean b = !(boolean) l.val;
 			btn.setText(b ? "TRUE" : "FALSE");
-			l.setFieldValue(b);
+			l.setNewVal(b);
 		}));
 		return btn;
 	}
@@ -418,7 +418,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		fields.table(t -> {
 			t.left().defaults().left();
 			// 占位符
-			Cell<?>  cell   = extentCell(t, type, l);
+			Cell<?>  cell   = extentCell(t, type, () -> l[0]);
 			BindCell c_cell = markDisplay(cell, E_JSFuncDisplay.value);
 			/*Cell<?> lableCell = */
 			l[0] = new FieldValueLabel(ValueLabel.unset, type, f, o);
@@ -426,9 +426,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			fields.labels.add(l);
 
 			try {
-				l[0].setVal();
+				l[0].flushVal();
 				buildExtendingField(c_cell, l[0]);
-				t.add(l[0]).minWidth(42).grow()
+				t.add(l[0]).minWidth(64).grow()
 				 // .update(Element::validate)
 				 .labelAlign(Align.topLeft);
 			} catch (Throwable e) {
@@ -446,21 +446,21 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 		addUnderline(fields, 8);
 	}
-	static Cell<?> extentCell(Table t, Class<?> type, ValueLabel[] l) {
+	public static Cell<?> extentCell(Table t, Class<?> type, Prov<ValueLabel> l) {
 		Cell<?> cell;
 		if (Drawable.class.isAssignableFrom(type)) {
 			cell = IntUI.buildImagePreviewButton(null, t,
-				() -> (Drawable) l[0].val,
-				v -> l[0].setNewVal(v))
+				() -> (Drawable) l.get().val,
+				v -> l.get().setNewVal(v))
 			 .padRight(4f);
 		} else if (Texture.class.isAssignableFrom(type)) {
 			cell = IntUI.buildImagePreviewButton(null, t,
-				() -> TmpVars.trd.set(Draw.wrap((Texture) l[0].val)),
+				() -> TmpVars.trd.set(Draw.wrap((Texture) l.get().val)),
 				null)
 			 .padRight(4f);
 		} else if (TextureRegion.class.isAssignableFrom(type)) {
 			cell = IntUI.buildImagePreviewButton(null, t,
-				() -> TmpVars.trd.set((TextureRegion) l[0].val),
+				() -> TmpVars.trd.set((TextureRegion) l.get().val),
 				null)
 			 .padRight(4f);
 		} else {
@@ -494,14 +494,14 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 				ValueLabel[] array = {null};
 				// 占位符
-				Cell<?> cell = extentCell(t, m.getReturnType(), array);
+				Cell<?> cell = extentCell(t, m.getReturnType(), () -> array[0]);
 				Cell<?> buttonsCell;
 
 				boolean noParam = m.getParameterCount() == 0;
 				boolean isValid = o != null || Modifier.isStatic(mod);
 				// if (noParam && !isValid) methods.add();
 
-				ValueLabel l = new MethodValueLabel(o, m);
+				MethodValueLabel l = new MethodValueLabel(o, m);
 				array[0] = l;
 				methods.labels.add(l);
 				IntUI.addShowMenuListenerp(label, () -> Seq.with(
@@ -772,7 +772,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		return new Table(t -> t.left().defaults().left().top());
 	}
 
-	private static Runnable methodInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ValueLabel l) {
+	private static Runnable methodInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ReflectValueLabel l) {
 		return () -> {
 			if (noParam) {
 				runT(() -> dealInvokeResult(m.invoke(o), cell, l),
@@ -785,7 +785,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 		};
 	}
-	private static Runnable methodSpecialInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ValueLabel l) {
+	private static Runnable methodSpecialInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ReflectValueLabel l) {
 		return () -> {
 			MethodHandle handle = getHandle(m);
 			if (noParam) {
@@ -793,7 +793,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 , l).run();
 				return;
 			}
-			if (!l.isStatic()) handle.bindTo(o);
+			if (!l.isStatic) handle.bindTo(o);
 			JSRequest.<NativeArray>requestForMethod(handle, o, arr -> {
 				dealInvokeResult(invokeForMethod(o, m, l, arr,
 				 handle::invokeWithArguments

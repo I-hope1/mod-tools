@@ -8,7 +8,7 @@ import arc.scene.ui.layout.Cell;
 import arc.util.*;
 import modtools.ui.IntUI;
 import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.ValueLabel;
+import modtools.ui.components.utils.*;
 import modtools.utils.Tools;
 import modtools.utils.ui.search.FilterTable;
 import rhino.*;
@@ -24,10 +24,10 @@ import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.keyword;
 
 public interface MethodTools {
-	static Object invokeForMethod(Object o, Method m, ValueLabel l, NativeArray args0,
-																FuncT func) throws Throwable {
+	static Object invokeForMethod(Object o, Method m, ReflectValueLabel l, NativeArray args0,
+	                              FuncT func) throws Throwable {
 		Object[] args = convertArgs(args0, m.getParameterTypes());
-		if (l.isStatic() || o != null) return func.get(args);
+		if (l.isStatic || o != null) return func.get(args);
 		throw new NullPointerException("'obj' is null.");
 	}
 	static Object invokeForHandle(MethodHandle handle, Object[] arr) throws Throwable {

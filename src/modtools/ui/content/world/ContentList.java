@@ -1,8 +1,8 @@
 package modtools.ui.content.world;
 
-import arc.func.Cons;
+import arc.func.*;
 import arc.graphics.Color;
-import arc.scene.ui.*;
+import arc.scene.ui.Image;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectMap;
 import arc.util.*;
@@ -11,14 +11,15 @@ import mindustry.content.*;
 import mindustry.ctype.UnlockableContent;
 import mindustry.entities.Effect;
 import mindustry.entities.bullet.BulletType;
-import mindustry.gen.*;
+import mindustry.gen.Icon;
 import mindustry.type.*;
+import mindustry.ui.Styles;
 import mindustry.world.Block;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
 import modtools.ui.components.*;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.content.Content;
+import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.ui.search.*;
@@ -34,12 +35,12 @@ public class ContentList extends Content {
 	Window ui;
 	Table  main;
 
-	ObjectMap<String, Effect>     fxs     = null;
-	ObjectMap<String, BulletType> bullets = null;
-	ObjectMap<String, Block>      blocks  = null;
-	ObjectMap<String, Item>       items   = null;
-	ObjectMap<String, Liquid>     liquids = null;
-	ObjectMap<String, Planet>     planets = null;
+	Prov<ObjectMap<String, Effect>> fxs = () -> fieldsToMap(Fx.class.getFields(), Effect.class);
+	Prov<ObjectMap<String, BulletType>> bullets = () -> fieldsToMap(Bullets.class.getFields(), BulletType.class);
+	Prov<ObjectMap<String, Block>> blocks = () -> Vars.content.blocks().asMap(b -> b.name);
+	Prov<ObjectMap<String, Item>> items = () -> Vars.content.items().asMap(b -> b.name);
+	Prov<ObjectMap<String, Liquid>> liquids = () -> Vars.content.liquids().asMap(b -> b.name);
+	Prov<ObjectMap<String, Planet>> planets = () -> Vars.content.planets().asMap(b -> b.name);
 
 	Pattern pattern = null;
 	public void load0() {
@@ -50,15 +51,6 @@ public class ContentList extends Content {
 		ui.cont.add(main).grow();
 		new Search((_, text) -> pattern = PatternUtils.compileRegExpOrNull(text))
 		 .build(top, main);
-	}
-	void loadFields() {
-		fxs = fieldsToMap(Fx.class.getFields(), Effect.class);
-		bullets = fieldsToMap(Bullets.class.getFields(), BulletType.class);
-		blocks = Vars.content.blocks().asMap(b -> b.name);
-		items = Vars.content.items().asMap(b -> b.name);
-		liquids = Vars.content.liquids().asMap(b -> b.name);
-		planets = Vars.content.planets().asMap(b -> b.name);
-		buildAll();
 	}
 
 	private <T> ObjectMap<String, T> fieldsToMap(Field[] fields, Class<T> cl) {
@@ -77,6 +69,8 @@ public class ContentList extends Content {
 		return map;
 	}
 	IntTab tab;
+
+	@SuppressWarnings("unchecked")
 	public void buildAll() {
 		main.clear();
 		String[] names = {"Fx", "Bullet", "Blocks", "Items", "Liquids", "Planets"};
@@ -104,14 +98,19 @@ public class ContentList extends Content {
 
 		main.add(tab.build()).grow().top();
 	}
-	private <T> FilterTable<String> defaultTable(ObjectMap<String, T> map) {
-		return defaultTable(map, null);
+	private <T> FilterTable<T> defaultTable(ObjectMap<String, T> map) {
+		return defaultTable(() -> map, null);
 	}
 
-	private <T> FilterTable<String> defaultTable(ObjectMap<String, T> map, Cons<T> clicked) {
-		return new FilterTable<>(t -> {
-			map.each((name, item) -> {
-				t.bind(name);
+	private <T> FilterTable<T> defaultTable(Prov<ObjectMap<String, T>> mapProv, Cons<T> clicked) {
+		Cons<FilterTable<T>>[] rebuild = new Cons[]{null};
+		rebuild[0] = t -> {
+			t.clear();
+			t.button("RebuildAll", Styles.flatt, () -> {
+				rebuild[0].get(t);
+			}).colspan(2).height(36).growX();
+			mapProv.get().each((name, item) -> {
+				t.bind(item);
 				MyLabel label = new MyLabel(name);
 				t.image().color(Tmp.c1.set(JColor.c_underline)).height(2).growX().colspan(2).row();
 				if (item instanceof UnlockableContent u) {
@@ -136,14 +135,17 @@ public class ContentList extends Content {
 					 } else {
 						 if (clicked != null) clicked.get(item);
 					 }
-				 })).update(_ -> t.layout()).row();
+				 })).row();
 			});
+		};
+		return new FilterTable<>(t -> {
+			rebuild[0].get(t);
 			t.addPatternUpdateListener(() -> pattern);
 		});
 	}
 	public void build() {
 		if (ui == null) load0();
-		loadFields();
+		buildAll();
 		ui.show();
 		Time.runTask(2, () -> tab.main.invalidate());
 	}

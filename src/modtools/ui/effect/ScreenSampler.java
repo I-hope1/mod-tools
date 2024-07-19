@@ -1,6 +1,6 @@
 package modtools.ui.effect;
 
-import arc.*;
+import arc.Events;
 import arc.graphics.*;
 import arc.graphics.g2d.Draw;
 import arc.graphics.gl.FrameBuffer;
@@ -17,7 +17,7 @@ import modtools.utils.ElementUtils;
 import static arc.Core.graphics;
 
 public class ScreenSampler {
-	public static final FrameBuffer BUFFER = new FrameBuffer();
+	private static final FrameBuffer BUFFER = new FrameBuffer();
 
 	private static final Runnable flashRun = () -> {
 		if (BUFFER.isBound()) {

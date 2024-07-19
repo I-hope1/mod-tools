@@ -1,8 +1,5 @@
 apply plugin: 'java'
 
-group 'mod-tools'
-version '1.4.6.2'
-
 ext {
 	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
@@ -106,12 +103,13 @@ task playGame(type: JavaExec) {
 	dependsOn jar
 
 	println "buildDir: $buildDir0; version: $version"
+
 	doFirst {
 		copy {
 			from "$buildDir0/libs"
 			into "${MdtDataDir}/mods"
 			include "$archivesBaseName-${version}.jar"
-			rename { oldName -> "$project.group-${version}.jar" }
+			rename { oldName -> "$modName-${version}.jar" }
 		}
 	}
 	//运行游戏目录
@@ -124,15 +122,16 @@ task playGame(type: JavaExec) {
 //			'-debug'
 	]
 }
+
 task ZCompileAll(type: Jar) {
 	dependsOn jarAndroid
+	archiveFileName = "$buildDir0/libs/$modName[$version].jar"
 
-	from(zipTree("$buildDir0/libs/$project.group-${version}.jar")) { include "**" }
-	from(zipTree("$buildDir0/libs/$project.group-android.jar")) { include "classes.dex" }
-	archiveFileName = "$buildDir0/libs/$project.group[$version].jar"
+	from(zipTree("$buildDir0/libs/$modName-${version}.jar")) { include "**" }
+	from(zipTree("$buildDir0/libs/$modName-android.jar")) { include "classes.dex" }
 	doLast {
 		copy {
-			from "$buildDir0/libs/$project.group[$version].jar"
+			from "$buildDir0/libs/$modName[$version].jar"
 			into "$buildDir0/libs/"
 			rename("\\[$version]", "-deploy")
 		}

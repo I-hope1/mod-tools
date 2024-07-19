@@ -17,21 +17,14 @@ import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.*;
 
-public class FieldValueLabel extends ValueLabel {
-	public @Nullable        Object obj;
-	private final @Nullable Field  field;
-
-	public Object getObject() {
-		return obj;
-	}
+public class FieldValueLabel extends ReflectValueLabel {
+	private final Field field;
 
 	public FieldValueLabel(Object newVal, Class<?> type, Field field, Object obj) {
-		super(type);
+		super(type, obj, field.getModifiers());
 		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
 			throw new IllegalArgumentException("Type(" + type + ") mismatches value(" + newVal + ").");
 		// markupEnabled = true;
-		if (field != null) isStatic = Modifier.isStatic(field.getModifiers());
-		this.obj = obj;
 		this.field = field;
 
 		if (newVal != unset) setVal(newVal);
@@ -39,7 +32,7 @@ public class FieldValueLabel extends ValueLabel {
 		if (field != null) {
 			Runnable r = () -> {
 				if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
-					setVal();
+					flushVal();
 				}
 			};
 			update(r);
@@ -75,7 +68,7 @@ public class FieldValueLabel extends ValueLabel {
 
 		setFieldValue(newVal);
 	}
-	public void setVal() {
+	public void flushVal() {
 		if (isValid()) {
 			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
 			setVal0(value);
@@ -131,10 +124,10 @@ public class FieldValueLabel extends ValueLabel {
 		 Float.NEGATIVE_INFINITY, 42,
 		 true, Align.left));
 	}
-	public boolean isFinal() {
-		return field == null || Modifier.isFinal(field.getModifiers());
-	}
 	public boolean isValid() {
 		return field != null && (obj != null || isStatic);
+	}
+	public boolean readOnly() {
+		return !isStatic && getObject() == null;
 	}
 }

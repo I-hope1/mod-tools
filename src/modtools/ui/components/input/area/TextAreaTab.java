@@ -3,12 +3,12 @@ package modtools.ui.components.input.area;
 
 import arc.Core;
 import arc.func.Boolf2;
-import arc.graphics.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
-import arc.math.*;
+import arc.math.Mathf;
 import arc.math.geom.Rect;
-import arc.scene.*;
+import arc.scene.Scene;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -20,12 +20,11 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
-import modtools.ui.IntUI.SelectTable;
 import modtools.ui.components.input.highlight.*;
 import modtools.ui.components.input.highlight.Syntax.VirtualString;
 import modtools.utils.Tools;
 
-import java.util.regex.*;
+import java.util.regex.Pattern;
 
 import static modtools.utils.Tools.Sr;
 
@@ -669,7 +668,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 	}
 
-	public static class CodeTooltip extends IntUI.Tooltip {
+	/* public static class CodeTooltip extends IntUI.Tooltip {
 		public Table p = new SelectTable(new Table(p -> {
 			p.left().defaults().left();
 			p.update(() -> {
@@ -700,7 +699,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			p.parent.act(30);
 			container.touchable(() -> Touchable.enabled);
 		}
-	}
+	} */
 
 
 	// 等宽字体样式（没有等宽字体就默认字体）

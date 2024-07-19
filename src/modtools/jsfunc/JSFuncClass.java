@@ -10,7 +10,6 @@ import rhino.*;
 import java.lang.reflect.Field;
 import java.util.Map;
 
-// @OptimizeReflect
 public class JSFuncClass extends NativeJavaClass {
 	public JSFuncClass(Scriptable scope) {
 		super(scope, JSFunc.class, true);
@@ -24,6 +23,10 @@ public class JSFuncClass extends NativeJavaClass {
 		Map<String, Field> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");
 
 		for (Class<?> inter : JSFunc.class.getInterfaces()) {
+			/* Delegate annotation = inter.getAnnotation(Delegate.class);
+			if (annotation != null) {
+				inter = annotation.value();
+			} */
 			ArrayUtils.valueArr2Map(inter.getFields(), Field::getName, map);
 		}
 	}
@@ -48,7 +51,7 @@ public class JSFuncClass extends NativeJavaClass {
 		};
 	}
 	private Object resolveNamedContent(String name) {
-		String key = Core.bundle.getProperties().findKey(name, false);
+		String key         = Core.bundle.getProperties().findKey(name, false);
 		String contentName = key != null ? key.split("\\.")[1] : name;
 		if (contentName != null) {
 			for (ContentType ctype : ContentType.all) {
@@ -65,4 +68,10 @@ public class JSFuncClass extends NativeJavaClass {
 	public Scriptable construct(Context cx, Scriptable scope, Object[] args) {
 		return null;
 	}
+
+
+	/* @Retention(RetentionPolicy.RUNTIME)
+	public @interface Delegate {
+		Class<?> value();
+	} */
 }

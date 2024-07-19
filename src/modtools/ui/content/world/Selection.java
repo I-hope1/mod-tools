@@ -9,7 +9,7 @@ import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.*;
 import arc.math.geom.QuadTree.QuadTreeObject;
-import arc.scene.*;
+import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.*;
@@ -32,10 +32,9 @@ import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.IntUI.*;
-import modtools.ui.TopGroup.BackElement;
+import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
-import modtools.ui.components.Window.*;
+import modtools.ui.components.Window.NoTopWindow;
 import modtools.ui.components.linstener.*;
 import modtools.ui.content.*;
 import modtools.ui.control.HopeInput;
@@ -49,9 +48,9 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
 
-import static arc.Core.*;
+import static arc.Core.scene;
 import static mindustry.Vars.*;
-import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.IntUI.*;
 import static modtools.utils.ui.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
 import static modtools.utils.world.WorldDraw.drawRegion;
@@ -391,7 +390,7 @@ public class Selection extends Content {
 		}
 
 		public void buildTable(T unit, Table table) {
-			table.image(unit.type().uiIcon).row();
+			table.image(IntUI.icon(unit.type())).row();
 			// table.label(() -> "(" + unit.x + ", " + unit.y + ')');
 		}
 		static final double sqrt2 = Math.sqrt(2);
@@ -747,7 +746,7 @@ public class Selection extends Content {
 		}
 	}
 
-	public class FocusWindow extends NoTopWindow implements IInfo {
+	public class FocusWindow extends NoTopWindow {
 		public FocusWindow(String title) {
 			super(title, 0, 42, false);
 		}

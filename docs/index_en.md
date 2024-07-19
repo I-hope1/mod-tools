@@ -18,19 +18,19 @@ English|[中文](index.md)
 - Built-in `unsafe`, `lookup`
 - Built-in `IntFunc` class (Alias as `$`)
 
-| Alias                                    | Object/Expression              | Description                                                     |
-|------------------------------------------|--------------------------------|-----------------------------------------------------------------|
-| IntFunc                                  | $                              | -                                                               |
-| $p                                       | Packages                       | -                                                               |
-| $.J, $.I, ...                            | long.class, int.class          | Encoding of Primitive Type                                      |
-| $.long<br/>$.int<br>...                  | long.class, int.class          | -                                                               |
-| $.%contentName% (<br>$.duo<br/>$.copper) | Blocks.duo, Items.copper       | Get all content by name                                         |
-| $.items, $.liquids, ...                  | Items, Liquids, ...            | -                                                               |
-| $.item(name/id), $.unit(name/id), ...    | Content which has the name/id  | Get content by name                                             |
-| $.forEach(list, func)                    | for (let v of list) { ... }    | Mindustry's RhinoJS is not supported the for-of for java object |
-| $.toArray(iterable)                      | [...iterable]                  | Convert a object to array                                       |
-| $.range(int), ... (like python)          | a generator (from -> to, step) | Like python                                                     |
-| $.dialog(text/drawable/texture)          | _                              | View the text/drawable/texture                                  |
+| Alias                                 | Object/Expression              | Description                                                     |
+|---------------------------------------|--------------------------------|-----------------------------------------------------------------|
+| IntFunc                               | $                              | -                                                               |
+| $p                                    | Packages                       | -                                                               |
+| $.J, $.I, ...                         | long.class, int.class          | Encoding of Primitive Type                                      |
+| $.long<br/>$.int<br>...               | long.class, int.class          | -                                                               |
+| $.duo, $.copper                       | Blocks.duo, Items.copper       | Get a content by name                                           |
+| $.items, $.liquids, ...               | Items, Liquids, ...            | -                                                               |
+| $.item(name/id), $.unit(name/id), ... | Content which has the name/id  | Get a content by name/id                                        |
+| $.forEach(list, func)                 | for (let v of list) { ... }    | Mindustry's RhinoJS is not supported the for-of for java object |
+| $.toArray(iterable)                   | [...iterable]                  | Convert a object to array                                       |
+| $.range(int), ... (like python)       | a generator (from -> to, step) | Like python                                                     |
+| $.dialog(text/drawable/texture)       | _                              | View the text/drawable/texture                                  |
 
 - Code: [JSFunc](https://github.com/i-hope1/mod-tools/src/modtools/utils/JSFunc.java)
 - Long press on code in the favorites to add to startup items\

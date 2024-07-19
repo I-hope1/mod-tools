@@ -718,7 +718,6 @@ public class Window extends Table implements Position {
 		}
 	}
 
-	public interface IInfo { }
 	/**
 	 * 延迟几秒销毁的窗口
 	 * @see InfoFadePopup

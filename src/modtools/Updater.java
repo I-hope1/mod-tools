@@ -5,17 +5,19 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.util.*;
 import arc.util.serialization.Jval;
-import mindustry.core.Version;
+import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Bar;
-import mindustry.ui.dialogs.BaseDialog;
+import modtools.ui.IntUI;
+import modtools.ui.components.Window;
+import modtools.ui.components.Window.NoTopWindow;
 
 import java.io.*;
 import java.net.*;
 
 import static mindustry.Vars.*;
-import static modtools.ui.IntUI.topGroup;
+import static modtools.utils.Tools.runT;
 
 public class Updater {
 	private static boolean checkUpdates = true;
@@ -32,12 +34,12 @@ public class Updater {
 			 done.get(false);
 		 })
 		 .submit(res -> {
-			 Jval   val      = Jval.read(res.getResultAsString());
+			 Jval val = Jval.read(res.getResultAsString());
 			 // Log.info(val.toString(Jformat.formatted));
 			 String newBuild = val.getString("tag_name", "0");
 			 // Log.info("New: @, Old: @",newBuild, IntVars.meta.version);
 			 if (Runtime.Version.parse(newBuild)
-						.compareTo(Runtime.Version.parse(IntVars.meta.version)) > 0) {
+				    .compareTo(Runtime.Version.parse(IntVars.meta.version)) > 0) {
 				 Jval   asset = val.get("assets").asArray().find(v -> v.getString("name", "").endsWith(".jar"));
 				 String url   = asset.getString("browser_download_url", "");
 				 Log.info(STR."Downloading mod-tools from: \{url}");
@@ -71,7 +73,7 @@ public class Updater {
 
 		if (!headless) {
 			checkUpdates = false;
-			ui.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}", "@mod-tools.update.confirm", "@ok", "@mod-tools.ignore", () -> {
+			IntUI.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}", "@mod-tools.update.confirm", "@ok", "@mod-tools.ignore", () -> {
 				try {
 					boolean[] cancel   = {false};
 					float[]   progress = {0};
@@ -80,31 +82,22 @@ public class Updater {
 					Fi fileDest = IntVars.dataDirectory.child("versions");
 					Fi file     = fileDest.child(STR."mod-tools.\{updateBuild}");
 
-					BaseDialog dialog = new BaseDialog("@mod-tools.updating");
-					download(updateUrl, fileDest, i -> length[0] = i, v -> progress[0] = v, () -> cancel[0], () -> {
-						try {
-							Runtime.getRuntime().exec(OS.isMac ?
-							 new String[]{javaPath, "-XstartOnFirstThread", "-DlastBuild=" + Version.build, "-Dberestart", "-Dbecopy=" + fileDest.absolutePath(), "-jar", file.absolutePath()} :
-							 new String[]{javaPath, "-DlastBuild=" + Version.build, "-Dberestart", "-Dbecopy=" + fileDest.absolutePath(), "-jar", file.absolutePath()}
-							);
-							System.exit(0);
-						} catch (IOException e) {
-							ui.showException(e);
-						}
-					}, e -> {
-						dialog.hide();
-						ui.showException(e);
-					});
+					Window dialog = new NoTopWindow("@mod-tools.updating");
+					download(updateUrl, fileDest, i -> length[0] = i, v -> progress[0] = v,
+					 () -> cancel[0], runT(() -> Vars.mods.importMod(file)),
+					 e -> {
+						 dialog.hide();
+						 ui.showException(e);
+					 });
 
-					dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("be.updating") : (int) (progress[0] * length[0]) / 1024 / 1024 + "/" + length[0] / 1024 / 1024 + " MB", () -> Pal.accent, () -> progress[0])).width(400f).height(70f);
+					dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating") : (int) (progress[0] * length[0]) / 1024 / 1024 + "/" + length[0] / 1024 / 1024 + " MB",
+					 () -> Pal.accent, () -> progress[0])).width(400f).height(70f);
 					dialog.buttons.button("@cancel", Icon.cancel, () -> {
 						cancel[0] = true;
 						dialog.hide();
 					}).size(210f, 64f);
 					dialog.setFillParent(false);
 					dialog.show();
-
-					topGroup.addChild(dialog);
 				} catch (Exception e) {
 					ui.showException(e);
 				}
@@ -115,7 +108,7 @@ public class Updater {
 	}
 
 	private static void download(String furl, Fi dest, Intc length, Floatc progressor, Boolp canceled, Runnable done,
-															 Cons<Throwable> error) {
+	                             Cons<Throwable> error) {
 		mainExecutor.submit(() -> {
 			try {
 				HttpURLConnection   con = (HttpURLConnection) new URL(furl).openConnection();

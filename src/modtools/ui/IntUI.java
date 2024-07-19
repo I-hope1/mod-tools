@@ -29,7 +29,7 @@ import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
-import modtools.ui.TopGroup.FocusTask;
+import modtools.ui.TopGroup.*;
 import modtools.ui.components.*;
 import modtools.ui.components.Window.*;
 import modtools.ui.content.ui.PairProv.SizeProv;
@@ -46,13 +46,13 @@ import java.util.regex.Pattern;
 
 import static arc.Core.graphics;
 import static mindustry.Vars.*;
+import static modtools.IntVars.mouseVec;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.components.utils.ValueLabel.DEBUG;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.*;
 import static modtools.utils.Tools.*;
-import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
@@ -630,7 +630,7 @@ public class IntUI {
 	                     float imageSize, int cols,
 	                     boolean searchable) {
 		return showSelectImageTableWithFunc(vec2, items, holder, cons, size, imageSize, cols,
-		 u -> new TextureRegionDrawable(u.uiIcon), searchable);
+		 IntUI::icon, searchable);
 	}
 
 	/** 弹出一个可以选择内容的窗口（需你提供{@link Func 图标构造器}） */
@@ -784,6 +784,9 @@ public class IntUI {
 		topGroup.clear();
 		frag.clear();
 	}
+	public static  <U extends UnlockableContent> Drawable icon(U i) {
+		return new TextureRegionDrawable(i == null ? Core.atlas.find("error") : i.uiIcon);
+	}
 
 
 	public static class ColorContainer extends BorderImage {
@@ -883,7 +886,7 @@ public class IntUI {
 				KeyValue keyValue = KeyValue.THE_ONE;
 				p.defaults().growX();
 				if (drawable instanceof TextureRegionDrawable trd && trd.getRegion() instanceof AtlasRegion atg) {
-					keyValue.label(p, "Name", () -> atg.name) ;
+					keyValue.label(p, "Name", () -> atg.name);
 					if (atg.texture.getTextureData() instanceof FileTextureData) {
 						String   str  = String.valueOf(atg.texture);
 						char     c    = str.charAt(str.length() - 1);
@@ -1023,9 +1026,11 @@ public class IntUI {
 	// ======-----弹窗------======
 	/* 这会添加到others里 */
 	public interface PopupWindow extends INotice { }
-	public interface IMenu extends IDisposable { }
+	/* 代表Menu菜单 */
+	public interface IMenu extends IDisposable, IInfo { }
 	public interface IHitter { }
-	public interface INotice { }
+	/* 代表一个通知 */
+	public interface INotice extends IInfo { }
 
 	public static class InfoFadePopup extends NoTopWindow implements DelayDisposable {
 		/**
@@ -1106,7 +1111,9 @@ public class IntUI {
 		                     boolean noButtons) {
 			super(title, minWidth, minHeight, full, noButtons);
 		}
-
+		public ConfirmWindow(String title) {
+			super(title);
+		}
 		/**
 		 * Sets center.
 		 * @param vec2 the vec 2

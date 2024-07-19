@@ -3,6 +3,7 @@ package modtools.utils.world;
 import arc.struct.Seq;
 import mindustry.Vars;
 import mindustry.content.*;
+import mindustry.entities.bullet.BulletType;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.Layer;
@@ -15,10 +16,14 @@ import static mindustry.Vars.content;
 import static modtools.ui.Contents.selection;
 
 public interface WorldUtils {
-	Seq<Item>     items   = content.items();
-	Seq<Liquid>   liquids = content.liquids();
-	Seq<UnitType> units   = content.units();
-	Seq<Block>    blocks  = content.blocks();
+	Seq<Item>         items   = content.items();
+	Seq<Liquid>       liquids = content.liquids();
+	Seq<UnitType>     units   = content.units();
+	Seq<Block>        blocks  = content.blocks();
+	Seq<BulletType>   bullets = content.bullets();
+	Seq<SectorPreset> sectors = content.sectors();
+	Seq<StatusEffect> status  = content.statusEffects();
+	Seq<Planet>       planets = content.planets();
 
 	WorldDraw uiWD = new WorldDraw(Layer.overlayUI, "ui");
 
@@ -84,12 +89,12 @@ public interface WorldUtils {
 			selectUnit.spawn(team, x, y);
 		}
 	}
-	static void focusWorld(Tile obj) {selection.focusInternal.add(obj);}
-	static void focusWorld(Building obj) {selection.focusInternal.add(obj);}
-	static void focusWorld(Unit obj) {selection.focusInternal.add(obj);}
-	static void focusWorld(Bullet obj) {selection.focusInternal.add(obj);}
-	static void focusWorld(Seq<?> obj) {selection.focusInternal.add(obj);}
-	static void removeFocusAll() {selection.focusInternal.clear();}
+	static void focusWorld(Tile obj) { selection.focusInternal.add(obj); }
+	static void focusWorld(Building obj) { selection.focusInternal.add(obj); }
+	static void focusWorld(Unit obj) { selection.focusInternal.add(obj); }
+	static void focusWorld(Bullet obj) { selection.focusInternal.add(obj); }
+	static void focusWorld(Seq<?> obj) { selection.focusInternal.add(obj); }
+	static void removeFocusAll() { selection.focusInternal.clear(); }
 
 	interface UNIT {
 		static void removeAllUnits() {

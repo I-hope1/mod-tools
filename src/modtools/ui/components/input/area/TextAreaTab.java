@@ -539,6 +539,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					if (lastCursor > cursor)
 						changeText(text, new StringBuilder(text).delete(cursor, lastCursor).toString());
 				}
+				// if (onlyFontChars && font.getData().getGlyph(character) == null) return true;
 				return super.keyTyped(event, character);
 			}
 

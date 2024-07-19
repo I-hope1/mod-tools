@@ -2,7 +2,7 @@
 package modtools.ui.components.utils;
 
 import arc.func.*;
-import arc.scene.style.*;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
@@ -10,7 +10,7 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.ui.HopeStyles;
+import modtools.ui.*;
 
 public class MyItemSelection {
 	public MyItemSelection() {
@@ -28,7 +28,7 @@ public class MyItemSelection {
 	private static <T extends UnlockableContent> void buildTable0(
 	 Table table, Seq<T> items, Prov<T> holder,
 	 Cons<T> consumer, int cols) {
-		buildTable0(table, items, holder, consumer, cols, u -> new TextureRegionDrawable(u.uiIcon));
+		buildTable0(table, items, holder, consumer, cols, IntUI::icon);
 	}
 
 	public static <T> void buildTable0(

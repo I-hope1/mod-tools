@@ -319,10 +319,9 @@ public abstract class WFunction<T> {
 	 String name, Prov<Seq<R>> list,
 	 Cons<SelectTable> builder, Cons2<List<T>, R> cons) {
 		FunctionBuild(name, from -> {
-			var table = IntUI.showSelectImageTableWithFunc(
+			var table = IntUI.showSelectImageTable(
 			 IntVars.mouseVec.cpy(), list.get(), () -> null,
 			 n -> cons.get(from, n), 42f, 32, 6,
-			 t -> new TextureRegionDrawable(t.uiIcon == null ? Core.atlas.find("error") : t.uiIcon),
 			 true);
 			if (builder != null) builder.get(table);
 		});
@@ -542,7 +541,7 @@ public abstract class WFunction<T> {
 		watcher.addAllCheckbox();
 		items.each(i -> {
 			if (i.id % 6 == 0) watcher.newLine();
-			watcher.watchWithSetter(new TextureRegionDrawable(i.uiIcon),
+			watcher.watchWithSetter(icon(i),
 			 () -> func.get(i),
 			 setter == null ? null : str -> setter.get(i, str));
 		});

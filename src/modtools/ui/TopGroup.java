@@ -102,19 +102,18 @@ public final class TopGroup extends WidgetGroup {
 				 ? el -> or(el, this) : null)
 				.get();
 		 }
-		 final Group menus   = new NGroup(this, "menus");
-		 final Group notices = new NGroup(this, "notices");
+		 final Group info   = new NGroup(this, "infos");
 		 final Group _others = new NGroup(this, "others");
 		 public void addChild(Element actor) {
 			 if (_others == null) {
 				 super.addChild(actor);
 				 return;
 			 }
-			 (actor instanceof IMenu ? menus
-				: actor instanceof INotice ? notices : _others)
+			 (actor instanceof IInfo ? info : _others)
 				.addChild(actor);
 		 }
 	 };
+	public interface IInfo {}
 	final Table end = new MyEnd();
 
 	public Element drawPadElem = null;

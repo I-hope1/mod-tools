@@ -23,13 +23,14 @@ import modtools.ui.components.limit.LimitTable;
 import modtools.ui.components.linstener.MoveListener;
 import modtools.ui.content.Content;
 import modtools.utils.Tools;
-import modtools.utils.ui.LerpFun;
+import modtools.utils.ui.*;
 import modtools.utils.ui.search.BindCell;
 
 import static modtools.IntVars.modName;
 import static modtools.ui.Frag.Settings.position;
 import static modtools.ui.IntUI.topGroup;
 
+/** @author I-hope1 */
 public class Frag extends Table {
 	public static final Color defaultColor = Color.sky;
 
@@ -74,9 +75,6 @@ public class Frag extends Table {
 
 		left().bottom();
 		topGroup.addChild(this);
-		if (position.isSwitchOn()) {
-			Timer.schedule(setPositionTask, 0, 1f, 4);
-		}
 		Log.info("Initialize TopGroup.");
 
 		// focusListener = new CancelFocusListener();
@@ -102,7 +100,7 @@ public class Frag extends Table {
 			circleRemove();
 			Core.app.post(() -> listener.display(x, y));
 		});
-		IntVars.addResizeListener(() -> listener.display(x, y));
+		IntVars.addResizeListener(() -> listener.display(CellTools.unset, CellTools.unset));
 	}
 	Task setPositionTask = new Task() {
 		public void run() {
@@ -111,7 +109,7 @@ public class Frag extends Table {
 	};
 	private void setDefaultPosition() {
 		Vec2 pos = position.getPosition();
-		setPosition(pos.x, pos.y);
+		super.setPosition(pos.x, pos.y);
 	}
 	public final float hoverSize   = 45 * Scl.scl();
 	public final float hoverRadius = 96 * Scl.scl();
@@ -173,6 +171,13 @@ public class Frag extends Table {
 	private class MoveInsideListener extends MoveListener {
 		public MoveInsideListener() { super(Frag.this.top, Frag.this); }
 		public void display(float x, float y) {
+			if (x == CellTools.unset && y == CellTools.unset) {
+				if (position.isSwitchOn() && !setPositionTask.isScheduled()) {
+					Timer.schedule(setPositionTask, 0, 0.2f, 8);
+				}
+				return;
+			}
+			setPositionTask.cancel();
 			float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
 			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
 			main.setPosition(

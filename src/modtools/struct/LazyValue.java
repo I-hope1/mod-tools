@@ -12,7 +12,7 @@ public class LazyValue<T> {
 		return new LazyValue<>(prov);
 	}
 	public T get() {
-		 if (t != null) return t;
+		if (t != null) return t;
 
 		t = prov.get();
 		return t;

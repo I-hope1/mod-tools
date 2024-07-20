@@ -26,7 +26,6 @@ public class URLRedirect {
 		defaultConfig = IntVars.dataDirectory.child("http_redirect.properties");
 		if (loadConfig(defaultConfig)
 		    || loadConfig(IntVars.root.child("http_redirect.properties"))) ;
-
 		final Field field = URL.class.getDeclaredField("handlers");
 		MyReflect.setOverride(field);
 		var hashtable = (Hashtable<String, URLStreamHandler>) field.get(null);

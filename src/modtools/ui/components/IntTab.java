@@ -15,6 +15,7 @@ import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.limit.PrefTable;
+import modtools.utils.ui.CellTools;
 
 import java.util.Arrays;
 
@@ -192,7 +193,7 @@ public class IntTab {
 		title.row();
 		first.fireClick();
 		if (column) {
-			title.add().height(/** {@link Cell#unset} */Float.NEGATIVE_INFINITY).growY().row();
+			title.add().height(CellTools.unset).growY().row();
 			title.left().defaults().left();
 			title.fill().left().bottom().button(Icon.menuSmall, HopeStyles.flati, () -> {
 				hideTitle = !hideTitle;

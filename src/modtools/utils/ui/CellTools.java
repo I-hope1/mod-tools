@@ -24,6 +24,8 @@ public interface CellTools {
 	 f_fillY             = f("fillY"),
 	 f_expandX           = f("expandX"),
 	 f_expandY           = f("expandY");
+	/** @see Cell#unset  */
+	float unset = Float.NEGATIVE_INFINITY;
 
 	private static Field f(String name) {
 		return FieldUtils.getFieldAccess(Cell.class, name);

@@ -53,6 +53,7 @@ import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
 import static modtools.utils.Tools.Sr;
+import static modtools.utils.ui.CellTools.unset;
 import static modtools.utils.ui.FormatHelper.*;
 import static modtools.IntVars.mouseVec;
 

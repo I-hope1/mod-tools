@@ -9,9 +9,9 @@ import arc.util.Nullable;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
 import modtools.utils.Tools;
+import modtools.utils.ui.CellTools;
 
 import static modtools.ui.Contents.tester;
-import static modtools.utils.Tools.runT;
 
 /**
  * The type Menu list.
@@ -78,7 +78,7 @@ public class MenuItem {
 
 	/** @see Cell#unset */
 	public float iconSize() {
-		return icon != null ? 24 : Float.NEGATIVE_INFINITY;/* unset */
+		return icon != null ? 24 : CellTools.unset;/* unset */
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 		cell.with(b -> b.clicked(Tools.runT(() -> {

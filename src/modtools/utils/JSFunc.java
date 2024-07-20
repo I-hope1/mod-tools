@@ -24,7 +24,7 @@ import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.draw.InterpImage;
+import modtools.ui.components.InterpImage;
 import modtools.utils.ui.WatchWindow;
 import modtools.utils.world.*;
 

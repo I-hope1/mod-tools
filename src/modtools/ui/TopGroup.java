@@ -51,6 +51,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		checkUICount,
 		debugBounds,
 		selectInvisible, drawHiddenPad,
+		/** @see ISettings#$(Drawable)  */
 		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.reset(d, Color.white)),
 		;
 		// overrideScene
@@ -520,6 +521,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 	public interface BackInterface { }
 
+	//----------
 
 	public interface Drawer {
 		default void drawMask() {

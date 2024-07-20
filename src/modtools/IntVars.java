@@ -11,7 +11,7 @@ import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
 import mindustry.mod.Mods.ModMeta;
 import modtools.files.HFi;
-import modtools.struct.MySet;
+import modtools.struct.*;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;
 import modtools.utils.Tools;
@@ -104,9 +104,8 @@ public class IntVars {
 		return OS.isWindows || OS.isMac;
 	}
 
-	public interface Async {
-		ExecutorService EXECUTOR = AThreads.impl.boundedExecutor("hope-async", 1);
-	}
+
+	public static LazyValue<ExecutorService> EXECUTOR = LazyValue.of(() -> AThreads.impl.boundedExecutor("hope-async", 1));
 
 	public static void dispose() {
 		resizeListeners.clear();

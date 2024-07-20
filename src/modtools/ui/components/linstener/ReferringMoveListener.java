@@ -49,6 +49,7 @@ public class ReferringMoveListener extends MoveListener {
 	public static Vec2 snap(
 	 Element main, float[] horizontalLines, float[] verticalLines,
 	 float x, float y) {
+		if (main.parent == null) return Tmp.v2.set(x, y);
 		float parentWidth  = main.parent.getWidth();
 		float parentHeight = main.parent.getHeight();
 		float halfWidth    = main.getWidth() / 2f, halfHeight = main.getHeight() / 2f;

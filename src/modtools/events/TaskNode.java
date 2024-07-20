@@ -4,7 +4,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
 import arc.util.Timer.Task;
-import modtools.IntVars.Async;
+import modtools.IntVars;
 import modtools.events.ExecuteTree.Error;
 import modtools.events.ExecuteTree.*;
 import modtools.struct.MySet;
@@ -90,7 +90,7 @@ public class TaskNode {
 		if (async) {
 			DelegateRun newRun = new DelegateRun(task, () -> intervalSeconds);
 			((MyTask) task).delegate = newRun;
-			Async.EXECUTOR.execute(newRun);
+			IntVars.EXECUTOR.get().execute(newRun);
 			return;
 		}
 		timer.scheduleTask(task, 0, intervalSeconds, repeatCount);

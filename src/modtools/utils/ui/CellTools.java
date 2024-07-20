@@ -1,5 +1,6 @@
 package modtools.utils.ui;
 
+import arc.scene.Element;
 import arc.scene.ui.layout.Cell;
 import arc.util.Reflect;
 import modtools.utils.reflect.FieldUtils;
@@ -88,5 +89,10 @@ public interface CellTools {
 	}
 	static int expandY(Cell<?> cell) {
 		return Reflect.get(cell, f_expandY);
+	}
+
+	static <T extends Element> Cell<T> rowSelf(Cell<T> cell) {
+		cell.row();
+		return cell;
 	}
 }

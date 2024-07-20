@@ -91,8 +91,9 @@ public interface StringUtils {
 	static CharSequence align(int align) {
 		return Strings.capitalize(Align.toString(align).replace(',', '-'));
 	}
-	static String getUIKey(Object val) {
+	static String getUIKeyOrNull(Object val) {
 		if (val instanceof DelegatingDrawable delegting) return delegting.toString();
+
 		return val instanceof Drawable icon && iconKeyMap.containsKey(icon) ?
 		 iconKeyMap.get(icon)
 
@@ -114,7 +115,13 @@ public interface StringUtils {
 		 : val instanceof Font f && fontKeyMap.containsKey(f) ?
 		 (withPrefix ? "Fonts." : "") + fontKeyMap.get(f)
 
-		 : Tools._throw();
+		 : null;
+	}
+
+	static String getUIKey(Object val) {
+		String res = getUIKeyOrNull(val);
+		if (res == null) Tools._throw();
+		return res;
 	}
 	static <T> T lookupUI(String key) {
 		int i = key.indexOf('.');

@@ -23,7 +23,7 @@ import static modtools.utils.JSFunc.JColor;
 import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.keyword;
 
-public interface MethodTools {
+public interface MethodBuilder {
 	static Object invokeForMethod(Object o, Method m, ReflectValueLabel l, NativeArray args0,
 	                              FuncT func) throws Throwable {
 		Object[] args = convertArgs(args0, m.getParameterTypes());

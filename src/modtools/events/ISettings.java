@@ -4,11 +4,13 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.math.Mathf;
 import arc.math.geom.*;
+import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
+import arc.scene.utils.Disableable;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.serialization.Jval.JsonMap;
@@ -31,6 +33,7 @@ import static modtools.ui.IntUI.*;
 import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 import static modtools.ui.content.SettingsUI.colorBlock;
 import static modtools.utils.Tools.*;
+import static modtools.utils.ui.CellTools.rowSelf;
 
 /**
  * @see SettingsInit
@@ -38,6 +41,7 @@ import static modtools.utils.Tools.*;
 @SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */, "StringTemplateMigration"})
 public interface ISettings extends E_DataInterface {
 	String SUFFIX_ENABLED = "$enabled";
+	float  DISABLED_ALPHA = 0.7f;
 
 	/** 这会根据实现自动更改 */
 	Data data = null;
@@ -57,15 +61,24 @@ public interface ISettings extends E_DataInterface {
 	default Switch _switch() {
 
 	} */
+
 	/** 是否为开关，用于某一个设置的开启/关闭 */
 	default boolean isSwitchOn() {
-		return data().getBool(name() + SUFFIX_ENABLED, true);
+		return !hasSwitch() || data().getBool(switchKey(), true);
 	}
 	default void defSwitchOn(boolean b) {
-		data().get(name() + SUFFIX_ENABLED, b);
+		data().get(switchKey(), b);
 	}
 	default void setSwitchOn(boolean b) {
-		data().put(name() + SUFFIX_ENABLED, b);
+		data().put(switchKey(), b);
+	}
+	/** it will be overrided by compiler. */
+	default boolean hasSwitch() {
+		return false;
+	}
+	/** it will be overrided by compiler. */
+	default String switchKey() {
+		return name() + SUFFIX_ENABLED;
 	}
 
 	default Object args() { return null; }
@@ -144,7 +157,15 @@ public interface ISettings extends E_DataInterface {
 
 	default void buildSwitch(String prefix, Table table) {
 		main = table;
-		check(STR."@settings.\{autoAddComma(prefix)}\{name()}\{SUFFIX_ENABLED}", this::setSwitchOn, this::isSwitchOn);
+		String dependency = switchKey();
+		if (dependency.endsWith(SUFFIX_ENABLED)) {
+			check(prefix + name() + SUFFIX_ENABLED, this::setSwitchOn, this::isSwitchOn);
+		} else {
+			/* Arrays.stream(getClass().getEnumConstants())
+			 .filter(e -> e.type() == boolean.class && e.name().equals(dependency))
+			 .findAny()
+			 .ifPresent(e -> e.$(false)); */
+		}
 	}
 	default void build(Table table) {
 		build("", table);
@@ -159,16 +180,15 @@ public interface ISettings extends E_DataInterface {
 	 * </pre>
 	 */
 	default void build(String prefix, Table table) {
+		if (hasSwitch()) {
+			buildSwitch(prefix, table);
+		}
 		main = table;
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
-		if (hasSwitch()) {
-			buildSwitch(prefix, table);
-		}
 		Method build = $builds.get(CAST.box(type));
 		try {
-			// Log.info(text);
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
 			Log.err(e);
@@ -183,20 +203,12 @@ public interface ISettings extends E_DataInterface {
 		 index == -1 ? Color.white : Color.valueOf(s.substring(index)));
 	}
 
-
-	default boolean hasSwitch() {
-		try {
-			return getClass().getField(name()).getAnnotation(Switch.class) != null;
-		} catch (NoSuchFieldException e) {
-			return false;
-		}
-	}
 	class $$ {
-		static String  text;
+		static String text;
 
 		@SuppressWarnings("StringTemplateMigration")
 		static String autoAddComma(String s) {
-			return s.isEmpty() ? s : s + ".";
+			return s.isEmpty() || s.charAt(s.length() - 1) == '.' ? s : s + ".";
 		}
 		static {
 			$builds.each((_, m) -> m.setAccessible(true));
@@ -208,12 +220,29 @@ public interface ISettings extends E_DataInterface {
 	 .removeAll(b -> !b.getName().equals("$"))
 	 .asMap(m -> m.getParameterTypes()[0]);
 
+	class Condition implements Runnable {
+		private final Disableable d;
+		private final Boolp       condition;
+		/** @param condition the d will be disabled if the return value is false. */
+		public Condition(Disableable d, Boolp condition) {
+			this.d = d;
+			this.condition = condition;
+		}
+		public void run() {
+			d.setDisabled(!condition.get());
+			if (d instanceof Element e && e.parent != null) {
+				e.parent.color.a = d.isDisabled() ? DISABLED_ALPHA : 1;
+			}
+		}
+	}
 
 	// 方法
 	private void $(Boolean __) {
-		check(text, this::set, this::enabled);
+		check(text, this::set, this::enabled, this::isSwitchOn);
 	}
-	/** 默认step为1 */
+	/**
+	 * (def, min, max, step=1)
+	 * */
 	private void $(Integer __) {
 		var   args = (int[]) args();
 		float def  = args[0];
@@ -224,6 +253,7 @@ public interface ISettings extends E_DataInterface {
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getInt());
 		Label value = new Label(getString(), Styles.outlineLabel);
+		slider.update(new Condition(slider, this::isSwitchOn));
 		slider.moved(new Floatc() {
 			public void get(float val0) {
 				int val = (int) val0;
@@ -238,7 +268,7 @@ public interface ISettings extends E_DataInterface {
 		content.touchable = Touchable.disabled;
 		main.stack(slider, content).growX().padTop(4f).row();
 	}
-	/** 默认step为0.1 */
+	/** (def, min, max, step=1) */
 	private void $(Float __) {
 		var   args = (float[]) args();
 		float def  = args[0];
@@ -249,6 +279,7 @@ public interface ISettings extends E_DataInterface {
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getFloat());
 		final Label value = new Label(getString(), Styles.outlineLabel);
+		slider.update(new Condition(slider, this::isSwitchOn));
 		slider.moved(new Floatc() {
 			public void get(float val) {
 				ISettings.this.set(val);
@@ -262,9 +293,11 @@ public interface ISettings extends E_DataInterface {
 		content.touchable = Touchable.disabled;
 		main.stack(slider, content).growX().padTop(4f).row();
 	}
+	/* noArgs */
 	private void $(Color __) {
 		colorBlock(main, text, data(), name(), getColor(), this::set);
 	}
+	/** (enumClass)  */
 	private void $(Enum<?> __) {
 		var enumClass = (Class) args();
 		var enums     = new Seq<>((Enum<?>[]) enumClass.getEnumConstants());
@@ -272,16 +305,19 @@ public interface ISettings extends E_DataInterface {
 			public Enum<?> get() {
 				return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
 			}
-		}, enums, Enum::name);
+		}, enums, Enum::name, this::isSwitchOn);
 	}
+	/** 参数：({@link String} ...args)  */
 	private void $(String[] __) {
 		var list = new Seq<>((String[]) args());
 		list(text, this::set, this::getString,
 		 list, s -> s.replaceAll("\\n", "\\\\n"));
 	}
 
+	// TODO
 	private void $(Position __) { }
 
+	/** (def, cons)  */
 	private void $(Drawable __) {
 		Object[]       args     = (Object[]) args();
 		Drawable[]     drawable = {getDrawable((Drawable) args[0])};
@@ -289,7 +325,7 @@ public interface ISettings extends E_DataInterface {
 		main.table(new Cons<>() {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
-				t.label(() -> StringUtils.getUIKey(drawable[0])).fontScale(0.8f).padRight(6f);
+				t.label(() -> StringUtils.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
 				IntUI.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
 					set(StringUtils.getUIKey(d));
 
@@ -300,7 +336,7 @@ public interface ISettings extends E_DataInterface {
 		}).growX().row();
 	}
 
-	// ContextMenu
+	// TODO: ContextMenu
 	@SuppressWarnings("StringTemplateMigration")
 	private void $(MenuItem[] __) {
 		var all = (Prov<Seq<MenuItem>>) args();
@@ -317,9 +353,9 @@ public interface ISettings extends E_DataInterface {
 
 				TextButtonStyle style = new TextButtonStyle(menu.style());
 				style.checkedFontColor = Color.gray;
-				var cell = p.button(menu.getName(), menu.icon, style,
+				var cell = rowSelf(p.button(menu.getName(), menu.icon, style,
 				 menu.iconSize(), () -> { }
-				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f);
+				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f));
 
 				TextButton btn = cell.get();
 				Image      img = (Image) btn.getChildren().peek();
@@ -334,7 +370,6 @@ public interface ISettings extends E_DataInterface {
 					btn.toggle();
 					updateState.get(btn.isChecked());
 				});
-				cell.row();
 			}
 		}, false, Align.center));
 	}

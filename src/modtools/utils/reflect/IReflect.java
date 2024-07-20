@@ -21,9 +21,9 @@ public interface IReflect {
 		.get(DefaultImpl::new)
 	);
 	class DesktopImpl implements IReflect {
-		MethodHandle getFieldsHandle       = MyReflect.lookup.findVirtual(Class.class, "getDeclaredFields0", MethodType.methodType(Field[].class, boolean.class));
-		MethodHandle getMethodsHandle      = MyReflect.lookup.findVirtual(Class.class, "getDeclaredMethods0", MethodType.methodType(Method[].class, boolean.class));
-		MethodHandle getConstructorsHandle = MyReflect.lookup.findVirtual(Class.class, "getDeclaredConstructors0", MethodType.methodType(Constructor[].class, boolean.class));
+		final MethodHandle getFieldsHandle       = MyReflect.lookup.findVirtual(Class.class, "getDeclaredFields0", MethodType.methodType(Field[].class, boolean.class));
+		final MethodHandle getMethodsHandle      = MyReflect.lookup.findVirtual(Class.class, "getDeclaredMethods0", MethodType.methodType(Method[].class, boolean.class));
+		final MethodHandle getConstructorsHandle = MyReflect.lookup.findVirtual(Class.class, "getDeclaredConstructors0", MethodType.methodType(Constructor[].class, boolean.class));
 		public DesktopImpl() throws NoSuchMethodException, IllegalAccessException {}
 		public Field[] getFields(Class<?> cls) {
 			return nls(() -> getFieldsHandle.invoke(cls, false), () -> new Field[0]);

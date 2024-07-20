@@ -33,6 +33,7 @@ import modtools.utils.MySettings.Data;
 
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.MySettings.SETTINGS;
+import static modtools.utils.ui.CellTools.rowSelf;
 
 public class SettingsUI extends Content {
 	Window ui;
@@ -225,9 +226,9 @@ public class SettingsUI extends Content {
 		}
 		public static void build(Table main) { SettingsBuilder.main = main; }
 
-		public static <T> void list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
-		                            Func<T, String> stringify) {
-			list(text, cons, prov, list, stringify, () -> true);
+		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
+		                                   Func<T, String> stringify) {
+			return list(text, cons, prov, list, stringify, () -> true);
 		}
 		public static Cell<Table> list(String prefix, String key, Data data, Seq<String> list,
 		                               Func<String, String> stringify) {
@@ -249,18 +250,18 @@ public class SettingsUI extends Content {
 						l.setText(stringify.get(prov.get()));
 						l.setColor(condition.get() ? Color.white : Color.gray);
 					});
-				 b.clicked(() -> IntUI.showSelectListTable(b, list,
-					prov, cons, stringify, 100, 42,
-					true,
-					Align.left));
-				 b.update(condition == null ? null : () -> b.setDisabled(!condition.get()));
+				 b.clicked(() -> {
+					 if (condition.get()) IntUI.showSelectListTable(b, list,
+						prov, cons, stringify, 100, 42,
+						true,
+						Align.left);
+				 });
+				 if (condition != null) b.setDisabled(() -> !condition.get());
 			 }, HopeStyles.hope_defaultb, () -> { })
 			 .height(42).self(c -> c.update(b ->
 				c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))
 			 ));
-			Cell<Table> cell = main.add(t).growX().padTop(0);
-			cell.row();
-			return cell;
+			return rowSelf(main.add(t).growX().padTop(0));
 		}
 
 		public static void number(String text, Floatc cons, Floatp prov) {

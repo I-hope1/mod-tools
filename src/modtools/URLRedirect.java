@@ -36,7 +36,7 @@ public class URLRedirect {
 			public synchronized URLStreamHandler put(String key, URLStreamHandler value) {
 				if (!key.equals("http") && !key.equals("https")) return super.put(key, value);
 
-				var handler = new MyClass<>(value.getClass().getName() + "-r0", value.getClass());
+				var handler = new MyClass<>(value.getClass().getName() + "-h0", value.getClass());
 				handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
 				handler.addInterface(RedirectHandler.class);
 				handler.visit(URLRedirect.class);

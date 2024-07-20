@@ -66,16 +66,6 @@ public class ModTools extends Mod {
 		}
 	}
 
-	public static void disposeAll() {
-		Tools.TASKS.clear();
-		WorldDraw.tasks.clear();
-		IntUI.disposeAll();
-		HopeInput.dispose();
-		IntVars.dispose();
-		MyEvents.dispose();
-		MyFonts.dispose();
-		System.gc();
-	}
 	private void extending() {
 		if (E_Extending.http_redirect.enabled()) {
 			Tools.runLoggedException(URLRedirect::load);
@@ -266,6 +256,16 @@ public class ModTools extends Mod {
 		}
 	}
 
+	public static void disposeAll() {
+		Tools.TASKS.clear();
+		WorldDraw.tasks.clear();
+		IntUI.disposeAll();
+		HopeInput.dispose();
+		IntVars.dispose();
+		MyEvents.dispose();
+		MyFonts.dispose();
+		System.gc();
+	}
 
 	static class UnexpectedPlatform extends RuntimeException { }
 }

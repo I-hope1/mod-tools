@@ -44,7 +44,7 @@ import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
 import static modtools.utils.JSFunc.*;
 import static modtools.utils.Tools.runT;
-import static modtools.utils.ui.MethodTools.*;
+import static modtools.utils.ui.MethodBuilder.*;
 import static modtools.utils.ui.ReflectTools.*;
 import static modtools.IntVars.mouseVec;
 

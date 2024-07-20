@@ -35,8 +35,8 @@ import modtools.ui.components.utils.*;
 import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
-import modtools.utils.draw.InterpImage;
-import modtools.utils.reflect.FieldUtils;
+import modtools.ui.components.InterpImage;
+import modtools.utils.reflect.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
@@ -141,11 +141,11 @@ public class ShowUIList extends Content {
 		t.unbind();
 	})), tex    = newTable(t -> {
 		String prefix = "Tex.";
-		for (Field field : Tex.class.getFields()) {
+		ClassUtils.walkPublicNotStaticKeys(Tex.class, field -> {
 			Drawable drawable = null;
 			try {
 				// 是否为Drawable
-				if (!Drawable.class.isAssignableFrom(field.getType())) continue;
+				if (!Drawable.class.isAssignableFrom(field.getType())) return;
 				t.bind(field.getName());
 				// 跳过private检查，减少时间
 				field.setAccessible(true);
@@ -160,8 +160,7 @@ public class ShowUIList extends Content {
 				t.row();
 				t.unbind();
 			}
-
-		}
+		});
 	}), styles  = newTable(true, t -> {
 		listAllStyles(t, Styles.class);
 		Tools.runLoggedException(() -> {
@@ -306,7 +305,7 @@ public class ShowUIList extends Content {
 	@SuppressWarnings("ComparatorCombinators")
 	private static Field[] getStyleFields(Class<?> stylesClass) {
 		return OS.isAndroid ? Arrays.stream(stylesClass.getFields())
-		 .sorted((a, b) -> a.getType().hashCode() - b.getType().hashCode())
+		 .sorted((a, b) -> a.getName().compareTo(b.getName()))
 		 .toArray(Field[]::new) : stylesClass.getFields();
 	}
 	static void addImage(Table t, Drawable drawable) {

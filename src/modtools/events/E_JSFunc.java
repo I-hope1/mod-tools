@@ -6,7 +6,9 @@ import modtools.annotations.settings.SettingsInit;
 public enum E_JSFunc implements ISettings {
 	watch_multi, search_exact, auto_refresh, display_generic,
 	truncate_text, hidden_if_empty, display_synthetic, update_async,
-	folded_name, array_delimiter(String[].class, ", ", "\n", "\n\n", "\n▶▶▶▶", "\n★★★");
+	folded_name,
+	/** @see ISettings#$(String[]) */
+	array_delimiter(String[].class, ", ", "\n", "\n\n", "\n▶▶▶▶", "\n★★★");
 
 	static {
 		array_delimiter.def(((String[]) array_delimiter.args())[0]);

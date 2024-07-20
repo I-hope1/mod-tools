@@ -54,6 +54,7 @@ import static modtools.ui.components.utils.ValueLabel.DEBUG;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.*;
 import static modtools.utils.Tools.*;
+import static modtools.utils.ui.CellTools.rowSelf;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
@@ -307,12 +308,12 @@ public class IntUI {
 		for (var menu : list) {
 			if (menu == null) continue;
 
-			var cell = main.button(menu.getName(), menu.icon, menu.style(),
+			var cell = rowSelf(main.button(menu.getName(), menu.icon, menu.style(),
 				menu.iconSize(), () -> { }
 			 ).minSize(Float.NEGATIVE_INFINITY, FUNCTION_BUTTON_SIZE)
 			 .growX().left()
 			 .marginLeft(5f).marginRight(5f)
-			 .wrapLabel(false);
+			 .wrapLabel(false));
 			// cell.get().getLabel().setFontScale(0.9f);
 			cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
 
@@ -320,7 +321,6 @@ public class IntUI {
 				hideRun.run();
 				if (hiddenListener != null) hiddenListener.run();
 			});
-			cell.row();
 		}
 		main.pack();
 

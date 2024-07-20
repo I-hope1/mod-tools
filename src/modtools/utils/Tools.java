@@ -110,6 +110,7 @@ public class Tools {
 	public static <T> T or(T t1, T t2) {
 		return t1 == null ? t2 : t1;
 	}
+
 	public static <T> T or(T t1, Prov<T> t2) {
 		return t1 == null ? t2.get() : t1;
 	}

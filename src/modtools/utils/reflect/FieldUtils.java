@@ -1,7 +1,8 @@
 package modtools.utils.reflect;
 
-import arc.util.OS;
+import arc.util.*;
 import jdk.internal.misc.Unsafe;
+import modtools.utils.Tools;
 
 import java.lang.reflect.*;
 
@@ -19,7 +20,7 @@ public class FieldUtils {
 		}
 	}
 	/** 查找包括自类的字段 */
-	public static Field getFieldAccessAll(Class<?> cls, String name) {
+	public static @Nullable Field getFieldAccessAll(Class<?> cls, String name) {
 		Field field;
 		while (cls != null) {
 			field = getFieldAccess(cls, name);
@@ -63,7 +64,7 @@ public class FieldUtils {
 	/** @return {@code null} if field isn't static or getting an exception. */
 	public static <T> T getOrNull(Field field) {
 		try {
-			return Modifier.isStatic(field.getModifiers()) ? (T) field.get(null) : null;
+			return Modifier.isStatic(field.getModifiers()) ? Tools.as(field.get(null)) : null;
 		} catch (Throwable ignored) {
 			return null;
 		}

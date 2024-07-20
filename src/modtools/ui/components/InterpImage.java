@@ -1,4 +1,4 @@
-package modtools.utils.draw;
+package modtools.ui.components;
 
 import arc.Core;
 import arc.graphics.Color;

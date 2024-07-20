@@ -5,8 +5,8 @@ import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.MethodType;
+import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
@@ -16,6 +16,8 @@ import modtools.annotations.settings.*;
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.util.*;
+
+import static modtools.annotations.processors.ContentProcessor.$.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
 @AutoService(Processor.class)
@@ -77,66 +79,38 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 	}
 
+	public static class $ {
+		static ClassSymbol settings;
+		static JCClassDecl classDecl;
+		static Object      literalName;
+		static String      parent;
+		static boolean     fireEvents;
+	}
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
-															Object literalName, String parent, boolean fireEvents) {
+	                            Object literalName, String parent, boolean fireEvents) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
+		$.settings = settings;
+		$.classDecl = classDecl;
+
 		// addImport(unit, settingsImpl);
 		// mMaker.at(classDecl.defs.get(0));
 		// classDecl.extending = mMaker.Ident(settingsImpl);
 
+		allSwitches.clear();
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
 				if (!(tree.init instanceof JCNewClass newClass)) return;
-				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
-							&& newClass.args.get(1) instanceof JCFieldAccess access)) return;
 				VarSymbol symbol = getSymbol(unit, tree);
-				if (symbol.getAnnotation(FlushField.class) == null) return;
 
-				mMaker.at(classDecl.defs.last());
-				classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC,
-				 List.of(buildAssignment(classType, access, mMaker.Ident(symbol)))));
-				Iterable<Symbol> set = settings.members().getSymbols(
-				 t -> t instanceof MethodSymbol m && m.name.toString().equals("set") && !m.params.isEmpty() && m.params.get(0).type.equals(mSymtab.objectType)
-							&& m.getReturnType().equals(mSymtab.voidType));
-				MethodSymbol ms;
+				collectSwitch(symbol);
+				// xxx(arg1, Vars.mods, xxx)
+				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
+				      && newClass.args.get(1) instanceof JCFieldAccess access)) return;
 
-				Iterator<Symbol> iterator = set.iterator();
-				if (!iterator.hasNext()) {
-					mMaker.at(classDecl.defs.last());
-					int flags = Flags.PUBLIC;
-					ms = new MethodSymbol(flags, ns("set"),
-					 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), settings),
-					 settings);
-
-					JCVariableDecl val = makeVar(Flags.PARAMETER, mSymtab.objectType, "val", null, ms);
-					JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
-					 mMaker.Select(mMaker.Select(mMaker.Ident(iSettings), ns("super")), ns("set")),
-					 List.of(mMaker.Ident(val.name)))));
-					ms.params = List.of(val.sym);
-
-					JCMethodDecl method = mMaker.MethodDef(ms, body);
-					settings.members().enter(ms);
-					classDecl.defs = classDecl.defs.append(method);
-				} else ms = (MethodSymbol) iterator.next();
-
-				JCMethodDecl methodDecl = trees.getTree(ms);
-				methodDecl.body.stats = methodDecl.body.stats.append(
-				 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-					 mMaker.This(settings.type)),
-					buildAssignment(classType, access, mMaker.This(settings.type)), null)
-				);
-			}
-			private JCExpressionStatement buildAssignment(JCFieldAccess classType, JCFieldAccess access,
-																										JCExpression selector) {
-				return mMaker.Exec(mMaker.Assign(access,
-					mMaker.Apply(List.nil(),
-					 mMaker.Select(selector, ns("get" + kebabToBigCamel(classType.selected.toString()))),
-					 List.nil()
-					)
-				 )
-				);
+				buildFlushField(classType, access, symbol);
 			}
 		});
+		buildSwitch();
 		addImport(settings, dataClass);
 
 		mMaker.at(classDecl.defs.last());
@@ -157,7 +131,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				 ), List.of(mMaker.Ident(ns("val")))
 				)),
 				mMaker.Exec(mMaker.Apply(
-				 List.nil(), mMaker.Select(
+			 List.nil(), mMaker.Select(
 					mMaker.Ident(myEvents),
 					ns("fire")
 				 ), List.of(mMaker.This(settings.type))
@@ -196,6 +170,102 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		});
 
 		// println(classDecl);
+	}
+	private void buildFlushField(JCFieldAccess classType, JCFieldAccess access, VarSymbol symbol) {
+		if (symbol.getAnnotation(FlushField.class) == null) return;
+
+		mMaker.at(classDecl.defs.last());
+		classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC,
+		 List.of(buildAssignment(classType, access, mMaker.Ident(symbol)))));
+		Iterable<Symbol> methodSym = settings.members().getSymbols(
+		 t -> t instanceof MethodSymbol m && m.name.toString().equals("set") && !m.params.isEmpty() && m.params.get(0).type.equals(mSymtab.objectType)
+		      && m.getReturnType().equals(mSymtab.voidType));
+		MethodSymbol ms;
+
+		Iterator<Symbol> iterator = methodSym.iterator();
+		if (!iterator.hasNext()) {
+			mMaker.at(classDecl.defs.last());
+			int flags = Flags.PUBLIC;
+			ms = new MethodSymbol(flags, ns("set"),
+			 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), settings),
+			 settings);
+
+			JCVariableDecl val = makeVar(Flags.PARAMETER, mSymtab.objectType, "val", null, ms);
+			JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
+			 mMaker.Select(mMaker.Select(mMaker.Ident(iSettings), ns("super")), ns("set")),
+			 List.of(mMaker.Ident(val.name)))));
+			ms.params = List.of(val.sym);
+
+			JCMethodDecl method = mMaker.MethodDef(ms, body);
+			settings.members().enter(ms);
+			classDecl.defs = classDecl.defs.append(method);
+		} else ms = (MethodSymbol) iterator.next();
+
+		JCMethodDecl methodDecl = trees.getTree(ms);
+		methodDecl.body.stats = methodDecl.body.stats.append(
+		 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
+			 mMaker.This(settings.type)),
+			buildAssignment(classType, access, mMaker.This(settings.type)), null)
+		);
+	}
+	// ai 生成就是快
+	private void buildSwitch() {
+		if (allSwitches.isEmpty()) return;
+		/* 仿照上面的，参加一个方法 boolean hasSwitch() {
+			if (this == %name1%) return true;
+			if (this == %name2%) return true;
+			...
+			return false;
+		} */
+		mMaker.at(classDecl.defs.last());
+		MethodSymbol            ms         = new MethodSymbol(Flags.PUBLIC, ns("hasSwitch"), mSymtab.booleanType, settings);
+		ListBuffer<JCStatement> listBuffer = new ListBuffer<>();
+		allSwitches.forEach((symbol, aSwitch) -> {
+			JCStatement ifState = mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
+			 mMaker.This(settings.type)), mMaker.Return(mMaker.Literal(true)), null);
+			listBuffer.append(ifState);
+		});
+		listBuffer.append(mMaker.Return(mMaker.Literal(false)));
+		JCMethodDecl method = mMaker.MethodDef(ms, PBlock(listBuffer.toList()));
+		method.restype = mMaker.Type(mSymtab.booleanType);
+		settings.members().enter(ms);
+		classDecl.defs = classDecl.defs.append(method);
+
+		/* 仿照上面的，参加一个方法 String switchKey() {
+			if (this == %name1%) return %dependency1%;
+			if (this == %name2%) return %dependency2%;
+			...
+			return ISettings.super.switchKey();
+		} */
+		mMaker.at(classDecl.defs.last());
+		ms = new MethodSymbol(Flags.PUBLIC, ns("switchKey"), mSymtab.stringType, settings);
+		listBuffer.clear();
+		allSwitches.forEach((symbol, aSwitch) -> {
+			if (aSwitch.dependency().isEmpty()) return;
+			listBuffer.append(mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
+			 mMaker.This(settings.type)), mMaker.Return(mMaker.Literal(aSwitch.dependency())), null));
+		});
+		listBuffer.append(mMaker.Return(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Select(mMaker.Type(iSettings.type), ns("super")), ns("switchKey")), List.nil())));
+		method = mMaker.MethodDef(ms, PBlock(listBuffer.toList()));
+		method.restype = mMaker.Type(mSymtab.stringType);
+		settings.members().enter(ms);
+		classDecl.defs = classDecl.defs.append(method);
+	}
+	Map<VarSymbol, Switch> allSwitches = new HashMap<>();
+	private void collectSwitch(VarSymbol symbol) {
+		Switch aSwitch = symbol.getAnnotation(Switch.class);
+		if (aSwitch == null) return;
+		allSwitches.put(symbol, aSwitch);
+	}
+	private JCExpressionStatement buildAssignment(JCFieldAccess classType, JCFieldAccess access,
+	                                              JCExpression selector) {
+		return mMaker.Exec(mMaker.Assign(access,
+			mMaker.Apply(List.nil(),
+			 mMaker.Select(selector, ns("get" + kebabToBigCamel(classType.selected.toString()))),
+			 List.nil()
+			)
+		 )
+		);
 	}
 
 	private JCMethodInvocation createInitValue(String parent, Object literalName) {

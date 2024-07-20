@@ -35,13 +35,14 @@ import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
 import modtools.override.ForRhino;
+import modtools.struct.LazyValue;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.components.*;
 import modtools.ui.components.buttons.FoldedImageButton;
 import modtools.ui.components.input.MyLabel;
 import modtools.ui.components.input.area.TextAreaTab;
-import modtools.ui.components.input.area.TextAreaTab.*;
+import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.components.input.highlight.JSSyntax;
 import modtools.ui.components.input.highlight.Syntax.*;
 import modtools.ui.components.limit.PrefPane;
@@ -54,7 +55,6 @@ import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.ui.MethodTools;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;
@@ -64,7 +64,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.components.windows.ListDialog.fileUnfair;
-import static modtools.ui.content.debug.Tester.Async0.executor;
 import static modtools.ui.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
 
@@ -77,9 +76,7 @@ public class Tester extends Content {
 	public static Scriptable topScope, scope;
 	private static Context cx;
 
-	interface Async0 {
-		ThreadPoolExecutor executor = (ThreadPoolExecutor) AThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1);
-	}
+	LazyValue<ThreadPoolExecutor> executor = LazyValue.of(() -> (ThreadPoolExecutor) AThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1));
 
 	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
 	public static final Fi   bookmarkDirectory = IntVars.dataDirectory.child("bookmarks");
@@ -328,27 +325,31 @@ public class Tester extends Content {
 
 	private void buildLog(Table p) {
 		p.table(lg -> lg.left().update(() -> {
-			if (logs.resolved) return;
+			if (logs.isResolved()) return;
 			lg.getCells().clear();
 			lg.clearChildren();
 			logs.each(item -> {
 				lg.add(STR."[\{item.charAt(0)}]")
 				 .style(HopeStyles.defaultLabel)
-				 .color(switch (item.charAt(0)) {
-					 case 'D' -> Color.green;
-					 case 'I' -> Color.royal;
-					 case 'W' -> Color.yellow;
-					 case 'E' -> Color.scarlet;
-					 case ' ' -> Color.white;
-					 default -> throw new IllegalStateException("Unexpected value: " + item.charAt(0));
-				 }).top();
+				 .color(logLevelToColor(item)).top();
 				lg.add(item.substring(1))
 				 .wrap().growX().style(HopeStyles.defaultLabel)
 				 .labelAlign(Align.left).row();
 			});
 		})).growX().left().colspan(2).row();
 	}
-	private void bottomBar(Table table, TextAreaTab textarea) {
+	private static Color logLevelToColor(String item) {
+		LogLevel.valueOf("");
+		return switch (item.charAt(0)) {
+			case 'D' -> Color.green;
+			case 'I' -> Color.royal;
+			case 'W' -> Color.yellow;
+			case 'E' -> Color.scarlet;
+			case ' ' -> Color.white;
+			default -> throw new IllegalStateException("Unexpected value: " + item.charAt(0));
+		};
+	}
+	void bottomBar(Table table, TextAreaTab textarea) {
 		FoldedImageButton folder  = new FoldedImageButton(true, HopeStyles.hope_flati);
 		Table             p       = new Table();
 		PrefPane          resPane = new PrefPane(p);
@@ -416,6 +417,7 @@ public class Tester extends Content {
 		if (res instanceof Class) INFO_DIALOG.showInfo((Class<?>) res);
 		else INFO_DIALOG.showInfo(res);
 	}
+
 	public boolean detailsListener(KeyCode keycode) {
 		if (keycode == KeyCode.d && Core.input.ctrl() && Core.input.shift()) {
 			showDetails();
@@ -467,6 +469,7 @@ public class Tester extends Content {
 		return false;
 	}
 
+	// roll history：回滚历史
 	private static final Vec2 tmpV = new Vec2();
 	private boolean rollHistory(boolean forward) {
 		if (max_history_size.getInt() == 0) return false;
@@ -502,6 +505,8 @@ public class Tester extends Content {
 	private static void showRollback(Vec2 pos) {
 		IntUI.showInfoFade("@tester.rollback", pos.add(0, 80), FADE_ALIGN);
 	}
+
+
 	public void build() {
 		if (ui == null) {
 			_load();
@@ -584,7 +589,7 @@ public class Tester extends Content {
 	public void execScript() {
 		if (!finished) return;
 		finished = false;
-		if (executor.getActiveCount() > 0) {
+		if (executor.get().getActiveCount() > 0) {
 			return;
 		}
 		killScript = false;
@@ -593,7 +598,7 @@ public class Tester extends Content {
 			return;
 		}
 		if (multiThread) {
-			executor.submit(this::execAndDealRes);
+			executor.get().submit(this::execAndDealRes);
 		} else {
 			startTime = Time.millis();
 			Core.app.post(this::execAndDealRes);
@@ -602,20 +607,9 @@ public class Tester extends Content {
 			Timer.schedule(killTask, 4, 0.1f, -1);
 		}
 	}
-	AddedSeq logs = new AddedSeq();
-	public final LogHandler logHandler = new DefaultLogHandler() {
-		public void log(LogLevel level, String text) {
-			if (level == LogLevel.err) super.log(level, text);
-			String s = switch (level) {
-				case debug -> "D";
-				case info -> "I";
-				case warn -> "W";
-				case err -> "E";
-				default -> " ";
-			} + text;
-			logs.add(Tools.format(s));
-		}
-	};
+
+	AddedSeq<String> logs = new AddedSeq<>();
+	public final LogHandler logHandler = new MyLogHandler();
 	private void execAndDealRes() {
 		try {
 			setContextToThread();
@@ -675,7 +669,7 @@ public class Tester extends Content {
 
 		killTask = new Task() {
 			public void run() {
-				if ((!multiThread || executor.getActiveCount() > 0) && stopIfOvertime) {
+				if ((!multiThread || executor.get().getActiveCount() > 0) && stopIfOvertime) {
 					killScript = true;
 					cancel();
 				}
@@ -728,7 +722,7 @@ public class Tester extends Content {
 					Func<Object, String> stringify =
 					 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
 					Func<Object, String> valuify = val -> val instanceof Class<?> cl ? cl.getSimpleName()
-					 : val instanceof Content ? STR."Vars.mods.mainLoader().loadClass('\{val.getClass().getName()}')"
+					 : val instanceof Content ? STR."Vars.mods.mainLoader().loadClass('\{clName(val)}')"
 					 : String.valueOf(val);
 					list("Event", val -> JS.put("type", valuify.get(val)),
 					 () -> JS.get("type"), classes,
@@ -871,7 +865,9 @@ public class Tester extends Content {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log, js_prop,
 		capture_logger,
-		auto_complement, max_history_size(int.class, 40/* def */, 0, 100);
+		auto_complement,
+		/** @see ISettings#$(Integer) */
+		max_history_size(int.class, 40/* def */, 0, 100);
 
 		Settings() { }
 		Settings(Class<?> a, int... args) { }
@@ -880,46 +876,6 @@ public class Tester extends Content {
 			capture_logger.defTrue();
 		}
 	}
-
-	static class AddedSeq extends Seq<String> {
-		/* 是否处理了log */
-		boolean resolved = true;
-		public Seq<String> add(String value) {
-			resolved = false;
-			return super.add(value);
-		}
-		public void each(Cons<? super String> consumer) {
-			resolved = true;
-			super.each(consumer);
-		}
-		public Seq<String> clear() {
-			resolved = false;
-			return super.clear();
-		}
-	}
-
-	public static class NativeJavaHandle extends BaseFunction {
-		private final MethodHandle handle;
-		public NativeJavaHandle(Scriptable scope, MethodHandle handle) {
-			super(scope, null);
-			this.handle = handle;
-		}
-		public String toString() {
-			return handle.toString();
-		}
-		public Object get(Object key) {
-			if ("__javaObject__".equals(key)) return handle;
-			return super.get(key);
-		}
-		public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-			try {
-				return cx.getWrapFactory().wrap(cx, scope, MethodTools.invokeForHandle(handle, args), handle.type().returnType());
-			} catch (Throwable ex) {
-				throw new RuntimeException(ex);
-			}
-		}
-	}
-
 
 	public class ComplementListener extends InputListener {
 		/** @see TextField#BACKSPACE */
@@ -1006,6 +962,20 @@ public class Tester extends Content {
 		}
 		private void check(InputEvent event) {
 			if (cancel) event.cancel();
+		}
+	}
+
+	private class MyLogHandler extends DefaultLogHandler {
+		public void log(LogLevel level, String text) {
+			if (level == LogLevel.err) super.log(level, text);
+			String s = switch (level) {
+				case debug -> "D";
+				case info -> "I";
+				case warn -> "W";
+				case err -> "E";
+				default -> " ";
+			} + text;
+			logs.add(Tools.format(s));
 		}
 	}
 }

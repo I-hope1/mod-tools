@@ -109,7 +109,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 				return;
 			} catch (Throwable ignored) { }
 		}
-		setText0(val.getClass().getName());
+		setText0(Tools.clName(val));
 	}
 	private void resetFunc() {
 		func = defFunc;
@@ -200,8 +200,8 @@ public abstract class ValueLabel extends ElementInlineLabel {
 				: val instanceof Element ? ElementUtils.getElementName((Element) val)
 				: StringUtils.getUIKey(val))
 			.get(() -> String.valueOf(val))
-			.get(() -> val.getClass().getName() + "@" + Integer.toHexString(val.hashCode()))
-			.get(() -> val.getClass().getName())
+			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
+			.get(() -> Tools.clName(val))
 		);
 		text = truncate(text);
 
@@ -305,6 +305,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		context = null;
 	}
 	public void addText(CharSequence text, Color color) {
+		setColor(color);
 		// if (context == this) super.addText(text, color);
 	}
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {

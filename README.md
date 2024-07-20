@@ -15,3 +15,6 @@
 <div align="center"><img src="./assets/icon.png" width=50%></div>
 
 <p style="font-size: 2em" align="center"><a href="https://i-hope1.github.io/mod-tools/">WIKI?</a></p>
+
+## Build
+if you receive an exception when building the project, please flush the gradle.

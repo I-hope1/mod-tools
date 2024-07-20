@@ -34,7 +34,7 @@ import static modtools.ui.windows.ColorPicker.*;
 public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	private Drawable drawable;
 
-	private Cons<Drawable> cons = color -> { };
+	private Cons<Drawable> cons = _ -> { };
 
 	Color iconCurrent  = new Color(Color.white),
 	 backgroundCurrent = new Color(bgColor);

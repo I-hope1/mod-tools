@@ -71,7 +71,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 	public void flushVal() {
 		if (isValid()) {
 			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
-			setVal0(value);
+			setVal(value);
 		} else {
 			setText0(null);
 		}

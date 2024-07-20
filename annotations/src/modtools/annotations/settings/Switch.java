@@ -15,7 +15,7 @@ import java.lang.annotation.*;
  * @see modtools.utils.JSFunc
  */
 @Target(ElementType.FIELD)
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.RUNTIME)
 public @interface Switch {
 	/** 用于设置的名称  */
 	String name() default "";

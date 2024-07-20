@@ -11,10 +11,11 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.settings.SettingsInit;
+import modtools.annotations.settings.*;
 import modtools.events.ISettings;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.components.Hitter;
@@ -74,8 +75,7 @@ public class Frag extends Table {
 		left().bottom();
 		topGroup.addChild(this);
 		if (position.isSwitchOn()) {
-			Vec2 pos = position.getPosition();
-			setPosition(pos.x, pos.y);
+			Timer.schedule(setPositionTask, 0, 1f, 4);
 		}
 		Log.info("Initialize TopGroup.");
 
@@ -103,6 +103,15 @@ public class Frag extends Table {
 			Core.app.post(() -> listener.display(x, y));
 		});
 		IntVars.addResizeListener(() -> listener.display(x, y));
+	}
+	Task setPositionTask = new Task() {
+		public void run() {
+			setDefaultPosition();
+		}
+	};
+	private void setDefaultPosition() {
+		Vec2 pos = position.getPosition();
+		setPosition(pos.x, pos.y);
 	}
 	public final float hoverSize   = 45 * Scl.scl();
 	public final float hoverRadius = 96 * Scl.scl();
@@ -179,6 +188,7 @@ public class Frag extends Table {
 
 	@SettingsInit
 	public enum Settings implements ISettings {
+		@Switch
 		position(Position.class, 0, 0, 1, 1);
 
 		Settings(Class<?> c, float... args) { }

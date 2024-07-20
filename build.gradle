@@ -97,6 +97,9 @@ jar {
 	from(rootDir) { include "mod.hjson" }
 	from("assets/") { include "**" }
 	from(zipTree("_libs/AndroidField.jar").getAsFileTree()) { include "**" }
+	from(zipTree("${project(":annotations").buildDir0}/libs/annotations.jar")) {
+		include "**/settings/**"
+	}
 }
 
 task playGame(type: JavaExec) {

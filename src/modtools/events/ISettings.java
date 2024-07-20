@@ -15,14 +15,14 @@ import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.annotations.settings.SettingsInit;
+import modtools.annotations.settings.*;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.components.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
-import modtools.utils.*;
+import modtools.utils.StringUtils;
 
 import java.lang.reflect.Method;
 
@@ -163,6 +163,9 @@ public interface ISettings extends E_DataInterface {
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
+		if (hasSwitch()) {
+			buildSwitch(prefix, table);
+		}
 		Method build = $builds.get(CAST.box(type));
 		try {
 			// Log.info(text);
@@ -181,9 +184,15 @@ public interface ISettings extends E_DataInterface {
 	}
 
 
+	default boolean hasSwitch() {
+		try {
+			return getClass().getField(name()).getAnnotation(Switch.class) != null;
+		} catch (NoSuchFieldException e) {
+			return false;
+		}
+	}
 	class $$ {
 		static String  text;
-		static boolean isSwitch;
 
 		@SuppressWarnings("StringTemplateMigration")
 		static String autoAddComma(String s) {

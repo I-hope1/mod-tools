@@ -4,7 +4,7 @@ import arc.func.Prov;
 import arc.graphics.Color;
 import arc.graphics.g2d.GlyphLayout;
 import arc.struct.*;
-import arc.util.Align;
+import arc.util.*;
 import arc.util.pooling.Pools;
 import modtools.ui.components.input.NoMarkupLabel;
 
@@ -39,6 +39,9 @@ public class ElementInlineLabel extends NoMarkupLabel {
 		GlyphLayout layout = Pools.obtain(GlyphLayout.class, GlyphLayout::new);
 		layout.setText(style.font, text, color, -1, Align.left, false);
 		cache.addText(layout, x, y);
+	}
+	public void layout() {
+		super.layout();
 	}
 	public void addText(CharSequence text, Color color) {
 		StringBuilder word = new StringBuilder();
@@ -92,13 +95,6 @@ public class ElementInlineLabel extends NoMarkupLabel {
 			items.each(i -> sb.append(i.getText()));
 			return sb;
 		}
-	}
-	InlineTable container = new InlineTable();
-	public void add(InlineItem item) {
-		container.add(item);
-	}
-	public CharSequence getTextFromItem() {
-		return container.getText();
 	}
 	public static class InlineLabel extends InlineItem {
 		public static IntMap<Color> intColorMap = new IntMap<>();

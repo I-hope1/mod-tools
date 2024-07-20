@@ -6,6 +6,7 @@ import arc.graphics.g2d.TextureRegion;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.*;
+import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
 import arc.util.*;
@@ -124,6 +125,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		return text;
 	}
 
+	IntMap<Color> colorMap = new IntMap<>();
 	@SuppressWarnings("ConstantConditions")
 	public CharSequence dealVal0(Object val) {
 		if (val instanceof ObjectMap || val instanceof Map) {
@@ -138,13 +140,13 @@ public abstract class ValueLabel extends ElementInlineLabel {
 			else for (var entry : ((Map<?, ?>) val).entrySet()) {
 				appendMap(sb, entry.getKey(), entry.getValue());
 				checkTail = true;
-				 if (isTruncate(sb.length())) break;
+				if (isTruncate(sb.length())) break;
 			}
 			if (checkTail) sb.deleteCharAt(sb.length() - 2);
 			sb.append('}');
 
-			setColor(Syntax.c_map);
-			return getTextFromItem();
+			addText(sb, Syntax.c_map);
+			return sb;
 		}
 		iter:
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
@@ -176,16 +178,6 @@ public abstract class ValueLabel extends ElementInlineLabel {
 					// break l;
 					checkTail = true;
 				}
-				/* for (Object o : seq) {
-					sb.append(dealVal(o));
-					sb.append(", ");
-					if (isTruncate(sb.length())) break;
-				} */
-				/* for (int i = 0, len = Array.getLength(val); i < len; i++) {
-					sb.append(dealVal(Array.get(val, i)));
-					sb.append(", ");
-					if (isTruncate(sb.length())) break;
-				} */
 			} catch (ArcRuntimeException ignored) {
 				break iter;
 			} catch (Throwable e) {
@@ -194,6 +186,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 			}
 			if (checkTail && sb.length() >= 2) sb.delete(sb.length() - 2, sb.length());
 			sb.append(']');
+			addText(sb, Color.white);
 			return sb;
 		}
 
@@ -218,7 +211,8 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		 : val.getClass().isEnum() ? c_enum
 		 : box(val.getClass()) == Boolean.class ? Syntax.c_objects
 		 : Color.white;
-		setColor(mainColor);
+
+		addText(text, mainColor);
 
 		return text;
 	}
@@ -265,8 +259,6 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
 	}
 	void setText0(CharSequence newText) {
-		clearText();
-		Log.info(newText);
 		if (newText == null || newText.length() == 0) {
 			newText = "<EMPTY>";
 			setColor(Color.gray);
@@ -278,15 +270,15 @@ public abstract class ValueLabel extends ElementInlineLabel {
 	/** 这可能会设置字段值 */
 	public void setNewVal(Object newVal) { }
 
-	protected void setVal0(Object newVal) {
+	public void setVal(Object newVal) {
 		try {
-			setVal(valueFunc.get(newVal));
+			setVal1(valueFunc.get(newVal));
 		} catch (Throwable th) {
 			Log.err(th);
-			setVal(newVal);
+			setVal1(newVal);
 		}
 	}
-	public void setVal(Object val) {
+	private void setVal1(Object val) {
 		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
 		if (this.val != null && val != null &&
 		    this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
@@ -296,14 +288,25 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		if (afterSet != null) afterSet.run();
 		if (func == null) resetFunc();
 		try {
-			setText0(func.get(val));
+			context(func == defFunc ? this : null, () -> func.get(val));
 		} catch (Throwable th) {
 			resolveThrow(val, th);
 		}
 		invalidateHierarchy();
 		layout();
 	}
-
+	private Label context;
+	public void context(ValueLabel label, Prov<CharSequence> prov) {
+		context = label;
+		CharSequence text = prov.get();
+		if (context != this || true) {
+			setText0(text);
+		}
+		context = null;
+	}
+	public void addText(CharSequence text, Color color) {
+		// if (context == this) super.addText(text, color);
+	}
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
 		Vec2 pos = ElementUtils.getAbsolutePos(el);
 		try {
@@ -387,7 +390,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 				 REVIEW_ELEMENT.inspect((Element) val);
 			 }));
 			 list.add(newElementDetailsList((Element) val));
-			 elementSetter(list, this::setVal);
+			 elementSetter(list, this::setVal1);
 		 }, Element.class)
 		 .isExtend(_ -> {
 			 list.add(MenuItem.with("effect.spawnAtPlayer", Icon.infoSmall, "At player", () -> {

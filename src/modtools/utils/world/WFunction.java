@@ -171,18 +171,24 @@ public abstract class WFunction<T> {
 	}
 	private void buildButtons() {
 		buttons.defaults().height(Selection.buttonHeight).growX();
+
 		buttons.button("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
-		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> { }).with(b -> b.clicked(() -> {
+		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> { })
+		 .with(b -> b.clicked(() -> {
 			 boolean all = select.size != selectMap.size;
 			 select.clear();
 			 if (all) for (var entry : selectMap) select.add(entry.value);
-		 })).update(b -> b.setChecked(select.size == selectMap.size))
-		 .row();
-		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> { }).with(b -> b.clicked(() -> {
+		 }))
+		 .update(b -> b.setChecked(select.size == selectMap.size));
+		buttons.row();
+
+		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> { })
+		 .with(b -> b.clicked(() -> {
 			showMenuList(getMenuLists(this, mergeList()));
-		})).disabled(_ -> select.isEmpty());
+		}))
+		 .disabled(_ -> select.isEmpty());
 		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestForSelection(mergeList(), null, boolf -> {
 				int size = select.sum(seq -> seq.size);
@@ -196,14 +202,20 @@ public abstract class WFunction<T> {
 				showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
 				 .sticky = true;
 			});
-		}).disabled(_ -> select.size == 0).row();
+		})
+		 .disabled(_ -> select.size == 0);
+		buttons.row();
+
 		buttons.button("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
 			drawAll = !drawAll;
-		}).update(t -> t.setChecked(drawAll));
+		})
+		 .update(t -> t.setChecked(drawAll));
 		buttons.button("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
 			clearList();
 			changeEvent.run();
-		}).update(t -> t.setChecked(drawAll)).row();
+		})
+		 .update(t -> t.setChecked(drawAll));
+		buttons.row();
 	}
 
 	private List<T> mergeList() {

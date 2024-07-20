@@ -6,9 +6,10 @@ import arc.graphics.g2d.Draw;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.struct.Seq;
 import arc.util.*;
 import mindustry.graphics.Layer;
-import modtools.struct.*;
+import modtools.struct.TaskSet;
 import modtools.utils.*;
 import modtools.utils.world.WorldDraw;
 
@@ -54,7 +55,7 @@ public class LerpFun {
 		});
 	}
 
-	MySet<Boolp> drawSeq;
+	Seq<Boolp> drawSeq;
 	public LerpFun onWorld() {
 		drawSeq = worldDraw.drawSeq;
 		return this;

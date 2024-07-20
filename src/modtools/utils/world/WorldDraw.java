@@ -6,10 +6,9 @@ import arc.graphics.Texture;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.*;
-import arc.struct.ObjectSet;
+import arc.struct.*;
 import mindustry.Vars;
-import mindustry.game.EventType.*;
-import modtools.struct.MySet;
+import mindustry.game.EventType.Trigger;
 import modtools.utils.ElementUtils;
 
 
@@ -32,8 +31,8 @@ public class WorldDraw {
 		Draw.reset();
 	};
 
-	public final MySet<Boolp> drawSeq = new MySet<>();
-	public       float        alpha   = 1;
+	public final Seq<Boolp> drawSeq = new Seq<>();
+	public       float      alpha   = 1;
 
 	WorldDraw(float z) {
 		this(z, null);
@@ -48,7 +47,7 @@ public class WorldDraw {
 			Draw.flush();
 			Draw.z(z);
 			Draw.alpha(alpha);
-			drawSeq.filter(Boolp::get);
+			drawSeq.removeAll(boolp -> !boolp.get());
 			Draw.reset();
 		});
 		/*Events.run(EventType.WorldLoadEvent.class, () -> {

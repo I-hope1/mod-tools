@@ -101,7 +101,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			t.table(Styles.black6, buttons -> {
 				buttons.label(() -> CatchSR.apply(() ->
 				 CatchSR.of(() -> StringUtils.getUIKey(drawable))
-				  .get(() -> "" + drawable)
+					.get(() -> "" + drawable)
 				)).fontScale(0.6f).row();
 				buttons.left().defaults().growX().height(32).padRight(4f);
 				buttons.check("Icon", _ -> { }).row();
@@ -238,7 +238,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
 		 .marginLeft(4f).marginRight(4f);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
-			 cons.get(iconCurrent.equals(sourceColor) ? drawable : new DelegatingDrawable(drawable, new Color(iconCurrent)));
+			 cons.get(iconCurrent.equals(sourceColor) && !(drawable0 instanceof DelegatingDrawable) ?
+				drawable : new DelegatingDrawable(drawable, new Color(iconCurrent)));
 			 hide();
 		 })
 		 .marginLeft(4f).marginRight(4f);
@@ -273,7 +274,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		h = values[0];
 		s = values[1];
 		v = values[2];
-		a = current.rgba() & 0xFF;
+		a = (current.rgba() & 0xFF) / 255f;
 
 		// 更新元素
 		if (hSlider != null && aSlider != null) {
@@ -323,7 +324,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}
 		};
 	}
-	/** 仅用于picker  */
+	/** 仅用于picker */
 	private class DelegatorColor extends Color {
 		public Color delegator() {
 			return isIconColor ? iconCurrent : backgroundCurrent;

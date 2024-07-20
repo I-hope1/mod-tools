@@ -23,7 +23,7 @@ public class Hitter extends FillElement implements IMenu {
 	public boolean canHide() {
 		return this == Hitter.peek() || this.getZIndex() >= Hitter.peek().getZIndex();
 	}
-	/** @return true if the hitter hide successfully.  */
+	/** @return true if the hitter hide successfully. */
 	public boolean hide() {
 		boolean b = canHide();
 		if (b) fireClick();
@@ -31,6 +31,7 @@ public class Hitter extends FillElement implements IMenu {
 	}
 	public Element hit(float x, float y, boolean touchable) {
 		if (autoClose && HopeInput.mouseDown()
+		    && !HopeInput.mouseDragged()
 		    && super.hit(x, y, touchable) == this
 		    && hide()) {
 			remove();

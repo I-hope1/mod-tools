@@ -19,9 +19,8 @@ public class HopeInput {
 		return hit;
 	}
 	private static MouseListener listener;
-	public static boolean mouseDown() {
-		return listener.down;
-	}
+	public static boolean mouseDown() { return listener.down; }
+	public static boolean mouseDragged() { return listener.hasDragged; }
 
 	public static void load() {
 		listener = new MouseListener();
@@ -60,13 +59,19 @@ public class HopeInput {
 	}
 	public static class MouseListener extends InputListener {
 		public boolean down;
+		public boolean hasDragged;
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			down = true;
 			TaskManager.scheduleOrCancel(0.1f, () -> down = false);
 			return true;
 		}
+		public void touchDragged(InputEvent event, float x, float y, int pointer) {
+			hasDragged = true;
+			TaskManager.scheduleOrCancel(0f, () -> hasDragged = false);
+		}
 
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			hasDragged = false;
 			down = false;
 		}
 	}

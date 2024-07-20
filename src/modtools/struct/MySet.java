@@ -7,6 +7,7 @@ import modtools.utils.Tools;
 import java.util.Iterator;
 
 /**
+ * TODO: 真难适配
  * 为了适配v6
  */
 public class MySet<T> extends OrderedSet<T> {

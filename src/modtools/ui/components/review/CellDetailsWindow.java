@@ -5,6 +5,7 @@ import arc.func.Func;
 import arc.graphics.Color;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
+import arc.scene.style.Style;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
@@ -19,7 +20,10 @@ import modtools.ui.components.utils.*;
 import modtools.ui.content.ui.ReviewElement;
 import modtools.ui.content.ui.ReviewElement.CellView;
 import modtools.utils.*;
+import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.*;
+
+import java.lang.reflect.Field;
 
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.utils.Tools.*;
@@ -36,9 +40,10 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		cont.table(Tex.pane, t -> {
 			t.defaults().grow();
 			t.add();
-			getAndAdd(t, cell, "padTop");
+			buildSetter(t, cell, "padTop");
 			t.add().row();
-			getAndAdd(t, cell, "padLeft");
+			buildSetter(t, cell, "padLeft");
+
 			ValueLabel label = new PlainValueLabel<>(Element.class, cell::get);
 			label.enableUpdate = false;
 			label.update(() -> label.setVal(cell.get()));
@@ -47,29 +52,29 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			placeholder.clicked(() -> placeholderCell.setElement(label));
 			label.clicked(() -> placeholderCell.setElement(placeholder));
 
-			getAndAdd(t, cell, "padRight").row();
+			buildSetter(t, cell, "padRight").row();
 			t.add();
-			getAndAdd(t, cell, "padBottom");
+			buildSetter(t, cell, "padBottom");
 			t.add();
 		}).colspan(2).growX().row();
 		cont.left().defaults().height(32).growX().left();
 		cont.add("Align: ").color(themeColor);
 		cont.label(() -> StringUtils.align(CellTools.align(cell))).row();
 		cont.defaults().colspan(2);
-		getAddWithName(cont, cell, "minWidth").row();
-		getAddWithName(cont, cell, "minHeight").row();
-		getAddWithName(cont, cell, "maxWidth").row();
-		getAddWithName(cont, cell, "maxHeight").row();
-		getAddWithName(cont, cell, "colspan", Float::intValue).row();
+		buildWithName(cont, cell, "minWidth");
+		buildWithName(cont, cell, "minHeight");
+		buildWithName(cont, cell, "maxWidth");
+		buildWithName(cont, cell, "maxHeight");
+		buildWithName(cont, cell, "colspan", Float::intValue);
 		cont.defaults().colspan(1);
-		checkboxField(cont, cell, "fillX", float.class);
-		checkboxField(cont, cell, "fillY", float.class);
+		checkboxField(cont, cell, "fillX");
+		checkboxField(cont, cell, "fillY");
 		cont.row();
-		checkboxField(cont, cell, "expandX", int.class);
-		checkboxField(cont, cell, "expandY", int.class);
+		checkboxField(cont, cell, "expandX");
+		checkboxField(cont, cell, "expandY");
 		cont.row();
-		checkboxField(cont, cell, "uniformX", boolean.class);
-		checkboxField(cont, cell, "uniformY", boolean.class);
+		checkboxField(cont, cell, "uniformX");
+		checkboxField(cont, cell, "uniformY");
 		cont.row();
 		TextButtonStyle style = HopeStyles.flatBordert;
 		fnButton("Layout", style, runT(() -> cell.getTable().layout()));
@@ -85,7 +90,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		fnButton("Bottom", style, cell::bottom);
 		cont.row();
 		fnButton("Center", style, cell::center);
-		checkboxField(cont, cell, "endRow", boolean.class);
+		checkboxField(cont, cell, "endRow");
 		cont.row();
 		// cont.table(Tex.pane, t -> {
 		// 	t.touchable = Touchable.enabled;
@@ -102,14 +107,14 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			if (cl.getTable() != null) cl.getTable().layout();
 		});
 	}
-	static Cell<Table> getAndAdd(Table t, Cell cell, String name) {
+	static Cell<Table> buildSetter(Table t, Cell<?> cell, String name) {
 		return t.add(ReviewElement.floatSetter(null, () -> FormatHelper.fixed(Reflect.get(Cell.class, cell, name)), f -> {
 			Reflect.set(Cell.class, cell, name, f);
 			if (cell.get() != null) cell.get().invalidateHierarchy();
 		}));
 	}
-	static Cell<Table> getAddWithName(Table t, Cell cell, String name) {
-		return getAddWithName(t, cell, name, f -> f);
+	static Cell<Table> buildWithName(Table t, Cell<?> cell, String name) {
+		return buildWithName(t, cell, name, f -> f);
 	}
 	public static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
 		return Sr(Reflect.get(ctype, obj, key))
@@ -121,8 +126,8 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		return t instanceof Boolean ? (Boolean) t :
 		 t instanceof Number n && n.intValue() == 1;
 	}
-	static <T extends Number> Cell<Table> getAddWithName(Table t, Cell cell, String name,
-	                                                     Func<Float, T> valueOf) {
+	static <T extends Number> Cell<Table> buildWithName(Table t, Cell cell, String name,
+	                                                    Func<Float, T> valueOf) {
 		Table table = ReviewElement.floatSetter(name + ": ",
 		 () -> fixedAny(Reflect.get(Cell.class, cell, name)),
 		 f -> {
@@ -132,48 +137,43 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			 });
 		 });
 		table.left();
-		return t.add(table);
+		return CellTools.rowSelf(t.add(table));
 	}
-	/* private static <T> void field(Table cont, Cell<?> cell, String key, TextFieldValidator validator,
-																	Func<String, T> func) {
-			cont.table(t -> {
-				t.add(key);
-				ModifiedLabel.build(() -> String.valueOf(Reflect.get(Cell.class, cell, key)),
-				 validator, (field, label) -> {
-					 if (!field.isValid()) return;
-					 Reflect.set(Cell.class, cell, key, func.get(field.getText()));
-					 label.setText(field.getText());
-				 }, 2, t);
-			});
-		} */
-	public static Cell<CheckBox> checkboxField(Table cont, Cell<?> obj, String key,
-	                                           Class<?> valueType) {
-		return checkboxField(cont, Cell.class, obj, key, valueType);
+
+	public static Cell<CheckBox> checkboxField(Table cont, Cell<?> obj, String key) {
+		return checkboxField(cont, Cell.class, obj, key);
 	}
 
 	public static <T>
-	Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key,
-	                             Class<?> valueType) {
+	Cell<CheckBox> checkboxField(Table cont, Class<? extends T> ctype, T obj, String key) {
+		Field    field     = FieldUtils.getFieldAccessOrThrow(ctype, key);
+		Class<?> valueType = field.getType();
 		return cont.check(Strings.capitalize(key), 28, getChecked(ctype, obj, key), b -> {
-			 Reflect.set(ctype, obj, key, castBoolean(valueType, b));
-			 if (obj instanceof Table t) t.layout();
-			 else if (obj instanceof Cell<?> c) c.getTable().layout();
+			 Tools.runShowedException(() -> field.set(obj, castBoolean(valueType, b)));
+
+			 // flush
+			 if (obj instanceof Table t) {
+				 t.layout();
+			 } else if (obj instanceof Cell<?> c) {
+				 c.getTable().layout();
+			 }
 		 })
+		 /** {@link Cell#style(Style)}会报错 */
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
-		 .with(t -> {
+		 .with(chk -> {
 			 if (valueType == float.class || valueType == int.class) {
-				 addFloatSetter(ctype, obj, key, t, valueType == int.class);
+				 addFloatSetter(obj, field,chk, valueType == int.class);
 			 }
 		 }).checked(_ -> getChecked(ctype, obj, key))
 		 .fill(false)
 		 .expand(false, false).left();
 	}
-	private static <T> void addFloatSetter(Class<? extends T> ctype, T obj, String key,
-	                                       CheckBox elem, boolean useInt) {
+	private static <T> void addFloatSetter(
+	 T obj, Field jfield, CheckBox elem, boolean useInt) {
 		IntUI.addTooltipListener(elem, IntUI.tips("exact_setter"));
 		IntUI.longPressOrRclick(elem, _ -> {
 			IntUI.showSelectTable(elem, (p, _, _) -> {
-				Number defvalue = Reflect.get(ctype, obj, key);
+				Number defvalue = Reflect.get(obj, jfield);
 				Slider slider   = new Slider(useInt ? -2 : -1, 2, useInt ? 1 : 0.01f, false);
 				slider.setValue(defvalue.floatValue());
 				TextField field = new TextField(FormatHelper.fixed(defvalue.floatValue()));
@@ -185,15 +185,15 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 					if (useInt) val = (int) v;
 					else val = v;
 
-					Reflect.set(ctype, obj, key, val);
+					Tools.runShowedException(() -> jfield.set(obj, val));
 					field.setText(FormatHelper.fixed(v));
 				});
 				field.changed(() -> {
 					Number value = useInt ? NumberHelper.asInt(field.getText()) : NumberHelper.asFloat(field.getText());
-					Reflect.set(ctype, obj, key, value);
+					Tools.runShowedException(() -> jfield.set(obj, value));
 					slider.setValue(value.floatValue());
 				});
-				Label label = new Label(() -> FormatHelper.fixedAny(Reflect.get(ctype, obj, key)));
+				Label label = new Label(() -> FormatHelper.fixedAny(Reflect.get(obj, jfield)));
 				label.setAlignment(Align.center);
 				label.touchable = Touchable.disabled;
 				p.stack(slider, label).growX().row();
@@ -201,6 +201,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			}, false, Align.top);
 		});
 	}
+
 	static Object castBoolean(Class<?> valueType, boolean b) {
 		return valueType == Boolean.TYPE ? b : b ? 1 : 0;
 	}

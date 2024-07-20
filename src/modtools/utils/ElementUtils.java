@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
@@ -15,6 +15,7 @@ import mindustry.ui.Styles;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.*;
 import modtools.ui.components.Window;
+import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.effect.ScreenSampler;
 
 import java.util.Optional;
@@ -31,6 +32,23 @@ public interface ElementUtils {
 			if (actor == null) return null;
 		}
 	}
+	static CharSequence getPath(Element element) {
+		if (element == null) return "null";
+		Element       el = element;
+		StringBuilder sb = new StringBuilder();
+		while (el != null) {
+			if (el.name != null) {
+				return STR."Core.scene.find(\"\{el.name}\")\{sb}";
+			} else if (el instanceof Group && ShowUIList.uiKeyMap.containsKey(el)) {
+				return STR."Vars.ui.\{ShowUIList.uiKeyMap.get(el)}\{sb}";
+			} else {
+				sb.append(".children.get(").append(el.getZIndex()).append(')');
+				el = el.parent;
+			}
+		}
+		return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
+	}
+
 	class $ {
 		static final Vec2 v1 = new Vec2();
 		static final Vec2 v2 = new Vec2();

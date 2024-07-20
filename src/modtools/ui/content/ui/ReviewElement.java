@@ -48,14 +48,13 @@ import modtools.utils.ui.search.BindCell;
 import java.util.regex.*;
 
 import static arc.Core.scene;
+import static modtools.IntVars.mouseVec;
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
-import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.CellTools.unset;
-import static modtools.utils.ui.FormatHelper.*;
-import static modtools.IntVars.mouseVec;
+import static modtools.utils.ui.FormatHelper.fixed;
 
 /** It should be `InspectElement`, but it's too late. */
 public class ReviewElement extends Content {
@@ -102,6 +101,7 @@ public class ReviewElement extends Content {
 			}
 		});
 	}
+
 	public static final Color FOCUS_COLOR = DEF_FOCUS_COLOR;
 	public static final Color MASK_COLOR  = DEF_MASK_COLOR;
 
@@ -470,90 +470,16 @@ public class ReviewElement extends Content {
 			keyDown(KeyCode.f, () -> window.fixedFocus = window.fixedFocus == this ? null : this);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
 			keyDown(KeyCode.r, () -> IntUI.showMenuList(execChildren(element)));
-			keyDown(KeyCode.del, () -> {
-				Runnable go = () -> {
-					remove();
-					element.remove();
-				};
-				if (Core.input.shift()) {
-					go.run();
-				} else {
-					IntUI.showConfirm("@confirm.remove", go);
-				}
-			});
+			keyDown(KeyCode.del, () -> IntUI.shiftIgnoreConfirm(() -> {
+				remove();
+				element.remove();
+			}));
 
 
 			/* 用于下面的侦听器  */
 			int eventChildIndex;
-			/* 用于添加侦听器 */
 			if (element instanceof Group group) {
-				/* 占位符 */
-				var button   = new FoldedImageButton(true);
-				int size     = 32;
-				var children = group.getChildren();
-				add(button).size(size).disabled(_ -> children.isEmpty());
-				eventChildIndex = 1;
-				window.addMultiRowWithPos(this,
-				 ElementUtils.getElementName(element),
-				 () -> Tmp.v1.set(element.x, element.y));
-				Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().first();
-				// Log.info(textElement);
-
-				image().growY().left().update(
-				 t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray)
-				);
-				keyDown(KeyCode.left, () -> button.fireCheck(false));
-				keyDown(KeyCode.right, () -> button.fireCheck(true));
-				defaults().growX();
-				table(t -> {
-					Table    table1  = new Table();
-					Runnable rebuild = () -> watchChildren(window, group, table1, children);
-
-					boolean b = children.size < 20
-					            || group.parent.getChildren().size == 1
-					            || window.element == group;
-					if (b) rebuild.run();
-					button.setContainer(t.add(table1).grow());
-					boolean[] lastEmpty = {children.isEmpty()};
-					t.update(() -> {
-						if (children.isEmpty() != lastEmpty[0]) {
-							lastEmpty[0] = children.isEmpty();
-							HopeFx.changedFx(textElement);
-						}
-					});
-					// button.setChecked(!children.isEmpty() && b);
-					table1.update(() -> {
-						if (needUpdate) {
-							button.rebuild.run();
-							needUpdate = false;
-							return;
-						}
-						button.fireCheck(!children.isEmpty() && b, false);
-						if (stopEvent) {
-							stopEvent = false;
-							return;
-						}
-
-						if (!group.needsLayout() || !parentValid(group, window)) return;
-
-						ElementUtils.findParent(this, ancestor -> {
-							if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
-							if (ancestor instanceof Window) return true;
-							return false;
-						});
-						button.rebuild.run();
-					});
-					button.rebuild = () -> {
-						if (parentValid(group, window) && (
-						 needUpdate || group.needsLayout() ||
-						 (!table1.hasChildren() && group.hasChildren())
-						)) {
-							rebuild.run();
-							// if (group.needsLayout()) HopeFx.changedFx(group);
-							HopeFx.changedFx(textElement);
-						}
-					};
-				}).left();
+				eventChildIndex = buildForGroup(group);
 			} else {
 				defaults().growX();
 				eventChildIndex = 0;
@@ -578,6 +504,79 @@ public class ReviewElement extends Content {
 			});
 			addFocusSource(this, () -> window, () -> element);
 		}
+
+		private int buildForGroup(Group group) {
+			var button   = new FoldedImageButton(true);
+			int size     = 32;
+			var children = group.getChildren();
+			add(button).size(size).disabled(_ -> children.isEmpty());
+			window.addMultiRowWithPos(this,
+			 ElementUtils.getElementName(group),
+			 () -> Tmp.v1.set(group.x, group.y));
+			Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().first();
+			// Log.info(textElement);
+
+			image().growY().left().update(focusUpdater());
+
+			keyDown(KeyCode.left, () -> button.fireCheck(false));
+			keyDown(KeyCode.right, () -> button.fireCheck(true));
+
+			defaults().growX();
+			table(t -> {
+				Table    table1  = new Table();
+				Runnable rebuild = () -> watchChildren(window, group, table1, children);
+
+				boolean unfoldChildren = children.size < 20
+				                         || group.parent.getChildren().size == 1
+				                         || window.element == group;
+				if (unfoldChildren) rebuild.run();
+
+				button.setContainer(t.add(table1).grow());
+				boolean[] lastEmpty = {children.isEmpty()};
+				t.update(() -> {
+					if (children.isEmpty() != lastEmpty[0]) {
+						lastEmpty[0] = children.isEmpty();
+						HopeFx.changedFx(textElement);
+					}
+				});
+				// button.setChecked(!children.isEmpty() && b);
+				table1.update(() -> {
+					if (needUpdate) {
+						button.rebuild.run();
+						needUpdate = false;
+						return;
+					}
+					button.fireCheck(!children.isEmpty() && unfoldChildren, false);
+					if (stopEvent) {
+						stopEvent = false;
+						return;
+					}
+
+					if (!group.needsLayout() || !parentValid(group, window)) return;
+
+					ElementUtils.findParent(this, ancestor -> {
+						if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
+						if (ancestor instanceof Window) return true;
+						return false;
+					});
+					button.rebuild.run();
+				});
+				button.rebuild = () -> {
+					if (parentValid(group, window) && (
+					 needUpdate || group.needsLayout() ||
+					 (!table1.hasChildren() && group.hasChildren())
+					)) {
+						rebuild.run();
+						// if (group.needsLayout()) HopeFx.changedFx(group);
+						HopeFx.changedFx(textElement);
+					}
+				};
+			}).left();
+			return 1;
+		}
+		private Cons<Image> focusUpdater() {
+			return t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray);
+		}
 		public void clear() {
 			super.clear();
 			userObject = null;
@@ -592,15 +591,16 @@ public class ReviewElement extends Content {
 			MyWrapTable table = ElementUtils.findParent(this, e -> e instanceof MyWrapTable);
 			if (table != null) table.needUpdate = true;
 		}
+
 		static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
-			return () -> Sr(Seq.with(
+			return () -> Seq.with(
 			 copyAsJSMenu(null, copy),
 			 ConfirmList.with("clear", Icon.trashSmall, "@clear", "@confirm.remove", () -> {
 				 self.remove();
 				 element.remove();
 			 }),
 			 MenuItem.with("path.copy", Icon.copySmall, "@copy.path", () -> {
-				 JSFunc.copyText(getPath(element));
+				 JSFunc.copyText(ElementUtils.getPath(element));
 			 }),
 			 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 				 ElementUtils.quietScreenshot(element);
@@ -609,17 +609,18 @@ public class ReviewElement extends Content {
 			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
 			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
 			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
-			 ValueLabel.newElementDetailsList(element)
-			))
-			 .ifRun(element instanceof Table, seq -> seq.add(
-				MenuItem.with("allcells", Icon.wavesSmall, "All Cells", () -> viewAllCells(self, (Table) element))
-			 ))
-			 .ifRun(element == null || element.parent instanceof Table, seq -> seq.add(
+			 ValueLabel.newElementDetailsList(element),
+
+			 element instanceof Table ?
+				MenuItem.with("allcells", Icon.wavesSmall, "All Cells", () -> viewAllCells((Table) element)) : null,
+
+			 element != null && element.parent instanceof Table ?
 				DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
-				 () -> element == null || !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
+				 () -> element != null && !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
 					 new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
-				 }))).get();
+				 }) : null);
 		}
+
 		private static Seq<MenuItem> execChildren(Element element) {
 			return Seq.with(
 			 MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
@@ -632,25 +633,9 @@ public class ReviewElement extends Content {
 			 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack)
 			);
 		}
-		private static CharSequence getPath(Element element) {
-			if (element == null) return "null";
-			Element       el = element;
-			StringBuilder sb = new StringBuilder();
-			while (el != null) {
-				if (el.name != null) {
-					return STR."Core.scene.find(\"\{el.name}\")\{sb}";
-				} else if (el instanceof Group && ShowUIList.uiKeyMap.containsKey(el)) {
-					return STR."Vars.ui.\{ShowUIList.uiKeyMap.get(el)}\{sb}";
-				} else {
-					sb.append(".children.get(").append(el.getZIndex()).append(')');
-					el = el.parent;
-				}
-			}
-			return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
-		}
 	}
 
-	private static Window viewAllCells(MyWrapTable self, Table element) {
+	private static Window viewAllCells(Table element) {
 		class AllCellsWindow extends Window implements IDisposable {
 			public AllCellsWindow() { super("All Cells"); }
 		}
@@ -660,6 +645,7 @@ public class ReviewElement extends Content {
 				super(background, cons);
 			}
 		}
+
 		Window d         = new AllCellsWindow();
 		Table  container = new Table();
 		d.cont.pane(container).grow();
@@ -675,7 +661,7 @@ public class ReviewElement extends Content {
 				Underline.of(container.row(), 20);
 			}
 		}
-		d.update(() -> d.display());
+		d.update(d::display);
 		return d;
 	}
 
@@ -684,7 +670,7 @@ public class ReviewElement extends Content {
 		return element.parent != null || element == window.element;
 	}
 
-	/** 监视children的变化  */
+	/** 监视children的变化 */
 	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
 	                                  SnapshotSeq<Element> children) {
 		if (!container.hasChildren()) {
@@ -768,7 +754,7 @@ public class ReviewElement extends Content {
 		}
 		void translation(Vec2 translation) {
 			if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
-				translationLabel.setText(STR."\{fixed(translation.x)} × \{fixed(translation.y)}");
+				translationLabel.setText(STR."\{fixed(translation.x)}, \{fixed(translation.y)}");
 		}
 		void style(Element element) {
 			try {
@@ -867,28 +853,32 @@ public class ReviewElement extends Content {
 			setPosition(x, y);
 		}
 		private void build(Table t) {
+			t.defaults().growX();
 			t.table(top -> {
 				top.add(nameLabel).padLeft(-4f);
 				top.add(sizeLabel).padLeft(10f)
-				 .growX().right().labelAlign(Align.right);
-			}).growX();
-			t.row().table(tableCons("Touchable", touchableLabel)).growX();
-			t.row().table(color -> {
-				key(color, "Color");
+				 .right().labelAlign(Align.right)
+				 .growX();
+			});
+			t.row().table(tableCons("Touchable", touchableLabel));
+			t.row().table(tableCons("Color", color -> {
 				color.add(colorContainer).size(16).padRight(4f);
 				color.add(colorLabel);
-			}).growX();
-			rotCell = makeCell(t, tableCons("Rotation", rotationLabel));
-			translationCell = makeCell(t, tableCons("Translation", translationLabel));
-			styleCell = makeCell(t, tableCons("Style", styleLabel));
-			alignCell = makeCell(t, tableCons("Align", alignLabel));
+			}));
+			rotCell = buildKey(t, "Rotation", rotationLabel);
+			translationCell = buildKey(t, "Translation", translationLabel);
+			styleCell = buildKey(t, "Style", styleLabel);
+			alignCell = buildKey(t, "Align", alignLabel);
 			cellCell = makeCell(t, _ -> {
-				colspanCell = makeCell(t, tableCons("Colspan", colspanLabel));
-				minSizeCell = makeCell(t, tableCons("MinSize", minSizeLabel));
-				maxSizeCell = makeCell(t, tableCons("MaxSize", maxSizeLabel));
-				expandCell = makeCell(t, tableCons("Expand", expandLabel));
-				fillCell = makeCell(t, tableCons("Fill", fillLabel));
+				colspanCell = buildKey(t, "Colspan", colspanLabel);
+				minSizeCell = buildKey(t, "MinSize", minSizeLabel);
+				maxSizeCell = buildKey(t, "MaxSize", maxSizeLabel);
+				expandCell = buildKey(t, "Expand", expandLabel);
+				fillCell = buildKey(t, "Fill", fillLabel);
 			});
+		}
+		private BindCell buildKey(Table t, String key, Label label) {
+			return makeCell(t, tableCons(key, label));
 		}
 	}
 
@@ -1035,15 +1025,15 @@ public class ReviewElement extends Content {
 		};
 	}
 
-	/** 如果source元素有CellView接口，drawFocus按照下面来  */
+	/** 如果source元素有CellView接口，drawFocus按照下面来 */
 	public interface CellView {
 		default void drawFocus(Element focus) {
 			if (focus == null || !(focus.parent instanceof Table table)) return;
 			drawFocus(table.getCell(focus), focus);
 		}
 		default void drawFocus(Cell<?> cl, Element focus) {
-			int   column =  CellTools.column(cl);
-			int   row    =  CellTools.row(cl);
+			int   column = CellTools.column(cl);
+			int   row    = CellTools.row(cl);
 			Table table  = cl.getTable();
 			float spanW  = table.getColumnWidth(column), spanH = table.getRowHeight(row);
 
@@ -1071,9 +1061,9 @@ public class ReviewElement extends Content {
                  */
 			int align = CellTools.align(cl);
 			float padTop = CellTools.padTop(cl),
-			 padBottom = CellTools.padBottom(cl) ,
-			 padLeft =  CellTools.padLeft(cl),
-			 padRight =  CellTools.padRight(cl);
+			 padBottom = CellTools.padBottom(cl),
+			 padLeft = CellTools.padLeft(cl),
+			 padRight = CellTools.padRight(cl);
 			// Log.info(padTop);
 
 			// 左下角为 (0, 0)

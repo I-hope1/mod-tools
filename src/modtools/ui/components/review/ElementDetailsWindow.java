@@ -1,5 +1,6 @@
 package modtools.ui.components.review;
 
+import arc.func.*;
 import arc.scene.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
@@ -9,7 +10,7 @@ import modtools.ui.components.Window;
 import modtools.ui.components.Window.IDisposable;
 import modtools.ui.content.ui.ReviewElement;
 
-import static modtools.ui.components.review.CellDetailsWindow.getAndAdd;
+import static modtools.ui.components.review.CellDetailsWindow.buildSetter;
 import static modtools.utils.ui.FormatHelper.fixed;
 
 public class ElementDetailsWindow extends Window implements IDisposable {
@@ -19,21 +20,24 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 		super("", 20, 160, true);
 		ReviewElement.addFocusSource(this, () -> this, () -> element);
 
-
 		show();
 		this.element = element;
 
 		cont.defaults().growX();
-		cont.table(setter -> {
-			setter.left().defaults().height(32).left();
-			setter.add(ReviewElement.floatSetter("x", () -> fixed(element.x), val -> element.x = val)).row();
-			setter.add(ReviewElement.floatSetter("y", () -> fixed(element.y), val -> element.y = val)).row();
-			setter.add(ReviewElement.floatSetter("Width", () -> fixed(element.getWidth()), element::setWidth)).row();
-			setter.add(ReviewElement.floatSetter("Height", () -> fixed(element.getHeight()), element::setHeight)).row();
-			setter.add(ReviewElement.floatSetter("PrefWidth", () -> fixed(element.getPrefWidth()), null)).row();
-			setter.add(ReviewElement.floatSetter("PrefHeight", () -> fixed(element.getPrefHeight()), null)).row();
-			setter.add(ReviewElement.floatSetter("Rotation", () -> fixed(element.getRotation()), element::setRotation)).row();
+		cont.table(prop -> {
+			prop.left().defaults().height(32).left();
+
+			Cons3<String, Floatp, Floatc> c3 = (label, getter, floatc) ->
+			 prop.add(ReviewElement.floatSetter(label, () -> fixed(getter.get()), floatc)).row();
+			c3.get("x", () -> element.x, val -> element.x = val);
+			c3.get("y", () -> element.y, val -> element.y = val);
+			c3.get("Width", element::getWidth, element::setWidth);
+			c3.get("Height", element::getHeight, element::setHeight);
+			c3.get("PrefWidth", element::getPrefWidth, null);
+			c3.get("PrefHeight", element::getPrefHeight, null);
+			c3.get("Rotation", element::getRotation, element::setRotation);
 		}).growX().row();
+
 		Table table = cont.table().get();
 		table.defaults().growX();
 		TextButtonStyle style = HopeStyles.flatBordert;
@@ -44,30 +48,31 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 			table.table(Tex.pane, t -> {
 				t.center().defaults().grow().center();
 				t.add();
-				getAndAdd(t, cl, "padTop");
+				buildSetter(t, cl, "padTop");
 				t.add().row();
-				getAndAdd(t, cl, "padLeft");
+				buildSetter(t, cl, "padLeft");
 				t.image();
-				getAndAdd(t, cl, "padRight").row();
+				buildSetter(t, cl, "padRight").row();
 				t.add();
-				getAndAdd(t, cl, "padBottom");
+				buildSetter(t, cl, "padBottom");
 				t.add();
 			}).colspan(2).row();
+
 			table.defaults().height(32).growX();
 			table.button("GrowX", style, cl::growX);
 			table.button("GrowY", style, cl::growY);
 			table.row();
 		}
 
-		CellDetailsWindow.checkboxField(table, Element.class, element, "fillParent", boolean.class);
-		CellDetailsWindow.checkboxField(table, Element.class, element, "visible", boolean.class).row();
+		CellDetailsWindow.checkboxField(table, Element.class, element, "fillParent");
+		CellDetailsWindow.checkboxField(table, Element.class, element, "visible").row();
 		if (element instanceof Group)
-			CellDetailsWindow.checkboxField(table, Group.class, element, "transform", boolean.class).row();
+			CellDetailsWindow.checkboxField(table, Group.class, element, "transform").row();
 
-		cont.row().defaults().height(32).growX();
-		cont.button("Invalidate", style, element::invalidate).row();
-		cont.button("InvalidateHierarchy", style, element::invalidateHierarchy).row();
-		cont.button("Layout", style, element::layout).row();
-		cont.button("Pack", style, element::pack).row();
+		cont.defaults().height(32).growX();
+		cont.row().button("Invalidate", style, element::invalidate);
+		cont.row().button("InvalidateHierarchy", style, element::invalidateHierarchy);
+		cont.row().button("Layout", style, element::layout);
+		cont.row().button("Pack", style, element::pack);
 	}
 }

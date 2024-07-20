@@ -93,6 +93,7 @@ public interface CellTools {
 		return Reflect.get(cell, f_expandY);
 	}
 
+	/** 换行并返回自己  */
 	static <T extends Element> Cell<T> rowSelf(Cell<T> cell) {
 		cell.row();
 		return cell;

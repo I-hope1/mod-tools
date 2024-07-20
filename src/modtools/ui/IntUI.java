@@ -259,9 +259,7 @@ public class IntUI {
 	}
 
 	/**
-	 * Add show menu listener.
-	 * @param elem the elem
-	 * @param list the list
+	 * @param list 关闭后自动销毁
 	 */
 	public static void
 	addShowMenuListener(Element elem, MenuItem... list) {
@@ -656,11 +654,18 @@ public class IntUI {
 		return showSelectImageTableWithIcons(button, items, icons, holder, cons, size, imageSize, cols, searchable);
 	}
 
-	/**
-	 * Window弹窗错误
-	 * @param t the t
-	 * @return the window
-	 */
+
+	/** 按shift键，忽略确认 */
+	public static void shiftIgnoreConfirm(Runnable run) {
+		if (Core.input.shift()) {
+			run.run();
+		} else {
+			IntUI.showConfirm("@confirm.remove", run);
+		}
+	}
+
+	// ----window-----
+	/** Window弹窗错误 */
 	public static Window showException(Throwable t) {
 		return showException("", t);
 	}

@@ -9,14 +9,24 @@ import java.lang.reflect.*;
 import static ihope_lib.MyReflect.unsafe;
 
 public class FieldUtils {
-	/* 获取字段，并设置override */
-	public static Field getFieldAccess(Class<?> cls, String name) {
+	/** 获取字段，并设置override */
+	public static @Nullable Field getFieldAccess(Class<?> cls, String name) {
+		try {
+			return getFieldAccessOrThrow(cls, name);
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+	/** 获取字段，并设置override
+	 *  @throws RuntimeException if class has no such field.
+	 **/
+	public static Field getFieldAccessOrThrow(Class<?> cls, String name) {
 		try {
 			Field field = cls.getDeclaredField(name);
 			field.setAccessible(true);
 			return field;
 		} catch (NoSuchFieldException e) {
-			return null;
+			throw new RuntimeException(e);
 		}
 	}
 	/** 查找包括自类的字段 */

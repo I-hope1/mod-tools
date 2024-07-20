@@ -162,49 +162,51 @@ public class ShowUIList extends Content {
 				t.row();
 				t.unbind();
 			}
-		});
-	}), styles  = newTable(true, t -> {
-		listAllStyles(t, Styles.class);
-		Tools.runLoggedException(() -> {
-			Fi json = uiConfig.child("styles.json");
-			if (!json.exists()) json.writeString("[\n]");
-			Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
-			for (Class<?> cl : classes) {
-				listAllStyles(t, cl);
-			}
-		});
-	}), colorsT = newTable(t -> {
-		Cons<Class<?>> buildColor = cls -> {
-			t.add(cls.getSimpleName()).colspan(2).color(Pal.accent).growX().row();
-			t.image().color(Pal.accent).colspan(2).growX().row();
-
-			String prefix = cls.getSimpleName() + ".";
-			for (Field field : cls.getFields()) {
-				if (!Modifier.isStatic(field.getModifiers())
-				    || !Color.class.isAssignableFrom(field.getType())) continue;
-				try {
-					// 跳过private检查，减少时间
-					field.setAccessible(true);
-					Color color = (Color) field.get(null);
-					colorKeyMap.put(color, prefix + field.getName());
-
-					t.bind(field.getName());
-					t.listener(el -> IntUI.addTooltipListener(el, "" + color));
-					t.add(new BorderImage(Core.atlas.white(), 2f)
-					 .border(color.cpy().inv())).color(color).size(42f);
-					field(t, field.getName()).growX();
-					t.listener(null);
-				} catch (IllegalAccessException | IllegalArgumentException | ClassCastException err) {
-					Log.err(err);
-				} finally {
-					t.unbind();
-				}
-				t.row();
-			}
-		};
-		buildColor.get(Color.class);
-		buildColor.get(Pal.class);
+		}
 	}),
+	 styles     = newTable(true, t -> {
+		 listAllStyles(t, Styles.class);
+		 Tools.runLoggedException(() -> {
+			 Fi json = uiConfig.child("styles.json");
+			 if (!json.exists()) json.writeString("[\n]");
+			 Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
+			 for (Class<?> cl : classes) {
+				 listAllStyles(t, cl);
+			 }
+		 });
+	 }),
+	 colorsT    = newTable(t -> {
+		 Cons<Class<?>> buildColor = cls -> {
+			 t.add(cls.getSimpleName()).colspan(2).color(Pal.accent).growX().row();
+			 t.image().color(Pal.accent).colspan(2).growX().row();
+
+			 String prefix = cls.getSimpleName() + ".";
+			 for (Field field : cls.getFields()) {
+				 if (!Modifier.isStatic(field.getModifiers())
+				     || !Color.class.isAssignableFrom(field.getType())) continue;
+				 try {
+					 // 跳过private检查，减少时间
+					 field.setAccessible(true);
+					 Color color = (Color) field.get(null);
+					 colorKeyMap.put(color, prefix + field.getName());
+
+					 t.bind(field.getName());
+					 t.listener(el -> IntUI.addTooltipListener(el, "" + color));
+					 t.add(new BorderImage(Core.atlas.white(), 2f)
+						.border(color.cpy().inv())).color(color).size(42f);
+					 field(t, field.getName()).growX();
+					 t.listener(null);
+				 } catch (IllegalAccessException | IllegalArgumentException | ClassCastException err) {
+					 Log.err(err);
+				 } finally {
+					 t.unbind();
+				 }
+				 t.row();
+			 }
+		 };
+		 buildColor.get(Color.class);
+		 buildColor.get(Pal.class);
+	 }),
 	 interps    = newTable(t -> {
 		 Table table = new Table();
 		 t.pane(table).pad(10f).grow().colspan(2).get();
@@ -231,17 +233,18 @@ public class ShowUIList extends Content {
 				 if (++c[0] % 3 == 0) table.row();
 			 });
 		 });
-	 }), uis    = newTable(t -> {
-		for (Field f : UI.class.getFields()) {
-			Object o = FieldUtils.getOrNull(f, Vars.ui);
-			if (!(o instanceof Group)) continue;
-			uiKeyMap.put((Group) o, f.getName());
-			t.bind(f.getName());
-			t.add(f.getName());
-			t.add(new FieldValueLabel(ValueLabel.unset, UI.class, f, Vars.ui));
-			t.unbind();
-		}
-	});
+	 }),
+	 uis        = newTable(t -> {
+		 for (Field f : UI.class.getFields()) {
+			 Object o = FieldUtils.getOrNull(f, Vars.ui);
+			 if (!(o instanceof Group)) continue;
+			 uiKeyMap.put((Group) o, f.getName());
+			 t.bind(f.getName());
+			 t.add(f.getName());
+			 t.add(new FieldValueLabel(ValueLabel.unset, UI.class, f, Vars.ui));
+			 t.unbind();
+		 }
+	 });
 	private static void fieldWithView(FilterTable<Object> t, Field field, Drawable drawable) {
 		if (drawable != null) {
 			t.table(p -> {
@@ -270,15 +273,15 @@ public class ShowUIList extends Content {
 				t.bind(field.getName());
 				Sr(style)
 				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
-				 .isInstance(DialogStyle.class, t,Builder::build)
-				 .isInstance(LabelStyle.class, t,Builder::build)
-				 .isInstance(SliderStyle.class, t,Builder::build)
-				 .isInstance(TextFieldStyle.class, t,Builder::build)
-				 .isInstance(CheckBoxStyle.class, t,Builder::build)
-				 .isInstance(TextButtonStyle.class, t,Builder::build)
-				 .isInstance(ImageButtonStyle.class, t,Builder::build)
-				 .isInstance(ButtonStyle.class, t,Builder::build)
-				 .isInstance(Drawable.class, t,Builder::build);
+				 .isInstance(DialogStyle.class, t, Builder::build)
+				 .isInstance(LabelStyle.class, t, Builder::build)
+				 .isInstance(SliderStyle.class, t, Builder::build)
+				 .isInstance(TextFieldStyle.class, t, Builder::build)
+				 .isInstance(CheckBoxStyle.class, t, Builder::build)
+				 .isInstance(TextButtonStyle.class, t, Builder::build)
+				 .isInstance(ImageButtonStyle.class, t, Builder::build)
+				 .isInstance(ButtonStyle.class, t, Builder::build)
+				 .isInstance(Drawable.class, t, Builder::build);
 			} catch (IllegalAccessException | IllegalArgumentException err) {
 				Log.err(err);
 				continue;

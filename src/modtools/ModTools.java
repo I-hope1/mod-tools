@@ -74,6 +74,7 @@ public class ModTools extends Mod {
 		IntVars.dispose();
 		MyEvents.dispose();
 		MyFonts.dispose();
+		System.gc();
 	}
 	private void extending() {
 		if (E_Extending.http_redirect.enabled()) {

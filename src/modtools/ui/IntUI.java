@@ -415,8 +415,7 @@ public class IntUI {
 		if (vec2 == null) throw new NullPointerException("vec2 cannot be null");
 		SelectTable t = basicSelectTable(vec2, searchable, f);
 		t.update(() -> {
-			Tmp.v1.set(vec2);
-			t.setPosition(Tmp.v1.x, Tmp.v1.y, Align.topLeft);
+			t.setPosition(vec2.x, vec2.y, Align.topLeft);
 			checkBound(t);
 		});
 		return t;
@@ -1156,7 +1155,6 @@ public class IntUI {
 		}
 		Hitter hitter = new Hitter(this::hideInternal);
 		final void hideInternal() {
-			hitter.remove();
 			actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
 			 Actions.run(() -> fire(new VisibilityEvent(true))),
 			 Actions.remove());

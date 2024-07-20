@@ -598,7 +598,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			if (!Core.scene.hasField() && keycode == KeyCode.escape && Hitter.any()) {
 				Hitter peek = Hitter.peek();
 				if (!peek.isTouchable()) break hitter;
-				peek.fireClick();
+				peek.hide();
 				if (!Hitter.contains(peek)) HopeInput.justPressed.remove(KeyCode.escape.ordinal());
 			}
 			return super.keyDown(event, keycode);

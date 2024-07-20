@@ -9,8 +9,10 @@ import modtools.ui.control.HopeInput;
 public class Hitter extends FillElement implements IMenu {
 	private static final Seq<Hitter> all = new Seq<>();
 	public               boolean     autoClose;
+	// public int id;
 	public Hitter() {
 		all.add(this);
+		// id = all.size;
 		autoClose = false;
 	}
 	public Hitter(Runnable clicked) {
@@ -19,7 +21,7 @@ public class Hitter extends FillElement implements IMenu {
 		autoClose = true;
 	}
 	public boolean canHide() {
-		return this == Hitter.peek() || this.getZIndex() > Hitter.peek().getZIndex();
+		return this == Hitter.peek() || this.getZIndex() >= Hitter.peek().getZIndex();
 	}
 	/** @return true if the hitter hide successfully.  */
 	public boolean hide() {
@@ -53,4 +55,8 @@ public class Hitter extends FillElement implements IMenu {
 	public static boolean contains(Hitter hitter) {
 		return all.contains(hitter);
 	}
+
+	/* public String toString() {
+		return "Hitter" + id;
+	} */
 }

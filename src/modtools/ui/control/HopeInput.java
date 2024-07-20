@@ -6,7 +6,7 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.struct.*;
 import arc.util.*;
-import modtools.utils.Tools;
+import modtools.utils.*;
 
 import static modtools.IntVars.mouseVec;
 
@@ -26,10 +26,7 @@ public class HopeInput {
 	public static void load() {
 		listener = new MouseListener();
 		Core.scene.addCaptureListener(listener);
-		Tools.TASKS.add(() -> {
-			hit = null;
-			listener.down = false;
-		});
+		Tools.TASKS.add(() -> hit = null);
 		try {
 			load0();
 		} catch (Throwable e) {
@@ -65,6 +62,7 @@ public class HopeInput {
 		public boolean down;
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			down = true;
+			TaskManager.scheduleOrCancel(0.1f, () -> down = false);
 			return true;
 		}
 

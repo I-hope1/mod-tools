@@ -3,12 +3,10 @@ package modtools.ui.components.utils;
 import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
-import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.style.*;
-import arc.scene.ui.Label;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Cell;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
@@ -99,31 +97,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 	public long getOffset() {
 		throw new UnsupportedOperationException("Not implemented yet");
 	}
-	/* public float getPrefWidth() {
-		if (prefSizeInvalid) computePrefSize();
-		return getLastSize().x;
-	}
-	public float getPrefHeight() {
-		if (prefSizeInvalid) computePrefSize();
-		return getLastSize().y;
-	} */
-	// Method m = Label.class.getDeclaredMethod("scaleAndComputePrefSize");
-	void computePrefSize() {
-		prefSizeInvalid = true;
-		wrap = true;
-		Reflect.invoke(Label.class, this, "scaleAndComputePrefSize", null);
-		prefSizeInvalid = false;
-		wrap = false;
-		getLastSize().x = Mathf.clamp(super.getPrefWidth(), 64, 800);
-		getLastSize().y = Math.max(Math.max(super.getPrefHeight(), getHeight()), 40);
-		wrap = true;
-	}
 
-	private Vec2 lastSize;
-	public Vec2 getLastSize() {
-		if (lastSize == null) lastSize = new Vec2();
-		return lastSize;
-	}
 	private void resolveThrow(Object val, Throwable th) {
 		Log.err(th);
 		IntUI.showException(th);
@@ -144,8 +118,14 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		super.layout();
 	}
 
-	@SuppressWarnings("ConstantConditions")
 	public CharSequence dealVal(Object val) {
+		CharSequence text = dealVal0(val);
+		addText(text, color);
+		return text;
+	}
+
+	@SuppressWarnings("ConstantConditions")
+	public CharSequence dealVal0(Object val) {
 		if (val instanceof ObjectMap || val instanceof Map) {
 			StringBuilder sb = new StringBuilder();
 			sb.append('{');
@@ -285,6 +265,8 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
 	}
 	void setText0(CharSequence newText) {
+		clearText();
+		Log.info(newText);
 		if (newText == null || newText.length() == 0) {
 			newText = "<EMPTY>";
 			setColor(Color.gray);

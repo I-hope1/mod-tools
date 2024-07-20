@@ -25,38 +25,19 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		ClassType   drawable       = (ClassType) drawableSymbol.type;
 		ClassType   texture        = findType("arc.graphics.Texture");
 		// ClassType   pixmap         = findType("arc.graphics.Pixmap");
-		ClassType   fiType         = findType("arc.files.Fi");
 
-		/* ClassType map = (ClassType) findType("arc.struct.ObjectMap").constType(123);
-		map.typarams_field = List.of(stringType, pixmap);
-
-		addImport(element, map); */
 		addImport(element, drawableSymbol);
-		addImport(element, fiType);
-		// addImport(element, pixmap);
-		// addImport(element, /* Pixmaps */findClassSymbol("arc.graphics.Pixmaps"));
 		addImport(element, /* TextureRegion */findClassSymbol("arc.graphics.g2d.TextureRegion"));
 		addImport(element, findClassSymbol("arc.graphics.Texture"));
 		// addImport(element, findClassSymbol("arc.Core"));
 
 		StringBuilder sb = new StringBuilder();
-		sb.append("if (root == null) root = mindustry.Vars.mods.getMod(").append(icons.mainClass().getName()).append(".class).root;");
-		sb.append("dir = root.child(\"").append(icons.iconDir()).append("\");");
+		sb.append("modName = mindustry.Vars.mods.getMod(").append(icons.mainClass().getName()).append(".class).name;");
 		stringType.tsym.owner.kind = Kind.VAR;
 		texture.tsym.owner.kind = Kind.VAR;
 		// map.tsym.owner.kind = Kind.VAR;
-		addField(root, Flags.STATIC | Flags.PRIVATE, fiType,
-		 "root", null).vartype = mMaker.Ident(fiType.tsym);
-		addField(root, Flags.STATIC | Flags.PRIVATE, fiType,
-		 "dir", null).vartype = mMaker.Ident(fiType.tsym);
-		var p1Fi = makeVar(Flags.PARAMETER, fiType, "p1Fi", null, root.sym);
-		p1Fi.vartype = mMaker.Ident(fiType.tsym);
-		JCMethodDecl setRoot = mMaker.MethodDef(
-		 mMaker.Modifiers(Flags.PUBLIC | Flags.STATIC),
-		 ns("setRoot"), mMaker.Ident(mSymtab.voidType.tsym),
-		 List.nil(), List.of(p1Fi),
-		 List.nil(), parseBlock("{root = p1Fi;}"), null);
-		root.defs = root.defs.append(setRoot);
+		addField(root, Flags.STATIC | Flags.PRIVATE, stringType,
+		 "modName", null).vartype = mMaker.Ident(stringType.tsym);
 		stringType.tsym.owner.kind = Kind.PCK;
 		texture.tsym.owner.kind = Kind.PCK;
 		// map.tsym.owner.kind = Kind.PCK;
@@ -68,10 +49,7 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		JCMethodDecl n = mMaker.MethodDef(
 		 mMaker.Modifiers(Flags.PRIVATE | Flags.STATIC),
 		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),
-		 List.nil(), parseBlock("{Texture t = new Texture(dir.child(name));" +
-														"t.setFilter(Texture.TextureFilter.linear);" +
-														"return new TextureRegionDrawable(new TextureRegion(t));" +
-														"}"), null);
+		 List.nil(), parseBlock("{return (TextureRegionDrawable)arc.Core.atlas.drawable(modName+\"-\"+name);}"), null);
 		root.defs = root.defs.append(n);
 		for (File fi : findAll(new File("./assets/" + icons.iconDir()))
 		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new)) {
@@ -81,7 +59,7 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 			addField(root, Flags.STATIC | Flags.PUBLIC,
 			 drawable, f_name, null);
 			drawable.tsym.owner.kind = last;
-			sb.append(f_name).append("=n(\"").append(fi.getName()).append("\");");
+			sb.append(f_name).append("=n(\"").append(nameWithoutExtension(fi)).append("\");");
 		}
 
 		// 添加load方法
@@ -105,8 +83,8 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		root.mods = mMaker.Modifiers(0);
 		root.name = ns(s);
 		var source = /* unit.getSourceFile() */
-		 mFiler.createSourceFile((icons.genPackage().equals(".") ? element.getEnclosingElement().toString() :icons.genPackage())
-			+ "." + genName);
+		 mFiler.createSourceFile((icons.genPackage().equals(".") ? element.getEnclosingElement().toString() : icons.genPackage())
+		                         + "." + genName);
 		Writer writer = source.openWriter();
 		writer.write(content);
 		root.defs = List.nil();

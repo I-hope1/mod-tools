@@ -154,7 +154,6 @@ public class ModTools extends Mod {
 		MyFonts.load();
 		HopeInput.load();
 		// 加载HopeIcons
-		HopeIcons.setRoot(root);
 		HopeIcons.load();
 		// new DrawablePicker().show(IntUI.whiteui, true, _ -> {});
 		if (isDesktop()) {

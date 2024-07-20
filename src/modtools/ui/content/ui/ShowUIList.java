@@ -141,9 +141,11 @@ public class ShowUIList extends Content {
 		t.unbind();
 	})), tex    = newTable(t -> {
 		String prefix = "Tex.";
-		ClassUtils.walkPublicNotStaticKeys(Tex.class, field -> {
+		for (Field field : Tex.class.getFields()) {
 			Drawable drawable = null;
 			try {
+				// 是否为static
+				if (!Modifier.isStatic(field.getModifiers())) return;
 				// 是否为Drawable
 				if (!Drawable.class.isAssignableFrom(field.getType())) return;
 				t.bind(field.getName());

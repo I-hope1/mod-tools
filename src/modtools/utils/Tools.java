@@ -192,7 +192,7 @@ public class Tools {
 		}
 	}
 
-	/** 对run封装，捕获报错  */
+	/** 对run封装，捕获报错 */
 	public static Runnable runT0(Runnable run) {
 		return () -> {
 			try {
@@ -234,24 +234,26 @@ public class Tools {
 	}
 	public static <T> Prov<T> provT(Prov<T> prov) {
 		return () -> {
-      try {
-        return prov.get();
-      } catch (Throwable e) {
-        Log.err(e);
+			try {
+				return prov.get();
+			} catch (Throwable e) {
+				Log.err(e);
 				return null;
-      }
+			}
 		};
 	}
-	public static Runnable delegate(Runnable r, Boolp stopBoolp){
-		return new Runnable() {
-			Runnable r0 = () -> {
-				if (stopBoolp.get()) r0 = () -> {};
-				r.run();
-			};
+	public static Runnable delegate(Runnable r, Boolp stopBoolp) {
+		var run = new Runnable() {
+			Runnable r0;
 			public void run() {
 				r0.run();
 			}
 		};
+		run.r0 = () -> {
+			if (stopBoolp.get()) run.r0 = () -> { };
+			r.run();
+		};
+		return run;
 	}
 
 	public static <T> T setLogger(LogHandler logger, Prov<T> prov) {

@@ -3,7 +3,7 @@ package modtools.ui.style;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.scene.style.Drawable;
-import modtools.utils.StringUtils;
+import modtools.utils.ui.FormatHelper;
 
 public class DelegatingDrawable implements Drawable {
 	public Drawable drawable;
@@ -69,9 +69,9 @@ public class DelegatingDrawable implements Drawable {
 
 	public String toString() {
 		try {
-			if (color == Color.white) return StringUtils.getUIKeyOrNull(drawable);
+			if (color == Color.white) return FormatHelper.getUIKeyOrNull(drawable);
 
-			return STR."\{StringUtils.getUIKeyOrNull(drawable)}#\{color.toString()}";
+			return STR."\{FormatHelper.getUIKeyOrNull(drawable)}#\{color.toString()}";
 		} catch (Throwable e) {
 			return drawable + "#" + color;
 		}

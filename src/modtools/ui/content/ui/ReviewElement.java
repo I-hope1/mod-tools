@@ -760,12 +760,12 @@ public class ReviewElement extends Content {
 			try {
 				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
 				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
-					styleLabel.setText(StringUtils.fieldFormat(ShowUIList.styleKeyMap.get(style)));
+					styleLabel.setText(FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));
 			} catch (Throwable e) { styleCell.remove(); }
 		}
 		void align(Element element) {
 			if (alignCell.toggle1(element instanceof Table))
-				alignLabel.setText(StringUtils.align(((Table) element).getAlign()));
+				alignLabel.setText(FormatHelper.align(((Table) element).getAlign()));
 		}
 		void colspan(Cell<?> cell) {
 			if (cell == null) {
@@ -911,7 +911,7 @@ public class ReviewElement extends Content {
 
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
 			table.sizeLabel.setText(posText(elem));
-			table.touchableLabel.setText(StringUtils.touchable(elem.touchable));
+			table.touchableLabel.setText(FormatHelper.touchable(elem.touchable));
 			table.touchableLabel.setColor(touchableToColor(elem.touchable));
 			table.color(elem.color);
 			table.rotation(elem.rotation);

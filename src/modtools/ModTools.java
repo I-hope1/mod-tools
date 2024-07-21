@@ -35,12 +35,14 @@ import static modtools.utils.MySettings.SETTINGS;
 public class ModTools extends Mod {
 	/** 是否从游戏内导入进来的 */
 	static        boolean   isImportFromGame = false;
+	/** 如果有（不为null），在进入是显示  */
 	public static Throwable error            = null;
 	public static Fi        libs             = root.child("libs");
 
 	public static  boolean isV6   = Version.number <= 135;
-	private static boolean loaded = false;
 
+
+	private static boolean loaded = false;
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");
 		loaded = true;

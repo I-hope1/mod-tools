@@ -1,6 +1,6 @@
 package modtools.utils.reflect;
 
-import modtools.utils.ElementUtils.MarkedCode;
+import modtools.utils.ui.ReflectTools.MarkedCode;
 
 /** @see java.lang.reflect.Modifier */
 public enum ModifierR implements MarkedCode {

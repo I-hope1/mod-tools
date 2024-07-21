@@ -198,7 +198,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
 
 				: val instanceof Element ? ElementUtils.getElementName((Element) val)
-				: StringUtils.getUIKey(val))
+				: FormatHelper.getUIKey(val))
 			.get(() -> String.valueOf(val))
 			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> Tools.clName(val))
@@ -329,7 +329,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 					Object fieldVal = FieldUtils.getOrNull(field, val);
 					if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
 					String uiKey = CatchSR.apply(() ->
-					 CatchSR.of(() -> StringUtils.getUIKey(fieldVal))
+					 CatchSR.of(() -> FormatHelper.getUIKey(fieldVal))
 						.get(() -> String.valueOf(fieldVal))
 					);
 					builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
@@ -342,7 +342,7 @@ public abstract class ValueLabel extends ElementInlineLabel {
 				 Seq.with(ShowUIList.styleKeyMap.keySet())
 					.retainAll(type::isInstance),
 				 () -> (Style) val, this::setNewVal,
-				 s -> StringUtils.fieldFormat(ShowUIList.styleKeyMap.get(s)),
+				 s -> FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(s)),
 				 Float.NEGATIVE_INFINITY, 32,
 				 true, Align.top);
 			}));

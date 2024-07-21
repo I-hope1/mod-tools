@@ -24,7 +24,7 @@ import modtools.ui.comp.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
-import modtools.utils.StringUtils;
+import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.Method;
 
@@ -198,7 +198,7 @@ public interface ISettings extends E_DataInterface {
 		String   s        = getString();
 		int      index    = s.indexOf('#');
 		String   key      = index == -1 ? s : s.substring(0, index);
-		Drawable drawable = StringUtils.lookupUI(key);
+		Drawable drawable = FormatHelper.lookupUI(key);
 		return new DelegatingDrawable(or(drawable, def),
 		 index == -1 ? Color.white : Color.valueOf(s.substring(index)));
 	}
@@ -325,9 +325,9 @@ public interface ISettings extends E_DataInterface {
 		main.table(new Cons<>() {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
-				t.label(() -> StringUtils.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
+				t.label(() -> FormatHelper.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
 				PreviewUtils.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
-					set(StringUtils.getUIKey(d));
+					set(FormatHelper.getUIKey(d));
 
 					cons.get(d);
 					drawable[0] = d;

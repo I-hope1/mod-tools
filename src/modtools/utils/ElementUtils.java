@@ -7,16 +7,13 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
-import arc.scene.style.Drawable;
 import arc.scene.ui.ScrollPane;
-import arc.scene.ui.layout.*;
 import arc.util.*;
-import mindustry.ui.Styles;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.effect.ScreenSampler;
+import modtools.utils.ui.ReflectTools;
 
 import java.util.Optional;
 
@@ -125,60 +122,11 @@ public interface ElementUtils {
 		return findParent(el, e -> e instanceof Window);
 	}
 
-	static String getSimpleName(Class<?> clazz) {
-		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
-			clazz = clazz.getSuperclass();
-		}
-		return clazz.getSimpleName();
-	}
 	static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
-		 : STR."\{getSimpleName(element.getClass())}\{
+		 : STR."\{ReflectTools.getSimpleName(element.getClass())}\{
 		 element.name != null ? " ★" + element.name + "★" : ""
 		 }";
-	}
-
-
-	/** 具有code的接口 */
-	interface MarkedCode {
-		int code();
-		String name();
-		default Drawable icon() {
-			return null;
-		}
-	}
-
-	static void addCodedBtn(
-	 Table t, String text, int cols,
-	 Intc cons, Intp prov, MarkedCode... seq) {
-		t.button("", HopeStyles.flatt, null).with(tbtn -> {
-			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, _, _) -> {
-				buildModifier(p, cols, cons, prov, seq);
-			}, false, Align.center));
-			Table fill = tbtn.fill();
-			fill.top().add(text, 0.6f).growX().labelAlign(Align.left).color(Color.lightGray);
-			tbtn.getCell(fill).colspan(0);
-			tbtn.getCells().reverse();
-		}).size(85, 32).update(b -> b.setText(String.format("%X", (short) prov.get())));
-	}
-
-	private static void buildModifier(Table p, int cols, Intc cons, Intp prov, MarkedCode... seq) {
-		p.button("All", HopeStyles.flatToggleMenut,
-			() -> cons.get(prov.get() != -1 ? -1 : 0))
-		 .growX().colspan(4).height(42)
-		 .update(b -> b.setChecked(prov.get() == -1))
-		 .row();
-		int c = 0;
-		for (var value : seq) {
-			int      bit      = 1 << value.code();
-			Runnable runnable = () -> cons.get(prov.get() ^ bit);
-			Drawable icon     = value.icon();
-			(icon == null ? p.button(value.name(), Styles.flatToggleMenut, runnable)
-			 : p.button(value.name(), value.icon(), Styles.flatToggleMenut, 24, runnable))
-			 .size(120, 42)
-			 .update(b -> b.setChecked((prov.get() & bit) != 0));
-			if (++c % cols == 0) p.row();
-		}
 	}
 
 }

@@ -8,6 +8,7 @@ import modtools.utils.reflect.FieldUtils;
 import java.lang.reflect.Field;
 
 public interface CellTools {
+	/* 获取一些字段 */
 	Field f_column       = f("column"),
 	 f_row               = f("row"),
 	 f_align             = f("align"),
@@ -24,6 +25,7 @@ public interface CellTools {
 	 f_fillY             = f("fillY"),
 	 f_expandX           = f("expandX"),
 	 f_expandY           = f("expandY");
+
 	/** @see Cell#unset  */
 	float unset = Float.NEGATIVE_INFINITY;
 
@@ -47,11 +49,11 @@ public interface CellTools {
 		Reflect.set(cell, f_row, value);
 	}
 
+	// 下面的不用setter
+
 	static int align(Cell<?> cell) {
 		return Reflect.get(cell, f_align);
 	}
-
-	// 下面的不用setter
 	static float padLeft(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadLeft);
 	}

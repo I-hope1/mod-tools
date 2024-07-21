@@ -24,6 +24,7 @@ import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.content.Content;
 import modtools.utils.*;
+import modtools.utils.ui.ReflectTools;
 import modtools.utils.ui.search.FilterTable;
 import rhino.BaseFunction;
 
@@ -46,7 +47,7 @@ public class Executor extends Content {
 			build(p);
 			p.invalidateHierarchy();
 		}).size(72, 42);
-		ElementUtils.addCodedBtn(ui.cont, "status", 1,
+		ReflectTools.addCodedBtn(ui.cont, "status", 1,
 		 i -> statusCode = i, () -> statusCode,
 		 StatusList.values());
 		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {

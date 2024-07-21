@@ -143,7 +143,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}).height(42).row();
 		// 搜索栏
 		topTable.table(t -> {
-			ElementUtils.addCodedBtn(t, "modifiers", 4,
+			addCodedBtn(t, "modifiers", 4,
 			 i -> {
 				 modifiers = i;
 				 rebuild0.run();

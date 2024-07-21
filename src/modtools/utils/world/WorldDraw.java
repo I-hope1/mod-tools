@@ -9,27 +9,18 @@ import arc.math.geom.*;
 import arc.struct.*;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
-import modtools.utils.ElementUtils;
+import modtools.utils.*;
+
+import static modtools.ui.IntUI.topGroup;
 
 
 public class WorldDraw {
-	// 玩家渲染区域
+	/** 玩家视野（渲染区域） */
 	public static final Rect CAMERA_RECT = new Rect();
+	/** 玩家视野的中心坐标 */
 	public static final Vec2 center      = new Vec2();
 
-	public static ObjectSet<Runnable> tasks       = new ObjectSet<>();
-	public static Runnable            postDrawRun = () -> {
-		// check disposed.
-		if (tasks.isEmpty()) return;
-		Draw.reset();
-		Draw.flush();
-		CAMERA_RECT.setPosition(Core.camera.unproject(0, 0));
-		Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
-		CAMERA_RECT.setSize(v2.x - CAMERA_RECT.x, v2.y - CAMERA_RECT.y);
-		CAMERA_RECT.getCenter(center);
-		tasks.each(Runnable::run);
-		Draw.reset();
-	};
+	public static ObjectSet<Runnable> tasks = new ObjectSet<>();
 
 	public final Seq<Boolp> drawSeq = new Seq<>();
 	public       float      alpha   = 1;
@@ -75,7 +66,16 @@ public class WorldDraw {
 	}
 
 	public static void registerEvent() {
-		Events.run(Trigger.postDraw, postDrawRun);
+		Events.run(Trigger.postDraw, Tools.delegate(() -> {
+			Draw.reset();
+			Draw.flush();
+			CAMERA_RECT.setPosition(Core.camera.unproject(0, 0));
+			Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
+			CAMERA_RECT.setSize(v2.x - CAMERA_RECT.x, v2.y - CAMERA_RECT.y);
+			CAMERA_RECT.getCenter(center);
+			tasks.each(Runnable::run);
+			Draw.reset();
+		}, topGroup::isDisposed));
 	}
 
 	public static TextureRegion drawRegion(int width, int height, Runnable draw) {

@@ -21,7 +21,7 @@ public class LanguageSwitcher {
 		I18NBundle newBundle = I18NBundle.createBundle(handle, locale);
 		addKeyToBundle(newBundle);
 		for (var k : origin.getKeys()) {
-			StringUtils.changeByte(origin.get(k), newBundle.get(k));
+			StringUtils.copyByte(origin.get(k), newBundle.get(k));
 		}
 		// Core.bundle = newBundle;
 	}

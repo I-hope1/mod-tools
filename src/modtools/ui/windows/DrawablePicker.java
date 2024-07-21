@@ -26,6 +26,7 @@ import modtools.ui.style.*;
 import modtools.utils.SR.CatchSR;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
+import modtools.utils.ui.FormatHelper;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
@@ -100,7 +101,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 			t.table(Styles.black6, buttons -> {
 				buttons.label(() -> CatchSR.apply(() ->
-				 CatchSR.of(() -> StringUtils.getUIKey(drawable))
+				 CatchSR.of(() -> FormatHelper.getUIKey(drawable))
 					.get(() -> "" + drawable)
 				)).fontScale(0.6f).row();
 				buttons.left().defaults().growX().height(32).padRight(4f);

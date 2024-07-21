@@ -59,7 +59,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		}).colspan(2).growX().row();
 		cont.left().defaults().height(32).growX().left();
 		cont.add("Align: ").color(themeColor);
-		cont.label(() -> StringUtils.align(CellTools.align(cell))).row();
+		cont.label(() -> FormatHelper.align(CellTools.align(cell))).row();
 		cont.defaults().colspan(2);
 		buildWithName(cont, cell, "minWidth");
 		buildWithName(cont, cell, "minHeight");

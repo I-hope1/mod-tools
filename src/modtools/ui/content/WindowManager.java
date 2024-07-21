@@ -7,10 +7,9 @@ import arc.scene.ui.layout.Table;
 import mindustry.gen.*;
 import modtools.ui.*;
 import modtools.ui.gen.HopeIcons;
-import modtools.ui.components.Window;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.IntUI;
-import modtools.utils.TaskManager;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.utils.*;
 
 public class WindowManager extends Content {
 	public WindowManager() {
@@ -39,7 +38,7 @@ public class WindowManager extends Content {
 		Window.all.each(window -> {
 			if (window == ui) return;
 			Table top = new Table(Tex.pane);
-			cont.add(top).growX().with(t -> IntUI.doubleClick(t, null, () -> {
+			cont.add(top).growX().with(t -> EventHelper.doubleClick(t, null, () -> {
 				window.invalidateHierarchy();
 				window.display();
 			})).row();

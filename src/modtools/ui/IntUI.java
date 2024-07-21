@@ -3,10 +3,8 @@ package modtools.ui;
 
 import arc.Core;
 import arc.func.*;
-import arc.graphics.*;
-import arc.graphics.g2d.*;
-import arc.graphics.g2d.TextureAtlas.AtlasRegion;
-import arc.graphics.gl.FileTextureData;
+import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
@@ -18,31 +16,25 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import arc.util.Timer.Task;
-import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
-import mindustry.graphics.MultiPacker.PageType;
-import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
-import modtools.jsfunc.*;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.*;
-import modtools.ui.components.*;
-import modtools.ui.components.Window.*;
-import modtools.ui.content.ui.PairProv.SizeProv;
+import modtools.ui.comp.*;
+import modtools.ui.comp.Window.*;
+import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
-import modtools.ui.menu.MenuItem;
 import modtools.ui.windows.*;
 import modtools.utils.*;
 import modtools.utils.JSFunc.*;
-import modtools.utils.ui.*;
+import modtools.utils.ui.WatchWindow;
 import modtools.utils.ui.search.Search;
 
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static arc.Core.graphics;
@@ -50,11 +42,9 @@ import static mindustry.Vars.*;
 import static modtools.IntVars.mouseVec;
 import static modtools.graphics.MyShaders.baseShader;
 import static modtools.ui.Contents.tester;
-import static modtools.ui.components.utils.ValueLabel.DEBUG;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
-import static modtools.utils.ElementUtils.*;
-import static modtools.utils.Tools.*;
-import static modtools.utils.ui.CellTools.rowSelf;
+import static modtools.utils.ElementUtils.getAbsolutePos;
+import static modtools.utils.Tools.Sr;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
@@ -87,260 +77,16 @@ public class IntUI {
 			topGroup.addChild(frag);
 		}
 	}
+	public static void disposeAll() {
+		topGroup.dispose();
+		frag.clear();
+		Background.dispose();
+	}
 
 	/** 默认的动效时间（单位秒） */
 	public static final float DEF_DURATION  = 0.2f;
 	/** 默认的长按触发时间（单位ms） */
 	public static final long  DEF_LONGPRESS = 600L;
-
-	static final Vec2 last = new Vec2();
-	/**
-	 * <p>创建一个双击事件</p>
-	 * <p color="gray">我还做了位置偏移计算，防止误触</p>
-	 * @param <T>     the type parameter
-	 * @param elem    被添加侦听器的元素
-	 * @param click   单击事件
-	 * @param d_click 双击事件
-	 * @return the t
-	 */
-	public static <T extends Element> T
-	doubleClick(T elem, Runnable click, Runnable d_click) {
-		if (click == null && d_click == null) return elem;
-		final Runnable click1 = click == null ? null : runT(click::run),
-		 d_click1 = d_click == null ? null : runT(d_click::run);
-		class ClickTask extends Task {
-			public void run() {
-				if (click1 != null) click1.run();
-			}
-		}
-		class DoubleClick extends ClickListener {
-			final Task clickTask = new ClickTask();
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				last.set(mouseVec);
-				return super.touchDown(event, x, y, pointer, button);
-			}
-			public void clicked(InputEvent event, float x, float y) {
-				if (last.dst(mouseVec) > MAX_OFF) return;
-				super.clicked(event, x, y);
-				if (click1 != null && d_click1 == null) {
-					click1.run();
-					return;
-				}
-				if (TaskManager.scheduleOrCancel(0.3f, clickTask)) {
-					last.set(mouseVec);
-					return;
-				}
-				if (mouseVec.dst(last) < MAX_OFF) d_click1.run();
-			}
-		}
-		elem.addListener(new DoubleClick());
-		return elem;
-	}
-
-	/**
-	 * 长按事件
-	 * @param <T>      the type parameter
-	 * @param elem     被添加侦听器的元素
-	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param boolc0   {@link Boolc#get(boolean b)}形参{@code b}为是否长按
-	 * @return the t
-	 */
-	public static <T extends Element> T
-	longPress(T elem, final long duration, final Boolc boolc0) {
-		Boolc boolc = b -> Tools.runLoggedException(() -> boolc0.get(b));
-		class LongPressListener extends ClickListener {
-			boolean longPress;
-			class LongPressTask extends Task {
-				public void run() {
-					if (pressed && mouseVec.dst(last) < MAX_OFF) {
-						longPress = true;
-						boolc.get(true);
-					}
-				}
-			}
-			final Task task = new LongPressTask();
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (event.stopped) return false;
-				longPress = false;
-				if (super.touchDown(event, x, y, pointer, button)) {
-					last.set(mouseVec);
-					task.cancel();
-					Timer.schedule(task, duration / 1000f);
-					return true;
-				}
-				return false;
-			}
-			public void clicked(InputEvent event, float x, float y) {
-				// super.clicked(event, x, y);
-				if (longPress) return;
-				if (task.isScheduled() && pressed) boolc.get(false);
-				task.cancel();
-			}
-		}
-		elem.addCaptureListener(new LongPressListener());
-		return elem;
-	}
-
-	public static <T extends Element> T
-	longPress(T elem, final Boolc boolc) {
-		return longPress(elem, DEF_LONGPRESS, boolc);
-	}
-	/**
-	 * 长按事件
-	 * @param <T>      the type parameter
-	 * @param elem     被添加侦听器的元素
-	 * @param duration 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
-	 * @param run      长按时调用
-	 * @return the t
-	 */
-	public static <T extends Element> T
-	longPress0(T elem, final long duration, final Runnable run) {
-		return longPress(elem, duration, b -> {
-			if (b) run.run();
-		});
-	}
-	public static <T extends Element> T
-	longPress0(T elem, final Runnable run) {
-		return longPress0(elem, DEF_LONGPRESS, run);
-	}
-
-	/**
-	 * 添加右键事件
-	 * @param <T>  the type parameter
-	 * @param elem 被添加侦听器的元素
-	 * @param run  右键执行的代码
-	 * @return the t
-	 */
-	public static <T extends Element> T
-	rightClick(T elem, Runnable run) {
-		class HClickListener extends ClickListener {
-			HClickListener() { super(KeyCode.mouseRight); }
-			public void clicked(InputEvent event, float x, float y) {
-				if (event.stopped) return;
-				run.run();
-				event.stop();
-			}
-		}
-		elem.addListener(new HClickListener());
-		return elem;
-	}
-
-	/**
-	 * <p>long press for {@link Vars#mobile moblie}</p>
-	 * <p>r-click for desktop</p>
-	 * @param <T>     the type parameter
-	 * @param element the element
-	 * @param run     the run
-	 * @return the t
-	 */
-	@SuppressWarnings("UnusedReturnValue")
-	public static <T extends Element> T
-	longPressOrRclick(T element, Consumer<T> run) {
-		return mobile ? longPress0(element, () -> run.accept(element))
-		 : rightClick(element, () -> run.accept(element));
-	}
-
-	/**
-	 * Add show menu listener.
-	 * @param elem 元素
-	 * @param prov menu提供者
-	 */
-	public static void
-	addShowMenuListenerp(Element elem, Prov<Seq<MenuItem>> prov) {
-		longPressOrRclick(elem, _ -> showMenuListDispose(prov));
-	}
-	/**
-	 * Dispose after close.
-	 * @param prov menu提供者
-	 */
-	public static void showMenuListDispose(Prov<Seq<MenuItem>> prov) {
-		Seq<MenuItem> list = prov.get();
-		showMenuList(list, () -> Pools.freeAll(list, false));
-	}
-
-	/**
-	 * @param list 关闭后自动销毁
-	 */
-	public static void
-	addShowMenuListener(Element elem, MenuItem... list) {
-		longPressOrRclick(elem, _ -> {
-			showMenuList(Seq.with(list));
-		});
-	}
-	public static void
-	addShowMenuListener(Element elem, Iterable<MenuItem> list) {
-		longPressOrRclick(elem, _ -> showMenuList(list));
-	}
-	public static void showMenuList(Iterable<MenuItem> list) {
-		showMenuList(list, null);
-	}
-	public static void showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
-		showSelectTableRB(mouseVec.cpy(), (p, hide, _) -> {
-			showMenuList(list, hiddenListener, p, hide);
-		}, false);
-	}
-	public static SelectTable showMenuListFor(
-	 Element elem,
-	 int align, Prov<Seq<MenuItem>> prov) {
-		return showSelectTable(elem, (p, hide, _) -> {
-			Seq<MenuItem> list = prov.get();
-			showMenuList(list, freeAllMenu(list), p, hide);
-		}, false, align);
-	}
-	public static Runnable freeAllMenu(Seq<MenuItem> list) {
-		return () -> Pools.freeAll(list, false);
-	}
-
-	/** TODO: 多个FoldedList有问题 */
-	public static Cell<ScrollPane> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
-	                                            Table p, Runnable hideRun) {
-		{// 修改p
-			ScrollPane pane = findClosestPane(p);
-			if (pane != null) {
-				p = (Table) pane.parent;
-			}
-		}
-
-		Table main = new Table();
-
-		for (var menu : list) {
-			if (menu == null) continue;
-
-			var cell = rowSelf(main.button(menu.getName(), menu.icon, menu.style(),
-				menu.iconSize(), () -> { }
-			 ).minSize(Float.NEGATIVE_INFINITY, FUNCTION_BUTTON_SIZE)
-			 .growX().left()
-			 .marginLeft(5f).marginRight(5f)
-			 .wrapLabel(false));
-			// cell.get().getLabel().setFontScale(0.9f);
-			cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
-
-			menu.build(p, cell, () -> {
-				hideRun.run();
-				if (hiddenListener != null) hiddenListener.run();
-			});
-		}
-		main.pack();
-
-		return p.pane(Styles.smallPane, main).growY();
-	}
-	/**
-	 * Menu `Copy ${key} As Js` constructor.
-	 * @param prov 对象提供
-	 * @return a menu.
-	 */
-	@SuppressWarnings("StringTemplateMigration")
-	public static MenuItem copyAsJSMenu(String key, Prov<Object> prov) {
-		return MenuItem.with(key + ".copy", Icon.copySmall,
-		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
-		 storeRun(prov));
-	}
-	@SuppressWarnings("StringTemplateMigration")
-	public static MenuItem copyAsJSMenu(String key, Runnable run) {
-		return MenuItem.with(key + ".copy", Icon.copySmall,
-		 IntUI.buildStoreKey(key == null ? null : Core.bundle.get("jsfunc." + key, key)),
-		 run);
-	}
 
 
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
@@ -349,7 +95,7 @@ public class IntUI {
 	}
 	public static ImageButton addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
 		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> { })
-		 .with(button -> IntUI.longPress(button, isLongPress -> {
+		 .with(button -> EventHelper.longPress(button, isLongPress -> {
 			 Object o = prov.get();
 			 if (o == null && clazz == null) return;
 			 Core.app.post(Tools.runT0(() -> {
@@ -369,7 +115,7 @@ public class IntUI {
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
 			HopeStyles.flatBordert, () -> { }).padLeft(8f).size(180, 40)
-		 .with(b -> b.clicked(() -> tester.put(b, prov.get())));
+		 .with(b -> b.clicked(() -> Tester.put(b, prov.get())));
 	}
 	public static String buildStoreKey(String key) {
 		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")
@@ -397,7 +143,7 @@ public class IntUI {
 	 * @return Runnable：将prov的值储存为js变量
 	 */
 	public static Runnable storeRun(Prov<Object> prov) {
-		return () -> tester.put(mouseVec, prov.get());
+		return () -> Tester.put(mouseVec, prov.get());
 	}
 
 	/**
@@ -669,7 +415,6 @@ public class IntUI {
 	public static Window showException(Throwable t) {
 		return showException("", t);
 	}
-
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
 		return ExceptionPopup.of(exc, text);
@@ -690,12 +435,17 @@ public class IntUI {
 		}}.show().setPosition(pos, align);
 	}
 
+	/** @see mindustry.core.UI#showConfirm(String, Runnable) */
 	public static ConfirmWindow showConfirm(String text, Runnable confirmed) {
 		return showConfirm("@confirm", text, null, confirmed);
 	}
+	/** @see mindustry.core.UI#showConfirm(String, String, Runnable) */
 	public static ConfirmWindow showConfirm(String title, String text, Runnable confirmed) {
 		return showConfirm(title, text, null, confirmed);
 	}
+	/**
+	 * @see mindustry.core.UI#showConfirm(String, String, Boolp, Runnable)
+	 */
 	public static ConfirmWindow showConfirm(String title, String text, Boolp hide,
 	                                        Runnable confirmed) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
@@ -723,9 +473,7 @@ public class IntUI {
 		window.moveToMouse();
 		return window;
 	}
-	/**
-	 * @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable)
-	 */
+	/** @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable) */
 	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
 	                                              Runnable denied) {
 		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
@@ -747,52 +495,6 @@ public class IntUI {
 	}
 
 
-	public static void colorBlock(Cell<?> cell, Color color, boolean needDouble) {
-		colorBlock(cell, color, null, needDouble);
-	}
-	/**
-	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
-	 * {@linkplain #colorBlock(Cell, Color, Cons, boolean)
-	 * colorBlock(
-	 * cell,
-	 * color,
-	 * callback,
-	 * needDclick: boolean = true
-	 * )}*
-	 * @param cell     the cell
-	 * @param color    the color
-	 * @param callback the callback
-	 * @see #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick) #colorBlock(Cell cell, Color color, Cons callback, boolean needDclick)
-	 */
-	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback) {
-		colorBlock(cell, color, callback, true);
-	}
-
-	/**
-	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
-	 * @param cell       被修改成颜色块的cell
-	 * @param color      初始化颜色
-	 * @param callback   回调函数，形参为修改后的{@link Color color}
-	 * @param needDclick 触发修改事件，是否需要双击（{@code false}为点击）
-	 */
-	public static void colorBlock(Cell<?> cell, Color color, Cons<Color> callback,
-	                              boolean needDclick) {
-		BorderImage image = new ColorContainer(color);
-		cell.setElement(image).size(42f);
-		Runnable runnable = () -> {
-			IntUI.colorPicker().show(color, c1 -> {
-				color.set(c1);
-				if (callback != null) callback.get(c1);
-			});
-			Core.app.post(() -> IntUI.colorPicker().setPosition(getAbsolutePos(image), Align.left | Align.center));
-		};
-		IntUI.doubleClick(image, needDclick ? null : runnable, needDclick ? runnable : null);
-	}
-	public static void disposeAll() {
-		topGroup.dispose();
-		frag.clear();
-		Background.dispose();
-	}
 	public static <U extends UnlockableContent> Drawable icon(U i) {
 		return new TextureRegionDrawable(i == null ? Core.atlas.find("error") : i.uiIcon);
 	}
@@ -867,106 +569,6 @@ public class IntUI {
 		topGroup.focusOnElement(new MyFocusTask(element, boolp));
 	}
 
-	public static Cell<?> buildImagePreviewButton(
-	 Element element, Table table,
-	 Prov<Drawable> prov, Cons<Drawable> consumer) {
-		return IntUI.addPreviewButton(table, p -> {
-			p.top();
-			try {
-				prov.get().getClass(); // null check
-				int   size = 100;
-				float mul;
-				if (element != null) {
-					float w = Math.max(2, element.getWidth());
-					mul = element.getHeight() / w;
-				} else {
-					mul = 1;
-				}
-				Drawable drawable = prov.get();
-				Image    alphaBg  = new Image(Tex.alphaBg);
-				alphaBg.color.a = 0.7f;
-				p.stack(alphaBg, new Image(drawable))
-				 .update(t -> t.setColor(element != null ? element.color : Color.white))
-				 .size(size, size * mul).row();
-
-				p.add(ReflectTools.getName(drawable.getClass()))
-				 .color(KeyValue.stressColor)
-				 .left().row();
-				KeyValue keyValue = KeyValue.THE_ONE;
-				p.defaults().growX();
-				if (drawable instanceof TextureRegionDrawable trd && trd.getRegion() instanceof AtlasRegion atg) {
-					keyValue.label(p, "Name", () -> atg.name);
-					if (atg.texture.getTextureData() instanceof FileTextureData) {
-						String   str  = String.valueOf(atg.texture);
-						char     c    = str.charAt(str.length() - 1);
-						PageType type = PageType.all[Character.isDigit(c) ? c - '0' : 0];
-						keyValue.label(p, "Page", type::name, Pal.accent);
-					}
-					keyValue.valueLabel(p, "Texture", () -> atg.texture, Texture.class);
-				} else if (drawable instanceof ScaledNinePatchDrawable snpd) {
-					NinePatch patch = snpd.getPatch();
-
-					keyValue.valueLabel(p, "Texture", patch::getTexture, Texture.class);
-				}
-				keyValue.label(p, "Original Size", new SizeProv(() ->
-				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
-				));
-				p.row();
-				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {
-					IntUI.drawablePicker().show(prov.get(), consumer);
-				}).size(42);
-			} catch (Throwable e) {
-				if (DEBUG) Log.err(e);
-				p.add("ERROR").labelAlign(Align.left).row();
-				p.image(Core.atlas.drawable("error"));
-			}
-		});
-	}
-	public static Cell<ImageButton> addPreviewButton(Table table, Cons<Table> cons) {
-		return table.button(Icon.imageSmall, Styles.clearNonei, () -> { })
-		 .with(b -> addPreviewListener(b, cons));
-	}
-	public static void addPreviewListener(Element element, Cons<Table> cons) {
-		element.addListener(new HoverAndExitListener() {
-			final Task hideTask = new Task() {
-				public void run() {
-					if (hitter != null && hitter.hide()) hitter = null;
-				}
-			};
-			void hide() {
-				if (hitter != null && hitter.canHide()) {
-					TaskManager.reSchedule(0.1f, hideTask);
-				}
-			}
-			Hitter      hitter = null;
-			SelectTable table;
-			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
-				if (hideTask.isScheduled()) {
-					hideTask.cancel();
-					return;
-				}
-				if (hitter != null) hitter.hide(); // 移除上一次的
-				if (Hitter.peek() != hitter) Hitter.peek().hide();
-
-				table = IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
-				hitter = Hitter.peek();
-				table.clearChildren();
-				table.add(table.table);
-				table.touchable = Touchable.enabled;
-				table.addListener(new HoverAndExitListener() {
-					public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
-						hideTask.cancel();
-					}
-					public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
-						hide();
-					}
-				});
-			}
-			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
-				hide();
-			}
-		});
-	}
 	public static void hoverAndExit(Element element, Runnable hovered, Runnable exit) {
 		element.addListener(new HoverAndExitListener() {
 			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
@@ -1137,6 +739,7 @@ public class IntUI {
 			setPosition(vec2.x - getPrefWidth() / 2f, vec2.y - getPrefHeight() / 2f);
 		}
 	}
+
 	private static class AutoFitTable extends Table implements PopupWindow {
 		public float getPrefHeight() {
 			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
@@ -1146,7 +749,6 @@ public class IntUI {
 			return Math.min(super.getPrefWidth(), (float) graphics.getWidth());
 		}
 	}
-
 	public static class SelectTable extends AutoFitTable implements IMenu {
 		public SelectTable(Table table, Element button) {
 			this.table = table;
@@ -1190,6 +792,7 @@ public class IntUI {
 			topGroup.addChild(this);
 		}
 	}
+
 	public interface Builder extends Cons3<Table, Runnable, String> { }
 
 	private static class MyFocusTask extends FocusTask {

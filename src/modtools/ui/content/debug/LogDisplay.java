@@ -2,22 +2,22 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
+import arc.func.Cons;
 import arc.graphics.Color;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import mindustry.ui.fragments.ConsoleFragment;
-import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.components.*;
-import modtools.ui.components.input.MyLabel;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.linstener.AutoWrapListener;
+import modtools.ui.comp.*;
+import modtools.ui.comp.input.MyLabel;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.linstener.AutoWrapListener;
 import modtools.ui.content.Content;
 
 import static modtools.utils.Tools.readFiOrEmpty;
@@ -32,26 +32,9 @@ public class LogDisplay extends Content {
 
 	Window ui;
 	Table  crashes;
-
-	public void load() {
-		crashes = new LimitTable(p -> {
-			p.defaults().top().grow();
-			IntVars.async(() -> {
-				Seq<Fi> list = new Seq<>(Vars.dataDirectory.child("crashes").list()).reverse();
-				p.left().defaults().left();
-				for (var fi : list) {
-					var label = new MyLabel("");
-					TextButton button = p.button(fi.nameWithoutExtension(), new TextButtonStyle(Styles.logicTogglet), () -> {
-						if (label.getText().length() == 0) {
-							label.setText(readFiOrEmpty(fi));
-						}
-					}).size(Core.graphics.isPortrait() ? 450 : 650, 45).get();
-					button.getStyle().up = Tex.underline;
-					p.row();
-					p.collapser(new Table(Tex.pane, cont -> cont.left().add(label).growX().wrap().left()), true, button::isChecked).growX().row();
-				}
-			}, () -> { });
-		});
+	/** @see mindustry.net.CrashSender#send(Throwable, Cons) */
+	private static Fi crashesDir() {
+		return Fi.get(OS.getAppDataDirectoryString(Vars.appName)).child("crashes");
 	}
 
 
@@ -75,7 +58,25 @@ public class LogDisplay extends Content {
 			t.pane(MessageBuilder::new)
 			 .colspan(2).grow().with(pane -> pane.update(new AutoWrapListener(pane)));
 			t.invalidateHierarchy();
-		}), crashes};
+		}),  new LimitTable(p -> {
+			Seq<Fi> list = new Seq<>(crashesDir().list()).sort(f -> -f.lastModified());
+			p.left().defaults().left().top().growX();
+			for (var fi : list) {
+				var label = new MyLabel("");
+				TextButton button = p.button(fi.nameWithoutExtension(), new TextButtonStyle(Styles.logicTogglet), () -> {
+					if (label.getText().length() == 0/* default method */) {
+						label.setText(readFiOrEmpty(fi));
+					}
+				}).height(45).get();
+				button.getStyle().up = Tex.underline;
+				p.row();
+				p.collapser(new Table(Tex.pane,
+					cont -> cont.left().add(label)
+					 .labelAlign(Align.left).growX().wrap().left()
+				 ), true, button::isChecked)
+				 .growX().row();
+			}
+		})};
 		String[] names = {"last_log", "crashes"};
 		IntTab   itab  = new IntTab(-1, names, colors, tables);
 		itab.pane.update(new AutoWrapListener(itab.pane));
@@ -85,6 +86,7 @@ public class LogDisplay extends Content {
 
 		// ui.addCloseButton();
 	}
+	/** For log  */
 	public static class MessageBuilder {
 		private final Table       p;
 		private final Seq<String> messages;

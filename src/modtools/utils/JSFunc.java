@@ -19,17 +19,17 @@ import modtools.jsfunc.reflect.*;
 import modtools.jsfunc.type.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.ResidentDrawTask;
+import modtools.ui.comp.InterpImage;
+import modtools.ui.content.debug.Tester;
 import modtools.ui.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.ui.components.InterpImage;
 import modtools.utils.ui.WatchWindow;
 import modtools.utils.world.*;
 
 import static modtools.IntVars.mouseVec;
-import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.*;
 
@@ -67,7 +67,7 @@ public class JSFunc
 	}
 
 	public static void addDClickCopy(Label label, Func<String, String> func) {
-		IntUI.doubleClick(label, null, () -> {
+		EventHelper.doubleClick(label, null, () -> {
 			String s = String.valueOf(label.getText());
 			copyText(func != null ? func.get(s) : s, label);
 		});
@@ -93,7 +93,7 @@ public class JSFunc
 	}
 	public static void copyValue(String text, Object value, Vec2 vec2) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.savedas", text,
-		 tester.quietPut(value)), vec2);
+		 Tester.quietPut(value)), vec2);
 	}
 
 

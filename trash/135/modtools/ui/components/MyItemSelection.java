@@ -1,4 +1,4 @@
-package modtools.ui.components;
+package modtools.ui.comp;
 
 import arc.func.Cons;
 import arc.func.Prov;

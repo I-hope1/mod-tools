@@ -18,14 +18,14 @@ import modtools.events.*;
 import modtools.jsfunc.reflect.*;
 import modtools.struct.Pair;
 import modtools.ui.*;
-import modtools.ui.components.*;
-import modtools.ui.components.Window.IDisposable;
-import modtools.ui.components.input.*;
-import modtools.ui.components.input.area.AutoTextField;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.linstener.FocusSearchListener;
-import modtools.ui.components.utils.*;
-import modtools.ui.menu.MenuItem;
+import modtools.ui.comp.*;
+import modtools.ui.comp.Window.IDisposable;
+import modtools.ui.comp.input.*;
+import modtools.ui.comp.input.area.AutoTextField;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.linstener.FocusSearchListener;
+import modtools.ui.comp.utils.*;
+import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.search.*;
@@ -307,7 +307,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		Boolp    editable = () -> !l.isFinal() || E_JSFuncEdit.final_modify.enabled();
 		/* Color的实现是Color#set方法 */
 		if (l.val instanceof Color) {
-			IntUI.colorBlock(cell, (Color) l.val, l::setVal);
+			ColorBlock.of(cell, (Color) l.val, l::setVal);
 			c_cell.require();
 		} else if (type == Boolean.TYPE || type == Boolean.class) {
 			var btn = newBoolButton(l, editable);
@@ -392,8 +392,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			// name
 			MyLabel label = newCopyLabel(fields, f.getName());
 			mergeOne(fields, f, label, attribute);
-			IntUI.addShowMenuListenerp(label, () -> Seq.with(
-			 IntUI.copyAsJSMenu("Field", () -> f),
+			MenuBuilder.addShowMenuListenerp(label, () -> Seq.with(
+			 MenuBuilder.copyAsJSMenu("Field", () -> f),
 			 MenuItem.with("field.offset.copy", Icon.copySmall, "Cpy offset", () -> {
 				 JSFunc.copyText("" + FieldUtils.fieldOffset(f));
 			 }),
@@ -449,17 +449,17 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	public static Cell<?> extentCell(Table t, Class<?> type, Prov<ValueLabel> l) {
 		Cell<?> cell;
 		if (Drawable.class.isAssignableFrom(type)) {
-			cell = IntUI.buildImagePreviewButton(null, t,
+			cell = PreviewUtils.buildImagePreviewButton(null, t,
 				() -> (Drawable) l.get().val,
 				v -> l.get().setNewVal(v))
 			 .padRight(4f);
 		} else if (Texture.class.isAssignableFrom(type)) {
-			cell = IntUI.buildImagePreviewButton(null, t,
+			cell = PreviewUtils.buildImagePreviewButton(null, t,
 				() -> TmpVars.trd.set(Draw.wrap((Texture) l.get().val)),
 				null)
 			 .padRight(4f);
 		} else if (TextureRegion.class.isAssignableFrom(type)) {
-			cell = IntUI.buildImagePreviewButton(null, t,
+			cell = PreviewUtils.buildImagePreviewButton(null, t,
 				() -> TmpVars.trd.set((TextureRegion) l.get().val),
 				null)
 			 .padRight(4f);
@@ -504,8 +504,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				MethodValueLabel l = new MethodValueLabel(o, m);
 				array[0] = l;
 				methods.labels.add(l);
-				IntUI.addShowMenuListenerp(label, () -> Seq.with(
-				 IntUI.copyAsJSMenu("method", () -> m),
+				MenuBuilder.addShowMenuListenerp(label, () -> Seq.with(
+				 MenuBuilder.copyAsJSMenu("method", () -> m),
 				 MenuItem.with("method.getter.copy", Icon.copySmall, "Cpy method getter", () -> copyExecutableReflection(m)),
 				 MenuItem.with("val.getter.copy", Icon.copySmall, "Cpy value getter", () -> copyExecutableArcReflection(m)),
 				 /* o == null ? null : MenuItem.with("method.override", Icon.editSmall, "Override", () -> {
@@ -547,12 +547,12 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), defaultLabel);
 			label.color.set(c_type);
 			boolean noParam = ctor.getParameterCount() == 0;
-			IntUI.addShowMenuListenerp(label, () -> Seq.with(
+			MenuBuilder.addShowMenuListenerp(label, () -> Seq.with(
 			 MenuItem.with("ctor.getter.copy", Icon.copySmall, "Cpy reflect getter", () -> copyExecutableReflection(ctor)),
 			 MenuItem.with("<init>handle.copy", o == null ? Icon.copySmall : Icon.boxSmall,
 				o == null ? "Cpy <init> handle" : "Invoke <init> method", ctorInitInvoker(o, ctor, noParam)),
 			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", ctorInvoker(o, ctor, noParam, label)),
-			 IntUI.copyAsJSMenu("constructor", () -> ctor),
+			 MenuBuilder.copyAsJSMenu("constructor", () -> ctor),
 			 ValueLabel.newDetailsMenuList(label, ctor, Constructor.class)
 			));
 			table.add(label);
@@ -584,8 +584,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);
-				IntUI.addShowMenuListenerp(l, () -> Seq.with(
-				 IntUI.copyAsJSMenu("class", () -> cls),
+				MenuBuilder.addShowMenuListenerp(l, () -> Seq.with(
+				 MenuBuilder.copyAsJSMenu("class", () -> cls),
 				 ValueLabel.newDetailsMenuList(l, null, cls)
 				));
 				Class<?>[] types = cls.getInterfaces();
@@ -753,7 +753,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			if (size == 1) return;
 			label.setText(STR."\{label.getText()}\{METHOD_COUNT_PREFIX}\{size}]");
 		});
-		IntUI.doubleClick(label, () -> {
+		EventHelper.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren())
 				return;
 			IntUI.showSelectTable(attribute, (p, _, _) -> {

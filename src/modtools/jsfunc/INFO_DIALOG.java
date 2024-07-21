@@ -14,13 +14,13 @@ import arc.util.*;
 import mindustry.gen.Icon;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.components.Window;
-import modtools.ui.components.Window.*;
-import modtools.ui.components.limit.*;
-import modtools.ui.components.utils.*;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.Window.*;
+import modtools.ui.comp.limit.*;
+import modtools.ui.comp.utils.*;
 import modtools.ui.control.HopeInput;
+import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
-import modtools.utils.Tools;
 import modtools.utils.ui.ShowInfoWindow;
 import modtools.utils.ui.search.BindCell;
 import modtools.utils.world.WorldDraw;
@@ -189,7 +189,7 @@ public interface INFO_DIALOG {
 	class $ {
 		@SuppressWarnings("rawtypes")
 		public static void buildLongPress(ImageButton button, Prov o) {
-			IntUI.longPress0(button, () -> INFO_DIALOG.showInfo(o));
+			EventHelper.longPress0(button, () -> INFO_DIALOG.showInfo(o));
 		}
 	}
 

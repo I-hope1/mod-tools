@@ -20,7 +20,7 @@ import mindustry.ui.Styles;
 import modtools.annotations.settings.*;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
-import modtools.ui.components.limit.LimitTextButton;
+import modtools.ui.comp.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
@@ -326,7 +326,7 @@ public interface ISettings extends E_DataInterface {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
 				t.label(() -> StringUtils.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
-				IntUI.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
+				PreviewUtils.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
 					set(StringUtils.getUIKey(d));
 
 					cons.get(d);

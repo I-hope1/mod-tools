@@ -10,7 +10,7 @@ import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.*;
 import modtools.ui.content.ui.design.DesignTable;
 import modtools.ui.content.ui.design.DesignTable.*;
-import modtools.ui.menu.MenuItem;
+import modtools.ui.menu.*;
 
 public class DesignHelper {
 	public static void design() {
@@ -48,7 +48,7 @@ public class DesignHelper {
 					buttons.add(button).growX();
 				}
 				buttons.button(Icon.menu, HopeStyles.flati, () -> {})
-				 .with(b -> b.clicked(() -> IntUI.showMenuListFor(b, Align.top, () -> Seq.with(
+				 .with(b -> b.clicked(() -> MenuBuilder.showMenuListFor(b, Align.top, () -> Seq.with(
 					MenuItem.with("save", Icon.saveSmall, "Save", table::save),
 					MenuItem.with("load", Icon.download, "Load", table::load),
 					MenuItem.with("export.code", Icon.export, "Export As Java", table::export)

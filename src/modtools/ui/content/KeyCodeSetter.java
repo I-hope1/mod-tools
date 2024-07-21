@@ -1,6 +1,6 @@
 package modtools.ui.content;
 
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 
 public class KeyCodeSetter extends Content{
 	public KeyCodeSetter() {

@@ -18,7 +18,7 @@ import mindustry.io.JsonIO;
 import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 import modtools.ui.windows.bytecode.BytecodeObjectives.*;
 import modtools.utils.Tools;
 import rhino.Kit;

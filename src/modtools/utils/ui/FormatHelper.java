@@ -29,4 +29,9 @@ public class FormatHelper {
 		if (Float.isInfinite(value)) return value > 0 ? "+∞" : "-∞";
 		return Strings.autoFixed(value, digits);
 	}
+
+	// 去除颜色
+	public static String format(String s) {
+		return s.replaceAll("\\[(\\w+?)]", "[[$1]");
+	}
 }

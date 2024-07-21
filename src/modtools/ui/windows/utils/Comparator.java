@@ -8,8 +8,8 @@ import ihope_lib.MyReflect;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.menu.MenuItem;
-import modtools.ui.components.Window;
-import modtools.ui.components.utils.PlainValueLabel;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.utils.PlainValueLabel;
 import modtools.utils.reflect.*;
 
 import java.lang.reflect.Field;

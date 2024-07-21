@@ -25,8 +25,8 @@ import modtools.IntVars;
 import modtools.annotations.settings.SettingsInit;
 import modtools.events.ISettings;
 import modtools.struct.TaskSet;
-import modtools.ui.components.*;
-import modtools.ui.components.Window.DelayDisposable;
+import modtools.ui.comp.*;
+import modtools.ui.comp.Window.DelayDisposable;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.*;
 import modtools.utils.*;
@@ -40,7 +40,7 @@ import static modtools.IntVars.modName;
 import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.*;
 import static modtools.ui.TopGroup.TSettings.*;
-import static modtools.ui.components.Window.frontWindow;
+import static modtools.ui.comp.Window.frontWindow;
 import static modtools.utils.Tools.*;
 import static modtools.IntVars.mouseVec;
 
@@ -51,7 +51,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		checkUICount,
 		debugBounds,
 		selectInvisible, drawHiddenPad,
-		/** @see ISettings#$(Drawable)  */
+		/** @see ISettings#$(Drawable) */
 		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.reset(d, Color.white)),
 		;
 		// overrideScene
@@ -394,76 +394,88 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	/** 用于获取元素 */
 	private void addSceneListener() {
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
-			boolean locked = false;
-			final Element mask = new FillElement() {
+			private       boolean locked      = false;
+			private       boolean cancelEvent = false;
+			private final Element mask        = new FillElement() {
+				@Override
 				public Element hit(float x, float y, boolean touchable) {
 					return cancelEvent ? this : null;
 				}
 			};
-			void unfocus() {
+
+			private void unfocus() {
 				scene.setKeyboardFocus(previousKeyboardFocus);
 				previousKeyboardFocus = null;
 			}
-			public void cancel() {
+
+			private void cancel() {
 				selecting = false;
 				unfocus();
 				resetSelectElem();
 			}
 
-			/* 拦截keydown */
+			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (!selecting) return true;
+
 				if (keycode == KeyCode.escape) {
 					cancel();
-				}
-				if (keycode == KeyCode.f && selected != null) {
+				} else if (keycode == KeyCode.f && selected != null) {
 					filterElem(selected);
-					// Log.info(selected);
 				}
-				/* 拦截事件 */
+
 				HopeInput.pressed.clear();
 				HopeInput.justPressed.clear();
 				event.stop();
 				return false;
 			}
+
 			private void filterElem(Element element) {
 				element.visible = false;
 				filterSelected.put(element, element.translation.x);
 				element.translation.x = scene.getWidth() * 2;
 			}
+
+			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				mouseVec.require();
 
 				if (locked) {
-					if (Vars.android) {
+					if (Vars.mobile) {
 						filterElem(getSelected0(x, y));
 					}
 					return false;
 				}
-				if (event.listenerActor.isDescendantOf(searchBlackList::contains)) return false;
-				if (!selecting) return false;
+
+				if (event.listenerActor.isDescendantOf(searchBlackList::contains)
+				    || !selecting) {
+					return false;
+				}
+
 				locked = true;
 				topGroup.addChild(mask);
 				cancelEvent = true;
 				event.cancel();
 
 				cancelEvent = false;
-				// frag.touchable = Touchable.disabled;
 				getSelected(x, y);
 				cancelEvent = true;
 				return true;
 			}
+
+			@Override
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				cancelEvent = false;
 				getSelected(x, y);
 				cancelEvent = true;
 			}
-			public boolean filter() {
+
+			private boolean filter() {
 				if (selected == null) return false;
-				Element  parent = selected;
-				Class<?> cl;
+
+				Element parent = selected;
 				while (parent != null) {
-					cl = parent.getClass();
+					Class<?> cl = parent.getClass();
 					for (Class<?> bcl : classBlackList) {
 						if (bcl.isAssignableFrom(cl)) return false;
 					}
@@ -472,20 +484,26 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 				return true;
 			}
 
+			@Override
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				locked = false;
 				mask.remove();
+
 				filterSelected.each(entry -> {
 					entry.key.translation.x = entry.value;
 					entry.key.visible = true;
 				});
 				filterSelected.clear();
 
-				if (elementCallback != null && filter()) elementCallback.get(selected);
+				if (elementCallback != null && filter()) {
+					elementCallback.get(selected);
+				}
+
 				cancel(); // reset
 			}
 		});
 	}
+
 	public void resetSelectElem() {
 		selected = null;
 		elementDrawer = null;

@@ -38,16 +38,16 @@ import modtools.override.ForRhino;
 import modtools.struct.LazyValue;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
-import modtools.ui.components.*;
-import modtools.ui.components.buttons.FoldedImageButton;
-import modtools.ui.components.input.MyLabel;
-import modtools.ui.components.input.area.TextAreaTab;
-import modtools.ui.components.input.area.TextAreaTab.MyTextArea;
-import modtools.ui.components.input.highlight.JSSyntax;
-import modtools.ui.components.input.highlight.Syntax.*;
-import modtools.ui.components.limit.PrefPane;
-import modtools.ui.components.linstener.*;
-import modtools.ui.components.windows.ListDialog;
+import modtools.ui.comp.*;
+import modtools.ui.comp.buttons.FoldedImageButton;
+import modtools.ui.comp.input.MyLabel;
+import modtools.ui.comp.input.area.TextAreaTab;
+import modtools.ui.comp.input.area.TextAreaTab.MyTextArea;
+import modtools.ui.comp.input.highlight.JSSyntax;
+import modtools.ui.comp.input.highlight.Syntax.*;
+import modtools.ui.comp.limit.PrefPane;
+import modtools.ui.comp.linstener.*;
+import modtools.ui.comp.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.gen.HopeIcons;
@@ -55,6 +55,7 @@ import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.ui.FormatHelper;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;
@@ -63,7 +64,7 @@ import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.ui.components.windows.ListDialog.fileUnfair;
+import static modtools.ui.comp.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
 
@@ -338,6 +339,7 @@ public class Tester extends Content {
 			});
 		})).growX().left().colspan(2).row();
 	}
+
 	private static Color logLevelToColor(String item) {
 		LogLevel.valueOf("");
 		return switch (item.charAt(0)) {
@@ -349,20 +351,21 @@ public class Tester extends Content {
 			default -> throw new IllegalStateException("Unexpected value: " + item.charAt(0));
 		};
 	}
+
 	void bottomBar(Table table, TextAreaTab textarea) {
 		FoldedImageButton folder  = new FoldedImageButton(true, HopeStyles.hope_flati);
 		Table             p       = new Table();
-		PrefPane          resPane = new PrefPane(p);
+		PrefPane          pane = new PrefPane(p);
 		int               height  = 56;
-		resPane.xp = _ -> WIDTH * Scl.scl();
-		resPane.yp = _ -> folder.hasChildren() ? height : 0;
-		resPane.setScrollingDisabledY(true);
-		folder.setContainer(table.add(resPane).growX().padLeft(6f));
+		pane.xp = _ -> WIDTH * Scl.scl();
+		pane.yp = _ -> folder.hasChildren() ? height : 0;
+		pane.setScrollingDisabledY(true);
+		folder.setContainer(table.add(pane).growX().padLeft(6f));
 
 		Table folderContainer = new Table();
 		folderContainer.left().bottom().add(folder).size(36f);
 		folderContainer.setFillParent(true);
-		folderContainer.update(() -> folderContainer.y = folder.cell.hasElement() ? resPane.getHeight() : 0);
+		folderContainer.update(() -> folderContainer.y = folder.cell.hasElement() ? pane.getHeight() : 0);
 		table.addChild(folderContainer);
 		folder.rebuild = () -> {
 			Time.runTask(1, folderContainer::toFront);
@@ -754,7 +757,7 @@ public class Tester extends Content {
 			ScriptableObject.putProperty(scope, "IntFunc", obj1);
 			ScriptableObject.putProperty(scope, "$", obj1);
 			ScriptableObject.putProperty(scope, "unsafe", unsafe);
-			ScriptableObject.putProperty(topScope, "modName", "<null>");
+			ScriptableObject.putProperty(topScope, "modName", "<?>");
 			ScriptableObject.putProperty(topScope, "scriptName", "console.js");
 
 			NativeJavaPackage pkg = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
@@ -790,6 +793,7 @@ public class Tester extends Content {
 			dir.child("README.txt").writeString("这是一个用于启动脚本（js）的文件夹\n\n所有的js文件都会执行");
 		}
 	}
+
 	private static void setAppClassLoader(ClassLoader loader) {
 		try {
 			ForRhino.factory.getApplicationClassLoader().loadClass(ModTools.class.getName());
@@ -825,7 +829,7 @@ public class Tester extends Content {
 		return area.getText();
 	}
 
-	public Object wrap(Object val) {
+	public static Object wrap(Object val) {
 		try {
 			if (val instanceof Class)
 				return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
@@ -837,7 +841,7 @@ public class Tester extends Content {
 		}
 	}
 
-	public void quietPut(String name, Object val) {
+	public static void quietPut(String name, Object val) {
 		if (wrap_ref.enabled()) {
 			val = wrap(val);
 			//			else if (val instanceof Field) val = new NativeJavaObject(scope, val, Field.class);
@@ -845,7 +849,7 @@ public class Tester extends Content {
 		ScriptableObject.putProperty(topScope, name, val);
 	}
 	public static final String prefix = "tmp";
-	public String quietPut(Object val) {
+	public static String quietPut(Object val) {
 		int i = 0;
 		// 从0开始直到找到没有被定义的变量
 		while (ScriptableObject.hasProperty(topScope, prefix + i)) i++;
@@ -853,11 +857,11 @@ public class Tester extends Content {
 		quietPut(key, val);
 		return key;
 	}
-	public void put(Element element, Object val) {
+	public static void put(Element element, Object val) {
 		put(ElementUtils.getAbsolutePos(element), val);
 	}
 	/** put之后，会弹窗提示 */
-	public void put(Vec2 vec2, Object val) {
+	public static void put(Vec2 vec2, Object val) {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", quietPut(val)), vec2);
 	}
 
@@ -975,7 +979,7 @@ public class Tester extends Content {
 				case err -> "E";
 				default -> " ";
 			} + text;
-			logs.add(Tools.format(s));
+			logs.add(FormatHelper.format(s));
 		}
 	}
 }

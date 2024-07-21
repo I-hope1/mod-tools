@@ -1,4 +1,4 @@
-package modtools.ui.components;
+package modtools.ui.comp;
 
 import arc.scene.ui.TextArea;
 import arc.scene.ui.layout.Table;

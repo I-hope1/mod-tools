@@ -31,7 +31,7 @@ import mindustry.world.blocks.environment.OverlayFloor;
 import modtools.ui.Contents;
 import modtools.ui.IntFunc;
 import modtools.ui.IntUI;
-import modtools.ui.components.MoveListener;
+import modtools.ui.comp.MoveListener;
 
 import java.util.ArrayList;
 import java.util.function.Consumer;

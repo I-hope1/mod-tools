@@ -5,7 +5,7 @@ import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
 import arc.util.Align;
-import modtools.ui.components.utils.ClearValueLabel;
+import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.utils.ui.search.BindCell;
 
 public interface KeyValue {

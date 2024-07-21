@@ -22,10 +22,10 @@ import modtools.IntVars;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.TSettings;
-import modtools.ui.components.Window;
-import modtools.ui.components.Window.DisWindow;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.ClearValueLabel;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.Window.DisWindow;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.*;
@@ -198,11 +198,11 @@ public class SettingsUI extends Content {
 				return this;
 			}
 		};
-		IntUI.doubleClick(table.add(text).growY()
+		EventHelper.doubleClick(table.add(text).growY()
 		 .padRight(4f).left().labelAlign(Align.left).get(), null, () -> {
 			color.set(Tmp.c2.set(defaultColor));
 		});
-		IntUI.colorBlock(table.add().right().growX(), color, false);
+		ColorBlock.of(table.add().right().growX(), color, false);
 		table.row();
 		return color;
 	}

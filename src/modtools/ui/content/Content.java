@@ -13,7 +13,7 @@ import arc.util.Reflect;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
-import modtools.ui.components.buttons.CircleImageButton;
+import modtools.ui.comp.buttons.CircleImageButton;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
 

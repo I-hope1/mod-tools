@@ -16,14 +16,14 @@ import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.*;
 import mindustry.gen.Tex;
 import modtools.jsfunc.type.CAST;
-import modtools.ui.components.windows.ListDialog.ModifiedLabel;
+import modtools.ui.comp.ModifiedLabel;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 
 import java.lang.reflect.Field;
 
-import static modtools.ui.components.linstener.ReferringMoveListener.snap;
+import static modtools.ui.comp.linstener.ReferringMoveListener.snap;
 
 public class DesignTable<T extends Group> extends WidgetGroup {
 	public T template;

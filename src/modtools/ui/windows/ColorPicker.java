@@ -15,7 +15,7 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.Tools;
 

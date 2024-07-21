@@ -5,9 +5,9 @@ import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
 import arc.struct.ObjectSet;
-import arc.util.pooling.Pools;
+import arc.util.pooling.*;
 import mindustry.ctype.UnlockableContent;
-import modtools.ui.components.limit.LimitTable;
+import modtools.ui.comp.limit.LimitTable;
 import modtools.utils.PatternUtils;
 
 import java.util.*;
@@ -40,7 +40,7 @@ public class FilterTable<E> extends LimitTable {
 		unbind();
 		if (map != null) {
 			map.forEach((key, seq) -> {
-				if (key instanceof Compound<?, ?> compound) Pools.free(compound);
+				if (key instanceof Pool.Poolable p) Pools.free(p);
 				seq.each(BindCell::clear);
 			});
 			map.clear();
@@ -67,7 +67,7 @@ public class FilterTable<E> extends LimitTable {
 		addConditionUpdateListener(new IntBoolf(provider, i -> (int) i));
 	}
 	/* 就是E == Intp */
-	public void addIntp_UpdateListener(Intp provider) {
+	public void addUpdateListenerIntp(Intp provider) {
 		addConditionUpdateListener(new IntBoolf(provider, i -> ((Intp) i).get()));
 	}
 	public void addPatternUpdateListener(Prov<Pattern> provider) {
@@ -91,18 +91,6 @@ public class FilterTable<E> extends LimitTable {
 		return map == null || map.isEmpty();
 	}
 
-	public static final class Compound<P1, P2> {
-		final P1 p1;
-		final P2 p2;
-		private Compound(P1 p1, P2 p2) {
-			this.p1 = p1;
-			this.p2 = p2;
-		}
-		public static <P1, P2> Compound<P1, P2> with(P1 p1, P2 p2) {
-			return Pools.get(Compound.class, () -> new Compound<>(p1, p2)).obtain();
-		}
-	}
-
 	public class IntBoolf implements Condition<E> {
 		int     last;
 		Intp    provider;
@@ -119,6 +107,7 @@ public class FilterTable<E> extends LimitTable {
 			return (last & intf.get(name)) != 0;
 		}
 	}
+
 	public class PatternBoolf implements Condition<E> {
 		Pattern       last;
 		Prov<Pattern> provider;

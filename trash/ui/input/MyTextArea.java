@@ -1,4 +1,4 @@
-package modtools.ui.components.input;
+package modtools.ui.comp.input;
 
 import arc.Core;
 import arc.scene.ui.TextField.TextFieldStyle;

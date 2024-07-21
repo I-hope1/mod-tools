@@ -18,10 +18,10 @@ import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.*;
 import modtools.ui.gen.HopeIcons;
-import modtools.ui.menu.MenuItem;
-import modtools.ui.components.Window;
-import modtools.ui.components.buttons.FoldedImageButton;
-import modtools.ui.components.input.JSRequest;
+import modtools.ui.menu.*;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.buttons.FoldedImageButton;
+import modtools.ui.comp.input.JSRequest;
 import modtools.ui.content.Content;
 import modtools.utils.*;
 import modtools.utils.ui.search.FilterTable;
@@ -68,7 +68,7 @@ public class Executor extends Content {
 		build(cont, ExecuteTree.roots);
 	}
 	public void build(FilterTable<Intp> cont, MySet<TaskNode> children) {
-		cont.addIntp_UpdateListener(() -> statusCode);
+		cont.addUpdateListenerIntp(() -> statusCode);
 		for (TaskNode node : children) {
 			cont.bind(() -> 1 << node.status.code());
 			/* 布局
@@ -129,8 +129,8 @@ public class Executor extends Content {
 					event.stop();
 				}
 			});
-			IntUI.longPressOrRclick(button, _ -> {
-				IntUI.showMenuListDispose(() -> Seq.with(
+			EventHelper.longPressOrRclick(button, _ -> {
+				MenuBuilder.showMenuListDispose(() -> Seq.with(
 				 MenuItem.with("copy.asjs",Icon.copySmall, "cpy as JS", () -> {
 					if (node.code != null) JSFunc.copyText(node.code);
 				})));

@@ -1,4 +1,4 @@
-package modtools.ui.components.input.area;
+package modtools.ui.comp.input.area;
 
 import arc.Core;
 import arc.Input.TextInput;

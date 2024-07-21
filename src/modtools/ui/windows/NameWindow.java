@@ -6,7 +6,7 @@ import arc.scene.event.*;
 import arc.scene.ui.TextField;
 import arc.scene.ui.TextField.TextFieldValidator;
 import modtools.ui.IntUI.PopupWindow;
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 
 public class NameWindow extends Window implements PopupWindow {
 	TextField    namef = new TextField();

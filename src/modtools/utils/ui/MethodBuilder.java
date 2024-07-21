@@ -7,9 +7,9 @@ import arc.scene.ui.Image;
 import arc.scene.ui.layout.Cell;
 import arc.util.*;
 import modtools.ui.IntUI;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.utils.*;
-import modtools.utils.Tools;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.utils.*;
+import modtools.utils.*;
 import modtools.utils.ui.search.FilterTable;
 import rhino.*;
 
@@ -97,7 +97,7 @@ public interface MethodBuilder {
 			table.unbind();
 			table.add("<args>").fontScale(0.8f)
 			 .color(Color.gray).with(t ->
-				IntUI.doubleClick(t, null, () -> {
+				EventHelper.doubleClick(t, null, () -> {
 					changedFx(table);
 					table.name ^= argKey;
 				}));
@@ -118,7 +118,7 @@ public interface MethodBuilder {
 		if (exceptions.length > 0) {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
 			keyword(table, "throws ").fontScale(0.9f)
-			 .with(t -> IntUI.doubleClick(t, null, () -> {
+			 .with(t -> EventHelper.doubleClick(t, null, () -> {
 				 changedFx(table);
 				 table.name ^= throwKey;
 			 }));

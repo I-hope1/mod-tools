@@ -15,8 +15,8 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.Tooltip;
-import modtools.ui.components.Window;
-import modtools.ui.components.Window.FollowWindow;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.Window.FollowWindow;
 import modtools.ui.windows.bytecode.BytecodeCanvas.ObjectiveTilemap.ObjectiveTile.Connector;
 import modtools.ui.windows.bytecode.BytecodeObjectives.BytecodeObjective;
 

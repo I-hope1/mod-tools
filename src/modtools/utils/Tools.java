@@ -11,7 +11,7 @@ import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
 import modtools.struct.TaskSet;
 import modtools.ui.IntUI;
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 
 import java.lang.reflect.*;
 import java.util.List;
@@ -36,11 +36,6 @@ public class Tools {
 
 	public static String clName(Object o) {
 		return o.getClass().getName();
-	}
-
-	// 去除颜色
-	public static String format(String s) {
-		return s.replaceAll("\\[(\\w+?)]", "[\1$1]");
 	}
 
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {

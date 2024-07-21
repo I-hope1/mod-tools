@@ -8,6 +8,15 @@ import static modtools.utils.Tools.Sr;
 
 public class TaskManager {
 	private static final ObjectMap<Runnable, Task> map = new ObjectMap<>();
+
+	public static Task newTask(Runnable run) {
+		return new Task() {
+			public void run() {
+				run.run();
+			}
+		};
+	}
+
 	/** 新建任务
 	 * 如果任务没有完成，不新建
 	 * @param delay 单位tick (正常60tick/s)

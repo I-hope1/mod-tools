@@ -11,11 +11,11 @@ import arc.util.Align;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
 import modtools.ui.*;
-import modtools.ui.components.TransformTable;
+import modtools.ui.comp.TransformTable;
 import modtools.utils.ElementUtils;
 import modtools.utils.ui.search.BindCell;
 
-import static modtools.ui.IntUI.freeAllMenu;
+import static modtools.ui.menu.MenuBuilder.freeAllMenu;
 
 /**
  * The type Folded list.
@@ -62,7 +62,7 @@ public class FoldedList extends MenuItem implements Poolable {
 					if (bcell == null) {
 						Seq<MenuItem> list = childrenGetter.get();
 						TextButton    target = cell.get();
-						var newCell = IntUI.showMenuList(list,
+						var newCell = MenuBuilder.showMenuList(list,
 						 freeAllMenu(list),
 						 new TransformTable(target, ElementUtils.findClosestPane(target), Align.topRight).top().left(),
 						 hide);

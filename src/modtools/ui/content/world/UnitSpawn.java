@@ -24,10 +24,11 @@ import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.components.*;
-import modtools.ui.components.linstener.WorldSelectListener;
-import modtools.ui.components.utils.MyItemSelection;
+import modtools.ui.comp.*;
+import modtools.ui.comp.linstener.WorldSelectListener;
+import modtools.ui.comp.utils.MyItemSelection;
 import modtools.ui.content.Content;
+import modtools.ui.content.debug.Tester;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
@@ -86,7 +87,7 @@ public class UnitSpawn extends Content {
 		unitCont.table(right -> {
 			nameL = new Label("");
 			localizedNameL = new Label("");
-			IntUI.longPressOrRclick(nameL, l -> tester.put(l, selectUnit));
+			EventHelper.longPressOrRclick(nameL, l -> Tester.put(l, selectUnit));
 			JSFunc.addDClickCopy(nameL);
 			JSFunc.addDClickCopy(localizedNameL);
 			right.update(() -> {
@@ -192,7 +193,7 @@ public class UnitSpawn extends Content {
 				Time.runTask(2.5f * 60f, dialog::hide);
 			}).size(90, 50);
 			table.button(Icon.menuSmall, HopeStyles.flati, 24, () -> {
-				IntUI.showMenuListDispose(() -> Seq.with(
+				MenuBuilder.showMenuListDispose(() -> Seq.with(
 				 CheckboxList.withc("loop", HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
 				 MenuItem.with("noScorchMarks", Icon.eyeOffSmall, noScorchMarksKey, UNIT::noScorchMarks),
 				 MenuItem.with("all.kill", Icon.cancelSmall, killAllUnitsKey, UNIT::killAllUnits),

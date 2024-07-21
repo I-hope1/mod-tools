@@ -18,7 +18,7 @@ import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
-import modtools.ui.components.IntTab;
+import modtools.ui.comp.IntTab;
 import modtools.ui.IntUI;
 
 import java.lang.reflect.Field;

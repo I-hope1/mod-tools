@@ -10,8 +10,8 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Bar;
 import modtools.ui.IntUI;
-import modtools.ui.components.Window;
-import modtools.ui.components.Window.NoTopWindow;
+import modtools.ui.comp.Window;
+import modtools.ui.comp.Window.NoTopWindow;
 
 import java.io.*;
 import java.net.*;

@@ -5,8 +5,7 @@ import arc.util.Reflect;
 import ihope_lib.MyReflect;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
-import modtools.ui.components.input.MyLabel;
-import modtools.ui.IntUI;
+import modtools.ui.comp.input.MyLabel;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 
@@ -30,7 +29,7 @@ public interface ReflectTools {
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
 		MyLabel label = new MyLabel(type.get(), HopeStyles.defaultLabel);
 		label.color.set(JColor.c_type);
-		IntUI.doubleClick(label, null, details == null ? null : () -> {
+		EventHelper.doubleClick(label, null, details == null ? null : () -> {
 			changedFx(label);
 			label.setText(label.getText().toString().equals(type.get())
 			 ? details.get() : type.get());

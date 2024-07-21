@@ -8,7 +8,7 @@ import arc.scene.ui.Image;
 import arc.util.Align;
 import mindustry.gen.Icon;
 import modtools.ui.HopeStyles;
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 import modtools.ui.content.Content;
 
 import java.lang.reflect.Method;

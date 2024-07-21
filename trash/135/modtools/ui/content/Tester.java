@@ -25,7 +25,7 @@ import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.IntStyles;
 import modtools.ui.IntUI;
-import modtools.ui.components.IntTextArea;
+import modtools.ui.comp.IntTextArea;
 import rhino.*;
 
 import java.lang.reflect.Modifier;

@@ -16,8 +16,8 @@ import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
 import modtools.ui.*;
-import modtools.ui.components.*;
-import modtools.ui.components.input.MyLabel;
+import modtools.ui.comp.*;
+import modtools.ui.comp.input.MyLabel;
 import modtools.ui.content.Content;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
@@ -115,7 +115,7 @@ public class ContentList extends Content {
 				t.image().color(Tmp.c1.set(JColor.c_underline)).height(2).growX().colspan(2).row();
 				if (item instanceof UnlockableContent u) {
 					t.add(new Image(u.uiIcon == null ? HopeIcons.interrupt.getRegion() : u.uiIcon)).size(32f)
-					 .with(img -> IntUI.longPress(img, b -> {
+					 .with(img -> EventHelper.longPress(img, b -> {
 						 if (!b) {
 							 label.setText((label.getText() + "").equals(name) ? u.localizedName : name);
 						 } else {
@@ -129,7 +129,7 @@ public class ContentList extends Content {
 				t.button(b -> b.add(label).grow().padLeft(8f).padRight(8f),
 					HopeStyles.clearb, () -> { })
 				 .growX().height(42)
-				 .with(button -> IntUI.longPress(button, b -> {
+				 .with(button -> EventHelper.longPress(button, b -> {
 					 if (b) {
 						 JSFunc.copyText(name, button);
 					 } else {

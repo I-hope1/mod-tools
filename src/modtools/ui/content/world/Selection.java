@@ -33,13 +33,14 @@ import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
 import modtools.ui.TopGroup.*;
-import modtools.ui.components.*;
-import modtools.ui.components.Window.NoTopWindow;
-import modtools.ui.components.linstener.*;
+import modtools.ui.comp.*;
+import modtools.ui.comp.Window.NoTopWindow;
+import modtools.ui.comp.linstener.*;
 import modtools.ui.content.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;
+import modtools.ui.menu.MenuBuilder;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.world.*;
@@ -845,7 +846,7 @@ public class Selection extends Content {
 			if (tile == null) return;
 
 			table.table(t -> {
-				IntUI.addShowMenuListenerp(t, () -> WFunction.getMenuLists(tile));
+				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(tile));
 				tiles.buildTable(tile, t);
 				addMoreButton(t, tile);
 			}).row();
@@ -859,7 +860,7 @@ public class Selection extends Content {
 			if (build == null) return;
 
 			table.table(t -> {
-				IntUI.addShowMenuListenerp(t, () -> WFunction.getMenuLists(build));
+				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(build));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(20).color(build.team.color);
 				buildPos(t, build);
@@ -875,7 +876,7 @@ public class Selection extends Content {
 			if (lastUnitSize == 0) return;
 
 			unitSet.each(u -> table.table(Tex.underline, t -> {
-				IntUI.addShowMenuListenerp(t, () -> WFunction.getMenuLists(unitSet));
+				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(unitSet));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color);
 				t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
@@ -895,7 +896,7 @@ public class Selection extends Content {
 			if (lastBulletSize == 0) return;
 
 			bulletSet.each(u -> table.table(Tex.underlineDisabled, t -> {
-				IntUI.addShowMenuListenerp(t, () -> WFunction.getMenuLists0(bulletSet));
+				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists0(bulletSet));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color).colspan(0);
 				t.label(() -> u.time + "[lightgray]/[]" + u.lifetime).size(10).colspan(2).row();

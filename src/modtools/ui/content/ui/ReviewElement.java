@@ -24,15 +24,15 @@ import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.*;
-import modtools.ui.components.*;
-import modtools.ui.components.Window.IDisposable;
-import modtools.ui.components.buttons.FoldedImageButton;
-import modtools.ui.components.input.*;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.linstener.FocusSearchListener;
-import modtools.ui.components.review.CellDetailsWindow;
-import modtools.ui.components.utils.*;
-import modtools.ui.components.windows.ListDialog.ModifiedLabel;
+import modtools.ui.comp.*;
+import modtools.ui.comp.Window.IDisposable;
+import modtools.ui.comp.buttons.FoldedImageButton;
+import modtools.ui.comp.input.*;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.linstener.FocusSearchListener;
+import modtools.ui.comp.review.CellDetailsWindow;
+import modtools.ui.comp.utils.*;
+import modtools.ui.comp.ModifiedLabel;
 import modtools.ui.content.Content;
 import modtools.ui.content.ui.PairProv.SizeProv;
 import modtools.ui.control.HopeInput;
@@ -469,7 +469,7 @@ public class ReviewElement extends Content {
 			exited(this::unfocus);
 			keyDown(KeyCode.f, () -> window.fixedFocus = window.fixedFocus == this ? null : this);
 			keyDown(KeyCode.i, () -> INFO_DIALOG.showInfo(element));
-			keyDown(KeyCode.r, () -> IntUI.showMenuList(execChildren(element)));
+			keyDown(KeyCode.r, () -> MenuBuilder.showMenuList(execChildren(element)));
 			keyDown(KeyCode.del, () -> IntUI.shiftIgnoreConfirm(() -> {
 				remove();
 				element.remove();
@@ -490,12 +490,12 @@ public class ReviewElement extends Content {
 			Element window_elem = this.children.get(eventChildIndex);
 			if (element instanceof Image img) {
 				keyDown(KeyCode.p, () -> IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable));
-				buildImagePreviewButton(element, (Table) window_elem, img::getDrawable, img::setDrawable);
+				PreviewUtils.buildImagePreviewButton(element, (Table) window_elem, img::getDrawable, img::setDrawable);
 			}
 			window_elem.touchable = Touchable.enabled;
 			Runnable copy = storeRun(() -> element);
-			IntUI.addShowMenuListenerp(window_elem, getContextMenu(this, element, copy));
-			IntUI.doubleClick(window_elem, null, copy);
+			MenuBuilder.addShowMenuListenerp(window_elem, getContextMenu(this, element, copy));
+			EventHelper.doubleClick(window_elem, null, copy);
 			touchable = Touchable.enabled;
 
 			update(() -> {
@@ -594,7 +594,7 @@ public class ReviewElement extends Content {
 
 		static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
 			return () -> Seq.with(
-			 copyAsJSMenu(null, copy),
+			 MenuBuilder.copyAsJSMenu(null, copy),
 			 ConfirmList.with("clear", Icon.trashSmall, "@clear", "@confirm.remove", () -> {
 				 self.remove();
 				 element.remove();

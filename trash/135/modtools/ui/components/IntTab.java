@@ -1,4 +1,4 @@
-package modtools.ui.components;
+package modtools.ui.comp;
 
 import arc.graphics.Color;
 import arc.math.Interp;

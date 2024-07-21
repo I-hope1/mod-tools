@@ -1,5 +1,5 @@
 
-package modtools.ui.components;
+package modtools.ui.comp;
 
 import arc.Core;
 import arc.func.*;
@@ -28,7 +28,7 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.MyFonts;
-import modtools.ui.components.input.highlight.*;
+import modtools.ui.comp.input.highlight.*;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

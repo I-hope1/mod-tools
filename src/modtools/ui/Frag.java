@@ -18,11 +18,11 @@ import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.events.ISettings;
 import modtools.ui.IntUI.IMenu;
-import modtools.ui.components.Hitter;
-import modtools.ui.components.limit.LimitTable;
-import modtools.ui.components.linstener.MoveListener;
+import modtools.ui.comp.Hitter;
+import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.linstener.MoveListener;
 import modtools.ui.content.Content;
-import modtools.utils.Tools;
+import modtools.utils.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.BindCell;
 
@@ -82,7 +82,7 @@ public class Frag extends Table {
 
 		var listener = new MoveInsideListener();
 		// 添加双击变小
-		IntUI.doubleClick(top, () -> {
+		EventHelper.doubleClick(top, () -> {
 			if (!hideCont) return;
 			if (circle == null) addChild(circle = new Group() {{
 				update(() -> {
@@ -102,11 +102,7 @@ public class Frag extends Table {
 		});
 		IntVars.addResizeListener(() -> listener.display(CellTools.unset, CellTools.unset));
 	}
-	Task setPositionTask = new Task() {
-		public void run() {
-			setDefaultPosition();
-		}
-	};
+	Task setPositionTask = TaskManager.newTask(this::setDefaultPosition);
 	private void setDefaultPosition() {
 		Vec2 pos = position.getPosition();
 		super.setPosition(pos.x, pos.y);

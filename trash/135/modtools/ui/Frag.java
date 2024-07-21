@@ -6,7 +6,7 @@ import arc.scene.ui.layout.Table;
 import arc.util.Log;
 import mindustry.gen.Tex;
 import mindustry.ui.Styles;
-import modtools.ui.components.MoveListener;
+import modtools.ui.comp.MoveListener;
 
 public class Frag extends Table {
 	public void load() {

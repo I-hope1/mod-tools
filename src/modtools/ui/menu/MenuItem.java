@@ -8,10 +8,9 @@ import arc.scene.ui.layout.*;
 import arc.util.Nullable;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
+import modtools.ui.content.debug.Tester;
 import modtools.utils.Tools;
 import modtools.utils.ui.CellTools;
-
-import static modtools.ui.Contents.tester;
 
 /**
  * The type Menu list.
@@ -23,7 +22,7 @@ public class MenuItem {
 	public String   key;
 	/** The Icon of button */
 	public Drawable icon;
-	/** The button text Used for display */
+	/** The button text used for display */
 	public String   name;
 	/**
 	 * The name provider. (Nullable)
@@ -61,7 +60,7 @@ public class MenuItem {
 	}
 	public static MenuItem with(String key, Drawable icon, String name, Prov<?> prov) {
 		return with(key, icon, name, () -> {
-			tester.quietPut(prov.get());
+			Tester.quietPut(prov.get());
 		});
 	}
 

@@ -14,7 +14,7 @@ import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import modtools.ui.Contents;
 import modtools.ui.IntFunc;
-import modtools.ui.components.MyItemSelection;
+import modtools.ui.comp.MyItemSelection;
 
 public class UnitSpwan extends Content {
 

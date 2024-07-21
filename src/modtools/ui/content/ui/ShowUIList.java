@@ -29,13 +29,13 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.ui.components.*;
-import modtools.ui.components.input.JSRequest;
-import modtools.ui.components.utils.*;
+import modtools.ui.comp.*;
+import modtools.ui.comp.input.JSRequest;
+import modtools.ui.comp.utils.*;
 import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
-import modtools.ui.components.InterpImage;
+import modtools.ui.comp.InterpImage;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
@@ -290,7 +290,7 @@ public class ShowUIList extends Content {
 			Object finalStyle = style;
 			t.table(t1 -> {
 				field(t1, field.getName());
-				IntUI.addPreviewButton(t1, p -> SR.apply(() -> Sr(finalStyle)
+				PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> Sr(finalStyle)
 				 .isInstance(ScrollPaneStyle.class, p, Builder::view)
 				 .isInstance(DialogStyle.class, p, Builder::view)
 				 .isInstance(LabelStyle.class, p, Builder::view)
@@ -416,6 +416,6 @@ public class ShowUIList extends Content {
 	}
 
 	static void viewDrawable(Table table, Drawable drawable) {
-		IntUI.addPreviewButton(table, p -> Builder.view(drawable, p)).padLeft(8f);
+		PreviewUtils.addPreviewButton(table, p -> Builder.view(drawable, p)).padLeft(8f);
 	}
 }

@@ -25,15 +25,16 @@ import modtools.events.MyEvents;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
-import modtools.ui.components.Window.DisWindow;
-import modtools.ui.components.input.JSRequest;
-import modtools.ui.components.limit.*;
-import modtools.ui.components.utils.TemplateTable;
+import modtools.ui.comp.Window.DisWindow;
+import modtools.ui.comp.input.JSRequest;
+import modtools.ui.comp.limit.*;
+import modtools.ui.comp.utils.TemplateTable;
+import modtools.ui.content.debug.Tester;
 import modtools.ui.content.ui.PairProv;
 import modtools.ui.content.world.Selection;
 import modtools.ui.content.world.Selection.Settings;
 import modtools.ui.effect.*;
-import modtools.ui.menu.MenuItem;
+import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 
@@ -128,7 +129,7 @@ public abstract class WFunction<T> {
 				btn.update(() -> {
 					btn.setChecked(btn.uiShowing || select.contains(value));
 				});
-				IntUI.doubleClick(btn, () -> {
+				EventHelper.doubleClick(btn, () -> {
 					if (select.contains(value, true)) select.remove(value);
 					else select.add(value);
 				}, () -> {
@@ -166,7 +167,7 @@ public abstract class WFunction<T> {
 		main.update(() -> SC.selectFunc = this);
 
 		FunctionBuild("Copy", list -> {
-			tester.put(IntVars.mouseVec, list.toArray());
+			Tester.put(IntVars.mouseVec, list.toArray());
 		});
 	}
 	private void buildButtons() {
@@ -186,7 +187,7 @@ public abstract class WFunction<T> {
 
 		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> { })
 		 .with(b -> b.clicked(() -> {
-			showMenuList(getMenuLists(this, mergeList()));
+			MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
 		}))
 		 .disabled(_ -> select.isEmpty());
 		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {

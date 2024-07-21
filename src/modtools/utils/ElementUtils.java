@@ -14,7 +14,7 @@ import arc.util.*;
 import mindustry.ui.Styles;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.*;
-import modtools.ui.components.Window;
+import modtools.ui.comp.Window;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.effect.ScreenSampler;
 

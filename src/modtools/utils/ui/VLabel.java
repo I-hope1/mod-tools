@@ -1,7 +1,7 @@
 package modtools.utils.ui;
 
 import arc.graphics.Color;
-import modtools.ui.components.input.NoMarkupLabel;
+import modtools.ui.comp.input.NoMarkupLabel;
 
 public class VLabel extends NoMarkupLabel {
 	public VLabel(float scale, Color color) {

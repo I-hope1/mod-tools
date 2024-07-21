@@ -115,7 +115,6 @@ public class ModTools extends Mod {
 		}); */
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
-
 	private static void resolveLibsCatch() {
 		try {
 			loadLibs();

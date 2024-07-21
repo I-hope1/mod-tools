@@ -117,7 +117,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		return buildWithName(t, cell, name, f -> f);
 	}
 	public static <T> Boolean getChecked(Class<? extends T> ctype, T obj, String key) {
-		return Sr(Reflect.get(ctype, obj, key))
+		return SR.of(Reflect.get(ctype, obj, key))
 		 .reset(CellDetailsWindow::asBoolean)
 		 .get();
 	}

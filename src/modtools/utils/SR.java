@@ -5,16 +5,23 @@ import arc.struct.ObjectMap;
 
 import java.util.function.*;
 
+import static modtools.utils.Tools.as;
+
 public class SR<T> {
-	T value;
+	private static final ObjectMap<Thread, SR<?>> caches = new ObjectMap<>();
+	public static <R> SR<R> of(R value) {
+		SR<R> instance = as(caches.get(Thread.currentThread(), SR::new));
+		return instance.setv(value);
+	}
+
+	private T value;
+	// 私有构造器
+	private SR() { }
+
 	public static void apply(Runnable run) {
 		try {
 			run.run();
-		} catch (SatisfyException ignored) {}
-	}
-
-	public SR(T value) {
-		this.value = value;
+		} catch (SatisfyException ignored) { }
 	}
 
 	public SR<T> setv(T value) {
@@ -38,7 +45,10 @@ public class SR<T> {
 		return this;
 	}
 	public <R> SR<R> reset(Function<T, R> func) {
-		return new SR<>(func.apply(value));
+		if (func == null) throw new NullPointerException("func is null");
+		SR<R> self = as(this);
+		self.value = func.apply(value);
+		return self;
 	}
 
 	/**
@@ -99,10 +109,10 @@ public class SR<T> {
 		T value = this.value;
 		return () -> cons.accept(value);
 	}
-	/** 绑定到单元格值  */
+	/** 绑定到单元格值 */
 	public <U> Cons<U> bindTo(Cons2<U, T> cons) {
 		T value = this.value;
-		return v -> cons.get(v,value);
+		return v -> cons.get(v, value);
 	}
 	public SR<T> cons(Predicate<T> boolf, Consumer<T> cons) {
 		if (boolf.test(value)) cons.accept(value);
@@ -130,12 +140,6 @@ public class SR<T> {
 		return func.apply(value);
 	}
 
-	/* ---- for classes ---- */
-	public static final SR NONE = new SR<>(null) {
-		public SR<Object> isExtend(Consumer<Class<?>> cons, Class<?>... classes) {
-			return this;
-		}
-	};
 	/**
 	 * 判断是否继承
 	 * @param cons    形参为满足的{@code class}
@@ -147,13 +151,13 @@ public class SR<T> {
 		for (Class<?> cl : classes) {
 			if (cl.isAssignableFrom(origin)) {
 				cons.accept(cl);
-				return NONE;
+				throw new SatisfyException();
 			}
 		}
 		return this;
 	}
 
-	public static class SatisfyException extends RuntimeException {}
+	public static class SatisfyException extends RuntimeException { }
 	public interface TBoolc<T> {
 		void get(T p1, boolean p2);
 	}
@@ -171,47 +175,4 @@ public class SR<T> {
 		return v -> cons2.get(p1, v);
 	}
 
-	/**
-	 * 使用方法:<br />
-	 * + {@link CatchSR#apply(Runnable run)}<br />
-	 * run是get链<br />
-	 *
-	 * <pre>{@code CatchSR.apply(() -> CatchSR.of(
-	 * () -> MyReflect.lookupGetMethods(cls))
-	 * .get(cls::getDeclaredMethods)
-	 * .get(() -> new Method[0])}</pre>
-	 */
-	@SuppressWarnings({"rawtypes", "unchecked"})
-	public static class CatchSR<R> {
-		private              R       value;
-		private CatchSR() {}
-		public static ObjectMap<Thread, CatchSR> caches = new ObjectMap<>();
-		public static <R> CatchSR<R> of(ProvT<R> prov) {
-			CatchSR instance = caches.get(Thread.currentThread(), CatchSR::new);
-			instance.value = null;
-			return instance.get(prov);
-		}
-		public static <R> R apply(Runnable run) {
-			try {
-				run.run();
-				throw new IllegalStateException("Cannot meet the requirements.");
-			} catch (SatisfyException e) {
-				return (R) caches.get(Thread.currentThread(), CatchSR::new).value;
-			}
-		}
-		public CatchSR<R> get(ProvT<R> prov) {
-			try {
-				value = prov.get();
-			} catch (Throwable ignored) {
-				return this;
-			}
-			throw new SatisfyException();
-		}
-		private R get() {
-			return value;
-		}
-		public interface ProvT<R> {
-			R get() throws Throwable;
-		}
-	}
 }

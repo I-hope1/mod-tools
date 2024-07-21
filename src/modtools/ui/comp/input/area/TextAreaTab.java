@@ -22,11 +22,9 @@ import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.comp.input.highlight.*;
 import modtools.ui.comp.input.highlight.Syntax.VirtualString;
-import modtools.utils.Tools;
+import modtools.utils.*;
 
 import java.util.regex.Pattern;
-
-import static modtools.utils.Tools.Sr;
 
 
 /**
@@ -47,7 +45,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	showLine;
 	public Syntax syntax;
 
-	public static float numWidth = Sr(0f).setOpt(_ -> {
+	public static float numWidth = SR.of(0f).setOpt(_ -> {
 		var layout = new GlyphLayout();
 		layout.setText(Fonts.def, "0");
 		return layout.width;

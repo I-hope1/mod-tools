@@ -2,7 +2,6 @@ package modtools.utils;
 
 import arc.util.Strings;
 import modtools.jsfunc.type.CAST;
-import modtools.utils.SR.CatchSR;
 import rhino.ScriptRuntime;
 
 import java.lang.reflect.InvocationTargetException;

@@ -168,17 +168,6 @@ public class Tools {
 		return t1 != null ? t1 : t2.get(); // or(t2.get(), Tools::_throw);
 	}
 
-	private static final SR sr_instance = new SR<>(null);
-
-	/**
-	 * 创建或获取SR对象
-	 * @param value 值
-	 * @return SR对象
-	 */
-	public static <T> SR<T> Sr(T value) {
-		return sr_instance.setv(value);
-	}
-
 	/**
 	 * 检查对象是否为null，如果非null则执行Consumer
 	 * @param t    对象

@@ -3,7 +3,7 @@ package modtools.utils.reflect;
 import arc.func.Prov;
 import arc.util.Log;
 import ihope_lib.MyReflect;
-import modtools.utils.SR.CatchSR;
+import modtools.utils.CatchSR;
 import modtools.utils.Tools.CProv;
 
 import java.lang.invoke.*;

@@ -673,7 +673,7 @@ public class Window extends Table implements Position {
 		}
 
 		public Element hit(float x, float y, boolean touchable) {
-			return Sr(super.hit(x, y, touchable))
+			return SR.of(super.hit(x, y, touchable))
 			 .set(e -> e == this, titleTable)
 			 .get();
 		}

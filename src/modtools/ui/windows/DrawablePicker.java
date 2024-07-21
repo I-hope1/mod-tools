@@ -23,7 +23,7 @@ import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
-import modtools.utils.SR.CatchSR;
+import modtools.utils.CatchSR;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.FormatHelper;

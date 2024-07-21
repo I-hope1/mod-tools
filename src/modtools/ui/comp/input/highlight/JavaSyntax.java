@@ -2,10 +2,10 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import modtools.utils.SR;
 import rhino.ScriptRuntime;
 
 import static modtools.ui.comp.input.highlight.JSSyntax.*;
-import static modtools.utils.Tools.Sr;
 
 public class JavaSyntax extends Syntax {
 	public JavaSyntax(SyntaxDrawable drawable) {
@@ -44,7 +44,7 @@ public class JavaSyntax extends Syntax {
 		}
 		return null;
 	}, task -> {
-		CharSequence token = Sr(task.token.charAt(task.token.length() - 1))
+		CharSequence token = SR.of(task.token.charAt(task.token.length() - 1))
 		                       .get(t -> t == 'F' || t == 'f' || t == 'l' || t == 'L'
 			                               ? task.token.subSequence(0, task.token.length() - 1) : task.token);
 		CharSequence s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.'

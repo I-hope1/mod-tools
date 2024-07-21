@@ -41,10 +41,8 @@ import static arc.Core.graphics;
 import static mindustry.Vars.*;
 import static modtools.IntVars.mouseVec;
 import static modtools.graphics.MyShaders.baseShader;
-import static modtools.ui.Contents.tester;
 import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
-import static modtools.utils.Tools.Sr;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
@@ -131,7 +129,7 @@ public class IntUI {
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> { }).with(b -> b.clicked(() -> {
-			Sr((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
+			SR.of((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 			 ? w : JSFunc.watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
 		})).size(FUNCTION_BUTTON_SIZE);

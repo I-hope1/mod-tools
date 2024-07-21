@@ -2,7 +2,7 @@ package modtools.struct.v6;
 
 import arc.util.*;
 import modtools.ModTools;
-import modtools.utils.SR.CatchSR;
+import modtools.utils.CatchSR;
 
 import java.util.concurrent.*;
 

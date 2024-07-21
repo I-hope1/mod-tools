@@ -4,8 +4,6 @@ import arc.struct.ObjectMap;
 import arc.util.*;
 import arc.util.Timer.Task;
 
-import static modtools.utils.Tools.Sr;
-
 public class TaskManager {
 	private static final ObjectMap<Runnable, Task> map = new ObjectMap<>();
 
@@ -23,7 +21,7 @@ public class TaskManager {
 	 * @return 进行的任务
 	 *  */
 	public static Task acquireTask(float delay, Runnable run) {
-		return Sr(map.get(run, () -> Time.runTask(delay, run)))
+		return SR.of(map.get(run, () -> Time.runTask(delay, run)))
 		 .consNot(Task::isScheduled, task -> Timer.schedule(task, delay / 60f)).get();
 	}
 	/** @param delay 延迟的帧（tick，60tick/s) */

@@ -35,9 +35,8 @@ import modtools.ui.comp.utils.*;
 import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
-import modtools.ui.comp.InterpImage;
-import modtools.utils.reflect.*;
-import modtools.utils.ui.*;
+import modtools.utils.reflect.FieldUtils;
+import modtools.utils.ui.KeyValue;
 import modtools.utils.ui.search.*;
 
 import java.lang.reflect.*;
@@ -45,7 +44,6 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 import static arc.scene.ui.CheckBox.CheckBoxStyle;
-import static modtools.utils.Tools.Sr;
 import static modtools.utils.ui.FormatHelper.fixed;
 
 @SuppressWarnings("StringTemplateMigration")
@@ -271,7 +269,7 @@ public class ShowUIList extends Content {
 				if (style instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
 				if (style instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
 				t.bind(field.getName());
-				Sr(style)
+				SR.of(style)
 				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
 				 .isInstance(DialogStyle.class, t, Builder::build)
 				 .isInstance(LabelStyle.class, t, Builder::build)
@@ -290,7 +288,7 @@ public class ShowUIList extends Content {
 			Object finalStyle = style;
 			t.table(t1 -> {
 				field(t1, field.getName());
-				PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> Sr(finalStyle)
+				PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> SR.of(finalStyle)
 				 .isInstance(ScrollPaneStyle.class, p, Builder::view)
 				 .isInstance(DialogStyle.class, p, Builder::view)
 				 .isInstance(LabelStyle.class, p, Builder::view)

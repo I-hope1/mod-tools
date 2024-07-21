@@ -15,7 +15,7 @@ import modtools.utils.*;
 public class WorldInfo {
 	public static void showInfo(Element element, Object o) {
 		IntUI.showSelectTable(element, (p, _, _) -> SR.apply(() ->
-			Tools.Sr(o)
+			SR.of(o)
 			 .isInstance(Tile.class, x -> build(p, x))
 			 .isInstance(Building.class, x -> build(p, x))
 			 .isInstance(Unit.class, x -> build(p, x))

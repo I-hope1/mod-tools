@@ -24,7 +24,6 @@ import modtools.ui.content.world.Selection;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
-import modtools.utils.SR.CatchSR;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
 
@@ -34,8 +33,7 @@ import java.util.Map;
 import static modtools.events.E_JSFunc.truncate_text;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
-import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.Sr;
+import static modtools.ui.IntUI.topGroup;
 
 @SuppressWarnings("SizeReplaceableByIsEmpty")
 public abstract class ValueLabel extends ElementInlineLabel {
@@ -372,46 +370,47 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		list.add(newDetailsMenuList(this, val, (Class) type));
 	}
 	protected void specialBuild(Seq<MenuItem> list) {
-		Sr(type).isExtend(cl -> {
-			 if (cl == Drawable.class) addPickDrawable(list);
-			 list.add(MenuItem.with("img.show", Icon.imageSmall, "img", () ->
-				SR.apply(() -> Sr(val)
-				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
-				 .isInstance(Texture.class, INFO_DIALOG::dialog)
-				 .isInstance(Drawable.class, INFO_DIALOG::dialog)
-				)));
-		 }, TextureRegion.class, Texture.class, Drawable.class)
-		 /* .isExtend(__ -> {
-			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
+		SR.apply(() -> SR.of(type).isExtend(cl -> {
+				if (cl == Drawable.class) addPickDrawable(list);
+				list.add(MenuItem.with("img.show", Icon.imageSmall, "img", () ->
+				 SR.apply(() -> SR.of(val)
+					.isInstance(TextureRegion.class, INFO_DIALOG::dialog)
+					.isInstance(Texture.class, INFO_DIALOG::dialog)
+					.isInstance(Drawable.class, INFO_DIALOG::dialog)
+				 )));
+			}, TextureRegion.class, Texture.class, Drawable.class)
+			/* .isExtend(__ -> {
+				list.add(MenuList.with(Icon.androidSmall, "change", () -> {
 
-			 }));
-		 }, Drawable.class) */
-		 .isExtend(_ -> {
-			 list.add(MenuItem.with("element.inspect", Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
-				 REVIEW_ELEMENT.inspect((Element) val);
-			 }));
-			 list.add(newElementDetailsList((Element) val));
-			 elementSetter(list, this::setVal1);
-		 }, Element.class)
-		 .isExtend(_ -> {
-			 list.add(MenuItem.with("effect.spawnAtPlayer", Icon.infoSmall, "At player", () -> {
-				 ((Effect) val).at(Vars.player);
-			 }));
-		 }, Effect.class)
-		 .isExtend(_ -> {
-			 list.add(MenuItem.with("cell.inspect", Icon.infoCircleSmall, "Cell details", b -> {
-				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
-			 }));
-		 }, Cell.class)
-		 .isExtend(_ -> {
-			 list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
-				STR."\{
-				 val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
-				 } world",
-				() -> val == null, () -> {
-					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
-		 }, Building.class, Unit.class, Bullet.class);
+			}, Drawable.class) */
+			.isExtend(_ -> {
+				list.add(MenuItem.with("element.inspect", Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
+					REVIEW_ELEMENT.inspect((Element) val);
+				}));
+				list.add(newElementDetailsList((Element) val));
+				elementSetter(list, this::setVal1);
+			}, Element.class)
+			.isExtend(_ -> {
+				list.add(MenuItem.with("effect.spawnAtPlayer", Icon.infoSmall, "At player", () -> {
+					((Effect) val).at(Vars.player);
+				}));
+			}, Effect.class)
+			.isExtend(_ -> {
+				list.add(MenuItem.with("cell.inspect", Icon.infoCircleSmall, "Cell details", b -> {
+					new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
+				}));
+			}, Cell.class)
+			.isExtend(_ -> {
+				list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
+				 STR."\{
+					val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
+					} world",
+				 () -> val == null, () -> {
+					 if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
+				 }));
+			}, Building.class, Unit.class, Bullet.class)
+		);
 	}
 	private void addPickDrawable(Seq<MenuItem> list) {
 		list.add(MenuItem.with("drawable.pick", Icon.editSmall, "@pickdrawable", () -> {

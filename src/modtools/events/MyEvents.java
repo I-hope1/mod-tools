@@ -2,10 +2,9 @@ package modtools.events;
 
 import arc.func.Cons;
 import arc.struct.Seq;
+import modtools.utils.SR;
 
 import java.util.HashMap;
-
-import static modtools.utils.Tools.Sr;
 
 /* copy from arc.Events */
 @SuppressWarnings("unchecked")
@@ -97,7 +96,7 @@ public class MyEvents {
 		events.computeIfAbsent(type, k -> new Seq<>()).add(listener);
 	}
 	public static void fire(Object type) {
-		Sr((Seq<Runnable>) events.get(type))
+		SR.of((Seq<Runnable>) events.get(type))
 		 .ifPresent(l -> l.each(Runnable::run));
 	}
 }

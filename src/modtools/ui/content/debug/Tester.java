@@ -427,7 +427,7 @@ public class Tester extends Content {
 			return true;
 		}
 		if (Core.input.alt() && keycode == KeyCode.v) {
-			Tools.runIgnoredException(() -> Sr(res)
+			SR.apply(() -> SR.of(res)
 			 .isInstance(Element.class, true, INFO_DIALOG::dialog)
 			 .isInstance(String.class, true, INFO_DIALOG::dialog)
 			 .isInstance(TextureRegion.class, true, INFO_DIALOG::dialog)

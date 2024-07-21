@@ -100,7 +100,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 frag    = new NGroup("frag"),
 	 others  = new NGroup("others") {
 		 public Element hit(float x, float y, boolean touchable) {
-			 return Sr(super.hit(x, y, touchable))
+			 return SR.of(super.hit(x, y, touchable))
 				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
 				 ? el -> or(el, this) : null)
 				.get();

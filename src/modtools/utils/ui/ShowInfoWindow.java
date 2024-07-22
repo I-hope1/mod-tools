@@ -550,8 +550,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			MenuBuilder.addShowMenuListenerp(label, () -> Seq.with(
 			 MenuItem.with("ctor.getter.copy", Icon.copySmall, "Cpy reflect getter", () -> copyExecutableReflection(ctor)),
 			 MenuItem.with("<init>handle.copy", o == null ? Icon.copySmall : Icon.boxSmall,
-				o == null ? "Cpy <init> handle" : "Invoke <init> method", ctorInitInvoker(o, ctor, noParam)),
-			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", ctorInvoker(o, ctor, noParam)),
+				o == null ? "Cpy <init> handle" : "Invoke <init> method", ctorInitInvoker(o, ctor, noParam, label)),
+			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", ctorInvoker(o, ctor, noParam, label)),
 			 MenuBuilder.copyAsJSMenu("constructor", () -> ctor),
 			 ValueLabel.newDetailsMenuList(label, ctor, Constructor.class)
 			));
@@ -800,7 +800,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}, l);
 	}
 
-	private static Runnable ctorInitInvoker(Object o, Constructor<?> ctor, boolean noParam, ReflectValueLabel l) {
+	private static Runnable ctorInitInvoker(Object o, Constructor<?> ctor, boolean noParam, Label l) {
 		return runT(() -> {
 			MethodHandle init = InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor);
 			if (o == null) {
@@ -813,7 +813,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 		}, l);
 	}
-	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, ReflectValueLabel l ) {
+	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, Label l ) {
 		return runT(() -> {
 			MethodHandle handle = getHandle(ctor);
 			if (noParam) {

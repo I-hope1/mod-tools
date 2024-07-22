@@ -2,7 +2,6 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
-import arc.scene.event.VisibilityListener;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
@@ -33,13 +32,13 @@ import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
-	/** 是否从游戏内导入进来的 */
-	static        boolean   isImportFromGame = false;
-	/** 如果有（不为null），在进入是显示  */
-	public static Throwable error            = null;
-	public static Fi        libs             = root.child("libs");
+	/** 如果不为empty，在进入是显示 */
+	private static final Seq<Throwable> errors = new Seq<>();
+	private static final Fi             libs   = root.child("libs");
 
-	public static  boolean isV6   = Version.number <= 135;
+	/** 是否从游戏内导入进来的 */
+	private static boolean isImportFromGame = false;
+	public static  boolean isV6             = Version.number <= 135;
 
 
 	private static boolean loaded = false;
@@ -63,7 +62,7 @@ public class ModTools extends Mod {
 				 SettingsUI::disabledRestart, () -> { });
 			}
 		} catch (Throwable e) {
-			if (isImportFromGame) ui.showException("Cannot load ModTools. (Don't worry.)", e);
+			if (isImportFromGame) ui.showException("Failed to load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
 		}
 	}
@@ -146,8 +145,8 @@ public class ModTools extends Mod {
 			mouseVec.require();
 			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();
 		});
-		if (error != null) {
-			ui.showException(error);
+		if (errors != null) {
+			errors.each(e -> ui.showException(e));
 			return;
 		}
 		load("MyShaders", MyShaders::load);
@@ -159,7 +158,7 @@ public class ModTools extends Mod {
 		if (isDesktop()) {
 			load("DropMod", DropFile::load);
 		}
-		load("IntUI",  IntUI::load);
+		load("IntUI", IntUI::load);
 
 		load("Updater", Updater::checkUpdate);
 		IntVars.async(() -> {
@@ -171,7 +170,7 @@ public class ModTools extends Mod {
 	}
 
 	public static void load(String moduleName, Runnable r) {
-		Tools.runT("Failed to load module " + moduleName, r, null).run();
+		Tools.runT("Failed to load module " + moduleName, r::run, null).run();
 	}
 
 	/**
@@ -237,7 +236,7 @@ public class ModTools extends Mod {
 			return true;
 		} catch (Throwable e) {
 			if (showError) {
-				error = e;
+				errors.add(e);
 				Log.err(STR."Unexpected exception when loading '\{sourceFi}'", e);
 			}
 			return false;

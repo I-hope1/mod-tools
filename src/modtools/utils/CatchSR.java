@@ -33,7 +33,7 @@ public class CatchSR<R> {
 	public static <R> R apply(Runnable run) {
 		try {
 			run.run();
-			throw new IllegalStateException("Cannot meet the requirements.");
+			throw new IllegalStateException("Failed to meet the requirements.");
 		} catch (SatisfyException e) {
 			return (R) getInstance().value;
 		}

@@ -16,7 +16,7 @@ import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.*;
 import mindustry.gen.Tex;
 import modtools.jsfunc.type.CAST;
-import modtools.ui.comp.ModifiedLabel;
+import modtools.ui.comp.ModifiableLabel;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
@@ -175,7 +175,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 		public String $text;
 		public DesignLabel(String text) {
 			$text = text;
-			ModifiedLabel.build(() -> $text, _ -> true, (f, _) -> {
+			ModifiableLabel.build(() -> $text, _ -> true, (f, _) -> {
 				$text = f.getText();
 			}, this);
 		}

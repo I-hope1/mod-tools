@@ -624,6 +624,7 @@ public class Window extends Table implements Position {
 
 		oldTransform.set(Draw.trans());
 		Tools.runLoggedException(super::drawChildren, () -> {
+			/* draw错误捕获 */
 			unexpectedDrawException = true;
 			children.end();
 
@@ -773,13 +774,16 @@ public class Window extends Table implements Position {
 		public float titleHeight = topHeight;
 
 		{
+			// 从window中删除titleTable
 			getCells().remove(getCell(titleTable).clearElement(), true);
-			Table table = new Table();
-			table.setFillParent(true);
-			table.top().add(titleTable).growX().height(titleHeight);
+			// 新建一个container
+			Table container = new Table();
+			container.setFillParent(true);
+			container.top().add(titleTable).growX().height(titleHeight);
 			titleTable.translation.y = titleHeight;
-			table.setClip(true);
-			addChild(table);
+			container.setClip(true);
+			addChild(container);
+
 			titleTable.invalidateHierarchy();
 			class ExitListener extends InputListener {
 				public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {

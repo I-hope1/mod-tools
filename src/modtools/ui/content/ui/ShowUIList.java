@@ -48,7 +48,9 @@ import static modtools.utils.ui.FormatHelper.fixed;
 
 @SuppressWarnings("StringTemplateMigration")
 public class ShowUIList extends Content {
-	public IntTab tab;
+	public static final int cols = 3;
+
+	IntTab tab;
 	Window ui;
 
 	public ShowUIList() {
@@ -67,10 +69,12 @@ public class ShowUIList extends Content {
 			t.left().defaults().left();
 			t.add(colorWrap);
 			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
-			t.table(t0 -> t0.check("ForceDisabled",
-				forceDisabled, val -> forceDisabled = val).with(c -> c.setStyle(HopeStyles.hope_defaultCheck)))
-			 .colspan(3).left()
-			 .growX().padTop(-4f);
+
+			t.table(t0 -> {
+				t0.check("ForceDisabled",
+					forceDisabled, val -> forceDisabled = val)
+				 .with(c -> c.setStyle(HopeStyles.hope_defaultCheck));
+			}).colspan(3).growX().padTop(-4f);
 		}).row();
 
 		Table top  = new Table();
@@ -139,28 +143,14 @@ public class ShowUIList extends Content {
 		t.unbind();
 	})), tex    = newTable(t -> {
 		String prefix = "Tex.";
-		for (Field field : Tex.class.getFields()) {
-			Drawable drawable = null;
-			try {
-				// 是否为static
-				if (!Modifier.isStatic(field.getModifiers())) return;
-				// 是否为Drawable
-				if (!Drawable.class.isAssignableFrom(field.getType())) return;
-				t.bind(field.getName());
-				// 跳过private检查，减少时间
-				field.setAccessible(true);
-				drawable = (Drawable) field.get(null);
-				texKeyMap.put(drawable, prefix + field.getName());
-				addImage(t, drawable);
-			} catch (Exception err) {
-				t.add();// 占位
-				Log.err(err);
-			} finally {
-				fieldWithView(t, field, drawable);
-				t.row();
-				t.unbind();
-			}
-		}
+		FieldUtils.walkAllConstOf(Tex.class, (field, drawable) -> {
+			t.bind(field.getName());
+			texKeyMap.put(drawable, prefix + field.getName());
+			addImage(t, drawable);
+			fieldWithView(t, field, drawable);
+			t.unbind();
+			t.row();
+		}, Drawable.class);
 	}),
 	 styles     = newTable(true, t -> {
 		 listAllStyles(t, Styles.class);
@@ -179,28 +169,18 @@ public class ShowUIList extends Content {
 			 t.image().color(Pal.accent).colspan(2).growX().row();
 
 			 String prefix = cls.getSimpleName() + ".";
-			 for (Field field : cls.getFields()) {
-				 if (!Modifier.isStatic(field.getModifiers())
-				     || !Color.class.isAssignableFrom(field.getType())) continue;
-				 try {
-					 // 跳过private检查，减少时间
-					 field.setAccessible(true);
-					 Color color = (Color) field.get(null);
-					 colorKeyMap.put(color, prefix + field.getName());
+			 FieldUtils.walkAllConstOf(cls, (field, color) -> {
+				 colorKeyMap.put(color, prefix + field.getName());
 
-					 t.bind(field.getName());
-					 t.listener(el -> IntUI.addTooltipListener(el, "" + color));
-					 t.add(new BorderImage(Core.atlas.white(), 2f)
-						.border(color.cpy().inv())).color(color).size(42f);
-					 field(t, field.getName()).growX();
-					 t.listener(null);
-				 } catch (IllegalAccessException | IllegalArgumentException | ClassCastException err) {
-					 Log.err(err);
-				 } finally {
-					 t.unbind();
-				 }
+				 t.bind(field.getName());
+				 t.listener(el -> IntUI.addTooltipListener(el, "" + color));
+				 t.add(new BorderImage(Core.atlas.white(), 2f)
+					.border(color.cpy().inv())).color(color).size(42f);
+				 field(t, field.getName()).growX();
+				 t.listener(null);
+				 t.unbind();
 				 t.row();
-			 }
+			 }, Color.class);
 		 };
 		 buildColor.get(Color.class);
 		 buildColor.get(Pal.class);
@@ -214,34 +194,30 @@ public class ShowUIList extends Content {
 		 t.button("Built-in", () -> {
 			 table.clearChildren();
 			 c[0] = 0;
-			 for (Field field : Interp.class.getDeclaredFields()) {
-				 Object o = FieldUtils.getOrNull(field);
-				 if (o instanceof Interp interp) {
-					 table.add(new InterpImage(interp))
-						.tooltip(field.getName())
-						.size(120).padBottom(32f);
-					 if (++c[0] % 3 == 0) table.row();
-				 }
-			 }
+			 FieldUtils.walkAllConstOf(Interp.class, (f, interp) -> {
+				 table.add(new InterpImage(interp))
+					.tooltip(f.getName())
+					.size(120).padBottom(32f);
+				 if (++c[0] % cols == 0) table.row();
+			 }, Interp.class);
 		 });
 		 t.button("@add", () -> {
 			 JSRequest.requestFor(Interp.class, Interp.class, interp -> {
 				 table.add(new InterpImage(interp))
 					.size(120).padBottom(32f);
-				 if (++c[0] % 3 == 0) table.row();
+				 if (++c[0] % cols == 0) table.row();
 			 });
 		 });
 	 }),
 	 uis        = newTable(t -> {
-		 for (Field f : UI.class.getFields()) {
-			 Object o = FieldUtils.getOrNull(f, Vars.ui);
-			 if (!(o instanceof Group)) continue;
-			 uiKeyMap.put((Group) o, f.getName());
+		 UI obj = Vars.ui;
+		 FieldUtils.walkAllConstOf(UI.class, (f, group) -> {
+			 uiKeyMap.put(group, f.getName());
 			 t.bind(f.getName());
 			 t.add(f.getName());
-			 t.add(new FieldValueLabel(ValueLabel.unset, UI.class, f, Vars.ui));
+			 t.add(new FieldValueLabel(ValueLabel.unset, UI.class, f, obj));
 			 t.unbind();
-		 }
+		 }, Group.class, obj);
 	 });
 	private static void fieldWithView(FilterTable<Object> t, Field field, Drawable drawable) {
 		if (drawable != null) {
@@ -261,15 +237,15 @@ public class ShowUIList extends Content {
 		Field[] fields = getStyleFields(stylesClass);
 		for (Field field : fields) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;
-			Object style = null;
+			Object obj = null;
 			try {
 				// 跳过访问检查，减少时间
 				field.setAccessible(true);
-				style = field.get(null);
-				if (style instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
-				if (style instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
+				obj = field.get(null);
+				if (obj instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
+				if (obj instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
 				t.bind(field.getName());
-				SR.of(style)
+				SR.of(obj)
 				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
 				 .isInstance(DialogStyle.class, t, Builder::build)
 				 .isInstance(LabelStyle.class, t, Builder::build)
@@ -285,10 +261,10 @@ public class ShowUIList extends Content {
 				continue;
 			} catch (SatisfyException ignored) { }
 
-			Object finalStyle = style;
+			Object finalObj = obj;
 			t.table(t1 -> {
 				field(t1, field.getName());
-				PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> SR.of(finalStyle)
+				PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> SR.of(finalObj)
 				 .isInstance(ScrollPaneStyle.class, p, Builder::view)
 				 .isInstance(DialogStyle.class, p, Builder::view)
 				 .isInstance(LabelStyle.class, p, Builder::view)

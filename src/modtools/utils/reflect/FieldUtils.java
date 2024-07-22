@@ -1,5 +1,6 @@
 package modtools.utils.reflect;
 
+import arc.func.*;
 import arc.util.*;
 import jdk.internal.misc.Unsafe;
 import modtools.utils.Tools;
@@ -17,8 +18,9 @@ public class FieldUtils {
 			return null;
 		}
 	}
-	/** 获取字段，并设置override
-	 *  @throws RuntimeException if class has no such field.
+	/**
+	 * 获取字段，并设置override
+	 * @throws RuntimeException if class has no such field.
 	 **/
 	public static Field getFieldAccessOrThrow(Class<?> cls, String name) {
 		try {
@@ -38,6 +40,21 @@ public class FieldUtils {
 			cls = cls.getSuperclass();
 		}
 		return null;
+	}
+
+
+	public static void walkAllConstOf(Class<?> cls, Cons2<Field, ?> cons, Boolf<?> boolf, Object object) {
+		for (Field field : cls.getDeclaredFields()) {
+			if (!Modifier.isStatic(field.getModifiers())) continue;
+			Object o = getOrNull(field, object);
+			if (boolf.get(Tools.as(o))) cons.get(field, Tools.as(o));
+		}
+	}
+	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass, Object object) {
+		walkAllConstOf(cls, cons, filterClass::isInstance, object);
+	}
+	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass) {
+		walkAllConstOf(cls, cons, filterClass::isInstance, null);
 	}
 
 
@@ -101,23 +118,8 @@ public class FieldUtils {
 	public static long fieldOffset(Field f) {
 		return fieldOffset(Modifier.isStatic(f.getModifiers()), f);
 	}
-	private interface OffsetGetter {
-		long fieldOffset(boolean isStatic, Field f);
-		@SuppressWarnings("deprecation")
-		class DefaultImpl implements OffsetGetter {
-			public long fieldOffset(boolean isStatic, Field f) {
-				return isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
-			}
-		}
-		class AndroidImpl implements OffsetGetter {
-			public long fieldOffset(boolean isStatic, Field f) {
-				return hope_android.FieldUtils.getFieldOffset(f);
-			}
-		}
-		OffsetGetter impl = OS.isAndroid ? new AndroidImpl() : new DefaultImpl();
-	}
 	public static long fieldOffset(boolean isStatic, Field f) {
-		return OffsetGetter.impl.fieldOffset(isStatic, f);
+		return $OffsetGetter.impl.fieldOffset(isStatic, f);
 	}
 	public static Object getFieldValue(Object o, long off, Class<?> type) {
 		if (int.class.equals(type)) {
@@ -192,4 +194,16 @@ public class FieldUtils {
 	public static boolean isStatic(Field f) {
 		return Modifier.isStatic(f.getModifiers());
 	}
+}
+
+interface $OffsetGetter {
+	long fieldOffset(boolean isStatic, Field f);
+
+	@SuppressWarnings("deprecation")
+	$OffsetGetter DefaultImpl = (isStatic, f) ->
+	 isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+
+	$OffsetGetter AndroidImpl = (isStatic, f) -> hope_android.FieldUtils.getFieldOffset(f);
+
+	$OffsetGetter impl = OS.isAndroid ? AndroidImpl : DefaultImpl;
 }

@@ -4,33 +4,34 @@ import arc.func.Prov;
 import arc.graphics.Color;
 import arc.math.Interp;
 import arc.scene.*;
-import arc.scene.actions.*;
+import arc.scene.actions.Actions;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Log;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.limit.PrefTable;
+import modtools.ui.effect.HopeFx;
 import modtools.utils.ui.CellTools;
 
 import java.util.Arrays;
 
 public class IntTab {
-	private final float duration = 0.1f;
+	private final float      duration = 0.1f;
 	public        Table      main;
 	public        PrefTable  title;
 	public        ScrollPane pane;
 
-	public Drawable[] icons;
-	public String[]   names;
-	public Color[]    colors;
-	public Table[]    tables;
+	private Drawable[] icons;
+	public  String[]   names;
+	public  Color[]    colors;
+	public  Table[]    tables;
 	/** 这些会乘以{@link Scl#scl} */
-	public float      totalWidth, eachWidth;
+	public  float      totalWidth, eachWidth;
 	public int     cols;
 	public boolean column/*  = false */;
 
@@ -101,7 +102,6 @@ public class IntTab {
 	 * @param tables     Tables
 	 * @param cols       一行的个数
 	 * @param column     是否为纵向排列
-	 *
 	 * @throws IllegalArgumentException size must be the same.
 	 */
 	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols, boolean column) {
@@ -155,7 +155,7 @@ public class IntTab {
 				 if (first == null) first = b;
 				 labels.put(names[j], b.add(new TitleLabel(
 					() -> hideTitle ? "" : names[j],
-					icons == null ? null : icons[j]
+					icons == null ? null :  icons[j]
 				 )).color(colors[j]).padLeft(4f).padRight(4f).minWidth(28).growY().get());
 				 b.row();
 				 Image image = b.image().growX().get();
@@ -166,15 +166,16 @@ public class IntTab {
 				 if (selected != j && !transitional) {
 					 if (selected != -1) {
 						 Table last = tables[selected];
-						 last.actions(getFadeOut(), Actions.remove());
+						 last.actions(getActionOut(j), Actions.remove());
 						 transitional = true;
+						 // JSFunc.watch().watch("Last", () -> last);
 						 title.update(() -> {
 							 if (!last.hasActions()) {
 								 transitional = false;
 								 title.update(null);
-								 selected = j;
+								 t.addAction(getActionIn(j));
 								 pane.setWidget(t);
-								 t.addAction(getFadeIn());
+								 selected = j;
 							 }
 						 });
 					 } else {
@@ -207,13 +208,45 @@ public class IntTab {
 		 title.getPrefHeight() <= main.getPrefHeight()); */
 		return main;
 	}
-	private Action getFadeIn() {
-		return Actions.sequence(Actions.alpha(0.2f), Actions.fadeIn(duration, Interp.fade));
-		// return Actions.sequence(Actions.moveToAligned(0,0, Align.left, duration, Interp.fade));
+	// 创建进入动画
+	private Action getActionIn(int toIndex) {
+		float duration = 0.16f; // 动画时长，可以根据需要调整
+
+		float targetX = column ? 0 : main.getWidth() * 0.7f;
+		float targetY = column ? main.getHeight() * -0.7f : 0;
+
+		// 如果是竖向排列
+		if (column) {
+			targetY *= toIndex > getSelected() ? 1 : -1;
+		} else {
+			targetX *= toIndex > getSelected() ? 1 : -1;
+		}
+
+		return Actions.parallel(
+		 Actions.sequence(HopeFx.translateTo(targetX, targetY, 0),
+			HopeFx.translateTo(0, 0, duration, Interp.fastSlow)),
+		 Actions.fadeIn(duration, Interp.fastSlow)
+		);
 	}
-	private Action getFadeOut() {
-		return Actions.alpha(0.2f, duration, Interp.fade);
-		// return Actions.sequence(Actions.moveToAligned(0,0, Align.right, duration, Interp.fade));
+
+	// 创建退出动画
+	private Action getActionOut(int toIndex) {
+		float duration = 0.16f; // 动画时长，可以根据需要调整
+
+		float targetX = column ? 0 : main.getWidth() * 0.7f;
+		float targetY = column ? main.getHeight() * -0.7f : 0;
+
+		// 如果是竖向排列
+		if (column) {
+			targetY *= toIndex > getSelected() ? -1 : 1;
+		} else {
+			targetX *= toIndex > getSelected() ? -1 : 1;
+		}
+
+		return Actions.parallel(
+		 HopeFx.translateTo(targetX, targetY, duration, Interp.fastSlow),
+		 Actions.alpha(0.2f, duration, Interp.slowFast)
+		);
 	}
 	public static class TitleLabel extends MyLabel {
 		Drawable icon;

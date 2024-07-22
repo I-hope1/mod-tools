@@ -629,6 +629,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	public String toString() {
 		return STR."\{getClass().getSimpleName()}#\{title.getText()}";
 	}
+	/** @see IDisposable#clearAll() */
 	public void hide() {
 		super.hide();
 
@@ -753,18 +754,21 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			if (size == 1) return;
 			label.setText(STR."\{label.getText()}\{METHOD_COUNT_PREFIX}\{size}]");
 		});
+
 		EventHelper.doubleClick(label, () -> {
-			if (!table.map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable).hasChildren())
+			if (!table.map.get(member.getName(), Pair::new)
+			 .getFirst(ShowInfoWindow::newPairTable).hasChildren())
 				return;
 			IntUI.showSelectTable(attribute, (p, _, _) -> {
-				table.left().top().defaults().left().top();
-				var   pair = table.map.get(member.getName());
-				Table one  = pair.getFirst(ShowInfoWindow::newPairTable);
-				p.add(one).self(c -> c.update(_ -> {
-					c.width(table.getWidth());
-				}).right().grow().get());
-				Time.runTask(6f, one::invalidateHierarchy);
-			}, false, Align.topLeft).table.background(Styles.black6);
+				 table.left().top().defaults().left().top();
+				 var   pair = table.map.get(member.getName());
+				 Table one  = pair.getFirst(ShowInfoWindow::newPairTable);
+				 p.add(one).self(c -> c.update(_ -> {
+					 c.width(table.getWidth());
+				 }).right().grow().get());
+				 Time.runTask(6f, one::invalidateHierarchy);
+			 }, false, Align.topLeft)
+			 .table.background(Styles.black6);
 		}, null);
 	}
 
@@ -813,7 +817,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			});
 		}, l);
 	}
-	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, Label l ) {
+	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, Label l) {
 		return runT(() -> {
 			MethodHandle handle = getHandle(ctor);
 			if (noParam) {

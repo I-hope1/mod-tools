@@ -145,7 +145,7 @@ public class ModTools extends Mod {
 			mouseVec.require();
 			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();
 		});
-		if (errors != null) {
+		if (errors.any()) {
 			errors.each(e -> ui.showException(e));
 			return;
 		}

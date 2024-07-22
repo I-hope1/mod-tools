@@ -95,6 +95,9 @@ jar {
 
 	from(rootDir) { include "mod.hjson" }
 	from("assets/") { include "**" }
+	/*from{
+        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+    }*/
 	from(zipTree("_libs/AndroidField.jar").getAsFileTree()) { include "**" }
 	from(zipTree("${project(":annotations").buildDir0}/libs/annotations-${version}.jar")) {
 		include "**/settings/**"
@@ -116,9 +119,6 @@ task playGame(type: JavaExec) {
 	}
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
-//	jvmArgs = [
-//			'-D' + 'socksProxyHost=127.0.0.1',
-//			'-D' + 'socksProxyPort=1080']
 	args = [
 //	        '-testMobile'
 //			'-debug'

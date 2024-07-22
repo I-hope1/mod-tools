@@ -32,7 +32,7 @@ import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
 import modtools.ui.comp.review.CellDetailsWindow;
 import modtools.ui.comp.utils.*;
-import modtools.ui.comp.ModifiedLabel;
+import modtools.ui.comp.ModifiableLabel;
 import modtools.ui.content.Content;
 import modtools.ui.content.ui.PairProv.SizeProv;
 import modtools.ui.control.HopeInput;
@@ -168,7 +168,7 @@ public class ReviewElement extends Content {
 
 		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
 	}
-	boolean checkA(int color) {
+	static boolean checkA(int color) {
 		// 检查后两位是否为0
 		return (color & 0xFF) == 0;
 	}
@@ -254,7 +254,7 @@ public class ReviewElement extends Content {
 
 	public static class ReviewElementWindow extends Window implements IDisposable {
 		private static final String SEARCH_RESULT = "SRCH_RS";
-		Table   pane = new LimitTable() { };
+		Table   pane = new LimitTable();
 		Element element;
 		Pattern pattern;
 
@@ -705,7 +705,7 @@ public class ReviewElement extends Content {
 				t.label(def);
 				return;
 			}
-			ModifiedLabel.build(def, NumberHelper::isFloat, (field, label) -> {
+			ModifiableLabel.build(def, NumberHelper::isFloat, (field, label) -> {
 				if (!field.isValid()) return;
 				label.setText(field.getText());
 				floatc.get(NumberHelper.asFloat(field.getText()));

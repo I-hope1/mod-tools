@@ -12,7 +12,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
-import modtools.ui.comp.ModifiedLabel;
+import modtools.ui.comp.ModifiableLabel;
 import modtools.ui.comp.utils.TemplateTable;
 import modtools.ui.comp.Window.*;
 import modtools.ui.comp.input.MyLabel;
@@ -102,7 +102,7 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 			o.add(new Image(icon)).size(32f).scaling(Scaling.fit);
 		}), new Table(t -> {
 			t.left().bottom();
-			ModifiedLabel.build(new CacheProv(value).getStringProv(), NumberHelper::isNumber, (field, label) -> {
+			ModifiableLabel.build(new CacheProv(value).getStringProv(), NumberHelper::isNumber, (field, label) -> {
 				if (!field.isValid() || setter == null) return;
 				setter.get(field.getText());
 			}, t).style(Styles.outlineLabel);
@@ -137,14 +137,15 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 			return this;
 		}
 		template.bind(NORMAL);
-		template.add(info).ellipsis(true).color(Pal.accent).growX().left().colspan(2).row();
+		template.top().left().defaults().left().top();
+		template.add(info).ellipsis(true).color(Pal.accent).growX().colspan(2).row();
 		template.image().color(Pal.accent).growX().colspan(2).row();
 		var prov  = new CacheProv(value);
 		var label = new MyLabel(prov.getStringProv());
 		label.prov = prov;
 		label.interval = interval;
 		IntUI.addDetailsButton(template, () -> prov.value, Void.class);
-		template.add(label).name(info).style(HopeStyles.defaultLabel).growX().left().padLeft(6f).row();
+		template.add(label).name(info).style(HopeStyles.defaultLabel).growX().padLeft(6f).row();
 		template.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
 		template.unbind();
 		return this;

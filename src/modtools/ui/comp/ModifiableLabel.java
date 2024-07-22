@@ -11,7 +11,7 @@ import modtools.ui.comp.input.area.AutoTextField;
 /**
  * 可以修改的Label
  */
-public class ModifiedLabel extends NoMarkupLabel {
+public class ModifiableLabel extends NoMarkupLabel {
 	public static Cell<?> build(
 	 Prov<CharSequence> def,
 	 TextFieldValidator validator,
@@ -23,7 +23,7 @@ public class ModifiedLabel extends NoMarkupLabel {
 	TextField               field;
 	Cell<?>                 cell;
 	Cons2<TextField, Label> modifier;
-	public ModifiedLabel(Prov<CharSequence> sup) {
+	public ModifiableLabel(Prov<CharSequence> sup) {
 		super(sup);
 	}
 
@@ -32,7 +32,7 @@ public class ModifiedLabel extends NoMarkupLabel {
 	 TextFieldValidator validator,
 	 Cons2<TextField, Label> modifier,
 	 Table t, Prov<TextField> fieldProv) {
-		var label = new ModifiedLabel(def);
+		var label = new ModifiableLabel(def);
 		label.cell = t.add(label).height(label.getPrefHeight() / Scl.scl());
 		label.field = fieldProv.get();
 		if (validator != null) label.field.setValidator(validator);

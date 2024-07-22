@@ -4,9 +4,9 @@ import arc.Core;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
 import arc.scene.event.*;
-import arc.util.Strings;
+import arc.util.*;
 import mindustry.graphics.Pal;
 import modtools.ui.effect.MyDraw;
 
@@ -44,23 +44,26 @@ public class WorldSelectListener extends InputListener {
 		}
 	}
 	public void draw() {
-		float minX = Mathf.clamp(Math.min(start.x, end.x), CAMERA_RECT.x, CAMERA_RECT.x + CAMERA_RECT.width);
-		float minY = Mathf.clamp(Math.min(start.y, end.y), CAMERA_RECT.y, CAMERA_RECT.y + CAMERA_RECT.height);
-		float maxX = Mathf.clamp(Math.max(start.x, end.x), CAMERA_RECT.x, CAMERA_RECT.x + CAMERA_RECT.width);
-		float maxY = Mathf.clamp(Math.max(start.y, end.y), CAMERA_RECT.y, CAMERA_RECT.y + CAMERA_RECT.height);
+		Rect  rect = CAMERA_RECT;
+		float minX = Mathf.clamp(Math.min(start.x, end.x), rect.x, rect.x + rect.width);
+		float minY = Mathf.clamp(Math.min(start.y, end.y), rect.y, rect.y + rect.height);
+		float maxX = Mathf.clamp(Math.max(start.x, end.x), rect.x, rect.x + rect.width);
+		float maxY = Mathf.clamp(Math.max(start.y, end.y), rect.y, rect.y + rect.height);
+		rect = Tmp.r1.set(minX, minY, maxX - minX, maxY - minY);
+		Vec2 center = rect.getCenter(Tmp.v1);
+		float cx = center.x;
+		float cy = center.y;
 
-		Fill.crect(minX, minY, maxX - minX, maxY - minY);
+		Fill.crect(rect.x, rect.y, rect.width, rect.height);
 
 		Lines.stroke(2);
 		// x: 0 -> x
-		float width = Math.abs(maxX - minX);
-		MyDraw.drawText(Strings.autoFixed(width, 1),
-		 minX + width / 2f, minY, Pal.accent);
+		MyDraw.drawText(Strings.autoFixed(rect.width, 1),
+		 cx, minY, Pal.accent);
 		Lines.line(minX, minY, maxX, minY);
 		// y: 0 -> y
-		float height = Math.abs(maxY - minY);
-		MyDraw.drawText(Strings.autoFixed(height, 1),
-		 minX, minY + height / 2f, Pal.accent);
+		MyDraw.drawText(Strings.autoFixed(rect.height, 1),
+		 minX, cy, Pal.accent);
 		Lines.line(minX, minY, minX, maxY);
 	}
 	protected void clampWorld() {

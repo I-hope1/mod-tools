@@ -1,8 +1,5 @@
 package modtools.utils.reflect;
 
-import java.io.File;
-import java.lang.reflect.*;
-
 import arc.Core;
 import arc.util.OS;
 import dalvik.system.VMStack;
@@ -10,6 +7,9 @@ import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import rhino.*;
+
+import java.io.File;
+import java.lang.reflect.*;
 
 public class HopeReflect {
 

@@ -84,7 +84,7 @@ public class ListDialog extends Window {
 		}
 
 		public Cell<Table> build() {
-			ModifiedLabel.build(() -> f.name(), t -> fileNameValid.get(f, t), (field, label) -> {
+			ModifiableLabel.build(() -> f.name(), t -> fileNameValid.get(f, t), (field, label) -> {
 				if (!f.name().equals(field.getText()) && f.sibling(field.getText()).exists()) {
 					IntUI.showException(new IllegalArgumentException("文件夹已存在.\nFile has existed."));
 				} else if (field.isValid()) {

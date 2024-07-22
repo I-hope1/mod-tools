@@ -32,6 +32,7 @@ public class FilterTable<E> extends LimitTable {
 		if (map == null) map = new HashMap<>();
 		current = map.computeIfAbsent(name, k -> new ObjectSet<>());
 	}
+	/** 对添加的元素进行在此操作  */
 	public void listener(Cons<Element> cons) {
 		this.cons = cons;
 	}

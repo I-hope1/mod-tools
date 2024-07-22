@@ -133,7 +133,7 @@ public class IntUI {
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> { }).with(b -> b.clicked(() -> {
 			SR.of((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
-			 ? w : JSFunc.watch()).watch(info, value).show())
+				? w : JSFunc.watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
 		})).size(FUNCTION_BUTTON_SIZE);
 	}
@@ -537,7 +537,7 @@ public class IntUI {
 
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 	                            String valid, String invalid) {
-		cell.get().addListener(new IntUI.Tooltip(
+		cell.get().addListener(new Tooltip(
 		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : invalid)
 		));
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
@@ -582,14 +582,32 @@ public class IntUI {
 	}
 
 	public static class HoverAndExitListener extends InputListener {
+		/**
+		 * 是否忽略{@code group}内元素的进出<br>
+		 * 如果为{@code true}，c绑定的侦听器，a -> b时不会触发enter & exit
+		 * <table style="border: 1px solid #ccf">
+		 *   c
+		 *   <td style="border: 1px solid #fcc">a</td>
+		 *   <td style="border: 1px solid #fcc">b</td>
+		 * </table>
+		 */
+		private boolean ignoreInsideElement = true;
+		public HoverAndExitListener(boolean ignoreInsideElement) {
+			this.ignoreInsideElement = ignoreInsideElement;
+		}
+		public HoverAndExitListener() { }
 		/** {@inheritDoc} */
 		public final void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+			// 如果inElement为true，判断fromActor是否是绑定元素的 子元素（Descendant）
+			if (ignoreInsideElement && (fromActor == null || !fromActor.isDescendantOf(event.listenerActor))) return;
 			// touchDown也会触发
-			if (mobile != (pointer == -1)) enter0(event, x, y, pointer, fromActor);
+			if (Core.input.isTouched() != (pointer == -1)) enter0(event, x, y, pointer, fromActor);
 		}
 		public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) { }
 		/** {@inheritDoc} */
 		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+			// 如果inElement为true，判断fromActor是否是绑定元素的 子元素（Descendant）
+			if (ignoreInsideElement && (toActor == null || !toActor.isDescendantOf(event.listenerActor))) return;
 			// touchUp也会触发
 			if (mobile != (pointer == -1)) exit0(event, x, y, pointer, toActor);
 		}
@@ -597,11 +615,7 @@ public class IntUI {
 	}
 
 	public static class Tooltip extends arc.scene.ui.Tooltip {
-
-		/**
-		 * Instantiates a new Tooltip.
-		 * @param contents the contents
-		 */
+		/** {@inheritDoc} */
 		public Tooltip(Cons<Table> contents) {
 			super(t -> { });
 			allowMobile = true;
@@ -613,24 +627,15 @@ public class IntUI {
 				topGroup.addChild(table);
 			};
 		}
-		/**
-		 * Instantiates a new Tooltip.
-		 * @param contents the contents
-		 * @param show     the show
-		 */
+		/** {@inheritDoc} */
 		public Tooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
 		}
-		/**
-		 * Instantiates a new Tooltip.
-		 * @param contents the contents
-		 * @param manager  the manager
-		 */
+		/** {@inheritDoc} */
 		public Tooltip(Cons<Table> contents, Tooltips manager) {
 			super(contents, manager);
 		}
 		public void show(Element element, float x, float y) {
-			super.show(element, x, y);
 			if (mobile) Time.runTask(60 * 1.2f, this::hide);
 		}
 		/** 禁用原本的mobile自动隐藏 */

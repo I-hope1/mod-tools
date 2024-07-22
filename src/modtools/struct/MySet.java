@@ -7,8 +7,8 @@ import modtools.utils.Tools;
 import java.util.Iterator;
 
 /**
- * TODO: 真难适配
  * 为了适配v6
+ * TODO: 真难适配
  */
 public class MySet<T> extends OrderedSet<T> {
 	public void filter(Boolf<T> predicate) {

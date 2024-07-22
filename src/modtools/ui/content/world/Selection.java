@@ -264,7 +264,7 @@ public class Selection extends Content {
 		 Color.sky,
 		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
 		 1, true);
-		tab.icons = new Drawable[]{HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall};
+		tab.setIcons(HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall);
 		pane.cont.update(() -> {
 			tab.labels.each((name, l) -> {
 				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);

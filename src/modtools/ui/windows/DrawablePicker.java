@@ -199,15 +199,9 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				}
 
 				updateColor(false);
-			})).size(130f, 40f).valid(text -> {
-				//garbage performance but who cares this runs only every key type anyway
-				try {
-					Color.valueOf(text);
-					return true;
-				} catch (Exception e) {
-					return false;
-				}
-			}).get();
+			}))
+			 .size(130f, 40f)
+			 .valid(ColorPicker::isValidColor).get();
 
 			if (alpha) {
 				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
@@ -306,24 +300,6 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}
 			hexField.setText(val);
 		}
-	}
-	/** a new table that stack() with clip */
-	Table newTable(Cons<Table> cons) {
-		return new Table(cons) {
-			public Cell<Stack> stack(Element... elements) {
-				Stack stack = new Stack() {
-					protected void drawChildren() {
-						clipBegin();
-						super.drawChildren();
-						clipEnd();
-					}
-				};
-				if (elements != null) {
-					for (Element element : elements) stack.addChild(element);
-				}
-				return add(stack);
-			}
-		};
 	}
 	/** 仅用于picker */
 	private class DelegatorColor extends Color {

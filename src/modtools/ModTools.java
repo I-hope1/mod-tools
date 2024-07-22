@@ -17,7 +17,7 @@ import modtools.events.*;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.content.SettingsUI;
+import modtools.ui.content.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
@@ -150,38 +150,28 @@ public class ModTools extends Mod {
 			ui.showException(error);
 			return;
 		}
-		Updater.checkUpdate();
-		MyShaders.load();
-		MyFonts.load();
-		HopeInput.load();
+		load("MyShaders", MyShaders::load);
+		load("MyFonts", MyFonts::load);
+		load("HopeInput", HopeInput::load);
 		// 加载HopeIcons
-		HopeIcons.load();
+		load("HopeIcons", HopeIcons::load);
 		// new DrawablePicker().show(IntUI.whiteui, true, _ -> {});
 		if (isDesktop()) {
-			addFileDragListener();
+			load("DropMod", DropFile::load);
 		}
-		IntUI.load();
+		load("IntUI",  IntUI::load);
+
+		load("Updater", Updater::checkUpdate);
 		IntVars.async(() -> {
-			// Updater.checkUpdate();
 			AllTutorial.init();
-			// Circle.draw();
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
 				Tools.runIgnoredException(Background::load);
 			}
-			// Core.batch = new SortedSpriteBatch() {
-			// 	{ setSort(true); }
-			// };
 		}, () -> Log.info("Loaded ModTools input and ui in @ms", Time.elapsed()));
 	}
-	private static void addFileDragListener() {
-		if (!DropFile.valid()) return;
-		ui.mods.addListener(new VisibilityListener() {
-			public boolean shown() {
-				ui.mods.removeListener(this);
-				DropFile.buildSelector(ui.mods.buttons.row());
-				return false;
-			}
-		});
+
+	public static void load(String moduleName, Runnable r) {
+		Tools.runT("Failed to load module " + moduleName, r, null).run();
 	}
 
 	/**
@@ -256,7 +246,10 @@ public class ModTools extends Mod {
 		}
 	}
 
+
+	private static boolean isDisposed = false;
 	public static void disposeAll() {
+		isDisposed = true;
 		Tools.TASKS.clear();
 		WorldDraw.tasks.clear();
 		IntUI.disposeAll();
@@ -265,6 +258,9 @@ public class ModTools extends Mod {
 		MyEvents.dispose();
 		MyFonts.dispose();
 		System.gc();
+	}
+	public static boolean isDisposed() {
+		return isDisposed;
 	}
 
 	static class UnexpectedPlatform extends RuntimeException { }

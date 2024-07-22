@@ -5,6 +5,7 @@ import modtools.jsfunc.type.CAST;
 import rhino.ScriptRuntime;
 
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigDecimal;
 
 /**
  * Positive: {@code num >= 0}<br>
@@ -55,7 +56,7 @@ public class NumberHelper {
 		);
 	}
 
-	public static Number cast(String text, Class<?> type0) {
+	public static Number parse(String text, Class<?> type0) {
 		Class<?> type = CAST.box(type0);
 		if (type == Float.class) return asFloat(text);
 		if (type == Integer.class) return asInt(text);
@@ -63,6 +64,7 @@ public class NumberHelper {
 		if (type == Long.class) return Long.parseLong(text);
 		if (type == Short.class) return Short.parseShort(text);
 		if (type == Byte.class) return Byte.parseByte(text);
+		if (type == BigDecimal.class) return new BigDecimal(text);
 		try {
 			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
 		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {

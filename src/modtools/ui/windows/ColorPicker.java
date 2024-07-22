@@ -137,15 +137,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 				updateColor(false);
 			}))
 			 .size(150f, 40f)
-			 .valid(text -> {
-				//garbage performance but who cares this runs only every key type anyway
-				try {
-					Color.valueOf(text);
-					return true;
-				} catch (Exception e) {
-					return false;
-				}
-			}).get();
+			 .valid(ColorPicker::isValidColor).get();
 
 			if (alpha) {
 				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
@@ -181,6 +173,15 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 			hide();
 		}).marginLeft(4f).marginRight(4f);
 	}
+	static boolean isValidColor(String text) {
+		//garbage performance but who cares this runs only every key type anyway
+		try {
+			Color.valueOf(text);
+			return true;
+		} catch (Exception e) {
+			return false;
+		}
+	}
 
 	void updateColor() {
 		updateColor(true);
@@ -204,7 +205,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		}
 	}
 	/** a new table that stack() with clip */
-	Table newTable(Cons<Table> cons) {
+	static Table newTable(Cons<Table> cons) {
 		return new Table(cons) {
 			public Cell<Stack> stack(Element... elements) {
 				Stack stack = new Stack() {

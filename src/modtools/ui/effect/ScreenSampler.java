@@ -9,13 +9,12 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.util.Tmp;
 import mindustry.game.EventType.Trigger;
-import modtools.IntVars;
+import modtools.*;
 import modtools.events.E_Blur;
 import modtools.graphics.MyShaders;
 import modtools.utils.*;
 
 import static arc.Core.graphics;
-import static modtools.ui.IntUI.topGroup;
 
 public class ScreenSampler {
 	private static final FrameBuffer BUFFER = new FrameBuffer();
@@ -46,7 +45,7 @@ public class ScreenSampler {
 			BUFFER.resize(graphics.getWidth(), graphics.getHeight());
 		});
 
-		Events.run(Trigger.uiDrawEnd, Tools.delegate(flashRun, topGroup::isDisposed));
+		Events.run(Trigger.uiDrawEnd, Tools.delegate(flashRun, ModTools::isDisposed));
 	}
 
 	public static Texture getSampler() {

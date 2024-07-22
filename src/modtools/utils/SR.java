@@ -7,6 +7,7 @@ import java.util.function.*;
 
 import static modtools.utils.Tools.as;
 
+/** @author I-hope1  */
 public class SR<T> {
 	private static final ObjectMap<Thread, SR<?>> caches = new ObjectMap<>();
 	public static <R> SR<R> of(R value) {

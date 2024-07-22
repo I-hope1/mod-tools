@@ -14,6 +14,7 @@ public interface KeyValue {
 	float    padRight    = 8f;
 	float    keyScale    = 0.8f;
 	float    valueScale  = 0.7f;
+
 	default void key(Table col, String key) {
 		col.add(key).fontScale(keyScale).color(Color.lightGray).left().padRight(padRight);
 	}
@@ -69,5 +70,5 @@ public interface KeyValue {
 	default BindCell makeCell(Table t, Cons<Table> cons) {
 		return new BindCell(t.row().table(cons).growX());
 	}
-	class $KeyValue implements KeyValue { }
 }
+class $KeyValue implements KeyValue { }

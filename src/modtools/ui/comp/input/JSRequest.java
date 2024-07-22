@@ -131,10 +131,10 @@ public class JSRequest {
 			TextAreaTab area = new TextAreaTab("");
 			area.syntax = new JSSyntax(area);
 			cont.add(area).grow().row();
-			cont.button("ok", () -> {
+			cont.button("ok", runT(() -> {
 				callback.get(area.getText());
 				hide();
-			}).size(120, 45);
+			})).size(120, 45);
 			moveToMouse();
 		}}.show();
 	}

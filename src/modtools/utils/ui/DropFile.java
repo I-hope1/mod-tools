@@ -2,6 +2,7 @@ package modtools.utils.ui;
 
 import arc.files.Fi;
 import arc.func.Cons;
+import arc.scene.event.VisibilityListener;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
@@ -12,8 +13,8 @@ import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.dnd.*;
 import java.io.File;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 import static mindustry.Vars.ui;
 
@@ -27,6 +28,19 @@ public class DropFile {
 			return false;
 		}
 	}
+	public static void load() {
+		if (!DropFile.valid()) return;
+		// 给mods添加导入按钮
+		ui.mods.addListener(new VisibilityListener() {
+			public boolean shown() {
+				ui.mods.removeListener(this);
+				DropFile.buildSelector(ui.mods.buttons.row());
+				return false;
+			}
+		});
+	}
+
+
 	public static void openFiSelector(Cons<List<Fi>> fiCons) {
 		new FileSelector(fiCons);
 	}

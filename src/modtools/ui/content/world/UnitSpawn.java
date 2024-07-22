@@ -20,6 +20,7 @@ import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
+import modtools.ModTools;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -37,8 +38,6 @@ import modtools.utils.ui.FormatHelper;
 import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
-import static modtools.ui.Contents.tester;
-import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.world.WorldUtils.UNIT;
 import static rhino.ScriptRuntime.*;
 
@@ -273,7 +272,7 @@ public class UnitSpawn extends Content {
 		Events.run(EventType.WorldLoadEvent.class, Tools.delegate(() -> {
 			defCap = Vars.state.rules.unitCap;
 			Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
-		}, topGroup::isDisposed));
+		}, ModTools::isDisposed));
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
 			left().defaults().left();
 			check(unitUnlimitedKey, 28, unitUnlimited, b -> toggleUnitCap(b))

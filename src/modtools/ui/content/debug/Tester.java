@@ -353,10 +353,10 @@ public class Tester extends Content {
 	}
 
 	void bottomBar(Table table, TextAreaTab textarea) {
-		FoldedImageButton folder  = new FoldedImageButton(true, HopeStyles.hope_flati);
-		Table             p       = new Table();
-		PrefPane          pane = new PrefPane(p);
-		int               height  = 56;
+		FoldedImageButton folder = new FoldedImageButton(true, HopeStyles.hope_flati);
+		Table             p      = new Table();
+		PrefPane          pane   = new PrefPane(p);
+		int               height = 56;
 		pane.xp = _ -> WIDTH * Scl.scl();
 		pane.yp = _ -> folder.hasChildren() ? height : 0;
 		pane.setScrollingDisabledY(true);
@@ -833,8 +833,11 @@ public class Tester extends Content {
 		try {
 			if (val instanceof Class)
 				return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
-			if (val instanceof Method method) return new NativeJavaMethod(method, method.getName());
-			if (val instanceof MethodHandle handle) return new NativeJavaHandle(scope, handle);
+			if (val instanceof Method method)
+				return new NativeJavaMethod(method, method.getName());
+			if (val instanceof MethodHandle handle)
+				return new NativeJavaHandle(scope, handle);
+
 			return Context.javaToJS(val, topScope);
 		} catch (Throwable e) {
 			return val;

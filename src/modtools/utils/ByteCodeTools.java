@@ -17,6 +17,7 @@ import static ihope_lib.MyReflect.unsafe;
 import static rhino.classfile.ByteCode.*;
 import static rhino.classfile.ClassFileWriter.*;
 
+/** 对rhino的ClassWriter进行封装  */
 public class ByteCodeTools {
 	/*public static <T> MyClass<T> newClass(String name, String superName) {
 		return new MyClass<>(name, superName);

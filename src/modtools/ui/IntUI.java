@@ -51,8 +51,8 @@ public class IntUI {
 	public static final float DEFAULT_WIDTH = 180;
 	public static final float MAX_OFF       = 35f;
 
-	public static final Frag     frag     = new Frag();
-	public static final TopGroup topGroup = new TopGroup();
+	public static Frag     frag;
+	public static TopGroup topGroup;
 
 	public static final int FUNCTION_BUTTON_SIZE = 42;
 
@@ -69,6 +69,9 @@ public class IntUI {
 	 * Load.
 	 */
 	public static void load() {
+		if (frag == null) frag = new Frag();
+		if (topGroup == null) topGroup = new TopGroup();
+
 		if (frag.getChildren().isEmpty()) {
 			frag.load();
 		} else {
@@ -329,7 +332,7 @@ public class IntUI {
 
 			for (int c = 0, i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (PatternUtils.testAny(text, pattern, item)) continue;
+				if (!PatternUtils.testAny(text, pattern, item)) continue;
 
 				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
 				btn.update(() -> btn.setChecked(holder.get() == item));

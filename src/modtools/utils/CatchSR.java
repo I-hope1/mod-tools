@@ -5,14 +5,20 @@ import modtools.utils.SR.SatisfyException;
 import modtools.utils.Tools.*;
 
 /**
+ *
  * 使用方法:<br />
- * + {@link CatchSR#apply(Runnable run)}<br />
+ * {@link CatchSR#apply(Runnable run)}<br />
  * run是get链<br />
  *
- * <pre>{@code CatchSR.apply(() -> CatchSR.of(
- * () -> MyReflect.lookupGetMethods(cls))
- * .get(cls::getDeclaredMethods)
- * .get(() -> new Method[0])}</pre>
+ * <pre>{@code CatchSR.apply(() ->
+ * CatchSR.of(() -> MyReflect.lookupGetMethods(cls))
+ *        .get(cls::getDeclaredMethods)
+ *        .get(() -> new Method[0])
+ * )}</pre>
+ * @author I-hope1
+ * @see #apply(Runnable)
+ * @see #of(CProv)
+ * @see #get(CProv)
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class CatchSR<R> {

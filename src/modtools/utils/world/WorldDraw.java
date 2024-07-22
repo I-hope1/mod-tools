@@ -9,9 +9,8 @@ import arc.math.geom.*;
 import arc.struct.*;
 import mindustry.Vars;
 import mindustry.game.EventType.Trigger;
+import modtools.ModTools;
 import modtools.utils.*;
-
-import static modtools.ui.IntUI.topGroup;
 
 
 public class WorldDraw {
@@ -75,7 +74,7 @@ public class WorldDraw {
 			CAMERA_RECT.getCenter(center);
 			tasks.each(Runnable::run);
 			Draw.reset();
-		}, topGroup::isDisposed));
+		}, ModTools::isDisposed));
 	}
 
 	public static TextureRegion drawRegion(int width, int height, Runnable draw) {

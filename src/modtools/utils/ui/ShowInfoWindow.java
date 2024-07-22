@@ -324,7 +324,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			field.setValidator(NumberHelper::isNumber);
 			field.changed(Tools.runT(() -> {
 				if (!field.isValid()) return;
-				l.setNewVal(NumberHelper.cast(field.getText(), l.type));
+				l.setNewVal(NumberHelper.parse(field.getText(), l.type));
 			}));
 			cell.setElement(field);
 			cell.height(42);
@@ -551,7 +551,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 MenuItem.with("ctor.getter.copy", Icon.copySmall, "Cpy reflect getter", () -> copyExecutableReflection(ctor)),
 			 MenuItem.with("<init>handle.copy", o == null ? Icon.copySmall : Icon.boxSmall,
 				o == null ? "Cpy <init> handle" : "Invoke <init> method", ctorInitInvoker(o, ctor, noParam)),
-			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", ctorInvoker(o, ctor, noParam, label)),
+			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", ctorInvoker(o, ctor, noParam)),
 			 MenuBuilder.copyAsJSMenu("constructor", () -> ctor),
 			 ValueLabel.newDetailsMenuList(label, ctor, Constructor.class)
 			));
@@ -773,24 +773,22 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 
 	private static Runnable methodInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ReflectValueLabel l) {
-		return () -> {
+		return runT(() -> {
 			if (noParam) {
-				runT(() -> dealInvokeResult(m.invoke(o), cell, l),
-				 l).run();
+				dealInvokeResult(m.invoke(o), cell, l);
 				return;
 			}
 			JSRequest.<NativeArray>requestForMethod(m, o, arr -> {
 				dealInvokeResult(invokeForMethod(o, m, l, arr,
 				 args -> m.invoke(o, args)), cell, l);
 			});
-		};
+		}, l);
 	}
 	private static Runnable methodSpecialInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ReflectValueLabel l) {
-		return () -> {
+		return runT(() -> {
 			MethodHandle handle = getHandle(m);
 			if (noParam) {
-				runT(() -> dealInvokeResult(handle.invokeWithArguments(o), cell, l)
-				 , l).run();
+				dealInvokeResult(handle.invokeWithArguments(o), cell, l);
 				return;
 			}
 			if (!l.isStatic) handle.bindTo(o);
@@ -799,11 +797,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 handle::invokeWithArguments
 				), cell, l);
 			});
-		};
+		}, l);
 	}
 
-	private static Runnable ctorInitInvoker(Object o, Constructor<?> ctor, boolean noParam) {
-		return Tools.runT(() -> {
+	private static Runnable ctorInitInvoker(Object o, Constructor<?> ctor, boolean noParam, ReflectValueLabel l) {
+		return runT(() -> {
 			MethodHandle init = InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor);
 			if (o == null) {
 				copyValue("Handle", init);
@@ -813,14 +811,13 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			} else JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
 				init.bindTo(o).invokeWithArguments(convertArgs(arr, ctor.getParameterTypes()));
 			});
-		});
+		}, l);
 	}
-	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, MyLabel label) {
-		return () -> {
+	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, ReflectValueLabel l ) {
+		return runT(() -> {
 			MethodHandle handle = getHandle(ctor);
 			if (noParam) {
-				runT(() -> JSFunc.copyValue("Instance", handle.invoke()),
-				 label).run();
+				JSFunc.copyValue("Instance", handle.invoke());
 				return;
 			}
 			JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
@@ -828,6 +825,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 convertArgs(arr, ctor.getParameterTypes())
 				));
 			});
-		};
+		}, l);
 	}
 }

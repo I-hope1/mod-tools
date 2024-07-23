@@ -141,6 +141,8 @@ public class ModTools extends Mod {
 	private static void loadInputAndUI() {
 		if (ui == null) return;
 		Time.mark();
+
+		IntVars.load();
 		Tools.TASKS.add(() -> {
 			mouseVec.require();
 			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();

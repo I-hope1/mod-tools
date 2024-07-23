@@ -34,9 +34,9 @@ public class IntVars {
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
-	public static final String  NL = System.lineSeparator();
-	public static boolean           hasDecompiler;
-	public static Json              json = new Json(){
+	public static final String  NL   = System.lineSeparator();
+	public static       boolean hasDecompiler;
+	public static       Json    json = new Json() {
 		@SuppressWarnings("unchecked")
 		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
 			if (type == Class.class) try {
@@ -48,7 +48,7 @@ public class IntVars {
 		}
 	};
 
-	public static void showException(Throwable e, boolean b)  {
+	public static void showException(Throwable e, boolean b) {
 		if (b) {
 			IntUI.showException(e);
 		} else {
@@ -115,8 +115,14 @@ public class IntVars {
 	public static final Cons<ResizeEvent> resizeEventCons = _ -> {
 		for (var r : resizeListeners) r.run();
 	};
+
 	static {
 		Events.on(ResizeEvent.class, resizeEventCons);
+	}
+
+	public static void load() {
+		if (Core.bundle.has("mod-tools.description"))
+			meta.description = Core.bundle.get("mod-tools.description");
 	}
 	public static class MouseVec extends Vec2 {
 		public void require() {

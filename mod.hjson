@@ -1,11 +1,11 @@
 name: mod-tools
-displayName: "mod工具"
 description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
 Version 1.4.6.5
-
+- Fixed a lot of bugs
+- Supported ValueLabel to operate the sub item.
 -----------------
 
 ## ShowUIList
@@ -88,13 +88,7 @@ Version 1.4.6.5
 ## Others
 
 ### Extensions
-
-- Override Scene
-
-> Replace the original scene, capture rendering errors, may not be good
-
 - Http Redirect
-
 > Redirect some websites, such as: github\
 > Configuration file: b0kkihope/http_redirect.properties
 '''

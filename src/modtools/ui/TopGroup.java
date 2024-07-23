@@ -844,8 +844,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		if (!elem.visible) {
 			Draw.color(Pal.accent);
 			TextureRegionDrawable icon = Icon.eyeOffSmall;
-			icon.draw(Mathf.clamp(pos.x, 7, graphics.getWidth() - 7),
-			 Mathf.clamp(pos.y, 7, graphics.getHeight() - 7),
+			icon.draw(Mathf.clamp(pos.x, 0, graphics.getWidth() - icon.getMinWidth()),
+			 Mathf.clamp(pos.y, 0, graphics.getHeight() - icon.getMinHeight()),
 			 14, 14);
 		}
 

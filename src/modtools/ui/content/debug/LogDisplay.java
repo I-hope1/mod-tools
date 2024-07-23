@@ -55,10 +55,10 @@ public class LogDisplay extends Content {
 				"Are you sure to clear?",
 				() -> Vars.ui.consolefrag.clearMessages())
 			).height(42).growX().row();
-			t.pane(MessageBuilder::new)
+			t.pane(new LimitTable(MessageBuilder::new))
 			 .colspan(2).grow().with(pane -> pane.update(new AutoWrapListener(pane)));
 			t.invalidateHierarchy();
-		}),  new LimitTable(p -> {
+		}), new LimitTable(p -> {
 			Seq<Fi> list = new Seq<>(crashesDir().list()).sort(f -> -f.lastModified());
 			p.left().defaults().left().top().growX();
 			for (var fi : list) {
@@ -100,7 +100,8 @@ public class LogDisplay extends Content {
 		void rebuildAll() {
 			p.clearChildren();
 			for (int i = messages.size - 1; i >= 0; i--) {
-				p.add(messages.get(i)).wrap().row();
+				String text = messages.get(i);
+				p.add(text).wrap().row();
 			}
 		}
 		class DelegatingSeq extends Seq<String> {

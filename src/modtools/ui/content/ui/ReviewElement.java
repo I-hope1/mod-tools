@@ -738,11 +738,24 @@ public class ReviewElement extends Content {
 		 fillLabel    = new Label(""), expandLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
-		BindCell rotCell, translationCell, styleCell, alignCell,
+		BindCell visibleCell, rotCell, translationCell, styleCell, alignCell,
 		 cellCell,
 		 colspanCell, minSizeCell, maxSizeCell,
 		 fillCell, expandCell;
 
+		final Vec2 sizeVec = new Vec2();
+		SizeProv sizeProv = new SizeProv(() -> sizeVec, " × ");
+		void size(float width, float height) {
+			sizeVec.set(width, height);
+		}
+		void touchableF(Touchable touchable) {
+			touchableLabel.setText(FormatHelper.touchable(touchable));
+			touchableLabel.setColor(touchableToColor(touchable));
+		}
+		/** @param bool element.visible  */
+		void visible(boolean bool) {
+			visibleCell.toggle(!bool);
+		}
 		void color(Color color) {
 			colorContainer.setColorValue(color);
 			String string = color.toString().toUpperCase();
@@ -776,7 +789,7 @@ public class ReviewElement extends Content {
 			if (colspanCell.toggle1(colspan != 1))
 				colspanLabel.setText("" + colspan);
 		}
-		Vec2 minSizeVec = new Vec2(), maxSizeVec = new Vec2();
+		final Vec2 minSizeVec = new Vec2(), maxSizeVec = new Vec2();
 		SizeProv minSizeProv = new SizeProv(() -> minSizeVec.scl(1 / Scl.scl()));
 		SizeProv maxSizeProv = new SizeProv(() -> maxSizeVec.scl(1 / Scl.scl()));
 		void minSize(Cell<?> cell) {
@@ -856,6 +869,11 @@ public class ReviewElement extends Content {
 			t.defaults().growX();
 			t.table(top -> {
 				top.add(nameLabel).padLeft(-4f);
+				visibleCell = new BindCell(top.image(Icon.eyeOffSmall)
+				 .color(Pal.accent)
+				 .size(16f).pad(4, 8, 4, 4));
+
+				sizeLabel.setText(sizeProv);
 				top.add(sizeLabel).padLeft(10f)
 				 .right().labelAlign(Align.right)
 				 .growX();
@@ -910,9 +928,9 @@ public class ReviewElement extends Content {
 			if (!hoverInfoWindow.enabled()) return;
 
 			table.nameLabel.setText(ElementUtils.getElementName(elem));
-			table.sizeLabel.setText(posText(elem));
-			table.touchableLabel.setText(FormatHelper.touchable(elem.touchable));
-			table.touchableLabel.setColor(touchableToColor(elem.touchable));
+			table.size(elem.getWidth(), elem.getHeight());
+			table.touchableF(elem.touchable);
+			table.visible(elem.visible);
 			table.color(elem.color);
 			table.rotation(elem.rotation);
 			table.translation(elem.translation);
@@ -928,9 +946,6 @@ public class ReviewElement extends Content {
 				table.expand(cell);
 			}
 			showInfoTable(elem, vec2);
-		}
-		private static String posText(Element elem) {
-			return STR."\{fixed(elem.getWidth())} × \{fixed(elem.getHeight())}";
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posText:

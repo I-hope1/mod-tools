@@ -88,10 +88,9 @@ public class LimitTable extends Table implements Limit {
 		return add(new LimitImage(name));
 	}
 
-	public <T extends Element> Cell<T> add(T element) {
-		return super.add(element);
+	public Cell<Label> add(CharSequence text) {
+		return add(new LimitLabel(text));
 	}
-
 	public void updateVisibility() {
 		// Limit.absPos(this, absPos);
 		visible = isVisible(this);

@@ -15,7 +15,7 @@ public class NoMarkupLabel extends Label {
 		super(text, style);
 	}
 	public NoMarkupLabel(float scale) {
-		super("");
+		super((CharSequence) null);
 		setFontScale(scale);
 	}
 	public void layout() {

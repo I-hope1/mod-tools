@@ -160,9 +160,9 @@ public class Window extends Table implements Position {
 
 		Core.app.post(() -> {
 			// 默认最小宽度为pref宽度
-			this.minWidth = Math.max(this.minWidth, getMinWidth());
-			float minHeight1 = Math.max(this.minHeight, getMinHeight());
-			sclListener.set(this.minWidth, minHeight1);
+			this.minWidth = getMinWidth();
+			this.minHeight = getMinHeight();
+			sclListener.set(this.minWidth, this.minHeight);
 			setSize(Math.max(this.minWidth, getPrefWidth()),
 			 Math.max(this.minHeight, getPrefHeight()));
 			if (this instanceof IDisposable) show();
@@ -174,10 +174,10 @@ public class Window extends Table implements Position {
 		});
 	}
 	public float getMinWidth() {
-		return Math.max(minWidth, super.getMaxWidth());
+		return Math.max(minWidth, super.getMinWidth());
 	}
 	public float getMinHeight() {
-		return Math.max(minHeight, super.getMaxHeight());
+		return Math.max(minHeight, super.getMinHeight());
 	}
 	private void buildTitle(String title, boolean full) {
 		add(titleTable).growX().height(topHeight).name("titleTable");
@@ -407,10 +407,7 @@ public class Window extends Table implements Position {
 
 	public Window show() {
 		/* 以免window超出屏幕外  */
-		Time.runTask(4, () -> {
-			invalidateHierarchy();
-			display();
-		});
+		Time.runTask(4, this::display);
 
 		if (isShown()) {
 			setZIndex(Integer.MAX_VALUE);
@@ -703,7 +700,8 @@ public class Window extends Table implements Position {
 		void fire(boolean status);
 	}
 
-	/** 窗口会自动销毁 */
+	/** 窗口会自动销毁
+	 * 而且新建就{@link #show()} */
 	public interface IDisposable {
 		default void clearAll() {
 			if (!(this instanceof Group g)) return;

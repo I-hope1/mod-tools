@@ -109,6 +109,7 @@ public class ShowUIList extends Content {
 
 	public static Fi uiConfig = IntVars.dataDirectory.child("ui");
 
+	// 这里用HashMap是因为ObjectMap刚好会hash碰撞。。。
 	public static Map<Drawable, String> iconKeyMap  = new HashMap<>();
 	public static Map<Drawable, String> texKeyMap   = new HashMap<>();
 	public static Map<Color, String>    colorKeyMap = new HashMap<>();

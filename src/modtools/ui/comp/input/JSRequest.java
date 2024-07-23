@@ -18,7 +18,7 @@ import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("SpellCheckingInspection")
 public class JSRequest {
-	public static class JSRequestWindow<R> extends HiddenTopWindow {
+	public static class JSRequestWindow<R> extends NoTopWindow {
 		TextAreaTab area = new TextAreaTab("", false);
 		String      log;
 		boolean     notHideAuto;

@@ -744,6 +744,9 @@ public class Window extends Table implements Position {
 		public NoTopWindow(String title, float width, float height, boolean full) {
 			super(title, width, height, full);
 		}
+		public NoTopWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(title, minWidth, minHeight, full, noButtons);
+		}
 		public NoTopWindow(String title, float width, float height) {
 			super(title, width, height);
 		}

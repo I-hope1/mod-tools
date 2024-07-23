@@ -22,7 +22,7 @@ import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.settings.SettingsInit;
+import modtools.annotations.settings.*;
 import modtools.events.ISettings;
 import modtools.struct.TaskSet;
 import modtools.ui.comp.*;
@@ -50,7 +50,10 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public enum TSettings implements ISettings {
 		checkUICount,
 		debugBounds,
-		selectInvisible, drawHiddenPad,
+		@Switch(dependency = "debugBounds")
+		selectInvisible,
+		@Switch(dependency = "debugBounds")
+		drawHiddenPad,
 		/** @see ISettings#$(Drawable) */
 		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.reset(d, Color.white)),
 		;

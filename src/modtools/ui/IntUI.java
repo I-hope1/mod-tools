@@ -614,7 +614,7 @@ public class IntUI {
 		public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) { }
 	}
 
-	public static class ITooltip extends Tooltip implements IInfo{
+	public static class ITooltip extends Tooltip implements IInfo {
 		/** {@inheritDoc} */
 		public ITooltip(Cons<Table> contents) {
 			super(t -> { });
@@ -637,10 +637,11 @@ public class IntUI {
 		}
 		public void show(Element element, float x, float y) {
 			if (mobile) Time.runTask(60 * 1.2f, this::hide);
+			super.show(element, x, y);
 		}
 		/** 禁用原本的mobile自动隐藏 */
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			if (!mobile) super.touchUp(event, x,y, pointer, button);
+			if (!mobile) super.touchUp(event, x, y, pointer, button);
 		}
 
 		static {

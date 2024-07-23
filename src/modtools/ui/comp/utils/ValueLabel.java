@@ -61,6 +61,35 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
 
+		addFocusListener();
+
+		Object[] val = {null};
+		addListener(new InputListener() {
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				int    cursor    = getCursor(x, y);
+				Object bestSoFar = null;
+				for (int i = 0; i < cursor; i++) {
+					if (!startIndexMap.containsKey(i)) continue;
+					Object o       = startIndexMap.get(i);
+					int    toIndex = endIndexMap.get(o);
+					if (toIndex > cursor && o != null) bestSoFar = o;
+				}
+				val[0] = bestSoFar;
+				return false;
+			}
+		});
+		MenuBuilder.addShowMenuListenerp(this, () -> {
+			Object val0 = val[0];
+			ValueLabel label = this;
+			if (val0 != null) {
+				Class<?> type1 = valToType.get(val0);
+				Object obj = valToObj.get(val0);
+				label = ItemValueLabel.of(obj, type1, () -> val[0]);
+			}
+			return label.getMenuLists();
+		});
+	}
+	public void addFocusListener() {
 		if (Element.class.isAssignableFrom(type) || val instanceof Element) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Element ? (Element) val : null);
@@ -70,31 +99,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}
 
 		Selection.addFocusSource(this, () -> val);
-
-		addListener(new ClickListener(KeyCode.mouseRight) {
-			public void clicked(InputEvent event, float x, float y) {
-				int    cursor    = getCursor(x, y);
-				Object bestSoFar = null;
-				for (int i = 0; i < cursor; i++) {
-					if (!startIndexMap.containsKey(i)) continue;
-					Object o       = startIndexMap.get(i);
-					int    toIndex = endIndexMap.get(o);
-					if (toIndex > cursor && o != null) bestSoFar = o;
-				}
-				Object val = bestSoFar;
-				if (val != null) {
-					Object   obj   = valToObj.get(val);
-					Class<?> type1 = valToType.get(val);
-					if (obj != null && type1 != null) {
-						event.cancel();
-						MenuBuilder.showMenuList(
-						 ItemValueLabel.of(obj, type1, () -> val).getMenuLists()
-						);
-					}
-				}
-			}
-		});
-		MenuBuilder.addShowMenuListenerp(this, () -> getMenuLists());
 	}
 
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
@@ -216,19 +220,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}
 
 		startIndexMap.put(text.length(), val);
-		text.append(CatchSR.<String>apply(() ->
-		 CatchSR.of(() ->
-			 val instanceof String ? '"' + (String) val + '"'
-				: val instanceof Character ? STR."'\{val}'" /* + (int) (Character) val */
-				: val instanceof Float ? FormatHelper.fixed((float) val, 2)
-				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
-
-				: val instanceof Element ? ElementUtils.getElementName((Element) val)
-				: FormatHelper.getUIKey(val))
-			.get(() -> String.valueOf(val))
-			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
-			.get(() -> Tools.clName(val))
-		));
+		text.append(toString(val));
 		endIndexMap.put(val, text.length());
 
 		Color mainColor = val == null ? Syntax.c_objects
@@ -240,6 +232,22 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 		setColor(mainColor);
 	}
+	private static String toString(Object val) {
+		return CatchSR.<String>apply(() ->
+		 CatchSR.of(() ->
+			 val instanceof String ? '"' + (String) val + '"'
+				: val instanceof Character ? STR."'\{val}'" /* + (int) (Character) val */
+				: val instanceof Float ? FormatHelper.fixed((float) val, 2)
+				: val instanceof Double ? FormatHelper.fixed((double) val, 2)
+
+				: val instanceof Element ? ElementUtils.getElementName((Element) val)
+				: FormatHelper.getUIKey(val))
+			.get(() -> String.valueOf(val))
+			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
+			.get(() -> Tools.clName(val))
+		);
+	}
+
 	private void appendMap(StringBuilder sb, Object key, Object value) {
 		appendValue(sb, key);
 		sb.append('=');
@@ -264,8 +272,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		float
 		 currentX,
 		 currentY = height; // 指文字左上角的坐标
-		boolean lineValid = Math.abs(currentY - y) < lineHeight;
-		int accumulate = 0;
+		boolean lineValid  = Math.abs(currentY - y) < lineHeight;
+		int     accumulate = 0;
 		for (GlyphRun run : runs) {
 			FloatSeq xAdvances = run.xAdvances;
 			currentX = 0;
@@ -506,13 +514,15 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			label.type = valType;
 			label.obj = obj;
 			label.prov = val;
+			label.clearListeners();
+			label.addFocusListener();
 			label.flushVal();
 			return label;
 		}
 		public Seq<MenuItem> getMenuLists() {
 			Seq<MenuItem> list = new Seq<>();
 			basicMenuLists(list);
-			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> String.valueOf(val)));
+			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> ValueLabel.toString(val)));
 			return list;
 		}
 		public boolean enabledUpdateMenu() {

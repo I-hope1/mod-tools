@@ -12,6 +12,7 @@ import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 
 import static modtools.IntVars.mouseVec;
+import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 
 public class TaskNode {
 	public static final float perTick = 1 / 60f;
@@ -144,13 +145,12 @@ public class TaskNode {
 	}
 
 	public void edit() {
-		new SettingsBuilder(new Table()) {{
-			number("@task.intervalseconds", f -> intervalSeconds = f, () -> intervalSeconds, 0.01f, Float.MAX_VALUE);
-			check("@task.worldtimer", b -> timer = b ? Timer.instance() : ExecuteTree.worldTimer, () -> timer != Timer.instance());
-			numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
-			IntUI.showSelectTable(mouseVec.cpy(), (p, hide, search) -> {
-				p.add(main).grow();
-			}, false).hidden(() -> main.clearChildren());
-		}};
+		SettingsBuilder.build(new Table());
+		number("@task.intervalseconds", f -> intervalSeconds = f, () -> intervalSeconds, 0.01f, Float.MAX_VALUE);
+		check("@task.worldtimer", b -> timer = b ? Timer.instance() : ExecuteTree.worldTimer, () -> timer != Timer.instance());
+		numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
+		IntUI.showSelectTable(mouseVec.cpy(), (p, hide, search) -> {
+			p.add(main).grow();
+		}, false).hidden(() -> main.clearChildren());
 	}
 }

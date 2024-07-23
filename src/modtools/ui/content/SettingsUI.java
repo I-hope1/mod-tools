@@ -36,6 +36,7 @@ import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.ui.CellTools.rowSelf;
 
 public class SettingsUI extends Content {
+	public static String TIP_PREFIX = "settings.tip";
 	Window ui;
 	Table  cont = new Table();
 	final Table loadTable = new Table(t -> t.left().defaults().left());
@@ -213,17 +214,15 @@ public class SettingsUI extends Content {
 	}
 
 	public static void tryAddTip(Element element, String tipKey) {
-		// Log.info(tipKey);
-		if (!Core.bundle.has("settings.tip." + tipKey)) return;
+		if (!Core.bundle.has(TIP_PREFIX + tipKey)) return;
+		Log.info(tipKey);
 
-		IntUI.addTooltipListener(element, Core.bundle.get("settings.tip." + tipKey));
+		IntUI.addTooltipListener(element, Core.bundle.get(TIP_PREFIX + tipKey));
 	}
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {
 		public static Table main;
-		public SettingsBuilder(Table main) {
-			build(main);
-		}
+		private SettingsBuilder(){}
 		public static void build(Table main) { SettingsBuilder.main = main; }
 
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
@@ -294,7 +293,10 @@ public class SettingsUI extends Content {
 				t.field((prov.get()) + "", s -> cons.get(Strings.parseInt(s)))
 				 .update(a -> a.setDisabled(!condition.get()))
 				 .padRight(100f)
-				 .valid(f -> Strings.parseInt(f) >= min && Strings.parseInt(f) <= max).width(120f).left();
+				 .valid(f -> {
+					 int i = Strings.parseInt(f);
+					 return i >= min && i <= max;
+				 }).width(120f).left();
 			}).padTop(0).row();
 		}
 		public static void numberi(String text, Data data, String key, int defaultValue,
@@ -330,7 +332,7 @@ public class SettingsUI extends Content {
 		}
 
 		public static void check(String text, Boolc cons, Boolp prov) {
-			check(text, cons, prov, () -> true);
+			check(text, cons, prov, null);
 		}
 
 		public static void check(String text, Data data, String key, Boolp condition) {
@@ -344,7 +346,8 @@ public class SettingsUI extends Content {
 
 
 		public static void check(String text, Boolc cons, Boolp prov, Boolp condition) {
-			CheckBox checkBox = main.check(text, cons).checked(prov.get()).update(a -> a.setDisabled(!condition.get()))
+			CheckBox checkBox = main.check(text, cons).checked(prov.get())
+			 .update(condition == null ? _ -> {} : a -> a.setDisabled(!condition.get()))
 			 .padLeft(10f).padRight(100f).get();
 			checkBox.setStyle(HopeStyles.hope_defaultCheck);
 			checkBox.left();

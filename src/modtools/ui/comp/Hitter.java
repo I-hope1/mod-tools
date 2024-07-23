@@ -6,10 +6,16 @@ import arc.struct.Seq;
 import modtools.ui.IntUI.IMenu;
 import modtools.ui.control.HopeInput;
 
-/** 用于判断鼠标事件，然后隐藏  */
+/** 用于判断鼠标事件，然后隐藏 */
 public class Hitter extends FillElement implements IMenu {
 	private static final Seq<Hitter> all = new Seq<>();
-	public               boolean     autoClose;
+
+	/**
+	 * 是否自动隐藏
+	 * <p>PS:{@code true}时不可触摸</p>
+	 * <div>{@code false}时可触摸</div>
+	 **/
+	public boolean autoClose;
 	// public int id;
 	public Hitter() {
 		all.add(this);
@@ -31,7 +37,9 @@ public class Hitter extends FillElement implements IMenu {
 		return b;
 	}
 	public Element hit(float x, float y, boolean touchable) {
-		if (autoClose && HopeInput.mouseDown()
+		if (!autoClose) return super.hit(x, y, touchable);
+
+		if (HopeInput.mouseDown()
 		    && !HopeInput.mouseDragged()
 		    && super.hit(x, y, touchable) == this
 		    && hide()) {

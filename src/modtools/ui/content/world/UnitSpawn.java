@@ -1,6 +1,6 @@
 package modtools.ui.content.world;
 
-import arc.Events;
+import arc.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -59,7 +59,7 @@ public class UnitSpawn extends Content {
 	Table    unitCont;
 
 	boolean unitUnlimited, multi;
-	float x, y;
+	float spawnX, spawnY;
 	TextField xField, yField, amountField, teamField;
 	ButtonGroup<ImageButton> group;
 
@@ -99,22 +99,21 @@ public class UnitSpawn extends Content {
 			right.add(localizedNameL).growX().wrap().row();
 		}).growX();
 	}
-	public void setX(float x) {
-		if (!validNumber(x)) return;
-		xField.setText(FormatHelper.fixed(x, 1));
-		this.x = x;
+	public void setSpawnX(float spawnX) {
+		if (Mathf.equal(this.spawnX, spawnX) || !validNumber(spawnX)) return;
+		xField.setText(FormatHelper.fixed(spawnX, 1));
+		this.spawnX = spawnX;
 		//		swapnX = x;
 	}
-	public void setY(float y) {
-		if (!validNumber(y)) return;
-		yField.setText(FormatHelper.fixed(y, 1));
-		this.y = y;
+	public void setSpawnY(float spawnY) {
+		if (Mathf.equal(this.spawnX, spawnX) || !validNumber(spawnY)) return;
+		yField.setText(FormatHelper.fixed(spawnY, 1));
+		this.spawnY = spawnY;
 	}
 
 	public void _load() {
 		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, () -> { });
-		x = player.x;
-		y = player.y;
+		listener.acquireWorldPos(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f);
 
 		selectUnit = UnitTypes.dagger;
 		team = Team.sharded;
@@ -126,21 +125,21 @@ public class UnitSpawn extends Content {
 			table.marginTop(-4f);
 			table.table(x0 -> {
 				x0.add("x:");
-				xField = x0.field(String.valueOf(x), newX -> x = NumberHelper.asFloat(newX))
+				xField = x0.field(String.valueOf(spawnX), newX -> spawnX = NumberHelper.asFloat(newX))
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX();
 			table.table(y0 -> {
 				y0.add("y:");
-				yField = y0.field(String.valueOf(y), newY -> y = NumberHelper.asFloat(newY))
+				yField = y0.field(String.valueOf(spawnY), newY -> spawnY = NumberHelper.asFloat(newY))
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
 			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, listener::toggleSelect).growX().height(42)
 			 .update(b -> b.setChecked(listener.isSelecting()));
 			table.button("@unitspawn.getfromplayer", HopeStyles.cleart, () -> {
-				setX(player.x);
-				setY(player.y);
+				setSpawnX(player.x);
+				setSpawnY(player.y);
 			}).growX().height(42);
 		}).growX().row();
 		// Options2
@@ -178,11 +177,11 @@ public class UnitSpawn extends Content {
 			table.check("Multi", false, b -> multi = b).get().setStyle(HopeStyles.hope_defaultCheck);
 			table.button("@ok", HopeStyles.cleart, this::spawnIgnored)
 			 .size(90, 50)
-			 .disabled(b -> !isOk(x, y, amount, team, selectUnit));
+			 .disabled(b -> !isOk(spawnX, spawnY, amount, team, selectUnit));
 			table.button("Post task", HopeStyles.cleart, () -> {
 				ExecuteTree.context(root, () ->
 				 ExecuteTree.node(String.valueOf(localizedNameL.getText()),
-					STR."(\{x},\{y})\n{\{team}}[accent]×\{amount}",
+					STR."(\{spawnX},\{spawnY})\n{\{team}}[accent]×\{amount}",
 					getSpawnRun()).code(generateCode()).resubmitted().worldTimer().apply()
 				);
 				Window dialog = INFO_DIALOG.dialog(t -> {
@@ -225,15 +224,15 @@ public class UnitSpawn extends Content {
 		return false;
 	}
 	public boolean validNumber(float d) {
-		return Math.abs(d) < 1E6 && !isNaN(d);
+		return Math.abs(d) < 1E6 && !Float.isNaN(d);
 	}
 	public void spawnIgnored() {
 		Tools.runIgnoredException(() -> {
-			group.getAllChecked().each(u -> spawn((UnitType) u.userObject, amount, team, x, y));
+			group.getAllChecked().each(u -> spawn((UnitType) u.userObject, amount, team, spawnX, spawnY));
 		});
 	}
 	public Runnable getSpawnRun() {
-		float         x0      = x, y0 = y;
+		float         x0      = spawnX, y0 = spawnY;
 		int           amount0 = amount;
 		Team          team0   = team;
 		Seq<UnitType> units   = new Seq<>(group.getAllChecked().size);
@@ -242,7 +241,7 @@ public class UnitSpawn extends Content {
 	}
 	public String generateCode() {
 		return STR."$.Contents.unit_spawn.spawn($.unit(\{
-		 selectUnit.name}),\{amount},Team.get(\{team.id}),\{x},\{y})";
+		 selectUnit.name}),\{amount},Team.get(\{team.id}),\{spawnX},\{spawnY})";
 	}
 
 	public void spawn(UnitType selectUnit, int amount, Team team, float x, float y) {
@@ -305,10 +304,13 @@ public class UnitSpawn extends Content {
 			WorldUtils.uiWD.submit(this::draw);
 		}
 
+		float lastX = Float.NaN, lastY = Float.NaN;
 		protected void acquireWorldPos(float x, float y) {
+			lastX = x;
+			lastY = y;
 			super.acquireWorldPos(x, y);
-			setX(end.x);
-			setY(end.y);
+			setSpawnX(end.x);
+			setSpawnY(end.y);
 		}
 		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
 			super.touchUp(event, mx, my, pointer, button);
@@ -316,13 +318,14 @@ public class UnitSpawn extends Content {
 		}
 		public void draw() {
 			if (ui == null) return;
+			if (!Float.isNaN(lastX) && !Float.isNaN(lastY)) acquireWorldPos(lastX, lastY);
 			Gl.flush();
 			Draw.z(Layer.overlayUI);
 			Draw.color();
 			Lines.stroke(2);
-			Color color = Tmp.c1.set(isOk(x, y, amount, team, selectUnit) ? Pal.accent : Pal.remove)
+			Color color = Tmp.c1.set(isOk(spawnX, spawnY, amount, team, selectUnit) ? Pal.accent : Pal.remove)
 			 .a(ui.isShown() ? 0.7f : 0.3f);
-			Drawf.dashCircle(x, y, 5, color);
+			Drawf.dashCircle(spawnX, spawnY, 5, color);
 			Draw.color();
 		}
 		public void toggleSelect() {

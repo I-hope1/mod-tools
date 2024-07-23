@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import static arc.Core.scene;
 import static mindustry.Vars.*;
+import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.$.*;
 
 public interface ElementUtils {
@@ -53,7 +54,7 @@ public interface ElementUtils {
 	/** 存在就remove，不存在就add */
 	static void addOrRemove(Element element, boolean show) {
 		if (show) {
-			Core.scene.add(element);
+			topGroup.addChild(element);
 		} else {
 			element.remove();
 		}

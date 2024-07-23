@@ -697,41 +697,39 @@ public class Tester extends Content {
 			t.left().defaults().left();
 			t.add(IntUI.tips("execution.js.added")).row();
 			t.add(IntUI.tips("execution.js.var")).row();
-			new SettingsBuilder(t) {
-				boolean enabled = EXEC_DATA.containsKey(f.name());
-				final Data JS = enabled ? EXEC_DATA.child(f.name()) :
+			SettingsBuilder.build(t);
+			{// block
+				boolean[] enabled = {EXEC_DATA.containsKey(f.name())};
+				final Data JS = enabled[0] ? EXEC_DATA.child(f.name()) :
 				 new Data(EXEC_DATA, new JsonMap());
+				SettingsBuilder.check("Add to executor", c -> {
+					enabled[0] = c;
+					if (enabled[0]) {
+						EXEC_DATA.put(f.name(), JS);
+					} else {
+						EXEC_DATA.remove(f.name());
+					}
+				}, () -> EXEC_DATA.containsKey(f.name()));
 
-				{
-					check("Add to executor", c -> {
-						enabled = c;
-						if (enabled) {
-							EXEC_DATA.put(f.name(), JS);
-						} else {
-							EXEC_DATA.remove(f.name());
-						}
-					}, () -> EXEC_DATA.containsKey(f.name()));
+				SettingsBuilder.number("@task.intervalseconds",
+				 JS, "intervalSeconds", 0.1f
+				 , () -> enabled[0], 0.01f, Float.MAX_VALUE);
 
-					number("@task.intervalseconds",
-					 JS, "intervalSeconds", 0.1f
-					 , () -> enabled, 0.01f, Float.MAX_VALUE);
+				SettingsBuilder.check("@task.trigger", JS, "disposable", () -> enabled[0]);
+				SettingsBuilder.numberi("@task.repeatcount",
+				 JS, "repeatCount", 0,
+				 () -> enabled[0] && !JS.getBool("disposable"),
+				 -1, Integer.MAX_VALUE);
 
-					check("@task.trigger", JS, "disposable", () -> enabled);
-					numberi("@task.repeatcount",
-					 JS, "repeatCount", 0,
-					 () -> enabled && !JS.getBool("disposable"),
-					 -1, Integer.MAX_VALUE);
-
-					Func<Object, String> stringify =
-					 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
-					Func<Object, String> valuify = val -> val instanceof Class<?> cl ? cl.getSimpleName()
-					 : val instanceof Content ? STR."Vars.mods.mainLoader().loadClass('\{clName(val)}')"
-					 : String.valueOf(val);
-					list("Event", val -> JS.put("type", valuify.get(val)),
-					 () -> JS.get("type"), classes,
-					 stringify, () -> JS.getBool("disposable"));
-				}
-			};
+				Func<Object, String> stringify =
+				 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
+				Func<Object, String> valuify = val -> val instanceof Class<?> cl ? cl.getSimpleName()
+				 : val instanceof Content ? STR."Vars.mods.mainLoader().loadClass('\{clName(val)}')"
+				 : String.valueOf(val);
+				SettingsBuilder.list("Event", val -> JS.put("type", valuify.get(val)),
+				 () -> JS.get("type"), classes,
+				 stringify, () -> JS.getBool("disposable"));
+			}
 		}).row();
 		p.add(new MyLabel(readFiOrEmpty(f), HopeStyles.defaultLabel)).row();
 	}

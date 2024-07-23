@@ -11,7 +11,7 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.Tex;
 import modtools.ui.*;
 import modtools.ui.IntUI;
-import modtools.ui.IntUI.Tooltip;
+import modtools.ui.IntUI.ITooltip;
 import modtools.utils.EventHelper;
 
 import static mindustry.Vars.mobile;
@@ -27,7 +27,7 @@ public class Hover {
 		});
 
 		if (!mobile) addHover(imageSize, btn);
-		btn.addListener(new Tooltip(t ->
+		btn.addListener(new ITooltip(t ->
 		 t.background(Tex.pane)
 			.add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
 			.right().bottom()

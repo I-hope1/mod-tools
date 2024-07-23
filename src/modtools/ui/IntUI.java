@@ -537,7 +537,7 @@ public class IntUI {
 
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 	                            String valid, String invalid) {
-		cell.get().addListener(new Tooltip(
+		cell.get().addListener(new ITooltip(
 		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : invalid)
 		));
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
@@ -591,7 +591,7 @@ public class IntUI {
 		 *   <td style="border: 1px solid #fcc">b</td>
 		 * </table>
 		 */
-		private boolean ignoreInsideElement = true;
+		private boolean ignoreInsideElement = false;
 		public HoverAndExitListener(boolean ignoreInsideElement) {
 			this.ignoreInsideElement = ignoreInsideElement;
 		}
@@ -614,9 +614,9 @@ public class IntUI {
 		public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) { }
 	}
 
-	public static class Tooltip extends arc.scene.ui.Tooltip {
+	public static class ITooltip extends Tooltip implements IInfo{
 		/** {@inheritDoc} */
-		public Tooltip(Cons<Table> contents) {
+		public ITooltip(Cons<Table> contents) {
 			super(t -> { });
 			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
@@ -628,21 +628,23 @@ public class IntUI {
 			};
 		}
 		/** {@inheritDoc} */
-		public Tooltip(Cons<Table> contents, Runnable show) {
+		public ITooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
 		}
 		/** {@inheritDoc} */
-		public Tooltip(Cons<Table> contents, Tooltips manager) {
+		public ITooltip(Cons<Table> contents, Tooltips manager) {
 			super(contents, manager);
 		}
 		public void show(Element element, float x, float y) {
 			if (mobile) Time.runTask(60 * 1.2f, this::hide);
 		}
 		/** 禁用原本的mobile自动隐藏 */
-		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) { }
+		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			if (!mobile) super.touchUp(event, x,y, pointer, button);
+		}
 
 		static {
-			Tooltips.getInstance().textProvider = text -> new Tooltip(t -> t.background(Styles.black6).margin(4f).add(text));
+			Tooltips.getInstance().textProvider = text -> new ITooltip(t -> t.background(Styles.black6).margin(4f).add(text));
 		}
 	}
 

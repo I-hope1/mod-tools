@@ -44,9 +44,8 @@ import java.util.concurrent.*;
 import java.util.function.*;
 
 import static mindustry.Vars.tilesize;
-import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.ui.TmpVars.*;
+import static modtools.utils.ui.TmpVars.tmpList;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 @SuppressWarnings("CodeBlock2Expr")
@@ -242,8 +241,9 @@ public abstract class WFunction<T> {
 	}
 
 	public void remove() {
+		if (!wrap.hasChildren()) return;
 		wrap.clearChildren();
-		HopeFx.changedFx(wrap);
+		// HopeFx.changedFx(wrap);
 	}
 
 	public void each(Consumer<? super T> action) {

@@ -2,7 +2,7 @@ package modtools.jsfunc;
 
 import arc.func.Cons;
 import arc.scene.Element;
-import modtools.ui.*;
+import modtools.ui.TopGroup;
 import modtools.ui.content.ui.ReviewElement.ReviewElementWindow;
 
 import static modtools.ui.IntUI.topGroup;

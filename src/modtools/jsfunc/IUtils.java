@@ -6,7 +6,7 @@ import mindustry.ctype.Content;
 import modtools.struct.LazyValue;
 import rhino.*;
 
-import java.util.*;
+import java.util.Iterator;
 
 public interface IUtils {
 	interface $ {

@@ -5,7 +5,7 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.util.Nullable;
+import arc.util.*;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
@@ -82,8 +82,8 @@ public class MenuItem implements Poolable {
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 		cell.with(b -> b.clicked(Tools.runT(() -> {
-			hide.run();
 			if (cons != null) cons.get(b);
+			hide.run();
 		}))).checked(this instanceof CheckboxList l && l.checked);
 	}
 	public void reset() {

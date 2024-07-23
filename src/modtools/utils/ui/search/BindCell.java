@@ -33,7 +33,7 @@ public final class BindCell {
 		cell.set(UNSET_CELL).clearElement();
 	}
 	public void clear() {
-		el.clear();
+		if (el != null) el.clear();
 		if (cpy != null) cpy.clearElement();
 		if (cell != null) cell.clearElement();
 		el = null;

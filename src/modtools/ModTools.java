@@ -16,7 +16,7 @@ import modtools.events.*;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.content.*;
+import modtools.ui.content.SettingsUI;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;

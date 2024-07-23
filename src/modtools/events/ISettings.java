@@ -24,6 +24,7 @@ import modtools.ui.comp.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
+import modtools.utils.Tools;
 import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.Method;
@@ -90,6 +91,7 @@ public interface ISettings extends E_DataInterface {
 		data().get(name(), true);
 	}
 	default void set(Object o) {
+		o = Tools.cast(o, type());
 		data().put(name(), o);
 	}
 	default void set(boolean b) {
@@ -129,7 +131,7 @@ public interface ISettings extends E_DataInterface {
 		return data().get0xInt(name(), -1);
 	}
 	default Vec2 getPosition() {
-		if (type() != Vec2.class) throw new IllegalStateException(STR."the settings is \{type()} not Vec2.class");
+		if (type() != Position.class) throw new IllegalStateException(STR."the settings is \{type()} not Position.class");
 		String s = getString();
 		int    i = s.indexOf(',');
 		if (i == -1) return Tmp.v3.set(0, 0);

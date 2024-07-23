@@ -425,6 +425,17 @@ public class Tools {
 	public static <T> T _throw() {
 		throw new RuntimeException();
 	}
+	public static Object cast(Object object, Class<?> type) {
+		if (object instanceof Number n && type.isPrimitive()) {
+			if (type == byte.class) return n.byteValue();
+			if (type == short.class) return n.shortValue();
+      if (type == int.class) return n.intValue();
+      if (type == long.class) return n.longValue();
+      if (type == float.class) return n.floatValue();
+      if (type == double.class) return n.doubleValue();
+		}
+		return object;
+	}
 
 	/** Run接口（带异常） */
 	public interface CatchRun {

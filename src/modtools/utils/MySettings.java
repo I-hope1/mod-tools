@@ -7,10 +7,9 @@ import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import modtools.IntVars;
-import modtools.utils.ui.FormatHelper;
 import rhino.ScriptRuntime;
 
-import java.util.*;
+import java.util.Objects;
 
 public class MySettings {
 	private static final Fi dataDirectory = IntVars.dataDirectory;
@@ -52,7 +51,6 @@ public class MySettings {
 		}
 
 		public Object put(String key, Object value) {
-			if (value instanceof Float f) value = FormatHelper.fixed(f);
 			Object old = super.put(key, value);
 			if (!Objects.equals(old, value)) {
 				write();

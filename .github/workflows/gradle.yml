@@ -32,13 +32,20 @@ jobs:
         chmod 777 gradlew
         ./gradlew ZCompileAll
 
-    - name: Rename built jar file
+    - name: Rename and prepare jar for upload
       run: |
         mv build/libs/${{ github.event.repository.name }}-deploy.jar build/libs/${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}-deploy.jar
+        mkdir -p build/unpacked
+        unzip build/libs/${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}-deploy.jar -d build/unpacked
 
     - name: Upload built jar file
       uses: actions/upload-artifact@v4.3.0
       with:
         name: ${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}
         path: build/libs/${{ github.event.repository.name }}-deploy.jar
-        if-no-files-found: ignore
+
+    - name: Upload unpacked jar contents
+      uses: actions/upload-artifact@v4.3.0
+      with:
+        name: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}]
+        path: build/unpacked

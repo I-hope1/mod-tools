@@ -2,6 +2,8 @@ package modtools.ui.menu;
 
 import arc.func.Prov;
 import arc.scene.style.Drawable;
+import arc.scene.ui.TextButton;
+import arc.scene.ui.layout.*;
 import arc.util.pooling.Pools;
 
 /**
@@ -22,5 +24,7 @@ public class InfoList extends MenuItem {
 		list.provider = name;
 		list.cons = null;
 		return list;
+	}
+	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 	}
 }

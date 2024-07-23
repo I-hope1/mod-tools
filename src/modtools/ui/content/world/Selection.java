@@ -676,7 +676,7 @@ public class Selection extends Content {
 			drawFocusInternal();
 		});
 		Tools.TASKS.add(() -> {
-			Element hit  = HopeInput.mouseHit();
+			Element hit = HopeInput.mouseHit();
 			focusLocked = control.input.locked();
 			focusEnabled = !focusLocked && !scene.hasDialog() && (
 			 hit == null || hit.isDescendantOf(focusW) ||
@@ -719,7 +719,7 @@ public class Selection extends Content {
 		}
 
 		boolean valid = false;
-		for (Object child : (Object[]) focus) {
+		if (focus instanceof Object[] arr) for (Object child : arr) {
 			if (drawFocusAny(child)) valid = true;
 		}
 		return valid;

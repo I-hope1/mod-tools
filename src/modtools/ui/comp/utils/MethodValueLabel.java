@@ -4,7 +4,7 @@ import arc.struct.Seq;
 import arc.util.Align;
 import modtools.ui.menu.MenuItem;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Method;
 
 public class MethodValueLabel extends ReflectValueLabel {
 	public MethodValueLabel(Object obj, Method method) {

@@ -403,7 +403,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 MenuItem.with("val.getter.copy", Icon.copySmall, "Cpy value getter", () -> {
 				 copyFieldArcReflection(f);
 			 }),
-			 ValueLabel.newDetailsMenuList(label, f, Field.class)
+			 ValueLabel.newDetailsMenuList(label, () ->f, Field.class)
 			));
 			fields.add(new MyLabel(" = ", defaultLabel))
 			 .color(Color.lightGray).top()
@@ -513,7 +513,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 }), */
 				 MenuItem.with("method.invoke", Icon.boxSmall, "Invoke", methodInvoker(o, m, noParam, cell, l)),
 				 MenuItem.with("method.invokeSpecial", Icon.boxSmall, "InvokeSpecial", methodSpecialInvoker(o, m, noParam, cell, l)),
-				 ValueLabel.newDetailsMenuList(label, m, Method.class)
+				 ValueLabel.newDetailsMenuList(label, () -> m, Method.class)
 				));
 				// float[] prefW = {0};
 				t.add(l).grow();
@@ -553,7 +553,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				o == null ? "Cpy <init> handle" : "Invoke <init> method", ctorInitInvoker(o, ctor, noParam, label)),
 			 MenuItem.with("constructor.invokeSpecial", Icon.boxSmall, "InvokeSpecial", ctorInvoker(o, ctor, noParam, label)),
 			 MenuBuilder.copyAsJSMenu("constructor", () -> ctor),
-			 ValueLabel.newDetailsMenuList(label, ctor, Constructor.class)
+			 ValueLabel.newDetailsMenuList(label, () -> ctor, Constructor.class)
 			));
 			table.add(label);
 			table.add(buildArgsAndExceptions(ctor)).growY();

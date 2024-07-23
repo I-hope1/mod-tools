@@ -2,11 +2,13 @@ package modtools.ui.comp.utils;
 
 import arc.func.*;
 import arc.graphics.*;
+import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.graphics.g2d.TextureRegion;
+import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.scene.event.*;
 import arc.scene.style.*;
-import arc.scene.ui.Label;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
 import arc.util.*;
@@ -16,8 +18,8 @@ import mindustry.gen.*;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
-import modtools.ui.comp.input.JSRequest;
-import modtools.ui.comp.input.highlight.Syntax;
+import modtools.ui.comp.input.NoMarkupLabel;
+import modtools.ui.comp.input.highlight.*;
 import modtools.ui.comp.review.*;
 import modtools.ui.content.ui.*;
 import modtools.ui.content.world.Selection;
@@ -35,16 +37,20 @@ import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
 
-@SuppressWarnings("SizeReplaceableByIsEmpty")
-public abstract class ValueLabel extends ElementInlineLabel {
+@SuppressWarnings({"SizeReplaceableByIsEmpty"})
+public abstract class ValueLabel extends NoMarkupLabel {
 	public static Object unset          = new Object();
 	public static Color  c_enum         = new Color(0xFFC66DFF);
 	public final  int    truncateLength = 2000;
 
 	public static final boolean DEBUG = false;
 
-	public       Object   val;
-	public final Class<?> type;
+	public Object   val;
+	public Class<?> type;
+	private ValueLabel() {
+		super((CharSequence) null);
+		type = null;
+	}
 	protected ValueLabel(Class<?> type) {
 		super((CharSequence) null);
 		if (type == null) throw new NullPointerException("'type' is null.");
@@ -65,7 +71,30 @@ public abstract class ValueLabel extends ElementInlineLabel {
 
 		Selection.addFocusSource(this, () -> val);
 
-		MenuBuilder.addShowMenuListenerp(this, this::getMenuLists);
+		addListener(new ClickListener(KeyCode.mouseRight) {
+			public void clicked(InputEvent event, float x, float y) {
+				int    cursor    = getCursor(x, y);
+				Object bestSoFar = null;
+				for (int i = 0; i < cursor; i++) {
+					if (!startIndexMap.containsKey(i)) continue;
+					Object o       = startIndexMap.get(i);
+					int    toIndex = endIndexMap.get(o);
+					if (toIndex > cursor && o != null) bestSoFar = o;
+				}
+				Object val = bestSoFar;
+				if (val != null) {
+					Object   obj   = valToObj.get(val);
+					Class<?> type1 = valToType.get(val);
+					if (obj != null && type1 != null) {
+						event.cancel();
+						MenuBuilder.showMenuList(
+						 ItemValueLabel.of(obj, type1, () -> val).getMenuLists()
+						);
+					}
+				}
+			}
+		});
+		MenuBuilder.addShowMenuListenerp(this, () -> getMenuLists());
 	}
 
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
@@ -74,83 +103,79 @@ public abstract class ValueLabel extends ElementInlineLabel {
 	/** 是否启用更新 */
 	enableUpdate = true;
 
-	public final Func<Object, CharSequence> defFunc   = this::dealVal;
-	/**
-	 * <p>用于显示label内容</p>
-	 * <p>每次修改时，都会执行这个func，返回值作为显示值</p>
-	 */
-	public       Func<Object, CharSequence> func;
-	public       Func<Object, Object>       valueFunc = o -> o;
+	public Func<Object, Object> valueFunc = o -> o;
 
 	public abstract Seq<MenuItem> getMenuLists();
 	public static MenuItem newElementDetailsList(Element element) {
 		return DisabledList.withd("elem.details", Icon.craftingSmall, "Elem Details", () -> element == null,
 		 () -> new ElementDetailsWindow(element));
 	}
-	public static <T> MenuItem newDetailsMenuList(Element el, T val, Class<T> type) {
+	public static <T> MenuItem newDetailsMenuList(Element el, Prov<T> val, Class<?> type) {
 		return DisabledList.withd("details", Icon.infoCircleSmall, "@details",
-		 () -> type.isPrimitive() && val == null,
-		 () -> showNewInfo(el, val, type));
+		 () -> type.isPrimitive() && val.get() == null,
+		 () -> showNewInfo(el, val.get(), type));
 	}
 
 	public long getOffset() {
 		throw new UnsupportedOperationException("Not implemented yet");
 	}
 
-	private void resolveThrow(Object val, Throwable th) {
+	private void resolveThrow(Throwable th) {
 		Log.err(th);
 		IntUI.showException(th);
-		if (func != defFunc) {
-			resetFunc();
-			try {
-				setText0(defFunc.get(val));
-				return;
-			} catch (Throwable ignored) { }
-		}
-		setText0(Tools.clName(val));
-	}
-	private void resetFunc() {
-		func = defFunc;
 	}
 
 	public void layout() {
 		super.layout();
 	}
 
-	public CharSequence dealVal(Object val) {
-		CharSequence text = dealVal0(val);
-		addText(text, color);
-		return text;
+	public void setAndProcessText(Object val) {
+		text.setLength(0);
+		startIndexMap.clear();
+		endIndexMap.clear();
+		appendValue(text, val);
+		setColor(color);
 	}
 
-	IntMap<Color> colorMap = new IntMap<>();
+	private final IntMap<Object>              startIndexMap = new IntMap<>();
+	private final ObjectMap<Object, Integer>  endIndexMap   = new ObjectMap<>();
+	private final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
+	private final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
+
 	@SuppressWarnings("ConstantConditions")
-	public CharSequence dealVal0(Object val) {
+	private void appendValue(StringBuilder text, Object val) {
+		if (val == null) {
+			text.append("null");
+			setColor(JSSyntax.c_keyword);
+			return;
+		}
 		if (val instanceof ObjectMap || val instanceof Map) {
-			StringBuilder sb = new StringBuilder();
-			sb.append('{');
+			text.append('{');
 			boolean checkTail = false;
 			if (val instanceof ObjectMap<?, ?> map) for (var o : map) {
-				appendMap(sb, o.key, o.value);
+				valToObj.put(o.key, val);
+				valToObj.put(o.value, val);
+				appendMap(text, o.key, o.value);
 				checkTail = true;
-				if (isTruncate(sb.length())) break;
+				if (isTruncate(text.length())) break;
 			}
 			else for (var entry : ((Map<?, ?>) val).entrySet()) {
-				appendMap(sb, entry.getKey(), entry.getValue());
+				valToObj.put(entry.getKey(), val);
+				valToObj.put(entry.getValue(), val);
+				appendMap(text, entry.getKey(), entry.getValue());
 				checkTail = true;
-				if (isTruncate(sb.length())) break;
+				if (isTruncate(text.length())) break;
 			}
-			if (checkTail) sb.deleteCharAt(sb.length() - 2);
-			sb.append('}');
+			if (checkTail) text.deleteCharAt(text.length() - 2);
+			text.append('}');
 
-			addText(sb, Syntax.c_map);
-			return sb;
+			setColor(Syntax.c_map);
+			return;
 		}
 		iter:
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
-			boolean       checkTail = false;
-			StringBuilder sb        = new StringBuilder();
-			sb.append('[');
+			boolean checkTail = false;
+			text.append('[');
 			try {
 				var seq = val instanceof Iterable<?> ? Seq.with((Iterable<?>) val) :
 				 Seq.with(asArray(val));
@@ -158,21 +183,23 @@ public abstract class ValueLabel extends ElementInlineLabel {
 					Object last  = seq.first();
 					int    count = 0;
 					for (Object item : seq) {
+						valToObj.put(item, val);
+						valToType.put(item, val.getClass());
 						if (last != null && Reflect.isWrapper(last.getClass())
 						 ? last.equals(item) : last == item) {
 							count++;
 						} else {
-							sb.append(dealVal(last));
-							if (count > 1) sb.append(" ▶×").append(count).append("◀");
-							sb.append(getArrayDelimiter());
-							if (isTruncate(sb.length())) break;
+							appendValue(text, last);
+							if (count > 1) text.append(" ▶×").append(count).append("◀");
+							text.append(getArrayDelimiter());
+							if (isTruncate(text.length())) break;
 							last = item;
 							count = 0;
 						}
 					}
-					sb.append(dealVal(last));
-					if (count > 1) sb.append(" ▶×").append(count).append("◀");
-					sb.append(", ");
+					appendValue(text, last);
+					if (count > 1) text.append(" ▶×").append(count).append("◀");
+					text.append(", ");
 					// break l;
 					checkTail = true;
 				}
@@ -180,15 +207,16 @@ public abstract class ValueLabel extends ElementInlineLabel {
 				break iter;
 			} catch (Throwable e) {
 				if (DEBUG) Log.err(e);
-				sb.append("▶ERROR◀");
+				text.append("▶ERROR◀");
 			}
-			if (checkTail && sb.length() >= 2) sb.delete(sb.length() - 2, sb.length());
-			sb.append(']');
-			addText(sb, Color.white);
-			return sb;
+			if (checkTail && text.length() >= 2) text.delete(text.length() - 2, text.length());
+			text.append(']');
+			setColor(Color.white);
+			return;
 		}
 
-		String text = CatchSR.apply(() ->
+		startIndexMap.put(text.length(), val);
+		text.append(CatchSR.<String>apply(() ->
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? STR."'\{val}'" /* + (int) (Character) val */
@@ -200,8 +228,8 @@ public abstract class ValueLabel extends ElementInlineLabel {
 			.get(() -> String.valueOf(val))
 			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
 			.get(() -> Tools.clName(val))
-		);
-		text = truncate(text);
+		));
+		endIndexMap.put(val, text.length());
 
 		Color mainColor = val == null ? Syntax.c_objects
 		 : type == String.class || val instanceof Character ? Syntax.c_string
@@ -210,14 +238,12 @@ public abstract class ValueLabel extends ElementInlineLabel {
 		 : box(val.getClass()) == Boolean.class ? Syntax.c_objects
 		 : Color.white;
 
-		addText(text, mainColor);
-
-		return text;
+		setColor(mainColor);
 	}
 	private void appendMap(StringBuilder sb, Object key, Object value) {
-		sb.append(dealVal(key));
+		appendValue(sb, key);
 		sb.append('=');
-		sb.append(dealVal(value));
+		appendValue(sb, value);
 		sb.append(getArrayDelimiter());
 	}
 	private static String getArrayDelimiter() {
@@ -227,9 +253,36 @@ public abstract class ValueLabel extends ElementInlineLabel {
 	private boolean isTruncate(int length) {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
-	private String truncate(String text) {
+	private CharSequence truncate(CharSequence text) {
 		//noinspection StringTemplateMigration
-		return isTruncate(text.length()) ? text.substring(0, truncateLength) + "  ..." : text;
+		return isTruncate(text.length()) ? text.subSequence(0, truncateLength) + "  ..." : text;
+	}
+
+	public int getCursor(float x, float y) {
+		var   runs       = cache.getLayouts().first().runs;
+		float lineHeight = style.font.getLineHeight();
+		float
+		 currentX,
+		 currentY = height; // 指文字左上角的坐标
+		boolean lineValid = Math.abs(currentY - y) < lineHeight;
+		int accumulate = 0;
+		for (GlyphRun run : runs) {
+			FloatSeq xAdvances = run.xAdvances;
+			currentX = 0;
+			for (int i = 1; i < xAdvances.size - 1; i++) {
+				accumulate++;
+				currentX += xAdvances.get(i);
+
+				if (currentX > x && lineValid) {
+					return accumulate;
+				}
+			}
+			// 新的一行
+			currentY -= lineHeight;
+			// 判断是否在行
+			lineValid = Math.abs(currentY - y) < lineHeight;
+		}
+		return -1;
 	}
 	public static final Object[] EMPTY_ARRAY = new Object[0];
 	private Object[] asArray(Object arr) {
@@ -270,13 +323,13 @@ public abstract class ValueLabel extends ElementInlineLabel {
 
 	public void setVal(Object newVal) {
 		try {
-			setVal1(valueFunc.get(newVal));
+			setValInternal(valueFunc.get(newVal));
 		} catch (Throwable th) {
 			Log.err(th);
-			setVal1(newVal);
+			setValInternal(newVal);
 		}
 	}
-	private void setVal1(Object val) {
+	private void setValInternal(Object val) {
 		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
 		if (this.val != null && val != null &&
 		    this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
@@ -284,27 +337,14 @@ public abstract class ValueLabel extends ElementInlineLabel {
 
 		this.val = val;
 		if (afterSet != null) afterSet.run();
-		if (func == null) resetFunc();
 		try {
-			context(func == defFunc ? this : null, () -> func.get(val));
+			setAndProcessText(val);
 		} catch (Throwable th) {
-			resolveThrow(val, th);
+			resolveThrow(th);
+			super.setText(String.valueOf(val));
 		}
 		invalidateHierarchy();
 		layout();
-	}
-	private Label context;
-	public void context(ValueLabel label, Prov<CharSequence> prov) {
-		context = label;
-		CharSequence text = prov.get();
-		if (context != this || true) {
-			setText0(text);
-		}
-		context = null;
-	}
-	public void addText(CharSequence text, Color color) {
-		setColor(color);
-		// if (context == this) super.addText(text, color);
 	}
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
 		Vec2 pos = ElementUtils.getAbsolutePos(el);
@@ -346,11 +386,6 @@ public abstract class ValueLabel extends ElementInlineLabel {
 			}));
 		}
 
-		list.add(MenuItem.with("func.stringify", Icon.diagonalSmall, "StringifyFunc", () -> {
-			JSRequest.<Func<Object, CharSequence>>requestForDisplay(defFunc,
-			 getObject(), o -> func = o);
-		}));
-
 		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
 		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
 			enableTruncate = !enableTruncate;
@@ -367,49 +402,50 @@ public abstract class ValueLabel extends ElementInlineLabel {
 	}
 
 	protected void detailsBuild(Seq<MenuItem> list) {
-		list.add(newDetailsMenuList(this, val, (Class) type));
+		list.add(newDetailsMenuList(this, () -> val, type));
 	}
 	protected void specialBuild(Seq<MenuItem> list) {
-		SR.apply(() -> SR.of(type).isExtend(cl -> {
-				if (cl == Drawable.class) addPickDrawable(list);
-				list.add(MenuItem.with("img.show", Icon.imageSmall, "img", () ->
-				 SR.apply(() -> SR.of(val)
-					.isInstance(TextureRegion.class, INFO_DIALOG::dialog)
-					.isInstance(Texture.class, INFO_DIALOG::dialog)
-					.isInstance(Drawable.class, INFO_DIALOG::dialog)
-				 )));
-			}, TextureRegion.class, Texture.class, Drawable.class)
-			/* .isExtend(__ -> {
-				list.add(MenuList.with(Icon.androidSmall, "change", () -> {
+		SR.apply(() -> SR.of(type)
+		 .isExtend(cl -> {
+			 if (cl == Drawable.class) addPickDrawable(list);
+			 list.add(MenuItem.with("img.show", Icon.imageSmall, "img", () ->
+				SR.apply(() -> SR.of(val)
+				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
+				 .isInstance(Texture.class, INFO_DIALOG::dialog)
+				 .isInstance(Drawable.class, INFO_DIALOG::dialog)
+				)));
+		 }, TextureRegion.class, Texture.class, Drawable.class)
+		 /* .isExtend(__ -> {
+			 list.add(MenuList.with(Icon.androidSmall, "change", () -> {
 
+			 }));
+		 }, Drawable.class) */
+		 .isExtend(_ -> {
+			 list.add(MenuItem.with("element.inspect", Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
+				 REVIEW_ELEMENT.inspect((Element) val);
+			 }));
+			 list.add(newElementDetailsList((Element) val));
+			 elementSetter(list, this::setValInternal);
+		 }, Element.class)
+		 .isExtend(_ -> {
+			 list.add(MenuItem.with("effect.spawnAtPlayer", Icon.infoSmall, "At player", () -> {
+				 ((Effect) val).at(Vars.player);
+			 }));
+		 }, Effect.class)
+		 .isExtend(_ -> {
+			 list.add(MenuItem.with("cell.inspect", Icon.infoCircleSmall, "Cell details", b -> {
+				 new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
+			 }));
+		 }, Cell.class)
+		 .isExtend(_ -> {
+			 list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
+				STR."\{
+				 val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
+				 } world",
+				() -> val == null, () -> {
+					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
-			}, Drawable.class) */
-			.isExtend(_ -> {
-				list.add(MenuItem.with("element.inspect", Icon.zoomSmall, Contents.review_element.localizedName(), () -> {
-					REVIEW_ELEMENT.inspect((Element) val);
-				}));
-				list.add(newElementDetailsList((Element) val));
-				elementSetter(list, this::setVal1);
-			}, Element.class)
-			.isExtend(_ -> {
-				list.add(MenuItem.with("effect.spawnAtPlayer", Icon.infoSmall, "At player", () -> {
-					((Effect) val).at(Vars.player);
-				}));
-			}, Effect.class)
-			.isExtend(_ -> {
-				list.add(MenuItem.with("cell.inspect", Icon.infoCircleSmall, "Cell details", b -> {
-					new CellDetailsWindow((Cell<?>) val).setPosition(ElementUtils.getAbsolutePos(b)).show();
-				}));
-			}, Cell.class)
-			.isExtend(_ -> {
-				list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
-				 STR."\{
-					val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
-					} world",
-				 () -> val == null, () -> {
-					 if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
-				 }));
-			}, Building.class, Unit.class, Bullet.class)
+		 }, Building.class, Unit.class, Bullet.class)
 		);
 	}
 	private void addPickDrawable(Seq<MenuItem> list) {
@@ -454,5 +490,42 @@ public abstract class ValueLabel extends ElementInlineLabel {
 	}
 	public boolean readOnly() {
 		return true;
+	}
+
+
+	private static class ItemValueLabel extends ValueLabel {
+		public static final ItemValueLabel THE_ONE = new ItemValueLabel();
+
+		private Object  obj;
+		private Prov<?> prov;
+		private ItemValueLabel() {
+			super();
+		}
+		public static ItemValueLabel of(Object obj, Class<?> valType, Prov<?> val) {
+			ItemValueLabel label = THE_ONE;
+			label.type = valType;
+			label.obj = obj;
+			label.prov = val;
+			label.flushVal();
+			return label;
+		}
+		public Seq<MenuItem> getMenuLists() {
+			Seq<MenuItem> list = new Seq<>();
+			basicMenuLists(list);
+			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> String.valueOf(val)));
+			return list;
+		}
+		public boolean enabledUpdateMenu() {
+			return false;
+		}
+		public void setNewVal(Object newVal) {
+			// do nothing.
+		}
+		public void flushVal() {
+			val = prov.get();
+		}
+		public Object getObject() {
+			return obj;
+		}
 	}
 }

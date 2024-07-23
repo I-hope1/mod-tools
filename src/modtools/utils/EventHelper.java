@@ -1,6 +1,6 @@
 package modtools.utils;
 
-import arc.func.Boolc;
+import arc.func.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
@@ -77,33 +77,7 @@ public class EventHelper {
 	public static <T extends Element> T
 	longPress(T elem, final long duration, final Boolc boolc0) {
 		Boolc boolc = b -> Tools.runLoggedException(() -> boolc0.get(b));
-		class LongPressListener extends ClickListener {
-			boolean longPress;
-			final Task task = TaskManager.newTask(() -> {
-				if (pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
-					longPress = true;
-					boolc.get(true);
-				}
-			});
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (event.stopped) return false;
-				longPress = false;
-				if (super.touchDown(event, x, y, pointer, button)) {
-					last.set(mouseVec);
-					task.cancel();
-					Timer.schedule(task, duration / 1000f);
-					return true;
-				}
-				return false;
-			}
-			public void clicked(InputEvent event, float x, float y) {
-				// super.clicked(event, x, y);
-				if (longPress) return;
-				if (task.isScheduled() && pressed) boolc.get(false);
-				task.cancel();
-			}
-		}
-		elem.addCaptureListener(new LongPressListener());
+		elem.addCaptureListener(new LongPressListener(boolc, duration));
 		return elem;
 	}
 	public static <T extends Element> T
@@ -119,7 +93,7 @@ public class EventHelper {
 	 * @return the t
 	 */
 	public static <T extends Element> T
-	longPress0(T elem, final long duration, final Runnable run) {
+	longPress0(T elem, long duration, Runnable run) {
 		return longPress(elem, duration, b -> {
 			if (b) run.run();
 		});
@@ -157,5 +131,40 @@ public class EventHelper {
 	longPressOrRclick(T element, Consumer<T> run) {
 		return mobile ? longPress0(element, () -> run.accept(element))
 		 : rightClick(element, () -> run.accept(element));
+	}
+
+
+	public static class LongPressListener extends ClickListener {
+		final long  duration;
+		final Boolc boolc;
+		public LongPressListener(Boolc boolc0, long duration0) {
+			boolc = boolc0;
+			duration = duration0;
+			task = TaskManager.newTask(() -> {
+				if (pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
+					longPress = true;
+					boolc.get(true);
+				}
+			});
+		}
+		boolean longPress;
+		final Task task;
+		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			if (event.stopped) return false;
+			longPress = false;
+			if (super.touchDown(event, x, y, pointer, button)) {
+				last.set(mouseVec);
+				task.cancel();
+				Timer.schedule(task, duration / 1000f);
+				return true;
+			}
+			return false;
+		}
+		public void clicked(InputEvent event, float x, float y) {
+			// super.clicked(event, x, y);
+			if (longPress) return;
+			if (task.isScheduled() && pressed) boolc.get(false);
+			task.cancel();
+		}
 	}
 }

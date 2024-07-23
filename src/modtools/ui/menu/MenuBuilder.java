@@ -69,8 +69,9 @@ public class MenuBuilder {
 		return () -> Pools.freeAll(list, false);
 	}
 	/** TODO: 多个FoldedList有问题 */
-	public static Cell<ScrollPane> showMenuList(Iterable<MenuItem> list, Runnable hiddenListener,
-	                                            Table p, Runnable hideRun) {
+	public static Cell<ScrollPane> showMenuList(
+	 Iterable<MenuItem> list, Runnable hiddenListener,
+	 Table p, Runnable hideRun) {
 		{// 修改p
 			ScrollPane pane = findClosestPane(p);
 			if (pane != null) {

@@ -17,7 +17,7 @@ public class ArrayItemLabel<T> extends ValueLabel {
 		flushVal();
 	}
 	public Seq<MenuItem> getMenuLists() {
-		Seq<MenuItem> list = new Seq<>();
+		Seq<MenuItem> list   = new Seq<>();
 		basicMenuLists(list);
 		list.add(MenuItem.with("selection.set", Icon.editSmall, "@selection.reset", () -> {
 			JSRequest.requestForField(val, arr, o -> setNewVal(type.cast(o)));

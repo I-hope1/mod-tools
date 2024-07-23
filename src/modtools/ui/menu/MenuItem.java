@@ -6,6 +6,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.util.Nullable;
+import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
 import modtools.ui.content.debug.Tester;
@@ -15,7 +16,7 @@ import modtools.utils.ui.CellTools;
 /**
  * The type Menu list.
  */
-public class MenuItem {
+public class MenuItem implements Poolable {
 	public static int max = 24;
 
 	/** Key for Settings */
@@ -84,5 +85,12 @@ public class MenuItem {
 			hide.run();
 			if (cons != null) cons.get(b);
 		}))).checked(this instanceof CheckboxList l && l.checked);
+	}
+	public void reset() {
+		key = null;
+		icon = null;
+		name = null;
+		provider = null;
+		cons = null;
 	}
 }

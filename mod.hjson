@@ -4,21 +4,8 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.4.6.4
-🌟 *Updater*启用
-⌨️ Tester的历史切换：`Ctrl`+`Shift`+`↑/↓`  ->  `Ctrl`+`Shift`+`Alt`+`↑/↓`
+Version 1.4.6.5
 
-🐛 修复`Selection`面对`uiIcon`为`null`时的报错
-🐛 修复`httpRedirect`导致其他url无法访问的问题
-🐛 修复Tester无法部分补全 & 支持'([{'多余报错
-🐛 修复Frag在强制横屏下异位的bug
-🐛 修复DrawablePicker有时没有alpha的bug（a没有除以255） & 颜色消失的bug
-
-✨ 完成ISettings的switch
-✨ `Tester`的`JS`更多功能
-✨ Better Updater & TopGroup
-🚚 `Icon`文件移到`sprites`下
-♻️ 代码部分重构 & 优化代码
 -----------------
 
 ## ShowUIList
@@ -113,7 +100,7 @@ Version 1.4.6.4
 '''
 author: "I hope..."
 hidden: true
-version: 1.4.6.4
+version: 1.4.6.5
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

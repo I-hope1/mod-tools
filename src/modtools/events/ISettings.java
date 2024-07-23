@@ -51,16 +51,8 @@ public interface ISettings extends E_DataInterface {
 	default Data data() {
 		return null;
 	}
+	/** 默认是bool  */
 	default Class<?> type() { return boolean.class; }
-
-	/* class Switch {
-		boolean enabled() { }
-		void def(boolean b) { }
-		void set(boolean b) { }
-	}
-	default Switch _switch() {
-
-	} */
 
 	/** 是否为开关，用于某一个设置的开启/关闭 */
 	default boolean isSwitchOn() {
@@ -94,37 +86,50 @@ public interface ISettings extends E_DataInterface {
 		data().get(name(), o);
 	}
 	default void defTrue() {
+		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
 		data().get(name(), true);
 	}
 	default void set(Object o) {
 		data().put(name(), o);
 	}
-	default void set(boolean b) { set((Boolean) b); }
+	default void set(boolean b) {
+		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		set((Boolean) b);
+	}
 
 
 	// getter
 	default boolean enabled() {
+		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
 		return data().getBool(name());
 	}
-	default void toggle() { set(!enabled()); }
+	default void toggle() {
+		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		set(!enabled());
+	}
 	default Object get() {
 		return data().get(name());
 	}
-	default String getString() { return data().getString(name()); }
+	default String getString() {
+		return data().getString(name());
+	}
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
 		return Enum.valueOf(cl, data().getString(name()));
 	}
 	default int getInt() {
+		if (type() != int.class) throw new IllegalStateException(STR."the settings is \{type()} not int.class");
 		return data().getInt(name(), 0);
 	}
 	default float getFloat() {
+		if (type() != float.class) throw new IllegalStateException(STR."the settings is \{type()} not float.class");
 		return data().getFloat(name(), 0);
 	}
 	default int getColor() {
 		return data().get0xInt(name(), -1);
 	}
 	default Vec2 getPosition() {
+		if (type() != Vec2.class) throw new IllegalStateException(STR."the settings is \{type()} not Vec2.class");
 		String s = getString();
 		int    i = s.indexOf(',');
 		if (i == -1) return Tmp.v3.set(0, 0);
@@ -327,7 +332,7 @@ public interface ISettings extends E_DataInterface {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
 				t.label(() -> FormatHelper.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
 				PreviewUtils.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
-					set(FormatHelper.getUIKey(d));
+					ISettings.this.set(FormatHelper.getUIKey(d));
 
 					cons.get(d);
 					drawable[0] = d;

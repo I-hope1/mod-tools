@@ -547,7 +547,7 @@ public class IntUI {
 		return elem -> addTooltipListener(elem, tips(tipKey));
 	}
 	public static void addTooltipListener(Element element, String text) {
-		element.addListener(new Tooltip(t -> t.background(Tex.pane).add(text)));
+		element.addListener(new ITooltip(t -> t.background(Tex.pane).add(text)));
 	}
 	public static String tips(String key) {
 		return Core.bundle.format("mod-tools.tips", Core.bundle.get("mod-tools.tips." + key));

@@ -7,6 +7,7 @@ import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.Vars;
 import modtools.IntVars;
+import modtools.utils.ui.FormatHelper;
 import rhino.ScriptRuntime;
 
 import java.util.*;
@@ -51,6 +52,7 @@ public class MySettings {
 		}
 
 		public Object put(String key, Object value) {
+			if (value instanceof Float f) value = FormatHelper.fixed(f);
 			Object old = super.put(key, value);
 			if (!Objects.equals(old, value)) {
 				write();
@@ -140,19 +142,21 @@ public class MySettings {
 
 		public float getFloat(String name, float def) {
 			Object v = get(name, def);
-			if (v instanceof Jval) {
-				if (((Jval) v).isNumber()) return ((Jval) v).asFloat();
+			if (v instanceof Float f) return f;
+			if (v instanceof Jval jval) {
+				if (jval.isNumber()) return jval.asFloat();
 				v = v.toString();
 			}
-			return Float.parseFloat("" + v);
+			return Strings.parseFloat("" + v, def);
 		}
 		public int getInt(String name, int def) {
 			Object v = get(name, def);
-			if (v instanceof Jval) {
-				if (((Jval) v).isNumber()) return ((Jval) v).asInt();
+			if (v instanceof Integer i) return i;
+			if (v instanceof Jval jval) {
+				if (jval.isNumber()) return jval.asInt();
 				v = v.toString();
 			}
-			return Integer.parseInt(("" + v).trim());
+			return Strings.parseInt("" + v, def);
 		}
 		/* for color */
 		public int get0xInt(String name, int def) {

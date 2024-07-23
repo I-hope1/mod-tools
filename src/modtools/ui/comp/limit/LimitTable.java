@@ -95,9 +95,9 @@ public class LimitTable extends Table implements Limit {
 	public void updateVisibility() {
 		// Limit.absPos(this, absPos);
 		visible = isVisible(this);
-		children.each(t -> {
+		/* children.each(t -> {
 			if (t instanceof Limit) return;
 			t.visible = isVisible(t);
-		});
+		}); */
 	}
 }

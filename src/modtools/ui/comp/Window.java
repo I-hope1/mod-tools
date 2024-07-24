@@ -242,22 +242,22 @@ public class Window extends Table implements Position {
 			ImageButtonStyle style = HopeStyles.flati;
 			final float      size  = 28;
 			p.shown = () -> sclListener.offset = size;
-			p.button(Icon.leftOpenSmall, style, () -> { }).size(size).get().getImage().rotation = -45;
-			p.button(Icon.upOpenSmall, style, () -> { }).growX().height(size);
-			p.button(Icon.rightOpenSmall, style, () -> { }).size(size).get().getImage().rotation = 45;
+			p.button(Icon.leftOpenSmall, style, IntVars.EMPTY_RUN).size(size).get().getImage().rotation = -45;
+			p.button(Icon.upOpenSmall, style, IntVars.EMPTY_RUN).growX().height(size);
+			p.button(Icon.rightOpenSmall, style, IntVars.EMPTY_RUN).size(size).get().getImage().rotation = 45;
 
 			p.row();
-			p.button(Icon.leftOpenSmall, style, () -> { }).growY().width(size);
+			p.button(Icon.leftOpenSmall, style, IntVars.EMPTY_RUN).growY().width(size);
 			p.table(t -> t.button(Icon.cancelSmall, style, () -> {
 				sclListener.offset = SclListener.defOffset;
 				p.hide();
 			}).size(32)).grow();
-			p.button(Icon.rightOpenSmall, style, () -> { }).growY().width(size);
+			p.button(Icon.rightOpenSmall, style, IntVars.EMPTY_RUN).growY().width(size);
 
 			p.row();
-			p.button(Icon.leftOpenSmall, style, () -> { }).size(size).get().getImage().rotation = 45;
-			p.button(Icon.downOpenSmall, style, () -> { }).growX().height(size);
-			p.button(Icon.rightOpenSmall, style, () -> { }).size(size).get().getImage().rotation = -45;
+			p.button(Icon.leftOpenSmall, style, IntVars.EMPTY_RUN).size(size).get().getImage().rotation = 45;
+			p.button(Icon.downOpenSmall, style, IntVars.EMPTY_RUN).growX().height(size);
+			p.button(Icon.rightOpenSmall, style, IntVars.EMPTY_RUN).size(size).get().getImage().rotation = -45;
 		});
 	}
 

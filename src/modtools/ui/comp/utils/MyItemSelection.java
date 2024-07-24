@@ -23,7 +23,7 @@ public class MyItemSelection {
 
 	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder,
 	                                                            Cons<T> consumer, int cols) {
-		IntVars.async(() -> buildTable0(table, items, holder, consumer, cols), () -> { });
+		IntVars.async(() -> buildTable0(table, items, holder, consumer, cols), IntVars.EMPTY_RUN);
 	}
 	private static <T extends UnlockableContent> void buildTable0(
 	 Table table, Seq<T> items, Prov<T> holder,
@@ -43,8 +43,7 @@ public class MyItemSelection {
 		for (T item : items) {
 			if (item == null) continue;
 			try {
-				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, () -> {
-				}).group(group).get();
+				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, IntVars.EMPTY_RUN).group(group).get();
 				button.changed(() -> consumer.get(button.isChecked() ? item : null));
 				button.getStyle().imageUp = drawableFunc.get(item);
 				if (item == holder.get()) button.setChecked(true);
@@ -73,7 +72,7 @@ public class MyItemSelection {
 			if (item == null) continue;
 			try {
 				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei,
-					24, () -> { })
+					24, IntVars.EMPTY_RUN)
 				 .group(group).get();
 				button.name = item.toString();
 				button.userObject = item;

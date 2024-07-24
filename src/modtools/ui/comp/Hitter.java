@@ -16,11 +16,13 @@ public class Hitter extends FillElement implements IMenu {
 	 * <div>{@code false}时可触摸</div>
 	 **/
 	public boolean autoClose;
+	public boolean init;
 	// public int id;
 	public Hitter() {
 		all.add(this);
 		// id = all.size;
 		autoClose = false;
+		init = !HopeInput.mouseDown();
 	}
 	public Hitter(Runnable clicked) {
 		this();
@@ -37,7 +39,13 @@ public class Hitter extends FillElement implements IMenu {
 		return b;
 	}
 	public Element hit(float x, float y, boolean touchable) {
-		if (!autoClose) return super.hit(x, y, touchable);
+		if (!autoClose) {
+			return super.hit(x, y, touchable);
+		}
+		if (!init) {
+			init = !HopeInput.mouseDown();
+			return super.hit(x, y, touchable);
+		}
 
 		if (HopeInput.mouseDown()
 		    && !HopeInput.mouseDragged()

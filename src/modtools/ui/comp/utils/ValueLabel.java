@@ -79,11 +79,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			}
 		});
 		MenuBuilder.addShowMenuListenerp(this, () -> {
-			Object val0 = val[0];
+			Object     val0  = val[0];
 			ValueLabel label = this;
 			if (val0 != null) {
 				Class<?> type1 = valToType.get(val0);
-				Object obj = valToObj.get(val0);
+				Object   obj   = valToObj.get(val0);
 				label = ItemValueLabel.of(obj, type1, () -> val[0]);
 			}
 			return label.getMenuLists();
@@ -399,12 +399,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			enableTruncate = !enableTruncate;
 		})); */
 
-		if (enabledUpdateMenu()) {
-			CheckboxList checkboxList = CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", enableUpdate, () -> {
-				enableUpdate = !enableUpdate;
-			});
-			list.add(checkboxList);
-		}
+		list.add(enabledUpdateMenu() ?
+		 CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", () -> enableUpdate, () -> {
+			 enableUpdate = !enableUpdate;
+		 }) : null);
+
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		return list;
 	}

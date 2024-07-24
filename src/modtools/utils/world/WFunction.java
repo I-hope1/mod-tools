@@ -175,7 +175,7 @@ public abstract class WFunction<T> {
 		buttons.button("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
-		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> { })
+		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, IntVars.EMPTY_RUN)
 		 .with(b -> b.clicked(() -> {
 			 boolean all = select.size != selectMap.size;
 			 select.clear();
@@ -184,7 +184,7 @@ public abstract class WFunction<T> {
 		 .update(b -> b.setChecked(select.size == selectMap.size));
 		buttons.row();
 
-		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, () -> { })
+		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
 		 .with(b -> b.clicked(() -> {
 			MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
 		}))

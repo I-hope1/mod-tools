@@ -59,7 +59,7 @@ public class ModTools extends Mod {
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
 				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
-				 SettingsUI::disabledRestart, () -> { });
+				 SettingsUI::disabledRestart, EMPTY_RUN);
 			}
 		} catch (Throwable e) {
 			if (isImportFromGame) ui.showException("Failed to load ModTools. (Don't worry.)", e);

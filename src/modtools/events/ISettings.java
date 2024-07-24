@@ -17,6 +17,7 @@ import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
@@ -361,7 +362,7 @@ public interface ISettings extends E_DataInterface {
 				TextButtonStyle style = new TextButtonStyle(menu.style());
 				style.checkedFontColor = Color.gray;
 				var cell = rowSelf(p.button(menu.getName(), menu.icon, style,
-				 menu.iconSize(), () -> { }
+				 menu.iconSize(), IntVars.EMPTY_RUN
 				).minSize(DEFAULT_WIDTH, FUNCTION_BUTTON_SIZE).marginLeft(5f).marginRight(5f));
 
 				TextButton btn = cell.get();

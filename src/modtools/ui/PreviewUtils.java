@@ -17,6 +17,7 @@ import mindustry.gen.*;
 import mindustry.graphics.MultiPacker.PageType;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Hitter;
 import modtools.ui.content.ui.PairProv.SizeProv;
@@ -82,7 +83,7 @@ public class PreviewUtils {
 		});
 	}
 	public static Cell<ImageButton> addPreviewButton(Table table, Cons<Table> cons) {
-		return table.button(Icon.imageSmall, Styles.clearNonei, () -> { })
+		return table.button(Icon.imageSmall, Styles.clearNonei, IntVars.EMPTY_RUN)
 		 .with(b -> addPreviewListener(b, cons));
 	}
 	public static void addPreviewListener(Element element, Cons<Table> cons) {

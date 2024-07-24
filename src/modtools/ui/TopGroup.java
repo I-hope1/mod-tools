@@ -705,7 +705,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 					currentIndex = t.getZIndex();
 					resolveSwitch();
 				});
-			}, HopeStyles.flatToggleMenut, () -> { }).pad(6, 8, 6, 8).update(t -> {
+			}, HopeStyles.flatToggleMenut, IntVars.EMPTY_RUN).pad(6, 8, 6, 8).update(t -> {
 				if (!w.isShown()) {
 					removeWindow(t);
 				}

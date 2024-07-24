@@ -81,10 +81,12 @@ public class MenuItem implements Poolable {
 		return icon != null ? 24 : CellTools.unset;/* unset */
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
-		cell.with(b -> b.clicked(Tools.runT(() -> {
-			if (cons != null) cons.get(b);
+		TextButton b = cell.get();
+		b.clicked(Tools.runT(() -> {
+			Cons<Button> c = cons;
 			hide.run();
-		}))).checked(this instanceof CheckboxList l && l.checked);
+			if (c != null) c.get(b);
+		}));
 	}
 	public void reset() {
 		key = null;

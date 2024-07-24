@@ -10,6 +10,7 @@ import arc.util.Align;
 import arc.util.pooling.Pools;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.SelectTable;
 import modtools.utils.EventHelper;
@@ -68,7 +69,9 @@ public class MenuBuilder {
 	public static Runnable freeAllMenu(Seq<MenuItem> list) {
 		return () -> Pools.freeAll(list, false);
 	}
-	/** TODO: 多个FoldedList有问题 */
+	/**
+	 * 自动过滤掉{@code null}
+	 * TODO: 多个FoldedList有问题 */
 	public static Cell<ScrollPane> showMenuList(
 	 Iterable<MenuItem> list, Runnable hiddenListener,
 	 Table p, Runnable hideRun) {
@@ -82,12 +85,14 @@ public class MenuBuilder {
 		Table main = new Table();
 
 		for (var menu : list) {
+			/* 过滤掉null */
 			if (menu == null) continue;
 
 			var cell = rowSelf(main.button(menu.getName(), menu.icon, menu.style(),
-				menu.iconSize(), () -> { }
+				menu.iconSize(), IntVars.EMPTY_RUN
 			 ).minSize(Float.NEGATIVE_INFINITY, IntUI.FUNCTION_BUTTON_SIZE)
 			 .growX().left()
+			 .padTop(-1)
 			 .marginLeft(5f).marginRight(5f)
 			 .wrapLabel(false));
 			// cell.get().getLabel().setFontScale(0.9f);

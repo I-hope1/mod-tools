@@ -95,7 +95,7 @@ public class IntUI {
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
 	public static ImageButton addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
-		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, () -> { })
+		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, IntVars.EMPTY_RUN)
 		 .with(button -> EventHelper.longPress(button, isLongPress -> {
 			 Object o = prov.get();
 			 if (o == null && clazz == null) return;
@@ -115,7 +115,7 @@ public class IntUI {
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
-			HopeStyles.flatBordert, () -> { }).padLeft(8f).size(180, 40)
+			HopeStyles.flatBordert, IntVars.EMPTY_RUN).padLeft(8f).size(180, 40)
 		 .with(b -> b.clicked(() -> Tester.put(b, prov.get())));
 	}
 	public static String buildStoreKey(String key) {
@@ -131,7 +131,7 @@ public class IntUI {
 	 * @return the cell
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
-		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> { }).with(b -> b.clicked(() -> {
+		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, IntVars.EMPTY_RUN).with(b -> b.clicked(() -> {
 			SR.of((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
 				? w : JSFunc.watch()).watch(info, value).show())
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));

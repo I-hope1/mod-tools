@@ -9,6 +9,7 @@ import arc.util.*;
 import arc.util.Log.LogHandler;
 import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
+import modtools.IntVars;
 import modtools.struct.TaskSet;
 import modtools.ui.IntUI;
 import modtools.ui.comp.Window;
@@ -386,7 +387,7 @@ public class Tools {
 			}
 		};
 		run.r0 = () -> {
-			if (stopBoolp.get()) run.r0 = () -> { };
+			if (stopBoolp.get()) run.r0 = IntVars.EMPTY_RUN;
 			r.run();
 		};
 		return run;

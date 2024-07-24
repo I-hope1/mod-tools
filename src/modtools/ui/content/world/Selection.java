@@ -108,7 +108,7 @@ public class Selection extends Content {
 	}
 	static void buildValidate(SelectTable t, TextField field) {
 		field.update(() -> {
-			t.hide = field.isValid() ? null : () -> { };
+			t.hide = field.isValid() ? null : IntVars.EMPTY_RUN;
 		});
 	}
 

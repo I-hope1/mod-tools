@@ -4,6 +4,7 @@ import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.Button;
 import arc.struct.Seq;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.menu.*;
 import modtools.ui.comp.Window;
@@ -16,7 +17,7 @@ public class DesignContent extends Content {
 	}
 	public void buildUI() {
 		ui = new Window(localizedName());
-		ui.cont.button("text", HopeStyles.flatBordert, () -> {})
+		ui.cont.button("text", HopeStyles.flatBordert, IntVars.EMPTY_RUN)
 		 .height(42)
 		 .self(c -> MenuBuilder.addShowMenuListenerp(c.get(), () -> Seq.with(
 			MenuItem.with("growX", null, "growX", () -> {

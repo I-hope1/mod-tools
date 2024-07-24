@@ -10,6 +10,7 @@ import arc.scene.ui.layout.*;
 import arc.util.Tmp;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
@@ -105,7 +106,7 @@ public class ListDialog extends Window {
 					 b.pane(c -> {
 						 c.add(new MyLabel(readFiOrEmpty(fileHolder.get(f)), HopeStyles.defaultLabel)).left();
 					 }).grow().left();
-				 }, HopeStyles.clearb, () -> {})
+				 }, HopeStyles.clearb, IntVars.EMPTY_RUN)
 				 .height(70).minWidth(400).growX().left().get();
 				EventHelper.longPress(btn, longPress -> {
 					if (longPress) {

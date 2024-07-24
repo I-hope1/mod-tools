@@ -1,7 +1,10 @@
 package modtools.ui.menu;
 
+import arc.func.*;
 import arc.scene.style.Drawable;
+import arc.scene.ui.TextButton;
 import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.scene.ui.layout.*;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
 
@@ -9,21 +12,10 @@ import modtools.ui.HopeStyles;
  * The type Checkbox list.
  */
 public class CheckboxList extends MenuItem {
-	/**
-	 * The Checked.
-	 */
-	public boolean checked;
-	/**
-	 * Withc checkbox list.
-	 *
-	 * @param icon the icon
-	 * @param name the name
-	 * @param checked the checked
-	 * @param run the run
-	 * @return the checkbox list
-	 */
-	public static CheckboxList withc(String key, Drawable icon, String name, boolean checked, Runnable run) {
-		CheckboxList list = Pools.get(CheckboxList.class,CheckboxList::new, max).obtain();
+	public Boolp checked;
+
+	public static CheckboxList withc(String key, Drawable icon, String name, Boolp checked, Runnable run) {
+		CheckboxList list = Pools.get(CheckboxList.class, CheckboxList::new, max).obtain();
 		list.key = key;
 		list.icon = icon;
 		list.name = name;
@@ -32,7 +24,10 @@ public class CheckboxList extends MenuItem {
 		list.cons = _ -> run.run();
 		return list;
 	}
-
+	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
+		super.build(p, cell, hide);
+		cell.update(b -> b.setChecked(checked.get()));
+	}
 	public TextButtonStyle style() {
 		return HopeStyles.flatTogglet;
 	}

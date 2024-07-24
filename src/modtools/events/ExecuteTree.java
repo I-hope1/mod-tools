@@ -7,6 +7,7 @@ import arc.util.*;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.struct.MySet;
 import modtools.utils.ui.ReflectTools.MarkedCode;
 import modtools.utils.Tools;
@@ -44,15 +45,15 @@ public class ExecuteTree {
 	}
 
 	public static TaskNode node(Runnable task) {
-		return node(task, () -> {});
+		return node(task, IntVars.EMPTY_RUN);
 	}
 
 	public static TaskNode node(String name, String source, Runnable task) {
-		return node(task, name, source, Styles.none, () -> {});
+		return node(task, name, source, Styles.none, IntVars.EMPTY_RUN);
 	}
 
 	public static TaskNode node(String source, Runnable task) {
-		return node(task, source, () -> {});
+		return node(task, source, IntVars.EMPTY_RUN);
 	}
 
 	public static @Nullable TaskNode context() {

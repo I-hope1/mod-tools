@@ -605,7 +605,8 @@ public class ReviewElement extends Content {
 			 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 				 ElementUtils.quietScreenshot(element);
 			 }),
-			 MenuItem.with("debug.bounds", Icon.adminSmall, "@settings.debugbounds", () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
+			 CheckboxList.withc("debug.bounds", Icon.adminSmall, "@settings.debugbounds",
+			  () -> topGroup.drawPadElem == element,() -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
 			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
 			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
 			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),

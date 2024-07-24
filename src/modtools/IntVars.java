@@ -25,6 +25,8 @@ public class IntVars {
 	public static final String   modName    = "mod-tools";
 	public static final MouseVec mouseVec   = new MouseVec();
 	public static final Vec2     mouseWorld = new Vec2();
+
+	public static final Runnable EMPTY_RUN  = () -> { };
 	public static       ModMeta  meta;
 
 	/** mod的根目录  */

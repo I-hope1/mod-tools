@@ -20,7 +20,7 @@ import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
-import modtools.ModTools;
+import modtools.*;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -112,7 +112,7 @@ public class UnitSpawn extends Content {
 	}
 
 	public void _load() {
-		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, () -> { });
+		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, IntVars.EMPTY_RUN);
 		listener.acquireWorldPos(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f);
 
 		selectUnit = UnitTypes.dagger;
@@ -192,7 +192,7 @@ public class UnitSpawn extends Content {
 			}).size(90, 50);
 			table.button(Icon.menuSmall, HopeStyles.flati, 24, () -> {
 				MenuBuilder.showMenuListDispose(() -> Seq.with(
-				 CheckboxList.withc("loop", HopeIcons.loop, unitUnlimitedKey, unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
+				 CheckboxList.withc("loop", HopeIcons.loop, unitUnlimitedKey, () -> unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
 				 MenuItem.with("noScorchMarks", Icon.eyeOffSmall, noScorchMarksKey, UNIT::noScorchMarks),
 				 MenuItem.with("all.kill", Icon.cancelSmall, killAllUnitsKey, UNIT::killAllUnits),
 				 MenuItem.with("all.remove", Icon.cancelSmall, removeAllUnitsKey, UNIT::removeAllUnits)

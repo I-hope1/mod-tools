@@ -15,6 +15,7 @@ import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
@@ -124,7 +125,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 				SettingsBuilder.main = buttons;
 				Seq<DrawStyle> styles = new Seq<>(DrawStyle.values());
-				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, () -> { }).get();
+				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, IntVars.EMPTY_RUN).get();
 				button.clicked(() -> {
 					drawStyle = styles.get((styles.indexOf(drawStyle) + 1) % styles.size);
 					button.setText(drawStyle.name());

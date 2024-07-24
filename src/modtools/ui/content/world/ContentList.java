@@ -15,6 +15,7 @@ import mindustry.gen.Icon;
 import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
@@ -127,7 +128,7 @@ public class ContentList extends Content {
 					 }));
 				} else t.add();
 				t.button(b -> b.add(label).grow().padLeft(8f).padRight(8f),
-					HopeStyles.clearb, () -> { })
+					HopeStyles.clearb, IntVars.EMPTY_RUN)
 				 .growX().height(42)
 				 .with(button -> EventHelper.longPress(button, b -> {
 					 if (b) {

@@ -85,7 +85,7 @@ public class Tester extends Content {
 	private static TaskNode startupTask;
 	static TaskNode startupTask() {
 		if (startupTask == null) startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
-		 Icon.craftingSmall, () -> { });
+		 Icon.craftingSmall, IntVars.EMPTY_RUN);
 		return startupTask;
 	}
 
@@ -115,7 +115,7 @@ public class Tester extends Content {
 				})()""";
 				ExecuteTree.node(() -> {
 					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);
-				 }, taskName, entry.key, Icon.none, () -> { })
+				 }, taskName, entry.key, Icon.none, IntVars.EMPTY_RUN)
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
 				 .code(source)
@@ -208,7 +208,7 @@ public class Tester extends Content {
 			t.button("@ok", HopeStyles.flatBordert, () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
-				compileAndExec(() -> { });
+				compileAndExec(IntVars.EMPTY_RUN);
 			}).width(64).disabled(_ -> !finished);
 			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::right);
 			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
@@ -461,7 +461,7 @@ public class Tester extends Content {
 	private boolean rollAndExec(KeyCode keycode) {
 		if (Core.input.ctrl() && Core.input.shift()) {
 			if (keycode == KeyCode.enter) {
-				compileAndExec(() -> { });
+				compileAndExec(IntVars.EMPTY_RUN);
 				return true;
 			}
 			if (Core.input.alt() && keycode == KeyCode.up && rollHistory(true)) return true;

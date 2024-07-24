@@ -255,7 +255,7 @@ public class SettingsUI extends Content {
 						Align.left);
 				 });
 				 if (condition != null) b.setDisabled(() -> !condition.get());
-			 }, HopeStyles.hope_defaultb, () -> { })
+			 }, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN)
 			 .height(42).self(c -> c.update(b ->
 				c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))
 			 ));

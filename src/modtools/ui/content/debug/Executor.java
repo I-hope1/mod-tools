@@ -12,6 +12,7 @@ import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
@@ -184,7 +185,7 @@ public class Executor extends Content {
 	private static TaskNode customTask;
 	public static TaskNode customTask() {
 		if (customTask == null) customTask = ExecuteTree.nodeRoot(null, "CustomJS", "startup",
-		 Icon.craftingSmall, () -> {});
+		 Icon.craftingSmall, IntVars.EMPTY_RUN);
 		return customTask;
 	}
 	public void build() {

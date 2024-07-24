@@ -355,15 +355,15 @@ public class ShowUIList extends Content {
 			 .get().setStyle(style);
 		}
 		static void build(TextButtonStyle style, Table t) {
-			t.button("text button", style, () -> { }).size(96, 42);
+			t.button("text button", style, IntVars.EMPTY_RUN).size(96, 42);
 		}
 		static void build(ImageButtonStyle style, Table t) {
-			t.button(Icon.ok, style, () -> { }).size(96, 42);
+			t.button(Icon.ok, style, IntVars.EMPTY_RUN).size(96, 42);
 		}
 		static void build(ButtonStyle style, Table t) {
 			t.button(b -> {
 				b.add("button");
-			}, style, () -> { }).size(96, 42);
+			}, style, IntVars.EMPTY_RUN).size(96, 42);
 		}
 		static void build(TextFieldStyle style, Table t) {
 			t.field("field", style, _ -> { });

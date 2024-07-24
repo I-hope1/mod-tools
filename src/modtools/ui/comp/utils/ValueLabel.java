@@ -276,14 +276,19 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		int     accumulate = 0;
 		for (GlyphRun run : runs) {
 			FloatSeq xAdvances = run.xAdvances;
+			// 第一个条目是相对于绘图位置的 X 偏移量
 			currentX = 0;
-			for (int i = 1; i < xAdvances.size - 1; i++) {
-				accumulate++;
-				currentX += xAdvances.get(i);
+			if (lineValid) {
+				for (int i = 0; i < xAdvances.size; i++) {
+					currentX += xAdvances.get(i);
 
-				if (currentX > x && lineValid) {
-					return accumulate;
+					if (currentX >= x) {
+						return accumulate;
+					}
+					accumulate++;
 				}
+			} else {
+				accumulate += xAdvances.size;
 			}
 			// 新的一行
 			currentY -= lineHeight;

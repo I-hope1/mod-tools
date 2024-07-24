@@ -40,7 +40,7 @@ public class LogDisplay extends Content {
 
 	public void rebuild() {
 		float w = getW();
-		ui = new Window(localizedName(), w, 90, true);
+		ui = new Window(localizedName(), w, 150, true);
 		ui.update(() -> ui.minWidth = getW());
 
 		Color[] colors = {Color.sky, Color.gold};
@@ -80,7 +80,7 @@ public class LogDisplay extends Content {
 		String[] names = {"last_log", "crashes"};
 		IntTab   itab  = new IntTab(-1, names, colors, tables);
 		itab.pane.update(new AutoWrapListener(itab.pane));
-		itab.setPrefSize(w, -1);
+		itab.setPrefSize(w, 220);
 		ui.cont.add(itab.build()).grow();
 		ui.shown(() -> Core.app.post(() -> tables[0].invalidateHierarchy()));
 
@@ -128,7 +128,7 @@ public class LogDisplay extends Content {
 		}
 	}
 
-	private static int getW() {
+	private static float getW() {
 		return Core.graphics.isPortrait() ? 400 : 600;
 	}
 

@@ -759,7 +759,7 @@ public class ReviewElement extends Content {
 		}
 		void color(Color color) {
 			colorContainer.setColorValue(color);
-			String string = color.toString().toUpperCase();
+			String string = FormatHelper.color(color);
 			colorLabel.setText(color.a == 1 ? string.substring(0, 6) : string);
 		}
 		void rotation(float rotation) {

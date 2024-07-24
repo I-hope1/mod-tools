@@ -36,7 +36,7 @@ import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.reflect.FieldUtils;
-import modtools.utils.ui.KeyValue;
+import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
 import java.lang.reflect.*;
@@ -134,7 +134,8 @@ public class ShowUIList extends Content {
 	}
 	public static final int imageSize = 36;
 
-	Table icons = newTable(t -> Icon.icons.each((k, icon) -> {
+	Table icons = newTable(t -> FieldUtils.walkAllConstOf(Icon.class, (field, icon) -> {
+		String k = field.getName();
 		iconKeyMap.put(icon, k);
 		t.bind(k);
 		var region = icon.getRegion();
@@ -142,17 +143,18 @@ public class ShowUIList extends Content {
 		 .size(imageSize, region.height / (float) region.width * imageSize).get());
 		field(t, k).row();
 		t.unbind();
-	})), tex    = newTable(t -> {
-		String prefix = "Tex.";
-		FieldUtils.walkAllConstOf(Tex.class, (field, drawable) -> {
-			t.bind(field.getName());
-			texKeyMap.put(drawable, prefix + field.getName());
-			addImage(t, drawable);
-			fieldWithView(t, field, drawable);
-			t.unbind();
-			t.row();
-		}, Drawable.class);
-	}),
+	}, TextureRegionDrawable.class)),
+	 tex        = newTable(t -> {
+		 String prefix = "Tex.";
+		 FieldUtils.walkAllConstOf(Tex.class, (field, drawable) -> {
+			 t.bind(field.getName());
+			 texKeyMap.put(drawable, prefix + field.getName());
+			 addImage(t, drawable);
+			 fieldWithView(t, field, drawable);
+			 t.unbind();
+			 t.row();
+		 }, Drawable.class);
+	 }),
 	 styles     = newTable(true, t -> {
 		 listAllStyles(t, Styles.class);
 		 Tools.runLoggedException(() -> {
@@ -174,7 +176,7 @@ public class ShowUIList extends Content {
 				 colorKeyMap.put(color, prefix + field.getName());
 
 				 t.bind(field.getName());
-				 t.listener(el -> IntUI.addTooltipListener(el, "" + color));
+				 t.listener(el -> IntUI.addTooltipListener(el, FormatHelper.color(color)));
 				 t.add(new BorderImage(Core.atlas.white(), 2f)
 					.border(color.cpy().inv())).color(color).size(42f);
 				 field(t, field.getName()).growX();

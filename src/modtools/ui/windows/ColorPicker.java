@@ -18,6 +18,7 @@ import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.Tools;
+import modtools.utils.ui.FormatHelper;
 
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
@@ -121,7 +122,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 				});
 			}}).row();
 
-			hexField = t.field(current.toString().toUpperCase(), Tools.consT(value -> {
+			hexField = t.field(FormatHelper.color(current), Tools.consT(value -> {
 				current.set(Color.valueOf(value).a(a));
 				current.toHsv(values);
 				h = values[0];
@@ -197,7 +198,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		current.a = a;
 
 		if (hexField != null && updateField) {
-			String val = current.toString().toUpperCase();
+			String val = FormatHelper.color(current);
 			if (current.a >= 0.9999f) {
 				val = val.substring(0, 6);
 			}

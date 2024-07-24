@@ -71,9 +71,9 @@ public class DelegatingDrawable implements Drawable {
 		try {
 			if (color == Color.white) return FormatHelper.getUIKeyOrNull(drawable);
 
-			return STR."\{FormatHelper.getUIKeyOrNull(drawable)}#\{color.toString()}";
+			return STR."\{FormatHelper.getUIKeyOrNull(drawable)}#\{FormatHelper.color(color)}";
 		} catch (Throwable e) {
-			return drawable + "#" + color;
+			return drawable + "#" + FormatHelper.color(color);
 		}
 	}
 }

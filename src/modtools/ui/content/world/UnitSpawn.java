@@ -5,6 +5,7 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.style.TextureRegionDrawable;
@@ -106,14 +107,13 @@ public class UnitSpawn extends Content {
 		//		swapnX = x;
 	}
 	public void setSpawnY(float spawnY) {
-		if (Mathf.equal(this.spawnX, spawnX) || !validNumber(spawnY)) return;
+		if (Mathf.equal(this.spawnY, spawnY) || !validNumber(spawnY)) return;
 		yField.setText(FormatHelper.fixed(spawnY, 1));
 		this.spawnY = spawnY;
 	}
 
 	public void _load() {
 		root = ExecuteTree.nodeRoot(null, "unitSpawn", "<internal>", Icon.unitsSmall, IntVars.EMPTY_RUN);
-		listener.acquireWorldPos(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f);
 
 		selectUnit = UnitTypes.dagger;
 		team = Team.sharded;
@@ -135,7 +135,8 @@ public class UnitSpawn extends Content {
 				 .valid(this::validNumber).growX()
 				 .get();
 			}).growX().row();
-			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, listener::toggleSelect).growX().height(42)
+			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, () -> listener.toggleSelect())
+			 .growX().height(42)
 			 .update(b -> b.setChecked(listener.isSelecting()));
 			table.button("@unitspawn.getfromplayer", HopeStyles.cleart, () -> {
 				setSpawnX(player.x);
@@ -200,12 +201,16 @@ public class UnitSpawn extends Content {
 			}).size(32);
 		}).growX();
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
+
 		// ui.addCloseButton();
+		listener = new UnitSpawnSelectListener();
+		Vec2 vec2 = Core.camera.unproject(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f);
+		setSpawnX(vec2.x);
+		setSpawnY(vec2.y);
 	}
 	TaskNode root;
 	public void load() {
 		loadSettings();
-		listener = new UnitSpawnSelectListener();
 	}
 	public boolean isOk(float x, float y, int amount, Team team, UnitType selectUnit) {
 		return validNumber(x) && validNumber(y) && selectUnit != null
@@ -295,6 +300,7 @@ public class UnitSpawn extends Content {
 		ui.show();
 	}
 	// 用于获取点击的坐标
+	@Nullable
 	UnitSpawnSelectListener listener;
 	class UnitSpawnSelectListener extends WorldSelectListener {
 		Element hitter = new Hitter();
@@ -314,6 +320,7 @@ public class UnitSpawn extends Content {
 		}
 		public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
 			super.touchUp(event, mx, my, pointer, button);
+			lastX = lastY = Float.NaN;
 			hitter.remove();
 		}
 		public void draw() {

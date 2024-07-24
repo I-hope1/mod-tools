@@ -78,7 +78,7 @@ public class MenuItem implements Poolable {
 
 	/** @see Cell#unset */
 	public float iconSize() {
-		return icon != null ? 24 : CellTools.unset;/* unset */
+		return icon != null ? 24 : CellTools.unset;
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 		TextButton b = cell.get();

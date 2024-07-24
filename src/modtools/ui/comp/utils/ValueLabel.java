@@ -40,8 +40,8 @@ import static modtools.ui.IntUI.topGroup;
 @SuppressWarnings({"SizeReplaceableByIsEmpty"})
 public abstract class ValueLabel extends NoMarkupLabel {
 	public static Object unset          = new Object();
-	public static Color  c_enum         = new Color(0xFFC66DFF);
-	public final  int    truncateLength = 2000;
+	public static Color  c_enum         = new Color(0xFFC66D_FF);
+	public final  int    truncateLength = 1000;
 
 	public static final boolean DEBUG = false;
 

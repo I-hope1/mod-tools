@@ -69,6 +69,9 @@ public class FormatHelper {
 	public static CharSequence align(int align) {
 		return Strings.capitalize(Align.toString(align).replace(',', '-'));
 	}
+	public static String color(Color color) {
+		return color.toString().toUpperCase();
+	}
 	public static String getUIKeyOrNull(Object val) {
 		if (val instanceof DelegatingDrawable delegting) return delegting.toString();
 

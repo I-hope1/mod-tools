@@ -68,7 +68,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				int    cursor    = getCursor(x, y);
 				Object bestSoFar = null;
-				for (int i = 0; i < cursor; i++) {
+				for (int i = 0; i <= cursor; i++) {
 					if (!startIndexMap.containsKey(i)) continue;
 					Object o       = startIndexMap.get(i);
 					int    toIndex = endIndexMap.get(o);
@@ -271,14 +271,16 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		float lineHeight = style.font.getLineHeight();
 		float
 		 currentX,
-		 currentY = height; // 指文字左上角的坐标
-		boolean lineValid  = Math.abs(currentY - y) < lineHeight;
-		int     accumulate = 0;
+		 currentY; // 指文字左上角的坐标
+		int accumulate = -1;
 		for (GlyphRun run : runs) {
 			FloatSeq xAdvances = run.xAdvances;
-			// 第一个条目是相对于绘图位置的 X 偏移量
 			currentX = 0;
-			if (lineValid) {
+			currentY = height + run.y;
+			// 判断是否在行
+			if (Math.abs(currentY - y) < lineHeight) {
+				if (x > run.width) return -1;
+				// 第一个条目是相对于绘图位置的 X 偏移量
 				for (int i = 0; i < xAdvances.size; i++) {
 					currentX += xAdvances.get(i);
 
@@ -290,10 +292,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			} else {
 				accumulate += xAdvances.size;
 			}
-			// 新的一行
-			currentY -= lineHeight;
-			// 判断是否在行
-			lineValid = Math.abs(currentY - y) < lineHeight;
 		}
 		return -1;
 	}

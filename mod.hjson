@@ -3,9 +3,10 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.4.6.6
-- Fixed a lot of bugs
-- Colorful ValueLabel
+Version 1.4.6.7
+- Fixed some bug about `ValueLabel`
+- Fixed the problem of not being able to obtain the offset of hidden class fields
+- Removed some test code
 -----------------
 
 ## ShowUIList

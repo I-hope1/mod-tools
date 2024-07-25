@@ -18,7 +18,7 @@ public class ColorBlock {
 	/**
 	 * <p>为{@link Cell cell}添加一个{@link Color color（颜色）}块</p>
 	 * {@linkplain #of(Cell, Color, Cons, boolean)
-	 * colorBlock(
+	 * of(
 	 * cell,
 	 * color,
 	 * callback,

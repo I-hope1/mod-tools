@@ -341,7 +341,6 @@ public class Tester extends Content {
 	}
 
 	private static Color logLevelToColor(String item) {
-		LogLevel.valueOf("");
 		return switch (item.charAt(0)) {
 			case 'D' -> Color.green;
 			case 'I' -> Color.royal;

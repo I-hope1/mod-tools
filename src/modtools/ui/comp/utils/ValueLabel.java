@@ -64,6 +64,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		setStyle(HopeStyles.defaultLabel);
 		setAlignment(Align.left, Align.left);
 
+		layout.ignoreMarkup = true;
+
 		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
 
 		addFocusListener();
@@ -216,68 +218,47 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
 
 		result.clear();
-
-		IntSeq colorKeys = colorMap.keys().toArray();
+		IntSeq        colorKeys = colorMap.keys().toArray();
 		colorKeys.sort();
-		Color color         = Color.white;
-		int   runStartIndex = 0, runEndIndex = 0;
-		int   startIndex    = 0;
-		// int      offset        = 0;
-		var      iter         = runs.iterator();
-		GlyphRun item         = iter.next();
-		int      currentIndex = 0;
-		for (int i = 0; i < colorKeys.size; i++) {
+		Color color        = Color.white;
+		int   startIndex   = colorKeys.first();
+		int   currentIndex = 0;
+
+		var      iter = runs.iterator();
+		GlyphRun item = iter.next();
+		for (int i = 1; i < colorKeys.size; i++) {
 			int endIndex = colorKeys.get(i);
 			if (startIndex == endIndex) continue;
 
-			searchedRuns.clear();
-			while (true) {
-				int itemStart = currentIndex;
-				int itemEnd   = currentIndex + item.glyphs.size;
-
-				if (itemStart <= startIndex && startIndex <= itemEnd) {
-					if (searchedRuns.isEmpty()) runStartIndex = startIndex - itemStart;
-				}
-				searchedRuns.add(item);
-				// 判断endIndex是不是就在[itemStart, itemEnd]
-				if (itemStart <= endIndex && endIndex <= itemEnd) {
-					runEndIndex = endIndex - itemStart;
-					break;
-				}
-				if (!iter.hasNext()) {
-					break;
-				}
-				currentIndex += item.glyphs.size;
-
-				item = iter.next();
-				// 判断是不是和原char一样
-				while (text.charAt(currentIndex) != (char) item.glyphs.first().id) {
+			while (currentIndex < endIndex && iter.hasNext()) {
+				while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
 					currentIndex++;
 				}
-				if (endIndex <= currentIndex) {
-					runEndIndex = itemEnd - itemStart;
-					break;
-				}
-			}
-
-			for (int j = 0; j < searchedRuns.size; j++) {
-				GlyphRun run = searchedRuns.get(j);
-				if (j == 0) {
-					result.add(sub(run, runStartIndex, searchedRuns.size == 1 ? runEndIndex : Integer.MAX_VALUE, color));
-				} else if (j == searchedRuns.size - 1) {
-					result.add(sub(run, 0, runEndIndex, color));
+				if (currentIndex + item.glyphs.size <= endIndex) {
+					// The whole item fits within the current color range
+					result.add(sub(item, 0, item.glyphs.size, color));
+					currentIndex += item.glyphs.size;
+					if (iter.hasNext()) item = iter.next();
 				} else {
-					result.add(run);
+					// Only part of the item fits within the current color range
+					int splitIndex = endIndex - currentIndex;
+					result.add(sub(item, 0, splitIndex, color));
+					item = sub(item, splitIndex, item.glyphs.size, colorMap.get(colorKeys.get(i)));
+					currentIndex = endIndex;
 				}
 			}
 
 			startIndex = endIndex;
 			color = colorMap.get(colorKeys.get(i));
 		}
-		if (runEndIndex != 0) result.add(sub(item, runEndIndex, Integer.MAX_VALUE, color));
+		// Add the remaining part of the last run
+		if (currentIndex < text.length()) {
+			result.add(sub(item, 0, text.length() - currentIndex, color));
+		}
 
 		return result;
 	}
+
 	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color) {
 		endIndex = Math.min(endIndex, glyphRun.glyphs.size);
 		GlyphRun newRun = Pools.get(GlyphRun.class, GlyphRun::new).obtain();
@@ -290,7 +271,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		newRun.color.set(color);
 		return newRun;
 	}
-	private static final Seq<GlyphRun> searchedRuns = new Seq<>();
 
 	public void setAndProcessText(Object val) {
 		text.setLength(0);
@@ -316,16 +296,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			text.append('{');
 			boolean checkTail = false;
 			if (val instanceof ObjectMap<?, ?> map) for (var o : map) {
-				valToObj.put(o.key, val);
-				valToObj.put(o.value, val);
-				appendMap(text, o.key, o.value);
+				appendMap(text, val, o.key, o.value);
 				checkTail = true;
 				if (isTruncate(text.length())) break;
 			}
 			else for (var entry : ((Map<?, ?>) val).entrySet()) {
-				valToObj.put(entry.getKey(), val);
-				valToObj.put(entry.getValue(), val);
-				appendMap(text, entry.getKey(), entry.getValue());
+				appendMap(text, val, entry.getKey(), entry.getValue());
 				checkTail = true;
 				if (isTruncate(text.length())) break;
 			}
@@ -409,7 +385,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 : Color.white;
 	}
 	private static String toString(Object val) {
-		return CatchSR.<String>apply(() ->
+		return CatchSR.apply(() ->
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? STR."'\{val}'" /* + (int) (Character) val */
@@ -424,7 +400,13 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		);
 	}
 
-	private void appendMap(StringBuilder sb, Object key, Object value) {
+	private void appendMap(StringBuilder sb, Object mapObj,
+	                       Object key,
+	                       Object value) {
+		valToObj.put(key, mapObj);
+		valToObj.put(value, mapObj);
+		valToType.put(key, key.getClass());
+		valToType.put(value, value == null ? Object.class : value.getClass());
 		appendValue(sb, key);
 		sb.append('=');
 		appendValue(sb, value);
@@ -438,41 +420,33 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
 
+	/**
+	 * 获取(x, y)对应的index
+	 */
 	public int getCursor(float x, float y) {
 		var   runs       = layout.runs;
 		float lineHeight = style.font.getLineHeight();
-		float
-		 currentX,
-		 currentY; // 指文字左上角的坐标
-		int accumulate = 0;
+		float currentX, currentY; // 指文字左上角的坐标
+
+		int index = 0; // 用于跟踪字符索引
+
 		for (GlyphRun run : runs) {
-			while (
-			 accumulate != 0 &&
-			 accumulate < text.length() &&
-			 text.charAt(accumulate) != (char) run.glyphs.first().id) {
-				accumulate++;
-			}
+			if (run.glyphs.isEmpty()) continue;
 			FloatSeq xAdvances = run.xAdvances;
 			currentX = run.x;
 			currentY = height + run.y;
+			while (index < text.length() && (char) run.glyphs.first().id != text.charAt(index)) index++; // 弥补offset
 			// 判断是否在行
-			if (Math.abs(currentY - y) < lineHeight) {
-				if (currentX + run.width < x) {
-					accumulate += run.glyphs.size;
-					continue;
-				}
-				// 第一个条目是相对于绘图位置的 X 偏移量
-				for (int i = 0; i < xAdvances.size; i++) {
-					currentX += xAdvances.get(i);
-
-					if (currentX >= x) {
-						return accumulate - 1;
+			if (Math.abs(currentY - y) < lineHeight && currentX + run.width > x) {
+				for (int i = 0; i < run.glyphs.size; i++) {
+					// 判断是否在当前字符范围内
+					if (x >= currentX && x < currentX + xAdvances.get(i)) {
+						return index + i - 1;
 					}
-					accumulate++;
+					currentX += xAdvances.get(i);
 				}
-			} else {
-				accumulate += run.glyphs.size;
 			}
+			index += run.glyphs.size;
 		}
 		return -1;
 	}

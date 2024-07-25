@@ -7,7 +7,7 @@ import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Align;
 import mindustry.gen.Icon;
 import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
@@ -15,7 +15,7 @@ import modtools.ui.comp.input.JSRequest;
 import modtools.ui.menu.MenuItem;
 import modtools.utils.reflect.FieldUtils;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Field;
 
 public class FieldValueLabel extends ReflectValueLabel {
 	private final Field field;
@@ -70,7 +70,10 @@ public class FieldValueLabel extends ReflectValueLabel {
 	}
 	public void flushVal() {
 		if (isValid()) {
-			Object value = FieldUtils.getFieldValue(isStatic ? field.getDeclaringClass() : obj, getOffset(), field.getType());
+			Object value = FieldUtils.getFieldValue(
+			 isStatic ? field.getDeclaringClass() : obj,
+			 getOffset(),
+			 field.getType());
 			setVal(value);
 		} else {
 			setText0(null);

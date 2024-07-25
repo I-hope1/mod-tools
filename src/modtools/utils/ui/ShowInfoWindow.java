@@ -60,7 +60,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	private final       MyEvents events   = new MyEvents();
 	public static final Color    tmpColor = new Color();
 
-
 	private ReflectTable
 	 fieldsTable,
 	 methodsTable,
@@ -188,11 +187,6 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	 * @param isBlack 是否为黑名单模式
 	 **/
 	private void buildReflect(Object o, Table cont, Pattern pattern, boolean isBlack) {
-		/*final Seq<Runnable> runnables = new Seq<>();
-		final Runnable mainRun;
-		IntVars.addResizeListener(mainRun = () -> {
-			runnables.each(Runnable::run);
-		});*/
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
 			 (pattern == null || find(pattern, member.getName()) != isBlack)
@@ -228,15 +222,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		consTable = func.apply("@jsfunc.constructor", 2);
 		classesTable = func.apply("@jsfunc.class", 3);
 
-		// boolean displayClass = MySettings.settings.getBool("displayClassIfMemberIsNull", "false");
 		Type type = clazz;
 		for (Class<?> cls = clazz; cls != null; type = cls.getGenericSuperclass(), cls = cls.getSuperclass()) {
 			buildAllByClass(o, cls, type);
 		}
-
-		// classSet.clear();
-
-		// return mainRun;
 	}
 	private void buildInterface(Object o, Class<?> clazz) {
 		Type[]     interfaceTypes = clazz.getGenericInterfaces();
@@ -248,6 +237,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	private void buildAllByClass(Object o, Class<?> cls, Type type) {
 		if (!classSet.add(cls)) return;
 		Field[] fields = IReflect.impl.getFields(cls);
+		// if (cls.isHidden()) fields = new Field[0];
 		fieldsTable.build(cls, type, fields);
 		Method[] methods = IReflect.impl.getMethods(cls);
 		methodsTable.build(cls, type, methods);
@@ -403,7 +393,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 MenuItem.with("val.getter.copy", Icon.copySmall, "Cpy value getter", () -> {
 				 copyFieldArcReflection(f);
 			 }),
-			 ValueLabel.newDetailsMenuList(label, () ->f, Field.class)
+			 ValueLabel.newDetailsMenuList(label, () -> f, Field.class)
 			));
 			fields.add(new MyLabel(" = ", defaultLabel))
 			 .color(Color.lightGray).top()

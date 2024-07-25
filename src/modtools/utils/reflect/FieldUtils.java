@@ -199,9 +199,9 @@ public class FieldUtils {
 interface $OffsetGetter {
 	long fieldOffset(boolean isStatic, Field f);
 
-	@SuppressWarnings("deprecation")
+	// @SuppressWarnings("deprecation")
 	$OffsetGetter DefaultImpl = (isStatic, f) ->
-	 isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+	 isStatic ? Unsafe.getUnsafe().staticFieldOffset(f) : Unsafe.getUnsafe().objectFieldOffset(f);
 
 	$OffsetGetter AndroidImpl = (isStatic, f) -> hope_android.FieldUtils.getFieldOffset(f);
 

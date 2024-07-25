@@ -159,12 +159,10 @@ public class Window extends Table implements Position {
 		};
 
 		Core.app.post(() -> {
-			// 默认最小宽度为pref宽度
+			// 默认宽度为pref宽度
 			this.minWidth = getMinWidth();
 			this.minHeight = getMinHeight();
 			sclListener.set(this.minWidth, this.minHeight);
-			setSize(Math.max(this.minWidth, getPrefWidth()),
-			 Math.max(this.minHeight, getPrefHeight()));
 			if (this instanceof IDisposable) show();
 		});
 		all.add(this);
@@ -179,6 +177,7 @@ public class Window extends Table implements Position {
 	public float getMinHeight() {
 		return Math.max(minHeight, super.getMinHeight());
 	}
+
 	private void buildTitle(String title, boolean full) {
 		add(titleTable).growX().height(topHeight).name("titleTable");
 		row();
@@ -322,7 +321,6 @@ public class Window extends Table implements Position {
 
 
 	public float getPrefWidth() {
-		// 默认最小宽度为顶部的最小宽度
 		return Mathf.clamp(super.getPrefWidth(), minWidth, graphics.getWidth());
 	}
 	public float getPrefHeight() {
@@ -371,7 +369,6 @@ public class Window extends Table implements Position {
 		clearActions();
 		removeCaptureListener(ignoreTouchDown);
 
-		pack();
 		topGroup.addChild(this);
 
 		if (action != null) addAction(action);
@@ -384,15 +381,14 @@ public class Window extends Table implements Position {
 		// if (!(this instanceof InfoFadePopup)) Core.scene.unfocusAll();
 		// stage.setKeyboardFocus(this);
 		invalidate();
-
 	}
 	public void pack() {
 		if (isMinimize) return;
-		if (!isMaximize) {
+		if (isMaximize) {
+			setSize(graphics.getWidth(), graphics.getHeight());
+		} else {
 			super.pack();
-			return;
 		}
-		setSize(graphics.getWidth(), graphics.getHeight());
 	}
 	/**
 	 * Shows this dialog if it was hidden, and vice versa.

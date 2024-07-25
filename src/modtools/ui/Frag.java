@@ -44,6 +44,8 @@ public class Frag extends Table {
 	public Frag() {
 		super(Styles.black8);
 	}
+
+	MoveInsideListener listener;
 	public void load() {
 		touchable = Touchable.enabled;
 		//		MyPacket.register();
@@ -80,7 +82,7 @@ public class Frag extends Table {
 		// focusListener = new CancelFocusListener();
 		// container.addCaptureListener(focusListener);
 
-		var listener = new MoveInsideListener();
+		listener = new MoveInsideListener();
 		// 添加双击变小
 		EventHelper.doubleClick(top, () -> {
 			if (!hideCont) return;
@@ -100,7 +102,10 @@ public class Frag extends Table {
 			circleRemove();
 			Core.app.post(() -> listener.display(x, y));
 		});
-		IntVars.addResizeListener(() -> listener.display(CellTools.unset, CellTools.unset));
+		IntVars.addResizeListener(() -> {
+			if (!setPositionTask.isScheduled()) Timer.schedule(setPositionTask, 0, 0.2f, 8);
+			listener.display(x, y);
+		});
 	}
 	Task setPositionTask = TaskManager.newTask(this::setDefaultPosition);
 	private void setDefaultPosition() {
@@ -169,7 +174,6 @@ public class Frag extends Table {
 		public void display(float x, float y) {
 			if (x == CellTools.unset && y == CellTools.unset) {
 				if (position.isSwitchOn() && !setPositionTask.isScheduled()) {
-					Timer.schedule(setPositionTask, 0, 0.2f, 8);
 				}
 				return;
 			}
@@ -184,7 +188,7 @@ public class Frag extends Table {
 	}
 	public void setPosition(float x, float y) {
 		super.setPosition(x, y);
-		position.set(STR."(\{x},\{y})");
+		if (!setPositionTask.isScheduled()) position.set(STR."(\{x},\{y})");
 	}
 
 	@SettingsInit

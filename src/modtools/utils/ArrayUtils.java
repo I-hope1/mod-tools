@@ -1,7 +1,7 @@
 package modtools.utils;
 
 import arc.func.*;
-import arc.struct.ObjectMap;
+import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 
 import java.lang.reflect.Array;
@@ -9,6 +9,8 @@ import java.util.*;
 
 @SuppressWarnings("unchecked")
 public class ArrayUtils {
+	public static final Object[] EMPTY_ARRAY = new Object[0];
+
 	public static <K, V, R> R[] map2Arr(Class<R> cl, ObjectMap<K, V> map, Func<Entry<K, V>, R> func) {
 		R[] tableSeq = (R[]) Array.newInstance(cl, map.size);
 		int c = 0;
@@ -48,6 +50,14 @@ public class ArrayUtils {
 	public static <T> T getBound(List<T> list, int i) {
 		if (i < 0) i += list.size();
 		return 0 <= i && i < list.size() ? list.get(i) : null;
+	}
+
+	public static float sumf(FloatSeq seq, int fromIndex, int toIndex) {
+		float sum = 0;
+		for (int i = fromIndex; i < toIndex && i < seq.size; i++) {
+			sum += seq.get(i);
+		}
+		return sum;
 	}
 
 	public static <T> float sumf(List<T> list, Floatf<T> summer) {

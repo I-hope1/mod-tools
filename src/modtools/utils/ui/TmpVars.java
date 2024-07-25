@@ -19,6 +19,7 @@ public interface TmpVars {
 	};
 	String[] tmpAmount = new String[1];
 	Rect     mr1       = new Rect();
+	Color c1 = new Color();
 
 	TextureRegionDrawable trd = new TextureRegionDrawable();
 }

@@ -12,6 +12,7 @@ import arc.scene.style.*;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
@@ -26,8 +27,9 @@ import modtools.ui.content.world.Selection;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.reflect.*;
-import modtools.utils.ui.FormatHelper;
+import modtools.utils.ui.*;
 
 import java.lang.reflect.Array;
 import java.util.Map;
@@ -39,11 +41,14 @@ import static modtools.ui.IntUI.topGroup;
 
 @SuppressWarnings({"SizeReplaceableByIsEmpty"})
 public abstract class ValueLabel extends NoMarkupLabel {
-	public static Object unset          = new Object();
-	public static Color  c_enum         = new Color(0xFFC66D_FF);
-	public final  int    truncateLength = 1000;
+	public static final boolean DEBUG     = false;
+	public static final Object  unset     = new Object();
+	public static final Color   c_enum    = new Color(0xFFC66D_FF);
+	public static final String  NULL_MARK = "`*null";
 
-	public static final boolean DEBUG = false;
+	public int    truncateLength = 1000;
+	public String ellipse        = "  ...";
+
 
 	public Object   val;
 	public Class<?> type;
@@ -68,10 +73,12 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				int    cursor    = getCursor(x, y);
 				Object bestSoFar = null;
+				Object o;
+				int    toIndex;
 				for (int i = 0; i <= cursor; i++) {
 					if (!startIndexMap.containsKey(i)) continue;
-					Object o       = startIndexMap.get(i);
-					int    toIndex = endIndexMap.get(o);
+					o = startIndexMap.get(i);
+					toIndex = endIndexMap.get(o);
 					if (toIndex > cursor && o != null) bestSoFar = o;
 				}
 				val[0] = bestSoFar;
@@ -90,7 +97,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		});
 	}
 	public void addFocusListener() {
-		if (Element.class.isAssignableFrom(type) || val instanceof Element) {
+		if (type == null) {
+		} else if (Element.class.isAssignableFrom(type) || val instanceof Element) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Element ? (Element) val : null);
 		} else if (Cell.class.isAssignableFrom(type)) {
@@ -131,16 +139,115 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 	public void layout() {
 		super.layout();
+		if (cache == null) return;
+		// if (true) return;
+		Seq<GlyphRun> runs  = cache.getLayouts().first().runs;
+		Seq<GlyphRun> runs1 = splitAndColorize(runs, colorMap, text);
+		if (runs != runs1) {
+			runs.clear();
+			runs.addAll(runs1);
+		}
 	}
+	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
+		if (runs.isEmpty() || text.length() == 0) return runs;
+		if (colorMap.size == 2 && colorMap.get(text.length()) == Color.white) {
+			Color color = colorMap.get(0);
+			runs.each(r -> r.color.set(color));
+			return runs;
+		}
+		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
+
+		Seq<GlyphRun> result = new Seq<>();
+
+		IntSeq colorKeys = colorMap.keys().toArray();
+		colorKeys.sort();
+		Color color         = Color.white;
+		int   runStartIndex = 0, runEndIndex = 0;
+		int   startIndex    = 0;
+		// int      offset        = 0;
+		var      iter         = runs.iterator();
+		GlyphRun item         = iter.next();
+		int      currentIndex = 0;
+		for (int i = 0; i < colorKeys.size; i++) {
+			int endIndex = colorKeys.get(i);
+			if (startIndex == endIndex) continue;
+
+			searchedRuns.clear();
+			while (true) {
+				int itemStart = currentIndex;
+				int itemEnd   = currentIndex + item.glyphs.size;
+
+				if (itemStart <= startIndex && startIndex < itemEnd) {
+					if (searchedRuns.isEmpty()) runStartIndex = startIndex - itemStart;
+				}
+				searchedRuns.add(item);
+				// 判断endIndex是不是就在[itemStart, itemEnd)
+				if (itemStart <= endIndex && endIndex <= itemEnd) {
+					runEndIndex = endIndex - itemStart;
+					break;
+				}
+				if (!iter.hasNext()) {
+					break;
+				}
+				currentIndex += item.glyphs.size;
+
+				item = iter.next();
+				// 判断是不是和原char一样
+				while (text.charAt(currentIndex) != (char) item.glyphs.first().id) {
+					currentIndex++;
+				}
+				if (endIndex == currentIndex) {
+					runEndIndex = itemEnd - itemStart;
+					break;
+				}
+			}
+
+			for (int j = 0; j < searchedRuns.size; j++) {
+				GlyphRun run = searchedRuns.get(j);
+				if (j == 0) {
+					result.add(sub(run, runStartIndex, searchedRuns.size == 1 ? runEndIndex : Integer.MAX_VALUE, color));
+				} else if (j == searchedRuns.size - 1) {
+					result.add(sub(run, 0, runEndIndex, color));
+				} else {
+					result.add(run);
+				}
+			}
+
+			startIndex = endIndex;
+			color = colorMap.get(colorKeys.get(i));
+		}
+
+		return result;
+	}
+	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color) {
+		endIndex = Math.min(endIndex, glyphRun.glyphs.size);
+		GlyphRun newRun = Pools.get(GlyphRun.class, GlyphRun::new).obtain();
+
+		newRun.y = glyphRun.y;
+		newRun.x = glyphRun.x + ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex + 1);
+		newRun.xAdvances.add(newRun.x);
+		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex);
+		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, endIndex - startIndex);
+		newRun.width = ArrayUtils.sumf(glyphRun.xAdvances, startIndex, endIndex);
+		newRun.xAdvances.add(newRun.width);
+		newRun.color.set(color);
+		return newRun;
+	}
+	private static final Seq<GlyphRun> searchedRuns = new Seq<>();
 
 	public void setAndProcessText(Object val) {
 		text.setLength(0);
+		colorMap.clear();
 		startIndexMap.clear();
 		endIndexMap.clear();
 		appendValue(text, val);
-		setColor(color);
+		if (text.length() > truncateLength) {
+			text.setLength(truncateLength);
+			text.append(ellipse);
+		}
 	}
 
+	private final IntMap<Color>               colorMap      = new IntMap<>();
 	private final IntMap<Object>              startIndexMap = new IntMap<>();
 	private final ObjectMap<Object, Integer>  endIndexMap   = new ObjectMap<>();
 	private final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
@@ -148,11 +255,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 
 	@SuppressWarnings("ConstantConditions")
 	private void appendValue(StringBuilder text, Object val) {
-		if (val == null) {
-			text.append("null");
-			setColor(JSSyntax.c_keyword);
-			return;
-		}
 		if (val instanceof ObjectMap || val instanceof Map) {
 			text.append('{');
 			boolean checkTail = false;
@@ -173,7 +275,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			if (checkTail) text.deleteCharAt(text.length() - 2);
 			text.append('}');
 
-			setColor(Syntax.c_map);
+			// setColor(Syntax.c_map);
 			return;
 		}
 		iter:
@@ -215,22 +317,33 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			}
 			if (checkTail && text.length() >= 2) text.delete(text.length() - 2, text.length());
 			text.append(']');
-			setColor(Color.white);
+			// setColor(Color.white);
 			return;
 		}
 
-		startIndexMap.put(text.length(), val);
+		Color mainColor = colorOf(val);
+		int   startI    = text.length();
+		colorMap.put(startI, mainColor);
+		startIndexMap.put(startI, wrap(val));
 		text.append(toString(val));
-		endIndexMap.put(val, text.length());
+		int endI = text.length();
+		endIndexMap.put(wrap(val), endI);
+		colorMap.put(endI, Color.white);
 
-		Color mainColor = val == null ? Syntax.c_objects
-		 : type == String.class || val instanceof Character ? Syntax.c_string
-		 : Number.class.isAssignableFrom(box(type)) ? Syntax.c_number
+		// setColor(mainColor);
+	}
+	private Object wrap(Object val) {
+		if (val == null) return NULL_MARK;
+		return val;
+	}
+	public static Color colorOf(Object val) {
+		return val == null ? Syntax.c_objects
+		 : val instanceof String || val instanceof Character ? Syntax.c_string
+		 : val instanceof Number ? Syntax.c_number
+		 : val instanceof Class ? TmpVars.c1.set(JColor.c_type)
 		 : val.getClass().isEnum() ? c_enum
-		 : box(val.getClass()) == Boolean.class ? Syntax.c_objects
+		 : box(val.getClass()) == Boolean.class ? Syntax.c_keyword
 		 : Color.white;
-
-		setColor(mainColor);
 	}
 	private static String toString(Object val) {
 		return CatchSR.<String>apply(() ->
@@ -261,10 +374,6 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	private boolean isTruncate(int length) {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
-	private CharSequence truncate(CharSequence text) {
-		//noinspection StringTemplateMigration
-		return isTruncate(text.length()) ? text.subSequence(0, truncateLength) + "  ..." : text;
-	}
 
 	public int getCursor(float x, float y) {
 		var   runs       = cache.getLayouts().first().runs;
@@ -274,14 +383,23 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		 currentY; // 指文字左上角的坐标
 		int accumulate = -1;
 		for (GlyphRun run : runs) {
+			while (
+			 accumulate != -1 &&
+			 accumulate < text.length() &&
+			 text.charAt(accumulate) != (char) run.glyphs.first().id) {
+				accumulate++;
+			}
 			FloatSeq xAdvances = run.xAdvances;
-			currentX = 0;
+			currentX = run.x;
 			currentY = height + run.y;
 			// 判断是否在行
 			if (Math.abs(currentY - y) < lineHeight) {
-				if (x > run.width) return -1;
+				if (currentX + run.width < x) {
+					accumulate += run.glyphs.size;
+					continue;
+				}
 				// 第一个条目是相对于绘图位置的 X 偏移量
-				for (int i = 0; i < xAdvances.size; i++) {
+				for (int i = 1; i < xAdvances.size; i++) {
 					currentX += xAdvances.get(i);
 
 					if (currentX >= x) {
@@ -290,16 +408,15 @@ public abstract class ValueLabel extends NoMarkupLabel {
 					accumulate++;
 				}
 			} else {
-				accumulate += xAdvances.size;
+				accumulate += run.glyphs.size;
 			}
 		}
 		return -1;
 	}
-	public static final Object[] EMPTY_ARRAY = new Object[0];
-	private Object[] asArray(Object arr) {
+	private static Object[] asArray(Object arr) {
 		if (arr instanceof Object[]) return (Object[]) arr;
 		int len = Array.getLength(arr);
-		if (len == 0) return EMPTY_ARRAY;
+		if (len == 0) return ArrayUtils.EMPTY_ARRAY;
 		Object[] objArr = new Object[len];
 		for (int i = 0; i < len; i++) {
 			objArr[i] = Array.get(arr, i);
@@ -312,7 +429,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
-	public static final String ERROR = "<ERROR>";
+	public static final String ERROR     = "<ERROR>";
+	public static final String STR_EMPTY = "<EMPTY>";
 	public void setError() {
 		super.setText(ERROR);
 		setColor(Color.red);
@@ -322,9 +440,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 	void setText0(CharSequence newText) {
 		if (newText == null || newText.length() == 0) {
-			newText = "<EMPTY>";
+			newText = STR_EMPTY;
 			setColor(Color.gray);
-		}
+		} else setColor(Color.white);
 		super.setText(newText);
 	}
 	public Runnable afterSet;
@@ -524,7 +642,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		public Seq<MenuItem> getMenuLists() {
 			Seq<MenuItem> list = new Seq<>();
 			basicMenuLists(list);
-			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> ValueLabel.toString(val)));
+			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> ValueLabel.toString(val))
+			 .color(colorOf(val)));
 			return list;
 		}
 		public boolean enabledUpdateMenu() {

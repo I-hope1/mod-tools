@@ -102,6 +102,8 @@ public class Frag extends Table {
 			Vec2 pos = position.getPosition();
 			listener.display(pos.x, pos.y, false);
 		});
+		Vec2 pos = position.getPosition();
+		listener.display(pos.x, pos.y, false);
 	}
 	public final float hoverSize   = 45 * Scl.scl();
 	public final float hoverRadius = 96 * Scl.scl();

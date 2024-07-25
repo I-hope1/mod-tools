@@ -3,6 +3,7 @@ package modtools.struct;
 import arc.func.Boolp;
 import arc.struct.Seq;
 
+/** 为false，就删除 */
 public class TaskSet extends Seq<Boolp> {
 	public void exec() {
 		/* 为false，就删除 */

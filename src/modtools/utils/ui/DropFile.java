@@ -1,5 +1,6 @@
 package modtools.utils.ui;
 
+import arc.Core;
 import arc.files.Fi;
 import arc.func.Cons;
 import arc.scene.event.VisibilityListener;
@@ -12,7 +13,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.dnd.*;
-import java.io.File;
+import java.io.*;
 import java.util.List;
 import java.util.*;
 
@@ -20,7 +21,7 @@ import static mindustry.Vars.ui;
 
 public class DropFile {
 	public static final String LABLE_NAME = "ImportFromSelector";
-	public static boolean valid(){
+	public static boolean valid() {
 		try {
 			Class.forName("javax.swing.JFrame");
 			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, LABLE_NAME);
@@ -53,7 +54,13 @@ public class DropFile {
 				 for (Fi fi : list) {
 					 if (!fi.extEquals("zip") && !fi.extEquals("jar"))
 						 throw new IllegalArgumentException("Unexpected file type: " + fi.extension());
-					 Vars.mods.importMod(fi);
+					 Core.app.post(() -> {
+						 try {
+							 Vars.mods.importMod(fi);
+						 } catch (IOException e) {
+							 Vars.ui.showException("Failed to import mod: " + fi, e);
+						 }
+					 });
 				 }
 			 } catch (Throwable e) {
 				 IntUI.showException("Failed to import mod from selector", e);
@@ -76,6 +83,7 @@ public class DropFile {
 							 setVisible(false);
 
 							 fiCons.get(list.stream().map(Fi::new).toList());
+							 dispose();
 						 } else {
 							 // 拒绝拖拽来的数据
 							 event.rejectDrop();

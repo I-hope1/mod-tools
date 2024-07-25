@@ -105,7 +105,9 @@ public class MenuBuilder {
 		}
 		main.pack();
 
-		return p.pane(Styles.smallPane, main).growY();
+		Cell<ScrollPane> cell = p.pane(Styles.smallPane, main).growY();
+		cell.get().setOverscroll(false, false);
+		return cell;
 	}
 	/**
 	 * Menu `Copy ${key} As Js` constructor.

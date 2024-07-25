@@ -32,11 +32,12 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		// addImport(element, findClassSymbol("arc.Core"));
 
 		StringBuilder sb = new StringBuilder();
-		sb.append("modName = mindustry.Vars.mods.getMod(").append(icons.mainClass().getName()).append(".class).name;");
+		sb.append("if (modName == null) modName = mindustry.Vars.mods.getMod(")
+		 .append(icons.mainClass().getName()).append(".class).name;");
 		stringType.tsym.owner.kind = Kind.VAR;
 		texture.tsym.owner.kind = Kind.VAR;
 		// map.tsym.owner.kind = Kind.VAR;
-		addField(root, Flags.STATIC | Flags.PRIVATE, stringType,
+		addField(root, Flags.STATIC | Flags.PUBLIC, stringType,
 		 "modName", null).vartype = mMaker.Ident(stringType.tsym);
 		stringType.tsym.owner.kind = Kind.PCK;
 		texture.tsym.owner.kind = Kind.PCK;

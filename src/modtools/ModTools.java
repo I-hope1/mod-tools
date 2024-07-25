@@ -13,6 +13,7 @@ import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
 import modtools.android.HiddenApi;
 import modtools.events.*;
+import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
@@ -41,10 +42,9 @@ public class ModTools extends Mod {
 	public static  boolean isV6             = Version.number <= 135;
 
 
-	private static boolean loaded = false;
+	public static boolean loaded = false;
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");
-		loaded = true;
 
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -52,13 +52,16 @@ public class ModTools extends Mod {
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
 		if (headless) Log.info("Running in headless environment.");
 
+		Core.app.post(this::load0);
+	}
+	public void load0(){
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 			IntVars.meta = metas.get(ModTools.class);
 			load();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
-				ui.showCustomConfirm("@mod-tools.modrestart", "@mod-tools.modrestart_text",
-				 "@mod-tools.modrestart_yes", "@mod-tools.modrestart_no",
+				ui.showCustomConfirm("@mod-tools.close_modrestart", "@mod-tools.close_modrestart_text",
+				 "@mod-tools.close_modrestart_yes", "@mod-tools.close_modrestart_no",
 				 SettingsUI::disabledRestart, EMPTY_RUN);
 			}
 		} catch (Throwable e) {
@@ -72,6 +75,7 @@ public class ModTools extends Mod {
 			Tools.runLoggedException(URLRedirect::load);
 		}
 	}
+
 	private void load() {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
@@ -87,10 +91,10 @@ public class ModTools extends Mod {
 		HopeCall.registerPacket();
 
 		if (isImportFromGame) {
-			loadContent();
+			// loadContent();
 			loadInputAndUI();
 		} else Events.on(ClientLoadEvent.class,
-		 _ -> Tools.runLoggedException(ModTools::loadInputAndUI));
+		 _ -> Tools.runLoggedException(this::loadInputAndUI));
 	}
 
 
@@ -138,24 +142,22 @@ public class ModTools extends Mod {
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();
 	}
-	private static void loadInputAndUI() {
+	private void loadInputAndUI() {
 		if (ui == null) return;
 		Time.mark();
 
 		IntVars.load();
-		Tools.TASKS.add(() -> {
-			mouseVec.require();
-			if (Vars.mods.getMod(ModTools.class) == null) disposeAll();
-		});
+		Tools.TASKS.add(mouseVec::require);
 		if (errors.any()) {
 			errors.each(e -> ui.showException(e));
 			return;
 		}
+		// 加载HopeIcons
+		HopeIcons.modName = modName;
+		load("HopeIcons", HopeIcons::load);
 		load("MyShaders", MyShaders::load);
 		load("MyFonts", MyFonts::load);
 		load("HopeInput", HopeInput::load);
-		// 加载HopeIcons
-		load("HopeIcons", HopeIcons::load);
 		// new DrawablePicker().show(IntUI.whiteui, true, _ -> {});
 		if (isDesktop()) {
 			load("DropMod", DropFile::load);
@@ -163,22 +165,31 @@ public class ModTools extends Mod {
 		load("IntUI", IntUI::load);
 
 		load("Updater", Updater::checkUpdate);
+		loaded = true;
 		IntVars.async(() -> {
 			AllTutorial.init();
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
-				Tools.runIgnoredException(Background::load);
+				Core.app.post(() -> Tools.runIgnoredException(Background::load));
 			}
+			Tools.TASKS.add(() -> {
+				if (mods.getMod(ModTools.class) == null) {
+					disposeAll();
+				}
+			});
 		}, () -> Log.info("Loaded ModTools input and ui in @ms", Time.elapsed()));
 	}
 
 	public static void load(String moduleName, Runnable r) {
-		Tools.runT("Failed to load module " + moduleName, r::run, null).run();
+		Tools.runLoggedException(moduleName, r::run);
 	}
 
 	/**
 	 * @see Mods#buildFiles()
 	 */
 	public static void loadBundle() {
+		if (root instanceof HFi && mods.getMod(modName) == null) return;
+		root = mods.getMod(modName).root;
+
 		ObjectMap<String, Seq<Fi>> bundles;
 		//load up bundles.
 		Fi folder = root.child("bundles");
@@ -250,6 +261,7 @@ public class ModTools extends Mod {
 
 	private static boolean isDisposed = false;
 	public static void disposeAll() {
+		if (isDisposed) return;
 		isDisposed = true;
 		Tools.TASKS.clear();
 		WorldDraw.tasks.clear();

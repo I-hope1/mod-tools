@@ -18,6 +18,7 @@ import static modtools.utils.Tools.clName;
 @SuppressWarnings("unused")
 public class ForRhino {
 	public static final ContextFactory factory;
+	public static final String SUFFIX = "_aa1";
 
 	static {
 		try {
@@ -29,7 +30,8 @@ public class ForRhino {
 
 	static ContextFactory createFactory() throws Exception {
 		ContextFactory                    global         = ContextFactory.getGlobal();
-		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(clName(global).replace('.', '/') + "_aa1", global.getClass());
+		if (global.getClass().getName().endsWith(SUFFIX)) return global;
+		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(clName(global).replace('.', '/') + SUFFIX, global.getClass());
 		factoryMyClass.addInterface(MyRhino.class);
 		factoryMyClass.visit(ForRhino.class);
 

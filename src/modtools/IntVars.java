@@ -106,7 +106,6 @@ public class IntVars {
 		return OS.isWindows || OS.isMac;
 	}
 
-
 	public static LazyValue<ExecutorService> EXECUTOR = LazyValue.of(() -> AThreads.impl.boundedExecutor("hope-async", 1));
 
 	public static void dispose() {

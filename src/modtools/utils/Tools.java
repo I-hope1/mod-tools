@@ -9,7 +9,7 @@ import arc.util.*;
 import arc.util.Log.LogHandler;
 import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
-import modtools.IntVars;
+import modtools.*;
 import modtools.struct.TaskSet;
 import modtools.ui.IntUI;
 import modtools.ui.comp.Window;
@@ -264,6 +264,17 @@ public class Tools {
 			Log.err(e);
 		}
 	}
+		/**
+	 * 运行带有异常的任务，捕获异常（并记录日志）
+	 * @param run 要运行的任务
+	 */
+	public static void runLoggedException(String failText, CatchRun run) {
+		try {
+			run.run();
+		} catch (Throwable e) {
+			Log.err(failText, e);
+		}
+	}
 
 	/**
 	 * <p>运行带有异常的任务，捕获异常（并记录日志）</p>
@@ -327,7 +338,8 @@ public class Tools {
 				run.run();
 			} catch (Throwable th) {
 				Log.err(th);
-				Window window = IntUI.showException(text, th);
+				if (!ModTools.loaded) return;
+					Window window = IntUI.showException(text, th);
 				if (el != null) window.setPosition(ElementUtils.getAbsolutePos(el));
 			}
 		};

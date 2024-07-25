@@ -638,10 +638,10 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 	@Override
 	public void dispose() {
+		clear();
 		listeners.each(l -> scene.removeCaptureListener(l));
 		drawResidentTasks.clear();
 		remove();
-		clear();
 	}
 	@Override
 	public boolean isDisposed() {

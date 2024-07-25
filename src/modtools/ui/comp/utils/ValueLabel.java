@@ -91,7 +91,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			if (val0 != null) {
 				Class<?> type1 = valToType.get(val0);
 				Object   obj   = valToObj.get(val0);
-				label = ItemValueLabel.of(obj, type1, () -> val[0]);
+				if (type1 != null && obj != null) {
+					label = ItemValueLabel.of(obj, type1, () -> val[0]);
+				}
 			}
 			return label.getMenuLists();
 		});
@@ -199,8 +201,8 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		if (newRuns != layout.runs) {
 			layout.runs.clear();
 			layout.runs.addAll(newRuns);
-			cache.setText(layout, x, y);
 		}
+		cache.setText(layout, x, y);
 		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
 	private static final Seq<GlyphRun> result = new Seq<>();

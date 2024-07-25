@@ -26,7 +26,11 @@ public class CheckboxList extends MenuItem {
 	}
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 		super.build(p, cell, hide);
-		cell.update(b -> b.setChecked(checked.get()));
+		cell.update(b -> b.setChecked(checked == null || checked.get()));
+	}
+	public void reset() {
+		super.reset();
+		checked = null;
 	}
 	public TextButtonStyle style() {
 		return HopeStyles.flatTogglet;

@@ -288,10 +288,9 @@ public class ReviewElement extends Content {
 						 IntUI.showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
 					 } else go.run();
 				 })
-				 .with(b -> {
-					 t.update(() -> b.setDisabled(element == null || element.parent == null));
-					 b.getLabel().setFontScale(0.9f);
-				 }).size(130, 35)
+				 .disabled(_ -> element == null || element.parent == null)
+				 .with(b -> b.getLabel().setFontScale(0.9f))
+				 .size(130, 35)
 				 .padRight(3f).get();
 				t.button(Icon.copySmall, HopeStyles.clearNonei, 28, () -> {
 					 var window = new ReviewElementWindow();

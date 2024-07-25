@@ -11,7 +11,6 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import arc.util.Timer.Task;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
@@ -23,7 +22,7 @@ import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.MoveListener;
 import modtools.ui.content.Content;
 import modtools.utils.*;
-import modtools.utils.ui.*;
+import modtools.utils.ui.LerpFun;
 import modtools.utils.ui.search.BindCell;
 
 import static modtools.IntVars.modName;
@@ -86,31 +85,23 @@ public class Frag extends Table {
 		// 添加双击变小
 		EventHelper.doubleClick(top, () -> {
 			if (!hideCont) return;
-			if (circle == null) addChild(circle = new Group() {{
-				update(() -> {
-					width = top.getWidth();
-					height = top.getHeight();
-					setPosition(0, 0, Align.center);
-				});
-			}});
-			if (circle.getChildren().any()) circleRemove();
-			else circleBuild();
+			if (circle == null) addChild(circle = new CircleGroup());
+			if (circle.getChildren().any()) {
+				circleRemove();
+			} else {
+				circleBuild();
+			}
 		}, () -> {
 			cell.toggle(hideCont);
 			hideCont = !hideCont;
 			invalidate();
 			circleRemove();
-			Core.app.post(() -> listener.display(x, y));
+			Core.app.post(() -> listener.display(x, y, false));
 		});
 		IntVars.addResizeListener(() -> {
-			if (!setPositionTask.isScheduled()) Timer.schedule(setPositionTask, 0, 0.2f, 8);
-			listener.display(x, y);
+			Vec2 pos = position.getPosition();
+			listener.display(pos.x, pos.y, false);
 		});
-	}
-	Task setPositionTask = TaskManager.newTask(this::setDefaultPosition);
-	private void setDefaultPosition() {
-		Vec2 pos = position.getPosition();
-		super.setPosition(pos.x, pos.y);
 	}
 	public final float hoverSize   = 45 * Scl.scl();
 	public final float hoverRadius = 96 * Scl.scl();
@@ -171,24 +162,19 @@ public class Frag extends Table {
 	}
 	private class MoveInsideListener extends MoveListener {
 		public MoveInsideListener() { super(Frag.this.top, Frag.this); }
-		public void display(float x, float y) {
-			if (x == CellTools.unset && y == CellTools.unset) {
-				if (position.isSwitchOn() && !setPositionTask.isScheduled()) {
-				}
-				return;
-			}
-			setPositionTask.cancel();
+		public void display(float x, float y, boolean writeSetting) {
 			float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
 			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();
 			main.setPosition(
 			 Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
 			 Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight)
 			);
+			if (writeSetting) position.set(STR."(\{main.x},\{main.y})");
 		}
-	}
-	public void setPosition(float x, float y) {
-		super.setPosition(x, y);
-		if (!setPositionTask.isScheduled()) position.set(STR."(\{x},\{y})");
+
+		public void display(float x, float y) {
+			display(x, y, true);
+		}
 	}
 
 	@SettingsInit
@@ -200,6 +186,15 @@ public class Frag extends Table {
 
 		static {
 			position.defSwitchOn(false);
+		}
+	}
+	private class CircleGroup extends Group {
+		{
+			update(() -> {
+				width = top.getWidth();
+				height = top.getHeight();
+				setPosition(0, 0, Align.center);
+			});
 		}
 	}
 }

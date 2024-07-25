@@ -3,9 +3,9 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.4.6.5
+Version 1.4.6.6
 - Fixed a lot of bugs
-- Supported ValueLabel to operate the sub item.
+- Colorful ValueLabel
 -----------------
 
 ## ShowUIList
@@ -94,7 +94,7 @@ Version 1.4.6.5
 '''
 author: "I hope..."
 hidden: true
-version: 1.4.6.5
+version: 1.4.6.6
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

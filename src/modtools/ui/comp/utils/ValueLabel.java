@@ -2,8 +2,8 @@ package modtools.ui.comp.utils;
 
 import arc.func.*;
 import arc.graphics.*;
+import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
-import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
@@ -138,16 +138,72 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 
 	public void layout() {
-		super.layout();
 		if (cache == null) return;
-		// if (true) return;
-		Seq<GlyphRun> runs  = cache.getLayouts().first().runs;
-		Seq<GlyphRun> runs1 = splitAndColorize(runs, colorMap, text);
-		if (runs != runs1) {
-			runs.clear();
-			runs.addAll(runs1);
+		Font  font      = cache.getFont();
+		float oldScaleX = font.getScaleX();
+		float oldScaleY = font.getScaleY();
+		if (fontScaleChanged) font.getData().setScale(fontScaleX, fontScaleY);
+
+		boolean wrap = this.wrap && ellipsis == null;
+		if (wrap) {
+			float prefHeight = getPrefHeight();
+			if (prefHeight != lastPrefHeight) {
+				lastPrefHeight = prefHeight;
+				invalidateHierarchy();
+			}
 		}
+
+		float    width      = getWidth(), height = getHeight();
+		Drawable background = style.background;
+		float    x          = 0, y = 0;
+		if (background != null) {
+			x = background.getLeftWidth();
+			y = background.getBottomHeight();
+			width -= background.getLeftWidth() + background.getRightWidth();
+			height -= background.getBottomHeight() + background.getTopHeight();
+		}
+
+		GlyphLayout layout = this.layout;
+		float       textWidth, textHeight;
+		if (wrap || text.indexOf("\n") != -1) {
+			// If the text can span multiple lines, determine the text's actual size so it can be aligned within the label.
+			layout.setText(font, text, 0, text.length(), Color.white, width, lineAlign, wrap, ellipsis);
+			textWidth = layout.width;
+			textHeight = layout.height;
+
+			if ((labelAlign & Align.left) == 0) {
+				if ((labelAlign & Align.right) != 0)
+					x += width - textWidth;
+				else
+					x += (width - textWidth) / 2;
+			}
+		} else {
+			textWidth = width;
+			textHeight = font.getData().capHeight;
+		}
+
+		if ((labelAlign & Align.top) != 0) {
+			y += cache.getFont().isFlipped() ? 0 : height - textHeight;
+			y += style.font.getDescent();
+		} else if ((labelAlign & Align.bottom) != 0) {
+			y += cache.getFont().isFlipped() ? height - textHeight : 0;
+			y -= style.font.getDescent();
+		} else {
+			y += (height - textHeight) / 2;
+		}
+		if (!cache.getFont().isFlipped()) y += textHeight;
+
+		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
+
+		var newRuns = splitAndColorize(layout.runs, colorMap, text);
+		if (newRuns != layout.runs) {
+			layout.runs.clear();
+			layout.runs.addAll(newRuns);
+			cache.setText(layout, x, y);
+		}
+		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
+	private static final Seq<GlyphRun> result = new Seq<>();
 	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.size == 2 && colorMap.get(text.length()) == Color.white) {
@@ -157,7 +213,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
 
-		Seq<GlyphRun> result = new Seq<>();
+		result.clear();
 
 		IntSeq colorKeys = colorMap.keys().toArray();
 		colorKeys.sort();
@@ -224,12 +280,10 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		GlyphRun newRun = Pools.get(GlyphRun.class, GlyphRun::new).obtain();
 
 		newRun.y = glyphRun.y;
-		newRun.x = glyphRun.x + ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex + 1);
-		newRun.xAdvances.add(newRun.x);
-		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex);
+		newRun.x = glyphRun.x + ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex);
+		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex + 1);
 		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, endIndex - startIndex);
-		newRun.width = ArrayUtils.sumf(glyphRun.xAdvances, startIndex, endIndex);
-		newRun.xAdvances.add(newRun.width);
+		newRun.width = ArrayUtils.sumf(glyphRun.xAdvances, startIndex, endIndex + 1);
 		newRun.color.set(color);
 		return newRun;
 	}
@@ -296,16 +350,14 @@ public abstract class ValueLabel extends NoMarkupLabel {
 							count++;
 						} else {
 							appendValue(text, last);
-							if (count > 1) text.append(" ▶×").append(count).append("◀");
-							text.append(getArrayDelimiter());
+							addCountText(text, count);
 							if (isTruncate(text.length())) break;
 							last = item;
 							count = 0;
 						}
 					}
 					appendValue(text, last);
-					if (count > 1) text.append(" ▶×").append(count).append("◀");
-					text.append(", ");
+					addCountText(text, count);
 					// break l;
 					checkTail = true;
 				}
@@ -324,15 +376,23 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		Color mainColor = colorOf(val);
 		int   startI    = text.length();
 		colorMap.put(startI, mainColor);
-		startIndexMap.put(startI, wrap(val));
+		startIndexMap.put(startI, wrapVal(val));
 		text.append(toString(val));
 		int endI = text.length();
-		endIndexMap.put(wrap(val), endI);
+		endIndexMap.put(wrapVal(val), endI);
 		colorMap.put(endI, Color.white);
 
 		// setColor(mainColor);
 	}
-	private Object wrap(Object val) {
+	private void addCountText(StringBuilder text, int count) {
+		if (count > 1) {
+			// colorMap.put(text.length(), Color.gray);
+			text.append(" ×").append(count);
+			// colorMap.put(text.length(), Color.white);
+		}
+		text.append(getArrayDelimiter());
+	}
+	private Object wrapVal(Object val) {
 		if (val == null) return NULL_MARK;
 		return val;
 	}
@@ -376,15 +436,15 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 
 	public int getCursor(float x, float y) {
-		var   runs       = cache.getLayouts().first().runs;
+		var   runs       = layout.runs;
 		float lineHeight = style.font.getLineHeight();
 		float
 		 currentX,
 		 currentY; // 指文字左上角的坐标
-		int accumulate = -1;
+		int accumulate = 0;
 		for (GlyphRun run : runs) {
 			while (
-			 accumulate != -1 &&
+			 accumulate != 0 &&
 			 accumulate < text.length() &&
 			 text.charAt(accumulate) != (char) run.glyphs.first().id) {
 				accumulate++;
@@ -399,11 +459,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 					continue;
 				}
 				// 第一个条目是相对于绘图位置的 X 偏移量
-				for (int i = 1; i < xAdvances.size; i++) {
+				for (int i = 0; i < xAdvances.size; i++) {
 					currentX += xAdvances.get(i);
 
 					if (currentX >= x) {
-						return accumulate;
+						return accumulate - 1;
 					}
 					accumulate++;
 				}

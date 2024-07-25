@@ -233,11 +233,11 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				int itemStart = currentIndex;
 				int itemEnd   = currentIndex + item.glyphs.size;
 
-				if (itemStart <= startIndex && startIndex < itemEnd) {
+				if (itemStart <= startIndex && startIndex <= itemEnd) {
 					if (searchedRuns.isEmpty()) runStartIndex = startIndex - itemStart;
 				}
 				searchedRuns.add(item);
-				// 判断endIndex是不是就在[itemStart, itemEnd)
+				// 判断endIndex是不是就在[itemStart, itemEnd]
 				if (itemStart <= endIndex && endIndex <= itemEnd) {
 					runEndIndex = endIndex - itemStart;
 					break;
@@ -252,7 +252,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 				while (text.charAt(currentIndex) != (char) item.glyphs.first().id) {
 					currentIndex++;
 				}
-				if (endIndex == currentIndex) {
+				if (endIndex <= currentIndex) {
 					runEndIndex = itemEnd - itemStart;
 					break;
 				}
@@ -272,6 +272,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			startIndex = endIndex;
 			color = colorMap.get(colorKeys.get(i));
 		}
+		if (runEndIndex != 0) result.add(sub(item, runEndIndex, Integer.MAX_VALUE, color));
 
 		return result;
 	}
@@ -386,9 +387,9 @@ public abstract class ValueLabel extends NoMarkupLabel {
 	}
 	private void addCountText(StringBuilder text, int count) {
 		if (count > 1) {
-			// colorMap.put(text.length(), Color.gray);
+			colorMap.put(text.length(), Color.gray);
 			text.append(" ×").append(count);
-			// colorMap.put(text.length(), Color.white);
+			colorMap.put(text.length(), Color.white);
 		}
 		text.append(getArrayDelimiter());
 	}

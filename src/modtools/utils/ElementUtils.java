@@ -25,8 +25,8 @@ import static modtools.utils.ElementUtils.$.*;
 public interface ElementUtils {
 	static <T> T findParent(Element actor, Boolf<Element> condition) {
 		while (true) {
-			if (condition.get(actor)) return (T) actor;
 			if (actor == null) return null;
+			if (condition.get(actor)) return (T) actor;
 			actor = actor.parent;
 		}
 	}

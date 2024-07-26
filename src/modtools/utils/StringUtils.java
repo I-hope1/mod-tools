@@ -64,4 +64,13 @@ public interface StringUtils {
 		return str.substring(start, end);
 	}
 
+	static boolean equals(CharSequence bigText, int start, int end, CharSequence smallText) {
+		if (smallText == null) return false;
+		if (end - start != smallText.length()) return false;
+		for (int j = start; j < end; j++) {
+			if (bigText.charAt(j) != smallText.charAt(j - start)) return false;
+		}
+		return true;
+	}
+
 }

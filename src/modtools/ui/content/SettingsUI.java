@@ -174,8 +174,7 @@ public class SettingsUI extends Content {
 	 Table table, String text, Prov<Element> prov,
 	 Runnable clear, Cons<Element> setter,
 	 Boolp condition) {
-		var vl = new ClearValueLabel<>(Element.class, prov, clear);
-		vl.setter = setter;
+		var vl = new ClearValueLabel<>(Element.class, prov, clear, setter);
 		vl.setAlignment(Align.right);
 		Label l = new Label(text);
 		table.stack(l, vl)

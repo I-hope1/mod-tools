@@ -3,12 +3,12 @@ package modtools.ui.content;
 import arc.Core;
 import arc.input.KeyCode;
 import arc.input.KeyCode.KeyType;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
-import arc.util.Strings;
+import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.struct.LazyValue;
@@ -17,10 +17,12 @@ import modtools.ui.IntUI.IHitter;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.comp.utils.*;
 import modtools.ui.control.*;
 import modtools.ui.control.HKeyCode.KeyCodeData;
-import modtools.utils.ElementUtils;
+import modtools.utils.*;
 
+import static arc.Core.scene;
 import static modtools.ui.IntUI.topGroup;
 
 public class KeyCodeSetter extends Content {
@@ -37,7 +39,7 @@ public class KeyCodeSetter extends Content {
 		super.load();
 		recordKeyCode = HKeyCode.data.keyCode("recordKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
 		final Seq<Button> toRemoveSeq = new Seq<>();
-		Core.scene.addCaptureListener(new InputListener() {
+		scene.addCaptureListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (recordKeyCode.isPress()) {
 					Element element = HopeInput.mouseHit();
@@ -47,7 +49,8 @@ public class KeyCodeSetter extends Content {
 				elementKeyCode.each((key, _) -> {
 					HKeyCode keyCode = elementKeyCode.keyCode(key, () -> HKeyCode.NONE);
 					if (keyCode.isPress()) {
-						clicked(Core.scene.find(key));
+						Element elem = getElementByKey(key);
+						if (elem != null) clicked(elem);
 					}
 				});
 				toRemoveSeq.clear();
@@ -68,17 +71,88 @@ public class KeyCodeSetter extends Content {
 	public static void clicked(Element el) {
 		el.fireClick();
 	}
+	/** 与{@link #getElementByKey(String)} 互为逆运算  */
 	public static String getBindKey(Button button) {
 		if (button.getScene() == null) return null;
 		Seq<String> sj = new Seq<>();
-		ElementUtils.findParent(button, e -> {
-			if (e.name != null) sj.add(e.name);
-			else sj.add("" + e.getZIndex());
+		if (button.name != null) {
+			sj.add("#" + button.name);
+		} else if (button instanceof TextButton tb) {
+			sj.add(String.valueOf(tb.getText()));
+		}
+		ElementUtils.findParent(button.parent, e -> {
+			if (e == scene.root) return true;
+			sj.add(e.name != null ? e.name : "" + e.getZIndex());
 			return false;
 		});
 		return sj.isEmpty() ? null : sj.reverse().toString(".");
 	}
+	/** 与{@link #getBindKey(Button)} 互为逆运算  */
+	public static Button getElementByKey(String key) {
+		if (key == null || key.isEmpty()) return null;
 
+		Element current = scene.root;
+		int     start   = 0;
+		int     end     = 0;
+		int     length  = key.length();
+
+		while (end < length) {
+			// 找到下一个点的位置
+			while (end < length && key.charAt(end) != '.') {
+				end++;
+			}
+
+			// 获取当前部分的子字符串
+			if (current == null) return null;
+
+			Element next = null;
+			if (current instanceof Group group) {
+				boolean isIndex = true;
+				for (int i = start; i < end; i++) {
+					if (!Character.isDigit(key.charAt(i))) {
+						isIndex = false;
+						break;
+					}
+				}
+
+				if (isIndex) {
+					int index = 0;
+					for (int i = start; i < end; i++) {
+						index = index * 10 + (key.charAt(i) - '0');
+					}
+					if (index < group.getChildren().size) {
+						next = group.getChildren().get(index);
+					}
+				} else if (key.charAt(start) != '#') {
+					for (int i = 0, size = group.getChildren().size; i < size; i++) {
+						Element child = group.getChildren().get(i);
+						if (!(child instanceof TextButton tb)) continue;
+						if (StringUtils.equals(key, start, end, tb.getText())) {
+							next = tb;
+							break;
+						}
+					}
+				} else {
+					for (int i = 0, size = group.getChildren().size; i < size; i++) {
+						Element child = group.getChildren().get(i);
+						if (StringUtils.equals(key, start + 1/* 跳过# */, end, child.name)) {
+							next = child;
+							break;
+						}
+					}
+				}
+			}
+
+			// 如果没有找到匹配的子元素，则无法继续查找
+			if (next == null) return null;
+
+			current = next;
+			end++;  // 跳过点
+			start = end;  // 更新起始位置
+		}
+
+		return current instanceof Button b ? b : null;
+	}
 	public static class KeyCodeBindWindow extends NoTopWindow implements IHitter {
 		public KeyCodeBindWindow(String title) {
 			super(title);
@@ -137,7 +211,7 @@ public class KeyCodeSetter extends Content {
 			cont.button("@cancel", Icon.left, Styles.flatt, this::hide);
 			cont.button("@ok", Icon.ok, Styles.flatt, () -> {
 				HKeyCode value = HKeyCode.parse(field.getText());
-				if (button.name != null) {
+				if (button.name != null || button instanceof TextButton tb && tb.getText() != null) {
 					String key = getBindKey(button);
 					elementKeyCode.setKeyCode(key, value);
 				} else {
@@ -158,12 +232,20 @@ public class KeyCodeSetter extends Content {
 		// 监控keys
 		Runnable rebuild = () -> {
 			pane.clearChildren();
-			elementKeyCode.eachKey((k, v) -> {
-				pane.button(k, Styles.flatt , () -> {});
+			elementKeyCode.eachKey((elementKey, keyCode) -> {
+				var vl = new ClearValueLabel<>(Button.class, () -> getElementByKey(elementKey), null,
+				 el -> {
+					 elementKeyCode.remove(elementKey);
+					 elementKeyCode.setKeyCode(getBindKey(el), keyCode);
+				 });
+				pane.add(vl).size(220, 45);
+				pane.button(keyCode.toString(), Styles.flatt, () -> { }).size(100, 45);
+				pane.row();
 			});
 		};
-		cont.button("Flush", Icon.refresh, Styles.flatt, rebuild);
-		cont.pane(Styles.smallPane, pane).grow();
+		rebuild.run();
+		cont.button("Flush", Icon.refresh, Styles.flatt, rebuild).row();
+		cont.pane(Styles.smallPane, pane).grow().colspan(2);
 	}
 	public void selectButton() {
 		topGroup.requestSelectElem(TopGroup.defaultDrawer, Button.class, el -> {

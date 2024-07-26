@@ -25,12 +25,13 @@ public class PlainValueLabel<T> extends ValueLabel {
 		});
 	}
 
+	public static final String KEY_CLEAR = "val.clear";
 	public Seq<MenuItem> getMenuLists() {
 		Seq<MenuItem> list = new Seq<>();
 		specialBuild(list);
 		detailsBuild(list);
 
-		list.add(MenuItem.with("val.clear", Icon.eraserSmall, "@clear", this::clearVal));
+		list.add(MenuItem.with(KEY_CLEAR, Icon.eraserSmall, "@clear", this::clearVal));
 
 		list.add(copyAsJSMenu("value", () -> val));
 		return list;

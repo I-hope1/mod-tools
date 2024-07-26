@@ -17,6 +17,9 @@ public class HKeyCode {
 		public boolean isPress() {
 			return false;
 		}
+		public String toString() {
+			return STR_NONE;
+		}
 	};
 	public static       Json     json     = new Json();
 
@@ -53,7 +56,7 @@ public class HKeyCode {
 	 **/
 	public static HKeyCode parse(String text) {
 		if (text == null || text.equalsIgnoreCase(STR_NONE)) return NONE;
-		String[] split   = text.split(" ");
+		String[] split   = text.split("\\s*\\+\\s*");
 		HKeyCode keyCode = new HKeyCode(KeyCode.valueOf(split[split.length - 1].toLowerCase()));
 		for (int i = 0; i < split.length - 1; i++) {
 			switch (split[i]) {
@@ -85,7 +88,7 @@ public class HKeyCode {
 		return alt == other.alt && shift == other.shift && ctrl == other.ctrl && key == other.key;
 	}
 	public String toString() {
-		return (ctrl ? "Ctrl + " : "") + (shift ? "Shift + " : "") + (alt ? "Alt + " : "") + key.name();
+		return (ctrl ? "Ctrl + " : "") + (shift ? "Shift + " : "") + (alt ? "Alt + " : "") + key.name().toUpperCase();
 	}
 
 	public static class KeyCodeData extends Data {

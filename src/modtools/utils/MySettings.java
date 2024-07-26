@@ -129,8 +129,8 @@ public class MySettings {
 				 .append(k.replaceAll("\"", "\\\\\""))
 				 .append('"').append(": ")
 				 .append(v instanceof Data ? ((Data) v).toString(tab) :
-					(Reflect.isWrapper(v.getClass()) ? v :
-					 STR."\"\{v.toString().replaceAll("\\\\", "\\\\")}\""))
+					Reflect.isWrapper(v.getClass()) ? v :
+					 STR."\"\{v.toString().replaceAll("\\\\", "\\\\")}\"")
 				 .append('\n');
 			});
 			builder.deleteCharAt(builder.length() - 1);

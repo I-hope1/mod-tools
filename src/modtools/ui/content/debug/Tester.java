@@ -459,7 +459,6 @@ public class Tester extends Content {
 		}, "").show();
 	}
 
-
 	private boolean rollAndExec(KeyCode keycode) {
 		if (Core.input.ctrl() && Core.input.shift()) {
 			if (keycode == KeyCode.enter) {

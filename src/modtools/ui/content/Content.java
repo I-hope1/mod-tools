@@ -14,6 +14,8 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.buttons.CircleImageButton;
+import modtools.ui.control.HKeyCode;
+import modtools.ui.control.HKeyCode.KeyCodeData;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
 
@@ -90,6 +92,9 @@ public abstract class Content {
 			btn.update(() -> btn.setChecked(checked.get()));
 		}
 		return btn;
+	}
+	public KeyCodeData keyCodeData() {
+		return HKeyCode.data.child(name);
 	}
 	private Button makeButton(boolean isSmallized, ButtonStyle style) {
 		if (isSmallized) {

@@ -25,11 +25,15 @@ import static modtools.utils.ElementUtils.$.*;
 public interface ElementUtils {
 	static <T> T findParent(Element actor, Boolf<Element> condition) {
 		while (true) {
-			actor = actor.parent;
 			if (condition.get(actor)) return (T) actor;
 			if (actor == null) return null;
+			actor = actor.parent;
 		}
 	}
+	static <T> T findParent(Element actor, Class<T> clazz) {
+		return findParent(actor, clazz::isInstance);
+	}
+
 	static CharSequence getPath(Element element) {
 		if (element == null) return "null";
 		Element       el = element;
@@ -117,10 +121,10 @@ public interface ElementUtils {
 	}
 
 	static @Nullable ScrollPane findClosestPane(Element actor) {
-		return findParent(actor, e -> e instanceof ScrollPane);
+		return findParent(actor, ScrollPane.class);
 	}
 	static @Nullable Window findWindow(Element el) {
-		return findParent(el, e -> e instanceof Window);
+		return findParent(el, Window.class);
 	}
 
 	static String getElementName(Element element) {

@@ -352,7 +352,7 @@ public class Window extends Table implements Position {
 	 * {@link #pack() Packs} the dialog and adds it to the stage with custom action which can be null for instant show
 	 */
 	public Window show(Scene stage, Action action) {
-		IntVars.postToMain(() -> show0(stage, action));
+		Core.app.post(() -> show0(stage, action));
 		return this;
 	}
 
@@ -380,7 +380,6 @@ public class Window extends Table implements Position {
 
 		// if (!(this instanceof InfoFadePopup)) Core.scene.unfocusAll();
 		// stage.setKeyboardFocus(this);
-		invalidate();
 	}
 	public void pack() {
 		if (isMinimize) return;

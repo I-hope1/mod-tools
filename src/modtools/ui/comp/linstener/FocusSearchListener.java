@@ -4,14 +4,16 @@ import arc.Core;
 import arc.input.KeyCode;
 import arc.scene.event.*;
 import arc.scene.ui.TextField;
+import modtools.ui.control.HKeyCode;
 
 public class FocusSearchListener extends InputListener {
 	TextField textField;
 	public FocusSearchListener(TextField textField) {
 		this.textField = textField;
 	}
-	public boolean keyDown(InputEvent event, KeyCode keycode) {
-		if (Core.input.ctrl() && keycode == KeyCode.f) {
+	HKeyCode keyCode = HKeyCode.data.keyCode("focusSearch", () -> new HKeyCode(KeyCode.f).ctrl());
+	public boolean keyDown(InputEvent event, KeyCode __) {
+		if (keyCode.isPress()) {
 			textField.requestKeyboard();
 			textField.setCursorPosition(Integer.MAX_VALUE);
 			if (Core.input.shift()) textField.clear();

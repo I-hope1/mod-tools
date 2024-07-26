@@ -32,6 +32,7 @@ public class HopeInput {
 				last.set(UNSET);
 			}
 		});
+		HKeyCode.load();
 		try {
 			load0();
 		} catch (Throwable e) {

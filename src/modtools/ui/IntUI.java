@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
-import arc.math.Interp;
+import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
@@ -187,27 +187,42 @@ public class IntUI {
 				IntVars.postToMain(t::hideInternal);
 				return;
 			}
-			button.localToStageCoordinates(
-			 Tmp.v1.set(button.getX(align), button.getY(align))
-				.sub(button.x, button.y));
-			if (Tmp.v1.y < graphics.getHeight() / 2f) {
-				t.setPosition(Tmp.v1.x, Tmp.v1.y + button.getHeight(), align | Align.bottom);
-			} else {
-				t.setPosition(Tmp.v1.x, Tmp.v1.y, align | Align.top);
-			}
-			if (t.getWidth() > Core.scene.getWidth()) {
-				t.setWidth((float) graphics.getWidth());
-			}
-			if (t.getHeight() >= Core.scene.getHeight()) {
-				t.setHeight((float) graphics.getHeight());
-				t.y += (t.y > graphics.getWidth() / 2f ? -1 : 1) * button.getHeight();
-			}
+			positionTooltip(button, align, t);
 
 			t.keepInStage();
 			t.invalidateHierarchy();
 			t.pack();
 		});
 		return t;
+	}
+	public static void positionTooltip(Element lying, Table t) {
+		positionTooltip(lying, Align.bottomLeft, t);
+	}
+
+	public static void positionTooltip(Element lying, int align, Table t) {
+		lying.localToStageCoordinates(
+		 Tmp.v1.set(lying.getX(align), lying.getY(align))
+			.sub(lying.x, lying.y));
+		positionTooltip(Tmp.v1, lying.getHeight(), t);
+	}
+	public static void positionTooltip(Vec2 pos, float height, Table t) {
+		t.bottom().left();
+
+		// 初始位置
+		float x = pos.x;
+		float y = pos.y + height;
+
+		x = Mathf.clamp(x, 0, Core.graphics.getWidth() - t.getWidth());
+		if (y + t.getWidth() > Core.graphics.getHeight()) {
+			y = Math.min(pos.y, Core.graphics.getHeight());
+
+			t.top();
+			if (y - t.getHeight() < 0) {
+				t.bottom();
+				y = 0;
+			}
+		}
+		t.setPosition(x, y);
 	}
 	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder f) {
 		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, f);
@@ -654,7 +669,7 @@ public class IntUI {
 	public interface PopupWindow extends INotice { }
 	/* 代表Menu菜单 */
 	public interface IMenu extends IDisposable, IInfo { }
-	public interface IHitter { }
+	public interface IHitter extends IInfo { }
 	/* 代表一个通知 */
 	public interface INotice extends IInfo { }
 

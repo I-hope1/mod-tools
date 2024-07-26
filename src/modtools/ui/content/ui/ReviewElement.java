@@ -35,7 +35,7 @@ import modtools.ui.comp.utils.*;
 import modtools.ui.comp.ModifiableLabel;
 import modtools.ui.content.Content;
 import modtools.ui.content.ui.PairProv.SizeProv;
-import modtools.ui.control.HopeInput;
+import modtools.ui.control.*;
 import modtools.ui.effect.*;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
@@ -119,30 +119,28 @@ public class ReviewElement extends Content {
 	public void settingColor(Table t) { }
 
 
+	public HKeyCode inspectKeycode     =
+	 keyCodeData().keyCode("inspect", () -> new HKeyCode(KeyCode.c).ctrl().shift())
+		.applyToScene(true, this::build);
+	public HKeyCode debugBoundsKeyCode =
+	 keyCodeData().keyCode("debugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt())
+		.applyToScene(true, () -> {
+			if (!Core.input.shift()) {
+				TSettings.debugBounds.toggle();
+				return;
+			}
+			if (topGroup.isSelecting()) {
+				return;
+			}
+			TSettings.debugBounds.set(true);
+			topGroup.requestSelectElem(TopGroup.defaultDrawer, topGroup::setDrawPadElem);
+		});
+
 	ReviewFocusTask task;
 	public void load() {
 		task = new ReviewFocusTask();
 
 		loadSettings();
-		scene.root.getCaptureListeners().insert(0, new InputListener() {
-			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (Core.input.ctrl() && Core.input.shift() && keycode == KeyCode.c) {
-					build();
-					HopeInput.justPressed.clear();
-					event.stop();
-				}
-				if (!(Core.input.ctrl() && Core.input.alt() && keycode == KeyCode.d)) return true;
-				if (Core.input.shift()) {
-					if (topGroup.isSelecting()) {
-						return false;
-					}
-					TSettings.debugBounds.set(true);
-					topGroup.requestSelectElem(TopGroup.defaultDrawer, topGroup::setDrawPadElem);
-				} else TSettings.debugBounds.toggle();
-				return true;
-			}
-		});
-
 		topGroup.focusOnElement(task);
 
 		TopGroup.classBlackList.add(ReviewElementWindow.class);
@@ -605,7 +603,7 @@ public class ReviewElement extends Content {
 				 ElementUtils.quietScreenshot(element);
 			 }),
 			 CheckboxList.withc("debug.bounds", Icon.adminSmall, "@settings.debugbounds",
-			  () -> topGroup.drawPadElem == element,() -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
+				() -> topGroup.drawPadElem == element, () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
 			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
 			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
 			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
@@ -847,23 +845,8 @@ public class ReviewElement extends Content {
 		}
 
 		void setPosition(Element elem, Vec2 vec2) {
-			bottom().left();
-
 			// 初始在元素的左上角
-			float x = vec2.x;
-			float y = vec2.y + elem.getHeight();
-
-			x = Mathf.clamp(x, 0, Core.graphics.getWidth() - getPrefWidth());
-			if (y + getPrefHeight() > Core.graphics.getHeight()) {
-				y = Math.min(vec2.y, Core.graphics.getHeight());
-
-				top();
-				if (y - getPrefHeight() < 0) {
-					bottom();
-					y = 0;
-				}
-			}
-			setPosition(x, y);
+			IntUI.positionTooltip(vec2, elem.getHeight(), this);
 		}
 		private void build(Table t) {
 			t.defaults().growX();
@@ -1015,6 +998,7 @@ public class ReviewElement extends Content {
 			);
 			table.invalidate();
 			table.getPrefWidth();
+			table.pack();
 			table.act(0);
 			table.setPosition(elem, vec2);
 			table.draw();

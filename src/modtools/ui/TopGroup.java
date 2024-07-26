@@ -27,7 +27,7 @@ import modtools.events.ISettings;
 import modtools.struct.TaskSet;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.DelayDisposable;
-import modtools.ui.control.HopeInput;
+import modtools.ui.control.*;
 import modtools.ui.effect.*;
 import modtools.utils.*;
 import modtools.utils.ui.ColorFul;
@@ -83,42 +83,25 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
 
-	public boolean      isSwitchWindows = false;
-	public int          currentIndex    = 0;
-	public List<Window> shownWindows    = new ArrayList<>();
+	public boolean isSwitchWindows = false;
+	public int     currentIndex    = 0;
+
+	public ArrayList<Window> shownWindows = new ArrayList<>();
 
 	private Element selected;
 	public Element getSelected() {
 		return selected;
 	}
 	public boolean isSelecting() {
-		return selecting;
+		return isSelecting;
 	}
-	private boolean selecting;
-	private boolean cancelEvent;
+	private boolean isSelecting;
 
 	private final Group
 	 back    = new NGroup("back"),
 	 windows = new NGroup("windows"),
 	 frag    = new NGroup("frag"),
-	 others  = new NGroup("others") {
-		 public Element hit(float x, float y, boolean touchable) {
-			 return SR.of(super.hit(x, y, touchable))
-				.setOpt(children.contains(t -> t instanceof Window && t instanceof PopupWindow)
-				 ? el -> or(el, this) : null)
-				.get();
-		 }
-		 final Group info    = new NGroup(this, "infos");
-		 final Group _others = new NGroup(this, "others");
-		 public void addChild(Element actor) {
-			 if (_others == null) {
-				 super.addChild(actor);
-				 return;
-			 }
-			 (actor instanceof IInfo ? info : _others)
-				.addChild(actor);
-		 }
-	 };
+	 infos   = new NGroup("infos");
 	public interface IInfo { }
 	final Table end = new MyEnd();
 
@@ -137,7 +120,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		if (elementDrawer != null && selected != null) {
 			// Draw.flush();
-			elementDrawer.draw(selecting, selected);
+			elementDrawer.draw(isSelecting, selected);
 		}
 		drawTask(0, ResidentDrawTask::elemDraw);
 
@@ -239,7 +222,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		addCaptureListener(Vars.mobile ? new SwitchGestureListener() : new SwitchInputListener());
 		if (IntVars.isDesktop()) {
-			addCaptureListener(new HitterAndWindowCloseListener());
+			addCaptureListener(new HitterListener());
 		}
 
 		fillParent = true;
@@ -247,7 +230,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		name = modName + "-TopGroup";
 
 		scene.add(this);
-		Group[] all = {back, windows, frag, others, new FillEnd()};
+		Group[] all = {back, windows, frag, infos, new FillEnd()};
 		for (Group group : all) {
 			group.fillParent = true;
 			group.touchable = Touchable.childrenOnly;
@@ -285,7 +268,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			end.touchable = isSwitchWindows ? Touchable.childrenOnly : Touchable.disabled;
 		});
 	}
-	public List<Window> acquireShownWindows() {
+	public ArrayList<Window> acquireShownWindows() {
 		shownWindows.clear();
 		Cons<Element> cons = elem -> {
 			if (elem instanceof Window window && !(elem instanceof DelayDisposable)) {
@@ -293,7 +276,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			}
 		};
 		windows.forEach(cons);
-		others.forEach(cons);
+		infos.forEach(cons);
 		return shownWindows;
 	}
 
@@ -332,10 +315,10 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public void addChild(Element actor) {
 		if (enabled) {
 			(actor instanceof BackInterface ? back
-			 : actor instanceof PopupWindow ? others
+			 : actor instanceof IInfo ? infos
 			 : actor instanceof Window ? windows
 			 : actor instanceof Frag ? frag
-			 : others).addChild(actor);
+			 : infos).addChild(actor);
 			return;
 		}
 		scene.add(actor);
@@ -357,25 +340,34 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 	} */
 
+	public void requestSelectElem(Drawer drawer, Cons<Element> callback) {
+		requestSelectElem(drawer, Element.class, callback);
+	}
+
 	/**
 	 * 请求选择元素
 	 * @param drawer 用于选择时渲染
+	 * @param elementType 选择元素的类型
+	 * @param callback 选择元素后的回调
 	 */
-	public void requestSelectElem(Drawer drawer, Cons<Element> callback) {
+	public <T extends Element> void requestSelectElem(Drawer drawer, Class<T> elementType, Cons<T> callback) {
 		if (callback == null) throw new IllegalArgumentException("'callback' is null");
-		if (selecting) throw new IllegalStateException("Cannot call it twice.");
+		if (isSelecting) throw new IllegalStateException("Cannot call it twice.");
 		selected = null;
-		selecting = true;
+		isSelecting = true;
 		previousKeyboardFocus = scene.getKeyboardFocus();
 		scene.setKeyboardFocus(topGroup);
 		elementDrawer = drawer;
-		elementCallback = callback;
+		this.elementType = elementType;
+		elementCallback = as(callback);
 	}
 
 	/* 过滤掉的选择元素 */
 	public ObjectFloatMap<Element> filterSelected = new ObjectFloatMap<>();
-	Element getSelected0(float x, float y) {
-		return scene.root.hit(x, y, !selectInvisible.enabled());
+	private Element getSelected0(float x, float y) {
+		Element actor = scene.root.hit(x, y, !selectInvisible.enabled());
+		while (actor != null && !elementType.isInstance(actor)) actor = actor.parent;
+		return actor;
 	}
 	// 获取指定位置的元素
 	public void getSelected(float x, float y) {
@@ -385,10 +377,12 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public static final ObjectSet<Element>  searchBlackList = new ObjectSet<>();
 	public static final ObjectSet<Class<?>> classBlackList  = new ObjectSet<>();
 
-	public              Cons<Element> elementCallback = null;
-	public              Drawer        elementDrawer   = null;
-	public static final Color         maskColor       = Color.valueOf("#00000033");
-	public static final Drawer        defaultDrawer   = (selecting, el) -> {
+	public Drawer        elementDrawer   = null;
+	public Class<?>      elementType     = Element.class;
+	public Cons<Element> elementCallback = null;
+
+	public static final Color  maskColor     = Color.valueOf("#00000033");
+	public static final Drawer defaultDrawer = (selecting, el) -> {
 		if (!selecting) return;
 		Draw.color();
 		TopGroup.drawFocus(el, ElementUtils.getAbsolutePos(el), IntUI.DEF_FOCUS_COLOR);
@@ -412,14 +406,14 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			}
 
 			private void cancel() {
-				selecting = false;
+				isSelecting = false;
 				unfocus();
 				resetSelectElem();
 			}
 
 			@Override
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (!selecting) return true;
+				if (!isSelecting) return true;
 
 				if (keycode == KeyCode.escape) {
 					cancel();
@@ -451,7 +445,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 				}
 
 				if (event.listenerActor.isDescendantOf(searchBlackList::contains)
-				    || !selecting) {
+				    || !isSelecting) {
 					return false;
 				}
 
@@ -510,6 +504,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public void resetSelectElem() {
 		selected = null;
 		elementDrawer = null;
+		elementType = Element.class;
 		elementCallback = null;
 	}
 
@@ -614,9 +609,12 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 	}
 
-	class HitterAndWindowCloseListener extends InputListener {
+	HKeyCode closeWindow = HKeyCode.data.keyCode("closeWindow", () -> new HKeyCode(KeyCode.f4).shift())
+	 .applyToScene(true, () -> {
+		 if (!shownWindows.isEmpty()) frontWindow.hide();
+	 });
+	static class HitterListener extends InputListener {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
-			if (keycode == KeyCode.f4 && input.shift() && shownWindows.size() > 0) frontWindow.hide();
 			hitter:
 			if (!Core.scene.hasField() && keycode == KeyCode.escape && Hitter.any()) {
 				Hitter peek = Hitter.peek();

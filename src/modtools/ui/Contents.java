@@ -4,7 +4,6 @@ import modtools.annotations.ContentInit;
 import modtools.ui.content.*;
 import modtools.ui.content.debug.*;
 import modtools.ui.content.ui.*;
-import modtools.ui.content.ui.design.DesignContent;
 import modtools.ui.content.world.*;
 
 @SuppressWarnings("unused")
@@ -21,6 +20,7 @@ public class Contents {
 	public static ActionsDebug  actions_debug;
 	// public static DesignContent design_content;
 	public static Executor      executor;
+	public static KeyCodeSetter key_code_setter;
 	public static WindowManager window_manager;
 
 	/**

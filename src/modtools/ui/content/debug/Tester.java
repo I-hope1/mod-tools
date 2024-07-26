@@ -3,7 +3,7 @@ package modtools.ui.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.func.*;
+import arc.func.Func;
 import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
@@ -50,6 +50,7 @@ import modtools.ui.comp.linstener.*;
 import modtools.ui.comp.windows.ListDialog;
 import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.ui.control.HKeyCode;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
@@ -420,12 +421,14 @@ public class Tester extends Content {
 		else INFO_DIALOG.showInfo(res);
 	}
 
+	public HKeyCode detailKeyCode = keyCodeData().keyCode("detail", () -> new HKeyCode(KeyCode.d).ctrl().shift());
+	public HKeyCode viewKeyCode   = keyCodeData().keyCode("view", () -> new HKeyCode(KeyCode.v).alt());
 	public boolean detailsListener(KeyCode keycode) {
-		if (keycode == KeyCode.d && Core.input.ctrl() && Core.input.shift()) {
+		if (detailKeyCode.isPress()) {
 			showDetails();
 			return true;
 		}
-		if (Core.input.alt() && keycode == KeyCode.v) {
+		if (viewKeyCode.isPress()) {
 			SR.apply(() -> SR.of(res)
 			 .isInstance(Element.class, true, INFO_DIALOG::dialog)
 			 .isInstance(String.class, true, INFO_DIALOG::dialog)

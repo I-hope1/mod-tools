@@ -789,7 +789,7 @@ public class Selection extends Content {
 				toBack();
 
 				if (Vars.mobile || Time.millis() - lastToggleTime <= toggleDelay
-				    || !Core.input.alt() || !Core.input.ctrl()) return;
+				    || !(Core.input.alt() && Core.input.ctrl())) return;
 
 				lastToggleTime = Time.millis();
 				updatePosUI = !updatePosUI;

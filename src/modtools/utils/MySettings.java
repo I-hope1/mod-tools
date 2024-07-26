@@ -32,17 +32,19 @@ public class MySettings {
 
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
+		public Fi fi;
 
 		public Data(Data parent, JsonMap jsonMap) {
 			this.parent = parent;
 			loadJval(jsonMap);
 		}
 		public Data(Fi fi) {
+			this.fi = fi;
 			loadFi(fi);
 		}
 
 		public Data child(String key) {
-			return (Data) get(key, () -> new Data(this, new JsonMap()));
+			return (Data) get(key, () -> newChild(this, new JsonMap()));
 		}
 
 		/** auto invoke {@link String#valueOf(Object)} */
@@ -63,8 +65,8 @@ public class MySettings {
 			return o;
 		}
 		public Runnable task = () -> {
-			if (parent == null) {
-				config.writeString("" + this);
+			if (parent == null && fi != null) {
+				fi.writeString(toString());
 			} else parent.write();
 		};
 		public void write() {
@@ -80,7 +82,7 @@ public class MySettings {
 				fi.writeString("");
 				return;
 			}
-			Fi bak = fi.sibling("mod-tools-config.bak");
+			Fi bak = fi.sibling(fi.nameWithoutExtension() + ".bak");
 			try {
 				loadJval(Jval.read(fi.readString()).asObject());
 				fi.copyTo(bak);
@@ -91,9 +93,12 @@ public class MySettings {
 		}
 		public void loadJval(JsonMap jsonMap) {
 			for (var entry : jsonMap) {
-				super.put(entry.key, entry.value.isObject() ? new Data(this, entry.value.asObject()) :
+				super.put(entry.key, entry.value.isObject() ? newChild(this, entry.value.asObject()) :
 				 entry.value.isBoolean() ? entry.value.asBool() : entry.value);
 			}
+		}
+		public Data newChild(Data parent, JsonMap object) {
+			return new Data(this, object);
 		}
 
 		public boolean toBool(Object v) {

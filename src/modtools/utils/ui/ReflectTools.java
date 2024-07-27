@@ -6,8 +6,10 @@ import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
+import arc.util.serialization.Json;
 import ihope_lib.MyReflect;
 import mindustry.ui.Styles;
+import modtools.annotations.CopyMethodFrom;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.comp.input.MyLabel;
@@ -59,7 +61,6 @@ public interface ReflectTools {
 		return label;
 	}
 
-
 	static String getGenericString(Class<?> cls) {
 		if (!E_JSFunc.display_generic.enabled()) return cls.getSimpleName();
 		StringBuilder sb         = new StringBuilder();
@@ -79,7 +80,7 @@ public interface ReflectTools {
 		if (typeparms.length > 0) {
 			StringJoiner sj = new StringJoiner(",", "<", ">");
 			for (TypeVariable<?> typeparm : typeparms) {
-				sj.add(typeparm.getTypeName());
+				sj.add(typeparm.getName());
 			}
 			sb.append(sj);
 		}
@@ -88,6 +89,12 @@ public interface ReflectTools {
 		sb.append(StringUtils.repeat("[]", arrayDepth));
 
 		return sb.toString();
+	}
+
+	/** @see Json#getElementType(Field, int)   */
+	@CopyMethodFrom(method = "arc.util.serialization.Json#getElementType(Field, int)")
+	static Class<?> getElementType(Field field, int index) {
+		return null;
 	}
 
 	// ---reflection getter------

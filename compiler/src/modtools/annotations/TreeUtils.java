@@ -3,6 +3,7 @@ package modtools.annotations;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
+import com.sun.tools.javac.comp.Modules;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 
@@ -50,7 +51,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 		return makeVar1(flags, type, name, init, sym, true);
 	}
 	private JCVariableDecl makeVar1(long flags, Type type, String name, JCExpression init, Symbol sym,
-																	boolean enterScope) {
+	                                boolean enterScope) {
 		if (!pattern.matcher(name).find())
 			throw new IllegalArgumentException("Name(" + name + ") contains illegal char.");
 		VarSymbol varSymbol = new VarSymbol(
@@ -85,6 +86,13 @@ public interface TreeUtils extends ParseUtils, NameString {
 	default ClassSymbol findClassSymbol(String name) {
 		return mSymtab.getClass(mSymtab.unnamedModule, ns(name));
 	}
+	default ClassSymbol findClassSymbolAny(String name) {
+		for (ModuleSymbol module : Modules.instance(_context).allModules()) {
+			ClassSymbol sym = mSymtab.getClass(module, ns(name));
+			if (sym != null && sym.exists()) return sym;
+		}
+		return null;
+	}
 
 	default void addImport(Element element, ClassType classType) {
 		addImport(element, classType.tsym);
@@ -102,7 +110,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 			unit.namedImportScope.importType(sym.owner.members(), sym.owner.members(), sym);
 
 			var list = new ArrayList<>(unit.defs);
-			list.add(1, mMaker.Import((JCFieldAccess)mMaker.QualIdent(sym), false));
+			list.add(1, mMaker.Import((JCFieldAccess) mMaker.QualIdent(sym), false));
 			unit.defs = List.from(list);
 		}
 	}

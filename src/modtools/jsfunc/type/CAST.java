@@ -16,6 +16,12 @@ public interface CAST {
 		return o;
 	}
 
+	static Class<?> basic(Class<?> type) {
+		type = box(type);
+		if (Number.class.isAssignableFrom(type)) return Number.class;
+		if (type == Boolean.class) return Boolean.class;
+		return type;
+	}
 	static Class<?> box(Class<?> type) {
 		if (!type.isPrimitive()) return type;
 		if (type == boolean.class) return Boolean.class;

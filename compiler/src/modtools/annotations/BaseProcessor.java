@@ -7,6 +7,7 @@ import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.comp.Attr;
 import com.sun.tools.javac.jvm.ClassWriter;
+import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.parser.ParserFactory;
 import com.sun.tools.javac.processing.*;
@@ -37,7 +38,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static ClassFinder   classFinder;
 	public static JavacFiler    mFiler;
 	public static ClassWriter   classWriter;
-	public static Attr          _attr_;
+	public static Attr          attr;
+	public static JavaCompiler  compiler;
 
 	public static Context _context;
 
@@ -73,7 +75,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 		return true;
 	}
-	public void process() { }
+	public void process() throws Throwable { }
 	protected static StringBuilder getUnderlineName(String fieldName) {
 		StringBuilder underlineName = new StringBuilder();
 		underlineName.append(Character.toLowerCase(fieldName.charAt(0)));
@@ -97,7 +99,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		} catch (Throwable e) { err(e); }
 	}
 
-	public void initConst(ProcessingEnvironment env) {
+	public final void initConst(ProcessingEnvironment env) {
 		if (_context != null) return;
 
 		_context = ((JavacProcessingEnvironment) processingEnv).getContext();
@@ -111,7 +113,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		classFinder = ClassFinder.instance(_context);
 		mFiler = (JavacFiler) env.getFiler();
 		classWriter = ClassWriter.instance(_context);
-		_attr_ = Attr.instance(_context);
+		attr = Attr.instance(_context);
+		compiler = JavaCompiler.instance(_context);
 
 		stringType = mSymtab.stringType;
 	}

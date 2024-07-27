@@ -230,7 +230,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 			int endIndex = colorKeys.get(i);
 			if (startIndex == endIndex) continue;
 
-			while (currentIndex < endIndex && iter.hasNext()) {
+			do {
 				while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
 					currentIndex++;
 				}
@@ -246,7 +246,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 					item = sub(item, splitIndex, item.glyphs.size, colorMap.get(colorKeys.get(i)));
 					currentIndex = endIndex;
 				}
-			}
+			} while (currentIndex < endIndex && iter.hasNext());
 
 			startIndex = endIndex;
 			color = colorMap.get(colorKeys.get(i));

@@ -1,15 +1,16 @@
 package modtools.ui.content.debug;
 
-import arc.func.Intp;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
+import arc.scene.style.Drawable;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.struct.Seq;
 import arc.util.*;
-import mindustry.gen.*;
+import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
@@ -18,12 +19,12 @@ import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
-import modtools.ui.menu.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.content.Content;
+import modtools.ui.gen.HopeIcons;
+import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.ui.ReflectTools;
 import modtools.utils.ui.search.FilterTable;
@@ -60,7 +61,7 @@ public class Executor extends Content {
 				 .code(code)
 				 .resubmitted().apply();
 			}));
-		}).size(96, 45);
+		}).size(120, 45);
 		ui.cont.row();
 		ui.cont.pane(p = new FilterTable<>(this::build))
 		 .colspan(3)
@@ -133,26 +134,29 @@ public class Executor extends Content {
 			});
 			EventHelper.longPressOrRclick(button, _ -> {
 				MenuBuilder.showMenuListDispose(() -> Seq.with(
-				 MenuItem.with("copy.asjs",Icon.copySmall, "cpy as JS", () -> {
-					if (node.code != null) JSFunc.copyText(node.code);
-				})));
+				 MenuItem.with("copy.asjs", Icon.copySmall, "cpy as JS", () -> {
+					 if (node.code != null) JSFunc.copyText(node.code);
+				 })));
 			});
 			button.table(right -> {
 				if (node.isResubmitted()) {
 					right.right().defaults().right().size(42);
-					right.button(Icon.wrench, Styles.squarei, 24, node::edit);
-					right.button(HopeIcons.loop, Styles.squarei, 24, () -> {
-						node.forever().apply();
-					}).row();
-					right.button(Icon.box, Styles.squarei, 24, () -> {
-						node.repeatCount(0).apply();
-					});
-					right.button(Icon.trash, Styles.squarei, 24, () -> {
+					Cons3<Drawable, Runnable, String> cons3 = (icon, r, tipKey) ->
+					 right.button(icon, Styles.squarei, 24, r).tooltip(tipKey(tipKey));
+
+					cons3.get(Icon.wrench, node::edit, "edit");
+					cons3.get(HopeIcons.loop, () -> node.forever().apply(), "loop");
+					right.row();
+
+					cons3.get(Icon.box, () -> node.repeatCount(0).apply(), "exec");
+					cons3.get(Icon.trash, () -> {
 						node.clear();
 						cont.getCells().remove(cont.getCell(button));
 						button.remove();
-					}).row();
-					right.button(HopeIcons.interrupt, Styles.squarei, 24, node::interrupt).row();
+					}, "remove");
+					right.row();
+
+					cons3.get(HopeIcons.interrupt, node::interrupt, "interrupt");
 				}
 			}).row();
 

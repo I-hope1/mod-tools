@@ -12,7 +12,7 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.util.Reflect;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
-import modtools.ui.HopeStyles;
+import modtools.ui.*;
 import modtools.ui.comp.buttons.CircleImageButton;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.control.HKeyCode.KeyCodeData;
@@ -92,6 +92,9 @@ public abstract class Content {
 			btn.update(() -> btn.setChecked(checked.get()));
 		}
 		return btn;
+	}
+	public final String tipKey(String key) {
+		return STR."@\{modName}.tips.\{name}.\{key}";
 	}
 	public KeyCodeData keyCodeData() {
 		return HKeyCode.data.child(name);

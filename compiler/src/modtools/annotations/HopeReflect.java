@@ -54,7 +54,8 @@ public class HopeReflect {
 		openTrust(Object.class.getModule(),
 		 "jdk.internal.misc",
 		 "sun.reflect.annotation",
-		 "jdk.internal.access"
+		 "jdk.internal.access",
+		 "jdk.internal.org.objectweb.asm"
 		);
 
 		openTrust(DocTrees.class.getModule(),

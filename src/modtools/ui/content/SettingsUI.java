@@ -189,10 +189,11 @@ public class SettingsUI extends Content {
 	 Table table, String text,
 	 Data data, String key, int defaultColor,
 	 Cons<Color> colorCons) {
-		Color color = new Color(data.get0xInt(key, defaultColor)) {
+		Color color = new Color(
+		 data == null ? defaultColor : data.get0xInt(key, defaultColor)) {
 			public Color set(Color color) {
 				if (this.equals(color)) return this;
-				data.putString(key, color);
+				if (data != null) data.putString(key, color);
 				super.set(color);
 				if (colorCons != null) colorCons.get(this);
 				return this;
@@ -220,7 +221,7 @@ public class SettingsUI extends Content {
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {
 		public static Table main;
-		private SettingsBuilder() { }
+		public SettingsBuilder() { }
 		public static void build(Table main) { SettingsBuilder.main = main; }
 
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
@@ -367,6 +368,10 @@ public class SettingsUI extends Content {
 			return table.field(Strings.autoFixed(value, 2), v -> setter.get(NumberHelper.asFloat(v)))
 			 .valid(Strings::canParsePositiveFloat)
 			 .size(90f, 40f).pad(2f);
+		}
+
+		public static void color(String text, Color defaultColor, Cons<Color> colorSet) {
+			colorBlock(main, text, null, null, defaultColor.rgba(), colorSet);
 		}
 	}
 }

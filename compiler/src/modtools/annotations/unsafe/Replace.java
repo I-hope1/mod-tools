@@ -93,7 +93,7 @@ public class Replace {
 
 			for (ExportsDirective export : m.exports) {
 				export.packge.modle = m;
-				addExports.computeIfAbsent(m, _ -> new HashSet<>()).add(new ExportsDirective(export.packge, List.of(syms.unnamedModule)));
+				addExports.computeIfAbsent(m, k -> new HashSet<>()).add(new ExportsDirective(export.packge, List.of(syms.unnamedModule)));
 			}
 			m.exports = prev;
 		};

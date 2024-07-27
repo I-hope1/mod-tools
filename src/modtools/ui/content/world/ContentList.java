@@ -50,8 +50,7 @@ public class ContentList extends Content {
 		Table top = new Table();
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
-		new Search((_, text) -> pattern = PatternUtils.compileRegExpOrNull(text))
-		 .build(top, main);
+		new Search((_, text) -> pattern = text).build(top, main);
 	}
 
 	private <T> ObjectMap<String, T> fieldsToMap(Field[] fields, Class<T> cl) {

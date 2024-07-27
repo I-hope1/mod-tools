@@ -51,8 +51,7 @@ public class PatternUtils {
 	 * @param item    要测试的对象
 	 * @return boolean；
 	 */
-	public static <T> boolean testAny(String text, Pattern pattern, T item) {
-		if (text == null || text.isEmpty()) return true;
+	public static <T> boolean testAny(Pattern pattern, T item) {
 		if (pattern == null) return false;
 		if (item instanceof UnlockableContent unlock) {
 			return test(pattern, unlock.name) || test(pattern, unlock.localizedName);

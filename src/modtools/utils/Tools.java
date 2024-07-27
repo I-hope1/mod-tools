@@ -264,7 +264,7 @@ public class Tools {
 			Log.err(e);
 		}
 	}
-		/**
+	/**
 	 * 运行带有异常的任务，捕获异常（并记录日志）
 	 * @param run 要运行的任务
 	 */
@@ -339,7 +339,7 @@ public class Tools {
 			} catch (Throwable th) {
 				Log.err(th);
 				if (!ModTools.loaded) return;
-					Window window = IntUI.showException(text, th);
+				Window window = IntUI.showException(text, th);
 				if (el != null) window.setPosition(ElementUtils.getAbsolutePos(el));
 			}
 		};
@@ -442,10 +442,10 @@ public class Tools {
 		if (object instanceof Number n && type.isPrimitive()) {
 			if (type == byte.class) return n.byteValue();
 			if (type == short.class) return n.shortValue();
-      if (type == int.class) return n.intValue();
-      if (type == long.class) return n.longValue();
-      if (type == float.class) return n.floatValue();
-      if (type == double.class) return n.doubleValue();
+			if (type == int.class) return n.intValue();
+			if (type == long.class) return n.longValue();
+			if (type == float.class) return n.floatValue();
+			if (type == double.class) return n.doubleValue();
 		}
 		return object;
 	}
@@ -458,11 +458,38 @@ public class Tools {
 	/** Boolp接口（带异常） */
 	public interface CBoolp {
 		boolean get() throws Throwable;
+		@SuppressWarnings("Convert2Lambda")
+		static Boolp of(String text, CBoolp boolp) {
+			return new Boolp() {
+				public boolean get() {
+					try {
+						return boolp.get();
+					} catch (Throwable e) {
+						IntUI.showException(text, e);
+						Log.err(e);
+						return false;
+					}
+				}
+			};
+		}
 	}
 
 	/** Boolc接口（带异常） */
 	public interface CBoolc {
 		void get(boolean b) throws Throwable;
+		@SuppressWarnings("Convert2Lambda")
+		static Boolc of(String text, CBoolc boolc) {
+			return new Boolc() {
+				public void get(boolean b) {
+					try {
+						boolc.get(b);
+					} catch (Throwable e) {
+						IntUI.showException(text, e);
+						Log.err(e);
+					}
+				}
+			};
+		}
 	}
 
 	/** Cons接口（带异常） */

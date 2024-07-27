@@ -14,7 +14,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 public class FilterTable<E> extends LimitTable {
-	public FilterTable() {}
+	public FilterTable() { }
 	@SuppressWarnings("rawtypes")
 	public FilterTable(Cons<FilterTable<E>> cons) {
 		super((Cons) cons);
@@ -23,14 +23,17 @@ public class FilterTable<E> extends LimitTable {
 	public FilterTable(Drawable background, Cons<FilterTable<E>> cons) {
 		super(background, (Cons) cons);
 	}
-	protected Map<E, ObjectSet<BindCell>> map;
-	ObjectSet<BindCell> current;
+	protected Map<E, CellGroup> map;
+	CellGroup current;
 
 	private Cons<Element> cons;
 
 	public void bind(E name) {
 		if (map == null) map = new HashMap<>();
-		current = map.computeIfAbsent(name, k -> new ObjectSet<>());
+		current = map.computeIfAbsent(name, k -> new CellGroup());
+	}
+	public CellGroup getCurrent() {
+		return current;
 	}
 	/** 对添加的元素进行在此操作  */
 	public void listener(Cons<Element> cons) {
@@ -40,9 +43,9 @@ public class FilterTable<E> extends LimitTable {
 		super.clear();
 		unbind();
 		if (map != null) {
-			map.forEach((key, seq) -> {
+			map.forEach((key, set) -> {
 				if (key instanceof Pool.Poolable p) Pools.free(p);
-				seq.each(BindCell::clear);
+				set.each(BindCell::clear);
 			});
 			map.clear();
 		}
@@ -89,7 +92,16 @@ public class FilterTable<E> extends LimitTable {
 		});
 	}
 	public boolean isEmpty() {
-		return map == null || map.isEmpty();
+		return map == null || map.isEmpty() || map.entrySet().stream().anyMatch(entry -> !entry.getValue().removed);
+	}
+
+	public static class CellGroup extends ObjectSet<BindCell> {
+		public boolean removed = false;
+		public void removeElement() {
+			each(BindCell::clear);
+			clear();
+			removed = true;
+		}
 	}
 
 	public class IntBoolf implements Condition<E> {
@@ -121,7 +133,10 @@ public class FilterTable<E> extends LimitTable {
 		public boolean valid(E name) {
 			if (name instanceof UnlockableContent u) {
 				return PatternUtils.test(last = provider.get(), u.localizedName)
-				 || PatternUtils.test(last, String.valueOf(u.name));
+				       || PatternUtils.test(last, String.valueOf(u.name));
+			}
+			if (name instanceof String[] strings) {
+				return PatternUtils.test(last = provider.get(), strings[0]);
 			}
 			return PatternUtils.test(last = provider.get(), String.valueOf(name));
 		}
@@ -129,7 +144,7 @@ public class FilterTable<E> extends LimitTable {
 
 
 	public interface Condition<E> {
-		default boolean needUpdate() {return true;}
+		default boolean needUpdate() { return true; }
 		boolean valid(E name);
 	}
 }

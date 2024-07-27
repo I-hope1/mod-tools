@@ -4,9 +4,12 @@ import arc.func.Cons2;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.Icon;
+import modtools.utils.PatternUtils;
+
+import java.util.regex.Pattern;
 
 public class Search {
-	public Search(Cons2<Table, String> rebuild) {
+	public Search(Cons2<Table, Pattern> rebuild) {
 		this.rebuild = rebuild;
 	}
 	public void build(Table title, Table cont) {
@@ -15,12 +18,14 @@ public class Search {
 			TextField field = new TextField();
 			field.setMessageText("@players.search");
 			top.add(field).growX();
-			field.changed(() -> rebuild(cont, field.getText()));
+			field.changed(() -> {
+				rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText()));
+			});
 		}).padRight(8f).growX().top().row();
 		rebuild(cont, null);
 	}
-	public Cons2<Table, String> rebuild;
-	protected void rebuild(Table cont, String text) {
-		if (rebuild != null) rebuild.get(cont, text);
+	public Cons2<Table, Pattern> rebuild;
+	protected void rebuild(Table cont, Pattern pattern) {
+		if (rebuild != null) rebuild.get(cont, pattern);
 	}
 }

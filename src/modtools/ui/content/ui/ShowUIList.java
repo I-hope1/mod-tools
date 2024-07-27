@@ -81,9 +81,9 @@ public class ShowUIList extends Content {
 		Table wrap = new Table();
 		ui.cont.add(top).growX().row();
 		ui.cont.add(wrap).grow();
-		new Search((_, text) -> {
+		new Search((_, pattern0) -> {
 			if (!wrap.getChildren().isEmpty()) {
-				pattern = PatternUtils.compileRegExpOrNull(text);
+				pattern = pattern0;
 				return;
 			}
 			wrap.add(tab.build()).pad(10f).grow();

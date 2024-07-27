@@ -243,7 +243,7 @@ public class IntUI {
 		}
 
 		t.init();
-		f.get(p.row(), hide0, "");
+		f.get(p.row(), hide0, null);
 		t.appendToGroup();
 
 		return t;
@@ -275,10 +275,9 @@ public class IntUI {
 	 BTN button, Seq<V> list, Prov<V> holder,
 	 Cons<V> cons, Func<V, String> stringify, float minWidth, float height,
 	 boolean searchable, int align) {
-		return showSelectTable(button, (p, hide, text) -> {
+		return showSelectTable(button, (p, hide, pattern) -> {
 			p.clearChildren();
 
-			Pattern pattern = PatternUtils.compileRegExpOrNull(text);
 			for (V item : list) {
 				if (!PatternUtils.test(pattern, stringify.get(item))) continue;
 				p.button(stringify.get(item), HopeStyles.cleart/*Styles.cleart*/, () -> {
@@ -334,20 +333,16 @@ public class IntUI {
 	private static <T1> Builder builderWithIcons(
 	 Seq<T1> items, Seq<? extends Drawable> icons,
 	 Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols) {
-		return (p, hide, text) -> {
+		return (p, hide, pattern) -> {
 			p.clearChildren();
 			p.left();
 			ButtonGroup<ImageButton> group = new ButtonGroup<>();
 			group.setMinCheckCount(0);
 			p.defaults().size(size);
-			Pattern pattern;
-			try {
-				pattern = PatternUtils.compileRegExp(text);
-			} catch (Exception ex) { return; }
 
 			for (int c = 0, i = 0; i < items.size; ++i) {
 				T1 item = items.get(i);
-				if (!PatternUtils.testAny(text, pattern, item)) continue;
+				if (!PatternUtils.testAny(pattern, item)) continue;
 
 				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
 				btn.update(() -> btn.setChecked(holder.get() == item));
@@ -642,6 +637,9 @@ public class IntUI {
 				topGroup.addChild(table);
 			};
 		}
+		public ITooltip(Prov<CharSequence> prov) {
+			this(t -> t.background(Styles.black6).margin(4f).label(prov));
+		}
 		/** {@inheritDoc} */
 		public ITooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
@@ -660,7 +658,7 @@ public class IntUI {
 		}
 
 		static {
-			Tooltips.getInstance().textProvider = text -> new ITooltip(t -> t.background(Styles.black6).margin(4f).add(text));
+			Tooltips.getInstance().textProvider = text -> new ITooltip(() -> text);
 		}
 	}
 
@@ -817,7 +815,7 @@ public class IntUI {
 		}
 	}
 
-	public interface Builder extends Cons3<Table, Runnable, String> { }
+	public interface Builder extends Cons3<Table, Runnable, Pattern> { }
 
 	private static class MyFocusTask extends FocusTask {
 		private final Boolp boolp;

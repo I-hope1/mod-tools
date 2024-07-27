@@ -1,6 +1,7 @@
 package modtools.ui.content;
 
 import arc.Core;
+import arc.func.Cons;
 import arc.input.KeyCode;
 import arc.input.KeyCode.KeyType;
 import arc.scene.*;
@@ -13,14 +14,17 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.struct.LazyValue;
 import modtools.ui.*;
-import modtools.ui.IntUI.IHitter;
+import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.NoTopWindow;
-import modtools.ui.comp.limit.LimitTable;
-import modtools.ui.comp.utils.*;
+import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.control.*;
 import modtools.ui.control.HKeyCode.KeyCodeData;
 import modtools.utils.*;
+import modtools.utils.ui.CellTools;
+import modtools.utils.ui.search.*;
+
+import java.util.regex.Pattern;
 
 import static arc.Core.scene;
 import static modtools.ui.IntUI.topGroup;
@@ -34,7 +38,18 @@ public class KeyCodeSetter extends Content {
 
 	public static KeyCodeData                  elementKeyCode    = HKeyCode.data.child("element");
 	public static ObjectMap<Button, HKeyCode>  tmpKeyCode        = new ObjectMap<>();
-	public static LazyValue<KeyCodeBindWindow> keyCodeBindWindow = LazyValue.of(() -> new KeyCodeBindWindow("Keycode Set"));
+	public static LazyValue<KeyCodeBindWindow> keyCodeBindWindow = LazyValue.of(KeyCodeBindWindow::new);
+
+	public static Cons<HKeyCode> keyCodeSetter(Button button) {
+		return value -> {
+			if (button.name != null || button instanceof TextButton tb && tb.getText() != null) {
+				String key = getBindKey(button);
+				elementKeyCode.setKeyCode(key, value);
+			} else {
+				tmpKeyCode.put(button, value);
+			}
+		};
+	}
 	public void load() {
 		super.load();
 		recordKeyCode = HKeyCode.data.keyCode("recordKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
@@ -43,11 +58,12 @@ public class KeyCodeSetter extends Content {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (recordKeyCode.isPress()) {
 					Element element = HopeInput.mouseHit();
-					keyCodeBindWindow.get().show(ElementUtils.findParent(element, Button.class));
+					Button  button  = ElementUtils.findParent(element, Button.class);
+					keyCodeBindWindow.get().show(button, keyCodeSetter(button));
 					return false;
 				}
 				elementKeyCode.each((key, _) -> {
-					HKeyCode keyCode = elementKeyCode.keyCode(key, () -> HKeyCode.NONE);
+					HKeyCode keyCode = elementKeyCode.keyCode(key);
 					if (keyCode.isPress()) {
 						Element elem = getElementByKey(key);
 						if (elem != null) clicked(elem);
@@ -82,7 +98,7 @@ public class KeyCodeSetter extends Content {
 		}
 		ElementUtils.findParent(button.parent, e -> {
 			if (e == scene.root) return true;
-			sj.add(e.name != null ? e.name : "" + e.getZIndex());
+			sj.add(e.name != null ? "#" + e.name : "" + e.getZIndex());
 			return false;
 		});
 		return sj.isEmpty() ? null : sj.reverse().toString(".");
@@ -154,17 +170,20 @@ public class KeyCodeSetter extends Content {
 		return current instanceof Button b ? b : null;
 	}
 	public static class KeyCodeBindWindow extends NoTopWindow implements IHitter {
-		public KeyCodeBindWindow(String title) {
-			super(title);
+		public KeyCodeBindWindow() {
+			super("Keycode Set");
 
 			rebuild();
 			update(() -> {
 				if (button != null) IntUI.positionTooltip(button, this);
 			});
 		}
-		Button button;
-		public void show(Button button) {
+		/** 被用来定位的  */
+		Button         button;
+		Cons<HKeyCode> callback;
+		public void show(Button button, Cons<HKeyCode> callback) {
 			this.button = button;
+			this.callback = callback;
 			field.setText("Press a key to bind");
 			show();
 		}
@@ -211,45 +230,67 @@ public class KeyCodeSetter extends Content {
 			cont.button("@cancel", Icon.left, Styles.flatt, this::hide);
 			cont.button("@ok", Icon.ok, Styles.flatt, () -> {
 				HKeyCode value = HKeyCode.parse(field.getText());
-				if (button.name != null || button instanceof TextButton tb && tb.getText() != null) {
-					String key = getBindKey(button);
-					elementKeyCode.setKeyCode(key, value);
-				} else {
-					tmpKeyCode.put(button, value);
-				}
+				callback.get(value);
 				hide();
 			});
 		}
 	}
 
+	Pattern pattern;
 	Window ui;
 	public void buildUI() {
 		ui = new Window(localizedName(), 120, 400);
 		Table cont = ui.cont;
-		cont.defaults().pad(4).growX();
-		cont.button("Bind key", Icon.pencil, Styles.flatt, this::selectButton);
-		Table pane = new LimitTable();
+		cont.defaults().height(42).pad(4).growX();
+		cont.button("Bind key", Icon.pencilSmall, Styles.flatt, this::selectButton);
+		FilterTable<String[]> pane = new FilterTable<>();
 		// 监控keys
 		Runnable rebuild = () -> {
 			pane.clearChildren();
-			elementKeyCode.eachKey((elementKey, keyCode) -> {
-				var vl = new ClearValueLabel<>(Button.class, () -> getElementByKey(elementKey), null,
+			elementKeyCode.eachKey((elementKey0, keyCode0) -> {
+				String[] elementKey = {elementKey0};
+				pane.bind(elementKey);
+				HKeyCode[] keyCode = {keyCode0};
+				var vl = new ClearValueLabel<>(Button.class, () -> getElementByKey(elementKey[0]), null,
 				 el -> {
-					 elementKeyCode.remove(elementKey);
-					 elementKeyCode.setKeyCode(getBindKey(el), keyCode);
+					 elementKeyCode.remove(elementKey[0]);
+					 elementKeyCode.setKeyCode(
+						elementKey[0] = getBindKey(el),
+						keyCode[0]
+					 );
 				 });
+				vl.elementType = Button.class;
+				vl.addCaptureListener(new ITooltip(() -> elementKey[0]));
 				pane.add(vl).size(220, 45);
-				pane.button(keyCode.toString(), Styles.flatt, () -> { }).size(100, 45);
+				TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
+				 .size(100, 45).get();
+				button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {
+					button.setText(newKeyCode.toString());
+					elementKeyCode.setKeyCode(
+					 elementKey[0],
+					 keyCode[0] = newKeyCode
+					);
+				}));
+				var current = pane.getCurrent();
+				pane.button(Icon.trash, Styles.flati, () -> IntUI.shiftIgnoreConfirm(() -> {
+					elementKeyCode.remove(elementKey[0]);
+					current.removeElement();
+				}));
 				pane.row();
 			});
 		};
+		cont.button("Flush", Icon.refreshSmall, Styles.flatt, rebuild).row();
+
+		cont.defaults().colspan(2).height(CellTools.unset);
+		new Search((_, text) -> pattern = text).build(cont, null);
+
 		rebuild.run();
-		cont.button("Flush", Icon.refresh, Styles.flatt, rebuild).row();
-		cont.pane(Styles.smallPane, pane).grow().colspan(2);
+		pane.addPatternUpdateListener(() -> pattern);
+		cont.pane(Styles.smallPane, pane).grow();
 	}
 	public void selectButton() {
-		topGroup.requestSelectElem(TopGroup.defaultDrawer, Button.class, el -> {
-			keyCodeBindWindow.get().show(el);
+		topGroup.requestSelectElem(TopGroup.defaultDrawer, Button.class, button -> {
+			keyCodeBindWindow.get().show(button, keyCodeSetter(button));
 		});
 	}
 	public void build() {

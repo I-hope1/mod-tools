@@ -218,7 +218,7 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
 
 		result.clear();
-		IntSeq        colorKeys = colorMap.keys().toArray();
+		IntSeq colorKeys = colorMap.keys().toArray();
 		colorKeys.sort();
 		Color color        = Color.white;
 		int   startIndex   = colorKeys.first();
@@ -620,12 +620,17 @@ public abstract class ValueLabel extends NoMarkupLabel {
 		}));
 	}
 
-	protected void elementSetter(Seq<MenuItem> list, Cons<Element> callback) {
+	protected  void elementSetter(Seq<MenuItem> list, Cons<Element> callback) {
+		elementSetter(list, Element.class, callback);
+	}
+
+	protected <T extends Element> void elementSetter(Seq<MenuItem> list, Class<T> elementType, Cons<T> callback) {
 		list.add(DisabledList.withd("element.pick", Icon.editSmall, "Select and Replace",
 		 topGroup::isSelecting,
-		 () -> topGroup.requestSelectElem(TopGroup.defaultDrawer, callback)
+		 () -> topGroup.requestSelectElem(TopGroup.defaultDrawer, elementType, callback)
 		));
 	}
+
 
 	public abstract Object getObject();
 	public boolean enabledUpdateMenu() {

@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.input.KeyCode;
 import arc.scene.event.*;
 import arc.struct.*;
-import arc.util.serialization.Json;
+import arc.util.serialization.*;
 import arc.util.serialization.Jval.JsonMap;
 import modtools.IntVars;
 import modtools.utils.MySettings.Data;
@@ -121,12 +121,19 @@ public class HKeyCode {
 				return def.get();
 			}
 		}
+		public HKeyCode keyCode(String key) {
+			return keyCode(key, () -> NONE);
+		}
 		public void setKeyCode(String key, HKeyCode keyCode) {
 			put(key, keyCode);
 		}
 		public void eachKey(Cons2<String, HKeyCode> cons) {
 			for (var entry : this) {
-				if (entry.value instanceof HKeyCode k) cons.get(entry.key, k);
+				Object value = entry.value;
+				if (value instanceof Jval) {
+					value = keyCode(entry.key);
+				}
+				if (value instanceof HKeyCode k) cons.get(entry.key, k);
 			}
 		}
 	}

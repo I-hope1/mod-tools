@@ -65,7 +65,7 @@ public class CopyMethodProc extends BaseProcessor<MethodSymbol> {
 			@Override
 			public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
 				// name 是原始的类名，newClassName 是我们要设置的新类名
-				super.visit(version, access, GEN_CLASS_NAME, signature, superName, interfaces);
+				super.visit(version, access, GEN_CLASS_NAME.replace('.', '/'), signature, superName, interfaces);
 			}
 			public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
 				return null;

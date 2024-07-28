@@ -3,9 +3,11 @@ package modtools.ui.content.ui;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.ui.Image;
-import arc.util.Align;
+import arc.util.*;
+import arc.util.pooling.Pools;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.jsfunc.reflect.UNSAFE;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
 import modtools.ui.content.Content;
@@ -37,20 +39,21 @@ public class ActionsDebug extends Content {
 			element.clearActions();
 			element.setTranslation(0, 0);
 			element.invalidateHierarchy();
-		}).growX().row();
+		}).growX().height(42).row();
 		ui.cont.pane(t -> {
 			int c = 0;
 			for (Class<?> action : classes) {
 				if (!Action.class.isAssignableFrom(action)) continue;
-				t.button(action.getSimpleName(), HopeStyles.flatTogglet, () -> {
+				t.button(action.getSimpleName(), HopeStyles.flatt, () -> {
 					applyToAction(as(action));
 				}).size(200, 42);
 				if (++c % 3 == 0) t.row();
 			}
 		}).grow();
 	}
-	private <T extends Action> void applyToAction(Class<T> action) {
-
+	private <T extends Action> void applyToAction(Class<T> actionClass) {
+		T action = Pools.obtain(actionClass, () -> UNSAFE.allocateInstance(actionClass));
+		Log.info(action);
 	}
 
 	@Override

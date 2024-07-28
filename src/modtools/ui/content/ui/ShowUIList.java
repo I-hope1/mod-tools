@@ -81,13 +81,8 @@ public class ShowUIList extends Content {
 		Table wrap = new Table();
 		ui.cont.add(top).growX().row();
 		ui.cont.add(wrap).grow();
-		new Search((_, pattern0) -> {
-			if (!wrap.getChildren().isEmpty()) {
-				pattern = pattern0;
-				return;
-			}
-			wrap.add(tab.build()).pad(10f).grow();
-		}).build(top, ui.cont);
+		new Search((_, pattern0) -> pattern = pattern0).build(top, ui.cont);
+		wrap.add(tab.build()).pad(10f).grow();
 		// ui.addCloseButton();
 	}
 

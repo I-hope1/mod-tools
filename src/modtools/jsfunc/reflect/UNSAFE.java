@@ -191,4 +191,13 @@ public interface UNSAFE {
 	static void unpark(Object thread) {
 		unsafe.unpark(thread);
 	}
+
+	@SuppressWarnings("unchecked")
+	static <T> T allocateInstance(Class<T> cls) {
+		try {
+			return (T) unsafe.allocateInstance(cls);
+		} catch (InstantiationException e) {
+			throw new RuntimeException(e);
+		}
+	}
 }

@@ -246,7 +246,7 @@ public class KeyCodeSetter extends Content {
 		FilterTable<String[]> pane = new FilterTable<>();
 		// 监控keys
 		Runnable rebuild = () -> {
-			pane.clearChildren();
+			pane.clear();
 			elementKeyCode.eachKey((elementKey0, keyCode0) -> {
 				String[] elementKey = {elementKey0};
 				pane.bind(elementKey);

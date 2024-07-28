@@ -507,7 +507,7 @@ public class IntUI {
 
 
 	public static <U extends UnlockableContent> Drawable icon(U i) {
-		return new TextureRegionDrawable(i == null ? Core.atlas.find("error") : i.uiIcon);
+		return new TextureRegionDrawable(i == null || i.uiIcon == null ? Core.atlas.find("error") : i.uiIcon);
 	}
 
 

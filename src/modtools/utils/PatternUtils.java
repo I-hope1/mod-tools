@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
  * 一个用于处理正则表达式的工具类。
  */
 public class PatternUtils {
-
+	public static final Pattern ANY = Pattern.compile(".");
 	/**
 	 * 尝试编译给定的字符串为正则表达式，如果发生异常则返回 null。
 	 * @param text 要编译的正则表达式字符串
@@ -28,7 +28,7 @@ public class PatternUtils {
 	 * @return 编译后的 Pattern 对象，如果 text 为 null 或空字符串则返回 null
 	 */
 	public static Pattern compileRegExp(String text) {
-		return text == null || text.isEmpty() ? null : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
+		return text == null || text.isEmpty() ? ANY : Pattern.compile(text, Pattern.CASE_INSENSITIVE);
 	}
 
 	/**
@@ -38,7 +38,7 @@ public class PatternUtils {
 	 * @return 如果 pattern 为 null 或者文本匹配正则表达式则返回 true
 	 */
 	public static boolean test(Pattern pattern, String text) {
-		return pattern == null || pattern.matcher(text).find();
+		return pattern == ANY || (pattern != null && pattern.matcher(text).find());
 	}
 
 	/**
@@ -53,6 +53,7 @@ public class PatternUtils {
 	 */
 	public static <T> boolean testAny(Pattern pattern, T item) {
 		if (pattern == null) return false;
+		if (pattern == ANY) return true;
 		if (item instanceof UnlockableContent unlock) {
 			return test(pattern, unlock.name) || test(pattern, unlock.localizedName);
 		}

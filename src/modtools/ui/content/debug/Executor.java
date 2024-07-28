@@ -17,7 +17,7 @@ import modtools.IntVars;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
-import modtools.struct.MySet;
+import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
@@ -53,7 +53,7 @@ public class Executor extends Content {
 		 i -> statusCode = i, () -> statusCode,
 		 StatusList.values());
 		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {
-			JSRequest.requestCode(code -> ExecuteTree.context(customTask(), () -> {
+			JSRequest.requestCode(code -> ExecuteTree.context(customTask.get(), () -> {
 				BaseFunction scope = new BaseFunction(JSRequest.topScope, new BaseFunction());
 				ExecuteTree.node("custom",
 					() -> IScript.cx.evaluateString(scope,
@@ -71,6 +71,7 @@ public class Executor extends Content {
 		build(cont, ExecuteTree.roots);
 	}
 	public void build(FilterTable<Intp> cont, MySet<TaskNode> children) {
+		cont.top().defaults().top();
 		cont.addUpdateListenerIntp(() -> statusCode);
 		for (TaskNode node : children) {
 			cont.bind(() -> 1 << node.status.code());
@@ -186,12 +187,8 @@ public class Executor extends Content {
 			});
 		}
 	}
-	private static TaskNode customTask;
-	public static TaskNode customTask() {
-		if (customTask == null) customTask = ExecuteTree.nodeRoot(null, "CustomJS", "startup",
-		 Icon.craftingSmall, IntVars.EMPTY_RUN);
-		return customTask;
-	}
+	private static final LazyValue<TaskNode> customTask = LazyValue.of(() -> ExecuteTree.nodeRoot(null, "CustomJS", "startup",
+	 Icon.craftingSmall, IntVars.EMPTY_RUN));
 	public void build() {
 		if (ui == null) loadUI();
 		ui.show();

@@ -1,4 +1,4 @@
-package modtools.utils.ui.search;
+	package modtools.utils.ui.search;
 
 import arc.func.*;
 import arc.scene.Element;

@@ -36,16 +36,16 @@ public class CopyMethodProc extends BaseProcessor<MethodSymbol> {
 		trees.getTree(method).body = PBlock(
 		 method.getReturnType() == mSymtab.voidType ? mMaker.Exec(apply) : mMaker.Return(apply)
 		);
-		todos.put(parts[1].split("\\(")[0], findClassSymbolAny(parts[0]));
+		todos.put(new String[]{parts[1].split("\\(")[0], method.name.toString()}, findClassSymbolAny(parts[0]));
 	}
 
-	final Map<String, ClassSymbol> todos = new HashMap<>();
+	final Map<String[], ClassSymbol> todos = new HashMap<>();
 	public void process() throws IOException {
 		ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 
-		todos.forEach((methodName, classSymbol) -> {
+		todos.forEach((names, classSymbol) -> {
 			try {
-				process(classSymbol, methodName, classWriter);
+				process(classSymbol, names, classWriter);
 			} catch (Exception e) {
 				err(e);
 			}
@@ -55,7 +55,9 @@ public class CopyMethodProc extends BaseProcessor<MethodSymbol> {
 		// Write the modified bytes to the target class
 		writeClassBytes(GEN_CLASS_NAME, modifiedClassBytes);
 	}
-	void process(ClassSymbol classSymbol, String methodName, ClassWriter classWriter) throws Exception {
+	void process(ClassSymbol classSymbol, String [] names, ClassWriter classWriter) throws Exception {
+		String originalMethodName = names[0];
+		String targetMethodName = names[1];
 		// Extract method from source class
 		ClassReader classReader = new ClassReader(classSymbol.classfile.openInputStream().readAllBytes());
 
@@ -71,8 +73,8 @@ public class CopyMethodProc extends BaseProcessor<MethodSymbol> {
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
 			                                 String[] exceptions) {
-				if (methodName.equals(name)) {
-					return super.visitMethod(Modifier.PUBLIC | Modifier.STATIC, name, descriptor, signature, exceptions);
+				if (originalMethodName.equals(name)) {
+					return super.visitMethod(Modifier.PUBLIC | Modifier.STATIC, targetMethodName, descriptor, signature, exceptions);
 				}
 				return null;
 			}

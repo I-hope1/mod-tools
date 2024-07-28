@@ -116,7 +116,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 	public class MyScrollPane extends ScrollPane {
 		public MyScrollPane() {
-			super(area);
+			super(area, Styles.smallPane);
 		}
 		public void trackCursor() {
 			// Time.runTask(0f, () -> {

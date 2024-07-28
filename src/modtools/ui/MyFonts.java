@@ -14,15 +14,11 @@ import modtools.utils.Tools;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class MyFonts {
-	public static       Font def;
+	public static       Font def = Fonts.def;
 	public static final Fi   fontDirectory = IntVars.dataDirectory.child("fonts");
 
-	static {
-		fontDirectory.mkdirs();
-		Tools.runLoggedException(MyFonts::load, () -> def = Fonts.def);
-	}
-
 	public static void load() {
+		fontDirectory.mkdirs();
 		def = acquireFont();
 	}
 
@@ -32,8 +28,8 @@ public class MyFonts {
 	 underline     = false,
 	 strikethrough = false;
 	private static Font acquireFont() {
-		if (def != null) return def;
 		if (!SETTINGS.containsKey("font")) return Fonts.def;
+		if (def != Fonts.def) return def;
 
 		Fi fontFi = fontDirectory.child(SETTINGS.getString("font"));
 		if (!fontFi.exists()) {
@@ -96,10 +92,8 @@ public class MyFonts {
 		public void draw() {
 			super.draw();
 
-			// Log.info(HopeReflect.getCaller() + ": " + underline);
 			if (!(underline || strikethrough)) return;
 			GlyphLayout layout = getLayouts().firstOpt();
-			// Log.info(layout);
 			if (layout == null) return;
 
 			Draw.color();

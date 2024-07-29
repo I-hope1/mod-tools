@@ -380,8 +380,10 @@ public class SettingsUI extends Content {
 		}
 
 		public static void interpolator(String name, Cons<Interp> cons, Prov<Interp> prov) {
-			ObjectMap<Interp, String> map = Seq.with(Interp.class.getFields()).asMap(Reflect::get, Field::getName);
-			list(name, cons, prov, map.keys().toSeq(), map::get);
+			Seq<Field>               seq = Seq.with(Interp.class.getFields());
+			ObjectMap<Interp, Field> map = seq.asMap(Reflect::get, f -> f);
+			list(name, f -> cons.get(Reflect.get(f)), () -> map.get(prov.get()),
+			 seq, Field::getName);
 		}
 	}
 }

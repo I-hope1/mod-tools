@@ -54,7 +54,8 @@ public class Replace {
 		ns = Names.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
 
-		println(syms.getClass(syms.unnamedModule, ns.fromString("arc.files.Fi")));
+		ClassSymbol symbol = syms.getClass(syms.unnamedModule, ns.fromString("arc.files.Fi"));
+		println(symbol);
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }

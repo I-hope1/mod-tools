@@ -2,7 +2,7 @@ apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
 tasks.withType(JavaCompile) {
-	options.compilerArgs += '-Aa2733'
+	options.compilerArgs += '-Aa968'
 }
 jar {
 	doLast {

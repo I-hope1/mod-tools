@@ -45,7 +45,7 @@ public class ActionsDebug extends Content {
 		// element.setOrigin(element.getWidth() / 2f, element.getHeight() / 2f);
 		// element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
 		Set<Class<?>> classes = Arrays.stream(Actions.class.getDeclaredMethods())
-		 .map(Method::getReturnType).collect(Collectors.toSet());
+		 .map(Method::getReturnType).collect(Collectors.toCollection(LinkedHashSet::new));
 		cont.button("Reset", Styles.flatt, runT(() -> {
 			// element.clear();
 			// element.visible = true;

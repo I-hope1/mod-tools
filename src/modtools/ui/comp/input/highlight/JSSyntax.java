@@ -146,7 +146,7 @@ public class JSSyntax extends Syntax {
 	@SuppressWarnings("StringEqualsCharSequence")
 	public TokenDraw[] tokenDraws = {
 	 task -> {
-		 String token = task.token + "";
+		 String token = task.token;
 		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
 			 if (operatesSymbol.lastSymbol == '.') return dealJSProp(token);
 			 obj = null;
@@ -163,7 +163,7 @@ public class JSSyntax extends Syntax {
 			 return entry.value;
 		 }
 		 if (lastTask != task) return null;
-		 String lastToken = task.lastToken + "";
+		 String lastToken = task.lastToken;
 		 if (localKeywords.contains(lastToken)) {
 			 localVars.add(token);
 			 return c_localvar;
@@ -178,7 +178,7 @@ public class JSSyntax extends Syntax {
 	 task -> "function".equals(task.lastToken) && lastTask == task ? c_functions : null,
 	 task -> {
 		 CharSequence s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
-		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !s.equals("NaN") ? null : c_number;
+		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !"NaN".equals(s) ? null : c_number;
 	 }
 	};
 	private void resolveToken(Scriptable scope, DrawToken task, String token) {
@@ -219,38 +219,6 @@ public class JSSyntax extends Syntax {
 		obj = null;
 		return null;
 	}
-	/* private void showTooltipMouse(DrawToken task) {
-		if (areaTable.tooltip.container.parent != null) return;
-		Vec2  v    = getRelativePos(task.lastIndex);
-		float minX = v.x, minY = v.y - area.lineHeight() * 0.1f;
-		v = getRelativePos(task.currentIndex);
-		Vec2 abs   = ElementUtils.getAbsPos(area.parent);
-		Vec2 mouse = Core.input.mouse();
-		Vec2 sub   = mouse.sub(abs);
-		if (Tmp.r1.set(minX, minY, v.x, v.y + area.lineHeight() * 1.1f).contains(sub)) {
-			Table p = areaTable.tooltip.p;
-			p.clearChildren();
-			Object obj = this.obj;
-			JSFunc.addDetailsButton(p, () -> obj, obj.getClass());
-			areaTable.tooltip.show(Core.scene.root, mouse.x, mouse.y);
-			Time.runTask(60 * 0.6f, () -> {
-				areaTable.tooltip.hide();
-			});
-		}
-	}
-
-	private void showTooltip(DrawToken task) {
-		float cursor = area.getRelativeCursor();
-		if (task.lastIndex < cursor && cursor <= task.currentIndex) {
-			Table p = areaTable.tooltip.p;
-			p.clearChildren();
-			areaTable.clearChildren();
-			for (Object id : obj.getIds()) {
-				areaTable.tooltip.p.add(new MyLabel("" + id)).row();
-			}
-			areaTable.tooltip.container.invalidateHierarchy();
-		}
-	}*/
 
 	private final DrawTask[] taskArr0 = {
 	 new DrawString(c_string),

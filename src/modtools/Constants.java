@@ -22,7 +22,7 @@ import static ihope_lib.MyReflect.lookup;
 
 /** 处理一些不安全的常量 */
 @SuppressWarnings("unchecked")
-public class HopeConstant {
+public class Constants {
 	public interface BINDING {
 		/** @see Binding#Binding(KeybindValue, String) */
 		// @SuppressWarnings("JavaLangInvokeHandleSignature")

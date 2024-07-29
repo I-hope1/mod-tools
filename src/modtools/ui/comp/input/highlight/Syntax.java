@@ -69,7 +69,7 @@ public class Syntax {
 	}
 
 	boolean hasChanged;
-	public void highlightingDraw(CharSequence displayText) {
+	public void highlightingDraw(String displayText) {
 		hasChanged = this.displayText != displayText;
 		this.displayText = displayText;
 		cursorTask = null;
@@ -138,7 +138,7 @@ public class Syntax {
 	} */
 
 
-	public CharSequence displayText;
+	public String displayText;
 
 	public Color defaultColor = Color.white;
 	char c, lastChar;
@@ -160,7 +160,7 @@ public class Syntax {
 		public boolean begin = false, finished;
 		public TokenDraw[] tokenDraws;
 		public int         lastTokenIndex = -1, currentIndex = -1;
-		public CharSequence lastToken, token;
+		public String lastToken, token;
 
 		public DrawToken(TokenDraw... tokenDraws) {
 			super(new Color());
@@ -188,10 +188,10 @@ public class Syntax {
 
 		void setColor(int from, int to) {
 			currentIndex = to;
-			setColor(displayText.subSequence(from, to));
+			setColor(displayText.substring(from, to));
 		}
 
-		void setColor(CharSequence token) {
+		void setColor(String token) {
 			this.token = token;
 			color.set(defaultColor);
 			// Log.info(token);

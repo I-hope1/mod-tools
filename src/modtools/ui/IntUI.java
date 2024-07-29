@@ -166,6 +166,11 @@ public class IntUI {
 		return t;
 	}
 
+	public static <T extends Element> SelectTable
+	showSelectTable(T button, Builder builder,
+	                boolean searchable) {
+		return showSelectTable(button, builder, searchable, Align.bottomLeft);
+	}
 	/**
 	 * 弹出一个小窗，自己设置内容
 	 * @param <T>        the type parameter
@@ -792,8 +797,8 @@ public class IntUI {
 		public final     Table    table;
 		public final     Element  button;
 		/**
-		 * 为null时，使用默认隐藏{@link #hideInternal}
-		 * 仅用于builder参数的hide，内部依然是直接隐藏（即默认值）
+		 * <p>为{@code null}时，使用默认隐藏{@link #hideInternal()}</p>
+		 * <p>仅用于builder参数的hide，内部依然是直接隐藏（即默认值）</p>
 		 */
 		public @Nullable Runnable hide;
 		/**

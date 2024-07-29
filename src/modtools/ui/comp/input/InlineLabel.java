@@ -172,14 +172,12 @@ public class InlineLabel extends NoMarkupLabel {
 		if (!cache.getFont().isFlipped()) y += textHeight;
 
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
-
 		var newRuns = InlineLabel.splitAndColorize(layout.runs, colorMap, text);
 		if (newRuns != layout.runs) {
 			layout.runs.clear();
 			layout.runs.addAll(newRuns);
 		}
 		cache.setText(layout, x, y);
-		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
 
 	protected final IntMap<Color> colorMap = new IntMap<>();

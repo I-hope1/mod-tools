@@ -4,7 +4,7 @@ import arc.files.Fi;
 import arc.func.Func2;
 import arc.util.OS;
 import ihope_lib.MyReflect;
-import modtools.HopeConstant.CURL;
+import modtools.Constants.CURL;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.ByteCodeTools.MyClass;
 

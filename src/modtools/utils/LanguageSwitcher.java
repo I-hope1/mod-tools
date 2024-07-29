@@ -5,7 +5,7 @@ import arc.files.Fi;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
-import modtools.HopeConstant.MODS;
+import modtools.Constants.MODS;
 
 import java.util.Locale;
 

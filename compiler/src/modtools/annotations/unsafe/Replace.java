@@ -53,6 +53,8 @@ public class Replace {
 		trees = JavacTrees.instance(context);
 		ns = Names.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
+
+		println(syms.getClass(syms.unnamedModule, ns.fromString("arc.files.Fi")));
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }
@@ -71,7 +73,6 @@ public class Replace {
 	private static void moduleExports() throws Exception {
 		removeKey(JCDiagnostic.Factory.class, () -> new JCDiagnostic.Factory(context) {
 			public JCDiagnostic fragment(Fragment fragmentKey) {
-				println(fragmentKey);
 				return super.fragment(fragmentKey);
 			}
 		});

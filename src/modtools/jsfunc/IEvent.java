@@ -8,7 +8,7 @@ import arc.struct.*;
 import arc.util.Reflect;
 import mindustry.Vars;
 
-import static modtools.HopeConstant.MODS.loadMod;
+import static modtools.Constants.MODS.loadMod;
 
 public interface IEvent {
 	class Snapshot {

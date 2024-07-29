@@ -5,7 +5,6 @@ import arc.struct.OrderedMap;
 import arc.util.*;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
-import mindustry.Vars;
 import modtools.IntVars;
 import rhino.ScriptRuntime;
 
@@ -13,16 +12,6 @@ import java.util.Objects;
 
 public class MySettings {
 	private static final Fi dataDirectory = IntVars.dataDirectory;
-
-	static {
-		Tools.runIgnoredException(() -> {
-			Fi fi = Vars.dataDirectory.child("mods(I hope...)");
-			if (fi.exists() && fi.isDirectory()) {
-				fi.copyFilesTo(dataDirectory);
-				fi.deleteDirectory();
-			}
-		});
-	}
 
 	static Fi config = dataDirectory.child("mod-tools-config.hjson");
 

@@ -2,7 +2,7 @@ package modtools.jsfunc;
 
 import arc.graphics.*;
 import arc.graphics.gl.*;
-import modtools.HopeConstant.PIXMAP;
+import modtools.Constants.PIXMAP;
 import modtools.jsfunc.reflect.UNSAFE;
 
 public interface IPixmap {

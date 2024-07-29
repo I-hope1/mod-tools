@@ -14,7 +14,7 @@ allprojects {
 		targetCompatibility = 21
 
 		options.compilerArgs += "-AtargetVersion=8"
-		options.compilerArgs.add("--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED")
+//		options.compilerArgs += "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED"
 	}
 
 	repositories {

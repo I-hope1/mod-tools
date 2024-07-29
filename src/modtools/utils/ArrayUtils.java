@@ -26,6 +26,13 @@ public class ArrayUtils {
 		}
 		return map;
 	}
+	public static <T, K, V> Map<K, V> keyArr2Map(T[] keys, Func<T, K> keyFunc,Func<T, V> valueFunc) {
+		Map<K, V> map = new HashMap<>();
+		for (T key : keys) {
+			map.put(keyFunc.get(key), valueFunc.get(key));
+		}
+		return map;
+	}
 	public static <K, V> Map<K, V> valueArr2Map(V[] values, Func<V, K> keyFunc) {
 		return valueArr2Map(values, keyFunc, new HashMap<>());
 	}

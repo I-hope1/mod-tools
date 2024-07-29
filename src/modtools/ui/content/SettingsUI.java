@@ -5,12 +5,12 @@ import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.Color;
-import arc.math.Mathf;
+import arc.math.*;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import arc.util.Log.LogLevel;
 import mindustry.Vars;
@@ -27,9 +27,11 @@ import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
-import modtools.utils.JSFunc.JColor;
 import modtools.utils.*;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+
+import java.lang.reflect.Field;
 
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.MySettings.SETTINGS;
@@ -222,7 +224,10 @@ public class SettingsUI extends Content {
 	public static class SettingsBuilder {
 		public static Table main;
 		public SettingsBuilder() { }
-		public static void build(Table main) { SettingsBuilder.main = main; }
+		public static void build(Table main) {
+			SettingsBuilder.main = main;
+			main.left().defaults().left();
+		}
 
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
 		                                   Func<T, String> stringify) {
@@ -372,6 +377,11 @@ public class SettingsUI extends Content {
 
 		public static void color(String text, Color defaultColor, Cons<Color> colorSet) {
 			colorBlock(main, text, null, null, defaultColor.rgba(), colorSet);
+		}
+
+		public static void interpolator(String name, Cons<Interp> cons, Prov<Interp> prov) {
+			ObjectMap<Interp, String> map = Seq.with(Interp.class.getFields()).asMap(Reflect::get, Field::getName);
+			list(name, cons, prov, map.keys().toSeq(), map::get);
 		}
 	}
 }

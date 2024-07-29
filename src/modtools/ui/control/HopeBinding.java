@@ -4,12 +4,12 @@ import arc.Core;
 import arc.KeyBinds.KeybindValue;
 import arc.input.KeyCode;
 import mindustry.input.Binding;
-import modtools.HopeConstant;
+import modtools.Constants;
 
 import java.lang.reflect.Array;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.HopeConstant.BINDING.*;
+import static modtools.Constants.BINDING.*;
 
 public enum HopeBinding {
 	close(KeyCode.escape),
@@ -22,7 +22,7 @@ public enum HopeBinding {
 		this.keyCode = keyCode;
 		this.category = category;
 		Binding[] src = Binding.values();
-		binding = HopeConstant.iv(BINDING_CTOR,
+		binding = Constants.iv(BINDING_CTOR,
 		 name(), src.length, keyCode, category);
 		Binding[] dest = (Binding[]) Array.newInstance(Binding.class, src.length + 1);
 		System.arraycopy(src, 0, dest, 0, src.length);

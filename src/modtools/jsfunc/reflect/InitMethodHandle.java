@@ -2,7 +2,7 @@ package modtools.jsfunc.reflect;
 
 import arc.func.Cons;
 import arc.util.OS;
-import modtools.HopeConstant.ANDROID;
+import modtools.Constants.ANDROID;
 import modtools.utils.Tools.CProvT;
 
 import java.lang.invoke.*;
@@ -10,7 +10,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Constructor;
 
 import static ihope_lib.MyReflect.*;
-import static modtools.HopeConstant.DESKTOP.*;
+import static modtools.Constants.DESKTOP.*;
 
 /** 获取类的{@code <init>}句柄 */
 public class InitMethodHandle {
@@ -38,7 +38,7 @@ public class InitMethodHandle {
 	}
 
 	// --------android--------
-	public static MethodHandle findInitAndroid
+	private static MethodHandle findInitAndroid
 	(Class<?> refc, Constructor<?> ctor) throws Exception {
 		Class<?>[] params = new Class[ctor.getParameterCount() + 1];
 		/* 设置第0个参数为this */
@@ -75,7 +75,7 @@ public class InitMethodHandle {
 		};
 		return findSpecial(refc, maker, resolver, specialCaller);
 	}
-	public static MethodHandle findSpecial
+	private static MethodHandle findSpecial
 	 (Class<?> refc, CProvT<Object, Throwable> maker, Cons<Object> resolver,
 	  Class<?> specialCaller) throws Throwable {
 		Lookup specialLookup = lookup.in(specialCaller);

@@ -2,7 +2,7 @@ package modtools.utils;
 
 import arc.util.OS;
 import dalvik.system.VMRuntime;
-import modtools.HopeConstant.STRING;
+import modtools.Constants.STRING;
 import modtools.android.HiddenApi;
 
 import static ihope_lib.MyReflect.unsafe;

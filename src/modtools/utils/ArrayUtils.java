@@ -67,16 +67,24 @@ public class ArrayUtils {
 			for (int i = 0; i < len; i++) cons.get(Array.get(arr, i));
 			return;
 		}
-		switch (arr) {
-			case int[] ia -> { for (int i : ia) cons.get(i); }
-			case float[] fa -> { for (float i : fa) cons.get(i); }
-			case double[] da -> { for (double i : da) cons.get(i); }
-			case long[] la -> { for (long i : la) cons.get(i); }
-			case boolean[] ba -> { for (boolean i : ba) cons.get(i); }
-			case char[] ca -> { for (char i : ca) cons.get(i); }
-			case byte[] ba -> { for (byte i : ba) cons.get(i); }
-			case short[] sa -> { for (short i : sa) cons.get(i); }
-			default -> throw new IllegalStateException("Unexpected value: " + arr);
+		if (arr instanceof int[] ia) {
+			for (int i : ia) cons.get(i);
+		} else if (arr instanceof float[] fa) {
+			for (float i : fa) cons.get(i);
+		} else if (arr instanceof double[] da) {
+			for (double i : da) cons.get(i);
+		} else if (arr instanceof long[] la) {
+			for (long i : la) cons.get(i);
+		} else if (arr instanceof boolean[] ba) {
+			for (boolean i : ba) cons.get(i);
+		} else if (arr instanceof char[] ca) {
+			for (char i : ca) cons.get(i);
+		} else if (arr instanceof byte[] ba) {
+			for (byte i : ba) cons.get(i);
+		} else if (arr instanceof short[] sa) {
+			for (short i : sa) cons.get(i);
+		} else {
+			throw new IllegalStateException("Unexpected value: " + arr);
 		}
 	}
 

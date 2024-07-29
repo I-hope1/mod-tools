@@ -13,7 +13,7 @@ public class ArrayUtils {
 
 	public static <K, V, R> R[] map2Arr(Class<R> cl, ObjectMap<K, V> map, Func<Entry<K, V>, R> func) {
 		R[] tableSeq = (R[]) Array.newInstance(cl, map.size);
-		int c = 0;
+		int c        = 0;
 		for (var entry : map) {
 			tableSeq[c++] = func.get(entry);
 		}
@@ -26,7 +26,7 @@ public class ArrayUtils {
 		}
 		return map;
 	}
-	public static <T, K, V> Map<K, V> keyArr2Map(T[] keys, Func<T, K> keyFunc,Func<T, V> valueFunc) {
+	public static <T, K, V> Map<K, V> keyArr2Map(T[] keys, Func<T, K> keyFunc, Func<T, V> valueFunc) {
 		Map<K, V> map = new HashMap<>();
 		for (T key : keys) {
 			map.put(keyFunc.get(key), valueFunc.get(key));
@@ -59,6 +59,27 @@ public class ArrayUtils {
 		return 0 <= i && i < list.size() ? list.get(i) : null;
 	}
 
+	public static void forEach(Object arr, AllCons cons) {
+		Class<?> type = arr.getClass().getComponentType();
+		if (type == null) throw new IllegalArgumentException("Not an array: " + arr);
+		if (!type.isPrimitive()) {
+			int len = Array.getLength(arr);
+			for (int i = 0; i < len; i++) cons.get(Array.get(arr, i));
+			return;
+		}
+		switch (arr) {
+			case int[] ia -> { for (int i : ia) cons.get(i); }
+			case float[] fa -> { for (float i : fa) cons.get(i); }
+			case double[] da -> { for (double i : da) cons.get(i); }
+			case long[] la -> { for (long i : la) cons.get(i); }
+			case boolean[] ba -> { for (boolean i : ba) cons.get(i); }
+			case char[] ca -> { for (char i : ca) cons.get(i); }
+			case byte[] ba -> { for (byte i : ba) cons.get(i); }
+			case short[] sa -> { for (short i : sa) cons.get(i); }
+			default -> throw new IllegalStateException("Unexpected value: " + arr);
+		}
+	}
+
 	public static float sumf(FloatSeq seq, int fromIndex, int toIndex) {
 		float sum = 0;
 		for (int i = fromIndex; i < toIndex && i < seq.size; i++) {
@@ -80,5 +101,16 @@ public class ArrayUtils {
 			sum += summer.get(t);
 		}
 		return sum;
+	}
+
+
+	public static abstract class AllCons implements Cons<Object> {
+		public abstract void get(Object object);
+		public abstract void get(int i);
+		public abstract void get(float f);
+		public abstract void get(double d);
+		public abstract void get(long l);
+		public abstract void get(boolean b);
+		public abstract void get(char c);
 	}
 }

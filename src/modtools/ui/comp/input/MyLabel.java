@@ -2,7 +2,6 @@ package modtools.ui.comp.input;
 
 import arc.Core;
 import arc.func.Prov;
-import arc.graphics.g2d.Font.FontData;
 import arc.util.*;
 import modtools.ui.comp.limit.LimitLabel;
 import modtools.utils.JSFunc.MyProv;
@@ -69,17 +68,4 @@ public class MyLabel extends LimitLabel {
 		});
 	}
 
-	public void layout() {
-		if (cache == null) return;
-		FontData fontData = cache.getFont().getData();
-
-		boolean had = fontData.markupEnabled;
-		fontData.markupEnabled = false;
-		super.layout();
-		/* 重新计算pref width  */
-		prefSizeInvalid = true;
-		getPrefWidth();
-		fontData.markupEnabled = had;
-	}
 }
-

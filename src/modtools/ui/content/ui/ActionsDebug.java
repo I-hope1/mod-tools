@@ -6,7 +6,7 @@ import arc.scene.ui.Image;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.*;
-import arc.util.pooling.Pools;
+import arc.util.pooling.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.jsfunc.reflect.*;
@@ -38,7 +38,7 @@ public class ActionsDebug extends Content {
 	@Override
 	public void load() {
 		ui = new Window(localizedName());
-		Table cont = ui.cont;
+		Table         cont = ui.cont;
 		Cell<Element> cell = cont.add(element = new Image()).size(64).pad(24);
 		cont.row();
 		element.update(() -> element.setOrigin(Align.center));
@@ -73,7 +73,9 @@ public class ActionsDebug extends Content {
 	 "startR", "startG", "startB", "startA",
 	 "startX", "startY");
 	private <T extends Action> void applyToAction(Class<T> actionClass) {
-		T action = Pools.obtain(actionClass, () -> UNSAFE.allocateInstance(actionClass));
+		Pool<T> pool   = Pools.get(actionClass, () -> UNSAFE.allocateInstance(actionClass));
+		T       action = pool.obtain();
+		action.setPool(pool);
 		action.reset();
 		SelectTable table = IntUI.showSelectTable(HopeInput.mouseHit(), (p, hide, _) -> {
 			RBuilder.build(p);

@@ -2,7 +2,8 @@ apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
 tasks.withType(JavaCompile) {
-	options.compilerArgs += '-Aa968'
+	// 这里是为了刷新编译器参数
+	options.compilerArgs += '-Aa5327'
 }
 jar {
 	doLast {

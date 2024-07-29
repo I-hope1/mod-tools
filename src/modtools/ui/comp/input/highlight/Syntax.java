@@ -5,6 +5,8 @@ import arc.struct.*;
 import arc.util.Tmp;
 import mindustry.graphics.Pal;
 
+import java.util.Objects;
+
 /** 用于控制渲染，当然你也可以解析文本 */
 public class Syntax {
 	public static final Color
@@ -69,8 +71,9 @@ public class Syntax {
 	}
 
 	boolean hasChanged;
+	boolean newLine;
 	public void highlightingDraw(String displayText) {
-		hasChanged = this.displayText != displayText;
+		hasChanged = !Objects.equals(this.displayText, displayText);
 		this.displayText = displayText;
 		cursorTask = null;
 		cTask = null;
@@ -85,6 +88,7 @@ public class Syntax {
 		outer:
 		for (int i = 0; i < len; i++, lastChar = c) {
 			c = displayText.charAt(i);
+			newLine = c == '\n';
 
 			if (i < drawable.cursor()) cursorTask = cTask;
 			if (cTask == null) {

@@ -13,12 +13,13 @@ import arc.scene.ui.layout.Table;
 import arc.scene.utils.Disableable;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
-import modtools.annotations.settings.*;
+import modtools.annotations.settings.SettingsInit;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.limit.LimitTextButton;
@@ -114,7 +115,9 @@ public interface ISettings extends E_DataInterface {
 		return data().get(name());
 	}
 	default String getString() {
-		return data().getString(name());
+		Object o = get();
+		if (type() == String.class && o instanceof Jval) set(o = ((Jval) o).asString());
+		return String.valueOf(o);
 	}
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
@@ -316,7 +319,7 @@ public interface ISettings extends E_DataInterface {
 		}, enums, Enum::name, this::isSwitchOn);
 	}
 	/** 参数：({@link String} ...args)  */
-	private void $(String[] __) {
+	private void $(String __) {
 		var list = new Seq<>((String[]) args());
 		list(text, this::set, this::getString,
 		 list, s -> s.replaceAll("\\n", "\\\\n"));

@@ -164,7 +164,7 @@ public class JSSyntax extends Syntax {
 		 }
 		 if (lastTask != task) return null;
 		 String lastToken = task.lastToken;
-		 if (localKeywords.contains(lastToken)) {
+		 if (lastToken != null && localKeywords.contains(lastToken)) {
 			 localVars.add(token);
 			 return c_localvar;
 		 }
@@ -177,8 +177,8 @@ public class JSSyntax extends Syntax {
 	 },
 	 task -> "function".equals(task.lastToken) && lastTask == task ? c_functions : null,
 	 task -> {
-		 CharSequence s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
-		 return ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) && !"NaN".equals(s) ? null : c_number;
+		 String s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
+		 return "NaN".equals(s) || !ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) ? c_number : null;
 	 }
 	};
 	private void resolveToken(Scriptable scope, DrawToken task, String token) {

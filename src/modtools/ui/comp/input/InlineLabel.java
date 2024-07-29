@@ -174,6 +174,7 @@ public class InlineLabel extends NoMarkupLabel {
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
 		var newRuns = InlineLabel.splitAndColorize(layout.runs, colorMap, text);
 		if (newRuns != layout.runs) {
+			Pools.freeAll(layout.runs, true);
 			layout.runs.clear();
 			layout.runs.addAll(newRuns);
 		}

@@ -12,6 +12,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.SOURCE)
 public @interface IconAnn {
 	Class<?> mainClass();
-	String iconDir() default "sprites/icons";
+	String iconDir() default "sprites/ui/icons";
 	String genPackage() default ".";
 }

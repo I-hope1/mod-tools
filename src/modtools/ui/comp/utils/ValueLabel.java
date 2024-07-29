@@ -4,13 +4,15 @@ import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.pooling.*;
+import arc.util.pooling.Pool.Poolable;
 import mindustry.Vars;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
@@ -25,11 +27,12 @@ import modtools.ui.content.world.Selection;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
+import modtools.utils.ArrayUtils.AllCons;
 import modtools.utils.JSFunc.JColor;
+import modtools.utils.SR.SatisfyException;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.*;
 
-import java.lang.reflect.Array;
 import java.util.Map;
 
 import static modtools.events.E_JSFunc.truncate_text;
@@ -152,7 +155,7 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 
 	private final IntMap<Object>              startIndexMap = new IntMap<>();
-	private final ObjectMap<Object, Integer>  endIndexMap   = new ObjectMap<>();
+	private final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
 	private final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
 	private final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
 
@@ -161,15 +164,28 @@ public abstract class ValueLabel extends InlineLabel {
 		if (val instanceof ObjectMap || val instanceof Map) {
 			text.append('{');
 			boolean checkTail = false;
-			if (val instanceof ObjectMap<?, ?> map) for (var o : map) {
-				appendMap(text, val, o.key, o.value);
-				checkTail = true;
-				if (isTruncate(text.length())) break;
-			}
-			else for (var entry : ((Map<?, ?>) val).entrySet()) {
-				appendMap(text, val, entry.getKey(), entry.getValue());
-				checkTail = true;
-				if (isTruncate(text.length())) break;
+			switch (val) {
+				case ObjectMap<?, ?> map -> {
+					for (var entry : map) {
+						appendMap(text, val, entry.key, entry.value);
+						checkTail = true;
+						if (isTruncate(text.length())) break;
+					}
+				}
+				case IntMap<?> map -> {
+					for (var entry : map) {
+						appendMap(text, val, entry.key, entry.value);
+						checkTail = true;
+						if (isTruncate(text.length())) break;
+					}
+				}
+				default -> {
+					for (var entry : ((Map<?, ?>) val).entrySet()) {
+						appendMap(text, val, entry.getKey(), entry.getValue());
+						checkTail = true;
+						if (isTruncate(text.length())) break;
+					}
+				}
 			}
 			if (checkTail) text.deleteCharAt(text.length() - 2);
 			text.append('}');
@@ -181,36 +197,27 @@ public abstract class ValueLabel extends InlineLabel {
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
 			boolean checkTail = false;
 			text.append('[');
+
+			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new);
+			IterCons       cons = pool.obtain().init(this, val, text);
 			try {
-				var seq = val instanceof Iterable<?> ? Seq.with((Iterable<?>) val) :
-				 Seq.with(asArray(val));
-				if (seq.any()) {
-					Object last  = seq.first();
-					int    count = 0;
-					for (Object item : seq) {
-						valToObj.put(item, val);
-						valToType.put(item, val.getClass());
-						if (last != null && Reflect.isWrapper(last.getClass())
-						 ? last.equals(item) : last == item) {
-							count++;
-						} else {
-							appendValue(text, last);
-							addCountText(text, count);
-							if (isTruncate(text.length())) break;
-							last = item;
-							count = 0;
+				try {
+					if (val instanceof Iterable<?> iter) {
+						for (Object item : iter) {
+							cons.get(item);
 						}
+					} else {
+						ArrayUtils.forEach(val, cons);
 					}
-					appendValue(text, last);
-					addCountText(text, count);
-					// break l;
 					checkTail = true;
-				}
+				} catch (SatisfyException ignored) { }
 			} catch (ArcRuntimeException ignored) {
 				break iter;
 			} catch (Throwable e) {
 				if (DEBUG) Log.err(e);
 				text.append("▶ERROR◀");
+			} finally {
+				pool.free(cons);
 			}
 			if (checkTail && text.length() >= 2) text.delete(text.length() - 2, text.length());
 			text.append(']');
@@ -226,9 +233,38 @@ public abstract class ValueLabel extends InlineLabel {
 		int endI = text.length();
 		endIndexMap.put(wrapVal(val), endI);
 		colorMap.put(endI, Color.white);
-
-		// setColor(mainColor);
 	}
+
+	// 一些基本类型的特化，不装箱，为了减少内存消耗
+
+	// 对于整数类型的处理 (包括 byte 和 short)
+	private void appendValue(StringBuilder text, int val) {
+		colorMap.put(text.length(), Syntax.c_number);
+		text.append(val);
+		colorMap.put(text.length(), Color.white);
+	}
+
+	// 对于长整数类型的处理
+	private void appendValue(StringBuilder text, long val) {
+		colorMap.put(text.length(), Syntax.c_number);
+		text.append(val);
+		colorMap.put(text.length(), Color.white);
+	}
+
+	// 对于浮点数类型的处理 (包括 float 和 double)
+	private void appendValue(StringBuilder text, float val) {
+		colorMap.put(text.length(), Syntax.c_number);
+		text.append(FormatHelper.fixed(val, 2));
+		colorMap.put(text.length(), Color.white);
+	}
+
+	// 对于字符类型的处理
+	private void appendValue(StringBuilder text, char val) {
+		colorMap.put(text.length(), Syntax.c_string);
+		text.append('\'').append(val).append('\'');
+		colorMap.put(text.length(), Color.white);
+	}
+
 	private void addCountText(StringBuilder text, int count) {
 		if (count > 1) {
 			colorMap.put(text.length(), Color.gray);
@@ -266,6 +302,16 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 
 	private void appendMap(StringBuilder sb, Object mapObj,
+	                       int key,
+	                       Object value) {
+		valToObj.put(value, mapObj);
+		valToType.put(value, value == null ? Object.class : value.getClass());
+		appendValue(sb, key);
+		sb.append('=');
+		appendValue(sb, value);
+		sb.append(getArrayDelimiter());
+	}
+	private void appendMap(StringBuilder sb, Object mapObj,
 	                       Object key,
 	                       Object value) {
 		valToObj.put(key, mapObj);
@@ -284,18 +330,6 @@ public abstract class ValueLabel extends InlineLabel {
 	private boolean isTruncate(int length) {
 		return enableTruncate && truncate_text.enabled() && length > truncateLength;
 	}
-
-	private static Object[] asArray(Object arr) {
-		if (arr instanceof Object[]) return (Object[]) arr;
-		int len = Array.getLength(arr);
-		if (len == 0) return ArrayUtils.EMPTY_ARRAY;
-		Object[] objArr = new Object[len];
-		for (int i = 0; i < len; i++) {
-			objArr[i] = Array.get(arr, i);
-		}
-		return objArr;
-	}
-
 	public void clearVal() {
 		val = "";
 		super.setText((CharSequence) null);
@@ -331,7 +365,8 @@ public abstract class ValueLabel extends InlineLabel {
 		}
 	}
 	private void setValInternal(Object val) {
-		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class)) return;
+		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class
+		                        || type == Class.class || type == Object.class)) return;
 		if (this.val != null && val != null &&
 		    this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
 		    this.val.equals(val)) return;
@@ -534,6 +569,145 @@ public abstract class ValueLabel extends InlineLabel {
 		}
 		public Object getObject() {
 			return obj;
+		}
+	}
+	public static final ObjectSet<Class<?>> identityClasses = ObjectSet.with(
+	 Vec2.class, Rect.class, Color.class
+	);
+	private static class IterCons extends AllCons implements Poolable {
+		private Object        val;
+		private StringBuilder text;
+
+		private int     count;
+		private boolean gotFirst;
+		private ValueLabel self;
+		public IterCons init(ValueLabel self, Object val, StringBuilder text) {
+			this.self = self;
+			this.val = val;
+			this.text = text;
+			return this;
+		}
+		private Object last;
+		public void get(Object item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				last = item;
+			}
+			self.valToObj.put(item, val);
+			self.valToType.put(item, val.getClass());
+			if (last != null && identityClasses.contains(val.getClass()) ? !last.equals(item) : last != item) {
+				self.appendValue(text, last);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				last = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+		private int ilast;
+		public void get(int item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				ilast = item;
+			}
+			if (item != ilast) {
+				self.appendValue(text, ilast);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				ilast = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+		private float flast;
+		public void get(float item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				flast = item;
+			}
+			if (item != flast) {
+				self.appendValue(text, flast);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				flast = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+		private double dlast;
+		public void get(double item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				dlast = item;
+			}
+			if (item != dlast) {
+				self.appendValue(text, (float) dlast);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				dlast = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+		private long llast;
+		public void get(long item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				llast = item;
+			}
+			if (item != llast) {
+				self.appendValue(text, llast);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				llast = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+		private boolean zlast;
+		public void get(boolean item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				zlast = item;
+			}
+			if (item != zlast) {
+				self.appendValue(text, zlast);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				zlast = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+		private char clast;
+		public void get(char item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				clast = item;
+			}
+			if (item != clast) {
+				self.appendValue(text, clast);
+				self.addCountText(text, count);
+				if (self.isTruncate(text.length())) throw new SatisfyException();
+				clast = item;
+				count = 0;
+			} else {
+				count++;
+			}
+		}
+
+
+		public void reset() {
+			last = null;
+			self = null;
+			count = 0;
+			gotFirst = false;
 		}
 	}
 }

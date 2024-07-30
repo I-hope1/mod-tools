@@ -143,9 +143,7 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 
 	public void setAndProcessText(Object val) {
-		int lastLength = text.length();
 		text.setLength(0);
-		text.ensureCapacity(lastLength);
 		colorMap.clear();
 		startIndexMap.clear();
 		endIndexMap.clear();

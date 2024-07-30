@@ -113,12 +113,12 @@ public class ArrayUtils {
 		return sum;
 	}
 
-	public static <T>Seq<T> seq(T ...items) {
+	public static <T> Seq<T> seq(T... items) {
 		Seq<T> seq = (Seq<T>) Pools.get(DisposableSeq.class, DisposableSeq::new).obtain();
 		return seq.add(items);
 	}
 
-	public static <T>Seq<T> seq(Iterable<T> items) {
+	public static <T> Seq<T> seq(Iterable<T> items) {
 		Seq<T> seq = (Seq<T>) Pools.get(DisposableSeq.class, DisposableSeq::new).obtain();
 		return seq.addAll(items);
 	}

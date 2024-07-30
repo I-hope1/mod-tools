@@ -35,7 +35,7 @@ import modtools.utils.ui.*;
 
 import java.util.Map;
 
-import static modtools.events.E_JSFunc.truncate_text;
+import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
@@ -47,7 +47,6 @@ public abstract class ValueLabel extends InlineLabel {
 	public static final Color   c_enum    = new Color(0xFFC66D_FF);
 	public static final String  NULL_MARK = "`*null";
 
-	public int    truncateLength = 1000;
 	public String ellipse        = "  ...";
 
 
@@ -148,8 +147,8 @@ public abstract class ValueLabel extends InlineLabel {
 		startIndexMap.clear();
 		endIndexMap.clear();
 		appendValue(text, val);
-		if (text.length() > truncateLength) {
-			text.setLength(truncateLength);
+		if (text.length() > truncate_length.getInt()) {
+			text.setLength(truncate_length.getInt());
 			text.append(ellipse);
 		}
 	}
@@ -328,7 +327,7 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 
 	private boolean isTruncate(int length) {
-		return enableTruncate && truncate_text.enabled() && length > truncateLength;
+		return enableTruncate && truncate_text.enabled() && length > truncate_length.getInt();
 	}
 	public void clearVal() {
 		val = "";
@@ -380,7 +379,7 @@ public abstract class ValueLabel extends InlineLabel {
 			super.setText(String.valueOf(val));
 		}
 		invalidateHierarchy();
-		layout();
+		// layout();
 	}
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
 		Vec2 pos = ElementUtils.getAbsolutePos(el);

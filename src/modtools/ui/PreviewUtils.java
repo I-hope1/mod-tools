@@ -13,6 +13,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
 import arc.util.Timer.Task;
+import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.MultiPacker.PageType;
 import mindustry.graphics.Pal;
@@ -108,6 +109,10 @@ public class PreviewUtils {
 
 				table = IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
 				hitter = Hitter.peek();
+				if (Vars.mobile) {
+					hitter.touchable = Touchable.disabled;
+					hitter.autoClose = false;
+				}
 				table.clearChildren();
 				table.add(table.table);
 				table.touchable = Touchable.enabled;

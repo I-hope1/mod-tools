@@ -194,7 +194,16 @@ public class IntUI {
 				IntVars.postToMain(t::hideInternal);
 				return;
 			}
-			positionTooltip(button, align, t);
+			int lyingAlign = align;
+			if (Align.isCenterVertical(align)) {
+			} else if (Align.isTop(align)) lyingAlign = lyingAlign & ~Align.top | Align.bottom;
+			else if (Align.isBottom(align)) lyingAlign = lyingAlign & ~Align.bottom | Align.top;
+
+			if (Align.isCenterHorizontal(align)) {
+			} else if (Align.isLeft(align)) lyingAlign = lyingAlign & ~Align.left | Align.right;
+			else if (Align.isRight(align)) lyingAlign = lyingAlign & ~Align.right | Align.left;
+
+			positionTooltip(button, lyingAlign, t, align);
 
 			t.keepInStage();
 			t.invalidateHierarchy();
@@ -203,33 +212,61 @@ public class IntUI {
 		return t;
 	}
 	public static void positionTooltip(Element lying, Table t) {
-		positionTooltip(lying, Align.bottomLeft, t);
+		positionTooltip(lying, Align.bottom, t, Align.top);
 	}
 
-	public static void positionTooltip(Element lying, int align, Table t) {
-		lying.localToStageCoordinates(
-		 Tmp.v1.set(lying.getX(align), lying.getY(align))
-			.sub(lying.x, lying.y));
-		positionTooltip(Tmp.v1, lying.getHeight(), t);
-	}
-	public static void positionTooltip(Vec2 pos, float height, Table t) {
-		t.bottom().left();
-
-		// 初始位置
-		float x = pos.x;
-		float y = pos.y + height;
-
-		x = Mathf.clamp(x, 0, Core.graphics.getWidth() - t.getWidth());
-		if (y + t.getWidth() > Core.graphics.getHeight()) {
-			y = Math.min(pos.y, Core.graphics.getHeight());
-
-			t.top();
-			if (y - t.getHeight() < 0) {
-				t.bottom();
-				y = 0;
-			}
+	public static void positionTooltip(Element lying, int lyingAlign, Table table, int tableAlign) {
+		Vec2 pos = Tmp.v1;
+		lying.localToStageCoordinates(pos.set(lying.getX(lyingAlign), lying.getY(lyingAlign)).sub(lying.x, lying.y));
+		table.setPosition(Tmp.v1.x, Tmp.v1.y, tableAlign);
+		// 在不遮挡lying的情况下，如果上面超出屏幕
+		l:
+		if (table.y + table.getHeight() > Core.graphics.getHeight()) {
+			int lyingAlign1 = lyingAlign & ~Align.top | Align.bottom;
+			if (lyingAlign == lyingAlign1) break l;
+			int tableAlign1 = tableAlign & ~Align.top | Align.bottom;
+			if (tableAlign == tableAlign1) break l;
+			positionTooltip(lying, lyingAlign1, table, tableAlign1);
 		}
-		t.setPosition(x, y);
+
+		// 在不遮挡lying的情况下，如果下面超出屏幕
+		l:
+		if (table.y < 0) {
+			int lyingAlign1 = lyingAlign & ~Align.bottom | Align.top;
+			if (lyingAlign == lyingAlign1) break l;
+			int tableAlign1 = tableAlign & ~Align.bottom | Align.top;
+			if (tableAlign == tableAlign1) break l;
+			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+		}
+
+		// 在不遮挡lying的情况下，如果右边超出屏幕
+		l:
+		if (table.x + table.getWidth() > Core.graphics.getWidth()) {
+			int lyingAlign1 = lyingAlign & ~Align.left | Align.right;
+			if (lyingAlign == lyingAlign1) break l;
+			int tableAlign1 = tableAlign & ~Align.left | Align.right;
+			if (tableAlign == tableAlign1) break l;
+			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+		}
+
+		// 如果左边超出屏幕
+		l:
+		if (table.x < 0) {
+			int lyingAlign1 = lyingAlign & ~Align.right | Align.left;
+			if (lyingAlign == lyingAlign1) break l;
+			int tableAlign1 = tableAlign & ~Align.right | Align.left;
+			if (tableAlign == tableAlign1) break l;
+			// 尽量不遮挡lying
+			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+		}
+
+		// keep in stage
+		if (table.x + table.getWidth() > Core.graphics.getWidth()) {
+			table.x -= table.getWidth();
+		}
+		if (table.y + table.getHeight() > Core.graphics.getHeight()) {
+			table.y -= table.getHeight();
+		}
 	}
 	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder f) {
 		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, f);

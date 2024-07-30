@@ -28,13 +28,7 @@ public enum E_Game implements ISettings {
 		float minZoom = Vars.renderer.minZoom;
 		float maxZoom = Vars.renderer.maxZoom;
 	}
-	static {
-		renderer_min_zoom.def(minZoom);
-		renderer_max_zoom.def(maxZoom);
-		max_schematic_size.def(Vars.maxSchematicSize);
-	}
 
-	E_Game() {}
 	E_Game(Class<?> cl, float... args) {}
 	E_Game(Class<?> cl, int... args) {}
 }

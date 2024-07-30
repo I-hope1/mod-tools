@@ -182,7 +182,7 @@ public class Frag extends Table {
 	@SettingsInit
 	public enum Settings implements ISettings {
 		@Switch
-		position(Position.class, 0, 0, 1, 1);
+		position(Position.class);
 
 		Settings(Class<?> c, float... args) { }
 

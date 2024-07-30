@@ -37,7 +37,7 @@ import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.linstener.*;
 import modtools.ui.content.*;
-import modtools.ui.control.HopeInput;
+import modtools.ui.control.*;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.MenuBuilder;
@@ -766,13 +766,14 @@ public class Selection extends Content {
 			return show(scene, Actions.fadeIn(0.1f));
 		}
 
+		HKeyCode fixedKeyCode = keyCodeData().keyCode("fixedWindow", () -> new HKeyCode(KeyCode.anyKey).ctrl().alt());
+
 		{
 			margin(4, 4, 4, 4);
 			titleTable.remove();
 			/* 禁用缩放和移动侦听器 */
 			touchable = Touchable.childrenOnly;
 			sclListener.remove();
-			moveListener.remove();
 			cont.update(() -> {
 				if (updatePosUI && focusEnabled) updatePosUIAndWorld();
 				else updatePosOnlyWorld();
@@ -789,7 +790,7 @@ public class Selection extends Content {
 				toBack();
 
 				if (Vars.mobile || Time.millis() - lastToggleTime <= toggleDelay
-				    || !(Core.input.alt() && Core.input.ctrl())) return;
+				    || !fixedKeyCode.isPress()) return;
 
 				lastToggleTime = Time.millis();
 				updatePosUI = !updatePosUI;
@@ -809,6 +810,8 @@ public class Selection extends Content {
 			return el;
 		}
 		private void buildCont0() {
+			pane.left().defaults().left();
+			if (mobile) pane.add(tipKey("fixed", fixedKeyCode.toString())).color(Color.lightGray).fontScale(0.8f).row();
 			/* tile */
 			newTable(t -> {
 				buildCont(t, focusTile);

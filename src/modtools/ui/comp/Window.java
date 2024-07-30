@@ -93,8 +93,9 @@ public class Window extends Table implements Position {
 		public Cell<ImageButton> button(Drawable icon, ImageButtonStyle style, float isize, Runnable listener) {
 			var cell = super.button(icon, style, isize, listener);
 			cell.get().tapped(() -> {
+				if (moveListener == null) return;
 				moveListener.disabled = true;
-				Time.runTask(0, () -> moveListener.disabled = false);
+				Core.app.post(() -> moveListener.disabled = false);
 			});
 			return cell;
 		}
@@ -115,9 +116,19 @@ public class Window extends Table implements Position {
 	 sticky = false,
 	/** 是否没有buttons */
 	noButtons;
-	public MoveListener moveListener;
+	private MoveListener moveListener;
+	public MoveListener moveListener() {
+		return new ReferringMoveListener(titleTable, this,
+		 new float[]{0, 0.5f, 1},
+		 new float[]{0, 0.5f, 1}) {
+			public void display(float x, float y) {
+				Vec2 pos = snap(x, y);
+				Window.this.display(pos.x, pos.y);
+			}
+		};
+	}
 	// public ObjectSet<Element> fireMoveElems = ObjectSet.with(this, titleTable);
-	public SclListener  sclListener;
+	public SclListener sclListener;
 
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super();
@@ -139,7 +150,7 @@ public class Window extends Table implements Position {
 		buildTitle(title, full);
 
 		sclListener = new SclListener(this, this.minWidth, this.minHeight);
-		moveListener.fire = () -> {
+		if (moveListener != null) moveListener.fire = () -> {
 			if (isMaximize && !isMinimize) {
 				float mulxw = moveListener.lastMouse.x / width;
 				float mulxh = moveListener.lastMouse.y / height;
@@ -179,16 +190,9 @@ public class Window extends Table implements Position {
 	}
 
 	private void buildTitle(String title, boolean full) {
+		moveListener = moveListener();
 		add(titleTable).growX().height(topHeight).name("titleTable");
 		row();
-		moveListener = new ReferringMoveListener(titleTable, this,
-		 new float[]{0, 0.5f, 1},
-		 new float[]{0, 0.5f, 1}) {
-			public void display(float x, float y) {
-				Vec2 pos = snap(x, y);
-				Window.this.display(pos.x, pos.y);
-			}
-		};
 
 		this.title = titleTable.add(title)
 		 .grow().touchable(Touchable.disabled)
@@ -234,7 +238,7 @@ public class Window extends Table implements Position {
 		Tools.runIgnoredException(() -> super.act(delta));
 		if (sticky) toFront();
 		sclListener.disabled0 = isMaximize;
-		moveListener.disabled = sclListener.scling;
+		if (moveListener != null) moveListener.disabled = sclListener.scling;
 	}
 	private FillTable getResizeFillTable() {
 		return addFillTable(p -> {
@@ -273,7 +277,6 @@ public class Window extends Table implements Position {
 
 	/** 自动解除focus */
 	public Element hit(float x, float y, boolean touchable) {
-		// if (!moveListener.isFiring) moveListener.disabled = element == null || !fireMoveElems.contains(element);
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
@@ -292,15 +295,17 @@ public class Window extends Table implements Position {
 	public void display() {
 		display(x, y);
 	}
+	/** 超出屏幕外的距离 */
+	float overMultiple = 0.33f;
 	private void display(float x, float y) {
 		float mainWidth  = getWidth(), mainHeight = getHeight();
 		float touchWidth = titleTable.getWidth(), touchHeight = titleTable.getHeight();
 
 		float offset = Scl.scl(45 * 4);
-		float minX   = (this instanceof PopupWindow ? 0 : Math.min(-touchWidth / 3f, -mainWidth + offset));
-		float maxX = (this instanceof PopupWindow ? 0 : Math.max(-mainWidth + touchWidth / 2f, -offset))
+		float minX   = (this instanceof PopupWindow ? 0 : Math.min(-touchWidth * overMultiple, -mainWidth + offset));
+		float maxX = (this instanceof PopupWindow ? 0 : Math.max(-mainWidth + touchWidth * overMultiple, -offset))
 		             + graphics.getWidth();
-		float minY = (this instanceof PopupWindow ? 0 : -mainHeight + touchHeight / 3f * 2f);
+		float minY = (this instanceof PopupWindow ? 0 : -mainHeight + touchHeight * overMultiple * 2f);
 		float maxY = -mainHeight + graphics.getHeight();
 
 		super.setPosition(Mathf.clamp(x, minX, maxX),
@@ -628,7 +633,6 @@ public class Window extends Table implements Position {
 			confirm = showCustomConfirm("@settings.exception", "@settings.exception.draw",
 			 "@settings.window.close", "@settings.window.keep",
 			 this::remove, () -> unexpectedDrawException = false);
-			confirm.moveListener.remove();
 			confirm.sclListener.remove();
 			Boolp boolp = () -> confirm.isShown();
 			topGroup.disabledSwitchPreviewSeq.add(boolp);
@@ -746,8 +750,13 @@ public class Window extends Table implements Position {
 		public NoTopWindow(String title) {
 			super(title);
 		}
+		public void display() {
+			keepInStage();
+		}
+		public MoveListener moveListener() {
+			return null;
+		}
 		{
-			moveListener.remove();
 			getCells().remove(getCell(titleTable).clearElement(), true);
 		}
 	}

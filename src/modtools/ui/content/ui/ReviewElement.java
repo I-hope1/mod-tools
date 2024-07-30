@@ -844,9 +844,9 @@ public class ReviewElement extends Content {
 			styleLabel.setFontScale(valueScale);
 		}
 
-		void setPosition(Element elem, Vec2 vec2) {
+		void setPosition(Element elem) {
 			// 初始在元素的左上角
-			IntUI.positionTooltip(vec2, elem.getHeight(), this);
+			IntUI.positionTooltip(elem, Align.topLeft, this, Align.bottomLeft);
 		}
 		private void build(Table t) {
 			t.defaults().growX();
@@ -1000,7 +1000,7 @@ public class ReviewElement extends Content {
 			table.getPrefWidth();
 			table.pack();
 			table.act(0);
-			table.setPosition(elem, vec2);
+			table.setPosition(elem);
 			table.draw();
 		}
 		final InfoDetails table = new InfoDetails();

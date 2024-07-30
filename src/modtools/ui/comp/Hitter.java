@@ -38,6 +38,8 @@ public class Hitter extends FillElement implements IMenu {
 		if (b) fireClick();
 		return b;
 	}
+
+	public boolean locked = false;
 	public Element hit(float x, float y, boolean touchable) {
 		if (!autoClose) {
 			return super.hit(x, y, touchable);
@@ -47,7 +49,7 @@ public class Hitter extends FillElement implements IMenu {
 			return super.hit(x, y, touchable);
 		}
 
-		if (HopeInput.mouseDown()
+		if (!locked && HopeInput.mouseDown()
 		    && !HopeInput.mouseDragged()
 		    && super.hit(x, y, touchable) == this
 		    && hide()) {

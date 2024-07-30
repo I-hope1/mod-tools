@@ -439,6 +439,7 @@ public class Tools {
 		throw new RuntimeException();
 	}
 	public static Object cast(Object object, Class<?> type) {
+		if (object.getClass() == type) return object;
 		if (object instanceof Number n && type.isPrimitive()) {
 			if (type == byte.class) return n.byteValue();
 			if (type == short.class) return n.shortValue();

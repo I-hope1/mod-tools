@@ -6,10 +6,13 @@ import arc.func.*;
 import arc.input.KeyCode;
 import arc.scene.event.*;
 import arc.struct.*;
+import arc.util.Strings;
 import arc.util.serialization.*;
 import arc.util.serialization.Jval.JsonMap;
 import modtools.IntVars;
 import modtools.utils.MySettings.Data;
+
+import java.util.StringJoiner;
 
 public class HKeyCode {
 	public static final String   STR_NONE = "None";
@@ -56,10 +59,13 @@ public class HKeyCode {
 	 **/
 	public static HKeyCode parse(String text) {
 		if (text == null || text.equalsIgnoreCase(STR_NONE)) return NONE;
-		String[] split   = text.split("\\s*\\+\\s*");
-		HKeyCode keyCode = new HKeyCode(KeyCode.valueOf(split[split.length - 1].toLowerCase()));
-		for (int i = 0; i < split.length - 1; i++) {
-			switch (split[i]) {
+		String[] split = text.split("\\s*\\+\\s*");
+		HKeyCode keyCode = new HKeyCode(switch (split[split.length - 1]) {
+			case "Ctrl", "Shift", "Alt" -> KeyCode.anyKey;
+			default -> KeyCode.valueOf(Strings.camelize(split[split.length - 1]));
+		});
+		for (String s : split) {
+			switch (s) {
 				case "Ctrl" -> keyCode.ctrl();
 				case "Shift" -> keyCode.shift();
 				case "Alt" -> keyCode.alt();
@@ -88,7 +94,12 @@ public class HKeyCode {
 		return alt == other.alt && shift == other.shift && ctrl == other.ctrl && key == other.key;
 	}
 	public String toString() {
-		return (ctrl ? "Ctrl + " : "") + (shift ? "Shift + " : "") + (alt ? "Alt + " : "") + key.name().toUpperCase();
+		StringJoiner sj = new StringJoiner(" + ");
+		if (ctrl) sj.add("Ctrl");
+		if (shift) sj.add("Shift");
+		if (alt) sj.add("Alt");
+		if (key != KeyCode.anyKey) sj.add(Strings.capitalize(key.name()));
+		return sj.toString();
 	}
 
 	public static class KeyCodeData extends Data {

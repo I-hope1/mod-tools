@@ -41,7 +41,7 @@ import static modtools.utils.ui.CellTools.rowSelf;
 /**
  * @see SettingsInit
  */
-@SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8 */, "StringTemplateMigration"})
+@SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8和安卓 */, "StringTemplateMigration"})
 public interface ISettings extends E_DataInterface {
 	String SUFFIX_ENABLED = "$enabled";
 	float  DISABLED_ALPHA = 0.7f;
@@ -132,6 +132,7 @@ public interface ISettings extends E_DataInterface {
 		return data().getFloat(name(), 0);
 	}
 	default int getColor() {
+		if (type() != Color.class) throw new IllegalStateException(STR."the settings is \{type()} not Color.class");
 		return data().get0xInt(name(), -1);
 	}
 	default Vec2 getPosition() {
@@ -247,6 +248,12 @@ public interface ISettings extends E_DataInterface {
 		}
 	}
 
+
+	@SuppressWarnings("unchecked")
+	private <T> T getArg(int i) {
+		Object[] args = (Object[]) args();
+		return (T) args[i];
+	}
 	// 方法
 	private void $(Boolean __) {
 		check(text, this::set, this::enabled, this::isSwitchOn);
@@ -309,8 +316,9 @@ public interface ISettings extends E_DataInterface {
 		colorBlock(main, text, data(), name(), getColor(), this::set);
 	}
 	/** (enumClass)  */
-	private void $(Enum<?> __) {
-		var enumClass = (Class) args();
+	private <T extends Enum<T>> void $(Enum<?> __) {
+		Enum<T> def = getArg(0);
+		Class<T> enumClass = getArg(1);
 		var enums     = new Seq<>((Enum<?>[]) enumClass.getEnumConstants());
 		list(text, this::set, new Prov<>() {
 			public Enum<?> get() {
@@ -318,11 +326,12 @@ public interface ISettings extends E_DataInterface {
 			}
 		}, enums, Enum::name, this::isSwitchOn);
 	}
-	/** 参数：({@link String} ...args)  */
+	/** 参数：({@link String}, def, ...args)  */
 	private void $(String __) {
-		var list = new Seq<>((String[]) args());
+		String   def = getArg(0);
+		String[] arg = getArg(1);
 		list(text, this::set, this::getString,
-		 list, s -> s.replaceAll("\\n", "\\\\n"));
+		 new Seq<>(arg), s -> s.replaceAll("\\n", "\\\\n"));
 	}
 
 	// TODO
@@ -330,9 +339,9 @@ public interface ISettings extends E_DataInterface {
 
 	/** (def, cons)  */
 	private void $(Drawable __) {
-		Object[]       args     = (Object[]) args();
-		Drawable[]     drawable = {getDrawable((Drawable) args[0])};
-		Cons<Drawable> cons     = as(args[1]);
+		Drawable def = getArg(0);
+		Drawable[]     drawable = {getDrawable(def)};
+		Cons<Drawable> cons     = getArg(1);
 		main.table(new Cons<>() {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);

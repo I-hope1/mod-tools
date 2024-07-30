@@ -97,12 +97,21 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// classDecl.extending = mMaker.Ident(settingsImpl);
 
 		allSwitches.clear();
+
+		ListBuffer<JCStatement> defList = new ListBuffer<>();
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				VarSymbol symbol = getSymbol(unit, tree);
 
 				collectSwitch(symbol);
+				// %name%.def(%args%[0])
+				if (newClass.args.size() >= 2 && newClass.args.get(1) instanceof JCLiteral literal
+				    && literal.value.getClass().isPrimitive()) defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
+				 mMaker.Select(mMaker.Ident(tree.name),
+					ns("def")),
+				 List.of(newClass.args.get(1)))));
+
 				// xxx(arg1, Vars.mods, xxx)
 				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
 				      && newClass.args.get(1) instanceof JCFieldAccess access)) return;
@@ -131,7 +140,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				 ), List.of(mMaker.Ident(ns("val")))
 				)),
 				mMaker.Exec(mMaker.Apply(
-			 List.nil(), mMaker.Select(
+				 List.nil(), mMaker.Select(
 					mMaker.Ident(myEvents),
 					ns("fire")
 				 ), List.of(mMaker.This(settings.type))
@@ -160,14 +169,24 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).sym)))
 			);
 		});
-		allInit.stream().filter(m1 -> m1.params.size() == 2).forEach(init -> {
+		allInit.stream().filter(m1 -> m1.params.size() >= 2).forEach(init -> {
 			addMethod(classDecl, "args", mSymtab.objectType);
 			addField(classDecl, mSymtab.objectType, "args", null);
 
+			JCExpression rhs;
+			if (init.params.size() <= 2) {
+				rhs = mMaker.Ident(init.params.get(1).name);
+			} else {
+				rhs = mMaker.NewArray(mMaker.Ident(mSymtab.objectType.tsym), List.nil(),
+				 List.from(init.params.subList(1, init.params.size()).stream()
+					.map(p -> mMaker.Ident(p.sym)).toList()));
+			}
 			init.body.stats = init.body.stats.append(
-			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("args")), mMaker.Ident(init.params.get(1).sym)))
+			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("args")), rhs))
 			);
 		});
+
+		if (!defList.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
 
 		// println(classDecl);
 	}

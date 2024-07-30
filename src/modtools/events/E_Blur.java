@@ -8,16 +8,12 @@ public enum E_Blur implements ISettings {
 	enabled,
 	/** @see ISettings#$(Integer) */
 	@Switch(dependency = "enabled")
-	scale_level(int.class, 4, 1, 16),
+	scale_level(int.class, 4/* def */, 1/* min */, 16/* max */),
 	/** @see ISettings#$(Enum) */
 	@Switch(dependency = "enabled")
-	convolution_scheme(Enum.class, DEF.class);
-
-	static {
-		convolution_scheme.def(DEF.D);
-	}
+	convolution_scheme(Enum.class, DEF.D, DEF.class);
 
 	E_Blur() { }
-	E_Blur(Class<?> type, Class<?> enumClass) { }
+	E_Blur(Class<?> type, Enum<?> obj, Class<?> clazz) { }
 	E_Blur(Class<?> type, int... args) { }
 }

@@ -94,7 +94,10 @@ public abstract class Content {
 		return btn;
 	}
 	public final String tipKey(String key) {
-		return STR."@\{modName}.tips.\{name}.\{key}";
+		return Core.bundle.get(STR."\{modName}.tips.\{name}.\{key}");
+	}
+	public final String tipKey(String key, String arg1) {
+		return Core.bundle.format(STR."\{modName}.tips.\{name}.\{key}", arg1);
 	}
 	public KeyCodeData keyCodeData() {
 		return HKeyCode.data.child(name);

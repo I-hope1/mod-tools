@@ -537,7 +537,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			MyLabel label = new MyLabel(ctor.getDeclaringClass().getSimpleName(), defaultLabel);
 			label.color.set(c_type);
 			boolean noParam = ctor.getParameterCount() == 0;
-			MenuBuilder.addShowMenuListenerp(label, () -> Seq.with(
+			MenuBuilder.addShowMenuListenerp(label, () -> ArrayUtils.seq(
 			 MenuItem.with("ctor.getter.copy", Icon.copySmall, "Cpy reflect getter", () -> copyExecutableReflection(ctor)),
 			 MenuItem.with("<init>handle.copy", o == null ? Icon.copySmall : Icon.boxSmall,
 				o == null ? "Cpy <init> handle" : "Invoke <init> method", ctorInitInvoker(o, ctor, noParam, label)),

@@ -16,6 +16,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
@@ -30,6 +31,7 @@ import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.windows.*;
 import modtools.utils.*;
+import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
 import modtools.utils.ui.WatchWindow;
 import modtools.utils.ui.search.Search;
@@ -280,7 +282,7 @@ public class IntUI {
 	 BTN button, Seq<V> list, Prov<V> holder,
 	 Cons<V> cons, Func<V, String> stringify, float minWidth, float height,
 	 boolean searchable, int align) {
-		return showSelectTable(button, (p, hide, pattern) -> {
+		SelectTable table = showSelectTable(button, (p, hide, pattern) -> {
 			p.clearChildren();
 
 			for (V item : list) {
@@ -298,8 +300,13 @@ public class IntUI {
 
 				p.image().color(Tmp.c1.set(JColor.c_underline)).growX().row();
 			}
-
 		}, searchable, align);
+		table.hidden(() -> {
+			if (list instanceof DisposableSeq) {
+				Pools.free(list);
+			}
+		});
+		return table;
 	}
 
 	/**

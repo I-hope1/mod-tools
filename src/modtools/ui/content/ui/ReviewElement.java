@@ -590,7 +590,7 @@ public class ReviewElement extends Content {
 		}
 
 		static Prov<Seq<MenuItem>> getContextMenu(MyWrapTable self, Element element, Runnable copy) {
-			return () -> Seq.with(
+			return () -> ArrayUtils.seq(
 			 MenuBuilder.copyAsJSMenu(null, copy),
 			 ConfirmList.with("clear", Icon.trashSmall, "@clear", "@confirm.remove", () -> {
 				 self.remove();

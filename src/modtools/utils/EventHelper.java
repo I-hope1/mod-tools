@@ -1,12 +1,13 @@
 package modtools.utils;
 
-import arc.func.*;
+import arc.func.Boolc;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.util.Timer;
+import arc.util.*;
 import arc.util.Timer.Task;
+import arc.util.pooling.Pool.Poolable;
 import mindustry.Vars;
 import modtools.ui.IntUI;
 
@@ -40,30 +41,7 @@ public class EventHelper {
 		 click1 = click == null ? null : runT(click::run),
 		 // 双击
 		 d_click1 = d_click == null ? null : runT(d_click::run);
-		class DoubleClick extends ClickListener {
-			final Task clickTask = TaskManager.newTask(() -> {
-				if (click1 != null) click1.run();
-			});
-
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				last.set(mouseVec);
-				return super.touchDown(event, x, y, pointer, button);
-			}
-			public void clicked(InputEvent event, float x, float y) {
-				if (last.dst(mouseVec) > IntUI.MAX_OFF) return;
-				super.clicked(event, x, y);
-				if (click1 != null && d_click1 == null) {
-					click1.run();
-					return;
-				}
-				if (TaskManager.scheduleOrCancel(0.3f, clickTask)) {
-					last.set(mouseVec);
-					return;
-				}
-				if (mouseVec.dst(last) < IntUI.MAX_OFF) d_click1.run();
-			}
-		}
-		elem.addListener(new DoubleClick());
+		elem.addListener(new DoubleClick().init(click1, d_click1));
 		return elem;
 	}
 	/**
@@ -76,7 +54,14 @@ public class EventHelper {
 	 */
 	public static <T extends Element> T
 	longPress(T elem, final long duration, final Boolc boolc0) {
-		Boolc boolc = b -> Tools.runLoggedException(() -> boolc0.get(b));
+		Boolc boolc = b -> {
+			try {
+				boolc0.get(b);
+			} catch (Throwable e) {
+				Log.err(e);
+				IntUI.showException(e);
+			}
+		};
 		elem.addCaptureListener(new LongPressListener(boolc, duration));
 		return elem;
 	}
@@ -165,6 +150,41 @@ public class EventHelper {
 			if (longPress) return;
 			if (task.isScheduled() && pressed) boolc.get(false);
 			task.cancel();
+		}
+	}
+	public static class DoubleClick extends ClickListener implements Poolable {
+		Runnable click, d_click;
+		public DoubleClick() { }
+		public DoubleClick init(Runnable click, Runnable d_click) {
+			this.click = click;
+			this.d_click = d_click;
+			return this;
+		}
+		final Task clickTask = TaskManager.newTask(() -> {
+			if (click != null) click.run();
+		});
+
+		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			last.set(mouseVec);
+			return super.touchDown(event, x, y, pointer, button);
+		}
+		public void clicked(InputEvent event, float x, float y) {
+			if (last.dst(mouseVec) > IntUI.MAX_OFF) return;
+			super.clicked(event, x, y);
+			if (click != null && d_click == null) {
+				click.run();
+				return;
+			}
+			if (TaskManager.scheduleOrCancel(0.3f, clickTask)) {
+				last.set(mouseVec);
+				return;
+			}
+			if (mouseVec.dst(last) < IntUI.MAX_OFF) d_click.run();
+		}
+		public void reset() {
+			click = null;
+			d_click = null;
+			clickTask.cancel();
 		}
 	}
 }

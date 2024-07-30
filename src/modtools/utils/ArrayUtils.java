@@ -3,6 +3,8 @@ package modtools.utils;
 import arc.func.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
+import arc.util.pooling.Pool.Poolable;
+import arc.util.pooling.Pools;
 
 import java.lang.reflect.Array;
 import java.util.*;
@@ -109,6 +111,22 @@ public class ArrayUtils {
 			sum += summer.get(t);
 		}
 		return sum;
+	}
+
+	public static <T>Seq<T> seq(T ...items) {
+		Seq<T> seq = (Seq<T>) Pools.get(DisposableSeq.class, DisposableSeq::new).obtain();
+		return seq.add(items);
+	}
+
+	public static <T>Seq<T> seq(Iterable<T> items) {
+		Seq<T> seq = (Seq<T>) Pools.get(DisposableSeq.class, DisposableSeq::new).obtain();
+		return seq.addAll(items);
+	}
+	@SuppressWarnings("rawtypes")
+	public static class DisposableSeq extends Seq implements Poolable {
+		public void reset() {
+			clear();
+		}
 	}
 
 

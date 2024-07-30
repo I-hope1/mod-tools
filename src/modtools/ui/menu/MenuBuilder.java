@@ -7,12 +7,13 @@ import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.Align;
-import arc.util.pooling.Pools;
+import arc.util.pooling.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.SelectTable;
+import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.EventHelper;
 
 import static modtools.IntVars.mouseVec;
@@ -35,7 +36,10 @@ public class MenuBuilder {
 	 */
 	public static void showMenuListDispose(Prov<Seq<MenuItem>> prov) {
 		Seq<MenuItem> list = prov.get();
-		showMenuList(list, () -> Pools.freeAll(list, false));
+		showMenuList(list, () -> {
+			Pools.freeAll(list, false);
+			if (list instanceof DisposableSeq) Pools.free(list);
+		});
 	}
 	/**
 	 * @param list 关闭后自动销毁

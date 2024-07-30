@@ -143,7 +143,9 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 
 	public void setAndProcessText(Object val) {
+		int lastLength = text.length();
 		text.setLength(0);
+		text.ensureCapacity(lastLength);
 		colorMap.clear();
 		startIndexMap.clear();
 		endIndexMap.clear();
@@ -198,7 +200,7 @@ public abstract class ValueLabel extends InlineLabel {
 			boolean checkTail = false;
 			text.append('[');
 
-			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new);
+			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
 			IterCons       cons = pool.obtain().init(this, val, text);
 			try {
 				try {
@@ -413,7 +415,7 @@ public abstract class ValueLabel extends InlineLabel {
 			}));
 			list.add(DisabledList.withd("style.set", Icon.copySmall, "Set Style", () -> val == null, () -> {
 				IntUI.showSelectListTable(this,
-				 Seq.with(ShowUIList.styleKeyMap.keySet())
+				 ArrayUtils.seq(ShowUIList.styleKeyMap.keySet())
 					.retainAll(type::isInstance),
 				 () -> (Style) val, this::setNewVal,
 				 s -> FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(s)),

@@ -13,6 +13,7 @@ import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.menu.MenuItem;
+import modtools.utils.ArrayUtils;
 import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.Field;
@@ -122,7 +123,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 	}
 	public void addEnumSetter() {
 		clicked(() -> IntUI.showSelectListEnumTable(this,
-		 Seq.with(type.getEnumConstants()).<Enum>as(),
+		 ArrayUtils.seq(type.getEnumConstants()).<Enum>as(),
 		 () -> (Enum) val, this::setFieldValue,
 		 Float.NEGATIVE_INFINITY, 42,
 		 true, Align.left));

@@ -53,7 +53,8 @@ public class MyFonts {
 				if (glyph == null) return null;
 				Glyph newGlyph = new Glyph();
 				Tools.clone(glyph1, newGlyph, Glyph.class, (Seq<String>) null);
-				newGlyph.page = 1;
+				newGlyph.page = 1; // fonts.def里
+				setGlyph(ch, glyph);
 				glyph = newGlyph;
 				// float baseLine = ((flipped ? -ascent : ascent) + capHeight) / scaleY;
 				glyph.yoffset = glyph.yoffset - 4;

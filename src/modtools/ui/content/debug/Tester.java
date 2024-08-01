@@ -742,7 +742,7 @@ public class Tester extends Content {
 		initScript();
 		loadSettings();
 		try {
-			Tester.class.getClassLoader().loadClass(ForRhino.class.getName());
+			Class.forName("modtools.override.ForRhino");
 		} catch (ClassNotFoundException e) {
 			throw new RuntimeException(e);
 		}

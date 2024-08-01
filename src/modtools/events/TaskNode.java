@@ -1,5 +1,6 @@
 package modtools.events;
 
+import arc.Core;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
@@ -7,9 +8,11 @@ import arc.util.Timer.Task;
 import modtools.IntVars;
 import modtools.events.ExecuteTree.Error;
 import modtools.events.ExecuteTree.*;
+import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
+import rhino.*;
 
 import static modtools.IntVars.mouseVec;
 import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
@@ -88,13 +91,13 @@ public class TaskNode {
 	public void apply(boolean async) {
 		if (!(task instanceof MyTask) && async) throw new IllegalStateException("async can be applied only for MyTask.");
 		interrupt();
-		if (async) {
-			DelegateRun newRun = new DelegateRun(task, () -> intervalSeconds);
-			((MyTask) task).delegate = newRun;
-			IntVars.EXECUTOR.get().execute(newRun);
+		if (!async) {
+			timer.scheduleTask(task, 0, intervalSeconds, repeatCount);
 			return;
 		}
-		timer.scheduleTask(task, 0, intervalSeconds, repeatCount);
+		DelegateRun newRun = new DelegateRun();
+		((MyTask) task).delegate = newRun;
+		IntVars.EXECUTOR.get().execute(newRun);
 	}
 	public boolean running() {
 		return task.isScheduled() || (task instanceof MyTask t && t.delegate != null);
@@ -152,5 +155,35 @@ public class TaskNode {
 		IntUI.showSelectTable(mouseVec.cpy(), (p, hide, search) -> {
 			p.add(main).grow();
 		}, false).hidden(() -> main.clearChildren());
+	}
+
+	public class DelegateRun implements Runnable {
+		public DelegateRun() {
+		}
+		public void run() {
+			if (run == null) return;
+			run.run();
+			/* sec -> ms */
+			float v = intervalSeconds * 1000;
+			Threads.sleep((long) (v - Time.delta / 60), (int) (v - ((long) v) * 100000));
+			Core.app.post(this);
+		}
+		public void stop() {
+			task.cancel();
+		}
+	}
+
+	public static class JSRun extends Task {
+		public final String code;
+		public final Script script;
+		public final Scriptable scope;
+		public JSRun(String code, Scriptable scope) {
+			this.code = code;
+			this.scope = scope;
+			script = IScript.cx.compileString(code,  "<custom>", 1);
+		}
+		public void run() {
+			script.exec(IScript.cx, scope);
+		}
 	}
 }

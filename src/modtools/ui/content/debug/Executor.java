@@ -2,6 +2,7 @@ package modtools.ui.content.debug;
 
 import arc.func.*;
 import arc.graphics.Color;
+import arc.input.KeyCode;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
@@ -16,7 +17,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
-import modtools.jsfunc.IScript;
+import modtools.events.TaskNode.JSRun;
 import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
@@ -37,7 +38,7 @@ public class Executor extends Content {
 
 	public  Window ui;
 	/** @see OK#code() */
-	private int    statusCode = ~(1 << 3);
+	private int    statusCode = -1;
 
 	public void load() {
 	}
@@ -54,10 +55,9 @@ public class Executor extends Content {
 		 StatusList.values());
 		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestCode(code -> ExecuteTree.context(customTask.get(), () -> {
-				BaseFunction scope = new BaseFunction(JSRequest.topScope, new BaseFunction());
+				BaseFunction scope = new BaseFunction(JSRequest.topScope, null);
 				ExecuteTree.node("custom",
-					() -> IScript.cx.evaluateString(scope,
-					 code, "<custom>", 1))
+					new JSRun(code, scope))
 				 .code(code)
 				 .resubmitted().apply();
 			}));
@@ -133,11 +133,15 @@ public class Executor extends Content {
 					event.stop();
 				}
 			});
-			EventHelper.longPressOrRclick(button, _ -> {
-				MenuBuilder.showMenuListDispose(() -> Seq.with(
-				 MenuItem.with("copy.asjs", Icon.copySmall, "cpy as JS", () -> {
-					 if (node.code != null) JSFunc.copyText(node.code);
-				 })));
+			MenuBuilder.addShowMenuListenerp(button, () -> Seq.with(
+			 node.code == null ? null : MenuItem.with("copy.code", Icon.copySmall, "cpy code", () -> {
+				 if (node.code != null) JSFunc.copyText(node.code);
+			 })));
+			button.addListener(new ClickListener() {
+				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					event.cancel();
+					return false;
+				}
 			});
 			button.table(right -> {
 				if (node.isResubmitted()) {

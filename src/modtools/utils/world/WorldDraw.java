@@ -24,6 +24,7 @@ public class WorldDraw {
 	public final Seq<Boolp> drawSeq = new Seq<>();
 	public       float      alpha   = 1;
 
+	@Deprecated
 	WorldDraw(float z) {
 		this(z, null);
 	}
@@ -78,7 +79,9 @@ public class WorldDraw {
 	}
 
 	public static TextureRegion drawRegion(int width, int height, Runnable draw) {
-		return new TextureRegion(drawTexture(width, height, draw));
+		TextureRegion region = new TextureRegion(drawTexture(width, height, draw));
+		region.flip(false, true);
+		return region;
 	}
 
 	public static TextureRegion drawRegion(FrameBuffer buffer, Runnable draw) {

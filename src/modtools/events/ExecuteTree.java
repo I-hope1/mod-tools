@@ -1,6 +1,5 @@
 package modtools.events;
 
-import arc.func.Floatp;
 import arc.graphics.Color;
 import arc.scene.style.Drawable;
 import arc.util.*;
@@ -9,8 +8,8 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.struct.MySet;
-import modtools.utils.ui.ReflectTools.MarkedCode;
 import modtools.utils.Tools;
+import modtools.utils.ui.ReflectTools.MarkedCode;
 
 public class ExecuteTree {
 	private static TaskNode context = null;
@@ -139,33 +138,5 @@ public class ExecuteTree {
 		public int code() {
 			return 4;
 		}
-	}
-
-
-	public static class JSRun extends DelegateRun {
-		public String code;
-		public JSRun(Runnable delegate, Floatp intervalSeconds, String code) {
-			super(delegate, intervalSeconds);
-			this.code = code;
-		}
-	}
-	public static class DelegateRun implements Runnable {
-		Runnable delegate;
-		Floatp   intervalSeconds;
-		public DelegateRun(Runnable delegate, Floatp intervalSeconds) {
-			this.delegate = delegate;
-			this.intervalSeconds = intervalSeconds;
-		}
-		public void run() {
-			if (delegate == null) return;
-			delegate.run();
-			/* sec -> ms */
-			float v = intervalSeconds.get() * 1000;
-			Threads.sleep((long) v, (int) (v - ((long) v) * 100000));
-			run();
-		}
-		public void stop() {
-			delegate = null;
-		}
-	}
+ 	}
 }

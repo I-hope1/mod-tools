@@ -526,7 +526,11 @@ public abstract class WFunction<T> {
 	static <R> Seq<MenuItem> getMenuLists(WFunction<R> function, List<R> list) {
 		Seq<MenuItem> seq = new Seq<>(function.FUNCTIONS.size);
 		function.FUNCTIONS.each((k, r) -> {
-			seq.add(MenuItem.with(k.replace("@", ""), nameToIcon.get(k), k, () -> r.get(list)));
+			seq.add(MenuItem.with(
+			 k.replace("@", ""),
+			 nameToIcon.get(k, Styles.none),
+			 k,
+			 () -> r.get(list)));
 		});
 		return seq;
 	}

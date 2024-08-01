@@ -12,19 +12,19 @@ import arc.math.geom.QuadTree.QuadTreeObject;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
-import arc.scene.style.*;
+import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
-import mindustry.Vars;
+import arc.util.pooling.Pool;
 import mindustry.content.Blocks;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.input.InputHandler;
 import mindustry.type.*;
-import mindustry.ui.Styles;
+import mindustry.ui.*;
 import mindustry.world.Tile;
 import mindustry.world.blocks.environment.*;
 import modtools.IntVars;
@@ -32,7 +32,7 @@ import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.TopGroup.*;
+import modtools.ui.TopGroup.BackElement;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.linstener.*;
@@ -143,7 +143,7 @@ public class Selection extends Content {
 		pane.shown(() -> Time.runTask(3, pane::display));
 		pane.hidden(this::hide);
 		pane.update(() -> {
-			if (Vars.state.isMenu()) {
+			if (state.isMenu()) {
 				pane.hide();
 			}
 		});
@@ -225,7 +225,7 @@ public class Selection extends Content {
 			});
 			TeamFunctionBuild("@editor.teams", (list, team) -> {
 				each(list, unit -> {
-					if (Vars.player.unit() == unit) Vars.player.team(team);
+					if (player.unit() == unit) player.team(team);
 					unit.team(team);
 				});
 			});
@@ -294,7 +294,7 @@ public class Selection extends Content {
 	}
 	public Button buildButton(boolean isSmallized) {
 		Button btn = buildButton(isSmallized, () -> isSelecting);
-		btn.setDisabled(() -> Vars.state.isMenu());
+		btn.setDisabled(() -> state.isMenu());
 		return btn;
 	}
 	public void build() {
@@ -332,7 +332,36 @@ public class Selection extends Content {
 				return Tmp.v3.set(Mathf.random(10F), Mathf.random(10F));
 			}
 		}
+		TextureRegion[] icons = new TextureRegion[9];
+		public TextureRegion lazyGetIcon(int i) {
+			if (icons[i] != null) return icons[i];
+			String text = switch (i) {
+				case 0 -> "Fire";
+				case 1 -> "Label";
+				case 2 -> "Player";
+				case 3 -> "Puddle";
+				case 4 -> "Weather";
+				case 5 -> "Drawc";
+				case 6 -> "Pool";
+				case 7 -> "Graph";
+				case 8 -> "Sync";
+				default -> throw new IllegalStateException("Unexpected value: " + i);
+			};
+			return icons[i] = drawRegion(48, 48, () -> {
+				Draw.color();
+				Fonts.def.draw(text, 8, 36, Color.white, 1, false, Align.left);
+			});
+		}
 		public TextureRegion getIcon(T key) {
+			if (key instanceof Fire) return lazyGetIcon(0);
+			if (key instanceof WorldLabel) return lazyGetIcon(1);
+			if (key instanceof Player) return lazyGetIcon(2);
+			if (key instanceof Puddle) return lazyGetIcon(3);
+			if (key instanceof WeatherState) return lazyGetIcon(4);
+			if (key instanceof Drawc) return lazyGetIcon(5);
+			if (key instanceof Pool.Poolable) return lazyGetIcon(6);
+			if (key instanceof PowerGraphUpdaterc) return lazyGetIcon(7);
+			if (key instanceof Syncc) return lazyGetIcon(8);
 			return Core.atlas.white();
 		}
 		public boolean checkRemove(T item) {
@@ -391,7 +420,7 @@ public class Selection extends Content {
 		}
 
 		public void buildTable(T unit, Table table) {
-			table.image(IntUI.icon(unit.type())).row();
+			table.image(icon(unit.type())).row();
 			// table.label(() -> "(" + unit.x + ", " + unit.y + ')');
 		}
 		static final double sqrt2 = Math.sqrt(2);
@@ -550,7 +579,7 @@ public class Selection extends Content {
 	private boolean drawArrow = false;
 
 	Mat mat = new Mat();
-	/** @see mindustry.graphics.OverlayRenderer#drawTop */
+	/** @see OverlayRenderer#drawTop */
 	public void drawFocus(Object focus) {
 		if (focus == null) return;
 		if (focus instanceof Seq<?> seq) {
@@ -789,7 +818,7 @@ public class Selection extends Content {
 				}
 				toBack();
 
-				if (Vars.mobile || Time.millis() - lastToggleTime <= toggleDelay
+				if (mobile || Time.millis() - lastToggleTime <= toggleDelay
 				    || !fixedKeyCode.isPress()) return;
 
 				lastToggleTime = Time.millis();
@@ -803,7 +832,7 @@ public class Selection extends Content {
 		}
 		public Element hit(float x, float y, boolean touchable) {
 			Element el = super.hit(x, y, touchable);
-			if (Vars.mobile) {
+			if (mobile) {
 				updatePosUI = el == null;
 				focusDisabled = !updatePosUI;
 			}
@@ -938,7 +967,7 @@ public class Selection extends Content {
 	}
 	class SelectListener extends WorldSelectListener {
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			if (button != KeyCode.mouseLeft || Vars.state.isMenu()) {
+			if (button != KeyCode.mouseLeft || state.isMenu()) {
 				hide();
 				mouseChanged = false;
 				return false;
@@ -994,15 +1023,16 @@ public class Selection extends Content {
 				});
 			}
 			if (Settings.others.enabled()) {
-				Groups.all.each(unit -> {
-					if (unit instanceof Bullet) return false;
-					if (unit instanceof Unit) return false;
-					if (!(unit instanceof Position pos)) return false;
+				Groups.all.each(entity -> {
+					if (entity instanceof Building) return false;
+					if (entity instanceof Bullet) return false;
+					if (entity instanceof Unit) return false;
+					if (!(entity instanceof Position pos)) return false;
 					// 返回单位是否在所选区域内
 					return start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
-				}, unit -> {
-					if (!others.list.contains(unit)) {
-						others.add(unit);
+				}, entity -> {
+					if (!others.list.contains(entity)) {
+						others.add(entity);
 					}
 				});
 			}
@@ -1063,11 +1093,11 @@ public class Selection extends Content {
 					int    c   = 0;
 
 					for (Team team : arr) {
-						ImageButton b = t1.button(IntUI.whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
+						ImageButton b = t1.button(whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
 							data.put("defaultTeam", team.id);
 							defaultTeam = team;
 						}).size(42).get();
-						b.getStyle().imageUp = IntUI.whiteui.tint(team.color);
+						b.getStyle().imageUp = whiteui.tint(team.color);
 						b.update(() -> b.setChecked(defaultTeam == team));
 						if (++c % 3 == 0) {
 							t1.row();

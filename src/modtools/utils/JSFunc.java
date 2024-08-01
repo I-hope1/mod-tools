@@ -60,8 +60,8 @@ public class JSFunc
 		return Selection.allFunctions.get(name);
 	}
 
-	public static Texture drawTexture(int w, int h, Runnable run) {
-		return WorldDraw.drawTexture(w, h,run);
+	public static TextureRegion drawRegion(int w, int h, Runnable run) {
+		return WorldDraw.drawRegion(w, h,run);
 	}
 
 

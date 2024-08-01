@@ -16,6 +16,8 @@ import modtools.ui.IntUI.SelectTable;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.EventHelper;
 
+import java.util.Objects;
+
 import static modtools.IntVars.mouseVec;
 import static modtools.utils.ElementUtils.findClosestPane;
 import static modtools.utils.ui.CellTools.rowSelf;
@@ -36,6 +38,7 @@ public class MenuBuilder {
 	 */
 	public static void showMenuListDispose(Prov<Seq<MenuItem>> prov) {
 		Seq<MenuItem> list = prov.get();
+		if (list.find(Objects::nonNull) == null) return;
 		showMenuList(list, () -> {
 			Pools.freeAll(list, false);
 			if (list instanceof DisposableSeq) Pools.free(list);

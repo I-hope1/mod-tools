@@ -182,6 +182,9 @@ public class Selection extends Content {
 					b.changeTeam(team);
 				});
 			});
+			ListFunction("@selection.reset", () -> content.blocks(), null, (list, block) -> {
+				each(list, b -> b.tile.setBlock(block));
+			});
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
 				if (!NumberHelper.isPositiveInt(tmpAmount[0])) return;
 				each(list, b -> {
@@ -398,8 +401,16 @@ public class Selection extends Content {
 			});
 		}
 
+		final ObjectMap<Class<?>, TextureRegion> class2icon = new ObjectMap<>();
 		public TextureRegion getIcon(T key) {
-			return Core.atlas.white();
+			if (key.type == null) return Core.atlas.find("error");
+			return class2icon.get(key.type.getClass(), () -> {
+				return drawRegion(32, 32, () -> {
+					Mathf.rand.setSeed(key.type.id * 9999);
+					Draw.color(Mathf.random(), Mathf.random(), Mathf.random(), 1);
+					Fill.crect(0, 0, 32, 32);
+				});
+			});
 		}
 		public boolean checkRemove(T item) {
 			return !item.isAdded();
@@ -482,10 +493,10 @@ public class Selection extends Content {
 			table.table(t -> {
 				t.defaults().size(75, 42);
 				var style = HopeStyles.flatt;
-				t.button("物品统计", style, () -> sumItems(content.items(),
+				t.button("@items.summary", style, () -> sumItems(content.items(),
 				 i -> build.items == null ? 0 : build.items.get(i),
 				 getItemSetter(build)));
-				t.button("液体统计", style, () -> sumItems(content.liquids(),
+				t.button("@liquids.summary", style, () -> sumItems(content.liquids(),
 				 l -> build.liquids == null ? 0 : build.liquids.get(l),
 				 getLiquidSetter(build)));
 			});

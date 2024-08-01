@@ -104,7 +104,9 @@ public abstract class WFunction<T> {
 			select.clear();
 			selectMap.clear();
 			Tools.each(list, t -> {
-				selectMap.get(getIcon(t), OrderedSet::new).add(t);
+				TextureRegion icon = getIcon(t);
+				if (icon == null) icon = Core.atlas.find("error");
+				selectMap.get(icon, OrderedSet::new).add(t);
 			});
 			int i = 0;
 			for (Entry<TextureRegion, OrderedSet<T>> entry : selectMap) {

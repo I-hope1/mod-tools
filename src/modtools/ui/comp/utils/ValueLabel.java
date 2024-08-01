@@ -378,8 +378,8 @@ public abstract class ValueLabel extends InlineLabel {
 			resolveThrow(th);
 			super.setText(String.valueOf(val));
 		}
+		layout();
 		invalidateHierarchy();
-		// layout();
 	}
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
 		Vec2 pos = ElementUtils.getAbsolutePos(el);

@@ -179,6 +179,8 @@ public class InlineLabel extends NoMarkupLabel {
 			layout.runs.addAll(newRuns);
 		}
 		cache.setText(layout, x, y);
+
+		if(fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
 
 	protected final IntMap<Color> colorMap = new IntMap<>();

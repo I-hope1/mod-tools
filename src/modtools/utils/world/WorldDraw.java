@@ -100,9 +100,12 @@ public class WorldDraw {
 		buffer.bind();
 		// 清空
 		ElementUtils.clearScreen();
-		draw.run();
-		// 结束
-		buffer.end();
+		try {
+			draw.run();
+		} finally {
+			// 结束
+			buffer.end();
+		}
 		// buffer.dispose();
 		// texture.bind(1);
 		return buffer.getTexture();

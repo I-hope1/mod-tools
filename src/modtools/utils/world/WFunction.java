@@ -8,8 +8,9 @@ import arc.math.*;
 import arc.math.geom.*;
 import arc.scene.event.Touchable;
 import arc.scene.style.*;
-import arc.scene.ui.Button;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.*;
+import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
@@ -34,6 +35,7 @@ import modtools.ui.content.ui.PairProv;
 import modtools.ui.content.world.Selection;
 import modtools.ui.content.world.Selection.Settings;
 import modtools.ui.effect.*;
+import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
@@ -54,10 +56,20 @@ public abstract class WFunction<T> {
 	public static void init(Selection selection) {
 		SC = selection;
 	}
+
+	public static final ObjectMap<String, Drawable> nameToIcon = ObjectMap.of(
+	 "Copy", Icon.copySmall,
+	 "@selection.reset", Icon.editSmall,
+	 "@clear", Icon.trashSmall,
+	 "@selection.forceClear",Icon.trashSmall,
+	 "@heal", HopeIcons.heal,
+	 "@kill", HopeIcons.kill,
+	 "@editor.teams", Icon.playersSmall
+	);
 	public final Table   wrap    = new Table();
 	public final Table   main    = new Table();
 	public final Table   buttons = new Table();
-	public       List<T> list    = new MyVector();
+	public final List<T> list    = new MyVector();
 
 
 	// for select
@@ -83,7 +95,7 @@ public abstract class WFunction<T> {
 		Tools.TASKS.add(() -> WD.alpha = SC.selectFunc == this ? 0.7f : 0.1f);
 		executor = AThreads.impl.boundedExecutor(name + "-each", 1);
 
-		main.button("Show All", HopeStyles.blackt, this::showAll).growX().height(Selection.buttonHeight).row();
+		main.button("View All", HopeStyles.blackt, this::viewAll).growX().height(Selection.buttonHeight).row();
 		main.add(buttons).growX().row();
 		buildButtons();
 
@@ -172,10 +184,10 @@ public abstract class WFunction<T> {
 	private void buildButtons() {
 		buttons.defaults().height(Selection.buttonHeight).growX();
 
-		buttons.button("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
+		newButton("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
 		});
-		buttons.button("SelectAll", Icon.menuSmall, HopeStyles.flatTogglet, IntVars.EMPTY_RUN)
+		newButton("PickAll", Icon.menuSmall, HopeStyles.flatTogglet, IntVars.EMPTY_RUN)
 		 .with(b -> b.clicked(() -> {
 			 boolean all = select.size != selectMap.size;
 			 select.clear();
@@ -184,38 +196,40 @@ public abstract class WFunction<T> {
 		 .update(b -> b.setChecked(select.size == selectMap.size));
 		buttons.row();
 
-		buttons.button("Run", Icon.okSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
+		newButton("Run", Icon.okSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
 		 .with(b -> b.clicked(() -> {
-			MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
-		}))
+			 MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
+		 }))
 		 .disabled(_ -> select.isEmpty());
 		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
-			JSRequest.requestForSelection(mergeList(), null, boolf -> {
-				int size = select.sum(seq -> seq.size);
-				select.each(seq -> {
-					var b    = ((Boolf<T>) boolf);
-					var iter = seq.iterator();
-					while (iter.hasNext()) {
-						if (!b.get(iter.next())) iter.remove();
-					}
-				});
-				showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
-				 .sticky = true;
-			});
-		})
+			 JSRequest.requestForSelection(mergeList(), null, boolf -> {
+				 int size = select.sum(seq -> seq.size);
+				 select.each(seq -> {
+					 var b    = ((Boolf<T>) boolf);
+					 var iter = seq.iterator();
+					 while (iter.hasNext()) {
+						 if (!b.get(iter.next())) iter.remove();
+					 }
+				 });
+				 showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
+					.sticky = true;
+			 });
+		 })
 		 .disabled(_ -> select.size == 0);
 		buttons.row();
 
-		buttons.button("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
-			drawAll = !drawAll;
-		})
-		 .update(t -> t.setChecked(drawAll));
-		buttons.button("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
-			clearList();
-			changeEvent.run();
-		})
-		 .update(t -> t.setChecked(drawAll));
+		newButton("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
+			 drawAll = !drawAll;
+		 }).update(t -> t.setChecked(drawAll));
+
+		newButton("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
+			 clearList();
+			 changeEvent.run();
+		 }).update(t -> t.setChecked(drawAll));
 		buttons.row();
+	}
+	private Cell<TextButton> newButton(String name, TextureRegionDrawable icon, TextButtonStyle style, Runnable runnable) {
+		return buttons.button(name, icon, style, runnable).tooltip(SC.tipKey(name.toLowerCase()));
 	}
 
 	private List<T> mergeList() {
@@ -280,7 +294,7 @@ public abstract class WFunction<T> {
 		if (main.parent == wrap) return;
 		wrap.add(main).grow();
 	}
-	public final void showAll() {
+	public final void viewAll() {
 		new ShowAllWindow().show();
 	}
 
@@ -512,7 +526,7 @@ public abstract class WFunction<T> {
 	static <R> Seq<MenuItem> getMenuLists(WFunction<R> function, List<R> list) {
 		Seq<MenuItem> seq = new Seq<>(function.FUNCTIONS.size);
 		function.FUNCTIONS.each((k, r) -> {
-			seq.add(MenuItem.with(k.replace("@", ""), null, k, () -> r.get(list)));
+			seq.add(MenuItem.with(k.replace("@", ""), nameToIcon.get(k), k, () -> r.get(list)));
 		});
 		return seq;
 	}

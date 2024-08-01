@@ -60,6 +60,10 @@ public class JSFunc
 		return Selection.allFunctions.get(name);
 	}
 
+	public static Texture drawTexture(int w, int h, Runnable run) {
+		return WorldDraw.drawTexture(w, h,run);
+	}
+
 
 	/** 双击复制文本内容 */
 	public static void addDClickCopy(Label label) {

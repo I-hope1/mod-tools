@@ -687,7 +687,7 @@ public class IntUI {
 			};
 		}
 		public ITooltip(Prov<CharSequence> prov) {
-			this(t -> t.background(Styles.black6).margin(4f).label(prov));
+			this(t -> t.background(Styles.black6).margin(6f).label(prov));
 		}
 		/** {@inheritDoc} */
 		public ITooltip(Cons<Table> contents, Runnable show) {

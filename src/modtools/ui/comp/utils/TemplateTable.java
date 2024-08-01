@@ -10,7 +10,7 @@ public class TemplateTable<R> extends Table {
 
 	R NORMAL;
 	public        Boolf<R> validator;
-	public        boolean  all;
+	public        boolean  noFilter;
 	private final Runnable rebuild;
 	public TemplateTable(R NORMAL, Boolf<R> boolf) {
 		this.NORMAL = NORMAL;
@@ -18,7 +18,7 @@ public class TemplateTable<R> extends Table {
 
 		update(rebuild = () -> {
 			template.filter(p -> {
-				if (all || p == NORMAL) return true;
+				if (noFilter || p == NORMAL) return true;
 				return boolf.get(p);
 			});
 			super.clearChildren();
@@ -48,7 +48,9 @@ public class TemplateTable<R> extends Table {
 	}
 	/** 添加用于切换是否显示所有的单选框 */
 	public void addAllCheckbox(Table cont) {
-		cont.check("View All", all, b -> all = b).growX();
+		cont.check("No Filter", noFilter, b -> noFilter = b)
+		 .tooltip("@mod-tools.tips.template.no_filter")
+		 .growX();
 	}
 
 	public void updateNow() {

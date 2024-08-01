@@ -159,7 +159,6 @@ public class ModTools extends Mod {
 		load("MyShaders", MyShaders::load);
 		load("MyFonts", MyFonts::load);
 		load("HopeInput", HopeInput::load);
-		// new DrawablePicker().show(IntUI.whiteui, true, _ -> {});
 		if (isDesktop()) {
 			load("DropMod", DropFile::load);
 		}

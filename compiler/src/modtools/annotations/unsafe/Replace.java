@@ -62,12 +62,13 @@ public class Replace {
 	private static void extendingFunc0() throws Exception {
 		accessOverride();
 
-		other();
-
-		forcePreview();
 		forceJavaVersion();
 
+		forcePreview();
+
 		moduleExports();
+
+		other();
 	}
 	private static void moduleExports() throws Exception {
 		removeKey(JCDiagnostic.Factory.class, () -> new JCDiagnostic.Factory(context) {
@@ -87,6 +88,7 @@ public class Replace {
 			} catch (IllegalAccessException | InvocationTargetException e) {
 				throw new RuntimeException(e);
 			}
+
 			Set<ExportsDirective> set = m.exports.stream().collect(Collectors.toSet());
 			set.removeIf(d -> d.packge.fullname.isEmpty());
 			m.exports = List.from(set);
@@ -204,7 +206,7 @@ public class Replace {
 			}
 		 ));
 	}
-	private static void fixSyntaxError() {
+	public static void fixSyntaxError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
 		ListBuffer<JCDiagnostic>  buffer  = new ListBuffer<>();
 
@@ -237,7 +239,7 @@ public class Replace {
 		setAccess(DeferredDiagnosticHandler.class, handler, "deferred", buffer);
 	}
 
-	static void forceJavaVersion() {
+	public static void forceJavaVersion() {
 		Options.instance(context).keySet().stream()
 		 .filter(f -> f.startsWith("-AtargetVersion=")).findFirst()
 		 .map(v -> v.substring("-AtargetVersion=".length()))
@@ -255,11 +257,11 @@ public class Replace {
 	}
 	private static void forcePreview() {
 		try {
-			forceEnabledPreview0();
+			forceEnablePreview0();
 		} catch (NoClassDefFoundError ignored) { }
 	}
 
-	private static void forceEnabledPreview0() {
+	private static void forceEnablePreview0() {
 		Preview preview = Preview.instance(context);
 		if (!preview.isEnabled()) {
 			setAccess(Preview.class, preview, "enabled", true);

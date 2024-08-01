@@ -23,6 +23,7 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
+import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
@@ -238,7 +239,7 @@ public class ModTools extends Mod {
 		// 加载前置
 		try {
 			Fi toFi = Vars.dataDirectory.child(STR."tmp/mod-tools-\{fileName}.jar");
-			IntVars.delete(toFi);
+			FileUtils.delete(toFi);
 			sourceFi.copyTo(toFi);
 			ClassLoader loader = Vars.platform.loadJar(toFi, IntVars.mainLoader);
 			IntVars.mainLoader.addChild(loader);

@@ -11,4 +11,8 @@ public class FileUtils {
 		}
 		return child;
 	}
+	/** @return {@code true} if the file be deleted successfully */
+	public static boolean delete(Fi fi) {
+		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
+	}
 }

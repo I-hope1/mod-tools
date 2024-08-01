@@ -17,14 +17,13 @@ import arc.scene.ui.layout.*;
 import arc.struct.ObjectSet;
 import arc.util.*;
 import arc.util.Timer.Task;
-import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.struct.MySet;
-import modtools.ui.*;
+import modtools.ui.HopeStyles;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.linstener.*;
@@ -37,10 +36,10 @@ import modtools.utils.JSFunc.JColor;
 import modtools.utils.ui.search.*;
 
 import static arc.Core.graphics;
+import static modtools.IntVars.mouseVec;
 import static modtools.ui.Contents.window_manager;
 import static modtools.ui.IntUI.*;
-import static modtools.utils.Tools.*;
-import static modtools.IntVars.mouseVec;
+import static modtools.utils.Tools.as;
 
 /**
  * <p>浮动的窗口，可以缩放，{@link #toggleMinimize() 最小化}，{@link #toggleMaximize() 最大化}</p>
@@ -817,7 +816,6 @@ public class Window extends Table implements Position {
 		private void applyAction(float toValue) {
 			if (last != null) {
 				titleTable.removeAction(last);
-				Pools.free(last);
 			} else last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);
 			last.reset();
 			last.setTime(0);

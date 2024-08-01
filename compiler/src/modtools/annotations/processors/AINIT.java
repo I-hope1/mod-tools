@@ -10,7 +10,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import java.util.Set;
 
-import static modtools.annotations.PrintHelper.SPrinter.*;
+import static modtools.annotations.PrintHelper.SPrinter.err;
 
 @SupportedOptions("org.gradle.annotation.processing.incremental")
 @AutoService(Processor.class)
@@ -34,8 +34,6 @@ public class AINIT extends AbstractProcessor {
 			Times.printElapsed("Take @ms");
 		}
 	}
-
-
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) { return true; }
 	public SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();

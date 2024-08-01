@@ -6,9 +6,9 @@ import java.util.*;
 
 /** @see arc.util.Time  */
 public interface Times {
-	Deque<Long> marks = new ArrayDeque<>();
+	Stack<Long> marks = new Stack<>();
 	static void mark() {
-		marks.add(System.nanoTime());
+		marks.push(System.nanoTime());
 	}
 
 	/** A value of -1 means mark() wasn't called beforehand. */

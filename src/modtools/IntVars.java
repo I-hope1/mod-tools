@@ -91,11 +91,6 @@ public class IntVars {
 		resizeListeners.add(runnable);
 	}
 
-	/** @return {@code true} if the file be deleted successfully */
-	public static boolean delete(Fi fi) {
-		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
-	}
-
 	/** 提交到主线程运行  */
 	public static void postToMain(Runnable run) {
 		if (Thread.currentThread().getContextClassLoader() == Vars.class.getClassLoader()) {

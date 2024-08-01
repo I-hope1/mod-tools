@@ -80,7 +80,7 @@ public class LogDisplay extends Content {
 		String[] names = {"last_log", "crashes"};
 		IntTab   itab  = new IntTab(-1, names, colors, tables);
 		itab.pane.update(new AutoWrapListener(itab.pane));
-		itab.setPrefSize(w, 220);
+		itab.setPrefSize(w, -1);
 		ui.cont.add(itab.build()).grow();
 		ui.shown(() -> Core.app.post(() -> tables[0].invalidateHierarchy()));
 
@@ -135,6 +135,6 @@ public class LogDisplay extends Content {
 	public void build() {
 		if (ui == null) rebuild();
 		else ui.toFront();
-		ui.show();
+		Core.app.post(() -> ui.show());
 	}
 }

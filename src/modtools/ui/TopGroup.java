@@ -49,9 +49,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	@SettingsInit
 	public enum TSettings implements ISettings {
 		checkUICount,
-		debugBounds,
-		@Switch(dependency = "debugBounds")
 		selectInvisible,
+
+		debugBounds,
 		@Switch(dependency = "debugBounds")
 		drawHiddenPad,
 		/** @see ISettings#$(Drawable) */

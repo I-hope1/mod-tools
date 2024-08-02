@@ -149,9 +149,9 @@ public class JSSyntax extends Syntax {
 		 String token = task.token;
 		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
 			 if (operatesSymbol.lastSymbol == '.') return dealJSProp(token);
-			 obj = null;
-			 pkg = null;
 		 }
+		 obj = null;
+		 pkg = null;
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;

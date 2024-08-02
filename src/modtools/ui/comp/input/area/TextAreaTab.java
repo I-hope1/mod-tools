@@ -104,6 +104,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	public Boolf2<InputEvent, Character> keyTypedB = null;
 	public Boolf2<InputEvent, KeyCode>   keyUpB    = null;
 
+	public int cursor() {
+		return area.getCursorPosition();
+	}
 	public float alpha() {
 		return parentAlpha;
 	}

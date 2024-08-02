@@ -15,4 +15,8 @@ public class FileUtils {
 	public static boolean delete(Fi fi) {
 		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
 	}
+
+	public static boolean openFolder(Fi fi) {
+		return false;
+	}
 }

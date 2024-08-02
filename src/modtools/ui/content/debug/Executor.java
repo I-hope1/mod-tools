@@ -133,8 +133,8 @@ public class Executor extends Content {
 					event.stop();
 				}
 			});
-			MenuBuilder.addShowMenuListenerp(button, () -> Seq.with(
-			 node.code == null ? null : MenuItem.with("copy.code", Icon.copySmall, "cpy code", () -> {
+			MenuBuilder.addShowMenuListenerp(button, () -> (node.menuList != null ? node.menuList.get() : new Seq<MenuItem>())
+			 .add(node.code == null ? null : MenuItem.with("copy.code", Icon.copySmall, "cpy code", () -> {
 				 if (node.code != null) JSFunc.copyText(node.code);
 			 })));
 			button.addListener(new ClickListener() {

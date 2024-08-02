@@ -90,7 +90,7 @@ public class Syntax {
 			c = displayText.charAt(i);
 			newLine = c == '\n';
 
-			if (i < drawable.cursor()) cursorTask = cTask;
+			if (i <= drawable.cursor()) cursorTask = cTask;
 			if (cTask == null) {
 				for (DrawTask drawTask : taskArr) {
 					if (!drawTask.draw(i)) {

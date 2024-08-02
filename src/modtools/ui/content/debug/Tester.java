@@ -51,6 +51,7 @@ import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.gen.HopeIcons;
+import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
@@ -78,12 +79,19 @@ public class Tester extends Content {
 
 	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
 	public static final Fi   bookmarkDirectory = IntVars.dataDirectory.child("bookmarks");
+	public static final Fi   startupDir        = IntVars.dataDirectory.child("startup");
 
 	private static TaskNode startupTask;
 	static TaskNode startupTask() {
 		if (startupTask == null) startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
 		 Icon.craftingSmall, IntVars.EMPTY_RUN);
-		return startupTask;
+		return startupTask.menuList(() -> Seq.with(
+		 MenuItem.with("fi.open", Icon.fileSmall, "Open Dir", runT(() -> {
+			 Fi[] list   = startupDir.list();
+			 String path = list.length == 0 ? startupDir.path() : list[0].path();
+			 Core.app.openFolder(path);
+		 })))
+		);
 	}
 
 	public static void initExecution() {
@@ -768,7 +776,7 @@ public class Tester extends Content {
 		}
 
 		// 启动脚本
-		Fi dir = IntVars.dataDirectory.child("startup");
+		Fi dir = startupDir;
 		if (dir.exists() && dir.isDirectory()) {
 			Log.info("Loading startup directory.");
 			ExecuteTree.context(startupTask(), () -> dir.walk(f -> {

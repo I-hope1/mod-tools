@@ -1,8 +1,10 @@
 package modtools.events;
 
 import arc.Core;
+import arc.func.Prov;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
+import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import modtools.IntVars;
@@ -12,6 +14,7 @@ import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.IntUI;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.ui.menu.MenuItem;
 import rhino.*;
 
 import static modtools.IntVars.mouseVec;
@@ -20,7 +23,8 @@ import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
 public class TaskNode {
 	public static final float perTick = 1 / 60f;
 
-	public String code;
+	public String               code;
+	public Prov<Seq<MenuItem>> menuList;
 	public TaskNode code(String code) {
 		this.code = code;
 		return this;
@@ -120,6 +124,10 @@ public class TaskNode {
 			status = new Paused();
 		}
 
+	}
+	public TaskNode menuList(Prov<Seq<MenuItem>> prov) {
+		this.menuList = prov;
+		return this;
 	}
 
 	private class MyTask extends Task {

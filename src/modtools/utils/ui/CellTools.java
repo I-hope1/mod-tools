@@ -24,7 +24,8 @@ public interface CellTools {
 	 f_fillX             = f("fillX"),
 	 f_fillY             = f("fillY"),
 	 f_expandX           = f("expandX"),
-	 f_expandY           = f("expandY");
+	 f_expandY           = f("expandY"),
+	f_endRow = f("endRow");
 
 	/** @see Cell#unset  */
 	float unset = Float.NEGATIVE_INFINITY;
@@ -99,5 +100,9 @@ public interface CellTools {
 	static <T extends Element> Cell<T> rowSelf(Cell<T> cell) {
 		cell.row();
 		return cell;
+	}
+
+	static void endRow(Cell<?> cell, boolean value) {
+		Reflect.set(cell, f_endRow, value);
 	}
 }

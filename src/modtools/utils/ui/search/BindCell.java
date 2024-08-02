@@ -2,24 +2,44 @@ package modtools.utils.ui.search;
 
 import arc.scene.Element;
 import arc.scene.ui.layout.Cell;
+import arc.util.pooling.*;
+import arc.util.pooling.Pool.Poolable;
 
-public final class BindCell {
-	public static final Cell<?> UNSET_CELL = new Cell<>();
+public final class BindCell implements Poolable {
+	public static final  Cell<?>        UNSET_CELL   = new Cell<>();
+	private static final Pool<Cell>     cellPool     = Pools.get(Cell.class, Cell::new);
+	private static final Pool<BindCell> bindCellPool = Pools.get(BindCell.class, BindCell::new);
+
+	static {
+		UNSET_CELL.colspan(0);
+	}
 
 	public  Cell<?> cell;
 	private Cell<?> cpy;
 	public  Element el;
 
-	public BindCell(Cell<?> cell) {
+	private BindCell() { }
+	private BindCell init(Cell<?> cell) {
 		this.cell = cell;
 		require();
+		return this;
 	}
+
+	public static BindCell of(Cell<?> cell) {
+		return bindCellPool.obtain().init(cell);
+	}
+	public static BindCell ofConst(Cell<?> cell) {
+		return new BindCell().init(cell);
+	}
+
+
 	public void require() {
 		el = cell.get();
 	}
 	public Cell<?> getCpy() {
 		if (cpy == null) {
-			cpy = new Cell<>().set(cell);
+			cpy = cellPool.obtain();
+			cpy.set(cell);
 		}
 		return cpy;
 	}
@@ -32,13 +52,11 @@ public final class BindCell {
 		getCpy();
 		cell.set(UNSET_CELL).clearElement();
 	}
+	/** clear时会回收cell和自己  */
 	public void clear() {
 		if (el != null) el.clear();
-		if (cpy != null) cpy.clearElement();
 		if (cell != null) cell.clearElement();
-		el = null;
-		cpy = null;
-		cell = null;
+		bindCellPool.free(this);
 	}
 
 	// toggle
@@ -53,5 +71,13 @@ public final class BindCell {
 		toggle(b);
 		return b;
 	}
-
+	public void reset() {
+		if (cpy != null) {
+			cpy.clearElement();
+			cellPool.free(cpy);
+		}
+		el = null;
+		cpy = null;
+		cell = null;
+	}
 }

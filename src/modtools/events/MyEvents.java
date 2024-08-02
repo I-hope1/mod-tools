@@ -1,6 +1,5 @@
 package modtools.events;
 
-import arc.func.Cons;
 import arc.struct.Seq;
 import modtools.utils.SR;
 
@@ -26,19 +25,19 @@ public class MyEvents {
 		allInstances.remove(this);
 	}
 	/** Handle an event by class. */
-	public <T extends Enum<T>> void onIns(Enum<T> type, Cons<T> listener) {
-		insEvents.computeIfAbsent(type, k -> new Seq<>(Cons.class))
+	public <T extends Enum<T>> void onIns(Enum<T> type, Runnable listener) {
+		insEvents.computeIfAbsent(type, k -> new Seq<>(Runnable.class))
 		 .add(listener);
 	}
 	/** Fires an enum trigger. */
 	public <T extends Enum<T>> void fireIns(Enum<T> type) {
-		Seq<Cons<?>> listeners = insEvents.get(type);
+		Seq<Runnable> listeners = insEvents.get(type);
 
 		if (listeners != null) {
 			int    len   = listeners.size;
-			Cons[] items = listeners.items;
+			Runnable[] items = listeners.items;
 			for (int i = 0; i < len; i++) {
-				items[i].get(type);
+				items[i].run();
 			}
 		}
 	}
@@ -75,25 +74,27 @@ public class MyEvents {
 	public static MyEvents current = null;
 	/* ------------- for enum ---------- */
 	/** Handle an event by class. */
-	public static <T extends Enum<T>> void on(Enum<T> type, Cons<T> listener) {
+	public static <T extends Enum<T>> void on(Enum<T> type, Runnable listener) {
 		(current != null ? current.insEvents : events)
-		 .computeIfAbsent(type, k -> new Seq<>(Cons.class))
+		 .computeIfAbsent(type, k -> new Seq<>(Runnable.class))
 		 .add(listener);
 	}
 
 	/** Fires an enum trigger. */
 	public static <T extends Enum<T>> void fire(Enum<T> type) {
-		Seq<Cons<Enum<T>>> listeners = events.get(type);
+		Seq<Runnable> listeners = events.get(type);
 
 		if (listeners != null) {
-			listeners.each(cons -> cons.get(type));
+			listeners.each(Runnable::run);
 		}
 		allInstances.each(e -> e.fireIns(type));
 	}
 
 	/* ------------- for object ---------- */
 	public static void on(Object type, Runnable listener) {
-		events.computeIfAbsent(type, k -> new Seq<>()).add(listener);
+		(current != null ? current.insEvents : events)
+		 .computeIfAbsent(type, _ -> new Seq<>(Runnable.class))
+		 .add(listener);
 	}
 	public static void fire(Object type) {
 		SR.of((Seq<Runnable>) events.get(type))

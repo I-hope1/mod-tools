@@ -1,4 +1,4 @@
-	package modtools.utils.ui.search;
+package modtools.utils.ui.search;
 
 import arc.func.*;
 import arc.scene.Element;
@@ -9,6 +9,7 @@ import arc.util.pooling.*;
 import mindustry.ctype.UnlockableContent;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.utils.PatternUtils;
+import modtools.utils.ui.FormatHelper;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -24,13 +25,12 @@ public class FilterTable<E> extends LimitTable {
 		super(background, (Cons) cons);
 	}
 	protected Map<E, CellGroup> map;
-	CellGroup current;
-
-	private Cons<Element> cons;
+	private   CellGroup         current;
+	private   Cons<Element>     cons;
 
 	public void bind(E name) {
 		if (map == null) map = new HashMap<>();
-		current = map.computeIfAbsent(name, k -> new CellGroup());
+		current = map.computeIfAbsent(name, _ -> new CellGroup());
 	}
 	public CellGroup getCurrent() {
 		return current;
@@ -45,10 +45,14 @@ public class FilterTable<E> extends LimitTable {
 		if (map != null) {
 			map.forEach((key, set) -> {
 				if (key instanceof Pool.Poolable p) Pools.free(p);
-				set.each(BindCell::clear);
+				set.dispose();
 			});
 			map.clear();
+			map = null;
 		}
+		update(null);
+		current = null;
+		cons = null;
 	}
 	public boolean isBound() {
 		return current != null;
@@ -64,7 +68,7 @@ public class FilterTable<E> extends LimitTable {
 	}
 	protected <T extends Element> void bindCell(T element, Cell<T> cell) {
 		if (cons != null) cons.get(element);
-		if (current != null) current.add(new BindCell(cell));
+		if (current != null) current.add(BindCell.of(cell));
 	}
 
 	public void addIntUpdateListener(Intp provider) {
@@ -75,7 +79,7 @@ public class FilterTable<E> extends LimitTable {
 		addConditionUpdateListener(new IntBoolf(provider, i -> ((Intp) i).get()));
 	}
 	public void addPatternUpdateListener(Prov<Pattern> provider) {
-		addConditionUpdateListener(new PatternBoolf(provider));
+		addConditionUpdateListener(new PatternBoolf<>(provider));
 	}
 	public void addConditionUpdateListener(Condition<E> condition) {
 		update(() -> {
@@ -102,6 +106,10 @@ public class FilterTable<E> extends LimitTable {
 			clear();
 			removed = true;
 		}
+		public void dispose() {
+			each(BindCell::clear);
+			clear();
+		}
 	}
 
 	public class IntBoolf implements Condition<E> {
@@ -121,7 +129,7 @@ public class FilterTable<E> extends LimitTable {
 		}
 	}
 
-	public class PatternBoolf implements Condition<E> {
+	public static class PatternBoolf<T> implements Condition<T>, Boolf<T> {
 		Pattern       last;
 		Prov<Pattern> provider;
 		public PatternBoolf(Prov<Pattern> provider) {
@@ -130,15 +138,21 @@ public class FilterTable<E> extends LimitTable {
 		public boolean needUpdate() {
 			return last != provider.get();
 		}
-		public boolean valid(E name) {
+		public boolean valid(T name) {
 			if (name instanceof UnlockableContent u) {
 				return PatternUtils.test(last = provider.get(), u.localizedName)
 				       || PatternUtils.test(last, String.valueOf(u.name));
+			}
+			if (name instanceof Drawable d) {
+				return PatternUtils.test(last = provider.get(), FormatHelper.getUIKeyOrNull(d));
 			}
 			if (name instanceof String[] strings) {
 				return PatternUtils.test(last = provider.get(), strings[0]);
 			}
 			return PatternUtils.test(last = provider.get(), String.valueOf(name));
+		}
+		public boolean get(T object) {
+			return valid(object);
 		}
 	}
 

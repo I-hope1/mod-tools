@@ -35,7 +35,7 @@ public class NameWindow extends Window implements PopupWindow {
 	}
 
 	public Window show() {
-		namef.setMessageText("请输入");
+		namef.setMessageText("@message.input");
 		namef.addListener(new InputListener() {
 			@Override
 			public boolean keyUp(InputEvent event, KeyCode keycode) {

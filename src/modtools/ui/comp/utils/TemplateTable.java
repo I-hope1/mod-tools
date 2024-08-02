@@ -22,6 +22,8 @@ public class TemplateTable<R> extends Table {
 				return boolf.get(p);
 			});
 			super.clearChildren();
+			getCells().clear();
+
 			var cells = template.getCells();
 			for (int i = 0; i < cells.size; i++) {
 				var c = cells.get(i);
@@ -29,6 +31,7 @@ public class TemplateTable<R> extends Table {
 				super.add(c.get()).set(c);
 				if (cells.get(getChildren().size - 1).isEndRow()) super.row();
 			}
+			layout();
 			// Log.info(cells);
 				/*var seq  = pane.getCells();
 				int size = seq.size;
@@ -62,6 +65,9 @@ public class TemplateTable<R> extends Table {
 	}
 	public <T extends Element> Cell<T> add(T element) {
 		return template.add(element);
+	}
+	public Table row() {
+		return template.row();
 	}
 	public void bind(R name) {
 		template.bind(name);

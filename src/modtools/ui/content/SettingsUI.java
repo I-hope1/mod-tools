@@ -7,7 +7,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.Element;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -69,11 +69,14 @@ public class SettingsUI extends Content {
 
 		// title
 		table.add(title).color(Pal.accent).growX().left().row();
-		table.image().color(Pal.accent).growX().colspan(2).left().row();
+		table.image().color(Pal.accent).growX().fill(0.95f, 0f).colspan(2).left().row();
 
 		// container
 		t.left().defaults().left();
-		table.add(t).growX().colspan(2).left().padLeft(16);
+		table.table(container -> container.background(((NinePatchDrawable) Tex.sideline)
+			.tint(Tmp.c1.set(Pal.accent).lerp(Color.lightGray, 0.8f)))
+			.add(t).grow())
+		 .growX().colspan(2).left();
 		cont.add(table).growX().left().row();
 		return table;
 	}

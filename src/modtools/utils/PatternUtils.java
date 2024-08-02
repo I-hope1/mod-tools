@@ -38,7 +38,7 @@ public class PatternUtils {
 	 * @return 如果 pattern 为 null 或者文本匹配正则表达式则返回 true
 	 */
 	public static boolean test(Pattern pattern, String text) {
-		return pattern == ANY || (pattern != null && pattern.matcher(text).find());
+		return pattern == ANY || text == null || (pattern != null && pattern.matcher(text).find());
 	}
 
 	/**

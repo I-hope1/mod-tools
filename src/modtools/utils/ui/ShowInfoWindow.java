@@ -270,10 +270,10 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 	}
 
-
 	static BindCell markDisplay(Cell<?> cell0, E_JSFuncDisplay type) {
-		BindCell cell = new BindCell(cell0);
-		MyEvents.on(type, b -> cell.toggle(b.enabled()));
+		BindCell cell = BindCell.of(cell0);
+		MyEvents.on(type, () -> cell.toggle(type.enabled()));
+		MyEvents.on(Disposable.class, cell::clear);
 		return cell;
 	}
 
@@ -319,8 +319,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.require();
-			MyEvents.on(E_JSFuncEdit.number, edit -> {
-				cell.setElement(edit.enabled() ? field : null);
+			MyEvents.on(E_JSFuncEdit.number, () -> {
+				cell.setElement(E_JSFuncEdit.number.enabled() ? field : null);
 				c_cell.require();
 			});
 		} else if (E_JSFuncEdit.string.enabled() && type == String.class && editable.get()) {
@@ -338,8 +338,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cell.setElement(field);
 			cell.height(42);
 			c_cell.require();
-			MyEvents.on(E_JSFuncEdit.string, edit -> {
-				cell.setElement(edit.enabled() ? field : null);
+			MyEvents.on(E_JSFuncEdit.string, () -> {
+				cell.setElement(E_JSFuncEdit.string.enabled() ? field : null);
 				c_cell.require();
 			});
 		}
@@ -611,7 +611,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
 			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));
 		}) */;
-		addDClickCopy(label, s -> s.replaceAll(" \\[\\d+]", ""));
+		addDClickCopy(label, s -> s.replaceAll(" \\[\\d+]$", ""));
 		return label;
 	}
 
@@ -623,6 +623,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	public void hide() {
 		super.hide();
 
+		events.fireIns(Disposable.class);
 		events.removeIns();
 		System.gc();
 	}
@@ -704,6 +705,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			Underline.of(current, COLSPAN, Color.lightGray).padTop(6);
 		}
 		public void clear() {
+			super.clear();
 			labels.each(ValueLabel::clearVal);
 			labels.clear().shrink();
 		}

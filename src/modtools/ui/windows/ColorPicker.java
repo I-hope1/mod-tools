@@ -13,6 +13,7 @@ import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
+import modtools.struct.LazyValue;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
@@ -23,7 +24,11 @@ import modtools.utils.ui.FormatHelper;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
 public class ColorPicker extends Window implements IHitter, PopupWindow {
-	static       Texture hueTex;
+	public static LazyValue<Texture> hueTex = LazyValue.of(() -> {
+		Texture texture = Pixmaps.hueTexture(128, 1);
+		texture.setFilter(TextureFilter.linear);
+		return texture;
+	});
 	static final Color   bgColor = Pal.gray;
 
 	private Cons<Color> cons    = c -> {};
@@ -47,11 +52,6 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		this.current.set(color);
 		this.cons = consumer;
 		show();
-
-		if (hueTex == null) {
-			hueTex = Pixmaps.hueTexture(128, 1);
-			hueTex.setFilter(TextureFilter.linear);
-		}
 
 		float[] values = color.toHsv(new float[3]);
 		h = values[0];
@@ -114,7 +114,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 				}
 			}).size(42);
 
-			t.stack(new Image(new TextureRegion(hueTex)), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
+			t.stack(new Image(new TextureRegion(hueTex.get())), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
 				setValue(h);
 				moved(value -> {
 					h = value;

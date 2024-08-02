@@ -92,15 +92,7 @@ public class EventHelper {
 	 */
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
-		class HClickListener extends ClickListener {
-			HClickListener() { super(KeyCode.mouseRight); }
-			public void clicked(InputEvent event, float x, float y) {
-				if (event.stopped) return;
-				run.run();
-				event.stop();
-			}
-		}
-		elem.addListener(new HClickListener());
+		elem.addListener(new RightClickListener(run));
 		return elem;
 	}
 	/**
@@ -185,6 +177,17 @@ public class EventHelper {
 			click = null;
 			d_click = null;
 			clickTask.cancel();
+		}
+	}
+	private static class RightClickListener extends ClickListener {
+		private final Runnable run;
+		RightClickListener(Runnable run) { super(KeyCode.mouseRight);
+			this.run = run;
+		}
+		public void clicked(InputEvent event, float x, float y) {
+			if (event.stopped) return;
+			run.run();
+			event.stop();
 		}
 	}
 }

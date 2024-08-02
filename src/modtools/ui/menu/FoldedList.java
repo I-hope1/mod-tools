@@ -8,14 +8,12 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.Align;
+import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
-import arc.util.pooling.Pools;
-import modtools.ui.*;
+import modtools.ui.HopeStyles;
 import modtools.ui.comp.TransformTable;
 import modtools.utils.ElementUtils;
 import modtools.utils.ui.search.BindCell;
-
-import static modtools.ui.menu.MenuBuilder.freeAllMenu;
 
 /**
  * The type Folded list.
@@ -51,26 +49,25 @@ public class FoldedList extends MenuItem implements Poolable {
 		return HopeStyles.flatTogglet;
 	}
 	public void reset() {
+		super.reset();
 		if (children != null) Pools.freeAll(children, false);
+		if (bcell != null) bcell.clear();
 	}
 
+	BindCell bcell;
 	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
 		Core.app.post(() -> {
-			class MyRun implements Runnable {
-				BindCell bcell;
-				public void run() {
-					if (bcell == null) {
+			cell.get().clicked(() -> {
+				if (bcell == null) {
 						Seq<MenuItem> list = childrenGetter.get();
 						TextButton    target = cell.get();
 						var newCell = MenuBuilder.showMenuList(list,
-						 freeAllMenu(list),
+						 MenuBuilder.freeAllMenu(list),
 						 new TransformTable(target, ElementUtils.findClosestPane(target), Align.topRight).top().left(),
 						 hide);
-						bcell = new BindCell(newCell);
+						bcell = BindCell.of(newCell);
 					} else bcell.toggle();
-				}
-			}
-			cell.get().clicked(new MyRun());
+			});
 		});
 	}
 }

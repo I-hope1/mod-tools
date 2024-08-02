@@ -66,7 +66,7 @@ public abstract class ValueLabel extends InlineLabel {
 
 		layout.ignoreMarkup = true;
 
-		MyEvents.on(E_JSFuncDisplay.value, b -> shown = b.enabled());
+		MyEvents.on(E_JSFuncDisplay.value, () -> shown = E_JSFuncDisplay.value.enabled());
 
 		addFocusListener();
 

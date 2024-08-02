@@ -6,11 +6,11 @@ import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.scene.style.Drawable;
 import arc.struct.*;
 import arc.struct.IntMap.Keys;
-import arc.util.Align;
+import arc.util.*;
 import arc.util.pooling.Pools;
 import modtools.utils.ArrayUtils;
 
-public class InlineLabel extends NoMarkupLabel {
+public class InlineLabel extends NoMarkupLabel  {
 	private static final Seq<GlyphRun> result    = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
 
@@ -182,6 +182,9 @@ public class InlineLabel extends NoMarkupLabel {
 
 		if(fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
-
+	public void clear() {
+		super.clear();
+		cache.clear();
+	}
 	protected final IntMap<Color> colorMap = new IntMap<>();
 }

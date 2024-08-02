@@ -1,8 +1,7 @@
 package modtools.ui.windows;
 
 import arc.func.Cons;
-import arc.graphics.*;
-import arc.graphics.Texture.TextureFilter;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
@@ -10,7 +9,7 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Scl;
 import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
@@ -24,7 +23,6 @@ import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
-import modtools.utils.CatchSR;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.FormatHelper;
@@ -63,11 +61,6 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		this.cons = consumer;
 		show();
 
-		if (hueTex == null) {
-			hueTex = Pixmaps.hueTexture(128, 1);
-			hueTex.setFilter(TextureFilter.linear);
-		}
-
 		isIconColor = true;
 		drawable = cloneDrawable(drawable0);
 		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
@@ -98,7 +91,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				MyItemSelection.buildTable0(wrap, drawables,
 				 () -> drawable, drawable -> this.drawable = drawable, 8,
 				 d -> d);
-			}).grow().padBottom(4f).row();
+			}).grow().padBottom(4f).height(320).row();
 
 			t.table(Styles.black6, buttons -> {
 				buttons.label(() -> CatchSR.apply(() ->
@@ -182,7 +175,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				}
 			}).size(42);
 
-			t.stack(new Image(new TextureRegion(hueTex)), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
+			t.stack(new Image(new TextureRegion(hueTex.get())), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
 				setValue(h);
 				moved(value -> {
 					h = value;

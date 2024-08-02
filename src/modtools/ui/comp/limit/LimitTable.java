@@ -1,7 +1,6 @@
 package modtools.ui.comp.limit;
 
 import arc.func.Cons;
-import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
@@ -9,14 +8,10 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import modtools.utils.Tools;
 
-import java.util.HashSet;
-
 import static modtools.ui.comp.limit.Limit.isVisible;
 
 
 public class LimitTable extends Table implements Limit {
-	private HashSet<Element> limitElems;
-
 	public LimitTable() {}
 	public LimitTable(Drawable background) {
 		super(background);

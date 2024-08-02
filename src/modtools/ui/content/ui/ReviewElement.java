@@ -32,10 +32,9 @@ import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
 import modtools.ui.comp.review.CellDetailsWindow;
 import modtools.ui.comp.utils.*;
-import modtools.ui.comp.ModifiableLabel;
 import modtools.ui.content.Content;
 import modtools.ui.content.ui.PairProv.SizeProv;
-import modtools.ui.control.*;
+import modtools.ui.control.HKeyCode;
 import modtools.ui.effect.*;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
@@ -621,6 +620,9 @@ public class ReviewElement extends Content {
 
 		private static Seq<MenuItem> execChildren(Element element) {
 			return Seq.with(
+			 element instanceof Table table ? MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
+				 IntUI.drawablePicker().show(table.getBackground(), table::setBackground);
+			 }) : null,
 			 MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
 			 MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
 			 MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
@@ -852,7 +854,7 @@ public class ReviewElement extends Content {
 			t.defaults().growX();
 			t.table(top -> {
 				top.add(nameLabel).padLeft(-4f);
-				visibleCell = new BindCell(top.image(Icon.eyeOffSmall)
+				visibleCell = BindCell.ofConst(top.image(Icon.eyeOffSmall)
 				 .color(Pal.accent)
 				 .size(16f).pad(4, 8, 4, 4));
 
@@ -880,6 +882,9 @@ public class ReviewElement extends Content {
 		}
 		private BindCell buildKey(Table t, String key, Label label) {
 			return makeCell(t, tableCons(key, label));
+		}
+		private BindCell makeCell(Table t, Cons<Table> cons) {
+			return BindCell.ofConst(t.row().table(cons).growX());
 		}
 	}
 

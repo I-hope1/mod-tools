@@ -6,7 +6,6 @@ import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
 import arc.util.Align;
 import modtools.ui.comp.utils.ClearValueLabel;
-import modtools.utils.ui.search.BindCell;
 
 public interface KeyValue {
 	Color    stressColor = Color.violet;
@@ -64,11 +63,6 @@ public interface KeyValue {
 	default <T> Cell<Table> valueLabel(Table col, String key, Prov<T> prov, Class<T> type) {
 		ClearValueLabel<T> label = new ClearValueLabel<>(type, prov, null);
 		return col.row().table(tableCons(key, label));
-	}
-
-
-	default BindCell makeCell(Table t, Cons<Table> cons) {
-		return new BindCell(t.row().table(cons).growX());
 	}
 }
 class $KeyValue implements KeyValue { }

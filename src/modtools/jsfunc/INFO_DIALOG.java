@@ -13,6 +13,7 @@ import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.gen.Icon;
 import modtools.IntVars;
+import modtools.events.MyEvents;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.*;
@@ -22,7 +23,7 @@ import modtools.ui.control.HopeInput;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.ui.ShowInfoWindow;
-import modtools.utils.ui.search.BindCell;
+import modtools.utils.ui.search.*;
 import modtools.utils.world.WorldDraw;
 
 import java.lang.reflect.Array;
@@ -57,13 +58,21 @@ public interface INFO_DIALOG {
 				dialog[0] = null;
 			}).left().size(50).row();
 
+			MyEvents events = new MyEvents();
 
+			MyEvents prev = MyEvents.current;
+			MyEvents.current = events;
 			buildArrayCont(o, clazz, length, _cont);
+			MyEvents.current = prev;
 			_cont.row();
 
 			dialog[0] = new DisWindow(clazz.getSimpleName(), 200, 200, true);
 			dialog[0].cont.pane(_cont).grow();
 			dialog[0].show();
+			dialog[0].hidden(() -> {
+				events.fireIns(Disposable.class);
+				events.removeIns();
+			});
 			return dialog[0];
 		}
 
@@ -85,10 +94,11 @@ public interface INFO_DIALOG {
 			button.add(i + "[lightgray]:", HopeStyles.defaultLabel).padRight(8f);
 			var label = new ArrayItemLabel(componentType, arr, i);
 
-			var cell  = new BindCell(ShowInfoWindow.extentCell(button,
+			var cell  = BindCell.of(ShowInfoWindow.extentCell(button,
 			 componentType == Object.class && label.val != null ? label.val.getClass() : componentType,
 			 () -> label));
 			ShowInfoWindow.buildExtendingField(cell, label);
+			MyEvents.on(Disposable.class, cell::clear);
 
 			button.add(label).grow();
 			button.clicked(() -> {

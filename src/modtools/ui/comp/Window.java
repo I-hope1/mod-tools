@@ -704,9 +704,11 @@ public class Window extends Table implements Position {
 		default void clearAll() {
 			if (!(this instanceof Group g)) return;
 			g.find(el -> {
-				if (el instanceof FilterTable) {
+				if (el instanceof FilterTable<?>) {
 					Core.app.post(el::clear);
 				}
+
+				el.update(null);
 				el.userObject = null;
 				return false;
 			});

@@ -72,7 +72,7 @@ public class Frag extends Table {
 		}), HopeStyles.noBarPane);
 		// lastIndex = getCells().indexOf(cell);
 		container.update(() -> container.setOverscroll(false, false));
-		cell = new BindCell(add(container).size(120, 40 * 5 + 1));
+		cell = BindCell.ofConst(add(container).size(120, 40 * 5 + 1));
 
 		left().bottom();
 		topGroup.addChild(this);
@@ -187,7 +187,7 @@ public class Frag extends Table {
 		Settings(Class<?> c, float... args) { }
 
 		static {
-			position.defSwitchOn(false);
+			position.defSwitchOn(true);
 		}
 	}
 	private class CircleGroup extends Group {

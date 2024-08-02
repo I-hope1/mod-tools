@@ -280,7 +280,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		return shownWindows;
 	}
 
-	public static final boolean enabled = true;
+	public static final boolean enabledGroup = true;
 
 	/**
 	 * 根据类别添加child
@@ -313,7 +313,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 *  </table>
 	 */
 	public void addChild(Element actor) {
-		if (enabled) {
+		if (enabledGroup) {
 			(actor instanceof BackInterface ? back
 			 : actor instanceof IInfo ? infos
 			 : actor instanceof Window ? windows

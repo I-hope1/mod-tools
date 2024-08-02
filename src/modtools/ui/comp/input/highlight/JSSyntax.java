@@ -9,7 +9,6 @@ import java.util.*;
 
 @SuppressWarnings("StringTemplateMigration")
 public class JSSyntax extends Syntax {
-
 	public static Color
 	 c_constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
 	// 常规变量
@@ -155,13 +154,17 @@ public class JSSyntax extends Syntax {
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
-			 if (!enableJSProp || (
-				entry.key != customConstantSet && entry.key != customVarSet
-			 ) || obj != null) return entry.value;
+			 if (!enableJSProp
+			     || !(entry.key == customConstantSet || entry.key == customVarSet)
+			     || obj != null) {
+				 obj = Undefined.SCRIPTABLE_UNDEFINED;
+				 return entry.value;
+			 }
 
 			 resolveToken(customScope, task, token);
 			 return entry.value;
 		 }
+		 obj = Undefined.SCRIPTABLE_UNDEFINED;
 		 if (lastTask != task) return null;
 		 String lastToken = task.lastToken;
 		 if (lastToken != null && localKeywords.contains(lastToken)) {
@@ -200,6 +203,8 @@ public class JSSyntax extends Syntax {
 	HashMap<Object, HashMap<String, Object>> js_prop_map = new HashMap<>();
 	private Color dealJSProp(String token) {
 		if (!enableJSProp) return null;
+		if (obj == Undefined.SCRIPTABLE_UNDEFINED) return null;
+
 		Object o = pkg == null && obj instanceof NativeJavaObject nja ?
 		 js_prop_map.computeIfAbsent(nja.unwrap(), _ -> new HashMap<>())
 			.computeIfAbsent(token, _ -> getPropOrNotFound(nja, token))

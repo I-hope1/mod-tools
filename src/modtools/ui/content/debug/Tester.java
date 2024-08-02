@@ -180,7 +180,7 @@ public class Tester extends Content {
 		if (ui == null) _load();
 
 		textarea = new TextAreaTab("");
-		Table _cont = new AutoRequestKeyboardTable(textarea.getArea());
+		Table _cont = new Table();
 		if (!Vars.mobile) textarea.addListener(new EscapeAndAxesClearListener(area));
 
 		Runnable areaInvalidate = () -> {
@@ -221,6 +221,9 @@ public class Tester extends Content {
 				});
 			});
 		}).growX().minWidth(WIDTH).get();
+		_cont.getChildren().each(btn -> {
+			btn.addListener(new KeepFocusListener(area));
+		});
 		_cont.row();
 		Cell<?> logCell = _cont.table(Tex.sliderBack, t -> {
 			Element actor = new Element();
@@ -959,14 +962,14 @@ public class Tester extends Content {
 				String key = String.valueOf(o);
 				if (key.startsWith(searchingKey)
 				    && searchingKey.length() < key.length()) {
-					complements.add(key);
+					complements.add(key.substring(searchingKey.length()));
 				}
 			});
 			if (complements.isEmpty()) return;
 
 			if (syntax.virtualString == null) syntax.virtualString = new VirtualString();
 			syntax.virtualString.index = area.getCursorPosition();
-			syntax.virtualString.text = complements.get(lastCompletionIndex++ % complements.size).substring(searchingKey.length());
+			syntax.virtualString.text = complements.get(lastCompletionIndex++ % complements.size);
 		}
 
 		public boolean keyTyped(InputEvent event, char character) {

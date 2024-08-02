@@ -16,7 +16,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.events.ISettings;
-import modtools.ui.IntUI.IMenu;
+import modtools.ui.IntUI.*;
 import modtools.ui.comp.Hitter;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.MoveListener;
@@ -50,6 +50,7 @@ public class Frag extends Table {
 		//		MyPacket.register();
 		name = modName + "-frag";
 		top = new Image();
+		top.addListener(new ITooltip(() -> IntUI.tips("frag")));
 		add(top).color(defaultColor)
 		 .margin(0).pad(0)
 		 .fillX().minWidth(40).height(40);

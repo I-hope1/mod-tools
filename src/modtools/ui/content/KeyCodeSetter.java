@@ -19,6 +19,7 @@ import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.control.*;
 import modtools.ui.control.HKeyCode.KeyCodeData;
+import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.ui.CellTools;
 import modtools.utils.ui.search.*;
@@ -30,7 +31,7 @@ import static modtools.ui.IntUI.*;
 
 public class KeyCodeSetter extends Content {
 	public KeyCodeSetter() {
-		super("keycodeSetter");
+		super("keycodeSetter", HopeIcons.keyboard);
 	}
 
 	HKeyCode recordKeyCode;

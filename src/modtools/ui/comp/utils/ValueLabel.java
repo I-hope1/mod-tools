@@ -1,5 +1,7 @@
 package modtools.ui.comp.utils;
 
+import arc.Core;
+import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
@@ -16,6 +18,7 @@ import arc.util.pooling.Pool.Poolable;
 import mindustry.Vars;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
+import mindustry.world.Tile;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
@@ -47,7 +50,7 @@ public abstract class ValueLabel extends InlineLabel {
 	public static final Color   c_enum    = new Color(0xFFC66D_FF);
 	public static final String  NULL_MARK = "`*null";
 
-	public String ellipse        = "  ...";
+	public String ellipse = "  ...";
 
 
 	public Object   val;
@@ -224,10 +227,19 @@ public abstract class ValueLabel extends InlineLabel {
 			return;
 		}
 
+		int textOff = 0;
+		if (text.length() > 0 && val instanceof Color c) {
+			int i = text.length();
+			colorMap.put(i, c);
+			text.append("■");
+			textOff = text.length() - i;
+			// colorMap.put(text.length(), Color.white);
+		}
+
 		Color mainColor = colorOf(val);
 		int   startI    = text.length();
 		colorMap.put(startI, mainColor);
-		startIndexMap.put(startI, wrapVal(val));
+		startIndexMap.put(startI - textOff, wrapVal(val));
 		text.append(toString(val));
 		int endI = text.length();
 		endIndexMap.put(wrapVal(val), endI);
@@ -420,6 +432,9 @@ public abstract class ValueLabel extends InlineLabel {
 				 true, Align.top);
 			}));
 		}
+		if (Fi.class.isAssignableFrom(type)) {
+			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", () -> val == null, () -> Core.app.openFolder(((Fi) val).path())));
+		}
 
 		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
 		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
@@ -479,7 +494,7 @@ public abstract class ValueLabel extends InlineLabel {
 				() -> val == null, () -> {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
-		 }, Building.class, Unit.class, Bullet.class)
+		 }, Tile.class, Building.class, Unit.class, Bullet.class, Posc.class)
 		);
 	}
 	private void addPickDrawable(Seq<MenuItem> list) {
@@ -577,8 +592,8 @@ public abstract class ValueLabel extends InlineLabel {
 		private Object        val;
 		private StringBuilder text;
 
-		private int     count;
-		private boolean gotFirst;
+		private int        count;
+		private boolean    gotFirst;
 		private ValueLabel self;
 		public IterCons init(ValueLabel self, Object val, StringBuilder text) {
 			this.self = self;

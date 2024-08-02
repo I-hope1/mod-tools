@@ -50,6 +50,7 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+	public static final TextureRegionDrawable emptyui = new EmptyDrawable();
 
 	public static final float DEFAULT_WIDTH = 180;
 	public static final float MAX_OFF       = 35f;
@@ -889,6 +890,20 @@ public class IntUI {
 		public void endDraw() {
 			super.endDraw();
 			drawFocus(elem);
+		}
+	}
+
+	private static class EmptyDrawable extends TextureRegionDrawable {
+		public void draw(float x, float y, float width, float height) {
+		}
+		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
+		                 float scaleY, float rotation) {
+		}
+		{
+			setTopHeight(8f);
+			setLeftWidth(8f);
+			setBottomHeight(8f);
+			setRightWidth(8f);
 		}
 	}
 }

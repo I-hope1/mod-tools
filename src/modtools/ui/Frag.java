@@ -16,7 +16,6 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.events.ISettings;
-import modtools.ui.IntUI.*;
 import modtools.ui.comp.Hitter;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.MoveListener;
@@ -27,7 +26,7 @@ import modtools.utils.ui.search.BindCell;
 
 import static modtools.IntVars.modName;
 import static modtools.ui.Frag.Settings.position;
-import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.IntUI.*;
 
 /** @author I-hope1 */
 public class Frag extends Table {
@@ -86,7 +85,9 @@ public class Frag extends Table {
 		// 添加双击变小
 		EventHelper.doubleClick(top, () -> {
 			if (!hideCont) return;
-			if (circle == null) addChild(circle = new CircleGroup());
+			if (circle == null) {
+				addChild(circle = new CircleGroup());
+			}
 			if (circle.getChildren().any()) {
 				circleRemove();
 			} else {
@@ -120,33 +121,34 @@ public class Frag extends Table {
 			ImageButton image      = (ImageButton) content.buildButton(true);
 			float       finalAngle = angle;
 			angle -= angleReduction;
+
 			new LerpFun(Interp.smooth).onUI().registerDispose(1 / 24f, f -> {
 				float rotation1 = Mathf.lerp(0, finalAngle, f);
 				// image.setRotation(rotation1);
 				float radius = Mathf.lerp(0, hoverRadius, f);
 				Core.graphics.requestRendering();
 				image.setSize(hoverSize);
-				image.setOrigin(Align.center);
 				image.setPosition(
 				 top.getWidth() / 2f + radius * Mathf.cosDeg(rotation1),
-				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1));/* Align.center); */
+				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1), Align.center);
 			});
 			image.clicked(content::build);
 
 			circle.addChild(image);
 		}
 
-		top.actions(Actions.color(Color.pink, 0.1f));
+		top.addAction(Actions.color(Color.lightGray, 0.1f));
 	}
 	private void circleRemove() {
 		if (circle == null) return;
-		top.actions(Actions.color(defaultColor, 0.1f));
+		top.addAction(Actions.color(defaultColor, 0.1f));
 		for (Element child : circle.getChildren()) {
 			if (child.hasActions()) continue;
-			child.actions(Actions.moveTo(
-			 top.getWidth() / 2f,
-			 top.getHeight() / 2f, 0.1f,
-			 Interp.smooth), Actions.remove());
+			child.actions(Actions.moveToAligned(
+				top.getWidth() / 2f,
+				top.getHeight() / 2f, Align.center,
+				0.1f, Interp.smooth),
+			 Actions.remove());
 		}
 	}
 
@@ -191,13 +193,10 @@ public class Frag extends Table {
 			position.defSwitchOn(true);
 		}
 	}
-	private class CircleGroup extends Group {
-		{
-			update(() -> {
-				width = top.getWidth();
-				height = top.getHeight();
-				setPosition(0, 0, Align.center);
-			});
+	private static class CircleGroup extends Group {
+		public Element hit(float x, float y, boolean touchable) {
+			// Log.info("@, @",x,y);
+			return super.hit(x, y, touchable);
 		}
 	}
 }

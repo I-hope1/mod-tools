@@ -5,12 +5,9 @@ import arc.scene.Scene;
 import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
 
-import static modtools.ui.comp.input.area.TextAreaTab.MOMO_STYLE;
-
 /** 根据文本，自动调整大小  */
 public class AutoTextField extends TextField {
 	public AutoTextField() {
-		setStyle(MOMO_STYLE);
 	}
 
 	public static final String NULL_STR = "'null";

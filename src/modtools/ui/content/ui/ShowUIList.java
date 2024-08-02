@@ -48,7 +48,13 @@ import static modtools.utils.ui.FormatHelper.fixed;
 
 @SuppressWarnings("StringTemplateMigration")
 public class ShowUIList extends Content {
-	public static final int cols = 3;
+	public static final  int    cols       = 3;
+	private static final String INIT_ARRAY =
+	 """
+		[
+		 // Write your qualified class names here.
+		]
+		""";
 
 	IntTab tab;
 	Window ui;
@@ -151,10 +157,14 @@ public class ShowUIList extends Content {
 		 }, Drawable.class);
 	 }),
 	 styles     = newTable(true, t -> {
+		 t.add("Custom Styles: ");
+		 t.button("styles.json", () -> Core.app.openFolder(uiConfig.child("styles.json").path())).growX();
+		 t.row();
+
 		 listAllStyles(t, Styles.class);
 		 Tools.runLoggedException(() -> {
 			 Fi json = uiConfig.child("styles.json");
-			 if (!json.exists()) json.writeString("[\n]");
+			 if (!json.exists()) json.writeString(INIT_ARRAY);
 			 Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
 			 for (Class<?> cl : classes) {
 				 listAllStyles(t, cl);

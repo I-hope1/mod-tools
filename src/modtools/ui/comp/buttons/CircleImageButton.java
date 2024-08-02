@@ -4,15 +4,14 @@ import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.ImageButton;
-import arc.util.*;
+import arc.util.Tmp;
 
 public class CircleImageButton extends ImageButton {
 	public Element hit(float x, float y, boolean touchable) {
 		if (touchable && this.touchable == Touchable.disabled) return null;
 		return Tmp.cr1.set(
-			translation.x + getX(Align.center),
-			translation.y + getY(Align.center),
-			getWidth()).contains(x, y) ? this : null;
+			width / 2f,
+			height / 2f, width).contains(x, y) ? super.hit(x, y, touchable) : null;
 	}
 
 	public CircleImageButton(Drawable icon, ImageButtonStyle style) {

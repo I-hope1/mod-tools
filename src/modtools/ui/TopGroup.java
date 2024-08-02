@@ -419,6 +419,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 					cancel();
 				} else if (keycode == KeyCode.f && selected != null) {
 					filterElem(selected);
+				} else if (keycode == KeyCode.p && selected != null) {
+					selected = selected.parent;
 				}
 
 				HopeInput.pressed.clear();

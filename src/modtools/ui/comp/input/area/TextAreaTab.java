@@ -723,19 +723,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	// 等宽字体样式（没有等宽字体就默认字体）
 	public static TextFieldStyle MOMO_STYLE = new TextFieldStyle(Styles.defaultField) {{
 		font = messageFont = MyFonts.def;
-		background = new TextureRegionDrawable() {
-			public void draw(float x, float y, float width, float height) {
-			}
-			public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
-			                 float scaleY, float rotation) {
-			}
-			{
-				setTopHeight(8f);
-				setLeftWidth(8f);
-				setBottomHeight(8f);
-				setRightWidth(8f);
-			}
-		};
+		background = IntUI.emptyui;
 		selection = ((TextureRegionDrawable) Tex.selection).tint(Tmp.c1.set(0x4763FFFF));
 	}};
 }

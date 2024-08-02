@@ -123,14 +123,13 @@ public class ReviewElement extends Content {
 		.applyToScene(true, this::build);
 	public HKeyCode debugBoundsKeyCode =
 	 keyCodeData().keyCode("debugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt())
+		.applyToScene(true, () -> TSettings.debugBounds.toggle());
+
+public HKeyCode selectDebugBoundsKeyCode =
+	 keyCodeData().keyCode("selectDebugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt().shift())
 		.applyToScene(true, () -> {
-			if (!Core.input.shift()) {
-				TSettings.debugBounds.toggle();
-				return;
-			}
-			if (topGroup.isSelecting()) {
-				return;
-			}
+			if (topGroup.isSelecting()) return;
+
 			TSettings.debugBounds.set(true);
 			topGroup.requestSelectElem(TopGroup.defaultDrawer, topGroup::setDrawPadElem);
 		});

@@ -7,7 +7,7 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
-import arc.scene.ui.ScrollPane;
+import arc.scene.ui.*;
 import arc.util.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.comp.Window;
@@ -127,11 +127,14 @@ public interface ElementUtils {
 		return findParent(el, Window.class);
 	}
 
+	@SuppressWarnings("StringTemplateMigration")
 	static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
-		 : STR."\{ReflectTools.getSimpleName(element.getClass())}\{
-		 element.name != null ? " ★" + element.name + "★" : ""
-		 }";
+		 : STR."""
+		 \{ReflectTools.getSimpleName(element.getClass())}\
+		 \{element instanceof TextButton tb ? ": " + tb.getText() : ""}\
+		 \{element.name != null ? " ★" + element.name + "★" : ""}\
+		 """;
 	}
 
 }

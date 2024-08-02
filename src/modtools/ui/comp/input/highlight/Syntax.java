@@ -443,7 +443,7 @@ public class Syntax {
 
 	public static class VirtualString {
 		public String text;
-		public Color  color = Color.gray;
+		public Color  color = Color.lightGray;
 		public int    index;
 		public VirtualString() { }
 	}

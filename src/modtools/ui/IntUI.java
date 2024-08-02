@@ -30,6 +30,7 @@ import modtools.ui.comp.Window.*;
 import modtools.ui.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.windows.*;
+import modtools.ui.windows.NameWindow.FileNameWindow;
 import modtools.utils.*;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
@@ -65,6 +66,10 @@ public class IntUI {
 	private static final LazyValue<DrawablePicker> _d = LazyValue.of(DrawablePicker::new);
 	public static DrawablePicker drawablePicker() {
 		return _d.get();
+	}
+	private static final LazyValue<FileNameWindow> _1 = LazyValue.of(FileNameWindow::new);
+	public static FileNameWindow fileNameWindow() {
+		return _1.get();
 	}
 
 	/**

@@ -237,7 +237,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 			this.font = font;
 
-			drawVirtualText(font);
 			if (enableHighlighting && syntax != null) {
 				try {
 					highlightingDraw(x, y);
@@ -259,6 +258,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					offsetY -= lineHeight();
 				}
 			}
+			drawVirtualText(font);
+
 			font.setColor(lastColor);
 			font.getData().markupEnabled = had;
 		}
@@ -266,12 +267,16 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		private void drawVirtualText(Font font) {
 			VirtualString virtualString = syntax.virtualString;
 			if (virtualString != null && virtualString.text != null) {
-				font.getColor().set(virtualString.color).mulA(alpha());
-				if (font.getColor().a == 0) return;
+				FontCache   cache  = font.getCache();
+				cache.getColor().set(virtualString.color).mulA(alpha());
+				if (cache.getColor().a == 0) return;
 				float x1 = getRelativeX(virtualString.index);
 				float y1 = getRelativeY(virtualString.index) + font.getLineHeight();
 				// Log.info("(@, @)", x1, y1);
-				font.draw(virtualString.text, x1, y1);
+				GlyphLayout layout = cache.setText(virtualString.text, x1, y1);
+				Draw.color(Color.gray, 0.8f);
+				Fill.crect(x1, y1 + 5, layout.width, -layout.height - 10);
+				cache.draw();
 			}
 		}
 
@@ -462,6 +467,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			}
 		}
+		/** 判断i有没有越界  */
 		public boolean checkIndex(int i) {
 			return 0 <= i && i < text.length();
 		}
@@ -551,11 +557,25 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				return super.keyUp(event, keycode);
 			}
 		}
+		/** 向前，向后选择整个单词  */
 		public void selectNearWord() {
 			int i = hasSelection ? selectionStart : cursor - 1;
-			while (isWordCharacterCheck(i)) --i;
+			while (isWordCharacterCheck(i)) --i; // 单词左边
 			selectionStart = i + 1;
 			i = cursor;
+			while (isWordCharacterCheck(i)) ++i; // 单词右边
+			cursor = i;
+			hasSelection = selectionStart != cursor;
+		}
+		/** 向前选择单词  */
+		public void selectForward() {
+			int i = hasSelection ? selectionStart : cursor - 1;
+      while (isWordCharacterCheck(i)) --i;
+      selectionStart = i + 1;
+      hasSelection = selectionStart != cursor;
+		}
+		public void selectBackward() {
+			int i = selectionStart = cursor;
 			while (isWordCharacterCheck(i)) ++i;
 			cursor = i;
 			hasSelection = selectionStart != cursor;
@@ -565,7 +585,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return text.charAt(i);
 		}
 
-		/* 这会判断是否越界，绕过越界就返回false */
+		/** 这会判断是否越界，绕过越界就返回false */
 		public boolean isWordCharacterCheck(int i) {
 			if (i < 0 || i >= text.length()) return false;
 			return isWordCharacter(text.charAt(i));

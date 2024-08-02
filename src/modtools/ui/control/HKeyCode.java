@@ -35,6 +35,11 @@ public class HKeyCode {
 		this.ctrl = false;
 		this.key = key;
 	}
+	public static boolean isFnKey(KeyCode keycode) {
+		return keycode == KeyCode.controlLeft || keycode == KeyCode.controlRight
+		       || keycode == KeyCode.shiftLeft || keycode == KeyCode.shiftRight
+		       || keycode == KeyCode.altLeft || keycode == KeyCode.altRight;
+	}
 	public HKeyCode alt() {
 		alt = true;
 		return this;

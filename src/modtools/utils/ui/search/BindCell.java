@@ -10,9 +10,9 @@ public final class BindCell implements Poolable {
 	private static final Pool<Cell>     cellPool     = Pools.get(Cell.class, Cell::new);
 	private static final Pool<BindCell> bindCellPool = Pools.get(BindCell.class, BindCell::new);
 
-	static {
+	/* static {
 		UNSET_CELL.colspan(0);
-	}
+	} */
 
 	public  Cell<?> cell;
 	private Cell<?> cpy;
@@ -34,7 +34,7 @@ public final class BindCell implements Poolable {
 
 
 	public void require() {
-		el = cell.get();
+		this.el = cell.get();
 	}
 	public Cell<?> getCpy() {
 		if (cpy == null) {

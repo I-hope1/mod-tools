@@ -109,6 +109,9 @@ public class EventHelper {
 		return mobile ? longPress0(element, () -> run.accept(element))
 		 : rightClick(element, () -> run.accept(element));
 	}
+	public static String longPressOrRclickKey() {
+		return mobile ? "Long press" : "Right click";
+	}
 
 
 	public static class LongPressListener extends ClickListener {

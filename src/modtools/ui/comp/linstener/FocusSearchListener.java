@@ -7,11 +7,11 @@ import arc.scene.ui.TextField;
 import modtools.ui.control.HKeyCode;
 
 public class FocusSearchListener extends InputListener {
-	TextField textField;
+	public static final HKeyCode keyCode = HKeyCode.data.keyCode("focusSearch", () -> new HKeyCode(KeyCode.f).ctrl());
+	final TextField textField;
 	public FocusSearchListener(TextField textField) {
 		this.textField = textField;
 	}
-	HKeyCode keyCode = HKeyCode.data.keyCode("focusSearch", () -> new HKeyCode(KeyCode.f).ctrl());
 	public boolean keyDown(InputEvent event, KeyCode __) {
 		if (keyCode.isPress()) {
 			textField.requestKeyboard();

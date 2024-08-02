@@ -14,7 +14,6 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.struct.LazyValue;
 import modtools.ui.*;
-import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.utils.ClearValueLabel;
@@ -27,7 +26,7 @@ import modtools.utils.ui.search.*;
 import java.util.regex.Pattern;
 
 import static arc.Core.scene;
-import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.IntUI.*;
 
 public class KeyCodeSetter extends Content {
 	public KeyCodeSetter() {
@@ -175,7 +174,7 @@ public class KeyCodeSetter extends Content {
 
 			rebuild();
 			update(() -> {
-				if (button != null) IntUI.positionTooltip(button, this);
+				if (button != null) IntUI.positionTooltip(button, Align.topLeft, this, Align.bottomLeft);
 			});
 		}
 		/** 被用来定位的  */
@@ -198,9 +197,7 @@ public class KeyCodeSetter extends Content {
 			field.addCaptureListener(new InputListener() {
 				public boolean keyDown(InputEvent event, KeyCode keycode) {
 					if (keycode.type != KeyType.key) return false;
-					if (keycode == KeyCode.controlLeft || keycode == KeyCode.controlRight) return false;
-					if (keycode == KeyCode.shiftLeft || keycode == KeyCode.shiftRight) return false;
-					if (keycode == KeyCode.altLeft || keycode == KeyCode.altRight) return false;
+					if (HKeyCode.isFnKey(keycode)) return false;
 
 					if (keycode == KeyCode.escape) {
 						field.setText("None");
@@ -239,7 +236,7 @@ public class KeyCodeSetter extends Content {
 	Pattern pattern;
 	Window ui;
 	public void buildUI() {
-		ui = new Window(localizedName(), 120, 400);
+		ui = new Window(localizedName(), 120, 400, true);
 		Table cont = ui.cont;
 		cont.defaults().height(42).pad(4).growX();
 		cont.button("Bind key", Icon.pencilSmall, Styles.flatt, this::selectButton);
@@ -260,8 +257,8 @@ public class KeyCodeSetter extends Content {
 					 );
 				 });
 				vl.elementType = Button.class;
-				vl.addCaptureListener(new ITooltip(() -> elementKey[0]));
-				pane.add(vl).size(220, 45);
+				vl.addCaptureListener(new ITooltip(() -> elementKey[0] + "\n" + EventHelper.longPressOrRclickKey() + " to edit"));
+				pane.add(vl).size(220, 45).labelAlign(Align.left);
 				TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
 				 .size(100, 45).get();
 				button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {

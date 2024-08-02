@@ -91,7 +91,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				MyItemSelection.buildTable0(wrap, drawables,
 				 () -> drawable, drawable -> this.drawable = drawable, 8,
 				 d -> d);
-			}).grow().padBottom(4f).height(320).row();
+			}).grow().padBottom(4f).height(280).row();
 
 			t.table(Styles.black6, buttons -> {
 				buttons.label(() -> CatchSR.apply(() ->
@@ -235,6 +235,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	}
 	/** 复制drawable并设置{@code tint}为{@link Color#white} */
 	private Drawable cloneDrawable(Drawable drawable) {
+		if (drawable == null) return null;
 		if (drawable instanceof DelegatingDrawable d) return d.drawable;
 		try {
 			Drawable newDrawable = (Drawable) unsafe.allocateInstance(drawable.getClass());
@@ -250,6 +251,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		}
 	}
 	private Color getTint(Drawable drawable) {
+		if (drawable == null) return Color.white;
 		if (drawable instanceof DelegatingDrawable d) return d.color;
 		return CatchSR.apply(() -> CatchSR.of(
 			() -> Reflect.get(TextureRegionDrawable.class, drawable, "tint"))

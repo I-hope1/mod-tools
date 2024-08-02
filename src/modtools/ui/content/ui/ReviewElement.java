@@ -146,6 +146,7 @@ public class ReviewElement extends Content {
 	}
 	public Button buildButton(boolean isSmallized) {
 		Button btn = buildButton(isSmallized, () -> task.isSelecting());
+		btn.addListener(new ITooltip(() -> tipKey("shortcuts", inspectKeycode.toString())));
 		TopGroup.searchBlackList.add(btn);
 		return btn;
 	}
@@ -352,7 +353,7 @@ public class ReviewElement extends Content {
 		/** 结构： Label，Image（下划线） */
 		public void addMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
 			wrapTable(table, pos,
-			 pattern == null ?
+			 pattern == null || pattern == PatternUtils.ANY ?
 				t -> t.add(new MyLabel(text, defaultLabel)).left().color(Pal.accent)
 				: t -> {
 				 for (var line : text.split("\\n")) {
@@ -362,7 +363,7 @@ public class ReviewElement extends Content {
 		}
 
 		public void highlightShow(Table table, Pattern pattern, String text) {
-			if (pattern == null) {
+			if (pattern == null || pattern == PatternUtils.ANY) {
 				table.add(text, defaultLabel).color(Pal.accent);
 				return;
 			}
@@ -559,7 +560,7 @@ public class ReviewElement extends Content {
 				});
 				button.rebuild = () -> {
 					if (parentValid(group, window) && (
-					 needUpdate || group.needsLayout() ||
+					 needUpdate || (group.needsLayout() && group.getScene() != null) ||
 					 (!table1.hasChildren() && group.hasChildren())
 					)) {
 						rebuild.run();
@@ -933,7 +934,7 @@ public class ReviewElement extends Content {
 				table.fill(cell);
 				table.expand(cell);
 			}
-			showInfoTable(elem, vec2);
+			Tools.runLoggedException(() -> showInfoTable(elem, vec2));
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posText:

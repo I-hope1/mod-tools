@@ -19,7 +19,6 @@ import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
-import arc.util.Timer;
 import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
@@ -52,7 +51,6 @@ import modtools.ui.content.Content;
 import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.gen.HopeIcons;
-import modtools.ui.windows.NameWindow;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
@@ -61,11 +59,9 @@ import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
-import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.ui.comp.windows.ListDialog.fileUnfair;
 import static modtools.ui.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
 
@@ -317,8 +313,8 @@ public class Tester extends Content {
 			}
 			return false;
 		};
-		textarea.keyTypedB = (event, character) -> stopEvent[0];
-		textarea.keyUpB = (event, keycode) -> stopEvent[0];
+		textarea.keyTypedB = (_, _) -> stopEvent[0];
+		textarea.keyUpB = (_, _) -> stopEvent[0];
 		area.addCaptureListener(new ComplementListener());
 	}
 	static boolean hasFunctionKey() {
@@ -443,20 +439,13 @@ public class Tester extends Content {
 		return false;
 	}
 	private void star() {
-		new NameWindow(res -> {
+		IntUI.fileNameWindow().show(res -> {
 			Fi fi = bookmark.file.child(res);
 			//noinspection SequencedCollectionMethodCanBeUsed
 			bookmark.list.add(0, fi);
 			fi.writeString(getMessage());
 			bookmark.build();
-		}, t -> {
-			try {
-				return !t.isBlank() && !fileUnfair.matcher(t).find()
-				       && !bookmark.file.child(t).exists();
-			} catch (Throwable e) {
-				return false;
-			}
-		}, "").show();
+		}, "", bookmark.file);
 	}
 
 	private boolean rollAndExec(KeyCode keycode) {
@@ -896,19 +885,43 @@ public class Tester extends Content {
 		// CodeTooltip codeTooltip = new CodeTooltip();
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			cancel = false;
-			if (Core.input.shift() && keycode == KeyCode.tab) {
-				cancel = true;
-				area.clearSelection();
-				// codeTooltip.show(area, area.getRelativeX(syntax.virtualString.index), area.getRelativeX(syntax.virtualString.index));
-			} else if (syntax.virtualString != null &&
-			           keycode == KeyCode.tab) {
-				cancel = true;
-				area.selectNearWord();
-				area.paste(syntax.virtualString.text, true);
-				syntax.virtualString = null;
-			} else syntax.virtualString = null;
+			if (syntax.virtualString != null) {
+				if (!HKeyCode.isFnKey(keycode)) {
+					keyListener(keycode);
+				}
+			}
 			check(event);
 			return true;
+		}
+		private void keyListener(KeyCode keycode) {
+			switch (keycode) {
+				case tab -> {
+					cancel = true;
+					area.selectBackward();
+					area.paste(syntax.virtualString.text, true);
+					syntax.virtualString = null;
+				}
+				case enter -> {
+					cancel = true;
+					area.paste(syntax.virtualString.text, true);
+					syntax.virtualString = null;
+				}
+				case up -> {
+					cancel = true;
+					if (lastCompletionCursor == area.getCursorPosition()) {
+						lastCompletionIndex = (lastCompletionIndex - 1 + complements.size) % complements.size;
+						syntax.virtualString.text = complements.get(lastCompletionIndex);
+					}
+				}
+				case down -> {
+					cancel = true;
+					if (lastCompletionCursor == area.getCursorPosition()) {
+						lastCompletionIndex = (lastCompletionIndex + 1) % complements.size;
+						syntax.virtualString.text = complements.get(lastCompletionIndex);
+					}
+				}
+				default -> syntax.virtualString = null;
+			}
 		}
 		private void complement() {
 			int lastCursor = area.getCursorPosition();
@@ -920,14 +933,16 @@ public class Tester extends Content {
 			}
 			area.setCursorPosition(lastCursor);
 		}
+
+		private final Seq<String> complements = new Seq<>();
+		private final Seq<Object> keys        = new Seq<>();
 		private void complement0() {
-			area.selectNearWord();
+			area.selectForward();
 			String searchingKey = area.getSelection();
 			int    start        = area.getSelectionStart();
 			area.clearSelection();
-			int cursor = area.getCursorPosition();
-			if (lastCompletionCursor != cursor) lastCompletionIndex = 0;
-			lastCompletionCursor = cursor;
+			lastCompletionCursor = area.getCursorPosition();
+
 			Scriptable obj;
 			// Log.info(syntax.indexToObj);
 			if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
@@ -935,20 +950,23 @@ public class Tester extends Content {
 			} else obj = scope;
 			if (obj == null) return;
 
-			List<Object> keys = new ArrayList<>(Arrays.asList(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds()));
+			keys.clear().addAll(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds());
 			if (obj == scope) keys.addAll(JSSyntax.varSet.toSeq().list());
 			if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
 
-			String[] array = keys.stream()
-			 .map(String::valueOf)
-			 .filter(key -> key.startsWith(searchingKey)
-			                && searchingKey.length() < key.length()).toArray(String[]::new);
-			if (array.length == 0) return;
-			// Log.info(key);
+			complements.clear();
+			keys.each(o -> {
+				String key = String.valueOf(o);
+				if (key.startsWith(searchingKey)
+				    && searchingKey.length() < key.length()) {
+					complements.add(key);
+				}
+			});
+			if (complements.isEmpty()) return;
+
 			if (syntax.virtualString == null) syntax.virtualString = new VirtualString();
-			syntax.virtualString.index = start;
-			syntax.virtualString.text = array[lastCompletionIndex++ % array.length];
-			// area.paste(array[lastCompletionIndex++ % array.length], true);
+			syntax.virtualString.index = area.getCursorPosition();
+			syntax.virtualString.text = complements.get(lastCompletionIndex++ % complements.size).substring(searchingKey.length());
 		}
 
 		public boolean keyTyped(InputEvent event, char character) {
@@ -957,6 +975,7 @@ public class Tester extends Content {
 			    (area.isWordCharacter(character) || character == '.') &&
 			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
 			    auto_complement.enabled()) {
+				Log.info(character);
 				if (syntax.virtualString != null) event.stop();
 				Core.app.post(this::complement);
 			}

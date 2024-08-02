@@ -189,8 +189,9 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	private void buildReflect(Object o, Table cont, Pattern pattern, boolean isBlack) {
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
-			 (pattern == null || find(pattern, member.getName()) != isBlack)
-			 && containsFlags(member.getModifiers()) != isBlack;
+			 pattern == PatternUtils.ANY ||
+			 (pattern != null && find(pattern, member.getName()) != isBlack
+			  && containsFlags(member.getModifiers()) != isBlack);
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::flushVal);
 			methodsTable.filter(memberBoolf);
@@ -654,10 +655,17 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		Table   skipTable;
 
 		public <T extends Element> Cell<T> add(T element) {
-			var cell = skip ? skipTable.add(element) :
-			 (current == null || !isBound() ? super.add(element) : current.add(element));
-			bindCell(element, cell);
-			return cell;
+			if (skip) {
+				Cell<T> cell = skipTable.add(element);
+				bindCell(element, cell);
+				return cell;
+			} else if (current == null || !isBound()) {
+				return super.add(element);
+			} else {
+				Cell<T> cell = current.add(element);
+				bindCell(element, cell);
+				return cell;
+			}
 		}
 
 		boolean lastEmpty;

@@ -43,7 +43,7 @@ public class MyItemSelection {
 		ButtonGroup<ImageButton> group = new ButtonGroup<>();
 		group.setMinCheckCount(0);
 		TemplateTable<T> cont = new TemplateTable<>(null, new PatternBoolf<>(() -> pattern[0]));
-		cont.defaults().size(40);
+		cont.left().top().defaults().left().top().size(40);
 		int i = 0;
 
 		for (T item : items) {

@@ -206,7 +206,7 @@ public class JSSyntax extends Syntax {
 		 : getPropOrNotFound(pkg, token);
 		if (o == Scriptable.NOT_FOUND) {
 			obj = null;
-			return null;
+			return c_error;
 		}
 		appendIndexToObj(drawToken, o);
 		if (o instanceof NativeJavaPackage) {

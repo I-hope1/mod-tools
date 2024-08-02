@@ -65,6 +65,8 @@ public class Window extends Table implements Position {
 		}
 	};
 
+	public static boolean disabledActions = false;
+
 	/** 最前面的窗口 */
 	public static Window frontWindow;
 
@@ -469,7 +471,6 @@ public class Window extends Table implements Position {
 
 	// 用于存储最小/大化前的位置和大小
 	public Rect    lastRect        = new Rect();
-	public boolean disabledActions = true;
 
 	public ObjectSet<RunListener> maxlisteners = new ObjectSet<>();
 	public boolean                isMaximize   = false, lastMaximize = false;
@@ -503,10 +504,10 @@ public class Window extends Table implements Position {
 		moveAndScaleAnimated(0, 0, graphics.getWidth(), graphics.getHeight());
 	}
 	private void moveAndScaleAnimated(float x, float y, float width, float height) {
-		actions(
+		addAction(Actions.parallel(
 		 Actions.sizeTo(width, height, disabledActions ? 0 : 0.06f),
-		 Actions.moveTo(x, y, disabledActions ? 0 : 0.01f)
-		);
+		 Actions.moveTo(x, y, disabledActions ? 0 : 0.06f)
+		));
 	}
 
 

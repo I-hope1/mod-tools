@@ -93,7 +93,7 @@ public interface MethodBuilder {
 		table.top().defaults().growY().top();
 		table.bind(argKey);
 		table.add("(").color(Color.lightGray);
-		if (args.length > 0) {
+		if (args.length > 1) {
 			table.unbind();
 			table.add("<args>").fontScale(0.8f)
 			 .color(Color.gray).with(t ->

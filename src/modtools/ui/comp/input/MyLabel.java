@@ -8,8 +8,10 @@ import modtools.utils.JSFunc.MyProv;
 
 import java.io.*;
 
+
 /**
  * a label that disables markup ( [color]文字颜色 )
+ * @see NoMarkupLabel
  */
 public class MyLabel extends LimitLabel {
 	// public static ObjectMap<Font, ObjectMap<String, FontCache>> fontObjectMapObjectMap;
@@ -31,6 +33,26 @@ public class MyLabel extends LimitLabel {
 		}*/
 		/* 用主程序运行，防止不显示 */
 		Core.app.post(() -> setText(text));
+	}
+	{
+		layout.ignoreMarkup = true;
+	}
+
+	public float getPrefWidth() {
+		try {
+			prefSizeLayout.ignoreMarkup = true;
+			return super.getPrefWidth();
+		} finally {
+			prefSizeLayout.ignoreMarkup = false;
+		}
+	}
+	public float getPrefHeight() {
+		try {
+			prefSizeLayout.ignoreMarkup = true;
+			return super.getPrefHeight();
+		} finally {
+			prefSizeLayout.ignoreMarkup = false;
+		}
 	}
 
 	public  float interval = 0;

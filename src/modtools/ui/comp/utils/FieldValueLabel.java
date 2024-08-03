@@ -21,26 +21,26 @@ import java.lang.reflect.Field;
 public class FieldValueLabel extends ReflectValueLabel {
 	private final Field field;
 
-	public FieldValueLabel(Object newVal, Class<?> type, Field field, Object obj) {
-		super(type, obj, field.getModifiers());
+	public FieldValueLabel(Object newVal, Field field, Object obj) {
+		super(field.getType(), obj, field.getModifiers());
 		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
 			throw new IllegalArgumentException("Type(" + type + ") mismatches value(" + newVal + ").");
 		// markupEnabled = true;
 		this.field = field;
 
 		if (newVal != unset) setVal(newVal);
-
-		if (field != null) {
-			Runnable r = () -> {
-				if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
-					flushVal();
-				}
-			};
-			update(r);
+		addUpdate();
+	}
+	void addUpdate() {
+		Runnable r = () -> {
+			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
+				flushVal();
+			}
+		};
+		update(r);
 			/* update(() -> {
 				if (!E_JSFunc.update_async.enabled()) r.run();
 			}); */
-		}
 	}
 
 	public void setNewVal(Object newVal) {
@@ -71,6 +71,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 	}
 	public void flushVal() {
 		if (isValid()) {
+			if (isStatic && isFinal() && field.getType().isPrimitive()) return;
 			Object value = FieldUtils.getFieldValue(
 			 isStatic ? field.getDeclaringClass() : obj,
 			 getOffset(),

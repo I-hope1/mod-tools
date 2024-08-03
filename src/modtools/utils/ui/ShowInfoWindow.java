@@ -412,7 +412,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			Cell<?>  cell   = extentCell(t, type, () -> l[0]);
 			BindCell c_cell = markDisplay(cell, E_JSFuncDisplay.value);
 			/*Cell<?> lableCell = */
-			l[0] = new FieldValueLabel(ValueLabel.unset, type, f, o);
+			l[0] = new FieldValueLabel(ValueLabel.unset, f, o);
 			if (Enum.class.isAssignableFrom(type)) l[0].addEnumSetter();
 			fields.labels.add(l);
 

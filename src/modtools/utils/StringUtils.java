@@ -9,7 +9,7 @@ import static ihope_lib.MyReflect.unsafe;
 
 public interface StringUtils {
 
-	/** 通过内存设置，直接修复字符串  */
+	/** 通过内存设置，直接修复字符串 */
 	static void copyByte(String from, String to) {
 		if (OS.isAndroid) copyByteAndroid(from, to);
 		else copyByteDesktop(from, to);
@@ -71,6 +71,48 @@ public interface StringUtils {
 			if (bigText.charAt(j) != smallText.charAt(j - start)) return false;
 		}
 		return true;
+	}
+
+	/**
+	 * 使用KCM算法
+	 * @param text    被查找的文本
+	 * @param pattern 查找文本
+	 **/
+	static int indexOf(String text, String pattern) {
+		int[] next = computePrefixFunction(pattern);
+		int   j    = 0; // index for pattern
+		int   n    = text.length();
+		int   m    = pattern.length();
+
+		for (int i = 0; i < n; i++) { // index for text
+			while (j > 0 && text.charAt(i) != pattern.charAt(j)) {
+				j = next[j - 1];
+			}
+			if (text.charAt(i) == pattern.charAt(j)) {
+				j++;
+			}
+			if (j == m) {
+				return i - m + 1; // match found, return the start index
+			}
+		}
+		return -1; // no match found
+	}
+
+	private static int[] computePrefixFunction(String pattern) {
+		int   m    = pattern.length();
+		int[] next = new int[m];
+		int   j    = 0; // length of previous longest prefix suffix
+
+		for (int i = 1; i < m; i++) {
+			while (j > 0 && pattern.charAt(i) != pattern.charAt(j)) {
+				j = next[j - 1];
+			}
+			if (pattern.charAt(i) == pattern.charAt(j)) {
+				j++;
+			}
+			next[i] = j;
+		}
+		return next;
 	}
 
 }

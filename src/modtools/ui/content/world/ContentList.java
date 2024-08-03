@@ -2,6 +2,7 @@ package modtools.ui.content.world;
 
 import arc.func.*;
 import arc.graphics.Color;
+import arc.scene.style.*;
 import arc.scene.ui.Image;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectMap;
@@ -108,13 +109,13 @@ public class ContentList extends Content {
 			t.clear();
 			t.button("RebuildAll", Styles.flatt, () -> {
 				rebuild[0].get(t);
-			}).colspan(2).height(36).growX();
+			}).colspan(2).height(36).growX().row();
 			mapProv.get().each((name, item) -> {
 				t.bind(item);
 				MyLabel label = new MyLabel(name);
 				t.image().color(Tmp.c1.set(JColor.c_underline)).height(2).growX().colspan(2).row();
 				if (item instanceof UnlockableContent u) {
-					t.add(new Image(u.uiIcon == null ? HopeIcons.interrupt.getRegion() : u.uiIcon)).size(32f)
+					t.add(new Image(getDrawable(u))).size(32f)
 					 .with(img -> EventHelper.longPress(img, b -> {
 						 if (!b) {
 							 label.setText((label.getText() + "").equals(name) ? u.localizedName : name);
@@ -142,6 +143,12 @@ public class ContentList extends Content {
 			rebuild[0].get(t);
 			t.addPatternUpdateListener(() -> pattern);
 		});
+	}
+	/** @see mindustry.ui.dialogs.PlanetDialog#setup()  */
+	private static Drawable getDrawable(UnlockableContent u) {
+		return u.uiIcon == null ? new TextureRegionDrawable(HopeIcons.interrupt.getRegion()) :
+		 u instanceof Planet planet ? Icon.icons.get(planet.icon + "Small", Icon.icons.get(planet.icon, Icon.commandRallySmall)).tint(planet.iconColor)
+		  : new TextureRegionDrawable(u.uiIcon);
 	}
 	public void build() {
 		if (ui == null) load0();

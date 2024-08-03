@@ -46,7 +46,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 	default JCVariableDecl makeVar(long flags, Type type, String name, String init, Symbol sym) {
 		return makeVar0(flags, type, name, init == null ? null : parseExpression(init), sym);
 	}
-	Pattern pattern = Pattern.compile("^[0-9a-zA-Z\\-$_ ]+$");
+	Pattern pattern = Pattern.compile("^[0-9a-zA-Z\\-$_ ]+?$");
 	default JCVariableDecl makeVar0(long flags, Type type, String name, JCExpression init, Symbol sym) {
 		return makeVar1(flags, type, name, init, sym, true);
 	}

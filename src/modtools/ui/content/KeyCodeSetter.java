@@ -149,9 +149,10 @@ public class KeyCodeSetter extends Content {
 						}
 					}
 				} else {
+					start++; // 跳过#
 					for (int i = 0, size = group.getChildren().size; i < size; i++) {
 						Element child = group.getChildren().get(i);
-						if (StringUtils.equals(key, start + 1/* 跳过# */, end, child.name)) {
+						if (StringUtils.equals(key, start, end, child.name)) {
 							next = child;
 							break;
 						}

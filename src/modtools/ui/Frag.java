@@ -24,7 +24,6 @@ import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.ui.search.BindCell;
 
-import static modtools.IntVars.modName;
 import static modtools.ui.Frag.Settings.position;
 import static modtools.ui.IntUI.*;
 
@@ -46,8 +45,7 @@ public class Frag extends Table {
 	MoveInsideListener listener;
 	public void load() {
 		touchable = Touchable.enabled;
-		//		MyPacket.register();
-		name = modName + "-frag";
+
 		top = new Image();
 		top.addListener(new ITooltip(() -> IntUI.tips("frag")));
 		add(top).color(defaultColor)
@@ -193,10 +191,5 @@ public class Frag extends Table {
 			position.defSwitchOn(true);
 		}
 	}
-	private static class CircleGroup extends Group {
-		public Element hit(float x, float y, boolean touchable) {
-			// Log.info("@, @",x,y);
-			return super.hit(x, y, touchable);
-		}
-	}
+	private static class CircleGroup extends Group { }
 }

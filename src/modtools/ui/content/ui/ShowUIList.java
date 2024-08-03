@@ -223,7 +223,7 @@ public class ShowUIList extends Content {
 			 uiKeyMap.put(group, f.getName());
 			 t.bind(f.getName());
 			 t.add(f.getName());
-			 t.add(new FieldValueLabel(ValueLabel.unset, UI.class, f, obj));
+			 t.add(new FieldValueLabel(ValueLabel.unset, f, obj));
 			 t.unbind();
 		 }, Group.class, obj);
 	 });

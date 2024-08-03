@@ -151,7 +151,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	} */
 	public boolean enableHighlighting = true;
 
-	private static final Pattern startComment = Pattern.compile("\\s*//");
+	private static final Pattern startComment = Pattern.compile("\\s*?//");
 
 	public class MyTextArea extends GenTextArea {
 		public  float    parentHeight = 0;

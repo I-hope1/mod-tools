@@ -22,7 +22,7 @@ public class HopeCall {
 
 	public static void setBlock(Tile tile, Block block, Team team) {
 		if (!net.active() || net.server()) {
-			tile.setBlock(block, team);
+			tile.setBlock(block, team, tile.build != null ? tile.build.rotation : 0);
 		}
 		if (net.server() || net.client()) {
 			net.send(new SetBlockPacket(block, tile, team), true);

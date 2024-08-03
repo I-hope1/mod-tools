@@ -25,7 +25,7 @@ import mindustry.graphics.*;
 import mindustry.input.InputHandler;
 import mindustry.type.*;
 import mindustry.ui.*;
-import mindustry.world.Tile;
+import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.IntVars;
 import modtools.events.ISettings;
@@ -43,6 +43,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.MenuBuilder;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
+import modtools.utils.reflect.ClassUtils;
 import modtools.utils.world.*;
 
 import java.util.Random;
@@ -327,6 +328,9 @@ public class Selection extends Content {
 				});
 			});
 		}
+		public CharSequence getTips(T item) {
+			return ClassUtils.getSuperExceptAnonymous(item.getClass()).getSimpleName();
+		}
 		public Vec2 getPos(T item) {
 			if (item instanceof PowerGraphUpdaterc) return Tmp.v3.set(-1, -1);
 			try {
@@ -350,6 +354,10 @@ public class Selection extends Content {
 				case 8 -> "Sync";
 				default -> throw new IllegalStateException("Unexpected value: " + i);
 			};
+			if (Core.atlas.has(IntVars.modName + "-" + text.toLowerCase())) {
+				return icons[i] = Core.atlas.find(IntVars.modName + "-" + text.toLowerCase());
+			}
+
 			return icons[i] = drawRegion(48, 48, () -> {
 				Draw.color();
 				Fonts.def.draw(text, 8, 36, Color.white, 1, false, Align.left);
@@ -402,6 +410,9 @@ public class Selection extends Content {
 		}
 
 		final ObjectMap<Class<?>, TextureRegion> class2icon = new ObjectMap<>();
+		public CharSequence getTips(T item) {
+			return item.type == null ? "error" : ClassUtils.getSuperExceptAnonymous(item.type.getClass()).getSimpleName();
+		}
 		public TextureRegion getIcon(T key) {
 			if (key.type == null) return Core.atlas.find("error");
 			return class2icon.get(key.type.getClass(), () -> {
@@ -445,6 +456,9 @@ public class Selection extends Content {
 			});
 		}
 
+		public CharSequence getTips(T item) {
+			return item.type.localizedName + "\n" + item.type.name;
+		}
 		public TextureRegion getIcon(T key) {
 			return key.type.uiIcon;
 		}
@@ -481,6 +495,9 @@ public class Selection extends Content {
 		}
 		public TextureRegion getIcon(T key) {
 			return key.block.uiIcon;
+		}
+		public CharSequence getTips(T item) {
+			return item.block.localizedName + "\n" + item.block.name;
 		}
 		public void buildTable(T build, Table table) {
 			/*Table cont = new Table();
@@ -542,8 +559,15 @@ public class Selection extends Content {
 			return region;
 		}
 
+		public Block getBlock(T key) {
+			return key.block() == Blocks.air ? key.floor() : key.block();
+		}
 		public TextureRegion getIcon(T key) {
-			return key.block() == Blocks.air ? key.floor().uiIcon : key.block().uiIcon;
+			return getBlock(key).uiIcon;
+		}
+		public CharSequence getTips(T item) {
+			Block b = getBlock(item);
+			return b.localizedName + "\n" + b.name;
 		}
 		public void buildTable(T tile, Table t) {
 			// tile.display(table);

@@ -150,14 +150,17 @@ public abstract class WFunction<T> {
 					IntUI.showSelectTable(btn, (p, hide, str) -> {
 						int c = 0;
 						for (T item : value) {
-							p.add(new SelectHover(item, t -> {
+							SelectHover hover = new SelectHover(item, t -> {
 								t.image(getIcon(item)).size(42);
-							}));
+							});
+							p.add(hover);
 							if (++c % 6 == 0) p.row();
 						}
 					}, false, Align.center).hidden(btn::toggleShowing);
 				});
-				btn.add(new ItemImage(entry.key, value.size)).grow().pad(6f);
+				ItemImage element = new ItemImage(entry.key, value.size);
+				element.addListener(new ITooltip(() -> value.isEmpty() ? "???" : getTips(value.first())));
+				btn.add(element).grow().pad(6f);
 				template.add(btn);
 				template.unbind();
 				if (++i % 4 == 0) template.newLine();
@@ -183,6 +186,7 @@ public abstract class WFunction<T> {
 			Tester.put(IntVars.mouseVec, list.toArray());
 		});
 	}
+	public abstract CharSequence getTips(T item);
 	private void buildButtons() {
 		buttons.defaults().height(Selection.buttonHeight).growX();
 

@@ -6,9 +6,7 @@ import arc.graphics.g2d.*;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.util.*;
-import mindustry.Vars;
 import mindustry.graphics.Pal;
-import mindustry.ui.Fonts;
 import modtools.events.E_Blur;
 import modtools.ui.MyFonts;
 
@@ -100,17 +98,16 @@ public class MyDraw {
 	public static void dashRect(float x, float y, float w, float h, float off) {
 		float unit = (w + h) / 32f;
 		float cx   = x - w / 2f, cy = y - h / 2f;
-
-		float unit4 = unit * 4f;
-		off %= unit4;
-		// float bx    = cx - unit4 + off;
-		float x1, y1;
-		Floatc4 line = (_x1, _y1, x2, y2) -> Lines.line(
-		 cx + Mathf.clamp(_x1, 0, w),
-		 cy + Mathf.clamp(_y1, 0, h),
+		Floatc4 line = (x1, y1, x2, y2) -> Lines.line(
+		 cx + Mathf.clamp(x1, 0, w),
+		 cy + Mathf.clamp(y1, 0, h),
 		 cx + Mathf.clamp(x2, 0, w),
 		 cy + Mathf.clamp(y2, 0, h)
 		);
+
+		float unit4 = unit * 4f;
+		off %= unit4;
+		float x1, y1;
 
 		// top ("x: 0 -> w", y; h -> h)
 		for (x1 = -unit4, y1 = h; x1 < w; x1 += unit4) {

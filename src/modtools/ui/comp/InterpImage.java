@@ -23,9 +23,11 @@ public class InterpImage extends Element {
 	public static int  pointAmount     = 100;
 	public        int  selfPointAmount = 0;
 	static final  Vec2 v1              = new Vec2();
+
 	public void draw() {
 		super.draw();
 		Core.graphics.requestRendering();
+
 		Draw.color(color);
 		Draw.alpha(parentAlpha * color.a);
 		selfPointAmount++;

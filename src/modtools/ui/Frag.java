@@ -127,8 +127,8 @@ public class Frag extends Table {
 				Core.graphics.requestRendering();
 				image.setSize(hoverSize);
 				image.setPosition(
-				 top.getWidth() / 2f + radius * Mathf.cosDeg(rotation1),
-				 top.getHeight() / 2f + radius * Mathf.sinDeg(rotation1), Align.center);
+				 top.getWidth() / 2f + Angles.trnsx(rotation1, radius),
+				 top.getHeight() / 2f + Angles.trnsy(rotation1, radius), Align.center);
 			});
 			image.clicked(content::build);
 

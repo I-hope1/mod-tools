@@ -614,7 +614,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public float getPrefWidth() {
 			// （行数+1）* 数字宽度
-			return (float) Math.ceil(Math.log10(area.getLines() + 1)) * numWidth;
+			return (float) Mathf.digits(area.getLines()) * numWidth;
 		}
 
 		Font font;

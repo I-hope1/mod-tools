@@ -478,7 +478,7 @@ public class Tester extends Content {
 	private boolean rollHistory(boolean forward) {
 		if (max_history_size.getInt() == 0) return false;
 		if (historyPos == -1) originalText = area.getText();
-		historyPos += forward ? 1 : -1;
+		historyPos += Mathf.sign(forward);
 		Vec2 pos            = tmpV.set(ui.x, ui.y + 20);
 		int  maxHistorySize = max_history_size.getInt();
 		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= maxHistorySize)) {
@@ -982,11 +982,10 @@ public class Tester extends Content {
 
 		public boolean keyTyped(InputEvent event, char character) {
 			check(event);
-			if (!hasFunctionKey() && character != DELETE && character != BACKSPACE &&
+			if (!event.stopped && character != DELETE && character != BACKSPACE &&
 			    (area.isWordCharacter(character) || character == '.') &&
 			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
 			    auto_complement.enabled()) {
-				Log.info(character);
 				if (syntax.virtualString != null) event.stop();
 				Core.app.post(this::complement);
 			}

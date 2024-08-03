@@ -2,7 +2,7 @@ package modtools.ui.comp;
 
 import arc.func.Prov;
 import arc.graphics.Color;
-import arc.math.Interp;
+import arc.math.*;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.style.Drawable;
@@ -155,7 +155,7 @@ public class IntTab {
 				 if (first == null) first = b;
 				 labels.put(names[j], b.add(new TitleLabel(
 					() -> hideTitle ? "" : names[j],
-					icons == null ? null :  icons[j]
+					icons == null ? null : icons[j]
 				 )).color(colors[j]).padLeft(4f).padRight(4f).minWidth(28).growY().get());
 				 b.row();
 				 Image image = b.image().growX().get();
@@ -216,10 +216,11 @@ public class IntTab {
 		float targetY = column ? main.getHeight() * -0.7f : 0;
 
 		// 如果是竖向排列
+		int sign = Mathf.sign(toIndex > getSelected());
 		if (column) {
-			targetY *= toIndex > getSelected() ? 1 : -1;
+			targetY *= sign;
 		} else {
-			targetX *= toIndex > getSelected() ? 1 : -1;
+			targetX *= sign;
 		}
 
 		return Actions.parallel(

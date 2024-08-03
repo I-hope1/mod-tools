@@ -3,6 +3,7 @@ package modtools.ui.comp.review;
 import arc.Core;
 import arc.func.Func;
 import arc.graphics.Color;
+import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Style;
@@ -203,7 +204,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 
 	static Object castBoolean(Class<?> valueType, boolean b) {
-		return valueType == Boolean.TYPE ? b : b ? 1 : 0;
+		return valueType == Boolean.TYPE ? b : Mathf.num(b);
 	}
 
 	// Mat mat = new Mat();

@@ -384,7 +384,7 @@ public interface ISettings extends E_DataInterface {
 				Boolc updateState = enabled -> {
 					img.setColor(enabled ? Color.gray : Color.white);
 					var o = (Data) get();
-					o.put(k_j, (enabled ? 1 : -1) * o.getInt(k_j, j + 1));
+					o.put(k_j, Mathf.sign(enabled) * o.getInt(k_j, j + 1));
 				};
 				btn.clicked(() -> {
 					btn.toggle();

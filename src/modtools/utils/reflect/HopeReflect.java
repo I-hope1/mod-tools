@@ -54,6 +54,9 @@ public class HopeReflect {
 
 	public static Class<?> getCaller() {
 		if (OS.isAndroid) return VMStack.getStackClass2();
+		try {
+			return StackWalker.getInstance().getCallerClass();
+		} catch (Throwable ignored) {}
 		Thread              thread = Thread.currentThread();
 		StackTraceElement[] trace  = thread.getStackTrace();
 		try {

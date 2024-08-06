@@ -8,7 +8,7 @@ import mindustry.gen.Tex;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.IDisposable;
-import modtools.ui.content.ui.ReviewElement;
+import modtools.content.ui.ReviewElement;
 
 import static modtools.ui.comp.review.CellDetailsWindow.buildSetter;
 import static modtools.utils.ui.FormatHelper.fixed;

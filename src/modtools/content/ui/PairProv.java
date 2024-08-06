@@ -1,4 +1,4 @@
-package modtools.ui.content.ui;
+package modtools.content.ui;
 
 import arc.func.Prov;
 import arc.math.Mathf;

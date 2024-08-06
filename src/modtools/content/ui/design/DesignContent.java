@@ -1,4 +1,4 @@
-package modtools.ui.content.ui.design;
+package modtools.content.ui.design;
 
 import arc.scene.Element;
 import arc.scene.style.Drawable;
@@ -8,7 +8,7 @@ import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.menu.*;
 import modtools.ui.comp.Window;
-import modtools.ui.content.Content;
+import modtools.content.Content;
 
 public class DesignContent extends Content {
 	public Window ui;

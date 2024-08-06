@@ -11,7 +11,7 @@ import arc.scene.ui.*;
 import arc.util.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.comp.Window;
-import modtools.ui.content.ui.ShowUIList;
+import modtools.content.ui.ShowUIList;
 import modtools.ui.effect.ScreenSampler;
 
 import java.util.Optional;

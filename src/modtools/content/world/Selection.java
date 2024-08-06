@@ -1,5 +1,5 @@
 
-package modtools.ui.content.world;
+package modtools.content.world;
 
 import arc.Core;
 import arc.func.*;
@@ -28,6 +28,7 @@ import mindustry.ui.*;
 import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.IntVars;
+import modtools.content.*;
 import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;

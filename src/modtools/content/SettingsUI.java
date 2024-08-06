@@ -1,5 +1,5 @@
 
-package modtools.ui.content;
+package modtools.content;
 
 import arc.Core;
 import arc.files.Fi;
@@ -164,7 +164,7 @@ public class SettingsUI extends Content {
 				 }).height(42).growX().colspan(2); */
 			 }).growX();
 		 }}));
-		Content.all.forEach(cont -> {
+		all.forEach(cont -> {
 			if (!(cont instanceof SettingsUI)) {
 				addLoad(cont);
 			}

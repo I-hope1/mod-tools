@@ -1,4 +1,4 @@
-package modtools.ui.content.ui;
+package modtools.content.ui;
 
 import arc.scene.*;
 import arc.scene.actions.*;
@@ -13,7 +13,7 @@ import modtools.jsfunc.reflect.*;
 import modtools.ui.*;
 import modtools.ui.IntUI.SelectTable;
 import modtools.ui.comp.Window;
-import modtools.ui.content.Content;
+import modtools.content.Content;
 import modtools.ui.control.HopeInput;
 import modtools.ui.reflect.RBuilder;
 

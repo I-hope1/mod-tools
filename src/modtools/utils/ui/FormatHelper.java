@@ -15,8 +15,6 @@ import modtools.utils.Tools;
 
 import java.util.Map;
 
-import static modtools.ui.content.ui.ShowUIList.*;
-
 public class FormatHelper {
 
 	public static final boolean                     withPrefix   = true;

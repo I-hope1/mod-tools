@@ -19,7 +19,7 @@ import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.utils.MyItemSelection;
-import modtools.ui.content.ui.ShowUIList;
+import modtools.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
 import modtools.utils.*;

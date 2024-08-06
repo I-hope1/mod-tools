@@ -1,4 +1,4 @@
-package modtools.ui.content.world;
+package modtools.content.world;
 
 import arc.func.*;
 import arc.graphics.Color;
@@ -17,10 +17,10 @@ import mindustry.type.*;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
 import modtools.IntVars;
+import modtools.content.Content;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
-import modtools.ui.content.Content;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;

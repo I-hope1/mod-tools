@@ -1,4 +1,4 @@
-package modtools.ui.content.ui.design;
+package modtools.content.ui.design;
 
 import arc.Core;
 import arc.func.Cons;
@@ -17,7 +17,7 @@ import arc.util.serialization.Jval.*;
 import mindustry.gen.Tex;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.comp.ModifiableLabel;
-import modtools.ui.content.ui.ShowUIList;
+import modtools.content.ui.ShowUIList;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 

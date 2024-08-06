@@ -1,5 +1,5 @@
 
-package modtools.ui.content.ui;
+package modtools.content.ui;
 
 import arc.Core;
 import arc.files.Fi;
@@ -28,11 +28,11 @@ import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.IntVars;
+import modtools.content.*;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.comp.utils.*;
-import modtools.ui.content.*;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.reflect.FieldUtils;

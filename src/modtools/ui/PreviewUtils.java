@@ -21,7 +21,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Hitter;
-import modtools.ui.content.ui.PairProv.SizeProv;
+import modtools.content.ui.PairProv.SizeProv;
 import modtools.utils.TaskManager;
 import modtools.utils.ui.*;
 

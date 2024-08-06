@@ -1,6 +1,6 @@
-package modtools.ui.content.ui.design;
+package modtools.content.ui.design;
 
-import modtools.ui.content.Content;
+import modtools.content.Content;
 
 public class DebugElement extends Content {
 	public DebugElement(String name) {

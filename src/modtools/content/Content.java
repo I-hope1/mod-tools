@@ -1,5 +1,5 @@
 
-package modtools.ui.content;
+package modtools.content;
 
 import arc.Core;
 import arc.func.Boolp;

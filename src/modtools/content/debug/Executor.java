@@ -1,4 +1,4 @@
-package modtools.ui.content.debug;
+package modtools.content.debug;
 
 import arc.func.*;
 import arc.graphics.Color;
@@ -23,7 +23,7 @@ import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.input.JSRequest;
-import modtools.ui.content.Content;
+import modtools.content.Content;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;

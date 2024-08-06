@@ -19,7 +19,7 @@ import modtools.events.ISettings;
 import modtools.ui.comp.Hitter;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.MoveListener;
-import modtools.ui.content.Content;
+import modtools.content.Content;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
 import modtools.utils.ui.search.BindCell;

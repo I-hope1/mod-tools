@@ -23,7 +23,7 @@ import modtools.annotations.settings.SettingsInit;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.limit.LimitTextButton;
-import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
@@ -34,8 +34,8 @@ import java.lang.reflect.Method;
 
 import static modtools.events.ISettings.$$.*;
 import static modtools.ui.IntUI.*;
-import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
-import static modtools.ui.content.SettingsUI.colorBlock;
+import static modtools.content.SettingsUI.SettingsBuilder.*;
+import static modtools.content.SettingsUI.colorBlock;
 import static modtools.utils.Tools.*;
 import static modtools.utils.ui.CellTools.rowSelf;
 

@@ -1,4 +1,4 @@
-package modtools.ui.content.world;
+package modtools.content.world;
 
 import arc.*;
 import arc.graphics.*;
@@ -22,6 +22,7 @@ import mindustry.graphics.*;
 import mindustry.type.UnitType;
 import mindustry.ui.Styles;
 import modtools.*;
+import modtools.content.Content;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -29,8 +30,7 @@ import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.linstener.WorldSelectListener;
 import modtools.ui.comp.utils.MyItemSelection;
-import modtools.ui.content.Content;
-import modtools.ui.content.debug.Tester;
+import modtools.content.debug.Tester;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;

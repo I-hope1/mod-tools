@@ -14,7 +14,7 @@ import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
-import modtools.ui.content.debug.Tester;
+import modtools.content.debug.Tester;
 import modtools.utils.*;
 import modtools.utils.ui.search.*;
 

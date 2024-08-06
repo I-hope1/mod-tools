@@ -8,7 +8,7 @@ import arc.util.Reflect;
 import arc.util.serialization.Json.FieldMetadata;
 import modtools.IntVars;
 import modtools.jsfunc.type.CAST;
-import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.utils.Tools.*;
 
 import java.lang.reflect.Field;

@@ -41,7 +41,7 @@ import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
-import static modtools.ui.content.ui.ReviewElement.Settings.checkCullingArea;
+import static modtools.content.ui.ReviewElement.Settings.checkCullingArea;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag

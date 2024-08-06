@@ -27,7 +27,7 @@ import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.*;
-import modtools.ui.content.debug.Tester;
+import modtools.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.windows.*;
 import modtools.ui.windows.NameWindow.FileNameWindow;

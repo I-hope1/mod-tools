@@ -1,4 +1,4 @@
-package modtools.ui.content.debug;
+package modtools.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
@@ -18,7 +18,7 @@ import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.AutoWrapListener;
-import modtools.ui.content.Content;
+import modtools.content.Content;
 
 import static modtools.utils.Tools.readFiOrEmpty;
 

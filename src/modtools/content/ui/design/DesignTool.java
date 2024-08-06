@@ -1,4 +1,4 @@
-package modtools.ui.content.ui.design;
+package modtools.content.ui.design;
 
 public enum DesignTool {
 	move, selection, rectangle, pen, text, hand, eraser;

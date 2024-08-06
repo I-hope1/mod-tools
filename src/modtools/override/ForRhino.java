@@ -12,7 +12,7 @@ import java.io.File;
 import java.lang.reflect.*;
 
 import static modtools.ui.Contents.tester;
-import static modtools.ui.content.debug.Tester.Settings.catch_outsize_error;
+import static modtools.content.debug.Tester.Settings.catch_outsize_error;
 import static modtools.utils.Tools.clName;
 
 @SuppressWarnings("unused")

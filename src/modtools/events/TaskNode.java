@@ -13,12 +13,12 @@ import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
 import modtools.struct.MySet;
 import modtools.ui.IntUI;
-import modtools.ui.content.SettingsUI.SettingsBuilder;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.ui.menu.MenuItem;
 import rhino.*;
 
 import static modtools.IntVars.mouseVec;
-import static modtools.ui.content.SettingsUI.SettingsBuilder.*;
+import static modtools.content.SettingsUI.SettingsBuilder.*;
 
 public class TaskNode {
 	public static final float perTick = 1 / 60f;

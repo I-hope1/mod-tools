@@ -1,10 +1,11 @@
 package modtools.ui;
 
 import modtools.annotations.ContentInit;
+import modtools.content.*;
+import modtools.content.debug.*;
+import modtools.content.ui.*;
+import modtools.content.world.*;
 import modtools.ui.content.*;
-import modtools.ui.content.debug.*;
-import modtools.ui.content.ui.*;
-import modtools.ui.content.world.*;
 
 @SuppressWarnings("unused")
 @ContentInit

@@ -9,8 +9,7 @@ import mindustry.gen.*;
 import modtools.IntVars;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.*;
-import modtools.ui.content.ui.design.DesignTable;
-import modtools.ui.content.ui.design.DesignTable.*;
+import modtools.content.ui.design.DesignTable;
 import modtools.ui.menu.*;
 
 public class DesignHelper {

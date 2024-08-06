@@ -9,7 +9,7 @@ import arc.util.*;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
-import modtools.ui.content.debug.Tester;
+import modtools.content.debug.Tester;
 import modtools.utils.Tools;
 import modtools.utils.ui.CellTools;
 

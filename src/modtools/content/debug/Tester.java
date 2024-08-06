@@ -1,5 +1,5 @@
 
-package modtools.ui.content.debug;
+package modtools.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
@@ -30,6 +30,8 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import modtools.*;
+import modtools.content.Content;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
@@ -47,8 +49,6 @@ import modtools.ui.comp.input.highlight.Syntax.*;
 import modtools.ui.comp.limit.PrefPane;
 import modtools.ui.comp.linstener.*;
 import modtools.ui.comp.windows.ListDialog;
-import modtools.ui.content.Content;
-import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.MenuItem;
@@ -63,7 +63,7 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.ui.content.debug.Tester.Settings.*;
+import static modtools.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {

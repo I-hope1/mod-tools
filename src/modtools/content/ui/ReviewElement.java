@@ -1,4 +1,4 @@
-package modtools.ui.content.ui;
+package modtools.content.ui;
 
 import arc.Core;
 import arc.func.*;
@@ -34,8 +34,8 @@ import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
 import modtools.ui.comp.review.CellDetailsWindow;
 import modtools.ui.comp.utils.*;
-import modtools.ui.content.Content;
-import modtools.ui.content.ui.PairProv.SizeProv;
+import modtools.content.Content;
+import modtools.content.ui.PairProv.SizeProv;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.effect.*;
 import modtools.ui.gen.HopeIcons;
@@ -53,7 +53,7 @@ import static modtools.IntVars.mouseVec;
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
-import static modtools.ui.content.ui.ReviewElement.Settings.*;
+import static modtools.content.ui.ReviewElement.Settings.*;
 import static modtools.utils.ui.CellTools.unset;
 import static modtools.utils.ui.FormatHelper.fixed;
 

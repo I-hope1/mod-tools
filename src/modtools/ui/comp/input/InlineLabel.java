@@ -1,5 +1,6 @@
 package modtools.ui.comp.input;
 
+import arc.func.Prov;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
@@ -16,6 +17,15 @@ public class InlineLabel extends NoMarkupLabel  {
 
 	public InlineLabel(CharSequence text) {
 		super(text);
+	}
+	public InlineLabel(CharSequence text, LabelStyle style) {
+		super(text, style);
+	}
+	public InlineLabel(float scale) {
+		super(scale);
+	}
+	public InlineLabel(Prov<CharSequence> sup) {
+		super(sup);
 	}
 
 	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
@@ -34,7 +44,7 @@ public class InlineLabel extends NoMarkupLabel  {
 			colorKeys.add(keys.next());
 		}
 		colorKeys.sort();
-		Color color        = Color.white;
+		Color color        = colorMap.get(0);
 		int   startIndex   = colorKeys.first();
 		int   currentIndex = 0;
 

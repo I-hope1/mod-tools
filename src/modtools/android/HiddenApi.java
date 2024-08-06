@@ -8,7 +8,6 @@ import rhino.classfile.ByteCode;
 
 import java.lang.reflect.*;
 
-import static ihope_lib.MyReflect.unsafe;
 import static modtools.utils.ByteCodeTools.nativeName;
 
 /** Only For Android */
@@ -73,8 +72,8 @@ public class HiddenApi {
 		/* 查找artMethod  */
 		for (int k = 0; k < length; ++k) {
 			final long k_address         = address + k * IBYTES;
-			final long address_Method    = unsafe.getInt(k_address);
-			final long address_ArtMethod = unsafe.getLong(address_Method + offset_art_method_);
+			final long address_Method    = UNSAFE.getInt(k_address);
+			final long address_ArtMethod = UNSAFE.getLong(address_Method + offset_art_method_);
 			if (min >= address_ArtMethod) {
 				min = address_ArtMethod;
 			} else if (min_second >= address_ArtMethod) {
@@ -91,9 +90,9 @@ public class HiddenApi {
 		if (size_art_method > 0 && size_art_method < 100) {
 			for (long artMethod = min_second; artMethod < max; artMethod += size_art_method) {
 				// 这获取的是array[0]的 *Method，大小32bit
-				final long address_Method = unsafe.getInt(address);
+				final long address_Method = UNSAFE.getInt(address);
 				// 修改第一个方法的artMethod
-				unsafe.putLong(address_Method + offset_art_method_, artMethod);
+				UNSAFE.putLong(address_Method + offset_art_method_, artMethod);
 				// 安卓的getName是native实现，修改了artMethod，name自然会变
 				if ("setHiddenApiExemptions".equals(array[0].getName())) {
 					Log.debug("Got: " + array[0]);
@@ -162,7 +161,7 @@ public class HiddenApi {
 			return 1;
 		}, 1, void.class);
 
-		Runnable r = (Runnable) unsafe.allocateInstance(testA.define(A.class));
+		Runnable r = (Runnable) UNSAFE.allocateInstance(testA.define(A.class));
 		Log.info("Runnable: @", r);
 		r.run();
 		Log.info("After run");
@@ -225,9 +224,9 @@ public class HiddenApi {
 		// new A()._private();
 	}
 	private static void replaceAMethod(Method dest, Method src) {
-		long address_dest = unsafe.getLong(dest, offset_art_method_);
-		long address_src  = unsafe.getLong(src, offset_art_method_);
+		long address_dest = UNSAFE.getLong(dest, offset_art_method_);
+		long address_src  = UNSAFE.getLong(src, offset_art_method_);
 
-		unsafe.copyMemory(address_src + 4, address_dest + 4, 24);
+		UNSAFE.copyMemory(address_src + 4, address_dest + 4, 24);
 	}
 }

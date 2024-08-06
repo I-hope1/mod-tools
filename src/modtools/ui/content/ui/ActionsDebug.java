@@ -33,7 +33,7 @@ public class ActionsDebug extends Content {
 	Window  ui;
 	Element element;
 
-	MethodHandle init = nl(() -> InitMethodHandle.findInit(Image.class, Image.class.getConstructor()));
+	MethodHandle init = nl(() -> InitMethodHandle.findInit(Image.class.getConstructor()));
 
 	@Override
 	public void load() {

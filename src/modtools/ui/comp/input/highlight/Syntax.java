@@ -163,7 +163,7 @@ public class Syntax {
 		// IntMap<?>[] current;
 		public boolean begin = false, finished;
 		public TokenDraw[] tokenDraws;
-		public int         lastTokenIndex = -1, currentIndex = -1;
+		public int         lastTokenIndex = -1;/* 上一次的token右边 */
 		public String lastToken, token;
 
 		public DrawToken(TokenDraw... tokenDraws) {
@@ -174,7 +174,6 @@ public class Syntax {
 		void reset() {
 			super.reset();
 			// System.arraycopy(total, 0, current, 0, total.length);
-			lastTokenIndex = -1;
 			finished = false;
 			begin = false;
 		}
@@ -191,8 +190,8 @@ public class Syntax {
 
 
 		void setColor(int from, int to) {
-			currentIndex = to;
 			setColor(displayText.substring(from, to));
+			lastTokenIndex = to;
 		}
 
 		void setColor(String token) {
@@ -208,19 +207,19 @@ public class Syntax {
 				break;
 			}
 			finished = true;
-			lastTokenIndex = lastIndex;
 			lastToken = token;
 		}
 
 		boolean draw(int i) {
 			// if (!current.containsKey(c)) return false;
 			if (!(begin || (isWordBreak(lastChar) && !isWordBreak(c)))) return false;
-			if (!begin) begin = true;
-			if (lastIndex == -1) lastIndex = i;
+			if (!begin) {
+				begin = true;
+				lastIndex = i;
+			}
 
 			/* 判断下一个index是否越界 */
 			if (++i < len) {
-				/* 判断下一个index是否越界 */
 				if (isWordBreak(i)) {
 					setColor(lastIndex, i);
 					return finished;
@@ -422,7 +421,6 @@ public class Syntax {
 
 		/** 渲染结束（包括失败）时，执行 */
 		void reset() {
-			lastIndex = -1;
 			withdraw = false;
 		}
 

@@ -238,7 +238,7 @@ public class ShowUIList extends Content {
 		}
 	}
 	private static Cell<Label> field(Table p, String fieldName) {
-		return p.add(fieldName).with(JSFunc::addDClickCopy).growY();
+		return p.add(fieldName).with(EventHelper::addDClickCopy).growY();
 	}
 	static void listAllStyles(FilterTable<Object> t, Class<?> stylesClass) {
 		String  prefix = stylesClass.getSimpleName() + ".";

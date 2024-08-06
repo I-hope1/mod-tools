@@ -8,7 +8,6 @@ import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
 import mindustry.graphics.Pal;
@@ -63,20 +62,6 @@ public class JSFunc
 	public static TextureRegion drawRegion(int w, int h, Runnable run) {
 		return WorldDraw.drawRegion(w, h,run);
 	}
-
-
-	/** 双击复制文本内容 */
-	public static void addDClickCopy(Label label) {
-		addDClickCopy(label, null);
-	}
-
-	public static void addDClickCopy(Label label, Func<String, String> func) {
-		EventHelper.doubleClick(label, null, () -> {
-			String s = String.valueOf(label.getText());
-			copyText(func != null ? func.get(s) : s, label);
-		});
-	}
-
 	public static void copyText(CharSequence text, Element element) {
 		copyText(text, getAbsolutePos(element));
 	}

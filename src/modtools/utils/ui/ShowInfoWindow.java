@@ -321,7 +321,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			cell.height(42);
 			c_cell.require();
 			MyEvents.on(E_JSFuncEdit.number, () -> {
-				cell.setElement(E_JSFuncEdit.number.enabled() ? field : null);
+				c_cell.cell.setElement(E_JSFuncEdit.number.enabled() ? field : null);
 				c_cell.require();
 			});
 		} else if (E_JSFuncEdit.string.enabled() && type == String.class && editable.get()) {
@@ -608,11 +608,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 	/** 双击复制文本内容 */
 	private static MyLabel newCopyLabel(Table table, String text) {
-		MyLabel label = new MyLabel(text, defaultLabel);
+		MyLabel label = new CopyLabel(text);
 		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
 			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));
 		}) */;
-		addDClickCopy(label, s -> s.replaceAll(" \\[\\d+]$", ""));
+		// addDClickCopy(label, s -> s.replaceAll(" \\[\\d+]$", ""));
 		return label;
 	}
 
@@ -646,6 +646,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 		public ReflectTable() {
 			left().defaults().left().top();
+
+			EventHelper.addDClickCopy(this, CopyLabel.class, l -> l.getText().toString().replaceAll(" \\[\\d+]$", ""));
 		}
 		public void act(float delta) {
 			super.act(delta);
@@ -716,6 +718,12 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			super.clear();
 			labels.each(ValueLabel::clearVal);
 			labels.clear().shrink();
+		}
+	}
+	/** 仅仅是个标识 */
+	static class CopyLabel extends MyLabel{
+		public CopyLabel(CharSequence text) {
+			super(text, defaultLabel);
 		}
 	}
 	static class MyHoverTable extends HoverTable {
@@ -806,7 +814,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 
 	private static Runnable ctorInitInvoker(Object o, Constructor<?> ctor, boolean noParam, Label l) {
 		return runT(() -> {
-			MethodHandle init = InitMethodHandle.findInit(ctor.getDeclaringClass(), ctor);
+			MethodHandle init = InitMethodHandle.findInit(ctor);
 			if (o == null) {
 				copyValue("Handle", init);
 			}

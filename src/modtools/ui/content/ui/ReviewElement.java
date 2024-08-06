@@ -125,7 +125,7 @@ public class ReviewElement extends Content {
 	 keyCodeData().keyCode("debugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt())
 		.applyToScene(true, () -> TSettings.debugBounds.toggle());
 
-public HKeyCode selectDebugBoundsKeyCode =
+	public HKeyCode selectDebugBoundsKeyCode =
 	 keyCodeData().keyCode("selectDebugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt().shift())
 		.applyToScene(true, () -> {
 			if (topGroup.isSelecting()) return;
@@ -251,6 +251,9 @@ public HKeyCode selectDebugBoundsKeyCode =
 
 	public static class ReviewElementWindow extends Window implements IDisposable {
 		private static final String SEARCH_RESULT = "SRCH_RS";
+		/** 用于parent父元素时，不用重新遍历 */
+		Element wrapCache;
+
 		Table   pane = new LimitTable();
 		Element element;
 		Pattern pattern;
@@ -268,17 +271,9 @@ public HKeyCode selectDebugBoundsKeyCode =
 				Button[] bs = {null};
 				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, HopeStyles.flatBordert, () -> {
 					 Runnable go = () -> {
-						 var parentWindow = new ReviewElementWindow();
-						 // Log.info(element.parent);
-						 /* 左上角对齐 */
-						 parentWindow.pattern = pattern;
-						 parentWindow.shown(() -> Core.app.post(() -> {
-							 parentWindow.pane.parent.setSize(pane.parent.getWidth(), pane.parent.getHeight());
-							 parentWindow.setSize(width, height);
-							 parentWindow.setPosition(x, getY(Align.topLeft), Align.topLeft);
-						 }));
-						 parentWindow.show(element.parent);
-						 hide();
+						 wrapCache = pane.getChildren().first();
+						 rebuild(element = element.parent);
+						 wrapCache = null;
 					 };
 					 if (element.parent == scene.root) {
 						 Vec2 vec2 = ElementUtils.getAbsolutePos(bs[0]);
@@ -296,7 +291,7 @@ public HKeyCode selectDebugBoundsKeyCode =
 					 window.shown(() -> window.setSize(width, height));
 				 })
 				 .size(35).padRight(3f);
-				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element, pattern))
+				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element))
 				 .size(35).padRight(3f);
 				t.table(search -> {
 					search.image(Icon.zoomSmall).size(35);
@@ -326,70 +321,34 @@ public HKeyCode selectDebugBoundsKeyCode =
 		}
 
 		public void rebuild(Element element, String text) {
-			pane.clearChildren();
-
+			pattern = PatternUtils.compileRegExpOrNull(text);
+			if (element == this.element) return;
 			if (element == null) return;
-			Pattern pattern = PatternUtils.compileRegExpOrNull(text);
-			rebuild(element, pattern);
+
+			rebuild(element);
 		}
 
-		public void rebuild(Element element, Pattern pattern) {
+		public void rebuild(Element element) {
+			if (pane.hasChildren()) {
+				SnapshotSeq<Element> children = pane.getChildren();
+				if (children.size == 1/* should always be true */ && children.get(0) instanceof MyWrapTable wt
+				    && wt.userObject instanceof Element elem && elem.parent == element) {
+					wt.remove();
+					pane.add();
+				}
+			}
 			pane.clearChildren();
 
 			if (element == null) return;
-			this.pattern = pattern;
 			build(element, pane);
-
-			// pane.row();
-			// pane.image().color(Pal.accent).growX().padTop(8).padBottom(8).row();
-			// highlightShowMultiRow(pane, pattern, element + "");
 		}
 
-
-		public void highlightShowMultiRow(Table table, String text) {
-			addMultiRowWithPos(table, text, null);
-		}
 		/** 结构： Label，Image（下划线） */
 		public void addMultiRowWithPos(Table table, String text, Prov<Vec2> pos) {
 			wrapTable(table, pos,
-			 pattern == null || pattern == PatternUtils.ANY ?
-				t -> t.add(new MyLabel(text, defaultLabel)).left().color(Pal.accent)
-				: t -> {
-				 for (var line : text.split("\\n")) {
-					 highlightShow(t.row(), pattern, line);
-				 }
-			 });
+			 t -> t.add(new SearchedLabel(() -> text, () -> pattern)).style(defaultLabel));
 		}
 
-		public void highlightShow(Table table, Pattern pattern, String text) {
-			if (pattern == null || pattern == PatternUtils.ANY) {
-				table.add(text, defaultLabel).color(Pal.accent);
-				return;
-			}
-			Matcher matcher = pattern.matcher(text);
-			table.table(t -> {
-				// Font font = style.font;
-
-				int index = 0, lastIndex = 0;
-				while (index <= text.length() && matcher.find(lastIndex)) {
-					String curText = matcher.group();
-					int    len     = curText.length();
-					if (len == 0) break;
-					index = matcher.start();
-					if (lastIndex != index) t.add(text.substring(lastIndex, index)).color(Pal.accent);
-					lastIndex = matcher.end();
-					if (index == lastIndex) {
-						lastIndex++;
-					}
-					// Log.info("i: @, l: @", index, lastIndex);
-					t.table(IntUI.whiteui.tint(Pal.logicWorld), t1 -> {
-						t1.add(new MyLabel(curText, LABEL_STYLE)).padRight(1);
-					}).name(SEARCH_RESULT);
-				}
-				if (text.length() - lastIndex > 0)
-					t.add(text.substring(lastIndex), defaultLabel).color(Pal.accent);
-			});
-		}
 		public void build(Element element, Table table) {
 			if (element == null) throw new IllegalArgumentException("element is null");
 			if (!DEBUG && element instanceof ReviewElementWindow) {
@@ -412,7 +371,7 @@ public HKeyCode selectDebugBoundsKeyCode =
 			if (isShown()) return;
 			this.element = element;
 			((ScrollPane) pane.parent).setScrollY(0);
-			rebuild(element, pattern);
+			rebuild(element);
 			show();
 		}
 
@@ -446,7 +405,7 @@ public HKeyCode selectDebugBoundsKeyCode =
 
 	private static class MyWrapTable extends ChildrenFirstTable implements KeyValue {
 		boolean stopEvent, needUpdate;
-		ReviewElementWindow window;
+		ReviewElement.ReviewElementWindow window;
 
 		Element previousKeyboardFocus;
 		public void requestKeyboard() {
@@ -457,6 +416,7 @@ public HKeyCode selectDebugBoundsKeyCode =
 		public void unfocus() {
 			if (scene.getKeyboardFocus() == this) scene.setKeyboardFocus(previousKeyboardFocus);
 		}
+
 		public MyWrapTable(ReviewElementWindow window, Element element) {
 			this.window = window;
 			userObject = element;
@@ -475,7 +435,8 @@ public HKeyCode selectDebugBoundsKeyCode =
 			/* 用于下面的侦听器  */
 			int eventChildIndex;
 			if (element instanceof Group group) {
-				eventChildIndex = buildForGroup(group);
+				buildForGroup(group);
+				eventChildIndex = 1;
 			} else {
 				defaults().growX();
 				eventChildIndex = 0;
@@ -501,7 +462,7 @@ public HKeyCode selectDebugBoundsKeyCode =
 			addFocusSource(this, () -> window, () -> element);
 		}
 
-		private int buildForGroup(Group group) {
+		private void buildForGroup(Group group) {
 			var button   = new FoldedImageButton(true);
 			int size     = 32;
 			var children = group.getChildren();
@@ -519,13 +480,13 @@ public HKeyCode selectDebugBoundsKeyCode =
 
 			defaults().growX();
 			table(t -> {
-				Table    table1  = new Table();
-				Runnable rebuild = () -> watchChildren(window, group, table1, children);
+				Cons<Table> rebuild = container -> watchChildren(window, group, container, children);
 
+				Table table1 = new Table();
 				boolean unfoldChildren = children.size < 20
 				                         || group.parent.getChildren().size == 1
 				                         || window.element == group;
-				if (unfoldChildren) rebuild.run();
+				if (unfoldChildren) rebuild.get(table1);
 
 				button.setContainer(t.add(table1).grow());
 				boolean[] lastEmpty = {children.isEmpty()};
@@ -562,13 +523,12 @@ public HKeyCode selectDebugBoundsKeyCode =
 					 needUpdate || (group.needsLayout() && group.getScene() != null) ||
 					 (!table1.hasChildren() && group.hasChildren())
 					)) {
-						rebuild.run();
+						rebuild.get(table1);
 						// if (group.needsLayout()) HopeFx.changedFx(group);
 						HopeFx.changedFx(textElement);
 					}
 				};
 			}).left();
-			return 1;
 		}
 		private Cons<Image> focusUpdater() {
 			return t -> t.color.set(FOCUS_FROM == this ? ColorFul.color : Color.darkGray);
@@ -674,7 +634,12 @@ public HKeyCode selectDebugBoundsKeyCode =
 	private static void watchChildren(ReviewElementWindow window, Group group, Table container,
 	                                  SnapshotSeq<Element> children) {
 		if (!container.hasChildren()) {
-			children.each(c -> window.build(c, container));
+			children.each(c -> {
+				if (window.wrapCache != null && window.wrapCache.userObject == c) {
+					container.add(window.wrapCache);
+				}
+				window.build(c, container);
+			});
 			return;
 		}
 		Cell<?>[] cells = new Cell<?>[children.size];
@@ -752,7 +717,7 @@ public HKeyCode selectDebugBoundsKeyCode =
 			touchableLabel.setText(FormatHelper.touchable(touchable));
 			touchableLabel.setColor(touchableToColor(touchable));
 		}
-		/** @param bool element.visible  */
+		/** @param bool element.visible */
 		void visible(boolean bool) {
 			visibleCell.toggle(!bool);
 		}

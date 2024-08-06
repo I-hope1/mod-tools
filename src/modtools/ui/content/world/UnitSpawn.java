@@ -88,8 +88,8 @@ public class UnitSpawn extends Content {
 			nameL = new Label("");
 			localizedNameL = new Label("");
 			EventHelper.longPressOrRclick(nameL, l -> Tester.put(l, selectUnit));
-			JSFunc.addDClickCopy(nameL);
-			JSFunc.addDClickCopy(localizedNameL);
+			EventHelper.addDClickCopy(nameL);
+			EventHelper.addDClickCopy(localizedNameL);
 			right.update(() -> {
 				selectUnit = (UnitType) group.getChecked().userObject;
 				Seq<ImageButton> allChecked = group.getAllChecked();

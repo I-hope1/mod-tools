@@ -27,7 +27,7 @@ public class HopeReflect {
 			flags &= ~Modifier.PRIVATE;
 			flags |= Modifier.PUBLIC;
 			f.setInt(obj, flags & 0xFFFF);
-		} catch (Exception ignored) {}
+		} catch (Exception ignored) { }
 	}
 
 	public static Class<?> defineClass(String name, Class<?> superClass, byte[] bytes) {
@@ -46,7 +46,8 @@ public class HopeReflect {
 		return UnsafeHandler.defineClass(name, bytes, loader);
 	}
 	private static Class<?> defineClassAndroid(String name, ClassLoader loader, byte[] bytes) {
-		if (!(ContextFactory.getGlobal() instanceof AndroidContextFactory)) AndroidRhinoContext.enter(new File(Core.settings.getDataDirectory() + "/rhino/"));
+		if (!(ContextFactory.getGlobal() instanceof AndroidContextFactory))
+			AndroidRhinoContext.enter(new File(Core.settings.getDataDirectory() + "/rhino/"));
 		return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
 		 .createClassLoader(loader))
 		 .defineClass(name, bytes);
@@ -54,9 +55,7 @@ public class HopeReflect {
 
 	public static Class<?> getCaller() {
 		if (OS.isAndroid) return VMStack.getStackClass2();
-		try {
-			return StackWalker.getInstance().getCallerClass();
-		} catch (Throwable ignored) {}
+		if (Runtime.version().feature() >= 9) return StackWalker.getInstance().getCallerClass();
 		Thread              thread = Thread.currentThread();
 		StackTraceElement[] trace  = thread.getStackTrace();
 		try {

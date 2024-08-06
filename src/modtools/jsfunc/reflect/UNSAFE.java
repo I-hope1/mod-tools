@@ -200,4 +200,7 @@ public interface UNSAFE {
 			throw new RuntimeException(e);
 		}
 	}
+	static void copyMemory(long src, long dest, int bytes) {
+		unsafe.copyMemory(src, dest, bytes);
+	}
 }

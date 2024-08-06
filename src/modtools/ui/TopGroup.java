@@ -346,9 +346,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 	/**
 	 * 请求选择元素
-	 * @param drawer 用于选择时渲染
+	 * @param drawer      用于选择时渲染
 	 * @param elementType 选择元素的类型
-	 * @param callback 选择元素后的回调
+	 * @param callback    选择元素后的回调
 	 */
 	public <T extends Element> void requestSelectElem(Drawer drawer, Class<T> elementType, Cons<T> callback) {
 		if (callback == null) throw new IllegalArgumentException("'callback' is null");
@@ -391,9 +391,10 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	/** 用于获取元素 */
 	private void addSceneListener() {
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
-			private       boolean locked      = false;
-			private       boolean cancelEvent = false;
-			private final Element mask        = new FillElement() {
+			private boolean locked      = false;
+			private boolean cancelEvent = false;
+
+			private final Element mask = new FillElement() {
 				@Override
 				public Element hit(float x, float y, boolean touchable) {
 					return cancelEvent ? this : null;

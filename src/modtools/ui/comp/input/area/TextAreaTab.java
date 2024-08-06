@@ -418,7 +418,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			char    c      = text.charAt(index);
 			boolean isWord = isWordCharacter(c);
 			while ((forward ? ++cursor < limit : --cursor > limit) && jump) {
-				c = text.charAt(index);
+				c = text.charAt(cursor);
 				if (c == '\n' || c == '\r') break;
 				if (isWord != continueCursor(cursor, charOffset)) break;
 			}

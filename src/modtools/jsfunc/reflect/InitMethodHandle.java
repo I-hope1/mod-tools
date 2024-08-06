@@ -32,9 +32,9 @@ public class InitMethodHandle {
 	}
 
 	public static MethodHandle findInit
-	 (Class<?> refc, Constructor<?> ctor) throws Throwable {
-		if (OS.isAndroid) return findInitAndroid(refc, ctor);
-		return findInitDesktop(refc, ctor, refc);
+	 (Constructor<?> ctor) throws Throwable {
+		if (OS.isAndroid) return findInitAndroid(ctor.getDeclaringClass(), ctor);
+		return findInitDesktop(ctor.getDeclaringClass(), ctor, ctor.getDeclaringClass());
 	}
 
 	// --------android--------

@@ -5,10 +5,10 @@ import arc.KeyBinds.KeybindValue;
 import arc.input.KeyCode;
 import mindustry.input.Binding;
 import modtools.Constants;
+import modtools.jsfunc.reflect.UNSAFE;
 
 import java.lang.reflect.Array;
 
-import static ihope_lib.MyReflect.unsafe;
 import static modtools.Constants.BINDING.*;
 
 public enum HopeBinding {
@@ -27,7 +27,7 @@ public enum HopeBinding {
 		Binding[] dest = (Binding[]) Array.newInstance(Binding.class, src.length + 1);
 		System.arraycopy(src, 0, dest, 0, src.length);
 		dest[src.length] = binding;
-		unsafe.putObject(Binding.class, BINDING_VALUES, dest);
+		UNSAFE.putObject(Binding.class, BINDING_VALUES, dest);
 	}
 	HopeBinding(KeybindValue keyCode) {
 		this(keyCode, null);

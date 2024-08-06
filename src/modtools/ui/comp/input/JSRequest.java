@@ -1,12 +1,14 @@
 package modtools.ui.comp.input;
 
+import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
-import arc.scene.ui.Label;
+import arc.scene.ui.*;
 import arc.util.Align;
 import modtools.jsfunc.IScript;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
+import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.*;
 import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.highlight.JSSyntax;
@@ -18,7 +20,7 @@ import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("SpellCheckingInspection")
 public class JSRequest {
-	public static class JSRequestWindow<R> extends NoTopWindow {
+	public static class JSRequestWindow<R> extends Window {
 		TextAreaTab area = new TextAreaTab("", false);
 		String      log;
 		boolean     notHideAuto;
@@ -45,6 +47,11 @@ public class JSRequest {
 
 		public JSRequestWindow() {
 			super("", 220, 220, true, false);
+			sticky = true;
+			if (titleTable.find("sticky") instanceof Button b) {
+				b.setDisabled(true);
+			}
+
 			cont.add(tips = new Label("")).color(Color.lightGray).growX().row();
 			area.getArea().setPrefRows(4);
 			cont.add(area).grow().row();
@@ -54,6 +61,7 @@ public class JSRequest {
 			shown(() -> {
 				area.getArea().setText(null);
 				log = "";
+				Core.app.post(this::keepInStage);
 			});
 		}
 		public Object eval() {

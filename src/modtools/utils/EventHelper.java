@@ -1,13 +1,13 @@
 package modtools.utils;
 
-import arc.func.Boolc;
+import arc.func.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
+import arc.scene.ui.Label;
 import arc.util.*;
 import arc.util.Timer.Task;
-import arc.util.pooling.Pool.Poolable;
 import mindustry.Vars;
 import modtools.ui.IntUI;
 
@@ -41,7 +41,7 @@ public class EventHelper {
 		 click1 = click == null ? null : runT(click::run),
 		 // 双击
 		 d_click1 = d_click == null ? null : runT(d_click::run);
-		elem.addListener(new DoubleClick().init(click1, d_click1));
+		elem.addListener(new DoubleClick(click1, d_click1));
 		return elem;
 	}
 	/**
@@ -112,6 +112,31 @@ public class EventHelper {
 	public static String longPressOrRclickKey() {
 		return mobile ? "Long press" : "Right click";
 	}
+	/** 双击复制文本内容 */
+	public static void addDClickCopy(Label label) {
+		addDClickCopy(label, null);
+	}
+	public static void addDClickCopy(Label label, Func<String, String> func) {
+		doubleClick(label, null, () -> {
+			String s = String.valueOf(label.getText());
+			JSFunc.copyText(func != null ? func.get(s) : s, label);
+		});
+	}
+
+	public static <E>void addDClickCopy(Element element, Class<E> type , Func<E, String> func) {
+		addDClickCopy(element, type::isInstance, (Func<Element, String>) func);
+	}
+
+	public static void addDClickCopy(Element element, Boolf<Element> boolf , Func<Element, String> func) {
+		element.addListener(new DoubleClick(null, null) {
+			public void d_clicked(InputEvent event, float x, float y) {
+				Element e = event.targetActor;
+				if (boolf.get(e)) {
+					JSFunc.copyText(func.get(e), e);
+				}
+			}
+		});
+	}
 
 
 	public static class LongPressListener extends ClickListener {
@@ -147,13 +172,11 @@ public class EventHelper {
 			task.cancel();
 		}
 	}
-	public static class DoubleClick extends ClickListener implements Poolable {
+	public static class DoubleClick extends ClickListener {
 		Runnable click, d_click;
-		public DoubleClick() { }
-		public DoubleClick init(Runnable click, Runnable d_click) {
+		public DoubleClick(Runnable click, Runnable d_click) {
 			this.click = click;
 			this.d_click = d_click;
-			return this;
 		}
 		final Task clickTask = TaskManager.newTask(() -> {
 			if (click != null) click.run();
@@ -166,6 +189,7 @@ public class EventHelper {
 		public void clicked(InputEvent event, float x, float y) {
 			if (last.dst(mouseVec) > IntUI.MAX_OFF) return;
 			super.clicked(event, x, y);
+			// 至少满足一个，可能是个坑
 			if (click != null && d_click == null) {
 				click.run();
 				return;
@@ -174,12 +198,10 @@ public class EventHelper {
 				last.set(mouseVec);
 				return;
 			}
-			if (mouseVec.dst(last) < IntUI.MAX_OFF) d_click.run();
+			if (mouseVec.dst(last) < IntUI.MAX_OFF) d_clicked(event, x, y);
 		}
-		public void reset() {
-			click = null;
-			d_click = null;
-			clickTask.cancel();
+		public void d_clicked(InputEvent event, float x, float y) {
+			d_click.run();
 		}
 	}
 	private static class RightClickListener extends ClickListener {

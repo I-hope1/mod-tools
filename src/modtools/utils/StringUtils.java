@@ -115,4 +115,38 @@ public interface StringUtils {
 		return next;
 	}
 
+	static boolean isBlank(CharSequence str, int start, int end) {
+		for (; start < end; start++) {
+			if (!Character.isWhitespace(str.charAt(start))) return false;
+		}
+		return true;
+	}
+	/** 判断是否符合正则表达式 \s*?\(\s*?)\s*? */
+	static boolean isParentheses(CharSequence str, int start, int end) {
+		// 检查索引是否在有效范围内
+		if (start < 0 || end >= str.length() || start > end) {
+			return false;
+		}
+
+		int index = start;
+
+		// 跳过开头的空白字符
+		while (index <= end && Character.isWhitespace(str.charAt(index))) {
+			index++;
+		}
+
+		// 检查是否遇到左括号
+		if (index <= end && str.charAt(index) == '(') {
+
+			// 跳过括号内的空白字符
+			do {
+				index++;
+			} while (index <= end && Character.isWhitespace(str.charAt(index)));
+
+			// 检查是否到达最后一个索引
+			return index > end;
+		}
+
+		return false;
+	}
 }

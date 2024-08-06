@@ -306,9 +306,7 @@ public class Tester extends Content {
 		bottomBar(table, textarea);
 	}
 	private void addListenerToArea(TextAreaTab textarea) {
-		JSSyntax syntax = new JSSyntax(textarea, scope);
-		syntax.indexToObj = new IntMap<>();
-		textarea.syntax = syntax;
+		textarea.syntax = new JSSyntax(textarea, scope);
 		area = textarea.getArea();
 		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
@@ -954,11 +952,15 @@ public class Tester extends Content {
 			area.clearSelection();
 			lastCompletionCursor = area.getCursorPosition();
 
+			while (area.checkIndex(start - 1) && Character.isWhitespace(area.charAtUncheck(start - 1))) start--;
+
 			Scriptable obj;
-			// Log.info(syntax.indexToObj);
 			if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
-				obj = syntax.indexToObj.get(start - 1);
-			} else obj = scope;
+				obj = syntax.cursorObj;
+			} else {
+				obj = scope;
+			}
+
 			if (obj == null) return;
 
 			keys.clear().addAll(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds());

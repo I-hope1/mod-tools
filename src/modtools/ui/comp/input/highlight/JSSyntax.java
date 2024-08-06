@@ -2,9 +2,13 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import modtools.Constants;
+import modtools.Constants.RHINO;
 import modtools.jsfunc.IScript;
+import modtools.jsfunc.reflect.UNSAFE;
 import rhino.*;
 
+import java.lang.reflect.Method;
 import java.util.*;
 
 @SuppressWarnings("StringTemplateMigration")
@@ -44,6 +48,10 @@ public class JSSyntax extends Syntax {
 
 	public static final ObjectSet<String> constantSet = new ScopeObjectSet(scope);
 	public static final ObjectSet<String> varSet      = new ObjectSet<>();
+
+	private static final NativeJavaObject NJO = new NativeJavaObject();
+
+	public Scriptable cursorObj = null;
 
 	static {
 		varSet.addAll("arguments", "Infinity", "Packages");
@@ -89,44 +97,10 @@ public class JSSyntax extends Syntax {
 
 	ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
 
+
 	protected final DrawSymbol
 	 operatesSymbol = new DrawSymbol(operates, c_operateChar),
-	 bracketsSymbol = new DrawSymbol(brackets, new Color()) {
-		 static final IntIntMap leftBracket = IntIntMap.of(
-			'(', ')',
-			'[', ']',
-			'{', '}');
-
-		 final Color            textColor = c_brackets;
-		 final Stack<Character> stack     = new Stack<>();
-
-		 int surpassSize = 0;
-		 void init() {
-			 super.init();
-			 surpassSize = hasChanged ? 0 : stack.size();
-			 stack.clear();
-		 }
-		 // ['(1', '(2', '2)' ] -> [ '(1' ]
-		 @Override
-		 boolean draw(int i) {
-			 if (!super.draw(i)) return false;
-			 if (leftBracket.containsKey(c)) {
-				 color.set(stack.size() < surpassSize ? c_error : textColor);
-				 stack.push(c);
-			 } else if (stack.isEmpty()) {
-				 color.set(c_error);
-			 } else if (leftBracket.get(stack.peek()) == c) {
-				 stack.pop();
-				 color.set(textColor);
-			 } else {
-				 color.set(c_error);
-			 }
-			 return true;
-		 }
-		 {
-			 color.set(textColor);
-		 }
-	 };
+	 bracketsSymbol = new DrawBracket();
 
 	public Object getPropOrNotFound(Scriptable scope, String key) {
 		try {
@@ -139,15 +113,15 @@ public class JSSyntax extends Syntax {
 	public NativeJavaPackage pkg = null;
 	public Scriptable        obj = null;
 
-	public IntMap<Scriptable> indexToObj;
-	public boolean            enableJSProp = false;
+	public boolean enableJSProp = false;
 
-	@SuppressWarnings("StringEqualsCharSequence")
 	public TokenDraw[] tokenDraws = {
 	 task -> {
 		 String token = task.token;
 		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
-			 if (operatesSymbol.lastSymbol == '.') return dealJSProp(token);
+			 if (operatesSymbol.lastSymbol == '.') {
+				 return dealJSProp(token);
+			 }
 		 }
 		 obj = null;
 		 pkg = null;
@@ -161,7 +135,7 @@ public class JSSyntax extends Syntax {
 				 return entry.value;
 			 }
 
-			 resolveToken(customScope, task, token);
+			 resolveToken(customScope, token);
 			 return entry.value;
 		 }
 		 obj = Undefined.SCRIPTABLE_UNDEFINED;
@@ -184,9 +158,8 @@ public class JSSyntax extends Syntax {
 		 return "NaN".equals(s) || !ScriptRuntime.isNaN(ScriptRuntime.toNumber(s)) ? c_number : null;
 	 }
 	};
-	private void resolveToken(Scriptable scope, DrawToken task, String token) {
+	private void resolveToken(Scriptable scope, String token) {
 		Object o = ScriptableObject.getProperty(scope, token);
-		appendIndexToObj(task, o);
 		if (o instanceof NativeJavaPackage newPkg) {
 			pkg = newPkg;
 			obj = null;
@@ -194,9 +167,12 @@ public class JSSyntax extends Syntax {
 			pkg = null;
 			obj = newObj;
 		}
+		setCursorObj();
 	}
-	private void appendIndexToObj(DrawToken task, Object o) {
-		if (indexToObj != null && o instanceof Scriptable sc) indexToObj.put(task.lastIndex + task.token.length(), sc);
+	private void setCursorObj() {
+		if (drawable != null && drawToken.lastIndex <= drawable.cursor()) {
+			cursorObj = obj;
+		}
 	}
 
 
@@ -209,16 +185,16 @@ public class JSSyntax extends Syntax {
 		 js_prop_map.computeIfAbsent(nja.unwrap(), _ -> new HashMap<>())
 			.computeIfAbsent(token, _ -> getPropOrNotFound(nja, token))
 		 : getPropOrNotFound(pkg, token);
-		if (o == Scriptable.NOT_FOUND) {
+		if (o == Scriptable.NOT_FOUND && obj != NJO) {
 			obj = null;
 			return c_error;
 		}
-		appendIndexToObj(drawToken, o);
 		if (o instanceof NativeJavaPackage) {
 			pkg = (NativeJavaPackage) o;
 		} else if (o instanceof Scriptable sc) {
 			pkg = null;
 			obj = sc;
+			setCursorObj();
 			return c_localvar;
 		}
 		obj = null;
@@ -230,16 +206,7 @@ public class JSSyntax extends Syntax {
 	 bracketsSymbol,
 	 new DrawComment(c_comment),
 	 operatesSymbol,
-	 drawToken = new DrawToken(tokenDraws) {
-		 void init() {
-			 super.init();
-			 pkg = null;
-			 obj = null;
-			 localVars.clear();
-			 localConstants.clear();
-			 if (indexToObj != null) indexToObj.clear();
-		 }
-	 },
+	 drawToken = new JSDrawToken(),
 	 };
 
 	{ taskArr = taskArr0; }
@@ -270,6 +237,76 @@ public class JSSyntax extends Syntax {
 
 			add(key);
 			return true;
+		}
+	}
+	private class DrawBracket extends DrawSymbol {
+		static final IntIntMap leftBracket = IntIntMap.of(
+		 '(', ')',
+		 '[', ']',
+		 '{', '}');
+
+		final Color textColor = c_brackets;
+
+		final IntSeq stack = new IntSeq();
+
+		int surpassSize = 0;
+		public DrawBracket() { super(JSSyntax.brackets, new Color()); }
+		void init() {
+			super.init();
+			surpassSize = hasChanged ? 0 : stack.size;
+			stack.clear();
+		}
+		// ['(1', '(2', '2)' ] -> [ '(1' ]
+		@Override
+		boolean draw(int i) {
+			if (!super.draw(i)) return false;
+			if (leftBracket.containsKey(c)) {
+				color.set(stack.size < surpassSize ? c_error : textColor);
+				stack.add(c);
+			} else if (stack.isEmpty()) {
+				color.set(c_error);
+			} else if (leftBracket.get(stack.peek()) == c) {
+				stack.pop();
+				color.set(textColor);
+			} else {
+				color.set(c_error);
+			}
+			forToken(i);
+			return true;
+		}
+		private void forToken(int i) {
+			if (c == '(') {
+				((JSDrawToken) drawToken).stack.add(obj);
+			}
+			if (c == ')') {
+				obj = ((JSDrawToken) drawToken).stack.pop();
+				if (obj != null) switch (obj) {
+					case NativeJavaMethod m -> {
+						Object[] o      = (Object[]) UNSAFE.getObject(m, RHINO.methods);
+						Method   method = (Method) UNSAFE.getObject(o[0], RHINO.memberObject);
+						Constants.iv(RHINO.initNativeJavaObject, NJO, customScope, null, method.getReturnType());
+						obj = NJO;
+						setCursorObj();
+					}
+					default -> { }
+				}
+			}
+		}
+		{
+			color.set(textColor);
+		}
+	}
+	private class JSDrawToken extends DrawToken {
+		public JSDrawToken() { super(JSSyntax.this.tokenDraws); }
+		final Stack<Scriptable> stack = new Stack<>();
+		void init() {
+			super.init();
+			stack.clear();
+			pkg = null;
+			obj = null;
+			cursorObj = null;
+			localVars.clear();
+			localConstants.clear();
 		}
 	}
 }

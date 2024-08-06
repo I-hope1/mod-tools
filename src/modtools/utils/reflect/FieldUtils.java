@@ -105,15 +105,9 @@ public class FieldUtils {
 		}
 	}
 
+	/** 如果字段不存在可能会导致JVM崩溃，谨慎使用  */
 	public static long fieldOffset(Class<?> cls, String name) {
-		// 尝试使用jdk中的unsafe获取offset
-		try { return Unsafe.getUnsafe().objectFieldOffset(cls, name); } catch (Throwable ignored) { }
-
-		try {
-			return fieldOffset(cls.getDeclaredField(name));
-		} catch (NoSuchFieldException e) {
-			throw new RuntimeException(e);
-		}
+		return $OffsetGetter2.impl.fieldOffset(cls, name);
 	}
 	public static long fieldOffset(Field f) {
 		return fieldOffset(Modifier.isStatic(f.getModifiers()), f);
@@ -121,6 +115,7 @@ public class FieldUtils {
 	public static long fieldOffset(boolean isStatic, Field f) {
 		return $OffsetGetter.impl.fieldOffset(isStatic, f);
 	}
+
 	public static Object getFieldValue(Object o, long off, Class<?> type) {
 		if (int.class.equals(type)) {
 			return unsafe.getInt(o, off);
@@ -206,4 +201,11 @@ interface $OffsetGetter {
 	$OffsetGetter AndroidImpl = (isStatic, f) -> hope_android.FieldUtils.getFieldOffset(f);
 
 	$OffsetGetter impl = OS.isAndroid ? AndroidImpl : DefaultImpl;
+}
+
+interface $OffsetGetter2 {
+	long fieldOffset(Class<?> clazz, String fieldName);
+	$OffsetGetter2 DesktopImpl = Unsafe.getUnsafe()::objectFieldOffset;
+	$OffsetGetter2 AndroidImpl= (cls, name) -> hope_android.FieldUtils.getFieldOffset(FieldUtils.getFieldAccessOrThrow(cls, name));
+	$OffsetGetter2 impl        = OS.isAndroid ? $OffsetGetter2.AndroidImpl : $OffsetGetter2.DesktopImpl;
 }

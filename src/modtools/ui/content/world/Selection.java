@@ -574,7 +574,7 @@ public class Selection extends Content {
 			// table.row();
 			t.left().defaults().left().padRight(4f);
 			t.image(tile.block() == Blocks.air ? null : new TextureRegionDrawable(tile.block().uiIcon)).size(24);
-			t.add(tile.block().name).with(JSFunc::addDClickCopy);
+			t.add(tile.block().name).with(EventHelper::addDClickCopy);
 			buildPos(t, new Vec2().set(tile.x, tile.y));
 			if (tile.overlay().itemDrop != null) t.image(tile.overlay().itemDrop.uiIcon).size(24);
 			if (tile.floor().liquidDrop != null) t.image(tile.floor().liquidDrop.uiIcon).size(24);
@@ -947,7 +947,7 @@ public class Selection extends Content {
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color);
 				t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
-				t.add(u.type.name).with(JSFunc::addDClickCopy);
+				t.add(u.type.name).with(EventHelper::addDClickCopy);
 
 				buildPos(t, u);
 				// t.add("pathfind:" + u.pathType());

@@ -74,7 +74,7 @@ public class SettingsUI extends Content {
 		// container
 		t.left().defaults().left();
 		table.table(container -> container.background(((NinePatchDrawable) Tex.sideline)
-			.tint(Tmp.c1.set(Pal.accent).lerp(Color.lightGray, 0.8f)))
+			 .tint(Tmp.c1.set(Pal.accent).lerp(Color.lightGray, 0.8f)))
 			.add(t).grow())
 		 .growX().colspan(2).left();
 		cont.add(table).growX().left().row();
@@ -225,11 +225,17 @@ public class SettingsUI extends Content {
 	}
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {
-		public static Table main;
+		private static Table main;
+		public static Table main() {
+			return main;
+		}
 		public SettingsBuilder() { }
 		public static void build(Table main) {
 			SettingsBuilder.main = main;
 			main.left().defaults().left();
+		}
+		public static void clearBuild() {
+			main = null;
 		}
 
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
@@ -358,7 +364,7 @@ public class SettingsUI extends Content {
 				 a.setChecked(prov.get());
 				 if (condition != null) a.setDisabled(!condition.get());
 			 })
-			 .padLeft(10f).padRight(100f).get();
+			 .padLeft(10f).get();
 			checkBox.setStyle(HopeStyles.hope_defaultCheck);
 			checkBox.left();
 			tryAddTip(checkBox, text.substring(text.indexOf('.') + 1));

@@ -729,6 +729,7 @@ public class Tester extends Content {
 				 () -> JS.get("type"), classes,
 				 stringify, () -> JS.getBool("disposable"));
 			}
+			SettingsBuilder.clearBuild();
 		}).row();
 		p.add(new MyLabel(readFiOrEmpty(f), HopeStyles.defaultLabel)).row();
 	}

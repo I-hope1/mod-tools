@@ -1,23 +1,16 @@
 package modtools.jsfunc;
 
 import arc.files.Fi;
-import arc.struct.Seq;
 
-import static mindustry.Vars.mods;
+import static mindustry.Vars.*;
 
 public interface IAsset {
-	static Fi[] file(String path) {
-		Seq<Fi> searched = new Seq<>();
-		mods.eachEnabled(m -> {
-			Fi child = m.root.child(path);
-			if (child.exists()) {
-				searched.add(child);
-			}
-		});
-		return searched.toArray(Fi.class);
+
+	static Fi file(String path) {
+		return tree.get(path);
 	}
 
-  static Fi file(String modName, String path) {
+	static Fi file(String modName, String path) {
 		return mods.getMod(modName).root.child(path);
-  }
+	}
 }

@@ -7,7 +7,7 @@ import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.struct.Seq;
-import arc.util.Align;
+import arc.util.*;
 import mindustry.gen.Icon;
 import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
@@ -29,6 +29,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 		this.field = field;
 
 		if (newVal != unset) setVal(newVal);
+		else setVal(getFieldValue());
 		addUpdate();
 	}
 	void addUpdate() {
@@ -71,20 +72,24 @@ public class FieldValueLabel extends ReflectValueLabel {
 	}
 	public void flushVal() {
 		if (isValid()) {
+			// 内联类型改了也没用
 			if (isStatic && isFinal() && field.getType().isPrimitive()) return;
-			Object value = FieldUtils.getFieldValue(
-			 isStatic ? field.getDeclaringClass() : obj,
-			 getOffset(),
-			 field.getType());
-			setVal(value);
+
+			setVal(getFieldValue());
 		} else {
 			setText0(null);
 		}
 	}
-	Long offset;
+	private Object getFieldValue() {
+		return FieldUtils.getFieldValue(
+		 isStatic ? field.getDeclaringClass() : obj,
+		 getOffset(),
+		 field.getType());
+	}
+	long offset = -1;
 	public long getOffset() {
 		if (field == null) throw new RuntimeException("Field is null.");
-		if (offset == null) offset = FieldUtils.fieldOffset(field);
+		if (offset == -1) offset = FieldUtils.fieldOffset(field);
 		return offset;
 	}
 

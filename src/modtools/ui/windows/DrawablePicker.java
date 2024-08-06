@@ -19,7 +19,6 @@ import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.utils.MyItemSelection;
-import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
@@ -116,7 +115,6 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 					resetColor(current);
 				});
 
-				SettingsBuilder.main = buttons;
 				Seq<DrawStyle> styles = new Seq<>(DrawStyle.values());
 				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, IntVars.EMPTY_RUN).get();
 				button.clicked(() -> {

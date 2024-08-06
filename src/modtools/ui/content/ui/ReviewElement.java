@@ -51,7 +51,7 @@ import static modtools.IntVars.mouseVec;
 import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
-import static modtools.ui.content.ui.ReviewElement.Settings.hoverInfoWindow;
+import static modtools.ui.content.ui.ReviewElement.Settings.*;
 import static modtools.utils.ui.CellTools.unset;
 import static modtools.utils.ui.FormatHelper.fixed;
 
@@ -103,6 +103,16 @@ public class ReviewElement extends Content {
 
 	public static final Color FOCUS_COLOR = DEF_FOCUS_COLOR;
 	public static final Color MASK_COLOR  = DEF_MASK_COLOR;
+
+	@SuppressWarnings("StringTemplateMigration")
+	public static String getElementName(Element element) {
+		return element == scene.root ? "ROOT"
+		 : STR."""
+		 \{anonymousInsteadSuper.enabled() ? element.getClass().getSimpleName() : ReflectTools.getSimpleNameNotAnonymous(element.getClass())}\
+		 \{element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : ""}\
+		 \{element.name != null ? " ★" + element.name + "★" : ""}\
+		 """;
+	}
 
 	public void loadSettings(Data SETTINGS) {
 		Contents.settings_ui.add(localizedName(), icon, new Table() {{
@@ -468,7 +478,7 @@ public class ReviewElement extends Content {
 			var children = group.getChildren();
 			add(button).size(size).disabled(_ -> children.isEmpty());
 			window.addMultiRowWithPos(this,
-			 ElementUtils.getElementName(group),
+			 getElementName(group),
 			 () -> Tmp.v1.set(group.x, group.y));
 			Element textElement = ((Table) this.children.get(this.children.size - 2)).getChildren().first();
 			// Log.info(textElement);
@@ -680,7 +690,9 @@ public class ReviewElement extends Content {
 
 
 	public enum Settings implements ISettings {
-		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */;
+		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */,
+		// 匿名类而不是非匿名超类
+		anonymousInsteadSuper;
 
 		Settings() { }
 		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }
@@ -880,7 +892,7 @@ public class ReviewElement extends Content {
 
 			if (!hoverInfoWindow.enabled()) return;
 
-			table.nameLabel.setText(ElementUtils.getElementName(elem));
+			table.nameLabel.setText(getElementName(elem));
 			table.size(elem.getWidth(), elem.getHeight());
 			table.touchableF(elem.touchable);
 			table.visible(elem.visible);

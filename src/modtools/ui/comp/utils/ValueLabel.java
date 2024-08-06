@@ -12,6 +12,7 @@ import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
+import arc.struct.IntMap.Entry;
 import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
@@ -165,31 +166,29 @@ public abstract class ValueLabel extends InlineLabel {
 	private void appendValue(StringBuilder text, Object val) {
 		if (val instanceof ObjectMap || val instanceof Map) {
 			text.append('{');
-			boolean checkTail = false;
 			switch (val) {
 				case ObjectMap<?, ?> map -> {
-					for (var entry : map) {
+					appendTail = null;
+					for (ObjectMap.Entry<?, ?> entry : map) {
 						appendMap(text, val, entry.key, entry.value);
-						checkTail = true;
 						if (isTruncate(text.length())) break;
 					}
 				}
 				case IntMap<?> map -> {
-					for (var entry : map) {
+					appendTail = null;
+					for (Entry<?> entry : map) {
 						appendMap(text, val, entry.key, entry.value);
-						checkTail = true;
 						if (isTruncate(text.length())) break;
 					}
 				}
 				default -> {
-					for (var entry : ((Map<?, ?>) val).entrySet()) {
+					appendTail = null;
+					for (Map.Entry<?, ?> entry : ((Map<?, ?>) val).entrySet()) {
 						appendMap(text, val, entry.getKey(), entry.getValue());
-						checkTail = true;
 						if (isTruncate(text.length())) break;
 					}
 				}
 			}
-			if (checkTail) text.deleteCharAt(text.length() - 2);
 			text.append('}');
 
 			// setColor(Syntax.c_map);
@@ -197,13 +196,13 @@ public abstract class ValueLabel extends InlineLabel {
 		}
 		iter:
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
-			boolean checkTail = false;
-			text.append('[');
+			text.append("[");
 
 			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
 			IterCons       cons = pool.obtain().init(this, val, text);
 			try {
 				try {
+					appendTail = null;
 					if (val instanceof Iterable<?> iter) {
 						for (Object item : iter) {
 							cons.get(item);
@@ -211,7 +210,6 @@ public abstract class ValueLabel extends InlineLabel {
 					} else {
 						ArrayUtils.forEach(val, cons);
 					}
-					checkTail = true;
 				} catch (SatisfyException ignored) { }
 			} catch (ArcRuntimeException ignored) {
 				break iter;
@@ -221,8 +219,7 @@ public abstract class ValueLabel extends InlineLabel {
 			} finally {
 				pool.free(cons);
 			}
-			if (checkTail && text.length() >= 2) text.delete(text.length() - 2, text.length());
-			text.append(']');
+			text.append("]");
 			// setColor(Color.white);
 			return;
 		}
@@ -282,7 +279,6 @@ public abstract class ValueLabel extends InlineLabel {
 			text.append(" ×").append(count);
 			colorMap.put(text.length(), Color.white);
 		}
-		text.append(getArrayDelimiter());
 	}
 	private Object wrapVal(Object val) {
 		if (val == null) return NULL_MARK;
@@ -304,7 +300,7 @@ public abstract class ValueLabel extends InlineLabel {
 				: val instanceof Character ? STR."'\{val}'"
 				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
 
-				: val instanceof Element ? ElementUtils.getElementName((Element) val)
+				: val instanceof Element ? ReviewElement.getElementName((Element) val)
 				: FormatHelper.getUIKey(val))
 			.get(() -> String.valueOf(val))
 			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
@@ -317,10 +313,10 @@ public abstract class ValueLabel extends InlineLabel {
 	                       Object value) {
 		valToObj.put(value, mapObj);
 		valToType.put(value, value == null ? Object.class : value.getClass());
+		postAppendDelimiter(sb);
 		appendValue(sb, key);
 		sb.append('=');
 		appendValue(sb, value);
-		sb.append(getArrayDelimiter());
 	}
 	private void appendMap(StringBuilder sb, Object mapObj,
 	                       Object key,
@@ -329,10 +325,15 @@ public abstract class ValueLabel extends InlineLabel {
 		valToObj.put(value, mapObj);
 		valToType.put(key, key.getClass());
 		valToType.put(value, value == null ? Object.class : value.getClass());
+		postAppendDelimiter(sb);
 		appendValue(sb, key);
 		sb.append('=');
 		appendValue(sb, value);
-		sb.append(getArrayDelimiter());
+	}
+	private Runnable appendTail;
+	private void postAppendDelimiter(StringBuilder sb) {
+		if (appendTail != null) appendTail.run();
+		appendTail = () -> sb.append(getArrayDelimiter());
 	}
 	private static String getArrayDelimiter() {
 		return E_JSFunc.array_delimiter.getString();
@@ -390,7 +391,6 @@ public abstract class ValueLabel extends InlineLabel {
 			resolveThrow(th);
 			super.setText(String.valueOf(val));
 		}
-		layout();
 		invalidateHierarchy();
 	}
 	private static void showNewInfo(Element el, Object val1, Class<?> type) {
@@ -610,6 +610,7 @@ public abstract class ValueLabel extends InlineLabel {
 			self.valToObj.put(item, val);
 			self.valToType.put(item, val.getClass());
 			if (last != null && identityClasses.contains(val.getClass()) ? !last.equals(item) : last != item) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, last);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();
@@ -626,6 +627,7 @@ public abstract class ValueLabel extends InlineLabel {
 				ilast = item;
 			}
 			if (item != ilast) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, ilast);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();
@@ -642,6 +644,7 @@ public abstract class ValueLabel extends InlineLabel {
 				flast = item;
 			}
 			if (item != flast) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, flast);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();
@@ -658,6 +661,7 @@ public abstract class ValueLabel extends InlineLabel {
 				dlast = item;
 			}
 			if (item != dlast) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, (float) dlast);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();
@@ -674,6 +678,7 @@ public abstract class ValueLabel extends InlineLabel {
 				llast = item;
 			}
 			if (item != llast) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, llast);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();
@@ -690,6 +695,7 @@ public abstract class ValueLabel extends InlineLabel {
 				zlast = item;
 			}
 			if (item != zlast) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, zlast);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();
@@ -706,6 +712,7 @@ public abstract class ValueLabel extends InlineLabel {
 				clast = item;
 			}
 			if (item != clast) {
+				self.postAppendDelimiter(text);
 				self.appendValue(text, clast);
 				self.addCountText(text, count);
 				if (self.isTruncate(text.length())) throw new SatisfyException();

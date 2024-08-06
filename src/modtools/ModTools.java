@@ -24,7 +24,6 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
-import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
@@ -56,7 +55,7 @@ public class ModTools extends Mod {
 
 		Core.app.post(this::load0);
 	}
-	public void load0(){
+	public void load0() {
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
 			IntVars.meta = metas.get(ModTools.class);
@@ -146,6 +145,7 @@ public class ModTools extends Mod {
 	}
 	private void loadInputAndUI() {
 		if (ui == null) return;
+		mod = mods.getMod(modName);
 		Time.mark();
 
 		IntVars.load();
@@ -271,7 +271,11 @@ public class ModTools extends Mod {
 		IntVars.dispose();
 		MyEvents.dispose();
 		MyFonts.dispose();
+		ModClassLoader   loader   = (ModClassLoader) mods.mainLoader();
+		Seq<ClassLoader> children = Reflect.get(ModClassLoader.class, loader, "children");
+		children.remove(ModTools.class.getClassLoader());
 		System.gc();
+		Core.app.post(() -> mods.removeMod(mod));
 	}
 	public static boolean isDisposed() {
 		return isDisposed;

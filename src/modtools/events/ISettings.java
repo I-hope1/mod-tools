@@ -23,6 +23,7 @@ import modtools.annotations.settings.SettingsInit;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.limit.LimitTextButton;
+import modtools.ui.content.SettingsUI.SettingsBuilder;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
@@ -168,7 +169,7 @@ public interface ISettings extends E_DataInterface {
 	}
 
 	default void buildSwitch(String prefix, Table table) {
-		main = table;
+		SettingsBuilder.build(table);
 		String dependency = switchKey();
 		if (dependency.endsWith(SUFFIX_ENABLED)) {
 			check(prefix + name() + SUFFIX_ENABLED, this::setSwitchOn, this::isSwitchOn);
@@ -178,6 +179,7 @@ public interface ISettings extends E_DataInterface {
 			 .findAny()
 			 .ifPresent(e -> e.$(false)); */
 		}
+		SettingsBuilder.clearBuild();
 	}
 	default void build(Table table) {
 		build("", table);
@@ -195,7 +197,7 @@ public interface ISettings extends E_DataInterface {
 		if (hasSwitch()) {
 			buildSwitch(prefix, table);
 		}
-		main = table;
+		SettingsBuilder.build(table);
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
@@ -204,6 +206,8 @@ public interface ISettings extends E_DataInterface {
 			build.invoke(this, (Object) null);
 		} catch (Throwable e) {
 			Log.err(e);
+		} finally {
+			SettingsBuilder.clearBuild();
 		}
 	}
 	default Drawable getDrawable(Drawable def) {
@@ -284,7 +288,7 @@ public interface ISettings extends E_DataInterface {
 		content.add(value).padLeft(10f).right();
 		content.margin(3f, 33f, 3f, 33f);
 		content.touchable = Touchable.disabled;
-		main.stack(slider, content).growX().padTop(4f).row();
+		main().stack(slider, content).growX().padTop(4f).row();
 	}
 	/** (def, min, max, step=1) */
 	private void $(Float __) {
@@ -309,11 +313,11 @@ public interface ISettings extends E_DataInterface {
 		content.add(value).padLeft(10f).right();
 		content.margin(3f, 33f, 3f, 33f);
 		content.touchable = Touchable.disabled;
-		main.stack(slider, content).growX().padTop(4f).row();
+		main().stack(slider, content).growX().padTop(4f).row();
 	}
 	/* noArgs */
 	private void $(Color __) {
-		colorBlock(main, text, data(), name(), getColor(), this::set);
+		colorBlock(main(), text, data(), name(), getColor(), this::set);
 	}
 	/** (enumClass)  */
 	private <T extends Enum<T>> void $(Enum<?> __) {
@@ -342,7 +346,7 @@ public interface ISettings extends E_DataInterface {
 		Drawable def = getArg(0);
 		Drawable[]     drawable = {getDrawable(def)};
 		Cons<Drawable> cons     = getArg(1);
-		main.table(new Cons<>() {
+		main().table(new Cons<>() {
 			public void get(Table t) {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
 				t.label(() -> FormatHelper.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
@@ -363,8 +367,8 @@ public interface ISettings extends E_DataInterface {
 		lazyDefault(() -> new Data(data(), new JsonMap()));
 
 		TextButton button = new LimitTextButton("Manage", HopeStyles.flatt);
-		main.add(text).left();
-		main.add(button.right()).size(96, 42).row();
+		main().add(text).left();
+		main().add(button.right()).size(96, 42).row();
 		button.clicked(() -> showSelectTable(button, (p, hide, searchText) -> {
 			Seq<MenuItem> lists = all.get();
 			for (int i = 0; i < lists.size; i++) {

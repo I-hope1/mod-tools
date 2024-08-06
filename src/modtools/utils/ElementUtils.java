@@ -13,11 +13,9 @@ import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.comp.Window;
 import modtools.ui.content.ui.ShowUIList;
 import modtools.ui.effect.ScreenSampler;
-import modtools.utils.ui.ReflectTools;
 
 import java.util.Optional;
 
-import static arc.Core.scene;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.$.*;
@@ -125,16 +123,6 @@ public interface ElementUtils {
 	}
 	static @Nullable Window findWindow(Element el) {
 		return findParent(el, Window.class);
-	}
-
-	@SuppressWarnings("StringTemplateMigration")
-	static String getElementName(Element element) {
-		return element == scene.root ? "ROOT"
-		 : STR."""
-		 \{ReflectTools.getSimpleName(element.getClass())}\
-		 \{element instanceof TextButton tb ? ": " + tb.getText() : ""}\
-		 \{element.name != null ? " ★" + element.name + "★" : ""}\
-		 """;
 	}
 
 }

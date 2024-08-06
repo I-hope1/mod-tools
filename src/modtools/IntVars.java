@@ -9,7 +9,7 @@ import arc.util.serialization.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.ModClassLoader;
-import mindustry.mod.Mods.ModMeta;
+import mindustry.mod.Mods.*;
 import modtools.files.HFi;
 import modtools.struct.*;
 import modtools.struct.v6.AThreads;
@@ -26,12 +26,13 @@ public class IntVars {
 	public static final MouseVec mouseVec   = new MouseVec();
 	public static final Vec2     mouseWorld = new Vec2();
 
-	public static final Runnable EMPTY_RUN  = () -> { };
+	public static final Runnable EMPTY_RUN = () -> { };
 	public static       ModMeta  meta;
 
-	/** mod的根目录  */
-	public static Fi root          = new HFi(IntVars.class.getClassLoader());
-	public static Fi dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
+	/** mod的根目录 */
+	public static LoadedMod mod;
+	public static Fi        root          = new HFi(IntVars.class.getClassLoader());
+	public static Fi        dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
 
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
@@ -91,7 +92,7 @@ public class IntVars {
 		resizeListeners.add(runnable);
 	}
 
-	/** 提交到主线程运行  */
+	/** 提交到主线程运行 */
 	public static void postToMain(Runnable run) {
 		if (Thread.currentThread().getContextClassLoader() == Vars.class.getClassLoader()) {
 			run.run();

@@ -30,6 +30,7 @@ public class InlineLabel extends NoMarkupLabel  {
 
 	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
+		if (colorMap.isEmpty()) return runs;
 		if (colorMap.size == 2 && colorMap.get(text.length()) == Color.white) {
 			Color color = colorMap.get(0);
 			runs.each(r -> r.color.set(color));
@@ -84,7 +85,7 @@ public class InlineLabel extends NoMarkupLabel  {
 	}
 	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color) {
 		endIndex = Math.min(endIndex, glyphRun.glyphs.size);
-		GlyphRun newRun = Pools.get(GlyphRun.class, GlyphRun::new).obtain();
+		GlyphRun newRun = Pools.obtain(GlyphRun.class, GlyphRun::new);
 
 		newRun.y = glyphRun.y;
 		newRun.x = glyphRun.x + ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex);
@@ -196,5 +197,10 @@ public class InlineLabel extends NoMarkupLabel  {
 		super.clear();
 		cache.clear();
 	}
-	protected final IntMap<Color> colorMap = new IntMap<>();
+	protected final IntMap<Color> colorMap = new IntMap<>() {
+		/* public Color put(int key, Color value) {
+			// return super.put(key, value);
+			return null;
+		} */
+	};
 }

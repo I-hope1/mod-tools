@@ -76,7 +76,7 @@ public class Selection extends Content {
 	}
 
 	public Element fragSelect;
-	public Window  pane;
+	public Window  ui;
 	// public Table functions;
 	public Team    defaultTeam;
 	/** select元素（用于选择）是否显示 **/
@@ -139,13 +139,13 @@ public class Selection extends Content {
 
 	void loadUI() {
 		int minH = 300;
-		pane = new Window(localizedName(), buttonWidth * 1.5f/* two buttons */,
+		ui = new Window(localizedName(), buttonWidth * 1.5f/* two buttons */,
 		 minH, false);
-		pane.shown(() -> Time.runTask(3, pane::display));
-		pane.hidden(this::hide);
-		pane.update(() -> {
+		ui.shown(() -> Time.runTask(3, ui::display));
+		ui.hidden(this::hide);
+		ui.update(() -> {
 			if (state.isMenu()) {
-				pane.hide();
+				ui.hide();
 			}
 		});
 
@@ -269,12 +269,20 @@ public class Selection extends Content {
 		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
 		 1, true);
 		tab.setIcons(HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall);
-		pane.cont.update(() -> {
+		Table cont = ui.cont;
+		cont.update(() -> {
 			tab.labels.each((name, l) -> {
 				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
 			});
 		});
-		pane.cont.left().add(tab.build()).grow().left();
+		cont.button("Select", HopeStyles.flatTogglet, () -> {
+			isSelecting = !isSelecting;
+			ElementUtils.addOrRemove(fragSelect, isSelecting);
+		}).size(100, 40).checked(_ -> isSelecting);
+		cont.row();
+		cont.left().add(tab.build())
+		 // .colspan(2)
+		 .grow().left();
 
 		loadSettings();
 	}
@@ -297,13 +305,12 @@ public class Selection extends Content {
 		if (executor != null) executor.shutdownNow();
 	}
 	public Button buildButton(boolean isSmallized) {
-		Button btn = buildButton(isSmallized, () -> isSelecting);
+		Button btn = super.buildButton(isSmallized);
 		btn.setDisabled(() -> state.isMenu());
 		return btn;
 	}
 	public void build() {
-		isSelecting = !isSelecting;
-		ElementUtils.addOrRemove(fragSelect, isSelecting);
+		ui.show();
 	}
 	public static void getWorldRect(Tile t) {
 		mr1.set(t.worldx(), t.worldy(), 32, 32);
@@ -863,7 +870,12 @@ public class Selection extends Content {
 		}
 
 		public void hide() {
-			super.hide(null);
+			if (!isShown()) return;
+			if (!(this instanceof IDisposable)) screenshot();
+			setOrigin(Align.center);
+			setClip(false);
+
+			hide(null);
 		}
 		public Element hit(float x, float y, boolean touchable) {
 			Element el = super.hit(x, y, touchable);
@@ -1007,6 +1019,7 @@ public class Selection extends Content {
 				mouseChanged = false;
 				return false;
 			}
+			Log.info("down");
 			super.touchDown(event, x, y, pointer, button);
 			start.set(end);
 			mouseChanged = true;
@@ -1093,10 +1106,10 @@ public class Selection extends Content {
 				}
 			});
 
-			if (!pane.isShown()) {
-				pane.setPosition(mx, my);
+			if (!ui.isShown()) {
+				ui.setPosition(mx, my);
 			}
-			pane.show();
+			ui.show();
 			isSelecting = false;
 		}
 	}

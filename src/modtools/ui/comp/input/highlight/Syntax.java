@@ -164,7 +164,7 @@ public class Syntax {
 		public boolean begin = false, finished;
 		public TokenDraw[] tokenDraws;
 		public int         lastTokenIndex = -1;/* 上一次的token右边 */
-		public String lastToken, token;
+		public String      lastToken, token;
 
 		public DrawToken(TokenDraw... tokenDraws) {
 			super(new Color());

@@ -34,7 +34,8 @@ public interface ReflectTools {
 		}
 		return getGenericString(clazz);
 	}
-	static String getSimpleName(Class<?> clazz) {
+	/** 找到第一个非匿名超类的simpleName  */
+	static String getSimpleNameNotAnonymous(Class<?> clazz) {
 		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
 			clazz = clazz.getSuperclass();
 		}
@@ -109,7 +110,7 @@ public interface ReflectTools {
 		Class<?>     dcl           = m.getDeclaringClass();
 		String       typeName      = m.getClass().getSimpleName();
 		char         c             = Character.toLowerCase(typeName.charAt(0));
-		boolean      isConstructor = c == 'c';
+		boolean      isConstructor = m instanceof Constructor;
 
 		sb.append(typeName);
 		if (isConstructor) sb.append("<?>");

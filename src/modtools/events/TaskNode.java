@@ -161,8 +161,9 @@ public class TaskNode {
 		check("@task.worldtimer", b -> timer = b ? Timer.instance() : ExecuteTree.worldTimer, () -> timer != Timer.instance());
 		numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
 		IntUI.showSelectTable(mouseVec.cpy(), (p, hide, search) -> {
-			p.add(main).grow();
-		}, false).hidden(() -> main.clearChildren());
+			p.add(main()).grow();
+		}, false).hidden(() -> main().clearChildren());
+		SettingsBuilder.clearBuild();
 	}
 
 	public class DelegateRun implements Runnable {

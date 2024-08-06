@@ -27,6 +27,7 @@ import modtools.ui.HopeStyles;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.linstener.*;
+import modtools.ui.content.ui.ReviewElement;
 import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
 import modtools.ui.gen.HopeIcons;
@@ -737,7 +738,7 @@ public class Window extends Table implements Position {
 	}
 
 	public String toString() {
-		return ElementUtils.getElementName(this);
+		return ReviewElement.getElementName(this);
 	}
 	public static class NoTopWindow extends Window {
 		public NoTopWindow(String title, float width, float height, boolean full) {

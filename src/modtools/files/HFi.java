@@ -18,6 +18,9 @@ public class HFi extends Fi {
 		if (loader == null) throw new IllegalArgumentException("loader cannot be null.");
 		this.loader = loader;
 	}
+	// public boolean delete() {
+	// 	return path().isBlank();
+	// }
 	// public boolean isDirectory() {
 	// 	// throw new UnsupportedOperationException();
 	// }

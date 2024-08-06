@@ -327,6 +327,8 @@ public abstract class WFunction<T> {
 			Vec2 pos = getPos(item);
 			/* 判断是否在相机内 */
 			if (!CAMERA_RECT.overlaps(pos.x, pos.y, region.width, region.height)) return true;
+			if (!SC.ui.isShown()) return true;
+
 			if (drawAll || (
 			 select.contains(selectMap.get(getIcon(item)))
 			 && selectMap.get(getIcon(item), OrderedSet::new).contains(item))) {

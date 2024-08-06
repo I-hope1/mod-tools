@@ -80,6 +80,7 @@ public class ActionsDebug extends Content {
 		SelectTable table = IntUI.showSelectTable(HopeInput.mouseHit(), (p, hide, _) -> {
 			RBuilder.build(p);
 			RBuilder.buildFor(actionClass, action, blackList);
+			RBuilder.clearBuild();
 		}, false);
 		table.hidden(() -> {
 			element.addAction(action);

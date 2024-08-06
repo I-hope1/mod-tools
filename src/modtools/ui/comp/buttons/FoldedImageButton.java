@@ -56,11 +56,11 @@ public class FoldedImageButton extends ImageButton {
 		Image image = getImage();
 		if (checked) {
 			if (rebuild != null) rebuild.run();
-			if (image.rotation != -90) image.actions(Actions.rotateTo(-90, duration));
+			if (image.rotation != -90) image.addAction(Actions.rotateTo(-90, duration));
 			if (cell != null) cell.setElement(element);
 		} else {
 			if (_clear != null) _clear.run();
-			if (image.rotation != 0) image.actions(Actions.rotateTo(0, duration));
+			if (image.rotation != 0) image.addAction(Actions.rotateTo(0, duration));
 			if (cell != null) cell.clearElement();
 		}
 	}

@@ -74,7 +74,7 @@ public class ReviewElement extends Content {
 		super("reviewElement", HopeIcons.codeSmall);
 	}
 
-	public static final boolean    DEBUG       = true;
+	public static final boolean    DEBUG       = false;
 	public static final LabelStyle LABEL_STYLE = new LabelStyle(MyFonts.def, Color.sky);
 
 

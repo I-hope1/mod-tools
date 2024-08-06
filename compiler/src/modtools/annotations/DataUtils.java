@@ -20,7 +20,7 @@ public interface DataUtils extends NameString {
 		return checkAndSet(0, "modtools.utils.MySettings");
 	}
 	default ClassSymbol SettingUI() {
-		return checkAndSet(1, "modtools.ui.content.SettingsUI");
+		return checkAndSet(1, "modtools.content.SettingsUI");
 	}
 	default ClassSymbol C_Data() {
 		return checkAndSet(2, "modtools.utils.MySettings$Data");

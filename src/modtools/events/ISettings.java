@@ -55,7 +55,7 @@ public interface ISettings extends E_DataInterface {
 	default Data data() {
 		return null;
 	}
-	/** 默认是bool  */
+	/** 默认是bool */
 	default Class<?> type() { return boolean.class; }
 
 	/** 是否为开关，用于某一个设置的开启/关闭 */
@@ -264,7 +264,7 @@ public interface ISettings extends E_DataInterface {
 	}
 	/**
 	 * (def, min, max, step=1)
-	 * */
+	 */
 	private void $(Integer __) {
 		var   args = (int[]) args();
 		float def  = args[0];
@@ -319,18 +319,17 @@ public interface ISettings extends E_DataInterface {
 	private void $(Color __) {
 		colorBlock(main(), text, data(), name(), getColor(), this::set);
 	}
-	/** (enumClass)  */
+	/** (enumClass) */
 	private <T extends Enum<T>> void $(Enum<?> __) {
-		Enum<T> def = getArg(0);
+		Enum<T>  def       = getArg(0);
 		Class<T> enumClass = getArg(1);
-		var enums     = new Seq<>((Enum<?>[]) enumClass.getEnumConstants());
-		list(text, this::set, new Prov<>() {
-			public Enum<?> get() {
+		enum_(text, enumClass, this::set, new Prov<>() {
+			public Enum<T> get() {
 				return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
 			}
-		}, enums, Enum::name, this::isSwitchOn);
+		}, this::isSwitchOn);
 	}
-	/** 参数：({@link String}, def, ...args)  */
+	/** 参数：({@link String}, def, ...args) */
 	private void $(String __) {
 		String   def = getArg(0);
 		String[] arg = getArg(1);
@@ -341,9 +340,9 @@ public interface ISettings extends E_DataInterface {
 	// TODO
 	private void $(Position __) { }
 
-	/** (def, cons)  */
+	/** (def, cons) */
 	private void $(Drawable __) {
-		Drawable def = getArg(0);
+		Drawable       def      = getArg(0);
 		Drawable[]     drawable = {getDrawable(def)};
 		Cons<Drawable> cons     = getArg(1);
 		main().table(new Cons<>() {

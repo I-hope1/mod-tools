@@ -37,7 +37,6 @@ import modtools.ui.TopGroup.BackElement;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.linstener.*;
-import modtools.ui.content.*;
 import modtools.ui.control.*;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;

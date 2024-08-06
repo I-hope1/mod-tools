@@ -13,6 +13,8 @@ import modtools.utils.Tools.*;
 
 import java.lang.reflect.Field;
 
+import static modtools.utils.Tools.as;
+
 
 @SuppressWarnings("StringTemplateMigration")
 public class RBuilder extends SettingsBuilder {
@@ -37,6 +39,8 @@ public class RBuilder extends SettingsBuilder {
 				Interp d = Reflect.get(obj, field);
 				if (d == null) Reflect.set(obj, field, d = Interp.linear);
 				interpolator(name, b -> Reflect.set(obj, field, b), () -> Reflect.get(obj, field));
+			} else if (type.isEnum()) {
+				enum_(name, as(type), b -> Reflect.set(obj, field, b), () -> Reflect.get(obj, field), null);
 			}
 		}
 	}

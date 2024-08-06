@@ -5,7 +5,6 @@ import modtools.content.*;
 import modtools.content.debug.*;
 import modtools.content.ui.*;
 import modtools.content.world.*;
-import modtools.ui.content.*;
 
 @SuppressWarnings("unused")
 @ContentInit
@@ -18,7 +17,6 @@ public class Contents {
 	public static LogDisplay    log_display;
 	public static ContentList   content_list;
 	public static ReviewElement review_element;
-	public static ActionsDebug  actions_debug;
 	// public static DesignContent design_content;
 	public static Executor      executor;
 	public static KeyCodeSetter key_code_setter;

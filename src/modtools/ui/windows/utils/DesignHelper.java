@@ -7,9 +7,10 @@ import arc.struct.Seq;
 import arc.util.Align;
 import mindustry.gen.*;
 import modtools.IntVars;
-import modtools.jsfunc.INFO_DIALOG;
-import modtools.ui.*;
 import modtools.content.ui.design.DesignTable;
+import modtools.content.ui.design.DesignTable.*;
+import modtools.jsfunc.INFO_DIALOG;
+import modtools.ui.HopeStyles;
 import modtools.ui.menu.*;
 
 public class DesignHelper {

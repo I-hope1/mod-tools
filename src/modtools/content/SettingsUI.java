@@ -30,6 +30,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.Field;
 
@@ -321,6 +322,7 @@ public class SettingsUI extends Content {
 			numberi(text, val -> data.put(key, val), () -> data.getInt(key, defaultValue), condition, min, max);
 		}
 
+		@SuppressWarnings("StringTemplateMigration")
 		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
 		                          Boolp condition, float min,
 		                          float max) {
@@ -328,7 +330,13 @@ public class SettingsUI extends Content {
 				t.left();
 				t.add(text).left().padRight(5)
 				 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-				t.field((integer ? (int) prov.get() : prov.get()) + "", s -> cons.get(NumberHelper.asFloat(s)))
+				String val;
+				if (integer) {
+					val = ((int)prov.get()) + "";
+				} else {
+					val = FormatHelper.fixed(prov.get(), 2);
+				}
+				t.field(val, s -> cons.get(NumberHelper.asFloat(s)))
 				 .padRight(100f)
 				 .update(a -> a.setDisabled(!condition.get()))
 				 .valid(f -> NumberHelper.isFloat(f) && NumberHelper.asFloat(f) >= min && NumberHelper.asFloat(f) <= max).width(120f).left();
@@ -376,6 +384,12 @@ public class SettingsUI extends Content {
 			main.row();
 			main.image().color(Pal.accent).height(3f).padRight(100f).padBottom(20);
 			main.row();
+		}
+		public static <T extends Enum<T>> void enum_(
+		 String text, Class<T> enumClass, Cons<Enum<T>> cons, Prov<Enum<T>> prov,
+		 Boolp condition) {
+			var enums = new Seq<>((Enum<T>[]) enumClass.getEnumConstants());
+			list(text, cons, prov, enums, Enum::name, condition);
 		}
 
 		public Cell<TextField> field(Table table, float value, Floatc setter) {

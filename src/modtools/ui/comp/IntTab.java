@@ -31,12 +31,12 @@ public class IntTab {
 	public  Color[]    colors;
 	public  Table[]    tables;
 	/** 这些会乘以{@link Scl#scl} */
-	public  float      totalWidth, eachWidth;
+	public  float      titleWidth, eachWidth;
 	public int     cols;
-	public boolean column/*  = false */;
+	public boolean column/* = false */;
 
-	public void setTotalWidth(float amount) {
-		totalWidth = amount;
+	public void setTitleWidth(float amount) {
+		titleWidth = amount;
 	}
 
 	protected void init() {
@@ -46,13 +46,17 @@ public class IntTab {
 		title.defaults().growX().height(42);
 		pane = new ScrollPane(null, Styles.smallPane);
 		main = new Table(t -> {
-			t.pane(title).top().fill()
+			t.pane(title).top().growX()
 			 .self(c -> c.update(p -> {
 				 p.setScrollingDisabled(column, !column);
-				 c.minHeight(title.getMinHeight() / Scl.scl());
+				 if (column) {
+					 c.width(p.getPrefWidth());
+				 } else {
+					 c.height(p.getPrefHeight());
+				 }
 			 }));
 			if (!column) t.row();
-			t.add(pane).self(c -> c.update(_ -> c.width(totalWidth))).grow();
+			t.add(pane).self(c -> c.update(_ -> c.width(titleWidth))).grow();
 		}) {
 			public float getMinWidth() {
 				return prefW != -1 ? prefW : super.getMinWidth();
@@ -78,25 +82,25 @@ public class IntTab {
 	/**
 	 * 自适配颜色
 	 */
-	public IntTab(float totalWidth, String[] names, Color color, Table[] tables) {
-		this(totalWidth, names,
+	public IntTab(float titleWidth, String[] names, Color color, Table[] tables) {
+		this(titleWidth, names,
 		 fillColor(names.length, color),
 		 tables);
 	}
 
-	public IntTab(float totalWidth, String[] names, Color color, Table[] tables, int cols, boolean column) {
-		this(totalWidth, names,
+	public IntTab(float titleWidth, String[] names, Color color, Table[] tables, int cols, boolean column) {
+		this(titleWidth, names,
 		 fillColor(names.length, color),
 		 tables, cols, column);
 	}
 
 
-	public IntTab(float totalWidth, String[] names, Color[] colors, Table[] tables) {
-		this(totalWidth, names, colors, tables, Integer.MAX_VALUE, false);
+	public IntTab(float titleWidth, String[] names, Color[] colors, Table[] tables) {
+		this(titleWidth, names, colors, tables, Integer.MAX_VALUE, false);
 	}
 
 	/**
-	 * @param totalWidth 总宽度（如果为纵向，totalWidth是标题宽度）
+	 * @param titleWidth 总宽度（如果为纵向，totalWidth是标题宽度）
 	 * @param names      名称
 	 * @param colors     颜色
 	 * @param tables     Tables
@@ -104,19 +108,19 @@ public class IntTab {
 	 * @param column     是否为纵向排列
 	 * @throws IllegalArgumentException size must be the same.
 	 */
-	public IntTab(float totalWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols, boolean column) {
-		this(totalWidth, names.toArray(String.class),
+	public IntTab(float titleWidth, Seq<String> names, Seq<Color> colors, Seq<Table> tables, int cols, boolean column) {
+		this(titleWidth, names.toArray(String.class),
 		 colors.toArray(Table.class),
 		 tables.toArray(Table.class), cols, column);
 	}
-	public IntTab(float totalWidth, String[] names, Color[] colors, Table[] tables, int cols, boolean column) {
+	public IntTab(float titleWidth, String[] names, Color[] colors, Table[] tables, int cols, boolean column) {
 		if (names.length != colors.length || names.length != tables.length) {
 			Log.err("name: @, color: @, table: @", names.length, colors.length, tables.length);
 			throw new IllegalArgumentException("size must be the same.");
 		}
 		if (names.length == 0) throw new RuntimeException("size can't be 0.");
 
-		this.totalWidth = totalWidth;
+		this.titleWidth = titleWidth;
 		this.names = names;
 		this.colors = colors;
 		this.tables = tables;
@@ -145,7 +149,7 @@ public class IntTab {
 	public ObjectMap<String, Label> labels;
 	boolean hideTitle;
 	public Table build() {
-		if (totalWidth == -1) title.defaults().growX();
+		if (titleWidth == -1) title.defaults().growX();
 		// pane.setScrollingDisabled(!column, column);
 
 		for (int i = 0; i < tables.length; ) {
@@ -183,11 +187,10 @@ public class IntTab {
 						 selected = j;
 					 }
 				 }
-			 })
-			 .self(c -> {
-				 if (totalWidth != -1)
-					 c.width(eachWidth != 0 ? eachWidth : Math.max(totalWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
-			 });
+			 }).self(c -> {
+				 if (titleWidth != -1)
+					 c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
+			 });;
 
 			if (++i % cols == 0) title.row();
 		}

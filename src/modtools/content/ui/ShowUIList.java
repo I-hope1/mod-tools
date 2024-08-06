@@ -8,6 +8,7 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.Interp;
 import arc.scene.*;
+import arc.scene.actions.Actions;
 import arc.scene.style.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.*;
@@ -21,29 +22,38 @@ import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Stack;
 import arc.scene.ui.layout.*;
 import arc.scene.utils.Disableable;
+import arc.struct.Seq;
 import arc.util.*;
+import arc.util.pooling.*;
 import mindustry.Vars;
 import mindustry.core.UI;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.IntVars;
+import modtools.*;
 import modtools.content.*;
+import modtools.jsfunc.reflect.*;
 import modtools.ui.*;
+import modtools.ui.IntUI.SelectTable;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.comp.utils.*;
+import modtools.ui.control.HopeInput;
+import modtools.ui.reflect.RBuilder;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.*;
 import modtools.utils.ui.search.*;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static arc.scene.ui.CheckBox.CheckBoxStyle;
+import static modtools.utils.Tools.*;
 import static modtools.utils.ui.FormatHelper.fixed;
 
 @SuppressWarnings("StringTemplateMigration")
@@ -65,11 +75,12 @@ public class ShowUIList extends Content {
 
 	public void _load() {
 		ui = new Window(localizedName(), getW(), 400, true);
-		Table[] tables = {icons, tex, styles, colorsT, interps};
-		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command};
+		Table[] tables = {icons, tex, styles, colorsT, interps, actions};
+		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
-		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp"};
-		tab = new IntTab(-1, names, colors, tables);
+		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
+		tab = new IntTab(getW(), names, colors, tables);
+		tab.eachWidth = getW() / 4.3f;
 		tab.setPrefSize(getW(), -1);
 		ui.cont.table(t -> {
 			t.left().defaults().left();
@@ -217,6 +228,7 @@ public class ShowUIList extends Content {
 			 });
 		 });
 	 }),
+	 actions    = newTable((Cons) new ActionComp()),
 	 uis        = newTable(t -> {
 		 UI obj = Vars.ui;
 		 FieldUtils.walkAllConstOf(UI.class, (f, group) -> {
@@ -394,6 +406,64 @@ public class ShowUIList extends Content {
 			keyValue.keyValue(t, "MinWidth", () -> fixed(drawable.getMinHeight()));
 			keyValue.keyValue(t, "MinHeight", () -> fixed(drawable.getMinHeight()));
 			keyValue.keyValue(t, "ImageSize", () -> fixed(drawable.imageSize()));
+		}
+	}
+
+
+	static class ActionComp implements Cons<Table> {
+		final        Element      element   = new Image();
+		static       MethodHandle init      = Constants.nl(() -> InitMethodHandle.findInit(Image.class.getConstructor()));
+		static final Seq<String>  blackList = Seq.with("time", "began", "complete", "lastPercent", "color",
+		 "start",
+		 "startR", "startG", "startB", "startA",
+		 "startX", "startY");
+
+		public void get(Table cont) {
+			cont.center();
+			Cell<Element> cell = cont.add(element).size(64).pad(24);
+			cont.row();
+			element.update(() -> element.setOrigin(Align.center));
+			// element.setOrigin(element.getWidth() / 2f, element.getHeight() / 2f);
+			// element.translation.set(element.getWidth() / 2f, element.getHeight() / 2f);
+			Set<Class<?>> classes = Arrays.stream(Actions.class.getDeclaredMethods())
+			 .map(Method::getReturnType).collect(Collectors.toCollection(LinkedHashSet::new));
+			cont.button("Reset", Styles.flatt, runT(() -> {
+				element.rotation = 0;
+				cell.setElement(element);
+				init.invoke(element);
+				cont.layout();
+			})).growX().height(42).row();
+			cont.pane(t -> {
+				int c = 0;
+				for (Class<?> action : classes) {
+					if (!Action.class.isAssignableFrom(action)) continue;
+					if (Modifier.isAbstract(action.getModifiers())) continue;
+					String text = action.getSimpleName();
+					t.button(text.substring(0, text.length() - 6/* Action */), HopeStyles.flatt, () -> {
+						applyToAction(as(action));
+					}).size(140, 42);
+					if (++c % 2 == 0) t.row();
+				}
+			}).grow();
+		}
+		private <T extends Action> void applyToAction(Class<T> actionClass) {
+			Pool<T> pool = Pools.get(actionClass, () -> {
+				try {
+					return actionClass.getConstructor().newInstance();
+				} catch (NoSuchMethodException | InvocationTargetException | InstantiationException |
+				         IllegalAccessException e) {
+					throw new RuntimeException(e);
+				}
+			});
+			T action = pool.obtain();
+			action.setPool(pool);
+			action.reset();
+			SelectTable table = IntUI.showSelectTable(HopeInput.mouseHit(), (p, hide, _) -> {
+				RBuilder.build(p);
+				RBuilder.buildFor(actionClass, action, blackList);
+				RBuilder.clearBuild();
+			}, false);
+			table.hidden(() -> element.addAction(action));
 		}
 	}
 

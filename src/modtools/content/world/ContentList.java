@@ -92,7 +92,7 @@ public class ContentList extends Content {
 
 		tab = new IntTab(main.getWidth(), names, Color.sky, tables);
 		tab.eachWidth = 86;
-		main.update(() -> tab.setTotalWidth(main.getWidth() / Scl.scl()));
+		main.update(() -> tab.setTitleWidth(main.getWidth() / Scl.scl()));
 		tab.title.add("@mod-tools.tips.longprees_to_cppy")
 		 .colspan(tables.length).growX().row();
 		tab.setPrefSize(tab.eachWidth * 3, -1);

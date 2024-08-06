@@ -98,10 +98,6 @@ public class Frag extends Table {
 			circleRemove();
 			Core.app.post(() -> listener.display(x, y, false));
 		});
-		IntVars.addResizeListener(() -> {
-			Vec2 pos = position.getPosition();
-			listener.display(pos.x, pos.y, false);
-		});
 		Vec2 pos = position.getPosition();
 		listener.display(pos.x, pos.y, false);
 	}
@@ -164,7 +160,13 @@ public class Frag extends Table {
 		return hit;
 	}
 	private class MoveInsideListener extends MoveListener {
-		public MoveInsideListener() { super(Frag.this.top, Frag.this); }
+		public MoveInsideListener() {
+			super(Frag.this.top, Frag.this);
+			IntVars.addResizeListener(() -> {
+				Vec2 pos = position.getPosition();
+				display(pos.x, pos.y, false);
+			});
+		}
 		public void display(float x, float y, boolean writeSetting) {
 			float mainWidth  = main.getPrefWidth(), mainHeight = main.getPrefHeight();
 			float touchWidth = touch.getWidth(), touchHeight = touch.getHeight();

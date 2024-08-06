@@ -418,7 +418,7 @@ public class Tester extends Content {
 				() -> multiThread = !multiThread),
 			 () -> multiThread, "@tester.multiThread", "@tester.mainThread");
 		};
-		Time.run(2, () -> folder.fireCheck(false));
+		folder.fireCheck(false);
 	}
 
 	private void showDetails() {

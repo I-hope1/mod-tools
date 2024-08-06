@@ -1,7 +1,7 @@
 package modtools.utils.ui;
 
 import arc.scene.Element;
-import arc.scene.ui.layout.Cell;
+import arc.scene.ui.layout.*;
 import arc.util.Reflect;
 import modtools.utils.reflect.FieldUtils;
 
@@ -24,8 +24,7 @@ public interface CellTools {
 	 f_fillX             = f("fillX"),
 	 f_fillY             = f("fillY"),
 	 f_expandX           = f("expandX"),
-	 f_expandY           = f("expandY"),
-	f_endRow = f("endRow");
+	 f_expandY           = f("expandY");
 
 	/** @see Cell#unset  */
 	float unset = Float.NEGATIVE_INFINITY;
@@ -100,9 +99,5 @@ public interface CellTools {
 	static <T extends Element> Cell<T> rowSelf(Cell<T> cell) {
 		cell.row();
 		return cell;
-	}
-
-	static void endRow(Cell<?> cell, boolean value) {
-		Reflect.set(cell, f_endRow, value);
 	}
 }

@@ -9,8 +9,8 @@ import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.*;
 import arc.scene.event.EventListener;
+import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
@@ -36,13 +36,13 @@ import java.util.*;
 import java.util.function.Consumer;
 
 import static arc.Core.*;
-import static modtools.IntVars.modName;
+import static modtools.IntVars.*;
 import static modtools.ui.Contents.*;
-import static modtools.ui.IntUI.*;
+import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
+import static modtools.ui.content.ui.ReviewElement.Settings.checkCullingArea;
 import static modtools.utils.Tools.*;
-import static modtools.IntVars.mouseVec;
 
 // 存储mod的窗口和Frag
 public final class TopGroup extends WidgetGroup implements Disposable {
@@ -122,7 +122,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			// Draw.flush();
 			elementDrawer.draw(isSelecting, selected);
 		}
-		drawTask(0, ResidentDrawTask::elemDraw);
+		drawTask(0.37f, ResidentDrawTask::elemDraw);
 
 		Draw.flush();
 
@@ -146,7 +146,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		ScreenSampler._continue();
 	}
 	private void drawTask(float z, Consumer<ResidentDrawTask> drawTaskCons) {
-		Draw.draw(z, () -> drawResidentTasks.forEach(drawTaskCons));
+		Draw.draw(z, runT(() -> drawResidentTasks.forEach(drawTaskCons)));
 	}
 	/** 如果选中的元素太小，会在边缘显示 */
 	private void drawSlightlyIfSmall() {
@@ -172,10 +172,18 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	}
 
 
+	private static final Vec2 tmp1 = new Vec2();
 	public static void drawPad(Element elem, Vec2 vec2) {
 		if (!drawHiddenPad.enabled() && !elem.visible) return;
 		/* translation也得参与计算 */
 		elem.localToParentCoordinates(vec2);
+
+		if (checkCullingArea.enabled()) {
+			elem.localToParentCoordinates(tmp1.set(0, 0));
+			if (elem.cullable && elem.parent.getCullingArea() != null &&
+			    !elem.parent.getCullingArea().overlaps(tmp1.x, tmp1.y,
+			     elem.getWidth(), elem.getHeight())) return;
+		}
 
 		float thick = elem instanceof Group ? 2 : 1;
 		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);

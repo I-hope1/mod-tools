@@ -1,7 +1,7 @@
 package modtools.ui.comp.input;
 
 import arc.func.Prov;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.scene.style.Drawable;
@@ -45,6 +45,7 @@ public class InlineLabel extends NoMarkupLabel  {
 			colorKeys.add(keys.next());
 		}
 		colorKeys.sort();
+
 		Color color        = colorMap.get(0);
 		int   startIndex   = colorKeys.first();
 		int   currentIndex = 0;
@@ -52,7 +53,7 @@ public class InlineLabel extends NoMarkupLabel  {
 		var      iter = runs.iterator();
 		GlyphRun item = iter.next();
 		for (int i = 1; i < colorKeys.size; i++) {
-			int endIndex = colorKeys.get(i);
+			final int endIndex = colorKeys.get(i);
 			if (startIndex == endIndex) continue;
 
 			do {
@@ -74,7 +75,7 @@ public class InlineLabel extends NoMarkupLabel  {
 			} while (currentIndex < endIndex && iter.hasNext());
 
 			startIndex = endIndex;
-			color = colorMap.get(colorKeys.get(i));
+			color = colorMap.get(endIndex);
 		}
 		// Add the remaining part of the last run
 		if (currentIndex < text.length()) {
@@ -99,13 +100,12 @@ public class InlineLabel extends NoMarkupLabel  {
 	 * 获取(x, y)对应的index
 	 */
 	public int getCursor(float x, float y) {
-		var   runs       = layout.runs;
 		float lineHeight = style.font.getLineHeight();
 		float currentX, currentY; // 指文字左上角的坐标
 
 		int index = 0; // 用于跟踪字符索引
 
-		for (GlyphRun run : runs) {
+		for (GlyphRun run : layout.runs) {
 			if (run.glyphs.isEmpty()) continue;
 			FloatSeq xAdvances = run.xAdvances;
 			currentX = run.x;
@@ -183,6 +183,7 @@ public class InlineLabel extends NoMarkupLabel  {
 		if (!cache.getFont().isFlipped()) y += textHeight;
 
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
+
 		var newRuns = InlineLabel.splitAndColorize(layout.runs, colorMap, text);
 		if (newRuns != layout.runs) {
 			Pools.freeAll(layout.runs, true);
@@ -190,6 +191,7 @@ public class InlineLabel extends NoMarkupLabel  {
 			layout.runs.addAll(newRuns);
 		}
 		cache.setText(layout, x, y);
+		// Pools.freeAll(layout.runs);
 
 		if(fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}

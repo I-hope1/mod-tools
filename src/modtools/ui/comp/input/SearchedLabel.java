@@ -14,26 +14,21 @@ public class SearchedLabel extends InlineLabel {
 		this.patternProv = patternProv;
 		layout();
 	}
-	private Pattern       pattern = null;
-	private StringBuilder text;
-	public boolean needsLayout() {
-		return super.needsLayout();
-	}
+	private Pattern pattern = null;
 	public void act(float delta) {
 		super.act(delta);
-		if (pattern != patternProv.get() || getText().compareTo(text) != 0) invalidate();
+		if (pattern != patternProv.get()) layout();
 	}
 	public Color normalColor    = Pal.accent;
 	public Color highlightColor = Color.sky;
 	public void layout() {
 		pattern = patternProv.get();
-		text = getText();
 
 		colorMap.clear();
 		colorMap.put(0, normalColor);
 		colorMap.put(text.length(), Color.white);
 
-		if (pattern == null || pattern == PatternUtils.ANY)  {
+		if (pattern == null || pattern == PatternUtils.ANY) {
 			super.layout();
 			return;
 		}

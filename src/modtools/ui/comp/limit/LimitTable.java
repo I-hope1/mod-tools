@@ -87,7 +87,6 @@ public class LimitTable extends Table implements Limit {
 		return add(new LimitLabel(text));
 	}
 	public void updateVisibility() {
-		// Limit.absPos(this, absPos);
 		visible = isVisible(this);
 		children.each(t -> {
 			if (t instanceof Limit) return;

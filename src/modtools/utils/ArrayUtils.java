@@ -13,6 +13,10 @@ import java.util.*;
 public class ArrayUtils {
 	public static final Object[] EMPTY_ARRAY = new Object[0];
 
+	public static <K, V> ObjectMap<K, V> autoClear(ObjectMap<K, V> map) {
+		Tools.TASKS.add(() -> map.clear());
+		return map;
+	}
 	public static <K, V, R> R[] map2Arr(Class<R> cl, ObjectMap<K, V> map, Func<Entry<K, V>, R> func) {
 		R[] tableSeq = (R[]) Array.newInstance(cl, map.size);
 		int c        = 0;

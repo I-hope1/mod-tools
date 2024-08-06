@@ -2,7 +2,6 @@ package modtools.ui.comp.input;
 
 import arc.func.Prov;
 import arc.graphics.Color;
-import arc.util.Log;
 import mindustry.graphics.Pal;
 import modtools.utils.PatternUtils;
 
@@ -46,7 +45,6 @@ public class SearchedLabel extends InlineLabel {
 			colorMap.put(matcher.start(), highlightColor);
 			colorMap.put(matcher.end(), normalColor);
 		}
-		Log.info(colorMap);
 
 		super.layout();
 	}

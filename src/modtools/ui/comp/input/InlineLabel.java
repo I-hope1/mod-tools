@@ -69,7 +69,7 @@ public class InlineLabel extends NoMarkupLabel  {
 					// Only part of the item fits within the current color range
 					int splitIndex = endIndex - currentIndex;
 					result.add(InlineLabel.sub(item, 0, splitIndex, color));
-					item = InlineLabel.sub(item, splitIndex, item.glyphs.size, colorMap.get(colorKeys.get(i)));
+					result.add(item = InlineLabel.sub(item, splitIndex, item.glyphs.size, colorMap.get(endIndex)));
 					currentIndex = endIndex;
 				}
 			} while (currentIndex < endIndex && iter.hasNext());

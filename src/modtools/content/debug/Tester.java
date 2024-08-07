@@ -16,8 +16,8 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
+import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Log.*;
 import arc.util.Timer.Task;
@@ -39,7 +39,7 @@ import modtools.override.ForRhino;
 import modtools.struct.LazyValue;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
-import modtools.ui.comp.*;
+import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.input.area.TextAreaTab;
@@ -286,16 +286,11 @@ public class Tester extends Content {
 		};
 		logSclListener.offset = center.getPrefHeight();
 		Time.runTask(1, () -> {
-			Vec2       v1    = ElementUtils.getAbsolutePos(_cont);
-			InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
-			event.type = (InputEventType.touchDown);
-			event.stageX = v1.x;
-			event.stageY = v1.y;
-			event.pointer = 0;
-			event.keyCode = KeyCode.mouseLeft;
+			InputEvent event = EventHelper.obtainEvent(InputEventType.touchDown, 0, 0, 0, KeyCode.mouseLeft);
 			if (logSclListener.touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
 				logSclListener.touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
 			}
+			Pools.free(event);
 		});
 
 		logCell.height(64f).padLeft(8f);

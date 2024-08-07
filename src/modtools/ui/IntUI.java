@@ -530,6 +530,7 @@ public class IntUI {
 				}
 			});
 		}
+		window.requestKeyboard();
 		window.keyDown(KeyCode.enter, () -> {
 			window.hide();
 			confirmed.run();

@@ -1,13 +1,13 @@
 package modtools.ui.menu;
 
 import arc.Core;
-import arc.func.Prov;
+import arc.func.*;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.Align;
-import arc.util.pooling.*;
+import arc.util.pooling.Pools;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.IntVars;
@@ -31,6 +31,10 @@ public class MenuBuilder {
 	public static void
 	addShowMenuListenerp(Element elem, Prov<Seq<MenuItem>> prov) {
 		EventHelper.longPressOrRclick(elem, _ -> showMenuListDispose(prov));
+	}
+	public static <T> void
+	addShowMenuListenerp(Element elem, Class<T> target, Func<T, Prov<Seq<MenuItem>>> func) {
+		EventHelper.longPressOrRclick(elem, target, t -> showMenuListDispose(func.get(t)));
 	}
 	/**
 	 * Dispose after close.
@@ -78,7 +82,8 @@ public class MenuBuilder {
 	}
 	/**
 	 * 自动过滤掉{@code null}
-	 * TODO: 多个FoldedList有问题 */
+	 * TODO: 多个FoldedList有问题
+	 */
 	public static Cell<ScrollPane> showMenuList(
 	 Iterable<MenuItem> list, Runnable hiddenListener,
 	 Table p, Runnable hideRun) {

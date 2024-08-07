@@ -1,13 +1,16 @@
 package modtools.utils;
 
+import arc.Core;
 import arc.func.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
+import arc.scene.event.InputEvent.InputEventType;
 import arc.scene.ui.Label;
 import arc.util.*;
 import arc.util.Timer.Task;
+import arc.util.pooling.Pools;
 import mindustry.Vars;
 import modtools.ui.IntUI;
 
@@ -109,6 +112,22 @@ public class EventHelper {
 		return mobile ? longPress0(element, () -> run.accept(element))
 		 : rightClick(element, () -> run.accept(element));
 	}
+	public static <T> void
+	longPressOrRclick(Element listener, Class<T> target, Consumer<T> cons) {
+		listener.addListener(mobile ? new LongPressListener(null, IntUI.DEF_LONGPRESS) {
+			public void longPress(InputEvent event, float x, float y) {
+				T targetActor = ElementUtils.findParent(event.targetActor,target);
+				if (targetActor != null) cons.accept(targetActor);
+				event.stop();
+			}
+		} : new ClickListener(KeyCode.mouseRight) {
+			public void clicked(InputEvent event, float x, float y) {
+				T targetActor = ElementUtils.findParent(event.targetActor,target);
+				if (targetActor != null) cons.accept(targetActor);
+				event.stop();
+			}
+		});
+	}
 	public static String longPressOrRclickKey() {
 		return mobile ? "Long press" : "Right click";
 	}
@@ -123,11 +142,11 @@ public class EventHelper {
 		});
 	}
 
-	public static <E>void addDClickCopy(Element element, Class<E> type , Func<E, String> func) {
+	public static <E> void addDClickCopy(Element element, Class<E> type, Func<E, String> func) {
 		addDClickCopy(element, type::isInstance, (Func<Element, String>) func);
 	}
 
-	public static void addDClickCopy(Element element, Boolf<Element> boolf , Func<Element, String> func) {
+	public static void addDClickCopy(Element element, Boolf<Element> boolf, Func<Element, String> func) {
 		element.addListener(new DoubleClick(null, null) {
 			public void d_clicked(InputEvent event, float x, float y) {
 				Element e = event.targetActor;
@@ -138,6 +157,17 @@ public class EventHelper {
 		});
 	}
 
+	public static InputEvent obtainEvent(
+	 InputEventType type, float x, float y,
+	 int pointer, KeyCode keyCode) {
+		InputEvent event = Pools.obtain(InputEvent.class, InputEvent::new);
+		event.type = type;
+		event.stageX = x;
+		event.stageY = y;
+		event.pointer = pointer;
+		event.keyCode = keyCode;
+		return event;
+	}
 
 	public static class LongPressListener extends ClickListener {
 		final long  duration;
@@ -148,7 +178,7 @@ public class EventHelper {
 			task = TaskManager.newTask(() -> {
 				if (pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
 					longPress = true;
-					boolc.get(true);
+					Core.scene.touchUp((int) mouseVec.x, (int) mouseVec.y, pressedPointer, button);
 				}
 			});
 		}
@@ -165,9 +195,18 @@ public class EventHelper {
 			}
 			return false;
 		}
+		public void longPress(InputEvent event, float x, float y) {
+			boolc.get(true);
+		}
+		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			super.touchUp(event, x, y, pointer, button);
+			if (longPress) longPress(event, x, y);
+			task.cancel();
+		}
 		public void clicked(InputEvent event, float x, float y) {
-			// super.clicked(event, x, y);
+			// 如果触发了长按，就不触发单击
 			if (longPress) return;
+
 			if (task.isScheduled() && pressed) boolc.get(false);
 			task.cancel();
 		}
@@ -204,9 +243,10 @@ public class EventHelper {
 			d_click.run();
 		}
 	}
-	private static class RightClickListener extends ClickListener {
+	public static class RightClickListener extends ClickListener {
 		private final Runnable run;
-		RightClickListener(Runnable run) { super(KeyCode.mouseRight);
+		RightClickListener(Runnable run) {
+			super(arc.input.KeyCode.mouseRight);
 			this.run = run;
 		}
 		public void clicked(InputEvent event, float x, float y) {

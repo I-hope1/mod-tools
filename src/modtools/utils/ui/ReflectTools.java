@@ -49,8 +49,8 @@ public interface ReflectTools {
 	static Prov<String> makeDetails(Class<?> cls, Type type) {
 		return cls.isPrimitive() || type == null ? null : type::getTypeName;
 	}
-	static MyLabel makeGenericType(Class<?> type, Prov<String> details) {
-		return makeGenericType(() -> getGenericString(type), type.isPrimitive() ? null : details);
+	static MyLabel makeGenericType(Class<?> cls, Type genericType) {
+		return makeGenericType(() -> getGenericString(cls, genericType), cls.isPrimitive() ? null : makeDetails(cls, genericType));
 	}
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
 		MyLabel label = new MyLabel(type.get(), HopeStyles.defaultLabel);
@@ -63,30 +63,36 @@ public interface ReflectTools {
 		return label;
 	}
 
-	static String getGenericString(Class<?> cls) {
-		if (!E_JSFunc.display_generic.enabled()) return cls.getSimpleName();
+	static String getGenericString(Class<?> type) {
+		return getGenericString(type, null);
+	}
+	static String getGenericString(Class<?> type, Type genericType) {
+		if (!E_JSFunc.display_generic.enabled()) return type.getSimpleName();
 		StringBuilder sb         = new StringBuilder();
 		String        simpleName;
 		int           arrayDepth = 0;
-		while (cls.isArray()) {
+		while (type.isArray()) {
 			arrayDepth++;
-			cls = cls.getComponentType();
+			type = type.getComponentType();
 		}
-		if (cls.isAnonymousClass()) {
-			simpleName = cls.getName();
+		if (type.isAnonymousClass()) {
+			simpleName = type.getName();
 			simpleName = simpleName.substring(simpleName.lastIndexOf('.') + 1); // strip the package name
-		} else simpleName = cls.getSimpleName();
-		sb.append(simpleName);
-		// if (!cls.isPrimitive()) {
-		TypeVariable<?>[] typeparms = cls.getTypeParameters();
-		if (typeparms.length > 0) {
-			StringJoiner sj = new StringJoiner(",", "<", ">");
-			for (TypeVariable<?> typeparm : typeparms) {
-				sj.add(typeparm.getName());
+		} else simpleName = type.getSimpleName();
+
+		if (genericType != null) {
+			sb.append(getGenericSimpleTypeName(genericType));
+		} else {
+			sb.append(simpleName);
+			TypeVariable<?>[] typeparms = type.getTypeParameters();
+			if (typeparms.length > 0) {
+				StringJoiner sj = new StringJoiner(",", "<", ">");
+				for (TypeVariable<?> typeparm : typeparms) {
+					sj.add(typeparm.getName());
+				}
+				sb.append(sj);
 			}
-			sb.append(sj);
 		}
-		// }
 
 		sb.append(StringUtils.repeat("[]", arrayDepth));
 
@@ -97,6 +103,29 @@ public interface ReflectTools {
 	@CopyMethodFrom(method = "arc.util.serialization.Json#getElementType(Field, int)")
 	static Class<?> getElementType(Field field, int index) {
 		return null;
+	}
+
+	static String getGenericSimpleTypeName(Type[] args) {
+		if (args.length == 0) return "";
+		StringJoiner sj = new StringJoiner(", ", "<", ">");
+		for (Type arg : args) {
+			sj.add(getGenericSimpleTypeName(arg));
+		}
+		return sj.toString();
+	}
+
+	static String getGenericSimpleTypeName(Type type) {
+		if (type instanceof Class) return ((Class<?>) type).getSimpleName();
+
+		StringBuilder sb = new StringBuilder();
+		if (type instanceof ParameterizedType ptype) {
+			sb.append(((Class<?>) ptype.getRawType()).getSimpleName());
+			sb.append(getGenericSimpleTypeName(ptype.getActualTypeArguments()));
+		} else {
+			sb.append(type.getTypeName());
+		}
+
+		return sb.toString();
 	}
 
 	// ---reflection getter------

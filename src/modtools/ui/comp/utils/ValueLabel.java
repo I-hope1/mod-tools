@@ -349,6 +349,7 @@ public abstract class ValueLabel extends InlineLabel {
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? STR."'\{val}'"
 				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
+			  : val instanceof Class ? ((Class<?>) val).getSimpleName()
 
 				: val instanceof Element ? ReviewElement.getElementName((Element) val)
 				: FormatHelper.getUIKey(val))

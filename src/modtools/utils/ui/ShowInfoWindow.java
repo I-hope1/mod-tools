@@ -285,8 +285,8 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	static void buildModifier(Table table, CharSequence string, float scale) {
 		markDisplay(keyword(table, string).fontScale(scale), E_JSFuncDisplay.modifier);
 	}
-	static void buildReturnType(Table table, Class<?> type, Prov<String> details) {
-		MyLabel label = makeGenericType(type, details);
+	static void buildReturnType(Table table, Class<?> type, @Nullable Type genericType) {
+		MyLabel label = makeGenericType(type, genericType);
 		markDisplay(table.add(label)
 		 .fontScale(0.9f)
 		 .padRight(16), E_JSFuncDisplay.type);
@@ -379,7 +379,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				// modifiers
 				buildModifier(attr, Modifier.toString(modifiers));
 				// type
-				buildReturnType(attr.row(), type, makeDetails(type, f.getGenericType()));
+				buildReturnType(attr.row(), type, f.getGenericType());
 			}).get();
 			// name
 			MyLabel label = newCopyLabel(fields, f.getName());
@@ -468,12 +468,24 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		try {
 			int mod = m.getModifiers();
 			Element attribute = methods.table(attr -> {
-				attr.defaults().left();
+				attr.left().defaults().left();
 				// modifiers
+				boolean b = m.getTypeParameters().length > 0 && E_JSFunc.display_generic.enabled();
+				if (b) {
+					attr.defaults().colspan(2);
+				}
 				buildModifier(attr, buildExecutableModifier(m));
+				attr.row();
+				if (b) {
+					attr.defaults().colspan(1);
+					markDisplay(attr.add(new MyLabel(
+						getGenericSimpleTypeName(m.getTypeParameters()),
+						defaultLabel)).padRight(6f).fontScale(0.9f)
+					 .color(tmpColor.set(c_type)), E_JSFuncDisplay.type);
+				}
 				// return type
-				buildReturnType(attr.row(), m.getReturnType(),
-				 makeDetails(m.getReturnType(), m.getGenericReturnType()));
+				buildReturnType(attr, m.getReturnType(),
+				 m.getGenericReturnType());
 			}).get();
 			// method name
 			MyLabel label = newCopyLabel(methods, m.getName());
@@ -563,7 +575,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 
 	private static void buildClass(ReflectTable table, Class<?> cls) {
-		table.bind(Pools.get(ClassMember.class,  ClassMember::new, 500).obtain().init(cls));
+		table.bind(Pools.get(ClassMember.class, ClassMember::new, 500).obtain().init(cls));
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
@@ -579,11 +591,19 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				 MenuBuilder.copyAsJSMenu("class", () -> cls),
 				 ValueLabel.newDetailsMenuList(l, null, cls)
 				));
+				Class<?> superClass = cls.getSuperclass();
+				if (superClass != null) {
+					keyword(t, " extends ");
+					t.add(newCopyLabel(t, getGenericString(superClass, cls.getGenericSuperclass()))).padRight(8f).color(tmpColor.set(c_type));
+				}
 				Class<?>[] types = cls.getInterfaces();
 				if (types.length > 0) {
 					keyword(t, " implements ");
-					for (Class<?> interf : types) {
-						t.add(new MyLabel(getGenericString(interf), defaultLabel)).padRight(8f).color(tmpColor.set(c_type));
+					for (int i = 0; i < types.length; i++) {
+						Class<?> interf = types[i];
+						t.add(new MyLabel(getGenericString(interf, cls.getGenericInterfaces()[i])
+							, defaultLabel))
+						 .padRight(8f).color(tmpColor.set(c_type));
 					}
 				}
 
@@ -721,7 +741,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 		}
 	}
 	/** 仅仅是个标识 */
-	static class CopyLabel extends MyLabel{
+	static class CopyLabel extends MyLabel {
 		public CopyLabel(CharSequence text) {
 			super(text, defaultLabel);
 		}

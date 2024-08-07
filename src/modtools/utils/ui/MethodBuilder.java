@@ -20,7 +20,6 @@ import java.util.*;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.effect.HopeFx.changedFx;
 import static modtools.utils.JSFunc.JColor;
-import static modtools.utils.ui.ReflectTools.makeDetails;
 import static modtools.utils.ui.ShowInfoWindow.keyword;
 
 public interface MethodBuilder {
@@ -106,7 +105,7 @@ public interface MethodBuilder {
 
 		for (int i = 0, length = args.length; i < length; i++) {
 			var ptype = args[i];
-			table.add(ReflectTools.makeGenericType(ptype, makeDetails(ptype, Tools.getOrNull(genericArgs, i))))
+			table.add(ReflectTools.makeGenericType(ptype, Tools.getOrNull(genericArgs, i)))
 			 .color(Tmp.c1.set(JColor.c_type));
 			if (i != length - 1) {
 				table.add(", ");
@@ -125,7 +124,7 @@ public interface MethodBuilder {
 			table.bind(throwKey);
 			for (int i = 0, length = exceptions.length; i < length; i++) {
 				var eType = exceptions[i];
-				table.add(ReflectTools.makeGenericType(eType, makeDetails(eType, genericExceptions[i])))
+				table.add(ReflectTools.makeGenericType(eType, genericExceptions[i]))
 				 .color(Tmp.c1.set(JColor.c_type));
 				if (i != length - 1) {
 					table.add(", ");

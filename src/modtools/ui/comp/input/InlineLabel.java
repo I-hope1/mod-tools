@@ -59,7 +59,7 @@ public class InlineLabel extends NoMarkupLabel {
 
 			do {
 				int size = item.glyphs.size - itemIndex;
-				if (currentIndex + size/* item的最右边 */ <= endIndex) {
+				if (size <= endIndex - currentIndex) {
 					// The whole item fits within the current color range
 					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 					currentIndex += size;

@@ -166,42 +166,42 @@ public abstract class ValueLabel extends InlineLabel {
 	private void appendValue(StringBuilder text, Object val) {
 		if (val instanceof ObjectMap || val instanceof Map) {
 			text.append('{');
+			Runnable prev = appendTail;
+			appendTail = null;
 			switch (val) {
 				case ObjectMap<?, ?> map -> {
-					appendTail = null;
 					for (ObjectMap.Entry<?, ?> entry : map) {
 						appendMap(text, val, entry.key, entry.value);
 						if (isTruncate(text.length())) break;
 					}
 				}
 				case IntMap<?> map -> {
-					appendTail = null;
 					for (Entry<?> entry : map) {
 						appendMap(text, val, entry.key, entry.value);
 						if (isTruncate(text.length())) break;
 					}
 				}
 				default -> {
-					appendTail = null;
 					for (Map.Entry<?, ?> entry : ((Map<?, ?>) val).entrySet()) {
 						appendMap(text, val, entry.getKey(), entry.getValue());
 						if (isTruncate(text.length())) break;
 					}
 				}
 			}
+			appendTail = prev;
 			text.append('}');
 
-			// setColor(Syntax.c_map);
 			return;
 		}
 		iter:
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
-			text.append("[");
+			text.append('[');
 
 			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
 			IterCons       cons = pool.obtain().init(this, val, text);
 			try {
 				try {
+					Runnable prev = appendTail;
 					appendTail = null;
 					if (val instanceof Iterable<?> iter) {
 						for (Object item : iter) {
@@ -210,6 +210,7 @@ public abstract class ValueLabel extends InlineLabel {
 					} else {
 						ArrayUtils.forEach(val, cons);
 					}
+					appendTail = prev;
 				} catch (SatisfyException ignored) { }
 			} catch (ArcRuntimeException ignored) {
 				break iter;
@@ -219,7 +220,7 @@ public abstract class ValueLabel extends InlineLabel {
 			} finally {
 				pool.free(cons);
 			}
-			text.append("]");
+			text.append(']');
 			// setColor(Color.white);
 			return;
 		}
@@ -228,7 +229,7 @@ public abstract class ValueLabel extends InlineLabel {
 		if (text.length() > 0 && val instanceof Color c) {
 			int i = text.length();
 			colorMap.put(i, c);
-			text.append("■");
+			text.append('■');
 			textOff = text.length() - i;
 			// colorMap.put(text.length(), Color.white);
 		}

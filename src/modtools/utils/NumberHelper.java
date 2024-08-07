@@ -21,7 +21,7 @@ public class NumberHelper {
 	}
 	public static boolean isNumber(String text) {
 		try {
-			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text));
+			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text.replaceAll("∞", "Infinity")));
 		} catch (Throwable ignored) {
 			return false;
 		}

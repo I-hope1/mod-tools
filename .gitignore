@@ -157,6 +157,6 @@ android/libs/
 
 
 hs_err_pid*.log
-.gradle/*
+.gradle/**
 /.temp/
 /.run/

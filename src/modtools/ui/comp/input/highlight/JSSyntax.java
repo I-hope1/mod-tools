@@ -118,7 +118,7 @@ public class JSSyntax extends Syntax {
 	public TokenDraw[] tokenDraws = {
 	 task -> {
 		 String token = task.token;
-		 if (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
+		 if ((obj != null || pkg != null) && lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
 			 if (operatesSymbol.lastSymbol == '.') {
 				 return dealJSProp(token);
 			 }
@@ -167,10 +167,10 @@ public class JSSyntax extends Syntax {
 			pkg = null;
 			obj = newObj;
 		}
-		setCursorObj();
+		setCursorObj(drawToken.lastIndex);
 	}
-	private void setCursorObj() {
-		if (drawable != null && drawToken.lastIndex <= drawable.cursor()) {
+	private void setCursorObj(int lastIndex) {
+		if (drawable != null && lastIndex <= drawable.cursor()) {
 			cursorObj = obj;
 		}
 	}
@@ -182,10 +182,10 @@ public class JSSyntax extends Syntax {
 		if (obj == Undefined.SCRIPTABLE_UNDEFINED) return null;
 
 		Object o = pkg == null && obj instanceof NativeJavaObject nja ?
-		 js_prop_map.computeIfAbsent(nja.unwrap(), _ -> new HashMap<>())
+		 js_prop_map.computeIfAbsent(nja instanceof NativeJavaClass ? Class.class : nja.unwrap(), _ -> new HashMap<>())
 			.computeIfAbsent(token, _ -> getPropOrNotFound(nja, token))
-		 : getPropOrNotFound(pkg, token);
-		if (o == Scriptable.NOT_FOUND && obj != NJO) {
+		 : getPropOrNotFound(pkg != null ? pkg : obj, token);
+		if (o == Scriptable.NOT_FOUND && obj != NJO && pkg == null) {
 			obj = null;
 			return c_error;
 		}
@@ -194,7 +194,7 @@ public class JSSyntax extends Syntax {
 		} else if (o instanceof Scriptable sc) {
 			pkg = null;
 			obj = sc;
-			setCursorObj();
+			setCursorObj(drawToken.lastIndex);
 			return c_localvar;
 		}
 		obj = null;
@@ -202,7 +202,15 @@ public class JSSyntax extends Syntax {
 	}
 
 	private final DrawTask[] taskArr0 = {
-	 new DrawString(c_string),
+	 new DrawString(c_string) {
+		 /** @see NativeString  */
+		 public static final Scriptable STR = Context.toObject("", IScript.scope);
+		 public void drawText(int i) {
+			 super.drawText(i);
+			 obj = STR;
+			 setCursorObj(lastIndex);
+		 }
+	 },
 	 bracketsSymbol,
 	 new DrawComment(c_comment),
 	 operatesSymbol,
@@ -275,18 +283,18 @@ public class JSSyntax extends Syntax {
 			return true;
 		}
 		private void forToken(int i) {
-			if (c == '(') {
+			if (c == '(' && obj != null) {
 				((JSDrawToken) drawToken).stack.add(obj);
 			}
-			if (c == ')') {
+			if (c == ')' && !((JSDrawToken) drawToken).stack.isEmpty()) {
 				obj = ((JSDrawToken) drawToken).stack.pop();
-				if (obj != null) switch (obj) {
+				switch (obj) {
 					case NativeJavaMethod m -> {
 						Object[] o      = (Object[]) UNSAFE.getObject(m, RHINO.methods);
 						Method   method = (Method) UNSAFE.getObject(o[0], RHINO.memberObject);
 						Constants.iv(RHINO.initNativeJavaObject, NJO, customScope, null, method.getReturnType());
 						obj = NJO;
-						setCursorObj();
+						setCursorObj(JSSyntax.this.drawToken.lastIndex);
 					}
 					default -> { }
 				}

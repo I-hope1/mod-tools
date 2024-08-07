@@ -64,6 +64,7 @@ public class MenuBuilder {
 	public static void showMenuList(Iterable<MenuItem> list) {
 		showMenuList(list, null);
 	}
+	/** TODO: 隐藏当前的MenuList  */
 	public static void showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
 		IntUI.showSelectTableRB(mouseVec.cpy(), (p, hide, _) -> {
 			showMenuList(list, hiddenListener, p, hide);

@@ -11,7 +11,7 @@ import arc.util.*;
 import arc.util.pooling.Pools;
 import modtools.utils.ArrayUtils;
 
-public class InlineLabel extends NoMarkupLabel  {
+public class InlineLabel extends NoMarkupLabel {
 	private static final Seq<GlyphRun> result    = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
 
@@ -47,52 +47,58 @@ public class InlineLabel extends NoMarkupLabel  {
 		colorKeys.sort();
 
 		Color color        = colorMap.get(0);
-		int   startIndex   = colorKeys.first();
+		int   lastIndex   = colorKeys.first();
 		int   currentIndex = 0;
+		int   itemIndex    = 0;
 
 		var      iter = runs.iterator();
 		GlyphRun item = iter.next();
-		for (int i = 1; i < colorKeys.size; i++) {
+		for (int i = 0; i < colorKeys.size; i++) {
 			final int endIndex = colorKeys.get(i);
-			if (startIndex == endIndex) continue;
+			if (lastIndex == endIndex) continue;
 
 			do {
-				while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
-					currentIndex++;
-				}
-				if (currentIndex + item.glyphs.size <= endIndex) {
+				int size = item.glyphs.size - itemIndex;
+				if (currentIndex + size/* item的最右边 */ <= endIndex) {
 					// The whole item fits within the current color range
-					result.add(InlineLabel.sub(item, 0, item.glyphs.size, color));
-					currentIndex += item.glyphs.size;
-					if (iter.hasNext()) item = iter.next();
+					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
+					currentIndex += size;
+					itemIndex = 0;
+					if (iter.hasNext()) {
+						item = iter.next();
+						// 对自动换行偏移
+						while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
+							currentIndex++;
+						}
+					}
 				} else {
 					// Only part of the item fits within the current color range
-					int splitIndex = endIndex - currentIndex;
-					result.add(InlineLabel.sub(item, 0, splitIndex, color));
-					result.add(item = InlineLabel.sub(item, splitIndex, item.glyphs.size, colorMap.get(endIndex)));
+					int splitIndex = endIndex - currentIndex + itemIndex;
+					result.add(InlineLabel.sub(item, itemIndex, splitIndex, color));
+					itemIndex = splitIndex;
 					currentIndex = endIndex;
+					break;
 				}
-			} while (currentIndex < endIndex && iter.hasNext());
+			} while (currentIndex < endIndex);
 
-			startIndex = endIndex;
+			lastIndex = endIndex;
 			color = colorMap.get(endIndex);
 		}
-		// Add the remaining part of the last run
-		if (currentIndex < text.length()) {
-			result.add(InlineLabel.sub(item, 0, text.length() - currentIndex, color));
+		if (itemIndex < item.glyphs.size) {
+			result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 		}
 
 		return result;
 	}
 	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color) {
-		endIndex = Math.min(endIndex, glyphRun.glyphs.size);
 		GlyphRun newRun = Pools.obtain(GlyphRun.class, GlyphRun::new);
+		boolean  isSame = startIndex == 0 && endIndex == glyphRun.glyphs.size;
 
 		newRun.y = glyphRun.y;
-		newRun.x = glyphRun.x + ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex);
+		newRun.x = glyphRun.x + (isSame ? 0 : ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex));
 		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex + 1);
 		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, endIndex - startIndex);
-		newRun.width = ArrayUtils.sumf(glyphRun.xAdvances, startIndex, endIndex + 1);
+		newRun.width = isSame ? glyphRun.width : ArrayUtils.sumf(glyphRun.xAdvances, startIndex, endIndex + 1);
 		newRun.color.set(color);
 		return newRun;
 	}
@@ -193,7 +199,7 @@ public class InlineLabel extends NoMarkupLabel  {
 		cache.setText(layout, x, y);
 		// Pools.freeAll(layout.runs);
 
-		if(fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
+		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
 	public void clear() {
 		super.clear();

@@ -109,7 +109,7 @@ public abstract class ValueLabel extends InlineLabel {
 		} else if (Element.class.isAssignableFrom(type) || val instanceof Element) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Element ? (Element) val : null);
-		} else if (Cell.class.isAssignableFrom(type)) {
+		} else if (Cell.class.isAssignableFrom(type) || val instanceof Cell<?>) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
@@ -236,11 +236,20 @@ public abstract class ValueLabel extends InlineLabel {
 		Color mainColor = colorOf(val);
 		int   startI    = text.length();
 		colorMap.put(startI, mainColor);
-		startIndexMap.put(startI - textOff, wrapVal(val));
+		boolean b = testHashCode(wrapVal(val));
+		if (b) startIndexMap.put(startI - textOff, wrapVal(val));
 		text.append(toString(val));
 		int endI = text.length();
-		endIndexMap.put(wrapVal(val), endI);
+		if (b) endIndexMap.put(wrapVal(val), endI);
 		colorMap.put(endI, Color.white);
+	}
+	public static boolean testHashCode(Object object) {
+		try {
+			object.hashCode();
+			return true;
+		} catch (Throwable e) {
+			return false;
+		}
 	}
 
 	// 一些基本类型的特化，不装箱，为了减少内存消耗
@@ -377,8 +386,8 @@ public abstract class ValueLabel extends InlineLabel {
 		}
 	}
 	private void setValInternal(Object val) {
-		if (this.val == val && (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class
-		                        || type == Class.class || type == Object.class)) return;
+		if (this.val == val && (val == null || type.isPrimitive() || Reflect.isWrapper(type) || type == String.class
+		                        || type == Class.class || val.getClass() == Object.class)) return;
 		if (this.val != null && val != null &&
 		    this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
 		    this.val.equals(val)) return;
@@ -406,7 +415,7 @@ public abstract class ValueLabel extends InlineLabel {
 		specialBuild(list);
 		detailsBuild(list);
 
-		if (Style.class.isAssignableFrom(type)) {
+		if (Style.class.isAssignableFrom(type) || val instanceof Style) {
 			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
 				Class<?>      cls     = val.getClass();
 				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
@@ -432,7 +441,7 @@ public abstract class ValueLabel extends InlineLabel {
 				 true, Align.top);
 			}));
 		}
-		if (Fi.class.isAssignableFrom(type)) {
+		if (Fi.class.isAssignableFrom(type) || val instanceof Fi) {
 			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", () -> val == null, () -> Core.app.openFolder(((Fi) val).path())));
 		}
 

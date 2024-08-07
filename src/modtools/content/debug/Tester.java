@@ -48,6 +48,7 @@ import modtools.ui.comp.input.highlight.JSSyntax;
 import modtools.ui.comp.input.highlight.Syntax.*;
 import modtools.ui.comp.limit.PrefPane;
 import modtools.ui.comp.linstener.*;
+import modtools.ui.comp.utils.*;
 import modtools.ui.comp.windows.ListDialog;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.gen.HopeIcons;
@@ -241,7 +242,7 @@ public class Tester extends Content {
 				p.left().top();
 				buildLog(p);
 				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
-				p.add(new MyLabel(() -> log))
+				p.add(new ClearValueLabel<>(Object.class, () -> res, null))
 				 .wrap().style(HopeStyles.defaultLabel)
 				 .labelAlign(Align.left).growX();
 			}).grow().with(p -> p.setScrollingDisabled(true, false));

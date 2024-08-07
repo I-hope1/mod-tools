@@ -11,6 +11,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.pooling.Pools;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -562,16 +563,15 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 
 	private static void buildClass(ReflectTable table, Class<?> cls) {
-		table.bind(new ClassMember(cls));
+		table.bind(Pools.get(ClassMember.class,  ClassMember::new, 500).obtain().init(cls));
 		table.table(t -> {
 			t.left().top().defaults().top();
 			try {
-				buildModifier(t,
-				 STR."""
-				 \{isNestStatic(cls) ? "static" : ""}\
-				 \{Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers())}\
-				 \{cls.isInterface() ? "" : " class"}
-				 """, 1);
+				StringJoiner modifiers = new StringJoiner(" ");
+				if (isNestStatic(cls)) modifiers.add("static");
+				modifiers.add(Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()));
+				if (!cls.isInterface()) modifiers.add("class");
+				buildModifier(t, modifiers.toString(), 1);
 
 				MyLabel l = newCopyLabel(t, getGenericString(cls));
 				l.color.set(c_type);

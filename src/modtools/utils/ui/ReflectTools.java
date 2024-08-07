@@ -6,6 +6,7 @@ import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
+import arc.util.pooling.Pool.Poolable;
 import arc.util.serialization.Json;
 import ihope_lib.MyReflect;
 import mindustry.ui.Styles;
@@ -34,7 +35,7 @@ public interface ReflectTools {
 		}
 		return getGenericString(clazz);
 	}
-	/** 找到第一个非匿名超类的simpleName  */
+	/** 找到第一个非匿名超类的simpleName */
 	static String getSimpleNameNotAnonymous(Class<?> clazz) {
 		while (clazz.getSimpleName().isEmpty() && clazz != Element.class) {
 			clazz = clazz.getSuperclass();
@@ -92,7 +93,7 @@ public interface ReflectTools {
 		return sb.toString();
 	}
 
-	/** @see Json#getElementType(Field, int)   */
+	/** @see Json#getElementType(Field, int) */
 	@CopyMethodFrom(method = "arc.util.serialization.Json#getElementType(Field, int)")
 	static Class<?> getElementType(Field field, int index) {
 		return null;
@@ -237,9 +238,13 @@ public interface ReflectTools {
 			return null;
 		}
 	}
-	class ClassMember implements Member {
-		private final Class<?> cl;
-		public ClassMember(Class<?> cl) { this.cl = cl; }
+	class ClassMember implements Member, Poolable {
+		private Class<?> cl;
+		public ClassMember() { }
+		public ClassMember init(Class<?> cl) {
+			this.cl = cl;
+			return this;
+		}
 		public Class<?> getDeclaringClass() {
 			return cl.getDeclaringClass();
 		}
@@ -251,6 +256,9 @@ public interface ReflectTools {
 		}
 		public boolean isSynthetic() {
 			return cl.isSynthetic();
+		}
+		public void reset() {
+			cl = Object.class;
 		}
 	}
 }

@@ -12,7 +12,6 @@ import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
-import arc.struct.IntMap.Entry;
 import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
@@ -21,13 +20,13 @@ import mindustry.entities.Effect;
 import mindustry.gen.*;
 import mindustry.world.Tile;
 import modtools.content.ui.*;
+import modtools.content.world.Selection;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.ui.*;
 import modtools.ui.comp.input.InlineLabel;
 import modtools.ui.comp.input.highlight.Syntax;
 import modtools.ui.comp.review.*;
-import modtools.content.world.Selection;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
@@ -43,6 +42,7 @@ import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
+import static modtools.ui.comp.input.highlight.Syntax.c_map;
 
 @SuppressWarnings({"SizeReplaceableByIsEmpty"})
 public abstract class ValueLabel extends InlineLabel {
@@ -161,10 +161,31 @@ public abstract class ValueLabel extends InlineLabel {
 	private final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
 	private final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
 	private final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
+	// 用于记录数组或map是否展开
+	private final ObjectMap<Object, Boolean>  expandMap     = new ObjectMap<>();
 
 	@SuppressWarnings("ConstantConditions")
 	private void appendValue(StringBuilder text, Object val) {
-		if (val instanceof ObjectMap || val instanceof Map) {
+		if (val instanceof ObjectMap || val instanceof IntMap<?>
+		    || val instanceof ObjectFloatMap<?> || val instanceof Map) {
+			if (!expandMap.containsKey(val)) {
+				clickedRegion(() -> {
+					int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
+					int end   = endIndexMap.get(val);
+					return Tmp.p1.set(start, end);
+				}, () -> toggleExpand(val));
+				expandMap.put(val, false);
+			}
+			startIndexMap.put(text.length(), val);
+			colorMap.put(text.length(), c_map);
+			text.append("|Map ").append(getSize(val)).append('|');
+			colorMap.put(text.length(), Color.white);
+			endIndexMap.put(val, text.length());
+
+			if (!expandMap.get(val, false)) {
+				return;
+			}
+			text.append('\n');
 			text.append('{');
 			Runnable prev = appendTail;
 			appendTail = null;
@@ -176,7 +197,13 @@ public abstract class ValueLabel extends InlineLabel {
 					}
 				}
 				case IntMap<?> map -> {
-					for (Entry<?> entry : map) {
+					for (IntMap.Entry<?> entry : map) {
+						appendMap(text, val, entry.key, entry.value);
+						if (isTruncate(text.length())) break;
+					}
+				}
+				case ObjectFloatMap<?> map -> {
+					for (ObjectFloatMap.Entry<?> entry : map) {
 						appendMap(text, val, entry.key, entry.value);
 						if (isTruncate(text.length())) break;
 					}
@@ -243,6 +270,19 @@ public abstract class ValueLabel extends InlineLabel {
 		int endI = text.length();
 		if (b) endIndexMap.put(wrapVal(val), endI);
 		colorMap.put(endI, Color.white);
+	}
+	private void toggleExpand(Object val) {
+		expandMap.put(val, !expandMap.get(val, false));
+		// Core.app.post(() -> flushVal());
+	}
+
+	private int getSize(Object val) {
+		return switch (val) {
+			case ObjectMap<?, ?> map -> map.size;
+			case IntMap<?> map -> map.size;
+			case ObjectFloatMap<?> map -> map.size;
+			default -> ((Map<?, ?>) val).size();
+		};
 	}
 	public static boolean testHashCode(Object object) {
 		try {

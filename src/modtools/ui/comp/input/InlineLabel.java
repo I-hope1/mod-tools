@@ -1,13 +1,17 @@
 package modtools.ui.comp.input;
 
+import arc.Core;
+import arc.Graphics.Cursor.SystemCursor;
 import arc.func.Prov;
-import arc.graphics.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
+import arc.math.geom.Point2;
+import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.struct.*;
 import arc.struct.IntMap.Keys;
-import arc.util.*;
+import arc.util.Align;
 import arc.util.pooling.Pools;
 import modtools.utils.ArrayUtils;
 
@@ -20,9 +24,6 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 	public InlineLabel(CharSequence text, LabelStyle style) {
 		super(text, style);
-	}
-	public InlineLabel(float scale) {
-		super(scale);
 	}
 	public InlineLabel(Prov<CharSequence> sup) {
 		super(sup);
@@ -62,20 +63,24 @@ public class InlineLabel extends NoMarkupLabel {
 					// The whole item fits within the current color range
 					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 					currentIndex += size;
-					if (iter.hasNext()) {
-						item = iter.next();
-						itemIndex = 0;
-						// 对自动换行偏移
-						while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
-							currentIndex++;
-						}
-					} else itemIndex = item.glyphs.size;
 				} else {
 					// Only part of the item fits within the current color range
 					int splitIndex = endIndex - currentIndex;
 					result.add(InlineLabel.sub(item, itemIndex, splitIndex + itemIndex, color));
 					itemIndex += splitIndex;
 					currentIndex = endIndex;
+					if (itemIndex < item.glyphs.size) break;
+				}
+				if (iter.hasNext()) {
+					item = iter.next();
+					itemIndex = 0;
+					// 对自动换行偏移
+					while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
+						currentIndex++;
+					}
+				} else {
+					itemIndex = item.glyphs.size;
+					break;
 				}
 			} while (currentIndex < endIndex);
 
@@ -116,7 +121,7 @@ public class InlineLabel extends NoMarkupLabel {
 			while (index < text.length() && (char) run.glyphs.first().id != text.charAt(index)) index++; // 弥补offset
 			// 判断是否在行
 			if (Math.abs(currentY - y) < lineHeight && currentX + run.width > x) {
-				for (int i = 0; i < run.glyphs.size; i++) {
+				for (int i = 0; i < xAdvances.size; i++) {
 					// 判断是否在当前字符范围内
 					if (x >= currentX && x < currentX + xAdvances.get(i)) {
 						return index + i - 1;
@@ -201,6 +206,31 @@ public class InlineLabel extends NoMarkupLabel {
 	public void clear() {
 		super.clear();
 		cache.clear();
+	}
+
+	/** 给指定区域添加双击事件 */
+	public void clickedRegion(Prov<Point2> point2Prov, Runnable runnable) {
+		addListener(new ClickListener() {
+			public void clicked(InputEvent event, float x, float y) {
+				int    cursor = getCursor(x, y);
+				Point2 point2 = point2Prov.get();
+				int    start  = point2.x, end = point2.y;
+				if (start <= cursor && cursor <= end) {
+					runnable.run();
+				}
+			}
+			public boolean mouseMoved(InputEvent event, float x, float y) {
+				int    cursor = getCursor(x, y);
+				Point2 point2 = point2Prov.get();
+				int    start  = point2.x, end = point2.y;
+				if (start <= cursor && cursor <= end) {
+					Core.graphics.cursor(SystemCursor.hand);
+				} else {
+					Core.graphics.cursor(SystemCursor.arrow);
+				}
+				return super.mouseMoved(event, x, y);
+			}
+		});
 	}
 	protected final IntMap<Color> colorMap = new IntMap<>() {
 		/* public Color put(int key, Color value) {

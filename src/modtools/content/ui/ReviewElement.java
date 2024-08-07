@@ -120,7 +120,7 @@ public class ReviewElement extends Content {
 			left().defaults().left();
 			table(t -> {
 				ISettings.buildAll("", t, Settings.class);
-				settingColor(t);
+				settingColor(t.table().growX().get());
 			}).grow();
 		}});
 	}
@@ -520,6 +520,15 @@ public class ReviewElement extends Content {
 			if (!parentValid(getElement(), window)) remove();
 			background(FOCUS_FROM == this ? Styles.flatDown : Styles.none);
 		}
+		public int getDepth() {
+			Element actor = getElement();
+			int     depth = 1;
+			while (actor != null && actor != window.element) {
+				actor = actor.parent;
+				depth++;
+			}
+			return depth;
+		}
 		private void buildForGroup(Group group) {
 			var button   = new FoldedImageButton(true);
 			var children = group.getChildren();
@@ -543,11 +552,12 @@ public class ReviewElement extends Content {
 
 			Table table1 = new LimitTable();
 			table1.left().defaults().left().growX();
-			boolean unfoldChildren = children.size < 20
-			                         || group.parent.getChildren().size == 1
-			                         || window.element == group;
-			button.fireCheck(unfoldChildren, true);
-			if (unfoldChildren) rebuild.get(table1);
+			boolean expandChildren = maxDepthForAutoExpand.getInt() >= getDepth() &&
+			                         (children.size < 20
+			                          || group.parent.getChildren().size == 1
+			                          || window.element == group);
+			button.fireCheck(expandChildren);
+			if (expandChildren) rebuild.get(table1);
 
 			button.setContainer(add(table1).grow());
 			boolean[] lastEmpty = {children.isEmpty()};
@@ -750,14 +760,20 @@ public class ReviewElement extends Content {
 
 	public enum Settings implements ISettings {
 		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */,
-		// 匿名类而不是非匿名超类
+		/** （显示名称时）匿名类而不是非匿名超类 */
 		anonymousInsteadSuper,
-		// 判断是否可见
-		checkCullingArea
+		/** 判断是否可见 */
+		checkCullingArea,
+		/**
+		 * 最大自动展开深度
+		 * @see ISettings#$(Integer)
+		 */
+		maxDepthForAutoExpand(int.class, 5/* def */, 0/* min */, 50/* max */, 1/* step */),
 		//
 		;
 
 		Settings() { }
+		Settings(Class<?> a, int... args) { }
 		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }
 	}
 

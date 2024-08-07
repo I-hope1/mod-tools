@@ -2,9 +2,14 @@ package modtools.ui.comp.input;
 
 import arc.func.Prov;
 import arc.graphics.Color;
+import arc.graphics.g2d.*;
+import arc.graphics.g2d.GlyphLayout.GlyphRun;
+import arc.struct.Seq;
+import arc.util.*;
 import mindustry.graphics.Pal;
 import modtools.utils.PatternUtils;
 
+import java.util.Objects;
 import java.util.regex.*;
 
 public class SearchedLabel extends InlineLabel {
@@ -21,6 +26,12 @@ public class SearchedLabel extends InlineLabel {
 	}
 	public Color normalColor    = Pal.accent;
 	public Color highlightColor = Color.sky;
+	private Color bgColor = Color.brick;
+	public void initColor(Color normalColor, Color highlightColor) {
+		this.normalColor    = normalColor;
+		this.highlightColor = highlightColor;
+		bgColor = Tmp.c1.set(highlightColor).inv().saturation(1).value(1).a(0.8f);
+	}
 	public void layout() {
 		pattern = patternProv.get();
 
@@ -40,7 +51,22 @@ public class SearchedLabel extends InlineLabel {
 			colorMap.put(matcher.start(), highlightColor);
 			colorMap.put(matcher.end(), normalColor);
 		}
-
 		super.layout();
+	}
+	public void draw() {
+		if (cache == null) return;
+		drawHighlightBackground();
+
+		super.draw();
+	}
+	private void drawHighlightBackground() {
+		float lineHeight = cache.getFont().getLineHeight();
+		// 绘制背景
+		Seq<GlyphRun> runs = layout.runs;
+		Draw.color(bgColor);
+		for (GlyphRun run : runs) {
+			if (!Objects.equals(run.color, highlightColor)) continue;
+			Fill.crect(x + run.xAdvances.first() + run.x, y + run.y, run.width, lineHeight);
+		}
 	}
 }

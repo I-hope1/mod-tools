@@ -25,11 +25,9 @@ public class FoldedImageButton extends ImageButton {
 				applyChanged();
 			}
 		});
-		update(() -> {
-			if (fireOnlyClick) return;
-			setOrigin(Align.center);
-			applyChanged();
-		});
+
+		setOrigin(Align.center);
+		if (!fireOnlyClick) update(this::applyChanged);
 		addListener(new InputListener() {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				event.stop();
@@ -71,7 +69,7 @@ public class FoldedImageButton extends ImageButton {
 	}
 	public Element  element;
 	public Runnable rebuild, _clear;
-	public Cell<?>  cell;
+	public Cell<?> cell;
 
 
 }

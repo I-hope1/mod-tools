@@ -31,7 +31,7 @@ public class InlineLabel extends NoMarkupLabel {
 	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.isEmpty()) return runs;
-		if (colorMap.size == 2 && colorMap.get(text.length()) == Color.white) {
+		if (colorMap.size == 1 || (colorMap.size == 2 && colorMap.get(text.length()) == Color.white)) {
 			Color color = colorMap.get(0);
 			runs.each(r -> r.color.set(color));
 			return runs;
@@ -47,15 +47,14 @@ public class InlineLabel extends NoMarkupLabel {
 		colorKeys.sort();
 
 		Color color        = colorMap.get(0);
-		int   lastIndex   = colorKeys.first();
 		int   currentIndex = 0;
 		int   itemIndex    = 0;
 
 		var      iter = runs.iterator();
 		GlyphRun item = iter.next();
-		for (int i = 0; i < colorKeys.size; i++) {
+		for (int i = 1; i < colorKeys.size; i++) {
 			final int endIndex = colorKeys.get(i);
-			if (lastIndex == endIndex) continue;
+			if (currentIndex == endIndex) continue;
 
 			do {
 				int size = item.glyphs.size - itemIndex;
@@ -63,25 +62,23 @@ public class InlineLabel extends NoMarkupLabel {
 					// The whole item fits within the current color range
 					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 					currentIndex += size;
-					itemIndex = 0;
 					if (iter.hasNext()) {
 						item = iter.next();
+						itemIndex = 0;
 						// 对自动换行偏移
 						while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
 							currentIndex++;
 						}
-					}
+					} else itemIndex = item.glyphs.size;
 				} else {
 					// Only part of the item fits within the current color range
-					int splitIndex = endIndex - currentIndex + itemIndex;
-					result.add(InlineLabel.sub(item, itemIndex, splitIndex, color));
-					itemIndex = splitIndex;
+					int splitIndex = endIndex - currentIndex;
+					result.add(InlineLabel.sub(item, itemIndex, splitIndex + itemIndex, color));
+					itemIndex += splitIndex;
 					currentIndex = endIndex;
-					break;
 				}
 			} while (currentIndex < endIndex);
 
-			lastIndex = endIndex;
 			color = colorMap.get(endIndex);
 		}
 		if (itemIndex < item.glyphs.size) {
@@ -98,7 +95,7 @@ public class InlineLabel extends NoMarkupLabel {
 		newRun.x = glyphRun.x + (isSame ? 0 : ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex));
 		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex + 1);
 		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, endIndex - startIndex);
-		newRun.width = isSame ? glyphRun.width : ArrayUtils.sumf(glyphRun.xAdvances, startIndex, endIndex + 1);
+		newRun.width = isSame ? glyphRun.width : ArrayUtils.sumf(glyphRun.xAdvances, startIndex + 1, endIndex + 1);
 		newRun.color.set(color);
 		return newRun;
 	}

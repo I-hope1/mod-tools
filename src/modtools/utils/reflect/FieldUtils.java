@@ -31,7 +31,7 @@ public class FieldUtils {
 			throw new RuntimeException(e);
 		}
 	}
-	/** 查找包括自类的字段 */
+	/** 查找包括子类的字段 */
 	public static @Nullable Field getFieldAccessAll(Class<?> cls, String name) {
 		Field field;
 		while (cls != null) {
@@ -181,11 +181,7 @@ public class FieldUtils {
 		} catch (IllegalAccessException ignored) { }
 		return false;
 	}
-	/** for compiler */
-	public static boolean set$$(Class<?> cls, Object obj, String fieldName, Object value) {
-		/* nothing to do */
-		return false;
-	}
+
 	public static boolean isStatic(Field f) {
 		return Modifier.isStatic(f.getModifiers());
 	}

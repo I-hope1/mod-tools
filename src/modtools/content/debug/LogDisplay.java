@@ -19,6 +19,7 @@ import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.AutoWrapListener;
 import modtools.content.Content;
+import modtools.utils.io.FileUtils;
 
 import static modtools.utils.Tools.readFiOrEmpty;
 
@@ -48,7 +49,7 @@ public class LogDisplay extends Content {
 		Table[] tables = {new LimitTable(t -> {
 			final Fi last_log = Vars.dataDirectory.child("last_log.txt");
 			t.button("Source", HopeStyles.flatBordert, () -> {
-				Core.app.openFolder(last_log.path());
+				FileUtils.openFile(last_log);
 			}).height(42).growX();
 			t.button("Clear All", HopeStyles.flatBordert, () ->
 			 IntUI.showConfirm("Confirm to clear",

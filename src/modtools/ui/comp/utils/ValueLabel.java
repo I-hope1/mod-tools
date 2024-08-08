@@ -1,6 +1,5 @@
 package modtools.ui.comp.utils;
 
-import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
@@ -33,6 +32,7 @@ import modtools.utils.*;
 import modtools.utils.ArrayUtils.AllCons;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.SR.SatisfyException;
+import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.*;
 
@@ -489,7 +489,7 @@ public abstract class ValueLabel extends InlineLabel {
 			}));
 		}
 		if (Fi.class.isAssignableFrom(type) || val instanceof Fi) {
-			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", () -> val == null, () -> Core.app.openFolder(((Fi) val).path())));
+			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", () -> val == null, () -> FileUtils.openFile((Fi) val)));
 		}
 
 		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));

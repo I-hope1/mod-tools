@@ -30,6 +30,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.io.FileUtils;
 import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.Field;
@@ -130,7 +131,7 @@ public class SettingsUI extends Content {
 					 }
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
 					 cont.button("Open Directory", HopeStyles.flatBordert, () -> {
-						 Core.app.openFolder(MyFonts.fontDirectory.path());
+						 FileUtils.openFile(MyFonts.fontDirectory);
 					 }).growX().height(45);
 					 show();
 				 }};

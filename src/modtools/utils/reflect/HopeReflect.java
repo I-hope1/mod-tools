@@ -16,10 +16,7 @@ public class HopeReflect {
 	public static <T extends Class<?>> void setPublic(T obj, Class<T> cls) {
 		setPublic0(obj, cls);
 	}
-
-	/**
-	 * only for android
-	 **/
+	/** 只在Android上可用 （Android Only） **/
 	public static <T extends Member> void setPublic(T obj, Class<T> cls) {
 		setPublic0(obj, cls);
 	}

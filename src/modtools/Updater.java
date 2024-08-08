@@ -12,6 +12,7 @@ import mindustry.ui.Bar;
 import modtools.ui.IntUI;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.NoTopWindow;
+import modtools.utils.Tools;
 
 import java.io.*;
 import java.net.*;
@@ -38,8 +39,7 @@ public class Updater {
 			 // Log.info(val.toString(Jformat.formatted));
 			 String newBuild = val.getString("tag_name", "0");
 			 // Log.info("New: @, Old: @",newBuild, IntVars.meta.version);
-			 if (Runtime.Version.parse(newBuild)
-				    .compareTo(Runtime.Version.parse(IntVars.meta.version)) > 0) {
+			 if (Tools.compareVersions(newBuild, IntVars.meta.version) > 0) {
 				 Jval   asset = val.get("assets").asArray().find(v -> v.getString("name", "").endsWith(".jar"));
 				 String url   = asset.getString("browser_download_url", "");
 				 Log.info(STR."Downloading mod-tools from: \{url}");

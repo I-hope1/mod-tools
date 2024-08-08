@@ -35,6 +35,7 @@ import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
+import modtools.misc.AddedSeq;
 import modtools.override.ForRhino;
 import modtools.struct.LazyValue;
 import modtools.struct.v6.AThreads;
@@ -56,6 +57,7 @@ import modtools.ui.menu.MenuItem;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
+import modtools.utils.io.FileUtils;
 import modtools.utils.ui.FormatHelper;
 import rhino.*;
 
@@ -90,7 +92,7 @@ public class Tester extends Content {
 		 MenuItem.with("fi.open", Icon.fileSmall, "Open Dir", runT(() -> {
 			 Fi[]   list = startupDir.list();
 			 String path = list.length == 0 ? startupDir.path() : list[0].path();
-			 Core.app.openFolder(path);
+			 FileUtils.openFile(path);
 		 })))
 		);
 	}

@@ -1,4 +1,4 @@
-package modtools.utils;
+package modtools.misc;
 
 import arc.func.Cons;
 import arc.struct.Seq;

@@ -493,6 +493,23 @@ public class Tools {
 		}
 	}
 
+	public static int compareVersions(String version1, String version2) {
+		String[] levels1 = version1.split("\\.");
+		String[] levels2 = version2.split("\\.");
+
+		int length = Math.max(levels1.length, levels2.length);
+		for (int i = 0; i < length; i++) {
+			Integer v1         = i < levels1.length ? Integer.parseInt(levels1[i]) : 0;
+			Integer v2         = i < levels2.length ? Integer.parseInt(levels2[i]) : 0;
+			int     comparison = v1.compareTo(v2);
+			if (comparison != 0) {
+				return comparison;
+			}
+		}
+
+		return 0;
+	}
+
 	/** Cons接口（带异常） */
 	public interface CCons<T> {
 		void get(T t) throws Throwable;

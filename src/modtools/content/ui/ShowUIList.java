@@ -42,6 +42,7 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.reflect.RBuilder;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
+import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.search.*;
 import modtools.utils.ui.*;
@@ -169,7 +170,7 @@ public class ShowUIList extends Content {
 	 }),
 	 styles     = newTable(true, t -> {
 		 t.add("Custom Styles: ");
-		 t.button("styles.json", () -> Core.app.openFolder(uiConfig.child("styles.json").path())).growX();
+		 t.button("styles.json", () -> FileUtils.openFile(uiConfig.child("styles.json"))).growX();
 		 t.row();
 
 		 listAllStyles(t, Styles.class);

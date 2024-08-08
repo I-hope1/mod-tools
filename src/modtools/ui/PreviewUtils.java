@@ -19,12 +19,13 @@ import mindustry.graphics.MultiPacker.PageType;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.misc.PairProv.SizeProv;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Hitter;
-import modtools.misc.PairProv.SizeProv;
 import modtools.utils.TaskManager;
 import modtools.utils.ui.*;
 
+import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.comp.utils.ValueLabel.DEBUG;
 
 public class PreviewUtils {
@@ -85,6 +86,7 @@ public class PreviewUtils {
 	}
 	public static Cell<ImageButton> addPreviewButton(Table table, Cons<Table> cons) {
 		return table.button(Icon.imageSmall, Styles.clearNonei, IntVars.EMPTY_RUN)
+		 .size(36)
 		 .with(b -> addPreviewListener(b, cons));
 	}
 	public static void addPreviewListener(Element element, Cons<Table> cons) {
@@ -111,7 +113,15 @@ public class PreviewUtils {
 				hitter = Hitter.peek();
 				if (Vars.mobile) {
 					hitter.touchable = Touchable.disabled;
-					hitter.autoClose = false;
+					hitter.autoClose = true;
+					table.table.update(() -> {
+						if (hitter.init) {
+							topGroup.addChild(hitter);
+							hitter.touchable = Touchable.enabled;
+							hitter.autoClose = true;
+							table.table.update(null);
+						}
+					});
 				}
 				table.clearChildren();
 				table.add(table.table);

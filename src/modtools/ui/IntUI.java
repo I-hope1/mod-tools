@@ -667,15 +667,16 @@ public class IntUI {
 			// 如果inElement为true，判断fromActor是否是绑定元素的 子元素（Descendant）
 			if (ignoreInsideElement && (fromActor == null || !fromActor.isDescendantOf(event.listenerActor))) return;
 			// touchDown也会触发
-			if (Core.input.isTouched() != (pointer == -1)) enter0(event, x, y, pointer, fromActor);
+			if (Core.input.isTouched() == (pointer != -1)) enter0(event, x, y, pointer, fromActor);
 		}
 		public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) { }
+
 		/** {@inheritDoc} */
 		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 			// 如果inElement为true，判断fromActor是否是绑定元素的 子元素（Descendant）
 			if (ignoreInsideElement && (toActor == null || !toActor.isDescendantOf(event.listenerActor))) return;
 			// touchUp也会触发
-			if (mobile != (pointer == -1)) exit0(event, x, y, pointer, toActor);
+			if (Core.input.isTouched() == (pointer != -1)) exit0(event, x, y, pointer, toActor);
 		}
 		public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) { }
 	}

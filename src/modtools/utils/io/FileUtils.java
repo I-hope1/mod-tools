@@ -1,12 +1,15 @@
 package modtools.utils.io;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.StrictMode;
 import arc.Core;
-import arc.backend.android.AndroidApplication;
 import arc.files.Fi;
-import arc.util.OS;
+import arc.util.*;
 import modtools.IntVars;
+import modtools.ui.IntUI;
+import modtools.utils.ArrayUtils;
 
 public class FileUtils {
 	public static Fi child(Fi parent, String newName, String... oldNames) {
@@ -26,15 +29,23 @@ public class FileUtils {
 		return openFile(path.path());
 	}
 
+	private static boolean init;
 	public static boolean openFile(String path) {
 		if (IntVars.isDesktop()) {
 			return Core.app.openURI(path);
 		}
 		if (OS.isAndroid) {
-			Uri    uri    = Uri.parse(path);
-			Intent intent = new Intent(Intent.ACTION_PICK);
-			intent.setDataAndType(uri, "*/*");
-			((AndroidApplication) Core.app).startActivity(intent);
+			try {
+				if (!init) {
+					Reflect.invoke(StrictMode.class, "disableDeathOnFileUriExposure", ArrayUtils.EMPTY_ARRAY);
+					init = true;
+				}
+				var    app    = (Activity) Core.app;
+				Intent intent = new Intent(Intent.ACTION_VIEW);
+				intent.setDataAndType(Uri.parse("file://" + path), "*/*");
+				app.startActivity(intent);
+			} catch (Throwable e) { IntUI.showException("Failed to open " + path, e); }
+			return true;
 		}
 		return Core.app.openFolder(path);
 	}

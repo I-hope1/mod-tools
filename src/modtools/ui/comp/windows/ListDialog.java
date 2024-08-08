@@ -11,12 +11,12 @@ import arc.util.Tmp;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
+import modtools.content.debug.Tester;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
-import modtools.content.debug.Tester;
 import modtools.utils.*;
-import modtools.utils.ui.search.*;
+import modtools.utils.search.*;
 
 import java.util.*;
 import java.util.regex.Pattern;

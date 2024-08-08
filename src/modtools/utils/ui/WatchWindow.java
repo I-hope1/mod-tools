@@ -13,7 +13,7 @@ import mindustry.ui.Styles;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.comp.ModifiableLabel;
-import modtools.ui.comp.utils.TemplateTable;
+import modtools.utils.search.TemplateTable;
 import modtools.ui.comp.Window.*;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.input.MyLabel.CacheProv;

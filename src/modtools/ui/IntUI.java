@@ -35,7 +35,7 @@ import modtools.utils.*;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
 import modtools.utils.ui.WatchWindow;
-import modtools.utils.ui.search.Search;
+import modtools.utils.search.Search;
 
 import java.util.Objects;
 import java.util.regex.Pattern;

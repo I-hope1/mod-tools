@@ -13,7 +13,7 @@ import arc.util.pooling.Pool.Poolable;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.TransformTable;
 import modtools.utils.ElementUtils;
-import modtools.utils.ui.search.BindCell;
+import modtools.utils.search.BindCell;
 
 /**
  * The type Folded list.

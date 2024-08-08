@@ -10,7 +10,7 @@ import modtools.ui.IntUI;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.utils.*;
 import modtools.utils.*;
-import modtools.utils.ui.search.FilterTable;
+import modtools.utils.search.FilterTable;
 import rhino.*;
 
 import java.lang.invoke.MethodHandle;

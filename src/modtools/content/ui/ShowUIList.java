@@ -32,7 +32,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.*;
 import modtools.content.*;
-import modtools.jsfunc.reflect.*;
+import modtools.jsfunc.reflect.InitMethodHandle;
 import modtools.ui.*;
 import modtools.ui.IntUI.SelectTable;
 import modtools.ui.comp.*;
@@ -43,8 +43,8 @@ import modtools.ui.reflect.RBuilder;
 import modtools.utils.*;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.reflect.FieldUtils;
+import modtools.utils.search.*;
 import modtools.utils.ui.*;
-import modtools.utils.ui.search.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;

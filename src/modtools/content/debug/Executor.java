@@ -28,7 +28,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.ui.ReflectTools;
-import modtools.utils.ui.search.FilterTable;
+import modtools.utils.search.FilterTable;
 import rhino.BaseFunction;
 
 public class Executor extends Content {

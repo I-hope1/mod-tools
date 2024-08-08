@@ -13,11 +13,17 @@ import java.lang.reflect.*;
 
 public class HopeReflect {
 
+	public static <T extends Class<?>> void setPublic(T obj, Class<T> cls) {
+		setPublic0(obj, cls);
+	}
+
 	/**
 	 * only for android
 	 **/
-	public static <T> void setPublic(T obj, Class<T> cls) {
-		// MyReflect.setPublic(cls);
+	public static <T extends Member> void setPublic(T obj, Class<T> cls) {
+		setPublic0(obj, cls);
+	}
+	private static void setPublic0(Object obj, Class<?> cls) {
 		try {
 			Field f = cls.getDeclaredField("accessFlags");
 			f.setAccessible(true);

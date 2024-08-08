@@ -18,12 +18,12 @@ import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.*;
 import modtools.ui.comp.limit.*;
-import modtools.ui.comp.utils.*;
+import modtools.ui.comp.utils.ArrayItemLabel;
 import modtools.ui.control.HopeInput;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
+import modtools.utils.search.BindCell;
 import modtools.utils.ui.ShowInfoWindow;
-import modtools.utils.ui.search.*;
 import modtools.utils.world.WorldDraw;
 
 import java.lang.reflect.Array;

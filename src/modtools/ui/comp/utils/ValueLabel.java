@@ -428,8 +428,13 @@ public abstract class ValueLabel extends InlineLabel {
 		}
 	}
 	private void setValInternal(Object val) {
-		if (this.val == val && (val == null || type.isPrimitive() || Reflect.isWrapper(type) || type == String.class
-		                        || type == Class.class || val.getClass() == Object.class)) return;
+		if (this.val == val) {
+			if (type.isPrimitive() || Reflect.isWrapper(type) || type == String.class
+			    || type == Class.class || (val != null && val.getClass() == Object.class)) {
+				return;
+			}
+		}
+
 		if (this.val != null && val != null &&
 		    this.val.getClass() == Vec2.class && val.getClass() == Vec2.class &&
 		    this.val.equals(val)) return;

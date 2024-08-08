@@ -7,12 +7,12 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import mindustry.ctype.UnlockableContent;
-import mindustry.gen.*;
+import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.utils.ui.search.*;
-import modtools.utils.ui.search.FilterTable.PatternBoolf;
+import modtools.utils.search.FilterTable.PatternBoolf;
+import modtools.utils.search.*;
 
 import java.util.regex.Pattern;
 

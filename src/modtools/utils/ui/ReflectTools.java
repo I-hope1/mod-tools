@@ -46,11 +46,11 @@ public interface ReflectTools {
 
 	// ---Builder-----
 
-	static Prov<String> makeDetails(Class<?> cls, Type type) {
-		return cls.isPrimitive() || type == null ? null : type::getTypeName;
+	static Prov<String> makeDetails(Class<?> cls, Type genericType) {
+		return cls.isPrimitive() || genericType == null ? null : () -> getGenericString(cls, genericType);
 	}
 	static MyLabel makeGenericType(Class<?> cls, Type genericType) {
-		return makeGenericType(() -> getGenericString(cls, genericType), cls.isPrimitive() ? null : makeDetails(cls, genericType));
+		return makeGenericType(() -> getGenericString(cls, null), cls.isPrimitive() ? null : makeDetails(cls, genericType));
 	}
 	static MyLabel makeGenericType(Prov<String> type, Prov<String> details) {
 		MyLabel label = new MyLabel(type.get(), HopeStyles.defaultLabel);
@@ -66,6 +66,7 @@ public interface ReflectTools {
 	static String getGenericString(Class<?> type) {
 		return getGenericString(type, null);
 	}
+	boolean ENABLED_GENERIC = true;
 	static String getGenericString(Class<?> type, Type genericType) {
 		if (!E_JSFunc.display_generic.enabled()) return type.getSimpleName();
 		StringBuilder sb         = new StringBuilder();
@@ -80,7 +81,7 @@ public interface ReflectTools {
 			simpleName = simpleName.substring(simpleName.lastIndexOf('.') + 1); // strip the package name
 		} else simpleName = type.getSimpleName();
 
-		if (genericType != null) {
+		if (ENABLED_GENERIC && genericType != null) {
 			sb.append(getGenericSimpleTypeName(genericType));
 		} else {
 			sb.append(simpleName);
@@ -114,18 +115,59 @@ public interface ReflectTools {
 		return sj.toString();
 	}
 
+	/** @see Field#toGenericString() */
 	static String getGenericSimpleTypeName(Type type) {
-		if (type instanceof Class) return ((Class<?>) type).getSimpleName();
-
 		StringBuilder sb = new StringBuilder();
-		if (type instanceof ParameterizedType ptype) {
-			sb.append(((Class<?>) ptype.getRawType()).getSimpleName());
-			sb.append(getGenericSimpleTypeName(ptype.getActualTypeArguments()));
-		} else {
-			sb.append(type.getTypeName());
+		getGenericSimpleTypeName(type, sb);
+		return sb.toString();
+	}
+	/** @see Field#toGenericString() */
+	private static void getGenericSimpleTypeName(Type type, StringBuilder sb) {
+		if (type instanceof Class<?> cl)  {
+			while (cl.isArray()) cl = cl.getComponentType();
+			sb.append(cl.getSimpleName());
+			return;
 		}
 
-		return sb.toString();
+		switch (type) {
+			case ParameterizedType ptype -> {
+				sb.append(((Class<?>) ptype.getRawType()).getSimpleName());
+				sb.append(getGenericSimpleTypeName(ptype.getActualTypeArguments()));
+			}
+			case GenericArrayType arrayType ->
+			 getGenericSimpleTypeName(arrayType.getGenericComponentType(), sb);
+
+			case WildcardType wtype -> wildcardToString(wtype, sb);
+
+			default -> sb.append(type.getTypeName());
+		}
+	}
+	/** @see sun.reflect.generics.reflectiveObjects.WildcardTypeImpl#toString()  */
+	private static void wildcardToString(WildcardType type, StringBuilder sb) {
+		Type[]        lowerBounds = type.getLowerBounds();
+		Type[]        bounds      = lowerBounds;
+
+		if (lowerBounds.length > 0) {
+			sb.append("? super ");
+		} else {
+			Type[] upperBounds = type.getUpperBounds();
+			if (upperBounds.length > 0 && !upperBounds[0].equals(Object.class)) {
+				bounds = upperBounds;
+				sb.append("? extends ");
+			} else {
+				sb.append("?");
+				return;
+			}
+		}
+
+		StringJoiner sj = new StringJoiner(" & ");
+		StringBuilder bs = new StringBuilder();
+		for (Type bound : bounds) {
+			bs.setLength(0);
+			getGenericSimpleTypeName(bound, bs);
+			sj.add(bs);
+		}
+		sb.append(sj);
 	}
 
 	// ---reflection getter------

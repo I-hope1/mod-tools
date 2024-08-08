@@ -21,8 +21,8 @@ import modtools.ui.control.*;
 import modtools.ui.control.HKeyCode.KeyCodeData;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
+import modtools.utils.search.*;
 import modtools.utils.ui.CellTools;
-import modtools.utils.ui.search.*;
 
 import java.util.regex.Pattern;
 

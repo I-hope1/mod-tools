@@ -28,8 +28,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 		// markupEnabled = true;
 		this.field = field;
 
-		if (newVal != unset) setVal(newVal);
-		else setVal(getFieldValue());
+		setVal(newVal != unset ? newVal : getFieldValue());
 		addUpdate();
 	}
 	void addUpdate() {
@@ -75,7 +74,8 @@ public class FieldValueLabel extends ReflectValueLabel {
 			// 内联类型改了也没用
 			if (isStatic && isFinal() && field.getType().isPrimitive()) return;
 
-			setVal(getFieldValue());
+			Object value = getFieldValue();
+			setVal(value);
 		} else {
 			setText0(null);
 		}

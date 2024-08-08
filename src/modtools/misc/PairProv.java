@@ -1,4 +1,4 @@
-package modtools.content.ui;
+package modtools.misc;
 
 import arc.func.Prov;
 import arc.math.Mathf;
@@ -7,11 +7,9 @@ import arc.math.geom.Vec2;
 import static modtools.utils.ui.FormatHelper.*;
 
 public class PairProv implements Prov<CharSequence> {
-	float lastX, lastY;
-	String lastPos;
-	public Prov<Vec2> vecProv;
-	public String     delimiter;
-	public boolean    parentheses;
+	public final Prov<Vec2> vecProv;
+	public final String     delimiter;
+	public final boolean    parentheses;
 	public PairProv(Prov<Vec2> vecProv, String delimiter) {
 		this(vecProv, delimiter, true);
 	}
@@ -23,6 +21,9 @@ public class PairProv implements Prov<CharSequence> {
 		this.delimiter = delimiter;
 		this.parentheses = parentheses;
 	}
+
+	float lastX, lastY;
+	String lastStr;
 	public String getString(Vec2 vec) {
 		return STR."(\{fixed(vec.x)}\{delimiter}\{fixed(vec.y)})";
 	}
@@ -32,10 +33,10 @@ public class PairProv implements Prov<CharSequence> {
 			vec = vecProv.get();
 		} catch (Throwable e) { return "[red]ERROR"; }
 
-		if (lastPos == null || !Mathf.equal(lastX, vec.x) || !Mathf.equal(lastY, vec.y)) {
-			lastPos = getString(vec);
+		if (lastStr == null || !Mathf.equal(lastX, vec.x) || !Mathf.equal(lastY, vec.y)) {
+			lastStr = getString(vec);
 		}
-		return lastPos;
+		return lastStr;
 	}
 	public static class SizeProv extends PairProv {
 		public SizeProv(Prov<Vec2> vecProv) {

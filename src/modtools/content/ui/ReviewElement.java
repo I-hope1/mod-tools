@@ -21,7 +21,8 @@ import modtools.Constants.TABLE;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.content.Content;
-import modtools.content.ui.PairProv.SizeProv;
+import modtools.misc.PairProv;
+import modtools.misc.PairProv.SizeProv;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -44,7 +45,7 @@ import modtools.utils.EventHelper.DoubleClick;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.*;
-import modtools.utils.ui.search.BindCell;
+import modtools.utils.search.BindCell;
 
 import java.util.regex.Pattern;
 

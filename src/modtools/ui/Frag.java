@@ -22,7 +22,7 @@ import modtools.ui.comp.linstener.MoveListener;
 import modtools.content.Content;
 import modtools.utils.*;
 import modtools.utils.ui.LerpFun;
-import modtools.utils.ui.search.BindCell;
+import modtools.utils.search.BindCell;
 
 import static modtools.ui.Frag.Settings.position;
 import static modtools.ui.IntUI.*;

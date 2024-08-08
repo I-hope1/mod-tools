@@ -1,9 +1,8 @@
-package modtools.ui.comp.utils;
+package modtools.utils.search;
 
 import arc.func.Boolf;
 import arc.scene.Element;
 import arc.scene.ui.layout.*;
-import modtools.utils.ui.search.FilterTable;
 
 public class TemplateTable<R> extends Table {
 	FilterTable<R> template = new FilterTable<>();

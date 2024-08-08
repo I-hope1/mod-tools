@@ -88,7 +88,7 @@ public class Tester extends Content {
 		 Icon.craftingSmall, IntVars.EMPTY_RUN);
 		return startupTask.menuList(() -> Seq.with(
 		 MenuItem.with("fi.open", Icon.fileSmall, "Open Dir", runT(() -> {
-			 Fi[] list   = startupDir.list();
+			 Fi[]   list = startupDir.list();
 			 String path = list.length == 0 ? startupDir.path() : list[0].path();
 			 Core.app.openFolder(path);
 		 })))
@@ -242,8 +242,11 @@ public class Tester extends Content {
 				p.left().top();
 				buildLog(p);
 				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
-				p.add(new ClearValueLabel<>(Object.class, () -> res, null))
-				 .wrap().style(HopeStyles.defaultLabel)
+				p.add(new ClearValueLabel<>(Object.class, () -> res, null) {
+					 protected boolean autoUpdate() {
+						 return true;
+					 }
+				 }).wrap().style(HopeStyles.defaultLabel)
 				 .labelAlign(Align.left).growX();
 			}).grow().with(p -> p.setScrollingDisabled(true, false));
 		}).growX().touchable(Touchable.enabled);

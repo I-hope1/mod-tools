@@ -19,10 +19,13 @@ public class PlainValueLabel<T> extends ValueLabel {
 		val = unset;
 		flushVal();
 		if (prov != null) update(() -> {
-			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
+			if (autoUpdate()) {
 				flushVal();
 			}
 		});
+	}
+	protected boolean autoUpdate() {
+		return E_JSFunc.auto_refresh.enabled() && enableUpdate;
 	}
 
 	public static final String KEY_CLEAR = "val.clear";

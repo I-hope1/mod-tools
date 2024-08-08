@@ -24,7 +24,7 @@ import modtools.ui.comp.input.MyLabel;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
-import modtools.utils.ui.search.*;
+import modtools.utils.search.*;
 
 import java.lang.reflect.Field;
 import java.util.regex.Pattern;

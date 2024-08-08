@@ -5,8 +5,8 @@ import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.scene.Element;
-import arc.scene.event.*;
-import arc.scene.style.*;
+import arc.scene.event.Touchable;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -29,8 +29,8 @@ import modtools.ui.comp.utils.*;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
-import modtools.utils.ui.search.*;
-import rhino.*;
+import modtools.utils.search.*;
+import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
@@ -39,6 +39,7 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
+import static modtools.IntVars.mouseVec;
 import static modtools.events.E_JSFunc.display_synthetic;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
@@ -47,7 +48,6 @@ import static modtools.utils.JSFunc.*;
 import static modtools.utils.Tools.runT;
 import static modtools.utils.ui.MethodBuilder.*;
 import static modtools.utils.ui.ReflectTools.*;
-import static modtools.IntVars.mouseVec;
 
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable {
@@ -629,10 +629,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	/** 双击复制文本内容 */
 	private static MyLabel newCopyLabel(Table table, String text) {
 		MyLabel label = new CopyLabel(text);
-		table.add(label).growY().labelAlign(Align.top)/* .self(c -> {
-			if (Vars.mobile && type != null) c.tooltip(getGenericString(type));
-		}) */;
-		// addDClickCopy(label, s -> s.replaceAll(" \\[\\d+]$", ""));
+		table.add(label).growY().labelAlign(Align.top).padTop(4f);
 		return label;
 	}
 

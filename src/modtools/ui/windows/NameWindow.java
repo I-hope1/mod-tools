@@ -10,7 +10,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldValidator;
 import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.comp.Window;
-import modtools.utils.ui.search.BindCell;
+import modtools.utils.search.BindCell;
 
 import static modtools.ui.comp.windows.ListDialog.fileUnfair;
 

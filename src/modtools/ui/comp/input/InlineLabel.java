@@ -2,17 +2,20 @@ package modtools.ui.comp.input;
 
 import arc.Core;
 import arc.Graphics.Cursor.SystemCursor;
-import arc.func.Prov;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
-import arc.math.geom.Point2;
+import arc.input.KeyCode;
+import arc.math.geom.*;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.struct.*;
 import arc.struct.IntMap.Keys;
-import arc.util.Align;
+import arc.util.*;
 import arc.util.pooling.Pools;
+import mindustry.ui.Styles;
+import modtools.ui.control.HopeInput;
 import modtools.utils.ArrayUtils;
 
 public class InlineLabel extends NoMarkupLabel {
@@ -104,9 +107,7 @@ public class InlineLabel extends NoMarkupLabel {
 		newRun.color.set(color);
 		return newRun;
 	}
-	/**
-	 * 获取(x, y)对应的index
-	 */
+	/** 获取(x, y)对应的index */
 	public int getCursor(float x, float y) {
 		float lineHeight = style.font.getLineHeight();
 		float currentX, currentY; // 指文字左上角的坐标
@@ -133,6 +134,61 @@ public class InlineLabel extends NoMarkupLabel {
 		}
 		return -1;
 	}
+
+	/** 遍历指定index区域 */
+	public void getRect(Point2 region, Cons<Rect> callback) {
+		float   lineHeight = style.font.getLineHeight();
+		float   currentX   = 0, currentY = 0;
+		float   startX     = 0, endX = 0;
+		boolean startFound = false;
+
+		int offset = 0;
+
+		for (GlyphRun run : layout.runs) {
+			if (run.glyphs.isEmpty()) continue;
+			FloatSeq xAdvances = run.xAdvances;
+			currentX = run.x;
+			currentY = height + run.y;
+			while (offset < text.length() && (char) run.glyphs.first().id != text.charAt(offset)) offset++; // 弥补offset
+
+			for (int i = 0; i < xAdvances.size; i++) {
+				if (!startFound && offset + i >= region.x) {
+					startX = currentX;
+					startFound = true;
+				}
+
+				if (startFound) {
+					// Check if the end of the region is in the same run
+					if (offset + i - 1 >= region.y) {
+						endX = currentX;
+						if (endX != startX)
+							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+						return;
+					}
+
+					// If the region spans multiple lines, create a rect for this line and prepare for the next
+					if (i == xAdvances.size - 1) {
+						endX = currentX + xAdvances.get(i);
+						if (endX != startX)
+							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+						startX = run.x; // Reset startX for the next line
+					}
+				}
+
+				currentX += xAdvances.get(i);
+			}
+
+			offset += run.glyphs.size;
+		}
+
+		// Handle the case where the region ends at the last character of the text
+		if (startFound && offset >= region.y) {
+			endX = currentX;
+			if (endX != startX)
+				callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+		}
+	}
+
 
 	public void layout() {
 		if (cache == null) return;
@@ -208,10 +264,45 @@ public class InlineLabel extends NoMarkupLabel {
 		cache.clear();
 	}
 
+
+	private static final Point2 overChunk = new Point2(-1, -1);
+	private static final Point2 downChunk = new Point2(-1, -1);
+	private static final int    padding   = 2;
+	public void draw() {
+		if (HopeInput.mouseHit() == this) {
+			if (!downChunk.equals(-1, -1)) {
+				getRect(downChunk, r1 -> {
+					Draw.color();
+					Styles.flatDown.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
+				});
+			} else if (!overChunk.equals(-1, -1)) {
+				getRect(overChunk, r1 -> {
+					Draw.color();
+					Styles.flatOver.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
+				});
+			}
+		}
+		super.draw();
+	}
 	/** 给指定区域添加双击事件 */
 	public void clickedRegion(Prov<Point2> point2Prov, Runnable runnable) {
 		addListener(new ClickListener() {
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				if (super.touchDown(event, x, y, pointer, button)) {
+					int    cursor = getCursor(x, y);
+					Point2 point2 = point2Prov.get();
+					int    start  = point2.x, end = point2.y;
+					if (start <= cursor && cursor <= end) {
+						InlineLabel.downChunk.set(point2);
+						return true;
+					}
+				}
+				InlineLabel.downChunk.set(-1, -1);
+				return false;
+			}
 			public void clicked(InputEvent event, float x, float y) {
+				InlineLabel.downChunk.set(-1, -1);
+
 				int    cursor = getCursor(x, y);
 				Point2 point2 = point2Prov.get();
 				int    start  = point2.x, end = point2.y;
@@ -224,8 +315,10 @@ public class InlineLabel extends NoMarkupLabel {
 				Point2 point2 = point2Prov.get();
 				int    start  = point2.x, end = point2.y;
 				if (start <= cursor && cursor <= end) {
+					InlineLabel.overChunk.set(point2);
 					Core.graphics.cursor(SystemCursor.hand);
 				} else {
+					InlineLabel.overChunk.set(-1, -1);
 					Core.graphics.cursor(SystemCursor.arrow);
 				}
 				return super.mouseMoved(event, x, y);

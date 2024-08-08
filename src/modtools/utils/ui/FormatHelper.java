@@ -98,6 +98,7 @@ public class FormatHelper {
 
 		 : null;
 	}
+	/** 如果找不到，就抛出一个错误  */
 	public static String getUIKey(Object val) {
 		String res = getUIKeyOrNull(val);
 		if (res == null) Tools._throw();

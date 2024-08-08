@@ -1,4 +1,4 @@
-package modtools.utils.ui.search;
+package modtools.utils.search;
 
 import arc.Core;
 import arc.func.Cons2;

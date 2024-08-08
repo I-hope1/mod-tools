@@ -123,19 +123,10 @@ public class KeyCodeSetter extends Content {
 
 			Element next = null;
 			if (current instanceof Group group) {
-				boolean isIndex = true;
-				for (int i = start; i < end; i++) {
-					if (!Character.isDigit(key.charAt(i))) {
-						isIndex = false;
-						break;
-					}
-				}
+				boolean isIndex = NumberHelper.isDigital(key, start, end);
 
 				if (isIndex) {
-					int index = 0;
-					for (int i = start; i < end; i++) {
-						index = index * 10 + (key.charAt(i) - '0');
-					}
+					int index = NumberHelper.parseDigital(key, start, end);
 					if (index < group.getChildren().size) {
 						next = group.getChildren().get(index);
 					}

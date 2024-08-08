@@ -1,4 +1,4 @@
-package modtools.content.ui;
+ package modtools.content.ui;
 
 import arc.Core;
 import arc.func.*;
@@ -469,6 +469,24 @@ public class ReviewElement extends Content {
 			userObject = element;
 		}
 		private ElementElem() { }
+
+		/* private int chunkSize;
+		public <T extends Element> Cell<T> add(T element) {
+			Cell<T> cell = super.add(element);
+			if (!(element instanceof Chunk)) {
+				Seq<Cell> cells = getCells();
+				if (cells.size - chunkSize > 64) {
+					Chunk chunk = new Chunk();
+					chunk.getCells().addAll(cells, chunkSize, 64).each(c -> c.setLayout(chunk));
+					cells.clear();
+					chunkSize++;
+					add(chunk);
+				}
+			}
+			return cell;
+		}
+		private static class Chunk extends Table { } */
+
 		public Element getElement() {
 			return (Element) this.userObject;
 		}
@@ -477,7 +495,7 @@ public class ReviewElement extends Content {
 			userObject = null;
 		}
 	}
-	public static class MyWrapTable extends ElementElem implements KeyValue {
+	public static class MyWrapTable extends ElementElem {
 		boolean stopEvent, needUpdate;
 		ReviewElement.ReviewElementWindow window;
 

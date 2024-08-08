@@ -17,6 +17,6 @@ public class Underline extends LimitImage {
 		return cell;
 	}
 	public float getHeight() {
-		return 1;
+		return 1 * Scl.scl();
 	}
 }

@@ -71,6 +71,24 @@ public class NumberHelper {
 			throw new NumberParseException(STR."\{text} cannot be cast to \{type0}", e);
 		}
 	}
+
+	public static boolean isDigital(String key, int start, int end) {
+		boolean isIndex = true;
+		for (int i = start; i < end; i++) {
+			if (!Character.isDigit(key.charAt(i))) {
+				isIndex = false;
+				break;
+			}
+		}
+		return isIndex;
+	}
+	public static int parseDigital(String key, int start, int end) {
+		int index = 0;
+		for (int i = start; i < end; i++) {
+			index = (index * 10) + (key.charAt(i) - '0');
+		}
+		return index;
+	}
 	public static class NumberParseException extends RuntimeException {
 		public NumberParseException(String message, Throwable cause) {
 			super(message, cause);

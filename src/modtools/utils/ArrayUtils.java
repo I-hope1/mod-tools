@@ -12,6 +12,11 @@ import java.util.*;
 @SuppressWarnings("unchecked")
 public class ArrayUtils {
 	public static final Object[] EMPTY_ARRAY = new Object[0];
+	 static final Object[] ARG1 = {null};
+	public static Object[] ARG(Object arg1) {
+		ARG1[0] = arg1;
+		return ARG1;
+	}
 
 	public static <K, V> ObjectMap<K, V> autoClear(ObjectMap<K, V> map) {
 		Tools.TASKS.add(() -> map.clear());

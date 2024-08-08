@@ -78,7 +78,7 @@ public class Syntax {
 		cursorTask = null;
 		cTask = null;
 		reset();
-		// String result;
+
 		for (DrawTask drawTask : taskArr) {
 			drawTask.init();
 		}

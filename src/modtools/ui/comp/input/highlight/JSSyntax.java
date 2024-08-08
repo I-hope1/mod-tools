@@ -99,7 +99,7 @@ public class JSSyntax extends Syntax {
 
 
 	protected final DrawSymbol
-	 operatesSymbol = new DrawSymbol(operates, c_operateChar),
+	 operatesSymbol = new JSDrawSymbol(),
 	 bracketsSymbol = new DrawBracket();
 
 	public Object getPropOrNotFound(Scriptable scope, String key) {
@@ -119,7 +119,7 @@ public class JSSyntax extends Syntax {
 	 task -> {
 		 String token = task.token;
 		 if ((obj != null || pkg != null) && lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
-			 if (operatesSymbol.lastSymbol == '.') {
+			 if (operatesSymbol.lastSymbol == '.' && !((JSDrawSymbol) operatesSymbol).error) {
 				 return dealJSProp(token);
 			 }
 		 }
@@ -169,8 +169,10 @@ public class JSSyntax extends Syntax {
 		}
 		setCursorObj(drawToken.lastIndex);
 	}
+	int lastCursorObjIndex = -2;
 	private void setCursorObj(int lastIndex) {
-		if (drawable != null && lastIndex <= drawable.cursor()) {
+		if (drawable != null && lastCursorObjIndex < lastIndex && lastIndex <= drawable.cursor()) {
+			lastCursorObjIndex = lastIndex;
 			cursorObj = obj;
 		}
 	}
@@ -282,22 +284,28 @@ public class JSSyntax extends Syntax {
 			forToken(i);
 			return true;
 		}
+		private final IntSeq lastIndexStack = new IntSeq();
 		private void forToken(int i) {
 			if (c == '(' && obj != null) {
 				((JSDrawToken) drawToken).stack.add(obj);
+				lastIndexStack.add(JSSyntax.this.drawToken.lastIndex);
 			}
 			if (c == ')' && !((JSDrawToken) drawToken).stack.isEmpty()) {
 				obj = ((JSDrawToken) drawToken).stack.pop();
+				int index = lastIndexStack.pop();
 				switch (obj) {
 					case NativeJavaMethod m -> {
 						Object[] o      = (Object[]) UNSAFE.getObject(m, RHINO.methods);
 						Method   method = (Method) UNSAFE.getObject(o[0], RHINO.memberObject);
+						if (method.getReturnType() == void.class) break;
 						Constants.iv(RHINO.initNativeJavaObject, NJO, customScope, null, method.getReturnType());
 						obj = NJO;
-						setCursorObj(JSSyntax.this.drawToken.lastIndex);
 					}
-					default -> { }
+					default -> {
+						obj = Undefined.SCRIPTABLE_UNDEFINED;
+					}
 				}
+				setCursorObj(index);
 			}
 		}
 		{
@@ -312,9 +320,33 @@ public class JSSyntax extends Syntax {
 			stack.clear();
 			pkg = null;
 			obj = null;
+			lastCursorObjIndex = -2;
 			cursorObj = null;
 			localVars.clear();
 			localConstants.clear();
+		}
+	}
+	private class JSDrawSymbol extends DrawSymbol {
+		boolean error;
+		public JSDrawSymbol() { super(JSSyntax.operates, Syntax.c_operateChar); }
+		void reset() {
+			super.reset();
+			error = false;
+		}
+		public void drawText(int i) {
+			drawText0(error ? c_error : color, lastIndex, i + 1);
+			lastIndex = i + 1;
+		}
+		boolean draw(int i) {
+			if (super.draw(i)) {
+				error = lastSymbol == '.' && lastTask == this && c == '.';
+				if (error) {
+					obj = Undefined.SCRIPTABLE_UNDEFINED;
+					setCursorObj(i);
+				}
+				return true;
+			}
+			return false;
 		}
 	}
 }

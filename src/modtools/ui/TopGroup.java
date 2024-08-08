@@ -37,11 +37,11 @@ import java.util.function.Consumer;
 
 import static arc.Core.*;
 import static modtools.IntVars.*;
+import static modtools.content.ui.ReviewElement.Settings.checkCullingArea;
 import static modtools.ui.Contents.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
-import static modtools.content.ui.ReviewElement.Settings.checkCullingArea;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
@@ -188,9 +188,12 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		float thick = elem instanceof Group ? 2 : 1;
 		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
 		Lines.stroke(thick);
+
 		Drawf.dashRectBasic(vec2.x, vec2.y - thick,
 		 clamp(vec2, elem.getWidth() + thick, true),
 		 clamp(vec2, elem.getHeight() + thick, false));
+
+
 		/* Lines.stroke(elem instanceof Group ? 3 : 1);
 		Draw.color(elem instanceof Group ? Color.sky : Color.green, 0.9f);
 		Lines.rect(vec2.x, vec2.y,
@@ -207,8 +210,17 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		if (elem instanceof Group group) {
 			float x = vec2.x, y = vec2.y;
+			if (group.isTransform()) {
+				Reflect.invoke(Group.class, group, "applyTransform", ArrayUtils.ARG(
+				 Reflect.invoke(Group.class, group, "computeTransform", ArrayUtils.EMPTY_ARRAY)), Mat.class);
+				x = 0;
+				y = 0;
+			}
 			for (var e : group.getChildren()) {
 				drawPad(e, vec2.set(x, y));
+			}
+			if (group.isTransform()) {
+				Reflect.invoke(Group.class, group, "resetTransform", ArrayUtils.EMPTY_ARRAY);
 			}
 		}
 	}

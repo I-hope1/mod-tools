@@ -958,7 +958,7 @@ public class Tester extends Content {
 				obj = scope;
 			}
 
-			if (obj == null) return;
+			if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) return;
 
 			keys.clear().addAll(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds());
 			if (obj == scope) keys.addAll(JSSyntax.varSet.toSeq().list());

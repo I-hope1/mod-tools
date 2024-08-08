@@ -201,7 +201,7 @@ interface $OffsetGetter {
 
 interface $OffsetGetter2 {
 	long fieldOffset(Class<?> clazz, String fieldName);
-	$OffsetGetter2 DesktopImpl = Unsafe.getUnsafe()::objectFieldOffset;
+	$OffsetGetter2 DesktopImpl = (cls, name) -> Unsafe.getUnsafe().objectFieldOffset(cls, name);
 	$OffsetGetter2 AndroidImpl= (cls, name) -> hope_android.FieldUtils.getFieldOffset(FieldUtils.getFieldAccessOrThrow(cls, name));
 	$OffsetGetter2 impl        = OS.isAndroid ? $OffsetGetter2.AndroidImpl : $OffsetGetter2.DesktopImpl;
 }

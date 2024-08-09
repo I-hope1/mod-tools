@@ -108,8 +108,8 @@ public class IntUI {
 			 Object o = prov.get();
 			 if (o == null && clazz == null) return;
 			 Core.app.post(Tools.runT0(() -> {
-				 if (isLongPress) {
-					 INFO_DIALOG.showInfo(o instanceof Class<?> c ? c : clazz);
+				 if (isLongPress && o instanceof Class<?> oClass) {
+					 INFO_DIALOG.showInfo(oClass);
 				 } else {
 					 INFO_DIALOG.showInfo(o);
 				 }

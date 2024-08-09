@@ -39,8 +39,9 @@ public interface INFO_DIALOG {
 		return showInfo(null, clazz);
 	}
 	static Window showInfo(Object o, Class<?> clazz) {
-		Window[] dialog = {null};
+		if (clazz == null) IntUI.showException(new IllegalArgumentException("'clazz' cannot be null."));
 		if (clazz != null && clazz.isArray()) {
+			Window[] dialog = {null};
 			if (o == null) return new DisWindow("none");
 			Table _cont = new LimitTable();
 
@@ -76,11 +77,9 @@ public interface INFO_DIALOG {
 			return dialog[0];
 		}
 
-		dialog[0] = new ShowInfoWindow(o, clazz == null ? Class.class : clazz);
-		//		dialog.addCloseButton();
-		dialog[0].show();
-		assert dialog[0] != null;
-		return dialog[0];
+		var dialog = new ShowInfoWindow(o,  clazz);
+		dialog.show();
+		return dialog;
 	}
 	private static void buildArrayCont(Object arr, Class<?> clazz, int length, Table cont) {
 		Class<?> componentType = clazz.getComponentType();

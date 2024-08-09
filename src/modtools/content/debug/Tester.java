@@ -75,7 +75,7 @@ public class Tester extends Content {
 	public static final float WIDTH = Core.graphics.isPortrait() ? 400 : 420;
 
 	public static Scripts    scripts;
-	public static Scriptable topScope, scope;
+	public static Scriptable topScope, customScope;
 	private static Context cx;
 
 	LazyValue<ThreadPoolExecutor> executor = LazyValue.of(() -> (ThreadPoolExecutor) AThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1));
@@ -122,7 +122,7 @@ public class Tester extends Content {
 				\{mainCode}
 				})()""";
 				ExecuteTree.node(() -> {
-					 cx.evaluateString(scope, source, STR."<\{taskName}>\{entry.key}", 1);
+					 cx.evaluateString(customScope, source, STR."<\{taskName}>\{entry.key}", 1);
 				 }, taskName, entry.key, Icon.none, IntVars.EMPTY_RUN)
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
@@ -135,7 +135,7 @@ public class Tester extends Content {
 		if (scripts != null) return;
 		scripts = Vars.mods.getScripts();
 		topScope = scripts.scope;
-		scope = new ScriptableObject(topScope, topScope) {
+		customScope = new ScriptableObject(topScope, topScope) {
 			public String getClassName() {
 				return "TesterScope";
 			}
@@ -151,7 +151,7 @@ public class Tester extends Content {
 	MyTextArea  area;
 
 	public boolean loop = false;
-	public Object  res;
+	public Object  res = ValueLabel.unset;
 
 	private boolean
 	 strict = false,
@@ -228,7 +228,7 @@ public class Tester extends Content {
 				Script script = this.script;
 				setContextToThread();
 				JSFunc.watch().watch(textarea.getText(), () -> {
-					return CAST.unwrap(script.exec(cx, scope));
+					return CAST.unwrap(script.exec(cx, customScope));
 				});
 			});
 		}).growX().minWidth(WIDTH).get();
@@ -307,7 +307,7 @@ public class Tester extends Content {
 		bottomBar(table, textarea);
 	}
 	private void addListenerToArea(TextAreaTab textarea) {
-		textarea.syntax = new JSSyntax(textarea, scope);
+		textarea.syntax = new JSSyntax(textarea, customScope);
 		area = textarea.getArea();
 		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
@@ -617,8 +617,8 @@ public class Tester extends Content {
 		try {
 			setContextToThread();
 			Object o = capture_logger.enabled() ?
-			 setLogger(logHandler, () -> script.exec(cx, scope))
-			 : script.exec(cx, scope);
+			 setLogger(logHandler, () -> script.exec(cx, customScope))
+			 : script.exec(cx, customScope);
 			o = CAST.unwrap(o);
 			if (o instanceof NativeArray na) o = na.toArray();
 			if (finished) return;
@@ -752,15 +752,15 @@ public class Tester extends Content {
 	void addJSInternalProperty() {
 		setContextToThread();
 		try {
-			Object obj1 = new JSFuncClass(scope);
-			ScriptableObject.putProperty(scope, "IntFunc", obj1);
-			ScriptableObject.putProperty(scope, "$", obj1);
-			ScriptableObject.putProperty(scope, "unsafe", unsafe);
+			Object obj1 = new JSFuncClass(customScope);
+			ScriptableObject.putProperty(customScope, "IntFunc", obj1);
+			ScriptableObject.putProperty(customScope, "$", obj1);
+			ScriptableObject.putProperty(customScope, "unsafe", unsafe);
 			ScriptableObject.putProperty(topScope, "modName", "<?>");
 			ScriptableObject.putProperty(topScope, "scriptName", "console.js");
 
 			NativeJavaPackage pkg = (NativeJavaPackage) ScriptableObject.getProperty(topScope, "Packages");
-			ScriptableObject.putProperty(scope, "$p", pkg);
+			ScriptableObject.putProperty(customScope, "$p", pkg);
 			ClassLoader loader = Vars.mods.mainLoader();
 			Reflect.set(NativeJavaPackage.class, pkg, "classLoader", loader);
 			if (cx.getFactory() != ForRhino.factory) {
@@ -782,7 +782,7 @@ public class Tester extends Content {
 			ExecuteTree.context(startupTask(), () -> dir.walk(f -> {
 				if (!f.extEquals("js")) return;
 				ExecuteTree.node(f.name(),
-					() -> cx.evaluateString(scope, readFiOrEmpty(f), f.name(), 1))
+					() -> cx.evaluateString(customScope, readFiOrEmpty(f), f.name(), 1))
 				 .code(readFiOrEmpty(f))
 				 .apply();
 			}));
@@ -835,7 +835,7 @@ public class Tester extends Content {
 			if (val instanceof Method method)
 				return new NativeJavaMethod(method, method.getName());
 			if (val instanceof MethodHandle handle)
-				return new NativeJavaHandle(scope, handle);
+				return new NativeJavaHandle(customScope, handle);
 
 			return Context.javaToJS(val, topScope);
 		} catch (Throwable e) {
@@ -843,12 +843,13 @@ public class Tester extends Content {
 		}
 	}
 
-	public static void quietPut(String name, Object val) {
+	public static void quietPut0(String name, Object val) {
 		if (wrap_ref.enabled()) {
 			val = wrap(val);
 			//			else if (val instanceof Field) val = new NativeJavaObject(scope, val, Field.class);
 		}
 		ScriptableObject.putProperty(topScope, name, val);
+		JSSyntax.varSet.add(name);
 	}
 	public static final String prefix = "tmp";
 	public static String quietPut(Object val) {
@@ -856,7 +857,7 @@ public class Tester extends Content {
 		// 从0开始直到找到没有被定义的变量
 		while (ScriptableObject.hasProperty(topScope, prefix + i)) i++;
 		String key = prefix + i;
-		quietPut(key, val);
+		quietPut0(key, val);
 		return key;
 	}
 	public static void put(Element element, Object val) {
@@ -960,13 +961,13 @@ public class Tester extends Content {
 			if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
 				obj = syntax.cursorObj;
 			} else {
-				obj = scope;
+				obj = customScope;
 			}
 
 			if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) return;
 
 			keys.clear().addAll(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds());
-			if (obj == scope) keys.addAll(JSSyntax.varSet.toSeq().list());
+			if (obj == customScope) keys.addAll(JSSyntax.varSet.toSeq().list());
 			if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
 
 			complements.clear();

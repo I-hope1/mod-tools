@@ -1,5 +1,6 @@
 package modtools.ui.comp.utils;
 
+
 import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.Dialog.DialogStyle;
@@ -7,7 +8,7 @@ import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Align;
 import mindustry.gen.Icon;
 import modtools.events.E_JSFunc;
 import modtools.ui.IntUI;
@@ -81,6 +82,8 @@ public class FieldValueLabel extends ReflectValueLabel {
 		}
 	}
 	private Object getFieldValue() {
+		if (!isValid()) return unset;
+
 		return FieldUtils.getFieldValue(
 		 isStatic ? field.getDeclaringClass() : obj,
 		 getOffset(),

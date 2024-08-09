@@ -1,17 +1,18 @@
 package modtools.annotations.processors;
 
+
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.MethodType;
-import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
-import modtools.annotations.*;
 import modtools.annotations.settings.*;
+import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
@@ -105,11 +106,13 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 				collectSwitch(symbol);
 				// %name%.def(%args%[0])
-				if (newClass.args.size() >= 2 && newClass.args.get(1) instanceof JCLiteral literal
-				    && literal.value.getClass().isPrimitive()) defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
-				 mMaker.Select(mMaker.Ident(tree.name),
-					ns("def")),
-				 List.of(newClass.args.get(1)))));
+				if (newClass.args.size() >= 2 && newClass.args.get(1) instanceof JCLiteral literal) {
+					mMaker.at(classDecl.defs.last());
+					defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
+					 mMaker.Select(mMaker.Ident(tree.name),
+						ns("def")),
+					 List.of(literal))));
+				}
 
 				// xxx(arg1, Vars.mods, xxx)
 				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType

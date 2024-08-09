@@ -5,7 +5,7 @@ import arc.func.Cons;
 import arc.math.Mathf;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Table;
-import arc.util.Tmp;
+import arc.util.*;
 import modtools.ui.IntUI;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.utils.ElementUtils;
@@ -33,20 +33,22 @@ public class HoverTable extends LimitTable {
 		if (pane == null) return;
 		int align = getAlign();
 		translation.setZero();
-		localToStageCoordinates(Tmp.v1.set(-getX(align), -getY(align)));
+		pane.localToStageCoordinates(Tmp.v1.set(pane.getX(align) - pane.x, pane.getY(align) - pane.y));
+		/* maxX = min(pane.x(right), scene.x(right) / gw) */
+		float maxX = Math.min(Tmp.v1.x, Core.graphics.getWidth()),
+		maxY = Math.min(Tmp.v1.y, Core.graphics.getHeight());
+
+		localToStageCoordinates(Tmp.v1.set(getX(align) - x, getY(align) - y));
+
 		if (stickX) {
-			translation.x = -getX(align) + pane.getVisualScrollX() + pane.getScrollWidth();
-			/* expect: rx = tx + x(scene) ∈ [0, gw]
-			tx = rx - x(scene) ∈ [-x, gw - x] */
-			float rx = Mathf.clamp(Tmp.v1.x, 0, Core.graphics.getWidth() - getX(align));
-			translation.x = Math.min(0, rx - Tmp.v1.x);
+			/* expectX(scene) = tx + x(scene) ∈ [0, maxX]
+			tx = expectX(scene) - x(scene) ∈ [-x, maxX - x] */
+			float expectX = Mathf.clamp(translation.x + Tmp.v1.x, 0, maxX);
+			translation.x = expectX - Tmp.v1.x;
 		}
 		if (stickY) {
-			translation.y = -getY(align) + pane.getVisualScrollY() + pane.getScrollHeight();
-			/* expect: ry = ty + y(scene) ∈ [0, gh]
-			ty = ry - y(scene) ∈ [-y, gh - y] */
-			float ry = Mathf.clamp(Tmp.v1.y, 0, Core.graphics.getHeight() - getY(align));
-			translation.y = Math.min(0, ry - Tmp.v1.y);
+			float expectY = Mathf.clamp(translation.y + Tmp.v1.y, 0, maxY);
+			translation.y = expectY - Tmp.v1.y;
 		}
 	}
 	public void draw() {

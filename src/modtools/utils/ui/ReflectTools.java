@@ -18,7 +18,7 @@ import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 
 import java.lang.reflect.*;
-import java.util.StringJoiner;
+import java.util.*;
 
 import static modtools.ui.effect.HopeFx.changedFx;
 
@@ -129,17 +129,15 @@ public interface ReflectTools {
 			return;
 		}
 
-		switch (type) {
-			case ParameterizedType ptype -> {
-				sb.append(((Class<?>) ptype.getRawType()).getSimpleName());
-				sb.append(getGenericSimpleTypeName(ptype.getActualTypeArguments()));
-			}
-			case GenericArrayType arrayType ->
-			 getGenericSimpleTypeName(arrayType.getGenericComponentType(), sb);
-
-			case WildcardType wtype -> wildcardToString(wtype, sb);
-
-			default -> sb.append(type.getTypeName());
+		if (Objects.requireNonNull(type) instanceof ParameterizedType ptype) {
+			sb.append(((Class<?>) ptype.getRawType()).getSimpleName());
+			sb.append(getGenericSimpleTypeName(ptype.getActualTypeArguments()));
+		} else if (type instanceof GenericArrayType arrayType) {
+			getGenericSimpleTypeName(arrayType.getGenericComponentType(), sb);
+		} else if (type instanceof WildcardType wtype) {
+			wildcardToString(wtype, sb);
+		} else {
+			sb.append(type.getTypeName());
 		}
 	}
 	/** @see sun.reflect.generics.reflectiveObjects.WildcardTypeImpl#toString()  */

@@ -1,5 +1,6 @@
 package modtools.utils.reflect;
 
+
 import arc.func.*;
 import arc.util.*;
 import jdk.internal.misc.Unsafe;
@@ -43,14 +44,16 @@ public class FieldUtils {
 	}
 
 
-	public static void walkAllConstOf(Class<?> cls, Cons2<Field, ?> cons, Boolf<?> boolf, Object object) {
+	public static void walkAllConstOf(Class<?> cls, Cons2<Field, ?> cons, Boolf<?> boolf,
+	                                  Object object) {
 		for (Field field : cls.getDeclaredFields()) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;
 			Object o = getOrNull(field, object);
 			if (boolf.get(Tools.as(o))) cons.get(field, Tools.as(o));
 		}
 	}
-	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass, Object object) {
+	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass,
+	                                      Object object) {
 		walkAllConstOf(cls, cons, filterClass::isInstance, object);
 	}
 	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass) {
@@ -105,7 +108,7 @@ public class FieldUtils {
 		}
 	}
 
-	/** 如果字段不存在可能会导致JVM崩溃，谨慎使用  */
+	/** 如果字段不存在可能会导致JVM崩溃，谨慎使用 */
 	public static long fieldOffset(Class<?> cls, String name) {
 		return $OffsetGetter2.impl.fieldOffset(cls, name);
 	}
@@ -116,6 +119,11 @@ public class FieldUtils {
 		return $OffsetGetter.impl.fieldOffset(isStatic, f);
 	}
 
+	/**
+	 * 不检查对象的合理性，但是不正确的参数会导致<b>JVM崩溃</b>
+	 * @param o   field.get(obj); obj不能为null，静态字段时，obj是类.
+	 * @param off 不能为负数
+	 */
 	public static Object getFieldValue(Object o, long off, Class<?> type) {
 		if (int.class.equals(type)) {
 			return unsafe.getInt(o, off);
@@ -202,6 +210,6 @@ interface $OffsetGetter {
 interface $OffsetGetter2 {
 	long fieldOffset(Class<?> clazz, String fieldName);
 	$OffsetGetter2 DesktopImpl = (cls, name) -> Unsafe.getUnsafe().objectFieldOffset(cls, name);
-	$OffsetGetter2 AndroidImpl= (cls, name) -> hope_android.FieldUtils.getFieldOffset(FieldUtils.getFieldAccessOrThrow(cls, name));
+	$OffsetGetter2 AndroidImpl = (cls, name) -> hope_android.FieldUtils.getFieldOffset(FieldUtils.getFieldAccessOrThrow(cls, name));
 	$OffsetGetter2 impl        = OS.isAndroid ? $OffsetGetter2.AndroidImpl : $OffsetGetter2.DesktopImpl;
 }

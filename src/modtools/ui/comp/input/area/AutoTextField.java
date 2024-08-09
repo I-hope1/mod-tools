@@ -1,6 +1,7 @@
 package modtools.ui.comp.input.area;
 
 import arc.Core;
+import arc.math.Mathf;
 import arc.scene.Scene;
 import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
@@ -35,13 +36,9 @@ public class AutoTextField extends TextField {
 		if (parent != null) parent.invalidateHierarchy();
 	}
 	public float getPrefWidth() {
-		float val = textOffset;
-		try {
-			val += glyphPositions.peek() - glyphPositions.get(0);
-			Drawable background = getBack();
-			if (background != null) val += background.getLeftWidth();
-		} catch (Exception ignored) {}
-		return Math.min(val + 14, Core.graphics.getWidth() * 0.7f);
+		float bgPad = 0;
+		if (getBack() instanceof Drawable back) bgPad = back.getLeftWidth() + back.getRightWidth();
+		return Mathf.clamp(layout.width + bgPad, 70, Core.graphics.getWidth() * 0.7f);
 	}
 
 	Drawable getBack() {

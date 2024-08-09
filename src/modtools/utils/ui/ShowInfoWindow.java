@@ -398,7 +398,7 @@ public class ShowInfoWindow extends Window implements IDisposable {
 			 ValueLabel.newDetailsMenuList(label, () -> f, Field.class)
 			));
 			fields.add(new MyLabel(" = ", defaultLabel))
-			 .color(Color.lightGray).top()
+			 .color(Color.lightGray).top().padTop(6f)
 			 .touchable(Touchable.disabled);
 		} catch (Throwable e) {
 			MyLabel label = new MyLabel(STR."<\{e}>", defaultLabel);
@@ -619,8 +619,11 @@ public class ShowInfoWindow extends Window implements IDisposable {
 	}
 	private static boolean isNestStatic(Class<?> cls) {
 		if (cls.getConstructors().length == 0) return true;
+		try {
+			return cls.getDeclaredField("$this").isSynthetic();
+		} catch (Throwable _) { }
 		Class<?>[] parameterTypes = cls.getConstructors()[0].getParameterTypes();
-		return parameterTypes.length == 0 || parameterTypes[0] != cls.getNestHost();
+		return parameterTypes.length == 0;
 	}
 	static Cell<MyLabel> keyword(Table t, CharSequence text) {
 		return t.add(new MyLabel(text, defaultLabel)).color(tmpColor.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);

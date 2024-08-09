@@ -29,13 +29,12 @@ public class JSSyntax extends Syntax {
 	public JSSyntax(SyntaxDrawable drawable, Scriptable customScope) {
 		super(drawable);
 		this.customScope = customScope;
-		if (customScope == null || customScope == scope) {
+		if (customScope == null || customScope == topScope) {
 			customConstantSet = constantSet;
 			customVarSet = varSet;
 		} else {
 			customConstantSet = new ScopeObjectSet(customScope);
-			customConstantSet.addAll(constantSet);
-			customVarSet = new ObjectSet<>(varSet);
+			customVarSet = new WithObjectSet(varSet);
 			addValueToSet(customScope, customVarSet, customConstantSet, false);
 		}
 		TOKEN_MAP.putAll(
@@ -44,9 +43,9 @@ public class JSSyntax extends Syntax {
 		);
 	}
 
-	public static ImporterTopLevel scope = (ImporterTopLevel) IScript.scope;
+	public static ImporterTopLevel topScope = (ImporterTopLevel) IScript.scope;
 
-	public static final ObjectSet<String> constantSet = new ScopeObjectSet(scope);
+	public static final ObjectSet<String> constantSet = new ScopeObjectSet(topScope);
 	public static final ObjectSet<String> varSet      = new ObjectSet<>();
 
 	private static final NativeJavaObject NJO = new NativeJavaObject();
@@ -55,7 +54,7 @@ public class JSSyntax extends Syntax {
 
 	static {
 		varSet.addAll("arguments", "Infinity", "Packages");
-		addValueToSet(scope, varSet, constantSet, true);
+		addValueToSet(topScope, varSet, constantSet, true);
 	}
 
 	private static void addValueToSet(
@@ -249,6 +248,19 @@ public class JSSyntax extends Syntax {
 			return true;
 		}
 	}
+	private static class WithObjectSet extends ObjectSet<String> {
+		final ObjectSet<String> with;
+		public WithObjectSet(ObjectSet<String> with) {
+			this.with = with;
+		}
+		public String get(String key) {
+			String s = super.get(key);
+			return s == null ? with.get(key) : s;
+		}
+		public boolean contains(String key) {
+			return super.contains(key) || with.contains(key);
+		}
+	}
 	private class DrawBracket extends DrawSymbol {
 		static final IntIntMap leftBracket = IntIntMap.of(
 		 '(', ')',
@@ -293,17 +305,14 @@ public class JSSyntax extends Syntax {
 			if (c == ')' && !((JSDrawToken) drawToken).stack.isEmpty()) {
 				obj = ((JSDrawToken) drawToken).stack.pop();
 				int index = lastIndexStack.pop();
-				switch (obj) {
-					case NativeJavaMethod m -> {
-						Object[] o      = (Object[]) UNSAFE.getObject(m, RHINO.methods);
-						Method   method = (Method) UNSAFE.getObject(o[0], RHINO.memberObject);
-						if (method.getReturnType() == void.class) break;
-						Constants.iv(RHINO.initNativeJavaObject, NJO, customScope, null, method.getReturnType());
-						obj = NJO;
-					}
-					default -> {
-						obj = Undefined.SCRIPTABLE_UNDEFINED;
-					}
+				l:if (obj instanceof NativeJavaMethod m) {
+					Object[] o      = (Object[]) UNSAFE.getObject(m, RHINO.methods);
+					Method   method = (Method) UNSAFE.getObject(o[0], RHINO.memberObject);
+					if (method.getReturnType() == void.class) break l;
+					Constants.iv(RHINO.initNativeJavaObject, NJO, customScope, null, method.getReturnType());
+					obj = NJO;
+				} else {
+					obj = Undefined.SCRIPTABLE_UNDEFINED;
 				}
 				setCursorObj(index);
 			}

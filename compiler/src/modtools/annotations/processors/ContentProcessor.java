@@ -11,14 +11,15 @@ import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
-import modtools.annotations.settings.*;
-import modtools.annotations.*;
+
+import java.util.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
-import java.util.*;
 
+import modtools.annotations.*;
 import static modtools.annotations.processors.ContentProcessor.$.*;
+import modtools.annotations.settings.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
 @AutoService(Processor.class)
@@ -106,12 +107,12 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 				collectSwitch(symbol);
 				// %name%.def(%args%[0])
-				if (newClass.args.size() >= 2 && newClass.args.get(1) instanceof JCLiteral literal) {
+				if (newClass.args.size() >= 2 && newClass.args.get(1) instanceof JCExpression ex) {
 					mMaker.at(classDecl.defs.last());
 					defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
 					 mMaker.Select(mMaker.Ident(tree.name),
 						ns("def")),
-					 List.of(literal))));
+					 List.of(ex))));
 				}
 
 				// xxx(arg1, Vars.mods, xxx)

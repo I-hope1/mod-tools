@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.StrictMode;
+
 import arc.Core;
 import arc.files.Fi;
 import arc.util.*;
@@ -12,6 +13,7 @@ import modtools.ui.IntUI;
 import modtools.utils.ArrayUtils;
 
 public class FileUtils {
+
 	public static Fi child(Fi parent, String newName, String... oldNames) {
 		Fi child = parent.child(newName);
 		for (String oldName : oldNames) {
@@ -29,7 +31,7 @@ public class FileUtils {
 		return openFile(path.path());
 	}
 
-	private static boolean init;
+	private static      boolean init;
 	public static boolean openFile(String path) {
 		if (IntVars.isDesktop()) {
 			return Core.app.openURI(path);
@@ -38,13 +40,17 @@ public class FileUtils {
 			try {
 				if (!init) {
 					Reflect.invoke(StrictMode.class, "disableDeathOnFileUriExposure", ArrayUtils.EMPTY_ARRAY);
+
 					init = true;
 				}
 				var    app    = (Activity) Core.app;
 				Intent intent = new Intent(Intent.ACTION_VIEW);
 				intent.setDataAndType(Uri.parse("file://" + path), "*/*");
 				app.startActivity(intent);
-			} catch (Throwable e) { IntUI.showException("Failed to open " + path, e); }
+			} catch (Throwable e) {
+				IntUI.showException("Failed to open " + path, e);
+				Log.err(e);
+			}
 			return true;
 		}
 		return Core.app.openFolder(path);

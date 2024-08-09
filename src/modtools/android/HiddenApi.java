@@ -1,5 +1,6 @@
 package modtools.android;
 
+
 import arc.util.Log;
 import dalvik.system.VMRuntime;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -15,8 +16,10 @@ public class HiddenApi {
 	public static final VMRuntime runtime = VMRuntime.getRuntime();
 
 	public static final long IBYTES             = Integer.BYTES;
-	/** <a href="https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY">
-	 * uint64_t Executable::art_method_</a>*/
+	/**
+	 * <a href="https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY">
+	 * uint64_t Executable::art_method_</a>
+	 */
 	public static final int  offset_art_method_ = 24;
 
 
@@ -41,7 +44,7 @@ public class HiddenApi {
 			// MAYBE: sdk_version < 28
 			runtime.setHiddenApiExemptions(new String[]{"L"});
 			return true;
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		try {
 			// 通过反射获取方法
 			Method m = Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class);
@@ -49,7 +52,7 @@ public class HiddenApi {
 			Method setHiddenApiExemptions = (Method) m.invoke(VMRuntime.class, "setHiddenApiExemptions", new Class[]{String[].class});
 			invoke(setHiddenApiExemptions);
 			return true;
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		return false;
 	}
 	private static void invoke(Method method)
@@ -105,7 +108,7 @@ public class HiddenApi {
 	public static long addressOf(Object[] array) {
 		try {
 			return runtime.addressOf(array);
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		return addressOf((Object) array);
 	}
 	public static long addressOf(Object obj) {
@@ -114,11 +117,11 @@ public class HiddenApi {
 
 	static long offset;
 
+
 	static {
 		/* Method是指针，大小相当于int */
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.vaddressOf(ints);
-
 		// try {
 		// 	// testReplaceModifier();
 		// 	replaceMethod();

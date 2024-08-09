@@ -1,21 +1,26 @@
 package modtools.utils;
 
+import java.lang.reflect.Array;
+import java.util.*;
+
 import arc.func.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
 
-import java.lang.reflect.Array;
-import java.util.*;
-
 @SuppressWarnings("unchecked")
 public class ArrayUtils {
 	public static final Object[] EMPTY_ARRAY = new Object[0];
-	 static final Object[] ARG1 = {null};
+	 static final Object[] ARG1 = {null}, ARG2 = {null, null};
 	public static Object[] ARG(Object arg1) {
 		ARG1[0] = arg1;
 		return ARG1;
+	}
+	public static Object[] ARG(Object arg1, Object arg2) {
+		ARG2[0] = arg1;
+		ARG2[1] = arg2;
+		return ARG2;
 	}
 
 	public static <K, V> ObjectMap<K, V> autoClear(ObjectMap<K, V> map) {

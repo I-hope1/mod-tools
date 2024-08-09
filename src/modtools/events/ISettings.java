@@ -90,7 +90,8 @@ public interface ISettings extends E_DataInterface {
 		data().get(name(), o);
 	}
 	default void defTrue() {
-		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
 		data().get(name(), true);
 	}
 	default void set(Object o) {
@@ -98,18 +99,21 @@ public interface ISettings extends E_DataInterface {
 		data().put(name(), o);
 	}
 	default void set(boolean b) {
-		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
 		set((Boolean) b);
 	}
 
 
 	// getter
 	default boolean enabled() {
-		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
 		return data().getBool(name());
 	}
 	default void toggle() {
-		if (type() != boolean.class) throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
 		set(!enabled());
 	}
 	default Object get() {
@@ -125,19 +129,23 @@ public interface ISettings extends E_DataInterface {
 		return Enum.valueOf(cl, data().getString(name()));
 	}
 	default int getInt() {
-		if (type() != int.class) throw new IllegalStateException(STR."the settings is \{type()} not int.class");
+		if (type() != int.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not int.class");
 		return data().getInt(name(), 0);
 	}
 	default float getFloat() {
-		if (type() != float.class) throw new IllegalStateException(STR."the settings is \{type()} not float.class");
+		if (type() != float.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not float.class");
 		return data().getFloat(name(), 0);
 	}
 	default int getColor() {
-		if (type() != Color.class) throw new IllegalStateException(STR."the settings is \{type()} not Color.class");
+		if (type() != Color.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not Color.class");
 		return data().get0xInt(name(), -1);
 	}
 	default Vec2 getPosition() {
-		if (type() != Position.class) throw new IllegalStateException(STR."the settings is \{type()} not Position.class");
+		if (type() != Position.class)
+			throw new IllegalStateException(STR."the settings is \{type()} not Position.class");
 		String s = getString();
 		int    i = s.indexOf(',');
 		if (i == -1) return Tmp.v3.set(0, 0);
@@ -325,7 +333,9 @@ public interface ISettings extends E_DataInterface {
 		Class<T> enumClass = getArg(1);
 		enum_(text, enumClass, this::set, new Prov<>() {
 			public Enum<T> get() {
-				return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
+				try {
+					return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
+				} catch (Throwable e) { return null; }
 			}
 		}, this::isSwitchOn);
 	}

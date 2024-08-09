@@ -1,37 +1,37 @@
 package modtools;
 
+import java.util.Arrays;
+
 import arc.*;
 import arc.files.Fi;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
+import dalvik.system.VMRuntime;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
+import static mindustry.Vars.*;
 import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
+import static modtools.IntVars.*;
 import modtools.android.HiddenApi;
+import modtools.content.SettingsUI;
+import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.content.SettingsUI;
-import modtools.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
+import static modtools.utils.MySettings.SETTINGS;
 import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
-
-import java.util.Arrays;
-
-import static mindustry.Vars.*;
-import static modtools.IntVars.*;
-import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
 	/** 如果不为empty，在进入是显示 */
@@ -81,8 +81,12 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
 
+
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
+			VMRuntime.getRuntime().setTargetSdkVersion(28);
+			final String TXT = "/storage/emulated/0/Android/data/bin.mt.plus/aaa.txt";
+			Fi.get(TXT).writeString("hh, ok");
 		} catch (Throwable e) {
 			/* Log.err(e);
 			System.exit(-1); */
@@ -126,7 +130,8 @@ public class ModTools extends Mod {
 			loadLibs();
 		} catch (Throwable e) {
 			Log.err(e);
-			if (e instanceof UnexpectedPlatform) Log.err("It seems you platform is special. (But don't worry.)");
+			if (e instanceof UnexpectedPlatform)
+				Log.err("It seems you platform is special. (But don't worry.)");
 			planB_resolveLibs();
 		}
 	}
@@ -224,12 +229,13 @@ public class ModTools extends Mod {
 	public static boolean loadLib(String fileName, String mainClassName, boolean showError) {
 		return loadLib(fileName, mainClassName, showError, null);
 	}
-	public static boolean loadLib(String fileName, String mainClassName, boolean showError, Runnable callback) {
+	public static boolean loadLib(String fileName, String mainClassName, boolean showError,
+																Runnable callback) {
 		try {
 			// 没报错的话，证明已经加载
 			IntVars.mainLoader.loadClass(mainClassName);
 			return true;
-		} catch (Exception ignored) { }
+		} catch (Exception ignored) {}
 
 		Fi sourceFi = libs.child(fileName + ".jar");
 		if (!sourceFi.exists()) return false;
@@ -281,5 +287,5 @@ public class ModTools extends Mod {
 		return isDisposed;
 	}
 
-	static class UnexpectedPlatform extends RuntimeException { }
+	static class UnexpectedPlatform extends RuntimeException {}
 }

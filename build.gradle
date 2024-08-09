@@ -171,12 +171,14 @@ task playAndroid {
 		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)
 
-		"$adb push $project.rootDir/appendLog.sh $MDT_ANDROID_DIR/appendLog.sh"
-				.execute().waitForProcessOutput(System.out, System.err)
 		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -W -S"
 				.execute().waitForProcessOutput(System.out, System.err)
 		Thread.sleep(100)
-		"$adb shell sh ${MDT_ANDROID_DIR}/appendLog.sh"
-				.execute().waitForProcessOutput(System.out, System.err)
+		if (false) {
+			"$adb push $project.rootDir/appendLog.sh $MDT_ANDROID_DIR/appendLog.sh"
+					.execute().waitForProcessOutput(System.out, System.err)
+			"$adb shell sh ${MDT_ANDROID_DIR}/appendLog.sh"
+					.execute().waitForProcessOutput(System.out, System.err)
+		}
 	}
 }

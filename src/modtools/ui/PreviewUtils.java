@@ -115,7 +115,7 @@ public class PreviewUtils {
 					hitter.touchable = Touchable.disabled;
 					hitter.autoClose = true;
 					table.table.update(() -> {
-						if (hitter.init) {
+						if (hitter != null && hitter.init) {
 							topGroup.addChild(hitter);
 							hitter.touchable = Touchable.enabled;
 							hitter.autoClose = true;

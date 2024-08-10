@@ -7,12 +7,13 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
-import arc.scene.ui.*;
+import arc.scene.ui.ScrollPane;
 import arc.util.*;
+import modtools.content.ui.ShowUIList;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.comp.Window;
-import modtools.content.ui.ShowUIList;
 import modtools.ui.effect.ScreenSampler;
+import modtools.utils.ui.LerpFun.DrawExecutor;
 
 import java.util.Optional;
 
@@ -118,6 +119,9 @@ public interface ElementUtils {
 		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
+	static @Nullable DrawExecutor findDrawExecutor(Element actor ) {
+		return findParent(actor, DrawExecutor.class);
+	}
 	static @Nullable ScrollPane findClosestPane(Element actor) {
 		return findParent(actor, ScrollPane.class);
 	}

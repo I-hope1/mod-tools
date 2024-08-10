@@ -1,4 +1,4 @@
- package modtools.content.ui;
+package modtools.content.ui;
 
 import arc.Core;
 import arc.func.*;
@@ -26,6 +26,7 @@ import modtools.misc.PairProv.SizeProv;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.struct.TaskSet;
 import modtools.ui.*;
 import modtools.ui.TopGroup.*;
 import modtools.ui.comp.*;
@@ -46,6 +47,7 @@ import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.*;
 import modtools.utils.search.BindCell;
+import modtools.utils.ui.LerpFun.DrawExecutor;
 
 import java.util.regex.Pattern;
 
@@ -261,7 +263,7 @@ public class ReviewElement extends Content {
 		FOCUS_FROM = null;
 	};
 
-	public static class ReviewElementWindow extends Window implements IDisposable {
+	public static class ReviewElementWindow extends Window implements IDisposable, DrawExecutor {
 		private static final String SEARCH_RESULT = "SRCH_RS";
 		/** 用于parent父元素时，不用重新遍历 */
 		ElementElem wrapCache;
@@ -271,6 +273,15 @@ public class ReviewElement extends Content {
 		Pattern pattern;
 
 		ElementElem fixedFocus;
+
+		final TaskSet drawTaskSet = new TaskSet();
+		public void draw() {
+			super.draw();
+			drawTaskSet.exec();
+		}
+		public TaskSet drawTaskSet() {
+			return drawTaskSet;
+		}
 
 		public ReviewElementWindow() {
 			super(review_element.localizedName(), 20, 160, true);
@@ -761,7 +772,7 @@ public class ReviewElement extends Content {
 	}
 
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
-		return new LimitTable(t -> {
+		return new Table(t -> {
 			if (name != null)
 				t.add(name).color(Pal.accent).fontScale(0.7f).padRight(8f);
 			if (floatc == null) {

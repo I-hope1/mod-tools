@@ -17,7 +17,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
 import modtools.jsfunc.reflect.*;
-import modtools.struct.Pair;
+import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.IDisposable;
@@ -30,6 +30,7 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.search.*;
+import modtools.utils.ui.LerpFun.DrawExecutor;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
@@ -50,7 +51,7 @@ import static modtools.utils.ui.MethodBuilder.*;
 import static modtools.utils.ui.ReflectTools.*;
 
 @SuppressWarnings("CodeBlock2Expr")
-public class ShowInfoWindow extends Window implements IDisposable {
+public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor {
 	public static final String whenExecuting       = "An exception occurred when executing";
 	public static final String METHOD_COUNT_PREFIX = " [";
 
@@ -858,5 +859,15 @@ public class ShowInfoWindow extends Window implements IDisposable {
 				));
 			});
 		}, l);
+	}
+
+
+	final TaskSet drawTaskSet = new TaskSet();
+	public void draw() {
+		super.draw();
+		drawTaskSet.exec();
+	}
+	public TaskSet drawTaskSet() {
+		return drawTaskSet;
 	}
 }

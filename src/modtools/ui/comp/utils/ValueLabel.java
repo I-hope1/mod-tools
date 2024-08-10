@@ -45,7 +45,6 @@ import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.comp.input.highlight.Syntax.c_map;
 
-@SuppressWarnings({"SizeReplaceableByIsEmpty"})
 public abstract class ValueLabel extends InlineLabel {
 	public static final boolean DEBUG     = false;
 	public static final Object  unset     = new Object();

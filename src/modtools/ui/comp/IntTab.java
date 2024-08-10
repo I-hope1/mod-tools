@@ -56,7 +56,7 @@ public class IntTab {
 				 }
 			 }));
 			if (!column) t.row();
-			t.add(pane).self(c -> c.update(_ -> c.width(titleWidth))).grow();
+			t.add(pane).self(c -> c.update(_ -> c.width(titleWidth == -1 ? CellTools.unset : titleWidth))).grow();
 		}) {
 			public float getMinWidth() {
 				return prefW != -1 ? prefW : super.getMinWidth();

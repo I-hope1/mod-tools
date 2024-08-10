@@ -64,11 +64,16 @@ public class LerpFun {
 		drawSeq = uiDraw;
 		return this;
 	}
-	public Element onElement;
-	public LerpFun onUI(Element element) {
-		this.onElement = element;
-		return onUI();
+	public Element transElement;
+	public LerpFun transform(Element element) {
+		this.transElement = element;
+		return this;
 	}
+	public LerpFun on(TaskSet taskSet) {
+		drawSeq = taskSet;
+		return this;
+	}
+
 	public static Mat mat = new Mat();
 	/**
 	 * 注册立即执行事件，到极点就销毁
@@ -82,15 +87,15 @@ public class LerpFun {
 		if (drawSeq == null) throw new IllegalStateException("You don't set the drawSeq");
 		enabled = true;
 		drawSeq.add(() -> {
-			if (drawSeq == uiDraw && onElement != null) {
+			if (transElement != null) {
 				Tmp.m1.set(Draw.proj());
-				Vec2 pos = ElementUtils.getAbsolutePos(onElement);
+				Vec2 pos = ElementUtils.getAbsolutePos(transElement);
 				Draw.proj(mat.setOrtho(-pos.x, -pos.y, Core.graphics.getWidth(), Core.graphics.getHeight()));
 			}
 			a = Mathf.clamp(a + step * Time.delta * (reverse ? -1 : 1));
 			applyV = apply(a);
 			if (floatc != null) floatc.get(applyV);
-			if (drawSeq == uiDraw && onElement != null) {
+			if (transElement != null) {
 				Draw.proj(Tmp.m1);
 			}
 			if (reverse ? a > 0 : a < 1) return true;
@@ -121,4 +126,8 @@ public class LerpFun {
 	 * else a (0 -> 1)
 	 */
 	public boolean reverse;
+
+	public interface DrawExecutor {
+		TaskSet drawTaskSet();
+	}
 }

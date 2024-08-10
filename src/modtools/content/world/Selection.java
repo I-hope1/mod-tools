@@ -16,6 +16,7 @@ import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
+import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.pooling.Pool;
 import mindustry.content.Blocks;
@@ -283,6 +284,9 @@ public class Selection extends Content {
 		cont.left().add(tab.build())
 		 // .colspan(2)
 		 .grow().left();
+		for (Entry<String, Label> label : tab.labels) {
+			label.value.setAlignment(Align.left);
+		}
 
 		loadSettings();
 	}

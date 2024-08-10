@@ -12,6 +12,7 @@ import arc.struct.ObjectMap;
 import arc.util.Tmp;
 import modtools.utils.ElementUtils;
 import modtools.utils.ui.LerpFun;
+import modtools.utils.ui.LerpFun.DrawExecutor;
 
 import java.util.Arrays;
 
@@ -55,12 +56,27 @@ public class HopeFx {
 		return action;
 	}
 
+	public static void context(Element element, Runnable runnable) {
+		element.localToStageCoordinates(Tmp.v1.set(0, 0));
+		float offX = Tmp.v1.x, offY = Tmp.v1.y;
+
+		Draw.proj().getTranslation(Tmp.v1);
+		float ltx = Tmp.v1.x, lty = Tmp.v1.y;
+		Draw.proj().setToTranslation(ltx + offX, lty + offY);
+		runnable.run();
+		Draw.proj().setToTranslation(ltx, lty);
+	}
 	static final ObjectMap<Element, LerpFun> all = new ObjectMap<>();
 	public static void changedFx(Element element) {
+		DrawExecutor executor = ElementUtils.findDrawExecutor(element);
+		if (executor == null) throw new IllegalStateException(STR."No executor for draw \{element}");
+		changedFx(element, executor);
+	}
+	public static void changedFx(Element element, DrawExecutor executor) {
 		// if (true) return;
 		all.get(element, () -> new LerpFun(Interp.fastSlow)
 		 // 1 -> 0
-		 .rev().onUI(element).registerDispose(0.05f, fin -> {
+		 .rev().transform(element).on(executor.drawTaskSet()).registerDispose(0.05f, fin -> {
 			 if (!element.visible || element.getScene() == null) return;
 			 Draw.color(Color.sky, fin * 0.5f);
 			 Lines.stroke(3f - fin * 2f);
@@ -96,6 +112,13 @@ public class HopeFx {
 			}); */
 		 }).onDispose(() -> all.remove(element))).back(0.8f);
 	}
+	/* public static void drawLine(boolean vertical, ) {
+		all.get(Mathf.sign(vertical) * ,
+		 new LerpFun(Interp.linear).transform(element.parent).registerDispose(0.3f,
+			 vertical ? _ -> Drawf.dashLine(lineColor, 0, prefValue, drawingValue, prefValue)
+			 : _ -> Drawf.dashLine(lineColor, prefValue, 0, prefValue, drawingValue)
+			);
+	} */
 
 	public static class TranslateToAction extends TemporalAction {
 		private float startX, startY;

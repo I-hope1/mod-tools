@@ -43,7 +43,6 @@ dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
 
-	def sdkRoot = System.getenv("ANDROID_HOME")
 //	println "AndroidHome: $sdkRoot"
 	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 	compileOnly files(
@@ -54,6 +53,15 @@ dependencies {
 			"_libs/Android_dalvik-1.0.jar",
 			"_libs/AndroidField.jar"
 	)
+
+//	annotationProcessor ("com.github.EB-wilson.JavaDynamilizer:apt:$jderVersion")
+//	implementation("com.github.EB-wilson.JavaDynamilizer:annotations:$jderVersion")
+//	implementation("com.github.EB-wilson.JavaDynamilizer:core:$jderVersion")
+//	implementation("com.github.EB-wilson.JavaDynamilizer:baseimpl:$jderVersion")
+//	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+//	compileOnly "com.github.EB-wilson.UniverseCore:core:$uncVersion"
+
+
 	compileOnly("com.github.Anuken.Mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
 	}

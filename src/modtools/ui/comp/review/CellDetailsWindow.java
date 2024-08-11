@@ -112,7 +112,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 
 			if (flush && cl.getTable() != null) {
 				cl.getTable().layout();
-				cl.get().invalidate();
+				cl.getTable().invalidate();
 			}
 		}).get().addListener(new ITooltip(() -> IntUI.tips("cell." + text)));
 	}

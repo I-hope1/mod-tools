@@ -139,7 +139,6 @@ public class ModTools extends Mod {
 		Time.mark();
 
 		IntVars.load();
-		Tools.TASKS.add(mouseVec::require);
 		if (errors.any()) {
 			errors.each(e -> ui.showException(e));
 			return;

@@ -112,18 +112,19 @@ public class EventHelper {
 		return mobile ? longPress0(element, () -> run.accept(element))
 		 : rightClick(element, () -> run.accept(element));
 	}
+	/** @param cons 它的参数可能为null  */
 	public static <T> void
 	longPressOrRclick(Element listener, Class<T> target, Consumer<T> cons) {
 		listener.addListener(mobile ? new LongPressListener(null, IntUI.DEF_LONGPRESS) {
 			public void longPress(InputEvent event, float x, float y) {
 				T targetActor = ElementUtils.findParent(event.targetActor, target);
-				if (targetActor != null) cons.accept(targetActor);
+				cons.accept(targetActor);
 				event.stop();
 			}
 		} : new ClickListener(KeyCode.mouseRight) {
 			public void clicked(InputEvent event, float x, float y) {
 				T targetActor = ElementUtils.findParent(event.targetActor, target);
-				if (targetActor != null) cons.accept(targetActor);
+				cons.accept(targetActor);
 				event.stop();
 			}
 		});

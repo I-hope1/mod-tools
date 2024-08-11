@@ -8,7 +8,7 @@ import arc.struct.*;
 import arc.util.*;
 import modtools.utils.*;
 
-import static modtools.IntVars.mouseVec;
+import static modtools.IntVars.*;
 
 public class HopeInput {
 	public static IntSet justPressed, pressed;
@@ -18,7 +18,7 @@ public class HopeInput {
 		if (hit == null) hit = Core.scene.hit(mouseVec.x, mouseVec.y, true);
 		return hit;
 	}
-	private static final Vec2 last = new Vec2();
+	private static final Vec2 last  = new Vec2();
 	private static final Vec2 UNSET = new Vec2(Float.NaN, Float.NaN);
 	public static boolean mouseDown() { return Core.input.isTouched(); }
 	public static boolean mouseDragged() { return !last.epsilonEquals(mouseVec); }
@@ -30,6 +30,16 @@ public class HopeInput {
 				if (last.equals(UNSET)) last.set(mouseVec);
 			} else {
 				last.set(UNSET);
+			}
+		});
+		Core.input.getInputMultiplexer().addProcessor(0, new InputProcessor() {
+			public boolean mouseMoved(int screenX, int screenY) {
+				mouseVec.require();
+				return false;
+			}
+			public boolean touchDragged(int screenX, int screenY, int pointer) {
+				mouseVec.require();
+				return false;
 			}
 		});
 		HKeyCode.load();

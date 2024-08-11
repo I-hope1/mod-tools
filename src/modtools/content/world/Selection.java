@@ -1023,7 +1023,6 @@ public class Selection extends Content {
 				mouseChanged = false;
 				return false;
 			}
-			Log.info("down");
 			super.touchDown(event, x, y, pointer, button);
 			start.set(end);
 			mouseChanged = true;

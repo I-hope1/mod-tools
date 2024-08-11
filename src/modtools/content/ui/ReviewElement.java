@@ -21,11 +21,12 @@ import modtools.Constants.TABLE;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.content.Content;
-import modtools.misc.PairProv;
-import modtools.misc.PairProv.SizeProv;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.misc.PairProv;
+import modtools.misc.PairProv.SizeProv;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
 import modtools.ui.TopGroup.*;
@@ -46,8 +47,8 @@ import modtools.utils.*;
 import modtools.utils.EventHelper.DoubleClick;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.ui.*;
 import modtools.utils.search.BindCell;
+import modtools.utils.ui.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 
 import java.util.regex.Pattern;
@@ -63,7 +64,8 @@ import static modtools.utils.ui.FormatHelper.fixed;
 
 /**
  * Ctrl+Shift+C审查元素
- * @author I-hope1 */
+ * @author I-hope1
+ */
 public class ReviewElement extends Content {
 	@DataColorFieldInit(data = "", needSetting = true)
 	public static int
@@ -266,7 +268,8 @@ public class ReviewElement extends Content {
 	};
 
 	public static class ReviewElementWindow extends Window implements IDisposable, DrawExecutor {
-		private static final String SEARCH_RESULT = "SRCH_RS";
+		private static final String  SEARCH_RESULT = "SRCH_RS";
+		public               boolean drawCell;
 		/** 用于parent父元素时，不用重新遍历 */
 		ElementElem wrapCache;
 
@@ -320,6 +323,14 @@ public class ReviewElement extends Content {
 				 .size(35).padRight(3f);
 				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element))
 				 .size(35).padRight(3f);
+				t.button(Icon.settingsSmall, HopeStyles.clearNonei, 28, () -> {
+					IntUI.showSelectTableRB((p, _, _) -> {
+						p.background(Tex.pane);
+						SettingsBuilder.build(p);
+						SettingsBuilder.check("Draw Cell", b -> drawCell = b, () -> drawCell);
+						SettingsBuilder.clearBuild();
+					}, false);
+				});
 				t.table(search -> {
 					search.image(Icon.zoomSmall).size(35);
 					search.field("", str -> rebuild(element, str))
@@ -347,6 +358,12 @@ public class ReviewElement extends Content {
 			keyMap.put(KeyCode.p, e -> {
 				if (e.getElement() instanceof Image img) {
 					IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable);
+				}
+			});
+			keyMap.put(KeyCode.c, e -> {
+				Element elem = e.getElement();
+				if (CellDetailsWindow.valid(elem)) {
+					new CellDetailsWindow(((Table) elem.parent).getCell(elem));
 				}
 			});
 			pane.requestKeyboard();
@@ -625,9 +642,10 @@ public class ReviewElement extends Content {
 				if (!(needUpdate
 				      || ((group.needsLayout() || sizeInvalid(group)) && group.getScene() != null)
 				      || !(table1.hasChildren() || !group.hasChildren()))) return;
-
-				rebuild.get(table1);
 				HopeFx.changedFx(textElement);
+
+				if (!button.isChecked()) return;
+				rebuild.get(table1);
 			};
 		}
 		private Cons<Image> focusUpdater() {
@@ -658,7 +676,7 @@ public class ReviewElement extends Content {
 		static Prov<Seq<MenuItem>> getContextMenu(ElementElem self, Element element) {
 			return () -> ArrayUtils.seq(
 			 MenuBuilder.copyAsJSMenu(null, storeRun(() -> element)),
-			 ConfirmList.with("clear", Icon.trashSmall, "@clear", "@confirm.remove", () -> {
+			 ConfirmList.with("clear", Icon.trashSmall, "@element.remove", "@confirm.remove", () -> {
 				 self.remove();
 				 element.remove();
 			 }),
@@ -680,8 +698,8 @@ public class ReviewElement extends Content {
 
 			 element != null && element.parent instanceof Table ?
 				DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
-				 () -> element != null && !(element.parent instanceof Table && ((Table) element.parent).getCell(element) != null), () -> {
-					 new CellDetailsWindow(((Table) element.parent).getCell(element)).show();
+				 () -> !CellDetailsWindow.valid(element), () -> {
+					 new CellDetailsWindow(((Table) element.parent).getCell(element));
 				 }) : null);
 		}
 
@@ -697,8 +715,19 @@ public class ReviewElement extends Content {
 			 MenuItem.with("validate", Icon.boxSmall, "Validate", element::validate),
 			 MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
 			 MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
-			 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack)
+			 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack),
+			 element instanceof Table table ? MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)) : null,
+			 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
+			 element instanceof Table table ? MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)) : null,
+			 element instanceof Table table ? MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)) : null,
+			 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null
 			);
+		}
+		private static Runnable l(Table t, int align) {
+			return () -> {
+				t.align(align);
+				t.layout();
+			};
 		}
 	}
 	private static boolean sizeInvalid(Group group) {
@@ -987,9 +1016,9 @@ public class ReviewElement extends Content {
 			if (drawer == FOCUS_WINDOW && FOCUS != null) {
 				if (FOCUS_FROM instanceof CellView cw) {
 					cw.drawFocus(FOCUS);
-					Vec2 pos = ElementUtils.getAbsolutePos(FOCUS);
+					// Vec2 pos = ElementUtils.getAbsolutePos(FOCUS);
 					// super.drawFocus(FOCUS, pos);
-					MyDraw.intoDraw(() -> drawGeneric(FOCUS, pos));
+					// MyDraw.intoDraw(() -> drawGeneric(FOCUS, pos));
 				} else {
 					drawFocus(FOCUS);
 				}
@@ -997,9 +1026,14 @@ public class ReviewElement extends Content {
 		}
 		public void drawFocus(Element elem, Vec2 vec2) {
 			super.afterAll();
-			super.drawFocus(elem, vec2);
-
-			MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
+			if (FOCUS_WINDOW instanceof ReviewElementWindow w && w.drawCell) {
+				if (elem.parent instanceof Table t0) {
+					CellView.drawFocusStatic(t0.getCell(elem), elem);
+				}
+			} else {
+				super.drawFocus(elem, vec2);
+				MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
+			}
 
 			if (!hoverInfoWindow.enabled()) return;
 
@@ -1124,6 +1158,9 @@ public class ReviewElement extends Content {
 			drawFocus(table.getCell(focus), focus);
 		}
 		default void drawFocus(Cell<?> cl, Element focus) {
+			drawFocusStatic(cl, focus);
+		}
+		static void drawFocusStatic(Cell<?> cl, Element focus) {
 			int   column = CellTools.column(cl);
 			int   row    = CellTools.row(cl);
 			Table table  = cl.getTable();
@@ -1132,46 +1169,52 @@ public class ReviewElement extends Content {
 			// 父元素的坐标
 			Vec2 offset = ElementUtils.getAbsolutePos(table);
 
-			float thick = 2f;
-			Lines.stroke(thick);
 
 			//逆运算下面过程
 			/* align = c.align;
-            if((align & Align.left) != 0)
-                c.elementX = currentX;
-            else if((align & Align.right) != 0)
-                c.elementX = currentX + spannedCellWidth - c.elementWidth;
-            else
-                c.elementX = currentX + (spannedCellWidth - c.elementWidth) / 2;
+        if((align & Align.left) != 0)
+            c.elementX = currentX;
+        else if((align & Align.right) != 0)
+            c.elementX = currentX + spannedCellWidth - c.elementWidth;
+        else
+            c.elementX = currentX + (spannedCellWidth - c.elementWidth) / 2;
 
-            if((align & Align.top) != 0)
-                c.elementY = currentY + c.computedPadTop;
-            else if((align & Align.bottom) != 0)
-                c.elementY = currentY + rowHeight[c.row] - c.elementHeight - c.computedPadBottom;
-            else
-                c.elementY = currentY + (rowHeight[c.row] - c.elementHeight + c.computedPadTop - c.computedPadBottom) / 2;
-                 */
+        if((align & Align.top) != 0)
+            c.elementY = currentY + c.computedPadTop;
+        else if((align & Align.bottom) != 0)
+            c.elementY = currentY + rowHeight[c.row] - c.elementHeight - c.computedPadBottom;
+        else
+            c.elementY = currentY + (rowHeight[c.row] - c.elementHeight + c.computedPadTop - c.computedPadBottom) / 2;
+      */
 			int align = CellTools.align(cl);
 			float padTop = CellTools.padTop(cl),
 			 padBottom = CellTools.padBottom(cl),
 			 padLeft = CellTools.padLeft(cl),
 			 padRight = CellTools.padRight(cl);
-			// Log.info(padTop);
 
 			// 左下角为 (0, 0)
-			float spanX = (align & Align.left) != 0 ? -padLeft :
-			 (align & Align.right) != 0 ? padRight - spanW :
-				// center
-				(focus.getWidth() - spanW - padLeft + padRight) / 2f;
-			float spanY = (align & Align.top) != 0 ? padTop - spanH + focus.getHeight() :
-			 (align & Align.bottom) != 0 ? -padBottom :
-				(focus.getHeight() - spanH - padBottom + padTop) / 2f;
+			float spanX =
+			 // left
+			 (align & Align.left) != 0 ? -padLeft :
+				// right
+				(align & Align.right) != 0 ? padRight - spanW + focus.getWidth() :
+				 // center
+				 (focus.getWidth() - spanW - padLeft + padRight) / 2f;
+			float spanY =
+			 // top
+			 (align & Align.top) != 0 ? padTop - spanH + focus.getHeight() :
+				// bottom
+				(align & Align.bottom) != 0 ? -padBottom :
+				 // center
+				 (focus.getHeight() - spanH - padBottom + padTop) / 2f;
 
-
+			float thick = 3f;
+			Lines.stroke(thick);
 			Draw.color(Pal.remove);
 			Drawf.dashRectBasic(focus.x + spanX + offset.x, focus.y + spanY + offset.y, spanW + thick, spanH + thick);
 
-			thick = 1f;
+			thick = 2f;
+			Lines.stroke(thick);
 			Draw.color(Pal.heal);
 			Drawf.dashRectBasic(focus.x + offset.x, focus.y + offset.y, focus.getWidth() + thick, focus.getHeight() + thick);
 		}

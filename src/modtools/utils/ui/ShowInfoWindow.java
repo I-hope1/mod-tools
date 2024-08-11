@@ -124,7 +124,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		topTable.pane(t -> {
 			t.left().defaults().left();
 			t.button(Icon.settingsSmall, clearNonei, () -> {
-				IntUI.showSelectTableRB(mouseVec.cpy(), (p, _, _) -> {
+				IntUI.showSelectTableRB((p, _, _) -> {
 					p.background(Styles.black6);
 					p.left().defaults().left().growX();
 					ISettings.buildAll("jsfunc", p, E_JSFunc.class);

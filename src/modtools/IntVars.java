@@ -37,9 +37,10 @@ public class IntVars {
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
 
-	public static final String  NL   = System.lineSeparator();
+	public static final String  NL = System.lineSeparator();
 	public static       boolean hasDecompiler;
-	public static       Json    json = new Json() {
+
+	public static Json json = new Json() {
 		@SuppressWarnings("unchecked")
 		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
 			if (type == Class.class) try {

@@ -61,15 +61,15 @@ public abstract class WFunction<T> {
 	 "Copy", Icon.copySmall,
 	 "@selection.reset", Icon.editSmall,
 	 "@clear", Icon.trashSmall,
-	 "@selection.forceClear",Icon.trashSmall,
+	 "@selection.forceClear", Icon.trashSmall,
 	 "@heal", HopeIcons.heal,
 	 "@kill", HopeIcons.kill,
 	 "@editor.teams", Icon.playersSmall
 	);
-	public final Table   wrap    = new Table();
-	public final Table   main    = new Table();
-	public final Table   buttons = new Table();
-	public final List<T> list    = new MyVector();
+	public final        Table                       wrap       = new Table();
+	public final        Table                       main       = new Table();
+	public final        Table                       buttons    = new Table();
+	public final        List<T>                     list       = new MyVector();
 
 
 	// for select
@@ -225,16 +225,17 @@ public abstract class WFunction<T> {
 		buttons.row();
 
 		newButton("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
-			 drawAll = !drawAll;
-		 }).update(t -> t.setChecked(drawAll));
+			drawAll = !drawAll;
+		}).update(t -> t.setChecked(drawAll));
 
 		newButton("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
-			 clearList();
-			 changeEvent.run();
-		 }).update(t -> t.setChecked(drawAll));
+			clearList();
+			changeEvent.run();
+		});
 		buttons.row();
 	}
-	private Cell<TextButton> newButton(String name, TextureRegionDrawable icon, TextButtonStyle style, Runnable runnable) {
+	private Cell<TextButton> newButton(String name, TextureRegionDrawable icon, TextButtonStyle style,
+	                                   Runnable runnable) {
 		return buttons.button(name, icon, style, runnable).tooltip(SC.tipKey(name.toLowerCase()));
 	}
 

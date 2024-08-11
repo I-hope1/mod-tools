@@ -80,10 +80,11 @@ public class HopeFx {
 			 if (!element.visible || element.getScene() == null) return;
 			 Draw.color(Color.sky, fin * 0.5f);
 			 Lines.stroke(3f - fin * 2f);
-			 ScrollPane pane   = ElementUtils.findClosestPane(element);
-			 Vec2       position;// left-bottom
-			 float      width  = element.getWidth();
-			 float      height = element.getHeight();
+			 ScrollPane   pane     = ElementUtils.findClosestPane(element);
+			 Vec2         position;// left-bottom
+			 float        width    = element.getWidth();
+			 float        height   = element.getHeight();
+			 float x = 0, y = 0;
 			 if (pane != null) {
 				 position = Tmp.v1;
 				 float maxX, maxY;
@@ -94,15 +95,21 @@ public class HopeFx {
 
 				 float lx = position.x, ly = position.y;
 				 position.clamp(0, 0, maxX, maxY);
-				 if (lx < 0) width += lx;
-				 if (ly < 0) height += ly;
+				 if (lx < 0) {
+					 x -= lx;
+					 width += lx;
+				 }
+				 if (ly < 0) {
+					 y -= lx;
+					 height += ly;
+				 }
 				 if (position.x + width > maxX) width = maxX - position.x;
 				 if (position.y + height > maxY) height = maxY - position.y;
 
 				 pane.localToStageCoordinates(position);
 			 }
 			 // float fout = 1 - fin;
-			 Fill.crect(0, 0, width, height);
+			 Fill.crect(x, y, width, height);
 
 			/* Draw.color(Pal.powerLight, fout);
 			Angles.randLenVectors(new Rand().nextInt(), 4, element.getWidth(), (x, __) -> {

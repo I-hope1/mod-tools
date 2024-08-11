@@ -12,13 +12,12 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.IntUI;
-import modtools.ui.IntUI.SelectTable;
+import modtools.ui.IntUI.*;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.EventHelper;
 
 import java.util.Objects;
 
-import static modtools.IntVars.mouseVec;
 import static modtools.utils.ElementUtils.findClosestPane;
 import static modtools.utils.ui.CellTools.rowSelf;
 
@@ -34,7 +33,9 @@ public class MenuBuilder {
 	}
 	public static <T> void
 	addShowMenuListenerp(Element elem, Class<T> target, Func<T, Prov<Seq<MenuItem>>> func) {
-		EventHelper.longPressOrRclick(elem, target, t -> showMenuListDispose(func.get(t)));
+		EventHelper.longPressOrRclick(elem, target, t -> {
+			if (t != null) showMenuListDispose(func.get(t));
+		});
 	}
 	/**
 	 * Dispose after close.
@@ -64,9 +65,9 @@ public class MenuBuilder {
 	public static void showMenuList(Iterable<MenuItem> list) {
 		showMenuList(list, null);
 	}
-	/** TODO: 隐藏当前的MenuList  */
+	/** TODO: 隐藏当前的MenuList */
 	public static void showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
-		IntUI.showSelectTableRB(mouseVec.cpy(), (p, hide, _) -> {
+		IntUI.showSelectTableRB((p, hide, _) -> {
 			showMenuList(list, hiddenListener, p, hide);
 		}, false);
 	}
@@ -108,6 +109,9 @@ public class MenuBuilder {
 			 .padTop(-1)
 			 .marginLeft(5f).marginRight(5f)
 			 .wrapLabel(false));
+			if (Core.bundle.has("menu." + menu.key)) {
+				cell.get().addListener(new ITooltip(() -> Core.bundle.get("menu." + menu.key)));
+			}
 			// cell.get().getLabel().setFontScale(0.9f);
 			cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
 

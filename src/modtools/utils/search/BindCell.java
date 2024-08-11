@@ -20,6 +20,7 @@ public final class BindCell implements Poolable {
 
 	private BindCell() { }
 	private BindCell init(Cell<?> cell) {
+		if (cell == null) throw new NullPointerException("cell is null");
 		this.cell = cell;
 		require();
 		return this;

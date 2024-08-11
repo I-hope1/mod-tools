@@ -54,8 +54,8 @@ public class FormatHelper {
 	}
 
 	// 去除颜色
-	public static String format(String s) {
-		return s.replaceAll("\\[(\\w+?)]", "[[$1]");
+	public static String stripColor(String s) {
+		return s.replace("[", "[[");
 	}
 
 	// 一些对象的字符串转换

@@ -1,24 +1,33 @@
 package modtools.ui;
 
+import arc.Core;
+import arc.assets.loaders.*;
 import arc.files.Fi;
 import arc.freetype.FreeTypeFontGenerator;
 import arc.freetype.FreeTypeFontGenerator.*;
+import arc.freetype.FreetypeFontLoader.FreeTypeFontLoaderParameter;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.Font.Glyph;
 import arc.struct.Seq;
-import arc.util.Reflect;
+import arc.util.*;
+import mindustry.Vars;
 import mindustry.ui.Fonts;
 import modtools.IntVars;
 import modtools.utils.Tools;
+import modtools.utils.reflect.FieldUtils;
+
+import java.lang.reflect.Field;
 
 import static modtools.utils.MySettings.SETTINGS;
 
 public class MyFonts {
-	public static       Font def = Fonts.def;
+	public static       Font def           = Fonts.def;
 	public static final Fi   fontDirectory = IntVars.dataDirectory.child("fonts");
 
 	public static void load() {
 		fontDirectory.mkdirs();
+
 		def = acquireFont();
 	}
 
@@ -33,9 +42,10 @@ public class MyFonts {
 
 		Fi fontFi = fontDirectory.child(SETTINGS.getString("font"));
 		if (!fontFi.exists()) {
-			if (Fonts.def == null) throw new RuntimeException("you can't load it before font load");
+			if (Fonts.def == null) throw new RuntimeException("You cannot load it before font load");
 			return Fonts.def;
 		}
+
 		FreeTypeFontGenerator generator = new FreeTypeFontGenerator(fontFi);
 		FreeTypeFontParameter parameter = new FreeTypeFontParameter() {{
 			size = 20;
@@ -74,10 +84,32 @@ public class MyFonts {
 				return new MyFontCache(this);
 			}
 		};
+
 		font.setOwnsTexture(parameter.packer == null);
 		// 添加默认字体，如果font没有就去def里找
 		font.getRegions().addAll(Fonts.def.getRegions());
 		return font;
+	}
+
+	/** 常规写法  */
+	static void loadFont() {
+		Field field = FieldUtils.getFieldAccessOrThrow(AssetLoader.class, "resolver");
+		FieldUtils.setValue(field,
+		 Core.assets.getLoader(FreeTypeFontGenerator.class),
+		 (FileHandleResolver) Vars.tree::get);
+		FieldUtils.setValue(field,
+		 Core.assets.getLoader(Font.class),
+		 (FileHandleResolver) Vars.tree::get);
+
+		String s = SETTINGS.getString("font");
+		Vars.tree.addFile("fonts/" + s + ".gen", MyFonts.fontDirectory.child(s));
+		FreeTypeFontParameter param = new FreeTypeFontParameter() {{
+			borderColor = Color.darkGray;
+			incremental = true;
+			size = 18;
+		}};
+		Core.assets.load(s, Font.class, new FreeTypeFontLoaderParameter("fonts/" + s, param))
+		 .loaded = font -> Log.info("Loaded @: @", s, font);
 	}
 	public static void dispose() {
 		if (MyFonts.def != Fonts.def) {
@@ -87,7 +119,7 @@ public class MyFonts {
 	}
 
 	private static class MyFontCache extends FontCache {
-		public MyFontCache(Font font) {super(font, font.usesIntegerPositions());}
+		public MyFontCache(Font font) { super(font, font.usesIntegerPositions()); }
 		// boolean underline_ = underline;
 		// boolean strikethrough_ = strikethrough;
 		public void draw() {

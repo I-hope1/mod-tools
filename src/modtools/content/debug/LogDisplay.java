@@ -4,6 +4,7 @@ import arc.Core;
 import arc.files.Fi;
 import arc.func.Cons;
 import arc.graphics.Color;
+import arc.input.KeyCode;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
@@ -21,6 +22,7 @@ import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.highlight.JSSyntax;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.AutoWrapListener;
+import modtools.utils.ArrayUtils;
 import modtools.utils.io.FileUtils;
 
 import static modtools.utils.Tools.readFiOrEmpty;
@@ -59,8 +61,23 @@ public class LogDisplay extends Content {
 				() -> Vars.ui.consolefrag.clearMessages())
 			).height(42).growX().row();
 			t.pane(new LimitTable(MessageBuilder::new))
-			 .colspan(2).grow().with(pane -> pane.update(new AutoWrapListener(pane))).row();
-			t.add(new TextAreaTab("", JSSyntax::new));
+			 .colspan(2).grow().with(pane -> pane.update(() -> new AutoWrapListener(pane))).row();
+			TextAreaTab tab = new TextAreaTab("", JSSyntax::new);
+			tab.getArea().setPrefRows(10);
+			TextField chatfield = Reflect.get(ConsoleFragment.class, Vars.ui.consolefrag, "chatfield");
+			tab.keyDownB = (event, keyCode) -> {
+				if (Core.input.ctrl() && keyCode == KeyCode.enter) {
+					Reflect.set(TextField.class, chatfield, "writeEnters", true);
+					chatfield.setText(tab.getText());
+					Reflect.set(TextField.class, chatfield, "writeEnters", false);
+					Reflect.invoke(ConsoleFragment.class, Vars.ui.consolefrag, "sendMessage", ArrayUtils.EMPTY_ARRAY);
+					tab.getArea().clearText();
+					tab.getArea().setCursorPosition(0);
+					return true;
+				}
+				return false;
+			};
+			t.add(tab).colspan(2).growX();
 			t.invalidateHierarchy();
 		}), new LimitTable(p -> {
 			Seq<Fi> list = new Seq<>(crashesDir().list()).sort(f -> -f.lastModified());
@@ -90,7 +107,7 @@ public class LogDisplay extends Content {
 
 		// ui.addCloseButton();
 	}
-	/** For log  */
+	/** For log */
 	public static class MessageBuilder {
 		private final Table       p;
 		private final Seq<String> messages;

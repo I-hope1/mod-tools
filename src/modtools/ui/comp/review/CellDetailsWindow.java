@@ -35,6 +35,9 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	public static final Color themeColor = Pal.accent;
 
 	final Cell<?> cl;
+	public static boolean valid(Element element) {
+		return element.parent instanceof Table && ((Table) element.parent).getCell(element) != null;
+	}
 	public CellDetailsWindow(Cell<?> cell) {
 		super("cell");
 		this.cl = cell;

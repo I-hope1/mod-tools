@@ -104,9 +104,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		return linesShow;
 	}
 
-	/* 返回true，则cancel事件 */
+	/** 返回true，则cancel事件 */
 	public Boolf2<InputEvent, KeyCode>   keyDownB  = null;
+	/** 返回true，则cancel事件 */
 	public Boolf2<InputEvent, Character> keyTypedB = null;
+	/** 返回true，则cancel事件 */
 	public Boolf2<InputEvent, KeyCode>   keyUpB    = null;
 
 	public int cursor() {
@@ -275,7 +277,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		private void drawVirtualText(Font font) {
 			VirtualString virtualString = syntax.virtualString;
 			if (virtualString != null && virtualString.text != null) {
-				FontCache   cache  = font.getCache();
+				FontCache cache = font.getCache();
 				cache.getColor().set(virtualString.color).mulA(alpha());
 				if (cache.getColor().a == 0) return;
 				float x1 = getRelativeX(virtualString.index);
@@ -475,7 +477,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			}
 		}
-		/** 判断i有没有越界  */
+		/** 判断i有没有越界 */
 		public boolean checkIndex(int i) {
 			return 0 <= i && i < text.length();
 		}
@@ -565,7 +567,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				return super.keyUp(event, keycode);
 			}
 		}
-		/** 向前，向后选择整个单词  */
+		/** 向前，向后选择整个单词 */
 		public void selectNearWord() {
 			int i = hasSelection ? selectionStart : cursor - 1;
 			while (isWordCharacterCheck(i)) --i; // 单词左边
@@ -575,12 +577,12 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			cursor = i;
 			hasSelection = selectionStart != cursor;
 		}
-		/** 向前选择单词  */
+		/** 向前选择单词 */
 		public void selectForward() {
 			int i = hasSelection ? selectionStart : cursor - 1;
-      while (isWordCharacterCheck(i)) --i;
-      selectionStart = i + 1;
-      hasSelection = selectionStart != cursor;
+			while (isWordCharacterCheck(i)) --i;
+			selectionStart = i + 1;
+			hasSelection = selectionStart != cursor;
 		}
 		public void selectBackward() {
 			int i = selectionStart = cursor;

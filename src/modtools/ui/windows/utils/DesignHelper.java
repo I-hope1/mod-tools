@@ -2,7 +2,7 @@ package modtools.ui.windows.utils;
 
 import arc.scene.ui.CheckBox;
 import mindustry.ui.dialogs.BaseDialog;
-import modtools.content.ui.design.DesignView;
+import modtools.content.ui.design.AbstractView;
 
 public class DesignHelper {
 	public static void design() {
@@ -48,7 +48,7 @@ public class DesignHelper {
 			}).growX();
 		}); */
 		new BaseDialog("") {{
-			add(new DesignView()).grow();
+			cont.add(new AbstractView() {}).grow();
 		}}.show();
 	}
 	private static CheckBox checkBox(String text, String name) {

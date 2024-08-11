@@ -36,7 +36,7 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 			c3.get("PrefWidth", element::getPrefWidth, null);
 			c3.get("PrefHeight", element::getPrefHeight, null);
 			c3.get("Rotation", element::getRotation, element::setRotation);
-		}).growX().row();
+		}).growX().pad(6, 8, 8, 6).row();
 
 		Table table = cont.table().get();
 		table.defaults().growX();

@@ -1014,7 +1014,7 @@ public class Tester extends Content {
 				case err -> "E";
 				default -> " ";
 			} + text;
-			logs.add(FormatHelper.format(s));
+			logs.add(FormatHelper.stripColor(s));
 		}
 	}
 }

@@ -163,12 +163,12 @@ public class IntUI {
 	 * @return the table
 	 */
 	public static SelectTable
-	showSelectTableRB(Vec2 vec2, Builder f,
+	showSelectTableRB(Builder f,
 	                  boolean searchable) {
-		if (vec2 == null) throw new NullPointerException("vec2 cannot be null");
-		SelectTable t = basicSelectTable(vec2, searchable, f);
+		SelectTable t = basicSelectTable(mouseVec, searchable, f);
+		float       x = mouseVec.x, y = mouseVec.y;
 		t.update(() -> {
-			t.setPosition(vec2.x, vec2.y, Align.topLeft);
+			t.setPosition(x, y, Align.topLeft);
 			checkBound(t);
 		});
 		return t;

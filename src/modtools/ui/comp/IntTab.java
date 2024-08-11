@@ -16,7 +16,7 @@ import modtools.ui.HopeStyles;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.limit.PrefTable;
 import modtools.ui.effect.HopeFx;
-import modtools.utils.ui.CellTools;
+import modtools.utils.ui.*;
 
 import java.util.Arrays;
 
@@ -46,16 +46,20 @@ public class IntTab {
 		title.defaults().growX().height(42);
 		pane = new ScrollPane(null, Styles.smallPane);
 		main = new Table(t -> {
-			t.pane(title).top().growX()
-			 .self(c -> c.update(p -> {
-				 p.setScrollingDisabled(column, !column);
-				 if (column) {
-					 c.width(p.getPrefWidth());
-				 } else {
-					 c.height(p.getPrefHeight());
-				 }
-			 }));
-			if (!column) t.row();
+			Cell<ScrollPane> cell = t.pane(title).top();
+			cell.update(p -> {
+				p.setScrollingDisabled(column, !column);
+				if (column) {
+					cell.width(p.getPrefWidth());
+				} else {
+					cell.height(p.getPrefHeight());
+				}
+			});
+			if (column) {
+				cell.growY();
+			} else {
+				cell.growX().row();
+			}
 			t.add(pane).self(c -> c.update(_ -> c.width(titleWidth == -1 ? CellTools.unset : titleWidth))).grow();
 		}) {
 			public float getMinWidth() {
@@ -156,41 +160,43 @@ public class IntTab {
 			Table t = tables[i];
 			int   j = i;
 			title.button(b -> {
-				 if (first == null) first = b;
-				 labels.put(names[j], b.add(new TitleLabel(
+				if (first == null) first = b;
+				labels.put(names[j], b.add(new TitleLabel(
 					() -> hideTitle ? "" : names[j],
 					icons == null ? null : icons[j]
-				 )).color(colors[j]).padLeft(4f).padRight(4f).minWidth(28).growY().get());
-				 b.row();
-				 Image image = b.image().growX().get();
-				 b.update(() -> {
-					 image.setColor(selected == j ? colors[j] : Color.gray);
-				 });
-			 }, HopeStyles.clearb, () -> {
-				 if (selected != j && !transitional) {
-					 if (selected != -1) {
-						 Table last = tables[selected];
-						 last.actions(getActionOut(j), Actions.remove());
-						 transitional = true;
-						 // JSFunc.watch().watch("Last", () -> last);
-						 title.update(() -> {
-							 if (!last.hasActions()) {
-								 transitional = false;
-								 title.update(null);
-								 t.addAction(getActionIn(j));
-								 pane.setWidget(t);
-								 selected = j;
-							 }
-						 });
-					 } else {
-						 pane.setWidget(t);
-						 selected = j;
-					 }
-				 }
-			 }).self(c -> {
-				 if (titleWidth != -1)
-					 c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
-			 });;
+				 )).color(colors[j]).padLeft(4f)
+				 .padRight(4f).minWidth(28).growY().get());
+				b.row();
+				Cell<Image> image = b.image().growX();
+				b.update(() -> {
+					image.color(selected == j ? colors[j] : Color.gray);
+				});
+			}, HopeStyles.clearb, () -> {
+				if (selected != j && !transitional) {
+					if (selected != -1) {
+						Table last = tables[selected];
+						last.actions(getActionOut(j), Actions.remove());
+						transitional = true;
+						// JSFunc.watch().watch("Last", () -> last);
+						title.update(() -> {
+							if (!last.hasActions()) {
+								transitional = false;
+								title.update(null);
+								t.addAction(getActionIn(j));
+								pane.setWidget(t);
+								selected = j;
+							}
+						});
+					} else {
+						pane.setWidget(t);
+						selected = j;
+					}
+				}
+			}).self(c -> {
+				if (titleWidth != -1)
+					c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
+			});
+			;
 
 			if (++i % cols == 0) title.row();
 		}

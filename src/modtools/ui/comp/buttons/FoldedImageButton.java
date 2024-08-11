@@ -38,6 +38,9 @@ public class FoldedImageButton extends ImageButton {
 			}
 		});
 	}
+	public boolean isChecked() {
+		return checked;
+	}
 	public void fireCheck(boolean checked) {
 		fireCheck(checked, true);
 	}
@@ -62,7 +65,7 @@ public class FoldedImageButton extends ImageButton {
 			if (cell != null) cell.clearElement();
 		}
 	}
-	boolean checked;
+	private boolean checked;
 	public void setContainer(Cell<?> cell) {
 		this.cell = cell;
 		this.element = cell.get();

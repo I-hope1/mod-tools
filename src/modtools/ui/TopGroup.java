@@ -23,6 +23,7 @@ import mindustry.graphics.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
+import modtools.content.ui.ReviewElement;
 import modtools.events.ISettings;
 import modtools.struct.TaskSet;
 import modtools.ui.comp.*;
@@ -205,11 +206,11 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		// Draw.color(Color.white, 0.01f);
 		// Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
 		if (elem instanceof Table table) {
-			review_element.drawMargin(vec2, table);
-			review_element.drawPadding(elem, vec2, table);
+			ReviewElement.drawMargin(vec2, table);
+			ReviewElement.drawPadding(elem, vec2, table);
 		}
 		if (elem == drawPadElem && elem.parent instanceof Table table) {
-			review_element.drawPadding(elem, vec2, table);
+			ReviewElement.drawPadding(elem, vec2, table);
 		}
 
 		if (elem instanceof Group group) {

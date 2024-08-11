@@ -1,6 +1,8 @@
 package modtools.content.ui.design;
 
-public enum DesignTool {
+import modtools.editor.HTool;
+
+public enum DesignTool implements HTool {
 	move, selection, rectangle, pen, text, hand, eraser;
 
 	public boolean edit;

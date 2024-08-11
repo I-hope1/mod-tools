@@ -720,9 +720,19 @@ public class ReviewElement extends Content {
 			 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
 			 element instanceof Table table ? MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)) : null,
 			 element instanceof Table table ? MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)) : null,
-			 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null
+			 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null,
+
+			 element instanceof Label label ? MenuItem.with("label.center", Icon.boxSmall, "Label Center", l(label, Align.center)) : null,
+			 element instanceof Label label ? MenuItem.with("label.left", Icon.boxSmall, "Label Left", l(label, Align.left)) : null,
+			 element instanceof Label label ? MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)) : null,
+			 element instanceof Label label ? MenuItem.with("label.top", Icon.boxSmall, "Label Top", l(label, Align.top)) : null,
+			 element instanceof Label label ? MenuItem.with("label.bottom", Icon.boxSmall, "Label Bottom", l(label, Align.bottom)) : null
 			);
 		}
+		private static Runnable l(Label l, int align) {
+			return () -> l.setAlignment(align);
+		}
+
 		private static Runnable l(Table t, int align) {
 			return () -> {
 				t.align(align);

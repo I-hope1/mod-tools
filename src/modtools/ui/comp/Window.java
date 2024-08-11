@@ -219,14 +219,17 @@ public class Window extends Table implements Position {
 				button.getStyle().imageUp = isMaximize ? HopeIcons.normal : HopeIcons.maximize;
 			});
 		}
-		FillTable resize = getResizeFillTable();
+		FillTable[] resize = {null};
 
 		EventHelper.longPressOrRclick(
 		 titleTable.button(Icon.cancel,
 			 cancel_clearNonei, 32, this::hide)
 			.padLeft(4f).padRight(4f)
 			.get(),
-		 _ -> resize.show());
+		 _ -> {
+			 if (resize[0] == null) resize[0] = getResizeFillTable();
+			 resize[0].show();
+		 });
 
 		setup();
 	}

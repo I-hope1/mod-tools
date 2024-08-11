@@ -209,9 +209,7 @@ public class EventHelper {
 		}
 		public void clicked(InputEvent event, float x, float y) {
 			// 如果触发了长按，就不触发单击
-			if (longPress) return;
-
-			if (task.isScheduled() && pressed) boolc.get(false);
+			if (!longPress && task.isScheduled() && pressed) boolc.get(false);
 			task.cancel();
 		}
 	}

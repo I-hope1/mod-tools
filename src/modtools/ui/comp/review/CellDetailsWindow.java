@@ -163,8 +163,10 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			 // flush
 			 if (obj instanceof Table t) {
 				 t.layout();
+				 t.invalidate();
 			 } else if (obj instanceof Cell<?> c) {
 				 c.getTable().layout();
+				 c.getTable().invalidate();
 			 }
 		 })
 		 /** {@link Cell#style(Style)}会报错 */
@@ -179,7 +181,9 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 	private static <T> void addFloatSetter(
 	 T obj, Field jfield, CheckBox elem, boolean useInt) {
-		IntUI.addTooltipListener(elem, IntUI.tips("exact_setter"));
+		IntUI.addTooltipListener(elem, Core.bundle.has("cell." + jfield.getName()) ?
+		 IntUI.tips("cell." + jfield.getName()) + "\n" + IntUI.tips("exact_setter")
+		 : null);
 		EventHelper.longPressOrRclick(elem, _ -> {
 			IntUI.showSelectTable(elem, (p, _, _) -> {
 				Number defvalue = Reflect.get(obj, jfield);

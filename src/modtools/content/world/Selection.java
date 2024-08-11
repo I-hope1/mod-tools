@@ -118,7 +118,7 @@ public class Selection extends Content {
 		Contents.settings_ui.add(localizedName(), icon, new SettingsTable(data));
 	}
 
-	public void load() {
+	public void lazyLoad() {
 		fragSelect = new BackElement();
 		fragSelect.name = "SelectionElem";
 		// fragSelect.update(() -> fragSelect.toFront());
@@ -131,6 +131,9 @@ public class Selection extends Content {
 
 		loadUI();
 		loadFocusWindow();
+	}
+	public void load() {
+		loadSettings();
 	}
 
 	FocusWindow focusW;
@@ -287,8 +290,6 @@ public class Selection extends Content {
 		for (Entry<String, Label> label : tab.labels) {
 			label.value.setAlignment(Align.left);
 		}
-
-		loadSettings();
 	}
 	private static Predicate<Building> killCons() {
 		return b -> {

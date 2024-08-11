@@ -87,6 +87,7 @@ public class SettingsUI extends Content {
 
 	public void lazyLoad() {
 		ui = new Window(localizedName(), 390, 90, true);
+		Table prev = cont;
 		cont = new Table();
 		ui.cont.pane(Styles.smallPane, cont).grow().padLeft(6f);
 		cont.defaults().minWidth(375).padTop(20);
@@ -99,8 +100,9 @@ public class SettingsUI extends Content {
 			left().defaults().left();
 			ISettings.buildAll("blur", this, E_Blur.class);
 		}});
+		cont.add(prev).grow().row();
 
-		Core.app.post(() -> add("@mod-tools.others", Icon.listSmall,
+		add("@mod-tools.others", Icon.listSmall,
 		 new LimitTable() {{
 			 left().defaults().left();
 			 SettingsBuilder.main = this;
@@ -110,7 +112,7 @@ public class SettingsUI extends Content {
 			 ISettings.buildAll("", this, TSettings.class);
 			 // find()
 			 addElemValueLabel(this, "Bound Element",
-			  TopGroup::getDrawPadElem,
+				TopGroup::getDrawPadElem,
 				() -> TopGroup.setDrawPadElem(null),
 				TopGroup::setDrawPadElem,
 				TSettings.debugBounds::enabled);
@@ -164,7 +166,7 @@ public class SettingsUI extends Content {
 					 Updater.checkUpdate(b -> {});
 				 }).height(42).growX().colspan(2); */
 			 }).growX();
-		 }}));
+		 }});
 		all.forEach(cont -> {
 			if (!(cont instanceof SettingsUI)) {
 				addLoad(cont);
@@ -332,7 +334,7 @@ public class SettingsUI extends Content {
 				 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
 				String val;
 				if (integer) {
-					val = ((int)prov.get()) + "";
+					val = ((int) prov.get()) + "";
 				} else {
 					val = FormatHelper.fixed(prov.get(), 2);
 				}

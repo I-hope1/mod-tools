@@ -82,19 +82,19 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		checkboxField(cont, cell, "uniformY");
 		cont.row();
 		TextButtonStyle style = HopeStyles.flatBordert;
-		fnButton("Layout", style, runT(() -> cell.getTable().layout()));
-		fnButton("Invalidate", style, runT(() -> cell.getTable().invalidateHierarchy()));
+		fnButton("Layout", style, runT(() -> cell.getTable().layout()), false);
+		fnButton("Invalidate", style, runT(() -> cell.getTable().invalidateHierarchy()), false);
 		cont.row();
-		fnButton("GrowX", style, cell::growX);
-		fnButton("GrowY", style, cell::growY);
+		fnButton("GrowX", style, cell::growX, true);
+		fnButton("GrowY", style, cell::growY, true);
 		cont.row();
-		fnButton("Left", style, cell::left);
-		fnButton("Right", style, cell::right);
+		fnButton("Left", style, cell::left, true);
+		fnButton("Right", style, cell::right, true);
 		cont.row();
-		fnButton("Top", style, cell::top);
-		fnButton("Bottom", style, cell::bottom);
+		fnButton("Top", style, cell::top, true);
+		fnButton("Bottom", style, cell::bottom, true);
 		cont.row();
-		fnButton("Center", style, cell::center);
+		fnButton("Center", style, cell::center, true);
 		checkboxField(cont, cell, "endRow");
 		cont.row();
 		// cont.table(Tex.pane, t -> {
@@ -106,10 +106,14 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		ReviewElement.addFocusSource(this, () -> this, cell::get);
 
 	}
-	private void fnButton(String text, TextButtonStyle style, Runnable listener) {
+	private void fnButton(String text, TextButtonStyle style, Runnable listener, boolean flush) {
 		cont.button(text, style, () -> {
 			listener.run();
-			if (cl.getTable() != null) cl.getTable().layout();
+
+			if (flush && cl.getTable() != null) {
+				cl.getTable().layout();
+				cl.get().invalidate();
+			}
 		}).get().addListener(new ITooltip(() -> IntUI.tips("cell." + text)));
 	}
 	static Cell<Table> buildSetter(Table t, Cell<?> cell, String name) {

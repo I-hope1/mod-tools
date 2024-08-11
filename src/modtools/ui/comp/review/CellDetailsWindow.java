@@ -39,7 +39,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		return element.parent instanceof Table && ((Table) element.parent).getCell(element) != null;
 	}
 	public CellDetailsWindow(Cell<?> cell) {
-		super("cell");
+		super("cell", 220, 0);
 		this.cl = cell;
 
 		cont.table(Tex.pane, t -> {
@@ -181,9 +181,8 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 	private static <T> void addFloatSetter(
 	 T obj, Field jfield, CheckBox elem, boolean useInt) {
-		IntUI.addTooltipListener(elem, Core.bundle.has("cell." + jfield.getName()) ?
-		 IntUI.tips("cell." + jfield.getName()) + "\n" + IntUI.tips("exact_setter")
-		 : null);
+		IntUI.addTooltipListener(elem, (IntUI.hasTips("cell." + jfield.getName()) ?
+		 IntUI.tips("cell." + jfield.getName()) + "\n" : "") + IntUI.tips("exact_setter"));
 		EventHelper.longPressOrRclick(elem, _ -> {
 			IntUI.showSelectTable(elem, (p, _, _) -> {
 				Number defvalue = Reflect.get(obj, jfield);

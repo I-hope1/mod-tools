@@ -591,6 +591,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			}
 		}
 	}
+
+	public static HKeyCode switchWindowKey = HKeyCode.data.keyCode("switchWindow", () -> new HKeyCode(KeyCode.tab).ctrl());
 	/**
 	 * 电脑端用于切换窗口的事件侦听器
 	 * @see SwitchGestureListener
@@ -599,7 +601,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			// acquireShownWindows();
 			if (shownWindows.isEmpty()) return false;
-			if ((keycode == KeyCode.tab && Core.input.ctrl()) /* || (Vars.mobile && keycode == KeyCode.volumeDown) */) {
+			if ((switchWindowKey.isPress()) /* || (Vars.mobile && keycode == KeyCode.volumeDown) */) {
 				if (!K_once) {
 					resolveOnce();
 				}

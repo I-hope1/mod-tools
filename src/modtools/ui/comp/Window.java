@@ -245,7 +245,8 @@ public class Window extends Table implements Position {
 		sclListener.disabled0 = isMaximize;
 		if (moveListener != null) moveListener.disabled = sclListener.scling;
 	}
-	private FillTable getResizeFillTable() {
+
+	protected FillTable getResizeFillTable() {
 		return addFillTable(p -> {
 			ImageButtonStyle style = HopeStyles.flati;
 			final float      size  = 28;
@@ -366,6 +367,9 @@ public class Window extends Table implements Position {
 		return this;
 	}
 
+	/** 用于记录是否已经show过 */
+	private boolean hasPacked;
+
 	Hitter hitter;
 	void show0(Scene stage, Action action) {
 		if (this instanceof IHitter) {
@@ -382,7 +386,10 @@ public class Window extends Table implements Position {
 		topGroup.addChild(this);
 
 		if (action != null) addAction(action);
-		pack();
+		if (!hasPacked) {
+			pack();
+			hasPacked = true;
+		}
 
 		if (!Window.all.contains(this)) {
 			Window.all.add(this);

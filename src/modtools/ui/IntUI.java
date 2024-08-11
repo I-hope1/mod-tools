@@ -615,11 +615,15 @@ public class IntUI {
 	public static void addTooltipListener(Element element, String text) {
 		element.addListener(new ITooltip(t -> t.background(Tex.pane).add(text)));
 	}
+	public static final String TIP_PREFIX = "mod-tools.tips.";
+	public static boolean hasTips(String key) {
+		return Core.bundle.has(TIP_PREFIX + key);
+	}
 	public static String tips(String key) {
-		return Core.bundle.format("mod-tools.tips", Core.bundle.get("mod-tools.tips." + key));
+		return Core.bundle.format("mod-tools.tips", Core.bundle.get(TIP_PREFIX + key));
 	}
 	public static String tips(String key, String arg1) {
-		return Core.bundle.format("mod-tools.tips", Core.bundle.format("mod-tools.tips." + key, arg1));
+		return Core.bundle.format("mod-tools.tips", Core.bundle.format(TIP_PREFIX + key, arg1));
 	}
 
 

@@ -2,6 +2,7 @@ package modtools.content;
 
 import arc.Core;
 import arc.func.Cons;
+import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.input.KeyCode.KeyType;
 import arc.scene.*;
@@ -11,10 +12,11 @@ import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.Icon;
+import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.struct.LazyValue;
 import modtools.ui.*;
-import modtools.ui.comp.Window;
+import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.control.*;
@@ -87,7 +89,7 @@ public class KeyCodeSetter extends Content {
 	public static void clicked(Element el) {
 		el.fireClick();
 	}
-	/** 与{@link #getElementByKey(String)} 互为逆运算  */
+	/** 与{@link #getElementByKey(String)} 互为逆运算 */
 	public static String getBindKey(Button button) {
 		if (button.getScene() == null) return null;
 		Seq<String> sj = new Seq<>();
@@ -103,7 +105,7 @@ public class KeyCodeSetter extends Content {
 		});
 		return sj.isEmpty() ? null : sj.reverse().toString(".");
 	}
-	/** 与{@link #getBindKey(Button)} 互为逆运算  */
+	/** 与{@link #getBindKey(Button)} 互为逆运算 */
 	public static Button getElementByKey(String key) {
 		if (key == null || key.isEmpty()) return null;
 
@@ -170,7 +172,7 @@ public class KeyCodeSetter extends Content {
 				if (button != null) IntUI.positionTooltip(button, Align.topLeft, this, Align.bottomLeft);
 			});
 		}
-		/** 被用来定位的  */
+		/** 被用来定位的 */
 		Button         button;
 		Cons<HKeyCode> callback;
 		public void show(Button button, Cons<HKeyCode> callback) {
@@ -227,13 +229,57 @@ public class KeyCodeSetter extends Content {
 	}
 
 	Pattern pattern;
-	Window ui;
-	public void buildUI() {
+	Window  ui;
+	public void lazyLoad() {
 		ui = new Window(localizedName(), 120, 400, true);
 		Table cont = ui.cont;
-		cont.defaults().height(42).pad(4).growX();
-		cont.button("Bind key", Icon.pencilSmall, Styles.flatt, this::selectButton);
+
+		IntTab tab = new IntTab(-1, new String[]{"Custom", "Internal"}, new Color[]{Color.acid, Color.sky},
+		 new Table[]{customTable(), interanlTable()});
+
+		new Search((_, text) -> pattern = text).build(cont, null);
+
+		cont.add(tab.build()).grow();
+	}
+	private Table interanlTable() {
+		FilterTable<String> pane = new FilterTable<>();
+		pane.addPatternUpdateListener(() -> pattern);
+		// 监控keys
+		Cons<KeyCodeData> rebuild = new Cons<>() {
+			public void get(KeyCodeData data) {
+				if (data == HKeyCode.data) {
+					pane.clear();
+					pane.add("ROOT").color(Pal.accent).expandX().left().colspan(2).row();
+					pane.image().color(Pal.accent).fillX().colspan(2).row();
+				}
+				data.each((key, keyCode) -> {
+					if (keyCode == elementKeyCode) return;
+					if (keyCode instanceof KeyCodeData d) {
+						Core.app.post(() -> {
+							pane.add(Strings.capitalize(key)).color(Pal.accent).expandX().left().colspan(2).row();
+							pane.image().color(Pal.accent).fillX().colspan(2).row();
+
+							get(d);
+						});
+						return;
+					}
+					pane.bind(key);
+					pane.add(key).left();
+					keyCodeButton(pane, new HKeyCode[]{data.keyCode(key)}, new String[]{key});
+					pane.row();
+					pane.unbind();
+				});
+			}
+		};
+		rebuild.get(HKeyCode.data);
+		return pane;
+
+	}
+	private Table customTable() {
+		Table cont = new Table();
+
 		FilterTable<String[]> pane = new FilterTable<>();
+		pane.addPatternUpdateListener(() -> pattern);
 		// 监控keys
 		Runnable rebuild = () -> {
 			pane.clear();
@@ -252,15 +298,7 @@ public class KeyCodeSetter extends Content {
 				vl.elementType = Button.class;
 				vl.addCaptureListener(new ITooltip(() -> elementKey[0] + "\n" + EventHelper.longPressOrRclickKey() + " to edit"));
 				pane.add(vl).size(220, 45).labelAlign(Align.left);
-				TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
-				 .size(100, 45).get();
-				button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {
-					button.setText(newKeyCode.toString());
-					elementKeyCode.setKeyCode(
-					 elementKey[0],
-					 keyCode[0] = newKeyCode
-					);
-				}));
+				keyCodeButton(pane, keyCode, elementKey);
 				var current = pane.getCurrent();
 				pane.button(Icon.trash, Styles.flati, () -> IntUI.shiftIgnoreConfirm(() -> {
 					elementKeyCode.remove(elementKey[0]);
@@ -269,14 +307,29 @@ public class KeyCodeSetter extends Content {
 				pane.row();
 			});
 		};
+		rebuild.run();
+
+		// 正式开始布局
+
+		cont.defaults().height(42).pad(4).growX();
+		cont.button("Bind key", Icon.pencilSmall, Styles.flatt, this::selectButton);
 		cont.button("Flush", Icon.refreshSmall, Styles.flatt, rebuild).row();
 
 		cont.defaults().colspan(2).height(CellTools.unset);
-		new Search((_, text) -> pattern = text).build(cont, null);
 
-		rebuild.run();
-		pane.addPatternUpdateListener(() -> pattern);
-		cont.pane(Styles.smallPane, pane).grow();
+		cont.add(pane).grow();
+		return cont;
+	}
+	private static void keyCodeButton(FilterTable<?> pane, HKeyCode[] keyCode, String[] elementKey) {
+		TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
+		 .minWidth(100).height(45).growX().get();
+		button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {
+			button.setText(newKeyCode.toString());
+			elementKeyCode.setKeyCode(
+			 elementKey[0],
+			 keyCode[0] = newKeyCode
+			);
+		}));
 	}
 	public void selectButton() {
 		topGroup.requestSelectElem(TopGroup.defaultDrawer, Button.class, button -> {
@@ -284,7 +337,6 @@ public class KeyCodeSetter extends Content {
 		});
 	}
 	public void build() {
-		if (ui == null) buildUI();
 		ui.show();
 	}
 }

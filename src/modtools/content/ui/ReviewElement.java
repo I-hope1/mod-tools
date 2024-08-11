@@ -173,9 +173,11 @@ public class ReviewElement extends Content {
 		if (checkA(padColor)) return;
 		Draw.color(padColor);
 		Cell<?> cl = table.getCell(elem);
-		if (cl == null) {
-			return;
+		if (cl != null) {
+			drawPadding(elem, vec2, cl);
 		}
+	}
+	public static void drawPadding(Element elem, Vec2 vec2, Cell<?> cl) {
 		float padLeft = Reflect.get(Cell.class, cl, "padLeft"),
 		 padTop = Reflect.get(Cell.class, cl, "padTop"),
 		 padBottom = Reflect.get(Cell.class, cl, "padBottom"),
@@ -1176,9 +1178,8 @@ public class ReviewElement extends Content {
 			Table table  = cl.getTable();
 			float spanW  = table.getColumnWidth(column), spanH = table.getRowHeight(row);
 
-			// 父元素的坐标
-			Vec2 offset = ElementUtils.getAbsolutePos(table);
-
+			// cell的元素的坐标
+			Vec2 pos = ElementUtils.getAbsolutePos(focus);
 
 			//逆运算下面过程
 			/* align = c.align;
@@ -1202,6 +1203,9 @@ public class ReviewElement extends Content {
 			 padLeft = CellTools.padLeft(cl),
 			 padRight = CellTools.padRight(cl);
 
+			// 渲染padding
+			// drawMarginOrPad(pos, focus, true, padLeft, padTop, padRight, padBottom);
+
 			// 左下角为 (0, 0)
 			float spanX =
 			 // left
@@ -1218,15 +1222,16 @@ public class ReviewElement extends Content {
 				 // center
 				 (focus.getHeight() - spanH - padBottom + padTop) / 2f;
 
-			float thick = 3f;
+			float x = pos.x, y = pos.y;
+			float thick = 2f;
 			Lines.stroke(thick);
 			Draw.color(Pal.remove);
-			Drawf.dashRectBasic(focus.x + spanX + offset.x, focus.y + spanY + offset.y, spanW + thick, spanH + thick);
+			Drawf.dashRectBasic(x + spanX - thick / 2f, y + spanY - thick / 2f, spanW + thick, spanH + thick);
 
-			thick = 2f;
+			thick = 3f;
 			Lines.stroke(thick);
-			Draw.color(Pal.heal);
-			Drawf.dashRectBasic(focus.x + offset.x, focus.y + offset.y, focus.getWidth() + thick, focus.getHeight() + thick);
+			Draw.color(Color.royal);
+			Drawf.dashRectBasic(x - thick / 2f, y - thick / 2f, focus.getWidth() + thick, focus.getHeight() + thick);
 		}
 	}
 }

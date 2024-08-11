@@ -33,6 +33,7 @@ import modtools.ui.comp.*;
 import modtools.ui.comp.Window.IDisposable;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.input.*;
+import modtools.ui.comp.input.area.AutoTextField;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
 import modtools.ui.comp.review.CellDetailsWindow;
@@ -60,10 +61,12 @@ import static modtools.ui.IntUI.*;
 import static modtools.utils.ui.CellTools.unset;
 import static modtools.utils.ui.FormatHelper.fixed;
 
-/** It should be `InspectElement`, but it's too late. */
+/**
+ * Ctrl+Shift+C审查元素
+ * @author I-hope1 */
 public class ReviewElement extends Content {
 	@DataColorFieldInit(data = "", needSetting = true)
-	public int
+	public static int
 	 // 浅绿色
 	 padColor        = 0x8C_E9_9A_75,
 	 padTextColor    = Color.green.rgba(),
@@ -134,10 +137,10 @@ public class ReviewElement extends Content {
 
 	public HKeyCode inspectKeycode     =
 	 keyCodeData().keyCode("inspect", () -> new HKeyCode(KeyCode.c).ctrl().shift())
-		.applyToScene(true, this::build);
+		.applyToScene(true, this::build0);
 	public HKeyCode debugBoundsKeyCode =
 	 keyCodeData().keyCode("debugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt())
-		.applyToScene(true, () -> TSettings.debugBounds.toggle());
+		.applyToScene(true, TSettings.debugBounds::toggle);
 
 	public HKeyCode selectDebugBoundsKeyCode =
 	 keyCodeData().keyCode("selectDebugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt().shift())
@@ -145,17 +148,16 @@ public class ReviewElement extends Content {
 			if (topGroup.isSelecting()) return;
 
 			TSettings.debugBounds.set(true);
-			topGroup.requestSelectElem(TopGroup.defaultDrawer, topGroup::setDrawPadElem);
+			topGroup.requestSelectElem(TopGroup.defaultDrawer, TopGroup::setDrawPadElem);
 		});
 
 	ReviewFocusTask task;
 	public void load() {
 		task = new ReviewFocusTask();
 
-		loadSettings();
 		topGroup.focusOnElement(task);
-
 		if (!DEBUG) TopGroup.classBlackList.add(ReviewElementWindow.class);
+		loadSettings();
 	}
 	public Button buildButton(boolean isSmallized) {
 		Button btn = buildButton(isSmallized, () -> task.isSelecting());
@@ -164,7 +166,7 @@ public class ReviewElement extends Content {
 		return btn;
 	}
 
-	public void drawPadding(Element elem, Vec2 vec2, Table table) {
+	public static void drawPadding(Element elem, Vec2 vec2, Table table) {
 		/* 如果a = 0就返回 */
 		if (checkA(padColor)) return;
 		Draw.color(padColor);
@@ -184,7 +186,7 @@ public class ReviewElement extends Content {
 		return (color & 0xFF) == 0;
 	}
 
-	public void drawMargin(Vec2 vec2, Table table) {
+	public static void drawMargin(Vec2 vec2, Table table) {
 		if (checkA(marginColor)) return;
 		Draw.color(marginColor);
 
@@ -193,7 +195,7 @@ public class ReviewElement extends Content {
 		 table.getMarginRight(), table.getMarginBottom());
 	}
 	/** @param pad true respect 外边距 */
-	private void drawMarginOrPad(
+	private static void drawMarginOrPad(
 	 Vec2 vec2, Element elem, boolean pad,
 	 float left, float top, float right, float bottom) {
 		left = TopGroup.clamp(vec2, left, true);
@@ -667,7 +669,7 @@ public class ReviewElement extends Content {
 				 ElementUtils.quietScreenshot(element);
 			 }),
 			 CheckboxList.withc("debug.bounds", Icon.adminSmall, "@settings.debugbounds",
-				() -> topGroup.drawPadElem == element, () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
+				() -> TopGroup.getDrawPadElem() == element, () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
 			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
 			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
 			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
@@ -783,7 +785,7 @@ public class ReviewElement extends Content {
 				if (!field.isValid()) return;
 				label.setText(field.getText());
 				floatc.get(NumberHelper.asFloat(field.getText()));
-			}, t, TextField::new);
+			}, t, AutoTextField::new);
 		});
 	}
 

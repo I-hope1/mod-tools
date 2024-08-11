@@ -9,7 +9,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.*;
@@ -68,12 +68,23 @@ public abstract class Content {
 	public final Data data() {
 		return data == null ? data = SETTINGS.child(getSettingName()) : data;
 	}
-	/** 加载  */
+	/** 加载 */
 	public void load() {
 	}
 
+	private boolean lazyLoaded = false;
+	/** 当build构建前，才加载 */
+	public void lazyLoad() { }
+
 	/** 点击按钮触发的事件 */
 	public void build() {
+	}
+	public final void build0() {
+		if (!lazyLoaded) {
+			lazyLoad();
+			lazyLoaded = true;
+		}
+		build();
 	}
 
 	public String toString() {
@@ -110,11 +121,12 @@ public abstract class Content {
 		}
 		String     localizedName = localizedName();
 		TextButton button        = new TextButton(localizedName, (TextButtonStyle) style);
-		button.add(new Image(icon)).size(icon == Styles.none ? 0 : 20);
+		button.add(new Image(icon)).size(icon == Styles.none ? 0 : 20).padRight(8f);
 		button.getCells().reverse();
-		button.clicked(() -> Tools.runShowedException(this::build));
+		button.clicked(() -> Tools.runShowedException(this::build0));
 		button.update(() -> button.setColor(button.isDisabled() ? Color.gray : Color.white));
 		button.getLabel().setSize(0.9f);
+		button.getLabel().setAlignment(Align.left);
 		return button;
 	}
 }

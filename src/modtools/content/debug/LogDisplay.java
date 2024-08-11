@@ -13,12 +13,14 @@ import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import mindustry.ui.fragments.ConsoleFragment;
+import modtools.content.Content;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
+import modtools.ui.comp.input.area.TextAreaTab;
+import modtools.ui.comp.input.highlight.JSSyntax;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.AutoWrapListener;
-import modtools.content.Content;
 import modtools.utils.io.FileUtils;
 
 import static modtools.utils.Tools.readFiOrEmpty;
@@ -57,7 +59,8 @@ public class LogDisplay extends Content {
 				() -> Vars.ui.consolefrag.clearMessages())
 			).height(42).growX().row();
 			t.pane(new LimitTable(MessageBuilder::new))
-			 .colspan(2).grow().with(pane -> pane.update(new AutoWrapListener(pane)));
+			 .colspan(2).grow().with(pane -> pane.update(new AutoWrapListener(pane))).row();
+			t.add(new TextAreaTab("", JSSyntax::new));
 			t.invalidateHierarchy();
 		}), new LimitTable(p -> {
 			Seq<Fi> list = new Seq<>(crashesDir().list()).sort(f -> -f.lastModified());
@@ -133,9 +136,11 @@ public class LogDisplay extends Content {
 		return Core.graphics.isPortrait() ? 400 : 600;
 	}
 
+	public void lazyLoad() {
+		rebuild();
+	}
 	public void build() {
-		if (ui == null) rebuild();
-		else ui.toFront();
+		ui.toFront();
 		Core.app.post(() -> ui.show());
 	}
 }

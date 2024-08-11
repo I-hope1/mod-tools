@@ -151,7 +151,7 @@ public class Tester extends Content {
 	MyTextArea  area;
 
 	public boolean loop = false;
-	public Object  res = ValueLabel.unset;
+	public Object  res  = ValueLabel.unset;
 
 	private boolean
 	 strict = false,
@@ -190,7 +190,7 @@ public class Tester extends Content {
 	public void build(Table table) {
 		if (ui == null) _load();
 
-		textarea = new TextAreaTab("");
+		textarea = new TextAreaTab("", d -> new JSSyntax(d, customScope));
 		Table _cont = new Table();
 		if (!Vars.mobile) textarea.addListener(new EscapeAndAxesClearListener(area));
 
@@ -307,7 +307,6 @@ public class Tester extends Content {
 		bottomBar(table, textarea);
 	}
 	private void addListenerToArea(TextAreaTab textarea) {
-		textarea.syntax = new JSSyntax(textarea, customScope);
 		area = textarea.getArea();
 		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {

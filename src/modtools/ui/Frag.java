@@ -54,6 +54,7 @@ public class Frag extends Table {
 		update(this::pack);
 		row();
 
+		final int eachHeight = 42;
 		container = new ScrollPane(new LimitTable(table -> {
 			if (Content.all.isEmpty()) Contents.load();
 			Content.all.forEach(content -> {
@@ -62,7 +63,7 @@ public class Frag extends Table {
 				table.image().color(Pal.gray).growX().row();
 				table.add(content.buildButton(false))
 				 .marginLeft(6f)
-				 .size(120, 40);
+				 .size(130, eachHeight);
 				Events.fire(content);
 				if (content.loadable()) Tools.runLoggedException(content::load);
 				table.row();
@@ -70,7 +71,7 @@ public class Frag extends Table {
 		}), HopeStyles.noBarPane);
 		// lastIndex = getCells().indexOf(cell);
 		container.update(() -> container.setOverscroll(false, false));
-		cell = BindCell.ofConst(add(container).size(120, 40 * 5 + 1));
+		cell = BindCell.ofConst(add(container).height(eachHeight * 5 + 1));
 
 		left().bottom();
 		topGroup.addChild(this);

@@ -20,7 +20,7 @@ import java.util.*;
 import static mindustry.Vars.ui;
 
 public class DropFile {
-	public static final String LABLE_NAME = "ImportFromSelector";
+	public static final String LABLE_NAME = "ImportFromDrop";
 	public static boolean valid() {
 		try {
 			Class.forName("javax.swing.JFrame");

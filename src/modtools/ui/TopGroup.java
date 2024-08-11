@@ -58,8 +58,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.reset(d, Color.white)),
 		;
 		// overrideScene
-		TSettings() {}
-		TSettings(Class<?> c, Object... args) {}
+		TSettings() { }
+		TSettings(Class<?> c, Object... args) { }
 	}
 	/* static {
 		if (overrideScene.enabled()) {
@@ -102,14 +102,16 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 windows = new NGroup("windows"),
 	 frag    = new NGroup("frag"),
 	 infos   = new NGroup("infos");
-	public interface IInfo {}
+	public interface IInfo { }
 	final Table end = new MyEnd();
 
-	public Element drawPadElem = null;
-	public void setDrawPadElem(Element drawPadElem) {
+	private static Element drawPadElem = null;
+	public static void setDrawPadElem(Element drawPadElem) {
 		debugBounds.set(drawPadElem != null);
-		this.drawPadElem = drawPadElem;
+		TopGroup.drawPadElem = drawPadElem;
 	}
+	public static Element getDrawPadElem() { return drawPadElem; }
+
 	public void draw() {
 		setTransform(false);
 		if (elementDrawer != null) elementDrawer.drawMask();
@@ -182,8 +184,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		if (checkCullingArea.enabled()) {
 			elem.localToParentCoordinates(tmp1.set(0, 0));
 			if (elem.cullable && elem.parent.getCullingArea() != null &&
-					!elem.parent.getCullingArea().overlaps(tmp1.x, tmp1.y,
-					 elem.getWidth(), elem.getHeight())) return;
+			    !elem.parent.getCullingArea().overlaps(tmp1.x, tmp1.y,
+			     elem.getWidth(), elem.getHeight())) return;
 		}
 
 		float thick = elem instanceof Group ? 2 : 1;
@@ -202,11 +204,12 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		// Draw.color(Color.white, 0.01f);
 		// Fill.crect(vec2.x, vec2.y, elem.getWidth(), elem.getHeight());
-		if (elem instanceof Table) {
-			review_element.drawMargin(vec2, (Table) elem);
+		if (elem instanceof Table table) {
+			review_element.drawMargin(vec2, table);
+			review_element.drawPadding(elem, vec2, table);
 		}
-		if (elem.parent instanceof Table) {
-			review_element.drawPadding(elem, vec2, (Table) elem.parent);
+		if (elem == drawPadElem && elem.parent instanceof Table table) {
+			review_element.drawPadding(elem, vec2, table);
 		}
 
 		if (elem instanceof Group group) {
@@ -363,7 +366,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 * @param callback    选择元素后的回调
 	 */
 	public <T extends Element> void requestSelectElem(Drawer drawer, Class<T> elementType,
-																										Cons<T> callback) {
+	                                                  Cons<T> callback) {
 		if (callback == null) throw new IllegalArgumentException("'callback' is null");
 		if (isSelecting) throw new IllegalStateException("Cannot call it twice.");
 		selected = null;
@@ -404,7 +407,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	/** 用于获取元素 */
 	private void addSceneListener() {
 		scene.root.getCaptureListeners().insert(0, new InputListener() {
-			private boolean locked = false;
+			private boolean locked      = false;
 			private boolean cancelEvent = false;
 
 			private final Element mask = new FillElement() {
@@ -461,7 +464,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 				}
 
 				if (event.listenerActor.isDescendantOf(searchBlackList::contains)
-						|| !isSelecting) {
+				    || !isSelecting) {
 					return false;
 				}
 
@@ -549,9 +552,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 * 这会被添加到TopGroup的最底层
 	 * @see modtools.ui.TopGroup#addChild
 	 */
-	public static class BackElement extends Element implements BackInterface {}
+	public static class BackElement extends Element implements BackInterface { }
 
-	public interface BackInterface {}
+	public interface BackInterface { }
 
 	//----------
 
@@ -784,20 +787,20 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 	}
 
-	public static class BoolfDrawTasks extends TaskSet {}
+	public static class BoolfDrawTasks extends TaskSet { }
 
 	public interface ResidentDrawTask {
-		default void backDraw() {}
+		default void backDraw() { }
 
-		default void elemDraw() {}
+		default void elemDraw() { }
 		/**
 		 * 在{@code drawer}渲染之前渲染
 		 * @param drawer 等一会会渲染的元素
 		 */
-		default void beforeDraw(Window drawer) {}
-		default void endDraw() {}
-		default void init() {}
-		default void afterAll() {}
+		default void beforeDraw(Window drawer) { }
+		default void endDraw() { }
+		default void init() { }
+		default void afterAll() { }
 	}
 
 	public static class NGroup extends Group {

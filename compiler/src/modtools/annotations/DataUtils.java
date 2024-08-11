@@ -1,15 +1,13 @@
 package modtools.annotations;
 
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.util.List;
 
 import static modtools.annotations.BaseProcessor.*;
 
 public interface DataUtils extends NameString {
-	default JCMethodInvocation selfData(Type type) {
-		return mMaker.Apply(List.nil(), mMaker.Select(mMaker.This(type), ns("data")), List.nil());
+	default JCFieldAccess selfData(String typeName) {
+		return mMaker.Select(mMaker.Ident(ns(typeName)), ns("data"));
 	}
 	ClassSymbol[] symbols = {
 	 null/* MySettings */,
@@ -34,8 +32,8 @@ public interface DataUtils extends NameString {
 	default JCFieldAccess internalData(String key) {
 		return mMaker.Select(mMaker.Ident(C_MySettings()), ns(key));
 	}
-	default JCExpression getData(String data, Type type) {
-		return data.isEmpty() ? selfData(type) : internalData(data);
+	default JCExpression getData(String data, String typeName) {
+		return data.isEmpty() ? selfData(typeName) : internalData(data);
 	}
 
 }

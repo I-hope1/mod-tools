@@ -2,7 +2,7 @@
 package modtools.ui.comp.input.area;
 
 import arc.Core;
-import arc.func.Boolf2;
+import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
@@ -93,6 +93,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			area.setFirstLineShowing(0);
 		});
 		Time.runTask(2, area::updateDisplayText);
+	}
+
+	public TextAreaTab(String text, Func<TextAreaTab, Syntax> syntaxFunc) {
+		this(text);
+		syntax = syntaxFunc.get(this);
 	}
 	private LinesShow getLinesShow() {
 		linesShow = new LinesShow(area);

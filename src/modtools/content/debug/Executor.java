@@ -2,7 +2,6 @@ package modtools.content.debug;
 
 import arc.func.*;
 import arc.graphics.Color;
-import arc.input.KeyCode;
 import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
@@ -15,6 +14,7 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.content.Content;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
 import modtools.events.TaskNode.JSRun;
@@ -23,12 +23,11 @@ import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.input.JSRequest;
-import modtools.content.Content;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
-import modtools.utils.*;
-import modtools.utils.ui.ReflectTools;
+import modtools.utils.JSFunc;
 import modtools.utils.search.FilterTable;
+import modtools.utils.ui.ReflectTools;
 import rhino.BaseFunction;
 
 public class Executor extends Content {
@@ -137,12 +136,6 @@ public class Executor extends Content {
 			 .add(node.code == null ? null : MenuItem.with("copy.code", Icon.copySmall, "cpy code", () -> {
 				 if (node.code != null) JSFunc.copyText(node.code);
 			 })));
-			button.addListener(new ClickListener() {
-				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-					event.cancel();
-					return false;
-				}
-			});
 			button.table(right -> {
 				if (node.isResubmitted()) {
 					right.right().defaults().right().size(42);

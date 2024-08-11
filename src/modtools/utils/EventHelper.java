@@ -116,13 +116,13 @@ public class EventHelper {
 	longPressOrRclick(Element listener, Class<T> target, Consumer<T> cons) {
 		listener.addListener(mobile ? new LongPressListener(null, IntUI.DEF_LONGPRESS) {
 			public void longPress(InputEvent event, float x, float y) {
-				T targetActor = ElementUtils.findParent(event.targetActor,target);
+				T targetActor = ElementUtils.findParent(event.targetActor, target);
 				if (targetActor != null) cons.accept(targetActor);
 				event.stop();
 			}
 		} : new ClickListener(KeyCode.mouseRight) {
 			public void clicked(InputEvent event, float x, float y) {
-				T targetActor = ElementUtils.findParent(event.targetActor,target);
+				T targetActor = ElementUtils.findParent(event.targetActor, target);
 				if (targetActor != null) cons.accept(targetActor);
 				event.stop();
 			}
@@ -194,6 +194,9 @@ public class EventHelper {
 				return true;
 			}
 			return false;
+		}
+		public void touchDragged(InputEvent event, float x, float y, int pointer) {
+			if (mouseVec.dst(last) >= IntUI.MAX_OFF && task != null) task.cancel();
 		}
 		public void longPress(InputEvent event, float x, float y) {
 			boolc.get(true);

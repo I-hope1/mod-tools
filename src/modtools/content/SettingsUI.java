@@ -35,7 +35,6 @@ import modtools.utils.ui.FormatHelper;
 
 import java.lang.reflect.Field;
 
-import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.ui.CellTools.rowSelf;
 
@@ -86,7 +85,7 @@ public class SettingsUI extends Content {
 		cont.add(t).growX().padTop(6).row();
 	}
 
-	public void load() {
+	public void lazyLoad() {
 		ui = new Window(localizedName(), 390, 90, true);
 		cont = new Table();
 		ui.cont.pane(Styles.smallPane, cont).grow().padLeft(6f);
@@ -111,9 +110,9 @@ public class SettingsUI extends Content {
 			 ISettings.buildAll("", this, TSettings.class);
 			 // find()
 			 addElemValueLabel(this, "Bound Element",
-				() -> topGroup.drawPadElem,
-				() -> topGroup.setDrawPadElem(null),
-				topGroup::setDrawPadElem,
+			  TopGroup::getDrawPadElem,
+				() -> TopGroup.setDrawPadElem(null),
+				TopGroup::setDrawPadElem,
 				TSettings.debugBounds::enabled);
 			 ISettings.buildAll("", this, E_Game.class);
 			 ISettings.buildAll("", this, E_Extending.class);

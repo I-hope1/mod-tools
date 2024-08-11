@@ -23,7 +23,7 @@ import static modtools.content.SettingsUI.SettingsBuilder.*;
 public class TaskNode {
 	public static final float perTick = 1 / 60f;
 
-	public String               code;
+	public String              code;
 	public Prov<Seq<MenuItem>> menuList;
 	public TaskNode code(String code) {
 		this.code = code;
@@ -162,7 +162,7 @@ public class TaskNode {
 		numberi("@task.repeatcount", i -> repeatCount = i, () -> repeatCount, -1, Integer.MAX_VALUE);
 		IntUI.showSelectTable(mouseVec.cpy(), (p, hide, search) -> {
 			p.add(main()).grow();
-		}, false).hidden(() -> main().clearChildren());
+		}, false);
 		SettingsBuilder.clearBuild();
 	}
 
@@ -183,13 +183,13 @@ public class TaskNode {
 	}
 
 	public static class JSRun extends Task {
-		public final String code;
-		public final Script script;
+		public final String     code;
+		public final Script     script;
 		public final Scriptable scope;
 		public JSRun(String code, Scriptable scope) {
 			this.code = code;
 			this.scope = scope;
-			script = IScript.cx.compileString(code,  "<custom>", 1);
+			script = IScript.cx.compileString(code, "<custom>", 1);
 		}
 		public void run() {
 			script.exec(IScript.cx, scope);

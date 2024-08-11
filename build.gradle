@@ -54,10 +54,10 @@ dependencies {
 			"_libs/AndroidField.jar"
 	)
 
-//	annotationProcessor ("com.github.EB-wilson.JavaDynamilizer:apt:$jderVersion")
-//	implementation("com.github.EB-wilson.JavaDynamilizer:annotations:$jderVersion")
-//	implementation("com.github.EB-wilson.JavaDynamilizer:core:$jderVersion")
-//	implementation("com.github.EB-wilson.JavaDynamilizer:baseimpl:$jderVersion")
+//	annotationProcessor ("com.github.EB-wilson.JavaDynamilizer:apt:$JDERVersion")
+//	implementation("com.github.EB-wilson.JavaDynamilizer:annotations:$JDERVersion")
+//	implementation("com.github.EB-wilson.JavaDynamilizer:core:$JDERVersion")
+//	implementation("com.github.EB-wilson.JavaDynamilizer:baseimpl:$JDERVersion")
 //	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 //	compileOnly "com.github.EB-wilson.UniverseCore:core:$uncVersion"
 

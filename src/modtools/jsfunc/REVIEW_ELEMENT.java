@@ -20,6 +20,6 @@ public interface REVIEW_ELEMENT {
 		topGroup.setDrawPadElem(elem);
 	}
 	static void toggleDrawPadElem(Element elem) {
-		topGroup.setDrawPadElem(topGroup.drawPadElem == elem ? null : elem);
+		TopGroup.setDrawPadElem(TopGroup.getDrawPadElem() == elem ? null : elem);
 	}
 }

@@ -11,12 +11,12 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.Image;
 import arc.scene.ui.layout.*;
 import arc.struct.ObjectMap;
-import arc.util.Structs;
+import arc.util.*;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.*;
 import mindustry.gen.Tex;
 import modtools.jsfunc.type.CAST;
-import modtools.ui.comp.ModifiableLabel;
+import modtools.ui.comp.*;
 import modtools.content.ui.ShowUIList;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
@@ -29,6 +29,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 	public T template;
 	float[] horizontalLines = new float[]{0, 0.5f, 1f}, verticalLines = new float[]{0, 0.5f, 1f};
 	VirtualGroup virtualGroup = new VirtualGroup();
+	TransformTable menuTable = new TransformTable(virtualGroup, Align.topLeft);
 	public DesignTable(T template) {
 		this.template = template;
 		init();
@@ -74,6 +75,7 @@ public class DesignTable<T extends Group> extends WidgetGroup {
 					return false;
 				}
 				selected.toFront();
+				menuTable.setTarget(selected);
 				last.set(selected.x, selected.y);
 				delta.set(x, y);
 				return true;

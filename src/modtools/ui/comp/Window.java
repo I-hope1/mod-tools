@@ -471,7 +471,7 @@ public class Window extends Table implements Position {
 	}
 
 	// 用于存储最小/大化前的位置和大小
-	public Rect    lastRect        = new Rect();
+	public Rect lastRect = new Rect();
 
 	public ObjectSet<RunListener> maxlisteners = new ObjectSet<>();
 	public boolean                isMaximize   = false, lastMaximize = false;
@@ -526,8 +526,10 @@ public class Window extends Table implements Position {
 			moveAndScaleAnimated(x, y + lastRect.height - topHeight,
 			 getMinWidth(), topHeight);
 
-			getCell(cont).set(BindCell.UNSET_CELL);
-			cont.remove();
+			addAction(Actions.run(() -> {
+				getCell(cont).set(BindCell.UNSET_CELL);
+				cont.remove();
+			}));
 			if (!noButtons) Tools.runIgnoredException(() -> {
 				getCell(buttons).set(BindCell.UNSET_CELL);
 				buttons.remove();
@@ -700,8 +702,10 @@ public class Window extends Table implements Position {
 		void fire(boolean status);
 	}
 
-	/** 窗口会自动销毁
-	 * 而且新建就{@link #show()} */
+	/**
+	 * 窗口会自动销毁
+	 * 而且新建就{@link #show()}
+	 */
 	public interface IDisposable {
 		default void clearAll() {
 			if (!(this instanceof Group g)) return;

@@ -14,6 +14,7 @@ import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import modtools.ui.*;
+import modtools.ui.IntUI.ITooltip;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.IDisposable;
 import modtools.ui.comp.input.MyLabel;
@@ -106,7 +107,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		cont.button(text, style, () -> {
 			listener.run();
 			if (cl.getTable() != null) cl.getTable().layout();
-		});
+		}).get().addListener(new ITooltip(() -> IntUI.tips("cell." + text)));
 	}
 	static Cell<Table> buildSetter(Table t, Cell<?> cell, String name) {
 		return t.add(ReviewElement.floatSetter(null, () -> FormatHelper.fixed(Reflect.get(Cell.class, cell, name)), f -> {
@@ -129,7 +130,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 	static <T extends Number> Cell<Table> buildWithName(Table t, Cell cell, String name,
 	                                                    Func<Float, T> valueOf) {
-		Table table = ReviewElement.floatSetter(name + ": ",
+		Table table = ReviewElement.floatSetter(Strings.capitalize(name) + ": ",
 		 () -> fixedAny(Reflect.get(Cell.class, cell, name)),
 		 f -> {
 			 Reflect.set(Cell.class, cell, name, valueOf.get(f));
@@ -163,7 +164,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
 		 .with(chk -> {
 			 if (valueType == float.class || valueType == int.class) {
-				 addFloatSetter(obj, field,chk, valueType == int.class);
+				 addFloatSetter(obj, field, chk, valueType == int.class);
 			 }
 		 }).checked(_ -> getChecked(ctype, obj, key))
 		 .fill(false)

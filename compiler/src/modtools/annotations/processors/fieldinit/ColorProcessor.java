@@ -21,7 +21,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 			JCVariableDecl     field = (JCVariableDecl) trees.getTree(element);
 			String             key   = field.name.toString().substring(anno.fieldPrefix().length());
 			JCExpression       init  = field.init;
-			JCExpression       data  = getData(anno.data(), decl.sym.type);
+			JCExpression       data  = getData(anno.data(), "Settings");
 			field.init = mMaker.Apply(
 			 List.nil(),
 			 mMaker.Select(data,

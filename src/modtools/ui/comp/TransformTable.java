@@ -41,6 +41,9 @@ public class TransformTable extends Table {
 			return false;
 		});
 	}
+	public void setTarget(Element element) {
+		target = element;
+	}
 	public void act(float delta) {
 		super.act(delta);
 

@@ -1,21 +1,12 @@
 package modtools.ui.windows.utils;
 
-import arc.Core;
-import arc.scene.ui.*;
-import arc.scene.ui.layout.WidgetGroup;
-import arc.struct.Seq;
-import arc.util.Align;
-import mindustry.gen.*;
-import modtools.IntVars;
-import modtools.content.ui.design.DesignTable;
-import modtools.content.ui.design.DesignTable.*;
-import modtools.jsfunc.INFO_DIALOG;
-import modtools.ui.HopeStyles;
-import modtools.ui.menu.*;
+import arc.scene.ui.CheckBox;
+import mindustry.ui.dialogs.BaseDialog;
+import modtools.content.ui.design.DesignView;
 
 public class DesignHelper {
 	public static void design() {
-		DesignTable<?> table = new DesignTable<>(new WidgetGroup());
+		/* DesignTable<?> table = new DesignTable<>(new WidgetGroup());
 
 		DesignLabel label = new DesignLabel("Nothing");
 		INFO_DIALOG.dialog(d -> {
@@ -55,8 +46,10 @@ public class DesignHelper {
 					MenuItem.with("export.code", Icon.export, "Export As Java", table::export)
 				 ))));
 			}).growX();
-		});
-		Core.app.post(() -> table.addChild(label));
+		}); */
+		new BaseDialog("") {{
+			add(new DesignView()).grow();
+		}}.show();
 	}
 	private static CheckBox checkBox(String text, String name) {
 		CheckBox box = new CheckBox(text);

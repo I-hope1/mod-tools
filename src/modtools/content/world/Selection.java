@@ -891,7 +891,7 @@ public class Selection extends Content {
 		}
 		private void buildCont0() {
 			pane.left().defaults().left();
-			if (mobile) pane.add(tipKey("fixed", fixedKeyCode.toString())).color(Color.lightGray).fontScale(0.8f).row();
+			if (!mobile) pane.add(tipKey("fixed", fixedKeyCode.toString())).color(Color.lightGray).fontScale(0.8f).row();
 			/* tile */
 			newTable(t -> {
 				buildCont(t, focusTile);

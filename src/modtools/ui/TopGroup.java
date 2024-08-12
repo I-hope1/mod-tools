@@ -63,7 +63,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		;
 		// overrideScene
 		TSettings() { }
-		TSettings(Class<?> c, Object... args) { }
+		TSettings(Class<?> c, int... args) { }
+		TSettings(Class<Drawable> c, Object... args) { }
 	}
 
 	/* 渲染相关 */

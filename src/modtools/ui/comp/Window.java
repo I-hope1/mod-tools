@@ -24,7 +24,7 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.content.ui.ReviewElement;
 import modtools.struct.MySet;
-import modtools.ui.HopeStyles;
+import modtools.ui.*;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.linstener.*;
@@ -232,12 +232,13 @@ public class Window extends Table implements Position {
 		}
 		FillTable[] resize = {null};
 
+		ImageButton closeButton = titleTable.button(Icon.cancel,
+			cancel_clearNonei, 32, this::hide)
+		 .padLeft(4f).padRight(4f)
+		 .get();
+		IntUI.addTooltipListener(closeButton, () -> IntUI.tips("window.resize"));
 		EventHelper.longPressOrRclick(
-		 titleTable.button(Icon.cancel,
-			 cancel_clearNonei, 32, this::hide)
-			.padLeft(4f).padRight(4f)
-			.get(),
-		 _ -> {
+		 closeButton, _ -> {
 			 if (resize[0] == null) resize[0] = getResizeFillTable();
 			 resize[0].show();
 		 });

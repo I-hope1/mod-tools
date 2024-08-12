@@ -6,7 +6,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
-import arc.math.*;
+import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
@@ -22,20 +22,21 @@ import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
 import modtools.IntVars;
+import modtools.content.SettingsUI;
+import modtools.content.debug.Tester;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.*;
-import modtools.content.debug.Tester;
 import modtools.ui.control.HopeInput;
 import modtools.ui.windows.*;
 import modtools.ui.windows.NameWindow.FileNameWindow;
 import modtools.utils.*;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
-import modtools.utils.ui.WatchWindow;
 import modtools.utils.search.Search;
+import modtools.utils.ui.*;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -610,20 +611,26 @@ public class IntUI {
 	}
 
 	public static <T extends Element> Cons<T> makeTipListener(String tipKey) {
-		return elem -> addTooltipListener(elem, tips(tipKey));
+		return elem -> addTooltipListener(elem, () -> tips(tipKey));
 	}
-	public static void addTooltipListener(Element element, String text) {
-		element.addListener(new ITooltip(t -> t.background(Tex.pane).add(text)));
+	public static void addTooltipListener(Element element, Prov<CharSequence> text) {
+		element.addListener(new ITooltip(text));
 	}
 	public static final String TIP_PREFIX = "mod-tools.tips.";
 	public static boolean hasTips(String key) {
 		return Core.bundle.has(TIP_PREFIX + key);
 	}
+	/**
+	 * TIP_PREFIX: {@value TIP_PREFIX}
+	 * @see SettingsUI#tryAddTip(Element, String) */
 	public static String tips(String key) {
-		return Core.bundle.format("mod-tools.tips", Core.bundle.get(TIP_PREFIX + key));
+		return Core.bundle.format("mod-tools.tips", FormatHelper.parseVars(Core.bundle.get(TIP_PREFIX + key)));
 	}
+	/**
+	 * TIP_PREFIX: {@value TIP_PREFIX}
+	 * @see SettingsUI#tryAddTip(Element, String) */
 	public static String tips(String key, String arg1) {
-		return Core.bundle.format("mod-tools.tips", Core.bundle.format(TIP_PREFIX + key, arg1));
+		return Core.bundle.format("mod-tools.tips", FormatHelper.parseVars(Core.bundle.format(TIP_PREFIX + key, arg1)));
 	}
 
 

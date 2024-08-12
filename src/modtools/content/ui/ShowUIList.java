@@ -193,7 +193,7 @@ public class ShowUIList extends Content {
 				 colorKeyMap.put(color, prefix + field.getName());
 
 				 t.bind(field.getName());
-				 t.listener(el -> IntUI.addTooltipListener(el, FormatHelper.color(color)));
+				 t.listener(el -> IntUI.addTooltipListener(el, () -> FormatHelper.color(color)));
 				 t.add(new BorderImage(Core.atlas.white(), 2f)
 					.border(color.cpy().inv())).color(color).size(42f);
 				 field(t, field.getName()).growX();

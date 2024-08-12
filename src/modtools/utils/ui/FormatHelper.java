@@ -1,15 +1,18 @@
 package modtools.utils.ui;
 
+import arc.Core;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
 import arc.scene.Group;
 import arc.scene.event.Touchable;
 import arc.scene.style.*;
-import arc.struct.ObjectMap;
+import arc.struct.*;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.ui.control.HKeyCode;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.Tools;
 
@@ -120,5 +123,43 @@ public class FormatHelper {
 	public static String fieldFormat(String s) {
 		if (s.indexOf('.') == -1) return "[accent]" + s;
 		return s.replaceAll("^(\\w+?)\\.(\\w+)", "[accent]$2 []([slate]$1[])");
+	}
+
+	private static final boolean       DEBUG         = false;
+	private static final StringBuilder sb            = new StringBuilder();
+	public static final  char          varIdentifier = '%';
+	/** 一些游戏一开始就能确定的var */
+	public static final  StringMap     varMap        = StringMap.of(
+	 "MENU_KEY", Core.bundle.get(Vars.mobile ? "longPress" : "rightClick")
+	);
+	public static CharSequence parseVars(String s) {
+		sb.setLength(0);
+		StringMap map = new StringMap();
+		HKeyCode.eachAllKey((key, value) -> {
+			map.put(key, String.valueOf(value));
+		});
+		if (DEBUG) Log.info(map);
+		int startIndex = -1;
+		for (int i = 0, len = s.length(); i < len; i++) {
+			if (startIndex == -1) {
+				if (s.charAt(i) == '%') {
+					startIndex = i + 1;
+				} else {
+					sb.append(s.charAt(i));
+				}
+			} else if (s.charAt(i) == varIdentifier) {
+				String key = s.substring(startIndex, i);
+				startIndex = -1;
+				if (DEBUG) Log.info(key);
+				if (map.containsKey(key)) {
+					sb.append(map.get(key));
+				} else if (varMap.containsKey(key)) {
+					sb.append(varMap.get(key));
+				} else {
+					sb.append('%').append(key).append('%');
+				}
+			}
+		}
+		return sb;
 	}
 }

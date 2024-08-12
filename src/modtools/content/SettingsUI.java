@@ -39,7 +39,6 @@ import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.ui.CellTools.rowSelf;
 
 public class SettingsUI extends Content {
-	public static String TIP_PREFIX = "settings.tip.";
 	Window ui;
 	Table  cont = new Table();
 	final Table loadTable = new Table(t -> t.left().defaults().left());
@@ -221,10 +220,15 @@ public class SettingsUI extends Content {
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
+	public static String TIP_PREFIX = "settings.tip.";
+	/**
+	 * TIP_PREFIX: {@value TIP_PREFIX}
+	 * @see IntUI#tips(String)
+	 * @see IntUI#tips(String, String)  */
 	public static void tryAddTip(Element element, String tipKey) {
 		if (!Core.bundle.has(TIP_PREFIX + tipKey)) return;
 
-		IntUI.addTooltipListener(element, Core.bundle.get(TIP_PREFIX + tipKey));
+		IntUI.addTooltipListener(element, () -> FormatHelper.parseVars(Core.bundle.get(TIP_PREFIX + tipKey)));
 	}
 	/** @see mindustry.ui.dialogs.CustomRulesDialog */
 	public static class SettingsBuilder {

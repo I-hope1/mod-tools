@@ -181,7 +181,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	}
 	private static <T> void addFloatSetter(
 	 T obj, Field jfield, CheckBox elem, boolean useInt) {
-		IntUI.addTooltipListener(elem, (IntUI.hasTips("cell." + jfield.getName()) ?
+		IntUI.addTooltipListener(elem, () -> (IntUI.hasTips("cell." + jfield.getName()) ?
 		 IntUI.tips("cell." + jfield.getName()) + "\n" : "") + IntUI.tips("exact_setter"));
 		EventHelper.longPressOrRclick(elem, _ -> {
 			IntUI.showSelectTable(elem, (p, _, _) -> {

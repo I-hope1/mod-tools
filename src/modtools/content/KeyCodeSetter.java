@@ -36,7 +36,7 @@ public class KeyCodeSetter extends Content {
 		super("keycodeSetter", HopeIcons.keyboard);
 	}
 
-	HKeyCode recordKeyCode;
+	HKeyCode bindKeyCode;
 
 	public static KeyCodeData                  elementKeyCode    = HKeyCode.data.child("element");
 	public static ObjectMap<Button, HKeyCode>  tmpKeyCode        = new ObjectMap<>();
@@ -54,11 +54,11 @@ public class KeyCodeSetter extends Content {
 	}
 	public void load() {
 		super.load();
-		recordKeyCode = HKeyCode.data.keyCode("recordKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
+		bindKeyCode = HKeyCode.data.keyCode("bindKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
 		final Seq<Button> toRemoveSeq = new Seq<>();
 		scene.addCaptureListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (recordKeyCode.isPress()) {
+				if (bindKeyCode.isPress()) {
 					Element element = HopeInput.mouseHit();
 					Button  button  = ElementUtils.findParent(element, Button.class);
 					keyCodeBindWindow.get().show(button, keyCodeSetter(button));
@@ -85,6 +85,11 @@ public class KeyCodeSetter extends Content {
 				return false;
 			}
 		});
+	}
+	public Button buildButton(boolean isSmallized) {
+		Button button = super.buildButton(isSmallized);
+		button.addListener(new ITooltip(() -> tipKey("shortcuts", bindKeyCode.toString())));
+		return button;
 	}
 	public static void clicked(Element el) {
 		el.fireClick();

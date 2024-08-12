@@ -12,7 +12,7 @@ import arc.util.serialization.Jval.JsonMap;
 import modtools.IntVars;
 import modtools.utils.MySettings.Data;
 
-import java.util.StringJoiner;
+import java.util.*;
 
 public class HKeyCode {
 	public static final String   STR_NONE = "None";
@@ -24,9 +24,9 @@ public class HKeyCode {
 			return STR_NONE;
 		}
 	};
-	public static       Json     json     = new Json();
 
 	public static KeyCodeData data = new KeyCodeData(IntVars.dataDirectory.child("keycode.json"));
+
 	boolean alt, shift, ctrl;
 	final KeyCode key;
 	public HKeyCode(KeyCode key) {
@@ -95,9 +95,7 @@ public class HKeyCode {
 		Core.scene.addCaptureListener(new MyInputListener(sceneCaptureKeys));
 		Core.scene.addListener(new MyInputListener(sceneKeys));
 	}
-	public boolean equals(HKeyCode other) {
-		return alt == other.alt && shift == other.shift && ctrl == other.ctrl && key == other.key;
-	}
+
 	public String toString() {
 		StringJoiner sj = new StringJoiner(" + ");
 		if (ctrl) sj.add("Ctrl");
@@ -105,6 +103,28 @@ public class HKeyCode {
 		if (alt) sj.add("Alt");
 		if (key != KeyCode.anyKey) sj.add(Strings.capitalize(key.name()));
 		return sj.toString();
+	}
+
+	public boolean equals(Object object) {
+		if (this == object) return true;
+		if (!(object instanceof HKeyCode keyCode)) return false;
+		return alt == keyCode.alt && shift == keyCode.shift && ctrl == keyCode.ctrl && key == keyCode.key;
+	}
+	public int hashCode() {
+		return Objects.hash(alt, shift, ctrl, key);
+	}
+	public static void eachAllKey(Cons2<String, HKeyCode> cons) {
+		eachAllKey(data, null, cons);
+	}
+	private static void eachAllKey(KeyCodeData data, String prefix, Cons2<String, HKeyCode> cons) {
+		data.each((key, value) -> {
+			String t = prefix == null ? key : prefix + "." + key;
+			if (value instanceof KeyCodeData d) {
+				eachAllKey(d, t, cons);
+			} else {
+				cons.get(t, data.keyCode(key));
+			}
+		});
 	}
 
 	public static class KeyCodeData extends Data {

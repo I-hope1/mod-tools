@@ -101,7 +101,7 @@ public class Executor extends Content {
 			 , "color", color);
 			cont.row();
 			cont.unbind();
-			IntUI.addTooltipListener(button.getImage(), node.status.name());
+			IntUI.addTooltipListener(button.getImage(),()-> node.status.name());
 
 			button.table(center -> {
 				center.marginLeft(4f);

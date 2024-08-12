@@ -132,9 +132,11 @@ public class FormatHelper {
 	public static final  StringMap     varMap        = StringMap.of(
 	 "MENU_KEY", Core.bundle.get(Vars.mobile ? "longPress" : "rightClick")
 	);
+	public static final StringMap tempMap = new StringMap();
 	public static CharSequence parseVars(String s) {
 		sb.setLength(0);
-		StringMap map = new StringMap();
+		tempMap.clear();
+		StringMap map = tempMap;
 		HKeyCode.eachAllKey((key, value) -> {
 			map.put(key, String.valueOf(value));
 		});

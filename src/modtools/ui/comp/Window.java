@@ -536,10 +536,10 @@ public class Window extends Table implements Position {
 			moveAndScaleAnimated(x, y + lastRect.height - topHeight,
 			 getMinWidth(), topHeight);
 
-			addAction(Actions.run(() -> {
+			addAction(Actions.after(Actions.run(() -> {
 				getCell(cont).set(BindCell.UNSET_CELL);
 				cont.remove();
-			}));
+			})));
 			if (!noButtons) Tools.runIgnoredException(() -> {
 				getCell(buttons).set(BindCell.UNSET_CELL);
 				buttons.remove();

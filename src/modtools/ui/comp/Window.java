@@ -162,7 +162,7 @@ public class Window extends Table implements Position {
 
 		left().defaults().left();
 
-		buildTitle(title, full);
+		buildTitle(title);
 
 		sclListener = new SclListener(this, this.minWidth, this.minHeight);
 		if (moveListener != null) moveListener.fire = () -> {

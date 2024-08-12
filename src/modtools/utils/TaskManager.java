@@ -15,10 +15,12 @@ public class TaskManager {
 		};
 	}
 
-	/** 新建任务
-	 * 如果任务没有完成，不新建
+	/**
+	 * <p>新建任务{@link Time#runTask(float, Runnable)}
+	 * <p>如果任务没有完成，不新建
 	 * @param delay 单位tick (正常60tick/s)
 	 * @return 进行的任务
+	 * @see Time#runTask(float, Runnable)
 	 *  */
 	public static Task acquireTask(float delay, Runnable run) {
 		return SR.of(map.get(run, () -> Time.runTask(delay, run)))
@@ -39,14 +41,27 @@ public class TaskManager {
 	 * @return 是否新建了任务
 	 */
 	public static boolean scheduleOrCancel(float delaySeconds, Task task) {
-		if (reSchedule(delaySeconds, task)) {
+		if (trySchedule(delaySeconds, task)) {
 			return true;
 		}
 		task.cancel();
 		return false;
 	}
+	/** 将task添加到计时器  */
+	public static void scheduleOrReset(float delaySeconds, Runnable run) {
+		scheduleOrReset(delaySeconds, map.get(run, () -> acquireTask(delaySeconds * 60f, run)));
+	}
+	/** 将task添加到计时器  */
+	public static void scheduleOrReset(float delaySeconds, Task task) {
+		if (task.isScheduled()) {
+			task.cancel();
+		}
+		Timer.schedule(task, delaySeconds);
+	}
 
-	public static boolean reSchedule(float delaySeconds, Task task) {
+	/** 尝试添加任务
+	 * @return true 如果添加成功 */
+	public static boolean trySchedule(float delaySeconds, Task task) {
 		if (task.isScheduled()) {
 			return false;
 		} else {

@@ -98,7 +98,7 @@ public class PreviewUtils {
 			});
 			void hide() {
 				if (hitter != null && hitter.canHide()) {
-					TaskManager.reSchedule(0.1f, hideTask);
+					TaskManager.trySchedule(0.1f, hideTask);
 				}
 			}
 			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {

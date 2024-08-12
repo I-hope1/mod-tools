@@ -50,6 +50,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	@SettingsInit
 	public enum TSettings implements ISettings {
 		checkUICount,
+		/** @see ISettings#$(Integer)  */
+		@Switch(dependency = "checkUICount")
+		maxUICount(int.class, 70, 10, 200, 1),
 		selectInvisible,
 
 		debugBounds,
@@ -211,9 +214,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		);
 	}
 
-	Element            previousKeyboardFocus = null;
+	Element previousKeyboardFocus = null;
 	/** used to dispose */
-	Seq<EventListener> listeners             = new Seq<>();
+	private static final Seq<EventListener> listeners = new Seq<>();
 	public boolean addCaptureListener(EventListener listener) {
 		listeners.add(listener);
 		return scene.addCaptureListener(listener);
@@ -241,7 +244,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		TASKS.add(() -> {
 			toFront();
 			if (checkUICount.enabled()) {
-				if (scene.root.getChildren().count(el -> el.visible) > 70) {
+				int max = maxUICount.getInt();
+				if (scene.root.getChildren().count(el -> el.visible) > max) {
 					tester.loop = false;
 					Dialog dialog;
 					while (true) {
@@ -250,7 +254,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 						dialog.hide();
 					}
 				}
-				if (windows.getChildren().count(el -> el.visible) > 70) {
+				if (windows.getChildren().count(el -> el.visible) > max) {
 					windows.getChildren().<Window>as().each(Window::hide);
 				}
 
@@ -594,6 +598,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		{
 			TopGroup.this.addCaptureListener(Vars.mobile ? new SwitchGestureListener() : new SwitchInputListener());
+
 			margin(10, 12, 10, 12);
 			name = "switchView";
 			touchablility = () -> isSwitchWindows ? Touchable.childrenOnly : Touchable.disabled;

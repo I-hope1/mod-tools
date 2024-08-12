@@ -39,7 +39,7 @@ import java.util.function.Consumer;
 import static arc.Core.*;
 import static modtools.IntVars.*;
 import static modtools.content.ui.ReviewElement.Settings.checkCullingArea;
-import static modtools.ui.Contents.*;
+import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
@@ -62,32 +62,14 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		TSettings() { }
 		TSettings(Class<?> c, Object... args) { }
 	}
-	/* static {
-		if (overrideScene.enabled()) {
-			var prev = scene.root;
-			FieldUtils.setValue(scene, Scene.class, "root", new Group() {
-				public float getHeight() {
-					return scene.getHeight() - scene.marginTop - scene.marginBottom;
-				}
-				public float getWidth() {
-					return scene.getWidth() - scene.marginLeft - scene.marginRight;
-				}
-				public void drawChildren() {
-					Tools.runLoggedException(super::drawChildren);
-				}
-			}, Group.class);
-			Tools.clone(prev, scene.root, Group.class, (Seq<String>) null);
-		}
-	 } */
 
 	/* 渲染相关 */
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
 
-	public boolean isSwitchWindows = false;
-	public int     currentIndex    = 0;
-
-	public ArrayList<Window> shownWindows = new ArrayList<>();
+	/** 按zIndex排列
+	 * @see #acquireShownWindows()  */
+	public Seq<Window> shownWindows = new Seq<>();
 
 	private Element selected;
 	public Element getSelected() {
@@ -97,6 +79,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		return isSelecting;
 	}
 	private boolean isSelecting;
+	// ------
+
 
 	private final Group
 	 back    = new NGroup("back"),
@@ -104,7 +88,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 frag    = new NGroup("frag"),
 	 infos   = new NGroup("infos");
 	public interface IInfo { }
-	final Table end = new MyEnd();
+	final SwitchView switchView = new SwitchView();
+
 
 	private static Element drawPadElem = null;
 	public static void setDrawPadElem(Element drawPadElem) {
@@ -236,7 +221,6 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public TopGroup() {
 		addSceneListener();
 
-		addCaptureListener(Vars.mobile ? new SwitchGestureListener() : new SwitchInputListener());
 		if (IntVars.isDesktop()) {
 			addCaptureListener(new HitterListener());
 		}
@@ -274,17 +258,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		});
 
 		Core.app.post(() -> ScreenSampler.init());
-
-		update(() -> {
-			// Log.info(selected);
-			if (shownWindows.isEmpty()) {
-				resetSwitch();
-			}
-			end.visible = isSwitchWindows;
-			end.touchable = isSwitchWindows ? Touchable.childrenOnly : Touchable.disabled;
-		});
 	}
-	public ArrayList<Window> acquireShownWindows() {
+
+	public Seq<Window> acquireShownWindows() {
 		shownWindows.clear();
 		Cons<Element> cons = elem -> {
 			if (elem instanceof Window window && !(elem instanceof DelayDisposable)) {
@@ -567,70 +543,6 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		void draw(boolean selecting, Element selected);
 	}
 
-
-	boolean K_once = false;
-
-	/**
-	 * 移动端用于切换窗口的事件侦听器
-	 * @see SwitchInputListener
-	 */
-	class SwitchGestureListener extends ElementGestureListener {
-		int lastTouches;
-		public void touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			lastTouches = input.getTouches();
-		}
-		public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {
-			// Log.info("fling: (@, @, @) ", velocityX, velocityY, lastTouches);
-			if (velocityX < 1000 || lastTouches != 3) return;
-			if (!isSwitchWindows) {
-				currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
-			}
-			isSwitchWindows = true;
-			if (!K_once) {
-				resolveOnce();
-			}
-		}
-	}
-
-	public static HKeyCode switchWindowKey = HKeyCode.data.keyCode("switchWindow", () -> new HKeyCode(KeyCode.tab).ctrl());
-	/**
-	 * 电脑端用于切换窗口的事件侦听器
-	 * @see SwitchGestureListener
-	 */
-	class SwitchInputListener extends InputListener {
-		public boolean keyDown(InputEvent event, KeyCode keycode) {
-			// acquireShownWindows();
-			if (shownWindows.isEmpty()) return false;
-			if ((switchWindowKey.isPress()) /* || (Vars.mobile && keycode == KeyCode.volumeDown) */) {
-				if (!K_once) {
-					resolveOnce();
-				}
-				if (!isSwitchWindows) {
-					currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
-				}
-				if (shownWindows.size() > 1) currentIndex += Core.input.shift() ? -1 : 1;
-				if (currentIndex < 0) {
-					currentIndex += shownWindows.size();
-				} else if (currentIndex >= shownWindows.size()) {
-					currentIndex -= shownWindows.size();
-				}
-				isSwitchWindows = true;
-			}
-			return true;
-			/*var children = Window.focusWindow.parent.getChildren();
-			children.get(Window.focusWindow.getZIndex() + 1 % children.size).toFront();*/
-		}
-
-		public boolean keyUp(InputEvent event, KeyCode keycode) {
-			if (event.cancelled) return false;
-			if (shownWindows.isEmpty()) return false;
-			if (isSwitchWindows && !Core.input.ctrl()) {
-				resolveSwitch();
-			}
-			return true;
-		}
-	}
-
 	HKeyCode closeWindow = HKeyCode.data.keyCode("closeWindow", () -> new HKeyCode(KeyCode.f4).shift())
 	 .applyToScene(true, () -> {
 		 if (!shownWindows.isEmpty()) frontWindow.hide();
@@ -647,14 +559,6 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			return super.keyDown(event, keycode);
 		}
 	}
-	private void resolveSwitch() {
-		resetSwitch();
-		if (currentIndex < shownWindows.size()) shownWindows.get(currentIndex).toFront();
-	}
-	void resetSwitch() {
-		isSwitchWindows = false;
-		K_once = false;
-	}
 
 	@Override
 	public void dispose() {
@@ -670,87 +574,29 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 	public class GroupHitter extends Hitter {
 		{
-			touchablility = () -> isSwitchWindows ? Touchable.enabled : Touchable.disabled;
-			clicked(TopGroup.this::resetSwitch);
+			touchablility = () -> switchView.isSwitchWindows ? Touchable.enabled : Touchable.disabled;
+			clicked(switchView::resetSwitch);
 		}
 	}
 
 	public Seq<Boolp> disabledSwitchPreviewSeq = new Seq<>();
-	private void resolveOnce() {
-		end.clearChildren();
-		boolean disabled = false;
-		for (Boolp boolp : disabledSwitchPreviewSeq) {
-			disabled |= boolp.get();
-		}
-		if (disabled) return;
 
-		K_once = true;
-		Table paneTable = new Table();
-		end.pane(paneTable).grow().with(
-		 s -> s.setScrollingDisabled(OS.isWindows, false));
-		int       W          = graphics.getWidth(), H = graphics.getHeight();
-		float     eachW      = W > H ? W / 3f : W / 4f - 16f, eachH = H / 3f;
-		Element[] tappedElem = {null}, hoveredElem = {null};
-		Table     table      = paneTable.row().table().get();
-		for (Window w : shownWindows) {
-			Image el = new Image(w.screenshot());
 
-			// TextureRegionDrawable drawable = new TextureRegionDrawable((TextureRegionDrawable) Tex.pane);
-			boolean[] cancelEvent = {false};
-			float     bestScl     = eachW / eachH, realScl = el.getWidth() / el.getHeight();
-			float     width1      = bestScl < realScl ? eachW : eachH * realScl;
-			if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table.row();
-			table.button(t -> {
-				t.margin(4, 6, 4, 6);
-				t.act(0);
-				t.tapped(() -> tappedElem[0] = t);
-				IntUI.hoverAndExit(t,
-				 () -> hoveredElem[0] = t,
-				 () -> hoveredElem[0] = null);
-				t.released(() -> tappedElem[0] = null);
-				t.table(t1 -> {
-					t1.add(w.title.getText(), Pal.accent).left().growX();
-					t1.button(Icon.cancelSmall, Styles.clearNonei, () -> {
-						w.hide();
-						cancelEvent[0] = true;
-					}).visible(() -> hoveredElem[0] == t);
-				}).growX().pad(6, 8, 6, 8).row();
-				t.add(el).size(width1,
-				 bestScl < realScl ? eachW / realScl : eachH);
-				t.clicked(() -> {
-					if (cancelEvent[0]) {
-						removeWindow(hoveredElem[0]);
-						return;
-					}
-					currentIndex = t.getZIndex();
-					resolveSwitch();
-				});
-			}, HopeStyles.flatToggleMenut, IntVars.EMPTY_RUN).pad(6, 8, 6, 8).update(t -> {
-				if (!w.isShown()) {
-					removeWindow(t);
-				}
-				t.setChecked(tappedElem[0] == null ? t.getZIndex() == currentIndex : tappedElem[0] == t);
-			});
-		}
-	}
-	private void removeWindow(Element el) {
-		el.actions(Actions.fadeOut(0.2f, Interp.fade), Actions.remove());
-		currentIndex = 0;
-	}
-	static class MyEnd extends Table {
-		// final FrameBuffer buffer = new FrameBuffer();
+	/* 切换窗口的UI渲染 */
+	class SwitchView extends Table {
+		// 切换窗口的实现
+		public boolean isSwitchWindows = false;
+		public int     currentIndex    = 0;
+		boolean built = false;
 
 		Pixmap  pixmap;
 		Texture texture;
 
 		{
+			TopGroup.this.addCaptureListener(Vars.mobile ? new SwitchGestureListener() : new SwitchInputListener());
 			margin(10, 12, 10, 12);
-			name = "end";
-			/*
-			allocateNewTexture();
-			Events.on(EventType.ResizeEvent.class, e -> {
-				allocateNewTexture();
-			}); */
+			name = "switchView";
+			touchablility = () -> isSwitchWindows ? Touchable.childrenOnly : Touchable.disabled;
 		}
 
 		private Texture getSampler() {
@@ -776,11 +622,153 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			));
 		}
 
-
 		public void draw() {
 			MyDraw.blurRect(x, y, width, height);
 			drawBack();
 			Tools.runLoggedException(super::draw);
+		}
+
+
+		public void act(float delta) {
+			super.act(delta);
+			if (shownWindows.isEmpty()) {
+				resetSwitch();
+			}
+		}
+		public void updateVisibility() {
+			visible = isSwitchWindows;
+		}
+
+		void removeWindow(Element el) {
+			el.actions(Actions.fadeOut(0.2f, Interp.fade), Actions.remove());
+			currentIndex = 0;
+		}
+		void build() {
+			switchView.clearChildren();
+			boolean disabled = false;
+			for (Boolp boolp : disabledSwitchPreviewSeq) {
+				disabled |= boolp.get();
+			}
+			if (disabled) return;
+
+			built = true;
+			Table paneTable = new Table();
+			switchView.pane(paneTable).grow().with(
+			 s -> s.setScrollingDisabled(OS.isWindows, false));
+			int       W          = graphics.getWidth(), H = graphics.getHeight();
+			float     eachW      = W > H ? W / 3f : W / 4f - 16f, eachH = H / 3f;
+			Element[] tappedElem = {null}, hoveredElem = {null};
+			Table     table      = paneTable.row().table().get();
+			for (Window w : shownWindows) {
+				Image el = new Image(w.screenshot());
+
+				// TextureRegionDrawable drawable = new TextureRegionDrawable((TextureRegionDrawable) Tex.pane);
+				boolean[] cancelEvent = {false};
+				float     bestScl     = eachW / eachH, realScl = el.getWidth() / el.getHeight();
+				float     width1      = bestScl < realScl ? eachW : eachH * realScl;
+				if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table.row();
+				table.button(t -> {
+					t.margin(4, 6, 4, 6);
+					t.act(0);
+					t.tapped(() -> tappedElem[0] = t);
+					IntUI.hoverAndExit(t,
+					 () -> hoveredElem[0] = t,
+					 () -> hoveredElem[0] = null);
+					t.released(() -> tappedElem[0] = null);
+					t.table(t1 -> {
+						t1.add(w.title.getText(), Pal.accent).left().growX();
+						t1.button(Icon.cancelSmall, Styles.clearNonei, () -> {
+							w.hide();
+							cancelEvent[0] = true;
+						}).visible(() -> hoveredElem[0] == t);
+					}).growX().pad(6, 8, 6, 8).row();
+					t.add(el).size(width1,
+					 bestScl < realScl ? eachW / realScl : eachH);
+					t.clicked(() -> {
+						if (cancelEvent[0]) {
+							removeWindow(hoveredElem[0]);
+							return;
+						}
+						currentIndex = t.getZIndex();
+						resolveSwitch();
+					});
+				}, HopeStyles.flatToggleMenut, IntVars.EMPTY_RUN).pad(6, 8, 6, 8).update(t -> {
+					if (!w.isShown()) {
+						removeWindow(t);
+					}
+					t.setChecked(tappedElem[0] == null ? t.getZIndex() == currentIndex : tappedElem[0] == t);
+				});
+			}
+		}
+		void resolveSwitch() {
+			resetSwitch();
+			if (currentIndex < shownWindows.size) shownWindows.get(currentIndex).toFront();
+		}
+		void resetSwitch() {
+			isSwitchWindows = false;
+			built = false;
+		}
+
+
+		/**
+		 * 移动端用于切换窗口的事件侦听器
+		 * @see SwitchInputListener
+		 */
+		class SwitchGestureListener extends ElementGestureListener {
+			int lastTouches;
+			public void touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				lastTouches = input.getTouches();
+			}
+			public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {
+				// Log.info("fling: (@, @, @) ", velocityX, velocityY, lastTouches);
+				if (velocityX < 1000 || lastTouches != 3) return;
+				if (!isSwitchWindows) {
+					currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
+				}
+				isSwitchWindows = true;
+				if (!built) {
+					build();
+				}
+			}
+		}
+
+		public static HKeyCode switchWindowKey = HKeyCode.data.keyCode("switchWindow", () -> new HKeyCode(KeyCode.tab).ctrl());
+		/**
+		 * 电脑端用于切换窗口的事件侦听器
+		 * @see SwitchGestureListener
+		 */
+		class SwitchInputListener extends InputListener {
+			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				// acquireShownWindows();
+				if (shownWindows.isEmpty()) return false;
+				if ((switchWindowKey.isPress()) /* || (Vars.mobile && keycode == KeyCode.volumeDown) */) {
+					if (!built) {
+						build();
+					}
+					if (!isSwitchWindows) {
+						currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
+					}
+					if (shownWindows.size > 1) currentIndex += Core.input.shift() ? -1 : 1;
+					if (currentIndex < 0) {
+						currentIndex += shownWindows.size;
+					} else if (currentIndex >= shownWindows.size) {
+						currentIndex -= shownWindows.size;
+					}
+					isSwitchWindows = true;
+				}
+				return true;
+			/*var children = Window.focusWindow.parent.getChildren();
+			children.get(Window.focusWindow.getZIndex() + 1 % children.size).toFront();*/
+			}
+
+			public boolean keyUp(InputEvent event, KeyCode keycode) {
+				if (event.cancelled) return false;
+				if (shownWindows.isEmpty()) return false;
+				if (isSwitchWindows && !Core.input.ctrl()) {
+					resolveSwitch();
+				}
+				return true;
+			}
 		}
 
 		public boolean fire(SceneEvent event) {
@@ -819,6 +807,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			parent.addChild(this);
 		}
 	}
+
 	public static class FocusTask implements ResidentDrawTask {
 		public       Element elem;
 		public final Color   maskColor, focusColor;
@@ -879,11 +868,11 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		public FillEnd() {
 			super(t -> {
 				t.addChild(new GroupHitter());
-				t.add(TopGroup.this.end);
+				t.add(TopGroup.this.switchView);
 			});
 		}
 		public Element hit(float x, float y, boolean touchable) {
-			return or(super.hit(x, y, touchable), isSwitchWindows ? this : null);
+			return or(super.hit(x, y, touchable), switchView.isSwitchWindows ? this : null);
 		}
 	}
 

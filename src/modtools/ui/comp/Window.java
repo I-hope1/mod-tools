@@ -78,16 +78,17 @@ public class Window extends Table implements Position {
 
 	public static final DelegatingDrawable myPane = (DelegatingDrawable) TSettings.paneDrawable.getDrawable(Tex.pane);
 
-	public static Drawable topPane
+	public static final Drawable topPane
 	 = new TintDrawable(whiteui, () -> JColor.c_window_title);
 
-	public static ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
+	public static final ImageButtonStyle cancel_clearNonei = new ImageButtonStyle(HopeStyles.hope_clearNonei) {{
 		over = whiteui.tint(Pal.remove);
 		down = whiteui.tint(Tmp.c1.set(Pal.remove).lerp(Color.gray, 0.3f));
 	}};
 
+	/** 每个title按钮的大小 */
 	public static final  float buttonSize = 38f;
-	// 用于最小化时的最小宽度
+	/** 用于确定title的高度 */
 	private static final float topHeight  = 45;
 
 	public Table
@@ -105,12 +106,24 @@ public class Window extends Table implements Position {
 	/** container */
 	cont     = new Table(myPane),
 	 buttons = new Table(myPane);
-	public float minWidth, minHeight;
+	/**
+	 * 实际的最小width，是这个和super的最小width中取最大
+	 * @see #getMinWidth()
+	 */
+	public float minWidth,
+	/**
+	 * 实际的最小height，是这个和super的最小height中取最大
+	 * @see #getMinHeight()
+	 */
+	minHeight;
 
 
 	public Label title;
 
-	/** 是否为一个完整的Window */
+	/**
+	 * 是否为一个完整的Window（有置顶，最小化，最大化按钮）
+	 * @see #buildTitle(String)
+	 */
 	public final boolean full;
 
 	/** 是否置顶 */
@@ -173,9 +186,7 @@ public class Window extends Table implements Position {
 
 		Core.app.post(() -> {
 			// 默认宽度为pref宽度
-			this.minWidth = getMinWidth();
-			this.minHeight = getMinHeight();
-			sclListener.set(this.minWidth, this.minHeight);
+			sclListener.set(getMinWidth(), getMinHeight());
 			if (this instanceof IDisposable) show();
 		});
 		all.add(this);
@@ -191,7 +202,7 @@ public class Window extends Table implements Position {
 		return Math.max(minHeight, super.getMinHeight());
 	}
 
-	private void buildTitle(String title, boolean full) {
+	private void buildTitle(String title) {
 		moveListener = moveListener();
 		add(titleTable).growX().height(topHeight).name("titleTable");
 		row();
@@ -730,7 +741,7 @@ public class Window extends Table implements Position {
 			});
 			g.clearChildren();
 			g.clearListeners();
-			Core.app.post(System::gc);
+			Time.runTask(20, System::gc);
 		}
 	}
 
@@ -824,6 +835,7 @@ public class Window extends Table implements Position {
 		}
 
 		TranslateToAction last;
+		/** 如果再标题区域自动显示下来 */
 		public Element hit(float x, float y, boolean touchable) {
 			Element element = super.hit(x, y, touchable);
 			translateTo(height - titleHeight <= y && element != null && !isMinimize ? 0 : titleHeight);

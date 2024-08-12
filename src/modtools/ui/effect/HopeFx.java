@@ -44,10 +44,10 @@ public class HopeFx {
 	public static SequenceAction transitionTranslation(float duration, Vec2... vecs) {
 		return Actions.sequence(Arrays.stream(vecs).map(vec -> translateTo(vec.x, vec.y, duration)).toArray(TranslateToAction[]::new));
 	}
+
 	public static TranslateToAction translateTo(float amountX, float amountY, float duration) {
 		return translateTo(amountX, amountY, duration, null);
 	}
-
 	public static TranslateToAction translateTo(float amountX, float amountY, float duration, Interp interpolation) {
 		TranslateToAction action = Actions.action(TranslateToAction.class, TranslateToAction::new);
 		action.setTranslation(amountX, amountY);

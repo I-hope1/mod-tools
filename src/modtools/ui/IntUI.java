@@ -99,6 +99,7 @@ public class IntUI {
 	public static final long  DEF_LONGPRESS = 600L;
 
 
+	/** @see ShowInfoWindow  */
 	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
 		addDetailsButton(table, prov, clazz);
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
@@ -118,7 +119,7 @@ public class IntUI {
 		 }))
 		 .with(makeTipListener("details_button"))
 		 .size(FUNCTION_BUTTON_SIZE, FUNCTION_BUTTON_SIZE)
-		 .disabled(_ -> clazz.isPrimitive() && prov.get() == null)
+		 .disabled(_ -> (clazz == null || clazz.isPrimitive()) && prov.get() == null)
 		 .get();
 	}
 

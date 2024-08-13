@@ -333,7 +333,6 @@ public class Tester extends Content {
 	private void buildLog(Table p) {
 		p.table(lg -> lg.left().update(() -> {
 			if (logs.isResolved()) return;
-			lg.getCells().clear();
 			lg.clearChildren();
 			logs.each(item -> {
 				lg.add(STR."[\{item.charAt(0)}]")
@@ -375,7 +374,6 @@ public class Tester extends Content {
 		folder.rebuild = () -> {
 			Time.runTask(1, folderContainer::toFront);
 			p.clearChildren();
-			p.getCells().clear();
 			ImageButtonStyle istyle = HopeStyles.clearNonei;
 			int              isize  = 26;
 			p.defaults().size(45).padLeft(2f);
@@ -398,6 +396,7 @@ public class Tester extends Content {
 			details.resizeImage(isize);
 
 			p.button(HopeIcons.history, istyle, isize, history::show)
+			 .with(IntUI.makeTipListener("tester.rollHistory"))
 			 .get().addCaptureListener(new ElementGestureListener() {
 				 public void fling(InputEvent event, float velocityX, float velocityY, KeyCode button) {
 					 if (velocityY > 10) {
@@ -418,7 +417,7 @@ public class Tester extends Content {
 				() -> multiThread = !multiThread),
 			 () -> multiThread, "@tester.multiThread", "@tester.mainThread");
 		};
-		folder.fireCheck(false);
+		folder.fireCheck(true);
 	}
 
 	private void showDetails() {

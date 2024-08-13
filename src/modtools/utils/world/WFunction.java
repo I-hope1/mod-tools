@@ -231,6 +231,7 @@ public abstract class WFunction<T> {
 
 		newButton("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
 			clearList();
+			SC.dynamicSelectRegions.clear();
 			changeEvent.run();
 		});
 		buttons.row();
@@ -278,6 +279,7 @@ public abstract class WFunction<T> {
 			return;
 		}
 		executor.submit(() -> Tools.each(list, Tools.consT(t -> {
+			if (t == null) return;
 			new LerpFun(Interp.fastSlow).onWorld().rev()
 			 .registerDispose(1 / 24f, fin -> {
 				 Draw.color(Pal.accent);
@@ -309,13 +311,14 @@ public abstract class WFunction<T> {
 	public abstract void buildTable(T item, Table table);
 
 	public final void add(T item) {
+		if (item == null) return;
 		Core.app.post(() -> {
 			TaskManager.acquireTask(15f, changeEvent);
 		});
 		list.add(item);
 		if (SC.drawSelect) {
 			// 异步无法创建FrameBuffer
-			Core.app.post(() -> Core.app.post(() -> afterAdd(item)));
+			Core.app.post(() -> afterAdd(item));
 		}
 	}
 
@@ -327,6 +330,7 @@ public abstract class WFunction<T> {
 			if (!SC.ui.isShown()) return true;
 
 			if (checkRemove(item)) {
+				list.remove(item);
 				return false;
 			}
 			Vec2 pos = getPos(item);
@@ -385,8 +389,12 @@ public abstract class WFunction<T> {
 
 
 	public boolean onRemoved = false;
+	Runnable fireRun = () -> {
+		onRemoved = false;
+		MyEvents.fire(this);
+	};
 	private void onRemoved() {
-		if (!onRemoved) Core.app.post(() -> onRemoved = false);
+		TaskManager.scheduleOrReset(0.1f, fireRun);
 		onRemoved = true;
 	}
 

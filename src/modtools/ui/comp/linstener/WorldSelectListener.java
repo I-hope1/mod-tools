@@ -14,8 +14,8 @@ import static mindustry.Vars.world;
 import static modtools.utils.world.WorldDraw.CAMERA_RECT;
 
 public class WorldSelectListener extends InputListener {
-	protected final Vec2 start = new Vec2();
-	protected final Vec2 end   = new Vec2();
+	public final Vec2 start = new Vec2();
+	public final Vec2 end   = new Vec2();
 
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		acquireWorldPos(x, y);
@@ -67,6 +67,9 @@ public class WorldSelectListener extends InputListener {
 		Lines.line(minX, minY, minX, maxY);
 	}
 	protected void clampWorld() {
+		clampWorld(start, end);
+	}
+	protected void clampWorld(Vec2 start, Vec2 end) {
 		start.x = Mathf.clamp(start.x, 0, world.unitWidth());
 		end.x = Mathf.clamp(end.x, 0, world.unitWidth());
 		start.y = Mathf.clamp(start.y, 0, world.unitHeight());

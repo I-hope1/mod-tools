@@ -82,9 +82,13 @@ public class Selection extends Content {
 	// public Table functions;
 	public Team    defaultTeam;
 	/** select元素（用于选择）是否显示 **/
-	boolean isSelecting  = false;
+	boolean   isSelecting          = false;
+	boolean   isDynamicSelecting   = false;
+	/** 动态更新的选区，格式(x1, y1, x2, y2)
+	 * @see SelectListener#touchUp(InputEvent, float, float, int, KeyCode)  */
+	public Seq<Rect> dynamicSelectRegions = new Seq<>();
 	/** 鼠标是否移动，形成矩形 */
-	boolean mouseChanged = false;
+	boolean   mouseChanged         = false;
 	public boolean drawSelect = true;
 
 	public static final int
@@ -119,6 +123,7 @@ public class Selection extends Content {
 		Contents.settings_ui.add(localizedName(), icon, new SettingsTable(data));
 	}
 
+	SelectListener listener;
 	public void lazyLoad() {
 		fragSelect = new BackElement();
 		fragSelect.name = "SelectionElem";
@@ -126,7 +131,7 @@ public class Selection extends Content {
 		fragSelect.touchable = Touchable.enabled;
 
 		fragSelect.setFillParent(true);
-		fragSelect.addListener(new SelectListener());
+		fragSelect.addListener(listener = new SelectListener());
 
 		loadUI();
 	}
@@ -173,13 +178,19 @@ public class Selection extends Content {
 				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
 			});
 		});
-		cont.button("Select", HopeStyles.flatTogglet, () -> {
+		cont.button("StaticSelect", HopeStyles.flatTogglet, () -> {
 			isSelecting = !isSelecting;
+			isDynamicSelecting = false;
 			ElementUtils.addOrRemove(fragSelect, isSelecting);
-		}).size(100, 40).checked(_ -> isSelecting);
+		}).size(150, 40).checked(_ -> isSelecting && !isDynamicSelecting);
+		cont.button("DynamicSelect", HopeStyles.flatTogglet, () -> {
+			isSelecting = !isSelecting;
+			isDynamicSelecting = true;
+			ElementUtils.addOrRemove(fragSelect, isSelecting);
+		}).size(150, 40).checked(_ -> isSelecting && isDynamicSelecting);
 		cont.row();
 		cont.left().add(tab.build())
-		 // .colspan(2)
+		 .colspan(2)
 		 .grow().left();
 		for (Entry<String, Label> label : tab.labels) {
 			label.value.setAlignment(Align.left);
@@ -759,6 +770,13 @@ public class Selection extends Content {
 			}
 			drawFocusInternal();
 		});
+		Vec2 start = new Vec2(), end = new Vec2();
+		/* 更新动态选区  */
+		Tools.TASKS.add(() -> {
+			for (Rect rect : dynamicSelectRegions) {
+				listener.updateRegion(rect.getPosition(start), rect.getSize(end)/* @see dynamicSelectRegions */);
+			}
+		});
 		Tools.TASKS.add(() -> {
 			Element hit = HopeInput.mouseHit();
 			focusLocked = control.input.locked();
@@ -1051,13 +1069,18 @@ public class Selection extends Content {
 			isSelecting = false;
 			fragSelect.remove();
 
-			/* if (!Core.input.alt()) {
-				tiles.clearList();
-				buildings.clearList();
-				bullets.clearList();
-				units.clearList();
-			} */
+			if (isDynamicSelecting) {
+				dynamicSelectRegions.add(new Rect(start.x, start.y, end.x, end.y));
+			}
+			updateRegion(start, end);
 
+			if (!ui.isShown()) {
+				ui.setPosition(mx, my);
+			}
+			ui.show();
+			isSelecting = false;
+		}
+		protected void updateRegion(Vec2 start, Vec2 end) {
 			if (Settings.bullet.enabled()) {
 				acquireExecutor().submit(() -> {
 					Groups.bullet.each(bullet -> {
@@ -1096,9 +1119,9 @@ public class Selection extends Content {
 				});
 			}
 
-			clampWorld();
+			clampWorld(start, end);
 
-			boolean enabledTile  = Settings.tile.enabled();
+			boolean enabledTile  = Settings.tile.enabled()&&start==this.start && end==this.end;
 			boolean enabledBuild = Settings.building.enabled();
 			acquireExecutor().submit(() -> {
 				for (float y = start.y; y < end.y; y += tilesize) {
@@ -1116,12 +1139,6 @@ public class Selection extends Content {
 					}
 				}
 			});
-
-			if (!ui.isShown()) {
-				ui.setPosition(mx, my);
-			}
-			ui.show();
-			isSelecting = false;
 		}
 	}
 

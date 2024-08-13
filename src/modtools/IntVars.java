@@ -8,7 +8,7 @@ import arc.util.*;
 import arc.util.serialization.*;
 import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
-import mindustry.mod.ModClassLoader;
+import mindustry.mod.*;
 import mindustry.mod.Mods.*;
 import modtools.files.HFi;
 import modtools.struct.*;
@@ -27,6 +27,7 @@ public class IntVars {
 	public static final Vec2     mouseWorld = new Vec2();
 
 	public static final Runnable EMPTY_RUN = () -> { };
+	/** @see Mods#metas */
 	public static       ModMeta  meta;
 
 	/** mod的根目录 */
@@ -130,6 +131,7 @@ public class IntVars {
 				}
 			});
 		}
+
 		public void require() {
 			super.set(Core.input.mouse());
 		}

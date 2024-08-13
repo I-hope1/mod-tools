@@ -30,6 +30,7 @@ import modtools.jsfunc.INFO_DIALOG;
 import modtools.misc.PairProv;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
+import modtools.ui.comp.ListenerTable;
 import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.comp.limit.*;
@@ -66,10 +67,11 @@ public abstract class WFunction<T> {
 	 "@kill", HopeIcons.kill,
 	 "@editor.teams", Icon.playersSmall
 	);
-	public final        Table                       wrap       = new Table();
-	public final        Table                       main       = new Table();
-	public final        Table                       buttons    = new Table();
-	public final        List<T>                     list       = new MyVector();
+
+	public final Table         wrap    = new Table();
+	public final Table         main    = new Table();
+	public final ListenerTable buttons = new ListenerTable();
+	public final List<T>       list    = new MyVector();
 
 
 	// for select
@@ -188,8 +190,11 @@ public abstract class WFunction<T> {
 		});
 	}
 	public abstract CharSequence getTips(T item);
+	@SuppressWarnings("StringTemplateMigration")
 	private void buildButtons() {
 		buttons.defaults().height(Selection.buttonHeight).growX();
+		buttons.setListener((Cell<TextButton> c) -> c.margin(6f).labelAlign(Align.left)
+		 .get().getLabelCell().padLeft(6f).labelAlign(Align.left));
 
 		newButton("Refresh", Icon.refreshSmall, HopeStyles.flatt, () -> {
 			MyEvents.fire(this);
@@ -200,41 +205,41 @@ public abstract class WFunction<T> {
 			 select.clear();
 			 if (all) for (var entry : selectMap) select.add(entry.value);
 		 }))
-		 .update(b -> b.setChecked(select.size == selectMap.size));
-		buttons.row();
+		 .update(b -> b.setChecked(select.size == selectMap.size))
+		 .row();
 
 		newButton("Run", Icon.okSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
 		 .with(b -> b.clicked(() -> {
 			 MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
 		 }))
 		 .disabled(_ -> select.isEmpty());
-		buttons.button("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
-			 JSRequest.requestForSelection(mergeList(), null, boolf -> {
-				 int size = select.sum(seq -> seq.size);
-				 select.each(seq -> {
-					 var b    = ((Boolf<T>) boolf);
-					 var iter = seq.iterator();
-					 while (iter.hasNext()) {
-						 if (!b.get(iter.next())) iter.remove();
-					 }
-				 });
-				 showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
-					.sticky = true;
-			 });
-		 })
-		 .disabled(_ -> select.size == 0);
-		buttons.row();
+		newButton("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
+			JSRequest.requestForSelection(mergeList(), null, boolf -> {
+				int size = select.sum(seq -> seq.size);
+				select.each(seq -> {
+					var b    = ((Boolf<T>) boolf);
+					var iter = seq.iterator();
+					while (iter.hasNext()) {
+						if (!b.get(iter.next())) iter.remove();
+					}
+				});
+				showInfoFade("Filtered [accent]" + (size - select.sum(seq -> seq.size)) + "[] elements")
+				 .sticky = true;
+			});
+		})
+		 .disabled(_ -> select.size == 0)
+		 .row();
 
 		newButton("DrawAll", Icon.menuSmall, HopeStyles.flatTogglet, () -> {
 			drawAll = !drawAll;
-		}).update(t -> t.setChecked(drawAll));
-
-		newButton("NoSelect", Icon.trash, HopeStyles.flatt, () -> {
+		})
+		 .update(t -> t.setChecked(drawAll));
+		newButton("NoSelect", Icon.trashSmall, HopeStyles.flatt, () -> {
 			clearList();
 			SC.dynamicSelectRegions.clear();
 			changeEvent.run();
-		});
-		buttons.row();
+		})
+		 .row();
 	}
 	private Cell<TextButton> newButton(String name, TextureRegionDrawable icon, TextButtonStyle style,
 	                                   Runnable runnable) {

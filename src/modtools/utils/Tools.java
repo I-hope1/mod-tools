@@ -23,12 +23,15 @@ import static ihope_lib.MyReflect.unsafe;
 public class Tools {
 	public static final boolean DEBUG = false;
 
+	public static void dispose() {
+		TASKS.clear();
+	}
 	/** 静态的任务集合 */
 	public static TaskSet TASKS = new TaskSet();
 
 	// 静态初始化块，用于在触发更新时运行任务集合
 	static {
-		Events.run(Trigger.update, delegate(TASKS::exec, TASKS::isEmpty));
+		Events.run(Trigger.update, delegate(TASKS::exec, ModTools::isDisposed));
 	}
 
 	/**

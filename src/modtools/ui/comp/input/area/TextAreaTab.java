@@ -171,10 +171,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 		public MyTextArea(String text) {
 			super("", HopeStyles.defaultMultiArea);
-			Tools.runIgnoredException(() -> {
-				focusTraversal = false;
-				onlyFontChars = false;
-			});
+			focusTraversal = false;
+			onlyFontChars = false;
 			setText(text);
 		}
 		public float lineHeight() {
@@ -517,9 +515,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					return false;
 				}
 			}
+			/** 修复笔记本上不能使用的问题  */
 			private void fixNumLk(InputEvent event, KeyCode keycode) {
-				if (OS.isAndroid) return;
-				// 修复笔记本上不能使用的问题
 				int oldCursor = cursor;
 				Time.runTask(1, () -> {
 					// 判断是否一样

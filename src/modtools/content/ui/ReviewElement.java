@@ -499,7 +499,7 @@ public class ReviewElement extends Content {
 			cons.get(t);
 			makePosLabel(t, pos);
 		}, element)).growX().left().row();
-		table.image().color(Tmp.c1.set(JColor.c_underline)).growX().colspan(2).row();
+		Underline.of(table, 2, Tmp.c1.set(JColor.c_underline));
 	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
@@ -760,6 +760,7 @@ public class ReviewElement extends Content {
 
 	private static Window viewAllCells(Table element) {
 		class AllCellsWindow extends Window implements IDisposable {
+			boolean ignoreEmptyCell;
 			public AllCellsWindow() { super("All Cells"); }
 		}
 
@@ -769,14 +770,17 @@ public class ReviewElement extends Content {
 			}
 		}
 
-		Window d         = new AllCellsWindow();
-		Table  container = new LimitTable();
-		d.cont.pane(container).grow();
+		AllCellsWindow window         = new AllCellsWindow();
+		Table          container = new LimitTable();
+		SettingsBuilder.build(window.cont);
+		SettingsBuilder.check("Filter out empty cell", b -> window.ignoreEmptyCell = b, () -> window.ignoreEmptyCell);
+		SettingsBuilder.clearBuild();
+		window.cont.pane(container).grow();
 		container.left().defaults().left();
 		for (var cell : element.getCells()) {
 			container.add(new CellItem(Tex.pane, t0 -> {
 				 var l = new PlainValueLabel<>(Cell.class, () -> cell);
-				 ReviewElement.addFocusSource(t0, () -> d, cell::get);
+				 ReviewElement.addFocusSource(t0, () -> window, cell::get);
 				 t0.add(l).grow();
 			 })).grow()
 			 .colspan(CellTools.colspan(cell));
@@ -784,8 +788,8 @@ public class ReviewElement extends Content {
 				Underline.of(container.row(), 20);
 			}
 		}
-		d.update(d::display);
-		return d;
+		window.update(window::display);
+		return window;
 	}
 
 

@@ -176,7 +176,7 @@ public class UnitSpawn extends Content {
 		ui.cont.table(Window.myPane, table -> {
 			table.margin(-4f, 0f, -4f, 0f);
 			table.check("Multi", false, b -> multi = b).get().setStyle(HopeStyles.hope_defaultCheck);
-			table.button("@ok", HopeStyles.cleart, this::spawnIgnored)
+			table.button("@ok", HopeStyles.cleart, this::spawnCatch)
 			 .size(90, 50)
 			 .disabled(b -> !isOk(spawnX, spawnY, amount, team, selectUnit));
 			table.button("Post task", HopeStyles.cleart, () -> {
@@ -231,8 +231,8 @@ public class UnitSpawn extends Content {
 	public boolean validNumber(float d) {
 		return Math.abs(d) < 1E6 && !Float.isNaN(d);
 	}
-	public void spawnIgnored() {
-		Tools.runIgnoredException(() -> {
+	public void spawnCatch() {
+		Tools.runLoggedException(() -> {
 			group.getAllChecked().each(u -> spawn((UnitType) u.userObject, amount, team, spawnX, spawnY));
 		});
 	}

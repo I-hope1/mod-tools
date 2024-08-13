@@ -60,7 +60,7 @@ public class IntTab {
 			} else {
 				cell.growX().row();
 			}
-			t.add(pane).self(c -> c.update(_ -> c.width(titleWidth == -1 ? CellTools.unset : titleWidth))).grow();
+			t.add(pane).pad(4).self(c -> c.update(_ -> c.width(titleWidth == -1 ? CellTools.unset : titleWidth))).grow();
 		}) {
 			public float getMinWidth() {
 				return prefW != -1 ? prefW : super.getMinWidth();
@@ -196,7 +196,6 @@ public class IntTab {
 				if (titleWidth != -1)
 					c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
 			});
-			;
 
 			if (++i % cols == 0) title.row();
 		}

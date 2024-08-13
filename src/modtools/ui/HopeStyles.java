@@ -11,7 +11,7 @@ import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Scl;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
@@ -29,11 +29,12 @@ import static modtools.ui.IntUI.whiteui;
 public class HopeStyles {
 	public static final TextButtonStyle blackt;
 	public static final ButtonStyle     clearb;
-	public static final Drawable        none = whiteui.tint(0f, 0f, 0f, 0.01f);
+	public static final Drawable        none     = whiteui.tint(0f, 0f, 0f, 0.01f);
+	public static final Drawable        hflatOver = copyFrom((TextureRegionDrawable) Styles.flatOver, 12);
 
 	/** 默认使用等宽字体，没有的话使用默认字体 */
 	public static final LabelStyle defaultLabel;
-	public static final int circleColor = 0x454545_FF;
+	public static final int        circleColor = 0x454545_FF;
 	// public static final CheckBoxStyle checkbox;
 
 
@@ -43,15 +44,25 @@ public class HopeStyles {
 	 hope_flati,
 	 hope_flatTogglei;
 	public static TextButtonStyle
-	                  hope_clearTogglet;
+	 hope_clearTogglet,
+	 squareTogglet = new TextButtonStyle() {{
+		 font = Fonts.def;
+		 fontColor = Color.white;
+		 disabledFontColor = Color.gray;
+		 up = Tex.pane;
+		 down = hflatOver;
+		 over = hflatOver;
+		 checked = hflatOver;
+		 disabled = Styles.black;
+	 }};
 	public static ButtonStyle
-	                  hope_defaultb;
+	 hope_defaultb;
 	public static SliderStyle
-	                  hope_defaultSlider;
+	 hope_defaultSlider;
 	public static CheckBoxStyle
-	                  hope_defaultCheck;
+	 hope_defaultCheck;
 	public static TextFieldStyle
-	                  defaultMultiArea;
+	 defaultMultiArea;
 
 	static void loadHopeStyles() {
 		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
@@ -112,7 +123,7 @@ public class HopeStyles {
 			background = null;
 		}};
 	}
-	static void setSize(Drawable drawable) {setSize(drawable, 28 * Scl.scl(), 28 * Scl.scl());}
+	static void setSize(Drawable drawable) { setSize(drawable, 28 * Scl.scl(), 28 * Scl.scl()); }
 	public static void setSize(Drawable drawable, float minWidth, float minHeight) {
 		if (drawable == null) return;
 		drawable.setMinWidth(minWidth);
@@ -238,6 +249,22 @@ public class HopeStyles {
 		loadHopeStyles();
 	}
 
+	static Drawable copyFrom(TextureRegionDrawable drawable, float pad) {
+		TextureRegionDrawable res = new TextureRegionDrawable(drawable) {
+			public void draw(float x, float y, float width, float height) {
+				drawable.draw(x, y, width, height);
+			}
+			public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
+			                 float scaleY, float rotation) {
+				drawable.draw(x, y, originX, originY, width, height, scaleX, scaleY, rotation);
+			}
+		};
+		res.setLeftWidth(pad);
+		res.setRightWidth(pad);
+		res.setTopHeight(pad);
+		res.setBottomHeight(pad);
+		return res;
+	}
 	static void init() {
 		if (ModTools.isV6) {
 			V6Adapter();

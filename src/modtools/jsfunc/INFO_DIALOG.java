@@ -230,7 +230,7 @@ public interface INFO_DIALOG {
 			((Table) titleTable.parent).getCell(titleTable).height(titleHeight);
 			cons.get(this);
 			moveToMouse();
-			Time.runTask(20, () -> {
+			Time.runTask(40, () -> {
 				if (autoDispose) autoDisposeRun = this::dispose;
 			});
 		}

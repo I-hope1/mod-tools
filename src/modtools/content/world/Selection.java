@@ -172,22 +172,23 @@ public class Selection extends Content {
 		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
 		 1, true);
 		tab.setIcons(HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall);
+		tab.setPrefSize(260, -1);
 		Table cont = ui.cont;
 		cont.update(() -> {
 			tab.labels.each((name, l) -> {
 				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
 			});
 		});
-		cont.button("StaticSelect", HopeStyles.flatTogglet, () -> {
+		cont.button("StaticSelect", HopeStyles.squareTogglet, () -> {
 			isSelecting = !isSelecting;
 			isDynamicSelecting = false;
 			ElementUtils.addOrRemove(fragSelect, isSelecting);
-		}).size(150, 40).checked(_ -> isSelecting && !isDynamicSelecting);
-		cont.button("DynamicSelect", HopeStyles.flatTogglet, () -> {
+		}).growX().minWidth(170).height(40).checked(_ -> isSelecting && !isDynamicSelecting);
+		cont.button("DynamicSelect", HopeStyles.squareTogglet, () -> {
 			isSelecting = !isSelecting;
 			isDynamicSelecting = true;
 			ElementUtils.addOrRemove(fragSelect, isSelecting);
-		}).size(150, 40).checked(_ -> isSelecting && isDynamicSelecting);
+		}).growX().minWidth(170).height(40).checked(_ -> isSelecting && isDynamicSelecting);
 		cont.row();
 		cont.left().add(tab.build())
 		 .colspan(2)

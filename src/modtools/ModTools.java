@@ -103,7 +103,7 @@ public class ModTools extends Mod {
 	public void loadContent() {
 		IntVars.meta.hidden = true;
 		// Time.mark();
-		Tools.runIgnoredException(Tester::initExecution);
+		Tools.runLoggedException(Tester::initExecution);
 
 		extending();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
@@ -157,7 +157,7 @@ public class ModTools extends Mod {
 		IntVars.async(() -> {
 			AllTutorial.init();
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
-				Core.app.post(() -> Tools.runIgnoredException(Background::load));
+				Core.app.post(() -> Tools.runLoggedException(Background::load));
 			}
 			Tools.TASKS.add(() -> {
 				if (mods.getMod(ModTools.class) == null) {
@@ -252,7 +252,7 @@ public class ModTools extends Mod {
 	public static void disposeAll() {
 		if (isDisposed) return;
 		isDisposed = true;
-		Tools.TASKS.clear();
+		Tools.dispose();
 		WorldDraw.tasks.clear();
 		IntUI.disposeAll();
 		HopeInput.dispose();

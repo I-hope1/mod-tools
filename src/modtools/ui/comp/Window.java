@@ -17,6 +17,7 @@ import arc.scene.ui.layout.*;
 import arc.struct.ObjectSet;
 import arc.util.*;
 import arc.util.Timer.Task;
+import arc.util.pooling.Pool;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -737,6 +738,9 @@ public class Window extends Table implements Position {
 			g.find(el -> {
 				if (el instanceof Table) {
 					Core.app.post(el::clear);
+				}
+				if (el instanceof Pool.Poolable poolable) {
+					poolable.reset();
 				}
 
 				el.update(null);

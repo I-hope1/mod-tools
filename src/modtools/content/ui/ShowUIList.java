@@ -96,11 +96,10 @@ public class ShowUIList extends Content {
 		}).row();
 
 		Table top  = new Table();
-		Table wrap = new Table();
 		ui.cont.add(top).growX().row();
-		ui.cont.add(wrap).grow();
+		ui.cont.top();
+		ui.cont.add(tab.build()).grow();
 		new Search((_, pattern0) -> pattern = pattern0).build(top, ui.cont);
-		wrap.add(tab.build()).pad(10f).grow();
 		// ui.addCloseButton();
 	}
 
@@ -251,7 +250,7 @@ public class ShowUIList extends Content {
 		}
 	}
 	private static Cell<Label> field(Table p, String fieldName) {
-		return p.add(fieldName).with(EventHelper::addDClickCopy).growY();
+		return p.add(fieldName).with(EventHelper::addDClickCopy);
 	}
 	static void listAllStyles(FilterTable<Object> t, Class<?> stylesClass) {
 		String  prefix = stylesClass.getSimpleName() + ".";
@@ -328,7 +327,6 @@ public class ShowUIList extends Content {
 	public void build() {
 		if (ui == null) _load();
 		ui.show();
-		Time.runTask(2, () -> tab.main.invalidate());
 	}
 	public <T> FilterTable<T> newTable(Cons<FilterTable<T>> cons) {
 		return newTable(false, cons);
@@ -336,8 +334,7 @@ public class ShowUIList extends Content {
 
 	public <T> FilterTable<T> newTable(boolean withDisabled, Cons<FilterTable<T>> cons) {
 		return new FilterTable<>(t -> {
-			t.left().defaults().left().padLeft(6f);
-			t.clearChildren();
+			t.top().left().defaults().left().padLeft(6f);
 			t.addChild(new FillElement() {
 				public void draw() {
 					Draw.color(bgColor, bgColor.a * parentAlpha);
@@ -396,6 +393,9 @@ public class ShowUIList extends Content {
 		}
 
 		static void view(Style style, Table t) {
+			t.button("Copy",  HopeStyles.flatBordert, () -> {
+
+			});
 		}
 
 		static void view(Drawable drawable, Table t) {

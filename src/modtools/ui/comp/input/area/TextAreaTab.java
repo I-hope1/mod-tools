@@ -634,6 +634,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
 			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
+			font.getColor().a *= parentAlpha * color.a;
 			MyFonts.underline = realCursorLine == row;
 			font.draw(String.valueOf(row), x, offsetY);
 			MyFonts.underline = false;

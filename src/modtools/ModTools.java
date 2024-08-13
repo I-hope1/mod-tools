@@ -23,7 +23,7 @@ import modtools.ui.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.utils.Tools;
+import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
@@ -81,7 +81,6 @@ public class ModTools extends Mod {
 	private void load() {
 		if (!isImportFromGame) IntVars.meta.hidden = false;
 		resolveLibsCatch();
-
 
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();

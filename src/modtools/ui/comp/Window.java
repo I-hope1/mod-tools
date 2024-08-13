@@ -66,7 +66,7 @@ public class Window extends Table implements Position {
 		}
 	};
 
-	public static boolean disabledActions = false;
+	public static final boolean disabledActions = false;
 
 	/** 最前面的窗口 */
 	public static Window frontWindow;

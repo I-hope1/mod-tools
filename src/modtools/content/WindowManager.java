@@ -1,14 +1,13 @@
 package modtools.content;
 
-import arc.Core;
 import arc.graphics.Color;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.*;
-import modtools.ui.*;
-import modtools.ui.gen.HopeIcons;
+import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.limit.LimitTable;
+import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 
 public class WindowManager extends Content {
@@ -29,7 +28,7 @@ public class WindowManager extends Content {
 	}
 	Runnable run = this::rebuild0;
 	public void rebuild() {
-		Core.app.post(() -> TaskManager.acquireTask(15, run));
+		TaskManager.scheduleOrReset(0.1f, run);
 	}
 
 	private void rebuild0() {

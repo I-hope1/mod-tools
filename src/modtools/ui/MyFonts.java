@@ -129,7 +129,7 @@ public class MyFonts {
 			GlyphLayout layout = getLayouts().firstOpt();
 			if (layout == null) return;
 
-			Draw.color();
+			Draw.color(Color.white, getColor().a);
 			float[] vertices = getVertices();
 			Fill.crect(getX() + vertices[0] - 1,
 			 getY() + vertices[1] - 4 + (strikethrough ? layout.height / 2f : 0),

@@ -76,8 +76,9 @@ public abstract class WFunction<T> {
 	public        Seq<OrderedSet<T>> select      = new Seq<>();
 	private final Runnable           changeEvent = () -> MyEvents.fire(this);
 	public final  String             name;
+	public final  WorldDraw          WD;
+
 	Settings data;
-	public WorldDraw WD;
 
 	public TemplateTable<OrderedSet<T>> template;
 
@@ -322,13 +323,15 @@ public abstract class WFunction<T> {
 	public final void afterAdd(T item) {
 		TextureRegion region = getRegion(item);
 		new BindBoolp(item, () -> {
+			/* 判断是否UI是否隐藏  */
+			if (!SC.ui.isShown()) return true;
+
 			if (checkRemove(item)) {
 				return false;
 			}
 			Vec2 pos = getPos(item);
 			/* 判断是否在相机内 */
 			if (!CAMERA_RECT.overlaps(pos.x, pos.y, region.width, region.height)) return true;
-			if (!SC.ui.isShown()) return true;
 
 			if (drawAll || (
 			 select.contains(selectMap.get(getIcon(item)))

@@ -298,14 +298,12 @@ public class Selection extends Content {
 		};
 	}
 
+	public void build() {
+		ui.show();
+	}
 	public void hide() {
 		fragSelect.remove();
 		isSelecting = false;
-
-		tiles.clearList();
-		buildings.clearList();
-		units.clearList();
-		bullets.clearList();
 
 		if (executor != null) executor.shutdownNow();
 	}
@@ -314,9 +312,7 @@ public class Selection extends Content {
 		btn.setDisabled(() -> state.isMenu());
 		return btn;
 	}
-	public void build() {
-		ui.show();
-	}
+
 	public static void getWorldRect(Tile t) {
 		mr1.set(t.worldx(), t.worldy(), 32, 32);
 	}

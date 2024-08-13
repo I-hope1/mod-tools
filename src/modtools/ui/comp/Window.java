@@ -429,6 +429,9 @@ public class Window extends Table implements Position {
 		}
 	}
 
+	/**
+	 * 如果实现了{@link IDisposable}接口，自动show
+	 * @see Window#Window(String, float, float, boolean, boolean)  */
 	public Window show() {
 		/* 以免window超出屏幕外  */
 		Time.runTask(4, this::display);

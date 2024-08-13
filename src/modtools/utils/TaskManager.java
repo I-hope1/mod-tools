@@ -49,7 +49,7 @@ public class TaskManager {
 		return false;
 	}
 	/** 将task添加到计时器  */
-	public static void scheduleOrReset(float delaySeconds, Runnable run) {
+	public static void  scheduleOrReset(float delaySeconds, Runnable run) {
 		scheduleOrReset(delaySeconds, map.get(run, () -> acquireTask(delaySeconds * 60f, run)));
 	}
 	/** 将task添加到计时器  */

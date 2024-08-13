@@ -123,6 +123,10 @@ public class SR<T> {
 		return this;
 	}
 
+	public SR<T> with(Consumer<T> cons) {
+		cons.accept(value);
+		return this;
+	}
 
 	public SR<T> ifRun(boolean b, Consumer<T> cons) {
 		if (b) cons.accept(value);

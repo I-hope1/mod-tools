@@ -146,6 +146,13 @@ public class ArrayUtils {
 		Seq<T> seq = (Seq<T>) Pools.get(DisposableSeq.class, DisposableSeq::new).obtain();
 		return seq.addAll(items);
 	}
+	public static <T> T findInverse(Seq<T> seq, Boolf<T> condition) {
+		T item;
+		for (int i = seq.size; i-- > 0;) {
+			if (condition.get(item = seq.get(i))) return item;
+		}
+		return null;
+	}
 	@SuppressWarnings("rawtypes")
 	public static class DisposableSeq extends Seq implements Poolable {
 		public void reset() {

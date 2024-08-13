@@ -106,7 +106,6 @@ public class ModTools extends Mod {
 		Tools.runIgnoredException(Tester::initExecution);
 
 		extending();
-
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 	private static void resolveLibsCatch() {

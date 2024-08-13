@@ -872,7 +872,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		public FillEnd() {
 			super(t -> {
 				t.addChild(new GroupHitter());
-				t.add(TopGroup.this.switchView);
+				t.add(TopGroup.this.switchView).grow();
 			});
 		}
 		public Element hit(float x, float y, boolean touchable) {

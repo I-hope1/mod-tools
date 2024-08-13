@@ -134,17 +134,16 @@ public class IntUI {
 
 	/**
 	 * Add watch button cell.
-	 * @param buttons the buttons
-	 * @param info    the info
-	 * @param value   the value
 	 * @return the cell
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, IntVars.EMPTY_RUN).with(b -> b.clicked(() -> {
-			SR.of((!WatchWindow.isMultiWatch() && ArrayUtils.getBound(topGroup.acquireShownWindows(), -2) instanceof WatchWindow w
-				? w : JSFunc.watch()).watch(info, value).show())
+			SR.of((!WatchWindow.isMultiWatch() &&
+			       ArrayUtils.findInverse(topGroup.acquireShownWindows(), e -> e instanceof WatchWindow) instanceof WatchWindow w
+				? w : JSFunc.watch())
+				.watch(info, value))
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
-		})).size(FUNCTION_BUTTON_SIZE);
+		})).size(FUNCTION_BUTTON_SIZE).with(makeTipListener("watch.multi"));
 	}
 
 
@@ -610,6 +609,7 @@ public class IntUI {
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
+	/** TIP_PREFIX: {@value TIP_PREFIX}  */
 	public static <T extends Element> Cons<T> makeTipListener(String tipKey) {
 		return elem -> addTooltipListener(elem, () -> tips(tipKey));
 	}

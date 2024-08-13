@@ -52,7 +52,7 @@ public class PreviewUtils {
 				 .size(size, size * mul).row();
 
 				p.add(ReflectTools.getName(drawable.getClass()))
-				 .color(KeyValue.stressColor)
+				 .color(KeyValue.stressColor).pad(4)
 				 .left().row();
 				KeyValue keyValue = KeyValue.THE_ONE;
 				p.defaults().growX();

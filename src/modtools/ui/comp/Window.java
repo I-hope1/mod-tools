@@ -252,7 +252,7 @@ public class Window extends Table implements Position {
 		display();
 	}
 	public void act(float delta) {
-		Tools.runIgnoredException(() -> super.act(delta));
+		Tools.runLoggedException(() -> super.act(delta));
 		if (sticky) toFront();
 		sclListener.disabled0 = isMaximize;
 		if (moveListener != null) moveListener.disabled = sclListener.scling;
@@ -551,11 +551,11 @@ public class Window extends Table implements Position {
 			addAction(Actions.after(Actions.run(() -> {
 				getCell(cont).set(BindCell.UNSET_CELL);
 				cont.remove();
+				if (!noButtons) Tools.runLoggedException(() -> {
+					getCell(buttons).set(BindCell.UNSET_CELL);
+					buttons.remove();
+				});
 			})));
-			if (!noButtons) Tools.runIgnoredException(() -> {
-				getCell(buttons).set(BindCell.UNSET_CELL);
-				buttons.remove();
-			});
 
 			sclListener.remove();
 			sizeChanged();

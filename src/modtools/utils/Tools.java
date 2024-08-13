@@ -7,7 +7,6 @@ import arc.scene.Element;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Log.LogHandler;
-import arc.util.Timer.Task;
 import mindustry.game.EventType.Trigger;
 import modtools.*;
 import modtools.struct.TaskSet;
@@ -118,23 +117,6 @@ public class Tools {
             }*/
 			unsafe.putObject(to, offset, o);
 		}
-	}
-
-	/**
-	 * 重复运行直到返回{@code true}
-	 * @param boolp 布尔提供者
-	 */
-	public static void forceRun(Boolp boolp) {
-		Timer.schedule(new Task() {
-			public void run() {
-				try {
-					if (boolp.get()) cancel();
-				} catch (Throwable e) {
-					Log.err(e);
-					cancel();
-				}
-			}
-		}, 0f, 0.5f, -1);
 	}
 
 	/**

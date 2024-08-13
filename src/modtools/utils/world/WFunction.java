@@ -62,7 +62,7 @@ public abstract class WFunction<T> {
 	 "@selection.reset", Icon.editSmall,
 	 "@clear", Icon.trashSmall,
 	 "@selection.forceClear", Icon.trashSmall,
-	 "@heal", HopeIcons.heal,
+	 "@stat.healing", HopeIcons.heal,
 	 "@kill", HopeIcons.kill,
 	 "@editor.teams", Icon.playersSmall
 	);
@@ -303,7 +303,7 @@ public abstract class WFunction<T> {
 		wrap.add(main).grow();
 	}
 	public final void viewAll() {
-		new ShowAllWindow().show();
+		new ShowAllWindow();
 	}
 
 	public abstract void buildTable(T item, Table table);

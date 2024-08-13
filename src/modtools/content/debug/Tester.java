@@ -815,14 +815,11 @@ public class Tester extends Content {
 	public static boolean loaded = false;
 	public void loadSettings(Data settings) {
 		Table table = new Table();
-		table.defaults().growX();
-		dataInit();
 		ISettings.buildAll("tester", table, Settings.class);
 
 		Contents.settings_ui.add(localizedName(), icon, table);
 	}
 
-	public void dataInit() { }
 	public String getMessage() {
 		return area.getText();
 	}

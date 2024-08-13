@@ -1,5 +1,6 @@
 package modtools.utils;
 
+import arc.func.Boolp;
 import arc.struct.ObjectMap;
 import arc.util.*;
 import arc.util.Timer.Task;
@@ -68,5 +69,21 @@ public class TaskManager {
 			Timer.schedule(task, delaySeconds);
 			return true;
 		}
+	}
+	/**
+	 * 重复运行直到返回{@code true}
+	 * @param boolp 布尔提供者
+	 */
+	public static void forceRun(Boolp boolp) {
+		Timer.schedule(new Task() {
+			public void run() {
+				try {
+					if (boolp.get()) cancel();
+				} catch (Throwable e) {
+					Log.err(e);
+					cancel();
+				}
+			}
+		}, 0f, 0.5f, -1);
 	}
 }

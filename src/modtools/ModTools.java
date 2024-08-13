@@ -120,7 +120,7 @@ public class ModTools extends Mod {
 		}
 	}
 	private static void planB_resolveLibs() {
-		Tools.forceRun(() -> {
+		TaskManager.forceRun(() -> {
 			if (Vars.mods.getMod(ModTools.class) == null) return false;
 			loadLibs();
 			return true;

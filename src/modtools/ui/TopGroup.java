@@ -436,8 +436,6 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 			@Override
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				mouseVec.require();
-
 				if (locked) {
 					if (Vars.mobile) {
 						filterElem(getSelected0(x, y));

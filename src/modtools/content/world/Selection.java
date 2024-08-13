@@ -19,6 +19,7 @@ import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.pooling.Pool;
+import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.game.Team;
 import mindustry.gen.*;
@@ -127,13 +128,17 @@ public class Selection extends Content {
 		fragSelect.setFillParent(true);
 		fragSelect.addListener(new SelectListener());
 
-		initTask();
-
 		loadUI();
-		loadFocusWindow();
 	}
 	public void load() {
 		loadSettings();
+		TaskManager.forceRun(() -> {
+			if (!Vars.state.isGame()) return false;
+			initTask();
+			loadFocusWindow();
+			initFunctions();
+			return true;
+		});
 	}
 
 	FocusWindow focusW;
@@ -154,6 +159,34 @@ public class Selection extends Content {
 		});
 
 		/* 初始化functions */
+		initFunctions();
+
+
+		var tab = new IntTab(-1, allFunctions.orderedKeys().toArray(String.class),
+		 Color.sky,
+		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
+		 1, true);
+		tab.setIcons(HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall);
+		Table cont = ui.cont;
+		cont.update(() -> {
+			tab.labels.each((name, l) -> {
+				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
+			});
+		});
+		cont.button("Select", HopeStyles.flatTogglet, () -> {
+			isSelecting = !isSelecting;
+			ElementUtils.addOrRemove(fragSelect, isSelecting);
+		}).size(100, 40).checked(_ -> isSelecting);
+		cont.row();
+		cont.left().add(tab.build())
+		 // .colspan(2)
+		 .grow().left();
+		for (Entry<String, Label> label : tab.labels) {
+			label.value.setAlignment(Align.left);
+		}
+	}
+	private void initFunctions() {
+		if (tiles != null) return;
 		tiles = new TileFunction<>("tile") {{
 			ListFunction("@selection.reset", () -> content.blocks(), null, (list, block) -> {
 				each(list, tile -> WorldUtils.setBlock(tile, block));
@@ -266,30 +299,6 @@ public class Selection extends Content {
 				});
 			});
 		}};
-
-
-		var tab = new IntTab(-1, allFunctions.orderedKeys().toArray(String.class),
-		 Color.sky,
-		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
-		 1, true);
-		tab.setIcons(HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall);
-		Table cont = ui.cont;
-		cont.update(() -> {
-			tab.labels.each((name, l) -> {
-				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
-			});
-		});
-		cont.button("Select", HopeStyles.flatTogglet, () -> {
-			isSelecting = !isSelecting;
-			ElementUtils.addOrRemove(fragSelect, isSelecting);
-		}).size(100, 40).checked(_ -> isSelecting);
-		cont.row();
-		cont.left().add(tab.build())
-		 // .colspan(2)
-		 .grow().left();
-		for (Entry<String, Label> label : tab.labels) {
-			label.value.setAlignment(Align.left);
-		}
 	}
 	private static Predicate<Building> killCons() {
 		return b -> {
@@ -645,7 +654,10 @@ public class Selection extends Content {
 			 focus instanceof Unit ? ((Unit) focus).icon() : Core.atlas.white();
 			if (region != Core.atlas.white()) mr1.setSize(region.width, region.height);
 			mr1.setPosition(box.x(), box.y());
-		} else return;
+		} else {
+			return;
+		}
+
 		mr1.setSize(mr1.width / 4f, mr1.height / 4f);
 
 		if (transform) {
@@ -707,8 +719,8 @@ public class Selection extends Content {
 		// Lines.line(vec2.x, vec2.y, screenX, screenY);
 	}
 
-	public boolean focusDisabled;
-	boolean focusLocked;
+	public boolean focusDisabled = false;
+	boolean focusLocked = false;
 	private       boolean focusEnabled;
 	public static Element focusElem;
 	/** 用于反应 元素 对应的 焦点 */
@@ -730,11 +742,11 @@ public class Selection extends Content {
 		});
 	}
 
-	public       Tile               focusTile;
-	public       Building           focusBuild;
-	public final ObjectSet<Unit>    focusUnits    = new ObjectSet<>();
-	public final ObjectSet<Bullet>  focusBullets  = new ObjectSet<>();
-	public final ObjectSet<Entityc> focusEntities = new ObjectSet<>();
+	public @Nullable Tile               focusTile;
+	public @Nullable Building           focusBuild;
+	public final     ObjectSet<Unit>    focusUnits    = new ObjectSet<>();
+	public final     ObjectSet<Bullet>  focusBullets  = new ObjectSet<>();
+	public final     ObjectSet<Entityc> focusEntities = new ObjectSet<>();
 
 	/** 用于 ValueLabel 添加 焦点 */
 	public final ObjectSet<Object> focusInternal = new ObjectSet<>();
@@ -910,9 +922,8 @@ public class Selection extends Content {
 			pane.table(t -> {
 				t.act(0.1f);
 				t.left().defaults().grow().left();
-				t.update(() -> cons.get(t));
 				t.background(t.getChildren().any() ? Tex.underlineOver : null);
-			}).grow().row();
+			}).update(cons).grow().row();
 		}
 
 		public Tile lastTile;

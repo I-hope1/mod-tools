@@ -37,6 +37,10 @@ public class HopeInput {
 				mouseVec.require();
 				return false;
 			}
+			public boolean touchDown(int screenX, int screenY, int pointer, KeyCode button) {
+				mouseVec.require();
+				return false;
+			}
 			public boolean touchDragged(int screenX, int screenY, int pointer) {
 				mouseVec.require();
 				return false;

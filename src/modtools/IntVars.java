@@ -123,9 +123,15 @@ public class IntVars {
 			meta.description = Core.bundle.get("mod-tools.description");
 	}
 	public static class MouseVec extends Vec2 {
+		static {
+			Tools.TASKS.add(() -> {
+				if (Vars.state.isGame()) {
+					mouseWorld.set(Core.camera.unproject(mouseVec.x, mouseVec.y));
+				}
+			});
+		}
 		public void require() {
 			super.set(Core.input.mouse());
-			if (Vars.state.isGame()) { mouseWorld.set(Core.camera.unproject(Core.input.mouse())); }
 		}
 		/* 禁止外部设置 */
 		public Vec2 set(Vec2 v) {

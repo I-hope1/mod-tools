@@ -462,19 +462,7 @@ public abstract class ValueLabel extends InlineLabel {
 
 		if (Style.class.isAssignableFrom(type) || val instanceof Style) {
 			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
-				Class<?>      cls     = val.getClass();
-				StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
-				ClassUtils.walkPublicNotStaticKeys(cls, field -> {
-					Object fieldVal = FieldUtils.getOrNull(field, val);
-					if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
-					String uiKey = CatchSR.apply(() ->
-					 CatchSR.of(() -> FormatHelper.getUIKey(fieldVal))
-						.get(() -> String.valueOf(fieldVal))
-					);
-					builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
-				});
-				builder.append("}}");
-				JSFunc.copyText(builder);
+				copyStyle(val);
 			}));
 			list.add(DisabledList.withd("style.set", Icon.copySmall, "Set Style", () -> val == null, () -> {
 				IntUI.showSelectListTable(this,
@@ -502,6 +490,21 @@ public abstract class ValueLabel extends InlineLabel {
 
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		return list;
+	}
+	public static void copyStyle(Object val1) {
+		Class<?>      cls     = val1.getClass();
+		StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
+		ClassUtils.walkPublicNotStaticKeys(cls, field -> {
+			Object fieldVal = FieldUtils.getOrNull(field, val1);
+			if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
+			String uiKey = CatchSR.apply(() ->
+			 CatchSR.of(() -> FormatHelper.getUIKey(fieldVal))
+				.get(() -> String.valueOf(fieldVal))
+			);
+			builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
+		});
+		builder.append("}}");
+		JSFunc.copyText(builder);
 	}
 
 	protected void detailsBuild(Seq<MenuItem> list) {

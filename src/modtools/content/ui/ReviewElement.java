@@ -47,7 +47,7 @@ import modtools.utils.*;
 import modtools.utils.EventHelper.DoubleClick;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
-import modtools.utils.search.BindCell;
+import modtools.utils.search.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 
@@ -760,7 +760,7 @@ public class ReviewElement extends Content {
 
 	private static Window viewAllCells(Table element) {
 		class AllCellsWindow extends Window implements IDisposable {
-			boolean ignoreEmptyCell;
+			boolean ignoreEmptyCell = true;
 			public AllCellsWindow() { super("All Cells"); }
 		}
 
@@ -770,14 +770,16 @@ public class ReviewElement extends Content {
 			}
 		}
 
-		AllCellsWindow window         = new AllCellsWindow();
-		Table          container = new LimitTable();
+		AllCellsWindow       window    = new AllCellsWindow();
+		FilterTable<Cell<?>> container = new FilterTable<>();
+		container.addConditionUpdateListener(c -> !window.ignoreEmptyCell || c.hasElement());
 		SettingsBuilder.build(window.cont);
 		SettingsBuilder.check("Filter out empty cell", b -> window.ignoreEmptyCell = b, () -> window.ignoreEmptyCell);
 		SettingsBuilder.clearBuild();
 		window.cont.pane(container).grow();
 		container.left().defaults().left();
 		for (var cell : element.getCells()) {
+			container.bind(cell);
 			container.add(new CellItem(Tex.pane, t0 -> {
 				 var l = new PlainValueLabel<>(Cell.class, () -> cell);
 				 ReviewElement.addFocusSource(t0, () -> window, cell::get);
@@ -787,6 +789,7 @@ public class ReviewElement extends Content {
 			if (cell.isEndRow()) {
 				Underline.of(container.row(), 20);
 			}
+			container.unbind();
 		}
 		window.update(window::display);
 		return window;

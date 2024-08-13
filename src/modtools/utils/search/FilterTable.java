@@ -44,7 +44,8 @@ public class FilterTable<E> extends LimitTable {
 		unbind();
 		if (map != null) {
 			map.forEach((key, set) -> {
-				if (key instanceof Pool.Poolable p) Pools.free(p);
+				// Cell 会自动被table回收
+				if (!(key instanceof Cell) && key instanceof Pool.Poolable p) Pools.free(p);
 				set.dispose();
 			});
 			map.clear();

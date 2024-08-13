@@ -244,7 +244,7 @@ public class ShowUIList extends Content {
 			t.table(p -> {
 				field(p, field.getName());
 				viewDrawable(p, drawable);
-			}).growY();
+			});
 		} else {
 			field(t, field.getName());
 		}
@@ -275,7 +275,8 @@ public class ShowUIList extends Content {
 				 .isInstance(TextButtonStyle.class, t, Builder::build)
 				 .isInstance(ImageButtonStyle.class, t, Builder::build)
 				 .isInstance(ButtonStyle.class, t, Builder::build)
-				 .isInstance(Drawable.class, t, Builder::build);
+				 .isInstance(Drawable.class, t, Builder::build)
+				 .isInstance(Object.class, _ -> t.add());
 			} catch (IllegalAccessException | IllegalArgumentException err) {
 				Log.err(err);
 				continue;
@@ -295,7 +296,7 @@ public class ShowUIList extends Content {
 				 .isInstance(ImageButtonStyle.class, p, Builder::view)
 				 .isInstance(ButtonStyle.class, p, Builder::view)
 				 .isInstance(Drawable.class, p, Builder::view))).padLeft(8f);
-			}).growY().row();
+			}).growX().row();
 			t.unbind();
 		}
 	}
@@ -394,8 +395,8 @@ public class ShowUIList extends Content {
 
 		static void view(Style style, Table t) {
 			t.button("Copy",  HopeStyles.flatBordert, () -> {
-
-			});
+				ValueLabel.copyStyle(style);
+			}).size(96, 42);
 		}
 
 		static void view(Drawable drawable, Table t) {

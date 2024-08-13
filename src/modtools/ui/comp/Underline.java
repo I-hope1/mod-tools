@@ -3,10 +3,11 @@ package modtools.ui.comp;
 import arc.graphics.Color;
 import arc.scene.ui.layout.*;
 import arc.util.pooling.*;
+import arc.util.pooling.Pool.Poolable;
 import modtools.ui.comp.Window.IDisposable;
 import modtools.ui.comp.limit.LimitImage;
 
-public class Underline extends LimitImage {
+public class Underline extends LimitImage implements Poolable {
 	public static Cell<Underline> of(Table table, int colspan) {
 		return of(table, colspan, Color.white);
 	}
@@ -22,5 +23,8 @@ public class Underline extends LimitImage {
 	}
 	public float getHeight() {
 		return 1 * Scl.scl();
+	}
+	public void reset() {
+		color.set(Color.white);
 	}
 }

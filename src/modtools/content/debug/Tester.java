@@ -794,7 +794,7 @@ public class Tester extends Content {
 	private static void setAppClassLoader(ClassLoader loader) {
 		try {
 			ForRhino.factory.getApplicationClassLoader().loadClass(ModTools.class.getName());
-		} catch (Throwable __) {
+		} catch (Throwable _) {
 			loader = OS.isAndroid ? AndroidLoader.loader(loader) : loader;
 			try {
 				ForRhino.factory.initApplicationClassLoader(loader);

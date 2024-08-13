@@ -14,6 +14,8 @@ public class MySet<T> extends OrderedSet<T> {
 	public void filter(Boolf<T> predicate) {
 		Iterator<T> iter = iterator();
 
+		// 因为concurrent，所以可能会报错
+		// TODO
 		Tools.runIgnoredException(() -> {
 			while (iter.hasNext()) {
 

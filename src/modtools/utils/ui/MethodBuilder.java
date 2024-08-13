@@ -116,7 +116,7 @@ public interface MethodBuilder {
 
 		if (exceptions.length > 0) {
 			Type[] genericExceptions = executable.getGenericExceptionTypes();
-			keyword(table, "throws ").fontScale(0.9f)
+			keyword(table, " throws ").touchable(Touchable.enabled).fontScale(0.9f)
 			 .with(t -> EventHelper.doubleClick(t, null, () -> {
 				 changedFx(table);
 				 table.name ^= throwKey;

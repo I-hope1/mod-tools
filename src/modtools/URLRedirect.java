@@ -2,7 +2,7 @@ package modtools;
 
 import arc.files.Fi;
 import arc.func.Func2;
-import arc.util.OS;
+import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.Constants.CURL;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -45,7 +45,9 @@ public class URLRedirect {
 				}
 				try {
 					value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
-				} catch (Throwable _) { }
+				} catch (Throwable e) {
+					Log.err(e);
+				}
 				return super.put(key, value);
 			}
 		});

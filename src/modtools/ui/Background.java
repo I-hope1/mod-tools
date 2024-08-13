@@ -31,7 +31,7 @@ public class Background {
 		Image img = new Image(new TextureRegion()) {};
 		img.setFillParent(true);
 		IntVars.addResizeListener(() -> setRegion(img));
-		Time.runTask(4f * Time.delta, () -> {
+		Time.runTask(3f * Time.delta, () -> {
 			group.addChildAt(0, img);
 			setRegion(img);
 		});

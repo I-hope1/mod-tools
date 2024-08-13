@@ -16,13 +16,13 @@ public class WorldInfo {
 	public static void showInfo(Element element, Object o) {
 		IntUI.showSelectTable(element, (p, _, _) -> SR.apply(() ->
 			SR.of(o)
-			 .isInstance(Tile.class, x -> build(p, x))
-			 .isInstance(Building.class, x -> build(p, x))
-			 .isInstance(Unit.class, x -> build(p, x))
+			 .isInstance(Tile.class, p, WorldInfo::build)
+			 .isInstance(Building.class, p,WorldInfo::build)
+			 .isInstance(Unit.class, p,WorldInfo::build)
 			 .isInstance(Object.class, x -> p.add("TODO")))
 		 , false, Align.center);
 	}
-	public static void build(Table p, Tile tile) {
+	public static void build(Tile tile, Table p) {
 		p.left().defaults().left();
 		p.add("block").color(Color.lightGray);
 		p.image(tile.block().fullIcon).size(24);
@@ -36,7 +36,7 @@ public class WorldInfo {
 			p.add(tile.drop().name);
 		}
 	}
-	public static void build(Table p, Building build) {
+	public static void build(Building build, Table p) {
 		p.left().defaults().left();
 		// build的所有items，build.items
 		if (build.items != null) {
@@ -54,21 +54,22 @@ public class WorldInfo {
 		// build的所有liquids，build.liquids
 		if (build.liquids != null) {
 			p.add("LIQUIDS").color(Pal.accent).row();
-			p.table(it -> {
-				it.left().defaults().left();
-				it.left().defaults().left();
+			p.table(li -> {
+				li.left().defaults().left();
+				li.left().defaults().left();
 				build.liquids.each((liquid, amount) -> {
-					it.image(liquid.uiIcon).padRight(6f);
-					it.add(liquid.localizedName).growX().left().padRight(6f);
-					it.add("" + amount);
-					it.row();
+					li.image(liquid.uiIcon).padRight(6f);
+					li.add(liquid.localizedName).growX().left().padRight(6f);
+					li.add("" + amount);
+					li.row();
 				});
-			});
+			}).row();
 		}
+		p.row();
 		// 显示build的血量
-		p.add(new Bar(() -> Core.bundle.format("@stat.health", build.health), () -> Pal.health, () -> build.health / build.maxHealth));
+		// p.add(new Bar(() -> Core.bundle.format("@stat.health", build.health), () -> Pal.health, () -> build.health / build.maxHealth)).growX();
 	}
-	public static void build(Table p, Unit unit) {
+	public static void build(Unit unit, Table p) {
 		// 显示unit的血量
 		p.add(new Bar(() -> Core.bundle.format("@stat.health", unit.health), () -> Pal.health, () -> unit.health / unit.maxHealth));
 	}

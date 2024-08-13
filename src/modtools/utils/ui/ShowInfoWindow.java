@@ -40,7 +40,6 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static modtools.IntVars.mouseVec;
 import static modtools.events.E_JSFunc.display_synthetic;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
@@ -231,8 +230,9 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		}
 	}
 	private void buildInterface(Object o, Class<?> clazz) {
-		Type[]     interfaceTypes = clazz.getGenericInterfaces();
 		Class<?>[] interfaces     = clazz.getInterfaces();
+		if (interfaces.length == 0) return;
+		Type[]     interfaceTypes = clazz.getGenericInterfaces();
 		for (int i = 0, clazzInterfacesLength = interfaces.length; i < clazzInterfacesLength; i++) {
 			buildAllByClass(o, interfaces[i], interfaceTypes[i]);
 		}
@@ -240,7 +240,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	private void buildAllByClass(Object o, Class<?> cls, Type type) {
 		if (!classSet.add(cls)) return;
 		Field[] fields = IReflect.impl.getFields(cls);
-		// if (cls.isHidden()) fields = new Field[0];
 		fieldsTable.build(cls, type, fields);
 		Method[] methods = IReflect.impl.getMethods(cls);
 		methodsTable.build(cls, type, methods);
@@ -578,11 +577,12 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	private static void buildClass(ReflectTable table, Class<?> cls) {
 		table.bind(Pools.get(ClassMember.class, ClassMember::new, 500).obtain().init(cls));
 		table.table(t -> {
-			t.left().top().defaults().top();
+			t.left().top().defaults().left().padTop(4f);
 			try {
 				StringJoiner modifiers = new StringJoiner(" ");
+				int          mod       = cls.getModifiers() & ~Modifier.classModifiers();
+				if (mod != 0) modifiers.add(Modifier.toString(mod));
 				if (isNestStatic(cls)) modifiers.add("static");
-				modifiers.add(Modifier.toString(cls.getModifiers() & ~Modifier.classModifiers()));
 				if (!cls.isInterface()) modifiers.add("class");
 				buildModifier(t, modifiers.toString(), 1);
 
@@ -595,13 +595,14 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				Class<?> superClass = cls.getSuperclass();
 				if (superClass != null) {
 					keyword(t, " extends ");
-					t.add(newCopyLabel(t, getGenericString(superClass, cls.getGenericSuperclass()))).padRight(8f).color(tmpColor.set(c_type));
+					t.add(newCopyLabel(t, getGenericString(superClass, cls.getGenericSuperclass())))
+					 .padRight(8f).color(tmpColor.set(c_type));
 				}
-				Class<?>[] types = cls.getInterfaces();
-				if (types.length > 0) {
+				Class<?>[] interfaces = cls.getInterfaces();
+				if (interfaces.length > 0) {
 					keyword(t, " implements ");
-					for (int i = 0; i < types.length; i++) {
-						Class<?> interf = types[i];
+					for (int i = 0; i < interfaces.length; i++) {
+						Class<?> interf = interfaces[i];
 						t.add(new MyLabel(getGenericString(interf, cls.getGenericInterfaces()[i])
 							, defaultLabel))
 						 .padRight(8f).color(tmpColor.set(c_type));
@@ -630,10 +631,10 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		return t.add(new MyLabel(text, defaultLabel)).color(tmpColor.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
 	}
 
-	/** 双击复制文本内容 */
+	/** 双击复制文本内容(padTop: 4) */
 	private static MyLabel newCopyLabel(Table table, String text) {
 		MyLabel label = new CopyLabel(text);
-		table.add(label).growY().labelAlign(Align.top).padTop(4f);
+		table.add(label).labelAlign(Align.top).padTop(4f);
 		return label;
 	}
 

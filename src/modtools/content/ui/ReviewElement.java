@@ -82,7 +82,7 @@ public class ReviewElement extends Content {
 		super("reviewElement", HopeIcons.codeSmall);
 	}
 
-	public static final boolean DEBUG = true;
+	public static final boolean DEBUG = false;
 
 
 	public static Element FOCUS;
@@ -581,7 +581,30 @@ public class ReviewElement extends Content {
 		public void act(float delta) {
 			super.act(delta);
 			if (!parentValid(getElement(), window)) remove();
-			background(FOCUS_FROM == this ? Styles.flatDown : Styles.none);
+			background(FOCUS_FROM == this ? Styles.flatDown : noneui);
+		}
+		public static final Vec2 bgVec = new Vec2();
+		/**
+		 * TODO: 位置bug
+		 * @see Table#drawBackground(float, float)*/
+		protected void drawBackground(float x, float y) {
+			ScrollPane pane = ElementUtils.findClosestPane(this);
+			if (pane == null || true) {
+				super.drawBackground(x, y);
+				return;
+			}
+			// pane的左下角坐标
+			pane.localToDescendantCoordinates(this, bgVec.set(0, 0));
+			float lastW = width, lastH = height;
+			float x1 = Mathf.clamp(x, bgVec.x, bgVec.x + pane.getWidth());
+			float y1 = Mathf.clamp(y, bgVec.y, bgVec.y + pane.getHeight());
+			float x2 = Mathf.clamp(x + width, bgVec.x, bgVec.x + pane.getWidth());
+			float y2 = Mathf.clamp(y + height, bgVec.y, bgVec.y + pane.getHeight());
+			width = x2 - x1;
+			height -= y2 - y1;
+			super.drawBackground(x1, y1);
+			width = lastW;
+			height = lastH;
 		}
 		public int getDepth() {
 			Element actor = getElement();

@@ -29,6 +29,7 @@ import static modtools.ui.IntUI.whiteui;
 public class HopeStyles {
 	public static final TextButtonStyle blackt;
 	public static final ButtonStyle     clearb;
+	/** @see IntUI#emptyui  */
 	public static final Drawable        none     = whiteui.tint(0f, 0f, 0f, 0.01f);
 	public static final Drawable        hflatOver = copyFrom((TextureRegionDrawable) Styles.flatOver, 12);
 

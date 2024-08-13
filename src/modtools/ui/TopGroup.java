@@ -670,7 +670,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 				boolean[] cancelEvent = {false};
 				float     bestScl     = eachW / eachH, realScl = el.getWidth() / el.getHeight();
 				float     width1      = bestScl < realScl ? eachW : eachH * realScl;
-				if (table.getPrefWidth() + Scl.scl(width1) > width - 30) table.row();
+				if (table.getPrefWidth() + Scl.scl(width1) > W - 30) table.row();
 				table.button(t -> {
 					t.margin(4, 6, 4, 6);
 					t.act(0);
@@ -872,7 +872,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		public FillEnd() {
 			super(t -> {
 				t.addChild(new GroupHitter());
-				t.add(TopGroup.this.switchView).grow();
+				t.add(TopGroup.this.switchView);
 			});
 		}
 		public Element hit(float x, float y, boolean touchable) {

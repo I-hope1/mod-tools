@@ -51,7 +51,10 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
-	public static final TextureRegionDrawable emptyui = new EmptyDrawable();
+	/** pad 8 */
+	public static final TextureRegionDrawable emptyui = new EmptyDrawable(8);
+	/** pad 0 */
+	public static final TextureRegionDrawable noneui = new EmptyDrawable(0);
 
 	public static final float DEFAULT_WIDTH = 180;
 	public static final float MAX_OFF       = 35f;
@@ -100,11 +103,11 @@ public class IntUI {
 
 
 	/** @see ShowInfoWindow  */
-	public static void addLabelButton(Table table, Prov<?> prov, Class<?> clazz) {
+	public static void addLabelButton(Table table, Prov<?> prov, @Nullable Class<?> clazz) {
 		addDetailsButton(table, prov, clazz);
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
 	}
-	public static ImageButton addDetailsButton(Table table, Prov<?> prov, Class<?> clazz) {
+	public static ImageButton addDetailsButton(Table table, Prov<?> prov, @Nullable Class<?> clazz) {
 		return table.button(Icon.infoCircleSmall, HopeStyles.clearNonei, 28, IntVars.EMPTY_RUN)
 		 .with(button -> EventHelper.longPress(button, isLongPress -> {
 			 Object o = prov.get();
@@ -913,11 +916,13 @@ public class IntUI {
 		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
 		                 float scaleY, float rotation) {
 		}
-		{
-			setTopHeight(8f);
-			setLeftWidth(8f);
-			setBottomHeight(8f);
-			setRightWidth(8f);
+		public final float pad;
+		public EmptyDrawable(float pad) {
+			this.pad = pad;
+			setTopHeight(pad);
+			setLeftWidth(pad);
+			setBottomHeight(pad);
+			setRightWidth(pad);
 		}
 	}
 }

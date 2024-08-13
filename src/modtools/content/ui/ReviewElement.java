@@ -330,6 +330,7 @@ public class ReviewElement extends Content {
 						p.background(Tex.pane);
 						SettingsBuilder.build(p);
 						SettingsBuilder.check("Draw Cell", b -> drawCell = b, () -> drawCell);
+						SettingsBuilder.check("Expand All", b -> drawCell = b, () -> drawCell);
 						SettingsBuilder.clearBuild();
 					}, false);
 				});
@@ -349,25 +350,8 @@ public class ReviewElement extends Content {
 			}).grow().minHeight(120);
 
 			MenuBuilder.addShowMenuListenerp(pane, ElementElem.class, target -> MyWrapTable.getContextMenu(target, target.getElement()));
-			ObjectMap<KeyCode, Cons<ElementElem>> keyMap = new ObjectMap<>();
-			keyMap.put(KeyCode.f, e -> fixedFocus = fixedFocus == e ? null : e);
-			keyMap.put(KeyCode.i, e -> INFO_DIALOG.showInfo(e.getElement()));
-			keyMap.put(KeyCode.r, e -> MenuBuilder.showMenuList(MyWrapTable.execChildren(e.getElement())));
-			keyMap.put(KeyCode.del, e -> IntUI.shiftIgnoreConfirm(() -> {
-				e.getElement().remove();
-				e.remove();
-			}));
-			keyMap.put(KeyCode.p, e -> {
-				if (e.getElement() instanceof Image img) {
-					IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable);
-				}
-			});
-			keyMap.put(KeyCode.c, e -> {
-				Element elem = e.getElement();
-				if (CellDetailsWindow.valid(elem)) {
-					new CellDetailsWindow(((Table) elem.parent).getCell(elem));
-				}
-			});
+			var keyMap = getKeyMap();
+
 			pane.requestKeyboard();
 			pane.addListener(new HoverAndExitListener() {
 				public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
@@ -418,6 +402,34 @@ public class ReviewElement extends Content {
 				}
 			});
 			hidden(CANCEL_TASK);
+		}
+		public ObjectMap<KeyCode, Cons<ElementElem>> getKeyMap() {
+			ObjectMap<KeyCode, Cons<ElementElem>> keyMap = new ObjectMap<>();
+			keyMap.put(KeyCode.f, e -> fixedFocus = fixedFocus == e ? null : e);
+			keyMap.put(KeyCode.i, e -> INFO_DIALOG.showInfo(e.getElement()));
+			keyMap.put(KeyCode.r, e -> MenuBuilder.showMenuList(MyWrapTable.execChildren(e.getElement())));
+			keyMap.put(KeyCode.del, e -> IntUI.shiftIgnoreConfirm(() -> {
+				e.getElement().remove();
+				e.remove();
+			}));
+			keyMap.put(KeyCode.p, e -> {
+				if (e.getElement() instanceof Image img) {
+					IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable);
+				}
+			});
+			keyMap.put(KeyCode.c, e -> {
+				Element elem = e.getElement();
+				if (CellDetailsWindow.valid(elem)) {
+					new CellDetailsWindow(((Table) elem.parent).getCell(elem));
+				}
+			});
+			keyMap.put(KeyCode.left, e -> {
+				if (e instanceof MyWrapTable table && table.rebuildGroup != null) table.rebuildGroup.get(false);
+			});
+			keyMap.put(KeyCode.right, e -> {
+				if (e instanceof MyWrapTable table && table.rebuildGroup != null) table.rebuildGroup.get(true);
+			});
+			return keyMap;
 		}
 
 		public void rebuild(Element element, String text) {
@@ -580,6 +592,7 @@ public class ReviewElement extends Content {
 			}
 			return depth;
 		}
+		Boolc rebuildGroup;
 		private void buildForGroup(Group group) {
 			var button   = new FoldedImageButton(true);
 			var children = group.getChildren();
@@ -594,8 +607,7 @@ public class ReviewElement extends Content {
 
 			image().growY().left().update(focusUpdater());
 
-			keyDown(KeyCode.left, () -> button.fireCheck(false));
-			keyDown(KeyCode.right, () -> button.fireCheck(true));
+			rebuildGroup = button::fireCheck;
 
 			defaults().growX();
 
@@ -1222,7 +1234,7 @@ public class ReviewElement extends Content {
 				 // center
 				 (focus.getHeight() - spanH - padBottom + padTop) / 2f;
 
-			float x = pos.x, y = pos.y;
+			float x     = pos.x, y = pos.y;
 			float thick = 2f;
 			Lines.stroke(thick);
 			Draw.color(Pal.remove);

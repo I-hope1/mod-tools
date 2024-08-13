@@ -6,7 +6,7 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.math.geom.*;
-import arc.scene.event.Touchable;
+import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
@@ -22,22 +22,22 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import mindustry.world.Tile;
 import modtools.IntVars;
+import modtools.content.debug.Tester;
+import modtools.content.world.Selection;
+import modtools.content.world.Selection.Settings;
 import modtools.events.MyEvents;
 import modtools.jsfunc.INFO_DIALOG;
+import modtools.misc.PairProv;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.comp.limit.*;
-import modtools.utils.search.TemplateTable;
-import modtools.content.debug.Tester;
-import modtools.misc.PairProv;
-import modtools.content.world.Selection;
-import modtools.content.world.Selection.Settings;
-import modtools.ui.effect.*;
+import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
+import modtools.utils.search.TemplateTable;
 import modtools.utils.ui.LerpFun;
 
 import java.util.Vector;
@@ -463,7 +463,13 @@ public abstract class WFunction<T> {
 				clearFocus(item);
 			});
 
-			clicked(() -> WorldInfo.showInfo(this, item));
+			addListener(new ClickListener() {
+				@Override
+				public void clicked(InputEvent event, float x, float y) {
+					if (event.targetActor instanceof Button && event.targetActor != event.listenerActor) return;
+					WorldInfo.showInfo(SelectHover.this, item);
+				}
+			});
 		}
 
 		public void updateVisibility() {

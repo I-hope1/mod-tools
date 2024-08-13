@@ -82,13 +82,13 @@ public class Selection extends Content {
 	// public Table functions;
 	public Team    defaultTeam;
 	/** select元素（用于选择）是否显示 **/
-	boolean   isSelecting          = false;
-	boolean   isDynamicSelecting   = false;
+	boolean isSelecting        = false;
+	boolean isDynamicSelecting = false;
 	/** 动态更新的选区，格式(x1, y1, x2, y2)
 	 * @see SelectListener#touchUp(InputEvent, float, float, int, KeyCode)  */
 	public Seq<Rect> dynamicSelectRegions = new Seq<>();
 	/** 鼠标是否移动，形成矩形 */
-	boolean   mouseChanged         = false;
+	boolean mouseChanged = false;
 	public boolean drawSelect = true;
 
 	public static final int
@@ -768,6 +768,11 @@ public class Selection extends Content {
 			if (Core.input.alt()) {
 				Draw.alpha(0.3f);
 			}
+			if (ui != null && ui.isShown()) {
+				for (Rect rect : dynamicSelectRegions) {
+					MyDraw.dashRect(2, Color.sky, rect.x, rect.y, rect.width - rect.x, rect.height - rect.y);
+				}
+			}
 			drawFocusInternal();
 		});
 		Vec2 start = new Vec2(), end = new Vec2();
@@ -1121,11 +1126,13 @@ public class Selection extends Content {
 
 			clampWorld(start, end);
 
-			boolean enabledTile  = Settings.tile.enabled()&&start==this.start && end==this.end;
+			boolean enabledTile  = Settings.tile.enabled() && start == this.start && end == this.end;
 			boolean enabledBuild = Settings.building.enabled();
 			acquireExecutor().submit(() -> {
-				for (float y = start.y; y < end.y; y += tilesize) {
-					for (float x = start.x; x < end.x; x += tilesize) {
+				for (float y = start.y; ; y += tilesize) {
+					if (y > end.y) y = end.y;
+					for (float x = start.x; ; x += tilesize) {
+						if (x > end.x) x = end.x;
 						Tile tile = world.tileWorld(x, y);
 						if (tile == null) continue;
 
@@ -1136,7 +1143,9 @@ public class Selection extends Content {
 						if (enabledBuild && tile.build != null && !buildings.list.contains(tile.build)) {
 							buildings.add(tile.build);
 						}
+						if (x == end.x) break;
 					}
+					if (y == end.y) break;
 				}
 			});
 		}

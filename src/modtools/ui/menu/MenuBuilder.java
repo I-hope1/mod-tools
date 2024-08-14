@@ -8,7 +8,6 @@ import arc.scene.ui.layout.*;
 import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.gen.*;
-import mindustry.ui.Styles;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.SelectTable;
 import modtools.utils.ArrayUtils.DisposableSeq;
@@ -83,7 +82,7 @@ public class MenuBuilder {
 	 * 自动过滤掉{@code null}
 	 * TODO: 多个FoldedList有问题
 	 */
-	public static Cell<ScrollPane> showMenuList(
+	public static Table showMenuList(
 	 Iterable<MenuItem> list, Runnable hiddenListener,
 	 Table p, Runnable hideRun) {
 		{// 修改p
@@ -94,8 +93,6 @@ public class MenuBuilder {
 		}
 		p.background(Tex.paneSolid);
 
-		Table main = new Table();
-
 		for (var menu : list) {
 			/* 过滤掉null */
 			if (menu == null) continue;
@@ -105,11 +102,8 @@ public class MenuBuilder {
 				if (hiddenListener != null) hiddenListener.run();
 			});
 		}
-		main.pack();
 
-		Cell<ScrollPane> cell = p.pane(Styles.smallPane, main).growY();
-		cell.get().setOverscroll(false, false);
-		return cell;
+		return p;
 	}
 	/**
 	 * Menu `Copy ${key} As Js` constructor.

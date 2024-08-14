@@ -712,16 +712,19 @@ public class ReviewElement extends Content {
 
 		static Prov<Seq<MenuItem>> getContextMenu(ElementElem self, Element element) {
 			return () -> ArrayUtils.seq(
-			 MenuBuilder.copyAsJSMenu(null, storeRun(() -> element)),
-			 ConfirmList.with("clear", Icon.trashSmall, "@element.remove", "@confirm.remove", () -> {
-				 self.remove();
-				 element.remove();
-			 }),
 			 MenuItem.with("path.copy", Icon.copySmall, "@copy.path", () -> {
 				 JSFunc.copyText(ElementUtils.getPath(element));
 			 }),
 			 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 				 ElementUtils.quietScreenshot(element);
+			 }),
+
+			 UnderlineItem.with(),
+
+			 MenuBuilder.copyAsJSMenu(null, storeRun(() -> element)),
+			 ConfirmList.with("clear", Icon.trashSmall, "@element.remove", "@confirm.remove", () -> {
+				 self.remove();
+				 element.remove();
 			 }),
 			 CheckboxList.withc("debug.bounds", Icon.adminSmall, "@settings.debugbounds",
 				() -> TopGroup.getDrawPadElem() == element, () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
@@ -729,6 +732,8 @@ public class ReviewElement extends Content {
 			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
 			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
 			 ValueLabel.newElementDetailsList(element),
+
+			 UnderlineItem.with(),
 
 			 element instanceof Table ?
 				MenuItem.with("allcells", Icon.wavesSmall, "All Cells", () -> viewAllCells((Table) element)) : null,

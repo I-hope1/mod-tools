@@ -458,8 +458,20 @@ public abstract class ValueLabel extends InlineLabel {
 
 	protected Seq<MenuItem> basicMenuLists(Seq<MenuItem> list) {
 		specialBuild(list);
+		if (list.any()) list.add(UnderlineItem.with());
 		detailsBuild(list);
+		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
+		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
+			enableTruncate = !enableTruncate;
+		})); */
 
+		list.add(enabledUpdateMenu() ?
+		 CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", () -> enableUpdate, () -> {
+			 enableUpdate = !enableUpdate;
+		 }) : null);
+
+		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
+		list.add(UnderlineItem.with());
 		if (Style.class.isAssignableFrom(type) || val instanceof Style) {
 			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
 				copyStyle(val);
@@ -477,18 +489,6 @@ public abstract class ValueLabel extends InlineLabel {
 		if (Fi.class.isAssignableFrom(type) || val instanceof Fi) {
 			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", () -> val == null, () -> FileUtils.openFile((Fi) val)));
 		}
-
-		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
-		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
-			enableTruncate = !enableTruncate;
-		})); */
-
-		list.add(enabledUpdateMenu() ?
-		 CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", () -> enableUpdate, () -> {
-			 enableUpdate = !enableUpdate;
-		 }) : null);
-
-		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		return list;
 	}
 	public static void copyStyle(Object val1) {

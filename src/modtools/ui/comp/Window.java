@@ -655,7 +655,7 @@ public class Window extends Table implements Position {
 
 		oldTransform.set(Draw.trans());
 		Tools.runLoggedException(super::drawChildren, () -> {
-			/* draw错误捕获 */
+			 /* draw错误捕获 */
 			unexpectedDrawException = true;
 			children.end();
 

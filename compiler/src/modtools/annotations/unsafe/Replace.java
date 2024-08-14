@@ -15,8 +15,6 @@ import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.model.JavacElements;
-import com.sun.tools.javac.processing.JavacRoundEnvironment;
-import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
 import com.sun.tools.javac.util.List;
@@ -24,7 +22,6 @@ import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.NoAccessCheck;
 
-import javax.annotation.processing.RoundEnvironment;
 import javax.tools.JavaFileObject;
 import java.io.*;
 import java.lang.invoke.MethodHandle;
@@ -75,22 +72,6 @@ public class Replace {
 		moduleExports();
 
 		other();
-	}
-	static JavacRoundEnvironment roundEnvironment;
-	public static void whenAnnotation(RoundEnvironment roundEnvironment) {
-		Replace.roundEnvironment = (JavacRoundEnvironment) roundEnvironment;
-		desugar();
-	}
-	private static void desugar() {
-		Desugar desugar = new Desugar(context);
-		try {
-			roundEnvironment.getRootElements().forEach(e -> {
-				JCTree tree = trees.getTree(e);
-				if (tree != null) tree.accept(desugar);
-			});
-		} catch (Throwable th) {
-			err(th);
-		}
 	}
 	private static void moduleExports() throws Exception {
 		removeKey(Factory.class, () -> new Factory(context) {
@@ -207,6 +188,12 @@ public class Replace {
 		Options.instance(context).put(Option.PARAMETERS, "");
 
 		fixSyntaxError();
+
+		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
+		// removeKey(Lower.class, () -> new Desugar(context));
+		// Lower lower = Lower.instance(context);
+		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "lower", lower);
+		// setAccess(Gen.class, Gen.instance(context), "lower", lower);
 
 		// setAccess(ClassType.class, syms.recordType, "outer_field", classFinder.loadClass(syms.unnamedModule,
 		//  Names.instance(context).fromString("modtools.TestFeature")));
@@ -378,12 +365,12 @@ public class Replace {
 	private static void removeKey(Class<?> cls) {
 		removeKey(cls, null);
 	}
-	public static void removeKey(Class<?> cls, Supplier<Object> newVal) {
+	public static <T> void removeKey(Class<T> cls, Supplier<T> newVal) {
 		String s = (cls.isMemberClass() ? cls.getNestHost().getSimpleName() : "") + cls.getSimpleName();
 		if (s.startsWith("JC")) s = s.substring(2);
 		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1) + "Key", cls, newVal);
 	}
-	private static void removeKey(String name, Class<?> cls, Supplier<Object> newVal) {
+	private static <T> void removeKey(String name, Class<T> cls, Supplier<T> newVal) {
 		Key<Resolve>            key = getAccess(cls, null, name);
 		HashMap<Key<?>, Object> ht  = getAccess(Context.class, context, "ht");
 		ht.remove(key);

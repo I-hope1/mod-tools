@@ -11,7 +11,6 @@ import javax.lang.model.element.TypeElement;
 import java.util.Set;
 
 import static modtools.annotations.PrintHelper.SPrinter.*;
-import static modtools.annotations.unsafe.Replace.whenAnnotation;
 
 @SupportedOptions("org.gradle.annotation.processing.incremental")
 @AutoService(Processor.class)
@@ -36,14 +35,13 @@ public class AINIT extends AbstractProcessor {
 		}
 	}
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-		whenAnnotation(roundEnv);
 		return true;
 	}
 	public SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();
 	}
 	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of("java.lang.Override");
+		return Set.of();
 	}
 	public Set<String> getSupportedOptions() {
 		return Set.of("targetVersion", "org.gradle.annotation.processing.incremental");

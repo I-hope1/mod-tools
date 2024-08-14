@@ -6,9 +6,7 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
-import java.util.function.*;
-
-import static modtools.annotations.PrintHelper.SPrinter.println;
+import java.util.function.Function;
 
 public class MyTransPatterns extends TransPatterns {
 	final AA aa;
@@ -55,29 +53,20 @@ class AA extends TreeTranslator {
 	}
 
 	public void visitSwitchExpression(JCSwitchExpression tree) {
-		if (tree.cases.stream().anyMatch(c -> c.labels.stream().anyMatch(l -> l instanceof JCPatternCaseLabel))) {
-			JCIf        first  = null;
-			JCStatement lastIf = null;
-			for (JCCase jcCase : tree.cases) {
-				JCStatement smt = translateCase(tree.selector, jcCase);
-				if (first == null) first = (JCIf) smt;
-				if (lastIf instanceof JCIf jcIf) jcIf.elsepart = smt;
-				lastIf = smt;
-			}
-
-			result = super.translate(first);
-			println(result);
-			return;
-		}
+		if (transSwitch(tree.cases, tree.selector)) return;
 		super.visitSwitchExpression(tree);
 	}
 	@Override
 	public void visitSwitch(JCSwitch tree) {
-		if (tree.cases.stream().anyMatch(c -> c.labels.stream().anyMatch(l -> l instanceof JCPatternCaseLabel))) {
+		if (transSwitch(tree.cases, tree.selector)) return;
+		super.visitSwitch(tree);
+	}
+	boolean transSwitch(List<JCCase> cases, JCExpression selector) {
+		if (cases.stream().anyMatch(c -> c.labels.stream().anyMatch(l -> l instanceof JCPatternCaseLabel))) {
 			JCIf        first  = null;
 			JCStatement lastIf = null;
-			for (JCCase jcCase : tree.cases) {
-				JCStatement smt = translateCase(tree.selector, jcCase);
+			for (JCCase jcCase : cases) {
+				JCStatement smt = translateCase(selector, jcCase);
 				if (first == null) first = (JCIf) smt;
 				if (lastIf instanceof JCIf jcIf) jcIf.elsepart = smt;
 				lastIf = smt;
@@ -85,12 +74,12 @@ class AA extends TreeTranslator {
 
 			result = first;
 			// println(result);
-			return;
+			return true;
 		}
-		super.visitSwitch(tree);
+		return false;
 	}
 
-	private JCStatement translateCase(JCExpression selector, JCCase jcCase) {
+	JCStatement translateCase(JCExpression selector, JCCase jcCase) {
 		JCExpression ifCondition = null;
 		if (func != null) {
 			translateStats(jcCase, func);
@@ -115,7 +104,7 @@ class AA extends TreeTranslator {
 		return ifCondition == null ? truepart : make.If(ifCondition, truepart, null);
 	}
 
-	private void translateStats(JCCase jcCase, Function<JCExpression, JCStatement> func) {
+	void translateStats(JCCase jcCase, Function<JCExpression, JCStatement> func) {
 		List<JCStatement> stats = jcCase.stats;
 		TreeTranslator translator = new TreeTranslator() {
 			public <T extends JCTree> T translate(T tree) {
@@ -128,7 +117,7 @@ class AA extends TreeTranslator {
 		//  make.Lambda(List.nil(), make.Block(0, stats))), names.fromString("get")), List.nil());
 	}
 
-	private JCExpression makePatternMatchCondition(JCExpression selector, JCPattern pattern) {
+	JCExpression makePatternMatchCondition(JCExpression selector, JCPattern pattern) {
 		if (pattern instanceof JCBindingPattern bindingPattern) {
 			return make.TypeTest(selector, bindingPattern);
 		}

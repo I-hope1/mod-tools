@@ -1,6 +1,5 @@
 package modtools.utils.search;
 
-import arc.Core;
 import arc.func.Cons2;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
@@ -23,7 +22,7 @@ public class Search {
 				rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText()));
 			});
 		}).padRight(8f).growX().top().row();
-		Core.app.post(() -> rebuild(cont, PatternUtils.ANY));
+		rebuild(cont, PatternUtils.ANY);
 	}
 	public final Cons2<Table, Pattern> rebuild;
 	protected void rebuild(Table cont, Pattern pattern) {

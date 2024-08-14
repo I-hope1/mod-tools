@@ -309,6 +309,7 @@ public class Window extends Table implements Position {
 	private void setup() {
 		add(cont).name("cont").grow().row();
 		if (!noButtons) add(buttons).name("buttons").growX().row();
+		titleTable.toFront();
 	}
 
 	public void display() {

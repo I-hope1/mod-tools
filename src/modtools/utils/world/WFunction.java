@@ -240,6 +240,8 @@ public abstract class WFunction<T> {
 			changeEvent.run();
 		})
 		 .row();
+
+		buttons.clearCellListener();
 	}
 	private Cell<TextButton> newButton(String name, TextureRegionDrawable icon, TextButtonStyle style,
 	                                   Runnable runnable) {
@@ -363,6 +365,11 @@ public abstract class WFunction<T> {
 
 	protected final ObjectMap<String, Cons<List<T>>> FUNCTIONS = new OrderedMap<>();
 
+	/** 这个exec的list是用来枚举的 */
+	public void FunctionBuild(String name, Cons<List<T>> exec) {
+		FUNCTIONS.put(name, exec);
+	}
+
 	public <R extends UnlockableContent> void ListFunction(
 	 String name, Prov<Seq<R>> list,
 	 Cons<SelectTable> builder, Cons2<List<T>, R> cons) {
@@ -373,10 +380,6 @@ public abstract class WFunction<T> {
 			 true);
 			if (builder != null) builder.get(table);
 		});
-	}
-	/** 这个exec的list是用来枚举的 */
-	public void FunctionBuild(String name, Cons<List<T>> exec) {
-		FUNCTIONS.put(name, exec);
 	}
 	public void TeamFunctionBuild(String name, Cons2<List<T>, Team> cons) {
 		FunctionBuild(name, from -> {

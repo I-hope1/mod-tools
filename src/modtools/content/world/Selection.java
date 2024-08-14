@@ -35,7 +35,7 @@ import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
-import modtools.ui.TopGroup.BackElement;
+import modtools.ui.TopGroup.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.linstener.*;
@@ -148,7 +148,7 @@ public class Selection extends Content {
 
 	FocusWindow focusW;
 	void loadFocusWindow() {
-		focusW = new FocusWindow("Focus");
+		if (focusW == null) focusW = new FocusWindow("Focus");
 	}
 
 	void loadUI() {
@@ -237,16 +237,18 @@ public class Selection extends Content {
 			});
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
 				if (!NumberHelper.isPositiveInt(tmpAmount[0])) return;
+				int amount = NumberHelper.asInt(tmpAmount[0]);
 				each(list, b -> {
 					if (b.items == null) return;
-					Call.setItem(b, item, NumberHelper.asInt(tmpAmount[0]));
+					Call.setItem(b, item, amount);
 				});
 			});
 			ListFunction("@selection.liquids", () -> content.liquids(), Selection::floatField, (list, liquid) -> {
 				if (!NumberHelper.isPositiveFloat(tmpAmount[0])) return;
+				float amount = NumberHelper.asFloat(tmpAmount[0]);
 				each(list, b -> {
 					if (b.liquids == null) return;
-					b.liquids.add(liquid, NumberHelper.asFloat(tmpAmount[0]) - b.liquids.get(liquid));
+					b.liquids.add(liquid, amount - b.liquids.get(liquid));
 				});
 			});
 			FunctionBuild("@selection.sumitems", list -> {
@@ -293,6 +295,16 @@ public class Selection extends Content {
 			});
 			FunctionBuild("@selection.forceClear", list -> {
 				removeAll(list, UnitUtils::forceRemove);
+			});
+			FunctionBuild("@selection.status.clear", (list) -> {
+				each(list, Statusc::clearStatuses);
+			});
+			ListFunction("@selection.status.apply", () -> Vars.content.statusEffects(), Selection::floatField, (list, status) -> {
+				if (!NumberHelper.isPositiveFloat(tmpAmount[0])) return;
+				float time = NumberHelper.asFloat(tmpAmount[0]);
+				each(list, b -> {
+					b.apply(status, time);
+				});
 			});
 		}};
 		bullets = new BulletFunction<>("bullet") {{
@@ -789,7 +801,7 @@ public class Selection extends Content {
 			focusEnabled = !focusLocked && !scene.hasDialog() && (
 			 hit == null || hit.isDescendantOf(focusW) ||
 			 (!hit.visible && hit.touchable == Touchable.disabled)
-			 || hit.isDescendantOf(el -> el instanceof IMenu)
+			 || hit.isDescendantOf(el -> el instanceof IInfo)
 			 // || hit.isDescendantOf(el -> clName(el).contains("modtools.ui.IntUI"))
 			 /* || hit instanceof IMenu */);
 			if (!focusEnabled) return;

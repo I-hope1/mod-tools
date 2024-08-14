@@ -13,13 +13,14 @@ import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.IntUI;
 import modtools.ui.IntUI.ITooltip;
-import modtools.utils.EventHelper;
+import modtools.utils.*;
 
 import static mindustry.Vars.mobile;
 
 public class Hover {
+	@SuppressWarnings("StringTemplateMigration")
 	public static <T> ImageButton buildImageButton(Cons<T> cons, float size, float imageSize, Table p, Runnable hide,
-																								 T item, Drawable icon) {
+	                                               T item, Drawable icon) {
 		ImageButton btn = p.button(Tex.whiteui, HopeStyles.clearNoneTogglei, imageSize, IntVars.EMPTY_RUN).size(size).get();
 		EventHelper.longPress(btn, 800, b -> {
 			if (b) return;
@@ -30,7 +31,7 @@ public class Hover {
 		if (!mobile) addHover(imageSize, btn);
 		btn.addListener(new ITooltip(t ->
 		 t.background(Tex.pane)
-			.add(item instanceof UnlockableContent u ? u.localizedName : "" + item)
+			.add(item instanceof UnlockableContent u ? u.localizedName + "\n" + u.name : "" + item)
 			.right().bottom()
 		));
 		btn.getStyle().imageUp = icon;

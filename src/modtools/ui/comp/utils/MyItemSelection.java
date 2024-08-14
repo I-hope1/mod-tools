@@ -34,6 +34,7 @@ public class MyItemSelection {
 		buildTable0(table, items, holder, consumer, cols, IntUI::icon);
 	}
 
+
 	public static <T> void buildTable0(
 	 Table table, Seq<T> items, Prov<T> holder,
 	 Cons<T> consumer, int cols, Func<T, Drawable> drawableFunc) {
@@ -60,8 +61,6 @@ public class MyItemSelection {
 				cont.row();
 			}
 		}
-
-
 
 		ScrollPane pane = new ScrollPane(cont, Styles.smallPane);
 		pane.setScrollingDisabled(true, false);

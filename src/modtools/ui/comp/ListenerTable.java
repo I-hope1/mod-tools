@@ -14,6 +14,9 @@ public class ListenerTable extends Table {
 	public <E extends Element> void setListener(Cons<Cell<E>> listener) {
 		this.listener = Tools.as(listener);
 	}
+	public void clearCellListener() {
+		listener = null;
+	}
 	public <T extends Element> Cell<T> add(T element) {
 		Cell<T> cell = super.add(element);
 		if (listener != null) listener.get(cell);

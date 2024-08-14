@@ -23,6 +23,7 @@ import mindustry.gen.*;
 import mindustry.ui.*;
 import modtools.IntVars;
 import modtools.content.SettingsUI;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.content.debug.Tester;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
@@ -38,7 +39,7 @@ import modtools.utils.JSFunc.*;
 import modtools.utils.search.Search;
 import modtools.utils.ui.*;
 
-import java.util.Objects;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static arc.Core.graphics;
@@ -54,7 +55,7 @@ public class IntUI {
 	/** pad 8 */
 	public static final TextureRegionDrawable emptyui = new EmptyDrawable(8);
 	/** pad 0 */
-	public static final TextureRegionDrawable noneui = new EmptyDrawable(0);
+	public static final TextureRegionDrawable noneui  = new EmptyDrawable(0);
 
 	public static final float DEFAULT_WIDTH = 180;
 	public static final float MAX_OFF       = 35f;
@@ -296,8 +297,10 @@ public class IntUI {
 			newSearch(f, hide0, t, p);
 		}
 
+		if (!searchable) {// newSearch会自动构建一次
+			f.get(p.row(), hide0, null);
+		}
 		t.init();
-		f.get(p.row(), hide0, null);
 		t.appendToGroup();
 
 		return t;
@@ -306,9 +309,9 @@ public class IntUI {
 		return () -> (t.hide != null ? t.hide : hide).run();
 	}
 	private static void newSearch(Builder rebuild, Runnable hide,
-	                              SelectTable t, Table p) {
+	                              SelectTable title, Table container) {
 		new Search((cont, text) -> rebuild.get(cont, hide, text))
-		 .build(t, p);
+		 .build(title, container);
 	}
 
 	public static <T extends Element> SelectTable
@@ -324,6 +327,8 @@ public class IntUI {
 		return showSelectListTable(button, list, holder, cons,
 		 Enum::name, width, height, searchable, align);
 	}
+
+	/** @see modtools.ui.comp.utils.MyItemSelection#buildTable0(Table, Seq, Prov, Cons, int, Func)   */
 	public static <BTN extends Element, V> SelectTable
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
@@ -393,23 +398,34 @@ public class IntUI {
 	 Seq<T1> items, Seq<? extends Drawable> icons,
 	 Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols) {
 		return (p, hide, pattern) -> {
+			boolean[] notHideAuto = {false};
+			Runnable wrapperHide = () -> {
+				if (!notHideAuto[0]) hide.run();
+			};
 			p.clearChildren();
 			p.left();
 			ButtonGroup<ImageButton> group = new ButtonGroup<>();
 			group.setMinCheckCount(0);
 			p.defaults().size(size);
 
-			for (int c = 0, i = 0; i < items.size; ++i) {
+			int c = 0;
+			for (int i = 0; i < items.size; i++) {
 				T1 item = items.get(i);
 				if (!PatternUtils.testAny(pattern, item)) continue;
 
-				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, hide, item, icons.get(i));
+				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, wrapperHide, item, icons.get(i));
 				btn.update(() -> btn.setChecked(holder.get() == item));
 
 				if (++c % cols == 0) {
 					p.row();
 				}
 			}
+			SettingsBuilder.build(p);
+			p.row().defaults().colspan(cols).size(CellTools.unset);
+			// see JSRequest
+			SettingsBuilder.check("@jsrequest.nothideauto", b -> notHideAuto[0] = b, () -> notHideAuto[0]);
+			p.row();
+			SettingsBuilder.clearBuild();
 		};
 	}
 

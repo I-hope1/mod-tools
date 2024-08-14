@@ -7,6 +7,8 @@ import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.*;
 import arc.util.pooling.Pools;
 
+import static modtools.utils.Tools.as;
+
 /**
  * The type Info list.
  */
@@ -27,8 +29,11 @@ public class InfoList extends MenuItem {
 		super.reset();
 		color = Color.white;
 	}
-	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
+	@Override
+	public Cell<?> build(Table p, Runnable hide) {
+		Cell<TextButton> cell = as(super.build(p, hide));
 		cell.get().getLabel().setColor(color);
+		return cell;
 	}
 	public MenuItem color(Color color) {
 		this.color = color;

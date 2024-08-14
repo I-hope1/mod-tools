@@ -8,6 +8,8 @@ import arc.scene.ui.layout.*;
 import arc.util.pooling.Pools;
 import modtools.ui.HopeStyles;
 
+import static modtools.utils.Tools.as;
+
 /**
  * The type Checkbox list.
  */
@@ -24,15 +26,16 @@ public class CheckboxList extends MenuItem {
 		list.cons = _ -> run.run();
 		return list;
 	}
-	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
-		super.build(p, cell, hide);
+	public Cell<?> build(Table p, Runnable hide) {
+		Cell<TextButton> cell = as(super.build(p, hide));
 		cell.update(b -> b.setChecked(checked == null || checked.get()));
+		return cell;
 	}
 	public void reset() {
 		super.reset();
 		checked = null;
 	}
 	public TextButtonStyle style() {
-		return HopeStyles.flatTogglet;
+		return HopeStyles.flatToggleMenut;
 	}
 }

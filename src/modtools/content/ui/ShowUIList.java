@@ -80,7 +80,7 @@ public class ShowUIList extends Content {
 		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
 		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
-		tab = new IntTab(getW(), names, colors, tables);
+		tab = new IntTab(-1, names, colors, tables);
 		tab.eachWidth = getW() / 4.3f;
 		tab.setPrefSize(getW(), -1);
 		ui.cont.table(t -> {
@@ -114,7 +114,7 @@ public class ShowUIList extends Content {
 		bgColor = SettingsUI.colorBlock(colorWrap.table().get(),
 		 "bg", data(), "bgColor",
 		 0x877F5E_FF, null);
-		iconColor = SettingsUI.colorBlock(colorWrap.table().padLeft(4f).get(),
+		iconColor = SettingsUI.colorBlock(colorWrap.table().padLeft(6f).get(),
 		 "icon", data(), "iconColor",
 		 -1/* white */, null);
 	}
@@ -296,7 +296,7 @@ public class ShowUIList extends Content {
 				 .isInstance(ImageButtonStyle.class, p, Builder::view)
 				 .isInstance(ButtonStyle.class, p, Builder::view)
 				 .isInstance(Drawable.class, p, Builder::view))).padLeft(8f);
-			}).growX().row();
+			}).left().row();
 			t.unbind();
 		}
 	}

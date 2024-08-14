@@ -753,6 +753,7 @@ public class ReviewElement extends Content {
 			 MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
 			 MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
 			 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack),
+			 UnderlineItem.with(),
 			 element instanceof Table table ? MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)) : null,
 			 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
 			 element instanceof Table table ? MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)) : null,

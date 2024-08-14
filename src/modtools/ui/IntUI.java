@@ -440,7 +440,7 @@ public class IntUI {
 		});
 		return t;
 	}
-	private static void checkBound(SelectTable t) {
+	public static void checkBound(SelectTable t) {
 		if (t.getWidth() > Core.scene.getWidth()) {
 			t.setWidth((float) graphics.getWidth());
 		}

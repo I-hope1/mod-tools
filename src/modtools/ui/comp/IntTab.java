@@ -193,7 +193,7 @@ public class IntTab {
 					}
 				}
 			}).self(c -> {
-				if (titleWidth != -1)
+				if (titleWidth != -1 || eachWidth != 0)
 					c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
 			});
 

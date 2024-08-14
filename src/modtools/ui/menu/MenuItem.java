@@ -1,5 +1,6 @@
 package modtools.ui.menu;
 
+import arc.Core;
 import arc.func.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
@@ -8,8 +9,10 @@ import arc.scene.ui.layout.*;
 import arc.util.*;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.pooling.Pools;
-import modtools.ui.HopeStyles;
+import modtools.IntVars;
 import modtools.content.debug.Tester;
+import modtools.ui.*;
+import modtools.ui.IntUI.ITooltip;
 import modtools.utils.Tools;
 import modtools.utils.ui.CellTools;
 
@@ -73,20 +76,39 @@ public class MenuItem implements Poolable {
 
 	/** The style of Button  */
 	public TextButtonStyle style() {
-		return HopeStyles.flatt;
+		return HopeStyles.flatToggleMenut;
 	}
 
 	/** @see Cell#unset */
 	public float iconSize() {
 		return icon != null ? 24 : CellTools.unset;
 	}
-	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
+	public Cell<?> build(Table p, Runnable hide) {
+		var cell = newMenuItemButton(p);
+		// cell.get().getLabel().setFontScale(0.9f);
 		TextButton b = cell.get();
 		b.clicked(Tools.runT(() -> {
 			Cons<Button> c = cons;
 			hide.run();
 			if (c != null) c.get(b);
 		}));
+		return cell;
+	}
+	@SuppressWarnings("StringTemplateMigration")
+	Cell<TextButton> newMenuItemButton(Table p) {
+		var cell = p.button(getName(), icon, style(),
+			iconSize(), IntVars.EMPTY_RUN
+		 ).minSize(Float.NEGATIVE_INFINITY, IntUI.FUNCTION_BUTTON_SIZE)
+		 .growX().left()
+		 .padTop(-1)
+		 .marginLeft(5f).marginRight(5f)
+		 .wrapLabel(false);
+		cell.row();
+		if (Core.bundle.has("menu." + key)) {
+			cell.get().addListener(new ITooltip(() -> Core.bundle.get("menu." + key)));
+		}
+		cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
+		return cell;
 	}
 	public void reset() {
 		key = null;

@@ -6,20 +6,17 @@ import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
-import arc.util.Align;
 import arc.util.pooling.Pools;
-import mindustry.gen.Icon;
+import mindustry.gen.*;
 import mindustry.ui.Styles;
-import modtools.IntVars;
 import modtools.ui.IntUI;
-import modtools.ui.IntUI.*;
+import modtools.ui.IntUI.SelectTable;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.EventHelper;
 
 import java.util.Objects;
 
 import static modtools.utils.ElementUtils.findClosestPane;
-import static modtools.utils.ui.CellTools.rowSelf;
 
 public class MenuBuilder {
 	/**
@@ -41,10 +38,10 @@ public class MenuBuilder {
 	 * Dispose after close.
 	 * @param prov menu提供者
 	 */
-	public static void showMenuListDispose(Prov<Seq<MenuItem>> prov) {
+	public static SelectTable showMenuListDispose(Prov<Seq<MenuItem>> prov) {
 		Seq<MenuItem> list = prov.get();
-		if (list.find(Objects::nonNull) == null) return;
-		showMenuList(list, () -> {
+		if (list.find(Objects::nonNull) == null) return null;
+		return showMenuList(list, () -> {
 			Pools.freeAll(list, false);
 			if (list instanceof DisposableSeq) Pools.free(list);
 		});
@@ -65,12 +62,12 @@ public class MenuBuilder {
 	public static void showMenuList(Iterable<MenuItem> list) {
 		showMenuList(list, null);
 	}
-	/** TODO: 隐藏当前的MenuList */
-	public static void showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
-		IntUI.showSelectTableRB((p, hide, _) -> {
+	public static SelectTable showMenuList(Iterable<MenuItem> list, Runnable hiddenListener) {
+		return IntUI.showSelectTableRB((p, hide, _) -> {
 			showMenuList(list, hiddenListener, p, hide);
 		}, false);
 	}
+
 	public static SelectTable showMenuListFor(
 	 Element elem,
 	 int align, Prov<Seq<MenuItem>> prov) {
@@ -95,6 +92,7 @@ public class MenuBuilder {
 				p = (Table) pane.parent;
 			}
 		}
+		p.background(Tex.paneSolid);
 
 		Table main = new Table();
 
@@ -102,20 +100,7 @@ public class MenuBuilder {
 			/* 过滤掉null */
 			if (menu == null) continue;
 
-			var cell = rowSelf(main.button(menu.getName(), menu.icon, menu.style(),
-				menu.iconSize(), IntVars.EMPTY_RUN
-			 ).minSize(Float.NEGATIVE_INFINITY, IntUI.FUNCTION_BUTTON_SIZE)
-			 .growX().left()
-			 .padTop(-1)
-			 .marginLeft(5f).marginRight(5f)
-			 .wrapLabel(false));
-			if (Core.bundle.has("menu." + menu.key)) {
-				cell.get().addListener(new ITooltip(() -> Core.bundle.get("menu." + menu.key)));
-			}
-			// cell.get().getLabel().setFontScale(0.9f);
-			cell.get().getLabelCell().padLeft(8f).labelAlign(Align.left);
-
-			menu.build(p, cell, () -> {
+			menu.build(p, () -> {
 				hideRun.run();
 				if (hiddenListener != null) hiddenListener.run();
 			});

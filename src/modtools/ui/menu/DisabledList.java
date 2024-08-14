@@ -2,7 +2,6 @@ package modtools.ui.menu;
 
 import arc.func.Boolp;
 import arc.scene.style.Drawable;
-import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.*;
 import arc.util.pooling.Pools;
 
@@ -34,8 +33,9 @@ public class DisabledList extends MenuItem {
 		return list;
 	}
 
-	public void build(Table p, Cell<TextButton> cell, Runnable hide) {
-		super.build(p, cell, hide);
+	public Cell<?> build(Table p, Runnable hide) {
+		var cell =super.build(p, hide);
 		cell.disabled(_ -> disabled.get()).row();
+		return cell;
 	}
 }

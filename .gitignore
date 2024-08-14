@@ -160,3 +160,6 @@ hs_err_pid*.log
 .gradle/**
 /.temp/
 /.run/
+
+a.txt
+/processorLog/

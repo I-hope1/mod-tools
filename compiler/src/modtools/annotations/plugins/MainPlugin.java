@@ -18,14 +18,13 @@ public class MainPlugin implements Plugin {
 	public boolean autoStart() {
 		return true;
 	}
-
+}
+class V {
 	/** 设置字节码版本  */
 	public static void main(String[] args) throws IOException {
 		HopeReflect.load();
-		V.load();
+		load();
 	}
-}
-class V {
 	static void load() throws IOException {
 		File file = new File("D:/core-v146/mindustry");
 		// 将jar中所有class文件majorVersion设置为55

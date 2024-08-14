@@ -404,17 +404,21 @@ public class Selection extends Content {
 				Fonts.def.draw(text, 8, 36, Color.white, 1, false, Align.left);
 			});
 		}
+
+		@SuppressWarnings("unused")
 		public TextureRegion getIcon(T key) {
-			if (key instanceof Fire) return lazyGetIcon(0);
-			if (key instanceof WorldLabel) return lazyGetIcon(1);
-			if (key instanceof Player) return lazyGetIcon(2);
-			if (key instanceof Puddle) return lazyGetIcon(3);
-			if (key instanceof WeatherState) return lazyGetIcon(4);
-			if (key instanceof Drawc) return lazyGetIcon(5);
-			if (key instanceof Pool.Poolable) return lazyGetIcon(6);
-			if (key instanceof PowerGraphUpdaterc) return lazyGetIcon(7);
-			if (key instanceof Syncc) return lazyGetIcon(8);
-			return Core.atlas.white();
+			return switch (key) {
+				case Fire fire -> lazyGetIcon(0);
+				case WorldLabel worldLabel -> lazyGetIcon(1);
+				case Player player1 -> lazyGetIcon(2);
+				case Puddle puddle -> lazyGetIcon(3);
+				case WeatherState weatherState -> lazyGetIcon(4);
+				case Drawc drawc -> lazyGetIcon(5);
+				case Pool.Poolable poolable -> lazyGetIcon(6);
+				case PowerGraphUpdaterc powerGraphUpdaterc -> lazyGetIcon(7);
+				case Syncc syncc -> lazyGetIcon(8);
+				case null, default -> Core.atlas.white();
+			};
 		}
 		public boolean checkRemove(T item) {
 			return !item.isAdded();

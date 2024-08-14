@@ -140,17 +140,13 @@ public class FilterTable<E> extends LimitTable {
 			return last != provider.get();
 		}
 		public boolean valid(T name) {
-			if (name instanceof UnlockableContent u) {
-				return PatternUtils.test(last = provider.get(), u.localizedName)
-				       || PatternUtils.test(last, String.valueOf(u.name));
-			}
-			if (name instanceof Drawable d) {
-				return PatternUtils.test(last = provider.get(), FormatHelper.getUIKeyOrNull(d));
-			}
-			if (name instanceof String[] strings) {
-				return PatternUtils.test(last = provider.get(), strings[0]);
-			}
-			return PatternUtils.test(last = provider.get(), String.valueOf(name));
+			return switch (name) {
+				case UnlockableContent u -> PatternUtils.test(last = provider.get(), u.localizedName)
+				                            || PatternUtils.test(last, String.valueOf(u.name));
+				case Drawable d -> PatternUtils.test(last = provider.get(), FormatHelper.getUIKeyOrNull(d));
+				case String[] strings -> PatternUtils.test(last = provider.get(), strings[0]);
+				case null, default -> PatternUtils.test(last = provider.get(), String.valueOf(name));
+			};
 		}
 		public boolean get(T object) {
 			return valid(object);

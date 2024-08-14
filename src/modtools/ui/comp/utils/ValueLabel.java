@@ -189,25 +189,30 @@ public abstract class ValueLabel extends InlineLabel {
 			text.append('{');
 			Runnable prev = appendTail;
 			appendTail = null;
-			if (val instanceof ObjectMap<?, ?> map) {
-				for (Entry<?, ?> entry : map) {
-					appendMap(text, val, entry.key, entry.value);
-					if (isTruncate(text.length())) break;
+			switch (val) {
+				case ObjectMap<?, ?> map -> {
+					for (Entry<?, ?> entry : map) {
+						appendMap(text, val, entry.key, entry.value);
+						if (isTruncate(text.length())) break;
+					}
 				}
-			} else if (val instanceof IntMap<?> map) {
-				for (IntMap.Entry<?> entry : map) {
-					appendMap(text, val, entry.key, entry.value);
-					if (isTruncate(text.length())) break;
+				case IntMap<?> map -> {
+					for (IntMap.Entry<?> entry : map) {
+						appendMap(text, val, entry.key, entry.value);
+						if (isTruncate(text.length())) break;
+					}
 				}
-			} else if (val instanceof ObjectFloatMap<?> map) {
-				for (ObjectFloatMap.Entry<?> entry : map) {
-					appendMap(text, val, entry.key, entry.value);
-					if (isTruncate(text.length())) break;
+				case ObjectFloatMap<?> map -> {
+					for (ObjectFloatMap.Entry<?> entry : map) {
+						appendMap(text, val, entry.key, entry.value);
+						if (isTruncate(text.length())) break;
+					}
 				}
-			} else {
-				for (Map.Entry<?, ?> entry : ((Map<?, ?>) val).entrySet()) {
-					appendMap(text, val, entry.getKey(), entry.getValue());
-					if (isTruncate(text.length())) break;
+				default -> {
+					for (Map.Entry<?, ?> entry : ((Map<?, ?>) val).entrySet()) {
+						appendMap(text, val, entry.getKey(), entry.getValue());
+						if (isTruncate(text.length())) break;
+					}
 				}
 			}
 			appendTail = prev;
@@ -272,14 +277,13 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 
 	private int getSize(Object val) {
-		if (Objects.requireNonNull(val) instanceof ObjectMap<?, ?> map) {
-			return map.size;
-		} else if (val instanceof IntMap<?> map) {
-			return map.size;
-		} else if (val instanceof ObjectFloatMap<?> map) {
-			return map.size;
-		}
-		return ((Map<?, ?>) val).size();
+		return switch (val) {
+			case ObjectMap<?, ?> map -> map.size;
+			case IntMap<?> map -> map.size;
+			case ObjectFloatMap<?> map -> map.size;
+			case Map<?, ?> map -> map.size();
+			default -> throw new UnsupportedOperationException();
+		};
 	}
 	public static boolean testHashCode(Object object) {
 		try {

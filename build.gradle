@@ -17,6 +17,10 @@ allprojects {
 //		options.compilerArgs += "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED"
 	}
 
+	tasks.withType(JavaCompile) {
+		options.compilerArgs.add("--enable-preview")
+		//	options.compilerArgs.add("-verbose")
+	}
 	repositories {
 		mavenLocal()
 		mavenCentral()
@@ -25,10 +29,6 @@ allprojects {
 	}
 }
 
-tasks.withType(JavaCompile) {
-	options.compilerArgs.add("--enable-preview")
-//	options.compilerArgs.add("-verbose")
-}
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -51,13 +51,13 @@ dependencies {
 //			"trash/procyon-0.6.jar",
 			"_libs/Mindustry_android.jar", // this contains android project of mindustry
 			"_libs/Android_dalvik-1.0.jar",
-			"_libs/AndroidField.jar"
 	)
+	implementation files("_libs/AndroidField.jar")
 
-//	annotationProcessor ("com.github.EB-wilson.JavaDynamilizer:apt:$JDERVersion")
-//	implementation("com.github.EB-wilson.JavaDynamilizer:annotations:$JDERVersion")
-//	implementation("com.github.EB-wilson.JavaDynamilizer:core:$JDERVersion")
-//	implementation("com.github.EB-wilson.JavaDynamilizer:baseimpl:$JDERVersion")
+	/*annotationProcessor ("com.github.EB-wilson.JavaDynamilizer:apt:$JDERVersion")
+	implementation("com.github.EB-wilson.JavaDynamilizer:annotations:$JDERVersion")
+	implementation("com.github.EB-wilson.JavaDynamilizer:core:$JDERVersion")
+	implementation("com.github.EB-wilson.JavaDynamilizer:baseimpl:$JDERVersion")*/
 //	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 //	compileOnly "com.github.EB-wilson.UniverseCore:core:$uncVersion"
 
@@ -68,6 +68,7 @@ dependencies {
 	compileOnly("com.github.Anuken.Arc:arc-core:$mindustryVersion")
 	compileOnly("com.github.Anuken.Arc:backend-android:$mindustryVersion")
 	compileOnly("com.github.Anuken.Arc:backend-sdl:$mindustryVersion")
+	compileOnly("com.github.EB-wilson.UniverseCore:annotations:$uncVersion")
 //	compileOnly("com.github.Anuken.rhino::$mindustryVersion")
 }
 
@@ -100,15 +101,16 @@ task jarAndroid(type: JavaExec) {
 	]
 }
 
+
 jar {
 	archiveFileName = "${project.archivesBaseName}-${version}.jar"
 
+	configurations.runtimeClasspath.asList().each {
+		from(zipTree(it))
+	}
+
 	from(rootDir) { include "mod.hjson" }
 	from("assets/") { include "**" }
-	/*from{
-        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
-    }*/
-	from(zipTree("_libs/AndroidField.jar").getAsFileTree()) { include "**" }
 	from(zipTree("${project(":annotations").buildDir0}/libs/annotations-${version}.jar")) {
 		include "**/settings/**"
 	}

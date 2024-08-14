@@ -2,7 +2,7 @@ package modtools.annotations.unsafe;
 
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Directive.*;
+import com.sun.tools.javac.code.Directive.ExportsDirective;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Lint.LintCategory;
 import com.sun.tools.javac.code.Source.Feature;
@@ -14,13 +14,17 @@ import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.model.JavacElements;
+import com.sun.tools.javac.processing.JavacRoundEnvironment;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
-import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
-import modtools.annotations.*;
+import modtools.annotations.NoAccessCheck;
 
+import javax.annotation.processing.RoundEnvironment;
 import javax.tools.JavaFileObject;
 import java.io.*;
 import java.lang.invoke.MethodHandle;
@@ -36,13 +40,14 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	static Context      context;
-	static ClassFinder  classFinder;
-	static Symtab       syms;
-	static Enter        enter;
-	static JavacTrees   trees;
-	static Names        ns;
-	static ModuleFinder moduleFinder;
+	static Context       context;
+	static ClassFinder   classFinder;
+	static Symtab        syms;
+	static Enter         enter;
+	static JavacTrees    trees;
+	static Names         ns;
+	static JavacElements elements;
+	static ModuleFinder  moduleFinder;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -52,6 +57,7 @@ public class Replace {
 		enter = Enter.instance(context);
 		trees = JavacTrees.instance(context);
 		ns = Names.instance(context);
+		elements = JavacElements.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
 
 		try {
@@ -70,8 +76,24 @@ public class Replace {
 
 		other();
 	}
+	static JavacRoundEnvironment roundEnvironment;
+	public static void whenAnnotation(RoundEnvironment roundEnvironment) {
+		Replace.roundEnvironment = (JavacRoundEnvironment) roundEnvironment;
+		desugar();
+	}
+	private static void desugar() {
+		Desugar desugar = new Desugar(context);
+		try {
+			roundEnvironment.getRootElements().forEach(e -> {
+				JCTree tree = trees.getTree(e);
+				if (tree != null) tree.accept(desugar);
+			});
+		} catch (Throwable th) {
+			err(th);
+		}
+	}
 	private static void moduleExports() throws Exception {
-		removeKey(JCDiagnostic.Factory.class, () -> new JCDiagnostic.Factory(context) {
+		removeKey(Factory.class, () -> new Factory(context) {
 			public JCDiagnostic fragment(Fragment fragmentKey) {
 				return super.fragment(fragmentKey);
 			}

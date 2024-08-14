@@ -31,7 +31,7 @@ public class FormatHelper {
 	);
 
 	public static String fixedAny(Object value) {
-		if (value instanceof Float) return fixed((float) value);
+		if (value instanceof Float f) return fixed(f);
 		return value.toString();
 	}
 

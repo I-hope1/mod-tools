@@ -173,7 +173,7 @@ public class ShowUIList extends Content {
 		 t.row();
 
 		 listAllStyles(t, Styles.class);
-		 Tools.runLoggedException(() -> {
+		 runLoggedException(() -> {
 			 Fi json = uiConfig.child("styles.json");
 			 if (!json.exists()) json.writeString(INIT_ARRAY);
 			 Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
@@ -265,6 +265,7 @@ public class ShowUIList extends Content {
 				if (obj instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
 				if (obj instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
 				t.bind(field.getName());
+
 				SR.of(obj)
 				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
 				 .isInstance(DialogStyle.class, t, Builder::build)

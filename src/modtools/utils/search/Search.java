@@ -12,6 +12,7 @@ public class Search {
 	public Search(Cons2<Table, Pattern> rebuild) {
 		this.rebuild = rebuild;
 	}
+
 	public void build(Table title, Table cont) {
 		title.table(top -> {
 			top.image(Icon.zoomSmall);

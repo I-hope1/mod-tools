@@ -113,8 +113,9 @@ public class ModTools extends Mod {
 			loadLibs();
 		} catch (Throwable e) {
 			Log.err(e);
-			if (e instanceof UnexpectedPlatform)
+			if (e instanceof UnexpectedPlatform) {
 				Log.err("It seems you platform is special. (But don't worry.)");
+			}
 			planB_resolveLibs();
 		}
 	}

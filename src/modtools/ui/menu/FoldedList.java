@@ -57,15 +57,17 @@ public class FoldedList extends MenuItem implements Poolable {
 			if (!button.isChecked()) return;
 			SelectTable table = MenuBuilder.showMenuListDispose(childrenGetter);
 			if (table == null) return;
+			table.hidden(() -> button.setChecked(false));
 			table.update(() -> {
-				int align = Align.topRight;
+				IntUI.positionTooltip(button, Align.topRight, table, Align.topLeft);
+				/* int align = Align.topRight;
 				button.localToStageCoordinates(Tmp.v1.set(button.getX(align) - button.x, button.getY(align) - button.y));
 				table.setPosition(Tmp.v1.x, Tmp.v1.y, Align.topLeft);
 				if (table.y < 0) {
 					align = Align.bottomRight;
 					button.localToStageCoordinates(Tmp.v1.set(button.getX(align) - button.x, button.getY(align) - button.y));
 					table.setPosition(Tmp.v1.x, Tmp.v1.y, Align.bottomLeft);
-				}
+				} */
 				IntUI.checkBound(table);
 			});
 		});

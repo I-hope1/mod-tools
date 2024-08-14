@@ -48,7 +48,6 @@ public class NameWindow extends Window implements PopupWindow {
 		field.update(() -> ((Label) errorMessage.el).setText(errorProv.get()));
 		field.setText(text);
 
-		moveToMouse();
 		field.setMessageText("@message.input");
 		field.addListener(new InputListener() {
 			@Override
@@ -60,7 +59,7 @@ public class NameWindow extends Window implements PopupWindow {
 				return false;
 			}
 		});
-		super.show();
+		moveToMouse().show();
 	}
 
 	public static class FileNameWindow extends NameWindow {

@@ -409,6 +409,10 @@ public class Window extends Table implements Position {
 			Window.all.add(this);
 		}
 
+		if (this instanceof IDisposable) {
+			moveToMouse();
+		}
+
 		// if (!(this instanceof InfoFadePopup)) Core.scene.unfocusAll();
 		// stage.setKeyboardFocus(this);
 	}
@@ -730,8 +734,9 @@ public class Window extends Table implements Position {
 	}
 
 	/**
-	 * 窗口会自动销毁
-	 * 而且新建就{@link #show()}
+	 * <p>窗口会自动销毁
+	 * <p>而且新建就{@link #show()}
+	 * <p>自动移动到鼠标位置
 	 */
 	public interface IDisposable {
 		default void clearAll() {

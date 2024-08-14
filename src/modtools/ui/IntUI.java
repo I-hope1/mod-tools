@@ -214,6 +214,7 @@ public class IntUI {
 			} else if (Align.isLeft(align)) lyingAlign = lyingAlign & ~Align.left | Align.right;
 			else if (Align.isRight(align)) lyingAlign = lyingAlign & ~Align.right | Align.left;
 
+			checkBound(t);
 			positionTooltip(button, lyingAlign, t, align);
 
 			t.keepInStage();
@@ -226,49 +227,64 @@ public class IntUI {
 		positionTooltip(lying, Align.bottom, t, Align.top);
 	}
 
+	public static boolean xlock, ylock;
 	public static void positionTooltip(Element lying, int lyingAlign, Table table, int tableAlign) {
 		Vec2 pos = Tmp.v1;
-		lying.localToStageCoordinates(pos.set(lying.getX(lyingAlign), lying.getY(lyingAlign)).sub(lying.x, lying.y));
-		table.setPosition(Tmp.v1.x, Tmp.v1.y, tableAlign);
+		lying.localToStageCoordinates(
+		 pos.set(lying.getX(lyingAlign) - lying.x,
+		 lying.getY(lyingAlign) - lying.y));
+
+		table.setPosition(pos.x, pos.y, tableAlign);
 		// 在不遮挡lying的情况下，如果上面超出屏幕
 		l:
 		if (table.y + table.getHeight() > Core.graphics.getHeight()) {
-			int lyingAlign1 = lyingAlign & ~Align.top | Align.bottom;
+			if (ylock) break l;
+			int lyingAlign1 = lyingAlign & ~Align.bottom | Align.top;
 			if (lyingAlign == lyingAlign1) break l;
-			int tableAlign1 = tableAlign & ~Align.top | Align.bottom;
+			int tableAlign1 = tableAlign & ~Align.bottom | Align.top;
 			if (tableAlign == tableAlign1) break l;
+			ylock = true;
 			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+			ylock = false;
 		}
 
 		// 在不遮挡lying的情况下，如果下面超出屏幕
 		l:
 		if (table.y < 0) {
-			int lyingAlign1 = lyingAlign & ~Align.bottom | Align.top;
+			if (ylock) break l;
+			int lyingAlign1 = lyingAlign & ~Align.top | Align.bottom;
 			if (lyingAlign == lyingAlign1) break l;
-			int tableAlign1 = tableAlign & ~Align.bottom | Align.top;
+			int tableAlign1 = tableAlign & ~Align.top | Align.bottom;
 			if (tableAlign == tableAlign1) break l;
+			ylock = true;
 			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+			ylock = false;
 		}
 
 		// 在不遮挡lying的情况下，如果右边超出屏幕
 		l:
 		if (table.x + table.getWidth() > Core.graphics.getWidth()) {
-			int lyingAlign1 = lyingAlign & ~Align.left | Align.right;
+			if (xlock) break l;
+			int lyingAlign1 = lyingAlign & ~Align.right | Align.left;
 			if (lyingAlign == lyingAlign1) break l;
 			int tableAlign1 = tableAlign & ~Align.left | Align.right;
 			if (tableAlign == tableAlign1) break l;
+			xlock = true;
 			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+			xlock = false;
 		}
 
 		// 如果左边超出屏幕
 		l:
 		if (table.x < 0) {
-			int lyingAlign1 = lyingAlign & ~Align.right | Align.left;
+			if (xlock) break l;
+			int lyingAlign1 = lyingAlign & ~Align.left | Align.right;
 			if (lyingAlign == lyingAlign1) break l;
 			int tableAlign1 = tableAlign & ~Align.right | Align.left;
 			if (tableAlign == tableAlign1) break l;
-			// 尽量不遮挡lying
+			xlock = true;
 			positionTooltip(lying, lyingAlign1, table, tableAlign1);
+			xlock = false;
 		}
 
 		// keep in stage
@@ -557,7 +573,6 @@ public class IntUI {
 		});
 		window.keyDown(KeyCode.escape, window::hide);
 		window.keyDown(KeyCode.back, window::hide);
-		window.moveToMouse();
 		return window;
 	}
 	/** @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable) */
@@ -774,7 +789,7 @@ public class IntUI {
 			Time.runTask(10f, DelayDisposable.super::clearAll);
 		}
 	}
-	private static class ExceptionPopup extends Window implements PopupWindow {
+	private static class ExceptionPopup extends Window implements PopupWindow, IDisposable {
 		static final ObjectMap<Signature, ExceptionPopup> instances = new ObjectMap<>();
 		private ExceptionPopup(Signature signature, Throwable th) {
 			super("", 0, 200, false);
@@ -808,7 +823,7 @@ public class IntUI {
 		private static Window get(Throwable th, String text) {
 			Signature signature = new Signature(Strings.getFinalMessage(th), text);
 			if (instances.containsKey(signature)) return instances.get(signature);
-			return new ExceptionPopup(signature, th).moveToMouse();
+			return new ExceptionPopup(signature, th);
 		}
 		static class Signature {
 			String message, text;

@@ -67,7 +67,6 @@ public class ShowUIList extends Content {
 		]
 		""";
 
-	IntTab tab;
 	Window ui;
 
 	public ShowUIList() {
@@ -76,14 +75,16 @@ public class ShowUIList extends Content {
 
 	public void _load() {
 		ui = new Window(localizedName(), getW(), 400, true);
+		Table cont = ui.cont;
+
 		Table[] tables = {icons, tex, styles, colorsT, interps, actions};
 		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
 		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
-		tab = new IntTab(-1, names, colors, tables);
+		IntTab   tab   = new IntTab(-1, names, colors, tables);
 		tab.eachWidth = getW() / 4.3f;
 		tab.setPrefSize(getW(), -1);
-		ui.cont.table(t -> {
+		cont.table(t -> {
 			t.left().defaults().left();
 			t.add(colorWrap);
 			t.add("@mod-tools.tips.dclick_to_copy").color(Color.lightGray).padLeft(6f).row();
@@ -95,11 +96,11 @@ public class ShowUIList extends Content {
 			}).colspan(3).growX().padTop(-4f);
 		}).row();
 
-		Table top  = new Table();
-		ui.cont.add(top).growX().row();
-		ui.cont.top();
-		ui.cont.add(tab.build()).grow();
-		new Search((_, pattern0) -> pattern = pattern0).build(top, ui.cont);
+		Table top = new Table();
+		cont.add(top).growX().row();
+		cont.top();
+		cont.add(tab.build()).grow();
+		new Search((_, pattern0) -> pattern = pattern0).build(top, cont);
 		// ui.addCloseButton();
 	}
 
@@ -168,21 +169,15 @@ public class ShowUIList extends Content {
 		 }, Drawable.class);
 	 }),
 	 styles     = newTable(true, t -> {
-		 t.add("Custom Styles: ");
-		 t.button("styles.json", () -> FileUtils.openFile(uiConfig.child("styles.json"))).growX();
-		 t.row();
-
-		 listAllStyles(t, Styles.class);
-		 runLoggedException(() -> {
-			 Fi json = uiConfig.child("styles.json");
-			 if (!json.exists()) json.writeString(INIT_ARRAY);
-			 Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
-			 for (Class<?> cl : classes) {
-				 listAllStyles(t, cl);
-			 }
-		 });
+		 final String type = "styles";
+		 customJson(type, t);
+		 Cons<Class<?>> builder = cls -> listAllStyles(t, cls);
+		 builder.get(Styles.class);
+		 readJson(type, builder);
 	 }),
 	 colorsT    = newTable(t -> {
+		 final String type = "colors";
+		 customJson(type, t);
 		 Cons<Class<?>> buildColor = cls -> {
 			 t.add(cls.getSimpleName()).colspan(2).color(Pal.accent).growX().row();
 			 t.image().color(Pal.accent).colspan(2).growX().row();
@@ -203,6 +198,7 @@ public class ShowUIList extends Content {
 		 };
 		 buildColor.get(Color.class);
 		 buildColor.get(Pal.class);
+		 readJson(type, buildColor);
 	 }),
 	 interps    = newTable(t -> {
 		 Table table = new Table();
@@ -239,6 +235,22 @@ public class ShowUIList extends Content {
 			 t.unbind();
 		 }, Group.class, obj);
 	 });
+	private static void readJson(String type, Cons<Class<?>> builder) {
+		runLoggedException(() -> {
+			Fi json = uiConfig.child(type + ".json");
+			if (!json.exists()) json.writeString(INIT_ARRAY);
+			Class<?>[] classes = IntVars.json.fromJson(Class[].class, json);
+			for (Class<?> cl : classes) {
+				builder.get(cl);
+			}
+		});
+	}
+	private static void customJson(String type, FilterTable<Object> t) {
+		t.add("Custom " + Strings.capitalize(type) + ": ");
+		String fileName = type + ".json";
+		t.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
+		t.row();
+	}
 	private static void fieldWithView(FilterTable<Object> t, Field field, Drawable drawable) {
 		if (drawable != null) {
 			t.table(p -> {
@@ -395,7 +407,7 @@ public class ShowUIList extends Content {
 		}
 
 		static void view(Style style, Table t) {
-			t.button("Copy",  HopeStyles.flatBordert, () -> {
+			t.button("Copy", HopeStyles.flatBordert, () -> {
 				ValueLabel.copyStyle(style);
 			}).size(96, 42);
 		}

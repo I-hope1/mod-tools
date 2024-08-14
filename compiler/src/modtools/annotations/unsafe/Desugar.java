@@ -7,8 +7,6 @@ import com.sun.tools.javac.util.*;
 
 import java.util.function.Function;
 
-import static modtools.annotations.PrintHelper.SPrinter.println;
-
 public class Desugar extends TreeTranslator {
 	final Context   context;
 	final Symtab    syms;
@@ -54,7 +52,7 @@ public class Desugar extends TreeTranslator {
 			}
 
 			result = first;
-			println(result);
+			// println(result);
 			return;
 		}
 		super.visitSwitchExpression(tree);

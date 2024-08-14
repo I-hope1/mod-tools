@@ -232,7 +232,7 @@ public class IntUI {
 		Vec2 pos = Tmp.v1;
 		lying.localToStageCoordinates(
 		 pos.set(lying.getX(lyingAlign) - lying.x,
-		 lying.getY(lyingAlign) - lying.y));
+			lying.getY(lyingAlign) - lying.y));
 
 		table.setPosition(pos.x, pos.y, tableAlign);
 		// 在不遮挡lying的情况下，如果上面超出屏幕
@@ -815,7 +815,7 @@ public class IntUI {
 			cont.row();
 			col.setCollapsed(false, false);
 			cont.add(col).colspan(2).pad(2);
-			//            closeOnBack();
+			// closeOnBack();
 		}
 		public static Window of(Throwable th, String text) {
 			return get(th, text).show();

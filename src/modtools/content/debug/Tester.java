@@ -170,7 +170,7 @@ public class Tester extends Content {
 		super("tester", Icon.terminalSmall);
 	}
 
-	/* 按修改时间倒序  */
+	/** 按修改时间倒序  */
 	private static int sort(Fi f1, Fi f2) {
 		return Long.compare(f2.lastModified(), f1.lastModified());
 	}
@@ -433,15 +433,15 @@ public class Tester extends Content {
 			return true;
 		}
 		if (viewKeyCode.isPress()) {
-			SR.apply(() -> SR.of(res)
-			 .isInstance(Element.class, true, INFO_DIALOG::dialog)
-			 .isInstance(String.class, true, INFO_DIALOG::dialog)
-			 .isInstance(TextureRegion.class, true, INFO_DIALOG::dialog)
-			 .isInstance(Texture.class, true, INFO_DIALOG::dialog)
-			 .isInstance(Drawable.class, true, INFO_DIALOG::dialog)
-			 .isInstance(Color.class, true, INFO_DIALOG::dialog)
-			);
-
+			switch (res) {
+				case Element o -> INFO_DIALOG.dialog(o, true);
+				case String o -> INFO_DIALOG.dialog(o, true);
+				case TextureRegion o -> INFO_DIALOG.dialog(o, true);
+				case Texture o -> INFO_DIALOG.dialog(o, true);
+				case Drawable o -> INFO_DIALOG.dialog(o, true);
+				case Color o -> INFO_DIALOG.dialog(o, true);
+				default -> {}
+			}
 			return true;
 		}
 		return false;
@@ -825,14 +825,12 @@ public class Tester extends Content {
 
 	public static Object wrap(Object val) {
 		try {
-			if (val instanceof Class)
-				return cx.getWrapFactory().wrapJavaClass(cx, topScope, (Class<?>) val);
-			if (val instanceof Method method)
-				return new NativeJavaMethod(method, method.getName());
-			if (val instanceof MethodHandle handle)
-				return new NativeJavaHandle(customScope, handle);
-
-			return Context.javaToJS(val, topScope);
+			return switch (val) {
+				case Class<?> aClass -> cx.getWrapFactory().wrapJavaClass(cx, topScope, aClass);
+				case Method method -> new NativeJavaMethod(method, method.getName());
+				case MethodHandle handle -> new NativeJavaHandle(customScope, handle);
+				case null, default -> Context.javaToJS(val, topScope);
+			};
 		} catch (Throwable e) {
 			return val;
 		}

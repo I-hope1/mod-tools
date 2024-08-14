@@ -6,6 +6,7 @@ import arc.graphics.g2d.*;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import modtools.utils.Tools;
 import modtools.utils.ui.ColorFul;
 
 public class InterpImage extends Element {
@@ -26,6 +27,11 @@ public class InterpImage extends Element {
 
 	public void draw() {
 		super.draw();
+		Tools.runShowedException(this::drawT, () -> {
+			Draw.rect("error", x + width / 2f, y + height / 2f, width, height);
+		});
+	}
+	public void drawT() {
 		Core.graphics.requestRendering();
 
 		Draw.color(color);

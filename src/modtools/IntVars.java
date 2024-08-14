@@ -43,6 +43,7 @@ public class IntVars {
 
 	public static Json json = new Json() {
 		@SuppressWarnings("unchecked")
+		@Override
 		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
 			if (type == Class.class) try {
 				return (T) Vars.mods.mainLoader().loadClass(jsonData.asString());

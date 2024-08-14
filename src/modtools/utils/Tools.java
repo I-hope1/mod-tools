@@ -230,11 +230,18 @@ public class Tools {
 	 * @param run 要运行的任务
 	 */
 	public static void runShowedException(CatchRun run) {
+		runShowedException(run, IntVars.EMPTY_RUN);
+	}
+	/**
+	 * 运行带有异常的任务，捕获异常（并用UI展示异常）
+	 * @param run 要运行的任务
+	 */
+	public static void runShowedException(CatchRun run, Runnable unexpected) {
 		try {
 			run.run();
 		} catch (Throwable e) {
 			IntUI.showException(e);
-			Log.err(e);
+			unexpected.run();
 		}
 	}
 

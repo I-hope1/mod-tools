@@ -5,13 +5,14 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.ui.*;
 import arc.util.Align;
+import modtools.content.debug.Tester;
 import modtools.jsfunc.IScript;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.*;
 import modtools.ui.comp.input.area.TextAreaTab;
-import modtools.ui.comp.input.highlight.JSSyntax;
+import modtools.ui.comp.input.highlight.*;
 import modtools.utils.Tools;
 import rhino.*;
 
@@ -115,15 +116,16 @@ public class JSRequest {
 	public static <R> void request0(ConsT<R, Throwable> callback, Object self, Object... args) {
 		// resetScope();
 		BaseFunction parent = new BaseFunction(topScope, null);
-		Scriptable selfScope = self != null ? cx.getWrapFactory()
-		 .wrapAsJavaObject(cx, topScope, self, self.getClass()) : null;
+		Scriptable selfScope = self != null && Tester.wrap(self) instanceof Scriptable sc ? sc : null;
 		if (selfScope != null) {
 			selfScope.setPrototype(parent);
 			scope = selfScope;
 		} else scope = parent;
-		// scope = new Delegator(parent);
+
+		JSRequestWindow<?> window = JSRequest.window;
 		window.show().setPosition(mouseVec, Align.center);
 		window.buttons.clearChildren();
+		window.area.syntax = new JSSyntax(window.area, scope);
 
 		for (int i = 0; i < args.length; i += 2) {
 			parent.put((String) args[0], parent, args[1]);

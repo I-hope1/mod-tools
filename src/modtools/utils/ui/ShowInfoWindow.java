@@ -155,6 +155,10 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 					rebuild0.run();
 				});
 			});
+			t.button(Icon.filter, clearNonei, () -> {}).with(b -> b.clicked(() -> {
+				IntUI.showSelectListEnumTable(b, new Seq<>(SearchType.values()), () -> searchType, s -> searchType = s,
+				 250, 45, false, Align.top);
+			})).size(42);
 			t.image(Icon.zoom).size(42);
 			t.add(textField).growX();
 		}).growX().row();
@@ -183,6 +187,27 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 
+	public SearchType searchType = SearchType.name;
+	public Boolf2<Pattern, Member> searchFunc = (pattern, member) -> searchType.get(pattern, member);
+	public enum SearchType {
+		name((p, m) -> find(p, m.getName())),
+		fieldTypeOrReturnType((p, member) -> find(p, (member instanceof Field f ? f.getType() :
+		 member instanceof Method m ? m.getReturnType() :
+		 member instanceof ClassMember cs ? cs.getDelegator() : null))),
+		params((p, member) -> member instanceof Executable method &&
+		                      Arrays.stream(method.getParameterTypes())
+		                       .anyMatch(parma -> find(p, parma))),
+		exceptions((p, member) -> member instanceof Executable method &&
+		                      Arrays.stream(method.getExceptionTypes())
+		                       .anyMatch(parma -> find(p, parma)));
+		final Boolf2<Pattern, Member> func;
+		SearchType(Boolf2<Pattern, Member> func) {
+			this.func = func;
+		}
+		boolean get(Pattern pattern, Member member) {
+			return func.get(pattern, member);
+		}
+	}
 	/**
 	 * @param pattern 用于搜索
 	 * @param isBlack 是否为黑名单模式
@@ -191,7 +216,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
 			 pattern == PatternUtils.ANY ||
-			 (pattern != null && find(pattern, member.getName()) != isBlack
+			 (pattern != null && searchFunc.get(pattern, member) != isBlack
 			  && containsFlags(member.getModifiers()) != isBlack);
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::flushVal);
@@ -265,6 +290,9 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 	public static boolean find(Pattern pattern, String name) {
 		return E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
+	}
+	public static boolean find(Pattern pattern, Class<?> clazz) {
+		return clazz != null && find(pattern, clazz.getName());
 	}
 	private static void checkRemovePeek(ReflectTable table) {
 		if (!table.lastEmpty && table.current.hasChildren()) {

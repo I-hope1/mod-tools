@@ -295,10 +295,10 @@ public class IntUI {
 			table.y -= table.getHeight();
 		}
 	}
-	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder f) {
-		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, f);
+	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder builder) {
+		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, builder);
 	}
-	public static SelectTable basicSelectTable(Element button, boolean searchable, Builder f) {
+	public static SelectTable basicSelectTable(Element button, boolean searchable, Builder builder) {
 		Table p = new Table();
 		p.top();
 
@@ -310,11 +310,9 @@ public class IntUI {
 		Runnable hide  = t::hideInternal;
 		Runnable hide0 = mergeHide(t, hide);
 		if (searchable) {
-			newSearch(f, hide0, t, p);
-		}
-
-		if (!searchable) {// newSearch会自动构建一次
-			f.get(p.row(), hide0, null);
+			newSearch(builder, hide0, t, p);
+		} else {// newSearch会自动构建一次
+			builder.get(p.row(), hide0, PatternUtils.ANY/* see Search */);
 		}
 		t.init();
 		t.appendToGroup();

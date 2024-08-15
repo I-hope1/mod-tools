@@ -314,6 +314,9 @@ public interface ReflectTools {
 			this.cl = cl;
 			return this;
 		}
+		public Class<?> getDelegator() {
+			return cl;
+		}
 		public Class<?> getDeclaringClass() {
 			return cl.getDeclaringClass();
 		}

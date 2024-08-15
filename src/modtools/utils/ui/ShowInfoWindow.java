@@ -175,8 +175,8 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		rebuild.get(null);
 		// cont.add(build).grow();
 
-		this.cont.add(topTable).row();
-		this.cont.add(new ScrollPane(build, Styles.smallPane))
+		cont.add(topTable).row();
+		cont.add(new ScrollPane(build, Styles.smallPane))
 		 .with(p -> p.setOverscroll(false, true))
 		 .grow().row();
 
@@ -188,7 +188,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 
 	public SearchType searchType = SearchType.name;
-	public Boolf2<Pattern, Member> searchFunc = (pattern, member) -> searchType.get(pattern, member);
 	public enum SearchType {
 		name((p, m) -> find(p, m.getName())),
 		fieldTypeOrReturnType((p, member) -> find(p, (member instanceof Field f ? f.getType() :
@@ -216,7 +215,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
 			 pattern == PatternUtils.ANY ||
-			 (pattern != null && searchFunc.get(pattern, member) != isBlack
+			 (pattern != null && searchType.get(pattern, member) != isBlack
 			  && containsFlags(member.getModifiers()) != isBlack);
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::flushVal);

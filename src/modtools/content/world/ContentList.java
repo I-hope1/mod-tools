@@ -45,7 +45,7 @@ public class ContentList extends Content {
 	Prov<ObjectMap<String, Planet>> planets = () -> Vars.content.planets().asMap(b -> b.name);
 
 	Pattern pattern = null;
-	public void load0() {
+	public void lazyLoad() {
 		ui = new Window(localizedName(), 200, 420, true);
 		main = new Table();
 		Table top = new Table();
@@ -151,7 +151,6 @@ public class ContentList extends Content {
 		  : new TextureRegionDrawable(u.uiIcon);
 	}
 	public void build() {
-		if (ui == null) load0();
 		buildAll();
 		ui.show();
 		Time.runTask(2, () -> tab.main.invalidate());

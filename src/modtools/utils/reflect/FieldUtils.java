@@ -4,6 +4,7 @@ package modtools.utils.reflect;
 import arc.func.*;
 import arc.util.*;
 import jdk.internal.misc.Unsafe;
+import modtools.IntVars;
 import modtools.utils.Tools;
 
 import java.lang.reflect.*;
@@ -202,14 +203,26 @@ interface $OffsetGetter {
 	$OffsetGetter DefaultImpl = (isStatic, f) ->
 	 isStatic ? Unsafe.getUnsafe().staticFieldOffset(f) : Unsafe.getUnsafe().objectFieldOffset(f);
 
+	@SuppressWarnings("deprecation")
+	$OffsetGetter Java8Impl = (isStatic, f) ->
+	 isStatic ? unsafe.staticFieldOffset(f) : unsafe.objectFieldOffset(f);
+
 	$OffsetGetter AndroidImpl = (isStatic, f) -> hope_android.FieldUtils.getFieldOffset(f);
 
-	$OffsetGetter impl = OS.isAndroid ? AndroidImpl : DefaultImpl;
+	$OffsetGetter impl = OS.isAndroid ? AndroidImpl :
+	 IntVars.javaVersion <= 8 ? Java8Impl : DefaultImpl;
 }
 
 interface $OffsetGetter2 {
 	long fieldOffset(Class<?> clazz, String fieldName);
 	$OffsetGetter2 DesktopImpl = (cls, name) -> Unsafe.getUnsafe().objectFieldOffset(cls, name);
 	$OffsetGetter2 AndroidImpl = (cls, name) -> hope_android.FieldUtils.getFieldOffset(FieldUtils.getFieldAccessOrThrow(cls, name));
-	$OffsetGetter2 impl        = OS.isAndroid ? $OffsetGetter2.AndroidImpl : $OffsetGetter2.DesktopImpl;
+
+	$OffsetGetter2 Java8Impl = (cls, name) -> {
+		Field field = FieldUtils.getFieldAccess(cls, name);
+		assert field != null;
+		return $OffsetGetter.impl.fieldOffset(Modifier.isStatic(field.getModifiers()), field);
+	};
+	$OffsetGetter2 impl      = OS.isAndroid ? AndroidImpl :
+	 IntVars.javaVersion <= 8 ? Java8Impl : DesktopImpl;
 }

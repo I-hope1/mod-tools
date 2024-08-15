@@ -50,21 +50,20 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	@SettingsInit
 	public enum TSettings implements ISettings {
 		checkUICount,
-		/** @see ISettings#$(Integer)  */
+		/** @see ISettings#$(int, int, int, int) */
 		@Switch(dependency = "checkUICount")
-		maxUICount(int.class, 70, 10, 200, 1),
+		maxUICount(int.class, it -> it.$(70, 10, 200, 1)),
 		selectInvisible,
 
 		debugBounds,
 		@Switch(dependency = "debugBounds")
 		drawHiddenPad,
-		/** @see ISettings#$(Drawable) */
-		paneDrawable(Drawable.class, Tex.pane, (Cons<Drawable>) d -> Window.myPane.reset(d, Color.white)),
+		/** @see ISettings#$(Drawable, Cons)  */
+		paneDrawable(Drawable.class, it -> it.$(Tex.pane, d -> Window.myPane.reset(d, Color.white))),
 		;
 		// overrideScene
 		TSettings() { }
-		TSettings(Class<?> c, int... args) { }
-		TSettings(Class<Drawable> c, Object... args) { }
+		TSettings(Class<?> type, Cons<ISettings> builder) { }
 	}
 
 	/* 渲染相关 */

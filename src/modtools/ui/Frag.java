@@ -1,6 +1,7 @@
 package modtools.ui;
 
 import arc.*;
+import arc.func.Cons;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.math.geom.*;
@@ -15,14 +16,14 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
+import modtools.content.Content;
 import modtools.events.ISettings;
 import modtools.ui.comp.Hitter;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.MoveListener;
-import modtools.content.Content;
 import modtools.utils.*;
-import modtools.utils.ui.LerpFun;
 import modtools.utils.search.BindCell;
+import modtools.utils.ui.LerpFun;
 
 import static modtools.ui.Frag.Settings.position;
 import static modtools.ui.IntUI.*;
@@ -186,9 +187,9 @@ public class Frag extends Table {
 	@SettingsInit
 	public enum Settings implements ISettings {
 		@Switch
-		position(Position.class);
+		position(Position.class, it -> it.$(Tmp.v1.set(0, 0)));
 
-		Settings(Class<?> c, float... args) { }
+		Settings(Class<?> c, Cons<ISettings> builder) { }
 
 		static {
 			position.defSwitchOn(true);

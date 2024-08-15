@@ -77,7 +77,7 @@ public class ShowUIList extends Content {
 		ui = new Window(localizedName(), getW(), 400, true);
 		Table cont = ui.cont;
 
-		Table[] tables = {icons, tex, styles, colorsT, interps, actions};
+		Table[] tables = {icons, tex, styles, colorsT, interps, actions = newTable(new ActionComp())};
 		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
 		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
@@ -224,7 +224,7 @@ public class ShowUIList extends Content {
 			 });
 		 });
 	 }),
-	 actions    = newTable((Cons) new ActionComp()),
+	 actions,
 	 uis        = newTable(t -> {
 		 UI obj = Vars.ui;
 		 FieldUtils.walkAllConstOf(UI.class, (f, group) -> {
@@ -425,7 +425,7 @@ public class ShowUIList extends Content {
 	}
 
 
-	static class ActionComp implements Cons<Table> {
+	static class ActionComp implements Cons<FilterTable<String>> {
 		final        Element      element   = new Image();
 		static       MethodHandle init      = Constants.nl(() -> InitMethodHandle.findInit(Image.class.getConstructor()));
 		static final Seq<String>  blackList = Seq.with("time", "began", "complete", "lastPercent", "color",
@@ -433,7 +433,7 @@ public class ShowUIList extends Content {
 		 "startR", "startG", "startB", "startA",
 		 "startX", "startY");
 
-		public void get(Table cont) {
+		public void get(FilterTable<String> cont) {
 			cont.center();
 			Cell<Element> cell = cont.add(element).size(64).pad(24);
 			cont.row();

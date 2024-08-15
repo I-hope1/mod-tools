@@ -596,10 +596,10 @@ public class ReviewElement extends Content {
 			// pane的左下角坐标
 			pane.localToDescendantCoordinates(this, bgVec.set(0, 0));
 			float lastW = width, lastH = height;
-			float x1 = Mathf.clamp(x, bgVec.x, bgVec.x + pane.getWidth());
-			float y1 = Mathf.clamp(y, bgVec.y, bgVec.y + pane.getHeight());
-			float x2 = Mathf.clamp(x + width, bgVec.x, bgVec.x + pane.getWidth());
-			float y2 = Mathf.clamp(y + height, bgVec.y, bgVec.y + pane.getHeight());
+			float x1    = Mathf.clamp(x, bgVec.x, bgVec.x + pane.getWidth());
+			float y1    = Mathf.clamp(y, bgVec.y, bgVec.y + pane.getHeight());
+			float x2    = Mathf.clamp(x + width, bgVec.x, bgVec.x + pane.getWidth());
+			float y2    = Mathf.clamp(y + height, bgVec.y, bgVec.y + pane.getHeight());
 			width = x2 - x1;
 			height -= y2 - y1;
 			super.drawBackground(x1, y1);
@@ -891,13 +891,12 @@ public class ReviewElement extends Content {
 		 * 最大自动展开深度
 		 * @see ISettings#$(Integer)
 		 */
-		maxDepthForAutoExpand(int.class, 5/* def */, 0/* min */, 50/* max */, 1/* step */),
+		maxDepthForAutoExpand(int.class, it -> it.$(5/* def */, 0/* min */, 50/* max */, 1/* step */)),
 		//
 		;
 
 		Settings() { }
-		Settings(Class<?> a, int... args) { }
-		Settings(Class<?> a, Prov<Seq<MenuItem>> prov) { }
+		Settings(Class<?> a, Cons<ISettings> builder) { }
 	}
 
 	public static class InfoDetails extends Table implements KeyValue {

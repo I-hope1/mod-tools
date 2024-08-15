@@ -5,29 +5,31 @@ import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.code.Type.MethodType;
+import com.sun.tools.javac.code.Type.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
-
-import java.util.*;
+import modtools.annotations.*;
+import modtools.annotations.settings.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
+import java.util.*;
 
-import modtools.annotations.*;
 import static modtools.annotations.processors.ContentProcessor.$.*;
-import modtools.annotations.settings.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
 @AutoService(Processor.class)
 public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {
 	private Name        nameSetting;
+	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
+
+	private static final String FIELD_PREFIX = "f";
 
 	public void init() throws Throwable {
 		nameSetting = ns("Settings");
@@ -35,7 +37,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		dataClass = C_Data();
 		iSettings = findClassSymbol("modtools.events.ISettings");
 		myEvents = findClassSymbol("modtools.events.MyEvents");
-		// settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
+		consType = findType("arc.func.Cons");
+		settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
 	}
 
 	public void contentLoad(ClassSymbol element) {
@@ -93,6 +96,11 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		$.settings = settings;
 		$.classDecl = classDecl;
 
+		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
+		// settingsImpl.flags_field &= ~Flags.FINAL;
+		// mMaker.at(classDecl.extending);
+		// classDecl.extending = mMaker.QualIdent(settingsImpl);
+
 		// addImport(unit, settingsImpl);
 		// mMaker.at(classDecl.defs.get(0));
 		// classDecl.extending = mMaker.Ident(settingsImpl);
@@ -106,27 +114,30 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				VarSymbol symbol = getSymbol(unit, tree);
 
 				collectSwitch(symbol);
+				Name name = tree.name;
 				// %name%.def(%args%[0])
-				if (newClass.args.size() >= 2 && newClass.args.get(1) instanceof JCExpression ex) {
-					mMaker.at(classDecl.defs.last());
-					defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
-					 mMaker.Select(mMaker.Ident(tree.name),
-						ns("def")),
-					 List.of(ex))));
+				if (newClass.args.size() == 2 && newClass.args.get(1) instanceof JCLambda lambda) {
+					lambda.accept(new TreeScanner() {
+						public void visitApply(JCMethodInvocation method) {
+							mMaker.at(classDecl.defs.last());
+							defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
+							 mMaker.Select(mMaker.Ident(name),
+								ns("def")),
+							 List.of(method.args.get(0)))));
+							if (!(method.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
+							      && method.args.get(0) instanceof JCFieldAccess access)) return;
+
+							buildFlushField(classType, access, symbol);
+						}
+					});
 				}
-
-				// xxx(arg1, Vars.mods, xxx)
-				if (!(newClass.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
-				      && newClass.args.get(1) instanceof JCFieldAccess access)) return;
-
-				buildFlushField(classType, access, symbol);
 			}
 		});
 		buildSwitch();
 		addImport(settings, dataClass);
 
 		mMaker.at(classDecl.defs.last());
-		addMethod(classDecl, "data", dataClass.type);
+		addMethod(classDecl, "data", dataClass.type, "data");
 		if (parent.isEmpty()) addImport(settings, mySettingsClass);
 
 		if (fireEvents) {
@@ -164,33 +175,30 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		 .map(t -> (JCMethodDecl) t)
 		 .filter(m1 -> m1.name.equals(names.init)).toList();
 
-		allInit.stream().filter(m1 -> !m1.params.isEmpty()).forEach(init -> {
-			addMethod(classDecl, "type", mSymtab.classType);
-			addField(classDecl, mSymtab.classType, "type", mMaker.ClassLiteral(mSymtab.booleanType));
-
+		String f_typeName = FIELD_PREFIX + "type";
+		addMethod(classDecl, f_typeName, mSymtab.classType, "type");
+		var f_type = addField(classDecl, mSymtab.classType, f_typeName, mMaker.ClassLiteral(mSymtab.booleanType));
+		allInit.stream().filter(m1 -> m1.params.size() == 2).forEach(init -> {
+			String f_builderName = FIELD_PREFIX + "builder";
+			addMethod(classDecl, f_builderName, consType, "builder");
+			var f_builder = addField(classDecl, consType, f_builderName, null);
 			init.body.stats = init.body.stats.append(
-			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("type")), mMaker.Ident(init.params.get(0).sym)))
+			 mMaker.Exec(mMaker.Assign(mMaker.Ident(f_type), mMaker.Ident(init.params.get(0))))
 			);
-		});
-		allInit.stream().filter(m1 -> m1.params.size() >= 2).forEach(init -> {
-			addMethod(classDecl, "args", mSymtab.objectType);
-			addField(classDecl, mSymtab.objectType, "args", null);
 
-			JCExpression rhs;
-			if (init.params.size() <= 2) {
-				rhs = mMaker.Ident(init.params.get(1).name);
-			} else {
-				rhs = mMaker.NewArray(mMaker.Ident(mSymtab.objectType.tsym), List.nil(),
-				 List.from(init.params.subList(1, init.params.size()).stream()
-					.map(p -> mMaker.Ident(p.sym)).toList()));
-			}
+			JCVariableDecl param = init.params.get(1);
+
+			JCExpression rhs = mMaker.Ident(param);
+			// args = xxx
 			init.body.stats = init.body.stats.append(
-			 mMaker.Exec(mMaker.Assign(mMaker.Select(mMaker.This(settings.type), ns("args")), rhs))
+			 mMaker.Exec(mMaker.Assign(mMaker.Ident(f_builder), rhs))
 			);
 		});
 
 		if (!defList.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
 
+		// if (!settings.getSimpleName().contentEquals("E_JSFuncDisplay")) return;
+		// println("------------------------------");
 		// println(classDecl);
 	}
 	private void buildFlushField(JCFieldAccess classType, JCFieldAccess access, VarSymbol symbol) {
@@ -306,22 +314,25 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		return initValue;
 	}
 
-	private void addMethod(JCClassDecl settingsTree, String fieldName, Type fieldType) {
+	private void addMethod(JCClassDecl settingsTree, String fieldName, Type fieldType, String methodName) {
 		if (findChild(settingsTree, Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(fieldName)) != null)
 			return;
 		mMaker.at(settingsTree);
 		JCBlock body  = PBlock(List.of(mMaker.Return(mMaker.Ident(ns(fieldName)))));
 		int     flags = Flags.PUBLIC;
 		JCMethodDecl method = mMaker.MethodDef(mMaker.Modifiers(flags),
-		 ns(fieldName), mMaker.Ident(fieldType.tsym),
+		 ns(methodName), mMaker.Ident(fieldType.tsym),
 		 List.nil(), List.nil(), List.nil(), body, null);
 		settingsTree.defs = settingsTree.defs.append(method);
 	}
 
-	private void addField(JCClassDecl settingsTree, Type type, String name, JCExpression init) {
-		if (findChild(settingsTree, Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals(name)) != null)
-			return;
-		addField0(settingsTree, Flags.PRIVATE, type, name, init).vartype = mMaker.Ident(type.tsym);
+	private JCVariableDecl addField(JCClassDecl settingsTree, Type type, String name, JCExpression init) {
+		JCVariableDecl v;
+		if ((v = findChild(settingsTree, Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals(name))) != null)
+			return v;
+		v = addField0(settingsTree, Flags.PRIVATE, type, name, init);
+		v.vartype = mMaker.Ident(type.tsym);
+		return v;
 	}
 
 	@Override

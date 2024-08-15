@@ -45,6 +45,9 @@ public class HopeInput {
 				mouseVec.require();
 				return false;
 			}
+			public boolean touchUp(int screenX, int screenY, int pointer, KeyCode button) {
+				return false;
+			}
 		});
 		HKeyCode.load();
 		try {

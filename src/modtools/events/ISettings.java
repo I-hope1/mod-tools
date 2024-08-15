@@ -11,7 +11,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import arc.scene.utils.Disableable;
-import arc.struct.*;
+import arc.struct.Seq;
 import arc.util.*;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
@@ -20,29 +20,28 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.annotations.settings.SettingsInit;
-import modtools.jsfunc.type.CAST;
+import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.ui.*;
 import modtools.ui.comp.limit.LimitTextButton;
-import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
 import modtools.utils.ui.FormatHelper;
 
-import java.lang.reflect.Method;
-
-import static modtools.events.ISettings.$$.*;
-import static modtools.ui.IntUI.*;
 import static modtools.content.SettingsUI.SettingsBuilder.*;
 import static modtools.content.SettingsUI.colorBlock;
-import static modtools.utils.Tools.*;
+import static modtools.events.ISettings.$$.*;
+import static modtools.ui.IntUI.*;
+import static modtools.utils.Tools.or;
 import static modtools.utils.ui.CellTools.rowSelf;
 
 /**
  * @see SettingsInit
  */
-@SuppressWarnings({"unused", "Convert2Lambda"/* 为了兼容java8和安卓 */, "StringTemplateMigration"})
+@SuppressWarnings({"unused",
+                   // "Convert2Lambda"/* 为了兼容java8和安卓 */,
+                   "StringTemplateMigration"})
 public interface ISettings extends E_DataInterface {
 	String SUFFIX_ENABLED = "$enabled";
 	float  DISABLED_ALPHA = 0.7f;
@@ -77,7 +76,7 @@ public interface ISettings extends E_DataInterface {
 		return name() + SUFFIX_ENABLED;
 	}
 
-	default Object args() { return null; }
+	default Cons<ISettings> builder() { return null; }
 	default String name() {
 		return null;
 	}
@@ -209,9 +208,13 @@ public interface ISettings extends E_DataInterface {
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
-		Method build = $builds.get(CAST.box(type));
 		try {
-			build.invoke(this, (Object) null);
+			Cons<ISettings> builder = builder();
+			if (builder == null) {
+				$(false);
+			} else {
+				builder.get(this);
+			}
 		} catch (Throwable e) {
 			Log.err(e);
 		} finally {
@@ -234,15 +237,7 @@ public interface ISettings extends E_DataInterface {
 		static String autoAddComma(String s) {
 			return s.isEmpty() || s.charAt(s.length() - 1) == '.' ? s : s + ".";
 		}
-		static {
-			$builds.each((_, m) -> m.setAccessible(true));
-		}
 	}
-
-	// ----通过反射执行对应的方法----
-	ObjectMap<Class<?>, Method> $builds = new Seq<>(ISettings.class.getDeclaredMethods())
-	 .removeAll(b -> !b.getName().equals("$"))
-	 .asMap(m -> m.getParameterTypes()[0]);
 
 	class Condition implements Runnable {
 		private final Disableable d;
@@ -260,36 +255,29 @@ public interface ISettings extends E_DataInterface {
 		}
 	}
 
+	// 方法 SettingsType $(%args%);
 
-	@SuppressWarnings("unchecked")
-	private <T> T getArg(int i) {
-		Object[] args = (Object[]) args();
-		return (T) args[i];
-	}
-	// 方法
-	private void $(Boolean __) {
+
+	default void $(boolean def) {
+		def(def);
 		check(text, this::set, this::enabled, this::isSwitchOn);
+	}
+	default void $(int def, int min, int max) {
+		$(def, min, max, 1);
 	}
 	/**
 	 * (def, min, max, step=1)
 	 */
-	private void $(Integer __) {
-		var   args = (int[]) args();
-		float def  = args[0];
+	default void $(int def, int min, int max, int step) {
 		def(def);
-		float  min    = args[1];
-		float  max    = args[2];
-		float  step   = args.length == 3 ? 1f : args[3];
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getInt());
 		Label value = new Label(getString(), Styles.outlineLabel);
 		slider.update(new Condition(slider, this::isSwitchOn));
-		slider.moved(new Floatc() {
-			public void get(float val0) {
-				int val = (int) val0;
-				ISettings.this.set(val);
-				value.setText(String.valueOf(val));
-			}
+		slider.moved(val0 -> {
+			int val = (int) val0;
+			ISettings.this.set(val);
+			value.setText(String.valueOf(val));
 		});
 		Table content = new Table();
 		content.add(text, Styles.outlineLabel).left().growX().wrap();
@@ -298,23 +286,19 @@ public interface ISettings extends E_DataInterface {
 		content.touchable = Touchable.disabled;
 		main().stack(slider, content).growX().padTop(4f).row();
 	}
+	default void $(float def, float min, float max) {
+		$(def, min, max, 1);
+	}
 	/** (def, min, max, step=1) */
-	private void $(Float __) {
-		var   args = (float[]) args();
-		float def  = args[0];
+	default void $(float def, float min, float max, float step) {
 		def(def);
-		float  min    = args[1];
-		float  max    = args[2];
-		float  step   = args.length == 3 ? 0.1f : args[3];
 		Slider slider = new Slider(min, max, step, false);
 		slider.setValue(getFloat());
 		final Label value = new Label(getString(), Styles.outlineLabel);
 		slider.update(new Condition(slider, this::isSwitchOn));
-		slider.moved(new Floatc() {
-			public void get(float val) {
-				ISettings.this.set(val);
-				value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
-			}
+		slider.moved(val -> {
+			ISettings.this.set(val);
+			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
 		});
 		Table content = new Table();
 		content.add(text, Styles.outlineLabel).left().growX().wrap();
@@ -323,56 +307,52 @@ public interface ISettings extends E_DataInterface {
 		content.touchable = Touchable.disabled;
 		main().stack(slider, content).growX().padTop(4f).row();
 	}
-	/* noArgs */
-	private void $(Color __) {
+	/** noArgs */
+	default void $(Color def) {
+		def(def);
 		colorBlock(main(), text, data(), name(), getColor(), this::set);
 	}
 	/** (enumClass) */
-	private <T extends Enum<T>> void $(Enum<?> __) {
-		Enum<T>  def       = getArg(0);
-		Class<T> enumClass = getArg(1);
-		enum_(text, enumClass, this::set, new Prov<>() {
-			public Enum<T> get() {
-				try {
-					return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
-				} catch (Throwable e) { return null; }
-			}
+	default <T extends Enum<T>> void $(Enum<T> def, Class<T> enumClass) {
+		def(def);
+		enum_(text, enumClass, this::set, () -> {
+			try {
+				return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
+			} catch (Throwable e) { return null; }
 		}, this::isSwitchOn);
 	}
-	/** 参数：({@link String}, def, ...args) */
-	private void $(String __) {
-		String   def = getArg(0);
-		String[] arg = getArg(1);
+	/** 参数：({@link String}, def, ...arr) */
+	default void $(String def, String... arr) {
+		def(def);
 		list(text, this::set, this::getString,
-		 new Seq<>(arg), s -> s.replaceAll("\\n", "\\\\n"));
+		 new Seq<>(arr), s -> s.replaceAll("\\n", "\\\\n"));
 	}
 
 	// TODO
-	private void $(Position __) { }
+	default void $(Position def) {
+		def(def);
+	}
 
 	/** (def, cons) */
-	private void $(Drawable __) {
-		Drawable       def      = getArg(0);
-		Drawable[]     drawable = {getDrawable(def)};
-		Cons<Drawable> cons     = getArg(1);
-		main().table(new Cons<>() {
-			public void get(Table t) {
-				t.add(text).left().padRight(10).growX().labelAlign(Align.left);
-				t.label(() -> FormatHelper.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
-				PreviewUtils.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
-					ISettings.this.set(FormatHelper.getUIKey(d));
+	default void $(Drawable def, Cons<Drawable> cons) {
+		def(def);
+		Drawable[] drawable = {getDrawable(def)};
+		main().table(t -> {
+			t.add(text).left().padRight(10).growX().labelAlign(Align.left);
+			t.label(() -> FormatHelper.getUIKeyOrNull(drawable[0])).fontScale(0.8f).padRight(6f);
+			PreviewUtils.buildImagePreviewButton(null, t, () -> drawable[0], d -> {
+				ISettings.this.set(FormatHelper.getUIKey(d));
 
-					cons.get(d);
-					drawable[0] = d;
-				});
-			}
+				cons.get(d);
+				drawable[0] = d;
+			});
 		}).growX().row();
 	}
 
 	// TODO: ContextMenu
 	@SuppressWarnings("StringTemplateMigration")
-	private void $(MenuItem[] __) {
-		var all = (Prov<Seq<MenuItem>>) args();
+	default void $(MenuItem[] def, Prov<Seq<MenuItem>> all) {
+		def(def);
 		lazyDefault(() -> new Data(data(), new JsonMap()));
 
 		TextButton button = new LimitTextButton("Manage", HopeStyles.flatt);
@@ -406,4 +386,5 @@ public interface ISettings extends E_DataInterface {
 			}
 		}, false, Align.center));
 	}
+
 }

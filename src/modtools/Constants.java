@@ -48,15 +48,17 @@ public class Constants {
 		long MEMBER_NAME_FLAGS =
 		 fieldOffset(MEMBER_NAME, "flags");
 
+		Class<?> CL_FACTORY = nl("java.lang.invoke.MemberName$Factory");
+
 		/** @see MemberName.Factory#INSTANCE */
-		Object       FACTORY          = Reflect.get(nl("java.lang.invoke.MemberName$Factory"), "INSTANCE");
+		Object       FACTORY          = Reflect.get(CL_FACTORY, "INSTANCE");
 		/** @see MemberName#MemberName(Constructor) */
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
 		 lookup.findConstructor(MEMBER_NAME, MethodType.methodType(void.class, Constructor.class)));
 
-		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class) */
-		Method RESOLVE_OR_FAIL   = method("java.lang.invoke.MemberName$Factory",
-		 "resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class);
+		/** @see MemberName.Factory#resolveOrNull(byte, MemberName, Class, int) */
+		Method RESOLVE_OR_FAIL   = method(CL_FACTORY,
+		 "resolveOrNull", byte.class, MEMBER_NAME, Class.class, int.class);
 		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
 		Method GET_DIRECT_METHOD = method(
 		 Lookup.class, "getDirectMethodCommon",

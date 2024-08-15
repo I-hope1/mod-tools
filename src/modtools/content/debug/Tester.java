@@ -3,7 +3,7 @@ package modtools.content.debug;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.func.Func;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
@@ -867,10 +867,10 @@ public class Tester extends Content {
 		capture_logger,
 		auto_complement,
 		/** @see ISettings#$(Integer) */
-		max_history_size(int.class, 40/* def */, 0/* min */, 100/* max */);
+		max_history_size(int.class, it -> it.$(40/* def */, 0/* min */, 100/* max */));
 
 		Settings() { }
-		Settings(Class<?> a, int... args) { }
+		Settings(Class<?> type, Cons<ISettings> builder) { }
 		static {
 			wrap_ref.defTrue();
 			capture_logger.defTrue();

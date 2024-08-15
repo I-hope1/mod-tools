@@ -1,21 +1,22 @@
 package modtools.events;
 
+import arc.func.Cons;
 import modtools.annotations.settings.*;
 
 @SettingsInit(fireEvent = true)
 public enum E_JSFunc implements ISettings {
 	watch_multi, search_exact, auto_refresh, display_generic,
 	truncate_text,
-	/** @see ISettings#$(Integer) */
+	/** @see ISettings#$(int, int, int, int) */
 	@Switch(dependency = "truncate_text")
-	truncate_length(int.class, 1000/* def */, 100/* min */, 100000/* max */, 10/* step */),
+	truncate_length(int.class, it -> it.$(1000/* def */, 100/* min */, 100000/* max */, 10/* step */)),
 
 	hidden_if_empty, display_synthetic, update_async,
 	folded_name,
-	/** @see ISettings#$(String) */
-	array_delimiter(String.class, ", ",
+	/** @see ISettings#$(String, String...)  */
+	array_delimiter(String.class, it -> it.$(", ",
 	 ", ", "\n", "\n\n",
-	 "\n▶▶▶▶", "\n★★★");
+	 "\n▶▶▶▶", "\n★★★"));
 
 	static {
 		auto_refresh.defTrue();
@@ -26,6 +27,5 @@ public enum E_JSFunc implements ISettings {
 	}
 
 	E_JSFunc() { }
-	E_JSFunc(Class<?> cl, String def, String... args) { }
-	E_JSFunc(Class<?> cl, int... args) { }
+	E_JSFunc(Class<?> type, Cons<ISettings> builder) { }
 }

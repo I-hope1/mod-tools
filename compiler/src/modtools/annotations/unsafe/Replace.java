@@ -1,5 +1,6 @@
 package modtools.annotations.unsafe;
 
+import com.sun.source.util.TreePath;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Directive.ExportsDirective;
@@ -15,6 +16,7 @@ import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.model.JavacElements;
+import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
 import com.sun.tools.javac.util.List;
@@ -22,6 +24,7 @@ import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.NoAccessCheck;
 
+import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
 import java.io.*;
 import java.lang.invoke.MethodHandle;
@@ -37,8 +40,8 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	static Context       context;
-	static ClassFinder   classFinder;
+	public static Context     context;
+	static        ClassFinder classFinder;
 	static Symtab        syms;
 	static Enter         enter;
 	static JavacTrees    trees;
@@ -190,6 +193,7 @@ public class Replace {
 		fixSyntaxError();
 
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
+		// removeKey(TransTypes.class, () -> new MyTransTypes(context));
 		// removeKey(Lower.class, () -> new Desugar(context));
 		// Lower lower = Lower.instance(context);
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "lower", lower);
@@ -401,5 +405,19 @@ public class Replace {
 		/* 使语法解析不会stop继续编译 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 100);
 		replaceSource();
+	}
+	public static void process(Set<? extends Element> rootElements) {
+		try {
+
+		DefaultToStatic defaultToStatic = new DefaultToStatic(Replace.context);
+		rootElements.forEach(element -> {
+			TreePath path = trees.getPath(element);
+			if (path == null) return;
+			defaultToStatic.translateTopLevelClass((JCCompilationUnit) path.getCompilationUnit(),
+			 trees.getTree(element));
+		});
+		} catch (Throwable e) {
+			err(e);
+		}
 	}
 }

@@ -40,14 +40,15 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	public static Context     context;
-	static        ClassFinder classFinder;
-	static Symtab        syms;
-	static Enter         enter;
-	static JavacTrees    trees;
-	static Names         ns;
-	static JavacElements elements;
-	static ModuleFinder  moduleFinder;
+	static Context         context;
+	static ClassFinder     classFinder;
+	static Symtab          syms;
+	static Enter           enter;
+	static JavacTrees      trees;
+	static Names           ns;
+	static JavacElements   elements;
+	static ModuleFinder    moduleFinder;
+	static DefaultToStatic defaultToStatic;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -59,6 +60,7 @@ public class Replace {
 		ns = Names.instance(context);
 		elements = JavacElements.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
+		defaultToStatic = new DefaultToStatic(Replace.context);
 
 		try {
 			extendingFunc0();
@@ -408,14 +410,12 @@ public class Replace {
 	}
 	public static void process(Set<? extends Element> rootElements) {
 		try {
-
-		DefaultToStatic defaultToStatic = new DefaultToStatic(Replace.context);
-		rootElements.forEach(element -> {
-			TreePath path = trees.getPath(element);
-			if (path == null) return;
-			defaultToStatic.translateTopLevelClass((JCCompilationUnit) path.getCompilationUnit(),
-			 trees.getTree(element));
-		});
+			rootElements.forEach(element -> {
+				TreePath path = trees.getPath(element);
+				if (path == null) return;
+				defaultToStatic.translateTopLevelClass((JCCompilationUnit) path.getCompilationUnit(),
+				 trees.getTree(element));
+			});
 		} catch (Throwable e) {
 			err(e);
 		}

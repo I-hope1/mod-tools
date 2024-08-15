@@ -8,14 +8,16 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
+/** 这个还未完全适配所有的  */
 public class DefaultToStatic extends TreeTranslator {
-	final Symtab syms;
-	final TreeMaker make;
-	final Names     names;
-	final Enter enter;
-	public final TypeEnter typeEnter;
-	public final JavacTrees trees;
-	public JCCompilationUnit toplevel;
+	final        Symtab            syms;
+	final        TreeMaker         make;
+	final        Names             names;
+	final        Enter             enter;
+	public final TypeEnter         typeEnter;
+	public final JavacTrees        trees;
+	public       JCCompilationUnit toplevel;
+	public       JCClassDecl       classDecl;
 
 	public DefaultToStatic(Context context) {
 		syms = Symtab.instance(context);
@@ -28,56 +30,75 @@ public class DefaultToStatic extends TreeTranslator {
 
 
 	ListBuffer<JCTree> toAppendMethods = new ListBuffer<>();
-	boolean            hasLambda;
 	JCMethodDecl       genMethod;
 	JCVariableDecl     self;
-	public void visitMethodDef(JCMethodDecl tree) {
-		if ((tree.mods.flags & Flags.DEFAULT) == 0) {
-			result = tree;
+	public void visitMethodDef(JCMethodDecl methodDecl) {
+		if ((methodDecl.mods.flags & Flags.DEFAULT) == 0) {
+			result = methodDecl;
 			return;
 		}
 		// println(Flags.toString(tree.mods.flags) + "." + tree.sym);
 		class LambdaScanner extends TreeScanner {
-			boolean hasLambda;
+			boolean hasLambda, hasThis;
+			boolean    inLambda;
+			List<Name> blackList = methodDecl.params.map(p -> p.name).appendList(classDecl.defs.map(p ->
+			 p instanceof JCVariableDecl v ? v.name :
+			 p instanceof JCClassDecl c ? c.name :
+			 p instanceof JCMethodDecl m ? m.name : null));
 			public void visitLambda(JCLambda tree) {
 				hasLambda = true;
+
+				inLambda = true;
+				List<Name> prev = blackList;
+				blackList = blackList.appendList(tree.params.map(p -> p.name));
+				if (!hasThis) super.visitLambda(tree);
+				blackList = prev;
+				inLambda = false;
+			}
+
+			public void visitIdent(JCIdent tree) {
+				if (inLambda
+				    && blackList.stream().noneMatch(p -> p != null && p.contentEquals(tree.name))
+				    && !hasImport(tree.name)) {
+					hasThis = true;
+				}
 			}
 		}
 		LambdaScanner scanner = new LambdaScanner();
-		tree.body.accept(scanner);
-		if (scanner.hasLambda) {
-			MethodSymbol enclMethod = tree.sym;
+		methodDecl.body.accept(scanner);
+		if (scanner.hasLambda && scanner.hasThis) {
+			MethodSymbol enclMethod = methodDecl.sym;
 			VarSymbol    varSymbol  = new VarSymbol(Flags.PARAMETER, names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			self = make.VarDef(varSymbol, null);
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
-			 names.fromString(tree.name + "$default"), tree.restype,
-			 tree.typarams,
-			 tree.recvparam,
-			 tree.params.prepend(self),
-			 tree.thrown,
+			 names.fromString(methodDecl.name + "$default"), methodDecl.restype,
+			 methodDecl.typarams,
+			 methodDecl.recvparam,
+			 methodDecl.params.prepend(self),
+			 methodDecl.thrown,
 			 null,
-			 tree.defaultValue);
-			genMethod.params = tree.params.prepend(self);
-			genMethod.body = translate(tree.body);
+			 methodDecl.defaultValue);
+			genMethod.params = methodDecl.params.prepend(self);
+			genMethod.body = translate(methodDecl.body);
 			genMethod.accept(enter);
 			// println(genMethod);
 			JCMethodInvocation apply = make.Apply(
 			 List.nil(), make.Ident(genMethod.name),
-			 tree.params.map(make::Ident).prepend(make.This(enclMethod.owner.type))
+			 methodDecl.params.map(make::Ident).prepend(make.This(enclMethod.owner.type))
 			);
 
 			// apply.type = ms.type;
-			tree.body = make.Block(0, List.of(enclMethod.getReturnType() == syms.voidType ? make.Exec(apply)
+			methodDecl.body = make.Block(0, List.of(enclMethod.getReturnType() == syms.voidType ? make.Exec(apply)
 			 : make.Return(apply)));
 			// println(tree);
-			tree.body.accept(enter);
+			methodDecl.body.accept(enter);
 
 			toAppendMethods.add(genMethod);
 		}
 
 		genMethod = null;
 		self = null;
-		result = tree;
+		result = methodDecl;
 	}
 
 	public void visitIdent(JCIdent tree) {
@@ -115,11 +136,15 @@ public class DefaultToStatic extends TreeTranslator {
 		}
 		try {
 			toplevel = unit;
-			translate(cdef);
+			this.classDecl = dcl;
+			translate(dcl);
 		} finally {
 			((JCClassDecl) cdef).defs = ((JCClassDecl) cdef).defs.appendList(toAppendMethods);
+			if (!toAppendMethods.isEmpty()) {
+				// println(cdef);
+			}
 			toAppendMethods.clear();
-			hasLambda = false;
+			this.classDecl = null;
 			toplevel = null;
 		}
 	}

@@ -40,7 +40,6 @@ import static modtools.utils.ui.CellTools.rowSelf;
  * @see SettingsInit
  */
 @SuppressWarnings({"unused",
-                   // "Convert2Lambda"/* 为了兼容java8和安卓 */,
                    "StringTemplateMigration"})
 public interface ISettings extends E_DataInterface {
 	String SUFFIX_ENABLED = "$enabled";
@@ -276,7 +275,7 @@ public interface ISettings extends E_DataInterface {
 		slider.update(new Condition(slider, this::isSwitchOn));
 		slider.moved(val0 -> {
 			int val = (int) val0;
-			ISettings.this.set(val);
+			set(val);
 			value.setText(String.valueOf(val));
 		});
 		Table content = new Table();
@@ -297,7 +296,7 @@ public interface ISettings extends E_DataInterface {
 		final Label value = new Label(getString(), Styles.outlineLabel);
 		slider.update(new Condition(slider, this::isSwitchOn));
 		slider.moved(val -> {
-			ISettings.this.set(val);
+			set(val);
 			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
 		});
 		Table content = new Table();
@@ -317,7 +316,7 @@ public interface ISettings extends E_DataInterface {
 		def(def);
 		enum_(text, enumClass, this::set, () -> {
 			try {
-				return Enum.valueOf(enumClass, data().getString(ISettings.this.name()));
+				return Enum.valueOf(enumClass, data().getString(name()));
 			} catch (Throwable e) { return null; }
 		}, this::isSwitchOn);
 	}

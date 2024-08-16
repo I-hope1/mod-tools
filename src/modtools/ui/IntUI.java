@@ -39,7 +39,7 @@ import modtools.utils.JSFunc.*;
 import modtools.utils.search.Search;
 import modtools.utils.ui.*;
 
-import java.util.*;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import static arc.Core.graphics;
@@ -103,7 +103,7 @@ public class IntUI {
 	public static final long  DEF_LONGPRESS = 600L;
 
 
-	/** @see ShowInfoWindow  */
+	/** @see ShowInfoWindow */
 	public static void addLabelButton(Table table, Prov<?> prov, @Nullable Class<?> clazz) {
 		addDetailsButton(table, prov, clazz);
 		// addStoreButton(table, Core.bundle.get("jsfunc.value", "value"), prov);
@@ -342,7 +342,7 @@ public class IntUI {
 		 Enum::name, width, height, searchable, align);
 	}
 
-	/** @see modtools.ui.comp.utils.MyItemSelection#buildTable0(Table, Seq, Prov, Cons, int, Func)   */
+	/** @see modtools.ui.comp.utils.MyItemSelection#buildTable0(Table, Seq, Prov, Cons, int, Func) */
 	public static <BTN extends Element, V> SelectTable
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
@@ -642,7 +642,7 @@ public class IntUI {
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
-	/** TIP_PREFIX: {@value TIP_PREFIX}  */
+	/** TIP_PREFIX: {@value TIP_PREFIX} */
 	public static <T extends Element> Cons<T> makeTipListener(String tipKey) {
 		return elem -> addTooltipListener(elem, () -> tips(tipKey));
 	}
@@ -655,13 +655,15 @@ public class IntUI {
 	}
 	/**
 	 * TIP_PREFIX: {@value TIP_PREFIX}
-	 * @see SettingsUI#tryAddTip(Element, String) */
+	 * @see SettingsUI#tryAddTip(Element, String)
+	 */
 	public static String tips(String key) {
 		return Core.bundle.format("mod-tools.tips", FormatHelper.parseVars(Core.bundle.get(TIP_PREFIX + key)));
 	}
 	/**
 	 * TIP_PREFIX: {@value TIP_PREFIX}
-	 * @see SettingsUI#tryAddTip(Element, String) */
+	 * @see SettingsUI#tryAddTip(Element, String)
+	 */
 	public static String tips(String key, String arg1) {
 		return Core.bundle.format("mod-tools.tips", FormatHelper.parseVars(Core.bundle.format(TIP_PREFIX + key, arg1)));
 	}
@@ -726,7 +728,6 @@ public class IntUI {
 	}
 
 	public static class ITooltip extends Tooltip implements IInfo {
-		/** {@inheritDoc} */
 		public ITooltip(Cons<Table> contents) {
 			super(t -> { });
 			allowMobile = true;
@@ -736,28 +737,23 @@ public class IntUI {
 				if (table.getChildren().isEmpty()) contents.get(table);
 				table.pack();
 				topGroup.addChild(table);
+
+				table.margin(10, 10, 10, 10);
 			};
 		}
 		public ITooltip(Prov<CharSequence> prov) {
 			this(t -> t.background(Styles.black6).margin(6f).label(prov));
 		}
-		/** {@inheritDoc} */
 		public ITooltip(Cons<Table> contents, Runnable show) {
 			super(contents, show);
 		}
-		/** {@inheritDoc} */
 		public ITooltip(Cons<Table> contents, Tooltips manager) {
 			super(contents, manager);
 		}
-		public void show(Element element, float x, float y) {
-			if (mobile) Time.runTask(60 * 1.2f, this::hide);
-			super.show(element, x, y);
+		protected void setContainerPosition(Element element, float x, float y) {
+			this.targetActor = element;
+			IntUI.positionTooltip(element, Align.top, container, Align.bottom);
 		}
-		/** 禁用原本的mobile自动隐藏 */
-		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-			if (!mobile) super.touchUp(event, x, y, pointer, button);
-		}
-
 		static {
 			Tooltips.getInstance().textProvider = text -> new ITooltip(() -> text);
 		}

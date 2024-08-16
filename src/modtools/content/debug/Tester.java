@@ -477,34 +477,34 @@ public class Tester extends Content {
 		if (historyPos == -1) originalText = area.getText();
 		historyPos += Mathf.sign(forward);
 		Vec2 pos            = tmpV.set(ui.x, ui.y + 20);
-		int  maxHistorySize = max_history_size.getInt();
-		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= maxHistorySize)) {
+		int  historySize = Math.min(history.list.size(), max_history_size.getInt());
+		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= historySize)) {
 			if (historyPos != -1) showRollback(pos);
 			historyPos = -1;
 			area.setText(originalText);
 			log = "";
-			IntUI.showInfoFade("[accent]0[]/[lightgray]" + maxHistorySize, pos, FADE_ALIGN);
+			IntUI.showInfoFade("[accent]0[]/[lightgray]" + historySize, pos, FADE_ALIGN);
 			return true;
 		}
 		if (rollback_history.enabled()) {
 			historyPos = Math.max(historyPos, -1);
 			int last = historyPos;
-			historyPos = (historyPos + maxHistorySize) % maxHistorySize;
+			historyPos = (historyPos + historySize) % historySize;
 			if (last != historyPos) {
 				showRollback(pos);
 			}
-		} else if (historyPos < -1 || historyPos >= maxHistorySize) {
+		} else if (historyPos < -1 || historyPos >= historySize) {
 			historyPos = forward ? history.list.size() - 1 : -1;
 			return false;
 		}
-		IntUI.showInfoFade(STR."\{historyPos + 1}/[lightgray]\{maxHistorySize}", pos, FADE_ALIGN);
+		IntUI.showInfoFade(STR."\{historyPos + 1}/[lightgray]\{historySize}", pos, FADE_ALIGN);
 		Fi dir = history.list.get(historyPos);
 		area.setText(readFiOrEmpty(dir.child("message.txt")));
 		log = readFiOrEmpty(dir.child("log.txt"));
 		return true;
 	}
 	private static void showRollback(Vec2 pos) {
-		IntUI.showInfoFade("@tester.rollback", pos.add(0, 80), FADE_ALIGN);
+		IntUI.showInfoFade("@tester.rollback", pos.add(0, 90), FADE_ALIGN);
 	}
 
 

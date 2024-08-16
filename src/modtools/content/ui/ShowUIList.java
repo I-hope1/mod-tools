@@ -100,6 +100,7 @@ public class ShowUIList extends Content {
 		cont.add(top).growX().row();
 		cont.top();
 		cont.add(tab.build()).grow();
+		tab.main.invalidateHierarchy();
 		new Search((_, pattern0) -> pattern = pattern0).build(top, cont);
 		// ui.addCloseButton();
 	}

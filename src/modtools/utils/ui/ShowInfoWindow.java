@@ -335,7 +335,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			c_cell.require();
 		} else if (Number.class.isAssignableFrom(box(type)) && editable.get()) {
 			var field = new AutoTextField();
-			l.afterSet = () -> field.setTextCheck(String.valueOf(l.getText()));
+			l.afterSet = () -> field.setText(String.valueOf(l.getText()));
 			l.afterSet.run();
 			field.update(() -> {
 				l.enableUpdate = !field.hasKeyboard();
@@ -358,7 +358,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			l.afterSet = () -> field.setTextCheck((String) l.val);
 			l.afterSet.run();
 			field.update(() -> {
-				l.enableUpdate = Core.scene.getKeyboardFocus() != field;
+				l.enableUpdate = !field.hasKeyboard();
 			});
 			field.changed(Tools.runT(() -> {
 				String text = field.getText();

@@ -442,12 +442,13 @@ public abstract class ValueLabel extends InlineLabel {
 		    this.val.equals(val)) return;
 
 		this.val = val;
-		if (afterSet != null) afterSet.run();
 		try {
 			setAndProcessText(val);
 		} catch (Throwable th) {
 			resolveThrow(th);
 			super.setText(String.valueOf(val));
+		} finally {
+			if (afterSet != null) afterSet.run();
 		}
 		invalidateHierarchy();
 	}

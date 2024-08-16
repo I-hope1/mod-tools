@@ -24,6 +24,7 @@ import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.AutoWrapListener;
 import modtools.utils.ArrayUtils;
 import modtools.utils.io.FileUtils;
+import modtools.utils.ui.CellTools;
 
 import static modtools.utils.Tools.readFiOrEmpty;
 
@@ -99,9 +100,9 @@ public class LogDisplay extends Content {
 			}
 		})};
 		String[] names = {"last_log", "crashes"};
-		IntTab   itab  = new IntTab(-1, names, colors, tables);
+		IntTab   itab  = new IntTab(CellTools.unset, names, colors, tables);
 		itab.pane.update(new AutoWrapListener(itab.pane));
-		itab.setPrefSize(w, -1);
+		itab.setPrefSize(w, CellTools.unset);
 		ui.cont.add(itab.build()).grow();
 		ui.shown(() -> Core.app.post(() -> tables[0].invalidateHierarchy()));
 

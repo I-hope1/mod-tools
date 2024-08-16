@@ -1,6 +1,5 @@
 package modtools.utils;
 
-import arc.Core;
 import arc.func.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
@@ -13,6 +12,7 @@ import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import modtools.ui.IntUI;
+import modtools.ui.control.HopeInput;
 
 import java.util.function.Consumer;
 
@@ -115,8 +115,8 @@ public class EventHelper {
 	/** @param cons 它的参数可能为null  */
 	public static <T> void
 	longPressOrRclick(Element listener, Class<T> target, Consumer<T> cons) {
-		listener.addListener(mobile ? new LongPressListener(null, IntUI.DEF_LONGPRESS) {
-			public void longPress(InputEvent event, float x, float y) {
+		listener.addListener(mobile ? new LongPressListener(_ -> {}, IntUI.DEF_LONGPRESS) {
+			public void longPress(InputEvent event) {
 				T targetActor = ElementUtils.findParent(event.targetActor, target);
 				cons.accept(targetActor);
 				event.stop();
@@ -174,12 +174,15 @@ public class EventHelper {
 		final long  duration;
 		final Boolc boolc;
 		public LongPressListener(Boolc boolc0, long duration0) {
+			if (boolc0 == null) throw new IllegalArgumentException("boolc cannot be null.");
 			boolc = boolc0;
 			duration = duration0;
 			task = TaskManager.newTask(() -> {
 				if (pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
 					longPress = true;
-					Core.scene.touchUp((int) mouseVec.x, (int) mouseVec.y, pressedPointer, button);
+					InputEvent event = EventHelper.obtainEvent(InputEventType.touchUp, mouseVec.x, mouseVec.y, pressedPointer, button);
+					event.targetActor = HopeInput.mouseHit();
+					longPress(event);
 				}
 			});
 		}
@@ -199,12 +202,15 @@ public class EventHelper {
 		public void touchDragged(InputEvent event, float x, float y, int pointer) {
 			if (mouseVec.dst(last) >= IntUI.MAX_OFF && task != null) task.cancel();
 		}
-		public void longPress(InputEvent event, float x, float y) {
+		public void longPress(InputEvent event) {
+			event.stop();
 			boolc.get(true);
 		}
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			super.touchUp(event, x, y, pointer, button);
-			if (longPress) longPress(event, x, y);
+			if (task.isScheduled() && longPress) {
+				longPress(event);
+			}
 			task.cancel();
 		}
 		public void clicked(InputEvent event, float x, float y) {

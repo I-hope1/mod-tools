@@ -239,7 +239,7 @@ public class KeyCodeSetter extends Content {
 		ui = new Window(localizedName(), 120, 400, true);
 		Table cont = ui.cont;
 
-		IntTab tab = new IntTab(-1, new String[]{"Custom", "Internal"}, new Color[]{Color.acid, Color.sky},
+		IntTab tab = new IntTab(CellTools.unset, new String[]{"Custom", "Internal"}, new Color[]{Color.acid, Color.sky},
 		 new Table[]{customTable(), interanlTable()});
 
 		new Search((_, text) -> pattern = text).build(cont, null);

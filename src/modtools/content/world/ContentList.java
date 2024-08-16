@@ -25,6 +25,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.search.*;
+import modtools.utils.ui.CellTools;
 
 import java.lang.reflect.Field;
 import java.util.regex.Pattern;
@@ -95,7 +96,7 @@ public class ContentList extends Content {
 		main.update(() -> tab.setTitleWidth(main.getWidth() / Scl.scl()));
 		tab.title.add("@mod-tools.tips.longprees_to_cppy")
 		 .colspan(tables.length).growX().row();
-		tab.setPrefSize(tab.eachWidth * 3, -1);
+		tab.setPrefSize(tab.eachWidth * 3, CellTools.unset);
 
 		main.add(tab.build()).grow().top();
 	}

@@ -877,6 +877,12 @@ public class IntUI {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
 			top().add(pane).grow().pad(0f).top();
 			pane.setScrollingDisabled(true, false);
+			pane.setOverscroll(false, false);
+			pane.update(() -> {
+				if (pane.getPrefHeight() == pane.getHeight()) {
+					pane.setScrollingDisabled(true, true);
+				}
+			});
 			pack();
 		}
 		Hitter hitter = new Hitter(this::hideInternal);

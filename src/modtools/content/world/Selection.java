@@ -46,6 +46,7 @@ import modtools.ui.menu.MenuBuilder;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.reflect.ClassUtils;
+import modtools.utils.ui.CellTools;
 import modtools.utils.world.*;
 
 import java.util.Random;
@@ -167,12 +168,12 @@ public class Selection extends Content {
 		initFunctions();
 
 
-		var tab = new IntTab(-1, allFunctions.orderedKeys().toArray(String.class),
+		var tab = new IntTab(CellTools.unset, allFunctions.orderedKeys().toArray(String.class),
 		 Color.sky,
 		 ArrayUtils.map2Arr(Table.class, allFunctions, e -> e.value.wrap),
 		 1, true);
 		tab.setIcons(HopeIcons.tile, HopeIcons.building, Icon.unitsSmall, Icon.gridSmall, Icon.folderSmall);
-		tab.setPrefSize(260, -1);
+		tab.setPrefSize(260, CellTools.unset);
 		Table cont = ui.cont;
 		cont.update(() -> {
 			tab.labels.each((name, l) -> {

@@ -36,7 +36,7 @@ public class IntTab {
 	public boolean column/* = false */;
 
 	public void setTitleWidth(float amount) {
-		titleWidth = amount;
+		titleWidth = amount * Scl.scl();
 	}
 
 	protected void init() {
@@ -60,19 +60,19 @@ public class IntTab {
 			} else {
 				cell.growX().row();
 			}
-			t.add(pane).pad(4).self(c -> c.update(_ -> c.width(titleWidth == -1 ? CellTools.unset : titleWidth))).grow();
+			t.add(pane).pad(4).self(c -> c.update(_ -> c.width(titleWidth))).grow();
 		}) {
 			public float getMinWidth() {
-				return prefW != -1 ? prefW : super.getMinWidth();
+				return prefW != CellTools.unset ? prefW : super.getMinWidth();
 			}
 			public float getMinHeight() {
-				return prefH != -1 ? prefH : super.getMinHeight();
+				return prefH != CellTools.unset ? prefH : super.getMinHeight();
 			}
 			public float getPrefWidth() {
-				return prefW != -1 ? prefW : super.getPrefWidth();
+				return prefW != CellTools.unset ? prefW : super.getPrefWidth();
 			}
 			public float getPrefHeight() {
-				return prefH != -1 ? prefH : super.getPrefHeight();
+				return prefH != CellTools.unset ? prefH : super.getPrefHeight();
 			}
 		};
 	}

@@ -81,9 +81,9 @@ public class ShowUIList extends Content {
 		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
 		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
-		IntTab   tab   = new IntTab(-1, names, colors, tables);
+		IntTab   tab   = new IntTab(CellTools.unset, names, colors, tables);
 		tab.eachWidth = getW() / 4.3f;
-		tab.setPrefSize(getW(), -1);
+		tab.setPrefSize(getW(), CellTools.unset);
 		cont.table(t -> {
 			t.left().defaults().left();
 			t.add(colorWrap);
@@ -100,7 +100,7 @@ public class ShowUIList extends Content {
 		cont.add(top).growX().row();
 		cont.top();
 		cont.add(tab.build()).grow();
-		tab.main.invalidateHierarchy();
+		cont.layout();
 		new Search((_, pattern0) -> pattern = pattern0).build(top, cont);
 		// ui.addCloseButton();
 	}

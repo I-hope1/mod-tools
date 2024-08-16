@@ -31,7 +31,7 @@ public class FileUtils {
 		return openFile(path.path());
 	}
 
-	private static      boolean init;
+	private static boolean init;
 	public static boolean openFile(String path) {
 		if (IntVars.isDesktop()) {
 			return Core.app.openURI(path);

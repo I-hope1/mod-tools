@@ -16,6 +16,7 @@ import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
 import modtools.utils.*;
+import modtools.utils.io.FileUtils;
 import modtools.utils.search.*;
 
 import java.util.*;
@@ -85,6 +86,7 @@ public class ListDialog extends Window {
 		}
 
 		public Cell<Table> build() {
+			FilterTable<String> p = ListDialog.this.p;
 			ModifiableLabel.build(() -> f.name(), t -> fileNameValid.get(f, t), (field, label) -> {
 				if (!f.name().equals(field.getText()) && f.sibling(field.getText()).exists()) {
 					IntUI.showException(new IllegalArgumentException("文件夹已存在.\nFile has existed."));
@@ -133,12 +135,9 @@ public class ListDialog extends Window {
 						ListDialog.this.build();
 						hide();
 					}
-
 				});
 				t.button("", Icon.trash, HopeStyles.cleart, () -> {
-					if (!f.deleteDirectory()) {
-						f.delete();
-					}
+					FileUtils.delete(f);
 
 					list.remove(f);
 					ListDialog.this.build();

@@ -48,6 +48,22 @@ public class HopeInput {
 			public boolean touchUp(int screenX, int screenY, int pointer, KeyCode button) {
 				return false;
 			}
+			public void connected(InputDevice device) {
+			}
+			public void disconnected(InputDevice device) {
+			}
+			public boolean keyDown(KeyCode keycode) {
+				return false;
+			}
+			public boolean keyUp(KeyCode keycode) {
+				return false;
+			}
+			public boolean keyTyped(char character) {
+				return false;
+			}
+			public boolean scrolled(float amountX, float amountY) {
+				return false;
+			}
 		});
 		HKeyCode.load();
 		try {

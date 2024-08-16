@@ -29,7 +29,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
 
-	private static final String FIELD_PREFIX = "f";
+	private static final String FIELD_PREFIX = "f_";
 
 	public void init() throws Throwable {
 		nameSetting = ns("Settings");
@@ -98,6 +98,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
 		// settingsImpl.flags_field &= ~Flags.FINAL;
+		// settingsImpl.type.tsym.flags_field &= ~Flags.FINAL;
 		// mMaker.at(classDecl.extending);
 		// classDecl.extending = mMaker.QualIdent(settingsImpl);
 

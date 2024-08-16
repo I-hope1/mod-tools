@@ -122,16 +122,16 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		// 功能按钮栏
 		topTable.pane(t -> {
 			t.left().defaults().left();
-			t.button(Icon.settingsSmall, clearNonei, () -> {
-				IntUI.showSelectTableRB((p, _, _) -> {
-					p.background(Styles.black6);
-					p.left().defaults().left().growX();
-					ISettings.buildAll("jsfunc", p, E_JSFunc.class);
-					// addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
-					ISettings.buildAllWrap("jsfunc.display", p, "Display", E_JSFuncDisplay.class);
-					ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
-				}, false);
-			}).size(42);
+			t.button(Icon.settingsSmall, clearNonei, () -> { })
+			 .with(b -> b.clicked(() -> {
+				 IntUI.showSelectTable(b, (p, _, _) -> {
+					 p.left().defaults().left().growX();
+					 ISettings.buildAll("jsfunc", p, E_JSFunc.class);
+					 // addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
+					 ISettings.buildAllWrap("jsfunc.display", p, "Display", E_JSFuncDisplay.class);
+					 ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
+				 }, false, Align.bottom);
+			 })).size(42);
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, clearNonei, rebuild0).size(42);
 			if (obj != null) {
@@ -214,9 +214,9 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	private void buildReflect(Object o, Table cont, Pattern pattern, boolean isBlack) {
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
-			 pattern == PatternUtils.ANY ||
-			 (pattern != null && searchType.get(pattern, member) != isBlack
-			  && containsFlags(member.getModifiers()) != isBlack);
+			 (pattern == PatternUtils.ANY ||
+			 pattern != null && searchType.get(pattern, member) != isBlack)
+			  && containsFlags(member.getModifiers()) != isBlack;
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::flushVal);
 			methodsTable.filter(memberBoolf);
@@ -760,9 +760,9 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr),
 				() -> null, m -> {
-					CellGroup  group  = findBind((Member) m);
-				  ElementUtils.scrollTo(this, group.get(1).el);
-			  }, String::valueOf, 400, 42, true, Align.left)))
+					CellGroup group = findBind((Member) m);
+					ElementUtils.scrollTo(this, group.get(1).el);
+				}, String::valueOf, 400, 42, true, Align.left)))
 			 .row();
 			Underline.of(current, COLSPAN, Color.lightGray).padTop(6);
 		}

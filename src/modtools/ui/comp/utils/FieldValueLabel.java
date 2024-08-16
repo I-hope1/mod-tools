@@ -34,6 +34,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 	}
 	void addUpdate() {
 		Runnable r = () -> {
+			if (!visible) return;
 			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
 				flushVal();
 			}

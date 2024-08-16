@@ -274,7 +274,7 @@ public interface ReflectTools {
 		t.button("", HopeStyles.flatt, null).with(tbtn -> {
 			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, _, _) -> {
 				buildModifier(p, cols, cons, prov, seq);
-			}, false, Align.center));
+			}, false, Align.bottom));
 			Table fill = tbtn.fill();
 			fill.top().add(text, 0.6f).growX().labelAlign(Align.left).color(Color.lightGray);
 			tbtn.getCell(fill).colspan(0);

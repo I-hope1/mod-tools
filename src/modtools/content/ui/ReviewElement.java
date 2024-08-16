@@ -81,7 +81,7 @@ public class ReviewElement extends Content {
 		super("reviewElement", HopeIcons.codeSmall);
 	}
 
-	public static final boolean DEBUG = false;
+	public static final boolean DEBUG = true;
 
 
 	public static Element FOCUS;

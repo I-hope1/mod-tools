@@ -4,7 +4,7 @@ import arc.Core;
 import arc.func.*;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.gen.*;
@@ -25,7 +25,7 @@ public class MenuBuilder {
 	 */
 	public static void
 	addShowMenuListenerp(Element elem, Prov<Seq<MenuItem>> prov) {
-		EventHelper.longPressOrRclick(elem, _ -> showMenuListDispose(prov));
+		EventHelper.longPressOrRclick(elem, _ ->  showMenuListDispose(prov));
 	}
 	public static <T> void
 	addShowMenuListenerp(Element elem, Class<T> target, Func<T, Prov<Seq<MenuItem>>> func) {

@@ -23,6 +23,7 @@ import modtools.ui.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
+import modtools.unsupported.HopeProcessor;
 import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;

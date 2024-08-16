@@ -62,7 +62,7 @@ public class DesugarStringTemplate extends TreeTranslator {
 			}
 			var interpolate = new InterpolateToConcat(make);
 			result = interpolate.copy(lambda.body);
-			println(result);
+			// println(result);
 			return;
 		}
 		super.visitStringTemplate(template);

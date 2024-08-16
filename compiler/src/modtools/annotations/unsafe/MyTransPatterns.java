@@ -1,7 +1,7 @@
 package modtools.annotations.unsafe;
 
-import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
@@ -33,6 +33,13 @@ class SwitchDesugar extends TreeTranslator {
 		chk = Check.instance(context);
 	}
 
+	MethodSymbol currentMethod;
+	public void visitMethodDef(JCMethodDecl tree) {
+		MethodSymbol prev = currentMethod;
+		currentMethod = tree.sym;
+		super.visitMethodDef(tree);
+		currentMethod = prev;
+	}
 	public void visitSwitchExpression(JCSwitchExpression tree) {
 		if (transSwitch(tree.cases, tree.selector, tree.type)) return;
 		super.visitSwitchExpression(tree);
@@ -49,7 +56,7 @@ class SwitchDesugar extends TreeTranslator {
 		}
 		JCVariableDecl variable;
 		public void init(Type exprType) {
-			variable = make.VarDef(new VarSymbol(0, names.fromString(getName()), exprType, exprType.tsym.owner), null);
+			variable = make.VarDef(new VarSymbol(0, names.fromString(getName()), exprType, currentMethod), null);
 		}
 		public <T extends JCTree> T translate(T tree) {
 			if (tree instanceof JCYield yield) {
@@ -83,6 +90,7 @@ class SwitchDesugar extends TreeTranslator {
 				expr.type = exprType;
 				expr.needsCond = true;
 				result = expr;
+				// println(expr);
 			}
 			return true;
 		}

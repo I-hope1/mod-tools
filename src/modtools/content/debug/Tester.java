@@ -866,7 +866,7 @@ public class Tester extends Content {
 		rollback_history, multi_windows, output_to_log, js_prop,
 		capture_logger,
 		auto_complement,
-		/** @see ISettings#$(Integer) */
+		/** @see ISettings#$(int, int, int, int) */
 		max_history_size(int.class, it -> it.$(40/* def */, 0/* min */, 100/* max */));
 
 		Settings() { }
@@ -902,8 +902,13 @@ public class Tester extends Content {
 			switch (keycode) {
 				case tab, right -> {
 					cancel = true;
-					area.selectBackward();
-					area.paste(syntax.virtualString.text, true);
+					area.clearSelection();
+					syntax.virtualString = null;
+				}
+				case left -> {
+					cancel = true;
+					area.clearSelection();
+					area.setCursorPosition(area.getSelectionStart());
 					syntax.virtualString = null;
 				}
 				case enter -> {
@@ -913,16 +918,22 @@ public class Tester extends Content {
 				}
 				case up -> {
 					cancel = true;
-					if (lastCompletionCursor == area.getCursorPosition()) {
+					if (lastCompletionCursor == area.getSelectionStart()) {
 						lastCompletionIndex = (lastCompletionIndex - 1 + complements.size) % complements.size;
-						syntax.virtualString.text = complements.get(lastCompletionIndex);
+						int    s       = area.getSelectionStart();
+						String content = complements.get(lastCompletionIndex);
+						area.paste(content, false);
+						area.setSelectionUncheck(s, s + content.length());
 					}
 				}
 				case down -> {
 					cancel = true;
-					if (lastCompletionCursor == area.getCursorPosition()) {
+					if (lastCompletionCursor == area.getSelectionStart()) {
 						lastCompletionIndex = (lastCompletionIndex + 1) % complements.size;
-						syntax.virtualString.text = complements.get(lastCompletionIndex);
+						int s = area.getSelectionStart();
+						String content = complements.get(lastCompletionIndex);
+						area.paste(content, false);
+						area.setSelectionUncheck(s, s + content.length());
 					}
 				}
 				default -> syntax.virtualString = null;
@@ -934,9 +945,8 @@ public class Tester extends Content {
 				complement0();
 			} catch (Throwable err) {
 				Log.err(err);
-				return;
+				area.setCursorPosition(lastCursor);
 			}
-			area.setCursorPosition(lastCursor);
 		}
 
 		private final Seq<String> complements = new Seq<>();
@@ -946,7 +956,8 @@ public class Tester extends Content {
 			String searchingKey = area.getSelection();
 			int    start        = area.getSelectionStart();
 			area.clearSelection();
-			lastCompletionCursor = area.getCursorPosition();
+			int cursor = area.getCursorPosition();
+			lastCompletionCursor = cursor;
 
 			while (area.checkIndex(start - 1) && Character.isWhitespace(area.charAtUncheck(start - 1))) start--;
 
@@ -974,8 +985,10 @@ public class Tester extends Content {
 			if (complements.isEmpty()) return;
 
 			if (syntax.virtualString == null) syntax.virtualString = new VirtualString();
-			syntax.virtualString.index = area.getCursorPosition();
-			syntax.virtualString.text = complements.get(lastCompletionIndex++ % complements.size);
+			syntax.virtualString.index = cursor;
+			String content = complements.get(lastCompletionIndex++ % complements.size);
+			area.paste(content, false);
+			area.setSelectionUncheck(cursor, cursor + content.length());
 		}
 
 		public boolean keyTyped(InputEvent event, char character) {
@@ -987,14 +1000,14 @@ public class Tester extends Content {
 				if (syntax.virtualString != null) event.stop();
 				Core.app.post(this::complement);
 			}
-			return false;
+			return true;
 		}
 		public boolean keyUp(InputEvent event, KeyCode keycode) {
 			check(event);
-			return super.keyUp(event, keycode);
+			return true;
 		}
 		private void check(InputEvent event) {
-			if (cancel) event.cancel();
+			if (cancel) event.stop();
 		}
 	}
 

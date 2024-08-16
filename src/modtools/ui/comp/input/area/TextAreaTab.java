@@ -168,6 +168,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public void setSelectionUncheck(int start, int end) {
 			selectionStart = start;
 			cursor = end;
+			hasSelection = start != end;
 		}
 
 		public void paste(String content, boolean fireChangeEvent) {
@@ -400,10 +401,12 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		public void left() {
-			moveCursor(false, false);
+			requestKeyboard();
+			if (Core.scene.keyDown(KeyCode.left)) Core.scene.keyUp(KeyCode.left);
 		}
 		public void right() {
-			moveCursor(true, false);
+			requestKeyboard();
+			if (Core.scene.keyDown(KeyCode.right)) Core.scene.keyUp(KeyCode.right);
 		}
 
 		public String insert(int position, CharSequence text, String to) {

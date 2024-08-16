@@ -170,7 +170,7 @@ public class Tester extends Content {
 		super("tester", Icon.terminalSmall);
 	}
 
-	/** 按修改时间倒序  */
+	/** 按修改时间倒序 */
 	private static int sort(Fi f1, Fi f2) {
 		return Long.compare(f2.lastModified(), f1.lastModified());
 	}
@@ -440,7 +440,7 @@ public class Tester extends Content {
 				case Texture o -> INFO_DIALOG.dialog(o, true);
 				case Drawable o -> INFO_DIALOG.dialog(o, true);
 				case Color o -> INFO_DIALOG.dialog(o, true);
-				default -> {}
+				default -> { }
 			}
 			return true;
 		}
@@ -476,7 +476,7 @@ public class Tester extends Content {
 		if (max_history_size.getInt() == 0) return false;
 		if (historyPos == -1) originalText = area.getText();
 		historyPos += Mathf.sign(forward);
-		Vec2 pos            = tmpV.set(ui.x, ui.y + 20);
+		Vec2 pos         = tmpV.set(ui.x, ui.y + 20);
 		int  historySize = Math.min(history.list.size(), max_history_size.getInt());
 		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= historySize)) {
 			if (historyPos != -1) showRollback(pos);
@@ -900,7 +900,7 @@ public class Tester extends Content {
 		}
 		private void keyListener(KeyCode keycode) {
 			switch (keycode) {
-				case tab -> {
+				case tab, right -> {
 					cancel = true;
 					area.selectBackward();
 					area.paste(syntax.virtualString.text, true);

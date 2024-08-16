@@ -172,7 +172,7 @@ public class Tester extends Content {
 	}
 
 	/** 按修改时间倒序 */
-	private static int sort(Fi f1, Fi f2) {
+	static int sort(Fi f1, Fi f2) {
 		return Long.compare(f2.lastModified(), f1.lastModified());
 	}
 
@@ -182,7 +182,7 @@ public class Tester extends Content {
 	 * -1表示originalText<br>
 	 * -2表示倒数第一个
 	 */
-	public int    historyPos   = -1;
+	public int    historyIndex = -1;
 	/** 位于0处的文本 */
 	public String originalText = null;
 
@@ -238,9 +238,6 @@ public class Tester extends Content {
 		});
 		_cont.row();
 		Cell<?> logCell = _cont.table(Tex.sliderBack, t -> {
-			Element actor = new Element();
-			t.addChild(actor);
-			actor.update(() -> actor.setBounds(0, t.getHeight(), t.getWidth(), center.getPrefHeight()));
 			t.pane(p -> {
 				p.left().top();
 				buildLog(p);
@@ -475,34 +472,36 @@ public class Tester extends Content {
 	private static final Vec2 tmpV = new Vec2();
 	private boolean rollHistory(boolean forward) {
 		if (max_history_size.getInt() == 0) return false;
-		if (historyPos == -1) originalText = area.getText();
-		historyPos += Mathf.sign(forward);
+		if (historyIndex == -1) originalText = area.getText();
+		historyIndex += Mathf.sign(forward);
 		Vec2 pos         = tmpV.set(ui.x, ui.y + 20);
 		int  historySize = Math.min(history.list.size(), max_history_size.getInt());
-		if (historyPos == -1 || (rollback_history.enabled() && historyPos >= historySize)) {
-			if (historyPos != -1) showRollback(pos);
-			historyPos = -1;
+		if (historyIndex == -1 || (rollback_history.enabled() && historyIndex >= historySize)) {
+			if (historyIndex != -1) showRollback(pos);
+			historyIndex = -1;
 			area.setText(originalText);
 			log = "";
 			IntUI.showInfoFade("[accent]0[]/[lightgray]" + historySize, pos, FADE_ALIGN);
 			return true;
 		}
 		if (rollback_history.enabled()) {
-			historyPos = Math.max(historyPos, -1);
-			int last = historyPos;
-			historyPos = (historyPos + historySize) % historySize;
-			if (last != historyPos) {
+			historyIndex = Math.max(historyIndex, -1);
+			int last = historyIndex;
+			historyIndex = (historyIndex + historySize) % historySize;
+			if (last != historyIndex) {
 				showRollback(pos);
 			}
-		} else if (historyPos < -1 || historyPos >= historySize) {
-			historyPos = forward ? history.list.size() - 1 : -1;
+		} else if (historyIndex < -1 || historyIndex >= historySize) {
+			historyIndex = forward ? history.list.size() - 1 : -1;
 			return false;
 		}
-		IntUI.showInfoFade(STR."\{historyPos + 1}/[lightgray]\{historySize}", pos, FADE_ALIGN);
-		Fi dir = history.list.get(historyPos);
+		IntUI.showInfoFade(STR."\{historyIndex + 1}/[lightgray]\{historySize}", pos, FADE_ALIGN);
+		switchHistory(history.list.get(historyIndex));
+		return true;
+	}
+	public void switchHistory(Fi dir) {
 		area.setText(readFiOrEmpty(dir.child("message.txt")));
 		log = readFiOrEmpty(dir.child("log.txt"));
-		return true;
 	}
 	private static void showRollback(Vec2 pos) {
 		IntUI.showInfoFade("@tester.rollback", pos.add(0, 90), FADE_ALIGN);
@@ -538,7 +537,7 @@ public class Tester extends Content {
 		compileScript();
 		execScript();
 
-		historyPos = -1;
+		historyIndex = -1;
 		originalText = area.getText();
 		if (max_history_size.getInt() <= 0) {
 			lastDir = null;
@@ -547,16 +546,12 @@ public class Tester extends Content {
 		// 保存历史记录
 		lastDir = history.file.child(String.valueOf(Time.millis()));
 		lastDir.child("message.txt").writeString(getMessage());
-		//noinspection SequencedCollectionMethodCanBeUsed
-		history.list.add(0, lastDir);
-		if (history.isShown()) {
-			history.build();
-		}
+
+		history.addItem(lastDir);
 		int max = history.list.size() - 1;
 		/* 判断是否大于边际（maxHistorySize），大于就删除 */
 		for (int i = max, maxHistorySize = max_history_size.getInt(); i >= maxHistorySize; i--) {
-			history.list.get(i).deleteDirectory();
-			history.list.remove(i);
+			history.removeItemAt(i);
 		}
 		callback.run();
 	}
@@ -653,10 +648,7 @@ public class Tester extends Content {
 			ui.setZIndex(frag.getZIndex() - 1);
 		});*/
 		history = new ListDialog("history", IntVars.dataDirectory.child("historical record"),
-		 f -> f.child("message.txt"), f -> {
-			area.setText(readFiOrEmpty(f.child("message.txt")));
-			log = readFiOrEmpty(f.child("log.txt"));
-		}, (f, p) -> {
+		 f -> f.child("message.txt"), this::switchHistory, (f, p) -> {
 			p.add(new MyLabel(readFiOrEmpty(f.child("message.txt")), HopeStyles.defaultLabel)).row();
 			p.image().color(Tmp.c1.set(JColor.c_underline)).growX().padTop(6f).padBottom(6f).row();
 			p.add(new MyLabel(readFiOrEmpty(f.child("log.txt")), HopeStyles.defaultLabel)).row();
@@ -933,7 +925,7 @@ public class Tester extends Content {
 					cancel = true;
 					if (lastCompletionCursor == area.getSelectionStart()) {
 						lastCompletionIndex = (lastCompletionIndex + 1) % complements.size;
-						int s = area.getSelectionStart();
+						int    s       = area.getSelectionStart();
 						String content = complements.get(lastCompletionIndex);
 						area.paste(content, false);
 						area.setSelectionUncheck(s, s + content.length());

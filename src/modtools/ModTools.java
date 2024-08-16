@@ -51,6 +51,7 @@ public class ModTools extends Mod {
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
 		}
+		// HopeProcessor.main();
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
 		if (headless) Log.info("Running in headless environment.");
 

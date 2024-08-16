@@ -55,6 +55,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	public static final String METHOD_COUNT_PREFIX = " [";
 
 
+
 	/* non-null */
 	private final       Class<?> clazz;
 	private final       Object   obj;

@@ -67,7 +67,7 @@ public class ListDialog extends Window {
 		list.forEach(this::build);
 	}
 
-	public static       Pattern            fileUnfair    = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*$)");
+	public static       Pattern            fileUnfair    = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*?$)");
 	public static final Boolf2<Fi, String> fileNameValid = (f, text) -> {
 		try {
 			return !text.isBlank() && !fileUnfair.matcher(text).find()
@@ -76,6 +76,16 @@ public class ListDialog extends Window {
 			return false;
 		}
 	};
+	public void removeItemAt(int i) {
+		list.get(i).deleteDirectory();
+		list.remove(i);
+	}
+	public void addItem(Fi lastDir) {
+		list.add(lastDir);
+		if (isShown()) {
+			build();
+		}
+	}
 
 
 	public class Builder {

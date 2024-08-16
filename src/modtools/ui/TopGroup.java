@@ -37,12 +37,12 @@ import java.util.*;
 import java.util.function.Consumer;
 
 import static arc.Core.*;
-import static modtools.IntVars.*;
 import static modtools.content.ui.ReviewElement.Settings.checkCullingArea;
 import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
+import static modtools.unsupported.HopeProcessor.NPX;
 import static modtools.utils.Tools.*;
 
 // 存储mod的窗口和Frag
@@ -230,7 +230,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		fillParent = true;
 		touchable = Touchable.childrenOnly;
-		name = modName + "-TopGroup";
+		name = NPX."TopGroup";
 
 		scene.add(this);
 		Group[] all = {back, windows, frag, infos, new FillEnd()};
@@ -736,6 +736,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 
 		public static HKeyCode switchWindowKey = HKeyCode.data.keyCode("switchWindow", () -> new HKeyCode(KeyCode.tab).ctrl());
+
 		/**
 		 * 电脑端用于切换窗口的事件侦听器
 		 * @see SwitchGestureListener
@@ -751,12 +752,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 					if (!isSwitchWindows) {
 						currentIndex = frontWindow != null ? shownWindows.indexOf(frontWindow) : 0;
 					}
-					if (shownWindows.size > 1) currentIndex += Core.input.shift() ? -1 : 1;
-					if (currentIndex < 0) {
-						currentIndex += shownWindows.size;
-					} else if (currentIndex >= shownWindows.size) {
-						currentIndex -= shownWindows.size;
-					}
+					if (shownWindows.size > 1) currentIndex -= Mathf.sign(Core.input.shift());
+
+					currentIndex = ArrayUtils.rollIndex(currentIndex, shownWindows.size);
 					isSwitchWindows = true;
 				}
 				return true;
@@ -847,7 +845,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		Gl.flush();
 		if (focusColor.a > 0) {
 			float alpha = focusColor.a * (elem.visible ? 0.9f : 0.6f);
-			if (alpha != 0 && Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(pos)) {
+			if (alpha != 0 && ElementUtils.checkInStage(pos)) {
 				Draw.color(focusColor, alpha);
 				// Tmp.m1.set(Draw.trans());
 				Fill.crect(pos.x, pos.y, elem.getWidth(), elem.getHeight());

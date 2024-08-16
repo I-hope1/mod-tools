@@ -396,8 +396,9 @@ public class Selection extends Content {
 				case 8 -> "Sync";
 				default -> throw new IllegalStateException("Unexpected value: " + i);
 			};
-			if (Core.atlas.has(IntVars.modName + "-" + text.toLowerCase())) {
-				return icons[i] = Core.atlas.find(IntVars.modName + "-" + text.toLowerCase());
+			String key = IntVars.modName + "-" + text.toLowerCase();
+			if (Core.atlas.has(key)) {
+				return icons[i] = Core.atlas.find(key);
 			}
 
 			return icons[i] = drawRegion(48, 48, () -> {

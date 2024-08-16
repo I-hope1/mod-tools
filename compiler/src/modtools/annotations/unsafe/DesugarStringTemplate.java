@@ -15,7 +15,7 @@ import modtools.annotations.HopeReflect;
 import java.lang.reflect.Method;
 import java.util.*;
 
-import static modtools.annotations.PrintHelper.SPrinter.err;
+import static modtools.annotations.PrintHelper.SPrinter.*;
 
 public class DesugarStringTemplate extends TreeTranslator {
 	final Symtab     syms;
@@ -38,20 +38,31 @@ public class DesugarStringTemplate extends TreeTranslator {
 		    trees.getTree(var) instanceof JCVariableDecl variableDecl) {
 			assert var.isStatic() && var.isFinal();
 			assert variableDecl.init instanceof JCLambda;
+			JCLambda lambda    = (JCLambda) variableDecl.init;
+			Name     parmaName = lambda.params.get(0).name;
 			class InterpolateToConcat extends TreeCopier<Void> {
 				public InterpolateToConcat(TreeMaker M) {
 					super(M);
 				}
+
 				public JCTree visitMethodInvocation(MethodInvocationTree node, Void v) {
-					if (node.getMethodSelect().toString().endsWith("interpolate")) {
-						make.at(((JCMethodInvocation) node));
+					JCMethodInvocation invocation = (JCMethodInvocation) node;
+					make.at(invocation);
+					if (invocation.toString().equals(parmaName + ".interpolate()")) {
 						return concatExpression(template.fragments, template.expressions);
+					} else if (invocation.toString().startsWith(parmaName + ".fragments().get(")) {
+						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer)) throw new IllegalArgumentException("" + invocation);
+						return make.Literal(template.fragments.get(integer));
+					} else if (invocation.toString().startsWith(parmaName + ".values().get(")) {
+						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer)) throw new IllegalArgumentException("" + invocation);
+						return copy(template.expressions.get(integer));
 					}
 					return super.visitMethodInvocation(node, v);
 				}
 			}
 			var interpolate = new InterpolateToConcat(make);
-			result = interpolate.copy(((JCLambda) variableDecl.init).body);
+			result = interpolate.copy(lambda.body);
+			println(result);
 			return;
 		}
 		super.visitStringTemplate(template);

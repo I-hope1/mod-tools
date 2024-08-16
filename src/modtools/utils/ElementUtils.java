@@ -17,6 +17,7 @@ import modtools.utils.ui.LerpFun.DrawExecutor;
 
 import java.util.Optional;
 
+import static arc.Core.graphics;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.$.*;
@@ -56,6 +57,9 @@ public interface ElementUtils {
 		 Tmp.v1.set(target.getWidth() / 2, target.getHeight() / 2)).y,
 		 target.getWidth(), target.getHeight(),
 		 false, true);
+	}
+	static boolean checkInStage(Vec2 pos) {
+		return Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(pos);
 	}
 
 	class $ {

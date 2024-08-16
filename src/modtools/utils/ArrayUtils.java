@@ -12,7 +12,7 @@ import java.util.*;
 @SuppressWarnings("unchecked")
 public class ArrayUtils {
 	public static final Object[] EMPTY_ARRAY = new Object[0];
-	 static final Object[] ARG1 = {null}, ARG2 = {null, null};
+	static final        Object[] ARG1        = {null}, ARG2 = {null, null};
 	public static Object[] ARG(Object arg1) {
 		ARG1[0] = arg1;
 		return ARG1;
@@ -59,6 +59,15 @@ public class ArrayUtils {
 		return map;
 	}
 
+	public static int rollIndex(int i, int size) {
+		if (i < 0) {
+			return i + size;
+		} else if (i >= size) {
+			return i - size;
+		}
+		return i;
+	}
+
 	public static <T> T getBound(T[] arr, int index) {
 		if (index >= arr.length || index < -arr.length) return null;
 		if (index < 0) index += arr.length;
@@ -74,7 +83,7 @@ public class ArrayUtils {
 		if (i < 0) i += list.size();
 		return 0 <= i && i < list.size() ? list.get(i) : null;
 	}
-		/**
+	/**
 	 * <p>返回List的第i个元素，如果越界就返回null</p>
 	 * 负数index为倒数第i个元素
 	 * @param list 列表
@@ -148,7 +157,7 @@ public class ArrayUtils {
 	}
 	public static <T> T findInverse(Seq<T> seq, Boolf<T> condition) {
 		T item;
-		for (int i = seq.size; i-- > 0;) {
+		for (int i = seq.size; i-- > 0; ) {
 			if (condition.get(item = seq.get(i))) return item;
 		}
 		return null;

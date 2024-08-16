@@ -239,7 +239,7 @@ public class IntUI {
 		l:
 		if (table.y + table.getHeight() > Core.graphics.getHeight()) {
 			if (ylock) break l;
-			int lyingAlign1 = lyingAlign & ~Align.bottom | Align.top;
+			int lyingAlign1 = lyingAlign & ~Align.top | Align.bottom;
 			if (lyingAlign == lyingAlign1) break l;
 			int tableAlign1 = tableAlign & ~Align.bottom | Align.top;
 			if (tableAlign == tableAlign1) break l;
@@ -252,7 +252,7 @@ public class IntUI {
 		l:
 		if (table.y < 0) {
 			if (ylock) break l;
-			int lyingAlign1 = lyingAlign & ~Align.top | Align.bottom;
+			int lyingAlign1 = lyingAlign & ~Align.bottom | Align.top;
 			if (lyingAlign == lyingAlign1) break l;
 			int tableAlign1 = tableAlign & ~Align.top | Align.bottom;
 			if (tableAlign == tableAlign1) break l;
@@ -288,12 +288,19 @@ public class IntUI {
 		}
 
 		// keep in stage
-		if (table.x + table.getWidth() > Core.graphics.getWidth()) {
-			table.x -= table.getWidth();
-		}
-		if (table.y + table.getHeight() > Core.graphics.getHeight()) {
-			table.y -= table.getHeight();
-		}
+		/** @see Element#keepInStage()  */
+		float width  = graphics.getWidth();
+		float height = graphics.getHeight();
+		if (table.getX(Align.right) > width)
+			table.setPosition(width, table.getY(Align.right), Align.right);
+		if (table.getX(Align.left) < 0)
+			table.setPosition(0, table.getY(Align.left), Align.left);
+		if (table.getY(Align.top) > height)
+			table.setPosition(table.getX(Align.top), height, Align.top);
+		if (table.getY(Align.bottom) < 0)
+			table.setPosition(table.getX(Align.bottom), 0, Align.bottom);
+
+		// Log.info("@, @",table.x, table.y);
 	}
 	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder builder) {
 		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, builder);

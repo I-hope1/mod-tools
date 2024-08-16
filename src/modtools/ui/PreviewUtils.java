@@ -51,7 +51,8 @@ public class PreviewUtils {
 				 .update(t -> t.setColor(element != null ? element.color : Color.white))
 				 .size(size, size * mul).row();
 
-				p.add(ReflectTools.getName(drawable.getClass()))
+				p.add(ReflectTools.getName(drawable == TmpVars.trd ?
+					TmpVars.trd.getRegion().getClass() : drawable.getClass()))
 				 .color(KeyValue.stressColor).pad(4)
 				 .left().row();
 				KeyValue keyValue = KeyValue.THE_ONE;

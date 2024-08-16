@@ -172,4 +172,23 @@ public class HopeReflect {
 	public static void setAccessible(AccessibleObject obj) {
 		obj.setAccessible(true);
 	}
+	public static <T> T nl(SupplierT<T> supplier) {
+		try {
+			T t = supplier.get();
+			if (t instanceof AccessibleObject ac) ac.setAccessible(true);
+			return t;
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
+	}
+	public static <T> T iv(Method method, Object obj, Object ...args) {
+		try {
+			return (T) method.invoke(obj, args);
+		} catch (IllegalAccessException | InvocationTargetException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	public interface SupplierT<T> {
+		T get() throws Throwable;
+	}
 }

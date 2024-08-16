@@ -40,15 +40,16 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	static Context         context;
-	static ClassFinder     classFinder;
-	static Symtab          syms;
-	static Enter           enter;
-	static JavacTrees      trees;
-	static Names           ns;
-	static JavacElements   elements;
-	static ModuleFinder    moduleFinder;
-	static DefaultToStatic defaultToStatic;
+	static        Context               context;
+	static        ClassFinder           classFinder;
+	static        Symtab                syms;
+	static        Enter                 enter;
+	static        JavacTrees            trees;
+	static        Names                 ns;
+	static        JavacElements         elements;
+	static        ModuleFinder          moduleFinder;
+	static        DefaultToStatic       defaultToStatic;
+	public static DesugarStringTemplate desugarStringTemplate;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -60,7 +61,8 @@ public class Replace {
 		ns = Names.instance(context);
 		elements = JavacElements.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
-		defaultToStatic = new DefaultToStatic(Replace.context);
+		defaultToStatic = new DefaultToStatic(context);
+		desugarStringTemplate = new DesugarStringTemplate(context);
 
 		try {
 			extendingFunc0();
@@ -196,6 +198,7 @@ public class Replace {
 
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
 		// removeKey(TransTypes.class, () -> new MyTransTypes(context));
+		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "transTypes", TransTypes.instance(context));
 		// removeKey(Lower.class, () -> new Desugar(context));
 		// Lower lower = Lower.instance(context);
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "lower", lower);
@@ -418,7 +421,11 @@ public class Replace {
 			rootElements.forEach(element -> {
 				TreePath path = trees.getPath(element);
 				if (path == null) return;
-				defaultToStatic.translateTopLevelClass((JCCompilationUnit) path.getCompilationUnit(),
+				JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
+				defaultToStatic.translateTopLevelClass(unit,
+				 trees.getTree(element));
+
+				desugarStringTemplate.translateTopLevelClass(unit,
 				 trees.getTree(element));
 			});
 		} catch (Throwable e) {

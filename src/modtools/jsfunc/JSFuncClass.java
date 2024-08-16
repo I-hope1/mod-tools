@@ -3,12 +3,14 @@ package modtools.jsfunc;
 import arc.Core;
 import arc.util.Reflect;
 import mindustry.Vars;
-import mindustry.ctype.ContentType;
+import mindustry.ctype.*;
+import modtools.struct.LazyValue;
 import modtools.utils.*;
 import rhino.*;
 
 import java.lang.reflect.Field;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class JSFuncClass extends NativeJavaClass {
 	public JSFuncClass(Scriptable scope) {
@@ -35,8 +37,6 @@ public class JSFuncClass extends NativeJavaClass {
 		try {
 			return super.get(name, start);
 		} catch (RuntimeException e) { ex = e; }
-		Object res = resolveNamedContent(name);
-		if (res != null) return res;
 
 		return switch (name) {
 			case "void" -> void.class;
@@ -47,8 +47,21 @@ public class JSFuncClass extends NativeJavaClass {
 			case "long" -> long.class;
 			case "float" -> float.class;
 			case "double" -> double.class;
-			default -> throw ex;
+			default -> {
+				Object o;
+				if ((o = resolveNamedContent(name)) != null) yield o;
+				throw ex;
+			}
 		};
+	}
+	public LazyValue<Object[]> ids = LazyValue.of(super::getIds);
+	public Object[] getIds() {
+		ArrayList<Object> list = Arrays.stream(ids.get())
+		 .collect(Collectors.toCollection(ArrayList::new));
+		list.addAll(Arrays.stream(ContentType.all)
+		 .flatMap(type -> Arrays.stream(Vars.content.getBy(type).map(c -> c instanceof UnlockableContent u ? u.name : null).toArray()))
+		 .toList());
+		return list.toArray();
 	}
 	private Object resolveNamedContent(String name) {
 		String key         = Core.bundle.getProperties().findKey(name, false);

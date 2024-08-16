@@ -12,7 +12,7 @@ import arc.util.*;
 import modtools.content.ui.ShowUIList;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.ui.comp.Window;
-import modtools.ui.effect.ScreenSampler;
+import modtools.ui.effect.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 
 import java.util.Optional;
@@ -48,6 +48,14 @@ public interface ElementUtils {
 			}
 		}
 		return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
+	}
+	static void scrollTo(Element actor, Element target) {
+		ScrollPane pane   = findClosestPane(actor);
+		Time.runTask(40, () -> HopeFx.changedFx(target));
+		pane.scrollTo(0, target.localToAscendantCoordinates(pane.getWidget(),
+		 Tmp.v1.set(target.getWidth() / 2, target.getHeight() / 2)).y,
+		 target.getWidth(), target.getHeight(),
+		 false, true);
 	}
 
 	class $ {

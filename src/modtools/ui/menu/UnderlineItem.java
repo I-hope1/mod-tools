@@ -2,10 +2,8 @@ package modtools.ui.menu;
 
 import arc.Core;
 import arc.scene.ui.layout.*;
-import arc.util.Tmp;
 import arc.util.pooling.Pools;
 import modtools.ui.comp.Underline;
-import modtools.utils.JSFunc.JColor;
 
 public class UnderlineItem extends MenuItem {
 	public static UnderlineItem with() {
@@ -13,7 +11,7 @@ public class UnderlineItem extends MenuItem {
 	}
 	@Override
 	public Cell<?> build(Table p, Runnable hide) {
-		Cell<Underline> cell = Underline.of(p, 1, Tmp.c1.set(JColor.c_underline)).pad(4);
+		Cell<Underline> cell = Underline.of(p, 1).pad(4);
 		Core.app.post(() -> {
 			if (cell.get() == p.getChildren().peek()) {
 				cell.clearElement().reset();

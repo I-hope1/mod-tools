@@ -32,6 +32,7 @@ public class LimitImage extends Image implements Limit {
 	}
 
 	public void updateVisibility() {
+		if (getScene() == null) return;
 		visible = Limit.isVisible(this);
 	}
 }

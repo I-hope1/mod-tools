@@ -4,7 +4,7 @@ import arc.func.*;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
 import arc.scene.ui.layout.Cell;
-import arc.struct.ObjectSet;
+import arc.struct.Seq;
 import arc.util.pooling.*;
 import mindustry.ctype.UnlockableContent;
 import modtools.ui.comp.limit.LimitTable;
@@ -32,8 +32,16 @@ public class FilterTable<E> extends LimitTable {
 		if (map == null) map = new HashMap<>();
 		current = map.computeIfAbsent(name, _ -> new CellGroup());
 	}
-	public CellGroup getCurrent() {
-		return current;
+	public CellGroup findBind(E name) {
+		if (map == null) map = new HashMap<>();
+		return map.computeIfAbsent(name, _ -> new CellGroup());
+	}
+	public void removeCells(E name) {
+		if (map == null) map = new HashMap<>();
+		if (map.containsKey(name)) {
+			map.get(name).removeElement();
+			map.remove(name);
+		}
 	}
 	/** 对添加的元素进行在此操作  */
 	public void listener(Cons<Element> cons) {
@@ -100,7 +108,7 @@ public class FilterTable<E> extends LimitTable {
 		return map == null || map.isEmpty() || map.entrySet().stream().anyMatch(entry -> !entry.getValue().removed);
 	}
 
-	public static class CellGroup extends ObjectSet<BindCell> {
+	public static class CellGroup extends Seq<BindCell> {
 		public boolean removed = false;
 		public void removeElement() {
 			each(BindCell::clear);

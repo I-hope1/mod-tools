@@ -165,6 +165,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
+		public void setSelectionUncheck(int start, int end) {
+			selectionStart = start;
+			cursor = end;
+		}
+
 		public void paste(String content, boolean fireChangeEvent) {
 			if (readOnly) return;
 			super.paste(content, fireChangeEvent);
@@ -193,21 +198,21 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public float getRelativeX(int cursor) {
 			int prev = this.cursor;
-			super.setCursorPosition(cursor);
+			this.cursor = cursor;
 			float textOffset = cursor >= glyphPositions.size || cursorLine * 2 >= linesBreak.size ? 0
 			 : glyphPositions.get(cursor) - glyphPositions.get(linesBreak.items[cursorLine * 2]);
 			float bgLeft = getBackground() == null ? 0 : getBackground().getLeftWidth();
 			float val    = x + bgLeft + textOffset + fontOffset + font.getData().cursorX;
-			super.setCursorPosition(prev);
+			this.cursor = prev;
 			return val;
 		}
 		/** @see arc.scene.ui.TextArea#drawCursor(Drawable, Font, float, float) */
 		public float getRelativeY(int cursor) {
 			int prev = this.cursor;
-			super.setCursorPosition(cursor);
+			this.cursor = cursor;
 			float textY = getTextY(font, getBackground());
 			float val   = y + textY - (cursorLine - firstLineShowing + 1) * font.getLineHeight();
-			super.setCursorPosition(prev);
+			this.cursor = prev;
 			return val;
 		}
 		public void setCursorPosition(int cursorPosition) {
@@ -266,7 +271,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					offsetY -= lineHeight();
 				}
 			}
-			drawVirtualText(font);
+			// drawVirtualText(font);
 
 			font.setColor(lastColor);
 			font.getData().markupEnabled = had;

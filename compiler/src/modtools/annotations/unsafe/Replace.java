@@ -22,7 +22,7 @@ import com.sun.tools.javac.util.Context.Key;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
-import modtools.annotations.NoAccessCheck;
+import modtools.annotations.*;
 
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
@@ -237,9 +237,16 @@ public class Replace {
 				 if (args.length == 0) return true;
 				 if (!(args[0].length() == 3 && args[0].charAt(0) == '\'' && args[0].charAt(2) == '\'')) return true;
 
-				 errs("Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")");
+				 errs(
+					"Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")"
+				 );
 				 StringBuilder target = new StringBuilder(filer.getCharContent(true));
-				 target.insert((int) t.getPosition() + positionOffset[0], args[0].charAt(1));
+				 int           index  = (int) t.getPosition() + positionOffset[0];
+				 if (target.charAt(index) == ')') {
+					 target.deleteCharAt(index);
+				 } else {
+					 target.insert(index, args[0].charAt(1));
+				 }
 				 positionOffset[0]++;
 
 				 try (var input = new FileOutputStream(new File(filer.toUri()))) {
@@ -294,7 +301,6 @@ public class Replace {
 		removeKey(Target.class, () -> target);
 		println("targetVersion: @ (@)", target.ordinal() + 1, target);
 
-		// removeKey(Target.class, target);
 		// jdk9才有
 		removeKey("concatKey", StringConcat.class, null);
 
@@ -302,8 +308,6 @@ public class Replace {
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
 
 		// 用于适配低版本
-		// Symtab syms = Symtab.instance(context);
-		// setAccess(Symtab.class, syms, "matchExceptionType", syms.incompatibleClassChangeErrorType);
 		runIgnoredException(() -> setAccess(Lower.class, Lower.instance(context), "useMatchException", false));
 		setAccess(Lower.class, Lower.instance(context), "target", target);
 		setAccess(LambdaToMethod.class, LambdaToMethod.instance(context), "nestmateLambdas", false);
@@ -410,6 +414,7 @@ public class Replace {
 	}
 	public static void process(Set<? extends Element> rootElements) {
 		try {
+			Times.mark();
 			rootElements.forEach(element -> {
 				TreePath path = trees.getPath(element);
 				if (path == null) return;
@@ -418,6 +423,8 @@ public class Replace {
 			});
 		} catch (Throwable e) {
 			err(e);
+		} finally {
+			Times.printElapsed("Process @ms");
 		}
 	}
 }

@@ -304,10 +304,9 @@ public class KeyCodeSetter extends Content {
 				vl.addCaptureListener(new ITooltip(() -> elementKey[0] + "\n" + EventHelper.longPressOrRclickKey() + " to edit"));
 				pane.add(vl).size(220, 45).labelAlign(Align.left);
 				keyCodeButton(pane, keyCode, elementKey);
-				var current = pane.getCurrent();
 				pane.button(Icon.trash, Styles.flati, () -> IntUI.shiftIgnoreConfirm(() -> {
 					elementKeyCode.remove(elementKey[0]);
-					current.removeElement();
+					pane.removeCells(elementKey);
 				}));
 				pane.row();
 			});

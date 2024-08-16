@@ -2,14 +2,16 @@ package modtools.ui.comp;
 
 import arc.graphics.Color;
 import arc.scene.ui.layout.*;
+import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
 import modtools.ui.comp.Window.IDisposable;
 import modtools.ui.comp.limit.LimitImage;
+import modtools.utils.JSFunc.JColor;
 
 public class Underline extends LimitImage implements Poolable {
 	public static Cell<Underline> of(Table table, int colspan) {
-		return of(table, colspan, Color.white);
+		return of(table, colspan, Tmp.c1.set(JColor.c_underline));
 	}
 	/** @see IDisposable#clearAll()   */
 	public static final Pool<Underline> pool = Pools.get(Underline.class, Underline::new);
@@ -22,7 +24,7 @@ public class Underline extends LimitImage implements Poolable {
 		return cell;
 	}
 	public float getHeight() {
-		return 1 * Scl.scl();
+		return 1.2f * Scl.scl();
 	}
 	public void reset() {
 		color.set(Color.white);

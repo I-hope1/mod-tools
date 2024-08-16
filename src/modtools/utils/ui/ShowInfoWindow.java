@@ -155,7 +155,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 					rebuild0.run();
 				});
 			});
-			t.button(Icon.filter, clearNonei, () -> {}).with(b -> b.clicked(() -> {
+			t.button(Icon.filter, clearNonei, () -> { }).with(b -> b.clicked(() -> {
 				IntUI.showSelectListEnumTable(b, new Seq<>(SearchType.values()), () -> searchType, s -> searchType = s,
 				 250, 45, false, Align.top);
 			})).size(42);
@@ -192,13 +192,13 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		name((p, m) -> find(p, m.getName())),
 		fieldTypeOrReturnType((p, member) -> find(p, (member instanceof Field f ? f.getType() :
 		 member instanceof Method m ? m.getReturnType() :
-		 member instanceof ClassMember cs ? cs.getDelegator() : null))),
+			member instanceof ClassMember cs ? cs.getDelegator() : null))),
 		params((p, member) -> member instanceof Executable method &&
 		                      Arrays.stream(method.getParameterTypes())
 		                       .anyMatch(parma -> find(p, parma))),
 		exceptions((p, member) -> member instanceof Executable method &&
-		                      Arrays.stream(method.getExceptionTypes())
-		                       .anyMatch(parma -> find(p, parma)));
+		                          Arrays.stream(method.getExceptionTypes())
+		                           .anyMatch(parma -> find(p, parma)));
 		final Boolf2<Pattern, Member> func;
 		SearchType(Boolf2<Pattern, Member> func) {
 			this.func = func;
@@ -254,9 +254,9 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		}
 	}
 	private void buildInterface(Object o, Class<?> clazz) {
-		Class<?>[] interfaces     = clazz.getInterfaces();
+		Class<?>[] interfaces = clazz.getInterfaces();
 		if (interfaces.length == 0) return;
-		Type[]     interfaceTypes = clazz.getGenericInterfaces();
+		Type[] interfaceTypes = clazz.getGenericInterfaces();
 		for (int i = 0, clazzInterfacesLength = interfaces.length; i < clazzInterfacesLength; i++) {
 			buildAllByClass(o, interfaces[i], interfaceTypes[i]);
 		}
@@ -758,8 +758,11 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			 .color(cls.isInterface() ? Color.lightGray : Pal.accent)
 			 .colspan(COLSPAN)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
-				Seq.with(arr).map(String::valueOf),
-				() -> null, _ -> { }, 400, 0, true, Align.left)))
+				Seq.with(arr),
+				() -> null, m -> {
+					CellGroup  group  = findBind((Member) m);
+				  ElementUtils.scrollTo(this, group.get(1).el);
+			  }, String::valueOf, 400, 42, true, Align.left)))
 			 .row();
 			Underline.of(current, COLSPAN, Color.lightGray).padTop(6);
 		}

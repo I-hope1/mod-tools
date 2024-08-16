@@ -45,7 +45,6 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.EventHelper.DoubleClick;
-import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.search.*;
 import modtools.utils.ui.*;
@@ -499,7 +498,7 @@ public class ReviewElement extends Content {
 			cons.get(t);
 			makePosLabel(t, pos);
 		}, element)).growX().left().row();
-		Underline.of(table, 2, Tmp.c1.set(JColor.c_underline));
+		Underline.of(table, 2);
 	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
@@ -1050,12 +1049,13 @@ public class ReviewElement extends Content {
 			translationCell = buildKey(t, "Translation", translationLabel);
 			styleCell = buildKey(t, "Style", styleLabel);
 			alignCell = buildKey(t, "Align", alignLabel);
-			cellCell = makeCell(t, _ -> {
-				colspanCell = buildKey(t, "Colspan", colspanLabel);
-				minSizeCell = buildKey(t, "MinSize", minSizeLabel);
-				maxSizeCell = buildKey(t, "MaxSize", maxSizeLabel);
-				expandCell = buildKey(t, "Expand", expandLabel);
-				fillCell = buildKey(t, "Fill", fillLabel);
+			cellCell = makeCell(t, ct -> {
+				Underline.of(ct, 1).pad(4, -1, 4, -1);
+				colspanCell = buildKey(ct, "Colspan", colspanLabel);
+				minSizeCell = buildKey(ct, "MinSize", minSizeLabel);
+				maxSizeCell = buildKey(ct, "MaxSize", maxSizeLabel);
+				expandCell = buildKey(ct, "Expand", expandLabel);
+				fillCell = buildKey(ct, "Fill", fillLabel);
 			});
 		}
 		private BindCell buildKey(Table t, String key, Label label) {
@@ -1182,9 +1182,10 @@ public class ReviewElement extends Content {
 		// ---------------------
 		private void showInfoTable(Element elem, Vec2 vec2) {
 			table.cellCell.toggle(
-			 ((Table) table.cellCell.el).getChildren().size > 2/* 两个基础元素 */
+			 ((Table) table.cellCell.el).getChildren().any()
 			);
 			table.invalidate();
+			table.layout();
 			table.getPrefWidth();
 			table.pack();
 			table.act(0);

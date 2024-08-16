@@ -30,6 +30,7 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import modtools.*;
+import modtools.annotations.settings.Switch;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.events.*;
@@ -863,8 +864,10 @@ public class Tester extends Content {
 
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
-		rollback_history, multi_windows, output_to_log, js_prop,
+		rollback_history, multi_windows, output_to_log,
 		capture_logger,
+		js_prop,
+		@Switch(dependency = "js_prop")
 		auto_complement,
 		/** @see ISettings#$(int, int, int, int) */
 		max_history_size(int.class, it -> it.$(40/* def */, 0/* min */, 100/* max */));

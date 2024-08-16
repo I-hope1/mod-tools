@@ -59,7 +59,7 @@ public class MySettings {
 			} else parent.write();
 		};
 		public void write() {
-			TaskManager.acquireTask(12, task);
+			TaskManager.scheduleOrReset(0.1f, task);
 		}
 
 		public Object get(String key, Object defaultValue) {

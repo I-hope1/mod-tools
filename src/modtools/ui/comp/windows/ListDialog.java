@@ -81,7 +81,7 @@ public class ListDialog extends Window {
 		list.remove(i);
 	}
 	public void addItem(Fi lastDir) {
-		list.add(lastDir);
+		list.add(0, lastDir);
 		if (isShown()) {
 			build();
 		}

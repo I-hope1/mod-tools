@@ -1,11 +1,13 @@
 package modtools.annotations.unsafe;
 
-import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+
+import static modtools.annotations.PrintHelper.SPrinter.println;
 
 public class MyTransPatterns extends TransPatterns {
 	final SwitchDesugar  switchDesugar;
@@ -72,6 +74,7 @@ class SwitchDesugar extends TreeTranslator {
 				yieldTranslator.init(exprType);
 				yieldTranslator.translate(cases);
 			}
+
 			JCIf        first  = null;
 			JCStatement lastIf = null;
 			for (JCCase jcCase : cases) {
@@ -90,7 +93,7 @@ class SwitchDesugar extends TreeTranslator {
 				expr.type = exprType;
 				expr.needsCond = true;
 				result = expr;
-				// println(expr);
+				println(expr);
 			}
 			return true;
 		}
@@ -105,9 +108,8 @@ class SwitchDesugar extends TreeTranslator {
 		for (JCCaseLabel label : jcCase.labels) {
 			make.at(label);
 			if (label instanceof JCPatternCaseLabel patternLabel) {
-				JCPattern    pattern   = patternLabel.pat;
-				JCExpression condition = makePatternMatchCondition(selector, pattern);
-				ifCondition = ifCondition != null ? make.Binary(Tag.OR, ifCondition, condition) : condition;
+				JCPattern pattern = patternLabel.pat;
+				ifCondition = makePatternMatchCondition(ifCondition, selector, pattern);
 			} else if (label instanceof JCConstantCaseLabel constantLabel) {
 				JCExpression condition = make.Binary(Tag.EQ, selector, constantLabel.expr);
 				ifCondition = ifCondition != null ? make.Binary(Tag.OR, ifCondition, condition) : condition;
@@ -120,12 +122,17 @@ class SwitchDesugar extends TreeTranslator {
 		return ifCondition == null ? truepart : make.If(ifCondition, truepart, null);
 	}
 
-	JCExpression makePatternMatchCondition(JCExpression selector, JCPattern pattern) {
+	JCExpression makePatternMatchCondition(JCExpression condition, JCExpression selector, JCPattern pattern) {
 		if (pattern instanceof JCBindingPattern bindingPattern) {
-			return make.TypeTest(selector, bindingPattern);
+			make.at(pattern);
+			JCExpression test = make.TypeTest(selector,
+			 bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : bindingPattern)
+			 .setType(syms.booleanType);
+			return condition != null ? Replace.desugarStringTemplate.makeBinary(Tag.OR, condition, test) : test;
 		}
 		// 处理其他类型的模式
-		return make.Literal(true); // 默认情况，应该根据实际需求修改
+		return condition;
+		// + make.Literal(true);
 	}
 }
 

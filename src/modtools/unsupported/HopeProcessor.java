@@ -1,5 +1,6 @@
 package modtools.unsupported;
 
+import arc.func.Cons;
 import arc.util.Log;
 import modtools.annotations.DebugMark;
 
@@ -12,8 +13,12 @@ public class HopeProcessor {
 	public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
 
 	public static void main() {
-		System.out.println(NPX."aa{}");
-		int a = 1, b = 2;
-		Log.info(a + b);
+		String aa = "10203";
+		int  a   = 1, b = 2;
+		Cons<String> run = d -> {
+			System.out.println(NPX."aa\{aa}");
+			Log.info(a + b + d);
+		};
+		run.get(aa);
 	}
 }

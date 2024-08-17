@@ -21,6 +21,7 @@ import arc.util.*;
 import arc.util.pooling.Pool;
 import mindustry.Vars;
 import mindustry.content.Blocks;
+import mindustry.entities.EntityGroup;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.*;
@@ -39,6 +40,7 @@ import modtools.ui.TopGroup.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.ui.comp.linstener.*;
+import modtools.ui.comp.utils.MyItemSelection;
 import modtools.ui.control.*;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;
@@ -85,8 +87,10 @@ public class Selection extends Content {
 	/** select元素（用于选择）是否显示 **/
 	boolean isSelecting        = false;
 	boolean isDynamicSelecting = false;
-	/** 动态更新的选区，格式(x1, y1, x2, y2)
-	 * @see SelectListener#touchUp(InputEvent, float, float, int, KeyCode)  */
+	/**
+	 * 动态更新的选区，格式(x1, y1, x2, y2)
+	 * @see SelectListener#touchUp(InputEvent, float, float, int, KeyCode)
+	 */
 	public Seq<Rect> dynamicSelectRegions = new Seq<>();
 	/** 鼠标是否移动，形成矩形 */
 	boolean mouseChanged = false;
@@ -396,7 +400,8 @@ public class Selection extends Content {
 				case 8 -> "Sync";
 				default -> throw new IllegalStateException("Unexpected value: " + i);
 			};
-			String key = IntVars.modName + "-" + text.toLowerCase();
+			@SuppressWarnings("StringTemplateMigration")
+			String key = IntVars.modName + "-" + text.toLowerCase()/* NPX."\{text.toLowerCase()}" */;
 			if (Core.atlas.has(key)) {
 				return icons[i] = Core.atlas.find(key);
 			}
@@ -1106,40 +1111,17 @@ public class Selection extends Content {
 		}
 		protected void updateRegion(Vec2 start, Vec2 end) {
 			if (Settings.bullet.enabled()) {
-				acquireExecutor().submit(() -> {
-					Groups.bullet.each(bullet -> {
-						// 返回单位是否在所选区域内
-						return start.x <= bullet.x && end.x >= bullet.x && start.y <= bullet.y && end.y >= bullet.y;
-					}, bullet -> {
-						Threads.sleep(1);
-						if (!bullets.list.contains(bullet)) {
-							bullets.add(bullet);
-						}
-					});
-				});
+				findAndAddToList(Groups.bullet, start, end, bullets);
 			}
 			if (Settings.unit.enabled()) {
-				Groups.unit.each(unit -> {
-					// 返回单位是否在所选区域内
-					return start.x <= unit.x && end.x >= unit.x && start.y <= unit.y && end.y >= unit.y;
-				}, unit -> {
-					if (!units.list.contains(unit)) {
-						units.add(unit);
-					}
-				});
+				findAndAddToList(Groups.unit, start, end, units);
 			}
 			if (Settings.others.enabled()) {
-				Groups.all.each(entity -> {
-					if (entity instanceof Building) return false;
-					if (entity instanceof Bullet) return false;
-					if (entity instanceof Unit) return false;
-					if (!(entity instanceof Position pos)) return false;
-					// 返回单位是否在所选区域内
-					return start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
-				}, entity -> {
-					if (!others.list.contains(entity)) {
-						others.add(entity);
-					}
+				findAndAddToList(Groups.all, others, entity -> {
+					return switch (entity) {
+						case Building _, Bullet _, Unit _ -> false;
+						default -> entity instanceof Position pos && checkInRegion(start, end, pos);
+					};
 				});
 			}
 
@@ -1169,6 +1151,25 @@ public class Selection extends Content {
 			});
 		}
 	}
+	private <T extends Entityc & Position> void findAndAddToList
+	 (EntityGroup<T> group, Vec2 start, Vec2 end, WFunction<T> list) {
+		findAndAddToList(group, list, entity -> checkInRegion(start, end, entity));
+	}
+	private <T extends Entityc> void findAndAddToList
+	 (EntityGroup<T> group, WFunction<T> list, Boolf<T> condition) {
+		acquireExecutor().submit(() -> {
+			group.each(condition, entity -> {
+				Threads.sleep(1);
+				if (!list.list.contains(entity)) {
+					list.add(entity);
+				}
+			});
+		});
+	}
+	/** 返回实体是否在所选区域内 */
+	private static boolean checkInRegion(Vec2 start, Vec2 end, Position pos) {
+		return start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
+	}
 
 	public enum Settings implements ISettings {
 		tile, building, unit, bullet, others
@@ -1191,24 +1192,10 @@ public class Selection extends Content {
 				defaultTeam = Team.get(data.getInt("defaultTeam", 1));
 				t.left().defaults().left();
 				t.add("@selection.default.team").color(Pal.accent).growX().left().row();
-				t.table(t1 -> {
-					t1.left().defaults().left();
-					Team[] arr = Team.baseTeams;
-					int    c   = 0;
-
-					for (Team team : arr) {
-						ImageButton b = t1.button(whiteui, HopeStyles.clearNoneTogglei/*Styles.clearTogglei*/, 32.0f, () -> {
-							data.put("defaultTeam", team.id);
-							defaultTeam = team;
-						}).size(42).get();
-						b.getStyle().imageUp = whiteui.tint(team.color);
-						b.update(() -> b.setChecked(defaultTeam == team));
-						if (++c % 3 == 0) {
-							t1.row();
-						}
-					}
-
-				}).growX().left().padLeft(16);
+				MyItemSelection.buildTable0(t, Team.baseTeams, () -> defaultTeam, team -> {
+					data.put("defaultTeam", team.id);
+					defaultTeam = team;
+				}, 3, team -> whiteui.tint(team.color));
 			}).row();
 			table(t -> {
 				t.left().defaults().left();

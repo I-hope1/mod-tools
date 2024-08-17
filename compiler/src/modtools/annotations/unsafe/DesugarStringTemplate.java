@@ -2,14 +2,14 @@ package modtools.annotations.unsafe;
 
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.tools.javac.api.JavacTrees;
-import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.comp.Operators;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
-import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import modtools.annotations.HopeReflect;
 
 import java.lang.reflect.Method;
@@ -51,18 +51,23 @@ public class DesugarStringTemplate extends TreeTranslator {
 					if (invocation.toString().equals(parmaName + ".interpolate()")) {
 						return concatExpression(template.fragments, template.expressions);
 					} else if (invocation.toString().startsWith(parmaName + ".fragments().get(")) {
-						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer)) throw new IllegalArgumentException("" + invocation);
-						return make.Literal(template.fragments.get(integer));
+						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer))
+							throw new IllegalArgumentException("" + invocation);
+						return makeString(template.fragments.get(integer));
 					} else if (invocation.toString().startsWith(parmaName + ".values().get(")) {
-						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer)) throw new IllegalArgumentException("" + invocation);
-						return copy(template.expressions.get(integer));
+						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer))
+							throw new IllegalArgumentException("" + invocation);
+						return template.expressions.get(integer);
 					}
 					return super.visitMethodInvocation(node, v);
 				}
 			}
 			var interpolate = new InterpolateToConcat(make);
 			result = interpolate.copy(lambda.body);
-			// println(result);
+			// result = ParserFactory.instance(Replace.context)
+			//  .newParser(result.toString(), false, true, true)
+			//  .parseExpression();
+			println(result);
 			return;
 		}
 		super.visitStringTemplate(template);
@@ -74,10 +79,10 @@ public class DesugarStringTemplate extends TreeTranslator {
 	JCExpression makeString(String string) {
 		return makeLit(syms.stringType, string);
 	}
-	Method method = HopeReflect.nl(() -> Operators.class.getDeclaredMethod("resolveBinary", DiagnosticPosition.class, Tag.class, Type.class, Type.class));
-	JCBinary makeBinary(JCExpression lhs, JCExpression rhs) {
-		JCBinary tree = make.Binary(Tag.PLUS, lhs, rhs);
-		tree.operator = HopeReflect.iv(method, operators, tree, Tag.PLUS, lhs.type, rhs.type);
+	static Method operatorMethod = HopeReflect.nl(() -> Operators.class.getDeclaredMethod("resolveBinary", DiagnosticPosition.class, Tag.class, Type.class, Type.class));
+	JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
+		JCBinary tree = make.Binary(tag, lhs, rhs);
+		tree.operator = HopeReflect.iv(operatorMethod, operators, tree, tag, lhs.type, rhs.type);
 		tree.type = tree.operator.type.getReturnType();
 		return tree;
 	}
@@ -86,11 +91,10 @@ public class DesugarStringTemplate extends TreeTranslator {
 		Iterator<JCExpression> iterator = expressions.iterator();
 		for (String fragment : fragments) {
 			expr = expr == null ? makeString(fragment)
-			 : makeBinary(expr, makeString(fragment));
+			 : makeBinary(Tag.PLUS, expr, makeString(fragment));
 			if (iterator.hasNext()) {
 				JCExpression expression     = iterator.next();
-				Type         expressionType = expression.type;
-				expr = makeBinary(expr, expression.setType(expressionType));
+				expr = makeBinary(Tag.PLUS, expr, expression);
 			}
 		}
 		return expr;

@@ -16,6 +16,7 @@ import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.model.JavacElements;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
@@ -422,11 +423,9 @@ public class Replace {
 				TreePath path = trees.getPath(element);
 				if (path == null) return;
 				JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
-				defaultToStatic.translateTopLevelClass(unit,
-				 trees.getTree(element));
-
-				desugarStringTemplate.translateTopLevelClass(unit,
-				 trees.getTree(element));
+				JCTree            cdef = trees.getTree(element);
+				defaultToStatic.translateTopLevelClass(unit, cdef);
+				desugarStringTemplate.translateTopLevelClass(unit, cdef);
 			});
 		} catch (Throwable e) {
 			err(e);

@@ -1,6 +1,5 @@
 package modtools.annotations.processors;
 
-import com.google.auto.service.AutoService;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Symbol.*;
@@ -9,10 +8,9 @@ import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 
-import javax.annotation.processing.Processor;
 import java.util.Set;
 
-@AutoService(Processor.class)
+// @AutoService(Processor.class)
 public class DebugLogProc extends BaseProcessor<ClassSymbol> {
 	public CompilationUnitTree unit;
 	public String              fmt;

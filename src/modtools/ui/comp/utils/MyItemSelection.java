@@ -38,6 +38,11 @@ public class MyItemSelection {
 	public static <T> void buildTable0(
 	 Table table, Seq<T> items, Prov<T> holder,
 	 Cons<T> consumer, int cols, Func<T, Drawable> drawableFunc) {
+		buildTable0(table, items.items, holder, consumer, cols, drawableFunc);
+	}
+	public static <T> void buildTable0(
+	 Table table, T[] items, Prov<T> holder,
+	 Cons<T> consumer, int cols, Func<T, Drawable> drawableFunc) {
 		Pattern[] pattern = {null};
 		new Search((_, p) -> pattern[0] = p).build(table, null);
 
@@ -47,7 +52,8 @@ public class MyItemSelection {
 		cont.left().top().defaults().left().top().size(40);
 		int i = 0;
 
-		for (T item : items) {
+		for (Object item0 : items) {
+			T item = (T) item0;
 			if (item == null) continue;
 			try {
 				cont.bind(item);

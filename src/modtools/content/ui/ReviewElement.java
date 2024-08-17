@@ -325,7 +325,7 @@ public class ReviewElement extends Content {
 				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element))
 				 .size(35).padRight(3f);
 				t.button(Icon.settingsSmall, HopeStyles.clearNonei, 28, () -> {
-					IntUI.showSelectTableRB((p, _, _) -> {
+					showSelectTableRB((p, _, _) -> {
 						p.background(Tex.pane);
 						SettingsBuilder.build(p);
 						SettingsBuilder.check("Draw Cell", b -> drawCell = b, () -> drawCell);
@@ -407,13 +407,13 @@ public class ReviewElement extends Content {
 			keyMap.put(KeyCode.f, e -> fixedFocus = fixedFocus == e ? null : e);
 			keyMap.put(KeyCode.i, e -> INFO_DIALOG.showInfo(e.getElement()));
 			keyMap.put(KeyCode.r, e -> MenuBuilder.showMenuList(MyWrapTable.execChildren(e.getElement())));
-			keyMap.put(KeyCode.del, e -> IntUI.shiftIgnoreConfirm(() -> {
+			keyMap.put(KeyCode.del, e -> shiftIgnoreConfirm(() -> {
 				e.getElement().remove();
 				e.remove();
 			}));
 			keyMap.put(KeyCode.p, e -> {
 				if (e.getElement() instanceof Image img) {
-					IntUI.drawablePicker().show(img.getDrawable(), true, img::setDrawable);
+					drawablePicker().show(img.getDrawable(), true, img::setDrawable);
 				}
 			});
 			keyMap.put(KeyCode.c, e -> {
@@ -541,7 +541,7 @@ public class ReviewElement extends Content {
 	}
 	public static class MyWrapTable extends ElementElem {
 		boolean stopEvent, needUpdate;
-		ReviewElement.ReviewElementWindow window;
+		ReviewElementWindow window;
 
 		Element previousKeyboardFocus;
 		public void requestKeyboard() {
@@ -585,7 +585,8 @@ public class ReviewElement extends Content {
 		public static final Vec2 bgVec = new Vec2();
 		/**
 		 * TODO: 位置bug
-		 * @see Table#drawBackground(float, float)*/
+		 * @see Table#drawBackground(float, float)
+		 */
 		protected void drawBackground(float x, float y) {
 			ScrollPane pane = ElementUtils.findClosestPane(this);
 			if (pane == null || true) {
@@ -758,7 +759,7 @@ public class ReviewElement extends Content {
 			 UnderlineItem.with(),
 
 			 element instanceof Table table ? MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
-				 IntUI.drawablePicker().show(table.getBackground(), table::setBackground);
+				 drawablePicker().show(table.getBackground(), table::setBackground);
 			 }) : null,
 			 element instanceof Table table ? MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)) : null,
 			 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
@@ -826,7 +827,7 @@ public class ReviewElement extends Content {
 	}
 
 
-	static boolean parentValid(Element element, ReviewElement.ReviewElementWindow window) {
+	static boolean parentValid(Element element, ReviewElementWindow window) {
 		return element.parent != null || element == window.element;
 	}
 
@@ -888,7 +889,7 @@ public class ReviewElement extends Content {
 		checkCullingArea,
 		/**
 		 * 最大自动展开深度
-		 * @see ISettings#$(Integer)
+		 * @see ISettings#$(int, int, int, int)
 		 */
 		maxDepthForAutoExpand(int.class, it -> it.$(5/* def */, 0/* min */, 50/* max */, 1/* step */)),
 		//
@@ -912,13 +913,13 @@ public class ReviewElement extends Content {
 
 		colspanLabel  = new VLabel(valueScale, Color.lightGray),
 		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
-		 fillLabel    = new Label(""), expandLabel = new Label("");
+		 fillLabel    = new Label(""), expandLabel = new Label(""), uniformLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
 		BindCell visibleCell, rotCell, translationCell, styleCell, alignCell,
 		 cellCell,
 		 colspanCell, minSizeCell, maxSizeCell,
-		 fillCell, expandCell;
+		 fillCell, expandCell, uniformCell;
 
 		final Vec2 sizeVec = new Vec2();
 		SizeProv sizeProv = new SizeProv(() -> sizeVec, " × ");
@@ -993,28 +994,30 @@ public class ReviewElement extends Content {
 				maxSizeLabel.setText(maxSizeProv.get());
 			}
 		}
-		void fill(Cell<?> cell) {
+		private void pairBool(Cell<?> cell, BindCell bindCell, Floatf<Cell<?>> xf, Floatf<Cell<?>> yf) {
 			if (cell == null) {
-				fillCell.remove();
+				bindCell.remove();
 				return;
 			}
-			float fillX = CellTools.fillX(cell),
-			 fillY = CellTools.fillY(cell);
-			if (fillCell.toggle1(fillX != 0 || fillY != 0))
-				fillLabel.setText(STR."\{enabledMark((int) fillX)}x []| \{enabledMark((int) fillY)}y");
+			float x = xf.get(cell);
+			float y = yf.get(cell);
+			if (bindCell.toggle1(x != 0 || y != 0))
+				getLabel(bindCell).setText(STR."\{enabledMark(x)}x []| \{enabledMark(y)}y");
+		}
+		static Label getLabel(BindCell cell) {
+			return (Label) ((Table) cell.el).getChildren().get(1);
+		}
+		void fill(Cell<?> cell) {
+			pairBool(cell, fillCell, CellTools::fillX, CellTools::fillY);
 		}
 		void expand(Cell<?> cell) {
-			if (cell == null) {
-				expandCell.remove();
-				return;
-			}
-			int expandX = CellTools.expandX(cell),
-			 expandY = CellTools.expandY(cell);
-			if (expandCell.toggle1(expandX != 0 || expandY != 0))
-				expandLabel.setText(STR."\{enabledMark(expandX)}x []| \{enabledMark(expandY)}y");
+			pairBool(cell, expandCell, CellTools::expandX, CellTools::expandY);
 		}
-		static String enabledMark(int i) {
-			return i == 1 ? "[accent]" : "[gray]";
+		void uniform(Cell<?> cell) {
+			pairBool(cell, uniformCell, cell1 -> CellTools.uniformX(cell1) ? 1 : 0, cell1 -> CellTools.uniformY(cell1) ? 1 : 0);
+		}
+		static String enabledMark(float i) {
+			return i != 0 ? "[accent]" : "[gray]";
 		}
 
 		InfoDetails() {
@@ -1025,7 +1028,7 @@ public class ReviewElement extends Content {
 
 		void setPosition(Element elem) {
 			// 初始在元素的左上角
-			IntUI.positionTooltip(elem, Align.topLeft, this, Align.bottomLeft);
+			positionTooltip(elem, Align.topLeft, this, Align.bottomLeft);
 		}
 		private void build(Table t) {
 			t.defaults().growX();
@@ -1056,6 +1059,7 @@ public class ReviewElement extends Content {
 				maxSizeCell = buildKey(ct, "MaxSize", maxSizeLabel);
 				expandCell = buildKey(ct, "Expand", expandLabel);
 				fillCell = buildKey(ct, "Fill", fillLabel);
+				uniformCell = buildKey(ct, "Uniform", uniformLabel);
 			});
 		}
 		private BindCell buildKey(Table t, String key, Label label) {
@@ -1115,6 +1119,7 @@ public class ReviewElement extends Content {
 				table.maxSize(cell);
 				table.fill(cell);
 				table.expand(cell);
+				table.uniform(cell);
 			}
 			showInfoTable(elem, vec2);
 		}

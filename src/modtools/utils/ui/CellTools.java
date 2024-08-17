@@ -24,9 +24,11 @@ public interface CellTools {
 	 f_fillX             = f("fillX"),
 	 f_fillY             = f("fillY"),
 	 f_expandX           = f("expandX"),
-	 f_expandY           = f("expandY");
+	 f_expandY           = f("expandY"),
+	 f_uniformX          = f("uniformX"),
+	 f_uniformY          = f("uniformY");
 
-	/** @see Cell#unset  */
+	/** @see Cell#unset */
 	float unset = Float.NEGATIVE_INFINITY;
 
 	private static Field f(String name) {
@@ -94,8 +96,14 @@ public interface CellTools {
 	static int expandY(Cell<?> cell) {
 		return Reflect.get(cell, f_expandY);
 	}
+	static boolean uniformX(Cell<?> cell) {
+		return Reflect.get(cell, f_uniformX);
+	}
+	static boolean uniformY(Cell<?> cell) {
+		return Reflect.get(cell, f_uniformY);
+	}
 
-	/** 换行并返回自己  */
+	/** 换行并返回自己 */
 	static <T extends Element> Cell<T> rowSelf(Cell<T> cell) {
 		cell.row();
 		return cell;

@@ -1,6 +1,6 @@
 package modtools.annotations.unsafe;
 
-import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.*;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.*;
@@ -44,7 +44,6 @@ public class DesugarStringTemplate extends TreeTranslator {
 				public InterpolateToConcat(TreeMaker M) {
 					super(M);
 				}
-
 				public JCTree visitMethodInvocation(MethodInvocationTree node, Void v) {
 					JCMethodInvocation invocation = (JCMethodInvocation) node;
 					make.at(invocation);
@@ -93,7 +92,7 @@ public class DesugarStringTemplate extends TreeTranslator {
 			expr = expr == null ? makeString(fragment)
 			 : makeBinary(Tag.PLUS, expr, makeString(fragment));
 			if (iterator.hasNext()) {
-				JCExpression expression     = iterator.next();
+				JCExpression expression = iterator.next();
 				expr = makeBinary(Tag.PLUS, expr, expression);
 			}
 		}

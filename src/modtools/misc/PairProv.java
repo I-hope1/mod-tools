@@ -42,6 +42,9 @@ public class PairProv implements Prov<CharSequence> {
 		public SizeProv(Prov<Vec2> vecProv) {
 			this(vecProv, "[accent]×[]");
 		}
+		public SizeProv(Vec2 vec2) {
+			this(() -> vec2, "[accent]×[]");
+		}
 		public SizeProv(Prov<Vec2> vecProv, String delimiter) {
 			super(vecProv, delimiter, false);
 		}

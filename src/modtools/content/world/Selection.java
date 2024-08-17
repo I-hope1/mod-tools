@@ -401,7 +401,10 @@ public class Selection extends Content {
 				default -> throw new IllegalStateException("Unexpected value: " + i);
 			};
 			@SuppressWarnings("StringTemplateMigration")
-			String key = IntVars.modName + "-" + text.toLowerCase()/* NPX."\{text.toLowerCase()}" */;
+			String key =
+			 IntVars.modName + "-" + text.toLowerCase() // todo: fix the bug
+			 // NPX."\{text.toLowerCase()}"
+			 ;
 			if (Core.atlas.has(key)) {
 				return icons[i] = Core.atlas.find(key);
 			}

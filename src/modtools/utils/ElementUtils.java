@@ -7,6 +7,7 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
+import arc.scene.style.Style;
 import arc.scene.ui.ScrollPane;
 import arc.util.*;
 import modtools.content.ui.ShowUIList;
@@ -34,6 +35,14 @@ public interface ElementUtils {
 		return findParent(actor, clazz::isInstance);
 	}
 
+
+	static Style getStyle(Element element) {
+		try {
+			return (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
+		} catch (Throwable e) {
+			return null;
+		}
+	}
 	static CharSequence getPath(Element element) {
 		if (element == null) return "null";
 		Element       el = element;
@@ -51,10 +60,10 @@ public interface ElementUtils {
 		return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 	}
 	static void scrollTo(Element actor, Element target) {
-		ScrollPane pane   = findClosestPane(actor);
+		ScrollPane pane = findClosestPane(actor);
 		Time.runTask(40, () -> HopeFx.changedFx(target));
 		pane.scrollTo(0, target.localToAscendantCoordinates(pane.getWidget(),
-		 Tmp.v1.set(target.getWidth() / 2, target.getHeight() / 2)).y,
+			Tmp.v1.set(target.getWidth() / 2, target.getHeight() / 2)).y,
 		 target.getWidth(), target.getHeight(),
 		 false, true);
 	}
@@ -131,7 +140,7 @@ public interface ElementUtils {
 		Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
 	}
 
-	static @Nullable DrawExecutor findDrawExecutor(Element actor ) {
+	static @Nullable DrawExecutor findDrawExecutor(Element actor) {
 		return findParent(actor, DrawExecutor.class);
 	}
 	static @Nullable ScrollPane findClosestPane(Element actor) {

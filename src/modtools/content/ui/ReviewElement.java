@@ -899,7 +899,9 @@ public class ReviewElement extends Content {
 		Settings(Class<?> a, Cons<ISettings> builder) { }
 	}
 
-	public static class InfoDetails extends Table implements KeyValue {
+	public static class InfoDetails implements KeyValue {
+		final Vec2 minSizeVec = new Vec2(), maxSizeVec = new Vec2();
+		final Vec2 translationVec = new Vec2();
 		Label nameLabel = new VLabel(0.85f, KeyValue.stressColor),
 		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
 		 touchableLabel = new NoMarkupLabel(valueScale),
@@ -912,9 +914,15 @@ public class ReviewElement extends Content {
 		 alignLabel       = new VLabel(valueScale, Color.sky),
 
 		colspanLabel  = new VLabel(valueScale, Color.lightGray),
-		 minSizeLabel = new Label(""), maxSizeLabel = new Label(""),
+		 minSizeLabel = new Label(new SizeProv(() -> minSizeVec.scl(1 / Scl.scl()))),
+		 maxSizeLabel = new Label(new SizeProv(() -> maxSizeVec.scl(1 / Scl.scl()))),
 		 fillLabel    = new Label(""), expandLabel = new Label(""), uniformLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
+
+		{
+			styleLabel.setFontScale(valueScale);
+			translationLabel.setText(new SizeProv(() -> translationVec, ", "));
+		}
 
 		BindCell visibleCell, rotCell, translationCell, styleCell, alignCell,
 		 cellCell,
@@ -923,29 +931,33 @@ public class ReviewElement extends Content {
 
 		final Vec2 sizeVec = new Vec2();
 		SizeProv sizeProv = new SizeProv(() -> sizeVec, " × ");
-		void size(float width, float height) {
-			sizeVec.set(width, height);
+		void name(Element elem) {
+			nameLabel.setText(getElementName(elem));
 		}
-		void touchableF(Touchable touchable) {
-			touchableLabel.setText(FormatHelper.touchable(touchable));
-			touchableLabel.setColor(touchableToColor(touchable));
+		void size(Element element) {
+			sizeVec.set(element.getWidth(), element.getHeight());
 		}
-		/** @param bool element.visible */
-		void visible(boolean bool) {
-			visibleCell.toggle(!bool);
+		void touchableF(Element element) {
+			touchableLabel.setText(FormatHelper.touchable(element.touchable));
+			touchableLabel.setColor(touchableToColor(element.touchable));
 		}
-		void color(Color color) {
+		/** @param element element.visible */
+		void visible(Element element) {
+			visibleCell.toggle(!element.visible);
+		}
+		void color(Element element) {
+			Color color = element.color;
 			colorContainer.setColorValue(color);
 			String string = FormatHelper.color(color);
 			colorLabel.setText(color.a == 1 ? string.substring(0, 6) : string);
 		}
-		void rotation(float rotation) {
-			if (rotCell.toggle1(rotation % 360 != 0))
-				rotationLabel.setText(fixed(rotation));
+		void rotation(Element element) {
+			if (rotCell.toggle1(element.rotation % 360 != 0))
+				rotationLabel.setText(fixed(element.rotation));
 		}
-		void translation(Vec2 translation) {
-			if (translationCell.toggle1(!Mathf.zero(translation.x) || !Mathf.zero(translation.y)))
-				translationLabel.setText(STR."\{fixed(translation.x)}, \{fixed(translation.y)}");
+
+		void translation(Element element) {
+			pairNum(element.translation, translationVec, translationCell, 0);
 		}
 		void style(Element element) {
 			try {
@@ -959,78 +971,47 @@ public class ReviewElement extends Content {
 				alignLabel.setText(FormatHelper.align(((Table) element).getAlign()));
 		}
 		void colspan(Cell<?> cell) {
-			if (cell == null) {
-				colspanCell.remove();
-				return;
-			}
 			int colspan = CellTools.colspan(cell);
 			if (colspanCell.toggle1(colspan != 1))
 				colspanLabel.setText("" + colspan);
 		}
-		final Vec2 minSizeVec = new Vec2(), maxSizeVec = new Vec2();
-		SizeProv minSizeProv = new SizeProv(() -> minSizeVec.scl(1 / Scl.scl()));
-		SizeProv maxSizeProv = new SizeProv(() -> maxSizeVec.scl(1 / Scl.scl()));
+		void pairNum(Vec2 got, Vec2 toSet, BindCell bindCell, float unset) {
+			if (bindCell.toggle1(got.x != unset || got.y != unset)) {
+				toSet.set(got.x, got.y);
+			}
+		}
 		void minSize(Cell<?> cell) {
-			if (cell == null) {
-				minSizeCell.remove();
-				return;
-			}
-			float minWidth = CellTools.minWidth(cell),
-			 minHeight = CellTools.minHeight(cell);
-			if (minSizeCell.toggle1(minWidth != unset || minHeight != unset)) {
-				minSizeVec.set(minWidth, minHeight);
-				minSizeLabel.setText(minSizeProv.get());
-			}
+			pairNum(CellTools.minSize(cell), minSizeVec, minSizeCell, unset);
 		}
 		void maxSize(Cell<?> cell) {
-			if (cell == null) {
-				maxSizeCell.remove();
-				return;
-			}
-			float maxWidth = CellTools.maxWidth(cell),
-			 maxHeight = CellTools.maxHeight(cell);
-			if (maxSizeCell.toggle1(maxWidth != unset || maxHeight != unset)) {
-				maxSizeVec.set(maxWidth, maxHeight);
-				maxSizeLabel.setText(maxSizeProv.get());
-			}
+			pairNum(CellTools.maxSize(cell), maxSizeVec, maxSizeCell, unset);
 		}
-		private void pairBool(Cell<?> cell, BindCell bindCell, Floatf<Cell<?>> xf, Floatf<Cell<?>> yf) {
-			if (cell == null) {
-				bindCell.remove();
-				return;
-			}
-			float x = xf.get(cell);
-			float y = yf.get(cell);
-			if (bindCell.toggle1(x != 0 || y != 0))
-				getLabel(bindCell).setText(STR."\{enabledMark(x)}x []| \{enabledMark(y)}y");
+		private void pairBool(Vec2 v1, BindCell bindCell) {
+			if (bindCell.toggle1(v1.x != 0 || v1.y != 0))
+				getLabel(bindCell).setText(STR."\{enabledMark(v1.x)}x []| \{enabledMark(v1.y)}y");
 		}
 		static Label getLabel(BindCell cell) {
 			return (Label) ((Table) cell.el).getChildren().get(1);
 		}
 		void fill(Cell<?> cell) {
-			pairBool(cell, fillCell, CellTools::fillX, CellTools::fillY);
+			pairBool(Tmp.v1.set(CellTools.fillX(cell), CellTools.fillY(cell)), fillCell);
 		}
 		void expand(Cell<?> cell) {
-			pairBool(cell, expandCell, CellTools::expandX, CellTools::expandY);
+			pairBool(Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell)), expandCell);
 		}
 		void uniform(Cell<?> cell) {
-			pairBool(cell, uniformCell, cell1 -> CellTools.uniformX(cell1) ? 1 : 0, cell1 -> CellTools.uniformY(cell1) ? 1 : 0);
+			pairBool(Tmp.v1.set( CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0), uniformCell);
 		}
 		static String enabledMark(float i) {
 			return i != 0 ? "[accent]" : "[gray]";
 		}
 
-		InfoDetails() {
-			margin(4, 4, 4, 4);
-			table(Tex.pane, this::build);
-			styleLabel.setFontScale(valueScale);
-		}
-
-		void setPosition(Element elem) {
+		public void setPosition(Element elem, Table table) {
 			// 初始在元素的左上角
-			positionTooltip(elem, Align.topLeft, this, Align.bottomLeft);
+			positionTooltip(elem, Align.topLeft, table, Align.bottomLeft);
 		}
-		private void build(Table t) {
+		public void build(Table t) {
+			t.background(Tex.pane);
 			t.defaults().growX();
 			t.table(top -> {
 				top.add(nameLabel).padLeft(-4f);
@@ -1102,24 +1083,26 @@ public class ReviewElement extends Content {
 
 			if (!hoverInfoWindow.enabled()) return;
 
-			table.nameLabel.setText(getElementName(elem));
-			table.size(elem.getWidth(), elem.getHeight());
-			table.touchableF(elem.touchable);
-			table.visible(elem.visible);
-			table.color(elem.color);
-			table.rotation(elem.rotation);
-			table.translation(elem.translation);
-			table.style(elem);
-			table.align(elem);
+			info.name(elem);
+			info.size(elem);
+			info.touchableF(elem);
+			info.visible(elem);
+			info.color(elem);
+			info.rotation(elem);
+			info.translation(elem);
+			info.style(elem);
+			info.align(elem);
+			l:
 			{
-				Cell cell = null;
+				Cell<?> cell = null;
 				if (elem.parent instanceof Table parent) cell = parent.getCell(elem);
-				table.colspan(cell);
-				table.minSize(cell);
-				table.maxSize(cell);
-				table.fill(cell);
-				table.expand(cell);
-				table.uniform(cell);
+				if (!info.cellCell.toggle1(cell != null)) break l;
+				info.colspan(cell);
+				info.minSize(cell);
+				info.maxSize(cell);
+				info.fill(cell);
+				info.expand(cell);
+				info.uniform(cell);
 			}
 			showInfoTable(elem, vec2);
 		}
@@ -1185,21 +1168,23 @@ public class ReviewElement extends Content {
 		}
 
 		// ---------------------
+		final InfoDetails info = new InfoDetails();
+		final Table table = new Table();
+		{
+			info.build(table.table().pad(4).get());
+		}
 		private void showInfoTable(Element elem, Vec2 vec2) {
-			table.cellCell.toggle(
-			 ((Table) table.cellCell.el).getChildren().any()
-			);
 			table.invalidate();
 			table.layout();
 			table.getPrefWidth();
 			table.pack();
 			table.act(0);
-			table.setPosition(elem);
+			info.setPosition(elem, table);
 			table.draw();
 		}
-		final InfoDetails table = new InfoDetails();
 
-		private boolean isSelecting() {
+
+		public boolean isSelecting() {
 			return topGroup.elementCallback == callback;
 		}
 		public void endDraw() {

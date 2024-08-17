@@ -1,8 +1,9 @@
 package modtools.utils.ui;
 
+import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.ui.layout.*;
-import arc.util.Reflect;
+import arc.scene.ui.layout.Cell;
+import arc.util.*;
 import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.Field;
@@ -107,5 +108,11 @@ public interface CellTools {
 	static <T extends Element> Cell<T> rowSelf(Cell<T> cell) {
 		cell.row();
 		return cell;
+	}
+	static Vec2 minSize(Cell<?> cell) {
+		return Tmp.v1.scl(CellTools.minWidth(cell), CellTools.minHeight(cell));
+	}
+	static Vec2 maxSize(Cell<?> cell) {
+		return Tmp.v1.scl(CellTools.maxWidth(cell), CellTools.maxHeight(cell));
 	}
 }

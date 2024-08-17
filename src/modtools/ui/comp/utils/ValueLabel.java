@@ -523,7 +523,7 @@ public abstract class ValueLabel extends InlineLabel {
 				SR.apply(() -> SR.of(val)
 				 .isInstance(TextureRegion.class, INFO_DIALOG::dialog)
 				 .isInstance(Texture.class, INFO_DIALOG::dialog)
-				 .isInstance(Drawable.class, INFO_DIALOG::dialog)
+				 .isInstance(Drawable.class, INFO_DIALOG::dialogd)
 				)));
 		 }, TextureRegion.class, Texture.class, Drawable.class)
 		 /* .isExtend(__ -> {

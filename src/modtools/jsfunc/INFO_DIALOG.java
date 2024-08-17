@@ -142,7 +142,7 @@ public interface INFO_DIALOG {
 	static JSWindow dialog(Element element) {
 		return window(d -> d.cont.pane(element).grow());
 	}
-	static JSWindow dialog(String text) {
+	static JSWindow dialogText(String text) {
 		return dialog(new Label(text));
 	}
 	static JSWindow dialog(TextureRegion region) {
@@ -151,7 +151,7 @@ public interface INFO_DIALOG {
 	static JSWindow dialog(Texture texture) {
 		return dialog(new TextureRegion(texture));
 	}
-	static JSWindow dialog(Drawable drawable) {
+	static JSWindow dialogd(Drawable drawable) {
 		return dialog(new Image(drawable));
 	}
 	static JSWindow dialog(Color color) {
@@ -173,8 +173,8 @@ public interface INFO_DIALOG {
 	static void dialog(Element element, boolean disposable) {
 		dialog(element).autoDispose = disposable;
 	}
-	static void dialog(String text, boolean disposable) {
-		dialog(text).autoDispose = disposable;
+	static void dialogText(String text, boolean disposable) {
+		dialogText(text).autoDispose = disposable;
 	}
 	static void dialog(TextureRegion region, boolean disposable) {
 		dialog(region).autoDispose = disposable;
@@ -184,8 +184,8 @@ public interface INFO_DIALOG {
 		dialog(texture).autoDispose = disposable;
 	}
 
-	static void dialog(Drawable drawable, boolean disposable) {
-		dialog(drawable).autoDispose = disposable;
+	static void dialogd(Drawable drawable, boolean disposable) {
+		dialogd(drawable).autoDispose = disposable;
 	}
 	static void dialog(Color color, boolean disposable) {
 		dialog(color).autoDispose = disposable;

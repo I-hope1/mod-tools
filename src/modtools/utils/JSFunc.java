@@ -15,6 +15,7 @@ import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.*;
+import modtools.jsfunc.reflect.android.LL_UNSAFE;
 import modtools.jsfunc.type.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.ResidentDrawTask;
@@ -39,7 +40,7 @@ public class JSFunc
  implements UNSAFE, REFLECT,
  REVIEW_ELEMENT, CAST, INFO_DIALOG, PTYPE,
  StringUtils, IScript, ElementUtils,
- ANDROID_UNSAFE,
+ LL_UNSAFE,
  /* world */
  UnitUtils, BulletUtils, WorldUtils,
  /* other */

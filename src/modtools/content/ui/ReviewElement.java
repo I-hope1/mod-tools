@@ -992,8 +992,8 @@ public class ReviewElement extends Content {
 		private void pairBool(Vec2 v1, BindCell bindCell) {
 			if (bindCell.toggle1(v1.x != 0 || v1.y != 0))
 				getLabel(bindCell).setText(STR."\{enabledMark(v1.x)}x[]\{
-				 v1.x != 0 && maxSizeVec.x != 0 ? "[[maxSize]" : ""} | \{enabledMark(v1.y)}y\{
-				 v1.y != 0 && maxSizeVec.y != 0 ? "[][[maxSize]" : ""}");
+				 v1.x != 0 && maxSizeCell.cell.hasElement() && maxSizeVec.x != unset ? "[[maxSize]" : ""} | \{enabledMark(v1.y)}y\{
+				 v1.y != 0 && maxSizeCell.cell.hasElement() && maxSizeVec.y != unset ? "[][[maxSize]" : ""}");
 		}
 		static Label getLabel(BindCell cell) {
 			return (Label) ((Table) cell.el).getChildren().get(1);

@@ -236,52 +236,18 @@ public class IntUI {
 
 		table.setPosition(pos.x, pos.y, tableAlign);
 		// 在不遮挡lying的情况下，如果上面超出屏幕
-		l:
-		if (table.y + table.getHeight() > Core.graphics.getHeight()) {
-			if (ylock) break l;
-			int lyingAlign1 = lyingAlign & ~Align.top | Align.bottom;
-			if (lyingAlign == lyingAlign1) break l;
-			int tableAlign1 = tableAlign & ~Align.bottom | Align.top;
-			if (tableAlign == tableAlign1) break l;
-			ylock = true;
-			positionTooltip(lying, lyingAlign1, table, tableAlign1);
-			ylock = false;
-		}
-
-		// 在不遮挡lying的情况下，如果下面超出屏幕
-		l:
-		if (table.y < 0) {
-			if (ylock) break l;
-			int lyingAlign1 = lyingAlign & ~Align.bottom | Align.top;
-			if (lyingAlign == lyingAlign1) break l;
-			int tableAlign1 = tableAlign & ~Align.top | Align.bottom;
-			if (tableAlign == tableAlign1) break l;
+		if (!ylock && table.y + table.getHeight() > Core.graphics.getHeight() || table.y < 0) {
+			int lyingAlign1 = Align.isTop(lyingAlign) ? lyingAlign & ~Align.top | Align.bottom : lyingAlign & ~Align.bottom | Align.top;
+			int tableAlign1 = Align.isTop(tableAlign) ? tableAlign & ~Align.top | Align.bottom : tableAlign & ~Align.bottom | Align.top;
 			ylock = true;
 			positionTooltip(lying, lyingAlign1, table, tableAlign1);
 			ylock = false;
 		}
 
 		// 在不遮挡lying的情况下，如果右边超出屏幕
-		l:
-		if (table.x + table.getWidth() > Core.graphics.getWidth()) {
-			if (xlock) break l;
-			int lyingAlign1 = lyingAlign & ~Align.right | Align.left;
-			if (lyingAlign == lyingAlign1) break l;
-			int tableAlign1 = tableAlign & ~Align.left | Align.right;
-			if (tableAlign == tableAlign1) break l;
-			xlock = true;
-			positionTooltip(lying, lyingAlign1, table, tableAlign1);
-			xlock = false;
-		}
-
-		// 如果左边超出屏幕
-		l:
-		if (table.x < 0) {
-			if (xlock) break l;
-			int lyingAlign1 = lyingAlign & ~Align.left | Align.right;
-			if (lyingAlign == lyingAlign1) break l;
-			int tableAlign1 = tableAlign & ~Align.right | Align.left;
-			if (tableAlign == tableAlign1) break l;
+		if (!xlock && table.x + table.getWidth() > Core.graphics.getWidth() || table.x < 0) {
+			int lyingAlign1 = Align.isLeft(lyingAlign) ? lyingAlign & ~Align.left | Align.right : lyingAlign & ~Align.right | Align.left;
+			int tableAlign1 = Align.isLeft(tableAlign) ? tableAlign & ~Align.left | Align.right : tableAlign & ~Align.right | Align.left;
 			xlock = true;
 			positionTooltip(lying, lyingAlign1, table, tableAlign1);
 			xlock = false;

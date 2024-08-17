@@ -41,6 +41,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	public CellDetailsWindow(Cell<?> cell) {
 		super("cell", 220, 0);
 		this.cl = cell;
+		title.setText(() -> "Cell" + (cell.hasElement() ? ": " + ReviewElement.getElementName(cell.get()) : ""));
 
 		cont.table(Tex.pane, t -> {
 			t.defaults().grow();
@@ -133,7 +134,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 
 	private static boolean asBoolean(Object t) {
 		return t instanceof Boolean ? (Boolean) t :
-		 t instanceof Number n && n.intValue() == 1;
+		 t instanceof Number n && n.floatValue() != 0;
 	}
 	static <T extends Number> Cell<Table> buildWithName(Table t, Cell cell, String name,
 	                                                    Func<Float, T> valueOf) {
@@ -160,14 +161,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		return cont.check(Strings.capitalize(key), 28, getChecked(ctype, obj, key), b -> {
 			 Tools.runShowedException(() -> field.set(obj, castBoolean(valueType, b)));
 
-			 // flush
-			 if (obj instanceof Table t) {
-				 t.layout();
-				 t.invalidate();
-			 } else if (obj instanceof Cell<?> c) {
-				 c.getTable().layout();
-				 c.getTable().invalidate();
-			 }
+			 update(obj);
 		 })
 		 /** {@link Cell#style(Style)}会报错 */
 		 .with(t -> t.setStyle(HopeStyles.hope_defaultCheck))
@@ -179,6 +173,16 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		 .fill(false)
 		 .expand(false, false).left();
 	}
+	private static  void update(Object obj) {
+		// flush
+		if (obj instanceof Table t) {
+			t.layout();
+			t.invalidate();
+		} else if (obj instanceof Cell<?> c) {
+			c.getTable().layout();
+			c.getTable().invalidate();
+		}
+	}
 	private static <T> void addFloatSetter(
 	 T obj, Field jfield, CheckBox elem, boolean useInt) {
 		IntUI.addTooltipListener(elem, () -> (IntUI.hasTips("cell." + jfield.getName()) ?
@@ -186,7 +190,10 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		EventHelper.longPressOrRclick(elem, _ -> {
 			IntUI.showSelectTable(elem, (p, _, _) -> {
 				Number defvalue = Reflect.get(obj, jfield);
-				Slider slider   = new Slider(useInt ? -2 : -1, 2, useInt ? 1 : 0.01f, false);
+				Slider slider = new Slider(
+				 useInt ? -4 : -2,
+				 useInt ? 4 : 2,
+				 useInt ? 1 : 0.01f, false);
 				slider.setValue(defvalue.floatValue());
 				TextField field = new TextField(FormatHelper.fixed(defvalue.floatValue()));
 				field.setValidator(useInt ? Strings::canParseInt : NumberHelper::isFloat);
@@ -199,6 +206,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 
 					Tools.runShowedException(() -> jfield.set(obj, val));
 					field.setText(FormatHelper.fixed(v));
+					update(obj);
 				});
 				field.changed(() -> {
 					Number value = useInt ? NumberHelper.asInt(field.getText()) : NumberHelper.asFloat(field.getText());

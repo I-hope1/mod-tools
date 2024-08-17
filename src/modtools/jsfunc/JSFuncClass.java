@@ -1,7 +1,7 @@
 package modtools.jsfunc;
 
 import arc.Core;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.Vars;
 import mindustry.ctype.*;
 import modtools.struct.LazyValue;
@@ -25,6 +25,7 @@ public class JSFuncClass extends NativeJavaClass {
 		Map<String, Field> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");
 
 		for (Class<?> inter : JSFunc.class.getInterfaces()) {
+			if (!OS.isAndroid && inter.getPackageName().contains("android")) continue;
 			/* Delegate annotation = inter.getAnnotation(Delegate.class);
 			if (annotation != null) {
 				inter = annotation.value();
@@ -35,7 +36,9 @@ public class JSFuncClass extends NativeJavaClass {
 	public Object get(String name, Scriptable start) {
 		RuntimeException ex;
 		try {
-			return super.get(name, start);
+			Object val = super.get(name, start);
+			if (val == null || val == Undefined.instance || val == NOT_FOUND) throw new NoSuchElementException(name);
+			return val;
 		} catch (RuntimeException e) { ex = e; }
 
 		return switch (name) {
@@ -59,7 +62,7 @@ public class JSFuncClass extends NativeJavaClass {
 		ArrayList<Object> list = Arrays.stream(ids.get())
 		 .collect(Collectors.toCollection(ArrayList::new));
 		list.addAll(Arrays.stream(ContentType.all)
-		 .flatMap(type -> Arrays.stream(Vars.content.getBy(type).toArray()).map(c -> c instanceof UnlockableContent u ? u.name : null))
+		 .flatMap(type -> Arrays.stream(Vars.content.getBy(type).toArray(Content.class)).map(c -> c instanceof UnlockableContent u ? u.name : null))
 		 .toList());
 		return list.toArray();
 	}

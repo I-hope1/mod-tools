@@ -894,6 +894,9 @@ public class ReviewElement extends Content {
 		maxDepthForAutoExpand(int.class, it -> it.$(5/* def */, 0/* min */, 50/* max */, 1/* step */)),
 		//
 		;
+		static {
+			hoverInfoWindow.defTrue();
+		}
 
 		Settings() { }
 		Settings(Class<?> a, Cons<ISettings> builder) { }
@@ -914,14 +917,14 @@ public class ReviewElement extends Content {
 		 alignLabel       = new VLabel(valueScale, Color.sky),
 
 		colspanLabel  = new VLabel(valueScale, Color.lightGray),
-		 minSizeLabel = new Label(new SizeProv(() -> minSizeVec.scl(1 / Scl.scl()))),
-		 maxSizeLabel = new Label(new SizeProv(() -> maxSizeVec.scl(1 / Scl.scl()))),
+		 minSizeLabel = new Label(new SizeProv(() -> minSizeVec)),
+		 maxSizeLabel = new Label(new SizeProv(() -> maxSizeVec)),
 		 fillLabel    = new Label(""), expandLabel = new Label(""), uniformLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
 		{
 			styleLabel.setFontScale(valueScale);
-			translationLabel.setText(new SizeProv(() -> translationVec, ", "));
+			translationLabel.setText(new PairProv(() -> translationVec, ", "));
 		}
 
 		BindCell visibleCell, rotCell, translationCell, styleCell, alignCell,
@@ -981,14 +984,16 @@ public class ReviewElement extends Content {
 			}
 		}
 		void minSize(Cell<?> cell) {
-			pairNum(CellTools.minSize(cell), minSizeVec, minSizeCell, unset);
+			pairNum(CellTools.minSize(cell).scl(1 / Scl.scl()), minSizeVec, minSizeCell, unset);
 		}
 		void maxSize(Cell<?> cell) {
-			pairNum(CellTools.maxSize(cell), maxSizeVec, maxSizeCell, unset);
+			pairNum(CellTools.maxSize(cell).scl(1 / Scl.scl()), maxSizeVec, maxSizeCell, unset);
 		}
 		private void pairBool(Vec2 v1, BindCell bindCell) {
 			if (bindCell.toggle1(v1.x != 0 || v1.y != 0))
-				getLabel(bindCell).setText(STR."\{enabledMark(v1.x)}x []| \{enabledMark(v1.y)}y");
+				getLabel(bindCell).setText(STR."\{enabledMark(v1.x)}x[]\{
+				 v1.x != 0 && maxSizeVec.x != 0 ? "[[maxSize]" : ""} | \{enabledMark(v1.y)}y\{
+				 v1.y != 0 && maxSizeVec.y != 0 ? "[][[maxSize]" : ""}");
 		}
 		static Label getLabel(BindCell cell) {
 			return (Label) ((Table) cell.el).getChildren().get(1);
@@ -1000,7 +1005,7 @@ public class ReviewElement extends Content {
 			pairBool(Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell)), expandCell);
 		}
 		void uniform(Cell<?> cell) {
-			pairBool(Tmp.v1.set( CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0), uniformCell);
+			pairBool(Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0), uniformCell);
 		}
 		static String enabledMark(float i) {
 			return i != 0 ? "[accent]" : "[gray]";
@@ -1104,7 +1109,7 @@ public class ReviewElement extends Content {
 				info.expand(cell);
 				info.uniform(cell);
 			}
-			showInfoTable(elem, vec2);
+			showInfoTable(elem);
 		}
 		private void drawGeneric(Element elem, Vec2 vec2) {
 			posText:
@@ -1168,12 +1173,14 @@ public class ReviewElement extends Content {
 		}
 
 		// ---------------------
-		final InfoDetails info = new InfoDetails();
-		final Table table = new Table();
+		final InfoDetails info  = new InfoDetails();
+		final Table       table = new Table();
+
 		{
 			info.build(table.table().pad(4).get());
 		}
-		private void showInfoTable(Element elem, Vec2 vec2) {
+
+		private void showInfoTable(Element elem) {
 			table.invalidate();
 			table.layout();
 			table.getPrefWidth();

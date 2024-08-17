@@ -3,6 +3,7 @@ package modtools.misc;
 import arc.func.Prov;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
+import modtools.utils.ui.CellTools;
 
 import static modtools.utils.ui.FormatHelper.*;
 
@@ -38,6 +39,7 @@ public class PairProv implements Prov<CharSequence> {
 		}
 		return lastStr;
 	}
+	/** {@link CellTools#unset}会被解析  */
 	public static class SizeProv extends PairProv {
 		public SizeProv(Prov<Vec2> vecProv) {
 			this(vecProv, "[accent]×[]");

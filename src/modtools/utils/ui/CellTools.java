@@ -110,9 +110,9 @@ public interface CellTools {
 		return cell;
 	}
 	static Vec2 minSize(Cell<?> cell) {
-		return Tmp.v1.scl(CellTools.minWidth(cell), CellTools.minHeight(cell));
+		return Tmp.v1.set(CellTools.minWidth(cell), CellTools.minHeight(cell));
 	}
 	static Vec2 maxSize(Cell<?> cell) {
-		return Tmp.v1.scl(CellTools.maxWidth(cell), CellTools.maxHeight(cell));
+		return Tmp.v1.set(CellTools.maxWidth(cell), CellTools.maxHeight(cell));
 	}
 }

@@ -59,7 +59,7 @@ public class JSFuncClass extends NativeJavaClass {
 		ArrayList<Object> list = Arrays.stream(ids.get())
 		 .collect(Collectors.toCollection(ArrayList::new));
 		list.addAll(Arrays.stream(ContentType.all)
-		 .flatMap(type -> Arrays.stream(Vars.content.getBy(type).map(c -> c instanceof UnlockableContent u ? u.name : null).toArray()))
+		 .flatMap(type -> Arrays.stream(Vars.content.getBy(type).toArray()).map(c -> c instanceof UnlockableContent u ? u.name : null))
 		 .toList());
 		return list.toArray();
 	}

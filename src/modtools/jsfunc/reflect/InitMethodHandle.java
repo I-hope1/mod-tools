@@ -2,7 +2,7 @@ package modtools.jsfunc.reflect;
 
 import arc.func.Cons;
 import arc.util.OS;
-import modtools.Constants.ANDROID;
+import modtools.Constants.ANDROID_INIT;
 import modtools.utils.Tools.CProvT;
 
 import java.lang.invoke.*;
@@ -10,7 +10,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Constructor;
 
 import static ihope_lib.MyReflect.*;
-import static modtools.Constants.DESKTOP.*;
+import static modtools.Constants.DESKTOP_INIT.*;
 
 /** 获取类的{@code <init>}句柄 */
 public class InitMethodHandle {
@@ -44,8 +44,8 @@ public class InitMethodHandle {
 		/* 设置第0个参数为this */
 		params[0] = refc;
 		System.arraycopy(ctor.getParameterTypes(), 0, params, 1, ctor.getParameterCount());
-		return ANDROID.HANDLE_CONSTRUCTOR.newInstance(
-		 unsafe.getLong(ctor, ANDROID.ART_METHOD),
+		return ANDROID_INIT.HANDLE_CONSTRUCTOR.newInstance(
+		 unsafe.getLong(ctor, ANDROID_INIT.ART_METHOD),
 		 INVOKE_SPECIAL, MethodType.methodType(Void.TYPE, params));
 	}
 

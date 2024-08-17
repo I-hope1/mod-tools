@@ -40,7 +40,7 @@ public class Constants {
 	}
 
 	@SuppressWarnings("DataFlowIssue")
-	public interface DESKTOP {
+	public interface DESKTOP_INIT {
 		/** @see java.lang.invoke.MemberName */
 		Class<?> MEMBER_NAME = nl("java.lang.invoke.MemberName");
 
@@ -56,9 +56,9 @@ public class Constants {
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
 		 lookup.findConstructor(MEMBER_NAME, MethodType.methodType(void.class, Constructor.class)));
 
-		/** @see MemberName.Factory#resolveOrNull(byte, MemberName, Class, int) */
+		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class) */
 		Method RESOLVE_OR_FAIL   = method(CL_FACTORY,
-		 "resolveOrNull", byte.class, MEMBER_NAME, Class.class, int.class);
+		 "resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class);
 		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
 		Method GET_DIRECT_METHOD = method(
 		 Lookup.class, "getDirectMethodCommon",
@@ -78,7 +78,7 @@ public class Constants {
 		// 	return lookup.findStatic(direct, "make", MethodType.methodType(direct, byte.class, Class.class, MEMBER_NAME, Class.class));
 		// });
 	}
-	public interface ANDROID {
+	public interface ANDROID_INIT {
 		/** {@code MethodHandleImpl(long artMethod, int ref, MethodType mt)} */
 		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = ctor(
 		 "java.lang.invoke.MethodHandleImpl",

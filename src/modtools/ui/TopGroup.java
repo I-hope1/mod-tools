@@ -233,7 +233,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		name = NPX."TopGroup";
 
 		scene.add(this);
-		Group[] all = {back, windows, frag, infos, new FillEnd()};
+		final Group[] all = {back, windows, frag, infos, new FillEnd()};
 		for (Group group : all) {
 			group.fillParent = true;
 			group.touchable = Touchable.childrenOnly;
@@ -276,7 +276,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		return shownWindows;
 	}
 
-	public static final boolean enabledGroup = true;
+	public static final boolean enableGroup = true;
 
 	/**
 	 * 根据类别添加child
@@ -309,7 +309,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 *  </table>
 	 */
 	public void addChild(Element actor) {
-		if (enabledGroup) {
+		if (enableGroup) {
 			(actor instanceof BackInterface ? back
 			 : actor instanceof IInfo ? infos
 			 : actor instanceof Window ? windows

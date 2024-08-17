@@ -436,7 +436,7 @@ public class Tester extends Content {
 				case String o -> INFO_DIALOG.dialogText(o, true);
 				case TextureRegion o -> INFO_DIALOG.dialog(o, true);
 				case Texture o -> INFO_DIALOG.dialog(o, true);
-				case Drawable o -> INFO_DIALOG.dialogd(o, true);
+				case Drawable o -> INFO_DIALOG.dialog(o, true);
 				case Color o -> INFO_DIALOG.dialog(o, true);
 				default -> { }
 			}

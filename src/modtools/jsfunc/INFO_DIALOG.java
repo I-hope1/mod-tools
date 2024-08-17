@@ -184,7 +184,7 @@ public interface INFO_DIALOG {
 		dialog(texture).autoDispose = disposable;
 	}
 
-	static void dialogd(Drawable drawable, boolean disposable) {
+	static void dialog(Drawable drawable, boolean disposable) {
 		dialogd(drawable).autoDispose = disposable;
 	}
 	static void dialog(Color color, boolean disposable) {

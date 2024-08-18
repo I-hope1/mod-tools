@@ -18,7 +18,9 @@ public class LimitButton extends Button implements Limit {
 	public LimitButton(Drawable up, Drawable down, Drawable checked) {
 		super(up, down, checked);
 	}
+
 	public void updateVisibility() {
+		super.updateVisibility();
 		visible = Limit.isVisible(this);
 	}
 }

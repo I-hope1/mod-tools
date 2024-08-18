@@ -41,7 +41,6 @@ import modtools.ui.comp.utils.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.reflect.RBuilder;
 import modtools.utils.*;
-import modtools.utils.SR.SatisfyException;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.search.*;
@@ -73,7 +72,7 @@ public class ShowUIList extends Content {
 		super("showuilist", Icon.imageSmall);
 	}
 
-	public void _load() {
+	public void lazyLoad() {
 		ui = new Window(localizedName(), getW(), 400, true);
 		Table cont = ui.cont;
 
@@ -100,6 +99,7 @@ public class ShowUIList extends Content {
 		cont.add(top).growX().row();
 		cont.top();
 		cont.add(tab.build()).grow();
+		cont.act(0);
 		cont.layout();
 		new Search((_, pattern0) -> pattern = pattern0).build(top, cont);
 		// ui.addCloseButton();
@@ -151,22 +151,26 @@ public class ShowUIList extends Content {
 	Table icons = newTable(t -> FieldUtils.walkAllConstOf(Icon.class, (field, icon) -> {
 		String k = field.getName();
 		iconKeyMap.put(icon, k);
-		t.bind(k);
-		var region = icon.getRegion();
-		setColor(t.image(icon)
-		 .size(imageSize, region.height / (float) region.width * imageSize).get());
-		field(t, k).row();
-		t.unbind();
+		t.addRun(() -> {
+			t.bind(k);
+			var region = icon.getRegion();
+			setColor(t.image(icon)
+			 .size(imageSize, region.height / (float) region.width * imageSize).get());
+			field(t, k).row();
+			t.unbind();
+		});
 	}, TextureRegionDrawable.class)),
 	 tex        = newTable(t -> {
 		 String prefix = "Tex.";
 		 FieldUtils.walkAllConstOf(Tex.class, (field, drawable) -> {
-			 t.bind(field.getName());
 			 texKeyMap.put(drawable, prefix + field.getName());
-			 addImage(t, drawable);
-			 fieldWithView(t, field, drawable);
-			 t.unbind();
-			 t.row();
+			 t.addRun(() -> {
+				 t.bind(field.getName());
+				 addImage(t, drawable);
+				 fieldWithView(t, field, drawable);
+				 t.unbind();
+				 t.row();
+			 });
 		 }, Drawable.class);
 	 }),
 	 styles     = newTable(true, t -> {
@@ -201,7 +205,7 @@ public class ShowUIList extends Content {
 		 buildColor.get(Pal.class);
 		 readJson(type, buildColor);
 	 }),
-	 interps    = newTable(t -> {
+	 interps    = newTable(t -> t.addRun(() -> {
 		 Table table = new Table();
 		 t.pane(table).pad(10f).grow().colspan(2).get();
 		 t.row();
@@ -224,16 +228,18 @@ public class ShowUIList extends Content {
 				 if (++c[0] % cols == 0) table.row();
 			 });
 		 });
-	 }),
+	 })),
 	 actions,
 	 uis        = newTable(t -> {
 		 UI obj = Vars.ui;
 		 FieldUtils.walkAllConstOf(UI.class, (f, group) -> {
 			 uiKeyMap.put(group, f.getName());
-			 t.bind(f.getName());
-			 t.add(f.getName());
-			 t.add(new FieldValueLabel(ValueLabel.unset, f, obj));
-			 t.unbind();
+			 t.addRun(() -> {
+				 t.bind(f.getName());
+				 t.add(f.getName());
+				 t.add(new FieldValueLabel(ValueLabel.unset, f, obj));
+				 t.unbind();
+			 });
 		 }, Group.class, obj);
 	 });
 	private static void readJson(String type, Cons<Class<?>> builder) {
@@ -246,13 +252,15 @@ public class ShowUIList extends Content {
 			}
 		});
 	}
-	private static void customJson(String type, FilterTable<Object> t) {
-		t.add("Custom " + Strings.capitalize(type) + ": ");
-		String fileName = type + ".json";
-		t.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
-		t.row();
+	private static void customJson(String type, LazyTable<Object> t) {
+		t.addRun(() -> {
+			t.add("Custom " + Strings.capitalize(type) + ": ");
+			String fileName = type + ".json";
+			t.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
+			t.row();
+		});
 	}
-	private static void fieldWithView(FilterTable<Object> t, Field field, Drawable drawable) {
+	private static void fieldWithView(LazyTable<Object> t, Field field, Drawable drawable) {
 		if (drawable != null) {
 			t.table(p -> {
 				field(p, field.getName());
@@ -265,7 +273,7 @@ public class ShowUIList extends Content {
 	private static Cell<Label> field(Table p, String fieldName) {
 		return p.add(fieldName).with(EventHelper::addDClickCopy);
 	}
-	static void listAllStyles(FilterTable<Object> t, Class<?> stylesClass) {
+	void listAllStyles(LazyTable<Object> t, Class<?> stylesClass) {
 		String  prefix = stylesClass.getSimpleName() + ".";
 		Field[] fields = getStyleFields(stylesClass);
 		for (Field field : fields) {
@@ -277,9 +285,15 @@ public class ShowUIList extends Content {
 				obj = field.get(null);
 				if (obj instanceof Style style1) styleKeyMap.put(style1, prefix + field.getName());
 				if (obj instanceof Drawable d) styleIconKeyMap.put(d, prefix + field.getName());
+			} catch (IllegalAccessException | IllegalArgumentException err) {
+				Log.err(err);
+				continue;
+			}
+			Object finalObj = obj;
+			t.addRun(() -> {
 				t.bind(field.getName());
 
-				SR.of(obj)
+				SR.apply(() -> SR.of(finalObj)
 				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
 				 .isInstance(DialogStyle.class, t, Builder::build)
 				 .isInstance(LabelStyle.class, t, Builder::build)
@@ -290,28 +304,24 @@ public class ShowUIList extends Content {
 				 .isInstance(ImageButtonStyle.class, t, Builder::build)
 				 .isInstance(ButtonStyle.class, t, Builder::build)
 				 .isInstance(Drawable.class, t, Builder::build)
-				 .isInstance(Object.class, _ -> t.add());
-			} catch (IllegalAccessException | IllegalArgumentException err) {
-				Log.err(err);
-				continue;
-			} catch (SatisfyException ignored) { }
+				 .isInstance(Object.class, _ -> t.add()));
 
-			Object finalObj = obj;
-			t.table(t1 -> {
-				field(t1, field.getName());
-				PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> SR.of(finalObj)
-				 .isInstance(ScrollPaneStyle.class, p, Builder::view)
-				 .isInstance(DialogStyle.class, p, Builder::view)
-				 .isInstance(LabelStyle.class, p, Builder::view)
-				 .isInstance(SliderStyle.class, p, Builder::view)
-				 .isInstance(TextFieldStyle.class, p, Builder::view)
-				 .isInstance(CheckBoxStyle.class, p, Builder::view)
-				 .isInstance(TextButtonStyle.class, p, Builder::view)
-				 .isInstance(ImageButtonStyle.class, p, Builder::view)
-				 .isInstance(ButtonStyle.class, p, Builder::view)
-				 .isInstance(Drawable.class, p, Builder::view))).padLeft(8f);
-			}).left().row();
-			t.unbind();
+				t.table(t1 -> {
+					field(t1, field.getName());
+					PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> SR.of(finalObj)
+					 .isInstance(ScrollPaneStyle.class, p, Builder::view)
+					 .isInstance(DialogStyle.class, p, Builder::view)
+					 .isInstance(LabelStyle.class, p, Builder::view)
+					 .isInstance(SliderStyle.class, p, Builder::view)
+					 .isInstance(TextFieldStyle.class, p, Builder::view)
+					 .isInstance(CheckBoxStyle.class, p, Builder::view)
+					 .isInstance(TextButtonStyle.class, p, Builder::view)
+					 .isInstance(ImageButtonStyle.class, p, Builder::view)
+					 .isInstance(ButtonStyle.class, p, Builder::view)
+					 .isInstance(Drawable.class, p, Builder::view))).padLeft(8f);
+				}).left().row();
+				t.unbind();
+			});
 		}
 	}
 
@@ -340,15 +350,14 @@ public class ShowUIList extends Content {
 		return Core.graphics.isPortrait() ? 320 : 400;
 	}
 	public void build() {
-		if (ui == null) _load();
 		ui.show();
 	}
-	public <T> FilterTable<T> newTable(Cons<FilterTable<T>> cons) {
+	public <T> LazyTable<T> newTable(Cons<LazyTable<T>> cons) {
 		return newTable(false, cons);
 	}
 
-	public <T> FilterTable<T> newTable(boolean withDisabled, Cons<FilterTable<T>> cons) {
-		return new FilterTable<>(t -> {
+	public <T> LazyTable<T> newTable(boolean withDisabled, Cons<LazyTable<T>> cons) {
+		return new LazyTable<>(t -> {
 			t.top().left().defaults().left().padLeft(6f);
 			t.addChild(new FillElement() {
 				public void draw() {
@@ -425,16 +434,35 @@ public class ShowUIList extends Content {
 		}
 	}
 
+	public static class LazyTable<T> extends FilterTable<T> {
+		private Seq<Runnable> toRuns;
+		Seq<Runnable> toRuns() {
+			if (toRuns == null) toRuns = new Seq<>();
+			return toRuns;
+		}
+		public LazyTable(Cons<LazyTable<T>> cons) {
+			super(cons);
+		}
+		public void act(float delta) {
+			super.act(delta);
+			toRuns().each(Runnable::run);
+			toRuns().clear();
+		}
+		public void addRun(Runnable run) {
+			toRuns().add(run);
+		}
+	}
 
-	static class ActionComp implements Cons<FilterTable<String>> {
-		final        Element      element   = new Image();
-		static       MethodHandle init      = Constants.nl(() -> InitMethodHandle.findInit(Image.class.getConstructor()));
-		static final Seq<String>  blackList = Seq.with("time", "began", "complete", "lastPercent", "color",
+
+	static class ActionComp implements Cons<LazyTable<String>> {
+		final Element element = new Image();
+		MethodHandle init = Constants.nl(() -> InitMethodHandle.findInit(Image.class.getConstructor()));
+		final Seq<String> blackList = Seq.with("time", "began", "complete", "lastPercent", "color",
 		 "start",
 		 "startR", "startG", "startB", "startA",
 		 "startX", "startY");
 
-		public void get(FilterTable<String> cont) {
+		public void get(LazyTable<String> cont) {
 			cont.center();
 			Cell<Element> cell = cont.add(element).size(64).pad(24);
 			cont.row();

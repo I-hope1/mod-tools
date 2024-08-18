@@ -12,7 +12,7 @@ import static modtools.ui.comp.limit.Limit.isVisible;
 
 
 public class LimitTable extends Table implements Limit {
-	public LimitTable() {}
+	public LimitTable() { }
 	public LimitTable(Drawable background) {
 		super(background);
 	}
@@ -86,11 +86,14 @@ public class LimitTable extends Table implements Limit {
 	public Cell<Label> add(CharSequence text) {
 		return add(new LimitLabel(text));
 	}
+
 	public void updateVisibility() {
+		super.updateVisibility();
+
 		visible = isVisible(this);
 		children.each(t -> {
 			if (t instanceof Limit) return;
-			t.visible = isVisible(t);
+			t.updateVisibility();
 		});
 	}
 }

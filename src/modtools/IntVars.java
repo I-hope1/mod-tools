@@ -26,6 +26,7 @@ public class IntVars {
 	public static final MouseVec mouseVec    = new MouseVec();
 	public static final Vec2     mouseWorld  = new Vec2();
 	public static final int      javaVersion = getVersion();
+
 	private static int getVersion() {
 		String version = System.getProperty("java.version");
 		if (version.startsWith("1.")) {

@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 public class FilterTable<E> extends LimitTable {
 	public FilterTable() { }
 	@SuppressWarnings("rawtypes")
-	public FilterTable(Cons<FilterTable<E>> cons) {
+	public FilterTable(Cons<? extends FilterTable<E>> cons) {
 		super((Cons) cons);
 	}
 	@SuppressWarnings("rawtypes")

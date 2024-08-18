@@ -11,16 +11,15 @@ import arc.scene.ui.*;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
 import arc.util.*;
-import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
+import modtools.content.ui.ReviewElement;
+import modtools.content.ui.ReviewElement.CellView;
 import modtools.ui.*;
 import modtools.ui.IntUI.ITooltip;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.IDisposable;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.utils.*;
-import modtools.content.ui.ReviewElement;
-import modtools.content.ui.ReviewElement.CellView;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.*;
@@ -28,7 +27,7 @@ import modtools.utils.ui.*;
 import java.lang.reflect.Field;
 
 import static modtools.ui.HopeStyles.defaultLabel;
-import static modtools.utils.Tools.*;
+import static modtools.utils.Tools.runT;
 import static modtools.utils.ui.FormatHelper.fixedAny;
 
 public class CellDetailsWindow extends Window implements IDisposable, CellView {
@@ -43,7 +42,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		this.cl = cell;
 		title.setText(() -> "Cell" + (cell.hasElement() ? ": " + ReviewElement.getElementName(cell.get()) : ""));
 
-		cont.table(Tex.pane, t -> {
+		cont.pane(HopeStyles.h_smallPane, t -> {
 			t.defaults().grow().uniformX();
 			t.add();
 			buildSetter(t, cell, "padTop");

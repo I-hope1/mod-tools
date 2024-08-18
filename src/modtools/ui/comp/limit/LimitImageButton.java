@@ -29,6 +29,7 @@ public class LimitImageButton extends ImageButton implements Limit {
 	}
 
 	public void updateVisibility() {
+		super.updateVisibility();
 		visible = Limit.isVisible(this);
 	}
 }

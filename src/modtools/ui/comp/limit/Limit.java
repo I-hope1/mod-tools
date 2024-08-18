@@ -7,26 +7,16 @@ import arc.scene.ui.ScrollPane;
 import modtools.utils.ElementUtils;
 
 public interface Limit {
-	/*static boolean isVisible(Element actor) {
-		Element elem = actor.parent;
-		while (!(elem instanceof ScrollPane)) {
-			elem = elem.parent;
-			if (elem == null) return false;
-		}
-		float w = actor.getWidth(), h = actor.getHeight();
-
-		actor.localToAscendantCoordinates(elem, Tmp.v1.set(0, 0));
-		if (Tmp.v1.x >= -w || Tmp.v1.y >= -h) return true;
-		actor.localToAscendantCoordinates(elem, Tmp.v2.set(w, h));
-		return Tmp.v1.x + Tmp.v2.x <= elem.getWidth() || Tmp.v2.x + Tmp.v2.y <= elem.getHeight();
-	}*/
-	Vec2       v1       = new Vec2(), v2 = new Vec2();
+	Vec2 v1 = new Vec2(), v2 = new Vec2();
 
 	static boolean isVisible(Element actor) {
 		ScrollPane pane = ElementUtils.findClosestPane(actor);
 		if (pane == null) return true;
 
+
 		float w = actor.getWidth(), h = actor.getHeight();
+
+		actor.localToAscendantCoordinates(pane, v1.set(0, 0));
 
 		/* 获取pane的绝对坐标 */
 		boolean computeIfOverStage = v1.x + pane.getWidth() > Core.graphics.getWidth()
@@ -42,7 +32,6 @@ public interface Limit {
 		}
 
 		/* 获取actor相对于pane的坐标 */
-		actor.localToAscendantCoordinates(pane, v1.set(0, 0));
 		return v1.x > -w && v1.y > -h &&
 		       v1.x < pane.getWidth() && v1.y < pane.getHeight();
 		// return v1.x > -w && v1.y > -h && v1.x < w + elem.getWidth() && v1.y < h + elem.getHeight();

@@ -133,6 +133,7 @@ public class ModTools extends Mod {
 		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();
 	}
+
 	private void loadInputAndUI() {
 		if (ui == null) return;
 		mod = mods.getMod(modName);

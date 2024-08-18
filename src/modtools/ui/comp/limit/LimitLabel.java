@@ -18,6 +18,7 @@ public class LimitLabel extends Label implements Limit {
 
 	@Override
 	public void updateVisibility() {
+		super.updateVisibility();
 		visible = isVisible(this);
 	}
 }

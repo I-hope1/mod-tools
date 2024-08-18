@@ -31,6 +31,8 @@ public class LimitTextButton extends TextButton implements Limit{
 	*/
 	@Override
 	public void updateVisibility() {
+		super.updateVisibility();
+
 		visible = isVisible(this);
 		// if (visible) draw();
 	}

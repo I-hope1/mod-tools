@@ -182,7 +182,7 @@ public class IntUI {
 	public static <T extends Element> SelectTable
 	showSelectTable(T button, Builder builder,
 	                boolean searchable) {
-		return showSelectTable(button, builder, searchable, Align.bottomLeft);
+		return showSelectTable(button, builder, searchable, Align.bottom);
 	}
 	/**
 	 * 弹出一个小窗，自己设置内容
@@ -706,6 +706,7 @@ public class IntUI {
 			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
 			show = () -> {
+				getManager().hideAll();
 				Table table = container;
 				if (table.getChildren().isEmpty()) contents.get(table);
 				table.pack();

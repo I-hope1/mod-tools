@@ -120,7 +120,7 @@ public class AllTutorial {
 			}
 		};
 		scene.root.getCaptureListeners().insert(0, listener);
-		LerpFun fun = new LerpFun(Interp.fastSlow, Interp.slowFast);
+		LerpFun fun = LerpFun.obtain(Interp.fastSlow, Interp.slowFast);
 		fun.register(0.07f);
 		JSFunc.applyDraw(() -> {
 			if (enableFocusMouse || fun.a > 0) {

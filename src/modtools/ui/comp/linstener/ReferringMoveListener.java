@@ -99,7 +99,7 @@ public class ReferringMoveListener extends MoveListener {
 			else res = prefValue;
 		}
 		if (res != UNSET) {
-			new LerpFun(Interp.linear).transform(element.parent).onUI().registerDispose(0.3f,
+			LerpFun.obtain(Interp.linear).transform(element.parent).onUI().registerDispose(0.3f,
 			 vertical ? _ -> Drawf.dashLine(lineColor, 0, prefValue, drawingValue, prefValue)
 			 : _ -> Drawf.dashLine(lineColor, prefValue, 0, prefValue, drawingValue)
 			);

@@ -17,7 +17,7 @@ import arc.scene.ui.layout.*;
 import arc.struct.ObjectSet;
 import arc.util.*;
 import arc.util.Timer.Task;
-import arc.util.pooling.Pool;
+import arc.util.pooling.*;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -25,12 +25,12 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.content.ui.ReviewElement;
 import modtools.struct.MySet;
-import modtools.ui.*;
+import modtools.ui.HopeStyles;
 import modtools.ui.TopGroup.TSettings;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.linstener.*;
-import modtools.ui.effect.*;
 import modtools.ui.effect.HopeFx.TranslateToAction;
+import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
 import modtools.utils.*;
@@ -149,12 +149,10 @@ public class Window extends Table implements Position {
 	public Window(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
 		super();
 
-		cont.setClip(true);
 		tapped(this::toFront);
 		touchable = titleTable.touchable/* = cont.touchable */ = Touchable.enabled;
 		titleTable.margin(0);
 		if ((IntVars.isDesktop()) && full) EventHelper.doubleClick(titleTable, null, this::toggleMaximize);
-		cont.margin(6f);
 		buttons.margin(0);
 		this.minWidth = minWidth * Scl.scl();
 		this.minHeight = minHeight * Scl.scl();
@@ -237,7 +235,7 @@ public class Window extends Table implements Position {
 			cancel_clearNonei, 32, this::hide)
 		 .padLeft(4f).padRight(4f)
 		 .get();
-		IntUI.addTooltipListener(closeButton, () -> IntUI.tips("window.resize"));
+		addTooltipListener(closeButton, () -> tips("window.resize"));
 		EventHelper.longPressOrRclick(
 		 closeButton, _ -> {
 			 if (resize[0] == null) resize[0] = getResizeFillTable();
@@ -306,8 +304,15 @@ public class Window extends Table implements Position {
 		}
 		return hit;
 	}
+	private BindCell contCell;
 	private void setup() {
-		add(cont).name("cont").grow().top().row();
+		if (contCell != null) {
+			contCell.build();
+		} else {
+			contCell = BindCell.of(add(cont).name("cont").grow().top());
+			// ElementUtils.hideBarIfValid((ScrollPane) contCell.el);
+			row();
+		}
 		if (!noButtons) add(buttons).name("buttons").top().growX().row();
 		titleTable.toFront();
 	}
@@ -433,7 +438,8 @@ public class Window extends Table implements Position {
 
 	/**
 	 * 如果实现了{@link IDisposable}接口，自动show
-	 * @see Window#Window(String, float, float, boolean, boolean)  */
+	 * @see Window#Window(String, float, float, boolean, boolean)
+	 */
 	public Window show() {
 		if (this instanceof IDisposable && !Vars.mobile) {
 			moveToMouse();
@@ -558,8 +564,7 @@ public class Window extends Table implements Position {
 			 getMinWidth(), topHeight);
 
 			addAction(Actions.after(Actions.run(() -> {
-				getCell(cont).set(BindCell.UNSET_CELL);
-				cont.remove();
+				contCell.remove();
 				if (!noButtons) Tools.runLoggedException(() -> {
 					getCell(buttons).set(BindCell.UNSET_CELL);
 					buttons.remove();
@@ -655,7 +660,7 @@ public class Window extends Table implements Position {
 
 		oldTransform.set(Draw.trans());
 		Tools.runLoggedException(super::drawChildren, () -> {
-			 /* draw错误捕获 */
+			/* draw错误捕获 */
 			unexpectedDrawException = true;
 			children.end();
 
@@ -741,6 +746,7 @@ public class Window extends Table implements Position {
 	public interface IDisposable {
 		default void clearAll() {
 			if (!(this instanceof Group g)) return;
+			if (this instanceof Window w) Pools.free(w.contCell);
 			g.find(el -> {
 				if (el instanceof Table) {
 					Core.app.post(el::clear);
@@ -861,7 +867,7 @@ public class Window extends Table implements Position {
 		private void applyAction(float toValue) {
 			if (last != null) {
 				titleTable.removeAction(last);
-			} else last = Actions.action(TranslateToAction.class, HopeFx.TranslateToAction::new);
+			} else last = Actions.action(TranslateToAction.class, TranslateToAction::new);
 			last.reset();
 			last.setTime(0);
 			last.setTranslation(0, toValue);

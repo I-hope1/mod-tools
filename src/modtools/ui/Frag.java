@@ -118,7 +118,7 @@ public class Frag extends Table {
 			float       finalAngle = angle;
 			angle -= angleReduction;
 
-			new LerpFun(Interp.smooth).onUI().registerDispose(1 / 24f, f -> {
+			LerpFun.obtain(Interp.smooth).onUI().registerDispose(1 / 24f, f -> {
 				float rotation1 = Mathf.lerp(0, finalAngle, f);
 				// image.setRotation(rotation1);
 				float radius = Mathf.lerp(0, hoverRadius, f);

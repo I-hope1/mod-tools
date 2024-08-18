@@ -74,7 +74,7 @@ public class HopeFx {
 	}
 	public static void changedFx(Element element, DrawExecutor executor) {
 		// if (true) return;
-		all.get(element, () -> new LerpFun(Interp.fastSlow)
+		all.get(element, () -> LerpFun.obtain(Interp.fastSlow)
 		 // 1 -> 0
 		 .rev().transform(element).on(executor.drawTaskSet()).registerDispose(0.05f, fin -> {
 			 if (!element.visible || element.getScene() == null) return;
@@ -111,12 +111,15 @@ public class HopeFx {
 			 // float fout = 1 - fin;
 			 Fill.crect(x, y, width, height);
 
-			/* Draw.color(Pal.powerLight, fout);
-			Angles.randLenVectors(new Rand().nextInt(), 4, element.getWidth(), (x, __) -> {
-				Angles.randLenVectors(new Rand().nextInt(), 4, element.getHeight(), (___, y) -> {
-					Fill.circle(e.x + x, e.y + y, fin * 2);
-				});
-			}); */
+			 Draw.color();
+			 /* Draw.color(Pal.powerLight, 1 / fin);
+			 float centerX = x + width / 2f;
+			 float centerY = y + height / 2f;
+			 Angles.randLenVectors(new Rand().nextInt(), 4, element.getWidth(), (x1, __) -> {
+				 Angles.randLenVectors(new Rand().nextInt(), 4, element.getHeight(), (___, y1) -> {
+					 Fill.circle(centerX + x1, centerY + y1, fin * 2);
+				 });
+			 }); */
 		 }).onDispose(() -> all.remove(element))).back(0.8f);
 	}
 	/* public static void drawLine(boolean vertical, ) {

@@ -53,9 +53,9 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 	/** pad 8 */
-	public static final TextureRegionDrawable emptyui = new EmptyDrawable(8);
+	public static final Drawable emptyui = new EmptyDrawable(8);
 	/** pad 0 */
-	public static final TextureRegionDrawable noneui  = new EmptyDrawable(0);
+	public static final Drawable noneui  = new EmptyDrawable(0);
 
 	public static final float DEFAULT_WIDTH = 180;
 	public static final float MAX_OFF       = 35f;
@@ -849,13 +849,7 @@ public class IntUI {
 		public void init() {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
 			top().add(pane).grow().pad(0f).top();
-			pane.setScrollingDisabled(true, false);
-			pane.setOverscroll(false, false);
-			pane.update(() -> {
-				if (pane.getPrefHeight() == pane.getHeight()) {
-					pane.setScrollingDisabled(true, true);
-				}
-			});
+			ElementUtils.hideBarIfValid(pane);
 			pack();
 		}
 		Hitter hitter = new Hitter(this::hideInternal);
@@ -914,12 +908,7 @@ public class IntUI {
 		}
 	}
 
-	private static class EmptyDrawable extends TextureRegionDrawable {
-		public void draw(float x, float y, float width, float height) {
-		}
-		public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
-		                 float scaleY, float rotation) {
-		}
+	private static class EmptyDrawable extends BaseDrawable {
 		public final float pad;
 		public EmptyDrawable(float pad) {
 			this.pad = pad;

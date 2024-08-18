@@ -2,10 +2,11 @@ package modtools.ui.style;
 
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
-import arc.scene.style.Drawable;
+import arc.scene.style.*;
+import arc.util.*;
 import modtools.utils.ui.FormatHelper;
 
-public class DelegatingDrawable implements Drawable {
+public class DelegatingDrawable extends BaseDrawable {
 	public Drawable drawable;
 	public Color    color;
 	public DelegatingDrawable(Drawable drawable, Color color) {
@@ -22,8 +23,13 @@ public class DelegatingDrawable implements Drawable {
 	public void draw(float x, float y, float originX, float originY, float width, float height, float scaleX,
 	                 float scaleY, float rotation) {
 		if (drawable == null) return;
-		Draw.color(Draw.getColor().mul(color));
+		Draw.color(Tmp.c1.set(color).mul(Draw.getColor()).toFloatBits());
 		drawable.draw(x, y, originX, originY, width, height, scaleX, scaleY, rotation);
+	}
+	public void draw(float x, float y, float width, float height) {
+		if (drawable == null) return;
+		Draw.color(Tmp.c1.set(color).mul(Draw.getColor()).toFloatBits());
+		drawable.draw(x, y, width, height);
 	}
 	public float getLeftWidth() {
 		return drawable.getLeftWidth();
@@ -60,11 +66,6 @@ public class DelegatingDrawable implements Drawable {
 	}
 	public void setMinHeight(float minHeight) {
 		drawable.setMinHeight(minHeight);
-	}
-	public void draw(float x, float y, float width, float height) {
-		if (drawable == null) return;
-		Draw.color(Draw.getColor().mul(color));
-		drawable.draw(x, y, width, height);
 	}
 
 	public String toString() {

@@ -176,6 +176,7 @@ public class ReviewElement extends Content {
 		if (cl != null) {
 			drawPadding(elem, vec2, cl);
 		}
+		Draw.color();
 	}
 	public static void drawPadding(Element elem, Vec2 vec2, Cell<?> cl) {
 		float padLeft = Reflect.get(Cell.class, cl, "padLeft"),
@@ -197,6 +198,8 @@ public class ReviewElement extends Content {
 		drawMarginOrPad(vec2, table, false,
 		 table.getMarginLeft(), table.getMarginTop(),
 		 table.getMarginRight(), table.getMarginBottom());
+
+		Draw.color();
 	}
 	/** @param pad true respect 外边距 */
 	private static void drawMarginOrPad(
@@ -254,6 +257,7 @@ public class ReviewElement extends Content {
 		Draw.color(ColorFul.color);
 		Lines.stroke(3f);
 		Lines.line(mouseVec.x, mouseVec.y, vec2.x, vec2.y);
+		Draw.color();
 	}
 
 	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
@@ -292,7 +296,6 @@ public class ReviewElement extends Content {
 
 		public ReviewElementWindow() {
 			super(review_element.localizedName(), 20, 160, true);
-			getCell(cont).maxWidth(Core.graphics.getWidth());
 
 			name = "ReviewElementWindow";
 
@@ -917,10 +920,11 @@ public class ReviewElement extends Content {
 		 styleLabel       = new Label(""),
 		 alignLabel       = new VLabel(valueScale, Color.sky),
 
-		colspanLabel  = new VLabel(valueScale, Color.lightGray),
-		 minSizeLabel = new Label(new SizeProv(() -> minSizeVec)),
-		 maxSizeLabel = new Label(new SizeProv(() -> maxSizeVec)),
-		 fillLabel    = new Label(""), expandLabel = new Label(""), uniformLabel = new Label("");
+		cellAlignLabel = new VLabel(valueScale, Color.sky),
+		 colspanLabel  = new VLabel(valueScale, Color.lightGray),
+		 minSizeLabel  = new Label(new SizeProv(() -> minSizeVec)),
+		 maxSizeLabel  = new Label(new SizeProv(() -> maxSizeVec)),
+		 fillLabel     = new Label(""), expandLabel = new Label(""), uniformLabel = new Label("");
 		ColorContainer colorContainer = new ColorContainer(Color.white);
 
 		{
@@ -929,7 +933,7 @@ public class ReviewElement extends Content {
 		}
 
 		BindCell visibleCell, rotCell, translationCell, styleCell, alignCell,
-		 cellCell,
+		 cellCell, cellAlignCell,
 		 colspanCell, minSizeCell, maxSizeCell,
 		 fillCell, expandCell, uniformCell;
 
@@ -973,6 +977,9 @@ public class ReviewElement extends Content {
 		void align(Element element) {
 			if (alignCell.toggle1(element instanceof Table))
 				alignLabel.setText(FormatHelper.align(((Table) element).getAlign()));
+		}
+		void cellAlign(Cell<?> cell) {
+			cellAlignLabel.setText(FormatHelper.align(CellTools.align(cell)));
 		}
 		void colspan(Cell<?> cell) {
 			int colspan = CellTools.colspan(cell);
@@ -1041,6 +1048,7 @@ public class ReviewElement extends Content {
 			alignCell = buildKey(t, "Align", alignLabel);
 			cellCell = makeCell(t, ct -> {
 				Underline.of(ct, 1).pad(4, -1, 4, -1);
+				cellAlignCell = buildKey(ct, "CellAlign", cellAlignLabel);
 				colspanCell = buildKey(ct, "Colspan", colspanLabel);
 				minSizeCell = buildKey(ct, "MinSize", minSizeLabel);
 				maxSizeCell = buildKey(ct, "MaxSize", maxSizeLabel);
@@ -1103,6 +1111,7 @@ public class ReviewElement extends Content {
 				Cell<?> cell = null;
 				if (elem.parent instanceof Table parent) cell = parent.getCell(elem);
 				if (!info.cellCell.toggle1(cell != null)) break l;
+				info.cellAlign(cell);
 				info.colspan(cell);
 				info.minSize(cell);
 				info.maxSize(cell);

@@ -130,7 +130,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			vec2 = Tmp.v1.set(0, 0);
 		} else return;
 
-		Draw.color(Color.white);
+		Draw.color();
 		Draw.alpha(0.7f);
 		ScreenSampler.pause();
 		drawPad(drawPadElem, vec2);
@@ -161,6 +161,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		Lines.line(mouse.x, mouse.y,
 		 (right ? 0 : selected.getWidth()) + Tmp.v1.x,
 		 (top ? 0 : selected.getHeight()) + Tmp.v1.y);
+		Draw.color();
 	}
 
 

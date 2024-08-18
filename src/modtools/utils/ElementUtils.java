@@ -70,6 +70,13 @@ public interface ElementUtils {
 	static boolean checkInStage(Vec2 pos) {
 		return Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(pos);
 	}
+	static void hideBarIfValid(ScrollPane pane) {
+		pane.setScrollingDisabled(true, false);
+		pane.setOverscroll(false, false);
+		pane.update(() -> {
+			pane.setScrollingDisabled(true, pane.getHeight() == pane.getPrefHeight());
+		});
+	}
 
 	class $ {
 		static final Vec2 v1 = new Vec2();

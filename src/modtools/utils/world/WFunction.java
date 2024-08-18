@@ -287,7 +287,7 @@ public abstract class WFunction<T> {
 		}
 		executor.submit(() -> Tools.each(list, Tools.consT(t -> {
 			if (t == null) return;
-			new LerpFun(Interp.fastSlow).onWorld().rev()
+			LerpFun.obtain(Interp.fastSlow).onWorld().rev()
 			 .registerDispose(1 / 24f, fin -> {
 				 Draw.color(Pal.accent);
 				 Vec2 pos = getPos(t);
@@ -295,6 +295,7 @@ public abstract class WFunction<T> {
 				 TextureRegion region = getRegion(t);
 				 Lines.square(pos.x, pos.y,
 					fin * Mathf.dst(region.width, region.height) / tilesize);
+				 Draw.color();
 			 });
 			Threads.sleep(0, 200000); // 0.2 ms
 			Core.app.post(() -> action.accept(t));

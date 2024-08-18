@@ -21,7 +21,6 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.comp.input.highlight.*;
-import modtools.ui.comp.input.highlight.Syntax.VirtualString;
 import modtools.utils.*;
 
 import java.util.regex.Pattern;
@@ -276,22 +275,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 			font.setColor(lastColor);
 			font.getData().markupEnabled = had;
-		}
-
-		private void drawVirtualText(Font font) {
-			VirtualString virtualString = syntax.virtualString;
-			if (virtualString != null && virtualString.text != null) {
-				FontCache cache = font.getCache();
-				cache.getColor().set(virtualString.color).mulA(alpha());
-				if (cache.getColor().a == 0) return;
-				float x1 = getRelativeX(virtualString.index);
-				float y1 = getRelativeY(virtualString.index) + font.getLineHeight();
-				// Log.info("(@, @)", x1, y1);
-				GlyphLayout layout = cache.setText(virtualString.text, x1, y1);
-				Draw.color(Color.gray, 0.8f);
-				Fill.crect(x1, y1 + 5, layout.width, -layout.height - 10);
-				cache.draw();
-			}
 		}
 
 		float offsetX, offsetY, baseOffsetX;

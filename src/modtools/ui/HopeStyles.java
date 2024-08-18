@@ -11,27 +11,27 @@ import arc.scene.ui.Slider.SliderStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Scl;
-import arc.util.*;
-import mindustry.gen.Tex;
+import arc.util.Tmp;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ModTools;
+import modtools.ui.comp.Window;
 import modtools.utils.reflect.FieldUtils;
 
 import java.util.Arrays;
 
 import static mindustry.gen.Tex.*;
 import static mindustry.ui.Styles.*;
-import static modtools.ui.gen.HopeIcons.*;
 import static modtools.ui.IntUI.whiteui;
+import static modtools.ui.gen.HopeIcons.*;
 
 @SuppressWarnings("SpellCheckingInspection")
 public class HopeStyles {
 	public static final TextButtonStyle blackt;
 	public static final ButtonStyle     clearb;
-	/** @see IntUI#emptyui  */
-	public static final Drawable        none     = whiteui.tint(0f, 0f, 0f, 0.01f);
-	public static final Drawable        hflatOver = copyFrom((TextureRegionDrawable) Styles.flatOver, 12);
+	/** @see IntUI#emptyui */
+	public static final Drawable        none      = whiteui.tint(0f, 0f, 0f, 0.01f);
+	public static final Drawable        hflatOver = copyFrom((TextureRegionDrawable) flatOver, 12);
 
 	/** 默认使用等宽字体，没有的话使用默认字体 */
 	public static final LabelStyle defaultLabel;
@@ -50,11 +50,11 @@ public class HopeStyles {
 		 font = Fonts.def;
 		 fontColor = Color.white;
 		 disabledFontColor = Color.gray;
-		 up = Tex.pane;
+		 up = pane;
 		 down = hflatOver;
 		 over = hflatOver;
 		 checked = hflatOver;
-		 disabled = Styles.black;
+		 disabled = black;
 	 }};
 	public static ButtonStyle
 	 hope_defaultb;
@@ -64,6 +64,9 @@ public class HopeStyles {
 	 hope_defaultCheck;
 	public static TextFieldStyle
 	 defaultMultiArea;
+
+	public static ScrollPaneStyle
+	 h_smallPane;
 
 	static void loadHopeStyles() {
 		hope_clearNonei = new ImageButtonStyle(clearNonei) {{
@@ -111,6 +114,9 @@ public class HopeStyles {
 			disabledFontColor = Color.gray;
 			Arrays.stream(CheckBoxStyle.class.getDeclaredFields())
 			 .forEach(f -> setSize(FieldUtils.getOrNull(f, this)));
+		}};
+		h_smallPane = new ScrollPaneStyle(smallPane) {{
+			background = copyFrom(Window.myPane, 8);
 		}};
 		/* hope_defaultSlider = new SliderStyle() {{
 			background = sliderBack;
@@ -224,12 +230,12 @@ public class HopeStyles {
 	static {
 		blackt = new TextButtonStyle(Styles.cleart) {{
 			up = pane;
-			over = Tex.flatDownBase;
+			over = flatDownBase;
 			down = flatDown;
 		}};
-		clearb = new ButtonStyle(Styles.defaultb) {{
+		clearb = new ButtonStyle(defaultb) {{
 			up = Styles.none;
-			down = over = Styles.flatOver;
+			down = over = flatOver;
 		}};
 
 		defaultLabel = new LabelStyle(Styles.defaultLabel) {{
@@ -250,8 +256,8 @@ public class HopeStyles {
 		loadHopeStyles();
 	}
 
-	static Drawable copyFrom(TextureRegionDrawable drawable, float pad) {
-		TextureRegionDrawable res = new TextureRegionDrawable(drawable) {
+	static Drawable copyFrom(BaseDrawable drawable, float pad) {
+		BaseDrawable res = new BaseDrawable(drawable) {
 			public void draw(float x, float y, float width, float height) {
 				drawable.draw(x, y, width, height);
 			}

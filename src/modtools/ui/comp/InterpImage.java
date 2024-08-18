@@ -56,5 +56,7 @@ public class InterpImage extends Element {
 			lastX = next.x;
 			lastY = next.y;
 		}
+
+		Draw.color();
 	}
 }

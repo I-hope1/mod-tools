@@ -167,7 +167,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		topTable.table(t -> {
 			t.left().defaults().left();
 			t.pane(t0 -> t0.left().add(clazz.getTypeName(), defaultLabel).left())
-			 .with(p -> p.setScrollingDisabledY(true)).grow().uniform();
+			 .with(p -> p.setScrollingDisabledY(true)).grow();
 			t.button(Icon.copySmall, Styles.cleari, () -> {
 				copyText(clazz.getTypeName(), t);
 			}).size(32);
@@ -190,7 +190,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 	public SearchType searchType = SearchType.name;
 	public enum SearchType {
-		name((p, m) -> find(p, m.getName())),
+		name((p, member) -> find(p, member.getName())),
 		fieldTypeOrReturnType((p, member) -> find(p, (member instanceof Field f ? f.getType() :
 		 member instanceof Method m ? m.getReturnType() :
 			member instanceof ClassMember cs ? cs.getDelegator() : null))),

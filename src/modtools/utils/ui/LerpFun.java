@@ -8,6 +8,8 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.struct.Seq;
 import arc.util.*;
+import arc.util.pooling.*;
+import arc.util.pooling.Pool.Poolable;
 import mindustry.graphics.Layer;
 import modtools.struct.TaskSet;
 import modtools.utils.*;
@@ -15,16 +17,30 @@ import modtools.utils.world.WorldDraw;
 
 import static modtools.ui.IntUI.topGroup;
 
-public class LerpFun {
+public class LerpFun implements Poolable {
 	public Interp in, out;
 	public float last;
-	public LerpFun(Interp fun) {
-		this(fun, fun);
+	private LerpFun() {
 	}
-
-	public LerpFun(Interp in, Interp out) {
-		this.in = in;
-		this.out = out;
+	public static LerpFun obtain(Interp fun) {
+		return obtain(fun ,fun);
+	}
+	public static LerpFun obtain(Interp in, Interp out) {
+		LerpFun lerpFun = Pools.obtain(LerpFun.class, LerpFun::new);
+		lerpFun.in = in;
+		lerpFun.out = out;
+		return lerpFun;
+	}
+	public void reset() {
+		in = null;
+		out = null;
+		a = 0;
+		applyV = 0;
+		enabled = false;
+		drawSeq = null;
+		reverse = false;
+		transElement = null;
+		onDispose = null;
 	}
 	public float apply(float a) {
 		return (last <= a ? in : out).apply(last = a);
@@ -46,6 +62,7 @@ public class LerpFun {
 			if (floatc != null) floatc.get(applyV);
 		});
 	}
+
 	public static WorldDraw worldDraw = new WorldDraw(Layer.overlayUI + 2f, "lerp");
 	public static TaskSet   uiDraw    = new TaskSet();
 
@@ -64,6 +81,7 @@ public class LerpFun {
 		drawSeq = uiDraw;
 		return this;
 	}
+
 	public Element transElement;
 	public LerpFun transform(Element element) {
 		this.transElement = element;
@@ -98,8 +116,11 @@ public class LerpFun {
 			if (transElement != null) {
 				Draw.proj(Tmp.m1);
 			}
-			if (reverse ? a > 0 : a < 1) return true;
+			if (reverse ? a > 0 : a < 1) {
+				return true;
+			}
 			if (onDispose != null) onDispose.run();
+			Pools.free(this);
 			return false;
 		});
 		return this;

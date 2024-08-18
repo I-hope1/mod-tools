@@ -99,7 +99,7 @@ public class MyFonts {
 		return font;
 	}
 
-	/** 常规写法  */
+	/** 常规写法 */
 	static void loadFont() {
 		Field field = FieldUtils.getFieldAccessOrThrow(AssetLoader.class, "resolver");
 		FieldUtils.setValue(field,
@@ -142,6 +142,8 @@ public class MyFonts {
 			Fill.crect(getX() + vertices[0] - 1,
 			 getY() + vertices[1] - 4 + (strikethrough ? layout.height / 2f : 0),
 			 Math.max(4, getLayouts().sumf(l -> l.width) + 1), 2);
+
+			Draw.color();
 		}
 	}
 

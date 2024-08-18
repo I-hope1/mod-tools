@@ -16,7 +16,7 @@ import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.model.JavacElements;
-import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
@@ -41,16 +41,18 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	static        Context               context;
-	static        ClassFinder           classFinder;
-	static        Symtab                syms;
-	static        Enter                 enter;
-	static        JavacTrees            trees;
-	static        Names                 ns;
-	static        JavacElements         elements;
-	static        ModuleFinder          moduleFinder;
-	static        DefaultToStatic       defaultToStatic;
-	public static DesugarStringTemplate desugarStringTemplate;
+	static Context               context;
+	static ClassFinder           classFinder;
+	static Symtab                syms;
+	static Enter                 enter;
+	static JavacTrees            trees;
+	static Names                 ns;
+	static TreeMaker             maker;
+	static JavacElements         elements;
+	static ModuleFinder          moduleFinder;
+	static DefaultToStatic       defaultToStatic;
+	static DesugarStringTemplate desugarStringTemplate;
+	static DesugarRecord         desugarRecord;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -60,10 +62,12 @@ public class Replace {
 		enter = Enter.instance(context);
 		trees = JavacTrees.instance(context);
 		ns = Names.instance(context);
+		maker = TreeMaker.instance(context);
 		elements = JavacElements.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
 		defaultToStatic = new DefaultToStatic(context);
 		desugarStringTemplate = new DesugarStringTemplate(context);
+		desugarRecord = new DesugarRecord();
 
 		try {
 			extendingFunc0();
@@ -425,6 +429,7 @@ public class Replace {
 				JCTree            cdef = trees.getTree(element);
 				defaultToStatic.translateTopLevelClass(unit, cdef);
 				desugarStringTemplate.translateTopLevelClass(unit, cdef);
+				desugarRecord.translateTopLevelClass(unit, cdef);
 			});
 		} catch (Throwable e) {
 			err(e);

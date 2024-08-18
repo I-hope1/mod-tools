@@ -16,6 +16,8 @@ public class HopeProcessor {
 	 **/
 	public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
 
+	record AA(Object a) {
+	};
 	public static void main() {
 		String aa = "10203";
 		int  a   = 1, b = 2;

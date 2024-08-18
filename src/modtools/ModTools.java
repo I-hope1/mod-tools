@@ -272,5 +272,10 @@ public class ModTools extends Mod {
 		return isDisposed;
 	}
 
+	static {
+
+	}
+
 	static class UnexpectedPlatform extends RuntimeException { }
+
 }

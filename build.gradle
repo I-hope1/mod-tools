@@ -9,6 +9,7 @@ allprojects {
 		buildDir0 = layout.buildDirectory.getAsFile().get()
 	}
 	tasks.withType(JavaCompile) {
+		options.incremental = true
 		options.encoding = 'UTF-8'
 		sourceCompatibility = 21
 		targetCompatibility = 21
@@ -68,7 +69,8 @@ dependencies {
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-android:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-sdl:$mindustryVersion"
-	// annotationProcessor 'com.github.Anuken:jabel:0.9.0'
+//	compileOnly 'com.github.bsideup:jabel:1.0.1'
+//	annotationProcessor 'com.github.bsideup:jabel:1.0.1'
 //	compileOnly("com.github.Anuken.rhino::$mindustryVersion")
 }
 
@@ -132,7 +134,7 @@ task playGame(type: JavaExec) {
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
 	args = [
-	        '-testMobile'
+			'-testMobile'
 //			'-debug'
 	]
 }

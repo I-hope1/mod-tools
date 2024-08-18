@@ -13,7 +13,6 @@ public interface Limit {
 		ScrollPane pane = ElementUtils.findClosestPane(actor);
 		if (pane == null) return true;
 
-
 		float w = actor.getWidth(), h = actor.getHeight();
 
 		actor.localToAscendantCoordinates(pane, v1.set(0, 0));

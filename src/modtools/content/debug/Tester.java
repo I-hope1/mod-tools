@@ -209,17 +209,17 @@ public class Tester extends Content {
 		ui.cont.update(() -> ((JSSyntax) textarea.syntax).enableJSProp = js_prop.enabled());
 
 		Table center = _cont.table(t -> {
-			t.defaults()
-			 .padRight(4f).padRight(4f)
-			 .size(45, 42);
+			t.defaults().padRight(4f).size(42);
 
-			t.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::left);
+			t.button(Icon.upOpenSmall, HopeStyles.clearNonei, area::fireUp);
+			t.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::fireLeft);
 			t.button("@ok", HopeStyles.flatBordert, () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
 				compileAndExec(IntVars.EMPTY_RUN);
 			}).width(64).disabled(_ -> !finished);
-			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::right);
+			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::fireRight);
+			t.button(Icon.downOpenSmall, HopeStyles.clearNonei, area::fireDown);
 			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
 			t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
@@ -242,11 +242,8 @@ public class Tester extends Content {
 				p.left().top();
 				buildLog(p);
 				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
-				p.add(new ClearValueLabel<>(Object.class, () -> res, null) {
-					 protected boolean autoUpdate() {
-						 return true;
-					 }
-				 }).wrap().style(HopeStyles.defaultLabel)
+				p.add(new ClearValueLabel<>(Object.class, () -> res, null))
+				 .wrap().style(HopeStyles.defaultLabel)
 				 .labelAlign(Align.left).growX();
 			}).grow().with(p -> p.setScrollingDisabled(true, false));
 		}).growX().touchable(Touchable.enabled);
@@ -282,10 +279,6 @@ public class Tester extends Content {
 				logCell.height(val / Scl.scl());
 				invalid.run();
 				pane.setScrollingDisabled(true, true);
-			}
-			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				super.touchUp(event, x, y, pointer, button);
-				// pane.setScrollingDisabled(true, false);
 			}
 		};
 		logSclListener.offset = center.getPrefHeight();
@@ -930,6 +923,10 @@ public class Tester extends Content {
 						area.paste(content, false);
 						area.setSelectionUncheck(s, s + content.length());
 					}
+				}
+				case escape -> {
+					cancel = true;
+					area.paste("", false);
 				}
 				default -> syntax.virtualString = null;
 			}

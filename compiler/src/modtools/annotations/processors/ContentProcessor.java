@@ -1,4 +1,4 @@
-package modtools.annotations.processors;
+  package modtools.annotations.processors;
 
 
 import com.google.auto.service.AutoService;
@@ -31,7 +31,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	private static final String FIELD_PREFIX = "f_";
 
-	public void init() throws Throwable {
+	public void lazyInit() throws Throwable {
 		nameSetting = ns("Settings");
 		mySettingsClass = C_MySettings();
 		dataClass = C_Data();

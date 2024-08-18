@@ -491,14 +491,8 @@ public class ShowUIList extends Content {
 			}).grow();
 		}
 		private <T extends Action> void applyToAction(Class<T> actionClass) {
-			Pool<T> pool = Pools.get(actionClass, () -> {
-				try {
-					return actionClass.getConstructor().newInstance();
-				} catch (NoSuchMethodException | InvocationTargetException | InstantiationException |
-				         IllegalAccessException e) {
-					throw new RuntimeException(e);
-				}
-			});
+			Pool<T> pool = Pools.get(actionClass, () -> Reflect.make(actionClass.getName()));
+
 			T action = pool.obtain();
 			action.setPool(pool);
 			action.reset();

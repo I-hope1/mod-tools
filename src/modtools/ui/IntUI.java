@@ -706,7 +706,6 @@ public class IntUI {
 			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
 			show = () -> {
-				getManager().hideAll();
 				Table table = container;
 				if (table.getChildren().isEmpty()) contents.get(table);
 				table.pack();
@@ -714,6 +713,10 @@ public class IntUI {
 
 				table.margin(10, 10, 10, 10);
 			};
+		}
+		public void show(Element element, float x, float y) {
+			getManager().hideAll();
+			super.show(element, x, y);
 		}
 		public ITooltip(Prov<CharSequence> prov) {
 			this(t -> t.background(Styles.black6).margin(6f).label(prov));

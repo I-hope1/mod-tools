@@ -383,13 +383,21 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return new MyTextAreaListener();
 		}
 
-		public void left() {
+		public void fireUp() {
+			requestKeyboard();
+			if (Core.scene.keyDown(KeyCode.up)) Core.scene.keyUp(KeyCode.up);
+		}
+		public void fireLeft() {
 			requestKeyboard();
 			if (Core.scene.keyDown(KeyCode.left)) Core.scene.keyUp(KeyCode.left);
 		}
-		public void right() {
+		public void fireRight() {
 			requestKeyboard();
 			if (Core.scene.keyDown(KeyCode.right)) Core.scene.keyUp(KeyCode.right);
+		}
+		public void fireDown() {
+			requestKeyboard();
+			if (Core.scene.keyDown(KeyCode.down)) Core.scene.keyUp(KeyCode.down);
 		}
 
 		public String insert(int position, CharSequence text, String to) {

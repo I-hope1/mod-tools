@@ -301,6 +301,7 @@ public class ReviewElement extends Content {
 
 			pane.top().left().defaults().left().top();
 			cont.table(t -> {
+				t.defaults().size(35).padLeft(3f);
 				Button[] bs = {null};
 				bs[0] = t.button("@reviewElement.parent", Icon.upSmall, HopeStyles.flatBordert, () -> {
 					 Runnable go = () -> {
@@ -317,26 +318,25 @@ public class ReviewElement extends Content {
 				 })
 				 .disabled(_ -> element == null || element.parent == null)
 				 .with(b -> b.getLabel().setFontScale(0.9f))
-				 .size(130, 35)
-				 .padRight(3f).get();
+				 .size(130, 35).get();
+
 				t.button(Icon.copySmall, HopeStyles.clearNonei, 28, () -> {
 					 var window = new ReviewElementWindow();
 					 window.pattern = pattern;
 					 window.show(element);
 					 window.shown(() -> window.setSize(width, height));
-				 })
-				 .size(35).padRight(3f);
-				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element))
-				 .size(35).padRight(3f);
+				 });
+				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element));
 				t.button(Icon.settingsSmall, HopeStyles.clearNonei, 28, () -> {
 					showSelectTableRB((p, _, _) -> {
 						p.background(Tex.pane);
 						SettingsBuilder.build(p);
 						SettingsBuilder.check("Draw Cell", b -> drawCell = b, () -> drawCell);
-						SettingsBuilder.check("Expand All", b -> drawCell = b, () -> drawCell);
+						// SettingsBuilder.check("Expand All", b -> drawCell = b, () -> drawCell);
 						SettingsBuilder.clearBuild();
 					}, false);
 				});
+				t.defaults().size(unset);
 				t.table(search -> {
 					search.image(Icon.zoomSmall).size(35);
 					search.field("", str -> rebuild(element, str))

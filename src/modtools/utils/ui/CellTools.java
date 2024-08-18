@@ -57,6 +57,9 @@ public interface CellTools {
 	static int align(Cell<?> cell) {
 		return Reflect.get(cell, f_align);
 	}
+	static void align(Cell<?> cell, int align) {
+		Reflect.set(cell, f_align, align);
+	}
 	static float padLeft(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadLeft);
 	}

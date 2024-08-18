@@ -64,9 +64,12 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			t.add();
 		}).colspan(2).growX().row();
 		cont.left().defaults().height(32).growX().left();
-		cont.add("Align: ").color(themeColor);
-		cont.label(() -> FormatHelper.align(CellTools.align(cell))).row();
 		cont.defaults().colspan(2);
+		ReviewElement.buildAlign(cont, () -> CellTools.align(cell), align -> {
+			CellTools.align(cell, align);
+			update(cell);
+		});
+		cont.row();
 		buildWithName(cont, cell, "minWidth");
 		buildWithName(cont, cell, "minHeight");
 		buildWithName(cont, cell, "maxWidth");
@@ -89,13 +92,6 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		fnButton("GrowX", style, cell::growX, true);
 		fnButton("GrowY", style, cell::growY, true);
 		cont.row();
-		fnButton("Left", style, cell::left, true);
-		fnButton("Right", style, cell::right, true);
-		cont.row();
-		fnButton("Top", style, cell::top, true);
-		fnButton("Bottom", style, cell::bottom, true);
-		cont.row();
-		fnButton("Center", style, cell::center, true);
 		checkboxField(cont, cell, "endRow");
 		cont.row();
 		// cont.table(Tex.pane, t -> {

@@ -24,7 +24,7 @@ public interface Limit {
 
 	static boolean isVisible(Element actor) {
 		ScrollPane pane = ElementUtils.findClosestPane(actor);
-		if (pane == null) return false;
+		if (pane == null) return true;
 
 		float w = actor.getWidth(), h = actor.getHeight();
 

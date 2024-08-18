@@ -49,6 +49,7 @@ import modtools.utils.MySettings.Data;
 import modtools.utils.search.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
+import modtools.utils.ui.ReflectTools.MarkedCode;
 
 import java.util.regex.Pattern;
 
@@ -1208,6 +1209,30 @@ public class ReviewElement extends Content {
 			case disabled -> DISABLED_COLOR;
 			case childrenOnly -> Pal.accent;
 		};
+	}
+
+	/** @see Align */
+	public enum AlignR implements MarkedCode {
+		Top(1),
+		Bottom(0),
+		Left(3),
+		Right(2);
+
+		public final int exclusive;
+		AlignR(int exclusive) {
+			this.exclusive = exclusive;
+		}
+
+		public int code() {
+			return ordinal() + 1;
+		}
+		public MarkedCode exclusive() {
+			return exclusive == -1 ? null : values()[exclusive];
+		}
+	}
+	public static void buildAlign(Table t, Intp alignProv, Intc alignCons) {
+		ReflectTools.addCodedBtn(t, "Align", 2, alignCons, alignProv, FormatHelper::align, AlignR.values())
+		 .width(unset);
 	}
 
 	/** 如果source元素有CellView接口，drawFocus按照下面来 */

@@ -222,22 +222,6 @@ public class Replace {
 		// Lower lower = Lower.instance(context);
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "lower", lower);
 		// setAccess(Gen.class, Gen.instance(context), "lower", lower);
-
-		// replaceAccess(Resolve.class,Resolve.instance(context), "resolveMethodCheck", "nilMethodCheck");
-
-		if (true) return;
-		// 忽略模块访问检查
-		Object prev = getAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper");
-		setAccess(Resolve.class, Resolve.instance(context), "basicLogResolveHelper",
-		 Proxy.newProxyInstance(Resolve.class.getClassLoader(), new Class[]{Class.forName("com.sun.tools.javac.comp.Resolve$LogResolveHelper")},
-			(proxy, method, args) -> {
-				if (method.getName().equals("resolveDiagnosticNeeded")) {
-					return false;
-				}
-				setAccessible(method);
-				return method.invoke(prev, args);
-			}
-		 ));
 	}
 	public static final HashSet<PackageSymbol> needExportedApi = new HashSet<>();
 	public static void fixSyntaxError() {
@@ -299,7 +283,7 @@ public class Replace {
 	private static void forcePreview() {
 		try {
 			forceEnablePreview0();
-		} catch (NoClassDefFoundError ignored) { }
+		} catch (NoClassDefFoundError | NoSuchMethodError _) { }
 	}
 
 	private static void forceEnablePreview0() {
@@ -308,7 +292,7 @@ public class Replace {
 			setAccess(Preview.class, preview, "enabled", true);
 		}
 		Lint.instance(context).suppress(LintCategory.PREVIEW);
-		Check.instance(context).disablePreviewCheck = true;
+		runIgnoredException(() -> Check.instance(context).disablePreviewCheck = true);
 		setAccess(Preview.class, preview, "sourcesWithPreviewFeatures", new HashSet<>() {
 			public boolean contains(Object o) {
 				return false;

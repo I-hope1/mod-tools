@@ -69,7 +69,7 @@ dependencies {
 	compileOnly "com.github.Anuken.Arc:backend-android:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-sdl:$mindustryVersion"
 	compileOnly "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
-	annotationProcessor 'com.github.Anuken:jabel:0.9.0'
+	// annotationProcessor 'com.github.Anuken:jabel:0.9.0'
 //	compileOnly("com.github.Anuken.rhino::$mindustryVersion")
 }
 

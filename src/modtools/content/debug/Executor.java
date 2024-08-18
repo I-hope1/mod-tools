@@ -73,7 +73,7 @@ public class Executor extends Content {
 		cont.top().defaults().top();
 		cont.addUpdateListenerIntp(() -> statusCode);
 		for (TaskNode node : children) {
-			cont.bind(() -> 1 << node.status.code());
+			cont.bind(() -> node.status.bit());
 			/* 布局
 			 * |-------|=========topImg===========|
 			 * |       |       |        |         |

@@ -4,7 +4,8 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.TextButton;
+import arc.scene.ui.layout.*;
 import arc.util.*;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.serialization.Json;
@@ -123,7 +124,7 @@ public interface ReflectTools {
 	}
 	/** @see Field#toGenericString() */
 	private static void getGenericSimpleTypeName(Type type, StringBuilder sb) {
-		if (type instanceof Class<?> cl)  {
+		if (type instanceof Class<?> cl) {
 			while (cl.isArray()) cl = cl.getComponentType();
 			sb.append(cl.getSimpleName());
 			return;
@@ -140,10 +141,10 @@ public interface ReflectTools {
 			sb.append(type.getTypeName());
 		}
 	}
-	/** @see sun.reflect.generics.reflectiveObjects.WildcardTypeImpl#toString()  */
+	/** @see sun.reflect.generics.reflectiveObjects.WildcardTypeImpl#toString() */
 	private static void wildcardToString(WildcardType type, StringBuilder sb) {
-		Type[]        lowerBounds = type.getLowerBounds();
-		Type[]        bounds      = lowerBounds;
+		Type[] lowerBounds = type.getLowerBounds();
+		Type[] bounds      = lowerBounds;
 
 		if (lowerBounds.length > 0) {
 			sb.append("? super ");
@@ -158,7 +159,7 @@ public interface ReflectTools {
 			}
 		}
 
-		StringJoiner sj = new StringJoiner(" & ");
+		StringJoiner  sj = new StringJoiner(" & ");
 		StringBuilder bs = new StringBuilder();
 		for (Type bound : bounds) {
 			bs.setLength(0);
@@ -268,18 +269,26 @@ public interface ReflectTools {
 
 	// modifier builder
 
-	static void addCodedBtn(
+	interface IntTf<T> {
+		T get(int i);
+	}
+	static Cell<TextButton> addCodedBtn(
 	 Table t, String text, int cols,
 	 Intc cons, Intp prov, MarkedCode... seq) {
-		t.button("", HopeStyles.flatt, null).with(tbtn -> {
+		return addCodedBtn(t, text, cols, cons, prov, i -> String.format("%X", (short) i), seq);
+	}
+	static Cell<TextButton> addCodedBtn(
+	 Table t, String text, int cols,
+	 Intc cons, Intp prov, IntTf<String> stringify, MarkedCode... seq) {
+		return t.button("", HopeStyles.flatt, null).with(tbtn -> {
 			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, _, _) -> {
 				buildModifier(p, cols, cons, prov, seq);
-			}, false, Align.bottom));
+			}, false, Align.top));
 			Table fill = tbtn.fill();
 			fill.top().add(text, 0.6f).growX().labelAlign(Align.left).color(Color.lightGray);
 			tbtn.getCell(fill).colspan(0);
 			tbtn.getCells().reverse();
-		}).size(85, 32).update(b -> b.setText(String.format("%X", (short) prov.get())));
+		}).size(85, 32).update(b -> b.setText(stringify.get(prov.get())));
 	}
 	static void buildModifier(Table p, int cols, Intc cons, Intp prov, MarkedCode... seq) {
 		p.button("All", HopeStyles.flatToggleMenut,
@@ -289,9 +298,14 @@ public interface ReflectTools {
 		 .row();
 		int c = 0;
 		for (var value : seq) {
-			int      bit      = 1 << value.code();
-			Runnable runnable = () -> cons.get(prov.get() ^ bit);
-			Drawable icon     = value.icon();
+			int bit = value.bit();
+			Runnable runnable = () -> {
+				int        i = prov.get() ^ bit;
+				MarkedCode exclusive;
+				if ((exclusive = value.exclusive()) != null) i &= ~exclusive.bit();
+				cons.get(i);
+			};
+			Drawable icon = value.icon();
 			(icon == null ? p.button(value.name(), Styles.flatToggleMenut, runnable)
 			 : p.button(value.name(), value.icon(), Styles.flatToggleMenut, 24, runnable))
 			 .size(120, 42)
@@ -300,10 +314,16 @@ public interface ReflectTools {
 		}
 	}
 	/** 具有code的接口 */
-	interface MarkedCode {
+	public interface MarkedCode {
 		int code();
 		String name();
 		default Drawable icon() {
+			return null;
+		}
+		default int bit() {
+			return 1 << code();
+		}
+		default MarkedCode exclusive() {
 			return null;
 		}
 	}

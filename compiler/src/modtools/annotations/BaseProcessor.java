@@ -61,6 +61,12 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			} catch (Throwable e) { err(e); }
 			return true;
 		}
+		if (!lazyInitial) {
+			lazyInitial = true;
+			try {
+				lazyInit();
+			} catch (Throwable e) { err(e); }
+		}
 		// 第一次
 		for (TypeElement annotation : annotations) {
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
@@ -70,10 +76,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			}
 		}
 		try {
-			if (!lazyInitial) {
-				lazyInitial = true;
-				lazyInit();
-			}
 			process();
 		} catch (Throwable e) { err(e); }
 
@@ -125,7 +127,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public void init() throws Throwable { }
 
 	boolean lazyInitial;
-	public void lazyInit() throws Throwable {}
+	public void lazyInit() throws Throwable { }
 
 
 	public static Element findSibling(Element sibling, String name, ElementKind kind) {

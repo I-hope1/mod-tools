@@ -236,7 +236,7 @@ public class IntUI {
 
 		table.setPosition(pos.x, pos.y, tableAlign);
 		// 在不遮挡lying的情况下，如果上面超出屏幕
-		if (!ylock && table.y + table.getHeight() > Core.graphics.getHeight() || table.y < 0) {
+		if (!ylock && (table.y + table.getHeight() > Core.graphics.getHeight() || table.y < 0)) {
 			int lyingAlign1 = Align.isTop(lyingAlign) ? lyingAlign & ~Align.top | Align.bottom : lyingAlign & ~Align.bottom | Align.top;
 			int tableAlign1 = Align.isTop(tableAlign) ? tableAlign & ~Align.top | Align.bottom : tableAlign & ~Align.bottom | Align.top;
 			ylock = true;
@@ -245,7 +245,7 @@ public class IntUI {
 		}
 
 		// 在不遮挡lying的情况下，如果右边超出屏幕
-		if (!xlock && table.x + table.getWidth() > Core.graphics.getWidth() || table.x < 0) {
+		if (!xlock && (table.x + table.getWidth() > Core.graphics.getWidth() || table.x < 0)) {
 			int lyingAlign1 = Align.isLeft(lyingAlign) ? lyingAlign & ~Align.left | Align.right : lyingAlign & ~Align.right | Align.left;
 			int tableAlign1 = Align.isLeft(tableAlign) ? tableAlign & ~Align.left | Align.right : tableAlign & ~Align.right | Align.left;
 			xlock = true;

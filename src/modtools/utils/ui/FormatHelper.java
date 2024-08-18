@@ -69,7 +69,7 @@ public class FormatHelper {
 			case childrenOnly -> "Children Only";
 		};
 	}
-	public static CharSequence align(int align) {
+	public static String align(int align) {
 		return Strings.capitalize(Align.toString(align).replace(',', '-'));
 	}
 	public static String color(Color color) {

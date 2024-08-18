@@ -51,7 +51,7 @@ public class ModuleOpenProc extends BaseProcessor<MethodSymbol> {
 			.collect(Collectors.joining())
 		 + "}catch(Exception e) {throw new RuntimeException(e);}}");
 
-		// println(methodDecl);
+		println(methodDecl);
 	}
 	public Set<Class<?>> getSupportedAnnotationTypes0() {
 		return Set.of(ModuleOpen.class);

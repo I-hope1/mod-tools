@@ -4,9 +4,7 @@ import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
-import com.sun.tools.javac.util.List;
 
-import java.util.*;
 import java.util.stream.Collectors;
 
 import static modtools.annotations.PrintHelper.SPrinter.*;
@@ -19,12 +17,15 @@ public class DesugarRecord extends TreeTranslator {
 	public void visitClassDef(JCClassDecl tree) {
 		super.visitClassDef(tree);
 		if ((tree.mods.flags & Flags.RECORD) == 0) return;
+		if (tree.type == null) {
+			tree.type = tree.sym.type;
+		}
 
 		maker.at(tree);
 		tree.mods.flags &= ~Flags.RECORD;
 		tree.sym.flags_field &= ~Flags.RECORD;
 		// tree.mods.flags |= Flags.FINAL;
-		Set<JCVariableDecl> fields = tree.defs.stream().filter(d -> d instanceof JCVariableDecl).map(d -> (JCVariableDecl) d).collect(Collectors.toSet());
+		java.util.List<JCVariableDecl> fields = tree.defs.stream().filter(d -> d instanceof JCVariableDecl).map(d -> (JCVariableDecl) d).toList();
 		// 将private设成public
 		fields.forEach(field -> {
 			field.mods.flags &= ~Flags.PRIVATE;
@@ -33,10 +34,13 @@ public class DesugarRecord extends TreeTranslator {
 
 		// 添加构造方法
 		tree.defs.stream().filter(d -> d instanceof JCMethodDecl).map(d -> (JCMethodDecl) d)
-		 .filter(m -> m.name.contentEquals(ns.init)).forEach(m -> {
+		 .filter(m -> m.name.contentEquals(ns.init)).findFirst().ifPresent(m -> {
 			 m.mods.flags &= ~(Flags.RECORD | Flags.GENERATEDCONSTR);
 			 m.sym.flags_field &= ~(Flags.RECORD | Flags.GENERATEDCONSTR);
-			 m.body = maker.Block(0, List.from(
+			 if (m.body.stats.head.toString().equals("super();")) {
+				 m.body.stats = m.body.stats.tail; // 删除super()
+			 }
+			 m.body.stats = m.body.stats.prependList(List.from(
 				fields.stream().map(field -> maker.Exec(
 				 maker.Assign(maker.Select(maker.This(tree.type), field.name), maker.Ident(field.name))
 				)).collect(Collectors.toList())
@@ -100,17 +104,18 @@ public class DesugarRecord extends TreeTranslator {
 			maker.Block(0, buffer.toList()), null));
 
 		// 添加String toString()
-		// "{" +
-		// "字段名=" + 字段 + ","
+		// "类名[" +
+		// "字段名=" + 字段 + ", "
 		// ...
-		// "}"
+		// "]"
 		buffer.clear();
-		buffer.add(maker.Return(maker.Binary(Tag.PLUS, maker.Binary(Tag.PLUS, maker.Literal("{"),
-		 fields.stream().map(f -> {
-			 JCExpression fieldExpr = maker.Ident(f);
-			 JCExpression toString  = maker.Apply(List.nil(), maker.Select(fieldExpr, ns.toString), List.nil());
-			 return maker.Binary(Tag.PLUS, maker.Binary(Tag.PLUS, maker.Binary(Tag.PLUS, maker.Literal("\"" + f.name + "=\""), toString), maker.Literal(",")), maker.Ident(f));
-		 }).reduce((a, b) -> maker.Binary(Tag.PLUS, a, b)).get()), maker.Literal("}"))));
+		buffer.add(maker.Return(
+		 maker.Binary(Tag.PLUS, maker.Literal(tree.getSimpleName().toString() + "["),
+			maker.Binary(Tag.PLUS, fields.stream().map(f -> maker.Binary(Tag.PLUS,
+				 maker.Binary(Tag.PLUS, maker.Binary(Tag.PLUS, maker.Literal(f.name.toString()), maker.Literal("=")), maker.Ident(f)), maker.Literal(", ")))
+				.reduce(null, (a, b) -> a == null ? b : maker.Binary(Tag.PLUS, a, b)),
+			 maker.Literal("]")))));
+
 
 		tree.defs = tree.defs.append(
 		 maker.MethodDef(maker.Modifiers(PUBLIC_FINAL), ns.toString, maker.Type(syms.stringType),
@@ -119,6 +124,7 @@ public class DesugarRecord extends TreeTranslator {
 			List.nil(),
 			maker.Block(0, buffer.toList()), null));
 
+		println("--------------");
 		println(tree);
 	}
 	public void translateTopLevelClass(JCCompilationUnit toplevel, JCTree tree) {

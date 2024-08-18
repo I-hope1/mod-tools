@@ -193,7 +193,7 @@ public class IntTab {
 					}
 				}
 			}).self(c -> {
-				if (titleWidth != -1 || eachWidth != 0)
+				if (titleWidth != CellTools.unset || eachWidth != 0)
 					c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
 			});
 
@@ -247,9 +247,9 @@ public class IntTab {
 
 		// 如果是竖向排列
 		if (column) {
-			targetY *= toIndex > getSelected() ? -1 : 1;
+			targetY *= Mathf.sign(toIndex < getSelected());
 		} else {
-			targetX *= toIndex > getSelected() ? -1 : 1;
+			targetX *= Mathf.sign(toIndex < getSelected());
 		}
 
 		return Actions.parallel(

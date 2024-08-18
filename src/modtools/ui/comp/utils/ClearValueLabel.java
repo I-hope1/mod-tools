@@ -20,6 +20,9 @@ public class ClearValueLabel<T> extends PlainValueLabel<T> {
 		this.clear = clear;
 		this.setter = setter;
 	}
+	protected boolean autoUpdate() {
+		return true;
+	}
 	public void clearVal() {
 		if (clear != null) clear.run();
 	}

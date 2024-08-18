@@ -44,7 +44,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		title.setText(() -> "Cell" + (cell.hasElement() ? ": " + ReviewElement.getElementName(cell.get()) : ""));
 
 		cont.table(Tex.pane, t -> {
-			t.defaults().grow();
+			t.defaults().grow().uniformX();
 			t.add();
 			buildSetter(t, cell, "padTop");
 			t.add().row();
@@ -121,7 +121,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		return t.add(ReviewElement.floatSetter(null, () -> FormatHelper.fixed(Reflect.get(Cell.class, cell, name)), f -> {
 			Reflect.set(Cell.class, cell, name, f);
 			if (cell.get() != null) cell.get().invalidateHierarchy();
-		}));
+		})).pad(0, -2, 0, -2);
 	}
 	static Cell<Table> buildWithName(Table t, Cell<?> cell, String name) {
 		return buildWithName(t, cell, name, f -> f);
@@ -173,7 +173,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		 .fill(false)
 		 .expand(false, false).left();
 	}
-	private static  void update(Object obj) {
+	private static void update(Object obj) {
 		// flush
 		if (obj instanceof Table t) {
 			t.layout();

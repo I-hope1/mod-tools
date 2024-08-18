@@ -867,7 +867,7 @@ public class ReviewElement extends Content {
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
 			if (name != null)
-				t.add(name).color(Pal.accent).fontScale(0.7f).padRight(8f);
+				t.add(name).color(Pal.accent).fontScale(0.8f).padRight(8f);
 			if (floatc == null) {
 				t.label(def);
 				return;

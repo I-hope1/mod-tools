@@ -70,6 +70,10 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			}
 		}
 		try {
+			if (!lazyInitial) {
+				lazyInitial = true;
+				lazyInit();
+			}
 			process();
 		} catch (Throwable e) { err(e); }
 
@@ -119,6 +123,9 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		stringType = mSymtab.stringType;
 	}
 	public void init() throws Throwable { }
+
+	boolean lazyInitial;
+	public void lazyInit() throws Throwable {}
 
 
 	public static Element findSibling(Element sibling, String name, ElementKind kind) {

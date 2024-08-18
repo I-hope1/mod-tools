@@ -66,7 +66,7 @@ public class DesugarStringTemplate extends TreeTranslator {
 			// result = ParserFactory.instance(Replace.context)
 			//  .newParser(result.toString(), false, true, true)
 			//  .parseExpression();
-			println(result);
+			// println(result);
 			return;
 		}
 		super.visitStringTemplate(template);

@@ -6,6 +6,7 @@ import dalvik.system.VMStack;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
+import modtools.annotations.msic.ModuleOpen;
 import rhino.*;
 
 import java.io.File;
@@ -66,5 +67,10 @@ public class HopeReflect {
 		} catch (ClassNotFoundException e) {
 			return null;
 		}
+	}
+
+	@ModuleOpen
+	public static void moduleOpen() {
+
 	}
 }

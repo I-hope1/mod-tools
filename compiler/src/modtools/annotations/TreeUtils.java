@@ -43,21 +43,21 @@ public interface TreeUtils extends ParseUtils, NameString {
 		classDecl.defs = classDecl.defs.prepend(x);
 		return x;
 	}
-	default JCVariableDecl makeVar(long flags, Type type, String name, String init, Symbol sym) {
-		return makeVar0(flags, type, name, init == null ? null : parseExpression(init), sym);
+	default JCVariableDecl makeVar(long flags, Type type, String name, String init, Symbol owner) {
+		return makeVar0(flags, type, name, init == null ? null : parseExpression(init), owner);
 	}
 	Pattern pattern = Pattern.compile("^[0-9a-zA-Z\\-$_ ]+?$");
-	default JCVariableDecl makeVar0(long flags, Type type, String name, JCExpression init, Symbol sym) {
-		return makeVar1(flags, type, name, init, sym, true);
+	default JCVariableDecl makeVar0(long flags, Type type, String name, JCExpression init, Symbol owner) {
+		return makeVar1(flags, type, name, init, owner, true);
 	}
-	private JCVariableDecl makeVar1(long flags, Type type, String name, JCExpression init, Symbol sym,
+	private JCVariableDecl makeVar1(long flags, Type type, String name, JCExpression init, Symbol owner,
 	                                boolean enterScope) {
 		if (!pattern.matcher(name).find())
 			throw new IllegalArgumentException("Name(" + name + ") contains illegal char.");
 		VarSymbol varSymbol = new VarSymbol(
-		 flags, ns(name), type, sym
+		 flags, ns(name), type, owner
 		);
-		if (enterScope && sym instanceof ClassSymbol csm) {
+		if (enterScope && owner instanceof ClassSymbol csm) {
 			csm.members_field.enter(varSymbol);
 		}
 		return mMaker.VarDef(varSymbol, init);
@@ -103,6 +103,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 		addImport(unit, sym);
 	}
 	default void addImport(JCCompilationUnit unit, TypeSymbol sym) {
+		if (sym == null) throw new NullPointerException("sym is null.");
 		if (!unit.namedImportScope.includes(sym) && !unit.starImportScope.includes(sym)) {
 			/* unit.namedImportScope.importType(
 			 SettingUI().members(), SettingUI().members(), SettingUI()

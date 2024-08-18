@@ -18,7 +18,7 @@ public class DataProcessor extends BaseProcessor<Element> {
 	private static final String EVNET_FIELD = "$event-0";
 	Type TY_Event;
 	Symbol EVENT_INIT;
-	public void init() throws Throwable {
+	public void lazyInit() throws Throwable {
 		TY_Event = findType(EVENT);
 		EVENT_INIT = TY_Event.tsym.members().findFirst(names.init);
 	}

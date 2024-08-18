@@ -7,8 +7,6 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
-import static modtools.annotations.PrintHelper.SPrinter.println;
-
 public class MyTransPatterns extends TransPatterns {
 	final SwitchDesugar  switchDesugar;
 	final LambdaToMethod ltm;
@@ -93,7 +91,7 @@ class SwitchDesugar extends TreeTranslator {
 				expr.type = exprType;
 				expr.needsCond = true;
 				result = expr;
-				println(expr);
+				// println(expr);
 			}
 			return true;
 		}

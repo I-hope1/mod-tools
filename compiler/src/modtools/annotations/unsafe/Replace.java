@@ -70,6 +70,14 @@ public class Replace {
 		} catch (Throwable e) { err(e); }
 	}
 
+	public static final HashMap<ModuleSymbol, ClassSymbol> moduleRepresentClass = new HashMap<>();
+	public static void searchModuleExport(ModuleSymbol module) {
+		if (moduleRepresentClass.containsKey(module)) return;
+		module.exports.stream().filter(export -> export.modules == null).findFirst().ifPresent(d -> {
+			moduleRepresentClass.put(module, (ClassSymbol) d.packge.members_field.getSymbols(s -> s instanceof ClassSymbol).iterator().next());
+		});
+	}
+
 	private static void extendingFunc0() throws Exception {
 		accessOverride();
 
@@ -82,6 +90,16 @@ public class Replace {
 		other();
 	}
 	private static void moduleExports() throws Exception {
+		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
+
+		handler.getDiagnostics().stream().filter(d -> d.isFlagSet(DiagnosticFlag.RESOLVE_ERROR))
+		 .filter(d -> d.getArgs()[0] instanceof PackageSymbol)
+		 .forEach(d -> {
+			 PackageSymbol pkg = (PackageSymbol) d.getArgs()[0];
+			 needExportedApi.add(pkg);
+			 searchModuleExport(pkg.modle);
+		 });
+
 		removeKey(Factory.class, () -> new Factory(context) {
 			public JCDiagnostic fragment(Fragment fragmentKey) {
 				return super.fragment(fragmentKey);
@@ -192,10 +210,10 @@ public class Replace {
 	private static void other() throws ClassNotFoundException {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
+		fixSyntaxError();
+
 		// 适配d8无法编译jdk21的枚举(enum)的字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
-
-		fixSyntaxError();
 
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
 		// removeKey(TransTypes.class, () -> new MyTransTypes(context));
@@ -204,10 +222,6 @@ public class Replace {
 		// Lower lower = Lower.instance(context);
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "lower", lower);
 		// setAccess(Gen.class, Gen.instance(context), "lower", lower);
-
-		// setAccess(ClassType.class, syms.recordType, "outer_field", classFinder.loadClass(syms.unnamedModule,
-		//  Names.instance(context).fromString("modtools.TestFeature")));
-		// println(syms.toString());
 
 		// replaceAccess(Resolve.class,Resolve.instance(context), "resolveMethodCheck", "nilMethodCheck");
 
@@ -225,6 +239,7 @@ public class Replace {
 			}
 		 ));
 	}
+	public static final HashSet<PackageSymbol> needExportedApi = new HashSet<>();
 	public static void fixSyntaxError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
 		ListBuffer<JCDiagnostic>  buffer  = new ListBuffer<>();

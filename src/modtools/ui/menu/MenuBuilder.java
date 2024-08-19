@@ -25,7 +25,7 @@ public class MenuBuilder {
 	 */
 	public static void
 	addShowMenuListenerp(Element elem, Prov<Seq<MenuItem>> prov) {
-		EventHelper.longPressOrRclick(elem, _ ->  showMenuListDispose(prov));
+		EventHelper.longPressOrRclick(elem, _ -> showMenuListDispose(prov));
 	}
 	public static <T> void
 	addShowMenuListenerp(Element elem, Class<T> target, Func<T, Prov<Seq<MenuItem>>> func) {

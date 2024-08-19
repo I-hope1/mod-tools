@@ -267,7 +267,7 @@ public class InlineLabel extends NoMarkupLabel {
 
 	private static final Point2 overChunk = new Point2(-1, -1);
 	private static final Point2 downChunk = new Point2(-1, -1);
-	private static final int    padding   = 2;
+	private static final int    padding   = 4;
 	public void draw() {
 		if (HopeInput.mouseHit() == this) {
 			if (!downChunk.equals(-1, -1)) {
@@ -284,10 +284,11 @@ public class InlineLabel extends NoMarkupLabel {
 		}
 		super.draw();
 	}
-	/** 给指定区域添加双击事件 */
+	/** 给指定区域添加点击事件 */
 	public void clickedRegion(Prov<Point2> point2Prov, Runnable runnable) {
-		addListener(new ClickListener() {
+		addListener(new ClickListener(KeyCode.mouseLeft) {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				pressed = false;
 				if (super.touchDown(event, x, y, pointer, button)) {
 					int    cursor = getCursor(x, y);
 					Point2 point2 = point2Prov.get();

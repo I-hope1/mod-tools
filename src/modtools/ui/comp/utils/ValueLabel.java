@@ -274,7 +274,7 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 	private void toggleExpand(Object val) {
 		expandMap.put(val, !expandMap.get(val, false));
-		// Core.app.post(() -> flushVal());
+		Core.app.post(this::flushVal);
 	}
 
 	private int getSize(Object val) {

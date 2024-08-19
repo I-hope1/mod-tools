@@ -6,12 +6,12 @@ A mod provides a variety of tools for modding.
 Version 1.5
 ## Highlight
 - Fixed a lot of bugs
-- Better `ReviewElement`, `Selections`, `Tester`
--
+- Better `ReviewElement`, `Selection`, `Tester`, `ContentList`
+- Optimize a lot
 - New Content: KeyCodeSetter
 - Better performance (More tips)
 - Completely new ValueLabel (ShowInfoWindow)
--
+- Better experience on mobile.
 -----------------
 
 ## ShowUIList

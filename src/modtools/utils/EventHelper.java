@@ -259,13 +259,11 @@ public class EventHelper {
 	public static class RightClickListener extends ClickListener {
 		private final Runnable run;
 		RightClickListener(Runnable run) {
-			super(arc.input.KeyCode.mouseRight);
+			super(KeyCode.mouseRight);
 			this.run = run;
 		}
 		public void clicked(InputEvent event, float x, float y) {
-			if (event.stopped) return;
-			run.run();
-			event.stop();
+			Core.app.post(run);
 		}
 	}
 }

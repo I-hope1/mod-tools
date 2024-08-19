@@ -119,11 +119,11 @@ public class SettingsUI extends Content {
 			 ISettings.buildAll("", this, E_Extending.class);
 			 ISettings.buildAll("frag", this, Frag.Settings.class);
 
-			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 			 button("Font", HopeStyles.flatBordert, () -> {
 				 new DisWindow("Fonts", 220, 400) {{
-					 cont.button(MyFonts.DEFAULT, HopeStyles.flatToggleMenut, () ->  SETTINGS.put("font", "DEFAULT")).height(42).growX()
-							.checked(_ -> MyFonts.DEFAULT.equals(SETTINGS.getString("font"))).row();
+					 cont.top().defaults().top();
+					 cont.button(MyFonts.DEFAULT, HopeStyles.flatToggleMenut, () -> SETTINGS.put("font", "DEFAULT")).height(42).growX()
+						.checked(_ -> MyFonts.DEFAULT.equals(SETTINGS.getString("font"))).row();
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
@@ -132,6 +132,7 @@ public class SettingsUI extends Content {
 							.checked(_ -> fi.name().equals(SETTINGS.getString("font")))
 							.row();
 					 }
+					 cont.add().expandY().row();
 					 cont.image().color(Color.gray).growX().padTop(6f).row();
 					 cont.button("Open Directory", HopeStyles.flatBordert, () -> {
 						 FileUtils.openFile(MyFonts.fontDirectory);
@@ -144,6 +145,7 @@ public class SettingsUI extends Content {
 			 table(Tex.pane, t -> {
 				 t.defaults().growX().height(42);
 				 t.add("@mod-tools.functions").row();
+				 t.button("Clear Mods Restart", Icon.boxSmall, HopeStyles.flatt, SettingsUI::disabledRestart).row();
 				 if (/* OS.isAndroid ||  */IntVars.isDesktop())
 					 t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
 						 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
@@ -153,21 +155,27 @@ public class SettingsUI extends Content {
 				 });
 			 }).growX();
 			 row();
-			 table(Tex.pane, t -> {
-				 t.add("@editor.author");
-				 t.add(IntVars.meta.author).row();
-				 t.defaults().growX().height(42);
-				 t.button("Github", Icon.githubSmall, HopeStyles.flatt, () -> {
-					 Core.app.openURI("https://github.com/" + IntVars.meta.repo);
-				 });
-				 t.button("QQ", HopeIcons.QQ, HopeStyles.flatt, () -> {
-					 Core.app.openURI(IntVars.QQ);
-				 }).row();
-				 // t.button("CheckUpdate", Icon.up, HopeStyles.flatt, Updater::checkUpdate).row();
-				 /* t.button("@mod-tools.check", Icon.androidSmall, HopeStyles.flatt, () -> {
-					 Updater.checkUpdate(b -> {});
-				 }).height(42).growX().colspan(2); */
-			 }).growX();
+			 // About
+			 button("About", Icon.infoCircleSmall, HopeStyles.flatBordert, () -> {
+				 new DisWindow("About", 220, 100) {{
+					 Table cont = this.cont;
+					 cont.left().defaults().left().growX().height(42);
+					 cont.add("@editor.author");
+					 cont.add(IntVars.meta.author).row();
+					 cont.add("@editor.version");
+					 cont.add(IntVars.meta.version).row();
+					 cont.button("Github", Icon.githubSmall, HopeStyles.flatt, () -> {
+						 Core.app.openURI("https://github.com/" + IntVars.meta.repo);
+					 });
+					 cont.button("QQ", HopeIcons.QQ, HopeStyles.flatt, () -> {
+						 Core.app.openURI(IntVars.QQ);
+					 }).row();
+					 // discord
+					 // cont.button("Discord", Icon.discord, HopeStyles.flatt, () -> {
+					 //  Core.app.openURI(IntVars.discord);
+					 // });
+				 }};
+			 }).height(42).growX();
 		 }});
 		all.forEach(cont -> {
 			if (!(cont instanceof SettingsUI)) {
@@ -227,7 +235,8 @@ public class SettingsUI extends Content {
 	/**
 	 * TIP_PREFIX: {@value TIP_PREFIX}
 	 * @see IntUI#tips(String)
-	 * @see IntUI#tips(String, String)  */
+	 * @see IntUI#tips(String, String)
+	 */
 	public static void tryAddTip(Element element, String tipKey) {
 		if (!Core.bundle.has(TIP_PREFIX + tipKey)) return;
 

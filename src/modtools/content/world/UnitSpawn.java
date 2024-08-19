@@ -68,7 +68,7 @@ public class UnitSpawn extends Content {
 	Label nameL, localizedNameL;
 	public void setup() {
 		unitCont.clearChildren();
-		group = MyItemSelection.buildTable0(unitCont, Vars.content.units(), Vars.mobile ? 8 : 10,
+		group = MyItemSelection.buildTable0(unitCont, Vars.content.units(), Vars.mobile ? 9 : 10,
 		 u -> new TextureRegionDrawable(u.uiIcon));
 		group.setMinCheckCount(1);
 
@@ -180,18 +180,18 @@ public class UnitSpawn extends Content {
 			table.button("@ok", HopeStyles.cleart, this::spawnCatch)
 			 .size(90, 50)
 			 .disabled(b -> !isOk(spawnX, spawnY, amount, team, selectUnit));
-			table.button("Post task", HopeStyles.cleart, () -> {
+			table.button("Post Task", HopeStyles.cleart, () -> {
 				ExecuteTree.context(root, () ->
 				 ExecuteTree.node(String.valueOf(localizedNameL.getText()),
 					STR."(\{spawnX},\{spawnY})\n{\{team}}[accent]×\{amount}",
-					getSpawnRun()).code(generateCode()).resubmitted().worldTimer().apply()
+					getSpawnRun()).code(generateCode()).resubmitted().worldTimer()
 				);
-				Window dialog = INFO_DIALOG.dialog(t -> {
+				var dialog = INFO_DIALOG.dialog(t -> {
 					t.add("Posted").row();
-					t.button("View", () -> Contents.executor.build());
+					t.button("View", () -> Contents.executor.build()).size(96, 45);
 				});
-				Time.runTask(2.5f * 60f, dialog::hide);
-			}).size(90, 50);
+				dialog.autoDispose = true;
+			}).size(140, 50);
 			table.button(Icon.menuSmall, HopeStyles.flati, 24, () -> {
 				MenuBuilder.showMenuListDispose(() -> Seq.with(
 				 CheckboxList.withc("loop", HopeIcons.loop, unitUnlimitedKey, () -> unitUnlimited, () -> toggleUnitCap(!unitUnlimited)),
@@ -199,7 +199,7 @@ public class UnitSpawn extends Content {
 				 MenuItem.with("all.kill", Icon.cancelSmall, killAllUnitsKey, UNIT::killAllUnits),
 				 MenuItem.with("all.remove", Icon.cancelSmall, removeAllUnitsKey, UNIT::removeAllUnits)
 				));
-			}).size(32);
+			}).size(34);
 		}).growX();
 		ui.getCell(ui.cont).minHeight(ui.cont.getPrefHeight());
 

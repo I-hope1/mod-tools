@@ -52,6 +52,7 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
+
 	/** pad 8 */
 	public static final Drawable emptyui = new EmptyDrawable(8);
 	/** pad 0 */
@@ -162,7 +163,6 @@ public class IntUI {
 
 	/**
 	 * 在鼠标右下弹出一个小窗，自己设置内容
-	 * @param vec2       用于定位弹窗的位置
 	 * @param f          (p, hide, text)                   p 是Table，你可以添加元素                   hide 是一个函数，调用就会关闭弹窗                   text 如果 @param 为 true ，则启用。用于返回用户在搜索框输入的文本
 	 * @param searchable 可选，启用后会添加一个搜索框
 	 * @return the table
@@ -695,22 +695,31 @@ public class IntUI {
 	}
 
 	public static class ITooltip extends Tooltip implements IInfo {
+		long lastShowTime;
 		public ITooltip(Cons<Table> contents) {
 			super(t -> { });
 			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
 			show = () -> {
+				lastShowTime = Time.millis();
 				Table container = this.container;
 				if (container.getChildren().isEmpty()) contents.get(container);
 				container.update(container::pack);
 				topGroup.addChild(container);
 
-				container.margin(10, 10, 10, 10);
+				container.margin(10f);
 			};
 		}
 		public void show(Element element, float x, float y) {
 			getManager().hideAll();
 			super.show(element, x, y);
+		}
+		public void hide() {
+			if (mobile) {
+				TaskManager.scheduleOrReset(1.2f - Time.timeSinceMillis(lastShowTime) / 1000f, super::hide);
+			} else {
+				super.hide();
+			}
 		}
 		public ITooltip(Prov<CharSequence> prov) {
 			this(t -> t.background(Styles.black6).margin(6f).label(prov));
@@ -725,6 +734,7 @@ public class IntUI {
 			this.targetActor = element;
 			IntUI.positionTooltip(element, Align.top, container, Align.bottom);
 		}
+
 		static {
 			Tooltips.getInstance().textProvider = text -> new ITooltip(() -> text);
 		}
@@ -828,6 +838,7 @@ public class IntUI {
 				hitter.autoClose = false;
 			});
 		}
+
 		/**
 		 * Sets center.
 		 * @param vec2 the vec 2

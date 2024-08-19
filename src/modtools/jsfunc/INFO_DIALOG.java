@@ -77,7 +77,7 @@ public interface INFO_DIALOG {
 			return dialog[0];
 		}
 
-		var dialog = new ShowInfoWindow(o,  clazz);
+		var dialog = new ShowInfoWindow(o, clazz);
 		dialog.show();
 		return dialog;
 	}
@@ -93,7 +93,7 @@ public interface INFO_DIALOG {
 			button.add(i + "[lightgray]:", HopeStyles.defaultLabel).padRight(8f);
 			var label = new ArrayItemLabel(componentType, arr, i);
 
-			var cell  = BindCell.of(ShowInfoWindow.extentCell(button,
+			var cell = BindCell.of(ShowInfoWindow.extentCell(button,
 			 componentType == Object.class && label.val != null ? label.val.getClass() : componentType,
 			 () -> label));
 			ShowInfoWindow.buildExtendingField(cell, label);
@@ -205,8 +205,8 @@ public interface INFO_DIALOG {
 	class JSWindow extends HiddenTopWindow implements IDisposable {
 		Cons<Window> cons;
 		/** 是否会自动关闭并销毁 */
-		boolean      autoDispose = false;
-		Runnable     autoDisposeRun;
+		public boolean autoDispose = false;
+		Runnable autoDisposeRun;
 		private void dispose() {
 			if (autoDispose && !HopeInput.pressed.isEmpty()) {
 				hide();
@@ -214,6 +214,7 @@ public interface INFO_DIALOG {
 		}
 		public void act(float delta) {
 			super.act(delta);
+			if (autoDispose) titleTable.remove();
 			if (autoDisposeRun != null) autoDisposeRun.run();
 		}
 		public JSWindow(Cons<Window> cons) {

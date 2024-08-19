@@ -9,7 +9,7 @@ Version 1.5
 - Better `ReviewElement`, `Selection`, `Tester`, `ContentList`
 - Optimize a lot
 - New Content: KeyCodeSetter
-- Better performance (More tips)
+- More tips for functions.
 - Completely new ValueLabel (ShowInfoWindow)
 - Better experience on mobile.
 -----------------
@@ -100,7 +100,7 @@ Version 1.5
 '''
 author: "I hope..."
 hidden: true
-version: 1.4.6.7
+version: 1.5
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

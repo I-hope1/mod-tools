@@ -403,6 +403,8 @@ public class Window extends Table implements Position {
 	/** 用于记录是否已经show过 */
 	private boolean hasPacked;
 
+	/** 如果window实现了IHitter则，
+	 * 则自动添加Hitter */
 	protected Hitter hitter;
 	void show0(Scene stage, Action action) {
 		if (this instanceof IHitter) {

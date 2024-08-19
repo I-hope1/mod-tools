@@ -2,7 +2,6 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import arc.util.Log;
 import modtools.Constants;
 import modtools.Constants.RHINO;
 import modtools.jsfunc.IScript;
@@ -136,7 +135,7 @@ public class JSSyntax extends Syntax {
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
-			 Log.info("Contains: " + entry);
+			 // Log.info("Contains: " + entry);
 
 			 if (!(js_prop
 			       && (entry.key == customConstantSet || entry.key == customVarSet)

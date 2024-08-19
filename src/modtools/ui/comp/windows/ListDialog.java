@@ -7,7 +7,7 @@ import arc.scene.*;
 import arc.scene.ui.Button;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.layout.*;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import modtools.IntVars;
@@ -44,6 +44,7 @@ public class ListDialog extends Window {
 		new Search((_, p0) -> pattern = p0)
 		 .build(cont, p);
 		p.addPatternUpdateListener(() -> pattern);
+		p.top().defaults().top();
 		cont.pane(p).grow();
 
 		this.file = file;
@@ -62,7 +63,7 @@ public class ListDialog extends Window {
 	}
 
 	public void build() {
-		p.clear();
+		p.clearChildren();
 
 		list.forEach(this::build);
 	}

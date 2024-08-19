@@ -403,7 +403,7 @@ public class Window extends Table implements Position {
 	/** 用于记录是否已经show过 */
 	private boolean hasPacked;
 
-	Hitter hitter;
+	protected Hitter hitter;
 	void show0(Scene stage, Action action) {
 		if (this instanceof IHitter) {
 			topGroup.addChild(hitter = new Hitter(this::hide));

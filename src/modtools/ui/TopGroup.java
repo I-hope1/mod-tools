@@ -173,7 +173,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		if (checkCullingArea.enabled()) {
 			elem.localToParentCoordinates(tmp1.set(0, 0));
-			if (elem.cullable && elem.parent.getCullingArea() != null &&
+			if (elem.cullable && elem.parent != null && elem.parent.getCullingArea() != null &&
 			    !elem.parent.getCullingArea().overlaps(tmp1.x, tmp1.y,
 			     elem.getWidth(), elem.getHeight())) return;
 		}

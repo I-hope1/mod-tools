@@ -605,9 +605,7 @@ public class IntUI {
 
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 	                            String valid, String invalid) {
-		cell.get().addListener(new ITooltip(
-		 t -> t.background(Tex.pane).label(() -> boolp.get() ? valid : invalid)
-		));
+		cell.get().addListener(new ITooltip(() -> boolp.get() ? valid : invalid));
 		cell.update(b -> b.getStyle().imageUpColor = boolp.get() ? Color.white : Color.gray);
 	}
 
@@ -702,12 +700,12 @@ public class IntUI {
 			allowMobile = true;
 			/* 异步执行时，字体会缺失  */
 			show = () -> {
-				Table table = container;
-				if (table.getChildren().isEmpty()) contents.get(table);
-				table.pack();
-				topGroup.addChild(table);
+				Table container = this.container;
+				if (container.getChildren().isEmpty()) contents.get(container);
+				container.update(container::pack);
+				topGroup.addChild(container);
 
-				table.margin(10, 10, 10, 10);
+				container.margin(10, 10, 10, 10);
 			};
 		}
 		public void show(Element element, float x, float y) {
@@ -807,7 +805,7 @@ public class IntUI {
 			}
 		}
 	}
-	public static class ConfirmWindow extends Window implements IDisposable, PopupWindow {
+	public static class ConfirmWindow extends Window implements IDisposable, PopupWindow, IHitter {
 		/**
 		 * Instantiates a new Confirm window.
 		 * @param title     the title
@@ -822,6 +820,13 @@ public class IntUI {
 		}
 		public ConfirmWindow(String title) {
 			super(title);
+		}
+		{
+			shown(() -> {
+				hitter.touchable = Touchable.enabled;
+				hitter.clear();
+				hitter.autoClose = false;
+			});
 		}
 		/**
 		 * Sets center.

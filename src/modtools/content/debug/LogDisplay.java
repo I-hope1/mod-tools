@@ -16,6 +16,7 @@ import mindustry.ui.Styles;
 import mindustry.ui.fragments.ConsoleFragment;
 import modtools.IntVars;
 import modtools.content.Content;
+import modtools.content.ui.ShowUIList.*;
 import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.input.MyLabel;
@@ -52,7 +53,7 @@ public class LogDisplay extends Content {
 
 		Color[] colors = {Color.sky, Color.gold};
 
-		Table[] tables = {new LimitTable(t -> {
+		Table[] tables = {new TotalLazyTable(t -> {
 			final Fi last_log = Vars.dataDirectory.child("last_log.txt");
 			t.button("Source", HopeStyles.flatBordert, () -> {
 				FileUtils.openFile(last_log);
@@ -77,7 +78,7 @@ public class LogDisplay extends Content {
 			};
 			t.add(tab).colspan(2).growX();
 			t.invalidateHierarchy();
-		}), new LimitTable(p -> {
+		}), new TotalLazyTable(p -> {
 			Seq<Fi> list = new Seq<>(crashesDir().list()).sort(f -> -f.lastModified());
 			p.left().defaults().left().top().growX();
 			for (var fi : list) {
@@ -101,6 +102,7 @@ public class LogDisplay extends Content {
 		itab.pane.update(new AutoWrapListener(itab.pane));
 		itab.setPrefSize(w, CellTools.unset);
 		ui.cont.add(itab.build()).grow();
+		itab.main.act(0);
 		ui.shown(() -> Core.app.post(() -> tables[0].invalidateHierarchy()));
 
 		// ui.addCloseButton();

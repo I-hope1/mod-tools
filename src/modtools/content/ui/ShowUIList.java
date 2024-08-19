@@ -458,7 +458,7 @@ public class ShowUIList extends Content {
 		}
 	}
 	public static class TotalLazyTable extends Table {
-		Cons<TotalLazyTable> cons;
+		private Cons<TotalLazyTable> cons;
 		public TotalLazyTable(Cons<TotalLazyTable> cons) {
 			super();
 			this.cons = cons;

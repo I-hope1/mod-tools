@@ -305,17 +305,30 @@ public class Window extends Table implements Position {
 		return hit;
 	}
 	private BindCell contCell;
-	private void setup() {
+	/**
+	 * 设置界面布局
+	 * 本方法主要负责界面元素的构建和布局，以确保界面能够正确显示
+	 */
+	public void setup() {
+		// 检查是否已经创建了内容容器，如果已创建，则直接构建
 		if (contCell != null) {
 			contCell.build();
 		} else {
+			// 如果内容容器未创建，则新建一个，并设置其属性
 			contCell = BindCell.of(add(cont).name("cont").grow().top());
+			// 隐藏有效情况下的标题栏
 			// ElementUtils.hideBarIfValid((ScrollPane) contCell.el);
+			// 新增一个行
 			row();
 		}
-		if (!noButtons) add(buttons).name("buttons").top().growX().row();
+		// 如果没有禁用按钮，则添加按钮布局
+		if (!noButtons) {
+			add(buttons).name("buttons").top().growX().row();
+		}
+		// 将标题表格置于前端
 		titleTable.toFront();
 	}
+
 
 	public void display() {
 		display(x, y);

@@ -184,21 +184,25 @@ public class ShowUIList extends Content {
 		 final String type = "colors";
 		 customJson(type, t);
 		 Cons<Class<?>> buildColor = cls -> {
-			 t.add(cls.getSimpleName()).colspan(2).color(Pal.accent).growX().row();
-			 t.image().color(Pal.accent).colspan(2).growX().row();
+			 t.toRuns.add(() -> {
+				 t.add(cls.getSimpleName()).colspan(2).color(Pal.accent).growX().row();
+				 t.image().color(Pal.accent).colspan(2).growX().row();
+			 });
 
 			 String prefix = cls.getSimpleName() + ".";
 			 FieldUtils.walkAllConstOf(cls, (field, color) -> {
 				 colorKeyMap.put(color, prefix + field.getName());
 
-				 t.bind(field.getName());
-				 t.listener(el -> IntUI.addTooltipListener(el, () -> FormatHelper.color(color)));
-				 t.add(new BorderImage(Core.atlas.white(), 2f)
-					.border(color.cpy().inv())).color(color).size(42f);
-				 field(t, field.getName()).growX();
-				 t.listener(null);
-				 t.unbind();
-				 t.row();
+				 t.addRun(() -> {
+					 t.bind(field.getName());
+					 t.listener(el -> IntUI.addTooltipListener(el, () -> FormatHelper.color(color)));
+					 t.add(new BorderImage(Core.atlas.white(), 2f)
+					  .border(color.cpy().inv())).color(color).size(42f);
+					 field(t, field.getName()).growX();
+					 t.listener(null);
+					 t.unbind();
+					 t.row();
+				 });
 			 }, Color.class);
 		 };
 		 buildColor.get(Color.class);
@@ -254,10 +258,11 @@ public class ShowUIList extends Content {
 	}
 	private static void customJson(String type, LazyTable<Object> t) {
 		t.addRun(() -> {
-			t.add("Custom " + Strings.capitalize(type) + ": ");
-			String fileName = type + ".json";
-			t.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
-			t.row();
+			t.table(t1 -> {
+				t1.add("Custom " + Strings.capitalize(type) + ": ");
+				String fileName = type + ".json";
+				t1.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
+			}).row();
 		});
 	}
 	private static void fieldWithView(LazyTable<Object> t, Field field, Drawable drawable) {
@@ -450,6 +455,20 @@ public class ShowUIList extends Content {
 		}
 		public void addRun(Runnable run) {
 			toRuns().add(run);
+		}
+	}
+	public static class TotalLazyTable extends Table {
+		Cons<TotalLazyTable> cons;
+		public TotalLazyTable(Cons<TotalLazyTable> cons) {
+			super();
+			this.cons = cons;
+		}
+		public void act(float delta) {
+			if (cons != null) {
+				cons.get(this);
+				cons = null;
+			}
+			super.act(delta);
 		}
 	}
 

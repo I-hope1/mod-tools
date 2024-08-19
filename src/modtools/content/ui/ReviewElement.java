@@ -22,6 +22,7 @@ import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
+import modtools.content.ui.ShowUIList.*;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -124,13 +125,13 @@ public class ReviewElement extends Content {
 	}
 
 	public void loadSettings(Data SETTINGS) {
-		Contents.settings_ui.add(localizedName(), icon, new Table() {{
-			left().defaults().left();
-			table(t -> {
+		Contents.settings_ui.add(localizedName(), icon, new TotalLazyTable(table -> {
+			table.left().defaults().left();
+			table.table(t -> {
 				ISettings.buildAll("", t, Settings.class);
 				settingColor(t.table().growX().get());
 			}).grow();
-		}});
+		}));
 	}
 
 	/** 代码生成{@code ColorProcessor} */

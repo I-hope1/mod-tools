@@ -7,12 +7,6 @@ import java.util.Objects;
 public class Pair<T1, T2> {
 	T1 first;
 	T2 second;
-	public record Pair2<T1, T2>(T1 first, T2 second) {
-		public Pair2 {
-			throw new IllegalArgumentException(
-			 "Employee Id cannot be below 100.");
-		}
-	}
 	public Pair(T1 first, T2 second) {
 		this.first = first;
 		this.second = second;

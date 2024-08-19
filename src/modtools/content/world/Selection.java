@@ -19,7 +19,6 @@ import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.pooling.Pool;
-import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.entities.EntityGroup;
 import mindustry.game.Team;
@@ -32,6 +31,7 @@ import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.IntVars;
 import modtools.content.*;
+import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.ISettings;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -143,7 +143,7 @@ public class Selection extends Content {
 	public void load() {
 		loadSettings();
 		TaskManager.forceRun(() -> {
-			if (!Vars.state.isGame()) return false;
+			if (!state.isGame()) return false;
 			initTask();
 			loadFocusWindow();
 			initFunctions();
@@ -304,7 +304,7 @@ public class Selection extends Content {
 			FunctionBuild("@selection.status.clear", (list) -> {
 				each(list, Statusc::clearStatuses);
 			});
-			ListFunction("@selection.status.apply", () -> Vars.content.statusEffects(), Selection::floatField, (list, status) -> {
+			ListFunction("@selection.status.apply", () -> content.statusEffects(), Selection::floatField, (list, status) -> {
 				if (!NumberHelper.isPositiveFloat(tmpAmount[0])) return;
 				float time = NumberHelper.asFloat(tmpAmount[0]);
 				each(list, b -> {
@@ -1178,10 +1178,13 @@ public class Selection extends Content {
 		tile, building, unit, bullet, others
 		/* other */, focusOnWorld
 	}
-	class SettingsTable extends Table {
+	class SettingsTable extends TotalLazyTable {
 		int lastIndex;
 
 		public SettingsTable(Data data) {
+			super(t -> ((SettingsTable) t).init(data));
+		}
+		public void init(Data data) {
 			lastIndex = 0;
 			defaults().growX().left();
 			table(t -> {

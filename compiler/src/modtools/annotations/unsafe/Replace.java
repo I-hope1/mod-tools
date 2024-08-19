@@ -107,6 +107,7 @@ public class Replace {
 
 		removeKey(Factory.class, () -> new Factory(context) {
 			public JCDiagnostic fragment(Fragment fragmentKey) {
+				println("fragment: " + fragmentKey);
 				return super.fragment(fragmentKey);
 			}
 		});
@@ -437,5 +438,8 @@ public class Replace {
 		} finally {
 			Times.printElapsed("Process @ms");
 		}
+	}
+	public static Context context() {
+		return context;
 	}
 }

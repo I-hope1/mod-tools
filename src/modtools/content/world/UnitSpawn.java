@@ -23,6 +23,8 @@ import mindustry.type.UnitType;
 import mindustry.ui.Styles;
 import modtools.*;
 import modtools.content.Content;
+import modtools.content.debug.Tester;
+import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -30,7 +32,6 @@ import modtools.ui.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.linstener.WorldSelectListener;
 import modtools.ui.comp.utils.MyItemSelection;
-import modtools.content.debug.Tester;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
@@ -40,7 +41,7 @@ import modtools.utils.world.WorldUtils;
 
 import static mindustry.Vars.player;
 import static modtools.utils.world.WorldUtils.UNIT;
-import static rhino.ScriptRuntime.*;
+import static rhino.ScriptRuntime.toInteger;
 
 public class UnitSpawn extends Content {
 	public static final String noScorchMarksKey  = "@settings.noScorchMarks";
@@ -277,16 +278,16 @@ public class UnitSpawn extends Content {
 			defCap = Vars.state.rules.unitCap;
 			Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
 		}, ModTools::isDisposed));
-		Contents.settings_ui.add(localizedName(), icon, new Table() {{
-			left().defaults().left();
-			check(unitUnlimitedKey, 28, unitUnlimited, b -> toggleUnitCap(b))
+		Contents.settings_ui.add(localizedName(), icon, new TotalLazyTable(t-> {
+			t.left().defaults().left();
+			t.check(unitUnlimitedKey, 28, unitUnlimited, b -> toggleUnitCap(b))
 			 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck))
 			 .row();
-			defaults().growX().height(42);
-			button(noScorchMarksKey, HopeStyles.flatBordert, UNIT::noScorchMarks).row();
-			button(killAllUnitsKey, HopeStyles.flatBordert, UNIT::killAllUnits).row();
-			button(removeAllUnitsKey, HopeStyles.flatBordert, UNIT::removeAllUnits);
-		}});
+			t.defaults().growX().height(42);
+			t.button(noScorchMarksKey, HopeStyles.flatBordert, UNIT::noScorchMarks).row();
+			t.button(killAllUnitsKey, HopeStyles.flatBordert, UNIT::killAllUnits).row();
+			t.button(removeAllUnitsKey, HopeStyles.flatBordert, UNIT::removeAllUnits);
+		}));
 	}
 	private void toggleUnitCap(boolean b) {
 		unitUnlimited = b;

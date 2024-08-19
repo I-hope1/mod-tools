@@ -33,6 +33,7 @@ import modtools.*;
 import modtools.annotations.settings.Switch;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
+import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
@@ -799,10 +800,9 @@ public class Tester extends Content {
 
 	public static boolean loaded = false;
 	public void loadSettings(Data settings) {
-		Table table = new Table();
-		ISettings.buildAll("tester", table, Settings.class);
-
-		Contents.settings_ui.add(localizedName(), icon, table);
+		Contents.settings_ui.add(localizedName(), icon, new TotalLazyTable(t -> {
+			ISettings.buildAll("tester", t, Settings.class);
+		}));
 	}
 
 	public String getMessage() {

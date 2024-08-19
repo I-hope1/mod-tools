@@ -18,7 +18,7 @@ public class WindowManager extends Content {
 	public Window ui;
 	Table cont;
 
-	public void load() {
+	public void lazyLoad() {
 		ui = new Window(localizedName(), 300, 400, true);
 		// 强制置顶
 		ui.titleTable.find("sticky").remove();

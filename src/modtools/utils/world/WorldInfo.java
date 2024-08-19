@@ -3,7 +3,7 @@ package modtools.utils.world;
 import arc.Core;
 import arc.graphics.Color;
 import arc.scene.Element;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import arc.util.Align;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -20,7 +20,7 @@ public class WorldInfo {
 			 .isInstance(Building.class, p,WorldInfo::build)
 			 .isInstance(Unit.class, p,WorldInfo::build)
 			 .isInstance(Object.class, x -> p.add("TODO")))
-		 , false, Align.center);
+		 , false, Align.bottom);
 	}
 	public static void build(Tile tile, Table p) {
 		p.left().defaults().left();
@@ -67,10 +67,14 @@ public class WorldInfo {
 		}
 		p.row();
 		// 显示build的血量
-		// p.add(new Bar(() -> Core.bundle.format("@stat.health", build.health), () -> Pal.health, () -> build.health / build.maxHealth)).growX();
+		addHealthBar(build, p);
 	}
 	public static void build(Unit unit, Table p) {
 		// 显示unit的血量
-		p.add(new Bar(() -> Core.bundle.format("@stat.health", unit.health), () -> Pal.health, () -> unit.health / unit.maxHealth));
+		addHealthBar(unit, p);
+	}
+	public static Cell<Bar> addHealthBar(Healthc unit, Table p) {
+		return p.add(new Bar(() -> Core.bundle.format("stat.health", unit.health()), () -> Pal.health, unit::healthf))
+		 .height(32).minWidth(120).growX();
 	}
 }

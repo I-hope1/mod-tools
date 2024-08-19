@@ -563,7 +563,7 @@ public class Selection extends Content {
 			buildPos(table, build);
 			table.row();
 			table.table(t -> {
-				t.defaults().size(75, 42);
+				t.defaults().size(95, 42);
 				var style = HopeStyles.flatt;
 				t.button("@items.summary", style, () -> sumItems(content.items(),
 				 i -> build.items == null ? 0 : build.items.get(i),
@@ -867,18 +867,19 @@ public class Selection extends Content {
 		if (Settings.focusOnWorld.enabled()) {
 			focusTile = world.tileWorld(IntVars.mouseWorld.x, IntVars.mouseWorld.y);
 			focusBuild = focusTile != null ? focusTile.build : null;
-			Groups.unit.each(u -> {
-				if (IntVars.mouseWorld.dst(u.x, u.y) < u.hitSize / 2f + 2)
-					focusUnits.add(u);
-			});
-			Groups.bullet.each(b -> {
-				if (IntVars.mouseWorld.dst(b.x, b.y) < b.hitSize / 2f + 4)
-					focusBullets.add(b);
-			});
+
+			addToGroup(Groups.unit, focusUnits, 2);
+			addToGroup(Groups.bullet, focusBullets, 4);
 		} else {
 			focusTile = null;
 			focusBuild = null;
 		}
+	}
+	private <T extends Hitboxc> void addToGroup(EntityGroup<T> group, ObjectSet<T> set, int offset) {
+		group.each(b -> {
+			if (b != null && IntVars.mouseWorld.dst(b.x(), b.y()) < b.hitSize() / 2f + offset)
+				set.add(b);
+		});
 	}
 
 	public class FocusWindow extends NoTopWindow {

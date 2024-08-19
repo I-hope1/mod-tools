@@ -114,7 +114,7 @@ public class Tester extends Content {
 					Events.on(\{map.get("type")}, $e$ => {\
 					 try {\
 					  \{readFiOrEmpty(bookmarkDirectory.child(entry.key))};
-					} catch(e) { Log.err(e); }});
+					 } catch(e) { Log.err(e); }});
 					"""
 					: readFiOrEmpty(bookmarkDirectory.child(entry.key));
 				String source = STR."""

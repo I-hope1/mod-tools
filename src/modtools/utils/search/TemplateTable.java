@@ -39,6 +39,7 @@ public class TemplateTable<R> extends Table {
 	}
 	public void act(float delta) {
 		super.act(delta);
+		template.act(delta);
 		super.clearChildren();
 
 		var cells = template.getCells();
@@ -48,6 +49,7 @@ public class TemplateTable<R> extends Table {
 			super.add(c.get()).set(c);
 			if (cells.get(getChildren().size - 1).isEndRow()) super.row();
 		}
+
 		layout();
 	}
 	/** 添加用于切换是否显示所有的单选框 */

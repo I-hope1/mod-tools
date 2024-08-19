@@ -475,7 +475,8 @@ public abstract class WFunction<T> {
 			addListener(new ClickListener() {
 				@Override
 				public void clicked(InputEvent event, float x, float y) {
-					if (event.targetActor instanceof Button && event.targetActor != event.listenerActor) return;
+					Button targetButton = ElementUtils.findParent(event.targetActor, Button.class);
+					if (targetButton != null && targetButton != SelectHover.this) return;
 					WorldInfo.showInfo(SelectHover.this, item);
 				}
 			});

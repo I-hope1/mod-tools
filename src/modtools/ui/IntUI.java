@@ -216,10 +216,6 @@ public class IntUI {
 
 			checkBound(t);
 			positionTooltip(button, lyingAlign, t, align);
-
-			t.keepInStage();
-			t.invalidateHierarchy();
-			t.pack();
 		});
 		return t;
 	}
@@ -854,7 +850,6 @@ public class IntUI {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
 			top().add(pane).grow().pad(0f).top();
 			ElementUtils.hideBarIfValid(pane);
-			pack();
 		}
 		Hitter hitter = new Hitter(this::hideInternal);
 		final void hideInternal() {

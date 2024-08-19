@@ -5,20 +5,22 @@ import java.lang.annotation.*;
 
 /**
  * <p>用于初始化对于content对象</p>
- * <pre>{@code @ContentInit
+ * {@snippet lang="java" :
+ * @ContentInit
  * class Contents {
  *   // fields
  *   public static void load() {}
- * }}</pre>
+ * }}
  * <p>这会生成</p>
- * <pre>{@code @ContentInit
+ * {@snippet lang="java" :
+ * @ContentInit
  * class Contents {
  *   // fields
  *   public static void load() {
  *     $field1$ = new $Field1$()
  *     // ....
  *   }
- * }}</pre>
+ * }}
  * @see modtools.annotations.processors.ContentProcessor#dealElement
  * @see modtools.ui.Contents
  */

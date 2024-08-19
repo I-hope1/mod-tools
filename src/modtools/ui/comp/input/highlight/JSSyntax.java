@@ -2,6 +2,7 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import arc.util.Log;
 import modtools.Constants;
 import modtools.Constants.RHINO;
 import modtools.jsfunc.IScript;
@@ -29,6 +30,7 @@ public class JSSyntax extends Syntax {
 	public JSSyntax(SyntaxDrawable drawable, Scriptable customScope) {
 		super(drawable);
 		this.customScope = customScope;
+
 		if (customScope == null || customScope == topScope) {
 			customConstantSet = constantSet;
 			customVarSet = varSet;
@@ -53,7 +55,7 @@ public class JSSyntax extends Syntax {
 	public Scriptable cursorObj = null;
 
 	static {
-		varSet.addAll("arguments", "Infinity", "Packages");
+		varSet.addAll("arguments", "Infinity");
 		addValueToSet(topScope, varSet, constantSet, true);
 	}
 
@@ -77,9 +79,9 @@ public class JSSyntax extends Syntax {
 	}
 
 	// 根据代码，解析出的变量
-	ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
+	final ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
 
-	ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = ObjectMap.of(
+	private final ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = OrderedMap.of(
 	 ObjectSet.with(
 		"break", "case", "catch", "const", "continue",
 		"default", "delete", "do", "else",
@@ -101,22 +103,29 @@ public class JSSyntax extends Syntax {
 	 operatesSymbol = new JSDrawSymbol(),
 	 bracketsSymbol = new DrawBracket();
 
-	public Object getPropOrNotFound(Scriptable scope, String key) {
-		try {
-			return ScriptableObject.getProperty(scope, key);
-		} catch (Throwable e) {
-			return Scriptable.NOT_FOUND;
-		}
+	public static Object getPropOrNotFound(Scriptable scope, String key) {
+		Object o;
+		do {
+			try {
+				o = ScriptableObject.getProperty(scope, key);
+				if (o != Scriptable.NOT_FOUND) return o;
+			} catch (Throwable e) {
+				return Scriptable.NOT_FOUND;
+			}
+			scope = scope.getParentScope();
+		} while (scope != null);
+		return Scriptable.NOT_FOUND;
 	}
 
 	public NativeJavaPackage pkg = null;
 	public Scriptable        obj = null;
 
-	public boolean enableJSProp = false;
+	public boolean js_prop = false;
 
 	public TokenDraw[] tokenDraws = {
 	 task -> {
 		 String token = task.token;
+
 		 if ((obj != null || pkg != null) && lastTask == operatesSymbol && operatesSymbol.lastSymbol != '\0') {
 			 if (operatesSymbol.lastSymbol == '.' && !((JSDrawSymbol) operatesSymbol).error) {
 				 return dealJSProp(token);
@@ -127,9 +136,11 @@ public class JSSyntax extends Syntax {
 
 		 for (var entry : TOKEN_MAP) {
 			 if (!entry.key.contains(token)) continue;
-			 if (!enableJSProp
-			     || !(entry.key == customConstantSet || entry.key == customVarSet)
-			     || obj != null) {
+			 Log.info("Contains: " + entry);
+
+			 if (!(js_prop
+			       && (entry.key == customConstantSet || entry.key == customVarSet)
+			       && obj == null)) {
 				 obj = Undefined.SCRIPTABLE_UNDEFINED;
 				 return entry.value;
 			 }
@@ -138,6 +149,7 @@ public class JSSyntax extends Syntax {
 			 return entry.value;
 		 }
 		 obj = Undefined.SCRIPTABLE_UNDEFINED;
+
 		 if (lastTask != task) return null;
 		 String lastToken = task.lastToken;
 		 if (lastToken != null && localKeywords.contains(lastToken)) {
@@ -158,7 +170,7 @@ public class JSSyntax extends Syntax {
 	 }
 	};
 	private void resolveToken(Scriptable scope, String token) {
-		Object o = ScriptableObject.getProperty(scope, token);
+		Object o = getPropOrNotFound(scope, token);
 		if (o instanceof NativeJavaPackage newPkg) {
 			pkg = newPkg;
 			obj = null;
@@ -179,7 +191,7 @@ public class JSSyntax extends Syntax {
 
 	HashMap<Object, HashMap<String, Object>> js_prop_map = new HashMap<>();
 	private Color dealJSProp(String token) {
-		if (!enableJSProp) return null;
+		if (!js_prop) return null;
 		if (obj == Undefined.SCRIPTABLE_UNDEFINED) return null;
 
 		Object o = pkg == null && obj instanceof NativeJavaObject nja ?
@@ -231,17 +243,21 @@ public class JSSyntax extends Syntax {
 			brackets.add(c);
 		}
 	}
+
 	private static class ScopeObjectSet extends ObjectSet<String> {
 		Scriptable scope;
 		public ScopeObjectSet(Scriptable scope) {
 			this.scope = scope;
 		}
+		public int hashCode() {
+			return scope.hashCode();
+		}
 		public boolean contains(String key) {
 			boolean contains = super.contains(key);
 			if (contains) return true;
 			char c = key.charAt(0);
-			if (!(('A' <= c && c <= 'Z') || c == '$')) return false;
-			Object o = scope.get(key, scope);
+			if (!Character.isJavaIdentifierStart(c)) return false;
+			Object o = getPropOrNotFound(scope, key);
 			if (o == Scriptable.NOT_FOUND) return false;
 
 			add(key);
@@ -252,6 +268,9 @@ public class JSSyntax extends Syntax {
 		final ObjectSet<String> with;
 		public WithObjectSet(ObjectSet<String> with) {
 			this.with = with;
+		}
+		public int hashCode() {
+			return with.hashCode() + super.hashCode();
 		}
 		public String get(String key) {
 			String s = super.get(key);
@@ -305,7 +324,8 @@ public class JSSyntax extends Syntax {
 			if (c == ')' && !((JSDrawToken) drawToken).stack.isEmpty()) {
 				obj = ((JSDrawToken) drawToken).stack.pop();
 				int index = lastIndexStack.pop();
-				l:if (obj instanceof NativeJavaMethod m) {
+				l:
+				if (obj instanceof NativeJavaMethod m) {
 					Object[] o      = (Object[]) UNSAFE.getObject(m, RHINO.methods);
 					Method   method = (Method) UNSAFE.getObject(o[0], RHINO.memberObject);
 					if (method.getReturnType() == void.class) break l;

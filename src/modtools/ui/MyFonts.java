@@ -24,6 +24,7 @@ import static modtools.utils.MySettings.SETTINGS;
 public class MyFonts {
 	public static       Font def           = Fonts.def;
 	public static final Fi   fontDirectory = IntVars.dataDirectory.child("fonts");
+	public static String DEFAULT = "DEFAULT";
 
 	public static void load() {
 		fontDirectory.mkdirs();
@@ -45,7 +46,7 @@ public class MyFonts {
 	 underline     = false,
 	 strikethrough = false;
 	private static Font acquireFont() {
-		if (!SETTINGS.containsKey("font")) return Fonts.def;
+		if (SETTINGS.get("font", DEFAULT).equals(DEFAULT)) return Fonts.def;
 		if (def != Fonts.def) return def;
 
 		Fi fontFi = fontDirectory.child(SETTINGS.getString("font"));

@@ -3,10 +3,15 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.4.6.7
-- Fixed some bug about `ValueLabel`
-- Fixed the problem of not being able to obtain the offset of hidden class fields
-- Removed some test code
+Version 1.5
+## Highlight
+- Fixed a lot of bugs
+- Better `ReviewElement`, `Selections`, `Tester`
+-
+- New Content: KeyCodeSetter
+- Better performance (More tips)
+- Completely new ValueLabel (ShowInfoWindow)
+-
 -----------------
 
 ## ShowUIList

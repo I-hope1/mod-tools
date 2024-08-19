@@ -121,7 +121,10 @@ public class SettingsUI extends Content {
 
 			 button("Clear Mods Restart", HopeStyles.flatBordert, SettingsUI::disabledRestart).growX().height(42).row();
 			 button("Font", HopeStyles.flatBordert, () -> {
-				 new DisWindow("Fonts", 220, 200) {{
+				 new DisWindow("Fonts", 220, 400) {{
+					 cont.button(MyFonts.DEFAULT, HopeStyles.flatToggleMenut, () ->  SETTINGS.put("font", "DEFAULT")).height(42).growX()
+							.checked(_ -> MyFonts.DEFAULT.equals(SETTINGS.getString("font"))).row();
+					 cont.image().color(Color.gray).growX().padTop(6f).row();
 					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
 						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
 								SETTINGS.put("font", fi.name());

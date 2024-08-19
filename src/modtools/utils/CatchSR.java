@@ -9,12 +9,12 @@ import modtools.utils.Tools.*;
  * 使用方法:<br />
  * {@link CatchSR#apply(Runnable run)}<br />
  * run是get链<br />
- *
- * <pre>{@code CatchSR.apply(() ->
+ * {@snippet lang="java" :
+ * CatchSR.apply(() ->
  * CatchSR.of(() -> MyReflect.lookupGetMethods(cls))
  *        .get(cls::getDeclaredMethods)
  *        .get(() -> new Method[0])
- * )}</pre>
+ * )}
  * @author I-hope1
  * @see #apply(Runnable)
  * @see #of(CProv)

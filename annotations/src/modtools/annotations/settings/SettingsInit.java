@@ -5,10 +5,11 @@ import java.lang.annotation.*;
 
 /**
  * <p>用于初始化对于Settings对象</p>
- * <pre>{@code @SettingsInit
+ * {@snippet lang="java":
+ * @SettingsInit
  * enum Settings {
- * }}</pre>
- * @see modtools.annotations.processors.ContentProcessor#dealElement(com.sun.tools.javac.code.Symbol.ClassSymbol) )
+ * }}
+ * @see modtools.annotations.processors.ContentProcessor#dealElement(com.sun.tools.javac.code.Symbol.ClassSymbol)
  * @see modtools.utils.JSFunc
  */
 @Target(ElementType.TYPE)

@@ -28,11 +28,6 @@ public interface ParseUtils {
 
 	/**
 	 * 执行语句。
-	 *
-	 * @param fn   要执行的函数。
-	 * @param args 函数的参数列表。
-	 *
-	 * @return {@code JCExpressionStatement} 对象。
 	 * @see TreeMaker#Apply(List, JCExpression, List)
 	 */
 	default JCExpressionStatement execStatement(JCFieldAccess fn, List<JCExpression> args) {

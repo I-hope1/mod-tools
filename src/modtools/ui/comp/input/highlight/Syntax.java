@@ -2,7 +2,7 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import arc.util.Tmp;
+import arc.util.*;
 import mindustry.graphics.Pal;
 
 import java.util.Objects;
@@ -234,7 +234,7 @@ public class Syntax {
 
 	public class DrawSymbol extends DrawTask {
 		public final IntSet symbols;
-		public       char   lastSymbol;
+		public       char   lastSymbol = '\0';
 
 		public DrawSymbol(IntSet map, Color color) {
 			super(color);

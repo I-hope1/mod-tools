@@ -207,7 +207,7 @@ public class Tester extends Content {
 
 		Cell<?> areaCell = _cont.add(textarea).grow();
 		_cont.row();
-		ui.cont.update(() -> ((JSSyntax) textarea.syntax).enableJSProp = js_prop.enabled());
+		ui.cont.update(() -> ((JSSyntax) textarea.syntax).js_prop = js_prop.enabled());
 
 		Table center = _cont.table(t -> {
 			t.defaults().padRight(4f).size(42);
@@ -381,8 +381,8 @@ public class Tester extends Content {
 
 			// highlight
 			IntUI.addCheck(p.button(HopeIcons.highlight, new ImageButtonStyle(istyle), isize, () -> {
-				textarea.enableHighlighting = !textarea.enableHighlighting;
-			}), () -> textarea.enableHighlighting, "@tester.highlighting", "@tester.nothighlighting");
+				textarea.enableHighlight = !textarea.enableHighlight;
+			}), () -> textarea.enableHighlight, "@tester.highlighting", "@tester.nothighlighting");
 
 			ImageButton details = IntUI.addDetailsButton(p, () -> res, null);
 			details.resizeImage(isize);
@@ -516,11 +516,7 @@ public class Tester extends Content {
 		} else ui.show();
 	}
 	void setup() {
-		ui.cont.pane(this::build).grow().update(pane -> {
-			this.pane = pane;
-			pane.setScrollingDisabled(true, true);
-			pane.setOverscroll(false, false);
-		});
+		ui.cont.table(this::build).grow();
 	}
 
 	public boolean finished = true;

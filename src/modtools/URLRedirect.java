@@ -21,6 +21,7 @@ import java.util.*;
 public class URLRedirect {
 	static Properties replacer = new Properties();
 	static Fi         defaultConfig;
+	public static final String SUFFIX = "-h0";
 
 	static void load() throws Throwable {
 		defaultConfig = IntVars.dataDirectory.child("http_redirect.properties");
@@ -34,8 +35,9 @@ public class URLRedirect {
 		field.set(null, new Hashtable<>(hashtable) {
 			public synchronized URLStreamHandler put(String key, URLStreamHandler value) {
 				if (!key.equals("http") && !key.equals("https")) return super.put(key, value);
+				if (value.getClass().getName().endsWith("-h0")) return value;
 
-				var handler = new MyClass<>(value.getClass().getName() + "-h0", value.getClass());
+				var handler = new MyClass<>(value.getClass().getName() + SUFFIX, value.getClass());
 				handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
 				handler.addInterface(RedirectHandler.class);
 				handler.visit(URLRedirect.class);

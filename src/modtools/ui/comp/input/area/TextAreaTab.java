@@ -21,7 +21,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.*;
 import modtools.ui.*;
 import modtools.ui.comp.input.highlight.*;
-import modtools.utils.*;
+import modtools.utils.SR;
 
 import java.util.regex.Pattern;
 
@@ -34,6 +34,8 @@ import java.util.regex.Pattern;
  * @author I hope...
  **/
 public class TextAreaTab extends Table implements SyntaxDrawable {
+	public static boolean DEBUG = false;
+
 	private final MyTextArea   area;
 	public final  MyScrollPane pane;
 	private       LinesShow    linesShow;
@@ -155,7 +157,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	public float getRelativeY(int pos) {
 		return area.getRelativeY(pos);
 	} */
-	public boolean enableHighlighting = true;
+	public boolean enableHighlight = true;
 
 	private static final Pattern startComment = Pattern.compile("\\s*?//");
 
@@ -250,12 +252,12 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 			this.font = font;
 
-			if (enableHighlighting && syntax != null) {
+			if (enableHighlight && syntax != null) {
 				try {
 					highlightingDraw(x, y);
 				} catch (Throwable e) {
 					Log.err(e);
-					enableHighlighting = false;
+					enableHighlight = false;
 				}
 			} else {
 				font.getColor().set(Color.white).mulA(alpha());
@@ -267,7 +269,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				int   max              = (firstLineShowing + linesShowing) * 2;
 				for (int i = firstLineShowing * 2; i < max && i < linesBreak.size; i += 2) {
 					font.draw(text, x, y + offsetY, linesBreak.get(i), linesBreak.get(i + 1),
-					 0, Align.left, false).free();
+					 0, Align.left, false);
 					offsetY -= lineHeight();
 				}
 			}
@@ -288,7 +290,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		} */
 		public void highlightingDraw(float x, float y) {
 			if (needsLayout()) return;
-			baseOffsetX = offsetX = x;
+			baseOffsetX = offsetX = x + textOffset;
 			updateTextIndex();
 			int firstLineShowing = getRealFirstLineShowing();
 			offsetY = -firstLineShowing * lineHeight() + y;
@@ -299,6 +301,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			} */
 
 			syntax.highlightingDraw(text.substring(displayTextStart, displayTextEnd));
+			font.getCache().draw();
+			font.getCache().clear();
 		}
 		/** 渲染多文本 */
 		public void drawMultiText(CharSequence text, int start, int max) {
@@ -321,13 +325,16 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 			if (start < max) {
 				drawText(text, start, max);
-				offsetX += glyphPositions.get(displayTextStart + max) - glyphPositions.get(displayTextStart + start);
-				// Log.info(glyphPositions);
-				// Log.info(font.getData().cursorX);
+				if (DEBUG) {
+					Draw.color();
+					Lines.line(offsetX, offsetY, offsetX, offsetY - lineHeight());
+				}
 			}
 		}
+
 		private void drawText(CharSequence text, int start, int cursor) {
 			font.draw(text, offsetX, offsetY, start, cursor, 0f, Align.left, false);
+			offsetX += Math.max(font.getCache().getLayouts().first().runs.first().xAdvances.sum(), glyphPositions.get(cursor) - glyphPositions.get(start));
 		}
 
 		public void updateDisplayText() {
@@ -514,7 +521,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					return false;
 				}
 			}
-			/** 修复笔记本上不能使用的问题  */
+			/** 修复笔记本上不能使用的问题 */
 			private void fixNumLk(InputEvent event, KeyCode keycode) {
 				int oldCursor = cursor;
 				Time.runTask(1, () -> {
@@ -601,7 +608,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return text.charAt(i) == c;
 		}
 		public boolean isWordCharacter(char c) {
-			return Character.isUnicodeIdentifierPart(c);
+			return Character.isUnicodeIdentifierPart(c) || c == '$';
 		}
 	}
 

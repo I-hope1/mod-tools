@@ -42,8 +42,9 @@ public class Tools {
 	public static String readFiOrEmpty(Fi fi) {
 		try {
 			return fi.exists() ? fi.readString() : "";
-		} catch (Throwable ignored) { }
-		return "<ERROR>";
+		} catch (Throwable ignored) {
+			return "<ERROR>";
+		}
 	}
 
 	/**
@@ -332,7 +333,7 @@ public class Tools {
 				Log.err(th);
 				if (!ModTools.loaded) return;
 				Window window = IntUI.showException(text, th);
-				if (el != null) window.shown( () -> window.setPosition(ElementUtils.getAbsolutePos(el)));
+				if (el != null) window.shown(() -> window.setPosition(ElementUtils.getAbsolutePos(el)));
 			}
 		};
 	}

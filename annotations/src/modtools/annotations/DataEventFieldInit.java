@@ -4,19 +4,19 @@ import java.lang.annotation.*;
 
 /**
  * <p>用于初始化字段的值，并注册事件</p>
- * 需要方法{@code public void dataInit(){}}
+ * 需要方法{@snippet lang="java": public void dataInit(){}}
  * 只需调用这个方法
  * <hr>
- * 示例：{@code @DataFieldInit boolean xxx;}
+ * 示例：{@snippet lang="java": @DataFieldInit boolean xxx;}
  * <p>这会生成：</p>
- * <pre>{@code
+ * <pre>{@snippet lang="java":
  * MyEvents $event$ = new MyEvents();
  * public void dataInit() {
  *   $event$.onIns(xxx, t -> xxx = t.enabled())
  * }
  * }</pre>
  *
- * @see modtools.annotations.processors.DataProcessor#process2
+ * @see modtools.annotations.processors.DataProcessor#process
  */
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.SOURCE)

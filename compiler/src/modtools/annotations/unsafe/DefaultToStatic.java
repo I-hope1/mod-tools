@@ -39,19 +39,19 @@ public class DefaultToStatic extends TreeTranslator {
 		}
 		// println(Flags.toString(tree.mods.flags) + "." + tree.sym);
 		class LambdaScanner extends TreeScanner {
-			boolean hasLambda, hasThis;
+			boolean hasLambda, hasCaptured;
 			boolean    inLambda;
-			List<Name> blackList = methodDecl.params.map(p -> p.name).appendList(classDecl.defs.map(p ->
+			List<Name> blackList = classDecl.defs.map(p ->
 			 p instanceof JCVariableDecl v ? v.name :
 			 p instanceof JCClassDecl c ? c.name :
-			 p instanceof JCMethodDecl m ? m.name : null));
+			 p instanceof JCMethodDecl m ? m.name : null);
 			public void visitLambda(JCLambda tree) {
 				hasLambda = true;
 
 				inLambda = true;
 				List<Name> prev = blackList;
 				blackList = blackList.appendList(tree.params.map(p -> p.name));
-				if (!hasThis) super.visitLambda(tree);
+				if (!hasCaptured) super.visitLambda(tree);
 				blackList = prev;
 				inLambda = false;
 			}
@@ -60,13 +60,13 @@ public class DefaultToStatic extends TreeTranslator {
 				if (inLambda
 				    && blackList.stream().noneMatch(p -> p != null && p.contentEquals(tree.name))
 				    && !hasImport(tree.name)) {
-					hasThis = true;
+					hasCaptured = true;
 				}
 			}
 		}
 		LambdaScanner scanner = new LambdaScanner();
 		methodDecl.body.accept(scanner);
-		if (scanner.hasLambda && scanner.hasThis) {
+		if (scanner.hasLambda && scanner.hasCaptured) {
 			MethodSymbol enclMethod = methodDecl.sym;
 			VarSymbol    varSymbol  = new VarSymbol(Flags.PARAMETER, names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			self = make.VarDef(varSymbol, null);

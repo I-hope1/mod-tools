@@ -16,7 +16,7 @@ public class MySet<T> extends OrderedSet<T> {
 
 		// 因为concurrent，所以可能会报错
 		// TODO
-		Tools.runIgnoredException(() -> {
+		Tools.runLoggedException(() -> {
 			while (iter.hasNext()) {
 
 				if (!predicate.get(iter.next())) {

@@ -31,7 +31,7 @@ public class AINIT extends AbstractProcessor {
 		} catch (Throwable e) {
 			err(e);
 		} finally {
-			Times.printElapsed("Take @ms");
+			Times.printElapsed("Compiler initialed in @ms");
 		}
 	}
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {

@@ -1,5 +1,6 @@
 package modtools.utils;
 
+import arc.Core;
 import arc.func.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
@@ -7,12 +8,12 @@ import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.event.InputEvent.InputEventType;
 import arc.scene.ui.Label;
-import arc.util.*;
+import arc.util.Log;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
+import modtools.annotations.DebugMark;
 import modtools.ui.IntUI;
-import modtools.ui.control.HopeInput;
 
 import java.util.function.Consumer;
 
@@ -112,10 +113,10 @@ public class EventHelper {
 		return mobile ? longPress0(element, () -> run.accept(element))
 		 : rightClick(element, () -> run.accept(element));
 	}
-	/** @param cons 它的参数可能为null  */
+	/** @param cons 它的参数可能为null */
 	public static <T> void
 	longPressOrRclick(Element listener, Class<T> target, Consumer<T> cons) {
-		listener.addListener(mobile ? new LongPressListener(_ -> {}, IntUI.DEF_LONGPRESS) {
+		listener.addListener(mobile ? new LongPressListener(_ -> { }, IntUI.DEF_LONGPRESS) {
 			public void longPress(InputEvent event) {
 				T targetActor = ElementUtils.findParent(event.targetActor, target);
 				cons.accept(targetActor);
@@ -170,6 +171,7 @@ public class EventHelper {
 		return event;
 	}
 
+	@DebugMark
 	public static class LongPressListener extends ClickListener {
 		final long  duration;
 		final Boolc boolc;
@@ -180,21 +182,20 @@ public class EventHelper {
 			task = TaskManager.newTask(() -> {
 				if (pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
 					longPress = true;
-					InputEvent event = EventHelper.obtainEvent(InputEventType.touchUp, mouseVec.x, mouseVec.y, pressedPointer, button);
-					event.targetActor = HopeInput.mouseHit();
-					longPress(event);
+					Core.scene.touchUp((int) mouseVec.x, (int) mouseVec.y, lastPointer, button);
 				}
 			});
 		}
 		boolean longPress;
 		final Task task;
+		int lastPointer;
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			if (event.stopped) return false;
 			longPress = false;
 			if (super.touchDown(event, x, y, pointer, button)) {
 				last.set(mouseVec);
-				task.cancel();
-				Timer.schedule(task, duration / 1000f);
+				lastPointer = pointer;
+				TaskManager.scheduleOrReset(duration / 1000f, task);
 				return true;
 			}
 			return false;
@@ -202,15 +203,19 @@ public class EventHelper {
 		public void touchDragged(InputEvent event, float x, float y, int pointer) {
 			if (mouseVec.dst(last) >= IntUI.MAX_OFF && task != null) task.cancel();
 		}
-		public void longPress(InputEvent event) {
+		public final void longPress0(InputEvent event) {
+			if (!longPress) return;
+			longPress = false;
 			event.stop();
+			longPress(event);
+		}
+		public void longPress(InputEvent event) {
 			boolc.get(true);
 		}
+
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			super.touchUp(event, x, y, pointer, button);
-			if (task.isScheduled() && longPress) {
-				longPress(event);
-			}
+			longPress0(event);
 			task.cancel();
 		}
 		public void clicked(InputEvent event, float x, float y) {

@@ -1,5 +1,6 @@
 package modtools.ui.comp.utils;
 
+import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
@@ -72,7 +73,7 @@ public abstract class ValueLabel extends InlineLabel {
 
 		MyEvents.on(E_JSFuncDisplay.value, () -> shown = E_JSFuncDisplay.value.enabled());
 
-		addFocusListener();
+		Core.app.post(() -> addFocusListener());
 
 		Object[] val = {null};
 		addListener(new InputListener() {

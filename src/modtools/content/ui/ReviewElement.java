@@ -322,11 +322,11 @@ public class ReviewElement extends Content {
 				 .size(130, 35).get();
 
 				t.button(Icon.copySmall, HopeStyles.clearNonei, 28, () -> {
-					 var window = new ReviewElementWindow();
-					 window.pattern = pattern;
-					 window.show(element);
-					 window.shown(() -> window.setSize(width, height));
-				 });
+					var window = new ReviewElementWindow();
+					window.pattern = pattern;
+					window.show(element);
+					window.shown(() -> window.setSize(width, height));
+				});
 				t.button(Icon.refreshSmall, HopeStyles.clearNonei, 28, () -> rebuild(element));
 				t.button(Icon.settingsSmall, HopeStyles.clearNonei, 28, () -> {
 					showSelectTableRB((p, _, _) -> {

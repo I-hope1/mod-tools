@@ -5,19 +5,7 @@ tasks.withType(JavaCompile) {
 	// 这里是为了刷新编译器参数
 	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000);
 }
-jar {
-	/*doLast {
-		File file = new File(buildDir0.parent, "build.gradle")
-		String str
-		try (var input = new FileInputStream(file)) {
-			str = String.join("options.compilerArgs += '-Aa${(int) (Math.random() * 10000)}'", new String(input.readAllBytes())
-							.split("options.compilerArgs \\+= '-Aa\\d*'"))
-		}
-		if (str != null) try (var output = new FileOutputStream(file)) {
-			output.write(str.bytes)
-		}
-	}*/
-}
+
 dependencies {
 	implementation project(":annotations")
 

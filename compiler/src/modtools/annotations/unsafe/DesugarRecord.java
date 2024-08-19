@@ -14,6 +14,8 @@ public class DesugarRecord extends TreeTranslator {
 	public static final int PUBLIC_FINAL = Flags.PUBLIC | Flags.FINAL;
 
 	JCCompilationUnit toplevel;
+	public void visitImport(JCImport tree) {
+	}
 	public void visitClassDef(JCClassDecl tree) {
 		super.visitClassDef(tree);
 		if ((tree.mods.flags & Flags.RECORD) == 0) return;

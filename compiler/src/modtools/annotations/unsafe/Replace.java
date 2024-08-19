@@ -17,12 +17,11 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.tree.*;
-import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
-import com.sun.tools.javac.util.JCDiagnostic.Factory;
 import com.sun.tools.javac.util.List;
-import com.sun.tools.javac.util.JCDiagnostic.*;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
 
@@ -105,12 +104,6 @@ public class Replace {
 			 searchModuleExport(pkg.modle);
 		 });
 
-		removeKey(Factory.class, () -> new Factory(context) {
-			public JCDiagnostic fragment(Fragment fragmentKey) {
-				println("fragment: " + fragmentKey);
-				return super.fragment(fragmentKey);
-			}
-		});
 		Method initModule = Modules.class.getDeclaredMethod("setupAutomaticModule", ModuleSymbol.class);
 		initModule.setAccessible(true);
 		Modules modules = Modules.instance(context);
@@ -436,7 +429,7 @@ public class Replace {
 		} catch (Throwable e) {
 			err(e);
 		} finally {
-			Times.printElapsed("Process @ms");
+			Times.printElapsed("Process in @ms");
 		}
 	}
 	public static Context context() {

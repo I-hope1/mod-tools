@@ -14,6 +14,7 @@ import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import mindustry.ui.fragments.ConsoleFragment;
+import modtools.IntVars;
 import modtools.content.Content;
 import modtools.ui.*;
 import modtools.ui.comp.*;
@@ -63,17 +64,13 @@ public class LogDisplay extends Content {
 			).height(42).growX().row();
 			t.pane(new LimitTable(MessageBuilder::new))
 			 .colspan(2).grow().with(pane -> pane.update(() -> new AutoWrapListener(pane))).row();
+			if (!IntVars.isDesktop()) return;
 			TextAreaTab tab = new TextAreaTab("", JSSyntax::new);
 			tab.getArea().setPrefRows(10);
 			TextField chatfield = Reflect.get(ConsoleFragment.class, Vars.ui.consolefrag, "chatfield");
 			tab.keyDownB = (event, keyCode) -> {
 				if (Core.input.ctrl() && keyCode == KeyCode.enter) {
-					Reflect.set(TextField.class, chatfield, "writeEnters", true);
-					chatfield.setText(tab.getText());
-					Reflect.set(TextField.class, chatfield, "writeEnters", false);
-					Reflect.invoke(ConsoleFragment.class, Vars.ui.consolefrag, "sendMessage", ArrayUtils.EMPTY_ARRAY);
-					tab.getArea().clearText();
-					tab.getArea().setCursorPosition(0);
+					exec(chatfield, tab);
 					return true;
 				}
 				return false;
@@ -107,6 +104,16 @@ public class LogDisplay extends Content {
 		ui.shown(() -> Core.app.post(() -> tables[0].invalidateHierarchy()));
 
 		// ui.addCloseButton();
+	}
+	private static void exec(TextField chatfield, TextAreaTab tab) {
+		Reflect.set(TextField.class, chatfield, "writeEnters", true);
+		chatfield.setText(tab.getText());
+		Reflect.set(TextField.class, chatfield, "writeEnters", false);
+		Reflect.invoke(ConsoleFragment.class, Vars.ui.consolefrag, "sendMessage", ArrayUtils.EMPTY_ARRAY);
+		Core.app.post(() -> {
+			tab.getArea().clearText();
+			tab.getArea().setCursorPosition(0);
+		});
 	}
 	/** For log */
 	public static class MessageBuilder {

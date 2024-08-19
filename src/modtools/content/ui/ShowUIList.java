@@ -262,7 +262,7 @@ public class ShowUIList extends Content {
 				t1.add("Custom " + Strings.capitalize(type) + ": ");
 				String fileName = type + ".json";
 				t1.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
-			}).row();
+			}).colspan(2).growX().row();
 		});
 	}
 	private static void fieldWithView(LazyTable<Object> t, Field field, Drawable drawable) {

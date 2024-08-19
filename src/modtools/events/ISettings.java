@@ -296,7 +296,7 @@ public interface ISettings extends E_DataInterface {
 		slider.update(new Condition(slider, this::isSwitchOn));
 		slider.moved(val -> {
 			set(val);
-			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step))));
+			value.setText(Strings.autoFixed(val, -Mathf.floor(Mathf.log(10, step)) + 1));
 		});
 		Table content = new Table();
 		content.add(text, Styles.outlineLabel).left().growX().wrap();

@@ -12,10 +12,10 @@ import static modtools.events.E_Game.DEF.*;
 public enum E_Game implements ISettings {
 	/** @see ISettings#$(float, float, float, float)  */
 	@FlushField
-	renderer_min_zoom(float.class, it -> it.$(Vars.renderer.minZoom, Math.min(0.1f, minZoom), maxZoom)),
+	renderer_min_zoom(float.class, it -> it.$(Vars.renderer.minZoom, Math.min(0.1f, minZoom), maxZoom, 0.1f)),
 	/** @see ISettings#$(float, float, float, float) */
 	@FlushField
-	renderer_max_zoom(float.class, it -> it.$(Vars.renderer.maxZoom, maxZoom, Math.max(14f, maxZoom))),
+	renderer_max_zoom(float.class, it -> it.$(Vars.renderer.maxZoom, maxZoom, Math.max(24f, maxZoom), 0.1f)),
 	/** @see ISettings#$(int, int, int, int) */
 	@FlushField
 	max_schematic_size(int.class, it -> it.$(Vars.maxSchematicSize, Vars.maxSchematicSize, 500)) {
@@ -26,8 +26,10 @@ public enum E_Game implements ISettings {
 	};
 
 	interface DEF {
-		float minZoom = Vars.renderer.minZoom;
-		float maxZoom = Vars.renderer.maxZoom;
+		/** @see mindustry.core.Renderer#minZoom  */
+		float minZoom = 1.5f;
+		/** @see mindustry.core.Renderer#maxZoom  */
+		float maxZoom = 6f;
 	}
 
 	E_Game(Class<?> cl, Cons<ISettings> builder) {}

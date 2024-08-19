@@ -49,6 +49,7 @@ public class KeyCodeSetter extends Content {
 				elementKeyCode.setKeyCode(key, value);
 			} else {
 				tmpKeyCode.put(button, value);
+				IntUI.showInfoFade("Temporary binding.");
 			}
 		};
 	}
@@ -315,7 +316,7 @@ public class KeyCodeSetter extends Content {
 
 		// 正式开始布局
 
-		cont.defaults().height(42).pad(4).growX();
+		cont.defaults().height(42).margin(4).pad(4).growX();
 		cont.button("Bind key", Icon.pencilSmall, Styles.flatt, this::selectButton);
 		cont.button("Flush", Icon.refreshSmall, Styles.flatt, rebuild).row();
 

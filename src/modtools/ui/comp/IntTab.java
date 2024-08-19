@@ -75,6 +75,8 @@ public class IntTab {
 				return prefH != CellTools.unset ? prefH : super.getPrefHeight();
 			}
 		};
+
+		main.name = "IntTab#main";
 	}
 
 	public static Color[] fillColor(int size, Color color) {

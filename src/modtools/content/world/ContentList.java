@@ -53,6 +53,7 @@ public class ContentList extends Content {
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
 		new Search((_, text) -> pattern = text).build(top, main);
+		buildAll();
 	}
 
 	private <T> ObjectMap<String, T> fieldsToMap(Field[] fields, Class<T> cl) {
@@ -91,12 +92,11 @@ public class ContentList extends Content {
 		 defaultTable(items, switchUnlock), defaultTable(liquids, switchUnlock),
 		 defaultTable(planets, switchUnlock)};
 
-		tab = new IntTab(main.getWidth(), names, Color.sky, tables);
+		tab = new IntTab(CellTools.unset, names, Color.sky, tables);
 		tab.eachWidth = 86;
-		main.update(() -> tab.setTitleWidth(main.getWidth() / Scl.scl()));
+		// main.update(() -> tab.setTitleWidth(main.getWidth() / Scl.scl()));
 		tab.title.add("@mod-tools.tips.longprees_to_cppy")
 		 .colspan(tables.length).growX().row();
-		tab.setPrefSize(tab.eachWidth * 3, CellTools.unset);
 
 		main.add(tab.build()).grow().top();
 	}
@@ -107,6 +107,7 @@ public class ContentList extends Content {
 	private <T> FilterTable<T> defaultTable(Prov<ObjectMap<String, T>> mapProv, Cons<T> clicked) {
 		Cons<FilterTable<T>>[] rebuild = new Cons[]{null};
 		rebuild[0] = t -> {
+			t.top().defaults().top();
 			t.clear();
 			t.button("RebuildAll", Styles.flatt, () -> {
 				rebuild[0].get(t);
@@ -152,7 +153,6 @@ public class ContentList extends Content {
 		  : new TextureRegionDrawable(u.uiIcon);
 	}
 	public void build() {
-		buildAll();
 		ui.show();
 		Time.runTask(2, () -> tab.main.invalidate());
 	}

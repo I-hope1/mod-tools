@@ -62,7 +62,7 @@ public class SclListener extends ClickListener {
 
 		if (valid(x, y)) {
 			scling = true;
-			change.set(0, 0);
+			delta.set(0, 0);
 			defWidth = bind.getWidth();
 			defHeight = bind.getHeight();
 			defX = bind.x;
@@ -74,25 +74,25 @@ public class SclListener extends ClickListener {
 	}
 
 	/** 用于移动时改变坐标的元素（left|bottom） */
-	public Vec2 change = new Vec2();
+	public Vec2 delta = new Vec2();
 	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		if (isDisabled()) return;
 		scling = true;
-		if (change.x != 0) {
-			x += change.x;
-			change.x = 0;
+		if (delta.x != 0) {
+			x += delta.x;
+			delta.x = 0;
 		}
-		if (change.y != 0) {
-			y += change.y;
-			change.y = 0;
+		if (delta.y != 0) {
+			y += delta.y;
+			delta.y = 0;
 		}
 		Core.graphics.cursor(getCursor());
 		if (left) {
 			float w = Mathf.clamp(defWidth - x + last.x, minW, Core.graphics.getWidth());
 			bind.setWidth(w);
-			change.x = defWidth - w;
-			bind.x = defX + change.x;
+			delta.x = defWidth - w;
+			bind.x = defX + delta.x;
 		}
 		if (right) {
 			bind.setWidth(Mathf.clamp(defWidth + x - last.x, minW, Core.graphics.getWidth()));
@@ -100,8 +100,8 @@ public class SclListener extends ClickListener {
 		if (bottom) {
 			float h = Mathf.clamp(defHeight - y + last.y, minH, Core.graphics.getHeight());
 			bind.setHeight(h);
-			change.y = defHeight - h;
-			bind.y = defY + change.y;
+			delta.y = defHeight - h;
+			bind.y = defY + delta.y;
 		}
 		if (top) {
 			bind.setHeight(Mathf.clamp(defHeight + y - last.y, minH, Core.graphics.getHeight()));
@@ -112,7 +112,7 @@ public class SclListener extends ClickListener {
 	@Override
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		super.touchUp(event, x, y, pointer, button);
-		change.set(0, 0);
+		delta.set(0, 0);
 		scling = false;
 		defWidth = defHeight = defX = defY = -1;
 		fireElement = null;

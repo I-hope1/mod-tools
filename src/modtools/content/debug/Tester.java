@@ -74,7 +74,7 @@ import static modtools.utils.Tools.*;
 public class Tester extends Content {
 	private static final int FADE_ALIGN = Align.bottomLeft;
 
-	public static final float WIDTH = Core.graphics.isPortrait() ? 400 : 420;
+	public static final float WIDTH = 420;
 
 	public static Scripts    scripts;
 	public static Scriptable topScope, customScope;
@@ -188,7 +188,7 @@ public class Tester extends Content {
 	public String originalText = null;
 
 	public ScrollPane  pane;
-	public SclListener logSclListener;
+	public SclListener barListener;
 	public void build(Table table) {
 		if (ui == null) _load();
 
@@ -233,7 +233,7 @@ public class Tester extends Content {
 					return CAST.unwrap(script.exec(cx, customScope));
 				});
 			});
-		}).growX().minWidth(WIDTH).get();
+		}).growX().minWidth(WIDTH).touchable(Touchable.enabled).get();
 		_cont.getChildren().each(btn -> {
 			btn.addListener(new KeepFocusListener(area));
 		});
@@ -247,46 +247,41 @@ public class Tester extends Content {
 				 .wrap().style(HopeStyles.defaultLabel)
 				 .labelAlign(Align.left).growX();
 			}).grow().with(p -> p.setScrollingDisabled(true, false));
-		}).growX().touchable(Touchable.enabled);
+		}).growX();
 
 		ScrollPane pane = new ScrollPane(_cont);
 		pane.setScrollingDisabled(true, true);
-		int areaSpace = 10;
-		Runnable invalid = () -> {
-			float height = pane.getHeight() - _cont.getChildren().sumf(
-			 e -> e == textarea ? 0 : e.getHeight()
+		int areaSpace = 20;
+		Floatc invalidate = height -> {
+			float maxHeight = _cont.getHeight() - _cont.getChildren().sumf(
+			 elem -> elem == textarea ? areaSpace : elem == logCell.get() ? 0 : elem.getHeight()
 			);
-			if (height < 0) {
-				logCell.height((pane.getHeight() - center.getHeight() - areaSpace) / Scl.scl());
-				return;
-			}
-			logCell.get().toBack();
-			areaCell.height(height / Scl.scl());
+			logCell.height(Mathf.clamp(height, 32, maxHeight) / Scl.scl());
 			_cont.invalidate();
 		};
-		pane.update(invalid);
-		logSclListener = new SclListener(logCell.get(), 0, logCell.get().getPrefHeight()) {
+		pane.update(() -> {
+			if (pane.needsLayout()) {
+				invalidate.get(logCell.get().getHeight());
+			}
+		});
+		barListener = new SclListener(center, 0, 0) {
 			public boolean valid(float x, float y) {
-				y -= bind.getHeight();
-				top = 0 < y && y < offset;
+				top = Math.abs(y - bind.getHeight()) < offset;
 				return top && !isDisabled();
 			}
 			public void touchDragged(InputEvent event, float x, float y, int pointer) {
 				super.touchDragged(event, x, y, pointer);
-
-				float val = Mathf.clamp(bind.getHeight(), 0, pane.getHeight() - center.getHeight() - areaSpace);
-				bind.setHeight(val);
-				// areaCell.height(sum - val / Scl.scl());
-				logCell.height(val / Scl.scl());
-				invalid.run();
-				pane.setScrollingDisabled(true, true);
+				float delta = bind.getHeight() - bind.getPrefHeight();
+				defY = bind.y;
+				bind.pack();
+				invalidate.get(logCell.get().getHeight() + delta);
 			}
 		};
-		logSclListener.offset = center.getPrefHeight();
+		barListener.offset = center.getPrefHeight();
 		Time.runTask(1, () -> {
 			InputEvent event = EventHelper.obtainEvent(InputEventType.touchDown, 0, 0, 0, KeyCode.mouseLeft);
-			if (logSclListener.touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
-				logSclListener.touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
+			if (barListener.touchDown(event, 0, 0, 0, KeyCode.mouseLeft)) {
+				barListener.touchUp(event, 0, 0, 0, KeyCode.mouseLeft);
 			}
 			Pools.free(event);
 		});

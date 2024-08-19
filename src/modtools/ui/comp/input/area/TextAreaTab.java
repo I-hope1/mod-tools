@@ -5,6 +5,7 @@ import arc.Core;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
+import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Rect;
@@ -14,7 +15,7 @@ import arc.scene.style.*;
 import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
-import arc.struct.IntSeq;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
@@ -37,8 +38,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	public static boolean DEBUG = false;
 
 	private final MyTextArea   area;
-	public final  MyScrollPane pane;
-	private       LinesShow    linesShow;
+	public final MyScrollPane pane;
+	private      LinesShow    linesShow;
 	// public final  CodeTooltip  tooltip  = new CodeTooltip();
 	/** 编辑器是否只可读 */
 	public        boolean      readOnly = false,
@@ -334,7 +335,17 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		private void drawText(CharSequence text, int start, int cursor) {
 			font.draw(text, offsetX, offsetY, start, cursor, 0f, Align.left, false);
-			offsetX += Math.max(font.getCache().getLayouts().first().runs.first().xAdvances.sum(), glyphPositions.get(cursor) - glyphPositions.get(start));
+			offsetX += Math.max(lastTextWidth(), glyphPositions.get(cursor) - glyphPositions.get(start));
+		}
+		private float lastTextWidth() {
+			Seq<GlyphLayout> layouts = font.getCache().getLayouts();
+			if (!layouts.isEmpty()) {
+				Seq<GlyphRun> runs = layouts.first().runs;
+				if (!runs.isEmpty()) {
+					return runs.first().xAdvances.sum();
+				}
+			}
+			return 0;
 		}
 
 		public void updateDisplayText() {

@@ -35,6 +35,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static Types         types;
 	public static ParserFactory parsers;
 	public static Symtab        mSymtab;
+	public static Log log;
+	public static JavacMessages messages;
 	public static ClassFinder   classFinder;
 	public static JavacFiler    mFiler;
 	public static ClassWriter   classWriter;
@@ -114,6 +116,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		mMaker = TreeMaker.instance(_context);
 		names = Names.instance(_context);
 		types = Types.instance(_context);
+		log = Log.instance(_context);
+		messages = JavacMessages.instance(_context);
 		parsers = ParserFactory.instance(_context);
 		mSymtab = Symtab.instance(_context);
 		classFinder = ClassFinder.instance(_context);

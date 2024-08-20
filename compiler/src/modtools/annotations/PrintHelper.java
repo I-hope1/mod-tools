@@ -1,8 +1,6 @@
 package modtools.annotations;
 
-import com.sun.tools.javac.tree.TreeMaker;
-import com.sun.tools.javac.util.Log;
-import modtools.annotations.unsafe.Replace;
+import com.sun.tools.javac.util.JCDiagnostic.Error;
 
 import java.io.*;
 
@@ -44,12 +42,14 @@ public interface PrintHelper {
 	}
 
 	interface SPrinter {
+		static Error err(String err) {
+			return new Error("any", "1", err);
+		}
 		static void err(Throwable th) {
 			StringWriter sw = new StringWriter();
 			PrintWriter  pw = new PrintWriter(sw);
 			th.printStackTrace(pw);
 			errs(sw.toString());
-			Log.instance(Replace.context()).error(TreeMaker.instance(Replace.context()).pos, "Internal Error",th.toString());
 		}
 		static void println(Object... objects) {
 			for (Object object : objects) {

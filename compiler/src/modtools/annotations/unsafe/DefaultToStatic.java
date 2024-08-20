@@ -71,7 +71,7 @@ public class DefaultToStatic extends TreeTranslator {
 			VarSymbol    varSymbol  = new VarSymbol(Flags.PARAMETER, names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			self = make.VarDef(varSymbol, null);
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
-			 names.fromString(methodDecl.name + "$default"), methodDecl.restype,
+			 names.fromString("$default$" + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
 			 methodDecl.recvparam,
 			 methodDecl.params.prepend(self),

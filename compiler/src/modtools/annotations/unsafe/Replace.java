@@ -53,6 +53,7 @@ public class Replace {
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
+	static JavacMessages         messages;
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -68,7 +69,21 @@ public class Replace {
 		defaultToStatic = new DefaultToStatic(context);
 		desugarStringTemplate = new DesugarStringTemplate(context);
 		desugarRecord = new DesugarRecord();
+		messages = JavacMessages.instance(context);
+		messages.add(locale -> new ResourceBundle() {
+			final Vector<String> vector = new Vector<>();
 
+			{
+				vector.add("any.1");
+			}
+
+			protected Object handleGetObject(String key) {
+				return "{0}";
+			}
+			public Enumeration<String> getKeys() {
+				return vector.elements();
+			}
+		});
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }

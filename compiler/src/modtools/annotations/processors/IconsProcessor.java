@@ -6,6 +6,7 @@ import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 
@@ -19,6 +20,14 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		JCClassDecl root = trees.getTree(element);
 		root.defs = List.nil();
 		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
+
+		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
+		log.useSource(unit.sourcefile);
+		if (!root.name.toString().endsWith("c")) {
+			log.error(DiagnosticFlag.MANDATORY, unit.toString().indexOf(root.name.toString()) + root.name.length() - 1,
+			 SPrinter.err("The class name must end with 'c' to use the @IconAnn annotation."));
+			return;
+		}
 
 		((ClassType) root.sym.type).supertype_field = mSymtab.objectType;
 		ClassSymbol drawableSymbol = findClassSymbol("arc.scene.style.TextureRegionDrawable");
@@ -69,11 +78,6 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		 ns("load"), mMaker.TypeIdent(TypeTag.VOID), List.nil(), List.nil(),
 		 List.nil(), parseBlock("{" + sb + "}"), null);
 		root.defs = root.defs.append(load);
-		// JCBlock x = parseBlock(Flags.STATIC, "{" + sb + "}");
-		// x.pos = 1000;
-		// root.defs = root.defs.append(x);
-		// Log.info(root);
-		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 
 		// var lastPackage = unit.packge;
 		String s       = root.name.toString();

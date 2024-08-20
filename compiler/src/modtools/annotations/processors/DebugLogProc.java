@@ -43,9 +43,7 @@ public class DebugLogProc extends BaseProcessor<ClassSymbol> {
 				if (expr instanceof JCLiteral) return;
 				tree.args = List.of(mMaker.Binary(Tag.PLUS,
 				 mMaker.Literal(expr.toString()), mMaker.Binary(Tag.PLUS, mMaker.Literal(" = "), expr)));
-					/* fmt.replace(
-					"%", tree.args.toString())
-					 .replace("@", tree); */
+				// TODO
 			}
 		}
 	}

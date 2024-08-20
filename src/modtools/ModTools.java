@@ -21,7 +21,7 @@ import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.override.HScene;
 import modtools.ui.*;
-import modtools.ui.control.*;
+import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
@@ -60,8 +60,8 @@ public class ModTools extends Mod {
 	}
 	public void load0() {
 		try {
-			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, Vars.mods, "metas");
-			IntVars.meta = metas.get(ModTools.class);
+			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, mods, "metas");
+			meta = metas.get(ModTools.class);
 			load();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.close_modrestart", "@mod-tools.close_modrestart_text",
@@ -81,7 +81,7 @@ public class ModTools extends Mod {
 	}
 
 	private void load() {
-		if (!isImportFromGame) IntVars.meta.hidden = false;
+		if (!isImportFromGame) meta.hidden = false;
 		resolveLibsCatch();
 
 		try {
@@ -91,19 +91,23 @@ public class ModTools extends Mod {
 			System.exit(-1); */
 		}
 
+		// HopeProcessor.main();
+
 		WorldDraw.registerEvent();
 		HopeCall.registerPacket();
 
 		if (isImportFromGame) {
 			// loadContent();
 			loadInputAndUI();
-		} else Events.on(ClientLoadEvent.class,
-		 _ -> Tools.runLoggedException(this::loadInputAndUI));
+		} else {
+			Events.on(ClientLoadEvent.class,
+			 _ -> Tools.runLoggedException(this::loadInputAndUI));
+		}
 	}
 
 
 	public void loadContent() {
-		IntVars.meta.hidden = true;
+		meta.hidden = true;
 		// Time.mark();
 		Tools.runLoggedException(Tester::initExecution);
 
@@ -123,7 +127,7 @@ public class ModTools extends Mod {
 	}
 	private static void planB_resolveLibs() {
 		TaskManager.forceRun(() -> {
-			if (Vars.mods.getMod(ModTools.class) == null) return false;
+			if (mods.getMod(ModTools.class) == null) return false;
 			loadLibs();
 			return true;
 		});
@@ -131,7 +135,7 @@ public class ModTools extends Mod {
 	private static void loadLibs() {
 		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
-		IntVars.hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
+		hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 		if (isImportFromGame) loadBundle();
 	}
 
@@ -159,7 +163,7 @@ public class ModTools extends Mod {
 		load("Updater", Updater::checkUpdate);
 
 		loaded = true;
-		IntVars.async(() -> {
+		async(() -> {
 			AllTutorial.init();
 			Tools.runLoggedException("HScene", HScene::load);
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
@@ -221,7 +225,7 @@ public class ModTools extends Mod {
 	                              Runnable callback) {
 		try {
 			// 没报错的话，证明已经加载
-			IntVars.mainLoader.loadClass(mainClassName);
+			mainLoader.loadClass(mainClassName);
 			return true;
 		} catch (Exception ignored) { }
 
@@ -235,8 +239,8 @@ public class ModTools extends Mod {
 			Fi toFi = Vars.dataDirectory.child(STR."tmp/mod-tools-\{fileName}.jar");
 			FileUtils.delete(toFi);
 			sourceFi.copyTo(toFi);
-			ClassLoader loader = Vars.platform.loadJar(toFi, IntVars.mainLoader);
-			IntVars.mainLoader.addChild(loader);
+			ClassLoader loader = platform.loadJar(toFi, mainLoader);
+			mainLoader.addChild(loader);
 			Class.forName(mainClassName, true, loader);
 			lastLoader = loader;
 			if (callback != null) callback.run();
@@ -262,7 +266,7 @@ public class ModTools extends Mod {
 		WorldDraw.tasks.clear();
 		IntUI.disposeAll();
 		HopeInput.dispose();
-		IntVars.dispose();
+		dispose();
 		MyEvents.dispose();
 		MyFonts.dispose();
 		ModClassLoader   loader   = (ModClassLoader) mods.mainLoader();
@@ -275,10 +279,5 @@ public class ModTools extends Mod {
 		return isDisposed;
 	}
 
-	static {
-
-	}
-
-	static class UnexpectedPlatform extends RuntimeException { }
-
+	public static class UnexpectedPlatform extends RuntimeException { }
 }

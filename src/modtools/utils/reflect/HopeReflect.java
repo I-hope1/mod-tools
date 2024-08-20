@@ -22,6 +22,7 @@ public class HopeReflect {
 		setPublic0(obj, cls);
 	}
 	private static void setPublic0(Object obj, Class<?> cls) {
+		if (!OS.isAndroid) return;
 		try {
 			Field f = cls.getDeclaredField("accessFlags");
 			f.setAccessible(true);
@@ -37,7 +38,7 @@ public class HopeReflect {
 	public static Class<?> defineClass(String name, Class<?> superClass, byte[] bytes) {
 		if (OS.isAndroid) {
 			int mod = superClass.getModifiers();
-			if (/*Modifier.isFinal(mod) || */Modifier.isPrivate(mod)) {
+			if (/*Modifier.isFinal(mod) || */!Modifier.isPublic(mod)) {
 				setPublic(superClass, Class.class);
 			}
 			return defineClassAndroid(name, superClass.getClassLoader(), bytes);

@@ -11,6 +11,7 @@ import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import modtools.annotations.HopeReflect;
+import modtools.annotations.PrintHelper.SPrinter;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -23,6 +24,7 @@ public class DesugarStringTemplate extends TreeTranslator {
 	final Names      names;
 	final JavacTrees trees;
 	final Operators  operators;
+	final Log        log;
 
 	public DesugarStringTemplate(Context context) {
 		syms = Symtab.instance(context);
@@ -30,15 +32,23 @@ public class DesugarStringTemplate extends TreeTranslator {
 		names = Names.instance(context);
 		trees = JavacTrees.instance(context);
 		operators = Operators.instance(context);
+		log = Log.instance(context);
 	}
 	@Override
 	public void visitStringTemplate(JCStringTemplate template) {
 		if (template.processor instanceof JCIdent i && !Objects.equals(i.toString(), "STR") &&
 		    trees.getElement(trees.getPath(toplevel, i)) instanceof VarSymbol var &&
 		    trees.getTree(var) instanceof JCVariableDecl variableDecl) {
-			assert var.isStatic() && var.isFinal();
-			assert variableDecl.init instanceof JCLambda;
-			JCLambda lambda    = (JCLambda) variableDecl.init;
+			// assert var.isStatic() && var.isFinal();
+			if (!var.isStatic() && var.isFinal()) {
+				log.error(variableDecl.startPos, SPrinter.err("StringTemplate processor must be static final"));
+				return;
+			}
+			// assert variableDecl.init instanceof JCLambda;
+			if (!(variableDecl.init instanceof JCLambda lambda)) {
+				log.error(variableDecl.startPos, SPrinter.err("StringTemplate processor must be a lambda"));
+				return;
+			}
 			Name     parmaName = lambda.params.get(0).name;
 			class InterpolateToConcat extends TreeCopier<Void> {
 				public InterpolateToConcat(TreeMaker M) {

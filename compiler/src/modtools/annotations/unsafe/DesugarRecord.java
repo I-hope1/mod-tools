@@ -42,12 +42,14 @@ public class DesugarRecord extends TreeTranslator {
 			 if (m.body.stats.head.toString().equals("super();")) {
 				 m.body.stats = m.body.stats.tail; // 删除super()
 			 }
+			 maker.at(m.body.stats.head);
 			 m.body.stats = m.body.stats.prependList(List.from(
 				fields.stream().map(field -> maker.Exec(
 				 maker.Assign(maker.Select(maker.This(tree.type), field.name), maker.Ident(field.name))
 				)).collect(Collectors.toList())
 			 ));
 		 });
+		maker.at(tree);
 		// 为每一个字段添加访问器方法
 		for (JCVariableDecl field : fields) {
 			JCMethodDecl getter = maker.MethodDef(maker.Modifiers(Flags.PUBLIC), field.name, field.vartype,
@@ -65,7 +67,7 @@ public class DesugarRecord extends TreeTranslator {
 		// 判断this和other是不是同一个类型 if (!(other instacneof Type $other)) return false;
 		JCIf checkType = maker.If(maker.Unary(Tag.NOT, maker.TypeTest(maker.Ident(ns.fromString("other")),
 			maker.BindingPattern(
-			 maker.VarDef(maker.Modifiers(0), ns.fromString("$other"), maker.Ident(tree.name), null)))),
+			 maker.VarDef(maker.Modifiers(0), ns.fromString("$other"), maker.Type(tree.type), null)))),
 		 maker.Return(maker.Literal(false)), null);
 		buffer.add(checkType);
 		/* 遍历所有字段，判断是否相等
@@ -80,7 +82,7 @@ public class DesugarRecord extends TreeTranslator {
 			if (field.vartype.type.isPrimitive()) {
 				condition = maker.Binary(Tag.EQ, fieldExpr, thisExpr);
 			} else {
-				condition = maker.Binary(Tag.EQ, maker.Apply(List.nil(), maker.Select(fieldExpr, ns.equals), List.of(thisExpr)), maker.Literal(true));
+				condition = maker.Apply(List.nil(), maker.Select(fieldExpr, ns.equals), List.of(thisExpr));
 			}
 			resCondition = resCondition == null ? condition : maker.Binary(Tag.AND, resCondition, condition);
 		}
@@ -126,8 +128,8 @@ public class DesugarRecord extends TreeTranslator {
 			List.nil(),
 			maker.Block(0, buffer.toList()), null));
 
-		println("--------------");
-		println(tree);
+		// println("-------DesugarRecord-------");
+		// println(tree);
 	}
 	public void translateTopLevelClass(JCCompilationUnit toplevel, JCTree tree) {
 		try {

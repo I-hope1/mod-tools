@@ -17,7 +17,7 @@ import static ihope_lib.MyReflect.unsafe;
 import static rhino.classfile.ByteCode.*;
 import static rhino.classfile.ClassFileWriter.*;
 
-/** 对rhino的ClassWriter进行封装  */
+/** 对rhino的ClassWriter进行封装 */
 public class ByteCodeTools {
 	/*public static <T> MyClass<T> newClass(String name, String superName) {
 		return new MyClass<>(name, superName);
@@ -52,7 +52,7 @@ public class ByteCodeTools {
 		}
 
 		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, boolean buildSuper,
-														Class<V> returnType, Class<?>... args) {
+		                        Class<V> returnType, Class<?>... args) {
 			if (func2 == null) {
 				writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 				if ((flags & ACC_ABSTRACT) != 0) {
@@ -70,11 +70,9 @@ public class ByteCodeTools {
 				writer.stopMethod((short) (args.length + 1));
 				return;
 			}
-			String fieldName = FUNCTION_KEY + "$" + nextID();
+			var lambda = addLambda(func2, Func2.class, "get", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
 			short  max       = (short) (args.length + 1);
 			int    v1        = max++, v2 = max++;
-			queues.add(new Queue<>(fieldName, () -> func2, Func2.class));
-			writer.addField(fieldName, typeToNative(Func2.class), (short) (Modifier.PUBLIC | Modifier.STATIC | Modifier.FINAL));
 			writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 
 			if (buildSuper) {
@@ -113,19 +111,33 @@ public class ByteCodeTools {
 				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add", nativeMethod(boolean.class, Object.class));
 			}
 
-			// 获取functionKey字段
-			writer.add(GETSTATIC, adapterName, fieldName, typeToNative(Func2.class));
+			execLambda(lambda, () -> {
+				writer.addLoadThis(); // this
+				writer.add(ALOAD, v2); // seq
+			});
 
-			writer.addLoadThis(); // this
-			writer.add(ALOAD, v2); // seq
-
-			// V get(args)
-			writer.addInvoke(INVOKEINTERFACE, nativeName(Func2.class), "get", nativeMethod(Object.class, Object.class, Object.class));
 			emitCast(writer, returnType);
 			// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 			writer.add(buildReturn(returnType));
 
 			writer.stopMethod(max); // this + args + var * 1
+		}
+		public record Lambda(String fieldName, Class<?> type, String invoker, String desc) { }
+
+		public void execLambda(Lambda lambda, Runnable loadParma) {
+			// 获取functionKey字段
+			writer.add(GETSTATIC, adapterName, lambda.fieldName, typeToNative(lambda.type));
+
+			loadParma.run();
+
+			// V get(args)
+			writer.addInvoke(INVOKEINTERFACE, nativeName(lambda.type), lambda.invoker, lambda.desc);
+		}
+		public <LT> Lambda addLambda(LT lambda, Class<LT> clazz, String invoker, String desc) {
+			String fieldName = FUNCTION_KEY + "$" + nextID();
+			queues.add(new Queue<>(fieldName, () -> lambda, clazz));
+			writer.addField(fieldName, typeToNative(clazz), (short) (Modifier.PUBLIC | Modifier.STATIC | Modifier.FINAL));
+			return new Lambda(fieldName, clazz, invoker, desc);
 		}
 
 		/*public <V> void setFunc(String name, arc.func.Func2 func2, int flags, Class<V> returnType, Class<?>... args) {
@@ -140,7 +152,7 @@ public class ByteCodeTools {
 		 * @param args       方法的参数
 		 **/
 		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, Class<V> returnType,
-														Class<?>... args) {
+		                        Class<?>... args) {
 			setFunc(name, func2, flags, false, returnType, args);
 		}
 
@@ -153,7 +165,7 @@ public class ByteCodeTools {
 		}
 
 		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, boolean buildSuper,
-												Class<?>... args) {
+		                    Class<?>... args) {
 			setFunc(name, cons2 == null ? null : (self, a) -> {
 				cons2.get(self, a);
 				return null;
@@ -185,7 +197,7 @@ public class ByteCodeTools {
 		}
 
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
-															 Class<?>... args) {
+		                           Class<?>... args) {
 			writer.startMethod(thisMethodName, nativeMethod(returnType, ArrayList.class), (short) Modifier.PUBLIC);
 			writer.addLoadThis(); // this
 			for (int i = 0; i < args.length; i++) {
@@ -391,8 +403,8 @@ public class ByteCodeTools {
 
 	public static short buildReturn(Class<?> returnType) {
 		if (returnType == boolean.class || returnType == int.class
-				|| returnType == byte.class || returnType == short.class
-				|| returnType == char.class)
+		    || returnType == byte.class || returnType == short.class
+		    || returnType == char.class)
 			return IRETURN;
 		else if (returnType == long.class) return LRETURN;
 		else if (returnType == float.class) return FRETURN;

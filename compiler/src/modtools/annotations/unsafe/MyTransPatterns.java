@@ -7,8 +7,6 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
-import static modtools.annotations.PrintHelper.SPrinter.println;
-
 public class MyTransPatterns extends TransPatterns {
 	final SwitchDesugar  switchDesugar;
 	final LambdaToMethod ltm;
@@ -85,6 +83,7 @@ class SwitchDesugar extends TreeTranslator {
 			}
 
 			result = first;
+			// println(result);
 			if (exprType != null) {
 				LetExpr expr = make.LetExpr(List.of(
 				 yieldTranslator.variable,
@@ -93,7 +92,6 @@ class SwitchDesugar extends TreeTranslator {
 				expr.type = exprType;
 				expr.needsCond = true;
 				result = expr;
-				println(expr);
 			}
 			return true;
 		}
@@ -119,9 +117,10 @@ class SwitchDesugar extends TreeTranslator {
 			// 可以根据需要处理其他类型的label
 		}
 
-		return ifCondition == null ? truepart : make.If(
-		 jcCase.guard != null ? makeBinary(Tag.AND, ifCondition, jcCase.guard) : ifCondition,
-		 truepart, null);
+		if (jcCase.guard != null) {
+			ifCondition = ifCondition == null ? jcCase.guard : makeBinary(Tag.AND, ifCondition, jcCase.guard);
+		}
+		return ifCondition == null ? truepart : make.If(ifCondition, truepart, null);
 	}
 	JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
 		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
@@ -130,6 +129,7 @@ class SwitchDesugar extends TreeTranslator {
 	JCExpression makePatternMatchCondition(JCExpression condition, JCExpression selector, JCPattern pattern) {
 		if (pattern instanceof JCBindingPattern bindingPattern) {
 			make.at(pattern);
+			if (bindingPattern.type == syms.objectType) return condition;
 			JCExpression test = make.TypeTest(selector,
 			 bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : bindingPattern)
 			 .setType(syms.booleanType);

@@ -40,7 +40,7 @@ import modtools.ui.comp.input.JSRequest;
 import modtools.ui.comp.utils.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.reflect.RBuilder;
-import modtools.utils.*;
+import modtools.utils.EventHelper;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.search.*;
@@ -197,7 +197,7 @@ public class ShowUIList extends Content {
 					 t.bind(field.getName());
 					 t.listener(el -> IntUI.addTooltipListener(el, () -> FormatHelper.color(color)));
 					 t.add(new BorderImage(Core.atlas.white(), 2f)
-					  .border(color.cpy().inv())).color(color).size(42f);
+						.border(color.cpy().inv())).color(color).size(42f);
 					 field(t, field.getName()).growX();
 					 t.listener(null);
 					 t.unbind();
@@ -298,32 +298,37 @@ public class ShowUIList extends Content {
 			t.addRun(() -> {
 				t.bind(field.getName());
 
-				SR.apply(() -> SR.of(finalObj)
-				 .isInstance(ScrollPaneStyle.class, t, Builder::build)
-				 .isInstance(DialogStyle.class, t, Builder::build)
-				 .isInstance(LabelStyle.class, t, Builder::build)
-				 .isInstance(SliderStyle.class, t, Builder::build)
-				 .isInstance(TextFieldStyle.class, t, Builder::build)
-				 .isInstance(CheckBoxStyle.class, t, Builder::build)
-				 .isInstance(TextButtonStyle.class, t, Builder::build)
-				 .isInstance(ImageButtonStyle.class, t, Builder::build)
-				 .isInstance(ButtonStyle.class, t, Builder::build)
-				 .isInstance(Drawable.class, t, Builder::build)
-				 .isInstance(Object.class, _ -> t.add()));
+				switch (finalObj) {
+					case ScrollPaneStyle style -> Builder.build(style, t);
+					case DialogStyle style -> Builder.build(style, t);
+					case LabelStyle style -> Builder.build(style, t);
+					case SliderStyle style -> Builder.build(style, t);
+					case TextFieldStyle style -> Builder.build(style, t);
+					case CheckBoxStyle style -> Builder.build(style, t);
+					case TextButtonStyle style -> Builder.build(style, t);
+					case ImageButtonStyle style -> Builder.build(style, t);
+					case ButtonStyle style -> Builder.build(style, t);
+					case Drawable style -> Builder.build(style, t);
+					default -> t.add();
+				}
 
 				t.table(t1 -> {
 					field(t1, field.getName());
-					PreviewUtils.addPreviewButton(t1, p -> SR.apply(() -> SR.of(finalObj)
-					 .isInstance(ScrollPaneStyle.class, p, Builder::view)
-					 .isInstance(DialogStyle.class, p, Builder::view)
-					 .isInstance(LabelStyle.class, p, Builder::view)
-					 .isInstance(SliderStyle.class, p, Builder::view)
-					 .isInstance(TextFieldStyle.class, p, Builder::view)
-					 .isInstance(CheckBoxStyle.class, p, Builder::view)
-					 .isInstance(TextButtonStyle.class, p, Builder::view)
-					 .isInstance(ImageButtonStyle.class, p, Builder::view)
-					 .isInstance(ButtonStyle.class, p, Builder::view)
-					 .isInstance(Drawable.class, p, Builder::view))).padLeft(8f);
+					PreviewUtils.addPreviewButton(t1, p -> {
+						switch (finalObj) {
+							case ScrollPaneStyle style -> Builder.view(style, p);
+							case DialogStyle style -> Builder.view(style, p);
+							case LabelStyle style -> Builder.view(style, p);
+							case SliderStyle style -> Builder.view(style, p);
+							case TextFieldStyle style -> Builder.view(style, p);
+							case CheckBoxStyle style -> Builder.view(style, p);
+							case TextButtonStyle style -> Builder.view(style, p);
+							case ImageButtonStyle style -> Builder.view(style, p);
+							case ButtonStyle style -> Builder.view(style, p);
+							case Drawable style -> Builder.view(style, p);
+							default -> { }
+						}
+					}).padLeft(8f);
 				}).left().row();
 				t.unbind();
 			});

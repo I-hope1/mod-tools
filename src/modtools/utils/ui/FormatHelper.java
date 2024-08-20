@@ -78,30 +78,25 @@ public class FormatHelper {
 	public static String getUIKeyOrNull(Object val) {
 		if (val instanceof DelegatingDrawable delegting) return delegting.toString();
 
-		return val instanceof Drawable icon && iconKeyMap.containsKey(icon) ?
-		 iconKeyMap.get(icon)
+		return switch (val) {
+			case Drawable icon when iconKeyMap.containsKey(icon) -> iconKeyMap.get(icon);
 
-		 : val instanceof Drawable drawable && styleIconKeyMap.containsKey(drawable) ?
-		 styleIconKeyMap.get(drawable)
+			case Drawable drawable when styleIconKeyMap.containsKey(drawable) -> styleIconKeyMap.get(drawable);
 
-		 : val instanceof Drawable drawable && texKeyMap.containsKey(drawable) ?
-		 texKeyMap.get(drawable)
+			case Drawable drawable when texKeyMap.containsKey(drawable) -> texKeyMap.get(drawable);
 
-		 : val instanceof Style s && styleKeyMap.containsKey(s) ?
-		 styleKeyMap.get(s)
+			case Style s when styleKeyMap.containsKey(s) -> styleKeyMap.get(s);
 
-		 : val instanceof Color c && colorKeyMap.containsKey(c) ?
-		 colorKeyMap.get(c)
+			case Color c when colorKeyMap.containsKey(c) -> colorKeyMap.get(c);
 
-		 : val instanceof Group g && uiKeyMap.containsKey(g) ?
-		 (withPrefix ? "ui." : "") + uiKeyMap.get(g)
+			case Group g when uiKeyMap.containsKey(g) -> (withPrefix ? "ui." : "") + uiKeyMap.get(g);
 
-		 : val instanceof Font f && fontKeyMap.containsKey(f) ?
-		 (withPrefix ? "Fonts." : "") + fontKeyMap.get(f)
+			case Font f when fontKeyMap.containsKey(f) -> (withPrefix ? "Fonts." : "") + fontKeyMap.get(f);
 
-		 : null;
+			default -> null;
+		};
 	}
-	/** 如果找不到，就抛出一个错误  */
+	/** 如果找不到，就抛出一个错误 */
 	public static String getUIKey(Object val) {
 		String res = getUIKeyOrNull(val);
 		if (res == null) Tools._throw();
@@ -132,7 +127,7 @@ public class FormatHelper {
 	public static final  StringMap     varMap        = StringMap.of(
 	 "MENU_KEY", Core.bundle.get(Vars.mobile ? "longPress" : "rightClick")
 	);
-	public static final StringMap tempMap = new StringMap();
+	public static final  StringMap     tempMap       = new StringMap();
 	public static CharSequence parseVars(String s) {
 		sb.setLength(0);
 		tempMap.clear();

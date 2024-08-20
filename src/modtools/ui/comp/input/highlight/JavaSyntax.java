@@ -2,7 +2,6 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import modtools.utils.SR;
 import rhino.ScriptRuntime;
 
 import static modtools.ui.comp.input.highlight.JSSyntax.*;
@@ -44,9 +43,10 @@ public class JavaSyntax extends Syntax {
 		}
 		return null;
 	}, task -> {
-		CharSequence token = SR.of(task.token.charAt(task.token.length() - 1))
-		                       .get(t -> t == 'F' || t == 'f' || t == 'l' || t == 'L'
-			                               ? task.token.subSequence(0, task.token.length() - 1) : task.token);
+		CharSequence token = switch (task.token.charAt(task.token.length() - 1)) {
+			case 'F', 'f',  'l', 'L' -> task.token.subSequence(0, task.token.length() - 1);
+			default -> task.token;
+		};
 		CharSequence s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.'
 		                 && task.token.charAt(0) == 'e' && task.lastToken != null
 		                   ? task.lastToken + "." + token : token;

@@ -98,28 +98,16 @@ public class Tools {
 	public static void copyValue(Field f, Object from, Object to) {
 		Class<?> type   = f.getType();
 		long     offset = modtools.utils.reflect.FieldUtils.fieldOffset(f);
-		if (int.class == type) {
-			unsafe.putInt(to, offset, unsafe.getInt(from, offset));
-		} else if (float.class == type) {
-			unsafe.putFloat(to, offset, unsafe.getFloat(from, offset));
-		} else if (double.class == type) {
-			unsafe.putDouble(to, offset, unsafe.getDouble(from, offset));
-		} else if (long.class == type) {
-			unsafe.putLong(to, offset, unsafe.getLong(from, offset));
-		} else if (char.class == type) {
-			unsafe.putChar(to, offset, unsafe.getChar(from, offset));
-		} else if (byte.class == type) {
-			unsafe.putByte(to, offset, unsafe.getByte(from, offset));
-		} else if (short.class == type) {
-			unsafe.putShort(to, offset, unsafe.getShort(from, offset));
-		} else if (boolean.class == type) {
-			unsafe.putBoolean(to, offset, unsafe.getBoolean(from, offset));
-		} else {
-			Object o = unsafe.getObject(from, offset);
-            /*if (f.getType().isArray()) {
-                o = Arrays.copyOf((Object[]) o, Array.getLength(o));
-            }*/
-			unsafe.putObject(to, offset, o);
+		switch (type) {
+			case Object _ when type == int.class -> unsafe.putInt(to, offset, unsafe.getInt(from, offset));
+			case Object _ when type == float.class -> unsafe.putFloat(to, offset, unsafe.getFloat(from, offset));
+			case Object _ when type == double.class -> unsafe.putDouble(to, offset, unsafe.getDouble(from, offset));
+			case Object _ when type == long.class -> unsafe.putLong(to, offset, unsafe.getLong(from, offset));
+			case Object _ when type == char.class -> unsafe.putChar(to, offset, unsafe.getChar(from, offset));
+			case Object _ when type == byte.class -> unsafe.putByte(to, offset, unsafe.getByte(from, offset));
+			case Object _ when type == short.class -> unsafe.putShort(to, offset, unsafe.getShort(from, offset));
+			case Object _ when type == boolean.class -> unsafe.putBoolean(to, offset, unsafe.getBoolean(from, offset));
+			default -> unsafe.putObject(to, offset, unsafe.getObject(from, offset));
 		}
 	}
 

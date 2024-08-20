@@ -139,14 +139,14 @@ public class ReviewElement extends Content {
 
 
 	public HKeyCode inspectKeycode     =
-	 keyCodeData().keyCode("inspect", () -> new HKeyCode(KeyCode.c).ctrl().shift())
+	 keyCodeData().dynamicKeyCode("inspect", () -> new HKeyCode(KeyCode.c).ctrl().shift())
 		.applyToScene(true, this::build0);
 	public HKeyCode debugBoundsKeyCode =
-	 keyCodeData().keyCode("debugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt())
+	 keyCodeData().dynamicKeyCode("debugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt())
 		.applyToScene(true, TSettings.debugBounds::toggle);
 
 	public HKeyCode selectDebugBoundsKeyCode =
-	 keyCodeData().keyCode("selectDebugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt().shift())
+	 keyCodeData().dynamicKeyCode("selectDebugBounds", () -> new HKeyCode(KeyCode.d).ctrl().alt().shift())
 		.applyToScene(true, () -> {
 			if (topGroup.isSelecting()) return;
 

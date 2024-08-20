@@ -21,7 +21,7 @@ import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.override.HScene;
 import modtools.ui.*;
-import modtools.ui.control.HopeInput;
+import modtools.ui.control.*;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;

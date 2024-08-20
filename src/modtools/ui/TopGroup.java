@@ -546,7 +546,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		void draw(boolean selecting, Element selected);
 	}
 
-	HKeyCode closeWindow = HKeyCode.data.keyCode("closeWindow", () -> new HKeyCode(KeyCode.f4).shift())
+	HKeyCode closeWindow = HKeyCode.data.dynamicKeyCode("closeWindow", () -> new HKeyCode(KeyCode.f4).shift())
 	 .applyToScene(true, () -> {
 		 if (!shownWindows.isEmpty()) frontWindow.hide();
 	 });
@@ -736,7 +736,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			}
 		}
 
-		public static HKeyCode switchWindowKey = HKeyCode.data.keyCode("switchWindow", () -> new HKeyCode(KeyCode.tab).ctrl());
+		public static HKeyCode switchWindowKey = HKeyCode.data.dynamicKeyCode("switchWindow", () -> new HKeyCode(KeyCode.tab).ctrl());
 
 		/**
 		 * 电脑端用于切换窗口的事件侦听器

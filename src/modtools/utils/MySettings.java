@@ -32,7 +32,7 @@ public class MySettings {
 		}
 
 		public Data child(String key) {
-			return (Data) get(key, () -> newChild(this, new JsonMap()));
+			return (Data) get(key, () -> newChild(key, new JsonMap()));
 		}
 
 		/** auto invoke {@link String#valueOf(Object)} */
@@ -81,11 +81,12 @@ public class MySettings {
 		}
 		public void loadJval(JsonMap jsonMap) {
 			for (var entry : jsonMap) {
-				super.put(entry.key, entry.value.isObject() ? newChild(this, entry.value.asObject()) :
+				super.put(entry.key, entry.value.isObject() ? newChild(entry.key, entry.value.asObject()) :
 				 entry.value.isBoolean() ? entry.value.asBool() : entry.value);
 			}
 		}
-		public Data newChild(Data parent, JsonMap object) {
+
+		public Data newChild(String key, JsonMap object) {
 			return new Data(this, object);
 		}
 

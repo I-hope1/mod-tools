@@ -55,7 +55,7 @@ public class KeyCodeSetter extends Content {
 	}
 	public void load() {
 		super.load();
-		bindKeyCode = HKeyCode.data.keyCode("bindKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
+		bindKeyCode = HKeyCode.data.dynamicKeyCode("bindKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
 		final Seq<Button> toRemoveSeq = new Seq<>();
 		scene.addCaptureListener(new InputListener() {
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
@@ -255,7 +255,7 @@ public class KeyCodeSetter extends Content {
 			public void get(KeyCodeData data) {
 				if (data == HKeyCode.data) {
 					pane.clear();
-					pane.add("ROOT").color(Pal.accent).expandX().left().colspan(2).row();
+					pane.add(data.name).color(Pal.accent).expandX().left().colspan(2).row();
 					pane.image().color(Pal.accent).fillX().colspan(2).row();
 				}
 				data.each((key, keyCode) -> {

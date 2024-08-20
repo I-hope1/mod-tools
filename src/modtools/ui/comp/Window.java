@@ -153,7 +153,7 @@ public class Window extends Table implements Position {
 		touchable = titleTable.touchable/* = cont.touchable */ = Touchable.enabled;
 		titleTable.margin(0);
 		if ((IntVars.isDesktop()) && full) EventHelper.doubleClick(titleTable, null, this::toggleMaximize);
-		cont.margin(4);
+		cont.margin(6);
 		buttons.margin(0);
 		this.minWidth = minWidth * Scl.scl();
 		this.minHeight = minHeight * Scl.scl();

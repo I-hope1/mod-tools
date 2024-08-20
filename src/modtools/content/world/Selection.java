@@ -901,10 +901,10 @@ public class Selection extends Content {
 			return show(scene, Actions.fadeIn(0.1f));
 		}
 
-		HKeyCode fixedKeyCode = keyCodeData().keyCode("fixedWindow", () -> new HKeyCode(KeyCode.anyKey).ctrl().alt());
+		HKeyCode fixedKeyCode = keyCodeData().dynamicKeyCode("fixedWindow", () -> new HKeyCode(KeyCode.anyKey).ctrl().alt());
 
 		{
-			margin(4, 4, 4, 4);
+			margin(5);
 			titleTable.remove();
 			/* 禁用缩放和移动侦听器 */
 			touchable = Touchable.childrenOnly;

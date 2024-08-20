@@ -356,7 +356,8 @@ public abstract class ValueLabel extends InlineLabel {
 				: val instanceof Element ? ReviewElement.getElementName((Element) val)
 				: FormatHelper.getUIKey(val))
 			.get(() -> String.valueOf(val))
-			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(val.hashCode()))
+		  /** @see Objects#toIdentityString(Object)  */
+			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(System.identityHashCode(val)))
 			.get(() -> Tools.clName(val))
 		);
 	}

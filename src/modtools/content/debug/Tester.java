@@ -412,8 +412,8 @@ public class Tester extends Content {
 		else INFO_DIALOG.showInfo(res);
 	}
 
-	public HKeyCode detailKeyCode = keyCodeData().keyCode("detail", () -> new HKeyCode(KeyCode.d).ctrl().shift());
-	public HKeyCode viewKeyCode   = keyCodeData().keyCode("view", () -> new HKeyCode(KeyCode.v).alt());
+	public HKeyCode detailKeyCode = keyCodeData().dynamicKeyCode("detail", () -> new HKeyCode(KeyCode.d).ctrl().shift());
+	public HKeyCode viewKeyCode   = keyCodeData().dynamicKeyCode("view", () -> new HKeyCode(KeyCode.v).alt());
 	public boolean detailsListener(KeyCode keycode) {
 		if (detailKeyCode.isPress()) {
 			showDetails();

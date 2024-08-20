@@ -7,7 +7,7 @@ import arc.input.KeyCode;
 import arc.scene.event.*;
 import arc.struct.*;
 import arc.util.Strings;
-import arc.util.serialization.*;
+import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import modtools.IntVars;
 import modtools.utils.MySettings.Data;
@@ -53,9 +53,9 @@ public class HKeyCode {
 		return this;
 	}
 	/**
-	 *  将一个文本解析，文本可能为:
-	 *  [Ctrl + ][Shift + ][Alt + ]Key
-	 *  <pre>
+	 * 将一个文本解析，文本可能为:
+	 * [Ctrl + ][Shift + ][Alt + ]Key
+	 * <pre>
 	 *    Ctrl + Shift + T
 	 *    Ctrl + Alt + P
 	 *    Shift + Alt + W
@@ -86,6 +86,7 @@ public class HKeyCode {
 	}
 	public HKeyCode applyToScene(boolean capture, Runnable r) {
 		if (this == NONE) return this;
+		if (r == null) throw new NullPointerException("r is null");
 		(capture ? sceneCaptureKeys : sceneKeys).put(this, r);
 		return this;
 	}
@@ -127,18 +128,55 @@ public class HKeyCode {
 		});
 	}
 
+	private static class DynamicHKeyCode extends HKeyCode {
+		final KeyCodeData    data;
+		final String         key;
+		final Prov<HKeyCode> def;
+
+		public DynamicHKeyCode(KeyCodeData data, String key) {
+			this(data, key, () -> NONE);
+		}
+		public DynamicHKeyCode(KeyCodeData data, String key, Prov<HKeyCode> def) {
+			super(KeyCode.anyKey);
+			this.data = data;
+			this.key = key;
+			this.def = def;
+		}
+		public int hashCode() {
+			return Objects.hash(System.identityHashCode(data), key, def);
+		}
+		public boolean isPress() {
+			return data.keyCode(key, def).isPress();
+		}
+		public String toString() {
+			return data.keyCode(key, def).toString();
+		}
+		public HKeyCode alt() {
+			throw new UnsupportedOperationException();
+		}
+		public HKeyCode shift() {
+			throw new UnsupportedOperationException();
+		}
+		public HKeyCode ctrl() {
+			throw new UnsupportedOperationException();
+		}
+	}
+
 	public static class KeyCodeData extends Data {
+		public final String name;
 		public KeyCodeData(Fi fi) {
 			super(fi);
+			name = "ROOT";
 		}
-		private KeyCodeData(Data parent, JsonMap jsonMap) {
+		private KeyCodeData(Data parent, String key, JsonMap jsonMap) {
 			super(parent, jsonMap);
+			name = key;
 		}
 		public KeyCodeData child(String key) {
 			return (KeyCodeData) super.child(key);
 		}
-		public KeyCodeData newChild(Data parent, JsonMap object) {
-			return new KeyCodeData(parent, object);
+		public KeyCodeData newChild(String key, JsonMap object) {
+			return new KeyCodeData(this, key, object);
 		}
 		public HKeyCode keyCode(String key, Prov<HKeyCode> def) {
 			if (!containsKey(key)) {
@@ -157,6 +195,10 @@ public class HKeyCode {
 				return def.get();
 			}
 		}
+		public HKeyCode dynamicKeyCode(String key, Prov<HKeyCode> def) {
+			return new DynamicHKeyCode(this, key, def);
+		}
+
 		public HKeyCode keyCode(String key) {
 			return keyCode(key, () -> NONE);
 		}
@@ -184,7 +226,7 @@ public class HKeyCode {
 				if (!entry.key.isPress()) continue;
 				event.cancel();
 				Runnable runnable = entry.value;
-				if (runnable != null) runnable.run();
+				runnable.run();
 				HopeInput.justPressed.clear();
 				return false;
 			}

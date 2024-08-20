@@ -137,20 +137,15 @@ public class HopeReflect {
 			return;
 		}
 
-		switch (field.getType().getSimpleName().charAt(0)) {
-			case 'i' -> unsafe.putInt(o, offset, (int) value);
-			case 'l' -> unsafe.putLong(o, offset, (long) value);
-			case 'f' -> unsafe.putFloat(o, offset, (float) value);
-			case 'd' -> unsafe.putDouble(o, offset, (double) value);
-			case 's' -> unsafe.putShort(o, offset, (short) value);
-			case 'c' -> unsafe.putChar(o, offset, (char) value);
-			case 'b' -> {
-				if (field.getType() == Boolean.TYPE) {
-					unsafe.putBoolean(o, offset, (boolean) value);
-				} else {
-					unsafe.putByte(o, offset, (byte) value);
-				}
-			}
+		switch (field.getType().getSimpleName()) {
+			case "int" -> unsafe.putInt(o, offset, (int) value);
+			case "long" -> unsafe.putLong(o, offset, (long) value);
+			case "float" -> unsafe.putFloat(o, offset, (float) value);
+			case "double" -> unsafe.putDouble(o, offset, (double) value);
+			case "short" -> unsafe.putShort(o, offset, (short) value);
+			case "char" -> unsafe.putChar(o, offset, (char) value);
+			case "boolean" -> unsafe.putBoolean(o, offset, (boolean) value);
+			case "byte" -> unsafe.putByte(o, offset, (byte) value);
 			default -> throw new RuntimeException("Unexpected type: " + field.getType().getTypeName());
 		}
 	}

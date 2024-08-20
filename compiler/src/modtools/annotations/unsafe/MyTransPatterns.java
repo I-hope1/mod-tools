@@ -7,6 +7,8 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
+import static modtools.annotations.PrintHelper.SPrinter.println;
+
 public class MyTransPatterns extends TransPatterns {
 	final SwitchDesugar  switchDesugar;
 	final LambdaToMethod ltm;
@@ -75,7 +77,7 @@ class SwitchDesugar extends TreeTranslator {
 
 			JCIf        first  = null;
 			JCStatement lastIf = null;
-			for (JCCase jcCase : cases) {
+			for (JCCase jcCase : cases.stream().sorted((a, b) -> a == b ? 0/* 可能不会发生 */ : a.labels.stream().anyMatch(l -> l instanceof JCDefaultCaseLabel) ? 1 : -1).toArray(JCCase[]::new)) {
 				JCStatement smt = translateCase(selector, jcCase);
 				if (first == null) first = (JCIf) smt;
 				if (lastIf instanceof JCIf jcIf) jcIf.elsepart = smt;
@@ -91,7 +93,7 @@ class SwitchDesugar extends TreeTranslator {
 				expr.type = exprType;
 				expr.needsCond = true;
 				result = expr;
-				// println(expr);
+				println(expr);
 			}
 			return true;
 		}
@@ -109,15 +111,20 @@ class SwitchDesugar extends TreeTranslator {
 				JCPattern pattern = patternLabel.pat;
 				ifCondition = makePatternMatchCondition(ifCondition, selector, pattern);
 			} else if (label instanceof JCConstantCaseLabel constantLabel) {
-				JCExpression condition = make.Binary(Tag.EQ, selector, constantLabel.expr);
-				ifCondition = ifCondition != null ? make.Binary(Tag.OR, ifCondition, condition) : condition;
+				JCExpression condition = makeBinary(Tag.EQ, selector, constantLabel.expr);
+				ifCondition = ifCondition != null ? makeBinary(Tag.OR, ifCondition, condition) : condition;
 			} else if (label instanceof JCDefaultCaseLabel defaultLabel) {
 				ifCondition = null;
 			}
 			// 可以根据需要处理其他类型的label
 		}
 
-		return ifCondition == null ? truepart : make.If(ifCondition, truepart, null);
+		return ifCondition == null ? truepart : make.If(
+		 jcCase.guard != null ? makeBinary(Tag.AND, ifCondition, jcCase.guard) : ifCondition,
+		 truepart, null);
+	}
+	JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
+		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
 	}
 
 	JCExpression makePatternMatchCondition(JCExpression condition, JCExpression selector, JCPattern pattern) {
@@ -126,7 +133,7 @@ class SwitchDesugar extends TreeTranslator {
 			JCExpression test = make.TypeTest(selector,
 			 bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : bindingPattern)
 			 .setType(syms.booleanType);
-			return condition != null ? Replace.desugarStringTemplate.makeBinary(Tag.OR, condition, test) : test;
+			return condition != null ? makeBinary(Tag.OR, condition, test) : test;
 		}
 		// 处理其他类型的模式
 		return condition;

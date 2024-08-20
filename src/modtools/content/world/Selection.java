@@ -1124,7 +1124,8 @@ public class Selection extends Content {
 				findAndAddToList(Groups.all, others, entity -> {
 					return switch (entity) {
 						case Building _, Bullet _, Unit _ -> false;
-						default -> entity instanceof Position pos && checkInRegion(start, end, pos);
+						case Position pos -> checkInRegion(start, end, pos);
+						default -> false;
 					};
 				});
 			}

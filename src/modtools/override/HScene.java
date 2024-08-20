@@ -28,8 +28,8 @@ public class HScene {
 		if (superClass.getName().endsWith(SUFFIX)) return;
 		MyClass<? extends Group> myClass = new MyClass<>(superClass.getName() + SUFFIX, superClass);
 
-		MethodHandle element_act = lookup.findSpecial(Element.class, "act", MethodType.methodType(void.class, float.class), Element.class);
-		MethodHandle super_act   = lookup.findSpecial(Group.class, "act", MethodType.methodType(void.class, float.class), superClass);
+		MethodHandle element_act = lookup.unreflectSpecial(Element.class.getDeclaredMethod("act", float.class), Element.class);
+		MethodHandle super_act   = lookup.unreflectSpecial(superClass.getMethod("act", float.class), superClass);
 		Object[] self = {null};
 		Floatc floatc = delta -> {
 			if (pauseAct) {

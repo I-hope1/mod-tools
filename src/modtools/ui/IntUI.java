@@ -471,11 +471,11 @@ public class IntUI {
 
 
 	/** 按shift键，忽略确认 */
-	public static void shiftIgnoreConfirm(Runnable run) {
+	public static void shiftIgnoreConfirm(String text, Runnable run) {
 		if (Core.input.shift()) {
 			run.run();
 		} else {
-			IntUI.showConfirm("@confirm.remove", run);
+			IntUI.showConfirm(Core.bundle.format("confirm.remove", text), run);
 		}
 	}
 

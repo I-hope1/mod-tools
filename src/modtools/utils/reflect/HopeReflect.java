@@ -1,7 +1,8 @@
 package modtools.utils.reflect;
 
 import arc.Core;
-import arc.util.OS;
+import arc.math.geom.Vec2;
+import arc.util.*;
 import dalvik.system.VMStack;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext;
@@ -66,6 +67,19 @@ public class HopeReflect {
 		} catch (ClassNotFoundException e) {
 			return null;
 		}
+	}
+	public static boolean isSameVal(Object val1, Object val2, Class<?> valType) {
+		if (val1 == val2) {
+			if (valType.isPrimitive() || Reflect.isWrapper(valType) || valType == String.class
+			    || valType == Class.class || (val1 != null && val1.getClass() == Object.class)) {
+				return true;
+			}
+		}
+
+		if (val2 != null && val1 != null &&
+		    val2.getClass() == Vec2.class && val1.getClass() == Vec2.class &&
+		    val2.equals(val1)) return true;
+		return false;
 	}
 
 	/* @ModuleOpen

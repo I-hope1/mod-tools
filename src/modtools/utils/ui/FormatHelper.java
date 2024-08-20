@@ -80,17 +80,11 @@ public class FormatHelper {
 
 		return switch (val) {
 			case Drawable icon when iconKeyMap.containsKey(icon) -> iconKeyMap.get(icon);
-
 			case Drawable drawable when styleIconKeyMap.containsKey(drawable) -> styleIconKeyMap.get(drawable);
-
 			case Drawable drawable when texKeyMap.containsKey(drawable) -> texKeyMap.get(drawable);
-
 			case Style s when styleKeyMap.containsKey(s) -> styleKeyMap.get(s);
-
 			case Color c when colorKeyMap.containsKey(c) -> colorKeyMap.get(c);
-
 			case Group g when uiKeyMap.containsKey(g) -> (withPrefix ? "ui." : "") + uiKeyMap.get(g);
-
 			case Font f when fontKeyMap.containsKey(f) -> (withPrefix ? "Fonts." : "") + fontKeyMap.get(f);
 
 			default -> null;

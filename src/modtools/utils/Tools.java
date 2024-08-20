@@ -64,7 +64,7 @@ public class Tools {
 	 * @param blackList 黑名单
 	 */
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {
-		clone(from, to, cls, f -> blackList == null || blackList.contains(f.getName()));
+		clone1(from, to, cls, f -> blackList == null || blackList.contains(f.getName()));
 	}
 
 	/**
@@ -74,7 +74,7 @@ public class Tools {
 	 * @param cls   类对象
 	 * @param boolf 条件判断函数
 	 */
-	public static void clone(Object from, Object to, Class<?> cls, Boolf<Field> boolf) {
+	public static void clone1(Object from, Object to, Class<?> cls, Boolf<Field> boolf) {
 		if (from == to) throw new IllegalArgumentException("from == to");
 		if (from == null) return;
 		while (cls != null && Object.class.isAssignableFrom(cls)) {

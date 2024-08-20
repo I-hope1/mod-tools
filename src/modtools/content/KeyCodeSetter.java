@@ -271,7 +271,7 @@ public class KeyCodeSetter extends Content {
 					}
 					pane.bind(key);
 					pane.add(key).left();
-					keyCodeButton(pane, new HKeyCode[]{data.keyCode(key)}, new String[]{key});
+					keyCodeButton(pane, data, new HKeyCode[]{data.keyCode(key)}, new String[]{key});
 					pane.row();
 					pane.unbind();
 				});
@@ -304,8 +304,8 @@ public class KeyCodeSetter extends Content {
 				vl.elementType = Button.class;
 				vl.addCaptureListener(new ITooltip(() -> elementKey[0] + "\n" + EventHelper.longPressOrRclickKey() + " to edit"));
 				pane.add(vl).size(220, 45).labelAlign(Align.left);
-				keyCodeButton(pane, keyCode, elementKey);
-				pane.button(Icon.trash, Styles.flati, () -> IntUI.shiftIgnoreConfirm(() -> {
+				keyCodeButton(pane, elementKeyCode, keyCode, elementKey);
+				pane.button(Icon.trash, Styles.flati, () -> IntUI.shiftIgnoreConfirm(elementKey[0], () -> {
 					elementKeyCode.remove(elementKey[0]);
 					pane.removeCells(elementKey);
 				}));
@@ -325,12 +325,12 @@ public class KeyCodeSetter extends Content {
 		cont.add(pane).grow();
 		return cont;
 	}
-	private static void keyCodeButton(FilterTable<?> pane, HKeyCode[] keyCode, String[] elementKey) {
+	private static void keyCodeButton(FilterTable<?> pane, KeyCodeData data, HKeyCode[] keyCode, String[] elementKey) {
 		TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
 		 .minWidth(100).height(45).growX().get();
 		button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {
 			button.setText(newKeyCode.toString());
-			elementKeyCode.setKeyCode(
+			data.setKeyCode(
 			 elementKey[0],
 			 keyCode[0] = newKeyCode
 			);

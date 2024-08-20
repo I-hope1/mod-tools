@@ -18,7 +18,7 @@ import static modtools.utils.Tools.clName;
 @SuppressWarnings("unused")
 public class ForRhino {
 	public static final ContextFactory factory;
-	public static final String SUFFIX = "_aa1";
+	public static final String SUFFIX = "-F1";
 
 	static {
 		try {

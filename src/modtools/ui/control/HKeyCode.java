@@ -183,7 +183,8 @@ public class HKeyCode {
 			for (var entry : keys) {
 				if (!entry.key.isPress()) continue;
 				event.cancel();
-				entry.value.run();
+				Runnable runnable = entry.value;
+				if (runnable != null) runnable.run();
 				HopeInput.justPressed.clear();
 				return false;
 			}

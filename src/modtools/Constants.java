@@ -174,7 +174,8 @@ public class Constants {
 		try {
 			return (R) handle.invokeWithArguments(args);
 		} catch (Throwable e) {
-			return null;
+			throw new RuntimeException(e);
+			// return null;
 		}
 	}
 }

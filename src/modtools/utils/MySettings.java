@@ -6,9 +6,8 @@ import arc.util.*;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
 import modtools.IntVars;
+import modtools.jsfunc.type.CAST;
 import rhino.ScriptRuntime;
-
-import java.util.Objects;
 
 public class MySettings {
 	private static final Fi dataDirectory = IntVars.dataDirectory;
@@ -16,12 +15,12 @@ public class MySettings {
 	static Fi config = dataDirectory.child("mod-tools-config.hjson");
 
 	public static final Data
-	 SETTINGS         = new Data(config),
-	 D_JSFUNC         = SETTINGS.child("JSFunc");
+	 SETTINGS = new Data(config),
+	 D_JSFUNC = SETTINGS.child("JSFunc");
 
 	public static class Data extends OrderedMap<String, Object> {
 		public Data parent;
-		public Fi fi;
+		public Fi   fi;
 
 		public Data(Data parent, JsonMap jsonMap) {
 			this.parent = parent;
@@ -43,7 +42,7 @@ public class MySettings {
 
 		public Object put(String key, Object value) {
 			Object old = super.put(key, value);
-			if (!Objects.equals(old, value)) {
+			if (value != old && (old == null || value == null || !CAST.unbox(value.getClass()).isPrimitive())) {
 				write();
 			}
 			return old;

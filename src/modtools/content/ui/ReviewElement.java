@@ -412,7 +412,7 @@ public class ReviewElement extends Content {
 			keyMap.put(KeyCode.f, e -> fixedFocus = fixedFocus == e ? null : e);
 			keyMap.put(KeyCode.i, e -> INFO_DIALOG.showInfo(e.getElement()));
 			keyMap.put(KeyCode.r, e -> MenuBuilder.showMenuList(MyWrapTable.execChildren(e.getElement())));
-			keyMap.put(KeyCode.del, e -> shiftIgnoreConfirm(() -> {
+			keyMap.put(KeyCode.del, e -> shiftIgnoreConfirm(getElementName(e.getElement()), () -> {
 				e.getElement().remove();
 				e.remove();
 			}));
@@ -453,7 +453,7 @@ public class ReviewElement extends Content {
 		}
 
 		/** 结构： Label，Image（下划线） */
-		public void addMultiRowWithPos(Table table, Element element) {
+		public void addMultiRowWithPos(MyWrapTable table, Element element) {
 			elementElem(table, element, () -> Tmp.v1.set(element.x, element.y),
 			 t -> t.add(new SearchedLabel(() -> getElementName(element),
 				() -> pattern)).style(defaultLabel));
@@ -502,7 +502,7 @@ public class ReviewElement extends Content {
 			t.left().defaults().left();
 			cons.get(t);
 			makePosLabel(t, pos);
-		}, element)).growX().left().row();
+		}, element)).growX().left();
 		Underline.of(table, 2);
 	}
 
@@ -546,6 +546,7 @@ public class ReviewElement extends Content {
 	}
 	public static class MyWrapTable extends ElementElem {
 		boolean stopEvent, needUpdate;
+
 		ReviewElementWindow window;
 
 		Element previousKeyboardFocus;

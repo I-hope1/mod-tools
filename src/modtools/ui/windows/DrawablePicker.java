@@ -237,7 +237,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		if (drawable instanceof DelegatingDrawable d) return d.drawable;
 		try {
 			Drawable newDrawable = (Drawable) unsafe.allocateInstance(drawable.getClass());
-			Tools.clone(drawable, newDrawable, drawable.getClass(), f -> {
+			Tools.clone1(drawable, newDrawable, drawable.getClass(), f -> {
 				if (!"tint".equals(f.getName()) || f.getType() != Color.class) return true;
 
 				FieldUtils.setValue(f, newDrawable, Color.white);

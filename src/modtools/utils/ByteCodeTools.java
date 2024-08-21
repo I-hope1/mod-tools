@@ -128,7 +128,7 @@ public class ByteCodeTools {
 			// 获取functionKey字段
 			writer.add(GETSTATIC, adapterName, lambda.fieldName, typeToNative(lambda.type));
 
-			loadParma.run();
+			if (loadParma != null)loadParma.run();
 
 			// V get(args)
 			writer.addInvoke(INVOKEINTERFACE, nativeName(lambda.type), lambda.invoker, lambda.desc);
@@ -293,18 +293,18 @@ public class ByteCodeTools {
 			}
 		}
 
-		public Class<? extends T> define() {
+		public Class<T> define() {
 			return define(superClass);
 		}
 
-		public Class<? extends T> define(Class<?> superClass) {
+		public Class<T> define(Class<?> superClass) {
 			return putStatic(HopeReflect.defineClass(adapterName, superClass, writer.toByteArray()));
 		}
 
-		public Class<? extends T> define(ClassLoader loader) {
+		public Class<T> define(ClassLoader loader) {
 			return putStatic(HopeReflect.defineClass(adapterName, loader, writer.toByteArray()));
 		}
-		private Class<? extends T> putStatic(Class<?> base) {
+		private Class<T> putStatic(Class<?> base) {
 			var  map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
 			long off;
 			for (var q : queues) {
@@ -312,7 +312,7 @@ public class ByteCodeTools {
 				unsafe.putObject(base, off, q.get());
 			}
 			//noinspection unchecked
-			return (Class<? extends T>) base;
+			return (Class<T>) base;
 		}
 
 		public void writeTo(Fi fi) {

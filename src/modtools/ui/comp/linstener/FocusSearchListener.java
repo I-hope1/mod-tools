@@ -17,7 +17,7 @@ public class FocusSearchListener extends InputListener {
 			textField.requestKeyboard();
 			textField.setCursorPosition(Integer.MAX_VALUE);
 			if (Core.input.shift()) textField.clear();
-			event.cancel();
+			event.stop();
 		}
 		return false;
 	}

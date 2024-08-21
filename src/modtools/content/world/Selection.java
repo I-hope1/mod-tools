@@ -58,6 +58,7 @@ import java.util.function.Predicate;
 import static arc.Core.scene;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.*;
+import static modtools.unsupported.HopeProcessor.NPX;
 import static modtools.utils.ui.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
 import static modtools.utils.world.WorldDraw.drawRegion;

@@ -19,7 +19,8 @@ import java.util.*;
 import static modtools.annotations.PrintHelper.SPrinter.*;
 
 public class DesugarStringTemplate extends TreeTranslator {
-	final Symtab     syms;
+	public static final boolean DISABLED = false;
+	final Symtab syms;
 	final TreeMaker  make;
 	final Names      names;
 	final JavacTrees trees;
@@ -81,6 +82,17 @@ public class DesugarStringTemplate extends TreeTranslator {
 		}
 		super.visitStringTemplate(template);
 	}
+	public void visitLambda(JCLambda tree) {
+		tree.body = translate(tree.body);
+		result = tree;
+	}
+	public void visitClassDef(JCClassDecl tree) {
+		tree.defs = translate(tree.defs);
+		result = tree;
+	}
+	public List<JCTypeParameter> translateTypeParams(List<JCTypeParameter> trees) {
+		return trees;
+	}
 	JCExpression makeLit(Type type, Object value) {
 		return make.Literal(type.getTag(), value).setType(type.constType(value));
 	}
@@ -110,6 +122,7 @@ public class DesugarStringTemplate extends TreeTranslator {
 	}
 	JCCompilationUnit toplevel;
 	public void translateTopLevelClass(JCCompilationUnit toplevel, JCTree tree) {
+		if (DISABLED) return;
 		/* if (tree instanceof JCClassDecl classDecl && classDecl.name.contentEquals("HopeString")) {
 			println(tree);
 		} */

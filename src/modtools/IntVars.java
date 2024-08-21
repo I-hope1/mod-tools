@@ -86,20 +86,13 @@ public class IntVars {
 	}
 	public static void async(String text, Runnable runnable, Runnable callback, boolean displayUI) {
 		if (displayUI) ui.loadfrag.show(text);
-		var completableFuture = CompletableFuture.runAsync(() -> {
-			try {
-				runnable.run();
-				if (callback != null) callback.run();
-			} catch (Throwable th) {
-				showException(th, displayUI);
-			}
-			if (displayUI) ui.loadfrag.hide();
-		});
-		try {
-			completableFuture.get();
-		} catch (Throwable th) {
+		CompletableFuture.runAsync(() -> {
+			runnable.run();
+			if (callback != null) callback.run();
+		}).exceptionally((th) -> {
 			showException(th, displayUI);
-		}
+			return null;
+		}).getNow(null);
 	}
 
 	public static final MySet<Runnable> resizeListeners = new MySet<>();

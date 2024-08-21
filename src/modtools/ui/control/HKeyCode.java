@@ -143,7 +143,7 @@ public class HKeyCode {
 			this.def = def;
 		}
 		public int hashCode() {
-			return Objects.hash(System.identityHashCode(data), key, def);
+			return Objects.hash(data.name, key, def);
 		}
 		public boolean isPress() {
 			return data.keyCode(key, def).isPress();

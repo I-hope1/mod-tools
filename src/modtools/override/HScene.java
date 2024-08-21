@@ -1,10 +1,12 @@
 package modtools.override;
 
-import arc.Core;
+import arc.*;
 import arc.func.*;
 import arc.input.KeyCode;
 import arc.scene.*;
-import arc.util.OS;
+import arc.struct.Seq;
+import arc.util.*;
+import mindustry.Vars;
 import modtools.Constants;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.ui.control.HKeyCode;
@@ -71,6 +73,42 @@ public class HScene {
 		self[0] = newGroup;
 		Tools.clone(Core.scene.root, newGroup, Group.class, null);
 		FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
+
+		hookUpdate(Core.app.getListeners());
+	}
+
+	static void hookUpdate(Seq<ApplicationListener> appListeners) {
+		// 使用asm将侦听器替换
+		appListeners.replace(source -> {
+			if (source.getClass().getSimpleName().endsWith(SUFFIX)) return source;
+			// 使mod-tools继续运行
+			if (source == Vars.ui || source == Vars.renderer || source == Vars.logic) return source;
+			if (source instanceof ApplicationCore core) {
+				ApplicationListener[]    array   = Reflect.get(ApplicationCore.class, core, "modules");
+				Seq<ApplicationListener> objects = new Seq<>(array);
+				objects.items = array;
+				hookUpdate(objects);
+				return core;
+			}
+			var    myClass = new MyClass<>(source.getClass().getName() + SUFFIX, source.getClass());
+			Lambda lambda  = myClass.addLambda(() -> pauseAct, Boolp.class, "get", "()Z");
+			myClass.setFunc("update", cfw -> {
+				myClass.execLambda(lambda, null);
+				// 判断是否暂停
+				int i = cfw.acquireLabel();
+				cfw.add(ByteCode.IFNE, i);
+				// super.update();
+				cfw.add(ByteCode.ALOAD_0); // load this
+				cfw.addInvoke(ByteCode.INVOKESPECIAL, myClass.superName, "update", "()V");
+				cfw.markLabel(i);
+				cfw.add(ByteCode.RETURN);
+				return 1; // this
+			}, Modifier.PUBLIC, void.class);
+			var clazz = myClass.define();
+			var obj   = UNSAFE.allocateInstance(clazz);
+			Tools.clone(source, obj, source.getClass(), null);
+			return obj;
+		});
 	}
 	private static Lookup newLookup(Class<?> lookupClass)
 	 throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {

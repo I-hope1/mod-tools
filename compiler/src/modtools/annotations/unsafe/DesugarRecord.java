@@ -1,6 +1,6 @@
 package modtools.annotations.unsafe;
 
-import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
@@ -24,10 +24,11 @@ public class DesugarRecord extends TreeTranslator {
 		}
 
 		maker.at(tree);
+		tree.mods.flags |= Flags.STATIC;
 		tree.mods.flags &= ~Flags.RECORD;
-		tree.sym.flags_field &= ~Flags.RECORD;
+		tree.sym.flags_field = tree.mods.flags;
 		// tree.mods.flags |= Flags.FINAL;
-		java.util.List<JCVariableDecl> fields = tree.defs.stream().filter(d -> d instanceof JCVariableDecl).map(d -> (JCVariableDecl) d).toList();
+		var fields = tree.defs.stream().filter(d -> d instanceof JCVariableDecl).map(d -> (JCVariableDecl) d).toList();
 		// 将private设成public
 		fields.forEach(field -> {
 			field.mods.flags &= ~Flags.PRIVATE;
@@ -39,17 +40,12 @@ public class DesugarRecord extends TreeTranslator {
 		 .filter(m -> m.name.contentEquals(ns.init)).findFirst().ifPresent(m -> {
 			 m.mods.flags &= ~(Flags.RECORD | Flags.GENERATEDCONSTR);
 			 m.sym.flags_field &= ~(Flags.RECORD | Flags.GENERATEDCONSTR);
-			 if (m.body.stats.head.toString().equals("super();")) {
-				 m.body.stats = m.body.stats.tail; // 删除super()
-			 }
-			 maker.at(m.body.stats.head);
-			 m.body.stats = m.body.stats.prependList(List.from(
+			 m.body.stats = m.body.stats.appendList(List.from(
 				fields.stream().map(field -> maker.Exec(
 				 maker.Assign(maker.Select(maker.This(tree.type), field.name), maker.Ident(field.name))
 				)).collect(Collectors.toList())
 			 ));
 		 });
-		maker.at(tree);
 		// 为每一个字段添加访问器方法
 		for (JCVariableDecl field : fields) {
 			JCMethodDecl getter = maker.MethodDef(maker.Modifiers(Flags.PUBLIC), field.name, field.vartype,
@@ -64,12 +60,20 @@ public class DesugarRecord extends TreeTranslator {
 		JCIf checkThis = maker.If(maker.Binary(Tag.EQ, maker.This(tree.type), maker.Ident(ns.fromString("other"))),
 		 maker.Return(maker.Literal(true)), null);
 		buffer.add(checkThis);
-		// 判断this和other是不是同一个类型 if (!(other instacneof Type $other)) return false;
-		JCIf checkType = maker.If(maker.Unary(Tag.NOT, maker.TypeTest(maker.Ident(ns.fromString("other")),
-			maker.BindingPattern(
-			 maker.VarDef(maker.Modifiers(0), ns.fromString("$other"), maker.Type(tree.type), null)))),
+
+		// if (other == null) return false;
+		JCIf checkNull = maker.If(maker.Binary(Tag.EQ, maker.Ident(ns.fromString("other")), maker.Literal(TypeTag.BOT, null)),
+		 maker.Return(maker.Literal(false)), null);
+		buffer.add(checkNull);
+		// 判断this和other是不是同一个类型 if (other.getClass() != $other.getClass()) return false;
+		JCIf checkType = maker.If(maker.Binary(Tag.NE, maker.Apply(List.nil(), maker.Select(maker.Ident(ns.fromString("other")), ns.getClass), List.nil()),
+		 maker.Apply(List.nil(), maker.Select(maker.This(tree.type), ns.getClass), List.nil())),
 		 maker.Return(maker.Literal(false)), null);
 		buffer.add(checkType);
+		// var $other = (Record) other;
+		buffer.add(maker.VarDef(maker.Modifiers(Flags.FINAL), ns.fromString("$other"), maker.Ident(tree.name),
+		 maker.TypeCast(maker.Ident(tree.name), maker.Ident(ns.fromString("other")))));
+
 		/* 遍历所有字段，判断是否相等
 		 如果是基本数据类型：if (!($other.field == field)) return false;
 		 如果是引用类型：if (!($other.field.equals(field))) return false;
@@ -98,7 +102,7 @@ public class DesugarRecord extends TreeTranslator {
 		// 添加int hashCode()
 		// 使用Objects.hash(...)
 		buffer.clear();
-		buffer.add(maker.Return(maker.Apply(List.nil(), maker.Select(maker.QualIdent(syms.objectsType.tsym), ns.fromString("hash")),
+		buffer.add(maker.Return(maker.Apply(List.nil(), maker.Select(maker.Type(syms.objectsType), ns.fromString("hash")),
 		 List.from(fields.stream().map(f -> maker.Ident(f)).collect(Collectors.toList())))));
 		tree.defs = tree.defs.append(
 		 maker.MethodDef(maker.Modifiers(PUBLIC_FINAL), ns.hashCode, maker.Type(syms.intType),

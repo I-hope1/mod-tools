@@ -3,7 +3,7 @@ package modtools.utils;
 import arc.files.Fi;
 import arc.func.*;
 import arc.struct.Seq;
-import arc.util.Log;
+import arc.util.*;
 import modtools.jsfunc.type.CAST;
 import modtools.utils.reflect.*;
 import rhino.classfile.ClassFileWriter;
@@ -70,9 +70,9 @@ public class ByteCodeTools {
 				writer.stopMethod((short) (args.length + 1));
 				return;
 			}
-			var lambda = addLambda(func2, Func2.class, "get", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-			short  max       = (short) (args.length + 1);
-			int    v1        = max++, v2 = max++;
+			var   lambda = addLambda(func2, Func2.class, "get", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+			short max    = (short) (args.length + 1);
+			int   v1     = max++, v2 = max++;
 			writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 
 			if (buildSuper) {
@@ -128,7 +128,7 @@ public class ByteCodeTools {
 			// 获取functionKey字段
 			writer.add(GETSTATIC, adapterName, lambda.fieldName, typeToNative(lambda.type));
 
-			if (loadParma != null)loadParma.run();
+			if (loadParma != null) loadParma.run();
 
 			// V get(args)
 			writer.addInvoke(INVOKEINTERFACE, nativeName(lambda.type), lambda.invoker, lambda.desc);
@@ -297,8 +297,15 @@ public class ByteCodeTools {
 			return define(superClass);
 		}
 
+		/** @param superClass 用于确定classLoader */
 		public Class<T> define(Class<?> superClass) {
-			return putStatic(HopeReflect.defineClass(adapterName, superClass, writer.toByteArray()));
+			if (OS.isAndroid) {
+				int mod = superClass.getModifiers();
+				if (/*Modifier.isFinal(mod) || */!Modifier.isPublic(mod)) {
+					HopeReflect.setPublic(superClass, Class.class);
+				}
+			}
+			return define(superClass.getClassLoader());
 		}
 
 		public Class<T> define(ClassLoader loader) {
@@ -330,18 +337,15 @@ public class ByteCodeTools {
 		}
 	}
 
-	public static class Queue<T> {
-		public final String   name;
-		public final Prov<T>  func;
-		/** {@code func} 返回的类Class<T> */
-		public final Class<T> cls;
-
-		public Queue(String name, Prov<T> func, Class<T> cls) {
-			this.name = name;
-			this.func = func;
-			this.cls = cls;
+	/**
+	 * @param cls {@code func} 返回的类Class<T>
+	 */
+	public record Queue<T>(String name, Prov<T> func, Class<T> cls) {
+		public Queue {
+			if (name == null) throw new IllegalArgumentException("name is null");
+			if (func == null) throw new IllegalArgumentException("func is null");
+			if (cls == null) throw new IllegalArgumentException("cls is null");
 		}
-
 		public T get() {
 			return func.get();
 		}

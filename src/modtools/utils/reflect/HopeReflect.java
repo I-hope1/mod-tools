@@ -35,17 +35,6 @@ public class HopeReflect {
 		} catch (Exception ignored) { }
 	}
 
-	public static Class<?> defineClass(String name, Class<?> superClass, byte[] bytes) {
-		if (OS.isAndroid) {
-			int mod = superClass.getModifiers();
-			if (/*Modifier.isFinal(mod) || */!Modifier.isPublic(mod)) {
-				setPublic(superClass, Class.class);
-			}
-			return defineClassAndroid(name, superClass.getClassLoader(), bytes);
-		}
-		return UnsafeHandler.defineClass(null, bytes, superClass.getClassLoader());
-	}
-
 	public static Class<?> defineClass(String name, ClassLoader loader, byte[] bytes) {
 		if (OS.isAndroid) return defineClassAndroid(name, loader, bytes);
 		return UnsafeHandler.defineClass(name, bytes, loader);

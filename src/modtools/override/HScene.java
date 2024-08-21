@@ -117,7 +117,7 @@ public class HScene {
 		return constructor.newInstance(lookupClass);
 	}
 	static boolean  pauseAct     = false;
-	static HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7))
+	static HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
 	 .applyToScene(true, () -> {
 		 pauseAct = !pauseAct;
 	 });

@@ -40,6 +40,7 @@ public class TemplateTable<R> extends Table {
 	public void act(float delta) {
 		super.act(delta);
 		template.act(delta);
+		if (!template.needsLayout()) return;
 		super.clearChildren();
 
 		var cells = template.getCells();

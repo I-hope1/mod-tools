@@ -31,7 +31,7 @@ public class FilterTable<E> extends LimitTable {
 	public FilterTable() { }
 
 	public FilterTable(Cons<? extends FilterTable<E>> cons) {
-		super((Cons<Table>) cons);
+		super((Cons) cons);
 	}
 
 	/**

@@ -9,7 +9,7 @@ import modtools.utils.Tools.CProv;
 import java.lang.invoke.*;
 import java.lang.reflect.*;
 
-/** 获取{@link Field},{@link Method},{@link Constructor} */
+/** 用于获取{@link Field},{@link Method},{@link Constructor} */
 @SuppressWarnings("unchecked")
 public interface IReflect {
 	Field[] getFields(Class<?> cls);

@@ -145,7 +145,7 @@ public class HKeyCode {
 			this.def = def;
 		}
 		public int hashCode() {
-			return Objects.hash(data.name, key, def);
+			return Objects.hash(data.name, key);
 		}
 		public boolean isPress() {
 			return data.keyCode(key, def).isPress();

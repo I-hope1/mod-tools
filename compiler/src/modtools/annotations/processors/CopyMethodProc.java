@@ -103,6 +103,7 @@ public class CopyMethodProc extends BaseProcessor<MethodSymbol> {
 					// 去除private和protected，加上public
 					access = access & ~Opcodes.ACC_PRIVATE & ~Opcodes.ACC_PROTECTED | Opcodes.ACC_PUBLIC;
 					return insertBefore.isEmpty() ? super.visitMethod(access, name, descriptor, signature, exceptions) :
+					 // 将当前的方法（methodTree）编译成字节码插入到指定位置（insertBefore）
 					 new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, name, descriptor, signature, exceptions)) {
 						 private boolean inserted = false;
 

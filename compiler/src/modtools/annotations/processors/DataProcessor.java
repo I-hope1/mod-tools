@@ -1,17 +1,15 @@
 package modtools.annotations.processors;
 
-import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 
-import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
 import java.util.*;
 
-@AutoService(Processor.class)
+// @AutoService(Processor.class)
 // @SupportedOptions({"debug", "verify"})
 public class DataProcessor extends BaseProcessor<Element> {
 	private static final String EVENT       = "modtools.events.MyEvents";

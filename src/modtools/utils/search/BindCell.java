@@ -53,7 +53,7 @@ public final class BindCell implements Poolable {
 		getCpy();
 		cell.set(UNSET_CELL).clearElement();
 	}
-	/** clear时会回收cell和自己  */
+	/** clear时会回收自己（不包括cell，cell由table回收）  */
 	public void clear() {
 		if (el != null) el.clear();
 		if (cell != null) cell.clearElement();

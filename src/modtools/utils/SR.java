@@ -6,9 +6,9 @@ import java.util.function.*;
 
 import static modtools.utils.Tools.as;
 
-/** @author I-hope1  */
+/** @author I-hope1 */
 public class SR<T> {
-	private static final ThreadLocal<SR<?>> local  = ThreadLocal.withInitial(SR::new);
+	private static final ThreadLocal<SR<?>> local = ThreadLocal.withInitial(SR::new);
 	public static <R> SR<R> of(R value) {
 		SR<R> instance = as(local.get());
 		return instance.setv(value);

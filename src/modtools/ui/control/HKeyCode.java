@@ -87,7 +87,9 @@ public class HKeyCode {
 	public HKeyCode applyToScene(boolean capture, Runnable r) {
 		if (this == NONE) return this;
 		if (r == null) throw new NullPointerException("r is null");
-		(capture ? sceneCaptureKeys : sceneKeys).put(this, r);
+		var map = capture ? sceneCaptureKeys : sceneKeys;
+		if (map.containsKey(this)) throw new IllegalArgumentException("Key already registered: " + this);
+		map.put(this, r);
 		return this;
 	}
 	private static final OrderedMap<HKeyCode, Runnable> sceneCaptureKeys = new OrderedMap<>();

@@ -1,6 +1,5 @@
 package modtools.utils;
 
-import arc.struct.ObjectMap;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.Tools.*;
 
@@ -24,9 +23,10 @@ import modtools.utils.Tools.*;
 public class CatchSR<R> {
 	private R value;
 	private CatchSR() { }
-	private static final ObjectMap<Thread, CatchSR> caches = new ObjectMap<>();
+	private static final ThreadLocal<CatchSR> LOCAL = ThreadLocal.withInitial(CatchSR::new);
+
 	public static <R> CatchSR<R> of(CProv<R> prov) {
-		CatchSR instance = getInstance();
+		CatchSR instance = LOCAL.get();
 		instance.value = null;
 		return instance.get(prov);
 	}
@@ -35,7 +35,7 @@ public class CatchSR<R> {
 			run.run();
 			throw new IllegalStateException("Failed to meet the requirements.");
 		} catch (SatisfyException e) {
-			return (R) getInstance().value;
+			return (R) LOCAL.get().value;
 		}
 	}
 	public CatchSR<R> get(CProv<R> prov) {
@@ -45,9 +45,5 @@ public class CatchSR<R> {
 			return this;
 		}
 		throw new SatisfyException();
-	}
-
-	private static CatchSR getInstance() {
-		return caches.get(Thread.currentThread(), CatchSR::new);
 	}
 }

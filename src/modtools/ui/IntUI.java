@@ -711,7 +711,8 @@ public class IntUI {
 			};
 		}
 		public void show(Element element, float x, float y) {
-			getManager().hideAll();
+			// 在新版本，移除了这个方法
+			Tools.runIgnoredException(() -> getManager().hideAll());
 			super.show(element, x, y);
 		}
 		public void hide() {

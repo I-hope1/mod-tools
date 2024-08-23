@@ -37,7 +37,7 @@ public class FormatHelper {
 
 	/**
 	 * 如果不是{@link CellTools#unset}就fixed
-	 * @return "<b color="gray">UNSET</b>" if value equals {@link CellTools#unset}
+	 * @return "[gray]UNSET[]" if value equals {@link CellTools#unset}
 	 */
 	public static String fixedUnlessUnset(float value) {
 		if (value == CellTools.unset) return "[gray]UNSET[]";

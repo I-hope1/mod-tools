@@ -55,7 +55,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	public static final String METHOD_COUNT_PREFIX = " [";
 
 
-
 	/* non-null */
 	private final       Class<?> clazz;
 	private final       Object   obj;
@@ -216,8 +215,8 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		if (cont.getChildren().size > 0) {
 			Boolf<Member> memberBoolf = member ->
 			 (pattern == PatternUtils.ANY ||
-			 pattern != null && searchType.get(pattern, member) != isBlack)
-			  && containsFlags(member.getModifiers()) != isBlack;
+			  pattern != null && searchType.get(pattern, member) != isBlack)
+			 && containsFlags(member.getModifiers()) != isBlack;
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::flushVal);
 			methodsTable.filter(memberBoolf);
@@ -464,7 +463,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		})).right().top(), E_JSFuncDisplay.buttons);
 		fields.row();
 
-		addUnderline(fields, 8);
+		Underline.of(fields, 8);
 	}
 	public static Cell<?> extentCell(Table t, Class<?> type, Prov<ValueLabel> l) {
 		Cell<?> cell;
@@ -568,7 +567,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		}
 		methods.row();
 
-		addUnderline(methods, 4);
+		Underline.of(methods, 4);
 	}
 
 	public static void buildConstructor(Object o, ReflectTable table, Constructor<?> ctor) {
@@ -599,7 +598,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		} catch (Throwable e) {
 			Log.err(e);
 		}
-		addUnderline(table, 7);
+		Underline.of(table, 7);
 	}
 
 	private static void buildClass(ReflectTable table, Class<?> cls) {
@@ -645,7 +644,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				Log.err(e);
 			}
 		}).growX().left().top().row();
-		addUnderline(table, 6);
+		Underline.of(table, 6);
 	}
 	private static boolean isNestStatic(Class<?> cls) {
 		if (cls.getConstructors().length == 0) return true;
@@ -787,24 +786,11 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			stickX = true;
 		}
 	}
-	private static void addUnderline(ReflectTable table,
-	                                 int colspan) {
-		Underline.of(table, colspan, tmpColor.set(c_underline));
+	private static MethodHandle getSpecialHandle(Method m) throws IllegalAccessException {
+		return lookup.unreflectSpecial(m, m.getDeclaringClass());
 	}
-
-	private static MethodHandle getHandle(Method m) {
-		try {
-			return lookup.unreflectSpecial(m, m.getDeclaringClass());
-		} catch (IllegalAccessException e) {
-			throw new RuntimeException(e);
-		}
-	}
-	private static MethodHandle getHandle(Constructor<?> ctor) {
-		try {
-			return lookup.unreflectConstructor(ctor);
-		} catch (IllegalAccessException e) {
-			throw new RuntimeException(e);
-		}
+	private static MethodHandle getHandle(Constructor<?> ctor) throws IllegalAccessException {
+		return lookup.unreflectConstructor(ctor);
 	}
 
 	private static void mergeOne(ReflectTable table, Member member, MyLabel label,
@@ -851,7 +837,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 	private static Runnable methodSpecialInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ReflectValueLabel l) {
 		return runT(() -> {
-			MethodHandle handle = getHandle(m);
+			MethodHandle handle = getSpecialHandle(m);
 			if (noParam) {
 				dealInvokeResult(handle.invokeWithArguments(o), cell, l);
 				return;

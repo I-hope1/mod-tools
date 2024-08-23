@@ -144,6 +144,11 @@ public class HKeyCode {
 			this.key = key;
 			this.def = def;
 		}
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof DynamicHKeyCode that)) return false;
+			return Objects.equals(data, that.data) && Objects.equals(key, that.key);
+		}
 		public int hashCode() {
 			return Objects.hash(data.name, key);
 		}

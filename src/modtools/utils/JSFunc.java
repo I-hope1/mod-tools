@@ -163,7 +163,7 @@ public class JSFunc
 		});
 	}
 
-	// Internal Method.
+	//region Internal Method.
 	public static void compare(Object o1, Object o2) {
 		Comparator.compare(o1, o2);
 	}
@@ -183,6 +183,7 @@ public class JSFunc
 	public static void design() {
 		DesignHelper.design();
 	}
+	//endregion
 
 	public interface MyProv<T> {
 		T get() throws Exception;

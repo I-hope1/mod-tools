@@ -112,9 +112,11 @@ public interface CellTools {
 		cell.row();
 		return cell;
 	}
+	/** 返回的是{@link Tmp#v1} */
 	static Vec2 minSize(Cell<?> cell) {
 		return Tmp.v1.set(CellTools.minWidth(cell), CellTools.minHeight(cell));
 	}
+	/** 返回的是{@link Tmp#v1} */
 	static Vec2 maxSize(Cell<?> cell) {
 		return Tmp.v1.set(CellTools.maxWidth(cell), CellTools.maxHeight(cell));
 	}

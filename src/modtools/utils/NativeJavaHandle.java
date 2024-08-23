@@ -5,6 +5,7 @@ import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 
+/** @see rhino.NativeJavaMethod */
 public class NativeJavaHandle extends BaseFunction {
 	private final MethodHandle handle;
 	public NativeJavaHandle(Scriptable scope, MethodHandle handle) {

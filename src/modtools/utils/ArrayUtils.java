@@ -54,7 +54,9 @@ public class ArrayUtils {
 	}
 	public static <K, V> Map<K, V> valueArr2Map(V[] values, Func<V, K> keyFunc, Map<K, V> map) {
 		for (V val : values) {
-			map.put(keyFunc.get(val), val);
+			K key = keyFunc.get(val);
+			if (map.containsKey(key)) throw new RuntimeException(key + " has already exists");
+			map.put(key, val);
 		}
 		return map;
 	}

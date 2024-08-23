@@ -69,6 +69,7 @@ public class HopeReflect {
 		if (val2 != null && val1 != null &&
 		    val2.getClass() == Vec2.class && val1.getClass() == Vec2.class &&
 		    val2.equals(val1)) return true;
+
 		return false;
 	}
 

@@ -19,7 +19,6 @@ import modtools.events.*;
 import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
-import modtools.override.HScene;
 import modtools.ui.*;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
@@ -165,7 +164,6 @@ public class ModTools extends Mod {
 		loaded = true;
 		async(() -> {
 			AllTutorial.init();
-			Tools.runLoggedException("HScene", HScene::load);
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {
 				Core.app.post(() -> Tools.runLoggedException(Background::load));
 			}

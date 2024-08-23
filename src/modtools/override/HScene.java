@@ -4,10 +4,11 @@ import arc.*;
 import arc.func.*;
 import arc.input.KeyCode;
 import arc.scene.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
 import modtools.Constants;
+import modtools.content.debug.Pause;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.ui.control.HKeyCode;
 import modtools.utils.ByteCodeTools.*;
@@ -21,6 +22,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
 
 import static ihope_lib.MyReflect.lookup;
+import static modtools.IntVars.json;
 import static modtools.override.ForRhino.forNameOrAddLoader;
 import static modtools.ui.IntUI.topGroup;
 
@@ -28,7 +30,7 @@ public class HScene {
 	public static final String SUFFIX = "-$H";
 
 	@Exclude
-	public static void load() throws Exception {
+	public static void load(Pause pause) throws Exception {
 		Class<? extends Group> superClass = Core.scene.root.getClass();
 		if (superClass.getName().endsWith(SUFFIX)) return;
 		MyClass<? extends Group> myClass = new MyClass<>(superClass.getName() + SUFFIX, superClass);
@@ -45,7 +47,7 @@ public class HScene {
 		);
 		Object[] self = {null};
 		Floatc floatc = delta -> {
-			if (pauseAct) {
+			if (pauseMap.get(Vars.ui.getClass()) == 1/* 暂停了 */) {
 				// Log.info(args.get(0));
 				Constants.iv(element_act, self[0], delta);
 				topGroup.act(delta);
@@ -74,15 +76,15 @@ public class HScene {
 		Tools.clone(Core.scene.root, newGroup, Group.class, null);
 		FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
 
+		pauseMap = json.fromJson(ObjectIntMap.class, Class.class, pause.data().toString());
 		hookUpdate(Core.app.getListeners());
 	}
 
 	static void hookUpdate(Seq<ApplicationListener> appListeners) {
 		// 使用asm将侦听器替换
 		appListeners.replace(source -> {
-			if (source.getClass().getSimpleName().endsWith(SUFFIX)) return source;
-			// 使mod-tools继续运行
-			if (source == Vars.ui || source == Vars.renderer || source == Vars.logic) return source;
+			var superClass = source.getClass();
+			if (superClass.getSimpleName().endsWith(SUFFIX)) return source;
 			if (source instanceof ApplicationCore core) {
 				ApplicationListener[]    array   = Reflect.get(ApplicationCore.class, core, "modules");
 				Seq<ApplicationListener> objects = new Seq<>(array);
@@ -90,8 +92,11 @@ public class HScene {
 				hookUpdate(objects);
 				return core;
 			}
-			var    myClass = new MyClass<>(source.getClass().getName() + SUFFIX, source.getClass());
-			Lambda lambda  = myClass.addLambda(() -> pauseAct, Boolp.class, "get", "()Z");
+			pauseMap.put(superClass, 0);
+			// 使mod-tools继续运行
+			if (source == Vars.ui) return source;
+			var myClass = new MyClass<>(superClass.getName() + SUFFIX, superClass);
+			Lambda lambda = myClass.addLambda(() -> pauseMap.get(superClass) == 1, Boolp.class, "get", "()Z");
 			myClass.setFunc("update", cfw -> {
 				myClass.execLambda(lambda, null);
 				// 判断是否暂停
@@ -106,7 +111,7 @@ public class HScene {
 			}, Modifier.PUBLIC, void.class);
 			var clazz = myClass.define();
 			var obj   = UNSAFE.allocateInstance(clazz);
-			Tools.clone(source, obj, source.getClass(), null);
+			Tools.clone(source, obj, superClass, null);
 			return obj;
 		});
 	}
@@ -116,9 +121,10 @@ public class HScene {
 		constructor.setAccessible(true);
 		return constructor.newInstance(lookupClass);
 	}
-	static boolean  pauseAct     = false;
+	public static ObjectIntMap<Class<?>> pauseMap;
+
 	static HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
 	 .applyToScene(true, () -> {
-		 pauseAct = !pauseAct;
+		 pauseMap.put(Vars.ui.getClass(), pauseMap.get(Vars.ui.getClass()) == 1 ? 0 : 1);
 	 });
 }

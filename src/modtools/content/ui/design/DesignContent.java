@@ -16,7 +16,7 @@ public class DesignContent extends Content {
 		super("designContent");
 	}
 	public void buildUI() {
-		ui = new Window(localizedName());
+		ui = new IconWindow(localizedName());
 		ui.cont.button("text", HopeStyles.flatBordert, IntVars.EMPTY_RUN)
 		 .height(42)
 		 .self(c -> MenuBuilder.addShowMenuListenerp(c.get(), () -> Seq.with(

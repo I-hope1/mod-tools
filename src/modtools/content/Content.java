@@ -12,7 +12,8 @@ import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
-import modtools.ui.*;
+import modtools.ui.HopeStyles;
+import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.CircleImageButton;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.control.HKeyCode.KeyCodeData;
@@ -128,5 +129,24 @@ public abstract class Content {
 		button.getLabel().setSize(0.9f);
 		button.getLabel().setAlignment(Align.left);
 		return button;
+	}
+
+	public class IconWindow extends Window {
+		public IconWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(title, minWidth, minHeight, full, noButtons);
+		}
+		public IconWindow(String title, float minWidth, float minHeight, boolean full) {
+			super(title, minWidth, minHeight, full);
+		}
+		public IconWindow(String title, float minWidth, float minHeight) {
+			super(title, minWidth, minHeight);
+		}
+		public IconWindow(String title) {
+			super(title);
+		}
+		public void buildTitle(String titleText) {
+			titleTable.image(icon).padLeft(6f).padRight(2f);
+			super.buildTitle(titleText);
+		}
 	}
 }

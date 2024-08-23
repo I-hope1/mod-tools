@@ -119,7 +119,7 @@ public class UnitSpawn extends Content {
 		selectUnit = UnitTypes.dagger;
 		team = Team.sharded;
 
-		ui = new Window(localizedName(), 40 * 8, 400, true);
+		ui = new IconWindow(localizedName(), 40 * 8, 400, true);
 		ui.cont.table(table -> unitCont = table).grow().row();
 		// Options1 (生成pos)
 		ui.cont.table(Window.myPane, table -> {

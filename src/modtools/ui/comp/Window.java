@@ -202,7 +202,7 @@ public class Window extends Table implements Position {
 		return Math.max(minHeight, super.getMinHeight());
 	}
 
-	private void buildTitle(String title) {
+	public void buildTitle(String title) {
 		moveListener = moveListener();
 		add(titleTable).growX().height(topHeight).name("titleTable");
 		row();

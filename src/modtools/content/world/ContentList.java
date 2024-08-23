@@ -47,7 +47,7 @@ public class ContentList extends Content {
 
 	Pattern pattern = null;
 	public void lazyLoad() {
-		ui = new IconWindow(localizedName(), 200, 420, true);
+		ui = new IconWindow(200, 420, true);
 		main = new Table();
 		Table top = new Table();
 		ui.cont.add(top).row();

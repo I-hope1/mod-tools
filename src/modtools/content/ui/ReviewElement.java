@@ -22,7 +22,7 @@ import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
-import modtools.content.ui.ShowUIList.*;
+import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.ISettings;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -57,7 +57,6 @@ import java.util.regex.Pattern;
 import static arc.Core.scene;
 import static modtools.IntVars.mouseVec;
 import static modtools.content.ui.ReviewElement.Settings.*;
-import static modtools.ui.Contents.review_element;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.ui.CellTools.unset;
@@ -105,7 +104,7 @@ public class ReviewElement extends Content {
 			}
 			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
 				if (toActor != null && source.isAscendantOf(toActor) && toActor.getScene() != null
-					/*  && source.getListeners().find(t -> this.getClass().isInstance(t)) == null */) return;
+					/*  && source.getListeners().find(t -> this.getClass().isInstance(t)) == null */) { return; }
 				CANCEL_TASK.run();
 			}
 		});
@@ -261,10 +260,9 @@ public class ReviewElement extends Content {
 		Draw.color();
 	}
 
-	public static final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
+	public final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
 	public void build() {
-		if (topGroup.isSelecting()) topGroup.resetSelectElem();
-		else topGroup.requestSelectElem(null, callback);
+		if (topGroup.isSelecting()) { topGroup.resetSelectElem(); } else topGroup.requestSelectElem(null, callback);
 	}
 
 
@@ -274,9 +272,14 @@ public class ReviewElement extends Content {
 		FOCUS_FROM = null;
 	};
 
-	public static class ReviewElementWindow extends Window implements IDisposable, DrawExecutor {
-		private static final String  SEARCH_RESULT = "SRCH_RS";
-		public               boolean drawCell;
+	public ReviewElementWindow inspect(Element element) {
+		ReviewElementWindow window = new ReviewElementWindow();
+		window.show(element);
+		return window;
+	}
+
+	public class ReviewElementWindow extends IconWindow implements IDisposable, DrawExecutor {
+		public boolean drawCell;
 		/** 用于parent父元素时，不用重新遍历 */
 		ElementElem wrapCache;
 
@@ -296,7 +299,7 @@ public class ReviewElement extends Content {
 		}
 
 		public ReviewElementWindow() {
-			super(review_element.localizedName(), 20, 160, true);
+			super(20, 160, true);
 
 			name = "ReviewElementWindow";
 
@@ -315,7 +318,7 @@ public class ReviewElement extends Content {
 					 if (element.parent == scene.root) {
 						 Vec2 vec2 = ElementUtils.getAbsolutePos(bs[0]);
 						 showConfirm("@reviewElement.confirm.root", go).setPosition(vec2);
-					 } else go.run();
+					 } else { go.run(); }
 				 })
 				 .disabled(_ -> element == null || element.parent == null)
 				 .with(b -> b.getLabel().setFontScale(0.9f))
@@ -333,6 +336,8 @@ public class ReviewElement extends Content {
 						p.background(Tex.pane);
 						SettingsBuilder.build(p);
 						SettingsBuilder.check("Draw Cell", b -> drawCell = b, () -> drawCell);
+						Underline.of(p, 1);
+						ISettings.buildAll("", p, Settings.class);
 						// SettingsBuilder.check("Expand All", b -> drawCell = b, () -> drawCell);
 						SettingsBuilder.clearBuild();
 					}, false);
@@ -353,7 +358,7 @@ public class ReviewElement extends Content {
 				}
 			}).grow().minHeight(120);
 
-			MenuBuilder.addShowMenuListenerp(pane, ElementElem.class, target -> MyWrapTable.getContextMenu(target, target.getElement()));
+			MenuBuilder.addShowMenuListenerp(pane, ElementElem.class, target -> getContextMenu(target, target.getElement()));
 			var keyMap = getKeyMap();
 
 			pane.requestKeyboard();
@@ -411,7 +416,7 @@ public class ReviewElement extends Content {
 			ObjectMap<KeyCode, Cons<ElementElem>> keyMap = new ObjectMap<>();
 			keyMap.put(KeyCode.f, e -> fixedFocus = fixedFocus == e ? null : e);
 			keyMap.put(KeyCode.i, e -> INFO_DIALOG.showInfo(e.getElement()));
-			keyMap.put(KeyCode.r, e -> MenuBuilder.showMenuList(MyWrapTable.execChildren(e.getElement())));
+			keyMap.put(KeyCode.r, e -> MenuBuilder.showMenuList(execChildren(e.getElement())));
 			keyMap.put(KeyCode.del, e -> shiftIgnoreConfirm(getElementName(e.getElement()), () -> {
 				e.getElement().remove();
 				e.remove();
@@ -507,9 +512,11 @@ public class ReviewElement extends Content {
 	}
 
 	static void makePosLabel(Table t, Prov<Vec2> pos) {
-		if (pos != null) t.label(new PairProv(pos, ", "))
-		 .style(defaultLabel).color(Color.lightGray)
-		 .fontScale(0.7f).padLeft(4f).padRight(4f);
+		if (pos != null) {
+			t.label(new PairProv(pos, ", "))
+			 .style(defaultLabel).color(Color.lightGray)
+			 .fontScale(0.7f).padLeft(4f).padRight(4f);
+		}
 	}
 
 	public static class ElementElem extends LimitTable {
@@ -544,7 +551,7 @@ public class ReviewElement extends Content {
 			userObject = null;
 		}
 	}
-	public static class MyWrapTable extends ElementElem {
+	public class MyWrapTable extends ElementElem {
 		boolean stopEvent, needUpdate;
 
 		ReviewElementWindow window;
@@ -684,7 +691,7 @@ public class ReviewElement extends Content {
 				if (!parentValid(group, window)) return;
 				if (!(needUpdate
 				      || ((group.needsLayout() || sizeInvalid(group)) && group.getScene() != null)
-				      || !(table1.hasChildren() || !group.hasChildren()))) return;
+				      || !(table1.hasChildren() || !group.hasChildren()))) { return; }
 				HopeFx.changedFx(textElement);
 
 				if (!button.isChecked()) return;
@@ -715,81 +722,82 @@ public class ReviewElement extends Content {
 			MyWrapTable table = ElementUtils.findParent(this, MyWrapTable.class);
 			if (table != null) table.needUpdate = true;
 		}
+	}
 
-		static Prov<Seq<MenuItem>> getContextMenu(ElementElem self, Element element) {
-			return () -> ArrayUtils.seq(
-			 MenuItem.with("path.copy", Icon.copySmall, "@copy.path", () -> {
-				 JSFunc.copyText(ElementUtils.getPath(element));
-			 }),
-			 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
-				 ElementUtils.quietScreenshot(element);
-			 }),
+	Prov<Seq<MenuItem>> getContextMenu(ElementElem self, Element element) {
+		return () -> ArrayUtils.seq(
+		 MenuItem.with("path.copy", Icon.copySmall, "@copy.path", () -> {
+			 JSFunc.copyText(ElementUtils.getPath(element));
+		 }),
+		 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
+			 ElementUtils.quietScreenshot(element);
+		 }),
 
-			 UnderlineItem.with(),
+		 UnderlineItem.with(),
 
-			 MenuBuilder.copyAsJSMenu(null, storeRun(() -> element)),
-			 ConfirmList.with("clear", Icon.trashSmall, "@element.remove", "@confirm.remove", () -> {
-				 self.remove();
-				 element.remove();
-			 }),
-			 CheckboxList.withc("debug.bounds", Icon.adminSmall, "@settings.debugbounds",
-				() -> TopGroup.getDrawPadElem() == element, () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
-			 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
-			 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
-			 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
-			 ValueLabel.newElementDetailsList(element),
+		 MenuBuilder.copyAsJSMenu(null, storeRun(() -> element)),
+		 ConfirmList.with("clear", Icon.trashSmall, "@element.remove", "@confirm.remove", () -> {
+			 self.remove();
+			 element.remove();
+		 }),
+		 CheckboxList.withc("debug.bounds", Icon.adminSmall, "@settings.debugbounds",
+			() -> TopGroup.getDrawPadElem() == element, () -> REVIEW_ELEMENT.toggleDrawPadElem(element)),
+		 MenuItem.with("window.new", Icon.copySmall, "New Window", () -> new ReviewElementWindow().show(element)),
+		 MenuItem.with("details", Icon.infoSmall, "@details", () -> INFO_DIALOG.showInfo(element)),
+		 FoldedList.withf("exec", Icon.boxSmall, "Exec", () -> execChildren(element)),
+		 ValueLabel.newElementDetailsList(element),
 
-			 UnderlineItem.with(),
+		 UnderlineItem.with(),
 
-			 element instanceof Table ?
-				MenuItem.with("allcells", Icon.wavesSmall, "All Cells", () -> viewAllCells((Table) element)) : null,
+		 element instanceof Table ?
+			MenuItem.with("allcells", Icon.wavesSmall, "All Cells", () -> viewAllCells((Table) element)) : null,
 
-			 element != null && element.parent instanceof Table ?
-				DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
-				 () -> !CellDetailsWindow.valid(element), () -> {
-					 new CellDetailsWindow(((Table) element.parent).getCell(element));
-				 }) : null);
-		}
+		 element != null && element.parent instanceof Table ?
+			DisabledList.withd("this.cell", Icon.wavesSmall, "This Cell",
+			 () -> !CellDetailsWindow.valid(element), () -> {
+				 new CellDetailsWindow(((Table) element.parent).getCell(element));
+			 }) : null);
+	}
 
-		private static Seq<MenuItem> execChildren(Element element) {
-			return Seq.with(
-			 MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
-			 MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
-			 MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
-			 MenuItem.with("pack", Icon.boxSmall, "Pack", element::pack),
-			 MenuItem.with("validate", Icon.boxSmall, "Validate", element::validate),
-			 MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
-			 MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
-			 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack),
+	static Seq<MenuItem> execChildren(Element element) {
+		return Seq.with(
+		 MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
+		 MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
+		 MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
+		 MenuItem.with("pack", Icon.boxSmall, "Pack", element::pack),
+		 MenuItem.with("validate", Icon.boxSmall, "Validate", element::validate),
+		 MenuItem.with("keepInStage", Icon.boxSmall, "Keep in stage", element::keepInStage),
+		 MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
+		 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack),
 
-			 UnderlineItem.with(),
+		 UnderlineItem.with(),
 
-			 element instanceof Table table ? MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
-				 drawablePicker().show(table.getBackground(), table::setBackground);
-			 }) : null,
-			 element instanceof Table table ? MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)) : null,
-			 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
-			 element instanceof Table table ? MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)) : null,
-			 element instanceof Table table ? MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)) : null,
-			 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null,
+		 element instanceof Table table ? MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
+			 drawablePicker().show(table.getBackground(), table::setBackground);
+		 }) : null,
+		 element instanceof Table table ? MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)) : null,
+		 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
+		 element instanceof Table table ? MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)) : null,
+		 element instanceof Table table ? MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)) : null,
+		 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null,
 
-			 element instanceof Label label ? MenuItem.with("label.center", Icon.boxSmall, "Label Center", l(label, Align.center)) : null,
-			 element instanceof Label label ? MenuItem.with("label.left", Icon.boxSmall, "Label Left", l(label, Align.left)) : null,
-			 element instanceof Label label ? MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)) : null,
-			 element instanceof Label label ? MenuItem.with("label.top", Icon.boxSmall, "Label Top", l(label, Align.top)) : null,
-			 element instanceof Label label ? MenuItem.with("label.bottom", Icon.boxSmall, "Label Bottom", l(label, Align.bottom)) : null
-			);
-		}
-		private static Runnable l(Label l, int align) {
-			return () -> l.setAlignment(align);
-		}
+		 element instanceof Label label ? MenuItem.with("label.center", Icon.boxSmall, "Label Center", l(label, Align.center)) : null,
+		 element instanceof Label label ? MenuItem.with("label.left", Icon.boxSmall, "Label Left", l(label, Align.left)) : null,
+		 element instanceof Label label ? MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)) : null,
+		 element instanceof Label label ? MenuItem.with("label.top", Icon.boxSmall, "Label Top", l(label, Align.top)) : null,
+		 element instanceof Label label ? MenuItem.with("label.bottom", Icon.boxSmall, "Label Bottom", l(label, Align.bottom)) : null
+		);
+	}
 
-		private static Runnable l(Table t, int align) {
-			return () -> {
-				t.align(align);
-				t.layout();
-			};
-		}
+	private static Runnable l(Label l, int align) {
+		return () -> l.setAlignment(align);
+	}
+
+	private static Runnable l(Table t, int align) {
+		return () -> {
+			t.align(align);
+			t.layout();
+		};
 	}
 	private static boolean sizeInvalid(Group group) {
 		return group instanceof Table && UNSAFE.getBoolean(group, TABLE.sizeInvalid);
@@ -872,8 +880,7 @@ public class ReviewElement extends Content {
 
 	public static Table floatSetter(String name, Prov<CharSequence> def, Floatc floatc) {
 		return new Table(t -> {
-			if (name != null)
-				t.add(name).color(Pal.accent).fontScale(0.8f).padRight(8f);
+			if (name != null) { t.add(name).color(Pal.accent).fontScale(0.8f).padRight(8f); }
 			if (floatc == null) {
 				t.label(def);
 				return;
@@ -962,8 +969,7 @@ public class ReviewElement extends Content {
 			colorLabel.setText(color.a == 1 ? string.substring(0, 6) : string);
 		}
 		void rotation(Element element) {
-			if (rotCell.toggle1(element.rotation % 360 != 0))
-				rotationLabel.setText(fixed(element.rotation));
+			if (rotCell.toggle1(element.rotation % 360 != 0)) { rotationLabel.setText(fixed(element.rotation)); }
 		}
 
 		void translation(Element element) {
@@ -972,21 +978,22 @@ public class ReviewElement extends Content {
 		void style(Element element) {
 			try {
 				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
-				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style)))
+				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style))) {
 					styleLabel.setText(FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));
+				}
 			} catch (Throwable e) { styleCell.remove(); }
 		}
 		void align(Element element) {
-			if (alignCell.toggle1(element instanceof Table))
+			if (alignCell.toggle1(element instanceof Table)) {
 				alignLabel.setText(FormatHelper.align(((Table) element).getAlign()));
+			}
 		}
 		void cellAlign(Cell<?> cell) {
 			cellAlignLabel.setText(FormatHelper.align(CellTools.align(cell)));
 		}
 		void colspan(Cell<?> cell) {
 			int colspan = CellTools.colspan(cell);
-			if (colspanCell.toggle1(colspan != 1))
-				colspanLabel.setText("" + colspan);
+			if (colspanCell.toggle1(colspan != 1)) { colspanLabel.setText("" + colspan); }
 		}
 		void pairNum(Vec2 got, Vec2 toSet, BindCell bindCell, float unset) {
 			if (bindCell.toggle1(got.x != unset || got.y != unset)) {
@@ -1000,10 +1007,11 @@ public class ReviewElement extends Content {
 			pairNum(CellTools.maxSize(cell).scl(1 / Scl.scl()), maxSizeVec, maxSizeCell, unset);
 		}
 		private void pairBool(Vec2 v1, BindCell bindCell) {
-			if (bindCell.toggle1(v1.x != 0 || v1.y != 0))
+			if (bindCell.toggle1(v1.x != 0 || v1.y != 0)) {
 				getLabel(bindCell).setText(STR."\{enabledMark(v1.x)}x[]\{
 				 v1.x != 0 && maxSizeCell.cell.hasElement() && maxSizeVec.x != unset ? "[[maxSize]" : ""} | \{enabledMark(v1.y)}y\{
 				 v1.y != 0 && maxSizeCell.cell.hasElement() && maxSizeVec.y != unset ? "[][[maxSize]" : ""}");
+			}
 		}
 		static Label getLabel(BindCell cell) {
 			return (Label) ((Table) cell.el).getChildren().get(1);
@@ -1137,11 +1145,15 @@ public class ReviewElement extends Content {
 
 				// 绝对坐标
 				// x: 0 -> x
-				if (vec2.x != 0) MyDraw.drawText(fixed(vec2.x),
-				 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+				if (vec2.x != 0) {
+					MyDraw.drawText(fixed(vec2.x),
+					 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+				}
 				// y: 0 -> y
-				if (vec2.y != 0) MyDraw.drawText(fixed(vec2.y),
-				 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+				if (vec2.y != 0) {
+					MyDraw.drawText(fixed(vec2.y),
+					 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+				}
 			}
 			posLine:
 			{
@@ -1161,16 +1173,20 @@ public class ReviewElement extends Content {
 				float h = elem.getHeight();
 				// width
 				boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
-				if (w != 0) MyDraw.drawText(fixed(w),
-				 vec2.x + w / 2f,
-				 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
-				 color, Align.center);
+				if (w != 0) {
+					MyDraw.drawText(fixed(w),
+					 vec2.x + w / 2f,
+					 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
+					 color, Align.center);
+				}
 
 				// height
-				if (h != 0) MyDraw.drawText(fixed(h),
-				 flipX ? Core.graphics.getWidth() : 0,
-				 vec2.y + (h + MyDraw.fontHeight()) / 2f,
-				 color, flipX ? Align.right : Align.left);
+				if (h != 0) {
+					MyDraw.drawText(fixed(h),
+					 flipX ? Core.graphics.getWidth() : 0,
+					 vec2.y + (h + MyDraw.fontHeight()) / 2f,
+					 color, flipX ? Align.right : Align.left);
+				}
 			}
 
 			if (elem instanceof Table) {

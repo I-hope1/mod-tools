@@ -34,7 +34,7 @@ public abstract class Content {
 
 	/** 显示名称 */
 	public String localizedName() {
-		return Core.bundle.get(modName + "." + name, name);
+		return Core.bundle.get(modName + "." + name, Strings.capitalize(name));
 	}
 	public final String getSettingName() {
 		return name;
@@ -132,17 +132,17 @@ public abstract class Content {
 	}
 
 	public class IconWindow extends Window {
-		public IconWindow(String title, float minWidth, float minHeight, boolean full, boolean noButtons) {
-			super(title, minWidth, minHeight, full, noButtons);
+		public IconWindow(float minWidth, float minHeight, boolean full, boolean noButtons) {
+			super(localizedName(), minWidth, minHeight, full, noButtons);
 		}
-		public IconWindow(String title, float minWidth, float minHeight, boolean full) {
-			super(title, minWidth, minHeight, full);
+		public IconWindow(float minWidth, float minHeight, boolean full) {
+			super(localizedName(), minWidth, minHeight, full);
 		}
-		public IconWindow(String title, float minWidth, float minHeight) {
-			super(title, minWidth, minHeight);
+		public IconWindow(float minWidth, float minHeight) {
+			super(localizedName(), minWidth, minHeight);
 		}
-		public IconWindow(String title) {
-			super(title);
+		public IconWindow() {
+			super(localizedName());
 		}
 		public void buildTitle(String titleText) {
 			titleTable.image(icon).padLeft(6f).padRight(2f);

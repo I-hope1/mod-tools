@@ -24,7 +24,7 @@ public class Pause extends Content {
 
 	Window ui;
 	public void lazyLoad() {
-		ui = new IconWindow("Pause", 120, 300, true);
+		ui = new IconWindow(120, 300, true);
 		FilterTable<Class<?>> table = new FilterTable<>();
 		table.top().defaults().top().left();
 		SettingsBuilder.build(table);

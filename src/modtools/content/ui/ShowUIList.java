@@ -73,7 +73,7 @@ public class ShowUIList extends Content {
 	}
 
 	public void lazyLoad() {
-		ui = new IconWindow(localizedName(), getW(), 400, true);
+		ui = new IconWindow(getW(), 400, true);
 		Table cont = ui.cont;
 
 		Table[] tables = {icons, tex, styles, colorsT, interps, actions = newTable(new ActionComp())};

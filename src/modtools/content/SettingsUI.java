@@ -85,7 +85,7 @@ public class SettingsUI extends Content {
 	}
 
 	public void lazyLoad() {
-		ui = new IconWindow(localizedName(), 390, 90, true);
+		ui = new IconWindow(390, 90, true);
 		Table prev = cont;
 		cont = new Table();
 		ui.cont.pane(Styles.smallPane, cont).grow().padLeft(6f);

@@ -9,7 +9,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.*;
 
-@SuppressWarnings({"unchecked"})
+@SuppressWarnings({"unchecked", "deprecation"})
 public class HopeReflect {
 	public static Unsafe unsafe = getUnsafe();
 	public static Lookup lookup = getLookup();
@@ -33,7 +33,7 @@ public class HopeReflect {
 			Field f = Unsafe.class.getDeclaredField("theUnsafe");
 			f.setAccessible(true);
 			return (Unsafe) f.get(null);
-		} catch (Exception e) {throw new RuntimeException(e);}
+		} catch (Exception e) { throw new RuntimeException(e); }
 	}
 	private static Lookup getLookup() {
 		try {
@@ -42,7 +42,7 @@ public class HopeReflect {
 			).newInstance(Lookup.class);
 			lookup = (Lookup) lookup.findStaticVarHandle(Lookup.class, "IMPL_LOOKUP", Lookup.class).get();
 			return lookup;
-		} catch (Exception e) {throw new RuntimeException(e);}
+		} catch (Exception e) { throw new RuntimeException(e); }
 	}
 	static Module EVERYONE_MODULE;
 	public static void openModule() throws Throwable {
@@ -121,7 +121,7 @@ public class HopeReflect {
 		}
 	}
 
-	public static<T> void setAccess(Class<? extends T> clazz, T obj, String name, Object value) {
+	public static <T> void setAccess(Class<? extends T> clazz, T obj, String name, Object value) {
 		Field field;
 		try {
 			field = clazz.getDeclaredField(name);
@@ -161,7 +161,7 @@ public class HopeReflect {
 		return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 	}
 	/** 主要是加载{@code <clinit>} */
-	public static void load() {}
+	public static void load() { }
 
 	public static void setAccessible(AccessibleObject obj) {
 		obj.setAccessible(true);
@@ -175,7 +175,7 @@ public class HopeReflect {
 			throw new RuntimeException(e);
 		}
 	}
-	public static <T> T iv(Method method, Object obj, Object ...args) {
+	public static <T> T iv(Method method, Object obj, Object... args) {
 		try {
 			return (T) method.invoke(obj, args);
 		} catch (IllegalAccessException | InvocationTargetException e) {

@@ -627,7 +627,7 @@ public class Tester extends Content {
 	}
 
 	public void _load() {
-		ui = new IconWindow(localizedName(), 0, 100, true);
+		ui = new IconWindow(0, 100, true);
 		// JSFunc.watch("times", () -> ui.times);
 		/*ui.update(() -> {
 			ui.setZIndex(frag.getZIndex() - 1);

@@ -159,7 +159,7 @@ public class Selection extends Content {
 
 	void loadUI() {
 		int minH = 300;
-		ui = new IconWindow(localizedName(), buttonWidth * 1.5f/* two buttons */,
+		ui = new IconWindow(buttonWidth * 1.5f/* two buttons */,
 		 minH, false);
 		ui.shown(() -> Time.runTask(3, ui::display));
 		ui.hidden(this::hide);

@@ -48,7 +48,7 @@ public class LogDisplay extends Content {
 
 	public void rebuild() {
 		float w = getW();
-		ui = new IconWindow(localizedName(), w, 150, true);
+		ui = new IconWindow(w, 150, true);
 		ui.update(() -> ui.minWidth = getW());
 
 		Color[] colors = {Color.sky, Color.gold};

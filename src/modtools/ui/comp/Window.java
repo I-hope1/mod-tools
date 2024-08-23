@@ -430,6 +430,10 @@ public class Window extends Table implements Position {
 			Window.all.add(this);
 		}
 
+		if (this instanceof IDisposable && !Vars.mobile) {
+			moveToMouse();
+			keepInStage();
+		}
 		// if (!(this instanceof InfoFadePopup)) Core.scene.unfocusAll();
 		// stage.setKeyboardFocus(this);
 	}
@@ -453,14 +457,10 @@ public class Window extends Table implements Position {
 	}
 
 	/**
-	 * 如果实现了{@link IDisposable}接口，自动show
+	 * 如果实现了{@link IDisposable}接口，自动show，自动移动到鼠标位置（{@link #moveToMouse()}&{@link #keepInStage}）
 	 * @see Window#Window(String, float, float, boolean, boolean)
 	 */
 	public Window show() {
-		if (this instanceof IDisposable && !Vars.mobile) {
-			moveToMouse();
-		}
-
 		/* 以免window超出屏幕外  */
 		Time.runTask(4, this::display);
 

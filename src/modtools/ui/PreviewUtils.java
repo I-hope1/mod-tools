@@ -35,7 +35,8 @@ public class PreviewUtils {
 		return addPreviewButton(table, p -> {
 			p.top();
 			try {
-				prov.get().getClass(); // null check
+				Drawable drawable = prov.get();
+				drawable.getClass(); // null check
 				int   size = 100;
 				float mul;
 				if (element != null) {
@@ -44,7 +45,6 @@ public class PreviewUtils {
 				} else {
 					mul = 1;
 				}
-				Drawable drawable = prov.get();
 				Image    alphaBg  = new Image(Tex.alphaBg);
 				alphaBg.color.a = 0.7f;
 				p.stack(alphaBg, new Image(drawable))

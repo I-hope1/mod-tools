@@ -43,7 +43,7 @@ public class Executor extends Content {
 	}
 	FilterTable<Intp> p;
 	public void loadUI() {
-		ui = new IconWindow(localizedName(), 200, 100, true);
+		ui = new IconWindow(200, 100, true);
 		ui.cont.button(Icon.refresh, HopeStyles.flati, () -> {
 			p.clear();
 			build(p);

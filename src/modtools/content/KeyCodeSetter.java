@@ -237,7 +237,7 @@ public class KeyCodeSetter extends Content {
 	Pattern pattern;
 	Window  ui;
 	public void lazyLoad() {
-		ui = new IconWindow(localizedName(), 120, 400, true);
+		ui = new IconWindow(120, 400, true);
 		Table cont = ui.cont;
 
 		IntTab tab = new IntTab(CellTools.unset, new String[]{"Custom", "Internal"}, new Color[]{Color.acid, Color.sky},

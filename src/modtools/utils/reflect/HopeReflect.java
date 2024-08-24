@@ -14,6 +14,7 @@ import java.lang.reflect.*;
 
 public class HopeReflect {
 
+	/** 同时去除final  */
 	public static <T extends Class<?>> void setPublic(T obj, Class<T> cls) {
 		setPublic0(obj, cls);
 	}

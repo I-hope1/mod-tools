@@ -328,6 +328,10 @@ public class ByteCodeTools {
 	}
 
 	public static void writeTo(ClassFileWriter writer, Fi fi) {
+		if (fi.isDirectory()) {
+			String name = writer.getClassName();
+			fi = fi.child(name.replace('/','.') + ".class");
+		}
 		try {
 			FileOutputStream outputStream = new FileOutputStream(fi.file());
 			outputStream.write(writer.toByteArray());

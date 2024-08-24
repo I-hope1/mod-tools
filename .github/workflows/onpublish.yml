@@ -1,0 +1,43 @@
+name: Release Workflow
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  trigger-another-workflow:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4.1.1
+
+    - name: Trigger another workflow
+      uses: benc-uk/workflow-dispatch@v1
+      with:
+        workflow: 'deploy.yml'  # 替换为你要触发的另一个YML文件
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Wait for completion
+      uses: actionforgithub/wait-for-check@v1
+      with:
+        ref: ${{ github.sha }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        check_name: 'deploy.yml'
+
+    - name: Download ZIP from another workflow
+      run: |
+        curl -L -o result.zip $(cat artifact_url.txt) # 根据你的任务配置调整路径
+
+    - name: Get latest release version
+      id: get_version
+      run: |
+        latest_version=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+        echo "LATEST_VERSION=${latest_version}" >> $GITHUB_ENV
+
+    - name: Upload artifact to release
+      uses: actions/upload-release-asset@v2
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./result.zip
+        asset_name: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].jar
+        asset_content_type: application/zip

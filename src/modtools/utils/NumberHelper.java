@@ -21,14 +21,14 @@ public class NumberHelper {
 	}
 	public static boolean isNumber(String text) {
 		try {
-			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text.replaceAll("∞", "Infinity")));
+			return !ScriptRuntime.isNaN(ScriptRuntime.toNumber(text.replace("∞", "Infinity")));
 		} catch (Throwable ignored) {
 			return false;
 		}
 	}
 	public static boolean isFloat(String text) {
 		try {
-			Float.parseFloat(text.replaceAll("∞", "Infinity"));
+			Float.parseFloat(text.replace("∞", "Infinity"));
 			return true;
 		} catch (Throwable ignored) {
 			return false;
@@ -43,7 +43,7 @@ public class NumberHelper {
 	}
 	public static float asFloat(String text) {
 		try {
-			return Strings.parseFloat(text.replaceAll("∞", "Infinity"), Float.NaN);
+			return Strings.parseFloat(text.replace("∞", "Infinity"), Float.NaN);
 		} catch (Throwable e) {
 			return Float.NaN;
 		}

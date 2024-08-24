@@ -49,7 +49,7 @@ public class MySettings {
 			if (old == null && value == null) return null;
 
 			Class<?> it = value == null ? old.getClass() : value.getClass();
-			if ( ((value == null) ^ (old == null)) || CAST.unbox(it).isPrimitive() || it == String.class) {
+			if (((value == null) ^ (old == null)) || CAST.unbox(it).isPrimitive() || it == String.class) {
 				if (Objects.equals(old, value)) {
 					return old;
 				}

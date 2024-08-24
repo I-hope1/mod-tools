@@ -4,7 +4,6 @@ on:
   push:
     paths-ignore:
       - 'docs/**'
-  workflow_dispatch:
   workflow_call:
 
 jobs:

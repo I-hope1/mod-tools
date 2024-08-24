@@ -9,30 +9,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v4.1.1
 
-      - name: Set up PATH
-        run: |
-          echo "${ANDROID_HOME}/build-tools/30.0.1" >> $GITHUB_PATH
+    - name: Set up PATH
+      run: |
+        echo "${ANDROID_HOME}/build-tools/30.0.1" >> $GITHUB_PATH
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: temurin
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: 21
+        distribution: temurin
 
-      - name: Build mod jar
-        run: |
-          chmod 777 gradlew
-          ./gradlew ZCompileAll
+    - name: Build mod jar
+      run: |
+        chmod 777 gradlew
+        ./gradlew ZCompileAll
 
-      - name: Get file name
-        run: |
-          echo "LATEST_FILE=$(ls -t ./build/libs/ | head -n1)" >> $GITHUB_ENV
+    - name: Get latest release version
+      id: get_version
+      run: |
+        latest_version=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+        echo "LATEST_VERSION=${latest_version}" >> $GITHUB_ENV
 
-      - name: Upload artifact to release
-        uses: JasonEtco/upload-to-release@v0.1.1
-        with:
-          args: ${{ env.LATEST_FILE }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload artifact to release
+      uses: JasonEtco/upload-to-release@v0.1.1
+      with:
+        args: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].jar
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

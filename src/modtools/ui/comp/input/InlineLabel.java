@@ -58,31 +58,35 @@ public class InlineLabel extends NoMarkupLabel {
 		GlyphRun item = iter.next();
 		for (int i = 1; i < colorKeys.size; i++) {
 			final int endIndex = colorKeys.get(i);
-			if (currentIndex == endIndex) continue;
+			if (currentIndex == endIndex) {
+				color = colorMap.get(endIndex);
+				continue;
+			}
 
 			do {
-				int size = item.glyphs.size - itemIndex;
+				int size = item.glyphs.size - itemIndex; // 当前item剩余字符数
+				// 判断是否超出当前颜色范围
 				if (size <= endIndex - currentIndex) {
 					// 整个item在当前颜色范围
 					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 					currentIndex += size;
 				} else {
+					// [1, {2, 3}, 4] | []: item, {}: color
 					// 仅部分item在当前颜色范围
-					int splitIndex = endIndex - currentIndex;
-					result.add(InlineLabel.sub(item, itemIndex, splitIndex + itemIndex, color));
-					itemIndex += splitIndex;
+					result.add(InlineLabel.sub(item, itemIndex, itemIndex += endIndex - currentIndex, color));
 					currentIndex = endIndex;
-					if (itemIndex < item.glyphs.size) break;
+					continue;
 				}
 				if (iter.hasNext()) {
-					item = iter.next();
+					do item = iter.next(); while (item.glyphs.isEmpty());
+
 					itemIndex = 0;
 					// 对自动换行偏移
 					while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
 						currentIndex++;
 					}
 				} else {
-					itemIndex = item.glyphs.size;
+					itemIndex = item.glyphs.size; // ??
 					break;
 				}
 			} while (currentIndex < endIndex);
@@ -247,6 +251,7 @@ public class InlineLabel extends NoMarkupLabel {
 			Pools.freeAll(layout.runs, true);
 			layout.runs.clear();
 			layout.runs.addAll(newRuns);
+			// Log.info(layout);
 		}
 		cache.setText(layout, x, y);
 		// Pools.freeAll(layout.runs);

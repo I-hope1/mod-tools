@@ -9,6 +9,8 @@ import modtools.IntVars;
 import modtools.jsfunc.type.CAST;
 import rhino.ScriptRuntime;
 
+import java.util.Objects;
+
 public class MySettings {
 	private static final Fi dataDirectory = IntVars.dataDirectory;
 
@@ -42,9 +44,18 @@ public class MySettings {
 
 		public Object put(String key, Object value) {
 			Object old = super.put(key, value);
-			if (value != old && (old == null || value == null || !CAST.unbox(value.getClass()).isPrimitive())) {
-				write();
+			/* 以下情况不write(), [it=value.getClass()]
+			it.isPrimitive() || it == String -> equals(old, value) */
+			if (old == null && value == null) return null;
+
+			Class<?> it = value == null ? old.getClass() : value.getClass();
+			if ( ((value == null) ^ (old == null)) || CAST.unbox(it).isPrimitive() || it == String.class) {
+				if (Objects.equals(old, value)) {
+					return old;
+				}
 			}
+
+			write();
 			return old;
 		}
 		public Object remove(String key) {
@@ -58,7 +69,7 @@ public class MySettings {
 			} else parent.write();
 		};
 		public void write() {
-			TaskManager.scheduleOrReset(0.1f, task);
+			TaskManager.scheduleOrReset(0f, task);
 		}
 
 		public Object get(String key, Object defaultValue) {

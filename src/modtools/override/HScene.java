@@ -73,7 +73,7 @@ public class HScene {
 			.get(() -> UNSAFE.allocateInstance(newClas))
 		);
 		self[0] = newGroup;
-		Tools.clone(Core.scene.root, newGroup, Group.class, null);
+		Tools.clone(Core.scene.root, newGroup, superClass, null);
 		SnapshotSeq<Element> children = Core.scene.root.getChildren();
 		children.begin();
 		children.each(e -> e.parent = newGroup);
@@ -91,6 +91,11 @@ public class HScene {
 		// 使用asm将侦听器替换
 		appListeners.replace(source -> {
 			var superClass = source.getClass();
+			// 好奇怪哦
+			//noinspection ConstantValue
+			if (superClass == null) {
+				return source;
+			}
 			if (superClass.getSimpleName().endsWith(SUFFIX)) return source;
 			if (source instanceof ApplicationCore core) {
 				ApplicationListener[]    array   = Reflect.get(ApplicationCore.class, core, "modules");

@@ -28,7 +28,7 @@ jobs:
 
       - name: Get file name
         run: |
-          echo "LATEST_FILE=$(ls -t /build/libs/ | head -n1)" >> $GITHUB_ENV
+          echo "LATEST_FILE=$(ls -t ./build/libs/ | head -n1)" >> $GITHUB_ENV
 
       - name: Upload artifact to release
         uses: JasonEtco/upload-to-release@v0.1.1

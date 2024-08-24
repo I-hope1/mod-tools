@@ -5,25 +5,13 @@ on:
     types: [ published ]
 
 jobs:
+  Build:
+    uses: ./.github/workflows/deploy.yml
   UploadArtifactToRelease:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4.1.1
-
-      - name: Trigger another workflow
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: 'deploy.yml'  # 替换为你要触发的另一个YML文件
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for completion
-        uses: fountainhead/action-wait-for-check@v1.2.0
-        id: wait-for-build
-        with:
-          ref: ${{ github.sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          check_name: 'deploy.yml'
 
       - name: Get latest release version
         id: get_version
@@ -31,14 +19,23 @@ jobs:
           latest_version=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
           echo "LATEST_VERSION=${latest_version}" >> $GITHUB_ENV
 
+      - name: Wait for deploy
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.ref }}
+          running-workflow-name: 'Build project'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 1
+
       - name: Download ZIP from another workflow
         uses: actions/download-artifact@v4.1.8
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           name: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].zip
 
-
       - name: Upload artifact to release
         uses: JasonEtco/upload-to-release@v0.1.1
         with:
           args: ./${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

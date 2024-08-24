@@ -3,15 +3,10 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.5
+Version 1.5.1
 ## Highlight
 - Fixed a lot of bugs
-- Better `ReviewElement`, `Selection`, `Tester`, `ContentList`
-- Optimize a lot
-- New Content: KeyCodeSetter
-- More tips for functions.
-- Completely new ValueLabel (ShowInfoWindow)
-- Better experience on mobile.
+- Ability to UI act pause
 -----------------
 
 ## ShowUIList
@@ -100,7 +95,7 @@ Version 1.5
 '''
 author: "I hope..."
 hidden: true
-version: 1.5
+version: 1.5.1
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

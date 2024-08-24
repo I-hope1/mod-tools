@@ -15,7 +15,7 @@ jobs:
         uses: Codex-/return-dispatch@v1.15.0
         id: return_dispatch
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.TOKEN }}
           repo: ${{ github.repository }}
           ref: ${{ github.ref }}
           owner: ${{ github.repository_owner }}
@@ -23,7 +23,7 @@ jobs:
       - name: Await Run ID ${{ steps.return_dispatch.outputs.run_id }}
         uses: Codex-/await-remote-run@v1.0.0
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.TOKEN }}
           repo: ${{ github.repository }}
           owner: ${{ github.repository_owner }}
           run_id: ${{ steps.return_dispatch.outputs.run_id }}

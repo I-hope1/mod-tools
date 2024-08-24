@@ -497,10 +497,10 @@ public class IntUI {
 		return showInfoFade(info, pos, Align.center);
 	}
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
-		return new InfoFadePopup("Info", 80, 64) {{
+		return new InfoFadePopup("Info", 120, 64) {{
 			cont.add(info);
 			// 1.2s
-			Time.runTask(60 * 1.2f, this::hide);
+			Time.runTask(60 * 1.4f, this::hide);
 		}}.show().setPosition(pos, align);
 	}
 

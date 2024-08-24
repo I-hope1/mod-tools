@@ -9,6 +9,7 @@ import arc.util.*;
 import mindustry.Vars;
 import modtools.content.debug.Pause;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.ui.IntUI;
 import modtools.ui.control.HKeyCode;
 import modtools.utils.ByteCodeTools.MyClass.Lambda;
 import modtools.utils.*;
@@ -132,6 +133,8 @@ public class HScene {
 
 	static HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
 	 .applyToScene(true, () -> {
-		 pauseMap.put(Vars.ui.getClass(), pauseMap.get(Vars.ui.getClass()) == 1 ? 0 : 1);
+		 int value = pauseMap.get(Vars.ui.getClass()) == 1 ? 0 : 1;
+		 IntUI.showInfoFade(value == 1 ? "UI Pause" : "UI Resume");
+		 pauseMap.put(Vars.ui.getClass(), value);
 	 });
 }

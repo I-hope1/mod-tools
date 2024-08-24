@@ -11,39 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.1
 
-      - name: Dispatch `deploy` and get the run ID
-        uses: Codex-/return-dispatch@v1.15.0
-        id: return_dispatch
-        with:
-          token: ${{ secrets.TOKEN }}
-          repo: ${{ github.repository }}
-          ref: ${{ github.ref }}
-          owner: ${{ github.repository_owner }}
-          workflow: .github/workflows/deploy.yml
-      - name: Await Run ID ${{ steps.return_dispatch.outputs.run_id }}
-        uses: Codex-/await-remote-run@v1.0.0
-        with:
-          token: ${{ secrets.TOKEN }}
-          repo: ${{ github.repository }}
-          owner: ${{ github.repository_owner }}
-          run_id: ${{ steps.return_dispatch.outputs.run_id }}
-          run_timeout_seconds: 120 # Optional
-          poll_interval_ms: 1000 # Optional
-
-      - name: Get latest release version
-        id: get_version
+      - name: Build mod jar
         run: |
-          latest_version=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
-          echo "LATEST_VERSION=${latest_version}" >> $GITHUB_ENV
+          chmod 777 gradlew
+          ./gradlew ZCompileAll
 
-      - name: Download ZIP from another workflow
-        uses: actions/download-artifact@v4.1.8
-        with:
-          name: '${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}.zip'  # Adjusted the artifact name format
+      - name: Get file name
+        run: |
+          echo "LATEST_FILE=$(ls -t /path/to/directory | head -n1)" >> $GITHUB_ENV
 
       - name: Upload artifact to release
         uses: JasonEtco/upload-to-release@v0.1.1
         with:
-          args: './${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}.zip'
+          args: ${{ env.LATEST_FILE }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -63,11 +63,11 @@ public class InlineLabel extends NoMarkupLabel {
 			do {
 				int size = item.glyphs.size - itemIndex;
 				if (size <= endIndex - currentIndex) {
-					// The whole item fits within the current color range
+					// 整个item在当前颜色范围
 					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 					currentIndex += size;
 				} else {
-					// Only part of the item fits within the current color range
+					// 仅部分item在当前颜色范围
 					int splitIndex = endIndex - currentIndex;
 					result.add(InlineLabel.sub(item, itemIndex, splitIndex + itemIndex, color));
 					itemIndex += splitIndex;
@@ -115,20 +115,20 @@ public class InlineLabel extends NoMarkupLabel {
 		int index = 0; // 用于跟踪字符索引
 
 		for (GlyphRun run : layout.runs) {
-			if (run.glyphs.isEmpty()) continue;
 			FloatSeq xAdvances = run.xAdvances;
 			currentX = run.x;
 			currentY = height + run.y;
 			while (index < text.length() && (char) run.glyphs.first().id != text.charAt(index)) index++; // 弥补offset
 			// 判断是否在行
-			if (Math.abs(currentY - y) < lineHeight && currentX + run.width > x) {
-				for (int i = 0; i < xAdvances.size; i++) {
+			if (currentY - lineHeight < y && y <= currentY && currentX <= x && x < currentX + run.width) {
+				for (int i = 1; i < xAdvances.size; i++) {
 					// 判断是否在当前字符范围内
-					if (x >= currentX && x < currentX + xAdvances.get(i)) {
+					if (x < currentX + xAdvances.get(i)) {
 						return index + i - 1;
 					}
 					currentX += xAdvances.get(i);
 				}
+				return -1;
 			}
 			index += run.glyphs.size;
 		}
@@ -161,16 +161,14 @@ public class InlineLabel extends NoMarkupLabel {
 					// Check if the end of the region is in the same run
 					if (offset + i - 1 >= region.y) {
 						endX = currentX;
-						if (endX != startX)
-							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+						if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
 						return;
 					}
 
 					// If the region spans multiple lines, create a rect for this line and prepare for the next
 					if (i == xAdvances.size - 1) {
 						endX = currentX + xAdvances.get(i);
-						if (endX != startX)
-							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+						if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
 						startX = run.x; // Reset startX for the next line
 					}
 				}
@@ -184,8 +182,7 @@ public class InlineLabel extends NoMarkupLabel {
 		// Handle the case where the region ends at the last character of the text
 		if (startFound && offset >= region.y) {
 			endX = currentX;
-			if (endX != startX)
-				callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+			if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
 		}
 	}
 
@@ -225,10 +222,7 @@ public class InlineLabel extends NoMarkupLabel {
 			textHeight = layout.height;
 
 			if ((labelAlign & Align.left) == 0) {
-				if ((labelAlign & Align.right) != 0)
-					x += width - textWidth;
-				else
-					x += (width - textWidth) / 2;
+				if ((labelAlign & Align.right) != 0) { x += width - textWidth; } else { x += (width - textWidth) / 2; }
 			}
 		} else {
 			textWidth = width;

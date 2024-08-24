@@ -78,17 +78,22 @@ public abstract class ValueLabel extends InlineLabel {
 		Object[] val = {null};
 		addListener(new InputListener() {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				val[0] = null;
 				int    cursor    = getCursor(x, y);
-				Object bestSoFar = null;
 				Object o;
 				int    toIndex;
-				for (int i = 0; i <= cursor; i++) {
-					if (!startIndexMap.containsKey(i)) continue;
-					o = startIndexMap.get(i);
+
+				IntSeq keys = startIndexMap.keys().toArray();
+				keys.sort();
+				for (int i = 0, size = keys.size; i < size; i++) {
+					int index = keys.get(i);
+					o = startIndexMap.get(index);
 					toIndex = endIndexMap.get(o);
-					if (toIndex > cursor && o != null) bestSoFar = o;
+					if (index <= cursor && cursor < toIndex) {
+						val[0] = o;
+						break;
+					}
 				}
-				val[0] = bestSoFar;
 				return false;
 			}
 		});
@@ -351,12 +356,12 @@ public abstract class ValueLabel extends InlineLabel {
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? STR."'\{val}'"
 				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
-			  : val instanceof Class ? ((Class<?>) val).getSimpleName()
+				: val instanceof Class ? ((Class<?>) val).getSimpleName()
 
 				: val instanceof Element ? ReviewElement.getElementName((Element) val)
 				: FormatHelper.getUIKey(val))
 			.get(() -> String.valueOf(val))
-		  /** @see Objects#toIdentityString(Object)  */
+			/** @see Objects#toIdentityString(Object)  */
 			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(System.identityHashCode(val)))
 			.get(() -> Tools.clName(val))
 		);
@@ -415,7 +420,7 @@ public abstract class ValueLabel extends InlineLabel {
 			colorMap.clear();
 			newText = STR_EMPTY;
 			setColor(Color.gray);
-		} else setColor(Color.white);
+		} else { setColor(Color.white); }
 		super.setText(newText);
 	}
 	public Runnable afterSet;
@@ -554,8 +559,7 @@ public abstract class ValueLabel extends InlineLabel {
 	}
 	private void addPickDrawable(Seq<MenuItem> list) {
 		list.add(MenuItem.with("drawable.pick", Icon.editSmall, "@pickdrawable", () -> {
-			if (val instanceof Drawable d)
-				IntUI.drawablePicker().show(d, true, this::setNewVal);
+			if (val instanceof Drawable d) { IntUI.drawablePicker().show(d, true, this::setNewVal); }
 		}));
 	}
 

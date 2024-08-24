@@ -74,7 +74,7 @@ public class MyItemSelection {
 		table.add(pane).maxHeight(40 * 8).grow();
 	}
 
-	/** 支持多元素选择 */
+	/** 支持多元素选择，没有clicked事件了 */
 	public static <T> ButtonGroup<ImageButton> buildTable0(
 	 Table table, Seq<T> items, int cols, Func<T, Drawable> drawableFunc) {
 		var group = new ButtonGroup<ImageButton>();

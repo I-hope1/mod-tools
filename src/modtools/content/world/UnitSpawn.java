@@ -65,6 +65,7 @@ public class UnitSpawn extends Content {
 	TextField xField, yField, amountField, teamField;
 	ButtonGroup<ImageButton> group;
 
+	int lastSize;
 	Label nameL, localizedNameL;
 	public void setup() {
 		unitCont.clearChildren();
@@ -92,8 +93,11 @@ public class UnitSpawn extends Content {
 			EventHelper.addDClickCopy(nameL);
 			EventHelper.addDClickCopy(localizedNameL);
 			right.update(() -> {
-				selectUnit = (UnitType) group.getChecked().userObject;
 				Seq<ImageButton> allChecked = group.getAllChecked();
+				if (selectUnit == group.getChecked().userObject && lastSize == allChecked.size) return;
+				selectUnit = (UnitType) group.getChecked().userObject;
+				lastSize = allChecked.size;
+
 				nameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.name}\{allChecked.size > 1 ? "[]..." : ""}");
 				localizedNameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.localizedName}\{allChecked.size > 1 ? "[]..." : ""}");
 			});
@@ -138,7 +142,7 @@ public class UnitSpawn extends Content {
 			}).growX().row();
 			table.button("@unitspawn.selectAposition", HopeStyles.flatToggleMenut, () -> listener.toggleSelect())
 			 .growX().height(42)
-			 .update(b -> b.setChecked(listener.isSelecting()));
+			 .checked(_ -> listener.isSelecting());
 			table.button("@unitspawn.getfromplayer", HopeStyles.cleart, () -> {
 				setSpawnX(player.x);
 				setSpawnY(player.y);

@@ -1,17 +1,20 @@
 package modtools;
 
 import arc.files.Fi;
-import arc.func.Func2;
+import arc.func.*;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.Constants.CURL;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.ByteCodeTools.MyClass;
+import modtools.utils.ByteCodeTools.MyClass.Lambda;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
+import java.lang.reflect.*;
 import java.net.*;
 import java.util.*;
+
+import static jdk.internal.classfile.Classfile.*;
 
 /**
  * 切换镜像
@@ -19,9 +22,15 @@ import java.util.*;
  */
 @SuppressWarnings("deprecation")
 public class URLRedirect {
+	public static final String SUFFIX = "-h0";
+
 	static Properties replacer = new Properties();
 	static Fi         defaultConfig;
-	public static final String SUFFIX = "-h0";
+	static Cons<URL>  cons     = u -> {
+		if (replacer.contains(u.getHost())) {
+			UNSAFE.putObject(u, CURL.host, replacer.getProperty(u.getHost()));
+		}
+	};
 
 	static void load() throws Throwable {
 		defaultConfig = IntVars.dataDirectory.child("http_redirect.properties");
@@ -35,12 +44,21 @@ public class URLRedirect {
 		field.set(null, new Hashtable<>(hashtable) {
 			public synchronized URLStreamHandler put(String key, URLStreamHandler value) {
 				if (!key.equals("http") && !key.equals("https")) return super.put(key, value);
-				if (value.getClass().getName().endsWith("-h0")) return value;
+				if (value.getClass().getName().endsWith(SUFFIX)) return value;
 
 				var handler = new MyClass<>(value.getClass().getName() + SUFFIX, value.getClass());
 				handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
-				handler.addInterface(RedirectHandler.class);
-				handler.visit(URLRedirect.class);
+				Lambda lambda = handler.addLambda(cons, Cons.class, "get", "(Ljava/lang/Object;)V");
+				handler.setFunc("openConnection", cfw -> {
+					handler.execLambda(lambda, () -> cfw.add(ALOAD_1)); // cons.get(url);
+					// super.openConnection(url);
+					cfw.add(ALOAD_0);
+					cfw.add(ALOAD_1);
+					cfw.addInvoke(INVOKESPECIAL, handler.superName, "openConnection",
+						"(Ljava/net/URL;)Ljava/net/URLConnection;");
+					cfw.add(ARETURN);
+					return 2; // this + url
+				}, Modifier.PUBLIC,  URLConnection.class, URL.class);
 				if (OS.isAndroid) {
 					/* 同时去除final */
 					MyReflect.setPublic(value.getClass());
@@ -63,16 +81,5 @@ public class URLRedirect {
 		if (!defaultConfig.exists()) config.copyTo(defaultConfig);
 
 		return true;
-	}
-
-	public static URLConnection openConnection(URLStreamHandler self, URL u) throws IOException {
-		if (replacer.contains(u.getHost())) {
-			UNSAFE.putObject(u, CURL.host, replacer.getProperty(u.getHost()));
-		}
-		// Log.info(u);
-		return ((RedirectHandler) self).super$_openConnection(u);
-	}
-	public interface RedirectHandler {
-		URLConnection super$_openConnection(URL u) throws IOException;
 	}
 }

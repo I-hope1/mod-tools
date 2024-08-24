@@ -5,27 +5,22 @@ on:
     types: [ published ]
 
 jobs:
-  Build:
-    uses: ./.github/workflows/deploy.yml
   UploadArtifactToRelease:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4.1.1
 
+      - name: Wait for workflow
+        uses: ArcticLampyrid/action-wait-for-workflow@v1.2.0
+        with:
+          workflow: Build project
+
       - name: Get latest release version
         id: get_version
         run: |
           latest_version=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
           echo "LATEST_VERSION=${latest_version}" >> $GITHUB_ENV
-
-      - name: Wait for deploy
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.ref }}
-          running-workflow-name: 'Build project'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 1
 
       - name: Download ZIP from another workflow
         uses: actions/download-artifact@v4.1.8

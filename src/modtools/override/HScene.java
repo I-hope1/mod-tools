@@ -10,6 +10,7 @@ import mindustry.Vars;
 import modtools.content.debug.Pause;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.ui.IntUI;
+import modtools.ui.comp.Window;
 import modtools.ui.control.HKeyCode;
 import modtools.utils.ByteCodeTools.MyClass.Lambda;
 import modtools.utils.*;
@@ -131,10 +132,12 @@ public class HScene {
 
 	public static ObjectIntMap<Class<?>> pauseMap;
 
-	static HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
+	public static Window lastInfo;
+	static HKeyCode      pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
 	 .applyToScene(true, () -> {
 		 int value = pauseMap.get(Vars.ui.getClass()) == 1 ? 0 : 1;
-		 IntUI.showInfoFade(value == 1 ? "UI Pause" : "UI Resume");
+		 if (lastInfo != null) lastInfo.hide();
+		 lastInfo = IntUI.showInfoFade(value == 1 ? "UI Pause" : "UI Resume");
 		 pauseMap.put(Vars.ui.getClass(), value);
 	 });
 }

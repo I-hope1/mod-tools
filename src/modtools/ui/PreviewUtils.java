@@ -45,7 +45,7 @@ public class PreviewUtils {
 				} else {
 					mul = 1;
 				}
-				Image    alphaBg  = new Image(Tex.alphaBg);
+				Image alphaBg = new Image(Tex.alphaBg);
 				alphaBg.color.a = 0.7f;
 				p.stack(alphaBg, new Image(drawable))
 				 .update(t -> t.setColor(element != null ? element.color : Color.white))
@@ -75,9 +75,11 @@ public class PreviewUtils {
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
 				));
 				p.row();
-				if (consumer != null) p.button(Icon.pickSmall, Styles.clearNonei, () -> {
-					IntUI.drawablePicker().show(prov.get(), consumer);
-				}).size(42);
+				if (consumer != null) {
+					p.button(Icon.pickSmall, Styles.clearNonei, () -> {
+						IntUI.drawablePicker().show(prov.get(), consumer);
+					}).size(42);
+				}
 			} catch (Throwable e) {
 				if (DEBUG) Log.err(e);
 				p.add("ERROR").labelAlign(Align.left).row();
@@ -88,7 +90,7 @@ public class PreviewUtils {
 	public static Cell<ImageButton> addPreviewButton(Table table, Cons<Table> cons) {
 		return table.button(Icon.imageSmall, Styles.clearNonei, IntVars.EMPTY_RUN)
 		 .size(36)
-		 .with(b -> addPreviewListener(b, cons));
+		 .with(button -> addPreviewListener(button, cons));
 	}
 	public static void addPreviewListener(Element element, Cons<Table> cons) {
 		element.addListener(new HoverAndExitListener() {

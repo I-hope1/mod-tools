@@ -14,6 +14,7 @@ import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.struct.LazyValue;
 import modtools.ui.*;
 import modtools.ui.comp.*;
@@ -173,10 +174,11 @@ public class KeyCodeSetter extends Content {
 		public KeyCodeBindWindow() {
 			super("Keycode Set");
 
-			rebuild();
-			update(() -> {
-				if (button != null) IntUI.positionTooltip(button, Align.topLeft, this, Align.bottomLeft);
-			});
+			shown(this::rebuild);
+			IntVars.resizeListeners.add(this::display);
+		}
+		public void display() {
+			if (button != null) IntUI.positionTooltip(button, Align.topLeft, this, Align.bottomLeft);
 		}
 		/** 被用来定位的 */
 		Button         button;

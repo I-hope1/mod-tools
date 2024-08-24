@@ -492,12 +492,11 @@ public class Window extends Table implements Position {
 		// bakRegion = screenshot();
 		this.fire(new VisibilityEvent(true));
 
-		SequenceAction sq;
+		SequenceAction sq = Actions.sequence();
 		if (action != null) {
 			addCaptureListener(ignoreTouchDown);
-			sq = Actions.sequence(action, Actions.removeListener(ignoreTouchDown, true));
-		} else {
-			sq = Actions.sequence();
+			sq.addAction(action);
+			sq.addAction(Actions.removeListener(ignoreTouchDown, true));
 		}
 		if (this instanceof IDisposable dis) {
 			sq.addAction(Actions.run(() -> {

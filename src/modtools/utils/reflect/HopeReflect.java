@@ -40,8 +40,9 @@ public class HopeReflect {
 		return UnsafeHandler.defineClass(name, bytes, loader);
 	}
 	private static Class<?> defineClassAndroid(String name, ClassLoader loader, byte[] bytes) {
-		if (!(ContextFactory.getGlobal() instanceof AndroidContextFactory))
+		if (!(ContextFactory.getGlobal() instanceof AndroidContextFactory)) {
 			AndroidRhinoContext.enter(new File(Core.settings.getDataDirectory() + "/rhino/"));
+		}
 		return ((GeneratedClassLoader) ((AndroidContextFactory) ContextFactory.getGlobal())
 		 .createClassLoader(loader))
 		 .defineClass(name, bytes);
@@ -49,7 +50,7 @@ public class HopeReflect {
 
 	public static Class<?> getCaller() {
 		if (OS.isAndroid) return VMStack.getStackClass2();
-		if (Runtime.version().feature() >= 9) return StackWalker.getInstance().getCallerClass();
+		// if (IntVars.javaVersion >= 9) return StackWalker.getInstance().getCallerClass();
 		Thread              thread = Thread.currentThread();
 		StackTraceElement[] trace  = thread.getStackTrace();
 		try {
@@ -68,7 +69,7 @@ public class HopeReflect {
 
 		if (val2 != null && val1 != null &&
 		    val2.getClass() == Vec2.class && val1.getClass() == Vec2.class &&
-		    val2.equals(val1)) return true;
+		    val2.equals(val1)) { return true; }
 
 		return false;
 	}

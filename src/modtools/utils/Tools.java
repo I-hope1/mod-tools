@@ -64,7 +64,7 @@ public class Tools {
 	 * @param blackList 黑名单
 	 */
 	public static void clone(Object from, Object to, Class<?> cls, Seq<String> blackList) {
-		clone1(from, to, cls, f -> blackList == null || blackList.contains(f.getName()));
+		clone1(from, to, cls, f -> blackList == null || !blackList.contains(f.getName()));
 	}
 
 	/**

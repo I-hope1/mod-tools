@@ -874,7 +874,6 @@ public class IntUI {
 			 Actions.run(() -> fire(new VisibilityEvent(true))),
 			 Actions.remove());
 		}
-
 		public final     Table    table;
 		public final     Element  button;
 		/**

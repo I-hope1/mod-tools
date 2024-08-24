@@ -78,7 +78,7 @@ public class HScene {
 		FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
 
 		pauseMap = json.fromJson(ObjectIntMap.class, Class.class, pause.data().toString());
-		hookUpdate(Core.app.getListeners());
+		// hookUpdate(Core.app.getListeners());
 	}
 
 	static void hookUpdate(Seq<ApplicationListener> appListeners) {
@@ -87,8 +87,12 @@ public class HScene {
 			var _1         = (Object) source;
 			var superClass = _1.getClass(); // android上好奇葩
 			try {
-				if (Modifier.isFinal(superClass.getMethod("update").getModifiers())) return source;
+				if (Modifier.isFinal(superClass.getMethod("update").getModifiers())) {
+					pauseMap.remove(superClass);
+					return source;
+				}
 			} catch (NoSuchMethodException e) {
+				pauseMap.remove(superClass);
 				return source;
 			}
 			if (superClass.getSimpleName().endsWith(SUFFIX)) return source;

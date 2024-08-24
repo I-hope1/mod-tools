@@ -15,6 +15,7 @@ import static modtools.override.HScene.pauseMap;
 public class Pause extends Content {
 	public Pause() {
 		super("pause", Icon.pauseSmall);
+		defLoadable = false;
 	}
 
 	public void load() {

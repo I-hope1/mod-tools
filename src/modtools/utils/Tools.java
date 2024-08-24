@@ -12,6 +12,7 @@ import modtools.*;
 import modtools.struct.TaskSet;
 import modtools.ui.IntUI;
 import modtools.ui.comp.Window;
+import modtools.utils.reflect.IReflect;
 
 import java.lang.reflect.*;
 import java.util.List;
@@ -78,7 +79,7 @@ public class Tools {
 		if (from == to) throw new IllegalArgumentException("from == to");
 		if (from == null) return;
 		while (cls != null && Object.class.isAssignableFrom(cls)) {
-			Field[] fields = cls.getDeclaredFields();
+			Field[] fields = IReflect.impl.getFields(cls);
 			for (Field f : fields) {
 				if (!Modifier.isStatic(f.getModifiers()) && boolf.get(f)) {
 					// if (display) Log.debug(f);

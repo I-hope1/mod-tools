@@ -74,6 +74,13 @@ public class HScene {
 		);
 		self[0] = newGroup;
 		Tools.clone(Core.scene.root, newGroup, Group.class, null);
+		SnapshotSeq<Element> children = Core.scene.root.getChildren();
+		children.begin();
+		children.each(e -> e.parent = newGroup);
+		children.end();
+		// FieldUtils.setValue(Core.scene.root, Group.class, "children",
+		//  new SnapshotSeq<>(true, 4, Element.class), Seq.class);
+		// Core.scene.root = newGroup;
 		FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
 
 		pauseMap = json.fromJson(ObjectIntMap.class, Class.class, pause.data().toString());

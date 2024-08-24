@@ -11,11 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.1
 
-      - name: Wait for workflow
-        uses: ArcticLampyrid/action-wait-for-workflow@v1.2.0
+      - name: Dispatch `deploy` and get the run ID
+        uses: codex-/return-dispatch@v1
+        id: return_dispatch
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: 'Build project'  # Make sure this matches the name of the workflow you want to wait for exactly
+          token: ${{ github.token }}
+          repo: ${{ github.repository }}
+          owner: ${{ github.repository_owner }}
+          workflow: ./.github/workflows/deploy.yml
+      - name: Await Run ID ${{ steps.return_dispatch.outputs.run_id }}
+        uses: Codex-/await-remote-run@v1.0.0
+        with:
+          token: ${{ github.token }}
+          repo: ${{ github.repository }}
+          owner: ${{ github.repository_owner }}
+          run_id: ${{ steps.return_dispatch.outputs.run_id }}
+          run_timeout_seconds: 120 # Optional
+          poll_interval_ms: 1000 # Optional
 
       - name: Get latest release version
         id: get_version

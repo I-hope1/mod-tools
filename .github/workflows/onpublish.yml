@@ -19,7 +19,7 @@ jobs:
           repo: ${{ github.repository }}
           ref: ${{ github.ref }}
           owner: ${{ github.repository_owner }}
-          workflow: deploy.yml
+          workflow: .github/workflows/deploy.yml
       - name: Await Run ID ${{ steps.return_dispatch.outputs.run_id }}
         uses: Codex-/await-remote-run@v1.0.0
         with:

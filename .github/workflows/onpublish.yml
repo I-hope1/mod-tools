@@ -2,7 +2,7 @@ name: Release Workflow
 
 on:
   release:
-    types: [ published ]
+    types: [published]
 
 jobs:
   UploadArtifactToRelease:
@@ -14,7 +14,8 @@ jobs:
       - name: Wait for workflow
         uses: ArcticLampyrid/action-wait-for-workflow@v1.2.0
         with:
-          workflow: Build project
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: 'Build project'  # Make sure this matches the name of the workflow you want to wait for exactly
 
       - name: Get latest release version
         id: get_version
@@ -25,12 +26,11 @@ jobs:
       - name: Download ZIP from another workflow
         uses: actions/download-artifact@v4.1.8
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          name: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].zip
+          name: '${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}.zip'  # Adjusted the artifact name format
 
       - name: Upload artifact to release
         uses: JasonEtco/upload-to-release@v0.1.1
         with:
-          args: ./${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].zip
+          args: './${{ github.event.repository.name }}-${{ env.LATEST_VERSION }}.zip'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

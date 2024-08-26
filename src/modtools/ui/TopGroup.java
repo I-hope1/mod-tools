@@ -847,6 +847,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	private static final Mat oldTransform = new Mat();
 	private static final Vec2 transVec = new Vec2();
 	public static void drawFocus(Element elem, Vec2 pos, Color focusColor) {
+		drawFocus(elem, pos, focusColor, null);
+	}
+	public static void drawFocus(Element elem, Vec2 pos, Color focusColor, Runnable otherDraw) {
 		Gl.flush();
 
 		Group transformParent = elem instanceof Group ? (Group) elem : elem.parent;
@@ -881,6 +884,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		float thick = 1f;
 		Lines.stroke(thick);
 		Drawf.dashRectBasic(pos.x, pos.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+
+		if (otherDraw != null) otherDraw.run();
 
 		if (transformParent != null) {
 			Draw.trans(oldTransform);

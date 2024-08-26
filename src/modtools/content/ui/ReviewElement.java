@@ -1103,7 +1103,7 @@ public class ReviewElement extends Content {
 					CellView.drawFocusStatic(t0.getCell(elem), elem);
 				}
 			} else {
-				super.drawFocus(elem, pos);
+				TopGroup.drawFocus(elem, pos, focusColor, () -> drawElemPad(elem, pos));
 				MyDraw.intoDraw(() -> drawGeneric(elem, pos));
 			}
 
@@ -1190,7 +1190,8 @@ public class ReviewElement extends Content {
 					 color, flipX ? Align.right : Align.left);
 				}
 			}
-
+		}
+		private void drawElemPad(Element elem, Vec2 pos) {
 			if (elem instanceof Table) {
 				drawMargin(pos, (Table) elem);
 			}

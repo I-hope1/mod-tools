@@ -50,6 +50,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	private   int              runTimes;
 	protected RoundEnvironment roundEnv;
 	public void process2() { }
+	public static boolean RECORD_TIME = false;
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		if (!AINIT.hasMindustry) return true;
 		this.roundEnv = roundEnv;
@@ -63,6 +64,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			} catch (Throwable e) { err(e); }
 			return true;
 		}
+		if (RECORD_TIME) Times.mark();
 		if (!lazyInitial) {
 			lazyInitial = true;
 			try {
@@ -80,6 +82,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		try {
 			process();
 		} catch (Throwable e) { err(e); }
+		if (RECORD_TIME) Times.printElapsed("@ in @ms", this);
 
 		return true;
 	}

@@ -466,10 +466,6 @@ public class ReviewElement extends Content {
 
 		public void build(Element element, Table table) {
 			if (element == null) throw new IllegalArgumentException("element is null");
-			if (!DEBUG && element instanceof ReviewElementWindow) {
-				table.add(STR."----\{name}-----", defaultLabel).row();
-				return;
-			}
 			IntVars.postToMain(() -> {
 				try {
 					table.add(new MyWrapTable(this, element));
@@ -573,7 +569,10 @@ public class ReviewElement extends Content {
 
 			/* 用于下面的侦听器  */
 			int eventChildIndex;
-			if (element instanceof Group group) {
+			if (!DEBUG && element instanceof ReviewElementWindow) {
+				add(STR."!!!\{element.name}", defaultLabel).row();
+				eventChildIndex = 0;
+			} else  if (element instanceof Group group) {
 				buildForGroup(group);
 				eventChildIndex = 1;
 			} else {
@@ -1103,8 +1102,8 @@ public class ReviewElement extends Content {
 					CellView.drawFocusStatic(t0.getCell(elem), elem);
 				}
 			} else {
-				TopGroup.drawFocus(elem, pos, focusColor, () -> drawElemPad(elem, pos));
-				MyDraw.intoDraw(() -> drawGeneric(elem, pos));
+				TopGroup.drawFocus(elem, pos, focusColor, pos2 -> MyDraw.fontScaleDraw(() -> drawElemPad(elem, pos2)));
+				MyDraw.fontScaleDraw(() -> drawGeneric(elem, pos));
 			}
 
 			if (!hoverInfoWindow.enabled()) return;
@@ -1133,6 +1132,7 @@ public class ReviewElement extends Content {
 			}
 			showInfoTable(elem);
 		}
+		/** pos和size  */
 		private void drawGeneric(Element elem, Vec2 pos) {
 			posText:
 			{
@@ -1197,7 +1197,8 @@ public class ReviewElement extends Content {
 			}
 
 			if (elem.parent instanceof Table parent) {
-				drawMargin(parent.localToStageCoordinates(Tmp.v1.set(0, 0)), parent);
+				// 太难了
+				drawMargin(elem.parentToLocalCoordinates(Tmp.v1.set(pos)), parent);
 
 				drawPadding(elem, pos, parent);
 			}

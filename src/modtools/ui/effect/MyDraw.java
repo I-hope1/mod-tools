@@ -140,14 +140,14 @@ public class MyDraw {
 		});
 	} */
 	public static void drawText(String text, float x, float y, Color color) {
-		intoDraw(() -> drawText(text, x, y, color, Align.center));
+		fontScaleDraw(() -> drawText(text, x, y, color, Align.center));
 	}
 	public static float fontHeight() {
 		return font.getLineHeight() * fontScale;
 	}
 	public static Font  font      = MyFonts.def;
 	public static float fontScale = 0.6f;
-	public static void intoDraw(Runnable draw) {
+	public static void fontScaleDraw(Runnable draw) {
 		float oldScaleX = font.getScaleX();
 		float oldScaleY = font.getScaleY();
 		font.getData().setScale(fontScale);

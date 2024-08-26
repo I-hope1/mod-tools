@@ -3,13 +3,12 @@ package modtools.unsupported;
 import arc.func.Cons;
 import arc.util.Log;
 import com.sun.tools.attach.VirtualMachine;
-import modtools.annotations.DebugMark;
 
 import java.lang.StringTemplate.Processor;
 import java.util.Properties;
 
 @SuppressWarnings("StringTemplateMigration")
-@DebugMark
+// @DebugMark
 public class HopeProcessor {
 	/**
 	 * 注意：

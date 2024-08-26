@@ -844,12 +844,12 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 	}
 
-	private static final Mat oldTransform = new Mat();
-	private static final Vec2 transVec = new Vec2();
+	private static final Mat     oldTransform     = new Mat();
+	private static final Vec2    transVec         = new Vec2();
 	public static void drawFocus(Element elem, Vec2 pos, Color focusColor) {
 		drawFocus(elem, pos, focusColor, null);
 	}
-	public static void drawFocus(Element elem, Vec2 pos, Color focusColor, Runnable otherDraw) {
+	public static void drawFocus(Element elem, Vec2 pos, Color focusColor, Cons<Vec2> otherDraw) {
 		Gl.flush();
 
 		Group transformParent = elem instanceof Group ? (Group) elem : elem.parent;
@@ -857,16 +857,21 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			if (transformParent.isTransform()) break;
 			transformParent = transformParent.parent;
 		}
+		if (transformParent != null && (transformParent instanceof ScrollPane || transformParent.parent instanceof ScrollPane)) {
+			transformParent = null;
+		}
+
 		if (transformParent != null) {
 			oldTransform.set(Draw.trans());
 			Mat computedTransform = Reflect.invoke(Group.class, transformParent, "computeTransform", ArrayUtils.EMPTY_ARRAY);
 			Draw.trans(computedTransform);
-			pos = elem.localToAscendantCoordinates(transformParent, transVec.set(0, 0));
+			pos = elem == transformParent ? transVec.set(0, 0) : elem.localToAscendantCoordinates(transformParent, transVec.set(0, 0));
 		}
 
 		if (focusColor.a > 0) {
 			float alpha = focusColor.a * (elem.visible ? 0.9f : 0.6f);
 			if (alpha != 0 && ElementUtils.checkInStage(pos)) {
+				// 填充背景
 				Draw.color(focusColor, alpha);
 				// Tmp.m1.set(Draw.trans());
 				Fill.crect(pos.x, pos.y, elem.getWidth(), elem.getHeight());
@@ -879,13 +884,13 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			 Mathf.clamp(pos.y, 0, graphics.getHeight() - icon.getMinHeight()),
 			 14, 14);
 		}
-
+		// 虚线框
 		Draw.color(Pal.accent);
 		float thick = 1f;
 		Lines.stroke(thick);
-		Drawf.dashRectBasic(pos.x, pos.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+		Drawf.dashRectBasic(pos.x - thick, pos.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
 
-		if (otherDraw != null) otherDraw.run();
+		if (otherDraw != null) otherDraw.get(pos);
 
 		if (transformParent != null) {
 			Draw.trans(oldTransform);

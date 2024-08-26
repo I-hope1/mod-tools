@@ -437,6 +437,7 @@ public class Replace {
 				if (path == null) return;
 				JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
 				JCTree            cdef = trees.getTree(element);
+
 				defaultToStatic.translateTopLevelClass(unit, cdef);
 				desugarStringTemplate.translateTopLevelClass(unit, cdef);
 				desugarRecord.translateTopLevelClass(unit, cdef);

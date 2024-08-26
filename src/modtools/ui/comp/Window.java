@@ -468,7 +468,7 @@ public class Window extends Table implements Position {
 	public Window show() {
 		/* 以免window超出屏幕外  */
 		Time.runTask(4, this::display);
-		Log.info("show");
+		// Log.info("show");
 
 		if (isShown()) {
 			setZIndex(Integer.MAX_VALUE);

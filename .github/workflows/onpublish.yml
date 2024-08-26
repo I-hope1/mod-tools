@@ -35,6 +35,7 @@ jobs:
     - name: Upload artifact to release
       uses: JasonEtco/upload-to-release@v0.1.1
       with:
-        args: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}].jar
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: build/libs/${{ github.event.repository.name }}.${{ env.LATEST_VERSION }}.jar
+        asset_name: ${{ github.event.repository.name }}.${{ env.LATEST_VERSION }}.jar
+        tag: ${{ github.ref }}

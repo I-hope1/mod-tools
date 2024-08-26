@@ -58,7 +58,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		debugBounds,
 		@Switch(dependency = "debugBounds")
 		drawHiddenPad,
-		/** @see ISettings#$(Drawable, Cons)  */
+		/** @see ISettings#$(Drawable, Cons) */
 		paneDrawable(Drawable.class, it -> it.$(Tex.pane, d -> Window.myPane.reset(d, Color.white))),
 		;
 		// overrideScene
@@ -70,8 +70,10 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public BoolfDrawTasks drawSeq     = new BoolfDrawTasks();
 	public BoolfDrawTasks backDrawSeq = new BoolfDrawTasks();
 
-	/** 按zIndex排列
-	 * @see #acquireShownWindows()  */
+	/**
+	 * 按zIndex排列
+	 * @see #acquireShownWindows()
+	 */
 	public Seq<Window> shownWindows = new Seq<>();
 
 	private Element selected;
@@ -128,7 +130,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			vec2 = ElementUtils.getAbsolutePos(drawPadElem.parent);
 		} else if (drawPadElem == scene.root) {
 			vec2 = Tmp.v1.set(0, 0);
-		} else return;
+		} else { return; }
 
 		Draw.color();
 		Draw.alpha(0.7f);
@@ -141,8 +143,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	}
 	/** 如果选中的元素太小，会在边缘显示 */
 	private void drawSlightlyIfSmall() {
-		if (selected == null || selected.getWidth() > width / 3f || selected.getHeight() > height / 3f)
-			return;
+		if (selected == null || selected.getWidth() > width / 3f || selected.getHeight() > height / 3f) { return; }
 
 		Vec2    mouse = input.mouse();
 		boolean right = mouse.x < width / 2f;
@@ -175,7 +176,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			elem.localToParentCoordinates(tmp1.set(0, 0));
 			if (elem.cullable && elem.parent != null && elem.parent.getCullingArea() != null &&
 			    !elem.parent.getCullingArea().overlaps(tmp1.x, tmp1.y,
-			     elem.getWidth(), elem.getHeight())) return;
+			     elem.getWidth(), elem.getHeight())) { return; }
 		}
 
 		float thick = elem instanceof Group ? 2 : 1;
@@ -550,12 +551,13 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	 .applyToScene(true, () -> {
 		 if (!shownWindows.isEmpty()) frontWindow.hide();
 	 });
+	/** press `esc` to hide hitter. */
 	static class HitterListener extends InputListener {
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
 			hitter:
 			if (!Core.scene.hasField() && keycode == KeyCode.escape && Hitter.any()) {
 				Hitter peek = Hitter.peek();
-				if (!peek.isTouchable()) break hitter;
+				if (!peek.canHide()) break hitter;
 				peek.hide();
 				if (!Hitter.contains(peek)) HopeInput.justPressed.remove(KeyCode.escape.ordinal());
 			}
@@ -829,8 +831,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		public void drawFocus(Element elem) {
 			drawFocus(elem, ElementUtils.getAbsolutePos(elem));
 		}
-		public void drawFocus(Element elem, Vec2 vec2) {
-			TopGroup.drawFocus(elem, vec2, focusColor);
+		public void drawFocus(Element elem, Vec2 pos) {
+			TopGroup.drawFocus(elem, pos, focusColor);
 		}
 		public void endDraw() {
 			if (maskColor.a == 0) return;
@@ -842,8 +844,23 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 	}
 
+	private static final Mat oldTransform = new Mat();
+	private static final Vec2 transVec = new Vec2();
 	public static void drawFocus(Element elem, Vec2 pos, Color focusColor) {
 		Gl.flush();
+
+		Group transformParent = elem instanceof Group ? (Group) elem : elem.parent;
+		while (transformParent != null) {
+			if (transformParent.isTransform()) break;
+			transformParent = transformParent.parent;
+		}
+		if (transformParent != null) {
+			oldTransform.set(Draw.trans());
+			Mat computedTransform = Reflect.invoke(Group.class, transformParent, "computeTransform", ArrayUtils.EMPTY_ARRAY);
+			Draw.trans(computedTransform);
+			pos = elem.localToAscendantCoordinates(transformParent, transVec.set(0, 0));
+		}
+
 		if (focusColor.a > 0) {
 			float alpha = focusColor.a * (elem.visible ? 0.9f : 0.6f);
 			if (alpha != 0 && ElementUtils.checkInStage(pos)) {
@@ -864,6 +881,10 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		float thick = 1f;
 		Lines.stroke(thick);
 		Drawf.dashRectBasic(pos.x, pos.y - thick, elem.getWidth() + thick, elem.getHeight() + thick);
+
+		if (transformParent != null) {
+			Draw.trans(oldTransform);
+		}
 	}
 
 	private class FillEnd extends Table {

@@ -25,7 +25,7 @@ public class JSFuncClass extends NativeJavaClass {
 		Map<String, Field> map = Reflect.get(Kit.classOrNull("rhino.JavaMembers"), members, "staticMembers");
 
 		for (Class<?> inter : JSFunc.class.getInterfaces()) {
-			if (!OS.isAndroid && inter.getPackageName().contains("android")) continue;
+			if (!OS.isAndroid && inter.getName()/* getPackageName()是since 9 */.contains("android")) continue;
 			/* Delegate annotation = inter.getAnnotation(Delegate.class);
 			if (annotation != null) {
 				inter = annotation.value();

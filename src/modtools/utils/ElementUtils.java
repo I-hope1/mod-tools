@@ -91,11 +91,15 @@ public interface ElementUtils {
 		}
 	}
 	static Vec2 getAbsPosCenter(Element el) {
-		return el.localToStageCoordinates(v2.set(el.getWidth() / 2f, el.getHeight() / 2f));
+		return el.localToStageCoordinates(v2.set(el.getX(Align.center) - el.x, el.getY(Align.center) - el.y));
 	}
 
 	static Vec2 getAbsolutePos(Element el) {
 		return el.localToStageCoordinates(v1.set(0, 0));
+	}
+	Vec2 topLeft = new Vec2();
+	static Vec2 getAbsolutePosTopLeft(Element el) {
+		return el.localToStageCoordinates(topLeft.set(0, 0));
 	}
 	static void quietScreenshot(Element element) {
 		// ui.update();

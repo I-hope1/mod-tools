@@ -55,9 +55,7 @@ public class Updater {
 		 });
 	}
 	public static void checkUpdate() {
-		checkUpdate(hasUpdated -> {
-			if (hasUpdated) showUpdateDialog();
-		});
+		checkUpdate(_ -> { });
 	}
 
 
@@ -72,6 +70,7 @@ public class Updater {
 
 		if (!headless) {
 			checkUpdates = false;
+			Log.info("OK");
 			IntUI.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}", "@mod-tools.update.confirm", "@ok", "@mod-tools.ignore", () -> {
 				try {
 					boolean[] cancel   = {false};

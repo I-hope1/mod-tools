@@ -291,7 +291,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		} */
 		public void highlightingDraw(float x, float y) {
 			if (needsLayout()) return;
-			baseOffsetX = offsetX = x + textOffset;
+			baseOffsetX = offsetX = x;
 			updateTextIndex();
 			int firstLineShowing = getRealFirstLineShowing();
 			offsetY = -firstLineShowing * lineHeight() + y;

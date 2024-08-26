@@ -545,7 +545,7 @@ public class IntUI {
 	/** @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable) */
 	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
 	                                              Runnable denied) {
-		ConfirmWindow window = new ConfirmWindow(title, 0, 100, false, false);
+		ConfirmWindow window = new ConfirmWindow(title, 400, 100, false, false);
 		window.cont.add(text).width(Vars.mobile ? 400f : 500f).wrap().pad(4).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2);
 		window.setFillParent(false);
@@ -559,7 +559,6 @@ public class IntUI {
 		});
 		window.keyDown(KeyCode.escape, window::hide);
 		window.keyDown(KeyCode.back, window::hide);
-		window.show();
 		return window;
 	}
 

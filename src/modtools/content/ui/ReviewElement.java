@@ -1082,6 +1082,7 @@ public class ReviewElement extends Content {
 
 		/** 清除elemDraw */
 		public void elemDraw() { }
+		@Override
 		public void beforeDraw(Window drawer) {
 			if (drawer == FOCUS_WINDOW && FOCUS != null) {
 				if (FOCUS_FROM instanceof CellView cw) {
@@ -1094,15 +1095,16 @@ public class ReviewElement extends Content {
 				}
 			}
 		}
-		public void drawFocus(Element elem, Vec2 vec2) {
+		@Override
+		public void drawFocus(Element elem, Vec2 pos) {
 			super.afterAll();
 			if (FOCUS_WINDOW instanceof ReviewElementWindow w && w.drawCell) {
 				if (elem.parent instanceof Table t0) {
 					CellView.drawFocusStatic(t0.getCell(elem), elem);
 				}
 			} else {
-				super.drawFocus(elem, vec2);
-				MyDraw.intoDraw(() -> drawGeneric(elem, vec2));
+				super.drawFocus(elem, pos);
+				MyDraw.intoDraw(() -> drawGeneric(elem, pos));
 			}
 
 			if (!hoverInfoWindow.enabled()) return;
@@ -1131,7 +1133,7 @@ public class ReviewElement extends Content {
 			}
 			showInfoTable(elem);
 		}
-		private void drawGeneric(Element elem, Vec2 vec2) {
+		private void drawGeneric(Element elem, Vec2 pos) {
 			posText:
 			{
 				if (checkA(posTextColor)) break posText;
@@ -1145,14 +1147,14 @@ public class ReviewElement extends Content {
 
 				// 绝对坐标
 				// x: 0 -> x
-				if (vec2.x != 0) {
-					MyDraw.drawText(fixed(vec2.x),
-					 vec2.x / 2f, vec2.y, Tmp.c1.set(posTextColor));
+				if (pos.x != 0) {
+					MyDraw.drawText(fixed(pos.x),
+					 pos.x / 2f, pos.y, Tmp.c1.set(posTextColor));
 				}
 				// y: 0 -> y
-				if (vec2.y != 0) {
-					MyDraw.drawText(fixed(vec2.y),
-					 vec2.x, vec2.y / 2f, Tmp.c1.set(posTextColor));
+				if (pos.y != 0) {
+					MyDraw.drawText(fixed(pos.y),
+					 pos.x, pos.y / 2f, Tmp.c1.set(posTextColor));
 				}
 			}
 			posLine:
@@ -1161,9 +1163,9 @@ public class ReviewElement extends Content {
 				Lines.stroke(4);
 				Draw.color(posLineColor);
 				// x: 0 -> x
-				if (vec2.x != 0) Lines.line(0, vec2.y, vec2.x, vec2.y);
+				if (pos.x != 0) Lines.line(0, pos.y, pos.x, pos.y);
 				// y: 0 -> y
-				if (vec2.y != 0) Lines.line(vec2.x, 0, vec2.x, vec2.y);
+				if (pos.y != 0) Lines.line(pos.x, 0, pos.x, pos.y);
 			}
 			sizeText:
 			{
@@ -1172,10 +1174,10 @@ public class ReviewElement extends Content {
 				float w = elem.getWidth();
 				float h = elem.getHeight();
 				// width
-				boolean flipX = vec2.x < 32, flipY = vec2.y < 32;
+				boolean flipX = pos.x < 32, flipY = pos.y < 32;
 				if (w != 0) {
 					MyDraw.drawText(fixed(w),
-					 vec2.x + w / 2f,
+					 pos.x + w / 2f,
 					 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
 					 color, Align.center);
 				}
@@ -1184,19 +1186,19 @@ public class ReviewElement extends Content {
 				if (h != 0) {
 					MyDraw.drawText(fixed(h),
 					 flipX ? Core.graphics.getWidth() : 0,
-					 vec2.y + (h + MyDraw.fontHeight()) / 2f,
+					 pos.y + (h + MyDraw.fontHeight()) / 2f,
 					 color, flipX ? Align.right : Align.left);
 				}
 			}
 
 			if (elem instanceof Table) {
-				drawMargin(vec2, (Table) elem);
+				drawMargin(pos, (Table) elem);
 			}
 
 			if (elem.parent instanceof Table parent) {
 				drawMargin(parent.localToStageCoordinates(Tmp.v1.set(0, 0)), parent);
 
-				drawPadding(elem, vec2, parent);
+				drawPadding(elem, pos, parent);
 			}
 		}
 

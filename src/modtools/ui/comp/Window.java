@@ -407,6 +407,11 @@ public class Window extends Table implements Position {
 	 * 则自动添加Hitter */
 	protected Hitter hitter;
 	void show0(Scene stage, Action action) {
+		if (isShown()) {
+			display();
+			return;
+		}
+
 		if (this instanceof IHitter) {
 			topGroup.addChild(hitter = new Hitter(this::hide));
 		}
@@ -463,6 +468,7 @@ public class Window extends Table implements Position {
 	public Window show() {
 		/* 以免window超出屏幕外  */
 		Time.runTask(4, this::display);
+		Log.info("show");
 
 		if (isShown()) {
 			setZIndex(Integer.MAX_VALUE);
@@ -657,7 +663,7 @@ public class Window extends Table implements Position {
 	}
 
 	boolean unexpectedDrawException;
-	Window  confirm;
+	Window  exceptionConfirm;
 	final Mat oldTransform = new Mat();
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
@@ -684,16 +690,16 @@ public class Window extends Table implements Position {
 				for (int i = 0; i < 100; i++) clipEnd();
 			});
 			Draw.trans(oldTransform);
-			confirm = showCustomConfirm("@settings.exception", "@settings.exception.draw",
+			exceptionConfirm = showCustomConfirm("@settings.exception", "@settings.exception.draw",
 			 "@settings.window.close", "@settings.window.keep",
 			 this::remove, () -> unexpectedDrawException = false);
-			confirm.sclListener.remove();
-			Boolp boolp = () -> confirm.isShown();
+			exceptionConfirm.sclListener.remove();
+			Boolp boolp = () -> exceptionConfirm.isShown();
 			topGroup.disabledSwitchPreviewSeq.add(boolp);
-			confirm.update(() -> confirm.setPosition(this));
-			confirm.hidden(() -> {
+			exceptionConfirm.update(() -> exceptionConfirm.setPosition(this));
+			exceptionConfirm.hidden(() -> {
 				topGroup.disabledSwitchPreviewSeq.remove(boolp, true);
-				confirm = null;
+				exceptionConfirm = null;
 			});
 		});
 	}

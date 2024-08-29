@@ -961,7 +961,7 @@ public class Tester extends Content {
 			keys.each(o -> {
 				String key = String.valueOf(o);
 				if (key.startsWith(searchingKey)
-				    && searchingKey.length() < key.length()) {
+				    && searchingKey.length() <= key.length()) {
 					complements.add(key.substring(searchingKey.length()));
 				}
 			});

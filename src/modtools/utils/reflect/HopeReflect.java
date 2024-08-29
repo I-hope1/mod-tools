@@ -15,8 +15,9 @@ import java.lang.reflect.*;
 
 public class HopeReflect {
 
-	//region 安卓
+	//region 安卓黑科技
 	public static void changeClass(Object obj, Class<?> clazz) {
+		if (!OS.isAndroid) return;
 		class $ {
 			static final long offset = FieldUtils.fieldOffset(Object.class, "shadow$_klass_");
 		}

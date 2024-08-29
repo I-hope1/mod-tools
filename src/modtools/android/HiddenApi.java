@@ -30,8 +30,7 @@ public class HiddenApi {
 		Method setHiddenApiExemptions = findMethod();
 
 		try {
-			if (setHiddenApiExemptions == null)
-				throw new InternalError("setHiddenApiExemptions not found.");
+			if (setHiddenApiExemptions == null) { throw new InternalError("setHiddenApiExemptions not found."); }
 
 			invoke(setHiddenApiExemptions);
 		} catch (Exception e) {
@@ -122,16 +121,17 @@ public class HiddenApi {
 		/* Method是指针，大小相当于int */
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.vaddressOf(ints);
-		// try {
-		// 	// testReplaceModifier();
-		// 	replaceMethod();
-		// } catch (Throwable e) {
-		// 	Log.err(e);
-		// }
+		try {
+			// testReplaceModifier();
+			// replaceMethod();
+		} catch (Throwable e) {
+			Log.err(e);
+		}
 	}
 
 
 	public static class A {
+		private A() { }
 		private void _private() {
 			Log.info("private");
 		}
@@ -145,14 +145,32 @@ public class HiddenApi {
 		}
 	}
 	static void testReplaceModifier() throws Exception {
-		// Method aPrivate                  = A.class.getDeclaredMethod("_private");
-		// Method aPublic                   = A.class.getDeclaredMethod("_public");
-		// long   address_artMethod_private = unsafe.getLong(aPrivate, offset_art_method_);
-		// long   address_artMethod_public  = unsafe.getLong(aPublic, offset_art_method_);
-		// Log.info("Origin: @",A.class.getDeclaredMethod("_private"));
-		//
-		// unsafe.copyMemory(address_artMethod_public + 4, address_artMethod_private + 4, 4);
-		// Log.info("Result: @",A.class.getDeclaredMethod("_private"));
+		Method aPrivate                  = A.class.getDeclaredMethod("_private");
+		Method aPublic                   = A.class.getDeclaredMethod("_public");
+		long   address_artMethod_private = UNSAFE.getLong(aPrivate, offset_art_method_);
+		long   address_artMethod_public  = UNSAFE.getLong(aPublic, offset_art_method_);
+		Log.info("Origin: @", A.class.getDeclaredMethod("_private"));
+
+		UNSAFE.copyMemory(address_artMethod_public + 4, address_artMethod_private + 4, 8);
+		Log.info("Result: @", A.class.getDeclaredMethod("_private"));
+
+		MyClass<Object> testA = new MyClass<>("testA", Object.class);
+		testA.addInterface(Runnable.class);
+		testA.setFunc("run", cfw -> { // new A()._private()
+			cfw.add(ByteCode.NEW, nativeName(A.class));
+			cfw.add(ByteCode.DUP);
+			cfw.addInvoke(ByteCode.INVOKESPECIAL, nativeName(Object.class), "<init>", "()V");
+			cfw.addInvoke(ByteCode.INVOKEVIRTUAL, nativeName(A.class), "_private", "()V");
+			cfw.add(ByteCode.RETURN);
+			return 1;
+		}, 1, void.class);
+
+		Runnable r = (Runnable) UNSAFE.allocateInstance(testA.define(A.class));
+		Log.info("Runnable: @", r);
+		r.run();
+		Log.info("After run");
+	}
+	static void testReplaceMethod() {
 		MyClass<Object> testA = new MyClass<>("testA", Object.class);
 		testA.addInterface(Runnable.class);
 		testA.setFunc("run", cfw -> {

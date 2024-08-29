@@ -44,7 +44,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	Slider    hSlider, aSlider;
 
 	public DrawablePicker() {
-		super("@pickcolor", 0, 0, false, false);
+		super("@pickdrawable", 0, 0, false, false);
 		background(null);
 
 		cont.background(new TintDrawable(IntUI.whiteui, backgroundCurrent));
@@ -61,8 +61,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		show();
 
 		isIconColor = true;
-		drawable = cloneDrawable(drawable0);
 		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
+		drawable = sourceColor.equals(Color.white)  ? drawable0 : cloneDrawable(drawable0);
 		resetColor(sourceColor);
 
 		cont.clear();
@@ -121,7 +121,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 					drawStyle = styles.get((styles.indexOf(drawStyle) + 1) % styles.size);
 					button.setText(drawStyle.name());
 				});
-			}).padLeft(4f).padRight(6f);
+			}).padLeft(4f).padRight(6f).uniformY();
 			t.add(new Element() {
 				 public void draw() {
 					 float first  = Tmp.c1.fromHsv(h, 0, 1).a(parentAlpha).toFloatBits();
@@ -138,7 +138,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 					 Icon.cancelSmall.draw(x + s * width, y + v * height,
 						5 * Scl.scl(), 5 * Scl.scl());
 				 }
-			 }).growX().growY().padBottom(6f)
+			 }).growX().growY().marginBottom(6f).uniformY()
 			 .with(l -> l.addListener(new InputListener() {
 				 public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 					 apply(x, y);
@@ -155,7 +155,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			 }))
 			 .row();
 
-			t.defaults().width(260f).height(24f);
+			t.defaults().height(24f).growX();
 
 			t.add(new Element() {
 				public void draw() {
@@ -169,9 +169,9 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 					Draw.color(Tmp.c1.set(iconCurrent).inv(), alpha);
 					Fill.circle(x, y, radius);
 					Draw.color(iconCurrent, alpha);
-					Fill.circle(x, y, radius - 1);
+					Fill.circle(x, y, radius - 2);
 				}
-			}).size(42);
+			}).size(42).padTop(4f);
 
 			t.stack(new Image(new TextureRegion(hueTex.get())), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
 				setValue(h);

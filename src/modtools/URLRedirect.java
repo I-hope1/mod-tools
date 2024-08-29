@@ -6,6 +6,7 @@ import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.Constants.CURL;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.*;
 import modtools.utils.ByteCodeTools.MyClass;
 import modtools.utils.ByteCodeTools.MyClass.Lambda;
 
@@ -63,12 +64,22 @@ public class URLRedirect {
 					/* 同时去除final */
 					MyReflect.setPublic(value.getClass());
 				}
+				URLStreamHandler newValue;
 				try {
-					value = handler.define(URLRedirect.class.getClassLoader()).getDeclaredConstructor().newInstance();
+					Class<URLStreamHandler> newClass = (Class<URLStreamHandler>) handler.define();
+					newValue = CatchSR.apply(() ->
+					 CatchSR.of(() -> newClass.getDeclaredConstructor().newInstance())
+					  .get(() -> {
+						  URLStreamHandler instance = UNSAFE.allocateInstance(newClass);
+						  Tools.clone(value, instance, value.getClass(), null);;
+							return instance;
+					  })
+					);
 				} catch (Throwable e) {
+					newValue = value;
 					Log.err(e);
 				}
-				return super.put(key, value);
+				return super.put(key, newValue);
 			}
 		});
 		new URL("https://github.com");

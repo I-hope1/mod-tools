@@ -84,8 +84,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		return isSelecting;
 	}
 	private boolean isSelecting;
-	// ------
 
+	// ------
 
 	private final Group
 	 back    = new NGroup("back"),

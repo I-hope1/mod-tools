@@ -68,16 +68,20 @@ public class HScene {
 		// sceneClass.writeTo(Vars.tmpDirectory);
 
 		Class<Group> newClas  = (Class<Group>) sceneClass.define();
-		Group        newGroup = UNSAFE.allocateInstance(newClas);
-		Tools.clone(Core.scene.root, newGroup, superClass, null);
-		SnapshotSeq<Element> children = Core.scene.root.getChildren();
-		children.begin();
-		children.each(e -> e.parent = newGroup);
-		children.end();
-		// FieldUtils.setValue(Core.scene.root, Group.class, "children",
-		//  new SnapshotSeq<>(true, 4, Element.class), Seq.class);
-		// Core.scene.root = newGroup;
-		FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
+		if (OS.isAndroid) {
+			HopeReflect.changeClass(Core.scene.root, newClas);
+		} else {
+			Group newGroup = UNSAFE.allocateInstance(newClas);
+			Tools.clone(Core.scene.root, newGroup, superClass, null);
+			SnapshotSeq<Element> children = Core.scene.root.getChildren();
+			children.begin();
+			children.each(e -> e.parent = newGroup);
+			children.end();
+			// FieldUtils.setValue(Core.scene.root, Group.class, "children",
+			//  new SnapshotSeq<>(true, 4, Element.class), Seq.class);
+			// Core.scene.root = newGroup;
+			FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
+		}
 
 		pauseMap = json.fromJson(ObjectIntMap.class, Class.class, pause.data().toString());
 
@@ -125,7 +129,12 @@ public class HScene {
 				return 1; // this
 			}, Modifier.PUBLIC, void.class);
 			var clazz = myClass.define();
-			var newVal   = UNSAFE.allocateInstance(clazz);
+			if (OS.isAndroid) {
+				HopeReflect.changeClass(source, clazz);
+				return source;
+			}
+
+			var newVal = UNSAFE.allocateInstance(clazz);
 			Tools.clone(source, newVal, superClass, null);
 
 			// 查找Vars中是否有对应的实例，如果有也替换掉
@@ -145,8 +154,8 @@ public class HScene {
 
 	public static ObjectIntMap<Class<?>> pauseMap;
 
-	public static Window lastInfo;
-	static HKeyCode      pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
+	public static Window   lastInfo;
+	static        HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
 	 .applyToScene(true, () -> {
 		 int value = pauseMap.get(Vars.ui.getClass()) == 1 ? 0 : 1;
 		 if (lastInfo != null) lastInfo.hide();

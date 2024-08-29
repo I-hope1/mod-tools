@@ -99,12 +99,13 @@ public class AllTutorial {
 		}); */
 		InputListener listener = new InputListener() {
 			final Task task = new Task() {
-				public void run() {}
+				public void run() { }
 			};
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (keycode == KeyCode.shiftLeft) {
-					if (!TaskManager.scheduleOrCancel(0.4f, task)) {
+					if (!TaskManager.scheduleOrCancel(0.2f, task)) {
 						enableFocusMouse = !enableFocusMouse;
+						task.cancel();
 					}
 				}
 				return false;
@@ -115,6 +116,7 @@ public class AllTutorial {
 			}
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				if (enableFocusMouse) event.cancel();
+				task.cancel();
 				enableFocusMouse = false;
 				return false;
 			}

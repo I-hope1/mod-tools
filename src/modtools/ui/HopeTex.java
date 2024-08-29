@@ -4,6 +4,7 @@ import arc.func.Prov;
 import arc.scene.style.Drawable;
 import mindustry.gen.Tex;
 
+/** 为了兼容v6？  */
 public interface HopeTex {
 	Drawable alphaBgLine = nl(() -> Tex.alphaBgLine, Tex.alphaBg);
 	Drawable paneRight   = nl(() -> Tex.paneRight, Tex.pane);

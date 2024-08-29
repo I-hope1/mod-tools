@@ -205,7 +205,7 @@ public class Tester extends Content {
 
 		addListenerToArea(textarea);
 
-		Cell<?> areaCell = _cont.add(textarea).grow();
+		_cont.add(textarea).grow();
 		_cont.row();
 		ui.cont.update(() -> ((JSSyntax) textarea.syntax).js_prop = js_prop.enabled());
 

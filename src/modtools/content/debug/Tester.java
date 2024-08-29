@@ -969,7 +969,7 @@ public class Tester extends Content {
 
 			if (syntax.virtualString == null) syntax.virtualString = new VirtualString();
 			syntax.virtualString.index = cursor;
-			String content = complements.get(lastCompletionIndex++ % complements.size);
+			String content = complements.get(lastCompletionIndex % complements.size);
 			area.paste(content, false);
 			area.setSelectionUncheck(cursor, cursor + content.length());
 		}

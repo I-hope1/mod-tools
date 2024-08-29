@@ -148,7 +148,7 @@ public class FieldUtils {
 	}
 	public static void setValue(Field f, Object obj, Object value) {
 		Class<?> type     = f.getType();
-		boolean  isStatic = Modifier.isStatic(f.getModifiers());
+		boolean  isStatic = isStatic(f);
 		Object   o        = isStatic ? f.getDeclaringClass() : obj;
 		long     offset   = fieldOffset(isStatic, f);
 		setValue(o, offset, value, type);

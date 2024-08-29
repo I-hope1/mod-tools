@@ -17,7 +17,7 @@ import modtools.utils.*;
 import modtools.utils.reflect.*;
 import rhino.classfile.ByteCode;
 
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 
 import static modtools.IntVars.json;
 import static modtools.override.ForRhino.forNameOrAddLoader;
@@ -80,14 +80,15 @@ public class HScene {
 		FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
 
 		pauseMap = json.fromJson(ObjectIntMap.class, Class.class, pause.data().toString());
-		// hookUpdate(Core.app.getListeners());
+
+		hookUpdate(Core.app.getListeners());
 	}
 
 	static void hookUpdate(Seq<ApplicationListener> appListeners) {
 		// 使用asm将侦听器替换
 		appListeners.replace(source -> {
 			var _1         = (Object) source;
-			var superClass = _1.getClass(); // android上好奇葩
+			var superClass = _1.getClass(); // android 上由 shadow$_klass_ 决定
 			try {
 				if (Modifier.isFinal(superClass.getMethod("update").getModifiers())) {
 					pauseMap.remove(superClass);
@@ -124,9 +125,21 @@ public class HScene {
 				return 1; // this
 			}, Modifier.PUBLIC, void.class);
 			var clazz = myClass.define();
-			var obj   = UNSAFE.allocateInstance(clazz);
-			Tools.clone(source, obj, superClass, null);
-			return (ApplicationListener) obj;
+			var newVal   = UNSAFE.allocateInstance(clazz);
+			Tools.clone(source, newVal, superClass, null);
+
+			// 查找Vars中是否有对应的实例，如果有也替换掉
+			for (Field field : Vars.class.getFields()) {
+				try {
+					field.setAccessible(true);
+					if (field.get(null) == source) {
+						FieldUtils.setValue(field, null, newVal);
+					}
+				} catch (IllegalAccessException e) {
+					Log.err(e);
+				}
+			}
+			return (ApplicationListener) newVal;
 		});
 	}
 

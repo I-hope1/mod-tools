@@ -78,7 +78,7 @@ public class Tools {
 	public static void clone1(Object from, Object to, Class<?> cls, Boolf<Field> boolf) {
 		if (from == to) throw new IllegalArgumentException("from == to");
 		if (from == null) return;
-		while (cls != null && Object.class.isAssignableFrom(cls)) {
+		while (cls != Object.class) {
 			Field[] fields = IReflect.impl.getFields(cls);
 			for (Field f : fields) {
 				if (!Modifier.isStatic(f.getModifiers()) && boolf.get(f)) {

@@ -7,6 +7,7 @@ import dalvik.system.VMStack;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
+import modtools.jsfunc.reflect.UNSAFE;
 import rhino.*;
 
 import java.io.File;
@@ -14,6 +15,13 @@ import java.lang.reflect.*;
 
 public class HopeReflect {
 
+	//region 安卓
+	public static void changeClass(Object obj, Class<?> clazz) {
+		class $ {
+			static final long offset = FieldUtils.fieldOffset(Object.class, "shadow$_klass_");
+		}
+		UNSAFE.putObject(obj, $.offset, clazz);
+	}
 	/** 同时去除final  */
 	public static <T extends Class<?>> void setPublic(T obj, Class<T> cls) {
 		setPublic0(obj, cls);
@@ -35,6 +43,7 @@ public class HopeReflect {
 			f.setInt(obj, flags & 0xFFFF);
 		} catch (Exception ignored) { }
 	}
+	//endregion
 
 	public static Class<?> defineClass(String name, ClassLoader loader, byte[] bytes) {
 		if (OS.isAndroid) return defineClassAndroid(name, loader, bytes);

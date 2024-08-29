@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.lang.reflect.*;
 import java.net.*;
 import java.util.*;
+import java.util.function.Consumer;
 
 import static jdk.internal.classfile.Classfile.*;
 
@@ -26,8 +27,8 @@ public class URLRedirect {
 	public static final String SUFFIX = "-h0";
 
 	static Properties replacer = new Properties();
-	static Fi         defaultConfig;
-	static Cons<URL>  cons     = u -> {
+	static Fi            defaultConfig;
+	static Consumer<URL> cons = u -> {
 		if (replacer.contains(u.getHost())) {
 			UNSAFE.putObject(u, CURL.host, replacer.getProperty(u.getHost()));
 		}
@@ -49,7 +50,7 @@ public class URLRedirect {
 
 				var handler = new MyClass<>(value.getClass().getName() + SUFFIX, value.getClass());
 				handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
-				Lambda lambda = handler.addLambda(cons, Cons.class, "get", "(Ljava/lang/Object;)V");
+				Lambda lambda = handler.addLambda(cons, Consumer.class, "accept", "(Ljava/lang/Object;)V");
 				handler.setFunc("openConnection", cfw -> {
 					handler.execLambda(lambda, () -> cfw.add(ALOAD_1)); // cons.get(url);
 					// super.openConnection(url);

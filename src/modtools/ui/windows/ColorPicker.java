@@ -24,6 +24,7 @@ import modtools.utils.ui.FormatHelper;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
 public class ColorPicker extends Window implements IHitter, PopupWindow {
+	public static final float WIDTH = 150f;
 	public static LazyValue<Texture> hueTex = LazyValue.of(() -> {
 		Texture texture = Pixmaps.hueTexture(128, 1);
 		texture.setFilter(TextureFilter.linear);
@@ -94,8 +95,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 			 }))
 			 .row();
 
-			t.defaults().width(140f).height(24f);
-
+			t.defaults().growX().height(24f);
 
 			t.add(new Element() {
 				public void draw() {
@@ -137,7 +137,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 
 				updateColor(false);
 			}))
-			 .size(150f, 40f)
+			 .size(WIDTH, 40f)
 			 .valid(ColorPicker::isValidColor).get();
 
 			if (alpha) {
@@ -166,13 +166,12 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		})).grow();
 
 		buttons.clear();
-		buttons.margin(0).defaults().growX().height(32);
-		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide)
-		 .marginLeft(4f).marginRight(4f);
+		buttons.margin(0).defaults().size(WIDTH, 32);
+		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
 			cons.get(current);
 			hide();
-		}).marginLeft(4f).marginRight(4f);
+		});
 	}
 	static boolean isValidColor(String text) {
 		//garbage performance but who cares this runs only every key type anyway

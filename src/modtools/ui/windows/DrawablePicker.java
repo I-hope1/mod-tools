@@ -17,20 +17,21 @@ import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
-import modtools.ui.comp.Window;
+import modtools.ui.comp.*;
 import modtools.ui.comp.utils.MyItemSelection;
 import modtools.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
-import modtools.utils.ui.FormatHelper;
+import modtools.utils.ui.*;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 import static modtools.ui.windows.ColorPicker.*;
 
 public class DrawablePicker extends Window implements IHitter, PopupWindow {
+	public static final TextureRegionDrawable PIN_ICON = Icon.cancelSmall;
 	private Drawable drawable;
 
 	private Cons<Drawable> cons = _ -> { };
@@ -62,11 +63,11 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 		isIconColor = true;
 		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
-		drawable = sourceColor.equals(Color.white)  ? drawable0 : cloneDrawable(drawable0);
+		drawable = sourceColor.equals(Color.white) ? drawable0 : cloneDrawable(drawable0);
 		resetColor(sourceColor);
 
 		cont.clear();
-		cont.pane(newTable(t -> {
+		cont.add(newTable(t -> {
 			t.add(new Element() {
 				public void draw() {
 					if (drawable == null) return;
@@ -90,38 +91,42 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				MyItemSelection.buildTable0(wrap, drawables,
 				 () -> drawable, drawable -> this.drawable = drawable, 8,
 				 d -> d);
-			}).grow().padBottom(4f).height(280).row();
+			}).grow().pad(6, 8, 6, 8).height(256).row();
 
 			t.table(Styles.black6, buttons -> {
+				buttons.left().defaults().padLeft(4f).padRight(4f);
 				buttons.label(() -> CatchSR.apply(() ->
 				 CatchSR.of(() -> FormatHelper.getUIKey(drawable))
 					.get(() -> "" + drawable)
-				)).fontScale(0.6f).row();
-				buttons.left().defaults().growX().height(32).padRight(4f);
-				buttons.check("Icon", _ -> { }).row();
-				buttons.check("Background", _ -> { }).row();
+				)).fontScale(0.6f).growX().labelAlign(Align.left).row();
+				buttons.left().defaults().growX().height(32);
+				buttons.button("Icon", Styles.fullTogglet, () -> { }).row();
+				buttons.button("Background", Styles.fullTogglet, () -> { }).row();
 
-				Seq<CheckBox> allButtons = buttons.getChildren().select(el -> el instanceof CheckBox).as();
+				Seq<TextButton>         allButtons = buttons.getChildren().select(el -> el instanceof TextButton).as();
+				ButtonGroup<TextButton> group      = new ButtonGroup<>();
 				allButtons.each(b -> {
-					b.left();
-					b.setStyle(HopeStyles.hope_defaultCheck);
+					b.getLabelCell().labelAlign(Align.left).padLeft(4f).padRight(4f);
+					group.add(b);
 				});
 
-				ButtonGroup<CheckBox> group = new ButtonGroup<>();
-				group.add(allButtons.toArray(CheckBox.class));
 				buttons.update(() -> {
 					if (isIconColor == (group.getChecked().getZIndex() == 1)) return;
 					isIconColor = group.getChecked().getZIndex() == 1;
 					resetColor(current);
 				});
 
+				buttons.defaults().height(CellTools.unset);
+
 				Seq<DrawStyle> styles = new Seq<>(DrawStyle.values());
-				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, IntVars.EMPTY_RUN).get();
+				Underline.of(buttons, 1);
+				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, IntVars.EMPTY_RUN)
+				 .growX().width(128).get();
 				button.clicked(() -> {
 					drawStyle = styles.get((styles.indexOf(drawStyle) + 1) % styles.size);
 					button.setText(drawStyle.name());
 				});
-			}).padLeft(4f).padRight(6f).uniformY();
+			}).padRight(6f).growX().uniformY();
 			t.add(new Element() {
 				 public void draw() {
 					 float first  = Tmp.c1.fromHsv(h, 0, 1).a(parentAlpha).toFloatBits();
@@ -134,9 +139,13 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 						x, y + height, first/* 左上角 */
 					 );
 
-					 Draw.color(Tmp.c1.fromHsv(h, s, v).inv());
-					 Icon.cancelSmall.draw(x + s * width, y + v * height,
-						5 * Scl.scl(), 5 * Scl.scl());
+					 Draw.color(Color.white);
+					 int radius = 5;
+					 PIN_ICON.draw(x + s * width, y + v * height,
+					  radius * Scl.scl(), radius * Scl.scl());
+					 Draw.color(Color.lightGray);
+					 PIN_ICON.draw(x + s * width, y + v * height,
+					  (radius - 1) * Scl.scl(), (radius - 1) * Scl.scl());
 				 }
 			 }).growX().growY().marginBottom(6f).uniformY()
 			 .with(l -> l.addListener(new InputListener() {
@@ -182,16 +191,16 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			}}).row();
 
 			hexField = t.field(current.toString().toUpperCase(), Tools.consT(value -> {
-				current.set(Color.valueOf(value).a(a));
-				resetColor(current);
+				 current.set(Color.valueOf(value).a(a));
+				 resetColor(current);
 
-				hSlider.setValue(h);
-				if (aSlider != null) {
-					aSlider.setValue(a);
-				}
+				 hSlider.setValue(h);
+				 if (aSlider != null) {
+					 aSlider.setValue(a);
+				 }
 
-				updateColor(false);
-			}))
+				 updateColor(false);
+			 }))
 			 .size(130f, 40f)
 			 .valid(ColorPicker::isValidColor).get();
 

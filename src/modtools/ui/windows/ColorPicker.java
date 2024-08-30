@@ -12,6 +12,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
 import mindustry.gen.Icon;
+import mindustry.ui.Styles;
 import modtools.struct.LazyValue;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
@@ -29,7 +30,6 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		texture.setFilter(TextureFilter.linear);
 		return texture;
 	});
-	static final Color   bgColor = new Color(Color.black).a(0.6f); /* black6 */;
 
 	private Cons<Color> cons    = c -> {};
 	final   Color       current = new Color();
@@ -40,7 +40,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 	public ColorPicker() {
 		super("@pickcolor", 0, 0, false, false);
 
-		cont.background(IntUI.whiteui.tint(bgColor));
+		cont.background(Styles.black6);
 		sclListener.remove();
 	}
 

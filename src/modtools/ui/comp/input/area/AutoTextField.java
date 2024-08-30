@@ -38,7 +38,7 @@ public class AutoTextField extends TextField {
 	public float getPrefWidth() {
 		float bgPad = 10;
 		if (getBack() instanceof Drawable back) bgPad += back.getLeftWidth() + back.getRightWidth();
-		return Mathf.clamp(layout.width + bgPad + fontOffset + textOffset, 70, Core.graphics.getWidth() * 0.7f);
+		return Mathf.clamp(layout.width + bgPad + fontOffset + textOffset, super.getPrefWidth()/* 150 */, Core.graphics.getWidth() * 0.7f);
 	}
 
 	Drawable getBack() {

@@ -18,6 +18,7 @@ import modtools.content.ui.ShowUIList;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
+import modtools.ui.comp.input.area.AutoTextField;
 import modtools.ui.comp.utils.MyItemSelection;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
@@ -142,6 +143,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			t.table(icon -> {
 				icon.add(new Element() {
 					public void draw() {
+						float alpha = iconCurrent.a * parentAlpha;
+						Draw.color(iconCurrent, alpha);
 						// 绘制所选的图标
 						if (drawable != null) {
 							drawable.draw(x, y, width, height);

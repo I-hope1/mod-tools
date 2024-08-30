@@ -14,17 +14,16 @@ import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
-import modtools.IntVars;
+import modtools.content.ui.ShowUIList;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
-import modtools.ui.comp.*;
+import modtools.ui.comp.Window;
 import modtools.ui.comp.utils.MyItemSelection;
-import modtools.content.ui.ShowUIList;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
 import modtools.utils.*;
 import modtools.utils.reflect.FieldUtils;
-import modtools.utils.ui.*;
+import modtools.utils.ui.FormatHelper;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
@@ -32,12 +31,12 @@ import static modtools.ui.windows.ColorPicker.*;
 
 public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	public static final TextureRegionDrawable PIN_ICON = Icon.cancelSmall;
-	private Drawable drawable;
+	private             Drawable              drawable;
 
 	private Cons<Drawable> cons = _ -> { };
 
 	Color iconCurrent  = new Color(Color.white),
-	 backgroundCurrent = new Color(bgColor);
+	 backgroundCurrent = new Color(Color.black).a(0.6f); /* black6 */
 	boolean        isIconColor = true;
 	DelegatorColor current     = new DelegatorColor();
 	float          h, s, v, a;
@@ -56,7 +55,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		show(drawable, true, consumer);
 	}
 
-	public void show(Drawable drawable0, boolean alpha, Cons<Drawable> consumer) {
+	public void show(Drawable drawable0, boolean hasAlpha, Cons<Drawable> consumer) {
 		this.current.set(color);
 		this.cons = consumer;
 		show();
@@ -68,165 +67,154 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 		cont.clear();
 		cont.add(newTable(t -> {
-			t.add(new Element() {
-				public void draw() {
-					if (drawable == null) return;
-					Draw.color(iconCurrent, iconCurrent.a * parentAlpha);
-					final float minWidth  = drawable.getMinWidth();
-					final float minHeight = drawable.getMinHeight();
-					switch (drawStyle) {
-						case normal -> Tmp.v1.set(minWidth, minHeight);
-						case large -> Tmp.v1.set(128, 128);
-						case full -> Tmp.v1.set(width, height);
-					}
-					drawable.draw(x, y, Tmp.v1.x, Tmp.v1.y);
-					// HopeStyles.setSize(drawable, minWidth, minHeight);
-				}
-			}).grow().pad(6, 8, 6, 8);
 			t.table(Styles.black6, wrap -> {
 				Seq<Drawable> drawables = Icon.icons.values().toSeq()
 				 .as().addAll(ShowUIList.styleIconKeyMap.keySet())
 				 .addAll(ShowUIList.texKeyMap.keySet()).as();
 				drawables.addUnique(drawable);
 				MyItemSelection.buildTable0(wrap, drawables,
-				 () -> drawable, drawable -> this.drawable = drawable, 8,
+				 () -> drawable, drawable -> this.drawable = drawable, 10,
 				 d -> d);
-			}).grow().pad(6, 8, 6, 8).height(256).row();
+			}).grow().padLeft(4).height(256).colspan(2).row();
 
-			t.table(Styles.black6, buttons -> {
-				buttons.left().defaults().padLeft(4f).padRight(4f);
-				buttons.label(() -> CatchSR.apply(() ->
-				 CatchSR.of(() -> FormatHelper.getUIKey(drawable))
-					.get(() -> "" + drawable)
-				)).fontScale(0.6f).growX().labelAlign(Align.left).row();
-				buttons.left().defaults().growX().height(32);
-				buttons.button("Icon", Styles.fullTogglet, () -> { }).row();
-				buttons.button("Background", Styles.fullTogglet, () -> { }).row();
+			t.table(fn -> {
+				fn.defaults().uniformY();
+				fn.table(Styles.black6, buttons -> {
+					buttons.left().defaults().padLeft(4f).padRight(4f);
+					buttons.label(() -> CatchSR.apply(() ->
+					 CatchSR.of(() -> FormatHelper.getUIKey(drawable))
+						.get(() -> "" + drawable)
+					)).fontScale(0.6f).growX().labelAlign(Align.left).row();
+					buttons.left().defaults().growX().height(32);
+					buttons.button("Icon", Styles.fullTogglet, () -> { }).row();
+					buttons.button("Background", Styles.fullTogglet, () -> { }).row();
 
-				Seq<TextButton>         allButtons = buttons.getChildren().select(el -> el instanceof TextButton).as();
-				ButtonGroup<TextButton> group      = new ButtonGroup<>();
-				allButtons.each(b -> {
-					b.getLabelCell().labelAlign(Align.left).padLeft(4f).padRight(4f);
-					group.add(b);
-				});
+					Seq<TextButton>         allButtons = buttons.getChildren().select(el -> el instanceof TextButton).as();
+					ButtonGroup<TextButton> group      = new ButtonGroup<>();
+					allButtons.each(b -> {
+						b.getLabelCell().labelAlign(Align.left).padLeft(4f).padRight(4f);
+						group.add(b);
+					});
 
-				buttons.update(() -> {
-					if (isIconColor == (group.getChecked().getZIndex() == 1)) return;
-					isIconColor = group.getChecked().getZIndex() == 1;
-					resetColor(current);
-				});
+					buttons.update(() -> {
+						if (isIconColor == (group.getChecked().getZIndex() == 1)) return;
+						isIconColor = group.getChecked().getZIndex() == 1;
+						resetColor(current);
+					});
+				}).padRight(6f).width(140f);
+				fn.add(new Element() {
+					 public void draw() {
+						 float first  = Tmp.c1.fromHsv(h, 0, 1).a(parentAlpha).toFloatBits();
+						 float second = Tmp.c2.fromHsv(h, 1, 1).a(parentAlpha).toFloatBits();
 
-				buttons.defaults().height(CellTools.unset);
+						 Fill.quad(
+							x, y, Tmp.c1.value(0).toFloatBits(),/* 左下角 */
+							x + width, y, Tmp.c2.value(0).toFloatBits(),/* 有下角 */
+							x + width, y + height, second,/* 有上角 */
+							x, y + height, first/* 左上角 */
+						 );
 
-				Seq<DrawStyle> styles = new Seq<>(DrawStyle.values());
-				Underline.of(buttons, 1);
-				TextButton     button = buttons.button(drawStyle.name(), HopeStyles.flatt, IntVars.EMPTY_RUN)
-				 .growX().width(128).get();
-				button.clicked(() -> {
-					drawStyle = styles.get((styles.indexOf(drawStyle) + 1) % styles.size);
-					button.setText(drawStyle.name());
-				});
-			}).padRight(6f).growX().uniformY();
-			t.add(new Element() {
-				 public void draw() {
-					 float first  = Tmp.c1.fromHsv(h, 0, 1).a(parentAlpha).toFloatBits();
-					 float second = Tmp.c2.fromHsv(h, 1, 1).a(parentAlpha).toFloatBits();
+						 Draw.color(Color.white);
+						 int radius = 3;
+						 PIN_ICON.draw(x + s * width, y + v * height,
+							radius * Scl.scl(), radius * Scl.scl());
+						 Draw.color(Color.lightGray);
+						 PIN_ICON.draw(x + s * width, y + v * height,
+							(radius - 1) * Scl.scl(), (radius - 1) * Scl.scl());
+					 }
+				 }).grow().marginBottom(6f)
+				 .with(l -> l.addListener(new InputListener() {
+					 public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+						 apply(x, y);
+						 return true;
+					 }
+					 public void touchDragged(InputEvent event, float x, float y, int pointer) {
+						 apply(x, y);
+					 }
+					 private void apply(float x, float y) {
+						 s = x / l.getWidth();
+						 v = y / l.getHeight();
+						 updateColor();
+					 }
+				 }));
+			}).colspan(2).growX().row();
 
-					 Fill.quad(
-						x, y, Tmp.c1.value(0).toFloatBits(),/* 左下角 */
-						x + width, y, Tmp.c2.value(0).toFloatBits(),/* 有下角 */
-						x + width, y + height, second,/* 有上角 */
-						x, y + height, first/* 左上角 */
-					 );
-
-					 Draw.color(Color.white);
-					 int radius = 5;
-					 PIN_ICON.draw(x + s * width, y + v * height,
-					  radius * Scl.scl(), radius * Scl.scl());
-					 Draw.color(Color.lightGray);
-					 PIN_ICON.draw(x + s * width, y + v * height,
-					  (radius - 1) * Scl.scl(), (radius - 1) * Scl.scl());
-				 }
-			 }).growX().growY().marginBottom(6f).uniformY()
-			 .with(l -> l.addListener(new InputListener() {
-				 public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-					 apply(x, y);
-					 return true;
-				 }
-				 public void touchDragged(InputEvent event, float x, float y, int pointer) {
-					 apply(x, y);
-				 }
-				 private void apply(float x, float y) {
-					 s = x / l.getWidth();
-					 v = y / l.getHeight();
-					 updateColor();
-				 }
-			 }))
-			 .row();
-
-			t.defaults().height(24f).growX();
-
-			t.add(new Element() {
-				public void draw() {
-					Draw.color();
-					HopeIcons.alphaBgCircle.draw(x, y, width, height);
-					float x      = getX(Align.center);
-					float y      = getY(Align.center);
-					float radius = width / 2;
-					float alpha  = a * parentAlpha;
-
-					Draw.color(Tmp.c1.set(iconCurrent).inv(), alpha);
-					Fill.circle(x, y, radius);
-					Draw.color(iconCurrent, alpha);
-					Fill.circle(x, y, radius - 2);
-				}
-			}).size(42).padTop(4f);
-
-			t.stack(new Image(new TextureRegion(hueTex.get())), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
-				setValue(h);
-				moved(value -> {
-					h = value;
-					updateColor();
-				});
-			}}).row();
-
-			hexField = t.field(current.toString().toUpperCase(), Tools.consT(value -> {
-				 current.set(Color.valueOf(value).a(a));
-				 resetColor(current);
-
-				 hSlider.setValue(h);
-				 if (aSlider != null) {
-					 aSlider.setValue(a);
-				 }
-
-				 updateColor(false);
-			 }))
-			 .size(130f, 40f)
-			 .valid(ColorPicker::isValidColor).get();
-
-			if (alpha) {
-				t.stack(new Image(HopeTex.alphaBgLine), new Element() {
-					@Override
+			t.table(icon -> {
+				icon.add(new Element() {
 					public void draw() {
-						float first  = Tmp.c1.set(current.delegator()).a(0f).toFloatBits();
-						float second = Tmp.c1.set(current.delegator()).a(parentAlpha).toFloatBits();
-
-						Fill.quad(
-						 x, y, first,
-						 x + width, y, second,
-						 x + width, y + height, second,
-						 x, y + height, first
-						);
+						// 绘制所选的图标
+						if (drawable != null) {
+							drawable.draw(x, y, width, height);
+						}
 					}
-				}, aSlider = new Slider(0f, 1f, 0.001f, false, hope_defaultSlider) {{
-					setValue(a);
+				}).size(42).expandX().left();
+				icon.add(new Element() {
+					public void draw() {
+						Draw.color();
+						HopeIcons.alphaBgCircle.draw(x, y, width, height);
+						float x      = getX(Align.center);
+						float y      = getY(Align.center);
+						float radius = width / 2;
+						float alpha  = iconCurrent.a * parentAlpha;
+
+						Draw.color(Tmp.c1.set(iconCurrent).inv(), alpha);
+						Fill.circle(x, y, radius);
+						Draw.color(iconCurrent, alpha);
+						Fill.circle(x, y, radius - 2);
+					}
+				}).size(42);
+
+				icon.row();
+
+				hexField = icon.field(current.toString().toUpperCase(), Tools.consT(value -> {
+					 current.set(Color.valueOf(value).a(a));
+					 resetColor(current);
+
+					 hSlider.setValue(h);
+					 if (aSlider != null) {
+						 aSlider.setValue(a);
+					 }
+
+					 updateColor(false);
+				 }))
+				 .colspan(2)
+				 .size(130f, 40f)
+				 .valid(ColorPicker::isValidColor).get();
+			}).padTop(4f);
+
+			t.table(slider -> {
+				slider.defaults().grow();
+				slider.stack(new Image(new TextureRegion(hueTex.get())), hSlider = new Slider(0f, 360f, 0.3f, false, hope_defaultSlider) {{
+					setValue(h);
 					moved(value -> {
-						a = value;
+						h = value;
 						updateColor();
 					});
-				}}).row();
-			}
+				}}).growY().row();
 
+				if (hasAlpha) {
+					slider.stack(new Image(HopeTex.alphaBgLine), new Element() {
+						@Override
+						public void draw() {
+							float first  = Tmp.c1.set(current.delegator()).a(0f).toFloatBits();
+							float second = Tmp.c1.set(current.delegator()).a(parentAlpha).toFloatBits();
+
+							Fill.quad(
+							 x, y, first,
+							 x + width, y, second,
+							 x + width, y + height, second,
+							 x, y + height, first
+							);
+						}
+					}, aSlider = new Slider(0f, 1f, 0.001f, false, hope_defaultSlider) {{
+						setValue(a);
+						moved(value -> {
+							a = value;
+							updateColor();
+						});
+					}}).row();
+				}
+			}).pad(4f).growX();
 		})).grow();
 
 		buttons.clear();
@@ -328,11 +316,4 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			return delegator().rgba();
 		}
 	}
-
-	enum DrawStyle {
-		normal,
-		large,
-		full
-	}
-	DrawStyle drawStyle = DrawStyle.large;
 }

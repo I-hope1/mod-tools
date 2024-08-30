@@ -19,8 +19,9 @@ import modtools.ui.control.HopeInput;
 import modtools.utils.ArrayUtils;
 
 public class InlineLabel extends NoMarkupLabel {
-	private static final Seq<GlyphRun> result    = new Seq<>();
+	private static final Seq<GlyphRun> result = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
+	public static final int UNSET = -1;
 
 	public InlineLabel(CharSequence text) {
 		super(text);
@@ -132,11 +133,11 @@ public class InlineLabel extends NoMarkupLabel {
 					}
 					currentX += xAdvances.get(i);
 				}
-				return -1;
+				return UNSET;
 			}
 			index += run.glyphs.size;
 		}
-		return -1;
+		return UNSET;
 	}
 
 	/** 遍历指定index区域 */
@@ -264,17 +265,17 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 
 
-	private static final Point2 overChunk = new Point2(-1, -1);
-	private static final Point2 downChunk = new Point2(-1, -1);
+	private static final Point2 overChunk = new Point2(UNSET, UNSET);
+	private static final Point2 downChunk = new Point2(UNSET, UNSET);
 	private static final int    padding   = 4;
 	public void draw() {
 		if (HopeInput.mouseHit() == this) {
-			if (!downChunk.equals(-1, -1)) {
+			if (!downChunk.equals(UNSET, UNSET)) {
 				getRect(downChunk, r1 -> {
 					Draw.color();
 					Styles.flatDown.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
 				});
-			} else if (!overChunk.equals(-1, -1)) {
+			} else if (!overChunk.equals(UNSET, UNSET)) {
 				getRect(overChunk, r1 -> {
 					Draw.color();
 					Styles.flatOver.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
@@ -297,12 +298,14 @@ public class InlineLabel extends NoMarkupLabel {
 						return true;
 					}
 				}
-				InlineLabel.downChunk.set(-1, -1);
+				InlineLabel.downChunk.set(UNSET, UNSET);
 				return false;
 			}
+			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				super.touchUp(event, x, y, pointer, button);
+				InlineLabel.downChunk.set(UNSET, UNSET);
+			}
 			public void clicked(InputEvent event, float x, float y) {
-				InlineLabel.downChunk.set(-1, -1);
-
 				int    cursor = getCursor(x, y);
 				Point2 point2 = point2Prov.get();
 				int    start  = point2.x, end = point2.y;
@@ -318,7 +321,7 @@ public class InlineLabel extends NoMarkupLabel {
 					InlineLabel.overChunk.set(point2);
 					Core.graphics.cursor(SystemCursor.hand);
 				} else {
-					InlineLabel.overChunk.set(-1, -1);
+					InlineLabel.overChunk.set(UNSET, UNSET);
 					Core.graphics.cursor(SystemCursor.arrow);
 				}
 				return super.mouseMoved(event, x, y);

@@ -59,6 +59,7 @@ public interface ElementUtils {
 		}
 		return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
 	}
+
 	static void scrollTo(Element actor, Element target) {
 		ScrollPane pane = findClosestPane(actor);
 		Time.runTask(40, () -> HopeFx.changedFx(target));

@@ -6,7 +6,7 @@ import arc.scene.Scene;
 import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
 
-/** 根据文本，自动调整大小  */
+/** 根据文本，自动调整大小 */
 public class AutoTextField extends TextField {
 	public AutoTextField() {
 	}
@@ -36,9 +36,9 @@ public class AutoTextField extends TextField {
 		if (parent != null) parent.invalidateHierarchy();
 	}
 	public float getPrefWidth() {
-		float bgPad = 0;
-		if (getBack() instanceof Drawable back) bgPad = back.getLeftWidth() + back.getRightWidth();
-		return Mathf.clamp(layout.width + bgPad, 70, Core.graphics.getWidth() * 0.7f);
+		float bgPad = 10;
+		if (getBack() instanceof Drawable back) bgPad += back.getLeftWidth() + back.getRightWidth();
+		return Mathf.clamp(layout.width + bgPad + fontOffset + textOffset, 70, Core.graphics.getWidth() * 0.7f);
 	}
 
 	Drawable getBack() {

@@ -5,7 +5,7 @@ import arc.scene.Element;
 import arc.scene.ui.layout.*;
 
 public class TemplateTable<R> extends Table {
-	FilterTable<R> template = new FilterTable<>();
+	private final FilterTable<R> template = new FilterTable<>();
 
 	R NORMAL;
 	public        Boolf<R> validator;
@@ -41,6 +41,8 @@ public class TemplateTable<R> extends Table {
 		super.act(delta);
 		template.act(delta);
 		if (!template.needsLayout()) return;
+		template.layout();
+		template.invalidate();
 		super.clearChildren();
 
 		var cells = template.getCells();
@@ -52,6 +54,7 @@ public class TemplateTable<R> extends Table {
 		}
 
 		layout();
+		invalidateHierarchy();
 	}
 	/** 添加用于切换是否显示所有的单选框 */
 	public void addAllCheckbox(Table cont) {
@@ -60,7 +63,7 @@ public class TemplateTable<R> extends Table {
 		 .growX();
 	}
 	public float getPrefWidth() {
-		return template.getPrefWidth();
+		return template.getPrefWidth() + 12/* 好烦啊 */;
 	}
 	public Cell defaults() {
 		return template.defaults();

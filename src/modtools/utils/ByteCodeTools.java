@@ -39,6 +39,11 @@ public class ByteCodeTools {
 		private final ArrayList<Queue<?>> queues = new ArrayList<>();
 		// private final ArrayList<ClassInfo> superFunctions = new ArrayList<>();
 
+		public MyClass(Class<T> superClass, String suffix) {
+			this(nativeName(superClass) + suffix, superClass);
+		}
+
+		/** @param name 必须调用nativeName  */
 		public MyClass(String name, Class<T> superClass) {
 			this.superClass = superClass;
 			adapterName = name;

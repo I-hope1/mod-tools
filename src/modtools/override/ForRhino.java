@@ -4,22 +4,23 @@ import arc.func.Func2;
 import arc.util.*;
 import mindustry.Vars;
 import mindustry.mod.ModClassLoader;
-import modtools.utils.ByteCodeTools.MyClass;
+import modtools.utils.ByteCodeTools.*;
 import modtools.utils.reflect.FieldUtils;
 import rhino.*;
 
 import java.io.File;
 import java.lang.reflect.*;
 
-import static modtools.ui.Contents.tester;
 import static modtools.content.debug.Tester.Settings.catch_outsize_error;
-import static modtools.utils.Tools.clName;
+import static modtools.ui.Contents.tester;
 
 @SuppressWarnings("unused")
 public class ForRhino {
 	public static final ContextFactory factory;
-	public static final String SUFFIX = "-F1";
+	public static final String SUFFIX = "-H0";
 
+	@Exclude
+	public static void load() {};
 	static {
 		try {
 			factory = createFactory();
@@ -31,7 +32,7 @@ public class ForRhino {
 	static ContextFactory createFactory() throws Exception {
 		ContextFactory                    global         = ContextFactory.getGlobal();
 		if (global.getClass().getName().endsWith(SUFFIX)) return global;
-		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(clName(global).replace('.', '/') + SUFFIX, global.getClass());
+		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(global.getClass(), SUFFIX);
 		factoryMyClass.addInterface(MyRhino.class);
 		factoryMyClass.visit(ForRhino.class);
 

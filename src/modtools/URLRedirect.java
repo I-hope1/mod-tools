@@ -48,7 +48,7 @@ public class URLRedirect {
 				if (!key.equals("http") && !key.equals("https")) return super.put(key, value);
 				if (value.getClass().getName().endsWith(SUFFIX)) return value;
 
-				var handler = new MyClass<>(value.getClass().getName() + SUFFIX, value.getClass());
+				var handler = new MyClass<>(value.getClass(), SUFFIX);
 				handler.setFunc("<init>", (Func2) null, 1, Void.TYPE);
 				Lambda lambda = handler.addLambda(cons, Consumer.class, "accept", "(Ljava/lang/Object;)V");
 				handler.setFunc("openConnection", cfw -> {

@@ -28,11 +28,12 @@ import modtools.content.world.Selection.Settings;
 import modtools.events.MyEvents;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.misc.PairProv;
+import modtools.struct.LazyValue;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.comp.ListenerTable;
 import modtools.ui.comp.Window.DisWindow;
-import modtools.ui.comp.input.JSRequest;
+import modtools.ui.comp.input.*;
 import modtools.ui.comp.limit.*;
 import modtools.ui.effect.MyDraw;
 import modtools.ui.gen.HopeIcons;
@@ -270,9 +271,12 @@ public abstract class WFunction<T> {
 		});
 	}
 
+	LazyValue<Label> tips = LazyValue.of(() -> new NoMarkupLabel("Not enabled!!", HopeStyles.defaultLabel));
 	public void remove() {
-		if (!wrap.hasChildren()) return;
+		if (wrap.hasChildren() && wrap.getChildren().get(0) == tips.get()) return;
 		wrap.clearChildren();
+		wrap.add(tips.get()).row();
+		data.build(wrap);
 		// HopeFx.changedFx(wrap);
 	}
 
@@ -310,6 +314,7 @@ public abstract class WFunction<T> {
 	}
 	public void setup() {
 		if (main.parent == wrap) return;
+		wrap.clearChildren();
 		wrap.add(main).grow();
 	}
 	public final void viewAll() {

@@ -221,50 +221,50 @@ public class Tester extends Content {
 		ui.cont.update(() -> ((JSSyntax) textarea.syntax).js_prop = js_prop.enabled());
 
 		Table center = _cont.table(t -> {
-			t.defaults().padRight(4f).size(42);
-			t.addListener(new KeepFocusListener(area));
+			 t.defaults().padRight(4f).size(42);
+			 t.addListener(new KeepFocusListener(area));
 
-			ImageButton move = t.button(Icon.move, HopeStyles.hope_flati, () -> { }).get();
-			move.clicked(() -> {
-				IntUI.showSelectTable(move, (p, hide, _) -> {
-					p.defaults().size(42);
-					// 9*9
-					p.add(); // 占位
-					p.button(Icon.upOpenSmall, HopeStyles.clearNonei, area::fireUp);
-					p.add();
+			 ImageButton move = t.button(Icon.move, HopeStyles.hope_flati, () -> { }).get();
+			 move.clicked(() -> {
+				 IntUI.showSelectTable(move, (p, hide, _) -> {
+					 p.defaults().size(42);
+					 // 9*9
+					 p.add(); // 占位
+					 p.button(Icon.upOpenSmall, HopeStyles.clearNonei, area::fireUp);
+					 p.add();
 
-					p.row();
+					 p.row();
 
-					p.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::fireLeft);
-					p.add();
-					p.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::fireRight);
+					 p.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::fireLeft);
+					 p.add();
+					 p.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::fireRight);
 
-					p.row();
+					 p.row();
 
-					p.add();
-					p.button(Icon.downOpenSmall, HopeStyles.clearNonei, area::fireDown);
-					p.add();
-				}, false, Align.center);
-			});
-			t.button("@ok", HopeStyles.flatBordert, () -> {
-				error = false;
-				// area.setText(getMessage().replaceAll("\\r", "\\n"));
-				compileAndExec(IntVars.EMPTY_RUN);
-			}).width(64).disabled(_ -> !finished);
+					 p.add();
+					 p.button(Icon.downOpenSmall, HopeStyles.clearNonei, area::fireDown);
+					 p.add();
+				 }, false, Align.center);
+			 });
+			 t.button("@ok", HopeStyles.flatBordert, () -> {
+				 error = false;
+				 // area.setText(getMessage().replaceAll("\\r", "\\n"));
+				 compileAndExec(IntVars.EMPTY_RUN);
+			 }).width(64).disabled(_ -> !finished);
 
-			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
-			t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->
-			 area.paste(Core.app.getClipboardText(), true)
-			);
-			t.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {
-				compileScript();
-				Script script = this.script;
-				setContextToThread();
-				JSFunc.watch().watch(textarea.getText(), () -> {
-					return CAST.unwrap(script.exec(cx, customScope));
-				});
-			});
-		}).growX().minWidth(WIDTH)
+			 t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
+			 t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->
+				area.paste(Core.app.getClipboardText(), true)
+			 );
+			 t.button(Icon.eyeSmall, HopeStyles.clearNonei, () -> {
+				 compileScript();
+				 Script script = this.script;
+				 setContextToThread();
+				 JSFunc.watch().watch(textarea.getText(), () -> {
+					 return CAST.unwrap(script.exec(cx, customScope));
+				 });
+			 });
+		 }).growX().minWidth(WIDTH)
 		 .touchable(Touchable.enabled).get();
 		_cont.row();
 		Cell<?> infoCell = _cont.table(Tex.sliderBack, t -> {
@@ -751,11 +751,7 @@ public class Tester extends Content {
 		loaded = true;
 		initScript();
 		loadSettings();
-		try {
-			Class.forName("modtools.override.ForRhino");
-		} catch (ClassNotFoundException e) {
-			throw new RuntimeException(e);
-		}
+		ForRhino.load();
 
 		Core.app.post(this::addJSInternalProperty);
 	}

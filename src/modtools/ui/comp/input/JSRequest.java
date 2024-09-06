@@ -85,7 +85,7 @@ public class JSRequest {
 	}
 	/** for field */
 	public static <R> void requestForMethod(Object value, Object self, ConsT<R, Throwable> callback) {
-		tips.setText(IntUI.tips("jsrequest.method"));
+		tips.setText(IntUI.tips("jsrequest.method", "" + value));
 		request0(callback, self, "m0", value);
 	}
 	/** for display */

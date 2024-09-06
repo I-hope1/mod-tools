@@ -32,7 +32,7 @@ public class HScene {
 	public static void load(Pause pause) throws Exception {
 		Class<? extends Group> superClass = Core.scene.root.getClass();
 		if (superClass.getName().endsWith(SUFFIX)) return;
-		MyClass<? extends Group> sceneClass = new MyClass<>(superClass.getName() + SUFFIX, superClass);
+		MyClass<? extends Group> sceneClass = new MyClass<>(superClass, SUFFIX);
 
 		Floatc floatc      = delta -> topGroup.act(delta);
 		Lambda actTopGroup = sceneClass.addLambda(floatc, Floatc.class, "get", "(F)V");
@@ -114,7 +114,7 @@ public class HScene {
 				return core;
 			}
 			HopeReflect.setPublic(superClass, Class.class);
-			var    myClass = new MyClass<>(superClass.getName() + SUFFIX, superClass);
+			var    myClass = new MyClass<>(superClass, SUFFIX);
 			Lambda lambda  = myClass.addLambda(() -> pauseMap.get(superClass) == 1, Boolp.class, "get", "()Z");
 			myClass.setFunc("update", cfw -> {
 				myClass.execLambda(lambda, null);

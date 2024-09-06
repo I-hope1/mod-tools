@@ -11,8 +11,8 @@ import arc.scene.event.*;
 import arc.util.Reflect;
 
 public class SclListener extends ClickListener {
-	public static Element fireElement;
-	public        boolean disabled0, disabled1;
+	public static Element fireElement, overElement;
+	public boolean disabled0, disabled1;
 	protected boolean isDisabled() {
 		return disabled0 || disabled1;
 	}
@@ -78,6 +78,7 @@ public class SclListener extends ClickListener {
 	@Override
 	public void touchDragged(InputEvent event, float x, float y, int pointer) {
 		if (isDisabled()) return;
+
 		scling = true;
 		if (delta.x != 0) {
 			x += delta.x;
@@ -116,12 +117,12 @@ public class SclListener extends ClickListener {
 		scling = false;
 		defWidth = defHeight = defX = defY = -1;
 		fireElement = null;
-		event.cancel();
 	}
 
 	@Override
 	public boolean mouseMoved(InputEvent event, float x, float y) {
 		if (isDisabled()) return false;
+		overElement = event.targetActor;
 
 		setCursor(event, x, y);
 		return false;
@@ -131,12 +132,11 @@ public class SclListener extends ClickListener {
 		boolean valid = valid(x, y);
 		if (event.pointer == -1 && valid) {
 			Core.graphics.cursor(getCursor());
-			disabledMove=false;
+			disabledMove = false;
 		} else if (!valid && !disabledMove) {
 			Cursor lastCursor = getLastCursor();
 			Core.app.post(() -> {
-				if (lastCursor == getLastCursor()) Core.graphics.restoreCursor();
-				else disabledMove = true;
+				if (lastCursor == getLastCursor()) { Core.graphics.restoreCursor(); } else disabledMove = true;
 			});
 		}
 	}

@@ -44,7 +44,7 @@ import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
-import modtools.ui.comp.input.MyLabel;
+import modtools.ui.comp.input.*;
 import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.comp.input.highlight.JSSyntax;
@@ -60,6 +60,7 @@ import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.io.FileUtils;
+import modtools.utils.search.BindCell;
 import modtools.utils.ui.FormatHelper;
 import rhino.*;
 
@@ -86,10 +87,20 @@ public class Tester extends Content {
 	public static final Fi   bookmarkDirectory = IntVars.dataDirectory.child("bookmarks");
 	public static final Fi   startupDir        = IntVars.dataDirectory.child("startup");
 
-	private static TaskNode startupTask;
+	private static TaskNode                startupTask;
+	public         ClearValueLabel<Object> logLabel;
+	public         BindCell                logLabelCell;
+	public         LazyValue<Label>        errorLabel = LazyValue.of(() -> {
+		NoMarkupLabel label = new NoMarkupLabel("", HopeStyles.defaultLabel);
+		label.setAlignment(Align.topLeft);
+		label.setWrap(true);
+		return label;
+	});
 	static TaskNode startupTask() {
-		if (startupTask == null) startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
-		 Icon.craftingSmall, IntVars.EMPTY_RUN);
+		if (startupTask == null) {
+			startupTask = ExecuteTree.nodeRoot(null, "JS startup", "startup",
+			 Icon.craftingSmall, IntVars.EMPTY_RUN);
+		}
 		return startupTask.menuList(() -> Seq.with(
 		 MenuItem.with("fi.open", Icon.fileSmall, "Open Dir", runT(() -> {
 			 Fi[]   list = startupDir.list();
@@ -211,16 +222,36 @@ public class Tester extends Content {
 
 		Table center = _cont.table(t -> {
 			t.defaults().padRight(4f).size(42);
+			t.addListener(new KeepFocusListener(area));
 
-			t.button(Icon.upOpenSmall, HopeStyles.clearNonei, area::fireUp);
-			t.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::fireLeft);
+			ImageButton move = t.button(Icon.move, HopeStyles.hope_flati, () -> { }).get();
+			move.clicked(() -> {
+				IntUI.showSelectTable(move, (p, hide, _) -> {
+					p.defaults().size(42);
+					// 9*9
+					p.add(); // 占位
+					p.button(Icon.upOpenSmall, HopeStyles.clearNonei, area::fireUp);
+					p.add();
+
+					p.row();
+
+					p.button(Icon.leftOpenSmall, HopeStyles.clearNonei, area::fireLeft);
+					p.add();
+					p.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::fireRight);
+
+					p.row();
+
+					p.add();
+					p.button(Icon.downOpenSmall, HopeStyles.clearNonei, area::fireDown);
+					p.add();
+				}, false, Align.center);
+			});
 			t.button("@ok", HopeStyles.flatBordert, () -> {
 				error = false;
 				// area.setText(getMessage().replaceAll("\\r", "\\n"));
 				compileAndExec(IntVars.EMPTY_RUN);
 			}).width(64).disabled(_ -> !finished);
-			t.button(Icon.rightOpenSmall, HopeStyles.clearNonei, area::fireRight);
-			t.button(Icon.downOpenSmall, HopeStyles.clearNonei, area::fireDown);
+
 			t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
 			t.button(Icon.pasteSmall, HopeStyles.clearNonei, () ->
 			 area.paste(Core.app.getClipboardText(), true)
@@ -233,19 +264,18 @@ public class Tester extends Content {
 					return CAST.unwrap(script.exec(cx, customScope));
 				});
 			});
-		}).growX().minWidth(WIDTH).touchable(Touchable.enabled).get();
-		_cont.getChildren().each(btn -> {
-			btn.addListener(new KeepFocusListener(area));
-		});
+		}).growX().minWidth(WIDTH)
+		 .touchable(Touchable.enabled).get();
 		_cont.row();
-		Cell<?> logCell = _cont.table(Tex.sliderBack, t -> {
+		Cell<?> infoCell = _cont.table(Tex.sliderBack, t -> {
 			t.pane(p -> {
 				p.left().top();
 				buildLog(p);
-				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top();
-				p.add(new ClearValueLabel<>(Object.class, () -> res, null))
+				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top().left();
+				logLabel = new ClearValueLabel<>(Object.class, () -> res, null);
+				logLabelCell = BindCell.ofConst(p.add(logLabel)
 				 .wrap().style(HopeStyles.defaultLabel)
-				 .labelAlign(Align.left).growX();
+				 .labelAlign(Align.left).growX());
 			}).grow().with(p -> p.setScrollingDisabled(true, false));
 		}).growX();
 
@@ -254,18 +284,22 @@ public class Tester extends Content {
 		int areaSpace = 20;
 		Floatc invalidate = height -> {
 			float maxHeight = _cont.getHeight() - _cont.getChildren().sumf(
-			 elem -> elem == textarea ? areaSpace : elem == logCell.get() ? 0 : elem.getHeight()
+			 elem -> elem == textarea ? areaSpace : elem == infoCell.get() ? 0 : elem.getHeight()
 			);
-			logCell.height(Mathf.clamp(height, 32, maxHeight) / Scl.scl());
+			infoCell.height(Mathf.clamp(height, 32, maxHeight) / Scl.scl());
 			_cont.invalidate();
 		};
 		pane.update(() -> {
 			if (pane.needsLayout()) {
-				invalidate.get(logCell.get().getHeight());
+				invalidate.get(infoCell.get().getHeight());
 			}
 		});
 		barListener = new SclListener(center, 0, 0) {
+			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+				return super.touchDown(event, x, y, pointer, button);
+			}
 			public boolean valid(float x, float y) {
+				if (overElement != center) return false;
 				top = Math.abs(y - bind.getHeight()) < offset;
 				return top && !isDisabled();
 			}
@@ -274,7 +308,7 @@ public class Tester extends Content {
 				float delta = bind.getHeight() - bind.getPrefHeight();
 				defY = bind.y;
 				bind.pack();
-				invalidate.get(logCell.get().getHeight() + delta);
+				invalidate.get(infoCell.get().getHeight() + delta);
 			}
 		};
 		barListener.offset = center.getPrefHeight();
@@ -286,7 +320,7 @@ public class Tester extends Content {
 			Pools.free(event);
 		});
 
-		logCell.height(64f).padLeft(8f);
+		infoCell.height(64f).padLeft(8f);
 
 		table.add(pane).grow();
 		table.row();
@@ -408,8 +442,7 @@ public class Tester extends Content {
 	}
 
 	private void showDetails() {
-		if (res instanceof Class) INFO_DIALOG.showInfo((Class<?>) res);
-		else INFO_DIALOG.showInfo(res);
+		if (res instanceof Class) { INFO_DIALOG.showInfo((Class<?>) res); } else INFO_DIALOG.showInfo(res);
 	}
 
 	public HKeyCode detailKeyCode = keyCodeData().dynamicKeyCode("detail", () -> new HKeyCode(KeyCode.d).ctrl().shift());
@@ -508,7 +541,7 @@ public class Tester extends Content {
 			var newTester = new Tester();
 			newTester.load();
 			newTester.build();
-		} else ui.show();
+		} else { ui.show(); }
 	}
 	void setup() {
 		ui.cont.table(this::build).grow();
@@ -558,11 +591,12 @@ public class Tester extends Content {
 		error = true;
 		loop = false;
 		if (output_to_log.enabled()) Log.err(name, ex);
-		if (!ignore_popup_error.enabled())
-			IntUI.showException(Core.bundle.get("error_in_execution"), ex);
+		if (!ignore_popup_error.enabled()) { IntUI.showException(Core.bundle.get("error_in_execution"), ex); }
 		log = fromExecutor && ex instanceof RhinoException
 		 ? STR."\{ex.getMessage()}\n\{((RhinoException) ex).getScriptStackTrace()}"
 		 : Strings.neatError(ex);
+		errorLabel.get().setText(log);
+		logLabelCell.replace(errorLabel.get());
 	}
 
 	public boolean killScript;
@@ -603,8 +637,9 @@ public class Tester extends Content {
 			if (finished) return;
 			res = o;
 
-			log = String.valueOf(o);
-			if (log == null) log = "null";
+			logLabelCell.replace(logLabel);
+			logLabel.flushVal();
+			log = String.valueOf(logLabel.getText());
 			if (output_to_log.enabled()) {
 				Log.info("[[TESTER]: " + log);
 			}
@@ -618,8 +653,7 @@ public class Tester extends Content {
 		}
 	}
 	private static void setContextToThread() {
-		if (Context.getCurrentContext() != cx)
-			VMBridge.setContext(VMBridge.getThreadContextHelper(), cx);
+		if (Context.getCurrentContext() != cx) { VMBridge.setContext(VMBridge.getThreadContextHelper(), cx); }
 	}
 	public void handleError(Throwable ex) {
 		makeError(ex, true);

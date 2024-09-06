@@ -37,6 +37,10 @@ public final class BindCell implements Poolable {
 	public void require() {
 		this.el = cell.get();
 	}
+	public void replace(Element el) {
+		this.el = el;
+		build();
+	}
 	public Cell<?> getCpy() {
 		if (cpy == null) {
 			cpy = cellPool.obtain();

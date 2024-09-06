@@ -3,10 +3,10 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.5.1
+Version 1.5.2
 ## Highlight
-- Fixed a lot of bugs
-- Ability to UI act pause
+- Fixed some serious bugs.
+- Better experience.
 -----------------
 
 ## ShowUIList

@@ -340,6 +340,12 @@ public interface ReflectTools {
 		public Class<?> getDeclaringClass() {
 			return cl.getDeclaringClass();
 		}
+		public boolean equals(Object obj) {
+			return obj instanceof ClassMember other && this.cl == other.cl;
+		}
+		public int hashCode() {
+			return Objects.hashCode(cl);
+		}
 		public String getName() {
 			return cl.getName();
 		}

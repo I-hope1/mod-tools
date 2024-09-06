@@ -11,7 +11,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import arc.util.pooling.Pools;
+import arc.util.pooling.*;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -52,7 +52,8 @@ import static modtools.utils.ui.ReflectTools.*;
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor {
 	public static final String whenExecuting       = "An exception occurred when executing";
-	public static final String METHOD_COUNT_PREFIX = " [";
+	public static final String            METHOD_COUNT_PREFIX = " [";
+	public static final Pool<ClassMember> CLASS_MEMBER_POOL   = Pools.get(ClassMember.class, ClassMember::new, 500);
 
 
 	/* non-null */
@@ -602,7 +603,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 	private static void buildClass(ReflectTable table, Class<?> cls) {
-		table.bind(Pools.get(ClassMember.class, ClassMember::new, 500).obtain().init(cls));
+		table.bind(CLASS_MEMBER_POOL.obtain().init(cls));
 		table.table(t -> {
 			t.left().top().defaults().left().padTop(4f);
 			try {
@@ -728,8 +729,10 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 			skip = E_JSFunc.folded_name.enabled() && map.containsKey(member.getName());
 			skipTable = skip ? map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable) : null;
-			if (skip) add(getName(member.getDeclaringClass()))
-			 .fontScale(0.7f).color(Pal.accent).left().padRight(4f);
+			if (skip) {
+				add(getName(member.getDeclaringClass()))
+				 .fontScale(0.7f).color(Pal.accent).left().padRight(4f);
+			}
 
 			map.get(member.getName(), Pair::new)
 			 .getSecond(Seq::new).add(member);
@@ -758,7 +761,11 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			 .color(cls.isInterface() ? Color.lightGray : Pal.accent)
 			 .colspan(COLSPAN)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
-				Seq.with(arr),
+				Seq.with(arr).retainAll(m -> switch (m) {
+					case Class<?> c -> findBind(CLASS_MEMBER_POOL.obtain().init(c));
+					case Member mem -> findBind(mem);
+					default -> null;
+				} instanceof CellGroup group && group.get(1).cell.hasElement()),
 				() -> null, m -> {
 					CellGroup group = findBind((Member) m);
 					ElementUtils.scrollTo(this, group.get(1).el);
@@ -804,8 +811,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 		EventHelper.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new)
-			 .getFirst(ShowInfoWindow::newPairTable).hasChildren())
-				return;
+			 .getFirst(ShowInfoWindow::newPairTable).hasChildren()) { return; }
 			IntUI.showSelectTable(attribute, (p, _, _) -> {
 				 table.left().top().defaults().left().top();
 				 var   pair = table.map.get(member.getName());
@@ -859,9 +865,11 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			}
 			if (noParam) {
 				if (o != null) init.invoke(o);
-			} else JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
-				init.bindTo(o).invokeWithArguments(convertArgs(arr, ctor.getParameterTypes()));
-			});
+			} else {
+				JSRequest.<NativeArray>requestForMethod(ctor, o, arr -> {
+					init.bindTo(o).invokeWithArguments(convertArgs(arr, ctor.getParameterTypes()));
+				});
+			}
 		}, l);
 	}
 	private static Runnable ctorInvoker(Object o, Constructor<?> ctor, boolean noParam, Label l) {

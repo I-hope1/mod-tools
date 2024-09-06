@@ -60,7 +60,7 @@ public class FilterTable<E> extends LimitTable {
 	 */
 	public CellGroup findBind(E name) {
 		if (map == null) map = new HashMap<>();
-		return map.computeIfAbsent(name, _ -> new CellGroup());
+		return map.get(name);
 	}
 
 	/**

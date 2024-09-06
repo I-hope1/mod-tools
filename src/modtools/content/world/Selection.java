@@ -58,7 +58,6 @@ import java.util.function.Predicate;
 import static arc.Core.scene;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.*;
-import static modtools.unsupported.HopeProcessor.NPX;
 import static modtools.utils.ui.TmpVars.*;
 import static modtools.utils.world.WFunction.buildPos;
 import static modtools.utils.world.WorldDraw.drawRegion;
@@ -708,7 +707,7 @@ public class Selection extends Content {
 		Draw.z(Layer.end);
 		float x = mr1.x, y = mr1.y;
 		float w = mr1.width, h = mr1.height;
-		Draw.mixcol(focusColor, 1);
+		Draw.mixcol(focusColor, 0.7f);
 		Draw.alpha((region == Core.atlas.white() ? 0.7f : 0.9f) * focusColor.a);
 
 		Draw.rect(region, x, y, w, h,

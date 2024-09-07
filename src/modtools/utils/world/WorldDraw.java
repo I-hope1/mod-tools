@@ -2,7 +2,7 @@ package modtools.utils.world;
 
 import arc.*;
 import arc.func.Boolp;
-import arc.graphics.Texture;
+import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.FrameBuffer;
 import arc.math.geom.*;
@@ -36,6 +36,7 @@ public class WorldDraw {
 			if (Vars.state.isMenu()) return;
 			Draw.reset();
 			Draw.flush();
+			Gl.flush();
 			Draw.z(z);
 			Draw.alpha(alpha);
 			drawSeq.removeAll(boolp -> !boolp.get());

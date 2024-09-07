@@ -147,8 +147,11 @@ public abstract class WFunction<T> {
 					btn.setChecked(btn.uiShowing || select.contains(value));
 				});
 				EventHelper.doubleClick(btn, () -> {
-					if (select.contains(value, true)) select.remove(value);
-					else select.add(value);
+					if (select.contains(value, true)) {
+						select.remove(value);
+					} else {
+						select.add(value);
+					}
 				}, () -> {
 					btn.toggleShowing();
 					IntUI.showSelectTable(btn, (p, hide, str) -> {
@@ -179,7 +182,7 @@ public abstract class WFunction<T> {
 			if (data.enabled()) {
 				setup();
 			} else {
-				remove();
+				removeTable();
 			}
 		});
 
@@ -210,10 +213,10 @@ public abstract class WFunction<T> {
 		 .row();
 
 		newButton("Run", Icon.okSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
+		 .disabled(_ -> select.isEmpty())
 		 .with(b -> b.clicked(() -> {
 			 MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
-		 }))
-		 .disabled(_ -> select.isEmpty());
+		 }));
 		newButton("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestForSelection(mergeList(), null, boolf -> {
 				int size = select.sum(seq -> seq.size);
@@ -260,8 +263,7 @@ public abstract class WFunction<T> {
 
 	public void setting(Table t) {
 		t.check(name, 28, data.enabled(), checked -> {
-			if (checked) setup();
-			else remove();
+			if (checked) { setup(); } else removeTable();
 
 			SC.hide();
 			data.set(checked);
@@ -272,7 +274,7 @@ public abstract class WFunction<T> {
 	}
 
 	LazyValue<Label> tips = LazyValue.of(() -> new NoMarkupLabel("Not enabled!!", HopeStyles.defaultLabel));
-	public void remove() {
+	public void removeTable() {
 		if (wrap.hasChildren() && wrap.getChildren().get(0) == tips.get()) return;
 		wrap.clearChildren();
 		wrap.add(tips.get()).row();
@@ -323,11 +325,17 @@ public abstract class WFunction<T> {
 
 	public abstract void buildTable(T item, Table table);
 
+	public final void addUnique(T item) {
+		if (item == null) return;
+		synchronized (list) {
+			if (!list.contains(item)) {
+				add(item);
+			}
+		}
+	}
 	public final void add(T item) {
 		if (item == null) return;
-		Core.app.post(() -> {
-			TaskManager.acquireTask(15f, changeEvent);
-		});
+		TaskManager.acquireTask(15f, changeEvent);
 		list.add(item);
 		if (SC.drawSelect) {
 			// 异步无法创建FrameBuffer

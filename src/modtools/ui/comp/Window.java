@@ -54,15 +54,17 @@ public class Window extends Table implements Position {
 	public static final MySet<Window> all = new MySet<>() {
 		public boolean add(Window value) {
 			boolean ok = super.add(value);
-			if (window_manager != null && window_manager.ui != null && window_manager.ui.isShown())
+			if (window_manager != null && window_manager.ui != null && window_manager.ui.isShown()) {
 				window_manager.rebuild();
+			}
 			return ok;
 		}
 
 		public boolean remove(Window value) {
 			boolean ok = super.remove(value);
-			if (window_manager != null && window_manager.ui != null && window_manager.ui.isShown())
+			if (window_manager != null && window_manager.ui != null && window_manager.ui.isShown()) {
 				window_manager.rebuild();
+			}
 			return ok;
 		}
 	};
@@ -165,24 +167,26 @@ public class Window extends Table implements Position {
 		buildTitle(title);
 
 		sclListener = new SclListener(this, this.minWidth, this.minHeight);
-		if (moveListener != null) moveListener.fire = () -> {
-			if (isMaximize && !isMinimize) {
-				float mulxw = moveListener.lastMouse.x / width;
-				float mulxh = moveListener.lastMouse.y / height;
-				toggleMaximize();
-				// 修复移动侦听器的位置
-				RunListener listener = new RunListener() {
-					public void fire(boolean status) {
-						moveListener.lastMain.x = x;
-						moveListener.lastMain.y = y;
-						moveListener.lastMouse.x = x + width * mulxw;
-						moveListener.lastMouse.y = y + height * mulxh;
-						maxlisteners.remove(this);
-					}
-				};
-				maximized(listener);
-			}
-		};
+		if (moveListener != null) {
+			moveListener.fire = () -> {
+				if (isMaximize && !isMinimize) {
+					float mulxw = moveListener.lastMouse.x / width;
+					float mulxh = moveListener.lastMouse.y / height;
+					toggleMaximize();
+					// 修复移动侦听器的位置
+					RunListener listener = new RunListener() {
+						public void fire(boolean status) {
+							moveListener.lastMain.x = x;
+							moveListener.lastMain.y = y;
+							moveListener.lastMouse.x = x + width * mulxw;
+							moveListener.lastMouse.y = y + height * mulxh;
+							maxlisteners.remove(this);
+						}
+					};
+					maximized(listener);
+				}
+			};
+		}
 
 		Core.app.post(() -> {
 			// 默认宽度为pref宽度
@@ -298,10 +302,12 @@ public class Window extends Table implements Position {
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
-			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this))
+			if (Core.scene.getScrollFocus() != null && Core.scene.getScrollFocus().isDescendantOf(this)) {
 				Core.scene.setScrollFocus(null);
-			if (Core.scene.getKeyboardFocus() != null && Core.scene.getKeyboardFocus().isDescendantOf(this))
+			}
+			if (Core.scene.getKeyboardFocus() != null && Core.scene.getKeyboardFocus().isDescendantOf(this)) {
 				Core.scene.setKeyboardFocus(null);
+			}
 		}
 		return hit;
 	}
@@ -403,8 +409,10 @@ public class Window extends Table implements Position {
 	/** 用于记录是否已经show过 */
 	private boolean hasPacked;
 
-	/** 如果window实现了IHitter则，
-	 * 则自动添加Hitter */
+	/**
+	 * 如果window实现了IHitter则，
+	 * 则自动添加Hitter
+	 */
 	protected Hitter hitter;
 	void show0(Scene stage, Action action) {
 		if (isShown()) {
@@ -586,10 +594,12 @@ public class Window extends Table implements Position {
 
 			addAction(Actions.after(Actions.run(() -> {
 				contCell.remove();
-				if (!noButtons) Tools.runLoggedException(() -> {
-					getCell(buttons).set(BindCell.UNSET_CELL);
-					buttons.remove();
-				});
+				if (!noButtons) {
+					Tools.runLoggedException(() -> {
+						getCell(buttons).set(BindCell.UNSET_CELL);
+						buttons.remove();
+					});
+				}
 			})));
 
 			sclListener.remove();
@@ -888,7 +898,7 @@ public class Window extends Table implements Position {
 		private void applyAction(float toValue) {
 			if (last != null) {
 				titleTable.removeAction(last);
-			} else last = Actions.action(TranslateToAction.class, TranslateToAction::new);
+			} else { last = Actions.action(TranslateToAction.class, TranslateToAction::new); }
 			last.reset();
 			last.setTime(0);
 			last.setTranslation(0, toValue);

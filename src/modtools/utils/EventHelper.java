@@ -180,7 +180,7 @@ public class EventHelper {
 			boolc = boolc0;
 			duration = duration0;
 			task = TaskManager.newTask(() -> {
-				if (pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
+				if (!longPress && pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
 					longPress = true;
 					Core.scene.touchUp((int) mouseVec.x, (int) mouseVec.y, lastPointer, button);
 				}
@@ -206,7 +206,7 @@ public class EventHelper {
 		public final void longPress0(InputEvent event) {
 			if (!longPress) return;
 			longPress = false;
-			event.stop();
+			event.cancel();
 			longPress(event);
 		}
 		public void longPress(InputEvent event) {
@@ -221,6 +221,7 @@ public class EventHelper {
 		public void clicked(InputEvent event, float x, float y) {
 			// 如果触发了长按，就不触发单击
 			if (!longPress && task.isScheduled() && pressed) boolc.get(false);
+			event.cancel();
 			task.cancel();
 		}
 	}

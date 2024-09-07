@@ -511,6 +511,7 @@ public class Selection extends Content {
 			});
 		}
 
+		@SuppressWarnings("StringTemplateMigration")
 		public CharSequence getTips(T item) {
 			return item.type.localizedName + "\n" + item.type.name;
 		}
@@ -551,6 +552,7 @@ public class Selection extends Content {
 		public TextureRegion getIcon(T key) {
 			return key.block.uiIcon;
 		}
+		@SuppressWarnings("StringTemplateMigration")
 		public CharSequence getTips(T item) {
 			return item.block.localizedName + "\n" + item.block.name;
 		}
@@ -620,6 +622,8 @@ public class Selection extends Content {
 		public TextureRegion getIcon(T key) {
 			return getBlock(key).uiIcon;
 		}
+
+		@SuppressWarnings("StringTemplateMigration")
 		public CharSequence getTips(T item) {
 			Block b = getBlock(item);
 			return b.localizedName + "\n" + b.name;
@@ -791,10 +795,8 @@ public class Selection extends Content {
 
 	public void initTask() {
 		WorldUtils.uiWD.submit(() -> {
-			Gl.flush();
-			if (Core.input.alt()) {
-				Draw.alpha(0.3f);
-			}
+			WorldUtils.uiWD.alpha = Core.input.alt() ? 0.3f : 1f;
+
 			if (ui != null && ui.isShown()) {
 				for (Rect rect : dynamicSelectRegions) {
 					MyDraw.dashRect(2, Color.sky, rect.x, rect.y, rect.width - rect.x, rect.height - rect.y);
@@ -802,11 +804,15 @@ public class Selection extends Content {
 			}
 			drawFocusInternal();
 		});
-		Vec2 start = new Vec2(), end = new Vec2();
+		final Vec2 start = new Vec2(), end = new Vec2();
 		/* 更新动态选区  */
 		Tools.TASKS.add(() -> {
 			for (Rect rect : dynamicSelectRegions) {
-				listener.updateRegion(rect.getPosition(start), rect.getSize(end)/* @see dynamicSelectRegions */);
+				listener.updateRegion(
+				 rect.getPosition(start),
+				 rect.getSize(end)/* @see dynamicSelectRegions */,
+				 false
+				);
 			}
 		});
 		Tools.TASKS.add(() -> {
@@ -853,8 +859,10 @@ public class Selection extends Content {
 		}
 
 		boolean valid = false;
-		if (focus instanceof Object[] arr) for (Object child : arr) {
-			if (drawFocusAny(child)) valid = true;
+		if (focus instanceof Object[] arr) {
+			for (Object child : arr) {
+				if (drawFocusAny(child)) valid = true;
+			}
 		}
 		return valid;
 	}
@@ -877,8 +885,7 @@ public class Selection extends Content {
 	}
 	private <T extends Hitboxc> void addToGroup(EntityGroup<T> group, ObjectSet<T> set, int offset) {
 		group.each(b -> {
-			if (b != null && IntVars.mouseWorld.dst(b.x(), b.y()) < b.hitSize() / 2f + offset)
-				set.add(b);
+			if (b != null && IntVars.mouseWorld.dst(b.x(), b.y()) < b.hitSize() / 2f + offset) { set.add(b); }
 		});
 	}
 
@@ -910,8 +917,7 @@ public class Selection extends Content {
 			touchable = Touchable.childrenOnly;
 			sclListener.remove();
 			cont.update(() -> {
-				if (updatePosUI && focusEnabled) updatePosUIAndWorld();
-				else updatePosOnlyWorld();
+				if (updatePosUI && focusEnabled) { updatePosUIAndWorld(); } else updatePosOnlyWorld();
 				clampPosition();
 			});
 			cont.pane(Styles.smallPane, p -> pane = p).grow();
@@ -925,7 +931,7 @@ public class Selection extends Content {
 				toBack();
 
 				if (mobile || Time.millis() - lastToggleTime <= toggleDelay
-				    || !fixedKeyCode.isPress()) return;
+				    || !fixedKeyCode.isPress()) { return; }
 
 				lastToggleTime = Time.millis();
 				updatePosUI = !updatePosUI;
@@ -1041,6 +1047,7 @@ public class Selection extends Content {
 				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists0(bulletSet));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(u.team.color).colspan(0);
+				//noinspection StringTemplateMigration
 				t.label(() -> u.time + "[lightgray]/[]" + u.lifetime).size(10).colspan(2).row();
 				// t.add("" + u.type).with(JSFunc::addDClickCopy);
 
@@ -1075,6 +1082,8 @@ public class Selection extends Content {
 	private static ExecutorService acquireExecutor() {
 		return executor == null || executor.isShutdown() ? executor = Threads.executor() : executor;
 	}
+
+	private final Vec2 cacheStart = new Vec2(), cacheEnd = new Vec2();
 	class SelectListener extends WorldSelectListener {
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			if (button != KeyCode.mouseLeft || state.isMenu()) {
@@ -1105,7 +1114,11 @@ public class Selection extends Content {
 			if (isDynamicSelecting) {
 				dynamicSelectRegions.add(new Rect(start.x, start.y, end.x, end.y));
 			}
-			updateRegion(start, end);
+			cacheStart.set(start);
+			cacheEnd.set(end);
+			Core.app.post(() -> {
+				updateRegion(cacheStart, cacheEnd, true);
+			});
 
 			if (!ui.isShown()) {
 				ui.setPosition(mx, my);
@@ -1113,7 +1126,8 @@ public class Selection extends Content {
 			ui.show();
 			isSelecting = false;
 		}
-		protected void updateRegion(Vec2 start, Vec2 end) {
+		@SuppressWarnings("DuplicateBranchesInSwitch")
+		protected void updateRegion(Vec2 start, Vec2 end, boolean includeTile) {
 			if (Settings.bullet.enabled()) {
 				findAndAddToList(Groups.bullet, start, end, bullets);
 			}
@@ -1132,7 +1146,7 @@ public class Selection extends Content {
 
 			clampWorld(start, end);
 
-			boolean enabledTile  = Settings.tile.enabled() && start == this.start && end == this.end;
+			boolean enabledTile  = Settings.tile.enabled() && includeTile;
 			boolean enabledBuild = Settings.building.enabled();
 			acquireExecutor().submit(() -> {
 				for (float y = start.y; ; y += tilesize) {
@@ -1142,12 +1156,12 @@ public class Selection extends Content {
 						Tile tile = world.tileWorld(x, y);
 						if (tile == null) continue;
 
-						if (enabledTile && !tiles.list.contains(tile)) {
-							tiles.add(tile);
+						if (enabledTile) {
+							tiles.addUnique(tile);
 						}
 
-						if (enabledBuild && tile.build != null && !buildings.list.contains(tile.build)) {
-							buildings.add(tile.build);
+						if (enabledBuild) {
+							buildings.addUnique(tile.build);
 						}
 						if (x == end.x) break;
 					}
@@ -1157,23 +1171,28 @@ public class Selection extends Content {
 		}
 	}
 	private <T extends Entityc & Position> void findAndAddToList
-	 (EntityGroup<T> group, Vec2 start, Vec2 end, WFunction<T> list) {
-		findAndAddToList(group, list, entity -> checkInRegion(start, end, entity));
+	 (EntityGroup<T> group, Vec2 start, Vec2 end, WFunction<T> wFunction) {
+		findAndAddToList(group, start.x, start.y, end.x, end.y, wFunction);
+	}
+	private <T extends Entityc & Position> void findAndAddToList
+	 (EntityGroup<T> group, float x1, float y1, float x2, float y2, WFunction<T> list) {
+		findAndAddToList(group, list, entity -> checkInRegion(x1, y1, x2, y2, entity));
 	}
 	private <T extends Entityc> void findAndAddToList
-	 (EntityGroup<T> group, WFunction<T> list, Boolf<T> condition) {
+	 (EntityGroup<T> group, WFunction<T> wFunction, Boolf<T> condition) {
 		acquireExecutor().submit(() -> {
 			group.each(condition, entity -> {
 				Threads.sleep(1);
-				if (!list.list.contains(entity)) {
-					list.add(entity);
-				}
+				wFunction.addUnique(entity);
 			});
 		});
 	}
 	/** 返回实体是否在所选区域内 */
 	private static boolean checkInRegion(Vec2 start, Vec2 end, Position pos) {
-		return start.x <= pos.getX() && end.x >= pos.getX() && start.y <= pos.getY() && end.y >= pos.getY();
+		return checkInRegion(start.x, start.y, end.x, end.y, pos);
+	}
+	private static boolean checkInRegion(float x1, float y1, float x2, float y2, Position pos) {
+		return x1 <= pos.getX() && x2 >= pos.getX() && y1 <= pos.getY() && y2 >= pos.getY();
 	}
 
 	public enum Settings implements ISettings {

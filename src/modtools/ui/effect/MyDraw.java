@@ -11,6 +11,7 @@ import modtools.events.E_Blur;
 import modtools.ui.MyFonts;
 
 import static arc.Core.graphics;
+
 public class MyDraw {
 	public static void dashLine(float thick, Color color, float x, float y, float x2, float y2, int segments) {
 		Lines.stroke(thick);
@@ -27,14 +28,11 @@ public class MyDraw {
 	}
 
 	public static void dashRect(float thick, Color color, float x, float y, float width, float height) {
-		if (0 < x && x < graphics.getWidth()) {
-			dashLine(thick, color, x + width, y, x + width, y + height);
-			dashLine(thick, color, x, y + height, x, y);
-		}
-		if (0 < y && y < graphics.getHeight()) {
-			dashLine(thick, color, x, y, x + width, y);
-			dashLine(thick, color, x + width, y + height, x, y + height);
-		}
+		dashLine(thick, color, x + width, y, x + width, y + height);
+		dashLine(thick, color, x, y + height, x, y);
+
+		dashLine(thick, color, x, y, x + width, y);
+		dashLine(thick, color, x + width, y + height, x, y + height);
 	}
 
 	public static void dashSquare(float thick, Color color, float x, float y, float size) {

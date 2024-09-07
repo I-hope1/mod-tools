@@ -35,7 +35,7 @@ public class WorldSelectListener extends InputListener {
 	public void touchUp(InputEvent event, float mx, float my, int pointer, KeyCode button) {
 		acquireWorldPos(mx, my);
 
-		/* 交换两个数 */
+		/* 如果不对的话，交换两个数 */
 		if (start.x > end.x) {
 			start.x = end.x + (end.x = start.x) * 0;
 		}

@@ -128,7 +128,6 @@ public class Frag extends Table {
 				 top.getWidth() / 2f + Angles.trnsx(rotation1, radius),
 				 top.getHeight() / 2f + Angles.trnsy(rotation1, radius), Align.center);
 			});
-			image.clicked(content::build);
 
 			circle.addChild(image);
 		}

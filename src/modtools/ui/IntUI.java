@@ -1,7 +1,11 @@
 
 package modtools.ui;
 
-import arc.Core;
+import arc.*;
+import arc.Graphics.Cursor;
+import arc.Graphics.Cursor.SystemCursor;
+import arc.backend.sdl.SdlGraphics.SdlCursor;
+import arc.backend.sdl.jni.SDL;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
@@ -12,6 +16,8 @@ import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.*;
+import arc.scene.ui.Button;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -28,6 +34,7 @@ import modtools.content.debug.Tester;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.*;
+import modtools.ui.comp.Window;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.*;
 import modtools.ui.control.HopeInput;
@@ -79,6 +86,9 @@ public class IntUI {
 		return _1.get();
 	}
 
+	public static Cursor northwestToSoutheast = newCursor(SDL.SDL_SYSTEM_CURSOR_SIZENWSE); // northwest to southeast
+	public static Cursor southwestToNortheast = newCursor(SDL.SDL_SYSTEM_CURSOR_SIZENESW); // southwest to northeast
+
 	/**
 	 * Load.
 	 */
@@ -91,6 +101,11 @@ public class IntUI {
 		} else {
 			topGroup.addChild(frag);
 		}
+	}
+	private static Cursor newCursor(int type) {
+		if (OS.isAndroid) return SystemCursor.arrow;
+		long handle = SDL.SDL_CreateSystemCursor(type);
+		return new SdlCursor(0, handle);
 	}
 	public static void disposeAll() {
 		topGroup.dispose();

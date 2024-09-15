@@ -212,8 +212,10 @@ public class EventHelper {
 		public void longPress(InputEvent event) {
 			boolc.get(true);
 		}
-
 		public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+			if (longPress) {
+				Core.scene.cancelTouchFocus(event.listenerActor);
+			}
 			super.touchUp(event, x, y, pointer, button);
 			longPress0(event);
 			task.cancel();
@@ -225,6 +227,7 @@ public class EventHelper {
 			task.cancel();
 		}
 	}
+
 	public static class DoubleClick extends ClickListener {
 		Runnable click, d_click;
 		public DoubleClick(Runnable click, Runnable d_click) {

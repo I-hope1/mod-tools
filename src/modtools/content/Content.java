@@ -100,6 +100,7 @@ public abstract class Content {
 		 checked == null ?
 			/* un-toggle */isSmallized ? HopeStyles.hope_flati : HopeStyles.cleart
 			:/* toggle */ isSmallized ? HopeStyles.hope_flatTogglei : HopeStyles.flatTogglet);
+		btn.clicked(() -> Tools.runShowedException(this::build0));
 		if (checked != null) {
 			btn.update(() -> btn.setChecked(checked.get()));
 		}
@@ -124,7 +125,6 @@ public abstract class Content {
 		TextButton button        = new TextButton(localizedName, (TextButtonStyle) style);
 		button.add(new Image(icon)).size(icon == Styles.none ? 0 : 20).padRight(8f);
 		button.getCells().reverse();
-		button.clicked(() -> Tools.runShowedException(this::build0));
 		button.update(() -> button.setColor(button.isDisabled() ? Color.gray : Color.white));
 		button.getLabel().setSize(0.9f);
 		button.getLabel().setAlignment(Align.left);

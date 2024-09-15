@@ -9,6 +9,7 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.util.Reflect;
+import modtools.ui.IntUI;
 
 public class SclListener extends ClickListener {
 	public static Element fireElement, overElement;
@@ -153,8 +154,13 @@ public class SclListener extends ClickListener {
 		return Reflect.get(Graphics.class, Core.graphics, "lastCursor");
 	}
 	Cursor getCursor() {
-		return left || right ? SystemCursor.horizontalResize
-		 : top || bottom ? SystemCursor.verticalResize
-		 : SystemCursor.arrow;
+		boolean x = left || right;
+		boolean y = bottom || top;
+		return
+		 (left && top) || (right && bottom) ? IntUI.northwestToSoutheast
+			: (left && bottom) || (right && top) ? IntUI.southwestToNortheast
+			: x ? SystemCursor.horizontalResize
+			: y ? SystemCursor.verticalResize
+			: SystemCursor.arrow;
 	}
 }

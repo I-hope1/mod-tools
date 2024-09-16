@@ -340,6 +340,7 @@ public class Selection extends Content {
 		ui.show();
 	}
 	public void hide() {
+		if (ui == null) return;
 		fragSelect.remove();
 		isSelecting = false;
 
@@ -1181,10 +1182,13 @@ public class Selection extends Content {
 	private <T extends Entityc> void findAndAddToList
 	 (EntityGroup<T> group, WFunction<T> wFunction, Boolf<T> condition) {
 		acquireExecutor().submit(() -> {
-			group.each(condition, entity -> {
-				Threads.sleep(1);
-				wFunction.addUnique(entity);
-			});
+			synchronized (group) {
+				for (T entity : group) {
+					if (!condition.get(entity)) continue;
+					Threads.sleep(1);
+					wFunction.addUnique(entity);
+				}
+			}
 		});
 	}
 	/** 返回实体是否在所选区域内 */

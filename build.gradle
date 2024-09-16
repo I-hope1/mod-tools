@@ -135,7 +135,7 @@ task playGame(type: JavaExec) {
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
 	args = [
-			'-testMobile'
+//			'-testMobile'
 //			'-debug'
 	]
 }

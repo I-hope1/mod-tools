@@ -327,10 +327,8 @@ public abstract class WFunction<T> {
 
 	public final void addUnique(T item) {
 		if (item == null) return;
-		synchronized (list) {
-			if (!list.contains(item)) {
-				add(item);
-			}
+		if (!list.contains(item)) {
+			add(item);
 		}
 	}
 	public final void add(T item) {

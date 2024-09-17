@@ -8,6 +8,7 @@ import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
 import arc.math.geom.*;
+import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.struct.*;
@@ -312,6 +313,10 @@ public class InlineLabel extends NoMarkupLabel {
 				if (start <= cursor && cursor <= end) {
 					runnable.run();
 				}
+			}
+			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+				super.exit(event, x, y, pointer, toActor);
+				InlineLabel.overChunk.set(UNSET, UNSET);
 			}
 			public boolean mouseMoved(InputEvent event, float x, float y) {
 				int    cursor = getCursor(x, y);

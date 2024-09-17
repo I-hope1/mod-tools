@@ -780,6 +780,7 @@ public class ReviewElement extends Content {
 		 element instanceof Table table ? MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)) : null,
 		 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null,
 
+		 element instanceof Label label ? MenuItem.with("label.copy", Icon.boxSmall, "Copy Text", () -> JSFunc.copyText(label.getText())) : null,
 		 element instanceof Label label ? MenuItem.with("label.center", Icon.boxSmall, "Label Center", l(label, Align.center)) : null,
 		 element instanceof Label label ? MenuItem.with("label.left", Icon.boxSmall, "Label Left", l(label, Align.left)) : null,
 		 element instanceof Label label ? MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)) : null,

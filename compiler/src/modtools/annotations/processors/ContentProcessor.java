@@ -107,16 +107,21 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// classDecl.extending = mMaker.Ident(settingsImpl);
 
 		allSwitches.clear();
+		flushAssignment.clear();
 
 		ListBuffer<JCStatement> defList = new ListBuffer<>();
+		// 初始化结束
+
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				VarSymbol symbol = getSymbol(unit, tree);
 
 				collectSwitch(symbol);
-				Name name = tree.name;
+
 				// %name%.def(%args%[0])
+				Name name = tree.name;
+				// enumx(float.class, it -> it.$(...))
 				if (newClass.args.size() == 2 && newClass.args.get(1) instanceof JCLambda lambda) {
 					lambda.accept(new TreeScanner() {
 						public void visitApply(JCMethodInvocation method) {
@@ -134,6 +139,11 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				}
 			}
 		});
+		if (!defList.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
+		// 添加flushAssignment
+		if (!flushAssignment.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
+		println(classDecl);
+
 		buildSwitch();
 		addImport(settings, dataClass);
 
@@ -196,18 +206,16 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			);
 		});
 
-		if (!defList.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
-
 		// if (!settings.getSimpleName().contentEquals("E_JSFuncDisplay")) return;
 		// println("------------------------------");
 		// println(classDecl);
 	}
+	ListBuffer<JCStatement> flushAssignment = new ListBuffer<>();
 	private void buildFlushField(JCFieldAccess classType, JCFieldAccess access, VarSymbol symbol) {
 		if (symbol.getAnnotation(FlushField.class) == null) return;
 
 		mMaker.at(classDecl.defs.last());
-		classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC,
-		 List.of(buildAssignment(classType, access, mMaker.Ident(symbol)))));
+		flushAssignment.add(buildAssignment(classType, access, mMaker.Ident(symbol)));
 		Iterable<Symbol> methodSym = settings.members().getSymbols(
 		 t -> t instanceof MethodSymbol m && m.name.toString().equals("set") && !m.params.isEmpty() && m.params.get(0).type.equals(mSymtab.objectType)
 		      && m.getReturnType().equals(mSymtab.voidType));

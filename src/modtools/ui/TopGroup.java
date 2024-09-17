@@ -45,7 +45,12 @@ import static modtools.ui.comp.Window.frontWindow;
 import static modtools.unsupported.HopeProcessor.NPX;
 import static modtools.utils.Tools.*;
 
-// 存储mod的窗口和Frag
+/**
+ * <p>容纳mod的窗口和Frag
+ * <p>根据类别添加child {@link #addChild(Element)}
+ * @author I-hope1
+ * @see #addChild(Element)
+ **/
 public final class TopGroup extends WidgetGroup implements Disposable {
 	@SettingsInit
 	public enum TSettings implements ISettings {
@@ -844,8 +849,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 	}
 
-	private static final Mat     oldTransform     = new Mat();
-	private static final Vec2    transVec         = new Vec2();
+	private static final Mat  oldTransform = new Mat();
+	private static final Vec2 transVec     = new Vec2();
 	public static void drawFocus(Element elem, Vec2 pos, Color focusColor) {
 		drawFocus(elem, pos, focusColor, null);
 	}

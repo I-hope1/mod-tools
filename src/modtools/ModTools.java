@@ -8,7 +8,6 @@ import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
-import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
@@ -41,7 +40,6 @@ public class ModTools extends Mod {
 
 	/** 是否从游戏内导入进来的 */
 	private static boolean isImportFromGame = false;
-	public static  boolean isV6             = Version.number <= 135;
 
 
 	public static boolean loaded = false;
@@ -154,7 +152,7 @@ public class ModTools extends Mod {
 		load("MyShaders", MyShaders::load);
 		load("MyFonts", MyFonts::load);
 		load("HopeInput", HopeInput::load);
-		if (isDesktop()) {
+		if (isDesktop() && E_Extending.import_mod_from_drop.enabled()) {
 			load("DropMod", DropFile::load);
 		}
 		load("IntUI", IntUI::load);

@@ -14,7 +14,6 @@ import arc.scene.ui.layout.Scl;
 import arc.util.Tmp;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
-import modtools.ModTools;
 import modtools.ui.comp.Window;
 import modtools.utils.reflect.FieldUtils;
 
@@ -273,7 +272,7 @@ public class HopeStyles {
 		return res;
 	}
 	static void init() {
-		if (ModTools.isV6) {
+		if (IntUI.isV6) {
 			V6Adapter();
 			return;
 		}

@@ -12,7 +12,7 @@ import mindustry.mod.*;
 import mindustry.mod.Mods.*;
 import modtools.files.HFi;
 import modtools.struct.*;
-import modtools.struct.v6.AThreads;
+import modtools.struct.v6.IThreads;
 import modtools.ui.IntUI;
 import modtools.utils.Tools;
 import modtools.utils.io.FileUtils;
@@ -110,7 +110,7 @@ public class IntVars {
 		return OS.isWindows || OS.isMac;
 	}
 
-	public static LazyValue<ExecutorService> EXECUTOR = LazyValue.of(() -> AThreads.impl.boundedExecutor("hope-async", 1));
+	public static LazyValue<ExecutorService> EXECUTOR = LazyValue.of(() -> IThreads.impl.boundedExecutor("hope-async", 1));
 
 	public static void dispose() {
 		resizeListeners.clear();

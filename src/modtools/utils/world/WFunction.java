@@ -29,7 +29,7 @@ import modtools.events.MyEvents;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.misc.PairProv;
 import modtools.struct.LazyValue;
-import modtools.struct.v6.AThreads;
+import modtools.struct.v6.IThreads;
 import modtools.ui.*;
 import modtools.ui.comp.ListenerTable;
 import modtools.ui.comp.Window.DisWindow;
@@ -97,7 +97,7 @@ public abstract class WFunction<T> {
 		data = Settings.valueOf(name);
 		this.WD = WD;
 		Tools.TASKS.add(() -> WD.alpha = SC.selectFunc == this ? 0.7f : 0.1f);
-		executor = AThreads.impl.boundedExecutor(name + "-each", 1);
+		executor = IThreads.impl.boundedExecutor(name + "-each", 1);
 
 		main.button("View All", HopeStyles.blackt, this::viewAll).growX().height(Selection.buttonHeight).row();
 		main.add(buttons).growX().row();

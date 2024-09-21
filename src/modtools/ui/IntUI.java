@@ -24,6 +24,7 @@ import arc.struct.*;
 import arc.util.*;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
+import mindustry.core.Version;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.ui.*;
@@ -74,6 +75,7 @@ public class IntUI {
 	public static final int FUNCTION_BUTTON_SIZE = 42;
 
 	private static final LazyValue<ColorPicker> _c = LazyValue.of(ColorPicker::new);
+	public static boolean isV6 = Version.number <= 135;
 	public static ColorPicker colorPicker() {
 		return _c.get();
 	}

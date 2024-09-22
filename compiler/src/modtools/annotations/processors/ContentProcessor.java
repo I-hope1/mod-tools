@@ -142,7 +142,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		if (!defList.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
 		// 添加flushAssignment
 		if (!flushAssignment.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
-		println(classDecl);
+		// println(classDecl);
 
 		buildSwitch();
 		addImport(settings, dataClass);

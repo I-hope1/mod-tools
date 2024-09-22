@@ -139,9 +139,14 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				}
 			}
 		});
-		if (!defList.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
+		if (!defList.isEmpty()) {
+			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
+		}
 		// 添加flushAssignment
-		if (!flushAssignment.isEmpty()) classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
+		if (!flushAssignment.isEmpty()) {
+			mMaker.at(classDecl.defs.last());
+			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
+		}
 		// println(classDecl);
 
 		buildSwitch();
@@ -229,7 +234,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), settings),
 			 settings);
 
-			JCVariableDecl val = makeVar(Flags.PARAMETER, mSymtab.objectType, "val", null, ms);
+			JCVariableDecl val = mMaker.Param(ns("val"), mSymtab.objectType, null);
 			JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Select(mMaker.Ident(iSettings), ns("super")), ns("set")),
 			 List.of(mMaker.Ident(val.name)))));

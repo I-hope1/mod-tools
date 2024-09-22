@@ -1,13 +1,13 @@
 package modtools.struct.v6;
 
 import arc.util.*;
-import modtools.ui.IntUI;
+import modtools.ModTools;
 import modtools.utils.CatchSR;
 
 import java.util.concurrent.*;
 
 public interface IThreads {
-	IThreads impl = IntUI.isV6 ? new V6() : new V7();
+	IThreads impl = ModTools.isV6 ? new V6() : new V7();
 	ExecutorService boundedExecutor(@Nullable String name, int max);
 
 	class V6 implements IThreads {

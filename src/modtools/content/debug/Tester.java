@@ -40,7 +40,7 @@ import modtools.jsfunc.type.CAST;
 import modtools.misc.AddedSeq;
 import modtools.override.ForRhino;
 import modtools.struct.LazyValue;
-import modtools.struct.v6.IThreads;
+import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
@@ -81,7 +81,7 @@ public class Tester extends Content {
 	public static Scriptable topScope, customScope;
 	private static Context cx;
 
-	LazyValue<ThreadPoolExecutor> executor = LazyValue.of(() -> (ThreadPoolExecutor) IThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1));
+	LazyValue<ThreadPoolExecutor> executor = LazyValue.of(() -> (ThreadPoolExecutor) AThreads.impl.boundedExecutor(Tester.class.getSimpleName(), 1));
 
 	public static final Data EXEC_DATA         = MySettings.SETTINGS.child("execution_js");
 	public static final Fi   bookmarkDirectory = IntVars.dataDirectory.child("bookmarks");

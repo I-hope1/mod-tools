@@ -8,6 +8,7 @@ import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
+import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
@@ -37,6 +38,7 @@ public class ModTools extends Mod {
 	/** 如果不为empty，在进入是显示 */
 	private static final Seq<Throwable> errors = new Seq<>();
 	private static final Fi             libs   = root.child("libs");
+	public static boolean isV6 = Version.number <= 135;
 
 	/** 是否从游戏内导入进来的 */
 	private static boolean isImportFromGame = false;

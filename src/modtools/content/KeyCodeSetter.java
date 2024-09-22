@@ -186,7 +186,6 @@ public class KeyCodeSetter extends Content {
 		public void show(Button button, Cons<HKeyCode> callback) {
 			this.button = button;
 			this.callback = callback;
-			field.setText("Press a key to bind");
 			show();
 		}
 		TextField field;
@@ -196,6 +195,7 @@ public class KeyCodeSetter extends Content {
 			field = cont.field("", _ -> { })
 			 .colspan(2).growX()
 			 .get();
+			field.setText("Press a key to bind");
 			field.update(field::requestKeyboard);
 			field.addCaptureListener(new InputListener() {
 				public boolean keyDown(InputEvent event, KeyCode keycode) {

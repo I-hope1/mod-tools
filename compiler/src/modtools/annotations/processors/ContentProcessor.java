@@ -234,10 +234,10 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), settings),
 			 settings);
 
-			JCVariableDecl val = mMaker.Param(ns("val"), mSymtab.objectType, null);
+			JCVariableDecl val = mMaker.Param(ns("val"), mSymtab.objectType, ms);
 			JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Select(mMaker.Ident(iSettings), ns("super")), ns("set")),
-			 List.of(mMaker.Ident(val.name)))));
+			 List.of(mMaker.Ident(val)))));
 			ms.params = List.of(val.sym);
 
 			JCMethodDecl method = mMaker.MethodDef(ms, body);

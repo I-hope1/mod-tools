@@ -21,7 +21,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         java-version: 21
-        distribution: temurin
+        distribution: corretto
 
     - name: Get latest release version
       id: get_version

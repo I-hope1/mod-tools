@@ -21,6 +21,7 @@ public class Contents {
 	public static Executor      executor;
 	public static KeyCodeSetter key_code_setter;
 	public static Pause         pause;
+	public static GameSettings  game_settings;
 	public static WindowManager window_manager;
 
 	/**

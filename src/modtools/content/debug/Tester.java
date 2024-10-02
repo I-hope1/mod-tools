@@ -152,7 +152,7 @@ public class Tester extends Content {
 		topScope = scripts.scope;
 		customScope = new ScriptableObject(topScope, topScope) {
 			public void put(String name, Scriptable start, Object value) {
-				if ("$$scope".equals(name)) {
+				if ("$$scope".equals(name) && value != customScope) {
 					userScope = value == null ? topScope : (Scriptable) value;
 					Scriptable scope = userScope.getParentScope();
 					while (scope != topScope && scope != null) {
@@ -162,7 +162,7 @@ public class Tester extends Content {
 						}
 					}
 					setParentScope(userScope);
-					Log.info(userScope);
+					// Log.info(userScope);
 					return;
 				}
 				super.put(name, start, value);

@@ -27,7 +27,7 @@ import modtools.content.world.Selection;
 import modtools.content.world.Selection.Settings;
 import modtools.events.MyEvents;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.misc.PairProv;
+import modtools.misc.*;
 import modtools.struct.LazyValue;
 import modtools.struct.v6.AThreads;
 import modtools.ui.*;
@@ -165,7 +165,7 @@ public abstract class WFunction<T> {
 						}
 					}, false, Align.center).hidden(btn::toggleShowing);
 				});
-				ItemImage element = new ItemImage(entry.key, value.size);
+				var element = new ItemImageDup(entry.key, value.size);
 				element.addListener(new ITooltip(() -> value.isEmpty() ? "???" : getTips(value.first())));
 				btn.add(element).grow().pad(6f);
 				template.add(btn);

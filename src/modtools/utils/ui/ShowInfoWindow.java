@@ -680,6 +680,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 	public boolean containsFlags(int modifiers) {
+		if (modifiers == 0) return true;
 		// Log.info("f: @, r: @", Modifier.toString(modifiers), Modifier.toString((short) this.modifiers));
 		for (ModifierR value : ModifierR.values()) {
 			int mod = 1 << value.ordinal();

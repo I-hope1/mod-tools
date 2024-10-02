@@ -144,11 +144,29 @@ public class Tester extends Content {
 			}
 		});
 	}
+	/** 可以自定义修改 */
+	public static Scriptable userScope;
 	private static void initScript() {
 		if (scripts != null) return;
 		scripts = Vars.mods.getScripts();
 		topScope = scripts.scope;
 		customScope = new ScriptableObject(topScope, topScope) {
+			public void put(String name, Scriptable start, Object value) {
+				if ("$$scope".equals(name)) {
+					userScope = value == null ? topScope : (Scriptable) value;
+					Scriptable scope = userScope.getParentScope();
+					while (scope != topScope && scope != null) {
+						scope = scope.getParentScope();
+						if (scope.getParentScope() == this) {
+							scope.setParentScope(topScope);
+						}
+					}
+					setParentScope(userScope);
+					Log.info(userScope);
+					return;
+				}
+				super.put(name, start, value);
+			}
 			public String getClassName() {
 				return "TesterScope";
 			}
@@ -482,8 +500,14 @@ public class Tester extends Content {
 				compileAndExec(IntVars.EMPTY_RUN);
 				return true;
 			}
-			if (Core.input.alt() && keycode == KeyCode.up && rollHistory(true)) return true;
-			if (Core.input.alt() && keycode == KeyCode.down && rollHistory(false)) return true;
+			if (Core.input.alt() && keycode == KeyCode.up) {
+				rollHistory(true);
+				return true;
+			}
+			if (Core.input.alt() && keycode == KeyCode.down) {
+				rollHistory(false);
+				return true;
+			}
 
 			return false;
 		}

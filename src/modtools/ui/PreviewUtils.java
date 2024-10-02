@@ -28,6 +28,7 @@ import modtools.utils.ui.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.comp.utils.ValueLabel.DEBUG;
 
+/** 用于添加preview侦听器  */
 public class PreviewUtils {
 	public static Cell<?> buildImagePreviewButton(
 	 Element element, Table table,

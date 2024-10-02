@@ -12,7 +12,7 @@ import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.pooling.*;
-import mindustry.gen.*;
+import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
@@ -30,6 +30,7 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.search.*;
+import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import rhino.NativeArray;
 
@@ -40,6 +41,7 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
+import static java.lang.StringTemplate.STR;
 import static modtools.events.E_JSFunc.display_synthetic;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
@@ -51,7 +53,7 @@ import static modtools.utils.ui.ReflectTools.*;
 
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor {
-	public static final String whenExecuting       = "An exception occurred when executing";
+	public static final String            whenExecuting       = "An exception occurred when executing";
 	public static final String            METHOD_COUNT_PREFIX = " [";
 	public static final Pool<ClassMember> CLASS_MEMBER_POOL   = Pools.get(ClassMember.class, ClassMember::new, 500);
 
@@ -87,35 +89,23 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 
-	Cons<String> rebuild;
 	TextField    textField;
 
 	public int modifiers = -1;
 	public void rebuildReflect() {
-		buildReflect(obj, build, pattern, isBlack);
+		buildReflect(obj, build, pattern);
 	}
-	public boolean isBlack;
 	public Table   build;
 	public Pattern pattern;
+	public Search<Member> search;
+
 	public void build() {
 		build = new LimitTable();
 		// 默认左居中
 		build.left().top().defaults().left();
-		textField = new TextField();
 
-		addCaptureListener(new FocusSearchListener(textField));
 		// Runnable[] last = {null};
-		rebuild = text -> {
-			// build.clearChildren();
-			pattern = PatternUtils.compileRegExpOrNull(text);
-			rebuildReflect();
-		};
-		Runnable rebuild0 = () -> {
-			if (textField.isValid()) {
-				rebuild.get(textField.getText());
-			}
-		};
-		textField.changed(rebuild0);
+		Runnable rebuild0 = this::rebuildReflect;
 
 		final Table topTable = new Table();
 		// 默认左居中
@@ -143,26 +133,22 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			}
 		}).height(42).row();
 		// 搜索栏
-		topTable.table(t -> {
-			addCodedBtn(t, "modifiers", 4,
-			 i -> {
-				 modifiers = i;
-				 rebuild0.run();
-			 }, () -> modifiers, ModifierR.values());
-			t.button(Tex.whiteui, 32, null).size(42).with(img -> {
-				img.clicked(() -> {
-					isBlack = !isBlack;
-					img.getStyle().imageUpColor = isBlack ? Color.darkGray : Color.white;
-					rebuild0.run();
-				});
-			});
-			t.button(Icon.filter, clearNonei, () -> { }).with(b -> b.clicked(() -> {
-				IntUI.showSelectListEnumTable(b, new Seq<>(SearchType.values()), () -> searchType, s -> searchType = s,
-				 250, 45, false, Align.top);
-			})).size(42);
-			t.image(Icon.zoom).size(42);
-			t.add(textField).growX();
-		}).growX().row();
+		search = new Search<>((_, pattern) -> {
+			this.pattern = pattern;
+			rebuildReflect();
+		});
+		search.addStatusFilter("modifiers", ModifierR.values(),4,
+		 i -> {
+			 modifiers = i;
+			 rebuild0.run();
+		 }, () -> modifiers, Member::getModifiers)
+		 .addBlackList(rebuild0)
+		 .addFilter("searchType", SearchType.values(), SearchType.name);
+		search.build(topTable, null);
+
+		textField = search.field;
+		addCaptureListener(new FocusSearchListener(textField));
+
 		// 信息栏
 		topTable.table(t -> {
 			t.left().defaults().left();
@@ -173,7 +159,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			}).size(32);
 			if (obj == null) t.add("NULL", defaultLabel).color(Color.red).padLeft(8f);
 		}).pad(6, 10, 6, 10).row();
-		rebuild.get(null);
 		// cont.add(build).grow();
 
 		cont.add(topTable).row();
@@ -188,8 +173,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 
-	public SearchType searchType = SearchType.name;
-	public enum SearchType {
+	public enum SearchType implements SearchItem<Member> {
 		name((p, member) -> find(p, member.getName())),
 		fieldTypeOrReturnType((p, member) -> find(p, (member instanceof Field f ? f.getType() :
 		 member instanceof Method m ? m.getReturnType() :
@@ -204,20 +188,16 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		SearchType(Boolf2<Pattern, Member> func) {
 			this.func = func;
 		}
-		boolean get(Pattern pattern, Member member) {
+		public boolean get(Pattern pattern, Member member) {
 			return func.get(pattern, member);
 		}
 	}
 	/**
 	 * @param pattern 用于搜索
-	 * @param isBlack 是否为黑名单模式
 	 **/
-	private void buildReflect(Object o, Table cont, Pattern pattern, boolean isBlack) {
+	private void buildReflect(Object o, Table cont, Pattern pattern) {
 		if (cont.getChildren().size > 0) {
-			Boolf<Member> memberBoolf = member ->
-			 (pattern == PatternUtils.ANY ||
-			  pattern != null && searchType.get(pattern, member) != isBlack)
-			 && containsFlags(member.getModifiers()) != isBlack;
+			Boolf<Member> memberBoolf = member -> search.valid(pattern, member);
 			fieldsTable.filter(memberBoolf);
 			fieldsTable.labels.each(ValueLabel::flushVal);
 			methodsTable.filter(memberBoolf);
@@ -289,7 +269,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 	public static boolean find(Pattern pattern, String name) {
-		return E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
+		return pattern == PatternUtils.ANY || E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
 	}
 	public static boolean find(Pattern pattern, Class<?> clazz) {
 		return clazz != null && find(pattern, clazz.getName());
@@ -677,16 +657,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		events.fireIns(Disposable.class);
 		events.removeIns();
 		System.gc();
-	}
-
-	public boolean containsFlags(int modifiers) {
-		if (modifiers == 0) return true;
-		// Log.info("f: @, r: @", Modifier.toString(modifiers), Modifier.toString((short) this.modifiers));
-		for (ModifierR value : ModifierR.values()) {
-			int mod = 1 << value.ordinal();
-			if ((modifiers & mod) != 0 && (this.modifiers & mod) != 0) return true;
-		}
-		return false;
 	}
 
 	public static final int COLSPAN = 8;

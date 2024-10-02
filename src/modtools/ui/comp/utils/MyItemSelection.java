@@ -84,7 +84,7 @@ public class MyItemSelection {
 		pane.setScrollingDisabled(true, false);
 		pane.setOverscroll(false, false);
 
-		new Search((_, p) -> {
+		new Search<>((_, p) -> {
 			pattern[0] = p;
 			ImageButton checked = group.getChecked();
 			if (checked != null) {

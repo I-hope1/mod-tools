@@ -308,7 +308,7 @@ public class IntUI {
 	}
 	private static void newSearch(Builder rebuild, Runnable hide,
 	                              SelectTable title, Table container) {
-		new Search((cont, text) -> rebuild.get(cont, hide, text))
+		new Search<>((cont, text) -> rebuild.get(cont, hide, text))
 		 .build(title, container);
 	}
 

@@ -13,6 +13,7 @@ import arc.scene.event.*;
 import arc.util.Timer.Task;
 import arc.util.Tmp;
 import mindustry.Vars;
+import modtools.events.E_Extending;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
 import modtools.utils.*;
@@ -102,6 +103,8 @@ public class AllTutorial {
 				public void run() { }
 			};
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				if (!E_Extending.double_shift_highlight.enabled()) return false;
+
 				if (keycode == KeyCode.shiftLeft) {
 					if (!TaskManager.scheduleOrCancel(0.2f, task)) {
 						enableFocusMouse = !enableFocusMouse;

@@ -101,7 +101,7 @@ public class ShowUIList extends Content {
 		cont.add(tab.build()).grow();
 		cont.act(0);
 		cont.layout();
-		new Search((_, pattern0) -> pattern = pattern0).build(top, cont);
+		new Search<>((_, pattern0) -> pattern = pattern0).build(top, cont);
 		// ui.addCloseButton();
 	}
 

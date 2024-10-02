@@ -245,7 +245,7 @@ public class KeyCodeSetter extends Content {
 		IntTab tab = new IntTab(CellTools.unset, new String[]{"Custom", "Internal"}, new Color[]{Color.acid, Color.sky},
 		 new Table[]{customTable(), interanlTable()});
 
-		new Search((_, text) -> pattern = text).build(cont, null);
+		new Search<>((_, text) -> pattern = text).build(cont, null);
 
 		cont.add(tab.build()).grow();
 	}

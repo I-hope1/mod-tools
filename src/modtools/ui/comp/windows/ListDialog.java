@@ -41,7 +41,7 @@ public class ListDialog extends Window {
 										Comparator<Fi> sorter) {
 		super(Core.bundle.get("title." + title, title), Tester.WIDTH, 600, true);
 		cont.add("@tester.tip").growX().left().row();
-		new Search((_, p0) -> pattern = p0)
+		new Search<>((_, p0) -> pattern = p0)
 		 .build(cont, p);
 		p.addPatternUpdateListener(() -> pattern);
 		p.top().defaults().top();

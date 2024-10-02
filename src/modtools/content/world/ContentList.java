@@ -52,7 +52,7 @@ public class ContentList extends Content {
 		Table top = new Table();
 		ui.cont.add(top).row();
 		ui.cont.add(main).grow();
-		new Search((_, text) -> pattern = text).build(top, main);
+		new Search<>((_, text) -> pattern = text).build(top, main);
 		buildAll();
 	}
 

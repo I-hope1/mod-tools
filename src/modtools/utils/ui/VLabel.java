@@ -12,4 +12,8 @@ public class VLabel extends NoMarkupLabel {
 		super(text);
 		setColor(color);
 	}
+	public VLabel(CharSequence text, float scale, Color color) {
+		this(scale, color);
+		setText(text);
+	}
 }

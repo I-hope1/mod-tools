@@ -921,8 +921,8 @@ public class ReviewElement extends Content {
 		Label nameLabel = new VLabel(0.85f, KeyValue.stressColor),
 		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
 		 touchableLabel = new NoMarkupLabel(valueScale),
+		transformLabel    = new VLabel("True", valueScale, Pal.accent),
 
-		// transformLabel    = new MyLabel(""),
 		colorLabel        = new NoMarkupLabel(valueScale),
 		 rotationLabel    = new VLabel(valueScale, Color.lightGray),
 		 translationLabel = new VLabel(valueScale, Color.orange),
@@ -941,7 +941,7 @@ public class ReviewElement extends Content {
 			translationLabel.setText(new PairProv(() -> translationVec, ", "));
 		}
 
-		BindCell visibleCell, rotCell, translationCell, styleCell, alignCell,
+		BindCell transformCell, visibleCell, rotCell, translationCell, styleCell, alignCell,
 		 cellCell, cellAlignCell,
 		 colspanCell, minSizeCell, maxSizeCell,
 		 fillCell, expandCell, uniformCell;
@@ -957,6 +957,9 @@ public class ReviewElement extends Content {
 		void touchableF(Element element) {
 			touchableLabel.setText(FormatHelper.touchable(element.touchable));
 			touchableLabel.setColor(touchableToColor(element.touchable));
+		}
+		void transform(Element element) {
+			transformCell.toggle1(element instanceof Group g && g.isTransform());
 		}
 		/** @param element element.visible */
 		void visible(Element element) {
@@ -1052,6 +1055,7 @@ public class ReviewElement extends Content {
 				color.add(colorContainer).size(16).padRight(4f);
 				color.add(colorLabel);
 			}));
+			transformCell = buildKey(t, "Transform", transformLabel);
 			rotCell = buildKey(t, "Rotation", rotationLabel);
 			translationCell = buildKey(t, "Translation", translationLabel);
 			styleCell = buildKey(t, "Style", styleLabel);
@@ -1113,6 +1117,7 @@ public class ReviewElement extends Content {
 			info.size(elem);
 			info.touchableF(elem);
 			info.visible(elem);
+			info.transform(elem);
 			info.color(elem);
 			info.rotation(elem);
 			info.translation(elem);

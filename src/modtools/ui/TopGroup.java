@@ -868,7 +868,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		if (transformParent != null) {
 			oldTransform.set(Draw.trans());
-			Mat computedTransform = Reflect.invoke(Group.class, transformParent, "computeTransform", ArrayUtils.EMPTY_ARRAY);
+			Mat computedTransform = Reflect.get(Group.class, transformParent, "computedTransform");
 			Draw.trans(computedTransform);
 			pos = elem == transformParent ? transVec.set(0, 0) : elem.localToAscendantCoordinates(transformParent, transVec.set(0, 0));
 		}

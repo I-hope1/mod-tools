@@ -55,6 +55,7 @@ public class CopyMethodProc extends BaseProcessor<MethodSymbol> {
 		methodDecl.body = PBlock(
 		 method.getReturnType() == mSymtab.voidType ? mMaker.Exec(apply) : mMaker.Return(apply)
 		);
+		// println(apply);
 	}
 
 	final Map<String[], Symbol[]> todos = new HashMap<>();

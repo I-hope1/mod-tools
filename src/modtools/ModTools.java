@@ -154,7 +154,7 @@ public class ModTools extends Mod {
 		load("MyShaders", MyShaders::load);
 		load("MyFonts", MyFonts::load);
 		load("HopeInput", HopeInput::load);
-		if (isDesktop()) {
+		if (isDesktop() && E_Extending.import_mod_from_drop.enabled()) {
 			load("DropMod", DropFile::load);
 		}
 		load("IntUI", IntUI::load);

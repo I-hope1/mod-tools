@@ -26,7 +26,8 @@ public interface AThreads {
 	 CatchSR.of(() -> Thread.ofVirtual().factory())
 		.get(() -> Thread::new));
 
-	// @CopyMethodFrom(method = "arc.util.Threads#newThread")
+	// @CopyMethodFrom(method = "arc.util.Threads#newThread(Runnable, String, boolean)")
+	/** @see Threads#newThread(Runnable, String, boolean) */
 	private static Thread newThread(Runnable r, @Nullable String name, boolean daemon) {
 		Thread thread = factory.newThread(r);
 		if (name != null) thread.setName(name);

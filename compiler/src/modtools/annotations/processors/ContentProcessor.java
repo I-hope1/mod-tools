@@ -149,7 +149,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 		// println(classDecl);
 
-		// buildSwitch();
+		buildSwitch();
 		addImport(settings, dataClass);
 
 		mMaker.at(classDecl.defs.last());
@@ -243,9 +243,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			JCMethodDecl method = mMaker.MethodDef(ms, body);
 			settings.members().enter(ms);
 			classDecl.defs = classDecl.defs.append(method);
-		} else {
-			ms = (MethodSymbol) iterator.next();
-		}
+		} else { ms = (MethodSymbol) iterator.next(); }
 
 		JCMethodDecl methodDecl = trees.getTree(ms);
 		methodDecl.body.stats = methodDecl.body.stats.append(

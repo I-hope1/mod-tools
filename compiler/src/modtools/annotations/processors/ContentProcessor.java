@@ -1,4 +1,4 @@
-  package modtools.annotations.processors;
+package modtools.annotations.processors;
 
 
 import com.google.auto.service.AutoService;
@@ -131,7 +131,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 								ns("def")),
 							 List.of(method.args.get(0)))));
 							if (!(method.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
-							      && method.args.get(0) instanceof JCFieldAccess access)) return;
+							      && method.args.get(0) instanceof JCFieldAccess access)) { return; }
 
 							buildFlushField(classType, access, symbol);
 						}
@@ -186,7 +186,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 "data", createInitValue(parent, literalName));
 		}
 
-		java.util.List<JCMethodDecl> allInit = classDecl.defs.stream()
+		var allInit = classDecl.defs.stream()
 		 .filter(t -> t instanceof JCMethodDecl)
 		 .map(t -> (JCMethodDecl) t)
 		 .filter(m1 -> m1.name.equals(names.init)).toList();
@@ -243,7 +243,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			JCMethodDecl method = mMaker.MethodDef(ms, body);
 			settings.members().enter(ms);
 			classDecl.defs = classDecl.defs.append(method);
-		} else ms = (MethodSymbol) iterator.next();
+		} else { ms = (MethodSymbol) iterator.next(); }
 
 		JCMethodDecl methodDecl = trees.getTree(ms);
 		methodDecl.body.stats = methodDecl.body.stats.append(
@@ -281,6 +281,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			...
 			return ISettings.super.switchKey();
 		} */
+
 		mMaker.at(classDecl.defs.last());
 		ms = new MethodSymbol(Flags.PUBLIC, ns("switchKey"), mSymtab.stringType, settings);
 		listBuffer.clear();
@@ -329,8 +330,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	private void addMethod(JCClassDecl settingsTree, String fieldName, Type fieldType, String methodName) {
-		if (findChild(settingsTree, Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(fieldName)) != null)
-			return;
+		if (findChild(settingsTree, Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(fieldName)) != null) { return; }
 		mMaker.at(settingsTree);
 		JCBlock body  = PBlock(List.of(mMaker.Return(mMaker.Ident(ns(fieldName)))));
 		int     flags = Flags.PUBLIC;
@@ -342,8 +342,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	private JCVariableDecl addField(JCClassDecl settingsTree, Type type, String name, JCExpression init) {
 		JCVariableDecl v;
-		if ((v = findChild(settingsTree, Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals(name))) != null)
+		if ((v = findChild(settingsTree, Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals(name))) != null) {
 			return v;
+		}
 		v = addField0(settingsTree, Flags.PRIVATE, type, name, init);
 		v.vartype = mMaker.Ident(type.tsym);
 		return v;

@@ -20,11 +20,11 @@ import java.util.*;
 import static mindustry.Vars.ui;
 
 public class DropFile {
-	public static final String LABLE_NAME = "ImportFromDrop";
+	public static final String LABEL_NAME = "ImportFromDrop";
 	public static boolean valid() {
 		try {
 			Class.forName("javax.swing.JFrame");
-			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, LABLE_NAME);
+			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, LABEL_NAME);
 		} catch (ClassNotFoundException e) {
 			return false;
 		}
@@ -47,8 +47,8 @@ public class DropFile {
 	}
 
 	public static void buildSelector(Table t) {
-		if (t.getChildren().peek() instanceof TextButton tb && tb.getText().equals(LABLE_NAME)) return;
-		t.button(LABLE_NAME, () -> DropFile.openFiSelector(
+		if (t.getChildren().peek() instanceof TextButton tb && tb.getText().equals(LABEL_NAME)) return;
+		t.button(LABEL_NAME, () -> DropFile.openFiSelector(
 		 list -> {
 			 try {
 				 for (Fi fi : list) {
@@ -65,7 +65,7 @@ public class DropFile {
 			 } catch (Throwable e) {
 				 IntUI.showException("Failed to import mod from selector", e);
 			 }
-		 })).name(LABLE_NAME);
+		 })).name(LABEL_NAME);
 	}
 	private static class FileSelector extends JFrame {
 		public FileSelector(Cons<List<Fi>> fiCons) throws HeadlessException {

@@ -159,7 +159,9 @@ public class ModTools extends Mod {
 		}
 		load("IntUI", IntUI::load);
 
-		load("Updater", Updater::checkUpdate);
+		if (E_Extending.auto_update.enabled()) {
+			load("Updater", Updater::checkUpdate);
+		}
 
 		loaded = true;
 		async(() -> {

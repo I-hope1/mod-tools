@@ -31,7 +31,8 @@ public class ForRhino {
 
 	static ContextFactory createFactory() throws Exception {
 		ContextFactory                    global         = ContextFactory.getGlobal();
-		if (global.getClass().getName().endsWith(SUFFIX)) return global;
+		if (global.getClass().getName().endsWith(SUFFIX) || global instanceof MyRhino) return global;
+
 		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(global.getClass(), SUFFIX);
 		factoryMyClass.addInterface(MyRhino.class);
 		factoryMyClass.visit(ForRhino.class);

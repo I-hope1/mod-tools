@@ -414,6 +414,9 @@ public class Window extends Table implements Position {
 	 * 则自动添加Hitter
 	 */
 	protected Hitter hitter;
+	public Hitter hitter() {
+		return hitter;
+	}
 	void show0(Scene stage, Action action) {
 		if (isShown()) {
 			display();

@@ -3,16 +3,18 @@ package modtools;
 import arc.Core;
 import arc.files.Fi;
 import arc.func.*;
+import arc.scene.event.Touchable;
 import arc.util.*;
 import arc.util.serialization.Jval;
-import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Bar;
 import modtools.ui.IntUI;
+import modtools.ui.IntUI.ConfirmWindow;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.NoTopWindow;
 import modtools.utils.Tools;
+import modtools.utils.ui.FormatHelper;
 
 import java.io.*;
 
@@ -70,43 +72,54 @@ public class Updater {
 
 		if (!headless) {
 			checkUpdates = false;
-			IntUI.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}", "@mod-tools.update.confirm", "@ok", "@mod-tools.ignore", () -> {
-				try {
-					boolean[] cancel   = {false};
-					float[]   progress = {0};
-					int[]     length   = {0};
+			ConfirmWindow window = IntUI.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}",
+			 "@mod-tools.update.confirm",
+			 "@ok", "@mod-tools.ignore",
+			 () -> {
+				 try {
+					 boolean[] cancel   = {false};
+					 float[]   progress = {0};
+					 int[]     length   = {0};
 
-					Fi fileDest = IntVars.dataDirectory.child("versions");
-					Fi file     = fileDest.child(STR."mod-tools.\{updateBuild}");
+					 Fi fileDir = IntVars.dataDirectory.child("versions");
+					 Fi file     = fileDir.child(STR."mod-tools.\{updateBuild}.jar");
 
-					Window dialog = new NoTopWindow("@mod-tools.updating");
-					download(updateUrl, fileDest, i -> length[0] = i, v -> progress[0] = v,
-					 () -> cancel[0], runT(() -> Vars.mods.importMod(file)),
-					 e -> {
+					 Window dialog = new NoTopWindow("@mod-tools.updating");
+					 download(updateUrl, file, i -> length[0] = i, v -> progress[0] = v,
+						() -> cancel[0], runT(() -> mods.importMod(file)),
+						e -> {
+							dialog.hide();
+							showException(e);
+						});
+
+					 dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating") : FormatHelper.fixed(progress[0] * length[0] / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length[0] / 1024f / 1024f, 2) + " MB",
+						() -> Pal.accent, () -> progress[0])).width(400f).height(70f);
+					 dialog.buttons.button("@cancel", Icon.cancel, () -> {
+						 cancel[0] = true;
 						 dialog.hide();
-						 ui.showException(e);
-					 });
-
-					dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating") : (int) (progress[0] * length[0]) / 1024 / 1024 + "/" + length[0] / 1024 / 1024 + " MB",
-					 () -> Pal.accent, () -> progress[0])).width(400f).height(70f);
-					dialog.buttons.button("@cancel", Icon.cancel, () -> {
-						cancel[0] = true;
-						dialog.hide();
-					}).size(210f, 64f);
-					dialog.setFillParent(false);
-					dialog.show();
-				} catch (Exception e) {
-					ui.showException(e);
-				}
-			}, () -> checkUpdates = false);
+					 }).size(210f, 64f);
+					 dialog.setFillParent(false);
+					 dialog.show();
+				 } catch (Exception e) {
+					 showException(e);
+				 }
+			 }, () -> checkUpdates = false);
+			window.cont.row();
+			// 不再提示此版本的更新
+			String text = Core.bundle.format("mod-tools.update.ignore", updateBuild);
+			window.cont.check(text, b -> Core.settings.put(IntVars.modName + "-update-ignore-" + updateBuild, b));
+			window.shown(() -> window.hitter().touchable = Touchable.disabled);
 		} else {
 			checkUpdates = false;
 		}
 	}
+	private static void showException(Throwable e) {
+		Core.app.post(() -> ui.showException(e));
+	}
 
 	private static void download(String furl, Fi dest, Intc length, Floatc progressor, Boolp canceled, Runnable done,
 	                             Cons<Throwable> error) {
-		mainExecutor.submit(() -> Http.get(furl, (res) -> {
+		Http.get(furl, (res) -> {
 			BufferedInputStream in  = new BufferedInputStream(res.getResultAsStream());
 			OutputStream        out = dest.write(false, 4096);
 
@@ -123,6 +136,6 @@ public class Updater {
 			out.close();
 			in.close();
 			if (!canceled.get()) done.run();
-		}, error));
+		}, error);
 	}
 }

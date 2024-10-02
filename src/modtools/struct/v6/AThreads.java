@@ -25,6 +25,8 @@ public interface AThreads {
 	ThreadFactory factory = CatchSR.apply(() ->
 	 CatchSR.of(() -> Thread.ofVirtual().factory())
 		.get(() -> Thread::new));
+
+	// @CopyMethodFrom(method = "arc.util.Threads#newThread")
 	private static Thread newThread(Runnable r, @Nullable String name, boolean daemon) {
 		Thread thread = factory.newThread(r);
 		if (name != null) thread.setName(name);

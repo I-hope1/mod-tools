@@ -35,7 +35,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static Types         types;
 	public static ParserFactory parsers;
 	public static Symtab        mSymtab;
-	public static Log log;
+	public static Log           log;
 	public static JavacMessages messages;
 	public static ClassFinder   classFinder;
 	public static JavacFiler    mFiler;
@@ -91,8 +91,9 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		StringBuilder underlineName = new StringBuilder();
 		underlineName.append(Character.toLowerCase(fieldName.charAt(0)));
 		for (int i = 1, len = fieldName.length(); i < len; i++) {
-			if (Character.isUpperCase(fieldName.charAt(i)) && !Character.isUpperCase(fieldName.charAt(i + 1)))
+			if (Character.isUpperCase(fieldName.charAt(i)) && !Character.isUpperCase(fieldName.charAt(i + 1))) {
 				underlineName.append("_");
+			}
 			underlineName.append(Character.toLowerCase(fieldName.charAt(i)));
 		}
 		return underlineName;

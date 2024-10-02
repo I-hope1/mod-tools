@@ -15,8 +15,6 @@ import modtools.ui.Contents;
 import static mindustry.Vars.content;
 import static modtools.ui.Contents.selection;
 
-/** 主要是为了JS
- * @see modtools.utils.JSFunc */
 public interface WorldUtils {
 	Seq<Item>         items   = content.items();
 	Seq<Liquid>       liquids = content.liquids();

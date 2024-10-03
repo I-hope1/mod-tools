@@ -19,6 +19,8 @@ import mindustry.ui.Styles;
 import modtools.ui.control.HopeInput;
 import modtools.utils.ArrayUtils;
 
+import static modtools.utils.Tools.or;
+
 public class InlineLabel extends NoMarkupLabel {
 	private static final Seq<GlyphRun> result = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
@@ -38,7 +40,7 @@ public class InlineLabel extends NoMarkupLabel {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.isEmpty()) return runs;
 		if (colorMap.size == 1 || (colorMap.size == 2 && colorMap.get(text.length()) == Color.white)) {
-			Color color = colorMap.get(0);
+			Color color = or(colorMap.get(0), Color.white);
 			runs.each(r -> r.color.set(color));
 			return runs;
 		}

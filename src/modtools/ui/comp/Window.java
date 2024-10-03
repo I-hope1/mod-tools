@@ -206,6 +206,7 @@ public class Window extends Table implements Position {
 		return Math.max(minHeight, super.getMinHeight());
 	}
 
+	public Button closeButton;
 	public void buildTitle(String title) {
 		moveListener = moveListener();
 		add(titleTable).growX().height(topHeight).name("titleTable");
@@ -236,7 +237,7 @@ public class Window extends Table implements Position {
 		}
 		FillTable[] resize = {null};
 
-		ImageButton closeButton = titleTable.button(Icon.cancel,
+		closeButton = titleTable.button(Icon.cancel,
 			cancel_clearNonei, 32, this::hide)
 		 .padLeft(4f).padRight(4f)
 		 .get();
@@ -299,6 +300,7 @@ public class Window extends Table implements Position {
 
 	/** 自动解除focus */
 	public Element hit(float x, float y, boolean touchable) {
+		if (unexpectedDrawException) return null;
 		Element hit = super.hit(x, y, touchable);
 		if (hit == null && this instanceof IMenu) hit = Hitter.firstTouchable();
 		if (hit == null) {
@@ -675,7 +677,7 @@ public class Window extends Table implements Position {
 		return b[0];
 	}
 
-	boolean unexpectedDrawException;
+	private boolean unexpectedDrawException;
 	Window  exceptionConfirm;
 	final Mat oldTransform = new Mat();
 	public void draw() {

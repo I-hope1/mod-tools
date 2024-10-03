@@ -557,16 +557,19 @@ public class IntUI {
 		window.keyDown(KeyCode.back, window::hide);
 		return window;
 	}
-	/** @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable) */
+	/**
+	 * @param denied 如果不为{@code null}，右上角关闭按钮会被删除
+	 *  @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable) */
 	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
 	                                              Runnable denied) {
 		ConfirmWindow window = new ConfirmWindow(title, 400, 100, false, false);
+		if (denied != null) window.closeButton.remove();
 		window.cont.add(text).width(Vars.mobile ? 400f : 500f).wrap().pad(4).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2);
 		window.setFillParent(false);
 		window.buttons.button(no, () -> {
 			window.hide();
-			denied.run();
+			if (denied != null) denied.run();
 		});
 		window.buttons.button(yes, () -> {
 			window.hide();

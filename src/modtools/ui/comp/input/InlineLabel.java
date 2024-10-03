@@ -19,8 +19,6 @@ import mindustry.ui.Styles;
 import modtools.ui.control.HopeInput;
 import modtools.utils.ArrayUtils;
 
-import static modtools.utils.Tools.or;
-
 public class InlineLabel extends NoMarkupLabel {
 	private static final Seq<GlyphRun> result = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
@@ -39,12 +37,13 @@ public class InlineLabel extends NoMarkupLabel {
 	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.isEmpty()) return runs;
+		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
+
 		if (colorMap.size == 1 || (colorMap.size == 2 && colorMap.get(text.length()) == Color.white)) {
-			Color color = or(colorMap.get(0), Color.white);
+			Color color = colorMap.get(0);
 			runs.each(r -> r.color.set(color));
 			return runs;
 		}
-		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
 
 		result.clear();
 		colorKeys.clear();
@@ -336,9 +335,9 @@ public class InlineLabel extends NoMarkupLabel {
 		});
 	}
 	protected final IntMap<Color> colorMap = new IntMap<>() {
-		/* public Color put(int key, Color value) {
-			// return super.put(key, value);
-			return null;
-		} */
+		public Color put(int key, Color value) {
+			if (value == null) throw  new NullPointerException("value is null");
+			return super.put(key, value);
+		}
 	};
 }

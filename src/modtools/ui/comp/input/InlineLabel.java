@@ -34,7 +34,7 @@ public class InlineLabel extends NoMarkupLabel {
 		super(sup);
 	}
 
-	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
+	static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.isEmpty()) return runs;
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
@@ -249,7 +249,7 @@ public class InlineLabel extends NoMarkupLabel {
 
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
 
-		var newRuns = InlineLabel.splitAndColorize(layout.runs, colorMap, text);
+		var newRuns = splitAndColorize(layout.runs, colorMap, text);
 		if (newRuns != layout.runs) {
 			Pools.freeAll(layout.runs, true);
 			layout.runs.clear();

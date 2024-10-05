@@ -2,6 +2,7 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
+import mindustry.graphics.Pal;
 import modtools.Constants;
 import modtools.Constants.RHINO;
 import modtools.jsfunc.IScript;
@@ -297,20 +298,26 @@ public class JSSyntax extends Syntax {
 			stack.clear();
 		}
 		// ['(1', '(2', '2)' ] -> [ '(1' ]
+		Color[] colors = {Pal.accent, c_brackets, Color.cyan};
+		private Color colorOf(int i) {
+			return colors[i % colors.length];
+		}
 		@Override
 		boolean draw(int i) {
 			if (!super.draw(i)) return false;
 			if (leftBracket.containsKey(c)) {
-				color.set(stack.size < surpassSize ? c_error : textColor);
+				color.set(stack.size < surpassSize/* 左括号多于上一次统计的 */
+				 ? c_error : colorOf(stack.size));
 				stack.add(c);
 			} else if (stack.isEmpty()) {
 				color.set(c_error);
 			} else if (leftBracket.get(stack.peek()) == c) {
 				stack.pop();
-				color.set(textColor);
+				color.set(colorOf(stack.size));
 			} else {
 				color.set(c_error);
 			}
+
 			forToken(i);
 			return true;
 		}

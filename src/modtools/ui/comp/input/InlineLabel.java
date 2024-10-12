@@ -19,6 +19,11 @@ import mindustry.ui.Styles;
 import modtools.ui.control.HopeInput;
 import modtools.utils.ArrayUtils;
 
+/**
+ * 内嵌的文本
+ * <p>可以对局部染色，
+ * <p>可以对局部添加点击事件
+ **/
 public class InlineLabel extends NoMarkupLabel {
 	private static final Seq<GlyphRun> result = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
@@ -34,7 +39,12 @@ public class InlineLabel extends NoMarkupLabel {
 		super(sup);
 	}
 
-	static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
+	public void clear() {
+		super.clear();
+		cache.clear();
+	}
+	//region 文本染色
+	private static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.isEmpty()) return runs;
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
@@ -114,7 +124,90 @@ public class InlineLabel extends NoMarkupLabel {
 		newRun.color.set(color);
 		return newRun;
 	}
-	/** 获取(x, y)对应的index */
+	/** 修改了部分layout
+	 * @see arc.scene.ui.Label#layout() */
+	public void layout() {
+		if (cache == null) return;
+		Font  font      = cache.getFont();
+		float oldScaleX = font.getScaleX();
+		float oldScaleY = font.getScaleY();
+		if (fontScaleChanged) font.getData().setScale(fontScaleX, fontScaleY);
+
+		boolean wrap = this.wrap && ellipsis == null;
+		if (wrap) {
+			float prefHeight = getPrefHeight();
+			if (prefHeight != lastPrefHeight) {
+				lastPrefHeight = prefHeight;
+				invalidateHierarchy();
+			}
+		}
+
+		float    width      = getWidth(), height = getHeight();
+		Drawable background = style.background;
+		float    x          = 0, y = 0;
+		if (background != null) {
+			x = background.getLeftWidth();
+			y = background.getBottomHeight();
+			width -= background.getLeftWidth() + background.getRightWidth();
+			height -= background.getBottomHeight() + background.getTopHeight();
+		}
+
+		GlyphLayout layout = this.layout;
+		float       textWidth, textHeight;
+		if (wrap || text.indexOf("\n") != -1) {
+			// If the text can span multiple lines, determine the text's actual size so it can be aligned within the label.
+			layout.setText(font, text, 0, text.length(), Color.white, width, lineAlign, wrap, ellipsis);
+			textWidth = layout.width;
+			textHeight = layout.height;
+
+			if ((labelAlign & Align.left) == 0) {
+				if ((labelAlign & Align.right) != 0) { x += width - textWidth; } else { x += (width - textWidth) / 2; }
+			}
+		} else {
+			textWidth = width;
+			textHeight = font.getData().capHeight;
+		}
+
+		if ((labelAlign & Align.top) != 0) {
+			y += cache.getFont().isFlipped() ? 0 : height - textHeight;
+			y += style.font.getDescent();
+		} else if ((labelAlign & Align.bottom) != 0) {
+			y += cache.getFont().isFlipped() ? height - textHeight : 0;
+			y -= style.font.getDescent();
+		} else {
+			y += (height - textHeight) / 2;
+		}
+		if (!cache.getFont().isFlipped()) y += textHeight;
+
+		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
+
+		var newRuns = splitAndColorize(layout.runs, colorMap, text);
+		if (newRuns != layout.runs) {
+			Pools.freeAll(layout.runs, true);
+			layout.runs.clear();
+			layout.runs.addAll(newRuns);
+			// Log.info(layout);
+		}
+		cache.setText(layout, x, y);
+		// Pools.freeAll(layout.runs);
+
+		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
+	}
+	public final IntMap<Color> colorMap = new IntMap<>() {
+		public Color put(int key, Color value) {
+			if (value == null) throw  new NullPointerException("value is null");
+			return super.put(key, value);
+		}
+	};
+	//endregion
+
+	// region Clickable
+
+	private static final Point2 overChunk = new Point2(UNSET, UNSET);
+	private static final Point2 downChunk = new Point2(UNSET, UNSET);
+	private static final int    padding   = 4;
+
+		/** 获取(x, y)对应的index */
 	public int getCursor(float x, float y) {
 		float lineHeight = style.font.getLineHeight();
 		float currentX, currentY; // 指文字左上角的坐标
@@ -192,84 +285,6 @@ public class InlineLabel extends NoMarkupLabel {
 			if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
 		}
 	}
-
-
-	public void layout() {
-		if (cache == null) return;
-		Font  font      = cache.getFont();
-		float oldScaleX = font.getScaleX();
-		float oldScaleY = font.getScaleY();
-		if (fontScaleChanged) font.getData().setScale(fontScaleX, fontScaleY);
-
-		boolean wrap = this.wrap && ellipsis == null;
-		if (wrap) {
-			float prefHeight = getPrefHeight();
-			if (prefHeight != lastPrefHeight) {
-				lastPrefHeight = prefHeight;
-				invalidateHierarchy();
-			}
-		}
-
-		float    width      = getWidth(), height = getHeight();
-		Drawable background = style.background;
-		float    x          = 0, y = 0;
-		if (background != null) {
-			x = background.getLeftWidth();
-			y = background.getBottomHeight();
-			width -= background.getLeftWidth() + background.getRightWidth();
-			height -= background.getBottomHeight() + background.getTopHeight();
-		}
-
-		GlyphLayout layout = this.layout;
-		float       textWidth, textHeight;
-		if (wrap || text.indexOf("\n") != -1) {
-			// If the text can span multiple lines, determine the text's actual size so it can be aligned within the label.
-			layout.setText(font, text, 0, text.length(), Color.white, width, lineAlign, wrap, ellipsis);
-			textWidth = layout.width;
-			textHeight = layout.height;
-
-			if ((labelAlign & Align.left) == 0) {
-				if ((labelAlign & Align.right) != 0) { x += width - textWidth; } else { x += (width - textWidth) / 2; }
-			}
-		} else {
-			textWidth = width;
-			textHeight = font.getData().capHeight;
-		}
-
-		if ((labelAlign & Align.top) != 0) {
-			y += cache.getFont().isFlipped() ? 0 : height - textHeight;
-			y += style.font.getDescent();
-		} else if ((labelAlign & Align.bottom) != 0) {
-			y += cache.getFont().isFlipped() ? height - textHeight : 0;
-			y -= style.font.getDescent();
-		} else {
-			y += (height - textHeight) / 2;
-		}
-		if (!cache.getFont().isFlipped()) y += textHeight;
-
-		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
-
-		var newRuns = splitAndColorize(layout.runs, colorMap, text);
-		if (newRuns != layout.runs) {
-			Pools.freeAll(layout.runs, true);
-			layout.runs.clear();
-			layout.runs.addAll(newRuns);
-			// Log.info(layout);
-		}
-		cache.setText(layout, x, y);
-		// Pools.freeAll(layout.runs);
-
-		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
-	}
-	public void clear() {
-		super.clear();
-		cache.clear();
-	}
-
-
-	private static final Point2 overChunk = new Point2(UNSET, UNSET);
-	private static final Point2 downChunk = new Point2(UNSET, UNSET);
-	private static final int    padding   = 4;
 	public void draw() {
 		if (HopeInput.mouseHit() == this) {
 			if (!downChunk.equals(UNSET, UNSET)) {
@@ -334,10 +349,7 @@ public class InlineLabel extends NoMarkupLabel {
 			}
 		});
 	}
-	protected final IntMap<Color> colorMap = new IntMap<>() {
-		public Color put(int key, Color value) {
-			if (value == null) throw  new NullPointerException("value is null");
-			return super.put(key, value);
-		}
-	};
+
+	// endregion
+
 }

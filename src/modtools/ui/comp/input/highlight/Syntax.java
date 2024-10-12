@@ -306,7 +306,7 @@ public class Syntax {
 		 '`', false
 		);
 		/** 可以转义的字符 */
-		public static final IntSet          escapeMap = IntSet.with(
+		public static final IntSet          escapeSet = IntSet.with(
 		 'n', 'b', 'c', 'r', 't', 'f', '\\',
 		 '"', '\'', '`'
 		);
@@ -352,7 +352,7 @@ public class Syntax {
 					withdraw = true;
 					escape = false;
 					// 判断是否可以转义
-					if (!escapeMap.contains(c) && !Character.isDigit(c)) color.set(c_error);
+					if (!escapeSet.contains(c) && !Character.isDigit(c)) color.set(c_error);
 					checkEscape(i);
 				}
 				return true;

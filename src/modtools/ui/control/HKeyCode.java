@@ -52,6 +52,19 @@ public class HKeyCode {
 		ctrl = true;
 		return this;
 	}
+
+	public HKeyCode alt(boolean b) {
+		alt = b;
+		return this;
+	}
+	public HKeyCode shift(boolean b) {
+		shift = b;
+		return this;
+	}
+	public HKeyCode ctrl(boolean b) {
+		ctrl = b;
+		return this;
+	}
 	/**
 	 * 将一个文本解析，文本可能为:
 	 * [Ctrl + ][Shift + ][Alt + ]Key
@@ -99,12 +112,23 @@ public class HKeyCode {
 		Core.scene.addListener(new MyInputListener(sceneKeys));
 	}
 
+	public HKeyCode copy() {
+		return new HKeyCode(key).alt(alt).shift(shift).ctrl(ctrl);
+	}
 	public String toString() {
 		StringJoiner sj = new StringJoiner(" + ");
 		if (ctrl) sj.add("Ctrl");
 		if (shift) sj.add("Shift");
 		if (alt) sj.add("Alt");
 		if (key != KeyCode.anyKey) sj.add(Strings.capitalize(key.name()));
+		return sj.toString();
+	}
+	public String getText() {
+		StringJoiner sj = new StringJoiner(" + ");
+		if (ctrl) sj.add("Ctrl");
+		if (shift) sj.add("Shift");
+		if (alt) sj.add("Alt");
+		if (key != KeyCode.anyKey) sj.add(Strings.capitalize(key.value));
 		return sj.toString();
 	}
 
@@ -222,6 +246,7 @@ public class HKeyCode {
 			}
 		}
 	}
+
 	public static class MyInputListener extends InputListener {
 		public final ObjectMap<HKeyCode, Runnable> keys;
 		public MyInputListener(ObjectMap<HKeyCode, Runnable> keys) {

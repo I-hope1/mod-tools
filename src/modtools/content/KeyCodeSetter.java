@@ -90,7 +90,7 @@ public class KeyCodeSetter extends Content {
 	}
 	public Button buildButton(boolean isSmallized) {
 		Button button = super.buildButton(isSmallized);
-		button.addListener(new ITooltip(() -> tipKey("shortcuts", bindKeyCode.toString())));
+		button.addListener(new ITooltip(() -> tipKey("shortcuts", bindKeyCode.getText())));
 		return button;
 	}
 	public static void clicked(Element el) {
@@ -174,6 +174,7 @@ public class KeyCodeSetter extends Content {
 		public KeyCodeBindWindow() {
 			super("Keycode Set");
 
+			init();
 			shown(this::rebuild);
 			IntVars.resizeListeners.add(this::display);
 		}
@@ -189,13 +190,18 @@ public class KeyCodeSetter extends Content {
 			show();
 		}
 		TextField field;
+		HKeyCode  hkeyCode;
 		private void rebuild() {
+			hkeyCode = null;
+			field.clearText();
+		}
+		public void init(){
 			Table cont = this.cont;
 			cont.clearChildren();
 			field = cont.field("", _ -> { })
-			 .colspan(2).growX()
-			 .get();
-			field.setText("Press a key to bind");
+			 .colspan(2).growX().get();
+
+			field.setMessageText("Press a key to bind");
 			field.update(field::requestKeyboard);
 			field.addCaptureListener(new InputListener() {
 				public boolean keyDown(InputEvent event, KeyCode keycode) {
@@ -203,19 +209,14 @@ public class KeyCodeSetter extends Content {
 					if (HKeyCode.isFnKey(keycode)) return false;
 
 					if (keycode == KeyCode.escape) {
-						field.setText("None");
+						hkeyCode = HKeyCode.NONE;
 					} else {
-						StringBuilder text = new StringBuilder();
-						if (Core.input.ctrl()) text.append("Ctrl + ");
-						if (Core.input.shift()) text.append("Shift + ");
-						if (Core.input.alt()) text.append("Alt + ");
-						text.append(
-						 keycode == KeyCode.backspace ? "Backspace" :
-							keycode.value.length() == 1 ? keycode.value.toUpperCase() :
-							 Strings.capitalize(keycode.value)
-						);
-						field.setText(text.toString());
+						hkeyCode = new HKeyCode(keycode)
+						 .ctrl(Core.input.ctrl())
+						 .shift(Core.input.shift())
+						 .alt(Core.input.alt());
 					}
+					field.setText(hkeyCode.getText());
 					field.setCursorPosition(100);
 					event.cancel();
 					return false;
@@ -229,10 +230,10 @@ public class KeyCodeSetter extends Content {
 			cont.defaults().size(120, 48);
 			cont.button("@cancel", Icon.left, Styles.flatt, this::hide);
 			cont.button("@ok", Icon.ok, Styles.flatt, () -> {
-				HKeyCode value = HKeyCode.parse(field.getText());
-				callback.get(value);
+				callback.get(hkeyCode);
 				hide();
-			});
+				hkeyCode = null;
+			}).disabled(_ -> hkeyCode == null);
 		}
 	}
 
@@ -331,7 +332,7 @@ public class KeyCodeSetter extends Content {
 		TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
 		 .minWidth(100).height(45).growX().get();
 		button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {
-			button.setText(newKeyCode.toString());
+			button.setText(newKeyCode.getText());
 			data.setKeyCode(
 			 elementKey[0],
 			 keyCode[0] = newKeyCode

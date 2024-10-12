@@ -163,7 +163,7 @@ public class ReviewElement extends Content {
 	}
 	public Button buildButton(boolean isSmallized) {
 		Button btn = buildButton(isSmallized, () -> task.isSelecting());
-		btn.addListener(new ITooltip(() -> tipKey("shortcuts", inspectKeycode.toString())));
+		btn.addListener(new ITooltip(() -> tipKey("shortcuts", inspectKeycode.getText())));
 		TopGroup.searchBlackList.add(btn);
 		return btn;
 	}

@@ -42,9 +42,6 @@ public class MyFonts {
 
 	/* some config */
 	// public static boolean italic = true;
-	public static boolean
-	 underline     = false,
-	 strikethrough = false;
 	private static Font acquireFont() {
 		if (SETTINGS.get("font", DEFAULT).equals(DEFAULT)) return Fonts.def;
 		if (def != Fonts.def) return def;
@@ -88,11 +85,7 @@ public class MyFonts {
 		generator.generateData(parameter, data);
 
 		Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, data, "regions");
-		Font font = new Font(data, regions, false) {
-			public FontCache newFontCache() {
-				return new MyFontCache(this);
-			}
-		};
+		Font font = new Font(data, regions, false);
 
 		font.setOwnsTexture(parameter.packer == null);
 		// 添加默认字体，如果font没有就去def里找
@@ -126,26 +119,4 @@ public class MyFonts {
 			MyFonts.def.dispose();
 		}
 	}
-
-	private static class MyFontCache extends FontCache {
-		public MyFontCache(Font font) { super(font, font.usesIntegerPositions()); }
-		// boolean underline_ = underline;
-		// boolean strikethrough_ = strikethrough;
-		public void draw() {
-			super.draw();
-
-			if (!(underline || strikethrough)) return;
-			GlyphLayout layout = getLayouts().firstOpt();
-			if (layout == null) return;
-
-			Draw.color(Color.white, getColor().a);
-			float[] vertices = getVertices();
-			Fill.crect(getX() + vertices[0] - 1,
-			 getY() + vertices[1] - 4 + (strikethrough ? layout.height / 2f : 0),
-			 Math.max(4, getLayouts().sumf(l -> l.width) + 1), 2);
-
-			Draw.color();
-		}
-	}
-
 }

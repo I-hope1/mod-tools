@@ -649,9 +649,13 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
 			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
 			font.getColor().a *= parentAlpha * color.a;
-			MyFonts.underline = realCursorLine == row;
-			font.draw(String.valueOf(row), x, offsetY);
-			MyFonts.underline = false;
+			GlyphLayout layout = font.draw(String.valueOf(row), x, offsetY);
+			if (realCursorLine == row) {
+				float y = offsetY - area.lineHeight();
+				Draw.color(Pal.accent);
+				Lines.stroke(2);
+				Lines.line(x, y, x + layout.width, y);
+			}
 		}
 		public void draw() {
 			super.draw();

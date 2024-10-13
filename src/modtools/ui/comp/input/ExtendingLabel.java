@@ -94,11 +94,10 @@ public class ExtendingLabel extends InlineLabel {
 	}
 
 
-
 	public void draw() {
 		super.draw();
-		for (DrawRun underline : drawRuns) {
-			underline.draw();
+		for (DrawRun run : drawRuns) {
+			run.draw();
 		}
 	}
 }

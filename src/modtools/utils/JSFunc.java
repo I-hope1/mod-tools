@@ -46,11 +46,6 @@ public class JSFunc
  /* other */
  IAsset, IUtils, IPixmap, IEvent {
 	public static final Font FONT = MyFonts.def;
-	public static void strikethrough(Runnable run) {
-		MyFonts.strikethrough = true;
-		run.run();
-		MyFonts.strikethrough = false;
-	}
 	/* for js */
 
 	public static final Fi   dataDir  = IntVars.dataDirectory;

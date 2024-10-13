@@ -41,7 +41,6 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static java.lang.StringTemplate.STR;
 import static modtools.events.E_JSFunc.display_synthetic;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
@@ -96,7 +95,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		buildReflect(obj, build, pattern);
 	}
 	public Table   build;
-	public Pattern pattern;
+	public Pattern pattern = PatternUtils.ANY;
 	public Search<Member> search;
 
 	public void build() {
@@ -269,7 +268,8 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 	public static boolean find(Pattern pattern, String name) {
-		return pattern == PatternUtils.ANY || E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find();
+		return pattern == PatternUtils.ANY ||
+		       (E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find());
 	}
 	public static boolean find(Pattern pattern, Class<?> clazz) {
 		return clazz != null && find(pattern, clazz.getName());

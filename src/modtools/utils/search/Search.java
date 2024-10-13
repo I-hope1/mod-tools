@@ -57,7 +57,7 @@ public class Search<T> {
 		return this;
 	}
 	public boolean valid(Pattern pattern, T item) {
-		return pattern != null && valid0(pattern, item) != isBlack;
+		return pattern == PatternUtils.ANY || (pattern != null && valid0(pattern, item) != isBlack);
 	}
 	private boolean valid0(Pattern pattern, T item) {
 		if (filters.isEmpty()) {

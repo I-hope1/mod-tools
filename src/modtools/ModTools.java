@@ -38,7 +38,7 @@ public class ModTools extends Mod {
 	/** 如果不为empty，在进入是显示 */
 	private static final Seq<Throwable> errors = new Seq<>();
 	private static final Fi             libs   = root.child("libs");
-	public static boolean isV6 = Version.number <= 135;
+	public static        boolean        isV6   = Version.number <= 135;
 
 	/** 是否从游戏内导入进来的 */
 	private static boolean isImportFromGame = false;
@@ -163,6 +163,17 @@ public class ModTools extends Mod {
 			load("Updater", Updater::checkUpdate);
 		}
 
+		/* INFO_DIALOG.dialog(p -> {
+			ExtendingLabel label = new ExtendingLabel("aaos\nhttps://baidu.com");
+			label.addUnderline(5, 5 + 17, Color.sky);
+			label.down = Tex.underline;
+			label.over = Tex.underlineOver;
+			label.clickedRegion(() -> Tmp.p1.set(5, 5 + 17), () -> {
+				Core.app.openURI("https://baidu.com");
+			});
+			p.add(label);
+		}); */
+
 		loaded = true;
 		async(() -> {
 			AllTutorial.init();
@@ -206,11 +217,13 @@ public class ModTools extends Mod {
 		while (bundle != null) {
 			String str    = bundle.getLocale().toString();
 			String locale = "bundle" + (str.isEmpty() ? "" : "_" + str);
-			if (bundles.containsKey(locale)) for (Fi file : bundles.get(locale)) {
-				try {
-					PropertiesUtils.load(bundle.getProperties(), file.reader());
-				} catch (Throwable e) {
-					Log.err(STR."Error loading bundle: \{file}/\{locale}", e);
+			if (bundles.containsKey(locale)) {
+				for (Fi file : bundles.get(locale)) {
+					try {
+						PropertiesUtils.load(bundle.getProperties(), file.reader());
+					} catch (Throwable e) {
+						Log.err(STR."Error loading bundle: \{file}/\{locale}", e);
+					}
 				}
 			}
 			bundle = bundle.getParent();

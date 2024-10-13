@@ -25,9 +25,9 @@ import modtools.utils.ArrayUtils;
  * <p>可以对局部添加点击事件
  **/
 public class InlineLabel extends NoMarkupLabel {
-	private static final Seq<GlyphRun> result = new Seq<>();
+	private static final Seq<GlyphRun> result    = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
-	public static final int UNSET = -1;
+	public static final  int           UNSET     = -1;
 
 	public InlineLabel(CharSequence text) {
 		super(text);
@@ -124,8 +124,10 @@ public class InlineLabel extends NoMarkupLabel {
 		newRun.color.set(color);
 		return newRun;
 	}
-	/** 修改了部分layout
-	 * @see arc.scene.ui.Label#layout() */
+	/**
+	 * 修改了部分layout
+	 * @see arc.scene.ui.Label#layout()
+	 */
 	public void layout() {
 		if (cache == null) return;
 		Font  font      = cache.getFont();
@@ -195,7 +197,7 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 	public final IntMap<Color> colorMap = new IntMap<>() {
 		public Color put(int key, Color value) {
-			if (value == null) throw  new NullPointerException("value is null");
+			if (value == null) throw new NullPointerException("value is null");
 			return super.put(key, value);
 		}
 	};
@@ -207,7 +209,7 @@ public class InlineLabel extends NoMarkupLabel {
 	private static final Point2 downChunk = new Point2(UNSET, UNSET);
 	private static final int    padding   = 4;
 
-		/** 获取(x, y)对应的index */
+	/** 获取(x, y)对应的index */
 	public int getCursor(float x, float y) {
 		float lineHeight = style.font.getLineHeight();
 		float currentX, currentY; // 指文字左上角的坐标
@@ -285,17 +287,19 @@ public class InlineLabel extends NoMarkupLabel {
 			if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
 		}
 	}
+
+	public Drawable down = Styles.flatDown, over = Styles.flatOver;
 	public void draw() {
 		if (HopeInput.mouseHit() == this) {
 			if (!downChunk.equals(UNSET, UNSET)) {
 				getRect(downChunk, r1 -> {
 					Draw.color();
-					Styles.flatDown.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
+					down.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
 				});
 			} else if (!overChunk.equals(UNSET, UNSET)) {
 				getRect(overChunk, r1 -> {
 					Draw.color();
-					Styles.flatOver.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
+					over.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
 				});
 			}
 		}
@@ -351,5 +355,4 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 
 	// endregion
-
 }

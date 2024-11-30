@@ -24,6 +24,7 @@ import modtools.content.ui.*;
 import modtools.content.world.Selection;
 import modtools.events.*;
 import modtools.jsfunc.*;
+import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.input.InlineLabel;
 import modtools.ui.comp.input.highlight.Syntax;
@@ -440,7 +441,8 @@ public abstract class ValueLabel extends InlineLabel {
 	private void setValInternal(Object val) {
 		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
-		if (val != null && !type.isInstance(val)) throw new IllegalArgumentException("val must be a " + type.getName());
+		if (val != null && !CAST.box(type).isInstance(val)) throw new IllegalArgumentException("val must be a " + type.getName());
+
 		this.val = val;
 		try {
 			setAndProcessText(val);

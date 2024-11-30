@@ -5,7 +5,7 @@ import arc.func.Boolf2;
 import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.struct.ObjectMap;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.graphics.Pal;
 import modtools.ui.IntUI;
 import modtools.ui.comp.*;
@@ -13,7 +13,7 @@ import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.utils.search.*;
 import modtools.utils.search.Search.SearchItem;
 
-import java.util.HashMap;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class GameSettings extends Content {

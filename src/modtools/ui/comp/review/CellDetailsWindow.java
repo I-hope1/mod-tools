@@ -64,10 +64,10 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		}).colspan(2).growX().row();
 		cont.left().defaults().height(32).growX().left();
 		cont.defaults().colspan(2);
-		ReviewElement.buildAlign(cont, () -> CellTools.align(cell), align -> {
+		IntUI.addTooltipListener(ReviewElement.buildAlign(cont, () -> CellTools.align(cell), align -> {
 			CellTools.align(cell, align);
 			update(cell);
-		});
+		}).get(), () -> IntUI.tips("cell.align"));
 		cont.row();
 		buildWithName(cont, cell, "minWidth");
 		buildWithName(cont, cell, "minHeight");

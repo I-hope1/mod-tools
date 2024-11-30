@@ -1267,8 +1267,8 @@ public class ReviewElement extends Content {
 			return exclusive == -1 ? null : values()[exclusive];
 		}
 	}
-	public static void buildAlign(Table t, Intp alignProv, Intc alignCons) {
-		ReflectTools.addCodedBtn(t, "Align", 2, alignCons, alignProv, FormatHelper::align, AlignR.values())
+	public static Cell<TextButton> buildAlign(Table t, Intp alignProv, Intc alignCons) {
+		return ReflectTools.addCodedBtn(t, "Align", 2, alignCons, alignProv, FormatHelper::align, AlignR.values())
 		 .width(unset);
 	}
 

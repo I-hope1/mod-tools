@@ -402,7 +402,7 @@ public abstract class ValueLabel extends InlineLabel {
 		return enableTruncate && truncate_text.enabled() && length > truncate_length.getInt();
 	}
 	public void clearVal() {
-		val = "";
+		val = null;
 		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
@@ -439,6 +439,7 @@ public abstract class ValueLabel extends InlineLabel {
 	private void setValInternal(Object val) {
 		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
+		if (!type.isInstance(val)) throw new IllegalArgumentException("val must be a " + type);
 		this.val = val;
 		try {
 			setAndProcessText(val);

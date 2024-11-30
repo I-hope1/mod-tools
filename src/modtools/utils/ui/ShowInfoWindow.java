@@ -282,6 +282,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 	static BindCell markDisplay(Cell<?> cell0, E_JSFuncDisplay type) {
 		BindCell cell = BindCell.of(cell0);
+		// 这些是有context的
 		MyEvents.on(type, () -> cell.toggle(type.enabled()));
 		MyEvents.on(Disposable.class, cell::clear);
 		return cell;

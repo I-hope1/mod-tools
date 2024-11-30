@@ -250,6 +250,7 @@ public class KeyCodeSetter extends Content {
 
 		cont.add(tab.build()).grow();
 	}
+	/** 内部按键的table  */
 	private Table interanlTable() {
 		FilterTable<String> pane = new FilterTable<>();
 		pane.addPatternUpdateListener(() -> pattern);

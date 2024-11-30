@@ -97,6 +97,13 @@ public class HKeyCode {
 		       && shift == Core.input.shift()
 		       && ctrl == Core.input.ctrl();
 	}
+	public boolean isPressThen(Runnable r) {
+		if (isPress()) {
+			r.run();
+			return true;
+		}
+		return false;
+	}
 	public HKeyCode applyToScene(boolean capture, Runnable r) {
 		if (this == NONE) return this;
 		if (r == null) throw new NullPointerException("r is null");
@@ -167,6 +174,7 @@ public class HKeyCode {
 			this.data = data;
 			this.key = key;
 			this.def = def;
+			data.keyCode(key, def); // 添加默认值
 		}
 		public boolean equals(Object o) {
 			if (this == o) return true;

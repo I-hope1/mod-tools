@@ -173,6 +173,7 @@ public abstract class ValueLabel extends InlineLabel {
 	@SuppressWarnings("ConstantConditions")
 	private void appendValue(StringBuilder text, Object val) {
 		if (val instanceof ObjectMap || val instanceof IntMap<?>
+		    || val instanceof ObjectIntMap<?>
 		    || val instanceof ObjectFloatMap<?> || val instanceof Map) {
 			if (!expandMap.containsKey(val)) {
 				clickedRegion(() -> {
@@ -439,7 +440,7 @@ public abstract class ValueLabel extends InlineLabel {
 	private void setValInternal(Object val) {
 		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
-		if (!type.isInstance(val)) throw new IllegalArgumentException("val must be a " + type);
+		if (val != null && !type.isInstance(val)) throw new IllegalArgumentException("val must be a " + type.getName());
 		this.val = val;
 		try {
 			setAndProcessText(val);
@@ -476,6 +477,11 @@ public abstract class ValueLabel extends InlineLabel {
 
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		list.add(UnderlineItem.with());
+		if (val instanceof String s) {
+			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", () -> val == null, () -> {
+				JSFunc.copyText(s);
+			}));
+		}
 		if (Style.class.isAssignableFrom(type) || val instanceof Style) {
 			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
 				copyStyle(val);

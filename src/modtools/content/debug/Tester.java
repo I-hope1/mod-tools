@@ -267,7 +267,7 @@ public class Tester extends Content {
 			 t.button("@ok", HopeStyles.flatBordert, () -> {
 				 error = false;
 				 // area.setText(getMessage().replaceAll("\\r", "\\n"));
-				 compileAndExec(IntVars.EMPTY_RUN);
+				 compileAndExec();
 			 }).width(64).disabled(_ -> !finished);
 
 			 t.button(Icon.copySmall, HopeStyles.clearNonei, area::copy);
@@ -350,7 +350,7 @@ public class Tester extends Content {
 		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
 			stopEvent[0] = false;
-			if (rollAndExec(keycode) || detailsListener(keycode)) {
+			if (rollAndExec() || detailsListener(keycode)) {
 				stopEvent[0] = true;
 				if (event != null) event.cancel();
 				return true;
@@ -494,24 +494,14 @@ public class Tester extends Content {
 		}, "", bookmark.file);
 	}
 
-	private boolean rollAndExec(KeyCode keycode) {
-		if (Core.input.ctrl() && Core.input.shift()) {
-			if (keycode == KeyCode.enter) {
-				compileAndExec(IntVars.EMPTY_RUN);
-				return true;
-			}
-			if (Core.input.alt() && keycode == KeyCode.up) {
-				rollHistory(true);
-				return true;
-			}
-			if (Core.input.alt() && keycode == KeyCode.down) {
-				rollHistory(false);
-				return true;
-			}
+	public HKeyCode exec_keyCode          = keyCodeData().dynamicKeyCode("exec", () -> new HKeyCode(KeyCode.enter).ctrl().shift());
+	public HKeyCode rollback_history_up   = keyCodeData().dynamicKeyCode("rollback_history_up", () -> new HKeyCode(KeyCode.up).ctrl().shift().alt());
+	public HKeyCode rollback_history_down = keyCodeData().dynamicKeyCode("rollback_history_down", () -> new HKeyCode(KeyCode.down).ctrl().shift().alt());
 
-			return false;
-		}
-		return false;
+	private boolean rollAndExec() {
+		return exec_keyCode.isPressThen(this::compileAndExec)
+		       || (rollback_history_up.isPress() && rollHistory(true))
+		       || (rollback_history_down.isPress() && rollHistory(false));
 	}
 
 	// roll history：回滚历史
@@ -572,6 +562,10 @@ public class Tester extends Content {
 	}
 
 	public boolean finished = true;
+
+	public void compileAndExec() {
+		compileAndExec(IntVars.EMPTY_RUN);
+	}
 	public void compileAndExec(Runnable callback) {
 		setContextToThread();
 

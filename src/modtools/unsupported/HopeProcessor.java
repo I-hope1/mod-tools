@@ -3,6 +3,7 @@ package modtools.unsupported;
 import arc.func.Cons;
 import arc.util.Log;
 import com.sun.tools.attach.VirtualMachine;
+import modtools.ui.IntUI;
 
 import java.lang.StringTemplate.Processor;
 import java.util.Properties;
@@ -18,6 +19,9 @@ public class HopeProcessor {
 	 * <p>Processor类可能没有，所以不要加载类
 	 **/
 	public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
+
+
+	public static final Processor<String, RuntimeException> S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
 
 	public static void main() {
 		String aa = "10203";

@@ -28,6 +28,7 @@ public class InlineLabel extends NoMarkupLabel {
 	private static final Seq<GlyphRun> result    = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
 	public static final  int           UNSET     = -1;
+	public float labelX, labelY;
 
 	public InlineLabel(CharSequence text) {
 		super(text);
@@ -181,6 +182,9 @@ public class InlineLabel extends NoMarkupLabel {
 		}
 		if (!cache.getFont().isFlipped()) y += textHeight;
 
+
+		labelX = x;
+		labelY = y;
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
 
 		var newRuns = splitAndColorize(layout.runs, colorMap, text);
@@ -250,7 +254,7 @@ public class InlineLabel extends NoMarkupLabel {
 			if (run.glyphs.isEmpty()) continue;
 			FloatSeq xAdvances = run.xAdvances;
 			currentX = run.x;
-			currentY = height + run.y;
+			currentY = labelY + run.y;
 			while (offset < text.length() && (char) run.glyphs.first().id != text.charAt(offset)) offset++; // 弥补offset
 
 			for (int i = 0; i < xAdvances.size; i++) {
@@ -263,14 +267,18 @@ public class InlineLabel extends NoMarkupLabel {
 					// Check if the end of the region is in the same run
 					if (offset + i - 1 >= region.y) {
 						endX = currentX;
-						if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
+						if (endX != startX) {
+							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+						}
 						return;
 					}
 
 					// If the region spans multiple lines, create a rect for this line and prepare for the next
 					if (i == xAdvances.size - 1) {
 						endX = currentX + xAdvances.get(i);
-						if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
+						if (endX != startX) {
+							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+						}
 						startX = run.x; // Reset startX for the next line
 					}
 				}

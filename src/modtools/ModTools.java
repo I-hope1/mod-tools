@@ -3,6 +3,7 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
+import arc.graphics.Color;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
@@ -18,8 +19,10 @@ import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.files.HFi;
 import modtools.graphics.MyShaders;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.ui.*;
+import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
@@ -173,6 +176,10 @@ public class ModTools extends Mod {
 			});
 			p.add(label);
 		}); */
+
+		if (false) INFO_DIALOG.dialog(new ExtendingLabel("1ijo\noaai") {{
+			addDrawRun(0, 4, DrawType.underline, Color.sky);
+		}});
 
 		loaded = true;
 		async(() -> {

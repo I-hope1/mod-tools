@@ -5,9 +5,9 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.geom.Point2;
 import arc.struct.Seq;
+import arc.util.Time;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
-import modtools.ui.comp.input.ExtendingLabel.DrawRun.Type;
 
 public class ExtendingLabel extends InlineLabel {
 
@@ -24,12 +24,12 @@ public class ExtendingLabel extends InlineLabel {
 	public static final class DrawRun implements Poolable {
 		public InlineLabel label;
 		public int         start, end;
-		public Type  type;
-		public Color color;
+		public DrawType type;
+		public Color    color;
 
-		private static final Point2        underlineRect = new Point2(UNSET, UNSET);
-		private static final Pool<DrawRun> pool          = Pools.get(DrawRun.class, DrawRun::new);
-		public static DrawRun obtain(InlineLabel label, int start, int end, Type type, Color color) {
+		private static final Point2        runRect = new Point2(UNSET, UNSET);
+		private static final Pool<DrawRun> pool    = Pools.get(DrawRun.class, DrawRun::new);
+		public static DrawRun obtain(InlineLabel label, int start, int end, DrawType type, Color color) {
 			if (label == null) throw new IllegalArgumentException("label cannot be null.");
 			if (start < 0 || end < 0) throw new IllegalArgumentException("start and end cannot be negative.");
 			if (start > end) throw new IllegalArgumentException("start cannot be greater than end.");
@@ -48,13 +48,30 @@ public class ExtendingLabel extends InlineLabel {
 		public void draw() {
 			Draw.color(color);
 			Lines.stroke(2);
-			label.getRect(underlineRect.set(start, end), r -> {
+			label.getRect(runRect.set(start, end), r -> {
 				float x = label.x + r.x;
 				float y = label.y + r.y;
 				switch (type) {
 					case underline -> Lines.line(x, y, x + r.width, y);
 					case strikethrough -> Lines.line(x, y + r.height / 2, x + r.width, y + r.height / 2);
 					case background -> Fill.crect(x, y, r.width, r.height);
+					// 波浪线
+					case wave -> {
+						float w  = r.width;
+						float h  = r.height;
+						float cx = x + w / 2;
+						float cy = y + h / 2;
+						float t  = Time.time;
+						float s  = 4;
+						float a  = 4;
+						float b  = 4;
+						float c  = 4;
+						float d  = 4;
+						float e  = 4;
+						float f  = 4;
+						float g  = 4;
+						Fill.quad(cx - a, cy - b, cx + a, cy - b, cx + d, cy + e, cx - c, cy + f);
+					}
 				}
 			});
 		}
@@ -65,16 +82,18 @@ public class ExtendingLabel extends InlineLabel {
 			end = UNSET;
 			color = null;
 		}
-		public enum Type {
-			// 下划线
-			underline,
-			// 删除线
-			strikethrough,
-			// 背景色
-			background,
-			// 加粗
-			// bold
-		}
+	}
+	public enum DrawType {
+		// 下划线
+		underline,
+		// 删除线
+		strikethrough,
+		// 背景色
+		background,
+		// 波浪线
+		wave
+		// 加粗
+		// bold
 	}
 
 	private final Seq<DrawRun> drawRuns = new Seq<>();
@@ -83,16 +102,9 @@ public class ExtendingLabel extends InlineLabel {
 		Pools.freeAll(drawRuns, true);
 		drawRuns.clear();
 	}
-	public void addUnderline(int start, int end, Color color) {
-		drawRuns.add(DrawRun.obtain(this, start, end, Type.underline, color));
+	public void addDrawRun(int start, int end, DrawType type, Color color) {
+		drawRuns.add(DrawRun.obtain(this, start, end, type, color));
 	}
-	public void addStrikethrough(int start, int end, Color color) {
-		drawRuns.add(DrawRun.obtain(this, start, end, Type.strikethrough, color));
-	}
-	public void addBackground(int start, int end, Color color) {
-		drawRuns.add(DrawRun.obtain(this, start, end, Type.background, color));
-	}
-
 
 	public void draw() {
 		super.draw();

@@ -4,7 +4,7 @@ import arc.func.Boolp;
 import arc.struct.Seq;
 import arc.util.Log;
 
-/** 为false，就删除 */
+/** 为false，就删除任务 */
 public class TaskSet extends Seq<Boolp> {
 	/** boolp.get()为{@code false}，就删除 */
 	public void exec() {

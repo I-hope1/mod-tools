@@ -42,6 +42,7 @@ import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
+import static modtools.unsupported.HopeProcessor.NPX;
 import static modtools.utils.Tools.*;
 
 /**
@@ -236,7 +237,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		fillParent = true;
 		touchable = Touchable.childrenOnly;
-		name = IntVars.modName + "-TopGroup";
+		name = NPX."TopGroup";
 
 		scene.add(this);
 		final Group[] all = {back, windows, frag, infos, new FillEnd()};

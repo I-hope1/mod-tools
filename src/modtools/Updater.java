@@ -92,7 +92,8 @@ public class Updater {
 							showException(e);
 						});
 
-					 dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating") : FormatHelper.fixed(progress[0] * length[0] / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length[0] / 1024f / 1024f, 2) + " MB",
+					 dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating")
+					  : FormatHelper.fixed(progress[0] * length[0] / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length[0] / 1024f / 1024f, 2) + " MB",
 						() -> Pal.accent, () -> progress[0])).width(400f).height(70f);
 					 dialog.buttons.button("@cancel", Icon.cancel, () -> {
 						 cancel[0] = true;

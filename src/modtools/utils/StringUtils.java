@@ -9,7 +9,7 @@ import static ihope_lib.MyReflect.unsafe;
 
 public interface StringUtils {
 
-	/** 通过内存设置，直接修复字符串 */
+	/** 通过内存设置，直接复制字符串 */
 	static void copyByte(String from, String to) {
 		if (OS.isAndroid) copyByteAndroid(from, to);
 		else copyByteDesktop(from, to);

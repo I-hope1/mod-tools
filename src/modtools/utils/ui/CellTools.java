@@ -10,7 +10,8 @@ import java.lang.reflect.Field;
 
 public interface CellTools {
 	/* 获取一些字段 */
-	Field f_column       = f("column"),
+	Field
+	 f_column            = f("column"),
 	 f_row               = f("row"),
 	 f_align             = f("align"),
 	 f_computedPadLeft   = f("computedPadLeft"),

@@ -14,12 +14,28 @@ import modtools.utils.ArrayUtils;
 
 public class FileUtils {
 
+	/**
+	 * 将指定名称的子目录及其内容移动到新子目录下
+	 * 如果新子目录不存在，它将被创建
+	 * @param parent   原始父目录对象
+	 * @param newName  新子目录的名称
+	 * @param oldNames 一个或多个要移动的旧子目录的名称
+	 * @return 返回新子目录对象，无论移动操作是否成功
+	 */
 	public static Fi child(Fi parent, String newName, String... oldNames) {
+		// 创建或获取新子目录
 		Fi child = parent.child(newName);
+
+		// 遍历旧子目录名称数组
 		for (String oldName : oldNames) {
+			// 获取旧子目录对象
 			Fi child1 = parent.child(oldName);
+
+			// 如果旧子目录存在且为目录，则将其移动到新子目录下
 			if (child1.exists() && child1.isDirectory()) child1.moveTo(child);
 		}
+
+		// 返回新子目录对象
 		return child;
 	}
 	/** @return {@code true} if the file be deleted successfully */

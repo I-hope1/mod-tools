@@ -5,7 +5,6 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.geom.Point2;
 import arc.struct.Seq;
-import arc.util.Time;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
 
@@ -57,21 +56,20 @@ public class ExtendingLabel extends InlineLabel {
 					case background -> Fill.crect(x, y, r.width, r.height);
 					// 波浪线
 					case wave -> {
-						float w  = r.width;
-						float h  = r.height;
-						float cx = x + w / 2;
-						float cy = y + h / 2;
-						float t  = Time.time;
-						float s  = 4;
-						float a  = 4;
-						float b  = 4;
-						float c  = 4;
-						float d  = 4;
-						float e  = 4;
-						float f  = 4;
-						float g  = 4;
-						Fill.quad(cx - a, cy - b, cx + a, cy - b, cx + d, cy + e, cx - c, cy + f);
+						float amplitude  = 2f; // 波浪的振幅
+						float wavelength = 6f; // 波浪的波长
+						float step       = 1f; // 绘制步长，值越小曲线越平滑
+
+						// 通过逐点计算波形
+						for (float i = 0; i < r.width; i += step) {
+							float x1 = x + i;
+							float y1 = y + (float) Math.sin((i / wavelength) * 2 * Math.PI) * amplitude;
+							float x2 = x + i + step;
+							float y2 = y + (float) Math.sin(((i + step) / wavelength) * 2 * Math.PI) * amplitude;
+							Lines.line(x1, y1, x2, y2); // 绘制波浪线段
+						}
 					}
+
 				}
 			});
 		}

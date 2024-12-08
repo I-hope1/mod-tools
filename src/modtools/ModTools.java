@@ -178,7 +178,7 @@ public class ModTools extends Mod {
 		}); */
 
 		if (false) INFO_DIALOG.dialog(new ExtendingLabel("1ijo\noaai") {{
-			addDrawRun(0, 4, DrawType.underline, Color.sky);
+			addDrawRun(0, 4, DrawType.wave, Color.sky);
 		}});
 
 		loaded = true;

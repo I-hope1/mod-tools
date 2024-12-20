@@ -3,7 +3,7 @@ package modtools.content.world;
 
 import arc.Core;
 import arc.func.*;
-import arc.graphics.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.*;
@@ -1207,7 +1207,10 @@ public class Selection extends Content {
 		int lastIndex;
 
 		public SettingsTable(Data data) {
-			super(t -> ((SettingsTable) t).init(data));
+			super(t -> ((SettingsTable) t).initSetting(data), t -> ((SettingsTable) t).init(data));
+		}
+		public void initSetting(Data data) {
+			defaultTeam = Team.get(data.getInt("defaultTeam", 1));
 		}
 		public void init(Data data) {
 			lastIndex = 0;
@@ -1220,7 +1223,6 @@ public class Selection extends Content {
 				});
 			}).row();
 			table(t -> {
-				defaultTeam = Team.get(data.getInt("defaultTeam", 1));
 				t.left().defaults().left();
 				t.add("@selection.default.team").color(Pal.accent).growX().left().row();
 				MyItemSelection.buildTable0(t, Team.baseTeams, () -> defaultTeam, team -> {

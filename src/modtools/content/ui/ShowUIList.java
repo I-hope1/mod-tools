@@ -464,9 +464,14 @@ public class ShowUIList extends Content {
 	}
 	public static class TotalLazyTable extends Table {
 		private Cons<TotalLazyTable> cons;
-		public TotalLazyTable(Cons<TotalLazyTable> cons) {
-			super();
-			this.cons = cons;
+		public TotalLazyTable(Cons<TotalLazyTable> lazyCons) {
+			this(_ -> { }, lazyCons);
+		}
+
+		@SuppressWarnings("unchecked")
+		public TotalLazyTable(Cons<TotalLazyTable> notLazyCons, Cons<TotalLazyTable> lazyCons) {
+			super((Cons) notLazyCons);
+			this.cons = lazyCons;
 		}
 		public void act(float delta) {
 			if (cons != null) {

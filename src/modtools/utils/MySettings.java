@@ -45,11 +45,11 @@ public class MySettings {
 		public Object put(String key, Object value) {
 			Object old = super.put(key, value);
 			/* 以下情况不write(), [it=value.getClass()]
-			it.isPrimitive() || it == String -> equals(old, value) */
-			if (old == null && value == null) return null;
+			(it.isPrimitive() || it == String) -> equals(old, value) */
+			if (old == null && value == null) return old;
 
 			Class<?> it = value == null ? old.getClass() : value.getClass();
-			if (((value == null) ^ (old == null)) || CAST.unbox(it).isPrimitive() || it == String.class) {
+			if (CAST.unbox(it).isPrimitive() || it == String.class) {
 				if (Objects.equals(old, value)) {
 					return old;
 				}

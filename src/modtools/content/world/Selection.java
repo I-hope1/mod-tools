@@ -1228,7 +1228,7 @@ public class Selection extends Content {
 				MyItemSelection.buildTable0(t, Team.baseTeams, () -> defaultTeam, team -> {
 					data.put("defaultTeam", team.id);
 					defaultTeam = team;
-				}, 3, team -> whiteui.tint(team.color));
+				}, 3, team -> whiteui.tint(team.color)).setMinCheckCount(1);
 			}).row();
 			table(t -> {
 				t.left().defaults().left();

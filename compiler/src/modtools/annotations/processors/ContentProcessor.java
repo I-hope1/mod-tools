@@ -142,6 +142,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			}
 		});
 		if (!defList.isEmpty()) {
+			mMaker.at(classDecl.defs.last());
 			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
 		}
 		// 添加flushAssignment
@@ -150,9 +151,14 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
 		}
 
-		// 在ModTools里加载xxx.getClass()
+		// 在ModTools里加载Class.forName(
 		mMaker.at(mainClass.defs.last());
-		mainClass.defs = mainClass.defs.append(PBlock(mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Select(mMaker.QualIdent(settings), ns("class")), ns("getClass")), List.nil()))));
+		mainClass.defs = mainClass.defs.append(PBlock(
+		 mMaker.Try(PBlock(
+			mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")), List.of(mMaker.Literal(settings.flatname.toString())))))
+		 , List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock()))
+		 , null)
+		));
 
 		// println(classDecl);
 

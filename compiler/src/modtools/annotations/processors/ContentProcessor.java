@@ -28,6 +28,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
+	private JCClassDecl mainClass;
 
 	private static final String FIELD_PREFIX = "f_";
 
@@ -39,6 +40,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		myEvents = findClassSymbol("modtools.events.MyEvents");
 		consType = findType("arc.func.Cons");
 		settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
+		mainClass = trees.getTree(findClassSymbol("modtools.ModTools"));
 	}
 
 	public void contentLoad(ClassSymbol element) {
@@ -147,6 +149,11 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			mMaker.at(classDecl.defs.last());
 			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
 		}
+
+		// 在ModTools里加载xxx.getClass()
+		mMaker.at(mainClass.defs.last());
+		mainClass.defs = mainClass.defs.append(PBlock(mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Select(mMaker.QualIdent(settings), ns("class")), ns("getClass")), List.nil()))));
+
 		// println(classDecl);
 
 		buildSwitch();

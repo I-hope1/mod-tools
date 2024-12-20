@@ -3,12 +3,9 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.5.3
+Version 1.5.3.1
 ## Highlight
-- 修复了一些小bug
-- Fixed some minor bugs
-- 更多自定义按键
-- More customizable keybinds
+- Fixed a bug about data(settings) save.
 -----------------
 
 ## ShowUIList
@@ -97,7 +94,7 @@ Version 1.5.3
 '''
 author: "I hope..."
 hidden: true
-version: 1.5.3
+version: 1.5.3.1
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

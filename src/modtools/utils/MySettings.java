@@ -123,12 +123,13 @@ public class MySettings {
 		public String toString(StringBuilder tab) {
 			StringBuilder builder = new StringBuilder();
 			builder.append("{\n");
-			tab.append("	");
+			tab.append("\t");
 			each((k, v) -> {
 				builder.append(tab).append('"')
 				 .append(k.replaceAll("\"", "\\\\\""))
 				 .append('"').append(": ")
 				 .append(v instanceof Data ? ((Data) v).toString(tab) :
+				  v == null ? "null" :
 					Reflect.isWrapper(v.getClass()) ? v :
 					 STR."\"\{v.toString().replaceAll("\\\\", "\\\\")}\"")
 				 .append('\n');

@@ -99,7 +99,6 @@ public class Updater {
 						 cancel[0] = true;
 						 dialog.hide();
 					 }).size(210f, 64f);
-					 dialog.setFillParent(false);
 					 dialog.show();
 				 } catch (Exception e) {
 					 showException(e);

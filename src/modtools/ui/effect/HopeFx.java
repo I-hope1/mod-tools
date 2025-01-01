@@ -68,6 +68,7 @@ public class HopeFx {
 	}
 	static final ObjectMap<Element, LerpFun> all = new ObjectMap<>();
 	public static void changedFx(Element element) {
+		if (element.getScene() == null) return;
 		DrawExecutor executor = ElementUtils.findDrawExecutor(element);
 		if (executor == null) throw new IllegalStateException(STR."No executor for draw \{element}");
 		changedFx(element, executor);

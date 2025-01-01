@@ -3,9 +3,9 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.5.4
+Version 1.5.5
 ## Highlight
-- Fixed a bug about data(settings) save.
+- Fixed a severe npe bug about data(settings) save.
 -----------------
 
 ## ShowUIList
@@ -94,7 +94,7 @@ Version 1.5.4
 '''
 author: "I hope..."
 hidden: true
-version: 1.5.4
+version: 1.5.5
 minGameVersion: 136
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

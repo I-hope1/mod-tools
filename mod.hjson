@@ -6,6 +6,7 @@ A mod provides a variety of tools for modding.
 Version 1.5.5
 ## Highlight
 - Fixed a severe npe bug about data(settings) save.
+- Added a setting: force_language.
 -----------------
 
 ## ShowUIList

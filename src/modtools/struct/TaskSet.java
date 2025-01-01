@@ -24,4 +24,11 @@ public class TaskSet extends Seq<Boolp> {
 			return true;
 		});
 	}
+
+	public void addOnce(Runnable run) {
+		add(() -> {
+			run.run();
+			return false;
+		});
+	}
 }

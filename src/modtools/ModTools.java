@@ -21,6 +21,7 @@ import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
+import modtools.struct.TaskSet;
 import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.control.HopeInput;
@@ -31,7 +32,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
-import java.util.Arrays;
+import java.util.*;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
@@ -108,12 +109,14 @@ public class ModTools extends Mod {
 	}
 
 
+	private static final TaskSet taskLoadContent = new TaskSet();
 	public void loadContent() {
 		meta.hidden = true;
 		// Time.mark();
 		Tools.runLoggedException(Tester::initExecution);
 
 		extending();
+		taskLoadContent.exec();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
 	private static void resolveLibsCatch() {
@@ -138,7 +141,15 @@ public class ModTools extends Mod {
 		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
-		if (isImportFromGame) loadBundle();
+		if (E_Extending.force_language.getLocale() != null &&Core.bundle.getLocale() != E_Extending.force_language.getLocale()) {
+			if (isImportFromGame) {
+				loadBundle(E_Extending.force_language.getLocale().toString());
+			} else {
+				taskLoadContent.addOnce(() -> loadBundle(E_Extending.force_language.getLocale().toString()));
+			}
+		} else if (isImportFromGame) {
+			loadBundle();
+		}
 	}
 
 	private void loadInputAndUI() {
@@ -199,13 +210,15 @@ public class ModTools extends Mod {
 		Tools.runLoggedException(moduleName, r::run);
 	}
 
+	public static void loadBundle() {
+		loadBundle(null);
+	}
 	/**
 	 * @see Mods#buildFiles()
 	 */
-	public static void loadBundle() {
+	public static void loadBundle(String locate) {
 		if (root instanceof HFi && mods.getMod(modName) == null) return;
 		root = mods.getMod(modName).root;
-
 		ObjectMap<String, Seq<Fi>> bundles;
 		//load up bundles.
 		Fi folder = root.child("bundles");
@@ -222,7 +235,7 @@ public class ModTools extends Mod {
 
 		I18NBundle bundle = Core.bundle;
 		while (bundle != null) {
-			String str    = bundle.getLocale().toString();
+			String str    = locate == null ? bundle.getLocale().toString() : locate;
 			String locale = "bundle" + (str.isEmpty() ? "" : "_" + str);
 			if (bundles.containsKey(locale)) {
 				for (Fi file : bundles.get(locale)) {

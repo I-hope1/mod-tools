@@ -25,9 +25,11 @@ import modtools.ui.*;
 import modtools.ui.comp.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
+import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.Tools;
 import modtools.utils.ui.FormatHelper;
+
+import java.util.Locale;
 
 import static modtools.content.SettingsUI.SettingsBuilder.*;
 import static modtools.content.SettingsUI.colorBlock;
@@ -48,7 +50,7 @@ public interface ISettings extends E_DataInterface {
 	Data data = null;
 
 
-	/** 获取数据  */
+	/** 获取数据 */
 	default Data data() {
 		return null;
 	}
@@ -87,8 +89,7 @@ public interface ISettings extends E_DataInterface {
 		data().get(name(), o);
 	}
 	default void defTrue() {
-		if (type() != boolean.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
 		data().get(name(), true);
 	}
 	default void set(Object o) {
@@ -96,21 +97,18 @@ public interface ISettings extends E_DataInterface {
 		data().put(name(), o);
 	}
 	default void set(boolean b) {
-		if (type() != boolean.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
 		set((Boolean) b);
 	}
 
 
 	// getter
 	default boolean enabled() {
-		if (type() != boolean.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
 		return data().getBool(name());
 	}
 	default void toggle() {
-		if (type() != boolean.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not boolean.class");
+		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
 		set(!enabled());
 	}
 	default Object get() {
@@ -121,28 +119,29 @@ public interface ISettings extends E_DataInterface {
 		if (type() == String.class && o instanceof Jval) set(o = ((Jval) o).asString());
 		return String.valueOf(o);
 	}
+	default Locale getLocale() {
+		return LocaleUtils.getLocale(getString());
+	}
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
 		return Enum.valueOf(cl, data().getString(name()));
 	}
 	default int getInt() {
-		if (type() != int.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not int.class");
+		if (type() != int.class) { throw new IllegalStateException(STR."the settings is \{type()} not int.class"); }
 		return data().getInt(name(), 0);
 	}
 	default float getFloat() {
-		if (type() != float.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not float.class");
+		if (type() != float.class) { throw new IllegalStateException(STR."the settings is \{type()} not float.class"); }
 		return data().getFloat(name(), 0);
 	}
 	default int getColor() {
-		if (type() != Color.class)
-			throw new IllegalStateException(STR."the settings is \{type()} not Color.class");
+		if (type() != Color.class) { throw new IllegalStateException(STR."the settings is \{type()} not Color.class"); }
 		return data().get0xInt(name(), -1);
 	}
 	default Vec2 getPosition() {
-		if (type() != Position.class)
+		if (type() != Position.class) {
 			throw new IllegalStateException(STR."the settings is \{type()} not Position.class");
+		}
 		String s = getString();
 		int    i = s.indexOf(',');
 		if (i == -1) return Tmp.v3.set(0, 0);
@@ -324,6 +323,12 @@ public interface ISettings extends E_DataInterface {
 		def(def);
 		list(text, this::set, this::getString,
 		 new Seq<>(arr), s -> s.replaceAll("\\n", "\\\\n"));
+	}
+
+	default <T> void $(T def, Func<String, T> valFunc, Func<T, String> stringify, T[]... arr) {
+		def(def);
+
+		list(text, this::set, () -> valFunc.get(getString()), new Seq<>(arr[0]), stringify);
 	}
 
 	// TODO

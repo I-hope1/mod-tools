@@ -441,7 +441,7 @@ public abstract class ValueLabel extends InlineLabel {
 	private void setValInternal(Object val) {
 		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
-		if (val != null && !CAST.box(type).isInstance(val)) throw new IllegalArgumentException("val must be a " + type.getName());
+		if (val != null && val != unset && !CAST.box(type).isInstance(val)) throw new IllegalArgumentException("val must be a " + type.getName());
 
 		this.val = val;
 		try {

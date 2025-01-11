@@ -120,7 +120,7 @@ public class InlineLabel extends NoMarkupLabel {
 		newRun.y = glyphRun.y;
 		newRun.x = glyphRun.x + (isSame ? 0 : ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex));
 		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex + 1);
-		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, endIndex - startIndex);
+		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, Math.max(0, endIndex - startIndex));
 		newRun.width = isSame ? glyphRun.width : ArrayUtils.sumf(glyphRun.xAdvances, startIndex + 1, endIndex + 1);
 		newRun.color.set(color);
 		return newRun;

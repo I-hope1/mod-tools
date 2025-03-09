@@ -633,7 +633,7 @@ public class Selection extends Content {
 			// tile.display(table);
 			// table.row();
 			t.left().defaults().left().padRight(4f);
-			t.image(tile.block() == Blocks.air ? null : new TextureRegionDrawable(tile.block().uiIcon)).size(24);
+			t.image(new TextureRegionDrawable(WorldUtils.getToDisplay(tile).uiIcon)).size(24);
 			t.add(tile.block().name).with(EventHelper::addDClickCopy);
 			buildPos(t, new Vec2().set(tile.x, tile.y));
 			if (tile.overlay().itemDrop != null) t.image(tile.overlay().itemDrop.uiIcon).size(24);
@@ -775,7 +775,7 @@ public class Selection extends Content {
 		source.addListener(new HoverAndExitListener() {
 			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				focusElem = source;
-				focusAny = focusProv.get();
+				focusAny = focusProv;
 			}
 			public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
 				if (toActor != null && source.isAscendantOf(toActor)) return;
@@ -845,7 +845,7 @@ public class Selection extends Content {
 		if (focusAny != null) {
 			Object focus = focusAny;
 			if (focus instanceof Prov<?> p) focus = p.get();
-			if (!drawFocusAny(focus)) focusAny = null;
+			if (!drawFocusAny(focus) && !(focusAny instanceof Prov)) focusAny = null;
 		}
 		focusInternal.each(this::drawFocus);
 		transform = true;

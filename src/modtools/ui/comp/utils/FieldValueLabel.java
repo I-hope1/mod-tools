@@ -103,7 +103,7 @@ public class FieldValueLabel extends ReflectValueLabel {
 	public Seq<MenuItem> getMenuLists() {
 		Seq<MenuItem> list = new Seq<>();
 		basicMenuLists(list);
-		if (field != null && !type.isPrimitive()) {
+		if (isValid()) {
 			list.add(MenuItem.with("selection.set", Icon.editSmall, "@selection.reset", () -> {
 				JSRequest.requestForField(val, obj, o -> setFieldValue(type.cast(o)));
 			}));

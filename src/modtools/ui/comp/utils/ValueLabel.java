@@ -17,16 +17,17 @@ import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
 import mindustry.Vars;
+import mindustry.ctype.UnlockableContent;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
-import mindustry.world.Tile;
+import mindustry.world.*;
 import modtools.content.ui.*;
 import modtools.content.world.Selection;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
-import modtools.ui.comp.input.InlineLabel;
+import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.highlight.Syntax;
 import modtools.ui.comp.review.*;
 import modtools.ui.gen.HopeIcons;
@@ -38,6 +39,7 @@ import modtools.utils.SR.SatisfyException;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.*;
+import modtools.utils.world.WorldUtils;
 
 import java.util.*;
 
@@ -47,8 +49,9 @@ import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.comp.input.highlight.Syntax.c_map;
 
-public abstract class ValueLabel extends InlineLabel {
+public abstract class ValueLabel extends ExtendingLabel {
 	public static final boolean DEBUG     = false;
+	/** 这个要和null判断一起 */
 	public static final Object  unset     = new Object();
 	public static final Color   c_enum    = new Color(0xFFC66D_FF);
 	public static final String  NULL_MARK = "`*null";
@@ -58,6 +61,7 @@ public abstract class ValueLabel extends InlineLabel {
 
 	public Object   val;
 	public Class<?> type;
+	public Object   hoveredVal;
 	private ValueLabel() {
 		super((CharSequence) null);
 		type = null;
@@ -76,11 +80,18 @@ public abstract class ValueLabel extends InlineLabel {
 
 		Core.app.post(() -> addFocusListener());
 
-		Object[] val = {null};
 		addListener(new InputListener() {
+			public boolean mouseMoved(InputEvent event, float x, float y) {
+				hover(x, y);
+				return true;
+			}
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				val[0] = null;
-				int    cursor    = getCursor(x, y);
+				hover(x, y);
+				return super.touchDown(event, x, y, pointer, button);
+			}
+			private void hover(float x, float y) {
+				hoveredVal = null;
+				int    cursor = getCursor(x, y);
 				Object o;
 				int    toIndex;
 
@@ -91,21 +102,20 @@ public abstract class ValueLabel extends InlineLabel {
 					o = startIndexMap.get(index);
 					toIndex = endIndexMap.get(o);
 					if (index <= cursor && cursor < toIndex) {
-						val[0] = o;
+						hoveredVal = o;
 						break;
 					}
 				}
-				return false;
 			}
 		});
 		MenuBuilder.addShowMenuListenerp(this, () -> {
-			Object     val0  = val[0];
-			ValueLabel label = this;
-			if (val0 != null) {
-				Class<?> type1 = valToType.get(val0);
-				Object   obj   = valToObj.get(val0);
+			ValueLabel   label = this;
+			final Object val   = hoveredVal;
+			if (val != null) {
+				Class<?> type1 = valToType.get(val);
+				Object   obj   = valToObj.get(val);
 				if (type1 != null && obj != null) {
-					label = ItemValueLabel.of(obj, type1, () -> val[0]);
+					label = ItemValueLabel.of(obj, type1, () -> val);
 				}
 			}
 			return label.getMenuLists();
@@ -121,7 +131,7 @@ public abstract class ValueLabel extends InlineLabel {
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
 
-		Selection.addFocusSource(this, () -> val);
+		Selection.addFocusSource(this, () -> hoveredVal);
 	}
 
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
@@ -157,6 +167,7 @@ public abstract class ValueLabel extends InlineLabel {
 		colorMap.clear();
 		startIndexMap.clear();
 		endIndexMap.clear();
+		clearDrawRuns();
 		appendValue(text, val);
 		if (text.length() > truncate_length.getInt()) {
 			text.setLength(truncate_length.getInt());
@@ -173,15 +184,12 @@ public abstract class ValueLabel extends InlineLabel {
 
 	@SuppressWarnings("ConstantConditions")
 	private void appendValue(StringBuilder text, Object val) {
+		// map
 		if (val instanceof ObjectMap || val instanceof IntMap<?>
 		    || val instanceof ObjectIntMap<?>
 		    || val instanceof ObjectFloatMap<?> || val instanceof Map) {
 			if (!expandMap.containsKey(val)) {
-				clickedRegion(() -> {
-					int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
-					int end   = endIndexMap.get(val);
-					return Tmp.p1.set(start, end);
-				}, () -> toggleExpand(val));
+				clickedRegion(getPoint2Prov(val), () -> toggleExpand(val));
 				expandMap.put(val, false);
 			}
 			startIndexMap.put(text.length(), val);
@@ -228,6 +236,7 @@ public abstract class ValueLabel extends InlineLabel {
 
 			return;
 		}
+
 		iter:
 		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
 			text.append('[');
@@ -268,16 +277,52 @@ public abstract class ValueLabel extends InlineLabel {
 			textOff = text.length() - i;
 			// colorMap.put(text.length(), Color.white);
 		}
+		if (text.length() > 0 && val instanceof Building b) {
+			int i = text.length();
+			colorMap.put(i, Color.white);
+			addDrawRun(i, i + 1, DrawType.icon, Color.white, b.getDisplayIcon());
+			text.append('□');
+			textOff = text.length() - i;
+		}
+		if (text.length() > 0 && val instanceof Unit u) {
+			int i = text.length();
+			colorMap.put(i, Color.white);
+			addDrawRun(i, i + 1, DrawType.icon, Color.white, u.type().fullIcon);
+			text.append('■');
+			textOff = text.length() - i;
+		}
+		if (text.length() > 0 && val instanceof Tile t) {
+			int i = text.length();
+			colorMap.put(i, Color.white);
+			Block toDisplay = WorldUtils.getToDisplay(t);
+			addDrawRun(i, i + 1, DrawType.icon, Color.white, toDisplay.uiIcon);
+			text.append('■');
+			textOff = text.length() - i;
+		}
+		if (text.length() > 0 && val instanceof UnlockableContent uc) {
+			int i = text.length();
+			colorMap.put(i, Color.white);
+			addDrawRun(i, i + 1, DrawType.icon, Color.white, uc.uiIcon);
+			text.append('■');
+			textOff = text.length() - i;
+		}
 
-		Color mainColor = colorOf(val);
-		int   startI    = text.length();
-		colorMap.put(startI, mainColor);
+		Color mainColor  = colorOf(val);
+		int   startIndex = text.length();
+		colorMap.put(startIndex, mainColor);
 		boolean b = testHashCode(wrapVal(val));
-		if (b) startIndexMap.put(startI - textOff, wrapVal(val));
+		if (b) startIndexMap.put(startIndex - textOff, wrapVal(val));
 		text.append(toString(val));
 		int endI = text.length();
 		if (b) endIndexMap.put(wrapVal(val), endI);
 		colorMap.put(endI, Color.white);
+	}
+	private Prov<Point2> getPoint2Prov(Object val) {
+		return () -> {
+			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
+			int end   = endIndexMap.get(val);
+			return Tmp.p1.set(start, end);
+		};
 	}
 	private void toggleExpand(Object val) {
 		expandMap.put(val, !expandMap.get(val, false));
@@ -441,7 +486,9 @@ public abstract class ValueLabel extends InlineLabel {
 	private void setValInternal(Object val) {
 		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
-		if (val != null && val != unset && !CAST.box(type).isInstance(val)) throw new IllegalArgumentException("val must be a " + type.getName());
+		if (val != null && val != unset && !CAST.box(type).isInstance(val)) {
+			throw new IllegalArgumentException("val must be a " + type.getName());
+		}
 
 		this.val = val;
 		try {
@@ -463,7 +510,10 @@ public abstract class ValueLabel extends InlineLabel {
 		}
 	}
 
+	/** 如果val == unset，则不添加任何特殊菜单 */
 	protected Seq<MenuItem> basicMenuLists(Seq<MenuItem> list) {
+		// 如果val == unset，则不添加任何菜单
+		if (val == unset) return list;
 		specialBuild(list);
 		if (list.any()) list.add(UnderlineItem.with());
 		detailsBuild(list);
@@ -480,15 +530,15 @@ public abstract class ValueLabel extends InlineLabel {
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		list.add(UnderlineItem.with());
 		if (val instanceof String s) {
-			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", () -> val == null, () -> {
+			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", this::valueIsNull, () -> {
 				JSFunc.copyText(s);
 			}));
 		}
 		if (Style.class.isAssignableFrom(type) || val instanceof Style) {
-			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", () -> val == null, () -> {
+			list.add(DisabledList.withd("style.copy", Icon.copySmall, "Copy Style", this::valueIsNull, () -> {
 				copyStyle(val);
 			}));
-			list.add(DisabledList.withd("style.set", Icon.copySmall, "Set Style", () -> val == null, () -> {
+			list.add(DisabledList.withd("style.set", Icon.copySmall, "Set Style", this::valueIsNull, () -> {
 				IntUI.showSelectListTable(this,
 				 ArrayUtils.seq(ShowUIList.styleKeyMap.keySet())
 					.retainAll(type::isInstance),
@@ -499,7 +549,7 @@ public abstract class ValueLabel extends InlineLabel {
 			}));
 		}
 		if (Fi.class.isAssignableFrom(type) || val instanceof Fi) {
-			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", () -> val == null, () -> FileUtils.openFile((Fi) val)));
+			list.add(DisabledList.withd("fi.open", Icon.fileSmall, "Open", this::valueIsNull, () -> FileUtils.openFile((Fi) val)));
 		}
 		return list;
 	}
@@ -560,11 +610,14 @@ public abstract class ValueLabel extends InlineLabel {
 				STR."\{
 				 val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
 				 } world",
-				() -> val == null, () -> {
+				this::valueIsNull, () -> {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
 		 }, Tile.class, Building.class, Unit.class, Bullet.class, Posc.class)
 		);
+	}
+	public boolean valueIsNull() {
+		return val == null || val == unset;
 	}
 	private void addPickDrawable(Seq<MenuItem> list) {
 		list.add(MenuItem.with("drawable.pick", Icon.editSmall, "@pickdrawable", () -> {
@@ -633,6 +686,7 @@ public abstract class ValueLabel extends InlineLabel {
 			label.flushVal();
 			return label;
 		}
+
 		public Seq<MenuItem> getMenuLists() {
 			Seq<MenuItem> list = new Seq<>();
 			basicMenuLists(list);

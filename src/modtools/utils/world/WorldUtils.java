@@ -98,6 +98,13 @@ public interface WorldUtils {
 	static void focusWorld(Seq<?> obj) { selection.focusInternal.add(obj); }
 	static void removeFocusAll() { selection.focusInternal.clear(); }
 
+	static Block getToDisplay(Tile t) {
+		if (t.build != null) return t.block();
+		return t.block().itemDrop != null ? t.block() :
+			t.overlay().itemDrop != null || t.wallDrop() != null ? t.overlay() :
+			t.floor();
+	}
+
 	interface UNIT {
 		static void removeAllUnits() {
 			Groups.unit.each(Unit::remove);

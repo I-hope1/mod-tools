@@ -3,7 +3,7 @@ package modtools.ui.comp.input;
 import arc.Core;
 import arc.Graphics.Cursor.SystemCursor;
 import arc.func.*;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
@@ -28,7 +28,7 @@ public class InlineLabel extends NoMarkupLabel {
 	private static final Seq<GlyphRun> result    = new Seq<>();
 	private static final IntSeq        colorKeys = new IntSeq();
 	public static final  int           UNSET     = -1;
-	public float labelX, labelY;
+	public               float         labelX, labelY;
 
 	public InlineLabel(CharSequence text) {
 		super(text);
@@ -252,20 +252,25 @@ public class InlineLabel extends NoMarkupLabel {
 
 		for (GlyphRun run : layout.runs) {
 			if (run.glyphs.isEmpty()) continue;
+			/*
+			 * xAdvances contains glyphs.size+1 entries: First entry is X offset relative to the drawing position. Subsequent entries are the X
+			 * advance relative to previous glyph position. Last entry is the width of the last glyph.
+			 */
 			FloatSeq xAdvances = run.xAdvances;
-			currentX = run.x;
+			currentX = run.x + xAdvances.first();
 			currentY = labelY + run.y;
 			while (offset < text.length() && (char) run.glyphs.first().id != text.charAt(offset)) offset++; // 弥补offset
 
-			for (int i = 0; i < xAdvances.size; i++) {
-				if (!startFound && offset + i >= region.x) {
+			for (int i = 1; i < xAdvances.size; i++) {
+				int j = i - 1;
+				if (!startFound && offset + j >= region.x) {
 					startX = currentX;
 					startFound = true;
 				}
 
 				if (startFound) {
 					// Check if the end of the region is in the same run
-					if (offset + i - 1 >= region.y) {
+					if (offset + j >= region.y) {
 						endX = currentX;
 						if (endX != startX) {
 							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
@@ -292,7 +297,9 @@ public class InlineLabel extends NoMarkupLabel {
 		// Handle the case where the region ends at the last character of the text
 		if (startFound && offset >= region.y) {
 			endX = currentX;
-			if (endX != startX) { callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight)); }
+			if (endX != startX) {
+				callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
+			}
 		}
 	}
 
@@ -356,6 +363,23 @@ public class InlineLabel extends NoMarkupLabel {
 				} else {
 					InlineLabel.overChunk.set(UNSET, UNSET);
 					Core.graphics.cursor(SystemCursor.arrow);
+				}
+				return super.mouseMoved(event, x, y);
+			}
+		});
+	}
+
+	public void hoveredRegion(Prov<Point2> point2Prov, Runnable runnable) {
+		addListener(new InputListener() {
+			public boolean mouseMoved(InputEvent event, float x, float y) {
+				int    cursor = getCursor(x, y);
+				Point2 point2 = point2Prov.get();
+				int    start  = point2.x, end = point2.y;
+				if (start <= cursor && cursor <= end) {
+					InlineLabel.overChunk.set(point2);
+					runnable.run();
+				} else {
+					InlineLabel.overChunk.set(UNSET, UNSET);
 				}
 				return super.mouseMoved(event, x, y);
 			}

@@ -36,6 +36,7 @@ public class MenuBuilder {
 	/**
 	 * Dispose after close.
 	 * @param prov menu提供者
+	 * @return SelectTable nullable
 	 */
 	public static SelectTable showMenuListDispose(Prov<Seq<MenuItem>> prov) {
 		Seq<MenuItem> list = prov.get();

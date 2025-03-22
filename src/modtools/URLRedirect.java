@@ -70,11 +70,7 @@ public class URLRedirect {
 					Class<URLStreamHandler> newClass = (Class<URLStreamHandler>) handler.define();
 					newValue = CatchSR.apply(() ->
 					 CatchSR.of(() -> newClass.getDeclaredConstructor().newInstance())
-					  .get(() -> {
-						  URLStreamHandler instance = UNSAFE.allocateInstance(newClass);
-						  Tools.clone(value, instance, value.getClass(), null);;
-							return instance;
-					  })
+					  .get(() -> Tools.newInstance(value, newClass))
 					);
 				} catch (Throwable e) {
 					newValue = value;

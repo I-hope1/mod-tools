@@ -23,6 +23,7 @@ import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
+import jdk.jshell.*;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import mindustry.game.EventType;
@@ -66,6 +67,7 @@ import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -591,7 +593,18 @@ public class Tester extends Content {
 		}
 		callback.run();
 	}
+	final boolean USE_JSHELL = false;
+	final JShell  jShell     = USE_JSHELL ? JShell.builder().executionEngine("local").build() : null;
 	public void compileScript() {
+		if (USE_JSHELL) {
+			List<SnippetEvent> eval = jShell.eval(getMessage());
+			SnippetEvent       last = eval.getLast();
+			JShellException    ex   = last.exception();
+			if (ex != null) handleError(ex);
+			res = last.value();
+			finished = true;
+			return;
+		}
 		error = false;
 		try {
 			boolean def = true;
@@ -621,6 +634,8 @@ public class Tester extends Content {
 	public long    startTime;
 	// 执行脚本
 	public void execScript() {
+		if (USE_JSHELL) return;
+
 		if (!finished) return;
 		finished = false;
 		if (executor.get().getActiveCount() > 0) {
@@ -654,6 +669,7 @@ public class Tester extends Content {
 			if (o instanceof NativeArray na) o = na.toArray();
 			if (finished) return;
 			res = o;
+			ScriptableObject.putProperty(customScope, "$0", res);
 
 			logLabelCell.replace(logLabel);
 			logLabel.flushVal();

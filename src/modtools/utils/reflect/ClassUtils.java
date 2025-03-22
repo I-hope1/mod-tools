@@ -7,6 +7,14 @@ import arc.struct.ObjectSet;
 import java.lang.reflect.*;
 
 public class ClassUtils {
+	public static Class<?> forName(String name) {
+		try {
+			return Class.forName(name);
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	/**
 	 * 获取给定类及其父类的所有类对象的集合
 	 * @param cls 给定的类对象

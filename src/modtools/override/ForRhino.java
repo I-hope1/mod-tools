@@ -3,7 +3,6 @@ package modtools.override;
 import arc.func.Func2;
 import arc.util.*;
 import mindustry.Vars;
-import mindustry.mod.ModClassLoader;
 import modtools.utils.ByteCodeTools.*;
 import modtools.utils.reflect.FieldUtils;
 import rhino.*;
@@ -34,13 +33,15 @@ public class ForRhino {
 		if (global.getClass().getName().endsWith(SUFFIX) || global instanceof MyRhino) return global;
 
 		MyClass<? extends ContextFactory> factoryMyClass = new MyClass<>(global.getClass(), SUFFIX);
+		factoryMyClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, OS.isAndroid ? new Class[]{File.class} : new Class[0]);
+		factoryMyClass = new MyClass<>(factoryMyClass.define(), "i");
+
 		factoryMyClass.addInterface(MyRhino.class);
 		factoryMyClass.visit(ForRhino.class);
 
 		factoryMyClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, OS.isAndroid ? new Class[]{File.class} : new Class[0]);
 		// factoryMyClass.writer.write(Vars.tmpDirectory.child(factoryMyClass.adapterName + ".class").write());
 
-		forNameOrAddLoader(global.getClass());
 		Constructor<?> cons = factoryMyClass.define(Vars.mods.mainLoader()).getDeclaredConstructors()[0];
 		ContextFactory factory = (ContextFactory) (OS.isAndroid ? cons.newInstance(Vars.tmpDirectory.child("factory").file())
 		 : cons.newInstance());
@@ -55,15 +56,6 @@ public class ForRhino {
 		return factory;
 	}
 
-	static void forNameOrAddLoader(Class<?> cls) {
-		ModClassLoader loader = (ModClassLoader) Vars.mods.mainLoader();
-		try {
-			Class.forName(cls.getName(), false, loader);
-		} catch (ClassNotFoundException e) {
-			loader.addChild(cls.getClassLoader());
-		}
-	}
-
 	public static void observeInstructionCount(ContextFactory factory, Context cx, int instructionCount) {
 		if (tester.stopIfOvertime && (tester.multiThread ? tester.killScript : Time.timeSinceMillis(tester.startTime) > 2000))
 			throw new TimeoutException();
@@ -73,7 +65,7 @@ public class ForRhino {
 																 Context cx, Scriptable scope,
 																 Scriptable thisObj, Object[] args) {
 		try {
-			return ((ContextFactory & MyRhino) factory).super$_doTopCall(callable, cx, scope, thisObj, args);
+			return ((ContextFactory & MyRhino) factory).super$doTopCall(callable, cx, scope, thisObj, args);
 		} catch (Throwable t) {
 			if (!(catch_outsize_error.enabled() || t instanceof TimeoutException)) throw t;
 			tester.handleError(t);
@@ -83,7 +75,7 @@ public class ForRhino {
 	public static class TimeoutException extends RuntimeException { }
 
 	public interface MyRhino {
-		Object super$_doTopCall(Callable callable,
+		Object super$doTopCall(Callable callable,
 														Context cx, Scriptable scope,
 														Scriptable thisObj, Object[] args);
 	}

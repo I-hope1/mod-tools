@@ -20,7 +20,6 @@ import rhino.classfile.ByteCode;
 import java.lang.reflect.*;
 
 import static modtools.IntVars.json;
-import static modtools.override.ForRhino.forNameOrAddLoader;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ByteCodeTools.*;
 import static rhino.classfile.ByteCode.*;
@@ -32,7 +31,8 @@ public class HScene {
 	public static void load(Pause pause) throws Exception {
 		Class<? extends Group> superClass = Core.scene.root.getClass();
 		if (superClass.getName().endsWith(SUFFIX)) return;
-		MyClass<? extends Group> sceneClass = new MyClass<>(superClass, SUFFIX);
+		var sceneClass0 = new MyClass<>(superClass, SUFFIX);
+		var sceneClass = new MyClass<>(sceneClass0.define(), "i");
 
 		Floatc floatc      = delta -> topGroup.act(delta);
 		Lambda actTopGroup = sceneClass.addLambda(floatc, Floatc.class, "get", "(F)V");
@@ -64,7 +64,6 @@ public class HScene {
 			return 2; // this + parma(delta)
 		}, Modifier.PUBLIC, void.class, float.class);
 		// if (!OS.isAndroid) myClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, Scene.class);
-		forNameOrAddLoader(superClass);
 		// sceneClass.writeTo(Vars.tmpDirectory);
 
 		Class<Group> newClas  = (Class<Group>) sceneClass.define();
@@ -134,8 +133,7 @@ public class HScene {
 				return source;
 			}
 
-			var newVal = UNSAFE.allocateInstance(clazz);
-			Tools.clone(source, newVal, superClass, null);
+			var newVal = Tools.newInstance(source, clazz);
 
 			// 查找Vars中是否有对应的实例，如果有也替换掉
 			for (Field field : Vars.class.getFields()) {

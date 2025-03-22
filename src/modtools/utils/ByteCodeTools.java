@@ -4,6 +4,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.struct.Seq;
 import arc.util.*;
+import modtools.IntVars;
 import modtools.jsfunc.type.CAST;
 import modtools.utils.reflect.*;
 import rhino.classfile.ClassFileWriter;
@@ -14,18 +15,19 @@ import java.lang.reflect.*;
 import java.util.*;
 
 import static ihope_lib.MyReflect.unsafe;
+import static modtools.annotations.asm.Sample.SUPER_METHOD_PREFIX;
 import static rhino.classfile.ByteCode.*;
 import static rhino.classfile.ClassFileWriter.*;
 
 /** 对rhino的ClassWriter进行封装 */
 public class ByteCodeTools {
-	/*public static <T> MyClass<T> newClass(String name, String superName) {
-		return new MyClass<>(name, superName);
-	}*/
-
 	public static final String
 	 FUNCTION_KEY = "_K_Fn",
 	 CLASS_FILE   = "_ihope";
+
+	public static boolean DEBUG_LOG_FILE = true;
+
+
 	private static int lastID = 0;
 	private static int nextID() {
 		return lastID++;
@@ -269,35 +271,43 @@ public class ByteCodeTools {
 				// 传给cls方法的参数
 				Class<?>[] types = m.getParameterTypes();
 				// 用于super方法
-				Class<?>[] realTypes  = Arrays.copyOfRange(types, 1, types.length);
 				Class<?>   returnType = m.getReturnType();
-				String     descriptor = nativeMethod(returnType, realTypes);
-				{ // buildSuper
-					writer.startMethod("super$_" + m.getName(),
-					 descriptor, ACC_PUBLIC);
-					writer.addLoadThis(); // this
-					for (int i = 1; i <= realTypes.length; i++) {
-						writer.add(addLoad(types[i]), i);
-						// addCast(writer, types[i]);
-					}
-					writer.addInvoke(INVOKESPECIAL, superName, m.getName(), descriptor);
-					writer.add(buildReturn(returnType));
-					writer.stopMethod((short) types.length);
-				}
-				writer.startMethod(m.getName(), descriptor, (short) Modifier.PUBLIC);
-				writer.addLoadThis();
-				for (int i = 0; i < realTypes.length; i++) {
-					writer.add(addLoad(realTypes[i]), i + 1);
-				}
-				writer.addInvoke(INVOKESTATIC, className,
-				 m.getName(), nativeMethod(returnType, types));
-				emitCast(writer, returnType);
-				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
-				writer.add(buildReturn(returnType));
-				writer.stopMethod((short) (realTypes.length + 1));
+				visitEmitMethod(m.getName(), types, returnType, className);
 			}
 		}
+		/**
+		 * @see modtools.annotations.processors.asm.SampleProcessor
+		 **/
+		public void visitEmitMethod(String name, Class<?>[] paramTypes,
+		                             Class<?> returnType, String className) {
+			Class<?>[] realTypes  = Arrays.copyOfRange(paramTypes, 1, paramTypes.length);
+			String     descriptor = nativeMethod(returnType, realTypes);
+			{ // buildSuper
+				writer.startMethod(SUPER_METHOD_PREFIX + name,
+				 descriptor, ACC_PUBLIC);
+				writer.addLoadThis(); // this
+				for (int i = 1; i <= realTypes.length; i++) {
+					writer.add(addLoad(paramTypes[i]), i);
+					// addCast(writer, paramTypes[i]);
+				}
+				writer.addInvoke(INVOKESPECIAL, superName, name, descriptor);
+				writer.add(buildReturn(returnType));
+				writer.stopMethod((short) paramTypes.length);
+			}
+			writer.startMethod(name, descriptor, (short) Modifier.PUBLIC);
+			writer.addLoadThis();
+			for (int i = 0; i < realTypes.length; i++) {
+				writer.add(addLoad(realTypes[i]), i + 1);
+			}
+			writer.addInvoke(INVOKESTATIC, className,
+			 name, nativeMethod(returnType, paramTypes));
+			// emitCast(writer, returnType);
+			// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
+			writer.add(buildReturn(returnType));
+			writer.stopMethod((short) (realTypes.length + 1));
+		}
 
+		/** 使用超类{@link #superClass}的保护域  */
 		public Class<T> define() {
 			return define(superClass);
 		}
@@ -314,6 +324,11 @@ public class ByteCodeTools {
 		}
 
 		public Class<T> define(ClassLoader loader) {
+			if (DEBUG_LOG_FILE) {
+				Fi dir = IntVars.dataDirectory.child("gen");
+				dir.mkdirs();
+				writeTo(dir);
+			}
 			return putStatic(HopeReflect.defineClass(adapterName, loader, writer.toByteArray()));
 		}
 		private Class<T> putStatic(Class<?> base) {
@@ -358,6 +373,10 @@ public class ByteCodeTools {
 		public T get() {
 			return func.get();
 		}
+	}
+
+	public static String legalName(String name) {
+		return name.replace("java", "lava").replace("jdk","ldk");
 	}
 
 	public static String nativeName(Class<?> cls) {

@@ -20,6 +20,7 @@ import modtools.events.*;
 import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
+import modtools.misc.*;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -116,6 +117,15 @@ public class ModTools extends Mod {
 		Tools.runLoggedException(Tester::initExecution);
 
 		extending();
+		// new SamplePackage();
+
+		Events.on(ClientLoadEvent.class,_ -> {
+			Vars.content.blocks().each(block -> {
+				if (!((block.update || block.destructible) && block.buildType != null)) return;
+				var last = block.buildType;
+				block.buildType = () -> SampleTestInterface.changeClass(last.get());
+			});
+		});
 		taskLoadContent.exec();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}

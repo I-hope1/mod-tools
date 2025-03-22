@@ -1,5 +1,6 @@
 package modtools.annotations;
 
+import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.util.JCDiagnostic.Error;
 
 import java.io.*;
@@ -31,6 +32,8 @@ public interface PrintHelper {
 	}
 	default void err(Throwable th) {
 		SPrinter.err(th);
+		BaseProcessor.log.error(th.toString());
+		BaseProcessor.compiler.shouldStopPolicyIfError = CompileState.INIT;
 	}
 	static void errs(Object... objects) {
 		for (Object object : objects) {

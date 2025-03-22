@@ -9,6 +9,7 @@ import arc.util.*;
 import arc.util.Log.LogHandler;
 import mindustry.game.EventType.Trigger;
 import modtools.*;
+import modtools.jsfunc.reflect.UNSAFE;
 import modtools.struct.TaskSet;
 import modtools.ui.IntUI;
 import modtools.ui.comp.Window;
@@ -431,6 +432,14 @@ public class Tools {
 			if (type == double.class) return n.doubleValue();
 		}
 		return object;
+	}
+	public static <T> T newInstance(T value, Class<?> newClass) {
+		return newInstance(value, newClass, null);
+	}
+	public static <T> T newInstance(T value, Class<?> newClass, Seq<String> blackList) {
+		T instance = (T) UNSAFE.allocateInstance(newClass);
+		clone(value, instance, value.getClass(), blackList);
+		return instance;
 	}
 
 	/** Run接口（带异常） */

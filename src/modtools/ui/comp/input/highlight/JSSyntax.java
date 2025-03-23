@@ -244,6 +244,10 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
+	public Script compile() {
+		return IScript.cx.compileString(drawable.getText(), "<compile>", 1);
+	}
+
 	private static class ScopeObjectSet extends ObjectSet<String> {
 		Scriptable scope;
 		public ScopeObjectSet(Scriptable scope) {

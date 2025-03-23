@@ -10,14 +10,14 @@ import modtools.jsfunc.IScript;
 import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
-import modtools.ui.comp.Window.*;
+import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.input.area.TextAreaTab;
-import modtools.ui.comp.input.highlight.*;
+import modtools.ui.comp.input.highlight.JSSyntax;
 import modtools.utils.Tools;
 import rhino.*;
 
-import static modtools.utils.Tools.*;
 import static modtools.IntVars.mouseVec;
+import static modtools.utils.Tools.*;
 
 @SuppressWarnings("SpellCheckingInspection")
 public class JSRequest {
@@ -115,12 +115,7 @@ public class JSRequest {
 	 */
 	public static <R> void request0(ConsT<R, Throwable> callback, Object self, Object... args) {
 		// resetScope();
-		BaseFunction parent = new BaseFunction(topScope, null);
-		Scriptable selfScope = self != null && Tester.wrap(self) instanceof Scriptable sc ? sc : null;
-		if (selfScope != null) {
-			selfScope.setPrototype(parent);
-			scope = selfScope;
-		} else scope = parent;
+		Scriptable parent = wrapper(self != null && Tester.wrap(self) instanceof Scriptable sc ? sc : null);
 
 		JSRequestWindow<?> window = JSRequest.window;
 		window.show().setPosition(mouseVec, Align.center);
@@ -131,6 +126,23 @@ public class JSRequest {
 			parent.put((String) args[0], parent, args[1]);
 		}
 		window.buildButtons(Tools.as(callback));
+	}
+
+	public static Scriptable wrapper(Scriptable self) {
+		return wrapper(self, new Object[0]);
+	}
+	public static Scriptable wrapper(Scriptable self, Object... args) {
+		BaseFunction parent = new BaseFunction(topScope, null);
+		for (int i = 0; i < args.length; i += 2) {
+			if (!(args[i] instanceof String name)) throw new IllegalArgumentException("key args[" + i + "](" + args[i] + ") must be String");
+
+			parent.put(name, parent, args[i + 1]);
+		}
+		if (self != null) {
+			self.setPrototype(parent);
+			return parent;
+		}
+		return parent;
 	}
 
 	private static Object eval() {

@@ -71,7 +71,7 @@ public class ByteCodeTools {
 					writer.add(addLoad(args[i - 1]), i);
 				}
 				writer.addInvoke(INVOKESPECIAL, superName, name, nativeMethod(returnType, args));
-				emitCast(writer, returnType);
+				// emitCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
 				writer.stopMethod((short) (args.length + 1));
@@ -104,6 +104,7 @@ public class ByteCodeTools {
 
 			// 将参数储存 seq
 			for (int i = 0; i < args.length; i++) {
+				// list.add(args[i])
 				writer.add(ALOAD, v2); // list
 				writer.add(addLoad(args[i]), i + 1);
 				emitBox(writer, args[i]);
@@ -111,6 +112,7 @@ public class ByteCodeTools {
 			}
 			// 将super的返回值存入seq
 			if (buildSuper && returnType != void.class) {
+				// list.add(superReturnVal)
 				writer.add(ALOAD, v2); // list
 				writer.add(addLoad(returnType), v1); // super return
 				emitBox(writer, returnType);
@@ -205,13 +207,10 @@ public class ByteCodeTools {
 
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
 		                           Class<?>... args) {
-			writer.startMethod(thisMethodName, nativeMethod(returnType, ArrayList.class), (short) Modifier.PUBLIC);
+			writer.startMethod(thisMethodName, nativeMethod(returnType, args), (short) Modifier.PUBLIC);
 			writer.addLoadThis(); // this
 			for (int i = 0; i < args.length; i++) {
-				writer.add(ALOAD_1);
-				writer.addPush(i);
-				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "get", nativeMethod(Object.class, int.class));
-				emitCast(writer, args[i]);
+				writer.add(addLoad(args[i]), i + 1);
 			}
 			writer.addInvoke(INVOKESPECIAL, this.superName, superMethodName, nativeMethod(returnType, args));
 			// addCast(returnType);

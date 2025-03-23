@@ -1,6 +1,7 @@
 package modtools.events;
 
 import arc.func.Cons;
+import arc.util.OS;
 import modtools.annotations.settings.*;
 
 @SettingsInit(fireEvent = true)
@@ -16,7 +17,16 @@ public enum E_JSFunc implements ISettings {
 	/** @see ISettings#$(String, String...)  */
 	array_delimiter(String.class, it -> it.$(", ",
 	 ", ", "\n", "\n\n",
-	 "\n▶▶▶▶", "\n★★★"));
+	 "\n▶▶▶▶", "\n★★★")),
+
+	change_class_reference_when_edit {
+		public boolean isSwitchOn() {
+			return OS.isAndroid;
+		}
+	}
+
+	//
+	;
 
 	static {
 		auto_refresh.defTrue();

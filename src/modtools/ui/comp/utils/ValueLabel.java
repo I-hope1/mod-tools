@@ -196,7 +196,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			colorMap.put(text.length(), c_map);
 			text.append("|Map ").append(getSize(val)).append('|');
 			colorMap.put(text.length(), Color.white);
-			endIndexMap.put(val, text.length());
+			endIndexMap.put(val, text.length() - 1);
 
 			if (!expandMap.get(val, false)) {
 				return;
@@ -472,7 +472,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	}
 	public Runnable afterSet;
 	public abstract void flushVal();
-	/** 这可能会设置字段值 */
+	/** <b>PS:</b> 这可能会设置字段值 */
 	public void setNewVal(Object newVal) { }
 
 	public void setVal(Object newVal) {
@@ -528,6 +528,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 		 }) : null);
 
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
+		list.add(UnderlineItem.with());
+		list.add(MenuItem.with("changeClass", Icon.pencilSmall, "Change Class", () -> {
+			new ChangeClassDialog(this).show();
+		}));
 		list.add(UnderlineItem.with());
 		if (val instanceof String s) {
 			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", this::valueIsNull, () -> {

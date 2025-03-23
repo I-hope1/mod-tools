@@ -6,6 +6,8 @@ public interface SyntaxDrawable {
 	default float alpha() { return 0; }
 	default int cursor() { return 0; }
 	default Font font() { return null; }
+
+	String getText();
 	void drawMultiText(CharSequence displayText, int start, int max);
 
 }

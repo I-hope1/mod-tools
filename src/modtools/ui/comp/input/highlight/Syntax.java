@@ -2,7 +2,7 @@ package modtools.ui.comp.input.highlight;
 
 import arc.graphics.Color;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Tmp;
 import mindustry.graphics.Pal;
 
 import java.util.Objects;

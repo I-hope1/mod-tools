@@ -10,13 +10,14 @@ import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
+import javax.lang.model.element.Element;
 import java.util.Set;
 
 @AutoService(Processor.class)
-public class DebugLogProc extends BaseProcessor<ClassSymbol> {
+public class DebugLogProc extends BaseProcessor<Element> {
 	public CompilationUnitTree unit;
 	public String              fmt;
-	public void dealElement(ClassSymbol element) {
+	public void dealElement(Element element) {
 		unit = trees.getPath(element).getCompilationUnit();
 		fmt = element.getAnnotation(DebugMark.class).fmt();
 		trees.getTree(element).accept(translator);

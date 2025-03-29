@@ -131,6 +131,9 @@ public class Constants {
 
 		/** @see NativeJavaObject#NativeJavaObject(Scriptable, Object, Class)    */
 		MethodHandle initNativeJavaObject = nl(() -> InitMethodHandle.findInit(NativeJavaObject.class.getDeclaredConstructor(Scriptable.class, Object.class, Class.class)));
+
+		/** @see NativeJavaMethod#findCachedFunction(Context, Object[])   */
+		Method findCachedFunction =  method(NativeJavaMethod.class, "findCachedFunction", Context.class, Object[].class);
 	}
 
 	public static <R> Class<R> nl(String className) {

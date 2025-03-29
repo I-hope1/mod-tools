@@ -41,15 +41,17 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	static Context               context;
-	static ClassFinder           classFinder;
-	static Symtab                syms;
-	static Enter                 enter;
-	static JavacTrees            trees;
-	static Names                 ns;
-	static TreeMaker             maker;
-	static JavacElements         elements;
-	static ModuleFinder          moduleFinder;
+	static Context       context;
+	static ClassFinder   classFinder;
+	static Symtab        syms;
+	static Enter         enter;
+	static JavacTrees    trees;
+	static Names         ns;
+	static TreeMaker     maker;
+	static JavacElements elements;
+	static ModuleFinder  moduleFinder;
+
+	static CopyValueProc         copyValueProc;
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
@@ -66,6 +68,7 @@ public class Replace {
 		maker = TreeMaker.instance(context);
 		elements = JavacElements.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
+		copyValueProc = new CopyValueProc();
 		defaultToStatic = new DefaultToStatic(context);
 		desugarStringTemplate = new DesugarStringTemplate(context);
 		desugarRecord = new DesugarRecord();
@@ -347,8 +350,7 @@ public class Replace {
 		Iterable<? extends S> candidates = get.apply(name);
 
 		for (S sym : candidates) {
-			if (validate.test(sym))
-				return sym;
+			if (validate.test(sym)) { return sym; }
 		}
 
 		Set<ModuleSymbol> recoverableModules = new HashSet<>(syms.getAllModules());
@@ -429,6 +431,7 @@ public class Replace {
 		unsafe.putInt(CompileState.INIT, off_stateValue, 100);
 		replaceSource();
 	}
+	/** 优先级很高 */
 	public static void process(Set<? extends Element> rootElements) {
 		try {
 			Times.mark();
@@ -438,6 +441,7 @@ public class Replace {
 				JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
 				JCTree            cdef = trees.getTree(element);
 
+				// copyValueProc.translateTopLevelClass(unit);
 				defaultToStatic.translateTopLevelClass(unit, cdef);
 				desugarStringTemplate.translateTopLevelClass(unit, cdef);
 				desugarRecord.translateTopLevelClass(unit, cdef);
@@ -445,7 +449,7 @@ public class Replace {
 		} catch (Throwable e) {
 			err(e);
 		} finally {
-			Times.printElapsed("Process in @ms");
+			Times.printElapsed("Process (init) in @ms");
 		}
 	}
 	public static Context context() {

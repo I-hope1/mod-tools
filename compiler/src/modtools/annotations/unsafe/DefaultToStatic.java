@@ -8,8 +8,10 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
-/** 这个还未完全适配所有的  */
+/** 这个还未完全适配所有的 */
 public class DefaultToStatic extends TreeTranslator {
+	public static final String NAME_PREFIX = "$default$";
+
 	final        Symtab            syms;
 	final        TreeMaker         make;
 	final        Names             names;
@@ -43,8 +45,8 @@ public class DefaultToStatic extends TreeTranslator {
 			boolean    inLambda;
 			List<Name> blackList = classDecl.defs.map(p ->
 			 p instanceof JCVariableDecl v ? v.name :
-			 p instanceof JCClassDecl c ? c.name :
-			 p instanceof JCMethodDecl m ? m.name : null);
+				p instanceof JCClassDecl c ? c.name :
+				 p instanceof JCMethodDecl m ? m.name : null);
 			public void visitLambda(JCLambda tree) {
 				hasLambda = true;
 
@@ -71,7 +73,7 @@ public class DefaultToStatic extends TreeTranslator {
 			VarSymbol    varSymbol  = new VarSymbol(Flags.PARAMETER, names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			self = make.VarDef(varSymbol, null);
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
-			 names.fromString("$default$" + methodDecl.name), methodDecl.restype,
+			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
 			 methodDecl.recvparam,
 			 methodDecl.params.prepend(self),

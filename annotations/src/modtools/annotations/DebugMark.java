@@ -3,7 +3,8 @@ package modtools.annotations;
 import java.lang.annotation.*;
 
 
-@Target(ElementType.TYPE)
+/** 默认将Log.info(xxx) -> Log.info("xxx = " + xxx) */
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.SOURCE)
 public @interface DebugMark {
 	/**

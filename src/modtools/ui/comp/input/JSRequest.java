@@ -13,7 +13,6 @@ import modtools.ui.comp.Window;
 import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.highlight.JSSyntax;
-import modtools.utils.Tools;
 import rhino.*;
 
 import static modtools.IntVars.mouseVec;
@@ -53,7 +52,7 @@ public class JSRequest {
 				b.setDisabled(true);
 			}
 
-			cont.add(tips = new Label("")).color(Color.lightGray).growX().row();
+			cont.add(tips = new Label("")).color(Color.lightGray).growX().wrapLabel(true).row();
 			area.getArea().setPrefRows(4);
 			cont.add(area).grow().row();
 			area.syntax = new JSSyntax(area);
@@ -74,7 +73,9 @@ public class JSRequest {
 	public static JSRequestWindow<?> window   = new JSRequestWindow<>();
 	public static Context            cx       = IScript.cx;
 	public static Scriptable         topScope = IScript.scope;
-	public static Scriptable         scope;
+
+
+	public static  Scriptable scope;
 
 	public static Label tips;
 
@@ -120,12 +121,14 @@ public class JSRequest {
 		JSRequestWindow<?> window = JSRequest.window;
 		window.show().setPosition(mouseVec, Align.center);
 		window.buttons.clearChildren();
-		window.area.syntax = new JSSyntax(window.area, scope);
 
 		for (int i = 0; i < args.length; i += 2) {
 			parent.put((String) args[0], parent, args[1]);
 		}
-		window.buildButtons(Tools.as(callback));
+
+		window.area.syntax = new JSSyntax(window.area, parent);
+		scope = parent;
+		window.buildButtons(as(callback));
 	}
 
 	public static Scriptable wrapper(Scriptable self) {
@@ -134,7 +137,9 @@ public class JSRequest {
 	public static Scriptable wrapper(Scriptable self, Object... args) {
 		BaseFunction parent = new BaseFunction(topScope, null);
 		for (int i = 0; i < args.length; i += 2) {
-			if (!(args[i] instanceof String name)) throw new IllegalArgumentException("key args[" + i + "](" + args[i] + ") must be String");
+			if (!(args[i] instanceof String name)) {
+				throw new IllegalArgumentException("key args[" + i + "](" + args[i] + ") must be String");
+			}
 
 			parent.put(name, parent, args[i + 1]);
 		}

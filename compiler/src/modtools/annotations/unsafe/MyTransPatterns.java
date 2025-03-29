@@ -7,6 +7,7 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
+/** 包含switch语法的脱糖 */
 public class MyTransPatterns extends TransPatterns {
 	final SwitchDesugar  switchDesugar;
 	final LambdaToMethod ltm;

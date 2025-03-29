@@ -15,7 +15,7 @@ import static modtools.annotations.unsafe.InitHandle.DESKTOP.*;
 public class InitHandle {
 	public static MethodHandle findInitDesktop
 	 (Class<?> refc, Constructor<?> ctor,
-		Class<?> specialCaller) throws Throwable {
+	  Class<?> specialCaller) throws Throwable {
 		assert MEMBER_NAME_CTOR != null;
 		CProv<Object> maker = () -> MEMBER_NAME_CTOR.invoke(ctor);
 		Consumer<Object> resolver = o -> {
@@ -26,7 +26,7 @@ public class InitHandle {
 	}
 	public static MethodHandle findSpecial
 	 (Class<?> refc, CProv<Object> maker, Consumer<Object> resolver,
-		Class<?> specialCaller) throws Throwable {
+	  Class<?> specialCaller) throws Throwable {
 		Lookup specialLookup = lookup.in(specialCaller);
 
 		assert RESOLVE_OR_FAIL != null;
@@ -48,15 +48,18 @@ public class InitHandle {
 		MethodHandle MEMBER_NAME_CTOR = nl(() ->
 		 lookup.findConstructor(MEMBER_NAME, MethodType.methodType(void.class, Constructor.class)));
 
-		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class)  */
+		/** @see MemberName.Factory#resolveOrFail(byte, MemberName, Class, int, Class) */
 		Method RESOLVE_OR_FAIL   = nl(() ->
 		 Class.forName("java.lang.invoke.MemberName$Factory").getDeclaredMethod("resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class));
 		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
 		Method GET_DIRECT_METHOD = nl(() ->
 		 Lookup.class.getDeclaredMethod("getDirectMethodCommon", byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class));
 	}
-	/** for window */
-	public static final byte REF_invokeSpecial = 7;
+	/**
+	 * for window (value: {@value MethodHandleNatives.Constants#REF_invokeSpecial})
+	 * @see MethodHandleNatives.Constants#REF_invokeSpecial
+	 */
+	public static byte REF_invokeSpecial = 7;
 
 	public interface CProv<T> {
 		T get() throws Throwable;

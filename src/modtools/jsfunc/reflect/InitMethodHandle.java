@@ -22,7 +22,7 @@ public class InitMethodHandle {
 	 */
 	public static final int  INVOKE_SPECIAL    = 1;
 	/**
-	 * for window
+	 * for window (value: {@value MethodHandleNatives.Constants#REF_invokeSpecial})
 	 * @see MethodHandleNatives.Constants#REF_invokeSpecial
 	 */
 	public static final byte REF_invokeSpecial = 7;

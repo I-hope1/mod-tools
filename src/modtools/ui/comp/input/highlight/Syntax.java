@@ -77,8 +77,10 @@ public class Syntax {
 		this.displayText = displayText;
 		cursorTask = null;
 		cTask = null;
+		lastTask = null;
 		reset();
 
+		outerTask.init();
 		for (DrawTask drawTask : taskArr) {
 			drawTask.init();
 		}
@@ -91,6 +93,8 @@ public class Syntax {
 			newLine = c == '\n';
 
 			if (i <= drawable.cursor()) cursorTask = cTask;
+			if (outerTask != null) outerTask.draw(i);
+
 			if (cTask == null) {
 				for (DrawTask drawTask : taskArr) {
 					if (!drawTask.draw(i)) {
@@ -109,6 +113,7 @@ public class Syntax {
 				if (cTask.isFinished() || cTask.withdraw) {
 					lastIndex = drawAndReset(i);
 				}
+				continue;
 			}/* 结束就重置 */ else {
 				reset();
 			}
@@ -129,8 +134,7 @@ public class Syntax {
 	/** 返回下一个index，{@link DrawTask#withdraw}时不{@link #reset()} */
 	private int drawAndReset(int i) {
 		cTask.drawText(i);
-		if (!cTask.withdraw) reset();
-		else cTask.withdraw = false;
+		if (!cTask.withdraw) { reset(); } else cTask.withdraw = false;
 		return i + 1;
 	}
 
@@ -153,10 +157,26 @@ public class Syntax {
 	 */
 	public DrawTask cursorTask,
 	 cTask, lastTask; // default for null.
+	/** 每次都会执行，不会调用{@link DrawTask#reset()}{@link DrawTask#isFinished()} */
+	public DrawOuterTask outerTask;
 	/**
 	 * 所有的任务
 	 */
-	public DrawTask[] taskArr = {};
+	public DrawTask[]    taskArr = {};
+
+	public class DrawOuterTask extends DrawTask {
+		public DrawOuterTask() {
+			super(defaultColor);
+		}
+		final void reset() { }
+		final boolean isFinished() {
+			return false;
+		}
+		public boolean draw(int i) {
+			return false;
+		}
+		public final void drawText(int i) { }
+	}
 
 	public class DrawToken extends DrawTask {
 		// IntMap<?>[] total;
@@ -247,6 +267,7 @@ public class Syntax {
 		void init() {
 			super.init();
 			lastSymbol = '\0';
+			lastIndex = -1;
 		}
 
 		boolean draw(int i) {

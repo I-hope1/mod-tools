@@ -1,48 +1,61 @@
-package modtools.annotations.processors.asm;
+package modtools.annotations.unsafe;
 
 import com.sun.source.doctree.*;
-import com.sun.source.util.DocTreePath;
+import com.sun.source.util.*;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.DCTree.DCReference;
-import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
-import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.tree.TreeTranslator;
 import jdk.internal.org.objectweb.asm.*;
-import modtools.annotations.BaseProcessor;
 import modtools.annotations.asm.CopyConstValue;
 
-import java.util.Set;
+import javax.lang.model.element.Element;
 import java.util.function.Consumer;
 
-// @AutoService(Processor.class)
+import static modtools.annotations.unsafe.Replace.trees;
+
+/** TODO: xxx  */
 @Deprecated
-public class ASMProcessor extends BaseProcessor<VarSymbol> {
+public class CopyValueProc extends TreeTranslator {
+	public JCCompilationUnit toplevel;
+	public JCClassDecl classDecl;
+
+	/** TODO: 这里似乎不应该用{@link com.sun.tools.javac.api.JavacTrees#getElement(TreePath)}  */
+	public void visitVarDef(JCVariableDecl tree) {
+		if (tree.mods.annotations != null && tree.mods.annotations.nonEmpty()) {
+			tree.mods.annotations.stream().anyMatch(a -> {
+				Element element;
+				if (!a.annotationType.toString().equals(CopyConstValue.class.getSimpleName())) {
+					element = trees.getElement(trees.getPath(toplevel, a.annotationType));
+					if (element.toString().equals(CopyConstValue.class.getName())) {
+						return true;
+					}
+				}
+				return false;
+			});
+		}
+		super.visitVarDef(tree);
+	}
 	public void dealElement(VarSymbol element) throws Throwable {
 		DocCommentTree doc    = trees.getDocCommentTree(element);
 		SeeTree        seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElse(null);
 		if (seeTag == null) {
-			log.error("@CopyConstValue 标注的field必须有@see");
+			// log.error("@CopyConstValue 标注的field必须有@see");
 			return;
 		}
 		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) {
-			log.error("@CopyConstValue 标注的field的@see必须为引用");
+			// log.error("@CopyConstValue 标注的field的@see必须为引用");
 			return;
 		}
-		println(reference);
 		element.flags_field |= Flags.FINAL;
 
 		VarSymbol field = (VarSymbol) trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
-		if (field == null) {
-			log.error(element + ": field is null.");
-			return;
-		}
 		var       tree  = ((JCVariableDecl) trees.getTree(element));
-		tree.mods.annotations = List.from(tree.mods.annotations.stream()
-		 .filter(a -> !a.annotationType.type.toString().equals(CopyConstValue.class.getName())).toList());
 		tree.mods.flags |= Flags.FINAL;
 
 		Consumer<Object> setConstantValue = value -> {
-			tree.init = mMaker.Literal(value);
+			tree.init = Replace.maker.Literal(value);
 			element.type = element.type.constType(value);
 			// println(element.type.constValue());
 		};
@@ -72,7 +85,7 @@ public class ASMProcessor extends BaseProcessor<VarSymbol> {
 										setConstantValue.accept(lvalue);
 									} catch (AssertionError e) {
 										String s = "\"" + element + "\" 's reference (" + reference + ") is not constvalue (Got: " + lvalue + ")";
-										log.error(s);
+										// log.error(s);
 										throw new RuntimeException(s, e);
 									}
 								}
@@ -87,7 +100,14 @@ public class ASMProcessor extends BaseProcessor<VarSymbol> {
 		// println(tree.sym == element);
 
 	}
-	public Set<Class<?>> getSupportedAnnotationTypes0() {
-		return Set.of(CopyConstValue.class);
+
+	public void translateTopLevelClass(JCCompilationUnit unit) {
+		try {
+			toplevel = unit;
+			translate(unit);
+		} finally {
+			this.classDecl = null;
+			toplevel = null;
+		}
 	}
 }

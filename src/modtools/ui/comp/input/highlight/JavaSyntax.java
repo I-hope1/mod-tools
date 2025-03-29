@@ -68,6 +68,6 @@ public class JavaSyntax extends Syntax {
 	}
 
 
-	public static IntSet operates = JSSyntax.operates;
-	public static IntSet brackets = JSSyntax.brackets;
+	public static IntSet operates = JSSyntax.operateSet;
+	public static IntSet brackets = JSSyntax.bracketSet;
 }

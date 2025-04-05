@@ -14,7 +14,7 @@ import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
-import arc.scene.ui.layout.Table;
+import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
@@ -189,11 +189,13 @@ public class Selection extends Content {
 			isDynamicSelecting = false;
 			ElementUtils.addOrRemove(fragSelect, isSelecting);
 		}).growX().minWidth(170).height(40).checked(_ -> isSelecting && !isDynamicSelecting);
-		cont.button("DynamicSelect", HopeStyles.squareTogglet, () -> {
-			isSelecting = !isSelecting;
-			isDynamicSelecting = true;
-			ElementUtils.addOrRemove(fragSelect, isSelecting);
-		}).growX().minWidth(170).height(40).checked(_ -> isSelecting && isDynamicSelecting);
+		TextButton btn = cont.button("DynamicSelect", HopeStyles.squareTogglet, () -> {
+			 isSelecting = !isSelecting;
+			 isDynamicSelecting = true;
+			 ElementUtils.addOrRemove(fragSelect, isSelecting);
+		 })
+		 .growX().minWidth(170).height(40).checked(_ -> isSelecting && isDynamicSelecting).get();
+		SettingsUI.tryAddTip(btn, name + ".dynamicselect");
 		cont.row();
 		cont.left().add(tab.build())
 		 .colspan(2)

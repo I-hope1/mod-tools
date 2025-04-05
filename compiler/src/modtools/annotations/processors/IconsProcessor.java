@@ -22,8 +22,8 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
 
 		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
-		log.useSource(unit.sourcefile);
 		if (!root.name.toString().endsWith("c")) {
+			log.useSource(unit.sourcefile);
 			log.error(DiagnosticFlag.MANDATORY, unit.toString().indexOf(root.name.toString()) + root.name.length() - 1,
 			 SPrinter.err("The class name must end with 'c' to use the @IconAnn annotation."));
 			return;

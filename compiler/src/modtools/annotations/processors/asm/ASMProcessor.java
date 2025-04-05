@@ -1,42 +1,30 @@
 package modtools.annotations.processors.asm;
 
-import com.sun.source.doctree.*;
-import com.sun.source.util.DocTreePath;
+import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
 import com.sun.tools.javac.util.List;
 import jdk.internal.org.objectweb.asm.*;
-import modtools.annotations.BaseProcessor;
 import modtools.annotations.asm.CopyConstValue;
 
+import javax.lang.model.element.ElementKind;
 import java.util.Set;
 import java.util.function.Consumer;
 
 // @AutoService(Processor.class)
+/** TODO: 在TransLiterals之前替换 */
 @Deprecated
-public class ASMProcessor extends BaseProcessor<VarSymbol> {
+public class ASMProcessor extends BaseASMProc<VarSymbol> {
 	public void dealElement(VarSymbol element) throws Throwable {
-		DocCommentTree doc    = trees.getDocCommentTree(element);
-		SeeTree        seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElse(null);
-		if (seeTag == null) {
-			log.error("@CopyConstValue 标注的field必须有@see");
-			return;
-		}
-		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) {
-			log.error("@CopyConstValue 标注的field的@see必须为引用");
-			return;
-		}
-		println(reference);
-		element.flags_field |= Flags.FINAL;
+		SeeReference seeReference = getSeeReference(CopyConstValue.class, element, ElementKind.FIELD);
+		if (seeReference == null) return;
+		VarSymbol field = (VarSymbol) seeReference.element();
 
-		VarSymbol field = (VarSymbol) trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
-		if (field == null) {
-			log.error(element + ": field is null.");
-			return;
-		}
-		var       tree  = ((JCVariableDecl) trees.getTree(element));
+		CompilationUnitTree unit = trees.getPath(element).getCompilationUnit();
+
+		element.flags_field |= Flags.FINAL;
+		var tree = ((JCVariableDecl) trees.getTree(element));
 		tree.mods.annotations = List.from(tree.mods.annotations.stream()
 		 .filter(a -> !a.annotationType.type.toString().equals(CopyConstValue.class.getName())).toList());
 		tree.mods.flags |= Flags.FINAL;
@@ -71,8 +59,9 @@ public class ASMProcessor extends BaseProcessor<VarSymbol> {
 									try {
 										setConstantValue.accept(lvalue);
 									} catch (AssertionError e) {
-										String s = "\"" + element + "\" 's reference (" + reference + ") is not constvalue (Got: " + lvalue + ")";
-										log.error(s);
+										String s = "\"" + element + "\" 's reference (" + seeReference.reference() + ") is not constvalue (Got: " + lvalue + ")";
+										log.useSource(unit.getSourceFile());
+										log.error(tree, SPrinter.err(s));
 										throw new RuntimeException(s, e);
 									}
 								}
@@ -87,6 +76,7 @@ public class ASMProcessor extends BaseProcessor<VarSymbol> {
 		// println(tree.sym == element);
 
 	}
+
 	public Set<Class<?>> getSupportedAnnotationTypes0() {
 		return Set.of(CopyConstValue.class);
 	}

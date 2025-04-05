@@ -44,7 +44,7 @@ public class DataProcessor extends BaseProcessor<Element> {
 				mMaker.at(method);
 				JCVariableDecl t = makeVar0(Flags.PARAMETER, null, "t", null, method.sym);
 				t.startPos = 0;
-				// Generate: %event%.onIns(%ECL%.%prop%, t->%field%=t.enabled());
+				// Generate: %event%.onIns(%ECL%.%prop%, t->%element%=t.enabled());
 				JCStatement x = execStatement(
 				 mMaker.Select(mMaker.Ident(event_f), ns("onIns")),
 				 List.of(

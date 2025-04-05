@@ -11,7 +11,7 @@ import arc.util.pooling.Pool.Poolable;
 import arc.util.serialization.Json;
 import ihope_lib.MyReflect;
 import mindustry.ui.Styles;
-import modtools.annotations.CopyMethodFrom;
+import modtools.annotations.asm.CopyMethodFrom;
 import modtools.events.E_JSFunc;
 import modtools.ui.*;
 import modtools.ui.comp.input.MyLabel;
@@ -102,7 +102,7 @@ public interface ReflectTools {
 	}
 
 	/** @see Json#getElementType(Field, int) */
-	@CopyMethodFrom(method = "arc.util.serialization.Json#getElementType(Field, int)")
+	@CopyMethodFrom
 	static Class<?> getElementType(Field field, int index) {
 		return null;
 	}

@@ -39,7 +39,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static JavacMessages messages;
 	public static ClassFinder   classFinder;
 	public static JavacFiler    mFiler;
-	public static ClassWriter   classWriter;
+	public static ClassWriter   mClassWriter;
 	public static Attr          attr;
 	public static JavaCompiler  compiler;
 
@@ -50,7 +50,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	private   int              runTimes;
 	protected RoundEnvironment roundEnv;
 	public void process2() { }
-	public static boolean RECORD_TIME = false;
+	public static final boolean RECORD_TIME = true;
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		if (!AINIT.hasMindustry) return true;
 		this.roundEnv = roundEnv;
@@ -82,7 +82,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		try {
 			process();
 		} catch (Throwable e) { err(e); }
-		if (RECORD_TIME) Times.printElapsed("@ in @ms", this);
+		if (RECORD_TIME) Times.printElapsed("@ms for @", this);
 
 		return true;
 	}
@@ -126,7 +126,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		mSymtab = Symtab.instance(_context);
 		classFinder = ClassFinder.instance(_context);
 		mFiler = (JavacFiler) env.getFiler();
-		classWriter = ClassWriter.instance(_context);
+		mClassWriter = ClassWriter.instance(_context);
 		attr = Attr.instance(_context);
 		compiler = JavaCompiler.instance(_context);
 

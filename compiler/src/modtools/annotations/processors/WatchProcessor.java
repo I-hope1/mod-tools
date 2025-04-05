@@ -29,10 +29,10 @@ public class WatchProcessor extends BaseProcessor<Element> {
 	}
 
 	public void process() {
-		// Iterate over each class field
+		// Iterate over each class element
 		classFields.forEach((dcls, fieldSeq) -> {
 			JCClassDecl classDecl = (JCClassDecl) trees.getTree(dcls);
-			// Add a constant field to the class
+			// Add a constant element to the class
 			addConstantField(classDecl, mSymtab.stringType.tsym.type.constType(dcls), "NAME", dcls.toString()
 			 .replace('.', '_'));
 
@@ -43,24 +43,24 @@ public class WatchProcessor extends BaseProcessor<Element> {
 			for (String s : watchClass.groups()) {
 				boolean isStatic = watchClass._static();
 				// Log.info("s: @" ,s);
-				// Add a field to the class for each group
+				// Add a element to the class for each group
 				addField(classDecl, isStatic ? STATIC : 0,
 				 findType(WATCH_STRING), s + WATCH_SIG, "new " + WATCH_STRING + "()");
 			}
 			// ------------------------fields--------------------------
 
-			/* group -> field[] */
+			/* group -> element[] */
 			HashMap<String, HashMap<Element, WatchField>> fieldMap = new HashMap<>();
-			// Iterate over each field in the field sequence
+			// Iterate over each element in the element sequence
 			fieldSeq.forEach((field) -> {
-				// Get the WatchField annotation for the field
+				// Get the WatchField annotation for the element
 				WatchField watchField = getAnnotationByElement(WatchField.class, field, true);
 				Objects.requireNonNull(watchField);
-				// Add the field to the field map
+				// Add the element to the element map
 				fieldMap.computeIfAbsent(watchField.group(), k -> new HashMap<>())
 				 .put(field, watchField);
 			});
-			// Iterate over each group in the field map
+			// Iterate over each group in the element map
 			fieldMap.forEach((group, fields) -> {
 				boolean isStatic  = false/* first.getModifiers().contains(Modifier.STATIC) */;
 				String  fieldName = (isStatic ? STATIC_SIG : "") + group + WATCH_SIG;
@@ -82,10 +82,10 @@ public class WatchProcessor extends BaseProcessor<Element> {
 				}
 
 				ArrayList<JCStatement> statements = new ArrayList<>();
-				// Iterate over each field in the group
+				// Iterate over each element in the group
 				fields.forEach((el, field) -> {
 					/* 添加watch监控
-					 * Generate: field.watch("name", () -> field, @interval);
+					 * Generate: element.watch("name", () -> element, @interval);
 					 **/
 					JCStatement x = execStatement(PSelect(fieldName, "watch"),
 					 List.of(
@@ -100,7 +100,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 					), x, null);
 					statements.add(x);
 				});
-				// Generate: field.showIfOk();
+				// Generate: element.showIfOk();
 				statements.add(execStatement(PSelect(fieldName, "showIfOk"), List.nil()));
 
 				/* Add a block of statements to the class definition

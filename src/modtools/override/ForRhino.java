@@ -4,7 +4,7 @@ import arc.func.Func2;
 import arc.util.*;
 import mindustry.Vars;
 import modtools.utils.ByteCodeTools.*;
-import modtools.utils.reflect.FieldUtils;
+import modtools.utils.reflect.*;
 import rhino.*;
 
 import java.io.File;
@@ -42,7 +42,12 @@ public class ForRhino {
 		factoryMyClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, OS.isAndroid ? new Class[]{File.class} : new Class[0]);
 		// factoryMyClass.writer.write(Vars.tmpDirectory.child(factoryMyClass.adapterName + ".class").write());
 
-		Constructor<?> cons = factoryMyClass.define(Vars.mods.mainLoader()).getDeclaredConstructors()[0];
+		Class<? extends ContextFactory> newClass = factoryMyClass.define(Vars.mods.mainLoader());
+		if (OS.isAndroid) {
+			HopeReflect.changeClass(global, newClass);
+			return global;
+		}
+		Constructor<?>                  cons   = newClass.getDeclaredConstructors()[0];
 		ContextFactory factory = (ContextFactory) (OS.isAndroid ? cons.newInstance(Vars.tmpDirectory.child("factory").file())
 		 : cons.newInstance());
 		// 设置全局的factory

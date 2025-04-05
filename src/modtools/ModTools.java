@@ -9,7 +9,7 @@ import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
-import mindustry.core.Version;
+import mindustry.core.*;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
@@ -21,6 +21,7 @@ import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.misc.*;
+import modtools.misc.SampleTest.X;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -30,19 +31,24 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
 import modtools.utils.io.FileUtils;
+import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
+import java.lang.reflect.Field;
 import java.util.*;
+import java.util.function.Consumer;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
+	public static final boolean TEST = true;
+
 	/** 如果不为empty，在进入是显示 */
-	private static final Seq<Throwable> errors = new Seq<>();
 	private static final Fi             libs   = root.child("libs");
+	private static final Seq<Throwable> errors = new Seq<>();
 	public static        boolean        isV6   = Version.number <= 135;
 
 	/** 是否从游戏内导入进来的 */
@@ -52,6 +58,7 @@ public class ModTools extends Mod {
 	public static boolean loaded = false;
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");
+		Set.of("asiosa").forEach(Log::info);
 
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -82,6 +89,31 @@ public class ModTools extends Mod {
 		if (E_Extending.http_redirect.enabled()) {
 			Tools.runLoggedException(URLRedirect::load);
 		}
+		if (TEST) {
+			if (!OS.isAndroid) initMagicClass(bytes -> HopeReflect.defineClass(null, null, bytes));
+			Log.info(X.classData(Object.class));
+			Field[] fields = X.fields(Class.class, false);
+			Log.info(fields);
+			X x = new X(10);
+			Log.info(x.a);
+			X.init(x, 100);
+			Log.info(x.a);
+
+			World w = SampleWorldInterface.changeClass(new World());
+		}
+	}
+	public static void initMagicClass(Consumer<byte[]> definer) {
+		try {
+			Class.forName("apzmagic.MAGICIMPL");
+			return;
+		} catch (ClassNotFoundException _) { }
+
+		byte[] bytes;
+		bytes = new byte[]{-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 1, 1, 0, 38, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5};
+		definer.accept(bytes);
+		// MAGICIMPL
+		bytes = new byte[]{-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 18, 97, 112, 122, 109, 97, 103, 105, 99, 47, 77, 65, 71, 73, 67, 73, 77, 80, 76, 7, 0, 1, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5};
+		definer.accept(bytes);
 	}
 
 	private void load() {
@@ -119,7 +151,7 @@ public class ModTools extends Mod {
 		extending();
 		// new SamplePackage();
 
-		Events.on(ClientLoadEvent.class,_ -> {
+		Events.on(ClientLoadEvent.class, _ -> {
 			Vars.content.blocks().each(block -> {
 				if (!((block.update || block.destructible) && block.buildType != null)) return;
 				var last = block.buildType;
@@ -151,7 +183,7 @@ public class ModTools extends Mod {
 		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
-		if (E_Extending.force_language.getLocale() != null &&Core.bundle.getLocale() != E_Extending.force_language.getLocale()) {
+		if (E_Extending.force_language.getLocale() != null && Core.bundle.getLocale() != E_Extending.force_language.getLocale()) {
 			if (isImportFromGame) {
 				loadBundle(E_Extending.force_language.getLocale().toString());
 			} else {
@@ -198,9 +230,11 @@ public class ModTools extends Mod {
 			p.add(label);
 		}); */
 
-		if (false) INFO_DIALOG.dialog(new ExtendingLabel("1ijo\noaai") {{
-			addDrawRun(0, 4, DrawType.wave, Color.sky);
-		}});
+		if (false) {
+			INFO_DIALOG.dialog(new ExtendingLabel("1ijo\noaai") {{
+				addDrawRun(0, 4, DrawType.wave, Color.sky);
+			}});
+		}
 
 		loaded = true;
 		async(() -> {

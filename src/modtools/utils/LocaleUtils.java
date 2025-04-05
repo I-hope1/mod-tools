@@ -7,6 +7,7 @@ import java.util.Locale;
 import static mindustry.Vars.locales;
 
 /** @see mindustry.ui.dialogs.LanguageDialog  */
+@SuppressWarnings("deprecation")
 public class LocaleUtils {
 	public static Locale findClosestLocale() {
 		//check exact locale
@@ -29,6 +30,7 @@ public class LocaleUtils {
 	public static final Locale none = new Locale(noneLocStr);
 
 	private static Locale lastLocale;
+	/** @see LanguageDialog#getLocale()   */
 	public static Locale getLocale(String loc) {
 		if (loc == null || loc.isEmpty() || loc.equals(noneLocStr)) {
 			return none;

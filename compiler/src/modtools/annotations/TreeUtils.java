@@ -18,14 +18,14 @@ public interface TreeUtils extends ParseUtils, NameString {
 	/**
 	 * 检测字段是否存在
 	 *
-	 * @return {@code true} if field is present.
+	 * @return {@code true} if element is present.
 	 */
 	default boolean checkField(
 	 JCClassDecl classDecl, String fieldName, String group
 	) {
 		JCVariableDecl fieldElem = findChild(classDecl, Tag.VARDEF, var -> var.name.toString().equals(fieldName));
 		if (fieldElem == null) {
-			new IllegalStateException("You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") field.")
+			new IllegalStateException("You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") element.")
 			 .printStackTrace();
 			return false;
 		}

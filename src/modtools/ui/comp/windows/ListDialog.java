@@ -26,7 +26,7 @@ import static modtools.IntVars.mouseVec;
 import static modtools.utils.Tools.readFiOrEmpty;
 
 public class ListDialog extends Window {
-	public List<Fi> list;
+	public ArrayList<Fi> list;
 
 	final FilterTable<String> p = new FilterTable<>();
 	Comparator<Fi> sorter;

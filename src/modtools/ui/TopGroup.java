@@ -514,7 +514,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	}
 
 
-	public final List<ResidentDrawTask> drawResidentTasks = new ArrayList<>();
+	public final ArrayList<ResidentDrawTask> drawResidentTasks = new ArrayList<>();
 
 	{
 		Events.run(Trigger.uiDrawBegin, delegate(

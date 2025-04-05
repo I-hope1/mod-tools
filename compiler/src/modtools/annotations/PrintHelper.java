@@ -32,7 +32,7 @@ public interface PrintHelper {
 	}
 	default void err(Throwable th) {
 		SPrinter.err(th);
-		BaseProcessor.log.error(th.toString());
+		BaseProcessor.log.error(SPrinter.err(th.toString()));
 		BaseProcessor.compiler.shouldStopPolicyIfError = CompileState.INIT;
 	}
 	static void errs(Object... objects) {

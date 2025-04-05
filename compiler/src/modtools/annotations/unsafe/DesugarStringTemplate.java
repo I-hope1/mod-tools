@@ -42,11 +42,13 @@ public class DesugarStringTemplate extends TreeTranslator {
 		    trees.getTree(var) instanceof JCVariableDecl variableDecl) {
 			// assert var.isStatic() && var.isFinal();
 			if (!var.isStatic() && var.isFinal()) {
+				log.useSource(toplevel.sourcefile);
 				log.error(variableDecl.startPos, SPrinter.err("StringTemplate processor must be static final"));
 				return;
 			}
 			// assert variableDecl.init instanceof JCLambda;
 			if (!(variableDecl.init instanceof JCLambda lambda)) {
+				log.useSource(toplevel.sourcefile);
 				log.error(variableDecl.startPos, SPrinter.err("StringTemplate processor must be a lambda"));
 				return;
 			}

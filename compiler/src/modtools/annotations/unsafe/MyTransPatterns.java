@@ -132,7 +132,7 @@ class SwitchDesugar extends TreeTranslator {
 			make.at(pattern);
 			if (bindingPattern.type == syms.objectType) return condition;
 			JCExpression test = make.TypeTest(selector,
-			 bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : bindingPattern)
+				bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : bindingPattern)
 			 .setType(syms.booleanType);
 			return condition != null ? makeBinary(Tag.OR, condition, test) : test;
 		}

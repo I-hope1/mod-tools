@@ -75,8 +75,8 @@ public class DesugarRecord extends TreeTranslator {
 		 maker.TypeCast(maker.Ident(tree.name), maker.Ident(ns.fromString("other")))));
 
 		/* 遍历所有字段，判断是否相等
-		 如果是基本数据类型：if (!($other.field == field)) return false;
-		 如果是引用类型：if (!($other.field.equals(field))) return false;
+		 如果是基本数据类型：if (!($other.element == element)) return false;
+		 如果是引用类型：if (!($other.element.equals(element))) return false;
 		*/
 		JCExpression resCondition = null;
 		for (JCVariableDecl field : fields) {

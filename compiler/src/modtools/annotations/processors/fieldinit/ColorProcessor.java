@@ -32,7 +32,7 @@ public class ColorProcessor extends BaseProcessor<Element> implements DataUtils 
 			 )
 			);
 			addImport(element.getEnclosingElement(), SettingUI());
-			// Log.info(field);
+			// Log.info(element);
 			if (!anno.needSetting()) return;
 
 			JCMethodDecl method = findChild(decl, Tag.METHODDEF, d -> d.name.contentEquals("settingColor"));

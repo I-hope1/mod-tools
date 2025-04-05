@@ -1,12 +1,11 @@
-package modtools.annotations;
+package modtools.annotations.asm;
 
 import java.lang.annotation.*;
 
 
+/** 依赖@see来获取引用  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.SOURCE)
 public @interface CopyMethodFrom {
-	/** 完全限定类名#方法名({@link java.lang.invoke.MethodType})  */
-	String method();
 	String insertBefore() default "";
 }

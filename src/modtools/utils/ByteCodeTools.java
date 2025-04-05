@@ -15,7 +15,7 @@ import java.lang.reflect.*;
 import java.util.*;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.annotations.asm.Sample.SUPER_METHOD_PREFIX;
+import static modtools.annotations.asm.Sample.AConstants.SUPER_METHOD_PREFIX;
 import static rhino.classfile.ByteCode.*;
 import static rhino.classfile.ClassFileWriter.*;
 
@@ -372,10 +372,6 @@ public class ByteCodeTools {
 		public T get() {
 			return func.get();
 		}
-	}
-
-	public static String legalName(String name) {
-		return name.replace("java", "lava").replace("jdk","ldk");
 	}
 
 	public static String nativeName(Class<?> cls) {

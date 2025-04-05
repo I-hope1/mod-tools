@@ -4,7 +4,7 @@ import arc.struct.ObjectMap;
 import arc.struct.ObjectMap.Entry;
 import arc.util.OS;
 import mindustry.gen.Icon;
-import modtools.annotations.asm.Sample;
+import modtools.annotations.asm.Sample.AConstants;
 import modtools.content.debug.Tester;
 import modtools.events.E_JSFunc;
 import modtools.jsfunc.IScript;
@@ -33,17 +33,17 @@ public class ChangeClassDialog extends Window {
 
 		E_JSFunc.change_class_reference_when_edit.build(cont);
 		cont.button("ok", Icon.ok, HopeStyles.flatBordert, () -> {
-			var myClass = new MyClass<>(label.type, Sample.GEN_CLASS_NAME_SUFFIX);
+			var myClass = new MyClass<>(label.type, AConstants.GEN_CLASS_NAME_SUFFIX);
 			for (Entry<Method, JSSyntax> entry : syntaxes) {
 				Method   m      = entry.key;
 				JSSyntax syntax = entry.value;
 				if (syntax.drawable.getText().isBlank()) continue;
 				myClass.setFunc(m.getName(), null, Modifier.PUBLIC, false, m.getReturnType(), m.getParameterTypes());
 				myClass.buildSuperFunc(
-				 Sample.SUPER_METHOD_PREFIX + m.getName(),m.getName(), m.getReturnType(), m.getParameterTypes());
+				 AConstants.SUPER_METHOD_PREFIX + m.getName(),m.getName(), m.getReturnType(), m.getParameterTypes());
 			}
 			/* 先使类public化 */
-			myClass = new MyClass<>(myClass.define(), Sample.GEN_CLASS_NAME_SUFFIX);
+			myClass = new MyClass<>(myClass.define(), AConstants.GEN_CLASS_NAME_SUFFIX);
 			for (Entry<Method, JSSyntax> entry : syntaxes) {
 				Method   m      = entry.key;
 				JSSyntax syntax = entry.value;

@@ -1,7 +1,7 @@
 package modtools.annotations.unsafe;
 
-import com.sun.source.util.TreePath;
-import com.sun.tools.javac.api.JavacTrees;
+import com.sun.source.util.*;
+import com.sun.tools.javac.api.*;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Directive.ExportsDirective;
 import com.sun.tools.javac.code.Kinds.Kind;
@@ -24,6 +24,7 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
+import modtools.annotations.unsafe.CheckDefaultCall.CheckException;
 
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
@@ -50,12 +51,14 @@ public class Replace {
 	static TreeMaker     maker;
 	static JavacElements elements;
 	static ModuleFinder  moduleFinder;
+	static JavacMessages messages;
+	static Analyzer      analyzer;
 
 	static CopyValueProc         copyValueProc;
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
-	static JavacMessages         messages;
+	static Properties            bundles = new Properties();
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -68,25 +71,21 @@ public class Replace {
 		maker = TreeMaker.instance(context);
 		elements = JavacElements.instance(context);
 		moduleFinder = ModuleFinder.instance(context);
+		messages = JavacMessages.instance(context);
+		analyzer = Analyzer.instance(context);
+
 		copyValueProc = new CopyValueProc();
 		defaultToStatic = new DefaultToStatic(context);
 		desugarStringTemplate = new DesugarStringTemplate(context);
 		desugarRecord = new DesugarRecord();
-		messages = JavacMessages.instance(context);
-		messages.add(locale -> new ResourceBundle() {
-			final Vector<String> vector = new Vector<>();
 
-			{
-				vector.add("any.1");
-			}
-
-			protected Object handleGetObject(String key) {
-				return "{0}";
-			}
-			public Enumeration<String> getKeys() {
-				return vector.elements();
+		messages.add(locale -> new ListResourceBundle() {
+			protected Object[][] getContents() {
+				return bundles.entrySet().stream().map(e -> new Object[]{e.getKey(), e.getValue()}).toArray(Object[][]::new);
 			}
 		});
+		bundles.put("any.1", "{0}");
+		bundles.put("any.err.1", "{0}");
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }
@@ -233,6 +232,17 @@ public class Replace {
 		Options.instance(context).put(Option.PARAMETERS, "");
 
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
+
+		MultiTaskListener.instance(context).add(new TaskListener() {
+			final CheckDefaultCall chk = new CheckDefaultCall(context);
+			public void finished(TaskEvent e) {
+				if (e.getKind() == TaskEvent.Kind.ANALYZE) {
+					try {
+						chk.scanToplevel((JCCompilationUnit) e.getCompilationUnit());
+					} catch (CheckException _) { }
+				}
+			}
+		});
 		// removeKey(TransTypes.class, () -> new MyTransTypes(context));
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "transTypes", TransTypes.instance(context));
 		// removeKey(Lower.class, () -> new Desugar(context));
@@ -286,6 +296,8 @@ public class Replace {
 		 .filter(f -> f.startsWith("-AtargetVersion=")).findFirst()
 		 .map(v -> v.substring("-AtargetVersion=".length()))
 		 .map(Target::lookup).ifPresent(Replace::setTarget);
+		// Options.instance(context).keySet().stream()
+		//  .filter(f -> f.startsWith("-AtargetVersion=")).findFirst().ifPresent(f -> Options.instance(context).remove(f));
 	}
 	/** 使source8就可以支持所有特性 */
 	public static void replaceSource() {
@@ -400,11 +412,12 @@ public class Replace {
 		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1) + "Key", cls, newVal);
 	}
 	private static <T> void removeKey(String name, Class<T> cls, Supplier<T> newVal) {
-		Key<Resolve>            key = getAccess(cls, null, name);
-		HashMap<Key<?>, Object> ht  = getAccess(Context.class, context, "ht");
-		ht.remove(key);
+		Key<Resolve>            key  = getAccess(cls, null, name);
+		HashMap<Key<?>, Object> ht   = getAccess(Context.class, context, "ht");
+		Object                  prev = ht.remove(key);
 		if (newVal != null) {
 			Object value = newVal.get();
+			// if (prev != null) copyTo(prev, value);
 			if (!ht.containsKey(key)) ht.put(key, value);
 		}
 	}

@@ -102,14 +102,14 @@ public class VirtualClass {
 			byte[] bytes;
 			try {
 				ByteArrayOutputStream out = new ByteArrayOutputStream();
-				classWriter.writeClassFile(out, symbol);
+				mClassWriter.writeClassFile(out, symbol);
 				bytes = out.toByteArray();
 			} catch (Throwable e) {
 				errs(e);
 				bytes = defaultBytes;
 			}
 			cl = defineHiddenClass(bytes);
-			HopeReflect.setAccess(Class.class, cl, "name", type.toString());
+			HopeReflect.setAccess(Class.class, cl, "name", "" + type.tsym.flatName());
 			// cl = jdk.internal.misc.Unsafe.getUnsafe().defineClass(
 			//  null, bytes, 0, bytes.length, loader, null);
 			// if (cl != null) classToType.put(cl, type);

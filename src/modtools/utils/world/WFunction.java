@@ -240,7 +240,7 @@ public abstract class WFunction<T> {
 		 .update(t -> t.setChecked(drawAll));
 		newButton("NoSelect", Icon.trashSmall, HopeStyles.flatt, () -> {
 			clearList();
-			SC.dynamicSelectRegions.clear();
+			if (Core.input.ctrl()) SC.dynamicSelectRegions.clear();
 			changeEvent.run();
 		})
 		 .row();

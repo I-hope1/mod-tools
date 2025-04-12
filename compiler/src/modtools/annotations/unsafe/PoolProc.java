@@ -171,8 +171,8 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 			 mMaker.Select(mMaker.Ident(ns("map")),
 				ns("put")),
 			 List.of(mMaker.Literal(s), mMaker.Lambda(List.nil(),
-				mMaker.Apply(List.nil(), mMaker.Ident(ns("changeClass")),
-				 List.of(mMaker.Reference(ReferenceMode.INVOKE, ns("create"), mMaker.QualIdent(clazz), null)))
+				mMaker.Apply(List.nil(), mMaker.Select(mMaker.QualIdent(pools), ns("obtain")),
+				 List.of(mMaker.ClassLiteral(clazz), mMaker.Literal(TypeTag.BOT, null)))
 			 ))
 			);
 			methodDecl.body.stats = methodDecl.body.stats.append(mMaker.Exec(expr));

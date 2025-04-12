@@ -5,7 +5,7 @@ import arc.func.Prov;
 import arc.struct.ObjectMap;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
-import mindustry.gen.Entityc;
+import mindustry.gen.*;
 import modtools.annotations.asm.GenPool;
 import modtools.utils.Tools;
 
@@ -20,15 +20,15 @@ public class ObjectPool {
 	public static void load() {
 		Events.on(ClientLoadEvent.class, _ -> {
 			install();
-			addMonitor();
+			flush();
 			// Log.info("ok");
 		});
 	}
 
-	static void addMonitor() {
+	static void flush() {
 		// Log.info("Adding monitor!!");
 		Vars.content.units().each(unit -> {
-			if (map.containsKey(unit.name)) unit.constructor = map.get(unit.name);
+			if (unit.constructor.getClass().getNestHost() == EntityMapping.class) unit.constructor = EntityMapping.map(unit.name);
 		});
 		// Vars.content.blocks()
 	}

@@ -24,7 +24,7 @@ public enum E_Extending implements ISettings {
 		public boolean isSwitchOn() {
 			return !OS.isAndroid;
 		}
-	};
+	}, world_save;
 
 	E_Extending() { }
 	E_Extending(Class<?> cl, Cons<ISettings> builder) { }

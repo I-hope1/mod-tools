@@ -1,4 +1,4 @@
-package modtools.files;
+package modtools.utils.files;
 
 import arc.Files.FileType;
 import arc.files.Fi;

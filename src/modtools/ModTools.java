@@ -18,7 +18,7 @@ import modtools.content.SettingsUI;
 import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.*;
-import modtools.files.HFi;
+import modtools.utils.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.misc.SampleTest.X;
@@ -90,6 +90,9 @@ public class ModTools extends Mod {
 		if (E_Extending.object_pool.enabled() && !OS.isAndroid) {
 			Tools.runLoggedException(MagicInstaller::installMagic);
 			Tools.runLoggedException(ObjectPool::load);
+		}
+		if (E_Extending.world_save.enabled()) {
+			Tools.runLoggedException(WorldSaver::load);
 		}
 
 		if (TEST) {

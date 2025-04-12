@@ -38,6 +38,7 @@ public class GameSettings extends Content {
 
 		Search<String> search = new Search<>((_, pattern) -> this.pattern = pattern);
 		search.addFilter("Filter", Status.values(), Status.hideNoName);
+		search.top.add("[accent]Unset[]: <clear>; [accent](DefaultValue)[]: [gray]*[]; [accent]Changed[]: [white]*");
 		cont.addConditionUpdateListener(item -> search.valid(pattern, item));
 		// 将设置的所以值都列出来
 		// example1 true* 示例设置1 R(重置) S(修改)

@@ -204,7 +204,7 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 			);
 		}
 
-		println(methodDecl);
+		// println(methodDecl);
 
 		// ---reset---
 

@@ -153,12 +153,12 @@ public class JSRequest {
 	private static Object eval() {
 		return window.eval();
 	}
-	public static void requestCode(Cons<String> callback) {
-		new DisWindow("code") {{
+	public static void requestCode(Scriptable scope, Cons<String> callback) {
+		new DisWindow("Code") {{
 			TextAreaTab area = new TextAreaTab("");
-			area.syntax = new JSSyntax(area);
+			area.syntax = new JSSyntax(area, scope);
 			cont.add(area).grow().row();
-			cont.button("ok", runT(() -> {
+			cont.button("@ok", runT(() -> {
 				callback.get(area.getText());
 				hide();
 			})).size(120, 45);

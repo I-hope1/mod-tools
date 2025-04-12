@@ -259,6 +259,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 						for (Object item : iter) {
 							cons.get(item);
 						}
+						cons.append(null);
 					} else {
 						ArrayUtils.forEach(val, cons);
 					}
@@ -757,6 +758,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		public void append(Object item) {
+			if (count == 0) return;
 			self.postAppendDelimiter(text);
 			self.appendValue(text, last);
 			self.addCountText(text, count);
@@ -777,6 +779,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		public void append(long item) {
+			if (count == 0) return;
 			self.postAppendDelimiter(text);
 			self.appendValue(text, llast);
 			self.addCountText(text, count);
@@ -797,6 +800,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		public void append(double item) {
+			if (count == 0) return;
 			self.postAppendDelimiter(text);
 			self.appendValue(text, dlast);
 			self.addCountText(text, count);
@@ -817,6 +821,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		public void append(boolean item) {
+			if (count == 0) return;
 			self.postAppendDelimiter(text);
 			self.appendValue(text, zlast);
 			self.addCountText(text, count);
@@ -837,6 +842,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		public void append(char item) {
+			if (count == 0) return;
 			self.postAppendDelimiter(text);
 			self.appendValue(text, clast);
 			self.addCountText(text, count);

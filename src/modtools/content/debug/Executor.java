@@ -10,14 +10,17 @@ import arc.scene.ui.ImageButton;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.struct.Seq;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.WorldSaver.*;
 import modtools.content.Content;
 import modtools.events.*;
 import modtools.events.ExecuteTree.*;
 import modtools.events.TaskNode.JSRun;
+import modtools.events.TaskNode.JSRun.CScope;
 import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
@@ -28,7 +31,6 @@ import modtools.ui.menu.*;
 import modtools.utils.JSFunc;
 import modtools.utils.search.FilterTable;
 import modtools.utils.ui.ReflectTools;
-import rhino.BaseFunction;
 
 public class Executor extends Content {
 	public Executor() {
@@ -44,21 +46,22 @@ public class Executor extends Content {
 	FilterTable<Intp> p;
 	public void loadUI() {
 		ui = new IconWindow(200, 100, true);
-		ui.cont.button(Icon.refresh, HopeStyles.flati, () -> {
+		Runnable refresh = () -> {
 			p.clear();
 			build(p);
 			p.invalidateHierarchy();
-		}).size(72, 42);
+		};
+		ui.cont.button(Icon.refresh, HopeStyles.flati, refresh).size(72, 42);
 		ReflectTools.addCodedBtn(ui.cont, "status", 1,
 		 i -> statusCode = i, () -> statusCode,
 		 StatusList.values());
 		ui.cont.button("@task.newtask", Icon.addSmall, HopeStyles.flatt, () -> {
-			JSRequest.requestCode(code -> ExecuteTree.context(customTask.get(), () -> {
-				BaseFunction scope = new BaseFunction(JSRequest.topScope, null);
+			JSRequest.requestCode(CScope.tester.scope(), code -> ExecuteTree.context(customTask.get(), () -> {
 				ExecuteTree.node("custom",
-					new JSRun(code, scope))
+					new JSRun(code, CScope.tester))
 				 .code(code)
 				 .resubmitted().apply();
+				refresh.run();
 			}));
 		}).size(120, 45);
 		ui.cont.row();
@@ -135,6 +138,10 @@ public class Executor extends Content {
 			MenuBuilder.addShowMenuListenerp(button, () -> (node.menuList != null ? node.menuList.get() : new Seq<MenuItem>())
 			 .add(node.code == null ? null : MenuItem.with("copy.code", Icon.copySmall, "cpy code", () -> {
 				 if (node.code != null) JSFunc.copyText(node.code);
+			 })).add(node.code == null ? null :
+				DisabledList.withd("save.map", Icon.copySmall, "save code in map", () -> !Vars.state.isGame() || Vars.state.map == null,() -> {
+					MyCustomChunk.instance.data.add(new Pair<>(DataType.code, node.code));
+					IntUI.showInfoFade("Saved.");
 			 })));
 			button.table(right -> {
 				if (node.isResubmitted()) {

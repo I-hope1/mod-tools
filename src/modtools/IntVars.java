@@ -10,7 +10,7 @@ import mindustry.Vars;
 import mindustry.game.EventType.ResizeEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.*;
-import modtools.files.HFi;
+import modtools.utils.files.HFi;
 import modtools.struct.*;
 import modtools.struct.v6.AThreads;
 import modtools.ui.IntUI;

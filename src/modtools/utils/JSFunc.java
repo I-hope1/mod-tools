@@ -9,25 +9,29 @@ import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.layout.Table;
+import arc.struct.Seq;
 import arc.util.*;
 import mindustry.graphics.Pal;
-import modtools.IntVars;
+import modtools.*;
+import modtools.WorldSaver.*;
 import modtools.annotations.builder.DataColorFieldInit;
+import modtools.content.debug.Tester;
+import modtools.content.world.Selection;
 import modtools.jsfunc.*;
 import modtools.jsfunc.reflect.*;
 import modtools.jsfunc.reflect.android.LL_UNSAFE;
 import modtools.jsfunc.type.*;
+import modtools.struct.Pair;
 import modtools.ui.*;
 import modtools.ui.TopGroup.ResidentDrawTask;
 import modtools.ui.comp.InterpImage;
-import modtools.content.debug.Tester;
-import modtools.content.world.Selection;
 import modtools.ui.effect.HopeFx;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.ui.windows.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.WatchWindow;
 import modtools.utils.world.*;
+import rhino.Scriptable;
 
 import static modtools.IntVars.mouseVec;
 import static modtools.ui.IntUI.topGroup;
@@ -81,6 +85,15 @@ public class JSFunc
 		 Tester.quietPut(value)), vec2);
 	}
 
+	//region WorldSaver
+	public static Scriptable worldSaver = cx.getWrapFactory().wrapJavaClass(cx, scope, WorldSaver.class);
+	public static Pair pairOf(Object o1, Object o2) {
+		return Pair.of(o1, o2);
+	}
+	public static Seq<Pair<DataType, Object>> worldData() {
+		return MyCustomChunk.instance.data;
+	}
+	//endregion
 
 	/*static Field rowField;
 

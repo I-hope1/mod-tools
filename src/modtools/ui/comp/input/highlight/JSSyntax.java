@@ -355,8 +355,12 @@ public class JSSyntax extends Syntax {
 			if (c == ';') {
 				operatesSymbol.lastSymbol = '\0';
 			}
-			if (c == '(' && currentObject instanceof Scriptable sc) {
-				stack.add(RMethod.obtain(sc));
+			if (c == '(') {
+				if (currentObject instanceof Scriptable sc) {
+					stack.add(RMethod.obtain(sc));
+					/* currentObject = customScope;
+					updateCursorObj(); */
+				}
 			}
 			if (c == ',' && inFunction()) {
 				stack.lastElement().args.add(currentObject);

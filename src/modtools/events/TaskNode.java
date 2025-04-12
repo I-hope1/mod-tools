@@ -8,6 +8,7 @@ import arc.struct.Seq;
 import arc.util.*;
 import arc.util.Timer.Task;
 import modtools.IntVars;
+import modtools.content.debug.Tester;
 import modtools.events.ExecuteTree.Error;
 import modtools.events.ExecuteTree.*;
 import modtools.jsfunc.IScript;
@@ -183,13 +184,28 @@ public class TaskNode {
 	}
 
 	public static class JSRun extends Task {
+		public enum CScope {
+			tester,
+			global;
+
+			public Scriptable scope() {
+				return switch (this) {
+					case tester -> Tester.customScope;
+					case global -> IScript.scope;
+					default -> throw new UnsupportedOperationException();
+				};
+			}
+		}
 		public final String     code;
 		public final Script     script;
 		public final Scriptable scope;
-		public JSRun(String code, Scriptable scope) {
+		private JSRun(String code, Scriptable scope) {
 			this.code = code;
 			this.scope = scope;
 			script = IScript.cx.compileString(code, "<custom>", 1);
+		}
+		public JSRun(String code, CScope scope) {
+			this(code, scope.scope());
 		}
 		public void run() {
 			script.exec(IScript.cx, scope);

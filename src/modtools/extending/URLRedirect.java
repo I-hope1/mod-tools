@@ -1,15 +1,15 @@
 package modtools.extending;
 
 import arc.files.Fi;
-import arc.func.*;
+import arc.func.Func2;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.Constants.CURL;
 import modtools.IntVars;
 import modtools.jsfunc.reflect.UNSAFE;
-import modtools.utils.*;
 import modtools.utils.ByteCodeTools.MyClass;
 import modtools.utils.ByteCodeTools.MyClass.Lambda;
+import modtools.utils.*;
 
 import java.io.IOException;
 import java.lang.reflect.*;
@@ -27,9 +27,9 @@ import static jdk.internal.classfile.Classfile.*;
 public class URLRedirect {
 	public static final String SUFFIX = "-h0";
 
-	static Properties replacer = new Properties();
+	static Properties    replacer = new Properties();
 	static Fi            defaultConfig;
-	static Consumer<URL> cons = u -> {
+	static Consumer<URL> cons     = u -> {
 		if (replacer.contains(u.getHost())) {
 			UNSAFE.putObject(u, CURL.host, replacer.getProperty(u.getHost()));
 		}
@@ -58,10 +58,10 @@ public class URLRedirect {
 					cfw.add(ALOAD_0);
 					cfw.add(ALOAD_1);
 					cfw.addInvoke(INVOKESPECIAL, handler.superName, "openConnection",
-						"(Ljava/net/URL;)Ljava/net/URLConnection;");
+					 "(Ljava/net/URL;)Ljava/net/URLConnection;");
 					cfw.add(ARETURN);
 					return 2; // this + url
-				}, Modifier.PUBLIC,  URLConnection.class, URL.class);
+				}, Modifier.PUBLIC, URLConnection.class, URL.class);
 				if (OS.isAndroid) {
 					/* 同时去除final */
 					MyReflect.setPublic(value.getClass());
@@ -71,7 +71,7 @@ public class URLRedirect {
 					Class<URLStreamHandler> newClass = (Class<URLStreamHandler>) handler.define();
 					newValue = CatchSR.apply(() ->
 					 CatchSR.of(() -> newClass.getDeclaredConstructor().newInstance())
-					  .get(() -> Tools.newInstance(value, newClass))
+						.get(() -> Tools.newInstance(value, newClass))
 					);
 				} catch (Throwable e) {
 					newValue = value;
@@ -80,8 +80,11 @@ public class URLRedirect {
 				return super.put(key, newValue);
 			}
 		});
-		new URL("https://github.com");
-		new URL("http://github.com");
+		for (var entry : replacer.entrySet()) {
+			Object k = entry.getKey();
+			new URL("https://" + k);
+			new URL("http://" + k);
+		}
 	}
 	private static boolean loadConfig(Fi config) throws IOException {
 		if (!config.exists()) return false;

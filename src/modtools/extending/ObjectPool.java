@@ -17,8 +17,11 @@ public class ObjectPool {
 	}
 	public static void reset(Entityc entity) {
 	}
-	static {
-		Events.on(ClientLoadEvent.class, _ -> addMonitor());
+	public static void load() {
+		Events.on(ClientLoadEvent.class, _ -> {
+			install();
+			addMonitor();
+		});
 	}
 
 	static void addMonitor() {

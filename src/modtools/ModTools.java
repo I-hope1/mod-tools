@@ -89,7 +89,7 @@ public class ModTools extends Mod {
 		}
 		if (E_Extending.object_pool.enabled()) {
 			Tools.runLoggedException(MagicInstaller::installMagic);
-			Tools.runLoggedException(ObjectPool::install);
+			Tools.runLoggedException(ObjectPool::load);
 		}
 
 		if (TEST) {

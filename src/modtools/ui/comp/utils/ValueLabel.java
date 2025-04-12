@@ -12,6 +12,7 @@ import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
+import arc.struct.IntMap.Keys;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.pooling.*;
@@ -89,14 +90,18 @@ public abstract class ValueLabel extends ExtendingLabel {
 				hover(x, y);
 				return super.touchDown(event, x, y, pointer, button);
 			}
+			private final IntSeq keys = new IntSeq();
 			private void hover(float x, float y) {
 				hoveredVal = null;
 				int    cursor = getCursor(x, y);
 				Object o;
 				int    toIndex;
 
-				IntSeq keys = startIndexMap.keys().toArray();
+				Keys keys1 = startIndexMap.keys();
+				keys.clear();
+				while (keys1.hasNext) keys.add(keys1.next());
 				keys.sort();
+
 				for (int i = 0, size = keys.size; i < size; i++) {
 					int index = keys.get(i);
 					o = startIndexMap.get(index);
@@ -109,8 +114,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		});
 		MenuBuilder.addShowMenuListenerp(this, () -> {
-			ValueLabel   label = this;
-			final Object val   = hoveredVal;
+			ValueLabel label = this;
+			Log.info(hoveredVal);
+			final Object val = hoveredVal;
 			if (val != null) {
 				Class<?> type1 = valToType.get(val);
 				Object   obj   = valToObj.get(val);
@@ -312,11 +318,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 		Color mainColor  = colorOf(val);
 		int   startIndex = text.length();
 		colorMap.put(startIndex, mainColor);
-		boolean b = testHashCode(wrapVal(val));
-		if (b) startIndexMap.put(startIndex - textOff, wrapVal(val));
+		boolean b = testHashCode(val);
+		if (b) startIndexMap.put(startIndex - textOff, val);
 		text.append(toString(val));
 		int endI = text.length();
-		if (b) endIndexMap.put(wrapVal(val), endI);
+		if (b) endIndexMap.put(val, endI);
 		colorMap.put(endI, Color.white);
 	}
 	private Prov<Point2> getPoint2Prov(Object val) {
@@ -429,10 +435,14 @@ public abstract class ValueLabel extends ExtendingLabel {
 	private void appendMap(StringBuilder sb, Object mapObj,
 	                       Object key,
 	                       Object value) {
-		valToObj.put(key, mapObj);
-		valToObj.put(value, mapObj);
-		valToType.put(key, key.getClass());
-		valToType.put(value, value == null ? Object.class : value.getClass());
+		if (key != null) {
+			valToObj.put(key, mapObj);
+			valToType.put(key, key.getClass());
+		}
+		if (value != null) {
+			valToObj.put(value, mapObj);
+			valToType.put(value, value.getClass());
+		}
 		postAppendDelimiter(sb);
 		appendValue(sb, key);
 		sb.append('=');
@@ -535,9 +545,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 			new ChangeClassDialog(this).show();
 		}));
 		list.add(UnderlineItem.with());
-		if (val instanceof String s) {
+		if (String.class.isAssignableFrom(type) || val instanceof String) {
 			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", this::valueIsNull, () -> {
-				JSFunc.copyText(s);
+				JSFunc.copyText((String) val);
 			}));
 		}
 		if (Style.class.isAssignableFrom(type) || val instanceof Style) {
@@ -739,67 +749,20 @@ public abstract class ValueLabel extends ExtendingLabel {
 				self.valToObj.put(item, val);
 				self.valToType.put(item, val.getClass());
 			}
-			if (last != null && identityClasses.contains(val.getClass()) ? !last.equals(item) : last != item) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, last);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				last = item;
-				count = 0;
+			if ((last != null && identityClasses.contains(val.getClass()))
+			 ? !last.equals(item) : last != item) {
+				append(item);
 			} else {
 				count++;
 			}
 		}
-		private int ilast;
-		public void get(int item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				ilast = item;
-			}
-			if (item != ilast) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, ilast);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				ilast = item;
-				count = 0;
-			} else {
-				count++;
-			}
-		}
-		private float flast;
-		public void get(float item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				flast = item;
-			}
-			if (item != flast) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, flast);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				flast = item;
-				count = 0;
-			} else {
-				count++;
-			}
-		}
-		private double dlast;
-		public void get(double item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				dlast = item;
-			}
-			if (item != dlast) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, (float) dlast);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				dlast = item;
-				count = 0;
-			} else {
-				count++;
-			}
+		public void append(Object item) {
+			self.postAppendDelimiter(text);
+			self.appendValue(text, last);
+			self.addCountText(text, count);
+			if (self.isTruncate(text.length())) throw new SatisfyException();
+			last = item;
+			count = 0;
 		}
 		private long llast;
 		public void get(long item) {
@@ -808,15 +771,38 @@ public abstract class ValueLabel extends ExtendingLabel {
 				llast = item;
 			}
 			if (item != llast) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, llast);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				llast = item;
-				count = 0;
+				append(item);
 			} else {
 				count++;
 			}
+		}
+		public void append(long item) {
+			self.postAppendDelimiter(text);
+			self.appendValue(text, llast);
+			self.addCountText(text, count);
+			if (self.isTruncate(text.length())) throw new SatisfyException();
+			llast = item;
+			count = 0;
+		}
+		private double dlast;
+		public void get(double item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				dlast = item;
+			}
+			if (item != dlast) {
+				append(item);
+			} else {
+				count++;
+			}
+		}
+		public void append(double item) {
+			self.postAppendDelimiter(text);
+			self.appendValue(text, dlast);
+			self.addCountText(text, count);
+			if (self.isTruncate(text.length())) throw new SatisfyException();
+			dlast = item;
+			count = 0;
 		}
 		private boolean zlast;
 		public void get(boolean item) {
@@ -825,15 +811,18 @@ public abstract class ValueLabel extends ExtendingLabel {
 				zlast = item;
 			}
 			if (item != zlast) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, zlast);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				zlast = item;
-				count = 0;
+				append(item);
 			} else {
 				count++;
 			}
+		}
+		public void append(boolean item) {
+			self.postAppendDelimiter(text);
+			self.appendValue(text, zlast);
+			self.addCountText(text, count);
+			if (self.isTruncate(text.length())) throw new SatisfyException();
+			zlast = item;
+			count = 0;
 		}
 		private char clast;
 		public void get(char item) {
@@ -842,15 +831,18 @@ public abstract class ValueLabel extends ExtendingLabel {
 				clast = item;
 			}
 			if (item != clast) {
-				self.postAppendDelimiter(text);
-				self.appendValue(text, clast);
-				self.addCountText(text, count);
-				if (self.isTruncate(text.length())) throw new SatisfyException();
-				clast = item;
-				count = 0;
+				append(item);
 			} else {
 				count++;
 			}
+		}
+		public void append(char item) {
+			self.postAppendDelimiter(text);
+			self.appendValue(text, clast);
+			self.addCountText(text, count);
+			if (self.isTruncate(text.length())) throw new SatisfyException();
+			clast = item;
+			count = 0;
 		}
 
 

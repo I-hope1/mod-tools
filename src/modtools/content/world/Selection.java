@@ -1019,24 +1019,31 @@ public class Selection extends Content {
 			}).row();
 		}
 
-		public int lastUnitSize;
+		public        int lastUnitSize;
+		private final int maxUnitSize = 150;
+		private       int nowUnitSize;
 		private void buildCont(Table table, ObjectSet<Unit> unitSet) {
 			if (lastUnitSize == unitSet.size) return;
 			table.clearChildren();
 			lastUnitSize = unitSet.size;
 			if (lastUnitSize == 0) return;
 
-			unitSet.each(u -> table.table(Tex.underline, t -> {
-				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(unitSet));
-				t.left().defaults().padRight(6f).growY().left();
-				t.image(Icon.starSmall).size(10).color(u.team.color);
-				t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
-				t.add(u.type.name).with(EventHelper::addDClickCopy);
+			nowUnitSize = 0;
+			unitSet.each(u -> {
+				if (nowUnitSize > maxUnitSize) return;
+				table.table(Tex.underline, t -> {
+					nowUnitSize++;
+					MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(unitSet));
+					t.left().defaults().padRight(6f).growY().left();
+					t.image(Icon.starSmall).size(10).color(u.team.color);
+					t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
+					t.add(u.type.name).with(EventHelper::addDClickCopy);
 
-				buildPos(t, u);
-				// t.add("pathfind:" + u.pathType());
-				addMoreButton(t, u);
-			}).growX().row());
+					buildPos(t, u);
+					// t.add("pathfind:" + u.pathType());
+					addMoreButton(t, u);
+				}).growX().row();
+			});
 		}
 
 		public int lastBulletSize;

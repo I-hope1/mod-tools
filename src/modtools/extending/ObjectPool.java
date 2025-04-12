@@ -21,6 +21,7 @@ public class ObjectPool {
 		Events.on(ClientLoadEvent.class, _ -> {
 			install();
 			addMonitor();
+			// Log.info("ok");
 		});
 	}
 
@@ -32,7 +33,7 @@ public class ObjectPool {
 		// Vars.content.blocks()
 	}
 	private static <T> T changeClass(Prov<T> prov) {
-		T t = prov.get();
+		T        t     = prov.get();
 		Class<?> clazz = EntitySampleInterface.visit(t.getClass());
 		if (clazz == t.getClass()) {
 			return t;

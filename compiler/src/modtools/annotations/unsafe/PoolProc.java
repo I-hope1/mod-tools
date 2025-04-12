@@ -20,15 +20,15 @@ import java.util.Map.Entry;
 
 @AutoService(Processor.class)
 public class PoolProc extends BaseProcessor<ClassSymbol> {
-	public static final boolean OUTPUT_GEN = true;
-	public static final String ENTITY_MAPPING = "mindustry/gen/EntityMapping";
+	public static final boolean OUTPUT_GEN     = true;
+	public static final String  ENTITY_MAPPING = "mindustry/gen/EntityMapping";
 
-	ArrayList<String>    list  = new ArrayList<>();
-	Map<Integer, String> idMap = new HashMap<>();
+	ArrayList<String>    list    = new ArrayList<>();
+	Map<Integer, String> idMap   = new HashMap<>();
 	Map<String, String>  nameMap = new HashMap<>();
 
-	String               genClassName;
-	ClassSymbol       genClassSymbol;
+	String      genClassName;
+	ClassSymbol genClassSymbol;
 
 	public void init() throws IOException {
 		ClassSymbol element = mSymtab.enterClass(mSymtab.unnamedModule, names.fromString("mindustry.gen.EntityMapping"));
@@ -41,7 +41,7 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 				if ("<clinit>".equals(name)) {
 					return new MethodVisitor(Opcodes.ASM9) {
 						boolean inIdMap, inNameMap;
-						String name;
+						String  name;
 						Integer id;
 						public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
 							if ((opcode == Opcodes.GETSTATIC) && owner.equals(ENTITY_MAPPING) && name.equals("idMap") && descriptor.equals("[Larc/func/Prov;")) {
@@ -115,9 +115,9 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 		cw.visitEnd();
 		list.replaceAll(s -> s.replace("/", "."));
 
-		JavaFileObject file      = mFiler.createClassFile(genClassName);
+		JavaFileObject file = mFiler.createClassFile(genClassName);
 		genClassSymbol = mSymtab.enterClass(mSymtab.unnamedModule, ns(genClassName));
-		byte[]         byteArray = cw.toByteArray();
+		byte[] byteArray = cw.toByteArray();
 		try (OutputStream outputStream = file.openOutputStream()) {
 			outputStream.write(byteArray);
 		}
@@ -128,9 +128,9 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 		}
 	}
 	public void dealElement(ClassSymbol element) throws Throwable {
-		ClassSymbol pools = findClassSymbol("arc.util.pooling.Pools");
+		ClassSymbol pools         = findClassSymbol("arc.util.pooling.Pools");
 		ClassSymbol entityMapping = findClassSymbol("mindustry.gen.EntityMapping");
-		ClassSymbol poolable = findClassSymbol("arc.util.pooling.Pool$Poolable");
+		ClassSymbol poolable      = findClassSymbol("arc.util.pooling.Pool$Poolable");
 
 		list.removeIf(s -> findClassSymbol(s).isSubClass(poolable, types));
 		for (Entry<String, String> entry : nameMap.entrySet()) {
@@ -162,24 +162,26 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 			);
 			methodDecl.body.stats = methodDecl.body.stats.append(
 			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(pools), ns("get")),
-			 List.of(mMaker.ClassLiteral(findClassSymbol(s)),
-			  lambda)))
+				List.of(mMaker.ClassLiteral(findClassSymbol(s)),
+				 lambda)))
 			);
 
 			// map.put(s, () -> Pools.obtain(%s%.class, null));
 			JCExpression expr = mMaker.Apply(List.nil(),
 			 mMaker.Select(mMaker.Ident(ns("map")),
 				ns("put")),
-			 List.of(mMaker.Literal(s),
-			  mMaker.Literal(TypeTag.BOT, null))
+			 List.of(mMaker.Literal(s), mMaker.Lambda(List.nil(),
+				mMaker.Apply(List.nil(), mMaker.Ident(ns("changeClass")),
+				 List.of(mMaker.Reference(ReferenceMode.INVOKE, ns("create"), mMaker.QualIdent(clazz), null)))
+			 ))
 			);
 			methodDecl.body.stats = methodDecl.body.stats.append(mMaker.Exec(expr));
 
 
 		}
 		for (Entry<Integer, String> entry : idMap.entrySet()) {
-			Integer id    = entry.getKey();
-			String  s = entry.getValue();
+			Integer id = entry.getKey();
+			String  s  = entry.getValue();
 			// EntityMapping.idMap[%id%] = map.get(s);
 			ClassSymbol clazz = findClassSymbol(s);
 
@@ -190,19 +192,19 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 			 ));
 		}
 		for (Entry<String, String> entry : nameMap.entrySet()) {
-			String name    = entry.getKey();
-			String s = entry.getValue();
+			String name = entry.getKey();
+			String s    = entry.getValue();
 			// EntityMapping.nameMap.put(name, map.get(s));
 			ClassSymbol clazz = findClassSymbol(s);
 
 			methodDecl.body.stats = methodDecl.body.stats.append(
 			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Select(mMaker.Ident(entityMapping), ns("nameMap")), ns("put")),
-			  List.of(mMaker.Literal(name), mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(ns("map")), ns("get")),
-			   List.of(mMaker.Literal(s))))))
+				List.of(mMaker.Literal(name), mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(ns("map")), ns("get")),
+				 List.of(mMaker.Literal(s))))))
 			);
 		}
 
-		// println(methodDecl);
+		println(methodDecl);
 
 		// ---reset---
 
@@ -212,13 +214,13 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 		JCVariableDecl var1 = methodDecl.params.get(0);
 		for (String s : list) {
 			// 生成:  if (var1 instanceof %s%) { %genClassName%.init((%s%)var1); Pools.get(%s%.class, null).free(var1); }
-			ClassSymbol sym = findClassSymbol(s);
-			JCTypeCast  cast  = mMaker.TypeCast(sym.type, mMaker.Ident(var1.sym));
+			ClassSymbol sym  = findClassSymbol(s);
+			JCTypeCast  cast = mMaker.TypeCast(sym.type, mMaker.Ident(var1.sym));
 			methodDecl.body.stats = methodDecl.body.stats.append(
 			 mMaker.If(mMaker.TypeTest(mMaker.Ident(var1), mMaker.QualIdent(sym)),
 				mMaker.Block(0, List.of(mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.QualIdent(genClassSymbol), ns("init")),
 				 List.of(cast))), mMaker.Exec(mMaker.Apply(List.nil(),
-					mMaker.Select(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(pools), ns("get")), List.of(mMaker.ClassLiteral(sym), mMaker.Literal(TypeTag.BOT, null))),
+				 mMaker.Select(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(pools), ns("get")), List.of(mMaker.ClassLiteral(sym), mMaker.Literal(TypeTag.BOT, null))),
 					ns("free")), List.of(cast))))),
 				null)
 			);

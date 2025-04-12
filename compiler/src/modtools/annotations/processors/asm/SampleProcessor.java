@@ -40,7 +40,7 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 		Sample      sample = owner.getAnnotation(Sample.class);
 		if (sample == null) {
 			log.useSource(unit.sourcefile);
-			log.error(trees.getTree(element).mods, SPrinter.err("@SampleForMethod is only allowed on methods annotated with @Sample"));
+			log.error(trees.getTree(element).mods, SPrinter.err("@SampleForMethod / @SampleForInitializer is only allowed on methods annotated with @Sample"));
 			return;
 		}
 
@@ -101,52 +101,57 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 		methodVisitSb.append("String ").append(var_class).append(" = ByteCodeTools.nativeName(").append(ownerName).append(".class);\n");
 
 
+		SampleForMethod      sm;
+		SampleForInitializer si;
 		for (Symbol symbol : owner.members().getSymbols()) {
-			if (symbol instanceof MethodSymbol ms && getAnnotationByElement(SampleForMethod.class, symbol, true) != null) {
-				JCMethodDecl         tree       = trees.getTree(ms);
-				JCBlock              prevbody   = tree.body;
-				JCModifiers          prevmods   = tree.mods;
-				Name                 prevname   = tree.name;
-				List<JCVariableDecl> prevparams = tree.params;
-				tree.body = null;
-				tree.mods = mMaker.Modifiers(Flags.PUBLIC, List.nil());
-				tree.name = names.fromString(AConstants.SUPER_METHOD_PREFIX + tree.name);
-				tree.params = tree.params.tail;
-				_interface.members_field = WriteableScope.create(_interface);
-				MethodSymbol methodSymbol = new MethodSymbol(Flags.PUBLIC, tree.name, tree.type, _interface);
-				// methodSymbol.params = tree.sym.params;
-				_interface.members().enter(methodSymbol);
-				superMethodDeclared.append(tree);
-				// 类型下届
-				// 代码转换：if (Object.class.isAssignableFrom(clazz)
-				methodVisitSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
-				// 类型上界
-				Class<?>[] upperBoundOfClasses = getAnnotationByElement(SampleForMethod.class, ms, true).upperBoundClasses();
-				if (upperBoundOfClasses.length > 0) {
-					methodVisitSb.append(Arrays.stream(upperBoundOfClasses).map(c -> "clazz.isAssignable(" + c.getSimpleName() + ".class)")
-					 .collect(Collectors.joining(" || ", "if (", ")")));
-				}
+			if (!(symbol instanceof MethodSymbol ms)) continue;
+			sm = getAnnotationByElement(SampleForMethod.class, symbol, true);
+			si = getAnnotationByElement(SampleForInitializer.class, symbol, true);
+			if (sm == null && si == null) { continue; }
 
-				// 代码转换：myClass.visitEmitMethod("acceptItem", new Class<?>[]{Building.class, Building.class, Item.class}, boolean.class, className);
-				methodVisitSb.append(var_myClas).append(".").append(NAME_VISIT)
-				 .append("(\"").append(ms.name).append("\", new Class<?>[]{")
-				 .append(ms.params.stream().map(BaseASMProc::className).collect(Collectors.joining(", "))).append("}, ")
-				 .append(className(ms.getReturnType())).append(", ").append(var_class).append(");\n");
-
-				if (openPackagePrivate) {
-					packagePrivateSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
-					// 代码转换：myClass.setFunc("acceptItem", (Func2) null, Modifier.PUBLIC, boolean.class, Building.class, Building.class, Item.class)
-					packagePrivateSb.append(var_myClas).append(".").append(NAME_SET_FUNC)
-					 .append("(\"").append(ms.name).append("\", (Func2) null, Modifier.PUBLIC, ")
-					 .append(className(ms.getReturnType())).append(", ")
-					 .append(ms.params.stream().skip(1).map(BaseASMProc::className).collect(Collectors.joining(", "))).append(");\n");
-				}
-
-				tree.mods = prevmods;
-				tree.body = prevbody;
-				tree.name = prevname;
-				tree.params = prevparams;
+			JCMethodDecl         tree       = trees.getTree(ms);
+			JCBlock              prevbody   = tree.body;
+			JCModifiers          prevmods   = tree.mods;
+			Name                 prevname   = tree.name;
+			List<JCVariableDecl> prevparams = tree.params;
+			tree.body = null;
+			tree.mods = mMaker.Modifiers(Flags.PUBLIC, List.nil());
+			tree.name = names.fromString(AConstants.SUPER_METHOD_PREFIX + tree.name);
+			tree.params = tree.params.tail;
+			_interface.members_field = WriteableScope.create(_interface);
+			MethodSymbol methodSymbol = new MethodSymbol(Flags.PUBLIC, tree.name, tree.type, _interface);
+			// methodSymbol.params = tree.sym.params;
+			_interface.members().enter(methodSymbol);
+			superMethodDeclared.append(tree);
+			// 类型下届
+			// 代码转换：if (Object.class.isAssignableFrom(clazz)
+			methodVisitSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
+			// 类型上界
+			Class<?>[] upperBoundOfClasses = sm != null ? sm.upperBoundClasses() : si.upperBoundClasses();
+			if (upperBoundOfClasses.length > 0) {
+				methodVisitSb.append(Arrays.stream(upperBoundOfClasses).map(c -> "clazz.isAssignable(" + c.getSimpleName() + ".class)")
+				 .collect(Collectors.joining(" || ", "if (", ")")));
 			}
+
+			// 代码转换：myClass.visitEmitMethod("acceptItem", new Class<?>[]{Building.class, Building.class, Item.class}, boolean.class, className);
+			methodVisitSb.append(var_myClas).append(".").append(NAME_VISIT)
+			 .append("(\"").append(ms.name).append("\", new Class<?>[]{")
+			 .append(ms.params.stream().map(BaseASMProc::className).collect(Collectors.joining(", "))).append("}, ")
+			 .append(className(ms.getReturnType())).append(", ").append(var_class).append(");\n");
+
+			if (openPackagePrivate) {
+				packagePrivateSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
+				// 代码转换：myClass.setFunc("acceptItem", (Func2) null, Modifier.PUBLIC, boolean.class, Building.class, Building.class, Item.class)
+				packagePrivateSb.append(var_myClas).append(".").append(NAME_SET_FUNC)
+				 .append("(\"").append(ms.name).append("\", (Func2) null, Modifier.PUBLIC, ")
+				 .append(className(ms.getReturnType())).append(", ")
+				 .append(ms.params.stream().skip(1).map(BaseASMProc::className).collect(Collectors.joining(", "))).append(");\n");
+			}
+
+			tree.mods = prevmods;
+			tree.body = prevbody;
+			tree.name = prevname;
+			tree.params = prevparams;
 		}
 
 		String myclassInit = openPackagePrivate ? "new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", " + var_myClas + ".define())" : "new MyClass(" + var_myClas + ".define()/* 使类public化 */, \"i\")";
@@ -211,6 +216,6 @@ public static <T> T newInstance(Class<T> c) {
 		return _interface;
 	}
 	public Set<Class<?>> getSupportedAnnotationTypes0() {
-		return Set.of(SampleForMethod.class);
+		return Set.of(SampleForMethod.class/* , SampleForInitializer.class *//* TODO */);
 	}
 }

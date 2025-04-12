@@ -102,26 +102,43 @@ public class ArrayUtils {
 		if (!type.isPrimitive()) {
 			int len = Array.getLength(arr);
 			for (int i = 0; i < len; i++) cons.get(Array.get(arr, i));
+			cons.append(null);
 			return;
 		}
-		if (arr instanceof int[] ia) {
-			for (int i : ia) cons.get(i);
-		} else if (arr instanceof float[] fa) {
-			for (float i : fa) cons.get(i);
-		} else if (arr instanceof double[] da) {
-			for (double i : da) cons.get(i);
-		} else if (arr instanceof long[] la) {
-			for (long i : la) cons.get(i);
-		} else if (arr instanceof boolean[] ba) {
-			for (boolean i : ba) cons.get(i);
-		} else if (arr instanceof char[] ca) {
-			for (char i : ca) cons.get(i);
-		} else if (arr instanceof byte[] ba) {
-			for (byte i : ba) cons.get(i);
-		} else if (arr instanceof short[] sa) {
-			for (short i : sa) cons.get(i);
-		} else {
-			throw new IllegalStateException("Unexpected value: " + arr);
+		switch (arr) {
+			case int[] ia -> {
+				for (int i : ia) cons.get(i);
+				cons.append(0);
+			}
+			case float[] fa -> {
+				for (float i : fa) cons.get(i);
+				cons.append(0F);
+			}
+			case double[] da -> {
+				for (double i : da) cons.get(i);
+				cons.append(0D);
+			}
+			case long[] la -> {
+				for (long i : la) cons.get(i);
+				cons.append(0L);
+			}
+			case boolean[] ba -> {
+				for (boolean i : ba) cons.get(i);
+				cons.append(false);
+			}
+			case char[] ca -> {
+				for (char i : ca) cons.get(i);
+				cons.append('\0');
+			}
+			case byte[] ba -> {
+				for (byte i : ba) cons.get(i);
+				cons.append((byte) 0);
+			}
+			case short[] sa -> {
+				for (short i : sa) cons.get(i);
+				cons.append((short) 0);
+			}
+			default -> throw new IllegalStateException("Unexpected value: " + arr);
 		}
 	}
 
@@ -174,11 +191,34 @@ public class ArrayUtils {
 
 	public static abstract class AllCons implements Cons<Object> {
 		public abstract void get(Object object);
-		public abstract void get(int i);
-		public abstract void get(float f);
-		public abstract void get(double d);
-		public abstract void get(long l);
+		public abstract void append(Object object);
+		public abstract void get(long i);
+		public abstract void append(long item);
+		public abstract void get(double f);
+		public abstract void append(double item);
 		public abstract void get(boolean b);
+		public abstract void append(boolean item);
 		public abstract void get(char c);
+		public abstract void append(char item);
+		public void get(short s) { get((int) s); }
+		public void append(short s) {
+			append((int) s);
+		}
+		public void get(byte b) { get((long) b); }
+		public void append(byte b) {
+			append((int) b);
+		}
+		public void get(float f) {
+			get((double) f);
+		}
+		public void append(float f) {
+			append((double) f);
+		}
+		public void get(int l) {
+			get((long) l);
+		}
+		public void append(int l) {
+			append((long) l);
+		}
 	}
 }

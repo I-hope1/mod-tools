@@ -18,6 +18,9 @@ public @interface Sample {
 	@interface SampleForMethod {
 		Class<?>[] upperBoundClasses() default {};
 	}
+	@interface SampleForInitializer {
+		Class<?>[] upperBoundClasses() default {};
+	}
 
 	class AConstants {
 		public static final  String INTERFACE_SUFFIX      = "Interface";

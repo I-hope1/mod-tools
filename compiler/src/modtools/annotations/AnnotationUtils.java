@@ -44,7 +44,7 @@ public interface AnnotationUtils {
 		if (attribute instanceof Constant) HopeReflect.set(Constant.class, attribute, "value", value);
 		else if (attribute instanceof Array) {
 			Attribute[] values = ((Array) attribute).values;
-			var         list   = ((MyList<?>) value);
+			var         list   = value instanceof List<?> l ? l : List.of(value);
 			for (int i = 0, valuesLength = values.length; i < valuesLength; i++) {
 				Attribute attribute1 = values[i];
 				covertTreeToAttribute(attribute1, list.get(i));

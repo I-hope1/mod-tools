@@ -24,7 +24,7 @@ allprojects {
 		mavenLocal()
 		mavenCentral()
 		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
-		maven { url 'https://www.jitpack.io' }
+		maven { url 'https://jitpack.io' }
 	}
 }
 
@@ -65,9 +65,10 @@ dependencies {
 //	compileOnly "com.github.EB-wilson.UniverseCore:core:$uncVersion"
 
 
-	compileOnly("com.github.Anuken.Mindustry:core:$mindustryVersion") {
+	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
 	}
+	mindustryVersion = "v146"
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-android:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-sdl:$mindustryVersion"
@@ -85,7 +86,7 @@ task jarAndroid(type: JavaExec) {
 	if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
 
 	//collect dependencies needed for desugaring
-	def dependencies = (configurations.compileClasspath.asList()
+		def dependencies = (configurations.compileClasspath.asList()
 //			+ configurations.runtimeClasspath.asList()
 //			+ [new File(platformRoot, "android.jar")]
 	).collectMany { ["--classpath", "$it.path"] }

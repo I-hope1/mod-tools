@@ -42,17 +42,18 @@ public interface INFO_DIALOG {
 		if (clazz == null) IntUI.showException(new IllegalArgumentException("'clazz' cannot be null."));
 		if (clazz != null && clazz.isArray()) {
 			Window[] dialog = {null};
-			if (o == null) return new DisWindow("none");
+			if (o == null) return new DisWindow("None");
 			Table _cont = new LimitTable();
 
 			int length = Array.getLength(o);
 			_cont.add("Length: " + length).left();
 
 			_cont.button(Icon.refresh, HopeStyles.clearNonei, () -> {
-				dialog[0].hide();
 				var pos = getAbsolutePos(dialog[0]);
+				dialog[0].hide();
 				try {
-					showInfo(o, clazz).setPosition(pos);
+					Window window = showInfo(o, clazz);
+					window.shown(() -> Time.runTask(1, () -> window.setPosition(pos)));
 				} catch (Throwable e) {
 					IntUI.showException(e).setPosition(pos);
 				}
@@ -101,9 +102,10 @@ public interface INFO_DIALOG {
 
 			button.add(label).grow();
 			button.clicked(() -> {
-				if (label.val != null) IntVars.postToMain(Tools.runT0(() ->
-				 showInfo(label.val).setPosition(getAbsolutePos(button))));
-				else IntUI.showException(new NullPointerException("item is null"));
+				if (label.val != null) {
+					IntVars.postToMain(Tools.runT0(() ->
+					 showInfo(label.val).setPosition(getAbsolutePos(button))));
+				} else { IntUI.showException(new NullPointerException("item is null")); }
 			});
 			c1.add(button).growX().minHeight(40);
 			IntUI.addWatchButton(c1, arr + "#" + i, () -> Array.get(arr, j)).row();

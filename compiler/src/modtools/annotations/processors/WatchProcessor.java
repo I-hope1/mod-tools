@@ -64,7 +64,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 			fieldMap.forEach((group, fields) -> {
 				boolean isStatic  = false/* first.getModifiers().contains(Modifier.STATIC) */;
 				String  fieldName = (isStatic ? STATIC_SIG : "") + group + WATCH_SIG;
-				if (!checkField(classDecl, fieldName, group)) return;
+				if (!checkField(dcls, classDecl, fieldName, group)) return;
 				// Find the test condition method in the class
 				JCMethodDecl test_con = findChild(classDecl, Tag.METHODDEF,
 				 m -> m.name.toString().equals(TEST_CON));
@@ -152,10 +152,10 @@ public class WatchProcessor extends BaseProcessor<Element> {
 
 				String      fieldName = watchVar.group() + WATCH_SIG;
 				boolean     valid     = false;
-				JCClassDecl cldl      = classDecl;
-				while (cldl != null) {
-					valid |= checkField(cldl, fieldName, watchVar.group());
-					cldl = (JCClassDecl) trees.getTree(cldl.sym.owner);
+				JCClassDecl classDecl2      = classDecl;
+				while (classDecl2 != null) {
+					valid |= checkField(dcls, classDecl2, fieldName, watchVar.group());
+					classDecl2 = (JCClassDecl) trees.getTree(classDecl2.sym.owner);
 				}
 				if (!valid) return super.visitVariable(node, parent);
 				var list = new ArrayList<>(block.stats);

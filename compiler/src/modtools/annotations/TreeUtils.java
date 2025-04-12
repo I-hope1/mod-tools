@@ -21,11 +21,14 @@ public interface TreeUtils extends ParseUtils, NameString {
 	 * @return {@code true} if element is present.
 	 */
 	default boolean checkField(
-	 JCClassDecl classDecl, String fieldName, String group
+	 Element element, JCClassDecl classDecl, String fieldName, String group
 	) {
 		JCVariableDecl fieldElem = findChild(classDecl, Tag.VARDEF, var -> var.name.toString().equals(fieldName));
 		if (fieldElem == null) {
-			new IllegalStateException("You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") element.")
+			log.useSource(classDecl.sym != null ? classDecl.sym.sourcefile : trees.getPath(element).getCompilationUnit().getSourceFile());
+			String s = "You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") element.";
+			log.error(classDecl, SPrinter.err(s));
+			new IllegalStateException(s)
 			 .printStackTrace();
 			return false;
 		}

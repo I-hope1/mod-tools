@@ -17,11 +17,12 @@ import modtools.android.HiddenApi;
 import modtools.content.SettingsUI;
 import modtools.content.debug.Tester;
 import modtools.events.*;
+import modtools.extending.*;
 import modtools.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.misc.*;
 import modtools.misc.SampleTest.X;
+import modtools.misc.*;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -31,20 +32,18 @@ import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
 import modtools.utils.io.FileUtils;
-import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
 import java.lang.reflect.Field;
-import java.util.*;
-import java.util.function.Consumer;
+import java.util.Arrays;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
-	public static final boolean TEST = true;
+	public static final boolean TEST = false;
 
 	/** 如果不为empty，在进入是显示 */
 	private static final Fi             libs   = root.child("libs");
@@ -58,7 +57,6 @@ public class ModTools extends Mod {
 	public static boolean loaded = false;
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");
-		Set.of("asiosa").forEach(Log::info);
 
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -89,8 +87,13 @@ public class ModTools extends Mod {
 		if (E_Extending.http_redirect.enabled()) {
 			Tools.runLoggedException(URLRedirect::load);
 		}
+		if (E_Extending.object_pool.enabled()) {
+			Tools.runLoggedException(MagicInstaller::installMagic);
+			Tools.runLoggedException(ObjectPool::install);
+		}
+
 		if (TEST) {
-			if (!OS.isAndroid) initMagicClass(bytes -> HopeReflect.defineClass(null, null, bytes));
+			MagicInstaller.installMagic();
 			Log.info(X.classData(Object.class));
 			Field[] fields = X.fields(Class.class, false);
 			Log.info(fields);
@@ -101,19 +104,6 @@ public class ModTools extends Mod {
 
 			World w = SampleWorldInterface.changeClass(new World());
 		}
-	}
-	public static void initMagicClass(Consumer<byte[]> definer) {
-		try {
-			Class.forName("apzmagic.MAGICIMPL");
-			return;
-		} catch (ClassNotFoundException _) { }
-
-		byte[] bytes;
-		bytes = new byte[]{-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 1, 1, 0, 38, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5};
-		definer.accept(bytes);
-		// MAGICIMPL
-		bytes = new byte[]{-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 18, 97, 112, 122, 109, 97, 103, 105, 99, 47, 77, 65, 71, 73, 67, 73, 77, 80, 76, 7, 0, 1, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5};
-		definer.accept(bytes);
 	}
 
 	private void load() {

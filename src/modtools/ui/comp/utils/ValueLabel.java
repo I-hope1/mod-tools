@@ -177,7 +177,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 	private final IntMap<Object>              startIndexMap = new IntMap<>();
 	private final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
+	// 用于记录数组或map的类型
 	private final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
+	// 用于记录数组或map的值
 	private final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
 	// 用于记录数组或map是否展开
 	private final ObjectMap<Object, Boolean>  expandMap     = new ObjectMap<>();
@@ -384,7 +386,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			colorMap.put(text.length(), Color.white);
 		}
 	}
-	private Object wrapVal(Object val) {
+	private static Object wrapVal(Object val) {
 		if (val == null) return NULL_MARK;
 		return val;
 	}
@@ -733,8 +735,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 				gotFirst = true;
 				last = item;
 			}
-			self.valToObj.put(item, val);
-			self.valToType.put(item, val.getClass());
+			if (item != null) {
+				self.valToObj.put(item, val);
+				self.valToType.put(item, val.getClass());
+			}
 			if (last != null && identityClasses.contains(val.getClass()) ? !last.equals(item) : last != item) {
 				self.postAppendDelimiter(text);
 				self.appendValue(text, last);

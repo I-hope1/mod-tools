@@ -134,6 +134,7 @@ public class Syntax {
 	/** 返回下一个index，{@link DrawTask#withdraw}时不{@link #reset()} */
 	private int drawAndReset(int i) {
 		cTask.drawText(i);
+		if (outerTask != null) outerTask.after(i);
 		if (!cTask.withdraw) { reset(); } else cTask.withdraw = false;
 		return i + 1;
 	}
@@ -174,6 +175,8 @@ public class Syntax {
 		}
 		public boolean draw(int i) {
 			return false;
+		}
+		public void after(int i) {
 		}
 		public final void drawText(int i) { }
 	}

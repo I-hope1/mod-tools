@@ -1,10 +1,11 @@
-package modtools;
+package modtools.extending;
 
 import arc.files.Fi;
 import arc.func.*;
 import arc.util.*;
 import ihope_lib.MyReflect;
 import modtools.Constants.CURL;
+import modtools.IntVars;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.*;
 import modtools.utils.ByteCodeTools.MyClass;
@@ -34,7 +35,7 @@ public class URLRedirect {
 		}
 	};
 
-	static void load() throws Throwable {
+	public static void load() throws Throwable {
 		defaultConfig = IntVars.dataDirectory.child("http_redirect.properties");
 		if (loadConfig(defaultConfig)
 		    || loadConfig(IntVars.root.child("http_redirect.properties"))) ;

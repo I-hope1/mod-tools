@@ -19,7 +19,7 @@ import java.lang.annotation.Annotation;
 import java.util.Arrays;
 
 public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
-	public static final boolean OUTPUT_CLASS_FILE = true;
+	public static final boolean OUTPUT_CLASS_FILE = false;
 
 	public String      genClassName;
 	public ClassWriter classWriter;
@@ -69,6 +69,9 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	}
 	protected void writeClassBytes(byte[] classBytes) throws IOException {
 		JavaFileObject classfile = mFiler.createClassFile(genClassName);
+		writeClassBytes(classfile, classBytes);
+	}
+	protected void writeClassBytes(JavaFileObject classfile, byte[] classBytes) throws IOException {
 		try (OutputStream outputStream = classfile.openOutputStream()) {
 			outputStream.write(classBytes);
 		}
@@ -78,6 +81,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			}
 		}
 	}
+	/** 用法: mMaker.QualIdent(classSymbol())  */
 	protected ClassSymbol classSymbol() {
 		return mSymtab.enterClass(mSymtab.unnamedModule, ns(genClassName));
 	}

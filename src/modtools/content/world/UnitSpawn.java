@@ -250,8 +250,8 @@ public class UnitSpawn extends Content {
 		return () -> units.each(u -> spawn(u, amount0, team0, x0, y0));
 	}
 	public String generateCode() {
-		return STR."$.Contents.unit_spawn.spawn($.unit(\{
-		 selectUnit.name}),\{amount},Team.get(\{team.id}),\{spawnX},\{spawnY})";
+		return STR."$.Contents.unit_spawn.spawn($.unit(\"\{(
+		 selectUnit.name)}\"),\{amount},Team.get(\{team.id}),\{spawnX},\{spawnY})";
 	}
 
 	public void spawn(UnitType selectUnit, int amount, Team team, float x, float y) {

@@ -173,6 +173,7 @@ public static Class<?> visit(Class<?> clazz) {
 	if (cache.containsKey(clazz)) {
 		return cache.get(clazz);
 	}
+	if (\{ownerName}\{AConstants.INTERFACE_SUFFIX}.class.isAssignableFrom(clazz)) return clazz;
 
 	var \{var_myClas} = new MyClass(clazz, "\{AConstants.GEN_CLASS_NAME_SUFFIX}");
 	\{packagePrivateSb}

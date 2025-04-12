@@ -223,7 +223,7 @@ public class Replace {
 		} catch (NoClassDefFoundError e) { return false; }
 		return true;
 	}
-	private static void other() throws ClassNotFoundException {
+	private static void other() throws ClassNotFoundException, IOException {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
 		fixSyntaxError();

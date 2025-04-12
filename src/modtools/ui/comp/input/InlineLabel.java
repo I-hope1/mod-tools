@@ -19,6 +19,8 @@ import mindustry.ui.Styles;
 import modtools.ui.control.HopeInput;
 import modtools.utils.ArrayUtils;
 
+import java.util.Objects;
+
 /**
  * 内嵌的文本
  * <p>可以对局部染色，
@@ -111,9 +113,13 @@ public class InlineLabel extends NoMarkupLabel {
 			result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
 		}
 
+		result.removeAll(Objects::isNull);
+
 		return result;
 	}
 	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color) {
+		if (startIndex < 0) return null;
+		if (endIndex <= startIndex) return null;
 		GlyphRun newRun = Pools.obtain(GlyphRun.class, GlyphRun::new);
 		boolean  isSame = startIndex == 0 && endIndex == glyphRun.glyphs.size;
 

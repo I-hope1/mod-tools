@@ -9,6 +9,7 @@ import mindustry.graphics.Pal;
 import modtools.Constants;
 import modtools.Constants.RHINO;
 import modtools.annotations.DebugMark;
+import modtools.annotations.watch.WatchVar;
 import modtools.jsfunc.IScript;
 import modtools.jsfunc.reflect.UNSAFE;
 import rhino.*;
@@ -20,6 +21,7 @@ import static rhino.Scriptable.NOT_FOUND;
 
 @SuppressWarnings("StringTemplateMigration")
 @DebugMark
+// @WatchClass(groups = {"aa"})
 public class JSSyntax extends Syntax {
 	public static Color
 	 c_constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
@@ -105,6 +107,7 @@ public class JSSyntax extends Syntax {
 	);
 
 	ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
+	ObjectSet<String> constKeywords = ObjectSet.with("const");
 
 
 	protected final DrawSymbol
@@ -140,11 +143,15 @@ public class JSSyntax extends Syntax {
 		 if (!js_prop) return null;
 		 for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
 			 if (entry.key.contains(task.token)) {
+				 currentObject = getNextObject(task.token);
+				 if (currentObject == null) currentObject = customScope;
+				 updateCursorObj();
 				 return entry.value;
 			 }
 		 }
 		 if (operatesSymbol.lastSymbol == '\0') {
 			 currentObject = customScope;
+			 updateCursorObj();
 		 }
 		 // Log.info(currentObject);
 		 // resolveToken(currentObject, task.token);
@@ -158,6 +165,9 @@ public class JSSyntax extends Syntax {
 		 return b ? c_number : null;
 	 }
 	};
+	private void updateCursorObj() {
+		setCursorObj(drawToken.lastIndex);
+	}
 	private void resolveToken(Scriptable scope, String token) {
 		Object o = getPropOrNotFound(scope, token);
 		if (o instanceof NativeJavaPackage newPkg) {
@@ -167,7 +177,7 @@ public class JSSyntax extends Syntax {
 			pkg = null;
 			currentObject = newObj;
 		}
-		setCursorObj(drawToken.lastIndex);
+		updateCursorObj();
 	}
 	int lastCursorObjIndex = -2;
 	private void setCursorObj(int lastIndex) {
@@ -196,13 +206,16 @@ public class JSSyntax extends Syntax {
 			currentObject = NOT_FOUND;
 			return defaultColor;
 		}
-		/* if (o instanceof NativeJavaPackage p) {
+		if (o instanceof NativeJavaPackage p) {
 			pkg = p;
-		} else  */if (o instanceof Scriptable sc) {
+			currentObject = p;
+			updateCursorObj();
+			return defaultColor;
+		} else if (o instanceof Scriptable sc) {
 			pkg = null;
 			currentObject = sc;
-			setCursorObj(drawToken.lastIndex);
-			return o instanceof NativeJavaPackage ? defaultColor : c_localvar;
+			updateCursorObj();
+			return c_localvar;
 		}
 		currentObject = customScope;
 		return null;
@@ -292,11 +305,20 @@ public class JSSyntax extends Syntax {
 			return super.contains(key) || with.contains(key);
 		}
 	}
+
 	private class DrawCompletion extends DrawOuterTask {
 		final Stack<RMethod> stack = new Stack<>();
 		void init() {
 			// Log.info("-----------");
 			stack.clear();
+			pkg = null;
+			currentObject = customScope;
+			lastCursorObjIndex = -2;
+			cursorObj = null;
+			lastTokenStackSize = -1;
+
+			localVars.clear();
+			localConstants.clear();
 		}
 		private static class RMethod implements Poolable {
 			Scriptable base;
@@ -319,7 +341,20 @@ public class JSSyntax extends Syntax {
 		}
 		/** 一个用于承载函数返回值的{@link NativeJavaObject} */
 		private final NativeJavaObject receiver = new NativeJavaObject();
+		private       int              lastTokenStackSize;
 		private void forToken(int i) {
+			@WatchVar(group = "aa") var token = drawToken.token;
+			@WatchVar(group = "aa") var lastToken = drawToken.lastToken;
+			if ("let".equals(drawToken.token)) {
+				lastTokenStackSize = stack.size();
+			}
+			if ("let".equals(drawToken.lastToken) && lastTokenStackSize == stack.size()) {
+				localVars.add(drawToken.token);
+				lastTokenStackSize = -1;
+			}
+			if (c == ';') {
+				operatesSymbol.lastSymbol = '\0';
+			}
 			if (c == '(' && currentObject instanceof Scriptable sc) {
 				stack.add(RMethod.obtain(sc));
 			}
@@ -327,7 +362,9 @@ public class JSSyntax extends Syntax {
 				stack.lastElement().args.add(currentObject);
 			}
 			if (c == ')' && inFunction()) {
-				if (lastTask != bracketsSymbol || currentObject != stack.lastElement().base) stack.lastElement().args.add(currentObject);
+				if (lastTask != bracketsSymbol || currentObject != stack.lastElement().base) {
+					stack.lastElement().args.add(currentObject);
+				}
 
 				RMethod     pop  = stack.pop();
 				Seq<Object> args = pop.args;
@@ -351,6 +388,19 @@ public class JSSyntax extends Syntax {
 				Pools.free(pop);
 				setCursorObj(i);
 			}
+		}
+
+		String lastToken;
+		public void after(int i) {
+			if (lastTask == cTask && lastTask == drawToken){
+				if (localKeywords.contains(lastToken)) {
+					localVars.add(drawToken.token);
+				}
+				if (constKeywords.contains(lastToken)) {
+					localConstants.add(drawToken.token);
+				}
+			}
+			if (cTask == drawToken) lastToken = drawToken.token;
 		}
 		public boolean draw(int i) {
 			forToken(i);
@@ -404,15 +454,6 @@ public class JSSyntax extends Syntax {
 	}
 	private class JSDrawToken extends DrawToken {
 		public JSDrawToken() { super(JSSyntax.this.tokenDraws); }
-		void init() {
-			super.init();
-			pkg = null;
-			currentObject = customScope;
-			lastCursorObjIndex = -2;
-			cursorObj = null;
-			localVars.clear();
-			localConstants.clear();
-		}
 	}
 	private class JSDrawSymbol extends DrawSymbol {
 		boolean error;

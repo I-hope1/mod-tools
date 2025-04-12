@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 @AutoService(Processor.class)
 public class AccessorProc extends BaseASMProc<MethodSymbol> {
 	Map<Symbol, ClassWriter> classWriterMap = new HashMap<>();
+	Map<ClassWriter, String> classNamesMap = new HashMap<>();
 	public void dealElement(MethodSymbol element) throws Throwable {
 		HField hField = element.getAnnotation(HField.class);
 		if (hField != null) {
@@ -52,6 +53,7 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 	private void setClassWriter(MethodSymbol element, HMarkMagic magic) throws IOException, ClassNotFoundException {
 		if (classWriterMap.containsKey(element.owner)) {
 			classWriter = classWriterMap.get(element.owner);
+			genClassName = classNamesMap.get(classWriter);
 		} else {
 			classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			String s = magic.magicClass().getName();
@@ -80,19 +82,21 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 			// 	output.write(bytes);
 			// }
 
+			genClassName = AConstants.nextGenClassName();
 			classWriter.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, genClassName.replace('.', '/'), null,
 			 s.replace('.', '/'), null);
 			classWriterMap.put(element.owner, classWriter);
+			classNamesMap.put(classWriter, genClassName);
 		}
 	}
 	public void process() throws Throwable {
 		for (Entry<Symbol, ClassWriter> entry : classWriterMap.entrySet()) {
 			ClassWriter writer = entry.getValue();
-			writeClassBytes(writer.toByteArray());
+			writeClassBytes(mFiler.createClassFile(classNamesMap.get(writer)), writer.toByteArray());
 		}
 	}
 	public void init() throws Throwable {
-		genClassName = AConstants.nextGenClassName();
+		genClassName = null;
 	}
 	public void process(MethodSymbol methodSymbol, HField hField) {
 		SeeReference reference  = getSeeReference(HField.class, methodSymbol, ElementKind.FIELD);

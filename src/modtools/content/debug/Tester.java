@@ -1017,7 +1017,7 @@ public class Tester extends Content {
 
 			if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) return;
 
-			keys.clear().addAll(obj instanceof ScriptableObject so ? so.getAllIds() : obj.getIds());
+			keys.clear().addAll(getAllIds(searchingKey, obj));
 			if (obj == customScope) keys.addAll(JSSyntax.varSet.toSeq().list());
 			if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
 
@@ -1036,6 +1036,14 @@ public class Tester extends Content {
 			String content = complements.get(lastCompletionIndex % complements.size);
 			area.paste(content, false);
 			area.setSelectionUncheck(cursor, cursor + content.length());
+		}
+		private Object[] getAllIds(String searchingKey, Scriptable obj) {
+			/* if (obj == customScope) {
+				obj = ScriptableObject.getTopLevelScope(obj);
+				Object[] data = (Object[]) UNSAFE.getObject(UNSAFE.getObject(obj, RHINO.importPackages), RHINO.objArray_data);
+
+			} */
+			return ScriptableObject.getPropertyIds(obj);
 		}
 
 		public boolean keyTyped(InputEvent event, char character) {

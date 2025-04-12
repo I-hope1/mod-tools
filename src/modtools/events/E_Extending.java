@@ -18,7 +18,8 @@ public enum E_Extending implements ISettings {
 	force_language(Locale.class, it -> it.$(
 	 LocaleUtils.none, LocaleUtils::getLocale, LocaleUtils::getDisplayName,
 	 Stream.concat(Stream.of(LocaleUtils.none), Arrays.stream(Vars.locales)).toArray(Locale[]::new))),
-	import_mod_from_drop;
+	import_mod_from_drop,
+	object_pool;
 
 	E_Extending(){}
 	E_Extending(Class<?> cl, Cons<ISettings> builder){}

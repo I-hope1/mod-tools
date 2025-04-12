@@ -87,7 +87,7 @@ public class ModTools extends Mod {
 		if (E_Extending.http_redirect.enabled()) {
 			Tools.runLoggedException(URLRedirect::load);
 		}
-		if (E_Extending.object_pool.enabled()) {
+		if (E_Extending.object_pool.enabled() && !OS.isAndroid) {
 			Tools.runLoggedException(MagicInstaller::installMagic);
 			Tools.runLoggedException(ObjectPool::load);
 		}

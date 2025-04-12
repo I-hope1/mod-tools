@@ -1,6 +1,7 @@
 package modtools.events;
 
 import arc.func.Cons;
+import arc.util.OS;
 import mindustry.Vars;
 import modtools.annotations.settings.SettingsInit;
 import modtools.utils.LocaleUtils;
@@ -19,10 +20,14 @@ public enum E_Extending implements ISettings {
 	 LocaleUtils.none, LocaleUtils::getLocale, LocaleUtils::getDisplayName,
 	 Stream.concat(Stream.of(LocaleUtils.none), Arrays.stream(Vars.locales)).toArray(Locale[]::new))),
 	import_mod_from_drop,
-	object_pool;
+	object_pool {
+		public boolean isSwitchOn() {
+			return !OS.isAndroid;
+		}
+	};
 
-	E_Extending(){}
-	E_Extending(Class<?> cl, Cons<ISettings> builder){}
+	E_Extending() { }
+	E_Extending(Class<?> cl, Cons<ISettings> builder) { }
 
 	static {
 		auto_update.defTrue();

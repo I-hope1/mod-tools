@@ -25,7 +25,7 @@ public @interface Sample {
 	class AConstants {
 		public static final  String INTERFACE_SUFFIX      = "Interface";
 		public static final  String GEN_CLASS_NAME_SUFFIX = "h$C";
-		public static final  String SUPER_METHOD_PREFIX   = "super$";
+		public static final  String SUPER_METHOD_PREFIX   = "super$$";
 		private static final String GEN_CLASS_NAME        = "modtools.gen.GenX";
 
 		public static String legalName(String name) {

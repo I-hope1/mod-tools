@@ -70,7 +70,7 @@ public class ForRhino {
 																 Context cx, Scriptable scope,
 																 Scriptable thisObj, Object[] args) {
 		try {
-			return ((MyRhino) factory).super$doTopCall(callable, cx, scope, thisObj, args);
+			return ((MyRhino) factory).super$$doTopCall(callable, cx, scope, thisObj, args);
 		} catch (Throwable t) {
 			if (!(catch_outsize_error.enabled() || t instanceof TimeoutException)) throw t;
 			tester.handleError(t);
@@ -80,8 +80,8 @@ public class ForRhino {
 	public static class TimeoutException extends RuntimeException { }
 
 	public interface MyRhino {
-		Object super$doTopCall(Callable callable,
-														Context cx, Scriptable scope,
-														Scriptable thisObj, Object[] args);
+		Object super$$doTopCall(Callable callable,
+		                        Context cx, Scriptable scope,
+		                        Scriptable thisObj, Object[] args);
 	}
 }

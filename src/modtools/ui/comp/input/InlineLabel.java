@@ -47,7 +47,7 @@ public class InlineLabel extends NoMarkupLabel {
 		cache.clear();
 	}
 	//region 文本染色
-	private static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
+	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
 		if (runs.isEmpty() || text.length() == 0) return runs;
 		if (colorMap.isEmpty()) return runs;
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);

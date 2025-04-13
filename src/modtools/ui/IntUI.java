@@ -712,7 +712,9 @@ public class IntUI {
 	}
 
 	public static class ITooltip extends Tooltip implements IInfo {
+		public static final Seq<Tooltip> shown = new Seq<>();
 		long lastShowTime;
+
 		public ITooltip(Cons<Table> contents) {
 			super(t -> { });
 			allowMobile = true;
@@ -723,16 +725,21 @@ public class IntUI {
 				if (container.getChildren().isEmpty()) contents.get(container);
 				container.update(container::pack);
 				topGroup.addChild(container);
+			shown.add(this);
 
 				container.margin(10f);
 			};
 		}
 		public void show(Element element, float x, float y) {
 			// 在新版本，移除了这个方法
-			Tools.runIgnoredException(() -> getManager().hideAll());
+			// Tools.runIgnoredException(() -> getManager().hideAll());
+			for (Tooltip tooltip : shown) {
+				if (tooltip.container.parent == topGroup) tooltip.hide();
+			}
 			super.show(element, x, y);
 		}
 		public void hide() {
+			shown.remove(this);
 			if (mobile) {
 				TaskManager.scheduleOrReset(1.2f - Time.timeSinceMillis(lastShowTime) / 1000f, super::hide);
 			} else {

@@ -18,10 +18,8 @@ import modtools.content.SettingsUI;
 import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.*;
-import modtools.utils.files.HFi;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.misc.SampleTest.X;
 import modtools.misc.*;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
@@ -31,11 +29,11 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
+import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
-import java.lang.reflect.Field;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -96,15 +94,6 @@ public class ModTools extends Mod {
 		}
 
 		if (TEST) {
-			MagicInstaller.installMagic();
-			Log.info(X.classData(Object.class));
-			Field[] fields = X.fields(Class.class, false);
-			Log.info(fields);
-			X x = new X(10);
-			Log.info(x.a);
-			X.init(x, 100);
-			Log.info(x.a);
-
 			World w = SampleWorldInterface.changeClass(new World());
 		}
 	}

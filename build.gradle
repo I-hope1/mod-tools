@@ -68,7 +68,7 @@ dependencies {
 	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
 	}
-	mindustryVersion = "v146"
+//	mindustryVersion = "v146"
 	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-android:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-sdl:$mindustryVersion"

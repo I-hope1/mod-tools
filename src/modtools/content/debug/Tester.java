@@ -1009,7 +1009,7 @@ public class Tester extends Content {
 			while (area.checkIndex(start - 1) && Character.isWhitespace(area.charAtUncheck(start - 1))) start--;
 
 			Scriptable obj;
-			if (area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.') {
+			if ((area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.')) {
 				obj = syntax.cursorObj;
 			} else {
 				obj = customScope;

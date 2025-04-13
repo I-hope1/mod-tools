@@ -18,7 +18,6 @@ import modtools.content.ui.ShowUIList;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
-import modtools.ui.comp.input.area.AutoTextField;
 import modtools.ui.comp.utils.MyItemSelection;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.style.*;
@@ -52,10 +51,21 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		sclListener.remove();
 	}
 
+	/**
+	 * 显示DrawablePicker窗口，并设置初始的Drawable和回调函数。
+	 * @param drawable 初始的Drawable
+	 * @param consumer 选择Drawable后的回调函数
+	 */
 	public void show(Drawable drawable, Cons<Drawable> consumer) {
 		show(drawable, true, consumer);
 	}
 
+	/**
+	 * 显示DrawablePicker窗口，并设置初始的Drawable、是否包含透明度以及回调函数。
+	 * @param drawable0 初始的Drawable
+	 * @param hasAlpha 是否包含透明度
+	 * @param consumer 选择Drawable后的回调函数
+	 */
 	public void show(Drawable drawable0, boolean hasAlpha, Cons<Drawable> consumer) {
 		this.current.set(color);
 		this.cons = consumer;
@@ -63,7 +73,9 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 		isIconColor = true;
 		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
-		drawable = sourceColor.equals(Color.white) ? drawable0 : cloneDrawable(drawable0);
+		boolean isDelegate = drawable0 instanceof DelegatingDrawable;
+		drawable = sourceColor.equals(Color.white) && !isDelegate ? drawable0 : cloneDrawable(drawable0);
+
 		resetColor(sourceColor);
 
 		cont.clear();
@@ -231,7 +243,12 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		 })
 		 .marginLeft(4f).marginRight(4f);
 	}
-	/** 复制drawable并设置{@code tint}为{@link Color#white} */
+
+	/**
+	 * 复制drawable并设置{@code tint}为{@link Color#white}。
+	 * @param drawable 要复制的Drawable
+	 * @return 复制后的Drawable
+	 */
 	private Drawable cloneDrawable(Drawable drawable) {
 		if (drawable == null) return null;
 		if (drawable instanceof DelegatingDrawable d) return d.drawable;
@@ -248,6 +265,12 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			return new TextureRegionDrawable(IntUI.whiteui.getRegion());
 		}
 	}
+
+	/**
+	 * 获取Drawable的tint颜色。
+	 * @param drawable 要获取tint颜色的Drawable
+	 * @return Drawable的tint颜色
+	 */
 	private Color getTint(Drawable drawable) {
 		if (drawable == null) return Color.white;
 		if (drawable instanceof DelegatingDrawable d) return d.color;
@@ -257,6 +280,11 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		 .get(() -> Color.white)
 		);
 	}
+
+	/**
+	 * 重置颜色为指定颜色，并更新相关UI元素。
+	 * @param color 要重置的颜色
+	 */
 	private void resetColor(Color color) {
 		// if (color instanceof AutoColor d) color = d.delegetor();
 		float[] values = color.toHsv(new float[3]);
@@ -273,10 +301,17 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		updateHexText(true);
 	}
 
+	/**
+	 * 更新颜色并更新相关UI元素。
+	 */
 	void updateColor() {
 		updateColor(true);
 	}
 
+	/**
+	 * 更新颜色并更新相关UI元素。
+	 * @param updateField 是否更新颜色字段
+	 */
 	void updateColor(boolean updateField) {
 		h = Mathf.clamp(h, 0, 360);
 		s = Mathf.clamp(s);
@@ -286,6 +321,11 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 
 		updateHexText(updateField);
 	}
+
+	/**
+	 * 更新颜色字段的文本。
+	 * @param updateField 是否更新颜色字段
+	 */
 	private void updateHexText(boolean updateField) {
 		if (hexField != null && updateField) {
 			String val = current.toString().toUpperCase();
@@ -295,26 +335,69 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 			hexField.setText(val);
 		}
 	}
-	/** 仅用于picker */
+
+	/**
+	 * 内部类，用于在颜色选择器中代理颜色操作。
+	 */
 	private class DelegatorColor extends Color {
+		/**
+		 * 获取代理的颜色对象。
+		 * @return 代理的颜色对象
+		 */
 		public Color delegator() {
 			return isIconColor ? iconCurrent : backgroundCurrent;
 		}
+
+		/**
+		 * 设置代理的颜色。
+		 * @param color 要设置的颜色
+		 * @return 代理的颜色对象
+		 */
 		public Color set(Color color) {
 			return delegator().set(color);
 		}
+
+		/**
+		 * 从HSV值设置代理的颜色。
+		 * @param h 色调
+		 * @param s 饱和度
+		 * @param v 亮度
+		 * @return 代理的颜色对象
+		 */
 		public Color fromHsv(float h, float s, float v) {
 			return delegator().fromHsv(h, s, v);
 		}
+
+		/**
+		 * 将代理的颜色转换为HSV值。
+		 * @param hsv 用于存储HSV值的数组
+		 * @return 包含HSV值的数组
+		 */
 		public float[] toHsv(float[] hsv) {
 			return delegator().toHsv(hsv);
 		}
+
+		/**
+		 * 返回代理的颜色的字符串表示。
+		 * @return 颜色的字符串表示
+		 */
 		public String toString() {
 			return delegator().toString();
 		}
+
+		/**
+		 * 设置代理的颜色的透明度。
+		 * @param a 透明度
+		 * @return 代理的颜色对象
+		 */
 		public Color a(float a) {
 			return delegator().a(a);
 		}
+
+		/**
+		 * 返回代理的颜色的RGBA值。
+		 * @return 颜色的RGBA值
+		 */
 		public int rgba() {
 			return delegator().rgba();
 		}

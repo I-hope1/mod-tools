@@ -9,7 +9,6 @@ import mindustry.graphics.Pal;
 import modtools.Constants;
 import modtools.Constants.RHINO;
 import modtools.annotations.DebugMark;
-import modtools.annotations.watch.WatchVar;
 import modtools.jsfunc.IScript;
 import modtools.jsfunc.reflect.UNSAFE;
 import rhino.*;
@@ -33,6 +32,7 @@ public class JSSyntax extends Syntax {
 	public Scriptable customScope;
 	ObjectSet<String> customConstantSet,
 	 customVarSet;
+	Seq<ObjectSet<String>> userVarSets = new Seq<>();
 	public JSSyntax(SyntaxDrawable drawable) {
 		this(drawable, null);
 	}
@@ -53,6 +53,8 @@ public class JSSyntax extends Syntax {
 		 customConstantSet, c_constants,
 		 customVarSet, c_localvar
 		);
+		userVarSets.add(customConstantSet);
+		userVarSets.add(customVarSet);
 
 		outerTask = new DrawCompletion();
 	}
@@ -140,19 +142,25 @@ public class JSSyntax extends Syntax {
 
 	public TokenDraw[] tokenDraws = {
 	 task -> {
-		 if (!js_prop) return null;
 		 for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
 			 if (entry.key.contains(task.token)) {
-				 currentObject = getNextObject(task.token);
-				 if (currentObject == null) currentObject = customScope;
+				 if (userVarSets.contains(entry.key)) {
+					 if (currentObject != customScope && currentObject != null && operatesSymbol.lastSymbol != '\0') continue;
+					 currentObject = getNextObject(task.token);
+				 } else {
+					 currentObject = null;
+				 }
 				 updateCursorObj();
 				 return entry.value;
 			 }
 		 }
+		 if (!js_prop) return null;
+
 		 if (operatesSymbol.lastSymbol == '\0') {
 			 currentObject = customScope;
 			 updateCursorObj();
 		 }
+
 		 // Log.info(currentObject);
 		 // resolveToken(currentObject, task.token);
 		 return dealJSProp(task.token);
@@ -179,7 +187,7 @@ public class JSSyntax extends Syntax {
 		}
 		updateCursorObj();
 	}
-	int lastCursorObjIndex = -2;
+	int lastCursorObjIndex = -1;
 	private void setCursorObj(int lastIndex) {
 		if (drawable != null && lastCursorObjIndex < lastIndex && lastIndex <= drawable.cursor()) {
 			lastCursorObjIndex = lastIndex;
@@ -313,7 +321,7 @@ public class JSSyntax extends Syntax {
 			stack.clear();
 			pkg = null;
 			currentObject = customScope;
-			lastCursorObjIndex = -2;
+			lastCursorObjIndex = -1;
 			cursorObj = null;
 			lastTokenStackSize = -1;
 
@@ -343,16 +351,7 @@ public class JSSyntax extends Syntax {
 		private final NativeJavaObject receiver = new NativeJavaObject();
 		private       int              lastTokenStackSize;
 		private void forToken(int i) {
-			@WatchVar(group = "aa") var token = drawToken.token;
-			@WatchVar(group = "aa") var lastToken = drawToken.lastToken;
-			if ("let".equals(drawToken.token)) {
-				lastTokenStackSize = stack.size();
-			}
-			if ("let".equals(drawToken.lastToken) && lastTokenStackSize == stack.size()) {
-				localVars.add(drawToken.token);
-				lastTokenStackSize = -1;
-			}
-			if (c == ';') {
+			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())) {
 				operatesSymbol.lastSymbol = '\0';
 			}
 			if (c == '(') {
@@ -407,6 +406,7 @@ public class JSSyntax extends Syntax {
 			if (cTask == drawToken) lastToken = drawToken.token;
 		}
 		public boolean draw(int i) {
+			// @WatchVar(group = "aa") var x =  cursorObj;
 			forToken(i);
 			return false;
 		}

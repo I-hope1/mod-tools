@@ -134,9 +134,15 @@ public interface ISettings extends E_DataInterface {
 		if (type() != float.class) { throw new IllegalStateException(STR."the settings is \{type()} not float.class"); }
 		return data().getFloat(name(), 0);
 	}
-	default int getColor() {
+	default int getColorInt() {
 		if (type() != Color.class) { throw new IllegalStateException(STR."the settings is \{type()} not Color.class"); }
 		return data().get0xInt(name(), -1);
+	}
+
+	Color $c1 = new Color();
+	/** @return {@link #$c1}同一个实例  */
+	default Color getColor() {
+		return $c1.set(getColorInt());
 	}
 	default Vec2 getPosition() {
 		if (type() != Position.class) {
@@ -307,7 +313,7 @@ public interface ISettings extends E_DataInterface {
 	/** noArgs */
 	default void $(Color def) {
 		def(def);
-		colorBlock(main(), text, data(), name(), getColor(), this::set);
+		colorBlock(main(), text, data(), name(), getColorInt(), this::set);
 	}
 	/** (enumClass) */
 	default <T extends Enum<T>> void $(Enum<T> def, Class<T> enumClass) {

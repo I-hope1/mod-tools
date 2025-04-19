@@ -45,6 +45,7 @@ public class ModTools extends Mod {
 
 	/** 如果不为empty，在进入是显示 */
 	private static final Fi             libs   = root.child("libs");
+	/** Stores errors encountered during library loading. */
 	private static final Seq<Throwable> errors = new Seq<>();
 	public static        boolean        isV6   = Version.number <= 135;
 
@@ -63,13 +64,14 @@ public class ModTools extends Mod {
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
 		if (headless) Log.info("Running in headless environment.");
 
+		// Defer loading to the main thread to ensure proper initialization order
 		Core.app.post(this::load0);
 	}
 	public void load0() {
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, mods, "metas");
 			meta = metas.get(ModTools.class);
-			load();
+			loadCore();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.close_modrestart", "@mod-tools.close_modrestart_text",
 				 "@mod-tools.close_modrestart_yes", "@mod-tools.close_modrestart_no",
@@ -98,7 +100,7 @@ public class ModTools extends Mod {
 		}
 	}
 
-	private void load() {
+	private void loadCore() {
 		if (!isImportFromGame) meta.hidden = false;
 		resolveLibsCatch();
 

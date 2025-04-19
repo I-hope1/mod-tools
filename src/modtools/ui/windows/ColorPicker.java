@@ -8,6 +8,7 @@ import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.event.*;
+import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
@@ -24,14 +25,20 @@ import modtools.utils.ui.FormatHelper;
 import static modtools.ui.HopeStyles.hope_defaultSlider;
 
 public class ColorPicker extends Window implements IHitter, PopupWindow {
-	public static final float WIDTH = 150f;
-	public static LazyValue<Texture> hueTex = LazyValue.of(() -> {
+	public static final float                            WIDTH  = 150f;
+	public static       LazyValue<Texture>               hueTex = LazyValue.of(() -> {
 		Texture texture = Pixmaps.hueTexture(128, 1);
 		texture.setFilter(TextureFilter.linear);
 		return texture;
 	});
+	public static       LazyValue<TextureRegionDrawable> circle = LazyValue.of(() -> {
+		Pixmap pixmap = new Pixmap(33, 33);
+		pixmap.fillCircle(16, 16, 14, Color.whiteRgba);
+		pixmap.fillCircle(16, 16, 7, Color.clearRgba);
+		return new TextureRegionDrawable(new TextureRegion(new Texture(pixmap)));
+	});
 
-	private Cons<Color> cons    = c -> {};
+	private Cons<Color> cons    = c -> { };
 	final   Color       current = new Color();
 	float h, s, v, a;
 	TextField hexField;
@@ -74,8 +81,10 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 					 );
 
 					 Draw.color(Tmp.c1.fromHsv(h, s, v).inv(), parentAlpha);
-					 Icon.cancelSmall.draw(x + s * width, y + v * height,
-						5 * Scl.scl(), 5 * Scl.scl());
+					 float w1 = Scl.scl(10);
+					 float h1 = Scl.scl(10);
+					 circle.get().draw(x + s * width - w1 / 2f, y + v * height - h1 / 2f,
+						w1, h1);
 				 }
 			 }).growX().height(100).padBottom(6f).colspan(2)
 			 .with(l -> l.addListener(new InputListener() {
@@ -122,20 +131,20 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 			}}).row();
 
 			hexField = t.field(FormatHelper.color(current), Tools.consT(value -> {
-				current.set(Color.valueOf(value).a(a));
-				current.toHsv(values);
-				h = values[0];
-				s = values[1];
-				v = values[2];
-				a = current.a;
+				 current.set(Color.valueOf(value).a(a));
+				 current.toHsv(values);
+				 h = values[0];
+				 s = values[1];
+				 v = values[2];
+				 a = current.a;
 
-				hSlider.setValue(h);
-				if (aSlider != null) {
-					aSlider.setValue(a);
-				}
+				 hSlider.setValue(h);
+				 if (aSlider != null) {
+					 aSlider.setValue(a);
+				 }
 
-				updateColor(false);
-			}))
+				 updateColor(false);
+			 }))
 			 .size(WIDTH, 40f)
 			 .valid(ColorPicker::isValidColor).get();
 
@@ -165,7 +174,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		})).grow();
 
 		buttons.clear();
-		buttons.margin(0).defaults().size(WIDTH, 32);
+		buttons.margin(2).defaults().size(WIDTH, 32);
 		buttons.button("@cancel", Icon.cancel, HopeStyles.flatt, this::hide);
 		buttons.button("@ok", Icon.ok, HopeStyles.flatt, () -> {
 			cons.get(current);

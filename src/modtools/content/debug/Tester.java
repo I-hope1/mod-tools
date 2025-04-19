@@ -34,7 +34,6 @@ import modtools.*;
 import modtools.annotations.settings.Switch;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
-import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.*;
 import modtools.jsfunc.*;
 import modtools.jsfunc.type.CAST;
@@ -855,9 +854,9 @@ public class Tester extends Content {
 
 	public static boolean loaded = false;
 	public void loadSettings(Data settings) {
-		Contents.settings_ui.add(localizedName(), icon, new TotalLazyTable(t -> {
+		Contents.settings_ui.addSection(localizedName(), icon, t -> {
 			ISettings.buildAll("tester", t, Settings.class);
-		}));
+		});
 	}
 
 	public String getMessage() {

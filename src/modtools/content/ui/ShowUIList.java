@@ -464,6 +464,7 @@ public class ShowUIList extends Content {
 	}
 	public static class TotalLazyTable extends Table {
 		private Cons<TotalLazyTable> cons;
+		private Seq<Runnable> lazyRuns = new Seq<>();
 		public TotalLazyTable(Cons<TotalLazyTable> lazyCons) {
 			this(_ -> { }, lazyCons);
 		}
@@ -478,7 +479,15 @@ public class ShowUIList extends Content {
 				cons.get(this);
 				cons = null;
 			}
+			if (lazyRuns != null) {
+				lazyRuns.each(Runnable::run);
+				lazyRuns = null;
+			}
 			super.act(delta);
+		}
+
+		public void addRun(Runnable run) {
+			lazyRuns.add(run);
 		}
 	}
 

@@ -59,7 +59,8 @@ public class HopeStyles {
 	public static ButtonStyle
 	 hope_defaultb;
 	public static SliderStyle
-	 hope_defaultSlider;
+	 hope_defaultSlider,
+	 hope_borderlessVerticalSlider;
 	public static CheckBoxStyle
 	 hope_defaultCheck;
 	public static TextFieldStyle
@@ -98,6 +99,14 @@ public class HopeStyles {
 			knob = drawable;
 			knobOver = drawable;
 			knobDown = drawable;
+		}};
+		hope_borderlessVerticalSlider = new SliderStyle() {{
+			background = Styles.none;
+			TextureRegionDrawable drawable = new TextureRegionDrawable(whiteui);
+			setSize(drawable, Scl.scl(10), Scl.scl(1));
+			knob = sliderKnob;
+			knobDown = sliderKnob;
+			knobOver = sliderKnob;
 		}};
 		hope_defaultCheck = new CheckBoxStyle() {{
 			Color on  = Tmp.c1.set(Pal.accent).lerp(Color.gray, 0.2f);

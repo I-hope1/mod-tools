@@ -125,7 +125,7 @@ public class Selection extends Content {
 	}
 
 	public void loadSettings(Data data) {
-		Contents.settings_ui.add(localizedName(), icon, new SettingsTable(data));
+		Contents.settings_ui.addSection(localizedName(), icon, new SettingsTable(data));
 	}
 
 	SelectListener listener;

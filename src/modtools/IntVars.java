@@ -29,13 +29,19 @@ public class IntVars {
 
 	private static int getVersion() {
 		String version = System.getProperty("java.version");
+		// Simpler version parsing
 		if (version.startsWith("1.")) {
 			version = version.substring(2, 3);
 		} else {
 			int dot = version.indexOf(".");
 			if (dot != -1) { version = version.substring(0, dot); }
 		}
-		return Integer.parseInt(version);
+		try {
+			return Integer.parseInt(version);
+		} catch (NumberFormatException e) {
+			Log.err("Failed to parse Java version: " + System.getProperty("java.version"), e);
+			return 8; // Default to a reasonable fallback
+		}
 	}
 
 	public static final Runnable EMPTY_RUN = () -> { };
@@ -57,15 +63,18 @@ public class IntVars {
 		@SuppressWarnings("unchecked")
 		@Override
 		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
-			if (type == Class.class) try {
-				return (T) Vars.mods.mainLoader().loadClass(jsonData.asString());
-			} catch (ClassNotFoundException e) {
-				throw new RuntimeException(e);
+			if (type == Class.class) {
+				try {
+					return (T) Vars.mods.mainLoader().loadClass(jsonData.asString());
+				} catch (ClassNotFoundException e) {
+					throw new RuntimeException(e);
+				}
 			}
 			return super.readValue(type, elementType, jsonData, keytype);
 		}
 	};
 
+	/** Shows an exception either in the UI or logs it. */
 	public static void showException(Throwable e, boolean b) {
 		if (b) {
 			IntUI.showException(e);
@@ -84,6 +93,13 @@ public class IntVars {
 	public static void async(String text, Runnable runnable, Runnable callback) {
 		async(text, runnable, callback, ui != null);
 	}
+	/**
+	 * Runs a task asynchronously.
+	 * @param text      Text for the loading fragment (optional).
+	 * @param runnable  The task to run asynchronously.
+	 * @param callback  Task to run on the main thread after completion (optional).
+	 * @param displayUI Whether to show a loading fragment and display errors in the UI.
+	 */
 	public static void async(String text, Runnable runnable, Runnable callback, boolean displayUI) {
 		if (displayUI) ui.loadfrag.show(text);
 		CompletableFuture.runAsync(() -> {
@@ -104,8 +120,9 @@ public class IntVars {
 	public static void postToMain(Runnable run) {
 		if (Thread.currentThread().getContextClassLoader() == Vars.class.getClassLoader()) {
 			run.run();
-		} else Core.app.post(Tools.runT0(run));
+		} else { Core.app.post(Tools.runT0(run)); }
 	}
+	/** Checks if the current OS is considered Desktop (Windows or Mac). */
 	public static boolean isDesktop() {
 		return OS.isWindows || OS.isMac;
 	}
@@ -115,6 +132,7 @@ public class IntVars {
 	public static void dispose() {
 		resizeListeners.clear();
 		Events.remove(ResizeEvent.class, resizeEventCons);
+		EXECUTOR.get().shutdownNow();
 	}
 
 	public static final Cons<ResizeEvent> resizeEventCons = _ -> {
@@ -126,9 +144,9 @@ public class IntVars {
 	}
 
 	public static void load() {
-		if (Core.bundle.has("mod-tools.description"))
-			meta.description = Core.bundle.get("mod-tools.description");
+		if (Core.bundle.has("mod-tools.description")) { meta.description = Core.bundle.get("mod-tools.description"); }
 	}
+	/** A Vec2 representing the mouse position, updated periodically. */
 	public static class MouseVec extends Vec2 {
 		static {
 			Tools.TASKS.add(() -> {
@@ -143,6 +161,7 @@ public class IntVars {
 		}
 		/* 禁止外部设置 */
 		public Vec2 set(Vec2 v) {
+			Log.err("Attempted to set MouseVec directly.", new Throwable()); // Log attempt
 			return this;
 		}
 	}

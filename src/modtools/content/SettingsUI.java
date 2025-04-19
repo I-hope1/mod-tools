@@ -1,4 +1,3 @@
-
 package modtools.content;
 
 import arc.Core;
@@ -7,7 +6,7 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.Element;
-import arc.scene.style.*;
+import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -19,31 +18,38 @@ import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.*;
 import modtools.ui.*;
 import modtools.ui.TopGroup.TSettings;
-import modtools.ui.comp.Window;
+import modtools.ui.comp.*;
 import modtools.ui.comp.Window.DisWindow;
-import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.io.FileUtils;
-import modtools.utils.ui.FormatHelper;
+import modtools.utils.ui.*;
 
 import java.lang.reflect.Field;
+import java.util.Objects;
 
 import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.ui.CellTools.rowSelf;
 
 public class SettingsUI extends Content {
-	Window ui;
-	Table  cont = new Table();
-	final Table loadTable = new Table(t -> t.left().defaults().left());
+	private Window ui;
 
+	// 用于构建IntTab的数据列表
+	private final Seq<String>   sectionNames  = new Seq<>();
+	private final Seq<Drawable> sectionIcons  = new Seq<>();
+	private final Seq<Table>    sectionTables = new Seq<>();
+	private final Seq<Color>    sectionColors = new Seq<>(); // 可选：为标签页添加颜色
+
+	@Override
 	public void build() {
+		if (ui == null) lazyLoad(); // 如果直接访问，确保UI已加载
 		ui.show();
 	}
 
@@ -51,380 +57,428 @@ public class SettingsUI extends Content {
 		super("settings");
 	}
 
-	public <T extends Content> void addLoad(T cont) {
-		loadTable.check(cont.localizedName(), 28, cont.loadable(), b -> {
-			SETTINGS.put("load-" + cont.name, b);
-		}).with(b -> b.setStyle(HopeStyles.hope_defaultCheck)).row();
+	/** 将加载项添加到Load部分的表格中 */
+	private <T extends Content> void addLoadCheck(Table t, T contentModule) {
+		t.check(contentModule.localizedName(), 28, contentModule.loadable(), b -> {
+			 SETTINGS.put("load-" + contentModule.name, b);
+		 })
+		 .with(b -> b.setStyle(HopeStyles.hope_defaultCheck))
+		 .left().row(); // 确保每个复选框靠左并占一行
 	}
 
-	public Table add(String title, Table t) {
-		return add(title, null, t);
+	public Seq<Runnable> customSections = new Seq<>();
+	/**
+	 * 准备一个设置区域，稍后添加到IntTab。
+	 * @param title          区域标题 (会用于标签文本)
+	 * @param icon           区域图标 (会用于标签图标)
+	 * @param contentBuilder 构建区域内容的lambda (参数是内容Table)
+	 */
+	public void addSection(String title, Drawable icon, Cons<TotalLazyTable> contentBuilder) {
+		addSection(title, icon, new TotalLazyTable(contentBuilder));
 	}
-	public Table add(String title, Drawable icon, Table t) {
-		Table table = new LimitTable();
-
-		// add icon
-		if (icon != null) table.image(icon).size(24).padRight(4f);
-		else table.add(); /* 占位符 */
-
-		// title
-		table.add(title).color(Pal.accent).growX().left().row();
-		table.image().color(Pal.accent).growX().fill(0.95f, 0f).colspan(2).left().row();
-
-		// container
-		t.left().defaults().left();
-		table.table(container -> container.background(((NinePatchDrawable) Tex.sideline)
-			 .tint(Tmp.c1.set(Pal.accent).lerp(Color.lightGray, 0.8f)))
-			.add(t).grow())
-		 .growX().colspan(2).left();
-		cont.add(table).growX().left().row();
-		return table;
+	public void addSection(String title, Drawable icon, Table table) {
+		customSections.add(() -> addSectionInternal(title, icon, table));
 	}
-	public void add(Table t) {
-		cont.add(t).growX().padTop(6).row();
+	private void addSectionInternal(String title, Drawable icon, Cons<TotalLazyTable> table) {
+		addSectionInternal(title, icon, new TotalLazyTable(table));
+	}
+	private void addSectionInternal(String title, Drawable icon, Table table) {
+		sectionNames.add(title);
+		sectionIcons.add(icon == null ? Styles.none : icon);
+		sectionColors.add(Color.sky); // 使用默认颜色，可以自定义
+
+		// 创建一个 TotalLazyTable 以实现内容的懒加载
+		table.left().defaults().left().pad(6f); // 内容区域增加内边距
+		sectionTables.add(table);
 	}
 
+	@Override
 	public void lazyLoad() {
-		ui = new IconWindow(390, 90, true);
-		Table prev = cont;
-		cont = new Table();
-		ui.cont.pane(Styles.smallPane, cont).grow().padLeft(6f);
-		cont.defaults().minWidth(375).padTop(20);
-		add("Load", loadTable);
-		add("JSFunc", new LimitTable() {{
-			left().defaults().left();
-			JColor.settingColor(this);
-		}});
-		add("Effects", Icon.effectSmall, new LimitTable() {{
-			left().defaults().left();
-			ISettings.buildAll("blur", this, E_Blur.class);
-		}});
-		cont.add(prev).grow().row();
+		// 初始化窗口
+		ui = new IconWindow(550, 500, true);
+		ui.cont.clear(); // 清除旧内容
 
-		add("@mod-tools.others", Icon.listSmall,
-		 new LimitTable() {{
-			 left().defaults().left();
-			 SettingsBuilder.main = this;
-			 String key = "ShowMainMenuBackground";
-			 SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
+		// --- 准备各个设置区域 ---
 
-			 ISettings.buildAll("", this, TSettings.class);
-			 // find()
-			 addElemValueLabel(this, "Bound Element",
-				TopGroup::getDrawPadElem,
-				() -> TopGroup.setDrawPadElem(null),
-				TopGroup::setDrawPadElem,
-				TSettings.debugBounds::enabled);
-			 ISettings.buildAll("", this, E_Game.class);
-			 ISettings.buildAll("", this, E_Extending.class);
-			 ISettings.buildAll("frag", this, Frag.Settings.class);
-
-			 button("Font", HopeStyles.flatBordert, () -> {
-				 new DisWindow("Fonts", 220, 400) {{
-					 cont.top().defaults().top();
-					 cont.button(MyFonts.DEFAULT, HopeStyles.flatToggleMenut, () -> SETTINGS.put("font", "DEFAULT")).height(42).growX()
-						.checked(_ -> MyFonts.DEFAULT.equals(SETTINGS.getString("font"))).row();
-					 cont.image().color(Color.gray).growX().padTop(6f).row();
-					 for (Fi fi : MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"))) {
-						 cont.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> {
-								SETTINGS.put("font", fi.name());
-							}).height(42).growX()
-							.checked(_ -> fi.name().equals(SETTINGS.getString("font")))
-							.row();
-					 }
-					 cont.add().expandY().row();
-					 cont.image().color(Color.gray).growX().padTop(6f).row();
-					 cont.button("Open Directory", HopeStyles.flatBordert, () -> {
-						 FileUtils.openFile(MyFonts.fontDirectory);
-					 }).growX().height(45);
-					 show();
-				 }};
-			 }).growX().height(42);
-
-			 row();
-			 table(Tex.pane, t -> {
-				 t.defaults().growX().height(42);
-				 t.add("@mod-tools.functions").row();
-				 t.button("Clear Mods Restart", Icon.boxSmall, HopeStyles.flatt, SettingsUI::disabledRestart).row();
-				 if (/* OS.isAndroid ||  */IntVars.isDesktop())
-					 t.button("Switch Language", Icon.chatSmall, HopeStyles.flatt, () -> {
-						 IntVars.async(LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language changed!"));
-					 }).row();
-				 t.button("Enable Debug Level", Icon.chatSmall, HopeStyles.flatt, () -> {
-					 Log.level = LogLevel.debug;
-				 });
-			 }).growX();
-			 row();
-			 // About
-			 button("About", Icon.infoCircleSmall, HopeStyles.flatBordert, () -> {
-				 new DisWindow("About", 220, 100) {{
-					 Table cont = this.cont;
-					 cont.left().defaults().left().growX().height(42);
-					 cont.add("@editor.author");
-					 cont.add(IntVars.meta.author).row();
-					 cont.add("@editor.version");
-					 cont.add(IntVars.meta.version).row();
-					 cont.button("Github", Icon.githubSmall, HopeStyles.flatt, () -> {
-						 Core.app.openURI("https://github.com/" + IntVars.meta.repo);
-					 });
-					 cont.button("QQ", HopeIcons.QQ, HopeStyles.flatt, () -> {
-						 Core.app.openURI(IntVars.QQ);
-					 }).row();
-					 // discord
-					 // cont.button("Discord", Icon.discord, HopeStyles.flatt, () -> {
-					 //  Core.app.openURI(IntVars.discord);
-					 // });
-				 }};
-			 }).height(42).growX();
-		 }});
-		all.forEach(cont -> {
-			if (!(cont instanceof SettingsUI)) {
-				addLoad(cont);
-			}
+		// 1. 准备 "加载" (Load) 区域
+		addSectionInternal("Load", Icon.downSmall, t -> {
+			// 在这里构建“加载”区域的内容
+			// addLoadCheck 会直接将复选框添加到 t (即 TotalLazyTable 的内部 Table)
+			all.forEach(contentModule -> {
+				if (!(contentModule instanceof SettingsUI)) {
+					addLoadCheck(t, contentModule);
+				}
+			});
 		});
-		// ui.addCloseButton();
+
+		customSections.each(Runnable::run);
+
+		// 2. 准备 "JSFunc" 区域
+		addSectionInternal("JSFunc", Icon.logicSmall, t -> {
+			SettingsBuilder.build(t);
+			JColor.settingColor(t);
+			SettingsBuilder.clearBuild();
+		});
+
+		// 3. 准备 "效果" (Effects) 区域
+		addSectionInternal("Effects", Icon.effectSmall, t -> {
+			SettingsBuilder.build(t);
+			ISettings.buildAll("blur", t, E_Blur.class);
+			SettingsBuilder.clearBuild();
+		});
+
+		// 4. 准备 "其他" (Others) 区域
+		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {
+			SettingsBuilder.build(t); // 设置SettingsBuilder的目标表格
+
+			// 主菜单背景切换
+			String key = "ShowMainMenuBackground";
+			SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
+
+			// 构建各种设置
+			ISettings.buildAll("", t, TSettings.class);
+			addElemValueLabel(t, "Bound Element",
+			 TopGroup::getDrawPadElem,
+			 () -> TopGroup.setDrawPadElem(null),
+			 TopGroup::setDrawPadElem,
+			 TSettings.debugBounds::enabled);
+			ISettings.buildAll("", t, E_Game.class);
+			ISettings.buildAll("", t, E_Extending.class);
+			ISettings.buildAll("frag", t, Frag.Settings.class);
+
+			// 字体选择按钮
+			t.button("@settings.font", HopeStyles.flatBordert, this::showFontDialog)
+			 .growX().height(42).row();
+
+			// 功能按钮区域
+			t.table(Tex.pane, ft -> {
+				ft.defaults().growX().height(42).pad(2);
+				ft.add("@mod-tools.functions").color(Pal.accent).center().row();
+				ft.button("@settings.cancelmodsrestart", Icon.cancelSmall, HopeStyles.flatt, SettingsUI::disabledRestart).row();
+				if (IntVars.isDesktop()) {
+					ft.button("@settings.switchlanguage", Icon.chatSmall, HopeStyles.flatt, () -> {
+						IntVars.async("Switching Language...", LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language switched!"));
+					}).row();
+				}
+				ft.button("@settings.enabledebuglevel", Icon.terminalSmall, HopeStyles.flatt, () -> {
+					Log.level = LogLevel.debug;
+					IntUI.showInfoFade("Debug log level enabled.");
+				});
+			}).growX().padTop(8f).row();
+
+			// 关于按钮
+			t.button("@about", Icon.infoCircleSmall, HopeStyles.flatBordert, this::showAboutDialog)
+			 .height(42).growX().padTop(8f);
+
+			SettingsBuilder.clearBuild(); // 清理SettingsBuilder的目标
+		});
+
+		// --- 构建 IntTab ---
+		IntTab tab = new IntTab(CellTools.unset, // 左侧标签栏的宽度 (titleWidth)
+		 sectionNames.toArray(String.class),
+		 sectionColors.toArray(Color.class),
+		 sectionTables.toArray(Table.class),
+		 1, // 列数 (垂直布局为1列)
+		 true); // column = true 表示垂直布局
+
+		tab.setIcons(sectionIcons.toArray(Drawable.class)); // 设置标签图标
+
+		// 将 IntTab 添加到窗口内容区
+		ui.cont.add(tab.build()).grow();
+
+		// 清理临时列表
+		sectionNames.clear();
+		sectionIcons.clear();
+		sectionTables.clear();
+		sectionColors.clear();
 	}
 
-	public static void disabledRestart() {
-		Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
+	// --- 辅助方法保持不变 ---
+
+	/** 显示字体选择对话框 */
+	private void showFontDialog() {
+		new DisWindow("@settings.font", 220, 400) {{
+			cont.top().defaults().top().growX();
+			// 默认字体按钮
+			cont.button(MyFonts.DEFAULT, HopeStyles.flatToggleMenut, () -> setFont(MyFonts.DEFAULT))
+			 .height(42).checked(_ -> MyFonts.DEFAULT.equals(getSelectedFont())).row();
+			cont.image().color(Color.gray).growX().pad(6f, 0, 6f, 0).row();
+
+			// 自定义字体列表
+			Seq<Fi> fontFiles = MyFonts.fontDirectory.findAll(fi -> fi.extEquals("ttf"));
+			if (fontFiles.isEmpty()) {
+				cont.add("@settings.font.nofonts").color(Color.gray).pad(10f).row();
+			} else {
+				// 使用ScrollPane显示可能很长的字体列表
+				ScrollPane fontsPane = new ScrollPane(new Table(fontTable -> {
+					fontTable.top().defaults().top().growX();
+					for (Fi fi : fontFiles) {
+						fontTable.button(fi.nameWithoutExtension(), Styles.flatToggleMenut, () -> setFont(fi.name()))
+						 .height(42).checked(_ -> fi.name().equals(getSelectedFont())).row();
+					}
+				}), Styles.smallPane);
+				fontsPane.setFadeScrollBars(false); // 始终显示滚动条
+				fontsPane.setOverscroll(false, false); // 禁用过度滚动效果
+				cont.add(fontsPane).growY().maxHeight(200f).row(); // 限制最大高度并允许垂直滚动
+			}
+
+			cont.add().expandY(); // 将底部按钮推到底部
+
+			cont.image().color(Color.gray).growX().pad(6f, 0, 6f, 0).row();
+			// 打开字体目录按钮
+			cont.button("@settings.font.opendir", Icon.folderSmall, HopeStyles.flatBordert, () -> FileUtils.openFile(MyFonts.fontDirectory))
+			 .growX().height(45);
+			show();
+		}};
 	}
+
+	/** 在设置中设置选定的字体 */
+	private void setFont(String fontName) {
+		SETTINGS.put("font", fontName);
+		IntUI.showInfoFade("Font set. Restart might be needed.");
+		// 如果需要立即生效，可以在这里强制重新加载字体或UI
+	}
+
+	/** 从设置中获取当前选定的字体名称 */
+	private String getSelectedFont() {
+		return SETTINGS.getString("font", MyFonts.DEFAULT);
+	}
+
+	/** 显示关于对话框 */
+	private void showAboutDialog() {
+		new DisWindow("@about", 220, 160) {{
+			Table content = this.cont;
+			content.left().defaults().left().pad(4f);
+			float buttonHeight = 42f;
+			content.add("Author").color(Pal.accent);
+			content.add(IntVars.meta.author).row();
+			content.add("Version").color(Pal.accent);
+			content.add(IntVars.meta.version).row();
+			content.button("GitHub", Icon.githubSmall, HopeStyles.flatt,
+				() -> Core.app.openURI("https://github.com/" + IntVars.meta.repo))
+			 .growX().height(buttonHeight).colspan(2).row();
+			content.button("QQ Group", HopeIcons.QQ, HopeStyles.flatt,
+				() -> Core.app.openURI(IntVars.QQ))
+			 .growX().height(buttonHeight).colspan(2).row();
+			show();
+		}};
+	}
+
+	/** 在Mindustry模组系统中禁用“需要重启”标志 */
+	public static void disabledRestart() {
+		try {
+			Reflect.set(Mods.class, Vars.mods, "requiresReload", false);
+			IntUI.showInfoFade("Restart flag cleared.");
+		} catch (Exception e) {
+			Log.err("Failed to disable restart flag", e);
+			IntUI.showException("Error clearing restart flag", e);
+		}
+	}
+
+	/** 添加一个带有值显示标签的标签，该值可以清除或设置 */
 	public static void addElemValueLabel(
 	 Table table, String text, Prov<Element> prov,
 	 Runnable clear, Cons<Element> setter,
 	 Boolp condition) {
-		var vl = new ClearValueLabel<>(Element.class, prov, clear, setter);
-		vl.setAlignment(Align.right);
-		Label l = new Label(text);
-		table.stack(l, vl)
-		 .update(_ -> {
-			 vl.setVal(prov.get());
+		Objects.requireNonNull(table, "table cannot be null");
+		Objects.requireNonNull(text, "text cannot be null");
+		Objects.requireNonNull(prov, "prov cannot be null");
+		Objects.requireNonNull(clear, "clear cannot be null");
+		Objects.requireNonNull(setter, "setter cannot be null");
+		Objects.requireNonNull(condition, "condition cannot be null");
+		var valueLabel = new ClearValueLabel<>(Element.class, prov, clear, setter);
+		valueLabel.setAlignment(Align.right);
+		Label keyLabel = new Label(text);
+		table.stack(keyLabel, valueLabel)
+		 .update(stack -> {
 			 Color color = condition.get() ? Color.white : Color.gray;
-			 l.setColor(color);
-		 }).growX().row();
+			 keyLabel.setColor(color);
+			 valueLabel.setColor(color);
+			 // 动态更新值
+			 try {
+				 valueLabel.setVal(prov.get());
+			 } catch (Exception e) {
+				 Log.err("Error updating value label for " + text, e);
+				 valueLabel.setText("[#ff4444]Error");
+			 }
+		 }).growX().padBottom(2f).row();
 	}
 
+	/** 添加一个带有标签和颜色选择器按钮的颜色设置块 */
 	public static Color colorBlock(
 	 Table table, String text,
 	 Data data, String key, int defaultColor,
 	 Cons<Color> colorCons) {
+		Objects.requireNonNull(table, "table cannot be null");
+		Objects.requireNonNull(text, "text cannot be null");
 		Color color = new Color(
-		 data == null ? defaultColor : data.get0xInt(key, defaultColor)) {
-			public Color set(Color color) {
-				if (this.equals(color)) return this;
-				if (data != null) data.putString(key, color);
-				super.set(color);
-				if (colorCons != null) colorCons.get(this);
+		 (data == null || key == null) ? defaultColor : data.get0xInt(key, defaultColor)
+		) {
+			@Override
+			public Color set(Color other) {
+				if (this.equals(other)) return this;
+				if (data != null && key != null) {
+					data.putString(key, other);
+				}
+				super.set(other);
+				if (colorCons != null) {
+					colorCons.get(this);
+				}
 				return this;
 			}
 		};
-		EventHelper.doubleClick(table.add(text).growY()
-		 .padRight(4f).left().labelAlign(Align.left).get(), null, () -> {
-			color.set(Tmp.c2.set(defaultColor));
-		});
+		Label label = table.add(text).growY().padRight(4f).left().get();
+		EventHelper.doubleClick(label, null, () -> color.set(Tmp.c2.set(defaultColor)));
+		EventHelper.rightClick(label, () -> color.set(Tmp.c2.set(defaultColor)));
 		ColorBlock.of(table.add().right().growX(), color, false);
 		table.row();
 		return color;
 	}
 
+	/** 添加一个链接到 E_DataInterface 枚举设置的复选框 */
 	public static Cell<CheckBox> checkboxWithEnum(Table t, String text, E_DataInterface enum_) {
+		Objects.requireNonNull(t, "table cannot be null");
+		Objects.requireNonNull(text, "text cannot be null");
+		Objects.requireNonNull(enum_, "enum_ cannot be null");
 		return t.check(text, 28, enum_.enabled(), enum_::set)
 		 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck));
 	}
 
-	public static String TIP_PREFIX = "settings.tip.";
-	/**
-	 * TIP_PREFIX: {@value TIP_PREFIX}
-	 * @see IntUI#tips(String)
-	 * @see IntUI#tips(String, String)
-	 */
-	public static void tryAddTip(Element element, String tipKey) {
-		if (!Core.bundle.has(TIP_PREFIX + tipKey)) return;
+	/** 工具提示资源束键的前缀 */
+	public static final String TIP_PREFIX = "settings.tip.";
 
-		IntUI.addTooltipListener(element, () -> FormatHelper.parseVars(Core.bundle.get(TIP_PREFIX + tipKey)));
+	/** 如果捆绑包中存在相应的键，则尝试向元素添加工具提示 */
+	public static void tryAddTip(Element element, String tipKey) {
+		Objects.requireNonNull(element, "element cannot be null");
+		Objects.requireNonNull(tipKey, "tipKey cannot be null");
+		String fullTipKey = TIP_PREFIX + tipKey;
+		if (Core.bundle != null && Core.bundle.has(fullTipKey)) {
+			IntUI.addTooltipListener(element,
+			 Tools.provT(() -> FormatHelper.parseVars(Core.bundle.get(fullTipKey)))
+			);
+		}
 	}
-	/** @see mindustry.ui.dialogs.CustomRulesDialog */
+
+	// --- SettingsBuilder 保持不变 ---
 	public static class SettingsBuilder {
 		private static Table main;
-		public static Table main() {
-			return main;
-		}
-		public SettingsBuilder() { }
-		public static void build(Table main) {
-			SettingsBuilder.main = main;
+		public static Table main() { return main; }
+		public static void build(Table mainTable) {
+			main = Objects.requireNonNull(mainTable, "main table cannot be null");
 			main.left().defaults().left();
 		}
-		public static void clearBuild() {
-			main = null;
-		}
-
+		public static void clearBuild() { main = null; }
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
 		                                   Func<T, String> stringify) {
 			return list(text, cons, prov, list, stringify, () -> true);
 		}
 		public static Cell<Table> list(String prefix, String key, Data data, Seq<String> list,
 		                               Func<String, String> stringify) {
-			return list(STR."@\{prefix}.\{key.toLowerCase()}", v -> data.put(key, v),
-			 () -> data.getString(key, list.get(0)), list,
-			 stringify, () -> true);
+			Objects.requireNonNull(data, "data cannot be null");
+			Objects.requireNonNull(key, "key cannot be null");
+			Objects.requireNonNull(list, "list cannot be null");
+			if (list.isEmpty()) throw new IllegalArgumentException("List cannot be empty");
+			String localizedText = "@" + prefix + "." + key.toLowerCase();
+			return list(localizedText, v -> data.put(key, v), () -> data.getString(key, list.get(0)), list, stringify, () -> true);
 		}
-		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list,
-		                                   Func<T, String> stringify,
+		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify,
 		                                   Boolp condition) {
 			Table t = new Table();
 			t.right();
-			t.add(text).left().padRight(10).growX().labelAlign(Align.left)
-			 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+			t.add(text).left().padRight(10).growX().labelAlign(Align.left).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
 			t.button(b -> {
-				 b.margin(0, 8f, 0, 8f);
-				 b.add("").grow().labelAlign(Align.right)
-					.update(l -> {
-						l.setText(stringify.get(prov.get()));
-						l.setColor(condition.get() ? Color.white : Color.gray);
-					});
-				 b.clicked(() -> {
-					 if (condition.get()) IntUI.showSelectListTable(b, list,
-						prov, cons, stringify, 100, 42,
-						true,
-						Align.left);
-				 });
-				 if (condition != null) b.setDisabled(() -> !condition.get());
-			 }, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN)
-			 .height(42).self(c -> c.update(b ->
-				c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))
-			 ));
+				b.margin(0, 8f, 0, 8f);
+				b.add("").grow().labelAlign(Align.right).update(l -> {
+					l.setText(stringify.get(prov.get()));
+					l.setColor(condition.get() ? Color.white : Color.gray);
+				});
+				b.clicked(() -> {
+					if (condition.get()) IntUI.showSelectListTable(b, list, prov, cons, stringify, 100, 42, true, Align.left);
+				});
+				b.setDisabled(() -> !condition.get());
+			}, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN).height(42).self(c -> c.update(b -> c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))));
 			return rowSelf(main.add(t).growX().padTop(0));
 		}
-
-		public static void number(String text, Floatc cons, Floatp prov) {
-			number(text, false, cons, prov, () -> true, 0, Float.MAX_VALUE);
-		}
-
-		public static void number(String text, Floatc cons, Floatp prov, float min, float max) {
-			number(text, false, cons, prov, () -> true, min, max);
-		}
-
+		public static void number(String text, Floatc cons,
+		                          Floatp prov) { number(text, false, cons, prov, () -> true, 0, Float.MAX_VALUE); }
+		public static void number(String text, Floatc cons, Floatp prov, float min,
+		                          float max) { number(text, false, cons, prov, () -> true, min, max); }
 		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
-		                          Boolp condition) {
-			number(text, integer, cons, prov, condition, 0, Float.MAX_VALUE);
-		}
-
-		public static void number(String text, Floatc cons, Floatp prov, Boolp condition) {
-			number(text, false, cons, prov, condition, 0, Float.MAX_VALUE);
-		}
-
-		public static void numberi(String text, Intc cons, Intp prov, int min, int max) {
-			numberi(text, cons, prov, () -> true, min, max);
-		}
-
-		public static void numberi(String text, Intc cons, Intp prov, Boolp condition, int min,
-		                           int max) {
+		                          Boolp condition) { number(text, integer, cons, prov, condition, 0, Float.MAX_VALUE); }
+		public static void number(String text, Floatc cons, Floatp prov,
+		                          Boolp condition) { number(text, false, cons, prov, condition, 0, Float.MAX_VALUE); }
+		public static void numberi(String text, Intc cons, Intp prov, int min,
+		                           int max) { numberi(text, cons, prov, () -> true, min, max); }
+		public static void numberi(String text, Intc cons, Intp prov, Boolp condition, int min, int max) {
 			main.table(t -> {
 				t.left();
-				t.add(text).left().padRight(5)
-				 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-				t.field((prov.get()) + "", s -> cons.get(Strings.parseInt(s)))
-				 .update(a -> a.setDisabled(!condition.get()))
-				 .padRight(100f)
-				 .valid(f -> {
-					 int i = Strings.parseInt(f);
-					 return i >= min && i <= max;
-				 }).width(120f).left();
+				t.add(text).left().padRight(5).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+				t.field(String.valueOf(prov.get()), s -> cons.get(Strings.parseInt(s))).update(a -> a.setDisabled(!condition.get())).padRight(100f).valid(f -> {
+					int i = Strings.parseInt(f);
+					return i >= min && i <= max;
+				}).width(120f).left();
 			}).padTop(0).row();
 		}
-		public static void numberi(String text, Data data, String key, int defaultValue,
-		                           Boolp condition, int min,
+		public static void numberi(String text, Data data, String key, int defaultValue, Boolp condition, int min,
 		                           int max) {
 			if (defaultValue < min || defaultValue > max) {
-				throw new IllegalArgumentException("defaultValue(" + defaultValue + ") must be in (" + min + ", " + max + ")");
+				throw new IllegalArgumentException(StringTemplate.STR."defaultValue(\{defaultValue}) must be in (\{min}, \{max})");
 			}
 			numberi(text, val -> data.put(key, val), () -> data.getInt(key, defaultValue), condition, min, max);
 		}
-
-		@SuppressWarnings("StringTemplateMigration")
-		public static void number(String text, boolean integer, Floatc cons, Floatp prov,
-		                          Boolp condition, float min,
+		public static void number(String text, boolean integer, Floatc cons, Floatp prov, Boolp condition, float min,
 		                          float max) {
 			main.table(t -> {
 				t.left();
-				t.add(text).left().padRight(5)
-				 .update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
-				String val;
-				if (integer) {
-					val = ((int) prov.get()) + "";
-				} else {
-					val = FormatHelper.fixed(prov.get(), 2);
-				}
-				t.field(val, s -> cons.get(NumberHelper.asFloat(s)))
-				 .padRight(100f)
-				 .update(a -> a.setDisabled(!condition.get()))
-				 .valid(f -> NumberHelper.isFloat(f) && NumberHelper.asFloat(f) >= min && NumberHelper.asFloat(f) <= max).width(120f).left();
+				t.add(text).left().padRight(5).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+				String val = integer ? String.valueOf((int) prov.get()) : FormatHelper.fixed(prov.get(), 2);
+				t.field(val, s -> cons.get(NumberHelper.asFloat(s))).padRight(100f).update(a -> a.setDisabled(!condition.get())).valid(f -> NumberHelper.isFloat(f) && NumberHelper.asFloat(f) >= min && NumberHelper.asFloat(f) <= max).width(120f).left();
 			}).padTop(0);
 			main.row();
 		}
-		public static void number(String text, Data data, String key, float defaultValue,
-		                          Boolp condition, float min,
+		public static void number(String text, Data data, String key, float defaultValue, Boolp condition, float min,
 		                          float max) {
 			if (defaultValue < min || defaultValue > max) {
-				throw new IllegalArgumentException("defaultValue 必须在 " + min + " 和 " + max + " 之间。当前值为: " + defaultValue);
+				throw new IllegalArgumentException(StringTemplate.STR."defaultValue must be between \{min} and \{max}. Current value: \{defaultValue}");
 			}
 			number(text, false, val -> data.put(key, val), () -> data.getFloat(key, defaultValue), condition, min, max);
 		}
-
-		public static void check(String text, Boolc cons, Boolp prov) {
-			check(text, cons, prov, null);
-		}
-
-		public static void check(String text, Data data, String key, Boolp condition) {
-			check(text, data, key, false, condition);
-		}
-
+		public static void check(String text, Boolc cons, Boolp prov) { check(text, cons, prov, null); }
+		public static void check(String text, Data data, String key) { check(text, data, key, () -> true); }
+		public static void check(String text, Data data, String key,
+		                         Boolp condition) { check(text, data, key, false, condition); }
 		public static void check(String text, Data data, String key, boolean defaultValue,
-		                         Boolp condition) {
-			check(text, val -> data.put(key, val), () -> data.getBool(key, defaultValue), condition);
-		}
-
-
+		                         Boolp condition) { check(text, val -> data.put(key, val), () -> data.getBool(key, defaultValue), condition); }
 		public static void check(String text, Boolc cons, Boolp prov, Boolp condition) {
-			CheckBox checkBox = main.check(text, cons)
-			 .update(a -> {
-				 a.setChecked(prov.get());
-				 if (condition != null) a.setDisabled(!condition.get());
-			 })
-			 .padLeft(10f).get();
+			CheckBox checkBox = main.check(text, cons).update(a -> {
+				a.setChecked(prov.get());
+				if (condition != null) a.setDisabled(!condition.get());
+			}).padLeft(10f).get();
 			checkBox.setStyle(HopeStyles.hope_defaultCheck);
 			checkBox.left();
 			tryAddTip(checkBox, text.substring(text.indexOf('.') + 1));
 			main.row();
 		}
-
 		public static void title(String text) {
 			main.add(text).color(Pal.accent).padTop(20).padRight(100f).padBottom(-3);
 			main.row();
 			main.image().color(Pal.accent).height(3f).padRight(100f).padBottom(20);
 			main.row();
 		}
-		public static <T extends Enum<T>> void enum_(
-		 String text, Class<T> enumClass, Cons<Enum<T>> cons, Prov<Enum<T>> prov,
-		 Boolp condition) {
+		public static <T extends Enum<T>> void enum_(String text, Class<T> enumClass, Cons<Enum<T>> cons,
+		                                             Prov<Enum<T>> prov, Boolp condition) {
 			var enums = new Seq<>((Enum<T>[]) enumClass.getEnumConstants());
 			list(text, cons, prov, enums, Enum::name, condition);
 		}
-
 		public Cell<TextField> field(Table table, float value, Floatc setter) {
-			return table.field(Strings.autoFixed(value, 2), v -> setter.get(NumberHelper.asFloat(v)))
-			 .valid(Strings::canParsePositiveFloat)
-			 .size(90f, 40f).pad(2f);
+			return table.field(Strings.autoFixed(value, 2), v -> setter.get(NumberHelper.asFloat(v))).valid(Strings::canParsePositiveFloat).size(90f, 40f).pad(2f);
 		}
-
-		public static void color(String text, Color defaultColor, Cons<Color> colorSet) {
-			colorBlock(main, text, null, null, defaultColor.rgba(), colorSet);
-		}
-
+		public static void color(String text, Color defaultColor,
+		                         Cons<Color> colorSet) { colorBlock(main, text, null, null, defaultColor.rgba(), colorSet); }
 		public static void interpolator(String name, Cons<Interp> cons, Prov<Interp> prov) {
 			Seq<Field>               seq = Seq.with(Interp.class.getFields());
 			ObjectMap<Interp, Field> map = seq.asMap(Reflect::get, f -> f);
-			list(name, f -> cons.get(Reflect.get(f)), () -> map.get(prov.get()),
-			 seq, Field::getName);
+			list(name, f -> cons.get(Reflect.get(f)), () -> map.get(prov.get()), seq, Field::getName);
 		}
 	}
 }

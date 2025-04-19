@@ -39,6 +39,7 @@ public class Constants {
 		long BINDING_VALUES = fieldOffset(Binding.class, "$VALUES");
 	}
 
+	/** Constants related to desktop JVM internals (java.lang.invoke). Likely fragile. */
 	@SuppressWarnings("DataFlowIssue")
 	public interface DESKTOP_INIT {
 		/** @see java.lang.invoke.MemberName */
@@ -78,6 +79,7 @@ public class Constants {
 		// 	return lookup.findStatic(direct, "make", MethodType.methodType(direct, byte.class, Class.class, MEMBER_NAME, Class.class));
 		// });
 	}
+	/** Constants related to Android JVM/ART internals. Highly fragile. */
 	public interface ANDROID_INIT {
 		/** {@code MethodHandleImpl(long artMethod, int ref, MethodType mt)} */
 		Constructor<MethodHandle> HANDLE_CONSTRUCTOR = ctor(
@@ -124,32 +126,39 @@ public class Constants {
 		long host = fieldOffset(URL.class, "host");
 	}
 	public interface RHINO {
-		/** @see NativeJavaMethod#methods  */
-		long methods = fieldOffset(NativeJavaMethod.class, "methods");
-		/** @see rhino.MemberBox#memberObject  */
+		/** @see NativeJavaMethod#methods */
+		long methods      = fieldOffset(NativeJavaMethod.class, "methods");
+		/** @see rhino.MemberBox#memberObject */
 		long memberObject = fieldOffset(nl("rhino.MemberBox"), "memberObject");
 
-		/** @see ImporterTopLevel#importedPackages  */
+		/** @see ImporterTopLevel#importedPackages */
 		long importPackages = fieldOffset(ImporterTopLevel.class, "importedPackages");
 
-		/** @see ObjArray#data  */
+		/** @see ObjArray#data */
 		long objArray_data = fieldOffset(ObjArray.class, "data");
 
 
-		/** @see NativeJavaObject#NativeJavaObject(Scriptable, Object, Class)    */
+		/** @see NativeJavaObject#NativeJavaObject(Scriptable, Object, Class) */
 		MethodHandle initNativeJavaObject = nl(() -> InitMethodHandle.findInit(NativeJavaObject.class.getDeclaredConstructor(Scriptable.class, Object.class, Class.class)));
 
-		/** @see NativeJavaMethod#findCachedFunction(Context, Object[])   */
-		Method findCachedFunction =  method(NativeJavaMethod.class, "findCachedFunction", Context.class, Object[].class);
+		/** @see NativeJavaMethod#findCachedFunction(Context, Object[]) */
+		Method findCachedFunction = method(NativeJavaMethod.class, "findCachedFunction", Context.class, Object[].class);
 	}
 
+	/** Loads a class by name
+	 * @throws RuntimeException on failure. */
 	public static <R> Class<R> nl(String className) {
 		return (Class<R>) nl(() -> Class.forName(className));
 	}
+
+	/** Gets a static field value by class and field name
+	 * @throws RuntimeException on failure. */
 	public static <R> R val(String className, String fieldName) {
 		Field field = nl(() -> Class.forName(className).getDeclaredField(fieldName));
 		return (R) nl(() -> field.get(null));
 	}
+		/**Gets a reflected method by class name and method name
+		 * @throws RuntimeException on failure. */
 	public static Method method(String className, String methodName, Class<?>... params) {
 		return method(nl(className), methodName, params);
 	}
@@ -163,6 +172,10 @@ public class Constants {
 		return nl(() -> clazz.getDeclaredConstructor(params));
 	}
 
+	/**
+	 * Executes a provider that might throw checked exceptions, wrapping them in RuntimeException.
+	 * Ensures accessible objects are made accessible.
+	 */
 	public static <R> R nl(CProv<R> prov) {
 		try {
 			Object r = prov.get();

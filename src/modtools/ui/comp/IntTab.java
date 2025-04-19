@@ -9,14 +9,14 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
-import arc.util.Log;
+import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.limit.PrefTable;
 import modtools.ui.effect.HopeFx;
-import modtools.utils.ui.*;
+import modtools.utils.ui.CellTools;
 
 import java.util.Arrays;
 
@@ -208,7 +208,7 @@ public class IntTab {
 			title.left().defaults().left();
 			title.fill().left().bottom().button(Icon.menuSmall, HopeStyles.flati, () -> {
 				hideTitle = !hideTitle;
-				title.invalidateHierarchy();
+				Time.runTask(1, () -> title.invalidateHierarchy());
 			}).size(24f);
 		}
 

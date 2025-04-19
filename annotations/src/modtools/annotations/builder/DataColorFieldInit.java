@@ -8,6 +8,7 @@ import java.lang.annotation.*;
 public @interface DataColorFieldInit {
 	/** 在settingColor中添加 */
 	boolean needSetting() default false;
+	/** 如果为空，在content中查找  */
 	String data() default "SETTINGS";
 	/** 删除字段的前缀 */
 	String fieldPrefix() default "";

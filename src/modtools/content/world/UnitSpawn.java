@@ -24,7 +24,6 @@ import mindustry.ui.Styles;
 import modtools.*;
 import modtools.content.Content;
 import modtools.content.debug.Tester;
-import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
@@ -282,16 +281,16 @@ public class UnitSpawn extends Content {
 			defCap = Vars.state.rules.unitCap;
 			Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;
 		}, ModTools::isDisposed));
-		Contents.settings_ui.add(localizedName(), icon, new TotalLazyTable(t-> {
+		Contents.settings_ui.addSection(localizedName(), icon, t-> {
 			t.left().defaults().left();
-			t.check(unitUnlimitedKey, 28, unitUnlimited, b -> toggleUnitCap(b))
+			t.check(unitUnlimitedKey, 28, unitUnlimited, this::toggleUnitCap)
 			 .with(cb -> cb.setStyle(HopeStyles.hope_defaultCheck))
 			 .row();
 			t.defaults().growX().height(42);
 			t.button(noScorchMarksKey, HopeStyles.flatBordert, UNIT::noScorchMarks).row();
 			t.button(killAllUnitsKey, HopeStyles.flatBordert, UNIT::killAllUnits).row();
 			t.button(removeAllUnitsKey, HopeStyles.flatBordert, UNIT::removeAllUnits);
-		}));
+		});
 	}
 	private void toggleUnitCap(boolean b) {
 		unitUnlimited = b;

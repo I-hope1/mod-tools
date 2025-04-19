@@ -14,7 +14,7 @@ import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
-import com.sun.tools.javac.main.Option;
+import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
@@ -24,7 +24,8 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
-import modtools.annotations.unsafe.CheckDefaultCall.CheckException;
+import modtools.annotations.PrintHelper.SPrinter;
+import modtools.annotations.unsafe.TopTranslator.CheckException;
 
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
@@ -54,6 +55,9 @@ public class Replace {
 	static JavacMessages messages;
 	static Analyzer      analyzer;
 
+	public static JavaCompiler compiler;
+	public static Log          log;
+
 	static CopyValueProc         copyValueProc;
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
@@ -73,6 +77,8 @@ public class Replace {
 		moduleFinder = ModuleFinder.instance(context);
 		messages = JavacMessages.instance(context);
 		analyzer = Analyzer.instance(context);
+		log = Log.instance(context);
+		compiler = JavaCompiler.instance(context);
 
 		copyValueProc = new CopyValueProc();
 		defaultToStatic = new DefaultToStatic(context);
@@ -234,12 +240,14 @@ public class Replace {
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
 
 		MultiTaskListener.instance(context).add(new TaskListener() {
-			final CheckDefaultCall chk = new CheckDefaultCall(context);
+			final TopTranslator chk = new TopTranslator(context);
 			public void finished(TaskEvent e) {
 				if (e.getKind() == TaskEvent.Kind.ANALYZE) {
 					try {
 						chk.scanToplevel((JCCompilationUnit) e.getCompilationUnit());
-					} catch (CheckException _) { }
+					} catch (CheckException _) { } catch (Throwable ex) {
+						SPrinter.err(ex);
+					}
 				}
 			}
 		});

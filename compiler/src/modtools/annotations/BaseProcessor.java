@@ -50,7 +50,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	private   int              runTimes;
 	protected RoundEnvironment roundEnv;
 	public void process2() { }
-	public static final boolean RECORD_TIME = true;
+
+	public static final boolean RECORD_TIME = false;
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		if (!AINIT.hasMindustry) return true;
 		this.roundEnv = roundEnv;

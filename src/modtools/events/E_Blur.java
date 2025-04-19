@@ -12,7 +12,7 @@ public enum E_Blur implements ISettings {
 	scale_level(int.class, it -> it.$(4, 1, 16, 1)),
 	/** @see ISettings#$(Enum, Class)  */
 	@Switch(dependency = "enabled")
-	convolution_scheme(Enum.class, it -> it.$(DEF.D, DEF.class));
+	convolution_scheme(DEF.class, it -> it.$(DEF.D, DEF.class));
 
 	E_Blur() { }
 	E_Blur(Class<?> type, Cons<ISettings> builder) { }

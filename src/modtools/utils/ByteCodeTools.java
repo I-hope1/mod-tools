@@ -5,6 +5,7 @@ import arc.func.*;
 import arc.struct.Seq;
 import arc.util.*;
 import modtools.IntVars;
+import modtools.annotations.asm.Sample.AConstants;
 import modtools.jsfunc.type.CAST;
 import modtools.utils.reflect.*;
 import rhino.classfile.ClassFileWriter;
@@ -15,7 +16,6 @@ import java.lang.reflect.*;
 import java.util.*;
 
 import static ihope_lib.MyReflect.unsafe;
-import static modtools.annotations.asm.Sample.AConstants.SUPER_METHOD_PREFIX;
 import static rhino.classfile.ByteCode.*;
 import static rhino.classfile.ClassFileWriter.*;
 
@@ -25,7 +25,7 @@ public class ByteCodeTools {
 	 FUNCTION_KEY = "_K_Fn",
 	 CLASS_FILE   = "_ihope";
 
-	public static boolean DEBUG_LOG_FILE = true;
+	public static boolean DEBUG_LOG_FILE = false;
 
 
 	private static int lastID = 0;
@@ -45,7 +45,7 @@ public class ByteCodeTools {
 			this(nativeName(superClass) + suffix, superClass);
 		}
 
-		/** @param name 必须调用nativeName  */
+		/** @param name 必须调用nativeName */
 		public MyClass(String name, Class<T> superClass) {
 			this.superClass = superClass;
 			adapterName = name;
@@ -182,37 +182,53 @@ public class ByteCodeTools {
 		}
 
 		private int addLoad(Class<?> type) {
-			if (type == boolean.class) return ILOAD;
-			else if (type == byte.class) return ILOAD;
-			else if (type == char.class) return ILOAD;
-			else if (type == short.class) return ILOAD;
-			else if (type == int.class) return ILOAD;
-			else if (type == float.class) return FLOAD;
-			else if (type == long.class) return LLOAD;
-			else if (type == double.class) return DLOAD;
-			else return ALOAD;
+			if (type == boolean.class) { return ILOAD; } else if (type == byte.class) {
+				return ILOAD;
+			} else if (type == char.class) {
+				return ILOAD;
+			} else if (type == short.class) {
+				return ILOAD;
+			} else if (type == int.class) {
+				return ILOAD;
+			} else if (type == float.class) {
+				return FLOAD;
+			} else if (type == long.class) {
+				return LLOAD;
+			} else if (type == double.class) { return DLOAD; } else return ALOAD;
 		}
 
 		private int addStore(Class<?> type) {
-			if (type == boolean.class) return ISTORE;
-			else if (type == byte.class) return ISTORE;
-			else if (type == char.class) return ISTORE;
-			else if (type == short.class) return ISTORE;
-			else if (type == int.class) return ISTORE;
-			else if (type == float.class) return FSTORE;
-			else if (type == long.class) return LSTORE;
-			else if (type == double.class) return DSTORE;
-			else return ASTORE;
+			if (type == boolean.class) {
+				return ISTORE;
+			} else if (type == byte.class) {
+				return ISTORE;
+			} else if (type == char.class) {
+				return ISTORE;
+			} else if (type == short.class) {
+				return ISTORE;
+			} else if (type == int.class) {
+				return ISTORE;
+			} else if (type == float.class) {
+				return FSTORE;
+			} else if (type == long.class) {
+				return LSTORE;
+			} else if (type == double.class) {
+				return DSTORE;
+			} else { return ASTORE; }
 		}
 
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
+		                           Class<?>... args) {
+			 buildSuperFunc(thisMethodName, superMethodName, Object.class, returnType, args);
+		}
+		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> superClass, Class<?> returnType,
 		                           Class<?>... args) {
 			writer.startMethod(thisMethodName, nativeMethod(returnType, args), (short) Modifier.PUBLIC);
 			writer.addLoadThis(); // this
 			for (int i = 0; i < args.length; i++) {
 				writer.add(addLoad(args[i]), i + 1);
 			}
-			writer.addInvoke(INVOKESPECIAL, this.superName, superMethodName, nativeMethod(returnType, args));
+			writer.addInvoke(INVOKESPECIAL, nativeName(superClass), superMethodName, nativeMethod(returnType, args));
 			// addCast(returnType);
 			writer.add(buildReturn(returnType));
 			writer.stopMethod((short) 2); // this + args
@@ -255,8 +271,7 @@ public class ByteCodeTools {
 		}
 
 		public void addInterface(Class<?> interfaceClass) {
-			if (!interfaceClass.isInterface())
-				throw new IllegalArgumentException(interfaceClass + " isn't interface");
+			if (!interfaceClass.isInterface()) { throw new IllegalArgumentException(interfaceClass + " isn't interface"); }
 			writer.addInterface(interfaceClass.getName());
 		}
 
@@ -270,19 +285,25 @@ public class ByteCodeTools {
 				// 传给cls方法的参数
 				Class<?>[] types = m.getParameterTypes();
 				// 用于super方法
-				Class<?>   returnType = m.getReturnType();
+				Class<?> returnType = m.getReturnType();
 				visitEmitMethod(m.getName(), types, returnType, className);
 			}
 		}
+		public void visitEmitMethod(String name, Class<?>[] paramTypes,
+		                            Class<?> returnType, String className) {
+			visitEmitMethod(name, name, paramTypes, returnType, className);
+		}
 		/**
+		 * @param name       重载方法名
+		 * @param targetName 注解所标记的方法的名称
 		 * @see modtools.annotations.processors.asm.SampleProcessor
 		 **/
-		public void visitEmitMethod(String name, Class<?>[] paramTypes,
-		                             Class<?> returnType, String className) {
+		public void visitEmitMethod(String name, String targetName, Class<?>[] paramTypes,
+		                            Class<?> returnType, String className) {
 			Class<?>[] realTypes  = Arrays.copyOfRange(paramTypes, 1, paramTypes.length);
 			String     descriptor = nativeMethod(returnType, realTypes);
 			{ // buildSuper
-				writer.startMethod(SUPER_METHOD_PREFIX + name,
+				writer.startMethod(AConstants.SUPER_METHOD_PREFIX + name,
 				 descriptor, ACC_PUBLIC);
 				writer.addLoadThis(); // this
 				for (int i = 1; i <= realTypes.length; i++) {
@@ -293,20 +314,22 @@ public class ByteCodeTools {
 				writer.add(buildReturn(returnType));
 				writer.stopMethod((short) paramTypes.length);
 			}
-			writer.startMethod(name, descriptor, (short) Modifier.PUBLIC);
-			writer.addLoadThis();
-			for (int i = 0; i < realTypes.length; i++) {
-				writer.add(addLoad(realTypes[i]), i + 1);
+			{ // thisMethod
+				writer.startMethod(targetName, descriptor, (short) Modifier.PUBLIC);
+				writer.addLoadThis();
+				for (int i = 0; i < realTypes.length; i++) {
+					writer.add(addLoad(realTypes[i]), i + 1);
+				}
+				writer.addInvoke(INVOKESTATIC, className,
+				 targetName, nativeMethod(returnType, paramTypes));
+				// emitCast(writer, returnType);
+				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
+				writer.add(buildReturn(returnType));
+				writer.stopMethod((short) (realTypes.length + 1));
 			}
-			writer.addInvoke(INVOKESTATIC, className,
-			 name, nativeMethod(returnType, paramTypes));
-			// emitCast(writer, returnType);
-			// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
-			writer.add(buildReturn(returnType));
-			writer.stopMethod((short) (realTypes.length + 1));
 		}
 
-		/** 使用超类{@link #superClass}的保护域  */
+		/** 使用超类{@link #superClass}的保护域 */
 		public Class<T> define() {
 			return define(superClass);
 		}
@@ -349,7 +372,7 @@ public class ByteCodeTools {
 	public static void writeTo(ClassFileWriter writer, Fi fi) {
 		if (fi.isDirectory()) {
 			String name = writer.getClassName();
-			fi = fi.child(name.replace('/','.') + ".class");
+			fi = fi.child(name.replace('/', '.') + ".class");
 		}
 		try {
 			FileOutputStream outputStream = new FileOutputStream(fi.file());
@@ -381,8 +404,9 @@ public class ByteCodeTools {
 	public static String nativeMethod(Class<?> returnType, Class<?>... args) {
 		StringBuilder builder = new StringBuilder("(");
 		for (var arg : args) {
-			if (arg == void.class)
+			if (arg == void.class) {
 				throw new IllegalArgumentException("args: " + Arrays.toString(args) + " contains void.class");
+			}
 			builder.append(typeToNative(arg));
 		}
 		builder.append(")").append(typeToNative(returnType));
@@ -431,14 +455,15 @@ public class ByteCodeTools {
 	public static short buildReturn(Class<?> returnType) {
 		if (returnType == boolean.class || returnType == int.class
 		    || returnType == byte.class || returnType == short.class
-		    || returnType == char.class)
-			return IRETURN;
-		else if (returnType == long.class) return LRETURN;
-		else if (returnType == float.class) return FRETURN;
-		else if (returnType == double.class) return DRETURN;
-		else if (returnType == void.class) return RETURN;
-			// else if (returnType == byte.class) return ByteCode.BRETURN;
-		else return ARETURN;
+		    || returnType == char.class) { return IRETURN; } else if (returnType == long.class) {
+			return LRETURN;
+		} else if (returnType == float.class) {
+			return FRETURN;
+		} else if (returnType == double.class) {
+			return DRETURN;
+		} else if (returnType == void.class) { return RETURN; }
+		// else if (returnType == byte.class) return ByteCode.BRETURN;
+		else { return ARETURN; }
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)

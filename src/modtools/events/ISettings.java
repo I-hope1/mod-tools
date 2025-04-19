@@ -41,7 +41,7 @@ import static modtools.utils.ui.CellTools.rowSelf;
 /**
  * @see SettingsInit
  */
-@SuppressWarnings("StringTemplateMigration")
+@SuppressWarnings({"StringTemplateMigration", "unused"})
 public interface ISettings extends E_DataInterface {
 	String SUFFIX_ENABLED = "$enabled";
 	float  DISABLED_ALPHA = 0.7f;

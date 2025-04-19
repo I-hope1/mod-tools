@@ -725,7 +725,7 @@ public class IntUI {
 				if (container.getChildren().isEmpty()) contents.get(container);
 				container.update(container::pack);
 				topGroup.addChild(container);
-			shown.add(this);
+				shown.add(this);
 
 				container.margin(10f);
 			};

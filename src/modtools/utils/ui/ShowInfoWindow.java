@@ -41,7 +41,7 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static modtools.events.E_JSFunc.display_synthetic;
+import static java.lang.StringTemplate.STR;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
@@ -269,7 +269,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 	public static boolean find(Pattern pattern, String name) {
 		return pattern == PatternUtils.ANY ||
-		       (E_JSFunc.search_exact.enabled() ? pattern.matcher(name).matches() : pattern.matcher(name).find());
+		       (R_JSFunc.search_exact ? pattern.matcher(name).matches() : pattern.matcher(name).find());
 	}
 	public static boolean find(Pattern pattern, Class<?> clazz) {
 		return clazz != null && find(pattern, clazz.getName());
@@ -471,7 +471,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 	private static void buildMethod(Object o, ReflectTable methods, Method m) {
-		if (!display_synthetic.enabled() && m.isSynthetic()) return;
+		if (!R_JSFunc.display_synthetic && m.isSynthetic()) return;
 		methods.bind(m);
 		setAccessible(m);
 		try {
@@ -479,7 +479,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			Element attribute = methods.table(attr -> {
 				attr.left().defaults().left();
 				// modifiers
-				boolean b = m.getTypeParameters().length > 0 && E_JSFunc.display_generic.enabled();
+				boolean b = m.getTypeParameters().length > 0 && R_JSFunc.display_generic;
 				if (b) {
 					attr.defaults().colspan(2);
 				}
@@ -699,7 +699,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			skip = false;
 			if (member instanceof Constructor || member instanceof ClassMember) return;
 
-			skip = E_JSFunc.folded_name.enabled() && map.containsKey(member.getName());
+			skip = R_JSFunc.folded_name && map.containsKey(member.getName());
 			skipTable = skip ? map.get(member.getName(), Pair::new).getFirst(ShowInfoWindow::newPairTable) : null;
 			if (skip) {
 				add(getName(member.getDeclaringClass()))
@@ -722,7 +722,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			current = table().growX().name(cls.getSimpleName()).get();
 			current.left().defaults().left().top();
 			super.row();
-			if (arr.length == 0 && E_JSFunc.hidden_if_empty.enabled()) {
+			if (arr.length == 0 && R_JSFunc.hidden_if_empty) {
 				lastEmpty = true;
 				return;
 			}
@@ -774,7 +774,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 	private static void mergeOne(ReflectTable table, Member member, MyLabel label,
 	                             Element attribute) {
-		if (table.skip || !E_JSFunc.folded_name.enabled()) return;
+		if (table.skip || !R_JSFunc.folded_name) return;
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
 			if (size == 1) return;

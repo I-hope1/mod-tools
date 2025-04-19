@@ -3,7 +3,7 @@ package modtools.ui.effect;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
-import modtools.events.E_Blur;
+import modtools.events.*;
 import modtools.ui.effect.MyDraw.DrawEffect;
 
 import static modtools.IntVars.NL;
@@ -62,7 +62,7 @@ public class EBBlur implements DrawEffect {
 	public float blurSpace = 1.26f;
 
 	public EBBlur() {
-		this(E_Blur.convolution_scheme.getEnum(DEF.class).floats);
+		this(R_Blur.convolution_scheme.floats);
 	}
 
 	public EBBlur(float... convolutions) {

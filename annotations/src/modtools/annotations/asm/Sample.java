@@ -45,6 +45,12 @@ public @interface Sample {
 		public static <T> T _super(T t) {
 			return t;
 		}
+
+		@Target(ElementType.TYPE_USE)
+		@Retention(RetentionPolicy.SOURCE)
+		public @interface Template {
+			String value();
+		}
 		public static <T> T fieldAccess(Object base, String name) {
 			return null;
 		}

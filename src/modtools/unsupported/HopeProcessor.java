@@ -1,8 +1,12 @@
 package modtools.unsupported;
 
 import arc.func.Cons;
+import arc.struct.ObjectMap;
 import arc.util.Log;
+import arc.util.serialization.JsonValue;
 import com.sun.tools.attach.VirtualMachine;
+import mindustry.mod.ContentParser;
+import modtools.annotations.asm.Sample.SampleTemp.Template;
 import modtools.ui.IntUI;
 
 import java.lang.StringTemplate.Processor;
@@ -20,11 +24,28 @@ public class HopeProcessor {
 	 **/
 	public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
 
-
 	public static final Processor<String, RuntimeException> S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
 
-	public static void main() {
-		String aa = "10203";
+	public static class Wrapper {
+		/** @see mindustry.mod.ContentParser#read(Runnable)    */
+		void run(Runnable runnable) {}
+		/** @see ContentParser#classParsers  */
+		ObjectMap<Class<?>, @Template(value = "mindustry.mod.ContentParser$FieldParser") Object> classParsers;
+		static Wrapper temp(ContentParser parser) {
+			return null;
+		}
+	}
+	public static class WrapperFieldParser {
+		/** @see mindustry.mod.ContentParser.FieldParser#parse(Class, JsonValue)   */
+		Object parse(Class<?> type, JsonValue value) throws Exception { return null; }
+
+		static WrapperFieldParser temp(Object val) {
+			return null;
+		}
+	}
+	public static void main() {;
+		// temp.run();
+		String  aa   = "10203";
 		int    a  = 1, b = 2;
 		Cons<String> run = d -> {
 			System.out.println(NPX."aa\{aa}");
@@ -33,7 +54,7 @@ public class HopeProcessor {
 		run.get(aa);
 	}
 	static void vm() throws Exception {
-		VirtualMachine vm0 =  VirtualMachine. attach(VirtualMachine.list().stream().filter(
+		VirtualMachine vm0 =  VirtualMachine.attach(VirtualMachine.list().stream().filter(
 		 vm -> vm.displayName().endsWith(".jar") || vm.displayName().endsWith(".exe")
 		).findFirst().orElseThrow());
 		Properties props = new Properties();

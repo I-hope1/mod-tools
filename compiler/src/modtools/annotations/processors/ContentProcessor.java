@@ -16,7 +16,10 @@ import modtools.annotations.settings.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
+import javax.tools.JavaFileObject;
+import java.io.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static modtools.annotations.processors.ContentProcessor.$.*;
 
@@ -24,13 +27,16 @@ import static modtools.annotations.processors.ContentProcessor.$.*;
 @AutoService(Processor.class)
 public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {
+	public static final  String SETTING_PREFIX = "E_";
+	private static final String FIELD_PREFIX   = "f_";
+public static final  String REF_PREFIX     = "R_";
+
 	private Name        nameSetting;
 	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
 	private JCClassDecl mainClass;
 
-	private static final String FIELD_PREFIX = "f_";
 
 	public void lazyInit() throws Throwable {
 		nameSetting = ns("Settings");
@@ -43,7 +49,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		mainClass = trees.getTree(findClassSymbol("modtools.ModTools"));
 	}
 
-	public void contentLoad(ClassSymbol element) {
+	public void contentLoad(ClassSymbol element) throws IOException {
 		JCMethodDecl            loadMethod = trees.getTree((ExecutableElement) findChild(element, "load", ElementKind.METHOD));
 		ListBuffer<JCStatement> statements = new ListBuffer<>();
 
@@ -70,7 +76,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// print(loadMethod);
 	}
 
-	public void dealElement(ClassSymbol element) {
+	public void dealElement(ClassSymbol element) throws IOException {
 		if (element.getAnnotation(ContentInit.class) != null) {
 			contentLoad(element);
 			// print(element);
@@ -79,7 +85,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			String       value      = annotation.value();
 			if (value.equals(".")) {
 				value = element.getSimpleName().toString();
-				if (value.startsWith("E_")) value = value.substring(2);
+				if (value.startsWith(SETTING_PREFIX)) value = value.substring(2);
 			}
 			processSetting(element, trees.getTree(element), value, annotation.parent(), annotation.fireEvent());
 		}
@@ -88,12 +94,12 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	public static class $ {
 		static ClassSymbol settings;
 		static JCClassDecl classDecl;
-		static Object      literalName;
+		static Object      literalName; /* content初始使的字面量name（主要是用于设置的key） */
 		static String      parent;
 		static boolean     fireEvents;
 	}
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
-	                            Object literalName, String parent, boolean fireEvents) {
+	                            Object literalName, String parent, boolean fireEvents) throws IOException {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
 		$.settings = settings;
 		$.classDecl = classDecl;
@@ -109,21 +115,27 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// classDecl.extending = mMaker.Ident(settingsImpl);
 
 		allSwitches.clear();
+		allEnumFields.clear();
 		flushAssignment.clear();
 
 		ListBuffer<JCStatement> defList = new ListBuffer<>();
-		// 初始化结束
+		// ↑ 初始化结束 ↑
+
 
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				VarSymbol symbol = getSymbol(unit, tree);
 
+				allEnumFields.put(symbol, "boolean");
 				collectSwitch(symbol);
 
 				// %name%.def(%args%[0])
 				Name name = tree.name;
 				// enumx(float.class, it -> it.$(...))
+				if (newClass.args.size() >= 1 && newClass.args.get(0) instanceof JCFieldAccess classType) {
+					allEnumFields.put(symbol, "" + classType.selected);
+				}
 				if (newClass.args.size() == 2 && newClass.args.get(1) instanceof JCLambda lambda) {
 					lambda.accept(new TreeScanner() {
 						public void visitApply(JCMethodInvocation method) {
@@ -141,6 +153,26 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				}
 			}
 		});
+		if (!allEnumFields.isEmpty()) {
+			// 生成对应的字段 enum_name(Type, ...) -> public static Type enumx = 默认值（ 0 / false / null）
+			Name             pkgName       = settings.packge().fullname;
+			JavaFileObject   file          = mFiler.createSourceFile(pkgName + "." +REF_PREFIX + literalName, settings);
+			Writer           writer        = file.openWriter();
+			StringBuilder    body          = new StringBuilder();
+
+			writer.write(String.valueOf(unit.getPackage()));
+			writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
+			writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
+			writer.write("public class " + REF_PREFIX + literalName + " {\n");
+			// writer.write(allEnumFields.entrySet().stream().reduce("\n",
+			//  (a, b) -> a + "\npublic static " + b.getValue() + " " + b.getKey().getSimpleName() + ";", (a, b) -> a + b));
+			allEnumFields.forEach((symbol, type) -> {
+				body.append("\tpublic static ").append(type).append(' ').append(symbol.getSimpleName()).append(";\n");
+			});
+			writer.write(body.toString());
+			writer.write("\n}");
+			writer.close();
+		}
 		if (!defList.isEmpty()) {
 			mMaker.at(classDecl.defs.last());
 			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
@@ -155,9 +187,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		mMaker.at(mainClass.defs.last());
 		mainClass.defs = mainClass.defs.append(PBlock(
 		 mMaker.Try(PBlock(
-			mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")), List.of(mMaker.Literal(settings.flatname.toString())))))
-		 , List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock()))
-		 , null)
+			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")), List.of(mMaker.Literal(settings.flatname.toString())))))
+			, List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock()))
+			, null)
 		));
 
 		// println(classDecl);
@@ -309,7 +341,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		settings.members().enter(ms);
 		classDecl.defs = classDecl.defs.append(method);
 	}
-	Map<VarSymbol, Switch> allSwitches = new HashMap<>();
+	Map<VarSymbol, Switch> allSwitches   = new HashMap<>();
+	Map<VarSymbol, String>   allEnumFields = new HashMap<>();
 	private void collectSwitch(VarSymbol symbol) {
 		Switch aSwitch = symbol.getAnnotation(Switch.class);
 		if (aSwitch == null) return;

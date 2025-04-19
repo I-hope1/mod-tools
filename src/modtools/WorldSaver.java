@@ -1,6 +1,7 @@
 package modtools;
 
 import arc.struct.Seq;
+import arc.util.Log;
 import arc.util.io.*;
 import mindustry.io.SaveFileReader.CustomChunk;
 import mindustry.io.SaveVersion;
@@ -52,7 +53,11 @@ public class WorldSaver {
 			data.each(pair -> {
 				DataType value = pair.getFirst();
 				switch (value) {
-					case code -> IScript.cx.evaluateString(Tester.customScope, (String) pair.getSecond(), "<WORLD>", 1);
+					case code -> {
+						try {
+							IScript.cx.evaluateString(Tester.customScope, (String) pair.getSecond(), "<WORLD>", 1);
+						} catch (Throwable e) { Log.err(e); }
+					}
 					default -> throw new RuntimeException("Unknown data type: " + value);
 				}
 			});

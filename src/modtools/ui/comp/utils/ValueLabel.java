@@ -455,11 +455,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 		appendTail = () -> sb.append(getArrayDelimiter());
 	}
 	private static String getArrayDelimiter() {
-		return E_JSFunc.array_delimiter.getString();
+		return R_JSFunc.array_delimiter;
 	}
 
 	private boolean isTruncate(int length) {
-		return enableTruncate && truncate_text.enabled() && length > truncate_length.getInt();
+		return enableTruncate && R_JSFunc.truncate_text && length > R_JSFunc.truncate_length;
 	}
 	public void clearVal() {
 		val = null;

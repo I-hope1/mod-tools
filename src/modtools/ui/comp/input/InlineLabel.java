@@ -3,7 +3,7 @@ package modtools.ui.comp.input;
 import arc.Core;
 import arc.Graphics.Cursor.SystemCursor;
 import arc.func.*;
-import arc.graphics.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
@@ -11,6 +11,7 @@ import arc.math.geom.*;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
+import arc.scene.ui.Label;
 import arc.struct.*;
 import arc.struct.IntMap.Keys;
 import arc.util.*;
@@ -133,7 +134,7 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 	/**
 	 * 修改了部分layout
-	 * @see arc.scene.ui.Label#layout()
+	 * @see Label#layout()
 	 */
 	public void layout() {
 		if (cache == null) return;

@@ -34,7 +34,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
-import java.util.Arrays;
+import java.util.*;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
@@ -82,14 +82,14 @@ public class ModTools extends Mod {
 	}
 
 	private void extending() {
-		if (E_Extending.http_redirect.enabled()) {
+		if (R_Extending.http_redirect) {
 			Tools.runLoggedException(URLRedirect::load);
 		}
-		if (E_Extending.object_pool.enabled() && !OS.isAndroid) {
+		if (R_Extending.object_pool && !OS.isAndroid) {
 			Tools.runLoggedException(MagicInstaller::installMagic);
 			Tools.runLoggedException(ObjectPool::load);
 		}
-		if (E_Extending.world_save.enabled()) {
+		if (R_Extending.world_save) {
 			Tools.runLoggedException(WorldSaver::load);
 		}
 

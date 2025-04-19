@@ -2,6 +2,7 @@ package modtools.annotations;
 
 import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.util.JCDiagnostic.Error;
+import modtools.annotations.unsafe.Replace;
 
 import java.io.*;
 
@@ -32,8 +33,6 @@ public interface PrintHelper {
 	}
 	default void err(Throwable th) {
 		SPrinter.err(th);
-		BaseProcessor.log.error(SPrinter.err(th.toString()));
-		BaseProcessor.compiler.shouldStopPolicyIfError = CompileState.INIT;
 	}
 	static void errs(Object... objects) {
 		for (Object object : objects) {
@@ -52,7 +51,11 @@ public interface PrintHelper {
 			StringWriter sw = new StringWriter();
 			PrintWriter  pw = new PrintWriter(sw);
 			th.printStackTrace(pw);
-			errs(sw.toString());
+			String s = sw.toString();
+			errs(s);
+
+			Replace.log.error(SPrinter.err(s));
+			Replace.compiler.shouldStopPolicyIfError = CompileState.INIT;
 		}
 		static void println(Object... objects) {
 			for (Object object : objects) {

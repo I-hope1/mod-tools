@@ -89,7 +89,7 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 	}
 	private ClassSymbol makeInterface(ClassSymbol owner, boolean openPackagePrivate, JCCompilationUnit unit,
 	                                  Sample sample) throws IOException {
-		final String   var_myClas          = "myClass";
+		final String   var_myClass          = "myClass";
 		final String   var_class           = "className";
 		final String   ownerName           = owner.name.toString();
 		ClassSymbol    _interface          = new ClassSymbol(Flags.PUBLIC | Flags.INTERFACE, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX), owner.owner);
@@ -108,6 +108,10 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 			sm = getAnnotationByElement(SampleForMethod.class, symbol, true);
 			si = getAnnotationByElement(SampleForInitializer.class, symbol, true);
 			if (sm == null && si == null) { continue; }
+			if (ms.params.isEmpty()) {
+				log.useSource(unit.sourcefile);
+				log.error(trees.getTree(ms).mods, SPrinter.err("@SampleForMethod / @SampleForInitializer is only allowed on methods with parameters"));
+			}
 
 			JCMethodDecl         tree       = trees.getTree(ms);
 			JCBlock              prevbody   = tree.body;
@@ -132,18 +136,21 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 				methodVisitSb.append(Arrays.stream(upperBoundOfClasses).map(c -> "clazz.isAssignable(" + c.getSimpleName() + ".class)")
 				 .collect(Collectors.joining(" || ", "if (", ")")));
 			}
+			Name name = si != null ? names.init : ms.name;
 
 			// 代码转换：myClass.visitEmitMethod("acceptItem", new Class<?>[]{Building.class, Building.class, Item.class}, boolean.class, className);
-			methodVisitSb.append(var_myClas).append(".").append(NAME_VISIT)
-			 .append("(\"").append(ms.name).append("\", new Class<?>[]{")
+			methodVisitSb.append(var_myClass).append(".").append(NAME_VISIT).append("(");
+			methodVisitSb.append("\"").append(name).append("\", ");
+			if (si != null) methodVisitSb.append("\"").append(ms.name).append("\", ");
+			methodVisitSb.append("new Class<?>[]{")
 			 .append(ms.params.stream().map(BaseASMProc::className).collect(Collectors.joining(", "))).append("}, ")
 			 .append(className(ms.getReturnType())).append(", ").append(var_class).append(");\n");
 
 			if (openPackagePrivate) {
 				packagePrivateSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
 				// 代码转换：myClass.setFunc("acceptItem", (Func2) null, Modifier.PUBLIC, boolean.class, Building.class, Building.class, Item.class)
-				packagePrivateSb.append(var_myClas).append(".").append(NAME_SET_FUNC)
-				 .append("(\"").append(ms.name).append("\", (Func2) null, Modifier.PUBLIC, ")
+				packagePrivateSb.append(var_myClass).append(".").append(NAME_SET_FUNC)
+				 .append("(\"").append(name).append("\", (Func2) null, Modifier.PUBLIC, ")
 				 .append(className(ms.getReturnType())).append(", ")
 				 .append(ms.params.stream().skip(1).map(BaseASMProc::className).collect(Collectors.joining(", "))).append(");\n");
 			}
@@ -154,12 +161,15 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 			tree.params = prevparams;
 		}
 
-		String myclassInit = openPackagePrivate ? "new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", " + var_myClas + ".define())" : "new MyClass(" + var_myClas + ".define()/* 使类public化 */, \"i\")";
+		String builderCall = "if (builder != null) builder.get(myClass);";
+
+		String myclassInit = openPackagePrivate ? "new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", " + var_myClass + ".define())" : "new MyClass(" + var_myClass + ".define()/* 使类public化 */, \"i\")";
 		String s = STR."""
 package \{owner.packge().getQualifiedName().toString()};
 
 \{unit.getImports().stream().reduce("", (a, b) -> a + b, (a, b) -> a + b)}
 import arc.func.Func2;
+import arc.func.Cons;
 import modtools.utils.ByteCodeTools;
 import modtools.utils.ByteCodeTools.MyClass;
 import modtools.utils.Tools;
@@ -173,23 +183,30 @@ public interface \{ownerName}\{AConstants.INTERFACE_SUFFIX} {
 \{superMethodDeclared}
 
 Map<Class<?>, Class<?>> cache = new HashMap<>();
+
 public static Class<?> visit(Class<?> clazz) {
+	return visit(clazz, null);
+}
+public static Class<?> visit(Class<?> clazz, Cons<MyClass<?>> builder) {
 	\{(sample.defaultClass().isBlank() ? "" : "if (clazz == Object.class) clazz = ClassUtils.forName(\"" + sample.defaultClass() + "\");")}
 	if (cache.containsKey(clazz)) {
 		return cache.get(clazz);
 	}
 	if (\{ownerName}\{AConstants.INTERFACE_SUFFIX}.class.isAssignableFrom(clazz)) return clazz;
 
-	var \{var_myClas} = new MyClass(clazz, "\{AConstants.GEN_CLASS_NAME_SUFFIX}");
+	var \{var_myClass} = new MyClass(clazz, "\{AConstants.GEN_CLASS_NAME_SUFFIX}");
 	\{packagePrivateSb}
-	\{var_myClas} = \{myclassInit};
+	\{builderCall}
+
+	\{var_myClass} = \{myclassInit};
 	\{methodVisitSb}
-	// \{var_myClas}.visit(\{ownerName}.class);
-	\{var_myClas}.addInterface(\{ownerName}\{AConstants.INTERFACE_SUFFIX}.class);
-	var newClass = \{var_myClas}.define(\{ownerName}.class);
+	\{var_myClass}.addInterface(\{ownerName}\{AConstants.INTERFACE_SUFFIX}.class);
+	\{builderCall}
+	var newClass = \{var_myClass}.define(\{ownerName}.class);
 	cache.put(clazz, newClass);
 	return newClass;
 }
+
 
 public static <T> T changeClass(T obj) {
 	Class<?> clazz = visit(obj.getClass());

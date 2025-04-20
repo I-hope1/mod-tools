@@ -212,6 +212,7 @@ public class JSSyntax extends Syntax {
 		// }
 		if (o == NOT_FOUND /* && currentObject != NJO */ && pkg == null) {
 			currentObject = NOT_FOUND;
+			// setCursorObj(drawToken.lastIndex + 1);
 			return defaultColor;
 		}
 		if (o instanceof NativeJavaPackage p) {
@@ -225,7 +226,8 @@ public class JSSyntax extends Syntax {
 			updateCursorObj();
 			return c_localvar;
 		}
-		currentObject = customScope;
+		currentObject = Undefined.SCRIPTABLE_UNDEFINED;
+		updateCursorObj();
 		return null;
 	}
 	private Object getNextObject(String token) {
@@ -351,7 +353,13 @@ public class JSSyntax extends Syntax {
 		private final NativeJavaObject receiver = new NativeJavaObject();
 		private       int              lastTokenStackSize;
 		private void forToken(int i) {
-			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())) {
+			if (!(lastTask == operatesSymbol || lastTask == bracketsSymbol)) return;
+
+			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
+			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())
+			|| ((currentObject == NOT_FOUND || currentObject == Undefined.SCRIPTABLE_UNDEFINED) && c =='\n')) {
+				currentObject = customScope;
+				updateCursorObj();
 				operatesSymbol.lastSymbol = '\0';
 			}
 			if (c == '(') {
@@ -393,17 +401,15 @@ public class JSSyntax extends Syntax {
 			}
 		}
 
-		String lastToken;
 		public void after(int i) {
-			if (lastTask == cTask && lastTask == drawToken){
-				if (localKeywords.contains(lastToken)) {
+			if (cTask == drawToken/* 刚执行完 */ && lastTask == drawToken){
+				if (localKeywords.contains(drawToken.lastToken)) {
 					localVars.add(drawToken.token);
 				}
-				if (constKeywords.contains(lastToken)) {
+				if (constKeywords.contains(drawToken.lastToken)) {
 					localConstants.add(drawToken.token);
 				}
 			}
-			if (cTask == drawToken) lastToken = drawToken.token;
 		}
 		public boolean draw(int i) {
 			// @WatchVar(group = "aa") var x =  cursorObj;

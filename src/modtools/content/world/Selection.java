@@ -1033,7 +1033,7 @@ public class Selection extends Content {
 				if (nowUnitSize > maxUnitSize) return;
 				table.table(Tex.underline, t -> {
 					nowUnitSize++;
-					MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(unitSet));
+					MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(u));
 					t.left().defaults().padRight(6f).growY().left();
 					t.image(Icon.starSmall).size(10).color(u.team.color);
 					t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
@@ -1053,17 +1053,17 @@ public class Selection extends Content {
 			lastBulletSize = bulletSet.size;
 			if (lastBulletSize == 0) return;
 
-			bulletSet.each(u -> table.table(Tex.underlineDisabled, t -> {
-				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists0(bulletSet));
+			bulletSet.each(b -> table.table(Tex.underlineDisabled, t -> {
+				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(b));
 				t.left().defaults().padRight(6f).growY().left();
-				t.image(Icon.starSmall).size(10).color(u.team.color).colspan(0);
+				t.image(Icon.starSmall).size(10).color(b.team.color).colspan(0);
 				//noinspection StringTemplateMigration
-				t.label(() -> u.time + "[lightgray]/[]" + u.lifetime).size(10).colspan(2).row();
-				// t.add("" + u.type).with(JSFunc::addDClickCopy);
+				t.label(() -> b.time + "[lightgray]/[]" + b.lifetime).size(10).colspan(2).row();
+				// t.add("" + b.type).with(JSFunc::addDClickCopy);
 
-				buildPos(t, u);
-				// t.add("pathfind:" + u.pathType());
-				addMoreButton(t, u);
+				buildPos(t, b);
+				// t.add("pathfind:" + b.pathType());
+				addMoreButton(t, b);
 			}).growX().row());
 		}
 

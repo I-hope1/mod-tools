@@ -215,7 +215,7 @@ public abstract class WFunction<T> {
 		newButton("Run", Icon.okSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
 		 .disabled(_ -> select.isEmpty())
 		 .with(b -> b.clicked(() -> {
-			 MenuBuilder.showMenuList(getMenuLists(this, mergeList()));
+			 MenuBuilder.showMenuList(getMenuLists(this, this::mergeList));
 		 }));
 		newButton("Filter", Icon.filtersSmall, HopeStyles.flatt, () -> {
 			JSRequest.requestForSelection(mergeList(), null, boolf -> {
@@ -570,41 +570,49 @@ public abstract class WFunction<T> {
 	}
 
 
-	static <R> Seq<MenuItem> getMenuLists(WFunction<R> function, List<R> list) {
+	static <R> Seq<MenuItem> getMenuLists(WFunction<R> function, Prov<List<R>> list) {
 		Seq<MenuItem> seq = new Seq<>(function.FUNCTIONS.size);
 		function.FUNCTIONS.each((k, r) -> {
 			seq.add(MenuItem.with(
 			 k.replace("@", ""),
 			 nameToIcon.get(k, Styles.none),
 			 k,
-			 () -> r.get(list)));
+			 () -> r.get(list.get())));
 		});
 		return seq;
 	}
 
 	@SuppressWarnings("unchecked")
-	public static Seq<MenuItem> getMenuLists0(ObjectSet<Bullet> bulletSet) {
-		tmpList.clear();
-		bulletSet.each(tmpList::add);
-		return getMenuLists(SC.bullets, tmpList);
+	public static Seq<MenuItem> getMenuLists(Bullet bullet) {
+		return getMenuLists(SC.bullets, () -> {
+			tmpList.clear();
+			tmpList.add(bullet);
+			return tmpList;
+		});
 	}
 	@SuppressWarnings("unchecked")
-	public static Seq<MenuItem> getMenuLists(ObjectSet<Unit> unitSet) {
-		tmpList.clear();
-		unitSet.each(tmpList::add);
-		return getMenuLists(SC.units, tmpList);
+	public static Seq<MenuItem> getMenuLists(Unit unit) {
+		return getMenuLists(SC.units, () -> {
+			tmpList.clear();
+			tmpList.add(unit);
+			return tmpList;
+		});
 	}
 	@SuppressWarnings("unchecked")
 	public static Seq<MenuItem> getMenuLists(Building build) {
-		tmpList.clear();
-		tmpList.add(build);
-		return getMenuLists(SC.buildings, tmpList);
+		return getMenuLists(SC.buildings, () -> {
+			tmpList.clear();
+			tmpList.add(build);
+			return tmpList;
+		});
 	}
 	@SuppressWarnings("unchecked")
 	public static Seq<MenuItem> getMenuLists(Tile tile) {
-		tmpList.clear();
-		tmpList.add(tile);
-		return getMenuLists(SC.tiles, tmpList);
+		return getMenuLists(SC.tiles, () -> {
+			tmpList.clear();
+			tmpList.add(tile);
+			return tmpList;
+		});
 	}
 
 

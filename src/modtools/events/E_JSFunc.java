@@ -19,6 +19,12 @@ public enum E_JSFunc implements ISettings {
 	 ", ", "\n", "\n\n",
 	 "\n▶▶▶▶", "\n★★★")),
 
+	/** 给ValueLabel区块添加背景  */
+	chunk_background,
+	/** 给ValueLabel区块添加颜色  */
+	@Switch(dependency = "chunk_background")
+	colorful_background,
+
 	change_class_reference_when_edit {
 		public boolean isSwitchOn() {
 			return OS.isAndroid;

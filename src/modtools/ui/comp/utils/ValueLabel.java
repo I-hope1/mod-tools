@@ -174,6 +174,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		startIndexMap.clear();
 		endIndexMap.clear();
 		clearDrawRuns();
+		bgIndex = 0;
 		appendValue(text, val);
 		if (text.length() > truncate_length.getInt()) {
 			text.setLength(truncate_length.getInt());
@@ -190,6 +191,16 @@ public abstract class ValueLabel extends ExtendingLabel {
 	// 用于记录数组或map是否展开
 	private final ObjectMap<Object, Boolean>  expandMap     = new ObjectMap<>();
 
+	public        int     bgIndex;
+	public static Color[] bgColors = new Color[]{
+	 new Color(0xFFC66D_66),
+	 new Color(0xFFC6FF_66),
+	 new Color(0xFC66C6_66),
+	 new Color(0x66FFC6_66),
+	 };
+	public Color bgColor() {
+		return colorful_background.enabled() ? bgColors[bgIndex++ % bgColors.length] : bgColors[0];
+	}
 	@SuppressWarnings("ConstantConditions")
 	private void appendValue(StringBuilder text, Object val) {
 		// map
@@ -200,8 +211,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 				clickedRegion(getPoint2Prov(val), () -> toggleExpand(val));
 				expandMap.put(val, false);
 			}
-			startIndexMap.put(text.length(), val);
-			colorMap.put(text.length(), c_map);
+			int start = text.length();
+			startIndexMap.put(start, val);
+			colorMap.put(start, c_map);
 			text.append("|Map ").append(getSize(val)).append('|');
 			colorMap.put(text.length(), Color.white);
 			endIndexMap.put(val, text.length() - 1);
@@ -242,11 +254,14 @@ public abstract class ValueLabel extends ExtendingLabel {
 			appendTail = prev;
 			text.append('}');
 
+			if (chunk_background.enabled()) addDrawRun(start, text.length(), DrawType.background, bgColor());
+
 			return;
 		}
 
 		iter:
-		if ((val instanceof Iterable || (val != null && val.getClass().isArray()))) {
+		if (val instanceof Iterable || (val != null && val.getClass().isArray())) {
+			int start = text.length();
 			text.append('[');
 
 			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
@@ -274,6 +289,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 				pool.free(cons);
 			}
 			text.append(']');
+
+			if (chunk_background.enabled()) addDrawRun(start, text.length(), DrawType.background, bgColor());
 			// setColor(Color.white);
 			return;
 		}
@@ -297,7 +314,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			int i = text.length();
 			colorMap.put(i, Color.white);
 			addDrawRun(i, i + 1, DrawType.icon, Color.white, u.type().fullIcon);
-			text.append('■');
+			text.append('□');
 			textOff = text.length() - i;
 		}
 		if (text.length() > 0 && val instanceof Tile t) {
@@ -305,14 +322,14 @@ public abstract class ValueLabel extends ExtendingLabel {
 			colorMap.put(i, Color.white);
 			Block toDisplay = WorldUtils.getToDisplay(t);
 			addDrawRun(i, i + 1, DrawType.icon, Color.white, toDisplay.uiIcon);
-			text.append('■');
+			text.append('□');
 			textOff = text.length() - i;
 		}
 		if (text.length() > 0 && val instanceof UnlockableContent uc) {
 			int i = text.length();
 			colorMap.put(i, Color.white);
 			addDrawRun(i, i + 1, DrawType.icon, Color.white, uc.uiIcon);
-			text.append('■');
+			text.append('□');
 			textOff = text.length() - i;
 		}
 
@@ -750,8 +767,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 				self.valToObj.put(item, val);
 				self.valToType.put(item, val.getClass());
 			}
-			if ((last != null && identityClasses.contains(val.getClass()))
-			 ? !last.equals(item) : last != item) {
+			boolean b = (last != null && identityClasses.contains(val.getClass()))
+			 ? !last.equals(item) : last != item;
+			if (b) {
 				append(item);
 			} else {
 				count++;
@@ -764,7 +782,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			self.addCountText(text, count);
 			if (self.isTruncate(text.length())) throw new SatisfyException();
 			last = item;
-			count = 0;
+			count = 1;
 		}
 		private long llast;
 		public void get(long item) {
@@ -785,7 +803,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			self.addCountText(text, count);
 			if (self.isTruncate(text.length())) throw new SatisfyException();
 			llast = item;
-			count = 0;
+			count = 1;
 		}
 		private double dlast;
 		public void get(double item) {
@@ -806,7 +824,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			self.addCountText(text, count);
 			if (self.isTruncate(text.length())) throw new SatisfyException();
 			dlast = item;
-			count = 0;
+			count = 1;
 		}
 		private boolean zlast;
 		public void get(boolean item) {
@@ -827,7 +845,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			self.addCountText(text, count);
 			if (self.isTruncate(text.length())) throw new SatisfyException();
 			zlast = item;
-			count = 0;
+			count = 1;
 		}
 		private char clast;
 		public void get(char item) {
@@ -848,7 +866,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			self.addCountText(text, count);
 			if (self.isTruncate(text.length())) throw new SatisfyException();
 			clast = item;
-			count = 0;
+			count = 1;
 		}
 
 

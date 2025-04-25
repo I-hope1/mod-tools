@@ -101,7 +101,9 @@ public class ArrayUtils {
 		if (type == null) throw new IllegalArgumentException("Not an array: " + arr);
 		if (!type.isPrimitive()) {
 			int len = Array.getLength(arr);
-			for (int i = 0; i < len; i++) cons.get(Array.get(arr, i));
+			for (int i = 0; i < len; i++) {
+				cons.get(Array.get(arr, i));
+			}
 			cons.append(null);
 			return;
 		}

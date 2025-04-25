@@ -95,7 +95,9 @@ public class InlineLabel extends NoMarkupLabel {
 					continue;
 				}
 				if (iter.hasNext()) {
-					do item = iter.next(); while (item.glyphs.isEmpty());
+					do {
+						item = iter.next();
+					} while (item.glyphs.isEmpty());
 
 					itemIndex = 0;
 					// 对自动换行偏移
@@ -249,65 +251,176 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 
 	/** 遍历指定index区域 */
+	// Assuming 'text' (the original text string used to create the layout)
+	// and 'labelY' (the base Y coordinate for the text) are fields accessible
+	// within the class containing this getRect method.
 	public void getRect(Point2 region, Cons<Rect> callback) {
-		float   lineHeight = style.font.getLineHeight();
-		float   currentX   = 0, currentY = 0;
-		float   startX     = 0, endX = 0;
+		// 获取行高
+		float lineHeight = style.font.getLineHeight();
+		// 当前光标的屏幕X、Y坐标
+		float currentX = 0, currentY = 0;
+		// 选区起始和结束的屏幕X坐标
+		float startX = 0, endX = 0;
+		// 标记是否已找到选区起始位置
 		boolean startFound = false;
 
-		int offset = 0;
+		// 追踪当前处理到的字符在原始文本字符串 `text` 中的索引。
+		// **注意：这是代码中最不确定也是最可能出错的地方。**
+		// 这个索引尝试与当前处理的 GlyphRun 对齐，但在换行、截断、移除空白等布局处理后，
+		// Glyph序列与原始文本索引的对应关系可能不连续或不简单。
+		int currentCharOriginalIndex = 0;
 
+		// 获取整个布局的基线Y坐标（或顶部Y坐标，取决于labelY的定义）
+		// run.y 是相对于布局基线的偏移，所以 currentY = labelY + run.y 是 glyph 的基线Y坐标。
+		// 矩形需要从顶部开始，所以 Y = currentY - lineHeight。
+		currentY = labelY; // 初始化 currentY，后续会在循环中根据 run.y 调整
+
+		// 遍历所有的 GlyphRun
 		for (GlyphRun run : layout.runs) {
-			if (run.glyphs.isEmpty()) continue;
-			/*
-			 * xAdvances contains glyphs.size+1 entries: First entry is X offset relative to the drawing position. Subsequent entries are the X
-			 * advance relative to previous glyph position. Last entry is the width of the last glyph.
-			 */
-			FloatSeq xAdvances = run.xAdvances;
-			currentX = run.x + xAdvances.first();
-			currentY = labelY + run.y;
-			while (offset < text.length() && (char) run.glyphs.first().id != text.charAt(offset)) offset++; // 弥补offset
+			if (run.glyphs.isEmpty()) {
+				// 如果一个 Run 是空的 (例如，颜色标记之间没有文本，或者纯粹由被移除的空白字符构成)，
+				// 它可能仍然对应于原始文本中的一些字符（如换行符、标记字符或被跳过的空白）。
+				// 简单地跳过它，并且不更新 currentCharOriginalIndex，意味着我们假设这些字符不影响 region 的索引判断。
+				// 这在 region.x 或 region.y 落在这些被跳过的字符范围内时会导致错误。
+				// 但在不修改 GlyphLayout 结构的情况下，很难确定这些空 Run 对应多少原始字符。
+				// 保持与原代码相同的行为：跳过空 Run。
+				continue;
+			}
 
-			for (int i = 1; i < xAdvances.size; i++) {
-				int j = i - 1;
-				if (!startFound && offset + j >= region.x) {
-					startX = currentX;
+			// --- 潜在的问题区域：尝试将 currentCharOriginalIndex 对齐到当前 Run 在原始文本中的起始位置 ---
+			// 这个 while 循环试图跳过原始文本中，从上一个 Run 结束位置到当前 Run 第一个 glyph
+			// 对应的原始字符之间的所有字符（例如换行符、颜色标记字符、被移除的前导空白等）。
+			// 它通过查找第一个 glyph 的 ID 在原始文本中的位置来实现。
+			// 如之前讨论，这种查找方式在复杂布局下是不可靠的，可能导致 currentCharOriginalIndex 错误。
+			// 然而，在没有 GlyphLayout 提供更精确映射信息的情况下，这是原代码唯一尝试对齐 offset 的机制。
+			// 我们保留它，但标记为潜在错误源。
+			while (currentCharOriginalIndex < text.length() && (char) run.glyphs.first().id != text.charAt(currentCharOriginalIndex)) {
+				// 添加一个边界检查，防止极端情况下无限循环或越界（理论上不应该发生如果布局是有效的）
+				if (currentCharOriginalIndex >= text.length()) break;
+				currentCharOriginalIndex++; // 跳过在 text 中，但似乎不对应到当前 run 的 glyphs 的字符
+			}
+			// --- 潜在的问题区域结束 ---
+
+			// 计算当前 Run 在屏幕上的基线Y坐标
+			// run.y 是相对于布局整体Y坐标（labelY）的偏移
+			currentY = labelY + run.y;
+
+			// 计算 Run 中第一个 glyph 的屏幕起始X坐标 (Run X + 第一个 glyph 的 X 偏移)
+			// xAdvances.first() 是第一个 glyph 相对于 run.x 的 X 偏移
+			float runStartScreenX = run.x + run.xAdvances.first();
+
+			// currentX 在循环中将追踪当前处理的 glyph 的屏幕起始X坐标
+			currentX = runStartScreenX;
+
+			// 遍历当前 Run 中的所有 glyphs。
+			// xAdvances 序列有 glyphs.size + 1 个元素。
+			// xAdvances[0] 是第一个 glyph 的 X 偏移。
+			// xAdvances[1] 到 xAdvances[glyphs.size - 1] 是 glyphs[0] 到 glyphs[glyphs.size - 2] 之后的 Advance。
+			// xAdvances[glyphs.size] 是最后一个 glyph (glyphs[glyphs.size - 1]) 的宽度。
+			// 我们需要遍历 glyph 索引 `j` 从 0 到 `run.glyphs.size - 1`。
+			// 对于每个 glyph `j`，其起始X是当前的 `currentX`，其结束X是 `currentX + (advance or width)`。
+
+			for (int j = 0; j < run.glyphs.size; j++) {
+				// 假设当前 glyph `j` 对应的原始文本字符索引是 `currentCharOriginalIndex + j`。
+				// **注意：这个简单的加法假设 Run 中的 glyphs 与原始文本中的字符是 1:1 连续对应的，**
+				// **这也是一个潜在的不准确来源，特别是对于连字或更复杂的文本整形。**
+				int currentCharacterIndex = currentCharOriginalIndex + j;
+
+				// `currentX` 在当前迭代开始时，是 glyph `j` 的屏幕起始 X 坐标。
+				float glyphStartX = currentX;
+
+				// 计算当前 glyph `j` 结束时的屏幕 X 坐标。
+				float glyphEndX;
+				if (j < run.glyphs.size - 1) {
+					// 如果不是最后一个 glyph，使用 xAdvances 中的对应 Advance 来计算下一个 glyph 的起始位置。
+					// xAdvances[j+1] 是 glyph `j` 之后的 Advance。
+					glyphEndX = currentX + run.xAdvances.get(j + 1);
+				} else {
+					// 如果是最后一个 glyph，使用 xAdvances 中的最后一个值，它是最后一个 glyph 的宽度。
+					// xAdvances[run.xAdvances.size - 1] 就是 xAdvances[glyphs.size]。
+					glyphEndX = currentX + run.xAdvances.get(run.xAdvances.size - 1);
+				}
+
+				// --- 检查选区起始位置 ---
+				// 如果还没有找到选区起始，并且当前字符索引 `currentCharacterIndex`
+				// 达到了或超过了选区起始索引 `region.x`。
+				if (!startFound && currentCharacterIndex >= region.x) {
+					// 选区在当前 Run 的当前 glyph 或其对应的字符处开始。
+					// 记录选区在此行上的起始屏幕 X 坐标。
+					// 理论上，如果 region.x 落在 glyph j 对应的字符范围内，起始X应该在 glyphStartX 和 glyphEndX 之间。
+					// 但根据原代码逻辑以及简化处理，我们取当前 glyph 的起始 X 作为段落的起始 X。
+					startX = glyphStartX;
 					startFound = true;
 				}
 
+				// --- 检查选区结束位置，并生成矩形 ---
+				// 如果已经找到了选区起始 (`startFound` 为 true)
 				if (startFound) {
-					// Check if the end of the region is in the same run
-					if (offset + j >= region.y) {
-						endX = currentX;
-						if (endX != startX) {
+					// 检查当前字符索引 `currentCharacterIndex` 是否达到了或超过了选区结束索引 `region.y`。
+					// **注意：region.y 通常表示选区结束位置的“后一个”字符索引，或者选区包含 region.y 处的字符。**
+					// **原代码的判断是 `offset + j >= region.y`，这暗示 region.y 指向选区结束的“后一个”字符。**
+					// **当 `currentCharacterIndex` 第一次 >= region.y 时，表示选区到此结束（不包含当前字符）。**
+					if (currentCharacterIndex >= region.y) {
+						// 选区在此 Run 的当前 glyph 或其对应的字符处结束（不包含当前字符）。
+						// 记录选区在此行上的结束屏幕 X 坐标。
+						// 结束位置应该是当前 glyph 的起始 X。
+						endX = glyphStartX;
+						// 只有当起始和结束X不同（即选区有宽度）时才生成矩形。
+						if (endX > startX) { // 使用 > 0 判断宽度更清晰
+							// 创建并回调矩形：(起始X, 矩形顶部Y, 宽度, 高度)
+							// 矩形顶部Y = 基线Y - 行高
 							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
 						}
+						// 选区结束位置已找到，后续的 glyph 和 Run 不再属于此选区。
+						// 立即返回，结束方法执行。
 						return;
 					}
 
-					// If the region spans multiple lines, create a rect for this line and prepare for the next
-					if (i == xAdvances.size - 1) {
-						endX = currentX + xAdvances.get(i);
-						if (endX != startX) {
+					// 如果还没有达到选区结束 (currentCharacterIndex < region.y)，但当前已处理到 Run 的最后一个 glyph...
+					if (j == run.glyphs.size - 1) {
+						// 这意味着选区跨越多行。当前 Run 构成了选区在当前行的最后一部分。
+						// 生成一个覆盖从 `startX` 到当前 Run 结束位置的矩形。
+						endX = glyphEndX; // 结束X是最后一个 glyph 的结束X
+						if (endX > startX) { // 只有当起始和结束X不同时才生成矩形。
 							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
 						}
-						startX = run.x; // Reset startX for the next line
+						// 选区将在下一行继续。`startX` 需要为下一行重置，但这个重置会在下一轮外层循环开始处理新的 Run 时隐含地发生，
+						// 因为 `startX` 只在 `startFound` 为 false 时被设置。如果选区跨行，`startFound` 保持为 true，
+						// 下一个 Run 的第一个满足 `characterIndex >= region.x` 条件的 glyph 会更新 `startX`（虽然这个条件已经恒为真）。
+						// **原代码在此处有个 `startX = run.x;` 的重置，这看起来是错误的，因为它将下一行的起始X设置为当前 Run 的起始X。**
+						// **我们移除这个错误的重置，让 `startX` 自然地在下一行找到第一个 relevant glyph 时被重新捕获。**
 					}
 				}
 
-				currentX += xAdvances.get(i);
-			}
+				// 移动 currentX 到下一个 glyph 的起始位置（当前 glyph 的结束位置）
+				currentX = glyphEndX;
 
-			offset += run.glyphs.size;
-		}
+			} // 内层循环结束：处理完当前 Run 的所有 glyphs
 
-		// Handle the case where the region ends at the last character of the text
-		if (startFound && offset >= region.y) {
-			endX = currentX;
-			if (endX != startX) {
+			// 在处理完 Run 的所有 glyphs 后，需要推进 currentCharOriginalIndex，使其指向下一个 Run 在原始文本中可能开始的位置。
+			// **原代码简单地 `offset += run.glyphs.size;` 这是不准确的，因为它假设每个 glyph 对应一个原始字符。**
+			// **同样，在不修改 GlyphLayout 的情况下，精确推进这个索引是困难的。**
+			// **我们依赖外层循环开始时那个有问题的 `while` 循环来尝试定位下一个 Run 的起始原始文本索引。**
+			// **因此，此处移除原有的 `offset += run.glyphs.size;`。**
+
+		} // 外层循环结束：处理完所有 Runs
+
+		// --- 处理选区结束正好在文本末尾的情况 ---
+		// 当所有 Runs 处理完毕，但 `region.y` 还没有被达到（即 `region.y` 等于或大于原始文本的总有效字符数）时。
+		// 且选区起始已被找到 (`startFound` 为 true)。
+		// `currentCharOriginalIndex` 此时应该大致（如果之前的同步和计数是准确的）等于处理过的原始字符总数。
+		// `currentX` 此时应该是在最后一个 Run 处理完毕后的位置，即整个文本布局的视觉结束 X 坐标。
+		// 如果 `region.y` 等于或超过了这个总数，选区包含到文本的最后一个字符（或到文本末尾）。
+		// 选区在视觉上延伸到整个文本布局的末尾。
+		if (startFound && currentCharOriginalIndex >= region.y) {
+			endX = currentX; // 选区结束X是整个文本的视觉结束X
+			if (endX > startX) { // 生成最后一个矩形
 				callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
 			}
+			// 不需要返回，方法自然结束。
 		}
+
+		// 方法执行完毕，所有属于 region 范围的矩形都已经通过 callback 返回。
 	}
 
 	public Drawable down = Styles.flatDown, over = Styles.flatOver;

@@ -25,6 +25,7 @@ public class ExtendingLabel extends InlineLabel {
 		public int         start, end;
 		public DrawType type;
 		public Color    color;
+		public boolean  beforeDraw;
 		public Object   data;
 
 		private static final Point2        runRect = new Point2(UNSET, UNSET);
@@ -33,6 +34,10 @@ public class ExtendingLabel extends InlineLabel {
 			return obtain(label, start, end, type, color, null);
 		}
 		public static DrawRun obtain(InlineLabel label, int start, int end, DrawType type, Color color, Object data) {
+			return obtain(label, start, end, type, color, type.beforeDraw, data);
+		}
+		public static DrawRun obtain(InlineLabel label, int start, int end, DrawType type, Color color, boolean beforeDraw,
+		                             Object data) {
 			if (label == null) throw new IllegalArgumentException("label cannot be null.");
 			if (start < 0 || end < 0) throw new IllegalArgumentException("start and end cannot be negative.");
 			if (start > end) throw new IllegalArgumentException("start cannot be greater than end.");
@@ -45,6 +50,7 @@ public class ExtendingLabel extends InlineLabel {
 			run.end = end;
 			run.type = type;
 			run.color = color;
+			run.beforeDraw = beforeDraw;
 			run.data = data;
 			return run;
 		}
@@ -73,7 +79,7 @@ public class ExtendingLabel extends InlineLabel {
 		// 删除线
 		strikethrough((x, y, w, h) -> Lines.line(x, y + h / 2, x + w, y + h / 2)),
 		// 背景色
-		background(Fill::crect),
+		background(true, Fill::crect),
 		// 波浪线
 		wave((x, y, width, h) -> {
 			float amplitude  = 2f; // 波浪的振幅
@@ -92,9 +98,11 @@ public class ExtendingLabel extends InlineLabel {
 		// 加粗
 		// bold
 		// 添加icon
-		icon((x, y, w, h) -> {}) {
+		icon((x, y, w, h) -> { }) {
 			void draw(DrawRun run, float x, float y, float w, float h) {
-				if (!(run.data instanceof TextureRegion region)) throw new IllegalArgumentException("data must be TextureRegion.");
+				if (!(run.data instanceof TextureRegion region)) {
+					throw new IllegalArgumentException("data must be TextureRegion.");
+				}
 				// 保持宽高比绘制图标
 				float scl = (float) region.width / region.height;
 				// 图标不能超出范围
@@ -107,8 +115,14 @@ public class ExtendingLabel extends InlineLabel {
 			}
 		},
 		;
-		private final Floatc4 cons;
+		public final Floatc4 cons;
+		public final  boolean beforeDraw;
 		DrawType(Floatc4 cons) {
+			this(false, cons);
+		}
+
+		DrawType(boolean beforeDraw, Floatc4 cons) {
+			this.beforeDraw = beforeDraw;
 			this.cons = cons;
 		}
 		void draw(DrawRun run, float x, float y, float w, float h) {
@@ -116,7 +130,7 @@ public class ExtendingLabel extends InlineLabel {
 		}
 	}
 
-	private final Seq<DrawRun>          drawRuns = new Seq<>();
+	private final Seq<DrawRun> drawRuns = new Seq<>();
 
 	public void clearDrawRuns() {
 		Pools.freeAll(drawRuns, true);
@@ -130,9 +144,12 @@ public class ExtendingLabel extends InlineLabel {
 	}
 
 	public void draw() {
+		for (DrawRun run : drawRuns) {
+			if (run.beforeDraw) run.draw();
+		}
 		super.draw();
 		for (DrawRun run : drawRuns) {
-			run.draw();
+			if (!run.beforeDraw) run.draw();
 		}
 	}
 }

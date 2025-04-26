@@ -744,7 +744,7 @@ public class Selection extends Content {
 			} else {
 				// 将screen映射到world
 				Draw.proj(Core.camera.inv);
-				Fill.crect(0, 0, 100, 100);
+				// Fill.crect(0, 0, 100, 100);
 				drawLineOnScreen(x, y);
 				Draw.proj(Core.camera);
 			}

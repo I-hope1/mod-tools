@@ -28,10 +28,11 @@ import java.util.Objects;
  * <p>可以对局部添加点击事件
  **/
 public class InlineLabel extends NoMarkupLabel {
-	private static final Seq<GlyphRun> result    = new Seq<>();
-	private static final IntSeq        colorKeys = new IntSeq();
-	public static final  int           UNSET     = -1;
-	public               float         labelX, labelY;
+	private static final Seq<GlyphRun> result = new Seq<>();
+
+	private static final IntSeq colorKeys = new IntSeq();
+	public static final  int    UNSET_I   = -1;
+	public               float  labelX, labelY;
 
 	public InlineLabel(CharSequence text) {
 		super(text);
@@ -218,8 +219,8 @@ public class InlineLabel extends NoMarkupLabel {
 
 	// region Clickable
 
-	private static final Point2 overChunk = new Point2(UNSET, UNSET);
-	private static final Point2 downChunk = new Point2(UNSET, UNSET);
+	private static final Point2 overChunk = new Point2(UNSET_I, UNSET_I);
+	private static final Point2 downChunk = new Point2(UNSET_I, UNSET_I);
 	private static final int    padding   = 4;
 
 	/** 获取(x, y)对应的index */
@@ -243,11 +244,11 @@ public class InlineLabel extends NoMarkupLabel {
 					}
 					currentX += xAdvances.get(i);
 				}
-				return UNSET;
+				return UNSET_I;
 			}
 			index += run.glyphs.size;
 		}
-		return UNSET;
+		return UNSET_I;
 	}
 
 	/** 遍历指定index区域 */
@@ -426,12 +427,12 @@ public class InlineLabel extends NoMarkupLabel {
 	public Drawable down = Styles.flatDown, over = Styles.flatOver;
 	public void draw() {
 		if (HopeInput.mouseHit() == this) {
-			if (!downChunk.equals(UNSET, UNSET)) {
+			if (!downChunk.equals(UNSET_I, UNSET_I)) {
 				getRect(downChunk, r1 -> {
 					Draw.color();
 					down.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
 				});
-			} else if (!overChunk.equals(UNSET, UNSET)) {
+			} else if (!overChunk.equals(UNSET_I, UNSET_I)) {
 				getRect(overChunk, r1 -> {
 					Draw.color();
 					over.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
@@ -454,12 +455,12 @@ public class InlineLabel extends NoMarkupLabel {
 						return true;
 					}
 				}
-				InlineLabel.downChunk.set(UNSET, UNSET);
+				InlineLabel.downChunk.set(UNSET_I, UNSET_I);
 				return false;
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
-				InlineLabel.downChunk.set(UNSET, UNSET);
+				InlineLabel.downChunk.set(UNSET_I, UNSET_I);
 			}
 			public void clicked(InputEvent event, float x, float y) {
 				int    cursor = getCursor(x, y);
@@ -471,7 +472,7 @@ public class InlineLabel extends NoMarkupLabel {
 			}
 			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 				super.exit(event, x, y, pointer, toActor);
-				InlineLabel.overChunk.set(UNSET, UNSET);
+				InlineLabel.overChunk.set(UNSET_I, UNSET_I);
 			}
 			public boolean mouseMoved(InputEvent event, float x, float y) {
 				int    cursor = getCursor(x, y);
@@ -481,7 +482,7 @@ public class InlineLabel extends NoMarkupLabel {
 					InlineLabel.overChunk.set(point2);
 					Core.graphics.cursor(SystemCursor.hand);
 				} else {
-					InlineLabel.overChunk.set(UNSET, UNSET);
+					InlineLabel.overChunk.set(UNSET_I, UNSET_I);
 					Core.graphics.cursor(SystemCursor.arrow);
 				}
 				return super.mouseMoved(event, x, y);
@@ -499,7 +500,7 @@ public class InlineLabel extends NoMarkupLabel {
 					InlineLabel.overChunk.set(point2);
 					runnable.run();
 				} else {
-					InlineLabel.overChunk.set(UNSET, UNSET);
+					InlineLabel.overChunk.set(UNSET_I, UNSET_I);
 				}
 				return super.mouseMoved(event, x, y);
 			}

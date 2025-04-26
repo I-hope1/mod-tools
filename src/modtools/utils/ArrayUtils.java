@@ -70,6 +70,9 @@ public class ArrayUtils {
 		return i;
 	}
 
+	public static int size(Object arr) {
+		return Array.getLength(arr);
+	}
 	public static <T> T getBound(T[] arr, int index) {
 		if (index >= arr.length || index < -arr.length) return null;
 		if (index < 0) index += arr.length;

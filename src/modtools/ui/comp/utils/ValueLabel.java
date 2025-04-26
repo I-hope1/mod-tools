@@ -13,42 +13,35 @@ import arc.scene.style.*;
 import arc.scene.ui.layout.Cell;
 import arc.struct.*;
 import arc.struct.IntMap.Keys;
-import arc.struct.ObjectMap.Entry;
 import arc.util.*;
-import arc.util.pooling.*;
-import arc.util.pooling.Pool.Poolable;
 import mindustry.Vars;
-import mindustry.ctype.UnlockableContent;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
-import mindustry.world.*;
+import mindustry.graphics.Pal;
+import mindustry.world.Tile;
 import modtools.content.ui.*;
 import modtools.content.world.Selection;
 import modtools.events.*;
 import modtools.jsfunc.*;
-import modtools.jsfunc.type.CAST;
 import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.highlight.Syntax;
 import modtools.ui.comp.review.*;
+import modtools.ui.comp.utils.Viewers.Viewer;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
-import modtools.utils.ArrayUtils.AllCons;
 import modtools.utils.JSFunc.JColor;
-import modtools.utils.SR.SatisfyException;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.*;
-import modtools.utils.world.WorldUtils;
 
-import java.util.*;
+import java.util.Objects;
 
 import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
-import static modtools.ui.comp.input.highlight.Syntax.c_map;
 
 public abstract class ValueLabel extends ExtendingLabel {
 	public static final boolean DEBUG     = false;
@@ -63,6 +56,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public Object   val;
 	public Class<?> type;
 	public Object   hoveredVal;
+	public Point2   hoveredChunk = new Point2();
 	private ValueLabel() {
 		super((CharSequence) null);
 		type = null;
@@ -107,15 +101,17 @@ public abstract class ValueLabel extends ExtendingLabel {
 					o = startIndexMap.get(index);
 					toIndex = endIndexMap.get(o);
 					if (index <= cursor && cursor < toIndex) {
+						hoveredChunk.set(index, toIndex);
 						hoveredVal = o;
-						break;
+						return;
 					}
 				}
+				hoveredChunk.set(UNSET_I, UNSET_I);
 			}
 		});
 		MenuBuilder.addShowMenuListenerp(this, () -> {
 			ValueLabel label = this;
-			Log.info(hoveredVal);
+			// Log.info(hoveredVal);
 			final Object val = hoveredVal;
 			if (val != null) {
 				Class<?> type1 = valToType.get(val);
@@ -176,20 +172,21 @@ public abstract class ValueLabel extends ExtendingLabel {
 		clearDrawRuns();
 		bgIndex = 0;
 		appendValue(text, val);
+		if (!hoveredChunk.equals(UNSET_I, UNSET_I)) addDrawRun(hoveredChunk.x, hoveredChunk.y, DrawType.outline, Pal.accent);
 		if (text.length() > truncate_length.getInt()) {
 			text.setLength(truncate_length.getInt());
 			text.append(ellipse);
 		}
 	}
 
-	private final IntMap<Object>              startIndexMap = new IntMap<>();
-	private final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
+	final IntMap<Object>              startIndexMap = new IntMap<>();
+	final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
 	// 用于记录数组或map的类型
-	private final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
+	final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
 	// 用于记录数组或map的值
-	private final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
+	final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
 	// 用于记录数组或map是否展开
-	private final ObjectMap<Object, Boolean>  expandMap     = new ObjectMap<>();
+	final ObjectMap<Object, Boolean>  expandMap     = new ObjectMap<>();
 
 	public        int     bgIndex;
 	public static Color[] bgColors = new Color[]{
@@ -202,208 +199,94 @@ public abstract class ValueLabel extends ExtendingLabel {
 		return colorful_background.enabled() ? bgColors[bgIndex++ % bgColors.length] : bgColors[0];
 	}
 	@SuppressWarnings("ConstantConditions")
-	private void appendValue(StringBuilder text, Object val) {
-		// map
-		if (val instanceof ObjectMap || val instanceof IntMap<?>
-		    || val instanceof ObjectIntMap<?>
-		    || val instanceof ObjectFloatMap<?> || val instanceof Map) {
-			if (!expandMap.containsKey(val)) {
-				clickedRegion(getPoint2Prov(val), () -> toggleExpand(val));
-				expandMap.put(val, false);
-			}
-			int start = text.length();
-			startIndexMap.put(start, val);
-			colorMap.put(start, c_map);
-			text.append("|Map ").append(getSize(val)).append('|');
-			colorMap.put(text.length(), Color.white);
-			endIndexMap.put(val, text.length() - 1);
+	void appendValue(StringBuilder text, Object val) {
+		int textOff;
+		int i = text.length();
 
-			if (!expandMap.get(val, false)) {
-				return;
-			}
-			text.append('\n');
-			text.append('{');
-			Runnable prev = appendTail;
-			appendTail = null;
-			switch (val) {
-				case ObjectMap<?, ?> map -> {
-					for (Entry<?, ?> entry : map) {
-						appendMap(text, val, entry.key, entry.value);
-						if (isTruncate(text.length())) break;
-					}
-				}
-				case IntMap<?> map -> {
-					for (IntMap.Entry<?> entry : map) {
-						appendMap(text, val, entry.key, entry.value);
-						if (isTruncate(text.length())) break;
-					}
-				}
-				case ObjectFloatMap<?> map -> {
-					for (ObjectFloatMap.Entry<?> entry : map) {
-						appendMap(text, val, entry.key, entry.value);
-						if (isTruncate(text.length())) break;
-					}
-				}
-				default -> {
-					for (Map.Entry<?, ?> entry : ((Map<?, ?>) val).entrySet()) {
-						appendMap(text, val, entry.getKey(), entry.getValue());
-						if (isTruncate(text.length())) break;
-					}
-				}
-			}
-			appendTail = prev;
-			text.append('}');
+		// viewers
+		if (i == text.length() && applyViewer(Viewers.typeMap, k -> k.valid.get(val), text, val)) return;
+		if (i == text.length() && applyViewer(Viewers.map, k -> k.isAssignableFrom(val.getClass()), text, val)) return;
 
-			if (chunk_background.enabled()) addDrawRun(start, text.length(), DrawType.background, bgColor());
-
-			return;
-		}
-
-		iter:
-		if (val instanceof Iterable || (val != null && val.getClass().isArray())) {
-			int start = text.length();
-			text.append('[');
-
-			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
-			IterCons       cons = pool.obtain().init(this, val, text);
-			try {
-				try {
-					Runnable prev = appendTail;
-					appendTail = null;
-					if (val instanceof Iterable<?> iter) {
-						for (Object item : iter) {
-							cons.get(item);
-						}
-						cons.append(null);
-					} else {
-						ArrayUtils.forEach(val, cons);
-					}
-					appendTail = prev;
-				} catch (SatisfyException ignored) { }
-			} catch (ArcRuntimeException ignored) {
-				break iter;
-			} catch (Throwable e) {
-				if (DEBUG) Log.err(e);
-				text.append("▶ERROR◀");
-			} finally {
-				pool.free(cons);
-			}
-			text.append(']');
-
-			if (chunk_background.enabled()) addDrawRun(start, text.length(), DrawType.background, bgColor());
-			// setColor(Color.white);
-			return;
-		}
-
-		int textOff = 0;
-		if (text.length() > 0 && val instanceof Color c) {
-			int i = text.length();
-			colorMap.put(i, c);
-			text.append('■');
-			textOff = text.length() - i;
-			// colorMap.put(text.length(), Color.white);
-		}
-		if (text.length() > 0 && val instanceof Building b) {
-			int i = text.length();
-			colorMap.put(i, Color.white);
-			addDrawRun(i, i + 1, DrawType.icon, Color.white, b.getDisplayIcon());
-			text.append('□');
-			textOff = text.length() - i;
-		}
-		if (text.length() > 0 && val instanceof Unit u) {
-			int i = text.length();
-			colorMap.put(i, Color.white);
-			addDrawRun(i, i + 1, DrawType.icon, Color.white, u.type().fullIcon);
-			text.append('□');
-			textOff = text.length() - i;
-		}
-		if (text.length() > 0 && val instanceof Tile t) {
-			int i = text.length();
-			colorMap.put(i, Color.white);
-			Block toDisplay = WorldUtils.getToDisplay(t);
-			addDrawRun(i, i + 1, DrawType.icon, Color.white, toDisplay.uiIcon);
-			text.append('□');
-			textOff = text.length() - i;
-		}
-		if (text.length() > 0 && val instanceof UnlockableContent uc) {
-			int i = text.length();
-			colorMap.put(i, Color.white);
-			addDrawRun(i, i + 1, DrawType.icon, Color.white, uc.uiIcon);
-			text.append('□');
-			textOff = text.length() - i;
-		}
+		textOff = text.length() - i;
 
 		Color mainColor  = colorOf(val);
 		int   startIndex = text.length();
 		colorMap.put(startIndex, mainColor);
-		boolean b = testHashCode(val);
+		boolean b = Viewers.testHashCode(val);
 		if (b) startIndexMap.put(startIndex - textOff, val);
 		text.append(toString(val));
 		int endI = text.length();
 		if (b) endIndexMap.put(val, endI);
 		colorMap.put(endI, Color.white);
 	}
-	private Prov<Point2> getPoint2Prov(Object val) {
+
+	@SuppressWarnings("unchecked")
+	private <K> boolean applyViewer(
+	 ObjectMap<K, Viewer<?>> viewers,
+	 Boolf<K> valid, StringBuilder text, Object val) {
+		for (var entry : viewers) {
+			if (!valid.get(entry.key)) { continue; }
+
+			switch (((Viewer<Object>) entry.value).view(val, this)) {
+				case skip -> {
+					return false;
+				}
+				case success -> {
+					return true;
+				}
+				case error -> {
+					appendError(this, text);
+					return false;
+				}
+				default -> throw new UnsupportedOperationException();
+			}
+		}
+		return false;
+	}
+
+	Prov<Point2> getPoint2Prov(Object val) {
 		return () -> {
 			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
 			int end   = endIndexMap.get(val);
 			return Tmp.p1.set(start, end);
 		};
 	}
-	private void toggleExpand(Object val) {
+	void toggleExpand(Object val) {
 		expandMap.put(val, !expandMap.get(val, false));
 		Core.app.post(this::flushVal);
-	}
-
-	private int getSize(Object val) {
-		return switch (val) {
-			case ObjectMap<?, ?> map -> map.size;
-			case IntMap<?> map -> map.size;
-			case ObjectFloatMap<?> map -> map.size;
-			case Map<?, ?> map -> map.size();
-			default -> throw new UnsupportedOperationException();
-		};
-	}
-	public static boolean testHashCode(Object object) {
-		try {
-			object.hashCode();
-			return true;
-		} catch (Throwable e) {
-			return false;
-		}
 	}
 
 	// 一些基本类型的特化，不装箱，为了减少内存消耗
 
 	// 对于整数类型的处理 (包括 byte 和 short)
-	private void appendValue(StringBuilder text, int val) {
+	void appendValue(StringBuilder text, int val) {
 		colorMap.put(text.length(), Syntax.c_number);
 		text.append(val);
 		colorMap.put(text.length(), Color.white);
 	}
 
 	// 对于长整数类型的处理
-	private void appendValue(StringBuilder text, long val) {
+	void appendValue(StringBuilder text, long val) {
 		colorMap.put(text.length(), Syntax.c_number);
 		text.append(val);
 		colorMap.put(text.length(), Color.white);
 	}
 
 	// 对于浮点数类型的处理 (包括 float 和 double)
-	private void appendValue(StringBuilder text, float val) {
+	void appendValue(StringBuilder text, float val) {
 		colorMap.put(text.length(), Syntax.c_number);
 		text.append(FormatHelper.fixed(val, 2));
 		colorMap.put(text.length(), Color.white);
 	}
 
 	// 对于字符类型的处理
-	private void appendValue(StringBuilder text, char val) {
+	void appendValue(StringBuilder text, char val) {
 		colorMap.put(text.length(), Syntax.c_string);
 		text.append('\'').append(val).append('\'');
 		colorMap.put(text.length(), Color.white);
 	}
 
-	private void addCountText(StringBuilder text, int count) {
+	void addCountText(StringBuilder text, int count) {
 		if (count > 1) {
 			colorMap.put(text.length(), Color.gray);
 			text.append(" ×").append(count);
@@ -440,9 +323,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 		);
 	}
 
-	private void appendMap(StringBuilder sb, Object mapObj,
-	                       int key,
-	                       Object value) {
+	void appendMap(StringBuilder sb, Object mapObj,
+	               int key,
+	               Object value) {
 		valToObj.put(value, mapObj);
 		valToType.put(value, value == null ? Object.class : value.getClass());
 		postAppendDelimiter(sb);
@@ -450,9 +333,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 		sb.append('=');
 		appendValue(sb, value);
 	}
-	private void appendMap(StringBuilder sb, Object mapObj,
-	                       Object key,
-	                       Object value) {
+	void appendMap(StringBuilder sb, Object mapObj,
+	               Object key,
+	               Object value) {
 		if (key != null) {
 			valToObj.put(key, mapObj);
 			valToType.put(key, key.getClass());
@@ -466,8 +349,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 		sb.append('=');
 		appendValue(sb, value);
 	}
-	private Runnable appendTail;
-	private void postAppendDelimiter(StringBuilder sb) {
+	Runnable appendTail;
+	void postAppendDelimiter(StringBuilder sb) {
 		if (appendTail != null) appendTail.run();
 		appendTail = () -> sb.append(getArrayDelimiter());
 	}
@@ -475,7 +358,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		return R_JSFunc.array_delimiter;
 	}
 
-	private boolean isTruncate(int length) {
+	boolean isTruncate(int length) {
 		return enableTruncate && R_JSFunc.truncate_text && length > R_JSFunc.truncate_length;
 	}
 	public void clearVal() {
@@ -489,6 +372,12 @@ public abstract class ValueLabel extends ExtendingLabel {
 		super.setText(ERROR);
 		setColor(Color.red);
 	}
+	public static void appendError(ValueLabel label, StringBuilder text) {
+		label.colorMap.put(text.length(), Color.red);
+		text.append(ERROR);
+		label.colorMap.put(text.length(), Color.white);
+	}
+
 	public void setText(CharSequence newText) {
 		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
 	}
@@ -516,7 +405,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	private void setValInternal(Object val) {
 		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
-		if (val != null && val != unset && !CAST.box(type).isInstance(val)) {
+		if (val != null && val != unset && !box(type).isInstance(val)) {
 			throw new IllegalArgumentException("val must be a " + type.getName());
 		}
 
@@ -744,137 +633,4 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public static final ObjectSet<Class<?>> identityClasses = ObjectSet.with(
 	 Vec2.class, Rect.class, Color.class
 	);
-	private static class IterCons extends AllCons implements Poolable {
-		private Object        val;
-		private StringBuilder text;
-
-		private int        count;
-		private boolean    gotFirst;
-		private ValueLabel self;
-		public IterCons init(ValueLabel self, Object val, StringBuilder text) {
-			this.self = self;
-			this.val = val;
-			this.text = text;
-			return this;
-		}
-		private Object last;
-		public void get(Object item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				last = item;
-			}
-			if (item != null) {
-				self.valToObj.put(item, val);
-				self.valToType.put(item, val.getClass());
-			}
-			boolean b = (last != null && identityClasses.contains(val.getClass()))
-			 ? !last.equals(item) : last != item;
-			if (b) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(Object item) {
-			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, last);
-			self.addCountText(text, count);
-			if (self.isTruncate(text.length())) throw new SatisfyException();
-			last = item;
-			count = 1;
-		}
-		private long llast;
-		public void get(long item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				llast = item;
-			}
-			if (item != llast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(long item) {
-			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, llast);
-			self.addCountText(text, count);
-			if (self.isTruncate(text.length())) throw new SatisfyException();
-			llast = item;
-			count = 1;
-		}
-		private double dlast;
-		public void get(double item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				dlast = item;
-			}
-			if (item != dlast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(double item) {
-			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, dlast);
-			self.addCountText(text, count);
-			if (self.isTruncate(text.length())) throw new SatisfyException();
-			dlast = item;
-			count = 1;
-		}
-		private boolean zlast;
-		public void get(boolean item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				zlast = item;
-			}
-			if (item != zlast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(boolean item) {
-			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, zlast);
-			self.addCountText(text, count);
-			if (self.isTruncate(text.length())) throw new SatisfyException();
-			zlast = item;
-			count = 1;
-		}
-		private char clast;
-		public void get(char item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				clast = item;
-			}
-			if (item != clast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(char item) {
-			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, clast);
-			self.addCountText(text, count);
-			if (self.isTruncate(text.length())) throw new SatisfyException();
-			clast = item;
-			count = 1;
-		}
-
-
-		public void reset() {
-			last = null;
-			self = null;
-			count = 0;
-			gotFirst = false;
-		}
-	}
 }

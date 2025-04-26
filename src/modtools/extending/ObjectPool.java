@@ -6,7 +6,9 @@ import arc.struct.ObjectMap;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.*;
+import mindustry.world.Block;
 import modtools.annotations.asm.GenPool;
+import modtools.misc.SampleTestInterface;
 import modtools.utils.Tools;
 
 @SuppressWarnings("unchecked")
@@ -19,6 +21,16 @@ public class ObjectPool {
 	}
 	public static void load() {
 		Events.on(ClientLoadEvent.class, _ -> {
+			Vars.content.blocks().each(block -> {
+				if (block.minfo.mod != null) return;
+				if (!((block.update || block.destructible) && block.buildType != null)) return;
+				if (block.getClass().getClassLoader() != Block.class.getClassLoader()) return;
+
+				var last = block.buildType;
+				block.buildType = () -> SampleTestInterface.changeClass(last.get());
+			});
+		});
+		Events.on(ClientLoadEvent.class, _ -> {
 			install();
 			flush();
 			// Log.info("ok");
@@ -28,7 +40,9 @@ public class ObjectPool {
 	static void flush() {
 		// Log.info("Adding monitor!!");
 		Vars.content.units().each(unit -> {
-			if (unit.constructor.getClass().getNestHost() == EntityMapping.class) unit.constructor = EntityMapping.map(unit.name);
+			if (unit.constructor.getClass().getNestHost() == EntityMapping.class) {
+				unit.constructor = EntityMapping.map(unit.name);
+			}
 		});
 		// Vars.content.blocks()
 	}

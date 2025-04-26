@@ -20,7 +20,7 @@ import modtools.events.*;
 import modtools.extending.*;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
-import modtools.misc.*;
+import modtools.misc.SampleWorldInterface;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -34,7 +34,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 
-import java.util.*;
+import java.util.Arrays;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
@@ -134,14 +134,6 @@ public class ModTools extends Mod {
 
 		extending();
 		// new SamplePackage();
-
-		Events.on(ClientLoadEvent.class, _ -> {
-			Vars.content.blocks().each(block -> {
-				if (!((block.update || block.destructible) && block.buildType != null)) return;
-				var last = block.buildType;
-				block.buildType = () -> SampleTestInterface.changeClass(last.get());
-			});
-		});
 		taskLoadContent.exec();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}

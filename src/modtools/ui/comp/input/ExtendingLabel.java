@@ -28,7 +28,7 @@ public class ExtendingLabel extends InlineLabel {
 		public boolean  beforeDraw;
 		public Object   data;
 
-		private static final Point2        runRect = new Point2(UNSET, UNSET);
+		private static final Point2        runRect = new Point2(UNSET_I, UNSET_I);
 		private static final Pool<DrawRun> pool    = Pools.get(DrawRun.class, DrawRun::new);
 		public static DrawRun obtain(InlineLabel label, int start, int end, DrawType type, Color color) {
 			return obtain(label, start, end, type, color, null);
@@ -67,8 +67,8 @@ public class ExtendingLabel extends InlineLabel {
 
 		public void reset() {
 			label = null;
-			start = UNSET;
-			end = UNSET;
+			start = UNSET_I;
+			end = UNSET_I;
 			color = null;
 			data = null;
 		}
@@ -95,6 +95,11 @@ public class ExtendingLabel extends InlineLabel {
 				Lines.line(x1, y1, x2, y2); // 绘制波浪线段
 			}
 		}),
+		// 轮廓
+		outline(true, (x, y, w, h) -> {
+			Lines.stroke(3);
+			Lines.rect(x, y, w, h);
+		}),
 		// 加粗
 		// bold
 		// 添加icon
@@ -104,12 +109,12 @@ public class ExtendingLabel extends InlineLabel {
 					throw new IllegalArgumentException("data must be TextureRegion.");
 				}
 				// 保持宽高比绘制图标
-				float scl = (float) region.width / region.height;
+				float radio = (float) region.width / region.height;
 				// 图标不能超出范围
-				if (w > h * scl) {
-					w = h * scl;
-				} else if (h > w / scl) {
-					h = w / scl;
+				if (w > h * radio) {
+					w = h * radio;
+				} else if (h > w / radio) {
+					h = w / radio;
 				}
 				Draw.rect(region, x + w / 2f, y + h / 2f, w, h);
 			}

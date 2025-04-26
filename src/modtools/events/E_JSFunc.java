@@ -21,7 +21,7 @@ public enum E_JSFunc implements ISettings {
 
 	/** 给ValueLabel区块添加背景  */
 	chunk_background,
-	/** 给ValueLabel区块添加颜色  */
+	/** 给ValueLabel区块添加颜色 */
 	@Switch(dependency = "chunk_background")
 	colorful_background,
 

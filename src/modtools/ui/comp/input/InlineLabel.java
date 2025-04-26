@@ -32,6 +32,7 @@ public class InlineLabel extends NoMarkupLabel {
 
 	private static final IntSeq colorKeys = new IntSeq();
 	public static final  int    UNSET_I   = -1;
+	public static final  Point2 UNSET_P   = new Point2(UNSET_I, UNSET_I);
 	public               float  labelX, labelY;
 
 	public InlineLabel(CharSequence text) {
@@ -441,33 +442,52 @@ public class InlineLabel extends NoMarkupLabel {
 		}
 		super.draw();
 	}
+	public final ObjectMap<Prov<Point2>, Runnable> clicks = new ObjectMap<>();
+	public final ObjectMap<Prov<Point2>, Runnable> hovers = new ObjectMap<>();
+
 	/** 给指定区域添加点击事件 */
 	public void clickedRegion(Prov<Point2> point2Prov, Runnable runnable) {
+		clicks.put(point2Prov, runnable);
+	}
+
+	public void hoveredRegion(Prov<Point2> point2Prov, Runnable runnable) {
+		hovers.put(point2Prov, runnable);
+	}
+	{
+		// clicks
 		addListener(new ClickListener(KeyCode.mouseLeft) {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				pressed = false;
 				if (super.touchDown(event, x, y, pointer, button)) {
-					int    cursor = getCursor(x, y);
-					Point2 point2 = point2Prov.get();
-					int    start  = point2.x, end = point2.y;
-					if (start <= cursor && cursor <= end) {
-						InlineLabel.downChunk.set(point2);
-						return true;
+					int cursor = getCursor(x, y);
+					for (var entry : clicks) {
+						Point2 point2 = entry.key.get();
+						if (point2.equals(UNSET_P)) continue;
+
+						int start = point2.x, end = point2.y;
+						if (start <= cursor && cursor <= end) {
+							InlineLabel.downChunk.set(point2);
+							return true;
+						}
 					}
 				}
-				InlineLabel.downChunk.set(UNSET_I, UNSET_I);
+				InlineLabel.downChunk.set(UNSET_P);
 				return false;
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
-				InlineLabel.downChunk.set(UNSET_I, UNSET_I);
+				InlineLabel.downChunk.set(UNSET_P);
 			}
 			public void clicked(InputEvent event, float x, float y) {
-				int    cursor = getCursor(x, y);
-				Point2 point2 = point2Prov.get();
-				int    start  = point2.x, end = point2.y;
-				if (start <= cursor && cursor <= end) {
-					runnable.run();
+				int cursor = getCursor(x, y);
+				for (var entry : clicks) {
+					Point2 point2 = entry.key.get();
+					if (point2.equals(UNSET_P)) continue;
+
+					int start = point2.x, end = point2.y;
+					if (start <= cursor && cursor <= end) {
+						entry.value.run();
+					}
 				}
 			}
 			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
@@ -475,32 +495,38 @@ public class InlineLabel extends NoMarkupLabel {
 				InlineLabel.overChunk.set(UNSET_I, UNSET_I);
 			}
 			public boolean mouseMoved(InputEvent event, float x, float y) {
-				int    cursor = getCursor(x, y);
-				Point2 point2 = point2Prov.get();
-				int    start  = point2.x, end = point2.y;
-				if (start <= cursor && cursor <= end) {
-					InlineLabel.overChunk.set(point2);
-					Core.graphics.cursor(SystemCursor.hand);
-				} else {
-					InlineLabel.overChunk.set(UNSET_I, UNSET_I);
-					Core.graphics.cursor(SystemCursor.arrow);
+				int cursor = getCursor(x, y);
+				for (var entry : clicks) {
+					Point2 point2 = entry.key.get();
+					if (point2.equals(UNSET_P)) continue;
+
+					int start = point2.x, end = point2.y;
+					if (start <= cursor && cursor <= end) {
+						InlineLabel.overChunk.set(point2);
+						Core.graphics.cursor(SystemCursor.hand);
+					} else {
+						InlineLabel.overChunk.set(UNSET_I, UNSET_I);
+						Core.graphics.cursor(SystemCursor.arrow);
+					}
 				}
 				return super.mouseMoved(event, x, y);
 			}
 		});
-	}
-
-	public void hoveredRegion(Prov<Point2> point2Prov, Runnable runnable) {
+		// hovers
 		addListener(new InputListener() {
 			public boolean mouseMoved(InputEvent event, float x, float y) {
-				int    cursor = getCursor(x, y);
-				Point2 point2 = point2Prov.get();
-				int    start  = point2.x, end = point2.y;
-				if (start <= cursor && cursor <= end) {
-					InlineLabel.overChunk.set(point2);
-					runnable.run();
-				} else {
-					InlineLabel.overChunk.set(UNSET_I, UNSET_I);
+				int cursor = getCursor(x, y);
+				for (var entry : hovers) {
+					Point2 point2 = entry.key.get();
+					if (point2.equals(UNSET_P)) continue;
+
+					int start = point2.x, end = point2.y;
+					if (start <= cursor && cursor <= end) {
+						InlineLabel.overChunk.set(point2);
+						entry.value.run();
+					} else {
+						InlineLabel.overChunk.set(UNSET_P);
+					}
 				}
 				return super.mouseMoved(event, x, y);
 			}

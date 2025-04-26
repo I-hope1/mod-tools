@@ -194,6 +194,14 @@ public class FieldUtils {
 	public static boolean isStatic(Field f) {
 		return Modifier.isStatic(f.getModifiers());
 	}
+
+	public static int getInt(Object obj, String name, int failback) {
+		try {
+			return getFieldAccessOrThrow(obj.getClass(), name).getInt(obj);
+		} catch (Throwable e) {
+			return failback;
+		}
+	}
 }
 
 interface $OffsetGetter {

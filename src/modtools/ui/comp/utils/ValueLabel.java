@@ -50,13 +50,18 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public static final Color   c_enum    = new Color(0xFFC66D_FF);
 	public static final String  NULL_MARK = "`*null";
 
-	public String ellipse = "  ...";
+	public               Object     val;
+	public               Class<?>   type;
+	private static       ValueLabel hoveredLabel;
+	private static       Object     hoveredVal;
+	private static final Point2     hoveredChunk = new Point2();
+	public Object hoveredVal() {
+		return hoveredLabel == this ? hoveredVal : null;
+	}
+	public Point2 hoveredChunk() {
+		return hoveredLabel == this ? hoveredChunk : UNSET_P;
+	}
 
-
-	public Object   val;
-	public Class<?> type;
-	public Object   hoveredVal;
-	public Point2   hoveredChunk = new Point2();
 	private ValueLabel() {
 		super((CharSequence) null);
 		type = null;
@@ -87,6 +92,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 			private final IntSeq keys = new IntSeq();
 			private void hover(float x, float y) {
 				hoveredVal = null;
+				hoveredLabel = null;
+				hoveredChunk.set(UNSET_P);
+
 				int    cursor = getCursor(x, y);
 				Object o;
 				int    toIndex;
@@ -102,11 +110,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 					toIndex = endIndexMap.get(o);
 					if (index <= cursor && cursor < toIndex) {
 						hoveredChunk.set(index, toIndex);
+						hoveredLabel = ValueLabel.this;
 						hoveredVal = o;
 						return;
 					}
 				}
-				hoveredChunk.set(UNSET_I, UNSET_I);
 			}
 		});
 		MenuBuilder.addShowMenuListenerp(this, () -> {
@@ -133,7 +141,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
 
-		Selection.addFocusSource(this, () -> hoveredVal);
+		Selection.addFocusSource(this, () -> hoveredVal());
 	}
 
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
@@ -171,11 +179,14 @@ public abstract class ValueLabel extends ExtendingLabel {
 		endIndexMap.clear();
 		clearDrawRuns();
 		bgIndex = 0;
+		objId = 0;
 		appendValue(text, val);
-		if (!hoveredChunk.equals(UNSET_I, UNSET_I)) addDrawRun(hoveredChunk.x, hoveredChunk.y, DrawType.outline, Pal.accent);
+
+		if (!hoveredChunk().equals(UNSET_P)) addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
+
 		if (text.length() > truncate_length.getInt()) {
 			text.setLength(truncate_length.getInt());
-			text.append(ellipse);
+			text.append(ellipsis);
 		}
 	}
 
@@ -186,9 +197,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 	// 用于记录数组或map的值
 	final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
 	// 用于记录数组或map是否展开
-	final ObjectMap<Object, Boolean>  expandMap     = new ObjectMap<>();
+	final ObjectMap<Object, Boolean>  expandVal     = new ObjectMap<>();
 
-	public        int     bgIndex;
+	int objId;
+	public int bgIndex;
+
 	public static Color[] bgColors = new Color[]{
 	 new Color(0xFFC66D_66),
 	 new Color(0xFFC6FF_66),
@@ -198,14 +211,22 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public Color bgColor() {
 		return colorful_background.enabled() ? bgColors[bgIndex++ % bgColors.length] : bgColors[0];
 	}
+
 	@SuppressWarnings("ConstantConditions")
 	void appendValue(StringBuilder text, Object val) {
 		int textOff;
 		int i = text.length();
 
 		// viewers
-		if (i == text.length() && applyViewer(Viewers.typeMap, k -> k.valid.get(val), text, val)) return;
-		if (i == text.length() && applyViewer(Viewers.map, k -> k.isAssignableFrom(val.getClass()), text, val)) return;
+		if (val != null) {
+			try {
+				if (i == text.length() && applyViewer(Viewers.typeMap, k -> k.valid.get(val), text, val)) return;
+				if (i == text.length() && applyViewer(Viewers.map, k -> k.isAssignableFrom(val.getClass()), text, val)) return;
+			} catch (Throwable e) {
+				appendError(this, text);
+			}
+		}
+		objId++;
 
 		textOff = text.length() - i;
 
@@ -252,7 +273,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		};
 	}
 	void toggleExpand(Object val) {
-		expandMap.put(val, !expandMap.get(val, false));
+		expandVal.put(val, !expandVal.get(val, false));
 		Core.app.post(this::flushVal);
 	}
 

@@ -19,6 +19,10 @@ public enum E_JSFunc implements ISettings {
 	 ", ", "\n", "\n\n",
 	 "\n▶▶▶▶", "\n★★★")),
 
+	/**
+	 * 最小展开的大小
+	 * @see ISettings#$(int, int, int, int)  */
+	min_expand_size(int.class, it -> it.$(0, 0, 128, 1)),
 	/** 给ValueLabel区块添加背景  */
 	chunk_background,
 	/** 给ValueLabel区块添加颜色 */

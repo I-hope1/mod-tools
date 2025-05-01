@@ -57,6 +57,11 @@ public interface StringUtils {
 			return buffer.toString();
 		}
 	}
+	static String repeat(char c, int count) {
+		if (count == 1) return String.valueOf(c);
+		char[] array = new char[count];
+		return String.copyValueOf(array);
+	}
 
 	static String substring(String str, int start, int end) {
 		if (start < 0) start += str.length();

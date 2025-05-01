@@ -222,9 +222,7 @@ public class SettingsUI extends Content {
 				cont.add(fontsPane).growY().maxHeight(200f).row(); // 限制最大高度并允许垂直滚动
 			}
 
-			cont.add().expandY(); // 将底部按钮推到底部
-
-			cont.image().color(Color.gray).growX().pad(6f, 0, 6f, 0).row();
+			Underline.of(cont, 1);
 			// 打开字体目录按钮
 			cont.button("@settings.font.opendir", Icon.folderSmall, HopeStyles.flatBordert, () -> FileUtils.openFile(MyFonts.fontDirectory))
 			 .growX().height(45);

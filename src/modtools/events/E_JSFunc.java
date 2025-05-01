@@ -19,16 +19,13 @@ public enum E_JSFunc implements ISettings {
 	 ", ", "\n", "\n\n",
 	 "\n▶▶▶▶", "\n★★★")),
 
-	fold_items {
-		public boolean isSwitchOn() {
-			return false;
-		}
-	},
 	/**
 	 * 最小展开的大小
-	 * @see ISettings#$(int, int, int, int)  */
-	@Switch(dependency = "fold_items")
-	min_expand_size(int.class, it -> it.$(0, 0, 128, 1)),
+	 * @see ISettings#$(int, int, int, int) */
+	// @Switch(dependency = "fold_items")
+	max_auto_expand_size(int.class, it -> it.$(32, 0, 1024, 1)),
+	/** 给hover的区块添加outline  */
+	hover_outline,
 	/** 给ValueLabel区块添加背景  */
 	chunk_background,
 	/** 给ValueLabel区块添加颜色 */

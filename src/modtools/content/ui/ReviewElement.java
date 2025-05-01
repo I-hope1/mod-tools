@@ -152,6 +152,17 @@ public class ReviewElement extends Content {
 			topGroup.requestSelectElem(TopGroup.defaultDrawer, TopGroup::setDrawPadElem);
 		});
 
+	public HKeyCode nextSearchKeyCode =
+	 keyCodeData().dynamicKeyCode("nextSearch", () -> new HKeyCode(KeyCode.f3))
+		.applyToScene(true, () -> {
+			if (FOCUS_WINDOW instanceof ReviewElementWindow window) window.nextSearch();
+		});
+	public HKeyCode prevSearchKeyCode =
+	 keyCodeData().dynamicKeyCode("prevSearch", () -> new HKeyCode(KeyCode.f3).shift())
+		.applyToScene(true, () -> {
+			if (FOCUS_WINDOW instanceof ReviewElementWindow window) window.nextSearch();
+		});
+
 	ReviewFocusTask task;
 	public void load() {
 		task = new ReviewFocusTask();
@@ -344,8 +355,16 @@ public class ReviewElement extends Content {
 				t.defaults().size(unset);
 				t.table(search -> {
 					search.image(Icon.zoomSmall).size(35);
-					search.field("", str -> rebuild(element, str))
+					search.field("", str -> rebuild(element, str, 0))
 					 .with(f -> f.setMessageText("@players.search"))
+					 .with(f -> f.addListener(new HoverAndExitListener() {
+						 public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
+							 FOCUS_WINDOW = ReviewElementWindow.this;
+						 }
+						 public void exit0(InputEvent event, float x, float y, int pointer, Element toActor) {
+							 FOCUS_WINDOW = null;
+						 }
+					 }))
 					 .with(f -> ReviewElementWindow.this.addCaptureListener(new FocusSearchListener(f)))
 					 .growX();
 				}).growX();
@@ -441,11 +460,29 @@ public class ReviewElement extends Content {
 		}
 
 		public void rebuild(Element element, String text) {
+			rebuild(element, text, 0);
+		}
+		private Runnable nextSearch;
+		public void nextSearch() {
+			if (nextSearch != null) nextSearch.run();
+		}
+		public void rebuild(Element element, String text, int searchIndex) {
 			pattern = PatternUtils.compileRegExpOrNull(text);
-			if (element == this.element) return;
+			if (element == this.element) {
+				scrollToSearch(text, searchIndex);
+				return;
+			}
 			if (element == null) return;
 
 			rebuild(element);
+		}
+		private void scrollToSearch(String text, int searchIndex) {
+			if (autoScrollToSearch.enabled() && pattern != null) {
+				nextSearch = () -> rebuild(element, text, searchIndex - Mathf.sign(Core.input.shift()));
+				int[]   ints   = {searchIndex};
+				Element target = find(e -> e instanceof SearchedLabel l && l.hasHighlight(pattern) && ints[0]-- == 0);
+				if (target != null) ElementUtils.scrollTo(pane, target);
+			}
 		}
 
 		public void rebuild(Element element) {
@@ -571,7 +608,7 @@ public class ReviewElement extends Content {
 			if (!DEBUG && element instanceof ReviewElementWindow) {
 				add(STR."!!!\{element.name}", defaultLabel).row();
 				eventChildIndex = 0;
-			} else  if (element instanceof Group group) {
+			} else if (element instanceof Group group) {
 				buildForGroup(group);
 				eventChildIndex = 1;
 			} else {
@@ -904,10 +941,14 @@ public class ReviewElement extends Content {
 		 * @see ISettings#$(int, int, int, int)
 		 */
 		maxDepthForAutoExpand(int.class, it -> it.$(5/* def */, 0/* min */, 50/* max */, 1/* step */)),
+
+		/** 自动滚动到搜索位置 */
+		autoScrollToSearch,
 		//
 		;
 		static {
 			hoverInfoWindow.defTrue();
+			anonymousInsteadSuper.defTrue();
 		}
 
 		Settings() { }
@@ -920,7 +961,7 @@ public class ReviewElement extends Content {
 		Label nameLabel = new VLabel(0.85f, KeyValue.stressColor),
 		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
 		 touchableLabel = new NoMarkupLabel(valueScale),
-		transformLabel    = new VLabel("True", valueScale, Pal.accent),
+		 transformLabel = new VLabel("True", valueScale, Pal.accent),
 
 		colorLabel        = new NoMarkupLabel(valueScale),
 		 rotationLabel    = new VLabel(valueScale, Color.lightGray),
@@ -1137,7 +1178,7 @@ public class ReviewElement extends Content {
 			}
 			showInfoTable(elem);
 		}
-		/** pos和size  */
+		/** pos和size */
 		private void drawGeneric(Element elem, Vec2 pos) {
 			posText:
 			{

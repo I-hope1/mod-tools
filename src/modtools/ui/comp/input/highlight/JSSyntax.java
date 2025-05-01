@@ -248,10 +248,10 @@ public class JSSyntax extends Syntax {
 	private final DrawTask[] taskArr0 = {
 	 new DrawString(c_string) {
 		 /** @see NativeString  */
-		 public static final Scriptable STR = Context.toObject("", IScript.scope);
+		 public static final Scriptable StringObj = Context.toObject("", IScript.scope);
 		 public void drawText(int i) {
 			 super.drawText(i);
-			 currentObject = STR;
+			 currentObject = StringObj;
 			 setCursorObj(i);
 		 }
 	 },

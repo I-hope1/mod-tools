@@ -1,93 +1,135 @@
 package modtools.ui.comp.utils;
 
+import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.TextureRegion;
-import arc.math.geom.Point2;
+import arc.math.geom.*;
+import arc.scene.Element;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
+import arc.util.serialization.*;
+import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
 import mindustry.world.Tile;
+import modtools.IntVars;
+import modtools.content.ui.ReviewElement;
 import modtools.events.R_JSFunc;
+import modtools.jsfunc.IScript;
 import modtools.ui.comp.input.ExtendingLabel.DrawType;
-import modtools.ui.comp.input.InlineLabel;
+import modtools.ui.comp.input.JSRequest;
+import modtools.ui.comp.input.JSRequest.LazyArg;
+import modtools.ui.comp.input.highlight.Syntax;
 import modtools.utils.*;
 import modtools.utils.ArrayUtils.AllCons;
+import modtools.utils.JSFunc.JColor;
 import modtools.utils.SR.SatisfyException;
 import modtools.utils.reflect.FieldUtils;
+import modtools.utils.ui.*;
 import modtools.utils.world.WorldUtils;
+import rhino.*;
 
-import java.lang.reflect.Array;
+import java.lang.reflect.*;
 import java.util.*;
 
 import static modtools.events.E_JSFunc.chunk_background;
+import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.comp.input.highlight.Syntax.c_map;
 
 public class Viewers {
-	public static final ObjectMap<Class<?>, Viewer<?>> map     = new ObjectMap<>();
-	public static final ObjectMap<Type, Viewer<?>>     typeMap = new ObjectMap<>();
+	public static final Seq<ViewerItem<?>>  internalViewers = new Seq<>();
+	public static final Seq<ViewerItem<?>>  customViewers   = new Seq<>();
+	public static final ObjectSet<Class<?>> identityClasses = ObjectSet.with(
+	 Vec2.class, Rect.class, Color.class
+	);
+	public static void loadCustomMap() {
+		Fi file = IntVars.dataDirectory.child("customViewers.json");
+		if (!file.exists()) file.writeString("[\n]");
+		JsonValue value = new JsonReader().parse(file);
+		vscope = JSRequest.wrapper(IScript.scope, "Viewers", (LazyArg) () -> IScript.cx.getWrapFactory().wrapJavaClass(IScript.cx, vscope, Viewers.class));
+		customViewers.set(json.readValue(Seq.class, ViewerItem.class, value));
+		// Log.info(customViewers);
 
-	public static final  boolean ARRAY_DEBUG           = false;
-	private static final int     SIZE_MAX_BIT          = 5;
-	public static final  boolean ENABLE_MAX_ITEM_COUNT = true;
-
-	static int getMapSize(Object val) {
-		return switch (val) {
-			case ObjectMap<?, ?> map -> map.size;
-			case IntMap<?> map -> map.size;
-			case ObjectFloatMap<?> map -> map.size;
-			case Map<?, ?> map -> map.size();
-			default -> throw new UnsupportedOperationException();
-		};
+		// json.setOutputType(OutputType.json);
+		// json.toJson(customViewers, file.sibling("customMap2.json"));
 	}
-	static int getArraySize(Object val) {
-		if (val.getClass().isArray()) return Array.getLength(val);
 
-		return switch (val) {
-			case Seq<?> seq -> seq.size;
-			case IntSeq seq -> seq.size;
-			case FloatSeq seq -> seq.size;
-			case LongSeq seq -> seq.size;
-			case List<?> list -> list.size();
-			case Iterable<?> iter -> FieldUtils.getInt(iter, "size", -1);
+	static Scriptable          vscope;
+	static ObjectSet<Class<?>> interfaces = ObjectSet.with(
+	 Boolf.class, Func.class, Prov.class, Cons.class, Boolp.class, Floatp.class, Floatf.class,
+	 Func2.class, Func3.class, Viewer.class
+	);
 
-			default -> throw new UnsupportedOperationException();
-		};
-	}
-	public static boolean testHashCode(Object object) {
-		try {
-			object.hashCode();
-			return true;
-		} catch (Throwable e) {
-			return false;
+	@SuppressWarnings("unchecked")
+	static Json json = new Json() {
+		{ setTypeName("type"); }
+
+		public void writeValue(Object object, Class knownType, Class elementType) {
+			if (object instanceof JSCode code) {
+				object = code.getJSCode();
+				knownType = String.class;
+			}
+			if (object instanceof Class clazz) {
+				object = clazz.getName();
+				knownType = String.class;
+			}
+			super.writeValue(object, knownType, elementType);
 		}
-	}
-
-	public enum Type {
-		map(ObjectMap.class, IntMap.class,
-		 ObjectIntMap.class, ObjectFloatMap.class, Map.class),
-		array(o -> o instanceof Iterable<?> ||
-		           (o instanceof IntSeq || o instanceof FloatSeq || o instanceof LongSeq) ||
-		           (o != null && o.getClass().isArray()));
-
-		public final Boolf<Object> valid;
-		Type(Class<?>... classes) {
-			Seq<Class<?>> classSeq = Seq.with(classes);
-			valid = o -> o != null && classSeq.indexOf(c -> c.isAssignableFrom(o.getClass())) != -1;
+		public <T> T readValue(Class<T> type, JsonValue jsonData) {
+			return super.readValue(type, jsonData);
 		}
-		Type(Boolf<Object> valid) {
-			this.valid = valid;
+		@Override
+		public <T> T readValue(Class<T> type, Class elementType, JsonValue jsonData, Class keytype) {
+			if (type == Class.class) {
+				try {
+					return (T) Vars.mods.mainLoader().loadClass(jsonData.asString());
+				} catch (ClassNotFoundException e) {
+					throw new RuntimeException(e);
+				}
+			}
+			if (interfaces.contains(type)) {
+				if (!jsonData.isString()) { return null; }
+				String jscode = jsonData.asString();
+
+				Context cx1 = IScript.cx;
+				var interface_ = ScriptRuntime.doTopCall((cx, _, _, _) -> Context.jsToJava(cx.evaluateString(
+				 JSRequest.wrapper(vscope), jscode, "<gen>", 1), type), cx1, vscope, vscope, null, true);
+				try {
+					return (T) Proxy.newProxyInstance(Vars.mods.mainLoader(), new Class[]{type, JSCode.class},
+					 (proxy, method, args) -> {
+						 if (method.getDeclaringClass() == JSCode.class && method.getName().equals("getJSCode")) {
+							 return jscode;
+						 }
+						 return ScriptRuntime.hasTopCall(cx1) ? method.invoke(interface_, args) :
+							ScriptRuntime.doTopCall((_, _, _, _) -> {
+								try {
+									return method.invoke(interface_, args);
+								} catch (IllegalAccessException | InvocationTargetException e) {
+									throw new RuntimeException(e);
+								}
+							}, cx1, vscope, vscope, args, true);
+					 });
+				} catch (Throwable e) {
+					Log.err(e);
+					return null;
+				}
+			}
+			return super.readValue(type, elementType, jsonData, keytype);
 		}
+	};
+
+	public static final  boolean ARRAY_DEBUG  = false;
+	private static final int     SIZE_MAX_BIT = 5;
+
+	static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
+		internalViewers.add(new ViewerItem<>(clazz, viewer));
 	}
-	public enum Result {
-		success,
-		skip,
-		error,
-		unknown
+	static void addViewer(Type type, Viewer<?> viewer) {
+		internalViewers.add(new ViewerItem<>(type, viewer));
 	}
 
 	static {
@@ -95,15 +137,17 @@ public class Viewers {
 		// 	label.appendValue(label.getText(), val);
 		// 	return true;
 		// });
-		map.put(Color.class, (Color val, ValueLabel label) -> {
+		addViewer(Color.class, (Color val, ValueLabel label) -> {
 			StringBuilder text = label.getText();
-			label.colorMap.put(text.length(), val);
+			int           i    = text.length();
+			label.colorMap.put(i, val);
 			text.append('■');
-			return Result.skip;
+			defaultAppend(label, i, val);
+			return true;
 		});
-		map.put(Building.class, iconViewer((Building b) -> b.block.uiIcon));
-		map.put(Unit.class, iconViewer((Unit u) -> u.type().uiIcon));
-		map.put(Tile.class, iconViewer((Tile t) -> WorldUtils.getToDisplay(t).uiIcon));
+		addViewer(Building.class, iconViewer((Building b) -> b.block.uiIcon));
+		addViewer(Unit.class, iconViewer((Unit u) -> u.type().uiIcon));
+		addViewer(Tile.class, iconViewer((Tile t) -> WorldUtils.getToDisplay(t).uiIcon));
 		/* map.put(Bullet.class, iconViewer((Bullet b) -> WorldDraw.drawRegion((int) (b.hitSize * 1.8), (int) (b.hitSize * 1.8), () -> {
 			float x = b.x, y = b.y;
 			b.x = b.hitSize * 0.9f;
@@ -114,33 +158,43 @@ public class Viewers {
 			b.x = x;
 			b.y = y;
 		}))); */
-		map.put(UnlockableContent.class, iconViewer((UnlockableContent uc) -> uc.uiIcon));
+		addViewer(UnlockableContent.class, iconViewer((UnlockableContent uc) -> uc.uiIcon));
 
-
-		typeMap.put(Type.map, (val, label) -> {
+		addViewer(Type.map, (val, label) -> {
 			if (!label.expandVal.containsKey(val)) {
 				label.clickedRegion(label.getPoint2Prov(val), () -> label.toggleExpand(val));
-				label.expandVal.put(val, getMapSize(val) < R_JSFunc.min_expand_size);
+				label.expandVal.put(val, getMapSize(val) < R_JSFunc.max_auto_expand_size);
 			}
-			StringBuilder text  = label.getText();
-			int           start = text.length();
+			StringBuilder text = label.getText();
+
+			int start = label.startColor(c_map);
 			label.startIndexMap.put(start, val);
-			label.colorMap.put(start, c_map);
 			text.append("|Map ").append(getMapSize(val)).append('|');
-			label.colorMap.put(text.length(), Color.white);
-			label.endIndexMap.put(val, text.length() - 1);
+			label.endIndexMap.put(val, text.length());
+			label.endColor();
 
 			if (!label.expandVal.get(val)) {
-				return Result.success;
+				return true;
 			}
 			text.append("\n{");
 			Runnable prev = label.appendTail;
 			label.appendTail = null;
 			switch (val) {
-				case ObjectMap<?, ?> m -> appendMap(val, label, text, m, e -> e.key, e -> e.value);
-				case IntMap<?> m -> appendMap(val, label, text, m, e -> e.key, e -> e.value);
-				case ObjectFloatMap<?> m -> appendMap(val, label, text, m, e -> e.key, e -> e.value);
-				case Map<?, ?> m -> appendMap(val, label, text, m.entrySet(), Map.Entry::getKey, Map.Entry::getValue);
+				case ObjectMap<?, ?> m -> appendMap(val, label, m.entries(), e -> e.key, e -> e.value);
+				case Map<?, ?> m -> appendMap(val, label, m.entrySet(), Map.Entry::getKey, Map.Entry::getValue);
+
+				case IntMap<?> m -> {
+					for (var entry : m) {
+						label.appendMap(val, entry.key, entry.value);
+						if (label.isTruncate(label.getText().length())) break;
+					}
+				}
+				case ObjectFloatMap<?> m -> {
+					for (var entry : m) {
+						label.appendMap(val, entry.key, entry.value);
+						if (label.isTruncate(label.getText().length())) break;
+					}
+				}
 				default -> throw new UnsupportedOperationException();
 			}
 			label.appendTail = prev;
@@ -148,25 +202,26 @@ public class Viewers {
 
 			if (chunk_background.enabled()) label.addDrawRun(start, text.length(), DrawType.background, label.bgColor());
 
-			return Result.success;
+			return true;
 		});
-		typeMap.put(Type.array, (val, label) -> {
+		addViewer(Type.array, (val, label) -> {
 			if (!label.expandVal.containsKey(val)) {
 				label.clickedRegion(label.getPoint2Prov(val), () -> label.toggleExpand(val));
-				label.expandVal.put(val, getArraySize(val) < R_JSFunc.min_expand_size);
+				label.expandVal.put(val, getArraySize(val) < R_JSFunc.max_auto_expand_size);
 			}
 			StringBuilder text  = label.getText();
 			int           start = text.length();
 			label.startIndexMap.put(start, val);
 			label.colorMap.put(start, c_map);
-			text.append("|Array ");
-			int sizeIndex = text.length();
-			text.append(StringUtils.repeat(" ", SIZE_MAX_BIT)).append("|");
-			label.colorMap.put(text.length(), Color.white);
-			label.endIndexMap.put(val, text.length() - 1);
+			text.append("|Array");
+			int    sizeIndex = text.length();
+			String repeat    = StringUtils.repeat('\u200d', SIZE_MAX_BIT);
+			text.append(repeat).append("|");
+			label.endColor();
+			label.endIndexMap.put(val, text.length());
 
 			if (!label.expandVal.get(val)) {
-				return Result.success;
+				return true;
 			}
 
 			text.append("\n[");
@@ -206,7 +261,8 @@ public class Viewers {
 				}
 			} catch (SatisfyException ignored) {
 			} catch (ArcRuntimeException ignored) {
-				return Result.error;
+				defaultAppend(label, start, val);
+				return true;
 			} catch (Throwable e) {
 				if (ARRAY_DEBUG) Log.err(e);
 				text.append("▶ERROR◀");
@@ -225,38 +281,78 @@ public class Viewers {
 
 			if (chunk_background.enabled()) label.addDrawRun(start, text.length(), DrawType.background, label.bgColor());
 			// setColor(Color.white);
-			return Result.success;
+			return true;
 		});
 	}
 
 
-	private static <M, K, V> void appendMap(Object val, ValueLabel label,
-	                                        StringBuilder text, Iterable<M> map, Func<M, K> keyF, Func<M, V> valueF) {
+	public static <M, K, V> void appendMap(Object val, ValueLabel label,
+	                                       Iterable<M> map, Func<M, K> keyF, Func<M, V> valueF) {
 		for (var entry : map) {
-			label.appendMap(text, val, keyF.get(entry), valueF.get(entry));
-			if (label.isTruncate(text.length())) break;
+			label.appendMap(val, keyF.get(entry), valueF.get(entry));
+			if (label.isTruncate(label.getText().length())) break;
 		}
 	}
 
-	private static <T> Viewer<T> iconViewer(Func<T, TextureRegion> iconFunc) {
-		return (T t, ValueLabel label) -> {
+	public static <T> Viewer<T> iconViewer(Func<T, TextureRegion> iconFunc) {
+		return (T val, ValueLabel label) -> {
 			StringBuilder text = label.getText();
 			int           i    = text.length();
-			label.addDrawRun(i, i + 1, DrawType.icon, Color.white, iconFunc.get(t));
+			label.addDrawRun(i, i + 1, DrawType.icon, Color.white, iconFunc.get(val));
 			text.append('□');
-			return Result.skip;
+			defaultAppend(label, i, val);
+			return true;
 		};
 	}
+	public interface JSCode {
+		String getJSCode();
+	}
 
+	public static class ViewerItem<T> {
+		public Viewer<T>     viewer;
+		public Type          type;
+		public Seq<Class<?>> classes;
+		public Boolf<T>      valid;
+		private ViewerItem() { }/* 用于序列化 */
+		public ViewerItem(Type type, Viewer<T> viewer) {
+			this.viewer = viewer;
+			this.type = type;
+		}
+		public ViewerItem(Class<?> clazz, Viewer<T> viewer) {
+			this.viewer = viewer;
+			this.classes = new Seq<>();
+			classes.add(clazz);
+		}
+		public ViewerItem(Viewer<T> viewer, Class<?>... classes) {
+			this.viewer = viewer;
+			this.classes = new Seq<>(classes);
+		}
+		public boolean valid(T val) {
+			return (type != null && type.valid.get(val))
+			       || (valid != null && valid.get(val))
+			       || (classes != null && classes.indexOf(c -> c.isInstance(val)) != -1);
+		}
+		public boolean view(T val, ValueLabel label) {
+			return viewer.view(val, label);
+		}
+
+		public String toString() {
+			return "ViewerItem{" +
+			       "viewer=" + viewer +
+			       ", type=" + type +
+			       ", classes=" + classes +
+			       ", valid=" + valid +
+			       '}';
+		}
+	}
 	public interface Viewer<T> {
-		Result view(T val, ValueLabel label);
+		boolean view(T val, ValueLabel label); /* 是否成功 */
 	}
 	static class IterCons extends AllCons implements Poolable {
 		private ValueLabel    self;
 		private Object        val;
 		private StringBuilder text;
 
-		private int     objId;
 		private int     count;
 		private boolean gotFirst;
 		private int     index;
@@ -267,7 +363,6 @@ public class Viewers {
 		public IterCons init(ValueLabel self, Object val, StringBuilder text) {
 			this.self = self;
 			this.val = val;
-			this.objId = self.objId;
 			this.text = text;
 			this.index = 0;
 			return this;
@@ -278,13 +373,14 @@ public class Viewers {
 				gotFirst = true;
 				last = item;
 			}
+			// Log.info("item = " + item);
 			checkCount();
 			if (item != null) {
 				self.valToObj.put(item, val);
 				self.valToType.put(item, val.getClass());
 			}
 
-			boolean b = (last != null && ValueLabel.identityClasses.contains(val.getClass()))
+			boolean b = (last != null && identityClasses.contains(val.getClass()))
 			 ? !last.equals(item) : last != item;
 			if (b) {
 				append(item);
@@ -293,14 +389,9 @@ public class Viewers {
 			}
 		}
 
-		public static class Point2Prov implements Prov<Point2> {
-			public static final int STEP_SIZE = 64;
-
-			public int          maxItemCount = STEP_SIZE;
-			public int          objId;
+		public static class DelegteProv implements Prov<Point2> {
 			public Prov<Point2> prov;
-			public Point2Prov(int objId, Prov<Point2> p) {
-				this.objId = objId;
+			public DelegteProv(Prov<Point2> p) {
 				this.prov = p;
 			}
 			@Override
@@ -308,39 +399,26 @@ public class Viewers {
 				return prov.get();
 			}
 		}
-		public static int getMaxCount(ValueLabel label, int objId) {
-			if (ENABLE_MAX_ITEM_COUNT) return Integer.MAX_VALUE;
-
-			for (Entry<Prov<Point2>, Runnable> click : label.clicks) {
-				if (click.key instanceof Point2Prov p && p.objId == objId) {
-					return p.maxItemCount;
-				}
-			}
-			Point2Prov p = new Point2Prov(objId, () -> InlineLabel.UNSET_P);
-			label.clickedRegion(p, () -> {
-				p.maxItemCount += 64;
-				// Log.info(p.maxItemCount);
-			});
-			return p.maxItemCount;
-		}
 		private Runnable afterAppend;
 		private void checkCount() {
-			if (index < getMaxCount(self, objId)) {
+			// 必须是toplevel级别
+			if (val != self.val || index < self.maxItemCount) {
 				index++;
 				return;
 			}
 
 			// 再展开64个元素
 			afterAppend = () -> {
-				self.colorMap.put(text.length(), Color.gray);
+				self.startColor(Color.gray);
 				text.append("\n...");
 				int start = text.length();
-				text.append("[Expand " + Point2Prov.STEP_SIZE + " more elements]");
-				self.postAppendDelimiter(text);
-				self.colorMap.put(text.length(), Color.white);
+				//noinspection StringTemplateMigration
+				text.append("[Expand " + ValueLabel.STEP_SIZE + " more elements]");
+				self.postAppendDelimiter();
+				self.endColor();
 				int end = text.length();
 				for (Entry<Prov<Point2>, Runnable> click : self.clicks) {
-					if (click.key instanceof Point2Prov p && p.objId == objId) {
+					if (click.key instanceof DelegteProv p) {
 						p.prov = () -> Tmp.p1.set(start, end);
 					}
 				}
@@ -350,12 +428,12 @@ public class Viewers {
 		}
 		public void append(Object item) {
 			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, last);
-			self.addCountText(text, count);
+			self.postAppendDelimiter();
+			self.appendValue(last);
+			self.addCountText(count);
 
 			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate(text.length())) throw new SatisfyException();
+			if (self.isTruncate()) throw new SatisfyException();
 			last = item;
 			count = 1;
 		}
@@ -375,11 +453,11 @@ public class Viewers {
 		}
 		public void append(long item) {
 			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, llast);
-			self.addCountText(text, count);
+			self.postAppendDelimiter();
+			self.appendValue(llast);
+			self.addCountText(count);
 			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate(text.length())) throw new SatisfyException();
+			if (self.isTruncate()) throw new SatisfyException();
 			llast = item;
 			count = 1;
 		}
@@ -399,11 +477,11 @@ public class Viewers {
 		}
 		public void append(double item) {
 			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, dlast);
-			self.addCountText(text, count);
+			self.postAppendDelimiter();
+			self.appendValue(dlast);
+			self.addCountText(count);
 			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate(text.length())) throw new SatisfyException();
+			if (self.isTruncate()) throw new SatisfyException();
 			dlast = item;
 			count = 1;
 		}
@@ -423,11 +501,11 @@ public class Viewers {
 		}
 		public void append(boolean item) {
 			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, zlast);
-			self.addCountText(text, count);
+			self.postAppendDelimiter();
+			self.appendValue(zlast);
+			self.addCountText(count);
 			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate(text.length())) throw new SatisfyException();
+			if (self.isTruncate()) throw new SatisfyException();
 			zlast = item;
 			count = 1;
 		}
@@ -447,11 +525,11 @@ public class Viewers {
 		}
 		public void append(char item) {
 			if (count == 0) return;
-			self.postAppendDelimiter(text);
-			self.appendValue(text, clast);
-			self.addCountText(text, count);
+			self.postAppendDelimiter();
+			self.appendValue(clast);
+			self.addCountText(count);
 			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate(text.length())) throw new SatisfyException();
+			if (self.isTruncate()) throw new SatisfyException();
 			clast = item;
 			count = 1;
 		}
@@ -464,6 +542,105 @@ public class Viewers {
 			count = 0;
 			afterAppend = null;
 			gotFirst = false;
+		}
+	}
+
+	/** @see Type#map */
+	static int getMapSize(Object val) {
+		return switch (val) {
+			case ObjectMap<?, ?> map -> map.size;
+			case IntMap<?> map -> map.size;
+			case IntIntMap map -> map.size;
+			case IntFloatMap map -> map.size;
+			case LongMap<?> map -> map.size;
+			case ObjectIntMap<?> map -> map.size;
+			case ObjectFloatMap<?> map -> map.size;
+			case Map<?, ?> map -> map.size();
+			default -> FieldUtils.getInt(val, "size", 0);
+		};
+	}
+	static int getArraySize(Object val) {
+		if (val.getClass().isArray()) return Array.getLength(val);
+
+		return switch (val) {
+			case Seq<?> seq -> seq.size;
+			case IntSeq seq -> seq.size;
+			case FloatSeq seq -> seq.size;
+			case LongSeq seq -> seq.size;
+			case List<?> list -> list.size();
+			case Iterable<?> iter -> FieldUtils.getInt(iter, "size", -1);
+
+			default -> throw new UnsupportedOperationException();
+		};
+	}
+	public static boolean testHashCode(Object object) {
+		try {
+			object.hashCode();
+			return true;
+		} catch (Throwable e) {
+			return false;
+		}
+	}
+	public static void defaultAppend(ValueLabel label, int startIndex, Object val) {
+		StringBuilder text      = label.getText();
+		Color         mainColor = colorOf(val);
+		label.startColor(mainColor);
+		boolean b = Viewers.testHashCode(val);
+		if (b) label.startIndexMap.put(startIndex, val);
+		text.append(toString(val));
+		int endI = text.length();
+		if (b) label.endIndexMap.put(val, endI);
+		label.endColor();
+	}
+	private static Object wrapVal(Object val) {
+		if (val == null) return ValueLabel.NULL_MARK;
+		return val;
+	}
+	public static Color colorOf(Object val) {
+		return val == null ? Syntax.c_objects
+		 : val instanceof String || val instanceof Character ? Syntax.c_string
+		 : val instanceof Number ? Syntax.c_number
+		 : val instanceof Class ? TmpVars.c1.set(JColor.c_type)
+		 : val.getClass().isEnum() ? ValueLabel.c_enum
+		 : box(val.getClass()) == Boolean.class ? Syntax.c_keyword
+		 : Color.white;
+	}
+	static String toString(Object val) {
+		return CatchSR.apply(() ->
+		 CatchSR.of(() ->
+			 val instanceof String ? '"' + (String) val + '"'
+				: val instanceof Character ? STR."'\{val}'"
+				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
+				: val instanceof Class ? ((Class<?>) val).getSimpleName()
+
+				: val instanceof Element ? ReviewElement.getElementName((Element) val)
+				: FormatHelper.getUIKey(val))
+			.get(() -> String.valueOf(val))
+			/** @see Objects#toIdentityString(Object)  */
+			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(System.identityHashCode(val)))
+			.get(() -> Tools.clName(val))
+		);
+	}
+	static String getArrayDelimiter() {
+		return R_JSFunc.array_delimiter;
+	}
+
+	public enum Type {
+		/** @see #getMapSize(Object) */
+		map(ObjectMap.class, IntMap.class, IntIntMap.class, IntFloatMap.class,
+		 LongMap.class,
+		 ObjectIntMap.class, ObjectFloatMap.class, Map.class),
+		array(o -> o instanceof Iterable<?> ||
+		           (o instanceof IntSeq || o instanceof FloatSeq || o instanceof LongSeq) ||
+		           (o != null && o.getClass().isArray()));
+
+		public final Boolf<Object> valid;
+		Type(Class<?>... classes) {
+			Seq<Class<?>> classSeq = Seq.with(classes);
+			valid = o -> o != null && classSeq.indexOf(c -> c.isAssignableFrom(o.getClass())) != -1;
+		}
+		Type(Boolf<Object> valid) {
+			this.valid = valid;
 		}
 	}
 }

@@ -97,8 +97,8 @@ public class ExtendingLabel extends InlineLabel {
 		}),
 		// 轮廓
 		outline(true, (x, y, w, h) -> {
-			Lines.stroke(3);
-			Lines.rect(x, y, w, h);
+			Lines.stroke(2);
+			Lines.rect(x, y, w, h + 3f);
 		}),
 		// 加粗
 		// bold
@@ -121,7 +121,7 @@ public class ExtendingLabel extends InlineLabel {
 		},
 		;
 		public final Floatc4 cons;
-		public final  boolean beforeDraw;
+		public final boolean beforeDraw;
 		DrawType(Floatc4 cons) {
 			this(false, cons);
 		}

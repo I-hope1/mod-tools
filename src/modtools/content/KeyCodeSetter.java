@@ -172,7 +172,7 @@ public class KeyCodeSetter extends Content {
 	}
 	public static class KeyCodeBindWindow extends NoTopWindow implements IHitter {
 		public KeyCodeBindWindow() {
-			super("Keycode Set");
+			super("KeyCode Set");
 
 			init();
 			shown(this::rebuild);

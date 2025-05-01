@@ -75,7 +75,7 @@ public class JSRequest {
 	public static Scriptable         topScope = IScript.scope;
 
 
-	public static  Scriptable scope;
+	public static Scriptable scope;
 
 	public static Label tips;
 
@@ -116,15 +116,11 @@ public class JSRequest {
 	 */
 	public static <R> void request0(ConsT<R, Throwable> callback, Object self, Object... args) {
 		// resetScope();
-		Scriptable parent = wrapper(self != null && Tester.wrap(self) instanceof Scriptable sc ? sc : null);
+		Scriptable parent = wrapper(self != null && Tester.wrap(self) instanceof Scriptable sc ? sc : null, args);
 
 		JSRequestWindow<?> window = JSRequest.window;
 		window.show().setPosition(mouseVec, Align.center);
 		window.buttons.clearChildren();
-
-		for (int i = 0; i < args.length; i += 2) {
-			parent.put((String) args[0], parent, args[1]);
-		}
 
 		window.area.syntax = new JSSyntax(window.area, parent);
 		scope = parent;
@@ -135,19 +131,27 @@ public class JSRequest {
 		return wrapper(self, new Object[0]);
 	}
 	public static Scriptable wrapper(Scriptable self, Object... args) {
-		BaseFunction parent = new BaseFunction(topScope, null);
+		var parent = new ScriptableObject(topScope, self) {
+			public String getClassName() {
+				return "Wrapper";
+			}
+		};
 		for (int i = 0; i < args.length; i += 2) {
 			if (!(args[i] instanceof String name)) {
 				throw new IllegalArgumentException("key args[" + i + "](" + args[i] + ") must be String");
 			}
 
-			parent.put(name, parent, args[i + 1]);
-		}
-		if (self != null) {
-			self.setPrototype(parent);
-			return parent;
+			Object value = args[i + 1];
+			if (value instanceof LazyArg lazyArg) {
+				Core.app.post(() -> parent.put(name, parent, lazyArg.get()));
+			} else {
+				parent.put(name, parent, value);
+			}
 		}
 		return parent;
+	}
+	public interface LazyArg {
+		Object get();
 	}
 
 	private static Object eval() {

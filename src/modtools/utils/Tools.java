@@ -367,6 +367,16 @@ public class Tools {
 			}
 		};
 	}
+	public static <T> Boolf<T> boolfT(Boolf<T> boolf) {
+		return t -> {
+			try {
+				return boolf.get(t);
+			} catch (Throwable e) {
+				Log.err(e);
+				return false;
+			}
+		};
+	}
 
 	/**
 	 * 委托运行任务，根据条件停止运行

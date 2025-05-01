@@ -79,7 +79,7 @@ public class WorldDraw {
 		}, ModTools::isDisposed));
 	}
 
-	public static TextureRegion drawRegion(int width, int height, Runnable draw) {
+	public static TextureRegion  drawRegion(int width, int height, Runnable draw) {
 		TextureRegion region = new TextureRegion(drawTexture(width, height, draw));
 		region.flip(false, true);
 		return region;

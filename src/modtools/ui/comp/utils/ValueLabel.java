@@ -27,16 +27,13 @@ import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.highlight.Syntax;
 import modtools.ui.comp.review.*;
-import modtools.ui.comp.utils.Viewers.Viewer;
+import modtools.ui.comp.utils.Viewers.ViewerItem;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
-import modtools.utils.JSFunc.JColor;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
-import modtools.utils.ui.*;
-
-import java.util.Objects;
+import modtools.utils.ui.FormatHelper;
 
 import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
@@ -88,6 +85,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				hover(x, y);
 				return super.touchDown(event, x, y, pointer, button);
+			}
+			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
+				super.exit(event, x, y, pointer, toActor);
+				hoveredLabel = null;
 			}
 			private final IntSeq keys = new IntSeq();
 			private void hover(float x, float y) {
@@ -144,9 +145,13 @@ public abstract class ValueLabel extends ExtendingLabel {
 		Selection.addFocusSource(this, () -> hoveredVal());
 	}
 
+	/** configuration */
+	public static final int STEP_SIZE = 64;
+
+	public int maxItemCount   = STEP_SIZE;
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
 	public boolean
-	 enableTruncate = true,
+	           enableTruncate = true,
 	/** 是否启用更新 */
 	enableUpdate = true;
 
@@ -179,10 +184,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 		endIndexMap.clear();
 		clearDrawRuns();
 		bgIndex = 0;
-		objId = 0;
-		appendValue(text, val);
+		appendValue(val);
 
-		if (!hoveredChunk().equals(UNSET_P)) addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
+		if (hover_outline.enabled() && !hoveredChunk().equals(UNSET_P)) addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
 
 		if (text.length() > truncate_length.getInt()) {
 			text.setLength(truncate_length.getInt());
@@ -190,18 +194,17 @@ public abstract class ValueLabel extends ExtendingLabel {
 		}
 	}
 
-	final IntMap<Object>              startIndexMap = new IntMap<>();
-	final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
+	public final IntMap<Object>              startIndexMap = new IntMap<>();
+	public final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
 	// 用于记录数组或map的类型
-	final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
+	public final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
 	// 用于记录数组或map的值
-	final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
+	public final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
 	// 用于记录数组或map是否展开
-	final ObjectMap<Object, Boolean>  expandVal     = new ObjectMap<>();
+	public final ObjectMap<Object, Boolean>  expandVal     = new ObjectMap<>();
 
-	int objId;
-	public int bgIndex;
 
+	private       int     bgIndex;
 	public static Color[] bgColors = new Color[]{
 	 new Color(0xFFC66D_66),
 	 new Color(0xFFC6FF_66),
@@ -212,67 +215,46 @@ public abstract class ValueLabel extends ExtendingLabel {
 		return colorful_background.enabled() ? bgColors[bgIndex++ % bgColors.length] : bgColors[0];
 	}
 
-	@SuppressWarnings("ConstantConditions")
-	void appendValue(StringBuilder text, Object val) {
-		int textOff;
-		int i = text.length();
 
-		// viewers
-		if (val != null) {
-			try {
-				if (i == text.length() && applyViewer(Viewers.typeMap, k -> k.valid.get(val), text, val)) return;
-				if (i == text.length() && applyViewer(Viewers.map, k -> k.isAssignableFrom(val.getClass()), text, val)) return;
-			} catch (Throwable e) {
-				appendError(this, text);
-			}
-		}
-		objId++;
-
-		textOff = text.length() - i;
-
-		Color mainColor  = colorOf(val);
-		int   startIndex = text.length();
-		colorMap.put(startIndex, mainColor);
-		boolean b = Viewers.testHashCode(val);
-		if (b) startIndexMap.put(startIndex - textOff, val);
-		text.append(toString(val));
-		int endI = text.length();
-		if (b) endIndexMap.put(val, endI);
-		colorMap.put(endI, Color.white);
-	}
-
-	@SuppressWarnings("unchecked")
-	private <K> boolean applyViewer(
-	 ObjectMap<K, Viewer<?>> viewers,
-	 Boolf<K> valid, StringBuilder text, Object val) {
-		for (var entry : viewers) {
-			if (!valid.get(entry.key)) { continue; }
-
-			switch (((Viewer<Object>) entry.value).view(val, this)) {
-				case skip -> {
-					return false;
-				}
-				case success -> {
-					return true;
-				}
-				case error -> {
-					appendError(this, text);
-					return false;
-				}
-				default -> throw new UnsupportedOperationException();
-			}
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	private boolean applyViewer(
+	 Seq<ViewerItem<?>> viewers, Object val) {
+		for (ViewerItem item : viewers) {
+			if (item.valid(val) && item.view(val, this)) return true;
 		}
 		return false;
 	}
 
-	Prov<Point2> getPoint2Prov(Object val) {
+	public void appendText(String text) {
+		this.text.append(text);
+	}
+	@SuppressWarnings("ConstantConditions")
+	public void appendValue(Object val) {
+		int valStart = text.length();
+
+		// viewers
+		if (val != null) {
+			try {
+				if (valStart == text.length() &&
+				    applyViewer(Viewers.customViewers, val)) { return; }
+				if (valStart == text.length() &&
+				    applyViewer(Viewers.internalViewers, val)) { return; }
+			} catch (Throwable e) {
+				Log.err("Failed to apply viewer for " + val, e);
+				appendError(this, text);
+			}
+		}
+		Viewers.defaultAppend(this, valStart, val);
+	}
+
+	public Prov<Point2> getPoint2Prov(Object val) {
 		return () -> {
 			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
 			int end   = endIndexMap.get(val);
 			return Tmp.p1.set(start, end);
 		};
 	}
-	void toggleExpand(Object val) {
+	public void toggleExpand(Object val) {
 		expandVal.put(val, !expandVal.get(val, false));
 		Core.app.post(this::flushVal);
 	}
@@ -280,83 +262,54 @@ public abstract class ValueLabel extends ExtendingLabel {
 	// 一些基本类型的特化，不装箱，为了减少内存消耗
 
 	// 对于整数类型的处理 (包括 byte 和 short)
-	void appendValue(StringBuilder text, int val) {
-		colorMap.put(text.length(), Syntax.c_number);
+	public void appendValue(int val) {
+		startColor(Syntax.c_number);
 		text.append(val);
-		colorMap.put(text.length(), Color.white);
+		endColor();
 	}
 
 	// 对于长整数类型的处理
-	void appendValue(StringBuilder text, long val) {
-		colorMap.put(text.length(), Syntax.c_number);
+	public void appendValue(long val) {
+		startColor(Syntax.c_number);
 		text.append(val);
-		colorMap.put(text.length(), Color.white);
+		endColor();
 	}
 
 	// 对于浮点数类型的处理 (包括 float 和 double)
-	void appendValue(StringBuilder text, float val) {
-		colorMap.put(text.length(), Syntax.c_number);
+	public void appendValue(float val) {
+		startColor(Syntax.c_number);
 		text.append(FormatHelper.fixed(val, 2));
-		colorMap.put(text.length(), Color.white);
+		endColor();
 	}
 
 	// 对于字符类型的处理
-	void appendValue(StringBuilder text, char val) {
-		colorMap.put(text.length(), Syntax.c_string);
+	public void appendValue(char val) {
+		startColor(Syntax.c_string);
 		text.append('\'').append(val).append('\'');
-		colorMap.put(text.length(), Color.white);
+		endColor();
 	}
 
-	void addCountText(StringBuilder text, int count) {
+	public void addCountText(int count) {
 		if (count > 1) {
-			colorMap.put(text.length(), Color.gray);
+			startColor(Color.gray);
 			text.append(" ×").append(count);
-			colorMap.put(text.length(), Color.white);
+			endColor();
 		}
 	}
-	private static Object wrapVal(Object val) {
-		if (val == null) return NULL_MARK;
-		return val;
-	}
-	public static Color colorOf(Object val) {
-		return val == null ? Syntax.c_objects
-		 : val instanceof String || val instanceof Character ? Syntax.c_string
-		 : val instanceof Number ? Syntax.c_number
-		 : val instanceof Class ? TmpVars.c1.set(JColor.c_type)
-		 : val.getClass().isEnum() ? c_enum
-		 : box(val.getClass()) == Boolean.class ? Syntax.c_keyword
-		 : Color.white;
-	}
-	private static String toString(Object val) {
-		return CatchSR.apply(() ->
-		 CatchSR.of(() ->
-			 val instanceof String ? '"' + (String) val + '"'
-				: val instanceof Character ? STR."'\{val}'"
-				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
-				: val instanceof Class ? ((Class<?>) val).getSimpleName()
 
-				: val instanceof Element ? ReviewElement.getElementName((Element) val)
-				: FormatHelper.getUIKey(val))
-			.get(() -> String.valueOf(val))
-			/** @see Objects#toIdentityString(Object)  */
-			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(System.identityHashCode(val)))
-			.get(() -> Tools.clName(val))
-		);
-	}
-
-	void appendMap(StringBuilder sb, Object mapObj,
-	               int key,
-	               Object value) {
+	public void appendMap(Object mapObj,
+	                      int key,
+	                      Object value) {
 		valToObj.put(value, mapObj);
 		valToType.put(value, value == null ? Object.class : value.getClass());
-		postAppendDelimiter(sb);
-		appendValue(sb, key);
-		sb.append('=');
-		appendValue(sb, value);
+		postAppendDelimiter();
+		appendValue(key);
+		text.append('=');
+		appendValue(value);
 	}
-	void appendMap(StringBuilder sb, Object mapObj,
-	               Object key,
-	               Object value) {
+	public void appendMap(Object mapObj,
+	                      Object key,
+	                      Object value) {
 		if (key != null) {
 			valToObj.put(key, mapObj);
 			valToType.put(key, key.getClass());
@@ -365,22 +318,22 @@ public abstract class ValueLabel extends ExtendingLabel {
 			valToObj.put(value, mapObj);
 			valToType.put(value, value.getClass());
 		}
-		postAppendDelimiter(sb);
-		appendValue(sb, key);
-		sb.append('=');
-		appendValue(sb, value);
+		postAppendDelimiter();
+		appendValue(key);
+		text.append('=');
+		appendValue(value);
 	}
 	Runnable appendTail;
-	void postAppendDelimiter(StringBuilder sb) {
+	public void postAppendDelimiter() {
 		if (appendTail != null) appendTail.run();
-		appendTail = () -> sb.append(getArrayDelimiter());
-	}
-	private static String getArrayDelimiter() {
-		return R_JSFunc.array_delimiter;
+		appendTail = () -> text.append(Viewers.getArrayDelimiter());
 	}
 
 	boolean isTruncate(int length) {
 		return enableTruncate && R_JSFunc.truncate_text && length > R_JSFunc.truncate_length;
+	}
+	boolean isTruncate() {
+		return isTruncate(text.length());
 	}
 	public void clearVal() {
 		val = null;
@@ -393,10 +346,18 @@ public abstract class ValueLabel extends ExtendingLabel {
 		super.setText(ERROR);
 		setColor(Color.red);
 	}
+	public int startColor(Color color) {
+		int i = text.length();
+		colorMap.put(i, color);
+		return i;
+	}
+	public void endColor() {
+		colorMap.put(text.length(), Color.white);
+	}
 	public static void appendError(ValueLabel label, StringBuilder text) {
-		label.colorMap.put(text.length(), Color.red);
+		label.startColor(Color.red);
 		text.append(ERROR);
-		label.colorMap.put(text.length(), Color.white);
+		label.endColor();
 	}
 
 	public void setText(CharSequence newText) {
@@ -469,9 +430,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		list.add(UnderlineItem.with());
-		list.add(MenuItem.with("changeClass", Icon.pencilSmall, "Change Class", () -> {
+		list.add(MenuItem.with("change.class", Icon.pencilSmall, "Change Class", () -> {
 			new ChangeClassDialog(this).show();
 		}));
+		// list.add(MenuItem.with("viewer.set", Icon.eyeSmall, "Set Viewer",  () -> { }));
 		list.add(UnderlineItem.with());
 		if (String.class.isAssignableFrom(type) || val instanceof String) {
 			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", this::valueIsNull, () -> {
@@ -634,8 +596,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 		public Seq<MenuItem> getMenuLists() {
 			Seq<MenuItem> list = new Seq<>();
 			basicMenuLists(list);
-			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> ValueLabel.toString(val))
-			 .color(colorOf(val)));
+			list.insert(0, InfoList.withi("obj", Icon.infoSmall, () -> Viewers.toString(val))
+			 .color(Viewers.colorOf(val)));
 			return list;
 		}
 		public boolean enabledUpdateMenu() {
@@ -651,7 +613,4 @@ public abstract class ValueLabel extends ExtendingLabel {
 			return obj;
 		}
 	}
-	public static final ObjectSet<Class<?>> identityClasses = ObjectSet.with(
-	 Vec2.class, Rect.class, Color.class
-	);
 }

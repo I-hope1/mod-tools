@@ -3,7 +3,7 @@ package modtools.utils.search;
 import arc.func.*;
 import arc.scene.Element;
 import arc.scene.style.Drawable;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Cell;
 import arc.struct.Seq;
 import arc.util.pooling.*;
 import mindustry.ctype.UnlockableContent;
@@ -24,6 +24,7 @@ public class FilterTable<E> extends LimitTable {
 
 	/** 当前绑定的 CellGroup。 */
 	private CellGroup current;
+	private CellGroup nullGroup;
 
 	/** 一个功能接口，用于处理元素。 */
 	private Cons<Element> cons;
@@ -50,7 +51,17 @@ public class FilterTable<E> extends LimitTable {
 	 */
 	public void bind(E name) {
 		if (map == null) map = new HashMap<>();
-		current = map.computeIfAbsent(name, _ -> new CellGroup());
+		current = name == null ? nullGroup() : map.computeIfAbsent(name, _ -> new CellGroup());
+	}
+	private CellGroup nullGroup() {
+		if (nullGroup == null) nullGroup = new CellGroup();
+		return nullGroup;
+	}
+	public void rebind(E lastName, E newName) {
+		if (map == null) map = new HashMap<>();
+		current = lastName == null ? nullGroup() : map.computeIfAbsent(lastName, _ -> new CellGroup());
+		map.remove(lastName);
+		map.put(newName, current);
 	}
 
 	/**
@@ -59,6 +70,7 @@ public class FilterTable<E> extends LimitTable {
 	 * @return 返回对应的 CellGroup。
 	 */
 	public CellGroup findBind(E name) {
+		if (name == null) return nullGroup();
 		if (map == null) map = new HashMap<>();
 		return map.get(name);
 	}
@@ -68,6 +80,10 @@ public class FilterTable<E> extends LimitTable {
 	 * @param name 要移除的名称。
 	 */
 	public void removeCells(E name) {
+		if (name == null) {
+			nullGroup().removeElement();
+			nullGroup = null;
+		}
 		if (map == null) map = new HashMap<>();
 		if (map.containsKey(name)) {
 			map.get(name).removeElement();
@@ -196,7 +212,6 @@ public class FilterTable<E> extends LimitTable {
 		 * 标记是否已被移除。
 		 */
 		public boolean removed = false;
-
 		/**
 		 * 移除当前 CellGroup 中的所有元素。
 		 */

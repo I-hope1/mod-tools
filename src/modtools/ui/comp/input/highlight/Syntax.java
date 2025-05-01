@@ -353,7 +353,7 @@ public class Syntax {
 			super.reset();
 			color.set(textColor);
 			leftQuote = rightQuote = false;
-			escape = false;
+			escape = inUnicode = false;
 		}
 
 		@Override
@@ -365,18 +365,37 @@ public class Syntax {
 		char quote;
 
 		boolean escape;
+		boolean inUnicode;
+		int     lastUnicodeIndex;
 		@Override
 		boolean draw(int i) {
 			/* left边的引号  */
 			if (!leftQuote) return searchQuote(i);
 
-			if (escape) {
+			if (inUnicode) {
+				color.set(escapeColor);
+				withdraw = true;
+				if (i - lastUnicodeIndex == 4) {
+					inUnicode = false;
+					lastUnicodeIndex = -1;
+					checkEscape(i);
+				} else if (Character.isLetterOrDigit(c)) {
+					return true;
+				} else {
+					color.set(c_error);
+				}
+				return true;
+			} else if (escape) {
 				if (lastChar == '\\') {
 					color.set(escapeColor);
 					withdraw = true;
 					escape = false;
 					// 判断是否可以转义
-					if (!escapeSet.contains(c) && !Character.isDigit(c)) color.set(c_error);
+					if (c == 'u') {
+						lastUnicodeIndex = i;
+						inUnicode = true;
+						return true;
+					} else if (!escapeSet.contains(c) && !Character.isDigit(c)) color.set(c_error);
 					checkEscape(i);
 				}
 				return true;

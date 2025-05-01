@@ -25,6 +25,7 @@ import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
+import modtools.ui.comp.utils.Viewers;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
@@ -190,10 +191,18 @@ public class ModTools extends Mod {
 			load("DropMod", DropFile::load);
 		}
 		load("IntUI", IntUI::load);
+		load("CustomViewer", Viewers::loadCustomMap);
 
 		if (E_Extending.auto_update.enabled()) {
 			load("Updater", Updater::checkUpdate);
 		}
+
+		// new MapEditor<>("MapEditor", new JsonReader().parse("""
+		//  [{"key": "133", "value": "134"},
+		//  {"key": "1asas33", "value": "13sa4"}]
+		//  """),
+		//  String.class, String.class,
+		//  JsonValue::name, JsonValue::asString);
 
 		/* INFO_DIALOG.dialog(p -> {
 			ExtendingLabel label = new ExtendingLabel("aaos\nhttps://baidu.com");

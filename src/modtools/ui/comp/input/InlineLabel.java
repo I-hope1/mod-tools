@@ -219,7 +219,7 @@ public class InlineLabel extends NoMarkupLabel {
 	};
 	//endregion
 
-	// region Clickable
+	//region Clickable
 
 	private static final Point2 overChunk = new Point2(UNSET_I, UNSET_I);
 	private static final Point2 downChunk = new Point2(UNSET_I, UNSET_I);
@@ -255,15 +255,13 @@ public class InlineLabel extends NoMarkupLabel {
 
 /** 遍历指定index区域 */
 	public void getRect(Point2 region, Cons<Rect> callback) {
-		Log.info(region);
 		float   lineHeight = style.font.getLineHeight();
 		float   currentX   = 0, currentY = 0;
 		float   startX     = 0, endX = 0;
 		boolean startFound = false;
 
-		int offset = 0;
+		int lineStart = 0;
 
-		outer:
 		for (GlyphRun run : layout.runs) {
 			if (run.glyphs.isEmpty()) continue;
 			/*
@@ -275,18 +273,18 @@ public class InlineLabel extends NoMarkupLabel {
 			if (startX == -1) startX = currentX;
 
 			currentY = labelY + run.y;
-			while (offset < text.length() && (char) run.glyphs.first().id != text.charAt(offset)) offset++; // 弥补offset
+			while (lineStart < text.length() && (char) run.glyphs.first().id != text.charAt(lineStart)) lineStart++; // 弥补offset
 
 			for (int i = 1; i < xAdvances.size; i++) {
 				int j = i - 1;
-				if (!startFound && offset + j >= region.x) {
+				if (!startFound && lineStart + j >= region.x) {
 					startX = currentX;
 					startFound = true;
 				}
 
 				if (startFound) {
 					// Check if the end of the region is in the same run
-					if (offset + j >= region.y) {
+					if (lineStart + j >= region.y) {
 						endX = currentX;
 						if (!Mathf.equal(startX, endX)) {
 							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
@@ -301,18 +299,18 @@ public class InlineLabel extends NoMarkupLabel {
 							callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
 						}
 						startX = -1; // Reset startX for the next line
-						continue outer;
+						break;
 					}
 				}
 
 				currentX += xAdvances.get(i);
 			}
 
-			offset += run.glyphs.size;
+			lineStart += run.glyphs.size;
 		}
 
 		// Handle the case where the region ends at the last character of the text
-		if (startFound && offset >= region.y) {
+		if (startFound && lineStart >= region.y) {
 			endX = currentX;
 			if (!Mathf.equal(startX, endX)) {
 				callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
@@ -334,6 +332,8 @@ public class InlineLabel extends NoMarkupLabel {
 					over.draw(x + r1.x - padding, y + r1.y - padding, r1.width + padding * 2, r1.height + padding * 2);
 				});
 			}
+		} else {
+			InlineLabel.overChunk.set(UNSET_P);
 		}
 		super.draw();
 	}
@@ -387,7 +387,7 @@ public class InlineLabel extends NoMarkupLabel {
 			}
 			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 				super.exit(event, x, y, pointer, toActor);
-				InlineLabel.overChunk.set(UNSET_I, UNSET_I);
+				InlineLabel.overChunk.set(UNSET_P);
 			}
 			public boolean mouseMoved(InputEvent event, float x, float y) {
 				int cursor = getCursor(x, y);
@@ -400,7 +400,7 @@ public class InlineLabel extends NoMarkupLabel {
 						InlineLabel.overChunk.set(point2);
 						Core.graphics.cursor(SystemCursor.hand);
 					} else {
-						InlineLabel.overChunk.set(UNSET_I, UNSET_I);
+						InlineLabel.overChunk.set(UNSET_P);
 						Core.graphics.cursor(SystemCursor.arrow);
 					}
 				}

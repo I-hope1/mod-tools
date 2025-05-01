@@ -60,9 +60,8 @@ public class Search<T> {
 		return valid0(pattern, item) != isBlack;
 	}
 	private boolean valid0(Pattern pattern, T item) {
-		if (filters.isEmpty()) {
-			return PatternUtils.testAny(pattern, item);
-		}
+		if (!PatternUtils.testAny(pattern, item)) return false;
+
 		for (var filter : filters) {
 			if (!filter.value.get(pattern, item)) return false;
 		}
@@ -74,9 +73,7 @@ public class Search<T> {
 		field = new TextField();
 		field.setMessageText("@players.search");
 		top.add(field).growX();
-		field.changed(() -> {
-			rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText()));
-		});
+		field.changed(() -> rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText())));
 		rebuild(cont, PatternUtils.ANY);
 	}
 	public final Cons2<Table, Pattern> rebuild;

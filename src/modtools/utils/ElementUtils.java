@@ -62,11 +62,14 @@ public interface ElementUtils {
 
 	static void scrollTo(Element actor, Element target) {
 		ScrollPane pane = findClosestPane(actor);
-		Time.runTask(40, () -> HopeFx.changedFx(target));
+		Time.runTask(5, () -> HopeFx.changedFx(target));
+		pane.setSmoothScrolling(false);
 		pane.scrollTo(0, target.localToAscendantCoordinates(pane.getWidget(),
 			Tmp.v1.set(target.getWidth() / 2, target.getHeight() / 2)).y,
 		 target.getWidth(), target.getHeight(),
 		 false, true);
+		pane.act(1);
+		pane.setSmoothScrolling(true);
 	}
 	static boolean checkInStage(Vec2 pos) {
 		return Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(pos);

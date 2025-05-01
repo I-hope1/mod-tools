@@ -5,7 +5,7 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Tmp;
 import mindustry.graphics.Pal;
 import modtools.utils.PatternUtils;
 
@@ -27,6 +27,7 @@ public class SearchedLabel extends InlineLabel {
 	public Color normalColor    = Pal.accent;
 	public Color highlightColor = Color.sky;
 	private Color bgColor = Color.brick;
+
 	public void initColor(Color normalColor, Color highlightColor) {
 		this.normalColor    = normalColor;
 		this.highlightColor = highlightColor;
@@ -58,6 +59,9 @@ public class SearchedLabel extends InlineLabel {
 		drawHighlightBackground();
 
 		super.draw();
+	}
+	public boolean hasHighlight(Pattern newPattern) {
+		return newPattern != null && newPattern != PatternUtils.ANY && newPattern.matcher(text).find();
 	}
 	private void drawHighlightBackground() {
 		float lineHeight = cache.getFont().getLineHeight();

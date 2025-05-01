@@ -12,6 +12,10 @@ public class FocusSearchListener extends InputListener {
 	public FocusSearchListener(TextField textField) {
 		this.textField = textField;
 	}
+	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+		textField.requestKeyboard();
+		return super.touchDown(event, x, y, pointer, button);
+	}
 	public boolean keyDown(InputEvent event, KeyCode __) {
 		if (keyCode.isPress()) {
 			textField.requestKeyboard();

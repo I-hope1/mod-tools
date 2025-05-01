@@ -257,13 +257,11 @@ public class ShowUIList extends Content {
 		});
 	}
 	private static void customJson(String type, LazyTable<Object> t) {
-		t.addRun(() -> {
-			t.table(t1 -> {
-				t1.add("Custom " + Strings.capitalize(type) + ": ");
-				String fileName = type + ".json";
-				t1.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
-			}).colspan(2).growX().row();
-		});
+		t.addRun(() -> t.table(t1 -> {
+			t1.add("Custom " + Strings.capitalize(type) + ": ");
+			String fileName = type + ".json";
+			t1.button(fileName, () -> FileUtils.openFile(uiConfig.child(fileName))).growX();
+		}).colspan(2).growX().row());
 	}
 	private static void fieldWithView(LazyTable<Object> t, Field field, Drawable drawable) {
 		if (drawable != null) {

@@ -12,6 +12,7 @@ import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
 import arc.util.serialization.*;
+import arc.util.serialization.Jval.Jformat;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.gen.*;
@@ -49,7 +50,7 @@ public class Viewers {
 	public static void loadCustomMap() {
 		Fi file = IntVars.dataDirectory.child("customViewers.json");
 		if (!file.exists()) file.writeString("[\n]");
-		JsonValue value = new JsonReader().parse(file);
+		JsonValue value = new JsonReader().parse(Jval.read(file.readString()).toString(Jformat.plain));
 		vscope = JSRequest.wrapper(IScript.scope, "Viewers", (LazyArg) () -> IScript.cx.getWrapFactory().wrapJavaClass(IScript.cx, vscope, Viewers.class));
 		customViewers.set(json.readValue(Seq.class, ViewerItem.class, value));
 		// Log.info(customViewers);
@@ -139,8 +140,7 @@ public class Viewers {
 		// });
 		addViewer(Color.class, (Color val, ValueLabel label) -> {
 			StringBuilder text = label.getText();
-			int           i    = text.length();
-			label.colorMap.put(i, val);
+			int           i    = label.startColor(val);
 			text.append('■');
 			defaultAppend(label, i, val);
 			return true;
@@ -210,15 +210,16 @@ public class Viewers {
 				label.expandVal.put(val, getArraySize(val) < R_JSFunc.max_auto_expand_size);
 			}
 			StringBuilder text  = label.getText();
-			int           start = text.length();
+			int           start = label.startColor(c_map);
 			label.startIndexMap.put(start, val);
-			label.colorMap.put(start, c_map);
+
 			text.append("|Array");
 			int    sizeIndex = text.length();
 			String repeat    = StringUtils.repeat('\u200d', SIZE_MAX_BIT);
 			text.append(repeat).append("|");
-			label.endColor();
+
 			label.endIndexMap.put(val, text.length());
+			label.endColor();
 
 			if (!label.expandVal.get(val)) {
 				return true;
@@ -328,6 +329,7 @@ public class Viewers {
 			this.classes = new Seq<>(classes);
 		}
 		public boolean valid(T val) {
+			if (viewer == null) return false;
 			return (type != null && type.valid.get(val))
 			       || (valid != null && valid.get(val))
 			       || (classes != null && classes.indexOf(c -> c.isInstance(val)) != -1);
@@ -336,6 +338,13 @@ public class Viewers {
 			return viewer.view(val, label);
 		}
 
+		public boolean equals(Object o) {
+			if (!(o instanceof ViewerItem<?> that)) return false;
+			return Objects.equals(viewer, that.viewer) && type == that.type && Objects.equals(classes, that.classes) && Objects.equals(valid, that.valid);
+		}
+		public int hashCode() {
+			return Objects.hash(viewer, type, classes, valid);
+		}
 		public String toString() {
 			return "ViewerItem{" +
 			       "viewer=" + viewer +

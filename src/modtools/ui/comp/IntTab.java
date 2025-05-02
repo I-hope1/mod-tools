@@ -13,7 +13,6 @@ import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
-import modtools.ui.comp.input.MyLabel;
 import modtools.ui.comp.limit.PrefTable;
 import modtools.ui.effect.HopeFx;
 import modtools.utils.ui.CellTools;
@@ -167,11 +166,9 @@ public class IntTab {
 				 () -> hideTitle ? "" : names[j],
 				 icons == null ? null : icons[j]
 				);
-				labels.put(names[j], label);
-				Image iconImg = new Image();
-				b.stack(iconImg.update(() -> iconImg.setDrawable(icons[j])),
-					label).padLeft(4f)
-				 .padRight(4f).minWidth(28).growY();
+				b.add(label).padLeft(4f).padRight(4f).minWidth(28)
+				 .labelAlign(Align.left)
+				 .growX().growY();
 				b.row();
 				Cell<Image> image = b.image().growX();
 				b.update(() -> {
@@ -199,8 +196,9 @@ public class IntTab {
 					}
 				}
 			}).self(c -> {
-				if (titleWidth != CellTools.unset || eachWidth != 0)
+				if (titleWidth != CellTools.unset || eachWidth != 0) {
 					c.width(eachWidth != 0 ? eachWidth : Math.max(titleWidth / (float) cols, c.get().getPrefWidth() / Scl.scl()));
+				}
 			});
 
 			if (++i % cols == 0) title.row();
@@ -263,15 +261,13 @@ public class IntTab {
 		 Actions.alpha(0.2f, duration, Interp.slowFast)
 		);
 	}
-	public static class TitleLabel extends MyLabel {
-		Drawable icon;
+	public static class TitleLabel extends Table {
 		public TitleLabel(Prov<CharSequence> sup, Drawable icon) {
-			super(sup);
-			this.icon = icon;
-		}
-		public void act(float delta) {
-			super.act(delta);
-			style.background = text.length() == 0 ? icon : null;
+			super(t -> {
+				t.image(icon).size(28);
+				t.label(sup).growX().labelAlign(Align.left);
+			});
+			// addDrawRun(0, 2, DrawType.icon, Color.white, icon);
 		}
 	}
 }

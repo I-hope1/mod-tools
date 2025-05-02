@@ -8,6 +8,7 @@ import arc.scene.style.Drawable;
 import arc.struct.Seq;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
+import modtools.utils.StringUtils;
 
 public class ExtendingLabel extends InlineLabel {
 
@@ -19,6 +20,12 @@ public class ExtendingLabel extends InlineLabel {
 	}
 	public ExtendingLabel(Prov<CharSequence> sup) {
 		super(sup);
+	}
+	public void insertIcon(int i, Drawable icon, int len) {
+		colorMap.put(i, Color.clear);
+		text.insert(i, StringUtils.repeat("+", len));
+		colorMap.put(i + len, Color.white);
+		addDrawRun(i, i + len, DrawType.icon, Color.white, icon);
 	}
 
 	public static final class DrawRun implements Poolable {

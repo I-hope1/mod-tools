@@ -106,12 +106,14 @@ public class JSFunc
 		}
 	}*/
 
+	//region Watch
 	public static WatchWindow watch() {
 		return new WatchWindow();
 	}
 	public static WatchWindow watch(WatchWindow watch) {
 		return watch == null ? new WatchWindow() : watch;
 	}
+	//endregion
 
 	/*public static WatchWindow watch(String info, MyProv<Object> value) {
 		return watch(info, value, 0);

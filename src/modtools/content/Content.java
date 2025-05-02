@@ -40,9 +40,10 @@ public abstract class Content {
 		return name;
 	}
 
+	protected boolean alwaysLoad = false;
 	protected boolean defLoadable = true;
 	public final boolean loadable() {
-		return SETTINGS.getBool("load-" + name, defLoadable);
+		return alwaysLoad || SETTINGS.getBool("load-" + name, defLoadable);
 	}
 	public Content(String name) {
 		this(name, null);

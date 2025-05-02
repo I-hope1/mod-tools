@@ -35,6 +35,7 @@ import modtools.utils.ui.ReflectTools;
 public class Executor extends Content {
 	public Executor() {
 		super("executor", Icon.wrenchSmall);
+		alwaysLoad = true;
 	}
 
 	public  Window ui;

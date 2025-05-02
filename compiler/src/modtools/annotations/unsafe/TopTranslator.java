@@ -9,8 +9,11 @@ import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.List;
 
-import static modtools.annotations.processors.ContentProcessor.REF_PREFIX;
+import java.lang.annotation.Annotation;
+import java.util.*;
+import java.util.function.*;
 
 public class TopTranslator extends TreeTranslator {
 	final JavacTrees trees;
@@ -20,7 +23,34 @@ public class TopTranslator extends TreeTranslator {
 	final TreeMaker  maker;
 
 	final String errorKey = "default.method.call";
-	public TopTranslator(Context context) {
+
+	/** 待处理的方法 */
+	public ArrayList<Todo> todos = new ArrayList<>();
+	public static boolean isEquals(Symbol i, Symbol element) {
+		return i.flatName().contentEquals(element.flatName());
+	}
+	public boolean inAnnotation(Class<? extends Annotation> annoType) {
+		return currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null
+		 || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
+	}
+	public static class Todo {
+		public Predicate<JCTree>        predicate;
+		public Function<JCTree, JCTree> treeTrans;
+
+		public Todo(Predicate<JCTree> predicate, Function<? extends JCTree, JCTree> treeTrans) {
+			this.predicate = predicate;
+			this.treeTrans = (Function) treeTrans;
+		}
+		public <T extends JCTree> Todo(Class<T> cls, Predicate<T> predicate, Function<T, JCTree> treeTrans) {
+			this(tree -> cls.isInstance(tree) && predicate.test((T) tree), treeTrans);
+		}
+		public <T extends JCTree> Todo(Class<T> cls, Function<T, JCTree> treeTrans) {
+			this(cls::isInstance, treeTrans);
+		}
+	}
+
+	private TopTranslator(Context context) {
+		context.put(TopTranslator.class, this);
 		trees = JavacTrees.instance(context);
 		log = Log.instance(context);
 		names = Names.instance(context);
@@ -29,64 +59,61 @@ public class TopTranslator extends TreeTranslator {
 
 		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
 	}
-	JCCompilationUnit toplevel;
+	public static TopTranslator instance(Context context) {
+		TopTranslator translator = context.get(TopTranslator.class);
+		if (translator == null) return new TopTranslator(context);
+		return translator;
+	}
+	public JCCompilationUnit toplevel;
+	public JCClassDecl currentClass;
+	public JCMethodDecl currentMethod;
+
 	public void scanToplevel(JCCompilationUnit toplevel) {
 		this.toplevel = toplevel;
 		translate(toplevel);
 	}
+	public void visitClassDef(JCClassDecl tree) {
+		currentClass = tree;
+		super.visitClassDef(tree);
+		currentClass = null;
+	}
+	public void visitMethodDef(JCMethodDecl tree) {
+		currentMethod = tree;
+		super.visitMethodDef(tree);
+		currentMethod = null;
+	}
 	public void visitApply(JCMethodInvocation tree) {
-		// if (tree.meth.type != null && tree.meth.type.tsym.owner.isInterface())
-		// checkDefault(tree);
 		super.visitApply(tree);
+		transTree(tree);
 	}
 	boolean inAssign = false;
 	public void visitAssign(JCAssign tree) {
 		inAssign = true;
 		super.visitAssign(tree);
 		inAssign = false;
-		x_translateAssign(tree);
+		transTree(tree);
 	}
 	public void visitSelect(JCFieldAccess tree) {
 		super.visitSelect(tree);
-		if (!inAssign) x_translateFieldAccess(tree);
+		if (!inAssign) transTree(tree);
 	}
-	public void x_translateFieldAccess(JCFieldAccess access) {
-		if (!(access.selected instanceof JCIdent i) || !i.name.toString().startsWith(REF_PREFIX)) {
-			return;
-		}
-		String         enumName  = access.name.toString();
-		ClassSymbol    symbol    = getEventClassSymbol(i);
-		if (symbol == null) return;
-		// R_XXX -> E_XXX.xxx.get%Type%()
-		JCFieldAccess enumField = makeSelect(maker.QualIdent(symbol), names.fromString(enumName), symbol);
-		String        s         = "" + access.type.tsym.getSimpleName();
-		String getter = switch (s) {
-			case "boolean" -> "enabled";
-			default -> access.type.tsym.isEnum() ? "getEnum" : "get" + s.substring(0, 1).toUpperCase() + s.substring(1);
-		};
-		JCFieldAccess fn = makeSelect(enumField,
-		 names.fromString(getter), iSettings());
-		MethodSymbol ms = ((MethodSymbol) fn.sym);
-		result = maker.Apply(List.nil(), fn, ms.params.isEmpty() ? List.nil() : List.of(
-		 maker.ClassLiteral(access.type))).setType(access.type);
-		// println(result);
+	public void visitExec(JCExpressionStatement tree) {
+		super.visitExec(tree);
+		transTree(tree);
 	}
-	private void x_translateAssign(JCAssign tree) {
-		if (!(tree.lhs instanceof JCFieldAccess access) || !(access.selected instanceof JCIdent i) || !i.name.toString().startsWith(REF_PREFIX)) {
-			return;
-		}
-		// R_XXX.xxx(lhs) = val(rhs) -> E_XXX.xxx.set%Type%(val)
-		ClassSymbol symbol = getEventClassSymbol(i);
-		// println(symbol.fullname);
-		JCFieldAccess enumField = makeSelect(maker.QualIdent(symbol), access.name, symbol);
-		JCFieldAccess fn        = makeSelect(enumField, names.fromString("set"), iSettings());
-		result = maker.Apply(List.nil(), fn, List.of(tree.rhs)).setType(tree.type);
-		// println(result);
+	private void transTree(JCTree tree) {
+		todos.stream().filter(todo -> todo.predicate.test(tree))
+		 .map(todo -> todo.treeTrans.apply(tree))
+		 .filter(Objects::nonNull)
+		 .limit(1)
+		 .forEach(tree1 -> result = tree1);
 	}
 
-	private TypeSymbol $settings;
-	private TypeSymbol iSettings() {
-		return $settings != null ? $settings : ($settings = symtab.enterClass(symtab.unnamedModule, names.fromString("modtools.events.ISettings")));
+	public JCTree makeString(String s) {
+		return Replace.desugarStringTemplate.makeString(s);
+	}
+	public JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
+		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
 	}
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, TypeSymbol owner) {
 		JCFieldAccess select = maker.Select(selected, name);
@@ -100,10 +127,47 @@ public class TopTranslator extends TreeTranslator {
 		select.type = select.sym.type;
 		return select;
 	}
+	public JCExpression defaultValue(Type type) {
+		if (type.isPrimitive()) {
+			TypeTag tag = type.getTag();
+			return switch (tag) {
+				case BYTE -> maker.Literal((byte) 0);
+				case CHAR -> maker.Literal((char) 0);
+				case SHORT -> maker.Literal((short) 0);
+				case LONG -> maker.Literal(0L);
+				case FLOAT -> maker.Literal(0F);
+				case INT -> maker.Literal(0);
+				case DOUBLE -> maker.Literal(0D);
+				case BOOLEAN -> maker.Literal(false);
+				case BOT -> maker.Literal(tag, null);
+				default -> throw new IllegalStateException("Unexpected value: " + tag);
+			};
+		}
+		return maker.Literal(TypeTag.BOT, null);
+	}
+	public int localVarIndex = 0;
+	public LetExpr translateMethodBlockToLetExpr(JCMethodDecl methodDecl, Symbol owner) {
+		if (methodDecl.sym.getReturnType() == symtab.voidType) {
+			throw new IllegalArgumentException("methodDecl is void method");
+		}
+		maker.at(methodDecl);
+		ListBuffer<JCStatement> defs      = new ListBuffer<>();
+		VarSymbol               varSymbol = new VarSymbol(0, names.fromString("$$letexper$$" + ++localVarIndex), methodDecl.sym.getReturnType(), owner);
+		defs.add(maker.VarDef(varSymbol, defaultValue(methodDecl.sym.getReturnType())));
+		new TreeScanner() {
+			public void visitReturn(JCReturn tree) {
+				super.visitReturn(tree);
+				defs.add(maker.Exec(maker.Assign(maker.Ident(varSymbol), tree.expr)));
+			}
+		}.scan(methodDecl.body);
+		LetExpr letExpr = maker.LetExpr(defs.toList(), maker.Ident(varSymbol));
+		letExpr.type = methodDecl.sym.getReturnType();
+		return letExpr;
+	}
 
-	private ClassSymbol getEventClassSymbol(JCIdent i) {
-		DocCommentTree doc      = trees.getDocCommentTree(i.sym);
-		SeeTree        seeTag    = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
+	public ClassSymbol getEventClassSymbol(JCIdent i) {
+		DocCommentTree doc    = trees.getDocCommentTree(i.sym);
+		SeeTree        seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
 		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) { return null; }
 
 		return (ClassSymbol) trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(i.sym), doc), reference));

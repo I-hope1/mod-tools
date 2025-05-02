@@ -3,6 +3,7 @@ package modtools.override;
 import arc.*;
 import arc.func.*;
 import arc.input.KeyCode;
+import arc.math.Mathf;
 import arc.scene.*;
 import arc.struct.*;
 import arc.util.*;
@@ -32,11 +33,11 @@ public class HScene {
 		Class<? extends Group> superClass = Core.scene.root.getClass();
 		if (superClass.getName().endsWith(SUFFIX)) return;
 		var sceneClass0 = new MyClass<>(superClass, SUFFIX);
-		var sceneClass = new MyClass<>(sceneClass0.define(), "i");
+		var sceneClass  = new MyClass<>(sceneClass0.define(), "i");
 
 		Floatc floatc      = delta -> topGroup.act(delta);
 		Lambda actTopGroup = sceneClass.addLambda(floatc, Floatc.class, "get", "(F)V");
-		Lambda boolp       = sceneClass.addLambda(() -> pauseMap.get(Vars.ui.getClass()) == 1/* 暂停了 */, Boolp.class, "get", "()Z");
+		Lambda boolp       = sceneClass.addLambda(() -> pauseMap.get(Vars.ui.getClass(), 0) > 0/* 暂停了 */, Boolp.class, "get", "()Z");
 
 		sceneClass.setFunc("act", cfw -> {
 			sceneClass.execLambda(boolp, null);
@@ -66,7 +67,7 @@ public class HScene {
 		// if (!OS.isAndroid) myClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, Scene.class);
 		// sceneClass.writeTo(Vars.tmpDirectory);
 
-		Class<Group> newClas  = (Class<Group>) sceneClass.define();
+		Class<Group> newClas = (Class<Group>) sceneClass.define();
 		if (OS.isAndroid) {
 			HopeReflect.changeClass(Core.scene.root, newClas);
 		} else {
@@ -82,7 +83,7 @@ public class HScene {
 			FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
 		}
 
-		pauseMap = json.fromJson(ObjectIntMap.class, Class.class, pause.data().toString());
+		pauseMap = json.fromJson(ObjectFloatMap.class, Class.class, pause.data().toString());
 
 		hookUpdate(Core.app.getListeners());
 	}
@@ -94,11 +95,11 @@ public class HScene {
 			var superClass = _1.getClass(); // android 上由 shadow$_klass_ 决定
 			try {
 				if (Modifier.isFinal(superClass.getMethod("update").getModifiers())) {
-					pauseMap.remove(superClass);
+					pauseMap.remove(superClass, 0);
 					return source;
 				}
 			} catch (NoSuchMethodException e) {
-				pauseMap.remove(superClass);
+				pauseMap.remove(superClass, 0);
 				return source;
 			}
 			if (superClass.getSimpleName().endsWith(SUFFIX)) return source;
@@ -113,8 +114,10 @@ public class HScene {
 				return core;
 			}
 			HopeReflect.setPublic(superClass, Class.class);
-			var    myClass = new MyClass<>(superClass, SUFFIX);
-			Lambda lambda  = myClass.addLambda(() -> pauseMap.get(superClass) == 1, Boolp.class, "get", "()Z");
+			var myClass = new MyClass<>(superClass, SUFFIX);
+			Lambda lambda = myClass.addLambda(() -> {
+				return pauseMap.increment(superClass, 0, -Time.delta) >= 0;
+			}, Boolp.class, "get", "()Z");
 			myClass.setFunc("update", cfw -> {
 				myClass.execLambda(lambda, null);
 				// 判断是否暂停
@@ -146,18 +149,18 @@ public class HScene {
 					Log.err(e);
 				}
 			}
-			return (ApplicationListener) newVal;
+			return newVal;
 		});
 	}
 
-	public static ObjectIntMap<Class<?>> pauseMap;
+	public static ObjectFloatMap<Class<?>> pauseMap;
 
 	public static Window   lastInfo;
 	static        HKeyCode pauseKeyCode = HKeyCode.data.dynamicKeyCode("pauseAct", () -> new HKeyCode(KeyCode.f7).ctrl())
 	 .applyToScene(true, () -> {
-		 int value = pauseMap.get(Vars.ui.getClass()) == 1 ? 0 : 1;
+		 float value = Mathf.equal(pauseMap.get(Vars.ui.getClass(), 0), Float.POSITIVE_INFINITY) ? 0 : Float.POSITIVE_INFINITY;
 		 if (lastInfo != null) lastInfo.hide();
-		 lastInfo = IntUI.showInfoFade(value == 1 ? "UI Pause" : "UI Resume");
+		 lastInfo = IntUI.showInfoFade(value == Float.POSITIVE_INFINITY ? "UI Pause" : "UI Resume");
 		 pauseMap.put(Vars.ui.getClass(), value);
 	 });
 }

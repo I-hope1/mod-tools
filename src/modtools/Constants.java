@@ -36,7 +36,7 @@ public class Constants {
 		);
 
 		/** @see Class#getEnumConstantsShared() */
-		long BINDING_VALUES = fieldOffset(Binding.class, "$VALUES");
+		long BINDING_VALUES = -1;//fieldOffset(Binding.class, "$VALUES");
 	}
 
 	/** Constants related to desktop JVM internals (java.lang.invoke). Likely fragile. */

@@ -2,12 +2,14 @@ package modtools.unsupported;
 
 import arc.func.Cons;
 import arc.struct.ObjectMap;
-import arc.util.Log;
+import arc.util.*;
 import arc.util.serialization.JsonValue;
 import com.sun.tools.attach.VirtualMachine;
 import mindustry.mod.ContentParser;
+import modtools.annotations.asm.Inline;
 import modtools.annotations.asm.Sample.SampleTemp.Template;
 import modtools.ui.IntUI;
+import modtools.utils.reflect.HopeReflect;
 
 import java.lang.StringTemplate.Processor;
 import java.util.Properties;
@@ -27,25 +29,44 @@ public class HopeProcessor {
 	public static final Processor<String, RuntimeException> S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
 
 	public static class Wrapper {
-		/** @see mindustry.mod.ContentParser#read(Runnable)    */
-		void run(Runnable runnable) {}
-		/** @see ContentParser#classParsers  */
+		/** @see mindustry.mod.ContentParser#read(Runnable) */
+		void run(Runnable runnable) { }
+		/** @see ContentParser#classParsers */
 		ObjectMap<Class<?>, @Template(value = "mindustry.mod.ContentParser$FieldParser") Object> classParsers;
 		static Wrapper temp(ContentParser parser) {
 			return null;
 		}
 	}
 	public static class WrapperFieldParser {
-		/** @see mindustry.mod.ContentParser.FieldParser#parse(Class, JsonValue)   */
+		/** @see mindustry.mod.ContentParser.FieldParser#parse(Class, JsonValue) */
 		Object parse(Class<?> type, JsonValue value) throws Exception { return null; }
 
 		static WrapperFieldParser temp(Object val) {
 			return null;
 		}
 	}
-	public static void main() {;
+	public static void aaa() {
+		bbb();
+	}
+	@Inline
+	public static void bbb() {
+		Log.info("Caller: " + HopeReflect.getCaller());
+	}
+	@Inline
+	public static int anInt() {
+		return OS.isAndroid ? 1820 * 92902 : 289223;
+	}
+	public static void asuia() {
+		Log.info("int" + anInt());
+		// new Table((@Capture Table t) -> {
+		// 	image();
+		// });
+
+	}
+	public static void main() {
+		aaa();
 		// temp.run();
-		String  aa   = "10203";
+		String aa = "10203";
 		int    a  = 1, b = 2;
 		Cons<String> run = d -> {
 			System.out.println(NPX."aa\{aa}");
@@ -54,7 +75,7 @@ public class HopeProcessor {
 		run.get(aa);
 	}
 	static void vm() throws Exception {
-		VirtualMachine vm0 =  VirtualMachine.attach(VirtualMachine.list().stream().filter(
+		VirtualMachine vm0 = VirtualMachine.attach(VirtualMachine.list().stream().filter(
 		 vm -> vm.displayName().endsWith(".jar") || vm.displayName().endsWith(".exe")
 		).findFirst().orElseThrow());
 		Properties props = new Properties();

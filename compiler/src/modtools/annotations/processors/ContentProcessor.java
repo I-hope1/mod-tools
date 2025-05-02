@@ -13,6 +13,8 @@ import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 import modtools.annotations.settings.*;
+import modtools.annotations.unsafe.TopTranslator;
+import modtools.annotations.unsafe.TopTranslator.Todo;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
@@ -29,7 +31,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {
 	public static final  String SETTING_PREFIX = "E_";
 	private static final String FIELD_PREFIX   = "f_";
-public static final  String REF_PREFIX     = "R_";
+	public static final  String REF_PREFIX     = "R_";
 
 	private Name        nameSetting;
 	private ClassType   consType;
@@ -47,6 +49,40 @@ public static final  String REF_PREFIX     = "R_";
 		consType = findType("arc.func.Cons");
 		settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
 		mainClass = trees.getTree(findClassSymbol("modtools.ModTools"));
+
+		TopTranslator translator = TopTranslator.instance(_context);
+		translator.todos.add(new Todo(
+		 JCFieldAccess.class, access -> {
+			if (!(access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) return null;
+
+			String      enumName = access.name.toString();
+			ClassSymbol symbol   = translator.getEventClassSymbol(i);
+			if (symbol == null) return null;
+			// R_XXX -> E_XXX.xxx.get%Type%()
+			JCFieldAccess enumField = translator.makeSelect(mMaker.QualIdent(symbol), names.fromString(enumName), symbol);
+			String        s         = "" + access.type.tsym.getSimpleName();
+			String getter = switch (s) {
+				case "boolean" -> "enabled";
+				default -> access.type.tsym.isEnum() ? "getEnum" : "get" + s.substring(0, 1).toUpperCase() + s.substring(1);
+			};
+			JCFieldAccess fn = translator.makeSelect(enumField,
+			 names.fromString(getter), iSettings);
+			MethodSymbol ms = ((MethodSymbol) fn.sym);
+			return mMaker.Apply(List.nil(), fn, ms.params.isEmpty() ? List.nil() : List.of(
+			 mMaker.ClassLiteral(access.type))).setType(access.type);
+		}));
+		translator.todos.add(new Todo(JCAssign.class,
+		 tree -> {
+			 if (!(tree.lhs instanceof JCFieldAccess access && access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) {
+				 return null;
+			 }
+			 // R_XXX.xxx(lhs) = val(rhs) -> E_XXX.xxx.set%Type%(val)
+			 ClassSymbol symbol = translator.getEventClassSymbol(i);
+			 // println(symbol.fullname);
+			 JCFieldAccess enumField = translator.makeSelect(mMaker.QualIdent(symbol), access.name, symbol);
+			 JCFieldAccess fn        = translator.makeSelect(enumField, names.fromString("set"), iSettings);
+			 return mMaker.Apply(List.nil(), fn, List.of(tree.rhs)).setType(tree.type);
+		 }));
 	}
 
 	public void contentLoad(ClassSymbol element) throws IOException {
@@ -155,10 +191,10 @@ public static final  String REF_PREFIX     = "R_";
 		});
 		if (!allEnumFields.isEmpty()) {
 			// 生成对应的字段 enum_name(Type, ...) -> public static Type enumx = 默认值（ 0 / false / null）
-			Name             pkgName       = settings.packge().fullname;
-			JavaFileObject   file          = mFiler.createSourceFile(pkgName + "." +REF_PREFIX + literalName, settings);
-			Writer           writer        = file.openWriter();
-			StringBuilder    body          = new StringBuilder();
+			Name           pkgName = settings.packge().fullname;
+			JavaFileObject file    = mFiler.createSourceFile(pkgName + "." + REF_PREFIX + literalName, settings);
+			Writer         writer  = file.openWriter();
+			StringBuilder  body    = new StringBuilder();
 
 			writer.write(String.valueOf(unit.getPackage()));
 			writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
@@ -342,7 +378,7 @@ public static final  String REF_PREFIX     = "R_";
 		classDecl.defs = classDecl.defs.append(method);
 	}
 	Map<VarSymbol, Switch> allSwitches   = new HashMap<>();
-	Map<VarSymbol, String>   allEnumFields = new HashMap<>();
+	Map<VarSymbol, String> allEnumFields = new HashMap<>();
 	private void collectSwitch(VarSymbol symbol) {
 		Switch aSwitch = symbol.getAnnotation(Switch.class);
 		if (aSwitch == null) return;

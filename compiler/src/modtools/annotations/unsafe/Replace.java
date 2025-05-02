@@ -239,12 +239,12 @@ public class Replace {
 
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
 
+		TopTranslator topTranslator = TopTranslator.instance(context);
 		MultiTaskListener.instance(context).add(new TaskListener() {
-			final TopTranslator chk = new TopTranslator(context);
 			public void finished(TaskEvent e) {
 				if (e.getKind() == TaskEvent.Kind.ANALYZE) {
 					try {
-						chk.scanToplevel((JCCompilationUnit) e.getCompilationUnit());
+						topTranslator.scanToplevel((JCCompilationUnit) e.getCompilationUnit());
 					} catch (CheckException _) { } catch (Throwable ex) {
 						SPrinter.err(ex);
 					}

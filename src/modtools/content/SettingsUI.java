@@ -55,6 +55,7 @@ public class SettingsUI extends Content {
 
 	public SettingsUI() {
 		super("settings");
+		alwaysLoad = true;
 	}
 
 	/** 将加载项添加到Load部分的表格中 */
@@ -105,7 +106,7 @@ public class SettingsUI extends Content {
 			// 在这里构建“加载”区域的内容
 			// addLoadCheck 会直接将复选框添加到 t (即 TotalLazyTable 的内部 Table)
 			all.forEach(contentModule -> {
-				if (!(contentModule instanceof SettingsUI)) {
+				if (!contentModule.alwaysLoad) {
 					addLoadCheck(t, contentModule);
 				}
 			});

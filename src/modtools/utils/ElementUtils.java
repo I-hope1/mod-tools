@@ -107,7 +107,6 @@ public interface ElementUtils {
 	}
 	static void quietScreenshot(Element element) {
 		// ui.update();
-		ScreenSampler.pause();
 		INFO_DIALOG.dialog(screenshot(element, true, (region, pixmap) -> {
 			Fi fi = screenshotDirectory.child(
 			 Optional.ofNullable(element.name)
@@ -117,7 +116,6 @@ public interface ElementUtils {
 
 			Core.app.post(() -> ui.showInfoFade(Core.bundle.format("screenshot", fi.path())));
 		}));
-		ScreenSampler._continue();
 		// Time.runTask(30, w::hide);
 	}
 	static TextureRegion screenshot(Element element, Cons2<TextureRegion, Pixmap> callback) {

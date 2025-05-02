@@ -1,7 +1,7 @@
 
 package modtools.ui;
 
-import arc.*;
+import arc.Core;
 import arc.Graphics.Cursor;
 import arc.Graphics.Cursor.SystemCursor;
 import arc.backend.sdl.SdlGraphics.SdlCursor;
@@ -16,8 +16,6 @@ import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.*;
-import arc.scene.ui.Button;
-import arc.scene.ui.ScrollPane;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -34,7 +32,6 @@ import modtools.content.debug.Tester;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.struct.LazyValue;
 import modtools.ui.TopGroup.*;
-import modtools.ui.comp.Window;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.*;
 import modtools.ui.control.HopeInput;
@@ -52,8 +49,6 @@ import java.util.regex.Pattern;
 import static arc.Core.graphics;
 import static mindustry.Vars.*;
 import static modtools.IntVars.mouseVec;
-import static modtools.graphics.MyShaders.baseShader;
-import static modtools.ui.effect.ScreenSampler.bufferCaptureAll;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 
 @SuppressWarnings("UnusedReturnValue")
@@ -938,7 +933,7 @@ public class IntUI {
 		}
 		public void drawFocus(Element elem) {
 			super.drawFocus(elem);
-			Draw.blit(bufferCaptureAll(getAbsolutePos(elem), elem), baseShader);
+			// Draw.blit(ScreenSampler(getAbsolutePos(elem), elem), baseShader);
 		}
 		public void elemDraw() { }
 		public void endDraw() {

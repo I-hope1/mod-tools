@@ -8,9 +8,8 @@ import arc.math.geom.Vec2;
 import arc.util.*;
 import mindustry.graphics.Pal;
 import modtools.events.E_Blur;
+import modtools.struct.LazyValue;
 import modtools.ui.MyFonts;
-
-import static arc.Core.graphics;
 
 public class MyDraw {
 	public static void dashLine(float thick, Color color, float x, float y, float x2, float y2, int segments) {
@@ -55,15 +54,16 @@ public class MyDraw {
 		square(x, y, radius, 45, thick, color);
 	}
 
-	static final DrawEffect blur = new EBBlur();
+
+	static final LazyValue<DrawEffect> blur = LazyValue.of(EBBlur::new);
 
 	// static ObjectMap<String, Seq<Runnable>> draws = new ObjectMap<>();
 	public static void blurRect(float x, float y, float w, float h) {
 		if (!isBlurEnable()) return;
 		// draws.get("blur", Seq::new).add(draw);
-		blur.resize(graphics.getWidth(), graphics.getHeight());
-		blur.capture(x, y, w, h);
-		blur.render();
+		blur.get().resize((int) w, (int) h);
+		blur.get().capture(x, y, w, h);
+		blur.get().render();
 		Draw.flush();
 	}
 	public static boolean isBlurEnable() {

@@ -1,117 +1,149 @@
 package modtools.ui.effect;
 
+import arc.Core;
 import arc.Events;
-import arc.graphics.*;
+import arc.graphics.Color;
+import arc.graphics.GL30;
+import arc.graphics.Gl;
 import arc.graphics.g2d.Draw;
 import arc.graphics.gl.FrameBuffer;
-import arc.math.Mat;
-import arc.math.geom.Vec2;
-import arc.scene.Element;
-import arc.util.Tmp;
-import mindustry.game.EventType.Trigger;
-import modtools.*;
-import modtools.events.E_Blur;
-import modtools.graphics.MyShaders;
-import modtools.utils.*;
+import arc.graphics.gl.Shader;
+import arc.util.serialization.Jval;
+import mindustry.game.EventType;
 
-import static arc.Core.graphics;
+import java.lang.reflect.Field;
 
+import static modtools.graphics.MyShaders.baseShader;
+
+/** @author EBwilson  */
 public class ScreenSampler {
-	private static final FrameBuffer BUFFER = new FrameBuffer();
+  private static FrameBuffer worldBuffer, uiBuffer;
 
-	private static final Runnable flashRun = () -> {
-		if (BUFFER.isBound()) {
-			BUFFER.end();
-			// Log.info("????");
-			ElementUtils.clearScreen();
-			BUFFER.blit(MyShaders.baseShader);
-		}
+  private static FrameBuffer currBuffer;
+  private static boolean activity;
 
-		if (!isEnabled()) return;
-		BUFFER.begin(Color.clear);
-	};
-	private static boolean isEnabled() {
-		return E_Blur.enabled.enabled();
-	}
+  public static void resetMark() {
+    Core.settings.remove("sampler.setup");
+  }
+  public static void setup() {
+    if (activity) throw new RuntimeException("forbid setup sampler twice");
 
-	public static void init() {
-		/* 初始化buffer */
-		BUFFER.begin(Color.clear);
-		ElementUtils.clearScreen();
-		BUFFER.end();
+    Jval e = Jval.read(Core.settings.getString("sampler.setup", "{enabled: false}"));
 
-		BUFFER.resize(graphics.getWidth(), graphics.getHeight());
-		IntVars.addResizeListener(() -> {
-			BUFFER.resize(graphics.getWidth(), graphics.getHeight());
-		});
+    if (!e.getBool("enabled", false)) {
+      e = Jval.newObject();
+      e.put("enabled", true);
+      e.put("className",  ScreenSampler.class.getName());
+      e.put("worldBuffer", "worldBuffer");
+      e.put("uiBuffer", "uiBuffer");
 
-		Events.run(Trigger.uiDrawEnd, Tools.delegate(flashRun, ModTools::isDisposed));
-	}
+      worldBuffer = new FrameBuffer();
+      uiBuffer = new FrameBuffer();
 
-	public static Texture getSampler() {
-		/* if (!BUFFER_SCREEN.isBound()) {
-			BUFFER_SCREEN.begin(Color.clear);
-			BUFFER_SCREEN.end();
-		} */
-		Draw.flush();
-		return BUFFER.getTexture();
-	}
-	/* static FrameBuffer pingpong1 = new FrameBuffer();
-	public static Texture getSampler0() {
-		pingpong1.resize(graphics.getWidth(), graphics.getHeight());
-		pingpong1.begin(Color.clear);
-		BUFFER_SCREEN.blit(MyShaders.baseShader);
-		pingpong1.end();
-		return pingpong1.getTexture();
-	} */
+      Core.settings.put("sampler.setup", e.toString());
 
-	public static void pause() {
-		/* pingpong1.resize(BUFFER_SCREEN.getWidth(), BUFFER_SCREEN.getHeight());
-		pingpong1.begin(Color.clear);
-		BUFFER_SCREEN.blit(MyShaders.baseShader);
-		pingpong1.end(); */
-		// FrameBuffer.unbind();
-		BUFFER.end();
-	}
-	public static void _continue() {
-		if (!isEnabled()) return;
-		// Draw.flush();
-		BUFFER.begin();
-	}
+      Events.run(EventType.Trigger.preDraw, ScreenSampler::beginWorld);
+      Events.run(EventType.Trigger.postDraw, ScreenSampler::endWorld);
 
-	private static final FrameBuffer buffer = new FrameBuffer();
+      Events.run(EventType.Trigger.uiDrawBegin, ScreenSampler::beginUI);
+      Events.run(EventType.Trigger.uiDrawEnd, ScreenSampler::endUI);
+    }
+    else {
+      String className = e.getString("className");
+      String worldBufferName = e.getString("worldBuffer");
+      String uiBufferName = e.getString("uiBuffer");
+      try {
+        Class<?> clazz = Class.forName(className);
+        Field worldBufferField = clazz.getDeclaredField(worldBufferName);
+        Field uiBufferField = clazz.getDeclaredField(uiBufferName);
+        worldBufferField.setAccessible(true);
+        uiBufferField.setAccessible(true);
+        worldBuffer = (FrameBuffer) worldBufferField.get(null);
+        uiBuffer = (FrameBuffer) uiBufferField.get(null);
 
-	public static Texture bufferCaptureAll(Vec2 pos, Element element) {
-		float lastX = element.x, lastY = element.y;
-		element.x = pos.x;
-		element.y = pos.y;
-		buffer.resize(graphics.getWidth(), graphics.getHeight());
-		buffer.begin(Color.clear);
-		Draw.reset();
-		// Tools.clearScreen();
-		element.draw();
-		buffer.end();
-		element.x = lastX;
-		element.y = lastY;
-		return buffer.getTexture();
-	}
+        Events.run(EventType.Trigger.preDraw, () -> currBuffer = worldBuffer);
+        Events.run(EventType.Trigger.postDraw, () -> currBuffer = null);
+        Events.run(EventType.Trigger.uiDrawBegin, () -> currBuffer = uiBuffer);
+        Events.run(EventType.Trigger.uiDrawEnd, () -> currBuffer = null);
+      } catch (ClassNotFoundException|NoSuchFieldException|IllegalAccessException ex) {
+        throw new RuntimeException(ex);
+      }
+    }
+    activity = true;
+  }
 
-	static Mat mat = new Mat();
-	/** 图片反着的 */
-	public static Texture bufferCapture(Element element) {
-		Gl.flush();
+  private static void beginWorld(){
+    currBuffer = worldBuffer;
+    worldBuffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
+    worldBuffer.begin(Color.clear);
+  }
+  private static void endWorld(){
+    currBuffer = null;
+    worldBuffer.end();
+  }
 
-		Tmp.m1.set(Draw.proj());
-		mat.setOrtho(element.x, element.y, element.getWidth(), element.getHeight());
-		Draw.proj(mat);
-		buffer.resize((int) element.getWidth(), (int) element.getHeight());
-		buffer.begin(Color.clear);
-		Draw.reset();
-		// Tools.clearScreen();
-		element.draw();
-		buffer.end();
-		Draw.proj(Tmp.m1);
-		return buffer.getTexture();
-	}
+  private static void beginUI(){
+    currBuffer = uiBuffer;
+    uiBuffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
+    uiBuffer.begin(Color.clear);
+    blitBuffer(worldBuffer, uiBuffer);
+  }
 
+  private static void endUI(){
+    currBuffer = null;
+    uiBuffer.end();
+    blitBuffer(uiBuffer, null);
+  }
+
+  /**将当前的屏幕纹理使用传入的着色器绘制到屏幕上*/
+  public static void blit(Shader shader) {
+    blit(shader, 0);
+  }
+
+  /**将当前的屏幕纹理使用传入的着色器绘制到屏幕上
+   * @param unit 屏幕采样纹理绑定的纹理单元*/
+  public static void blit(Shader shader, int unit) {
+    if (currBuffer == null) throw new IllegalStateException("currently no buffer bound");
+
+    currBuffer.getTexture().bind(unit);
+    Draw.blit(shader);
+  }
+
+  private static void blitBuffer(FrameBuffer from, FrameBuffer to){
+    if (Core.gl30 == null) {
+      from.blit(baseShader);
+    }
+    else {
+      Gl.bindFramebuffer(GL30.GL_READ_FRAMEBUFFER, from.getFramebufferHandle());
+      Gl.bindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, to == null? 0: to.getFramebufferHandle());
+      Core.gl30.glBlitFramebuffer(
+          0, 0, from.getWidth(), from.getHeight(),
+          0, 0,
+          to == null? Core.graphics.getWidth(): to.getWidth(),
+          to == null? Core.graphics.getHeight(): to.getHeight(),
+          Gl.colorBufferBit, Gl.nearest
+      );
+    }
+  }
+
+  /**将当前屏幕纹理转存到一个{@linkplain FrameBuffer 帧缓冲区}，这将成为一份拷贝，可用于暂存屏幕内容
+   *
+   * @param target 用于转存屏幕纹理的目标缓冲区
+   * @param clear 在转存之前是否清空帧缓冲区*/
+  public static void getToBuffer(FrameBuffer target, boolean clear){
+    if (currBuffer == null) throw new IllegalStateException("currently no buffer bound");
+
+    if (clear) target.begin(Color.clear);
+    else target.begin();
+
+    Gl.bindFramebuffer(GL30.GL_READ_FRAMEBUFFER, currBuffer.getFramebufferHandle());
+    Gl.bindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, target.getFramebufferHandle());
+    Core.gl30.glBlitFramebuffer(
+        0, 0, currBuffer.getWidth(), currBuffer.getHeight(),
+        0, 0, target.getWidth(), target.getHeight(),
+        Gl.colorBufferBit, Gl.nearest
+    );
+
+    target.end();
+  }
 }

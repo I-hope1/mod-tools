@@ -139,9 +139,9 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		Draw.color();
 		Draw.alpha(0.7f);
-		ScreenSampler.pause();
+		// ScreenSampler.pause();
 		drawPad(drawPadElem, vec2);
-		ScreenSampler._continue();
+		// ScreenSampler._continue();
 	}
 	private void drawTask(float z, Consumer<ResidentDrawTask> drawTaskCons) {
 		Draw.draw(z, runT(() -> drawResidentTasks.forEach(drawTaskCons)));
@@ -156,7 +156,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		boolean top = mouse.y < height / 2f;
 		Tmp.v1.y = top ? height - selected.getHeight() : 0;
 
-		Draw.rect(Draw.wrap(ScreenSampler.bufferCapture(selected)),
+		Draw.rect(Draw.wrap(BufferCapturer.bufferCapture(selected)),
 		 Tmp.v1.x + selected.getWidth() / 2f,
 		 Tmp.v1.y + selected.getHeight() / 2f,
 		 selected.getWidth(),
@@ -268,7 +268,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			}
 		});
 
-		Core.app.post(() -> ScreenSampler.init());
+		Core.app.post(() -> ScreenSampler.setup());
 	}
 
 	public Seq<Window> acquireShownWindows() {

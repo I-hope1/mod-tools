@@ -1,5 +1,6 @@
 package modtools.ui.effect;
 
+import arc.Core;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
@@ -54,7 +55,7 @@ public class EBBlur implements DrawEffect {
 	}
 
 	Shader      blurShader;
-	FrameBuffer buffer, pingpong;
+	FrameBuffer buffer, pingpong, screen;
 
 	boolean capturing;
 
@@ -70,6 +71,7 @@ public class EBBlur implements DrawEffect {
 
 		buffer = new FrameBuffer();
 		pingpong = new FrameBuffer();
+		screen = new FrameBuffer();
 
 		blurShader.bind();
 		blurShader.setUniformi("u_texture0", 0);
@@ -203,12 +205,14 @@ public class EBBlur implements DrawEffect {
 		Gl.disable(Gl.depthTest);
 		Gl.depthMask(false);
 
-		ScreenSampler.pause();
+		screen.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
+		ScreenSampler.getToBuffer(screen, true);
+		screen.getTexture().bind(1);
 		pingpong.begin();
 		blurShader.bind();
 		blurShader.setUniformf("dir", blurSpace, 0f);
 		blurShader.setUniformf("def_alpha", 1);
-		ScreenSampler.getSampler().bind(1);
+		screen.getTexture().bind(1);
 		Draw.shader();
 		buffer.blit(blurShader);
 		pingpong.end();
@@ -220,7 +224,6 @@ public class EBBlur implements DrawEffect {
 
 		Gl.enable(Gl.blend);
 		Gl.blendFunc(Gl.srcAlpha, Gl.oneMinusSrcAlpha);
-		ScreenSampler._continue();
 		buffer.blit(blurShader);
 	}
 }

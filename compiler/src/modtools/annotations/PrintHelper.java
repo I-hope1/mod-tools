@@ -52,7 +52,7 @@ public interface PrintHelper {
 			PrintWriter  pw = new PrintWriter(sw);
 			th.printStackTrace(pw);
 			String s = sw.toString();
-			errs(s);
+			errs("[MISC]:" + s);
 
 			Replace.log.error(SPrinter.err(s));
 			Replace.compiler.shouldStopPolicyIfError = CompileState.INIT;

@@ -39,6 +39,7 @@ import java.util.Arrays;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
+import static modtools.unsupported.HopeProcessor.LABEL;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
@@ -99,6 +100,7 @@ public class ModTools extends Mod {
 		if (TEST) {
 			World w = SampleWorldInterface.changeClass(new World());
 		}
+		INFO_DIALOG.dialog(LABEL."aaa\{Color.pink}2290\{Color.sky}sky");
 	}
 
 	private void loadCore() {

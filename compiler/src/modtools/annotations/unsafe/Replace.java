@@ -7,8 +7,8 @@ import com.sun.tools.javac.code.Directive.ExportsDirective;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Lint.LintCategory;
 import com.sun.tools.javac.code.Source.Feature;
-import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
@@ -16,17 +16,19 @@ import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.model.JavacElements;
+import com.sun.tools.javac.processing.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
 import modtools.annotations.PrintHelper.SPrinter;
 import modtools.annotations.unsafe.TopTranslator.CheckException;
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
 import java.io.*;
@@ -54,6 +56,7 @@ public class Replace {
 	static ModuleFinder  moduleFinder;
 	static JavacMessages messages;
 	static Analyzer      analyzer;
+	static JavacFiler    filer;
 
 	public static JavaCompiler compiler;
 	public static Log          log;
@@ -95,6 +98,10 @@ public class Replace {
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }
+	}
+	public static void extendingFunc(ProcessingEnvironment processingEnv) {
+		filer = (JavacFiler) processingEnv.getFiler();
+		extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
 	}
 
 	public static final HashMap<ModuleSymbol, ClassSymbol> moduleRepresentClass = new HashMap<>();

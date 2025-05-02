@@ -1,6 +1,7 @@
 package modtools.annotations.unsafe;
 
 import com.sun.source.doctree.*;
+import com.sun.source.tree.ReturnTree;
 import com.sun.source.util.DocTreePath;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
@@ -31,7 +32,7 @@ public class TopTranslator extends TreeTranslator {
 	}
 	public boolean inAnnotation(Class<? extends Annotation> annoType) {
 		return currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null
-		 || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
+		       || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
 	}
 	public static class Todo {
 		public Predicate<JCTree>        predicate;
@@ -65,8 +66,8 @@ public class TopTranslator extends TreeTranslator {
 		return translator;
 	}
 	public JCCompilationUnit toplevel;
-	public JCClassDecl currentClass;
-	public JCMethodDecl currentMethod;
+	public JCClassDecl       currentClass;
+	public JCMethodDecl      currentMethod;
 
 	public void scanToplevel(JCCompilationUnit toplevel) {
 		this.toplevel = toplevel;
@@ -147,21 +148,24 @@ public class TopTranslator extends TreeTranslator {
 	}
 	public int localVarIndex = 0;
 	public LetExpr translateMethodBlockToLetExpr(JCMethodDecl methodDecl, Symbol owner) {
-		if (methodDecl.sym.getReturnType() == symtab.voidType) {
+		return translateBlockToLetExpr(methodDecl.body, methodDecl.sym.getReturnType(), owner);
+	}
+	/** 必须在Attr之后  */
+	public LetExpr translateBlockToLetExpr(JCBlock block, Type returnType, Symbol owner) {
+		if (returnType == symtab.voidType) {
 			throw new IllegalArgumentException("methodDecl is void method");
 		}
-		maker.at(methodDecl);
+		maker.at(block);
 		ListBuffer<JCStatement> defs      = new ListBuffer<>();
-		VarSymbol               varSymbol = new VarSymbol(0, names.fromString("$$letexper$$" + ++localVarIndex), methodDecl.sym.getReturnType(), owner);
-		defs.add(maker.VarDef(varSymbol, defaultValue(methodDecl.sym.getReturnType())));
-		new TreeScanner() {
-			public void visitReturn(JCReturn tree) {
-				super.visitReturn(tree);
-				defs.add(maker.Exec(maker.Assign(maker.Ident(varSymbol), tree.expr)));
+		VarSymbol               varSymbol = new VarSymbol(0, names.fromString("$$letexper$$" + ++localVarIndex), returnType, owner);
+		defs.add(maker.VarDef(varSymbol, defaultValue(returnType)));
+		defs.appendList(new TreeCopier<Void>(maker) {
+			public JCTree visitReturn(ReturnTree node, Void unused) {
+				return maker.Exec(maker.Assign(maker.Ident(varSymbol), (JCExpression) node.getExpression()));
 			}
-		}.scan(methodDecl.body);
+		}.copy(block.stats));
 		LetExpr letExpr = maker.LetExpr(defs.toList(), maker.Ident(varSymbol));
-		letExpr.type = methodDecl.sym.getReturnType();
+		letExpr.type = returnType;
 		return letExpr;
 	}
 

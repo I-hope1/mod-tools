@@ -163,11 +163,15 @@ public class IntTab {
 			int   j = i;
 			title.button(b -> {
 				if (first == null) first = b;
-				labels.put(names[j], b.add(new TitleLabel(
-					() -> hideTitle ? "" : names[j],
-					icons == null ? null : icons[j]
-				 )).color(colors[j]).padLeft(4f)
-				 .padRight(4f).minWidth(28).growY().get());
+				TitleLabel label = new TitleLabel(
+				 () -> hideTitle ? "" : names[j],
+				 icons == null ? null : icons[j]
+				);
+				labels.put(names[j], label);
+				Image iconImg = new Image();
+				b.stack(iconImg.update(() -> iconImg.setDrawable(icons[j])),
+					label).padLeft(4f)
+				 .padRight(4f).minWidth(28).growY();
 				b.row();
 				Cell<Image> image = b.image().growX();
 				b.update(() -> {

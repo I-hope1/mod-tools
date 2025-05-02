@@ -1,6 +1,7 @@
 package modtools.unsupported;
 
 import arc.func.Cons;
+import arc.graphics.Color;
 import arc.struct.ObjectMap;
 import arc.util.*;
 import arc.util.serialization.JsonValue;
@@ -9,10 +10,11 @@ import mindustry.mod.ContentParser;
 import modtools.annotations.asm.Inline;
 import modtools.annotations.asm.Sample.SampleTemp.Template;
 import modtools.ui.IntUI;
+import modtools.ui.comp.input.ExtendingLabel;
 import modtools.utils.reflect.HopeReflect;
 
 import java.lang.StringTemplate.Processor;
-import java.util.Properties;
+import java.util.*;
 
 @SuppressWarnings("StringTemplateMigration")
 // @DebugMark
@@ -26,7 +28,20 @@ public class HopeProcessor {
 	 **/
 	public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
 
-	public static final Processor<String, RuntimeException> S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
+	public static final Processor<String, RuntimeException>         S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
+	public static final Processor<ExtendingLabel, RuntimeException> LABEL = template -> {
+		List<String>   fragments    = template.fragments();
+		ExtendingLabel label        = new ExtendingLabel(String.join("", fragments));
+		List<Object>   values       = template.values();
+		int            currentIndex = 0;
+		for (int i = 0, fragmentsSize = fragments.size(); i < fragmentsSize; i++) {
+			String fragment = fragments.get(i);
+			label.colorMap.put(currentIndex, new Color((Color) values.get(i)));
+			currentIndex += fragment.length();
+			label.colorMap.put(currentIndex, Color.white);
+		}
+		return label;
+	};
 
 	public static class Wrapper {
 		/** @see mindustry.mod.ContentParser#read(Runnable) */

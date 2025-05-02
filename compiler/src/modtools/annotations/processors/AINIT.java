@@ -1,7 +1,6 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.processing.JavacProcessingEnvironment;
 import modtools.annotations.*;
 import modtools.annotations.unsafe.Replace;
 
@@ -27,7 +26,7 @@ public class AINIT extends AbstractProcessor {
 
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		try {
-			Replace.extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
+			Replace.extendingFunc(processingEnv);
 		} catch (Throwable e) {
 			err(e);
 		} finally {

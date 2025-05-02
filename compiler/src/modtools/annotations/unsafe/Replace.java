@@ -463,6 +463,7 @@ public class Replace {
 	public static void process(Set<? extends Element> rootElements) {
 		try {
 			Times.mark();
+			desugarStringTemplate.thenRuns.clear();
 			rootElements.forEach(element -> {
 				TreePath path = trees.getPath(element);
 				if (path == null) return;
@@ -474,6 +475,7 @@ public class Replace {
 				desugarStringTemplate.translateTopLevelClass(unit, cdef);
 				desugarRecord.translateTopLevelClass(unit, cdef);
 			});
+			desugarStringTemplate.thenRuns.forEach(Runnable::run);
 		} catch (Throwable e) {
 			err(e);
 		} finally {

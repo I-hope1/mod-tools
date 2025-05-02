@@ -96,7 +96,6 @@ public class DebugLogProc extends BaseProcessor<Symbol> {
 
 
 				// 6. Return the newly constructed method invocation tree
-				println(newMethodInvocation);
 				return newMethodInvocation;
 			} catch (Exception e) {
 				// Log errors during transformation attempt

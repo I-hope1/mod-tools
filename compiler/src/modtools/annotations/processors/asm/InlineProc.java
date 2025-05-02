@@ -44,7 +44,9 @@ public class InlineProc extends BaseProcessor<MethodSymbol> {
 				return null;
 			}
 			JCMethodDecl methodDecl = trees.getTree(methodSymbol);
-			return translator.translateMethodBlockToLetExpr(methodDecl, sym.owner);
+			LetExpr      letExpr    = translator.translateMethodBlockToLetExpr(methodDecl, sym);
+			println(letExpr);
+			return letExpr;
 		}));
 	}
 

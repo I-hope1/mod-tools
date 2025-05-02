@@ -34,6 +34,7 @@ public class TopTranslator extends TreeTranslator {
 		return currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null
 		       || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
 	}
+	// public static JCTree stripSign = new JCErroneous(List.nil()) { };
 	public static class Todo {
 		public Predicate<JCTree>        predicate;
 		public Function<JCTree, JCTree> treeTrans;
@@ -48,6 +49,12 @@ public class TopTranslator extends TreeTranslator {
 		public <T extends JCTree> Todo(Class<T> cls, Function<T, JCTree> treeTrans) {
 			this(cls::isInstance, treeTrans);
 		}
+		/* public Todo(Symbol skipElement) {
+			this(element -> true, tree -> {
+				if (TopTranslator.isEquals(skipElement, TreeInfo.symbolFor(tree))) return stripSign;
+				return null;
+			});
+		} */
 	}
 
 	private TopTranslator(Context context) {
@@ -150,7 +157,7 @@ public class TopTranslator extends TreeTranslator {
 	public LetExpr translateMethodBlockToLetExpr(JCMethodDecl methodDecl, Symbol owner) {
 		return translateBlockToLetExpr(methodDecl.body, methodDecl.sym.getReturnType(), owner);
 	}
-	/** 必须在Attr之后  */
+	/** 必须在Attr之后 */
 	public LetExpr translateBlockToLetExpr(JCBlock block, Type returnType, Symbol owner) {
 		if (returnType == symtab.voidType) {
 			throw new IllegalArgumentException("methodDecl is void method");

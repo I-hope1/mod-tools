@@ -1,9 +1,10 @@
 package modtools.ui.comp.input;
 
 import arc.func.*;
-import arc.graphics.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.geom.Point2;
+import arc.scene.style.Drawable;
 import arc.struct.Seq;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
@@ -105,18 +106,20 @@ public class ExtendingLabel extends InlineLabel {
 		// 添加icon
 		icon((x, y, w, h) -> { }) {
 			void draw(DrawRun run, float x, float y, float w, float h) {
-				if (!(run.data instanceof TextureRegion region)) {
-					throw new IllegalArgumentException("data must be TextureRegion.");
+				if (run.data instanceof TextureRegion region) {// 保持宽高比绘制图标
+					float radio = (float) region.width / region.height;
+					// 图标不能超出范围
+					if (w > h * radio) {
+						w = h * radio;
+					} else if (h > w / radio) {
+						h = w / radio;
+					}
+					Draw.rect(region, x + w / 2f, y + h / 2f, w, h);
+				} else if (run.data instanceof Drawable drawable) {
+					drawable.draw(x, y, w, h);
+				} else {
+					throw new IllegalArgumentException("data must be TextureRegion or Drawable.");
 				}
-				// 保持宽高比绘制图标
-				float radio = (float) region.width / region.height;
-				// 图标不能超出范围
-				if (w > h * radio) {
-					w = h * radio;
-				} else if (h > w / radio) {
-					h = w / radio;
-				}
-				Draw.rect(region, x + w / 2f, y + h / 2f, w, h);
 			}
 		},
 		;

@@ -3,7 +3,6 @@ package modtools;
 
 import arc.*;
 import arc.files.Fi;
-import arc.graphics.Color;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
@@ -37,9 +36,9 @@ import modtools.utils.world.WorldDraw;
 
 import java.util.Arrays;
 
+import static arc.graphics.Color.sky;
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
-import static modtools.unsupported.HopeProcessor.LABEL;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
@@ -100,7 +99,6 @@ public class ModTools extends Mod {
 		if (TEST) {
 			World w = SampleWorldInterface.changeClass(new World());
 		}
-		INFO_DIALOG.dialog(LABEL."aaa\{Color.pink}2290\{Color.sky}sky");
 	}
 
 	private void loadCore() {
@@ -199,6 +197,10 @@ public class ModTools extends Mod {
 			load("Updater", Updater::checkUpdate);
 		}
 
+		// INFO_DIALOG.dialog(
+		//  LABEL."aaa\{pink}2290\{sky}sky\n\{UnitTypes.alpha.fullIcon}Map");
+
+
 		// new MapEditor<>("MapEditor", new JsonReader().parse("""
 		//  [{"key": "133", "value": "134"},
 		//  {"key": "1asas33", "value": "13sa4"}]
@@ -219,7 +221,7 @@ public class ModTools extends Mod {
 
 		if (false) {
 			INFO_DIALOG.dialog(new ExtendingLabel("1ijo\noaai") {{
-				addDrawRun(0, 4, DrawType.wave, Color.sky);
+				addDrawRun(0, 4, DrawType.wave, sky);
 			}});
 		}
 

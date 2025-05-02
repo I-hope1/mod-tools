@@ -16,11 +16,8 @@ import com.sun.tools.javac.util.List;
 import modtools.annotations.HopeReflect;
 
 import javax.lang.model.element.TypeElement;
-import javax.tools.JavaFileObject;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static modtools.annotations.PrintHelper.SPrinter.*;
 
@@ -36,6 +33,8 @@ public class DesugarStringTemplate extends TreeTranslator {
 	final Log           log;
 	final JavacElements elements;
 	final TopTranslator topTranslator;
+
+	int lastID = 0;
 
 	public DesugarStringTemplate(Context context) {
 		filer = Replace.filer;
@@ -66,15 +65,12 @@ public class DesugarStringTemplate extends TreeTranslator {
 				return;
 			}
 			JCVariableDecl paramFrag = null, paramExp = null;
-			JCMethodDecl   interpolateMethod;
-			JCClassDecl    genClassDecl;
 			if (lambda.body instanceof JCBlock block) {
 				block.pos = template.pos;
 
 				ClassType listType = (ClassType) syms.listType.constType(1);
 				listType.typarams_field = List.nil();
 				paramFrag = make.Param(names.fromString("$fragments"), listType, null);
-				println(paramFrag);
 				paramExp = make.Param(names.fromString("$expressions"), listType, null);
 			}
 			Name           parmaName      = lambda.params.get(0).name;
@@ -89,12 +85,12 @@ public class DesugarStringTemplate extends TreeTranslator {
 					make.at(invocation);
 					if (invocation.toString().equals(parmaName + ".interpolate()")) {
 						return concatExpression(template.fragments, template.expressions);
-					} else if (invocation.toString().startsWith(parmaName + ".fragments().get(")) {
+					} else if (finalParmaFrag == null && invocation.toString().startsWith(parmaName + ".fragments().get(")) {
 						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer)) {
 							throw new IllegalArgumentException("" + invocation);
 						}
 						return makeString(template.fragments.get(integer));
-					} else if (invocation.toString().startsWith(parmaName + ".values().get(")) {
+					} else if (finalParmaExp == null && invocation.toString().startsWith(parmaName + ".values().get(")) {
 						if (!(invocation.args.get(0) instanceof JCLiteral literal && literal.value instanceof Integer integer)) {
 							throw new IllegalArgumentException("" + invocation);
 						}
@@ -106,21 +102,48 @@ public class DesugarStringTemplate extends TreeTranslator {
 					}
 					return super.visitMethodInvocation(node, v);
 				}
-				public JCTree visitVariable(VariableTree node, Void unused) {
+				/* public JCTree visitVariable(VariableTree node, Void unused) {
 					return super.visitVariable(node, unused).setType(((JCExpression) node.getInitializer()).type);
-				}
+				} */
 			}
 			var interpolate = new InterpolateToConcat(make);
 			result = interpolate.copy(lambda.body);
+
+			JCClassDecl classDecl1 = trees.getTree((TypeElement) varSym.owner);
+
 			if (result instanceof JCBlock block) {
 				make.at(template);
-				String className = varSym.owner.flatName() + "$" + variableDecl.name;
-				String classSimpleName = varSym.owner.name + "$" + variableDecl.name;
-				String classDecl = STR."""
-					\{toplevel.getImports().stream().map(String::valueOf).collect(Collectors.joining())}
+				String classSimpleName = "_" + variableDecl.name;
+				// String       className       = varSym.packge() + "." + classSimpleName;
+				String       methodName = "interpolate" + lastID++;
+				JCMethodDecl interpolateMethod;
+				JCClassDecl  genClassDecl;
+
+				// 在varSym.owner中创建内部类
+				interpolateMethod = make.MethodDef(
+				 make.Modifiers(Flags.PUBLIC | Flags.STATIC),
+				 names.fromString(methodName),
+				 make.Ident(template.type.tsym).setType(template.type),
+				 List.nil(),
+				 List.of(paramFrag, paramExp),
+				 List.nil(),
+				 block,
+				 null
+				);
+				// genClassDecl = make.ClassDef(
+				//  make.Modifiers(Flags.PUBLIC | Flags.STATIC),
+				//  names.fromString(classSimpleName),
+				//  List.nil(),
+				//  null,
+				//  List.nil(),
+				//  List.of(interpolateMethod));
+				classDecl1.defs = classDecl1.defs.append(interpolateMethod);
+				/* String classDecl = STR."""
+					\{trees.getPath(varSym).getCompilationUnit().getImports().stream().map(String::valueOf).collect(Collectors.joining())}
 				  public class \{classSimpleName} {
-				 			public static \{template.type} $interpolate(\{paramFrag}, \{paramExp}) \{block}
-				 	}""";
+				 			public static \{template.type} \{methodName}(\{paramFrag}, \{paramExp}) \{block}
+				 	}
+				 """;
 				JavaFileObject sourceFile;
 				try {
 					sourceFile = filer.createSourceFile(className);
@@ -132,27 +155,40 @@ public class DesugarStringTemplate extends TreeTranslator {
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
-				// 创建一个类
-				ClassSymbol classSymbol = syms.enterClass(syms.unnamedModule, names.fromString(className), (TypeSymbol) varSym.owner);
-				// Completer      prev   = classSymbol.completer;
-				interpolateMethod = makeMethod("$interpolate", List.of(paramFrag, paramExp),
-				 template.type, block, classSymbol);
-				JCClassDecl varOwner = trees.getTree((TypeElement) varSym.owner);
-				varOwner.defs = varOwner.defs.append(genClassDecl = make.ClassDef(
-				 make.Modifiers(classSymbol.flags()), classSymbol.name,
-				 List.nil(), null, List.nil(), List.of(interpolateMethod)));
-				// classSymbol.completer = prev;
-				// classSymbol.members().enter(interpolateMethod.sym);
-				genClassDecl.sym = classSymbol;
-				result = make.Apply(List.nil(), make.Select(make.QualIdent(genClassDecl.sym), interpolateMethod.sym), List.of(makeStringList(template.fragments), makeList(template.expressions)));
+				ClassSymbol sym = syms.enterClass(syms.unnamedModule, names.fromString(className));
+				sym.sourcefile = sourceFile;
+				sym.complete(); */
+
+				MethodSymbol interpolateMethodSymbol = new MethodSymbol(Flags.PUBLIC | Flags.STATIC,
+				 names.fromString(methodName),
+				 new MethodType(List.of(finalParmaFrag.type, finalParmaExp.type), template.type, List.nil(), (TypeSymbol) varSym.owner),
+				 varSym.owner);
+				finalParmaExp.sym.owner = finalParmaFrag.sym.owner = interpolateMethodSymbol;
+				// interpolateMethodSymbol.params = interpolateMethod.params.map(x -> x.sym);
+				varSym.owner.members().enter(interpolateMethodSymbol);
+
+				interpolateMethod.sym = interpolateMethodSymbol;
+				result = make.App(make.Select(make.QualIdent(varSym.owner), interpolateMethod.sym),
+				 List.of(makeStringList(template.fragments), makeList(template.expressions)));
 			}
+
+			thenRun(() -> {
+				variableDecl.vartype = make.Ident(syms.objectType.tsym);
+				variableDecl.mods.flags &= ~Flags.FINAL;
+				variableDecl.sym.flags_field &= ~Flags.FINAL;
+				variableDecl.init = null;
+			});
 			// result = ParserFactory.instance(Replace.context)
 			//  .newParser(result.toString(), false, true, true)
 			//  .parseExpression();
-			// println(result);
+			// println(result);;
 			return;
 		}
 		super.visitStringTemplate(template);
+	}
+	ArrayList<Runnable> thenRuns = new ArrayList<>();
+	private void thenRun(Runnable runnable) {
+		thenRuns.add(runnable);
 	}
 	JCTree makeIdent(JCVariableDecl variableDecl) {
 		return make.Ident(variableDecl);
@@ -231,6 +267,7 @@ public class DesugarStringTemplate extends TreeTranslator {
 		} catch (Throwable e) {
 			err(e);
 		} finally {
+			this.classDecl = null;
 			this.toplevel = null;
 		}
 	}

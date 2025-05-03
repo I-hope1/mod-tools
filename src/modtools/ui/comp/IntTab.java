@@ -255,6 +255,7 @@ public class IntTab {
 		} else {
 			targetX *= Mathf.sign(toIndex < getSelected());
 		}
+		targetX *= Mathf.sign(toIndex < getSelected());;
 
 		return Actions.parallel(
 		 HopeFx.translateTo(targetX, targetY, duration, Interp.fastSlow),

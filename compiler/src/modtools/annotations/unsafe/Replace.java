@@ -21,7 +21,7 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
-import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
+import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
@@ -36,7 +36,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.*;
-import java.util.stream.Collectors;
+import java.util.stream.*;
 
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
@@ -239,7 +239,7 @@ public class Replace {
 	private static void other() throws ClassNotFoundException, IOException {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
-		fixSyntaxError();
+		fixSyntaxErrorAndSkipInvisibleError();
 
 		// 适配d8无法编译jdk21的枚举(enum)的字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
@@ -266,27 +266,43 @@ public class Replace {
 		// setAccess(Gen.class, Gen.instance(context), "lower", lower);
 	}
 	public static final HashSet<PackageSymbol> needExportedApi = new HashSet<>();
-	public static void fixSyntaxError() {
+	public static void fixSyntaxErrorAndSkipInvisibleError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
 		ListBuffer<JCDiagnostic>  buffer  = new ListBuffer<>();
 
 		int[] positionOffset = {0};
 
+		boolean illegalStartOf = true;
+		// handler.getDiagnostics()
+		//  .stream().forEach(diag -> println(diag.getMessage(Locale.getDefault()) + ":" + getAccess(JCDiagnostic.class, diag, "flags")));
 		buffer.addAll(handler.getDiagnostics()
 		 .stream()
-		 .filter(diag -> diag.isFlagSet(DiagnosticFlag.SYNTAX))
-		 .filter(t -> {
+		 .filter(diag -> {
+			 // skip包不可见的错误
+			 if (diag.isFlagSet(DiagnosticFlag.RESOLVE_ERROR) && diag.getCode().contains("package.not.visible")) return false;
+			 if (!diag.isFlagSet(DiagnosticFlag.SYNTAX)) return true;
 			 try {
-				 JavaFileObject filer = t.getSource();
-				 String[]       args  = Arrays.stream(t.getArgs()).map(String::valueOf).toArray(String[]::new);
-				 if (args.length == 0) return true;
+				 JavaFileObject filer = diag.getSource();
+				 String[]       args  = Arrays.stream(diag.getArgs()).map(String::valueOf).toArray(String[]::new);
+				 if (args.length == 0) {
+					 if (illegalStartOf && diag.getCode().contains("illegal.start.of")) {
+						 StringBuilder target = new StringBuilder(filer.getCharContent(true));
+						 try (var input = new FileOutputStream(new File(filer.toUri()))) {
+							 input.write(target.deleteCharAt((int) diag.getPosition() + positionOffset[0]).toString().getBytes());
+							 positionOffset[0]--;
+						 }
+						 return false;
+					 }
+					 // println(diag);
+					 return true;
+				 }
 				 if (!(args[0].length() == 3 && args[0].charAt(0) == '\'' && args[0].charAt(2) == '\'')) return true;
 
 				 errs(
-					"Added " + args[0] + " at " + filer.getName() + "(" + t.getLineNumber() + ":" + t.getColumnNumber() + ")"
+					"Added " + args[0] + " at " + filer.getName() + "(" + diag.getLineNumber() + ":" + diag.getColumnNumber() + ")"
 				 );
 				 StringBuilder target = new StringBuilder(filer.getCharContent(true));
-				 int           index  = (int) t.getPosition() + positionOffset[0];
+				 int           index  = (int) diag.getPosition() + positionOffset[0];
 				 if (target.charAt(index) == ')') {
 					 target.deleteCharAt(index);
 				 } else {

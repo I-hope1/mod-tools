@@ -49,20 +49,22 @@ public class HScene {
 			sceneClass.execLambda(actTopGroup, () -> {
 				cfw.add(FLOAD_1); // load delta
 			});
-			{// Element.super.act(delta);
+			{
+				//region Element.super.act(delta);
 				// cfw.add(ALOAD_0); // load this
 				// cfw.add(FLOAD_1); // load delta
 				// cfw.addInvoke(INVOKESPECIAL, nativeName(Element.class), "act", "(F)V");
 				cfw.add(RETURN);
+				//endregion
 			}
 
 			cfw.markLabel(label);
-			{// Group.super.act(delta);
-				cfw.add(ALOAD_0); // load this
-				cfw.add(FLOAD_1); // load delta
-				cfw.addInvoke(INVOKESPECIAL, nativeName(Group.class), "act", "(F)V");
-				cfw.add(RETURN);
-			}
+			//region Group.super.act(delta);
+			cfw.add(ALOAD_0); // load this
+			cfw.add(FLOAD_1); // load delta
+			cfw.addInvoke(INVOKESPECIAL, nativeName(Group.class), "act", "(F)V");
+			cfw.add(RETURN);
+			//endregion
 			return 2; // this + parma(delta)
 		}, Modifier.PUBLIC, void.class, float.class);
 		// if (!OS.isAndroid) myClass.setFunc("<init>", (Func2) null, Modifier.PUBLIC, void.class, Scene.class);
@@ -97,8 +99,10 @@ public class HScene {
 
 			var _1         = (Object) source;
 			var superClass = _1.getClass(); // android 上由 shadow$_klass_ 决定
+			//region simpleCheck
+			if (superClass.getSimpleName().endsWith(SUFFIX)) return source;
 			try {
-				if (Modifier.isFinal(superClass.getMethod("update").getModifiers())) {
+				if (Modifier.isFinal(superClass.getModifiers()) || Modifier.isFinal(superClass.getMethod("update").getModifiers())) {
 					pauseMap.remove(superClass, 0);
 					return source;
 				}
@@ -106,7 +110,8 @@ public class HScene {
 				pauseMap.remove(superClass, 0);
 				return source;
 			}
-			if (superClass.getSimpleName().endsWith(SUFFIX)) return source;
+			//endregion
+
 			pauseMap.put(superClass, 0);
 			// 使mod-tools继续运行
 			if (source == Vars.ui) return source;
@@ -136,14 +141,14 @@ public class HScene {
 				return 1; // this
 			}, Modifier.PUBLIC, void.class);
 			var clazz = myClass.define();
-			if (OS.isAndroid) {
+			//endregion
+			if (OS.isAndroid) { // android可以直接修改类引用
 				HopeReflect.changeClass(source, clazz);
 				return source;
 			}
-			//endregion
 
 			var newVal = Tools.newInstance(source, clazz);
-			Log.info("Source: " + source + ";Val" + newVal);
+			// Log.info("Source: " + source + ";Val" + newVal);
 
 			// 找出primitive的field，并随Tools.TASKS不断替换
 			/* for (Field field : superClass.getDeclaredFields()) {

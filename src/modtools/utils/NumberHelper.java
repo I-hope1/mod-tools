@@ -13,7 +13,7 @@ import java.math.BigDecimal;
  * @see Strings
  */
 public class NumberHelper {
-	public static boolean isPositiveInt(String text) {
+	public static boolean notNegativeInt(String text) {
 		if (asInt(text) >= 0) return true;
 		float res = asFloat(text);
 		return 0 <= res && res < (float) Integer.MAX_VALUE;

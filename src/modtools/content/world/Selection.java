@@ -110,7 +110,7 @@ public class Selection extends Content {
 	public static OrderedMap<String, WFunction<?>> allFunctions = new OrderedMap<>();
 	static void intField(SelectTable t) {
 		buildValidate(t, t.row().field("0", s -> tmpAmount[0] = s)
-		 .valid(NumberHelper::isPositiveInt)
+		 .valid(NumberHelper::notNegativeInt)
 		 .get());
 	}
 	static void floatField(SelectTable t) {
@@ -243,7 +243,7 @@ public class Selection extends Content {
 				each(list, b -> b.tile.setBlock(block));
 			});
 			ListFunction("@selection.items", () -> content.items(), Selection::intField, (list, item) -> {
-				if (!NumberHelper.isPositiveInt(tmpAmount[0])) return;
+				if (!NumberHelper.notNegativeInt(tmpAmount[0])) return;
 				int amount = NumberHelper.asInt(tmpAmount[0]);
 				each(list, b -> {
 					if (b.items == null) return;

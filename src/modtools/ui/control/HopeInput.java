@@ -32,6 +32,7 @@ public class HopeInput {
 				last.set(UNSET);
 			}
 		});
+
 		Core.input.getInputMultiplexer().addProcessor(0, new InputProcessor() {
 			public boolean mouseMoved(int screenX, int screenY) {
 				mouseVec.require();
@@ -65,6 +66,7 @@ public class HopeInput {
 				return false;
 			}
 		});
+
 		HKeyCode.load();
 		try {
 			load0();

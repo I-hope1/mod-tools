@@ -233,7 +233,7 @@ public class ModTools extends Mod {
 					disposeAll();
 				}
 			});
-		}, () -> Log.info("Loaded ModTools input and ui in @ms", Time.elapsed()));
+		}, () -> Log.info("Loaded ModTools modules in @ms", Time.elapsed()));
 	}
 
 	public static void load(String moduleName, Runnable r) {
@@ -278,6 +278,7 @@ public class ModTools extends Mod {
 			}
 			bundle = bundle.getParent();
 		}
+		// jdk.internal.event.EventHelper.isLoggingSecurity();
 	}
 
 	public static ClassLoader lastLoader;

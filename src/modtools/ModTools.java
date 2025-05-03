@@ -191,6 +191,7 @@ public class ModTools extends Mod {
 		if (isDesktop() && E_Extending.import_mod_from_drop.enabled()) {
 			load("DropMod", DropFile::load);
 		}
+		load("Contents", Contents::load);
 		load("IntUI", IntUI::load);
 		load("CustomViewer", Viewers::loadCustomMap);
 

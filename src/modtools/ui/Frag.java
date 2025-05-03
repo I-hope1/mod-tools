@@ -57,7 +57,10 @@ public class Frag extends Table {
 
 		final int eachHeight = 42;
 		container = new ScrollPane(new LimitTable(table -> {
-			if (Content.all.isEmpty()) Contents.load();
+			if (Content.all.isEmpty()) {
+				Log.err("Content is empty.");
+			}
+
 			Content.all.forEach(content -> {
 				if (content == null || !content.loadable()) return;
 				enabledContents.add(content);

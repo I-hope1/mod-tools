@@ -103,9 +103,10 @@ public interface ISettings extends E_DataInterface {
 
 
 	// getter
+	/** 获取设置是否可用，如果禁用，则返回false */
 	default boolean enabled() {
 		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
-		return data().getBool(name());
+		return isSwitchOn() && data().getBool(name());
 	}
 	default void toggle() {
 		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }

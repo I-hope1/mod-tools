@@ -60,11 +60,11 @@ public class SettingsUI extends Content {
 
 	/** 将加载项添加到Load部分的表格中 */
 	private <T extends Content> void addLoadCheck(Table t, T contentModule) {
-		t.check(contentModule.localizedName(), 28, contentModule.loadable(), b -> {
-			 SETTINGS.put("load-" + contentModule.name, b);
-		 })
+		t.check(contentModule.localizedName(), 28, contentModule.loadable(), contentModule::setEnabled)
+		 .disabled(contentModule.alwaysLoad)
+		 .update(b -> b.setChecked(contentModule.loadable()))
 		 .with(b -> b.setStyle(HopeStyles.hope_defaultCheck))
-		 .left().row(); // 确保每个复选框靠左并占一行
+		 .left().get().left();
 	}
 
 	public Seq<Runnable> customSections = new Seq<>();
@@ -103,13 +103,29 @@ public class SettingsUI extends Content {
 
 		// 1. 准备 "加载" (Load) 区域
 		addSectionInternal("Load", Icon.downSmall, t -> {
+			t.button("Disable All Experimental", HopeStyles.flatBordert, () -> all.forEach(c -> {
+				if (c.experimental) c.disable();
+			})).growX().height(42).row();
+			t.button("Disable All", HopeStyles.flatBordert, () -> {
+				IntUI.showConfirm("Disable All", "Are you sure to disable all modules?", () -> {
+					all.forEach(Content::disable);
+				});
+			}).growX().height(42).row();
 			// 在这里构建“加载”区域的内容
 			// addLoadCheck 会直接将复选框添加到 t (即 TotalLazyTable 的内部 Table)
-			all.forEach(contentModule -> {
-				if (!contentModule.alwaysLoad) {
-					addLoadCheck(t, contentModule);
+			// 两列
+			t.table(Tex.pane, t2 -> {
+				t2.left().defaults().growX().left().pad(2);
+
+				final int cols = 2;
+				int       c    = 0;
+				for (Content contentModule : all) {
+					if (!contentModule.alwaysLoad) {
+						addLoadCheck(t2, contentModule);
+						if (++c % cols == 0) t2.row();
+					}
 				}
-			});
+			}).left().growX();
 		});
 
 		customSections.each(Runnable::run);

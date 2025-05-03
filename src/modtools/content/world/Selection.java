@@ -1015,7 +1015,13 @@ public class Selection extends Content {
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(20).color(build.team.color);
 				buildPos(t, build);
-				addMoreButton(t, build);
+				t.row();
+				t.table(t1 -> {
+					t1.left().defaults().left();
+					t1.add("ID: ").color(Pal.accent);
+					t1.add(build.id + "(build); " + build.block.id + "(block)").color(Color.gray).fontScale(0.6f);
+					addMoreButton(t1, build);
+				}).colspan(3);
 			}).row();
 		}
 
@@ -1035,13 +1041,22 @@ public class Selection extends Content {
 					nowUnitSize++;
 					MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(u));
 					t.left().defaults().padRight(6f).growY().left();
-					t.image(Icon.starSmall).size(10).color(u.team.color);
-					t.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
-					t.add(u.type.name).with(EventHelper::addDClickCopy);
+					t.table(t1 -> {
+						t1.left().defaults().left();
+						t1.image(Icon.starSmall).size(10).color(u.team.color);
+						t1.image(new TextureRegionDrawable(u.type.uiIcon)).size(24);
+						t1.add(u.type.name).with(EventHelper::addDClickCopy);
+						buildPos(t1, u);
+					});
 
-					buildPos(t, u);
-					// t.add("pathfind:" + u.pathType());
-					addMoreButton(t, u);
+					t.row();
+					t.table(t1 -> {
+						t1.left().defaults().left();
+						t1.add("ID: ").color(Pal.accent);
+						t1.add(u.id + "(unit); " + u.type.id + "(type)").color(Color.gray).fontScale(0.6f);
+						// t.add("pathfind:" + u.pathType());
+						addMoreButton(t1, u);
+					});
 				}).growX().row();
 			});
 		}
@@ -1062,8 +1077,13 @@ public class Selection extends Content {
 				// t.add("" + b.type).with(JSFunc::addDClickCopy);
 
 				buildPos(t, b);
-				// t.add("pathfind:" + b.pathType());
-				addMoreButton(t, b);
+				t.row();
+				t.table(t1 -> {
+					t1.left().defaults().left();
+					t1.add("ID: ").color(Pal.accent);
+					t1.add(b.id + "(bullet); " + b.type.id + "(type)").color(Color.gray).fontScale(0.6f);
+					addMoreButton(t1, b);
+				}).colspan(4);
 			}).growX().row());
 		}
 

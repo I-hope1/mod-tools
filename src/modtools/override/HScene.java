@@ -8,13 +8,14 @@ import arc.scene.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.Vars;
+import mindustry.core.*;
 import modtools.content.debug.Pause;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.ui.IntUI;
 import modtools.ui.comp.Window;
 import modtools.ui.control.HKeyCode;
 import modtools.utils.ByteCodeTools.MyClass.Lambda;
-import modtools.utils.*;
+import modtools.utils.Tools;
 import modtools.utils.reflect.*;
 import rhino.classfile.ByteCode;
 
@@ -91,6 +92,9 @@ public class HScene {
 	static void hookUpdate(Seq<ApplicationListener> appListeners) {
 		// 使用asm将侦听器替换
 		appListeners.replace(source -> {
+			if (source instanceof NetServer) return source;
+			if (source instanceof NetClient) return source;
+
 			var _1         = (Object) source;
 			var superClass = _1.getClass(); // android 上由 shadow$_klass_ 决定
 			try {
@@ -113,6 +117,7 @@ public class HScene {
 				hookUpdate(objects);
 				return core;
 			}
+			//region asm
 			HopeReflect.setPublic(superClass, Class.class);
 			var myClass = new MyClass<>(superClass, SUFFIX);
 			Lambda lambda = myClass.addLambda(() -> {
@@ -135,20 +140,34 @@ public class HScene {
 				HopeReflect.changeClass(source, clazz);
 				return source;
 			}
+			//endregion
 
 			var newVal = Tools.newInstance(source, clazz);
+			Log.info("Source: " + source + ";Val" + newVal);
 
-			// 查找Vars中是否有对应的实例，如果有也替换掉
-			for (Field field : Vars.class.getFields()) {
-				try {
+			// 找出primitive的field，并随Tools.TASKS不断替换
+			/* for (Field field : superClass.getDeclaredFields()) {
+				if (field.getType().isPrimitive() && !Modifier.isStatic(field.getModifiers())) {
 					field.setAccessible(true);
-					if (field.get(null) == source) {
-						FieldUtils.setValue(field, null, newVal);
-					}
-				} catch (IllegalAccessException e) {
-					Log.err(e);
+					Tools.TASKS.add(() -> Tools.copyValue(field, newVal, source));
 				}
-			}
+			} */
+			Cons<Class<?>> replace = lookupClass -> {
+				// 查找Vars/Core中是否有对应的实例，如果有也替换掉
+				for (Field field : lookupClass.getFields()) {
+					try {
+						field.setAccessible(true);
+						if (field.get(null) == source) {
+							Log.info("Replace " + field.getName() + " in " + lookupClass.getSimpleName());
+							FieldUtils.setValue(field, null, newVal);
+						}
+					} catch (IllegalAccessException e) {
+						Log.err(e);
+					}
+				}
+			};
+			replace.get(Vars.class);
+			replace.get(Core.class);
 			return newVal;
 		});
 	}

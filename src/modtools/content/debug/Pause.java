@@ -13,11 +13,13 @@ import modtools.utils.ui.CellTools;
 
 import static modtools.override.HScene.pauseMap;
 
-/** 应该用于暂停游戏的Content */
+/** 应该用于暂停游戏的Content
+ * 包括 UI，Logic，Renderer，Timer等 */
 public class Pause extends Content {
 	public Pause() {
 		super("pause", Icon.pauseSmall);
 		defLoadable = false;
+		experimental = true;
 	}
 
 	public void load() {

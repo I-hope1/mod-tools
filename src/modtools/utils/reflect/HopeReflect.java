@@ -61,6 +61,7 @@ public class HopeReflect {
 
 	public static Class<?> getCaller() {
 		if (OS.isAndroid) return VMStack.getStackClass2();
+
 		// if (IntVars.javaVersion >= 9) return StackWalker.getInstance().getCallerClass();
 		Thread              thread = Thread.currentThread();
 		StackTraceElement[] trace  = thread.getStackTrace();

@@ -33,8 +33,8 @@ public class HopeProcessor {
 
 	public static final Processor<String, RuntimeException>         S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
 	public static final Processor<ExtendingLabel, RuntimeException> LABEL = template -> {
-		List<String>   fragments    = template.fragments();
-		StringBuilder         sb         = new StringBuilder();
+		List<String>  fragments = template.fragments();
+		StringBuilder sb        = new StringBuilder();
 		for (String fragment : fragments) {
 			sb.append(fragment);
 		}
@@ -49,7 +49,7 @@ public class HopeProcessor {
 				label.colorMap.put(currentIndex, color);
 				currentIndex += fragment.length();
 				label.colorMap.put(currentIndex, Color.white);
-			} else if(o instanceof Drawable || o instanceof TextureRegion) {
+			} else if (o instanceof Drawable || o instanceof TextureRegion) {
 				label.colorMap.put(currentIndex, Color.clear);
 				sb.insert(currentIndex, "□");
 				label.colorMap.put(currentIndex + 1, Color.white);
@@ -59,6 +59,7 @@ public class HopeProcessor {
 		label.setText(sb.toString());
 		return label;
 	};
+
 
 	public static class Wrapper {
 		/** @see mindustry.mod.ContentParser#read(Runnable) */
@@ -95,8 +96,10 @@ public class HopeProcessor {
 		// });
 
 	}
+
 	public static void main() {
 		aaa();
+
 		// temp.run();
 		String aa = "10203";
 		int    a  = 1, b = 2;

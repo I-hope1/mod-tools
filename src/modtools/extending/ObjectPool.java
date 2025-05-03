@@ -8,7 +8,6 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.*;
 import mindustry.world.Block;
 import modtools.annotations.asm.GenPool;
-import modtools.misc.SampleTestInterface;
 import modtools.utils.Tools;
 
 @SuppressWarnings("unchecked")
@@ -27,7 +26,7 @@ public class ObjectPool {
 				if (block.getClass().getClassLoader() != Block.class.getClassLoader()) return;
 
 				var last = block.buildType;
-				block.buildType = () -> SampleTestInterface.changeClass(last.get());
+				block.buildType = () -> EntitySampleInterface.changeClass(last.get());
 			});
 		});
 		Events.on(ClientLoadEvent.class, _ -> {

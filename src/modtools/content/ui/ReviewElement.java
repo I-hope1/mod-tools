@@ -765,7 +765,7 @@ public class ReviewElement extends Content {
 			 JSFunc.copyText(ElementUtils.getPath(element));
 		 }),
 		 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
-			 ElementUtils.quietScreenshot(element);
+			 Time.runTask(2, () -> ElementUtils.quietScreenshot(element));
 		 }),
 
 		 UnderlineItem.with(),

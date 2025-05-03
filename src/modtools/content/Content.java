@@ -40,8 +40,8 @@ public abstract class Content {
 		return name;
 	}
 
-	protected boolean alwaysLoad = false;
-	protected boolean defLoadable = true;
+	protected boolean experimental = false;
+	protected boolean alwaysLoad = false, defLoadable = true;
 	public final boolean loadable() {
 		return alwaysLoad || SETTINGS.getBool("load-" + name, defLoadable);
 	}
@@ -50,6 +50,7 @@ public abstract class Content {
 	}
 	public Content(String name, Drawable icon) {
 		this.name = name;
+
 		if (icon == null) try {
 			icon = Reflect.get(Icon.class, name + "Small");
 		} catch (Throwable ignored) {
@@ -130,6 +131,12 @@ public abstract class Content {
 		button.getLabel().setSize(0.9f);
 		button.getLabel().setAlignment(Align.left);
 		return button;
+	}
+	protected void disable() {
+		setEnabled(false);
+	}
+	protected void setEnabled(boolean b) {
+		SETTINGS.put("load-" + name, b);
 	}
 
 	public class IconWindow extends Window {

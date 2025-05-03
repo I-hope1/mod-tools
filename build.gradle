@@ -86,7 +86,7 @@ task jarAndroid(type: JavaExec) {
 	if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
 
 	//collect dependencies needed for desugaring
-		def dependencies = (configurations.compileClasspath.asList()
+	def dependencies = (configurations.compileClasspath.asList()
 //			+ configurations.runtimeClasspath.asList()
 //			+ [new File(platformRoot, "android.jar")]
 	).collectMany { ["--classpath", "$it.path"] }
@@ -139,6 +139,32 @@ task playGame(type: JavaExec) {
 	args = [
 //			'-testMobile'
 //			'-debug'
+	]
+}
+
+task playMultiplayer(type: JavaExec) {
+	dependsOn jar
+
+	doFirst {
+		copy {
+			from "$buildDir0/libs"
+			into "${MdtDataDir}/mods"
+			include "$archivesBaseName-${version}.jar"
+			rename { oldName -> "$modName-${version}.jar" }
+		}
+		new Thread(() -> {
+			Thread.sleep(5000)
+			exec {
+				commandLine "java", "-jar", MdtDataDir + "/Mindustry.jar"
+			}
+		}).start()
+	}
+
+
+	classpath(MdtDataDir + "/Mindustry.jar")
+
+	args = [
+			'-debug',
 	]
 }
 

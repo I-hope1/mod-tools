@@ -3,10 +3,15 @@ package modtools.events;
 import arc.func.Cons;
 import modtools.annotations.settings.*;
 import modtools.ui.effect.EBBlur.DEF;
+import modtools.ui.effect.ScreenSampler;
 
 @SettingsInit
 public enum E_Blur implements ISettings {
-	enabled,
+	enabled {
+		public boolean isSwitchOn() {
+			return ScreenSampler.activity;
+		}
+	},
 	/** @see ISettings#$(float def, float min, float max, float step) */
 	@Switch(dependency = "enabled")
 	scale_level(int.class, it -> it.$(4, 1, 16, 1)),

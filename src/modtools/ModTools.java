@@ -18,14 +18,13 @@ import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.*;
 import modtools.graphics.MyShaders;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.misc.SampleWorldInterface;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
-import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.utils.Viewers;
 import modtools.ui.control.HopeInput;
+import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.utils.*;
@@ -36,7 +35,6 @@ import modtools.utils.world.WorldDraw;
 
 import java.util.Arrays;
 
-import static arc.graphics.Color.sky;
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
@@ -52,11 +50,13 @@ public class ModTools extends Mod {
 
 	/** 是否从游戏内导入进来的 */
 	private static boolean isImportFromGame = false;
+	public static final boolean DISABLE_UI = false;
 
 
 	public static boolean loaded = false;
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");
+		ScreenSampler.resetMark();
 
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -173,6 +173,7 @@ public class ModTools extends Mod {
 
 	private void loadInputAndUI() {
 		if (ui == null) return;
+		if (DISABLE_UI) return;
 		mod = mods.getMod(modName);
 		Time.mark();
 
@@ -218,12 +219,6 @@ public class ModTools extends Mod {
 			});
 			p.add(label);
 		}); */
-
-		if (false) {
-			INFO_DIALOG.dialog(new ExtendingLabel("1ijo\noaai") {{
-				addDrawRun(0, 4, DrawType.wave, sky);
-			}});
-		}
 
 		loaded = true;
 		async(() -> {

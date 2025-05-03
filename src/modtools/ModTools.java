@@ -119,10 +119,10 @@ public class ModTools extends Mod {
 
 		if (isImportFromGame) {
 			// loadContent();
-			loadInputAndUI();
+			loadModules();
 		} else {
 			Events.on(ClientLoadEvent.class,
-			 _ -> Tools.runLoggedException(this::loadInputAndUI));
+			 _ -> Tools.runLoggedException(this::loadModules));
 		}
 	}
 
@@ -171,7 +171,8 @@ public class ModTools extends Mod {
 		}
 	}
 
-	private void loadInputAndUI() {
+	/** 包括 Input，UI，Contents */
+	public void loadModules() {
 		if (ui == null) return;
 		if (DISABLE_UI) return;
 		mod = mods.getMod(modName);

@@ -8,6 +8,8 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
+import static modtools.annotations.PrintHelper.SPrinter.println;
+
 /** 这个还未完全适配所有的 */
 public class DefaultToStatic extends TreeTranslator {
 	public static final String NAME_PREFIX = "$default$";
@@ -71,6 +73,7 @@ public class DefaultToStatic extends TreeTranslator {
 		if (scanner.hasLambda && scanner.hasCaptured) {
 			MethodSymbol enclMethod = methodDecl.sym;
 			self = make.Param(names.fromString("default$this"), enclMethod.owner.type, enclMethod);
+			self.sym = null;
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
@@ -85,14 +88,15 @@ public class DefaultToStatic extends TreeTranslator {
 			// println(genMethod);
 			JCMethodInvocation apply = make.Apply(
 			 List.nil(), make.Ident(genMethod.name),
-			 methodDecl.params.map(make::Ident).prepend(make.This(enclMethod.owner.type))
+			 methodDecl.params.<JCExpression>map(param -> make.Ident(param.name))
+			  .prepend(make.This(enclMethod.owner.type))
 			);
 
 			// apply.type = ms.type;
 			methodDecl.body = make.Block(0, List.of(enclMethod.getReturnType() == syms.voidType ? make.Exec(apply)
 			 : make.Return(apply)));
-			// println(tree);
-			methodDecl.body.accept(enter);
+			// methodDecl.body.accept(enter);
+			println(methodDecl);
 
 			toAppendMethods.add(genMethod);
 		}

@@ -75,11 +75,17 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		try (OutputStream outputStream = classfile.openOutputStream()) {
 			outputStream.write(classBytes);
 		}
+		logClassFile(classBytes, genClassName);
+	}
+	public static void logClassFile(byte[] classBytes, String className) throws IOException {
 		if (OUTPUT_CLASS_FILE) {
-			try (OutputStream fileOutput = new FileOutputStream("F:/" + genClassName + ".class")) {
+			try (OutputStream fileOutput = new FileOutputStream(targetFilePath(className))) {
 				fileOutput.write(classBytes);
 			}
 		}
+	}
+	public static String targetFilePath(String genClassName) {
+		return "F:/gen/" + genClassName + ".class";
 	}
 	/** 用法: mMaker.QualIdent(classSymbol())  */
 	protected ClassSymbol classSymbol() {

@@ -10,6 +10,7 @@ import jdk.internal.org.objectweb.asm.*;
 import modtools.annotations.BaseProcessor;
 import modtools.annotations.asm.GenPool;
 import modtools.annotations.asm.Sample.AConstants;
+import modtools.annotations.processors.asm.BaseASMProc;
 
 import javax.annotation.processing.Processor;
 import javax.tools.JavaFileObject;
@@ -20,7 +21,6 @@ import java.util.Map.Entry;
 
 @AutoService(Processor.class)
 public class PoolProc extends BaseProcessor<ClassSymbol> {
-	public static final boolean OUTPUT_GEN     = true;
 	public static final String  ENTITY_MAPPING = "mindustry/gen/EntityMapping";
 
 	ArrayList<String>    list    = new ArrayList<>();
@@ -121,11 +121,7 @@ public class PoolProc extends BaseProcessor<ClassSymbol> {
 		try (OutputStream outputStream = file.openOutputStream()) {
 			outputStream.write(byteArray);
 		}
-		if (OUTPUT_GEN) {
-			try (OutputStream fileOutput = new FileOutputStream("F:/" + genClassName + ".class")) {
-				fileOutput.write(byteArray);
-			}
-		}
+		BaseASMProc.logClassFile(byteArray, genClassName);
 	}
 	public void dealElement(ClassSymbol element) throws Throwable {
 		ClassSymbol pools         = findClassSymbol("arc.util.pooling.Pools");

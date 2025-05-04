@@ -72,6 +72,7 @@ public class DefaultToStatic extends TreeTranslator {
 			MethodSymbol enclMethod = methodDecl.sym;
 			VarSymbol    varSymbol  = new VarSymbol(Flags.PARAMETER, names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			self = make.VarDef(varSymbol, null);
+			self.sym = null;
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
@@ -82,7 +83,7 @@ public class DefaultToStatic extends TreeTranslator {
 			 methodDecl.defaultValue);
 			// genMethod.params = methodDecl.params.prepend(self);
 			genMethod.body = translate(methodDecl.body);
-			genMethod.accept(enter);
+			// genMethod.accept(enter);
 			// println(genMethod);
 			JCMethodInvocation apply = make.Apply(
 			 List.nil(), make.Ident(genMethod.name),
@@ -106,7 +107,7 @@ public class DefaultToStatic extends TreeTranslator {
 	public void visitIdent(JCIdent tree) {
 		if (tree.name == names._this && self != null) {
 			make.at(tree);
-			result = make.Ident(self);
+			result = make.Ident(self.name);
 			return;
 		}
 		super.visitIdent(tree);
@@ -117,13 +118,13 @@ public class DefaultToStatic extends TreeTranslator {
 		    && invocation.meth instanceof JCIdent i &&
 		    !hasImport(i.name) && self != null) {
 			make.at(i);
-			invocation.meth = make.Select(make.Ident(self), i.name);
+			invocation.meth = make.Select(make.Ident(self.name), i.name);
 		}
 	}
 	public void visitSelect(JCFieldAccess tree) {
 		if (tree.name == names._this) {
 			make.at(tree);
-			result = make.Ident(self);
+			result = make.Ident(self.name);
 			return;
 		}
 		super.visitSelect(tree);

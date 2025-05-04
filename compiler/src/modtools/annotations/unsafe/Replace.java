@@ -487,7 +487,7 @@ public class Replace {
 				JCTree            cdef = trees.getTree(element);
 
 				// copyValueProc.translateTopLevelClass(unit);
-				// defaultToStatic.translateTopLevelClass(unit, cdef);
+				defaultToStatic.translateTopLevelClass(unit, cdef);
 				desugarStringTemplate.translateTopLevelClass(unit, cdef);
 				desugarRecord.translateTopLevelClass(unit, cdef);
 			});

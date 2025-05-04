@@ -70,9 +70,7 @@ public class DefaultToStatic extends TreeTranslator {
 		methodDecl.body.accept(scanner);
 		if (scanner.hasLambda && scanner.hasCaptured) {
 			MethodSymbol enclMethod = methodDecl.sym;
-			VarSymbol    varSymbol  = new VarSymbol(Flags.PARAMETER, names.fromString("default$this"), enclMethod.owner.type, enclMethod);
-			self = make.VarDef(varSymbol, null);
-			self.sym = null;
+			self = make.Param(names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,

@@ -74,7 +74,6 @@ public class DefaultToStatic extends TreeTranslator {
 			MethodSymbol enclMethod = methodDecl.sym;
 			self = make.Param(names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			make.at(methodDecl);
-			// methodDecl.params.forEach(p -> p.sym = null);
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
@@ -83,8 +82,9 @@ public class DefaultToStatic extends TreeTranslator {
 			 methodDecl.thrown,
 			 null,
 			 methodDecl.defaultValue);
+			// genMethod.params.forEach(x -> x.sym);
 			// genMethod.params = methodDecl.params.prepend(self);
-			genMethod.body = translate(methodDecl.body);
+			genMethod.body = new TreeCopier<>(make).copy(translate(methodDecl.body));
 			// genMethod.accept(enter);
 			// println(genMethod);
 			JCMethodInvocation apply = make.Apply(

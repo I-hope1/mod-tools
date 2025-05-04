@@ -74,11 +74,13 @@ public class DefaultToStatic extends TreeTranslator {
 			MethodSymbol enclMethod = methodDecl.sym;
 			self = make.Param(names.fromString("default$this"), enclMethod.owner.type, enclMethod);
 			make.at(methodDecl);
+			List<JCVariableDecl> copyParams = new TreeCopier<>(make).copy(methodDecl.params);
+			copyParams.map(param -> param.sym = new VarSymbol(0, param.name, param.type, null));
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
 			 methodDecl.recvparam,
-			 new TreeCopier<>(make).copy(methodDecl.params).prepend(self),
+			 copyParams.prepend(self),
 			 methodDecl.thrown,
 			 null,
 			 methodDecl.defaultValue);

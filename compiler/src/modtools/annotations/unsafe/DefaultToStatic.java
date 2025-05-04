@@ -73,7 +73,7 @@ public class DefaultToStatic extends TreeTranslator {
 		if (scanner.hasLambda && scanner.hasCaptured) {
 			MethodSymbol enclMethod = methodDecl.sym;
 			self = make.Param(names.fromString("default$this"), enclMethod.owner.type, enclMethod);
-			self.sym = null;
+			make.at(methodDecl);
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
@@ -89,12 +89,13 @@ public class DefaultToStatic extends TreeTranslator {
 			JCMethodInvocation apply = make.Apply(
 			 List.nil(), make.Ident(genMethod.name),
 			 methodDecl.params.<JCExpression>map(param -> make.Ident(param.name))
-			  .prepend(make.This(enclMethod.owner.type))
+				.prepend(make.QualThis(enclMethod.owner.type))
 			);
 
 			// apply.type = ms.type;
 			methodDecl.body = make.Block(0, List.of(enclMethod.getReturnType() == syms.voidType ? make.Exec(apply)
 			 : make.Return(apply)));
+			println(genMethod);
 			// methodDecl.body.accept(enter);
 			println(methodDecl);
 
@@ -143,11 +144,8 @@ public class DefaultToStatic extends TreeTranslator {
 			toplevel = unit;
 			this.classDecl = dcl;
 			translate(dcl);
+			dcl.defs = dcl.defs.appendList(toAppendMethods);
 		} finally {
-			((JCClassDecl) cdef).defs = ((JCClassDecl) cdef).defs.appendList(toAppendMethods);
-			if (!toAppendMethods.isEmpty()) {
-				// println(cdef);
-			}
 			toAppendMethods.clear();
 			this.classDecl = null;
 			toplevel = null;

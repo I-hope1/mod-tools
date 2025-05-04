@@ -1,4 +1,4 @@
-package modtools.ui.comp.utils;
+ package modtools.ui.comp.utils;
 
 import arc.Core;
 import arc.files.Fi;
@@ -41,24 +41,67 @@ import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
 
 public abstract class ValueLabel extends ExtendingLabel {
+	//region Static Fields & Constants
 	public static final boolean DEBUG     = false;
 	/** 这个要和null判断一起 */
 	public static final Object  unset     = new Object();
 	public static final Color   c_enum    = new Color(0xFFC66D_FF);
 	public static final String  NULL_MARK = "`*null";
+	public static final String ERROR     = "<ERROR>";
+	public static final String STR_EMPTY = "<EMPTY>";
 
-	public               Object     val;
-	public               Class<?>   type;
 	private static       ValueLabel hoveredLabel;
 	private static       Object     hoveredVal;
 	private static final Point2     hoveredChunk = new Point2();
+
+	/** configuration */
+	public static final int STEP_SIZE = 64;
+	public static Color[] bgColors = new Color[]{
+	 new Color(0xFFC66D_66),
+	 new Color(0xFFC6FF_66),
+	 new Color(0xFC66C6_66),
+	 new Color(0x66FFC6_66),
+	 };
+	//endregion
+
+	//region Instance Fields
+	public               Object     val;
+	public               Class<?>   type;
+	public int maxItemCount   = STEP_SIZE;
+	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
+	public boolean
+							 enableTruncate = true,
+	/** 是否启用更新 */
+	enableUpdate = true;
+
+	public Func<Object, Object> valueFunc = o -> o;
+
+	public final IntMap<Object>              startIndexMap = new IntMap<>();
+	public final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
+	// 用于记录数组或map的类型
+	public final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
+	// 用于记录数组或map的值
+	public final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
+	// 用于记录数组或map是否展开
+	public final ObjectMap<Object, Boolean>  expandVal     = new ObjectMap<>();
+
+	private       int     bgIndex;
+	Runnable appendTail;
+	boolean shown = E_JSFuncDisplay.value.enabled();
+	boolean cleared;
+	public Runnable afterSet;
+	//endregion
+
+	//region Hover State Accessors
 	public Object hoveredVal() {
 		return hoveredLabel == this ? hoveredVal : null;
 	}
 	public Point2 hoveredChunk() {
 		return hoveredLabel == this ? hoveredChunk : UNSET_P;
 	}
+	//endregion
 
+	//region Constructors & Initialization
 	private ValueLabel() {
 		super((CharSequence) null);
 		type = null;
@@ -132,8 +175,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 			return label.getMenuLists();
 		});
 	}
+
 	public void addFocusListener() {
 		if (type == null) {
+			// Do nothing if type is null
 		} else if (Element.class.isAssignableFrom(type) || val instanceof Element) {
 			ReviewElement.addFocusSource(this, () -> ElementUtils.findWindow(this),
 			 () -> val instanceof Element ? (Element) val : null);
@@ -144,37 +189,44 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 		Selection.addFocusSource(this, () -> hoveredVal());
 	}
+	//endregion
 
-	/** configuration */
-	public static final int STEP_SIZE = 64;
-
-	public int maxItemCount   = STEP_SIZE;
-	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
-	public boolean
-	           enableTruncate = true,
-	/** 是否启用更新 */
-	enableUpdate = true;
-
-	public Func<Object, Object> valueFunc = o -> o;
-
+	//region Abstract Methods
 	public abstract Seq<MenuItem> getMenuLists();
-	public static MenuItem newElementDetailsList(Element element) {
-		return DisabledList.withd("elem.details", Icon.craftingSmall, "Elem Details", () -> element == null,
-		 () -> new ElementDetailsWindow(element));
-	}
-	public static <T> MenuItem newDetailsMenuList(Element el, Prov<T> val, Class<?> type) {
-		return DisabledList.withd("details", Icon.infoCircleSmall, "@details",
-		 () -> type.isPrimitive() && val.get() == null,
-		 () -> showNewInfo(el, val.get(), type));
+	public abstract void flushVal();
+	public abstract Object getObject();
+	//endregion
+
+	//region Core Value Handling
+	/** <b>PS:</b> 这可能会设置字段值 */
+	public void setNewVal(Object newVal) { }
+
+	public void setVal(Object newVal) {
+		try {
+			setValInternal(valueFunc.get(newVal));
+		} catch (Throwable th) {
+			Log.err(th);
+			setValInternal(newVal);
+		}
 	}
 
-	public long getOffset() {
-		throw new UnsupportedOperationException("Not implemented yet");
-	}
+	private void setValInternal(Object val) {
+		if (HopeReflect.isSameVal(val, this.val, type)) return;
 
-	private void resolveThrow(Throwable th) {
-		Log.err(th);
-		IntUI.showException(th);
+		if (val != null && val != unset && !box(type).isInstance(val)) {
+			throw new IllegalArgumentException("val must be a " + type.getName());
+		}
+
+		this.val = val;
+		try {
+			setAndProcessText(val);
+		} catch (Throwable th) {
+			resolveThrow(th);
+			super.setText(String.valueOf(val));
+		} finally {
+			if (afterSet != null) afterSet.run();
+		}
+		invalidateHierarchy();
 	}
 
 	public void setAndProcessText(Object val) {
@@ -188,33 +240,40 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 		if (hover_outline.enabled() && !hoveredChunk().equals(UNSET_P)) addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
 
-		if (text.length() > truncate_length.getInt()) {
+		if (isTruncate()) {
 			text.setLength(truncate_length.getInt());
 			text.append(ellipsis);
 		}
 	}
 
-	public final IntMap<Object>              startIndexMap = new IntMap<>();
-	public final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
-	// 用于记录数组或map的类型
-	public final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
-	// 用于记录数组或map的值
-	public final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
-	// 用于记录数组或map是否展开
-	public final ObjectMap<Object, Boolean>  expandVal     = new ObjectMap<>();
+	public void clearVal() {
+		val = null;
+		super.setText((CharSequence) null);
+		prefSizeInvalid = true;
+	}
 
+	public void setError() {
+		super.setText(ERROR);
+		setColor(Color.red);
+	}
 
-	private       int     bgIndex;
-	public static Color[] bgColors = new Color[]{
-	 new Color(0xFFC66D_66),
-	 new Color(0xFFC6FF_66),
-	 new Color(0xFC66C6_66),
-	 new Color(0x66FFC6_66),
-	 };
+	public void setText(CharSequence newText) {
+		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
+	}
+	void setText0(CharSequence newText) {
+		if (newText == null || newText.length() == 0) {
+			colorMap.clear();
+			newText = STR_EMPTY;
+			setColor(Color.gray);
+		} else { setColor(Color.white); }
+		super.setText(newText);
+	}
+	//endregion
+
+	//region Text Appending & Formatting
 	public Color bgColor() {
 		return colorful_background.enabled() ? bgColors[bgIndex++ % bgColors.length] : bgColors[0];
 	}
-
 
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	private boolean applyViewer(
@@ -245,18 +304,6 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		Viewers.defaultAppend(this, valStart, val);
-	}
-
-	public Prov<Point2> getPoint2Prov(Object val) {
-		return () -> {
-			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
-			int end   = endIndexMap.get(val);
-			return Tmp.p1.set(start, end);
-		};
-	}
-	public void toggleExpand(Object val) {
-		expandVal.put(val, !expandVal.get(val, false));
-		Core.app.post(this::flushVal);
 	}
 
 	// 一些基本类型的特化，不装箱，为了减少内存消耗
@@ -323,7 +370,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		text.append('=');
 		appendValue(value);
 	}
-	Runnable appendTail;
+
 	public void postAppendDelimiter() {
 		if (appendTail != null) appendTail.run();
 		appendTail = () -> text.append(Viewers.getArrayDelimiter());
@@ -335,17 +382,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	boolean isTruncate() {
 		return isTruncate(text.length());
 	}
-	public void clearVal() {
-		val = null;
-		super.setText((CharSequence) null);
-		prefSizeInvalid = true;
-	}
-	public static final String ERROR     = "<ERROR>";
-	public static final String STR_EMPTY = "<EMPTY>";
-	public void setError() {
-		super.setText(ERROR);
-		setColor(Color.red);
-	}
+
 	public int startColor(Color color) {
 		int i = text.length();
 		colorMap.put(i, color);
@@ -359,56 +396,17 @@ public abstract class ValueLabel extends ExtendingLabel {
 		text.append(ERROR);
 		label.endColor();
 	}
+	//endregion
 
-	public void setText(CharSequence newText) {
-		throw new UnsupportedOperationException("the ValueLabel cannot be set by setText(newText)");
+	//region Menu Building
+	public static MenuItem newElementDetailsList(Element element) {
+		return DisabledList.withd("elem.details", Icon.craftingSmall, "Elem Details", () -> element == null,
+		 () -> new ElementDetailsWindow(element));
 	}
-	void setText0(CharSequence newText) {
-		if (newText == null || newText.length() == 0) {
-			colorMap.clear();
-			newText = STR_EMPTY;
-			setColor(Color.gray);
-		} else { setColor(Color.white); }
-		super.setText(newText);
-	}
-	public Runnable afterSet;
-	public abstract void flushVal();
-	/** <b>PS:</b> 这可能会设置字段值 */
-	public void setNewVal(Object newVal) { }
-
-	public void setVal(Object newVal) {
-		try {
-			setValInternal(valueFunc.get(newVal));
-		} catch (Throwable th) {
-			Log.err(th);
-			setValInternal(newVal);
-		}
-	}
-	private void setValInternal(Object val) {
-		if (HopeReflect.isSameVal(val, this.val, type)) return;
-
-		if (val != null && val != unset && !box(type).isInstance(val)) {
-			throw new IllegalArgumentException("val must be a " + type.getName());
-		}
-
-		this.val = val;
-		try {
-			setAndProcessText(val);
-		} catch (Throwable th) {
-			resolveThrow(th);
-			super.setText(String.valueOf(val));
-		} finally {
-			if (afterSet != null) afterSet.run();
-		}
-		invalidateHierarchy();
-	}
-	private static void showNewInfo(Element el, Object val1, Class<?> type) {
-		Vec2 pos = ElementUtils.getAbsolutePos(el);
-		try {
-			INFO_DIALOG.showInfo(val1, val1 != null ? val1.getClass() : type).setPosition(pos);
-		} catch (Throwable e) {
-			IntUI.showException(e).setPosition(pos);
-		}
+	public static <T> MenuItem newDetailsMenuList(Element el, Prov<T> val, Class<?> type) {
+		return DisabledList.withd("details", Icon.infoCircleSmall, "@details",
+		 () -> type.isPrimitive() && val.get() == null,
+		 () -> showNewInfo(el, val.get(), type));
 	}
 
 	/** 如果val == unset，则不添加任何特殊菜单 */
@@ -542,13 +540,37 @@ public abstract class ValueLabel extends ExtendingLabel {
 		));
 	}
 
+	private static void showNewInfo(Element el, Object val1, Class<?> type) {
+		Vec2 pos = ElementUtils.getAbsolutePos(el);
+		try {
+			INFO_DIALOG.showInfo(val1, val1 != null ? val1.getClass() : type).setPosition(pos);
+		} catch (Throwable e) {
+			IntUI.showException(e).setPosition(pos);
+		}
+	}
+	//endregion
 
-	public abstract Object getObject();
+	//region Utility & Overrides
+	public long getOffset() {
+		throw new UnsupportedOperationException("Not implemented yet");
+	}
+
+	public Prov<Point2> getPoint2Prov(Object val) {
+		return () -> {
+			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
+			int end   = endIndexMap.get(val);
+			return Tmp.p1.set(start, end);
+		};
+	}
+	public void toggleExpand(Object val) {
+		expandVal.put(val, !expandVal.get(val, false));
+		Core.app.post(this::flushVal);
+	}
+
 	public boolean enabledUpdateMenu() {
 		return true;
 	}
 
-	boolean shown = E_JSFuncDisplay.value.enabled();
 	public float getWidth() {
 		return shown ? super.getWidth() : 0;
 	}
@@ -556,7 +578,6 @@ public abstract class ValueLabel extends ExtendingLabel {
 		if (shown) super.draw();
 	}
 
-	boolean cleared;
 	public void clear() {
 		cleared = true;
 		super.clear();
@@ -572,8 +593,16 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public boolean readOnly() {
 		return true;
 	}
+	//endregion
 
+	//region Private Helper Methods
+	private void resolveThrow(Throwable th) {
+		Log.err(th);
+		IntUI.showException(th);
+	}
+	//endregion
 
+	//region Inner Class: ItemValueLabel
 	private static class ItemValueLabel extends ValueLabel {
 		public static final ItemValueLabel THE_ONE = new ItemValueLabel();
 
@@ -613,4 +642,5 @@ public abstract class ValueLabel extends ExtendingLabel {
 			return obj;
 		}
 	}
+	//endregion
 }

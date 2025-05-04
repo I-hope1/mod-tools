@@ -202,6 +202,19 @@ public class FieldUtils {
 			return failback;
 		}
 	}
+	public static Object defaultValue(Class<?> clazz) {
+		return switch (clazz) {
+			case Class c when c == int.class -> 0;
+			case Class c when c == float.class -> 0f;
+			case Class c when c == double.class -> 0d;
+			case Class c when c == long.class -> 0L;
+			case Class c when c == char.class -> '\0';
+			case Class c when c == byte.class -> (byte) 0;
+			case Class c when c == short.class -> (short) 0;
+			case Class c when c == boolean.class -> false;
+			default -> null;
+		};
+	}
 }
 
 interface $OffsetGetter {

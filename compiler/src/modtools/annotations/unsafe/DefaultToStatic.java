@@ -80,7 +80,7 @@ public class DefaultToStatic extends TreeTranslator {
 			 methodDecl.thrown,
 			 null,
 			 methodDecl.defaultValue);
-			genMethod.params = methodDecl.params.prepend(self);
+			// genMethod.params = methodDecl.params.prepend(self);
 			genMethod.body = translate(methodDecl.body);
 			genMethod.accept(enter);
 			// println(genMethod);

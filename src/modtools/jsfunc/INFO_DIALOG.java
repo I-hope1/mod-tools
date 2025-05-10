@@ -19,6 +19,7 @@ import arc.util.Timer.Task;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
+import modtools.content.debug.Tester;
 import modtools.ui.IntUI;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.*;
@@ -32,7 +33,7 @@ import modtools.utils.ui.ShowInfoWindow;
 import modtools.utils.world.WorldDraw;
 
 import java.lang.reflect.Array;
-import java.util.*;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static modtools.ui.HopeStyles.*;
@@ -221,10 +222,14 @@ public interface INFO_DIALOG {
 				rebuild.run();
 				Time.runTask(1f, () -> dialog[0].setPosition(pos));
 			}).size(btn_size).padRight(4);
+			header.button(Icon.copy, clearNonei, () -> {
+				Tester.put(IntVars.mouseVec, arrayHolder.get());
+			}).size(btn_size).padRight(4);
+
 			header.button(Icon.add, clearNonei, () -> {
 				Class<?> componentType = clazz.getComponentType();
 				Object   defaultValue  = FieldUtils.defaultValue(componentType);
-				showArrayChangeWarning("Adding an element will create a new array instance.", () -> {
+				showArrayChangeWarning("Add an element?", () -> {
 					arrayHolder.set(addArrayElement(arrayHolder.get(), defaultValue));
 					rebuild.run();
 				});
@@ -316,7 +321,7 @@ public interface INFO_DIALOG {
 
 		// --- Remove Button ---
 		rowTable.button(Icon.cancel, clearNonei, () -> {
-			showArrayChangeWarning("Removing...", () -> {
+			showArrayChangeWarning("Remove an element?", () -> {
 				arrayHolderRef.set(removeArrayElement(arrayHolderRef.get(), index));
 				rebuildListAction.run();
 			});
@@ -362,41 +367,7 @@ public interface INFO_DIALOG {
 
 	// --- Array Manipulation Helpers ---
 	private static void showArrayChangeWarning(String message, Runnable confirmedAction) {
-		IntUI.showConfirm("Warning", message + "\n\nContinue?", confirmedAction);
-	}
-
-	/** Moves an element within the array. Returns a new array instance. */
-	private static Object moveArrayElement(Object array, int fromIndex, int toIndex) {
-		int length = Array.getLength(array);
-		// Corrected boundary check for toIndex: should be <= length for inserting at the end
-		if (fromIndex < 0 || fromIndex >= length || toIndex < 0 || toIndex > length || fromIndex == toIndex) {
-			Log.debug("Move ignored: from=@, to=@, length=@", fromIndex, toIndex, length);
-			return array;
-		}
-		Log.debug("Executing move: from=@, to=@", fromIndex, toIndex);
-
-		Object   element       = Array.get(array, fromIndex);
-		Class<?> componentType = array.getClass().getComponentType();
-		// Use ArrayList for easier manipulation
-		List<Object> list = new ArrayList<>(length);
-		for (int i = 0; i < length; i++) {
-			list.add(Array.get(array, i));
-		}
-
-		// Remove the element from its original position
-		list.remove(fromIndex);
-
-		// Add the element at the target position (clamped)
-		int insertPos = Math.max(0, Math.min(toIndex, list.size()));
-		list.add(insertPos, element);
-
-		// Create new array and copy back from the list
-		Object newArray = Array.newInstance(componentType, length);
-		for (int i = 0; i < length; i++) {
-			Array.set(newArray, i, list.get(i));
-		}
-
-		return newArray;
+		IntUI.showConfirm("Warning", message + "\nIt will create a new array instance.\n(Don't change field value)\n\nContinue?", confirmedAction);
 	}
 
 

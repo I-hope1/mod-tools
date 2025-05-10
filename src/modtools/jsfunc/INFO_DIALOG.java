@@ -89,11 +89,11 @@ public interface INFO_DIALOG {
 
 			// --- Global TouchUp Listener (for cancelling drags) ---
 			InputListener globalListener = new InputListener() {
-				public static final float durationSeconds = 280f;
+				public static final float durationSeconds = 300f;
 				RowTable rowTableR;
 				Task     task;
 				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-					if (isScheduled()) return false;
+					if (taskIsScheduled()) return false;
 
 					RowTable rowTable = ElementUtils.findParent(event.targetActor, RowTable.class);
 					if (rowTable != null) {
@@ -102,7 +102,7 @@ public interface INFO_DIALOG {
 					}
 					return true;
 				}
-				private boolean isScheduled() {
+				private boolean taskIsScheduled() {
 					return task != null && task.isScheduled();
 				}
 				private void setDragState(RowTable rowTable, float x, float y) {
@@ -124,7 +124,7 @@ public interface INFO_DIALOG {
 					mainCont.localToDescendantCoordinates(rowTable, dragState.dragStartOffset.set(x, y));
 				}
 				public void touchDragged(InputEvent event, float x, float y, int pointer) {
-					if (isScheduled() && !ElementUtils.checkIn(rowTableR, mainCont, x, y)) {
+					if (taskIsScheduled() && !ElementUtils.checkIn(rowTableR, mainCont, x, y)) {
 						task.cancel();
 					}
 					if (dragState.isDragging) {
@@ -166,6 +166,7 @@ public interface INFO_DIALOG {
 				}
 				@Override
 				public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					if (taskIsScheduled()) task.cancel();
 					if (!dragState.isDragging) { return; }
 
 					event.stop();

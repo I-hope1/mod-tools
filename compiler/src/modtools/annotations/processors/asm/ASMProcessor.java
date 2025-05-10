@@ -1,5 +1,6 @@
 package modtools.annotations.processors.asm;
 
+import com.google.auto.service.AutoService;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.*;
@@ -8,14 +9,19 @@ import com.sun.tools.javac.util.List;
 import jdk.internal.org.objectweb.asm.*;
 import modtools.annotations.asm.CopyConstValue;
 
+import javax.annotation.processing.Processor;
 import javax.lang.model.element.ElementKind;
 import java.util.Set;
 import java.util.function.Consumer;
 
-// @AutoService(Processor.class)
 /** TODO: 在TransLiterals之前替换 */
-@Deprecated
+@AutoService(Processor.class)
 public class ASMProcessor extends BaseASMProc<VarSymbol> {
+	static {
+		SPrinter.println("init");
+	}
+	public void process() { }
+
 	public void dealElement(VarSymbol element) throws Throwable {
 		SeeReference seeReference = getSeeReference(CopyConstValue.class, element, ElementKind.FIELD);
 		if (seeReference == null) return;
@@ -34,7 +40,7 @@ public class ASMProcessor extends BaseASMProc<VarSymbol> {
 			element.type = element.type.constType(value);
 			// println(element.type.constValue());
 		};
-		Object constantValue = field.getConstantValue();
+		Object constantValue = field.getConstValue(); // 用field.getConstantValue()会出错
 		if (constantValue != null) {
 			setConstantValue.accept(constantValue);
 		} else if (field.owner instanceof ClassSymbol cs) {
@@ -74,7 +80,6 @@ public class ASMProcessor extends BaseASMProc<VarSymbol> {
 		}
 
 		// println(tree.sym == element);
-
 	}
 
 	public Set<Class<?>> getSupportedAnnotationTypes0() {

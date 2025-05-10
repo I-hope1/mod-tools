@@ -8,11 +8,11 @@ import java.lang.reflect.*;
 import java.util.function.Consumer;
 
 import static modtools.annotations.HopeReflect.*;
-import static modtools.annotations.unsafe.InitHandle.DESKTOP.*;
+import static modtools.annotations.unsafe.InitHandleC.DESKTOP.*;
 
 /* 获取<init>的方法句柄  */
 @SuppressWarnings("unchecked")
-public class InitHandle {
+public class InitHandleC {
 	public static MethodHandle findInitDesktop
 	 (Class<?> refc, Constructor<?> ctor,
 	  Class<?> specialCaller) throws Throwable {
@@ -59,7 +59,7 @@ public class InitHandle {
 	 * for window (value: {@value MethodHandleNatives.Constants#REF_invokeSpecial})
 	 * @see MethodHandleNatives.Constants#REF_invokeSpecial
 	 */
-	public static byte REF_invokeSpecial = 7;
+	public static final byte REF_invokeSpecial = 7;
 
 	public interface CProv<T> {
 		T get() throws Throwable;

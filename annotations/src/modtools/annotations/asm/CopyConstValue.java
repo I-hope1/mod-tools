@@ -7,6 +7,5 @@ import java.lang.annotation.*;
  * @see modtools.annotations.asm.ASMProccessor */
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.SOURCE)
-@Deprecated
 public @interface CopyConstValue {
 }

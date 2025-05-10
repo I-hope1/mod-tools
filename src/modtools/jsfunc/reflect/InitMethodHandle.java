@@ -1,8 +1,9 @@
 package modtools.jsfunc.reflect;
 
 import arc.func.Cons;
-import arc.util.OS;
+import arc.util.*;
 import modtools.Constants.ANDROID_INIT;
+import modtools.annotations.asm.CopyConstValue;
 import modtools.utils.Tools.CProvT;
 
 import java.lang.invoke.*;
@@ -25,6 +26,7 @@ public class InitMethodHandle {
 	 * for window (value: {@value MethodHandleNatives.Constants#REF_invokeSpecial})
 	 * @see MethodHandleNatives.Constants#REF_invokeSpecial
 	 */
+	@CopyConstValue
 	public static final byte REF_invokeSpecial = 7;
 
 	static {
@@ -49,17 +51,24 @@ public class InitMethodHandle {
 		 INVOKE_SPECIAL, MethodType.methodType(Void.TYPE, params));
 	}
 
+	static void a() {
+		Log.info(MN_IS_METHOD);
+	}
 	// --------desktop--------
 	/**
 	 * @see MemberName#IS_METHOD
 	 * @see MethodHandleNatives.Constants#MN_IS_METHOD
 	 */
-	static final int MN_IS_METHOD      = 0x00010000;
+	@CopyConstValue
+	static final int MN_IS_METHOD      = -1;
 	/**
 	 * @see MemberName#IS_CONSTRUCTOR
 	 * @see MethodHandleNatives.Constants#MN_IS_CONSTRUCTOR
 	 */
+	@CopyConstValue
 	static final int MN_IS_CONSTRUCTOR = 0x00020000;
+
+
 	public static MethodHandle findInitDesktop
 	 (Class<?> refc, Constructor<?> ctor,
 	  Class<?> specialCaller) throws Throwable {

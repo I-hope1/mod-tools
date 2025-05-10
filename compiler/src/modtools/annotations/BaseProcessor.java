@@ -5,7 +5,7 @@ import com.sun.source.util.TreePath;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
-import com.sun.tools.javac.comp.Attr;
+import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.jvm.ClassWriter;
 import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.model.JavacElements;
@@ -31,6 +31,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
+	public static Resolve       resolve;
+	public static Enter         enter;
 	public static Names         names;
 	public static Types         types;
 	public static ParserFactory parsers;
@@ -119,6 +121,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		elements = JavacElements.instance(_context);
 		trees = JavacTrees.instance(_context);
 		mMaker = TreeMaker.instance(_context);
+		resolve = Resolve.instance(_context);
+		enter = Enter.instance(_context);
 		names = Names.instance(_context);
 		types = Types.instance(_context);
 		log = Log.instance(_context);

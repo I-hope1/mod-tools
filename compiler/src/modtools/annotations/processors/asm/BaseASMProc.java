@@ -1,22 +1,23 @@
 package modtools.annotations.processors.asm;
 
 import com.sun.source.doctree.*;
-import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.DocTreePath;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.Name;
 import jdk.internal.org.objectweb.asm.ClassWriter;
-import modtools.annotations.BaseProcessor;
+import modtools.annotations.*;
 import modtools.annotations.asm.Sample.AConstants;
 
 import javax.lang.model.element.*;
 import javax.tools.JavaFileObject;
 import java.io.*;
 import java.lang.annotation.Annotation;
-import java.util.Arrays;
+import java.util.*;
 
 public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public static final boolean OUTPUT_CLASS_FILE = false;
@@ -26,9 +27,9 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public static <R extends Symbol> SeeReference
 	getSeeReference(Class<? extends Annotation> annotationClass,
 	                R element, ElementKind... expectKinds) {
-		CompilationUnitTree unit = trees.getPath(element).getCompilationUnit();
-		JCTree              pos  = trees.getTree(element);
-		DocCommentTree      doc  = trees.getDocCommentTree(element);
+		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
+		JCTree            pos  = trees.getTree(element);
+		DocCommentTree    doc  = trees.getDocCommentTree(element);
 		if (doc == null) {
 			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "必须有文档注释"));
@@ -45,15 +46,45 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "的@see必须为引用"));
 			return null;
 		}
-		// println(reference);
 
 		Element ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
+		l:
 		if (ref == null) {
+			JCTree expressionCpy = reference.qualifierExpression;
+			JCTree expression    = expressionCpy;
+			Name   name          = null;
+			while (expression instanceof JCFieldAccess access) {
+				if (access.selected instanceof JCIdent i) {
+					name = i.name;
+					break;
+				}
+				expression = access.selected;
+			}
+			if (name == null && expression instanceof JCIdent i) name = i.name;
+
+			// SPrinter.println("access=" + expression);
+			// 尝试从import 中查找
+			for (var i : unit.getImports()) {
+				if (!i.isStatic() && i.qualid.name.toString().equals("*")) {
+					if (expressionCpy instanceof JCFieldAccess && expression instanceof JCFieldAccess access) {
+						access.selected = mMaker.Select(i.qualid.selected, name);
+					} else {
+						JCFieldAccess m = mMaker.Select(i.qualid.selected, name);
+						HopeReflect.setAccess(DCReference.class, reference, "qualifierExpression", m);
+					}
+					SPrinter.println(reference.qualifierExpression);
+					ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
+					if (ref != null) break l;
+				}
+			}
+
 			log.useSource(unit.getSourceFile());
-			log.error(pos, SPrinter.err(element + ": " + element.getKind() + " is null."));
+			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + ": Couldn't find symbol: " + reference));
 			return null;
 		}
-		if (Arrays.stream(expectKinds).noneMatch(k -> k == ref.getKind())) {
+
+		Element finalRef = ref;
+		if (Arrays.stream(expectKinds).noneMatch(k -> k == finalRef.getKind())) {
 			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "的@see必须为" + Arrays.stream(expectKinds).map(k -> k.name().toLowerCase()).toList() + "之一"));
 			return null;
@@ -87,7 +118,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public static String targetFilePath(String genClassName) {
 		return "F:/gen/" + genClassName + ".class";
 	}
-	/** 用法: mMaker.QualIdent(classSymbol())  */
+	/** 用法: mMaker.QualIdent(classSymbol()) */
 	protected ClassSymbol classSymbol() {
 		return mSymtab.enterClass(mSymtab.unnamedModule, ns(genClassName));
 	}

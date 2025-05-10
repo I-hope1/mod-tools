@@ -45,7 +45,9 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
-	static Context       context;
+	public static Source targetVersion = Source.JDK8;
+
+	static Context context;
 	static ClassFinder   classFinder;
 	static Symtab        syms;
 	static Enter         enter;
@@ -61,11 +63,10 @@ public class Replace {
 	public static JavaCompiler compiler;
 	public static Log          log;
 
-	static CopyValueProc         copyValueProc;
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
-	static Properties            bundles = new Properties();
+	static Properties    bundles      = new Properties();
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -83,7 +84,6 @@ public class Replace {
 		log = Log.instance(context);
 		compiler = JavaCompiler.instance(context);
 
-		copyValueProc = new CopyValueProc();
 		defaultToStatic = new DefaultToStatic(context);
 		desugarStringTemplate = new DesugarStringTemplate(context);
 		desugarRecord = new DesugarRecord();
@@ -280,7 +280,9 @@ public class Replace {
 		 .filter(diag -> {
 			 // skip包不可见的错误
 			 if (diag.isFlagSet(DiagnosticFlag.RESOLVE_ERROR) && diag.getCode().contains("package.not.visible")) return false;
+			 // 语法错误
 			 if (!diag.isFlagSet(DiagnosticFlag.SYNTAX)) return true;
+
 			 try {
 				 JavaFileObject filer = diag.getSource();
 				 String[]       args  = Arrays.stream(diag.getArgs()).map(String::valueOf).toArray(String[]::new);
@@ -333,10 +335,9 @@ public class Replace {
 	/** 使source8就可以支持所有特性 */
 	public static void replaceSource() {
 		long   off    = fieldOffset(Feature.class, "minLevel");
-		Source source = Source.JDK8;
 		for (Feature feature : Feature.values()) {
-			if (!feature.allowedInSource(source)) {
-				unsafe.putObject(feature, off, source);
+			if (!feature.allowedInSource(targetVersion)) {
+				unsafe.putObject(feature, off, targetVersion);
 			}
 		}
 	}
@@ -379,6 +380,7 @@ public class Replace {
 	}
 
 
+	/** @see com.sun.tools.javac.comp.Resolve#lookupInvisibleSymbol */
 	public static <S extends Symbol> Symbol lookupInvisibleSymbol(
 	 Env<AttrContext> env,
 	 Name name,
@@ -428,7 +430,7 @@ public class Replace {
 		setAccess(cl, instance, key, val);
 	}
 	private static <T> void re_init(Class<T> clazz, T instance) throws Throwable {
-		MethodHandle init = InitHandle.findInitDesktop(clazz, clazz.getDeclaredConstructor(Context.class), clazz);
+		MethodHandle init = InitHandleC.findInitDesktop(clazz, clazz.getDeclaredConstructor(Context.class), clazz);
 		init.invoke(instance, context);
 	}
 

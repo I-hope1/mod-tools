@@ -23,20 +23,30 @@ jobs:
         id: wf_info
         run: |
           echo "Workflow run ID: ${{ github.event.workflow_run.id }}"
-          echo "Triggering ref: ${{ github.event.workflow_run.head_branch }}"
+          
+          # 将 GHA context 变量的值赋给 shell 变量
+          triggering_ref="${{ github.event.workflow_run.head_branch }}"
+          echo "Triggering ref: ${triggering_ref}"
+
+          # 现在对 shell 变量使用 Bash 字符串操作
           # 从 head_branch (e.g., refs/tags/v1.0.0) 提取标签名
-          TAG_NAME="${{ github.event.workflow_run.head_branch#refs/tags/ }}"
+          TAG_NAME="${triggering_ref#refs/tags/}"
+          echo "Extracted TAG_NAME: ${TAG_NAME}"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
           
           # 根据 deploy.yml 中 artifact 的命名逻辑，重构 artifact 的基础名称
           # deploy.yml 中的 artifact name: ${{ github.event.repository.name }}-${{ env.RELEASE_VERSION }}
           # github.event.workflow_run.repository.name 是仓库名
-          ARTIFACT_BASE_NAME="${{ github.event.workflow_run.repository.name }}-${TAG_NAME}"
+          repository_name="${{ github.event.workflow_run.repository.name }}" # 仓库名
+          ARTIFACT_BASE_NAME="${repository_name}-${TAG_NAME}"
+          echo "Calculated ARTIFACT_BASE_NAME: ${ARTIFACT_BASE_NAME}"
           echo "artifact_base_name=${ARTIFACT_BASE_NAME}" >> $GITHUB_OUTPUT
+
           # 由于 deploy.yml 上传的是一个目录，upload-artifact 会将其打包成 .zip
           # 所以最终的 asset 文件名会是 <artifact_base_name>.zip
-          echo "asset_file_name=${ARTIFACT_BASE_NAME}.zip" >> $GITHUB_OUTPUT
-
+          ASSET_FILE_NAME="${ARTIFACT_BASE_NAME}.zip"
+          echo "Calculated ASSET_FILE_NAME: ${ASSET_FILE_NAME}"
+          echo "asset_file_name=${ASSET_FILE_NAME}" >> $GITHUB_OUTPUT
 
       - name: Get Release by tag
         id: get_release
@@ -58,7 +68,6 @@ jobs:
               return;
             } catch (error) {
               core.error(`Error fetching release for tag ${tagName}: ${error.message}`);
-              // 尝试列出最近的几个 release 以便调试
               try {
                 const releases = await github.rest.repos.listReleases({
                   owner: context.repo.owner,
@@ -74,26 +83,19 @@ jobs:
               throw error;
             }
         env:
-          TAG_NAME_ENV: ${{ steps.wf_info.outputs.tag_name }} # 传递给脚本内部，虽然上面直接用了
+          TAG_NAME_ENV: ${{ steps.wf_info.outputs.tag_name }}
 
       - name: Download artifact from 'Build project'
         uses: actions/download-artifact@v4
         with:
-          # 这是 deploy.yml 中 upload-artifact 使用的 'name'
           name: ${{ steps.wf_info.outputs.artifact_base_name }}
-          path: ./downloaded-artifact # Artifact 内容会下载到这个目录
-          # workflow 和 run-id 会自动从 workflow_run 事件中推断出来
-          # workflow: ${{ github.event.workflow_run.workflow_id }} # 通常不需要显式指定
+          path: ./downloaded-artifact
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: List downloaded files (for debugging)
         run: |
           echo "Listing contents of ./downloaded-artifact:"
           ls -R ./downloaded-artifact
-          # 由于 deploy.yml 上传了一个目录 (build/unpacked) 作为名为 ARTIFACT_BASE_NAME 的 artifact，
-          # download-artifact 会下载一个名为 ARTIFACT_BASE_NAME.zip 的文件到 path 指定的目录中。
-          # 例如，如果 ARTIFACT_BASE_NAME 是 "myrepo-v1.0.0"，则下载的文件是 "myrepo-v1.0.0.zip"。
-          # 所以，要上传的文件的实际路径是 ./downloaded-artifact/${{ steps.wf_info.outputs.asset_file_name }}
 
       - name: Upload asset to Release
         uses: actions/upload-release-asset@v1
@@ -101,6 +103,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: ./downloaded-artifact/${{ steps.wf_info.outputs.asset_file_name }} # 确保这是 .zip 文件的路径
-          asset_name: ${{ steps.wf_info.outputs.asset_file_name }} # Release Asset 的名称
+          asset_path: ./downloaded-artifact/${{ steps.wf_info.outputs.asset_file_name }}
+          asset_name: ${{ steps.wf_info.outputs.asset_file_name }}
           asset_content_type: application/zip

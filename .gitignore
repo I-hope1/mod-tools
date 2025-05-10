@@ -163,3 +163,4 @@ hs_err_pid*.log
 
 a.txt
 /processorLog/
+.vscode/

@@ -14,9 +14,13 @@ import java.util.Set;
 
 @AutoService(Processor.class)
 public class InlineProc extends BaseProcessor<MethodSymbol> {
+	public static boolean DEBUG_INLINE = false;
 	public void dealElement(MethodSymbol element) throws Throwable {
 		Inline annotation = element.getAnnotation(Inline.class);
 		if (annotation == null) return;
+		if (DEBUG_INLINE) {
+			println("Inline: " + element.getQualifiedName());
+		}
 		TopTranslator translator = TopTranslator.instance(_context);
 		// translator.todos.add(new Todo(JCLambda.class, lambda -> {
 		// 	// if (lambda.params.stream().anyMatch(p -> trees.getTree())
@@ -45,7 +49,7 @@ public class InlineProc extends BaseProcessor<MethodSymbol> {
 			}
 			JCMethodDecl methodDecl = trees.getTree(methodSymbol);
 			LetExpr      letExpr    = translator.translateMethodBlockToLetExpr(methodDecl, sym);
-			println(letExpr);
+			// println(letExpr);
 			return letExpr;
 		}));
 	}

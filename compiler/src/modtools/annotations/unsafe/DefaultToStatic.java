@@ -8,8 +8,6 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 
-import static modtools.annotations.PrintHelper.SPrinter.println;
-
 /** 这个还未完全适配所有的 */
 public class DefaultToStatic extends TreeTranslator {
 	public static final String NAME_PREFIX = "$default$";
@@ -98,9 +96,9 @@ public class DefaultToStatic extends TreeTranslator {
 			// apply.type = ms.type;
 			methodDecl.body = make.Block(0, List.of(enclMethod.getReturnType() == syms.voidType ? make.Exec(apply)
 			 : make.Return(apply)));
-			println(genMethod);
+			// println(genMethod);
 			// methodDecl.body.accept(enter);
-			println(methodDecl);
+			// println(methodDecl);
 
 			toAppendMethods.add(genMethod);
 		}

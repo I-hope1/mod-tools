@@ -12,14 +12,15 @@ import arc.util.Reflect;
 import modtools.ui.IntUI;
 
 public class SclListener extends ClickListener {
+	public static final float defOffset = 8;
+
 	public static Element fireElement, overElement;
 	public boolean disabled0, disabled1;
 	protected boolean isDisabled() {
 		return disabled0 || disabled1;
 	}
-	public static final float defOffset = 8;
-	public              float offset    = defOffset;
-	public              float defWidth, defHeight, defX, defY, minW, minH;
+	public float offset = defOffset;
+	public float defWidth, defHeight, defX, defY, minW, minH;
 
 	public final Element bind;
 

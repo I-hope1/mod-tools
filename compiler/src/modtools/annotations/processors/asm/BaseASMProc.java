@@ -72,7 +72,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 						JCFieldAccess m = mMaker.Select(i.qualid.selected, name);
 						HopeReflect.setAccess(DCReference.class, reference, "qualifierExpression", m);
 					}
-					SPrinter.println(reference.qualifierExpression);
+					// SPrinter.println(reference.qualifierExpression);
 					ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
 					if (ref != null) break l;
 				}

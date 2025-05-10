@@ -3,10 +3,9 @@ description: '''
 A mod provides a variety of tools for modding.
 
 -----------------
-Version 1.5.5
+Version 1.5.6
 ## Highlight
-- Fixed a severe npe bug about data(settings) save.
-- Added a setting: force_language.
+- Added some
 -----------------
 
 ## ShowUIList
@@ -95,7 +94,7 @@ Version 1.5.5
 '''
 author: "I hope..."
 hidden: true
-version: 1.5.5
+version: 1.5.6
 minGameVersion: 147
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

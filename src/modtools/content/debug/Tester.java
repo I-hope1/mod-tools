@@ -31,6 +31,7 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import modtools.*;
+import modtools.annotations.asm.CopyConstValue;
 import modtools.annotations.settings.Switch;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
@@ -75,6 +76,9 @@ import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
 	private static final int FADE_ALIGN = Align.bottomLeft;
+	/** @see NativeJavaClass#javaClassPropertyName  */
+	@CopyConstValue
+	static final String javaClassPropertyName = "";
 
 	public static final float WIDTH = 420;
 
@@ -1018,7 +1022,7 @@ public class Tester extends Content {
 
 			keys.clear().addAll(getAllIds(searchingKey, obj));
 			if (obj == customScope) keys.addAll(JSSyntax.varSet.toSeq().list());
-			if (obj instanceof NativeJavaClass) keys.add("__javaObject__");
+			if (obj instanceof NativeJavaClass) keys.add(javaClassPropertyName);
 
 			complements.clear();
 			keys.each(o -> {

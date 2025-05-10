@@ -17,9 +17,6 @@ import java.util.function.Consumer;
 /** TODO: 在TransLiterals之前替换 */
 @AutoService(Processor.class)
 public class ASMProcessor extends BaseASMProc<VarSymbol> {
-	static {
-		SPrinter.println("init");
-	}
 	public void process() { }
 
 	public void dealElement(VarSymbol element) throws Throwable {

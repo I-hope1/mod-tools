@@ -9,24 +9,23 @@ import arc.graphics.gl.*;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.*;
-import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
-import arc.struct.Seq;
+import arc.struct.*;
 import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.IntVars;
 import modtools.ui.IntUI;
-import modtools.ui.comp.Window;
+import modtools.ui.comp.*;
 import modtools.ui.comp.Window.*;
 import modtools.ui.comp.limit.*;
 import modtools.ui.comp.utils.ArrayItemLabel;
 import modtools.ui.control.HopeInput;
 import modtools.utils.*;
-import modtools.utils.JSFunc.JColor;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.search.BindCell;
 import modtools.utils.ui.ShowInfoWindow;
@@ -37,31 +36,25 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static modtools.ui.HopeStyles.*;
-import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 
 public interface INFO_DIALOG {
-	float vsize = 42; // Size for control buttons
+	float btn_size = 42; // Size for control buttons
 
 	//region Static Inner Class for Drag State
 	/** Holds the state during a drag-and-drop operation for array items. */
-	static class DragState {
-		boolean isDragging                 = false;
-		Table   dragRow                    = null;       // The actual row element being dragged
-		Table   originalRowParent          = null; // Parent of the original row (to add/remove it)
-		int     originalRowIndex           = -1; // Index in the original parent
-		Element dragActor                  = null;     // Visual representation while dragging
-		Table   dropPlaceholder            = null; // Visual indicator for drop position
-		int     fromIndex                  = -1; // Logical index of the item being dragged
-		int     potentialToIndex           = -1;  // Logical index where the drop *would* occur
-		Vec2    dragStartOffset            = new Vec2(); // Offset from mouse click to top-left of dragRow
-		Image   currentDropTargetSeparator = null; // The separator currently being hovered over
+	class DragState {
+		BindCell bindCell        = BindCell.ofConst(BindCell.UNSET_CELL);
+		boolean  isDragging      = false;
+		RowTable dragRow         = null; // The actual row element being dragged
+		Element  dropPlaceholder = null; // Visual indicator for drop position
+		Vec2     dragStartOffset = new Vec2();
 
 		/** Creates the placeholder element if it doesn't exist. */
-		Table getOrCreatePlaceholder() {
+		Element getOrCreatePlaceholder() {
 			if (dropPlaceholder == null) {
-				dropPlaceholder = new Table().background(Tex.selection);
-				dropPlaceholder.setSize(dragRow.getWidth(), dragRow.getHeight()); // Match size of dragged row
+				dropPlaceholder = new Image(Tex.whitePane);
+				// dropPlaceholder.setSize(dragRow.getWidth(), dragRow.getHeight()); // Match size of dragged row
 			}
 			return dropPlaceholder;
 		}
@@ -96,13 +89,111 @@ public interface INFO_DIALOG {
 
 			// --- Global TouchUp Listener (for cancelling drags) ---
 			InputListener globalListener = new InputListener() {
+				public static final float durationSeconds = 280f;
+				RowTable rowTableR;
+				Task     task;
+				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					if (isScheduled()) return false;
+
+					RowTable rowTable = ElementUtils.findParent(event.targetActor, RowTable.class);
+					if (rowTable != null) {
+						rowTableR = rowTable;
+						task = Time.runTask(60f / 1000f * durationSeconds, () -> setDragState(rowTable, x, y));
+					}
+					return true;
+				}
+				private boolean isScheduled() {
+					return task != null && task.isScheduled();
+				}
+				private void setDragState(RowTable rowTable, float x, float y) {
+					if (dragState.isDragging) { return; }
+
+					dragState.isDragging = true;
+					dragState.dragRow = rowTable;
+					Table table = (Table) rowTable.parent;
+					dragState.bindCell.setCell(table.getCell(rowTable));
+					Element placeholder = dragState.getOrCreatePlaceholder();
+					dragState.bindCell.replace(placeholder, true);
+					SnapshotSeq<Element> children = table.getChildren();
+					children.begin();
+					for (Element child : children) {
+						if (child instanceof RowTable r) r.cancelClick = true;
+					}
+					children.end();
+					table.addChild(rowTable);
+					mainCont.localToDescendantCoordinates(rowTable, dragState.dragStartOffset.set(x, y));
+				}
+				public void touchDragged(InputEvent event, float x, float y, int pointer) {
+					if (isScheduled() && !ElementUtils.checkIn(rowTableR, mainCont, x, y)) {
+						task.cancel();
+					}
+					if (dragState.isDragging) {
+						dragState.dragRow.touchable = Touchable.disabled;
+						dragState.dragRow.setPosition(-dragState.dragStartOffset.x + x, -dragState.dragStartOffset.y + y);
+						event.stop();
+					}
+					super.touchDragged(event, x, y, pointer);
+				}
+				public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
+					if (!dragState.isDragging) return;
+
+					event.stop();
+
+					RowTable rowTable = ElementUtils.findParent(event.targetActor, RowTable.class);
+					if (rowTable != null) {
+						Table     table  = (Table) rowTable.parent;
+						Seq<Cell> cells  = table.getCells();
+						int       first  = cells.indexOf(dragState.bindCell.cell);
+						int       second = cells.indexOf(c -> c.get() == rowTable);
+						if (first == -1 || second == -1) return;
+						// Log.info("first=" + first + "; second=" + second);
+						// 交换cell
+						cells.swap(first, second);
+						// 交换rowTable的index
+						int    i1  = dragState.dragRow.index;
+						int    i2  = rowTable.index;
+						Object iv1 = Array.get(arrayHolder.get(), i1);
+						Object iv2 = Array.get(arrayHolder.get(), i2);
+						Array.set(arrayHolder.get(), i1, iv2);
+						Array.set(arrayHolder.get(), i2, iv1);
+						int index = rowTable.index;
+						rowTable.index = dragState.dragRow.index;
+						dragState.dragRow.index = index;
+
+						// 重新布局
+						table.layout();
+					}
+				}
 				@Override
 				public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-					if (dragState.isDragging) {
-						Log.debug("Drag cancelled by touchUp outside drop target");
-						cleanupDragState(dragState); // Clean up visuals and state
-						// No rebuild needed as no change occurred
-					}
+					if (!dragState.isDragging) { return; }
+
+					event.stop();
+
+					clearDragState();
+					event.stop();
+					// cleanupDragState(dragState); // Clean up visuals and state
+					// No rebuild needed as no change occurred
+				}
+				private void clearDragState() {
+					if (!dragState.isDragging) { return; }
+
+					Table dragRow = dragState.dragRow;
+					Core.app.post(() -> {
+						dragRow.touchable = Touchable.enabled;
+						SnapshotSeq<Element> children = dragRow.parent.getChildren();
+						children.begin();
+						for (Element child : children) {
+							if (child instanceof RowTable r) r.cancelClick = false;
+						}
+						children.end();
+					});
+
+					dragState.bindCell.replace(dragState.dragRow);
+					dragState.bindCell.unsetSize();
+
+					dragState.isDragging = false;
+					dragState.dragRow = null;
 				}
 			};
 
@@ -128,7 +219,7 @@ public interface INFO_DIALOG {
 				if (disposables != null) disposables.each(Disposable::dispose);
 				rebuild.run();
 				Time.runTask(1f, () -> dialog[0].setPosition(pos));
-			}).size(vsize).padRight(4);
+			}).size(btn_size).padRight(4);
 			header.button(Icon.add, clearNonei, () -> {
 				Class<?> componentType = clazz.getComponentType();
 				Object   defaultValue  = FieldUtils.defaultValue(componentType);
@@ -136,7 +227,7 @@ public interface INFO_DIALOG {
 					arrayHolder.set(addArrayElement(arrayHolder.get(), defaultValue));
 					rebuild.run();
 				});
-			}).size(vsize);
+			}).size(btn_size);
 
 			// --- Layout ---
 			mainCont.add(header).growX().row();
@@ -150,12 +241,13 @@ public interface INFO_DIALOG {
 			dialog[0].cont.add(mainCont).grow();
 
 			// Add global listener when shown, remove when hidden
-			dialog[0].shown(() -> Core.scene.addListener(globalListener));
+			dialog[0].shown(() -> mainCont.addCaptureListener(globalListener));
 			dialog[0].hidden(() -> {
-				Core.scene.removeListener(globalListener);
-				cleanupDragState(dragState); // Clean up if window is hidden during drag
+				mainCont.removeCaptureListener(globalListener);
+
 				Seq<Disposable> disposables = dialog[0].userObject instanceof Seq<?> s ? (Seq<Disposable>) s : null;
 				if (disposables != null) disposables.each(Disposable::dispose);
+				dialog[0] = null;
 			});
 
 
@@ -194,6 +286,22 @@ public interface INFO_DIALOG {
 			addSeparator(cont, i + 1, dragState, arrayHolderRef, rebuildAction);
 		}
 	}
+	class RowTable extends LimitTable {
+		public int     index;
+		public boolean cancelClick = false;
+		public RowTable(int index) {
+			this.index = index;
+			addCaptureListener(new InputListener() {
+				public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					if (cancelClick) event.stop();
+					return true;
+				}
+				public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+					if (cancelClick) event.stop();
+				}
+			});
+		}
+	}
 
 	/** Builds a single row with manual drag listener */
 	private static void buildRowWithManualDrag(Table listTable, AtomicReference<Object> arrayHolderRef,
@@ -202,7 +310,7 @@ public interface INFO_DIALOG {
 	                                           final DragState dragState,
 	                                           final Runnable rebuildListAction) {
 
-		Table rowTable = new LimitTable();
+		var rowTable = new RowTable(index);
 		// rowTable.background(Styles.black6); // Background for the row
 
 		// --- Remove Button ---
@@ -211,14 +319,15 @@ public interface INFO_DIALOG {
 				arrayHolderRef.set(removeArrayElement(arrayHolderRef.get(), index));
 				rebuildListAction.run();
 			});
-		}).size(vsize / 1.5f).padLeft(4).right();
+		}).size(btn_size / 1.5f).padLeft(4).right();
 
 		// --- Item Display ---
 		var itemButton = new LimitTextButton("", cleart);
 		itemButton.clearChildren();
-		itemButton.add(index + ":", defaultLabel).padRight(8f).color(Color.lightGray);
+		itemButton.label(() -> rowTable.index + ":").style(defaultLabel).padRight(8f).color(Color.lightGray);
 
 		var label = new ArrayItemLabel<>(componentType, arrayHolderRef.get(), index);
+		itemButton.update(() -> label.i = rowTable.index);
 
 		itemButton.clicked(() -> {
 			Object itemValue = label.val;
@@ -234,77 +343,7 @@ public interface INFO_DIALOG {
 		itemButton.add(label).growX().left();
 		rowTable.add(itemButton).growX().minHeight(40);
 
-		IntUI.addWatchButton(rowTable, arrayHolderRef.get() + "#" + index, () -> Array.get(arrayHolderRef.get(), index)).padLeft(4);
-
-		// --- Manual Drag Listener for the Row ---
-		rowTable.addListener(new InputListener() {
-			final Vec2 localStart = new Vec2(); // Local tracking for drag start
-			boolean canDrag       = false;
-			float   dragThreshold = 10f; // Pixels to move before drag starts
-
-			@Override
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (button != KeyCode.mouseLeft) return false;
-				if (dragState.isDragging) return false; // Prevent starting new drag
-
-				canDrag = true;
-				localStart.set(x, y);
-				return true; // Capture events
-			}
-
-			@Override
-			public void touchDragged(InputEvent event, float x, float y, int pointer) {
-				if (!canDrag) return;
-
-				if (!dragState.isDragging && localStart.dst(x, y) > dragThreshold) {
-					// --- Start Drag ---
-					dragState.isDragging = true;
-					dragState.fromIndex = index;
-					dragState.dragRow = rowTable; // The row being dragged
-					// dragState.originalRowParent = rowTable.parent; // Store parent
-					dragState.originalRowIndex = rowTable.parent.getChildren().indexOf(rowTable); // Store index
-					dragState.dragStartOffset.set(x, y); // Offset within the row
-
-					// Create visual actor for dragging (clone the row visually)
-					// Cloning elements is complex. Let's make a simple visual clone.
-					dragState.dragActor = new Label(index + ": " + label.getText().toString(), Styles.outlineLabel); // Simple actor
-					dragState.dragActor.pack();
-					topGroup.addChild(dragState.dragActor);
-
-					// Create placeholder element and put it in the original row's place
-					Table placeholder = dragState.getOrCreatePlaceholder();
-					// ((Table) rowTable.parent).getCell(rowTable).clearElement(); // Temporarily remove original row
-					// Re-add placeholder in the original position
-					if (dragState.originalRowParent != null && dragState.originalRowIndex != -1) {
-						dragState.originalRowParent.addChildAt(dragState.originalRowIndex, placeholder);
-					}
-
-					// Dim original row representation (actor)
-					dragState.dragRow.setColor(Color.lightGray); // Use lightGray
-				}
-
-				if (dragState.isDragging) {
-					// --- Update Drag Actor Position ---
-					Vec2 stageCoords = rowTable.localToStageCoordinates(Tmp.v1.set(x, y));
-					// Position actor's top-left based on stage coords minus the initial offset
-					dragState.dragActor.setPosition(
-					 stageCoords.x - dragState.dragStartOffset.x,
-					 stageCoords.y - (dragState.dragActor.getHeight() - dragState.dragStartOffset.y), // Adjust Y based on actor height and offset
-					 Align.topLeft);
-
-					// Placeholder position is handled by the separator listener now
-					// We don't need to update it here based on mouse, only the separator does.
-				}
-			}
-
-			@Override
-			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (!canDrag) return;
-				canDrag = false;
-				// Don't handle drop here, the separator listener handles it.
-				// cleanupDragState will be called by the separator or global listener.
-			}
-		});
+		IntUI.addWatchButton(rowTable, () -> arrayHolderRef.get() + "#" + rowTable.index, () -> Array.get(arrayHolderRef.get(), index)).padLeft(4);
 
 		listTable.add(rowTable).growX().row();
 	}
@@ -316,160 +355,13 @@ public interface INFO_DIALOG {
 	                                 final Runnable rebuildListAction) {
 
 		// The separator image itself
-		Image separator = listTable.image().color(Tmp.c1.set(JColor.c_underline))
-		 .growX().pad(0).height(3f).get();
+		Image separator = Underline.of(listTable, 2).get();
 		listTable.row(); // Ensure separator is in its own row
-
-		separator.addListener(new InputListener() {
-			@Override
-			public void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
-				if (dragState.isDragging && pointer == -1) { // pointer == -1 for mouse hover
-					// Highlight this separator
-					if (dragState.currentDropTargetSeparator != null) {
-						dragState.currentDropTargetSeparator.setColor(Tmp.c1.set(JColor.c_underline));
-					}
-					separator.setColor(Color.cyan);
-					dragState.potentialToIndex = targetIndex;
-					dragState.currentDropTargetSeparator = separator;
-
-					// Position placeholder over this separator's row
-					Table placeholder = dragState.getOrCreatePlaceholder();
-					positionPlaceholder(listTable, placeholder, targetIndex);
-				}
-			}
-
-			@Override
-			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
-				// If exiting the current target separator (and still dragging/hovering)
-				if (dragState.isDragging && dragState.currentDropTargetSeparator == separator && pointer == -1) {
-					separator.setColor(Tmp.c1.set(JColor.c_underline));
-					dragState.potentialToIndex = -1;
-					dragState.currentDropTargetSeparator = null;
-					// Remove placeholder when exiting the target
-					if (dragState.dropPlaceholder != null) dragState.dropPlaceholder.remove();
-				}
-			}
-
-			@Override
-			public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				// Allow touchDown to pass through
-				return false;
-			}
-
-			@Override
-			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-				if (dragState.isDragging && button == KeyCode.mouseLeft) {
-					// --- Drop Occurred on this Separator ---
-					int fromIndex = dragState.fromIndex;
-					int toIndex   = targetIndex; // Drop is *before* the element at targetIndex
-
-					Log.debug("Drop detected on separator: targetIndex = @", targetIndex);
-
-					cleanupDragState(dragState); // Clean up visuals and state
-					event.cancel(); // Prevent global listener
-
-					// Adjust target index if moving item downwards
-					if (fromIndex < toIndex) {
-						toIndex--;
-					}
-
-					if (fromIndex != toIndex) {
-						Log.debug("Final Move: from @ to @", fromIndex, toIndex);
-						final int finalToIndex = toIndex;
-						showArrayChangeWarning("Moving an element will create a new array instance.", () -> {
-							arrayHolderRef.set(moveArrayElement(arrayHolderRef.get(), fromIndex, finalToIndex));
-							rebuildListAction.run();
-						});
-					} else {
-						Log.debug("Drop resulted in no index change.");
-						// If no change, need to put the original row back
-						if (dragState.dragRow != null && dragState.originalRowParent != null && dragState.originalRowIndex != -1) {
-							// Re-add the original row where it was removed from
-							dragState.originalRowParent.addChildAt(dragState.originalRowIndex, dragState.dragRow);
-						}
-					}
-				}
-			}
-		});
 	}
-
-	/** Cleans up drag actor, resets original row appearance, and resets drag state */
-	private static void cleanupDragState(DragState dragState) {
-		if (dragState.isDragging) {
-			if (dragState.dragActor != null) dragState.dragActor.remove();
-			if (dragState.currentDropTargetSeparator != null) {
-				dragState.currentDropTargetSeparator.setColor(Tmp.c1.set(JColor.c_underline));
-			}
-			if (dragState.dropPlaceholder != null) dragState.dropPlaceholder.remove();
-
-			// Restore original row if it was removed
-			if (dragState.dragRow != null && dragState.dragRow.parent == null && dragState.originalRowParent != null && dragState.originalRowIndex != -1) {
-				// Add back to its original position
-				dragState.originalRowParent.addChildAt(dragState.originalRowIndex, dragState.dragRow);
-			}
-
-			if (dragState.dragRow != null) {
-				dragState.dragRow.touchable = Touchable.enabled;
-				dragState.dragRow.actions(Actions.alpha(1f, 0.1f));
-			}
-
-			// Reset state fields
-			dragState.isDragging = false;
-			dragState.dragRow = null;
-			dragState.originalRowParent = null;
-			dragState.originalRowIndex = -1;
-			dragState.dragActor = null;
-			// dragState.dropPlaceholder = null; // Don't null, just remove from parent
-			dragState.fromIndex = -1;
-			dragState.potentialToIndex = -1;
-			dragState.currentDropTargetSeparator = null;
-		}
-	}
-
-	/** Calculates the target index for dropping based on Y coordinate */
-	private static int calculateDropIndex(Table listTable, float stageY, AtomicReference<Object> arrayHolderRef) {
-		// This method is less relevant now that separators handle the drop index.
-		// The separator's touchUp listener will use its own targetIndex.
-		// Keeping a simplified version for reference or potential other uses.
-		Seq<Element> children     = listTable.getChildren();
-		int          elementIndex = 0; // Tracks the logical index of the array element
-		for (int i = 0; i < children.size; i++) {
-			Element child = children.get(i);
-			if (child instanceof Image) { // Separator
-				// Do nothing for logical index, just skip visual element
-			} else if (child instanceof LimitTable) { // Assuming rows are LimitTable
-				Vec2 childPos = child.localToStageCoordinates(Tmp.v2.set(0, child.getHeight() / 2f));
-				if (stageY > childPos.y) {
-					return elementIndex; // Drop *before* this element
-				}
-				elementIndex++; // Increment logical index only for element rows
-			}
-		}
-		// If below all rows, drop at the end
-		return Array.getLength(arrayHolderRef.get());
-	}
-
-
-	/** Positions the placeholder visual */
-	private static void positionPlaceholder(Table listTable, Table placeholder, int targetIndex) {
-		int childIndex = targetIndex * 2; // Account for row + separator in the visual listTable
-		if (placeholder.parent != listTable) {
-			// Ensure index is valid before adding
-			childIndex = Math.min(childIndex, listTable.getChildren().size);
-			listTable.addChildAt(childIndex, placeholder);
-		} else if (listTable.getChildren().indexOf(placeholder) != childIndex) {
-			// If already added but position is wrong, move it
-			placeholder.remove();
-			childIndex = Math.min(childIndex, listTable.getChildren().size);
-			listTable.addChildAt(childIndex, placeholder);
-		}
-		placeholder.toFront();
-	}
-
 
 	// --- Array Manipulation Helpers ---
 	private static void showArrayChangeWarning(String message, Runnable confirmedAction) {
-		IntUI.showConfirm("Warning", message + "\n\nThis action cannot be undone. Proceed?", confirmedAction);
+		IntUI.showConfirm("Warning", message + "\n\nContinue?", confirmedAction);
 	}
 
 	/** Moves an element within the array. Returns a new array instance. */
@@ -601,8 +493,8 @@ public interface INFO_DIALOG {
 
 	class JSWindow extends HiddenTopWindow implements IDisposable {
 		Cons<Window> cons;
-		public boolean  autoDispose = false;
-		       Runnable autoDisposeRun;
+		public boolean autoDispose = false;
+		Runnable autoDisposeRun;
 		private void dispose() { if (autoDispose && !HopeInput.pressed.isEmpty()) { hide(); } }
 		public void act(float delta) {
 			super.act(delta);

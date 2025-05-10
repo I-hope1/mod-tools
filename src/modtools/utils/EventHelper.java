@@ -12,7 +12,6 @@ import arc.util.Log;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
-import modtools.annotations.DebugMark;
 import modtools.ui.IntUI;
 
 import java.util.function.Consumer;
@@ -171,16 +170,18 @@ public class EventHelper {
 		return event;
 	}
 
-	@DebugMark
 	public static class LongPressListener extends ClickListener {
 		final long  duration;
 		final Boolc boolc;
+		/** 长按
+		 * @param boolc0 {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+		 * @param duration0 需要长按的事件（单位毫秒[ms]，600ms=0.6s）*/
 		public LongPressListener(Boolc boolc0, long duration0) {
 			if (boolc0 == null) throw new IllegalArgumentException("boolc cannot be null.");
 			boolc = boolc0;
 			duration = duration0;
 			task = TaskManager.newTask(() -> {
-				if (!longPress && pressed && mouseVec.dst(last) < IntUI.MAX_OFF) {
+				if (!longPress && pressed && mouseVec.dst(last) < IntUI.MAX_LONGPRESS_OFF) {
 					longPress = true;
 					Core.scene.touchUp((int) mouseVec.x, (int) mouseVec.y, lastPointer, button);
 				}
@@ -201,7 +202,7 @@ public class EventHelper {
 			return false;
 		}
 		public void touchDragged(InputEvent event, float x, float y, int pointer) {
-			if (mouseVec.dst(last) >= IntUI.MAX_OFF && task != null) task.cancel();
+			if (mouseVec.dst(last) >= IntUI.MAX_LONGPRESS_OFF && task != null) task.cancel();
 		}
 		public final void longPress0(InputEvent event) {
 			if (!longPress) return;
@@ -243,7 +244,7 @@ public class EventHelper {
 			return super.touchDown(event, x, y, pointer, button);
 		}
 		public void clicked(InputEvent event, float x, float y) {
-			if (last.dst(mouseVec) > IntUI.MAX_OFF) return;
+			if (last.dst(mouseVec) > IntUI.MAX_DCLICK_OFF) return;
 			super.clicked(event, x, y);
 			// 至少满足一个，可能是个坑
 			if (click != null && d_click == null) {
@@ -254,7 +255,7 @@ public class EventHelper {
 				last.set(mouseVec);
 				return;
 			}
-			if (mouseVec.dst(last) < IntUI.MAX_OFF) d_clicked(event, x, y);
+			if (mouseVec.dst(last) < IntUI.MAX_DCLICK_OFF) d_clicked(event, x, y);
 		}
 		public void d_clicked(InputEvent event, float x, float y) {
 			d_click.run();

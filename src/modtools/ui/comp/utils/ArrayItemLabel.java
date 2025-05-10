@@ -8,8 +8,8 @@ import modtools.ui.menu.MenuItem;
 import java.lang.reflect.Array;
 
 public class ArrayItemLabel<T> extends ValueLabel {
-	Object arr;
-	int    i;
+	public Object arr;
+	public int i;
 	public ArrayItemLabel(Class<T> type, Object arr, int i) {
 		super(type);
 		this.arr = arr;

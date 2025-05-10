@@ -26,7 +26,7 @@ public class InitMethodHandle {
 	 * for window (value: {@value MethodHandleNatives.Constants#REF_invokeSpecial})
 	 * @see MethodHandleNatives.Constants#REF_invokeSpecial
 	 */
-	@CopyConstValue
+	// @CopyConstValue
 	public static final byte REF_invokeSpecial = 7;
 
 	static {
@@ -51,9 +51,6 @@ public class InitMethodHandle {
 		 INVOKE_SPECIAL, MethodType.methodType(Void.TYPE, params));
 	}
 
-	static void a() {
-		Log.info(MN_IS_METHOD);
-	}
 	// --------desktop--------
 	/**
 	 * @see MemberName#IS_METHOD
@@ -66,7 +63,7 @@ public class InitMethodHandle {
 	 * @see MethodHandleNatives.Constants#MN_IS_CONSTRUCTOR
 	 */
 	@CopyConstValue
-	static final int MN_IS_CONSTRUCTOR = 0x00020000;
+	static final int MN_IS_CONSTRUCTOR = -1;
 
 
 	public static MethodHandle findInitDesktop
@@ -78,8 +75,8 @@ public class InitMethodHandle {
 		Cons<Object> resolver = o -> {
 			int flags = unsafe.getInt(o, MEMBER_NAME_FLAGS);
 			unsafe.putInt(o, MEMBER_NAME_FLAGS,
-			 flags ^ MN_IS_CONSTRUCTOR // 去除
-			 | MN_IS_METHOD // 添加
+			 flags ^ MN_IS_CONSTRUCTOR // 去除MN_IS_CONSTRUCTOR
+			 | MN_IS_METHOD // 添加MN_IS_METHOD
 			);
 		};
 		return findSpecial(refc, maker, resolver, specialCaller);

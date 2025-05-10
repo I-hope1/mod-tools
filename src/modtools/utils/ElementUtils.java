@@ -35,6 +35,16 @@ public interface ElementUtils {
 		return findParent(actor, clazz::isInstance);
 	}
 
+	static boolean checkIn(Element actor, float x, float y) {
+		return checkIn(actor, actor.getScene().root, x, y);
+	}
+	static boolean checkIn(Element actor, Group group, float x, float y) {
+		if (actor == null) return false;
+		if (group == null) return false;
+		group.localToDescendantCoordinates(actor, Tmp.v1.set(x, y));
+		return Tmp.v1.x > 0 && Tmp.v1.y > 0 && Tmp.v1.x < actor.getWidth() && Tmp.v1.y < actor.getHeight();
+	}
+
 
 	static Style getStyle(Element element) {
 		try {

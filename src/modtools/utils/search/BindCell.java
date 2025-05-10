@@ -1,9 +1,10 @@
 package modtools.utils.search;
 
 import arc.scene.Element;
-import arc.scene.ui.layout.Cell;
+import arc.scene.ui.layout.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
+import modtools.utils.ui.CellTools;
 
 public final class BindCell implements Poolable {
 	public static final  Cell<?>        UNSET_CELL   = new Cell<>();
@@ -38,8 +39,15 @@ public final class BindCell implements Poolable {
 		this.el = cell.get();
 	}
 	public void replace(Element el) {
-		this.el = el;
+		replace(el, false);
+	}
+	public void replace(Element newEl, boolean keepSize) {
+		if (keepSize) cell.size(el.getWidth() / Scl.scl(), el.getHeight() / Scl.scl());
+		el = newEl;
 		build();
+	}
+	public void unsetSize() {
+		cell.size(CellTools.unset);
 	}
 	public Cell<?> getCpy() {
 		if (cpy == null) {
@@ -84,5 +92,9 @@ public final class BindCell implements Poolable {
 		el = null;
 		cpy = null;
 		cell = null;
+	}
+	public void setCell(Cell cell) {
+		this.cell = cell;
+		require();
 	}
 }

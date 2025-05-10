@@ -4,6 +4,7 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.layout.Cell;
 import arc.util.*;
+import modtools.annotations.asm.CopyConstValue;
 import modtools.utils.reflect.FieldUtils;
 
 import java.lang.reflect.Field;
@@ -31,6 +32,7 @@ public interface CellTools {
 	 f_uniformY          = f("uniformY");
 
 	/** @see Cell#unset */
+	@CopyConstValue
 	float unset = Float.NEGATIVE_INFINITY;
 
 	private static Field f(String name) {

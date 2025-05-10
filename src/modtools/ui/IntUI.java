@@ -60,8 +60,9 @@ public class IntUI {
 	/** pad 0 */
 	public static final Drawable noneui  = new EmptyDrawable(0);
 
-	public static final float DEFAULT_WIDTH = 180;
-	public static final float MAX_OFF       = 35f;
+	public static final float DEFAULT_WIDTH  = 180;
+	public static final float MAX_LONGPRESS_OFF = 6f;
+	public static final float MAX_DCLICK_OFF = 35f;
 
 	public static Frag     frag;
 	public static TopGroup topGroup;
@@ -153,14 +154,22 @@ public class IntUI {
 	 * @return the cell
 	 */
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
+		return addWatchButton(buttons, () -> info, value);
+	}
+		/**
+	 * Add watch button cell.
+	 * @return the cell
+	 */
+	public static Cell<?> addWatchButton(Table buttons, Prov<String> info, MyProv<Object> value) {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, IntVars.EMPTY_RUN).with(b -> b.clicked(() -> {
 			SR.of((!WatchWindow.isMultiWatch() &&
 			       ArrayUtils.findInverse(topGroup.acquireShownWindows(), e -> e instanceof WatchWindow) instanceof WatchWindow w
 				? w : JSFunc.watch())
-				.watch(info, value))
+				.watch(info.get(), value))
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
 		})).size(FUNCTION_BUTTON_SIZE).with(makeTipListener("watch.multi"));
 	}
+
 
 
 	/**

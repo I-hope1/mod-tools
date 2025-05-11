@@ -38,8 +38,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	public static boolean DEBUG = false;
 
 	private final MyTextArea   area;
-	public final MyScrollPane pane;
-	private      LinesShow    linesShow;
+	public final  MyScrollPane pane;
+	private       LinesShow    linesShow;
 	// public final  CodeTooltip  tooltip  = new CodeTooltip();
 	/** 编辑器是否只可读 */
 	public        boolean      readOnly = false,
@@ -167,6 +167,13 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;
 
+
+		public float visualRY() {
+			float    scrollOffsetY = scrollY - (int) (scrollY / lineHeight()) * lineHeight();
+			Drawable background    = getBackground();
+			return (background == null ? 0 : background.getTopHeight())
+			       + scrollOffsetY;
+		}
 		public void setSelectionUncheck(int start, int end) {
 			selectionStart = start;
 			cursor = end;
@@ -565,8 +572,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					int lastCursor = cursor;
 					moveCursor(false, Core.input.ctrl());
 					cursor++;
-					if (lastCursor > cursor)
-						changeText(text, new StringBuilder(text).delete(cursor, lastCursor).toString());
+					if (lastCursor > cursor) { changeText(text, new StringBuilder(text).delete(cursor, lastCursor).toString()); }
 				}
 				// if (onlyFontChars && font.getData().getGlyph(character) == null) return true;
 				return super.keyTyped(event, character);
@@ -663,13 +669,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			int firstLineShowing = area.getRealFirstLineShowing();
 			int linesShowing     = area.getRealLinesShowing();
 			font = area.getStyle().font;
-			boolean  had           = font.getData().markupEnabled;
-			String   text          = area.getText();
-			float    scrollOffsetY = area.scrollY - (int) (area.scrollY / area.lineHeight()) * area.lineHeight();
-			Drawable background    = area.getBackground();
-			float offsetY = getTop() -
-			                (background == null ? 0 : background.getTopHeight())
-			                + scrollOffsetY;
+			boolean had     = font.getData().markupEnabled;
+			String  text    = area.getText();
+			float   offsetY = getTop() - area.visualRY();
+
 			IntSeq linesBreak = area.getLinesBreak();
 			int    row        = 1;
 			font.getData().markupEnabled = false;

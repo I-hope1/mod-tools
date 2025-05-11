@@ -16,6 +16,9 @@ import java.util.*;
 
 @AutoService(Processor.class)
 public class IconsProcessor extends BaseProcessor<ClassSymbol> {
+	public void process2() {
+		super.process2();
+	}
 	public void dealElement(ClassSymbol element) throws Throwable {
 		JCClassDecl root = trees.getTree(element);
 		root.defs = List.nil();

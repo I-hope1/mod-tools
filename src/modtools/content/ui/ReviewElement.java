@@ -46,11 +46,13 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.EventHelper.DoubleClick;
 import modtools.utils.MySettings.Data;
+import modtools.utils.reflect.*;
 import modtools.utils.search.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import modtools.utils.ui.ReflectTools.MarkedCode;
 
+import java.lang.reflect.Field;
 import java.util.regex.Pattern;
 
 import static arc.Core.scene;
@@ -973,8 +975,14 @@ public class ReviewElement extends Content {
 		 colspanLabel  = new VLabel(valueScale, Color.lightGray),
 		 minSizeLabel  = new Label(new SizeProv(() -> minSizeVec)),
 		 maxSizeLabel  = new Label(new SizeProv(() -> maxSizeVec)),
-		 fillLabel     = new Label(""), expandLabel = new Label(""), uniformLabel = new Label("");
+		 fillLabel     = new Label(""), expandLabel = new Label(""), uniformLabel = new Label(""),
+
+		wrapLabel = new VLabel("", valueScale, Pal.accent);
 		ColorContainer colorContainer = new ColorContainer(Color.white);
+
+		static class $ {
+			static Field wrap = FieldUtils.getFieldAccess(Label.class, "wrap");
+		}
 
 		{
 			styleLabel.setFontScale(valueScale);
@@ -982,9 +990,13 @@ public class ReviewElement extends Content {
 		}
 
 		BindCell transformCell, visibleCell, rotCell, translationCell, styleCell, alignCell,
-		 cellCell, cellAlignCell,
+		// cell
+		cellContainer, cellAlignCell,
 		 colspanCell, minSizeCell, maxSizeCell,
-		 fillCell, expandCell, uniformCell;
+		 fillCell, expandCell, uniformCell,
+		 // label
+		 labelContainer, wrapCell
+		 ;
 
 		final Vec2 sizeVec = new Vec2();
 		SizeProv sizeProv = new SizeProv(() -> sizeVec, " × ");
@@ -1068,6 +1080,10 @@ public class ReviewElement extends Content {
 		void uniform(Cell<?> cell) {
 			pairBool(Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0), uniformCell);
 		}
+		void wrap(Label label) {
+			// wrapCell.toggle1(FieldUtils.getBoolean(label, $.wrap));
+			wrapLabel.setText("" + FieldUtils.getBoolean(label, $.wrap));
+		}
 		static String enabledMark(float i) {
 			return i != 0 ? "[accent]" : "[gray]";
 		}
@@ -1100,7 +1116,7 @@ public class ReviewElement extends Content {
 			translationCell = buildKey(t, "Translation", translationLabel);
 			styleCell = buildKey(t, "Style", styleLabel);
 			alignCell = buildKey(t, "Align", alignLabel);
-			cellCell = makeCell(t, ct -> {
+			cellContainer = makeCell(t, ct -> {
 				Underline.of(ct, 1).pad(4, -1, 4, -1);
 				cellAlignCell = buildKey(ct, "CellAlign", cellAlignLabel);
 				colspanCell = buildKey(ct, "Colspan", colspanLabel);
@@ -1109,6 +1125,10 @@ public class ReviewElement extends Content {
 				expandCell = buildKey(ct, "Expand", expandLabel);
 				fillCell = buildKey(ct, "Fill", fillLabel);
 				uniformCell = buildKey(ct, "Uniform", uniformLabel);
+			});
+			Underline.of(t, 6);
+			labelContainer = makeCell(t, lt -> {
+				wrapCell = buildKey(lt, "LabelWrap", wrapLabel);
 			});
 		}
 		private BindCell buildKey(Table t, String key, Label label) {
@@ -1167,7 +1187,7 @@ public class ReviewElement extends Content {
 			{
 				Cell<?> cell = null;
 				if (elem.parent instanceof Table parent) cell = parent.getCell(elem);
-				if (!info.cellCell.toggle1(cell != null)) break l;
+				if (!info.cellContainer.toggle1(cell != null)) break l;
 				info.cellAlign(cell);
 				info.colspan(cell);
 				info.minSize(cell);
@@ -1175,6 +1195,14 @@ public class ReviewElement extends Content {
 				info.fill(cell);
 				info.expand(cell);
 				info.uniform(cell);
+			}
+			l: {
+				boolean b =false;
+				if (elem instanceof Label label) {
+					b = true;
+					info.wrap(label);
+				}
+				info.labelContainer.toggle1(b);
 			}
 			showInfoTable(elem);
 		}

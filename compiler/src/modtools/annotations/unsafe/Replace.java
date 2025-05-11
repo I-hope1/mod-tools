@@ -21,7 +21,7 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Context.Key;
-import com.sun.tools.javac.util.JCDiagnostic.*;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
@@ -34,9 +34,12 @@ import javax.tools.JavaFileObject;
 import java.io.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.function.*;
-import java.util.stream.*;
+import java.util.regex.*;
+import java.util.stream.Collectors;
 
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
@@ -47,7 +50,7 @@ import static modtools.annotations.PrintHelper.errs;
 public class Replace {
 	public static Source targetVersion = Source.JDK8;
 
-	static Context context;
+	static Context       context;
 	static ClassFinder   classFinder;
 	static Symtab        syms;
 	static Enter         enter;
@@ -66,7 +69,7 @@ public class Replace {
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
-	static Properties    bundles      = new Properties();
+	static Properties            bundles = new Properties();
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
@@ -334,7 +337,7 @@ public class Replace {
 	}
 	/** 使source8就可以支持所有特性 */
 	public static void replaceSource() {
-		long   off    = fieldOffset(Feature.class, "minLevel");
+		long off = fieldOffset(Feature.class, "minLevel");
 		for (Feature feature : Feature.values()) {
 			if (!feature.allowedInSource(targetVersion)) {
 				unsafe.putObject(feature, off, targetVersion);
@@ -477,17 +480,24 @@ public class Replace {
 		unsafe.putInt(CompileState.INIT, off_stateValue, 100);
 		replaceSource();
 	}
+	static boolean first = true;
 	/** 优先级很高 */
 	public static void process(Set<? extends Element> rootElements) {
 		try {
 			Times.mark();
-			desugarStringTemplate.thenRuns.clear();
+			Map<JCTree, JCCompilationUnit> map = new HashMap<>();
+
 			rootElements.forEach(element -> {
 				TreePath path = trees.getPath(element);
 				if (path == null) return;
 				JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
 				JCTree            cdef = trees.getTree(element);
+				map.put(cdef, unit);
+			});
+			saveAllApi(map);
 
+			desugarStringTemplate.thenRuns.clear();
+			map.forEach((cdef, unit) -> {
 				// copyValueProc.translateTopLevelClass(unit);
 				defaultToStatic.translateTopLevelClass(unit, cdef);
 				desugarStringTemplate.translateTopLevelClass(unit, cdef);
@@ -500,6 +510,81 @@ public class Replace {
 			Times.printElapsed("Process (init) in @ms");
 		}
 	}
+	private static void saveAllApi(Map<JCTree, JCCompilationUnit> rootElements) {
+		if (!first) return;
+		first = false;
+
+		StringBuilder     sb  = new StringBuilder();
+		List<ClassSymbol> cpy = List.from(syms.getAllClasses());
+		for (ClassSymbol c : cpy) {
+			String string = c.toString();
+			if (string.startsWith("arc") || string.startsWith("mindustry") || string.startsWith("rhino")) {
+				if (c.members_field == null) continue;
+				// 添加api到sb
+				sb.append("class " + c.getQualifiedName() + " {\n");
+				for (Symbol s : c.members_field.getSymbols()) {
+					// 判断是否是合成的
+					if ((s.flags() & Flags.SYNTHETIC) != 0) continue;
+					sb.append(s.name).append(s.type).append(" ").append("\n");
+				}
+				sb.append("}\n");
+			}
+		}
+		sb.append("-------------mod-tools(project)-----------------\n");
+		for (Entry<JCTree, JCCompilationUnit> entry : rootElements.entrySet()) {
+			JCTree            cdef = entry.getKey();
+			JCCompilationUnit unit = entry.getValue();
+			// sb.append(unit.sourcefile.getName()).append("\n");
+			sb.append("`").append(unit).append("\n`");
+		}
+
+		String fileName = "F:/classes/api.txt";
+		try (FileOutputStream fos = new FileOutputStream(fileName);
+		     // OutputStreamWriter 将字符流转换为字节流，并指定编码
+		     OutputStreamWriter osw = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+			osw.write(convertUnicodeEscapes(sb.toString()));
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	public static String convertUnicodeEscapes(String input) {
+        // 匹配 \\u 后面跟着四个十六进制字符 (0-9, a-f, A-F)
+        // \\u 匹配字面量 \\u
+        // ([0-9a-fA-F]{4}) 匹配四个十六进制字符，并将其捕获到分组 1 中
+        Pattern pattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})");
+        Matcher matcher = pattern.matcher(input);
+        // 使用 StringBuffer 来构建新的字符串
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            // 获取捕获到的十六进制字符串 (分组 1)
+            String hex = matcher.group(1);
+            try {
+                // 将十六进制字符串解析为整数 (Unicode 码点)
+                int codePoint = Integer.parseInt(hex, 16);
+                // 将码点转换为字符 (可能是一个或两个 char，处理 BMP 和非 BMP)
+                // Character.toChars 会返回一个 char[]
+                char[] chars = Character.toChars(codePoint);
+                // 将 char[] 转换为 String
+                String replacement = new String(chars);
+                // 将匹配到的 \uXXXX 替换为转换后的字符
+                // 使用 quoteReplacement 确保 replacement 中的 $ 和 \ 不被误解为 matcher 的特殊语法
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+            } catch (NumberFormatException e) {
+                // 如果十六进制字符串无效，这里会捕获异常
+                // 你可以选择跳过这个无效序列，或者保留它，或者记录错误
+                System.err.println("警告: 发现无效的 Unicode 转义序列 \\u" + hex + "，无法转换。");
+                // 保留原始的无效序列：
+                 matcher.appendReplacement(sb, "\\\\u" + hex); // 重新添加原始序列
+                 // 或者跳过（不 appendReplacement 即可） - 但 appendReplacement 确保其他部分被添加
+                 // 如果想完全跳过，需要更复杂的逻辑，或者直接将原始匹配到的文本加回去
+                 // 这里的 appendReplacement("\\\\u" + hex) 是保留原始文本的简单方法
+            }
+        }
+        // 将字符串的剩余部分添加到 StringBuffer
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
 	public static Context context() {
 		return context;
 	}

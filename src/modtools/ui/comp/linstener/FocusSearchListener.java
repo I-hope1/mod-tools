@@ -13,7 +13,7 @@ public class FocusSearchListener extends InputListener {
 		this.textField = textField;
 	}
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
-		textField.requestKeyboard();
+		if (event.targetActor == textField) textField.requestKeyboard();
 		return super.touchDown(event, x, y, pointer, button);
 	}
 	public boolean keyDown(InputEvent event, KeyCode __) {

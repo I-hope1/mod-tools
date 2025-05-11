@@ -45,11 +45,11 @@ import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
+import modtools.ui.comp.completion.CompletionPopup;
 import modtools.ui.comp.input.*;
 import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.area.TextAreaTab.MyTextArea;
 import modtools.ui.comp.input.highlight.JSSyntax;
-import modtools.ui.comp.input.highlight.Syntax.*;
 import modtools.ui.comp.limit.PrefPane;
 import modtools.ui.comp.linstener.*;
 import modtools.ui.comp.utils.*;
@@ -75,10 +75,10 @@ import static modtools.content.debug.Tester.Settings.*;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
-	private static final int FADE_ALIGN = Align.bottomLeft;
-	/** @see NativeJavaClass#javaClassPropertyName  */
+	private static final int    FADE_ALIGN            = Align.bottomLeft;
+	/** @see NativeJavaClass#javaClassPropertyName */
 	@CopyConstValue
-	static final String javaClassPropertyName = "";
+	public static final  String javaClassPropertyName = "";
 
 	public static final float WIDTH = 420;
 
@@ -202,6 +202,8 @@ public class Tester extends Content {
 	public boolean stopIfOvertime;
 	Task killTask;
 
+	private CompletionPopup completionPopup;
+
 	public Tester() {
 		super("tester", Icon.terminalSmall);
 	}
@@ -226,7 +228,20 @@ public class Tester extends Content {
 	public void build(Table table) {
 		if (ui == null) _load();
 
-		textarea = new TextAreaTab("", d -> new JSSyntax(d, customScope));
+		textarea = new TextAreaTab("", d -> new JSSyntax(d, customScope)) {
+			public int cursor() {
+				return completionPopup.isShown() ? completionPopup.cursorBeforeDot : super.cursor();
+			}
+		};
+		area = textarea.getArea();
+
+		if (area != null && ui != null) { // Added ui null check
+			completionPopup = new CompletionPopup(area);
+			ui.addChild(completionPopup); // Add it to the Tester's window
+		} else {
+			Log.warn("Tester: 'area' or 'ui' is null during completionPopup initialization. Completion will not work.");
+		}
+
 		Table _cont = new Table();
 		if (!Vars.mobile) textarea.addListener(new EscapeAndAxesClearListener(area));
 
@@ -351,7 +366,6 @@ public class Tester extends Content {
 		bottomBar(table, textarea);
 	}
 	private void addListenerToArea(TextAreaTab textarea) {
-		area = textarea.getArea();
 		boolean[] stopEvent = {false};
 		textarea.keyDownB = (event, keycode) -> {
 			stopEvent[0] = false;
@@ -700,6 +714,7 @@ public class Tester extends Content {
 	public void _load() {
 		ui = new IconWindow(0, 100, true);
 		// JSFunc.watch("times", () -> ui.times);
+
 		/*ui.update(() -> {
 			ui.setZIndex(frag.getZIndex() - 1);
 		});*/
@@ -925,147 +940,187 @@ public class Tester extends Content {
 
 	public class ComplementListener extends InputListener {
 		/** @see TextField#BACKSPACE */
+		@CopyConstValue
 		static final char BACKSPACE = 8;
 		/** @see TextField#DELETE */
+		@CopyConstValue
 		static final char DELETE    = 127;
+		/** @see TextField#TAB */
+		@CopyConstValue
+		static final char TAB       = '\t';
 
-		public int lastCompletionCursor = -1;
-		public int lastCompletionIndex  = 0;
-		JSSyntax syntax = (JSSyntax) textarea.syntax;
-		boolean  cancel;
-		// CodeTooltip codeTooltip = new CodeTooltip();
+		JSSyntax syntax = (JSSyntax) textarea.syntax; // Ensure syntax is initialized with textarea
+
+		@Override
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
-			cancel = false;
-			if (syntax.virtualString != null) {
-				if (!HKeyCode.isFnKey(keycode)) {
-					keyListener(keycode);
+			if (completionPopup != null && completionPopup.isShown()) {
+				if (completionPopup.handleKeyDown(keycode)) {
+					event.stop();
+					return true;
 				}
 			}
-			check(event);
-			return true;
-		}
-		private void keyListener(KeyCode keycode) {
-			switch (keycode) {
-				case tab, right -> {
-					cancel = true;
-					area.clearSelection();
-					syntax.virtualString = null;
+
+			if (keycode == KeyCode.escape) {
+				if (completionPopup != null && completionPopup.isShown()) {
+					completionPopup.hide();
+					event.stop();
+					return true;
 				}
-				case left -> {
-					cancel = true;
-					area.clearSelection();
-					area.setCursorPosition(area.getSelectionStart());
-					syntax.virtualString = null;
-				}
-				case enter -> {
-					cancel = true;
-					area.paste(syntax.virtualString.text, true);
-					syntax.virtualString = null;
-				}
-				case up -> {
-					cancel = true;
-					if (lastCompletionCursor == area.getSelectionStart()) {
-						lastCompletionIndex = (lastCompletionIndex - 1 + complements.size) % complements.size;
-						int    s       = area.getSelectionStart();
-						String content = complements.get(lastCompletionIndex);
-						area.paste(content, false);
-						area.setSelectionUncheck(s, s + content.length());
-					}
-				}
-				case down -> {
-					cancel = true;
-					if (lastCompletionCursor == area.getSelectionStart()) {
-						lastCompletionIndex = (lastCompletionIndex + 1) % complements.size;
-						int    s       = area.getSelectionStart();
-						String content = complements.get(lastCompletionIndex);
-						area.paste(content, false);
-						area.setSelectionUncheck(s, s + content.length());
-					}
-				}
-				case escape -> {
-					cancel = true;
-					area.paste("", false);
-				}
-				default -> syntax.virtualString = null;
 			}
+
+			if (rollAndExec() || detailsListener(keycode)) {
+				if (event != null) event.cancel(); // Should already be cancelled by sub-methods
+				return true;
+			}
+
+			if (!hasFunctionKey() && keycode == KeyCode.tab) {
+				if (completionPopup == null || !completionPopup.isShown()) {
+					area.paste("  ", true);
+					event.cancel();
+					return true;
+				}
+			}
+			return false;
 		}
+
+
 		private void complement() {
-			int lastCursor = area.getCursorPosition();
+			if (completionPopup == null || syntax == null) return; // Ensure dependencies are ready
+
+			int    originalCursor = area.getCursorPosition();
+			String textContent    = area.getText();
+
+			// Determine prefix
+
+			area.selectForward();
+			int    start         = area.getSelectionStart();
+			String currentPrefix = area.getSelection();
+			area.clearSelection();
+
+			int i = start;
+			while (i > 0 && !area.isCharCheck(i, '.')) i--;
+			completionPopup.cursorBeforeDot = i;
+
 			try {
-				complement0();
+				complement0(currentPrefix, originalCursor, area.isCharCheck(i, '.'), start);
 			} catch (Throwable err) {
-				Log.err(err);
-				area.setCursorPosition(lastCursor);
+				Log.err("Completion error", err);
+				completionPopup.hide();
+				// area.setCursorPosition(originalCursor); // Cursor might have moved
 			}
 		}
 
 		private final Seq<String> complements = new Seq<>();
 		private final Seq<Object> keys        = new Seq<>();
-		private void complement0() {
-			area.selectForward();
-			String searchingKey = area.getSelection();
-			int    start        = area.getSelectionStart();
-			area.clearSelection();
-			int cursor = area.getCursorPosition();
-			lastCompletionCursor = cursor;
 
-			while (area.checkIndex(start - 1) && Character.isWhitespace(area.charAtUncheck(start - 1))) start--;
+		private void complement0(String prefix, int originalCursor, boolean afterDot, int actualPrefixStart) {
+			if (completionPopup == null || syntax == null) return;
 
 			Scriptable obj;
-			if ((area.checkIndex(start - 1) && area.charAtUncheck(start - 1) == '.')) {
-				obj = syntax.cursorObj;
+			if (afterDot) {
+				obj = syntax.cursorObj; // cursorObj should be updated by JSSyntax when '.' is typed
 			} else {
-				obj = customScope;
+				obj = customScope; // Or a more specific scope if available
 			}
 
-			if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) return;
+			if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) {
+				// If after a dot and obj is null, no completions.
+				// If not after a dot (word completion) and obj is null, might still try globals if prefix is short.
+				if (afterDot || prefix.length() == 0) {
+					completionPopup.hide();
+					return;
+				}
+				obj = customScope; // Fallback to custom scope for word completion
+			}
 
-			keys.clear().addAll(getAllIds(searchingKey, obj));
-			if (obj == customScope) keys.addAll(JSSyntax.varSet.toSeq().list());
-			if (obj instanceof NativeJavaClass) keys.add(javaClassPropertyName);
+
+			keys.clear().addAll(getAllIds(prefix, obj));
+			// For non-dot completion, also add global/scope vars
+			if (!afterDot) {
+				if (obj == customScope) { // Only add these if we're in the global-like scope
+					JSSyntax.varSet.each(s -> { if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s); });
+					JSSyntax.constantSet.each(s -> { if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s); });
+				}
+				if (obj instanceof NativeJavaClass) { // if completing on a class name itself
+					if (javaClassPropertyName.toLowerCase().startsWith(prefix.toLowerCase())) {
+						keys.addUnique(javaClassPropertyName);
+					}
+				}
+			}
+
 
 			complements.clear();
-			keys.each(o -> {
+			keys.each((o) -> {
 				String key = String.valueOf(o);
-				if (key.startsWith(searchingKey)
-				    && searchingKey.length() <= key.length()) {
-					complements.add(key.substring(searchingKey.length()));
+				if (key.toLowerCase().startsWith(prefix.toLowerCase()) && !key.equals(prefix)) {
+					complements.add(key);
 				}
 			});
-			if (complements.isEmpty()) return;
 
-			if (syntax.virtualString == null) syntax.virtualString = new VirtualString();
-			syntax.virtualString.index = cursor;
-			String content = complements.get(lastCompletionIndex % complements.size);
-			area.paste(content, false);
-			area.setSelectionUncheck(cursor, cursor + content.length());
-		}
-		private Object[] getAllIds(String searchingKey, Scriptable obj) {
-			/* if (obj == customScope) {
-				obj = ScriptableObject.getTopLevelScope(obj);
-				Object[] data = (Object[]) UNSAFE.getObject(UNSAFE.getObject(obj, RHINO.importPackages), RHINO.objArray_data);
-
-			} */
-			return ScriptableObject.getPropertyIds(obj);
-		}
-
-		public boolean keyTyped(InputEvent event, char character) {
-			check(event);
-			if (!event.stopped && character != DELETE && character != BACKSPACE &&
-			    (area.isWordCharacter(character) || character == '.') &&
-			    (syntax.cursorTask == null || syntax.cursorTask instanceof DrawToken) &&
-			    auto_complement.enabled()) {
-				if (syntax.virtualString != null) event.stop();
-				Core.app.post(this::complement);
+			if (complements.isEmpty()) {
+				completionPopup.hide();
+				return;
 			}
-			return true;
+
+			// Calculate position for the popup
+			// This calculates Y position of the line *below* the cursor line, relative to area's bottom.
+			// For popup above, use Y of current line. For popup below, use Y of line below.
+
+			float cursorLineVisualY = area.getRelativeY(actualPrefixStart);
+			Vec2  uiCoords          = area.localToAscendantCoordinates(ui, Tmp.v1.set(area.getRelativeX(actualPrefixStart), cursorLineVisualY));
+
+
+			completionPopup.show(complements, prefix, selectedSuggestion -> {
+				String text = area.getText();
+
+				String before = text.substring(0, actualPrefixStart);
+				String after  = text.substring(originalCursor);
+
+				String newText = before + selectedSuggestion + after;
+				area.setText(newText);
+				area.setCursorPosition(actualPrefixStart + selectedSuggestion.length());
+				area.clearSelection();
+			}, uiCoords.x, uiCoords.y);
 		}
+
+		private Object[] getAllIds(String searchingKey, Scriptable obj) {
+			// For NativeJavaObject/Class, getIds() is appropriate. For general ScriptableObject, getPropertyIds might be better.
+			if (obj instanceof ScriptableObject) return ScriptableObject.getPropertyIds(obj);
+			return obj.getIds();
+		}
+
+		@Override
+		public boolean keyTyped(InputEvent event, char character) {
+			if (completionPopup != null && !completionPopup.isShown() && (Core.input.alt() || Core.input.ctrl())) {
+				// Do nothing for modifier keys if popup not shown
+				return false;
+			}
+
+			if (completionPopup != null && completionPopup.isShown() && (character == TAB || character == '\n')) {
+				// Let keyDown handle these for popup navigation
+				event.cancel();
+				return true;
+			}
+
+			boolean shouldTriggerCompletion = auto_complement.enabled() &&
+			                                  (area.isWordCharacter(character) || (character == '.' && syntax.cursorTask == null) ||
+			                                   ((syntax.cursorTask instanceof JSSyntax.DrawToken || syntax.cursorTask instanceof JSSyntax.DrawSymbol)));
+
+			if (!event.stopped && shouldTriggerCompletion) {
+				Core.app.post(this::complement);
+			} else if (completionPopup != null && completionPopup.isShown()) {
+				if (character != DELETE && character != BACKSPACE) {
+					completionPopup.hide();
+				} else {
+					Core.app.post(this::complement); // Re-evaluate on delete/backspace
+				}
+			}
+			return false; // Let character be typed.
+		}
+
+		@Override
 		public boolean keyUp(InputEvent event, KeyCode keycode) {
-			check(event);
-			return true;
-		}
-		private void check(InputEvent event) {
-			if (cancel) event.stop();
+			return false;
 		}
 	}
 

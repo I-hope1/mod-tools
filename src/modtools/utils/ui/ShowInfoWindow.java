@@ -533,9 +533,14 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 				buttonsCell = t.add(new MyHoverTable(buttons -> {
 					if (noParam && isValid) {
+						// 运行
 						buttons.button(Icon.rightOpenOutSmall, flati, Tools.runT(whenExecuting, () -> {
 							dealInvokeResult(m.invoke(o), cell, l);
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
+						// watch
+						IntUI.addWatchButton(buttons,
+							STR."\{m.getDeclaringClass().getSimpleName()}: \{m.getName()}",
+							() -> m.invoke(o));
 					}
 					if (!l.type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l.val, l.type);
 				})).right().colspan(1);

@@ -2,13 +2,16 @@ package modtools.ui.comp.review;
 
 import arc.func.*;
 import arc.scene.*;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
 import mindustry.gen.Tex;
-import modtools.ui.HopeStyles;
-import modtools.ui.comp.Window;
-import modtools.ui.comp.Window.IDisposable;
 import modtools.content.ui.ReviewElement;
+import modtools.ui.HopeStyles;
+import modtools.ui.comp.*;
+import modtools.ui.comp.Window.IDisposable;
+import modtools.ui.comp.utils.*;
+import modtools.utils.reflect.FieldUtils;
 
 import static modtools.ui.comp.review.CellDetailsWindow.buildSetter;
 import static modtools.utils.ui.FormatHelper.fixed;
@@ -29,13 +32,20 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 
 			Cons3<String, Floatp, Floatc> c3 = (label, getter, floatc) ->
 			 prop.add(ReviewElement.floatSetter(label, () -> fixed(getter.get()), floatc)).row();
+
 			c3.get("x", () -> element.x, val -> element.x = val);
 			c3.get("y", () -> element.y, val -> element.y = val);
+			c3.get("OriginX", () -> element.originX, val -> element.originX = val);
+			c3.get("OriginY", () -> element.originY, val -> element.originY = val);
 			c3.get("Width", element::getWidth, element::setWidth);
 			c3.get("Height", element::getHeight, element::setHeight);
 			c3.get("PrefWidth", element::getPrefWidth, null);
 			c3.get("PrefHeight", element::getPrefHeight, null);
 			c3.get("Rotation", element::getRotation, element::setRotation);
+			if (element instanceof Label l) {
+				Underline.of(prop, 4);
+				prop.add(new FieldValueLabel(ValueLabel.unset, FieldUtils.getFieldAccess(Label.class, "wrap"), l)).row();
+			}
 		}).growX().pad(6, 8, 8, 6).row();
 
 		Table table = cont.table().get();
@@ -66,8 +76,7 @@ public class ElementDetailsWindow extends Window implements IDisposable {
 
 		CellDetailsWindow.checkboxField(table, Element.class, element, "fillParent");
 		CellDetailsWindow.checkboxField(table, Element.class, element, "visible").row();
-		if (element instanceof Group)
-			CellDetailsWindow.checkboxField(table, Group.class, element, "transform").row();
+		if (element instanceof Group) { CellDetailsWindow.checkboxField(table, Group.class, element, "transform").row(); }
 
 		cont.defaults().height(32).growX();
 		cont.row().button("Invalidate", style, element::invalidate);

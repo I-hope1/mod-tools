@@ -216,7 +216,7 @@ public class HopeProcessor {
 	public static class MyContentParser extends ContentParser {
 		/** {@link ContentParser#read(Runnable) METHOD} */
 		@LinkMethod
-		public void read() { }
+		public void read(Runnable r) { }
 
 		// /** @see #classParsers */
 		// @LinkFieldToField

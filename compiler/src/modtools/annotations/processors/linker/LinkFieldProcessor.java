@@ -1,4 +1,4 @@
-package modtools.annotations.processors;
+package modtools.annotations.processors.linker;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
@@ -15,17 +15,11 @@ import javax.lang.model.element.ElementKind;
 import java.util.Set;
 
 @AutoService(Processor.class)
-public class LinkProcessor extends BaseASMProc<VarSymbol> {
-
-	private ClassSymbol arcReflectSym;
+public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 
 	@Override
 	public void lazyInit() throws Throwable {
 		super.lazyInit();
-		arcReflectSym = findClassSymbol("arc.util.Reflect");
-		if (arcReflectSym == null) {
-			err("arc.util.Reflect class symbol not found. LinkProcessor will not function correctly for reflection.");
-		}
 	}
 
 	@Override
@@ -67,115 +61,96 @@ public class LinkProcessor extends BaseASMProc<VarSymbol> {
 			return;
 		}
 
-		boolean isInherited = sourceOwnerClass.isSubClass(targetOwnerClass, types);
-		boolean useReflection;
-
-		long targetFlags = targetField.flags_field;
-		if ((targetFlags & Flags.PUBLIC) != 0) {
-			useReflection = false;
-		} else if ((targetFlags & Flags.PROTECTED) != 0 && isInherited) {
-			useReflection = false;
-		} else if (((targetFlags & Flags.PRIVATE) == 0) && targetOwnerClass.packge() == sourceOwnerClass.packge()) {
-			useReflection = false;
-		} else {
-			useReflection = true;
+		// MANDATE PUBLIC TARGET FIELD
+		if ((targetField.flags_field & Flags.PUBLIC) == 0) {
+			log.error(trees.getTree(sourceField), SPrinter.err("@LinkToField: Target field '" + targetField.name + "' in '" + targetOwnerClass.getSimpleName() + "' must be public."));
+			return;
 		}
 
-		if (!isTargetStatic && !isInherited && !targetOwnerClass.equals(sourceOwnerClass) && !useReflection) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkToField: Field '" + sourceField.name + "' attempts to directly access non-static field '" + targetField.name + "' from unrelated class '" + targetOwnerClass.getSimpleName() + "'. Forcing reflection."));
-			useReflection = true;
-		}
+		// Accessibility of targetOwnerClass itself will be checked by Javac during normal compilation
+		// if direct access is generated. We ensure the field is public.
 
-		final boolean finalUseReflection = useReflection;
+		final boolean isEffectivelyLocalOrInherited = targetOwnerClass.equals(sourceOwnerClass) || sourceOwnerClass.isSubClass(targetOwnerClass, types);
 
 		translator.todos.add(new ToTranslate(JCFieldAccess.class, (fieldAccess) -> {
 			if (!TopTranslator.isEquals(fieldAccess.sym, sourceField)) return null;
 
 			JCExpression instanceExpr = fieldAccess.selected;
 
-			if (finalUseReflection) {
-				if (arcReflectSym == null) {
-					log.error(fieldAccess, SPrinter.err("arc.util.Reflect not found for @LinkToField read."));
-					return fieldAccess;
-				}
-				JCExpression targetClassLiteral = mMaker.ClassLiteral(targetOwnerClass.type);
-				JCExpression instanceForReflection = isTargetStatic ?
-					translator.makeNullLiteral() : instanceExpr;
-
-				JCMethodInvocation getCall = mMaker.App(
-					translator.makeSelect(mMaker.QualIdent(arcReflectSym), names.fromString("get"), arcReflectSym),
-					List.of(targetClassLiteral, instanceForReflection, translator.makeString(targetField.name.toString()))
-				);
-				getCall.setType(mSymtab.objectType);
-				return mMaker.TypeCast(sourceField.type, getCall);
+			if (isTargetStatic) {
+				return translator.makeSelect(mMaker.QualIdent(targetOwnerClass), targetField.name, targetOwnerClass);
 			} else {
-				if (isTargetStatic) {
-					return translator.makeSelect(mMaker.QualIdent(targetOwnerClass), targetField.name, targetOwnerClass);
-				} else {
-					return translator.makeSelect(instanceExpr, targetField.name, targetOwnerClass);
-				}
+				return translator.makeSelect(instanceExpr, targetField.name, targetOwnerClass);
 			}
 		}));
 
 		translator.todos.add(new ToTranslate(JCIdent.class, (ident) -> {
-			if (!TopTranslator.isEquals(ident.sym, sourceField) || isSourceStatic) return null;
+			if (!TopTranslator.isEquals(ident.sym, sourceField)) return null;
 
-			if (finalUseReflection) {
-				if (arcReflectSym == null) {
-					log.error(ident, SPrinter.err("arc.util.Reflect not found for @LinkToField (ident read)."));
-					return ident;
+			if (sourceField.isStatic()) {
+				// Linking static Source.sourceField to Target.targetField (must also be static, checked by early exit)
+				return translator.makeSelect(mMaker.QualIdent(targetOwnerClass), targetField.name, targetOwnerClass);
+			} else { // sourceField is non-static, ident implies this.sourceField
+				if (isTargetStatic) {
+					// Linking non-static this.sourceField to static Target.targetField
+					return translator.makeSelect(mMaker.QualIdent(targetOwnerClass), targetField.name, targetOwnerClass);
+				} else { // Both source (this.sourceField) and target are non-static
+					if (isEffectivelyLocalOrInherited) { // targetField is on `this` (same class or superclass)
+						return translator.makeSelect(mMaker.This(sourceOwnerClass.type), targetField.name, targetOwnerClass);
+					} else { // targetField is on an unrelated class instance. `this.targetField` is invalid.
+						log.error(ident, SPrinter.err("@LinkToField: Reading from non-static field '" + sourceField.name +
+							"' (implicitly 'this." + sourceField.name + "') which links to non-static field '" + targetField.name +
+							"' in unrelated class '" + targetOwnerClass.getSimpleName() + "'. This requires an explicit instance of '" +
+							targetOwnerClass.getSimpleName() + "'."));
+						return ident; // No change
+					}
 				}
-				JCExpression targetClassLiteral = mMaker.ClassLiteral(targetOwnerClass.type);
-				JCExpression thisExpr = mMaker.This(sourceOwnerClass.type);
-
-				JCMethodInvocation getCall = mMaker.App(
-					translator.makeSelect(mMaker.QualIdent(arcReflectSym), names.fromString("get"), arcReflectSym),
-					List.of(targetClassLiteral, thisExpr, translator.makeString(targetField.name.toString()))
-				);
-				getCall.setType(mSymtab.objectType);
-				return mMaker.TypeCast(sourceField.type, getCall);
-			} else {
-				return translator.makeSelect(mMaker.This(sourceOwnerClass.type), targetField.name, targetOwnerClass);
 			}
 		}));
 
 		translator.todos.add(ToTranslate.Assign(
-			(assignedSym) -> assignedSym == sourceField,
-			(assign, assignedSym) -> {
-				JCExpression actualInstanceExpr;
+			(assignedSym) -> TopTranslator.isEquals(assignedSym, sourceField),
+			(assign, assignedSymVarSymbol) -> {
+				JCExpression actualInstanceExprForTarget = null;
+				boolean lhsIsSimpleIdent = false;
+
 				if (assign.lhs instanceof JCFieldAccess faLhs) {
-					actualInstanceExpr = faLhs.selected;
+					actualInstanceExprForTarget = faLhs.selected;
 				} else if (assign.lhs instanceof JCIdent) {
-					actualInstanceExpr = mMaker.This(sourceOwnerClass.type);
+					lhsIsSimpleIdent = true;
+					if (!sourceField.isStatic()) { // If source is non-static, ident implies 'this'
+						actualInstanceExprForTarget = mMaker.This(sourceOwnerClass.type);
+					}
 				} else {
 					log.error(assign.lhs, SPrinter.err("Unexpected LHS in assignment to linked field: " + assign.lhs.getClass()));
 					return assign;
 				}
 
-				if (finalUseReflection) {
-					if (arcReflectSym == null) {
-						log.error(assign, SPrinter.err("arc.util.Reflect not found for @LinkToField assignment."));
-						return assign;
-					}
-					JCExpression targetClassLiteral = mMaker.ClassLiteral(targetOwnerClass.type);
-					JCExpression instanceForReflection = isTargetStatic ?
-						translator.makeNullLiteral() : actualInstanceExpr;
-
-					JCMethodInvocation setCall = mMaker.App(
-						translator.makeSelect(mMaker.QualIdent(arcReflectSym), names.fromString("set"), arcReflectSym),
-						List.of(targetClassLiteral, instanceForReflection, translator.makeString(targetField.name.toString()), assign.rhs)
-					);
-					setCall.setType(mSymtab.voidType);
-					return setCall;
-				} else {
-					JCExpression selectLhs;
-					if (isTargetStatic) {
-						selectLhs = translator.makeSelect(mMaker.QualIdent(targetOwnerClass), targetField.name, targetOwnerClass);
-					} else {
-						selectLhs = translator.makeSelect(actualInstanceExpr, targetField.name, targetOwnerClass);
-					}
-					return mMaker.Assign(selectLhs, assign.rhs).setType(targetField.type);
+				// Error case: assigning to `this.sourceField` (non-static) -> `this.targetField` (non-static)
+				// but targetField is in an unrelated class.
+				if (lhsIsSimpleIdent && !sourceField.isStatic() && !isTargetStatic && !isEffectivelyLocalOrInherited) {
+					log.error(assign.lhs, SPrinter.err("@LinkToField: Assigning to non-static field '" + sourceField.name +
+						"' (implicitly 'this." + sourceField.name + "') which links to non-static field '" + targetField.name +
+						"' in unrelated class '" + targetOwnerClass.getSimpleName() + "'. This requires an explicit instance of '" +
+						targetOwnerClass.getSimpleName() + "'."));
+					return assign;
 				}
+
+				JCExpression selectLhs;
+				if (isTargetStatic) {
+					selectLhs = translator.makeSelect(mMaker.QualIdent(targetOwnerClass), targetField.name, targetOwnerClass);
+				} else { // Target is non-static
+					// Due to the early check `(!isTargetStatic && isSourceStatic)`, if target is non-static, source must also be non-static.
+					// Thus, actualInstanceExprForTarget should be valid.
+					if (actualInstanceExprForTarget == null && !sourceField.isStatic()) {
+                        // This state should ideally not be reached if source is non-static, as actualInstanceExprForTarget should be set.
+                        // If source IS static, but target is non-static, it's an error caught earlier.
+                        log.error(assign.lhs, SPrinter.err("Internal error: Could not determine instance for non-static target field assignment. LHS: " + assign.lhs));
+                        return assign;
+                    }
+					selectLhs = translator.makeSelect(actualInstanceExprForTarget, targetField.name, targetOwnerClass);
+				}
+				return mMaker.Assign(selectLhs, assign.rhs).setType(targetField.type);
 			}
 		));
 	}
@@ -204,6 +179,16 @@ public class LinkProcessor extends BaseASMProc<VarSymbol> {
 			return;
 		}
 
+		// Enforce utility methods are public
+		if ((getterMethod.flags() & Flags.PUBLIC) == 0) {
+			log.error(trees.getTree(getterMethod), SPrinter.err("@LinkMethod: Getter utility method " + getterMethod.name + " in " + getterMethod.owner.getQualifiedName() + " must be public."));
+			return;
+		}
+		if ((setterMethod.flags() & Flags.PUBLIC) == 0) {
+			log.error(trees.getTree(setterMethod), SPrinter.err("@LinkMethod: Setter utility method " + setterMethod.name + " in " + setterMethod.owner.getQualifiedName() + " must be public."));
+			return;
+		}
+
 		if (getterMethod.params.size() != 3) {
 			log.error(trees.getTree(getterMethod), SPrinter.err("@LinkMethod: Getter method " + getterMethod.name + " must have 3 parameters: Class<?>, String, Object. Found: " + getterMethod.params.size()));
 			return;
@@ -217,20 +202,13 @@ public class LinkProcessor extends BaseASMProc<VarSymbol> {
 		Type targetClassForCallType;
 		String targetFieldNameForCall;
 
-		// Use the Class<?> returned by linkMethodAnnon.clazz() directly,
-		// thanks to getAnnotationByElement's processing.
 		Class<?> annonClazzValue = linkMethodAnnon.clazz();
 
-		if (annonClazzValue == void.class) { // Default value
+		if (annonClazzValue == void.class) {
 			targetClassForCallType = sourceOwnerClassSym.type;
 		} else {
-			// Convert the Class<?> from annotation to a Javac Type
 			Symbol ts = elements.getTypeElement(annonClazzValue.getCanonicalName());
 			if (ts == null || ts.kind == Kinds.Kind.ERR) {
-				// This might happen if VirtualClass returned a synthetic Class<?> whose canonical name isn't found by elements.
-				// Or if annonClazzValue is a primitive/array type class.
-				// A more robust way would be to get the Type directly if getAnnotationByElement could provide it.
-				// For now, let's try to find it via fully qualified name.
 				Type foundType = typeFromString(annonClazzValue.getName());
 				if (foundType == null || foundType.getTag() == TypeTag.ERROR) {
 					log.error(trees.getTree(sourceField), SPrinter.err("@LinkMethod: Could not resolve class specified in clazz(): " + annonClazzValue.getName()));
@@ -306,10 +284,8 @@ public class LinkProcessor extends BaseASMProc<VarSymbol> {
 					List.of(targetClassLiteral, targetFieldNameLiteral, instanceArgForCall, assign.rhs)
 				);
 				setCall.setType(mSymtab.voidType);
-				// if (true) return assign.lhs;
 				LetExpr letExpr = mMaker.LetExpr(List.of(mMaker.Exec(setCall)), assign.rhs);
 				letExpr.type = assign.rhs.type.baseType();
-				// letExpr.needsCond = true;
 				return letExpr;
 			}
 		));

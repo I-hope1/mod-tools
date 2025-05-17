@@ -71,6 +71,11 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			findReference(annotationClass, element, expectKinds, (DCReference) ((LinkTree) t).getReference(), unit, pos, doc)))
 		 .toList();
 	}
+	public static <R extends Symbol> List<Pair<String, DocReference>>
+	getLinkReference(Class<? extends Annotation> annotationClass,
+	                 R element, ElementKind expectKind, String name) {
+		return getLinkReference(annotationClass, element, expectKind).stream().filter(p -> p.fst.equals(name)).toList();
+	}
 	private static <R extends Symbol> DocReference findReference(Class<? extends Annotation> annotationClass, R element,
 	                                                             ElementKind[] expectKinds, DCReference reference,
 	                                                             JCCompilationUnit unit, JCTree pos,

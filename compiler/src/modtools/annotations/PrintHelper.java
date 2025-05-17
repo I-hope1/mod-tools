@@ -1,6 +1,7 @@
 package modtools.annotations;
 
 import com.sun.tools.javac.comp.CompileStates.CompileState;
+import com.sun.tools.javac.util.JCDiagnostic.*;
 import com.sun.tools.javac.util.JCDiagnostic.Error;
 import modtools.annotations.unsafe.Replace;
 
@@ -68,6 +69,12 @@ public interface PrintHelper {
 		}
 		static void println(String str) {
 			System.out.println(str);
+		}
+		static Warning warn(String s) {
+			return new Warning("any", "1", s);
+		}
+		static Note note(String s) {
+			return new Note("any", "1", s);
 		}
 	}
 }

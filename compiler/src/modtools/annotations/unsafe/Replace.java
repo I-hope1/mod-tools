@@ -98,6 +98,8 @@ public class Replace {
 		});
 		bundles.put("any.1", "{0}");
 		bundles.put("any.err.1", "{0}");
+		bundles.put("any.warn.1", "{0}");
+		bundles.put("any.info.1", "{0}");
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }

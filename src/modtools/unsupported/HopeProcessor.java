@@ -1,5 +1,6 @@
 package modtools.unsupported;
 
+import android.content.ContentProvider;
 import arc.func.Cons;
 import arc.graphics.Color;
 import arc.graphics.g2d.TextureRegion;
@@ -9,11 +10,11 @@ import arc.util.*;
 import arc.util.serialization.JsonValue;
 import com.sun.tools.attach.VirtualMachine;
 import mindustry.mod.ContentParser;
-import modtools.annotations.asm.HAccessor.HMethod;
 import modtools.annotations.asm.Inline;
 import modtools.annotations.asm.Sample.SampleTemp.Template;
 import modtools.annotations.linker.*;
-import modtools.ui.IntUI;
+import modtools.annotations.linker.LinkMethod.MTemp;
+import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.ExtendingLabel.DrawType;
 import modtools.utils.reflect.HopeReflect;
@@ -127,6 +128,9 @@ public class HopeProcessor {
 			private int privateMethod() {
 				return 293;
 			}
+			private int privateMethod2(int i) {
+				return 293 * 29903 * i;
+			}
 		}
 		static class Utils {
 			public static int field;
@@ -137,6 +141,12 @@ public class HopeProcessor {
 			public static Object get(Class<?> clazz, String fieldName, Object obj) {
 				return Reflect.get(clazz, obj, fieldName);
 			}
+			public static int aMethod(Child x) {
+				return x.field;
+			}
+			public static Object invoke() {
+				return Reflect.invoke(MTemp.declaring, MTemp.obj, MTemp.methodName, MTemp.args, MTemp.params);
+			}
 		}
 
 		static class Example extends Child {
@@ -146,10 +156,6 @@ public class HopeProcessor {
 			/** @see Utils#field */
 			@LinkFieldToField // 如果不是继承的类，必须是静态
 			 int f2; // 访问这个字段相当于访问Utils.field
-
-			// /** @see Child#privateField */
-			// @LinkToField // 如果访问的字段是private，使用Reflect.get() & Reflect.set()
-			// int f3;
 
 			/**
 			 * {@link Utils#set(Class, String, Object, Object) SETTER}
@@ -181,12 +187,29 @@ public class HopeProcessor {
 			 * 读取相当于调用Utils.get(Child.class, "privateField", this) */
 			 int m3;
 
+			/** {@link Utils#aMethod(Child) METHOD} */
+			@LinkMethod
+			int method1() { return 0; }
+			/** {@link #privateMethod() METHOD} */
+			@LinkMethod
+			/* 会在Example创建一个字段Method method2$privateMethod = %init%;  */
+			int method2() { return 0; }
+
+			/** {@link #privateMethod2(int) METHOD} */
+			@LinkMethod
+			/* 检查参数类型是否匹配 */
+			/* 会在Example创建一个字段Method methodArg$privateMethod = %init%;  */
+			int methodArg(int i) { return 0; }
+
 			void updateX() {
 				f1 = 1; // 相当于field = 1
 				f2 = 9; // 相当于Utils.field = 9
 				m1 = 7; // 修改相当于调用Utils.set(Example.class, "m1", this, 7)
 				m2 = 4; // 修改相当于调用Utils.set(Example.class, "m2", null, 4)
 				m3 = 1; // 修改相当于调用Utils.set(Child.class, "privateField", this, 1)
+				method1(); // 调用相当于调用Utils.aMethod(this);
+				method2(); // 调用相当于调用method2$privateMethod.invoke(this);
+				methodArg(23); // 调用相当于调用methodArg$privateMethod.invoke(this, 23);
 			}
 		}
 	}

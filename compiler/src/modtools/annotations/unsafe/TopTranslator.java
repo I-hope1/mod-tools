@@ -11,6 +11,7 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
+import modtools.annotations.PrintHelper.SPrinter;
 
 import java.lang.annotation.Annotation;
 import java.util.*;
@@ -60,12 +61,7 @@ public class TopTranslator extends TreeTranslator {
 				return treeTrans.apply(assign, symbol);
 			});
 		}
-		/* public Todo(Symbol skipElement) {
-			this(element -> true, tree -> {
-				if (TopTranslator.isEquals(skipElement, TreeInfo.symbolFor(tree))) return stripSign;
-				return null;
-			});
-		} */
+
 	}
 
 	private TopTranslator(Context context) {
@@ -117,6 +113,10 @@ public class TopTranslator extends TreeTranslator {
 		super.visitSelect(tree);
 		if (!inAssign) transTree(tree);
 	}
+	public void visitIdent(JCIdent tree) {
+		super.visitIdent(tree);
+		if (!inAssign) transTree(tree);
+	}
 	public void visitExec(JCExpressionStatement tree) {
 		super.visitExec(tree);
 		transTree(tree);
@@ -143,14 +143,32 @@ public class TopTranslator extends TreeTranslator {
 	}
 	/** 用到{@link ToTranslate}时，make.Select需要改为用这个 */
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, TypeSymbol owner) {
-		JCFieldAccess select = maker.Select(selected, name);
-		Symbol        sym    = owner.members().findFirst(name);
+		JCFieldAccess select  = maker.Select(selected, name);
+		var           symbols = List.from(owner.members().getSymbolsByName(name));
+		if (symbols.size() > 1) {
+			log.useSource(toplevel.sourcefile);
+			log.error(SPrinter.err("Find more than one symbol: " + symbols));
+			throw new CheckException("");
+		}
+		Symbol sym = symbols.head;
 		if (sym == null) {
 			log.useSource(toplevel.sourcefile);
 			log.error("cant.resolve.location", selected, name, List.nil(), owner);
 			throw new CheckException("");
 		}
 		select.sym = sym;
+		select.type = select.sym.type;
+		return select;
+	}
+	/** 用到{@link ToTranslate}时，make.Select需要改为用这个 */
+	public JCFieldAccess makeSelect(JCExpression selected, Name name, MethodSymbol ms) {
+		JCFieldAccess select = maker.Select(selected, name);
+		if (ms == null) {
+			log.useSource(toplevel.sourcefile);
+			log.error("cant.resolve.location", selected, name, List.nil(), ms);
+			throw new CheckException("");
+		}
+		select.sym = ms;
 		select.type = select.sym.type;
 		return select;
 	}

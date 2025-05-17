@@ -496,7 +496,7 @@ public class Replace {
 				JCTree            cdef = trees.getTree(element);
 				map.put(cdef, unit);
 			});
-			saveAllApi(map);
+			if (false) saveAllApi(map);
 
 			desugarStringTemplate.thenRuns.clear();
 			map.forEach((cdef, unit) -> {

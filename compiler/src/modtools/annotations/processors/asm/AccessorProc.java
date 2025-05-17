@@ -28,7 +28,6 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		if (hField != null) {
 			HMarkMagic magic = getAnnotationByElement(HMarkMagic.class, element.owner, true);
 			if (magic == null) {
-				log.useSource(trees.getPath(element).getCompilationUnit().getSourceFile());
 				log.error(trees.getTree(element.owner), SPrinter.err("@HField is only allowed on methods annotated with @HMarkMagic"));
 				return;
 			}
@@ -40,7 +39,6 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		if (hMethod != null) {
 			HMarkMagic magic = getAnnotationByElement(HMarkMagic.class, element.owner, true);
 			if (magic == null) {
-				log.useSource(trees.getPath(element).getCompilationUnit().getSourceFile());
 				log.error(trees.getTree(element.owner), SPrinter.err("@HMethod is only allowed on methods annotated with @HMarkMagic"));
 				return;
 			}
@@ -106,7 +104,6 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
 		// 检查方法返回值是否符合调用
 		if (!methodSymbol.getReturnType().tsym.equals((isGetter ? target.type : mSymtab.voidType).tsym)) {
-			log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 			log.error(methodDecl.restype, SPrinter.err("Field type mismatch the return type: " + (isGetter ? target.type : "void") + " != " + methodSymbol.getReturnType()));
 			return;
 		}
@@ -159,13 +156,11 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		String genMethodName = genMethodName();
 		if (targetMethod.isStatic()/*  && !(hMethod.isSpecial() && targetMethod.isConstructor()) */) {
 			if (hMethod.isSpecial()) {
-				log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 				log.error(methodDecl.mods, SPrinter.err("Special method cannot be static"));
 				return;
 			}
 
 			if (targetMethod.getParameters().size() != methodSymbol.params.size()) {
-				log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 				log.error(methodDecl.params.get(0).pos, SPrinter.err("Method parameter count mismatch"));
 				return;
 			}
@@ -174,13 +169,11 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 				VarSymbol targetParam = targetMethod.getParameters().get(i);
 				VarSymbol param       = methodSymbol.params.get(i);
 				if (!targetParam.type.tsym.equals(param.type.tsym)) {
-					log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 					log.error(param.pos, SPrinter.err("Method parametertype mismatch"));
 				}
 			}
 
 			if (!targetMethod.getReturnType().tsym.equals(methodSymbol.getReturnType().tsym)) {
-				log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 				log.error(methodDecl.restype, SPrinter.err("Method return type mismatch"));
 				return;
 			}
@@ -208,7 +201,6 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 			List<TypeSymbol> paramsL = methodSymbol.params.map(v -> v.type.tsym);
 			List<TypeSymbol> paramsR = targetMethod.getParameters().map(v -> v.type.tsym).prepend((TypeSymbol) targetMethod.owner);
 			if (paramsL.size() != paramsR.size()) {
-				log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 				log.error(methodDecl.params.get(0).pos, SPrinter.err("Method parameter count mismatch"));
 				return;
 			}
@@ -217,13 +209,11 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 				TypeSymbol targetParam = paramsR.get(i);
 				TypeSymbol param       = paramsL.get(i);
 				if (!targetParam.equals(param)) {
-					log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 					log.error(methodDecl.params.get(i).pos, SPrinter.err("Method parametertype mismatch: " + param + " != " + targetParam));
 				}
 			}
 
 			if (!targetMethod.getReturnType().tsym.equals(methodSymbol.getReturnType().tsym)) {
-				log.useSource(trees.getPath(methodSymbol).getCompilationUnit().getSourceFile());
 				log.error(methodDecl.restype, SPrinter.err("Method return type mismatch: " + methodSymbol.getReturnType() + " != " + targetMethod.getReturnType()));
 				return;
 			}

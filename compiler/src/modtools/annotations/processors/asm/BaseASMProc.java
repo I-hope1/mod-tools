@@ -33,7 +33,6 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		JCTree            pos  = trees.getTree(element);
 		DocCommentTree    doc  = trees.getDocCommentTree(element);
 		if (doc == null) {
-			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "必须有文档注释"));
 			return null;
 		}
@@ -44,12 +43,10 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		}
 		SeeTree seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElse(null);
 		if (seeTag == null) {
-			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "必须有@see"));
 			return null;
 		}
 		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) {
-			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "的@see必须为引用"));
 			return null;
 		}
@@ -62,7 +59,6 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		JCTree            pos  = trees.getTree(element);
 		DocCommentTree    doc  = trees.getDocCommentTree(element);
 		if (doc == null) {
-			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "必须有文档注释"));
 			return null;
 		}
@@ -112,14 +108,12 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 				}
 			}
 
-			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + ": Couldn't find symbol: " + reference));
 			return null;
 		}
 
 		Element finalRef = ref;
 		if (Arrays.stream(expectKinds).noneMatch(k -> k == finalRef.getKind())) {
-			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "的@see必须为" + Arrays.stream(expectKinds).map(k -> k.name().toLowerCase()).toList() + "之一"));
 			return null;
 		}

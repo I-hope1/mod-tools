@@ -48,13 +48,14 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 	public void dealElement(MethodSymbol sourceMethod) throws Throwable {
 		java.util.List<Pair<String, DocReference>> links = getLinkReference(LinkMethod.class, sourceMethod, ElementKind.METHOD, "METHOD");
 
+		JCMethodDecl methodDecl = trees.getTree(sourceMethod);
 		if (links == null || links.isEmpty()) {
-			log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod requires a {@link ... METHOD} Javadoc tag."));
+			log.error(methodDecl, SPrinter.err("@LinkMethod requires a {@link ... METHOD} Javadoc tag."));
 			return;
 		}
 		DocReference targetMethodRef = links.get(0).snd;
 		if (!(targetMethodRef.element() instanceof MethodSymbol targetMethod)) {
-			log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod: Tag must point to a method."));
+			log.error(methodDecl, SPrinter.err("@LinkMethod: Tag must point to a method."));
 			return;
 		}
 
@@ -94,26 +95,26 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 		}
 
 		if (sourceParams.size() != effectiveTargetParams.size()) {
-			log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod: Parameter count mismatch. Source: " + sourceParams.size() + ", Target effectively: " + effectiveTargetParams.size()));
+			log.error(methodDecl, SPrinter.err("@LinkMethod: Parameter count mismatch. Source: " + sourceParams.size() + ", Target effectively: " + effectiveTargetParams.size()));
 			return;
 		}
 		for (int i = 0; i < sourceParams.size(); i++) {
 			if (!types.isSameType(types.erasure(sourceParams.get(i).type), types.erasure(effectiveTargetParams.get(i).type))) {
-				log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod: Parameter type mismatch at index " + i));
+				log.error(methodDecl, SPrinter.err("@LinkMethod: Parameter type mismatch at index " + i));
 				return;
 			}
 		}
 		if (!types.isSameType(types.erasure(sourceReturnType), types.erasure(targetReturnType)) &&
 		    !(sourceReturnType.getTag() == TypeTag.VOID && targetReturnType.getTag() != TypeTag.VOID)) {
-			log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod: Return type mismatch."));
+			log.error(methodDecl, SPrinter.err("@LinkMethod: Return type mismatch."));
 			return;
 		}
 		if (isSourceStatic && !isTargetStatic) {
-			log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod: Static source cannot link to non-static target."));
+			log.error(methodDecl, SPrinter.err("@LinkMethod: Static source cannot link to non-static target."));
 			return;
 		}
 		if (!isTargetStatic && !isSourceStatic && !targetOwnerClass.equals(sourceOwnerClass) && !types.isSubtype(sourceOwnerClass.type, targetOwnerClass.type)) {
-			log.error(trees.getTree(sourceMethod), SPrinter.err("@LinkMethod: Incompatible instance types for non-static link."));
+			log.error(methodDecl, SPrinter.err("@LinkMethod: Incompatible instance types for non-static link."));
 			return;
 		}
 

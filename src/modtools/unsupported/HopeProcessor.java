@@ -1,6 +1,5 @@
 package modtools.unsupported;
 
-import android.content.ContentProvider;
 import arc.func.Cons;
 import arc.graphics.Color;
 import arc.graphics.g2d.TextureRegion;
@@ -14,7 +13,7 @@ import modtools.annotations.asm.Inline;
 import modtools.annotations.asm.Sample.SampleTemp.Template;
 import modtools.annotations.linker.*;
 import modtools.annotations.linker.LinkMethod.MTemp;
-import modtools.ui.*;
+import modtools.ui.IntUI;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.ExtendingLabel.DrawType;
 import modtools.utils.reflect.HopeReflect;
@@ -212,5 +211,19 @@ public class HopeProcessor {
 				methodArg(23); // 调用相当于调用methodArg$privateMethod.invoke(this, 23);
 			}
 		}
+	}
+
+	public static class MyContentParser extends ContentParser {
+		/** {@link ContentParser#read(Runnable) METHOD} */
+		@LinkMethod
+		public void read() { }
+
+		// /** @see #classParsers */
+		// @LinkFieldToField
+		// public ObjectMap<Class<?>, ?> classParsersR;
+
+		// {
+		// 	Log.info(classParsersR);
+		// }
 	}
 }

@@ -62,7 +62,6 @@ public class ASMProcessor extends BaseASMProc<VarSymbol> {
 										setConstantValue.accept(lvalue);
 									} catch (AssertionError e) {
 										String s = "\"" + element + "\" 's reference (" + seeReference.reference() + ") is not constvalue (Got: " + lvalue + ")";
-										log.useSource(unit.getSourceFile());
 										log.error(tree, SPrinter.err(s));
 										throw new RuntimeException(s, e);
 									}

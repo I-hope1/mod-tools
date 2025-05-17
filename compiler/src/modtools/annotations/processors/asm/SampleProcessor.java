@@ -39,7 +39,6 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 		ClassSymbol owner  = ((ClassSymbol) element.owner);
 		Sample      sample = owner.getAnnotation(Sample.class);
 		if (sample == null) {
-			log.useSource(unit.sourcefile);
 			log.error(trees.getTree(element).mods, SPrinter.err("@SampleForMethod / @SampleForInitializer is only allowed on methods annotated with @Sample"));
 			return;
 		}
@@ -64,7 +63,6 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 				if (tree == _super) {
 					_super = null;
 					if (!(tree.args.get(0) instanceof JCIdent i && i.name.contentEquals(element.params.get(0).name))) {
-						log.useSource(unit.sourcefile);
 						log.error(tree.pos, SPrinter.err("_super is only allowed to be used as '_super(" + element.params.get(0).name + ")'."));
 						return;
 					}
@@ -109,7 +107,6 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 			si = getAnnotationByElement(SampleForInitializer.class, symbol, true);
 			if (sm == null && si == null) { continue; }
 			if (ms.params.isEmpty()) {
-				log.useSource(unit.sourcefile);
 				log.error(trees.getTree(ms).mods, SPrinter.err("@SampleForMethod / @SampleForInitializer is only allowed on methods with parameters"));
 			}
 

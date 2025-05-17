@@ -76,7 +76,9 @@ import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
 	private static final int    FADE_ALIGN            = Align.bottomLeft;
-	/** @see NativeJavaClass#javaClassPropertyName */
+	/**
+	 * @see NativeJavaClass#javaClassPropertyName
+	 */
 	@CopyConstValue
 	public static final  String javaClassPropertyName = "";
 
@@ -1137,4 +1139,16 @@ public class Tester extends Content {
 			logs.add(FormatHelper.stripColor(s));
 		}
 	}
+
+
+	/* The animal world is full of wonder. But what's it like to be right in the heart of the action?
+	To find out, our spy creatures join the animal families.
+	They not only look like the animals they film, they behave like them, too.
+	 Armed with the latest camera technology, they are heading across the globe,
+	 from the heat of the tropics to the lands that lie in the north,
+	  from the islands of the southern seas to the snow and ice of the frozen poles.
+	   Our spies reveal the astonishing variety of life that thrives there,
+	   from inside their world.
+
+ */
 }

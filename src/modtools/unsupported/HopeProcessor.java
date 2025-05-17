@@ -9,8 +9,10 @@ import arc.util.*;
 import arc.util.serialization.JsonValue;
 import com.sun.tools.attach.VirtualMachine;
 import mindustry.mod.ContentParser;
+import modtools.annotations.asm.HAccessor.HMethod;
 import modtools.annotations.asm.Inline;
 import modtools.annotations.asm.Sample.SampleTemp.Template;
+import modtools.annotations.linker.*;
 import modtools.ui.IntUI;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.ExtendingLabel.DrawType;
@@ -78,27 +80,7 @@ public class HopeProcessor {
 			return null;
 		}
 	}
-	public static void aaa() {
-		bbb();
-	}
-	@Inline
-	public static void bbb() {
-		Log.info("Caller: " + HopeReflect.getCaller());
-	}
-	@Inline
-	public static int anInt() {
-		return OS.isAndroid ? 1820 * 92902 : 289223;
-	}
-	public static void asuia() {
-		Log.info("int" + anInt());
-		// new Table((@Capture Table t) -> {
-		// 	image();
-		// });
-
-	}
-
 	public static void main() {
-		aaa();
 
 		// temp.run();
 		String aa = "10203";
@@ -116,5 +98,96 @@ public class HopeProcessor {
 		Properties props = new Properties();
 		props.put("com.sun.management.jmxremote.port", "5000");
 		vm0.startManagementAgent(props);
+	}
+	public static class TestInline {
+
+		@Inline
+		public static void bbb() {
+			Log.info("Caller: " + HopeReflect.getCaller());
+		}
+		@Inline
+		public static int anInt() {
+			return OS.isAndroid ? 1820 * 92902 : 289223;
+		}
+		public static void asuia() {
+			Log.info("int" + anInt());
+			// new Table((@Capture Table t) -> {
+			// 	image();
+			// });
+
+		}
+
+	}
+
+	public static class LinkTest {
+		static class Child {
+			public int field;
+
+			private int privateField;
+			private int privateMethod() {
+				return 293;
+			}
+		}
+		static class Utils {
+			public static int field;
+
+			public static void set(Class<?> clazz, String fieldName, Object obj, Object value) {
+				Reflect.set(clazz, obj, fieldName, value);
+			}
+			public static Object get(Class<?> clazz, String fieldName, Object obj) {
+				return Reflect.get(clazz, obj, fieldName);
+			}
+		}
+
+		static class Example extends Child {
+			/** @see Child#field */
+			@LinkFieldToField // 如果是继承的类，可以访问是非静态
+			 int f1; // 访问这个字段相当于访问Child.field
+			/** @see Utils#field */
+			@LinkFieldToField // 如果不是继承的类，必须是静态
+			 int f2; // 访问这个字段相当于访问Utils.field
+
+			// /** @see Child#privateField */
+			// @LinkToField // 如果访问的字段是private，使用Reflect.get() & Reflect.set()
+			// int f3;
+
+			/**
+			 * {@link Utils#set(Class, String, Object, Object) SETTER}
+			 * {@link Utils#get(Class, String, Object) GETTER}
+			 **/
+			@LinkFieldToMethod // 需要两个link，target的setter和getter必须是static方法
+			 /*
+			 如果是link是非static
+			  修改相当于调用Utils.set(Example.class, "f3", this, value)
+				读取相当于调用Utils.get(Example.class, "f3", this)
+				*/
+			 int m1;
+
+			/**
+			 * {@link Utils#set(Class, String, Object, Object) SETTER}
+			 * {@link Utils#get(Class, String, Object) GETTER}
+			 */
+			@LinkFieldToMethod
+			/* 修改相当于调用Utils.set(Example.class, "f3", null, value)
+				读取相当于调用Utils.get(Example.class, "f3", null) */
+			static int m2;
+
+			/**
+			 * {@link Utils#set(Class, String, Object, Object) SETTER}
+			 * {@link Utils#get(Class, String, Object) GETTER}
+			 */
+			@LinkFieldToMethod(clazz = Child.class, fieldName = "privateField")
+			/* 修改相当于调用Utils.set(Child.class, "privateField", this, value)
+			 * 读取相当于调用Utils.get(Child.class, "privateField", this) */
+			 int m3;
+
+			void updateX() {
+				f1 = 1; // 相当于field = 1
+				f2 = 9; // 相当于Utils.field = 9
+				m1 = 7; // 修改相当于调用Utils.set(Example.class, "m1", this, 7)
+				m2 = 4; // 修改相当于调用Utils.set(Example.class, "m2", null, 4)
+				m3 = 1; // 修改相当于调用Utils.set(Child.class, "privateField", this, 1)
+			}
+		}
 	}
 }

@@ -14,7 +14,7 @@ import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 import modtools.annotations.settings.*;
 import modtools.annotations.unsafe.TopTranslator;
-import modtools.annotations.unsafe.TopTranslator.Todo;
+import modtools.annotations.unsafe.TopTranslator.ToTranslate;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.*;
@@ -51,12 +51,11 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		mainClass = trees.getTree(findClassSymbol("modtools.ModTools"));
 
 		TopTranslator translator = TopTranslator.instance(_context);
-		translator.todos.add(new Todo(
-		 JCFieldAccess.class, access -> {
+		translator.todos.add(new ToTranslate(JCFieldAccess.class, access -> {
 			if (!(access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) return null;
 
 			String      enumName = access.name.toString();
-			ClassSymbol symbol   = translator.getEventClassSymbol(i);
+			ClassSymbol symbol   = translator.getClassSymbolByDoc(i);
 			if (symbol == null) return null;
 			// R_XXX -> E_XXX.xxx.get%Type%()
 			JCFieldAccess enumField = translator.makeSelect(mMaker.QualIdent(symbol), names.fromString(enumName), symbol);
@@ -71,13 +70,12 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			return mMaker.Apply(List.nil(), fn, ms.params.isEmpty() ? List.nil() : List.of(
 			 mMaker.ClassLiteral(access.type))).setType(access.type);
 		}));
-		translator.todos.add(new Todo(JCAssign.class,
-		 tree -> {
+		translator.todos.add(new ToTranslate(JCAssign.class, tree -> {
 			 if (!(tree.lhs instanceof JCFieldAccess access && access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) {
 				 return null;
 			 }
 			 // R_XXX.xxx(lhs) = val(rhs) -> E_XXX.xxx.set%Type%(val)
-			 ClassSymbol symbol = translator.getEventClassSymbol(i);
+			 ClassSymbol symbol = translator.getClassSymbolByDoc(i);
 			 // println(symbol.fullname);
 			 JCFieldAccess enumField = translator.makeSelect(mMaker.QualIdent(symbol), access.name, symbol);
 			 JCFieldAccess fn        = translator.makeSelect(enumField, names.fromString("set"), iSettings);

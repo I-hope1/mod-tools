@@ -8,6 +8,7 @@ import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 import modtools.annotations.unsafe.TopTranslator;
+import modtools.annotations.unsafe.TopTranslator.ToTranslate;
 
 import javax.annotation.processing.Processor;
 import javax.tools.Diagnostic;
@@ -20,7 +21,7 @@ public class DebugLogProc extends BaseProcessor<Symbol> {
 	public void dealElement(Symbol element) {
 		String fmt           = element.getAnnotation(DebugMark.class).fmt();
 		var    topTranslator = TopTranslator.instance(_context);
-		topTranslator.todos.add(new TopTranslator.Todo(JCMethodInvocation.class, tree -> {
+		topTranslator.todos.add(new ToTranslate(JCMethodInvocation.class, tree -> {
 			if (!(topTranslator.inAnnotation(DebugMark.class) && TopTranslator.isEquals(getSymbol(topTranslator.toplevel, tree), element) &&
 			      tree.meth instanceof JCFieldAccess access)) {
 				return null;

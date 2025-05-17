@@ -566,7 +566,7 @@ public class Replace {
                 char[] chars = Character.toChars(codePoint);
                 // 将 char[] 转换为 String
                 String replacement = new String(chars);
-                // 将匹配到的 \uXXXX 替换为转换后的字符
+                // 将匹配到的 \\uXXXX 替换为转换后的字符
                 // 使用 quoteReplacement 确保 replacement 中的 $ 和 \ 不被误解为 matcher 的特殊语法
                 matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
             } catch (NumberFormatException e) {

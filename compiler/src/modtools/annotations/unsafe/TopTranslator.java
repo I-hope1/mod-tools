@@ -23,31 +23,42 @@ public class TopTranslator extends TreeTranslator {
 	final Symtab     symtab;
 	final TreeMaker  maker;
 
+	public static final String LOCAL_PREFIX = "$$letexpr$$";
+
+
 	final String errorKey = "default.method.call";
 
 	/** 待处理的方法 */
-	public ArrayList<Todo> todos = new ArrayList<>();
+	public ArrayList<ToTranslate> todos = new ArrayList<>();
 	public static boolean isEquals(Symbol i, Symbol element) {
-		return i.flatName().contentEquals(element.flatName());
+		return i != null && element != null && i.owner == element.owner && i.getQualifiedName().contentEquals(element.getQualifiedName());
 	}
 	public boolean inAnnotation(Class<? extends Annotation> annoType) {
 		return currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null
 		       || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
 	}
 	// public static JCTree stripSign = new JCErroneous(List.nil()) { };
-	public static class Todo {
+	public static class ToTranslate {
 		public Predicate<JCTree>        predicate;
 		public Function<JCTree, JCTree> treeTrans;
 
-		public Todo(Predicate<JCTree> predicate, Function<? extends JCTree, JCTree> treeTrans) {
+		public ToTranslate(Predicate<JCTree> predicate, Function<? extends JCTree, JCTree> treeTrans) {
 			this.predicate = predicate;
 			this.treeTrans = (Function) treeTrans;
 		}
-		public <T extends JCTree> Todo(Class<T> cls, Predicate<T> predicate, Function<T, JCTree> treeTrans) {
+		public <T extends JCTree> ToTranslate(Class<T> cls, Predicate<T> predicate, Function<T, JCTree> treeTrans) {
 			this(tree -> cls.isInstance(tree) && predicate.test((T) tree), treeTrans);
 		}
-		public <T extends JCTree> Todo(Class<T> cls, Function<T, JCTree> treeTrans) {
+		public <T extends JCTree> ToTranslate(Class<T> cls, Function<T, JCTree> treeTrans) {
 			this(cls::isInstance, treeTrans);
+		}
+		public static ToTranslate Assign(Predicate<Symbol> condition, BiFunction<JCAssign, Symbol, JCTree> treeTrans) {
+			return new ToTranslate(JCAssign.class, (assign) -> {
+				Symbol symbol;
+				if (!(assign.lhs instanceof JCFieldAccess lhsAccess && condition.test(symbol = lhsAccess.sym)
+				      || assign.lhs instanceof JCIdent ident && condition.test(symbol = ident.sym))) { return null; }
+				return treeTrans.apply(assign, symbol);
+			});
 		}
 		/* public Todo(Symbol skipElement) {
 			this(element -> true, tree -> {
@@ -79,6 +90,7 @@ public class TopTranslator extends TreeTranslator {
 	public void scanToplevel(JCCompilationUnit toplevel) {
 		this.toplevel = toplevel;
 		translate(toplevel);
+		this.toplevel = null;
 	}
 	public void visitClassDef(JCClassDecl tree) {
 		currentClass = tree;
@@ -114,21 +126,28 @@ public class TopTranslator extends TreeTranslator {
 		 .map(todo -> todo.treeTrans.apply(tree))
 		 .filter(Objects::nonNull)
 		 .limit(1)
-		 .forEach(tree1 -> result = tree1);
+		 .forEach(tree2 -> result = tree2);
 	}
 
-	public JCTree makeString(String s) {
+	public JCLiteral makeNullLiteral() {
+		return maker.Literal(TypeTag.BOT, null).setType(symtab.botType);
+	}
+
+	public JCExpression makeString(String s) {
 		return Replace.desugarStringTemplate.makeString(s);
 	}
+
+	/** 用到{@link ToTranslate}时，make.Binary需要改为用这个 */
 	public JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
 		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
 	}
+	/** 用到{@link ToTranslate}时，make.Select需要改为用这个 */
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, TypeSymbol owner) {
 		JCFieldAccess select = maker.Select(selected, name);
 		Symbol        sym    = owner.members().findFirst(name);
 		if (sym == null) {
 			log.useSource(toplevel.sourcefile);
-			log.error("cant.resolve.location", names.fromString("modtools.events.ISettings"), name, List.nil(), owner);
+			log.error("cant.resolve.location", selected, name, List.nil(), owner);
 			throw new CheckException("");
 		}
 		select.sym = sym;
@@ -164,7 +183,7 @@ public class TopTranslator extends TreeTranslator {
 		}
 		maker.at(block);
 		ListBuffer<JCStatement> defs      = new ListBuffer<>();
-		VarSymbol               varSymbol = new VarSymbol(0, names.fromString("$$letexper$$" + ++localVarIndex), returnType, owner);
+		VarSymbol               varSymbol = new VarSymbol(0, names.fromString(LOCAL_PREFIX + ++localVarIndex), returnType, owner);
 		defs.add(maker.VarDef(varSymbol, defaultValue(returnType)));
 		defs.appendList(new TreeCopier<Void>(maker) {
 			public JCTree visitReturn(ReturnTree node, Void unused) {
@@ -176,7 +195,7 @@ public class TopTranslator extends TreeTranslator {
 		return letExpr;
 	}
 
-	public ClassSymbol getEventClassSymbol(JCIdent i) {
+	public ClassSymbol getClassSymbolByDoc(JCIdent i) {
 		DocCommentTree doc    = trees.getDocCommentTree(i.sym);
 		SeeTree        seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
 		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) { return null; }

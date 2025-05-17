@@ -99,8 +99,8 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		genClassName = null;
 	}
 	public void process(MethodSymbol methodSymbol, HField hField) {
-		SeeReference reference  = getSeeReference(HField.class, methodSymbol, ElementKind.FIELD);
-		VarSymbol    target     = (VarSymbol) reference.element();
+		DocReference reference = getSeeReference(HField.class, methodSymbol, ElementKind.FIELD);
+		VarSymbol    target    = (VarSymbol) reference.element();
 		boolean      isGetter   = hField.isGetter();
 		boolean      isStatic   = target.isStatic();
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
@@ -152,7 +152,7 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		// println(methodDecl);
 	}
 	public void process(MethodSymbol methodSymbol, HMethod hMethod) {
-		SeeReference reference    = getSeeReference(HMethod.class, methodSymbol, ElementKind.METHOD, ElementKind.CONSTRUCTOR);
+		DocReference reference    = getSeeReference(HMethod.class, methodSymbol, ElementKind.METHOD, ElementKind.CONSTRUCTOR);
 		MethodSymbol targetMethod = (MethodSymbol) reference.element();
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);

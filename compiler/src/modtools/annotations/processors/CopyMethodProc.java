@@ -22,7 +22,7 @@ public class CopyMethodProc extends BaseASMProc<MethodSymbol> {
 		if ((anno = method.getAnnotation(CopyMethodFrom.class)) == null) return;
 
 		JCMethodDecl methodDecl   = trees.getTree(method);
-		SeeReference seeReference = getSeeReference(CopyMethodFrom.class, method, ElementKind.METHOD);
+		DocReference seeReference = getSeeReference(CopyMethodFrom.class, method, ElementKind.METHOD);
 		if (seeReference == null) return;
 		MethodSymbol targetMethod = (MethodSymbol) seeReference.element();
 

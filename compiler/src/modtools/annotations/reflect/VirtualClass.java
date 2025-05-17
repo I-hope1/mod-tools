@@ -13,6 +13,7 @@ import jdk.internal.access.SharedSecrets;
 import modtools.annotations.HopeReflect;
 import sun.reflect.annotation.ExceptionProxy;
 
+import javax.lang.model.type.TypeMirror;
 import java.io.*;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
@@ -54,7 +55,14 @@ public class VirtualClass {
 				return types.stream().map(VirtualClass::defineMirrorType0)
 				 .toList().toArray(Class[]::new);
 			}
-			return defineMirrorClass1(HopeReflect.getAccess(mirrorType, proxy, "type"));
+			TypeMirror type = HopeReflect.getAccess(mirrorType, proxy, "type");
+			return switch (type) {
+				case ClassType ct -> defineMirrorClass1(ct);
+				case ArrayType at -> defineMirrorType0(at);
+				case JCVoidType _ -> void.class;
+				case JCPrimitiveType pt -> pt.tsym.type;
+				default -> throw new RuntimeException("Unsupported type: " + type);
+			};
 		} catch (Throwable e) {
 			errs(e);
 			return proxy;
@@ -64,7 +72,7 @@ public class VirtualClass {
 		if (type instanceof ClassType ct) {
 			return defineMirrorClass1(ct);
 		}
-		if (type.isPrimitiveOrVoid())
+		if (type.isPrimitiveOrVoid()) {
 			return switch (type.getTag()) {
 				case BYTE -> byte.class;
 				case CHAR -> char.class;
@@ -77,6 +85,7 @@ public class VirtualClass {
 				case VOID -> void.class;
 				default -> throw new IllegalArgumentException("type: " + type);
 			};
+		}
 		if (type instanceof ArrayType arrayType) {
 			return Array.newInstance(defineMirrorType0(arrayType.elemtype), 0).getClass();
 		}
@@ -94,7 +103,7 @@ public class VirtualClass {
 		try {
 			if (type.supertype_field != null && defineMirrorType0(type.supertype_field) == null) return null;
 			if (type.interfaces_field != null && type.interfaces_field.stream()
-			 .anyMatch(type1 -> defineMirrorType0(type1) == null)) return null;
+			 .anyMatch(type1 -> defineMirrorType0(type1) == null)) { return null; }
 
 			ClassSymbol symbol = new ClassSymbol(type.tsym.flags_field, type.tsym.name, type.tsym.owner);
 			symbol.type.tsym = symbol;
@@ -110,6 +119,11 @@ public class VirtualClass {
 			}
 			cl = defineHiddenClass(bytes);
 			HopeReflect.setAccess(Class.class, cl, "name", "" + type.tsym.flatName());
+			Object rd = HopeReflect.invoke(Class.class, cl, "reflectionData", new Object[0]);
+			// 设置canonicalName
+			HopeReflect.setAccess(rd.getClass(), rd, "canonicalName", type.tsym.getQualifiedName());
+
+
 			// cl = jdk.internal.misc.Unsafe.getUnsafe().defineClass(
 			//  null, bytes, 0, bytes.length, loader, null);
 			// if (cl != null) classToType.put(cl, type);
@@ -137,20 +151,22 @@ public class VirtualClass {
 	}
 	private static boolean tryCreate(ClassType type, ClassSymbol symbol) {
 		boolean valid = false;
-		if (valid) for (Symbol sym : type.tsym.members().getSymbols()) {
-			if (sym instanceof VarSymbol vs && defineMirrorType0(vs.type) == null) return true;
-			if (sym instanceof MethodSymbol ms) {
-				if (defineMirrorType0(ms.getReturnType()) == null) return true;
-				// if (ms.params.stream().anyMatch(
-				//  type1 -> type1.type.getTag() != TypeTag.TYPEVAR
-				// 					&& defineMirrorClass0(type1.type) == null)) return null;
-				TreePath path = trees.getPath(sym);
-				if (path == null) {
-					valid = false;
-					break;
+		if (valid) {
+			for (Symbol sym : type.tsym.members().getSymbols()) {
+				if (sym instanceof VarSymbol vs && defineMirrorType0(vs.type) == null) return true;
+				if (sym instanceof MethodSymbol ms) {
+					if (defineMirrorType0(ms.getReturnType()) == null) return true;
+					// if (ms.params.stream().anyMatch(
+					//  type1 -> type1.type.getTag() != TypeTag.TYPEVAR
+					// 					&& defineMirrorClass0(type1.type) == null)) return null;
+					TreePath path = trees.getPath(sym);
+					if (path == null) {
+						valid = false;
+						break;
+					}
+					JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
+					generateCode(ms, unit);
 				}
-				JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
-				generateCode(ms, unit);
 			}
 		}
 		symbol.members_field =

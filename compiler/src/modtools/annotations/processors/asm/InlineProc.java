@@ -7,7 +7,7 @@ import com.sun.tools.javac.tree.JCTree.*;
 import modtools.annotations.BaseProcessor;
 import modtools.annotations.asm.Inline;
 import modtools.annotations.unsafe.TopTranslator;
-import modtools.annotations.unsafe.TopTranslator.Todo;
+import modtools.annotations.unsafe.TopTranslator.ToTranslate;
 
 import javax.annotation.processing.Processor;
 import java.util.Set;
@@ -25,7 +25,7 @@ public class InlineProc extends BaseProcessor<MethodSymbol> {
 		// translator.todos.add(new Todo(JCLambda.class, lambda -> {
 		// 	// if (lambda.params.stream().anyMatch(p -> trees.getTree())
 		// }));
-		translator.todos.add(new Todo(JCExpressionStatement.class, (state) -> {
+		translator.todos.add(new ToTranslate(JCExpressionStatement.class, (state) -> {
 			if (!(state.expr instanceof JCMethodInvocation m)) return null;
 
 			Symbol sym;
@@ -38,7 +38,7 @@ public class InlineProc extends BaseProcessor<MethodSymbol> {
 			}
 			return trees.getTree(methodSymbol).body;
 		}));
-		translator.todos.add(new Todo(JCMethodInvocation.class, (m) -> {
+		translator.todos.add(new ToTranslate(JCMethodInvocation.class, (m) -> {
 			Symbol sym;
 			if ((!(m.meth instanceof JCFieldAccess fa) || !TopTranslator.isEquals(sym = fa.sym, element))
 			    && (!(m.meth instanceof JCIdent i) || !TopTranslator.isEquals(sym = i.sym, element))) { return null; }

@@ -4,10 +4,11 @@ import com.sun.source.doctree.*;
 import com.sun.source.util.DocTreePath;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.code.Type.*;
+import com.sun.tools.javac.code.Type.ArrayType;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
+import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Name;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import modtools.annotations.*;
@@ -18,13 +19,14 @@ import javax.tools.JavaFileObject;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.util.*;
+import java.util.List;
 
 public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public static final boolean OUTPUT_CLASS_FILE = false;
 
 	public String      genClassName;
 	public ClassWriter classWriter;
-	public static <R extends Symbol> SeeReference
+	public static <R extends Symbol> DocReference
 	getSeeReference(Class<? extends Annotation> annotationClass,
 	                R element, ElementKind... expectKinds) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
@@ -34,6 +36,11 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			log.useSource(unit.getSourceFile());
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "必须有文档注释"));
 			return null;
+		}
+		for (DocTree tree : doc.getFirstSentence()) {
+			if (tree instanceof LinkTree l) {
+				SPrinter.println(l.getLabel().getFirst());
+			}
 		}
 		SeeTree seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElse(null);
 		if (seeTag == null) {
@@ -46,6 +53,28 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "的@see必须为引用"));
 			return null;
 		}
+		return findReference(annotationClass, element, expectKinds, reference, unit, pos, doc);
+	}
+	public static <R extends Symbol> List<Pair<String, DocReference>>
+	getLinkReference(Class<? extends Annotation> annotationClass,
+	                 R element, ElementKind... expectKinds) {
+		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
+		JCTree            pos  = trees.getTree(element);
+		DocCommentTree    doc  = trees.getDocCommentTree(element);
+		if (doc == null) {
+			log.useSource(unit.getSourceFile());
+			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "必须有文档注释"));
+			return null;
+		}
+		return doc.getFirstSentence().stream().filter(t -> t instanceof LinkTree l && !l.getLabel().isEmpty())
+		 .map(t -> Pair.of(((LinkTree) t).getLabel().getFirst().toString(),
+			findReference(annotationClass, element, expectKinds, (DCReference) ((LinkTree) t).getReference(), unit, pos, doc)))
+		 .toList();
+	}
+	private static <R extends Symbol> DocReference findReference(Class<? extends Annotation> annotationClass, R element,
+	                                                             ElementKind[] expectKinds, DCReference reference,
+	                                                             JCCompilationUnit unit, JCTree pos,
+	                                                             DocCommentTree doc) {
 
 		Element ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
 		l:
@@ -89,7 +118,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + " 标注的" + element.getKind() + "的@see必须为" + Arrays.stream(expectKinds).map(k -> k.name().toLowerCase()).toList() + "之一"));
 			return null;
 		}
-		return new SeeReference(reference, ref);
+		return new DocReference(reference, ref);
 	}
 	/** 默认直接写入字节码 */
 	public void process() throws Throwable {
@@ -142,7 +171,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		// println(arrayType.elemtype);
 		return "Object" + "[]".repeat(depth) + ".class";
 	}
-	public record SeeReference(
+	public record DocReference(
 	 DCReference reference, Element element) {
 	}
 }

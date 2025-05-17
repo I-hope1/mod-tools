@@ -14,13 +14,12 @@ import javax.lang.model.element.ElementKind;
 import java.util.Set;
 import java.util.function.Consumer;
 
-/** TODO: 在TransLiterals之前替换 */
 @AutoService(Processor.class)
 public class ASMProcessor extends BaseASMProc<VarSymbol> {
 	public void process() { }
 
 	public void dealElement(VarSymbol element) throws Throwable {
-		SeeReference seeReference = getSeeReference(CopyConstValue.class, element, ElementKind.FIELD);
+		DocReference seeReference = getSeeReference(CopyConstValue.class, element, ElementKind.FIELD);
 		if (seeReference == null) return;
 		VarSymbol field = (VarSymbol) seeReference.element();
 

@@ -23,13 +23,11 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 	public static String FIELD_PREFIX = "f$";
 
 	ClassType     reflectFieldType;
-	TopTranslator translator;
 	private final Map<ClassSymbol, Set<Pair<VarSymbol, VarSymbol>>> classFields = new HashMap<>();
 	@Override
 	public void lazyInit() throws Throwable {
 		super.lazyInit();
 		reflectFieldType = findTypeBoot("java.lang.reflect.Field");
-		translator = TopTranslator.instance(_context);
 	}
 
 	@Override

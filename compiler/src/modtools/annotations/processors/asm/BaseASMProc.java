@@ -13,6 +13,7 @@ import com.sun.tools.javac.util.Name;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import modtools.annotations.*;
 import modtools.annotations.asm.Sample.AConstants;
+import modtools.annotations.unsafe.TopTranslator;
 
 import javax.lang.model.element.*;
 import javax.tools.JavaFileObject;
@@ -24,9 +25,14 @@ import java.util.List;
 public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public static final boolean OUTPUT_CLASS_FILE = false;
 
+	public TopTranslator translator;
+	public void lazyInit() throws Throwable {
+		super.lazyInit();
+		translator = TopTranslator.instance(_context);
+	}
 	public String      genClassName;
 	public ClassWriter classWriter;
-	public static <R extends Symbol> DocReference
+	public <R extends Symbol> DocReference
 	getSeeReference(Class<? extends Annotation> annotationClass,
 	                R element, ElementKind... expectKinds) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
@@ -52,7 +58,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		}
 		return findReference(annotationClass, element, expectKinds, reference, unit, pos, doc);
 	}
-	public static <R extends Symbol> List<Pair<String, DocReference>>
+	public  <R extends Symbol> List<Pair<String, DocReference>>
 	getLinkReference(Class<? extends Annotation> annotationClass,
 	                 R element, ElementKind... expectKinds) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
@@ -67,12 +73,12 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			findReference(annotationClass, element, expectKinds, (DCReference) ((LinkTree) t).getReference(), unit, pos, doc)))
 		 .toList();
 	}
-	public static <R extends Symbol> List<Pair<String, DocReference>>
+	public <R extends Symbol> List<Pair<String, DocReference>>
 	getLinkReference(Class<? extends Annotation> annotationClass,
 	                 R element, ElementKind expectKind, String name) {
 		return getLinkReference(annotationClass, element, expectKind).stream().filter(p -> p.fst.equals(name)).toList();
 	}
-	private static <R extends Symbol> DocReference findReference(Class<? extends Annotation> annotationClass, R element,
+	private <R extends Symbol> DocReference findReference(Class<? extends Annotation> annotationClass, R element,
 	                                                             ElementKind[] expectKinds, DCReference reference,
 	                                                             JCCompilationUnit unit, JCTree pos,
 	                                                             DocCommentTree doc) {
@@ -80,6 +86,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		Element ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
 		l:
 		if (ref == null) {
+
 			JCTree expressionCpy = reference.qualifierExpression;
 			JCTree expression    = expressionCpy;
 			Name   name          = null;
@@ -95,6 +102,18 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			// SPrinter.println("access=" + expression);
 			// 尝试从import 中查找
 			for (var i : unit.getImports()) {
+				if (i.qualid.name.contentEquals(name)) {
+					if (expressionCpy instanceof JCFieldAccess && expression instanceof JCFieldAccess access) {
+						access.selected = mMaker.Select(i.qualid.selected, name);
+					} else {
+						JCFieldAccess m = mMaker.Select(i.qualid.selected, name);
+						HopeReflect.setAccess(DCReference.class, reference, "qualifierExpression", m);
+					}
+
+					ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
+					break l;
+				}
+
 				if (!i.isStatic() && i.qualid.name.toString().equals("*")) {
 					if (expressionCpy instanceof JCFieldAccess && expression instanceof JCFieldAccess access) {
 						access.selected = mMaker.Select(i.qualid.selected, name);
@@ -102,11 +121,12 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 						JCFieldAccess m = mMaker.Select(i.qualid.selected, name);
 						HopeReflect.setAccess(DCReference.class, reference, "qualifierExpression", m);
 					}
-					// SPrinter.println(reference.qualifierExpression);
+
 					ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
 					if (ref != null) break l;
 				}
 			}
+
 
 			log.error(pos, SPrinter.err("@" + annotationClass.getSimpleName() + ": Couldn't find symbol: " + reference));
 			return null;

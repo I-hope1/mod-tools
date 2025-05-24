@@ -27,7 +27,6 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 	private ClassSymbol methodSym;
 	private ClassSymbol classSym;
 	private ClassSymbol objectSym;
-	TopTranslator translator;
 
 	@Override
 	public void lazyInit() throws Throwable {
@@ -36,7 +35,6 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 		methodSym = findClassSymbolAny("java.lang.reflect.Method");
 		classSym = (ClassSymbol) mSymtab.classType.tsym;
 		objectSym = (ClassSymbol) mSymtab.objectType.tsym;
-		translator = TopTranslator.instance(_context);
 
 		if (methodSym == null || classSym == null || objectSym == null || reflectSym == null) {
 			err("Could not find essential reflection class symbols. LinkMethod reflective features will fail or produce uncompilable code.");

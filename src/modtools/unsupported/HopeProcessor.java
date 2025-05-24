@@ -214,7 +214,7 @@ public class HopeProcessor {
 	}
 	static {
 		try {
-		} catch (Throwable oaios) {}
+		} catch (Throwable oaios) { }
 	}
 
 	public static class MyContentParser extends ContentParser {
@@ -224,10 +224,28 @@ public class HopeProcessor {
 
 		/** @see #classParsers */
 		@LinkFieldToField
-		public ObjectMap<Class<?>, ?> classParsersR;
+		public ObjectMap<Class<?>, Object> classParsersR;
+
+		/** @see ContentParser.FieldParser */
+		@LinkVirClass
+		interface FieldParserR {
+			Object parse(Class<?> type, JsonValue value) throws Exception;
+		}
 
 		{
 			Log.info(classParsersR);
+
+			classParsersR.put(String.class, (FieldParserR) (type, value) -> {
+				return value.asString();
+			});
+
+			/* Class<?> FieldParserClass = Class.forName("mindustry.mod.ContentParser$FieldParser");
+			Proxy.newProxyInstance(FieldParserClass.getClassLoader(), new Class[]{FieldParserClass}, (proxy, method, args) -> {
+				if (method.getName().equals("parse")) {
+					return ;
+				}
+				return method.invoke(proxy, args);
+			}); */
 		}
 	}
 }

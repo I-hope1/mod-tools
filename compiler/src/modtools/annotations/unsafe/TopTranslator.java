@@ -7,6 +7,7 @@ import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
+import com.sun.tools.javac.comp.Resolve;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
@@ -24,11 +25,25 @@ public class TopTranslator extends TreeTranslator {
 	final Names      names;
 	final Symtab     symtab;
 	final TreeMaker  maker;
+	final Resolve    resolve;
 
 	public static final String LOCAL_PREFIX = "$$letexpr$$";
 
 
 	final String errorKey = "default.method.call";
+
+	private TopTranslator(Context context) {
+		context.put(TopTranslator.class, this);
+		trees = JavacTrees.instance(context);
+		log = Log.instance(context);
+		names = Names.instance(context);
+		symtab = Symtab.instance(context);
+		maker = TreeMaker.instance(context);
+		resolve = Resolve.instance(context);
+
+		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
+	}
+
 
 	/** 待处理的方法 */
 	private final ArrayList<ToTranslate> todos = new ArrayList<>();
@@ -44,9 +59,27 @@ public class TopTranslator extends TreeTranslator {
 		return currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null
 		       || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
 	}
+	public JCExpression makeClassExpr(ClassSymbol classSymbol, Symbol owner) {
+		if (classSymbol.isPublic()) return maker.ClassLiteral(classSymbol);
+
+		// loadClass(String)
+		MethodSymbol forName = (MethodSymbol) symtab.classType.tsym.members().findFirst(names.fromString("forName"),
+		 s -> s.isPublic() && s instanceof MethodSymbol ms && ms.params.size() == 1 && ms.params.get(0).type.tsym == symtab.stringType.tsym);
+		JCMethodInvocation apply = maker.App(
+		 makeSelect(maker.Ident(symtab.classType.tsym),
+			names.fromString("forName"), forName), List.of(makeString(classSymbol.flatName().toString()))
+		);
+		// 创建一个局部变量 %LOCAL_PREFIX%
+		VarSymbol      localSym = new VarSymbol(0, names.fromString(LOCAL_PREFIX + classSymbol.name), symtab.classType, owner);
+		localSym.flags_field |= Flags.LocalVarFlags;
+		JCVariableDecl local    = maker.VarDef(localSym, apply);
+
+		// let (local = %moduleRep[0]%.class.getClassLoader().loadClass("%classSymbol.name%");) in local
+		return maker.LetExpr(List.of(local), maker.Ident(local)).setType(symtab.classType);
+	}
 	// public static JCTree stripSign = new JCErroneous(List.nil()) { };
 	public static class ToTranslate {
-		public TopTranslator  translator;
+		public TopTranslator            translator;
 		public Predicate<JCTree>        predicate;
 		public Function<JCTree, JCTree> treeTrans;
 
@@ -88,55 +121,73 @@ public class TopTranslator extends TreeTranslator {
 
 	}
 
-	private TopTranslator(Context context) {
-		context.put(TopTranslator.class, this);
-		trees = JavacTrees.instance(context);
-		log = Log.instance(context);
-		names = Names.instance(context);
-		symtab = Symtab.instance(context);
-		maker = TreeMaker.instance(context);
-
-		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
-	}
 	public static TopTranslator instance(Context context) {
 		TopTranslator translator = context.get(TopTranslator.class);
 		if (translator == null) return new TopTranslator(context);
 		return translator;
 	}
-	public JCCompilationUnit toplevel;
-	public JCClassDecl       currentClass;
-	public JCMethodDecl      currentMethod;
-
+	public  JCCompilationUnit toplevel;
+	public  JCClassDecl       currentClass;
+	public  JCMethodDecl currentMethod;
+	private Symbol       implCurrentMethod;
+	public Symbol currentOwner() {
+		return currentMethod != null ? currentMethod.sym :
+		 implCurrentMethod != null ? implCurrentMethod : currentClass.sym;
+	}
 	public void scanToplevel(JCCompilationUnit toplevel) {
 		this.toplevel = toplevel;
 		translate(toplevel);
 		this.toplevel = null;
 	}
+
 	public void visitClassDef(JCClassDecl tree) {
+		JCClassDecl prev = currentClass;
 		currentClass = tree;
 		super.visitClassDef(tree);
-		currentClass = null;
+		currentClass = prev;
 	}
 	public void visitMethodDef(JCMethodDecl tree) {
+		var prev = currentMethod;
 		currentMethod = tree;
 		super.visitMethodDef(tree);
-		currentMethod = null;
+		currentMethod = prev;
+	}
+	public void visitBlock(JCBlock tree) {
+		var prev = implCurrentMethod;
+		if (currentClass != null && currentClass.defs.contains(tree)) {
+			implCurrentMethod = currentClass.sym.members().findFirst(tree.isStatic() ? names.clinit : names.init);
+		}
+		super.visitBlock(tree);
+		implCurrentMethod = prev;
 	}
 	public void visitApply(JCMethodInvocation tree) {
 		super.visitApply(tree);
 		transTree(tree);
 	}
+	public void visitLambda(JCLambda tree) {
+		super.visitLambda(tree);
+		transTree(tree);
+	}
+	public void visitReturn(JCReturn tree) {
+		super.visitReturn(tree);
+		transTree(tree);
+	}
 	boolean inAssignLHS = false;
 	public void visitAssign(JCAssign tree) {
+		var prev = inAssignLHS;
 		inAssignLHS = true;
 		tree.lhs = translate(tree.lhs);
-		inAssignLHS = false;
+		inAssignLHS = prev;
 		tree.rhs = translate(tree.rhs);
 		result = tree;
 		transTree(tree);
 	}
 	public void visitSelect(JCFieldAccess tree) {
 		super.visitSelect(tree);
+		transTree(tree);
+	}
+	public void visitTypeCast(JCTypeCast tree) {
+		super.visitTypeCast(tree);
 		transTree(tree);
 	}
 	public void visitIdent(JCIdent tree) {
@@ -186,7 +237,7 @@ public class TopTranslator extends TreeTranslator {
 		Symbol sym = symbols.head;
 		if (sym == null) {
 			log.useSource(toplevel.sourcefile);
-			log.error("cant.resolve.location", selected, name, List.nil(), owner);
+			log.error(SPrinter.err("can't resolve location in " + owner + "." + name + ":" + selected));
 			throw new CheckException("");
 		}
 		select.sym = sym;
@@ -198,7 +249,7 @@ public class TopTranslator extends TreeTranslator {
 		JCFieldAccess select = maker.Select(selected, name);
 		if (ms == null) {
 			log.useSource(toplevel.sourcefile);
-			log.error("cant.resolve.location", selected, name, List.nil(), ms);
+			log.error(SPrinter.err("can't resolve location in " + name + ":" + selected));
 			throw new CheckException("");
 		}
 		select.sym = ms;

@@ -27,6 +27,7 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
+import modtools.unsupported.HopeProcessor.MyContentParser;
 import modtools.utils.*;
 import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
@@ -68,6 +69,7 @@ public class ModTools extends Mod {
 
 		// Defer loading to the main thread to ensure proper initialization order
 		Core.app.post(this::load0);
+		new MyContentParser();
 	}
 	public void load0() {
 		try {

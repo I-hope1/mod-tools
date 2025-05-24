@@ -22,10 +22,8 @@ public class InlineProc extends BaseProcessor<MethodSymbol> {
 			println("Inline: " + element.getQualifiedName());
 		}
 		TopTranslator translator = TopTranslator.instance(_context);
-		// translator.todos.add(new Todo(JCLambda.class, lambda -> {
-		// 	// if (lambda.params.stream().anyMatch(p -> trees.getTree())
-		// }));
-		translator.todos.add(new ToTranslate(JCExpressionStatement.class, (state) -> {
+
+		translator.addToDo(new ToTranslate(JCExpressionStatement.class, (state) -> {
 			if (!(state.expr instanceof JCMethodInvocation m)) return null;
 
 			Symbol sym;
@@ -38,7 +36,7 @@ public class InlineProc extends BaseProcessor<MethodSymbol> {
 			}
 			return trees.getTree(methodSymbol).body;
 		}));
-		translator.todos.add(new ToTranslate(JCMethodInvocation.class, (m) -> {
+		translator.addToDo(new ToTranslate(JCMethodInvocation.class, (m) -> {
 			Symbol sym;
 			if ((!(m.meth instanceof JCFieldAccess fa) || !TopTranslator.isEquals(sym = fa.sym, element))
 			    && (!(m.meth instanceof JCIdent i) || !TopTranslator.isEquals(sym = i.sym, element))) { return null; }

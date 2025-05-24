@@ -51,7 +51,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		mainClass = trees.getTree(findClassSymbol("modtools.ModTools"));
 
 		TopTranslator translator = TopTranslator.instance(_context);
-		translator.todos.add(new ToTranslate(JCFieldAccess.class, access -> {
+		translator.addToDo(new ToTranslate(JCFieldAccess.class, access -> {
 			if (!(access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) return null;
 
 			String      enumName = access.name.toString();
@@ -70,7 +70,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			return mMaker.Apply(List.nil(), fn, ms.params.isEmpty() ? List.nil() : List.of(
 			 mMaker.ClassLiteral(access.type))).setType(access.type);
 		}));
-		translator.todos.add(new ToTranslate(JCAssign.class, tree -> {
+		translator.addToDo(new ToTranslate(JCAssign.class, tree -> {
 			 if (!(tree.lhs instanceof JCFieldAccess access && access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) {
 				 return null;
 			 }

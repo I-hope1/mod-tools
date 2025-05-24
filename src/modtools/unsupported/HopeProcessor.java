@@ -212,18 +212,22 @@ public class HopeProcessor {
 			}
 		}
 	}
+	static {
+		try {
+		} catch (Throwable oaios) {}
+	}
 
 	public static class MyContentParser extends ContentParser {
 		/** {@link ContentParser#read(Runnable) METHOD} */
 		@LinkMethod
 		public void read(Runnable r) { }
 
-		// /** @see #classParsers */
-		// @LinkFieldToField
-		// public ObjectMap<Class<?>, ?> classParsersR;
+		/** @see #classParsers */
+		@LinkFieldToField
+		public ObjectMap<Class<?>, ?> classParsersR;
 
-		// {
-		// 	Log.info(classParsersR);
-		// }
+		{
+			Log.info(classParsersR);
+		}
 	}
 }

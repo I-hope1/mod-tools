@@ -6,6 +6,7 @@ import com.sun.source.util.DocTreePath;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
+import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
@@ -30,7 +31,12 @@ public class TopTranslator extends TreeTranslator {
 	final String errorKey = "default.method.call";
 
 	/** 待处理的方法 */
-	public ArrayList<ToTranslate> todos = new ArrayList<>();
+	private final ArrayList<ToTranslate> todos = new ArrayList<>();
+	public void addToDo(ToTranslate todo) {
+		if (todo.translator != null) throw new IllegalStateException("todo.translator != null");
+		todo.translator = this;
+		todos.add(todo);
+	}
 	public static boolean isEquals(Symbol i, Symbol element) {
 		return i != null && element != null && i.owner == element.owner && i.getQualifiedName().contentEquals(element.getQualifiedName());
 	}
@@ -40,6 +46,7 @@ public class TopTranslator extends TreeTranslator {
 	}
 	// public static JCTree stripSign = new JCErroneous(List.nil()) { };
 	public static class ToTranslate {
+		public TopTranslator  translator;
 		public Predicate<JCTree>        predicate;
 		public Function<JCTree, JCTree> treeTrans;
 
@@ -53,7 +60,24 @@ public class TopTranslator extends TreeTranslator {
 		public <T extends JCTree> ToTranslate(Class<T> cls, Function<T, JCTree> treeTrans) {
 			this(cls::isInstance, treeTrans);
 		}
-		public static ToTranslate Assign(Predicate<Symbol> condition, BiFunction<JCAssign, Symbol, JCTree> treeTrans) {
+		/** 访问字段：包括Ident和FieldAccess，不包括作Assign.lhs的 */
+		public static ToTranslate AccessField(Symbol expectSym, BiFunction<JCTree, Symbol, JCTree> treeTrans) {
+			ToTranslate toTranslate[] = {null};
+			return toTranslate[0] = new ToTranslate(_ -> true, (tree) -> {
+				if (toTranslate[0].translator.inAssignLHS) return null;
+				Symbol symbol;
+				if (tree instanceof JCFieldAccess access) {
+					symbol = access.sym;
+				} else if (tree instanceof JCIdent ident) {
+					symbol = ident.sym;
+				} else {
+					return null;
+				}
+				if (!isEquals(symbol, expectSym)) return null;
+				return treeTrans.apply(tree, symbol);
+			});
+		}
+		public static ToTranslate AssignLHS(Predicate<Symbol> condition, BiFunction<JCAssign, Symbol, JCTree> treeTrans) {
 			return new ToTranslate(JCAssign.class, (assign) -> {
 				Symbol symbol;
 				if (!(assign.lhs instanceof JCFieldAccess lhsAccess && condition.test(symbol = lhsAccess.sym)
@@ -102,20 +126,22 @@ public class TopTranslator extends TreeTranslator {
 		super.visitApply(tree);
 		transTree(tree);
 	}
-	boolean inAssign = false;
+	boolean inAssignLHS = false;
 	public void visitAssign(JCAssign tree) {
-		inAssign = true;
-		super.visitAssign(tree);
-		inAssign = false;
+		inAssignLHS = true;
+		tree.lhs = translate(tree.lhs);
+		inAssignLHS = false;
+		tree.rhs = translate(tree.rhs);
+		result = tree;
 		transTree(tree);
 	}
 	public void visitSelect(JCFieldAccess tree) {
 		super.visitSelect(tree);
-		if (!inAssign) transTree(tree);
+		transTree(tree);
 	}
 	public void visitIdent(JCIdent tree) {
 		super.visitIdent(tree);
-		if (!inAssign) transTree(tree);
+		transTree(tree);
 	}
 	public void visitExec(JCExpressionStatement tree) {
 		super.visitExec(tree);
@@ -137,10 +163,17 @@ public class TopTranslator extends TreeTranslator {
 		return Replace.desugarStringTemplate.makeString(s);
 	}
 
-	/** 用到{@link ToTranslate}时，make.Binary需要改为用这个 */
+	/** 用到{@link TopTranslator.ToTranslate}时，make.Binary需要改为用这个 */
 	public JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
 		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
 	}
+	public JCFieldAccess makeSelect(ClassType owner, Name name) {
+		return makeSelect((ClassSymbol) owner.tsym, name);
+	}
+	public JCFieldAccess makeSelect(ClassSymbol owner, Name name) {
+		return makeSelect(maker.Ident(owner), name, owner);
+	}
+
 	/** 用到{@link ToTranslate}时，make.Select需要改为用这个 */
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, TypeSymbol owner) {
 		JCFieldAccess select  = maker.Select(selected, name);
@@ -190,7 +223,11 @@ public class TopTranslator extends TreeTranslator {
 		}
 		return maker.Literal(TypeTag.BOT, null);
 	}
-	public int localVarIndex = 0;
+	int localVarIndex = 0;
+	public int nextLocalVarIndex() {
+		return ++localVarIndex;
+	}
+
 	public LetExpr translateMethodBlockToLetExpr(JCMethodDecl methodDecl, Symbol owner) {
 		return translateBlockToLetExpr(methodDecl.body, methodDecl.sym.getReturnType(), owner);
 	}
@@ -201,7 +238,7 @@ public class TopTranslator extends TreeTranslator {
 		}
 		maker.at(block);
 		ListBuffer<JCStatement> defs      = new ListBuffer<>();
-		VarSymbol               varSymbol = new VarSymbol(0, names.fromString(LOCAL_PREFIX + ++localVarIndex), returnType, owner);
+		VarSymbol               varSymbol = new VarSymbol(0, names.fromString(LOCAL_PREFIX + nextLocalVarIndex()), returnType, owner);
 		defs.add(maker.VarDef(varSymbol, defaultValue(returnType)));
 		defs.appendList(new TreeCopier<Void>(maker) {
 			public JCTree visitReturn(ReturnTree node, Void unused) {

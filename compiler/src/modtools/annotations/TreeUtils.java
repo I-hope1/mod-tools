@@ -61,7 +61,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 		 flags, ns(name), type, owner
 		);
 		if (enterScope && owner instanceof ClassSymbol csm) {
-			csm.members_field.enter(varSymbol);
+			csm.members_field.enterIfAbsent(varSymbol);
 		}
 		return mMaker.VarDef(varSymbol, init);
 	}
@@ -76,8 +76,8 @@ public interface TreeUtils extends ParseUtils, NameString {
 		return x;
 	}
 
-	default Type findTypeBoot(String name) {
-		return mSymtab.getClass(mSymtab.java_base, ns(name)).type;
+	default ClassType findTypeBoot(String name) {
+		return (ClassType) mSymtab.getClass(mSymtab.java_base, ns(name)).type;
 	}
 	default ClassType findType(String name) {
 		return (ClassType) mSymtab.getClass(mSymtab.unnamedModule, ns(name)).type;
@@ -114,7 +114,7 @@ public interface TreeUtils extends ParseUtils, NameString {
 			unit.namedImportScope.importType(sym.owner.members(), sym.owner.members(), sym);
 
 			var list = new ArrayList<>(unit.defs);
-			list.add(1, mMaker.Import((JCFieldAccess) mMaker.QualIdent(sym), false));
+			list.add(1, mMaker.Import((JCFieldAccess) nullMaker.QualIdent(sym), false));
 			unit.defs = List.from(list);
 		}
 	}

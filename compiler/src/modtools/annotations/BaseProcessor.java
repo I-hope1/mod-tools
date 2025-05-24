@@ -31,6 +31,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
+	public static TreeMaker nullMaker;
 	public static Resolve       resolve;
 	public static Enter         enter;
 	public static Names         names;
@@ -79,8 +80,10 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
 					log.useSource(trees.getPath(element).getCompilationUnit().getSourceFile());
+					mMaker.toplevel = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 					dealElement((T) element);
 				} catch (Throwable e) { err(e); } finally {
+					mMaker.toplevel = null;
 					log.useSource(null);
 				}
 			}
@@ -124,6 +127,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		elements = JavacElements.instance(_context);
 		trees = JavacTrees.instance(_context);
 		mMaker = TreeMaker.instance(_context);
+		nullMaker = mMaker.forToplevel(null);
 		resolve = Resolve.instance(_context);
 		enter = Enter.instance(_context);
 		names = Names.instance(_context);

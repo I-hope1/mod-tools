@@ -65,6 +65,15 @@ public interface ParseUtils {
 		);
 	}
 
+
+	/**
+	 * 创建一个代码块。
+	 *
+	 * @param stats 语句列表。
+	 *
+	 * @return {@code JCBlock} 对象。
+	 * @see TreeMaker#Block(long, List)
+	 */
 	default JCBlock PBlock(JCStatement... stats) {
 		return PBlock(List.from(stats));
 	}

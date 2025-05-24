@@ -19,12 +19,15 @@ import java.util.*;
 @AutoService(Processor.class)
 public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 
+	private static final boolean LOG_RES = false;
+
 	private final Map<ClassSymbol, ArrayList<Pair<MethodSymbol, Name>>> classMethodFields = new HashMap<>();
 
 	private ClassSymbol reflectSym;
 	private ClassSymbol methodSym;
 	private ClassSymbol classSym;
 	private ClassSymbol objectSym;
+	TopTranslator translator;
 
 	@Override
 	public void lazyInit() throws Throwable {
@@ -33,6 +36,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 		methodSym = findClassSymbolAny("java.lang.reflect.Method");
 		classSym = (ClassSymbol) mSymtab.classType.tsym;
 		objectSym = (ClassSymbol) mSymtab.objectType.tsym;
+		translator = TopTranslator.instance(_context);
 
 		if (methodSym == null || classSym == null || objectSym == null || reflectSym == null) {
 			err("Could not find essential reflection class symbols. LinkMethod reflective features will fail or produce uncompilable code.");
@@ -127,12 +131,12 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 		VarSymbol     methodFieldVarSym;
 		if (!useDirectCall) {
 			classMethodFields.computeIfAbsent(sourceOwnerClass, k -> new ArrayList<>()).add(new Pair<>(finalTargetMethod, methodFieldName));
-			methodFieldVarSym = getOrCreateMethodFieldSymbol(sourceOwnerClass, methodFieldName, methodSym.type);
+			methodFieldVarSym = getOrCreateFieldSymbol(sourceOwnerClass, methodFieldName, methodSym.type);
 		} else {
 			methodFieldVarSym = null;
 		}
 
-		translator.todos.add(new ToTranslate(JCMethodInvocation.class, inv -> {
+		translator.addToDo(new ToTranslate(JCMethodInvocation.class, inv -> {
 			if (!TopTranslator.isEquals(TreeInfo.symbol(inv.meth), sourceMethod)) return null;
 
 			List<JCExpression> callArgs = prepareCallArgs(sourceMethod, sourceOwnerClass, finalImplicitThis);
@@ -180,7 +184,8 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 		}));
 	}
 
-	private VarSymbol getOrCreateMethodFieldSymbol(ClassSymbol ownerClass, Name fieldName, Type fieldType) {
+
+	static VarSymbol getOrCreateFieldSymbol(ClassSymbol ownerClass, Name fieldName, Type fieldType) {
 		Symbol existingSym = ownerClass.members_field.findFirst(fieldName);
 		if (existingSym instanceof VarSymbol && types.isSameType(existingSym.type, fieldType)) {
 			return (VarSymbol) existingSym;
@@ -208,7 +213,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 	private List<JCExpression> boxArguments(List<JCExpression> args, TopTranslator translator) {
 		List<JCExpression> boxedArgs = List.nil();
 		for (JCExpression arg : args) {
-			boxedArgs = boxedArgs.append(box(arg, translator));
+			boxedArgs = boxedArgs.append(box(arg));
 		}
 		return boxedArgs;
 	}
@@ -220,8 +225,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 			var methodsToInit = entry.getValue();
 			if (methodsToInit.isEmpty()) continue;
 
-			TopTranslator     translator    = TopTranslator.instance(_context);
-			JCBlock           clinit        = getOrCreateClinit(ownerClass, translator);
+			JCBlock           clinit        = getOrCreateClinit(ownerClass);
 			List<JCStatement> tryStatements = List.nil();
 
 			for (Pair<MethodSymbol, Name> pair : methodsToInit) {
@@ -229,7 +233,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 				Name         fieldName       = pair.snd;
 				ClassSymbol  targetOwner     = (ClassSymbol) targetMethodSym.owner;
 
-				VarSymbol fieldVarSym = getOrCreateMethodFieldSymbol(ownerClass, fieldName, methodSym.type);
+				VarSymbol fieldVarSym = getOrCreateFieldSymbol(ownerClass, fieldName, methodSym.type);
 				JCIdent   fieldIdent  = mMaker.Ident(fieldVarSym);
 
 				List<JCExpression> paramTypesExpr = List.nil();
@@ -242,7 +246,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 				// **WARNING:** The following call to getDeclaredMethod() throws NoSuchMethodException (checked).
 				// Without a try-catch, this WILL CAUSE A COMPILATION ERROR in <clinit>.
 				JCMethodInvocation getDeclaredMethodCall = mMaker.App(
-				 translator.makeSelect(mMaker.ClassLiteral(targetOwner.type), names.fromString("getDeclaredMethod"), classSym),
+				 translator.makeSelect(mMaker.ClassLiteral(targetOwner), names.fromString("getDeclaredMethod"), classSym),
 				 List.of(translator.makeString(targetMethodSym.name.toString()), paramTypesArray));
 				getDeclaredMethodCall.setType(methodSym.type);
 
@@ -263,12 +267,13 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 			clinit.stats = clinit.stats.append(aTry);
 			// log.warning(clinit, SPrinter.warn("<clinit> in " + ownerClass + " for reflective methods generated WITHOUT try-catch. " +
 			//                                   "THIS WILL CAUSE COMPILE ERRORS due to unhandled checked exceptions (e.g., NoSuchMethodException)."));
-			// println(trees.getTree(ownerClass));
+
+			if (LOG_RES) println(trees.getTree(ownerClass));
 		}
 		classMethodFields.clear();
 	}
 
-	private JCExpression box(JCExpression expr, TopTranslator translator) {
+	private JCExpression box(JCExpression expr) {
 		return expr;
 		/* if (!expr.type.isPrimitive()) return expr;
 		Type.JCPrimitiveType pt = (Type.JCPrimitiveType) expr.type;
@@ -303,7 +308,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 		}
 	}
 
-	private JCBlock getOrCreateClinit(ClassSymbol classSymbol, TopTranslator translator) {
+	static JCBlock getOrCreateClinit(ClassSymbol classSymbol) {
 		JCClassDecl classDecl = trees.getTree(classSymbol);
 		if (classDecl == null) {
 			log.error(classDecl, SPrinter.err("Cannot find JCClassDecl for " + classSymbol.getQualifiedName() + " to add/get <clinit>."));

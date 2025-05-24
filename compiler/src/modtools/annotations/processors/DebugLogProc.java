@@ -21,7 +21,7 @@ public class DebugLogProc extends BaseProcessor<Symbol> {
 	public void dealElement(Symbol element) {
 		String fmt           = element.getAnnotation(DebugMark.class).fmt();
 		var    topTranslator = TopTranslator.instance(_context);
-		topTranslator.todos.add(new ToTranslate(JCMethodInvocation.class, tree -> {
+		topTranslator.addToDo(new ToTranslate(JCMethodInvocation.class, tree -> {
 			if (!(topTranslator.inAnnotation(DebugMark.class) && TopTranslator.isEquals(getSymbol(topTranslator.toplevel, tree), element) &&
 			      tree.meth instanceof JCFieldAccess access)) {
 				return null;

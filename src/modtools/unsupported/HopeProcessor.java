@@ -81,7 +81,6 @@ public class HopeProcessor {
 		}
 	}
 	public static void main() {
-
 		// temp.run();
 		String aa = "10203";
 		int    a  = 1, b = 2;
@@ -217,6 +216,13 @@ public class HopeProcessor {
 		} catch (Throwable oaios) { }
 	}
 
+	public static class TestComponentType {
+		static {
+			Log.info(Class.class.componentType());
+			Log.info(List.of(10920));
+			// Log.info("ass".repeat(2));
+		}
+	}
 	public static class MyContentParser extends ContentParser {
 		/** {@link ContentParser#read(Runnable) METHOD} */
 		@LinkMethod
@@ -233,12 +239,13 @@ public class HopeProcessor {
 		}
 
 		{
-			Log.info(classParsersR);
-
 			classParsersR.put(String.class, (FieldParserR) (type, value) -> {
 				return value.asString();
 			});
 
+			Log.info(classParsersR);
+
+			read(() -> {});
 			/* Class<?> FieldParserClass = Class.forName("mindustry.mod.ContentParser$FieldParser");
 			Proxy.newProxyInstance(FieldParserClass.getClassLoader(), new Class[]{FieldParserClass}, (proxy, method, args) -> {
 				if (method.getName().equals("parse")) {

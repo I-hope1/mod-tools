@@ -4,12 +4,17 @@ import arc.scene.ui.ImageButton;
 import mindustry.gen.Icon;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
+import modtools.jsfunc.reflect.UNSAFE;
 import modtools.override.HScene;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
 import modtools.utils.Tools;
+import modtools.utils.reflect.ClassUtils;
 import modtools.utils.search.FilterTable;
 import modtools.utils.ui.CellTools;
+
+import javax.swing.*;
+import java.awt.*;
 
 import static modtools.override.HScene.pauseMap;
 
@@ -54,8 +59,30 @@ public class Pause extends Content {
 			table.defaults().size(CellTools.unset);
 			table.row();
 		}
+		table.row();
 		SettingsBuilder.clearBuild();
-		ui.cont.add(table);
+		ui.cont.add(table).colspan(2).row();
+
+
+		if (ClassUtils.exists("javax.swing.JFrame")) buildPark();
+	}
+	private void buildPark() {
+		Thread thread = Thread.currentThread();
+		ui.cont.button("OpenPane", () -> {
+			new JFrame("ParkPane") {{
+				// 设置窗口的初始大小，这样它就不会是一个小点而看不见
+				setSize(400, 300); // 宽度400，高度300
+				JButton button = new JButton("Resume");
+				button.addActionListener(e -> {
+					 if (UNSAFE.PARK_COUNT.get(thread) > 0) UNSAFE.unpark(thread);
+				});
+				getContentPane().add(button, BorderLayout.CENTER);
+				setVisible(true);
+			}};
+		}).growX();
+		ui.cont.button("Park", () -> {
+			UNSAFE.park(false, Long.MAX_VALUE);
+		}).growX();
 	}
 	public void build() {
 		ui.show();

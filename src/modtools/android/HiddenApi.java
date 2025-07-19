@@ -97,7 +97,7 @@ public class HiddenApi {
 				UNSAFE.putLong(address_Method + offset_art_method_, artMethod);
 				// 安卓的getName是native实现，修改了artMethod，name自然会变
 				if ("setHiddenApiExemptions".equals(array[0].getName())) {
-					Log.debug("Got: " + array[0]);
+					Log.debug("Got Method setHiddenApiExemptions: " + array[0]);
 					return array[0];
 				}
 			}

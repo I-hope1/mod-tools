@@ -8,6 +8,7 @@ import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import mindustry.Vars;
 import modtools.ui.IntUI;
+import modtools.utils.reflect.ClassUtils;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,12 +23,7 @@ import static mindustry.Vars.ui;
 public class DropFile {
 	public static final String LABEL_NAME = "ImportFromDrop";
 	public static boolean valid() {
-		try {
-			Class.forName("javax.swing.JFrame");
-			return !Objects.equals(ui.mods.buttons.getChildren().peek().name, LABEL_NAME);
-		} catch (ClassNotFoundException e) {
-			return false;
-		}
+		return ClassUtils.exists("javax.swing.JFrame") && !Objects.equals(ui.mods.buttons.getChildren().peek().name, LABEL_NAME);
 	}
 	public static void load() {
 		if (!DropFile.valid()) return;

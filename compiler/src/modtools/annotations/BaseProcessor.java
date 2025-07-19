@@ -31,7 +31,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static JavacElements elements;
 	public static JavacTrees    trees;
 	public static TreeMaker     mMaker;
-	public static TreeMaker nullMaker;
+	public static TreeMaker     nullMaker;
 	public static Resolve       resolve;
 	public static Enter         enter;
 	public static Names         names;

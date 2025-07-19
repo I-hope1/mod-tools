@@ -9,12 +9,28 @@ import modtools.jsfunc.type.CAST;
 import java.lang.reflect.*;
 
 public class ClassUtils {
+	/**
+	 * 根据类名获取类对象
+	 * @param name 类名
+	 * @return 类对象
+	 */
 	public static Class<?> forName(String name) {
 		try {
 			return Class.forName(name);
 		} catch (ClassNotFoundException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	/** 是否存在某个类 */
+	public static boolean exists(String className) {
+		try {
+			Class.forName(className);
+			return true;
+		} catch (ClassNotFoundException e) {
+			return false;
+		}
+
 	}
 
 	/**

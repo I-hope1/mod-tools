@@ -30,7 +30,7 @@ public class HScene {
 	public static final String SUFFIX = "-$H";
 
 	@Exclude
-	public static void load(Pause pause) throws Exception {
+	public static void load(  Pause pause) throws Exception {
 		Class<? extends Group> superClass = Core.scene.root.getClass();
 		if (superClass.getName().endsWith(SUFFIX)) return;
 		var sceneClass0 = new MyClass<>(superClass, SUFFIX);
@@ -38,7 +38,7 @@ public class HScene {
 
 		Floatc floatc      = delta -> topGroup.act(delta);
 		Lambda actTopGroup = sceneClass.addLambda(floatc, Floatc.class, "get", "(F)V");
-		Lambda boolp       = sceneClass.addLambda(() -> pauseMap.get(Vars.ui.getClass(), 0) > 0/* 暂停了 */, Boolp.class, "get", "()Z");
+		Lambda boolp       = sceneClass.addLambda(() -> decrement(Vars.ui.getClass()) > 0/* 暂停了 */, Boolp.class, "get", "()Z");
 
 		sceneClass.setFunc("act", cfw -> {
 			sceneClass.execLambda(boolp, null);
@@ -90,6 +90,9 @@ public class HScene {
 
 		hookUpdate(Core.app.getListeners());
 	}
+	private static float decrement(Class<?> key) {
+		return pauseMap.increment(key, 0, -Time.delta);
+	}
 
 	static void hookUpdate(Seq<ApplicationListener> appListeners) {
 		// 使用asm将侦听器替换
@@ -125,9 +128,7 @@ public class HScene {
 			//region asm
 			HopeReflect.setPublic(superClass, Class.class);
 			var myClass = new MyClass<>(superClass, SUFFIX);
-			Lambda lambda = myClass.addLambda(() -> {
-				return pauseMap.increment(superClass, 0, -Time.delta) >= 0;
-			}, Boolp.class, "get", "()Z");
+			Lambda lambda = myClass.addLambda(() -> decrement(superClass) > 0, Boolp.class, "get", "()Z");
 			myClass.setFunc("update", cfw -> {
 				myClass.execLambda(lambda, null);
 				// 判断是否暂停

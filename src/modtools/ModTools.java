@@ -8,7 +8,7 @@ import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import ihope_lib.MyReflect;
 import mindustry.Vars;
-import mindustry.core.*;
+import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
@@ -18,7 +18,6 @@ import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.*;
 import modtools.graphics.MyShaders;
-import modtools.misc.SampleWorldInterface;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -33,7 +32,10 @@ import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
+import sun.reflect.ReflectionFactory;
 
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -41,7 +43,7 @@ import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
-	public static final boolean TEST = false;
+	public static final boolean TEST = true;
 
 	/** 如果不为empty，在进入是显示 */
 	private static final Fi             libs   = root.child("libs");
@@ -69,7 +71,6 @@ public class ModTools extends Mod {
 
 		// Defer loading to the main thread to ensure proper initialization order
 		Core.app.post(this::load0);
-		new MyContentParser();
 	}
 	public void load0() {
 		try {
@@ -100,7 +101,16 @@ public class ModTools extends Mod {
 		}
 
 		if (TEST) {
-			World w = SampleWorldInterface.changeClass(new World());
+			// World w = SampleWorldInterface.changeClass(new World());
+			try {
+				Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
+				 Lookup.class,
+				 Lookup.class.getDeclaredConstructor(Class.class)
+				 ).newInstance(Lookup.class));
+			} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+				throw new RuntimeException(e);
+			}
+			new MyContentParser();
 		}
 	}
 

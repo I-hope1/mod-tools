@@ -1,8 +1,9 @@
 package modtools.jsfunc.reflect;
 
+import arc.struct.ObjectIntMap;
 import arc.util.OS;
 import dalvik.system.VMRuntime;
-import ihope_lib.*;
+import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -185,10 +186,13 @@ public interface UNSAFE {
 		unsafe.freeMemory(address);
 	}
 
+	ObjectIntMap<Object> PARK_COUNT = new ObjectIntMap<>();
 	static void park(boolean isAbsolute, long time) {
+		PARK_COUNT.increment(Thread.currentThread());
 		unsafe.park(isAbsolute, time);
 	}
 	static void unpark(Object thread) {
+		PARK_COUNT.increment(thread, -1);
 		unsafe.unpark(thread);
 	}
 

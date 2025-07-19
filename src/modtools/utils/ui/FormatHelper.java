@@ -62,7 +62,7 @@ public class FormatHelper {
 	}
 
 	// 一些对象的字符串转换
-	public static CharSequence touchable(Touchable touchable) {
+	public static String touchable(Touchable touchable) {
 		return switch (touchable) {
 			case enabled -> "Enabled";
 			case disabled -> "Disabled";

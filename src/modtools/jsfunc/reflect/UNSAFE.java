@@ -3,6 +3,7 @@ package modtools.jsfunc.reflect;
 import arc.struct.ObjectIntMap;
 import arc.util.OS;
 import dalvik.system.VMRuntime;
+import hope_android.FieldUtils;
 import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
 
@@ -90,16 +91,15 @@ public interface UNSAFE {
 			return -1;
 		}
 	}
-	static long staticFieldOffset(Class<?> cls, String fieldName) {
+	static long staticFieldOffset(Class<?> cls, String fieldName) throws NoSuchFieldException {
+		if (OS.isAndroid) {
+			return FieldUtils.getFieldOffset(cls.getDeclaredField(fieldName));
+		}
 		try {
 			/* 这个也可以获取static的  */
 			return Unsafe.getUnsafe().objectFieldOffset(cls, fieldName);
 		} catch (Throwable ignored) {}
-		try {
-			return unsafe.staticFieldOffset(cls.getDeclaredField(fieldName));
-		} catch (NoSuchFieldException e) {
-			return -1;
-		}
+		return unsafe.staticFieldOffset(cls.getDeclaredField(fieldName));
 	}
 
 	// ---------Address/Memory Operation---------

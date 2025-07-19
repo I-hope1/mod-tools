@@ -6,7 +6,7 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.style.*;
@@ -46,7 +46,7 @@ import modtools.ui.menu.*;
 import modtools.utils.*;
 import modtools.utils.EventHelper.DoubleClick;
 import modtools.utils.MySettings.Data;
-import modtools.utils.reflect.*;
+import modtools.utils.reflect.FieldUtils;
 import modtools.utils.search.*;
 import modtools.utils.ui.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
@@ -61,7 +61,7 @@ import static modtools.content.ui.ReviewElement.Settings.*;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.ui.CellTools.unset;
-import static modtools.utils.ui.FormatHelper.fixed;
+import static modtools.utils.ui.FormatHelper.*;
 
 /**
  * Ctrl+Shift+C审查元素
@@ -179,7 +179,7 @@ public class ReviewElement extends Content {
 		TopGroup.searchBlackList.add(btn);
 		return btn;
 	}
-
+	//region draw
 	public static void drawPadding(Element elem, Vec2 vec2, Table table) {
 		/* 如果a = 0就返回 */
 		if (checkA(padColor)) return;
@@ -191,15 +191,15 @@ public class ReviewElement extends Content {
 		Draw.color();
 	}
 	public static void drawPadding(Element elem, Vec2 vec2, Cell<?> cl) {
-		float padLeft = Reflect.get(Cell.class, cl, "padLeft"),
-		 padTop = Reflect.get(Cell.class, cl, "padTop"),
-		 padBottom = Reflect.get(Cell.class, cl, "padBottom"),
-		 padRight = Reflect.get(Cell.class, cl, "padRight");
+		float padLeft = CellTools.padLeft(cl),
+		 padTop = CellTools.padTop(cl),
+		 padBottom = CellTools.padBottom(cl),
+		 padRight = CellTools.padRight(cl);
 
 		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
 	}
+	/** 检查a(后两位)是否为0 */
 	static boolean checkA(int color) {
-		// 检查后两位是否为0
 		return (color & 0xFF) == 0;
 	}
 
@@ -213,56 +213,89 @@ public class ReviewElement extends Content {
 
 		Draw.color();
 	}
-	/** @param pad true respect 外边距 */
+	/**
+	 * 绘制外边距(Margin)或内边距(Padding)的可视化指示器。
+	 * @param vec2   元素左上角坐标
+	 * @param elem   目标元素
+	 * @param pad    true 表示绘制内边距 (Padding), false 表示绘制外边距 (Margin)
+	 * @param left   左边距/填充值
+	 * @param top    上边距/填充值
+	 * @param right  右边距/填充值
+	 * @param bottom 底边距/填充值
+	 */
 	private static void drawMarginOrPad(
 	 Vec2 vec2, Element elem, boolean pad,
 	 float left, float top, float right, float bottom) {
+
+		// 数据预处理和初始化
 		left = TopGroup.clamp(vec2, left, true);
 		top = TopGroup.clamp(vec2, top, false);
 		right = TopGroup.clamp(vec2, right, true);
 		bottom = TopGroup.clamp(vec2, bottom, false);
+
 		if (pad) {
 			left *= -1;
 			top *= -1;
 			right *= -1;
 			bottom *= -1;
 		}
-		Color color = pad ? Tmp.c1.set(padTextColor) : Tmp.c1.set(marginTextColor);
-		float mul   = pad ? -1 : 1;
-		// 左边 left
-		if (left != 0) {
-			Fill.crect(vec2.x, vec2.y, left, elem.getHeight());
-			MyDraw.drawText(fixed(left * mul),
-			 vec2.x + left / 2f,
-			 vec2.y + (MyDraw.fontHeight() + elem.getHeight()) / 2f, color);
+
+		final Color color = pad ? Tmp.c1.set(padTextColor) : Tmp.c1.set(marginTextColor);
+		final float mul   = pad ? -1 : 1;
+
+		final float elemX = vec2.x;
+		final float elemY = vec2.y;
+		final float elemW = elem.getWidth();
+		final float elemH = elem.getHeight();
+		final float fontH = MyDraw.fontHeight();
+
+		// 调用统一的辅助方法来绘制各个边
+		// 左边 (Left)
+		drawSideIndicator(left, mul, color,
+		 elemX, elemY, left, elemH,
+		 elemX + left / 2f, elemY + (fontH + elemH) / 2f);
+
+		// 底部 (Bottom)
+		drawSideIndicator(bottom, mul, color,
+		 elemX, elemY, elemW, bottom,
+		 elemX + elemW / 2f, elemY + bottom);
+
+		// 顶部 (Top)
+		drawSideIndicator(top, mul, color,
+		 elemX, elemY + elemH, elemW, -top,
+		 elemX + elemW / 2f, elemY + elemH - top / 2f);
+
+		// 右边 (Right) - 注意：修复了原始代码中可能存在的bug
+		drawSideIndicator(right, mul, color,
+		 elemX + elemW, elemY, -right, elemH,
+		 elemX + elemW - right / 2f, elemY + (fontH + elemH) / 2f);
+	}
+
+	/**
+	 * 绘制单个边的指示器（矩形和文本）。
+	 * @param value          边距/填充的原始值 (用于判断是否为0)
+	 * @param textMultiplier 用于显示的文本值的乘数 (padding为-1, margin为1)
+	 * @param color          文本颜色
+	 * @param rectX          矩形X坐标
+	 * @param rectY          矩形Y坐标
+	 * @param rectW          矩形宽度
+	 * @param rectH          矩形高度
+	 * @param textX          文本X坐标
+	 * @param textY          文本Y坐标
+	 */
+	private static void drawSideIndicator(float value, float textMultiplier, Color color,
+	                                      float rectX, float rectY, float rectW, float rectH,
+	                                      float textX, float textY) {
+		// 使用卫语句 (guard clause) 提前返回，使代码更扁平
+		if (value == 0) {
+			return;
 		}
 
-		// 底部 bottom
-		if (bottom != 0) {
-			Fill.crect(vec2.x, vec2.y, elem.getWidth(), bottom);
-			MyDraw.drawText(fixed(bottom * mul),
-			 vec2.x + elem.getWidth() / 2f,
-			 vec2.y + bottom, color);
-		}
-
-		// 顶部 top
-		if (top != 0) {
-			Fill.crect(vec2.x, vec2.y + elem.getHeight(), elem.getWidth(), -top);
-			MyDraw.drawText(fixed(top * mul),
-			 vec2.x + elem.getWidth() / 2f,
-			 vec2.y + elem.getHeight() - top / 2f, color);
-		}
-
-		// 右边 right
-		if (right != 0) {
-			Fill.crect(vec2.x + elem.getWidth(), vec2.y, -right, elem.getHeight());
-			MyDraw.drawText(fixed(right * mul),
-			 vec2.x + elem.getWidth() - left / 2f,
-			 vec2.y + (MyDraw.fontHeight() + elem.getHeight()) / 2f, color);
-		}
+		Fill.crect(rectX, rectY, rectW, rectH);
+		MyDraw.drawText(fixed(value * textMultiplier), textX, textY, color);
 	}
 	/** 从元素到hover的元素的连线 */
-	public void drawLine() {
+	public static void drawLine() {
 		if (FOCUS == null) return;
 
 		Vec2 vec2 = ElementUtils.getAbsPosCenter(FOCUS);
@@ -271,6 +304,7 @@ public class ReviewElement extends Content {
 		Lines.line(mouseVec.x, mouseVec.y, vec2.x, vec2.y);
 		Draw.color();
 	}
+	//endregion
 
 	public final Cons<Element> callback = selected -> new ReviewElementWindow().show(selected);
 	public void build() {
@@ -797,7 +831,7 @@ public class ReviewElement extends Content {
 	}
 
 	static Seq<MenuItem> execChildren(Element element) {
-		return Seq.with(
+		Seq<MenuItem> baseSeq = Seq.with(
 		 MenuItem.with("invalidate", Icon.boxSmall, "Invalidate", element::invalidate),
 		 MenuItem.with("invalidateHierarchy", Icon.boxSmall, "InvalidateHierarchy", element::invalidateHierarchy),
 		 MenuItem.with("layout", Icon.boxSmall, "Layout", element::layout),
@@ -807,30 +841,32 @@ public class ReviewElement extends Content {
 		 MenuItem.with("toFront", Icon.boxSmall, "To Front", element::toFront),
 		 MenuItem.with("toBack", Icon.boxSmall, "To Back", element::toBack),
 
-		 UnderlineItem.with(),
-
-		 element instanceof Table table ? MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
-			 drawablePicker().show(table.getBackground(), table::setBackground);
-		 }) : null,
-		 element instanceof Table table ? MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)) : null,
-		 element instanceof Table table ? MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)) : null,
-		 element instanceof Table table ? MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)) : null,
-		 element instanceof Table table ? MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)) : null,
-		 element instanceof Table table ? MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom)) : null,
-
-		 element instanceof Label label ? MenuItem.with("label.copy", Icon.boxSmall, "Copy Text", () -> JSFunc.copyText(label.getText())) : null,
-		 element instanceof Label label ? MenuItem.with("label.center", Icon.boxSmall, "Label Center", l(label, Align.center)) : null,
-		 element instanceof Label label ? MenuItem.with("label.left", Icon.boxSmall, "Label Left", l(label, Align.left)) : null,
-		 element instanceof Label label ? MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)) : null,
-		 element instanceof Label label ? MenuItem.with("label.top", Icon.boxSmall, "Label Top", l(label, Align.top)) : null,
-		 element instanceof Label label ? MenuItem.with("label.bottom", Icon.boxSmall, "Label Bottom", l(label, Align.bottom)) : null
+		 UnderlineItem.with()
 		);
+		SR.apply(() -> SR.of(baseSeq)
+		 .isInstance(Table.class, table -> baseSeq.addAll(
+			MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
+				drawablePicker().show(table.getBackground(), table::setBackground);
+			}),
+			MenuItem.with("table.center", Icon.boxSmall, "Table Center", l(table, Align.center)),
+			MenuItem.with("table.left", Icon.boxSmall, "Table Left", l(table, Align.left)),
+			MenuItem.with("table.right", Icon.boxSmall, "Table Right", l(table, Align.right)),
+			MenuItem.with("table.top", Icon.boxSmall, "Table Top", l(table, Align.top)),
+			MenuItem.with("table.bottom", Icon.boxSmall, "Table Bottom", l(table, Align.bottom))
+		 ))
+		 .isInstance(Label.class, label -> baseSeq.addAll(
+			MenuItem.with("label.copy", Icon.boxSmall, "Copy Text", () -> JSFunc.copyText(label.getText())),
+			MenuItem.with("label.center", Icon.boxSmall, "Label Center", l(label, Align.center)),
+			MenuItem.with("label.left", Icon.boxSmall, "Label Left", l(label, Align.left)),
+			MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)),
+			MenuItem.with("label.top", Icon.boxSmall, "Label Top", l(label, Align.top)),
+			MenuItem.with("label.bottom", Icon.boxSmall, "Label Bottom", l(label, Align.bottom))
+		 )));
+		return baseSeq;
 	}
-
 	private static Runnable l(Label l, int align) {
 		return () -> l.setAlignment(align);
 	}
-
 	private static Runnable l(Table t, int align) {
 		return () -> {
 			t.align(align);
@@ -840,6 +876,7 @@ public class ReviewElement extends Content {
 	private static boolean sizeInvalid(Group group) {
 		return group instanceof Table && UNSAFE.getBoolean(group, TABLE.sizeInvalid);
 	}
+
 
 	private static Window viewAllCells(Table element) {
 		class AllCellsWindow extends Window implements IDisposable {
@@ -957,193 +994,138 @@ public class ReviewElement extends Content {
 		Settings(Class<?> a, Cons<ISettings> builder) { }
 	}
 
-	public static class InfoDetails implements KeyValue {
-		final Vec2 minSizeVec = new Vec2(), maxSizeVec = new Vec2();
-		final Vec2 translationVec = new Vec2();
-		Label nameLabel = new VLabel(0.85f, KeyValue.stressColor),
-		 sizeLabel      = new VLabel(valueScale, Color.lightGray),
-		 touchableLabel = new NoMarkupLabel(valueScale),
-		 transformLabel = new VLabel("True", valueScale, Pal.accent),
+	// ========================================================================
+	// 1. 核心抽象：DetailEntry 接口
+	// ========================================================================
 
-		colorLabel        = new NoMarkupLabel(valueScale),
-		 rotationLabel    = new VLabel(valueScale, Color.lightGray),
-		 translationLabel = new VLabel(valueScale, Color.orange),
-		 styleLabel       = new Label(""),
-		 alignLabel       = new VLabel(valueScale, Color.sky),
+	/**
+	 * 代表信息面板中的一个可管理的条目。
+	 * 每个条目封装了自己的UI、更新逻辑和可见性规则。
+	 */
+	interface DetailEntry {
+		/**
+		 * 构建并添加此条目的UI组件到父表格中。
+		 * 此方法只在初始化时调用一次。
+		 * @param table 父表格
+		 */
+		void build(Table table);
 
-		cellAlignLabel = new VLabel(valueScale, Color.sky),
-		 colspanLabel  = new VLabel(valueScale, Color.lightGray),
-		 minSizeLabel  = new Label(new SizeProv(() -> minSizeVec)),
-		 maxSizeLabel  = new Label(new SizeProv(() -> maxSizeVec)),
-		 fillLabel     = new Label(""), expandLabel = new Label(""), uniformLabel = new Label(""),
+		/**
+		 * 根据给定的元素更新此条目的UI状态（值和可见性）。
+		 * @param element 当前聚焦的元素
+		 */
+		void update(Element element);
+		boolean valid(Element element);
+	}
 
-		wrapLabel = new VLabel("", valueScale, Pal.accent);
-		ColorContainer colorContainer = new ColorContainer(Color.white);
 
-		static class $ {
-			static Field wrap = FieldUtils.getFieldAccess(Label.class, "wrap");
-		}
+	// ========================================================================
+	// 2. 重构后的 InfoDetails 类
+	// ========================================================================
 
-		{
-			styleLabel.setFontScale(valueScale);
-			translationLabel.setText(new PairProv(() -> translationVec, ", "));
-		}
+	/**
+	 * InfoDetails 现在是一个高层次的协调者。
+	 * 它管理一个DetailEntry列表，并委托所有构建和更新任务。
+	 */
+	public static class InfoDetails {
+		private final Seq<DetailEntry> entries = new Seq<>();
 
-		BindCell transformCell, visibleCell, rotCell, translationCell, styleCell, alignCell,
-		// cell
-		cellContainer, cellAlignCell,
-		 colspanCell, minSizeCell, maxSizeCell,
-		 fillCell, expandCell, uniformCell,
-		 // label
-		 labelContainer, wrapCell
-		 ;
+		public InfoDetails() {
+			// 按顺序创建和注册所有信息条目
+			// 这种方式使得添加、删除或重新排序条目变得非常简单。
+			entries.add(new HeaderEntry());
+			entries.add(new SimpleEntry("Touchable", e -> FormatHelper.touchable(e.touchable), e -> touchableToColor(e.touchable)));
+			entries.add(new ColorEntry());
+			entries.add(new BoolEntry("Transform", e -> e instanceof Group g && g.isTransform()));
+			entries.add(new ElemFieldEntry("rotation"));
+			entries.add(new ElemFieldEntry(Element.class, "translation", new PairCons(", ")));
+			entries.add(new StyleEntry());
+			entries.add(new AlignEntry());
 
-		final Vec2 sizeVec = new Vec2();
-		SizeProv sizeProv = new SizeProv(() -> sizeVec, " × ");
-		void name(Element elem) {
-			nameLabel.setText(getElementName(elem));
-		}
-		void size(Element element) {
-			sizeVec.set(element.getWidth(), element.getHeight());
-		}
-		void touchableF(Element element) {
-			touchableLabel.setText(FormatHelper.touchable(element.touchable));
-			touchableLabel.setColor(touchableToColor(element.touchable));
-		}
-		void transform(Element element) {
-			transformCell.toggle1(element instanceof Group g && g.isTransform());
-		}
-		/** @param element element.visible */
-		void visible(Element element) {
-			visibleCell.toggle(!element.visible);
-		}
-		void color(Element element) {
-			Color color = element.color;
-			colorContainer.setColorValue(color);
-			String string = FormatHelper.color(color);
-			colorLabel.setText(color.a == 1 ? string.substring(0, 6) : string);
-		}
-		void rotation(Element element) {
-			if (rotCell.toggle1(element.rotation % 360 != 0)) { rotationLabel.setText(fixed(element.rotation)); }
+			// 分隔符也是一个条目
+			entries.add(new SeparatorEntry(4, -1, 4, -1));
+
+			// Cell 相关条目
+			entries.add(new CellAlignEntry());
+			entries.add(new ColspanEntry());
+			entries.add(new SizePairEntry("MinSize", CellTools::minSize, cell -> CellTools.minWidth(cell) != 0 || CellTools.minHeight(cell) != 0));
+			entries.add(new SizePairEntry("MaxSize", CellTools::maxSize, cell -> CellTools.maxWidth(cell) != 0 || CellTools.maxHeight(cell) != 0));
+			entries.add(new BoolPairEntry("Expand", cell -> Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell))));
+			entries.add(new BoolPairEntry("Fill", cell -> Tmp.v1.set(CellTools.fillX(cell), CellTools.fillY(cell))));
+			entries.add(new BoolPairEntry("Uniform", cell -> Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0)));
+
+			// Label 相关条目
+			entries.add(new SeparatorEntry(6, 0, 0, 0));
+			entries.add(new LabelWrapEntry());
 		}
 
-		void translation(Element element) {
-			pairNum(element.translation, translationVec, translationCell, 0);
-		}
-		void style(Element element) {
-			try {
-				Style style = (Style) element.getClass().getMethod("getStyle", (Class<?>[]) null).invoke(element, (Object[]) null);
-				if (styleCell.toggle1(style != null && ShowUIList.styleKeyMap.containsKey(style))) {
-					styleLabel.setText(FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));
-				}
-			} catch (Throwable e) { styleCell.remove(); }
-		}
-		void align(Element element) {
-			if (alignCell.toggle1(element instanceof Table)) {
-				alignLabel.setText(FormatHelper.align(((Table) element).getAlign()));
-			}
-		}
-		void cellAlign(Cell<?> cell) {
-			cellAlignLabel.setText(FormatHelper.align(CellTools.align(cell)));
-		}
-		void colspan(Cell<?> cell) {
-			int colspan = CellTools.colspan(cell);
-			if (colspanCell.toggle1(colspan != 1)) { colspanLabel.setText("" + colspan); }
-		}
-		void pairNum(Vec2 got, Vec2 toSet, BindCell bindCell, float unset) {
-			if (bindCell.toggle1(got.x != unset || got.y != unset)) {
-				toSet.set(got.x, got.y);
-			}
-		}
-		void minSize(Cell<?> cell) {
-			pairNum(CellTools.minSize(cell).scl(1 / Scl.scl()), minSizeVec, minSizeCell, unset);
-		}
-		void maxSize(Cell<?> cell) {
-			pairNum(CellTools.maxSize(cell).scl(1 / Scl.scl()), maxSizeVec, maxSizeCell, unset);
-		}
-		private void pairBool(Vec2 v1, BindCell bindCell) {
-			if (bindCell.toggle1(v1.x != 0 || v1.y != 0)) {
-				getLabel(bindCell).setText(STR."\{enabledMark(v1.x)}x[]\{
-				 v1.x != 0 && maxSizeCell.cell.hasElement() && maxSizeVec.x != unset ? "[[maxSize]" : ""} | \{enabledMark(v1.y)}y\{
-				 v1.y != 0 && maxSizeCell.cell.hasElement() && maxSizeVec.y != unset ? "[][[maxSize]" : ""}");
-			}
-		}
-		static Label getLabel(BindCell cell) {
-			return (Label) ((Table) cell.el).getChildren().get(1);
-		}
-		void fill(Cell<?> cell) {
-			pairBool(Tmp.v1.set(CellTools.fillX(cell), CellTools.fillY(cell)), fillCell);
-		}
-		void expand(Cell<?> cell) {
-			pairBool(Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell)), expandCell);
-		}
-		void uniform(Cell<?> cell) {
-			pairBool(Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0), uniformCell);
-		}
-		void wrap(Label label) {
-			// wrapCell.toggle1(FieldUtils.getBoolean(label, $.wrap));
-			wrapLabel.setText("" + FieldUtils.getBoolean(label, $.wrap));
-		}
-		static String enabledMark(float i) {
-			return i != 0 ? "[accent]" : "[gray]";
-		}
-
-		public void setPosition(Element elem, Table table) {
-			// 初始在元素的左上角
-			positionTooltip(elem, Align.topLeft, table, Align.bottomLeft);
-		}
+		/**
+		 * 构建整个信息面板的UI。现在是一个简单的循环。
+		 */
 		public void build(Table t) {
 			t.background(Tex.pane);
 			t.defaults().growX();
-			t.table(top -> {
-				top.add(nameLabel).padLeft(-4f);
-				visibleCell = BindCell.ofConst(top.image(Icon.eyeOffSmall)
-				 .color(Pal.accent)
-				 .size(16f).pad(4, 8, 4, 4));
+			for (DetailEntry entry : entries) {
+				entry.build(t);
+			}
+		}
 
-				sizeLabel.setText(sizeProv);
-				top.add(sizeLabel).padLeft(10f)
-				 .right().labelAlign(Align.right)
-				 .growX();
-			});
-			t.row().table(tableCons("Touchable", touchableLabel));
-			t.row().table(tableCons("Color", color -> {
-				color.add(colorContainer).size(16).padRight(4f);
-				color.add(colorLabel);
-			}));
-			transformCell = buildKey(t, "Transform", transformLabel);
-			rotCell = buildKey(t, "Rotation", rotationLabel);
-			translationCell = buildKey(t, "Translation", translationLabel);
-			styleCell = buildKey(t, "Style", styleLabel);
-			alignCell = buildKey(t, "Align", alignLabel);
-			cellContainer = makeCell(t, ct -> {
-				Underline.of(ct, 1).pad(4, -1, 4, -1);
-				cellAlignCell = buildKey(ct, "CellAlign", cellAlignLabel);
-				colspanCell = buildKey(ct, "Colspan", colspanLabel);
-				minSizeCell = buildKey(ct, "MinSize", minSizeLabel);
-				maxSizeCell = buildKey(ct, "MaxSize", maxSizeLabel);
-				expandCell = buildKey(ct, "Expand", expandLabel);
-				fillCell = buildKey(ct, "Fill", fillLabel);
-				uniformCell = buildKey(ct, "Uniform", uniformLabel);
-			});
-			Underline.of(t, 6);
-			labelContainer = makeCell(t, lt -> {
-				wrapCell = buildKey(lt, "LabelWrap", wrapLabel);
-			});
+		/**
+		 * 更新所有条目的状态。
+		 */
+		public void updateFor(Element element) {
+			for (DetailEntry entry : entries) {
+				if (entry.valid(element)) {
+					entry.update(element);
+				}
+			}
 		}
-		private BindCell buildKey(Table t, String key, Label label) {
-			return makeCell(t, tableCons(key, label));
+
+		/**
+		 * 定位逻辑保持不变。
+		 */
+		public void setPosition(Element elem, Table table) {
+			positionTooltip(elem, Align.topLeft, table, Align.bottomLeft);
 		}
-		private BindCell makeCell(Table t, Cons<Table> cons) {
-			return BindCell.ofConst(t.row().table(cons).growX());
+		private static class PairCons implements Cons2<Label, Object> {
+			final String delim;
+			public PairCons(String delims) {
+				this.delim = delims;
+				prov = new PairProv(() -> vec2, delim, true);
+			}
+			final Vec2     vec2 = new Vec2();
+			final PairProv prov;
+			public void get(Label l, Object v) {
+				vec2.set((Position) v);
+				l.setText(prov.get());
+			}
 		}
 	}
 
+
+	// ========================================================================
+	// 3. 重构后的 ReviewFocusTask 类
+	// ========================================================================
+
+	/**
+	 * ReviewFocusTask 现在职责清晰：
+	 * - 绘制焦点视觉效果。
+	 * - 在焦点改变时，触发InfoDetails进行一次完整的更新。
+	 * - 每帧绘制已经更新和布局好的信息面板。
+	 */
 	class ReviewFocusTask extends FocusTask {
 		{ drawSlightly = true; }
 
-		public ReviewFocusTask() { super(ReviewElement.MASK_COLOR, ReviewElement.FOCUS_COLOR); }
+		final   InfoDetails info               = new InfoDetails();
+		final   Table       table              = new Table();
+		private Element     lastFocusedElement = null;
 
+		{
+			// 构建UI的操作只在初始化时执行一次
+			info.build(table.table().pad(4).get());
+		}
+
+		public ReviewFocusTask() { super(ReviewElement.MASK_COLOR, ReviewElement.FOCUS_COLOR); }
 		/** 清除elemDraw */
 		public void elemDraw() { }
 		@Override
@@ -1161,6 +1143,7 @@ public class ReviewElement extends Content {
 		}
 		@Override
 		public void drawFocus(Element elem, Vec2 pos) {
+			// --- 步骤 1: 绘制焦点 (原始逻辑) ---
 			super.afterAll();
 			if (FOCUS_WINDOW instanceof ReviewElementWindow w && w.drawCell) {
 				if (elem.parent instanceof Table t0) {
@@ -1173,40 +1156,34 @@ public class ReviewElement extends Content {
 
 			if (!hoverInfoWindow.enabled()) return;
 
-			info.name(elem);
-			info.size(elem);
-			info.touchableF(elem);
-			info.visible(elem);
-			info.transform(elem);
-			info.color(elem);
-			info.rotation(elem);
-			info.translation(elem);
-			info.style(elem);
-			info.align(elem);
-			l:
-			{
-				Cell<?> cell = null;
-				if (elem.parent instanceof Table parent) cell = parent.getCell(elem);
-				if (!info.cellContainer.toggle1(cell != null)) break l;
-				info.cellAlign(cell);
-				info.colspan(cell);
-				info.minSize(cell);
-				info.maxSize(cell);
-				info.fill(cell);
-				info.expand(cell);
-				info.uniform(cell);
+			// --- 步骤 2: 更新数据模型 (性能优化的核心) ---
+			// 只有当焦点元素改变时，才执行昂贵的更新和布局操作
+			if (elem != lastFocusedElement) {
+				updateInfoPanel(elem);
+				lastFocusedElement = elem;
 			}
-			l: {
-				boolean b =false;
-				if (elem instanceof Label label) {
-					b = true;
-					info.wrap(label);
-				}
-				info.labelContainer.toggle1(b);
-			}
-			showInfoTable(elem);
+
+			// --- 步骤 3: 绘制UI (轻量级) ---
+			// table.draw() 只是将已计算好的顶点数据发送给GPU，非常快。
+			table.draw();
 		}
-		/** pos和size */
+
+		/**
+		 * 新的辅助方法，封装了所有昂贵操作。
+		 * 它只在焦点元素改变时被调用一次。
+		 */
+		private void updateInfoPanel(Element elem) {
+			// 委托给 InfoDetails 更新所有条目
+			info.updateFor(elem);
+
+			// 在这里执行耗时的布局和定位操作
+			table.invalidate();
+			table.pack(); // pack() 包含了 layout 和 getPrefWidth 等操作
+			table.act(0); // 确保所有动作执行
+			info.setPosition(elem, table);
+		}
+
+		/** 绘制position和size */
 		private void drawGeneric(Element elem, Vec2 pos) {
 			posText:
 			{
@@ -1265,6 +1242,8 @@ public class ReviewElement extends Content {
 				}
 			}
 		}
+
+		/** 绘制padding和margin */
 		private void drawElemPad(Element elem, Vec2 pos) {
 			if (elem instanceof Table) {
 				drawMargin(pos, (Table) elem);
@@ -1278,25 +1257,6 @@ public class ReviewElement extends Content {
 			}
 		}
 
-		// ---------------------
-		final InfoDetails info  = new InfoDetails();
-		final Table       table = new Table();
-
-		{
-			info.build(table.table().pad(4).get());
-		}
-
-		private void showInfoTable(Element elem) {
-			table.invalidate();
-			table.layout();
-			table.getPrefWidth();
-			table.pack();
-			table.act(0);
-			info.setPosition(elem, table);
-			table.draw();
-		}
-
-
 		public boolean isSelecting() {
 			return topGroup.elementCallback == callback;
 		}
@@ -1306,7 +1266,445 @@ public class ReviewElement extends Content {
 			elem = topGroup.getSelected();
 			if (elem != null) drawFocus(elem);
 		}
+
 	}
+
+	// ========================================================================
+	// 4. DetailEntry 的具体实现类
+	//    这些类现在封装了所有的UI和逻辑。
+	// ========================================================================
+	//region Entry classes
+
+	/** 辅助基类，用于处理通用的 "Key: Value" 行，并管理可见性 */
+	private static abstract class BaseEntry implements DetailEntry, KeyValue {
+		protected       BindCell       rowCell;
+		protected       Boolf<Element> validator;
+		protected final Boolf<Element> cellValidator = elem -> {
+			boolean visible = getCell(elem) != null;
+			setVisible(visible);
+			return visible;
+		};
+		public boolean valid(Element el) {
+			return validator == null || validator.get(el);
+		}
+		protected void cellValidator() {
+			this.validator = cellValidator;
+		}
+
+		protected void buildRow(Table table, String key, Element valueElement) {
+			buildRow(table, key, t -> t.add(valueElement).growX().right());
+		}
+
+		@SuppressWarnings("SameParameterValue")
+		protected void buildRow(Table table, String key, Cons<Table> valueBuilder) {
+			rowCell = BindCell.ofConst(table.row().table(t -> {
+				t.left().defaults().left();
+				t.add(key).fontScale(keyScale).color(Color.lightGray).padRight(10f);
+				valueBuilder.get(t);
+			}).growX());
+		}
+
+		protected void setVisible(boolean visible) {
+			if (rowCell != null) {
+				rowCell.toggle1(visible);
+			}
+		}
+	}
+
+	// --- 具体实现 ---
+	private static class BoolEntry extends BaseEntry {
+		private final Label          label = new VLabel("True", valueScale, Pal.accent);
+		private final String         key;
+		private final Boolf<Element> boolf;
+		public BoolEntry(String key, Boolf<Element> boolf) {
+			this.key = key;
+			this.boolf = boolf;
+		}
+		public void build(Table table) {
+			buildRow(table, key, label);
+		}
+		public void update(Element element) {
+			setVisible(boolf.get(element));
+		}
+	}
+	private static class HeaderEntry implements DetailEntry, KeyValue {
+		private Label nameLabel, sizeLabel;
+		private final Vec2     sizeVec  = new Vec2();
+		private final SizeProv sizeProv = new SizeProv(() -> sizeVec, " × ");
+		private       BindCell visibleCell;
+		public boolean valid(Element element) {
+			return true;
+		}
+		@Override
+		public void build(Table table) {
+			nameLabel = new VLabel(0.85f, stressColor);
+			sizeLabel = new VLabel(valueScale, Color.lightGray);
+			sizeLabel.setText(sizeProv);
+
+			table.table(top -> {
+				top.add(nameLabel).padLeft(-4f);
+				visibleCell = BindCell.ofConst(top.image(Icon.eyeOffSmall).color(Pal.accent).size(16f).pad(4, 8, 4, 4));
+				top.add(sizeLabel).padLeft(10f).right().labelAlign(Align.right).growX();
+			}).growX();
+			table.row();
+		}
+
+		@Override
+		public void update(Element element) {
+			nameLabel.setText(getElementName(element));
+			sizeVec.set(element.getWidth(), element.getHeight());
+			visibleCell.toggle(!element.visible);
+		}
+	}
+
+	private static class SimpleEntry extends BaseEntry {
+		private final String                key;
+		private final Func<Element, String> textProvider;
+		private final Func<Element, Color>  colorProvider;
+		private       Label                 valueLabel;
+
+		SimpleEntry(String key, Func<Element, String> textProvider, Func<Element, Color> colorProvider) {
+			this.key = key;
+			this.textProvider = textProvider;
+			this.colorProvider = colorProvider;
+		}
+
+		@Override
+		public void build(Table table) {
+			valueLabel = new NoMarkupLabel(valueScale);
+			buildRow(table, key, valueLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			valueLabel.setText(textProvider.get(element));
+			if (colorProvider != null) {
+				valueLabel.setColor(colorProvider.get(element));
+			}
+		}
+	}
+
+	private static class ColorEntry extends BaseEntry {
+		private ColorContainer colorContainer;
+		private Label          colorLabel;
+
+		@Override
+		public void build(Table table) {
+			colorContainer = new ColorContainer(Color.white);
+			colorLabel = new NoMarkupLabel(valueScale);
+			buildRow(table, "Color", t -> {
+				t.add(colorContainer).size(16).padRight(4f);
+				t.add(colorLabel);
+			});
+		}
+
+		@Override
+		public void update(Element element) {
+			Color color = element.color;
+			colorContainer.setColorValue(color);
+			String string = FormatHelper.color(color);
+			colorLabel.setText(color.a == 1 ? string.substring(0, 6) : string);
+		}
+	}
+
+	private static class ElemFieldEntry extends BaseEntry {
+		private final String               fieldName;
+		private final Field                field;
+		private final Label                label;
+		private final Cons2<Label, Object> labelCons;
+		public ElemFieldEntry(Class<?> base, String fieldName, Label label, Cons2<Label, Object> labelCons) {
+			this.fieldName = fieldName;
+			field = FieldUtils.getFieldAccess(base, fieldName);
+			if (field == null) throw new NullPointerException(fieldName);
+			this.label = label != null ? label : new VLabel(valueScale, Color.lightGray);
+			this.labelCons = labelCons;
+		}
+		public ElemFieldEntry(Class<?> base, String fieldName, Cons2<Label, Object> labelCons) {
+			this(base, fieldName, null, labelCons);
+		}
+		public ElemFieldEntry(String fieldName) {
+			this(Element.class, fieldName, null, (l, v) -> l.setText(FormatHelper.fixedAny(v)));
+		}
+		public void build(Table table) {
+			buildRow(table, Strings.capitalize(fieldName), label);
+		}
+		public void update(Element element) {
+			if (!field.getDeclaringClass().isInstance(element)) return;
+			Object val = FieldUtils.get(element, field);
+			labelCons.get(label, val);
+			setVisible(switch (val) {
+				case Number i -> i.intValue() != 0;
+				// case Boolean b -> b;
+				case String s -> !s.isEmpty();
+				case Vec2 v -> v.x != 0 || v.y != 0;
+				case null, default -> false;
+			});
+		}
+	}
+	private static class RotationEntry extends BaseEntry {
+		private VLabel rotationLabel;
+		@Override
+		public void build(Table table) {
+			rotationLabel = new VLabel(valueScale, Color.lightGray);
+			buildRow(table, "Rotation", rotationLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			boolean visible = Mathf.equal(element.rotation % 360f, 0);
+			setVisible(visible);
+			if (visible) {
+				rotationLabel.setText(fixed(element.rotation));
+			}
+		}
+	}
+
+	private static class StyleEntry extends BaseEntry {
+		private Label styleLabel;
+		@Override
+		public void build(Table table) {
+			styleLabel = new Label("");
+			styleLabel.setFontScale(valueScale);
+			buildRow(table, "Style", styleLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			try {
+				Style style = (Style) element.getClass().getMethod("getStyle").invoke(element);
+				if (style != null && ShowUIList.styleKeyMap.containsKey(style)) {
+					setVisible(true);
+					styleLabel.setText(FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));
+				} else {
+					setVisible(false);
+				}
+			} catch (Throwable e) { setVisible(false); }
+		}
+	}
+
+	private static class CellAlignEntry extends BaseEntry {
+		private VLabel cellAlignLabel;
+
+		@Override
+		public void build(Table table) {
+			cellAlignLabel = new VLabel(valueScale, Color.sky);
+			buildRow(table, "CellAlign", cellAlignLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			Cell<?> cell = getCell(element);
+			setVisible(cell != null);
+			if (cell != null) {
+				cellAlignLabel.setText(FormatHelper.align(CellTools.align(cell)));
+			}
+		}
+	}
+
+	private static class ColspanEntry extends BaseEntry {
+		private VLabel colspanLabel;
+
+		@Override
+		public void build(Table table) {
+			colspanLabel = new VLabel(valueScale, Color.lightGray);
+			buildRow(table, "Colspan", colspanLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			Cell<?> cell    = getCell(element);
+			int     colspan = (cell != null) ? CellTools.colspan(cell) : 1;
+			boolean visible = colspan != 1;
+			setVisible(visible);
+			if (visible) {
+				colspanLabel.setText(String.valueOf(colspan));
+			}
+		}
+	}
+
+	private static class LabelWrapEntry extends BaseEntry {
+		private static final Field  wrapField = FieldUtils.getFieldAccess(Label.class, "wrap");
+		private              VLabel wrapLabel;
+
+		@Override
+		public void build(Table table) {
+			wrapLabel = new VLabel("", valueScale, Pal.accent);
+			buildRow(table, "LabelWrap", wrapLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			if (element instanceof Label label) {
+				setVisible(true);
+				wrapLabel.setText(String.valueOf(FieldUtils.getBoolean(label, wrapField)));
+			} else {
+				setVisible(false);
+			}
+		}
+	}
+
+	private static class SeparatorEntry implements DetailEntry {
+		private final float top, left, bottom, right;
+		public boolean valid(Element element) {
+			return true;
+		}
+		public SeparatorEntry(float pad) { this(pad, pad, pad, pad); }
+		public SeparatorEntry(float top, float left, float bottom, float right) {
+			this.top = top;
+			this.left = left;
+			this.bottom = bottom;
+			this.right = right;
+		}
+
+		@Override
+		public void build(Table table) {
+			Underline.of(table, 1).pad(top, left, bottom, right);
+		}
+
+		@Override
+		public void update(Element element) { /* Do nothing */ }
+	}
+	/**
+	 * 用于显示一个 Vec2 值的条目，例如 MinSize, MaxSize。
+	 * 它使用 SizeProv 来格式化输出。
+	 */
+	private static class SizePairEntry extends BaseEntry {
+		private final String                 key;
+		private final Func<Cell<?>, Vec2>    valueProvider;
+		private final Func<Cell<?>, Boolean> visibilityChecker;
+		private final Vec2                   valueVec = new Vec2();
+
+		/**
+		 * @param key               显示的标签文本，如 "MinSize"
+		 * @param valueProvider     一个函数，根据 Cell 返回 Vec2 值
+		 * @param visibilityChecker 一个函数，判断此条目是否应该可见
+		 */
+		public SizePairEntry(String key, Func<Cell<?>, Vec2> valueProvider, Func<Cell<?>, Boolean> visibilityChecker) {
+			this.key = key;
+			this.valueProvider = valueProvider;
+			this.visibilityChecker = visibilityChecker;
+			cellValidator();
+		}
+
+		@Override
+		public void build(Table table) {
+			// SizeProv 会自动监听 valueVec 的变化并更新文本
+			SizeProv sizeProv   = new SizeProv(() -> valueVec);
+			Label    valueLabel = new Label(sizeProv);
+			valueLabel.setFontScale(valueScale); // 假设 valueScale 是一个可访问的常量
+			buildRow(table, key, valueLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			Cell<?> cell = getCell(element);
+
+			boolean visible = visibilityChecker.get(cell);
+			setVisible(visible);
+
+			if (visible) {
+				// 从 provider 获取值并更新本地的 Vec2，
+				// SizeProv 会自动处理标签的文本更新。
+				Vec2 providedValue = valueProvider.get(cell);
+				valueVec.set(providedValue.scl(1 / Scl.scl())); // 假设需要进行缩放
+			}
+		}
+	}
+	private static class BoolPairEntry extends BaseEntry {
+		private final String              key;
+		private final Func<Cell<?>, Vec2> valueProvider;
+		private       Label               valueLabel;
+
+		public BoolPairEntry(String key, Func<Cell<?>, Vec2> valueProvider) {
+			this.key = key;
+			this.valueProvider = valueProvider;
+			cellValidator();
+		}
+
+		@Override
+		public void build(Table table) {
+			valueLabel = new Label(""); // 初始为空
+			valueLabel.setFontScale(valueScale);
+			buildRow(table, key, valueLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			Cell<?> cell = getCell(element);
+
+			Vec2    values = valueProvider.get(cell);
+			boolean x      = (values.x != 0);
+			boolean y      = (values.y != 0);
+
+			// 只有当至少一个为 true 时才显示
+			boolean visible = x || y;
+			setVisible(visible);
+
+			if (visible) {
+				// 使用原始代码中的格式化逻辑
+				String text = String.format("%sx[] | %sy", enabledMark(x), enabledMark(y));
+				valueLabel.setText(text);
+			}
+		}
+
+		private String enabledMark(boolean enabled) {
+			return enabled ? "[accent]" : "[gray]";
+		}
+	}
+	private static class TranslationEntry extends BaseEntry {
+		private final Vec2 translationVec = new Vec2();
+
+		@Override
+		public void build(Table table) {
+			// PairProv 会自动监听 translationVec 的变化
+			PairProv pairProv         = new PairProv(() -> translationVec, ", ");
+			Label    translationLabel = new VLabel("", valueScale, Color.orange);
+			translationLabel.setText(pairProv);
+			buildRow(table, "Translation", translationLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			Vec2    translation = element.translation;
+			boolean visible     = (translation.x != 0 || translation.y != 0);
+			setVisible(visible);
+
+			if (visible) {
+				// 更新本地的 Vec2，PairProv 会自动更新 Label 的文本
+				translationVec.set(translation);
+			}
+		}
+	}
+	/**
+	 * 用于显示 Table 的 align 属性。
+	 */
+	private static class AlignEntry extends BaseEntry {
+		private VLabel alignLabel;
+
+		@Override
+		public void build(Table table) {
+			alignLabel = new VLabel(valueScale, Color.sky);
+			buildRow(table, "Align", alignLabel);
+		}
+
+		@Override
+		public void update(Element element) {
+			if (element instanceof Table table) {
+				setVisible(true);
+				// 使用 FormatHelper 将整数 align 值转换为可读的字符串
+				alignLabel.setText(FormatHelper.align(table.getAlign()));
+			} else {
+				setVisible(false);
+			}
+		}
+	}
+	//endregion
+
+	// --- 辅助方法 ---
+	private static Cell<?> getCell(Element element) {
+		return (element != null && element.parent instanceof Table) ? ((Table) element.parent).getCell(element) : null;
+	}
+
 	static Color DISABLED_COLOR = new Color(0xFF0000_FF);
 	static Color touchableToColor(Touchable touchable) {
 		return switch (touchable) {
@@ -1375,10 +1773,10 @@ public class ReviewElement extends Content {
             c.elementY = currentY + (rowHeight[c.row] - c.elementHeight + c.computedPadTop - c.computedPadBottom) / 2;
       */
 			int align = CellTools.align(cl);
-			float padTop = CellTools.padTop(cl),
-			 padBottom = CellTools.padBottom(cl),
-			 padLeft = CellTools.padLeft(cl),
-			 padRight = CellTools.padRight(cl);
+			float padTop = CellTools.computedPadTop(cl),
+			 padBottom = CellTools.computedPadBottom(cl),
+			 padLeft = CellTools.computedPadLeft(cl),
+			 padRight = CellTools.computedPadRight(cl);
 
 			// 渲染padding
 			// drawMarginOrPad(pos, focus, true, padLeft, padTop, padRight, padBottom);

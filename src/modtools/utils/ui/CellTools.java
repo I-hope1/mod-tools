@@ -15,6 +15,10 @@ public interface CellTools {
 	 f_column            = f("column"),
 	 f_row               = f("row"),
 	 f_align             = f("align"),
+	f_padLeft   = f("padLeft"),
+	 f_padTop    = f("padTop"),
+	 f_padRight  = f("padRight"),
+	 f_padBottom = f("padBottom"),
 	 f_computedPadLeft   = f("computedPadLeft"),
 	 f_computedPadTop    = f("computedPadTop"),
 	 f_computedPadRight  = f("computedPadRight"),
@@ -63,16 +67,30 @@ public interface CellTools {
 	static void align(Cell<?> cell, int align) {
 		Reflect.set(cell, f_align, align);
 	}
+
 	static float padLeft(Cell<?> cell) {
-		return Reflect.get(cell, f_computedPadLeft);
+		return Reflect.get(cell, f_padLeft);
 	}
 	static float padTop(Cell<?> cell) {
-		return Reflect.get(cell, f_computedPadTop);
+		return Reflect.get(cell, f_padTop);
 	}
 	static float padRight(Cell<?> cell) {
-		return Reflect.get(cell, f_computedPadRight);
+		return Reflect.get(cell, f_padRight);
 	}
 	static float padBottom(Cell<?> cell) {
+		return Reflect.get(cell, f_padBottom);
+	}
+	// todo computed有误导
+	static float computedPadLeft(Cell<?> cell) {
+		return Reflect.get(cell, f_computedPadLeft);
+	}
+	static float computedPadTop(Cell<?> cell) {
+		return Reflect.get(cell, f_computedPadTop);
+	}
+	static float computedPadRight(Cell<?> cell) {
+		return Reflect.get(cell, f_computedPadRight);
+	}
+	static float computedPadBottom(Cell<?> cell) {
 		return Reflect.get(cell, f_computedPadBottom);
 	}
 

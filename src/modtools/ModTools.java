@@ -43,7 +43,7 @@ import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
-	public static final boolean TEST = true;
+	public static final boolean TEST = false;
 
 	/** 如果不为empty，在进入是显示 */
 	private static final Fi             libs   = root.child("libs");
@@ -101,17 +101,20 @@ public class ModTools extends Mod {
 		}
 
 		if (TEST) {
-			// World w = SampleWorldInterface.changeClass(new World());
-			try {
-				Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
-				 Lookup.class,
-				 Lookup.class.getDeclaredConstructor(Class.class)
-				 ).newInstance(Lookup.class));
-			} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-				throw new RuntimeException(e);
-			}
-			new MyContentParser();
+			test();
 		}
+	}
+	private static void test() {
+		// World w = SampleWorldInterface.changeClass(new World());
+		try {
+			Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
+			 Lookup.class,
+			 Lookup.class.getDeclaredConstructor(Class.class)
+			 ).newInstance(Lookup.class));
+		} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+			throw new RuntimeException(e);
+		}
+		new MyContentParser();
 	}
 
 	private void loadCore() {

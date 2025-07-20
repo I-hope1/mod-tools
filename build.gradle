@@ -91,7 +91,7 @@ task jarAndroid(type: JavaExec) {
 //			+ [new File(platformRoot, "android.jar")]
 	).collectMany { ["--classpath", "$it.path"] }
 
-	def d8Root = file("$sdkRoot/build-tools/").listFiles().find {
+	def d8Root = file("$sdkRoot/build-tools/").listFiles().sort().reverse().find {
 		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= Integer.parseInt(minApi)
 	}
 
@@ -204,7 +204,9 @@ task playAndroid {
 	dependsOn ZCompileAll
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"
-	def MDT_ANDROID_DIR = "/storage/emulated/0/Android/data/io.anuke.mindustry/files"
+	def pkg = "com.github.tinylake.mindustryX" // io.anuke.mindustry
+	def MDT_ANDROID_DIR =
+			"/storage/emulated/0/Android/data/$pkg/files"
 
 	def buildDir = buildDir0
 	def fileName = "$archivesBaseName[$version].jar"
@@ -212,7 +214,7 @@ task playAndroid {
 		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/")
 				.execute().waitForProcessOutput(System.out, System.err)
 
-		"$adb shell am start -n io.anuke.mindustry/mindustry.android.AndroidLauncher -W -S"
+		"$adb shell am start -n $pkg/mindustry.android.AndroidLauncher -W -S"
 				.execute().waitForProcessOutput(System.out, System.err)
 		Thread.sleep(100)
 		if (false) {

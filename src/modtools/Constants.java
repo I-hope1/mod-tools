@@ -185,6 +185,7 @@ public class Constants {
 			throw new RuntimeException(e);
 		}
 	}
+	/** @return null if failed.  */
 	public static <R> R iv(Method method, Object obj, Object... args) {
 		try {
 			return (R) method.invoke(obj, args);

@@ -30,7 +30,7 @@ public class IntTab {
 	public  Color[]    colors;
 	public  Table[]    tables;
 	/** 这些会乘以{@link Scl#scl} */
-	public  float      titleWidth, eachWidth;
+	public  float      titleWidth, eachWidth, labelWidth = CellTools.unset;
 	public int     cols;
 	public boolean column/* = false */;
 
@@ -166,7 +166,7 @@ public class IntTab {
 				 () -> hideTitle ? "" : names[j],
 				 icons == null ? null : icons[j]
 				);
-				b.add(label).padLeft(4f).padRight(4f).minWidth(28)
+				b.add(label).padLeft(4f).padRight(4f).minWidth(28).maxWidth(labelWidth)
 				 .labelAlign(Align.left)
 				 .growX().growY();
 				b.row();

@@ -28,6 +28,7 @@ public class TopTranslator extends TreeTranslator {
 	final Symtab     symtab;
 	final TreeMaker  maker;
 	final Resolve    resolve;
+	final Types      types;
 
 	public static final String LOCAL_PREFIX = "$$letexpr$$";
 
@@ -44,6 +45,7 @@ public class TopTranslator extends TreeTranslator {
 		symtab = Symtab.instance(context);
 		maker = TreeMaker.instance(context);
 		resolve = Resolve.instance(context);
+		types = Types.instance(context);
 
 		addDefaultTodo();
 		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
@@ -53,7 +55,6 @@ public class TopTranslator extends TreeTranslator {
 		// 你的旧方法，现在可能可以简化或移除
 		replaceMethod(symtab.classType.tsym, "componentType", "getComponentType");
 
-		// --- 新的替换方式示例 ---
 		// 1. List.of(...) -> Arrays.asList(...)
 		// 首先，我们精确找到 List.of 和 Arrays.asList 的 MethodSymbol
 		// List.of是静态方法，通常接受 Object... 或具体的类型数组
@@ -65,7 +66,8 @@ public class TopTranslator extends TreeTranslator {
 			 (originalInvocation, originalSym, targetSym) -> {
 				 // List.of(args) -> Arrays.asList(args)
 				 // 参数列表保持不变
-				 List<JCExpression> newArgs = originalInvocation.args;
+				 List<JCExpression> newArgs = List.of(
+					maker.NewArray(maker.Ident(symtab.objectType.tsym), List.nil(), originalInvocation.args).setType(types.makeArrayType(symtab.objectType)));
 				 // 方法选择表达式：Arrays.asList
 				 JCExpression newMethodSelect = makeSelect(maker.QualIdent(targetSym.owner), targetSym.name, targetSym);
 				 return maker.at(originalInvocation.pos).App(

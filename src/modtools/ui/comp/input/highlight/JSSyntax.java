@@ -357,7 +357,7 @@ public class JSSyntax extends Syntax {
 
 			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
 			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())
-			|| ((currentObject == NOT_FOUND || currentObject == Undefined.SCRIPTABLE_UNDEFINED) && c =='\n')) {
+			    || ((currentObject == NOT_FOUND || currentObject == Undefined.SCRIPTABLE_UNDEFINED) && c == '\n')) {
 				currentObject = customScope;
 				updateCursorObj();
 				operatesSymbol.lastSymbol = '\0';
@@ -384,7 +384,9 @@ public class JSSyntax extends Syntax {
 				if (pop.base instanceof NativeJavaMethod m) {
 					Object[] allMethods = (Object[]) UNSAFE.getObject(m, RHINO.methods);
 					Method   method     = null;
-					int      index      = Constants.iv(RHINO.findCachedFunction, m, IScript.cx, args.toArray());
+					Integer  integer    = Constants.iv(RHINO.findCachedFunction, m, IScript.cx, args.toArray());
+					if (integer == null) break l;
+					int index = integer;
 					if (index >= 0) method = (Method) UNSAFE.getObject(allMethods[index], RHINO.memberObject);
 					// Log.info(args);
 					// Log.info(method);
@@ -402,7 +404,7 @@ public class JSSyntax extends Syntax {
 		}
 
 		public void after(int i) {
-			if (cTask == drawToken/* 刚执行完 */ && lastTask == drawToken){
+			if (cTask == drawToken/* 刚执行完 */ && lastTask == drawToken) {
 				if (localKeywords.contains(drawToken.lastToken)) {
 					localVars.add(drawToken.token);
 				}

@@ -95,10 +95,10 @@ public class ContentList extends Content {
 		tab = new IntTab(CellTools.unset, names, Color.sky, tables);
 		tab.eachWidth = 86;
 		// main.update(() -> tab.setTitleWidth(main.getWidth() / Scl.scl()));
-		tab.title.add("@mod-tools.tips.longprees_to_cppy")
-		 .colspan(tables.length).growX().row();
-
 		main.add(tab.build()).grow().top();
+
+		tab.getTabsBar().add("@mod-tools.tips.longprees_to_cppy")
+		 .colspan(tables.length).growX().row();
 	}
 	private <T> FilterTable<T> defaultTable(ObjectMap<String, T> map) {
 		return defaultTable(() -> map, null);
@@ -154,6 +154,6 @@ public class ContentList extends Content {
 	}
 	public void build() {
 		ui.show();
-		Time.runTask(2, () -> tab.main.invalidate());
+		Time.runTask(2, () -> tab.getMainContainer().invalidate());
 	}
 }

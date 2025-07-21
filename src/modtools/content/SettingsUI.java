@@ -198,7 +198,7 @@ public class SettingsUI extends Content {
 		 1, // 列数 (垂直布局为1列)
 		 true); // column = true 表示垂直布局
 
-		tab.labelWidth = 60f;
+		// tab.labelWidth = 100f;
 		tab.setIcons(sectionIcons.toArray(Drawable.class)); // 设置标签图标
 
 		// 将 IntTab 添加到窗口内容区

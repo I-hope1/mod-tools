@@ -99,10 +99,14 @@ public class LogDisplay extends Content {
 		})};
 		String[] names = {"last_log", "crashes"};
 		IntTab   itab  = new IntTab(CellTools.unset, names, colors, tables);
-		itab.pane.update(new AutoWrapListener(itab.pane));
-		itab.setPrefSize(w, CellTools.unset);
 		ui.cont.add(itab.build()).grow();
-		itab.main.act(0);
+
+		// custom build
+		ScrollPane pane = itab.getContentPane();
+		pane.update(new AutoWrapListener(pane));
+		itab.setPrefSize(w, CellTools.unset);
+		pane.act(0);
+
 		ui.shown(() -> Core.app.post(() -> tables[0].invalidateHierarchy()));
 
 		// ui.addCloseButton();

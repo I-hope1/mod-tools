@@ -2,7 +2,7 @@ package modtools.utils.ui;
 
 import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.ui.layout.Cell;
+import arc.scene.ui.layout.*;
 import arc.util.*;
 import modtools.annotations.asm.CopyConstValue;
 import modtools.utils.reflect.FieldUtils;
@@ -15,10 +15,10 @@ public interface CellTools {
 	 f_column            = f("column"),
 	 f_row               = f("row"),
 	 f_align             = f("align"),
-	f_padLeft   = f("padLeft"),
-	 f_padTop    = f("padTop"),
-	 f_padRight  = f("padRight"),
-	 f_padBottom = f("padBottom"),
+	 f_padLeft           = f("padLeft"),
+	 f_padTop            = f("padTop"),
+	 f_padRight          = f("padRight"),
+	 f_padBottom         = f("padBottom"),
 	 f_computedPadLeft   = f("computedPadLeft"),
 	 f_computedPadTop    = f("computedPadTop"),
 	 f_computedPadRight  = f("computedPadRight"),
@@ -140,5 +140,22 @@ public interface CellTools {
 	/** 返回的是{@link Tmp#v1} */
 	static Vec2 maxSize(Cell<?> cell) {
 		return Tmp.v1.set(CellTools.maxWidth(cell), CellTools.maxHeight(cell));
+	}
+	static Cell<?> getCell(Element element) {
+		return element.parent instanceof Table table ? table.getCell(element) : null;
+	}
+	static Cell<?> getNextCell(Cell<?> cell) {
+		if (cell == null || cell.getTable() == null) return null;
+		Table table = cell.getTable();
+		int   index = table.getCells().indexOf(cell);
+		if (index == -1 || index >= table.getCells().size - 1) return null;
+		return table.getCells().get(index + 1);
+	}
+	static Cell<?> getPrevCell(Cell<?> cell) {
+		if (cell == null || cell.getTable() == null) return null;
+		Table table = cell.getTable();
+		int   index = table.getCells().indexOf(cell);
+		if (index == -1 || index == 0) return null;
+		return table.getCells().get(index - 1);
 	}
 }

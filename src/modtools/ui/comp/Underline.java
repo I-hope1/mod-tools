@@ -10,6 +10,10 @@ import modtools.ui.comp.limit.LimitImage;
 import modtools.utils.JSFunc.JColor;
 
 public class Underline extends LimitImage implements Poolable {
+	public static final boolean DEBUG_ID = false;
+	public String toString() {
+		return DEBUG_ID ? super.toString() + "#" + hashCode() : super.toString();
+	}
 	public static Cell<Underline> of(Table table, int colspan) {
 		return of(table, colspan, Tmp.c1.set(JColor.c_underline));
 	}

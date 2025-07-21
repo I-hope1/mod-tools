@@ -180,7 +180,7 @@ public class Selection extends Content {
 		tab.setPrefSize(260, CellTools.unset);
 		Table cont = ui.cont;
 		cont.update(() -> {
-			tab.labels.each((name, l) -> {
+			tab.getLabels().each((name, l) -> {
 				l.color.set(Settings.valueOf(name).enabled() ? Color.white : Color.lightGray);
 			});
 		});
@@ -200,7 +200,7 @@ public class Selection extends Content {
 		cont.left().add(tab.build())
 		 .colspan(2)
 		 .grow().left();
-		for (Entry<String, Label> label : tab.labels) {
+		for (Entry<String, Label> label : tab.getLabels()) {
 			label.value.setAlignment(Align.left);
 		}
 	}

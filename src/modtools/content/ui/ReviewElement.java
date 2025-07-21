@@ -9,7 +9,7 @@ import arc.math.Mathf;
 import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.event.*;
-import arc.scene.style.*;
+import arc.scene.style.Style;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
@@ -38,7 +38,7 @@ import modtools.ui.comp.input.area.AutoTextField;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
 import modtools.ui.comp.review.CellDetailsWindow;
-import modtools.ui.comp.utils.*;
+import modtools.ui.comp.utils.ValueLabel;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.effect.*;
 import modtools.ui.gen.HopeIcons;
@@ -47,7 +47,7 @@ import modtools.utils.*;
 import modtools.utils.EventHelper.DoubleClick;
 import modtools.utils.MySettings.Data;
 import modtools.utils.reflect.FieldUtils;
-import modtools.utils.search.*;
+import modtools.utils.search.BindCell;
 import modtools.utils.ui.*;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import modtools.utils.ui.ReflectTools.MarkedCode;
@@ -61,7 +61,7 @@ import static modtools.content.ui.ReviewElement.Settings.*;
 import static modtools.ui.HopeStyles.defaultLabel;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.ui.CellTools.unset;
-import static modtools.utils.ui.FormatHelper.*;
+import static modtools.utils.ui.FormatHelper.fixed;
 
 /**
  * Ctrl+Shift+C审查元素
@@ -878,41 +878,8 @@ public class ReviewElement extends Content {
 	}
 
 
-	private static Window viewAllCells(Table element) {
-		class AllCellsWindow extends Window implements IDisposable {
-			boolean ignoreEmptyCell = true;
-			public AllCellsWindow() { super("All Cells"); }
-		}
-
-		class CellItem extends Table implements CellView {
-			public CellItem(Drawable background, Cons<Table> cons) {
-				super(background, cons);
-			}
-		}
-
-		AllCellsWindow       window    = new AllCellsWindow();
-		FilterTable<Cell<?>> container = new FilterTable<>();
-		container.addConditionUpdateListener(c -> !window.ignoreEmptyCell || c.hasElement());
-		SettingsBuilder.build(window.cont);
-		SettingsBuilder.check("Filter out empty cell", b -> window.ignoreEmptyCell = b, () -> window.ignoreEmptyCell);
-		SettingsBuilder.clearBuild();
-		window.cont.pane(container).grow();
-		container.left().defaults().left();
-		for (var cell : element.getCells()) {
-			container.bind(cell);
-			container.add(new CellItem(Tex.pane, t0 -> {
-				 var l = new PlainValueLabel<>(Cell.class, () -> cell);
-				 ReviewElement.addFocusSource(t0, () -> window, cell::get);
-				 t0.add(l).grow();
-			 })).grow()
-			 .colspan(CellTools.colspan(cell));
-			if (cell.isEndRow()) {
-				Underline.of(container.row(), 20);
-			}
-			container.unbind();
-		}
-		window.update(window::display);
-		return window;
+	private static Window viewAllCells(Table table) {
+		return new AllCellsWindow(table);
 	}
 
 
@@ -1040,23 +1007,27 @@ public class ReviewElement extends Content {
 			entries.add(new ElemFieldEntry("rotation"));
 			entries.add(new ElemFieldEntry(Element.class, "translation", new PairCons(", ")));
 			entries.add(new StyleEntry());
-			entries.add(new AlignEntry());
-
-			// 分隔符也是一个条目
-			entries.add(new SeparatorEntry(4, -1, 4, -1));
+			entries.add(new AlignEntry<>("Align", Table.class, Table::getAlign));
 
 			// Cell 相关条目
+			entries.add(new SeparatorEntry(4, 2, 4, 2));
 			entries.add(new CellAlignEntry());
 			entries.add(new ColspanEntry());
 			entries.add(new SizePairEntry("MinSize", CellTools::minSize, cell -> CellTools.minWidth(cell) != 0 || CellTools.minHeight(cell) != 0));
 			entries.add(new SizePairEntry("MaxSize", CellTools::maxSize, cell -> CellTools.maxWidth(cell) != 0 || CellTools.maxHeight(cell) != 0));
-			entries.add(new BoolPairEntry("Expand", cell -> Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell))));
-			entries.add(new BoolPairEntry("Fill", cell -> Tmp.v1.set(CellTools.fillX(cell), CellTools.fillY(cell))));
-			entries.add(new BoolPairEntry("Uniform", cell -> Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0)));
+			entries.add(new BoolPairEntry<Cell<?>>("Expand", ProviderType.cell, cell -> Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell))));
+			entries.add(new BoolPairEntry<Cell<?>>("Fill", ProviderType.cell, cell -> Tmp.v1.set(CellTools.fillX(cell), CellTools.fillY(cell))));
+			entries.add(new BoolPairEntry<Cell<?>>("Uniform", ProviderType.cell, cell -> Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0)));
 
 			// Label 相关条目
-			entries.add(new SeparatorEntry(6, 0, 0, 0));
+			entries.add(new SeparatorEntry(4, 2, 4, 2));
+			entries.add(new AlignEntry<>("LabelAlign", Label.class, Label::getLabelAlign));
+			entries.add(new AlignEntry<>("LineAlign", Label.class, Label::getLineAlign));
 			entries.add(new LabelWrapEntry());
+
+			// ScrollPane 相关条目
+			entries.add(new SeparatorEntry(4, 2, 4, 2));
+			entries.add(new BoolPairEntry<ScrollPane>("Scroll", ProviderType.scroll, scroll -> Tmp.v1.set(scroll.isScrollX() ? 1 : 0, scroll.isScrollY() ? 1 : 0)));
 		}
 
 		/**
@@ -1280,7 +1251,7 @@ public class ReviewElement extends Content {
 		protected       BindCell       rowCell;
 		protected       Boolf<Element> validator;
 		protected final Boolf<Element> cellValidator = elem -> {
-			boolean visible = getCell(elem) != null;
+			boolean visible = CellTools.getCell(elem) != null;
 			setVisible(visible);
 			return visible;
 		};
@@ -1306,7 +1277,7 @@ public class ReviewElement extends Content {
 
 		protected void setVisible(boolean visible) {
 			if (rowCell != null) {
-				rowCell.toggle1(visible);
+				rowCell.toggle(visible);
 			}
 		}
 	}
@@ -1493,7 +1464,7 @@ public class ReviewElement extends Content {
 
 		@Override
 		public void update(Element element) {
-			Cell<?> cell = getCell(element);
+			Cell<?> cell = CellTools.getCell(element);
 			setVisible(cell != null);
 			if (cell != null) {
 				cellAlignLabel.setText(FormatHelper.align(CellTools.align(cell)));
@@ -1512,7 +1483,7 @@ public class ReviewElement extends Content {
 
 		@Override
 		public void update(Element element) {
-			Cell<?> cell    = getCell(element);
+			Cell<?> cell    = CellTools.getCell(element);
 			int     colspan = (cell != null) ? CellTools.colspan(cell) : 1;
 			boolean visible = colspan != 1;
 			setVisible(visible);
@@ -1536,7 +1507,7 @@ public class ReviewElement extends Content {
 		public void update(Element element) {
 			if (element instanceof Label label) {
 				setVisible(true);
-				wrapLabel.setText(String.valueOf(FieldUtils.getBoolean(label, wrapField)));
+				wrapLabel.setText((wrapField == null) ? "error" : String.valueOf(FieldUtils.getBoolean(label, wrapField)));
 			} else {
 				setVisible(false);
 			}
@@ -1556,13 +1527,47 @@ public class ReviewElement extends Content {
 			this.right = right;
 		}
 
+		BindCell bindCell;
+		Table table;
 		@Override
 		public void build(Table table) {
-			Underline.of(table, 1).pad(top, left, bottom, right);
+			bindCell = BindCell.ofConst(Underline.of(table, 2).pad(top, left, bottom, right));
+			this.table = table;
 		}
 
 		@Override
-		public void update(Element element) { /* Do nothing */ }
+		public void update(Element __) {
+			if (bindCell == null) return;
+
+			var cells        = table.getCells();
+			int currentIndex = cells.indexOf(bindCell.cell, true); // true 表示使用 == 进行身份比较
+
+			// 如果在父容器中找不到自己，则隐藏
+			if (currentIndex == -1) {
+				bindCell.remove();
+				return;
+			}
+
+			// 条件A: 下一个元素存在
+			Cell<?> nextCell       = ArrayUtils.find(cells, currentIndex, cell -> cell.get() != null);
+			boolean hasNextElement = nextCell != null && nextCell.hasElement();
+
+			// 条件B: 上一个元素不是 Underline
+			boolean prevIsNotUnderline = true; // 默认为 true，因为如果没有上一个元素，也满足条件
+			if (currentIndex > 0) { // 检查是否存在上一个元素
+				var prev = ArrayUtils.findInverse(cells, currentIndex, cell -> cell.get() != null);
+				// 如果上一个元素是 Underline 类型，则条件不满足
+				if (prev != null && prev.get() instanceof Underline) {
+					prevIsNotUnderline = false;
+				}
+			}
+
+			// 综合两个条件
+			boolean b = hasNextElement && prevIsNotUnderline;
+
+			// 应用最终结果
+			bindCell.toggle(b);
+		}
 	}
 	/**
 	 * 用于显示一个 Vec2 值的条目，例如 MinSize, MaxSize。
@@ -1597,7 +1602,7 @@ public class ReviewElement extends Content {
 
 		@Override
 		public void update(Element element) {
-			Cell<?> cell = getCell(element);
+			Cell<?> cell = CellTools.getCell(element);
 
 			boolean visible = visibilityChecker.get(cell);
 			setVisible(visible);
@@ -1610,13 +1615,34 @@ public class ReviewElement extends Content {
 			}
 		}
 	}
-	private static class BoolPairEntry extends BaseEntry {
-		private final String              key;
-		private final Func<Cell<?>, Vec2> valueProvider;
-		private       Label               valueLabel;
+	private enum ProviderType {
+		element(Element.class), label(Label.class), scroll(ScrollPane.class),
+		cell(Element.class) {
+			public <E> E getValue(Element element) {
+				return (E) CellTools.getCell(element);
+			}
+		};
+		final Class<?> elementType;
+		boolean valid(Element element) {
+			return elementType.isInstance(element);
+		}
+		ProviderType(Class<?> elementType) {
+			this.elementType = elementType;
+		}
+		public <E> E getValue(Element element) {
+			return (E) element;
+		}
+	}
+	private static class BoolPairEntry<E> extends BaseEntry {
+		private final String       key;
+		private final ProviderType providerType;
 
-		public BoolPairEntry(String key, Func<Cell<?>, Vec2> valueProvider) {
+		private final Func<E, Vec2> valueProvider;
+		private       Label         valueLabel;
+
+		public BoolPairEntry(String key, ProviderType providerType, Func<E, Vec2> valueProvider) {
 			this.key = key;
+			this.providerType = providerType;
 			this.valueProvider = valueProvider;
 			cellValidator();
 		}
@@ -1630,9 +1656,11 @@ public class ReviewElement extends Content {
 
 		@Override
 		public void update(Element element) {
-			Cell<?> cell = getCell(element);
-
-			Vec2    values = valueProvider.get(cell);
+			if (!providerType.valid(element)) {
+				setVisible(false);
+				return;
+			}
+			Vec2    values = valueProvider.get(providerType.getValue(element));
 			boolean x      = (values.x != 0);
 			boolean y      = (values.y != 0);
 
@@ -1676,34 +1704,37 @@ public class ReviewElement extends Content {
 		}
 	}
 	/**
-	 * 用于显示 Table 的 align 属性。
+	 * 用于显示 Table, Label 的 align 属性。
 	 */
-	private static class AlignEntry extends BaseEntry {
-		private VLabel alignLabel;
+	private static class AlignEntry<P> extends BaseEntry {
+		private final String   key;
+		private final Class<P> providerClass;
+		private final Intf<P>  alignProvider;
+		public AlignEntry(String key, Class<P> providerClass, Intf<P> alignProvider) {
+			this.key = key;
+			this.providerClass = providerClass;
+			this.alignProvider = alignProvider;
+		}
 
+		private VLabel alignLabel;
 		@Override
 		public void build(Table table) {
 			alignLabel = new VLabel(valueScale, Color.sky);
-			buildRow(table, "Align", alignLabel);
+			buildRow(table, key, alignLabel);
 		}
 
 		@Override
 		public void update(Element element) {
-			if (element instanceof Table table) {
+			if (providerClass.isInstance(element)) {
 				setVisible(true);
 				// 使用 FormatHelper 将整数 align 值转换为可读的字符串
-				alignLabel.setText(FormatHelper.align(table.getAlign()));
+				alignLabel.setText(FormatHelper.align(alignProvider.get((P) element)));
 			} else {
 				setVisible(false);
 			}
 		}
 	}
 	//endregion
-
-	// --- 辅助方法 ---
-	private static Cell<?> getCell(Element element) {
-		return (element != null && element.parent instanceof Table) ? ((Table) element.parent).getCell(element) : null;
-	}
 
 	static Color DISABLED_COLOR = new Color(0xFF0000_FF);
 	static Color touchableToColor(Touchable touchable) {

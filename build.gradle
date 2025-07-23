@@ -44,6 +44,7 @@ configurations.configureEach {
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
+	compileOnly project(":testAgent")
 
 //	println "AndroidHome: $sdkRoot"
 	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
@@ -211,12 +212,15 @@ task playAndroid {
 	def buildDir = buildDir0
 	def fileName = "$archivesBaseName[$version].jar"
 	doLast {
-		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/")
+		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/$fileName")
 				.execute().waitForProcessOutput(System.out, System.err)
 
+		Thread.sleep(100)
 		"$adb shell am start -n $pkg/mindustry.android.AndroidLauncher -W -S"
 				.execute().waitForProcessOutput(System.out, System.err)
 		Thread.sleep(100)
+//		"$adb "
+
 		if (false) {
 			"$adb push $project.rootDir/appendLog.sh $MDT_ANDROID_DIR/appendLog.sh"
 					.execute().waitForProcessOutput(System.out, System.err)

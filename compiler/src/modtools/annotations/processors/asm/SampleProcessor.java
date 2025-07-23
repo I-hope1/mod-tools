@@ -6,8 +6,8 @@ import com.sun.tools.javac.code.Scope.WriteableScope;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeTranslator;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.List;
 import modtools.annotations.BaseProcessor;
 import modtools.annotations.asm.Sample;
 

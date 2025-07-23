@@ -4,7 +4,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.struct.Seq;
 import arc.util.*;
-import modtools.IntVars;
+import modtools.*;
 import modtools.annotations.asm.Sample.AConstants;
 import modtools.jsfunc.type.CAST;
 import modtools.utils.reflect.*;
@@ -16,6 +16,7 @@ import java.lang.reflect.*;
 import java.util.*;
 
 import static ihope_lib.MyReflect.unsafe;
+import static modtools.IntVars.mainLoader;
 import static rhino.classfile.ByteCode.*;
 import static rhino.classfile.ClassFileWriter.*;
 
@@ -336,10 +337,20 @@ public class ByteCodeTools {
 
 		/** @param superClass 用于确定classLoader */
 		public Class<T> define(Class<?> superClass) {
-			if (OS.isAndroid) {
+			l:if (OS.isAndroid) {
 				int mod = superClass.getModifiers();
 				if (/*Modifier.isFinal(mod) || */!Modifier.isPublic(mod)) {
 					HopeReflect.setPublic(superClass, Class.class);
+				}
+				if (superClass == this.superClass) break l;
+				mod = this.superClass.getModifiers();
+				if (!Modifier.isPublic(mod)) {
+					HopeReflect.setPublic(this.superClass, Class.class);
+				}
+				try {
+					superClass.getClassLoader().loadClass(this.superClass.getName());
+				} catch (ClassNotFoundException e) {
+					mainLoader.addChild(this.superClass.getClassLoader());
 				}
 			}
 			return define(superClass.getClassLoader());

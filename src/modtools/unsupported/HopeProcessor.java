@@ -211,10 +211,6 @@ public class HopeProcessor {
 			}
 		}
 	}
-	static {
-		try {
-		} catch (Throwable oaios) { }
-	}
 
 	public static class TestComponentType {
 		static {

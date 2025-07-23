@@ -1,13 +1,12 @@
 package modtools.annotations.unsafe;
 
-import com.sun.source.tree.*;
+import com.sun.source.tree.MethodInvocationTree;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
 import com.sun.tools.javac.comp.Operators;
 import com.sun.tools.javac.model.JavacElements;
-import com.sun.tools.javac.processing.JavacFiler;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
@@ -15,16 +14,17 @@ import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.HopeReflect;
 
+import javax.annotation.processing.Filer;
 import javax.lang.model.element.TypeElement;
 import java.lang.reflect.Method;
 import java.util.*;
 
-import static modtools.annotations.PrintHelper.SPrinter.*;
+import static modtools.annotations.PrintHelper.SPrinter.err;
 
 public class DesugarStringTemplate extends TreeTranslator {
 	public static final boolean DISABLED = false;
 
-	final JavacFiler    filer;
+	final Filer         filer;
 	final Symtab        syms;
 	final TreeMaker     make;
 	final Names         names;

@@ -28,7 +28,7 @@ import modtools.annotations.*;
 import modtools.annotations.PrintHelper.SPrinter;
 import modtools.annotations.unsafe.TopTranslator.CheckException;
 
-import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.*;
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
 import java.io.*;
@@ -61,7 +61,7 @@ public class Replace {
 	static ModuleFinder  moduleFinder;
 	static JavacMessages messages;
 	static Analyzer      analyzer;
-	static JavacFiler    filer;
+	static Filer         filer;
 
 	public static JavaCompiler compiler;
 	public static Log          log;
@@ -105,8 +105,8 @@ public class Replace {
 		} catch (Throwable e) { err(e); }
 	}
 	public static void extendingFunc(ProcessingEnvironment processingEnv) {
-		filer = (JavacFiler) processingEnv.getFiler();
-		extendingFunc(((JavacProcessingEnvironment) processingEnv).getContext());
+		filer = processingEnv.getFiler();
+		extendingFunc(((JavacProcessingEnvironment)processingEnv).getContext());
 	}
 
 	public static final HashMap<ModuleSymbol, ClassSymbol> moduleRepresentClass = new HashMap<>();
@@ -550,42 +550,42 @@ public class Replace {
 		}
 	}
 	public static String convertUnicodeEscapes(String input) {
-        // 匹配 \\u 后面跟着四个十六进制字符 (0-9, a-f, A-F)
-        // \\u 匹配字面量 \\u
-        // ([0-9a-fA-F]{4}) 匹配四个十六进制字符，并将其捕获到分组 1 中
-        Pattern pattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})");
-        Matcher matcher = pattern.matcher(input);
-        // 使用 StringBuffer 来构建新的字符串
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            // 获取捕获到的十六进制字符串 (分组 1)
-            String hex = matcher.group(1);
-            try {
-                // 将十六进制字符串解析为整数 (Unicode 码点)
-                int codePoint = Integer.parseInt(hex, 16);
-                // 将码点转换为字符 (可能是一个或两个 char，处理 BMP 和非 BMP)
-                // Character.toChars 会返回一个 char[]
-                char[] chars = Character.toChars(codePoint);
-                // 将 char[] 转换为 String
-                String replacement = new String(chars);
-                // 将匹配到的 \\uXXXX 替换为转换后的字符
-                // 使用 quoteReplacement 确保 replacement 中的 $ 和 \ 不被误解为 matcher 的特殊语法
-                matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
-            } catch (NumberFormatException e) {
-                // 如果十六进制字符串无效，这里会捕获异常
-                // 你可以选择跳过这个无效序列，或者保留它，或者记录错误
-                System.err.println("警告: 发现无效的 Unicode 转义序列 \\u" + hex + "，无法转换。");
-                // 保留原始的无效序列：
-                 matcher.appendReplacement(sb, "\\\\u" + hex); // 重新添加原始序列
-                 // 或者跳过（不 appendReplacement 即可） - 但 appendReplacement 确保其他部分被添加
-                 // 如果想完全跳过，需要更复杂的逻辑，或者直接将原始匹配到的文本加回去
-                 // 这里的 appendReplacement("\\\\u" + hex) 是保留原始文本的简单方法
-            }
-        }
-        // 将字符串的剩余部分添加到 StringBuffer
-        matcher.appendTail(sb);
-        return sb.toString();
-    }
+		// 匹配 \\u 后面跟着四个十六进制字符 (0-9, a-f, A-F)
+		// \\u 匹配字面量 \\u
+		// ([0-9a-fA-F]{4}) 匹配四个十六进制字符，并将其捕获到分组 1 中
+		Pattern pattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})");
+		Matcher matcher = pattern.matcher(input);
+		// 使用 StringBuffer 来构建新的字符串
+		StringBuffer sb = new StringBuffer();
+		while (matcher.find()) {
+			// 获取捕获到的十六进制字符串 (分组 1)
+			String hex = matcher.group(1);
+			try {
+				// 将十六进制字符串解析为整数 (Unicode 码点)
+				int codePoint = Integer.parseInt(hex, 16);
+				// 将码点转换为字符 (可能是一个或两个 char，处理 BMP 和非 BMP)
+				// Character.toChars 会返回一个 char[]
+				char[] chars = Character.toChars(codePoint);
+				// 将 char[] 转换为 String
+				String replacement = new String(chars);
+				// 将匹配到的 \\uXXXX 替换为转换后的字符
+				// 使用 quoteReplacement 确保 replacement 中的 $ 和 \ 不被误解为 matcher 的特殊语法
+				matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+			} catch (NumberFormatException e) {
+				// 如果十六进制字符串无效，这里会捕获异常
+				// 你可以选择跳过这个无效序列，或者保留它，或者记录错误
+				System.err.println("警告: 发现无效的 Unicode 转义序列 \\u" + hex + "，无法转换。");
+				// 保留原始的无效序列：
+				matcher.appendReplacement(sb, "\\\\u" + hex); // 重新添加原始序列
+				// 或者跳过（不 appendReplacement 即可） - 但 appendReplacement 确保其他部分被添加
+				// 如果想完全跳过，需要更复杂的逻辑，或者直接将原始匹配到的文本加回去
+				// 这里的 appendReplacement("\\\\u" + hex) 是保留原始文本的简单方法
+			}
+		}
+		// 将字符串的剩余部分添加到 StringBuffer
+		matcher.appendTail(sb);
+		return sb.toString();
+	}
 
 	public static Context context() {
 		return context;

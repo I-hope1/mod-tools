@@ -1,0 +1,41 @@
+plugins {
+	id 'java'
+}
+
+group = 'nipx'
+version = '1.0'
+
+sourceSets.main.java.srcDirs = ["src"]
+
+repositories {
+	mavenCentral()
+	maven { url 'https://jitpack.io' }
+	mavenLocal()
+}
+sourceCompatibility = 8
+targetCompatibility = 8
+
+jar {
+	manifest {
+		attributes(
+				'Agent-Class': 'nipx.YourAgent',
+				'Premain-Class': 'nipx.Main',
+				'Can-Retransform-Classes': true,
+				'Can-Redefine-Classes': true
+		)
+	}
+//	from(configurations.compileClasspath.asList().toArray()) { include "**" }
+	from {
+		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+	}
+}
+
+dependencies {
+	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:2.3.0"
+
+	implementation "net.bytebuddy:byte-buddy:1.17.6"
+}
+
+test {
+	useJUnitPlatform()
+}

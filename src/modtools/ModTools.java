@@ -52,8 +52,8 @@ public class ModTools extends Mod {
 	public static        boolean        isV6   = Version.number <= 135;
 
 	/** 是否从游戏内导入进来的 */
-	private static boolean isImportFromGame = false;
-	public static final boolean DISABLE_UI = false;
+	private static      boolean isImportFromGame = false;
+	public static final boolean DISABLE_UI       = false;
 
 
 	public static boolean loaded = false;
@@ -110,7 +110,7 @@ public class ModTools extends Mod {
 			Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
 			 Lookup.class,
 			 Lookup.class.getDeclaredConstructor(Class.class)
-			 ).newInstance(Lookup.class));
+			).newInstance(Lookup.class));
 		} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
 			throw new RuntimeException(e);
 		}
@@ -121,11 +121,15 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) meta.hidden = false;
 		resolveLibsCatch();
 
+
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
+
+			// if (isDesktop()) TestVM.main();
+			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
-			/* Log.err(e);
-			System.exit(-1); */
+			Log.err(e);
+			// System.exit(-1);
 		}
 
 		// HopeProcessor.main();

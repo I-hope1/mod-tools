@@ -72,6 +72,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
 import static modtools.content.debug.Tester.Settings.*;
+import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
@@ -239,7 +240,7 @@ public class Tester extends Content {
 
 		if (area != null && ui != null) { // Added ui null check
 			completionPopup = new CompletionPopup(area);
-			ui.addChild(completionPopup); // Add it to the Tester's window
+			topGroup.addChild(completionPopup); // Add it to the Tester's window
 		} else {
 			Log.warn("Tester: 'area' or 'ui' is null during completionPopup initialization. Completion will not work.");
 		}
@@ -1061,7 +1062,7 @@ public class Tester extends Content {
 			// For popup above, use Y of current line. For popup below, use Y of line below.
 
 			float cursorLineVisualY = area.getRelativeY(actualPrefixStart);
-			Vec2  uiCoords          = area.localToAscendantCoordinates(ui, Tmp.v1.set(area.getRelativeX(actualPrefixStart), cursorLineVisualY));
+			Vec2  uiCoords          = area.localToAscendantCoordinates(topGroup, Tmp.v1.set(area.getRelativeX(actualPrefixStart), cursorLineVisualY));
 
 
 			completionPopup.show(complements, prefix, selectedSuggestion -> {

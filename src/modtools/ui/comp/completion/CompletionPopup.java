@@ -74,6 +74,9 @@ public class CompletionPopup extends Table {
 
 		rebuildList(); // This will also set selectedIndex if list is not empty
 		pack();
+		// area.localToStageCoordinates(Tmp.v1.set(preferredX, preferredY));
+		// preferredX = Tmp.v1.x;
+		// preferredY = Tmp.v1.y;
 
 		// Position below the preferredY (which should be the baseline of the current text line)
 		float popupY = preferredY - getHeight() - area.getStyle().font.getLineHeight() * 0.2f; // Try to position above the line

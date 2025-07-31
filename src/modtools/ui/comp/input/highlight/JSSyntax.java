@@ -199,36 +199,38 @@ public class JSSyntax extends Syntax {
 	private Color dealJSProp(String token) {
 		if (!js_prop) return null;
 		if (currentObject == Undefined.SCRIPTABLE_UNDEFINED || currentObject == NOT_FOUND) return null;
-		// 判断当前是否是属性访问符
 		if (currentObject == null || (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '.')) return null;
 
-		/* if (currentObject == NJO) {
-			Log.info(List.of(ScriptableObject.getPropertyIds((NativeJavaObject) currentObject)));
-		} */
-
 		Object o = getNextObject(token);
-		// if (currentObject != customScope) {
-		// 	Log.info(o);
-		// }
-		if (o == NOT_FOUND /* && currentObject != NJO */ && pkg == null) {
-			currentObject = NOT_FOUND;
-			// setCursorObj(drawToken.lastIndex + 1);
+
+		if (o == NOT_FOUND && pkg == null) {
+			// Instead of setting the main currentObject to NOT_FOUND and polluting the state,
+			// just return the default color and let the state reset naturally on the next token.
 			return defaultColor;
 		}
+
+		// Create a temporary object for the next step in the chain,
+		// and only assign it to currentObject on success.
+		Object nextObject;
+		Color  colorToReturn;
+
 		if (o instanceof NativeJavaPackage p) {
 			pkg = p;
-			currentObject = p;
-			updateCursorObj();
-			return defaultColor;
+			nextObject = p;
+			colorToReturn = defaultColor;
 		} else if (o instanceof Scriptable sc) {
 			pkg = null;
-			currentObject = sc;
-			updateCursorObj();
-			return c_localvar;
+			nextObject = sc;
+			colorToReturn = c_localvar;
+		} else {
+			// This case handles other valid properties (like numbers, strings) that aren't scriptable.
+			nextObject = Undefined.SCRIPTABLE_UNDEFINED;
+			colorToReturn = null;
 		}
-		currentObject = Undefined.SCRIPTABLE_UNDEFINED;
+
+		currentObject = nextObject;
 		updateCursorObj();
-		return null;
+		return colorToReturn;
 	}
 	private Object getNextObject(String token) {
 		if (true) {
@@ -433,7 +435,7 @@ public class JSSyntax extends Syntax {
 		public DrawBracket() { super(bracketSet, new Color()); }
 		void init() {
 			super.init();
-			surpassSize = hasChanged ? 0 : stack.size;
+			surpassSize = /* hasChanged ? 0 :  */stack.size;
 			stack.clear();
 		}
 		// ['(1', '(2', '2)' ] -> [ '(1' ]

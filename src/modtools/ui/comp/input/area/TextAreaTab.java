@@ -108,11 +108,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 	}
 
 	/** 返回true，则cancel事件 */
-	public Boolf2<InputEvent, KeyCode>   keyDownB  = null;
+	public Boolf2<InputEvent, KeyCode>   keyDownBlock  = null;
 	/** 返回true，则cancel事件 */
-	public Boolf2<InputEvent, Character> keyTypedB = null;
+	public Boolf2<InputEvent, Character> keyTypedBlock = null;
 	/** 返回true，则cancel事件 */
-	public Boolf2<InputEvent, KeyCode>   keyUpB    = null;
+	public Boolf2<InputEvent, KeyCode>   keyUpBlock    = null;
 
 	public int cursor() {
 		return area.getCursorPosition();
@@ -642,7 +642,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				trackCursor();
 			}
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
-				if (keyDownB != null && keyDownB.get(event, keycode)) {
+				if (keyDownBlock != null && keyDownBlock.get(event, keycode)) {
 					if (event != null) event.cancel();
 					return false;
 				}
@@ -701,7 +701,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				});
 			}
 			public boolean keyTyped(InputEvent event, char character) {
-				if (keyTypedB != null && keyTypedB.get(event, character)) {
+				if (keyTypedBlock != null && keyTypedBlock.get(event, character)) {
 					event.cancel();
 					return false;
 				}
@@ -723,7 +723,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 
 			public boolean keyUp(InputEvent event, KeyCode keycode) {
-				if (keyUpB != null && keyUpB.get(event, keycode)) {
+				if (keyUpBlock != null && keyUpBlock.get(event, keycode)) {
 					event.cancel();
 					return false;
 				}
@@ -834,8 +834,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				if (i >= start) offsetY -= area.lineHeight();
 				if (i == cursorLine) realCursorLine = row;
 				try {
-					int lineEndIndex = linesBreak.get(i + 1);
-					if (lineEndIndex < text.length() && text.charAt(lineEndIndex) == '\n') {
+					if (text.charAt(linesBreak.get(i + 1)) == '\n') {
 						if (i >= start) task.run();
 						row++;
 						if (i >= start) task = getTask(offsetY, row);

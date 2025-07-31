@@ -10,7 +10,7 @@ import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
-import arc.util.Align;
+import arc.util.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -45,6 +45,7 @@ public class CompletionPopup extends Table {
 
 		add(scrollPane).grow().maxHeight(Core.graphics.getHeight() / Scl.scl() * 0.9f);
 
+		update(this::keepInStage);
 		// Listener for global clicks to hide the popup
 		Core.scene.addCaptureListener(new InputListener() {
 			@Override

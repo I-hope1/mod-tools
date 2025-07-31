@@ -69,7 +69,7 @@ public class LogDisplay extends Content {
 			TextAreaTab tab = new TextAreaTab("", JSSyntax::new);
 			tab.getArea().setPrefRows(10);
 			TextField chatfield = Reflect.get(ConsoleFragment.class, Vars.ui.consolefrag, "chatfield");
-			tab.keyDownB = (event, keyCode) -> {
+			tab.keyDownBlock = (event, keyCode) -> {
 				if (Core.input.ctrl() && keyCode == KeyCode.enter) {
 					exec(chatfield, tab);
 					return true;

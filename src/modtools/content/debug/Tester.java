@@ -367,18 +367,18 @@ public class Tester extends Content {
 
 		bottomBar(table, textarea);
 	}
+	boolean stopEvent = false;
 	private void addListenerToArea(TextAreaTab textarea) {
-		boolean[] stopEvent = {false};
-		textarea.keyDownB = (_, keycode) -> {
-			stopEvent[0] = false;
+		textarea.keyDownBlock = (_, keycode) -> {
+			stopEvent = false;
 			if (rollAndExec() || detailsListener(keycode)) {
-				stopEvent[0] = true;
+				stopEvent = true;
 				return true;
 			}
 			return false;
 		};
-		textarea.keyTypedB = (_, _) -> stopEvent[0];
-		textarea.keyUpB = (_, _) -> stopEvent[0];
+		textarea.keyTypedBlock = (_, _) -> stopEvent;
+		textarea.keyUpBlock = (_, _) -> stopEvent;
 		area.addCaptureListener(new ComplementListener());
 	}
 	static boolean hasFunctionKey() {
@@ -948,15 +948,13 @@ public class Tester extends Content {
 		static final char TAB       = '\t';
 
 		JSSyntax syntax = (JSSyntax) textarea.syntax; // Ensure syntax is initialized with textarea
-		boolean  stoppedKeyTyped;
 
 		@Override
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
-			stoppedKeyTyped = false;
 			if (completionPopup != null && completionPopup.isShown()) {
 				if (completionPopup.handleKeyDown(keycode)) {
 					event.stop();
-					stoppedKeyTyped = true;
+					stopEvent = true;
 					return true;
 				}
 
@@ -964,16 +962,14 @@ public class Tester extends Content {
 				// we want to update the completion list on the next frame, *after*
 				// the character has been deleted from the text area.
 				if (keycode == KeyCode.backspace || keycode == KeyCode.del) {
-					Core.app.post(this::complement);
+					postCompletion();
 					// Return false to allow the key press to be processed by the text area.
 					return false;
 				}
-			}
-
-			if (keycode == KeyCode.escape) {
-				if (completionPopup != null && completionPopup.isShown()) {
-					completionPopup.hide();
+				if (keycode == KeyCode.escape) {
+					hideCompletion();
 					event.stop();
+					stopEvent = true;
 					return true;
 				}
 			}
@@ -1003,7 +999,7 @@ public class Tester extends Content {
 				complement0(currentPrefix, originalCursor, area.isCharCheck(i, '.'), start);
 			} catch (Throwable err) {
 				Log.err("Completion error", err);
-				completionPopup.hide();
+				hideCompletion();
 				// area.setCursorPosition(originalCursor); // Cursor might have moved
 			}
 		}
@@ -1025,7 +1021,7 @@ public class Tester extends Content {
 				// If after a dot and obj is null, no completions.
 				// If not after a dot (word completion) and obj is null, might still try globals if prefix is short.
 				if (afterDot || prefix.length() == 0) {
-					completionPopup.hide();
+					hideCompletion();
 					return;
 				}
 				obj = customScope; // Fallback to custom scope for word completion
@@ -1056,7 +1052,7 @@ public class Tester extends Content {
 			});
 
 			if (complements.isEmpty()) {
-				completionPopup.hide();
+				hideCompletion();
 				return;
 			}
 
@@ -1087,18 +1083,24 @@ public class Tester extends Content {
 			return obj.getIds();
 		}
 
-		Task completionTask = new Task() {
+		final Task completionTask = new Task() {
 			@Override
 			public void run() {
 				complement();
 			}
 		};
-		private boolean postCompletion() {
-			return TaskManager.trySchedule(0.05f, completionTask);
+		private void postCompletion() {
+			TaskManager.trySchedule(0.05f, completionTask);
+		}
+		private void hideCompletion() {
+			if (completionPopup != null) {
+				completionPopup.hide();
+				completionTask.cancel();
+			}
 		}
 		@Override
 		public boolean keyTyped(InputEvent event, char character) {
-			if (stoppedKeyTyped) {
+			if (stopEvent) {
 				event.cancel();
 				return false;
 			}
@@ -1115,13 +1117,14 @@ public class Tester extends Content {
 			// --- The faulty logic for DELETE/BACKSPACE has been REMOVED from here. ---
 
 			boolean isCompletableChar       = area.isWordCharacter(character) || character == '.';
-			boolean shouldTriggerCompletion = auto_complement.enabled() && isCompletableChar;
+			boolean shouldTriggerCompletion = auto_complement.enabled() && isCompletableChar
+			                                  && (character != BACKSPACE && character != DELETE || area.isWordCharacterCheck(area.getCursorPosition()));
 
 			if (!event.stopped && shouldTriggerCompletion) {
-				Timer.schedule(this::complement, 0.05f);
+				postCompletion();
 			} else if (completionPopup != null && completionPopup.isShown() && !isCompletableChar) {
 				// Hide the popup if a non-word character (like space, ';', '(') is typed.
-				completionPopup.hide();
+				hideCompletion();
 			}
 			return false;
 		}

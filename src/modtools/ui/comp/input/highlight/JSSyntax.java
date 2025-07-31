@@ -14,32 +14,24 @@ import modtools.jsfunc.reflect.UNSAFE;
 import rhino.*;
 
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.Stack;
 
 import static rhino.Scriptable.NOT_FOUND;
 
 @SuppressWarnings("StringTemplateMigration")
 @DebugMark
-// @WatchClass(groups = {"aa"})
 public class JSSyntax extends Syntax {
 	public static Color
-	 c_constants = new Color(/*0x39C8B0FF*/0x4FC1FFFF),
-	// 常规变量
-	c_localvar = new Color(0x7CDCFEFF)
-	 // , __defalutColor__ = new Color(0xDCDCAAFF)
-	 ;
+	 c_constants = new Color(0x4FC1FFFF),
+	 c_localvar  = new Color(0x7CDCFEFF);
 
-	public Scriptable customScope;
-	ObjectSet<String> customConstantSet,
-	 customVarSet;
-	Seq<ObjectSet<String>> userVarSets = new Seq<>();
-	public JSSyntax(SyntaxDrawable drawable) {
-		this(drawable, null);
-	}
+	public Scriptable       customScope;
+	ObjectSet<String>       customConstantSet, customVarSet;
+	Seq<ObjectSet<String>>  userVarSets = new Seq<>();
+
 	public JSSyntax(SyntaxDrawable drawable, Scriptable customScope) {
 		super(drawable);
 		this.customScope = customScope;
-		// INFO_DIALOG.showInfo(customScope);
 
 		if (customScope == null || customScope == topScope) {
 			customConstantSet = constantSet;
@@ -49,6 +41,24 @@ public class JSSyntax extends Syntax {
 			customVarSet = new WithObjectSet(varSet);
 			addValueToSet(customScope, customVarSet, customConstantSet, false);
 		}
+
+		// --- MODIFICATION: TOKEN_MAP re-simplified ---
+		// It now contains ALL keywords, including declaration keywords.
+		// It no longer needs to contain localVars, localFunctions, etc.,
+		// as the new "brain" rule handles them directly.
+		TOKEN_MAP.putAll(
+			ObjectSet.with(
+				"break", "case", "catch", "const", "continue", // "const" is back
+				"default", "delete", "do", "else",
+				"finally", "for", "function", "if", "in",     // "function" is back
+				"instanceof", "let", "new", "of", "return",   // "let" is back
+                "switch", "this", "throw", "try", "typeof",
+                "var", "void", "while", "with", "yield"       // "var" is back
+			), c_keyword,
+			ObjectSet.with("null", "undefined", "true", "false"), c_keyword
+		);
+
+		// Global scope variables are still handled by TOKEN_MAP
 		TOKEN_MAP.putAll(
 		 customConstantSet, c_constants,
 		 customVarSet, c_localvar
@@ -58,13 +68,13 @@ public class JSSyntax extends Syntax {
 
 		outerTask = new DrawCompletion();
 	}
+	public JSSyntax(SyntaxDrawable drawable) { this(drawable, null); }
 
 	public static ImporterTopLevel topScope = (ImporterTopLevel) IScript.scope;
 
 	public static final ObjectSet<String> constantSet = new ScopeObjectSet(topScope);
 	public static final ObjectSet<String> varSet      = new ObjectSet<>();
-
-	public Scriptable cursorObj = null;
+	public              Scriptable      cursorObj   = null;
 
 	static {
 		varSet.addAll("arguments", "Infinity");
@@ -75,14 +85,17 @@ public class JSSyntax extends Syntax {
 	 Scriptable scope, ObjectSet<String> varSet, ObjectSet<String> constantSet,
 	 boolean searchParent) {
 		do {
-			for (Object id : scope.getIds()) {
-				if (!(id instanceof String key)) continue;
-				try {
-					ScriptableObject.putProperty(scope, key,
-					 ScriptableObject.getProperty(scope, key));
-					varSet.add(key);
-				} catch (RuntimeException ignored) {
-					constantSet.add(key);
+			if (!(scope instanceof ScriptableObject so)) {
+				for (Object id : scope.getIds()) if (id instanceof String key) varSet.add(key);
+			} else {
+				for (Object id : so.getIds()) {
+					if (!(id instanceof String key)) continue;
+					try {
+						if ((so.getAttributes(key) & ScriptableObject.READONLY) != 0) constantSet.add(key);
+						else varSet.add(key);
+					} catch (Exception e) {
+						varSet.add(key);
+					}
 				}
 			}
 			if (!searchParent || scope.getParentScope() == null) break;
@@ -90,31 +103,16 @@ public class JSSyntax extends Syntax {
 		} while (true);
 	}
 
-	// 根据代码，解析出的变量
-	final ObjectSet<String> localVars = new ObjectSet<>(), localConstants = new ObjectSet<>();
+	final ObjectSet<String> localVars      = new ObjectSet<>();
+	final ObjectSet<String> localConstants = new ObjectSet<>();
+	final ObjectSet<String> localFunctions = new ObjectSet<>();
 
-	private final ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = OrderedMap.of(
-	 ObjectSet.with(
-		"break", "case", "catch", "const", "continue",
-		"default", "delete", "do", "else",
-		"finally", "for", "function", "if", "in",
-		"instanceof", "let", "new", "of", "return", "switch",
-		"this", "throw", "try", "typeof", "var",
-		"void", "while", "with",
-		"yield"
-	 ), c_keyword,
-	 ObjectSet.with("null", "undefined", "true", "false"), c_keyword,
-	 localVars, c_localvar,
-	 localConstants, c_constants
-	);
+	final ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
+	final ObjectSet<String> constKeywords = ObjectSet.with("const");
 
-	ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
-	ObjectSet<String> constKeywords = ObjectSet.with("const");
+	private final ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = new OrderedMap<>();
 
-
-	protected final DrawSymbol
-	 operatesSymbol = new JSDrawSymbol(),
-	 bracketsSymbol = new DrawBracket();
+	protected final DrawSymbol operatesSymbol = new JSDrawSymbol(), bracketsSymbol = new DrawBracket();
 
 	public static Object getPropOrNotFound(Scriptable scope, String key) {
 		Object o;
@@ -122,9 +120,7 @@ public class JSSyntax extends Syntax {
 			try {
 				o = ScriptableObject.getProperty(scope, key);
 				if (o != NOT_FOUND) return o;
-			} /* catch (EvaluatorException e) {
-
-			}  */ catch (Throwable e) {
+			} catch (Throwable e) {
 				return NOT_FOUND;
 			}
 			scope = scope.getParentScope();
@@ -133,60 +129,91 @@ public class JSSyntax extends Syntax {
 	}
 
 	public NativeJavaPackage pkg = null;
-	/** 默认为{@link #customScope} */
 	public Object            currentObject;
-
-	public boolean js_prop = false;
-
+	public boolean           js_prop = false;
 	private final Integer OBJ_NUMBER = -189021039;
 
+
+    // --- FINAL FIX: Unified Identifier Handling Logic ---
 	public TokenDraw[] tokenDraws = {
-	 task -> {
-		 for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
-			 if (entry.key.contains(task.token)) {
-				 if (userVarSets.contains(entry.key)) {
-					 if (currentObject != customScope && currentObject != null && operatesSymbol.lastSymbol != '\0') continue;
-					 currentObject = getNextObject(task.token);
-				 } else {
-					 currentObject = null;
-				 }
-				 updateCursorObj();
-				 return entry.value;
-			 }
-		 }
-		 if (!js_prop) return null;
+        // Rule 1: The "Brain". Handles all identifier logic: declaration, parameters, and usage.
+        task -> {
+            DrawCompletion completion = (DrawCompletion) outerTask;
+            String token = task.token;
+            String lastToken = task.lastToken;
 
-		 if (operatesSymbol.lastSymbol == '\0') {
-			 currentObject = customScope;
-			 updateCursorObj();
-		 }
+            // Priority 1: Check for declaration context.
+            if (lastToken != null) {
+                // Is it a variable declaration?
+                if (localKeywords.contains(lastToken)) {
+                    localVars.add(token);
+                    return c_localvar;
+                }
+                // Is it a constant declaration?
+                if (constKeywords.contains(lastToken)) {
+                    localConstants.add(token);
+                    return c_constants;
+                }
+                // Is it a function declaration?
+                if ("function".equals(lastToken)) {
+                    localFunctions.add(token);
+                    completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
+                    return c_functions;
+                }
+            }
 
-		 // Log.info(currentObject);
-		 // resolveToken(currentObject, task.token);
-		 return dealJSProp(task.token);
-	 },
-	 task -> "function".equals(task.lastToken) && lastTask == task ? c_functions : null,
-	 task -> {
-		 String  s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
-		 boolean b = "NaN".equals(s) || !ScriptRuntime.isNaN(ScriptRuntime.toNumber(s));
-		 if (b) currentObject = OBJ_NUMBER;
-		 return b ? c_number : null;
-	 }
+            // Priority 2: Check if we are inside function parameters.
+            if (completion.state == DrawCompletion.ParseState.INSIDE_PARAMS) {
+                if (!token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
+                    localVars.add(token); // Parameters are local variables.
+                    return c_localvar;
+                }
+            }
+
+            // Priority 3: If not a declaration, check if it's a *usage* of an already-defined local.
+            // This is the key fix for highlighting the 'x' on the second line.
+            if (localFunctions.contains(token)) return c_functions;
+            if (localVars.contains(token)) return c_localvar;
+            if (localConstants.contains(token)) return c_constants;
+
+            // If none of the above, let subsequent rules handle it (e.g., keywords, globals).
+            return null;
+        },
+
+        // Rule 2: Generic lookup for everything else (keywords, globals). This is now simpler.
+        task -> {
+            for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
+                if (entry.key.contains(task.token)) {
+                    if (userVarSets.contains(entry.key)) {
+                        if (currentObject != customScope && currentObject != null && operatesSymbol.lastSymbol != '\0')
+                            continue;
+                        currentObject = getNextObject(task.token);
+                    } else {
+                        currentObject = null;
+                    }
+                    updateCursorObj();
+                    return entry.value;
+                }
+            }
+            if (!js_prop) return null;
+            if (operatesSymbol.lastSymbol == '\0') {
+                currentObject = customScope;
+                updateCursorObj();
+            }
+            return dealJSProp(task.token);
+        },
+
+        // Rule 3: Number highlighting (unchanged).
+        task -> {
+            String s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
+            boolean b = "NaN".equals(s) || !ScriptRuntime.isNaN(ScriptRuntime.toNumber(s));
+            if (b) currentObject = OBJ_NUMBER;
+            return b ? c_number : null;
+        }
 	};
-	private void updateCursorObj() {
-		setCursorObj(drawToken.lastIndex);
-	}
-	private void resolveToken(Scriptable scope, String token) {
-		Object o = getPropOrNotFound(scope, token);
-		if (o instanceof NativeJavaPackage newPkg) {
-			pkg = newPkg;
-			currentObject = customScope;
-		} else if (o instanceof Scriptable newObj) {
-			pkg = null;
-			currentObject = newObj;
-		}
-		updateCursorObj();
-	}
+
+	private void updateCursorObj() { setCursorObj(drawToken.lastIndex); }
+
 	int lastCursorObjIndex = -1;
 	private void setCursorObj(int lastIndex) {
 		if (drawable != null && lastCursorObjIndex < lastIndex && lastIndex <= drawable.cursor()) {
@@ -195,24 +222,16 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
-	HashMap<Object, HashMap<String, Object>> js_prop_map = new HashMap<>();
 	private Color dealJSProp(String token) {
 		if (!js_prop) return null;
 		if (currentObject == Undefined.SCRIPTABLE_UNDEFINED || currentObject == NOT_FOUND) return null;
 		if (currentObject == null || (lastTask == operatesSymbol && operatesSymbol.lastSymbol != '.')) return null;
 
 		Object o = getNextObject(token);
+		if (o == NOT_FOUND && pkg == null) return defaultColor;
 
-		if (o == NOT_FOUND && pkg == null) {
-			// Instead of setting the main currentObject to NOT_FOUND and polluting the state,
-			// just return the default color and let the state reset naturally on the next token.
-			return defaultColor;
-		}
-
-		// Create a temporary object for the next step in the chain,
-		// and only assign it to currentObject on success.
 		Object nextObject;
-		Color  colorToReturn;
+		Color colorToReturn;
 
 		if (o instanceof NativeJavaPackage p) {
 			pkg = p;
@@ -223,33 +242,23 @@ public class JSSyntax extends Syntax {
 			nextObject = sc;
 			colorToReturn = c_localvar;
 		} else {
-			// This case handles other valid properties (like numbers, strings) that aren't scriptable.
 			nextObject = Undefined.SCRIPTABLE_UNDEFINED;
 			colorToReturn = null;
 		}
-
 		currentObject = nextObject;
 		updateCursorObj();
 		return colorToReturn;
 	}
+
 	private Object getNextObject(String token) {
-		if (true) {
-			return currentObject instanceof Scriptable sc ? getPropOrNotFound(sc, token) : null;
+		if (currentObject instanceof Scriptable sc) {
+			return getPropOrNotFound(sc, token);
 		}
-		/* if (currentObject == customScope) {
-			return getPropOrNotFound(customScope, token);
-		} else if (pkg == null && currentObject instanceof NativeJavaObject nja) {
-			return js_prop_map.computeIfAbsent(nja instanceof NativeJavaClass ? Class.class : nja.unwrap(), _ -> new HashMap<>())
-			 .computeIfAbsent(token, _ -> getPropOrNotFound(nja, token));
-		} else {
-			return getPropOrNotFound(pkg != null ? pkg : currentObject, token);
-		} */
-		return null;
+		return NOT_FOUND;
 	}
 
 	private final DrawTask[] taskArr0 = {
 	 new DrawString(c_string) {
-		 /** @see NativeString  */
 		 public static final Scriptable StringObj = Context.toObject("", IScript.scope);
 		 public void drawText(int i) {
 			 super.drawText(i);
@@ -261,20 +270,14 @@ public class JSSyntax extends Syntax {
 	 new DrawComment(c_comment),
 	 operatesSymbol,
 	 drawToken = new JSDrawToken(),
-	 };
-
+	};
 	{ taskArr = taskArr0; }
 
 	public static IntSet operateSet = new IntSet();
 	public static IntSet bracketSet = new IntSet();
-
 	static {
-		for (char c : "~|,+-=*/<>!%^&;.:?".toCharArray()) {
-			operateSet.add(c);
-		}
-		for (char c : "()[]{}".toCharArray()) {
-			bracketSet.add(c);
-		}
+		for (char c : "~|,+-=*/<>!%^&;.:?".toCharArray()) operateSet.add(c);
+		for (char c : "()[]{}".toCharArray()) bracketSet.add(c);
 	}
 
 	public Script compile() {
@@ -283,45 +286,40 @@ public class JSSyntax extends Syntax {
 
 	private static class ScopeObjectSet extends ObjectSet<String> {
 		Scriptable scope;
-		public ScopeObjectSet(Scriptable scope) {
-			this.scope = scope;
-		}
-		public int hashCode() {
-			return scope.hashCode();
-		}
+		public ScopeObjectSet(Scriptable scope) { this.scope = scope; }
+		public int hashCode() { return scope.hashCode(); }
 		public boolean contains(String key) {
-			boolean contains = super.contains(key);
-			if (contains) return true;
-			char c = key.charAt(0);
-			if (!Character.isJavaIdentifierStart(c)) return false;
+			if (super.contains(key)) return true;
+			if (key.isEmpty() || !Character.isJavaIdentifierStart(key.charAt(0))) return false;
 			Object o = getPropOrNotFound(scope, key);
 			if (o == NOT_FOUND) return false;
-
 			add(key);
 			return true;
 		}
 	}
 	private static class WithObjectSet extends ObjectSet<String> {
 		final ObjectSet<String> with;
-		public WithObjectSet(ObjectSet<String> with) {
-			this.with = with;
-		}
-		public int hashCode() {
-			return with.hashCode() + super.hashCode();
-		}
+		public WithObjectSet(ObjectSet<String> with) { this.with = with; }
+		public int hashCode() { return with.hashCode() + super.hashCode(); }
 		public String get(String key) {
 			String s = super.get(key);
 			return s == null ? with.get(key) : s;
 		}
-		public boolean contains(String key) {
-			return super.contains(key) || with.contains(key);
-		}
+		public boolean contains(String key) { return super.contains(key) || with.contains(key); }
 	}
 
 	private class DrawCompletion extends DrawOuterTask {
+        // The state machine is now simpler, mainly for tracking parameter lists.
+        enum ParseState {
+            DEFAULT,
+            AWAITING_PARAMS_START,
+            INSIDE_PARAMS
+        }
+        ParseState state = ParseState.DEFAULT;
+
 		final Stack<RMethod> stack = new Stack<>();
+
 		void init() {
-			// Log.info("-----------");
 			stack.clear();
 			pkg = null;
 			currentObject = customScope;
@@ -331,6 +329,8 @@ public class JSSyntax extends Syntax {
 
 			localVars.clear();
 			localConstants.clear();
+			localFunctions.clear();
+            state = ParseState.DEFAULT;
 		}
 		private static class RMethod implements Poolable {
 			Scriptable base;
@@ -340,115 +340,83 @@ public class JSSyntax extends Syntax {
 				args.clear();
 				return this;
 			}
-			public static RMethod obtain(Scriptable base) {
-				return Pools.obtain(RMethod.class, RMethod::new).init(base);
-			}
+			public static RMethod obtain(Scriptable base) { return Pools.obtain(RMethod.class, RMethod::new).init(base); }
 			public void reset() {
 				base = null;
 				args.clear();
 			}
 		}
-		public boolean inFunction() {
-			return !stack.isEmpty();
-		}
-		/** 一个用于承载函数返回值的{@link NativeJavaObject} */
+		public boolean inFunction() { return !stack.isEmpty(); }
 		private final NativeJavaObject receiver = new NativeJavaObject();
 		private       int              lastTokenStackSize;
 		private void forToken(int i) {
 			if (!(lastTask == operatesSymbol || lastTask == bracketsSymbol)) return;
-
 			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
+
+            switch (state) {
+                case AWAITING_PARAMS_START:
+                    if (c == '(') state = ParseState.INSIDE_PARAMS;
+                    else if (c != ' ' && c != '\n') state = ParseState.DEFAULT;
+                    break;
+                case INSIDE_PARAMS:
+                    if (c == ')') state = ParseState.DEFAULT;
+                    break;
+            }
+
 			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())
 			    || ((currentObject == NOT_FOUND || currentObject == Undefined.SCRIPTABLE_UNDEFINED) && c == '\n')) {
 				currentObject = customScope;
 				updateCursorObj();
 				operatesSymbol.lastSymbol = '\0';
 			}
-			if (c == '(') {
-				if (currentObject instanceof Scriptable sc) {
-					stack.add(RMethod.obtain(sc));
-					/* currentObject = customScope;
-					updateCursorObj(); */
-				}
-			}
-			if (c == ',' && inFunction()) {
-				stack.lastElement().args.add(currentObject);
-			}
+			if (c == '(') if (currentObject instanceof Scriptable sc) stack.add(RMethod.obtain(sc));
+			if (c == ',' && inFunction()) stack.lastElement().args.add(currentObject);
 			if (c == ')' && inFunction()) {
 				if (lastTask != bracketsSymbol || currentObject != stack.lastElement().base) {
 					stack.lastElement().args.add(currentObject);
 				}
-
-				RMethod     pop  = stack.pop();
-				Seq<Object> args = pop.args;
-
-				l:
-				if (pop.base instanceof NativeJavaMethod m) {
+				RMethod pop = stack.pop();
+				l: if (pop.base instanceof NativeJavaMethod m) {
 					Object[] allMethods = (Object[]) UNSAFE.getObject(m, RHINO.methods);
-					Method   method     = null;
-					Integer  integer    = Constants.iv(RHINO.findCachedFunction, m, IScript.cx, args.toArray());
+					Method method = null;
+					Integer integer = Constants.iv(RHINO.findCachedFunction, m, IScript.cx, pop.args.toArray());
 					if (integer == null) break l;
 					int index = integer;
 					if (index >= 0) method = (Method) UNSAFE.getObject(allMethods[index], RHINO.memberObject);
-					// Log.info(args);
-					// Log.info(method);
 					if (method == null || method.getReturnType() == void.class) break l;
-
 					Constants.iv(RHINO.initNativeJavaObject, receiver, customScope, null, method.getReturnType());
 					currentObject = receiver;
-					// Log.info(currentObject);
 				} else {
-					currentObject = NOT_FOUND;
+					currentObject = customScope;
 				}
 				Pools.free(pop);
 				setCursorObj(i);
 			}
 		}
 
-		public void after(int i) {
-			if (cTask == drawToken/* 刚执行完 */ && lastTask == drawToken) {
-				if (localKeywords.contains(drawToken.lastToken)) {
-					localVars.add(drawToken.token);
-				}
-				if (constKeywords.contains(drawToken.lastToken)) {
-					localConstants.add(drawToken.token);
-				}
-			}
-		}
+		public void after(int i) {}
+
 		public boolean draw(int i) {
-			// @WatchVar(group = "aa") var x =  cursorObj;
 			forToken(i);
 			return false;
 		}
 	}
 	private class DrawBracket extends DrawSymbol {
-		static final IntIntMap leftBracket = IntIntMap.of(
-		 '(', ')',
-		 '[', ']',
-		 '{', '}');
-
-		final Color textColor = c_brackets;
-
-		final IntSeq stack = new IntSeq();
-
-		int surpassSize = 0;
+		static final IntIntMap leftBracket = IntIntMap.of('(', ')', '[', ']', '{', '}');
+		final      Color     textColor     = c_brackets;
+		final      IntSeq    stack         = new IntSeq();
 		public DrawBracket() { super(bracketSet, new Color()); }
 		void init() {
 			super.init();
-			surpassSize = /* hasChanged ? 0 :  */stack.size;
 			stack.clear();
 		}
-		// ['(1', '(2', '2)' ] -> [ '(1' ]
 		Color[] colors = {Pal.accent, c_brackets, Color.cyan};
-		private Color colorOf(int i) {
-			return colors[i % colors.length];
-		}
+		private Color colorOf(int i) { return colors[i % colors.length]; }
 		@Override
 		boolean draw(int i) {
 			if (!super.draw(i)) return false;
 			if (leftBracket.containsKey(c)) {
-				color.set(stack.size < surpassSize/* 左括号多于上一次统计的 */
-				 ? c_error : colorOf(stack.size));
+				color.set(colorOf(stack.size));
 				stack.add(c);
 			} else if (stack.isEmpty()) {
 				color.set(c_error);
@@ -458,13 +426,9 @@ public class JSSyntax extends Syntax {
 			} else {
 				color.set(c_error);
 			}
-
 			return true;
 		}
-
-		{
-			color.set(textColor);
-		}
+		{ color.set(textColor); }
 	}
 	private class JSDrawToken extends DrawToken {
 		public JSDrawToken() { super(JSSyntax.this.tokenDraws); }

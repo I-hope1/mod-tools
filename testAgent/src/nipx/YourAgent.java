@@ -49,10 +49,10 @@ public class YourAgent {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
-		// handleCrach(inst);
+		// handleCrash(inst);
 		// A(inst);
 	}
-	private static void handleCrach(Instrumentation inst) {
+	private static void handleCrash(Instrumentation inst) {
 		try {
 			ClassWriter cw       = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			Class<?>    theClass = Class.forName(LAUNCHER_CLASS);

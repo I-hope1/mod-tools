@@ -10,7 +10,7 @@ import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
-import arc.util.*;
+import arc.util.Align;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -86,12 +86,12 @@ public class CompletionPopup extends Table {
 		if (popupX + getWidth() > Core.graphics.getWidth()) {
 			popupX = Core.graphics.getWidth() - getWidth();
 		}
-		if (popupX < 0) popupX = 0;
+		popupX = Math.max(0, popupX);
 
 		if (popupY + getHeight() > Core.graphics.getHeight()) {
 			popupY = Core.graphics.getHeight() - getHeight();
 		}
-		if (popupY < 0) popupY = 0;
+		popupY = Math.max(0, popupY);
 
 		setPosition(popupX, popupY);
 

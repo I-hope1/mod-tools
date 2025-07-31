@@ -30,7 +30,7 @@ public class TestVM {
 
 		VirtualMachine vm = VirtualMachine.attach(pid); // 调用 VirtualMachine.attach(pid)
 		vm.loadAgent(agentPath);      // 调用 vm.loadAgent(agentPath)
-		// vm.detach();                    // 调用 vm.detach()
+		vm.detach();                    // 调用 vm.detach()
 
 		System.out.println("[ModEntry] Agent attached successfully.");
 	}

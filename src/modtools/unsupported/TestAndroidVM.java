@@ -1,19 +1,21 @@
 package modtools.unsupported;
 
-import android.os.FileUtils;
+import android.os.*;
+import android.os.StrictMode.*;
+import android.system.*;
 import arc.Core;
 import arc.files.Fi;
 import arc.util.*;
 import mindustry.mod.Mod;
 
-import java.io.*;
+import java.io.IOException;
 import java.lang.reflect.*;
 
 import static modtools.IntVars.*;
 
 public class TestAndroidVM {
 	public static void main()
-	 throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException, NoSuchFieldException, IOException {
+	 throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException, NoSuchFieldException, IOException, ErrnoException {
 		Class<?> VMDebug               = mainLoader.loadClass("dalvik.system.VMDebug");
 		Method   getInstancesOfClasses = VMDebug.getDeclaredMethod("getInstancesOfClasses", Class[].class, boolean.class);
 		getInstancesOfClasses.setAccessible(true);
@@ -25,6 +27,23 @@ public class TestAndroidVM {
 				}
 			}
 		}
+		/* class Inl {
+			void in() {
+				Log.info("In");
+			}
+		}
+		Inl   in    = new Inl();
+		in.in();
+		Field klass = Object.class.getDeclaredField("shadow$_klass_");
+		klass.setAccessible(true);
+		klass.set(in, Inl.class.getTypeName());
+		in.in(); */
+
+		StrictMode.setThreadPolicy(ThreadPolicy.LAX);
+		StrictMode.setVmPolicy(VmPolicy.LAX);
+		Os.chmod("/data/app/io.anuke.mindustry-sllvVmptrrW7MBl_nvMX_Q==/", 777);
+
+
 		// Debug.waitForDebugger();
 		Method method = TestAndroidVM.class.getDeclaredMethod("fakeMethod");
 		method.setAccessible(true);
@@ -37,6 +56,9 @@ public class TestAndroidVM {
 		method.invoke(a);
 		Log.info("field: @", a.field);
 
+		attachAgent(VMDebug);
+	}
+	private static void attachAgent(Class<?> VMDebug) throws NoSuchMethodException {
 		Method attachAgent = VMDebug.getDeclaredMethod("attachAgent", String.class);
 		attachAgent.setAccessible(true);
 		// new SharedLibraryLoader(Vars.mods.getMod(IntVars.modName).file.path()).load("myagent.so");
@@ -60,7 +82,7 @@ public class TestAndroidVM {
 	}
 	private static String copyLib(String name, boolean loadLib) throws IOException {
 		String target = OS.getAppDataDirectoryString(Core.settings.getAppName()) + "/lib/" + name;
-		Log.info("Loading "+target);
+		Log.info("Loading " + target);
 		FileUtils.copy(root.child("libs").child(name).read(), Fi.get(target).write());
 		if (loadLib) System.load(target);
 		return target;

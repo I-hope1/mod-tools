@@ -120,6 +120,8 @@ jar {
 	from(zipTree("${project(":annotations").buildDir0}/libs/annotations-${version}.jar")) {
 		include "**/settings/**"
 	}
+	def agent = project(":testAgent")
+	from("${agent.buildDir0}/libs/") {include "testAgent-${agent.version}.jar" rename { o ->  "libs/hotswap-agent.jar" }}
 }
 
 task playGame(type: JavaExec) {

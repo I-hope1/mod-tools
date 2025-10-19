@@ -1,9 +1,9 @@
 package modtools;
 
-import arc.KeyBinds.KeybindValue;
 import arc.files.Fi;
 import arc.graphics.g2d.PixmapPacker;
 import arc.graphics.gl.FileTextureData;
+import arc.input.KeyBind.KeybindValue;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.Reflect;

@@ -843,7 +843,7 @@ public class ReviewElement extends Content {
 
 		 UnderlineItem.with()
 		);
-		SR.apply(() -> SR.of(baseSeq)
+		SR.apply(() -> SR.of(element)
 		 .isInstance(Table.class, table -> baseSeq.addAll(
 			MenuItem.with("background", Icon.boxSmall, "Set Background", () -> {
 				drawablePicker().show(table.getBackground(), table::setBackground);
@@ -861,7 +861,12 @@ public class ReviewElement extends Content {
 			MenuItem.with("label.right", Icon.boxSmall, "Label Right", l(label, Align.right)),
 			MenuItem.with("label.top", Icon.boxSmall, "Label Top", l(label, Align.top)),
 			MenuItem.with("label.bottom", Icon.boxSmall, "Label Bottom", l(label, Align.bottom))
-		 )));
+		 ))
+		 .isInstance(Dialog.class, dialog -> baseSeq.addAll(
+			MenuItem.with("dialog.hide", Icon.boxSmall, "Hide", () -> dialog.hide()),
+			MenuItem.with("dialog.show", Icon.boxSmall, "Show", () -> dialog.show())
+		 ))
+		);
 		return baseSeq;
 	}
 	private static Runnable l(Label l, int align) {
@@ -1528,7 +1533,7 @@ public class ReviewElement extends Content {
 		}
 
 		BindCell bindCell;
-		Table table;
+		Table    table;
 		@Override
 		public void build(Table table) {
 			bindCell = BindCell.ofConst(Underline.of(table, 2).pad(top, left, bottom, right));

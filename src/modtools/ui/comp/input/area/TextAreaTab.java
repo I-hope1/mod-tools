@@ -1,4 +1,3 @@
-
 package modtools.ui.comp.input.area;
 
 import arc.Core;
@@ -36,6 +35,8 @@ import java.util.regex.Pattern;
  **/
 public class TextAreaTab extends Table implements SyntaxDrawable {
 	public static boolean DEBUG = false;
+
+	public static final String INDENT = "  ";
 
 	private final MyTextArea   area;
 	public final  MyScrollPane pane;
@@ -153,12 +154,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 	}
 
-	/* public float getRelativeX(int pos) {
-		return area.getRelativeX(pos);
-	}
-	public float getRelativeY(int pos) {
-		return area.getRelativeY(pos);
-	} */
 	public boolean enableHighlight = true;
 
 	private static final Pattern startComment = Pattern.compile("\\s*?//");
@@ -282,7 +277,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					offsetY -= lineHeight();
 				}
 			}
-			// drawVirtualText(font);
 
 			font.setColor(lastColor);
 			font.getData().markupEnabled = had;
@@ -291,12 +285,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		float offsetX, offsetY, baseOffsetX;
 		int row, displayTextStart, displayTextEnd;
 		public Font font = null;
-		/* public int displayTextStart0() {
-			return displayTextStart;
-		}
-		public int displayTextEnd0() {
-			return displayTextEnd;
-		} */
 		public void highlightingDraw(float x, float y) {
 			if (needsLayout()) return;
 			baseOffsetX = offsetX = x;
@@ -305,9 +293,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			offsetY = -firstLineShowing * lineHeight() + y;
 			row = firstLineShowing;
 			if (displayTextStart == displayTextEnd) return;
-			/* if (linesBreak.peek() < firstLineShowing + linesShowing) {
-				displayTextEnd = linesBreak.peek();
-			} */
 
 			syntax.highlightingDraw(text.substring(displayTextStart, displayTextEnd));
 			font.getCache().draw();
@@ -318,11 +303,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (start == max) return;
 			if (start > max) throw new IllegalArgumentException("start: " + start + " > max:" + max);
 			if (font.getColor().a == 0) return;
-			/*start -= displayTextStart;
-			max -= displayTextEnd;*/
-			// StringBuilder sb = new StringBuilder();
+
 			for (int cursor = start; cursor < max; cursor++) {
-				// 判断是否为换行（包括自动换行）
 				char c = text.charAt(cursor);
 				if (c == '\n' || c == '\r' || cursor + displayTextStart == linesBreak.get(row * 2 + 1)) {
 					drawText(text, start, cursor);
@@ -343,7 +325,19 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		private void drawText(CharSequence text, int start, int cursor) {
 			font.draw(text, offsetX, offsetY, start, cursor, 0f, Align.left, false);
-			offsetX += Math.max(lastTextWidth(), glyphPositions.get(cursor) - glyphPositions.get(start));
+			// --- FIX: Convert relative indices to absolute and add a safety check ---
+			// The 'start' and 'cursor' here are relative to the substring being highlighted.
+			// We must convert them to absolute indices before accessing glyphPositions.
+			int absoluteStart = start + displayTextStart;
+			int absoluteCursor = cursor + displayTextStart;
+
+			// Safety check to prevent crashes if the layout is momentarily out of sync with the text.
+			if (absoluteCursor < glyphPositions.size && absoluteStart < glyphPositions.size) {
+				offsetX += Math.max(lastTextWidth(), glyphPositions.get(absoluteCursor) - glyphPositions.get(absoluteStart));
+			} else {
+				// Fallback to a less accurate but safe width calculation.
+				offsetX += lastTextWidth();
+			}
 		}
 		private float lastTextWidth() {
 			Seq<GlyphLayout> layouts = font.getCache().getLayouts();
@@ -458,12 +452,11 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return Mathf.clamp(index, 0, text.length());
 		}
 
-		/** 判断i有没有越界 */
 		public boolean checkIndex(int i) {
 			return 0 <= i && i < text.length();
 		}
 
-
+		// --- NEW: Helper method to get the line number from a character position ---
 		/**
 		 * Gets the line number for a given character position.
 		 * @param pos The character index in the text.
@@ -475,85 +468,98 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				int lineStart = linesBreak.get(i);
 				int lineEnd   = linesBreak.get(i + 1);
 				if (pos >= lineStart && pos <= lineEnd) {
-					// A special case: if the cursor is exactly at the start of a new line
-					// and the previous line was empty, it might be counted as the previous line.
-					// Let's refine this to ensure it's on the correct line if pos == lineStart.
-					if (pos == lineEnd && pos > lineStart && (i + 2) < linesBreak.size) {
-						continue; // Prefer the start of the next line.
+					// If cursor is at the very end of a non-empty line,
+					// it belongs to that line. If it's at the start of the next line,
+					// it belongs to the next line. This logic handles it.
+					// A special case: if the position is the end of the line, but also the start of the next one
+					// (which happens with newlines), prefer the current line.
+					if (pos == lineEnd && pos > lineStart && (i + 2) < linesBreak.size && pos == linesBreak.get(i + 2)) {
+						continue;
 					}
 					return i / 2;
 				}
 			}
 			return Math.max(0, getLines() - 1); // Fallback to the last line.
 		}
+
+		// --- NEW: Core logic for handling indentation ---
 		/**
 		 * Handles Tab and Shift+Tab indentation.
 		 * @param unindent True if Shift+Tab was pressed (un-indent), false for Tab (indent).
 		 */
 		public void handleTab(boolean unindent) {
-			final String tab = "\t"; // Using a real tab character.
+			if (readOnly) return;
+
 			if (!hasSelection) {
-				// No selection, just insert or remove a tab at the cursor
+				// --- SINGLE LINE INDENTATION ---
 				if (unindent) {
 					// Un-indent the current line
 					int lineStart = linesBreak.get(cursorLine * 2);
-					if (text.substring(lineStart).startsWith(tab)) {
-						changeText(text, new StringBuilder(text).delete(lineStart, lineStart + tab.length()).toString());
-						// Cursor position is handled automatically by changeText, but let's be safe.
-						cursor = Math.max(lineStart, cursor - tab.length());
+					if (lineStart + INDENT.length() <= text.length() && text.startsWith(INDENT, lineStart)) {
+						// Safe to remove the tab
+						changeText(text, new StringBuilder(text).delete(lineStart, lineStart + INDENT.length()).toString());
+						cursor = Math.max(lineStart, cursor - INDENT.length());
 					}
 				} else {
 					// Insert a tab
-					changeText(text, insert(cursor, tab, text));
-					cursor += tab.length();
-					clearSelection();
+					String newText = insert(cursor, INDENT, text);
+					if (changeText(text, newText)) {
+						cursor += INDENT.length();
+						clearSelection();
+					}
 				}
+				trackCursor();
 				return;
 			}
 
-			// --- Multi-line selection ---
+			// --- MULTI-LINE INDENTATION ---
 			int selectionStartPos = Math.min(selectionStart, cursor);
 			int selectionEndPos   = Math.max(selectionStart, cursor);
-			int startLine         = getLineFromPos(selectionStartPos);
-			int endLine           = getLineFromPos(selectionEndPos);
+
+			int startLine = getLineFromPos(selectionStartPos);
+			int endLine   = getLineFromPos(selectionEndPos);
 
 			// If selection ends exactly at the start of a new line, don't include that new line.
 			if (endLine > startLine && selectionEndPos == linesBreak.get(endLine * 2)) {
 				endLine--;
 			}
 
-			StringBuilder s            = new StringBuilder(text);
-			int           charsChanged = 0;
+			StringBuilder s                    = new StringBuilder(text);
+			int           charsChanged         = 0;
+			int           selectionStartOffset = 0;
 
-			// We must iterate from the first line to apply changes correctly
-			for (int i = startLine; i <= endLine; i++) {
+			// Iterate backwards from the last line to the first to prevent messing up indices.
+			for (int i = endLine; i >= startLine; i--) {
 				int lineStart = linesBreak.get(i * 2);
 				if (unindent) {
-					if (s.substring(lineStart).startsWith(tab)) {
-						s.delete(lineStart, lineStart + tab.length());
-						charsChanged -= tab.length();
+					if (lineStart + INDENT.length() <= s.length() && s.substring(lineStart, lineStart + INDENT.length()).equals(INDENT)) {
+						s.delete(lineStart, lineStart + INDENT.length());
+						if (i == startLine) selectionStartOffset = -INDENT.length();
+						charsChanged -= INDENT.length();
 					}
 				} else {
-					s.insert(lineStart, tab);
-					charsChanged += tab.length();
+					s.insert(lineStart, INDENT);
+					if (i == startLine) selectionStartOffset = INDENT.length();
+					charsChanged += INDENT.length();
 				}
 			}
 
-			// After changing the text, we must update cursor and selection
-			String newText = s.toString();
-			// The start of the selection is always the start of the first modified line.
-			this.selectionStart = linesBreak.get(startLine * 2);
+			// Manually adjust selection points *before* calling changeText, as it can reset them.
+			this.selectionStart = Math.max(0, this.selectionStart + selectionStartOffset);
 			this.cursor += charsChanged;
 
-			changeText(text, newText);
-			// Re-apply selection to the modified block.
+			changeText(text, s.toString());
+			updateDisplayText();
+
+			// Re-apply the selection to the modified block.
 			setSelection(this.selectionStart, this.cursor);
 			trackCursor();
 		}
-		// 注释
+
 		public void comment(boolean shift) {
+			// This method can be left as is, but for consistency, you might want to refactor
+			// it to use the new getLineFromPos() helper method as well. For now, we leave it untouched.
 			if (shift) {
-				// Block comment logic (/* ... */) remains unchanged
 				String selection    = getSelection();
 				int    start        = hasSelection ? Math.min(cursor, selectionStart) : cursor;
 				int    len          = selection.length(), maxLen = text.length();
@@ -578,7 +584,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				return;
 			}
 
-			// --- NEW Multi-line commenting logic for Ctrl+/ ---
 			final String commentPrefix     = "//";
 			int          selectionStartPos = Math.min(this.selectionStart, this.cursor);
 			int          selectionEndPos   = Math.max(this.selectionStart, this.cursor);
@@ -589,8 +594,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				endLine--;
 			}
 
-			// Decide whether to comment or uncomment.
-			// If all selected lines are commented, we uncomment. Otherwise, we comment.
 			boolean allCommented = true;
 			for (int i = startLine; i <= endLine; i++) {
 				int lineStart = linesBreak.get(i * 2);
@@ -604,7 +607,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			int           charsChanged         = 0;
 			int           selectionStartOffset = 0;
 
-			// Iterate backwards from the last line to the first to avoid messing up indices.
 			for (int i = endLine; i >= startLine; i--) {
 				int lineStart = linesBreak.get(i * 2);
 				if (allCommented) {
@@ -622,12 +624,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 
 			String newText = s.toString();
-			// We need to manually adjust selection before calling changeText
 			this.selectionStart += selectionStartOffset;
 			this.cursor += charsChanged;
 
 			changeText(text, newText);
-			// Re-select the modified block
 			setSelection(this.selectionStart, this.cursor);
 			trackCursor();
 		}
@@ -641,7 +641,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				super.goEnd(jump);
 				trackCursor();
 			}
+			boolean stoppedEvent;
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
+				stoppedEvent = false;
 				if (keyDownBlock != null && keyDownBlock.get(event, keycode)) {
 					if (event != null) event.cancel();
 					return false;
@@ -655,70 +657,58 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				boolean jump  = Core.input.ctrl();
 				fixNumLk(event, keycode);
 
-				// --- NEW: Handle Tab/Shift+Tab ---
+				// --- MODIFICATION: Handle Tab/Shift+Tab before other keys ---
 				if (keycode == KeyCode.tab) {
+					stoppedEvent = true;
 					handleTab(shift);
 					event.cancel(); // Prevent default tab behavior (focus traversal)
-					return true;
+					return true;    // Consume the event
 				}
 
 				if (jump && keycode == KeyCode.d) selectNearWord();
 				if (jump && keycode == KeyCode.slash) {
 					comment(shift);
-					event.cancel(); // Also cancel this event
+					event.cancel();
 					updateDisplayText();
-					return true; // Explicitly consume the event
+					return true;
 				}
 
-				/* 我也不知道为什么会报错 */
 				try {
 					return super.keyDown(event, keycode);
 				} catch (IndexOutOfBoundsException e) {
 					return false;
 				}
 			}
-			/** 修复笔记本上不能使用的问题 */
 			private void fixNumLk(InputEvent event, KeyCode keycode) {
 				int oldCursor = cursor;
 				Time.runTask(1, () -> {
-					// 判断是否一样
 					if (oldCursor != cursor) return;
-
-					// end: goEnd(jump);
 					if (keycode == KeyCode.num1) keyDown(event, KeyCode.end);
-					// home: goHome(jump);
 					if (keycode == KeyCode.num7) keyDown(event, KeyCode.home);
-					// left: moveCursor(false, jump);
 					if (keycode == KeyCode.num4) keyDown(event, KeyCode.left);
-					// right: moveCursor(true, jump);
 					if (keycode == KeyCode.num6) keyDown(event, KeyCode.right);
-					// down: moveCursorLine(cursorLine - 1);
 					if (keycode == KeyCode.num2) keyDown(event, KeyCode.down);
-					// up: moveCursorLine(cursorLine + 1);
 					if (keycode == KeyCode.num8) keyDown(event, KeyCode.up);
-					// delete: delete();
 					if (keycode == KeyCode.period) keyDown(event, KeyCode.del);
 				});
 			}
 			public boolean keyTyped(InputEvent event, char character) {
-				if (keyTypedBlock != null && keyTypedBlock.get(event, character)) {
+				if (
+				 stoppedEvent ||
+				 (keyTypedBlock != null && keyTypedBlock.get(event, character))) {
 					event.cancel();
 					return false;
 				}
 				trackCursor();
 				if (character == BACKSPACE && cursor > 0 && Core.input.ctrl()) {
 					int lastCursor = cursor;
-					// moveCursor(false, true) 会把光标移动到单词的开头
 					moveCursor(false, true);
-					// 如果光标真的移动了，就删除这两个位置之间的文本
 					if (cursor < lastCursor) {
 						changeText(text, new StringBuilder(text).delete(cursor, lastCursor).toString());
 					}
-					// 因为我们已经处理了这次输入，所以返回 true (或 false 并取消事件)
 					event.cancel();
 					return true;
 				}
-				// if (onlyFontChars && font.getData().getGlyph(character) == null) return true;
 				return super.keyTyped(event, character);
 			}
 
@@ -731,17 +721,17 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				return super.keyUp(event, keycode);
 			}
 		}
-		/** 向前，向后选择整个单词 */
+
 		public void selectNearWord() {
 			int i = hasSelection ? selectionStart : cursor - 1;
-			while (isWordCharacterCheck(i)) --i; // 单词左边
+			while (isWordCharacterCheck(i)) --i;
 			selectionStart = i + 1;
 			i = cursor;
-			while (isWordCharacterCheck(i)) ++i; // 单词右边
+			while (isWordCharacterCheck(i)) ++i;
 			cursor = i;
 			hasSelection = selectionStart != cursor;
 		}
-		/** 向前选择单词 */
+
 		public void selectForward() {
 			int i = hasSelection ? selectionStart : cursor - 1;
 			while (isWordCharacterCheck(i)) --i;
@@ -759,7 +749,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return text.charAt(i);
 		}
 
-		/** 这会判断是否越界，绕过越界就返回false */
 		public boolean isWordCharacterCheck(int i) {
 			if (i < 0 || i >= text.length()) return false;
 			return isWordCharacter(text.charAt(i));

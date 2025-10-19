@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import static modtools.IntVars.modName;
 import static modtools.utils.MySettings.SETTINGS;
 
-public abstract class Content {
+public abstract class Content implements Disposable {
 	public static final ArrayList<Content> all = new ArrayList<>();
 
 	public final Drawable icon;
@@ -139,6 +139,8 @@ public abstract class Content {
 		SETTINGS.put("load-" + name, b);
 	}
 
+	public void dispose() {
+	}
 	public class IconWindow extends Window {
 		public IconWindow(float minWidth, float minHeight, boolean full, boolean noButtons) {
 			super(localizedName(), minWidth, minHeight, full, noButtons);

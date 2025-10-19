@@ -1,14 +1,15 @@
 package modtools.ui.control;
 
+import android.view.InputDevice;
 import arc.Core;
 import arc.input.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.struct.*;
 import arc.util.*;
-import modtools.utils.*;
+import modtools.utils.Tools;
 
-import static modtools.IntVars.*;
+import static modtools.IntVars.mouseVec;
 
 public class HopeInput {
 	public static IntSet justPressed, pressed;

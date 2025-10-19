@@ -190,9 +190,6 @@ public class JSFunc
 		return HopeFx.colorFulText(text);
 	}
 
-	public static void design() {
-		DesignHelper.design();
-	}
 	//endregion
 
 	public interface MyProv<T> {

@@ -76,4 +76,8 @@ public class Pause extends Content {
 	public void build() {
 		ui.show();
 	}
+
+	public void dispose() {
+		pauseMap.clear();
+	}
 }

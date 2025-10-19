@@ -13,11 +13,12 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
 import modtools.android.HiddenApi;
-import modtools.content.SettingsUI;
+import modtools.content.*;
 import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.*;
 import modtools.graphics.MyShaders;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -27,6 +28,7 @@ import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.unsupported.HopeProcessor.MyContentParser;
+import modtools.unsupported.HotSwapWatcher;
 import modtools.utils.*;
 import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
@@ -125,7 +127,7 @@ public class ModTools extends Mod {
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
 
-			// if (isDesktop()) TestVM.main();
+			if (isDesktop()) HotSwapWatcher.start();
 			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
 			Log.err(e);
@@ -195,6 +197,7 @@ public class ModTools extends Mod {
 	public void loadModules() {
 		if (ui == null) return;
 		if (DISABLE_UI) return;
+
 		mod = mods.getMod(modName);
 		Time.mark();
 
@@ -205,6 +208,7 @@ public class ModTools extends Mod {
 		}
 		// 加载HopeIcons
 		HopeIcons.modName = modName;
+		// Core.batch = new MySpriteBatch();
 		load("HopeIcons", HopeIcons::load);
 		load("MyShaders", MyShaders::load);
 		load("MyFonts", MyFonts::load);
@@ -215,6 +219,8 @@ public class ModTools extends Mod {
 		load("Contents", Contents::load);
 		load("IntUI", IntUI::load);
 		load("CustomViewer", Viewers::loadCustomMap);
+		INFO_DIALOG.dialog(c -> c.button("BTN", () -> Log.info("324")));
+
 
 		if (E_Extending.auto_update.enabled()) {
 			load("Updater", Updater::checkUpdate);
@@ -350,12 +356,14 @@ public class ModTools extends Mod {
 		WorldDraw.tasks.clear();
 		IntUI.disposeAll();
 		HopeInput.dispose();
-		dispose();
+		IntVars.dispose();
 		MyEvents.dispose();
 		MyFonts.dispose();
 		ModClassLoader   loader   = (ModClassLoader) mods.mainLoader();
 		Seq<ClassLoader> children = Reflect.get(ModClassLoader.class, loader, "children");
 		children.remove(ModTools.class.getClassLoader());
+		Content.all.forEach(Content::dispose);
+		Content.all.clear();
 		System.gc();
 		Core.app.post(() -> mods.removeMod(mod));
 	}

@@ -1,3 +1,4 @@
+// temp_file_9e2936cb-88f5-40a8-92be-c17210cda96e_pasted_text.txt
 package nipx;
 
 import java.io.File;
@@ -16,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger; // <--- [FIX] 引入 AtomicInteger
 import java.util.stream.Stream;
 
 public class Main {
@@ -33,7 +35,7 @@ public class Main {
 		if (DEBUG) {
 			info("Debug mode is enabled.");
 		}
-		// ... (参数检查代码不变) ...
+        // ... (参数检查代码不变) ...
 
 		Path classesDir = Paths.get(agentArgs);
 		if (!Files.isDirectory(classesDir)) {
@@ -52,7 +54,8 @@ public class Main {
 		}
 
 		List<ClassDefinition> definitions = new ArrayList<>();
-		int unchangedCount = 0;
+        // [FIX] 使用 AtomicInteger 来正确地在 lambda 中计数
+		final AtomicInteger unchangedCount = new AtomicInteger(0);
 
 		try (Stream<Path> stream = Files.walk(classesDir)) {
 			stream.filter(path -> path.toString().endsWith(".class"))
@@ -70,10 +73,8 @@ public class Main {
 							if (oldHash != null && Arrays.equals(oldHash, newHash)) {
 								// 哈希值相同，说明字节码未改变
 								log("Bytecode for " + className + " is unchanged, skipping.");
-								// 使用本地变量来计数，避免并发问题
-								// 在 forEach 中不能直接修改外部非 final 变量，这里我们用一个数组来绕过
-								final int[] localUnchangedCounter = {unchangedCount};
-								localUnchangedCounter[0]++;
+                                // [FIX] 正确地增加计数器
+								unchangedCount.incrementAndGet();
 							} else {
 								// 哈希值不同或首次加载，需要重定义
 								definitions.add(new ClassDefinition(targetClass, newBytecode));
@@ -92,12 +93,9 @@ public class Main {
 			return;
 		}
 
-		// 更新未改变的类计数
-		// (如果需要在forEach之外访问unchangedCount，可以用 AtomicInteger 或类似的并发计数器)
-		// 这里为了简单，我们就不精确报告这个数字了，只在日志里体现
-
 		if (definitions.isEmpty()) {
-			info("No modified classes to redefine.");
+            // [IMPROVEMENT] 提供更详细的日志信息
+			info("No modified classes to redefine. " + unchangedCount.get() + " classes were checked and found unchanged.");
 			return;
 		}
 
@@ -108,6 +106,7 @@ public class Main {
 			for (ClassDefinition def : definitions) {
 				String className = def.getDefinitionClass().getName();
 				try {
+					// [IMPROVEMENT] 直接使用传入的字节码来计算哈希，避免重复读取或依赖内部 API
 					byte[] newHash = calculateHash(def.getDefinitionClassFile());
 					classHashes.put(className, newHash);
 				} catch (NoSuchAlgorithmException e) {
@@ -123,7 +122,8 @@ public class Main {
 			error("An unexpected error occurred during redefinition.", t);
 		}
 
-		info("Hot-swap summary: " + definitions.size() + " redefined.");
+        // [IMPROVEMENT] 提供更完整的最终摘要信息
+		info("Hot-swap summary: " + definitions.size() + " redefined, " + unchangedCount.get() + " unchanged.");
 	}
 
 	/**

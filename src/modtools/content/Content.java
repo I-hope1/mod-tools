@@ -32,6 +32,7 @@ public abstract class Content implements Disposable {
 	public final String   name;
 	public       Runnable update;
 
+
 	/** 显示名称 */
 	public String localizedName() {
 		return Core.bundle.get(modName + "." + name, Strings.capitalize(name));

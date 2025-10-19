@@ -39,7 +39,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	 iSettings, myEvents, settingsImpl;
 	private JCClassDecl mainClass;
 
-
 	public void lazyInit() throws Throwable {
 		nameSetting = ns("Settings");
 		mySettingsClass = C_MySettings();

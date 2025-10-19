@@ -10,17 +10,17 @@ import com.sun.tools.javac.jvm.ClassWriter;
 import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.parser.ParserFactory;
-import com.sun.tools.javac.processing.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.processors.AINIT;
+import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
-import java.util.List;
 import java.util.*;
+import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -41,7 +41,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public static Log           log;
 	public static JavacMessages messages;
 	public static ClassFinder   classFinder;
-	public static JavacFiler    mFiler;
+	public static Filer         mFiler;
 	public static ClassWriter   mClassWriter;
 	public static Attr          attr;
 	public static JavaCompiler  compiler;
@@ -123,7 +123,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public final void initConst(ProcessingEnvironment env) {
 		if (_context != null) return;
 
-		_context = ((JavacProcessingEnvironment) processingEnv).getContext();
+		_context = Replace.getContextFor(processingEnv);
+
 		elements = JavacElements.instance(_context);
 		trees = JavacTrees.instance(_context);
 		mMaker = TreeMaker.instance(_context);
@@ -137,7 +138,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		parsers = ParserFactory.instance(_context);
 		mSymtab = Symtab.instance(_context);
 		classFinder = ClassFinder.instance(_context);
-		mFiler = (JavacFiler) env.getFiler();
+		mFiler = env.getFiler();
 		mClassWriter = ClassWriter.instance(_context);
 		attr = Attr.instance(_context);
 		compiler = JavaCompiler.instance(_context);

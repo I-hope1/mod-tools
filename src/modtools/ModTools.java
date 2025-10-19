@@ -57,7 +57,6 @@ public class ModTools extends Mod {
 	private static      boolean isImportFromGame = false;
 	public static final boolean DISABLE_UI       = false;
 
-
 	public static boolean loaded = false;
 	public ModTools() {
 		if (loaded) throw new IllegalStateException("ModTools already loaded.");

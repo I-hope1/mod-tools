@@ -11,7 +11,6 @@ import java.util.Set;
 
 import static modtools.annotations.PrintHelper.SPrinter.err;
 
-@SupportedOptions("org.gradle.annotation.processing.incremental")
 @AutoService(Processor.class)
 public class AINIT extends AbstractProcessor {
 	public static boolean hasMindustry = true;
@@ -41,9 +40,6 @@ public class AINIT extends AbstractProcessor {
 		return SourceVersion.latestSupported();
 	}
 	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of("java.lang.Override");
-	}
-	public Set<String> getSupportedOptions() {
-		return Set.of("targetVersion", "org.gradle.annotation.processing.incremental");
+		return Set.of();
 	}
 }

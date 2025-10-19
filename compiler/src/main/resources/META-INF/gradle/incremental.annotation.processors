@@ -1,0 +1,4 @@
+modtools.annotations.processors.ContentProcessor,isolating
+modtools.annotations.processors.AINIT,isolating
+modtools.annotations.processors.DebugLogProc,isolating
+modtools.annotations.BaseProcessor,isolating

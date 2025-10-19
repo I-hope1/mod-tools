@@ -29,7 +29,7 @@ allprojects {
 }
 
 tasks.withType(JavaCompile) {
-	options.compilerArgs += "-AtargetVersion=7"
+	options.compilerArgs += "-AtargetVersion=8"
 }
 
 sourceSets.main.java.srcDirs = ["src"]
@@ -111,9 +111,7 @@ task jarAndroid(type: JavaExec) {
 jar {
 	archiveFileName = "${project.archivesBaseName}-${version}.jar"
 
-	configurations.runtimeClasspath.asList().each {
-		from(zipTree(it))
-	}
+	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
 
 	from(rootDir) { include "mod.hjson" }
 	from("assets/") { include "**" }

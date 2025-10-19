@@ -106,7 +106,7 @@ public class Replace {
 	}
 	public static void extendingFunc(ProcessingEnvironment processingEnv) {
 		filer = processingEnv.getFiler();
-		extendingFunc(((JavacProcessingEnvironment)processingEnv).getContext());
+		extendingFunc(getContextFor(processingEnv));
 	}
 
 	public static final HashMap<ModuleSymbol, ClassSymbol> moduleRepresentClass = new HashMap<>();
@@ -589,5 +589,19 @@ public class Replace {
 
 	public static Context context() {
 		return context;
+	}
+	public static Context getContextFor(ProcessingEnvironment env) {
+		if (env instanceof JavacProcessingEnvironment proc) {
+			return proc.getContext();
+		} else {
+			try {
+				Field f = env.getClass().getDeclaredField("delegate");
+				f.setAccessible(true);
+				return ((JavacProcessingEnvironment) f.get(env)).getContext();
+				// CMN.Log(jcEnv);
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 	}
 }

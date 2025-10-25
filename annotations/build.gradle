@@ -1,7 +1,9 @@
 apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
-
+//tasks.withType(JavaCompile) {
+//	options.compilerArgs += "-AdisableDesugar"
+//}
 dependencies {
 	annotationProcessor files("$compilerJar")
 //	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"

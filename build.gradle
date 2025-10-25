@@ -28,10 +28,6 @@ allprojects {
 	}
 }
 
-tasks.withType(JavaCompile) {
-	options.compilerArgs += "-AtargetVersion=8"
-}
-
 sourceSets.main.java.srcDirs = ["src"]
 
 //force arc version

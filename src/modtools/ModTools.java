@@ -18,7 +18,6 @@ import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.*;
 import modtools.graphics.MyShaders;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -27,8 +26,8 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.unsupported.*;
 import modtools.unsupported.HopeProcessor.MyContentParser;
+import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
@@ -218,7 +217,7 @@ public class ModTools extends Mod {
 		load("Contents", Contents::load);
 		load("IntUI", IntUI::load);
 		load("CustomViewer", Viewers::loadCustomMap);
-		INFO_DIALOG.dialog(c -> c.button("BTN", () -> Log.info("]-Lggg4")));
+		//INFO_DIALOG.dialog(c -> c.button("BTN", () -> Log.info("==-Lggg4")));
 
 
 		if (E_Extending.auto_update.enabled()) {

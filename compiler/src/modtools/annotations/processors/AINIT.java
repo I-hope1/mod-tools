@@ -39,7 +39,9 @@ public class AINIT extends AbstractProcessor {
 	public SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();
 	}
+
+	// 这里的override用于只是启用process
 	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of();
+		return Set.of(Override.class.getCanonicalName());
 	}
 }

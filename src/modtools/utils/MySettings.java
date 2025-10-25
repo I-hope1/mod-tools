@@ -1,11 +1,12 @@
 package modtools.utils;
 
 import arc.files.Fi;
-import arc.struct.OrderedMap;
+import arc.struct.*;
 import arc.util.*;
 import arc.util.serialization.Jval;
-import arc.util.serialization.Jval.JsonMap;
+import arc.util.serialization.Jval.*;
 import modtools.IntVars;
+import modtools.events.MyEvents;
 import modtools.jsfunc.type.CAST;
 import rhino.ScriptRuntime;
 
@@ -21,6 +22,7 @@ public class MySettings {
 	 D_JSFUNC = SETTINGS.child("JSFunc");
 
 	public static class Data extends OrderedMap<String, Object> {
+		public MyEvents events = new MyEvents();
 		public Data parent;
 		public Fi   fi;
 
@@ -54,26 +56,34 @@ public class MySettings {
 					return old;
 				}
 			}
-
-			write();
+			fireChanged(key);
 			return old;
 		}
 		public Object remove(String key) {
 			Object o = super.remove(key);
-			write();
+			fireChanged(key);
 			return o;
 		}
+		public void fireChanged(String key) {
+			events.fireIns(key);
+			write();
+		}
+
 		public Runnable task = () -> {
 			if (parent == null && fi != null) {
 				fi.writeString(toString());
-			} else parent.write();
+			} else if (parent != null) {
+				parent.write();
+			}
 		};
 		public void write() {
 			TaskManager.scheduleOrReset(0f, task);
 		}
 
 		public Object get(String key, Object defaultValue) {
-			return super.get(key, () -> defaultValue);
+			if (containsKey(key)) return get(key);
+			fireChanged( key);
+			return defaultValue;
 		}
 
 		public void loadFi(Fi fi) {
@@ -120,6 +130,7 @@ public class MySettings {
 		public String toString() {
 			return toString(new StringBuilder());
 		}
+
 		public String toString(StringBuilder tab) {
 			StringBuilder builder = new StringBuilder();
 			builder.append("{\n");
@@ -128,16 +139,22 @@ public class MySettings {
 				builder.append(tab).append('"')
 				 .append(k.replaceAll("\"", "\\\\\""))
 				 .append('"').append(": ")
-				 .append(v instanceof Data ? ((Data) v).toString(tab) :
-				  v == null ? "null" :
-					Reflect.isWrapper(v.getClass()) ? v :
-					 STR."\"\{v.toString().replaceAll("\\\\", "\\\\")}\"")
+				 .append(toString(tab, v))
 				 .append('\n');
 			});
 			builder.deleteCharAt(builder.length() - 1);
 			tab.deleteCharAt(tab.length() - 1);
 			builder.append('\n').append(tab).append('}');
 			return builder.toString();
+		}
+		@SuppressWarnings("StringTemplateMigration")
+		private static String toString(StringBuilder tab, Object v) {
+			return v instanceof Data ? ((Data) v).toString(tab) :
+			 // v instanceof Seq ? "[" + ((Seq) v).map(item -> toString(tab, item)).toString(", ") + "]" :
+			 v instanceof Jval jval ? jval.toString(Jformat.formatted) :
+				v == null ? "null" :
+				 Reflect.isWrapper(v.getClass()) ? v.toString() :
+					STR."\"\{v.toString().replace("\\", "\\\\")}\"";
 		}
 
 		public float getFloat(String name) {
@@ -187,6 +204,13 @@ public class MySettings {
 		public String getString(String name) {
 			Object o = get(name);
 			return o instanceof Jval ? ((Jval) o).asString() : String.valueOf(o);
+		}
+		public JsonArray getArray(String name) {
+			Object o = get(name, Jval::newArray);
+			return o instanceof Jval jval && jval.isArray() ? jval.asArray() : null;
+		}
+		public void onChanged(String key, Runnable run) {
+			events.onIns(key, run);
 		}
 	}
 }

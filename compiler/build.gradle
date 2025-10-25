@@ -3,7 +3,7 @@ apply plugin: 'java'
 sourceSets.main.java.srcDirs = ["src"]
 tasks.withType(JavaCompile) {
 	// 这里是为了刷新编译器参数
-	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000);
+//	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000);
 }
 
 dependencies {
@@ -26,6 +26,7 @@ dependencies {
 	)
 }
 
+
 task anno(type: Jar) {
 	dependsOn jar
 
@@ -36,4 +37,15 @@ task anno(type: Jar) {
 	}
 	from(zipTree("$buildDir0.parent/ProcessorConfig.zip"))
 	duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+task setMdtClassVersion(type: JavaExec) {
+	dependsOn jar
+
+	//运行游戏目录
+	classpath("$buildDir0/libs/$archivesBaseName-${version}.jar")
+	args = [
+//			'-testMobile'
+//			'-debug'
+	]
 }

@@ -33,7 +33,7 @@ jar {
 dependencies {
 	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:2.3.0"
 
-	implementation "net.bytebuddy:byte-buddy:1.17.6"
+//	implementation "net.bytebuddy:byte-buddy:1.17.6"
 }
 
 test {

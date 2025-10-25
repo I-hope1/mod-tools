@@ -1,3 +1,4 @@
+// temp_file_51b6367c-2460-43d9-b737-a8a7b8c85d16_pasted_text.txt
 package modtools.content;
 
 import arc.Core;
@@ -6,12 +7,15 @@ import arc.func.*;
 import arc.graphics.Color;
 import arc.math.*;
 import arc.scene.Element;
+import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.Log.LogLevel;
+import arc.util.serialization.Jval;
+import arc.util.serialization.Jval.JsonArray;
 import mindustry.Vars;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -35,6 +39,7 @@ import modtools.utils.ui.*;
 import java.lang.reflect.Field;
 import java.util.Objects;
 
+import static modtools.unsupported.HotSwapManager.HOT_SWAP;
 import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.ui.CellTools.rowSelf;
 
@@ -101,7 +106,7 @@ public class SettingsUI extends Content {
 
 		// --- 准备各个设置区域 ---
 
-		// 1. 准备 "加载" (Load) 区域
+		// (Load) 区域
 		addSectionInternal("Load", Icon.downSmall, t -> {
 			t.button("Disable All Experimental", HopeStyles.flatBordert, () -> all.forEach(c -> {
 				if (c.experimental) c.disable();
@@ -130,21 +135,28 @@ public class SettingsUI extends Content {
 
 		customSections.each(Runnable::run);
 
-		// 2. 准备 "JSFunc" 区域
+		// "JSFunc" 区域
 		addSectionInternal("JSFunc", Icon.logicSmall, t -> {
 			SettingsBuilder.build(t);
 			JColor.settingColor(t);
 			SettingsBuilder.clearBuild();
 		});
 
-		// 3. 准备 "效果" (Effects) 区域
+		// (Effects) 区域
 		addSectionInternal("Effects", Icon.effectSmall, t -> {
 			SettingsBuilder.build(t);
 			ISettings.buildAll("blur", t, E_Blur.class);
 			SettingsBuilder.clearBuild();
 		});
 
-		// 4. 准备 "其他" (Others) 区域
+		// (HotSwap) 区域
+		addSectionInternal("HotSwap", Icon.refreshSmall, t -> {
+			SettingsBuilder.build(t);
+			// watch的路径数组配置
+			SettingsBuilder.array("@settings.hotswap.watchpaths", HOT_SWAP, "watch-paths", () -> true);
+		});
+
+		// (Others) 区域
 		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {
 			SettingsBuilder.build(t); // 设置SettingsBuilder的目标表格
 
@@ -414,6 +426,93 @@ public class SettingsUI extends Content {
 				b.setDisabled(() -> !condition.get());
 			}, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN).height(42).self(c -> c.update(b -> c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))));
 			return rowSelf(main.add(t).growX().padTop(0));
+		}
+		/**
+		* 添加一个用于编辑字符串数组的UI组件。
+		* 数组在Data中以换行符分隔的字符串形式存储。
+		* @param text 标题标签的文本 (可以是本地化键)
+		* @param data 设置数据实例
+		* @param key  存储数组的键
+		* @param condition 控制该组件是否启用的条件
+		* @return 添加到主设置表格的单元格
+		*/
+		public static Cell<Table> array(String text, Data data, String key, Boolp condition) {
+			Table container = new Table();
+			container.left();
+
+			Label titleLabel = new Label(text);
+			container.add(titleLabel).left().padBottom(4f).row();
+
+			Table listTable = new Table();
+			listTable.left().defaults().padBottom(2f);
+
+			// 用于重建列表的函数
+			Runnable rebuildList = () -> {
+				listTable.clear();
+				// 从数据加载，按换行符分割，并移除空行
+				JsonArray items = data.getArray(key);
+
+				if (items.isEmpty()) {
+					listTable.add(Core.bundle.get("settings.array.empty", "(Empty)"))
+					 .color(Color.gray).left();
+				} else {
+					for (int i = 0; i < items.size; i++) {
+						final int index = i;
+						String item = items.get(index).asString();
+						Table row = new Table();
+						row.left();
+						row.add(item).growX().wrap().width(300).left();
+						// 移除按钮
+						row.button(Icon.trashSmall, Styles.emptyi, () -> {
+							JsonArray currentItems = data.getArray(key);
+							if (index < currentItems.size) {
+								currentItems.remove(index);
+								data.put(key, currentItems.toString("\n"));
+							}
+						}).size(40f).padLeft(8f).disabled(b -> !condition.get());
+						listTable.add(row).growX().left().row();
+					}
+				}
+			};
+
+			// 列表的滚动窗格
+			ScrollPane listPane = new ScrollPane(listTable, Styles.smallPane);
+			listPane.setFadeScrollBars(false);
+			listPane.setOverscroll(false, false);
+			container.add(listPane).growX().maxHeight(160f).left().row();
+
+			// 添加新项目的输入区域
+			Table addTable = new Table();
+			addTable.left();
+			TextField inputField = new TextField();
+			addTable.add(inputField).growX().height(42f);
+
+			// 添加按钮
+			addTable.button(Icon.addSmall, Styles.emptyi, () -> {
+				String newItem = inputField.getText();
+				if (newItem != null && !newItem.isBlank()) {
+					JsonArray items = data.getArray(key);
+					items.add(Jval.valueOf(newItem.trim()));
+					data.fireChanged(key);
+					inputField.setText("");
+				}
+			}).size(42f);
+			container.add(addTable).growX().padTop(4f).row();
+
+			// 当数据改变时重建UI
+			data.onChanged(key, rebuildList);
+			rebuildList.run(); // 初始构建
+
+			// 根据条件更新整个组件的颜色和禁用状态
+			container.update(() -> {
+				boolean enabled = condition.get();
+				container.touchablility = () -> enabled ? Touchable.enabled : Touchable.disabled;
+				Color color = enabled ? Color.white : Color.gray;
+				titleLabel.setColor(color);
+				// 可以在此处为其他组件设置颜色
+			});
+
+			return rowSelf(main.add(container).growX().padTop(8f));
 		}
 		public static void number(String text, Floatc cons,
 		                          Floatp prov) { number(text, false, cons, prov, () -> true, 0, Float.MAX_VALUE); }

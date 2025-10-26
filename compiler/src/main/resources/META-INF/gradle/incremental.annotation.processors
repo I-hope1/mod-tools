@@ -2,3 +2,8 @@ modtools.annotations.processors.ContentProcessor,isolating
 modtools.annotations.processors.AINIT,isolating
 modtools.annotations.processors.DebugLogProc,isolating
 modtools.annotations.BaseProcessor,isolating
+modtools.annotations.processors.ColorProcessor,isolating
+modtools.annotations.processors.asm.ASMProcessor,isolating
+modtools.annotations.processors.asm.AccessorProc,isolating
+modtools.annotations.processors.asm.SampleProcessor,isolating
+modtools.annotations.processors.asm.InlineProc,isolating

@@ -1013,6 +1013,7 @@ public class ReviewElement extends Content {
 			entries.add(new ElemFieldEntry(Element.class, "translation", new PairCons(", ")));
 			entries.add(new StyleEntry());
 			entries.add(new AlignEntry<>("Align", Table.class, Table::getAlign));
+			entries.add(new ElemScaleEntry());
 
 			// Cell 相关条目
 			entries.add(new SeparatorEntry(4, 2, 4, 2));
@@ -1029,6 +1030,7 @@ public class ReviewElement extends Content {
 			entries.add(new AlignEntry<>("LabelAlign", Label.class, Label::getLabelAlign));
 			entries.add(new AlignEntry<>("LineAlign", Label.class, Label::getLineAlign));
 			entries.add(new LabelWrapEntry());
+			entries.add(new ScalingEntry());
 
 			// ScrollPane 相关条目
 			entries.add(new SeparatorEntry(4, 2, 4, 2));
@@ -1432,6 +1434,40 @@ public class ReviewElement extends Content {
 			if (visible) {
 				rotationLabel.setText(fixed(element.rotation));
 			}
+		}
+	}
+
+	private static class ElemScaleEntry extends BaseEntry {
+		private final Vec2 scaleVec = new Vec2();
+		@Override
+		public void build(Table table) {
+			VLabel scaleLabel = new VLabel(valueScale, Color.white);
+			scaleLabel.setText(new SizeProv(() -> scaleVec, " × "));
+			buildRow(table, "ElemScale", scaleLabel);
+		}
+		@Override
+		public void update(Element element) {
+			scaleVec.set(element.scaleX, element.scaleY);
+			boolean visible = !Mathf.equal(element.scaleX, 1) && Mathf.equal(element.scaleY, 1);
+			setVisible(visible);
+		}
+	}
+	private static class ScalingEntry extends BaseEntry {
+		VLabel label = new VLabel("ImgScaling", valueScale, stressColor);
+		public void build(Table table) {
+			buildRow(table, "Scaling", label);
+		}
+
+		public void update(Element element) {
+			boolean imgVisible = false;
+			l:
+			if (element instanceof Image image) {
+				Scaling scaling = FieldUtils.get(image, FieldUtils.getFieldAccessOrThrow(Image.class, "scaling"));
+				if (scaling == null) break l;
+				label.setText(scaling.name());
+				imgVisible = true;
+			}
+			setVisible(imgVisible);
 		}
 	}
 

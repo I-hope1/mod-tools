@@ -128,7 +128,9 @@ public class Main {
 					byte[] newHash     = calculateHash(newBytecode);
 					byte[] oldHash     = classHashes.get(className);
 
-					if (oldHash == null || !Arrays.equals(oldHash, newHash)) {
+					if (oldHash == null) {
+						error("[ERROR] Hash is null: " + className);
+					}else if (!Arrays.equals(oldHash, newHash)) {
 						classHashes.put(className, newHash);
 						log("[MODIFIED] " + className);
 						definitions.add(new ClassDefinition(targetClass, newBytecode));

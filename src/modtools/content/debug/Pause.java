@@ -1,7 +1,6 @@
 package modtools.content.debug;
 
 import arc.scene.ui.ImageButton;
-import arc.util.Log;
 import mindustry.gen.Icon;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
@@ -78,7 +77,7 @@ public class Pause extends Content {
 	public void build() {
 		ui.show();
 
-		Log.info("-XXX-[''''''i032");
+		// Log.info("-XXX-['[]]03---2");
 		// INFO_DIALOG.showInfo(ui);
 	}
 

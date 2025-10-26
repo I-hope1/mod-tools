@@ -75,6 +75,9 @@ public class Pause extends Content {
 	}
 	public void build() {
 		ui.show();
+
+		// Log.info("[[[]]]][siodsj");
+		// INFO_DIALOG.showInfo(ui);
 	}
 
 	public void dispose() {

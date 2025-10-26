@@ -19,12 +19,13 @@ public class Main {
 	// Agent 核心状态
 	private static       Instrumentation     inst;
 	// [MODIFIED] 从单个Path变为Set，以支持多路径
-	private static       Set<Path>           activeWatchDirs = new HashSet<>();
+	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	// [MODIFIED] 管理一个WatcherThread列表，每个路径一个
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
 
 	// 存储已加载类的字节码哈希，用于比对变更
 	private static final Map<String, byte[]> classHashes = new ConcurrentHashMap<>();
+	private static final Map<String, byte[]> unloadedClasses = new ConcurrentHashMap<>();
 
 	// 变更处理调度器，用于"防抖"
 	private static final Set<Path>                pendingChanges = Collections.synchronizedSet(new HashSet<>());
@@ -120,6 +121,8 @@ public class Main {
 				Class<?> targetClass = loadedClassesMap.get(className);
 
 				if (targetClass != null && Files.exists(path)) {
+					// 如果有写锁，则等待
+					// while (!Files.isReadable(path)) { Thread.sleep(100); }
 					byte[] newBytecode = Files.readAllBytes(path);
 					byte[] newHash     = calculateHash(newBytecode);
 					byte[] oldHash     = classHashes.get(className);
@@ -129,8 +132,10 @@ public class Main {
 						log("[MODIFIED] " + className);
 						definitions.add(new ClassDefinition(targetClass, newBytecode));
 					} else {
-						log("[UNCHANGED] " + className);
+						log("[UNCHANGED] Hash is the same for: " + className);
 					}
+				} else if (targetClass == null) {
+					log("[NOT LOADED] Class file changed but class is not loaded: " + className);
 				}
 			} catch (IOException | NoSuchAlgorithmException e) {
 				error("Failed to process file: " + path, e);
@@ -148,7 +153,19 @@ public class Main {
 			info("Successfully redefined " + definitions.size() + " classes. Hotswap finished.");
 		} catch (ClassNotFoundException | UnmodifiableClassException e) {
 			error("Error redefining " + definitions.size() + " classes.", e);
-		} catch (Throwable t) {
+		} catch (UnsupportedOperationException e) {
+			// [MODIFIED] 增强错误报告：当批量重定义失败时，尝试逐个重定义以找出问题类
+			error("Failed to redefine classes due to incompatible changes (e.g., method signature change).", e);
+			info("Attempting to redefine one by one to identify the faulty class...");
+			for (ClassDefinition def : definitions) {
+				try {
+					inst.redefineClasses(def);
+					info(" -> Successfully redefined: " + def.getDefinitionClass().getName());
+				} catch (Exception ex) {
+					error(" -> FAILED to redefine: " + def.getDefinitionClass().getName(), ex);
+				}
+			}
+		}catch (Throwable t) {
 			error("An unexpected error occurred during redefinition.", t);
 		}
 	}
@@ -194,12 +211,19 @@ public class Main {
 
 						Path context  = (Path) event.context();
 						Path fullPath = triggeredDir.resolve(context);
-						if (context.toString().endsWith(".class")) {
-							handleFileChange(triggeredDir.resolve(context));
-						}
-						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
-							registerAll(fullPath);
-						}
+
+						// 对删除事件的处理
+						WatchEvent.Kind<?> kind = event.kind();
+
+						if (kind == StandardWatchEventKinds.ENTRY_CREATE || kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+							if (context.toString().endsWith(".class")) {
+								handleFileChange(fullPath);
+							} else if (Files.isDirectory(fullPath)) {
+								registerAll(fullPath);
+							}
+						} else if (kind == StandardWatchEventKinds.ENTRY_DELETE && context.toString().endsWith(".class")) {
+							info("[DELETED] Class file was deleted: " + fullPath);
+ 						}
 					}
 					if (!key.reset()) {
 						log("WatchKey no longer valid: " + triggeredDir);
@@ -223,7 +247,10 @@ public class Main {
 			try (Stream<Path> stream = Files.walk(startDir)) {
 				stream.filter(Files::isDirectory).forEach(dir -> {
 					try {
-						dir.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY);
+						dir.register(watchService,
+						 StandardWatchEventKinds.ENTRY_CREATE,
+						 StandardWatchEventKinds.ENTRY_MODIFY,
+						 StandardWatchEventKinds.ENTRY_DELETE);
 					} catch (IOException e) {
 						log("Failed to register directory: " + dir);
 					}
@@ -231,6 +258,15 @@ public class Main {
 			}
 		}
 	}
+	/*  这个 Transformer 用于转换还未加载类的字节码 */
+	private static final ClassFileTransformer CLASS_TRANSFORMER      = new ClassFileTransformer() {
+		public byte[] transform(Module module, ClassLoader loader, String className, Class<?> classBeingRedefined,
+		                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+			// className 使用 internal name (e.g., "java/lang/String")，需要转换
+			String dotClassName = className.replace('/', '.');
+			return unloadedClasses.remove(dotClassName);
+		}
+	};
 	/**
 	 * [NEW] 这个 Transformer 只用于在 Agent 启动时捕获所有已加载类的原始字节码。
 	 * 它不进行任何实际的类转换，只是一个“窃听器”。
@@ -242,6 +278,7 @@ public class Main {
 			// className 使用 internal name (e.g., "java/lang/String")，需要转换
 			String dotClassName = className.replace('/', '.');
 
+			// info(dotClassName);
 			// 只有当这个类我们还没记录过哈希时，才记录它
 			// 这是为了防止重复计算和潜在的并发问题
 			classHashes.computeIfAbsent(dotClassName, key -> {
@@ -266,6 +303,8 @@ public class Main {
 	private static void initializeAgentState() {
 		info("Initializing class state using in-memory bytecode...");
 		classHashes.clear();
+
+		// inst.addTransformer(CLASS_TRANSFORMER, true);
 		inst.addTransformer(INITIAL_STATE_CAPTURER, true);
 
 		try {
@@ -287,8 +326,9 @@ public class Main {
 			// 这个异常理论上不应该发生，因为我们已经用 isModifiableClass 检查过了
 			error("Failed during initial state capture.", e);
 		} finally {
-			// 初始化完成后，这个 Transformer 的使命就结束了，移除它
-			inst.removeTransformer(INITIAL_STATE_CAPTURER);
+			// 不行，还有未加载的类，没计算hash
+			// // 初始化完成后，这个 Transformer 的使命就结束了，移除它
+			// inst.removeTransformer(INITIAL_STATE_CAPTURER);
 		}
 	}
 

@@ -793,7 +793,7 @@ public class IntUI {
 			Time.runTask(10f, DelayDisposable.super::clearAll);
 		}
 	}
-	private static class ExceptionPopup extends Window implements PopupWindow, IDisposable {
+	static class ExceptionPopup extends Window implements PopupWindow, IDisposable {
 		static final ObjectMap<Signature, ExceptionPopup> instances = new ObjectMap<>();
 		private ExceptionPopup(Signature signature, Throwable th) {
 			super("", 0, 200, false);
@@ -877,7 +877,7 @@ public class IntUI {
 		}
 	}
 
-	private static class AutoFitTable extends Table implements PopupWindow {
+	static class AutoFitTable extends Table implements PopupWindow {
 		public float getPrefHeight() {
 			return Math.min(super.getPrefHeight(), (float) graphics.getHeight());
 		}

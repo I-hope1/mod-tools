@@ -116,22 +116,27 @@ jar {
 	}
 
 	def agent = project(":testAgent")
-	from("${agent.buildDir0}/libs/") {include "testAgent-${agent.version}.jar" rename { o ->  "libs/hotswap-agent.jar" }}
+	from("${agent.buildDir0}/libs/") { include "testAgent-${agent.version}.jar" rename { o -> "libs/hotswap-agent.jar" } }
 }
 
-task playGame(type: JavaExec) {
+
+task playDesktop {
 	dependsOn jar
 
 	println "buildDir: $buildDir0; version: $version"
 
-	doFirst {
-		copy {
-			from "$buildDir0/libs"
-			into "${MdtDataDir}/mods"
-			include "$archivesBaseName-${version}.jar"
-			rename { oldName -> "$modName-${version}.jar" }
-		}
+	copy {
+		from "$buildDir0/libs"
+		into "${MdtDataDir}/mods"
+		include "$archivesBaseName-${version}.jar"
+		rename { oldName -> "$modName-${version}.jar" }
 	}
+}
+
+task playGame(type: JavaExec) {
+	dependsOn jar
+	dependsOn playDesktop
+
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
 	args = [

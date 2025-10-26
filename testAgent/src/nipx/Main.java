@@ -122,15 +122,13 @@ public class Main {
 				Class<?> targetClass = loadedClassesMap.get(className);
 
 				if (targetClass != null && Files.exists(path)) {
-					// 如果有写锁，则等待
-					// while (!Files.isReadable(path)) { Thread.sleep(100); }
 					byte[] newBytecode = Files.readAllBytes(path);
 					byte[] newHash     = calculateHash(newBytecode);
 					byte[] oldHash     = classHashes.get(className);
 
 					if (oldHash == null) {
 						error("[ERROR] Hash is null: " + className);
-					}else if (!Arrays.equals(oldHash, newHash)) {
+					} else if (!Arrays.equals(oldHash, newHash)) {
 						classHashes.put(className, newHash);
 						log("[MODIFIED] " + className);
 						definitions.add(new ClassDefinition(targetClass, newBytecode));
@@ -264,15 +262,6 @@ public class Main {
 			}
 		}
 	}
-	/*  这个 Transformer 用于转换还未加载类的字节码 */
-	private static final ClassFileTransformer CLASS_TRANSFORMER      = new ClassFileTransformer() {
-		public byte[] transform(Module module, ClassLoader loader, String className, Class<?> classBeingRedefined,
-		                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
-			// className 使用 internal name (e.g., "java/lang/String")，需要转换
-			String dotClassName = className.replace('/', '.');
-			return unloadedClasses.remove(dotClassName);
-		}
-	};
 	/**
 	 * [NEW] 这个 Transformer 只用于在 Agent 启动时捕获所有已加载类的原始字节码。
 	 * 它不进行任何实际的类转换，只是一个“窃听器”。
@@ -297,6 +286,7 @@ public class Main {
 				}
 			});
 
+			if (unloadedClasses.containsKey(dotClassName)) return unloadedClasses.remove(dotClassName);
 			// 我们不修改任何字节码，返回 null 表示不进行转换
 			return null;
 		}
@@ -311,7 +301,6 @@ public class Main {
 		classHashes.clear();
 		unloadedClasses.clear();
 
-		inst.addTransformer(CLASS_TRANSFORMER, true);
 		inst.addTransformer(INITIAL_STATE_CAPTURER, true);
 
 		try {

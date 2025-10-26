@@ -1,6 +1,7 @@
 package modtools.content.debug;
 
 import arc.scene.ui.ImageButton;
+import arc.util.Log;
 import mindustry.gen.Icon;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
@@ -68,6 +69,7 @@ public class Pause extends Content {
 	}
 	private void buildPark() {
 		Thread thread = Thread.currentThread();
+
 		ui.cont.button("OpenPane", () -> new MyJFrame(thread)).growX();
 		ui.cont.button("Park", () -> {
 			UNSAFE.park(false, Long.MAX_VALUE);
@@ -76,7 +78,7 @@ public class Pause extends Content {
 	public void build() {
 		ui.show();
 
-		// Log.info("[[[]]]][siodsj");
+		Log.info("-XXX-[''''''i032");
 		// INFO_DIALOG.showInfo(ui);
 	}
 

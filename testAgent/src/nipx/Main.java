@@ -15,6 +15,7 @@ import java.util.stream.*;
 public class Main {
 	private static final boolean DEBUG         = false;
 	private static final boolean FORCE_RESTART = true;
+	public static final  int     FILE_SHAKE_MS = 600;
 
 	// Agent 核心状态
 	private static       Instrumentation     inst;
@@ -24,7 +25,7 @@ public class Main {
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
 
 	// 存储已加载类的字节码哈希，用于比对变更
-	private static final Map<String, byte[]> classHashes = new ConcurrentHashMap<>();
+	private static final Map<String, byte[]> classHashes     = new ConcurrentHashMap<>();
 	private static final Map<String, byte[]> unloadedClasses = new ConcurrentHashMap<>();
 
 	// 变更处理调度器，用于"防抖"
@@ -134,8 +135,12 @@ public class Main {
 					} else {
 						log("[UNCHANGED] Hash is the same for: " + className);
 					}
-				} else if (targetClass == null) {
+				} else if (targetClass == null && Files.exists(path)) {
 					log("[NOT LOADED] Class file changed but class is not loaded: " + className);
+					// [FIX] 读取新字节码并暂存，以便在未来加载时使用
+					byte[] newBytecode = Files.readAllBytes(path);
+					unloadedClasses.put(className, newBytecode);
+					log("[STASHED] Stashed new bytecode for future loading of: " + className);
 				}
 			} catch (IOException | NoSuchAlgorithmException e) {
 				error("Failed to process file: " + path, e);
@@ -165,7 +170,7 @@ public class Main {
 					error(" -> FAILED to redefine: " + def.getDefinitionClass().getName(), ex);
 				}
 			}
-		}catch (Throwable t) {
+		} catch (Throwable t) {
 			error("An unexpected error occurred during redefinition.", t);
 		}
 	}
@@ -212,18 +217,12 @@ public class Main {
 						Path context  = (Path) event.context();
 						Path fullPath = triggeredDir.resolve(context);
 
-						// 对删除事件的处理
-						WatchEvent.Kind<?> kind = event.kind();
-
-						if (kind == StandardWatchEventKinds.ENTRY_CREATE || kind == StandardWatchEventKinds.ENTRY_MODIFY) {
-							if (context.toString().endsWith(".class")) {
-								handleFileChange(fullPath);
-							} else if (Files.isDirectory(fullPath)) {
-								registerAll(fullPath);
-							}
-						} else if (kind == StandardWatchEventKinds.ENTRY_DELETE && context.toString().endsWith(".class")) {
-							info("[DELETED] Class file was deleted: " + fullPath);
- 						}
+						if (context.toString().endsWith(".class")) {
+							handleFileChange(triggeredDir.resolve(context));
+						}
+						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
+							registerAll(fullPath);
+						}
 					}
 					if (!key.reset()) {
 						log("WatchKey no longer valid: " + triggeredDir);
@@ -233,6 +232,8 @@ public class Main {
 				error("File watcher encountered an error in " + getName(), e);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
+			} catch (UncheckedIOException e) {
+				error("File watcher encountered an unchecked IO error, possibly due to a directory being deleted during a scan.", e);
 			} finally {
 				info("File watcher stopped for: " + root);
 				try {
@@ -244,13 +245,16 @@ public class Main {
 		}
 
 		private void registerAll(Path startDir) throws IOException {
+			if (!Files.exists(startDir)) {
+				log("Skipping registration for non-existent directory: " + startDir);
+				return;
+			}
 			try (Stream<Path> stream = Files.walk(startDir)) {
 				stream.filter(Files::isDirectory).forEach(dir -> {
 					try {
 						dir.register(watchService,
 						 StandardWatchEventKinds.ENTRY_CREATE,
-						 StandardWatchEventKinds.ENTRY_MODIFY,
-						 StandardWatchEventKinds.ENTRY_DELETE);
+						 StandardWatchEventKinds.ENTRY_MODIFY);
 					} catch (IOException e) {
 						log("Failed to register directory: " + dir);
 					}
@@ -303,8 +307,9 @@ public class Main {
 	private static void initializeAgentState() {
 		info("Initializing class state using in-memory bytecode...");
 		classHashes.clear();
+		unloadedClasses.clear();
 
-		// inst.addTransformer(CLASS_TRANSFORMER, true);
+		inst.addTransformer(CLASS_TRANSFORMER, true);
 		inst.addTransformer(INITIAL_STATE_CAPTURER, true);
 
 		try {
@@ -337,7 +342,7 @@ public class Main {
 		if (scheduledTask != null && !scheduledTask.isDone()) {
 			scheduledTask.cancel(false);
 		}
-		scheduledTask = scheduler.schedule(Main::triggerHotswap, 500, TimeUnit.MILLISECONDS);
+		scheduledTask = scheduler.schedule(Main::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
 	}
 
 	private static void triggerHotswap() {

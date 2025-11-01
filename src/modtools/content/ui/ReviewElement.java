@@ -1011,6 +1011,7 @@ public class ReviewElement extends Content {
 			entries.add(new BoolEntry("Transform", e -> e instanceof Group g && g.isTransform()));
 			entries.add(new ElemFieldEntry("rotation"));
 			entries.add(new ElemFieldEntry(Element.class, "translation", new PairCons(", ")));
+			entries.add(new RotationEntry());
 			entries.add(new StyleEntry());
 			entries.add(new AlignEntry<>("Align", Table.class, Table::getAlign));
 			entries.add(new ElemScaleEntry());

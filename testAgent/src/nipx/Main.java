@@ -13,7 +13,7 @@ import java.util.stream.*;
  * 它会自动监控指定目录下的.class文件变化，并对已加载的类进行热更新。
  */
 public class Main {
-	private static final boolean DEBUG         = false;
+	private static final boolean DEBUG         = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 	private static final boolean FORCE_RESTART = true;
 	public static final  int     FILE_SHAKE_MS = 600;
 

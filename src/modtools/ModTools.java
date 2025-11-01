@@ -31,7 +31,6 @@ import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
-import modtools.utils.reflect.ClassUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 import sun.reflect.ReflectionFactory;
@@ -126,7 +125,7 @@ public class ModTools extends Mod {
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
 
-			if (isDesktop() && ClassUtils.exists("sun.tools.attach.HotSpotVirtualMachine")) HotSwapManager.start();
+			if (HotSwapManager.valid()) HotSwapManager.start();
 			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
 			Log.err(e);

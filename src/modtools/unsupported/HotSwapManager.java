@@ -4,8 +4,9 @@ import arc.util.serialization.Jval.JsonArray;
 import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
+import modtools.IntVars;
 import modtools.utils.MySettings.Data;
-import modtools.utils.reflect.FieldUtils;
+import modtools.utils.reflect.*;
 import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;
@@ -19,7 +20,6 @@ import static modtools.utils.MySettings.SETTINGS;
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-
 	public static final Data      HOT_SWAP   = SETTINGS.child("hot-swap");
 	public static final JsonArray watchPaths = HOT_SWAP.getArray("watch-paths");
 	public static final boolean   DEBUG      = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
@@ -57,6 +57,9 @@ public class HotSwapManager {
 
 		VirtualMachine vm = null;
 		try {
+			if (DEBUG) {
+				System.out.println("[HotSwapManager] Attaching to process " + pid);
+			}
 			vm = VirtualMachine.attach(pid);
 			vm.loadAgent(agentPath, agentArgs);
 		} finally {
@@ -94,4 +97,7 @@ public class HotSwapManager {
 		}
 	}
 
+	public static boolean valid() {
+		return IntVars.isDesktop() && ClassUtils.exists("sun.tools.attach.HotSpotVirtualMachine");
+	}
 }

@@ -30,6 +30,7 @@ import modtools.ui.comp.*;
 import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
+import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
@@ -150,7 +151,7 @@ public class SettingsUI extends Content {
 		});
 
 		// (HotSwap) 区域
-		addSectionInternal("HotSwap", Icon.refreshSmall, t -> {
+		if (HotSwapManager.valid()) addSectionInternal("HotSwap", Icon.refreshSmall, t -> {
 			SettingsBuilder.build(t);
 			// watch的路径数组配置
 			SettingsBuilder.array("@settings.hotswap.watchpaths", HOT_SWAP, "watch-paths", () -> true);

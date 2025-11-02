@@ -1,5 +1,5 @@
 modtools.annotations.processors.ContentProcessor,isolating
-modtools.annotations.processors.AINIT,isolating
+modtools.annotations.processors.AINIT,dynamic
 modtools.annotations.processors.DebugLogProc,isolating
 modtools.annotations.BaseProcessor,isolating
 modtools.annotations.processors.ColorProcessor,isolating

@@ -151,11 +151,13 @@ public class SettingsUI extends Content {
 		});
 
 		// (HotSwap) 区域
-		if (HotSwapManager.valid()) addSectionInternal("HotSwap", Icon.refreshSmall, t -> {
-			SettingsBuilder.build(t);
-			// watch的路径数组配置
-			SettingsBuilder.array("@settings.hotswap.watchpaths", HOT_SWAP, "watch-paths", () -> true);
-		});
+		if (HotSwapManager.valid()) {
+			addSectionInternal("HotSwap", Icon.refreshSmall, t -> {
+				SettingsBuilder.build(t);
+				// watch的路径数组配置
+				SettingsBuilder.array("@settings.hotswap.watchpaths", HOT_SWAP, "watch-paths", () -> true);
+			});
+		}
 
 		// (Others) 区域
 		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {
@@ -429,14 +431,14 @@ public class SettingsUI extends Content {
 			return rowSelf(main.add(t).growX().padTop(0));
 		}
 		/**
-		* 添加一个用于编辑字符串数组的UI组件。
-		* 数组在Data中以换行符分隔的字符串形式存储。
-		* @param text 标题标签的文本 (可以是本地化键)
-		* @param data 设置数据实例
-		* @param key  存储数组的键
-		* @param condition 控制该组件是否启用的条件
-		* @return 添加到主设置表格的单元格
-		*/
+		 * 添加一个用于编辑字符串数组的UI组件。
+		 * 数组在Data中以换行符分隔的字符串形式存储。
+		 * @param text      标题标签的文本 (可以是本地化键)
+		 * @param data      设置数据实例
+		 * @param key       存储数组的键
+		 * @param condition 控制该组件是否启用的条件
+		 * @return 添加到主设置表格的单元格
+		 */
 		public static Cell<Table> array(String text, Data data, String key, Boolp condition) {
 			Table container = new Table();
 			container.left();
@@ -448,30 +450,29 @@ public class SettingsUI extends Content {
 			listTable.left().defaults().padBottom(2f);
 
 			// 用于重建列表的函数
-			Runnable rebuildList = () -> {
-				listTable.clear();
-				// 从数据加载，按换行符分割，并移除空行
-				JsonArray items = data.getArray(key);
+			Runnable rebuildList = new Runnable() {
+				public void run() {
+					listTable.clear();
+					// 从数据加载，按换行符分割，并移除空行
+					JsonArray items = data.getArray(key);
 
-				if (items.isEmpty()) {
-					listTable.add(Core.bundle.get("settings.array.empty", "(Empty)"))
-					 .color(Color.gray).left();
-				} else {
-					for (int i = 0; i < items.size; i++) {
-						final int index = i;
-						String item = items.get(index).asString();
-						Table row = new Table();
-						row.left();
-						row.add(item).growX().wrap().width(300).left();
-						// 移除按钮
-						row.button(Icon.trashSmall, Styles.emptyi, () -> {
-							JsonArray currentItems = data.getArray(key);
-							if (index < currentItems.size) {
-								currentItems.remove(index);
-								data.put(key, currentItems.toString("\n"));
-							}
-						}).size(40f).padLeft(8f).disabled(b -> !condition.get());
-						listTable.add(row).growX().left().row();
+					if (items == null || items.isEmpty()) {
+						listTable.add(Core.bundle.get("settings.array.empty", "(Empty)"))
+						 .color(Color.gray).left();
+					} else {
+						for (int i = 0; i < items.size; i++) {
+							final int index = i;
+							String    item  = items.get(index).asString();
+							Table     row   = new Table();
+							row.left();
+							row.add(item).growX().wrap().width(300).left();
+							// 移除按钮
+							row.button(Icon.trashSmall, Styles.emptyi, () -> {
+								data.removeArrayIndex(key, index);
+								this.run();
+							}).size(40f).padLeft(8f).disabled(b -> !condition.get());
+							listTable.add(row).growX().left().row();
+						}
 					}
 				}
 			};

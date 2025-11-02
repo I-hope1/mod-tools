@@ -187,8 +187,6 @@ public class Main {
 		return null; // 如果文件不属于任何一个监控目录
 	}
 
-	// ================== 以下方法与单路径版本基本一致 ==================
-
 	/**
 	 * 文件监控线程，这个类的设计本身就是可复用的，无需修改。
 	 */
@@ -272,7 +270,6 @@ public class Main {
 		                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 			// className 使用 internal name (e.g., "java/lang/String")，需要转换
 			String dotClassName = className.replace('/', '.');
-
 			// info(dotClassName);
 			// 只有当这个类我们还没记录过哈希时，才记录它
 			// 这是为了防止重复计算和潜在的并发问题

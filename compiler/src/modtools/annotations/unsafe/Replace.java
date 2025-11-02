@@ -16,7 +16,7 @@ import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
 import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.main.*;
 import com.sun.tools.javac.model.JavacElements;
-import com.sun.tools.javac.processing.*;
+import com.sun.tools.javac.processing.JavacProcessingEnvironment;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.*;
@@ -184,12 +184,14 @@ public class Replace {
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
 	}
+	/** @see Resolve#lookupInvisibleSymbol(Env, Name, Function, BiFunction, Predicate, Symbol)   */
 	private static void setRecovery(Resolve resolve) {
 		setAccess(Resolve.class, resolve, "doRecoveryLoadClass", (RecoveryLoadClass) (env, name) -> {
 			List<Name> candidates = Convert.classCandidates(name);
 			return lookupInvisibleSymbol(env, name,
 			 n -> () -> createCompoundIterator(candidates,
-				c -> syms.getClassesForName(c).iterator()),
+				c -> syms.getClassesForName(c)
+				 .iterator()),
 			 (ms, n) -> {
 				 for (Name candidate : candidates) {
 					 try {
@@ -586,13 +588,15 @@ public class Replace {
 		matcher.appendTail(sb);
 		return sb.toString();
 	}
-
 	public static Context context() {
 		return context;
 	}
 	public static Context getContextFor(ProcessingEnvironment env) {
 		if (env instanceof JavacProcessingEnvironment proc) {
 			return proc.getContext();
+		} else if (Proxy.isProxyClass(env.getClass())) {
+			println(Proxy.getInvocationHandler(env));
+			throw new RuntimeException("" + Proxy.getInvocationHandler(env));
 		} else {
 			try {
 				Field f = env.getClass().getDeclaredField("delegate");

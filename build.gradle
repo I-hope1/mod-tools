@@ -25,6 +25,7 @@ allprojects {
 		mavenCentral()
 		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
 		maven { url 'https://jitpack.io' }
+		google()
 	}
 }
 
@@ -35,6 +36,9 @@ configurations.configureEach {
 	resolutionStrategy.eachDependency { details ->
 		if (details.requested.group == 'com.github.Anuken.Arc') details.useVersion "$mindustryVersion"
 	}
+}
+configurations {
+    desugarLib
 }
 
 dependencies {
@@ -72,12 +76,13 @@ dependencies {
 //	compileOnly 'com.github.bsideup:jabel:1.0.1'
 //	annotationProcessor 'com.github.bsideup:jabel:1.0.1'
 //	compileOnly("com.github.Anuken.rhino::$mindustryVersion")
+	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'
 }
 
 task jarAndroid(type: JavaExec) {
 	dependsOn "jar"
 
-	if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
+	if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.")
 
 	def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 	if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
@@ -94,10 +99,14 @@ task jarAndroid(type: JavaExec) {
 
 	classpath("$d8Root/lib/d8.jar")
 	main("com.android.tools.r8.D8")
-	//dex and desugar files - this requires d8 in your PATH
-	args = dependencies + [
+	def platformJar = new File(platformRoot, "android.jar")
+	def desugarLibJar = configurations.desugarLib.files.find { it.name.endsWith('.jar') }
+
+	args = [
+			"--lib", "$platformJar.path",
+	] + dependencies + [
+//			"--desugared-lib", desugarLibJar.absolutePath,
 			"--min-api", "$minApi",
-//			"--file-per-class",
 			"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
 			"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
 	]

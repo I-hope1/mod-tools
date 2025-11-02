@@ -209,6 +209,12 @@ public class MySettings {
 			Object o = get(name, Jval::newArray);
 			return o instanceof Jval jval && jval.isArray() ? jval.asArray() : null;
 		}
+		public void removeArrayIndex(String name, int index) {
+			JsonArray array = getArray(name);
+			if (array == null) return;
+			array.remove(index);
+			fireChanged(name);
+		}
 		public void onChanged(String key, Runnable run) {
 			events.onIns(key, run);
 		}

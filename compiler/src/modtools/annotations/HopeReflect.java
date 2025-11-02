@@ -46,9 +46,11 @@ public class HopeReflect {
 	}
 	static Module EVERYONE_MODULE;
 	public static void openModule() throws Throwable {
-		lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class))
-		 .invokeExact(Object.class.getModule(), "jdk.internal.module");
-		EVERYONE_MODULE = (Module) lookup.findStaticGetter(Module.class, "EVERYONE_MODULE", Module.class).invoke();
+		if (EVERYONE_MODULE == null) {
+			lookup.findVirtual(Module.class, "implAddOpens", MethodType.methodType(Void.TYPE, String.class))
+			 .invokeExact(Object.class.getModule(), "jdk.internal.module");
+			EVERYONE_MODULE = (Module) lookup.findStaticGetter(Module.class, "EVERYONE_MODULE", Module.class).invoke();
+		}
 
 		openTrust(Object.class.getModule(),
 		 "jdk.internal.misc",

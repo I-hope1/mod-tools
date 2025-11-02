@@ -25,6 +25,7 @@ public class AINIT extends AbstractProcessor {
 
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		try {
+			HopeReflect.openModule();
 			Replace.extendingFunc(processingEnv);
 		} catch (Throwable e) {
 			err(e);

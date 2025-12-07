@@ -212,9 +212,9 @@ public class ModTools extends Mod {
 		if (isDesktop() && E_Extending.import_mod_from_drop.enabled()) {
 			load("DropMod", DropFile::load);
 		}
-		if (Core.app.isAndroid()) {
+		/* if (Core.app.isAndroid()) {
 			load("AndroidOptimize", AndroidOptimize::load);
-		}
+		} */
 		load("Contents", Contents::load);
 		load("IntUI", IntUI::load);
 		load("CustomViewer", Viewers::loadCustomMap);

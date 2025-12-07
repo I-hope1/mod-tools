@@ -184,7 +184,7 @@ public class Replace {
 		setAccess(Check.class, Check.instance(context), "rs", resolve);
 		setAccess(Attr.class, Attr.instance(context), "rs", resolve);
 	}
-	/** @see Resolve#lookupInvisibleSymbol(Env, Name, Function, BiFunction, Predicate, Symbol)   */
+	/** @see Resolve#lookupInvisibleSymbol(Env, Name, Function, BiFunction, Predicate, Symbol) */
 	private static void setRecovery(Resolve resolve) {
 		setAccess(Resolve.class, resolve, "doRecoveryLoadClass", (RecoveryLoadClass) (env, name) -> {
 			List<Name> candidates = Convert.classCandidates(name);
@@ -487,6 +487,8 @@ public class Replace {
 	static boolean first = true;
 	/** 优先级很高 */
 	public static void process(Set<? extends Element> rootElements) {
+		// if (true) return;
+
 		try {
 			Times.mark();
 			Map<JCTree, JCCompilationUnit> map = new HashMap<>();
@@ -595,16 +597,24 @@ public class Replace {
 		if (env instanceof JavacProcessingEnvironment proc) {
 			return proc.getContext();
 		} else if (Proxy.isProxyClass(env.getClass())) {
-			println(Proxy.getInvocationHandler(env));
-			throw new RuntimeException("" + Proxy.getInvocationHandler(env));
+			StringBuilder sb = new StringBuilder();
+			sb.append(Proxy.getInvocationHandler(env)).append('\n');
+			for (Field field : env.getClass().getDeclaredFields()) {
+				sb.append(field).append('\n');
+			}
+			throw new RuntimeException("" + sb);
 		} else {
 			try {
 				Field f = env.getClass().getDeclaredField("delegate");
 				f.setAccessible(true);
 				return ((JavacProcessingEnvironment) f.get(env)).getContext();
 				// CMN.Log(jcEnv);
-			} catch (Exception e) {
-				throw new RuntimeException(e);
+			} catch (Throwable e) {
+				StringBuilder sb = new StringBuilder();
+				for (Field field : env.getClass().getDeclaredFields()) {
+					sb.append(field).append("||");
+				}
+				throw new RuntimeException("" + sb);
 			}
 		}
 	}

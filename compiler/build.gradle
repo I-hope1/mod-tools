@@ -3,7 +3,7 @@ apply plugin: 'java'
 sourceSets.main.java.srcDirs = ["src"]
 tasks.withType(JavaCompile) {
 	// 这里是为了刷新编译器参数
-//	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000)
+	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000)
 }
 
 dependencies {
@@ -11,9 +11,8 @@ dependencies {
 
 	compileOnly 'com.google.auto.service:auto-service:1.1.1'
 	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
-
 	annotationProcessor files("$compilerJar")
-//	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
+	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 //	implementation files("libs/Internal.jar")
 

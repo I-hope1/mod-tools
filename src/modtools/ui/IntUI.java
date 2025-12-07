@@ -745,7 +745,7 @@ public class IntUI {
 		public void hide() {
 			shown.remove(this);
 			if (mobile) {
-				TaskManager.scheduleOrReset(1.2f - Time.timeSinceMillis(lastShowTime) / 1000f, super::hide);
+				TaskManager.scheduleOrReset(Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f), super::hide);
 			} else {
 				super.hide();
 			}

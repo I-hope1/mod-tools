@@ -12,7 +12,7 @@ import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
-import modtools.android.HiddenApi;
+import modtools.android.*;
 import modtools.content.*;
 import modtools.content.debug.Tester;
 import modtools.events.*;
@@ -196,10 +196,12 @@ public class ModTools extends Mod {
 		Time.mark();
 
 		IntVars.load();
+
 		if (errors.any()) {
 			errors.each(e -> ui.showException(e));
 			return;
 		}
+
 		// 加载HopeIcons
 		HopeIcons.modName = modName;
 		// Core.batch = new MySpriteBatch();
@@ -209,6 +211,9 @@ public class ModTools extends Mod {
 		load("HopeInput", HopeInput::load);
 		if (isDesktop() && E_Extending.import_mod_from_drop.enabled()) {
 			load("DropMod", DropFile::load);
+		}
+		if (Core.app.isAndroid()) {
+			load("AndroidOptimize", AndroidOptimize::load);
 		}
 		load("Contents", Contents::load);
 		load("IntUI", IntUI::load);

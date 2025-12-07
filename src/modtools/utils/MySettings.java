@@ -82,7 +82,7 @@ public class MySettings {
 
 		public Object get(String key, Object defaultValue) {
 			if (containsKey(key)) return get(key);
-			fireChanged( key);
+			put(key, defaultValue);
 			return defaultValue;
 		}
 

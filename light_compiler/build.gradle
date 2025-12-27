@@ -2,7 +2,7 @@ plugins {
 	id 'java'
 }
 
-group = 'nipx'
+group = 'light-compiler'
 version = '1.0'
 
 sourceSets.main.java.srcDirs = ["src"]
@@ -14,18 +14,6 @@ repositories {
 }
 
 jar {
-	manifest {
-		attributes(
-				'Agent-Class': 'nipx.Main',
-				'Premain-Class': 'nipx.Main',
-				'Can-Retransform-Classes': true,
-				'Can-Redefine-Classes': true
-		)
-	}
-//	from(configurations.compileClasspath.asList().toArray()) { include "**" }
-	from {
-		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-	}
 }
 tasks.withType(JavaCompile) {
 	options.incremental = true
@@ -37,6 +25,11 @@ tasks.withType(JavaCompile) {
 	//	options.compilerArgs.add("-verbose")
 }
 
+dependencies {
+	compileOnly 'com.google.auto.service:auto-service:1.1.1'
+	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+//	implementation "net.bytebuddy:byte-buddy:1.17.6"
+}
 
 test {
 	useJUnitPlatform()

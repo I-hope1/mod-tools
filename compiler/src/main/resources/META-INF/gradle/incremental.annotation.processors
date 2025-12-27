@@ -7,3 +7,4 @@ modtools.annotations.processors.asm.ASMProcessor,isolating
 modtools.annotations.processors.asm.AccessorProc,isolating
 modtools.annotations.processors.asm.SampleProcessor,isolating
 modtools.annotations.processors.asm.InlineProc,isolating
+modtools.annotations.processors.IconsProcessor,dynamic

@@ -63,7 +63,7 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),
 		 List.nil(), parseBlock("{return (TextureRegionDrawable)arc.Core.atlas.drawable(modName+\"-\"+name);}"), null);
 		root.defs = root.defs.append(n);
-		for (File fi : findAll(new File("./assets/" + icons.iconDir()))
+		for (File fi : findAll(new File(System.getProperty("user.dir") + "/assets/" + icons.iconDir()))
 		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new)) {
 			Kind last = drawable.tsym.owner.kind;
 			drawable.tsym.owner.kind = Kind.VAR;
@@ -89,15 +89,23 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		String content = unit.toString();
 		root.mods = mMaker.Modifiers(0);
 		root.name = ns(s);
-		var source = /* unit.getSourceFile() */
-		 mFiler.createSourceFile((icons.genPackage().equals(".") ? element.getEnclosingElement().toString() : icons.genPackage())
-		                         + "." + genName);
-		Writer writer = source.openWriter();
-		writer.write(content);
-		root.defs = List.nil();
+		Writer writer = null;
+		try {
+			String flatName = (icons.genPackage().equals(".") ? element.getEnclosingElement().toString() : icons.genPackage())
+			                  + "." + genName;
+			var source = /* unit.getSourceFile() */
+			 mFiler.createSourceFile(flatName);
+			writer = source.openWriter();
+		} catch (IOException e) {
+		} finally {
+			if (writer != null) {
+				writer.write(content);
+				writer.flush();
+				writer.close();
+			}
+			root.defs = List.nil();
+		}
 		// unit.packge = lastPackage;
-		writer.flush();
-		writer.close();
 		// Log.info(root);
 	}
 	ArrayList<File> findAll(File file) {

@@ -55,6 +55,9 @@ public interface PrintHelper {
 			String s = sw.toString();
 			errs("[MISC]:" + s);
 
+			if (Replace.log == null) {
+				throw new RuntimeException(th);
+			}
 			Replace.log.error(SPrinter.err(s));
 			Replace.compiler.shouldStopPolicyIfError = CompileState.INIT;
 		}

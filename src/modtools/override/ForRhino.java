@@ -21,7 +21,7 @@ public class ForRhino {
 
 	// @Exclude
 	public static void load() { }
-	;
+
 	static {
 		try {
 			factory = createFactory();

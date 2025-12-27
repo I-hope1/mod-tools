@@ -12,11 +12,11 @@ import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
-import modtools.android.*;
+import modtools.android.HiddenApi;
 import modtools.content.*;
 import modtools.content.debug.Tester;
 import modtools.events.*;
-import modtools.extending.*;
+import modtools.extending.URLRedirect;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
@@ -117,11 +117,11 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) meta.hidden = false;
 		resolveLibsCatch();
 
-
 		try {
 			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
 
 			if (HotSwapManager.valid()) HotSwapManager.start();
+			// HotSwapManager.attachAgent("jdwp", "transport=dt_socket,server=y,suspend=n,address=15005");
 			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
 			Log.err(e);

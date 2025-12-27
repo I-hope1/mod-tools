@@ -86,15 +86,25 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 		// println(methodDecl);
 	}
 	private ClassSymbol makeInterface(ClassSymbol owner, boolean openPackagePrivate, JCCompilationUnit unit,
-	                                  Sample sample) throws IOException {
-		final String   var_myClass          = "myClass";
-		final String   var_class           = "className";
-		final String   ownerName           = owner.name.toString();
-		ClassSymbol    _interface          = new ClassSymbol(Flags.PUBLIC | Flags.INTERFACE, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX), owner.owner);
-		JavaFileObject file                = mFiler.createSourceFile(owner.getQualifiedName().toString() + AConstants.INTERFACE_SUFFIX, owner);
-		StringBuilder  packagePrivateSb    = new StringBuilder();
-		StringBuilder  superMethodDeclared = new StringBuilder();
-		StringBuilder  methodVisitSb       = new StringBuilder();
+	                                  Sample sample) {
+		final String var_myClass = "myClass";
+		final String var_class   = "className";
+		final String ownerName   = owner.name.toString();
+
+		JavaFileObject file;
+		try {
+			file = mFiler.createSourceFile(owner.getQualifiedName().toString() + AConstants.INTERFACE_SUFFIX, owner);
+		} catch (IOException e) {
+			ClassSymbol classSymbol = mSymtab.getClass(owner.packge().modle, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX));
+			if (classSymbol.exists()) {
+				return classSymbol;
+			}
+			throw new RuntimeException(e);
+		}
+		ClassSymbol   _interface          = new ClassSymbol(Flags.PUBLIC | Flags.INTERFACE, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX), owner.owner);
+		StringBuilder packagePrivateSb    = new StringBuilder();
+		StringBuilder superMethodDeclared = new StringBuilder();
+		StringBuilder methodVisitSb       = new StringBuilder();
 
 		methodVisitSb.append("String ").append(var_class).append(" = ByteCodeTools.nativeName(").append(ownerName).append(".class);\n");
 

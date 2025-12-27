@@ -8,15 +8,15 @@ import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeScanner;
+import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
-import com.sun.tools.javac.util.*;
 import modtools.annotations.*;
 import modtools.annotations.settings.*;
 import modtools.annotations.unsafe.TopTranslator;
 import modtools.annotations.unsafe.TopTranslator.ToTranslate;
 
-import javax.annotation.processing.Processor;
+import javax.annotation.processing.*;
 import javax.lang.model.element.*;
 import javax.tools.JavaFileObject;
 import java.io.*;
@@ -33,8 +33,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private static final String FIELD_PREFIX   = "f_";
 	public static final  String REF_PREFIX     = "R_";
 
-	private Name        nameSetting;
-	private ClassType   consType;
+	private Name      nameSetting;
+	private ClassType consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
 	private JCClassDecl mainClass;
@@ -70,16 +70,16 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			 mMaker.ClassLiteral(access.type))).setType(access.type);
 		}));
 		translator.addToDo(new ToTranslate(JCAssign.class, tree -> {
-			 if (!(tree.lhs instanceof JCFieldAccess access && access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) {
-				 return null;
-			 }
-			 // R_XXX.xxx(lhs) = val(rhs) -> E_XXX.xxx.set%Type%(val)
-			 ClassSymbol symbol = translator.getClassSymbolByDoc(i);
-			 // println(symbol.fullname);
-			 JCFieldAccess enumField = translator.makeSelect(mMaker.QualIdent(symbol), access.name, symbol);
-			 JCFieldAccess fn        = translator.makeSelect(enumField, names.fromString("set"), iSettings);
-			 return mMaker.Apply(List.nil(), fn, List.of(tree.rhs)).setType(tree.type);
-		 }));
+			if (!(tree.lhs instanceof JCFieldAccess access && access.selected instanceof JCIdent i && i.name.toString().startsWith(REF_PREFIX))) {
+				return null;
+			}
+			// R_XXX.xxx(lhs) = val(rhs) -> E_XXX.xxx.set%Type%(val)
+			ClassSymbol symbol = translator.getClassSymbolByDoc(i);
+			// println(symbol.fullname);
+			JCFieldAccess enumField = translator.makeSelect(mMaker.QualIdent(symbol), access.name, symbol);
+			JCFieldAccess fn        = translator.makeSelect(enumField, names.fromString("set"), iSettings);
+			return mMaker.Apply(List.nil(), fn, List.of(tree.rhs)).setType(tree.type);
+		}));
 	}
 
 	public void contentLoad(ClassSymbol element) throws IOException {
@@ -188,23 +188,27 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		});
 		if (!allEnumFields.isEmpty()) {
 			// 生成对应的字段 enum_name(Type, ...) -> public static Type enumx = 默认值（ 0 / false / null）
-			Name           pkgName = settings.packge().fullname;
-			JavaFileObject file    = mFiler.createSourceFile(pkgName + "." + REF_PREFIX + literalName, settings);
-			Writer         writer  = file.openWriter();
-			StringBuilder  body    = new StringBuilder();
+			Name pkgName = settings.packge().fullname;
+			try {
+				JavaFileObject file   = mFiler.createSourceFile(pkgName + "." + REF_PREFIX + literalName, settings);
+				Writer         writer = file.openWriter();
+				StringBuilder  body   = new StringBuilder();
 
-			writer.write(String.valueOf(unit.getPackage()));
-			writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
-			writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
-			writer.write("public class " + REF_PREFIX + literalName + " {\n");
-			// writer.write(allEnumFields.entrySet().stream().reduce("\n",
-			//  (a, b) -> a + "\npublic static " + b.getValue() + " " + b.getKey().getSimpleName() + ";", (a, b) -> a + b));
-			allEnumFields.forEach((symbol, type) -> {
-				body.append("\tpublic static ").append(type).append(' ').append(symbol.getSimpleName()).append(";\n");
-			});
-			writer.write(body.toString());
-			writer.write("\n}");
-			writer.close();
+				writer.write(String.valueOf(unit.getPackage()));
+				writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
+				writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
+				writer.write("public class " + REF_PREFIX + literalName + " {\n");
+				// writer.write(allEnumFields.entrySet().stream().reduce("\n",
+				//  (a, b) -> a + "\npublic static " + b.getValue() + " " + b.getKey().getSimpleName() + ";", (a, b) -> a + b));
+				allEnumFields.forEach((symbol, type) -> {
+					body.append("\tpublic static ").append(type).append(' ').append(symbol.getSimpleName()).append(";\n");
+				});
+				writer.write(body.toString());
+				writer.write("\n}");
+				writer.close();
+			} catch (FilerException e) {
+				println(pkgName + " has been created.");
+			}
 		}
 		if (!defList.isEmpty()) {
 			mMaker.at(classDecl.defs.last());

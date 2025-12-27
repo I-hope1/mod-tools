@@ -53,6 +53,7 @@ public class HopeReflect {
 		}
 
 		openTrust(Object.class.getModule(),
+		 "java.lang",
 		 "jdk.internal.misc",
 		 "sun.reflect.annotation",
 		 "jdk.internal.access",

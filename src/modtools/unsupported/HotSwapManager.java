@@ -1,5 +1,6 @@
 package modtools.unsupported;
 
+import arc.util.Log;
 import arc.util.serialization.Jval.JsonArray;
 import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
@@ -42,14 +43,16 @@ public class HotSwapManager {
 			// 参数是类目录，Agent会自行处理
 			String agentPath = getAgentPath();
 
-			attachAgent(agentPath, watchPaths);
+			attachAgent(agentPath, true, watchPaths);
 		} catch (Throwable e) {
 			System.err.println("[HotSwapManager] An error occurred during the hotswap process.");
 			e.printStackTrace();
 		}
 	}
-
-	private static void attachAgent(String agentPath, String agentArgs) throws Throwable {
+	public static void attachAgent(String agentPath, String agentArgs) throws Throwable {
+		attachAgent(agentPath, false, agentArgs);
+	}
+	public static void attachAgent(String agentPath, boolean isAbsolute, String agentArgs) throws Throwable {
 		String pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
 
 		// 允许自我附加，这段代码可以不用每次都执行，但为了简单和健壮性，我们保留它
@@ -61,7 +64,11 @@ public class HotSwapManager {
 				System.out.println("[HotSwapManager] Attaching to process " + pid);
 			}
 			vm = VirtualMachine.attach(pid);
-			vm.loadAgent(agentPath, agentArgs);
+			if (isAbsolute) {
+				vm.loadAgent(agentPath, agentArgs);
+			} else {
+				vm.loadAgentLibrary(agentPath, agentArgs);
+			}
 		} finally {
 			if (vm != null) {
 				vm.detach();

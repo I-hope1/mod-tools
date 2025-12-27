@@ -113,6 +113,7 @@ public class Replace {
 	public static void searchModuleExport(ModuleSymbol module) {
 		if (moduleRepresentClass.containsKey(module)) return;
 		module.exports.stream().filter(export -> export.modules == null).findFirst().ifPresent(d -> {
+			if (d.packge.members_field == null) return;
 			moduleRepresentClass.put(module, (ClassSymbol) d.packge.members_field.getSymbols(s -> s instanceof ClassSymbol).iterator().next());
 		});
 	}
@@ -597,12 +598,30 @@ public class Replace {
 		if (env instanceof JavacProcessingEnvironment proc) {
 			return proc.getContext();
 		} else if (Proxy.isProxyClass(env.getClass())) {
-			StringBuilder sb = new StringBuilder();
-			sb.append(Proxy.getInvocationHandler(env)).append('\n');
-			for (Field field : env.getClass().getDeclaredFields()) {
-				sb.append(field).append('\n');
+			var handler = Proxy.getInvocationHandler(env);
+			// 尝试从 Handler 中找到原始的 ProcessingEnvironment
+			// 因为这是 IDEA 的匿名内部类，字段名不确定，所以遍历所有字段查找
+			for (Field field : handler.getClass().getDeclaredFields()) {
+				try {
+					field.setAccessible(true);
+					Object obj = field.get(handler);
+					// 递归调用自己，尝试解包找到的对象
+					if (obj instanceof ProcessingEnvironment) {
+						try {
+							return getContextFor((ProcessingEnvironment) obj);
+						} catch (Exception e) {
+							// 如果这个字段不是我们要找的，继续找下一个
+						}
+					}
+				} catch (IllegalAccessException e) {
+					// 忽略
+				}
 			}
-			throw new RuntimeException("" + sb);
+
+			// 如果遍历完还没找到，再抛出原来的异常作为兜底
+			StringBuilder sb = new StringBuilder();
+			sb.append("Failed to unwrap proxy: ").append(handler).append("\n");
+			throw new RuntimeException(sb.toString());
 		} else {
 			try {
 				Field f = env.getClass().getDeclaredField("delegate");
@@ -612,7 +631,7 @@ public class Replace {
 			} catch (Throwable e) {
 				StringBuilder sb = new StringBuilder();
 				for (Field field : env.getClass().getDeclaredFields()) {
-					sb.append(field).append("||");
+					sb.append(field).append("\n");
 				}
 				throw new RuntimeException("" + sb);
 			}

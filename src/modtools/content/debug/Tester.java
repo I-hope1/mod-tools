@@ -23,7 +23,6 @@ import arc.util.Log.*;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import arc.util.serialization.Jval.JsonMap;
-import jdk.jshell.*;
 import mindustry.Vars;
 import mindustry.android.AndroidRhinoContext.AndroidContextFactory;
 import mindustry.game.EventType;
@@ -67,7 +66,6 @@ import rhino.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
-import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static ihope_lib.MyReflect.unsafe;
@@ -610,9 +608,9 @@ public class Tester extends Content {
 		callback.run();
 	}
 	final boolean USE_JSHELL = false;
-	final JShell  jShell     = USE_JSHELL ? JShell.builder().executionEngine("local").build() : null;
+	// final JShell  jShell     = USE_JSHELL ? JShell.builder().executionEngine("local").build() : null;
 	public void compileScript() {
-		if (USE_JSHELL) {
+		/* if (USE_JSHELL) {
 			List<SnippetEvent> eval = jShell.eval(getMessage());
 			SnippetEvent       last = eval.getLast();
 			JShellException    ex   = last.exception();
@@ -620,7 +618,7 @@ public class Tester extends Content {
 			res = last.value();
 			finished = true;
 			return;
-		}
+		} */
 		error = false;
 		try {
 			boolean def = true;

@@ -143,11 +143,13 @@ task playDesktop {
 }
 
 task playGame(type: JavaExec) {
-	dependsOn jar
 	dependsOn playDesktop
 
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
+//	jvmArgs = [
+//			"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
+//	]
 	args = [
 //			'-testMobile'
 //			'-debug'

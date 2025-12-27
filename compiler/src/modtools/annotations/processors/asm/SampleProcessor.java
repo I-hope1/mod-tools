@@ -95,7 +95,7 @@ public class SampleProcessor extends BaseProcessor<MethodSymbol> {
 		try {
 			file = mFiler.createSourceFile(owner.getQualifiedName().toString() + AConstants.INTERFACE_SUFFIX, owner);
 		} catch (IOException e) {
-			ClassSymbol classSymbol = mSymtab.getClass(owner.packge().modle, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX));
+			ClassSymbol classSymbol = mSymtab.enterClass(owner.packge().modle, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX));
 			if (classSymbol.exists()) {
 				return classSymbol;
 			}

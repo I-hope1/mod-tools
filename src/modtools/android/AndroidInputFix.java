@@ -1,6 +1,7 @@
 package modtools.android;
 
 import android.view.*;
+import arc.Core;
 import arc.backend.android.AndroidInput;
 import arc.input.KeyCode;
 import arc.struct.ObjectMap;
@@ -37,15 +38,16 @@ public class AndroidInputFix {
 
 		// 判定目标按键 (扩展 Home, End, PageUp/Down, Insert, ForwardDel)
 		KeyCode targetCode = switch (keyCode) {
-			case 113 -> KeyCode.controlLeft;   // CTRL_LEFT
-			case 114 -> KeyCode.controlRight;  // CTRL_RIGHT
-			case 67 -> KeyCode.backspace;     // Backspace
-			case 112 -> KeyCode.forwardDel;    // Forward Delete (PC Delete)
-			case 122 -> KeyCode.home;          // Home
-			case 123 -> KeyCode.end;           // End
-			case 124 -> KeyCode.insert;        // Insert
-			case 92 -> KeyCode.pageUp;        // PageUp
-			case 93 -> KeyCode.pageDown;      // PageDown
+			case KeyEvent.KEYCODE_CTRL_LEFT -> KeyCode.controlLeft;   // CTRL_LEFT
+			case KeyEvent.KEYCODE_CTRL_RIGHT -> KeyCode.controlRight;  // CTRL_RIGHT
+			case KeyEvent.KEYCODE_DEL -> KeyCode.backspace;     // Backspace
+			case KeyEvent.KEYCODE_FORWARD_DEL -> KeyCode.forwardDel;    // Forward Delete (PC Delete)
+			case KeyEvent.KEYCODE_MOVE_HOME -> KeyCode.home;          // Home
+			case KeyEvent.KEYCODE_MOVE_END -> KeyCode.end;           // End
+			case KeyEvent.KEYCODE_INSERT -> KeyCode.insert;        // Insert
+			case KeyEvent.KEYCODE_PAGE_UP -> KeyCode.pageUp;        // PageUp
+			case KeyEvent.KEYCODE_PAGE_DOWN -> KeyCode.pageDown;      // PageDown
+			// case KeyEvent.KEYCODE_DPAD_RIGHT -> KeyCode.mouseRight;  // 鼠标右键
 			default -> null;
 		};
 
@@ -60,10 +62,10 @@ public class AndroidInputFix {
 
 			synchronized (self) {
 				if (action == KeyEvent.ACTION_DOWN) {
-					// 1. 注入 KEY_DOWN (允许重复，Arc 会处理为 pressed=true)
+					// 注入 KEY_DOWN (允许重复，Arc 会处理为 pressed=true)
 					injectEvent(usedKeyEvents, keyEvents, time, KEY_DOWN, targetCode, (char) 0);
 
-					// 2. Backspace 特殊处理：按下时注入 TYPED 以支持长按连续删除
+					// TYPED
 					if (targetCode == KeyCode.backspace) {
 						injectEvent(usedKeyEvents, keyEvents, time, KEY_TYPED, KeyCode.unknown, '\b');
 					}
@@ -71,15 +73,21 @@ public class AndroidInputFix {
 						injectEvent(usedKeyEvents, keyEvents, time, KEY_TYPED, KeyCode.unknown, (char) 127);
 					}
 				} else if (action == KeyEvent.ACTION_UP) {
-					// 3. 注入 KEY_UP
+					// KEY_UP
 					injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, targetCode, (char) 0);
 				}
 			}
+
+			if (Core.graphics != null) {
+				Core.graphics.requestRendering();
+			}
+
 			return true; // 拦截事件，不再交给 super 处理
 		}
 
 		return _super(self).onKey(v, keyCode, e);
 	}
+
 	private static void injectEvent(Pool<Object> pool, ArrayList<Object> list, long time, int type, KeyCode code,
 	                                char ch) {
 		try {

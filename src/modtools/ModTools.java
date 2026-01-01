@@ -4,6 +4,7 @@ package modtools;
 import arc.*;
 import arc.backend.android.AndroidInput;
 import arc.files.Fi;
+import arc.scene.ui.Label;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
@@ -18,6 +19,7 @@ import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.URLRedirect;
 import modtools.graphics.MyShaders;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.struct.*;
 import modtools.ui.*;
@@ -233,6 +235,12 @@ public class ModTools extends Mod {
 		if (E_Extending.auto_update.enabled()) {
 			load("Updater", Updater::checkUpdate);
 		}
+
+		INFO_DIALOG.dialog(d -> {
+			Label elem = d.add("Click me").get();
+			EventHelper.leftClick(elem, () -> IntUI.showInfoFade("left click"));
+			EventHelper.rightClick(elem, () -> IntUI.showInfoFade("right click"));
+		});
 
 		// INFO_DIALOG.dialog(
 		//  LABEL."aaa\{pink}2290\{sky}sky\n\{UnitTypes.alpha.fullIcon}Map");

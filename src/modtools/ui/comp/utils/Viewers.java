@@ -229,7 +229,7 @@ public class Viewers {
 			return true;
 		});
 		addViewer(Type.array, (val, label) -> {
-			if (!label.expandVal.containsKey(val)) {
+			if (!label.isExpand(val)) {
 				label.clickedRegion(label.getPoint2Prov(val), () -> label.toggleExpand(val));
 				label.expandVal.put(val, getArraySize(val) < R_JSFunc.max_auto_expand_size);
 			}

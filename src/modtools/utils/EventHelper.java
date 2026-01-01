@@ -95,7 +95,8 @@ public class EventHelper {
 	 */
 	public static <T extends Element> T
 	rightClick(T elem, Runnable run) {
-		elem.addListener(new RightClickListener(run));
+		// elem.addListener(new RightClickListener(run));
+		elem.clicked(KeyCode.mouseRight, run);
 		return elem;
 	}
 	/**
@@ -168,6 +169,9 @@ public class EventHelper {
 		event.pointer = pointer;
 		event.keyCode = keyCode;
 		return event;
+	}
+	public static void leftClick(Element elem, Runnable run) {
+		elem.clicked(run);
 	}
 
 	public static class LongPressListener extends ClickListener {

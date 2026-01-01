@@ -1,4 +1,4 @@
- package modtools.ui.comp.utils;
+package modtools.ui.comp.utils;
 
 import arc.Core;
 import arc.files.Fi;
@@ -23,6 +23,7 @@ import modtools.content.ui.*;
 import modtools.content.world.Selection;
 import modtools.events.*;
 import modtools.jsfunc.*;
+import modtools.struct.IdentityObjectIntMap;
 import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.highlight.Syntax;
@@ -34,6 +35,8 @@ import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
+
+import java.util.IdentityHashMap;
 
 import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
@@ -47,16 +50,16 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public static final Object  unset     = new Object();
 	public static final Color   c_enum    = new Color(0xFFC66D_FF);
 	public static final String  NULL_MARK = "`*null";
-	public static final String ERROR     = "<ERROR>";
-	public static final String STR_EMPTY = "<EMPTY>";
+	public static final String  ERROR     = "<ERROR>";
+	public static final String  STR_EMPTY = "<EMPTY>";
 
 	private static       ValueLabel hoveredLabel;
 	private static       Object     hoveredVal;
 	private static final Point2     hoveredChunk = new Point2();
 
 	/** configuration */
-	public static final int STEP_SIZE = 64;
-	public static Color[] bgColors = new Color[]{
+	public static final int     STEP_SIZE = 64;
+	public static       Color[] bgColors  = new Color[]{
 	 new Color(0xFFC66D_66),
 	 new Color(0xFFC6FF_66),
 	 new Color(0xFC66C6_66),
@@ -65,30 +68,30 @@ public abstract class ValueLabel extends ExtendingLabel {
 	//endregion
 
 	//region Instance Fields
-	public               Object     val;
-	public               Class<?>   type;
-	public int maxItemCount   = STEP_SIZE;
+	public Object   val;
+	public Class<?> type;
+	public int      maxItemCount   = STEP_SIZE;
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
 	public boolean
-							 enableTruncate = true,
+	                enableTruncate = true,
 	/** 是否启用更新 */
 	enableUpdate = true;
 
 	public Func<Object, Object> valueFunc = o -> o;
 
-	public final IntMap<Object>              startIndexMap = new IntMap<>();
-	public final ObjectIntMap<Object>        endIndexMap   = new ObjectIntMap<>();
+	public final IntMap<Object>                    startIndexMap = new IntMap<>();
+	public final IdentityObjectIntMap<Object>      endIndexMap   = new IdentityObjectIntMap<>();
 	// 用于记录数组或map的类型
-	public final ObjectMap<Object, Class<?>> valToType     = new ObjectMap<>();
+	public final IdentityHashMap<Object, Class<?>> valToType     = new IdentityHashMap<>();
 	// 用于记录数组或map的值
-	public final ObjectMap<Object, Object>   valToObj      = new ObjectMap<>();
+	public final IdentityHashMap<Object, Object>   valToObj      = new IdentityHashMap<>();
 	// 用于记录数组或map是否展开
-	public final ObjectMap<Object, Boolean>  expandVal     = new ObjectMap<>();
+	public final IdentityHashMap<Object, Boolean>  expandVal     = new IdentityHashMap<>();
 
-	private       int     bgIndex;
+	private int bgIndex;
 	Runnable appendTail;
-	boolean shown = E_JSFuncDisplay.value.enabled();
-	boolean cleared;
+	boolean  shown = E_JSFuncDisplay.value.enabled();
+	boolean  cleared;
 	public Runnable afterSet;
 	//endregion
 
@@ -238,7 +241,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 		bgIndex = 0;
 		appendValue(val);
 
-		if (hover_outline.enabled() && !hoveredChunk().equals(UNSET_P)) addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
+		if (hover_outline.enabled() && !hoveredChunk().equals(UNSET_P)) {
+			addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
+		}
 
 		if (isTruncate()) {
 			text.setLength(truncate_length.getInt());
@@ -604,11 +609,6 @@ public abstract class ValueLabel extends ExtendingLabel {
 			return Tmp.p1.set(start, end);
 		};
 	}
-	public void toggleExpand(Object val) {
-		expandVal.put(val, !expandVal.get(val, false));
-		Core.app.post(this::flushVal);
-	}
-
 	public boolean enabledUpdateMenu() {
 		return true;
 	}
@@ -685,4 +685,12 @@ public abstract class ValueLabel extends ExtendingLabel {
 		}
 	}
 	//endregion
+
+	public void toggleExpand(Object val) {
+		expandVal.put(val, !expandVal.getOrDefault(val, false));
+		Core.app.post(this::flushVal);
+	}
+	public boolean isExpand(Object val) {
+		return expandVal.getOrDefault(val, false);
+	}
 }

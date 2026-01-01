@@ -47,6 +47,8 @@ public class AndroidInputFix {
 			case KeyEvent.KEYCODE_INSERT -> KeyCode.insert;        // Insert
 			case KeyEvent.KEYCODE_PAGE_UP -> KeyCode.pageUp;        // PageUp
 			case KeyEvent.KEYCODE_PAGE_DOWN -> KeyCode.pageDown;      // PageDown
+			case KeyEvent.KEYCODE_ALT_LEFT -> KeyCode.altLeft;       // ALT_LEFT
+			case KeyEvent.KEYCODE_ALT_RIGHT -> KeyCode.altRight;      // ALT_RIGHT
 			// case KeyEvent.KEYCODE_DPAD_RIGHT -> KeyCode.mouseRight;  // 鼠标右键
 			default -> null;
 		};
@@ -86,6 +88,27 @@ public class AndroidInputFix {
 		}
 
 		return _super(self).onKey(v, keyCode, e);
+	}
+	@SampleForMethod
+	public static void onPause(AndroidInput self) {
+		// 1. 获取事件队列
+		ObjectMap<String, Object> variable = allvariables.get(self, ObjectMap::new);
+		ArrayList<Object> keyEvents = (ArrayList<Object>) variable.get("keyEvents", () ->
+		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "keyEvents"), self));
+		Pool<Object> usedKeyEvents = (Pool<Object>) variable.get("usedKeyEvents", () ->
+		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "usedKeyEvents"), self));
+
+		// 2. 强制释放所有修饰键 (Alt, Ctrl)
+		if (keyEvents != null && usedKeyEvents != null) {
+			long time = System.nanoTime();
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.altLeft, (char) 0);
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.altRight, (char) 0);
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.controlLeft, (char) 0);
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.controlRight, (char) 0);
+		}
+
+		// 3. 调用原方法 (清理触摸点等)
+		_super(self).onPause();
 	}
 
 	private static void injectEvent(Pool<Object> pool, ArrayList<Object> list, long time, int type, KeyCode code,

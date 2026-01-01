@@ -22,23 +22,21 @@ import static rhino.classfile.ClassFileWriter.*;
 
 /** 对rhino的ClassWriter进行封装 */
 public class ByteCodeTools {
-	public static final String
-	 FUNCTION_KEY = "_K_Fn",
-	 CLASS_FILE   = "_ihope";
+	public static final String FUNCTION_KEY = "_K_Fn",
+			CLASS_FILE = "_ihope";
 
 	public static boolean DEBUG_LOG_FILE = false;
 
-
 	private static int lastID = 0;
+
 	private static int nextID() {
 		return lastID++;
 	}
 
-
 	public static class MyClass<T> {
 		public final ClassFileWriter writer;
-		public final String          adapterName, superName;
-		final         Class<?>            superClass;
+		public final String adapterName, superName;
+		final Class<?> superClass;
 		private final ArrayList<Queue<?>> queues = new ArrayList<>();
 		// private final ArrayList<ClassInfo> superFunctions = new ArrayList<>();
 
@@ -60,7 +58,7 @@ public class ByteCodeTools {
 		}
 
 		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, boolean buildSuper,
-		                        Class<V> returnType, Class<?>... args) {
+				Class<V> returnType, Class<?>... args) {
 			if (func2 == null) {
 				writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 				if ((flags & ACC_ABSTRACT) != 0) {
@@ -78,9 +76,10 @@ public class ByteCodeTools {
 				writer.stopMethod((short) (args.length + 1));
 				return;
 			}
-			var   lambda = addLambda(func2, Func2.class, "get", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-			short max    = (short) (args.length + 1);
-			int   v1     = max++, v2 = max++;
+			var lambda = addLambda(func2, Func2.class, "get",
+					"(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+			short max = (short) (args.length + 1);
+			int v1 = max++, v2 = max++;
 			writer.startMethod(name, nativeMethod(returnType, args), (short) flags);
 
 			if (buildSuper) {
@@ -93,7 +92,8 @@ public class ByteCodeTools {
 				// super
 				writer.addInvoke(INVOKESPECIAL, superName, name, nativeMethod(returnType, args));
 				// 储存为v1
-				if (returnType != void.class) writer.add(addStore(returnType), v1);
+				if (returnType != void.class)
+					writer.add(addStore(returnType), v1);
 			}
 
 			// new ArrayList(args.length)
@@ -109,7 +109,8 @@ public class ByteCodeTools {
 				writer.add(ALOAD, v2); // list
 				writer.add(addLoad(args[i]), i + 1);
 				emitBox(writer, args[i]);
-				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add", nativeMethod(boolean.class, Object.class));
+				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add",
+						nativeMethod(boolean.class, Object.class));
 			}
 			// 将super的返回值存入seq
 			if (buildSuper && returnType != void.class) {
@@ -118,7 +119,8 @@ public class ByteCodeTools {
 				writer.add(addLoad(returnType), v1); // super return
 				emitBox(writer, returnType);
 				// add
-				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add", nativeMethod(boolean.class, Object.class));
+				writer.addInvoke(INVOKEVIRTUAL, nativeName(ArrayList.class), "add",
+						nativeMethod(boolean.class, Object.class));
 			}
 
 			execLambda(lambda, () -> {
@@ -132,28 +134,35 @@ public class ByteCodeTools {
 
 			writer.stopMethod(max); // this + args + var * 1
 		}
-		public record Lambda(String fieldName, Class<?> type, String invoker, String desc) { }
+
+		public record Lambda(String fieldName, Class<?> type, String invoker, String desc) {
+		}
 
 		public void execLambda(Lambda lambda, Runnable loadParma) {
 			// 获取functionKey字段
 			writer.add(GETSTATIC, adapterName, lambda.fieldName, typeToNative(lambda.type));
 
-			if (loadParma != null) loadParma.run();
+			if (loadParma != null)
+				loadParma.run();
 
 			// V get(args)
 			writer.addInvoke(INVOKEINTERFACE, nativeName(lambda.type), lambda.invoker, lambda.desc);
 		}
+
 		public <LT> Lambda addLambda(LT lambda, Class<LT> clazz, String invoker, String desc) {
 			String fieldName = FUNCTION_KEY + "$" + nextID();
 			queues.add(new Queue<>(fieldName, () -> lambda, clazz));
-			writer.addField(fieldName, typeToNative(clazz), (short) (Modifier.PUBLIC | Modifier.STATIC | Modifier.FINAL));
+			writer.addField(fieldName, typeToNative(clazz),
+					(short) (Modifier.PUBLIC | Modifier.STATIC | Modifier.FINAL));
 			return new Lambda(fieldName, clazz, invoker, desc);
 		}
 
-		/*public <V> void setFunc(String name, arc.func.Func2 func2, int flags, Class<V> returnType, Class<?>... args) {
-			setFunc(name, (a, b) -> func2.get(a, b), flags, false, returnType, args);
-		}*/
-
+		/*
+		 * public <V> void setFunc(String name, arc.func.Func2 func2, int flags,
+		 * Class<V> returnType, Class<?>... args) {
+		 * setFunc(name, (a, b) -> func2.get(a, b), flags, false, returnType, args);
+		 * }
+		 */
 
 		/**
 		 * @param name       方法名
@@ -162,10 +171,9 @@ public class ByteCodeTools {
 		 * @param args       方法的参数
 		 **/
 		public <V> void setFunc(String name, Func2<T, ArrayList<Object>, Object> func2, int flags, Class<V> returnType,
-		                        Class<?>... args) {
+				Class<?>... args) {
 			setFunc(name, func2, flags, false, returnType, args);
 		}
-
 
 		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, Class<?>... args) {
 			setFunc(name, (self, a) -> {
@@ -175,7 +183,7 @@ public class ByteCodeTools {
 		}
 
 		public void setFunc(String name, Cons2<T, ArrayList<Object>> cons2, int flags, boolean buildSuper,
-		                    Class<?>... args) {
+				Class<?>... args) {
 			setFunc(name, cons2 == null ? null : (self, a) -> {
 				cons2.get(self, a);
 				return null;
@@ -183,7 +191,9 @@ public class ByteCodeTools {
 		}
 
 		private int addLoad(Class<?> type) {
-			if (type == boolean.class) { return ILOAD; } else if (type == byte.class) {
+			if (type == boolean.class) {
+				return ILOAD;
+			} else if (type == byte.class) {
 				return ILOAD;
 			} else if (type == char.class) {
 				return ILOAD;
@@ -195,7 +205,10 @@ public class ByteCodeTools {
 				return FLOAD;
 			} else if (type == long.class) {
 				return LLOAD;
-			} else if (type == double.class) { return DLOAD; } else return ALOAD;
+			} else if (type == double.class) {
+				return DLOAD;
+			} else
+				return ALOAD;
 		}
 
 		private int addStore(Class<?> type) {
@@ -215,15 +228,19 @@ public class ByteCodeTools {
 				return LSTORE;
 			} else if (type == double.class) {
 				return DSTORE;
-			} else { return ASTORE; }
+			} else {
+				return ASTORE;
+			}
 		}
 
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
-		                           Class<?>... args) {
-			 buildSuperFunc(thisMethodName, superMethodName, Object.class, returnType, args);
+				Class<?>... args) {
+			buildSuperFunc(thisMethodName, superMethodName, Object.class, returnType, args);
 		}
-		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> superClass, Class<?> returnType,
-		                           Class<?>... args) {
+
+		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> superClass,
+				Class<?> returnType,
+				Class<?>... args) {
 			writer.startMethod(thisMethodName, nativeMethod(returnType, args), (short) Modifier.PUBLIC);
 			writer.addLoadThis(); // this
 			for (int i = 0; i < args.length; i++) {
@@ -258,7 +275,6 @@ public class ByteCodeTools {
 			writer.stopMethod((short) 2); // this + arg1
 		}
 
-
 		public void setField(int flags, Class<?> type, String name) {
 			setField(flags, type, name, null);
 		}
@@ -266,23 +282,28 @@ public class ByteCodeTools {
 		public <T2> void setField(int flags, Class<T2> type, String name, T2 val) {
 			writer.addField(name, typeToNative(type), (short) flags);
 			if (val != null) {
-				if (!Modifier.isStatic(flags)) throw new IllegalArgumentException("Field " + name + " isn't static");
+				if (!Modifier.isStatic(flags))
+					throw new IllegalArgumentException("Field " + name + " isn't static");
 				queues.add(new Queue<>(name, () -> val, type));
 			}
 		}
 
 		public void addInterface(Class<?> interfaceClass) {
-			if (!interfaceClass.isInterface()) { throw new IllegalArgumentException(interfaceClass + " isn't interface"); }
+			if (!interfaceClass.isInterface()) {
+				throw new IllegalArgumentException(interfaceClass + " isn't interface");
+			}
 			writer.addInterface(interfaceClass.getName());
 		}
 
 		public void visit(Class<?> cls) {
-			Method[] methods   = cls.getDeclaredMethods();
-			String   className = nativeName(cls);
+			Method[] methods = cls.getDeclaredMethods();
+			String className = nativeName(cls);
 			for (var m : methods) {
-				if (m.getAnnotation(Exclude.class) != null) continue;
+				if (m.getAnnotation(Exclude.class) != null)
+					continue;
 				int mod = m.getModifiers();
-				if (!Modifier.isStatic(mod) || !Modifier.isPublic(mod)) continue;
+				if (!Modifier.isStatic(mod) || !Modifier.isPublic(mod))
+					continue;
 				// 传给cls方法的参数
 				Class<?>[] types = m.getParameterTypes();
 				// 用于super方法
@@ -290,22 +311,24 @@ public class ByteCodeTools {
 				visitEmitMethod(m.getName(), types, returnType, className);
 			}
 		}
+
 		public void visitEmitMethod(String name, Class<?>[] paramTypes,
-		                            Class<?> returnType, String className) {
+				Class<?> returnType, String className) {
 			visitEmitMethod(name, name, paramTypes, returnType, className);
 		}
+
 		/**
 		 * @param name       重载方法名
 		 * @param targetName 注解所标记的方法的名称
 		 * @see modtools.annotations.processors.asm.SampleProcessor
 		 **/
 		public void visitEmitMethod(String name, String targetName, Class<?>[] paramTypes,
-		                            Class<?> returnType, String className) {
-			Class<?>[] realTypes  = Arrays.copyOfRange(paramTypes, 1, paramTypes.length);
-			String     descriptor = nativeMethod(returnType, realTypes);
+				Class<?> returnType, String className) {
+			Class<?>[] realTypes = Arrays.copyOfRange(paramTypes, 1, paramTypes.length);
+			String descriptor = nativeMethod(returnType, realTypes);
 			{ // buildSuper
 				writer.startMethod(AConstants.SUPER_METHOD_PREFIX + name,
-				 descriptor, ACC_PUBLIC);
+						descriptor, ACC_PUBLIC);
 				writer.addLoadThis(); // this
 				for (int i = 1; i <= realTypes.length; i++) {
 					writer.add(addLoad(paramTypes[i]), i);
@@ -322,11 +345,29 @@ public class ByteCodeTools {
 					writer.add(addLoad(realTypes[i]), i + 1);
 				}
 				writer.addInvoke(INVOKESTATIC, className,
-				 targetName, nativeMethod(returnType, paramTypes));
+						targetName, nativeMethod(returnType, paramTypes));
 				// emitCast(writer, returnType);
 				// writer.add(ByteCode.CHECKCAST, nativeName(returnType));
 				writer.add(buildReturn(returnType));
 				writer.stopMethod((short) (realTypes.length + 1));
+			}
+		}
+
+		public void visitEmitField(String name, Class<?> type) {
+			{ // buildGetter
+				writer.startMethod(name, nativeMethod(type), ACC_PUBLIC);
+				writer.addLoadThis();
+				writer.add(GETFIELD, superName, name, typeToNative(type));
+				writer.add(buildReturn(type));
+				writer.stopMethod((short) 1);
+			}
+			{ // buildSetter
+				writer.startMethod(name, nativeMethod(void.class, type), ACC_PUBLIC);
+				writer.addLoadThis();
+				writer.add(addLoad(type), 1);
+				writer.add(PUTFIELD, superName, name, typeToNative(type));
+				writer.add(RETURN);
+				writer.stopMethod((short) 2);
 			}
 		}
 
@@ -337,12 +378,13 @@ public class ByteCodeTools {
 
 		/** @param superClass 用于确定classLoader */
 		public Class<T> define(Class<?> superClass) {
-			l:if (OS.isAndroid) {
+			l: if (OS.isAndroid) {
 				int mod = superClass.getModifiers();
-				if (/*Modifier.isFinal(mod) || */!Modifier.isPublic(mod)) {
+				if (/* Modifier.isFinal(mod) || */!Modifier.isPublic(mod)) {
 					HopeReflect.setPublic(superClass, Class.class);
 				}
-				if (superClass == this.superClass) break l;
+				if (superClass == this.superClass)
+					break l;
 				mod = this.superClass.getModifiers();
 				if (!Modifier.isPublic(mod)) {
 					HopeReflect.setPublic(this.superClass, Class.class);
@@ -364,14 +406,15 @@ public class ByteCodeTools {
 			}
 			return putStatic(HopeReflect.defineClass(adapterName, loader, writer.toByteArray()));
 		}
+
 		private Class<T> putStatic(Class<?> base) {
-			var  map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
+			var map = Seq.with(base.getDeclaredFields()).asMap(Field::getName);
 			long off;
 			for (var q : queues) {
 				off = FieldUtils.fieldOffset(map.get(q.name));
 				unsafe.putObject(base, off, q.get());
 			}
-			//noinspection unchecked
+			// noinspection unchecked
 			return (Class<T>) base;
 		}
 
@@ -399,10 +442,14 @@ public class ByteCodeTools {
 	 */
 	public record Queue<T>(String name, Prov<T> func, Class<T> cls) {
 		public Queue {
-			if (name == null) throw new IllegalArgumentException("name is null");
-			if (func == null) throw new IllegalArgumentException("func is null");
-			if (cls == null) throw new IllegalArgumentException("cls is null");
+			if (name == null)
+				throw new IllegalArgumentException("name is null");
+			if (func == null)
+				throw new IllegalArgumentException("func is null");
+			if (cls == null)
+				throw new IllegalArgumentException("cls is null");
 		}
+
 		public T get() {
 			return func.get();
 		}
@@ -429,12 +476,13 @@ public class ByteCodeTools {
 	}
 
 	public static void emitCast(ClassFileWriter writer, Class<?> type) {
-		if (type == void.class) return;
+		if (type == void.class)
+			return;
 		if (type.isPrimitive()) {
 			String tmp = nativeName(box(type));
 			writer.add(CHECKCAST, tmp);
 			writer.addInvoke(INVOKEVIRTUAL, tmp,
-			 type.getSimpleName() + "Value", nativeMethod(type));
+					type.getSimpleName() + "Value", nativeMethod(type));
 		} else {
 			writer.add(CHECKCAST, nativeName(type));
 		}
@@ -450,35 +498,52 @@ public class ByteCodeTools {
 	}
 
 	public static String typeToNative(Class<?> cls) {
-		if (cls.isArray()) return "[" + typeToNative(cls.getComponentType());
-		if (cls == int.class) return "I";
-		if (cls == long.class) return "J";
-		if (cls == float.class) return "F";
-		if (cls == double.class) return "D";
-		if (cls == char.class) return "C";
-		if (cls == short.class) return "S";
-		if (cls == byte.class) return "B";
-		if (cls == boolean.class) return "Z";
-		if (cls == void.class) return "V";
+		if (cls.isArray())
+			return "[" + typeToNative(cls.getComponentType());
+		if (cls == int.class)
+			return "I";
+		if (cls == long.class)
+			return "J";
+		if (cls == float.class)
+			return "F";
+		if (cls == double.class)
+			return "D";
+		if (cls == char.class)
+			return "C";
+		if (cls == short.class)
+			return "S";
+		if (cls == byte.class)
+			return "B";
+		if (cls == boolean.class)
+			return "Z";
+		if (cls == void.class)
+			return "V";
 		return "L" + nativeName(cls) + ";";
 	}
 
 	public static short buildReturn(Class<?> returnType) {
 		if (returnType == boolean.class || returnType == int.class
-		    || returnType == byte.class || returnType == short.class
-		    || returnType == char.class) { return IRETURN; } else if (returnType == long.class) {
+				|| returnType == byte.class || returnType == short.class
+				|| returnType == char.class) {
+			return IRETURN;
+		} else if (returnType == long.class) {
 			return LRETURN;
 		} else if (returnType == float.class) {
 			return FRETURN;
 		} else if (returnType == double.class) {
 			return DRETURN;
-		} else if (returnType == void.class) { return RETURN; }
+		} else if (returnType == void.class) {
+			return RETURN;
+		}
 		// else if (returnType == byte.class) return ByteCode.BRETURN;
-		else { return ARETURN; }
+		else {
+			return ARETURN;
+		}
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)
-	public @interface Exclude { }
+	public @interface Exclude {
+	}
 
 	public interface MyRun {
 		int get(ClassFileWriter cfw);

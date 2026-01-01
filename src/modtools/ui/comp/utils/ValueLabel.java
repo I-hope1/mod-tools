@@ -291,6 +291,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendValue(Object val) {
 		int valStart = text.length();
 
+		Runnable prevTail = appendTail;
+		appendTail = null;
+
 		// viewers
 		if (val != null) {
 			try {
@@ -304,6 +307,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		Viewers.defaultAppend(this, valStart, val);
+
+		appendTail = prevTail;
 	}
 
 	// 一些基本类型的特化，不装箱，为了减少内存消耗
@@ -345,10 +350,47 @@ public abstract class ValueLabel extends ExtendingLabel {
 	}
 
 	public void appendMap(Object mapObj,
-	                      int key,
+	                      double key,
+	                      double value) {
+		valToObj.put(value, mapObj);
+		postAppendDelimiter();
+		appendValue(key);
+		text.append('=');
+		appendValue(value);
+	}
+	public void appendMap(Object mapObj,
+	                      long key,
+	                      double value) {
+		valToObj.put(value, mapObj);
+		postAppendDelimiter();
+		appendValue(key);
+		text.append('=');
+		appendValue(value);
+	}
+	public void appendMap(Object mapObj,
+	                      long key,
+	                      long value) {
+		valToObj.put(value, mapObj);
+		postAppendDelimiter();
+		appendValue(key);
+		text.append('=');
+		appendValue(value);
+	}
+	public void appendMap(Object mapObj,
+	                      long key,
 	                      Object value) {
 		valToObj.put(value, mapObj);
 		valToType.put(value, value == null ? Object.class : value.getClass());
+		postAppendDelimiter();
+		appendValue(key);
+		text.append('=');
+		appendValue(value);
+	}
+	public void appendMap(Object mapObj,
+	                      Object key,
+	                      long value) {
+		valToObj.put(key, mapObj);
+		valToType.put(key, key == null ? Object.class : key.getClass());
 		postAppendDelimiter();
 		appendValue(key);
 		text.append('=');

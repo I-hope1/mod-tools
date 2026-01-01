@@ -39,6 +39,15 @@ public class Constants {
 		long BINDING_VALUES = -1;//fieldOffset(Binding.class, "$VALUES");
 	}
 
+	/** @see arc.backend.android.AndroidInput.KeyEvent */
+	public interface AndroidInput_KeyEvent {
+		Class<?> KeyEvent = nl(() -> Class.forName("arc.backend.android.AndroidInput$KeyEvent"));
+		long TIMESTAMP = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "timeStamp");
+		long TYPE = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "type");
+		long KEY_CODE = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyCode");
+		long KEY_CHAR = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyChar");
+	}
+
 	/** Constants related to desktop JVM internals (java.lang.invoke). Likely fragile. */
 	@SuppressWarnings("DataFlowIssue")
 	public interface DESKTOP_INIT {

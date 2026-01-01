@@ -2,24 +2,24 @@ package modtools;
 
 
 import arc.*;
+import arc.backend.android.AndroidInput;
 import arc.files.Fi;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
 import ihope_lib.MyReflect;
-import mindustry.Vars;
 import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
 import mindustry.mod.Mods.ModMeta;
-import modtools.android.HiddenApi;
+import modtools.android.*;
 import modtools.content.*;
 import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.URLRedirect;
 import modtools.graphics.MyShaders;
 import modtools.net.packet.HopeCall;
-import modtools.struct.TaskSet;
+import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.utils.Viewers;
 import modtools.ui.control.HopeInput;
@@ -31,6 +31,7 @@ import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
+import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 import sun.reflect.ReflectionFactory;
@@ -95,6 +96,12 @@ public class ModTools extends Mod {
 		if (R_Extending.world_save) {
 			Tools.runLoggedException(WorldSaver::load);
 		}
+		LazyValue<Class<?>> newClass = LazyValue.of(() -> AndroidInputFixInterface.visit(AndroidInput.class));
+		Runnable run = () -> {
+			HopeReflect.changeClass(Core.input, R_Hook.android_input_fix ? newClass.get() : AndroidInput.class);
+		};
+		E_Hook.data.onChanged(E_Hook.android_input_fix.name(), run);
+		run.run();
 
 		if (TEST) {
 			test();
@@ -118,7 +125,9 @@ public class ModTools extends Mod {
 		resolveLibsCatch();
 
 		try {
-			if (OS.isAndroid) HiddenApi.setHiddenApiExemptions();
+			if (OS.isAndroid) {
+				HiddenApi.setHiddenApiExemptions();
+			}
 
 			if (HotSwapManager.valid()) HotSwapManager.start();
 			// HotSwapManager.attachAgent("jdwp", "transport=dt_socket,server=y,suspend=n,address=15005");
@@ -325,9 +334,7 @@ public class ModTools extends Mod {
 		Time.mark();
 		// 加载前置
 		try {
-			Fi toFi = Vars.dataDirectory.child(STR."tmp/mod-tools-\{fileName}.jar");
-			FileUtils.delete(toFi);
-			sourceFi.copyTo(toFi);
+			Fi          toFi   = FileUtils.copyToTmp(sourceFi);
 			ClassLoader loader = platform.loadJar(toFi, mainLoader);
 			mainLoader.addChild(loader);
 			Class.forName(mainClassName, true, loader);

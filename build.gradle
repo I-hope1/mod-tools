@@ -38,7 +38,7 @@ configurations.configureEach {
 	}
 }
 configurations {
-    desugarLib
+	desugarLib
 }
 
 dependencies {
@@ -106,9 +106,9 @@ task jarAndroid(type: JavaExec) {
 			"--lib", "$platformJar.path",
 	] + dependencies + [
 //			"--desugared-lib", desugarLibJar.absolutePath,
-			"--min-api", "$minApi",
-			"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
-			"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
+"--min-api", "$minApi",
+"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
+"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
 	]
 }
 
@@ -129,17 +129,15 @@ jar {
 }
 
 
-task playDesktop {
+task playDesktop(type: Copy) {
 	dependsOn jar
 
 	println "buildDir: $buildDir0; version: $version"
 
-	copy {
-		from "$buildDir0/libs"
-		into "${MdtDataDir}/mods"
-		include "$archivesBaseName-${version}.jar"
-		rename { oldName -> "$modName-${version}.jar" }
-	}
+	from "$buildDir0/libs"
+	into "${MdtDataDir}/mods"
+	include "$archivesBaseName-${version}.jar"
+	rename { oldName -> "$modName-${version}.jar" }
 }
 
 task playGame(type: JavaExec) {
@@ -147,6 +145,7 @@ task playGame(type: JavaExec) {
 
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
+	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
 	jvmArgs("-XX:+AllowEnhancedClassRedefinition")
 //	jvmArgs = [
 //			"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"

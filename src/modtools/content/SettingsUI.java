@@ -158,6 +158,11 @@ public class SettingsUI extends Content {
 				SettingsBuilder.array("@settings.hotswap.watchpaths", HOT_SWAP, "watch-paths", () -> true);
 			});
 		}
+		addSectionInternal("Hook", Icon.refreshSmall, t -> {
+			SettingsBuilder.build(t);
+			// watch的路径数组配置
+			ISettings.buildAll("hook", t, E_Hook.class);
+		});
 
 		// (Others) 区域
 		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {

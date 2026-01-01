@@ -4,10 +4,11 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.StrictMode;
-
 import arc.Core;
+import arc.Files.FileType;
 import arc.files.Fi;
 import arc.util.*;
+import mindustry.Vars;
 import modtools.IntVars;
 import modtools.ui.IntUI;
 import modtools.utils.ArrayUtils;
@@ -37,6 +38,21 @@ public class FileUtils {
 
 		// 返回新子目录对象
 		return child;
+	}
+	public static Fi copyToTmp(Fi fi, Fi destDir, String newName) {
+		// dest应该是本地文件
+		if (destDir.type() != FileType.absolute) throw new IllegalArgumentException("destDir must be absolute file");
+		if (fi.type() == FileType.absolute) return fi;
+		Fi toFi = destDir.child(newName == null ? fi.name() : newName);
+		FileUtils.delete(toFi);
+		fi.copyTo(toFi);
+		return toFi;
+	}
+	public static Fi copyToTmp(Fi fi, String newName) {
+		return copyToTmp(fi, Vars.tmpDirectory, newName);
+	}
+	public static Fi copyToTmp(Fi fi) {
+		return copyToTmp(fi, null);
 	}
 	/** @return {@code true} if the file be deleted successfully */
 	public static boolean delete(Fi fi) {

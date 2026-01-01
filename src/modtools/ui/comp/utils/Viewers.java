@@ -189,6 +189,30 @@ public class Viewers {
 						if (label.isTruncate(label.getText().length())) break;
 					}
 				}
+				case IntIntMap m -> {
+					for (var entry : m) {
+						label.appendMap(val, entry.key, entry.value);
+						if (label.isTruncate(label.getText().length())) break;
+					}
+				}
+				case IntFloatMap m -> {
+					for (var entry : m) {
+						label.appendMap(val, entry.key, entry.value);
+						if (label.isTruncate(label.getText().length())) break;
+					}
+				}
+				case LongMap<?> m -> {
+					for (var entry : m) {
+						label.appendMap(val, entry.key, entry.value);
+						if (label.isTruncate(label.getText().length())) break;
+					}
+				}
+				case ObjectIntMap<?> m -> {
+					for (var entry : m) {
+						label.appendMap(val, entry.key, entry.value);
+						if (label.isTruncate(label.getText().length())) break;
+					}
+				}
 				case ObjectFloatMap<?> m -> {
 					for (var entry : m) {
 						label.appendMap(val, entry.key, entry.value);

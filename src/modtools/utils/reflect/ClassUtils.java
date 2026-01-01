@@ -21,6 +21,13 @@ public class ClassUtils {
 			throw new RuntimeException(e);
 		}
 	}
+	public static Class<?> forNameOrNull(String name) {
+		try {
+			return Class.forName(name);
+		} catch (ClassNotFoundException e) {
+			return null;
+		}
+	}
 
 	/** 是否存在某个类 */
 	public static boolean exists(String className) {

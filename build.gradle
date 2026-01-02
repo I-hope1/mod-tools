@@ -145,7 +145,7 @@ task playGame(type: JavaExec) {
 
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
-	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
+//	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
 	jvmArgs("-XX:+AllowEnhancedClassRedefinition")
 //	jvmArgs = [
 //			"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"

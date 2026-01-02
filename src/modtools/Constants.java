@@ -1,5 +1,6 @@
 package modtools;
 
+import arc.backend.android.AndroidInput;
 import arc.files.Fi;
 import arc.graphics.g2d.PixmapPacker;
 import arc.graphics.gl.FileTextureData;
@@ -39,13 +40,19 @@ public class Constants {
 		long BINDING_VALUES = -1;//fieldOffset(Binding.class, "$VALUES");
 	}
 
+	public interface AndroidInput_ {
+		/** @see AndroidInput#processEvents() */
+		Method processEvents = nl(() -> AndroidInput.class.getDeclaredMethod("processEvents"));
+		/** @see AndroidInput#processDevices() () */
+		Method processDevices = nl(() -> AndroidInput.class.getDeclaredMethod("processDevices"));
+	}
 	/** @see arc.backend.android.AndroidInput.KeyEvent */
 	public interface AndroidInput_KeyEvent {
-		Class<?> KeyEvent = nl(() -> Class.forName("arc.backend.android.AndroidInput$KeyEvent"));
-		long TIMESTAMP = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "timeStamp");
-		long TYPE = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "type");
-		long KEY_CODE = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyCode");
-		long KEY_CHAR = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyChar");
+		Class<?> KeyEvent  = nl(() -> Class.forName("arc.backend.android.AndroidInput$KeyEvent"));
+		long     TIMESTAMP = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "timeStamp");
+		long     TYPE      = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "type");
+		long     KEY_CODE  = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyCode");
+		long     KEY_CHAR  = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyChar");
 	}
 
 	/** Constants related to desktop JVM internals (java.lang.invoke). Likely fragile. */
@@ -154,20 +161,26 @@ public class Constants {
 		Method findCachedFunction = method(NativeJavaMethod.class, "findCachedFunction", Context.class, Object[].class);
 	}
 
-	/** Loads a class by name
-	 * @throws RuntimeException on failure. */
+	/**
+	 * Loads a class by name
+	 * @throws RuntimeException on failure.
+	 */
 	public static <R> Class<R> nl(String className) {
 		return (Class<R>) nl(() -> Class.forName(className));
 	}
 
-	/** Gets a static field value by class and field name
-	 * @throws RuntimeException on failure. */
+	/**
+	 * Gets a static field value by class and field name
+	 * @throws RuntimeException on failure.
+	 */
 	public static <R> R val(String className, String fieldName) {
 		Field field = nl(() -> Class.forName(className).getDeclaredField(fieldName));
 		return (R) nl(() -> field.get(null));
 	}
-		/**Gets a reflected method by class name and method name
-		 * @throws RuntimeException on failure. */
+	/**
+	 * Gets a reflected method by class name and method name
+	 * @throws RuntimeException on failure.
+	 */
 	public static Method method(String className, String methodName, Class<?>... params) {
 		return method(nl(className), methodName, params);
 	}
@@ -194,7 +207,7 @@ public class Constants {
 			throw new RuntimeException(e);
 		}
 	}
-	/** @return null if failed.  */
+	/** @return null if failed. */
 	public static <R> R iv(Method method, Object obj, Object... args) {
 		try {
 			return (R) method.invoke(obj, args);

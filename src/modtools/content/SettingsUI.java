@@ -10,6 +10,7 @@ import arc.scene.Element;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
+import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
@@ -592,8 +593,41 @@ public class SettingsUI extends Content {
 			var enums = new Seq<>((Enum<T>[]) enumClass.getEnumConstants());
 			list(text, cons, prov, enums, Enum::name, condition);
 		}
-		public Cell<TextField> field(Table table, float value, Floatc setter) {
-			return table.field(Strings.autoFixed(value, 2), v -> setter.get(NumberHelper.asFloat(v))).valid(Strings::canParsePositiveFloat).size(90f, 40f).pad(2f);
+		public static void field(String text, float value, Floatc setter) {
+			field(text, value, setter, () -> true);
+		}
+		public static void field(String text, float value, Floatc setter, Boolp condition) {
+			main.table(t -> {
+				t.add(text).left().padRight(10).growX().labelAlign(Align.left).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+				t.field(Strings.autoFixed(value, 2), v -> setter.get(NumberHelper.asFloat(v)))
+				 .valid(Strings::canParsePositiveFloat)
+				 .size(90f, 40f).pad(2f);
+			}).padTop(0).row();
+		}
+		public static void field(String text, int value, Intc setter) {
+			field(text, value, setter, Integer.MIN_VALUE, Integer.MAX_VALUE, () -> true);
+		}
+		public static void field(String text, int value, Intc setter, int min, int max) {
+			field(text, value, setter, min, max, () -> true);
+		}
+
+		public static void field(String text, int value, Intc setter, int min, int max,Boolp condition) {
+			main.table(t -> {
+				t.add(text).left().padRight(10).growX().labelAlign(Align.left).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+				t.field(String.valueOf(value), v -> setter.get(Strings.parseInt(v)))
+				 .valid(f -> Strings.canParseInt(f) && Strings.parseInt(f) >= min && Strings.parseInt(f) <= max)
+				 .size(90f, 40f).pad(2f);
+			}).padTop(0).row();
+		}
+		public static void field(String text, String value, TextFieldValidator validator, Cons<String> setter) {
+			field(text, value, validator, setter, () -> true);
+		}
+		public static void field(String name, String value, TextFieldValidator validator, Cons<String> setter,Boolp condition) {
+			main.table(t -> {
+				t.add(name).left().padRight(10).growX().labelAlign(Align.left).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
+				t.field(value, setter)
+				 .valid(validator).size(90f, 40f).pad(2f);
+			}).padTop(0).row();
 		}
 		public static void color(String text, Color defaultColor,
 		                         Cons<Color> colorSet) { colorBlock(main, text, null, null, defaultColor.rgba(), colorSet); }

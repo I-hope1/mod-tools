@@ -428,8 +428,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 					selected = selected.parent;
 				}
 
-				HopeInput.pressed.clear();
-				HopeInput.justPressed.clear();
+				HopeInput.clearPressed();
 				event.stop();
 				return false;
 			}

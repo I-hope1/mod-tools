@@ -15,6 +15,11 @@ public class HopeInput {
 	public static IntSet justPressed, pressed;
 	public static  IntFloatMap axes;
 	private static Element     hit;
+
+	public static void clearPressed() {
+		justPressed.clear();
+		pressed.clear();
+	}
 	public static Element mouseHit() {
 		if (hit == null) hit = Core.scene.hit(mouseVec.x, mouseVec.y, true);
 		return hit;

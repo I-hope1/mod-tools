@@ -331,6 +331,10 @@ public interface ISettings extends E_DataInterface {
 		list(text, this::set, this::getString,
 		 new Seq<>(arr), s -> s.replaceAll("\\n", "\\\\n"));
 	}
+	default void intField(int def, int min, int max) {
+		def(def);
+		field(text, getInt(), this::set, min, max);
+	}
 
 	default <T> void $(T def, Func<String, T> valFunc, Func<T, String> stringify, T[]... arr) {
 		def(def);

@@ -5,7 +5,7 @@ import arc.Core;
 import arc.backend.android.AndroidInput;
 import arc.input.KeyCode;
 import arc.struct.ObjectMap;
-import arc.util.Log;
+import arc.util.*;
 import arc.util.pooling.Pool;
 import modtools.Constants.AndroidInput_KeyEvent;
 import modtools.annotations.asm.Sample;
@@ -36,7 +36,6 @@ public class AndroidInputFix {
 		Pool<Object> usedKeyEvents = (Pool<Object>) variable.get("usedKeyEvents", () ->
 		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "usedKeyEvents"), self));
 
-		// 判定目标按键 (扩展 Home, End, PageUp/Down, Insert, ForwardDel)
 		KeyCode targetCode = switch (keyCode) {
 			case KeyEvent.KEYCODE_CTRL_LEFT -> KeyCode.controlLeft;   // CTRL_LEFT
 			case KeyEvent.KEYCODE_CTRL_RIGHT -> KeyCode.controlRight;  // CTRL_RIGHT
@@ -89,28 +88,27 @@ public class AndroidInputFix {
 
 		return _super(self).onKey(v, keyCode, e);
 	}
-	@SampleForMethod
-	public static void onPause(AndroidInput self) {
-		// 1. 获取事件队列
-		ObjectMap<String, Object> variable = allvariables.get(self, ObjectMap::new);
+	public static void releaseModifierKeys() {
+		AndroidInput              input    = (AndroidInput) Core.input;
+		ObjectMap<String, Object> variable = allvariables.get(input, ObjectMap::new);
 		ArrayList<Object> keyEvents = (ArrayList<Object>) variable.get("keyEvents", () ->
-		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "keyEvents"), self));
+		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "keyEvents"), input));
 		Pool<Object> usedKeyEvents = (Pool<Object>) variable.get("usedKeyEvents", () ->
-		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "usedKeyEvents"), self));
+		 FieldUtils.getOrNull(FieldUtils.getFieldAccess(AndroidInput.class, "usedKeyEvents"), input));
 
-		// 2. 强制释放所有修饰键 (Alt, Ctrl)
 		if (keyEvents != null && usedKeyEvents != null) {
 			long time = System.nanoTime();
-			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.altLeft, (char) 0);
-			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.altRight, (char) 0);
-			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.controlLeft, (char) 0);
-			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.controlRight, (char) 0);
+
+			// 强制发送 UP 事件，打断卡死的按键状态
+			// 包含：Alt, Ctrl, Shift
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.altLeft, '0');
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.altRight, '0');
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.controlLeft, '0');
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.controlRight, '0');
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.shiftLeft, '0');
+			injectEvent(usedKeyEvents, keyEvents, time, KEY_UP, KeyCode.shiftRight, '0');
 		}
-
-		// 3. 调用原方法 (清理触摸点等)
-		_super(self).onPause();
 	}
-
 	private static void injectEvent(Pool<Object> pool, ArrayList<Object> list, long time, int type, KeyCode code,
 	                                char ch) {
 		try {

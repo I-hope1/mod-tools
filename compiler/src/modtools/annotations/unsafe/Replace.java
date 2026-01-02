@@ -163,6 +163,11 @@ public class Replace {
 			}
 			m.exports = prev;
 		};
+		Field        field = Symtab.class.getDeclaredField("modules");
+		field.setAccessible( true);
+		var moduleMap = (Map<Name, ModuleSymbol>) field.get(syms);
+		var module = moduleMap.get(ns.fromString("jdk.hotspot.agent"));
+		modules.allModules().add(module);
 		for (ModuleSymbol m : modules.allModules()) {
 			exportAll.accept(m);
 		}

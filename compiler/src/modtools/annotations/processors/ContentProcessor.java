@@ -173,6 +173,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 					lambda.accept(new TreeScanner() {
 						public void visitApply(JCMethodInvocation method) {
 							mMaker.at(classDecl.defs.last());
+							if (method.args.isEmpty()) return;
 							defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
 							 mMaker.Select(mMaker.Ident(name),
 								ns("def")),

@@ -2,6 +2,7 @@ package modtools.annotations;
 
 import com.sun.source.util.DocTrees;
 import jdk.internal.module.Modules;
+import modtools.annotations.PrintHelper.SPrinter;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 
@@ -73,6 +74,9 @@ public class HopeReflect {
 		 "com.sun.tools.javac.resources",
 		 "com.sun.tools.javac.util"
 		);
+		
+		openTrust(Modules.loadModule("jdk.hotspot.agent"),
+		 "sun.jvm.hotspot");
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
 	}
 	public static void openTrust(Module module, String... pkgs) {

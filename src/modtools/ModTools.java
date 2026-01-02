@@ -2,12 +2,13 @@ package modtools;
 
 
 import arc.*;
-import arc.backend.android.AndroidInput;
 import arc.files.Fi;
+import arc.graphics.Color;
 import arc.scene.ui.Label;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
+import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
 import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -37,9 +38,11 @@ import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 import sun.reflect.ReflectionFactory;
+import sun.tools.attach.VirtualMachineImpl;
 
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.reflect.InvocationTargetException;
+import java.lang.management.ManagementFactory;
+import java.lang.reflect.*;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
@@ -98,12 +101,19 @@ public class ModTools extends Mod {
 		if (R_Extending.world_save) {
 			Tools.runLoggedException(WorldSaver::load);
 		}
-		LazyValue<Class<?>> newClass = LazyValue.of(() -> AndroidInputFixInterface.visit(AndroidInput.class));
-		Runnable run = () -> {
-			HopeReflect.changeClass(Core.input, R_Hook.android_input_fix ? newClass.get() : AndroidInput.class);
-		};
-		E_Hook.data.onChanged(E_Hook.android_input_fix.name(), run);
-		run.run();
+		if (OS.isAndroid) {
+			Class<?>            prevInput  = Core.input.getClass();
+			LazyValue<Class<?>> inputClass = LazyValue.of(() -> AndroidInputFixInterface.visit(prevInput));
+			Class<?>            prevApp    = Core.app.getClass();
+			LazyValue<Class<?>> appClass   = LazyValue.of(() -> AndroidApplicationHookInterface.visit(prevApp));
+
+			Runnable run = () -> {
+				HopeReflect.changeClass(Core.input, R_Hook.android_input_fix ? inputClass.get() : prevInput);
+				HopeReflect.changeClass(Core.app, R_Hook.android_input_fix ? appClass.get() : prevApp);
+			};
+			E_Hook.data.onChanged(E_Hook.android_input_fix.name(), run);
+			run.run();
+		}
 
 		if (TEST) {
 			test();
@@ -131,7 +141,35 @@ public class ModTools extends Mod {
 				HiddenApi.setHiddenApiExemptions();
 			}
 
-			if (HotSwapManager.valid()) HotSwapManager.start();
+			if (HotSwapManager.valid()) {
+				HotSwapManager.start();
+			}
+			if (R_Hook.dynamic_jdwp) {
+				String         pid    = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+				VirtualMachine vm     = VirtualMachine.attach(pid);
+				Method         method = VirtualMachineImpl.class.getDeclaredMethod("execute", String.class, Object[].class);
+				method.setAccessible(true);
+				String arg = "transport=dt_socket,server=y,suspend=n,address=" + R_Hook.dynamic_jdwp_port;
+				vm.loadAgentLibrary("jdwp", arg);
+				vm.detach();
+				Log.info("Loaded jdwp.");
+				/* // 获取当前 JVM 内部真正的 jdwp 路径
+				String javaHome = System.getProperty("java.home");
+				String jdwpPath = javaHome + File.separator + "bin" + File.separator + "jdwp.dll";
+
+				// 检查文件是否存在
+				if (new File(jdwpPath).exists()) {
+					// 使用 loadAgent (注意：不是 loadAgentLibrary)
+					// loadAgent 内部调用的是 Agent_OnAttach，且接受绝对路径
+					vm.loadAgent(jdwpPath, "transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005");
+				} */
+
+				// vm.loadAgentLibrary("jdwp", arg);
+				// vm.loadAgent("jdwp", arg);
+				/* Class<?> CLS = Class.forName("sun.jvm.hotspot.HotSpotAgent");
+				Method   method = CLS.getMethod("attach", int.class);
+				method.invoke(CLS.newInstance(), Integer.parseInt(ManagementFactory.getRuntimeMXBean().getName().split("@")[0])); */
+			}
 			// HotSwapManager.attachAgent("jdwp", "transport=dt_socket,server=y,suspend=n,address=15005");
 			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
@@ -237,6 +275,7 @@ public class ModTools extends Mod {
 		}
 
 		INFO_DIALOG.dialog(d -> {
+			d.image().size(64).update(i -> i.setColor(Core.input.alt() ? Color.white : Color.yellow)).row();
 			Label elem = d.add("Click me").get();
 			EventHelper.leftClick(elem, () -> IntUI.showInfoFade("left click"));
 			EventHelper.rightClick(elem, () -> IntUI.showInfoFade("right click"));

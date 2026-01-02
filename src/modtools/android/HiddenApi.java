@@ -14,17 +14,16 @@ import static modtools.utils.ByteCodeTools.nativeName;
 public class HiddenApi {
 	public static final VMRuntime runtime = VMRuntime.getRuntime();
 
-	public static final long IBYTES = Integer.BYTES;
+	public static final long IBYTES             = Integer.BYTES;
 	/**
 	 * <a href=
 	 * "https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY">
 	 * uint64_t Executable::art_method_</a>
 	 */
-	public static final int offset_art_method_ = 24;
+	public static final int  offset_art_method_ = 24;
 
 	public static void setHiddenApiExemptions() {
-		if (trySetHiddenApiExemptions())
-			return;
+		if (trySetHiddenApiExemptions()) { return; }
 		// 高版本中setHiddenApiExemptions方法直接反射获取不到，得修改artMethod
 		// sdk_version > 28（具体多少不知道）
 		Method setHiddenApiExemptions = findMethod();
@@ -60,7 +59,7 @@ public class HiddenApi {
 			 * Method defineClass = DexFile.class.getDeclaredMethod("defineClassNative",
 			 * String.class, ClassLoader.class, Object.class, DexFile.class);
 			 * defineClass.setAccessible(true);
-			 * 
+			 *
 			 * Field f_dexElements = pathList.getClass().getDeclaredField("dexElements");
 			 * f_dexElements.setAccessible(true);
 			 * Object dexElements = f_dexElements.get(pathList);
@@ -75,7 +74,7 @@ public class HiddenApi {
 			 * f_mCookie.setAccessible(true);
 			 * Object dex_apkCookie = f_mCookie.get(dex_apk);
 			 * Object dex_modCookie = f_mCookie.get(dex_mod);
-			 * 
+			 *
 			 * Class<?> cls = (Class) defineClass.invoke(null, "modtools.android.RMap",
 			 * Vars.class.getClassLoader(), dex_modCookie, dex_apk);
 			 * replaceAMethod(AndroidInputMap.class.getDeclaredMethod("getKeyCode",
@@ -91,7 +90,7 @@ public class HiddenApi {
 	private static boolean trySetHiddenApiExemptions() {
 		try {
 			// MAYBE: sdk_version < 28
-			runtime.setHiddenApiExemptions(new String[] { "L" });
+			runtime.setHiddenApiExemptions(new String[]{"L"});
 			return true;
 		} catch (Throwable ignored) {
 		}
@@ -100,7 +99,7 @@ public class HiddenApi {
 			Method m = Class.class.getDeclaredMethod("getDeclaredMethod", String.class, Class[].class);
 			m.setAccessible(true);
 			Method setHiddenApiExemptions = (Method) m.invoke(VMRuntime.class, "setHiddenApiExemptions",
-					new Class[] { String[].class });
+			 new Class[]{String[].class});
 			invoke(setHiddenApiExemptions);
 			return true;
 		} catch (Throwable ignored) {
@@ -109,9 +108,9 @@ public class HiddenApi {
 	}
 
 	private static void invoke(Method method)
-			throws IllegalAccessException, InvocationTargetException {
+	 throws IllegalAccessException, InvocationTargetException {
 		method.setAccessible(true);
-		method.invoke(runtime, (Object) new String[] { "L" });
+		method.invoke(runtime, (Object) new String[]{"L"});
 	}
 
 	private static Method findMethod() {
@@ -119,16 +118,16 @@ public class HiddenApi {
 		if (methods[0].getName().equals("setHiddenApiExemptions")) {
 			return methods[0];
 		}
-		int length = methods.length;
-		Method[] array = (Method[]) runtime.newNonMovableArray(Method.class, length);
+		int      length = methods.length;
+		Method[] array  = (Method[]) runtime.newNonMovableArray(Method.class, length);
 		System.arraycopy(methods, 0, array, 0, length);
 
 		long address = addressOf(array);
-		long min = Long.MAX_VALUE, min_second = Long.MAX_VALUE, max = Long.MIN_VALUE;
+		long min     = Long.MAX_VALUE, min_second = Long.MAX_VALUE, max = Long.MIN_VALUE;
 		/* 查找artMethod */
 		for (int k = 0; k < length; ++k) {
-			final long k_address = address + k * IBYTES;
-			final long address_Method = UNSAFE.getInt(k_address);
+			final long k_address         = address + k * IBYTES;
+			final long address_Method    = UNSAFE.getInt(k_address);
 			final long address_ArtMethod = UNSAFE.getLong(address_Method + offset_art_method_);
 			if (min >= address_ArtMethod) {
 				min = address_ArtMethod;
@@ -206,10 +205,10 @@ public class HiddenApi {
 	}
 
 	static void testReplaceModifier() throws Exception {
-		Method aPrivate = A.class.getDeclaredMethod("_private");
-		Method aPublic = A.class.getDeclaredMethod("_public");
-		long address_artMethod_private = UNSAFE.getLong(aPrivate, offset_art_method_);
-		long address_artMethod_public = UNSAFE.getLong(aPublic, offset_art_method_);
+		Method aPrivate                  = A.class.getDeclaredMethod("_private");
+		Method aPublic                   = A.class.getDeclaredMethod("_public");
+		long   address_artMethod_private = UNSAFE.getLong(aPrivate, offset_art_method_);
+		long   address_artMethod_public  = UNSAFE.getLong(aPublic, offset_art_method_);
 		Log.info("Origin: @", A.class.getDeclaredMethod("_private"));
 
 		UNSAFE.copyMemory(address_artMethod_public + 4, address_artMethod_private + 4, 8);
@@ -257,16 +256,14 @@ public class HiddenApi {
 		}
 	}
 
-	static Method vm;
-	static Class<?> Exception = Exception.class;
+	static Method   vm;
+	static Class<?> Exception            = Exception.class;
 	static Class<?> NullPointerException = NullPointerException.class;
 
 	public static class Delegator extends Super {
 		public Class findLoadedClass(String name) {
-			if (name.equals("java.lang.Exception"))
-				return Exception;
-			if (name.equals("java.lang.NullPointerException"))
-				return NullPointerException;
+			if (name.equals("java.lang.Exception")) { return Exception; }
+			if (name.equals("java.lang.NullPointerException")) { return NullPointerException; }
 
 			try {
 				Class res = (Class) vm.invoke(this, name);
@@ -313,7 +310,7 @@ public class HiddenApi {
 
 	private static void replaceAMethod(Method dest, Method src) {
 		long artDest = UNSAFE.getLong(dest, offset_art_method_);
-		long artSrc = UNSAFE.getLong(src, offset_art_method_);
+		long artSrc  = UNSAFE.getLong(src, offset_art_method_);
 
 		/*
 		 * API 33 ArtMethod 结构 (64-bit):
@@ -329,7 +326,7 @@ public class HiddenApi {
 
 		// 我们从偏移 8 开始拷贝，跳过 class 和 flags
 		// 这样可以保留原本的类归属关系，避免 NoSuchMethodError
-		int skip = 8;
+		int skip     = 8;
 		int copySize = (int) size_art_method - skip;
 
 		if (copySize > 0) {

@@ -233,11 +233,6 @@ public class ByteCodeTools {
 			}
 		}
 
-		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> returnType,
-				Class<?>... args) {
-			buildSuperFunc(thisMethodName, superMethodName, Object.class, returnType, args);
-		}
-
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> superClass,
 				Class<?> returnType,
 				Class<?>... args) {
@@ -250,12 +245,6 @@ public class ByteCodeTools {
 			// addCast(returnType);
 			writer.add(buildReturn(returnType));
 			writer.stopMethod((short) 2); // this + args
-		}
-
-		public String buildSuperFunc(String methodName, Class<?> returnType, Class<?>... args) {
-			String superMethodName = methodName + nextID();
-			buildSuperFunc(superMethodName, methodName, returnType, args);
-			return superMethodName;
 		}
 
 		public <K> void buildGetFieldFunc(String fieldName, String methodName, Class<K> fieldType) {

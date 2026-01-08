@@ -151,6 +151,22 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public void lazyInit() throws Throwable { }
 
 
+	public final SourceVersion getSupportedSourceVersion() {
+		return SourceVersion.latestSupported();
+	}
+	public final Set<String> getSupportedAnnotationTypes() {
+		if (!AINIT.hasMindustry) return Set.of();
+		try {
+			return getSupportedAnnotationTypes0().stream()
+			 .map(Class::getCanonicalName).collect(Collectors.toSet());
+		} catch (Throwable e) {
+			return Set.of();
+		}
+	}
+	public abstract Set<Class<?>> getSupportedAnnotationTypes0();
+
+
+	// region utils
 	public static Element findSibling(Element sibling, String name, ElementKind kind) {
 		return findChild(sibling.getEnclosingElement(), name, kind);
 	}
@@ -220,19 +236,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			}
 		}
 	}
-
-	public final SourceVersion getSupportedSourceVersion() {
-		return SourceVersion.latestSupported();
-	}
-	public final Set<String> getSupportedAnnotationTypes() {
-		if (!AINIT.hasMindustry) return Set.of();
-		try {
-			return getSupportedAnnotationTypes0().stream()
-			 .map(Class::getCanonicalName).collect(Collectors.toSet());
-		} catch (Throwable e) {
-			return Set.of();
-		}
-	}
 	protected static VarSymbol getSymbol(CompilationUnitTree unit, JCVariableDecl tree) {
 		return (VarSymbol) getSymbol(unit, (JCTree) tree);
 	}
@@ -240,8 +243,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		TreePath path = trees.getPath(unit, tree);
 		return trees.getElement(path);
 	}
-	public abstract Set<Class<?>> getSupportedAnnotationTypes0();
-
 
 	public static String kebabToCamel(String s) {
 		StringBuilder result = new StringBuilder(s.length());
@@ -275,4 +276,5 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 		return result.toString();
 	}
+	// endregion utils
 }

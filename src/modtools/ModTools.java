@@ -124,6 +124,7 @@ public class ModTools extends Mod {
 	private void loadCore() {
 		if (!isImportFromGame) meta.hidden = false;
 		resolveLibsCatch();
+		MySettings.load();
 
 		try {
 			if (OS.isAndroid) {
@@ -163,10 +164,7 @@ public class ModTools extends Mod {
 			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
 			Log.err(e);
-			// System.exit(-1);
 		}
-
-		// HopeProcessor.main();
 
 		WorldDraw.registerEvent();
 		HopeCall.registerPacket();

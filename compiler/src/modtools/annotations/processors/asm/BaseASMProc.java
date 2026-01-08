@@ -58,7 +58,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		}
 		return findReference(annotationClass, element, expectKinds, reference, unit, pos, doc);
 	}
-	public  <R extends Symbol> List<Pair<String, DocReference>>
+	public <R extends Symbol> List<Pair<String, DocReference>>
 	getLinkReference(Class<? extends Annotation> annotationClass,
 	                 R element, ElementKind... expectKinds) {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
@@ -79,9 +79,9 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		return getLinkReference(annotationClass, element, expectKind).stream().filter(p -> p.fst.equals(name)).toList();
 	}
 	private <R extends Symbol> DocReference findReference(Class<? extends Annotation> annotationClass, R element,
-	                                                             ElementKind[] expectKinds, DCReference reference,
-	                                                             JCCompilationUnit unit, JCTree pos,
-	                                                             DocCommentTree doc) {
+	                                                      ElementKind[] expectKinds, DCReference reference,
+	                                                      JCCompilationUnit unit, JCTree pos,
+	                                                      DocCommentTree doc) {
 
 		Element ref = trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(element), doc), reference));
 		l:
@@ -174,14 +174,25 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		genClassName = AConstants.nextGenClassName();
 		classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 	}
-	public static String className(VarSymbol v) {
-		return className(v.type);
-	}
+
 	public static String className(Type type) {
+		return type.toString();
+	}
+	public static String classAccess(VarSymbol v) {
+		return classAccess(v.type);
+	}
+
+	/**
+	 * 生成给定类型的类访问表达式
+	 * @param type 要生成类访问表达式的类型
+	 * @return 返回表示该类型的.class访问字符串
+	 */
+	public static String classAccess(Type type) {
 		if (!(type instanceof ArrayType arrayType)) {
 			return type.tsym.name + ".class";
 		}
 
+		// 计算数组的维度深度
 		int depth = 1;
 		while (arrayType.elemtype instanceof ArrayType) {
 			arrayType = (ArrayType) arrayType.elemtype;
@@ -190,6 +201,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		// println(arrayType.elemtype);
 		return "Object" + "[]".repeat(depth) + ".class";
 	}
+
 	public record DocReference(
 	 DCReference reference, Element element) {
 	}

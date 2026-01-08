@@ -40,7 +40,8 @@ public class ChangeClassDialog extends Window {
 				if (syntax.drawable.getText().isBlank()) continue;
 				myClass.setFunc(m.getName(), null, Modifier.PUBLIC, false, m.getReturnType(), m.getParameterTypes());
 				myClass.buildSuperFunc(
-				 AConstants.SUPER_METHOD_PREFIX + m.getName(),m.getName(), m.getReturnType(), m.getParameterTypes());
+				 AConstants.SUPER_METHOD_PREFIX + m.getName(),m.getName(),
+				 label.type, m.getReturnType(), m.getParameterTypes());
 			}
 			/* 先使类public化 */
 			myClass = new MyClass<>(myClass.define(), AConstants.GEN_CLASS_NAME_SUFFIX);

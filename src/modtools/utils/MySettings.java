@@ -21,6 +21,10 @@ public class MySettings {
 	 SETTINGS = new Data(config),
 	 D_JSFUNC = SETTINGS.child("JSFunc");
 
+	public static void load() {
+		Log.info(SETTINGS);
+	}
+
 	public static class Data extends OrderedMap<String, Object> {
 		public MyEvents events = new MyEvents();
 		public Data parent;

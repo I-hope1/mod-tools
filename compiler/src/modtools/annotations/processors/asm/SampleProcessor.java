@@ -6,7 +6,7 @@ import com.sun.tools.javac.code.Scope.WriteableScope;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.MethodType;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.tree.TreeTranslator;
+import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.BaseProcessor;
@@ -20,273 +20,403 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static modtools.annotations.asm.Sample.*;
-import static modtools.annotations.processors.asm.BaseASMProc.className;
 
-@AutoService({ Processor.class })
+@AutoService({Processor.class})
 public class SampleProcessor extends BaseProcessor<Symbol> {
 
-	public static final String NAME_VISIT = "visitEmitMethod";
+	public static final String NAME_VISIT       = "visitEmitMethod";
 	public static final String NAME_VISIT_FIELD = "visitEmitField";
-	public static final String NAME_SET_FUNC = "setFunc";
-	public MethodSymbol _superCall;
+	public static final String NAME_SET_FUNC    = "setFunc";
+	public static final String _SUPER           = "_super";
 
+	private       MethodSymbol                  superCallSymbol;
+	private final Map<ClassSymbol, ClassSymbol> interfaceCache = new HashMap<>();
+
+	@Override
 	public void lazyInit() {
-		ClassSymbol classSymbol = findClassSymbol("modtools.annotations.asm.Sample$SampleTemp");
-		_superCall = findChild(classSymbol, "_super", ElementKind.METHOD);
+		ClassSymbol tempClass = findClassSymbol("modtools.annotations.asm.Sample$SampleTemp");
+		superCallSymbol = findChild(tempClass, _SUPER, ElementKind.METHOD);
 	}
 
-	/** 通过Sample的定义生成对应的接口 */
-	public Map<ClassSymbol, ClassSymbol> interfaces = new HashMap<>();
-
+	@Override
 	public void dealElement(Symbol element) throws Throwable {
-		if (element instanceof VarSymbol)
-			return;
-		if (!(element instanceof MethodSymbol ms))
-			return;
+		if (!(element instanceof MethodSymbol methodSym)) return;
 
-		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(ms).getCompilationUnit();
-
-		ClassSymbol owner = ((ClassSymbol) ms.owner);
-		Sample sample = owner.getAnnotation(Sample.class);
+		ClassSymbol owner  = (ClassSymbol) methodSym.owner;
+		Sample      sample = owner.getAnnotation(Sample.class);
 		if (sample == null) {
-			log.error(trees.getTree(ms).mods, SPrinter
-					.err("@SampleForMethod / @SampleForInitializer is only allowed on methods annotated with @Sample"));
+			log.error(trees.getTree(methodSym).mods, SPrinter.err(
+			 "@SampleForMethod / @SampleForInitializer is only allowed on methods within a class annotated with @Sample"
+			));
 			return;
 		}
 
-		final boolean openPackagePrivate = sample.openPackagePrivate();
+		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(methodSym).getCompilationUnit();
 
-		/* 创建接口类型 */
-		if (!interfaces.containsKey(owner)) {
-			trees.getTree(owner).mods.annotations = List.nil();
-			ClassSymbol _interface = makeInterface(owner, openPackagePrivate, unit, sample);
+		// 确保接口已生成
+		ClassSymbol generatedInterface = interfaceCache.computeIfAbsent(owner,
+		 k -> makeInterface(owner, sample.openPackagePrivate(), unit, sample));
 
-			interfaces.put(owner, _interface);
-		}
+		// 转换 AST，处理 self 强转逻辑和 _super 调用
+		transformMethodBody(methodSym, generatedInterface, unit);
+	}
 
-		JCMethodDecl methodDecl = trees.getTree(ms);
-		VarSymbol selfSymbol = ms.params.head;
-		ClassSymbol _interface = interfaces.get(owner);
+	/**
+	 * 转换方法体：将 self 引用强转为生成的接口，并处理特殊的 _super 语法
+	 */
+	private void transformMethodBody(MethodSymbol methodSym, ClassSymbol interfaceSym, JCCompilationUnit unit) {
+		JCMethodDecl methodDecl = trees.getTree(methodSym);
+		VarSymbol    selfParam  = methodSym.params.head;
 
 		new TreeTranslator() {
-			public JCMethodInvocation _super;
+			private JCMethodInvocation currentSuperContext;
 
 			private JCExpression castSelf() {
-				return mMaker.TypeCast(mMaker.Type(_interface.type), mMaker.Ident(selfSymbol));
+				return mMaker.TypeCast(mMaker.Type(interfaceSym.type), mMaker.Ident(selfParam));
 			}
 
+			@Override
 			public void visitApply(JCMethodInvocation tree) {
-				if (tree == _super) {
-					_super = null;
-					if (!(tree.args.get(0) instanceof JCIdent i && i.name.contentEquals(selfSymbol.name))) {
-						log.error(tree.pos, SPrinter
-								.err("_super is only allowed to be used as '_super(" + selfSymbol.name + ")'."));
+				// 处理 _super(self) 的替换
+				if (tree == currentSuperContext) {
+					currentSuperContext = null;
+					if (!(tree.args.get(0) instanceof JCIdent ident && ident.name.contentEquals(selfParam.name))) {
+						log.error(tree.pos, SPrinter.err("_super 必须以 '_super(" + selfParam.name + ")' 形式使用"));
 						return;
 					}
 					this.result = castSelf();
 					return;
 				}
 
-				if (tree.meth instanceof JCFieldAccess fa && fa.selected instanceof JCMethodInvocation mi
-						&& getSymbol(unit, mi) == _superCall) {
-					_super = mi;
+				// 识别形如 _super(self).method() 的调用
+				if (tree.meth instanceof JCFieldAccess fieldAccess &&
+				    fieldAccess.selected instanceof JCMethodInvocation subInvoke &&
+				    _SUPER.equals("" + subInvoke.meth) &&
+				    getSymbol(unit, subInvoke) == superCallSymbol) {
+
+					currentSuperContext = subInvoke;
 					super.visitApply(tree);
-					fa.name = names.fromString(AConstants.SUPER_METHOD_PREFIX + fa.name);
-					fa.sym = _interface.members().findFirst(fa.name);
+
+					// 修正方法名为 super$$Name
+					fieldAccess.selected = castSelf();
+					fieldAccess.name = names.fromString(AConstants.SUPER_METHOD_PREFIX + fieldAccess.name);
+					fieldAccess.sym = interfaceSym.members().findFirst(fieldAccess.name);
+					// 添加super接口方法
+
+					// println(fieldAccess);
 				} else {
 					super.visitApply(tree);
 				}
 			}
 
+			@Override
 			public void visitIdent(JCIdent tree) {
 				super.visitIdent(tree);
-				if (tree.sym instanceof VarSymbol vs
-						&& getAnnotationByElement(SampleForAccess.class, vs, true) != null) {
-					// 替换为 getter 调用: ((Interface) self).fieldName()
-					this.result = mMaker.Apply(List.nil(), mMaker.Select(castSelf(), vs.name), List.nil());
+				// 自动将带有 @SampleForAccess 的字段访问转为 getter 调用
+				if (tree.sym instanceof VarSymbol varSym && getAnnotationByElement(SampleForAccess.class, varSym, true) != null) {
+					this.result = mMaker.Apply(List.nil(), mMaker.Select(castSelf(), varSym.name), List.nil());
 				}
 			}
 
+			@Override
 			public void visitAssign(JCAssign tree) {
 				super.visitAssign(tree);
-				if (tree.lhs instanceof JCIdent ident && ident.sym instanceof VarSymbol vs
-						&& getAnnotationByElement(SampleForAccess.class, vs, true) != null) {
-					// 替换为 setter 调用: ((Interface) self).fieldName(rhs)
-					this.result = mMaker.Apply(List.nil(), mMaker.Select(castSelf(), vs.name), List.of(tree.rhs));
+				// 自动将带有 @SampleForAccess 的字段赋值转为 setter 调用
+				if (tree.lhs instanceof JCIdent ident && ident.sym instanceof VarSymbol varSym &&
+				    getAnnotationByElement(SampleForAccess.class, varSym, true) != null) {
+					this.result = mMaker.Apply(List.nil(), mMaker.Select(castSelf(), varSym.name), List.of(tree.rhs));
 				}
 			}
 		}.translate(methodDecl);
 	}
 
-	private ClassSymbol makeInterface(ClassSymbol owner, boolean openPackagePrivate, JCCompilationUnit unit,
-	                                  Sample sample) {
-		final String var_myClass = "myClass";
-		final String var_class   = "className";
-		final String ownerName   = owner.name.toString();
+	/**
+	 * 生成接口源码及其对应的 ClassSymbol
+	 */
+	private ClassSymbol makeInterface(ClassSymbol owner, boolean openPkgPriv, JCCompilationUnit unit, Sample sample) {
+		String ownerName     = owner.name.toString();
+		String interfaceName = ownerName + AConstants.INTERFACE_SUFFIX;
 
-		JavaFileObject file;
+		JavaFileObject sourceFile;
 		try {
-			file = mFiler.createSourceFile(owner.getQualifiedName().toString() + AConstants.INTERFACE_SUFFIX, owner);
+			sourceFile = mFiler.createSourceFile(owner.getQualifiedName() + AConstants.INTERFACE_SUFFIX, owner);
 		} catch (IOException e) {
-			ClassSymbol classSymbol = mSymtab.enterClass(owner.packge().modle, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX));
-			if (classSymbol != null && classSymbol.exists()) {
-				return classSymbol;
-			}
+			ClassSymbol existing = mSymtab.enterClass(owner.packge().modle, names.fromString(interfaceName));
+			if (existing != null && existing.exists()) return existing;
 			throw new RuntimeException(e);
 		}
-		ClassSymbol   _interface          = new ClassSymbol(Flags.PUBLIC | Flags.INTERFACE, names.fromString(ownerName + AConstants.INTERFACE_SUFFIX), owner.owner);
-		_interface.members_field = WriteableScope.create(_interface);
-		StringBuilder packagePrivateSb    = new StringBuilder();
-		StringBuilder superMethodDeclared = new StringBuilder();
-		StringBuilder methodVisitSb       = new StringBuilder();
 
-		methodVisitSb.append("String ").append(var_class).append(" = ByteCodeTools.nativeName(").append(ownerName).append(".class);\n");
+		ClassSymbol interfaceSym = new ClassSymbol(Flags.PUBLIC | Flags.INTERFACE, names.fromString(interfaceName), owner.owner);
+		interfaceSym.members_field = WriteableScope.create(interfaceSym);
 
-		SampleForMethod      sm;
-		SampleForInitializer si;
-		SampleForAccess      sa;
-		for (Symbol symbol : owner.members().getSymbols()) {
-			sm = getAnnotationByElement(SampleForMethod.class, symbol, true);
-			si = getAnnotationByElement(SampleForInitializer.class, symbol, true);
-			sa = getAnnotationByElement(SampleForAccess.class, symbol, true);
-			if (sm == null && si == null && sa == null) continue;
+		CodeBuffer buffer = new CodeBuffer(ownerName);
 
-			if (symbol instanceof MethodSymbol ms) {
-				if (ms.params.isEmpty()) {
-					log.error(trees.getTree(ms).mods, SPrinter.err("@SampleForMethod / @SampleForInitializer is only allowed on methods with parameters"));
-				}
-
-				JCMethodDecl         tree       = trees.getTree(ms);
-				JCBlock              prevbody   = tree.body;
-				JCModifiers          prevmods   = tree.mods;
-				Name                 prevname   = tree.name;
-				List<JCVariableDecl> prevparams = tree.params;
-				tree.body = null;
-				tree.mods = mMaker.Modifiers(Flags.PUBLIC, List.nil());
-				tree.name = names.fromString(AConstants.SUPER_METHOD_PREFIX + tree.name);
-				tree.params = tree.params.tail;
-
-				MethodSymbol methodSymbol = new MethodSymbol(Flags.PUBLIC, tree.name, tree.type, _interface);
-				_interface.members().enter(methodSymbol);
-				superMethodDeclared.append(tree).append("\n");
-
-				// 类型下届
-				methodVisitSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
-				// 类型上界
-				Class<?>[] upperBoundOfClasses = sm != null ? sm.upperBoundClasses() : si.upperBoundClasses();
-				if (upperBoundOfClasses.length > 0) {
-					methodVisitSb.append(Arrays.stream(upperBoundOfClasses).map(c -> "clazz.isAssignable(" + c.getSimpleName() + ".class)")
-					 .collect(Collectors.joining(" || ", "if (", ")")));
-				}
-				Name name = si != null ? names.init : ms.name;
-
-				methodVisitSb.append(var_myClass).append(".").append(NAME_VISIT).append("(");
-				methodVisitSb.append("\"").append(name).append("\", ");
-				if (si != null) methodVisitSb.append("\"").append(ms.name).append("\", ");
-				methodVisitSb.append("new Class<?>[]{")
-				 .append(ms.params.stream().map(BaseASMProc::className).collect(Collectors.joining(", "))).append("}, ")
-				 .append(className(ms.getReturnType())).append(", ").append(var_class).append(");\n");
-
-				if (openPackagePrivate) {
-					packagePrivateSb.append("if (").append(className(ms.params.head.type)).append(".isAssignableFrom(clazz)) ");
-					packagePrivateSb.append(var_myClass).append(".").append(NAME_SET_FUNC)
-					 .append("(\"").append(name).append("\", (Func2) null, Modifier.PUBLIC, ")
-					 .append(className(ms.getReturnType())).append(", ")
-					 .append(ms.params.stream().skip(1).map(BaseASMProc::className).collect(Collectors.joining(", "))).append(");\n");
-				}
-
-				tree.mods = prevmods;
-				tree.body = prevbody;
-				tree.name = prevname;
-				tree.params = prevparams;
-			} else if (symbol instanceof VarSymbol vs) {
-				// Getter: type name();
-				MethodSymbol getter = new MethodSymbol(Flags.PUBLIC, vs.name, new MethodType(List.nil(), vs.type, List.nil(), mSymtab.methodClass), _interface);
-				_interface.members().enter(getter);
-				superMethodDeclared.append(className(vs.type)).append(" ").append(vs.name).append("();\n");
-
-				// Setter: void name(type value);
-				MethodSymbol setter = new MethodSymbol(Flags.PUBLIC, vs.name, new MethodType(List.of(vs.type), mSymtab.voidType, List.nil(), mSymtab.methodClass), _interface);
-				_interface.members().enter(setter);
-				superMethodDeclared.append("void ").append(vs.name).append("(").append(className(vs.type)).append(" value);\n");
-
-				methodVisitSb.append(var_myClass).append(".").append(NAME_VISIT_FIELD).append("(\"").append(vs.name).append("\", ").append(className(vs.type)).append(");\n");
+		Set<MethodSymbol> superMethodsToBridge = new LinkedHashSet<>();
+		for (Symbol s : owner.members().getSymbols()) {
+			if (s instanceof MethodSymbol ms) {
+				findSuperCallsInMethod(ms, unit, superMethodsToBridge);
 			}
 		}
 
-		String builderCall = "if (builder != null) builder.get(myClass);";
+		for (Symbol member : owner.members().getSymbols()) {
+			processMember(member, interfaceSym, buffer, superMethodsToBridge, openPkgPriv);
+		}
+		// println(superMethodsToBridge);
 
-		String myclassInit = openPackagePrivate ? "new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", " + var_myClass + ".define())" : "new MyClass(" + var_myClass + ".define()/* 使类public化 */, \"i\")";
-		String s = STR."""
-package \{owner.packge().getQualifiedName().toString()};
+		for (MethodSymbol superMethod : superMethodsToBridge) {
+			addSuperBridgeToInterface(owner, superMethod, interfaceSym, buffer);
+		}
 
-\{unit.getImports().stream().reduce("", (a, b) -> a + b, (a, b) -> a + b)}
+		String source = generateInterfaceSource(owner, unit, sample, buffer);
+		writeSource(sourceFile, source);
+
+		interfaceSym.sourcefile = sourceFile;
+		interfaceSym.complete();
+		return interfaceSym;
+	}
+
+	private void processMember(Symbol member, ClassSymbol interfaceSym, CodeBuffer buffer,
+	                           Set<MethodSymbol> superMethodsToBridge, boolean openPkgPriv) {
+		SampleForMethod      sm = getAnnotationByElement(SampleForMethod.class, member, true);
+		SampleForInitializer si = getAnnotationByElement(SampleForInitializer.class, member, true);
+		SampleForAccess      sa = getAnnotationByElement(SampleForAccess.class, member, true);
+
+		if (sm == null && si == null && sa == null) return;
+
+		if (member instanceof MethodSymbol methodSym) {
+			handleMethodMember(methodSym, interfaceSym, buffer, sm, si, openPkgPriv);
+			superMethodsToBridge.add(methodSym);
+		} else if (member instanceof VarSymbol varSym) {
+			handleFieldMember(varSym, interfaceSym, buffer);
+		}
+	}
+
+	private void handleMethodMember(MethodSymbol methodSym, ClassSymbol interfaceSym, CodeBuffer buffer,
+	                                SampleForMethod sm, SampleForInitializer si, boolean openPkgPriv) {
+		if (methodSym.params.isEmpty()) {
+			log.error(trees.getTree(methodSym).mods, SPrinter.err("方法的参数列表不能为空"));
+			return;
+		}
+
+		JCMethodDecl tree = trees.getTree(methodSym);
+
+		// 临时修改 AST 以便利用 tree.toString() 生成接口方法签名
+		List<JCVariableDecl> oldParams      = tree.params;
+		JCBlock              oldBody        = tree.body;
+		var                  oldAnnotations = tree.mods.annotations;
+		tree.mods.flags &= ~Flags.STATIC; // 移除 static
+		tree.params = tree.params.tail; // 移除第一个参数 (self)
+		tree.body = null; // 移除方法体
+		tree.mods.annotations = List.nil(); // 移除注解
+		buffer.interfaceMethods.append("    ").append(tree.toString().replace(";", "")).append(";\n");
+		tree.mods.flags |= Flags.STATIC;
+		tree.params = oldParams;
+		tree.body = oldBody;
+		tree.mods.annotations = oldAnnotations;
+
+		// 生成访问代码 (Visit Code)
+		String firstParamType = BaseASMProc.classAccess(methodSym.params.head.type);
+		buffer.visitLogic.append(STR."if (\{firstParamType}.isAssignableFrom(clazz)) ");
+
+		Class<?>[] bounds = (sm != null) ? sm.upperBoundClasses() : si.upperBoundClasses();
+		if (bounds.length > 0) {
+			String check = Arrays.stream(bounds)
+			 .map(c -> "clazz.isAssignable(" + c.getSimpleName() + ".class)")
+			 .collect(Collectors.joining(" || ", "if (", ") "));
+			buffer.visitLogic.append(check);
+		}
+
+		Name   targetName = (si != null) ? names.init : methodSym.name;
+		String paramTypes = methodSym.params.stream().map(BaseASMProc::classAccess).collect(Collectors.joining(", "));
+
+		buffer.visitLogic.append(STR."myClass.\{NAME_VISIT}(\"\{targetName}\", ");
+		if (si != null) buffer.visitLogic.append(STR."\"\{methodSym.name}\", ");
+		buffer.visitLogic.append(STR."new Class<?>[]{\{paramTypes}}, \{BaseASMProc.classAccess(methodSym.getReturnType())}, className);\n");
+
+		// 处理 Package-Private 开放
+		if (openPkgPriv) {
+			String subParams = methodSym.params.stream().skip(1).map(BaseASMProc::classAccess).collect(Collectors.joining(", "));
+			buffer.packagePrivateLogic.append(STR."    if (\{firstParamType}.isAssignableFrom(clazz)) ");
+			buffer.packagePrivateLogic.append(STR."myClass.\{NAME_SET_FUNC}(\"\{targetName}\", (Func2) null, Modifier.PUBLIC, \{BaseASMProc.classAccess(methodSym.getReturnType())}, \{subParams});\n");
+		}
+	}
+
+	private void handleFieldMember(VarSymbol varSym, ClassSymbol interfaceSym, CodeBuffer buffer) {
+		String typeName  = BaseASMProc.classAccess(varSym.type);
+		String fieldName = varSym.name.toString();
+
+		// Getter
+		MethodSymbol getter = new MethodSymbol(Flags.PUBLIC, varSym.name,
+		 new MethodType(List.nil(), varSym.type, List.nil(), mSymtab.methodClass), interfaceSym);
+		interfaceSym.members().enter(getter);
+		buffer.interfaceMethods.append(STR."    \{typeName} \{fieldName}();\n");
+
+		// Setter
+		MethodSymbol setter = new MethodSymbol(Flags.PUBLIC, varSym.name,
+		 new MethodType(List.of(varSym.type), mSymtab.voidType, List.nil(), mSymtab.methodClass), interfaceSym);
+		interfaceSym.members().enter(setter);
+		buffer.interfaceMethods.append(STR."    void \{fieldName}(\{typeName} value);\n");
+
+		// Visit Field
+		buffer.visitLogic.append(STR."    myClass.\{NAME_VISIT_FIELD}(\"\{fieldName}\", \{typeName}.class);\n");
+	}
+	/**
+	 * 为 super 调用生成接口声明和字节码桥接逻辑
+	 */
+	private void addSuperBridgeToInterface(ClassSymbol classSymbol, MethodSymbol targetMethod, ClassSymbol interfaceSym,
+	                                       CodeBuffer buffer) {
+		String superMethodName = AConstants.SUPER_METHOD_PREFIX + targetMethod.name.toString();
+
+		// 避免重复生成
+		if (interfaceSym.members().findFirst(ns(superMethodName)) != null) return;
+
+		// 向接口 Symbol Table 添加方法
+		MethodSymbol bridgeSym = new MethodSymbol(Flags.PUBLIC, ns(superMethodName), targetMethod.type, interfaceSym);
+		interfaceSym.members().enter(bridgeSym);
+
+		// 生成接口源码声明
+		List<VarSymbol> params1 = targetMethod.params;
+		if (targetMethod.owner == classSymbol) {
+			params1 = params1.tail;
+			// println(params1);
+		}
+		String returnType = BaseASMProc.className(types.erasure(targetMethod.getReturnType()));
+		String params = params1.stream()
+		 .map(p -> BaseASMProc.className(types.erasure(p.type)) + " " + p.name)
+		 .collect(Collectors.joining(", "));
+		String throw_str = targetMethod.type.getThrownTypes().isEmpty() ? "" :
+		 " throws " + targetMethod.type.getThrownTypes().stream()
+			.map(t -> BaseASMProc.className(types.erasure(t)))
+			.collect(Collectors.joining(", "));
+		buffer.interfaceMethods.append(STR."  \{returnType} \{superMethodName}(\{params})\{throw_str};\n");
+
+		// 生成 visit 逻辑中的字节码桥接调用: myClass.buildSuperFunc("super$$onKey", "onKey", void.class, View.class, ...)
+		String paramClasses = params1.stream()
+		 .map(p -> BaseASMProc.classAccess(types.erasure(p.type)))
+		 .collect(Collectors.joining(", "));
+
+
+		buffer.visitLogic.append(STR."        myClass.buildSuperFunc(\"\{superMethodName}\", \"\{targetMethod.name}\", \{BaseASMProc.classAccess(targetMethod.owner.type)}, \{BaseASMProc.classAccess(targetMethod.getReturnType())}\{paramClasses.isEmpty() ? "" : ", " + paramClasses});\n");
+	}
+	/**
+	 * 扫描方法体，寻找 _super(self).methodName() 并记录 methodName 的 Symbol
+	 */
+	private void findSuperCallsInMethod(MethodSymbol ms, JCCompilationUnit unit, Set<MethodSymbol> results) {
+		JCMethodDecl tree = trees.getTree(ms);
+		if (tree == null || tree.body == null) return;
+
+		tree.accept(new TreeScanner() {
+			@Override
+			public void visitApply(JCMethodInvocation tree) {
+				if (tree.meth instanceof JCFieldAccess fieldAccess &&
+				    fieldAccess.selected instanceof JCMethodInvocation subInvoke &&
+				    _SUPER.equals("" + subInvoke.meth) &&
+				    getSymbol(unit, subInvoke) == superCallSymbol) {
+
+					if (fieldAccess.sym instanceof MethodSymbol targetMethod) {
+						results.add(targetMethod);
+					}
+				}
+				super.visitApply(tree);
+			}
+		});
+	}
+
+	private String generateInterfaceSource(ClassSymbol owner, JCCompilationUnit unit, Sample sample, CodeBuffer buffer) {
+		String pkg           = owner.packge().getQualifiedName().toString();
+		String imports       = unit.getImports().stream().map(Objects::toString).collect(Collectors.joining());
+		String ownerName     = owner.name.toString();
+		String interfaceName = ownerName + AConstants.INTERFACE_SUFFIX;
+
+		String defaultClassLogic = sample.defaultClass().isBlank() ? "" :
+		 STR."if (clazz == Object.class) clazz = ClassUtils.forName(\"\{sample.defaultClass()}\");";
+
+		String myClassInit = sample.openPackagePrivate()
+		 ? STR."new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", myClass.define())"
+		 : "new MyClass(myClass.define(), \"i\")";
+
+		return STR."""
+package \{pkg};
+
+\{imports}
 import arc.func.Func2;
 import arc.func.Cons;
 import modtools.utils.ByteCodeTools;
 import modtools.utils.ByteCodeTools.MyClass;
 import modtools.utils.Tools;
 import modtools.utils.reflect.ClassUtils;
-
 import java.lang.reflect.*;
 import java.util.*;
 
-public interface \{ownerName}\{AConstants.INTERFACE_SUFFIX} {
+public interface \{interfaceName} {
 
-\{superMethodDeclared}
+\{buffer.interfaceMethods}
 
-Map<Class<?>, Class<?>> cache = new HashMap<>();
+    Map<Class<?>, Class<?>> cache = new HashMap<>();
 
-public static Class<?> visit(Class<?> clazz) {
-	return visit(clazz, null);
+    static Class<?> visit(Class<?> clazz) {
+        return visit(clazz, null);
+    }
+
+    static Class<?> visit(Class<?> clazz, Cons<MyClass<?>> builder) {
+        \{defaultClassLogic}
+        if (cache.containsKey(clazz)) return cache.get(clazz);
+        if (\{interfaceName}.class.isAssignableFrom(clazz)) return clazz;
+
+        var myClass = new MyClass(clazz, "\{AConstants.GEN_CLASS_NAME_SUFFIX}");
+        \{buffer.packagePrivateLogic}
+        if (builder != null) builder.get(myClass);
+
+        String className = ByteCodeTools.nativeName(\{ownerName}.class);
+        myClass = \{myClassInit};
+        \{buffer.visitLogic}
+        myClass.addInterface(\{interfaceName}.class);
+
+        if (builder != null) builder.get(myClass);
+        var newClass = myClass.define(\{ownerName}.class);
+        cache.put(clazz, newClass);
+        return newClass;
+    }
+
+    static <T> T changeClass(T obj) {
+        return Tools.newInstance(obj, visit(obj.getClass()));
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T> T newInstance(Class<T> c) {
+        try {
+            return (T) visit(c).getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
-public static Class<?> visit(Class<?> clazz, Cons<MyClass<?>> builder) {
-	\{(sample.defaultClass().isBlank() ? "" : "if (clazz == Object.class) clazz = ClassUtils.forName(\"" + sample.defaultClass() + "\");")}
-	if (cache.containsKey(clazz)) {
-		return cache.get(clazz);
+""";
 	}
-	if (\{ownerName}\{AConstants.INTERFACE_SUFFIX}.class.isAssignableFrom(clazz)) return clazz;
 
-	var \{var_myClass} = new MyClass(clazz, "\{AConstants.GEN_CLASS_NAME_SUFFIX}");
-	\{packagePrivateSb}
-	\{builderCall}
-
-	\{var_myClass} = \{myclassInit};
-	\{methodVisitSb}
-	\{var_myClass}.addInterface(\{ownerName}\{AConstants.INTERFACE_SUFFIX}.class);
-	\{builderCall}
-	var newClass = \{var_myClass}.define(\{ownerName}.class);
-	cache.put(clazz, newClass);
-	return newClass;
-}
-
-
-public static <T> T changeClass(T obj) {
-	Class<?> clazz = visit(obj.getClass());
-	return Tools.newInstance(obj, clazz);
-}
-public static <T> T newInstance(Class<T> c) {
-	Class<?> clazz = visit(c);
-	try {
-		return (T) clazz.getDeclaredConstructor().newInstance();
-	} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-		throw new RuntimeException(e);
-	}
-}
-
-}""";
+	private void writeSource(JavaFileObject file, String content) {
 		try (Writer writer = file.openWriter()) {
-			writer.append(s);
-			writer.flush();
+			writer.write(content);
 		} catch (IOException e) {
-			throw new RuntimeException(e);
+			throw new RuntimeException("Failed to write generated source", e);
 		}
-		_interface.sourcefile = file;
-		_interface.complete();
-		return _interface;
 	}
 
+	/**
+	 * 辅助类：用于暂存生成的各部分代码块
+	 */
+	private static class CodeBuffer {
+		final StringBuilder interfaceMethods    = new StringBuilder();
+		final StringBuilder packagePrivateLogic = new StringBuilder();
+		final StringBuilder visitLogic          = new StringBuilder();
+
+		CodeBuffer(String ownerName) {
+			// 初始化 visit 逻辑
+		}
+	}
+
+	@Override
 	public Set<Class<?>> getSupportedAnnotationTypes0() {
-		return Set.of(SampleForMethod.class, SampleForAccess.class/* , SampleForInitializer.class *//* TODO */);
+		return Set.of(SampleForMethod.class, SampleForAccess.class);
 	}
 }

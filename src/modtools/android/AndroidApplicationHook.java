@@ -10,6 +10,7 @@ import modtools.ui.control.HopeInput;
 
 import static modtools.annotations.asm.Sample.SampleTemp._super;
 
+/** @see AndroidApplication  */
 @Sample
 public class AndroidApplicationHook {
 	static IntSet toRemove = IntSet.with(

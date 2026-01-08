@@ -88,8 +88,10 @@ public class HopeInput {
 		axes.clear();
 	}
 	static void load0() {
-		pressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "pressed");
-		justPressed = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "justPressed");
-		axes = Reflect.get(KeyboardDevice.class, Core.input.getKeyboard(), "axes");
+		KeyboardDevice        keyboard    = Core.input.getKeyboard();
+		Class<KeyboardDevice> deviceClass = KeyboardDevice.class;
+		pressed = Reflect.get(deviceClass, keyboard, "pressed");
+		justPressed = Reflect.get(deviceClass, keyboard, "justPressed");
+		axes = Reflect.get(deviceClass, keyboard, "axes");
 	}
 }

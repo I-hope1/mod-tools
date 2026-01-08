@@ -1,6 +1,6 @@
 package modtools.utils;
 
-import arc.func.Boolp;
+import arc.func.*;
 import arc.struct.ObjectMap;
 import arc.util.*;
 import arc.util.Timer.Task;
@@ -12,6 +12,13 @@ public class TaskManager {
 		return new Task() {
 			public void run() {
 				run.run();
+			}
+		};
+	}
+	public static Task newTaskc(Cons<Task> cons) {
+		return new Task() {
+			public void run() {
+				cons.get(this);
 			}
 		};
 	}

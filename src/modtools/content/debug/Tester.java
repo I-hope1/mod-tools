@@ -729,14 +729,12 @@ public class Tester extends Content {
 
 		setup();
 
-		killTask = new Task() {
-			public void run() {
-				if ((!multiThread || executor.get().getActiveCount() > 0) && stopIfOvertime) {
-					killScript = true;
-					cancel();
-				}
+		killTask = TaskManager.newTaskc(task -> {
+			if ((!multiThread || executor.get().getActiveCount() > 0) && stopIfOvertime) {
+				killScript = true;
+				task.cancel();
 			}
-		};
+		});
 
 		TASKS.add(() -> {
 			if (loop && script != null) {
@@ -1082,12 +1080,7 @@ public class Tester extends Content {
 			return obj.getIds();
 		}
 
-		final Task completionTask = new Task() {
-			@Override
-			public void run() {
-				complement();
-			}
-		};
+		final Task completionTask = TaskManager.newTask(this::complement);
 		private void postCompletion() {
 			TaskManager.trySchedule(0.05f, completionTask);
 		}
@@ -1115,7 +1108,7 @@ public class Tester extends Content {
 
 			// --- The faulty logic for DELETE/BACKSPACE has been REMOVED from here. ---
 
-			boolean isCompletableChar       = area.isWordCharacter(character) || character == '.';
+			boolean isCompletableChar = area.isWordCharacter(character) || character == '.';
 			boolean shouldTriggerCompletion = auto_complement.enabled() && isCompletableChar
 			                                  && (character != BACKSPACE && character != DELETE || area.isWordCharacterCheck(area.getCursorPosition()));
 

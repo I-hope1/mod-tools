@@ -22,7 +22,7 @@ import modtools.extending.URLRedirect;
 import modtools.graphics.MyShaders;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
-import modtools.struct.*;
+import modtools.struct.TaskSet;
 import modtools.ui.*;
 import modtools.ui.comp.utils.Viewers;
 import modtools.ui.control.HopeInput;
@@ -34,7 +34,6 @@ import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
-import modtools.utils.reflect.HopeReflect;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 import sun.reflect.ReflectionFactory;
@@ -102,17 +101,7 @@ public class ModTools extends Mod {
 			Tools.runLoggedException(WorldSaver::load);
 		}
 		if (OS.isAndroid) {
-			Class<?>            prevInput  = Core.input.getClass();
-			LazyValue<Class<?>> inputClass = LazyValue.of(() -> AndroidInputFixInterface.visit(prevInput));
-			Class<?>            prevApp    = Core.app.getClass();
-			LazyValue<Class<?>> appClass   = LazyValue.of(() -> AndroidApplicationHookInterface.visit(prevApp));
-
-			Runnable run = () -> {
-				HopeReflect.changeClass(Core.input, R_Hook.android_input_fix ? inputClass.get() : prevInput);
-				HopeReflect.changeClass(Core.app, R_Hook.android_input_fix ? appClass.get() : prevApp);
-			};
-			E_Hook.data.onChanged(E_Hook.android_input_fix.name(), run);
-			run.run();
+			AndroidInputFix.load();
 		}
 
 		if (TEST) {
@@ -244,6 +233,7 @@ public class ModTools extends Mod {
 		mod = mods.getMod(modName);
 		Time.mark();
 
+		if (OS.isAndroid) WSAInputFixer.install();
 		IntVars.load();
 
 		if (errors.any()) {

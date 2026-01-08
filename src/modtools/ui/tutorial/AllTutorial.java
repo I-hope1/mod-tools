@@ -99,9 +99,7 @@ public class AllTutorial {
 			viewport.setWorldHeight(Core.graphics.getHeight() - 50);
 		}); */
 		InputListener listener = new InputListener() {
-			final Task task = new Task() {
-				public void run() { }
-			};
+			final Task task = TaskManager.newTask(() -> {});
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (!E_Extending.double_shift_highlight.enabled()) return false;
 

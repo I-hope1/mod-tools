@@ -157,14 +157,22 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 				findSuperCallsInMethod(ms, unit, superMethodsToBridge);
 			}
 		}
-
+		Set<MethodSymbol> sampleMethods = new LinkedHashSet<>();
 		for (Symbol member : owner.members().getSymbols()) {
-			processMember(member, interfaceSym, buffer, superMethodsToBridge, openPkgPriv);
+			processMember(member, interfaceSym, buffer, sampleMethods, openPkgPriv);
 		}
-		// println(superMethodsToBridge);
-
+		/* Set<MethodType> methodTypes =  new LinkedHashSet<>();
+		for (MethodSymbol symbol : superMethodsToBridge) {
+			methodTypes.add((MethodType) symbol.type);
+		}
+		for (MethodSymbol symbol : sampleMethods) {
+			methodTypes.add(new MethodType(symbol.params.tail.map(p -> p.type), symbol.getReceiverType(), symbol.getThrownTypes(), mSymtab.methodClass));
+		} */
 		for (MethodSymbol superMethod : superMethodsToBridge) {
-			addSuperBridgeToInterface(owner, superMethod, interfaceSym, buffer);
+			addSuperBridgeToInterface(superMethod, interfaceSym, buffer, false, false);
+		}
+		for (MethodSymbol superMethod : sampleMethods) {
+			addSuperBridgeToInterface(superMethod, interfaceSym, buffer, true, false);
 		}
 
 		String source = generateInterfaceSource(owner, unit, sample, buffer);
@@ -176,7 +184,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	}
 
 	private void processMember(Symbol member, ClassSymbol interfaceSym, CodeBuffer buffer,
-	                           Set<MethodSymbol> superMethodsToBridge, boolean openPkgPriv) {
+	                           Set<MethodSymbol> sampleMethods, boolean openPkgPriv) {
 		SampleForMethod      sm = getAnnotationByElement(SampleForMethod.class, member, true);
 		SampleForInitializer si = getAnnotationByElement(SampleForInitializer.class, member, true);
 		SampleForAccess      sa = getAnnotationByElement(SampleForAccess.class, member, true);
@@ -185,7 +193,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 
 		if (member instanceof MethodSymbol methodSym) {
 			handleMethodMember(methodSym, interfaceSym, buffer, sm, si, openPkgPriv);
-			superMethodsToBridge.add(methodSym);
+			sampleMethods.add(methodSym);
 		} else if (member instanceof VarSymbol varSym) {
 			handleFieldMember(varSym, interfaceSym, buffer);
 		}
@@ -263,8 +271,8 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	/**
 	 * 为 super 调用生成接口声明和字节码桥接逻辑
 	 */
-	private void addSuperBridgeToInterface(ClassSymbol classSymbol, MethodSymbol targetMethod, ClassSymbol interfaceSym,
-	                                       CodeBuffer buffer) {
+	private void addSuperBridgeToInterface(MethodSymbol targetMethod, ClassSymbol interfaceSym,
+	                                       CodeBuffer buffer, boolean stripFirst, boolean visitLogic) {
 		String superMethodName = AConstants.SUPER_METHOD_PREFIX + targetMethod.name.toString();
 
 		// 避免重复生成
@@ -276,7 +284,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 
 		// 生成接口源码声明
 		List<VarSymbol> params1 = targetMethod.params;
-		if (targetMethod.owner == classSymbol) {
+		if (stripFirst) {
 			params1 = params1.tail;
 			// println(params1);
 		}
@@ -295,8 +303,9 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		 .map(p -> BaseASMProc.classAccess(types.erasure(p.type)))
 		 .collect(Collectors.joining(", "));
 
-
-		buffer.visitLogic.append(STR."        myClass.buildSuperFunc(\"\{superMethodName}\", \"\{targetMethod.name}\", \{BaseASMProc.classAccess(targetMethod.owner.type)}, \{BaseASMProc.classAccess(targetMethod.getReturnType())}\{paramClasses.isEmpty() ? "" : ", " + paramClasses});\n");
+		if (visitLogic) {
+			buffer.visitLogic.append(STR."        myClass.buildSuperFunc(\"\{superMethodName}\", \"\{targetMethod.name}\", \{BaseASMProc.classAccess(targetMethod.owner.type)}, \{BaseASMProc.classAccess(targetMethod.getReturnType())}\{paramClasses.isEmpty() ? "" : ", " + paramClasses});\n");
+		}
 	}
 	/**
 	 * 扫描方法体，寻找 _super(self).methodName() 并记录 methodName 的 Symbol

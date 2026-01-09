@@ -168,11 +168,16 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		for (MethodSymbol symbol : sampleMethods) {
 			methodTypes.add(new MethodType(symbol.params.tail.map(p -> p.type), symbol.getReceiverType(), symbol.getThrownTypes(), mSymtab.methodClass));
 		} */
+
 		for (MethodSymbol superMethod : superMethodsToBridge) {
-			addSuperBridgeToInterface(superMethod, interfaceSym, buffer, false, false);
+			boolean isEssentiallySample = sampleMethods.stream()
+			 .anyMatch(sm -> isEquivalent(sm, superMethod));
+
+			// 如果本质是 sampleMethods 有的，跳过 bridge 执行
+			addSuperBridgeToInterface(superMethod, interfaceSym, buffer, false, isEssentiallySample);
 		}
 		for (MethodSymbol superMethod : sampleMethods) {
-			addSuperBridgeToInterface(superMethod, interfaceSym, buffer, true, false);
+			addSuperBridgeToInterface(superMethod, interfaceSym, buffer, true, true);
 		}
 
 		String source = generateInterfaceSource(owner, unit, sample, buffer);
@@ -181,6 +186,32 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		interfaceSym.sourcefile = sourceFile;
 		interfaceSym.complete();
 		return interfaceSym;
+	}
+	/**
+	 * 判断 Sample 静态方法是否等效于某个实例方法
+	 * @param sampleMethod Sample 类中的静态方法 (self, p1, p2...)
+	 * @param superMethod  目标类中的实例方法 (p1, p2...)
+	 */
+	private boolean isEquivalent(MethodSymbol sampleMethod, MethodSymbol superMethod) {
+		if (!sampleMethod.name.equals(superMethod.name)) return false;
+
+		// Sample 方法必须至少有一个 self 参数
+		if (sampleMethod.params.isEmpty()) return false;
+
+		List<VarSymbol> sParams = sampleMethod.params.tail; // 去掉 self
+		List<VarSymbol> mParams = superMethod.params;
+
+		if (sParams.size() != mParams.size()) return false;
+
+		// 比对参数类型（使用 erasure 避免泛型干扰）
+		for (int i = 0; i < sParams.size(); i++) {
+			if (!types.isSameType(types.erasure(sParams.get(i).type), types.erasure(mParams.get(i).type))) {
+				return false;
+			}
+		}
+
+		// 比对返回类型
+		return types.isSameType(types.erasure(sampleMethod.getReturnType()), types.erasure(superMethod.getReturnType()));
 	}
 
 	private void processMember(Symbol member, ClassSymbol interfaceSym, CodeBuffer buffer,
@@ -272,7 +303,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	 * 为 super 调用生成接口声明和字节码桥接逻辑
 	 */
 	private void addSuperBridgeToInterface(MethodSymbol targetMethod, ClassSymbol interfaceSym,
-	                                       CodeBuffer buffer, boolean stripFirst, boolean visitLogic) {
+	                                       CodeBuffer buffer, boolean stripFirst, boolean skipBridge) {
 		String superMethodName = AConstants.SUPER_METHOD_PREFIX + targetMethod.name.toString();
 
 		// 避免重复生成
@@ -298,13 +329,20 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 			.collect(Collectors.joining(", "));
 		buffer.interfaceMethods.append(STR."  \{returnType} \{superMethodName}(\{params})\{throw_str};\n");
 
-		// 生成 visit 逻辑中的字节码桥接调用: myClass.buildSuperFunc("super$$onKey", "onKey", void.class, View.class, ...)
-		String paramClasses = params1.stream()
-		 .map(p -> BaseASMProc.classAccess(types.erasure(p.type)))
-		 .collect(Collectors.joining(", "));
 
-		if (visitLogic) {
-			buffer.visitLogic.append(STR."        myClass.buildSuperFunc(\"\{superMethodName}\", \"\{targetMethod.name}\", \{BaseASMProc.classAccess(targetMethod.owner.type)}, \{BaseASMProc.classAccess(targetMethod.getReturnType())}\{paramClasses.isEmpty() ? "" : ", " + paramClasses});\n");
+		// 生成 visit 逻辑中的字节码桥接调用: myClass.buildSuperFunc("super$$onKey", "onKey", void.class, View.class, ...)
+		if (!skipBridge) {
+			String paramClasses = params1.stream()
+			 .map(p -> BaseASMProc.classAccess(types.erasure(p.type)))
+			 .collect(Collectors.joining(", "));
+
+			// 注意：如果是从 sampleMethods 来的，targetMethod.owner 是 Sample 类，
+			// 但 buildSuperFunc 的第三个参数应该是被注入类的基类（即 targetMethod.params.head.type）
+			String ownerClassAccess = stripFirst ?
+			 BaseASMProc.classAccess(targetMethod.params.head.type) :
+			 BaseASMProc.classAccess(targetMethod.owner.type);
+
+			buffer.visitLogic.append(STR."        myClass.buildSuperFunc(\"\{superMethodName}\", \"\{targetMethod.name}\", \{ownerClassAccess}, \{BaseASMProc.classAccess(targetMethod.getReturnType())}\{paramClasses.isEmpty() ? "" : ", " + paramClasses});\n");
 		}
 	}
 	/**

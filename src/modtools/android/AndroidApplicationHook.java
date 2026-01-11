@@ -19,6 +19,8 @@ public class AndroidApplicationHook {
 	 KeyCode.shiftLeft.ordinal(), KeyCode.shiftRight.ordinal()); /* 功能键 */
 	@SampleForMethod
 	public static void onWindowFocusChanged(AndroidApplication self, boolean hasFocus) {
+		if (HopeInput.pressed == null || HopeInput.justPressed == null) return;
+
 		Log.info("AndroidApplicationHook.onWindowFocusChanged");
 
 		Time.runTask(0.2f, () -> {

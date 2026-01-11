@@ -6,7 +6,6 @@ import arc.backend.android.AndroidInput;
 import arc.input.KeyCode;
 import arc.util.Log;
 import arc.util.pooling.Pool;
-import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import modtools.Constants.AndroidInput_KeyEvent;
 import modtools.annotations.asm.Sample;
@@ -136,8 +135,9 @@ public class AndroidInputFix {
 		Runnable run = () -> {
 			HopeReflect.changeClass(Core.input, R_Hook.android_input_fix ? inputClass.get() : prevInput);
 			HopeReflect.changeClass(Core.app, R_Hook.android_input_fix ? appClass.get() : prevApp);
+
 			Runnable r = R_Hook.android_input_fix ? WSAInputFixer::install : WSAInputFixer::uninstall;
-			if (Vars.ui != null) {
+			if (Core.scene != null) {
 				r.run();
 			} else {
 				Events.run(ClientLoadEvent.class, r);

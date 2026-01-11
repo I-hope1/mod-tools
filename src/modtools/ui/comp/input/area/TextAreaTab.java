@@ -331,6 +331,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			int absoluteStart = start + displayTextStart;
 			int absoluteCursor = cursor + displayTextStart;
 
+			// Log.info("start: " + start + " cursor: " + cursor + " absoluteStart: " + absoluteStart + " absoluteCursor: " + absoluteCursor);
+			// Log.info(text);
 			// Safety check to prevent crashes if the layout is momentarily out of sync with the text.
 			if (absoluteCursor < glyphPositions.size && absoluteStart < glyphPositions.size) {
 				offsetX += Math.max(lastTextWidth(), glyphPositions.get(absoluteCursor) - glyphPositions.get(absoluteStart));
@@ -344,7 +346,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (!layouts.isEmpty()) {
 				Seq<GlyphRun> runs = layouts.first().runs;
 				if (!runs.isEmpty()) {
-					return runs.first().xAdvances.sum();
+					return runs.first().xAdvances.peek();
 				}
 			}
 			return 0;

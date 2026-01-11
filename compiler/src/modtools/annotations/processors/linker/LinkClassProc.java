@@ -41,7 +41,7 @@ public class LinkClassProc extends BaseASMProc<TypeSymbol> {
 			return;
 		}
 		translator.addToDo(new TopTranslator.ToTranslate(JCLambda.class, lambda -> {
-			if (!TopTranslator.isEquals(lambda.type.tsym, element)) {
+			if (lambda.type == null || !TopTranslator.isEquals(lambda.type.tsym, element)) {
 				return null;
 			}
 

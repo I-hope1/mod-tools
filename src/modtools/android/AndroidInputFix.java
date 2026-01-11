@@ -1,11 +1,13 @@
 package modtools.android;
 
 import android.view.*;
-import arc.Core;
+import arc.*;
 import arc.backend.android.AndroidInput;
 import arc.input.KeyCode;
 import arc.util.Log;
 import arc.util.pooling.Pool;
+import mindustry.Vars;
+import mindustry.game.EventType.ClientLoadEvent;
 import modtools.Constants.AndroidInput_KeyEvent;
 import modtools.annotations.asm.Sample;
 import modtools.annotations.asm.Sample.SampleForMethod;
@@ -134,10 +136,11 @@ public class AndroidInputFix {
 		Runnable run = () -> {
 			HopeReflect.changeClass(Core.input, R_Hook.android_input_fix ? inputClass.get() : prevInput);
 			HopeReflect.changeClass(Core.app, R_Hook.android_input_fix ? appClass.get() : prevApp);
-			if (R_Hook.android_input_fix) {
-				WSAInputFixer.install();
+			Runnable r = R_Hook.android_input_fix ? WSAInputFixer::install : WSAInputFixer::uninstall;
+			if (Vars.ui != null) {
+				r.run();
 			} else {
-				WSAInputFixer.uninstall();
+				Events.run(ClientLoadEvent.class, r);
 			}
 		};
 		E_Hook.data.onChanged(E_Hook.android_input_fix.name(), run);

@@ -78,40 +78,79 @@ dependencies {
 //	compileOnly("com.github.Anuken.rhino::$mindustryVersion")
 	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'
 }
-
 task jarAndroid(type: JavaExec) {
-	dependsOn "jar"
+    dependsOn "jar"
+    group = "build"
+    description = "Compiles jar to dex using D8 (JavaExec mode)"
 
-	if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.")
+    // --------------------------------------------------------
+    // 1. 配置增量构建 (缓存关键)
+    // --------------------------------------------------------
+    def inputJar = layout.buildDirectory.file("libs/${project.archivesBaseName}-${version}.jar")
+    def outputJar = layout.buildDirectory.file("libs/${project.archivesBaseName}-android.jar")
 
-	def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
-	if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
+    // 输入：Jar包
+    inputs.file(inputJar).withPropertyName("inputJar")
 
-	//collect dependencies needed for desugaring
-	def dependencies = (configurations.compileClasspath.asList()
-//			+ configurations.runtimeClasspath.asList()
-//			+ [new File(platformRoot, "android.jar")]
-	).collectMany { ["--classpath", "$it.path"] }
+    // 输入：编译依赖 (修正：改名为 d8Dependencies 防止冲突)
+    inputs.files(configurations.compileClasspath).withPropertyName("d8Dependencies")
 
-	def d8Root = file("$sdkRoot/build-tools/").listFiles().sort().reverse().find {
-		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= Integer.parseInt(minApi)
-	}
+    // 输入：API版本
+    inputs.property("minApi", minApi)
 
-	classpath("$d8Root/lib/d8.jar")
-	main("com.android.tools.r8.D8")
-	def platformJar = new File(platformRoot, "android.jar")
-	def desugarLibJar = configurations.desugarLib.files.find { it.name.endsWith('.jar') }
+    // 输出：生成的文件
+    outputs.file(outputJar).withPropertyName("outputJar")
 
-	args = [
-			"--lib", "$platformJar.path",
-	] + dependencies + [
-//			"--desugared-lib", desugarLibJar.absolutePath,
-"--min-api", "$minApi",
-"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
-"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
-	]
+    // 允许任务结果缓存
+    outputs.cacheIf { true }
+
+    // --------------------------------------------------------
+    // 2. 配置执行环境
+    // --------------------------------------------------------
+    mainClass = "com.android.tools.r8.D8"
+	jvmArgs "-XX:+UseZGC -XX:+ZGenerational"
+
+    // --------------------------------------------------------
+    // 3. 动态计算参数 (放在 doFirst)
+    // --------------------------------------------------------
+    doFirst {
+        if (!sdkRoot || !new File(sdkRoot).exists()) {
+            throw new GradleException("ANDROID_HOME not set or invalid.")
+        }
+
+        // 查找 Android Jar
+        def platformRoot = new File("$sdkRoot/platforms/").listFiles()?.sort()?.reverse()?.find {
+            new File(it, "android.jar").exists()
+        }
+        if (!platformRoot) throw new GradleException("No android.jar found.")
+        def platformJar = new File(platformRoot, "android.jar")
+
+        // 查找 D8
+        def d8Root = file("$sdkRoot/build-tools/").listFiles()?.sort()?.reverse()?.find { dir ->
+            dir.isDirectory() &&
+            new File(dir, "lib/d8.jar").exists() &&
+            (dir.name.tokenize('.')[0].isInteger() ? dir.name.tokenize('.')[0].toInteger() >= (minApi as int) : true)
+        }
+        if (!d8Root) throw new GradleException("No suitable d8.jar found in build-tools.")
+
+        // 设置运行 D8 本身的 Classpath
+        classpath = files(new File(d8Root, "lib/d8.jar"))
+
+        println "D8 Exec: Using ${d8Root.name}"
+
+        // 准备依赖路径
+        def dependencies = configurations.compileClasspath.collectMany { ["--classpath", it.path] }
+
+        // 设置运行参数
+        args = [
+                "--lib", platformJar.path,
+                "--min-api", minApi,
+//                "--release",
+                "--output", outputJar.get().asFile.path,
+                inputJar.get().asFile.path
+        ] + dependencies
+    }
 }
-
 
 jar {
 	archiveFileName = "${project.archivesBaseName}-${version}.jar"
@@ -124,6 +163,7 @@ jar {
 		include "**/settings/**"
 	}
 
+	evaluationDependsOn(":testAgent") // 确保 testAgent 的 build.gradle 先运行
 	def agent = project(":testAgent")
 	from("${agent.buildDir0}/libs/") { include "testAgent-${agent.version}.jar" rename { o -> "libs/hotswap-agent.jar" } }
 }

@@ -13,7 +13,7 @@ import ihope_lib.MyReflect;
 import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.mod.*;
-import mindustry.mod.Mods.ModMeta;
+import mindustry.mod.Mods.*;
 import modtools.android.*;
 import modtools.content.*;
 import modtools.content.debug.Tester;
@@ -42,7 +42,7 @@ import sun.tools.attach.VirtualMachineImpl;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.*;
-import java.util.Arrays;
+import java.util.*;
 
 import static mindustry.Vars.*;
 import static modtools.IntVars.*;
@@ -135,30 +135,7 @@ public class ModTools extends Mod {
 				HotSwapManager.start();
 			}
 			if (R_Hook.dynamic_jdwp) {
-				String         pid    = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
-				VirtualMachine vm     = VirtualMachine.attach(pid);
-				Method         method = VirtualMachineImpl.class.getDeclaredMethod("execute", String.class, Object[].class);
-				method.setAccessible(true);
-				String arg = "transport=dt_socket,server=y,suspend=n,address=" + R_Hook.dynamic_jdwp_port;
-				vm.loadAgentLibrary("jdwp", arg);
-				vm.detach();
-				Log.info("Loaded jdwp.");
-				/* // 获取当前 JVM 内部真正的 jdwp 路径
-				String javaHome = System.getProperty("java.home");
-				String jdwpPath = javaHome + File.separator + "bin" + File.separator + "jdwp.dll";
-
-				// 检查文件是否存在
-				if (new File(jdwpPath).exists()) {
-					// 使用 loadAgent (注意：不是 loadAgentLibrary)
-					// loadAgent 内部调用的是 Agent_OnAttach，且接受绝对路径
-					vm.loadAgent(jdwpPath, "transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005");
-				} */
-
-				// vm.loadAgentLibrary("jdwp", arg);
-				// vm.loadAgent("jdwp", arg);
-				/* Class<?> CLS = Class.forName("sun.jvm.hotspot.HotSpotAgent");
-				Method   method = CLS.getMethod("attach", int.class);
-				method.invoke(CLS.newInstance(), Integer.parseInt(ManagementFactory.getRuntimeMXBean().getName().split("@")[0])); */
+				load("JDWP", ModTools::loadJDWP);
 			}
 			// HotSwapManager.attachAgent("jdwp", "transport=dt_socket,server=y,suspend=n,address=15005");
 			// if (OS.isAndroid) TestAndroidVM.main();
@@ -175,6 +152,24 @@ public class ModTools extends Mod {
 		} else {
 			Events.on(ClientLoadEvent.class,
 			 _ -> Tools.runLoggedException(this::loadModules));
+		}
+	}
+	private static void loadJDWP() {
+		try {
+			String         pid    = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+			VirtualMachine vm     = VirtualMachine.attach(pid);
+			Method         method = VirtualMachineImpl.class.getDeclaredMethod("execute", String.class, Object[].class);
+			method.setAccessible(true);
+			// Properties props = new Properties();
+			// props.put("com.sun.management.jmxremote.port", "5000");
+			// props.put("com.sun.management.jmxremote.password", "");
+			// vm.startManagementAgent(props);
+			String arg = "transport=dt_socket,server=y,suspend=n,address=" + R_Hook.dynamic_jdwp_port;
+			vm.loadAgentLibrary("jdwp", arg);
+			vm.detach();
+			Log.info("Loaded jdwp.");
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
 		}
 	}
 
@@ -212,11 +207,13 @@ public class ModTools extends Mod {
 		//noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
-		if (E_Extending.force_language.getLocale() != null && Core.bundle.getLocale() != E_Extending.force_language.getLocale()) {
+
+		Locale forceLanguageLocale = E_Extending.force_language.getLocale();
+		if (forceLanguageLocale != null && Core.bundle.getLocale() != forceLanguageLocale) {
 			if (isImportFromGame) {
-				loadBundle(E_Extending.force_language.getLocale().toString());
+				loadBundle(forceLanguageLocale.toString());
 			} else {
-				taskLoadContent.addOnce(() -> loadBundle(E_Extending.force_language.getLocale().toString()));
+				taskLoadContent.addOnce(() -> loadBundle(forceLanguageLocale.toString()));
 			}
 		} else if (isImportFromGame) {
 			loadBundle();
@@ -231,7 +228,6 @@ public class ModTools extends Mod {
 		mod = mods.getMod(modName);
 		Time.mark();
 
-		if (OS.isAndroid) WSAInputFixer.install();
 		IntVars.load();
 
 		if (errors.any()) {
@@ -316,8 +312,8 @@ public class ModTools extends Mod {
 	 * @see Mods#buildFiles()
 	 */
 	public static void loadBundle(String locate) {
-		if (root instanceof HFi && mods.getMod(modName) == null) return;
-		root = mods.getMod(modName).root;
+		if (!(mods.getMod(modName) instanceof LoadedMod lmod)) return;
+		root = lmod.root;
 		ObjectMap<String, Seq<Fi>> bundles;
 		//load up bundles.
 		Fi folder = root.child("bundles");

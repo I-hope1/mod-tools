@@ -22,7 +22,7 @@ public class MySettings {
 	 D_JSFUNC = SETTINGS.child("JSFunc");
 
 	public static void load() {
-		Log.info(SETTINGS);
+
 	}
 
 	public static class Data extends OrderedMap<String, Object> {

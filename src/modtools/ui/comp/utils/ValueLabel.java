@@ -296,7 +296,6 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendValue(Object val) {
 		int valStart = text.length();
 
-		Runnable prevTail = appendTail;
 		appendTail = null;
 
 		// viewers
@@ -313,7 +312,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		}
 		Viewers.defaultAppend(this, valStart, val);
 
-		appendTail = prevTail;
+		postAppendDelimiter();
 	}
 
 	// 一些基本类型的特化，不装箱，为了减少内存消耗

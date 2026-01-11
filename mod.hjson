@@ -96,6 +96,6 @@ Version 1.5.6
 author: "I hope..."
 hidden: true
 version: 1.5.6
-minGameVersion: 147
+minGameVersion: "154"
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

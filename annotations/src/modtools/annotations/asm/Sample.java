@@ -25,6 +25,7 @@ public @interface Sample {
 		Class<?>[] upperBoundClasses() default {};
 	}
 
+	/** 使用文档注释标记field或method  */
 	@interface SampleForAccess {
 	}
 
@@ -59,10 +60,6 @@ public @interface Sample {
 		@Retention(RetentionPolicy.SOURCE)
 		public @interface Template {
 			String value();
-		}
-
-		public static <T> T fieldAccess(Object base, String name) {
-			return null;
 		}
 	}
 }

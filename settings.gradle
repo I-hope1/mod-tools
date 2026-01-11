@@ -5,4 +5,3 @@ include 'compiler'
 //include 'test'
 
 include 'testAgent'
-include 'light_compiler'

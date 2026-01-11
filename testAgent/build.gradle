@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'nipx'
-version = '1.0'
+version = "1.0"
 
 sourceSets.main.java.srcDirs = ["src"]
 

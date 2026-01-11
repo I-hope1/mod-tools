@@ -112,9 +112,14 @@ public class IntVars {
 	}
 
 	public static final MySet<Runnable> resizeListeners = new MySet<>();
+	/**
+	 * 添加窗口大小调整监听器
+	 * @param runnable 当窗口大小发生改变时要执行的任务
+	 */
 	public static void addResizeListener(Runnable runnable) {
 		resizeListeners.add(runnable);
 	}
+
 
 	/** 提交到主线程运行 */
 	public static void postToMain(Runnable run) {

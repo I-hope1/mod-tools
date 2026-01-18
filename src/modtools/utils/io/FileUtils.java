@@ -45,7 +45,7 @@ public class FileUtils {
 	public static Fi copyToTmp(Fi fi, Fi destDir, String newName) {
 		// dest应该是本地文件
 		if (!isLocal(destDir)) throw new IllegalArgumentException("destDir should be local file");
-		if (isLocal(fi) return fi;
+		if (isLocal(fi)) return fi;
 		Fi toFi = destDir.child(newName == null ? fi.name() : newName);
 		FileUtils.delete(toFi);
 		fi.copyTo(toFi);

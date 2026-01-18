@@ -45,11 +45,15 @@ jobs:
         echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
 
     - name: Upload artifact to release
-      uses: softprops/action-gh-release@v2
+      uses: ncipollo/release-action@v1
       with:
-        # 使用上面获取到的 TAG_NAME
-        tag_name: ${{ env.TAG_NAME }}
-        # 指定要上传的文件路径，支持通配符
-        files: build/libs/${{ github.event.repository.name }}?${{ env.TAG_NAME }}?.jar
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 指定要上传的文件
+        artifacts: "build/libs/mod-tools?${{ env.TAG_NAME }}?.jar"
+        # 对应的 Tag 名字
+        tag: ${{ env.TAG_NAME }}
+        # 核心参数：允许更新现有的 Release
+        allowUpdates: true
+        # 核心参数：如果文件已存在，则覆盖它
+        overwrite: true
+        # 权限 Token
+        token: ${{ secrets.GITHUB_TOKEN }}

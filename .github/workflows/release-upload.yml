@@ -1,10 +1,12 @@
 name: Upload Release Asset
 
 on:
-  workflow_run:
-    workflows: ["Build project"]
-    types:
-      - completed
+  workflow_dispatch:
+
+#  workflow_run:
+#    workflows: ["Build project"]
+#    types:
+#      - completed
 
 permissions:
   contents: write

@@ -50,6 +50,6 @@ jobs:
         # 使用上面获取到的 TAG_NAME
         tag_name: ${{ env.TAG_NAME }}
         # 指定要上传的文件路径，支持通配符
-        files: build/libs/${{ github.event.repository.name }}.${{ env.TAG_NAME }}.jar
+        files: build/libs/${{ github.event.repository.name }}[${{ env.TAG_NAME }}].jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

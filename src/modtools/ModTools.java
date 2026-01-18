@@ -1,10 +1,7 @@
 package modtools;
 
-
 import arc.*;
 import arc.files.Fi;
-import arc.graphics.Color;
-import arc.scene.ui.Label;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
@@ -20,7 +17,6 @@ import modtools.content.debug.Tester;
 import modtools.events.*;
 import modtools.extending.URLRedirect;
 import modtools.graphics.MyShaders;
-import modtools.jsfunc.INFO_DIALOG;
 import modtools.net.packet.HopeCall;
 import modtools.struct.TaskSet;
 import modtools.ui.*;
@@ -32,7 +28,6 @@ import modtools.ui.tutorial.AllTutorial;
 import modtools.unsupported.HopeProcessor.MyContentParser;
 import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
-import modtools.utils.files.HFi;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
@@ -49,21 +44,23 @@ import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
-	public static final boolean TEST = false;
+	public static final boolean TEST = false; // incremental test comment 15
 
 	/** 如果不为empty，在进入是显示 */
-	private static final Fi             libs   = root.child("libs");
+	private static final Fi libs = root.child("libs");
 	/** Stores errors encountered during library loading. */
 	private static final Seq<Throwable> errors = new Seq<>();
-	public static        boolean        isV6   = Version.number <= 135;
+	public static boolean isV6 = Version.number <= 135;
 
 	/** 是否从游戏内导入进来的 */
-	private static      boolean isImportFromGame = false;
-	public static final boolean DISABLE_UI       = false;
+	private static boolean isImportFromGame = false;
+	public static final boolean DISABLE_UI = false;
 
 	public static boolean loaded = false;
+
 	public ModTools() {
-		if (loaded) throw new IllegalStateException("ModTools already loaded.");
+		if (loaded)
+			throw new IllegalStateException("ModTools already loaded.");
 
 		ScreenSampler.resetMark();
 
@@ -72,11 +69,13 @@ public class ModTools extends Mod {
 		}
 		// HopeProcessor.main();
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
-		if (headless) Log.info("Running in headless environment.");
+		if (headless)
+			Log.info("Running in headless environment.");
 
 		// Defer loading to the main thread to ensure proper initialization order
 		Core.app.post(this::load0);
 	}
+
 	public void load0() {
 		try {
 			ObjectMap<Class<?>, ModMeta> metas = Reflect.get(Mods.class, mods, "metas");
@@ -84,11 +83,12 @@ public class ModTools extends Mod {
 			loadCore();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.close_modrestart", "@mod-tools.close_modrestart_text",
-				 "@mod-tools.close_modrestart_yes", "@mod-tools.close_modrestart_no",
-				 SettingsUI::disabledRestart, EMPTY_RUN);
+						"@mod-tools.close_modrestart_yes", "@mod-tools.close_modrestart_no",
+						SettingsUI::disabledRestart, EMPTY_RUN);
 			}
 		} catch (Throwable e) {
-			if (isImportFromGame) ui.showException("Failed to load ModTools. (Don't worry.)", e);
+			if (isImportFromGame)
+				ui.showException("Failed to load ModTools. (Don't worry.)", e);
 			Log.err("Failed to load ModTools.", e);
 		}
 	}
@@ -108,21 +108,23 @@ public class ModTools extends Mod {
 			test();
 		}
 	}
+
 	private static void test() {
 		// World w = SampleWorldInterface.changeClass(new World());
 		try {
 			Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
-			 Lookup.class,
-			 Lookup.class.getDeclaredConstructor(Class.class)
-			).newInstance(Lookup.class));
-		} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+					Lookup.class,
+					Lookup.class.getDeclaredConstructor(Class.class)).newInstance(Lookup.class));
+		} catch (InstantiationException | IllegalAccessException | InvocationTargetException
+				| NoSuchMethodException e) {
 			throw new RuntimeException(e);
 		}
 		new MyContentParser();
 	}
 
 	private void loadCore() {
-		if (!isImportFromGame) meta.hidden = false;
+		if (!isImportFromGame)
+			meta.hidden = false;
 		resolveLibsCatch();
 		MySettings.load();
 
@@ -137,7 +139,8 @@ public class ModTools extends Mod {
 			if (R_Hook.dynamic_jdwp) {
 				load("JDWP", ModTools::loadJDWP);
 			}
-			// HotSwapManager.attachAgent("jdwp", "transport=dt_socket,server=y,suspend=n,address=15005");
+			// HotSwapManager.attachAgent("jdwp",
+			// "transport=dt_socket,server=y,suspend=n,address=15005");
 			// if (OS.isAndroid) TestAndroidVM.main();
 		} catch (Throwable e) {
 			Log.err(e);
@@ -151,14 +154,15 @@ public class ModTools extends Mod {
 			loadModules();
 		} else {
 			Events.on(ClientLoadEvent.class,
-			 _ -> Tools.runLoggedException(this::loadModules));
+					_ -> Tools.runLoggedException(this::loadModules));
 		}
 	}
+
 	private static void loadJDWP() {
 		try {
-			String         pid    = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
-			VirtualMachine vm     = VirtualMachine.attach(pid);
-			Method         method = VirtualMachineImpl.class.getDeclaredMethod("execute", String.class, Object[].class);
+			String pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+			VirtualMachine vm = VirtualMachine.attach(pid);
+			Method method = VirtualMachineImpl.class.getDeclaredMethod("execute", String.class, Object[].class);
 			method.setAccessible(true);
 			// Properties props = new Properties();
 			// props.put("com.sun.management.jmxremote.port", "5000");
@@ -173,8 +177,8 @@ public class ModTools extends Mod {
 		}
 	}
 
-
 	private static final TaskSet taskLoadContent = new TaskSet();
+
 	public void loadContent() {
 		meta.hidden = true;
 		// Time.mark();
@@ -185,6 +189,7 @@ public class ModTools extends Mod {
 		taskLoadContent.exec();
 		// Log.info("Initialized Execution in @ms", Time.elapsed());
 	}
+
 	private static void resolveLibsCatch() {
 		try {
 			loadLibs();
@@ -196,15 +201,18 @@ public class ModTools extends Mod {
 			planB_resolveLibs();
 		}
 	}
+
 	private static void planB_resolveLibs() {
 		TaskManager.forceRun(() -> {
-			if (mods.getMod(ModTools.class) == null) return false;
+			if (mods.getMod(ModTools.class) == null)
+				return false;
 			loadLibs();
 			return true;
 		});
 	}
+
 	private static void loadLibs() {
-		//noinspection Convert2MethodRef
+		// noinspection Convert2MethodRef
 		loadLib("reflect-core", "ihope_lib.MyReflect", true, () -> MyReflect.load());
 		hasDecompiler = loadLib("procyon-0.6", "com.strobel.decompiler.Decompiler", false);
 
@@ -222,8 +230,10 @@ public class ModTools extends Mod {
 
 	/** 包括 Input，UI，Contents */
 	public void loadModules() {
-		if (ui == null) return;
-		if (DISABLE_UI) return;
+		if (ui == null)
+			return;
+		if (DISABLE_UI)
+			return;
 
 		mod = mods.getMod(modName);
 		Time.mark();
@@ -245,47 +255,42 @@ public class ModTools extends Mod {
 		if (isDesktop() && E_Extending.import_mod_from_drop.enabled()) {
 			load("DropMod", DropFile::load);
 		}
-		/* if (Core.app.isAndroid()) {
-			load("AndroidOptimize", AndroidOptimize::load);
-		} */
+		/*
+		 * if (Core.app.isAndroid()) {
+		 * load("AndroidOptimize", AndroidOptimize::load);
+		 * }
+		 */
 		load("Contents", Contents::load);
 		load("IntUI", IntUI::load);
 		load("CustomViewer", Viewers::loadCustomMap);
-		//INFO_DIALOG.dialog(c -> c.button("BTN", () -> Log.info("==-Lggg4")));
-
+		// INFO_DIALOG.dialog(c -> c.button("BTN", () -> Log.info("==-Lggg4")));
 
 		if (E_Extending.auto_update.enabled()) {
 			load("Updater", Updater::checkUpdate);
 		}
 
-		INFO_DIALOG.dialog(d -> {
-			d.image().size(64).update(i -> i.setColor(Core.input.alt() ? Color.white : Color.yellow)).row();
-			Label elem = d.add("Click me").get();
-			EventHelper.leftClick(elem, () -> IntUI.showInfoFade("left click"));
-			EventHelper.rightClick(elem, () -> IntUI.showInfoFade("right click"));
-		});
-
 		// INFO_DIALOG.dialog(
-		//  LABEL."aaa\{pink}2290\{sky}sky\n\{UnitTypes.alpha.fullIcon}Map");
-
+		// LABEL."aaa\{pink}2290\{sky}sky\n\{UnitTypes.alpha.fullIcon}Map");
 
 		// new MapEditor<>("MapEditor", new JsonReader().parse("""
-		//  [{"key": "133", "value": "134"},
-		//  {"key": "1asas33", "value": "13sa4"}]
-		//  """),
-		//  String.class, String.class,
-		//  JsonValue::name, JsonValue::asString);
+		// [{"key": "133", "value": "134"},
+		// {"key": "1asas33", "value": "13sa4"}]
+		// """),
+		// String.class, String.class,
+		// JsonValue::name, JsonValue::asString);
 
-		/* INFO_DIALOG.dialog(p -> {
-			ExtendingLabel label = new ExtendingLabel("aaos\nhttps://baidu.com");
-			label.addUnderline(5, 5 + 17, Color.sky);
-			label.down = Tex.underline;
-			label.over = Tex.underlineOver;
-			label.clickedRegion(() -> Tmp.p1.set(5, 5 + 17), () -> {
-				Core.app.openURI("https://baidu.com");
-			});
-			p.add(label);
-		}); */
+		/*
+		 * INFO_DIALOG.dialog(p -> {
+		 * ExtendingLabel label = new ExtendingLabel("aaos\nhttps://baidu.com");
+		 * label.addUnderline(5, 5 + 17, Color.sky);
+		 * label.down = Tex.underline;
+		 * label.over = Tex.underlineOver;
+		 * label.clickedRegion(() -> Tmp.p1.set(5, 5 + 17), () -> {
+		 * Core.app.openURI("https://baidu.com");
+		 * });
+		 * p.add(label);
+		 * });
+		 */
 
 		loaded = true;
 		async(() -> {
@@ -308,6 +313,7 @@ public class ModTools extends Mod {
 	public static void loadBundle() {
 		loadBundle(null);
 	}
+
 	/**
 	 * @see Mods#buildFiles()
 	 */
@@ -347,9 +353,11 @@ public class ModTools extends Mod {
 	}
 
 	public static ClassLoader lastLoader;
+
 	public static boolean loadLib(String fileName, String mainClassName, boolean showError) {
 		return loadLib(fileName, mainClassName, showError, null);
 	}
+
 	public static boolean loadLib(String fileName, String mainClassName, boolean showError,
 	                              Runnable callback) {
 		try {
@@ -384,10 +392,11 @@ public class ModTools extends Mod {
 		}
 	}
 
-
 	private static boolean isDisposed = false;
+
 	public static void disposeAll() {
-		if (isDisposed) return;
+		if (isDisposed)
+			return;
 		isDisposed = true;
 		Tools.dispose();
 		WorldDraw.tasks.clear();
@@ -396,7 +405,7 @@ public class ModTools extends Mod {
 		IntVars.dispose();
 		MyEvents.dispose();
 		MyFonts.dispose();
-		ModClassLoader   loader   = (ModClassLoader) mods.mainLoader();
+		ModClassLoader loader = (ModClassLoader) mods.mainLoader();
 		Seq<ClassLoader> children = Reflect.get(ModClassLoader.class, loader, "children");
 		children.remove(ModTools.class.getClassLoader());
 		Content.all.forEach(Content::dispose);
@@ -404,9 +413,11 @@ public class ModTools extends Mod {
 		System.gc();
 		Core.app.post(() -> mods.removeMod(mod));
 	}
+
 	public static boolean isDisposed() {
 		return isDisposed;
 	}
 
-	public static class UnexpectedPlatform extends RuntimeException { }
+	public static class UnexpectedPlatform extends RuntimeException {
+	}
 }

@@ -31,7 +31,6 @@ import modtools.ui.comp.*;
 import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
-import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
@@ -41,7 +40,6 @@ import modtools.utils.ui.*;
 import java.lang.reflect.Field;
 import java.util.Objects;
 
-import static modtools.unsupported.HotSwapManager.HOT_SWAP;
 import static modtools.utils.MySettings.SETTINGS;
 import static modtools.utils.ui.CellTools.rowSelf;
 
@@ -106,9 +104,6 @@ public class SettingsUI extends Content {
 		ui = new IconWindow(550, 500, true);
 		ui.cont.clear(); // 清除旧内容
 
-		// --- 准备各个设置区域 ---
-
-		// (Load) 区域
 		addSectionInternal("Load", Icon.downSmall, t -> {
 			t.button("Disable All Experimental", HopeStyles.flatBordert, () -> all.forEach(c -> {
 				if (c.experimental) c.disable();
@@ -137,35 +132,24 @@ public class SettingsUI extends Content {
 
 		customSections.each(Runnable::run);
 
-		// "JSFunc" 区域
 		addSectionInternal("JSFunc", Icon.logicSmall, t -> {
 			SettingsBuilder.build(t);
 			JColor.settingColor(t);
 			SettingsBuilder.clearBuild();
 		});
 
-		// (Effects) 区域
 		addSectionInternal("Effects", Icon.effectSmall, t -> {
 			SettingsBuilder.build(t);
 			ISettings.buildAll("blur", t, E_Blur.class);
 			SettingsBuilder.clearBuild();
 		});
 
-		// (HotSwap) 区域
-		if (HotSwapManager.valid()) {
-			addSectionInternal("HotSwap", Icon.refreshSmall, t -> {
-				SettingsBuilder.build(t);
-				// watch的路径数组配置
-				SettingsBuilder.array("@settings.hotswap.watchpaths", HOT_SWAP, "watch-paths", () -> true);
-			});
-		}
 		addSectionInternal("Hook", Icon.refreshSmall, t -> {
 			SettingsBuilder.build(t);
 			// watch的路径数组配置
 			ISettings.buildAll("hook", t, E_Hook.class);
 		});
 
-		// (Others) 区域
 		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {
 			SettingsBuilder.build(t); // 设置SettingsBuilder的目标表格
 
@@ -211,7 +195,6 @@ public class SettingsUI extends Content {
 			SettingsBuilder.clearBuild(); // 清理SettingsBuilder的目标
 		});
 
-		// --- 构建 IntTab ---
 		IntTab tab = new IntTab(CellTools.unset, // 左侧标签栏的宽度 (titleWidth)
 		 sectionNames.toArray(String.class),
 		 sectionColors.toArray(Color.class),
@@ -451,6 +434,7 @@ public class SettingsUI extends Content {
 
 			Label titleLabel = new Label(text);
 			container.add(titleLabel).left().padBottom(4f).row();
+			tryAddTip(titleLabel, text.substring(text.indexOf('.') + 1));
 
 			Table listTable = new Table();
 			listTable.left().defaults().padBottom(2f);
@@ -508,7 +492,7 @@ public class SettingsUI extends Content {
 			container.add(addTable).growX().padTop(4f).row();
 
 			// 当数据改变时重建UI
-			data.onChanged(key, rebuildList);
+			data.onChange(key, rebuildList);
 			rebuildList.run(); // 初始构建
 
 			// 根据条件更新整个组件的颜色和禁用状态

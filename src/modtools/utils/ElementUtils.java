@@ -21,7 +21,7 @@ import java.util.Optional;
 import static arc.Core.graphics;
 import static mindustry.Vars.*;
 import static modtools.ui.IntUI.topGroup;
-import static modtools.utils.ElementUtils.$.*;
+import static modtools.utils.ElementUtils.ZL.*;
 
 public interface ElementUtils {
 	static <T> T findParent(Element actor, Boolf<Element> condition) {
@@ -92,7 +92,7 @@ public interface ElementUtils {
 		});
 	}
 
-	class $ {
+	class ZL {
 		static final Vec2 v1 = new Vec2();
 		static final Vec2 v2 = new Vec2();
 	}

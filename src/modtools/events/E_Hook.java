@@ -4,9 +4,18 @@ import arc.func.Cons;
 import arc.util.OS;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
+import modtools.utils.reflect.ClassUtils;
 
 @SettingsInit
 public enum E_Hook implements ISettings {
+	hot_swap {
+		public boolean isSwitchOn() {
+			return IntVars.isDesktop() && ClassUtils.exists("sun.tools.attach.HotSpotVirtualMachine");
+		}
+	},
+	@Switch(dependency = "hot_swap")
+	hot_swap_watch_paths(String[].class, i -> i.array(null)),
+
 	dynamic_jdwp {
 		public boolean isSwitchOn() {
 			return IntVars.isDesktop();

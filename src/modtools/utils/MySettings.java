@@ -219,7 +219,7 @@ public class MySettings {
 			array.remove(index);
 			fireChanged(name);
 		}
-		public void onChanged(String key, Runnable run) {
+		public void onChange(String key, Runnable run) {
 			events.onIns(key, run);
 		}
 	}

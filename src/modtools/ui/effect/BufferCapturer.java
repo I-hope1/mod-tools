@@ -12,7 +12,10 @@ import modtools.struct.LazyValue;
 import static arc.Core.graphics;
 
 public class BufferCapturer {
-	static LazyValue<FrameBuffer> bufferL = LazyValue.of(() -> new FrameBuffer(512, 512));
+	static LazyValue<FrameBuffer> bufferL = LazyValue.of(BufferCapturer::createBuffer);
+	static FrameBuffer createBuffer() {
+		return new FrameBuffer(512, 512);
+	}
 	public static Texture capture(Element element) {
 		FrameBuffer buffer = bufferL.get();
 		buffer.begin();

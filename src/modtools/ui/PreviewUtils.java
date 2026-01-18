@@ -30,6 +30,7 @@ import static modtools.ui.comp.utils.ValueLabel.DEBUG;
 
 /** 用于添加preview侦听器  */
 public class PreviewUtils {
+	public static final float PREVIEW_SHOW_DELAY_SECONDS = 0.11f;
 	public static Cell<?> buildImagePreviewButton(
 	 Element element, Table table,
 	 Prov<Drawable> prov, Cons<Drawable> consumer) {
@@ -95,17 +96,26 @@ public class PreviewUtils {
 	}
 	public static void addPreviewListener(Element element, Cons<Table> cons) {
 		element.addListener(new HoverAndExitListener() {
-			Hitter      hitter = null;
+			Hitter hitter = null;
 			SelectTable table;
+			final Task showTask = TaskManager.newTask(this::show);
 			final Task hideTask = TaskManager.newTask(() -> {
 				if (hitter != null && hitter.hide()) hitter = null;
 			});
 			void hide() {
+				showTask.cancel();
 				if (hitter != null && hitter.canHide()) {
 					TaskManager.trySchedule(0.1f, hideTask);
 				}
 			}
 			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
+				if (hideTask.isScheduled()) {
+					hideTask.cancel();
+					return;
+				}
+				TaskManager.scheduleOrReset(PREVIEW_SHOW_DELAY_SECONDS, showTask);
+			}
+			void show(){
 				if (hideTask.isScheduled()) {
 					hideTask.cancel();
 					return;

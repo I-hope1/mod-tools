@@ -1,12 +1,9 @@
 package modtools.unsupported;
 
-import arc.util.Log;
-import arc.util.serialization.Jval.JsonArray;
 import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
-import modtools.IntVars;
-import modtools.utils.MySettings.Data;
+import modtools.events.E_Hook;
 import modtools.utils.reflect.*;
 import sun.tools.attach.HotSpotVirtualMachine;
 
@@ -14,15 +11,11 @@ import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 
-import static modtools.utils.MySettings.SETTINGS;
-
 /**
  * 负责执行热更新的核心逻辑。
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-	public static final Data      HOT_SWAP   = SETTINGS.child("hot-swap");
-	public static final JsonArray watchPaths = HOT_SWAP.getArray("watch-paths");
 	public static final boolean   DEBUG      = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 
 	private static final String  AGENT_RESOURCE_PATH = "/libs/hotswap-agent.jar";
@@ -31,12 +24,12 @@ public class HotSwapManager {
 
 	public static void start() {
 		if (!inited) {
-			HOT_SWAP.onChanged("watch-paths", () -> {
-				hotswap(watchPaths.toString(File.pathSeparator));
+			E_Hook.hot_swap_watch_paths.onChange(() -> {
+				hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 			});
 			inited = true;
 		}
-		hotswap(watchPaths.toString(File.pathSeparator));
+		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 	}
 	public static void hotswap(String watchPaths) {
 		try {
@@ -105,6 +98,6 @@ public class HotSwapManager {
 	}
 
 	public static boolean valid() {
-		return IntVars.isDesktop() && ClassUtils.exists("sun.tools.attach.HotSpotVirtualMachine");
+		return E_Hook.hot_swap.enabled();
 	}
 }

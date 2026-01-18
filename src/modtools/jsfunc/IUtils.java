@@ -9,7 +9,7 @@ import rhino.*;
 import java.util.Iterator;
 
 public interface IUtils {
-	interface $ {
+	interface ZX {
 		LazyValue<Callable> generator = LazyValue.of(() -> (Callable) IScript.cx.compileString(
 		 """
 			function* range(start, end, step){
@@ -41,7 +41,7 @@ public interface IUtils {
 	static Object range(int from, int to, int step) {
 		// 判断是否同号
 		// if (((from - to) ^ step) > 0) throw new IllegalArgumentException(STR."\{from} --\{step}-> \{to} is unvalid.");
-		return $.generator.get().call(IScript.cx, IScript.scope, null, new Object[]{from, to, step});
+		return ZX.generator.get().call(IScript.cx, IScript.scope, null, new Object[]{from, to, step});
 	}
 
 	static NativeArray toArray(Iterable<?> obj) {

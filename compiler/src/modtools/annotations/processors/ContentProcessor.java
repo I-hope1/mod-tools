@@ -23,7 +23,7 @@ import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static modtools.annotations.processors.ContentProcessor.$.*;
+import static modtools.annotations.processors.ContentProcessor.ZX.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
 @AutoService(Processor.class)
@@ -124,7 +124,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 	}
 
-	public static class $ {
+	public static class ZX {
 		static ClassSymbol settings;
 		static JCClassDecl classDecl;
 		static Object      literalName; /* content初始使的字面量name（主要是用于设置的key） */
@@ -134,8 +134,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 	                            Object literalName, String parent, boolean fireEvents) throws IOException {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
-		$.settings = settings;
-		$.classDecl = classDecl;
+		ZX.settings = settings;
+		ZX.classDecl = classDecl;
 
 		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
 		// settingsImpl.flags_field &= ~Flags.FINAL;

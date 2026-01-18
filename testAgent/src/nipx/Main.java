@@ -47,7 +47,7 @@ public class Main {
 
 		// [MODIFIED] 解析多个路径
 		Set<Path> newWatchDirs = Arrays.stream(agentArgs.split(File.pathSeparator))
-		 .filter(s -> s != null && !s.trim().isEmpty())
+		 .filter(s -> !s.trim().isEmpty())
 		 .map(Paths::get)
 		 .collect(Collectors.toSet());
 

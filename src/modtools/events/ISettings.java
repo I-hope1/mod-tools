@@ -14,7 +14,7 @@ import arc.scene.utils.Disableable;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.serialization.Jval;
-import arc.util.serialization.Jval.JsonMap;
+import arc.util.serialization.Jval.*;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
@@ -29,11 +29,11 @@ import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.ui.FormatHelper;
 
-import java.util.Locale;
+import java.util.*;
 
 import static modtools.content.SettingsUI.SettingsBuilder.*;
 import static modtools.content.SettingsUI.colorBlock;
-import static modtools.events.ISettings.$$.*;
+import static modtools.events.ISettings.ZX.*;
 import static modtools.ui.IntUI.*;
 import static modtools.utils.Tools.or;
 import static modtools.utils.ui.CellTools.rowSelf;
@@ -120,8 +120,26 @@ public interface ISettings extends E_DataInterface {
 		if (type() == String.class && o instanceof Jval) set(o = ((Jval) o).asString());
 		return String.valueOf(o);
 	}
+	default JsonArray getArray() {
+		Object o = get();
+		if (o instanceof JsonArray) return (JsonArray) o;
+		if (o instanceof Jval jval && jval.isArray()) return jval.asArray();
+
+		if (type() == String[].class && o instanceof String[]) {
+			set(o = Jval.read(IntVars.json.toJson( o, String[].class)).asArray());
+		} else throw new IllegalStateException(STR."the settings \{type()} is not supported");
+		return (JsonArray) o;
+	}
 	default Locale getLocale() {
 		return LocaleUtils.getLocale(getString());
+	}
+	default Drawable getDrawable(Drawable def) {
+		String   s        = getString();
+		int      index    = s.indexOf('#');
+		String   key      = index == -1 ? s : s.substring(0, index);
+		Drawable drawable = FormatHelper.lookupUI(key);
+		return new DelegatingDrawable(or(drawable, def),
+		 index == -1 ? Color.white : Color.valueOf(s.substring(index)));
 	}
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
@@ -141,7 +159,7 @@ public interface ISettings extends E_DataInterface {
 	}
 
 	Color $c1 = new Color();
-	/** @return {@link #$c1}同一个实例  */
+	/** @return {@link #$c1}同一个实例 */
 	default Color getColor() {
 		return $c1.set(getColorInt());
 	}
@@ -225,16 +243,11 @@ public interface ISettings extends E_DataInterface {
 			SettingsBuilder.clearBuild();
 		}
 	}
-	default Drawable getDrawable(Drawable def) {
-		String   s        = getString();
-		int      index    = s.indexOf('#');
-		String   key      = index == -1 ? s : s.substring(0, index);
-		Drawable drawable = FormatHelper.lookupUI(key);
-		return new DelegatingDrawable(or(drawable, def),
-		 index == -1 ? Color.white : Color.valueOf(s.substring(index)));
+	default void onChange(Runnable r) {
+		data().onChange(name(), r);
 	}
 
-	class $$ {
+	class ZX {
 		static String text;
 
 		@SuppressWarnings("StringTemplateMigration")
@@ -342,6 +355,12 @@ public interface ISettings extends E_DataInterface {
 		list(text, this::set, () -> valFunc.get(getString()), new Seq<>(arr[0]), stringify);
 	}
 
+	default void array(String[] def) {
+		def(def == null ? new String[0] : def);
+		SettingsBuilder.array(text, data(), name(), this::isSwitchOn);
+	}
+
+
 	// TODO
 	default void $(Position def) {
 		def(def);
@@ -359,7 +378,7 @@ public interface ISettings extends E_DataInterface {
 
 				cons.get(d);
 				drawable[0] = d;
-			});
+			}).disabled(_ -> !isSwitchOn());
 		}).growX().row();
 	}
 

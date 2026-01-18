@@ -457,7 +457,7 @@ public interface INFO_DIALOG {
 	static void dialog(Pixmap pixmap,
 	                   boolean disposable) { dialog(new TextureRegion(new Texture(pixmap))).autoDispose = disposable; }
 
-	class $ {
+	class ZX {
 		@SuppressWarnings("rawtypes")
 		public static void buildLongPress(ImageButton button,
 		                                  Prov o) { EventHelper.longPress0(button, () -> INFO_DIALOG.showInfo(o)); }

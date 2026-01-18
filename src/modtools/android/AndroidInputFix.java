@@ -143,7 +143,7 @@ public class AndroidInputFix {
 				Events.run(ClientLoadEvent.class, r);
 			}
 		};
-		E_Hook.data.onChanged(E_Hook.android_input_fix.name(), run);
+		E_Hook.android_input_fix.onChange(run);
 		run.run();
 	}
 }

@@ -39,10 +39,13 @@ public class FileUtils {
 		// 返回新子目录对象
 		return child;
 	}
+	public static boolean isLocal(Fi fi) {
+		return fi.type() == FileType.absolute || fi.type() == FileType.local || fi.type() == FileType.external;
+	}
 	public static Fi copyToTmp(Fi fi, Fi destDir, String newName) {
 		// dest应该是本地文件
-		if (destDir.type() != FileType.absolute) throw new IllegalArgumentException("destDir must be absolute file");
-		if (fi.type() == FileType.absolute) return fi;
+		if (!isLocal(destDir)) throw new IllegalArgumentException("destDir should be local file");
+		if (isLocal(fi) return fi;
 		Fi toFi = destDir.child(newName == null ? fi.name() : newName);
 		FileUtils.delete(toFi);
 		fi.copyTo(toFi);

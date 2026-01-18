@@ -3,6 +3,11 @@ name: Release Workflow
 on:
   release:
     types: [published]
+  workflow_dispatch: # 添加这一行，支持手动点击触发
+    inputs:
+      tag_name:
+        description: 'Manual tag name to upload'
+        required: false
 
 jobs:
   UploadArtifactToRelease:

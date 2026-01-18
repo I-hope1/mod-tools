@@ -260,8 +260,8 @@ task playAndroid {
 
 	def adb = "F:/files/java/sdk/platform-tools/adb"
 	def pkg =
-//			"com.github.tinylake.mindustryX"
-			"io.anuke.mindustry"
+			"com.github.tinylake.mindustryX"
+//			"io.anuke.mindustry"
 	def MDT_ANDROID_DIR =
 			"/storage/emulated/0/Android/data/$pkg/files"
 

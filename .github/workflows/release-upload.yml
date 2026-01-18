@@ -2,7 +2,7 @@ name: Upload Release Asset
 
 on:
   workflow_run:
-    workflows: ["Build project"] # 确保这与 build 工作流的 name 字段完全一致
+    workflows: ["Build project"]
     types:
       - completed
 
@@ -12,25 +12,28 @@ permissions:
 jobs:
   upload_to_release:
     runs-on: ubuntu-latest
-    # 仅在成功完成且有关联标签时运行
+    # 核心修复：只有成功完成，且触发源是一个 Tag 时才运行 (排除 main 分支推送)
+    # 在 workflow_run 事件中，head_branch 在标签推送时就是标签名
     if: >
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch != null
-    
+      github.event.workflow_run.event == 'push'
+
     steps:
-      - name: Get Tag Name
+      - name: Prepare Names
         id: vars
         run: |
-          # 在 workflow_run 中，head_branch 通常就是 tag 名 (例如 v1.0.0)
+          # 获取触发 Build 的分支或标签名
           TAG_NAME=${{ github.event.workflow_run.head_branch }}
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
-          
-          # 设置文件名
           REPO_NAME=${{ github.event.repository.name }}
-          echo "artifact_name=${REPO_NAME}-${TAG_NAME}" >> $GITHUB_OUTPUT
-          echo "zip_name=${REPO_NAME}-${TAG_NAME}.zip" >> $GITHUB_OUTPUT
+          
+          # 必须与 Build project 中的命名逻辑完全一致
+          ARTIFACT_NAME="${REPO_NAME}-${TAG_NAME}"
+          
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "zip_name=${ARTIFACT_NAME}.zip" >> $GITHUB_OUTPUT
 
-      - name: Download artifact from 'Build project'
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.vars.outputs.artifact_name }}
@@ -38,26 +41,16 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Archive files into Zip
-        # 将下载的内容重新打包，因为 download-artifact 会解压内容
+      - name: Archive files
         run: |
           cd ./release-files
           zip -r ../${{ steps.vars.outputs.zip_name }} .
-          cd ..
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.event.workflow_run.head_branch, 'v') # 可选：确保只有 v 开头的标签才上传
         with:
           tag_name: ${{ steps.vars.outputs.tag_name }}
           files: ${{ steps.vars.outputs.zip_name }}
-          # 如果 Release 还没创建，它可以根据 tag 自动创建一个草稿或正式发布
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Debug Info
-        if: failure()
-        run: |
-          echo "Triggering branch/tag: ${{ github.event.workflow_run.head_branch }}"
-          echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"

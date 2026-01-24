@@ -12,7 +12,7 @@ import modtools.ui.IntUI.PopupWindow;
 import modtools.ui.comp.Window;
 import modtools.utils.search.BindCell;
 
-import static modtools.ui.comp.windows.ListDialog.fileUnfair;
+import static modtools.ui.comp.windows.ListDialog.fileValidator;
 
 public class NameWindow extends Window implements PopupWindow {
 	TextField    field = new TextField();
@@ -63,18 +63,18 @@ public class NameWindow extends Window implements PopupWindow {
 	}
 
 	public static class FileNameWindow extends NameWindow {
-		private boolean fileNameFair = false;
+		private boolean fileNameValid = false;
 		public FileNameWindow() { }
 		public void show(
 		 Cons<String> okCons,
 		 String text, Fi parent) {
 			super.show(okCons, t -> {
 				 try {
-					 return fileNameFair = !t.isBlank() && !fileUnfair.matcher(t).find();
+					 return fileNameValid = !t.isBlank() && !fileValidator.matcher(t).find();
 				 } catch (Throwable e) { return false; }
 			 },
 
-			 () -> !fileNameFair ? "@message.file_name_unfair" :
+			 () -> !fileNameValid ? "@message.invalid_file_name" :
 				parent.child(field.getText()).exists() ? Core.bundle.format("message.file_exists", field.getText()) : "",
 
 			 text);

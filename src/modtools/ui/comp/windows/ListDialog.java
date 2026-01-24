@@ -68,10 +68,10 @@ public class ListDialog extends Window {
 		list.forEach(this::build);
 	}
 
-	public static       Pattern            fileUnfair    = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*?$)");
+	public static       Pattern            fileValidator = Pattern.compile("[\\\\/:*?<>\"\\[\\]]|(\\.\\s*?$)");
 	public static final Boolf2<Fi, String> fileNameValid = (f, text) -> {
 		try {
-			return !text.isBlank() && !fileUnfair.matcher(text).find()
+			return !text.isBlank() && !fileValidator.matcher(text).find()
 						 && (f.name().equals(text) || !f.sibling(text).exists());
 		} catch (Throwable e) {
 			return false;

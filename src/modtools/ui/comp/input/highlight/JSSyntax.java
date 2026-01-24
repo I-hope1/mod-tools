@@ -25,9 +25,9 @@ public class JSSyntax extends Syntax {
 	 c_constants = new Color(0x4FC1FFFF),
 	 c_localvar  = new Color(0x7CDCFEFF);
 
-	public Scriptable       customScope;
-	ObjectSet<String>       customConstantSet, customVarSet;
-	Seq<ObjectSet<String>>  userVarSets = new Seq<>();
+	public Scriptable customScope;
+	ObjectSet<String> customConstantSet, customVarSet;
+	Seq<ObjectSet<String>> userVarSets = new Seq<>();
 
 	public JSSyntax(SyntaxDrawable drawable, Scriptable customScope) {
 		super(drawable);
@@ -47,15 +47,15 @@ public class JSSyntax extends Syntax {
 		// It no longer needs to contain localVars, localFunctions, etc.,
 		// as the new "brain" rule handles them directly.
 		TOKEN_MAP.putAll(
-			ObjectSet.with(
-				"break", "case", "catch", "const", "continue", // "const" is back
-				"default", "delete", "do", "else",
-				"finally", "for", "function", "if", "in",     // "function" is back
-				"instanceof", "let", "new", "of", "return",   // "let" is back
-                "switch", "this", "throw", "try", "typeof",
-                "var", "void", "while", "with", "yield"       // "var" is back
-			), c_keyword,
-			ObjectSet.with("null", "undefined", "true", "false"), c_keyword
+		 ObjectSet.with(
+			"break", "case", "catch", "const", "continue", // "const" is back
+			"default", "delete", "do", "else",
+			"finally", "for", "function", "if", "in",     // "function" is back
+			"instanceof", "let", "new", "of", "return",   // "let" is back
+			"switch", "this", "throw", "try", "typeof",
+			"var", "void", "while", "with", "yield"       // "var" is back
+		 ), c_keyword,
+		 ObjectSet.with("null", "undefined", "true", "false"), c_keyword
 		);
 
 		// Global scope variables are still handled by TOKEN_MAP
@@ -74,7 +74,7 @@ public class JSSyntax extends Syntax {
 
 	public static final ObjectSet<String> constantSet = new ScopeObjectSet(topScope);
 	public static final ObjectSet<String> varSet      = new ObjectSet<>();
-	public              Scriptable      cursorObj   = null;
+	public              Scriptable        cursorObj   = null;
 
 	static {
 		varSet.addAll("arguments", "Infinity");
@@ -91,8 +91,9 @@ public class JSSyntax extends Syntax {
 				for (Object id : so.getIds()) {
 					if (!(id instanceof String key)) continue;
 					try {
-						if ((so.getAttributes(key) & ScriptableObject.READONLY) != 0) constantSet.add(key);
-						else varSet.add(key);
+						if ((so.getAttributes(key) & ScriptableObject.READONLY) != 0) { constantSet.add(key); } else {
+							varSet.add(key);
+						}
 					} catch (Exception e) {
 						varSet.add(key);
 					}
@@ -128,88 +129,87 @@ public class JSSyntax extends Syntax {
 		return NOT_FOUND;
 	}
 
-	public NativeJavaPackage pkg = null;
-	public Object            currentObject;
-	public boolean           js_prop = false;
-	private final Integer OBJ_NUMBER = -189021039;
+	public        NativeJavaPackage pkg        = null;
+	public        Object            currentObject;
+	public        boolean           js_prop    = false;
+	private final Integer           OBJ_NUMBER = -189021039;
 
 
-    // --- FINAL FIX: Unified Identifier Handling Logic ---
+	// --- FINAL FIX: Unified Identifier Handling Logic ---
 	public TokenDraw[] tokenDraws = {
-        // Rule 1: The "Brain". Handles all identifier logic: declaration, parameters, and usage.
-        task -> {
-            DrawCompletion completion = (DrawCompletion) outerTask;
-            String token = task.token;
-            String lastToken = task.lastToken;
+	 // Rule 1: The "Brain". Handles all identifier logic: declaration, parameters, and usage.
+	 task -> {
+		 DrawCompletion completion = (DrawCompletion) outerTask;
+		 String         token      = task.token;
+		 String         lastToken  = task.lastToken;
 
-            // Priority 1: Check for declaration context.
-            if (lastToken != null) {
-                // Is it a variable declaration?
-                if (localKeywords.contains(lastToken)) {
-                    localVars.add(token);
-                    return c_localvar;
-                }
-                // Is it a constant declaration?
-                if (constKeywords.contains(lastToken)) {
-                    localConstants.add(token);
-                    return c_constants;
-                }
-                // Is it a function declaration?
-                if ("function".equals(lastToken)) {
-                    localFunctions.add(token);
-                    completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
-                    return c_functions;
-                }
-            }
+		 // Priority 1: Check for declaration context.
+		 if (lastToken != null) {
+			 // Is it a variable declaration?
+			 if (localKeywords.contains(lastToken)) {
+				 localVars.add(token);
+				 return c_localvar;
+			 }
+			 // Is it a constant declaration?
+			 if (constKeywords.contains(lastToken)) {
+				 localConstants.add(token);
+				 return c_constants;
+			 }
+			 // Is it a function declaration?
+			 if ("function".equals(lastToken)) {
+				 localFunctions.add(token);
+				 completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
+				 return c_functions;
+			 }
+		 }
 
-            // Priority 2: Check if we are inside function parameters.
-            if (completion.state == DrawCompletion.ParseState.INSIDE_PARAMS) {
-                if (!token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
-                    localVars.add(token); // Parameters are local variables.
-                    return c_localvar;
-                }
-            }
+		 // Priority 2: Check if we are inside function parameters.
+		 if (completion.state == DrawCompletion.ParseState.INSIDE_PARAMS) {
+			 if (!token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
+				 localVars.add(token); // Parameters are local variables.
+				 return c_localvar;
+			 }
+		 }
 
-            // Priority 3: If not a declaration, check if it's a *usage* of an already-defined local.
-            // This is the key fix for highlighting the 'x' on the second line.
-            if (localFunctions.contains(token)) return c_functions;
-            if (localVars.contains(token)) return c_localvar;
-            if (localConstants.contains(token)) return c_constants;
+		 // Priority 3: If not a declaration, check if it's a *usage* of an already-defined local.
+		 // This is the key fix for highlighting the 'x' on the second line.
+		 if (localFunctions.contains(token)) return c_functions;
+		 if (localVars.contains(token)) return c_localvar;
+		 if (localConstants.contains(token)) return c_constants;
 
-            // If none of the above, let subsequent rules handle it (e.g., keywords, globals).
-            return null;
-        },
+		 // If none of the above, let subsequent rules handle it (e.g., keywords, globals).
+		 return null;
+	 },
 
-        // Rule 2: Generic lookup for everything else (keywords, globals). This is now simpler.
-        task -> {
-            for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
-                if (entry.key.contains(task.token)) {
-                    if (userVarSets.contains(entry.key)) {
-                        if (currentObject != customScope && currentObject != null && operatesSymbol.lastSymbol != '\0')
-                            continue;
-                        currentObject = getNextObject(task.token);
-                    } else {
-                        currentObject = null;
-                    }
-                    updateCursorObj();
-                    return entry.value;
-                }
-            }
-            if (!js_prop) return null;
-            if (operatesSymbol.lastSymbol == '\0') {
-                currentObject = customScope;
-                updateCursorObj();
-            }
-            return dealJSProp(task.token);
-        },
+	 // Rule 2: Generic lookup for everything else (keywords, globals). This is now simpler.
+	 task -> {
+		 for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
+			 if (entry.key.contains(task.token)) {
+				 if (userVarSets.contains(entry.key)) {
+					 if (currentObject != customScope && currentObject != null && operatesSymbol.lastSymbol != '\0') { continue; }
+					 currentObject = getNextObject(task.token);
+				 } else {
+					 currentObject = null;
+				 }
+				 updateCursorObj();
+				 return entry.value;
+			 }
+		 }
+		 if (!js_prop) return null;
+		 if (operatesSymbol.lastSymbol == '\0') {
+			 currentObject = customScope;
+			 updateCursorObj();
+		 }
+		 return dealJSProp(task.token);
+	 },
 
-        // Rule 3: Number highlighting (unchanged).
-        task -> {
-            String s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
-            boolean b = "NaN".equals(s) || !ScriptRuntime.isNaN(ScriptRuntime.toNumber(s));
-            if (b) currentObject = OBJ_NUMBER;
-            return b ? c_number : null;
-        }
+	 // Rule 3: Number highlighting (unchanged).
+	 task -> {
+		 String  s = operatesSymbol.lastSymbol != '\0' && operatesSymbol.lastSymbol == '.' && task.token.charAt(0) == 'e' && task.lastToken != null ? task.lastToken + "." + task.token : task.token;
+		 boolean b = "NaN".equals(s) || !ScriptRuntime.isNaN(ScriptRuntime.toNumber(s));
+		 if (b) currentObject = OBJ_NUMBER;
+		 return b ? c_number : null;
+	 }
 	};
 
 	private void updateCursorObj() { setCursorObj(drawToken.lastIndex); }
@@ -231,7 +231,7 @@ public class JSSyntax extends Syntax {
 		if (o == NOT_FOUND && pkg == null) return defaultColor;
 
 		Object nextObject;
-		Color colorToReturn;
+		Color  colorToReturn;
 
 		if (o instanceof NativeJavaPackage p) {
 			pkg = p;
@@ -270,11 +270,13 @@ public class JSSyntax extends Syntax {
 	 new DrawComment(c_comment),
 	 operatesSymbol,
 	 drawToken = new JSDrawToken(),
-	};
+	 };
+
 	{ taskArr = taskArr0; }
 
 	public static IntSet operateSet = new IntSet();
 	public static IntSet bracketSet = new IntSet();
+
 	static {
 		for (char c : "~|,+-=*/<>!%^&;.:?".toCharArray()) operateSet.add(c);
 		for (char c : "()[]{}".toCharArray()) bracketSet.add(c);
@@ -309,13 +311,13 @@ public class JSSyntax extends Syntax {
 	}
 
 	private class DrawCompletion extends DrawOuterTask {
-        // The state machine is now simpler, mainly for tracking parameter lists.
-        enum ParseState {
-            DEFAULT,
-            AWAITING_PARAMS_START,
-            INSIDE_PARAMS
-        }
-        ParseState state = ParseState.DEFAULT;
+		// The state machine is now simpler, mainly for tracking parameter lists.
+		enum ParseState {
+			DEFAULT,
+			AWAITING_PARAMS_START,
+			INSIDE_PARAMS
+		}
+		ParseState state = ParseState.DEFAULT;
 
 		final Stack<RMethod> stack = new Stack<>();
 
@@ -330,7 +332,7 @@ public class JSSyntax extends Syntax {
 			localVars.clear();
 			localConstants.clear();
 			localFunctions.clear();
-            state = ParseState.DEFAULT;
+			state = ParseState.DEFAULT;
 		}
 		private static class RMethod implements Poolable {
 			Scriptable base;
@@ -353,15 +355,15 @@ public class JSSyntax extends Syntax {
 			if (!(lastTask == operatesSymbol || lastTask == bracketsSymbol)) return;
 			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
 
-            switch (state) {
-                case AWAITING_PARAMS_START:
-                    if (c == '(') state = ParseState.INSIDE_PARAMS;
-                    else if (c != ' ' && c != '\n') state = ParseState.DEFAULT;
-                    break;
-                case INSIDE_PARAMS:
-                    if (c == ')') state = ParseState.DEFAULT;
-                    break;
-            }
+			switch (state) {
+				case AWAITING_PARAMS_START:
+					if (c == '(') { state = ParseState.INSIDE_PARAMS; } else if (c != ' ' && c != '\n')
+						state = ParseState.DEFAULT;
+					break;
+				case INSIDE_PARAMS:
+					if (c == ')') state = ParseState.DEFAULT;
+					break;
+			}
 
 			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())
 			    || ((currentObject == NOT_FOUND || currentObject == Undefined.SCRIPTABLE_UNDEFINED) && c == '\n')) {
@@ -376,16 +378,27 @@ public class JSSyntax extends Syntax {
 					stack.lastElement().args.add(currentObject);
 				}
 				RMethod pop = stack.pop();
-				l: if (pop.base instanceof NativeJavaMethod m) {
+				l:
+				if (pop.base instanceof NativeJavaMethod m) {
 					Object[] allMethods = (Object[]) UNSAFE.getObject(m, RHINO.methods);
-					Method method = null;
-					Integer integer = Constants.iv(RHINO.findCachedFunction, m, IScript.cx, pop.args.toArray());
+					Method   method     = null;
+					Integer  integer    = Constants.iv(RHINO.findCachedFunction, m, IScript.cx, pop.args.toArray());
 					if (integer == null) break l;
 					int index = integer;
 					if (index >= 0) method = (Method) UNSAFE.getObject(allMethods[index], RHINO.memberObject);
 					if (method == null || method.getReturnType() == void.class) break l;
 					Constants.iv(RHINO.initNativeJavaObject, receiver, customScope, null, method.getReturnType());
 					currentObject = receiver;
+				} else if (pop.base instanceof NativeJavaClass njc) {
+					// 处理 Java 类作为构造函数调用的情况 (例如 Fi("...") 或 new Fi("..."))
+					Class<?> javaClass = njc.getClassObject();
+					if (javaClass != null) {
+						// 将 currentObject 模拟为该类的实例，以便后续补全
+						Constants.iv(RHINO.initNativeJavaObject, receiver, customScope, null, javaClass);
+						currentObject = receiver;
+					} else {
+						currentObject = customScope;
+					}
 				} else {
 					currentObject = customScope;
 				}
@@ -394,7 +407,7 @@ public class JSSyntax extends Syntax {
 			}
 		}
 
-		public void after(int i) {}
+		public void after(int i) { }
 
 		public boolean draw(int i) {
 			forToken(i);
@@ -403,8 +416,8 @@ public class JSSyntax extends Syntax {
 	}
 	private class DrawBracket extends DrawSymbol {
 		static final IntIntMap leftBracket = IntIntMap.of('(', ')', '[', ']', '{', '}');
-		final      Color     textColor     = c_brackets;
-		final      IntSeq    stack         = new IntSeq();
+		final        Color     textColor   = c_brackets;
+		final        IntSeq    stack       = new IntSeq();
 		public DrawBracket() { super(bracketSet, new Color()); }
 		void init() {
 			super.init();

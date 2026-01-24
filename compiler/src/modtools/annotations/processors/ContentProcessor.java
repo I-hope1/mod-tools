@@ -197,6 +197,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 				writer.write(String.valueOf(unit.getPackage()));
 				writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
+				// 导入原本类的所有子类
+				writer.write("import " + settings.getQualifiedName() + ".*;\n");
 				writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
 				writer.write("public class " + REF_PREFIX + literalName + " {\n");
 				// writer.write(allEnumFields.entrySet().stream().reduce("\n",

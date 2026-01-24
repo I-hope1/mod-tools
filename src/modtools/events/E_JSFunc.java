@@ -14,8 +14,8 @@ public enum E_JSFunc implements ISettings {
 
 	hidden_if_empty, display_synthetic, update_async,
 	folded_name,
-	/** @see ISettings#$(String, String...)  */
-	array_delimiter(String.class, it -> it.$(", ",
+	/** @see ISettings#buildStr(String, String...)  */
+	array_delimiter(String.class, it -> it.buildStr(", ",
 	 ", ", "\n", "\n\n",
 	 "\n▶▶▶▶", "\n★★★")),
 

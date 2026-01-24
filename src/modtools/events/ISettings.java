@@ -330,7 +330,7 @@ public interface ISettings extends E_DataInterface {
 		colorBlock(main(), text, data(), name(), getColorInt(), this::set);
 	}
 	/** (enumClass) */
-	default <T extends Enum<T>> void $(Enum<T> def, Class<T> enumClass) {
+	default <T extends Enum<T>> void buildEnum(Enum<T> def, Class<T> enumClass) {
 		def(def);
 		enum_(text, enumClass, this::set, () -> {
 			try {
@@ -339,7 +339,7 @@ public interface ISettings extends E_DataInterface {
 		}, this::isSwitchOn);
 	}
 	/** 参数：({@link String}, def, ...arr) */
-	default void $(String def, String... arr) {
+	default void buildStr(String def, String... arr) {
 		def(def);
 		list(text, this::set, this::getString,
 		 new Seq<>(arr), s -> s.replaceAll("\\n", "\\\\n"));

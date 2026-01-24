@@ -138,24 +138,16 @@ public class SettingsUI extends Content {
 			SettingsBuilder.clearBuild();
 		});
 
-		addSectionInternal("Effects", Icon.effectSmall, t -> {
-			SettingsBuilder.build(t);
-			ISettings.buildAll("blur", t, E_Blur.class);
-			SettingsBuilder.clearBuild();
-		});
-
 		addSectionInternal("Hook", Icon.refreshSmall, t -> {
 			SettingsBuilder.build(t);
 			// watch的路径数组配置
 			ISettings.buildAll("hook", t, E_Hook.class);
 		});
 
-		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {
-			SettingsBuilder.build(t); // 设置SettingsBuilder的目标表格
+		addSectionInternal("UI", Icon.imageSmall, t -> {
+			SettingsBuilder.build(t);
 
-			// 主菜单背景切换
-			String key = "ShowMainMenuBackground";
-			SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
+			ISettings.buildAll("ui", t, E_UISettings.class);
 
 			// 构建各种设置
 			ISettings.buildAll("", t, TSettings.class);
@@ -165,12 +157,25 @@ public class SettingsUI extends Content {
 			 TopGroup::setDrawPadElem,
 			 TSettings.debugBounds::enabled);
 			ISettings.buildAll("", t, E_Game.class);
-			ISettings.buildAll("", t, E_Extending.class);
 			ISettings.buildAll("frag", t, Frag.Settings.class);
+
+			SettingsBuilder.build(t);
+			ISettings.buildAll("blur", t, E_Blur.class);
+			SettingsBuilder.clearBuild();
 
 			// 字体选择按钮
 			t.button("@settings.font", HopeStyles.flatBordert, this::showFontDialog)
 			 .growX().height(42).row();
+		});
+
+		addSectionInternal("@mod-tools.others", Icon.listSmall, t -> {
+			SettingsBuilder.build(t); // 设置SettingsBuilder的目标表格
+
+			// 主菜单背景切换
+			String key = "ShowMainMenuBackground";
+			SettingsBuilder.check("@settings.mainmenubackground", b -> SETTINGS.put(key, b), () -> SETTINGS.getBool(key));
+
+			ISettings.buildAll("", t, E_Extending.class);
 
 			// 功能按钮区域
 			t.table(Tex.pane, ft -> {

@@ -143,8 +143,15 @@ task playDesktop(type: Copy) {
 task playGame(type: JavaExec) {
 	dependsOn playDesktop
 
+	workingDir = new File(buildDir0, "run")
+
+    // 确保目录存在
+    doFirst {
+        if(!workingDir.exists()) workingDir.mkdirs()
+    }
 	//运行游戏目录
-	classpath(MdtDataDir + "/Mindustry.jar")
+//	classpath(MdtDataDir + "/Mindustry.jar")
+	classpath(MdtDataDir + "/MindustryX.jar")
 //	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
 	jvmArgs("-XX:+AllowEnhancedClassRedefinition")
 //	jvmArgs = [

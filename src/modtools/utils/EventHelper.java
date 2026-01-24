@@ -12,11 +12,12 @@ import arc.util.Log;
 import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
+import modtools.events.E_UISettings.MenuTrigger;
+import modtools.events.R_UISettings;
 import modtools.ui.IntUI;
 
 import java.util.function.Consumer;
 
-import static mindustry.Vars.mobile;
 import static modtools.IntVars.mouseVec;
 import static modtools.utils.Tools.runT;
 
@@ -110,28 +111,37 @@ public class EventHelper {
 	@SuppressWarnings("UnusedReturnValue")
 	public static <T extends Element> T
 	longPressOrRclick(T element, Consumer<T> run) {
-		return mobile ? longPress0(element, () -> run.accept(element))
-		 : rightClick(element, () -> run.accept(element));
+		return
+		 switch (R_UISettings.menu_trigger) {
+			 case long_press -> longPress0(element, () -> run.accept(element));
+			 case right_click -> rightClick(element, () -> run.accept(element));
+			 default -> throw new IllegalArgumentException("Unsupported menu trigger.");
+		 };
 	}
 	/** @param cons 它的参数可能为null */
 	public static <T> void
 	longPressOrRclick(Element listener, Class<T> target, Consumer<T> cons) {
-		listener.addListener(mobile ? new LongPressListener(_ -> { }, IntUI.DEF_LONGPRESS) {
-			public void longPress(InputEvent event) {
-				T targetActor = ElementUtils.findParent(event.targetActor, target);
-				cons.accept(targetActor);
-				event.stop();
-			}
-		} : new ClickListener(KeyCode.mouseRight) {
-			public void clicked(InputEvent event, float x, float y) {
-				T targetActor = ElementUtils.findParent(event.targetActor, target);
-				cons.accept(targetActor);
-				event.stop();
-			}
-		});
+		listener.addListener(
+		 switch (R_UISettings.menu_trigger) {
+			 case long_press -> new LongPressListener(_ -> { }, IntUI.DEF_LONGPRESS) {
+				 public void longPress(InputEvent event) {
+					 T targetActor = ElementUtils.findParent(event.targetActor, target);
+					 cons.accept(targetActor);
+					 event.stop();
+				 }
+			 };
+			 case right_click -> new ClickListener(KeyCode.mouseRight) {
+				 public void clicked(InputEvent event, float x, float y) {
+					 T targetActor = ElementUtils.findParent(event.targetActor, target);
+					 cons.accept(targetActor);
+					 event.stop();
+				 }
+			 };
+			 default -> throw new IllegalArgumentException("Unsupported menu trigger.");
+		 });
 	}
 	public static String longPressOrRclickKey() {
-		return mobile ? "Long press" : "Right click";
+		return R_UISettings.menu_trigger == MenuTrigger.long_press ? "Long press" : "Right click";
 	}
 	/** 双击复制文本内容 */
 	public static void addDClickCopy(Label label) {
@@ -177,9 +187,11 @@ public class EventHelper {
 	public static class LongPressListener extends ClickListener {
 		final long  duration;
 		final Boolc boolc;
-		/** 长按
-		 * @param boolc0 {@link Boolc#get(boolean b)}形参{@code b}为是否长按
-		 * @param duration0 需要长按的事件（单位毫秒[ms]，600ms=0.6s）*/
+		/**
+		 * 长按
+		 * @param boolc0    {@link Boolc#get(boolean b)}形参{@code b}为是否长按
+		 * @param duration0 需要长按的事件（单位毫秒[ms]，600ms=0.6s）
+		 */
 		public LongPressListener(Boolc boolc0, long duration0) {
 			if (boolc0 == null) throw new IllegalArgumentException("boolc cannot be null.");
 			boolc = boolc0;
@@ -268,7 +280,7 @@ public class EventHelper {
 	public static class RightClickListener extends ClickListener {
 		private final Runnable run;
 		RightClickListener(Runnable run) {
-			super(KeyCode.mouseRight);
+			super(arc.input.KeyCode.mouseRight);
 			this.run = run;
 		}
 		public void clicked(InputEvent event, float x, float y) {

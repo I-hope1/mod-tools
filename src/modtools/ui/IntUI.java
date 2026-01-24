@@ -53,6 +53,7 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
+	public static final boolean DEBUG = true;
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
 	/** pad 8 */
@@ -505,6 +506,7 @@ public class IntUI {
 	}
 	public static Window showException(String text, Throwable exc) {
 		ui.loadfrag.hide();
+		if (DEBUG) Log.err(exc);
 		return ExceptionPopup.of(exc, text);
 	}
 
@@ -793,7 +795,7 @@ public class IntUI {
 			Time.runTask(10f, DelayDisposable.super::clearAll);
 		}
 	}
-	static class ExceptionPopup extends Window implements PopupWindow, IDisposable {
+	public static class ExceptionPopup extends Window implements PopupWindow, IDisposable {
 		static final ObjectMap<Signature, ExceptionPopup> instances = new ObjectMap<>();
 		private ExceptionPopup(Signature signature, Throwable th) {
 			super("", 0, 200, false);

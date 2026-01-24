@@ -26,9 +26,10 @@ public class MySettings {
 	}
 
 	public static class Data extends OrderedMap<String, Object> {
-		public MyEvents events = new MyEvents();
-		public Data parent;
-		public Fi   fi;
+		public MyEvents                  events   = new MyEvents();
+		public ObjectMap<String, Object> defaults = new ObjectMap<>();
+		public Data                      parent;
+		public Fi                        fi;
 
 		public Data(Data parent, JsonMap jsonMap) {
 			this.parent = parent;
@@ -84,6 +85,14 @@ public class MySettings {
 			TaskManager.scheduleOrReset(0f, task);
 		}
 
+		public void setDef(String key, Object value) {
+			defaults.put(key, value);
+			if (!containsKey(key)) put(key, defaults.get(key));
+		}
+
+		public Object getDef(String name) {
+			return defaults.get(name);
+		}
 		public Object get(String key, Object defaultValue) {
 			if (containsKey(key)) return get(key);
 			put(key, defaultValue);

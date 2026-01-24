@@ -18,9 +18,16 @@ import java.util.stream.*;
  * 修复了 NoClassDefFoundError 问题：支持动态注入新类（匿名内部类/Lambda）。
  */
 public class Main {
-	private static final boolean DEBUG         = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
-	private static final boolean UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static final  int     FILE_SHAKE_MS = 600;
+	private static final boolean      DEBUG         = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	private static final boolean      UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "false"));
+	public static final  int          FILE_SHAKE_MS = 600;
+	private static final RedefineMode REDEFINE_MODE = RedefineMode.valueOf(System.getProperty("nipx.agent.redefine_mode", "inject"));
+	/** @see E_Hook.RedefineMode */
+	enum RedefineMode {
+		inject,
+		lazy_load,
+	}
+
 
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
@@ -152,25 +159,25 @@ public class Main {
 		}
 	}
 
+	/**
+	 * 处理文件变化的核心逻辑
+	 */
 	private static void processChanges(Set<Path> changedFiles) {
-		// 更新 ClassLoader 映射，防止遗漏新加载的 Loader
 		refreshPackageLoaders();
 
-		// 优先保留“子加载器”加载的类（业务类通常在子加载器）
+		// 获取当前所有已加载类的快照
 		Map<String, Class<?>> loadedClassesMap = new HashMap<>();
 		for (Class<?> c : inst.getAllLoadedClasses()) {
 			String   name     = c.getName();
 			Class<?> existing = loadedClassesMap.get(name);
-			// 如果 map 里还没这个类，或者新来的类是 existing 的子加载器加载的（说明更具体），则替换
 			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
 				loadedClassesMap.put(name, c);
 			}
 		}
 
-		List<ClassDefinition> definitions = new ArrayList<>();
-
-		int skippedCount  = 0;
-		int injectedCount = 0;
+		List<ClassDefinition> definitions   = new ArrayList<>();
+		int                   skippedCount  = 0;
+		int                   injectedCount = 0;
 
 		for (Path path : changedFiles) {
 			try {
@@ -180,56 +187,38 @@ public class Main {
 				byte[] bytecode = Files.readAllBytes(path);
 				byte[] newHash  = calculateHash(bytecode);
 
-				// 检查磁盘文件的上一版本哈希
-				boolean isContentChanged = true;
+				// 检查磁盘内容是否真的改变（过滤时间戳伪触发）
 				byte[]  oldDiskHash      = fileDiskHashes.get(className);
-				if (oldDiskHash != null && Arrays.equals(oldDiskHash, newHash)) {
-					isContentChanged = false;
-				}
-
-				// 更新磁盘哈希缓存
+				boolean isContentChanged = oldDiskHash == null || !Arrays.equals(oldDiskHash, newHash);
 				fileDiskHashes.put(className, newHash);
 
 				Class<?> targetClass = loadedClassesMap.get(className);
 
 				if (targetClass != null) {
-					if (!isContentChanged) {
-						// 双重检查内存哈希
-						byte[] oldMemHash = classHashes.get(className);
-						if (oldMemHash != null && Arrays.equals(oldMemHash, newHash)) {
-							skippedCount++;
-							continue;
-						}
+					// 1. 类已加载：无论模式，都必须执行 redefinition
+					byte[] oldMemHash = classHashes.get(className);
+					if (!isContentChanged && oldMemHash != null && Arrays.equals(oldMemHash, newHash)) {
+						skippedCount++;
+						continue;
 					}
-					// 修改已存在的类 -> Redefine
 					classHashes.put(className, newHash);
-					log("[MODIFIED] " + className + " (Loader: " + targetClass.getClassLoader() + ")");
+					log("[MODIFIED] " + className);
 					definitions.add(new ClassDefinition(targetClass, bytecode));
 				} else {
-					// 即使 isContentChanged 为 false，只要它没被加载，我们就要尝试注入！
-					// 因为它可能只存在于 WatchDir，而不在 ClassPath 里。
-
-					// 为了避免重复注入(造成 LinkageError)，先检查一下是否真的未加载
-					// (loadedClassesMap 已经是最新快照了)
-
-					// 尝试注入
-					ClassLoader targetLoader = findTargetClassLoader(className);
-					if (targetLoader != null) {
-						if (isContentChanged) {
-							log("[NEW-CHANGE] Injecting modified new class: " + className);
-						} else {
-							// 这是修复你报错的关键：内容没变，但是为了让 JVM 看到它，必须注入
-							// debug 日志可以降级，避免刷屏
-							// log("[NEW-STALE] Injecting unloaded existing class: " + className);
-						}
+					// 2. 类尚未加载：根据 REDEFINE_MODE 处理
+					if (REDEFINE_MODE == RedefineMode.inject) {
+						// 注入模式：强行让 JVM 认识这个类
 						if (injectNewClass(className, bytecode)) {
 							classHashes.put(className, newHash);
 							injectedCount++;
 						}
-					} else {
-						// 这是一个还未被使用的类，且找不到亲戚，直接忽略，
-						// 等 JVM 自然加载它时，会读取到最新的磁盘文件。
-						// log("Skipping unloaded class with no loader context: " + className);
+					} else if (REDEFINE_MODE == RedefineMode.lazy_load) {
+						// 延迟加载：确保路径已挂载
+						ClassLoader loader = findTargetClassLoader(className);
+						if (loader != null) {
+							ensureMounted(loader);
+							log("[LAZY-LOAD] Path ensured for: " + className);
+						}
 					}
 				}
 			} catch (Exception e) {
@@ -237,31 +226,13 @@ public class Main {
 			}
 		}
 
-		if (skippedCount > 0) {
-			info("Skipped " + skippedCount + " files (timestamp changed but content identical).");
-		}
-		if (injectedCount > 0) {
-			info("Injected/Ensured " + injectedCount + " unloaded classes.");
-		}
+		// 批量执行重定义（针对已加载类）
+		applyRedefinitions(definitions);
 
-		// 批量执行重定义
-		if (!definitions.isEmpty()) {
-			try {
-				inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
-				info("HotSwap success: " + definitions.size() + " classes redefined.");
-			} catch (Throwable t) {
-				error("Redefinition failed.", t);
-				// 降级策略：尝试单个重定义，避免一个失败炸全家
-				for (ClassDefinition def : definitions) {
-					try {
-						inst.redefineClasses(def);
-					} catch (Throwable singleEx) {
-						error("Failed individual redefine: " + def.getDefinitionClass().getName(), singleEx);
-					}
-				}
-			}
-		}
+		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
+		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
 	}
+
 
 	/**
 	 * 直接定义类，而不是被动加载
@@ -287,6 +258,26 @@ public class Main {
 		} catch (Exception e) {
 			error("Failed to inject new class: " + className + ". CAUTION: This may cause NoClassDefFoundError.", e);
 			return false;
+		}
+	}
+	/**
+	 * 分块执行 Redefine，防止其中一个类出错导致所有类失败
+	 */
+	private static void applyRedefinitions(List<ClassDefinition> definitions) {
+		if (definitions.isEmpty()) return;
+		try {
+			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
+			info("HotSwap successful: " + definitions.size() + " classes updated.");
+		} catch (Throwable t) {
+			error("Bulk Redefine failed, switching to individual mode...");
+			for (ClassDefinition def : definitions) {
+				try {
+					inst.redefineClasses(def);
+					log("[OK] " + def.getDefinitionClass().getName());
+				} catch (Throwable e) {
+					error("[FAIL] " + def.getDefinitionClass().getName() + ": " + e.getMessage());
+				}
+			}
 		}
 	}
 
@@ -350,6 +341,23 @@ public class Main {
 			current = current.getParent();
 		}
 		return false;
+	}
+	/**
+	 * 确保目标 ClassLoader 的 URL 搜索路径包含了我们的监控目录
+	 * TODO: ucp没实现
+	 */
+	private static void ensureMounted(ClassLoader loader) {
+		if (!UCP_APPEND) return;
+		if (true) throw new UnsupportedOperationException("UCP_APPEND is not supported yet.");
+
+		// 只有 URLClassLoader 及其子类支持 addURL
+		if (loader instanceof URLClassLoader) {
+			mountWorkDir(loader, activeWatchDirs);
+		} else {
+			// 如果是普通的 ClassLoader，但在 Java 9+ 中，可以通过反射拿到 ucp (URLClassPath)
+			// 这里根据需求可以进一步扩展
+			log("[SKIP-MOUNT] Loader is not URLClassLoader: " + loader.getClass().getSimpleName());
+		}
 	}
 
 	private static String getClassName(Path classFile) {

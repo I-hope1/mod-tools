@@ -8,7 +8,6 @@ import modtools.annotations.settings.SettingsInit;
 public enum E_UISettings implements ISettings {
 	menu_trigger(MenuTrigger.class, it ->
 	 it.buildEnum(IntVars.isDesktop() ? MenuTrigger.right_click : MenuTrigger.long_press, MenuTrigger.class)),
-
 	//
 	;
 	E_UISettings(Class<?> cl, Cons<ISettings> builder) { }

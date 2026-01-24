@@ -62,7 +62,7 @@ public interface ISettings extends E_DataInterface {
 		return !hasSwitch() || data().getBool(switchKey(), true);
 	}
 	default void defSwitchOn(boolean b) {
-		data().get(switchKey(), b);
+		data().setDef(switchKey(), b);
 	}
 	default void setSwitchOn(boolean b) {
 		data().put(switchKey(), b);
@@ -85,12 +85,15 @@ public interface ISettings extends E_DataInterface {
 	default void lazyDefault(Prov<Object> o) {
 		data().get(name(), o);
 	}
+	default <T> T getDefault() {
+		return (T) data().getDef(name());
+	}
 	default void def(Object o) {
-		data().get(name(), o);
+		data().setDef(name(), o);
 	}
 	default void defTrue() {
 		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
-		data().get(name(), true);
+		data().setDef(name(), true);
 	}
 	default void set(Object o) {
 		o = Tools.cast(o, type());
@@ -143,7 +146,12 @@ public interface ISettings extends E_DataInterface {
 	}
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
-		return Enum.valueOf(cl, data().getString(name()));
+		try {
+			return Enum.valueOf(cl, data().getString(name()));
+		} catch (Exception e) {
+			Log.err(e);
+			return getDefault();
+		}
 	}
 	default int getInt() {
 		if (type() != int.class) { throw new IllegalStateException(STR."the settings is \{type()} not int.class"); }
@@ -335,7 +343,7 @@ public interface ISettings extends E_DataInterface {
 		enum_(text, enumClass, this::set, () -> {
 			try {
 				return Enum.valueOf(enumClass, data().getString(name()));
-			} catch (Throwable e) { return null; }
+			} catch (Throwable e) { return getDefault(); }
 		}, this::isSwitchOn);
 	}
 	/** 参数：({@link String}, def, ...arr) */

@@ -15,6 +15,8 @@ public enum E_Hook implements ISettings {
 	},
 	@Switch(dependency = "hot_swap")
 	hot_swap_watch_paths(String[].class, i -> i.array(null)),
+	// 重定义模式
+	redefine_mode(RedefineMode.class, i -> i.buildEnum(RedefineMode.inject, RedefineMode.class)),
 
 	dynamic_jdwp {
 		public boolean isSwitchOn() {
@@ -30,4 +32,12 @@ public enum E_Hook implements ISettings {
 	};
 	E_Hook(Class<?> type, Cons<ISettings> builder) { }
 	E_Hook(){}
+
+	static {
+		redefine_mode.onChange(() -> System.setProperty("nipx.agent.redefine_mode", redefine_mode.name()));
+	}
+	public enum RedefineMode {
+		inject,
+		lazy_load,
+	}
 }

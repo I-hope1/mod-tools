@@ -39,9 +39,16 @@ public class FileUtils {
 		// 返回新子目录对象
 		return child;
 	}
+
+	/**
+	 * 判断文件是否为本地文件
+	 * @param fi 文件对象
+	 * @return 如果文件类型为绝对路径、本地路径或外部路径则返回true，否则返回false
+	 */
 	public static boolean isLocal(Fi fi) {
 		return fi.type() == FileType.absolute || fi.type() == FileType.local || fi.type() == FileType.external;
 	}
+
 	public static Fi copyToTmp(Fi fi, Fi destDir, String newName) {
 		// dest应该是本地文件
 		if (!isLocal(destDir)) throw new IllegalArgumentException("destDir should be local file");
@@ -62,9 +69,16 @@ public class FileUtils {
 		return fi.exists() && (fi.isDirectory() ? fi.deleteDirectory() : fi.delete());
 	}
 
+	/**
+	 * 打开指定路径的文件
+	 *
+	 * @param path 文件路径对象，封装了文件的路径信息
+	 * @return 返回打开文件操作的结果，true表示成功，false表示失败
+	 */
 	public static boolean openFile(Fi path) {
 		return openFile(path.path());
 	}
+
 
 	private static boolean init;
 	public static boolean openFile(String path) {

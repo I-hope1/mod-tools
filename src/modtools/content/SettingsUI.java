@@ -442,7 +442,7 @@ public class SettingsUI extends Content {
 			container.add(titleLabel).left().padBottom(4f).row();
 			tryAddTip(titleLabel, text.substring(text.indexOf('.') + 1));
 
-			Table listTable = new Table();
+			Table listTable = new Table(Tex.paneLeft);
 			listTable.left().defaults().padBottom(2f);
 
 			// 用于重建列表的函数

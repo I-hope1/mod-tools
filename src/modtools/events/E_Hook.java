@@ -1,7 +1,8 @@
 package modtools.events;
 
 import arc.func.Cons;
-import arc.util.OS;
+import arc.util.*;
+import arc.util.serialization.Jval;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.utils.reflect.ClassUtils;
@@ -17,6 +18,10 @@ public enum E_Hook implements ISettings {
 	hot_swap_watch_paths(String[].class, i -> i.array(null)),
 	// 重定义模式
 	redefine_mode(RedefineMode.class, i -> i.buildEnum(RedefineMode.lazy_load, RedefineMode.class)),
+	hotswap_blacklist(String[].class, i -> i.array(
+	 new String[]{"java.", "javax.", "jdk.", "sun.",
+  "kotlin.", "kotlinx.", "arc.", "mindustry.",
+  "nipx."})),
 
 	dynamic_jdwp {
 		public boolean isSwitchOn() {
@@ -35,6 +40,7 @@ public enum E_Hook implements ISettings {
 
 	static {
 		System.setProperty("nipx.agent.redefine_mode", redefine_mode.getString());
+		System.setProperty("nipx.agent.hotswap_blacklist", String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
 	}
 	public enum RedefineMode {
 		inject,

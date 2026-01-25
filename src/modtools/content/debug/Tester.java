@@ -229,6 +229,8 @@ public class Tester extends Content {
 	public void build(Table table) {
 		if (ui == null) _load();
 
+		Log.info("asoiasj");
+
 		textarea = new TextAreaTab("", d -> new JSSyntax(d, customScope)) {
 			public int cursor() {
 				return completionPopup.isShown() ? completionPopup.cursorBeforeDot : super.cursor();

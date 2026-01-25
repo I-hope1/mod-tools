@@ -5,12 +5,6 @@ sourceSets.main.java.srcDirs = ["src"]
 tasks.withType(JavaCompile) {
 	// 这里是为了刷新编译器参数
 //	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000)
-	options.compilerArgs += ["--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED"]
-	options.compilerArgs += ["--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED"]
-	options.compilerArgs += ["--add-exports", "jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED"]
-	options.compilerArgs += ["--add-exports", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED"]
-	options.compilerArgs += ["--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED"]
-	options.compilerArgs += ["--add-exports", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"]
 }
 
 dependencies {
@@ -41,7 +35,7 @@ task anno(type: Jar) {
 	from(zipTree("$buildDir0/libs/${project.name}-${project.version}.jar")) {
 		exclude("META-INF/services/javax.annotation.processing.Processor")
 	}
-	from(zipTree("$buildDir0.parent/ProcessorConfig.zip"))
+//	from(zipTree("$buildDir0.parent/ProcessorConfig.zip"))
 	duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
@@ -49,7 +43,7 @@ task setMdtClassVersion(type: JavaExec) {
 	dependsOn jar
 
 	//运行游戏目录
-	classpath("$buildDir0/libs/$archivesBaseName-${version}.jar")
+	classpath("$buildDir0/libs/$base.archivesName-${version}.jar")
 	args = [
 //			'-testMobile'
 //			'-debug'

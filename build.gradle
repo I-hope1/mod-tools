@@ -7,8 +7,9 @@ ext {
 }
 allprojects {
 	ext {
-		buildDir0 = layout.buildDirectory.getAsFile().get()
+		buildDir0 = layout.buildDirectory.get().asFile
 	}
+
 	tasks.withType(JavaCompile) {
 		options.incremental = true
 		options.encoding = 'UTF-8'
@@ -17,7 +18,6 @@ allprojects {
 
 		options.compilerArgs += "-AtargetVersion=8"
 //		options.compilerArgs += "-Xlint:unchecked"
-//		options.compilerArgs += "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED"
 		options.compilerArgs.add("--enable-preview")
 		//	options.compilerArgs.add("-verbose")
 	}
@@ -30,7 +30,7 @@ allprojects {
 	}
 }
 
-sourceSets.main.java.srcDirs = ["src", "build/generated/sources/annotationProcessor/java/main"]
+sourceSets.main.java.srcDirs = ["src"]
 
 //force arc version
 configurations.configureEach {
@@ -98,7 +98,7 @@ task jarAndroid(type: JavaExec) {
 	}
 
 	classpath("$d8Root/lib/d8.jar")
-	main("com.android.tools.r8.D8")
+	mainClass = "com.android.tools.r8.D8"
 	def platformJar = new File(platformRoot, "android.jar")
 	def desugarLibJar = configurations.desugarLib.files.find { it.name.endsWith('.jar') }
 
@@ -106,14 +106,14 @@ task jarAndroid(type: JavaExec) {
 			"--lib", "$platformJar.path",
 	] + dependencies + [
 //			"--desugared-lib", desugarLibJar.absolutePath,
-			"--min-api", "$minApi",
-			"--output", "$buildDir0/libs/${project.archivesBaseName}-android.jar",
-			"$buildDir0/libs/${project.archivesBaseName}-${version}.jar",
+"--min-api", "$minApi",
+"--output", "$buildDir0/libs/${base.archivesName}-android.jar",
+"$buildDir0/libs/${base.archivesName}-${version}.jar",
 	]
 }
 
 jar {
-	archiveFileName = "${project.archivesBaseName}-${version}.jar"
+	archiveFileName = "${base.archivesName}-${version}.jar"
 
 	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
 
@@ -136,33 +136,34 @@ task playDesktop(type: Copy) {
 
 	def targetFile = file("${MdtDataDir}/mods/${modName}-${version}.jar")
 	onlyIf {
-        def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
-        boolean canMove = targetFile.renameTo(testName)
-        if (canMove) {
-            // 如果能移动成功，说明没被锁定，立即移回来
-            testName.renameTo(targetFile)
-	        return true
-        } else {
-            println "\n[警告] 无法覆盖 JAR: 文件正被 Mindustry 占用 (Windows Lock)"
-            return false
-        }
-    }
+		def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
+		boolean canMove = targetFile.renameTo(testName)
+		if (canMove) {
+			// 如果能移动成功，说明没被锁定，立即移回来
+			testName.renameTo(targetFile)
+			return true
+		} else {
+			println "\n[警告] 无法覆盖 JAR: 文件正被 Mindustry 占用 (Windows Lock)"
+			return false
+		}
+	}
+
 
 	from "$buildDir0/libs"
 	into "${MdtDataDir}/mods"
-	include targetFile.name
+	include "$base.archivesName-${version}.jar"
 	rename { oldName -> "$modName-${version}.jar" }
 }
 
 task playGame(type: JavaExec) {
 	dependsOn playDesktop
 
-	workingDir = new File(buildDir0, "run")
+	workingDir = new File("$buildDir0/run")
 
-    // 确保目录存在
-    doFirst {
-        if(!workingDir.exists()) workingDir.mkdirs()
-    }
+	// 确保目录存在
+	doFirst {
+		if (!workingDir.exists()) workingDir.mkdirs()
+	}
 	//运行游戏目录
 //	classpath(MdtDataDir + "/Mindustry.jar")
 	classpath(MdtDataDir + "/MindustryX.jar")
@@ -184,7 +185,7 @@ task playMultiplayer(type: JavaExec) {
 		copy {
 			from "$buildDir0/libs"
 			into "${MdtDataDir}/mods"
-			include "$archivesBaseName-${version}.jar"
+			include "$base.archivesName-${version}.jar"
 			rename { oldName -> "$modName-${version}.jar" }
 		}
 		Thread.start {
@@ -246,7 +247,7 @@ task playAndroid {
 			"/storage/emulated/0/Android/data/$pkg/files"
 
 	def buildDir = buildDir0
-	def fileName = "$archivesBaseName[$version].jar"
+	def fileName = "$base.archivesName[$version].jar"
 	doLast {
 		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/$fileName")
 				.execute().waitForProcessOutput(System.out, System.err)

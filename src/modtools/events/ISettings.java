@@ -125,8 +125,19 @@ public interface ISettings extends E_DataInterface {
 	}
 	default JsonArray getArray() {
 		Object o = get();
-		if (o instanceof JsonArray) return (JsonArray) o;
-		if (o instanceof Jval jval && jval.isArray()) return jval.asArray();
+		switch (o) {
+			case null -> {
+				return new JsonArray();
+			}
+			case JsonArray jvals -> {
+				return jvals;
+			}
+			case Jval jval when jval.isArray() -> {
+				return jval.asArray();
+			}
+			default -> {
+			}
+		}
 
 		if (type() == String[].class && o instanceof String[]) {
 			set(o = Jval.read(IntVars.json.toJson( o, String[].class)).asArray());

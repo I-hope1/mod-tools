@@ -421,7 +421,8 @@ public class SettingsUI extends Content {
 					if (condition.get()) IntUI.showSelectListTable(b, list, prov, cons, stringify, 100, 42, true, Align.left);
 				});
 				b.setDisabled(() -> !condition.get());
-			}, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN).height(42).self(c -> c.update(b -> c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))));
+				tryAddTip(b, text.substring(text.indexOf('.') + 1));
+			}, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN).minWidth(64).height(42).self(c -> c.update(b -> c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))));
 			return rowSelf(main.add(t).growX().padTop(0));
 		}
 		/**

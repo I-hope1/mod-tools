@@ -1,5 +1,6 @@
 package nipx;
 
+
 import jdk.internal.misc.Unsafe;
 
 import java.io.*;
@@ -18,10 +19,11 @@ import java.util.stream.*;
  * 修复了 NoClassDefFoundError 问题：支持动态注入新类（匿名内部类/Lambda）。
  */
 public class Main {
-	private static final boolean      DEBUG         = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
-	private static final boolean      UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "false"));
-	public static final  int          FILE_SHAKE_MS = 600;
-	private static final RedefineMode REDEFINE_MODE = RedefineMode.valueOf(System.getProperty("nipx.agent.redefine_mode", "inject"));
+	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "false"));
+	public static final  int          FILE_SHAKE_MS     = 600;
+	private static final RedefineMode REDEFINE_MODE     = RedefineMode.valueOf(System.getProperty("nipx.agent.redefine_mode", "inject"));
+	private static final String[]     HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
 	/** @see E_Hook.RedefineMode */
 	enum RedefineMode {
 		inject,
@@ -33,8 +35,6 @@ public class Main {
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
 
-	// 缓存类名对应的哈希，防止重复加载
-	private static final Map<String, byte[]> classHashes    = new ConcurrentHashMap<>();
 	// 记录磁盘上文件的哈希，用于过滤“伪修改”（时间变了但内容没变）
 	private static final Map<String, byte[]> fileDiskHashes = new ConcurrentHashMap<>();
 
@@ -53,7 +53,9 @@ public class Main {
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		Main.inst = inst;
 
+		log("DEBUG: " + DEBUG);
 		info("RedefineMode: " + REDEFINE_MODE);
+		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
 
 		// 初始化当前所有已加载类的 ClassLoader 映射关系
 		refreshPackageLoaders();
@@ -117,7 +119,7 @@ public class Main {
 					addUrlMethod.invoke(targetLoader, url);
 					info("[MOUNT] Successfully mounted directory to ClassLoader: " + dir);
 				} else {
-					// log("[MOUNT] Directory already mounted: " + dir);
+					log("[MOUNT] Directory already mounted: " + dir);
 				}
 			}
 		} catch (Exception e) {
@@ -186,32 +188,37 @@ public class Main {
 				String className = getClassName(path);
 				if (className == null) continue;
 
+				if (isBlacklisted(className)) {
+					if (DEBUG) log("[SKIP-BLACKLIST] " + className);
+					continue;
+				}
+
 				byte[] bytecode = Files.readAllBytes(path);
 				byte[] newHash  = calculateHash(bytecode);
 
 				// 检查磁盘内容是否真的改变（过滤时间戳伪触发）
-				byte[]  oldDiskHash      = fileDiskHashes.get(className);
-				boolean isContentChanged = oldDiskHash == null || !Arrays.equals(oldDiskHash, newHash);
+				byte[] oldDiskHash = fileDiskHashes.get(className);
+				if (oldDiskHash != null && Arrays.equals(oldDiskHash, newHash)) {
+					skippedCount++;
+					continue;
+				}
 				fileDiskHashes.put(className, newHash);
 
 				Class<?> targetClass = loadedClassesMap.get(className);
 
 				if (targetClass != null) {
 					// 1. 类已加载：无论模式，都必须执行 redefinition
-					byte[] oldMemHash = classHashes.get(className);
-					if (!isContentChanged && oldMemHash != null && Arrays.equals(oldMemHash, newHash)) {
-						skippedCount++;
-						continue;
-					}
-					classHashes.put(className, newHash);
 					log("[MODIFIED] " + className);
 					definitions.add(new ClassDefinition(targetClass, bytecode));
 				} else {
+					if (isBlacklisted(className)) {
+						log("[SKIP-INJECT] Library class ignored: " + className);
+						continue;
+					}
 					// 2. 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
 						// 注入模式：强行让 JVM 认识这个类
 						if (injectNewClass(className, bytecode)) {
-							classHashes.put(className, newHash);
 							injectedCount++;
 						}
 					} else if (REDEFINE_MODE == RedefineMode.lazy_load) {
@@ -234,7 +241,12 @@ public class Main {
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
 	}
-
+	private static boolean isBlacklisted(String className) {
+		for (String prefix : HOTSWAP_BLACKLIST) {
+			if (className.startsWith(prefix)) return true;
+		}
+		return false;
+	}
 
 	/**
 	 * 直接定义类，而不是被动加载
@@ -246,6 +258,16 @@ public class Main {
 			if (loader == null) {
 				error("Could not find a suitable ClassLoader for new class: " + className);
 				return false;
+			}
+			try {
+				// 尝试用标准方式加载。如果成功，说明它在 ClassPath 里。
+				// 既然它在 ClassPath 里，我们就不应该用 Unsafe 注入！
+				loader.loadClass(className);
+				if (DEBUG) log("[SKIP-EXISTING] " + className + " is visible in " + loader);
+				return false;
+			} catch (ClassNotFoundException ignored) {
+				// 只有抛出 ClassNotFoundException，才说明 ClassLoader 真的找不到它
+				// 这时我们才有资格用 Unsafe 注入
 			}
 
 			Unsafe.getUnsafe().defineClass(className, bytes, 0, bytes.length, loader, null);
@@ -375,66 +397,28 @@ public class Main {
 		}
 		return null;
 	}
-
 	private static void initializeAgentState() {
-		info("Scanning initial file state...");
+		info("Scanning files...");
 		fileDiskHashes.clear();
-		classHashes.clear();
-
-		// 1. 扫描所有监控目录下的 class 文件，记录初始 MD5
 		for (Path root : activeWatchDirs) {
-			try {
-				Files.walk(root)
+			try (Stream<Path> walk = Files.walk(root)) {
+				walk
 				 .filter(p -> p.toString().endsWith(".class"))
 				 .forEach(path -> {
-					 try {
-						 String className = getClassName(path);
-						 if (className != null) {
-							 byte[] bytes = Files.readAllBytes(path);
-							 fileDiskHashes.put(className, calculateHash(bytes));
-						 }
-					 } catch (Exception e) {
-						 // ignore
+					 String cName = getClassName(path);
+					 // 即使是初始化，也要过滤黑名单，防止记录不该记录的东西
+					 if (cName != null && !isBlacklisted(cName)) {
+						 try {
+							 fileDiskHashes.put(cName, calculateHash(Files.readAllBytes(path)));
+						 } catch (Exception _) { }
 					 }
 				 });
 			} catch (IOException e) {
-				error("Failed to scan root: " + root);
+				error("Scan failed: " + root);
 			}
 		}
-
-		info("Indexed " + fileDiskHashes.size() + " classes on disk.");
-
-		// 内存状态快照
-		classHashes.clear();
-		inst.addTransformer(new ClassFileTransformer() {
-			@Override
-			public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-			                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
-				if (className == null) return null;
-				String dotName = className.replace('/', '.');
-				try {
-					classHashes.putIfAbsent(dotName, calculateHash(classfileBuffer));
-				} catch (Exception e) { /* ignore */ }
-				return null;
-			}
-		}, true);
-
-		try {
-			// 仅对当前已加载的非 JDK 类进行状态快照
-			List<Class<?>> targets = new ArrayList<>();
-			for (Class<?> c : inst.getAllLoadedClasses()) {
-				if (inst.isModifiableClass(c) && c.getClassLoader() != null) {
-					targets.add(c);
-				}
-			}
-			if (!targets.isEmpty()) {
-				inst.retransformClasses(targets.toArray(new Class[0]));
-			}
-		} catch (Exception e) {
-			error("Init failed", e);
-		}
+		info("Indexed " + fileDiskHashes.size() + " mod classes.");
 	}
-
 	private static void handleFileChange(Path changedFile) {
 		pendingChanges.add(changedFile);
 		if (scheduledTask != null && !scheduledTask.isDone()) {

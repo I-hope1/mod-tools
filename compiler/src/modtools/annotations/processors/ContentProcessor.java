@@ -6,8 +6,8 @@ import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
+import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
-import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
@@ -21,6 +21,7 @@ import javax.lang.model.element.*;
 import javax.tools.JavaFileObject;
 import java.io.*;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static modtools.annotations.processors.ContentProcessor.ZX.*;
@@ -33,8 +34,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private static final String FIELD_PREFIX   = "f_";
 	public static final  String REF_PREFIX     = "R_";
 
-	private Name      nameSetting;
-	private ClassType consType;
+	private Name        nameSetting;
+	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
 	private JCClassDecl mainClass;
@@ -213,15 +214,32 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				println(pkgName + " has been created.");
 			}
 		}
-		if (!defList.isEmpty()) {
-			mMaker.at(classDecl.defs.last());
-			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, defList.toList()));
+
+		ListBuffer<JCTree> defBuilder = new ListBuffer<>();
+		boolean            append     = false;
+		Consumer<JCTree> consumer = def -> {
+			if (!defList.isEmpty()) {
+				mMaker.at(def);
+				defBuilder.append(mMaker.Block(Flags.STATIC, defList.toList()));
+			}
+			// 添加flushAssignment
+			if (!flushAssignment.isEmpty()) {
+				mMaker.at(def);
+				defBuilder.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
+			}
+		};
+		for (JCTree def : classDecl.defs) {
+			// 如果是合成的字段，则忽略
+			defBuilder.append(def);
+			if (append || (def instanceof JCVariableDecl vari && vari.sym.isStatic())) {
+				continue;
+			}
+			append = true;
+			consumer.accept(def);
 		}
-		// 添加flushAssignment
-		if (!flushAssignment.isEmpty()) {
-			mMaker.at(classDecl.defs.last());
-			classDecl.defs = classDecl.defs.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
-		}
+		if (!append) consumer.accept(classDecl.defs.last());
+		classDecl.defs = defBuilder.toList();
+		println(classDecl);
 
 		// 在ModTools里加载Class.forName(
 		mMaker.at(mainClass.defs.last());

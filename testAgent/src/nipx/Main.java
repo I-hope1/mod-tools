@@ -170,7 +170,7 @@ public class Main {
 		refreshPackageLoaders();
 
 		// 获取当前所有已加载类的快照
-		Map<String, Class<?>> loadedClassesMap = new HashMap<>();
+		Map<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
 		for (Class<?> c : inst.getAllLoadedClasses()) {
 			String   name     = c.getName();
 			Class<?> existing = loadedClassesMap.get(name);
@@ -211,10 +211,6 @@ public class Main {
 					log("[MODIFIED] " + className);
 					definitions.add(new ClassDefinition(targetClass, bytecode));
 				} else {
-					if (isBlacklisted(className)) {
-						log("[SKIP-INJECT] Library class ignored: " + className);
-						continue;
-					}
 					// 2. 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
 						// 注入模式：强行让 JVM 认识这个类

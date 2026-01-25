@@ -163,7 +163,7 @@ public class MySettings {
 		@SuppressWarnings("StringTemplateMigration")
 		private static String toString(StringBuilder tab, Object v) {
 			return v instanceof Data ? ((Data) v).toString(tab) :
-			 v instanceof String[] str ? ("[\"" + Strings.join("\", \"", str) + "\"]") :
+			 v instanceof String[] ? IntVars.json.toJson(v, String[].class) :
 			 // v instanceof Seq ? "[" + ((Seq) v).map(item -> toString(tab, item)).toString(", ") + "]" :
 			 v instanceof Jval jval ? jval.toString(Jformat.formatted) :
 				v == null ? "null" :

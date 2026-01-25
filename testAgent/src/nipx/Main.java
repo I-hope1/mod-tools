@@ -22,13 +22,8 @@ public class Main {
 	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "false"));
 	public static final  int          FILE_SHAKE_MS     = 600;
-	private static final RedefineMode REDEFINE_MODE     = RedefineMode.valueOf(System.getProperty("nipx.agent.redefine_mode", "inject"));
+	private static final RedefineMode REDEFINE_MODE     = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 	private static final String[]     HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
-	/** @see E_Hook.RedefineMode */
-	enum RedefineMode {
-		inject,
-		lazy_load,
-	}
 
 
 	private static       Instrumentation     inst;
@@ -515,6 +510,20 @@ public class Main {
 						log("Failed to register directory: " + dir);
 					}
 				});
+			}
+		}
+	}
+
+	/** @see E_Hook.RedefineMode */
+	public enum RedefineMode {
+		inject,
+		lazy_load,
+		;
+		public static RedefineMode valueOfFail(String inject, RedefineMode def) {
+			try {
+				return RedefineMode.valueOf(inject);
+			} catch (Exception e) {
+				return def;
 			}
 		}
 	}

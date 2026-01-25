@@ -239,7 +239,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 		if (!append) consumer.accept(classDecl.defs.last());
 		classDecl.defs = defBuilder.toList();
-		println(classDecl);
+		// println(classDecl);
 
 		// 在ModTools里加载Class.forName(
 		mMaker.at(mainClass.defs.last());

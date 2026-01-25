@@ -39,7 +39,7 @@ public enum E_Hook implements ISettings {
 	E_Hook(){}
 
 	static {
-		System.setProperty("nipx.agent.redefine_mode", redefine_mode.getString());
+		System.setProperty("nipx.agent.redefine_mode", redefine_mode.getString().trim());
 		System.setProperty("nipx.agent.hotswap_blacklist", String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
 	}
 	public enum RedefineMode {

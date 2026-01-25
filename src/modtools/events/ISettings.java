@@ -158,7 +158,7 @@ public interface ISettings extends E_DataInterface {
 
 	default <T extends Enum<T>> T getEnum(Class<T> cl) {
 		try {
-			return Enum.valueOf(cl, data().getString(name()));
+			return Enum.valueOf(cl, data().getString(name()).trim());
 		} catch (Exception e) {
 			Log.err(e);
 			return getDefault();

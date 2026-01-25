@@ -53,6 +53,8 @@ public class Main {
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		Main.inst = inst;
 
+		info("RedefineMode: " + REDEFINE_MODE);
+
 		// 初始化当前所有已加载类的 ClassLoader 映射关系
 		refreshPackageLoaders();
 

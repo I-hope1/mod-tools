@@ -53,7 +53,7 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
-	public static final boolean DEBUG = true;
+	public static final boolean DEBUG = false;
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
 	/** pad 8 */

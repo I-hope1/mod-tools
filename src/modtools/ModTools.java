@@ -5,7 +5,6 @@ import arc.files.Fi;
 import arc.struct.*;
 import arc.util.*;
 import arc.util.io.PropertiesUtils;
-import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
 import mindustry.core.Version;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -25,17 +24,15 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
+import modtools.unsupported.*;
 import modtools.unsupported.HopeProcessor.MyContentParser;
-import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
 import sun.reflect.ReflectionFactory;
-import sun.tools.attach.VirtualMachineImpl;
 
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -137,7 +134,7 @@ public class ModTools extends Mod {
 				HotSwapManager.start();
 			}
 			if (R_Hook.dynamic_jdwp) {
-				load("JDWP", ModTools::loadJDWP);
+				load("JDWP", JDWP::load);
 			}
 			// HotSwapManager.attachAgent("jdwp",
 			// "transport=dt_socket,server=y,suspend=n,address=15005");
@@ -155,25 +152,6 @@ public class ModTools extends Mod {
 		} else {
 			Events.on(ClientLoadEvent.class,
 					_ -> Tools.runLoggedException(this::loadModules));
-		}
-	}
-
-	private static void loadJDWP() {
-		try {
-			String pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
-			VirtualMachine vm = VirtualMachine.attach(pid);
-			Method method = VirtualMachineImpl.class.getDeclaredMethod("execute", String.class, Object[].class);
-			method.setAccessible(true);
-			// Properties props = new Properties();
-			// props.put("com.sun.management.jmxremote.port", "5000");
-			// props.put("com.sun.management.jmxremote.password", "");
-			// vm.startManagementAgent(props);
-			String arg = "transport=dt_socket,server=y,suspend=n,address=" + R_Hook.dynamic_jdwp_port;
-			vm.loadAgentLibrary("jdwp", arg);
-			vm.detach();
-			Log.info("Loaded jdwp.");
-		} catch (Throwable e) {
-			throw new RuntimeException(e);
 		}
 	}
 

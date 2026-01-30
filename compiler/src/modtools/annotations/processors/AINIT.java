@@ -9,7 +9,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import java.util.Set;
 
-import static modtools.annotations.PrintHelper.SPrinter.err;
+import static modtools.annotations.PrintHelper.SPrinter.*;
 
 @AutoService(Processor.class)
 public class AINIT extends AbstractProcessor {
@@ -33,9 +33,13 @@ public class AINIT extends AbstractProcessor {
 			Times.printElapsed("Compiler initialed in @ms");
 		}
 	}
+	boolean init = false;
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		if (init) return false;
+		init = true;
+		// println("AINIT process");
 		Replace.process(roundEnv.getRootElements());
-		return true;
+		return false;
 	}
 	public SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();
@@ -43,6 +47,6 @@ public class AINIT extends AbstractProcessor {
 
 	// 这里的override用于只是启用process
 	public Set<String> getSupportedAnnotationTypes() {
-		return Set.of(Override.class.getCanonicalName());
+		return Set.of("*");
 	}
 }

@@ -99,6 +99,11 @@ public class ModTools extends Mod {
 		}
 		if (OS.isAndroid) {
 			AndroidInputFix.load();
+			try {
+				TestAndroidVM.main();
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
 		}
 
 		if (TEST) {

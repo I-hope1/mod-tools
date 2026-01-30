@@ -10,7 +10,7 @@ import modtools.ui.control.HopeInput;
 
 import static modtools.annotations.asm.Sample.SampleTemp._super;
 
-/** @see AndroidApplication  */
+/** @see AndroidApplication */
 @Sample
 public class AndroidApplicationHook {
 	static IntSet toRemove = IntSet.with(
@@ -24,6 +24,7 @@ public class AndroidApplicationHook {
 		Log.info("AndroidApplicationHook.onWindowFocusChanged");
 
 		Time.runTask(0.2f, () -> {
+			if (HopeInput.pressed == null || HopeInput.justPressed == null) return;
 			toRemove.each(key -> {
 				HopeInput.justPressed.remove(key);
 				HopeInput.pressed.remove(key);

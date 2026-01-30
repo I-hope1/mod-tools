@@ -70,9 +70,18 @@ public class Replace {
 	static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
 	static Properties            bundles = new Properties();
+
+	// 增加一个标记，防止重复初始化
+	private static final Key<Boolean> MODTOOLS_INIT_MARK = new Key<>();
 	public static void extendingFunc(Context context) {
 		/* 恢复初始状态 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 0);
+		if (context.get(MODTOOLS_INIT_MARK) != null) {
+			// 已经在这个 Context 初始化过了，直接返回
+			return;
+		}
+		context.put(MODTOOLS_INIT_MARK, true);
+
 		Replace.context = context;
 		classFinder = ClassFinder.instance(context);
 		syms = Symtab.instance(context);
@@ -103,6 +112,7 @@ public class Replace {
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }
+
 	}
 	public static void extendingFunc(ProcessingEnvironment processingEnv) {
 		filer = processingEnv.getFiler();
@@ -163,10 +173,10 @@ public class Replace {
 			}
 			m.exports = prev;
 		};
-		Field        field = Symtab.class.getDeclaredField("modules");
-		field.setAccessible( true);
+		Field field = Symtab.class.getDeclaredField("modules");
+		field.setAccessible(true);
 		var moduleMap = (Map<Name, ModuleSymbol>) field.get(syms);
-		var module = moduleMap.get(ns.fromString("jdk.hotspot.agent"));
+		var module    = moduleMap.get(ns.fromString("jdk.hotspot.agent"));
 		modules.allModules().add(module);
 		for (ModuleSymbol m : modules.allModules()) {
 			exportAll.accept(m);
@@ -259,18 +269,10 @@ public class Replace {
 
 		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
 
-		TopTranslator topTranslator = TopTranslator.instance(context);
-		MultiTaskListener.instance(context).add(new TaskListener() {
-			public void finished(TaskEvent e) {
-				if (e.getKind() == TaskEvent.Kind.ANALYZE) {
-					try {
-						topTranslator.scanToplevel((JCCompilationUnit) e.getCompilationUnit());
-					} catch (CheckException _) { } catch (Throwable ex) {
-						SPrinter.err(ex);
-					}
-				}
-			}
-		});
+		TopTranslator     topTranslator     = TopTranslator.instance(context);
+		MultiTaskListener multiTaskListener = MultiTaskListener.instance(context);
+		multiTaskListener.getTaskListeners().removeIf(x -> x instanceof MyTaskListener);
+		multiTaskListener.add(new MyTaskListener(topTranslator));
 		// removeKey(TransTypes.class, () -> new MyTransTypes(context));
 		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "transTypes", TransTypes.instance(context));
 		// removeKey(Lower.class, () -> new Desugar(context));
@@ -401,40 +403,46 @@ public class Replace {
 	 BiFunction<ModuleSymbol, Name, S> load,
 	 Predicate<S> validate,
 	 Symbol defaultResult) {
-		//even if a class/package cannot be found in the current module and among packages in modules
-		//it depends on that are exported for any or this module, the class/package may exist internally
-		//in some of these modules, or may exist in a module on which this module does not depend.
-		//Provide better diagnostic in such cases by looking for the class in any module:
-		Iterable<? extends S> candidates = get.apply(name);
+		if (name.toString().startsWith("[")) return defaultResult;
+		Times.mark();
+		try {
+			//even if a class/package cannot be found in the current module and among packages in modules
+			//it depends on that are exported for any or this module, the class/package may exist internally
+			//in some of these modules, or may exist in a module on which this module does not depend.
+			//Provide better diagnostic in such cases by looking for the class in any module:
+			Iterable<? extends S> candidates = get.apply(name);
 
-		for (S sym : candidates) {
-			if (validate.test(sym)) { return sym; }
-		}
+			for (S sym : candidates) {
+				if (validate.test(sym)) { return sym; }
+			}
 
-		Set<ModuleSymbol> recoverableModules = new HashSet<>(syms.getAllModules());
+			Set<ModuleSymbol> recoverableModules = new HashSet<>(syms.getAllModules());
 
-		recoverableModules.add(syms.unnamedModule);
-		if (env != null) recoverableModules.remove(env.toplevel.modle);
+			recoverableModules.add(syms.unnamedModule);
+			if (env != null) recoverableModules.remove(env.toplevel.modle);
 
-		for (ModuleSymbol ms : recoverableModules) {
-			//avoid overly eager completing classes from source-based modules, as those
-			//may not be completable with the current compiler settings:
-			if (ms.sourceLocation == null) {
-				if (ms.classLocation == null) {
-					ms = moduleFinder.findModule(ms);
-				}
+			for (ModuleSymbol ms : recoverableModules) {
+				//avoid overly eager completing classes from source-based modules, as those
+				//may not be completable with the current compiler settings:
+				if (ms.sourceLocation == null) {
+					if (ms.classLocation == null) {
+						ms = moduleFinder.findModule(ms);
+					}
 
-				if (ms.kind != ERR) {
-					S sym = load.apply(ms, name);
+					if (ms.kind != ERR) {
+						S sym = load.apply(ms, name);
 
-					if (sym != null && validate.test(sym)) {
-						return sym;
+						if (sym != null && validate.test(sym)) {
+							return sym;
+						}
 					}
 				}
 			}
-		}
 
-		return defaultResult;
+			return defaultResult;
+		} finally {
+			Times.printElapsed("lookupInvisibleSymbol in @ms, @", name.charAt(0));
+		}
 	}
 
 	private static void runIgnoredException(Runnable r) { try { r.run(); } catch (Throwable ignored) { } }
@@ -639,6 +647,19 @@ public class Replace {
 					sb.append(field).append("\n");
 				}
 				throw new RuntimeException("" + sb);
+			}
+		}
+	}
+	private static class MyTaskListener implements TaskListener {
+		private final TopTranslator topTranslator;
+		public MyTaskListener(TopTranslator topTranslator) { this.topTranslator = topTranslator; }
+		public void finished(TaskEvent e) {
+			if (e.getKind() == TaskEvent.Kind.ANALYZE) {
+				try {
+					topTranslator.scanToplevel((JCCompilationUnit) e.getCompilationUnit());
+				} catch (CheckException _) { } catch (Throwable ex) {
+					SPrinter.err(ex);
+				}
 			}
 		}
 	}

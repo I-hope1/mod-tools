@@ -89,6 +89,7 @@ public interface ISettings extends E_DataInterface {
 		return (T) data().getDef(name());
 	}
 	default void def(Object o) {
+		if (o instanceof String[]) o = array2Jval(o, String[].class);
 		data().setDef(name(), o);
 	}
 	default void defTrue() {
@@ -140,9 +141,15 @@ public interface ISettings extends E_DataInterface {
 		}
 
 		if (type() == String[].class && o instanceof String[]) {
-			set(o = Jval.read(IntVars.json.toJson( o, String[].class)).asArray());
-		} else throw new IllegalStateException(STR."the settings \{type()} is not supported");
+			set(o = array2Jval(o, String[].class));
+		} else {
+			set(o = new JsonArray());
+			Log.err(new IllegalStateException(STR."the settings \{type()} is not supported"));
+		}
 		return (JsonArray) o;
+	}
+	private static JsonArray array2Jval(Object o, Class<?> knownType) {
+		return Jval.read(IntVars.json.toJson(o, knownType)).asArray();
 	}
 	default Locale getLocale() {
 		return LocaleUtils.getLocale(getString());
@@ -369,13 +376,10 @@ public interface ISettings extends E_DataInterface {
 	}
 
 	default <T> void $(T def, Func<String, T> valFunc, Func<T, String> stringify, T[]... arr) {
-		def(def);
-
 		list(text, this::set, () -> valFunc.get(getString()), new Seq<>(arr[0]), stringify);
 	}
 
 	default void array(String[] def) {
-		def(def == null ? new String[0] : def);
 		SettingsBuilder.array(text, data(), name(), this::isSwitchOn);
 	}
 

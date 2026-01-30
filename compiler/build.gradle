@@ -4,7 +4,7 @@ sourceSets.main.java.srcDirs = ["src"]
 //sourceSets.main.resources.srcDirs = ["src/main/resources"]
 tasks.withType(JavaCompile) {
 	// 这里是为了刷新编译器参数
-//	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000)
+	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000)
 }
 
 dependencies {
@@ -43,7 +43,7 @@ task setMdtClassVersion(type: JavaExec) {
 	dependsOn jar
 
 	//运行游戏目录
-	classpath("$buildDir0/libs/$base.archivesName-${version}.jar")
+	classpath("$buildDir0/libs/${base.archivesName.get()}-${version}.jar")
 	args = [
 //			'-testMobile'
 //			'-debug'

@@ -164,11 +164,11 @@ public class MySettings {
 		private static String toString(StringBuilder tab, Object v) {
 			return v instanceof Data ? ((Data) v).toString(tab) :
 			 v instanceof String[] ? IntVars.json.toJson(v, String[].class) :
-			 // v instanceof Seq ? "[" + ((Seq) v).map(item -> toString(tab, item)).toString(", ") + "]" :
-			 v instanceof Jval jval ? jval.toString(Jformat.formatted) :
-				v == null ? "null" :
-				 Reflect.isWrapper(v.getClass()) ? v.toString() :
-					STR."\"\{v.toString().replace("\\", "\\\\")}\"";
+				v instanceof Seq ? "[" + ((Seq) v).map(item -> toString(tab, item)).toString(", ") + "]" :
+				v instanceof Jval jval ? jval.toString(Jformat.formatted) :
+					v == null ? "null" :
+					 Reflect.isWrapper(v.getClass()) ? v.toString() :
+						STR."\"\{v.toString().replace("\\", "\\\\")}\"";
 		}
 
 		public float getFloat(String name) {

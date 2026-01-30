@@ -1,4 +1,3 @@
-// temp_file_51b6367c-2460-43d9-b737-a8a7b8c85d16_pasted_text.txt
 package modtools.content;
 
 import arc.Core;

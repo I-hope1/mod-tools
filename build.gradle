@@ -1,6 +1,7 @@
 apply plugin: 'java'
 apply plugin: 'maven-publish'
 
+def archivesName = base.archivesName.get()
 ext {
 	sdkRoot = System.getenv("ANDROID_HOME")
 	compilerJar = "$rootDir/_libs/compiler.jar"
@@ -102,18 +103,19 @@ task jarAndroid(type: JavaExec) {
 	def platformJar = new File(platformRoot, "android.jar")
 	def desugarLibJar = configurations.desugarLib.files.find { it.name.endsWith('.jar') }
 
+
 	args = [
 			"--lib", "$platformJar.path",
 	] + dependencies + [
 //			"--desugared-lib", desugarLibJar.absolutePath,
 "--min-api", "$minApi",
-"--output", "$buildDir0/libs/${base.archivesName}-android.jar",
-"$buildDir0/libs/${base.archivesName}-${version}.jar",
+"--output", "$buildDir0/libs/${archivesName}-android.jar",
+"$buildDir0/libs/${archivesName}-${version}.jar",
 	]
 }
 
 jar {
-	archiveFileName = "${base.archivesName}-${version}.jar"
+	archiveFileName = "${archivesName}-${version}.jar"
 
 	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
 
@@ -151,7 +153,7 @@ task playDesktop(type: Copy) {
 
 	from "$buildDir0/libs"
 	into "${MdtDataDir}/mods"
-	include "$base.archivesName-${version}.jar"
+	include "$archivesName-${version}.jar"
 	rename { oldName -> "$modName-${version}.jar" }
 }
 
@@ -185,7 +187,7 @@ task playMultiplayer(type: JavaExec) {
 		copy {
 			from "$buildDir0/libs"
 			into "${MdtDataDir}/mods"
-			include "$base.archivesName-${version}.jar"
+			include "$archivesName-${version}.jar"
 			rename { oldName -> "$modName-${version}.jar" }
 		}
 		Thread.start {
@@ -247,7 +249,7 @@ task playAndroid {
 			"/storage/emulated/0/Android/data/$pkg/files"
 
 	def buildDir = buildDir0
-	def fileName = "$base.archivesName[$version].jar"
+	def fileName = "$archivesName[$version].jar"
 	doLast {
 		("$adb push $buildDir/libs/$fileName $MDT_ANDROID_DIR/mods/$fileName")
 				.execute().waitForProcessOutput(System.out, System.err)

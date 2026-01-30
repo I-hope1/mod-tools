@@ -120,7 +120,7 @@ public class WSAInputFixer {
         if (!(Core.input instanceof AndroidInput input)) return;
         if (text == null || text.length() == 0) return;
 
-        Log.info("[WSA Fix] Injecting Final: " + text); // 仅调试用，正式发布可删除
+        // Log.info("[WSA Fix] Injecting Final: " + text); // 仅调试用，正式发布可删除
 
         try {
             // 使用 synchronized 确保线程安全

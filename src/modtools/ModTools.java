@@ -41,7 +41,7 @@ import static modtools.IntVars.*;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class ModTools extends Mod {
-	public static final boolean TEST = false; // incremental test comment 15
+	public static final boolean TEST = false;
 
 	/** 如果不为empty，在进入是显示 */
 	private static final Fi libs = root.child("libs");
@@ -99,11 +99,6 @@ public class ModTools extends Mod {
 		}
 		if (OS.isAndroid) {
 			AndroidInputFix.load();
-			try {
-				TestAndroidVM.main();
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			}
 		}
 
 		if (TEST) {
@@ -112,7 +107,6 @@ public class ModTools extends Mod {
 	}
 
 	private static void test() {
-		// World w = SampleWorldInterface.changeClass(new World());
 		try {
 			Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
 					Lookup.class,

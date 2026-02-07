@@ -441,7 +441,7 @@ public class Replace {
 
 			return defaultResult;
 		} finally {
-			Times.printElapsed("lookupInvisibleSymbol in @ms, @", name.charAt(0));
+			// Times.printElapsed("lookupInvisibleSymbol in @ms, @", name.charAt(0));
 		}
 	}
 

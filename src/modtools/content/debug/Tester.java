@@ -561,7 +561,6 @@ public class Tester extends Content {
 
 
 	public void build() {
-
 		if (ui == null) {
 			_load();
 			ui.show();

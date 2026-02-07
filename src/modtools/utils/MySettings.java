@@ -160,6 +160,7 @@ public class MySettings {
 			builder.append('\n').append(tab).append('}');
 			return builder.toString();
 		}
+
 		@SuppressWarnings("StringTemplateMigration")
 		private static String toString(StringBuilder tab, Object v) {
 			return v instanceof Data ? ((Data) v).toString(tab) :

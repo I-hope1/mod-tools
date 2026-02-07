@@ -1,9 +1,13 @@
 package modtools.unsupported;
 
+import arc.util.Log;
 import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
+import jdk.internal.access.*;
 import jdk.internal.misc.Unsafe;
+import modtools.ModTools;
 import modtools.events.E_Hook;
+import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.reflect.*;
 import sun.tools.attach.HotSpotVirtualMachine;
 
@@ -16,14 +20,21 @@ import java.nio.file.Files;
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-	public static final boolean   DEBUG      = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	public static final boolean DEBUG = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 
-	private static final String  AGENT_RESOURCE_PATH = "/libs/hotswap-agent.jar";
+	private static final String  AGENT_NAME          = "hotswap-agent";
+	private static final String  AGENT_RESOURCE_PATH = "/libs/"+AGENT_NAME+".jar";
 	private static       String  agentPathCache      = null;
 	private static       boolean inited              = false;
 
-	public static void start() {
+	public static void start() throws Throwable {
 		if (!inited) {
+			/* 模块open（MyReflect里）还不够，还得exports */
+			JavaLangAccess langAccess = SharedSecrets.getJavaLangAccess();
+			Module         module     = Object.class.getModule();
+			langAccess.addExports(module, "jdk.internal.misc");
+			langAccess.addExports(module, "jdk.internal.reflect");
+			langAccess.addExports(module, "jdk.internal.org.objectweb.asm");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 			});
@@ -69,8 +80,8 @@ public class HotSwapManager {
 		}
 	}
 
-	private static void prepareSelfAttach() throws Throwable {
-		MyReflect.openModule(VirtualMachine.class.getModule(), "sun.tools.attach");
+	private static void prepareSelfAttach() {
+		UNSAFE.openModule(VirtualMachine.class, "sun.tools.attach");
 		Unsafe unsafe = Unsafe.getUnsafe();
 		unsafe.ensureClassInitialized(HotSpotVirtualMachine.class);
 		unsafe.putBoolean(HotSpotVirtualMachine.class,

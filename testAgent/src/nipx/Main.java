@@ -15,8 +15,8 @@ import java.util.concurrent.*;
 import java.util.stream.*;
 
 /**
- * 增强版 HotSwap Agent
- * 修复了 NoClassDefFoundError 问题：支持动态注入新类（匿名内部类/Lambda）。
+ * HotSwap Agent
+ * 其由AppLoader加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
 public class Main {
 	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
@@ -148,7 +148,6 @@ public class Main {
 					watcher.setDaemon(true);
 					watcher.start();
 					activeWatchers.add(watcher);
-					info("Started watcher on: " + dir);
 				} catch (IOException e) {
 					error("Failed to start watcher for: " + dir, e);
 				}
@@ -204,6 +203,12 @@ public class Main {
 				if (targetClass != null) {
 					// 1. 类已加载：无论模式，都必须执行 redefinition
 					log("[MODIFIED] " + className);
+
+					ClassDiffUtil.ClassDiff diff =
+					 ClassDiffUtil.diff(targetClass, bytecode);
+
+					ClassDiffUtil.logDiff(className, diff);
+
 					definitions.add(new ClassDefinition(targetClass, bytecode));
 				} else {
 					// 2. 类尚未加载：根据 REDEFINE_MODE 处理

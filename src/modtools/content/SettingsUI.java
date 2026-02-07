@@ -54,6 +54,7 @@ public class SettingsUI extends Content {
 	@Override
 	public void build() {
 		if (ui == null) lazyLoad(); // 如果直接访问，确保UI已加载
+		Log.info("assaasq11.build()");
 		ui.show();
 	}
 

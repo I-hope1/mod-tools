@@ -5,7 +5,8 @@ import com.sun.tools.attach.VirtualMachine;
 import ihope_lib.MyReflect;
 import jdk.internal.access.*;
 import jdk.internal.misc.Unsafe;
-import modtools.ModTools;
+import jdk.internal.module.Modules;
+
 import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.reflect.*;
@@ -30,11 +31,10 @@ public class HotSwapManager {
 	public static void start() throws Throwable {
 		if (!inited) {
 			/* 模块open（MyReflect里）还不够，还得exports */
-			JavaLangAccess langAccess = SharedSecrets.getJavaLangAccess();
 			Module         module     = Object.class.getModule();
-			langAccess.addExports(module, "jdk.internal.misc");
-			langAccess.addExports(module, "jdk.internal.reflect");
-			langAccess.addExports(module, "jdk.internal.org.objectweb.asm");
+			Modules.addExports(module, "jdk.internal.misc");
+			Modules.addExports(module, "jdk.internal.reflect");
+			Modules.addExports(module, "jdk.internal.org.objectweb.asm");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 			});

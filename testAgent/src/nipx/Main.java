@@ -20,7 +20,7 @@ import java.util.stream.*;
  */
 public class Main {
 	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
-	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "false"));
+	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
 	public static final  int          FILE_SHAKE_MS     = 600;
 	private static final RedefineMode REDEFINE_MODE     = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 	private static final String[]     HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
@@ -368,7 +368,6 @@ public class Main {
 	 */
 	private static void ensureMounted(ClassLoader loader) {
 		if (!UCP_APPEND) return;
-		if (true) throw new UnsupportedOperationException("UCP_APPEND is not supported yet.");
 
 		// 只有 URLClassLoader 及其子类支持 addURL
 		if (loader instanceof URLClassLoader) {

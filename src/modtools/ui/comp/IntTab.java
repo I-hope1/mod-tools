@@ -112,6 +112,7 @@ public class IntTab {
 	public Table build() {
 		if (mainContainer != null) return mainContainer;
 
+		// Log.info("asoujas");
 		mainContainer = new Table();
 		mainContainer.name = "IntTab-MainContainer";
 

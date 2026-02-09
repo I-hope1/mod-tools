@@ -18,7 +18,7 @@ public enum E_Hook implements ISettings {
 	hot_swap_watch_paths(String[].class, i -> i.array(null)),
 	@Switch(dependency = "hot_swap")
 	// 重定义模式
-	redefine_mode(RedefineMode.class, i -> i.buildEnum(RedefineMode.inject, RedefineMode.class)),
+	redefine_mode(RedefineMode.class, i -> i.buildEnum(RedefineMode.lazy_load, RedefineMode.class)),
 	@Switch(dependency = "hot_swap")
 	hotswap_blacklist(String[].class, i -> i.array(
 	 new String[]{"java.", "javax.", "jdk.", "sun.",

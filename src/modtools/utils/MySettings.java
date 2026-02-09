@@ -163,13 +163,20 @@ public class MySettings {
 
 		@SuppressWarnings("StringTemplateMigration")
 		private static String toString(StringBuilder tab, Object v) {
-			return v instanceof Data ? ((Data) v).toString(tab) :
-			 v instanceof String[] ? IntVars.json.toJson(v, String[].class) :
-				v instanceof Seq ? "[" + ((Seq) v).map(item -> toString(tab, item)).toString(", ") + "]" :
-				v instanceof Jval jval ? jval.toString(Jformat.formatted) :
-					v == null ? "null" :
-					 Reflect.isWrapper(v.getClass()) ? v.toString() :
-						STR."\"\{v.toString().replace("\\", "\\\\")}\"";
+			return switch (v) {
+				case Data data -> data.toString(tab);
+				case String[] arr -> IntVars.json.toJson(arr, String[].class);
+				case Seq seq -> "[" + seq.map(item -> toString(tab, item)).toString(", ") + "]";
+				case Jval jval -> jval.toString(Jformat.formatted);
+				case null -> "null";
+				default -> {
+					if (Reflect.isWrapper(v.getClass())) {
+						yield v.toString();
+					} else {
+						yield STR."\"\{v.toString().replace("\\", "\\\\")}\"";
+					}
+				}
+			};
 		}
 
 		public float getFloat(String name) {
@@ -222,7 +229,11 @@ public class MySettings {
 		}
 		public JsonArray getArray(String name) {
 			Object o = get(name, Jval::newArray);
-			return o instanceof Jval jval && jval.isArray() ? jval.asArray() : null;
+			return switch (o) {
+				case Jval jval when jval.isArray() -> jval.asArray();
+				case JsonArray array -> array;
+				default -> null;
+			};
 		}
 		public void removeArrayIndex(String name, int index) {
 			JsonArray array = getArray(name);

@@ -155,7 +155,7 @@ public class IntTab {
 			// 水平布局：
 			// [ 标题栏 ]
 			// [ 内容面板 ]
-			mainContainer.add(tabsPane).growX().row();
+			mainContainer.add(tabsPane).minHeight(42f).growX().row();
 			mainContainer.add(contentPane).grow();
 		}
 	}

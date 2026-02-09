@@ -54,7 +54,7 @@ public class SettingsUI extends Content {
 	@Override
 	public void build() {
 		if (ui == null) lazyLoad(); // 如果直接访问，确保UI已加载
-		Log.info("assaasq11.build()");
+
 		ui.show();
 	}
 
@@ -578,6 +578,7 @@ public class SettingsUI extends Content {
 			main.image().color(Pal.accent).height(3f).padRight(100f).padBottom(20);
 			main.row();
 		}
+		/** @param condition must not be null.  */
 		public static <T extends Enum<T>> void enum_(String text, Class<T> enumClass, Cons<Enum<T>> cons,
 		                                             Prov<Enum<T>> prov, Boolp condition) {
 			var enums = new Seq<>((Enum<T>[]) enumClass.getEnumConstants());

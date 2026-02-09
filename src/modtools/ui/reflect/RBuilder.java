@@ -40,7 +40,7 @@ public class RBuilder extends SettingsBuilder {
 				if (d == null) Reflect.set(obj, field, d = Interp.linear);
 				interpolator(name, b -> Reflect.set(obj, field, b), () -> Reflect.get(obj, field));
 			} else if (type.isEnum()) {
-				enum_(name, as(type), b -> Reflect.set(obj, field, b), () -> Reflect.get(obj, field), null);
+				enum_(name, as(type), b -> Reflect.set(obj, field, b), () -> Reflect.get(obj, field), () -> true);
 			} else if (type == Runnable.class) {
 				Reflect.set(obj, field, IntVars.EMPTY_RUN);
 			}

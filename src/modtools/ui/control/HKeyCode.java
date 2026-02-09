@@ -16,7 +16,7 @@ import java.util.*;
 
 public class HKeyCode {
 	public static final String   STR_NONE = "None";
-	public static final HKeyCode NONE     = new HKeyCode(KeyCode.escape) {
+	public static final HKeyCode NONE     = new HKeyCode(KeyCode.unset) {
 		public boolean isPress() {
 			return false;
 		}

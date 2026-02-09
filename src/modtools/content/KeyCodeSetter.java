@@ -43,6 +43,7 @@ public class KeyCodeSetter extends Content {
 	public static ObjectMap<Button, HKeyCode>  tmpKeyCode        = new ObjectMap<>();
 	public static LazyValue<KeyCodeBindWindow> keyCodeBindWindow = LazyValue.of(KeyCodeBindWindow::new);
 
+	public static Runnable rebuild;
 	public static Cons<HKeyCode> keyCodeSetter(Button button) {
 		return value -> {
 			if (button.name != null || button instanceof TextButton tb && tb.getText() != null) {
@@ -195,11 +196,23 @@ public class KeyCodeSetter extends Content {
 			hkeyCode = null;
 			field.clearText();
 		}
-		public void init(){
+		public void init() {
 			Table cont = this.cont;
 			cont.clearChildren();
-			field = cont.field("", _ -> { })
-			 .colspan(2).growX().get();
+			field = new TextField();
+
+			Cons<KeyCode> setHKeyCode =  keycode-> {
+					hkeyCode = keycode != null ? new HKeyCode(keycode)
+					 .ctrl(Core.input.ctrl())
+					 .shift(Core.input.shift())
+					 .alt(Core.input.alt()) : HKeyCode.NONE;
+					field.setText(hkeyCode.getText());
+					field.setCursorPosition(100);
+			};
+			cont.table(t -> {
+				t.add(field).growX();
+				t.button("None", Styles.flatTogglet, () -> setHKeyCode.get(null)).size(96, 42);
+			}).colspan(2).growX();
 
 			field.setMessageText("Press a key to bind");
 			field.update(field::requestKeyboard);
@@ -208,16 +221,7 @@ public class KeyCodeSetter extends Content {
 					if (keycode.type != KeyType.key) return false;
 					if (HKeyCode.isFnKey(keycode)) return false;
 
-					if (keycode == KeyCode.escape) {
-						hkeyCode = HKeyCode.NONE;
-					} else {
-						hkeyCode = new HKeyCode(keycode)
-						 .ctrl(Core.input.ctrl())
-						 .shift(Core.input.shift())
-						 .alt(Core.input.alt());
-					}
-					field.setText(hkeyCode.getText());
-					field.setCursorPosition(100);
+					setHKeyCode.get(keycode);
 					event.cancel();
 					return false;
 				}
@@ -232,6 +236,7 @@ public class KeyCodeSetter extends Content {
 			cont.button("@ok", Icon.ok, Styles.flatt, () -> {
 				callback.get(hkeyCode);
 				hide();
+				if (rebuild != null) rebuild.run();
 				hkeyCode = null;
 			}).disabled(_ -> hkeyCode == null);
 		}
@@ -250,7 +255,7 @@ public class KeyCodeSetter extends Content {
 
 		cont.add(tab.build()).grow();
 	}
-	/** 内部按键的table  */
+	/** 内部按键的table */
 	private Table interanlTable() {
 		FilterTable<String> pane = new FilterTable<>();
 		pane.addPatternUpdateListener(() -> pattern);
@@ -291,7 +296,7 @@ public class KeyCodeSetter extends Content {
 		FilterTable<String[]> pane = new FilterTable<>();
 		pane.addPatternUpdateListener(() -> pattern);
 		// 监控keys
-		Runnable rebuild = () -> {
+		rebuild = () -> {
 			pane.clear();
 			elementKeyCode.eachKey((elementKey0, keyCode0) -> {
 				String[] elementKey = {elementKey0};

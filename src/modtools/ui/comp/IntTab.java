@@ -202,6 +202,7 @@ public class IntTab {
 			t.label(() -> hideTabTitles ? "" : tabNames[index])
 			 .growX().align(Align.left)
 			 .with(l -> labels.put(tabNames[index], l))
+			 .minHeight(28f)
 			 .maxWidth(labelWidth)
 			 .get().setWrap(false);
 		}).growX().pad(4f);

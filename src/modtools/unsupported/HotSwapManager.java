@@ -31,10 +31,9 @@ public class HotSwapManager {
 	public static void start() throws Throwable {
 		if (!inited) {
 			/* 模块open（MyReflect里）还不够，还得exports */
-			Module         module     = Object.class.getModule();
-			Modules.addExports(module, "jdk.internal.misc");
-			Modules.addExports(module, "jdk.internal.reflect");
-			Modules.addExports(module, "jdk.internal.org.objectweb.asm");
+			UNSAFE.addExports(Object.class, "jdk.internal.misc");
+			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
+			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 			});

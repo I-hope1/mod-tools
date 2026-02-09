@@ -42,6 +42,7 @@ import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
 import modtools.utils.search.Search;
 import modtools.utils.ui.*;
+import org.lwjgl.sdl.SDLMouse;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -53,7 +54,7 @@ import static modtools.utils.ElementUtils.getAbsolutePos;
 
 @SuppressWarnings("UnusedReturnValue")
 public class IntUI {
-	public static final boolean DEBUG = false;
+	public static final boolean               DEBUG   = false;
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
 
 	/** pad 8 */
@@ -61,9 +62,9 @@ public class IntUI {
 	/** pad 0 */
 	public static final Drawable noneui  = new EmptyDrawable(0);
 
-	public static final float DEFAULT_WIDTH  = 180;
+	public static final float DEFAULT_WIDTH     = 180;
 	public static final float MAX_LONGPRESS_OFF = 6f;
-	public static final float MAX_DCLICK_OFF = 35f;
+	public static final float MAX_DCLICK_OFF    = 35f;
 
 	public static Frag     frag;
 	public static TopGroup topGroup;
@@ -100,9 +101,21 @@ public class IntUI {
 		}
 	}
 	private static Cursor newCursor(int type) {
+		return newCursor(type, SystemCursor.arrow);
+	}
+	private static Cursor newCursor(int type, Cursor fallback) {
 		if (OS.isAndroid) return SystemCursor.arrow;
-		long handle = SDL.SDL_CreateSystemCursor(type);
-		return new SdlCursor(0, handle);
+		try {
+			long handle;
+			try {
+				handle = SDL.SDL_CreateSystemCursor(type);
+			} catch (NoClassDefFoundError e) {
+				handle = SDLMouse.SDL_CreateSystemCursor(type);
+			}
+			return new SdlCursor(0, handle);
+		} catch (Throwable e) {
+			return fallback;
+		}
 	}
 	public static void disposeAll() {
 		topGroup.dispose();
@@ -157,7 +170,7 @@ public class IntUI {
 	public static Cell<?> addWatchButton(Table buttons, String info, MyProv<Object> value) {
 		return addWatchButton(buttons, () -> info, value);
 	}
-		/**
+	/**
 	 * Add watch button cell.
 	 * @return the cell
 	 */
@@ -170,7 +183,6 @@ public class IntUI {
 			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
 		})).size(FUNCTION_BUTTON_SIZE).with(makeTipListener("watch.multi"));
 	}
-
 
 
 	/**
@@ -227,12 +239,14 @@ public class IntUI {
 			}
 			int lyingAlign = align;
 			if (Align.isCenterVertical(align)) {
-			} else if (Align.isTop(align)) lyingAlign = lyingAlign & ~Align.top | Align.bottom;
-			else if (Align.isBottom(align)) lyingAlign = lyingAlign & ~Align.bottom | Align.top;
+			} else if (Align.isTop(align)) {
+				lyingAlign = lyingAlign & ~Align.top | Align.bottom;
+			} else if (Align.isBottom(align)) lyingAlign = lyingAlign & ~Align.bottom | Align.top;
 
 			if (Align.isCenterHorizontal(align)) {
-			} else if (Align.isLeft(align)) lyingAlign = lyingAlign & ~Align.left | Align.right;
-			else if (Align.isRight(align)) lyingAlign = lyingAlign & ~Align.right | Align.left;
+			} else if (Align.isLeft(align)) {
+				lyingAlign = lyingAlign & ~Align.left | Align.right;
+			} else if (Align.isRight(align)) lyingAlign = lyingAlign & ~Align.right | Align.left;
 
 			checkBound(t);
 			positionTooltip(button, lyingAlign, t, align);
@@ -273,14 +287,10 @@ public class IntUI {
 		/** @see Element#keepInStage()  */
 		float width  = graphics.getWidth();
 		float height = graphics.getHeight();
-		if (table.getX(Align.right) > width)
-			table.setPosition(width, table.getY(Align.right), Align.right);
-		if (table.getX(Align.left) < 0)
-			table.setPosition(0, table.getY(Align.left), Align.left);
-		if (table.getY(Align.top) > height)
-			table.setPosition(table.getX(Align.top), height, Align.top);
-		if (table.getY(Align.bottom) < 0)
-			table.setPosition(table.getX(Align.bottom), 0, Align.bottom);
+		if (table.getX(Align.right) > width) { table.setPosition(width, table.getY(Align.right), Align.right); }
+		if (table.getX(Align.left) < 0) { table.setPosition(0, table.getY(Align.left), Align.left); }
+		if (table.getY(Align.top) > height) { table.setPosition(table.getX(Align.top), height, Align.top); }
+		if (table.getY(Align.bottom) < 0) { table.setPosition(table.getX(Align.bottom), 0, Align.bottom); }
 
 		// Log.info("@, @",table.x, table.y);
 	}
@@ -565,7 +575,8 @@ public class IntUI {
 	}
 	/**
 	 * @param denied 如果不为{@code null}，右上角关闭按钮会被删除
-	 *  @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable) */
+	 * @see mindustry.core.UI#showCustomConfirm(String, String, String, String, Runnable, Runnable)
+	 */
 	public static ConfirmWindow showCustomConfirm(String title, String text, String yes, String no, Runnable confirmed,
 	                                              Runnable denied) {
 		ConfirmWindow window = new ConfirmWindow(title, 400, 100, false, false);

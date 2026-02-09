@@ -6,6 +6,7 @@ import dalvik.system.VMRuntime;
 import hope_android.FieldUtils;
 import ihope_lib.MyReflect;
 import jdk.internal.misc.Unsafe;
+import jdk.internal.module.Modules;
 
 import static ihope_lib.MyReflect.unsafe;
 
@@ -19,11 +20,15 @@ public interface UNSAFE {
 		if (OS.isAndroid) return;
 		try {
 			MyReflect.openModule(cls.getModule(), pn);
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 	}
 	static void openModule(Object module, String pn) throws Throwable {
 		if (OS.isAndroid) return;
 		MyReflect.openModule((Module) module, pn);
+	}
+	static void addExports(Class<?> cls, String pn) {
+		if (OS.isAndroid) return;
+		Modules.addExports(cls.getModule(), pn);
 	}
 
 	// ------------put and get------------

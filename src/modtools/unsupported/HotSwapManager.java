@@ -34,6 +34,9 @@ public class HotSwapManager {
 			UNSAFE.addExports(Object.class, "jdk.internal.misc");
 			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
 			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm");
+			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.tree");
+			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.util");
+			UNSAFE.addExports(Object.class, "jdk.internal.loader");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 			});

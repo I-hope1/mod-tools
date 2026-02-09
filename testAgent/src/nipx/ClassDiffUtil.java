@@ -2,22 +2,35 @@ package nipx;
 
 import jdk.internal.org.objectweb.asm.*;
 import jdk.internal.org.objectweb.asm.Type;
+import jdk.internal.org.objectweb.asm.tree.*;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 
+import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
 
 final class ClassDiffUtil {
 
-	private ClassDiffUtil() {}
+	private ClassDiffUtil() { }
 
 	/* =========================
 	 * 对外 API
 	 * ========================= */
 
-	static ClassDiff diff(Class<?> loadedClass, byte[] newBytecode) {
-		ClassStructure oldStruct = fromLoadedClass(loadedClass);
-		ClassStructure newStruct = fromBytecode(newBytecode);
-		return diff(oldStruct, newStruct);
+	// 现在输入必须是两份字节码
+	static ClassDiff diff(byte[] oldBytes, byte[] newBytes) {
+		ClassNode oldNode = parse(oldBytes);
+		ClassNode newNode = parse(newBytes);
+		return diff(oldNode, newNode);
+	}
+	private static ClassNode parse(byte[] bytes) {
+		ClassNode cn = new ClassNode();
+		// 关键：不使用 SKIP_CODE，否则无法检测方法体
+		// SKIP_DEBUG 可以忽略行号变化，这对于 Diff 逻辑变更很有用
+		ClassReader cr = new ClassReader(bytes);
+		cr.accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		return cn;
 	}
 
 	/* =========================
@@ -25,29 +38,23 @@ final class ClassDiffUtil {
 	 * ========================= */
 
 	static final class ClassStructure {
-		String className;
-		Set<FieldSig> fields = new HashSet<>();
-		Set<MethodSig> methods = new HashSet<>();
+		String         className;
+		Set<FieldSig>  fields       = new HashSet<>();
+		Set<MethodSig> methods      = new HashSet<>();
 		Set<MethodSig> constructors = new HashSet<>();
 	}
 
 	static final class ClassDiff {
-		Set<FieldSig> addedFields = new HashSet<>();
-		Set<FieldSig> removedFields = new HashSet<>();
+		final List<String> addedFields   = new ArrayList<>();
+		final List<String> removedFields = new ArrayList<>();
 
-		Set<MethodSig> addedMethods = new HashSet<>();
-		Set<MethodSig> removedMethods = new HashSet<>();
-
-		Set<MethodSig> addedConstructors = new HashSet<>();
-		Set<MethodSig> removedConstructors = new HashSet<>();
-
-		boolean hasStructuralChange() {
-			return !addedFields.isEmpty()
-				|| !removedFields.isEmpty()
-				|| !addedMethods.isEmpty()
-				|| !removedMethods.isEmpty()
-				|| !addedConstructors.isEmpty()
-				|| !removedConstructors.isEmpty();
+		final List<String> addedMethods    = new ArrayList<>();
+		final List<String> removedMethods  = new ArrayList<>();
+		final List<String> modifiedMethods = new ArrayList<>();
+		boolean hasChange() {
+			return !addedFields.isEmpty() || !removedFields.isEmpty() ||
+			       !addedMethods.isEmpty() || !removedMethods.isEmpty() ||
+			       !modifiedMethods.isEmpty();
 		}
 	}
 
@@ -129,25 +136,25 @@ final class ClassDiffUtil {
 
 		for (Field f : c.getDeclaredFields()) {
 			cs.fields.add(new FieldSig(
-				f.getName(),
-				Type.getDescriptor(f.getType()),
-				f.getModifiers()
+			 f.getName(),
+			 Type.getDescriptor(f.getType()),
+			 f.getModifiers()
 			));
 		}
 
 		for (Method m : c.getDeclaredMethods()) {
 			cs.methods.add(new MethodSig(
-				m.getName(),
-				Type.getMethodDescriptor(m),
-				m.getModifiers()
+			 m.getName(),
+			 Type.getMethodDescriptor(m),
+			 m.getModifiers()
 			));
 		}
 
 		for (Constructor<?> ctor : c.getDeclaredConstructors()) {
 			cs.constructors.add(new MethodSig(
-				"<init>",
-				Type.getConstructorDescriptor(ctor),
-				ctor.getModifiers()
+			 "<init>",
+			 Type.getConstructorDescriptor(ctor),
+			 ctor.getModifiers()
 			));
 		}
 
@@ -196,59 +203,95 @@ final class ClassDiffUtil {
 	/* =========================
 	 * Diff
 	 * ========================= */
-
-	private static ClassDiff diff(ClassStructure oldC, ClassStructure newC) {
+	private static ClassDiff diff(ClassNode oldC, ClassNode newC) {
 		ClassDiff d = new ClassDiff();
 
-		diffSet(oldC.fields, newC.fields, d.addedFields, d.removedFields);
-		diffSet(oldC.methods, newC.methods, d.addedMethods, d.removedMethods);
-		diffSet(oldC.constructors, newC.constructors, d.addedConstructors, d.removedConstructors);
+		// 1. Fields
+		Set<String> oldFields = new HashSet<>();
+		for (FieldNode f : oldC.fields) oldFields.add(key(f));
+		Set<String> newFields = new HashSet<>();
+		for (FieldNode f : newC.fields) newFields.add(key(f));
+
+		for (String f : newFields) if (!oldFields.contains(f)) d.addedFields.add(f);
+		for (String f : oldFields) if (!newFields.contains(f)) d.removedFields.add(f);
+
+		// 2. Methods
+		Map<String, MethodNode> oldMethods = new HashMap<>();
+		for (MethodNode m : oldC.methods) oldMethods.put(key(m), m);
+
+		Map<String, MethodNode> newMethods = new HashMap<>();
+		for (MethodNode m : newC.methods) newMethods.put(key(m), m);
+
+		// 检测新增和修改
+		for (Map.Entry<String, MethodNode> entry : newMethods.entrySet()) {
+			String     key  = entry.getKey();
+			MethodNode newM = entry.getValue();
+			MethodNode oldM = oldMethods.get(key);
+
+			if (oldM == null) {
+				d.addedMethods.add(key);
+			} else {
+				// 深度对比方法体
+				if (isCodeChanged(oldM, newM)) {
+					d.modifiedMethods.add(key);
+				}
+			}
+		}
+
+		// 检测删除
+		for (String key : oldMethods.keySet()) {
+			if (!newMethods.containsKey(key)) {
+				d.removedMethods.add(key);
+			}
+		}
 
 		return d;
 	}
 
-	private static <T> void diffSet(Set<T> oldSet, Set<T> newSet,
-	                                Set<T> added, Set<T> removed) {
-		for (T n : newSet) {
-			if (!oldSet.contains(n)) {
-				added.add(n);
-			}
-		}
-		for (T o : oldSet) {
-			if (!newSet.contains(o)) {
-				removed.add(o);
-			}
-		}
+	private static String key(FieldNode f) { return f.name + " " + f.desc; }
+	private static String key(MethodNode m) { return m.name + m.desc; }
+
+	/**
+	 * 核心：对比两个方法体逻辑是否一致
+	 */
+	private static boolean isCodeChanged(MethodNode m1, MethodNode m2) {
+		// 1. 简单检查指令数量
+		if (m1.instructions.size() != m2.instructions.size()) return true;
+
+		// 2. 规范化为文本进行对比
+		// 这种方式能屏蔽 Label 对象实例不同带来的干扰，也能屏蔽常量池索引差异
+		String t1 = textify(m1);
+		String t2 = textify(m2);
+
+		return !t1.equals(t2);
+	}
+
+	private static String textify(MethodNode mn) {
+		// 使用 ASM 内置的 Textifier 打印指令
+		Textifier          printer = new Textifier();
+		TraceMethodVisitor mp      = new TraceMethodVisitor(printer);
+		mn.accept(mp);
+
+		StringWriter sw = new StringWriter();
+		printer.print(new PrintWriter(sw));
+		return sw.toString();
 	}
 
 	/* =========================
-	 * 可选：日志友好输出
+	 * 日志
 	 * ========================= */
 
 	static void logDiff(String className, ClassDiff diff) {
-		if (!diff.hasStructuralChange()) return;
+		if (!diff.hasChange()) return;
 
 		System.out.println("[NIPX] [DIFF] " + className);
 
-		diff.addedFields.forEach(f ->
-			System.out.println("  + field: " + f.name() + " " + f.desc())
-		);
-		diff.removedFields.forEach(f ->
-			System.out.println("  - field: " + f.name() + " " + f.desc())
-		);
+		diff.addedFields.forEach(f -> System.out.println("  + field: " + f));
+		diff.removedFields.forEach(f -> System.out.println("  - field: " + f));
 
-		diff.addedMethods.forEach(m ->
-			System.out.println("  + method: " + m.name() + m.desc())
-		);
-		diff.removedMethods.forEach(m ->
-			System.out.println("  - method: " + m.name() + m.desc())
-		);
+		diff.addedMethods.forEach(m -> System.out.println("  + method: " + m));
+		diff.removedMethods.forEach(m -> System.out.println("  - method: " + m));
 
-		diff.addedConstructors.forEach(c ->
-			System.out.println("  + ctor: " + c.desc())
-		);
-		diff.removedConstructors.forEach(c ->
-			System.out.println("  - ctor: " + c.desc())
-		);
+		diff.modifiedMethods.forEach(m -> System.out.println("  * body changed: " + m));
 	}
 }

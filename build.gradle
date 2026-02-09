@@ -181,33 +181,31 @@ task playGame(type: JavaExec) {
 	]
 }
 task playGameDirect(type: JavaExec) {
-	copy { // copyJar
-		def targetFile = file("${MdtDataDir}/mods/${modName}-${version}.jar")
-		onlyIf {
-			def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
-			boolean canMove = targetFile.renameTo(testName)
-			if (canMove) {
-				// 如果能移动成功，说明没被锁定，立即移回来
-				testName.renameTo(targetFile)
-				return true
-			} else {
-				println "\n[警告] 无法覆盖 JAR: 文件正被 Mindustry 占用 (Windows Lock)"
-				return false
-			}
-		}
-
-
-		from "$buildDir0/libs"
-		into "${MdtDataDir}/mods"
-		include "$archivesName-${version}.jar"
-		rename { oldName -> "$modName-${version}.jar" }
-	}
-	workingDir = new File("$buildDir0/run")
-
-	// 确保目录存在
 	doFirst {
+		workingDir = new File("$buildDir0/run")
 		if (!workingDir.exists()) workingDir.mkdirs()
+
+		def targetFile = file("${MdtDataDir}/mods/${modName}-${version}.jar")
+		boolean valid;
+		def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
+		boolean canMove = targetFile.renameTo(testName)
+		if (canMove) {
+			// 如果能移动成功，说明没被锁定，立即移回来
+			testName.renameTo(targetFile)
+			valid = true
+		} else {
+			println "\n[警告] 无法覆盖 JAR: 文件正被 Mindustry 占用 (Windows Lock)"
+			valid = false
+		}
+		println "valid: $valid"
+		if (valid) copy { // copyJar
+			from "$buildDir0/libs"
+			into "${MdtDataDir}/mods"
+			include "$archivesName-${version}.jar"
+			rename { oldName -> "$modName-${version}.jar" }
+		}
 	}
+
 	//运行游戏目录
 	classpath(MdtDataDir + "/Mindustry.jar")
 //	classpath(MdtDataDir + "/MindustryX.jar")

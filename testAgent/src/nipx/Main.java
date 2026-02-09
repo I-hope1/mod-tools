@@ -1,12 +1,13 @@
 package nipx;
 
 
+import jdk.internal.loader.URLClassPath;
 import jdk.internal.misc.Unsafe;
 
 import java.io.*;
 import java.lang.instrument.*;
+import java.lang.invoke.MethodHandle;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Method;
 import java.net.*;
 import java.nio.file.*;
 import java.security.*;
@@ -19,6 +20,8 @@ import java.util.stream.*;
  * 其由AppLoader加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
 public class Main {
+	static final Unsafe UNSAFE = Unsafe.getUnsafe();
+
 	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
 	public static final  int          FILE_SHAKE_MS     = 600;
@@ -29,6 +32,8 @@ public class Main {
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
+
+	private static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 记录磁盘上文件的哈希，用于过滤“伪修改”（时间变了但内容没变）
 	private static final Map<String, byte[]> fileDiskHashes = new ConcurrentHashMap<>();
@@ -44,6 +49,15 @@ public class Main {
 		return t;
 	});
 	private static       ScheduledFuture<?>       scheduledTask;
+	public static final  MethodHandle             ucpHandle;
+
+	static {
+		try {
+			ucpHandle = Reflect.IMPL.findGetter(URLClassLoader.class, "ucp", URLClassPath.class);
+		} catch (NoSuchFieldException | IllegalAccessException e) {
+			throw new RuntimeException(e);
+		}
+	}
 
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		Main.inst = inst;
@@ -52,6 +66,21 @@ public class Main {
 		info("RedefineMode: " + REDEFINE_MODE);
 		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
 
+		inst.addTransformer(new ClassFileTransformer() {
+			@Override
+			public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
+			                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+				if (className != null) {
+					// ASM 和 JVM 使用 / 分隔，我们统一转换为 .
+					String name = className.replace('/', '.');
+					if (!isBlacklisted(name)) {
+						// clone 一份，因为 classfileBuffer 可能会被后续链修改
+						bytecodeCache.put(name, classfileBuffer.clone());
+					}
+				}
+				return null; // 返回 null 表示不修改字节码
+			}
+		}, true); // canRetransform = true
 		// 初始化当前所有已加载类的 ClassLoader 映射关系
 		refreshPackageLoaders();
 
@@ -91,9 +120,8 @@ public class Main {
 		}
 
 		try {
-			// 1. 获取 protected void addURL(URL url) 方法
-			Method addUrlMethod = URLClassLoader.class.getDeclaredMethod("addURL", URL.class);
-			addUrlMethod.setAccessible(true);
+			// 1. 获取 ucp
+			URLClassPath ucp = (URLClassPath) ucpHandle.invoke(targetLoader);
 
 			for (Path dir : watchDirs) {
 				// 2. 将目录转换为 URL
@@ -111,13 +139,13 @@ public class Main {
 
 				if (!alreadyExists) {
 					// 4. 调用 addURL
-					addUrlMethod.invoke(targetLoader, url);
+					ucp.addURL(url);
 					info("[MOUNT] Successfully mounted directory to ClassLoader: " + dir);
 				} else {
 					log("[MOUNT] Directory already mounted: " + dir);
 				}
 			}
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			error("Failed to mount working directory to ClassLoader", e);
 		}
 	}
@@ -204,12 +232,38 @@ public class Main {
 					// 1. 类已加载：无论模式，都必须执行 redefinition
 					log("[MODIFIED] " + className);
 
-					ClassDiffUtil.ClassDiff diff =
-					 ClassDiffUtil.diff(targetClass, bytecode);
+					@SuppressWarnings("UnnecessaryLocalVariable")
+					byte[] newBytecode = bytecode;
+					byte[] oldBytecode = bytecodeCache.get(className);
 
-					ClassDiffUtil.logDiff(className, diff);
+					// 2. 如果缓存里没有（说明Agent attach晚了，或者还没触发过transform），
+					//    主动触发一次 retransform 来“偷”取字节码
+					if (oldBytecode == null) {
+						try {
+							// 这会触发上面的 transformer，填充 bytecodeCache
+							inst.retransformClasses(targetClass);
+							oldBytecode = bytecodeCache.get(className);
+						} catch (Exception e) {
+							error("Failed to capture old bytecode for diff: " + className, e);
+						}
+					}
 
-					definitions.add(new ClassDefinition(targetClass, bytecode));
+					// 3. 执行 ASM Diff
+					if (oldBytecode != null) {
+						// 现在我们是 byte[] vs byte[]，可以检测方法体了
+						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
+						ClassDiffUtil.logDiff(className, diff);
+
+						// 可选：如果没有结构性变化且没有方法体变化，是否跳过 redefine？
+						// 为了保险起见，只要文件变了，还是建议 redefine，防止漏掉细微变化
+					} else {
+						log("[WARN] Cannot diff " + className + " (missing old bytecode). Proceeding with redefine.");
+					}
+
+					definitions.add(new ClassDefinition(targetClass, newBytecode));
+
+					// 更新缓存，以便下次对比
+					bytecodeCache.put(className, newBytecode);
 				} else {
 					// 2. 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {

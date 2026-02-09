@@ -166,7 +166,7 @@ public class MySettings {
 			return switch (v) {
 				case Data data -> data.toString(tab);
 				case String[] arr -> IntVars.json.toJson(arr, String[].class);
-				case Seq seq -> "[" + seq.map(item -> toString(tab, item)).toString(", ") + "]";
+				case Seq<?> seq -> "[" + seq.map(item -> toString(tab, item)).toString(", ") + "]";
 				case Jval jval -> jval.toString(Jformat.formatted);
 				case null -> "null";
 				default -> {

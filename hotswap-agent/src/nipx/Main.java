@@ -1,13 +1,11 @@
 package nipx;
 
-
 import jdk.internal.loader.URLClassPath;
-import jdk.internal.misc.Unsafe;
 
 import java.io.*;
 import java.lang.instrument.*;
 import java.lang.invoke.MethodHandle;
-import java.lang.ref.WeakReference;
+import java.lang.ref.*;
 import java.net.*;
 import java.nio.file.*;
 import java.security.*;
@@ -17,10 +15,9 @@ import java.util.stream.*;
 
 /**
  * HotSwap Agent
- * 其由AppLoader加载，属于java.base模块，可以访问其他java.base模块中的类。
+ * 其由Bootstrap加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
 public class Main {
-	static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
 	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
@@ -320,7 +317,7 @@ public class Main {
 				// 这时我们才有资格用 Unsafe 注入
 			}
 
-			Unsafe.getUnsafe().defineClass(className, bytes, 0, bytes.length, loader, null);
+			Reflect.defineClass(className, bytes, 0, bytes.length, loader, null);
 
 			info("[INJECTED] Successfully defined new class: " + className + " into " + loader);
 			return true;

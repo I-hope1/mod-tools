@@ -1,0 +1,44 @@
+plugins {
+	id 'java'
+}
+
+group = 'nipx'
+version = "1.0"
+
+sourceSets.main.java.srcDirs = ["src"]
+
+repositories {
+	mavenCentral()
+	maven { url 'https://jitpack.io' }
+	mavenLocal()
+}
+
+jar {
+	manifest {
+		attributes(
+				'Agent-Class': 'nipx.Utils',
+				'Premain-Class': 'nipx.Utils',
+				'Can-Retransform-Classes': true,
+				'Can-Redefine-Classes': true
+		)
+	}
+//	from(configurations.compileClasspath.asList().toArray()) { include "**" }
+	from {
+		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+	}
+}
+tasks.withType(JavaCompile) {
+	options.incremental = true
+
+//	options.compilerArgs.remove("--enable-preview")
+	//	options.compilerArgs.add("-verbose")
+}
+
+dependencies {
+	annotationProcessor files(compilerJar)
+}
+
+
+test {
+	useJUnitPlatform()
+}

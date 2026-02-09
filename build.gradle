@@ -1,3 +1,5 @@
+import java.util.function.Consumer
+
 apply plugin: 'java'
 apply plugin: 'maven-publish'
 
@@ -46,7 +48,9 @@ configurations {
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
-	compileOnly project(":testAgent")
+	compileOnly project(":hotswap-agent")
+	compileOnly project(":utils-agent")
+
 
 //	println "AndroidHome: $sdkRoot"
 	def platformRoot = new File("$sdkRoot/platforms").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
@@ -126,9 +130,14 @@ jar {
 		include "**/settings/**"
 	}
 
-	evaluationDependsOn(":testAgent") // 确保 testAgent 的 build.gradle 先运行
-	def agent = project(":testAgent")
-	from("${agent.buildDir0}/libs/") { include "testAgent-${agent.version}.jar" rename { o -> "libs/hotswap-agent.jar" } }
+	Consumer<String> includeLib = name -> {
+//		println "includeLib: $name"
+		evaluationDependsOn(":" + name) // 确保 xxx 的 build.gradle 先运行
+		def agent = project(":" + name)
+		from("${agent.buildDir0}/libs/") { include "$name-${agent.version}.jar" rename { o -> "libs/${name}.jar" } }
+	}
+	includeLib.accept("hotswap-agent")
+	includeLib.accept("utils-agent")
 }
 
 
@@ -186,7 +195,7 @@ task playGameDirect(type: JavaExec) {
 		if (!workingDir.exists()) workingDir.mkdirs()
 
 		def targetFile = file("${MdtDataDir}/mods/${modName}-${version}.jar")
-		boolean valid;
+		boolean valid
 		def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
 		boolean canMove = targetFile.renameTo(testName)
 		if (canMove) {
@@ -197,7 +206,6 @@ task playGameDirect(type: JavaExec) {
 			println "\n[警告] 无法覆盖 JAR: 文件正被 Mindustry 占用 (Windows Lock)"
 			valid = false
 		}
-		println "valid: $valid"
 		if (valid) copy { // copyJar
 			from "$buildDir0/libs"
 			into "${MdtDataDir}/mods"
@@ -211,6 +219,7 @@ task playGameDirect(type: JavaExec) {
 //	classpath(MdtDataDir + "/MindustryX.jar")
 	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
 	jvmArgs("-XX:+AllowEnhancedClassRedefinition")
+	jvmArgs("-XX:+EnableDynamicAgentLoading")
 //	jvmArgs = [
 //			"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
 //	]

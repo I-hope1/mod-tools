@@ -4,4 +4,6 @@ include 'annotations'
 include 'compiler'
 //include 'test'
 
-include 'testAgent'
+include 'hotswap-agent'
+
+include 'utils-agent'

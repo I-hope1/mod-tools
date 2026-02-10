@@ -119,6 +119,7 @@ public interface ISettings extends E_DataInterface {
 	default Object get() {
 		return data().get(name());
 	}
+	/** 仅仅是调用{@link String#valueOf(Object)}  */
 	default String getString() {
 		Object o = get();
 		if (type() == String.class && o instanceof Jval) set(o = ((Jval) o).asString());

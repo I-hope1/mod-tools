@@ -5,9 +5,6 @@ import jdk.internal.org.objectweb.asm.tree.*;
 import jdk.internal.org.objectweb.asm.util.*;
 
 import java.io.*;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.*;
 
 final class ClassDiffUtil {
@@ -124,80 +121,6 @@ final class ClassDiffUtil {
 			       "desc=" + desc + ", " +
 			       "access=" + access + ']';
 		}
-	}
-
-	/* =========================
-	 * Loaded Class -> Structure
-	 * ========================= */
-
-	private static ClassStructure fromLoadedClass(Class<?> c) {
-		ClassStructure cs = new ClassStructure();
-		cs.className = c.getName();
-
-		for (Field f : c.getDeclaredFields()) {
-			cs.fields.add(new FieldSig(
-			 f.getName(),
-			 Type.getDescriptor(f.getType()),
-			 f.getModifiers()
-			));
-		}
-
-		for (Method m : c.getDeclaredMethods()) {
-			cs.methods.add(new MethodSig(
-			 m.getName(),
-			 Type.getMethodDescriptor(m),
-			 m.getModifiers()
-			));
-		}
-
-		for (Constructor<?> ctor : c.getDeclaredConstructors()) {
-			cs.constructors.add(new MethodSig(
-			 "<init>",
-			 Type.getConstructorDescriptor(ctor),
-			 ctor.getModifiers()
-			));
-		}
-
-		return cs;
-	}
-
-	/* =========================
-	 * Bytecode -> Structure
-	 * ========================= */
-
-	private static ClassStructure fromBytecode(byte[] bytes) {
-		ClassStructure cs = new ClassStructure();
-
-		ClassReader cr = new ClassReader(bytes);
-		cr.accept(new ClassVisitor(Opcodes.ASM9) {
-
-			@Override
-			public void visit(int version, int access, String name,
-			                  String signature, String superName, String[] interfaces) {
-				cs.className = name.replace('/', '.');
-			}
-
-			@Override
-			public FieldVisitor visitField(int access, String name,
-			                               String desc, String signature, Object value) {
-				cs.fields.add(new FieldSig(name, desc, access));
-				return null;
-			}
-
-			@Override
-			public MethodVisitor visitMethod(int access, String name,
-			                                 String desc, String signature, String[] exceptions) {
-				MethodSig sig = new MethodSig(name, desc, access);
-				if ("<init>".equals(name)) {
-					cs.constructors.add(sig);
-				} else {
-					cs.methods.add(sig);
-				}
-				return null;
-			}
-		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-
-		return cs;
 	}
 
 	/* =========================

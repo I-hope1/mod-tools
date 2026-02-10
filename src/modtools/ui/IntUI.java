@@ -341,25 +341,37 @@ public class IntUI {
 		 Enum::name, width, height, searchable, align);
 	}
 
-	/** @see modtools.ui.comp.utils.MyItemSelection#buildTable0(Table, Seq, Prov, Cons, int, Func) */
 	public static <BTN extends Element, V> SelectTable
 	showSelectListTable(
 	 BTN button, Seq<V> list, Prov<V> holder,
+	 Cons<V> cons, Func<V, String> stringify, float minWidth, float height,
+	 boolean searchable, int align) {
+		return showSelectListTable(button, null, list, holder, cons, stringify, minWidth, height, searchable, align);
+	}
+	/** @see modtools.ui.comp.utils.MyItemSelection#buildTable0(Table, Seq, Prov, Cons, int, Func) */
+	public static <BTN extends Element, V> SelectTable
+	showSelectListTable(
+	 BTN button, String settingKey, Seq<V> list, Prov<V> holder,
 	 Cons<V> cons, Func<V, String> stringify, float minWidth, float height,
 	 boolean searchable, int align) {
 		SelectTable table = showSelectTable(button, (p, hide, pattern) -> {
 			p.clearChildren();
 
 			for (V item : list) {
-				if (!PatternUtils.test(pattern, stringify.get(item))) continue;
-				p.button(stringify.get(item), HopeStyles.cleart/*Styles.cleart*/, () -> {
+				String s    = stringify.get(item);
+				String text = settingKey != null ? "@settings." + settingKey + "." + s : s;
+				if (!PatternUtils.test(pattern, text)) continue;
+				p.button(text, HopeStyles.cleart/*Styles.cleart*/, () -> {
 					 cons.get(item);
 					 hide.run();
-				 }).with(t ->
-					t.getLabelCell()
-					 .padLeft(8f).padRight(8)
-					 .labelAlign(Align.left)
-				 ).wrapLabel(false)
+				 }).with(t -> {
+					 t.getLabelCell()
+						.padLeft(8f).padRight(8)
+						.labelAlign(Align.left);
+					 if (settingKey != null) {
+						 SettingsUI.tryAddTip(t, settingKey + "." + s);
+					 }
+				 }).wrapLabel(false)
 				 .minWidth(minWidth).growX().height(height)
 				 .disabled(_ -> Objects.equals(holder.get(), item)).row();
 

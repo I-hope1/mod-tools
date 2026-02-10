@@ -21,10 +21,10 @@ import java.util.stream.*;
 public class HotSwapAgent {
 	public static final boolean      DEBUG                = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 	public static final boolean      UCP_APPEND           = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static final  int          FILE_SHAKE_MS        = 600;
+	public static final int          FILE_SHAKE_MS        = 600;
 	public static final RedefineMode REDEFINE_MODE        = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 	public static final String[]     HOTSWAP_BLACKLIST    = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
-	public static final boolean      ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.enable_hotswap_event", "false"));
+	public static final boolean      ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
 
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();

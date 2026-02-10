@@ -24,6 +24,7 @@ public enum E_Hook implements ISettings {
 	 new String[]{"java.", "javax.", "jdk.", "sun.",
   "kotlin.", "kotlinx.", "arc.", "mindustry.",
   "nipx."})),
+	hotswap_event,
 
 
 	dynamic_jdwp {
@@ -44,6 +45,7 @@ public enum E_Hook implements ISettings {
 	static {
 		System.setProperty("nipx.agent.redefine_mode", redefine_mode.getString().trim());
 		System.setProperty("nipx.agent.hotswap_blacklist", String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
+		System.setProperty("nipx.agent.hotswap_event", hotswap_event.getString().trim());
 	}
 	public enum RedefineMode {
 		inject,

@@ -406,7 +406,8 @@ public class SettingsUI extends Content {
 			String localizedText = "@" + prefix + "." + key.toLowerCase();
 			return list(localizedText, v -> data.put(key, v), () -> data.getString(key, list.get(0)), list, stringify, () -> true);
 		}
-		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov, Seq<T> list, Func<T, String> stringify,
+		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov,
+		                                   Seq<T> list, Func<T, String> stringify,
 		                                   Boolp condition) {
 			Table t = new Table();
 			t.right();
@@ -417,11 +418,12 @@ public class SettingsUI extends Content {
 					l.setText(stringify.get(prov.get()));
 					l.setColor(condition.get() ? Color.white : Color.gray);
 				});
+				String tipKey = stripFirstDot(text);
 				b.clicked(() -> {
-					if (condition.get()) IntUI.showSelectListTable(b, list, prov, cons, stringify, 100, 42, true, Align.left);
+					if (condition.get()) IntUI.showSelectListTable(b, tipKey, list, prov, cons, stringify, 100, 42, true, Align.left);
 				});
 				b.setDisabled(() -> !condition.get());
-				tryAddTip(b, text.substring(text.indexOf('.') + 1));
+				tryAddTip(b, tipKey);
 			}, HopeStyles.hope_defaultb, IntVars.EMPTY_RUN).minWidth(64).height(42).self(c -> c.update(b -> c.width(Mathf.clamp(b.getPrefWidth() / Scl.scl(), 64, 220))));
 			return rowSelf(main.add(t).growX().padTop(0));
 		}
@@ -440,7 +442,7 @@ public class SettingsUI extends Content {
 
 			Label titleLabel = new Label(text);
 			container.add(titleLabel).left().padBottom(4f).row();
-			tryAddTip(titleLabel, text.substring(text.indexOf('.') + 1));
+			tryAddTip(titleLabel, stripFirstDot(text));
 
 			Table listTable = new Table(Tex.paneLeft);
 			listTable.left().defaults().padBottom(2f);
@@ -569,7 +571,7 @@ public class SettingsUI extends Content {
 			}).padLeft(10f).get();
 			checkBox.setStyle(HopeStyles.hope_defaultCheck);
 			checkBox.left();
-			tryAddTip(checkBox, text.substring(text.indexOf('.') + 1));
+			tryAddTip(checkBox, stripFirstDot(text));
 			main.row();
 		}
 		public static void title(String text) {
@@ -578,7 +580,7 @@ public class SettingsUI extends Content {
 			main.image().color(Pal.accent).height(3f).padRight(100f).padBottom(20);
 			main.row();
 		}
-		/** @param condition must not be null.  */
+		/** @param condition must not be null. */
 		public static <T extends Enum<T>> void enum_(String text, Class<T> enumClass, Cons<Enum<T>> cons,
 		                                             Prov<Enum<T>> prov, Boolp condition) {
 			var enums = new Seq<>((Enum<T>[]) enumClass.getEnumConstants());
@@ -602,7 +604,7 @@ public class SettingsUI extends Content {
 			field(text, value, setter, min, max, () -> true);
 		}
 
-		public static void field(String text, int value, Intc setter, int min, int max,Boolp condition) {
+		public static void field(String text, int value, Intc setter, int min, int max, Boolp condition) {
 			main.table(t -> {
 				t.add(text).left().padRight(10).growX().labelAlign(Align.left).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
 				t.field(String.valueOf(value), v -> setter.get(Strings.parseInt(v)))
@@ -613,7 +615,8 @@ public class SettingsUI extends Content {
 		public static void field(String text, String value, TextFieldValidator validator, Cons<String> setter) {
 			field(text, value, validator, setter, () -> true);
 		}
-		public static void field(String name, String value, TextFieldValidator validator, Cons<String> setter,Boolp condition) {
+		public static void field(String name, String value, TextFieldValidator validator, Cons<String> setter,
+		                         Boolp condition) {
 			main.table(t -> {
 				t.add(name).left().padRight(10).growX().labelAlign(Align.left).update(a -> a.setColor(condition.get() ? Color.white : Color.gray));
 				t.field(value, setter)
@@ -627,5 +630,8 @@ public class SettingsUI extends Content {
 			ObjectMap<Interp, Field> map = seq.asMap(Reflect::get, f -> f);
 			list(name, f -> cons.get(Reflect.get(f)), () -> map.get(prov.get()), seq, Field::getName);
 		}
+	}
+	public static String stripFirstDot(String text) {
+		return text.substring(text.indexOf('.') + 1);
 	}
 }

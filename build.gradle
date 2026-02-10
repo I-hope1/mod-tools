@@ -22,6 +22,12 @@ allprojects {
 		options.compilerArgs += "-AtargetVersion=8"
 //		options.compilerArgs += "-Xlint:unchecked"
 		options.compilerArgs.add("--enable-preview")
+
+		// 查找项目所有.java文件中的包名
+		/*sourceSets.main.java.srcDirs.each {
+			def packageName = JavaParser.parse(it).packageDeclaration.name.toString()
+			if (packageName) {}
+		}*/
 		//	options.compilerArgs.add("-verbose")
 	}
 	repositories {
@@ -215,8 +221,8 @@ task playGameDirect(type: JavaExec) {
 	}
 
 	//运行游戏目录
-	classpath(MdtDataDir + "/Mindustry.jar")
-//	classpath(MdtDataDir + "/MindustryX.jar")
+//	classpath(MdtDataDir + "/Mindustry.jar")
+	classpath(MdtDataDir + "/MindustryX.jar")
 	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
 	jvmArgs("-XX:+AllowEnhancedClassRedefinition")
 	jvmArgs("-XX:+EnableDynamicAgentLoading")
@@ -228,7 +234,70 @@ task playGameDirect(type: JavaExec) {
 //			'-debug'
 	]
 }
+task playGameAsync {
+    dependsOn jar
+    group = "application"
+    description = "尝试更新并启动游戏：如果游戏未运行则启动，若已运行则仅更新(如果可能)"
 
+    doLast {
+        def targetFile = file("${MdtDataDir}/mods/${modName}-${version}.jar")
+        boolean isRunning = false
+
+        // 1. 探测游戏是否正在运行 (利用 Windows 文件锁扬弃思想)
+        if (targetFile.exists()) {
+            def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
+            if (targetFile.renameTo(testName)) {
+                // 如果能重命名，说明没被占用 -> 游戏没运行
+                testName.renameTo(targetFile) // 还原
+                isRunning = false
+            } else {
+                // 无法重命名 -> 游戏正在运行
+                isRunning = true
+            }
+        } else {
+            // 文件不存在，肯定没运行
+            isRunning = false
+        }
+
+        // 2. 执行拷贝逻辑 (对应 playDesktop 的核心)
+        if (!isRunning) {
+            println "检测到游戏未运行，正在执行部署并准备启动..."
+            copy {
+                from "$buildDir0/libs"
+                into "${MdtDataDir}/mods"
+                include "$archivesName-${version}.jar"
+                rename { oldName -> "$modName-${version}.jar" }
+            }
+
+            // 3. 非阻塞启动游戏 (关键：启动新线程，不阻塞 Gradle)
+            Thread.start {
+                println "正在后台启动 MindustryX..."
+                try {
+                    exec {
+                        workingDir = new File("$buildDir0/run")
+                        if (!workingDir.exists()) workingDir.mkdirs()
+
+                        // 引用你 playGameDirect 的配置
+                        executable = "java"
+                        args = [
+                            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005",
+                            "-XX:+AllowEnhancedClassRedefinition",
+                            "-XX:+EnableDynamicAgentLoading",
+                            "-jar", "${MdtDataDir}/MindustryX.jar"
+                        ]
+                    }
+                } catch (Exception e) {
+                    println "启动失败: ${e.message}"
+                }
+            }
+            println "启动指令已发出，Gradle 任务结束。"
+        } else {
+            // 如果游戏正在运行，playDesktop 的 onlyIf 本就会跳过拷贝
+            // 这里我们给出实事求是的反馈
+            println "\n[提示] 游戏正在运行中，跳过启动步骤。请检查热更新是否生效。"
+        }
+    }
+}
 task playMultiplayer(type: JavaExec) {
 	dependsOn jar
 

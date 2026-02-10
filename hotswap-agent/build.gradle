@@ -16,8 +16,8 @@ repositories {
 jar {
 	manifest {
 		attributes(
-				'Agent-Class': 'nipx.Main',
-				'Premain-Class': 'nipx.Main',
+				'Agent-Class': 'nipx.HotSwapAgent',
+				'Premain-Class': 'nipx.HotSwapAgent',
 				'Can-Retransform-Classes': true,
 				'Can-Redefine-Classes': true
 		)

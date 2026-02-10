@@ -14,9 +14,9 @@ public class HotSwapManager {
 	public static final boolean DEBUG = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 
 	private static final String  AGENT_NAME          = "hotswap-agent";
-	private static final String  AGENT_RESOURCE_PATH = "/libs/"+AGENT_NAME+".jar";
-	private static       String  agentPathCache = null;
-	private static       boolean initialized    = false;
+	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
+	private static       String  agentPathCache      = null;
+	private static       boolean initialized         = false;
 
 	public static void start() throws Throwable {
 		if (!initialized) {
@@ -38,8 +38,8 @@ public class HotSwapManager {
 		try {
 			// 参数是类目录，Agent会自行处理
 			String agentPath = getAgentPath();
-			UtilsAgent.appendToBootstrap(agentPath);
-			UtilsAgent.attachAgent(agentPath, true, watchPaths);
+			UtilsAgentManager.appendToBootstrap(agentPath);
+			UtilsAgentManager.attachAgent(agentPath, true, watchPaths);
 		} catch (Throwable e) {
 			System.err.println("[HotSwapManager] An error occurred during the hotswap process.");
 			e.printStackTrace();

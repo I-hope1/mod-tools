@@ -10,7 +10,7 @@ import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 
-public class UtilsAgent {
+public class UtilsAgentManager {
 	public static final  String  AGENT_NAME          = "utils-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;

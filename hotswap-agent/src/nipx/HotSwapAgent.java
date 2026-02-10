@@ -5,7 +5,8 @@ import jdk.internal.loader.URLClassPath;
 import java.io.*;
 import java.lang.instrument.*;
 import java.lang.invoke.MethodHandle;
-import java.lang.ref.*;
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Method;
 import java.net.*;
 import java.nio.file.*;
 import java.security.*;
@@ -17,20 +18,19 @@ import java.util.stream.*;
  * HotSwap Agent
  * 其由Bootstrap加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
-public class Main {
-
-	private static final boolean      DEBUG             = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
-	private static final boolean      UCP_APPEND        = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static final  int          FILE_SHAKE_MS     = 600;
-	private static final RedefineMode REDEFINE_MODE     = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
-	private static final String[]     HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
-
+public class HotSwapAgent {
+	public static final boolean      DEBUG                = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	public static final boolean      UCP_APPEND           = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
+	public static final  int          FILE_SHAKE_MS        = 600;
+	public static final RedefineMode REDEFINE_MODE        = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
+	public static final String[]     HOTSWAP_BLACKLIST    = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
+	public static final boolean      ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.enable_hotswap_event", "false"));
 
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
 
-	private static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
+	static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 记录磁盘上文件的哈希，用于过滤“伪修改”（时间变了但内容没变）
 	private static final Map<String, byte[]> fileDiskHashes = new ConcurrentHashMap<>();
@@ -57,27 +57,13 @@ public class Main {
 	}
 
 	public static void agentmain(String agentArgs, Instrumentation inst) {
-		Main.inst = inst;
+		HotSwapAgent.inst = inst;
 
 		log("DEBUG: " + DEBUG);
 		info("RedefineMode: " + REDEFINE_MODE);
 		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
 
-		inst.addTransformer(new ClassFileTransformer() {
-			@Override
-			public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-			                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
-				if (className != null) {
-					// ASM 和 JVM 使用 / 分隔，我们统一转换为 .
-					String name = className.replace('/', '.');
-					if (!isBlacklisted(name)) {
-						// clone 一份，因为 classfileBuffer 可能会被后续链修改
-						bytecodeCache.put(name, classfileBuffer.clone());
-					}
-				}
-				return null; // 返回 null 表示不修改字节码
-			}
-		}, true); // canRetransform = true
+		inst.addTransformer(new MyClassFileTransformer(), true); // canRetransform = true
 		// 初始化当前所有已加载类的 ClassLoader 映射关系
 		refreshPackageLoaders();
 
@@ -285,10 +271,50 @@ public class Main {
 		// 批量执行重定义（针对已加载类）
 		applyRedefinitions(definitions);
 
+		processAnnotations(definitions);
+
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
 	}
-	private static boolean isBlacklisted(String className) {
+	/** 在 applyRedefinitions(definitions) 后调用 */
+	private static void processAnnotations(List<ClassDefinition> definitions) {
+		if (!ENABLE_HOTSWAP_EVENT) return;
+
+		for (ClassDefinition def : definitions) {
+			Class<?> clazz = def.getDefinitionClass();
+
+			// 1. 检查类是否有 @Reloadable (虽然我们只注入了带这个的，但双重检查无害)
+			// 注意：这里用反射检查，因为类已经定义好了
+			if (clazz.isAnnotationPresent(Reloadable.class)) {
+
+				// 2. 获取所有实例
+				List<Object> instances = InstanceTracker.getInstances(clazz);
+				if (instances.isEmpty()) continue;
+
+				// 3. 查找回调方法 @OnReload
+				Method reloadMethod = null;
+				for (Method m : clazz.getDeclaredMethods()) {
+					if (m.isAnnotationPresent(OnReload.class)) {
+						reloadMethod = m;
+						reloadMethod.setAccessible(true);
+						break; // 假设只有一个
+					}
+				}
+
+				if (reloadMethod != null) {
+					for (Object obj : instances) {
+						try {
+							reloadMethod.invoke(obj);
+							log("[Reload] Invoked @OnReload on " + obj);
+						} catch (Exception e) {
+							error("Error invoking @OnReload", e);
+						}
+					}
+				}
+			}
+		}
+	}
+	static boolean isBlacklisted(String className) {
 		for (String prefix : HOTSWAP_BLACKLIST) {
 			if (className.startsWith(prefix)) return true;
 		}
@@ -470,7 +496,7 @@ public class Main {
 		if (scheduledTask != null && !scheduledTask.isDone()) {
 			scheduledTask.cancel(false);
 		}
-		scheduledTask = scheduler.schedule(Main::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
+		scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
 	}
 
 	private static void triggerHotswap() {
@@ -487,10 +513,10 @@ public class Main {
 		return MessageDigest.getInstance("MD5").digest(data);
 	}
 
-	private static void log(String msg) { if (DEBUG) System.out.println("[NIPX] " + msg); }
-	private static void info(String msg) { System.out.println("[NIPX] " + msg); }
-	private static void error(String msg) { System.err.println("[NIPX] " + msg); }
-	private static void error(String msg, Throwable t) {
+	static void log(String msg) { if (DEBUG) System.out.println("[NIPX] " + msg); }
+	static void info(String msg) { System.out.println("[NIPX] " + msg); }
+	static void error(String msg) { System.err.println("[NIPX] " + msg); }
+	static void error(String msg, Throwable t) {
 		System.err.println("[NIPX] " + msg);
 		t.printStackTrace(System.err);
 	}

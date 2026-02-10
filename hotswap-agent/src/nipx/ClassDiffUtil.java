@@ -1,13 +1,13 @@
 package nipx;
 
 import jdk.internal.org.objectweb.asm.*;
-import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.org.objectweb.asm.tree.*;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import jdk.internal.org.objectweb.asm.util.*;
 
 import java.io.*;
-import java.lang.reflect.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.*;
 
 final class ClassDiffUtil {

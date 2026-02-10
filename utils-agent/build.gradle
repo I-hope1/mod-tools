@@ -27,12 +27,6 @@ jar {
 		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
 	}
 }
-tasks.withType(JavaCompile) {
-	options.incremental = true
-
-//	options.compilerArgs.remove("--enable-preview")
-	//	options.compilerArgs.add("-verbose")
-}
 
 dependencies {
 	annotationProcessor files(compilerJar)

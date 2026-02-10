@@ -28,10 +28,6 @@ jar {
 	}
 }
 tasks.withType(JavaCompile) {
-	options.incremental = true
-
-//	options.compilerArgs.remove("--enable-preview")
-	//	options.compilerArgs.add("-verbose")
 }
 
 dependencies {

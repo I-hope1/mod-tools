@@ -3,19 +3,20 @@ description: '''
 A mod provides various tools for modding.
 
 -----------------
-Version 1.5.6
+Version 1.5.7
 ## Highlight
-1. 修改minGameVersion
-2. 桌面端支持HotSwap（Preview）
-3. 修复一些bug，如ValueLabel
-4. 支持WSA环境的键盘输入
-5. 其他的一些优化
+1. 完善HotSwap（Preview）
+  - ClassDiff (field +/-, method +/-, method body change)
+2. 适配Mindustry v155的lwjgl
+3. 其他的一些优化
+4. 升级ScreenSampler（加了opengl2的判断）来修复bug
+
 -----------------
 WIKI: https://i-hope1.github.io/mod-tools
 '''
 author: "I hope..."
 hidden: true
-version: 1.5.6
+version: 1.5.7
 minGameVersion: "154"
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

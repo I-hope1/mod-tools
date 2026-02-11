@@ -160,16 +160,9 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		// info("transform: " + dotClassName + " ' blacklisted " + HotSwapAgent.isBlacklisted(dotClassName));
 
 		try {
-
 			if (!HotSwapAgent.isBlacklisted(dotClassName) && HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
 
-				File file = new File("F:/classes/" + className + ".class");
-				file.getParentFile().mkdirs();
-				try (FileOutputStream fos = new FileOutputStream(file)) {
-					fos.write(classfileBuffer);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+				if (HotSwapAgent.DEBUG) writeTo(className, classfileBuffer);
 				// 缓存原始字节码
 				HotSwapAgent.bytecodeCache.put(dotClassName, classfileBuffer.clone());
 
@@ -197,6 +190,15 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 			return null; // 返回 null 放弃修改，保证应用不崩，但修改不生效
 		}
 		return null;
+	}
+	private static void writeTo(String className, byte[] classfileBuffer) {
+		File file = new File("F:/classes/" + className + ".class");
+		file.getParentFile().mkdirs();
+		try (FileOutputStream fos = new FileOutputStream(file)) {
+			fos.write(classfileBuffer);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 

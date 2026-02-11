@@ -1,6 +1,7 @@
 package nipx;
 
 import jdk.internal.loader.URLClassPath;
+import nipx.annotation.*;
 
 import java.io.*;
 import java.lang.instrument.*;
@@ -19,12 +20,12 @@ import java.util.stream.*;
  * 其由Bootstrap加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
 public class HotSwapAgent {
-	public static final boolean      DEBUG                = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
-	public static final boolean      UCP_APPEND           = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static final int          FILE_SHAKE_MS        = 600;
-	public static final RedefineMode REDEFINE_MODE        = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
-	public static final String[]     HOTSWAP_BLACKLIST    = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
-	public static final boolean      ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
+	public static boolean      DEBUG         = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	public static boolean      UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
+	public static int          FILE_SHAKE_MS = 600;
+	public static RedefineMode REDEFINE_MODE;
+	public static String[]     HOTSWAP_BLACKLIST;
+	public static boolean      ENABLE_HOTSWAP_EVENT;
 
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
@@ -56,14 +57,24 @@ public class HotSwapAgent {
 		}
 	}
 
+	static MyClassFileTransformer transformer;
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		HotSwapAgent.inst = inst;
-
+		init(agentArgs, false);
+	}
+	public static void init(String agentArgs, boolean reinit){
 		log("DEBUG: " + DEBUG);
+		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 		info("RedefineMode: " + REDEFINE_MODE);
+		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
 		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
+		ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
+		info("HotSwapEvent: " + ENABLE_HOTSWAP_EVENT);
 
-		inst.addTransformer(new MyClassFileTransformer(), true); // canRetransform = true
+		if (transformer == null) {
+			transformer = new MyClassFileTransformer();
+			inst.addTransformer(transformer, true); // canRetransform = true
+		}
 		// 初始化当前所有已加载类的 ClassLoader 映射关系
 		refreshPackageLoaders();
 

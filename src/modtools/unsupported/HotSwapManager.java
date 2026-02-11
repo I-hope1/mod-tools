@@ -2,6 +2,7 @@ package modtools.unsupported;
 
 import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
+import nipx.HotSwapAgent;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -26,9 +27,10 @@ public class HotSwapManager {
 			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm");
 			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.tree");
 			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.util");
+			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.commons");
 			UNSAFE.addExports(Object.class, "jdk.internal.loader");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
-				hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
+				HotSwapAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
 			});
 			initialized = true;
 		}

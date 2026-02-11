@@ -359,7 +359,7 @@ public class IntUI {
 
 			for (V item : list) {
 				String s    = stringify.get(item);
-				String text = settingKey != null ? "@settings." + settingKey + "." + s : s;
+				String text = settingKey == null ? s : Core.bundle.get("settings." + settingKey + "." + s, s);
 				if (!PatternUtils.test(pattern, text)) continue;
 				p.button(text, HopeStyles.cleart/*Styles.cleart*/, () -> {
 					 cons.get(item);

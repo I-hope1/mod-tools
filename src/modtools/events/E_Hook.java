@@ -22,10 +22,11 @@ public enum E_Hook implements ISettings {
 	@Switch(dependency = "hot_swap")
 	hotswap_blacklist(String[].class, i -> i.array(
 	 new String[]{"java.", "javax.", "jdk.", "sun.",
-  "kotlin.", "kotlinx.", "arc.", "mindustry.",
+  "kotlin.", "kotlinx.", "arc.", "mindustry.", "rhino.", "mindustryX",
   "nipx."})),
 	hotswap_event,
 
+	// ------------
 
 	dynamic_jdwp {
 		public boolean isSwitchOn() {
@@ -43,9 +44,9 @@ public enum E_Hook implements ISettings {
 	E_Hook(){}
 
 	static {
-		System.setProperty("nipx.agent.redefine_mode", redefine_mode.getString().trim());
-		System.setProperty("nipx.agent.hotswap_blacklist", String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
-		System.setProperty("nipx.agent.hotswap_event", hotswap_event.getString().trim());
+		redefine_mode.runAndOnChange(() -> System.setProperty("nipx.agent.redefine_mode", redefine_mode.getString().trim()));
+		hotswap_blacklist.runAndOnChange(() -> System.setProperty("nipx.agent.hotswap_blacklist", String.join(",", hotswap_blacklist.getArray().map(Jval::asString))));
+		hotswap_event.runAndOnChange(() -> System.setProperty("nipx.agent.hotswap_event", hotswap_event.getString().trim()));
 	}
 	public enum RedefineMode {
 		inject,

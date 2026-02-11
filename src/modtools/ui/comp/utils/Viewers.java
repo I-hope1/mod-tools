@@ -170,15 +170,16 @@ public class Viewers {
 			int start = label.startColor(c_map);
 			label.startIndexMap.put(start, val);
 			text.append("|Map ").append(getMapSize(val)).append('|');
-			label.endIndexMap.put(val, text.length());
+			label.endIndexMap.put(start, text.length());
 			label.endColor();
 
 			if (!label.expandVal.get(val)) {
 				return true;
 			}
-			text.append("\n{");
 			Runnable prev = label.appendTail;
-			label.appendTail = null;
+			label.postAppendDelimiter(null);
+			text.append("\n{");
+			// label.postAppendDelimiter(null);
 			switch (val) {
 				case ObjectMap<?, ?> m -> appendMap(val, label, m.entries(), e -> e.key, e -> e.value);
 				case Map<?, ?> m -> appendMap(val, label, m.entrySet(), Map.Entry::getKey, Map.Entry::getValue);
@@ -221,8 +222,10 @@ public class Viewers {
 				}
 				default -> throw new UnsupportedOperationException();
 			}
-			label.appendTail = prev;
+			// label.postAppendDelimiter();
 			text.append('}');
+			label.postAppendDelimiter(prev);
+			// label.postAppendDelimiter();
 
 			if (chunk_background.enabled()) label.addDrawRun(start, text.length(), DrawType.background, label.bgColor());
 
@@ -242,7 +245,7 @@ public class Viewers {
 			String repeat    = StringUtils.repeat('\u200d', SIZE_MAX_BIT);
 			text.append(repeat).append("|");
 
-			label.endIndexMap.put(val, text.length());
+			label.endIndexMap.put(start, text.length());
 			label.endColor();
 
 			if (!label.expandVal.get(val)) {
@@ -254,7 +257,7 @@ public class Viewers {
 			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
 			IterCons       cons = pool.obtain().init(label, val, text);
 			Runnable       prev = label.appendTail;
-			label.appendTail = null;
+			label.postAppendDelimiter(null);
 			Runnable[] append = {null};
 			try {
 				switch (val) {
@@ -292,7 +295,7 @@ public class Viewers {
 				if (ARRAY_DEBUG) Log.err(e);
 				text.append("▶ERROR◀");
 			} finally {
-				label.appendTail = prev;
+				label.postAppendDelimiter(prev);
 				try {
 					if (append[0] != null) append[0].run();
 				} catch (Throwable e) {
@@ -622,7 +625,7 @@ public class Viewers {
 		if (b) label.startIndexMap.put(startIndex, val);
 		text.append(toString(val));
 		int endI = text.length();
-		if (b) label.endIndexMap.put(val, endI);
+		if (b) label.endIndexMap.put(startIndex, endI);
 		label.endColor();
 	}
 	private static Object wrapVal(Object val) {

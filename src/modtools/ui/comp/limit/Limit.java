@@ -5,10 +5,13 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.ScrollPane;
 import modtools.utils.ElementUtils;
+import nipx.annotation.Profile;
 
 public interface Limit {
 	Vec2 v1 = new Vec2(), v2 = new Vec2();
 
+
+	@Profile
 	static boolean isVisible(Element actor) {
 		ScrollPane pane = ElementUtils.findClosestPane(actor);
 		if (pane == null) return true;

@@ -23,7 +23,6 @@ import modtools.content.ui.*;
 import modtools.content.world.Selection;
 import modtools.events.*;
 import modtools.jsfunc.*;
-import modtools.struct.IdentityObjectIntMap;
 import modtools.ui.*;
 import modtools.ui.comp.input.ExtendingLabel;
 import modtools.ui.comp.input.highlight.Syntax;
@@ -79,8 +78,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 	public Func<Object, Object> valueFunc = o -> o;
 
-	public final IntMap<Object>                    startIndexMap = new IntMap<>();
-	public final IdentityObjectIntMap<Object>      endIndexMap   = new IdentityObjectIntMap<>();
+	public final IntMap<Object>                    startIndexMap = new IntMap<>(); // startIndex -> value
+	public final IntIntMap                         endIndexMap   = new IntIntMap(); // startIndex -> endIndex
 	// 用于记录数组或map的类型
 	public final IdentityHashMap<Object, Class<?>> valToType     = new IdentityHashMap<>();
 	// 用于记录数组或map的值
@@ -154,7 +153,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 				for (int i = 0, size = keys.size; i < size; i++) {
 					int index = keys.get(i);
 					o = startIndexMap.get(index);
-					toIndex = endIndexMap.get(o);
+					toIndex = endIndexMap.get(index);
 					if (index <= cursor && cursor < toIndex) {
 						hoveredChunk.set(index, toIndex);
 						hoveredLabel = ValueLabel.this;
@@ -190,7 +189,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			 () -> val instanceof Cell<?> cell ? cell.get() : null);
 		}
 
-		Selection.addFocusSource(this, () -> hoveredVal());
+		Selection.addFocusSource(this, this::hoveredVal);
 	}
 	//endregion
 
@@ -418,8 +417,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 	}
 
 	public void postAppendDelimiter() {
+		postAppendDelimiter(() -> text.append(Viewers.getArrayDelimiter()));
+	}
+	public void postAppendDelimiter(Runnable next) {
 		if (appendTail != null) appendTail.run();
-		appendTail = () -> text.append(Viewers.getArrayDelimiter());
+		appendTail = next;
 	}
 
 	boolean isTruncate(int length) {
@@ -604,7 +606,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public Prov<Point2> getPoint2Prov(Object val) {
 		return () -> {
 			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);
-			int end   = endIndexMap.get(val);
+			int end   = endIndexMap.get(start);
 			return Tmp.p1.set(start, end);
 		};
 	}

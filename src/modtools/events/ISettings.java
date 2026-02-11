@@ -273,6 +273,10 @@ public interface ISettings extends E_DataInterface {
 	default void onChange(Runnable r) {
 		data().onChange(name(), r);
 	}
+	default void runAndOnChange(Runnable r) {
+		r.run();
+		onChange(r);
+	}
 
 	class ZX {
 		static String text;

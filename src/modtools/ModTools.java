@@ -24,8 +24,8 @@ import modtools.ui.control.HopeInput;
 import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.unsupported.*;
 import modtools.unsupported.HopeProcessor.MyContentParser;
+import modtools.unsupported.*;
 import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
@@ -33,7 +33,7 @@ import modtools.utils.world.WorldDraw;
 import sun.reflect.ReflectionFactory;
 
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.reflect.*;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 import static mindustry.Vars.*;
@@ -44,20 +44,19 @@ public class ModTools extends Mod {
 	public static final boolean TEST = false;
 
 	/** 如果不为empty，在进入是显示 */
-	private static final Fi libs = root.child("libs");
+	private static final Fi             libs   = root.child("libs");
 	/** Stores errors encountered during library loading. */
 	private static final Seq<Throwable> errors = new Seq<>();
-	public static boolean isV6 = Version.number <= 135;
+	public static        boolean        isV6   = Version.number <= 135;
 
 	/** 是否从游戏内导入进来的 */
-	private static boolean isImportFromGame = false;
-	public static final boolean DISABLE_UI = false;
+	private static      boolean isImportFromGame = false;
+	public static final boolean DISABLE_UI       = false;
 
 	public static boolean loaded = false;
 
 	public ModTools() {
-		if (loaded)
-			throw new IllegalStateException("ModTools already loaded.");
+		if (loaded) { throw new IllegalStateException("ModTools already loaded."); }
 
 		ScreenSampler.resetMark();
 
@@ -66,8 +65,7 @@ public class ModTools extends Mod {
 		}
 		// HopeProcessor.main();
 		Log.info("Loaded ModTools constructor@.", (isImportFromGame ? " [[[from game]]]" : ""));
-		if (headless)
-			Log.info("Running in headless environment.");
+		if (headless) { Log.info("Running in headless environment."); }
 
 		// Defer loading to the main thread to ensure proper initialization order
 		Core.app.post(this::load0);
@@ -80,12 +78,11 @@ public class ModTools extends Mod {
 			loadCore();
 			if (isImportFromGame && SETTINGS.getBool("SDIFG", true)) {
 				ui.showCustomConfirm("@mod-tools.close_modrestart", "@mod-tools.close_modrestart_text",
-						"@mod-tools.close_modrestart_yes", "@mod-tools.close_modrestart_no",
-						SettingsUI::disabledRestart, EMPTY_RUN);
+				 "@mod-tools.close_modrestart_yes", "@mod-tools.close_modrestart_no",
+				 SettingsUI::disabledRestart, EMPTY_RUN);
 			}
 		} catch (Throwable e) {
-			if (isImportFromGame)
-				ui.showException("Failed to load ModTools. (Don't worry.)", e);
+			if (isImportFromGame) { ui.showException("Failed to load ModTools. (Don't worry.)", e); }
 			Log.err("Failed to load ModTools.", e);
 		}
 	}
@@ -109,18 +106,19 @@ public class ModTools extends Mod {
 	private static void test() {
 		try {
 			Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
-					Lookup.class,
-					Lookup.class.getDeclaredConstructor(Class.class)).newInstance(Lookup.class));
+			 Lookup.class,
+			 Lookup.class.getDeclaredConstructor(Class.class)).newInstance(Lookup.class));
 		} catch (InstantiationException | IllegalAccessException | InvocationTargetException
-				| NoSuchMethodException e) {
+		         | NoSuchMethodException e) {
 			throw new RuntimeException(e);
 		}
 		new MyContentParser();
 	}
 
 	private void loadCore() {
-		if (!isImportFromGame)
+		if (!isImportFromGame) {
 			meta.hidden = false;
+		}
 		resolveLibsCatch();
 		MySettings.load();
 
@@ -150,7 +148,7 @@ public class ModTools extends Mod {
 			loadModules();
 		} else {
 			Events.on(ClientLoadEvent.class,
-					_ -> Tools.runLoggedException(this::loadModules));
+			 _ -> Tools.runLoggedException(this::loadModules));
 		}
 	}
 
@@ -181,8 +179,7 @@ public class ModTools extends Mod {
 
 	private static void planB_resolveLibs() {
 		TaskManager.forceRun(() -> {
-			if (mods.getMod(ModTools.class) == null)
-				return false;
+			if (mods.getMod(ModTools.class) == null) { return false; }
 			loadLibs();
 			return true;
 		});
@@ -207,10 +204,8 @@ public class ModTools extends Mod {
 
 	/** 包括 Input，UI，Contents */
 	public void loadModules() {
-		if (ui == null)
-			return;
-		if (DISABLE_UI)
-			return;
+		if (ui == null) { return; }
+		if (DISABLE_UI) { return; }
 
 		mod = mods.getMod(modName);
 		Time.mark();
@@ -372,8 +367,7 @@ public class ModTools extends Mod {
 	private static boolean isDisposed = false;
 
 	public static void disposeAll() {
-		if (isDisposed)
-			return;
+		if (isDisposed) { return; }
 		isDisposed = true;
 		Tools.dispose();
 		WorldDraw.tasks.clear();
@@ -382,7 +376,7 @@ public class ModTools extends Mod {
 		IntVars.dispose();
 		MyEvents.dispose();
 		MyFonts.dispose();
-		ModClassLoader loader = (ModClassLoader) mods.mainLoader();
+		ModClassLoader   loader   = (ModClassLoader) mods.mainLoader();
 		Seq<ClassLoader> children = Reflect.get(ModClassLoader.class, loader, "children");
 		children.remove(ModTools.class.getClassLoader());
 		Content.all.forEach(Content::dispose);

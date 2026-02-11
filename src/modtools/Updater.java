@@ -31,11 +31,12 @@ public class Updater {
 	/** asynchronously checks for updates. */
 	public static void checkUpdate(Boolc done) {
 		Http.get(STR."https://api.github.com/repos/\{IntVars.meta.repo}/releases/latest")
-		 .error(e -> {
+		 .error(e -> Core.app.post(() -> {
 			 Log.err(e);
 			 done.get(false);
-		 })
-		 .submit(res -> {
+		 }))
+		 .submit(res -> Core.app.post(() -> {
+			 Log.info("Got response: @", res.getStatus());
 			 Jval val = Jval.read(res.getResultAsString());
 			 // Log.info(val.toString(Jformat.formatted));
 			 String newBuild = val.getString("tag_name", "0");
@@ -54,7 +55,7 @@ public class Updater {
 			 } else {
 				 Core.app.post(() -> done.get(false));
 			 }
-		 });
+		 }));
 	}
 	public static void checkUpdate() {
 		checkUpdate(_ -> { });
@@ -82,18 +83,18 @@ public class Updater {
 					 int[]     length   = {0};
 
 					 Fi fileDir = IntVars.dataDirectory.child("versions");
-					 Fi file     = fileDir.child(STR."mod-tools.\{updateBuild}.jar");
+					 Fi file    = fileDir.child(STR."mod-tools.\{updateBuild}.jar");
 
 					 Window dialog = new NoTopWindow("@mod-tools.updating");
 					 download(updateUrl, file, i -> length[0] = i, v -> progress[0] = v,
 						() -> cancel[0], runT(() -> mods.importMod(file)),
-						e -> {
+						e -> Core.app.post(runT(() -> {
 							dialog.hide();
 							showException(e);
-						});
+						})));
 
 					 dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating")
-					  : FormatHelper.fixed(progress[0] * length[0] / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length[0] / 1024f / 1024f, 2) + " MB",
+						: FormatHelper.fixed(progress[0] * length[0] / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length[0] / 1024f / 1024f, 2) + " MB",
 						() -> Pal.accent, () -> progress[0])).width(400f).height(70f);
 					 dialog.buttons.button("@cancel", Icon.cancel, () -> {
 						 cancel[0] = true;

@@ -13,6 +13,7 @@ public interface Limit {
 
 	@Profile
 	static boolean isVisible(Element actor) {
+		if (actor == null) return false;
 		ScrollPane pane = ElementUtils.findClosestPane(actor);
 		if (pane == null) return true;
 

@@ -62,7 +62,7 @@ public class HotSwapAgent {
 		HotSwapAgent.inst = inst;
 		init(agentArgs, false);
 	}
-	public static void init(String agentArgs, boolean reinit){
+	public static void init(String agentArgs, boolean reinit) {
 		log("DEBUG: " + DEBUG);
 		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 		info("RedefineMode: " + REDEFINE_MODE);
@@ -90,6 +90,8 @@ public class HotSwapAgent {
 			return;
 		}
 
+		transformLoaded();
+
 		// 重启监控线程
 		if (!activeWatchDirs.equals(newWatchDirs)) {
 			info("Watch paths updated: " + newWatchDirs);
@@ -98,6 +100,27 @@ public class HotSwapAgent {
 			restartWatchers();
 		} else {
 			triggerHotswap();
+		}
+	}
+	private static void transformLoaded() {
+		List<Class<?>> candidates = new ArrayList<>();
+		for (Class<?> loadedClass : inst.getAllLoadedClasses()) {
+			if (!inst.isModifiableClass(loadedClass)) continue;
+			if (isBlacklisted(loadedClass.getName())) continue;
+			if (bytecodeCache.containsKey(loadedClass.getName())) continue;
+
+			candidates.add(loadedClass);
+		}
+		if (candidates.isEmpty()) return;
+		info("Found " + candidates.size() + " classes loaded before Agent start. Retransforming...");
+		try {
+			inst.retransformClasses(candidates.toArray(new Class[0]));
+			info("Retransform complete.");
+		} catch (UnmodifiableClassException e) {
+			error("Failed to retransform some classes", e);
+		} catch (Throwable t) {
+			// 捕获可能的 LinkageError 或 VerifyError
+			error("Critical error during retransform", t);
 		}
 	}
 

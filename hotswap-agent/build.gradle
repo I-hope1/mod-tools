@@ -27,8 +27,6 @@ jar {
 		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
 	}
 }
-tasks.withType(JavaCompile) {
-}
 
 dependencies {
 	annotationProcessor files(compilerJar)

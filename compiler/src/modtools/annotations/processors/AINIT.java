@@ -45,6 +45,9 @@ public class AINIT extends AbstractProcessor {
 		return SourceVersion.latestSupported();
 	}
 
+	public Set<String> getSupportedOptions() {
+		return Set.of(Replace.forceJavaVersionOri);
+	}
 	// 这里的override用于只是启用process
 	public Set<String> getSupportedAnnotationTypes() {
 		return Set.of("*");

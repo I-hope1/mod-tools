@@ -104,7 +104,7 @@ public class HotSwapAgent {
 	}
 	private static void transformLoaded() {
 		List<Class<?>> candidates = new ArrayList<>();
-		for (Class<?> loadedClass : inst.getAllLoadedClasses()) {
+		for (Class<?> loadedClass : loadedClassesMap.values()) {
 			if (!inst.isModifiableClass(loadedClass)) continue;
 			if (isBlacklisted(loadedClass.getName())) continue;
 			if (bytecodeCache.containsKey(loadedClass.getName())) continue;
@@ -202,6 +202,7 @@ public class HotSwapAgent {
 		}
 	}
 
+	public static ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();;
 	/**
 	 * 处理文件变化的核心逻辑
 	 */
@@ -209,7 +210,7 @@ public class HotSwapAgent {
 		refreshPackageLoaders();
 
 		// 获取当前所有已加载类的快照
-		Map<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
+		loadedClassesMap.clear();
 		for (Class<?> c : inst.getAllLoadedClasses()) {
 			String   name     = c.getName();
 			Class<?> existing = loadedClassesMap.get(name);
@@ -421,16 +422,11 @@ public class HotSwapAgent {
 		// 尝试1: 找 a.b.Outer$Inner
 		// 尝试2: 找 a.b.Outer
 		String                candidate = className;
-		Map<String, Class<?>> loadedMap = new HashMap<>();
-		// 建立临时索引，避免多次遍历数组
-		for (Class<?> c : inst.getAllLoadedClasses()) {
-			loadedMap.put(c.getName(), c);
-		}
 
 		while (candidate.contains("$")) {
 			// 剥离最后一层
 			candidate = candidate.substring(0, candidate.lastIndexOf('$'));
-			Class<?> found = loadedMap.get(candidate);
+			Class<?> found = loadedClassesMap.get(candidate);
 			if (found != null) {
 				log("[FOUND-PARENT] Found parent class " + candidate + " for " + className);
 				return found.getClassLoader();
@@ -442,7 +438,7 @@ public class HotSwapAgent {
 		if (className.contains(".")) {
 			String packageName = className.substring(0, className.lastIndexOf('.'));
 			// 遍历所有已加载类，找同包的
-			for (Class<?> c : inst.getAllLoadedClasses()) {
+			for (Class<?> c : loadedClassesMap.values()) {
 				if (c.getName().startsWith(packageName + ".")) {
 					// 排除系统类加载器加载的类（如果目标是应用类），除非只有系统类加载器
 					// 这里直接返回找到的第一个同包类的加载器
@@ -533,7 +529,7 @@ public class HotSwapAgent {
 		scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
 	}
 
-	private static void triggerHotswap() {
+	public static void triggerHotswap() {
 		Set<Path> changes;
 		synchronized (pendingChanges) {
 			if (pendingChanges.isEmpty()) return;
@@ -547,13 +543,40 @@ public class HotSwapAgent {
 		return MessageDigest.getInstance("MD5").digest(data);
 	}
 
-	static void log(String msg) { if (DEBUG) System.out.println("[NIPX] " + msg); }
-	static void info(String msg) { System.out.println("[NIPX] " + msg); }
-	static void error(String msg) { System.err.println("[NIPX] " + msg); }
-	static void error(String msg, Throwable t) {
-		System.err.println("[NIPX] " + msg);
-		t.printStackTrace(System.err);
+	public static Logger logger = new DefaultLogger();
+	public static class DefaultLogger implements Logger {
+		@Override
+		public void log(String msg) {
+			if (DEBUG) System.out.println("[NIPX] " + msg);
+		}
+
+		@Override
+		public void info(String msg) {
+			System.out.println("[NIPX] " + msg);
+		}
+
+		@Override
+		public void error(String msg) {
+			System.err.println("[NIPX] " + msg);
+		}
+
+		@Override
+		public void error(String msg, Throwable t) {
+			System.err.println("[NIPX] " + msg);
+			t.printStackTrace(System.err);
+		}
 	}
+
+	public interface Logger {
+		void log(String msg);
+		void info(String msg);
+		void error(String msg);
+		void error(String msg, Throwable t);
+	}
+	public static void log(String msg) { logger.log(msg); }
+	public static void info(String msg) { logger.info(msg); }
+	public static void error(String msg) { logger.error(msg); }
+	public static void error(String msg, Throwable t) { logger.error(msg, t); }
 
 	/**
 	 * 文件监控线程，这个类的设计本身就是可复用的

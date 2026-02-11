@@ -21,7 +21,10 @@ public class MyTransPatterns extends TransPatterns {
 		return super.translateTopLevelClass(env, cdef, make);
 	}
 }
+/** TODO: owner可能有问题  */
 class SwitchDesugar extends TreeTranslator {
+	public static final String LABEL_SWITCH = "label$switch";
+
 	final        Symtab    syms;
 	final        TreeMaker make;
 	final        Names     names;
@@ -41,6 +44,13 @@ class SwitchDesugar extends TreeTranslator {
 		super.visitMethodDef(tree);
 		currentMethod = prev;
 	}
+	ClassSymbol currentClass;
+	public void visitClassDef(JCClassDecl tree) {
+		ClassSymbol prev = currentClass;
+		currentClass = tree.sym;
+		super.visitClassDef(tree);
+		currentClass = prev;
+	}
 	public void visitSwitchExpression(JCSwitchExpression tree) {
 		if (transSwitch(tree.cases, tree.selector, tree.type)) return;
 		super.visitSwitchExpression(tree);
@@ -57,52 +67,88 @@ class SwitchDesugar extends TreeTranslator {
 		}
 		JCVariableDecl variable;
 		public void init(Type exprType) {
-			variable = make.VarDef(new VarSymbol(0, names.fromString(getName()), exprType, currentMethod), null);
+			variable = exprType != null ? make.VarDef(new VarSymbol(0, names.fromString(getName()), exprType, currentMethod), null) : null;
 		}
 		public <T extends JCTree> T translate(T tree) {
-			if (tree instanceof JCYield yield) {
+			if (tree instanceof JCYield yield && variable != null) {
 				return (T) make.Exec(make.Assign(make.Ident(variable), yield.value).setType(variable.type));
 			}
 			return super.translate(tree);
 		}
 	}
+	class BreakTranslator extends TreeTranslator {
+		public void visitForLoop(JCForLoop tree) {
+			result = tree;
+		}
+		public void visitForeachLoop(JCEnhancedForLoop tree) {
+			result = tree;
+		}
+		public void visitMethodDef(JCMethodDecl tree) {
+			result = tree;
+		}
+		public void visitClassDef(JCClassDecl tree) {
+			result = tree;
+		}
+		public void visitBreak(JCBreak tree) {
+			if (tree.target == null) {
+				tree.target = make.Ident(names.fromString(LABEL_SWITCH));
+			}
+			super.visitBreak(tree);
+		}
+	}
 	final YieldTranslator yieldTranslator = new YieldTranslator();
+	final BreakTranslator breakTranslator = new BreakTranslator();
 	boolean transSwitch(List<JCCase> cases, JCExpression selector, Type exprType) {
 		if (cases.stream().anyMatch(c -> c.labels.stream().anyMatch(l -> l instanceof JCPatternCaseLabel))) {
 			if (exprType != null) {
 				yieldTranslator.init(exprType);
 				yieldTranslator.translate(cases);
 			}
+			if (exprType == null) {
+				breakTranslator.translate(cases);
+			}
+			make.at(selector);
+			JCBlock        block        = make.Block(0, List.nil());
+			VarSymbol      selector_var = new VarSymbol(0, names.fromString("$switch$input"), selector.type, currentMethod != null ? currentMethod : currentClass);
+			block.stats = block.stats.append(make.VarDef(selector_var, selector));
 
 			JCIf        first  = null;
 			JCStatement lastIf = null;
-			for (JCCase jcCase : cases.stream().sorted((a, b) -> a == b ? 0/* 可能不会发生 */ : a.labels.stream().anyMatch(l -> l instanceof JCDefaultCaseLabel) ? 1 : -1).toArray(JCCase[]::new)) {
-				JCStatement smt = translateCase(selector, jcCase);
+			JCCase[] array = cases.stream()
+			 .sorted((a, b) -> a == b ? 0/* 可能不会发生 */ : a.labels.stream().anyMatch(l -> l instanceof JCDefaultCaseLabel) ? 1 : -1)
+			 .toArray(JCCase[]::new);
+			for (JCCase jcCase : array) {
+				JCStatement smt = translateCase(make.Ident(selector_var), jcCase);
 				if (first == null) first = (JCIf) smt;
 				if (lastIf instanceof JCIf jcIf) jcIf.elsepart = smt;
 				lastIf = smt;
 			}
+			JCLabeledStatement labeledStatement = make.Labelled(names.fromString(LABEL_SWITCH), block);
+			labeledStatement.body = first;
+			block.stats = block.stats.append(labeledStatement);
 
-			result = first;
-			// println(result);
+			result = block;
 			if (exprType != null) {
 				LetExpr expr = make.LetExpr(List.of(
 				 yieldTranslator.variable,
-				 first
+				 block
 				), make.Ident(yieldTranslator.variable));
 				expr.type = exprType;
 				expr.needsCond = true;
 				result = expr;
 			}
+			// println(result);
 			return true;
 		}
 		return false;
 	}
 
+	// ------------
 	JCStatement translateCase(JCExpression selector, JCCase jcCase) {
 		JCExpression ifCondition = null;
 
 		make.at(jcCase);
+
 		JCStatement truepart = jcCase.body instanceof JCBlock b ? b : make.Block(0, jcCase.stats);
 		for (JCCaseLabel label : jcCase.labels) {
 			make.at(label);
@@ -121,6 +167,7 @@ class SwitchDesugar extends TreeTranslator {
 		if (jcCase.guard != null) {
 			ifCondition = ifCondition == null ? jcCase.guard : makeBinary(Tag.AND, ifCondition, jcCase.guard);
 		}
+
 		return ifCondition == null ? truepart : make.If(ifCondition, truepart, null);
 	}
 	JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
@@ -131,8 +178,8 @@ class SwitchDesugar extends TreeTranslator {
 		if (pattern instanceof JCBindingPattern bindingPattern) {
 			make.at(pattern);
 			if (bindingPattern.type == syms.objectType) return condition;
-			JCExpression test = make.TypeTest(selector,
-				bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : bindingPattern)
+			JCTree tree = bindingPattern.var.name.isEmpty() ? make.Ident(bindingPattern.type.tsym) : make.BindingPattern(bindingPattern.var).setType(bindingPattern.type);
+			JCExpression test = make.TypeTest(selector, tree)
 			 .setType(syms.booleanType);
 			return condition != null ? makeBinary(Tag.OR, condition, test) : test;
 		}
@@ -141,5 +188,3 @@ class SwitchDesugar extends TreeTranslator {
 		// + make.Literal(true);
 	}
 }
-
-

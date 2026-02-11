@@ -3,11 +3,9 @@ package modtools.annotations.unsafe;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.util.Context;
-import modtools.annotations.NoAccessCheck;
 
 import java.util.function.BiPredicate;
 
-@NoAccessCheck
 public class MyResolve extends Resolve {
 	BiPredicate<Env<AttrContext>, Symbol> accessValidator;
 	public MyResolve(Context context, 
@@ -20,7 +18,7 @@ public class MyResolve extends Resolve {
 	}
 	public boolean isAccessible(Env<AttrContext> env, Type site, Symbol sym, boolean checkInner) {
 		if (!sym.owner.isAbstract() && !sym.isInner() && !sym.isAnonymous() && sym.exists()
-				&& (sym.flags_field & Flags.PARAMETER) == 0 &&
+				&& (sym.flags_field & (Flags.PARAMETER | Flags.SYNTHETIC)) == 0 &&
 				accessValidator.test(env, sym)) {
 			sym.flags_field |= Flags.PUBLIC;
 			sym.flags_field &= ~(Flags.PRIVATE | Flags.PROTECTED);

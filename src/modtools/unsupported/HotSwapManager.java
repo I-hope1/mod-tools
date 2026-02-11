@@ -43,8 +43,7 @@ public class HotSwapManager {
 			UtilsAgentManager.appendToBootstrap(agentPath);
 			UtilsAgentManager.attachAgent(agentPath, true, watchPaths);
 		} catch (Throwable e) {
-			System.err.println("[HotSwapManager] An error occurred during the hotswap process.");
-			e.printStackTrace();
+			HotSwapAgent.error("[HotSwapManager] An error occurred during the hotswap process.", e);
 		}
 	}
 

@@ -8,8 +8,6 @@ import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Lint.LintCategory;
 import com.sun.tools.javac.code.Source.Feature;
 import com.sun.tools.javac.code.Symbol.*;
-import com.sun.tools.javac.code.Type;
-import com.sun.tools.javac.code.Types.SimpleVisitor;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
 import com.sun.tools.javac.comp.Resolve.RecoveryLoadClass;
@@ -48,6 +46,8 @@ import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
+	public static final String forceJavaVersionOri = "targetVersion";
+	public static final String forceJavaVersion = "-A" + forceJavaVersionOri;
 	public static Source targetVersion = Source.JDK8;
 
 	static Context       context;
@@ -63,8 +63,8 @@ public class Replace {
 	static Analyzer      analyzer;
 	static Filer         filer;
 
-	public static JavaCompiler compiler;
-	public static Log          log;
+	public static JavaCompiler        compiler;
+	public static Log                 log;
 
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
@@ -239,12 +239,12 @@ public class Replace {
 			}
 			return null;
 		});
-		setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
+		/* setAccess(Resolve.class, resolve, "accessibilityChecker", new SimpleVisitor<>() {
 			public Object visitType(Type t, Object o) { return t; }
-		});
+		}); */
 	}
 	private static Resolve tryDefineOne(Resolve resolve) {
-		boolean hasAnnotation = isHasAnnotation();
+		boolean hasAnnotation = hasAnnotation();
 		var     predicate     = (BiPredicate<Env<AttrContext>, Symbol>) (env, __) -> hasAnnotation && env.enclClass.sym.getAnnotation(NoAccessCheck.class) != null;
 
 		try {
@@ -253,13 +253,13 @@ public class Replace {
 
 		return resolve;
 	}
-	private static boolean isHasAnnotation() {
+	private static boolean hasAnnotation() {
 		try {
 			NoAccessCheck.class.getClass();
 		} catch (NoClassDefFoundError e) { return false; }
 		return true;
 	}
-	private static void other() throws ClassNotFoundException, IOException {
+	private static void other() {
 		// removeKey(MemberEnter.class, () -> new MyMemberEnter(context));
 
 		fixSyntaxErrorAndSkipInvisibleError();
@@ -340,10 +340,17 @@ public class Replace {
 	}
 
 	public static void forceJavaVersion() {
-		Options.instance(context).keySet().stream()
-		 .filter(f -> f.startsWith("-AtargetVersion=")).findFirst()
-		 .map(v -> v.substring("-AtargetVersion=".length()))
+		String   key     = forceJavaVersion;
+		Options  options = Options.instance(context);
+		String[] s       = {null};
+		options.keySet().stream()
+		 .filter(f -> f.startsWith(key + "=")).findFirst()
+		 .map(v -> {
+			 s[0] = v;
+			 return v.substring(key.length() + 1); // 包括了'='
+		 })
 		 .map(Target::lookup).ifPresent(Replace::setTarget);
+		if (s[0] != null) options.remove(s[0]);
 		// Options.instance(context).keySet().stream()
 		//  .filter(f -> f.startsWith("-AtargetVersion=")).findFirst().ifPresent(f -> Options.instance(context).remove(f));
 	}

@@ -40,6 +40,7 @@ public enum E_Hook implements ISettings {
 			return OS.isAndroid;
 		}
 	};
+
 	E_Hook(Class<?> type, Cons<ISettings> builder) { }
 	E_Hook(){}
 

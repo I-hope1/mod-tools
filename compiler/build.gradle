@@ -1,11 +1,6 @@
 apply plugin: 'java'
 
 sourceSets.main.java.srcDirs = ["src"]
-//sourceSets.main.resources.srcDirs = ["src/main/resources"]
-tasks.withType(JavaCompile) {
-	// 这里是为了刷新编译器参数
-//	options.compilerArgs += '-Aa' + (int) (Math.random() * 100000)
-}
 
 dependencies {
 	implementation project(":annotations")
@@ -22,6 +17,7 @@ dependencies {
 
 }
 jar {}
+
 
 task anno(type: Jar) {
 	dependsOn jar

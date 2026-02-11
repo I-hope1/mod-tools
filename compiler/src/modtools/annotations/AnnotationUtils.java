@@ -120,6 +120,9 @@ public interface AnnotationUtils {
 		return ann;
 	}
 	default Object treeToConstant(CompilationUnitTree unit, JCTree node) {
+		return treeToConstantStatic(unit, node);
+	}
+	private Object treeToConstantStatic(CompilationUnitTree unit, JCTree node) {
 		switch (node) {
 			case JCLiteral jcLiteral -> {
 				return jcLiteral.value;
@@ -148,7 +151,7 @@ public interface AnnotationUtils {
 					}
 				}
 			}
-			case JCIdent jcIdent -> {
+			case JCIdent _ -> {
 				TreePath path   = trees.getPath(unit, node);
 				Symbol   symbol = trees.getElement(path);
 				if (symbol instanceof VarSymbol v) {

@@ -35,7 +35,6 @@ import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.*;
-import nipx.profiler.ProfilerData;
 
 import java.lang.reflect.Field;
 import java.util.Objects;
@@ -144,7 +143,7 @@ public class SettingsUI extends Content {
 			// watch的路径数组配置
 			ISettings.buildAll("hook", t, E_Hook.class);
 
-			t.button("Show Profile", ProfilerData::printReport).growX().height(45);
+			t.button("HotSwapLog", HotSwapDialog::staticShow).growX().height(45);
 		});
 
 		addSectionInternal("UI", Icon.imageSmall, t -> {

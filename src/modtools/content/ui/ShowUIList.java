@@ -76,8 +76,15 @@ public class ShowUIList extends Content {
 		ui = new IconWindow(getW(), 400, true);
 		Table cont = ui.cont;
 
-		Table[] tables = {icons, tex, styles, colorsT, interps, actions = newTable(new ActionComp())};
-		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
+		try {
+			actions = newTable(new ActionComp());
+		} catch (Throwable e) {
+			Log.err(e);
+		}
+		if (actions == null) actions = new Table(t -> t.add("<EMPTY>"));
+
+		Table[]           tables   = {icons, tex, styles, colorsT, interps, actions};
+		Color[]           colors   = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
 		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
 		IntTab   tab   = new IntTab(CellTools.unset, names, colors, tables);

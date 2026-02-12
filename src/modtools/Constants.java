@@ -13,7 +13,8 @@ import mindustry.graphics.MultiPacker;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
 import modtools.jsfunc.reflect.InitMethodHandle;
-import modtools.utils.Tools.CProv;
+import modtools.utils.*;
+import modtools.utils.Tools.*;
 import rhino.*;
 
 import java.lang.invoke.*;
@@ -60,6 +61,7 @@ public class Constants {
 	public interface DESKTOP_INIT {
 		/** @see java.lang.invoke.MemberName */
 		Class<?> MEMBER_NAME = nl("java.lang.invoke.MemberName");
+		Class<?> DIRECT_METHOD_HANDLE = nl("java.lang.invoke.DirectMethodHandle");
 
 		/** @see MemberName#flags */
 		long MEMBER_NAME_FLAGS =
@@ -77,9 +79,13 @@ public class Constants {
 		Method RESOLVE_OR_FAIL   = method(CL_FACTORY,
 		 "resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class);
 		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
-		Method GET_DIRECT_METHOD = method(
-		 Lookup.class, "getDirectMethodCommon",
-		 byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class);
+		Method GET_DIRECT_METHOD = CatchSR.apply(
+		 ()-> CatchSR.of(() -> method(
+		 Lookup.class, "getDirectMethodCommonx",
+		 byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class))
+		  .get(() -> method(DIRECT_METHOD_HANDLE,
+		   "make", byte.class, Class.class, MEMBER_NAME, Class.class))
+		);
 
 
 		// /** @see MemberName#MemberName(Method, boolean) */

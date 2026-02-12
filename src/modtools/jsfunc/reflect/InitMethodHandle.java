@@ -79,10 +79,10 @@ public class InitMethodHandle {
 			 | MN_IS_METHOD // 添加MN_IS_METHOD
 			);
 		};
-		return findSpecial(refc, maker, resolver, specialCaller);
+		return findSpecial(refc, ctor, maker, resolver, specialCaller);
 	}
 	private static MethodHandle findSpecial
-	 (Class<?> refc, CProvT<Object, Throwable> maker, Cons<Object> resolver,
+	 (Class<?> refc, Constructor<?> ctor, CProvT<Object, Throwable> maker, Cons<Object> resolver,
 	  Class<?> specialCaller) throws Throwable {
 		Lookup specialLookup = lookup.in(specialCaller);
 
@@ -92,14 +92,31 @@ public class InitMethodHandle {
 		 NoSuchMethodException.class);
 		resolver.get(mb);
 		assert GET_DIRECT_METHOD != null;
-		return (MethodHandle) GET_DIRECT_METHOD.invoke(
-		 specialLookup,
-		 REF_invokeSpecial, // refKind
-		 refc,// ReferringClass
-		 mb, // method
-		 false, // checkSecurity
-		 true, // doRestrict
-		 specialLookup // boundCaller
-		);
+		if (GET_DIRECT_METHOD.getDeclaringClass() == Lookup.class) {
+			return (MethodHandle) GET_DIRECT_METHOD.invoke(
+			 specialLookup,
+			 REF_invokeSpecial, // refKind
+			 refc,// ReferringClass
+			 mb, // method
+			 false, // checkSecurity
+			 true, // doRestrict
+			 specialLookup // boundCaller
+			);
+		} else {
+			// fallback方案
+			// DirectMethodHandle#make(byte, java.lang.Class<?>, java.lang.invoke.MemberName, java.lang.Class<?>)
+			MethodHandle mh = (MethodHandle) GET_DIRECT_METHOD.invoke(
+			 null,
+			 REF_invokeSpecial, // refKind
+			 refc,// ReferringClass
+			 mb, // method
+			 specialCaller // callerClass
+			);
+			// 手动补偿 Varargs
+			if (ctor.isVarArgs()) {
+				mh = mh.asVarargsCollector(ctor.getParameterTypes()[ctor.getParameterCount() - 1]);
+			}
+			return mh;
+		}
 	}
 }

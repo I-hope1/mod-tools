@@ -155,6 +155,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 		if (className == null) return null;
+		if (className.startsWith("org/objectweb/asm/")) return null;
 
 		String dotClassName = className.replace('/', '.');
 		// info("transform: " + dotClassName + " ' blacklisted " + HotSwapAgent.isBlacklisted(dotClassName));

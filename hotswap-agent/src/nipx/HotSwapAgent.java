@@ -62,6 +62,9 @@ public class HotSwapAgent {
 	static MyClassFileTransformer transformer;
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		HotSwapAgent.inst = inst;
+		try {
+			Class.forName("org.objectweb.asm.ClassReader");
+		} catch (ClassNotFoundException e) { }
 		init(agentArgs, false);
 	}
 	public static void init(String agentArgs, boolean reinit) {
@@ -509,44 +512,36 @@ public class HotSwapAgent {
 		}
 	}
 	private static void initializeAgentState() {
-		info("Scanning files and checking for initial out-of-sync...");
-		fileDiskHashes.clear();
-		Set<Path> initialChanges = new HashSet<>();
-
+		info("Scanning files...");
+		// 不要盲目 clear，或者 clear 后立即进行差异检查
 		for (Path root : activeWatchDirs) {
 			try (Stream<Path> walk = Files.walk(root)) {
 				walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
 					String cName = getClassName(path);
-					if (cName != null && !isBlacklisted(cName)) {
-						try {
-							byte[] diskBytes = Files.readAllBytes(path);
-							byte[] diskHash  = calculateHash(diskBytes);
+					if (cName == null || isBlacklisted(cName)) return;
 
-							// 1. 存入基准哈希
-							fileDiskHashes.put(cName, diskHash);
+					try {
+						byte[] diskBytes = Files.readAllBytes(path);
+						byte[] diskHash  = calculateHash(diskBytes);
 
-							// 2. 核心：与内存中的字节码对比
-							// bytecodeCache 是在 transformLoaded 中通过 retransform 获取的内存字节码
-							byte[] memoryBytes = bytecodeCache.get(cName);
-							if (memoryBytes != null) {
-								byte[] memoryHash = calculateHash(memoryBytes);
-								if (!Arrays.equals(diskHash, memoryHash)) {
-									log("[INIT] Class " + cName + " on disk differs from memory. Queuing update.");
-									initialChanges.add(path);
-								}
+						// 获取内存中的字节码（这是 transformLoaded 偷出来的）
+						byte[] memBytes = bytecodeCache.get(cName);
+						if (memBytes != null) {
+							byte[] memHash = calculateHash(memBytes);
+							if (!Arrays.equals(diskHash, memHash)) {
+								// 发现磁盘和内存不一致，手动加入待处理队列
+								log("[INIT-SYNC] " + cName + " is out of sync. Reloading...");
+								pendingChanges.add(path);
 							}
-						} catch (Exception _) { }
-					}
+						}
+						// 只有在这里才记录磁盘哈希
+						fileDiskHashes.put(cName, diskHash);
+					} catch (Exception _) { }
 				});
-			} catch (IOException e) {
-				error("Scan failed: " + root);
-			}
+			} catch (IOException _) { }
 		}
-
-		// 如果发现不一致，立即同步
-		if (!initialChanges.isEmpty()) {
-			processChanges(initialChanges);
-		}
+		// 触发一次同步
+		if (!pendingChanges.isEmpty()) triggerHotswap();
 	}
 	private static void handleFileChange(Path changedFile) {
 		pendingChanges.add(changedFile);

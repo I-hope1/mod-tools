@@ -110,7 +110,7 @@ public class Viewers {
 								try {
 									return method.invoke(interface_, args);
 								} catch (IllegalAccessException | InvocationTargetException e) {
-									throw new RuntimeException(e);
+									return null;
 								}
 							}, cx1, vscope, vscope, args, true);
 					 });
@@ -125,6 +125,7 @@ public class Viewers {
 
 	public static final  boolean ARRAY_DEBUG  = false;
 	private static final int     SIZE_MAX_BIT = 5;
+	public static final int maxDepth = 5;
 
 	static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
 		internalViewers.add(new ViewerItem<>(clazz, viewer));
@@ -298,6 +299,7 @@ public class Viewers {
 				label.postAppendDelimiter(prev);
 				try {
 					if (append[0] != null) append[0].run();
+				} catch (SatisfyException ignored) {
 				} catch (Throwable e) {
 					Log.err(e);
 				}
@@ -341,6 +343,7 @@ public class Viewers {
 		public Type          type;
 		public Seq<Class<?>> classes;
 		public Boolf<T>      valid;
+		public int currentDepth;
 		private ViewerItem() { }/* 用于序列化 */
 		public ViewerItem(Type type, Viewer<T> viewer) {
 			this.viewer = viewer;
@@ -362,6 +365,8 @@ public class Viewers {
 			       || (classes != null && classes.indexOf(c -> c.isInstance(val)) != -1);
 		}
 		public boolean view(T val, ValueLabel label) {
+			if (currentDepth > maxDepth) return false;
+			currentDepth++;
 			return viewer.view(val, label);
 		}
 

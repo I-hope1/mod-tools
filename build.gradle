@@ -234,10 +234,11 @@ task playGame(type: JavaExec) {
 		if (!workingDir.exists()) workingDir.mkdirs()
 	}
 	//运行游戏目录
-	classpath(MdtDataDir + "/Mindustry.jar")
-//	classpath(MdtDataDir + "/MindustryX.jar")
+//	classpath(MdtDataDir + "/Mindustry.jar")
+	classpath(MdtDataDir + "/MindustryX.jar")
 	jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
 	jvmArgs("-XX:+AllowEnhancedClassRedefinition")
+	jvmArgs("-XX:+EnableDynamicAgentLoading")
 //	jvmArgs = [
 //			"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
 //	]

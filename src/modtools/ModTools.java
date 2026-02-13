@@ -27,6 +27,7 @@ import modtools.ui.tutorial.AllTutorial;
 import modtools.unsupported.HopeProcessor.MyContentParser;
 import modtools.unsupported.*;
 import modtools.utils.*;
+import modtools.utils.Tools.CatchRun;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
@@ -126,18 +127,16 @@ public class ModTools extends Mod {
 			if (OS.isAndroid) {
 				HiddenApi.setHiddenApiExemptions();
 			}
-
+		} catch (Throwable e) {
+			Log.err(e);
+		}
+		load("HotSwapManager", () -> {
 			if (HotSwapManager.valid()) {
 				HotSwapManager.start();
 			}
-			if (R_Hook.dynamic_jdwp) {
-				load("JDWP", JDWP::load);
-			}
-			// HotSwapManager.attachAgent("jdwp",
-			// "transport=dt_socket,server=y,suspend=n,address=15005");
-			// if (OS.isAndroid) TestAndroidVM.main();
-		} catch (Throwable e) {
-			Log.err(e);
+		});
+		if (R_Hook.dynamic_jdwp) {
+			load("JDWP", JDWP::load);
 		}
 
 		WorldDraw.registerEvent();
@@ -278,8 +277,8 @@ public class ModTools extends Mod {
 		}, () -> Log.info("Loaded ModTools modules in @ms", Time.elapsed()));
 	}
 
-	public static void load(String moduleName, Runnable r) {
-		Tools.runLoggedException(moduleName, r::run);
+	public static void load(String moduleName, CatchRun r) {
+		Tools.runLoggedException(moduleName, r);
 	}
 
 	public static void loadBundle() {

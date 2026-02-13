@@ -2,6 +2,7 @@ package nipx;
 
 import jdk.internal.loader.URLClassPath;
 import nipx.annotation.*;
+import org.objectweb.asm.ClassReader;
 
 import java.io.*;
 import java.lang.instrument.*;
@@ -246,7 +247,7 @@ public class HotSwapAgent {
 				// 检查磁盘内容是否真的改变（过滤时间戳伪触发）
 				byte[] oldDiskHash = fileDiskHashes.get(className);
 				if (oldDiskHash != null && Arrays.equals(oldDiskHash, newHash)) {
-					log("[SKIP] " + className + " hash=" + bytesToHex(newHash).substring(0,8) + " old=" + bytesToHex(oldDiskHash).substring(0,8));
+					log("[SKIP] " + className + " hash=" + bytesToHex(newHash).substring(0, 8) + " old=" + bytesToHex(oldDiskHash).substring(0, 8));
 					skippedCount++;
 					continue;
 				}
@@ -499,57 +500,53 @@ public class HotSwapAgent {
 	}
 
 	private static String getClassName(Path classFile) {
-		for (Path rootDir : activeWatchDirs) {
-			if (classFile.startsWith(rootDir)) {
-				Path   relativePath = rootDir.relativize(classFile);
-				String pathStr      = relativePath.toString();
-				// 移除 .class 后缀并转换分隔符
-				if (pathStr.endsWith(".class")) {
-					return pathStr.substring(0, pathStr.length() - 6).replace(File.separatorChar, '.');
-				}
-			}
+		try (InputStream is = Files.newInputStream(classFile)) {
+			// 解析类文件头，只读不处理，性能开销极小
+			ClassReader cr = new ClassReader(is);
+			return cr.getClassName().replace('/', '.');
+		} catch (IOException e) {
+			return null; // 不是合法的 class 文件
 		}
-		return null;
 	}
 	private static void initializeAgentState() {
-    info("Scanning files and checking for initial out-of-sync...");
-    fileDiskHashes.clear();
-    Set<Path> initialChanges = new HashSet<>();
+		info("Scanning files and checking for initial out-of-sync...");
+		fileDiskHashes.clear();
+		Set<Path> initialChanges = new HashSet<>();
 
-    for (Path root : activeWatchDirs) {
-        try (Stream<Path> walk = Files.walk(root)) {
-            walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
-                String cName = getClassName(path);
-                if (cName != null && !isBlacklisted(cName)) {
-                    try {
-                        byte[] diskBytes = Files.readAllBytes(path);
-                        byte[] diskHash = calculateHash(diskBytes);
+		for (Path root : activeWatchDirs) {
+			try (Stream<Path> walk = Files.walk(root)) {
+				walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
+					String cName = getClassName(path);
+					if (cName != null && !isBlacklisted(cName)) {
+						try {
+							byte[] diskBytes = Files.readAllBytes(path);
+							byte[] diskHash  = calculateHash(diskBytes);
 
-                        // 1. 存入基准哈希
-                        fileDiskHashes.put(cName, diskHash);
+							// 1. 存入基准哈希
+							fileDiskHashes.put(cName, diskHash);
 
-                        // 2. 核心：与内存中的字节码对比
-                        // bytecodeCache 是在 transformLoaded 中通过 retransform 获取的内存字节码
-                        byte[] memoryBytes = bytecodeCache.get(cName);
-                        if (memoryBytes != null) {
-                            byte[] memoryHash = calculateHash(memoryBytes);
-                            if (!Arrays.equals(diskHash, memoryHash)) {
-                                log("[INIT] Class " + cName + " on disk differs from memory. Queuing update.");
-                                initialChanges.add(path);
-                            }
-                        }
-                    } catch (Exception _) { }
-                }
-            });
-        } catch (IOException e) {
-            error("Scan failed: " + root);
-        }
-    }
+							// 2. 核心：与内存中的字节码对比
+							// bytecodeCache 是在 transformLoaded 中通过 retransform 获取的内存字节码
+							byte[] memoryBytes = bytecodeCache.get(cName);
+							if (memoryBytes != null) {
+								byte[] memoryHash = calculateHash(memoryBytes);
+								if (!Arrays.equals(diskHash, memoryHash)) {
+									log("[INIT] Class " + cName + " on disk differs from memory. Queuing update.");
+									initialChanges.add(path);
+								}
+							}
+						} catch (Exception _) { }
+					}
+				});
+			} catch (IOException e) {
+				error("Scan failed: " + root);
+			}
+		}
 
-    // 如果发现不一致，立即同步
-    if (!initialChanges.isEmpty()) {
-        processChanges(initialChanges);
-    }
+		// 如果发现不一致，立即同步
+		if (!initialChanges.isEmpty()) {
+			processChanges(initialChanges);
+		}
 	}
 	private static void handleFileChange(Path changedFile) {
 		pendingChanges.add(changedFile);

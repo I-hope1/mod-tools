@@ -24,10 +24,6 @@ public class HotSwapManager {
 			/* 模块open（MyReflect里）还不够，还得exports */
 			UNSAFE.addExports(Object.class, "jdk.internal.misc");
 			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
-			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm");
-			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.tree");
-			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.util");
-			UNSAFE.addExports(Object.class, "jdk.internal.org.objectweb.asm.commons");
 			UNSAFE.addExports(Object.class, "jdk.internal.loader");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				HotSwapAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);

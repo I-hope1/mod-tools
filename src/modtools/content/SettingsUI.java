@@ -143,7 +143,9 @@ public class SettingsUI extends Content {
 			// watch的路径数组配置
 			ISettings.buildAll("hook", t, E_Hook.class);
 
-			t.button("HotSwapLog", HotSwapDialog::staticShow).growX().height(45);
+			t.button("HotSwapLog", () -> {
+				if (R_Hook.hot_swap) HotSwapDialog.staticShow();
+			}).growX().height(45);
 		});
 
 		addSectionInternal("UI", Icon.imageSmall, t -> {

@@ -26,7 +26,7 @@ public class HotSwapAgent {
 	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
-	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true"));
+	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true")); // 需要重启
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
 
@@ -114,7 +114,7 @@ public class HotSwapAgent {
 		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "false"));
 		info("LambdaAlign: " + LAMBDA_ALIGN);
 	}
-	/** 对外api，刷新已加载的类  */
+	/** 对外api，刷新已加载的类 */
 	public static void retransformLoaded() {
 		retransformLoaded(inst.getAllLoadedClasses());
 	}
@@ -573,7 +573,7 @@ public class HotSwapAgent {
 		}
 		processChanges(changes, classes);
 	}
-	/** 对外api，触发热更新  */
+	/** 对外api，触发热更新 */
 	public static void triggerHotswap() {
 		triggerHotswapWith(inst.getAllLoadedClasses());
 	}
@@ -605,7 +605,6 @@ public class HotSwapAgent {
 			t.printStackTrace(System.err);
 		}
 	}
-
 	public interface Logger {
 		void log(String msg);
 		void info(String msg);
@@ -616,6 +615,7 @@ public class HotSwapAgent {
 	public static void info(String msg) { logger.info(msg); }
 	public static void error(String msg) { logger.error(msg); }
 	public static void error(String msg, Throwable t) { logger.error(msg, t); }
+
 
 	/**
 	 * 文件监控线程，这个类的设计本身就是可复用的

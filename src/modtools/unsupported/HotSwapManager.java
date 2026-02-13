@@ -12,8 +12,6 @@ import java.nio.file.Files;
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-	public static final boolean DEBUG = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
-
 	private static final String  AGENT_NAME          = "hotswap-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;

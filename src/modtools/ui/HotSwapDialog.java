@@ -10,6 +10,7 @@ import mindustry.ui.Styles;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import nipx.HotSwapAgent;
+import nipx.HotSwapAgent.Logger;
 import nipx.profiler.ProfilerData;
 
 /**
@@ -29,7 +30,7 @@ public class HotSwapDialog extends Window {
 	private final ScrollPane    logPane;
 
 	// 原始 Logger，用于窗口关闭时恢复
-	private final HotSwapAgent.Logger originalLogger;
+	private final Logger originalLogger;
 
 	public HotSwapDialog() {
 		super("HotSwap Control", 400, 300, true);
@@ -114,7 +115,7 @@ public class HotSwapDialog extends Window {
 	 * 既保留控制台输出，又转发到 UI，同时解决线程安全问题
 	 */
 	private void setupAgentLogger() {
-		HotSwapAgent.logger = new HotSwapAgent.Logger() {
+		HotSwapAgent.logger = new Logger() {
 			@Override
 			public void log(String msg) {
 				originalLogger.log(msg); // 转发给原控制台

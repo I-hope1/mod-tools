@@ -16,6 +16,7 @@ import java.util.jar.JarFile;
 
 public class UtilsAgentManager {
 	public static final  String  AGENT_NAME          = "utils-agent";
+	public static final  boolean DEBUG               = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
@@ -24,7 +25,7 @@ public class UtilsAgentManager {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
-		try (InputStream is = HotSwapManager.class.getResourceAsStream(AGENT_RESOURCE_PATH)) {
+		try (InputStream is = UtilsAgentManager.class.getResourceAsStream(AGENT_RESOURCE_PATH)) {
 			if (is == null) {
 				throw new RuntimeException("Agent JAR not found in resources: " + AGENT_RESOURCE_PATH);
 			}
@@ -65,7 +66,7 @@ public class UtilsAgentManager {
 
 		VirtualMachine vm = null;
 		try {
-			if (HotSwapManager.DEBUG) {
+			if (DEBUG) {
 				System.out.println("[Agent] Attaching to process " + pid);
 			}
 			vm = VirtualMachine.attach(pid);

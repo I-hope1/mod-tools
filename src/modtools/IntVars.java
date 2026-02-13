@@ -154,6 +154,9 @@ public class IntVars {
 	/** A Vec2 representing the mouse position, updated periodically. */
 	public static class MouseVec extends Vec2 {
 		static {
+			init();
+		}
+		static void init(){
 			Tools.TASKS.add(() -> {
 				if (Vars.state.isGame()) {
 					mouseWorld.set(Core.camera.unproject(mouseVec.x, mouseVec.y));

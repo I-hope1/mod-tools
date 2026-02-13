@@ -75,6 +75,9 @@ public class Window extends Table implements Position {
 	public static Window frontWindow;
 
 	static {
+		init();
+	}
+	static void init(){
 		IntVars.addResizeListener(() -> all.each(Window::display));
 		Tools.TASKS.add(() -> frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1));
 	}

@@ -798,11 +798,14 @@ public class IntUI {
 		}
 		protected void setContainerPosition(Element element, float x, float y) {
 			this.targetActor = element;
-			IntUI.positionTooltip(element, Align.top, container, Align.bottom);
+			IntUI.positionTooltip(element, Align.topLeft, container, Align.bottomLeft);
 		}
 
+		public static Tooltip provideTooltip(String text) {
+        return new ITooltip(() -> text);
+    }
 		static {
-			Tooltips.getInstance().textProvider = text -> new ITooltip(() -> text);
+			Tooltips.getInstance().textProvider = ITooltip::provideTooltip;
 		}
 	}
 

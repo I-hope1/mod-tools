@@ -15,6 +15,9 @@ public class SamplePackage {
 	}
 
 	static {
+		test();
+	}
+	static void test(){
 		var map = SamplePackageInterface.changeClass(new HashMap<>());
 		map.put("SamplePackage", SamplePackage.class);
 		Arrays.stream(map.keySet().toArray()).forEach(Log::info); // 123 ausojisji

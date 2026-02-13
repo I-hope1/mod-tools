@@ -68,6 +68,9 @@ public class ExecuteTree {
 	public static Timer worldTimer = new Timer();
 
 	static {
+		initTasks();
+	}
+	static void initTasks(){
 		Tools.TASKS.add(() -> {
 			if (Vars.state.isPaused()) worldTimer.stop();
 			else worldTimer.start();

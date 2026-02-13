@@ -44,6 +44,9 @@ public class MapEditor<K, V> extends Window {
 	}
 
 	static {
+		initClassBuilders();
+	}
+	static void initClassBuilders() {
 		classBuilders.put(String.class, (table, field, value) -> {
 			ModifiableLabel.build(value::asString, null, (f, _) -> value.set(f.getText()), table);
 		});

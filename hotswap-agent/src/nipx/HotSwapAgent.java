@@ -26,6 +26,7 @@ public class HotSwapAgent {
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
 	public static boolean      ENABLE_HOTSWAP_EVENT;
+	public static boolean      LAMBDA_ALIGN;
 
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
@@ -63,13 +64,7 @@ public class HotSwapAgent {
 		init(agentArgs, false);
 	}
 	public static void init(String agentArgs, boolean reinit) {
-		log("DEBUG: " + DEBUG);
-		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
-		info("RedefineMode: " + REDEFINE_MODE);
-		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
-		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
-		ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
-		info("HotSwapEvent: " + ENABLE_HOTSWAP_EVENT);
+		initConfig();
 
 		if (transformer == null) {
 			transformer = new MyClassFileTransformer();
@@ -101,6 +96,17 @@ public class HotSwapAgent {
 		} else {
 			triggerHotswap();
 		}
+	}
+	public static void initConfig() {
+		log("DEBUG: " + DEBUG);
+		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
+		info("RedefineMode: " + REDEFINE_MODE);
+		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
+		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
+		ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
+		info("HotSwapEvent: " + ENABLE_HOTSWAP_EVENT);
+		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "false"));
+		info("LambdaAlign: " + LAMBDA_ALIGN);
 	}
 	private static void transformLoaded() {
 		List<Class<?>> candidates = new ArrayList<>();
@@ -202,7 +208,8 @@ public class HotSwapAgent {
 		}
 	}
 
-	public static ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();;
+	public static ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
+	;
 	/**
 	 * 处理文件变化的核心逻辑
 	 */
@@ -271,6 +278,10 @@ public class HotSwapAgent {
 						// 现在我们是 byte[] vs byte[]，可以检测方法体了
 						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
 						ClassDiffUtil.logDiff(className, diff);
+
+						if (LAMBDA_ALIGN) {
+							LambdaAligner.align(oldBytecode, newBytecode);
+						}
 
 						// 可选：如果没有结构性变化且没有方法体变化，是否跳过 redefine？
 						// 为了保险起见，只要文件变了，还是建议 redefine，防止漏掉细微变化
@@ -421,7 +432,7 @@ public class HotSwapAgent {
 		// 输入: a.b.Outer$Inner$Deep
 		// 尝试1: 找 a.b.Outer$Inner
 		// 尝试2: 找 a.b.Outer
-		String                candidate = className;
+		String candidate = className;
 
 		while (candidate.contains("$")) {
 			// 剥离最后一层

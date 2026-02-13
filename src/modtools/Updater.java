@@ -36,7 +36,7 @@ public class Updater {
 			 done.get(false);
 		 }))
 		 .submit(res -> Core.app.post(() -> {
-			 Log.info("Got response: @", res.getStatus());
+			 Log.debug("Got response: @", res.getStatus());
 			 Jval val = Jval.read(res.getResultAsString());
 			 // Log.info(val.toString(Jformat.formatted));
 			 String newBuild = val.getString("tag_name", "0");

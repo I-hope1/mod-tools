@@ -55,7 +55,8 @@ public class TaskManager {
 		task.cancel();
 		return false;
 	}
-	/** 将task添加到计时器  */
+	/** 将task添加到计时器
+	 * @param run 一定要缓存，field或其他常量 */
 	public static void  scheduleOrReset(float delaySeconds, Runnable run) {
 		scheduleOrReset(delaySeconds, map.get(run, () -> acquireTask(delaySeconds * 60f, run)));
 	}

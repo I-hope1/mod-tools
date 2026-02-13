@@ -257,42 +257,52 @@ public class IntUI {
 		positionTooltip(lying, Align.bottom, t, Align.top);
 	}
 
-	public static boolean xlock, ylock;
 	public static void positionTooltip(Element lying, int lyingAlign, Table table, int tableAlign) {
-		Vec2 pos = Tmp.v1;
-		lying.localToStageCoordinates(
-		 pos.set(lying.getX(lyingAlign) - lying.x,
-			lying.getY(lyingAlign) - lying.y));
+		float stageW = Core.scene.getWidth(), stageH = Core.scene.getHeight();
 
-		table.setPosition(pos.x, pos.y, tableAlign);
-		// 在不遮挡lying的情况下，如果上面超出屏幕
-		if (!ylock && (table.y + table.getHeight() > Core.graphics.getHeight() || table.y < 0)) {
-			int lyingAlign1 = Align.isTop(lyingAlign) ? lyingAlign & ~Align.top | Align.bottom : lyingAlign & ~Align.bottom | Align.top;
-			int tableAlign1 = Align.isTop(tableAlign) ? tableAlign & ~Align.top | Align.bottom : tableAlign & ~Align.bottom | Align.top;
-			ylock = true;
-			positionTooltip(lying, lyingAlign1, table, tableAlign1);
-			ylock = false;
+		// 1. 获取基础对齐方案
+		int currentLyingAlign = lyingAlign;
+		int currentTableAlign = tableAlign;
+
+		// 辅助函数计算坐标并设置
+		applyPos(lying, currentLyingAlign, table, currentTableAlign);
+
+		// 2. 检查 Y 轴并尝试翻转
+		if (table.y + table.getHeight() > stageH || table.y < 0) {
+			currentLyingAlign = flipV(currentLyingAlign);
+			currentTableAlign = flipV(currentTableAlign);
+			applyPos(lying, currentLyingAlign, table, currentTableAlign);
 		}
 
-		// 在不遮挡lying的情况下，如果右边超出屏幕
-		if (!xlock && (table.x + table.getWidth() > Core.graphics.getWidth() || table.x < 0)) {
-			int lyingAlign1 = Align.isLeft(lyingAlign) ? lyingAlign & ~Align.left | Align.right : lyingAlign & ~Align.right | Align.left;
-			int tableAlign1 = Align.isLeft(tableAlign) ? tableAlign & ~Align.left | Align.right : tableAlign & ~Align.right | Align.left;
-			xlock = true;
-			positionTooltip(lying, lyingAlign1, table, tableAlign1);
-			xlock = false;
+		// 3. 检查 X 轴并尝试翻转 (在 Y 已经决定的基础上)
+		if (table.x + table.getWidth() > stageW || table.x < 0) {
+			currentLyingAlign = flipH(currentLyingAlign);
+			currentTableAlign = flipH(currentTableAlign);
+			applyPos(lying, currentLyingAlign, table, currentTableAlign);
 		}
 
-		// keep in stage
-		/** @see Element#keepInStage()  */
-		float width  = graphics.getWidth();
-		float height = graphics.getHeight();
-		if (table.getX(Align.right) > width) { table.setPosition(width, table.getY(Align.right), Align.right); }
-		if (table.getX(Align.left) < 0) { table.setPosition(0, table.getY(Align.left), Align.left); }
-		if (table.getY(Align.top) > height) { table.setPosition(table.getX(Align.top), height, Align.top); }
-		if (table.getY(Align.bottom) < 0) { table.setPosition(table.getX(Align.bottom), 0, Align.bottom); }
+		// 4. 最后硬性限制在屏幕内，防止 Table 实在太大放不下
+		table.keepInStage();
+	}
 
-		// Log.info("@, @",table.x, table.y);
+	private static void applyPos(Element lying, int lAlign, Table table, int tAlign) {
+		Vec2 pos = lying.localToStageCoordinates(Tmp.v1.set(
+		 lying.getX(lAlign) - lying.x,
+		 lying.getY(lAlign) - lying.y
+		));
+		table.setPosition(pos.x, pos.y, tAlign);
+	}
+
+	private static int flipV(int align) {
+		if (Align.isTop(align)) return align & ~Align.top | Align.bottom;
+		if (Align.isBottom(align)) return align & ~Align.bottom | Align.top;
+		return align;
+	}
+
+	private static int flipH(int align) {
+		if (Align.isLeft(align)) return align & ~Align.left | Align.right;
+		if (Align.isRight(align)) return align & ~Align.right | Align.left;
+		return align;
 	}
 	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder builder) {
 		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, builder);
@@ -440,6 +450,7 @@ public class IntUI {
 
 				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, wrapperHide, item, icons.get(i));
 				btn.update(() -> btn.setChecked(holder.get() == item));
+				group.add(btn);
 
 				if (++c % cols == 0) {
 					p.row();
@@ -741,7 +752,7 @@ public class IntUI {
 	}
 
 	public static class ITooltip extends Tooltip implements IInfo {
-		public static final Seq<Tooltip> shown = new Seq<>();
+		public static final ObjectSet<Tooltip> shown = new ObjectSet<>();
 		long lastShowTime;
 
 		public ITooltip(Cons<Table> contents) {
@@ -762,15 +773,16 @@ public class IntUI {
 		public void show(Element element, float x, float y) {
 			// 在新版本，移除了这个方法
 			// Tools.runIgnoredException(() -> getManager().hideAll());
-			for (Tooltip tooltip : shown) {
-				if (tooltip.container.parent == topGroup) tooltip.hide();
-			}
+			Tools.runLoggedException(() -> {
+				while (shown.size > 0) shown.first().hide();
+			});
 			super.show(element, x, y);
 		}
+		Runnable hideRun = super::hide;
 		public void hide() {
 			shown.remove(this);
 			if (mobile) {
-				TaskManager.scheduleOrReset(Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f), super::hide);
+				TaskManager.scheduleOrReset(Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f), hideRun);
 			} else {
 				super.hide();
 			}

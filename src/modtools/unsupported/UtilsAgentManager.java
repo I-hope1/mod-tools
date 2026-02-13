@@ -1,14 +1,18 @@
 package modtools.unsupported;
 
+import arc.util.Log;
 import com.sun.tools.attach.VirtualMachine;
 import jdk.internal.misc.Unsafe;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.reflect.FieldUtils;
+import nipx.Utils;
 import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
+import java.util.*;
+import java.util.jar.JarFile;
 
 public class UtilsAgentManager {
 	public static final  String  AGENT_NAME          = "utils-agent";
@@ -16,7 +20,7 @@ public class UtilsAgentManager {
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
 
-	private static String getAgentPath() throws Exception {
+	public static String getAgentPath() throws Exception {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
@@ -34,12 +38,24 @@ public class UtilsAgentManager {
 			return agentPathCache;
 		}
 	}
-	/** 添加类路径到启动类路径  */
-	public static void appendToBootstrap(String path) throws Throwable {
-		attachAgent(getAgentPath(), true, "appendToBootstrap\n" + path);
+	/** 添加类路径到启动类路径 */
+	public static void appendToBootstrap(String path) throws IOException {
+		Utils.inst.appendToSystemClassLoaderSearch(new JarFile(path));
 	}
-	public static void attachAgent(String agentPath, String agentArgs) throws Throwable {
-		attachAgent(agentPath, false, agentArgs);
+	public static void redefineModule(Module module,
+	                                  Set<Module> extraReads,
+	                                  Map<String, Set<Module>> extraExports,
+	                                  Map<String, Set<Module>> extraOpens,
+	                                  Set<Class<?>> extraUses,
+	                                  Map<Class<?>, List<Class<?>>> extraProvides) {
+		Utils.inst.redefineModule(
+		 module,
+		 extraReads,
+		 extraExports,
+		 extraOpens,
+		 extraUses,
+		 extraProvides
+		);
 	}
 	public static void attachAgent(String agentPath, boolean isAbsolute, String agentArgs) throws Throwable {
 		String pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
@@ -64,9 +80,21 @@ public class UtilsAgentManager {
 			}
 		}
 	}
-	private static void prepareSelfAttach() {
+	static {
+		try {
+			init();
+		} catch (Throwable e) {
+			Log.err("Failed to init utils agent", e);
+		}
+	}
+
+	public static void init() throws Throwable {
 		if (initialized) return; // 避免重复
 		initialized = true;
+		attachAgent(getAgentPath(), true, "");
+	}
+
+	static void prepareSelfAttach() {
 		UNSAFE.openModule(VirtualMachine.class, "sun.tools.attach");
 		Unsafe unsafe = Unsafe.getUnsafe();
 		unsafe.ensureClassInitialized(HotSpotVirtualMachine.class);

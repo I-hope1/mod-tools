@@ -21,11 +21,12 @@ import java.util.stream.*;
  * 其由Bootstrap加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
 public class HotSwapAgent {
-	public static boolean      DEBUG         = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
-	public static boolean      UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static int          FILE_SHAKE_MS = 1200;
+	public static boolean      DEBUG              = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
+	public static boolean      UCP_APPEND         = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
+	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
+	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
 
@@ -64,7 +65,7 @@ public class HotSwapAgent {
 		HotSwapAgent.inst = inst;
 		try {
 			Class.forName("org.objectweb.asm.ClassReader");
-		} catch (ClassNotFoundException e) { }
+		} catch (ClassNotFoundException _) { }
 		init(agentArgs, false);
 	}
 	public static void init(String agentArgs, boolean reinit) {
@@ -74,8 +75,9 @@ public class HotSwapAgent {
 			transformer = new MyClassFileTransformer();
 			inst.addTransformer(transformer, true); // canRetransform = true
 		}
+		var loadedClasses = inst.getAllLoadedClasses();
 		// 初始化当前所有已加载类的 ClassLoader 映射关系
-		refreshPackageLoaders();
+		refreshPackageLoaders(loadedClasses);
 
 		// 解析传入的监控路径 (支持分号或冒号分割)
 		Set<Path> newWatchDirs = Arrays.stream(agentArgs.split(File.pathSeparator))
@@ -89,13 +91,13 @@ public class HotSwapAgent {
 			return;
 		}
 
-		transformLoaded();
+		if (RETRANSFORM_LOADED) retransformLoaded(loadedClasses);
 
 		// 重启监控线程
 		if (!activeWatchDirs.equals(newWatchDirs)) {
 			info("Watch paths updated: " + newWatchDirs);
 			activeWatchDirs = newWatchDirs;
-			initializeAgentState();
+			initializeAgentState(loadedClasses);
 			restartWatchers();
 		} else {
 			triggerHotswap();
@@ -112,9 +114,14 @@ public class HotSwapAgent {
 		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "false"));
 		info("LambdaAlign: " + LAMBDA_ALIGN);
 	}
-	private static void transformLoaded() {
+	/** 对外api，刷新已加载的类  */
+	public static void retransformLoaded() {
+		retransformLoaded(inst.getAllLoadedClasses());
+	}
+	private static void retransformLoaded(Class<?>[] classes) {
+		info("Force retransform all loaded classes...");
 		List<Class<?>> candidates = new ArrayList<>();
-		for (Class<?> loadedClass : loadedClassesMap.values()) {
+		for (Class<?> loadedClass : classes) {
 			if (!inst.isModifiableClass(loadedClass)) continue;
 			if (isBlacklisted(loadedClass.getName())) continue;
 			if (bytecodeCache.containsKey(loadedClass.getName())) continue;
@@ -180,8 +187,8 @@ public class HotSwapAgent {
 	 * 扫描内存中已加载的类，建立 "包名 -> ClassLoader" 的映射。
 	 * 这对于解决 NoClassDefFoundError 至关重要。
 	 */
-	private static void refreshPackageLoaders() {
-		for (Class<?> clazz : inst.getAllLoadedClasses()) {
+	private static void refreshPackageLoaders(Class<?>[] classes) {
+		for (Class<?> clazz : classes) {
 			ClassLoader cl = clazz.getClassLoader();
 			if (cl != null && clazz.getPackage() != null) {
 				// 简单策略：记录该包最后一次出现的 ClassLoader
@@ -216,18 +223,11 @@ public class HotSwapAgent {
 	/**
 	 * 处理文件变化的核心逻辑
 	 */
-	private static void processChanges(Set<Path> changedFiles) {
-		refreshPackageLoaders();
+	private static void processChanges(Set<Path> changedFiles, Class<?>[] classes) {
+		refreshPackageLoaders(classes);
 
 		// 获取当前所有已加载类的快照
-		loadedClassesMap.clear();
-		for (Class<?> c : inst.getAllLoadedClasses()) {
-			String   name     = c.getName();
-			Class<?> existing = loadedClassesMap.get(name);
-			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
-				loadedClassesMap.put(name, c);
-			}
-		}
+		loadClassSnap(classes);
 
 		List<ClassDefinition> definitions   = new ArrayList<>();
 		int                   skippedCount  = 0;
@@ -328,6 +328,17 @@ public class HotSwapAgent {
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
+	}
+
+	private static void loadClassSnap(Class<?>[] classes) {
+		loadedClassesMap.clear();
+		for (Class<?> c : classes) {
+			String   name     = c.getName();
+			Class<?> existing = loadedClassesMap.get(name);
+			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
+				loadedClassesMap.put(name, c);
+			}
+		}
 	}
 	/** 在 applyRedefinitions(definitions) 后调用 */
 	private static void processAnnotations(List<ClassDefinition> definitions) {
@@ -513,7 +524,7 @@ public class HotSwapAgent {
 			return null; // 不是合法的 class 文件
 		}
 	}
-	private static void initializeAgentState() {
+	private static void initializeAgentState(Class<?>[] classes) {
 		info("Scanning files...");
 		// 不要盲目 clear，或者 clear 后立即进行差异检查
 		for (Path root : activeWatchDirs) {
@@ -543,7 +554,7 @@ public class HotSwapAgent {
 			} catch (IOException _) { }
 		}
 		// 触发一次同步
-		if (!pendingChanges.isEmpty()) triggerHotswap();
+		if (!pendingChanges.isEmpty()) triggerHotswapWith(classes);
 	}
 	private static void handleFileChange(Path changedFile) {
 		pendingChanges.add(changedFile);
@@ -553,14 +564,18 @@ public class HotSwapAgent {
 		scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
 	}
 
-	public static void triggerHotswap() {
+	private static void triggerHotswapWith(Class<?>[] classes) {
 		Set<Path> changes;
 		synchronized (pendingChanges) {
 			if (pendingChanges.isEmpty()) return;
 			changes = new HashSet<>(pendingChanges);
 			pendingChanges.clear();
 		}
-		processChanges(changes);
+		processChanges(changes, classes);
+	}
+	/** 对外api，触发热更新  */
+	public static void triggerHotswap() {
+		triggerHotswapWith(inst.getAllLoadedClasses());
 	}
 
 	private static byte[] calculateHash(byte[] data) throws NoSuchAlgorithmException {

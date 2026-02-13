@@ -8,7 +8,9 @@ import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.comp.Window;
+import modtools.ui.gen.HopeIcons;
 import nipx.HotSwapAgent;
+import nipx.profiler.ProfilerData;
 
 /**
  * 热重载控制台
@@ -53,11 +55,9 @@ public class HotSwapDialog extends Window {
 
 			// 强制全量重扫 (对应 transformLoaded)
 			t.button(Icon.box, Styles.cleari, () -> {
-				log("[accent]Force re-scanning all loaded classes...[]");
 				// 这里需要反射或者修改 Agent 公开 transformLoaded
 				// 假设你在 Agent 里把 transformLoaded 改为了 public static
-				// Threads.daemon(HotSwapAgent::transformLoaded);
-				log("[yellow](Method needs to be public in Agent)[]");
+				Threads.daemon(HotSwapAgent::retransformLoaded);
 			}).tooltip("Force Retransform Loaded Classes");
 
 			// 垃圾回收
@@ -65,6 +65,10 @@ public class HotSwapDialog extends Window {
 				System.gc();
 				log("[lightgray]GC invoked. Heap: " + Core.app.getJavaHeap() / 1024 / 1024 + "MB[]");
 			}).tooltip("Force GC");
+
+			// Profile
+			t.button(HopeIcons.profile, Styles.cleari, ProfilerData::printReport).tooltip("Print profile data");
+
 
 			t.add().growX();
 

@@ -26,6 +26,8 @@ public enum E_Hook implements ISettings {
 	              "kotlin.", "kotlinx.", "arc.", "mindustry.", "rhino.", "mindustryX",
 	              "nipx."})),
 	@Switch(dependency = "hot_swap")
+	retransform_loaded,
+	@Switch(dependency = "hot_swap")
 	hotswap_event,
 	@Switch(dependency = "hot_swap")
 	lambda_align,
@@ -58,6 +60,8 @@ public enum E_Hook implements ISettings {
 		hotswapOnChange(hotswap_blacklist, () -> String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
 		hotswapOnChange(hotswap_event, () -> hotswap_event.getString().trim());
 		hotswapOnChange(lambda_align, () -> lambda_align.getString().trim());
+		retransform_loaded.defTrue();
+		System.setProperty("nipx.agent.retransform_loaded", retransform_loaded.getString());
 	}
 	static void hotswapOnChange(ISettings setting, Prov<String> prov) {
 		setting.runAndOnChange(() -> {

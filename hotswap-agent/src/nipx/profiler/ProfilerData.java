@@ -3,6 +3,8 @@ package nipx.profiler;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static nipx.HotSwapAgent.info;
+
 public class ProfilerData {
 	// 记录方法名 -> 总耗时 (纳秒)
 	public static final Map<String, Long> totalTime = new ConcurrentHashMap<>();
@@ -11,12 +13,12 @@ public class ProfilerData {
 
 	// 打印报告
 	public static void printReport() {
-		System.out.println("=== Profiler Report ===");
+		info("=== Profiler Report ===");
 		totalTime.forEach((method, nanos) -> {
 			long   count = callCount.getOrDefault(method, 0L);
 			double avgMs = (nanos / 1_000_000.0) / count;
-			System.out.printf("[%s] Total: %d ms, Calls: %d, Avg: %.4f ms%n",
-			 method, nanos / 1_000_000, count, avgMs);
+			info(String.format("[%s] Total: %d ms, Calls: %d, Avg: %.4f ms%n",
+			 method, nanos / 1_000_000, count, avgMs));
 		});
 	}
 

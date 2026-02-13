@@ -1,6 +1,6 @@
 package nipx;
 
-import nipx.annotation.Profile;
+import nipx.annotation.*;
 import nipx.profiler.ProfilerData;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -9,6 +9,8 @@ import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
+
+import static nipx.HotSwapAgent.error;
 
 public class MyClassFileTransformer implements ClassFileTransformer {
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
@@ -171,24 +173,19 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 				byte[] bytes = classfileBuffer;
 
 
-				// 1. 处理 @Reloadable (类级别)
-				// if (hasClassAnnotation(bytes, Reloadable.class)) {
-				// 	bytes = injectTracker(bytes, dotClassName); // 你的 injectTracker 保持原样即可
-				// }
+				// 处理 @Reloadable (类级别)
+				if (hasClassAnnotation(bytes, Reloadable.class)) {
+					bytes = injectTracker(bytes, dotClassName); // 你的 injectTracker 保持原样即可
+				}
 
-				// 2. 处理 @Profile (方法级别)
-				// 我们不再先检查 hasAnnotation，而是直接把 bytes 扔进去
-				// 因为 injectProfiler 内部会自己判断每个方法有没有注解
-				// 如果一个方法都没有，injectProfiler 几乎是零开销的（只是扫描一遍）
-				// 这种 "乐观策略" 比先 parse 一遍整个类要高效得多
+				// 处理 @Profile (方法级别)
 				bytes = injectProfiler(bytes, dotClassName);
 
 				return bytes == classfileBuffer ? null : bytes;
 			}
 		} catch (Throwable t) {
 			// ！！！这里是关键，找出凶手！！！
-			System.err.println("[NIPX] Transformer crashed for class: " + dotClassName);
-			t.printStackTrace(); // 打印堆栈
+			error("[NIPX] Transformer crashed for class: " + dotClassName, t);
 			return null; // 返回 null 放弃修改，保证应用不崩，但修改不生效
 		}
 		return null;
@@ -199,7 +196,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		try (FileOutputStream fos = new FileOutputStream(file)) {
 			fos.write(classfileBuffer);
 		} catch (IOException e) {
-			e.printStackTrace();
+			error("Failed to write bytes", e);
 		}
 	}
 

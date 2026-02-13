@@ -23,7 +23,7 @@ import java.util.stream.*;
 public class HotSwapAgent {
 	public static boolean      DEBUG         = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 	public static boolean      UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static int          FILE_SHAKE_MS = 1500;
+	public static int          FILE_SHAKE_MS = 1200;
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
 	public static boolean      ENABLE_HOTSWAP_EVENT;
@@ -176,7 +176,6 @@ public class HotSwapAgent {
 			error("Failed to mount working directory to ClassLoader", e);
 		}
 	}
-
 	/**
 	 * 扫描内存中已加载的类，建立 "包名 -> ClassLoader" 的映射。
 	 * 这对于解决 NoClassDefFoundError 至关重要。
@@ -213,7 +212,7 @@ public class HotSwapAgent {
 	}
 
 	public static ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
-	;
+
 	/**
 	 * 处理文件变化的核心逻辑
 	 */
@@ -235,6 +234,7 @@ public class HotSwapAgent {
 		int                   injectedCount = 0;
 
 		for (Path path : changedFiles) {
+			log("Processing changes: " + path);
 			try {
 				String className = getClassName(path);
 				if (className == null) continue;
@@ -250,7 +250,9 @@ public class HotSwapAgent {
 				// 检查磁盘内容是否真的改变（过滤时间戳伪触发）
 				byte[] oldDiskHash = fileDiskHashes.get(className);
 				if (oldDiskHash != null && Arrays.equals(oldDiskHash, newHash)) {
-					log("[SKIP] " + className + " hash=" + bytesToHex(newHash).substring(0, 8) + " old=" + bytesToHex(oldDiskHash).substring(0, 8));
+					if (DEBUG) {
+						log("[SKIP] " + className + " hash=" + bytesToHex(newHash).substring(0, 8) + " old=" + bytesToHex(oldDiskHash).substring(0, 8));
+					}
 					skippedCount++;
 					continue;
 				}
@@ -501,8 +503,8 @@ public class HotSwapAgent {
 			log("[SKIP-MOUNT] Loader is not URLClassLoader: " + loader.getClass().getSimpleName());
 		}
 	}
-
 	private static String getClassName(Path classFile) {
+		if (DEBUG) log("[PARSE] Parsing class file: " + classFile);
 		try (InputStream is = Files.newInputStream(classFile)) {
 			// 解析类文件头，只读不处理，性能开销极小
 			ClassReader cr = new ClassReader(is);
@@ -622,18 +624,38 @@ public class HotSwapAgent {
 					WatchKey key          = watchService.take();
 					Path     triggeredDir = (Path) key.watchable();
 
+					// 在 WatcherThread.run() 循环内部
 					for (WatchEvent<?> event : key.pollEvents()) {
-						log("[EVENT] " + triggeredDir + ": " + event.kind());
 						if (event.kind() == StandardWatchEventKinds.OVERFLOW) continue;
 
 						Path context  = (Path) event.context();
 						Path fullPath = triggeredDir.resolve(context);
 
-						if (context.toString().endsWith(".class")) {
-							handleFileChange(triggeredDir.resolve(context));
+						// 1. 处理普通类文件变化
+						if (fullPath.toString().endsWith(".class")) {
+							// [DEBUG] 打印一下，看看是不是这里就没捕获到
+							// log("Detected change: " + fullPath);
+							handleFileChange(fullPath);
 						}
+
+						// 2. 处理新目录创建 (核心修复)
 						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
+							info("[WATCH] New directory detected: " + fullPath);
+
+							// A. 注册监视
 							registerAll(fullPath);
+
+							// B. 【必须补这一刀】立即扫描该目录下现有的文件！
+							// 因为在注册完成前，编译器可能已经把 .class 写进去了
+							try (Stream<Path> subFiles = Files.walk(fullPath)) {
+								subFiles.filter(p -> p.toString().endsWith(".class"))
+								 .forEach(p -> {
+									 info("[WATCH] Found existing file in new dir: " + p);
+									 handleFileChange(p);
+								 });
+							} catch (IOException e) {
+								error("Failed to scan new directory: " + fullPath, e);
+							}
 						}
 					}
 					if (!key.reset()) {

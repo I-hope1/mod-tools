@@ -1,9 +1,9 @@
 package nipx;
 
-import jdk.internal.org.objectweb.asm.*;
-import jdk.internal.org.objectweb.asm.commons.AdviceAdapter;
 import nipx.annotation.Profile;
 import nipx.profiler.ProfilerData;
+import org.objectweb.asm.*;
+import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.io.*;
 import java.lang.annotation.Annotation;

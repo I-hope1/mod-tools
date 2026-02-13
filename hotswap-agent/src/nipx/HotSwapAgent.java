@@ -20,9 +20,9 @@ import java.util.stream.*;
  * 其由Bootstrap加载，属于java.base模块，可以访问其他java.base模块中的类。
  */
 public class HotSwapAgent {
-	public static boolean      DEBUG         = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	public static boolean      DEBUG         = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 	public static boolean      UCP_APPEND    = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
-	public static int          FILE_SHAKE_MS = 600;
+	public static int          FILE_SHAKE_MS = 1500;
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
 	public static boolean      ENABLE_HOTSWAP_EVENT;
@@ -246,6 +246,7 @@ public class HotSwapAgent {
 				// 检查磁盘内容是否真的改变（过滤时间戳伪触发）
 				byte[] oldDiskHash = fileDiskHashes.get(className);
 				if (oldDiskHash != null && Arrays.equals(oldDiskHash, newHash)) {
+					log("[SKIP] " + className + " hash=" + bytesToHex(newHash).substring(0,8) + " old=" + bytesToHex(oldDiskHash).substring(0,8));
 					skippedCount++;
 					continue;
 				}
@@ -511,26 +512,44 @@ public class HotSwapAgent {
 		return null;
 	}
 	private static void initializeAgentState() {
-		info("Scanning files...");
-		fileDiskHashes.clear();
-		for (Path root : activeWatchDirs) {
-			try (Stream<Path> walk = Files.walk(root)) {
-				walk
-				 .filter(p -> p.toString().endsWith(".class"))
-				 .forEach(path -> {
-					 String cName = getClassName(path);
-					 // 即使是初始化，也要过滤黑名单，防止记录不该记录的东西
-					 if (cName != null && !isBlacklisted(cName)) {
-						 try {
-							 fileDiskHashes.put(cName, calculateHash(Files.readAllBytes(path)));
-						 } catch (Exception _) { }
-					 }
-				 });
-			} catch (IOException e) {
-				error("Scan failed: " + root);
-			}
-		}
-		info("Indexed " + fileDiskHashes.size() + " mod classes.");
+    info("Scanning files and checking for initial out-of-sync...");
+    fileDiskHashes.clear();
+    Set<Path> initialChanges = new HashSet<>();
+
+    for (Path root : activeWatchDirs) {
+        try (Stream<Path> walk = Files.walk(root)) {
+            walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
+                String cName = getClassName(path);
+                if (cName != null && !isBlacklisted(cName)) {
+                    try {
+                        byte[] diskBytes = Files.readAllBytes(path);
+                        byte[] diskHash = calculateHash(diskBytes);
+
+                        // 1. 存入基准哈希
+                        fileDiskHashes.put(cName, diskHash);
+
+                        // 2. 核心：与内存中的字节码对比
+                        // bytecodeCache 是在 transformLoaded 中通过 retransform 获取的内存字节码
+                        byte[] memoryBytes = bytecodeCache.get(cName);
+                        if (memoryBytes != null) {
+                            byte[] memoryHash = calculateHash(memoryBytes);
+                            if (!Arrays.equals(diskHash, memoryHash)) {
+                                log("[INIT] Class " + cName + " on disk differs from memory. Queuing update.");
+                                initialChanges.add(path);
+                            }
+                        }
+                    } catch (Exception _) { }
+                }
+            });
+        } catch (IOException e) {
+            error("Scan failed: " + root);
+        }
+    }
+
+    // 如果发现不一致，立即同步
+    if (!initialChanges.isEmpty()) {
+        processChanges(initialChanges);
+    }
 	}
 	private static void handleFileChange(Path changedFile) {
 		pendingChanges.add(changedFile);
@@ -612,6 +631,7 @@ public class HotSwapAgent {
 					Path     triggeredDir = (Path) key.watchable();
 
 					for (WatchEvent<?> event : key.pollEvents()) {
+						log("[EVENT] " + triggeredDir + ": " + event.kind());
 						if (event.kind() == StandardWatchEventKinds.OVERFLOW) continue;
 
 						Path context  = (Path) event.context();
@@ -663,6 +683,13 @@ public class HotSwapAgent {
 		}
 	}
 
+	public static String bytesToHex(byte[] bytes) {
+		StringBuilder sb = new StringBuilder();
+		for (byte b : bytes) {
+			sb.append(String.format("%02x", b));
+		}
+		return sb.toString();
+	}
 	/** @see E_Hook.RedefineMode */
 	public enum RedefineMode {
 		inject,

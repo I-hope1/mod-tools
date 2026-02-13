@@ -13,6 +13,17 @@ repositories {
 	mavenLocal()
 }
 
+dependencies {
+	// asm
+
+	def asmVersion = '9.9.1'
+	implementation "org.ow2.asm:asm:$asmVersion"
+	implementation "org.ow2.asm:asm-commons:$asmVersion"
+	implementation "org.ow2.asm:asm-analysis:$asmVersion"
+	implementation "org.ow2.asm:asm-util:$asmVersion"
+	implementation "org.ow2.asm:asm-tree:$asmVersion"
+}
+
 jar {
 	manifest {
 		attributes(
@@ -22,6 +33,7 @@ jar {
 				'Can-Redefine-Classes': true
 		)
 	}
+	exclude "module-info.class"
 //	from(configurations.compileClasspath.asList().toArray()) { include "**" }
 	from {
 		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }

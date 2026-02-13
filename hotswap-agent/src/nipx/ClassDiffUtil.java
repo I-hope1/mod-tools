@@ -1,8 +1,8 @@
 package nipx;
 
-import jdk.internal.org.objectweb.asm.*;
-import jdk.internal.org.objectweb.asm.tree.*;
-import jdk.internal.org.objectweb.asm.util.*;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.*;
+import org.objectweb.asm.util.*;
 
 import java.io.*;
 import java.util.*;

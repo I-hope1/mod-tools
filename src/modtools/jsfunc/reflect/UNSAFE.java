@@ -28,7 +28,9 @@ public interface UNSAFE {
 	}
 	static void addExports(Class<?> cls, String pn) {
 		if (OS.isAndroid) return;
-		Modules.addExports(cls.getModule(), pn);
+		try {
+			Modules.addExports(cls.getModule(), pn);
+		} catch (Throwable ignored) { }
 	}
 
 	// ------------put and get------------
@@ -89,7 +91,7 @@ public interface UNSAFE {
 	static long objectFieldOffset(Class<?> cls, String fieldName) {
 		try {
 			return Unsafe.getUnsafe().objectFieldOffset(cls, fieldName);
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		try {
 			return unsafe.objectFieldOffset(cls.getDeclaredField(fieldName));
 		} catch (NoSuchFieldException e) {
@@ -103,7 +105,7 @@ public interface UNSAFE {
 		try {
 			/* 这个也可以获取static的  */
 			return Unsafe.getUnsafe().objectFieldOffset(cls, fieldName);
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		return unsafe.staticFieldOffset(cls.getDeclaredField(fieldName));
 	}
 
@@ -115,7 +117,8 @@ public interface UNSAFE {
 		return switch (unsafe.arrayIndexScale(Object[].class)) {
 			case 4 -> (unsafe.getInt(ONE_ARRAY, baseOffset) & 0xFFFFFFFFL) * (OS.is64Bit ? 8 : 1);
 			case 8 -> unsafe.getLong(ONE_ARRAY, baseOffset);
-			default -> throw new UnsupportedOperationException("Unsupported address size: " + unsafe.arrayIndexScale(Object[].class));
+			default ->
+			 throw new UnsupportedOperationException("Unsupported address size: " + unsafe.arrayIndexScale(Object[].class));
 		};
 	}
 

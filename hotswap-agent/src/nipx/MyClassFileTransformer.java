@@ -10,7 +10,7 @@ import java.lang.annotation.Annotation;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
 
-import static nipx.HotSwapAgent.error;
+import static nipx.HotSwapAgent.*;
 
 public class MyClassFileTransformer implements ClassFileTransformer {
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
@@ -161,17 +161,17 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		if (className.startsWith("nipx/")) return null;
 
 		String dotClassName = className.replace('/', '.');
+		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
+
+		bytecodeCache.put(dotClassName, classfileBuffer);
 		// info("transform: " + dotClassName + " ' blacklisted " + HotSwapAgent.isBlacklisted(dotClassName));
 
 		try {
-			if (!HotSwapAgent.isBlacklisted(dotClassName) && HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
+			if (HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
 
 				if (HotSwapAgent.DEBUG) writeTo(className, classfileBuffer);
-				// 缓存原始字节码
-				HotSwapAgent.bytecodeCache.put(dotClassName, classfileBuffer.clone());
 
-				byte[] bytes = classfileBuffer;
-
+				byte[] bytes = classfileBuffer.clone();
 
 				// 处理 @Reloadable (类级别)
 				if (hasClassAnnotation(bytes, Reloadable.class)) {
@@ -181,7 +181,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 				// 处理 @Profile (方法级别)
 				bytes = injectProfiler(bytes, dotClassName);
 
-				return bytes == classfileBuffer ? null : bytes;
+				return bytes;
 			}
 		} catch (Throwable t) {
 			// ！！！这里是关键，找出凶手！！！

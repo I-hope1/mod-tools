@@ -129,7 +129,7 @@ public class IntVars {
 	}
 	/** Checks if the current OS is considered Desktop (Windows or Mac). */
 	public static boolean isDesktop() {
-		return OS.isWindows || OS.isMac || OS.isLinux ;
+		return OS.isWindows || OS.isMac || OS.isLinux;
 	}
 
 	public static LazyValue<ExecutorService> EXECUTOR = LazyValue.of(() -> AThreads.impl.boundedExecutor("hope-async", 1));

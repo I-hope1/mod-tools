@@ -23,7 +23,7 @@ public enum E_Hook implements ISettings {
 	@Switch(dependency = "hot_swap")
 	hotswap_blacklist(String[].class, i -> i.array(
 	 new String[]{"java.", "javax.", "jdk.", "sun.",
-	              "kotlin.", "kotlinx.", "arc.", "mindustry.", "rhino.", "mindustryX",
+	              "kotlin.", "kotlinx.", "arc.", "mindustry.", "rhino.", "mindustryX.",
 	              "nipx."})),
 	@Switch(dependency = "hot_swap")
 	retransform_loaded,
@@ -56,6 +56,7 @@ public enum E_Hook implements ISettings {
 	}
 
 	static void init() {
+		hot_swap.def(false);
 		hotswapOnChange(redefine_mode, () -> redefine_mode.getString().trim());
 		hotswapOnChange(hotswap_blacklist, () -> String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
 		hotswapOnChange(hotswap_event, () -> hotswap_event.getString().trim());

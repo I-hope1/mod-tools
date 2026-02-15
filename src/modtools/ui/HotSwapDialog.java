@@ -62,7 +62,7 @@ public class HotSwapDialog extends Window {
 			}).tooltip("Force Retransform Loaded Classes");
 
 			// 垃圾回收
-			t.button(Icon.eraser, Styles.cleari, () -> {
+			t.button(Icon.trash, Styles.cleari, () -> {
 				System.gc();
 				log("[lightgray]GC invoked. Heap: " + Core.app.getJavaHeap() / 1024 / 1024 + "MB[]");
 			}).tooltip("Force GC");
@@ -70,6 +70,8 @@ public class HotSwapDialog extends Window {
 			// Profile
 			t.button(HopeIcons.profile, Styles.cleari, ProfilerData::printReport).tooltip("Print profile data");
 
+			// Profile Clear
+			t.button(Icon.eraser, Styles.cleari, ProfilerData::clear).tooltip("Clear profile");
 
 			t.add().growX();
 

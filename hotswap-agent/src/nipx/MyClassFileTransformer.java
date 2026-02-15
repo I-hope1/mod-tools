@@ -13,6 +13,9 @@ import java.security.ProtectionDomain;
 import static nipx.HotSwapAgent.*;
 
 public class MyClassFileTransformer implements ClassFileTransformer {
+	// 预先计算注解的描述符，避免重复计算
+	public static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
+
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
 		return hasClassAnnotation(bytes, "L" + annotationClass.getName().replace('.', '/') + ";");
 	}
@@ -75,9 +78,6 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	private static byte[] injectProfiler(byte[] bytes, String dotClassName) {
 		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
-
-		// 预先计算注解的描述符，避免重复计算
-		String profileDesc = "L" + dot2slash(Profile.class) + ";";
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -180,6 +180,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 				// 处理 @Profile (方法级别)
 				bytes = injectProfiler(bytes, dotClassName);
+				// bytes = injectBuildingProfiler(bytes);
 
 				return bytes;
 			}
@@ -190,6 +191,61 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		}
 		return null;
 	}
+
+
+	private static byte[] injectBuildingProfiler(byte[] bytes) {
+		ClassReader cr = new ClassReader(bytes);
+		// 【修改点 1】必须使用 COMPUTE_FRAMES 来自动重新计算 StackMapTable
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
+
+		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+
+				if ("updateTile".equals(name) && "()V".equals(descriptor)) {
+					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+						int startTimeVar;
+
+						@Override
+						protected void onMethodEnter() {
+							// 插入 nanoTime()
+							visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+							startTimeVar = newLocal(Type.LONG_TYPE);
+							visitVarInsn(LSTORE, startTimeVar);
+						}
+
+						@Override
+						protected void onMethodExit(int opcode) {
+							if (opcode != ATHROW) {
+								// 1. 获取当前时间并计算耗时
+								visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+								visitVarInsn(LLOAD, startTimeVar);
+								visitInsn(LSUB);
+								int durationVar = newLocal(Type.LONG_TYPE);
+								visitVarInsn(LSTORE, durationVar);
+
+								// 2. 准备参数调用 recordBuilding(Object obj, long duration)
+								visitVarInsn(ALOAD, 0);      // 加载 this (Object类型)
+								visitVarInsn(LLOAD, durationVar); // 加载 duration
+
+								// 调用我们刚才定义的 Java 辅助方法
+								visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData",
+								 "recordBuilding", "(Ljava/lang/Object;J)V", false);
+							}
+						}
+					};
+				}
+				return mv;
+			}
+		};
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		return cw.toByteArray();
+	}
+	// --------------
+
+
 	private static void writeTo(String className, byte[] classfileBuffer) {
 		File file = new File("F:/classes/" + className + ".class");
 		file.getParentFile().mkdirs();
@@ -199,7 +255,6 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 			error("Failed to write bytes", e);
 		}
 	}
-
 
 	static String dot2slash(String className) {
 		return className.replace('.', '/');

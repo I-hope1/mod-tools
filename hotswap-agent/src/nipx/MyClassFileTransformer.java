@@ -8,6 +8,7 @@ import org.objectweb.asm.commons.AdviceAdapter;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.ClassFileTransformer;
+import java.lang.ref.SoftReference;
 import java.security.ProtectionDomain;
 
 import static nipx.HotSwapAgent.*;
@@ -157,13 +158,15 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 		if (className == null) return null;
+		// 忽略 bootclassloader
+		if (loader == null) return null;
 		if (className.startsWith("org/objectweb/asm/")) return null;
 		if (className.startsWith("nipx/")) return null;
 
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
-		bytecodeCache.put(dotClassName, classfileBuffer);
+		bytecodeCache.put(dotClassName, new SoftReference<>(classfileBuffer));
 		// info("transform: " + dotClassName + " ' blacklisted " + HotSwapAgent.isBlacklisted(dotClassName));
 
 		try {
@@ -186,7 +189,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 			}
 		} catch (Throwable t) {
 			// ！！！这里是关键，找出凶手！！！
-			error("[NIPX] Transformer crashed for class: " + dotClassName, t);
+			error("Transformer crashed for class: " + dotClassName, t);
 			return null; // 返回 null 放弃修改，保证应用不崩，但修改不生效
 		}
 		return null;

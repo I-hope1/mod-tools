@@ -2,23 +2,24 @@ package nipx;
 
 import jdk.internal.loader.URLClassPath;
 import nipx.annotation.*;
+import nipx.util.CRC64;
+import nipx.util.LongLongMap;
 import org.objectweb.asm.ClassReader;
 
 import java.io.*;
 import java.lang.instrument.*;
-import java.lang.invoke.MethodHandle;
-import java.lang.ref.WeakReference;
+import java.lang.invoke.*;
+import java.lang.ref.*;
 import java.lang.reflect.Method;
 import java.net.*;
 import java.nio.file.*;
-import java.security.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.*;
 
 /**
  * HotSwap Agent
- * 其由Bootstrap加载，属于java.base模块，可以访问其他java.base模块中的类。
+ * 其由Bootstrap加载，但不属于java.base模块
  */
 public class HotSwapAgent {
 	public static boolean      DEBUG              = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
@@ -34,10 +35,10 @@ public class HotSwapAgent {
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
 
-	static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
+	static final Map<String, SoftReference<byte[]>> bytecodeCache = new ConcurrentHashMap<>();
 
-	// 记录磁盘上文件的哈希，用于过滤“伪修改”（时间变了但内容没变）
-	private static final Map<String, byte[]> fileDiskHashes = new ConcurrentHashMap<>();
+	// 仅记录byte的指纹
+	private static final LongLongMap fileDiskHashes = new LongLongMap(2048);
 
 	// 维护一个 ClassLoader 索引，用于快速查找某个包应该属于哪个 Loader
 	// Key: PackageName (e.g., "com.example.service"), Value: WeakReference<ClassLoader>
@@ -50,13 +51,24 @@ public class HotSwapAgent {
 		return t;
 	});
 	private static       ScheduledFuture<?>       scheduledTask;
-	public static final  MethodHandle             ucpHandle;
+
+	public static MethodHandle
+	 ucpGetter,
+	 ucpPathGetter,
+	 loadersGetter,
+	 unopenedUrlsGetter,
+	getLoaderHandle;
 
 	static {
 		try {
-			ucpHandle = Reflect.IMPL.findGetter(URLClassLoader.class, "ucp", URLClassPath.class);
-		} catch (NoSuchFieldException | IllegalAccessException e) {
-			throw new RuntimeException(e);
+			ucpGetter = Reflect.IMPL.findGetter(URLClassLoader.class, "ucp", URLClassPath.class);
+			ucpPathGetter = Reflect.IMPL.findGetter(URLClassPath.class, "path", ArrayList.class);
+			loadersGetter = Reflect.IMPL.findGetter(URLClassPath.class, "loaders", ArrayList.class);
+			unopenedUrlsGetter = Reflect.IMPL.findGetter(URLClassPath.class, "unopenedUrls", ArrayDeque.class);
+			Class<?> Loader = Class.forName("jdk.internal.loader.URLClassPath$Loader");
+			getLoaderHandle = Reflect.IMPL.findVirtual(URLClassPath.class, "getLoader", MethodType.methodType(Loader, URL.class));
+		} catch (Exception _) {
+
 		}
 	}
 
@@ -146,6 +158,10 @@ public class HotSwapAgent {
 	 * 针对 URLClassLoader (及其子类，如 ModClassLoader) 有效。
 	 */
 	private static void mountWorkDir(ClassLoader targetLoader, Set<Path> watchDirs) {
+		if (ucpGetter == null) {
+			log("[WARN] ucpGetter is null, cannot mount work directory.");
+			return;
+		}
 		if (!(targetLoader instanceof URLClassLoader)) {
 			// 如果 Mindustry 升级了 Java 版本且不再继承 URLClassLoader，这里会失效
 			// 但目前的 ModClassLoader 通常都是 URLClassLoader 的子类
@@ -155,7 +171,10 @@ public class HotSwapAgent {
 
 		try {
 			// 1. 获取 ucp
-			URLClassPath ucp = (URLClassPath) ucpHandle.invoke(targetLoader);
+			URLClassPath ucp = (URLClassPath) ucpGetter.invoke(targetLoader);
+			var path = (ArrayList<URL>) ucpPathGetter.invoke(ucp);
+			var unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
+			var loaders = (ArrayList<Object>) loadersGetter.invoke(ucp);
 
 			for (Path dir : watchDirs) {
 				// 2. 将目录转换为 URL
@@ -173,7 +192,12 @@ public class HotSwapAgent {
 
 				if (!alreadyExists) {
 					// 4. 调用 addURL
-					ucp.addURL(url);
+					synchronized (ucp) {
+						path.add(0, url);
+						unopenedUrls.addFirst(url);
+						Object fileLoader = getLoaderHandle.invoke(ucp, url);
+						loaders.add(0, fileLoader);
+					}
 					info("[MOUNT] Successfully mounted directory to ClassLoader: " + dir);
 				} else {
 					log("[MOUNT] Directory already mounted: " + dir);
@@ -244,19 +268,20 @@ public class HotSwapAgent {
 					continue;
 				}
 
-				byte[] bytecode = Files.readAllBytes(path);
-				byte[] newHash  = calculateHash(bytecode);
+				byte[] bytecode     = Files.readAllBytes(path);
+				long   newHash      = calculateHash(bytecode); // 现在返回 long
+				long   classNameKey = CRC64.hashString(className); // 类名也转为 long
 
-				// 检查磁盘内容是否真的改变（过滤时间戳伪触发）
-				byte[] oldDiskHash = fileDiskHashes.get(className);
-				if (oldDiskHash != null && Arrays.equals(oldDiskHash, newHash)) {
-					if (DEBUG) {
-						log("[SKIP] " + className + " hash=" + bytesToHex(newHash).substring(0, 8) + " old=" + bytesToHex(oldDiskHash).substring(0, 8));
+				// 检查指纹
+				synchronized (fileDiskHashes) {
+					long oldDiskHash = fileDiskHashes.get(classNameKey);
+					if (oldDiskHash != -1 && oldDiskHash == newHash) {
+						if (DEBUG) log("[SKIP] " + className + " (content unchanged)");
+						skippedCount++;
+						continue;
 					}
-					skippedCount++;
-					continue;
+					fileDiskHashes.put(classNameKey, newHash);
 				}
-				fileDiskHashes.put(className, newHash);
 
 				Class<?> targetClass = loadedClassesMap.get(className);
 
@@ -266,7 +291,7 @@ public class HotSwapAgent {
 
 					@SuppressWarnings("UnnecessaryLocalVariable")
 					byte[] newBytecode = bytecode;
-					byte[] oldBytecode = bytecodeCache.get(className);
+					byte[] oldBytecode = getRef(bytecodeCache.get(className));
 
 					// 2. 如果缓存里没有（说明Agent attach晚了，或者还没触发过transform），
 					//    主动触发一次 retransform 来“偷”取字节码
@@ -274,7 +299,7 @@ public class HotSwapAgent {
 						try {
 							// 这会触发上面的 transformer，填充 bytecodeCache
 							inst.retransformClasses(targetClass);
-							oldBytecode = bytecodeCache.get(className);
+							oldBytecode = getRef(bytecodeCache.get(className));
 						} catch (Exception e) {
 							error("Failed to capture old bytecode for diff: " + className, e);
 						}
@@ -299,7 +324,7 @@ public class HotSwapAgent {
 					definitions.add(new ClassDefinition(targetClass, newBytecode));
 
 					// 更新缓存，以便下次对比
-					bytecodeCache.put(className, newBytecode);
+					bytecodeCache.put(className, new SoftReference<>(newBytecode));
 				} else {
 					// 2. 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
@@ -308,6 +333,7 @@ public class HotSwapAgent {
 							injectedCount++;
 						}
 					} else if (REDEFINE_MODE == RedefineMode.lazy_load) {
+						info("[LAZY-LOAD] Found change in: " + className);
 						// 延迟加载：确保路径已挂载
 						ClassLoader loader = findTargetClassLoader(className);
 						if (loader != null) {
@@ -328,6 +354,9 @@ public class HotSwapAgent {
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
+	}
+	public static byte[] getRef(SoftReference<byte[]> softReference) {
+		return softReference != null ? softReference.get() : null;
 	}
 
 	private static void loadClassSnap(Class<?>[] classes) {
@@ -535,20 +564,20 @@ public class HotSwapAgent {
 
 					try {
 						byte[] diskBytes = Files.readAllBytes(path);
-						byte[] diskHash  = calculateHash(diskBytes);
+						long   diskHash  = calculateHash(diskBytes);
 
 						// 获取内存中的字节码（这是 transformLoaded 偷出来的）
-						byte[] memBytes = bytecodeCache.get(cName);
+						byte[] memBytes = getRef(bytecodeCache.get(cName));
 						if (memBytes != null) {
-							byte[] memHash = calculateHash(memBytes);
-							if (!Arrays.equals(diskHash, memHash)) {
+							long memHash = calculateHash(memBytes);
+							if (diskHash != memHash) {
 								// 发现磁盘和内存不一致，手动加入待处理队列
 								log("[INIT-SYNC] " + cName + " is out of sync. Reloading...");
 								pendingChanges.add(path);
 							}
 						}
 						// 只有在这里才记录磁盘哈希
-						fileDiskHashes.put(cName, diskHash);
+						fileDiskHashes.put(CRC64.hashString(cName), diskHash);
 					} catch (Exception _) { }
 				});
 			} catch (IOException _) { }
@@ -578,8 +607,8 @@ public class HotSwapAgent {
 		triggerHotswapWith(inst.getAllLoadedClasses());
 	}
 
-	private static byte[] calculateHash(byte[] data) throws NoSuchAlgorithmException {
-		return MessageDigest.getInstance("MD5").digest(data);
+	private static long calculateHash(byte[] data) {
+		return CRC64.update(data);
 	}
 
 	public static Logger logger = new DefaultLogger();
@@ -632,7 +661,7 @@ public class HotSwapAgent {
 
 		@Override
 		public void run() {
-			info("File watcher started for: " + root);
+			log("[Watch] File watcher started for: " + root);
 			try {
 				registerAll(root);
 				while (!Thread.currentThread().isInterrupted()) {
@@ -655,7 +684,7 @@ public class HotSwapAgent {
 
 						// 2. 处理新目录创建 (核心修复)
 						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
-							info("[WATCH] New directory detected: " + fullPath);
+							log("[WATCH] New directory detected: " + fullPath);
 
 							// A. 注册监视
 							registerAll(fullPath);
@@ -665,7 +694,7 @@ public class HotSwapAgent {
 							try (Stream<Path> subFiles = Files.walk(fullPath)) {
 								subFiles.filter(p -> p.toString().endsWith(".class"))
 								 .forEach(p -> {
-									 info("[WATCH] Found existing file in new dir: " + p);
+									 log("[WATCH] Found existing file in new dir: " + p);
 									 handleFileChange(p);
 								 });
 							} catch (IOException e) {

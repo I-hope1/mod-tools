@@ -1,220 +1,126 @@
 package nipx;
 
-import org.objectweb.asm.ClassReader;
+import nipx.util.CRC64;
+import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
-import org.objectweb.asm.util.*;
-
-import java.io.*;
 import java.util.*;
 
 final class ClassDiffUtil {
+    private ClassDiffUtil() { }
 
-	private ClassDiffUtil() { }
+    static ClassDiff diff(byte[] oldBytes, byte[] newBytes) {
+        ClassNode oldNode = parse(oldBytes);
+        ClassNode newNode = parse(newBytes);
+        return diff(oldNode, newNode);
+    }
 
-	/* =========================
-	 * 对外 API
-	 * ========================= */
+    private static ClassNode parse(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        // 关键：我们要深入代码，但跳过调试信息（行号、变量名等），确保逻辑对比的纯粹性
+        new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        return cn;
+    }
 
-	// 现在输入必须是两份字节码
-	static ClassDiff diff(byte[] oldBytes, byte[] newBytes) {
-		ClassNode oldNode = parse(oldBytes);
-		ClassNode newNode = parse(newBytes);
-		return diff(oldNode, newNode);
-	}
-	private static ClassNode parse(byte[] bytes) {
-		ClassNode cn = new ClassNode();
-		// 关键：不使用 SKIP_CODE，否则无法检测方法体
-		// SKIP_DEBUG 可以忽略行号变化，这对于 Diff 逻辑变更很有用
-		ClassReader cr = new ClassReader(bytes);
-		cr.accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-		return cn;
-	}
+    static final class ClassDiff {
+        final List<String> modifiedMethods = new ArrayList<>();
+        final List<String> addedMethods = new ArrayList<>();
+        final List<String> removedMethods = new ArrayList<>();
+        // 字段变动通常会导致 Redefine 失败，记录它们以进行预警
+        final List<String> changedFields = new ArrayList<>();
 
-	/* =========================
-	 * 数据结构
-	 * ========================= */
+        boolean hasChange() {
+            return !modifiedMethods.isEmpty() || !addedMethods.isEmpty() ||
+                   !removedMethods.isEmpty() || !changedFields.isEmpty();
+        }
+    }
 
-	static final class ClassStructure {
-		String         className;
-		Set<FieldSig>  fields       = new HashSet<>();
-		Set<MethodSig> methods      = new HashSet<>();
-		Set<MethodSig> constructors = new HashSet<>();
-	}
+    private static ClassDiff diff(ClassNode oldC, ClassNode newC) {
+        ClassDiff d = new ClassDiff();
 
-	static final class ClassDiff {
-		final List<String> addedFields   = new ArrayList<>();
-		final List<String> removedFields = new ArrayList<>();
+        // 1. 字段对比（快速比对）
+        Set<String> oldFields = new HashSet<>();
+        for (FieldNode f : oldC.fields) oldFields.add(f.name + ":" + f.desc);
+        for (FieldNode f : newC.fields) {
+            if (!oldFields.contains(f.name + ":" + f.desc)) d.changedFields.add("+ " + f.name);
+        }
 
-		final List<String> addedMethods    = new ArrayList<>();
-		final List<String> removedMethods  = new ArrayList<>();
-		final List<String> modifiedMethods = new ArrayList<>();
-		boolean hasChange() {
-			return !addedFields.isEmpty() || !removedFields.isEmpty() ||
-			       !addedMethods.isEmpty() || !removedMethods.isEmpty() ||
-			       !modifiedMethods.isEmpty();
-		}
-	}
+        // 2. 方法对比
+        Map<String, MethodNode> oldMethods = new HashMap<>();
+        for (MethodNode m : oldC.methods) oldMethods.put(m.name + m.desc, m);
 
-	static final class FieldSig {
-		private final String name;
-		private final String desc;
-		private final int    access;
-		FieldSig(String name, String desc, int access) {
-			this.name = name;
-			this.desc = desc;
-			this.access = access;
-		}
-		public String name() { return name; }
-		public String desc() { return desc; }
-		public int access() { return access; }
-		@Override
-		public boolean equals(Object obj) {
-			if (obj == this) return true;
-			if (obj == null || obj.getClass() != this.getClass()) return false;
-			var that = (FieldSig) obj;
-			return Objects.equals(this.name, that.name) &&
-			       Objects.equals(this.desc, that.desc) &&
-			       this.access == that.access;
-		}
-		@Override
-		public int hashCode() {
-			return Objects.hash(name, desc, access);
-		}
-		@Override
-		public String toString() {
-			return "FieldSig[" +
-			       "name=" + name + ", " +
-			       "desc=" + desc + ", " +
-			       "access=" + access + ']';
-		}
-	}
+        for (MethodNode newM : newC.methods) {
+            String key = newM.name + newM.desc;
+            MethodNode oldM = oldMethods.remove(key);
+            if (oldM == null) {
+                d.addedMethods.add(key);
+            } else if (isCodeChanged(oldM, newM)) {
+                d.modifiedMethods.add(key);
+            }
+        }
+        d.removedMethods.addAll(oldMethods.keySet());
 
-	static final class MethodSig {
-		private final String name;
-		private final String desc;
-		private final int    access;
-		MethodSig(String name, String desc, int access) {
-			this.name = name;
-			this.desc = desc;
-			this.access = access;
-		}
-		public String name() { return name; }
-		public String desc() { return desc; }
-		public int access() { return access; }
-		@Override
-		public boolean equals(Object obj) {
-			if (obj == this) return true;
-			if (obj == null || obj.getClass() != this.getClass()) return false;
-			var that = (MethodSig) obj;
-			return Objects.equals(this.name, that.name) &&
-			       Objects.equals(this.desc, that.desc) &&
-			       this.access == that.access;
-		}
-		@Override
-		public int hashCode() {
-			return Objects.hash(name, desc, access);
-		}
-		@Override
-		public String toString() {
-			return "MethodSig[" +
-			       "name=" + name + ", " +
-			       "desc=" + desc + ", " +
-			       "access=" + access + ']';
-		}
-	}
+        return d;
+    }
 
-	/* =========================
-	 * Diff
-	 * ========================= */
-	private static ClassDiff diff(ClassNode oldC, ClassNode newC) {
-		ClassDiff d = new ClassDiff();
+    /**
+     * 核心逻辑：基于指令流指纹的快速对比
+     */
+    private static boolean isCodeChanged(MethodNode m1, MethodNode m2) {
+        // 首先进行低成本的快速判断
+        if (m1.instructions.size() != m2.instructions.size()) return true;
+        if (m1.access != m2.access) return true;
 
-		// 1. Fields
-		Set<String> oldFields = new HashSet<>();
-		for (FieldNode f : oldC.fields) oldFields.add(key(f));
-		Set<String> newFields = new HashSet<>();
-		for (FieldNode f : newC.fields) newFields.add(key(f));
+        // 计算逻辑指纹，不产生任何 String 垃圾
+        return calculateMethodHash(m1) != calculateMethodHash(m2);
+    }
 
-		for (String f : newFields) if (!oldFields.contains(f)) d.addedFields.add(f);
-		for (String f : oldFields) if (!newFields.contains(f)) d.removedFields.add(f);
+    /**
+     * 深度扫描指令流，计算逻辑指纹
+     */
+    private static long calculateMethodHash(MethodNode mn) {
+        long h = 0;
+        InsnList insns = mn.instructions;
+        for (int i = 0; i < insns.size(); i++) {
+            AbstractInsnNode node = insns.get(i);
 
-		// 2. Methods
-		Map<String, MethodNode> oldMethods = new HashMap<>();
-		for (MethodNode m : oldC.methods) oldMethods.put(key(m), m);
+            // 1. 混合 Opcode
+            h = 31 * h + node.getOpcode();
 
-		Map<String, MethodNode> newMethods = new HashMap<>();
-		for (MethodNode m : newC.methods) newMethods.put(key(m), m);
+            // 2. 根据指令类型混合关键特征
+            // 这里的辩证法：忽略 Label 的对象标识符，因为它们在每次编译时都是新的，
+            // 但我们要捕获指令引用的常量、字段名和方法名。
+            if (node instanceof MethodInsnNode) {
+                MethodInsnNode min = (MethodInsnNode) node;
+                h = h * 31 + hashString(min.owner);
+                h = h * 31 + hashString(min.name);
+                h = h * 31 + hashString(min.desc);
+            } else if (node instanceof FieldInsnNode) {
+                FieldInsnNode fin = (FieldInsnNode) node;
+                h = h * 31 + hashString(fin.owner);
+                h = h * 31 + hashString(fin.name);
+            } else if (node instanceof LdcInsnNode) {
+                Object cst = ((LdcInsnNode) node).cst;
+                h = h * 31 + (cst == null ? 0 : cst.hashCode());
+            } else if (node instanceof VarInsnNode) {
+                h = h * 31 + ((VarInsnNode) node).var;
+            } else if (node instanceof TypeInsnNode) {
+                h = h * 31 + hashString(((TypeInsnNode) node).desc);
+            }
+        }
+        return h;
+    }
 
-		// 检测新增和修改
-		for (Map.Entry<String, MethodNode> entry : newMethods.entrySet()) {
-			String     key  = entry.getKey();
-			MethodNode newM = entry.getValue();
-			MethodNode oldM = oldMethods.get(key);
+    private static long hashString(String s) {
+        return s == null ? 0 : CRC64.hashString(s);
+    }
 
-			if (oldM == null) {
-				d.addedMethods.add(key);
-			} else {
-				// 深度对比方法体
-				if (isCodeChanged(oldM, newM)) {
-					d.modifiedMethods.add(key);
-				}
-			}
-		}
-
-		// 检测删除
-		for (String key : oldMethods.keySet()) {
-			if (!newMethods.containsKey(key)) {
-				d.removedMethods.add(key);
-			}
-		}
-
-		return d;
-	}
-
-	private static String key(FieldNode f) { return f.name + " " + f.desc; }
-	private static String key(MethodNode m) { return m.name + m.desc; }
-
-	/**
-	 * 核心：对比两个方法体逻辑是否一致
-	 */
-	private static boolean isCodeChanged(MethodNode m1, MethodNode m2) {
-		// 1. 简单检查指令数量
-		if (m1.instructions.size() != m2.instructions.size()) return true;
-
-		// 2. 规范化为文本进行对比
-		// 这种方式能屏蔽 Label 对象实例不同带来的干扰，也能屏蔽常量池索引差异
-		String t1 = textify(m1);
-		String t2 = textify(m2);
-
-		return !t1.equals(t2);
-	}
-
-	private static String textify(MethodNode mn) {
-		// 使用 ASM 内置的 Textifier 打印指令
-		Textifier          printer = new Textifier();
-		TraceMethodVisitor mp      = new TraceMethodVisitor(printer);
-		mn.accept(mp);
-
-		StringWriter sw = new StringWriter();
-		printer.print(new PrintWriter(sw));
-		return sw.toString();
-	}
-
-	/* =========================
-	 * 日志
-	 * ========================= */
-
-	static void logDiff(String className, ClassDiff diff) {
-		if (!diff.hasChange()) return;
-
-		System.out.println("[NIPX] [DIFF] " + className);
-
-		diff.addedFields.forEach(f -> System.out.println("  + field: " + f));
-		diff.removedFields.forEach(f -> System.out.println("  - field: " + f));
-
-		diff.addedMethods.forEach(m -> System.out.println("  + method: " + m));
-		diff.removedMethods.forEach(m -> System.out.println("  - method: " + m));
-
-		diff.modifiedMethods.forEach(m -> System.out.println("  * body changed: " + m));
-	}
+    static void logDiff(String className, ClassDiff diff) {
+        if (!diff.hasChange()) return;
+        StringBuilder sb = new StringBuilder("[DIFF] ").append(className).append(":").append('\n');
+        if (!diff.modifiedMethods.isEmpty()) sb.append(" *Modified: ").append(diff.modifiedMethods).append('\n');
+        if (!diff.addedMethods.isEmpty()) sb.append(" +Added: ").append(diff.addedMethods).append('\n');
+        if (!diff.removedMethods.isEmpty()) sb.append(" -Removed: ").append(diff.removedMethods).append('\n');
+        if (!diff.changedFields.isEmpty()) sb.append(" !Fields: ").append(diff.changedFields).append('\n');
+        HotSwapAgent.info(sb.toString());
+    }
 }

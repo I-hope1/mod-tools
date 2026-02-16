@@ -15,7 +15,7 @@ import java.util.*;
 import java.util.jar.JarFile;
 
 public class UtilsAgentManager {
-	public static final  boolean DEBUG               = Boolean.parseBoolean(System.getProperty("nipx.agent.debug", "false"));
+	public static final  boolean DEBUG               = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 
 	public static final  String  AGENT_NAME          = "utils-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";

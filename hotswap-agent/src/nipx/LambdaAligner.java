@@ -2,86 +2,140 @@ package nipx;
 
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.*;
-import org.objectweb.asm.tree.*;
 
 import java.util.*;
-import java.security.MessageDigest;
 
-import static nipx.HotSwapAgent.*;
-
+/**
+ * Lambda表达式对齐工具类
+ * <p>
+ * 主要功能：
+ * 1. 分析新旧字节码中的合成方法（synthetic methods）
+ * 2. 通过哈希匹配和顺序对齐算法，建立方法名映射关系
+ * 3. 重写新字节码中的方法名引用，保持与旧版本的一致性
+ * 4. 解决热交换时因Lambda表达式名称变化导致的NoSuchMethodError问题
+ */
 public class LambdaAligner {
 
+	private static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
+
+	/**
+	 * 匹配上下文，存储当前线程的匹配状态
+	 */
+	static class MatchContext {
+		/** 旧版本中的合成方法映射 */
+		final Map<String, SyntheticInfo> oldMethods    = new LinkedHashMap<>(64);
+		/** 新版本中的合成方法列表 */
+		final List<SyntheticInfo>        newList       = new ArrayList<>(64);
+		/** 方法名重命名映射表 */
+		final Map<String, String>        renameMap     = new HashMap<>(32);
+		/** 已使用的旧方法名集合 */
+		final Set<String>                usedOldNames  = new HashSet<>(32);
+		/** 方法指纹生成器 */
+		final MethodFingerprinter        fingerprinter = new MethodFingerprinter();
+		/** 当前处理的类名 */
+		String currentClass;
+
+		/**
+		 * 重置上下文状态，为下一次匹配做准备
+		 */
+		void reset() {
+			oldMethods.clear();
+			newList.clear();
+			renameMap.clear();
+			usedOldNames.clear();
+			fingerprinter.reset();
+			currentClass = null;
+		}
+	}
+
+	/**
+	 * 对齐Lambda表达式的主入口方法
+	 * @param oldBytes 旧版本字节码
+	 * @param newBytes 新版本字节码
+	 * @return 对齐后的字节码，如果没有需要重命名则返回原始newBytes
+	 */
 	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
-		if (oldBytes == null) return newBytes;
-		if (oldBytes.length == 0) return newBytes;
+		if (oldBytes == null || oldBytes.length == 0) return newBytes;
 
-		// 1. 提取旧类的合成方法信息 (以 Hash+Desc 为索引)
-		Map<String, SyntheticInfo> oldMethods = collectSyntheticMethods(oldBytes);
-		// 2. 提取新类的合成方法信息
-		List<SyntheticInfo> newMethods = new ArrayList<>(collectSyntheticMethods(newBytes).values());
+		MatchContext ctx = CONTEXT.get();
+		ctx.reset();
 
-		// 核心映射表：NewName -> OldName
-		Map<String, String> renameMap = new HashMap<>();
+		ctx.currentClass = scan(oldBytes, ctx, true);
+		scan(newBytes, ctx, false);
 
-		// 已使用的旧方法名，防止重复分配
-		Set<String> usedOldNames = new HashSet<>();
+		Map<String, List<SyntheticInfo>> oldGroups = groupByLogic(ctx.oldMethods.values());
+		Map<String, List<SyntheticInfo>> newGroups = groupByLogic(ctx.newList);
 
-		// --- 第一步：精确匹配（逻辑未变的方法优先对齐） ---
-		// 依据：Hash + Desc + Prefix + ParentMethod 相同，认为绝对是同一个 Lambda
-		for (SyntheticInfo ni : newMethods) {
-			for (SyntheticInfo oi : oldMethods.values()) {
-				if (!usedOldNames.contains(oi.name) &&
-				    oi.hash == ni.hash &&
-				    oi.desc.equals(ni.desc) &&
-				    oi.prefix.equals(ni.prefix) &&
-				    oi.parentMethod.equals(ni.parentMethod)) { // ← 添加父方法检查
+		for (Map.Entry<String, List<SyntheticInfo>> entry : newGroups.entrySet()) {
+			List<SyntheticInfo> newGroup = entry.getValue();
+			List<SyntheticInfo> oldGroup = oldGroups.get(entry.getKey());
+			if (oldGroup == null) continue;
 
-					if (!ni.name.equals(oi.name)) {
-						renameMap.put(ni.name, oi.name);
-					}
+			// Step 1: 精确 Hash 匹配 (O(N))
+			Map<Long, LinkedList<SyntheticInfo>> hashIdx = new HashMap<>();
+			for (SyntheticInfo oi : oldGroup) hashIdx.computeIfAbsent(oi.hash, _ -> new LinkedList<>()).add(oi);
+
+			for (SyntheticInfo ni : newGroup) {
+				LinkedList<SyntheticInfo> cand = hashIdx.get(ni.hash);
+				if (cand != null && !cand.isEmpty()) {
+					SyntheticInfo oi = cand.removeFirst();
+					if (!ni.name.equals(oi.name)) ctx.renameMap.put(ni.name, oi.name);
 					ni.matched = true;
-					usedOldNames.add(oi.name);
-					break;
+					ctx.usedOldNames.add(oi.name);
+				}
+			}
+
+			// Step 2: 顺序对齐 (解决 NSME 的关键)
+			int oldPtr = 0;
+			for (SyntheticInfo ni : newGroup) {
+				if (ni.matched) continue;
+				while (oldPtr < oldGroup.size() && ctx.usedOldNames.contains(oldGroup.get(oldPtr).name)) oldPtr++;
+				if (oldPtr < oldGroup.size()) {
+					SyntheticInfo oi = oldGroup.get(oldPtr);
+					ctx.renameMap.put(ni.name, oi.name);
+					ni.matched = true;
+					ctx.usedOldNames.add(oi.name);
 				}
 			}
 		}
 
-		// --- 第二步：模糊匹配（代码逻辑改了，但结构还在） ---
-		// 依据：按出现顺序对齐相同 Prefix 和 Desc 的方法
-		for (SyntheticInfo ni : newMethods) {
-			if (ni.matched) continue;
-			for (SyntheticInfo oi : oldMethods.values()) {
-				if (!usedOldNames.contains(oi.name) &&
-				    oi.desc.equals(ni.desc) &&
-				    oi.prefix.equals(ni.prefix) &&
-				    oi.parentMethod.equals(ni.parentMethod)) { // ← 关键：必须同一个父方法
+		return ctx.renameMap.isEmpty() ? newBytes : applyTransform(newBytes, ctx);
+	}
 
-					renameMap.put(ni.name, oi.name);
-					ni.matched = true;
-					usedOldNames.add(oi.name);
-					break;
-				}
-			}
-		}
-
-		if (renameMap.isEmpty()) return newBytes;
-
-		if (DEBUG) log("[LambdaAligner] Renamed " + renameMap.size() + " methods:" + renameMap);
-
-		// --- 第三步：物理重映射 ---
-		ClassReader cr = new ClassReader(newBytes);
+	/**
+	 * 应用转换规则到字节码
+	 * @param bytes 原始字节码
+	 * @param ctx   匹配上下文
+	 * @return 转换后的字节码
+	 */
+	private static byte[] applyTransform(byte[] bytes, MatchContext ctx) {
+		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(0);
 
 		Remapper remapper = new Remapper(Opcodes.ASM9) {
 			@Override
-			public String mapMethodName(String owner, String name, String descriptor) {
-				return renameMap.getOrDefault(name, name);
+			public String mapMethodName(String owner, String name, String desc) {
+				if (owner.equals(ctx.currentClass)) {
+					return ctx.renameMap.getOrDefault(name, name);
+				}
+				return name;
 			}
 
 			@Override
-			public String mapInvokeDynamicMethodName(String name, String descriptor, Handle bsm, Object... bsmArgs) {
-				// Lambda 在 invokedynamic 中作为方法名存在
-				return renameMap.getOrDefault(name, name);
+			public String mapInvokeDynamicMethodName(String name, String desc, Handle bsm, Object... args) {
+				return ctx.renameMap.getOrDefault(name, name);
+			}
+
+			/** 处理 $deserializeLambda$ 内部的方法名字符串常量 */
+			@Override
+			public Object mapValue(Object value) {
+				if (value instanceof String s && s.length() > 7) {
+					char c = s.charAt(0);
+					if (c == 'l' || c == 'a') { // 快速预过滤 lambda$ 或 access$
+						return ctx.renameMap.getOrDefault(s, s);
+					}
+				}
+				return super.mapValue(value);
 			}
 		};
 
@@ -89,83 +143,104 @@ public class LambdaAligner {
 		return cw.toByteArray();
 	}
 
-	private static Map<String, SyntheticInfo> collectSyntheticMethods(byte[] bytes) {
-		ClassNode cn = new ClassNode();
-		new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-		Map<String, SyntheticInfo> map = new LinkedHashMap<>();
-
-		for (MethodNode mn : cn.methods) {
-			// 忽略非合成方法
-			if ((mn.access & Opcodes.ACC_SYNTHETIC) == 0) continue;
-			String prefix = getPrefix(mn.name);
-			if (prefix != null) {
-				String parentMethod = extractParentMethod(mn.name); // ← 提取父方法名
-				map.put(mn.name, new SyntheticInfo(mn.name, prefix, mn.desc, getFastMethodHash(mn), parentMethod));
+	/**
+	 * 扫描字节码并收集合成方法信息
+	 * @param bytes 要扫描的字节码
+	 * @param ctx   匹配上下文
+	 * @param isOld 是否为旧版本
+	 * @return 类名
+	 */
+	private static String scan(byte[] bytes, MatchContext ctx, boolean isOld) {
+		final String[] className = new String[1];
+		new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+			@Override
+			public void visit(int version, int access, String name, String sig, String superName, String[] itfs) {
+				className[0] = name;
 			}
-		}
-		return map;
+
+			@Override
+			public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] exc) {
+				if (!isSyntheticName(name)) return null;
+
+				ctx.fingerprinter.reset();
+				return new MethodVisitor(Opcodes.ASM9, ctx.fingerprinter) {
+					@Override
+					public void visitEnd() {
+						String        logicalName = extractLogicalName(name);
+						SyntheticInfo info        = new SyntheticInfo(name, desc, ctx.fingerprinter.getHash(), logicalName);
+						if (isOld) { ctx.oldMethods.put(name, info); } else ctx.newList.add(info);
+					}
+				};
+			}
+		}, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		return className[0];
+	}
+
+	private static boolean isSyntheticName(String name) {
+		if (name.length() < 7) return false;
+		char c = name.charAt(0);
+		// 重点 3：性能优化，避免全量 contains 扫描
+		return (c == 'l' && name.startsWith("lambda$")) ||
+		       (c == 'a' && name.startsWith("access$")) ||
+		       (c == '$' && name.equals("$deserializeLambda$"));
 	}
 
 	/**
-	 * 提取 Lambda 的逻辑身份（去除序号）
-	 * lambda$hide$4          → lambda$hide
-	 * lambda$new$3           → lambda$new
-	 * lambda$bar$0$lambda$1  → lambda$bar$0$lambda
-	 * access$000             → access (没有父方法信息)
+	 * 从方法名中提取逻辑名称用于分组
+	 * <pre>
+	 * lambda$foo$bar -> lambda$foo
+	 * access$100 -> access
+	 * $deserializeLambda$ -> $deserializeLambda$
+	 * </pre>
+	 * @param name 合成方法名
+	 * @return 逻辑名称
 	 */
-	private static String extractParentMethod(String lambdaName) {
-		if (lambdaName.startsWith("lambda$")) {
-			int lastDollar = lambdaName.lastIndexOf('$');
-			if (lastDollar > 7) { // "lambda$".length() == 7
-				return lambdaName.substring(0, lastDollar);
-			}
-			return "lambda"; // 边界情况: lambda$0
+	private static String extractLogicalName(String name) {
+		if (name.startsWith("lambda$")) {
+			int lastDollar = name.lastIndexOf('$');
+			return lastDollar > 7 ? name.substring(0, lastDollar) : "lambda";
 		}
-
-		if (lambdaName.startsWith("access$")) {
-			// access$000 → access (仅保留前缀，没有父方法信息)
-			return "access";
-		}
-
-		return "";
+		// 对于 access$100 等，逻辑名称就是其前缀，确保它们被归为一组顺序对齐
+		if (name.startsWith("access$")) return "access";
+		return name; // $deserializeLambda$ 等
 	}
-	private static String getPrefix(String name) {
-		if (name.startsWith("lambda$")) return "lambda$";
-		if (name.startsWith("access$")) return "access$";
-		return null;
+
+
+	/**
+	 * 按逻辑名称和描述符对合成方法进行分组
+	 * @param infos 合成方法信息集合
+	 * @return 分组映射
+	 */
+	private static Map<String, List<SyntheticInfo>> groupByLogic(Collection<SyntheticInfo> infos) {
+		Map<String, List<SyntheticInfo>> groups = new LinkedHashMap<>();
+		for (SyntheticInfo info : infos) {
+			// 使用逻辑名称+描述符作为分组键
+			String key = info.logicalName + "|" + info.desc;
+			groups.computeIfAbsent(key, _ -> new ArrayList<>()).add(info);
+		}
+		return groups;
 	}
 
 	/**
-	 * 使用 SHA-256 提取稳定的方法指纹
+	 * 合成方法信息类
 	 */
-	public static String getMethodHashSHA256(MethodNode mn) {
-		try {
-			ClassWriter cw = new ClassWriter(0);
-			mn.accept(cw);
-			byte[]        methodBytes = cw.toByteArray();
-			MessageDigest md          = MessageDigest.getInstance("SHA-256");
-			return Base64.getEncoder().encodeToString(md.digest(methodBytes));
-		} catch (Exception e) {
-			return String.valueOf(mn.instructions.size());
-		}
-	}
-
-	public static long getFastMethodHash(MethodNode mn) {
-		MethodFingerprinter hasher = new MethodFingerprinter();
-		mn.accept(hasher);
-		return hasher.getHash();
-	}
-
 	static class SyntheticInfo {
-		String name, prefix, desc, parentMethod;
+		/** 方法名 */
+		String  name;
+		/** 方法描述符 */
+		String  desc;
+		/** 逻辑名称（用于分组） */
+		String  logicalName;
+		/** 方法指纹哈希值 */
 		long    hash;
+		/** 是否已匹配 */
 		boolean matched = false;
-		SyntheticInfo(String n, String p, String d, long h, String pm) {
-			this.name = n;
-			this.prefix = p;
-			this.desc = d;
-			this.hash = h;
-			this.parentMethod = pm;
+
+		SyntheticInfo(String n, String d, long h, String l) {
+			name = n;
+			desc = d;
+			hash = h;
+			logicalName = l;
 		}
 	}
 }

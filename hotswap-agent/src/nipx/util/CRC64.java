@@ -58,11 +58,9 @@ public final class CRC64 {
 	}
 
 	/* ========== 基础 update ========== */
-
 	public static long updateByte(long crc, int b) {
 		return LOOKUP[(int) ((crc ^ b) & 0xFF)] ^ (crc >>> 8);
 	}
-
 	public static long updateBytes(long crc, byte[] data) {
 		for (byte b : data) {
 			crc = updateByte(crc, b);
@@ -71,7 +69,6 @@ public final class CRC64 {
 	}
 
 	/* ========== 原始类型支持（避免装箱） ========== */
-
 	public static long updateInt(long crc, int value) {
 		crc = updateByte(crc, value);
 		crc = updateByte(crc, value >>> 8);
@@ -93,7 +90,6 @@ public final class CRC64 {
 	}
 
 	/* ========== 字符串（推荐 UTF-8 统一编码） ========== */
-
 	public static long updateStringUTF16(long crc, String s) {
 		int len = s.length();
 		for (int i = 0; i < len; i++) {

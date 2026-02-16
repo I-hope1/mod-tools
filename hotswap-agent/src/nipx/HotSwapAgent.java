@@ -21,18 +21,22 @@ import java.util.stream.*;
  * HotSwap Agent
  * 其由Bootstrap加载，但不属于java.base模块
  */
+@SuppressWarnings("StringTemplateMigration")
 public class HotSwapAgent {
+	//region Configuration Fields
 	public static boolean      DEBUG              = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 	public static boolean      UCP_APPEND         = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
 	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
-	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true")); // 需要重启
+	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
 
 	public static boolean STRUCTURAL_SUPPORTED = isEnhancedHotswapEnabled();
+	//endregion
 
+	//region Core State Management
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
@@ -53,7 +57,9 @@ public class HotSwapAgent {
 		return t;
 	});
 	private static       ScheduledFuture<?>       scheduledTask;
+	//endregion
 
+	//region Method Handles for Class Loading
 	public static MethodHandle
 	 ucpGetter,
 	 ucpPathGetter,
@@ -69,12 +75,15 @@ public class HotSwapAgent {
 			unopenedUrlsGetter = Reflect.IMPL.findGetter(URLClassPath.class, "unopenedUrls", ArrayDeque.class);
 			Class<?> Loader = Class.forName("jdk.internal.loader.URLClassPath$Loader");
 			getLoaderHandle = Reflect.IMPL.findVirtual(URLClassPath.class, "getLoader", MethodType.methodType(Loader, URL.class));
-		} catch (Exception _) {
-
+		} catch (Throwable e) {
+			if (DEBUG) error("Failed to initialize method handle.", e);
 		}
 	}
+	//endregion
 
+	//region Agent Initialization
 	static MyClassFileTransformer transformer;
+
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		HotSwapAgent.inst = inst;
 		try {
@@ -82,22 +91,22 @@ public class HotSwapAgent {
 		} catch (ClassNotFoundException _) { }
 		init(agentArgs, false);
 	}
+
 	public static void init(String agentArgs, boolean reinit) {
 		initConfig();
 
 		if (transformer == null) {
 			transformer = new MyClassFileTransformer();
-			inst.addTransformer(transformer, true); // canRetransform = true
+			inst.addTransformer(transformer, true);
 		}
 		var loadedClasses = inst.getAllLoadedClasses();
-		// 初始化当前所有已加载类的 ClassLoader 映射关系
 		refreshPackageLoaders(loadedClasses);
 
 		// 解析传入的监控路径 (支持分号或冒号分割)
 		Set<Path> newWatchDirs = Arrays.stream(agentArgs.split(File.pathSeparator))
 		 .filter(s -> !s.trim().isEmpty())
 		 .map(Paths::get)
-		 .map(Path::toAbsolutePath) // 统一转绝对路径
+		 .map(Path::toAbsolutePath)
 		 .collect(Collectors.toSet());
 
 		if (newWatchDirs.isEmpty()) {
@@ -117,8 +126,9 @@ public class HotSwapAgent {
 			triggerHotswap();
 		}
 	}
+
 	public static void initConfig() {
-		log("DEBUG: " + DEBUG);
+		info("DEBUG: " + DEBUG);
 		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 		info("Redefine Mode: " + REDEFINE_MODE);
 		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
@@ -132,10 +142,14 @@ public class HotSwapAgent {
 		}
 		info("Structural HotSwap Supported: " + STRUCTURAL_SUPPORTED);
 	}
+	//endregion
+
+	//region Class Retransformation
 	/** 对外api，刷新已加载的类 */
 	public static void retransformLoaded() {
 		retransformLoaded(inst.getAllLoadedClasses());
 	}
+
 	private static void retransformLoaded(Class<?>[] classes) {
 		info("Force retransform all loaded classes...");
 		List<Class<?>> candidates = new ArrayList<>();
@@ -154,40 +168,37 @@ public class HotSwapAgent {
 		} catch (UnmodifiableClassException e) {
 			error("Failed to retransform some classes", e);
 		} catch (Throwable t) {
-			// 捕获可能的 LinkageError 或 VerifyError
 			error("Critical error during retransform", t);
 		}
 	}
+	//endregion
 
+	//region Class Loading Utilities
 	/**
 	 * 强行将工作目录挂载到指定的 ClassLoader 搜索路径中。
 	 * 针对 URLClassLoader (及其子类，如 ModClassLoader) 有效。
 	 */
+	@SuppressWarnings("unchecked")
 	private static void mountWorkDir(ClassLoader targetLoader, Set<Path> watchDirs) {
-		if (ucpGetter == null) {
-			log("[WARN] ucpGetter is null, cannot mount work directory.");
+		if (getLoaderHandle == null) {
+			error("[WARN] getLoaderHandle is null, cannot mount work directory.");
 			return;
 		}
 		if (!(targetLoader instanceof URLClassLoader)) {
-			// 如果 Mindustry 升级了 Java 版本且不再继承 URLClassLoader，这里会失效
-			// 但目前的 ModClassLoader 通常都是 URLClassLoader 的子类
-			log("[WARN] Target loader is NOT a URLClassLoader: " + targetLoader.getClass().getName());
+			if (DEBUG) log("[WARN] Target loader is NOT a URLClassLoader: " + targetLoader.getClass().getName());
 			return;
 		}
 
 		try {
-			// 1. 获取 ucp
 			URLClassPath ucp          = (URLClassPath) ucpGetter.invoke(targetLoader);
 			var          path         = (ArrayList<URL>) ucpPathGetter.invoke(ucp);
 			var          unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
 			var          loaders      = (ArrayList<Object>) loadersGetter.invoke(ucp);
 
 			for (Path dir : watchDirs) {
-				// 2. 将目录转换为 URL
-				// 注意：目录的 URL 必须以 "/" 结尾，toURI().toURL() 会自动处理
 				URL url = dir.toUri().toURL();
 
-				// 3. 检查是否已经存在 (避免重复添加)
+				// 检查是否已经存在 (避免重复添加)
 				boolean alreadyExists = false;
 				for (URL existing : ((URLClassLoader) targetLoader).getURLs()) {
 					if (existing.equals(url)) {
@@ -197,7 +208,6 @@ public class HotSwapAgent {
 				}
 
 				if (!alreadyExists) {
-					// 4. 调用 addURL
 					synchronized (ucp) {
 						path.add(0, url);
 						unopenedUrls.addFirst(url);
@@ -206,13 +216,14 @@ public class HotSwapAgent {
 					}
 					info("[MOUNT] Successfully mounted directory to ClassLoader: " + dir);
 				} else {
-					log("[MOUNT] Directory already mounted: " + dir);
+					if (DEBUG) log("[MOUNT] Directory already mounted: " + dir);
 				}
 			}
 		} catch (Throwable e) {
 			error("Failed to mount working directory to ClassLoader", e);
 		}
 	}
+
 	/**
 	 * 扫描内存中已加载的类，建立 "包名 -> ClassLoader" 的映射。
 	 * 这对于解决 NoClassDefFoundError 至关重要。
@@ -222,7 +233,6 @@ public class HotSwapAgent {
 			ClassLoader cl = clazz.getClassLoader();
 			if (cl != null && clazz.getPackage() != null) {
 				// 简单策略：记录该包最后一次出现的 ClassLoader
-				// 在 Spring Boot 中，这通常会覆盖 AppClassLoader，指向 RestartClassLoader
 				packageLoaders.put(clazz.getPackage().getName(), new WeakReference<>(cl));
 			}
 		}
@@ -247,7 +257,9 @@ public class HotSwapAgent {
 			}
 		}
 	}
+	//endregion
 
+	//region HotSwap Core Logic
 	public static ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
 
 	/**
@@ -264,7 +276,7 @@ public class HotSwapAgent {
 		int                   injectedCount = 0;
 
 		for (Path path : changedFiles) {
-			log("Processing changes: " + path);
+			if (DEBUG) log("Processing changes: " + path);
 			try {
 				String className = getClassName(path);
 				if (className == null) continue;
@@ -292,15 +304,13 @@ public class HotSwapAgent {
 				Class<?> targetClass = loadedClassesMap.get(className);
 
 				if (targetClass != null) {
-					// 1. 类已加载：无论模式，都必须执行 redefinition
+					// 类已加载：无论模式，都必须执行 redefinition
 					log("[MODIFIED] " + className);
 
-					@SuppressWarnings("UnnecessaryLocalVariable")
 					byte[] newBytecode = bytecode;
 					byte[] oldBytecode = getRef(bytecodeCache.get(className));
 
-					// 2. 如果缓存里没有（说明Agent attach晚了，或者还没触发过transform），
-					//    主动触发一次 retransform 来“偷”取字节码
+					// 如果缓存里没有，主动触发一次 retransform 来"偷"取字节码
 					if (oldBytecode == null) {
 						try {
 							// 这会触发上面的 transformer，填充 bytecodeCache
@@ -311,49 +321,37 @@ public class HotSwapAgent {
 						}
 					}
 
-					// 3. 执行 ASM Diff
+					// 执行 ASM Diff
 					if (oldBytecode != null) {
-						// ClassDiffUtil.logDiff(className, ClassDiffUtil.diff(oldBytecode, newBytecode));
-
-						// 现在我们是 byte[] vs byte[]，可以检测方法体了
 						if (LAMBDA_ALIGN) {
 							newBytecode = LambdaAligner.align(oldBytecode, newBytecode);
 						}
 
 						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
 						ClassDiffUtil.logDiff(className, diff);
-						// 在执行 ASM Diff 后
+
 						if (!diff.changedFields.isEmpty() || !diff.addedMethods.isEmpty() || !diff.removedMethods.isEmpty()) {
 							if (!STRUCTURAL_SUPPORTED) {
 								error("STRUCTURAL CHANGE DETECTED! Field/Method structure changed but DCEVM is NOT active.");
 								error("This redefine will likely FAIL. Classes: " + className);
-								// 如果你想强制中断防止 JVM 抛出不可控异常：
-								// return;
 							} else {
 								log("[DCEVM] Structure change detected, proceeding with enhanced redefinition.");
 							}
 						}
-
-						// 可选：如果没有结构性变化且没有方法体变化，是否跳过 redefine？
-						// 为了保险起见，只要文件变了，还是建议 redefine，防止漏掉细微变化
 					} else {
 						log("[WARN] Cannot diff " + className + " (missing old bytecode). Proceeding with redefine.");
 					}
 
 					definitions.add(new ClassDefinition(targetClass, newBytecode));
-
-					// 更新缓存，以便下次对比
 					bytecodeCache.put(className, new SoftReference<>(newBytecode));
 				} else {
-					// 2. 类尚未加载：根据 REDEFINE_MODE 处理
+					// 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
-						// 注入模式：强行让 JVM 认识这个类
 						if (injectNewClass(className, bytecode)) {
 							injectedCount++;
 						}
 					} else if (REDEFINE_MODE == RedefineMode.lazy_load) {
 						info("[LAZY-LOAD] Found change in: " + className);
-						// 延迟加载：确保路径已挂载
 						ClassLoader loader = findTargetClassLoader(className);
 						if (loader != null) {
 							ensureMounted(loader);
@@ -368,12 +366,12 @@ public class HotSwapAgent {
 
 		// 批量执行重定义（针对已加载类）
 		applyRedefinitions(definitions);
-
 		processAnnotations(definitions);
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
 	}
+
 	public static byte[] getRef(SoftReference<byte[]> softReference) {
 		return softReference != null ? softReference.get() : null;
 	}
@@ -395,21 +393,16 @@ public class HotSwapAgent {
 		for (ClassDefinition def : definitions) {
 			Class<?> clazz = def.getDefinitionClass();
 
-			// 1. 检查类是否有 @Reloadable (虽然我们只注入了带这个的，但双重检查无害)
-			// 注意：这里用反射检查，因为类已经定义好了
 			if (clazz.isAnnotationPresent(Reloadable.class)) {
-
-				// 2. 获取所有实例
 				List<Object> instances = InstanceTracker.getInstances(clazz);
 				if (instances.isEmpty()) continue;
 
-				// 3. 查找回调方法 @OnReload
 				Method reloadMethod = null;
 				for (Method m : clazz.getDeclaredMethods()) {
 					if (m.isAnnotationPresent(OnReload.class)) {
 						reloadMethod = m;
 						reloadMethod.setAccessible(true);
-						break; // 假设只有一个
+						break;
 					}
 				}
 
@@ -426,49 +419,47 @@ public class HotSwapAgent {
 			}
 		}
 	}
+
 	static boolean isBlacklisted(String className) {
 		for (String prefix : HOTSWAP_BLACKLIST) {
 			if (className.startsWith(prefix)) return true;
 		}
 		return false;
 	}
+	//endregion
 
+	//region Class Injection and Redefinition
 	/**
 	 * 直接定义类，而不是被动加载
 	 */
 	private static boolean injectNewClass(String className, byte[] bytes) {
 		try {
-			// 寻找合适的 ClassLoader
 			ClassLoader loader = findTargetClassLoader(className);
 			if (loader == null) {
 				error("Could not find a suitable ClassLoader for new class: " + className);
 				return false;
 			}
 			try {
-				// 尝试用标准方式加载。如果成功，说明它在 ClassPath 里。
-				// 既然它在 ClassPath 里，我们就不应该用 Unsafe 注入！
 				loader.loadClass(className);
 				if (DEBUG) log("[SKIP-EXISTING] " + className + " is visible in " + loader);
 				return false;
 			} catch (ClassNotFoundException ignored) {
 				// 只有抛出 ClassNotFoundException，才说明 ClassLoader 真的找不到它
-				// 这时我们才有资格用 Unsafe 注入
 			}
 
 			Reflect.defineClass(className, bytes, 0, bytes.length, loader, null);
-
 			info("[INJECTED] Successfully defined new class: " + className + " into " + loader);
 			return true;
 
 		} catch (LinkageError le) {
-			// 类可能已经存在（并发情况），忽略
-			log("Class already loaded: " + className);
+			if (DEBUG) error("Class already loaded: " + className, le);
 			return true;
 		} catch (Exception e) {
 			error("Failed to inject new class: " + className + ". CAUTION: This may cause NoClassDefFoundError.", e);
 			return false;
 		}
 	}
+
 	/**
 	 * 分块执行 Redefine，防止其中一个类出错导致所有类失败
 	 */
@@ -482,19 +473,21 @@ public class HotSwapAgent {
 			for (ClassDefinition def : definitions) {
 				try {
 					inst.redefineClasses(def);
-					log("[OK] " + def.getDefinitionClass().getName());
+					if (DEBUG) log("[OK] " + def.getDefinitionClass().getName());
 				} catch (Throwable e) {
 					error("[FAIL] " + def.getDefinitionClass().getName(), e);
 				}
 			}
 		}
 	}
+	//endregion
 
+	//region ClassLoader Resolution
 	/**
-	 * 启发式算法：为新类寻找“宿主” ClassLoader。
+	 * 启发式算法：为新类寻找"宿主" ClassLoader。
 	 */
 	private static ClassLoader findTargetClassLoader(String className) {
-		// 1. 优先尝试递归查找外部类 (Outer Class)
+		// 优先尝试递归查找外部类 (Outer Class)
 		// 输入: a.b.Outer$Inner$Deep
 		// 尝试1: 找 a.b.Outer$Inner
 		// 尝试2: 找 a.b.Outer
@@ -505,25 +498,22 @@ public class HotSwapAgent {
 			candidate = candidate.substring(0, candidate.lastIndexOf('$'));
 			Class<?> found = loadedClassesMap.get(candidate);
 			if (found != null) {
-				log("[FOUND-PARENT] Found parent class " + candidate + " for " + className);
+				if (DEBUG) log("[FOUND-PARENT] Found parent class " + candidate + " for " + className);
 				return found.getClassLoader();
 			}
 		}
 
-		// 2. 如果外部类都没加载 (极端情况)，尝试同包查找
+		// 如果外部类都没加载 (极端情况)，尝试同包查找
 		// 比如 modtools.android.SomeOtherUtil 可能是加载过的
 		if (className.contains(".")) {
 			String packageName = className.substring(0, className.lastIndexOf('.'));
-			// 遍历所有已加载类，找同包的
 			for (Class<?> c : loadedClassesMap.values()) {
 				if (c.getName().startsWith(packageName + ".")) {
-					// 排除系统类加载器加载的类（如果目标是应用类），除非只有系统类加载器
-					// 这里直接返回找到的第一个同包类的加载器
 					return c.getClassLoader();
 				}
 			}
 
-			// 3. 尝试查之前缓存的 packageLoaders (从 Main.refreshPackageLoaders 填充的)
+			// 尝试查之前缓存的 packageLoaders
 			WeakReference<ClassLoader> ref = packageLoaders.get(packageName);
 			if (ref != null && ref.get() != null) {
 				return ref.get();
@@ -546,9 +536,9 @@ public class HotSwapAgent {
 		}
 		return false;
 	}
+
 	/**
 	 * 确保目标 ClassLoader 的 URL 搜索路径包含了我们的监控目录
-	 * TODO: ucp没实现
 	 */
 	private static void ensureMounted(ClassLoader loader) {
 		if (!UCP_APPEND) return;
@@ -557,24 +547,24 @@ public class HotSwapAgent {
 		if (loader instanceof URLClassLoader) {
 			mountWorkDir(loader, activeWatchDirs);
 		} else {
-			// 如果是普通的 ClassLoader，但在 Java 9+ 中，可以通过反射拿到 ucp (URLClassPath)
-			// 这里根据需求可以进一步扩展
-			log("[SKIP-MOUNT] Loader is not URLClassLoader: " + loader.getClass().getSimpleName());
+			if (DEBUG) log("[SKIP-MOUNT] Loader is not URLClassLoader: " + loader.getClass().getSimpleName());
 		}
 	}
+	//endregion
+
+	//region File Processing Utilities
 	private static String getClassName(Path classFile) {
 		if (DEBUG) log("[PARSE] Parsing class file: " + classFile);
 		try (InputStream is = Files.newInputStream(classFile)) {
-			// 解析类文件头，只读不处理，性能开销极小
 			ClassReader cr = new ClassReader(is);
 			return cr.getClassName().replace('/', '.');
 		} catch (IOException e) {
 			return null; // 不是合法的 class 文件
 		}
 	}
+
 	private static void initializeAgentState(Class<?>[] classes) {
 		info("Scanning files...");
-		// 不要盲目 clear，或者 clear 后立即进行差异检查
 		for (Path root : activeWatchDirs) {
 			try (Stream<Path> walk = Files.walk(root)) {
 				walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
@@ -591,19 +581,19 @@ public class HotSwapAgent {
 							long memHash = calculateHash(memBytes);
 							if (diskHash != memHash) {
 								// 发现磁盘和内存不一致，手动加入待处理队列
-								log("[INIT-SYNC] " + cName + " is out of sync. Reloading...");
+								if (DEBUG) log("[INIT-SYNC] " + cName + " is out of sync. Reloading...");
 								pendingChanges.add(path);
 							}
 						}
 						// 只有在这里才记录磁盘哈希
-							fileDiskHashes.put(CRC64.hashString(cName), diskHash);
+						fileDiskHashes.put(CRC64.hashString(cName), diskHash);
 					} catch (Exception _) { }
 				});
 			} catch (IOException _) { }
 		}
-		// 触发一次同步
 		if (!pendingChanges.isEmpty()) triggerHotswapWith(classes);
 	}
+
 	private static void handleFileChange(Path changedFile) {
 		pendingChanges.add(changedFile);
 		if (scheduledTask != null && !scheduledTask.isDone()) {
@@ -621,6 +611,7 @@ public class HotSwapAgent {
 		}
 		processChanges(changes, classes);
 	}
+
 	/** 对外api，触发热更新 */
 	public static void triggerHotswap() {
 		triggerHotswapWith(inst.getAllLoadedClasses());
@@ -629,8 +620,11 @@ public class HotSwapAgent {
 	private static long calculateHash(byte[] data) {
 		return CRC64.update(data);
 	}
+	//endregion
 
+	//region Logging System
 	public static Logger logger = new DefaultLogger();
+
 	public static class DefaultLogger implements Logger {
 		@Override
 		public void log(String msg) {
@@ -653,31 +647,31 @@ public class HotSwapAgent {
 			t.printStackTrace(System.err);
 		}
 	}
+
 	public interface Logger {
 		void log(String msg);
 		void info(String msg);
 		void error(String msg);
 		void error(String msg, Throwable t);
 	}
+
 	public static void log(String msg) { logger.log(msg); }
 	public static void info(String msg) { logger.info(msg); }
 	public static void error(String msg) { logger.error(msg); }
 	public static void error(String msg, Throwable t) { logger.error(msg, t); }
+	//endregion
 
-
-	// ----Environment Variables
+	//region Environment Detection
 	public static boolean isDcevmDetected() {
 		String vmName    = System.getProperty("java.vm.name", "");
 		String vmVersion = System.getProperty("java.vm.version", "");
-		// 旧版 DCEVM (Java 8) 常见标识
 		return vmName.contains("Dynamic Code Evolution") ||
 		       vmVersion.contains("dcevm");
 	}
+
 	public static boolean isEnhancedHotswapEnabled() {
-		// 1. 先查名称标识
 		if (isDcevmDetected()) return true;
 
-		// 2. 查核心参数：Java 11/17+ 开启增强热更的标志
 		List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
 		for (String arg : inputArguments) {
 			if (arg.contains("AllowEnhancedClassRedefinition")) {
@@ -686,8 +680,9 @@ public class HotSwapAgent {
 		}
 		return false;
 	}
+	//endregion
 
-
+	//region File Watcher Implementation
 	/**
 	 * 文件监控线程，这个类的设计本身就是可复用的
 	 */
@@ -696,7 +691,7 @@ public class HotSwapAgent {
 		private final WatchService watchService;
 
 		WatcherThread(Path root) throws IOException {
-			super("HotSwap-FileWatcher-" + root.getFileName()); // 给线程一个有意义的名字
+			super("HotSwap-FileWatcher-" + root.getFileName());
 			this.root = root;
 			this.watchService = FileSystems.getDefault().newWatchService();
 		}
@@ -710,33 +705,28 @@ public class HotSwapAgent {
 					WatchKey key          = watchService.take();
 					Path     triggeredDir = (Path) key.watchable();
 
-					// 在 WatcherThread.run() 循环内部
 					for (WatchEvent<?> event : key.pollEvents()) {
 						if (event.kind() == StandardWatchEventKinds.OVERFLOW) continue;
 
 						Path context  = (Path) event.context();
 						Path fullPath = triggeredDir.resolve(context);
 
-						// 1. 处理普通类文件变化
+						// 处理普通类文件变化
 						if (fullPath.toString().endsWith(".class")) {
-							// [DEBUG] 打印一下，看看是不是这里就没捕获到
-							// log("Detected change: " + fullPath);
 							handleFileChange(fullPath);
 						}
 
-						// 2. 处理新目录创建 (核心修复)
+						// 处理新目录创建
 						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
 							log("[WATCH] New directory detected: " + fullPath);
 
-							// A. 注册监视
 							registerAll(fullPath);
 
-							// B. 【必须补这一刀】立即扫描该目录下现有的文件！
-							// 因为在注册完成前，编译器可能已经把 .class 写进去了
+							// 立即扫描该目录下现有的文件
 							try (Stream<Path> subFiles = Files.walk(fullPath)) {
 								subFiles.filter(p -> p.toString().endsWith(".class"))
 								 .forEach(p -> {
-									 log("[WATCH] Found existing file in new dir: " + p);
+									 if (DEBUG) log("[WATCH] Found existing file in new dir: " + p);
 									 handleFileChange(p);
 								 });
 							} catch (IOException e) {
@@ -745,7 +735,7 @@ public class HotSwapAgent {
 						}
 					}
 					if (!key.reset()) {
-						log("WatchKey no longer valid: " + triggeredDir);
+						if (DEBUG) log("WatchKey no longer valid: " + triggeredDir);
 					}
 				}
 			} catch (IOException e) {
@@ -753,7 +743,7 @@ public class HotSwapAgent {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			} catch (UncheckedIOException e) {
-				error("File watcher encountered an unchecked IO error, possibly due to a directory being deleted during a scan.", e);
+				error("File watcher encountered an unchecked IO error", e);
 			} finally {
 				if (DEBUG) log("[Watch] File watcher stopped for: " + root);
 				try {
@@ -766,7 +756,7 @@ public class HotSwapAgent {
 
 		private void registerAll(Path startDir) throws IOException {
 			if (!Files.exists(startDir)) {
-				log("Skipping registration for non-existent directory: " + startDir);
+				if (DEBUG) log("Skipping registration for non-existent directory: " + startDir);
 				return;
 			}
 			try (Stream<Path> stream = Files.walk(startDir)) {
@@ -776,13 +766,15 @@ public class HotSwapAgent {
 						 StandardWatchEventKinds.ENTRY_CREATE,
 						 StandardWatchEventKinds.ENTRY_MODIFY);
 					} catch (IOException e) {
-						log("Failed to register directory: " + dir);
+						if (DEBUG) log("Failed to register directory: " + dir);
 					}
 				});
 			}
 		}
 	}
+	//endregion
 
+	//region Utility Methods
 	public static String bytesToHex(byte[] bytes) {
 		StringBuilder sb = new StringBuilder();
 		for (byte b : bytes) {
@@ -790,6 +782,7 @@ public class HotSwapAgent {
 		}
 		return sb.toString();
 	}
+
 	/** @see E_Hook.RedefineMode */
 	public enum RedefineMode {
 		inject,
@@ -803,4 +796,5 @@ public class HotSwapAgent {
 			}
 		}
 	}
+	//endregion
 }

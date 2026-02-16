@@ -33,6 +33,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG);
 		return found[0];
 	}
+
 	/** @see InstanceTracker */
 	private static byte[] injectTracker(byte[] bytes, String className) {
 		ClassReader cr = new ClassReader(bytes);

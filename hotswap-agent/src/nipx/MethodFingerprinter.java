@@ -18,8 +18,7 @@ import java.util.Map;
  */
 public final class MethodFingerprinter extends MethodVisitor {
 
-	/* ================= 标记常量 ================= */
-
+	//region  标记常量
 	/** LDC指令标记 */
 	private static final int MARK_LDC             = 0x7F000010;
 	/** IINC指令标记 */
@@ -43,8 +42,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 	/** 注解默认值标记 */
 	private static final int MARK_ANNOT_DEFAULT   = 0x7F00001A;
 
-	/* ================= 标签ID管理 ================= */
+	//endregion
 
+	// region 标签ID管理
 	/** 标签到ID的映射，用于统一标识跳转目标 */
 	private final Map<Label, Integer> labelIds    = new IdentityHashMap<>();
 	/** 下一个可用的标签ID */
@@ -58,9 +58,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 	private int getLabelId(Label l) {
 		return labelIds.computeIfAbsent(l, _ -> nextLabelId++);
 	}
+	// endregion
 
-	/* ================= CRC哈希计算 ================= */
-
+	//region  CRC64哈希值计算
 	/** 当前累积的CRC64哈希值 */
 	private long crc = CRC64.init();
 
@@ -87,9 +87,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 	public long getHash() {
 		return CRC64.finish(crc);
 	}
+	//endregion
 
-	/* ================= 辅助方法 ================= */
-
+	//region CRC64更新方法
 	/**
 	 * 更新CRC值与整数
 	 * @param v 要更新的整数值
@@ -129,9 +129,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateString(h.getDesc());       // 方法描述符
 		updateInt(h.isInterface() ? 1 : 0); // 是否接口方法
 	}
+	//endregion
 
-	/* ================= 字节码指令处理 ================= */
-
+	//region  字节码指令处理
 	/**
 	 * 处理无操作数指令（如NOP, ACONST_NULL等）
 	 */
@@ -316,8 +316,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateString(desc); // 数组类型描述符
 		updateInt(dims);    // 维度数量
 	}
+	//endregion
 
-	/* ================= 注解处理 ================= */
+	//region 注解处理
 
 	/**
 	 * 处理注解默认值
@@ -338,9 +339,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(parameterCount);
 		updateInt(visible ? 1 : 0);
 	}
+	//endregion
 
-	/* ================= 常量处理 ================= */
-
+	//region 常量处理
 	/**
 	 * 处理各种类型的常量值
 	 * @param cst 常量对象
@@ -389,21 +390,20 @@ public final class MethodFingerprinter extends MethodVisitor {
 					updateConstant(cd.getBootstrapMethodArgument(i));
 				}
 			}
-			default -> throw new IllegalStateException(
-			 "Unhandled constant type: " + cst.getClass()
-			);
+			default -> throw new IllegalStateException("Unhandled constant type: " + cst.getClass());
 		}
 	}
+	//endregion
 
-	/* ================= 注解访问器 ================= */
+	//region 注解访问器
 
 	/**
 	 * 指纹注解访问器
 	 * 用于处理注解信息并将其纳入指纹计算
 	 */
-	private final class FingerprintAnnotationVisitor extends AnnotationVisitor {
+	public final class FingerprintAnnotationVisitor extends AnnotationVisitor {
 
-		FingerprintAnnotationVisitor() {
+		public FingerprintAnnotationVisitor() {
 			super(Opcodes.ASM9);
 		}
 
@@ -422,6 +422,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		@Override
 		public void visitEnum(String name, String desc, String value) {
 			updateString(name);
+			updateString("enum");
 			updateString(desc);  // 枚举类型描述符
 			updateString(value); // 枚举值名称
 		}
@@ -442,12 +443,14 @@ public final class MethodFingerprinter extends MethodVisitor {
 		@Override
 		public AnnotationVisitor visitArray(String name) {
 			updateString(name);
+			updateString("array");
 			return this; // 返回自身继续处理数组元素
 		}
 	}
 
-	/* ================= 忽略调试信息 ================= */
+	//endregion
 
+	//region 忽略信息
 	/**
 	 * 忽略行号信息（不影响程序逻辑）
 	 */
@@ -461,4 +464,5 @@ public final class MethodFingerprinter extends MethodVisitor {
 	public void visitLocalVariable(String name, String desc,
 	                               String sig, Label start,
 	                               Label end, int index) { }
+	//endregion
 }

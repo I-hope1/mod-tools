@@ -15,6 +15,7 @@ import java.util.*;
  * 4. 解决热交换时因Lambda表达式名称变化导致的NoSuchMethodError问题
  */
 public class LambdaAligner {
+	public static final int LAMBDA_LENGTH = 7;// "lambda$".length()
 
 	private static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
 
@@ -23,13 +24,13 @@ public class LambdaAligner {
 	 */
 	static class MatchContext {
 		/** 旧版本中的合成方法映射 */
-		final Map<String, SyntheticInfo> oldMethods    = new LinkedHashMap<>(64);
+		final Map<String, SyntheticInfo> oldMethods    = new LinkedHashMap<>(128);
 		/** 新版本中的合成方法列表 */
-		final List<SyntheticInfo>        newList       = new ArrayList<>(64);
+		final List<SyntheticInfo>        newList       = new ArrayList<>(128);
 		/** 方法名重命名映射表 */
-		final Map<String, String>        renameMap     = new HashMap<>(32);
+		final Map<String, String>        renameMap     = new HashMap<>(64);
 		/** 已使用的旧方法名集合 */
-		final Set<String>                usedOldNames  = new HashSet<>(32);
+		final Set<String>                usedOldNames  = new HashSet<>(64);
 		/** 方法指纹生成器 */
 		final MethodFingerprinter        fingerprinter = new MethodFingerprinter();
 		/** 当前处理的类名 */
@@ -61,7 +62,10 @@ public class LambdaAligner {
 		ctx.reset();
 
 		ctx.currentClass = scan(oldBytes, ctx, true);
-		scan(newBytes, ctx, false);
+		String newClass = scan(newBytes, ctx, false);
+		if (!Objects.equals(ctx.currentClass, newClass)) {
+			throw new IllegalArgumentException("New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
+		}
 
 		Map<String, List<SyntheticInfo>> oldGroups = groupByLogic(ctx.oldMethods.values());
 		Map<String, List<SyntheticInfo>> newGroups = groupByLogic(ctx.newList);
@@ -113,6 +117,10 @@ public class LambdaAligner {
 		ClassWriter cw = new ClassWriter(0);
 
 		Remapper remapper = new Remapper(Opcodes.ASM9) {
+			/**
+			 * 处理合成方法的定义和 Handle 引用
+			 * 这是对齐 Lambda 的核心
+			 */
 			@Override
 			public String mapMethodName(String owner, String name, String desc) {
 				if (owner.equals(ctx.currentClass)) {
@@ -121,15 +129,10 @@ public class LambdaAligner {
 				return name;
 			}
 
-			@Override
-			public String mapInvokeDynamicMethodName(String name, String desc, Handle bsm, Object... args) {
-				return ctx.renameMap.getOrDefault(name, name);
-			}
-
 			/** 处理 $deserializeLambda$ 内部的方法名字符串常量 */
 			@Override
 			public Object mapValue(Object value) {
-				if (value instanceof String s && s.length() > 7) {
+				if (value instanceof String s && s.length() > LAMBDA_LENGTH) {
 					char c = s.charAt(0);
 					if (c == 'l' || c == 'a') { // 快速预过滤 lambda$ 或 access$
 						return ctx.renameMap.getOrDefault(s, s);
@@ -191,7 +194,7 @@ public class LambdaAligner {
 	}
 
 	private static boolean isSyntheticName(String name) {
-		if (name.length() < 7) return false;
+		if (name.length() < LAMBDA_LENGTH) return false;
 		char c = name.charAt(0);
 		// 性能优化，避免全量 contains 扫描
 		return (c == 'l' && name.startsWith("lambda$")) ||
@@ -212,7 +215,7 @@ public class LambdaAligner {
 	private static String extractLogicalName(String name) {
 		if (name.startsWith("lambda$")) {
 			int lastDollar = name.lastIndexOf('$');
-			return lastDollar > 7 ? name.substring(0, lastDollar) : "lambda";
+			return lastDollar > LAMBDA_LENGTH ? name.substring(0, lastDollar) : "lambda";
 		}
 		// 对于 access$100 等，逻辑名称就是其前缀，确保它们被归为一组顺序对齐
 		if (name.startsWith("access$")) return "access";

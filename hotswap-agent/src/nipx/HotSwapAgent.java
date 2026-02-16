@@ -2,13 +2,13 @@ package nipx;
 
 import jdk.internal.loader.URLClassPath;
 import nipx.annotation.*;
-import nipx.util.CRC64;
-import nipx.util.LongLongMap;
+import nipx.util.*;
 import org.objectweb.asm.ClassReader;
 
 import java.io.*;
 import java.lang.instrument.*;
 import java.lang.invoke.*;
+import java.lang.management.ManagementFactory;
 import java.lang.ref.*;
 import java.lang.reflect.Method;
 import java.net.*;
@@ -30,6 +30,8 @@ public class HotSwapAgent {
 	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true")); // 需要重启
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
+
+	public static boolean STRUCTURAL_SUPPORTED = isEnhancedHotswapEnabled();
 
 	private static       Instrumentation     inst;
 	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
@@ -57,7 +59,7 @@ public class HotSwapAgent {
 	 ucpPathGetter,
 	 loadersGetter,
 	 unopenedUrlsGetter,
-	getLoaderHandle;
+	 getLoaderHandle;
 
 	static {
 		try {
@@ -125,6 +127,7 @@ public class HotSwapAgent {
 		info("HotSwapEvent: " + ENABLE_HOTSWAP_EVENT);
 		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "false"));
 		info("LambdaAlign: " + LAMBDA_ALIGN);
+		info("Structural HotSwap Supported: " + STRUCTURAL_SUPPORTED);
 	}
 	/** 对外api，刷新已加载的类 */
 	public static void retransformLoaded() {
@@ -171,10 +174,10 @@ public class HotSwapAgent {
 
 		try {
 			// 1. 获取 ucp
-			URLClassPath ucp = (URLClassPath) ucpGetter.invoke(targetLoader);
-			var path = (ArrayList<URL>) ucpPathGetter.invoke(ucp);
-			var unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
-			var loaders = (ArrayList<Object>) loadersGetter.invoke(ucp);
+			URLClassPath ucp          = (URLClassPath) ucpGetter.invoke(targetLoader);
+			var          path         = (ArrayList<URL>) ucpPathGetter.invoke(ucp);
+			var          unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
+			var          loaders      = (ArrayList<Object>) loadersGetter.invoke(ucp);
 
 			for (Path dir : watchDirs) {
 				// 2. 将目录转换为 URL
@@ -313,6 +316,17 @@ public class HotSwapAgent {
 
 						if (LAMBDA_ALIGN) {
 							LambdaAligner.align(oldBytecode, newBytecode);
+						}
+						// 在执行 ASM Diff 后
+						if (!diff.changedFields.isEmpty() || !diff.addedMethods.isEmpty() || !diff.removedMethods.isEmpty()) {
+							if (!STRUCTURAL_SUPPORTED) {
+								error("STRUCTURAL CHANGE DETECTED! Field/Method structure changed but DCEVM is NOT active.");
+								error("This redefine will likely FAIL. Classes: " + className);
+								// 如果你想强制中断防止 JVM 抛出不可控异常：
+								// return;
+							} else {
+								log("[DCEVM] Structure change detected, proceeding with enhanced redefinition.");
+							}
 						}
 
 						// 可选：如果没有结构性变化且没有方法体变化，是否跳过 redefine？
@@ -644,6 +658,29 @@ public class HotSwapAgent {
 	public static void info(String msg) { logger.info(msg); }
 	public static void error(String msg) { logger.error(msg); }
 	public static void error(String msg, Throwable t) { logger.error(msg, t); }
+
+
+	// ----Environment Variables
+	public static boolean isDcevmDetected() {
+		String vmName    = System.getProperty("java.vm.name", "");
+		String vmVersion = System.getProperty("java.vm.version", "");
+		// 旧版 DCEVM (Java 8) 常见标识
+		return vmName.contains("Dynamic Code Evolution") ||
+		       vmVersion.contains("dcevm");
+	}
+	public static boolean isEnhancedHotswapEnabled() {
+		// 1. 先查名称标识
+		if (isDcevmDetected()) return true;
+
+		// 2. 查核心参数：Java 11/17+ 开启增强热更的标志
+		List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
+		for (String arg : inputArguments) {
+			if (arg.contains("AllowEnhancedClassRedefinition")) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 
 	/**

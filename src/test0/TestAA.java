@@ -6,7 +6,7 @@ public class TestAA {
 		int ib = (int)b;
 		System.out.println(".,.asas");
 		System.out.println("aiasj");
-		System.out.println("尼玛");
+		System.out.println("啊是阿三");
 		System.out.println(ib);
 	}
 }

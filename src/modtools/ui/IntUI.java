@@ -781,6 +781,7 @@ public class IntUI {
 		Runnable hideRun = super::hide;
 		public void hide() {
 			shown.remove(this);
+
 			if (mobile) {
 				TaskManager.scheduleOrReset(Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f), hideRun);
 			} else {
@@ -801,11 +802,8 @@ public class IntUI {
 			IntUI.positionTooltip(element, Align.topLeft, container, Align.bottomLeft);
 		}
 
-		public static Tooltip provideTooltip(String text) {
-        return new ITooltip(() -> text);
-    }
 		static {
-			Tooltips.getInstance().textProvider = ITooltip::provideTooltip;
+			Tooltips.getInstance().textProvider = text -> new ITooltip(() -> text);
 		}
 	}
 

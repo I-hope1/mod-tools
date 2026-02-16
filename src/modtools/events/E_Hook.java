@@ -57,11 +57,13 @@ public enum E_Hook implements ISettings {
 
 	static void init() {
 		hot_swap.def(false);
+		lambda_align.defTrue();
+		retransform_loaded.defTrue();
+
 		hotswapOnChange(redefine_mode, () -> redefine_mode.getString().trim());
 		hotswapOnChange(hotswap_blacklist, () -> String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
 		hotswapOnChange(hotswap_event, () -> hotswap_event.getString().trim());
 		hotswapOnChange(lambda_align, () -> lambda_align.getString().trim());
-		retransform_loaded.defTrue();
 		System.setProperty("nipx.agent.retransform_loaded", retransform_loaded.getString());
 	}
 	static void hotswapOnChange(ISettings setting, Prov<String> prov) {

@@ -120,13 +120,16 @@ public class HotSwapAgent {
 	public static void initConfig() {
 		log("DEBUG: " + DEBUG);
 		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
-		info("RedefineMode: " + REDEFINE_MODE);
+		info("Redefine Mode: " + REDEFINE_MODE);
 		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
-		info("InjectionBlacklist: " + String.join(",", HOTSWAP_BLACKLIST));
+		info("Injection Blacklist: " + String.join(",", HOTSWAP_BLACKLIST));
 		ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
-		info("HotSwapEvent: " + ENABLE_HOTSWAP_EVENT);
-		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "false"));
-		info("LambdaAlign: " + LAMBDA_ALIGN);
+		info("HotSwap Event: " + ENABLE_HOTSWAP_EVENT);
+		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "true"));
+		info("Lambda Align: " + LAMBDA_ALIGN);
+		if (LAMBDA_ALIGN) {
+			info("Lambda Alignment ENABLED. Warning: This may cause logical shifts if lambdas are reordered.");
+		}
 		info("Structural HotSwap Supported: " + STRUCTURAL_SUPPORTED);
 	}
 	/** 对外api，刷新已加载的类 */
@@ -311,12 +314,12 @@ public class HotSwapAgent {
 					// 3. 执行 ASM Diff
 					if (oldBytecode != null) {
 						// 现在我们是 byte[] vs byte[]，可以检测方法体了
+						if (LAMBDA_ALIGN) {
+							newBytecode = LambdaAligner.align(oldBytecode, newBytecode);
+						}
+
 						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
 						ClassDiffUtil.logDiff(className, diff);
-
-						if (LAMBDA_ALIGN) {
-							LambdaAligner.align(oldBytecode, newBytecode);
-						}
 						// 在执行 ASM Diff 后
 						if (!diff.changedFields.isEmpty() || !diff.addedMethods.isEmpty() || !diff.removedMethods.isEmpty()) {
 							if (!STRUCTURAL_SUPPORTED) {

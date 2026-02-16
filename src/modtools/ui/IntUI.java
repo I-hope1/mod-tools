@@ -782,6 +782,11 @@ public class IntUI {
 		public void hide() {
 			shown.remove(this);
 
+			{ // ====我加了这个====
+				Runnable r = super::hide;
+				Log.info(r.hashCode());
+			}
+
 			if (mobile) {
 				TaskManager.scheduleOrReset(Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f), hideRun);
 			} else {

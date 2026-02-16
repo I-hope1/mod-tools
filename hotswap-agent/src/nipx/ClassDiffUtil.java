@@ -5,10 +5,10 @@ import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 import java.util.*;
 
-final class ClassDiffUtil {
+public final class ClassDiffUtil {
     private ClassDiffUtil() { }
 
-    static ClassDiff diff(byte[] oldBytes, byte[] newBytes) {
+    public static ClassDiff diff(byte[] oldBytes, byte[] newBytes) {
         ClassNode oldNode = parse(oldBytes);
         ClassNode newNode = parse(newBytes);
         return diff(oldNode, newNode);
@@ -21,7 +21,7 @@ final class ClassDiffUtil {
         return cn;
     }
 
-    static final class ClassDiff {
+    public static final class ClassDiff {
         final List<String> modifiedMethods = new ArrayList<>();
         final List<String> addedMethods = new ArrayList<>();
         final List<String> removedMethods = new ArrayList<>();
@@ -77,7 +77,7 @@ final class ClassDiffUtil {
     /**
      * 深度扫描指令流，计算逻辑指纹
      */
-    private static long calculateMethodHash(MethodNode mn) {
+    public static long calculateMethodHash(MethodNode mn) {
         long h = 0;
         InsnList insns = mn.instructions;
         for (int i = 0; i < insns.size(); i++) {

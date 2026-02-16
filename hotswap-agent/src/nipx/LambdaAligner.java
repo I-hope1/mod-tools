@@ -2,141 +2,170 @@ package nipx;
 
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.*;
+import org.objectweb.asm.tree.*;
+
 import java.util.*;
+import java.security.MessageDigest;
+
+import static nipx.HotSwapAgent.*;
 
 public class LambdaAligner {
 
-    public static byte[] align(byte[] oldBytes, byte[] newBytes) {
-        if (oldBytes == null) return newBytes;
+	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
+		if (oldBytes == null) return newBytes;
+		if (oldBytes.length == 0) return newBytes;
 
-        // 1. 收集信息
-        Map<String, LinkedList<String>> oldPool = collect(oldBytes);
-        List<SyntheticInfo> newMethods = collectList(newBytes);
+		// 1. 提取旧类的合成方法信息 (以 Hash+Desc 为索引)
+		Map<String, SyntheticInfo> oldMethods = collectSyntheticMethods(oldBytes);
+		// 2. 提取新类的合成方法信息
+		List<SyntheticInfo> newMethods = new ArrayList<>(collectSyntheticMethods(newBytes).values());
 
-        Map<String, String> renameMap = new HashMap<>();
-        Set<String> assignedOldNames = new HashSet<>();
+		// 核心映射表：NewName -> OldName
+		Map<String, String> renameMap = new HashMap<>();
 
-        // 2. 第一阶段：匹配失散的 Lambda
-        for (SyntheticInfo n : newMethods) {
-            String key = n.prefix + "|" + n.desc;
-            LinkedList<String> pool = oldPool.get(key);
-            if (pool != null && !pool.isEmpty()) {
-                String oldName = pool.removeFirst();
-                if (!n.name.equals(oldName)) {
-                    renameMap.put(n.name, oldName);
-                }
-                assignedOldNames.add(oldName);
-                n.isMapped = true;
-            }
-        }
+		// 已使用的旧方法名，防止重复分配
+		Set<String> usedOldNames = new HashSet<>();
 
-        // 3. 第二阶段：冲突规避
-        int safeId = 0;
-        for (SyntheticInfo n : newMethods) {
-            if (!n.isMapped) {
-                if (isNameUsedInOld(n.name, oldBytes) || assignedOldNames.contains(n.name)) {
-                    String safeName = "nipx$" + (safeId++) + "$" + n.name;
-                    renameMap.put(n.name, safeName);
-                }
-            }
-        }
+		// --- 第一步：精确匹配（逻辑未变的方法优先对齐） ---
+		// 依据：Hash + Desc + Prefix + ParentMethod 相同，认为绝对是同一个 Lambda
+		for (SyntheticInfo ni : newMethods) {
+			for (SyntheticInfo oi : oldMethods.values()) {
+				if (!usedOldNames.contains(oi.name) &&
+				    oi.hash == ni.hash &&
+				    oi.desc.equals(ni.desc) &&
+				    oi.prefix.equals(ni.prefix) &&
+				    oi.parentMethod.equals(ni.parentMethod)) { // ← 添加父方法检查
 
-        if (renameMap.isEmpty()) return newBytes;
+					if (!ni.name.equals(oi.name)) {
+						renameMap.put(ni.name, oi.name);
+					}
+					ni.matched = true;
+					usedOldNames.add(oi.name);
+					break;
+				}
+			}
+		}
 
-        HotSwapAgent.info("[ALIGN] Map built: " + renameMap);
+		// --- 第二步：模糊匹配（代码逻辑改了，但结构还在） ---
+		// 依据：按出现顺序对齐相同 Prefix 和 Desc 的方法
+		for (SyntheticInfo ni : newMethods) {
+			if (ni.matched) continue;
+			for (SyntheticInfo oi : oldMethods.values()) {
+				if (!usedOldNames.contains(oi.name) &&
+				    oi.desc.equals(ni.desc) &&
+				    oi.prefix.equals(ni.prefix) &&
+				    oi.parentMethod.equals(ni.parentMethod)) { // ← 关键：必须同一个父方法
 
-        // 4. 执行物理重映射（核心修改点）
-        ClassReader cr = new ClassReader(newBytes);
-        ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+					renameMap.put(ni.name, oi.name);
+					ni.matched = true;
+					usedOldNames.add(oi.name);
+					break;
+				}
+			}
+		}
 
-        // 使用自定义 Remapper，强制匹配简单名，并打印日志
-        Remapper customRemapper = new Remapper() {
-            @Override
-            public String mapMethodName(String owner, String name, String descriptor) {
-                String newName = renameMap.get(name);
-                if (newName != null) {
-                    // [调试探针] 只有这里打印了，才说明 ASM 真的在干活
-                    // HotSwapAgent.info("  -> Remapping method: " + name + " to " + newName);
-                    return newName;
-                }
-                return super.mapMethodName(owner, name, descriptor);
-            }
+		if (renameMap.isEmpty()) return newBytes;
 
-            @Override
-            public String mapInvokeDynamicMethodName(String name, String descriptor) {
-                // 这对于 Lambda 的 Indy 调用至关重要
-                String newName = renameMap.get(name);
-                if (newName != null) {
-                    return newName;
-                }
-                return super.mapInvokeDynamicMethodName(name, descriptor);
-            }
-        };
+		if (DEBUG) log("[LambdaAligner] Renamed " + renameMap.size() + " methods:" + renameMap);
 
-        try {
-            cr.accept(new ClassRemapper(cw, customRemapper), 0);
-            byte[] result = cw.toByteArray();
+		// --- 第三步：物理重映射 ---
+		ClassReader cr = new ClassReader(newBytes);
+		ClassWriter cw = new ClassWriter(0);
 
-            // [双重验证] 检查结果字节码里是否还包含旧名字
-            // 如果这里打印出来了，说明 ASM 写入失败
-            // checkVerification(result, renameMap);
+		Remapper remapper = new Remapper(Opcodes.ASM9) {
+			@Override
+			public String mapMethodName(String owner, String name, String descriptor) {
+				return renameMap.getOrDefault(name, name);
+			}
 
-            return result;
-        } catch (Exception e) {
-            HotSwapAgent.error("[ALIGN] Critical error during remapping", e);
-            return newBytes; // 失败退回
-        }
-    }
+			@Override
+			public String mapInvokeDynamicMethodName(String name, String descriptor, Handle bsm, Object... bsmArgs) {
+				// Lambda 在 invokedynamic 中作为方法名存在
+				return renameMap.getOrDefault(name, name);
+			}
+		};
 
-    // --- 辅助方法保持不变 ---
+		cr.accept(new ClassRemapper(cw, remapper), 0);
+		return cw.toByteArray();
+	}
 
-    private static String getPrefix(String name) {
-        if (!name.startsWith("lambda$") && !name.startsWith("access$")) return null;
-        int lastDollar = name.lastIndexOf('$');
-        return (lastDollar == -1) ? name : name.substring(0, lastDollar + 1);
-    }
+	private static Map<String, SyntheticInfo> collectSyntheticMethods(byte[] bytes) {
+		ClassNode cn = new ClassNode();
+		new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		Map<String, SyntheticInfo> map = new LinkedHashMap<>();
 
-    private static Map<String, LinkedList<String>> collect(byte[] bytes) {
-        Map<String, LinkedList<String>> map = new HashMap<>();
-        new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] ex) {
-                String prefix = getPrefix(name);
-                if (prefix != null) map.computeIfAbsent(prefix + "|" + desc, k -> new LinkedList<>()).add(name);
-                return null;
-            }
-        }, 0);
-        return map;
-    }
+		for (MethodNode mn : cn.methods) {
+			// 忽略非合成方法
+			if ((mn.access & Opcodes.ACC_SYNTHETIC) == 0) continue;
+			String prefix = getPrefix(mn.name);
+			if (prefix != null) {
+				String parentMethod = extractParentMethod(mn.name); // ← 提取父方法名
+				map.put(mn.name, new SyntheticInfo(mn.name, prefix, mn.desc, getFastMethodHash(mn), parentMethod));
+			}
+		}
+		return map;
+	}
 
-    private static List<SyntheticInfo> collectList(byte[] bytes) {
-        List<SyntheticInfo> list = new ArrayList<>();
-        new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] ex) {
-                String prefix = getPrefix(name);
-                if (prefix != null) list.add(new SyntheticInfo(name, prefix, desc));
-                return null;
-            }
-        }, 0);
-        return list;
-    }
+	/**
+	 * 提取 Lambda 的逻辑身份（去除序号）
+	 * lambda$hide$4          → lambda$hide
+	 * lambda$new$3           → lambda$new
+	 * lambda$bar$0$lambda$1  → lambda$bar$0$lambda
+	 * access$000             → access (没有父方法信息)
+	 */
+	private static String extractParentMethod(String lambdaName) {
+		if (lambdaName.startsWith("lambda$")) {
+			int lastDollar = lambdaName.lastIndexOf('$');
+			if (lastDollar > 7) { // "lambda$".length() == 7
+				return lambdaName.substring(0, lastDollar);
+			}
+			return "lambda"; // 边界情况: lambda$0
+		}
 
-    private static boolean isNameUsedInOld(String name, byte[] oldBytes) {
-        final boolean[] found = {false};
-        new ClassReader(oldBytes).accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int acc, String n, String d, String s, String[] e) {
-                if (n.equals(name)) found[0] = true;
-                return null;
-            }
-        }, 0);
-        return found[0];
-    }
+		if (lambdaName.startsWith("access$")) {
+			// access$000 → access (仅保留前缀，没有父方法信息)
+			return "access";
+		}
 
-    static class SyntheticInfo {
-        String name, prefix, desc;
-        boolean isMapped = false;
-        SyntheticInfo(String n, String p, String d) { name = n; prefix = p; desc = d; }
-    }
+		return "";
+	}
+	private static String getPrefix(String name) {
+		if (name.startsWith("lambda$")) return "lambda$";
+		if (name.startsWith("access$")) return "access$";
+		return null;
+	}
+
+	/**
+	 * 使用 SHA-256 提取稳定的方法指纹
+	 */
+	public static String getMethodHashSHA256(MethodNode mn) {
+		try {
+			ClassWriter cw = new ClassWriter(0);
+			mn.accept(cw);
+			byte[]        methodBytes = cw.toByteArray();
+			MessageDigest md          = MessageDigest.getInstance("SHA-256");
+			return Base64.getEncoder().encodeToString(md.digest(methodBytes));
+		} catch (Exception e) {
+			return String.valueOf(mn.instructions.size());
+		}
+	}
+
+	public static long getFastMethodHash(MethodNode mn) {
+		MethodFingerprinter hasher = new MethodFingerprinter();
+		mn.accept(hasher);
+		return hasher.getHash();
+	}
+
+	static class SyntheticInfo {
+		String name, prefix, desc, parentMethod;
+		long    hash;
+		boolean matched = false;
+		SyntheticInfo(String n, String p, String d, long h, String pm) {
+			this.name = n;
+			this.prefix = p;
+			this.desc = d;
+			this.hash = h;
+			this.parentMethod = pm;
+		}
+	}
 }

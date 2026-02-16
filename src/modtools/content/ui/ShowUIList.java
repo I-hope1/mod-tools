@@ -83,8 +83,8 @@ public class ShowUIList extends Content {
 		}
 		if (actions == null) actions = new Table(t -> t.add("<EMPTY>"));
 
-		Table[]           tables   = {icons, tex, styles, colorsT, interps, actions};
-		Color[]           colors   = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
+		Table[] tables = {icons, tex, styles, colorsT, interps, actions};
+		Color[] colors = {Color.sky, Color.gold, Color.orange, Color.acid, Pal.command, Color.cyan};
 
 		String[] names = {"Icon", "Tex", "Styles", "Colors", "Interp", "Actions"};
 		IntTab   tab   = new IntTab(CellTools.unset, names, colors, tables);
@@ -469,7 +469,7 @@ public class ShowUIList extends Content {
 	}
 	public static class TotalLazyTable extends Table {
 		private Cons<TotalLazyTable> cons;
-		private Seq<Runnable> lazyRuns = new Seq<>();
+		private Seq<Runnable>        lazyRuns = new Seq<>();
 		public TotalLazyTable(Cons<TotalLazyTable> lazyCons) {
 			this(_ -> { }, lazyCons);
 		}

@@ -313,6 +313,8 @@ public class HotSwapAgent {
 
 					// 3. 执行 ASM Diff
 					if (oldBytecode != null) {
+						// ClassDiffUtil.logDiff(className, ClassDiffUtil.diff(oldBytecode, newBytecode));
+
 						// 现在我们是 byte[] vs byte[]，可以检测方法体了
 						if (LAMBDA_ALIGN) {
 							newBytecode = LambdaAligner.align(oldBytecode, newBytecode);
@@ -476,13 +478,13 @@ public class HotSwapAgent {
 			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
 			info("HotSwap successful: " + definitions.size() + " classes updated.");
 		} catch (Throwable t) {
-			error("Bulk Redefine failed, switching to individual mode...");
+			error("Bulk Redefine failed, switching to individual mode...", t);
 			for (ClassDefinition def : definitions) {
 				try {
 					inst.redefineClasses(def);
 					log("[OK] " + def.getDefinitionClass().getName());
 				} catch (Throwable e) {
-					error("[FAIL] " + def.getDefinitionClass().getName() + ": " + e.getMessage());
+					error("[FAIL] " + def.getDefinitionClass().getName(), e);
 				}
 			}
 		}

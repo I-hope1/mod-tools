@@ -703,7 +703,7 @@ public class HotSwapAgent {
 
 		@Override
 		public void run() {
-			log("[Watch] File watcher started for: " + root);
+			if (DEBUG) log("[Watch] File watcher started for: " + root);
 			try {
 				registerAll(root);
 				while (!Thread.currentThread().isInterrupted()) {
@@ -755,7 +755,7 @@ public class HotSwapAgent {
 			} catch (UncheckedIOException e) {
 				error("File watcher encountered an unchecked IO error, possibly due to a directory being deleted during a scan.", e);
 			} finally {
-				info("File watcher stopped for: " + root);
+				if (DEBUG) log("[Watch] File watcher stopped for: " + root);
 				try {
 					watchService.close();
 				} catch (IOException e) {

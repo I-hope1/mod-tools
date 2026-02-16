@@ -17,6 +17,7 @@ public class TestAA {
 		// r.run();
 	}
 
+
 	static {
 		Tooltips.getInstance().textProvider = text -> new ITooltip(t -> t.add(text));
 	}

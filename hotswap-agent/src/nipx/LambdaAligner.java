@@ -85,7 +85,7 @@ public class LambdaAligner {
 				}
 			}
 
-			// Step 2: 顺序对齐 (解决 NSME 的关键)
+			// Step 2: 顺序对齐 (解决 NoSuchMethodError 的关键)
 			int oldPtr = 0;
 			for (SyntheticInfo ni : newGroup) {
 				if (ni.matched) continue;
@@ -139,7 +139,7 @@ public class LambdaAligner {
 			}
 		};
 
-		cr.accept(new ClassRemapper(cw, remapper), 0);
+		cr.accept(new ClassRemapper(cw, remapper), ClassReader.EXPAND_FRAMES);
 		return cw.toByteArray();
 	}
 
@@ -160,7 +160,17 @@ public class LambdaAligner {
 
 			@Override
 			public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] exc) {
-				if (!isSyntheticName(name)) return null;
+				// 构造函数和静态初始化块不处理
+				if (name.startsWith("<")) {
+					return null;
+				}
+
+				boolean isSynthetic    = (acc & Opcodes.ACC_SYNTHETIC) != 0;
+				boolean matchesPattern = isSyntheticName(name);
+
+				if (!isSynthetic && !matchesPattern) {
+					return null; // 业务方法（如 aaa）直接跳过，不参与 hash 和 rename 映射
+				}
 
 				ctx.fingerprinter.reset();
 				return new MethodVisitor(Opcodes.ASM9, ctx.fingerprinter) {
@@ -168,7 +178,11 @@ public class LambdaAligner {
 					public void visitEnd() {
 						String        logicalName = extractLogicalName(name);
 						SyntheticInfo info        = new SyntheticInfo(name, desc, ctx.fingerprinter.getHash(), logicalName);
-						if (isOld) { ctx.oldMethods.put(name, info); } else ctx.newList.add(info);
+						if (isOld) {
+							ctx.oldMethods.put(name, info);
+						} else {
+							ctx.newList.add(info);
+						}
 					}
 				};
 			}
@@ -179,7 +193,7 @@ public class LambdaAligner {
 	private static boolean isSyntheticName(String name) {
 		if (name.length() < 7) return false;
 		char c = name.charAt(0);
-		// 重点 3：性能优化，避免全量 contains 扫描
+		// 性能优化，避免全量 contains 扫描
 		return (c == 'l' && name.startsWith("lambda$")) ||
 		       (c == 'a' && name.startsWith("access$")) ||
 		       (c == '$' && name.equals("$deserializeLambda$"));

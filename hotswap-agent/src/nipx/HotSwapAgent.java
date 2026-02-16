@@ -596,7 +596,7 @@ public class HotSwapAgent {
 							}
 						}
 						// 只有在这里才记录磁盘哈希
-						fileDiskHashes.put(CRC64.hashString(cName), diskHash);
+							fileDiskHashes.put(CRC64.hashString(cName), diskHash);
 					} catch (Exception _) { }
 				});
 			} catch (IOException _) { }

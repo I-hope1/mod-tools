@@ -7,9 +7,9 @@ public class TestAA {
 	public static void main(String[] args) {
 		byte b = -1;
 		int ib = (int)b;
-		System.out.println(".,.asas");
+		System.out.println("哦莎简欧i啥");
 		System.out.println("aiasj");
-		System.out.println("啊是阿三");
+		System.out.println("u扫街");
 		System.out.println(ib);
 		// Runnable r = () -> {
 		// 	System.out.println("asas");

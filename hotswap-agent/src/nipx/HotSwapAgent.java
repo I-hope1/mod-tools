@@ -1,21 +1,20 @@
 package nipx;
 
-import jdk.internal.loader.URLClassPath;
 import nipx.annotation.*;
 import nipx.util.*;
 import org.objectweb.asm.ClassReader;
 
 import java.io.*;
 import java.lang.instrument.*;
-import java.lang.invoke.*;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.*;
 import java.lang.reflect.Method;
-import java.net.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.*;
+
+import static nipx.MountManager.*;
 
 /**
  * HotSwap Agent
@@ -37,18 +36,14 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Core State Management
-	private static       Instrumentation     inst;
-	private static       Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
+	static               Instrumentation     inst;
+	static               Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
 
 	static final Map<String, SoftReference<byte[]>> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 仅记录byte的指纹
 	private static final LongLongMap fileDiskHashes = new LongLongMap(2048);
-
-	// 维护一个 ClassLoader 索引，用于快速查找某个包应该属于哪个 Loader
-	// Key: PackageName (e.g., "com.example.service"), Value: WeakReference<ClassLoader>
-	private static final Map<String, WeakReference<ClassLoader>> packageLoaders = new ConcurrentHashMap<>();
 
 	private static final Set<Path>                pendingChanges = Collections.synchronizedSet(new HashSet<>());
 	private static final ScheduledExecutorService scheduler      = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -57,28 +52,6 @@ public class HotSwapAgent {
 		return t;
 	});
 	private static       ScheduledFuture<?>       scheduledTask;
-	//endregion
-
-	//region Method Handles for Class Loading
-	public static MethodHandle
-	 ucpGetter,
-	 ucpPathGetter,
-	 loadersGetter,
-	 unopenedUrlsGetter,
-	 getLoaderHandle;
-
-	static {
-		try {
-			ucpGetter = Reflect.IMPL.findGetter(URLClassLoader.class, "ucp", URLClassPath.class);
-			ucpPathGetter = Reflect.IMPL.findGetter(URLClassPath.class, "path", ArrayList.class);
-			loadersGetter = Reflect.IMPL.findGetter(URLClassPath.class, "loaders", ArrayList.class);
-			unopenedUrlsGetter = Reflect.IMPL.findGetter(URLClassPath.class, "unopenedUrls", ArrayDeque.class);
-			Class<?> Loader = Class.forName("jdk.internal.loader.URLClassPath$Loader");
-			getLoaderHandle = Reflect.IMPL.findVirtual(URLClassPath.class, "getLoader", MethodType.methodType(Loader, URL.class));
-		} catch (Throwable e) {
-			if (DEBUG) error("Failed to initialize method handle.", e);
-		}
-	}
 	//endregion
 
 	//region Agent Initialization
@@ -174,61 +147,12 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Class Loading Utilities
-	/**
-	 * 强行将工作目录挂载到指定的 ClassLoader 搜索路径中。
-	 * 针对 URLClassLoader (及其子类，如 ModClassLoader) 有效。
-	 */
-	@SuppressWarnings("unchecked")
-	private static void mountWorkDir(ClassLoader targetLoader, Set<Path> watchDirs) {
-		if (getLoaderHandle == null) {
-			error("[WARN] getLoaderHandle is null, cannot mount work directory.");
-			return;
-		}
-		if (!(targetLoader instanceof URLClassLoader)) {
-			if (DEBUG) log("[WARN] Target loader is NOT a URLClassLoader: " + targetLoader.getClass().getName());
-			return;
-		}
-
-		try {
-			URLClassPath ucp          = (URLClassPath) ucpGetter.invoke(targetLoader);
-			var          path         = (ArrayList<URL>) ucpPathGetter.invoke(ucp);
-			var          unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
-			var          loaders      = (ArrayList<Object>) loadersGetter.invoke(ucp);
-
-			for (Path dir : watchDirs) {
-				URL url = dir.toUri().toURL();
-
-				// 检查是否已经存在 (避免重复添加)
-				boolean alreadyExists = false;
-				for (URL existing : ((URLClassLoader) targetLoader).getURLs()) {
-					if (existing.equals(url)) {
-						alreadyExists = true;
-						break;
-					}
-				}
-
-				if (!alreadyExists) {
-					synchronized (ucp) {
-						path.add(0, url);
-						unopenedUrls.addFirst(url);
-						Object fileLoader = getLoaderHandle.invoke(ucp, url);
-						loaders.add(0, fileLoader);
-					}
-					info("[MOUNT] Successfully mounted directory to ClassLoader: " + dir);
-				} else {
-					if (DEBUG) log("[MOUNT] Directory already mounted: " + dir);
-				}
-			}
-		} catch (Throwable e) {
-			error("Failed to mount working directory to ClassLoader", e);
-		}
-	}
 
 	/**
 	 * 扫描内存中已加载的类，建立 "包名 -> ClassLoader" 的映射。
 	 * 这对于解决 NoClassDefFoundError 至关重要。
 	 */
-	private static void refreshPackageLoaders(Class<?>[] classes) {
+	static void refreshPackageLoaders(Class<?>[] classes) {
 		for (Class<?> clazz : classes) {
 			ClassLoader cl = clazz.getClassLoader();
 			if (cl != null && clazz.getPackage() != null) {
@@ -347,16 +271,12 @@ public class HotSwapAgent {
 				} else {
 					// 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
-						if (injectNewClass(className, bytecode)) {
+						if (injectNewClass(className, path, bytecode)) {
 							injectedCount++;
 						}
-					} else if (REDEFINE_MODE == RedefineMode.lazy_load) {
-						info("[LAZY-LOAD] Found change in: " + className);
-						ClassLoader loader = findTargetClassLoader(className);
-						if (loader != null) {
-							ensureMounted(loader);
-							log("[LAZY-LOAD] Path ensured for: " + className);
-						}
+					} else if (REDEFINE_MODE == RedefineMode.lazy_load && UCP_APPEND) {
+						ClassLoader loader = findTargetClassLoader(className, path);
+						mountForClass(loader, path);
 					}
 				}
 			} catch (Exception e) {
@@ -432,9 +352,9 @@ public class HotSwapAgent {
 	/**
 	 * 直接定义类，而不是被动加载
 	 */
-	private static boolean injectNewClass(String className, byte[] bytes) {
+	private static boolean injectNewClass(String className, Path path, byte[] bytes) {
 		try {
-			ClassLoader loader = findTargetClassLoader(className);
+			ClassLoader loader = findTargetClassLoader(className, path);
 			if (loader == null) {
 				error("Could not find a suitable ClassLoader for new class: " + className);
 				return false;
@@ -482,78 +402,8 @@ public class HotSwapAgent {
 	}
 	//endregion
 
-	//region ClassLoader Resolution
-	/**
-	 * 启发式算法：为新类寻找"宿主" ClassLoader。
-	 */
-	private static ClassLoader findTargetClassLoader(String className) {
-		// 优先尝试递归查找外部类 (Outer Class)
-		// 输入: a.b.Outer$Inner$Deep
-		// 尝试1: 找 a.b.Outer$Inner
-		// 尝试2: 找 a.b.Outer
-		String candidate = className;
-
-		while (candidate.contains("$")) {
-			// 剥离最后一层
-			candidate = candidate.substring(0, candidate.lastIndexOf('$'));
-			Class<?> found = loadedClassesMap.get(candidate);
-			if (found != null) {
-				if (DEBUG) log("[FOUND-PARENT] Found parent class " + candidate + " for " + className);
-				return found.getClassLoader();
-			}
-		}
-
-		// 如果外部类都没加载 (极端情况)，尝试同包查找
-		// 比如 modtools.android.SomeOtherUtil 可能是加载过的
-		if (className.contains(".")) {
-			String packageName = className.substring(0, className.lastIndexOf('.'));
-			for (Class<?> c : loadedClassesMap.values()) {
-				if (c.getName().startsWith(packageName + ".")) {
-					return c.getClassLoader();
-				}
-			}
-
-			// 尝试查之前缓存的 packageLoaders
-			WeakReference<ClassLoader> ref = packageLoaders.get(packageName);
-			if (ref != null && ref.get() != null) {
-				return ref.get();
-			}
-		}
-
-		return null;
-	}
-
-	// 判断 child 是否真的是 parent 的子加载器
-	private static boolean isChildClassLoader(ClassLoader child, ClassLoader parent) {
-		if (child == null) return false;
-		if (parent == null) return true; // Bootstrap 是所有人的祖先
-		if (child == parent) return false;
-
-		ClassLoader current = child;
-		while (current != null) {
-			if (current == parent) return true;
-			current = current.getParent();
-		}
-		return false;
-	}
-
-	/**
-	 * 确保目标 ClassLoader 的 URL 搜索路径包含了我们的监控目录
-	 */
-	private static void ensureMounted(ClassLoader loader) {
-		if (!UCP_APPEND) return;
-
-		// 只有 URLClassLoader 及其子类支持 addURL
-		if (loader instanceof URLClassLoader) {
-			mountWorkDir(loader, activeWatchDirs);
-		} else {
-			if (DEBUG) log("[SKIP-MOUNT] Loader is not URLClassLoader: " + loader.getClass().getSimpleName());
-		}
-	}
-	//endregion
-
 	//region File Processing Utilities
-	private static String getClassName(Path classFile) {
+	static String getClassName(Path classFile) {
 		if (DEBUG) log("[PARSE] Parsing class file: " + classFile);
 		try (InputStream is = Files.newInputStream(classFile)) {
 			ClassReader cr = new ClassReader(is);

@@ -53,7 +53,7 @@ public class MountManager {
 			Class<?> Loader = Class.forName(URLClassPath.getName() + "$Loader");
 			getLoaderHandle = Reflect.IMPL_LOOKUP.findVirtual(URLClassPath, "getLoader", MethodType.methodType(Loader, URL.class));
 		} catch (Throwable e) {
-			if (DEBUG) error("Failed to initialize method handle.", e);
+			error("[Mount] Failed to initialize method handles.", e);
 		}
 	}
 	//endregion
@@ -65,6 +65,7 @@ public class MountManager {
 	 */
 	@SuppressWarnings({"rawtypes", "unchecked"})
 	public static void mountForClass(ClassLoader targetLoader, Path classFilePath) {
+		if (getLoaderHandle == null) return;
 		if (targetLoader == null || classFilePath == null) return;
 
 		// 溯源：找到该 class 文件所属的 watchDir 根目录
@@ -85,35 +86,35 @@ public class MountManager {
 
 			URL rootUrl = rootDir.toUri().toURL();
 
+			ArrayList<URL> path;
 			// 执行原子挂载
 			synchronized (ucp) {
-				var path         = (ArrayList<URL>) pathGetter.invoke(ucp);
+				path = (ArrayList<URL>) pathGetter.invoke(ucp);
+				// 检查是否已存在，避免重复挂载
 				if (path.contains(rootUrl)) return;
-
+			}
+			Object fileLoader = getLoaderHandle.invoke(ucp, rootUrl);
+			synchronized (ucp) {
 				var unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
 				var loaders      = (ArrayList) loadersGetter.invoke(ucp);
 
-				// 检查是否已存在，避免重复挂载
-				if (!path.contains(rootUrl)) {
-					// 关键：Add First！确保挂载目录的优先级高于原始 Jar 包
-					path.add(0, rootUrl);
+				// 关键：确保挂载目录的优先级高于原始 Jar 包
+				path.add(0, rootUrl);
 
-					// 必须锁住 unopenedUrls，参考 URLClassPath 源码安全性要求
-					synchronized (unopenedUrls) {
-						unopenedUrls.addFirst(rootUrl);
-					}
-
-					synchronized (loaders) {
-						Object fileLoader = getLoaderHandle.invoke(ucp, rootUrl);
-						loaders.add(0, fileLoader);
-					}
-
-					info("[MOUNT] Successfully injected priority path: " + rootUrl
-					     + " into " + targetLoader);
+				// 必须锁住 unopenedUrls，参考 URLClassPath 源码安全性要求
+				synchronized (unopenedUrls) {
+					unopenedUrls.addFirst(rootUrl);
 				}
+
+				synchronized (loaders) {
+					loaders.add(0, fileLoader);
+				}
+
+				info("[MOUNT] Successfully injected priority path: " + rootUrl
+				     + " into " + targetLoader);
 			}
 		} catch (Throwable t) {
-			error("Failed to mount path: " + classFilePath, t);
+			error("[Mount] Failed to mount path: " + classFilePath, t);
 		}
 	}
 
@@ -227,7 +228,7 @@ public class MountManager {
 		}
 	}
 
-	// 判断 child 是否真的是 parent 的子加载器
+	/** 判断 child 是否真的是 parent 的子加载器 */
 	static boolean isChildClassLoader(ClassLoader child, ClassLoader parent) {
 		if (child == null) return false;
 		if (parent == null) return true; // Bootstrap 是所有人的祖先

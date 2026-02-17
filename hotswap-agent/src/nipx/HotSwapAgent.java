@@ -37,8 +37,8 @@ public class HotSwapAgent {
 
 	//region Core State Management
 	static               Instrumentation     inst;
-	static               Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
-	private static final List<WatcherThread> activeWatchers  = new ArrayList<>();
+	static final         Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
+	private static final List<WatcherThread> activeWatchers  = new CopyOnWriteArrayList<>();
 
 	static final Map<String, SoftReference<byte[]>> bytecodeCache = new ConcurrentHashMap<>();
 
@@ -92,7 +92,8 @@ public class HotSwapAgent {
 		// 重启监控线程
 		if (!activeWatchDirs.equals(newWatchDirs)) {
 			info("Watch paths updated: " + newWatchDirs);
-			activeWatchDirs = newWatchDirs;
+			activeWatchDirs.clear();
+			activeWatchDirs.addAll(newWatchDirs);
 			initializeAgentState(loadedClasses);
 			restartWatchers();
 		} else {
@@ -184,7 +185,7 @@ public class HotSwapAgent {
 	//endregion
 
 	//region HotSwap Core Logic
-	public static ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
+	public static volatile ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
 
 	/**
 	 * 处理文件变化的核心逻辑
@@ -296,16 +297,22 @@ public class HotSwapAgent {
 		return softReference != null ? softReference.get() : null;
 	}
 
+	private static ConcurrentHashMap<String,Class<?>> tmpLoadedClassesMap = new ConcurrentHashMap<>();
+	/** 双缓存 */
 	private static void loadClassSnap(Class<?>[] classes) {
-		loadedClassesMap.clear();
-		for (Class<?> c : classes) {
-			String   name     = c.getName();
-			Class<?> existing = loadedClassesMap.get(name);
-			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
-				loadedClassesMap.put(name, c);
-			}
-		}
-	}
+    var newMap = tmpLoadedClassesMap; // 取出备用 buffer（Map B）
+    newMap.clear();                   // 清空备用 buffer，不影响当前活跃 map
+    for (Class<?> c : classes) {
+        String   name     = c.getName();
+        Class<?> existing = newMap.get(name);
+        if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
+            newMap.put(name, c);
+        }
+    }
+    tmpLoadedClassesMap = loadedClassesMap; // 把旧的活跃 map 存为下次的备用
+    loadedClassesMap = newMap;              // 原子切换，读者要么看到完整旧 map，要么完整新 map
+		tmpLoadedClassesMap.clear();
+}
 	/** 在 applyRedefinitions(definitions) 后调用 */
 	private static void processAnnotations(List<ClassDefinition> definitions) {
 		if (!ENABLE_HOTSWAP_EVENT) return;
@@ -359,18 +366,10 @@ public class HotSwapAgent {
 				error("Could not find a suitable ClassLoader for new class: " + className);
 				return false;
 			}
-			try {
-				loader.loadClass(className);
-				if (DEBUG) log("[SKIP-EXISTING] " + className + " is visible in " + loader);
-				return false;
-			} catch (ClassNotFoundException ignored) {
-				// 只有抛出 ClassNotFoundException，才说明 ClassLoader 真的找不到它
-			}
 
 			Reflect.defineClass(className, bytes, 0, bytes.length, loader, null);
 			info("[INJECTED] Successfully defined new class: " + className + " into " + loader);
 			return true;
-
 		} catch (LinkageError le) {
 			if (DEBUG) error("Class already loaded: " + className, le);
 			return true;
@@ -436,7 +435,9 @@ public class HotSwapAgent {
 							}
 						}
 						// 只有在这里才记录磁盘哈希
-						fileDiskHashes.put(CRC64.hashString(cName), diskHash);
+						synchronized (fileDiskHashes) {
+							fileDiskHashes.put(CRC64.hashString(cName), diskHash);
+						}
 					} catch (Exception _) { }
 				});
 			} catch (IOException _) { }
@@ -445,11 +446,13 @@ public class HotSwapAgent {
 	}
 
 	private static void handleFileChange(Path changedFile) {
-		pendingChanges.add(changedFile);
-		if (scheduledTask != null && !scheduledTask.isDone()) {
-			scheduledTask.cancel(false);
+		synchronized (pendingChanges) {
+			pendingChanges.add(changedFile);
+			if (scheduledTask != null && !scheduledTask.isDone()) {
+				scheduledTask.cancel(false);
+			}
+			scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
 		}
-		scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
 	}
 
 	private static void triggerHotswapWith(Class<?>[] classes) {

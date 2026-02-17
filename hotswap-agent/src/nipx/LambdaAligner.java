@@ -17,12 +17,10 @@ import java.util.*;
 public class LambdaAligner {
 	public static final int LAMBDA_LENGTH = 7;// "lambda$".length()
 
-	private static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
+	public static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
 
-	/**
-	 * 匹配上下文，存储当前线程的匹配状态
-	 */
-	static class MatchContext {
+	/** 匹配上下文，存储当前线程的匹配状态 */
+	public static class MatchContext {
 		/** 旧版本中的合成方法映射 */
 		final Map<String, SyntheticInfo> oldMethods    = new LinkedHashMap<>(128);
 		/** 新版本中的合成方法列表 */

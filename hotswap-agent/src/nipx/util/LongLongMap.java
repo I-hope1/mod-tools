@@ -10,7 +10,7 @@ import java.util.Arrays;
  */
 public class LongLongMap {
 	public static final long EMPTY_KEY = 0;
-	public static final long NOT_FOUND = -1;
+	public static final long NOT_FOUND = Long.MIN_VALUE;
 
 	private       long[] keys;
 	private       long[] values;

@@ -1,7 +1,6 @@
 package nipx;
 
-import nipx.util.CRC64;
-import org.objectweb.asm.*;
+import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.*;
 
 import java.util.*;
@@ -109,58 +108,16 @@ public final class ClassDiffUtil {
 		return calculateMethodHash(m1) != calculateMethodHash(m2);
 	}
 
+	public static final ThreadLocal<MethodFingerprinter> CONTEXT             = ThreadLocal.withInitial(MethodFingerprinter::new);
 	/**
 	 * 计算方法的逻辑指纹哈希值
 	 * 通过遍历指令流提取关键特征来生成唯一标识
 	 */
 	public static long calculateMethodHash(MethodNode mn) {
-		long     h     = 0;
-		InsnList insns = mn.instructions;
-		for (int i = 0; i < insns.size(); i++) {
-			AbstractInsnNode node = insns.get(i);
-
-			// 混合操作码作为基础特征
-			h = 31 * h + node.getOpcode();
-
-			// 根据指令类型提取关键特征
-			// 忽略Label的对象标识符（每次编译都会变化）
-			// 重点捕获常量、字段名和方法名等稳定特征
-			switch (node) {
-				case MethodInsnNode min -> {
-					h = h * 31 + hashString(min.owner);
-					h = h * 31 + hashString(min.name);
-					h = h * 31 + hashString(min.desc);
-				}
-				case FieldInsnNode fin -> {
-					h = h * 31 + hashString(fin.owner);
-					h = h * 31 + hashString(fin.name);
-				}
-				case LdcInsnNode ldcInsnNode -> {
-					Object cst = ldcInsnNode.cst;
-					long   cstHash;
-					if (cst instanceof String s) {
-						cstHash = hashString(s);
-					} else if (cst == null) {
-						cstHash = 0;
-					} else {
-						cstHash = cst.hashCode();
-					}
-					h = h * 31 + cstHash;
-				}
-				case VarInsnNode varInsnNode -> h = h * 31 + varInsnNode.var;
-				case TypeInsnNode typeInsnNode -> h = h * 31 + hashString(typeInsnNode.desc);
-				default -> { }
-			}
-		}
-		return h;
-	}
-
-	/**
-	 * 字符串哈希计算
-	 * 使用CRC64算法确保高性能且无垃圾回收压力
-	 */
-	private static long hashString(String s) {
-		return s == null ? 0 : CRC64.hashString(s);
+		MethodFingerprinter fingerprinter = CONTEXT.get();
+		fingerprinter.reset();
+		mn.accept(fingerprinter);
+		return fingerprinter.getHash();
 	}
 
 	/**

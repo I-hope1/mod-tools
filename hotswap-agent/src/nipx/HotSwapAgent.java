@@ -297,22 +297,22 @@ public class HotSwapAgent {
 		return softReference != null ? softReference.get() : null;
 	}
 
-	private static ConcurrentHashMap<String,Class<?>> tmpLoadedClassesMap = new ConcurrentHashMap<>();
+	private static ConcurrentHashMap<String, Class<?>> tmpLoadedClassesMap = new ConcurrentHashMap<>();
 	/** 双缓存 */
 	private static void loadClassSnap(Class<?>[] classes) {
-    var newMap = tmpLoadedClassesMap; // 取出备用 buffer（Map B）
-    newMap.clear();                   // 清空备用 buffer，不影响当前活跃 map
-    for (Class<?> c : classes) {
-        String   name     = c.getName();
-        Class<?> existing = newMap.get(name);
-        if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
-            newMap.put(name, c);
-        }
-    }
-    tmpLoadedClassesMap = loadedClassesMap; // 把旧的活跃 map 存为下次的备用
-    loadedClassesMap = newMap;              // 原子切换，读者要么看到完整旧 map，要么完整新 map
+		var newMap = tmpLoadedClassesMap; // 取出备用 buffer（Map B）
+		newMap.clear();                   // 清空备用 buffer，不影响当前活跃 map
+		for (Class<?> c : classes) {
+			String   name     = c.getName();
+			Class<?> existing = newMap.get(name);
+			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
+				newMap.put(name, c);
+			}
+		}
+		tmpLoadedClassesMap = loadedClassesMap; // 把旧的活跃 map 存为下次的备用
+		loadedClassesMap = newMap;              // 原子切换，读者要么看到完整旧 map，要么完整新 map
 		tmpLoadedClassesMap.clear();
-}
+	}
 	/** 在 applyRedefinitions(definitions) 后调用 */
 	private static void processAnnotations(List<ClassDefinition> definitions) {
 		if (!ENABLE_HOTSWAP_EVENT) return;
@@ -515,23 +515,38 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Environment Detection
-	public static boolean isDcevmDetected() {
+	private static final boolean DCEVM_DETECTED;
+	private static final boolean ENHANCED_HOTSWAP;
+
+	static {
+		// 1. 一次性检测并缓存，避免重复调用 JMX 的开销
 		String vmName    = System.getProperty("java.vm.name", "");
 		String vmVersion = System.getProperty("java.vm.version", "");
-		return vmName.contains("Dynamic Code Evolution") ||
-		       vmVersion.contains("dcevm");
+		DCEVM_DETECTED = vmName.contains("Dynamic Code Evolution") ||
+		                 vmVersion.contains("dcevm");
+
+		boolean enhanced = false;
+		if (!DCEVM_DETECTED) {
+			try {
+				List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
+				for (String arg : inputArguments) {
+					// 2. 严谨性校验：必须是开启状态 (+)，排除关闭状态 (-)
+					if (arg.contains("-XX:+AllowEnhancedClassRedefinition")) {
+						enhanced = true;
+						break;
+					}
+				}
+			} catch (Throwable t) { }
+		}
+		ENHANCED_HOTSWAP = enhanced;
 	}
 
+	/**
+	 * 判断当前环境是否支持增强型热重载（增加字段/方法等）
+	 * 支持 DCEVM 且 显式开启了 AllowEnhancedClassRedefinition 的现代 OpenJDK
+	 */
 	public static boolean isEnhancedHotswapEnabled() {
-		if (isDcevmDetected()) return true;
-
-		List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
-		for (String arg : inputArguments) {
-			if (arg.contains("AllowEnhancedClassRedefinition")) {
-				return true;
-			}
-		}
-		return false;
+		return ENHANCED_HOTSWAP;
 	}
 	//endregion
 

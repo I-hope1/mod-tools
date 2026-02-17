@@ -3,7 +3,7 @@ package nipx;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.*;
 
-import java.util.*;
+ import java.util.*;
 
 /**
  * 类差异分析工具
@@ -11,6 +11,7 @@ import java.util.*;
  * 主要用于热重载系统的智能更新决策
  */
 public final class ClassDiffUtil {
+
 	private ClassDiffUtil() { }
 
 	/**
@@ -108,7 +109,7 @@ public final class ClassDiffUtil {
 		return calculateMethodHash(m1) != calculateMethodHash(m2);
 	}
 
-	public static final ThreadLocal<MethodFingerprinter> CONTEXT             = ThreadLocal.withInitial(MethodFingerprinter::new);
+	public static final ThreadLocal<MethodFingerprinter> CONTEXT = ThreadLocal.withInitial(MethodFingerprinter::new);
 	/**
 	 * 计算方法的逻辑指纹哈希值
 	 * 通过遍历指令流提取关键特征来生成唯一标识
@@ -127,11 +128,23 @@ public final class ClassDiffUtil {
 	 */
 	static void logDiff(String className, ClassDiff diff) {
 		if (!diff.hasChange()) return;
-		StringBuilder sb = new StringBuilder("[DIFF] ").append(className).append(":").append('\n');
-		if (!diff.modifiedMethods.isEmpty()) sb.append(" *Modified: ").append(diff.modifiedMethods).append('\n');
-		if (!diff.addedMethods.isEmpty()) sb.append(" +Added: ").append(diff.addedMethods).append('\n');
-		if (!diff.removedMethods.isEmpty()) sb.append(" -Removed: ").append(diff.removedMethods).append('\n');
-		if (!diff.changedFields.isEmpty()) sb.append(" !Fields: ").append(diff.changedFields).append('\n');
+
+		// 预估容量：[DIFF] (7) + className (avg 30) + 4行内容 (avg 200) ≈ 256
+		StringBuilder sb = new StringBuilder(256);
+		sb.append("[DIFF] ").append(className).append(":\n");
+
+		appendIfNotEmpty(sb, " *Modified: ", diff.modifiedMethods);
+		appendIfNotEmpty(sb, " +Added:    ", diff.addedMethods);
+		appendIfNotEmpty(sb, " -Removed:  ", diff.removedMethods);
+		appendIfNotEmpty(sb, " !Fields:   ", diff.changedFields);
+
 		HotSwapAgent.info(sb.toString());
+	}
+
+	private static final String NE = System.lineSeparator();
+	private static void appendIfNotEmpty(StringBuilder sb, String label, Collection<?> items) {
+		if (items != null && !items.isEmpty()) {
+			sb.append(label).append(items).append(NE);
+		}
 	}
 }

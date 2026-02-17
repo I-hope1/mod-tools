@@ -9,7 +9,7 @@ public class TestAA {
 		int ib = (int)b;
 		System.out.println("哦莎简欧i啥");
 		System.out.println("aiasj");
-		System.out.println("u扫街");
+		System.out.println("acu按时间哦");
 		System.out.println(ib);
 		// Runnable r = () -> {
 		// 	System.out.println("asas");

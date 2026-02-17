@@ -63,6 +63,7 @@ public class MountManager {
 	 * @param targetLoader  目标类加载器（通常是某个 ModClassLoader）
 	 * @param classFilePath 发生变化的 .class 文件绝对路径
 	 */
+	@SuppressWarnings({"rawtypes", "unchecked"})
 	public static void mountForClass(ClassLoader targetLoader, Path classFilePath) {
 		if (targetLoader == null || classFilePath == null) return;
 
@@ -86,9 +87,11 @@ public class MountManager {
 
 			// 执行原子挂载
 			synchronized (ucp) {
-				ArrayList<URL>  path         = (ArrayList<URL>) pathGetter.invoke(ucp);
-				ArrayDeque<URL> unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
-				var             loaders      = (ArrayList) loadersGetter.invoke(ucp);
+				var path         = (ArrayList<URL>) pathGetter.invoke(ucp);
+				if (path.contains(rootUrl)) return;
+
+				var unopenedUrls = (ArrayDeque<URL>) unopenedUrlsGetter.invoke(ucp);
+				var loaders      = (ArrayList) loadersGetter.invoke(ucp);
 
 				// 检查是否已存在，避免重复挂载
 				if (!path.contains(rootUrl)) {
@@ -101,7 +104,7 @@ public class MountManager {
 					}
 
 					synchronized (loaders) {
-						Object fileLoader = getLoaderHandle.invoke(targetLoader, path);
+						Object fileLoader = getLoaderHandle.invoke(ucp, rootUrl);
 						loaders.add(0, fileLoader);
 					}
 

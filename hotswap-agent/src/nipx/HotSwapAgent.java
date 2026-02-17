@@ -387,7 +387,7 @@ public class HotSwapAgent {
 		if (definitions.isEmpty()) return;
 		try {
 			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
-			info("HotSwap successful: " + definitions.size() + " classes updated.");
+			info("HotSwap successful: " + definitions.size() + " classes redefined.");
 		} catch (Throwable t) {
 			error("Bulk Redefine failed, switching to individual mode...", t);
 			for (ClassDefinition def : definitions) {

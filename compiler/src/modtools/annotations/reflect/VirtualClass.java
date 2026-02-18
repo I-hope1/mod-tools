@@ -43,8 +43,8 @@ public class VirtualClass {
 	public static Class<?> mirrorTypes = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypesExceptionProxy");
 
 	/** 因为class不能完美复刻，所以这个表用于获取type */
-	public static HashMap<Class<?>, ClassType> classToType = new HashMap<>();
-	public static ClassLoader                  loader      = new ClassLoader(HopeReflect.class.getClassLoader()) { };
+	public static Map<Class<?>, ClassType> classToType = new HashMap<>();
+	public static ClassLoader              loader      = new ClassLoader(HopeReflect.class.getClassLoader()) { };
 	public static Object defineMirrorClass(ExceptionProxy proxy) {
 		if (!mirrorType.isInstance(proxy) && !mirrorTypes.isInstance(proxy)) {
 			throw new IllegalArgumentException("type (" + proxy + ") isn't MirroredType(s)ExceptionProxy");

@@ -50,7 +50,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 			// ------------------------fields--------------------------
 
 			/* group -> element[] */
-			HashMap<String, HashMap<Element, WatchField>> fieldMap = new HashMap<>();
+			HashMap<String, HashMap<Element, WatchField>> fieldMap = new LinkedHashMap<>();
 			// Iterate over each element in the element sequence
 			fieldSeq.forEach((field) -> {
 				// Get the WatchField annotation for the element
@@ -205,5 +205,5 @@ public class WatchProcessor extends BaseProcessor<Element> {
 		 WatchVar.class
 		);
 	}
-	final Map<Element, ArrayList<Element>> classFields = new HashMap<>();
+	final Map<Element, ArrayList<Element>> classFields = new LinkedHashMap<>();
 }

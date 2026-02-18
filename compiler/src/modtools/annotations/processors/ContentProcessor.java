@@ -399,8 +399,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		settings.members().enter(ms);
 		classDecl.defs = classDecl.defs.append(method);
 	}
-	Map<VarSymbol, Switch> allSwitches   = new HashMap<>();
-	Map<VarSymbol, String> allEnumFields = new HashMap<>();
+	Map<VarSymbol, Switch> allSwitches   = new LinkedHashMap<>();
+	Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
 	private void collectSwitch(VarSymbol symbol) {
 		Switch aSwitch = symbol.getAnnotation(Switch.class);
 		if (aSwitch == null) return;

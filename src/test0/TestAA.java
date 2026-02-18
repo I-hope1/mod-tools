@@ -12,7 +12,7 @@ public class TestAA {
 		System.out.println("acu按时间哦");
 		System.out.println(ib);
 		Runnable r = () -> {
-			System.out.println("asas");
+			System.out.println("[ascuytyuas]");
 		};
 		r.run();
 		new ChildClass().print();

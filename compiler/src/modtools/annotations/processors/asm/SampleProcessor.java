@@ -30,7 +30,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	public static final String _SUPER           = "_super";
 
 	private       MethodSymbol                  superCallSymbol;
-	private final Map<ClassSymbol, ClassSymbol> interfaceCache = new HashMap<>();
+	private final Map<ClassSymbol, ClassSymbol> interfaceCache = new LinkedHashMap<>();
 
 	@Override
 	public void lazyInit() {
@@ -399,7 +399,7 @@ public interface \{interfaceName} {
 
 \{buffer.interfaceMethods}
 
-    Map<Class<?>, Class<?>> cache = new HashMap<>();
+    Map<Class<?>, Class<?>> cache = new LinkedHashMap<>();
 
     static Class<?> visit(Class<?> clazz) {
         return visit(clazz, null);

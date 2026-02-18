@@ -23,7 +23,7 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 	public static String FIELD_PREFIX = "f$";
 
 	ClassType     reflectFieldType;
-	private final Map<ClassSymbol, Set<Pair<VarSymbol, VarSymbol>>> classFields = new HashMap<>();
+	private final Map<ClassSymbol, Set<Pair<VarSymbol, VarSymbol>>> classFields = new LinkedHashMap<>();
 	@Override
 	public void lazyInit() throws Throwable {
 		super.lazyInit();

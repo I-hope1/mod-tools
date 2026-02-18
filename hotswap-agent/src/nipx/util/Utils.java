@@ -6,8 +6,12 @@ public class Utils {
 	 * 解决了 String 拼接产生的 char[] 拷贝和 StringBuilder 垃圾
 	 */
 	public static long computeCompositeHash(String logicalName, String desc) {
-		// 将两个 32 位哈希值拼成一个 64 位 long
-		// 在单个类文件的上下文中，这种碰撞概率在数学上可以忽略不计
-		return ((long) logicalName.hashCode() << 32) | (desc.hashCode() & 0xFFFFFFFFL);
+		long crc = CRC64.init();
+		crc = CRC64.updateStringUTF16(crc, logicalName);
+		crc = CRC64.updateStringUTF16(crc, desc);
+		return CRC64.finish(crc);
+	}
+	public static long hash(String itf) {
+		return CRC64.hashString(itf);
 	}
 }

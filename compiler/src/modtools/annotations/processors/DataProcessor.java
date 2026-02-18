@@ -73,7 +73,7 @@ public class DataProcessor extends BaseProcessor<Element> {
 			// Log.info(classDecl);
 		});
 	}
-	public Map<Element, java.util.List<Element>> initMap = new HashMap<>();
+	public Map<Element, java.util.List<Element>> initMap = new LinkedHashMap<>();
 
 	public void dealElement(Element element) {
 		if (element.getKind() == ElementKind.FIELD)

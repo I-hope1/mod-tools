@@ -1,6 +1,6 @@
 package nipx;
 
-import nipx.util.Utils;
+import nipx.util.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.*;
 
@@ -34,6 +34,31 @@ public class LambdaAligner {
 		/** 当前处理的类名 */
 		String currentClass;
 
+		final LongObjectMap<List<SyntheticInfo>> oldGroups  = new LongObjectMap<>(128);
+		final LongObjectMap<List<SyntheticInfo>> newGroups  = new LongObjectMap<>(128);
+		final LongObjectMap<List<SyntheticInfo>> hashIdxMap = new LongObjectMap<>(64);
+
+		// 预分配的一堆 ArrayList，用于复用
+		private final List<List<SyntheticInfo>> pool    = new ArrayList<>();
+		private       int                       poolIdx = 0;
+		List<SyntheticInfo> acquireList() {
+			if (poolIdx >= pool.size()) pool.add(new ArrayList<>(8));
+			List<SyntheticInfo> list = pool.get(poolIdx++);
+			list.clear();
+			return list;
+		}
+
+		private final List<SyntheticInfo> infoPool    = new ArrayList<>();
+		private       int                 infoPoolIdx = 0;
+		SyntheticInfo acquireInfo(String n, String d, long h, String l) {
+			if (infoPoolIdx >= infoPool.size()) {
+				infoPool.add(new SyntheticInfo(n, d, h, l));
+			}
+			SyntheticInfo info = infoPool.get(infoPoolIdx++);
+			info.update(n, d, h, l); // 增加一个更新方法
+			return info;
+		}
+
 		/**
 		 * 重置上下文状态，为下一次匹配做准备
 		 */
@@ -44,6 +69,11 @@ public class LambdaAligner {
 			usedOldNames.clear();
 			fingerprinter.reset();
 			currentClass = null;
+			oldGroups.clear();
+			newGroups.clear();
+			poolIdx = 0;
+			infoPoolIdx = 0;
+			hashIdxMap.clear();
 		}
 	}
 
@@ -65,22 +95,33 @@ public class LambdaAligner {
 			throw new IllegalArgumentException("New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
 		}
 
-		Map<Long, List<SyntheticInfo>> oldGroups = groupByLogic(ctx.oldMethods.values());
-		Map<Long, List<SyntheticInfo>> newGroups = groupByLogic(ctx.newList);
+		var oldGroups = ctx.oldGroups;
+		groupByLogic(ctx, oldGroups, ctx.oldMethods.values());
+		var newGroups = ctx.newGroups;
+		groupByLogic(ctx, newGroups, ctx.newList);
 
-		for (Map.Entry<Long, List<SyntheticInfo>> entry : newGroups.entrySet()) {
-			List<SyntheticInfo> newGroup = entry.getValue();
-			List<SyntheticInfo> oldGroup = oldGroups.get(entry.getKey());
+		var hashIdxMap = ctx.hashIdxMap;
+		for (int i = 0, capacity = newGroups.capacity(); i < capacity; i++) {
+			var newGroup = newGroups.valueAt(i);
+			if (newGroup == null) continue;
+			var oldGroup = oldGroups.get(newGroups.keyAt(i));
 			if (oldGroup == null) continue;
 
 			// Step 1: 精确 Hash 匹配 (O(N))
-			Map<Long, LinkedList<SyntheticInfo>> hashIdx = new HashMap<>();
-			for (SyntheticInfo oi : oldGroup) hashIdx.computeIfAbsent(oi.hash, _ -> new LinkedList<>()).add(oi);
+			hashIdxMap.clear();
+			for (SyntheticInfo oi : oldGroup) {
+				List<SyntheticInfo> list = hashIdxMap.get(oi.hash);
+				if (list == null) {
+					list = ctx.acquireList();
+					hashIdxMap.put(oi.hash, list);
+				}
+				list.add(oi);
+			}
 
 			for (SyntheticInfo ni : newGroup) {
-				LinkedList<SyntheticInfo> cand = hashIdx.get(ni.hash);
+				List<SyntheticInfo> cand = hashIdxMap.get(ni.hash);
 				if (cand != null && !cand.isEmpty()) {
-					SyntheticInfo oi = cand.removeFirst();
+					SyntheticInfo oi = cand.removeLast();
 					if (!ni.name.equals(oi.name)) ctx.renameMap.put(ni.name, oi.name);
 					ni.matched = true;
 					ctx.usedOldNames.add(oi.name);
@@ -112,7 +153,7 @@ public class LambdaAligner {
 	 */
 	private static byte[] applyTransform(byte[] bytes, MatchContext ctx) {
 		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(0);
+		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 
 		Remapper remapper = new Remapper(Opcodes.ASM9) {
 			/**
@@ -132,8 +173,8 @@ public class LambdaAligner {
 			public Object mapValue(Object value) {
 				if (value instanceof String s && s.length() > LAMBDA_LENGTH) {
 					char c = s.charAt(0);
-					if (c == 'l' || c == 'a') { // 快速预过滤 lambda$ 或 access$
-						return ctx.renameMap.getOrDefault(s, s);
+					if ((c == 'l' || c == 'a') && ctx.renameMap.containsKey(s)) { // 快速预过滤 lambda$ 或 access$
+						return ctx.renameMap.get(s);
 					}
 				}
 				return super.mapValue(value);
@@ -152,11 +193,11 @@ public class LambdaAligner {
 	 * @return 类名
 	 */
 	private static String scan(byte[] bytes, MatchContext ctx, boolean isOld) {
-		final String[] className = new String[1];
-		new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+		var visitor = new ClassVisitor(Opcodes.ASM9) {
+			public String className;
 			@Override
 			public void visit(int version, int access, String name, String sig, String superName, String[] itfs) {
-				className[0] = name;
+				className = name;
 			}
 
 			@Override
@@ -178,7 +219,7 @@ public class LambdaAligner {
 					@Override
 					public void visitEnd() {
 						String        logicalName = extractLogicalName(name);
-						SyntheticInfo info        = new SyntheticInfo(name, desc, ctx.fingerprinter.getHash(), logicalName);
+						SyntheticInfo info        = ctx.acquireInfo(name, desc, ctx.fingerprinter.getHash(), logicalName);
 						if (isOld) {
 							ctx.oldMethods.put(name, info);
 						} else {
@@ -187,8 +228,9 @@ public class LambdaAligner {
 					}
 				};
 			}
-		}, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-		return className[0];
+		};
+		new ClassReader(bytes).accept(visitor, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		return visitor.className;
 	}
 
 	private static boolean isSyntheticName(String name) {
@@ -223,17 +265,22 @@ public class LambdaAligner {
 
 	/**
 	 * 按逻辑名称和描述符对合成方法进行分组
-	 * @param infos 合成方法信息集合
-	 * @return 分组映射
+	 * @param ctx    匹配上下文
+	 * @param target 存放分组结果的容器
+	 * @param infos  合成方法信息集合
 	 */
-	private static Map<Long, List<SyntheticInfo>> groupByLogic(Collection<SyntheticInfo> infos) {
-		Map<Long, List<SyntheticInfo>> groups = new LinkedHashMap<>();
+	private static void groupByLogic(
+	 MatchContext ctx, LongObjectMap<List<SyntheticInfo>> target, Collection<SyntheticInfo> infos) {
 		for (SyntheticInfo info : infos) {
 			// 使用逻辑名称+描述符作为分组键
-			long key = Utils.computeCompositeHash(info.logicalName, info.desc);
-			groups.computeIfAbsent(key, _ -> new ArrayList<>()).add(info);
+			long                key  = Utils.computeCompositeHash(info.logicalName, info.desc);
+			List<SyntheticInfo> list = target.get(key);
+			if (list == null) {
+				list = ctx.acquireList();
+				target.put(key, list);
+			}
+			list.add(info);
 		}
-		return groups;
 	}
 
 	/**
@@ -249,13 +296,18 @@ public class LambdaAligner {
 		/** 方法指纹哈希值 */
 		long    hash;
 		/** 是否已匹配 */
-		boolean matched = false;
+		boolean matched;
 
 		SyntheticInfo(String n, String d, long h, String l) {
+			update(n, d, h, l);
+		}
+
+		void update(String n, String d, long h, String l) {
 			name = n;
 			desc = d;
 			hash = h;
 			logicalName = l;
+			matched = false;
 		}
 	}
 }

@@ -14,6 +14,7 @@ public class LongLongMap {
 
 	private       long[] keys;
 	private       long[] values;
+	/** size 不包含 zero-key */
 	private       int    size;
 	private       int    capacity;
 	private final float  loadFactor = 0.75f;
@@ -72,6 +73,7 @@ public class LongLongMap {
 		zeroValue = 0;
 		size = 0;
 	}
+
 	public int size() { return size + (hasZero ? 1 : 0); }
 	public boolean isEmpty() { return size() == 0; }
 
@@ -95,7 +97,7 @@ public class LongLongMap {
 		v ^= (v >>> 33);
 		v *= 0xc4ceb9fe1a85ec53L; // 额外常量混高位
 		v ^= (v >>> 33);
-		return Long.hashCode(v); // 混合高低
+		return (int) v;
 	}
 
 	private int powerOfTwo(int n) {

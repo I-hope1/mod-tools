@@ -21,8 +21,8 @@ import java.util.stream.Collectors;
 
 @AutoService(Processor.class)
 public class AccessorProc extends BaseASMProc<MethodSymbol> {
-	Map<Symbol, ClassWriter> classWriterMap = new HashMap<>();
-	Map<ClassWriter, String> classNamesMap = new HashMap<>();
+	Map<Symbol, ClassWriter> classWriterMap = new LinkedHashMap<>();
+	Map<ClassWriter, String> classNamesMap = new LinkedHashMap<>();
 	public void dealElement(MethodSymbol element) throws Throwable {
 		HField hField = element.getAnnotation(HField.class);
 		if (hField != null) {

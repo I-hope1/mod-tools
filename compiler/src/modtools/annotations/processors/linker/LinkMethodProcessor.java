@@ -21,7 +21,7 @@ public class LinkMethodProcessor extends BaseASMProc<MethodSymbol> {
 
 	private static final boolean LOG_RES = false;
 
-	private final Map<ClassSymbol, ArrayList<Pair<MethodSymbol, Name>>> classMethodFields = new HashMap<>();
+	private final Map<ClassSymbol, ArrayList<Pair<MethodSymbol, Name>>> classMethodFields = new LinkedHashMap<>();
 
 	private ClassSymbol reflectSym;
 	private ClassSymbol methodSym;

@@ -52,7 +52,7 @@ public class CopyMethodProc extends BaseASMProc<MethodSymbol> {
 		// println(apply);
 	}
 
-	final Map<String[], Symbol[]> todos = new HashMap<>();
+	final Map<String[], Symbol[]> todos = new LinkedHashMap<>();
 
 	public void process() throws Throwable {
 		todos.forEach((names, symbols) -> {

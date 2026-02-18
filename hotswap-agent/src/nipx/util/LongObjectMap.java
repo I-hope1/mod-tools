@@ -244,4 +244,7 @@ public final class LongObjectMap<V> {
 		}
 		return h;
 	}
+	public boolean containsKey(long l) {
+		return get(l) != null;
+	}
 }

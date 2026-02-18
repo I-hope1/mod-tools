@@ -20,17 +20,14 @@ public class LambdaAligner {
 
 	public static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
 
+	//region 匹配上下文
 	/** 匹配上下文，存储当前线程的匹配状态 */
 	public static class MatchContext {
-		/** 旧版本中的合成方法映射 */
-		final Map<String, SyntheticInfo> oldMethods    = new LinkedHashMap<>(128);
-		/** 新版本中的合成方法列表 */
-		final List<SyntheticInfo>        newList       = new ArrayList<>(128);
 		/** 方法名重命名映射表 */
-		final Map<String, String>        renameMap     = new HashMap<>(64);
+		final Map<String, String> renameMap     = new HashMap<>(64);
 		/** 已使用的旧方法名集合 */
-		final Set<String>                usedOldNames  = new HashSet<>(64);
-		final MethodFingerprinter        fingerprinter = MethodFingerprinter.CONTEXT.get();
+		final Set<String>         usedOldNames  = new HashSet<>(64);
+		final MethodFingerprinter fingerprinter = MethodFingerprinter.CONTEXT.get();
 		/** 当前处理的类名 */
 		String currentClass;
 
@@ -38,6 +35,7 @@ public class LambdaAligner {
 		final LongObjectMap<List<SyntheticInfo>> newGroups  = new LongObjectMap<>(128);
 		final LongObjectMap<List<SyntheticInfo>> hashIdxMap = new LongObjectMap<>(64);
 
+		//region 对象池管理
 		// 预分配的一堆 ArrayList，用于复用
 		private final List<List<SyntheticInfo>> pool    = new ArrayList<>();
 		private       int                       poolIdx = 0;
@@ -48,6 +46,7 @@ public class LambdaAligner {
 			return list;
 		}
 
+		// 预分配的一堆 SyntheticInfo
 		private final List<SyntheticInfo> infoPool    = new ArrayList<>();
 		private       int                 infoPoolIdx = 0;
 		SyntheticInfo acquireInfo(String n, String d, long h, String l) {
@@ -58,13 +57,12 @@ public class LambdaAligner {
 			info.update(n, d, h, l); // 增加一个更新方法
 			return info;
 		}
+		//endregion
 
 		/**
 		 * 重置上下文状态，为下一次匹配做准备
 		 */
 		void reset() {
-			oldMethods.clear();
-			newList.clear();
 			renameMap.clear();
 			usedOldNames.clear();
 			fingerprinter.reset();
@@ -76,7 +74,9 @@ public class LambdaAligner {
 			hashIdxMap.clear();
 		}
 	}
+	//endregion
 
+	//region 主要API方法
 	/**
 	 * 对齐Lambda表达式的主入口方法
 	 * @param oldBytes 旧版本字节码
@@ -95,10 +95,9 @@ public class LambdaAligner {
 			throw new IllegalArgumentException("New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
 		}
 
+		// 在scan时就分好了组
 		var oldGroups = ctx.oldGroups;
-		groupByLogic(ctx, oldGroups, ctx.oldMethods.values());
 		var newGroups = ctx.newGroups;
-		groupByLogic(ctx, newGroups, ctx.newList);
 
 		var hashIdxMap = ctx.hashIdxMap;
 		for (int i = 0, capacity = newGroups.capacity(); i < capacity; i++) {
@@ -144,14 +143,16 @@ public class LambdaAligner {
 
 		return ctx.renameMap.isEmpty() ? newBytes : applyTransform(newBytes, ctx);
 	}
+	//endregion
 
+	//region 字节码转换+扫描
 	/**
 	 * 应用转换规则到字节码
 	 * @param bytes 原始字节码
 	 * @param ctx   匹配上下文
 	 * @return 转换后的字节码
 	 */
-	private static byte[] applyTransform(byte[] bytes, MatchContext ctx) {
+	private static byte[] applyTransform(byte[] bytes, LambdaAligner.MatchContext ctx) {
 		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 
@@ -163,7 +164,9 @@ public class LambdaAligner {
 			@Override
 			public String mapMethodName(String owner, String name, String desc) {
 				if (owner.equals(ctx.currentClass)) {
-					return ctx.renameMap.getOrDefault(name, name);
+					if (ctx.renameMap.containsKey(name)) {
+						return ctx.renameMap.get(name);
+					}
 				}
 				return name;
 			}
@@ -186,7 +189,7 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 扫描字节码并收集合成方法信息
+	 * 扫描字节码并收集合成方法信息，并利用了 ASM 顺序解析字节码自动分组
 	 * @param bytes 要扫描的字节码
 	 * @param ctx   匹配上下文
 	 * @param isOld 是否为旧版本
@@ -207,6 +210,10 @@ public class LambdaAligner {
 					return null;
 				}
 
+				boolean isBridge = (acc & Opcodes.ACC_BRIDGE) != 0;
+				// 如果是桥接方法，通常由编译器自动管理，且不涉及 lambda$ 这种随机命名问题，建议跳过
+				if (isBridge) return null;
+
 				boolean isSynthetic    = (acc & Opcodes.ACC_SYNTHETIC) != 0;
 				boolean matchesPattern = isSyntheticName(name);
 
@@ -214,17 +221,15 @@ public class LambdaAligner {
 					return null; // 业务方法（如 aaa）直接跳过，不参与 hash 和 rename 映射
 				}
 
-				ctx.fingerprinter.reset();
-				return new MethodVisitor(Opcodes.ASM9, ctx.fingerprinter) {
+				MethodFingerprinter fingerprinter = ctx.fingerprinter;
+				fingerprinter.reset();
+				fingerprinter.setContext(className);
+				return new MethodVisitor(Opcodes.ASM9, fingerprinter) {
 					@Override
 					public void visitEnd() {
 						String        logicalName = extractLogicalName(name);
-						SyntheticInfo info        = ctx.acquireInfo(name, desc, ctx.fingerprinter.getHash(), logicalName);
-						if (isOld) {
-							ctx.oldMethods.put(name, info);
-						} else {
-							ctx.newList.add(info);
-						}
+						SyntheticInfo info        = ctx.acquireInfo(name, desc, fingerprinter.getHash(), logicalName);
+						groupByLogic(ctx, isOld ? ctx.oldGroups : ctx.newGroups, info);
 					}
 				};
 			}
@@ -232,7 +237,9 @@ public class LambdaAligner {
 		new ClassReader(bytes).accept(visitor, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 		return visitor.className;
 	}
+	//endregion
 
+	//region 辅助方法
 	private static boolean isSyntheticName(String name) {
 		if (name.length() < LAMBDA_LENGTH) return false;
 		char c = name.charAt(0);
@@ -253,13 +260,28 @@ public class LambdaAligner {
 	 * @return 逻辑名称
 	 */
 	private static String extractLogicalName(String name) {
-		if (name.startsWith("lambda$")) {
-			int lastDollar = name.lastIndexOf('$');
-			return lastDollar > LAMBDA_LENGTH ? name.substring(0, lastDollar) : "lambda";
+		// 1. 处理特定的 Java 序列化 Lambda
+		if (name.equals("$deserializeLambda$")) return name;
+
+		// 2. 通用策略：剥离末尾的纯数字 ID
+		// 例如：lambda$main$0 -> lambda$main$
+		//      access$100    -> access$
+		//      func$1        -> func$
+		int i = name.length() - 1;
+		while (i >= 0 && Character.isDigit(name.charAt(i))) {
+			i--;
 		}
-		// 对于 access$100 等，逻辑名称就是其前缀，确保它们被归为一组顺序对齐
-		if (name.startsWith("access$")) return "access";
-		return name; // $deserializeLambda$ 等
+
+		// 如果剥离后没有变化（说明末尾不是数字），或者剥离完了（纯数字方法名？）
+		if (i == name.length() - 1 || i < 0) {
+			// 退回兜底逻辑：如果是 lambda$ 开头，尝试保留前缀
+			if (name.startsWith("lambda$")) return "lambda";
+			return name;
+		}
+
+		// 返回剥离数字后的前缀作为组名，保留分隔符以防止碰撞
+		// lambda$main$0 -> lambda$main$
+		return name.substring(0, i + 1);
 	}
 
 
@@ -267,22 +289,22 @@ public class LambdaAligner {
 	 * 按逻辑名称和描述符对合成方法进行分组
 	 * @param ctx    匹配上下文
 	 * @param target 存放分组结果的容器
-	 * @param infos  合成方法信息集合
+	 * @param info   合成方法信息
 	 */
 	private static void groupByLogic(
-	 MatchContext ctx, LongObjectMap<List<SyntheticInfo>> target, Collection<SyntheticInfo> infos) {
-		for (SyntheticInfo info : infos) {
-			// 使用逻辑名称+描述符作为分组键
-			long                key  = Utils.computeCompositeHash(info.logicalName, info.desc);
-			List<SyntheticInfo> list = target.get(key);
-			if (list == null) {
-				list = ctx.acquireList();
-				target.put(key, list);
-			}
-			list.add(info);
+	 MatchContext ctx, LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info) {
+		// 使用逻辑名称+描述符作为分组键
+		long key  = Utils.compositeHash(info.logicalName, info.desc);
+		var  list = target.get(key);
+		if (list == null) {
+			list = ctx.acquireList();
+			target.put(key, list);
 		}
+		list.add(info);
 	}
+	//endregion
 
+	//region 数据结构类
 	/**
 	 * 合成方法信息类
 	 */
@@ -310,4 +332,5 @@ public class LambdaAligner {
 			matched = false;
 		}
 	}
+	//endregion
 }

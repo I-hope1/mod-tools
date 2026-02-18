@@ -18,6 +18,26 @@ import java.util.*;
 public final class MethodFingerprinter extends MethodVisitor {
 	public static final ThreadLocal<MethodFingerprinter> CONTEXT = ThreadLocal.withInitial(MethodFingerprinter::new);
 
+	//region 上下文
+	private String currentClassName;
+
+	public void setContext(String className) {
+		this.currentClassName = className;
+	}
+	// 简单的数字判断
+	private boolean isNumeric(String s) {
+		for (int i = 0; i < s.length(); i++) {
+			if (!Character.isDigit(s.charAt(i))) return false;
+		}
+		return true;
+	}
+	/** 重置指纹生成器状态，为下一个方法做准备*/
+	public void reset() {
+		crc = CRC64.init();
+		labelIds.clear();
+		nextLabelId = 0;
+	}
+	//endregion
 
 	//region  标记常量
 	/** LDC指令标记 */
@@ -72,14 +92,6 @@ public final class MethodFingerprinter extends MethodVisitor {
 		super(Opcodes.ASM9);
 	}
 
-	/**
-	 * 重置指纹生成器状态，为下一个方法做准备
-	 */
-	public void reset() {
-		crc = CRC64.init();
-		labelIds.clear();
-		nextLabelId = 0;
-	}
 
 	/**
 	 * 获取最终计算出的哈希值
@@ -124,11 +136,31 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 * @param h 要更新的句柄对象
 	 */
 	private void updateHandle(Handle h) {
-		updateInt(h.getTag());           // 句柄类型
-		updateString(h.getOwner());      // 所属类
-		updateString(h.getName());       // 方法名
-		updateString(h.getDesc());       // 方法描述符
-		updateInt(h.isInterface() ? 1 : 0); // 是否接口方法
+		updateInt(h.getTag()); // 句柄类型
+
+		String owner = h.getOwner();
+		if (owner.equals(currentClassName)) {
+			updateString("#THIS#");
+		}
+		// 如果 owner 是当前类的内部类（匿名类或合成类），尝试屏蔽数字编号
+		// 假设内部类格式为 CurrentClass$xxx
+		else if (currentClassName != null && owner.startsWith(currentClassName + "$")) {
+			// 策略：只保留内部类的前缀结构，忽略具体的数字编号
+			// 例如：com/example/Main$1 -> com/example/Main$#ANON#
+			//      com/example/Main$Inner -> com/example/Main$Inner (非数字不屏蔽)
+			String suffix = owner.substring(currentClassName.length() + 1);
+			if (isNumeric(suffix)) {
+				updateString(currentClassName + "$#ANON#");
+			} else {
+				updateString(owner);
+			}
+		} else {
+			updateString(owner);
+		}
+
+		updateString(h.getName()); // 方法名
+		updateString(h.getDesc()); // 方法描述符
+		updateInt(h.isInterface() ? 1 : 0); // 是否为接口方法
 	}
 	//endregion
 

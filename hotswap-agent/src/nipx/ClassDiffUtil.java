@@ -195,12 +195,12 @@ public final class ClassDiffUtil {
 		var oldFieldsMap = ctx.fieldMap;
 		// 将旧版本所有字段放入映射表，key为字段名和描述符的复合哈希
 		for (FieldNode f : oldC.fields) {
-			oldFieldsMap.put(Utils.computeCompositeHash(f.name, f.desc), f.name);
+			oldFieldsMap.put(Utils.compositeHash(f.name, f.desc), f.name);
 		}
 
 		// 遍历新版本字段
 		for (FieldNode newF : newC.fields) {
-			long key = Utils.computeCompositeHash(newF.name, newF.desc);
+			long key = Utils.compositeHash(newF.name, newF.desc);
 			// 如果旧映射表中没有此key，说明是新增字段
 			if (oldFieldsMap.remove(key) == null) {
 				d.changedFields.add("+ " + newF.name);
@@ -215,12 +215,12 @@ public final class ClassDiffUtil {
 		var oldMethods = ctx.methodMap;
 		// 将旧版本所有方法放入映射表，key为方法名和描述符的复合哈希
 		for (MethodNode m : oldC.methods) {
-			oldMethods.put(Utils.computeCompositeHash(m.name, m.desc), m);
+			oldMethods.put(Utils.compositeHash(m.name, m.desc), m);
 		}
 
 		// 遍历新版本方法
 		for (MethodNode newM : newC.methods) {
-			long       key  = Utils.computeCompositeHash(newM.name, newM.desc);
+			long       key  = Utils.compositeHash(newM.name, newM.desc);
 			MethodNode oldM = oldMethods.remove(key);
 
 			if (oldM == null) {

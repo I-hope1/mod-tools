@@ -11,10 +11,10 @@ public class TestAA {
 		System.out.println("aiasj");
 		System.out.println("acu按时间哦");
 		System.out.println(ib);
-		// Runnable r = () -> {
-		// 	System.out.println("asas");
-		// };
-		// r.run();
+		Runnable r = () -> {
+			System.out.println("asas");
+		};
+		r.run();
 		new ChildClass().print();
 	}
 	public static class ParentClass1 {

@@ -3,8 +3,7 @@ package nipx;
 import nipx.util.CRC64;
 import org.objectweb.asm.*;
 
-import java.util.IdentityHashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * <pre>方法指纹生成器
@@ -17,6 +16,8 @@ import java.util.Map;
  * 4. 相同逻辑的方法会产生相同的哈希值，用于精确匹配
  */
 public final class MethodFingerprinter extends MethodVisitor {
+	public static final ThreadLocal<MethodFingerprinter> CONTEXT = ThreadLocal.withInitial(MethodFingerprinter::new);
+
 
 	//region  标记常量
 	/** LDC指令标记 */

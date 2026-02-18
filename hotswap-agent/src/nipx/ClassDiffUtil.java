@@ -1,5 +1,6 @@
 package nipx;
 
+import nipx.util.Utils;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.*;
 
@@ -43,9 +44,9 @@ public final class ClassDiffUtil {
 	public static final class ClassDiff {
 		final List<String> modifiedBodyMethods = new ArrayList<>();
 		final List<String> addedMethods        = new ArrayList<>();
-		final List<String> removedMethods  = new ArrayList<>();
+		final List<String> removedMethods      = new ArrayList<>();
 		// 字段变动通常会导致重定义失败，记录它们以进行预警
-		final List<String> changedFields   = new ArrayList<>();
+		final List<String> changedFields       = new ArrayList<>();
 
 		boolean hierarchyChanged = false;
 		final List<String> errors = new ArrayList<>();
@@ -76,39 +77,45 @@ public final class ClassDiffUtil {
 			d.changedFields.add("! CRITICAL: Interfaces changed");
 		}
 
-
 		// 字段对比：检测字段的增删
-		Set<String> oldFields = new HashSet<>();
-		for (FieldNode f : oldC.fields) oldFields.add(f.name + ":" + f.desc);
-
-		Set<String> newFields = new HashSet<>();
-		for (FieldNode f : newC.fields) {
-			String key = f.name + ":" + f.desc;
-			newFields.add(key);
-			if (!oldFields.contains(key)) d.changedFields.add("+ " + f.name);
+		Map<Long, String> oldFieldsMap = new HashMap<>(oldC.fields.size());
+		for (FieldNode f : oldC.fields) {
+			oldFieldsMap.put(Utils.computeCompositeHash(f.name, f.desc), f.name);
 		}
 
-		for (String oldKey : oldFields) {
-			if (!newFields.contains(oldKey)) {
-				String name = oldKey.split(":")[0];
-				d.changedFields.add("- " + name);
+		for (FieldNode newF : newC.fields) {
+			long key = Utils.computeCompositeHash(newF.name, newF.desc);
+			// 如果旧 Map 里没有，说明是新增
+			if (oldFieldsMap.remove(key) == null) {
+				d.changedFields.add("+ " + newF.name);
 			}
 		}
+		// Map 中剩余的部分就是被删除的，直接取值，无需 split
+		for (String removedFieldName : oldFieldsMap.values()) {
+			d.changedFields.add("- " + removedFieldName);
+		}
 
-		// 方法对比：检测方法的增删改
-		Map<String, MethodNode> oldMethods = new HashMap<>();
-		for (MethodNode m : oldC.methods) oldMethods.put(m.name + m.desc, m);
+		// --- 方法对比逻辑：同样采用映射销毁法 ---
+		Map<Long, MethodNode> oldMethods = new HashMap<>(oldC.methods.size());
+		for (MethodNode m : oldC.methods) {
+			oldMethods.put(Utils.computeCompositeHash(m.name, m.desc), m);
+		}
 
 		for (MethodNode newM : newC.methods) {
-			String     key  = newM.name + newM.desc;
+			long       key  = Utils.computeCompositeHash(newM.name, newM.desc);
 			MethodNode oldM = oldMethods.remove(key);
 			if (oldM == null) {
-				d.addedMethods.add(key);
+				// 新增方法：记录 逻辑名 + 描述符
+				d.addedMethods.add(newM.name + newM.desc);
 			} else if (isCodeChanged(oldM, newM)) {
-				d.modifiedBodyMethods.add(key);
+				// 修改方法
+				d.modifiedBodyMethods.add(newM.name + newM.desc);
 			}
 		}
-		d.removedMethods.addAll(oldMethods.keySet());
+		// 剩余的是删除的方法
+		for (MethodNode m : oldMethods.values()) {
+			d.removedMethods.add(m.name + m.desc);
+		}
 
 		return d;
 	}
@@ -118,21 +125,19 @@ public final class ClassDiffUtil {
 	 * 通过指令流指纹进行快速对比
 	 */
 	private static boolean isCodeChanged(MethodNode m1, MethodNode m2) {
-		// 快速判断：指令数量或访问权限不同则肯定有变化
-		if (m1.instructions.size() != m2.instructions.size()) return true;
+		// 快速判断：访问权限不同则肯定有变化
 		if (m1.access != m2.access) return true;
 
 		// 计算逻辑指纹进行精确对比
 		return calculateMethodHash(m1) != calculateMethodHash(m2);
 	}
 
-	public static final ThreadLocal<MethodFingerprinter> CONTEXT = ThreadLocal.withInitial(MethodFingerprinter::new);
 	/**
 	 * 计算方法的逻辑指纹哈希值
 	 * 通过遍历指令流提取关键特征来生成唯一标识
 	 */
 	public static long calculateMethodHash(MethodNode mn) {
-		MethodFingerprinter fingerprinter = CONTEXT.get();
+		MethodFingerprinter fingerprinter = MethodFingerprinter.CONTEXT.get();
 		fingerprinter.reset();
 		mn.accept(fingerprinter);
 		return fingerprinter.getHash();

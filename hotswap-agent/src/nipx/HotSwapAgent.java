@@ -252,8 +252,13 @@ public class HotSwapAgent {
 
 						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
 						ClassDiffUtil.logDiff(className, diff);
+						if (diff.hierarchyChanged) {
+							error("REJECTED: Class hierarchy change detected for " + className + ". JBR/DCEVM does not support changing superclass/interfaces reliably. Please RESTART application.");
+							// 直接跳过该类的重定义，避免抛出 UnsupportedOperationException
+							continue;
+						}
 
-						if (!diff.changedFields.isEmpty() || !diff.addedMethods.isEmpty() || !diff.removedMethods.isEmpty()) {
+						if (!diff.structureChanged()) {
 							if (!isEnhancedHotswapEnabled()) {
 								error("STRUCTURAL CHANGE DETECTED! Field/Method structure changed but DCEVM is NOT active.");
 								error("This redefine will likely FAIL. Classes: " + className);

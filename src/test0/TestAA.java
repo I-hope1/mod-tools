@@ -15,7 +15,21 @@ public class TestAA {
 		// 	System.out.println("asas");
 		// };
 		// r.run();
+		new ChildClass().print();
 	}
+	public static class ParentClass1 {
+		public void print() {
+			System.out.println("11");
+		}
+	}
+	public static class ParentClass2 {
+		public void print() {
+			System.out.println("22");
+		}
+	}
+	public static class ChildClass extends ParentClass2{
+	}
+
 
 
 	static {

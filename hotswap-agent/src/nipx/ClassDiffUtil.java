@@ -3,7 +3,7 @@ package nipx;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.*;
 
- import java.util.*;
+import java.util.*;
 
 /**
  * 类差异分析工具
@@ -41,16 +41,23 @@ public final class ClassDiffUtil {
 	 * 包含修改的方法、新增的方法、删除的方法以及字段变更信息
 	 */
 	public static final class ClassDiff {
-		final List<String> modifiedMethods = new ArrayList<>();
-		final List<String> addedMethods    = new ArrayList<>();
+		final List<String> modifiedBodyMethods = new ArrayList<>();
+		final List<String> addedMethods        = new ArrayList<>();
 		final List<String> removedMethods  = new ArrayList<>();
 		// 字段变动通常会导致重定义失败，记录它们以进行预警
 		final List<String> changedFields   = new ArrayList<>();
 
+		boolean hierarchyChanged = false;
+		final List<String> errors = new ArrayList<>();
+
 		/** 检查是否存在任何变更 */
 		public boolean hasChange() {
-			return !modifiedMethods.isEmpty() || !addedMethods.isEmpty() ||
-			       !removedMethods.isEmpty() || !changedFields.isEmpty();
+			return !(modifiedBodyMethods.isEmpty() && addedMethods.isEmpty() &&
+			         removedMethods.isEmpty() && changedFields.isEmpty() &&
+			         errors.isEmpty());
+		}
+		public boolean structureChanged() {
+			return !(addedMethods.isEmpty() && removedMethods.isEmpty() && changedFields.isEmpty());
 		}
 	}
 
@@ -59,6 +66,16 @@ public final class ClassDiffUtil {
 	 */
 	private static ClassDiff diff(ClassNode oldC, ClassNode newC) {
 		ClassDiff d = new ClassDiff();
+
+		if (!Objects.equals(oldC.superName, newC.superName)) {
+			d.hierarchyChanged = true;
+			d.errors.add("! CRITICAL: Superclass changed: " + oldC.superName + " -> " + newC.superName);
+		}
+		if (!Objects.equals(new HashSet<>(oldC.interfaces), new HashSet<>(newC.interfaces))) {
+			d.hierarchyChanged = true;
+			d.changedFields.add("! CRITICAL: Interfaces changed");
+		}
+
 
 		// 字段对比：检测字段的增删
 		Set<String> oldFields = new HashSet<>();
@@ -88,7 +105,7 @@ public final class ClassDiffUtil {
 			if (oldM == null) {
 				d.addedMethods.add(key);
 			} else if (isCodeChanged(oldM, newM)) {
-				d.modifiedMethods.add(key);
+				d.modifiedBodyMethods.add(key);
 			}
 		}
 		d.removedMethods.addAll(oldMethods.keySet());
@@ -133,7 +150,8 @@ public final class ClassDiffUtil {
 		StringBuilder sb = new StringBuilder(256);
 		sb.append("[DIFF] ").append(className).append(":\n");
 
-		appendIfNotEmpty(sb, " *Modified: ", diff.modifiedMethods);
+		appendIfNotEmpty(sb, " !!!Errors:   ", diff.errors);
+		appendIfNotEmpty(sb, " *Modified: ", diff.modifiedBodyMethods);
 		appendIfNotEmpty(sb, " +Added:    ", diff.addedMethods);
 		appendIfNotEmpty(sb, " -Removed:  ", diff.removedMethods);
 		appendIfNotEmpty(sb, " !Fields:   ", diff.changedFields);

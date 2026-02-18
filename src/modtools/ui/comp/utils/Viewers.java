@@ -243,7 +243,7 @@ public class Viewers {
 			text.append("|Array");
 			int    sizeIndex = text.length();
 			String repeat    = StringUtils.repeat('\u200d', SIZE_MAX_BIT);
-			text.append(repeat).append("|");
+			text.append(repeat).append('|');
 
 			label.endIndexMap.put(start, text.length());
 			label.endColor();

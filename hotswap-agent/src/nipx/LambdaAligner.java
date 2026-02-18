@@ -65,10 +65,10 @@ public class LambdaAligner {
 			throw new IllegalArgumentException("New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
 		}
 
-		Map<String, List<SyntheticInfo>> oldGroups = groupByLogic(ctx.oldMethods.values());
-		Map<String, List<SyntheticInfo>> newGroups = groupByLogic(ctx.newList);
+		Map<Long, List<SyntheticInfo>> oldGroups = groupByLogic(ctx.oldMethods.values());
+		Map<Long, List<SyntheticInfo>> newGroups = groupByLogic(ctx.newList);
 
-		for (Map.Entry<String, List<SyntheticInfo>> entry : newGroups.entrySet()) {
+		for (Map.Entry<Long, List<SyntheticInfo>> entry : newGroups.entrySet()) {
 			List<SyntheticInfo> newGroup = entry.getValue();
 			List<SyntheticInfo> oldGroup = oldGroups.get(entry.getKey());
 			if (oldGroup == null) continue;
@@ -226,14 +226,23 @@ public class LambdaAligner {
 	 * @param infos 合成方法信息集合
 	 * @return 分组映射
 	 */
-	private static Map<String, List<SyntheticInfo>> groupByLogic(Collection<SyntheticInfo> infos) {
-		Map<String, List<SyntheticInfo>> groups = new LinkedHashMap<>();
+	private static Map<Long, List<SyntheticInfo>> groupByLogic(Collection<SyntheticInfo> infos) {
+		Map<Long, List<SyntheticInfo>> groups = new LinkedHashMap<>();
 		for (SyntheticInfo info : infos) {
 			// 使用逻辑名称+描述符作为分组键
-			String key = info.logicalName + "|" + info.desc;
+			long key = computeCompositeHash(info.logicalName, info.desc);
 			groups.computeIfAbsent(key, _ -> new ArrayList<>()).add(info);
 		}
 		return groups;
+	}
+	/**
+	 * 计算复合 Key：将逻辑名 Hash 和描述符 Hash 压缩进一个 long
+	 * 解决了 String 拼接产生的 char[] 拷贝和 StringBuilder 垃圾
+	 */
+	private static long computeCompositeHash(String logicalName, String desc) {
+		// 将两个 32 位哈希值拼成一个 64 位 long
+		// 在单个类文件的上下文中，这种碰撞概率在数学上可以忽略不计
+		return ((long) logicalName.hashCode() << 32) | (desc.hashCode() & 0xFFFFFFFFL);
 	}
 
 	/**

@@ -31,8 +31,6 @@ public class HotSwapAgent {
 	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
-
-	public static boolean STRUCTURAL_SUPPORTED = isEnhancedHotswapEnabled();
 	//endregion
 
 	//region Core State Management
@@ -114,7 +112,7 @@ public class HotSwapAgent {
 		if (LAMBDA_ALIGN) {
 			info("Lambda Alignment ENABLED. Warning: This may cause logical shifts if lambdas are reordered.");
 		}
-		info("Structural HotSwap Supported: " + STRUCTURAL_SUPPORTED);
+		info("Structural HotSwap Supported: " + isEnhancedHotswapEnabled());
 	}
 	//endregion
 
@@ -256,7 +254,7 @@ public class HotSwapAgent {
 						ClassDiffUtil.logDiff(className, diff);
 
 						if (!diff.changedFields.isEmpty() || !diff.addedMethods.isEmpty() || !diff.removedMethods.isEmpty()) {
-							if (!STRUCTURAL_SUPPORTED) {
+							if (!isEnhancedHotswapEnabled()) {
 								error("STRUCTURAL CHANGE DETECTED! Field/Method structure changed but DCEVM is NOT active.");
 								error("This redefine will likely FAIL. Classes: " + className);
 							} else {
@@ -515,28 +513,21 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Environment Detection
-	private static final boolean DCEVM_DETECTED;
 	private static final boolean ENHANCED_HOTSWAP;
 
 	static {
-		// 1. 一次性检测并缓存，避免重复调用 JMX 的开销
-		String vmName    = System.getProperty("java.vm.name", "");
-		String vmVersion = System.getProperty("java.vm.version", "");
-		DCEVM_DETECTED = vmName.contains("Dynamic Code Evolution") ||
-		                 vmVersion.contains("dcevm");
-
 		boolean enhanced = false;
-		if (!DCEVM_DETECTED) {
-			try {
-				List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
-				for (String arg : inputArguments) {
-					// 2. 严谨性校验：必须是开启状态 (+)，排除关闭状态 (-)
-					if (arg.contains("-XX:+AllowEnhancedClassRedefinition")) {
-						enhanced = true;
-						break;
-					}
+		try {
+			List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
+			for (String arg : inputArguments) {
+				info("Input Argument: " + arg);
+				if (arg.equals("-XX:+AllowEnhancedClassRedefinition")) {
+					info("[OK] Enhanced HotSwap is enabled.");
+					enhanced = true;
+					break;
 				}
-			} catch (Throwable t) { }
+			}
+		} catch (Throwable e) {
 		}
 		ENHANCED_HOTSWAP = enhanced;
 	}

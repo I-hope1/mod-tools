@@ -121,7 +121,7 @@ public class HotSwapDialog extends Window {
 			@Override
 			public void log(String msg) {
 				originalLogger.log(msg); // 转发给原控制台
-				appendUI("[lightgray]" + msg + "[]");
+				if (HotSwapAgent.DEBUG) appendUI("[lightgray]" + msg + "[]");
 			}
 
 			@Override

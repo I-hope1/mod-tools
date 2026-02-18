@@ -311,7 +311,7 @@ public class Tester extends Content {
 				p.left().top();
 				buildLog(p);
 				p.image(Icon.leftOpenSmall).color(Color.gray).size(24).top().left();
-				logLabel = new ClearValueLabel<>(Object.class, () -> res, null);
+				logLabel = new ClearValueLabel<>(Object.class, () -> res, () -> logLabel.setVal(ValueLabel.unset));
 				logLabelCell = BindCell.ofConst(p.add(logLabel)
 				 .wrap().style(HopeStyles.defaultLabel)
 				 .labelAlign(Align.left).growX());
@@ -685,15 +685,19 @@ public class Tester extends Content {
 			res = o;
 			ScriptableObject.putProperty(customScope, "$0", res);
 
-			logLabelCell.replace(logLabel);
-			logLabel.flushVal();
-			log = String.valueOf(logLabel.getText());
-			if (output_to_log.enabled()) {
-				Log.info("[[TESTER]: " + log);
-			}
+			Core.app.post(() -> {
+				logLabelCell.replace(logLabel);
+				// logLabel.clearMouseEvents();
+				// logLabel.clearExpand();
+				logLabel.flushVal();
+				log = String.valueOf(logLabel.getText());
+				if (output_to_log.enabled()) {
+					Log.info("[[TESTER]: " + log);
+				}
 
-			if (lastDir != null) lastDir.child("log.txt").writeString(log);
-			lastDir = null;
+				if (lastDir != null) lastDir.child("log.txt").writeString(log);
+				lastDir = null;
+			});
 		} catch (Throwable e) {
 			Core.app.post(() -> handleError(e));
 		} finally {

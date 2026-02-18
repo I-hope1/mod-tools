@@ -141,24 +141,25 @@ public abstract class ValueLabel extends ExtendingLabel {
 				hoveredLabel = null;
 				hoveredChunk.set(UNSET_P);
 
-				int    cursor = getCursor(x, y);
-				Object o;
-				int    toIndex;
+				int cursor = getCursor(x, y);
+				if (cursor == UNSET_I) return; // 提前退出
 
 				Keys keys1 = startIndexMap.keys();
 				keys.clear();
 				while (keys1.hasNext) keys.add(keys1.next());
 				keys.sort();
 
-				for (int i = 0, size = keys.size; i < size; i++) {
-					int index = keys.get(i);
-					o = startIndexMap.get(index);
-					toIndex = endIndexMap.get(index);
+				// 从索引最大的（最具体的）对象开始检查
+				for (int i = keys.size - 1; i >= 0; i--) {
+					int    index   = keys.get(i);
+					Object o       = startIndexMap.get(index);
+					int    toIndex = endIndexMap.get(index);
+
 					if (index <= cursor && cursor < toIndex) {
 						hoveredChunk.set(index, toIndex);
 						hoveredLabel = ValueLabel.this;
 						hoveredVal = o;
-						return;
+						return; // 找到最具体的对象后立即返回
 					}
 				}
 			}
@@ -236,7 +237,12 @@ public abstract class ValueLabel extends ExtendingLabel {
 		colorMap.clear();
 		startIndexMap.clear();
 		endIndexMap.clear();
+		// clearMouseEvents();
 		clearDrawRuns();
+
+		valToType.clear();
+		valToObj.clear();
+
 		bgIndex = 0;
 		appendValue(val);
 
@@ -687,11 +693,17 @@ public abstract class ValueLabel extends ExtendingLabel {
 	}
 	//endregion
 
-	public void toggleExpand(Object val) {
-		expandVal.put(val, !expandVal.getOrDefault(val, false));
-		Core.app.post(this::flushVal);
+	public void clearExpand() {
+		expandVal.clear();
 	}
-	public boolean isExpand(Object val) {
-		return expandVal.getOrDefault(val, false);
+	public final void flushValExpand() {
+		setVal(val);
+	}
+	public final void toggleExpand(Object val) {
+		expandVal.put(val, !expandVal.getOrDefault(val, false));
+		Core.app.post(this::flushValExpand);
+	}
+	public final boolean isExpand(Object val) {
+		return expandVal.containsKey(val);
 	}
 }

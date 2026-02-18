@@ -11,8 +11,10 @@ import arc.util.pooling.Pool.Poolable;
 import arc.util.serialization.Json;
 import ihope_lib.MyReflect;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.annotations.asm.CopyMethodFrom;
 import modtools.events.E_JSFunc;
+import modtools.jsfunc.reflect.UNSAFE;
 import modtools.ui.*;
 import modtools.ui.comp.input.MyLabel;
 import modtools.utils.*;
@@ -24,10 +26,17 @@ import java.util.*;
 import static modtools.ui.effect.HopeFx.changedFx;
 
 public interface ReflectTools {
+	boolean[] _initialized = new boolean[1];
 	static void setAccessible(AccessibleObject object) {
 		try {
 			MyReflect.setOverride(object);
-		} catch (Throwable ignored) { }
+		} catch (Throwable e) {
+			if (IntVars.isDesktop() && !_initialized[0]) {
+				UNSAFE.putObject(MyReflect.class, UNSAFE.objectFieldOffset(Class.class, "module"), Object.class.getModule());
+				_initialized[0] = true;
+				MyReflect.setOverride(object);
+			}
+		}
 	}
 	static String getName(Class<?> clazz) {
 		if (clazz == null) throw new IllegalArgumentException("clazz is null");
@@ -80,7 +89,7 @@ public interface ReflectTools {
 		if (type.isAnonymousClass()) {
 			simpleName = type.getName();
 			simpleName = simpleName.substring(simpleName.lastIndexOf('.') + 1); // strip the package name
-		} else simpleName = type.getSimpleName();
+		} else { simpleName = type.getSimpleName(); }
 
 		if (ENABLED_GENERIC && genericType != null) {
 			sb.append(getGenericSimpleTypeName(genericType));

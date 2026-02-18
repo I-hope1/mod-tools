@@ -125,12 +125,11 @@ public class Viewers {
 
 	public static final  boolean ARRAY_DEBUG  = false;
 	private static final int     SIZE_MAX_BIT = 5;
-	public static final int maxDepth = 5;
 
-	static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
+	public static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
 		internalViewers.add(new ViewerItem<>(clazz, viewer));
 	}
-	static void addViewer(Type type, Viewer<?> viewer) {
+	public static void addViewer(Type type, Viewer<?> viewer) {
 		internalViewers.add(new ViewerItem<>(type, viewer));
 	}
 
@@ -162,7 +161,7 @@ public class Viewers {
 		addViewer(UnlockableContent.class, iconViewer((UnlockableContent uc) -> uc.uiIcon));
 
 		addViewer(Type.map, (val, label) -> {
-			if (!label.expandVal.containsKey(val)) {
+			if (!label.isExpand(val)) {
 				label.clickedRegion(label.getPoint2Prov(val), () -> label.toggleExpand(val));
 				label.expandVal.put(val, getMapSize(val) < R_JSFunc.max_auto_expand_size);
 			}
@@ -343,7 +342,6 @@ public class Viewers {
 		public Type          type;
 		public Seq<Class<?>> classes;
 		public Boolf<T>      valid;
-		public int currentDepth;
 		private ViewerItem() { }/* 用于序列化 */
 		public ViewerItem(Type type, Viewer<T> viewer) {
 			this.viewer = viewer;
@@ -364,10 +362,20 @@ public class Viewers {
 			       || (valid != null && valid.get(val))
 			       || (classes != null && classes.indexOf(c -> c.isInstance(val)) != -1);
 		}
+		public static final int maxDepth = 10;
+
+		public int currentDepth = 0;
 		public boolean view(T val, ValueLabel label) {
 			if (currentDepth > maxDepth) return false;
 			currentDepth++;
-			return viewer.view(val, label);
+			try {
+				return viewer.view(val, label);
+			} catch (Throwable e) {
+				Log.err("Viewer Error", e);
+				return false;
+			} finally {
+				currentDepth--; // 绝对对称
+			}
 		}
 
 		public boolean equals(Object o) {
@@ -614,23 +622,14 @@ public class Viewers {
 			default -> throw new UnsupportedOperationException();
 		};
 	}
-	public static boolean testHashCode(Object object) {
-		try {
-			object.hashCode();
-			return true;
-		} catch (Throwable e) {
-			return false;
-		}
-	}
 	public static void defaultAppend(ValueLabel label, int startIndex, Object val) {
 		StringBuilder text      = label.getText();
 		Color         mainColor = colorOf(val);
 		label.startColor(mainColor);
-		boolean b = Viewers.testHashCode(val);
-		if (b) label.startIndexMap.put(startIndex, val);
+		label.startIndexMap.put(startIndex, val);
 		text.append(toString(val));
 		int endI = text.length();
-		if (b) label.endIndexMap.put(startIndex, endI);
+		label.endIndexMap.put(startIndex, endI);
 		label.endColor();
 	}
 	private static Object wrapVal(Object val) {

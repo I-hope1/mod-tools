@@ -2,13 +2,12 @@ package nipx;
 
 import nipx.annotation.*;
 import nipx.util.*;
-import org.objectweb.asm.ClassReader;
 
 import java.io.*;
 import java.lang.instrument.*;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.*;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -184,23 +183,27 @@ public class HotSwapAgent {
 		for (Path path : changedFiles) {
 			if (DEBUG) log("Processing changes: " + path);
 			try {
-				String className = getClassName(path);
-				if (className == null) continue;
+				byte[] bytecode  = Files.readAllBytes(path);
+				String className = Utils.getClassNameASM(bytecode);
+				if (className == null) {
+					skippedCount++;
+					error("[SKIP] No className: " + path);
+					continue;
+				}
 
 				if (isBlacklisted(className)) {
 					if (DEBUG) log("[SKIP-BLACKLIST] " + className);
 					continue;
 				}
 
-				byte[] bytecode     = Files.readAllBytes(path);
-				long   newHash      = calculateHash(bytecode); // 现在返回 long
-				long   classNameKey = CRC64.hashString(className); // 类名也转为 long
+				long newHash      = calculateHash(bytecode); // 现在返回 long
+				long classNameKey = CRC64.hashString(className); // 类名也转为 long
 
 				// 检查指纹
 				synchronized (fileDiskHashes) {
 					long oldDiskHash = fileDiskHashes.get(classNameKey);
 					if (oldDiskHash != -1 && oldDiskHash == newHash) {
-						if (DEBUG) log("[SKIP] " + className + " (content unchanged)");
+						if (DEBUG) log("[SKIP] " + className + " (file hash unchanged)");
 						skippedCount++;
 						continue;
 					}
@@ -256,6 +259,7 @@ public class HotSwapAgent {
 					definitions.add(new ClassDefinition(targetClass, newBytecode));
 					bytecodeCache.put(className, new SoftReference<>(newBytecode));
 				} else {
+					if (DEBUG) log("[NEW] " + className);
 					// 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
 						if (injectNewClass(className, path, bytecode)) {
@@ -290,28 +294,40 @@ public class HotSwapAgent {
 		for (ClassDefinition def : definitions) {
 			Class<?> clazz = def.getDefinitionClass();
 
-			if (clazz.isAnnotationPresent(Reloadable.class)) {
-				List<Object> instances = InstanceTracker.getInstances(clazz);
-				if (instances.isEmpty()) continue;
+			if (!clazz.isAnnotationPresent(Reloadable.class)) continue;
 
-				Method reloadMethod = null;
-				for (Method m : clazz.getDeclaredMethods()) {
-					if (m.isAnnotationPresent(OnReload.class)) {
-						reloadMethod = m;
-						reloadMethod.setAccessible(true);
-						break;
-					}
+			Method reloadMethod = null;
+			for (Method m : clazz.getDeclaredMethods()) {
+				if (m.isAnnotationPresent(OnReload.class)) {
+					reloadMethod = m;
+					reloadMethod.setAccessible(true);
+					break;
 				}
+			}
+			if (reloadMethod == null) continue;
+			info("[Reload] Found @OnReload on " + clazz);
 
-				if (reloadMethod != null) {
-					for (Object obj : instances) {
-						try {
-							reloadMethod.invoke(obj);
-							log("[Reload] Invoked @OnReload on " + obj);
-						} catch (Exception e) {
-							error("Error invoking @OnReload", e);
-						}
-					}
+			if (Modifier.isStatic(reloadMethod.getModifiers())) {
+				try {
+					reloadMethod.invoke(null);
+					if (DEBUG) log("[Reload] Invoked @OnReload static method.");
+				} catch (Exception e) {
+					error("Error invoking @OnReload", e);
+				}
+				log("[Reload] Invoked @OnReload on " + clazz);
+				continue;
+			}
+
+			List<Object> instances = InstanceTracker.getInstances(clazz);
+			if (instances.isEmpty()) continue;
+
+
+			for (Object obj : instances) {
+				try {
+					reloadMethod.invoke(obj);
+					if (DEBUG) log("[Reload] Invoked @OnReload on " + obj);
+				} catch (Exception e) {
+					error("Error invoking @OnReload", e);
 				}
 			}
 		}
@@ -372,27 +388,18 @@ public class HotSwapAgent {
 	//endregion
 
 	//region File Processing Utilities
-	static String getClassName(Path classFile) {
-		if (DEBUG) log("[PARSE] Parsing class file: " + classFile);
-		try (InputStream is = Files.newInputStream(classFile)) {
-			ClassReader cr = new ClassReader(is);
-			return cr.getClassName().replace('/', '.');
-		} catch (IOException e) {
-			return null; // 不是合法的 class 文件
-		}
-	}
 
 	private static void initializeAgentState(Class<?>[] classes) {
 		info("Scanning files...");
 		for (Path root : activeWatchDirs) {
 			try (Stream<Path> walk = Files.walk(root)) {
 				walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
-					String cName = getClassName(path);
-					if (cName == null || isBlacklisted(cName)) return;
-
 					try {
 						byte[] diskBytes = Files.readAllBytes(path);
-						long   diskHash  = calculateHash(diskBytes);
+						String cName     = Utils.getClassNameASM(diskBytes);
+						if (cName == null || isBlacklisted(cName)) return;
+
+						long diskHash = calculateHash(diskBytes);
 
 						// 获取内存中的字节码（这是 transformLoaded 偷出来的）
 						byte[] memBytes = getRef(bytecodeCache.get(cName));
@@ -492,15 +499,14 @@ public class HotSwapAgent {
 		try {
 			List<String> inputArguments = ManagementFactory.getRuntimeMXBean().getInputArguments();
 			for (String arg : inputArguments) {
-				info("Input Argument: " + arg);
+				// info("Input Argument: " + arg);
 				if (arg.equals("-XX:+AllowEnhancedClassRedefinition")) {
-					info("[OK] Enhanced HotSwap is enabled.");
+					// info("[OK] Enhanced HotSwap is enabled.");
 					enhanced = true;
 					break;
 				}
 			}
-		} catch (Throwable e) {
-		}
+		} catch (Throwable _) { }
 		ENHANCED_HOTSWAP = enhanced;
 	}
 

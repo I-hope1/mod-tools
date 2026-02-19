@@ -36,7 +36,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 	/** @see InstanceTracker */
 	private static byte[] injectTracker(byte[] bytes, String className) {
-		ClassReader cr = new ClassReader(bytes);
+	ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
@@ -177,8 +177,8 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 				byte[] bytes = classfileBuffer.clone();
 
-				// 处理 @Reloadable (类级别)
-				if (hasClassAnnotation(bytes, Reloadable.class)) {
+				// 处理 @Tracker (类级别)
+				if (hasClassAnnotation(bytes, Tracker.class)) {
 					bytes = injectTracker(bytes, dotClassName); // 你的 injectTracker 保持原样即可
 				}
 

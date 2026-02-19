@@ -16,8 +16,8 @@ repositories {
 jar {
 	manifest {
 		attributes(
-				'Agent-Class': 'nipx.Utils',
-				'Premain-Class': 'nipx.Utils',
+				'Agent-Class': 'nipx.UtilsAgent',
+				'Premain-Class': 'nipx.UtilsAgent',
 				'Can-Retransform-Classes': true,
 				'Can-Redefine-Classes': true
 		)

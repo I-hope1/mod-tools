@@ -5,7 +5,7 @@ import com.sun.tools.attach.VirtualMachine;
 import jdk.internal.misc.Unsafe;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.reflect.FieldUtils;
-import nipx.Utils;
+import nipx.UtilsAgent;
 import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;
@@ -42,7 +42,7 @@ public class UtilsAgentManager {
 	}
 	/** 添加类路径到启动类路径 */
 	public static void appendToBootstrap(String path) throws IOException {
-		Utils.inst.appendToSystemClassLoaderSearch(new JarFile(path));
+		UtilsAgent.inst.appendToSystemClassLoaderSearch(new JarFile(path));
 	}
 	public static void redefineModule(Module module,
 	                                  Set<Module> extraReads,
@@ -50,7 +50,7 @@ public class UtilsAgentManager {
 	                                  Map<String, Set<Module>> extraOpens,
 	                                  Set<Class<?>> extraUses,
 	                                  Map<Class<?>, List<Class<?>>> extraProvides) {
-		Utils.inst.redefineModule(
+		UtilsAgent.inst.redefineModule(
 		 module,
 		 extraReads,
 		 extraExports,

@@ -1,6 +1,7 @@
 package nipx;
 
 import jdk.internal.loader.BuiltinClassLoader;
+import nipx.util.Utils;
 
 import java.io.IOException;
 import java.lang.invoke.*;
@@ -207,7 +208,7 @@ public class MountManager {
 			 .filter(p -> p.toString().endsWith(".class"))
 			 .limit(50)
 			 .map(p -> {
-				 String cName = getClassName(p);
+				 String cName = Utils.getClassName(p);
 				 // 看看这个邻居类是否在内存中
 				 return cName != null ? loadedClassesMap.get(cName) : null;
 			 })

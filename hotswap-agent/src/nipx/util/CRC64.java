@@ -21,11 +21,11 @@ public final class CRC64 {
 	 * 计算字节数组的 CRC64 值
 	 */
 	public static long update(byte[] b) {
-		long crc = -1; // 初始值
+		long crc = init(); // 初始值
 		for (byte value : b) {
 			crc = LOOKUP[(int) ((crc ^ value) & 0xff)] ^ (crc >>> 8);
 		}
-		return ~crc;
+		return finish(crc);
 	}
 
 	/**
@@ -33,7 +33,7 @@ public final class CRC64 {
 	 * <p>注意: hashString 使用 UTF-16 序列级 CRC，不等同于 UTF-8 字节 CRC</p>
 	 */
 	public static long hashString(String s) {
-		long crc = -1;
+		long crc = init();
 		int  len = s.length();
 		for (int i = 0; i < len; i++) {
 			char c = s.charAt(i);
@@ -42,7 +42,7 @@ public final class CRC64 {
 			// 处理高位字节（Java char 是双字节）
 			crc = LOOKUP[(int) ((crc ^ (c >>> 8)) & 0xff)] ^ (crc >>> 8);
 		}
-		return ~crc;
+		return finish(crc);
 	}
 
 

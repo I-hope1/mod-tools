@@ -37,7 +37,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	/** @see InstanceTracker */
 	private static byte[] injectTracker(byte[] bytes, String className) {
 	ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -79,7 +79,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	 */
 	private static byte[] injectProfiler(byte[] bytes, String dotClassName) {
 		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -172,10 +172,9 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 		try {
 			if (HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
-
-				if (HotSwapAgent.DEBUG) writeTo(className, classfileBuffer);
-
 				byte[] bytes = classfileBuffer.clone();
+
+				if (HotSwapAgent.DEBUG) writeTo(className, bytes);
 
 				// 处理 @Tracker (类级别)
 				if (hasClassAnnotation(bytes, Tracker.class)) {

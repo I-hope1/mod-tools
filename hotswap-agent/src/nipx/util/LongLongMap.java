@@ -6,7 +6,7 @@ import java.util.Arrays;
 /**
  * <p>专门为 long->long 映射设计的轻量级 Map。</p>
  * <p>内存占用极小，拒绝包装类垃圾。</p>
- * <p>PS：返回值 -1 是一个特殊值，表示无值。</p>
+ * <p>PS：返回值 {@value NOT_FOUND} 是一个特殊值，表示无值。</p>
  */
 public class LongLongMap {
 	public static final long EMPTY_KEY = 0;

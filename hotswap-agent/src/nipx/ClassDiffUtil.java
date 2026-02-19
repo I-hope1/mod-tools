@@ -11,7 +11,7 @@ import java.util.function.*;
  * 类差异分析工具
  * 用于检测类文件的变更，支持字段、方法的增删改检测
  * 主要用于热重载系统的智能更新决策
- *
+ * <pre>
  * 核心功能：
  * 1. 比较两个版本的类字节码差异
  * 2. 检测类继承关系变更（父类、接口）
@@ -98,7 +98,7 @@ public final class ClassDiffUtil {
 		final List<String> removedMethods      = new ArrayList<>();
 		/** 字段变更列表：包括新增和删除的字段，存储格式为 "+ fieldName" 或 "- fieldName" */
 		final List<String> changedFields       = new ArrayList<>();
-
+		
 		/** 继承层次是否发生变化（父类或接口变更） */
 		boolean hierarchyChanged = false;
 		/** 错误信息列表：记录严重的不兼容变更 */

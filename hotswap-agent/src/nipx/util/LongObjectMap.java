@@ -1,11 +1,16 @@
 package nipx.util;
 
 import java.util.*;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.function.*;
 
+/**
+ * 高性能 Long -> Object 映射表
+ * 采用开放寻址法（线性探测）减少对象开销和 GC 压力
+ */
+@SuppressWarnings("unchecked")
 public final class LongObjectMap<V> {
 
+	// 哨兵对象
 	private static final Object TOMBSTONE   = new Object();
 	private static final float  LOAD_FACTOR = 0.75f;
 
@@ -14,19 +19,7 @@ public final class LongObjectMap<V> {
 	private int      size;
 	private int      tombstoneCount;
 	private int      capacity;
-
-	public int capacity() {
-		return capacity;
-	}
-	public long keyAt(int index) {
-		return keys[index];
-	}
-	public V valueAt(int index) {
-		@SuppressWarnings("unchecked")
-		V v = (V) values[index];
-		if (v == TOMBSTONE) return null;
-		return v;
-	}
+	private int      mask; // 缓存 capacity - 1
 
 
 	public LongObjectMap() {
@@ -34,23 +27,49 @@ public final class LongObjectMap<V> {
 	}
 
 	public LongObjectMap(int initialCapacity) {
-		if (initialCapacity <= 0 || Integer.bitCount(initialCapacity) != 1) {
-			throw new IllegalArgumentException("capacity must be a positive power of 2, got: " + initialCapacity);
-		}
-		this.capacity = initialCapacity;
-		this.keys = new long[capacity];
-		this.values = new Object[capacity];
+		// 自动修正为 2 的幂次
+		int cap = tableSizeFor(initialCapacity);
+		init(cap);
+	}
+
+	private void init(int cap) {
+		this.capacity = cap;
+		this.mask = cap - 1;
+		this.keys = new long[cap];
+		this.values = new Object[cap];
+		this.size = 0;
+		this.tombstoneCount = 0;
+	}
+
+	private static int tableSizeFor(int n) {
+		int cap = 1;
+		while (cap < n) cap <<= 1;
+		return cap;
 	}
 
 	public int size() { return size; }
 	public boolean isEmpty() { return size == 0; }
 
-	public void put(long key, V value) {
-		if ((size + tombstoneCount) > capacity * LOAD_FACTOR) resize();
+	/**
+	 * 哈希混合函数 (MurmurHash3 变体)
+	 */
+	private int hash(long key) {
+		key ^= key >>> 33;
+		key *= 0xff51afd7ed558ccdL;
+		key ^= key >>> 33;
+		key *= 0xc4ceb9fe1a85ec53L;
+		key ^= key >>> 33;
+		return (int) key;
+	}
 
-		// 对 key 进行混合，确保高位信息参与索引计算
+	public void put(long key, V value) {
+		if (value == null) throw new NullPointerException("Value cannot be null");
+		if ((size + tombstoneCount + 1) > capacity * LOAD_FACTOR) {
+			rehash();
+		}
+
 		int h            = hash(key);
-		int idx          = h & (capacity - 1);
+		int idx          = h & mask;
 		int tombstoneIdx = -1;
 
 		while (values[idx] != null) {
@@ -60,44 +79,47 @@ public final class LongObjectMap<V> {
 				values[idx] = value;
 				return;
 			}
-			idx = (idx + 1) & (capacity - 1);
+			idx = (idx + 1) & mask;
 		}
 
 		int insertIdx = (tombstoneIdx != -1) ? tombstoneIdx : idx;
 		if (tombstoneIdx != -1) {
-			tombstoneCount--;  // 复用了一个墓碑
+			tombstoneCount--;
 		}
 		keys[insertIdx] = key;
 		values[insertIdx] = value;
 		size++;
 	}
 
-	private int hash(long key) {
-		// 简单的 MurmurHash3 混合常量
-		key ^= key >>> 33;
-		key *= 0xff51afd7ed558ccdL;
-		key ^= key >>> 33;
-		key *= 0xc4ceb9fe1a85ec53L;
-		key ^= key >>> 33;
-		return (int) key;
-	}
-
 	@SuppressWarnings("unchecked")
 	public V get(long key) {
 		int h   = hash(key);
-		int idx = h & (capacity - 1);
+		int idx = h & mask;
 		while (values[idx] != null) {
-			// 注意：墓碑不匹配 Key，但不能停止探测链
-			if (values[idx] != TOMBSTONE && keys[idx] == key) return (V) values[idx];
-			idx = (idx + 1) & (capacity - 1);
+			if (values[idx] != TOMBSTONE && keys[idx] == key) {
+				return (V) values[idx];
+			}
+			idx = (idx + 1) & mask;
 		}
 		return null;
+	}
+
+	public boolean containsKey(long key) {
+		int h   = hash(key);
+		int idx = h & mask;
+		while (values[idx] != null) {
+			if (values[idx] != TOMBSTONE && keys[idx] == key) {
+				return true;
+			}
+			idx = (idx + 1) & mask;
+		}
+		return false;
 	}
 
 	@SuppressWarnings("unchecked")
 	public V remove(long key) {
 		int h   = hash(key);
-		int idx = h & (capacity - 1);
+		int idx = h & mask;
 		while (values[idx] != null) {
 			if (values[idx] != TOMBSTONE && keys[idx] == key) {
 				V old = (V) values[idx];
@@ -106,19 +128,75 @@ public final class LongObjectMap<V> {
 				tombstoneCount++;
 				return old;
 			}
-			idx = (idx + 1) & (capacity - 1);
+			idx = (idx + 1) & mask;
 		}
 		return null;
 	}
 
+	/**
+	 * 高性能 computeIfAbsent，避免两次查找
+	 */
 	@SuppressWarnings("unchecked")
-	public V getOrDefault(long key, Supplier<V> defaultSupplier) {
-		V v = get(key);
-		return v != null ? v : defaultSupplier.get();
+	public V computeIfAbsent(long key, LongFunction<? extends V> mappingFunction) {
+		if ((size + tombstoneCount + 1) > capacity * LOAD_FACTOR) rehash();
+
+		int h            = hash(key);
+		int idx          = h & mask;
+		int tombstoneIdx = -1;
+
+		while (values[idx] != null) {
+			if (values[idx] == TOMBSTONE) {
+				if (tombstoneIdx == -1) tombstoneIdx = idx;
+			} else if (keys[idx] == key) {
+				return (V) values[idx];
+			}
+			idx = (idx + 1) & mask;
+		}
+
+		V newValue = mappingFunction.apply(key);
+		if (newValue != null) {
+			int insertIdx = (tombstoneIdx != -1) ? tombstoneIdx : idx;
+			if (tombstoneIdx != -1) tombstoneCount--;
+			keys[insertIdx] = key;
+			values[insertIdx] = newValue;
+			size++;
+		}
+		return newValue;
 	}
 
-	@SuppressWarnings("unchecked")
-	public void forEachValue(Consumer<V> action) {
+	private void rehash() {
+		// 如果墓碑太多，我们可以不扩容只清理（这里暂定简单翻倍扩容）
+		resizeTo(capacity * 2);
+	}
+
+	private void resizeTo(int newCapacity) {
+		long[]   oldKeys   = keys;
+		Object[] oldValues = values;
+		int      oldCap    = capacity;
+
+		init(newCapacity); // 重新分配数组
+
+		for (int i = 0; i < oldCap; i++) {
+			Object v = oldValues[i];
+			if (v != null && v != TOMBSTONE) {
+				// 直接重新插入，无需考虑重复和墓碑，性能更高
+				insertInternal(oldKeys[i], v);
+			}
+		}
+	}
+
+	// 内部快速插入：不检查重复，不检查容量，不检查墓碑
+	private void insertInternal(long key, Object value) {
+		int idx = hash(key) & mask;
+		while (values[idx] != null) {
+			idx = (idx + 1) & mask;
+		}
+		keys[idx] = key;
+		values[idx] = value;
+		size++;
+	}
+
+	public void forEachValue(Consumer<? super V> action) {
 		for (int i = 0; i < capacity; i++) {
 			if (values[i] != null && values[i] != TOMBSTONE) {
 				action.accept((V) values[i]);
@@ -127,36 +205,26 @@ public final class LongObjectMap<V> {
 	}
 
 	public void clear() {
-		Arrays.fill(keys, 0L);
-		Arrays.fill(values, null);
+		Arrays.fill(values, null); // keys 不需要 fill，因为根据 values 判断
 		size = 0;
 		tombstoneCount = 0;
 	}
 
-	private void resize() {
-		resizeTo(capacity * 2);
-	}
-
-	@SuppressWarnings("unchecked")
-	private void resizeTo(int newCapacity) {
-		long[]   oldKeys   = keys;
-		Object[] oldValues = values;
-		int      oldCap    = capacity;
-
-		this.keys = new long[newCapacity];
-		this.values = new Object[newCapacity];
-		this.capacity = newCapacity;
-		this.size = 0;
-		this.tombstoneCount = 0;
-
-		for (int i = 0; i < oldCap; i++) {
-			Object v = oldValues[i];
+	@Override
+	public String toString() {
+		if (isEmpty()) return "{}";
+		StringBuilder sb = new StringBuilder();
+		sb.append('{');
+		boolean first = true;
+		for (int i = 0; i < capacity; i++) {
+			Object v = values[i];
 			if (v != null && v != TOMBSTONE) {
-				// 4. 修正：重新放入时，基于新容量再次哈希计算位置
-				// 这里直接调用 put 是最稳妥的，或者手动展开以追求极速
-				put(oldKeys[i], (V)v);
+				if (!first) sb.append(", ");
+				sb.append(keys[i]).append('=').append(v == this ? "(this Map)" : v);
+				first = false;
 			}
 		}
+		return sb.append('}').toString();
 	}
 	public void putAll(LongObjectMap<? extends V> other) {
 		if (other == null || other.isEmpty()) return;
@@ -164,10 +232,12 @@ public final class LongObjectMap<V> {
 		ensureMoreCapacity(other.size());
 
 		// 2. 物理搬移：直接遍历数组，跳过 null 和墓碑
-		for (int i = 0; i < other.capacity(); i++) {
+		long[]   keys1   = other.keys;
+		Object[] values1 = other.values;
+		for (int i = 0, cap = other.capacity; i < cap; i++) {
 			// 直接访问数组比 get 效率更高（减少哈希计算）
-			long key   = other.keyAt(i);
-			V    value = other.valueAt(i);
+			long key   = keys1[i];
+			V    value = (V) values1[i];
 			// valueAt 已经处理了墓碑返回 null
 			if (value != null) {
 				this.put(key, value);
@@ -244,7 +314,21 @@ public final class LongObjectMap<V> {
 		}
 		return h;
 	}
-	public boolean containsKey(long l) {
-		return get(l) != null;
+
+	public long[] keys() { return keys; }
+	public Object[] values() { return values; }
+	/** 快速判断该位置是否有有效值 (逻辑内联) */
+	public static boolean isValid(Object value) {
+		return value != null && value != TOMBSTONE;
 	}
+	public int capacity() {
+		return capacity;
+	}
+	/* public long keyAt(int i) {
+		return keys[i];
+	}
+	public V valueAt(int i) {
+		Object v = values[i];
+		return v == TOMBSTONE ? null : (V) v;
+	} */
 }

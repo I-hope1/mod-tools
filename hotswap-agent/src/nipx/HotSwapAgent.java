@@ -17,7 +17,7 @@ import static nipx.MountManager.*;
 
 /**
  * HotSwap Agent
- * 其由Bootstrap加载，但不属于java.base模块
+ * 其由Bootstrap加载（bootloader），但不属于java.base模块
  */
 @SuppressWarnings("StringTemplateMigration")
 public class HotSwapAgent {
@@ -214,7 +214,7 @@ public class HotSwapAgent {
 
 				if (targetClass != null) {
 					// 类已加载：无论模式，都必须执行 redefinition
-					log("[MODIFIED] " + className);
+					if (DEBUG) log("[MODIFIED] " + className);
 
 					byte[] newBytecode = bytecode;
 					byte[] oldBytecode = getRef(bytecodeCache.get(className));
@@ -314,7 +314,7 @@ public class HotSwapAgent {
 				} catch (Exception e) {
 					error("Error invoking @OnReload", e);
 				}
-				log("[Reload] Invoked @OnReload on " + clazz);
+				if (DEBUG) log("[Reload] Invoked @OnReload on " + clazz);
 				continue;
 			}
 
@@ -572,7 +572,7 @@ public class HotSwapAgent {
 
 						// 处理新目录创建
 						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
-							log("[WATCH] New directory detected: " + fullPath);
+							if (DEBUG) log("[WATCH] New directory detected: " + fullPath);
 
 							registerAll(fullPath);
 

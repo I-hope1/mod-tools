@@ -33,7 +33,6 @@ public class LambdaAligner {
 
 		final LongObjectMap<List<SyntheticInfo>> oldGroups  = new LongObjectMap<>(128);
 		final LongObjectMap<List<SyntheticInfo>> newGroups  = new LongObjectMap<>(128);
-		final LongObjectMap<List<SyntheticInfo>> hashIdxMap = new LongObjectMap<>(64);
 
 		//region 对象池管理
 		// 预分配的一堆 ArrayList，用于复用
@@ -71,7 +70,6 @@ public class LambdaAligner {
 			newGroups.clear();
 			poolIdx = 0;
 			infoPoolIdx = 0;
-			hashIdxMap.clear();
 		}
 	}
 	//endregion
@@ -83,6 +81,7 @@ public class LambdaAligner {
 	 * @param newBytes 新版本字节码
 	 * @return 对齐后的字节码，如果没有需要重命名则返回原始newBytes
 	 */
+	@SuppressWarnings("ForLoopReplaceableByForEach")
 	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
 		if (oldBytes == null || oldBytes.length == 0) return newBytes;
 
@@ -99,31 +98,39 @@ public class LambdaAligner {
 		var oldGroups = ctx.oldGroups;
 		var newGroups = ctx.newGroups;
 
-		var hashIdxMap = ctx.hashIdxMap;
-		for (int i = 0, capacity = newGroups.capacity(); i < capacity; i++) {
-			var newGroup = newGroups.valueAt(i);
-			if (newGroup == null) continue;
-			var oldGroup = oldGroups.get(newGroups.keyAt(i));
+		long[]   ks  = newGroups.keys();
+		Object[] vs  = newGroups.values();
+		int      cap = newGroups.capacity();
+		for (int i = 0; i < cap; i++) {
+			Object v = vs[i];
+			if (!LongObjectMap.isValid(v)) continue;
+
+			@SuppressWarnings("unchecked")
+			var newGroup = (List<SyntheticInfo>) v;
+			var oldGroup = oldGroups.get(ks[i]);
 			if (oldGroup == null) continue;
 
 			// Step 1: 精确 Hash 匹配 (O(N))
-			hashIdxMap.clear();
-			for (SyntheticInfo oi : oldGroup) {
-				List<SyntheticInfo> list = hashIdxMap.get(oi.hash);
-				if (list == null) {
-					list = ctx.acquireList();
-					hashIdxMap.put(oi.hash, list);
-				}
-				list.add(oi);
-			}
+			int newSize = newGroup.size();
+			int oldSize = oldGroup.size();
 
-			for (SyntheticInfo ni : newGroup) {
-				List<SyntheticInfo> cand = hashIdxMap.get(ni.hash);
-				if (cand != null && !cand.isEmpty()) {
-					SyntheticInfo oi = cand.removeLast();
-					if (!ni.name.equals(oi.name)) ctx.renameMap.put(ni.name, oi.name);
-					ni.matched = true;
-					ctx.usedOldNames.add(oi.name);
+			// Step 1: 尝试精确指纹匹配 (双重for就够了，有缓存)
+			for (int j = 0; j < newSize; j++) {
+				SyntheticInfo ni = newGroup.get(j);
+
+				// 嵌套循环寻找匹配的指纹
+				for (int k = 0; k < oldSize; k++) {
+					SyntheticInfo oi = oldGroup.get(k);
+
+					if (!oi.matched && ni.hash == oi.hash) {
+						if (!ni.name.equals(oi.name)) {
+							ctx.renameMap.put(ni.name, oi.name);
+						}
+						ni.matched = true;
+						oi.matched = true;
+						ctx.usedOldNames.add(oi.name);
+						break; // 匹配成功，跳出内层循环
+					}
 				}
 			}
 

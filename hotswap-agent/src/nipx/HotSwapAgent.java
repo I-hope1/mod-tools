@@ -58,9 +58,10 @@ public class HotSwapAgent {
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		HotSwapAgent.inst = inst;
 		try {
-			Class.forName("org.objectweb.asm.ClassReader");
-		} catch (ClassNotFoundException _) { }
-		init(agentArgs, false);
+			init(agentArgs, false);
+		} catch (Throwable t) {
+			error("Critical error during agent initialization", t);
+		}
 	}
 
 	public static void init(String agentArgs, boolean reinit) {
@@ -145,45 +146,27 @@ public class HotSwapAgent {
 	}
 	//endregion
 
-	//region Class Loading Utilities
-
-	/**
-	 * 扫描内存中已加载的类，建立 "包名 -> ClassLoader" 的映射。
-	 * 这对于解决 NoClassDefFoundError 至关重要。
-	 */
-	static void refreshPackageLoaders(Class<?>[] classes) {
-		for (Class<?> clazz : classes) {
-			ClassLoader cl = clazz.getClassLoader();
-			if (cl != null && clazz.getPackage() != null) {
-				// 简单策略：记录该包最后一次出现的 ClassLoader
-				packageLoaders.put(clazz.getPackage().getName(), new WeakReference<>(cl));
-			}
-		}
-	}
-
-	private static void restartWatchers() {
-		activeWatchers.forEach(Thread::interrupt);
-		activeWatchers.clear();
-
-		for (Path dir : activeWatchDirs) {
-			if (Files.isDirectory(dir)) {
-				try {
-					WatcherThread watcher = new WatcherThread(dir);
-					watcher.setDaemon(true);
-					watcher.start();
-					activeWatchers.add(watcher);
-				} catch (IOException e) {
-					error("Failed to start watcher for: " + dir, e);
-				}
-			} else {
-				error("Skipping invalid directory: " + dir);
-			}
-		}
-	}
-	//endregion
-
 	//region HotSwap Core Logic
 	public static volatile ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
+
+
+	// 临时缓存
+	private static ConcurrentHashMap<String, Class<?>> tmpLoadedClassesMap = new ConcurrentHashMap<>();
+	/** 双缓存机制 */
+	private static void loadClassSnap(Class<?>[] classes) {
+		var newMap = tmpLoadedClassesMap; // 取出备用 buffer（Map B）
+		newMap.clear();                   // 清空备用 buffer，不影响当前活跃 map
+		for (Class<?> c : classes) {
+			String   name     = c.getName();
+			Class<?> existing = newMap.get(name);
+			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
+				newMap.put(name, c);
+			}
+		}
+		tmpLoadedClassesMap = loadedClassesMap; // 把旧的活跃 map 存为下次的备用
+		loadedClassesMap = newMap;              // 原子切换，读者要么看到完整旧 map，要么完整新 map
+		tmpLoadedClassesMap.clear();
+	}
 
 	/**
 	 * 处理文件变化的核心逻辑
@@ -300,22 +283,6 @@ public class HotSwapAgent {
 		return softReference != null ? softReference.get() : null;
 	}
 
-	private static ConcurrentHashMap<String, Class<?>> tmpLoadedClassesMap = new ConcurrentHashMap<>();
-	/** 双缓存 */
-	private static void loadClassSnap(Class<?>[] classes) {
-		var newMap = tmpLoadedClassesMap; // 取出备用 buffer（Map B）
-		newMap.clear();                   // 清空备用 buffer，不影响当前活跃 map
-		for (Class<?> c : classes) {
-			String   name     = c.getName();
-			Class<?> existing = newMap.get(name);
-			if (existing == null || isChildClassLoader(c.getClassLoader(), existing.getClassLoader())) {
-				newMap.put(name, c);
-			}
-		}
-		tmpLoadedClassesMap = loadedClassesMap; // 把旧的活跃 map 存为下次的备用
-		loadedClassesMap = newMap;              // 原子切换，读者要么看到完整旧 map，要么完整新 map
-		tmpLoadedClassesMap.clear();
-	}
 	/** 在 applyRedefinitions(definitions) 后调用 */
 	private static void processAnnotations(List<ClassDefinition> definitions) {
 		if (!ENABLE_HOTSWAP_EVENT) return;
@@ -547,9 +514,26 @@ public class HotSwapAgent {
 	//endregion
 
 	//region File Watcher Implementation
-	/**
-	 * 文件监控线程，这个类的设计本身就是可复用的
-	 */
+	private static void restartWatchers() {
+		activeWatchers.forEach(Thread::interrupt);
+		activeWatchers.clear();
+
+		for (Path dir : activeWatchDirs) {
+			if (Files.isDirectory(dir)) {
+				try {
+					WatcherThread watcher = new WatcherThread(dir);
+					watcher.setDaemon(true);
+					watcher.start();
+					activeWatchers.add(watcher);
+				} catch (IOException e) {
+					error("Failed to start watcher for: " + dir, e);
+				}
+			} else {
+				error("Skipping invalid directory: " + dir);
+			}
+		}
+	}
+	/** 文件监控线程，这个类的设计本身就是可复用的 */
 	private static class WatcherThread extends Thread {
 		private final Path         root;
 		private final WatchService watchService;

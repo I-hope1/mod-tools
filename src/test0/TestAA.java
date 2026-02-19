@@ -4,11 +4,11 @@ import arc.scene.ui.Tooltip.Tooltips;
 import modtools.ui.IntUI.ITooltip;
 import nipx.annotation.*;
 
-@Reloadable
 public class TestAA {
 	public static void main(String[] args) {
 		byte b  = -1;
 		int  ib = (int) b;
+		System.out.println(ib * 2 + 11312);
 		Runnable rNew = new Runnable() {
 			@Override
 			public void run() {
@@ -26,7 +26,6 @@ public class TestAA {
 		}; // 依然是 lambda$main$0
 		r2.run();
 	}
-	@OnReload
 	public static void reload() {
 		main(null);
 	}

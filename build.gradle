@@ -115,7 +115,6 @@ dependencies {
 			"assets/libs/reflect-core.jar",
 			"$platformRoot/android.jar",
 //			"trash/procyon-0.6.jar",
-			"_libs/magicClass.jar",
 			"_libs/Mindustry_android.jar", // this contains android project of mindustry
 			"_libs/Android_dalvik-1.0.jar",
 	)
@@ -175,8 +174,16 @@ task jarAndroid(type: JavaExec) {
 "$buildDir0/libs/${archivesName}-${version}.jar",
 	]
 }
+// 任务开始前发送 "1" (暂停)
+println ">> Notifying Game to PAUSE..."
+sendGameCommand(1)
 
 jar {
+	// 运行结束发送 "0" (继续)
+	doLast {
+		println ">> Notifying Game to CONTINUE..."
+		sendGameCommand(0)
+	}
 	archiveFileName = "${archivesName}-${version}.jar"
 
 	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
@@ -196,7 +203,19 @@ jar {
 	includeLib.accept("hotswap-agent")
 	includeLib.accept("utils-agent")
 }
-
+// 定义发送指令的辅助方法
+static def sendGameCommand(int command) {
+	try {
+		// 连接本地游戏端口
+		def socket = new Socket("127.0.0.1", 35791)
+		socket.setSoTimeout(500) // 避免卡死
+		socket.getOutputStream().write(command)
+		socket.close()
+	} catch (Exception e) {
+		// 游戏没运行，忽略错误
+		// println "Game not running, skipping command."
+	}
+}
 
 task playDesktop(type: Copy) {
 	dependsOn jar

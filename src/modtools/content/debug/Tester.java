@@ -30,6 +30,7 @@ import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
 import modtools.*;
+import modtools.Constants.RHINO;
 import modtools.annotations.asm.CopyConstValue;
 import modtools.annotations.settings.Switch;
 import modtools.content.Content;
@@ -75,11 +76,6 @@ import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
 	private static final int    FADE_ALIGN            = Align.bottomLeft;
-	/**
-	 * @see NativeJavaClass#javaClassPropertyName
-	 */
-	@CopyConstValue
-	public static final  String javaClassPropertyName = "";
 
 	public static final float WIDTH = 420;
 
@@ -983,7 +979,7 @@ public class Tester extends Content {
 			if (completionPopup == null || syntax == null) return; // Ensure dependencies are ready
 
 			int    originalCursor = area.getCursorPosition();
-			String textContent    = area.getText();
+			// String textContent    = area.getText();
 
 			// Determine prefix
 
@@ -1033,19 +1029,23 @@ public class Tester extends Content {
 			// For non-dot completion, also add global/scope vars
 			if (!afterDot) {
 				if (obj == customScope) { // Only add these if we're in the global-like scope
-					JSSyntax.varSet.each(s -> { if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s); });
-					JSSyntax.constantSet.each(s -> { if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s); });
+					JSSyntax.varSet.each(s -> {
+						if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
+					});
+					JSSyntax.constantSet.each(s -> {
+						if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
+					});
 				}
-				if (obj instanceof NativeJavaClass) { // if completing on a class name itself
-					if (javaClassPropertyName.toLowerCase().startsWith(prefix.toLowerCase())) {
-						keys.addUnique(javaClassPropertyName);
+				if (obj instanceof NativeJavaClass || (obj instanceof NativeJavaObject njo && njo.unwrap() instanceof Class)) { // if completing on a class name itself
+					if (RHINO.javaClassPropertyName.toLowerCase().startsWith(prefix.toLowerCase())) {
+						keys.addUnique(RHINO.javaClassPropertyName);
 					}
 				}
 			}
 
 
 			complements.clear();
-			keys.each((o) -> {
+			keys.each(o -> {
 				String key = String.valueOf(o);
 				if (key.toLowerCase().startsWith(prefix.toLowerCase()) && !key.equals(prefix)) {
 					complements.add(key);
@@ -1114,7 +1114,7 @@ public class Tester extends Content {
 
 			boolean isCompletableChar = area.isWordCharacter(character) || character == '.';
 			boolean shouldTriggerCompletion = auto_complement.enabled() && isCompletableChar
-			                                  && (character != BACKSPACE && character != DELETE || area.isWordCharacterCheck(area.getCursorPosition()));
+			                                  && ((character != BACKSPACE && character != DELETE) || area.isWordCharacterCheck(area.getCursorPosition()));
 
 			if (!event.stopped && shouldTriggerCompletion) {
 				postCompletion();

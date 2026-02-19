@@ -1,5 +1,6 @@
 package modtools.utils;
 
+import modtools.Constants.RHINO;
 import modtools.utils.ui.MethodBuilder;
 import rhino.*;
 
@@ -7,6 +8,8 @@ import java.lang.invoke.MethodHandle;
 
 /** @see rhino.NativeJavaMethod */
 public class NativeJavaHandle extends BaseFunction {
+
+
 	private final MethodHandle handle;
 	public NativeJavaHandle(Scriptable scope, MethodHandle handle) {
 		super(scope, null);
@@ -16,7 +19,7 @@ public class NativeJavaHandle extends BaseFunction {
 		return handle.toString();
 	}
 	public Object get(Object key) {
-		if ("__javaObject__".equals(key)) return handle;
+		if (RHINO.javaClassPropertyName.equals(key)) return handle;
 		return super.get(key);
 	}
 	public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {

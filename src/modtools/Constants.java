@@ -12,6 +12,7 @@ import mindustry.Vars;
 import mindustry.graphics.MultiPacker;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
+import modtools.annotations.asm.CopyConstValue;
 import modtools.jsfunc.reflect.InitMethodHandle;
 import modtools.utils.*;
 import modtools.utils.Tools.*;
@@ -153,18 +154,17 @@ public class Constants {
 		/** @see rhino.MemberBox#memberObject */
 		long memberObject = fieldOffset(nl("rhino.MemberBox"), "memberObject");
 
-		/** @see ImporterTopLevel#importedPackages */
-		long importPackages = fieldOffset(ImporterTopLevel.class, "importedPackages");
-
-		/** @see ObjArray#data */
-		long objArray_data = fieldOffset(ObjArray.class, "data");
-
 
 		/** @see NativeJavaObject#NativeJavaObject(Scriptable, Object, Class) */
 		MethodHandle initNativeJavaObject = nl(() -> InitMethodHandle.findInit(NativeJavaObject.class.getDeclaredConstructor(Scriptable.class, Object.class, Class.class)));
 
 		/** @see NativeJavaMethod#findCachedFunction(Context, Object[]) */
 		Method findCachedFunction = method(NativeJavaMethod.class, "findCachedFunction", Context.class, Object[].class);
+		/**
+		 * @see NativeJavaClass#javaClassPropertyName
+		 */
+		@CopyConstValue
+		String javaClassPropertyName = "";
 	}
 
 	/**

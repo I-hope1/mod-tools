@@ -760,7 +760,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return text.charAt(i) == c;
 		}
 		public boolean isWordCharacter(char c) {
-			return Character.isJavaIdentifierPart(c) || c == '$';
+			return Character.isJavaIdentifierPart(c);
 		}
 	}
 

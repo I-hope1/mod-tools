@@ -20,7 +20,7 @@ public class MountManager {
 	private static final Map<Path, WeakReference<ClassLoader>>   rootToLoader   = new ConcurrentHashMap<>();
 	/**
 	 * 维护一个 ClassLoader 索引，用于快速查找某个包应该属于哪个 Loader
-	 * Key: PackageName (e.g., "com.example.service"), Value: WeakReference<ClassLoader>
+	 * <code>PackageName (e.g., "com.example.service") --> WeakReference<ClassLoader></code>
 	 */
 	static final         Map<String, WeakReference<ClassLoader>> packageLoaders = new ConcurrentHashMap<>();
 	//endregion
@@ -240,6 +240,19 @@ public class MountManager {
 			current = current.getParent();
 		}
 		return false;
+	}
+	/**
+	 * 扫描内存中已加载的类，建立 "包名 -> ClassLoader" 的映射。
+	 * 这对于解决 NoClassDefFoundError 至关重要。
+	 */
+	static void refreshPackageLoaders(Class<?>[] classes) {
+		for (Class<?> clazz : classes) {
+			ClassLoader cl = clazz.getClassLoader();
+			if (cl != null && clazz.getPackage() != null) {
+				// 简单策略：记录该包最后一次出现的 ClassLoader
+				packageLoaders.put(clazz.getPackage().getName(), new WeakReference<>(cl));
+			}
+		}
 	}
 
 	//endregion

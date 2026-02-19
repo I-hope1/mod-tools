@@ -24,8 +24,9 @@ public class Utils {
 
 	public static String getClassName(Path classFile) {
 		if (DEBUG) log("[PARSE] Parsing class file: " + classFile);
-		return getClassNameFast(classFile);
+		return getClassNameASM(classFile);
 	}
+
 	/** 使用 ASM 获取 class 文件的逻辑名 */
 	private static String getClassNameASM(Path classFile) {
 		try (InputStream is = Files.newInputStream(classFile)) {

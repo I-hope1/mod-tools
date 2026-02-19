@@ -93,12 +93,6 @@ dependencies {
 	compileOnly files(stripAndroidJar)
 	implementation files("_libs/AndroidField.jar")
 
-	/*annotationProcessor ("com.github.EB-wilson.JavaDynamilizer:apt:$JDERVersion")
-	implementation("com.github.EB-wilson.JavaDynamilizer:annotations:$JDERVersion")
-	implementation("com.github.EB-wilson.JavaDynamilizer:core:$JDERVersion")
-	implementation("com.github.EB-wilson.JavaDynamilizer:baseimpl:$JDERVersion")*/
-//	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
-//	compileOnly "com.github.EB-wilson.UniverseCore:core:$uncVersion"
 
 	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
@@ -112,9 +106,6 @@ dependencies {
 	}
 
 //	compileOnly "org.lwjgl:lwjgl-sdl:3.4.0"
-//	compileOnly 'com.github.bsideup:jabel:1.0.1'
-//	annotationProcessor 'com.github.bsideup:jabel:1.0.1'
-//	compileOnly("com.github.Anuken.rhino::$mindustryVersion")
 	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'
 }
 
@@ -126,10 +117,8 @@ task jarAndroid(type: JavaExec) {
 	if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
 
 	//collect dependencies needed for desugaring
-	def dependencies = (configurations.compileClasspath.asList()
-//			+ configurations.runtimeClasspath.asList()
-//			+ [new File(platformRoot, "android.jar")]
-	).collectMany { ["--classpath", "$it.path"] }
+	def dependencies = (configurations.compileClasspath.asList())
+			.collectMany { ["--classpath", "$it.path"] }
 
 	def d8Root = file("$sdkRoot/build-tools/").listFiles().sort().reverse().find {
 		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= Integer.parseInt(minApi)
@@ -150,14 +139,8 @@ task jarAndroid(type: JavaExec) {
 "$buildDir0/libs/${archivesName}-${version}.jar",
 	]
 }
-// 任务开始前发送 "1" (暂停)
 
 jar {
-	// 运行结束发送 "0" (继续)
-	doLast {
-		println ">> Notifying Game to CONTINUE..."
-		sendGameCommand(0)
-	}
 	archiveFileName = "${archivesName}-${version}.jar"
 
 	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
@@ -436,35 +419,27 @@ task playAndroid {
 //@groovy.transform.CompileStatic
 class Reflect {
 	static jdkExports0 = []
-	public static final Lookup IMPL;
+	public static final Lookup IMPL_LOOKUP;
 	static {
 		try {
 			Constructor<?> constructor = ReflectionFactory.getReflectionFactory().newConstructorForSerialization(Lookup.class, Lookup.class.getDeclaredConstructor(Class.class));
 			Lookup lookup = (Lookup) constructor.newInstance(Lookup.class);
 			var methodHandle = lookup.findStaticGetter(Lookup.class, "IMPL_LOOKUP", Lookup.class)
-			IMPL = (Lookup) methodHandle.invokeWithArguments();
+			IMPL_LOOKUP = (Lookup) methodHandle.invokeWithArguments();
 //			def mh = IMPL.findGetter(Module.class, "exportedPackages", Map.class)
 			def WPM = Class.forName('java.lang.WeakPairMap')
-			def exports = IMPL.findStaticGetter(Class.forName('java.lang.Module$ReflectionData'), 'exports', WPM).invokeWithArguments()
-			def map = IMPL.findGetter(WPM, 'map', ConcurrentHashMap.class).invokeWithArguments(exports)
+			def exports = IMPL_LOOKUP.findStaticGetter(Class.forName('java.lang.Module$ReflectionData'), 'exports', WPM).invokeWithArguments()
+			def map = IMPL_LOOKUP.findGetter(WPM, 'map', ConcurrentHashMap.class).invokeWithArguments(exports)
 			map.forEach { k, v ->
 				def m = (Module) k.first()
 				if (m.name.startsWith('jdk.proxy') || m.name.startsWith('jdk.hotspot.agent')) return
 				m.packages.forEach {
 					jdkExports0 += "$m.name/$it"
 				}
-				/*def map2 = mh.invokeWithArguments(m)
-				if (map2 != null) map2.forEach { j, _ ->
-					jdkExports0 += "$m.name/$j=ALL-UNNAMED"
-				}*/
 			}
 //			println jdkExports0
 		} catch (Throwable e) {
 			e.printStackTrace()
 		}
 	}
-}
-
-configurations.compileOnly.incoming.beforeResolve {
-	stripAndroidJar.execute() // 注意：这是为了演示逻辑，现代 Gradle 建议用下面的方式
 }

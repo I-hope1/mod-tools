@@ -24,13 +24,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	public void setContext(String className) {
 		this.currentClassName = className;
 	}
-	// 简单的数字判断
-	private boolean isNumeric(String s) {
-		for (int i = 0; i < s.length(); i++) {
-			if (!Character.isDigit(s.charAt(i))) return false;
-		}
-		return true;
-	}
+
 	/** 重置指纹生成器状态，为下一个方法做准备 */
 	public void reset() {
 		crc = CRC64.init();
@@ -90,12 +84,10 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 */
 	private String maskAnonymousClass(String owner) {
 		if (currentClassName != null && owner.startsWith(currentClassName + "$")) {
-			String suffix = owner.substring(currentClassName.length() + 1);
-			if (isNumeric(suffix)) {
-				// 给当前具体的匿名类分配一个在这个方法内部的相对 ID
-				int relId = anonClassIds.computeIfAbsent(owner, _ -> nextAnonId++);
-				return currentClassName + "$#ANON_" + relId + "#";
-			}
+			// 只要是内部类（带有 $ 符号），在计算指纹时都应视为不稳定的（为了kotlin等）
+			// 我们可以根据它在当前方法中出现的顺序给它分配 ID
+			int relId = anonClassIds.computeIfAbsent(owner, _ -> nextAnonId++);
+			return "#ANON_" + relId + "#";
 		}
 		return owner;
 	}
@@ -156,18 +148,23 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 * @param h 要更新的句柄对象
 	 */
 	private void updateHandle(Handle h) {
-		updateInt(h.getTag()); // 句柄类型
+		updateInt(h.getTag());
+		String  owner  = h.getOwner();
+		boolean isSelf = owner.equals(currentClassName);
 
-		String owner = h.getOwner();
-		if (owner.equals(currentClassName)) {
-			updateString("#THIS#");
+		updateString(isSelf ? "#THIS#" : maskAnonymousClass(owner));
+
+		// 关键修正：如果调用的是本类的合成方法（Lambda），不要哈希它的名字！
+		// 因为名字是我们要对齐的对象，它是变量，不是常量。
+		String name = h.getName();
+		if (isSelf && (name.contains("$lambda") || name.contains("access$"))) {
+			updateString("#SYNTHETIC_METHOD#");
 		} else {
-			updateString(maskAnonymousClass(owner)); // 统一使用拦截器
+			updateString(name);
 		}
 
-		updateString(h.getName()); // 方法名
-		updateString(h.getDesc()); // 方法描述符
-		updateInt(h.isInterface() ? 1 : 0); // 是否为接口方法
+		updateString(h.getDesc()); // 描述符通常是稳定的，或者由对齐器另行处理
+		updateInt(h.isInterface() ? 1 : 0);
 	}
 	//endregion
 

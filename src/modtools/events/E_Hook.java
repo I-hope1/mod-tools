@@ -58,7 +58,6 @@ public enum E_Hook implements ISettings {
 	static void init() {
 		hot_swap.def(false);
 		lambda_align.defTrue();
-		retransform_loaded.defTrue();
 
 		hotswapOnChange(redefine_mode, () -> redefine_mode.getString().trim());
 		hotswapOnChange(hotswap_blacklist, () -> String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));

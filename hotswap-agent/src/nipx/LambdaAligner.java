@@ -24,15 +24,16 @@ public class LambdaAligner {
 	/** 匹配上下文，存储当前线程的匹配状态 */
 	public static class MatchContext {
 		/** 方法名重命名映射表 */
-		final Map<String, String> renameMap     = new HashMap<>(64);
+		final Map<String, String> renameMap        = new HashMap<>(64);
 		/** 已使用的旧方法名集合 */
-		final Set<String>         usedOldNames  = new HashSet<>(64);
-		final MethodFingerprinter fingerprinter = MethodFingerprinter.CONTEXT.get();
+		final Set<String>         usedOldNames     = new HashSet<>(64);
+		final Set<String>         existingNewNames = new HashSet<>(64);
+		final MethodFingerprinter fingerprinter    = MethodFingerprinter.CONTEXT.get();
 		/** 当前处理的类名 */
 		String currentClass;
 
-		final LongObjectMap<List<SyntheticInfo>> oldGroups  = new LongObjectMap<>(128);
-		final LongObjectMap<List<SyntheticInfo>> newGroups  = new LongObjectMap<>(128);
+		final LongObjectMap<List<SyntheticInfo>> oldGroups = new LongObjectMap<>(128);
+		final LongObjectMap<List<SyntheticInfo>> newGroups = new LongObjectMap<>(128);
 
 		//region 对象池管理
 		// 预分配的一堆 ArrayList，用于复用
@@ -64,6 +65,7 @@ public class LambdaAligner {
 		void reset() {
 			renameMap.clear();
 			usedOldNames.clear();
+			existingNewNames.clear();
 			fingerprinter.reset();
 			currentClass = null;
 			oldGroups.clear();
@@ -134,16 +136,50 @@ public class LambdaAligner {
 				}
 			}
 
+			Set<String> existingNewNames = ctx.existingNewNames;
+			for (SyntheticInfo ni : newGroup) {
+				existingNewNames.add(ni.name);
+			}
+
 			// Step 2: 顺序对齐 (解决 NoSuchMethodError 的关键)
 			int oldPtr = 0;
 			for (SyntheticInfo ni : newGroup) {
 				if (ni.matched) continue;
 				while (oldPtr < oldGroup.size() && ctx.usedOldNames.contains(oldGroup.get(oldPtr).name)) oldPtr++;
 				if (oldPtr < oldGroup.size()) {
-					SyntheticInfo oi = oldGroup.get(oldPtr);
-					ctx.renameMap.put(ni.name, oi.name);
-					ni.matched = true;
-					ctx.usedOldNames.add(oi.name);
+					SyntheticInfo oi         = oldGroup.get(oldPtr);
+					String        targetName = oi.name;
+
+					// 如果目标名是另一个新方法的原名，跳过，交给 Step 3 处理
+					if (!existingNewNames.contains(targetName)) {
+						ctx.renameMap.put(ni.name, targetName);
+						ni.matched = true;
+						ctx.usedOldNames.add(targetName);
+					}
+					oldPtr++;
+				}
+			}
+
+			// Step 3: 防止未匹配的新方法与已分配的旧方法名冲突 (核心修复)
+			int freshId = 0;
+
+			for (SyntheticInfo ni : newGroup) {
+				if (!ni.matched) {
+					// 检查它的原名是否已经被"偷"走分配给了别的方法
+					if (ctx.usedOldNames.contains(ni.name)) {
+						String freshName;
+						do {
+							// logicalName 已经包含了结尾的 "$"
+							freshName = ni.logicalName + (freshId++);
+						} while (ctx.usedOldNames.contains(freshName) || existingNewNames.contains(freshName));
+						// 被偷了，必须给它生成一个全新的名字 (例如 lambda$checkCount$3)
+
+						ctx.renameMap.put(ni.name, freshName);
+						ctx.usedOldNames.add(freshName);
+					} else {
+						// 没被偷，安全保留原名，但也需要将其登记为已使用，防止后续冲突
+						ctx.usedOldNames.add(ni.name);
+					}
 				}
 			}
 		}
@@ -183,7 +219,7 @@ public class LambdaAligner {
 			public Object mapValue(Object value) {
 				if (value instanceof String s && s.length() > LAMBDA_LENGTH) {
 					char c = s.charAt(0);
-					if ((c == 'l' || c == 'a') && ctx.renameMap.containsKey(s)) { // 快速预过滤 lambda$ 或 access$
+					if (ctx.renameMap.containsKey(s)) { // 快速预过滤 lambda$ 或 access$
 						return ctx.renameMap.get(s);
 					}
 				}
@@ -248,12 +284,9 @@ public class LambdaAligner {
 
 	//region 辅助方法
 	private static boolean isSyntheticName(String name) {
-		if (name.length() < LAMBDA_LENGTH) return false;
-		char c = name.charAt(0);
-		// 性能优化，避免全量 contains 扫描
-		return (c == 'l' && name.startsWith("lambda$")) ||
-		       (c == 'a' && name.startsWith("access$")) ||
-		       (c == '$' && name.equals("$deserializeLambda$"));
+		// 只要包含 lambda$ 或 access$ 且是合成方法，就应该纳入对齐范畴
+		return name.contains("lambda$") || name.contains("access$") || name.startsWith("$")
+		       || name.contains("internal$") || name.contains("$lambda");
 	}
 
 	/**
@@ -267,28 +300,10 @@ public class LambdaAligner {
 	 * @return 逻辑名称
 	 */
 	private static String extractLogicalName(String name) {
-		// 1. 处理特定的 Java 序列化 Lambda
-		if (name.equals("$deserializeLambda$")) return name;
-
-		// 2. 通用策略：剥离末尾的纯数字 ID
-		// 例如：lambda$main$0 -> lambda$main$
-		//      access$100    -> access$
-		//      func$1        -> func$
+		// 剥离末尾数字，拿到 _init_$lambda$
 		int i = name.length() - 1;
-		while (i >= 0 && Character.isDigit(name.charAt(i))) {
-			i--;
-		}
-
-		// 如果剥离后没有变化（说明末尾不是数字），或者剥离完了（纯数字方法名？）
-		if (i == name.length() - 1 || i < 0) {
-			// 退回兜底逻辑：如果是 lambda$ 开头，尝试保留前缀
-			if (name.startsWith("lambda$")) return "lambda";
-			return name;
-		}
-
-		// 返回剥离数字后的前缀作为组名，保留分隔符以防止碰撞
-		// lambda$main$0 -> lambda$main$
-		return name.substring(0, i + 1);
+		while (i >= 0 && Character.isDigit(name.charAt(i))) i--;
+		return (i >= 0) ? name.substring(0, i + 1) : name;
 	}
 
 

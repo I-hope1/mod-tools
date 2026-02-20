@@ -33,10 +33,11 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		return found[0];
 	}
 
+
 	/** @see InstanceTracker */
-	private static byte[] injectTracker(byte[] bytes, String className) {
-	ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
+	private static byte[] injectTracker(byte[] bytes, String className, ClassLoader classLoader) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassWriter cw = new MyClassWriter(cr, classLoader);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -72,90 +73,142 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		return cw.toByteArray();
 	}
 
+	private static final ThreadLocal<Boolean> IN_GET_COMMON_SUPER_CLASS = ThreadLocal.withInitial(() -> false);
 	/**
 	 * @param dotClassName 类名，如 nipx.MyClass，用于print
 	 * @see nipx.profiler.ProfilerData
 	 */
-	private static byte[] injectProfiler(byte[] bytes, String dotClassName) {
+	private static byte[] injectProfiler(byte[] bytes, String dotClassName, ClassLoader targetLoader) {
 		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
+
+		// 1. 提取当前类的元数据 (用于打破递归)
+		String   currentSlashName   = cr.getClassName();
+		String   currentSuperName   = cr.getSuperName();
+		boolean  isCurrentInterface = (cr.getAccess() & Opcodes.ACC_INTERFACE) != 0;
+		String[] currentInterfaces  = cr.getInterfaces();
+
+		// 2. 构造带有防御逻辑的 ClassWriter
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
+			@Override
+			protected String getCommonSuperClass(String type1, String type2) {
+				// 1. 递归守卫：如果当前线程已经在计算 CommonSuperClass，再次进入说明发生了递归
+				if (IN_GET_COMMON_SUPER_CLASS.get()) {
+					// 递归发生！为了打破死循环，盲目返回 Object
+					return "java/lang/Object";
+				}
+
+				// 2. 拦截当前类（之前的逻辑保留）
+				if (type1.equals(currentSlashName) || type2.equals(currentSlashName)) {
+					return "java/lang/Object"; // 简化处理，直接返回 Object 最安全
+				}
+
+				IN_GET_COMMON_SUPER_CLASS.set(true);
+				try {
+					Class<?>    c, d;
+					ClassLoader cl = targetLoader != null ? targetLoader : ClassLoader.getSystemClassLoader();
+					try {
+						c = Class.forName(type1.replace('/', '.'), false, cl);
+						d = Class.forName(type2.replace('/', '.'), false, cl);
+					} catch (Throwable e) {
+						// 任何类加载失败（包括 ClassCircularityError），都返回 Object
+						return "java/lang/Object";
+					}
+
+					if (c.isAssignableFrom(d)) return type1;
+					if (d.isAssignableFrom(c)) return type2;
+					if (c.isInterface() || d.isInterface()) return "java/lang/Object";
+
+					do {
+						c = c.getSuperclass();
+					} while (!c.isAssignableFrom(d));
+					return c.getName().replace('.', '/');
+				} finally {
+					IN_GET_COMMON_SUPER_CLASS.set(false);
+				}
+			}
+		};
 
 		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
-			boolean anyProfiled;
+			boolean anyProfiled = false;
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+				return
 
-				// 使用 AdviceAdapter 既能访问注解，也能插入代码
-				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+				 new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 
-					// 标志位：当前方法是否有 @Profile
-					boolean isProfiled = false;
-					int     startTimeVar;
+					 // 标志位：当前方法是否有 @Profile
+					 boolean isProfiled = false;
+					 int     startTimeVar;
 
-					@Override
-					public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-						if (descriptor.equals(profileDesc)) {
-							anyProfiled = true;
-							isProfiled = true;
-							// info("Found @Profile on: " + dotClassName + "." + name); // 移到这里
-						}
-						return super.visitAnnotation(descriptor, visible);
-					}
+					 @Override
+					 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+						 if (descriptor.equals(profileDesc)) {
+							 anyProfiled = true;
+							 isProfiled = true;
+							 // info("Found @Profile on: " + dotClassName + "." + name); // 移到这里
+						 }
+						 return super.visitAnnotation(descriptor, visible);
+					 }
 
-					@Override
-					protected void onMethodEnter() {
-						// 只有被打标的方法才插桩
-						if (!isProfiled) return;
+					 @Override
+					 protected void onMethodEnter() {
+						 // 只有被打标的方法才插桩
+						 if (!isProfiled) return;
 
-						// long startTime = System.nanoTime();
-						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-						startTimeVar = newLocal(Type.LONG_TYPE);
-						visitVarInsn(LSTORE, startTimeVar);
-					}
+						 // long startTime = System.nanoTime();
+						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+						 startTimeVar = newLocal(Type.LONG_TYPE);
+						 visitVarInsn(LSTORE, startTimeVar);
+					 }
 
-					@Override
-					protected void onMethodExit(int opcode) {
-						if (!isProfiled) return;
-						// if (opcode == ATHROW) return; // 可选：不统计抛异常的情况
+					 @Override
+					 protected void onMethodExit(int opcode) {
+						 if (!isProfiled) return;
+						 // if (opcode == ATHROW) return; // 可选：不统计抛异常的情况
 
-						// long duration = System.nanoTime() - startTime;
-						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-						visitVarInsn(LLOAD, startTimeVar);
-						visitInsn(LSUB);
-						// 栈顶现在是: [long: duration]
+						 // long duration = System.nanoTime() - startTime;
+						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+						 visitVarInsn(LLOAD, startTimeVar);
+						 visitInsn(LSUB);
+						 // 栈顶现在是: [long: duration]
 
-						// 【核心修复】修复 SWAP 导致的 VerifyError
-						// 此时不能直接 SWAP。最简单的做法是：
-						// 把 duration 再存到一个临时变量，或者直接按参数顺序加载
+						 // 【核心修复】修复 SWAP 导致的 VerifyError
+						 // 此时不能直接 SWAP。最简单的做法是：
+						 // 把 duration 再存到一个临时变量，或者直接按参数顺序加载
 
-						// 方案：因为 duration 已经在栈顶了，ProfilerData.record(String, long)
-						// 我们需要 String 在下面，long 在上面。
-						// 但 duration 是计算出来的，必须在上面。
-						// 所以：先 LSTORE 到临时变量 -> LDC String -> LLOAD 临时变量
+						 // 方案：因为 duration 已经在栈顶了，ProfilerData.record(String, long)
+						 // 我们需要 String 在下面，long 在上面。
+						 // 但 duration 是计算出来的，必须在上面。
+						 // 所以：先 LSTORE 到临时变量 -> LDC String -> LLOAD 临时变量
 
-						int durationVar = newLocal(Type.LONG_TYPE);
-						visitVarInsn(LSTORE, durationVar); // 存入临时变量
+						 int durationVar = newLocal(Type.LONG_TYPE);
+						 visitVarInsn(LSTORE, durationVar); // 存入临时变量
 
-						// 准备参数 1: String name
-						visitLdcInsn(dotClassName + "." + name);
+						 // 准备参数 1: String name
+						 visitLdcInsn(dotClassName + "." + name);
 
-						// 准备参数 2: long duration
-						visitVarInsn(LLOAD, durationVar);
+						 // 准备参数 2: long duration
+						 visitVarInsn(LLOAD, durationVar);
 
-						// 调用: ProfilerData.record(String, long)
-						visitMethodInsn(INVOKESTATIC,
-						 dot2slash(ProfilerData.class),
-						 "record", "(Ljava/lang/String;J)V", false);
-					}
-				};
+						 // 调用: ProfilerData.record(String, long)
+						 visitMethodInsn(INVOKESTATIC,
+							dot2slash(ProfilerData.class),
+							"record", "(Ljava/lang/String;J)V", false);
+					 }
+				 };
 			}
 		};
-		if (!cv.anyProfiled) return bytes;
+		if (!cv.anyProfiled) return null;
 
-		cr.accept(cv, ClassReader.EXPAND_FRAMES); // 建议加上 EXPAND_FRAMES
-		return cw.toByteArray();
+		try {
+			cr.accept(cv, ClassReader.EXPAND_FRAMES);
+			return cw.toByteArray();
+		} catch (Exception e) {
+			// ... error handling
+			return null;
+		}
 	}
 	@Override
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
@@ -180,11 +233,11 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 				// 处理 @Tracker (类级别)
 				if (hasClassAnnotation(bytes, Tracker.class)) {
-					bytes = injectTracker(bytes, dotClassName); // 你的 injectTracker 保持原样即可
+					bytes = injectTracker(bytes, dotClassName, loader);
 				}
 
 				// 处理 @Profile (方法级别)
-				bytes = injectProfiler(bytes, dotClassName);
+				bytes = injectProfiler(bytes, dotClassName, loader);
 				// bytes = injectBuildingProfiler(bytes);
 
 				return bytes;
@@ -266,5 +319,42 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	}
 	static String dot2slash(Class<?> clazz) {
 		return clazz.getName().replace('.', '/');
+	}
+
+
+	private static class MyClassWriter extends ClassWriter {
+		private final ClassLoader targetLoader;
+		public MyClassWriter(ClassReader cr, ClassLoader targetLoader) {
+			super(cr, ClassWriter.COMPUTE_FRAMES);
+			this.targetLoader = targetLoader;
+		}
+		@Override
+		protected String getCommonSuperClass(String type1, String type2) {
+			Class<?>    c, d;
+			ClassLoader classLoader = targetLoader;
+			// 防御：如果 targetLoader 为 null (BootClassLoader)，则尝试用系统加载器兜底
+			// 但通常 BootLoader 的类不会引用用户类，所以这层防御主要针对特殊情况
+			if (classLoader == null) {
+				classLoader = ClassLoader.getSystemClassLoader();
+			}
+
+			try {
+				c = Class.forName(type1.replace('/', '.'), false, classLoader);
+				d = Class.forName(type2.replace('/', '.'), false, classLoader);
+			} catch (Exception e) {
+				// 这里是关键：如果找不到类，抛出 RuntimeException 会导致 Transformer 崩溃
+				// 在热更场景下，如果依赖缺失，我们宁愿放弃 Frame 计算也不要崩掉进程
+				throw new RuntimeException(e.toString());
+			}
+
+			if (c.isAssignableFrom(d)) return type1;
+			if (d.isAssignableFrom(c)) return type2;
+			if (c.isInterface() || d.isInterface()) return "java/lang/Object";
+
+			do {
+				c = c.getSuperclass();
+			} while (!c.isAssignableFrom(d));
+			return c.getName().replace('.', '/');
+		}
 	}
 }

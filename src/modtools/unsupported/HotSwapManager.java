@@ -29,7 +29,7 @@ public class HotSwapManager {
 					HotSwapAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
 				}
 			});
-			HotSwapController.init();
+			// HotSwapController.init();
 			initialized = true;
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));

@@ -86,6 +86,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public final IdentityHashMap<Object, Object>   valToObj      = new IdentityHashMap<>();
 	// 用于记录数组或map是否展开
 	public final IdentityHashMap<Object, Boolean>  expandVal     = new IdentityHashMap<>();
+	// 用于记录数组或map的更多按钮是否注册
+	public final IdentityHashMap<Object, DelegteProv>  expandMoreClick     = new IdentityHashMap<>();
+
 
 	private int bgIndex;
 	Runnable appendTail;
@@ -706,4 +709,13 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public final boolean isExpand(Object val) {
 		return expandVal.containsKey(val);
 	}
+
+		public static class DelegteProv implements Prov<Point2> {
+			public int start, end;
+			@Override
+			public Point2 get() {
+				return Tmp.p1.set(start, end);
+			}
+		}
+
 }

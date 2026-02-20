@@ -7,7 +7,6 @@ import arc.graphics.g2d.TextureRegion;
 import arc.math.geom.*;
 import arc.scene.Element;
 import arc.struct.*;
-import arc.struct.ObjectMap.Entry;
 import arc.util.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
@@ -25,6 +24,7 @@ import modtools.ui.comp.input.ExtendingLabel.DrawType;
 import modtools.ui.comp.input.JSRequest;
 import modtools.ui.comp.input.JSRequest.LazyArg;
 import modtools.ui.comp.input.highlight.Syntax;
+import modtools.ui.comp.utils.ValueLabel.DelegteProv;
 import modtools.utils.*;
 import modtools.utils.ArrayUtils.AllCons;
 import modtools.utils.JSFunc.JColor;
@@ -438,16 +438,6 @@ public class Viewers {
 			}
 		}
 
-		public static class DelegteProv implements Prov<Point2> {
-			public Prov<Point2> prov;
-			public DelegteProv(Prov<Point2> p) {
-				this.prov = p;
-			}
-			@Override
-			public Point2 get() {
-				return prov.get();
-			}
-		}
 		private Runnable afterAppend;
 		private void checkCount() {
 			// 必须是toplevel级别
@@ -466,10 +456,20 @@ public class Viewers {
 				self.postAppendDelimiter();
 				self.endColor();
 				int end = text.length();
-				for (Entry<Prov<Point2>, Runnable> click : self.clicks) {
-					if (click.key instanceof DelegteProv p) {
-						p.prov = () -> Tmp.p1.set(start, end);
-					}
+				if (!self.expandMoreClick.containsKey(val)) {
+					DelegteProv prov = new DelegteProv();
+					prov.start = start;
+					prov.end = end;
+					self.expandMoreClick.put(val, prov);
+					var self0 = self;
+					self.clickedRegion(prov, () -> {
+						self0.maxItemCount += ValueLabel.STEP_SIZE;
+						self0.flushValExpand();
+					});
+				} else {
+					DelegteProv prov = self.expandMoreClick.get(val);
+					prov.start = start;
+					prov.end = end;
 				}
 			};
 

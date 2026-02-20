@@ -27,7 +27,7 @@ public class HotSwapAgent {
 	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;
 	public static String[]     HOTSWAP_BLACKLIST;
-	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "true"));
+	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "false"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
 	//endregion
@@ -86,7 +86,7 @@ public class HotSwapAgent {
 			return;
 		}
 
-		if (RETRANSFORM_LOADED) retransformLoaded(loadedClasses);
+		// if (RETRANSFORM_LOADED) retransformLoaded(loadedClasses);
 
 		// 重启监控线程
 		if (!activeWatchDirs.equals(newWatchDirs)) {

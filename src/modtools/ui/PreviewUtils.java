@@ -67,11 +67,11 @@ public class PreviewUtils {
 						PageType type = PageType.all[Character.isDigit(c) ? c - '0' : 0];
 						keyValue.label(p, "Page", type::name, Pal.accent);
 					}
-					keyValue.valueLabel(p, "Texture", () -> atg.texture, Texture.class);
+					keyValue.valueLabel(p, "Texture", () -> atg.texture, Texture.class).width(220);
 				} else if (drawable instanceof ScaledNinePatchDrawable snpd) {
 					NinePatch patch = snpd.getPatch();
 
-					keyValue.valueLabel(p, "Texture", patch::getTexture, Texture.class);
+					keyValue.valueLabel(p, "Texture", patch::getTexture, Texture.class).width(220);
 				}
 				keyValue.label(p, "Original Size", new SizeProv(() ->
 				 Tmp.v1.set(prov.get().getMinWidth(), prov.get().getMinHeight())
@@ -87,6 +87,7 @@ public class PreviewUtils {
 				p.add("ERROR").labelAlign(Align.left).row();
 				p.image(Core.atlas.drawable("error"));
 			}
+			p.pack();
 		});
 	}
 	public static Cell<ImageButton> addPreviewButton(Table table, Cons<Table> cons) {

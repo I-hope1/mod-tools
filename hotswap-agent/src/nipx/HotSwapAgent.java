@@ -136,14 +136,7 @@ public class HotSwapAgent {
 		if (candidates.isEmpty()) return;
 		info("Found " + candidates.size() + " classes loaded before Agent start. Retransforming...");
 		try {
-			if (isEnhancedHotswapEnabled()) {
-				// 使用foreach循环，避免并发修改异常
-				for (Class<?> clazz : candidates) {
-					inst.retransformClasses(clazz);
-				}
-			} else {
-				inst.retransformClasses(candidates.toArray(new Class[0]));
-			}
+			inst.retransformClasses(candidates.toArray(new Class[0]));
 			info("Retransform complete.");
 		} catch (UnmodifiableClassException e) {
 			error("Failed to retransform some classes", e);

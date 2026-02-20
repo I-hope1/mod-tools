@@ -80,7 +80,8 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
 
-		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
+			boolean anyProfiled;
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
@@ -96,6 +97,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 					@Override
 					public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
 						if (descriptor.equals(profileDesc)) {
+							anyProfiled = true;
 							isProfiled = true;
 							// info("Found @Profile on: " + dotClassName + "." + name); // 移到这里
 						}
@@ -150,6 +152,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 				};
 			}
 		};
+		if (!cv.anyProfiled) return bytes;
 
 		cr.accept(cv, ClassReader.EXPAND_FRAMES); // 建议加上 EXPAND_FRAMES
 		return cw.toByteArray();

@@ -1,0 +1,34 @@
+name: Custom AI Agent # 适用于任意 OpenAI 兼容模型
+
+on:
+  issues:
+    types:
+  issue_comment:
+    types:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write        # 必须给写 Issue 的权限才能发评论
+      contents: read       # 读取代码权限
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pygithub openai
+
+      - name: Run AI Agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CUSTOM_API_KEY: ${{ secrets.CUSTOM_API_KEY }}
+          CUSTOM_BASE_URL: ${{ secrets.CUSTOM_BASE_URL }}
+          CUSTOM_MODEL: 'LongCat-Flash-Thinking-2601' # 在这里指定你要用的模型名
+        run: python run_agent.py

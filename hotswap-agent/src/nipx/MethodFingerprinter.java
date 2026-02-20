@@ -31,11 +31,13 @@ public final class MethodFingerprinter extends MethodVisitor {
 		}
 		return true;
 	}
-	/** 重置指纹生成器状态，为下一个方法做准备*/
+	/** 重置指纹生成器状态，为下一个方法做准备 */
 	public void reset() {
 		crc = CRC64.init();
 		labelIds.clear();
 		nextLabelId = 0;
+		anonClassIds.clear();
+		nextAnonId = 0;
 	}
 	//endregion
 
@@ -65,7 +67,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 	//endregion
 
-	// region 标签ID管理
+	// region ID管理
 	/** 标签到ID的映射，用于统一标识跳转目标 */
 	private final Map<Label, Integer> labelIds    = new IdentityHashMap<>();
 	/** 下一个可用的标签ID */
@@ -79,7 +81,25 @@ public final class MethodFingerprinter extends MethodVisitor {
 	private int getLabelId(Label l) {
 		return labelIds.computeIfAbsent(l, _ -> nextLabelId++);
 	}
-	// endregion
+
+	private final Map<String, Integer> anonClassIds = new HashMap<>();
+	private       int                  nextAnonId   = 0;
+	/**
+	 * 核心统一拦截器：处理所有出现的内部类名称
+	 * @return 屏蔽编号后的安全描述符
+	 */
+	private String maskAnonymousClass(String owner) {
+		if (currentClassName != null && owner.startsWith(currentClassName + "$")) {
+			String suffix = owner.substring(currentClassName.length() + 1);
+			if (isNumeric(suffix)) {
+				// 给当前具体的匿名类分配一个在这个方法内部的相对 ID
+				int relId = anonClassIds.computeIfAbsent(owner, _ -> nextAnonId++);
+				return currentClassName + "$#ANON_" + relId + "#";
+			}
+		}
+		return owner;
+	}
+	//endregion
 
 	//region  CRC64哈希值计算
 	/** 当前累积的CRC64哈希值 */
@@ -141,21 +161,8 @@ public final class MethodFingerprinter extends MethodVisitor {
 		String owner = h.getOwner();
 		if (owner.equals(currentClassName)) {
 			updateString("#THIS#");
-		}
-		// 如果 owner 是当前类的内部类（匿名类或合成类），尝试屏蔽数字编号
-		// 假设内部类格式为 CurrentClass$xxx
-		else if (currentClassName != null && owner.startsWith(currentClassName + "$")) {
-			// 策略：只保留内部类的前缀结构，忽略具体的数字编号
-			// 例如：com/example/Main$1 -> com/example/Main$#ANON#
-			//      com/example/Main$Inner -> com/example/Main$Inner (非数字不屏蔽)
-			String suffix = owner.substring(currentClassName.length() + 1);
-			if (isNumeric(suffix)) {
-				updateString(currentClassName + "$#ANON#");
-			} else {
-				updateString(owner);
-			}
 		} else {
-			updateString(owner);
+			updateString(maskAnonymousClass(owner)); // 统一使用拦截器
 		}
 
 		updateString(h.getName()); // 方法名
@@ -197,7 +204,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	@Override
 	public void visitTypeInsn(int opcode, String type) {
 		updateInt(opcode);
-		updateString(type);
+		updateString(maskAnonymousClass(type)); // 拦截 NEW, CHECKCAST 等
 	}
 
 	/**
@@ -206,7 +213,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	@Override
 	public void visitFieldInsn(int opcode, String owner, String name, String desc) {
 		updateInt(opcode);
-		updateString(owner);  // 字段所属类
+		updateString(maskAnonymousClass(owner)); // 拦截字段所属的匿名类
 		updateString(name);   // 字段名
 		updateString(desc);   // 字段描述符
 	}
@@ -218,7 +225,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	public void visitMethodInsn(int opcode, String owner, String name,
 	                            String desc, boolean isInterface) {
 		updateInt(opcode);
-		updateString(owner);      // 方法所属类
+		updateString(maskAnonymousClass(owner)); // 拦截 INVOKESPECIAL (构造函数调用) 等
 		updateString(name);       // 方法名
 		updateString(desc);       // 方法描述符
 		updateInt(isInterface ? 1 : 0); // 是否接口方法

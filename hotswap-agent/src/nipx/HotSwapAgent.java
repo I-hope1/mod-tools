@@ -149,12 +149,8 @@ public class HotSwapAgent {
 	public static volatile ConcurrentHashMap<String, Class<?>> loadedClassesMap = new ConcurrentHashMap<>();
 
 
-	// 临时缓存
-	private static ConcurrentHashMap<String, Class<?>> tmpLoadedClassesMap = new ConcurrentHashMap<>();
-	/** 双缓存机制 */
 	private static void loadClassSnap(Class<?>[] classes) {
-		var newMap = tmpLoadedClassesMap; // 取出备用 buffer（Map B）
-		newMap.clear();                   // 清空备用 buffer，不影响当前活跃 map
+		var newMap = new ConcurrentHashMap<String, Class<?>>((int) (classes.length / 0.75f) + 1);
 		for (Class<?> c : classes) {
 			String   name     = c.getName();
 			Class<?> existing = newMap.get(name);
@@ -162,9 +158,7 @@ public class HotSwapAgent {
 				newMap.put(name, c);
 			}
 		}
-		tmpLoadedClassesMap = loadedClassesMap; // 把旧的活跃 map 存为下次的备用
 		loadedClassesMap = newMap;              // 原子切换，读者要么看到完整旧 map，要么完整新 map
-		tmpLoadedClassesMap.clear();
 	}
 
 	/**

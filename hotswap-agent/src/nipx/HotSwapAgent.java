@@ -6,8 +6,8 @@ import nipx.util.*;
 import java.io.*;
 import java.lang.instrument.*;
 import java.lang.management.ManagementFactory;
-import java.lang.ref.*;
 import java.lang.reflect.*;
+import java.net.URL;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -37,7 +37,8 @@ public class HotSwapAgent {
 	static final         Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new CopyOnWriteArrayList<>();
 
-	static final Map<String, SoftReference<byte[]>> bytecodeCache = new ConcurrentHashMap<>();
+	/** 在不使用retransform的情况下，确保旧bytecode正确的唯一方法 */
+	static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 仅记录byte的指纹
 	private static final LongLongMap fileDiskHashes = new LongLongMap(2048);
@@ -218,16 +219,13 @@ public class HotSwapAgent {
 					if (DEBUG) log("[MODIFIED] " + className);
 
 					byte[] newBytecode = bytecode;
-					byte[] oldBytecode = getRef(bytecodeCache.get(className));
+					byte[] oldBytecode = bytecodeCache.get(className);
 
 					// 如果缓存里没有，主动触发一次 retransform 来"偷"取字节码
 					if (oldBytecode == null) {
-						try {
-							// 这会触发上面的 transformer，填充 bytecodeCache
-							inst.retransformClasses(targetClass);
-							oldBytecode = getRef(bytecodeCache.get(className));
-						} catch (Exception e) {
-							error("Failed to capture old bytecode for diff: " + className, e);
+						oldBytecode = fetchOriginalBytecode(targetClass);
+						if (oldBytecode != null) {
+							bytecodeCache.put(className, oldBytecode);
 						}
 					}
 
@@ -258,17 +256,19 @@ public class HotSwapAgent {
 					}
 
 					definitions.add(new ClassDefinition(targetClass, newBytecode));
-					bytecodeCache.put(className, new SoftReference<>(newBytecode));
+					bytecodeCache.put(className, newBytecode);
 				} else {
 					if (DEBUG) log("[NEW] " + className);
 					// 类尚未加载：根据 REDEFINE_MODE 处理
 					if (REDEFINE_MODE == RedefineMode.inject) {
 						if (injectNewClass(className, path, bytecode)) {
+							bytecodeCache.put(className, bytecode);
 							injectedCount++;
 						}
 					} else if (REDEFINE_MODE == RedefineMode.lazy_load && UCP_APPEND) {
 						ClassLoader loader = findTargetClassLoader(className, path);
 						mountForClass(loader, path);
+						bytecodeCache.put(className, bytecode);
 					}
 				}
 			} catch (Exception e) {
@@ -282,10 +282,6 @@ public class HotSwapAgent {
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
-	}
-
-	public static byte[] getRef(SoftReference<byte[]> softReference) {
-		return softReference != null ? softReference.get() : null;
 	}
 
 	/** 在 applyRedefinitions(definitions) 后调用 */
@@ -339,6 +335,49 @@ public class HotSwapAgent {
 			if (className.startsWith(prefix)) return true;
 		}
 		return false;
+	}
+
+	private static byte[] fetchOriginalBytecode(Class<?> clazz) {
+		String      path = clazz.getName().replace('.', '/') + ".class";
+		ClassLoader cl   = clazz.getClassLoader();
+		if (cl == null) cl = ClassLoader.getSystemClassLoader();
+
+		try {
+			// 核心扬弃：获取所有同名资源，执行空间隔离
+			var resources = cl.getResources(path);
+
+			while (resources.hasMoreElements()) {
+				URL     url            = resources.nextElement();
+				boolean isFromWatchDir = false;
+
+				// 异质点校验：判断这个流是否来自我们监控（已被修改）的目录
+				if ("file".equals(url.getProtocol())) {
+					try {
+						Path resourcePath = Paths.get(url.toURI()).toAbsolutePath();
+						for (Path watchDir : activeWatchDirs) {
+							if (resourcePath.startsWith(watchDir.toAbsolutePath())) {
+								isFromWatchDir = true;
+								break;
+							}
+						}
+					} catch (Exception ignored) {
+						// URI格式异常，防守性跳过
+					}
+				}
+
+				// 只要不是来自修改目录（比如来自 jar:file:/...），它就是未被污染的原始字节码
+				if (!isFromWatchDir) {
+					try (InputStream is = url.openStream()) {
+						return is.readAllBytes();
+					}
+				} else {
+					if (DEBUG) log(" Ignored polluted mount path: " + url);
+				}
+			}
+		} catch (Throwable t) {
+			// 吞掉异常，退化到盲狙
+		}
+		return null;
 	}
 	//endregion
 
@@ -403,7 +442,7 @@ public class HotSwapAgent {
 						long diskHash = calculateHash(diskBytes);
 
 						// 获取内存中的字节码（这是 transformLoaded 偷出来的）
-						byte[] memBytes = getRef(bytecodeCache.get(cName));
+						byte[] memBytes = bytecodeCache.get(cName);
 						if (memBytes != null) {
 							long memHash = calculateHash(memBytes);
 							if (diskHash != memHash) {

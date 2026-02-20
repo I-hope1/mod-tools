@@ -8,7 +8,6 @@ import org.objectweb.asm.commons.AdviceAdapter;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.ClassFileTransformer;
-import java.lang.ref.SoftReference;
 import java.security.ProtectionDomain;
 
 import static nipx.HotSwapAgent.*;
@@ -167,7 +166,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
-		bytecodeCache.put(dotClassName, new SoftReference<>(classfileBuffer));
+		bytecodeCache.put(dotClassName, classfileBuffer);
 		// info("transform: " + dotClassName + " ' blacklisted " + HotSwapAgent.isBlacklisted(dotClassName));
 
 		try {

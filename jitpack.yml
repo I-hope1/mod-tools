@@ -1,7 +1,17 @@
 jdk:
   - openjdk21
+
 before_install:
+  # 1. 降维打击：安装并强制切换到 Java 8，专门伺候陈旧的 sdkmanager
+  - sdk install java 8.0.265-open || sdk install java 8.0.302-open
+  - sdk use java 8.0.265-open || sdk use java 8.0.302-open
+
+  # 2. 借尸还魂：在 Java 8 的庇护下，安全执行 Android SDK 下载
   - yes | sdkmanager --licenses
-  - sdkmanager "platforms;android-34" "build-tools;34.0.0"
+  - yes | sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+  # 3. 拨乱反正：切回 JDK 21，把干净且包含 android.jar 的环境交还给 Gradle
+  - sdk use java 21.0.2-open
+
 install:
   - ./gradlew publishToMavenLocal -DANDROID_HOME=$ANDROID_HOME

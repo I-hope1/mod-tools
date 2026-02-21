@@ -153,7 +153,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 				while (keys1.hasNext) keys.add(keys1.next());
 				keys.sort();
 
-				for (int i = 0, size = keys.size; i < size; i++) {
+				for (int i = keys.size - 1; i >= 0; i--) {
 					int    index   = keys.get(i);
 					Object o       = startIndexMap.get(index);
 					int    toIndex = endIndexMap.get(index);

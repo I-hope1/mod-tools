@@ -145,34 +145,56 @@ public class MySettings {
 		}
 
 		public String toString(StringBuilder tab) {
-			StringBuilder builder = new StringBuilder();
-			builder.append("{\n");
-			tab.append("\t");
+			if (isEmpty()) return "{}";
+
+			StringBuilder builder = new StringBuilder("{\n");
+			tab.append('\t');
+
+			boolean[] first = {true};
 			each((k, v) -> {
-				builder.append(tab).append('"')
-				 .append(k.replaceAll("\"", "\\\\\""))
-				 .append('"').append(": ")
-				 .append(toString(tab, v))
-				 .append('\n');
+				if (!first[0]) builder.append('\n');
+				first[0] = false;
+				builder.append(tab)
+				 .append('"').append(k.replace("\"", "\\\"")).append('"')
+				 .append(": ")
+				 .append(toValueString(tab, v));
 			});
-			builder.deleteCharAt(builder.length() - 1);
+
 			tab.deleteCharAt(tab.length() - 1);
 			builder.append('\n').append(tab).append('}');
 			return builder.toString();
 		}
 
 		@SuppressWarnings("StringTemplateMigration")
-		private static String toString(StringBuilder tab, Object v) {
+		private static String toValueString(StringBuilder tab, Object v) {
 			return switch (v) {
 				case Data data -> data.toString(tab);
-				case String[] arr -> IntVars.json.toJson(arr, String[].class);
-				case Seq<?> seq -> "[" + seq.map(item -> toString(tab, item)).toString(", ") + "]";
-				case Jval jval -> jval.toString(Jformat.formatted);
+				case String[] arr -> {
+					if (arr.length == 0) yield "[]";
+					StringBuilder sb = new StringBuilder("[\n");
+					tab.append('\t');
+					for (String s : arr) {
+						sb.append(tab).append('"')
+						 .append(s.replace("\\", "\\\\").replace("\"", "\\\""))
+						 .append('"').append('\n');
+					}
+					tab.deleteCharAt(tab.length() - 1);
+					sb.append(tab).append(']');
+					yield sb.toString();
+				}
+				case Seq<?> seq -> {
+					if (seq.isEmpty()) yield "[]";
+					StringBuilder sb = new StringBuilder("[\n");
+					tab.append('\t');
+					seq.each(item -> sb.append(tab).append(toValueString(tab, item)).append('\n'));
+					tab.deleteCharAt(tab.length() - 1);
+					sb.append(tab).append(']');
+					yield sb.toString();
+				}
+				case Jval jval -> jval.toString(Jformat.formatted).replace("\n", "\n" + tab);
 				case null -> "null";
 				default -> {
-					if (Reflect.isWrapper(v.getClass())) {
-						yield v.toString();
-					} else {
+					if (Reflect.isWrapper(v.getClass())) { yield v.toString(); } else {
 						yield STR."\"\{v.toString().replace("\\", "\\\\")}\"";
 					}
 				}

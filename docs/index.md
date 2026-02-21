@@ -89,6 +89,8 @@
 - `'null` 代表 `null` (空) 指针
 - 按 `Ctrl`+`F` 聚焦搜索框
 - 按 `Ctrl`+`Shift`+`F` 聚焦搜索框并清空搜索框
+- CustomViewers (/%MindustryData%/mod_tools)
+  + ![custom_viewers](./screenshots/custom_viewers.png)
 
 ## Others (其他)
 
@@ -242,7 +244,7 @@ public class CacheManager {
 ```java
 // 简化的增强逻辑
 if (hasClassAnnotation(bytes, Tracker.class)) {
-    bytes = injectTracker(bytes, className, loader);
+	bytes = injectTracker(bytes, className, loader);
 }
 bytes = injectProfiler(bytes, className, loader);  // 方法级扫描
 ```

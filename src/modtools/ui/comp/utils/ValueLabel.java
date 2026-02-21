@@ -488,9 +488,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
 		list.add(UnderlineItem.with());
-		list.add(MenuItem.with("change.class", Icon.pencilSmall, "Change Class", () -> {
-			new ChangeClassDialog(this).show();
-		}));
+		list.add(DisabledList.withd("change.class", Icon.pencilSmall, "Change Class",
+		 () -> val == null || Reflect.isWrapper(val.getClass()),
+		 () -> {
+			 new ChangeClassDialog(this).show();
+		 }));
 		// list.add(MenuItem.with("viewer.set", Icon.eyeSmall, "Set Viewer",  () -> { }));
 		list.add(UnderlineItem.with());
 		if (String.class.isAssignableFrom(type) || val instanceof String) {

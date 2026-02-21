@@ -89,6 +89,8 @@ English|[中文](index.md)
 - `'null` represents `null` pointer
 - Press `Ctrl`+`F` to focus search box
 - Press `Ctrl`+`Shift`+`F` to focus search box and clear search box
+- CustomViewers (/%MindustryData%/mod_tools)
+  + ![custom_viewers](./screenshots/custom_viewers.png)
 
 ## Others
 

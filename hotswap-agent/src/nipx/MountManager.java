@@ -69,8 +69,14 @@ public class MountManager {
 		if (getLoaderHandle == null) return;
 		if (targetLoader == null || classFilePath == null) return;
 
-		// 溯源：找到该 class 文件所属的 watchDir 根目录
+		// 溯源：找到该 class 文件所属的根目录。
+		// 正常情况是 watchDir；jar 解压路径（tmpDir）不在 watchDir 内，
+		// findMatchingRoot 会返回 null，此时 fallback 到 classFilePath 向上找到
+		// nipx-hotswap 临时根目录（即 extractJarToTemp 创建的 tmpDir）作为挂载点。
 		Path rootDir = findMatchingRoot(classFilePath);
+		if (rootDir == null) {
+			rootDir = findTmpMountRoot(classFilePath);
+		}
 		if (rootDir == null) return;
 
 		try {
@@ -117,6 +123,25 @@ public class MountManager {
 		} catch (Throwable t) {
 			error("[Mount] Failed to mount path: " + classFilePath, t);
 		}
+	}
+
+	/**
+	 * 当 classFilePath 来自 jar 解压的临时目录（不在任何 watchDir 下）时，
+	 * 向上遍历路径，找到 nipx-hotswap 下的直属子目录（即 extractJarToTemp 创建的 tmpDir）作为挂载根。
+	 * 例如：/tmp/nipx-hotswap/foo-abc123/com/example/Foo.class → /tmp/nipx-hotswap/foo-abc123
+	 */
+	private static Path findTmpMountRoot(Path classFilePath) {
+		Path abs = classFilePath.toAbsolutePath();
+		Path p   = abs.getParent();
+		while (p != null) {
+			Path parent = p.getParent();
+			if (parent != null && parent.getFileName() != null
+			    && parent.getFileName().toString().equals("nipx-hotswap")) {
+				return p; // p 就是 nipx-hotswap/<stem>-<hash>
+			}
+			p = parent;
+		}
+		return null;
 	}
 
 	//region ClassLoader Resolution
@@ -174,19 +199,26 @@ public class MountManager {
 		ClassLoader loader = findTargetClassLoader(className); // 原有的逻辑
 		if (loader != null) {
 			// 发现踪迹，立即绑定根路径
-			bindRoot(classFilePath, loader);
+			if (classFilePath != null) bindRoot(classFilePath, loader);
 			return loader;
 		}
 
+		// classFilePath 为 null（来自直接传入的 activeWatchJar 且无虚拟路径），无法做路径推断
+		if (classFilePath == null) return null;
+
 		// 2. 如果包名没见过，检查该文件所属的根目录是否已经绑定过
 		Path root = findMatchingRoot(classFilePath);
+		if (root == null) {
+			// classFilePath 可能是 jar 解压的 tmpDir 路径，尝试用 tmpDir 本身做勘探
+			root = findTmpMountRoot(classFilePath);
+		}
 		if (root != null) {
 			WeakReference<ClassLoader> ref = rootToLoader.get(root);
 			if (ref != null && ref.get() != null) {
 				return ref.get();
 			}
 
-			// 3. 如果根目录也没绑定过，执行“深度物理勘探”
+			// 3. 如果根目录也没绑定过，执行"深度物理勘探"
 			loader = surveyWatchDir(root);
 			if (loader != null) {
 				rootToLoader.put(root, new WeakReference<>(loader));
@@ -199,7 +231,7 @@ public class MountManager {
 
 	/**
 	 * 深度物理勘探：扫描该目录下是否有其他类已经被加载
-	 * 只要找到一个“邻居”被加载了，就能确定整个目录的归属
+	 * 只要找到一个"邻居"被加载了，就能确定整个目录的归属
 	 */
 	private static ClassLoader surveyWatchDir(Path root) {
 		try (Stream<Path> stream = Files.walk(root)) {

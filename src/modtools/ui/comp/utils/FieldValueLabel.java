@@ -24,8 +24,9 @@ public class FieldValueLabel extends ReflectValueLabel {
 
 	public FieldValueLabel(Object newVal, Field field, Object obj) {
 		super(field.getType(), obj, field.getModifiers());
-		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal))
+		if (newVal != null && newVal != unset && !type.isPrimitive() && !type.isInstance(newVal)) {
 			throw new IllegalArgumentException("Type(" + type + ") mismatches value(" + newVal + ").");
+		}
 		// markupEnabled = true;
 		this.field = field;
 

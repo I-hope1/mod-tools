@@ -124,7 +124,7 @@ public class Viewers {
 	};
 
 	public static final  boolean ARRAY_DEBUG  = false;
-	private static final int     SIZE_MAX_BIT = 5;
+	private static final int     SIZE_MAX_BIT = 6;
 
 	public static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
 		internalViewers.add(new ViewerItem<>(clazz, viewer));
@@ -224,7 +224,9 @@ public class Viewers {
 			}
 			// label.postAppendDelimiter();
 			text.append('}');
-			label.postAppendDelimiter(prev);
+			// 直接赋值而非 postAppendDelimiter(prev)：后者会把最后一个 entry 的分隔符
+			// 注入到 '}' 之后（如 "{k=v, k=v}, "），造成尾部多余分隔符。
+			label.appendTail = prev;
 			// label.postAppendDelimiter();
 
 			if (chunk_background.enabled()) label.addDrawRun(start, text.length(), DrawType.background, label.bgColor());
@@ -295,15 +297,30 @@ public class Viewers {
 				if (ARRAY_DEBUG) Log.err(e);
 				text.append("▶ERROR◀");
 			} finally {
-				label.postAppendDelimiter(prev);
+				// append[0] 必须先于 prev 恢复运行：它负责输出最后一个缓冲元素。
+				// 恢复时直接赋值而非调用 postAppendDelimiter，避免触发末尾多余分隔符，
+				// 也避免把外层 prev 注入到数组内部（即 "a, <outer_delim>b]" 的 bug）。
 				try {
 					if (append[0] != null) append[0].run();
 				} catch (SatisfyException ignored) {
 				} catch (Throwable e) {
 					Log.err(e);
 				}
-				// 自动补位
-				text.replace(sizeIndex, sizeIndex + SIZE_MAX_BIT, String.format("% " + SIZE_MAX_BIT + "d", cons.size()));
+				label.appendTail = prev; // 丢弃末尾多余分隔符，还原外层上下文
+				// 自动补位：格式化结果必须严格等于 SIZE_MAX_BIT 个字符，否则 text.replace
+				// 会插入多余字符，把之后所有 colorMap / startIndexMap / endIndexMap 的下标
+				// 全部错位（静默破坏，不报错）。
+				// 用 %-5s 截断到固定宽度：超过 99999 时显示 "9999+"（含前导空格仍为5字符）。
+				int    size      = cons.size();
+				String sizeStr;
+				if (size < (int) Math.pow(10, SIZE_MAX_BIT)) {
+					sizeStr = String.format("%" + SIZE_MAX_BIT + "d", size); // 右对齐，宽度固定
+				} else {
+					sizeStr = String.format("%" + (SIZE_MAX_BIT - 1) + "d+", // 最后一位留给 '+'
+					 (int) Math.pow(10, SIZE_MAX_BIT - 1) - 1); // e.g. "99999+"
+				}
+				// assert sizeStr.length() == SIZE_MAX_BIT;
+				text.replace(sizeIndex, sizeIndex + SIZE_MAX_BIT, sizeStr);
 				pool.free(cons);
 			}
 			text.append(']');
@@ -327,8 +344,13 @@ public class Viewers {
 		return (T val, ValueLabel label) -> {
 			StringBuilder text = label.getText();
 			int           i    = text.length();
+			// '□' 是占位符，必须设为透明；否则字形以白色渲染在图标底层，
+			// 两者尺寸/位置不完全吻合时 '□' 会漏出（insertIcon 已有此处理，这里补上）。
+			label.colorMap.put(i, Color.clear);
 			label.addDrawRun(i, i + 1, DrawType.icon, Color.white, iconFunc.get(val));
 			text.append('□');
+			// defaultAppend 内部会调用 startColor(mainColor)，在 i+1 处写入正常颜色，
+			// 因此只需在 i 处设 clear，无需再手动恢复。
 			defaultAppend(label, i, val);
 			return true;
 		};
@@ -426,10 +448,10 @@ public class Viewers {
 			checkCount();
 			if (item != null) {
 				self.valToObj.put(item, val);
-				self.valToType.put(item, val.getClass());
+				self.valToType.put(item, item.getClass()); // fix: 应存元素自身的类型，而非父集合的类型
 			}
 
-			boolean b = (last != null && identityClasses.contains(val.getClass()))
+			boolean b = (last != null && identityClasses.contains(last.getClass())) // fix: 应检查元素类型，而非父集合类型
 			 ? !last.equals(item) : last != item;
 			if (b) {
 				append(item);
@@ -631,6 +653,10 @@ public class Viewers {
 		int endI = text.length();
 		label.endIndexMap.put(startIndex, endI);
 		label.endColor();
+		// 统一在此设置 delimiter tail，避免各 viewer 各自调用导致遗漏：
+		// appendValue(Object) 开头会 appendTail = null，若 viewer 提前 return 而不经过此处，
+		// IterCons.append() 已压入的 lambda 就永远死在 null 里，导致元素间没有分隔符。
+		label.postAppendDelimiter();
 	}
 	private static Object wrapVal(Object val) {
 		if (val == null) return ValueLabel.NULL_MARK;

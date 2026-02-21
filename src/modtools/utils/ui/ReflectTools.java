@@ -26,15 +26,24 @@ import java.util.*;
 import static modtools.ui.effect.HopeFx.changedFx;
 
 public interface ReflectTools {
+	boolean   __DEBUG      = false;
 	boolean[] _initialized = new boolean[1];
+	/** 跳过Class */
 	static void setAccessible(AccessibleObject object) {
+		if (object instanceof Constructor<?> c && c.getDeclaringClass() == Class.class) {
+			return;
+		}
 		try {
 			MyReflect.setOverride(object);
 		} catch (Throwable e) {
 			if (IntVars.isDesktop() && !_initialized[0]) {
 				UNSAFE.putObject(MyReflect.class, UNSAFE.objectFieldOffset(Class.class, "module"), Object.class.getModule());
 				_initialized[0] = true;
-				MyReflect.setOverride(object);
+				try {
+					MyReflect.setOverride(object);
+				} catch (Throwable ex) {
+					if (__DEBUG) Log.err("Failed to set accessible for " + object, ex);
+				}
 			}
 		}
 	}

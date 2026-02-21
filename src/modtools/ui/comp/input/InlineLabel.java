@@ -56,7 +56,7 @@ public class InlineLabel extends NoMarkupLabel {
 		if (colorMap.isEmpty()) return runs;
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
 
-		if (colorMap.size == 1 || (colorMap.size == 2 && colorMap.get(text.length()) == Color.white)) {
+		if (colorMap.size == 1 || (colorMap.size == 2 && Color.white.equals(colorMap.get(text.length())))) {
 			Color color = colorMap.get(0);
 			runs.each(r -> r.color.set(color));
 			return runs;
@@ -100,7 +100,7 @@ public class InlineLabel extends NoMarkupLabel {
 				if (iter.hasNext()) {
 					do {
 						item = iter.next();
-					} while (item.glyphs.isEmpty());
+					} while (item.glyphs.isEmpty() && iter.hasNext());
 
 					itemIndex = 0;
 					// 对自动换行偏移
@@ -233,14 +233,18 @@ public class InlineLabel extends NoMarkupLabel {
 		int index = 0; // 用于跟踪字符索引
 
 		for (GlyphRun run : layout.runs) {
+			if (run.glyphs.isEmpty()) continue; // 空 run 直接跳过，否则 first() 越界
 			FloatSeq xAdvances = run.xAdvances;
-			currentX = run.x;
+			// xAdvances[0] 是第一个字形相对 run.x 的初始偏移（kerning/对齐）。
+			// getRect 用 run.x + xAdvances.first() 作为起点；这里必须一致，
+			// 否则 cursor 检测比实际字形起点早 xAdvances.first() 像素，表现为"偏左"。
+			currentX = labelX + run.x + xAdvances.first();
 			currentY = height + run.y;
 			while (index < text.length() && (char) run.glyphs.first().id != text.charAt(index)) index++; // 弥补offset
-			// 判断是否在行
-			if (currentY - lineHeight < y && y <= currentY && currentX <= x && x < currentX + run.width) {
+			// hit-test 终点用 run.x + run.width（不含 xAdvances.first()，与 libGDX 一致）
+			if (currentY - lineHeight < y && y <= currentY && currentX <= x && x < labelX + run.x + run.width) {
 				for (int i = 1; i < xAdvances.size; i++) {
-					// 判断是否在当前字符范围内
+					// xAdvances[i] 是字形 i-1 的 advance
 					if (x < currentX + xAdvances.get(i)) {
 						return index + i - 1;
 					}
@@ -269,7 +273,10 @@ public class InlineLabel extends NoMarkupLabel {
 			 * advance relative to previous glyph position. Last entry is the width of the last glyph.
 			 */
 			FloatSeq xAdvances = run.xAdvances;
-			currentX = run.x + xAdvances.first();
+			// run.x/y 是 layout 局部坐标（layout.setText 后不含 labelX/labelY 偏移）。
+			// cache.setText(layout, labelX, labelY) 只烘焙进顶点缓冲，不回写 run.x/y。
+			// Y 轴已正确加上 labelY，X 轴同理必须加上 labelX，否则水平位置整体偏移。
+			currentX = labelX + run.x + xAdvances.first();
 			if (startX == -1) startX = currentX;
 
 			currentY = labelY + run.y;

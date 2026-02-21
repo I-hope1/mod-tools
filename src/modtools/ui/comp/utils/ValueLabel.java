@@ -44,13 +44,14 @@ import static modtools.ui.IntUI.topGroup;
 
 public abstract class ValueLabel extends ExtendingLabel {
 	//region Static Fields & Constants
-	public static final boolean DEBUG     = false;
+	public static final boolean DEBUG  = false;
 	/** 这个要和null判断一起 */
-	public static final Object  unset     = new Object();
-	public static final Color   c_enum    = new Color(0xFFC66D_FF);
-	public static final String  NULL_MARK = "`*null";
-	public static final String  ERROR     = "<ERROR>";
-	public static final String  STR_EMPTY = "<EMPTY>";
+	public static final Object  unset  = new Object();
+	public static final Color   c_enum = new Color(0xFFC66D_FF);
+
+	public static final String NULL_MARK = "`*null";
+	public static final String ERROR     = "<ERROR>";
+	public static final String STR_EMPTY = "<EMPTY>";
 
 	private static       ValueLabel hoveredLabel;
 	private static       Object     hoveredVal;
@@ -78,16 +79,16 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 	public Func<Object, Object> valueFunc = o -> o;
 
-	public final IntMap<Object>                    startIndexMap = new IntMap<>(); // startIndex -> value
-	public final IntIntMap                         endIndexMap   = new IntIntMap(); // startIndex -> endIndex
+	public final IntMap<Object>                       startIndexMap   = new IntMap<>(); // startIndex -> value
+	public final IntIntMap                            endIndexMap     = new IntIntMap(); // startIndex -> endIndex
 	// 用于记录数组或map的类型
-	public final IdentityHashMap<Object, Class<?>> valToType     = new IdentityHashMap<>();
+	public final IdentityHashMap<Object, Class<?>>    valToType       = new IdentityHashMap<>();
 	// 用于记录数组或map的值
-	public final IdentityHashMap<Object, Object>   valToObj      = new IdentityHashMap<>();
+	public final IdentityHashMap<Object, Object>      valToObj        = new IdentityHashMap<>();
 	// 用于记录数组或map是否展开
-	public final IdentityHashMap<Object, Boolean>  expandVal     = new IdentityHashMap<>();
+	public final IdentityHashMap<Object, Boolean>     expandVal       = new IdentityHashMap<>();
 	// 用于记录数组或map的更多按钮是否注册
-	public final IdentityHashMap<Object, DelegteProv>  expandMoreClick     = new IdentityHashMap<>();
+	public final IdentityHashMap<Object, DelegteProv> expandMoreClick = new IdentityHashMap<>();
 
 
 	private int bgIndex;
@@ -152,13 +153,12 @@ public abstract class ValueLabel extends ExtendingLabel {
 				while (keys1.hasNext) keys.add(keys1.next());
 				keys.sort();
 
-				// 从索引最大的（最具体的）对象开始检查
-				for (int i = keys.size - 1; i >= 0; i--) {
+				for (int i = 0, size = keys.size; i < size; i++) {
 					int    index   = keys.get(i);
 					Object o       = startIndexMap.get(index);
 					int    toIndex = endIndexMap.get(index);
 
-					if (index <= cursor && cursor < toIndex) {
+					if (index <= cursor && cursor <= toIndex) {
 						hoveredChunk.set(index, toIndex);
 						hoveredLabel = ValueLabel.this;
 						hoveredVal = o;
@@ -249,8 +249,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 		bgIndex = 0;
 		appendValue(val);
 
-		if (hover_outline.enabled() && !hoveredChunk().equals(UNSET_P)) {
-			addDrawRun(hoveredChunk().x, hoveredChunk().y, DrawType.outline, Pal.accent);
+		if (hover_outline.enabled()) {
+			Point2 chunk = hoveredChunk();
+			if (!chunk.equals(UNSET_P)) {
+				addDrawRun(chunk.x, chunk.y, DrawType.outline, Pal.accent);
+			}
 		}
 
 		if (isTruncate()) {
@@ -319,8 +322,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 		}
 		Viewers.defaultAppend(this, valStart, val);
-
-		postAppendDelimiter();
+		// postAppendDelimiter() 已移入 Viewers.defaultAppend，此处不再重复调用。
 	}
 
 	// 一些基本类型的特化，不装箱，为了减少内存消耗
@@ -425,8 +427,9 @@ public abstract class ValueLabel extends ExtendingLabel {
 		appendValue(value);
 	}
 
+	final Runnable defaultAppendDelimiter = () -> text.append(Viewers.getArrayDelimiter());
 	public void postAppendDelimiter() {
-		postAppendDelimiter(() -> text.append(Viewers.getArrayDelimiter()));
+		postAppendDelimiter(defaultAppendDelimiter);
 	}
 	public void postAppendDelimiter(Runnable next) {
 		if (appendTail != null) appendTail.run();
@@ -710,12 +713,12 @@ public abstract class ValueLabel extends ExtendingLabel {
 		return expandVal.containsKey(val);
 	}
 
-		public static class DelegteProv implements Prov<Point2> {
-			public int start, end;
-			@Override
-			public Point2 get() {
-				return Tmp.p1.set(start, end);
-			}
+	public static class DelegteProv implements Prov<Point2> {
+		public int start, end;
+		@Override
+		public Point2 get() {
+			return Tmp.p1.set(start, end);
 		}
+	}
 
 }

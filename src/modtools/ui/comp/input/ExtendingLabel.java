@@ -22,8 +22,8 @@ public class ExtendingLabel extends InlineLabel {
 		super(sup);
 	}
 	public void insertIcon(int i, Drawable icon, int len) {
-		colorMap.put(i, Color.clear);
 		text.insert(i, StringUtils.repeat("+", len));
+		colorMap.put(i, Color.clear);
 		colorMap.put(i + len, Color.white);
 		addDrawRun(i, i + len, DrawType.icon, Color.white, icon);
 	}
@@ -68,7 +68,7 @@ public class ExtendingLabel extends InlineLabel {
 			Lines.stroke(2);
 			label.getRect(runRect.set(start, end), r -> {
 				float x = label.x + r.x;
-				float y = label.y + r.y;
+				float y = label.y + r.y + r.height / 2f;
 				type.draw(this, x, y, r.width, r.height);
 			});
 		}

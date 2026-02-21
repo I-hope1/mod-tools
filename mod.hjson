@@ -3,20 +3,20 @@ description: '''
 A mod provides various tools for modding.
 
 -----------------
-Version 1.5.7
+Version 1.5.8
 ## Highlight
-1. 完善HotSwap（Preview）
-  - ClassDiff (field +/-, method +/-, method body change)
-2. 适配Mindustry v155的lwjgl
+1. 继续完善HotSwap（Preview）
+2. 修复大量的bug
+  - 修复配置文件的格式化问题
+  - 修复ValueLabel的对齐不对，分隔符不对等大量问题
 3. 其他的一些优化
-4. 升级ScreenSampler（加了opengl2的判断）来修复bug
 
 -----------------
 WIKI: https://i-hope1.github.io/mod-tools
 '''
 author: "I hope..."
 hidden: true
-version: 1.5.7
+version: 1.5.8
 minGameVersion: "154"
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

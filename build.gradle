@@ -11,7 +11,7 @@ plugins {
 }
 
 ext {
-	sdkRoot = System.getenv("ANDROID_HOME")
+	sdkRoot = System.getenv("ANDROID_HOME") ?: "/opt/android-sdk-linux"
 	compilerJar = "$rootDir/_libs/compiler.jar"
 }
 def archivesName = base.archivesName.get()
@@ -413,6 +413,15 @@ task playAndroid {
 					.execute().waitForProcessOutput(System.out, System.err)
 		}
 	}
+}
+
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
 }
 
 

@@ -10,7 +10,7 @@ plugins {
 	id 'maven-publish'
 }
 
-group 'com.github.i-hope1.' + modName
+group 'com.github.I-hope1.' + modName
 ext {
 	sdkRoot = System.getenv("ANDROID_HOME") ?: "/opt/android-sdk-linux"
 	compilerJar = "$rootDir/_libs/compiler.jar"

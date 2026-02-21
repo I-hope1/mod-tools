@@ -7,8 +7,8 @@ before_install:
   - sdk use java 8.0.265-open || sdk use java 8.0.302-open
 
   # 2. 借尸还魂：在 Java 8 的庇护下，安全执行 Android SDK 下载
-  - yes | sdkmanager --licenses
-  - yes | sdkmanager "platforms;android-34" "build-tools;34.0.0"
+  - yes | sdkmanager --licenses > /dev/null
+  - yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
 
   # 3. 拨乱反正：切回 JDK 21，把干净且包含 android.jar 的环境交还给 Gradle
   - sdk use java 21.0.2-open

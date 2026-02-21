@@ -5,6 +5,7 @@ import nipx.util.*;
 
 import java.io.*;
 import java.lang.instrument.*;
+import java.util.zip.*;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.*;
 import java.net.URL;
@@ -426,7 +427,47 @@ public class HotSwapAgent {
 		info("Scanning files...");
 		for (Path root : activeWatchDirs) {
 			try (Stream<Path> walk = Files.walk(root)) {
-				walk.filter(p -> p.toString().endsWith(".class")).forEach(path -> {
+				walk.filter(p -> {
+					String s = p.toString();
+					return s.endsWith(".class") || s.endsWith(".jar") || s.endsWith(".zip");
+				}).forEach(path -> {
+					String ps = path.toString();
+					if (ps.endsWith(".jar") || ps.endsWith(".zip")) {
+						// 对 jar/zip：解压后做 hash 对比
+						try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(Files.newInputStream(path)))) {
+							ZipEntry entry;
+							while ((entry = zis.getNextEntry()) != null) {
+								try {
+									if (!entry.isDirectory() && entry.getName().endsWith(".class")) {
+										byte[] diskBytes = zis.readAllBytes();
+										String cName     = Utils.getClassNameASM(diskBytes);
+										if (cName == null || isBlacklisted(cName)) continue;
+										long diskHash = calculateHash(diskBytes);
+
+										byte[] memBytes = bytecodeCache.get(cName);
+										if (memBytes != null && calculateHash(memBytes) != diskHash) {
+											if (DEBUG) log("[INIT-SYNC] " + cName + " (in jar) is out of sync. Reloading...");
+											// 写到临时文件再加入 pendingChanges
+											String stem    = path.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
+											Path   tmpDir  = Files.createTempDirectory("nipx-jar-" + stem + "-");
+											Path   outPath = tmpDir.resolve(entry.getName().replace('/', File.separatorChar));
+											Files.createDirectories(outPath.getParent());
+											Files.write(outPath, diskBytes);
+											pendingChanges.add(outPath);
+										}
+										synchronized (fileDiskHashes) {
+											fileDiskHashes.put(CRC64.hashString(cName), diskHash);
+										}
+									}
+								} catch (Exception _) {
+								} finally {
+									zis.closeEntry();
+								}
+							}
+						} catch (IOException _) { }
+						return;
+					}
+					// 原始 .class 文件逻辑（保持不变）
 					try {
 						byte[] diskBytes = Files.readAllBytes(path);
 						String cName     = Utils.getClassNameASM(diskBytes);
@@ -462,6 +503,56 @@ public class HotSwapAgent {
 				scheduledTask.cancel(false);
 			}
 			scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
+		}
+	}
+
+	/**
+	 * 处理 jar/zip 文件变化：解压其中所有 .class 到临时目录，统一纳入 pendingChanges
+	 */
+	private static void handleJarChange(Path jarPath) {
+		if (DEBUG) log("[JAR] Detected change: " + jarPath);
+		try {
+			// 为该 jar 创建专属临时目录，目录名含 jar 文件名便于调试
+			String stem = jarPath.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
+			Path   tempDir = Files.createTempDirectory("nipx-jar-" + stem + "-");
+
+			int extracted = 0;
+			try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(Files.newInputStream(jarPath)))) {
+				ZipEntry entry;
+				while ((entry = zis.getNextEntry()) != null) {
+					try {
+						if (!entry.isDirectory() && entry.getName().endsWith(".class")) {
+							// 保留包路径结构
+							Path outPath = tempDir.resolve(entry.getName().replace('/', File.separatorChar));
+							Files.createDirectories(outPath.getParent());
+							Files.write(outPath, zis.readAllBytes());
+							extracted++;
+							// 直接加入 pendingChanges，不在此处单独 schedule
+							synchronized (pendingChanges) {
+								pendingChanges.add(outPath);
+							}
+						}
+					} finally {
+						zis.closeEntry();
+					}
+				}
+			}
+
+			if (extracted == 0) {
+				if (DEBUG) log("[JAR] No .class entries found in: " + jarPath);
+				return;
+			}
+			info("[JAR] Extracted " + extracted + " classes from " + jarPath.getFileName() + " → " + tempDir);
+
+			// 提取完毕后统一触发一次防抖调度
+			synchronized (pendingChanges) {
+				if (scheduledTask != null && !scheduledTask.isDone()) {
+					scheduledTask.cancel(false);
+				}
+				scheduledTask = scheduler.schedule(HotSwapAgent::triggerHotswap, FILE_SHAKE_MS, TimeUnit.MILLISECONDS);
+			}
+		} catch (IOException e) {
+			error("Failed to process jar/zip: " + jarPath, e);
 		}
 	}
 
@@ -603,6 +694,12 @@ public class HotSwapAgent {
 							handleFileChange(fullPath);
 						}
 
+						// 处理 jar / zip 包变化
+						String name = fullPath.toString();
+						if (name.endsWith(".jar") || name.endsWith(".zip")) {
+							handleJarChange(fullPath);
+						}
+
 						// 处理新目录创建
 						if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(fullPath)) {
 							if (DEBUG) log("[WATCH] New directory detected: " + fullPath);
@@ -611,11 +708,15 @@ public class HotSwapAgent {
 
 							// 立即扫描该目录下现有的文件
 							try (Stream<Path> subFiles = Files.walk(fullPath)) {
-								subFiles.filter(p -> p.toString().endsWith(".class"))
-								 .forEach(p -> {
-									 if (DEBUG) log("[WATCH] Found existing file in new dir: " + p);
-									 handleFileChange(p);
-								 });
+								subFiles.filter(p -> {
+									String s = p.toString();
+									return s.endsWith(".class") || s.endsWith(".jar") || s.endsWith(".zip");
+								}).forEach(p -> {
+									if (DEBUG) log("[WATCH] Found existing file in new dir: " + p);
+									String ps = p.toString();
+									if (ps.endsWith(".class")) handleFileChange(p);
+									else handleJarChange(p);
+								});
 							} catch (IOException e) {
 								error("Failed to scan new directory: " + fullPath, e);
 							}

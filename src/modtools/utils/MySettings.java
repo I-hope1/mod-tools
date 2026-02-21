@@ -82,7 +82,7 @@ public class MySettings {
 			}
 		};
 		public void write() {
-			TaskManager.scheduleOrReset(0f, task);
+			TaskManager.scheduleOrReset(0.8f, task);
 		}
 
 		public void setDef(String key, Object value) {
@@ -140,67 +140,39 @@ public class MySettings {
 			return toBool(get(name, def));
 		}
 
-		public String toString() {
-			return toString(new StringBuilder());
-		}
-
-		public String toString(StringBuilder tab) {
-			if (isEmpty()) return "{}";
-
-			StringBuilder builder = new StringBuilder("{\n");
-			tab.append('\t');
-
-			boolean[] first = {true};
-			each((k, v) -> {
-				if (!first[0]) builder.append('\n');
-				first[0] = false;
-				builder.append(tab)
-				 .append('"').append(k.replace("\"", "\\\"")).append('"')
-				 .append(": ")
-				 .append(toValueString(tab, v));
-			});
-
-			tab.deleteCharAt(tab.length() - 1);
-			builder.append('\n').append(tab).append('}');
-			return builder.toString();
-		}
-
-		@SuppressWarnings("StringTemplateMigration")
-		private static String toValueString(StringBuilder tab, Object v) {
+		/** 将 Data 及其所有值递归转为 Jval */
+		private static Jval toJval(Object v) {
 			return switch (v) {
-				case Data data -> data.toString(tab);
+				case Data data -> {
+					Jval obj = Jval.newObject();
+					data.each((k, val) -> obj.add(k, toJval(val)));
+					yield obj;
+				}
 				case String[] arr -> {
-					if (arr.length == 0) yield "[]";
-					StringBuilder sb = new StringBuilder("[\n");
-					tab.append('\t');
-					for (String s : arr) {
-						sb.append(tab).append('"')
-						 .append(s.replace("\\", "\\\\").replace("\"", "\\\""))
-						 .append('"').append('\n');
-					}
-					tab.deleteCharAt(tab.length() - 1);
-					sb.append(tab).append(']');
-					yield sb.toString();
+					Jval array = Jval.newArray();
+					for (String s : arr) array.add(s);
+					yield array;
 				}
 				case Seq<?> seq -> {
-					if (seq.isEmpty()) yield "[]";
-					StringBuilder sb = new StringBuilder("[\n");
-					tab.append('\t');
-					seq.each(item -> sb.append(tab).append(toValueString(tab, item)).append('\n'));
-					tab.deleteCharAt(tab.length() - 1);
-					sb.append(tab).append(']');
-					yield sb.toString();
+					Jval array = Jval.newArray();
+					seq.each(item -> array.add(toJval(item)));
+					yield array;
 				}
-				case Jval jval -> jval.toString(Jformat.formatted).replace("\n", "\n" + tab);
-				case null -> "null";
-				default -> {
-					if (Reflect.isWrapper(v.getClass())) { yield v.toString(); } else {
-						yield STR."\"\{v.toString().replace("\\", "\\\\")}\"";
-					}
-				}
+				case Jval jval -> jval;
+				case Boolean b -> Jval.valueOf(b);
+				case Integer i -> Jval.valueOf((long) i);
+				case Long l -> Jval.valueOf(l);
+				case Float f -> Jval.valueOf(f);
+				case Double d -> Jval.valueOf(d);
+				case null -> Jval.NULL;
+				default -> Jval.valueOf(v.toString());
 			};
 		}
 
+		@Override
+		public String toString() {
+			return toJval(this).toString(Jformat.hjson);
+		}
 		public float getFloat(String name) {
 			return getFloat(name, 0);
 		}

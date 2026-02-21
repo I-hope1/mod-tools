@@ -14,7 +14,7 @@ import static nipx.HotSwapAgent.*;
 
 public class MyClassFileTransformer implements ClassFileTransformer {
 	// 预先计算注解的描述符，避免重复计算
-	public static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
+	static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
 
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
 		return hasClassAnnotation(bytes, "L" + annotationClass.getName().replace('.', '/') + ";");
@@ -35,9 +35,9 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 
 	/** @see InstanceTracker */
-	private static byte[] injectTracker(byte[] bytes, String className, ClassLoader classLoader) {
+	private static byte[] injectTracker(byte[] bytes, String slashClassName, ClassLoader classLoader) {
 		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new MyClassWriter(cr, classLoader);
+		ClassWriter cw = new MyClassWriter(cr, slashClassName, classLoader);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -73,60 +73,16 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		return cw.toByteArray();
 	}
 
-	private static final ThreadLocal<Boolean> IN_GET_COMMON_SUPER_CLASS = ThreadLocal.withInitial(() -> false);
 	/**
-	 * @param dotClassName 类名，如 nipx.MyClass，用于print
+	 * @param slashClassName 类名，如 nipx/MyClass
+	 * @return 如果没有拦截点，则返回原始 bytes，否则返回修改后的字节码
 	 * @see nipx.profiler.ProfilerData
 	 */
-	private static byte[] injectProfiler(byte[] bytes, String dotClassName, ClassLoader targetLoader) {
+	private static byte[] injectProfiler(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
 		ClassReader cr = new ClassReader(bytes);
 
-		// 1. 提取当前类的元数据 (用于打破递归)
-		String   currentSlashName   = cr.getClassName();
-		String   currentSuperName   = cr.getSuperName();
-		boolean  isCurrentInterface = (cr.getAccess() & Opcodes.ACC_INTERFACE) != 0;
-		String[] currentInterfaces  = cr.getInterfaces();
-
 		// 2. 构造带有防御逻辑的 ClassWriter
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
-			@Override
-			protected String getCommonSuperClass(String type1, String type2) {
-				// 1. 递归守卫：如果当前线程已经在计算 CommonSuperClass，再次进入说明发生了递归
-				if (IN_GET_COMMON_SUPER_CLASS.get()) {
-					// 递归发生！为了打破死循环，盲目返回 Object
-					return "java/lang/Object";
-				}
-
-				// 2. 拦截当前类（之前的逻辑保留）
-				if (type1.equals(currentSlashName) || type2.equals(currentSlashName)) {
-					return "java/lang/Object"; // 简化处理，直接返回 Object 最安全
-				}
-
-				IN_GET_COMMON_SUPER_CLASS.set(true);
-				try {
-					Class<?>    c, d;
-					ClassLoader cl = targetLoader != null ? targetLoader : ClassLoader.getSystemClassLoader();
-					try {
-						c = Class.forName(type1.replace('/', '.'), false, cl);
-						d = Class.forName(type2.replace('/', '.'), false, cl);
-					} catch (Throwable e) {
-						// 任何类加载失败（包括 ClassCircularityError），都返回 Object
-						return "java/lang/Object";
-					}
-
-					if (c.isAssignableFrom(d)) return type1;
-					if (d.isAssignableFrom(c)) return type2;
-					if (c.isInterface() || d.isInterface()) return "java/lang/Object";
-
-					do {
-						c = c.getSuperclass();
-					} while (!c.isAssignableFrom(d));
-					return c.getName().replace('.', '/');
-				} finally {
-					IN_GET_COMMON_SUPER_CLASS.set(false);
-				}
-			}
-		};
+		ClassWriter cw = new MyClassWriter(cr, slashClassName, targetLoader);
 
 		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			boolean anyProfiled = false;
@@ -166,7 +122,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 					 @Override
 					 protected void onMethodExit(int opcode) {
 						 if (!isProfiled) return;
-						 // if (opcode == ATHROW) return; // 可选：不统计抛异常的情况
+						 if (opcode == ATHROW) return;
 
 						 // long duration = System.nanoTime() - startTime;
 						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
@@ -174,7 +130,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 						 visitInsn(LSUB);
 						 // 栈顶现在是: [long: duration]
 
-						 // 【核心修复】修复 SWAP 导致的 VerifyError
+						 // 修复 SWAP 导致的 VerifyError
 						 // 此时不能直接 SWAP。最简单的做法是：
 						 // 把 duration 再存到一个临时变量，或者直接按参数顺序加载
 
@@ -187,7 +143,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 						 visitVarInsn(LSTORE, durationVar); // 存入临时变量
 
 						 // 准备参数 1: String name
-						 visitLdcInsn(dotClassName + "." + name);
+						 visitLdcInsn(slashClassName + "." + name);
 
 						 // 准备参数 2: long duration
 						 visitVarInsn(LLOAD, durationVar);
@@ -200,14 +156,14 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 				 };
 			}
 		};
-		if (!cv.anyProfiled) return null;
 
 		try {
 			cr.accept(cv, ClassReader.EXPAND_FRAMES);
+			if (!cv.anyProfiled) return bytes;
 			return cw.toByteArray();
 		} catch (Exception e) {
 			// ... error handling
-			return null;
+			return bytes;
 		}
 	}
 	@Override
@@ -233,11 +189,11 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 				// 处理 @Tracker (类级别)
 				if (hasClassAnnotation(bytes, Tracker.class)) {
-					bytes = injectTracker(bytes, dotClassName, loader);
+					bytes = injectTracker(bytes, className, loader);
 				}
 
 				// 处理 @Profile (方法级别)
-				bytes = injectProfiler(bytes, dotClassName, loader);
+				bytes = injectProfiler(bytes, className, loader);
 				// bytes = injectBuildingProfiler(bytes);
 
 				return bytes;
@@ -305,7 +261,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 
 	private static void writeTo(String className, byte[] classfileBuffer) {
-		File file = new File("F:/classes/" + className + ".class");
+		File file = new File("./classes/" + className + ".class");
 		file.getParentFile().mkdirs();
 		try (FileOutputStream fos = new FileOutputStream(file)) {
 			fos.write(classfileBuffer);
@@ -321,40 +277,52 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		return clazz.getName().replace('.', '/');
 	}
 
-
 	private static class MyClassWriter extends ClassWriter {
+		private static final ThreadLocal<Boolean> IN_GET_COMMON_SUPER_CLASS = ThreadLocal.withInitial(() -> false);
+
+		private final String      currentSlashName;
 		private final ClassLoader targetLoader;
-		public MyClassWriter(ClassReader cr, ClassLoader targetLoader) {
+		public MyClassWriter(ClassReader cr, String currentSlashName, ClassLoader targetLoader) {
 			super(cr, ClassWriter.COMPUTE_FRAMES);
+			this.currentSlashName = currentSlashName;
 			this.targetLoader = targetLoader;
 		}
 		@Override
 		protected String getCommonSuperClass(String type1, String type2) {
-			Class<?>    c, d;
-			ClassLoader classLoader = targetLoader;
-			// 防御：如果 targetLoader 为 null (BootClassLoader)，则尝试用系统加载器兜底
-			// 但通常 BootLoader 的类不会引用用户类，所以这层防御主要针对特殊情况
-			if (classLoader == null) {
-				classLoader = ClassLoader.getSystemClassLoader();
+			// 1. 递归守卫：如果当前线程已经在计算 CommonSuperClass，再次进入说明发生了递归
+			if (IN_GET_COMMON_SUPER_CLASS.get()) {
+				// 递归发生！为了打破死循环，盲目返回 Object
+				return "java/lang/Object";
 			}
 
+			// 2. 拦截当前类（之前的逻辑保留）
+			if (type1.equals(currentSlashName) || type2.equals(currentSlashName)) {
+				return "java/lang/Object"; // 简化处理，直接返回 Object 最安全
+			}
+
+			IN_GET_COMMON_SUPER_CLASS.set(true);
 			try {
-				c = Class.forName(type1.replace('/', '.'), false, classLoader);
-				d = Class.forName(type2.replace('/', '.'), false, classLoader);
-			} catch (Exception e) {
-				// 这里是关键：如果找不到类，抛出 RuntimeException 会导致 Transformer 崩溃
-				// 在热更场景下，如果依赖缺失，我们宁愿放弃 Frame 计算也不要崩掉进程
-				throw new RuntimeException(e.toString());
+				Class<?>    c, d;
+				ClassLoader cl = targetLoader != null ? targetLoader : ClassLoader.getSystemClassLoader();
+				try {
+					c = Class.forName(type1.replace('/', '.'), false, cl);
+					d = Class.forName(type2.replace('/', '.'), false, cl);
+				} catch (Throwable e) {
+					// 任何类加载失败（包括 ClassCircularityError），都返回 Object
+					return "java/lang/Object";
+				}
+
+				if (c.isAssignableFrom(d)) return type1;
+				if (d.isAssignableFrom(c)) return type2;
+				if (c.isInterface() || d.isInterface()) return "java/lang/Object";
+
+				do {
+					c = c.getSuperclass();
+				} while (!c.isAssignableFrom(d));
+				return c.getName().replace('.', '/');
+			} finally {
+				IN_GET_COMMON_SUPER_CLASS.set(false);
 			}
-
-			if (c.isAssignableFrom(d)) return type1;
-			if (d.isAssignableFrom(c)) return type2;
-			if (c.isInterface() || d.isInterface()) return "java/lang/Object";
-
-			do {
-				c = c.getSuperclass();
-			} while (!c.isAssignableFrom(d));
-			return c.getName().replace('.', '/');
 		}
 	}
 }

@@ -11,8 +11,8 @@ public interface KeyValue {
 	Color    stressColor = Color.violet;
 	KeyValue THE_ONE     = new $KeyValue();
 	float    padRight    = 8f;
-	float    keyScale    = 0.8f;
-	float    valueScale  = 0.7f;
+	float    keyScale    = 0.84f;
+	float    valueScale  = 0.8f;
 
 	default void key(Table col, String key) {
 		col.add(key).fontScale(keyScale).color(Color.lightGray).left().padRight(padRight);

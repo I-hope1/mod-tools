@@ -7,8 +7,8 @@ import org.objectweb.asm.commons.*;
 import java.util.*;
 
 /**
- * Lambda表达式对齐工具类
- * <p>
+ * Lambda表达式对齐工具类，优先保证“不崩溃”，尽可能保证“逻辑严丝合缝”
+ * <pre>
  * 主要功能：
  * 1. 分析新旧字节码中的合成方法（synthetic methods）
  * 2. 通过哈希匹配和顺序对齐算法，建立方法名映射关系
@@ -112,7 +112,7 @@ public class LambdaAligner {
 			var oldGroup = oldGroups.get(ks[i]);
 			if (oldGroup == null) continue;
 
-			// Step 1: 精确 Hash 匹配 (O(N))
+			// Step 1: 精确 Hash 匹配 (O(N²))
 			int newSize = newGroup.size();
 			int oldSize = oldGroup.size();
 
@@ -218,7 +218,6 @@ public class LambdaAligner {
 			@Override
 			public Object mapValue(Object value) {
 				if (value instanceof String s && s.length() > LAMBDA_LENGTH) {
-					char c = s.charAt(0);
 					if (ctx.renameMap.containsKey(s)) { // 快速预过滤 lambda$ 或 access$
 						return ctx.renameMap.get(s);
 					}
@@ -284,11 +283,12 @@ public class LambdaAligner {
 
 	//region 辅助方法
 	private static boolean isSyntheticName(String name) {
-		// 只要包含 lambda$ 或 access$ 且是合成方法，就应该纳入对齐范畴
-		return name.contains("lambda$") || name.contains("access$") || name.startsWith("$")
-		       || name.contains("internal$") || name.contains("$lambda");
+		// 仅针对名称具有随机/递增序号、且逻辑上可能发生偏移的方法
+		return name.contains("lambda$")    // Java / Kotlin Indy
+		       || name.contains("$lambda")    // Kotlin
+		       || name.contains("$anonfun$")  // Scala
+		       || name.contains("access$");   // Accessors (内部类访问桩)
 	}
-
 	/**
 	 * 从方法名中提取逻辑名称用于分组
 	 * <pre>
@@ -300,10 +300,26 @@ public class LambdaAligner {
 	 * @return 逻辑名称
 	 */
 	private static String extractLogicalName(String name) {
-		// 剥离末尾数字，拿到 _init_$lambda$
-		int i = name.length() - 1;
-		while (i >= 0 && Character.isDigit(name.charAt(i))) i--;
-		return (i >= 0) ? name.substring(0, i + 1) : name;
+		// 针对 Scala: $anonfun$main$1 -> $anonfun$main
+		// 针对 Java/Kotlin: lambda$main$0 -> lambda$main
+		int lastDollar = name.lastIndexOf('$');
+		if (lastDollar <= 0) return name;
+
+		// 检查最后一部分是否为纯数字序号
+		boolean isNumericSuffix = true;
+		for (int i = lastDollar + 1; i < name.length(); i++) {
+			if (!Character.isDigit(name.charAt(i))) {
+				isNumericSuffix = false;
+				break;
+			}
+		}
+
+		if (isNumericSuffix) {
+			return name.substring(0, lastDollar);
+		}
+
+		// 如果不是数字结尾（如 $deserializeLambda$），保持原样
+		return name;
 	}
 
 

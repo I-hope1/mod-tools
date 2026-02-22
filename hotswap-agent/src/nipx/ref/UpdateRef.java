@@ -38,21 +38,30 @@ public class UpdateRef {
 	 * 返回的 Runnable 是稳定的方法引用，不会被 HotSwap 删除。
 	 */
 	public static Runnable wrap(Element element, Runnable original) {
+		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
 		return ref::run;  // ref::run 对应 UpdateRef.run()，永远存在
 	}
 	public static Prov<?> wrap(Element element, Prov<?> original) {
+		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
 		return ref::get;
 	}
 	public static Boolp wrap(Element element, Boolp original) {
+		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
 		return ref::getBool;
 	}
 	public static Cons<?> wrapRunCons(Element element, Cons<?> original) {
-    UpdateRef ref = new UpdateRef(original, element, element::remove);
-    return ref::runCons;
-}
+		if (returnOriginal(original)) return original;
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::runCons;
+	}
+	private static boolean returnOriginal(Object original) {
+		if (original == null) return true;
+		if (original.getClass().getName().startsWith(UpdateRef.class.getName())) return true;  // 已被包装
+		return false;
+	}
 
 	/**
 	 * 注册到 element 的稳定引用。

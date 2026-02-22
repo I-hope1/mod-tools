@@ -95,6 +95,8 @@ dependencies {
 	implementation files("_libs/AndroidField.jar")
 
 
+//	implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:+'
+
 	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"
 	}

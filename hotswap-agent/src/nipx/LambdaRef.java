@@ -17,7 +17,7 @@ public class LambdaRef {
 	public static void init() {
 		{
 			var bytes = fetchOriginalBytecode(Element.class);
-			bytes = injectUpdateWrapper(bytes, dot2slash(Element.class), Element.class.getClassLoader());
+			bytes = injectUpdateWrapper(bytes);
 			try {
 				inst.redefineClasses(new ClassDefinition(Element.class, bytes));
 			} catch (ClassNotFoundException | UnmodifiableClassException e) {
@@ -26,7 +26,7 @@ public class LambdaRef {
 		}
 		{
 			var bytes = fetchOriginalBytecode(Label.class);
-			bytes = injectLabelSetTextWrapper(bytes, dot2slash(Label.class), Label.class.getClassLoader());
+			bytes = injectLabelSetTextWrapper(bytes);
 			try {
 				inst.redefineClasses(new ClassDefinition(Label.class, bytes));
 			} catch (ClassNotFoundException | UnmodifiableClassException e) {
@@ -46,7 +46,7 @@ public class LambdaRef {
 	 * r = UpdateRef.wrap(this, r);   ← 插入
 	 * this.update = r;               ← 原样保留
 	 */
-	private static byte[] injectUpdateWrapper(byte[] bytes, String slashClassName, ClassLoader classLoader) {
+	private static byte[] injectUpdateWrapper(byte[] bytes) {
 		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
@@ -83,7 +83,7 @@ public class LambdaRef {
 		cr.accept(cv, ClassReader.EXPAND_FRAMES);
 		return cw.toByteArray();
 	}
-	private static byte[] injectLabelSetTextWrapper(byte[] bytes, String slashClassName, ClassLoader classLoader) {
+	private static byte[] injectLabelSetTextWrapper(byte[] bytes) {
 		// 拦截 setText(Lprov;) 入口
 		// var0=this(Label), var1=prov
 		// 插入: var1 = UpdateRef.wrapProv(this, var1)

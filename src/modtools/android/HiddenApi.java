@@ -115,49 +115,71 @@ public class HiddenApi {
 
 	private static Method findMethod() {
 		Method[] methods = VMRuntime.class.getDeclaredMethods();
+
+		// Fast path: if first method is already the target
 		if (methods[0].getName().equals("setHiddenApiExemptions")) {
 			return methods[0];
 		}
+
 		int      length = methods.length;
 		Method[] array  = (Method[]) runtime.newNonMovableArray(Method.class, length);
 		System.arraycopy(methods, 0, array, 0, length);
 
 		long address = addressOf(array);
-		long min     = Long.MAX_VALUE, min_second = Long.MAX_VALUE, max = Long.MIN_VALUE;
-		/* 查找artMethod */
+
+		// --- Step 1: Extract all ArtMethod addresses ---
+		long[] artMethodAddresses = new long[length];
 		for (int k = 0; k < length; ++k) {
-			final long k_address         = address + k * IBYTES;
-			final long address_Method    = UNSAFE.getInt(k_address);
-			final long address_ArtMethod = UNSAFE.getLong(address_Method + offset_art_method_);
-			if (min >= address_ArtMethod) {
-				min = address_ArtMethod;
-			} else if (min_second >= address_ArtMethod) {
-				min_second = address_ArtMethod;
+			final long k_address = address + k * IBYTES;
+			// FIX #1: mask to prevent sign-extension of 32-bit compressed pointer
+			// e.g. 0x80001000 as int is negative, but as long should be 0x0000000080001000L
+			final long address_Method = UNSAFE.getInt(k_address) & 0xFFFFFFFFL;
+			artMethodAddresses[k] = UNSAFE.getLong(address_Method + offset_art_method_);
+		}
+
+		// --- Step 2: Compute step size robustly ---
+		// FIX #2: sort addresses, then find the minimum positive delta.
+		// The original code used only min and min_second, which breaks when
+		// hidden methods are filtered out by getDeclaredMethods() on API 14+,
+		// causing the computed stride to span 2+ ArtMethod slots and skipping the target.
+		long[] sorted = artMethodAddresses.clone();
+		java.util.Arrays.sort(sorted);
+
+		long min_diff = Long.MAX_VALUE;
+		for (int i = 1; i < length; i++) {
+			long diff = sorted[i] - sorted[i - 1];
+			if (diff > 0 && diff < min_diff) {
+				min_diff = diff;
 			}
-			if (max <= address_ArtMethod) {
-				max = address_ArtMethod;
+		}
+		size_art_method = min_diff;
+		Log.debug("size_art_method: " + size_art_method);
+
+		// Sanity check: ArtMethod structs are typically 40–128 bytes
+		if (size_art_method <= 0 || size_art_method > 150) {
+			Log.err("Implausible size_art_method: " + size_art_method);
+			return null;
+		}
+
+		long min = sorted[0];
+		long max = sorted[length - 1];
+
+		// --- Step 3: Walk the ArtMethod table and probe by name ---
+		// Search slightly beyond max to catch methods that getDeclaredMethods skipped
+		for (long artMethod = min; artMethod <= max + size_art_method * 32; artMethod += size_art_method) {
+			// FIX #1 applied again: always mask when reading the compressed pointer
+			final long address_Method = UNSAFE.getInt(address) & 0xFFFFFFFFL;
+			UNSAFE.putLong(address_Method + offset_art_method_, artMethod);
+
+			// getName() is native; it reads the new artMethod pointer directly
+			if ("setHiddenApiExemptions".equals(array[0].getName())) {
+				Log.debug("Got Method setHiddenApiExemptions: " + array[0]);
+				return array[0];
 			}
 		}
 
-		// 两个artMethod的差值（因为连续）
-		size_art_method = min_second - min;
-		Log.debug("size_art_method: " + size_art_method);
-		if (size_art_method > 0 && size_art_method < 100) {
-			for (long artMethod = min_second; artMethod < max; artMethod += size_art_method) {
-				// 这获取的是array[0]的 *Method，大小32bit
-				final long address_Method = UNSAFE.getInt(address);
-				// 修改第一个方法的artMethod
-				UNSAFE.putLong(address_Method + offset_art_method_, artMethod);
-				// 安卓的getName是native实现，修改了artMethod，name自然会变
-				if ("setHiddenApiExemptions".equals(array[0].getName())) {
-					Log.debug("Got Method setHiddenApiExemptions: " + array[0]);
-					return array[0];
-				}
-			}
-		}
 		return null;
 	}
-
 	public static long addressOf(Object[] array) {
 		try {
 			return runtime.addressOf(array);
@@ -184,6 +206,8 @@ public class HiddenApi {
 			Log.err(e);
 		}
 	}
+
+	// ---------------------------------
 
 	public static class A {
 		private A() {

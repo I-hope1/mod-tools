@@ -182,6 +182,7 @@ task playDesktop(type: Copy) {
 
 	def targetFile = file("${MdtDataDir}/mods/${modName}-${version}.jar")
 	onlyIf {
+		if (!targetFile.exists()) return true
 		def testName = new File(targetFile.parent, "lock_test_" + System.currentTimeMillis() + ".tmp")
 		boolean canMove = targetFile.renameTo(testName)
 		if (canMove) {

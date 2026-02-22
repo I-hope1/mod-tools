@@ -5,20 +5,20 @@ import nipx.util.*;
 
 import java.io.*;
 import java.lang.instrument.*;
-import java.util.zip.*;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.*;
 import java.net.URL;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.*;
+import java.util.stream.Stream;
+import java.util.zip.*;
 
 import static nipx.MountManager.*;
 
 /**
  * HotSwap Agent
- * 其由Bootstrap加载（bootloader），但不属于java.base模块
+ * 其由AppLoader加载，但不属于java.base模块
  */
 @SuppressWarnings("StringTemplateMigration")
 public class HotSwapAgent {
@@ -31,6 +31,7 @@ public class HotSwapAgent {
 	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "false"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
+	public static boolean      UI_HOOK;
 	//endregion
 
 	//region Core State Management
@@ -81,12 +82,19 @@ public class HotSwapAgent {
 		var loadedClasses = inst.getAllLoadedClasses();
 		refreshPackageLoaders(loadedClasses);
 
+		if (RETRANSFORM_LOADED) {
+			retransformLoaded(loadedClasses);
+		}
+		if (UI_HOOK) {
+			LambdaRef.init();
+		}
+
 		// 解析传入的监控路径 (支持分号或冒号分割)，按类型分流
 		Set<Path> newWatchDirs = new HashSet<>();
 		Set<Path> newWatchJars = new HashSet<>();
 		for (String s : agentArgs.split(File.pathSeparator)) {
 			if (s.trim().isEmpty()) continue;
-			Path p  = Paths.get(s.trim()).toAbsolutePath();
+			Path   p  = Paths.get(s.trim()).toAbsolutePath();
 			String ps = p.toString();
 			if (Files.isDirectory(p)) {
 				newWatchDirs.add(p);
@@ -103,7 +111,6 @@ public class HotSwapAgent {
 		}
 
 		// if (RETRANSFORM_LOADED) retransformLoaded(loadedClasses);
-
 		// 重启监控线程
 		if (!activeWatchDirs.equals(newWatchDirs) || !activeWatchJars.equals(newWatchJars)) {
 			info("Watch paths updated — dirs: " + newWatchDirs + "  jars: " + newWatchJars);
@@ -131,6 +138,8 @@ public class HotSwapAgent {
 		if (LAMBDA_ALIGN) {
 			info("Lambda Alignment ENABLED. Warning: This may cause logical shifts if lambdas are reordered.");
 		}
+		UI_HOOK = Boolean.parseBoolean(System.getProperty("nipx.agent.ui_hook", "false"));
+		info("UI Hook: " + UI_HOOK);
 		info("Structural HotSwap Supported: " + isEnhancedHotswapEnabled());
 	}
 	//endregion
@@ -273,8 +282,8 @@ public class HotSwapAgent {
 					// 类尚未加载：根据 REDEFINE_MODE 处理
 					// 若 path 来自 jar 临时目录，需还原为 watchDir 内的虚拟路径以正确推断 ClassLoader
 					Path clHintPath = tmpToJar.containsKey(path)
-					                  ? resolveWatchDirPath(tmpToJar.get(path), className)
-					                  : path;
+					 ? resolveWatchDirPath(tmpToJar.get(path), className)
+					 : path;
 					// clHintPath == null 表示来自直接传入的 activeWatchJar，无虚拟 watchDir 路径，
 					// 退化到纯包名推断（findTargetClassLoader(className)），inject 照常走，lazy_load 挂 tmpDir 路径
 					if (REDEFINE_MODE == RedefineMode.inject) {
@@ -335,7 +344,7 @@ public class HotSwapAgent {
 				continue;
 			}
 
-			List<Object> instances = InstanceTracker.getInstances(clazz);
+			var instances = InstanceTracker.getInstances(clazz);
 			if (instances.isEmpty()) continue;
 
 
@@ -357,7 +366,7 @@ public class HotSwapAgent {
 		return false;
 	}
 
-	private static byte[] fetchOriginalBytecode(Class<?> clazz) {
+	static byte[] fetchOriginalBytecode(Class<?> clazz) {
 		String      path = clazz.getName().replace('.', '/') + ".class";
 		ClassLoader cl   = clazz.getClassLoader();
 		if (cl == null) cl = ClassLoader.getSystemClassLoader();
@@ -473,9 +482,9 @@ public class HotSwapAgent {
 		info("Scanning files...");
 		// 直接传入的 jar/zip 文件：立即解压扫描
 		for (Path jar : activeWatchJars) {
-			String stem   = jar.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
-			Path   tmpDir = Paths.get(System.getProperty("java.io.tmpdir"), "nipx-hotswap",
-			                          stem + "-" + Long.toHexString(CRC64.hashString(jar.toString())));
+			String stem = jar.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
+			Path tmpDir = Paths.get(System.getProperty("java.io.tmpdir"), "nipx-hotswap",
+			 stem + "-" + Long.toHexString(CRC64.hashString(jar.toString())));
 			List<Path> outOfSync = new ArrayList<>();
 			try {
 				Files.createDirectories(tmpDir);
@@ -524,10 +533,10 @@ public class HotSwapAgent {
 					String ps = path.toString();
 					if (ps.endsWith(".jar") || ps.endsWith(".zip")) {
 						// 对 jar/zip：解压后做 hash 对比，out-of-sync 的类批量加入 pendingChanges
-						Path   absJar  = path.toAbsolutePath();
-						String stem    = absJar.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
-						Path   tmpDir  = Paths.get(System.getProperty("java.io.tmpdir"), "nipx-hotswap",
-						                            stem + "-" + Long.toHexString(CRC64.hashString(absJar.toString())));
+						Path   absJar = path.toAbsolutePath();
+						String stem   = absJar.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
+						Path tmpDir = Paths.get(System.getProperty("java.io.tmpdir"), "nipx-hotswap",
+						 stem + "-" + Long.toHexString(CRC64.hashString(absJar.toString())));
 						List<Path> outOfSync = new ArrayList<>();
 						try {
 							Files.createDirectories(tmpDir);
@@ -627,16 +636,16 @@ public class HotSwapAgent {
 	private static void extractJarToTemp(Path jarPath) {
 		try {
 			// 固定路径：<tmpdir>/nipx-hotswap/<stem>-<jarPathHash>
-			String stem   = jarPath.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
-			Path   tmpDir = Paths.get(System.getProperty("java.io.tmpdir"), "nipx-hotswap",
-			                          stem + "-" + Long.toHexString(CRC64.hashString(jarPath.toString())));
+			String stem = jarPath.getFileName().toString().replaceAll("[^a-zA-Z0-9_-]", "_");
+			Path tmpDir = Paths.get(System.getProperty("java.io.tmpdir"), "nipx-hotswap",
+			 stem + "-" + Long.toHexString(CRC64.hashString(jarPath.toString())));
 
 			// 清空旧内容（稳定路径，不删目录本身）
 			if (Files.exists(tmpDir)) {
 				try (Stream<Path> s = Files.walk(tmpDir)) {
 					s.sorted(Comparator.reverseOrder())
 					 .filter(p -> !p.equals(tmpDir))
-					 .forEach(p -> { try { Files.delete(p); } catch (IOException _) {} });
+					 .forEach(p -> { try { Files.delete(p); } catch (IOException _) { } });
 				}
 			}
 			Files.createDirectories(tmpDir);
@@ -765,6 +774,8 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Environment Detection
+	static Class<?> cl_Element;
+
 	private static final boolean ENHANCED_HOTSWAP;
 
 	static {
@@ -835,7 +846,7 @@ public class HotSwapAgent {
 		WatcherThread(Path root, Path specificJar) throws IOException {
 			super("HotSwap-FileWatcher-" + root.getFileName()
 			      + (specificJar != null ? "[" + specificJar.getFileName() + "]" : ""));
-			this.root        = root;
+			this.root = root;
 			this.specificJar = specificJar != null ? specificJar.toAbsolutePath() : null;
 			this.watchService = FileSystems.getDefault().newWatchService();
 		}
@@ -883,10 +894,10 @@ public class HotSwapAgent {
 							// 立即扫描该目录下现有的 .class 文件（jar/zip 仅在 root 一级处理，新子目录不扫）
 							try (Stream<Path> subFiles = Files.walk(fullPath)) {
 								subFiles.filter(p -> p.toString().endsWith(".class"))
-								        .forEach(p -> {
-									        if (DEBUG) log("[WATCH] Found existing file in new dir: " + p);
-									        handleFileChange(p);
-								        });
+								 .forEach(p -> {
+									 if (DEBUG) log("[WATCH] Found existing file in new dir: " + p);
+									 handleFileChange(p);
+								 });
 							} catch (IOException e) {
 								error("Failed to scan new directory: " + fullPath, e);
 							}

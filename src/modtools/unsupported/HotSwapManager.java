@@ -38,7 +38,7 @@ public class HotSwapManager {
 		try {
 			// 参数是类目录，Agent会自行处理
 			String agentPath = getAgentPath();
-			UtilsAgentManager.appendToBootstrap(agentPath);
+			// UtilsAgentManager.appendToBootstrap(agentPath);
 			UtilsAgentManager.attachAgent(agentPath, true, watchPaths);
 		} catch (Throwable e) {
 			HotSwapAgent.error("[HotSwapManager] An error occurred during the hotswap process.", e);

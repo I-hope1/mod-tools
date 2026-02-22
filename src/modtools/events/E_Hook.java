@@ -31,6 +31,8 @@ public enum E_Hook implements ISettings {
 	hotswap_event,
 	@Switch(dependency = "hot_swap")
 	lambda_align,
+	@Switch(dependency = "hot_swap")
+	ui_hook,
 
 
 	// ------------
@@ -63,6 +65,7 @@ public enum E_Hook implements ISettings {
 		hotswapOnChange(hotswap_blacklist, () -> String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
 		hotswapOnChange(hotswap_event, () -> hotswap_event.getString().trim());
 		hotswapOnChange(lambda_align, () -> lambda_align.getString().trim());
+		hotswapOnChange(ui_hook, () -> ui_hook.getString().trim());
 		System.setProperty("nipx.agent.retransform_loaded", retransform_loaded.getString());
 	}
 	static void hotswapOnChange(ISettings setting, Prov<String> prov) {

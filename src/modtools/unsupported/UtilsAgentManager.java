@@ -93,7 +93,7 @@ public class UtilsAgentManager {
 	public static void init() throws Throwable {
 		if (initialized) return; // 避免重复
 		initialized = true;
-		attachAgent(getAgentPath(), true, "");
+		// attachAgent(getAgentPath(), true, "");
 	}
 
 	static void prepareSelfAttach() {

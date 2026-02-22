@@ -16,6 +16,11 @@ repositories {
 dependencies {
 	// asm
 
+	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
+		exclude module: "flabel"
+	}
+	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+
 	def asmVersion = '9.9.1'
 	implementation "org.ow2.asm:asm:$asmVersion"
 	implementation "org.ow2.asm:asm-commons:$asmVersion"

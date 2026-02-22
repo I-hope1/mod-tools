@@ -11,10 +11,11 @@ import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
 
 import static nipx.HotSwapAgent.*;
+import static nipx.LambdaRef.onClassRedefined;
 
 public class MyClassFileTransformer implements ClassFileTransformer {
 	// 预先计算注解的描述符，避免重复计算
-	static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
+	static final String      profileDesc     = "L" + dot2slash(Profile.class) + ";";
 
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
 		return hasClassAnnotation(bytes, "L" + annotationClass.getName().replace('.', '/') + ";");
@@ -34,10 +35,11 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	}
 
 
+
 	/** @see InstanceTracker */
 	private static byte[] injectTracker(byte[] bytes, String slashClassName, ClassLoader classLoader) {
 		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new MyClassWriter(cr, slashClassName, classLoader);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -81,8 +83,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	private static byte[] injectProfiler(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
 		ClassReader cr = new ClassReader(bytes);
 
-		// 2. 构造带有防御逻辑的 ClassWriter
-		ClassWriter cw = new MyClassWriter(cr, slashClassName, targetLoader);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
 		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			boolean anyProfiled = false;
@@ -96,7 +97,6 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 
 					 // 标志位：当前方法是否有 @Profile
 					 boolean isProfiled = false;
-					 int     startTimeVar;
 
 					 @Override
 					 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
@@ -108,11 +108,15 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 						 return super.visitAnnotation(descriptor, visible);
 					 }
 
+					 int startTimeVar;
+					 int durationVar; // 声明为类成员
 					 @Override
 					 protected void onMethodEnter() {
 						 // 只有被打标的方法才插桩
 						 if (!isProfiled) return;
 
+						 startTimeVar = newLocal(Type.LONG_TYPE);
+						 durationVar = newLocal(Type.LONG_TYPE); // 在入口处统一分配
 						 // long startTime = System.nanoTime();
 						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
 						 startTimeVar = newLocal(Type.LONG_TYPE);
@@ -124,34 +128,14 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 						 if (!isProfiled) return;
 						 if (opcode == ATHROW) return;
 
-						 // long duration = System.nanoTime() - startTime;
 						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
 						 visitVarInsn(LLOAD, startTimeVar);
 						 visitInsn(LSUB);
-						 // 栈顶现在是: [long: duration]
 
-						 // 修复 SWAP 导致的 VerifyError
-						 // 此时不能直接 SWAP。最简单的做法是：
-						 // 把 duration 再存到一个临时变量，或者直接按参数顺序加载
-
-						 // 方案：因为 duration 已经在栈顶了，ProfilerData.record(String, long)
-						 // 我们需要 String 在下面，long 在上面。
-						 // 但 duration 是计算出来的，必须在上面。
-						 // 所以：先 LSTORE 到临时变量 -> LDC String -> LLOAD 临时变量
-
-						 int durationVar = newLocal(Type.LONG_TYPE);
-						 visitVarInsn(LSTORE, durationVar); // 存入临时变量
-
-						 // 准备参数 1: String name
+						 visitVarInsn(LSTORE, durationVar); // 复用已分配的局部变量
 						 visitLdcInsn(slashClassName + "." + name);
-
-						 // 准备参数 2: long duration
 						 visitVarInsn(LLOAD, durationVar);
-
-						 // 调用: ProfilerData.record(String, long)
-						 visitMethodInsn(INVOKESTATIC,
-							dot2slash(ProfilerData.class),
-							"record", "(Ljava/lang/String;J)V", false);
+						 visitMethodInsn(INVOKESTATIC, dot2slash(ProfilerData.class), "record", "(Ljava/lang/String;J)V", false);
 					 }
 				 };
 			}
@@ -161,8 +145,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 			cr.accept(cv, ClassReader.EXPAND_FRAMES);
 			if (!cv.anyProfiled) return bytes;
 			return cw.toByteArray();
-		} catch (Exception e) {
-			// ... error handling
+		} catch (Throwable e) {
 			return bytes;
 		}
 	}
@@ -170,38 +153,43 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 		if (className == null) return null;
-		// 忽略 bootclassloader
 		if (loader == null) return null;
 		if (className.startsWith("org/objectweb/asm/")) return null;
 		if (className.startsWith("nipx/")) return null;
 
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
+		if (classBeingRedefined != null) {
+			onClassRedefined(dotClassName);
+		}
 
 		bytecodeCache.put(dotClassName, classfileBuffer);
-		// info("transform: " + dotClassName + " ' blacklisted " + HotSwapAgent.isBlacklisted(dotClassName));
 
 		try {
 			if (HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
-				byte[] bytes = classfileBuffer.clone();
+				byte[]  bytes    = classfileBuffer;  // 不clone，用引用做"是否修改"判断
+				boolean modified = false;
 
-				if (HotSwapAgent.DEBUG) writeTo(className, bytes);
-
-				// 处理 @Tracker (类级别)
 				if (hasClassAnnotation(bytes, Tracker.class)) {
 					bytes = injectTracker(bytes, className, loader);
+					modified = true;
 				}
 
-				// 处理 @Profile (方法级别)
-				bytes = injectProfiler(bytes, className, loader);
-				// bytes = injectBuildingProfiler(bytes);
+				// injectProfiler 内部已判断是否有@Profile，只在有时才返回修改后字节码
+				byte[] profiled = injectProfiler(bytes, className, loader);
+				if (profiled != bytes) {  // 引用不等 → 确实被修改了
+					bytes = profiled;
+					modified = true;
+				}
 
-				return bytes;
+				if (HotSwapAgent.DEBUG && modified) writeTo(className, bytes);
+
+				// info("Transformed: " + dotClassName + ":" + modified);
+				return modified ? bytes : null;  // ← 关键：未修改返回null
 			}
 		} catch (Throwable t) {
-			// ！！！这里是关键，找出凶手！！！
 			error("Transformer crashed for class: " + dotClassName, t);
-			return null; // 返回 null 放弃修改，保证应用不崩，但修改不生效
+			return null;
 		}
 		return null;
 	}
@@ -277,52 +265,4 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		return clazz.getName().replace('.', '/');
 	}
 
-	private static class MyClassWriter extends ClassWriter {
-		private static final ThreadLocal<Boolean> IN_GET_COMMON_SUPER_CLASS = ThreadLocal.withInitial(() -> false);
-
-		private final String      currentSlashName;
-		private final ClassLoader targetLoader;
-		public MyClassWriter(ClassReader cr, String currentSlashName, ClassLoader targetLoader) {
-			super(cr, ClassWriter.COMPUTE_FRAMES);
-			this.currentSlashName = currentSlashName;
-			this.targetLoader = targetLoader;
-		}
-		@Override
-		protected String getCommonSuperClass(String type1, String type2) {
-			// 1. 递归守卫：如果当前线程已经在计算 CommonSuperClass，再次进入说明发生了递归
-			if (IN_GET_COMMON_SUPER_CLASS.get()) {
-				// 递归发生！为了打破死循环，盲目返回 Object
-				return "java/lang/Object";
-			}
-
-			// 2. 拦截当前类（之前的逻辑保留）
-			if (type1.equals(currentSlashName) || type2.equals(currentSlashName)) {
-				return "java/lang/Object"; // 简化处理，直接返回 Object 最安全
-			}
-
-			IN_GET_COMMON_SUPER_CLASS.set(true);
-			try {
-				Class<?>    c, d;
-				ClassLoader cl = targetLoader != null ? targetLoader : ClassLoader.getSystemClassLoader();
-				try {
-					c = Class.forName(type1.replace('/', '.'), false, cl);
-					d = Class.forName(type2.replace('/', '.'), false, cl);
-				} catch (Throwable e) {
-					// 任何类加载失败（包括 ClassCircularityError），都返回 Object
-					return "java/lang/Object";
-				}
-
-				if (c.isAssignableFrom(d)) return type1;
-				if (d.isAssignableFrom(c)) return type2;
-				if (c.isInterface() || d.isInterface()) return "java/lang/Object";
-
-				do {
-					c = c.getSuperclass();
-				} while (!c.isAssignableFrom(d));
-				return c.getName().replace('.', '/');
-			} finally {
-				IN_GET_COMMON_SUPER_CLASS.set(false);
-			}
-		}
-	}
 }

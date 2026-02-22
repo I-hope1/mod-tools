@@ -70,6 +70,7 @@ configurations.configureEach {
 }
 configurations {
 	desugarLib
+	aarLib
 }
 
 def stripAndroidJar = tasks.register('stripAndroidJar', Jar) {
@@ -78,6 +79,20 @@ def stripAndroidJar = tasks.register('stripAndroidJar', Jar) {
 	destinationDirectory = layout.buildDirectory.dir("libs")
 	exclude 'java/**', 'javax/**', 'sun/**', 'com/sun/**', 'org/w3c/**', 'org/xml/**'
 }
+def extractHiddenApiBypass = tasks.register('extractHiddenApiBypass', Jar) {
+	// AAR 里面的 classes.jar 再套一层 zipTree
+	from {
+		zipTree(configurations.aarLib.singleFile).matching { include 'classes.jar' }
+				.collect {
+					println "classes.jar: $it"
+					return zipTree(it)
+				}
+	}
+	archiveFileName = "hiddenapibypass.jar"
+	println archiveFileName
+	destinationDirectory = layout.buildDirectory.dir("libs")
+}
+
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
@@ -95,7 +110,9 @@ dependencies {
 	implementation files("_libs/AndroidField.jar")
 
 
-//	implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:+'
+	aarLib('org.lsposed.hiddenapibypass:hiddenapibypass:6.1') { transitive = false }
+	compileOnly files(extractHiddenApiBypass)
+
 
 	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
 		exclude module: "flabel"

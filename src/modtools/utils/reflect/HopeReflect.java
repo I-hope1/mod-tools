@@ -19,11 +19,12 @@ public class HopeReflect {
 	public static void changeClass(Object obj, Class<?> clazz) {
 		if (!OS.isAndroid) return;
 		class X {
-			static final long offset = FieldUtils.fieldOffset(Object.class, "shadow$_klass_");
+			static final long offset =
+			 FieldUtils.fieldOffset(Object.class, "shadow$_klass_", 0L);
 		}
 		UNSAFE.putObject(obj, X.offset, clazz);
 	}
-	/** 同时去除final  */
+	/** 同时去除final */
 	public static <T extends Class<?>> void setPublic(T obj, Class<T> cls) {
 		setPublic0(obj, cls);
 	}

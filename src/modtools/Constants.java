@@ -12,10 +12,11 @@ import mindustry.Vars;
 import mindustry.graphics.MultiPacker;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
+import modtools.android.HiddenApi;
 import modtools.annotations.asm.CopyConstValue;
 import modtools.jsfunc.reflect.InitMethodHandle;
-import modtools.utils.*;
-import modtools.utils.Tools.*;
+import modtools.utils.CatchSR;
+import modtools.utils.Tools.CProv;
 import rhino.*;
 
 import java.lang.invoke.*;
@@ -51,10 +52,10 @@ public class Constants {
 	/** @see arc.backend.android.AndroidInput.KeyEvent */
 	public interface AndroidInput_KeyEvent {
 		Class<?> KeyEvent  = nl(() -> Class.forName("arc.backend.android.AndroidInput$KeyEvent"));
-		long     TIMESTAMP = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "timeStamp");
-		long     TYPE      = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "type");
-		long     KEY_CODE  = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyCode");
-		long     KEY_CHAR  = fieldOffset(AndroidInput_KeyEvent.KeyEvent, "keyChar");
+		long     TIMESTAMP = fieldOffset(KeyEvent, "timeStamp");
+		long     TYPE      = fieldOffset(KeyEvent, "type");
+		long     KEY_CODE  = fieldOffset(KeyEvent, "keyCode");
+		long     KEY_CHAR  = fieldOffset(KeyEvent, "keyChar");
 	}
 
 	/** Constants related to desktop JVM internals (java.lang.invoke). Likely fragile. */
@@ -109,9 +110,7 @@ public class Constants {
 		 "java.lang.invoke.MethodHandleImpl",
 		 long.class, int.class, MethodType.class);
 
-		long ART_METHOD = fieldOffset(Executable.class, "artMethod");
-
-		long STRING_COUNT = fieldOffset(String.class, "count");
+		long ART_METHOD = fieldOffset(Executable.class, "artMethod", HiddenApi.offset_art_method_);
 
 		// long OBJECT_SIZE = FieldUtils.fieldOffset(nl(() ->
 		//  Class.class.getDeclaredField("objectSize")));

@@ -4,13 +4,17 @@ import arc.util.Log;
 import dalvik.system.VMRuntime;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.ByteCodeTools.MyClass;
+import org.lsposed.hiddenapibypass.HiddenApiBypass;
 import rhino.classfile.ByteCode;
 
 import java.lang.reflect.*;
 
 import static modtools.utils.ByteCodeTools.nativeName;
 
-/** Only For Android */
+/**
+ * Only For Android
+ * @see <a href="https://lovesykun.cn/archives/android-hidden-api-bypass.html">LSPosed的实现</a>
+ */
 public class HiddenApi {
 	public static final VMRuntime runtime = VMRuntime.getRuntime();
 
@@ -23,6 +27,13 @@ public class HiddenApi {
 	public static final int  offset_art_method_ = 24;
 
 	public static void setHiddenApiExemptions() {
+		try { // 使用LSPosed的实现
+			HiddenApiBypass.setHiddenApiExemptions("L");
+		} catch (Throwable e) {
+			// 如果这也崩溃那也是nb了
+			Log.err(e);
+		}
+
 		if (trySetHiddenApiExemptions()) { return; }
 		// 高版本中setHiddenApiExemptions方法直接反射获取不到，得修改artMethod
 		// sdk_version > 28（具体多少不知道）
@@ -88,6 +99,7 @@ public class HiddenApi {
 
 	/** @return true if successful. */
 	private static boolean trySetHiddenApiExemptions() {
+
 		try {
 			// MAYBE: sdk_version < 28
 			runtime.setHiddenApiExemptions(new String[]{"L"});

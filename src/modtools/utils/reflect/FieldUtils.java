@@ -113,6 +113,13 @@ public class FieldUtils {
 	public static long fieldOffset(Class<?> cls, String name) {
 		return $OffsetGetter2.impl.fieldOffset(cls, name);
 	}
+	public static long fieldOffset(Class<?> cls, String name, long def) {
+		try {
+			return fieldOffset(cls, name);
+		} catch (Throwable ignored) {
+			return def;
+		}
+	}
 	public static long fieldOffset(Field f) {
 		return fieldOffset(Modifier.isStatic(f.getModifiers()), f);
 	}

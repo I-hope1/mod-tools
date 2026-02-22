@@ -1,24 +1,36 @@
 package nipx.ref;
 
+import arc.func.*;
 import arc.scene.Element;
-import nipx.annotation.Tracker;
 
 import java.lang.ref.WeakReference;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-@Tracker
 public class UpdateRef {
+	public static final List<WeakReference<UpdateRef>> ALL =
+	 new CopyOnWriteArrayList<>();
 
-	private volatile Runnable fn;
+
+	public static List<WeakReference<UpdateRef>> getAll() {
+		return ALL;
+	}
+	public static void clearLambda() {
+		ALL.removeIf(x -> x.get() == null);
+	}
+
+	private volatile Object fn;
 
 	/** 弱引用持有元素，避免阻止 GC */
 	private final WeakReference<?> elementRef;
 	/** 如何"删除"这个元素，由注册方传入 */
 	private final Runnable         removeAction;
 
-	public UpdateRef(Runnable fn, Object element, Runnable removeAction) {
+	private UpdateRef(Object fn, Object element, Runnable removeAction) {
 		this.fn = fn;
 		this.elementRef = new WeakReference<>(element);
 		this.removeAction = removeAction;
+		ALL.add(new WeakReference<>(this));
 	}
 
 	/**
@@ -29,34 +41,87 @@ public class UpdateRef {
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
 		return ref::run;  // ref::run 对应 UpdateRef.run()，永远存在
 	}
+	public static Prov<?> wrap(Element element, Prov<?> original) {
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::get;
+	}
+	public static Boolp wrap(Element element, Boolp original) {
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::getBool;
+	}
+	public static Cons<?> wrapRunCons(Element element, Cons<?> original) {
+    UpdateRef ref = new UpdateRef(original, element, element::remove);
+    return ref::runCons;
+}
 
 	/**
 	 * 注册到 element 的稳定引用。
 	 * fn == null (被 HotSwap 清除) → 自动删除元素。
 	 */
 	public void run() {
-		var f = this.fn;
+		var f = (Runnable) this.fn;
+		if (checkFn(f)) return;
+		try {
+			f.run();
+		} catch (NoSuchMethodError e) {
+			// 极端情况兜底
+			clearFn();
+		}
+	}
+	private void clearFn() {
+		this.fn = null;
+	}
+
+	public <T> T get() {
+		var f = (Prov<T>) this.fn;
+		if (checkFn(f)) return null;
+		try {
+			return f.get();
+		} catch (NoSuchMethodError e) {
+			// 极端情况兜底
+			clearFn();
+			return null;
+		}
+	}
+
+	public boolean getBool() {
+		var f = (Boolp) this.fn;
+		if (checkFn(f)) return false;
+		try {
+			return f.get();
+		} catch (NoSuchMethodError e) {
+			// 极端情况兜底
+			clearFn();
+			return false;
+		}
+	}
+	@SuppressWarnings("unchecked")
+	public <T> void runCons(T t) {
+		var f = (Cons<T>) this.fn;
+		if (checkFn(f)) return;
+		try {
+			f.get(t);
+		} catch (NoSuchMethodError e) {
+			clearFn();
+		}
+	}
+
+	private boolean checkFn(Object f) {
 		if (f == null) {
 			// lambda 已被 HotSwap 删除，移除元素
 			if (elementRef.get() != null && removeAction != null) {
 				removeAction.run();
 			}
-			return;
+			return true;
 		}
-		try {
-			f.run();
-		} catch (NoSuchMethodError e) {
-			// 极端情况兜底
-			this.fn = null;
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
+		return false;
 	}
 
+
 	public boolean clearIfFromClass(String dotClassName) {
-		Runnable f = this.fn;
+		var f = this.fn;
 		if (f != null && f.getClass().getName().startsWith(dotClassName + "$$Lambda")) {
-			this.fn = null;
+			clearFn();
 			return true;
 		}
 		return false;

@@ -41,10 +41,7 @@ jar {
 		)
 	}
 	exclude "module-info.class"
-//	from(configurations.compileClasspath.asList().toArray()) { include "**" }
-	from {
-		configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-	}
+	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
 }
 
 dependencies {

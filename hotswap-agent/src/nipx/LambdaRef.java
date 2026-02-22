@@ -1,7 +1,10 @@
 package nipx;
 
+import arc.func.Cons;
 import arc.scene.Element;
-import nipx.ref.*;
+import arc.scene.ui.*;
+import arc.scene.ui.Label;
+import nipx.ref.UpdateRef;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
@@ -11,32 +14,72 @@ import static nipx.HotSwapAgent.*;
 import static nipx.MyClassFileTransformer.dot2slash;
 
 public class LambdaRef {
-	static final String      CL_ELEMENT      = "arc/scene/Element";
-	static final String      CL_LABEL        = "arc/scene/ui/Label";
+	static final String CL_ELEMENT = "arc/scene/Element";
 
 	public static void init() {
-		{
-			var bytes = fetchOriginalBytecode(Element.class);
-			bytes = injectUpdateWrapper(bytes);
-			try {
-				inst.redefineClasses(new ClassDefinition(Element.class, bytes));
-			} catch (ClassNotFoundException | UnmodifiableClassException e) {
-				throw new RuntimeException(e);
-			}
+		redefine(Element.class, "update", "(Ljava/lang/Runnable;)V", "java/lang/Runnable");
+		redefine(Label.class, "setText", "(Larc/func/Prov;)V", "arc/func/Prov");
+		redefine(Button.class, "setDisabled", "(Larc/func/Boolp;)V", "arc/func/Boolp");
+		redefineCell();
+	}
+	private static void redefineCell() {
+		var bytes = fetchOriginalBytecode(arc.scene.ui.layout.Cell.class);
+		bytes = injectCell(bytes);
+		try {
+			inst.redefineClasses(new ClassDefinition(arc.scene.ui.layout.Cell.class, bytes));
+		} catch (Exception e) {
+			throw new RuntimeException(e);
 		}
-		{
-			var bytes = fetchOriginalBytecode(Label.class);
-			bytes = injectLabelSetTextWrapper(bytes);
-			try {
-				inst.redefineClasses(new ClassDefinition(Label.class, bytes));
-			} catch (ClassNotFoundException | UnmodifiableClassException e) {
-				throw new RuntimeException(e);
+	}
+
+	/** @see UpdateRef#wrapRunCons(Element, Cons)   */
+	private static byte[] injectCell(byte[] bytes) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+				// 只拦截 update(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
+				if (!"update".equals(name) || !"(Larc/func/Cons;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+					return mv;
+				}
+				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+					@Override
+					protected void onMethodEnter() {
+						// UpdateRef.wrap(this.element, cons)
+						// Cell.element 是 package-private 字段
+						visitVarInsn(ALOAD, 0);
+						visitFieldInsn(GETFIELD, "arc/scene/ui/layout/Cell", "element", "Larc/scene/Element;");
+						visitVarInsn(ALOAD, 1);  // Cons
+						visitMethodInsn(
+						 INVOKESTATIC,
+						 dot2slash(UpdateRef.class),
+						 "wrapRunCons",
+						 "(Larc/scene/Element;Larc/func/Cons;)Larc/func/Cons;",
+						 false
+						);
+						visitVarInsn(ASTORE, 1);
+					}
+				};
 			}
+		};
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		return cw.toByteArray();
+	}
+	private static void redefine(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
+		var bytes = fetchOriginalBytecode(clazz);
+		bytes = inject(bytes, methodName, methodDesc, lambdaType);
+		try {
+			inst.redefineClasses(new ClassDefinition(clazz, bytes));
+		} catch (ClassNotFoundException | UnmodifiableClassException e) {
+			throw new RuntimeException(e);
 		}
 	}
 
 	/**
-	 * 拦截 Element.update(Runnable) 方法，
+	 * 拦截 Element.update(Runnable) 等方法，
 	 * 在方法入口把参数 r 替换为 UpdateRef.wrap(this, r)。
 	 * <p>
 	 * 原始字节码：
@@ -46,44 +89,9 @@ public class LambdaRef {
 	 * r = UpdateRef.wrap(this, r);   ← 插入
 	 * this.update = r;               ← 原样保留
 	 */
-	private static byte[] injectUpdateWrapper(byte[] bytes) {
-		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
-
-		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
-			@Override
-			public MethodVisitor visitMethod(int access, String name, String descriptor,
-			                                 String signature, String[] exceptions) {
-				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-
-				// 只拦截 update(Ljava/lang/Runnable;)Larc/scene/Element;
-				if (!"update".equals(name) || !"(Ljava/lang/Runnable;)Larc/scene/Element;".equals(descriptor)) { return mv; }
-
-				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
-					@Override
-					protected void onMethodEnter() {
-						// 在方法最开头执行：r = UpdateRef.wrap(this, r)
-						// var0 = this, var1 = r (Runnable)
-						visitVarInsn(ALOAD, 0);  // this (Element)
-						visitVarInsn(ALOAD, 1);  // r (Runnable)
-						visitMethodInsn(
-						 INVOKESTATIC,
-						 dot2slash(UpdateRef.class),          // nipx/UpdateRef
-						 "wrap",
-						 "(L" + CL_ELEMENT + ";Ljava/lang/Runnable;)Ljava/lang/Runnable;",
-						 false
-						);
-						visitVarInsn(ASTORE, 1); // 覆盖局部变量 r
-						// 后续原始代码 this.update = r 自然存入包装后的 Runnable
-					}
-				};
-			}
-		};
-
-		cr.accept(cv, ClassReader.EXPAND_FRAMES);
-		return cw.toByteArray();
-	}
-	private static byte[] injectLabelSetTextWrapper(byte[] bytes) {
+	private static byte[] inject(
+	 byte[] bytes, String methodName, String methodDesc,
+	 String lambdaType) {
 		// 拦截 setText(Lprov;) 入口
 		// var0=this(Label), var1=prov
 		// 插入: var1 = UpdateRef.wrapProv(this, var1)
@@ -95,7 +103,7 @@ public class LambdaRef {
 			                                 String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 				// 只拦截 setText(Larc/struct/prov;)V
-				if (!"setText".equals(name) || !"(Larc/func/Prov;)V".equals(descriptor)) { return mv; }
+				if (!methodName.equals(name) || !methodDesc.equals(descriptor)) { return mv; }
 				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 					@Override
 					protected void onMethodEnter() {
@@ -103,9 +111,9 @@ public class LambdaRef {
 						visitVarInsn(ALOAD, 1);
 						visitMethodInsn(
 						 INVOKESTATIC,
-						 dot2slash(ProvRef.class),
+						 dot2slash(UpdateRef.class),
 						 "wrap",
-						 "(L" + CL_ELEMENT + ";Larc/func/Prov;)Larc/func/Prov;",
+						 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
 						 false
 						);
 						visitVarInsn(ASTORE, 1);
@@ -122,23 +130,15 @@ public class LambdaRef {
 	 * @param dotClassName 被重载的类名，如 com.example.MyView
 	 */
 	public static void onClassRedefined(String dotClassName) {
-		// InstanceTracker 里用 WeakReference 存着所有 @Tracker 实例
-		// 直接过滤出 UpdateRef 类型
 		int cleared = 0;
-		for (Object instance : InstanceTracker.getInstances(UpdateRef.class)) {
-			if (instance instanceof UpdateRef ref) {
-				if (ref.clearIfFromClass(dotClassName)) {
-					cleared++;
-				}
+		for (var ref : UpdateRef.getAll()) {
+			UpdateRef updateRef = ref.get();
+			if (updateRef != null && updateRef.clearIfFromClass(dotClassName)) {
+				cleared++;
 			}
 		}
-		for (Object instance : InstanceTracker.getInstances(ProvRef.class)) {
-			if (instance instanceof ProvRef ref) {
-				if (ref.clearIfFromClass(dotClassName)) {
-					cleared++;
-				}
-			}
-		}
+		UpdateRef.clearLambda();
+
 		if (cleared > 0) {
 			info("HotSwap: cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
 		}

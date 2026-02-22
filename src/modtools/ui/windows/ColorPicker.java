@@ -67,6 +67,7 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		a = color.a;
 
 		cont.clear();
+		// cont.label(() -> "asoskao").row();
 		cont.add(newTable(t -> {
 			t.add(new Element() {
 				 public void draw() {

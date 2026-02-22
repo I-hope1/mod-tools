@@ -17,10 +17,11 @@ public class LambdaRef {
 	static final String CL_ELEMENT = "arc/scene/Element";
 
 	public static void init() {
-		redefine(Element.class, "update", "(Ljava/lang/Runnable;)V", "java/lang/Runnable");
-		redefine(Label.class, "setText", "(Larc/func/Prov;)V", "arc/func/Prov");
+		// 子类在前面，父类在后
 		redefine(Button.class, "setDisabled", "(Larc/func/Boolp;)V", "arc/func/Boolp");
+		redefine(Label.class, "setText", "(Larc/func/Prov;)V", "arc/func/Prov");
 		redefineCell();
+		redefine(Element.class, "update", "(Ljava/lang/Runnable;)V", "java/lang/Runnable");
 	}
 	private static void redefineCell() {
 		var bytes = fetchOriginalBytecode(arc.scene.ui.layout.Cell.class);

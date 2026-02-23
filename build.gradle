@@ -111,7 +111,7 @@ dependencies {
 
 
 	aarLib('org.lsposed.hiddenapibypass:hiddenapibypass:6.1') { transitive = false }
-	compileOnly files(extractHiddenApiBypass)
+	implementation files(extractHiddenApiBypass)
 
 
 	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {

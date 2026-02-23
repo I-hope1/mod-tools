@@ -30,9 +30,16 @@ public class HScene {
 	public static final String SUFFIX = "-$H";
 
 	@Exclude
-	public static void load(  Pause pause) throws Exception {
+	public static void load(Pause pause) throws Exception {
+		try {
+			pauseMap = json.fromJson(ObjectFloatMap.class, Class.class, pause.data().toJsonString());
+		} catch (Exception e) {
+			pauseMap = new ObjectFloatMap<>();
+		}
+
 		Class<? extends Group> superClass = Core.scene.root.getClass();
 		if (superClass.getName().endsWith(SUFFIX)) return;
+
 		var sceneClass0 = new MyClass<>(superClass, SUFFIX);
 		var sceneClass  = new MyClass<>(sceneClass0.define(), "i");
 
@@ -86,7 +93,6 @@ public class HScene {
 			FieldUtils.setValue(Core.scene, Scene.class, "root", newGroup, Group.class);
 		}
 
-		pauseMap = json.fromJson(ObjectFloatMap.class, Class.class, pause.data().toString());
 
 		hookUpdate(Core.app.getListeners());
 	}
@@ -127,8 +133,8 @@ public class HScene {
 			}
 			//region asm
 			HopeReflect.setPublic(superClass, Class.class);
-			var myClass = new MyClass<>(superClass, SUFFIX);
-			Lambda lambda = myClass.addLambda(() -> decrement(superClass) > 0, Boolp.class, "get", "()Z");
+			var    myClass = new MyClass<>(superClass, SUFFIX);
+			Lambda lambda  = myClass.addLambda(() -> decrement(superClass) > 0, Boolp.class, "get", "()Z");
 			myClass.setFunc("update", cfw -> {
 				myClass.execLambda(lambda, null);
 				// 判断是否暂停

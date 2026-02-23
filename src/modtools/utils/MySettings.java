@@ -169,6 +169,9 @@ public class MySettings {
 			};
 		}
 
+		public String toJsonString() {
+			return toJval(this).toString(Jformat.plain);
+		}
 		@Override
 		public String toString() {
 			return toJval(this).toString(Jformat.hjson);

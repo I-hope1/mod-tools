@@ -17,6 +17,7 @@ import modtools.utils.Tools;
 import modtools.utils.ui.FormatHelper;
 
 import java.io.*;
+import java.util.concurrent.atomic.*;
 
 import static mindustry.Vars.*;
 import static modtools.utils.Tools.runT;
@@ -40,10 +41,19 @@ public class Updater {
 			 Jval val = Jval.read(res.getResultAsString());
 			 // Log.info(val.toString(Jformat.formatted));
 			 String newBuild = val.getString("tag_name", "0");
+			 if (Core.settings.getBool(IntVars.modName + "-update-ignore-" + newBuild, false)) {
+				 done.get(false);
+				 return;
+			 }
 			 // Log.info("New: @, Old: @",newBuild, IntVars.meta.version);
-			 if (Tools.compareVersions(newBuild, IntVars.meta.version) > 0) {
-				 Jval   asset = val.get("assets").asArray().find(v -> v.getString("name", "").endsWith(".jar"));
-				 String url   = asset.getString("browser_download_url", "");
+			 if (IntVars.meta.version != null && Tools.compareVersions(newBuild, IntVars.meta.version) > 0) {
+				 Jval asset = val.get("assets").asArray().find(v -> v.getString("name", "").endsWith(".jar"));
+				 if (asset == null) {
+					 Log.err("No jar asset found in release: " + newBuild);
+					 Core.app.post(() -> done.get(false));
+					 return;
+				 }
+				 String url = asset.getString("browser_download_url", "");
 				 Log.info(STR."Downloading mod-tools from: \{url}");
 				 updateAvailable = true;
 				 updateBuild = newBuild;
@@ -52,8 +62,6 @@ public class Updater {
 					 showUpdateDialog();
 					 done.get(true);
 				 });
-			 } else {
-				 Core.app.post(() -> done.get(false));
 			 }
 		 }));
 	}
@@ -78,26 +86,32 @@ public class Updater {
 			 "@ok", "@mod-tools.ignore",
 			 () -> {
 				 try {
-					 boolean[] cancel   = {false};
-					 float[]   progress = {0};
-					 int[]     length   = {0};
+					 AtomicBoolean cancel      = new AtomicBoolean(false);
+					 AtomicInteger progress    = new AtomicInteger();
+					 Floatp        getProgress = () -> Float.intBitsToFloat(progress.get());
+					 Floatc        setProgress = p -> progress.set(Float.floatToIntBits(p));
+					 AtomicInteger length      = new AtomicInteger();
 
 					 Fi fileDir = IntVars.dataDirectory.child("versions");
 					 Fi file    = fileDir.child(STR."mod-tools.\{updateBuild}.jar");
 
 					 Window dialog = new NoTopWindow("@mod-tools.updating");
-					 download(updateUrl, file, i -> length[0] = i, v -> progress[0] = v,
-						() -> cancel[0], runT(() -> mods.importMod(file)),
+					 download(updateUrl, file, length::set, setProgress,
+					  cancel::get, runT(() -> mods.importMod(file)),
 						e -> Core.app.post(runT(() -> {
 							dialog.hide();
 							showException(e);
 						})));
 
-					 dialog.cont.add(new Bar(() -> length[0] == 0 ? Core.bundle.get("mod-tools.updating")
-						: FormatHelper.fixed(progress[0] * length[0] / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length[0] / 1024f / 1024f, 2) + " MB",
-						() -> Pal.accent, () -> progress[0])).width(400f).height(70f);
+					 dialog.cont.add(new Bar(() -> {
+						 if (length.get() == 0) {
+							 return Core.bundle.get("mod-tools.updating");
+						 }
+						 return FormatHelper.fixed(getProgress.get() * length.get() / 1024f / 1024f, 2) + "/" + FormatHelper.fixed(length.get() / 1024f / 1024f, 2) + " MB";
+					 },
+						() -> Pal.accent, getProgress)).width(400f).height(70f);
 					 dialog.buttons.button("@cancel", Icon.cancel, () -> {
-						 cancel[0] = true;
+						 cancel.set(true);
 						 dialog.hide();
 					 }).size(210f, 64f);
 					 dialog.show();
@@ -136,7 +150,11 @@ public class Updater {
 			}
 			out.close();
 			in.close();
-			if (!canceled.get()) done.run();
+			if (canceled.get()) {
+				dest.delete();
+			} else {
+				done.run();
+			}
 		}, error);
 	}
 }

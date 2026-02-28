@@ -110,6 +110,11 @@ public class DesugarStringTemplate extends TreeTranslator {
 			result = interpolate.copy(lambda.body);
 
 			JCClassDecl classDecl1 = trees.getTree((TypeElement) varSym.owner);
+			if (classDecl1 == null) {
+				log.useSource(toplevel.sourcefile);
+				log.error(template.pos, err("StringTemplate processor's owner class is not in current compilation round"));
+				return;
+			}
 
 			if (result instanceof JCBlock block) {
 				make.at(template);

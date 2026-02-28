@@ -8,3 +8,6 @@ modtools.annotations.processors.asm.AccessorProc,isolating
 modtools.annotations.processors.asm.SampleProcessor,isolating
 modtools.annotations.processors.asm.InlineProc,isolating
 modtools.annotations.processors.IconsProcessor,dynamic
+modtools.annotations.processors.linker.LinkMethodProcessor,isolating
+modtools.annotations.processors.linker.LinkFieldProcessor,isolating
+modtools.annotations.processors.linker.LinkClassProcessor,isolating

@@ -2,6 +2,7 @@ package nipx.ref;
 
 import arc.func.*;
 import arc.scene.Element;
+import arc.scene.ui.TextField.TextFieldValidator;
 
 import java.lang.ref.WeakReference;
 import java.util.*;
@@ -45,18 +46,29 @@ public class UpdateRef {
 	public static Prov<?> wrap(Element element, Prov<?> original) {
 		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
-		return ref::get;
+		return ref::runProv;
 	}
 	public static Boolp wrap(Element element, Boolp original) {
 		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
-		return ref::getBool;
+		return ref::runBoolp;
 	}
-	public static Cons<?> wrapRunCons(Element element, Cons<?> original) {
+	public static Cons<?> wrap(Element element, Cons<?> original) {
 		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
 		return ref::runCons;
 	}
+	public static Boolf<?> wrap(Element element, Boolf<?> original) {
+		if (returnOriginal(original)) return original;
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::runBoolf;
+	}
+	public static TextFieldValidator wrap(Element element, TextFieldValidator original) {
+		if (returnOriginal(original)) return original;
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::runValidator;
+	}
+
 	private static boolean returnOriginal(Object original) {
 		if (original == null) return true;
 		if (original.getClass().getName().startsWith(UpdateRef.class.getName())) return true;  // 已被包装
@@ -81,7 +93,7 @@ public class UpdateRef {
 		this.fn = null;
 	}
 
-	public <T> T get() {
+	public <T> T runProv() {
 		var f = (Prov<T>) this.fn;
 		if (checkFn(f)) return null;
 		try {
@@ -93,7 +105,7 @@ public class UpdateRef {
 		}
 	}
 
-	public boolean getBool() {
+	public boolean runBoolp() {
 		var f = (Boolp) this.fn;
 		if (checkFn(f)) return false;
 		try {
@@ -112,6 +124,26 @@ public class UpdateRef {
 			f.get(t);
 		} catch (NoSuchMethodError e) {
 			clearFn();
+		}
+	}
+	public <T> boolean runBoolf(T t) {
+		var f = (Boolf<T>) this.fn;
+		if (checkFn(f)) return false;
+		try {
+			return f.get(t);
+		} catch (NoSuchMethodError e) {
+			clearFn();
+			return false;
+		}
+	}
+	public boolean runValidator(String t) {
+		var f = (TextFieldValidator) this.fn;
+		if (checkFn(f)) return false;
+		try {
+			return f.valid(t);
+		} catch (NoSuchMethodError e) {
+			clearFn();
+			return false;
 		}
 	}
 

@@ -299,35 +299,36 @@ public class LambdaAligner {
 	}
 	/**
 	 * 从方法名中提取逻辑名称用于分组
+	 * 滑动去除字符串中所有“紧跟在 $ 符号后面的纯数字”
 	 * <pre>
-	 * lambda$foo$bar -> lambda$foo
-	 * access$100 -> access
+	 * lambda$foo$1$bar$2 -> lambda$foo$$bar$
+	 * build$lambda$26$lambda$25 -> build$lambda$$lambda$
+	 * access$100 -> access$
 	 * $deserializeLambda$ -> $deserializeLambda$
 	 * </pre>
-	 * @param name 合成方法名
-	 * @return 逻辑名称
+	 * 这样能保证发生深层嵌套移位时（如 $26$25 变为 $27$26），依然能被归入同一个逻辑组。
 	 */
 	private static String extractLogicalName(String name) {
-		// 针对 Scala: $anonfun$main$1 -> $anonfun$main
-		// 针对 Java/Kotlin: lambda$main$0 -> lambda$main
-		int lastDollar = name.lastIndexOf('$');
-		if (lastDollar <= 0) return name;
-
-		// 检查最后一部分是否为纯数字序号
-		boolean isNumericSuffix = true;
-		for (int i = lastDollar + 1; i < name.length(); i++) {
-			if (!Character.isDigit(name.charAt(i))) {
-				isNumericSuffix = false;
-				break;
+		StringBuilder sb    = new StringBuilder(name.length());
+		char[]        chars = name.toCharArray();
+		int           i     = 0;
+		while (i < chars.length) {
+			char c = chars[i];
+			sb.append(c);
+			if (c == '$') {
+				int j = i + 1;
+				// 寻找 $ 后面连续的数字
+				while (j < chars.length && Character.isDigit(chars[j])) {
+					j++;
+				}
+				// 如果真的跟了数字，那么直接跳过这些数字
+				if (j > i + 1) {
+					i = j - 1; // i 将会在外部循环被 i++ 推进到数字后的下一个字符
+				}
 			}
+			i++;
 		}
-
-		if (isNumericSuffix) {
-			return name.substring(0, lastDollar);
-		}
-
-		// 如果不是数字结尾（如 $deserializeLambda$），保持原样
-		return name;
+		return sb.toString();
 	}
 
 

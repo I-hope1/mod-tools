@@ -12,7 +12,7 @@ import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.util.*;
-import mindustry.gen.Icon;
+import mindustry.gen.*;
 import mindustry.ui.Styles;
 import modtools.struct.LazyValue;
 import modtools.ui.*;
@@ -67,7 +67,6 @@ public class ColorPicker extends Window implements IHitter, PopupWindow {
 		a = color.a;
 
 		cont.clear();
-		// cont.label(() -> "asoskao").row();
 		cont.add(newTable(t -> {
 			t.add(new Element() {
 				 public void draw() {

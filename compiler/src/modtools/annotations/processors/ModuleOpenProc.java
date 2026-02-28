@@ -12,7 +12,7 @@ import javax.annotation.processing.Processor;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@AutoService(Processor.class)
+// @AutoService(Processor.class)
 public class ModuleOpenProc extends BaseProcessor<MethodSymbol> {
 	ClassSymbol c_unsafe;
 	ClassSymbol c_field;

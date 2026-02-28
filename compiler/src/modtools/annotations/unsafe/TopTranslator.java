@@ -532,6 +532,7 @@ public class TopTranslator extends TreeTranslator {
 
 	public ClassSymbol getClassSymbolByDoc(JCIdent i) {
 		DocCommentTree doc    = trees.getDocCommentTree(i.sym);
+		if (doc == null) return null;
 		SeeTree        seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
 		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) { return null; }
 

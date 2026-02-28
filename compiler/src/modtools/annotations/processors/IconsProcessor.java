@@ -1,13 +1,10 @@
 package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.code.Type.ClassType;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
-import com.sun.tools.javac.util.List;
 import modtools.annotations.*;
 
 import javax.annotation.processing.Processor;
@@ -16,13 +13,11 @@ import java.util.*;
 
 @AutoService(Processor.class)
 public class IconsProcessor extends BaseProcessor<ClassSymbol> {
-	public void process2() {
-		super.process2();
-	}
+	@Override
 	public void dealElement(ClassSymbol element) throws Throwable {
-		JCClassDecl root = trees.getTree(element);
-		root.defs = List.nil();
-		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
+		JCClassDecl root  = trees.getTree(element);
+		// 这里的getAnnotationByElement会直接修改Class的引用，获取class.getName()不需要mirror
+		IconAnn     icons = getAnnotationByElement(IconAnn.class, element, false);
 
 		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		if (!root.name.toString().endsWith("c")) {
@@ -31,82 +26,83 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 			return;
 		}
 
-		((ClassType) root.sym.type).supertype_field = mSymtab.objectType;
-		ClassSymbol drawableSymbol = findClassSymbol("arc.scene.style.TextureRegionDrawable");
-		ClassType   drawable       = (ClassType) drawableSymbol.type;
-		ClassType   texture        = findType("arc.graphics.Texture");
-		// ClassType   pixmap         = findType("arc.graphics.Pixmap");
-
-		addImport(element, drawableSymbol);
-		addImport(element, /* TextureRegion */findClassSymbol("arc.graphics.g2d.TextureRegion"));
-		addImport(element, findClassSymbol("arc.graphics.Texture"));
-		// addImport(element, findClassSymbol("arc.Core"));
-
-		StringBuilder sb = new StringBuilder();
-		sb.append("if (modName == null) modName = mindustry.Vars.mods.getMod(")
-		 .append(icons.mainClass().getName()).append(".class).name;");
-		stringType.tsym.owner.kind = Kind.VAR;
-		texture.tsym.owner.kind = Kind.VAR;
-		// map.tsym.owner.kind = Kind.VAR;
-		addField(root, Flags.STATIC | Flags.PUBLIC, stringType,
-		 "modName", null).vartype = mMaker.Ident(stringType.tsym);
-		stringType.tsym.owner.kind = Kind.PCK;
-		texture.tsym.owner.kind = Kind.PCK;
-		// map.tsym.owner.kind = Kind.PCK;
-
-		// 添加TextureRegionDrawable的构造方法n()
-		// 添加参数name
-		JCVariableDecl name = makeVar(Flags.PARAMETER, stringType, "name", null, root.sym);
-		name.vartype = mMaker.Ident(stringType.tsym);
-		JCMethodDecl n = mMaker.MethodDef(
-		 mMaker.Modifiers(Flags.PRIVATE | Flags.STATIC),
-		 ns("n"), mMaker.Ident(drawableSymbol), List.nil(), List.of(name),
-		 List.nil(), parseBlock("{return (TextureRegionDrawable)arc.Core.atlas.drawable(modName+\"-\"+name);}"), null);
-		root.defs = root.defs.append(n);
-		for (File fi : findAll(new File(System.getProperty("user.dir") + "/assets/" + icons.iconDir()))
-		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new)) {
-			Kind last = drawable.tsym.owner.kind;
-			drawable.tsym.owner.kind = Kind.VAR;
-			String f_name = kebabToCamel(nameWithoutExtension(fi));
-			addField(root, Flags.STATIC | Flags.PUBLIC,
-			 drawable, f_name, null);
-			drawable.tsym.owner.kind = last;
-			sb.append(f_name).append("=n(\"").append(nameWithoutExtension(fi)).append("\");");
-		}
-
-		// 添加load方法
-		JCMethodDecl load = mMaker.MethodDef(
-		 mMaker.Modifiers(Flags.STATIC | Flags.PUBLIC),
-		 ns("load"), mMaker.TypeIdent(TypeTag.VOID), List.nil(), List.nil(),
-		 List.nil(), parseBlock("{" + sb + "}"), null);
-		root.defs = root.defs.append(load);
-
-		// var lastPackage = unit.packge;
+		// 获取原类名和去掉 'c' 的新类名
 		String s       = root.name.toString();
 		String genName = s.substring(0, s.length() - 1);
-		root.name = ns(genName);
-		root.mods = mMaker.Modifiers(1);
-		String content = unit.toString();
-		root.mods = mMaker.Modifiers(0);
-		root.name = ns(s);
+
+		// 解析包名和生成的全限定名
+		String packageName = icons.genPackage().equals(".") ? element.getEnclosingElement().toString() : icons.genPackage();
+		String flatName    = packageName + "." + genName;
+
+		// 使用 StringBuilder 直接构造新文件的代码文本（完全不修改原 root 和 unit）
+		StringBuilder out = new StringBuilder();
+
+		// 写入包名
+		out.append("package ").append(packageName).append(";\n\n");
+
+		// 复制原文件的 imports
+		for (JCTree def : unit.defs) {
+			if (def instanceof JCImport) {
+				out.append(def).append("\n");
+			}
+		}
+		// 添加我们生成的类所需的 imports
+		out.append("import arc.scene.style.TextureRegionDrawable;\n");
+		out.append("import arc.graphics.g2d.TextureRegion;\n");
+		out.append("import arc.graphics.Texture;\n\n");
+
+		// 声明新类 (Public 修饰)
+		out.append("public class ").append(genName).append(" {\n");
+
+		// modName 字段
+		out.append("    public static String modName;\n\n");
+
+		// 准备图片目录
+		File[] pngs = findAll(new File(System.getProperty("user.dir") + "/assets/" + icons.iconDir()))
+		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new);
+
+		// 生成每个图片的字段，并同时收集 load 方法中需要的赋值逻辑
+		StringBuilder loadBody = new StringBuilder();
+
+		String mainClassName = icons.mainClass().getName();
+
+		loadBody.append("        if (modName == null) modName = mindustry.Vars.mods.getMod(")
+		 .append(mainClassName).append(".class).name;\n");
+
+		for (File fi : pngs) {
+			String f_name = kebabToCamel(nameWithoutExtension(fi));
+			out.append("    public static TextureRegionDrawable ").append(f_name).append(";\n");
+			loadBody.append("        ").append(f_name).append(" = n(\"").append(nameWithoutExtension(fi)).append("\");\n");
+		}
+
+		// 生成 n() 方法
+		out.append("\n    private static TextureRegionDrawable n(String name) {\n");
+		out.append("        return (TextureRegionDrawable) arc.Core.atlas.drawable(modName + \"-\" + name);\n");
+		out.append("    }\n\n");
+
+		// 生成 load() 方法
+		out.append("    public static void load() {\n");
+		out.append(loadBody);
+		out.append("    }\n");
+
+		// 结束类
+		out.append("}\n");
+
+		// --写入到新文件中--
 		Writer writer = null;
 		try {
-			String flatName = (icons.genPackage().equals(".") ? element.getEnclosingElement().toString() : icons.genPackage())
-			                  + "." + genName;
-			var source = /* unit.getSourceFile() */
-			 mFiler.createSourceFile(flatName);
+			var source = mFiler.createSourceFile(flatName, element);
 			writer = source.openWriter();
+			writer.write(out.toString());
+			writer.flush();
 		} catch (IOException e) {
+			println("Error when writing file.");
+			err(e);
 		} finally {
 			if (writer != null) {
-				writer.write(content);
-				writer.flush();
 				writer.close();
 			}
-			root.defs = List.nil();
 		}
-		// unit.packge = lastPackage;
-		// Log.info(root);
 	}
 	ArrayList<File> findAll(File file) {
 		return findAll(new ArrayList<>(), file);

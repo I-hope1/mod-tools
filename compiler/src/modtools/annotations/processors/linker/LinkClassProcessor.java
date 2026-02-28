@@ -18,7 +18,7 @@ import java.lang.reflect.InvocationHandler;
 import java.util.Set;
 
 @AutoService(Processor.class)
-public class LinkClassProc extends BaseASMProc<TypeSymbol> {
+public class LinkClassProcessor extends BaseASMProc<TypeSymbol> {
 
 	public static final String suffix = "c";
 

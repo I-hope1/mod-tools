@@ -22,9 +22,9 @@ import java.lang.reflect.Field;
 import static modtools.utils.MySettings.SETTINGS;
 
 public class MyFonts {
-	public static       Font def           = Fonts.def;
-	public static final Fi   fontDirectory = IntVars.dataDirectory.child("fonts");
-	public static String DEFAULT = "DEFAULT";
+	public static       Font   def           = Fonts.def;
+	public static final Fi     fontDirectory = IntVars.dataDirectory.child("fonts");
+	public static       String DEFAULT       = "DEFAULT";
 
 	public static void load() {
 		fontDirectory.mkdirs();
@@ -59,6 +59,7 @@ public class MyFonts {
 			// 可以添加Fonts.def的glyph
 			incremental = true;
 		}};
+		// Log.info("Generate font @", fontFi.name());
 		// FreeTypeFontGenerator other = Reflect.get(FreeTypeFontData.class, Fonts.def.getData(), "generator");
 		class MyFontData extends FreeTypeFontData {
 			final GlyphLayout layout = new GlyphLayout(Fonts.def, "");
@@ -66,7 +67,7 @@ public class MyFonts {
 				Glyph glyph = super.getGlyph(ch);
 				if (glyph != missingGlyph) return glyph;
 				Glyph glyph1 = Fonts.def.getData().getGlyph(ch);
-				if (glyph == null) return null;
+				if (glyph1 == null) return null;
 				Glyph newGlyph = new Glyph();
 				Tools.clone(glyph1, newGlyph, Glyph.class, null);
 				newGlyph.page = 1; // fonts.def里
@@ -85,7 +86,7 @@ public class MyFonts {
 		generator.generateData(parameter, data);
 
 		Seq<TextureRegion> regions = Reflect.get(FreeTypeFontData.class, data, "regions");
-		Font font = new Font(data, regions, false);
+		Font               font    = new Font(data, regions, false);
 
 		font.setOwnsTexture(parameter.packer == null);
 		// 添加默认字体，如果font没有就去def里找

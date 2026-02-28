@@ -22,6 +22,7 @@ import java.util.concurrent.*;
 import static mindustry.Vars.ui;
 
 public class IntVars {
+	//asasasasasa
 	public static final String   modName     = "mod-tools";
 	public static final MouseVec mouseVec    = new MouseVec();
 	public static final Vec2     mouseWorld  = new Vec2();

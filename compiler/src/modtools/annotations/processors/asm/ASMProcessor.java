@@ -11,6 +11,7 @@ import modtools.annotations.asm.CopyConstValue;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.ElementKind;
+import java.io.InputStream;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -40,38 +41,40 @@ public class ASMProcessor extends BaseASMProc<VarSymbol> {
 		if (constantValue != null) {
 			setConstantValue.accept(constantValue);
 		} else if (field.owner instanceof ClassSymbol cs) {
-			new ClassReader(cs.classfile.openInputStream().readAllBytes()).accept(new ClassVisitor(Opcodes.ASM5) {
-				public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
-					if (field.name.toString().equals(name) && value != null) {
-						setConstantValue.accept(value);
+			try (InputStream is = cs.classfile.openInputStream()) {
+				new ClassReader(is.readAllBytes()).accept(new ClassVisitor(Opcodes.ASM5) {
+					public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
+						if (field.name.toString().equals(name) && value != null) {
+							setConstantValue.accept(value);
+						}
+						return super.visitField(access, name, descriptor, signature, value);
 					}
-					return super.visitField(access, name, descriptor, signature, value);
-				}
-				public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
-				                                 String[] exceptions) {
-					if ("<clinit>".equals(name)) {
-						// println("clinit");
-						return new MethodVisitor(Opcodes.ASM5) {
-							Object lvalue;
-							public void visitLdcInsn(Object value) {
-								this.lvalue = value;
-							}
-							public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
-								if (field.name.toString().equals(name) && opcode == Opcodes.PUTSTATIC) {
-									try {
-										setConstantValue.accept(lvalue);
-									} catch (AssertionError e) {
-										String s = "\"" + element + "\" 's reference (" + seeReference.reference() + ") is not constvalue (Got: " + lvalue + ")";
-										log.error(tree, SPrinter.err(s));
-										throw new RuntimeException(s, e);
+					public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
+					                                 String[] exceptions) {
+						if ("<clinit>".equals(name)) {
+							// println("clinit");
+							return new MethodVisitor(Opcodes.ASM5) {
+								Object lvalue;
+								public void visitLdcInsn(Object value) {
+									this.lvalue = value;
+								}
+								public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+									if (field.name.toString().equals(name) && opcode == Opcodes.PUTSTATIC) {
+										try {
+											setConstantValue.accept(lvalue);
+										} catch (AssertionError e) {
+											String s = "\"" + element + "\" 's reference (" + seeReference.reference() + ") is not constvalue (Got: " + lvalue + ")";
+											log.error(tree, SPrinter.err(s));
+											throw new RuntimeException(s, e);
+										}
 									}
 								}
-							}
-						};
+							};
+						}
+						return super.visitMethod(access, name, descriptor, signature, exceptions);
 					}
-					return super.visitMethod(access, name, descriptor, signature, exceptions);
-				}
-			}, 0);
+				}, 0);
+			}
 		}
 
 		// println(tree.sym == element);

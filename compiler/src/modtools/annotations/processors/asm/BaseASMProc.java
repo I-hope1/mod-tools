@@ -25,6 +25,7 @@ import java.util.List;
 public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public static final boolean OUTPUT_CLASS_FILE = false;
 
+	public Set<Element>  originatingElements = new HashSet<>();
 	public TopTranslator translator;
 	public void lazyInit() throws Throwable {
 		super.lazyInit();
@@ -35,6 +36,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	public <R extends Symbol> DocReference
 	getSeeReference(Class<? extends Annotation> annotationClass,
 	                R element, ElementKind... expectKinds) {
+		originatingElements.add(element);
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		JCTree            pos  = trees.getTree(element);
 		DocCommentTree    doc  = trees.getDocCommentTree(element);
@@ -147,7 +149,7 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 		writeClassBytes(classWriter.toByteArray());
 	}
 	protected void writeClassBytes(byte[] classBytes) throws IOException {
-		JavaFileObject classfile = mFiler.createClassFile(genClassName);
+		JavaFileObject classfile = mFiler.createClassFile(genClassName, originatingElements.toArray(Element[]::new));
 		writeClassBytes(classfile, classBytes);
 	}
 	protected void writeClassBytes(JavaFileObject classfile, byte[] classBytes) throws IOException {

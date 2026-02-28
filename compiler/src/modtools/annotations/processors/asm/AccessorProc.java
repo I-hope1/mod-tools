@@ -90,7 +90,7 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 	public void process() throws Throwable {
 		for (Entry<Symbol, ClassWriter> entry : classWriterMap.entrySet()) {
 			ClassWriter writer = entry.getValue();
-			writeClassBytes(mFiler.createClassFile(classNamesMap.get(writer)), writer.toByteArray());
+			writeClassBytes(mFiler.createClassFile(classNamesMap.get(writer), entry.getKey()), writer.toByteArray());
 		}
 	}
 	public void init() throws Throwable {

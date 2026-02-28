@@ -96,13 +96,25 @@ public class LambdaAligner {
 			throw new IllegalArgumentException("New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
 		}
 
-		// 在scan时就分好了组
 		var oldGroups = ctx.oldGroups;
 		var newGroups = ctx.newGroups;
+
+		// 提前收集所有新产生的方法名，其唯一使命是在最后生成全新名字时作为防碰撞的“避障集”
+		Set<String> existingNewNames = ctx.existingNewNames;
+		for (Object v : newGroups.values()) {
+			if (!LongObjectMap.isValid(v)) continue;
+			@SuppressWarnings("unchecked")
+			var newGroup = (List<SyntheticInfo>) v;
+			for (SyntheticInfo ni : newGroup) {
+				existingNewNames.add(ni.name);
+			}
+		}
 
 		long[]   ks  = newGroups.keys();
 		Object[] vs  = newGroups.values();
 		int      cap = newGroups.capacity();
+
+		// 【阶段一】全力抢占和复用旧名，杜绝外部调用的 NoSuchMethodError
 		for (int i = 0; i < cap; i++) {
 			Object v = vs[i];
 			if (!LongObjectMap.isValid(v)) continue;
@@ -112,18 +124,14 @@ public class LambdaAligner {
 			var oldGroup = oldGroups.get(ks[i]);
 			if (oldGroup == null) continue;
 
-			// Step 1: 精确 Hash 匹配 (O(N²))
 			int newSize = newGroup.size();
 			int oldSize = oldGroup.size();
 
-			// Step 1: 尝试精确指纹匹配 (双重for就够了，有缓存)
+			// Step 1: 精确 Hash 指纹匹配
 			for (int j = 0; j < newSize; j++) {
 				SyntheticInfo ni = newGroup.get(j);
-
-				// 嵌套循环寻找匹配的指纹
 				for (int k = 0; k < oldSize; k++) {
 					SyntheticInfo oi = oldGroup.get(k);
-
 					if (!oi.matched && ni.hash == oi.hash) {
 						if (!ni.name.equals(oi.name)) {
 							ctx.renameMap.put(ni.name, oi.name);
@@ -131,53 +139,53 @@ public class LambdaAligner {
 						ni.matched = true;
 						oi.matched = true;
 						ctx.usedOldNames.add(oi.name);
-						break; // 匹配成功，跳出内层循环
+						break;
 					}
 				}
 			}
 
-			Set<String> existingNewNames = ctx.existingNewNames;
-			for (SyntheticInfo ni : newGroup) {
-				existingNewNames.add(ni.name);
-			}
-
-			// Step 2: 顺序对齐 (解决 NoSuchMethodError 的关键)
+			// Step 2: 顺序对齐 (解决小改动导致 Hash 变更后的平稳降级)
 			int oldPtr = 0;
 			for (SyntheticInfo ni : newGroup) {
 				if (ni.matched) continue;
-				while (oldPtr < oldGroup.size() && ctx.usedOldNames.contains(oldGroup.get(oldPtr).name)) oldPtr++;
+				while (oldPtr < oldGroup.size() && ctx.usedOldNames.contains(oldGroup.get(oldPtr).name)) {
+					oldPtr++;
+				}
 				if (oldPtr < oldGroup.size()) {
 					SyntheticInfo oi         = oldGroup.get(oldPtr);
 					String        targetName = oi.name;
 
-					// 如果目标名是另一个新方法的原名，跳过，交给 Step 3 处理
-					if (!existingNewNames.contains(targetName)) {
-						ctx.renameMap.put(ni.name, targetName);
-						ni.matched = true;
-						ctx.usedOldNames.add(targetName);
-					}
+					// 必须强行占用 targetName，新类里原有的同名方法将在阶段二被我们安全重命名
+					ctx.renameMap.put(ni.name, targetName);
+					ni.matched = true;
+					ctx.usedOldNames.add(targetName);
+
 					oldPtr++;
 				}
 			}
+		}
 
-			// Step 3: 防止未匹配的新方法与已分配的旧方法名冲突 (核心修复)
-			int freshId = 0;
+		// 【阶段二】扫尾防线：统一处理全部未匹配的新方法，防止内部重组带来的 ClassFormatError
+		int freshId = 0;
+		for (int i = 0; i < cap; i++) {
+			Object v = vs[i];
+			if (!LongObjectMap.isValid(v)) continue;
+
+			@SuppressWarnings("unchecked")
+			var newGroup = (List<SyntheticInfo>) v;
 
 			for (SyntheticInfo ni : newGroup) {
 				if (!ni.matched) {
-					// 检查它的原名是否已经被"偷"走分配给了别的方法
+					// 检查它的原名是否已经在阶段一被分配给了其他重要逻辑
 					if (ctx.usedOldNames.contains(ni.name)) {
 						String freshName;
 						do {
-							// logicalName 已经包含了结尾的 "$"
 							freshName = ni.logicalName + (freshId++);
 						} while (ctx.usedOldNames.contains(freshName) || existingNewNames.contains(freshName));
-						// 被偷了，必须给它生成一个全新的名字 (例如 lambda$checkCount$3)
 
 						ctx.renameMap.put(ni.name, freshName);
 						ctx.usedOldNames.add(freshName);
 					} else {
-						// 没被偷，安全保留原名，但也需要将其登记为已使用，防止后续冲突
 						ctx.usedOldNames.add(ni.name);
 					}
 				}

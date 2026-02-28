@@ -33,7 +33,7 @@ public class HScene {
 	public static void load(Pause pause) throws Exception {
 		try {
 			pauseMap = json.fromJson(ObjectFloatMap.class, Class.class, pause.data().toJsonString());
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			pauseMap = new ObjectFloatMap<>();
 		}
 
@@ -97,6 +97,7 @@ public class HScene {
 		hookUpdate(Core.app.getListeners());
 	}
 	private static float decrement(Class<?> key) {
+		if (pauseMap == null) pauseMap = new ObjectFloatMap<>();
 		return pauseMap.increment(key, 0, -Time.delta);
 	}
 

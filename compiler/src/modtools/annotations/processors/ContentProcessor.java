@@ -97,7 +97,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 			TypeSymbol   contentTypeSymbol = variableTree.vartype.type.tsym;
 			JCMethodDecl initMethod        = (JCMethodDecl) trees.getTree(contentTypeSymbol.members().findFirst(names.init));
-			Object       literalName       = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
+			if (initMethod == null) continue;
+			Object literalName = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
 
 			ClassSymbol settingsSymbol = (ClassSymbol) contentTypeSymbol.members().findFirst(nameSetting, t -> t.kind == Kind.TYP);
 			if (settingsSymbol != null) {
@@ -284,7 +285,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 
 
-		if (settings.members().findFirst(ns("data"), t -> t.kind == Kind.VAR) == null) {
+		if (findChild(classDecl, Tag.VARDEF,
+		 (JCVariableDecl t) -> t.name.contentEquals("data")) == null) {
 			addConstantField(Flags.PUBLIC, classDecl, dataClass.type,
 			 "data", createInitValue(parent, literalName));
 		}
@@ -324,13 +326,13 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		mMaker.at(classDecl.defs.last());
 		flushAssignment.add(buildAssignment(classType, access, mMaker.Ident(symbol)));
-		Iterable<Symbol> methodSym = settings.members().getSymbols(
-		 t -> t instanceof MethodSymbol m && m.name.toString().equals("set") && !m.params.isEmpty() && m.params.get(0).type.equals(mSymtab.objectType)
-		      && m.getReturnType().equals(mSymtab.voidType));
+		JCMethodDecl existingSet = findChild(classDecl, Tag.METHODDEF,
+		 (JCMethodDecl m) -> m.name.contentEquals("set")
+		                     && m.params.size() == 1
+		                     && m.params.get(0).vartype.type.equals(mSymtab.objectType));
 		MethodSymbol ms;
 
-		Iterator<Symbol> iterator = methodSym.iterator();
-		if (!iterator.hasNext()) {
+		if (existingSet == null) {
 			mMaker.at(classDecl.defs.last());
 			int flags = Flags.PUBLIC;
 			ms = new MethodSymbol(flags, ns("set"),
@@ -346,10 +348,10 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			JCMethodDecl method = mMaker.MethodDef(ms, body);
 			settings.members().enter(ms);
 			classDecl.defs = classDecl.defs.append(method);
-		} else { ms = (MethodSymbol) iterator.next(); }
+			existingSet = method;
+		}
 
-		JCMethodDecl methodDecl = trees.getTree(ms);
-		methodDecl.body.stats = methodDecl.body.stats.append(
+		existingSet.body.stats = existingSet.body.stats.append(
 		 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
 			 mMaker.This(settings.type)),
 			buildAssignment(classType, access, mMaker.This(settings.type)), null)

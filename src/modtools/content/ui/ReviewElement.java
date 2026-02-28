@@ -940,7 +940,6 @@ public class ReviewElement extends Content {
 		});
 	}
 
-
 	public enum Settings implements ISettings {
 		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */,
 		/** （显示名称时）匿名类而不是非匿名超类 */
@@ -958,8 +957,8 @@ public class ReviewElement extends Content {
 		//
 		;
 		static {
-			hoverInfoWindow.defTrue();
 			anonymousInsteadSuper.defTrue();
+			hoverInfoWindow.defTrue();
 		}
 
 		Settings() { }

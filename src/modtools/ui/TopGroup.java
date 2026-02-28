@@ -9,7 +9,6 @@ import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.actions.Actions;
-import arc.scene.event.EventListener;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -33,7 +32,7 @@ import modtools.ui.effect.*;
 import modtools.utils.*;
 import modtools.utils.ui.ColorFul;
 
-import java.util.*;
+import java.util.ArrayList;
 import java.util.function.Consumer;
 
 import static arc.Core.*;
@@ -42,7 +41,6 @@ import static modtools.ui.Contents.tester;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.TopGroup.TSettings.*;
 import static modtools.ui.comp.Window.frontWindow;
-import static modtools.unsupported.HopeProcessor.NPX;
 import static modtools.utils.Tools.*;
 
 /**
@@ -237,7 +235,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 
 		fillParent = true;
 		touchable = Touchable.childrenOnly;
-		name = NPX."TopGroup";
+		name = "TopGroup";
 
 		scene.add(this);
 		final Group[] all = {back, windows, frag, infos, new FillEnd()};

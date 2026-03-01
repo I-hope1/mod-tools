@@ -68,7 +68,7 @@ public class ExtendingLabel extends InlineLabel {
 			Lines.stroke(2);
 			label.getRect(runRect.set(start, end), r -> {
 				float x = label.x + r.x;
-				float y = label.y + r.y + r.height / 2f;
+				float y = label.y + r.y;
 				type.draw(this, x, y, r.width, r.height);
 			});
 		}
@@ -112,7 +112,9 @@ public class ExtendingLabel extends InlineLabel {
 		// bold
 		// 添加icon
 		icon((x, y, w, h) -> { }) {
-			void draw(DrawRun run, float x, float y, float w, float h) {
+			public void draw(DrawRun run, float x, float y, float w, float h) {
+				x = x + w / 2f;
+				y = y + h / 2f;
 				if (run.data instanceof TextureRegion region) {// 保持宽高比绘制图标
 					float radio = (float) region.width / region.height;
 					// 图标不能超出范围
@@ -121,7 +123,7 @@ public class ExtendingLabel extends InlineLabel {
 					} else if (h > w / radio) {
 						h = w / radio;
 					}
-					Draw.rect(region, x + w / 2f, y + h / 2f, w, h);
+					Draw.rect(region, x, y, w, h);
 				} else if (run.data instanceof Drawable drawable) {
 					drawable.draw(x, y, w, h);
 				} else {
@@ -140,7 +142,8 @@ public class ExtendingLabel extends InlineLabel {
 			this.beforeDraw = beforeDraw;
 			this.cons = cons;
 		}
-		void draw(DrawRun run, float x, float y, float w, float h) {
+		/** (x, y)左上角 */
+		public void draw(DrawRun run, float x, float y, float w, float h) {
 			cons.get(x, y, w, h);
 		}
 	}

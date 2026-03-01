@@ -24,6 +24,7 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
 import modtools.annotations.PrintHelper.SPrinter;
+import modtools.annotations.processors.ContentProcessor;
 import modtools.annotations.unsafe.TopTranslator.CheckException;
 
 import javax.annotation.processing.*;
@@ -47,24 +48,24 @@ import static modtools.annotations.PrintHelper.errs;
 
 public class Replace {
 	public static final String forceJavaVersionOri = "targetVersion";
-	public static final String forceJavaVersion = "-A" + forceJavaVersionOri;
-	public static Source targetVersion = Source.JDK8;
+	public static final String forceJavaVersion    = "-A" + forceJavaVersionOri;
+	public static       Source targetVersion       = Source.JDK8;
 
-	static Context       context;
-	static ClassFinder   classFinder;
-	static Symtab        syms;
-	static Enter         enter;
-	static JavacTrees    trees;
-	static Names         ns;
-	static TreeMaker     maker;
-	static JavacElements elements;
-	static ModuleFinder  moduleFinder;
-	static JavacMessages messages;
-	static Analyzer      analyzer;
-	static Filer         filer;
+	public static Context       context;
+	public static ClassFinder   classFinder;
+	public static Symtab        syms;
+	public static Enter         enter;
+	public static JavacTrees    trees;
+	public static Names         ns;
+	public static TreeMaker     maker;
+	public static JavacElements elements;
+	public static ModuleFinder  moduleFinder;
+	public static JavacMessages messages;
+	public static Analyzer      analyzer;
+	public static Filer         filer;
 
-	public static JavaCompiler        compiler;
-	public static Log                 log;
+	public static JavaCompiler compiler;
+	public static Log          log;
 
 	static DefaultToStatic       defaultToStatic;
 	static DesugarStringTemplate desugarStringTemplate;
@@ -112,7 +113,6 @@ public class Replace {
 		try {
 			extendingFunc0();
 		} catch (Throwable e) { err(e); }
-
 	}
 	public static void extendingFunc(ProcessingEnvironment processingEnv) {
 		filer = processingEnv.getFiler();
@@ -138,6 +138,10 @@ public class Replace {
 		moduleExports();
 
 		other();
+
+		try {
+			ContentProcessor.registerTodos(context);
+		} catch (NoSuchFieldError _) { }
 	}
 	private static void moduleExports() throws Exception {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");

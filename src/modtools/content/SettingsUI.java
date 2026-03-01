@@ -139,13 +139,13 @@ public class SettingsUI extends Content {
 		});
 
 		addSectionInternal("Hook", Icon.refreshSmall, t -> {
+			t.button("HotSwapLog", () -> {
+				if (R_Hook.hot_swap) HotSwapDialog.staticShow();
+			}).growX().height(45).disabled(_ -> !R_Hook.hot_swap);
+
 			SettingsBuilder.build(t);
 			// watch的路径数组配置
 			ISettings.buildAll("hook", t, E_Hook.class);
-
-			t.button("HotSwapLog", () -> {
-				if (R_Hook.hot_swap) HotSwapDialog.staticShow();
-			}).growX().height(45);
 		});
 
 		addSectionInternal("UI", Icon.imageSmall, t -> {

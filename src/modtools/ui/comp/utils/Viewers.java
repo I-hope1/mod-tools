@@ -126,6 +126,36 @@ public class Viewers {
 	public static final  boolean ARRAY_DEBUG  = false;
 	private static final int     SIZE_MAX_BIT = 6;
 
+	/** 每层缩进使用的括号颜色，循环取用 */
+	private static final Color[] PRETTY_BRACKET_COLORS = {
+	 new Color(0xFFD700FF), // 金色
+	 new Color(0xDA70D6FF), // 兰花紫
+	 new Color(0x4FC3F7FF), // 浅蓝
+	 new Color(0xA5D6A7FF), // 浅绿
+	};
+
+	/** 预缓存常用深度的缩进字符串，避免每次 repeat 产生新对象 */
+	private static final int      INDENT_CACHE_SIZE = 16;
+	private static final String[] INDENT_CACHE;
+
+	static {
+		INDENT_CACHE = new String[INDENT_CACHE_SIZE];
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < INDENT_CACHE_SIZE; i++) {
+			INDENT_CACHE[i] = sb.toString();
+			sb.append("  ");
+		}
+	}
+
+	private static String prettyIndent(int depth) {
+		if (depth <= 0) return "";
+		if (depth < INDENT_CACHE_SIZE) return INDENT_CACHE[depth];
+		return "  ".repeat(depth); // 超出缓存范围（极深嵌套）才真正 repeat
+	}
+	private static Color prettyBracketColor(int depth) {
+		return PRETTY_BRACKET_COLORS[depth % PRETTY_BRACKET_COLORS.length];
+	}
+
 	public static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
 		internalViewers.add(new ViewerItem<>(clazz, viewer));
 	}
@@ -177,53 +207,80 @@ public class Viewers {
 				return true;
 			}
 			Runnable prev = label.appendTail;
-			label.postAppendDelimiter(null);
-			text.append("\n{");
-			// label.postAppendDelimiter(null);
-			switch (val) {
-				case ObjectMap<?, ?> m -> appendMap(val, label, m.entries(), e -> e.key, e -> e.value);
-				case Map<?, ?> m -> appendMap(val, label, m.entrySet(), Map.Entry::getKey, Map.Entry::getValue);
 
-				case IntMap<?> m -> {
-					for (var entry : m) {
-						label.appendMap(val, entry.key, entry.value);
-						if (label.isTruncate(label.getText().length())) break;
+			// 提取 entries 遍历，避免在 pretty/普通 两个分支中重复
+			Runnable runEntries = () -> {
+				switch (val) {
+					case ObjectMap<?, ?> m -> appendMap(val, label, m.entries(), e -> e.key, e -> e.value);
+					case IntMap<?> m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
 					}
-				}
-				case IntIntMap m -> {
-					for (var entry : m) {
-						label.appendMap(val, entry.key, entry.value);
-						if (label.isTruncate(label.getText().length())) break;
+					case IntIntMap m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
 					}
-				}
-				case IntFloatMap m -> {
-					for (var entry : m) {
-						label.appendMap(val, entry.key, entry.value);
-						if (label.isTruncate(label.getText().length())) break;
+					case IntFloatMap m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
 					}
-				}
-				case LongMap<?> m -> {
-					for (var entry : m) {
-						label.appendMap(val, entry.key, entry.value);
-						if (label.isTruncate(label.getText().length())) break;
+					case LongMap<?> m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
 					}
-				}
-				case ObjectIntMap<?> m -> {
-					for (var entry : m) {
-						label.appendMap(val, entry.key, entry.value);
-						if (label.isTruncate(label.getText().length())) break;
+					case ObjectIntMap<?> m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
 					}
-				}
-				case ObjectFloatMap<?> m -> {
-					for (var entry : m) {
-						label.appendMap(val, entry.key, entry.value);
-						if (label.isTruncate(label.getText().length())) break;
+					case ObjectFloatMap<?> m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
 					}
+					case Map<?, ?> m -> appendMap(val, label, m.entrySet(), Map.Entry::getKey, Map.Entry::getValue);
+					default -> throw new UnsupportedOperationException();
 				}
-				default -> throw new UnsupportedOperationException();
+			};
+
+			if (R_JSFunc.pretty_print) {
+				int    depth       = label.prettyDepth;
+				String baseIndent  = prettyIndent(depth);
+				String entryIndent = prettyIndent(depth + 1);
+				Color  bColor      = prettyBracketColor(depth);
+				// 彩色左括号
+				text.append('\n');
+				label.startColor(bColor);
+				text.append('{');
+				label.endColor();
+				// 第一个 entry 前只需换行+缩进；后续 entry 前追加 ",\n<indent>"
+				label.overrideDelimiter = () -> text.append(",\n").append(entryIndent);
+				label.postAppendDelimiter(() -> text.append('\n').append(entryIndent));
+				label.prettyDepth = depth + 1;
+				runEntries.run();
+				label.prettyDepth = depth;
+				label.overrideDelimiter = null;
+				// 彩色右括号（前加换行+基础缩进）
+				text.append('\n').append(baseIndent);
+				label.startColor(bColor);
+				text.append('}');
+				label.endColor();
+			} else {
+				label.postAppendDelimiter(null);
+				text.append("\n{");
+				runEntries.run();
+				text.append('}');
 			}
-			// label.postAppendDelimiter();
-			text.append('}');
 			// 直接赋值而非 postAppendDelimiter(prev)：后者会把最后一个 entry 的分隔符
 			// 注入到 '}' 之后（如 "{k=v, k=v}, "），造成尾部多余分隔符。
 			label.appendTail = prev;
@@ -254,12 +311,29 @@ public class Viewers {
 				return true;
 			}
 
-			text.append("\n[");
-
 			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
 			IterCons       cons = pool.obtain().init(label, val, text);
 			Runnable       prev = label.appendTail;
-			label.postAppendDelimiter(null);
+
+			// pretty-print: 设置彩色括号和换行缩进
+			int     ppDepth     = label.prettyDepth;
+			boolean prettyPrint = R_JSFunc.pretty_print;
+			String  baseIndent  = prettyPrint ? prettyIndent(ppDepth) : "";
+			String  entryIndent = prettyPrint ? prettyIndent(ppDepth + 1) : "";
+			Color   bColor      = prettyPrint ? prettyBracketColor(ppDepth) : null;
+
+			if (prettyPrint) {
+				text.append('\n');
+				label.startColor(bColor);
+				text.append('[');
+				label.endColor();
+				label.overrideDelimiter = () -> text.append(",\n").append(entryIndent);
+				label.postAppendDelimiter(() -> text.append('\n').append(entryIndent));
+				label.prettyDepth = ppDepth + 1;
+			} else {
+				text.append("\n[");
+				label.postAppendDelimiter(null);
+			}
 			Runnable[] append = {null};
 			try {
 				switch (val) {
@@ -290,12 +364,15 @@ public class Viewers {
 					}
 				}
 			} catch (SatisfyException ignored) {
-			} catch (ArcRuntimeException ignored) {
-				defaultAppend(label, start, val);
+			} catch (ArcRuntimeException e) {
+				if ("#iterator() cannot be used nested.".equals(e.getMessage())) {
+					defaultAppend(label, start, val);
+				} else {
+					handleError(e, text);
+				}
 				return true;
 			} catch (Throwable e) {
-				if (ARRAY_DEBUG) Log.err(e);
-				text.append("▶ERROR◀");
+				handleError(e, text);
 			} finally {
 				// append[0] 必须先于 prev 恢复运行：它负责输出最后一个缓冲元素。
 				// 恢复时直接赋值而非调用 postAppendDelimiter，避免触发末尾多余分隔符，
@@ -307,11 +384,15 @@ public class Viewers {
 					Log.err(e);
 				}
 				label.appendTail = prev; // 丢弃末尾多余分隔符，还原外层上下文
+				if (prettyPrint) {
+					label.prettyDepth = ppDepth;
+					label.overrideDelimiter = null;
+				}
 				// 自动补位：格式化结果必须严格等于 SIZE_MAX_BIT 个字符，否则 text.replace
 				// 会插入多余字符，把之后所有 colorMap / startIndexMap / endIndexMap 的下标
 				// 全部错位（静默破坏，不报错）。
 				// 用 %-5s 截断到固定宽度：超过 99999 时显示 "9999+"（含前导空格仍为5字符）。
-				int    size      = cons.size();
+				int    size = cons.size();
 				String sizeStr;
 				if (size < (int) Math.pow(10, SIZE_MAX_BIT)) {
 					sizeStr = String.format("%" + SIZE_MAX_BIT + "d", size); // 右对齐，宽度固定
@@ -323,12 +404,24 @@ public class Viewers {
 				text.replace(sizeIndex, sizeIndex + SIZE_MAX_BIT, sizeStr);
 				pool.free(cons);
 			}
-			text.append(']');
+			if (prettyPrint) {
+				text.append('\n').append(baseIndent);
+				label.startColor(bColor);
+				text.append(']');
+				label.endColor();
+			} else {
+				text.append(']');
+			}
 
 			if (chunk_background.enabled()) label.addDrawRun(start, text.length(), DrawType.background, label.bgColor());
 			// setColor(Color.white);
 			return true;
 		});
+	}
+
+	private static void handleError(Throwable e, StringBuilder text) {
+		if (ARRAY_DEBUG) Log.err(e);
+		text.append("▶ERROR◀:").append(e.getMessage());
 	}
 
 

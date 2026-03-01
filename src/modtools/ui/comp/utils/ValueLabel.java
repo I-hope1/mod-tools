@@ -76,6 +76,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 	                enableTruncate = true,
 	/** 是否启用更新 */
 	enableUpdate = true;
+	/** 当前美化输出的嵌套深度（由 Viewers 管理，外部勿改） */
+	public int      prettyDepth       = 0;
+	/** 非空时覆盖 postAppendDelimiter() 中调度的默认分隔符（用于美化输出缩进） */
+	public Runnable overrideDelimiter = null;
 
 	public Func<Object, Object> valueFunc = o -> o;
 
@@ -247,6 +251,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 		valToObj.clear();
 
 		bgIndex = 0;
+		prettyDepth = 0;
+		overrideDelimiter = null;
 		appendValue(val);
 
 		if (hover_outline.enabled()) {
@@ -429,7 +435,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 	final Runnable defaultAppendDelimiter = () -> text.append(Viewers.getArrayDelimiter());
 	public void postAppendDelimiter() {
-		postAppendDelimiter(defaultAppendDelimiter);
+		postAppendDelimiter(overrideDelimiter != null ? overrideDelimiter : defaultAppendDelimiter);
 	}
 	public void postAppendDelimiter(Runnable next) {
 		if (appendTail != null) appendTail.run();

@@ -1,6 +1,6 @@
 package modtools.misc;
 
-import arc.func.Prov;
+import arc.func.*;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 
@@ -17,6 +17,7 @@ public class PairProv implements Prov<CharSequence> {
 	public final String     delimiter;
 	// parentheses表示结果是否被括号包围
 	public final boolean    parentheses;
+	public       int        digits = 2;
 
 	// 构造函数：初始化vecProv和delimiter，使用默认的parentheses值true
 	public PairProv(Prov<Vec2> vecProv, String delimiter) {
@@ -40,7 +41,7 @@ public class PairProv implements Prov<CharSequence> {
 	String lastStr;
 
 	public String getString(float f) {
-		return fixed(f);
+		return fixed(f, digits);
 	}
 
 	/**
@@ -94,9 +95,25 @@ public class PairProv implements Prov<CharSequence> {
 			super(vecProv, delimiter, false);
 		}
 
-		/** @see modtools.utils.ui.FormatHelper#fixedUnlessUnset(float)   */
+		/** @see modtools.utils.ui.FormatHelper#fixedUnlessUnset(float) */
 		public String getString(float f) {
 			return fixedUnlessUnset(f);
+		}
+	}
+
+	/** 只取第一个作为String */
+	public static class SingleProv extends PairProv {
+		public final Func<String, String> builder;
+		public SingleProv(Prov<Vec2> vecProv) {
+			this(vecProv, null);
+		}
+		public SingleProv(Prov<Vec2> vecProv, Func<String, String> builder) {
+			super(vecProv, "");
+			this.builder = builder;
+		}
+		public String getString(Vec2 vec) {
+			if (builder == null) return getString(vec.x);
+			return builder.get(getString(vec.x));
 		}
 	}
 }

@@ -203,6 +203,10 @@ public class FilterTable<E> extends LimitTable {
 		return map == null || map.isEmpty() || map.entrySet().stream().anyMatch(entry -> !entry.getValue().removed);
 	}
 
+	public int getMapSize() {
+		return map == null ? 0 : map.size();
+	}
+
 	/**
 	 * CellGroup 类，用于管理一组绑定的 Cell。
 	 */

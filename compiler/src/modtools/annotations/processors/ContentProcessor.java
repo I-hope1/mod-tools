@@ -34,8 +34,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {
 	public static final  String SETTING_PREFIX = "E_";
 	private static final String FIELD_PREFIX   = "f_";
-	public static final  String REF_PREFIX  = "R_";
-	public static final String  REF_OF_ANNO = RefOf.class.getName();
+	public static final  String REF_PREFIX     = "R_";
+	public static final  String REF_OF_ANNO    = RefOf.class.getName();
 
 	private Name        nameSetting;
 	private ClassType   consType;
@@ -145,7 +145,14 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			TypeSymbol   contentTypeSymbol = variableTree.vartype.type.tsym;
 			JCMethodDecl initMethod        = (JCMethodDecl) trees.getTree(contentTypeSymbol.members().findFirst(names.init));
 			if (initMethod == null) continue;
-			Object literalName = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
+			Object literalName;
+			try {
+				literalName = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
+			} catch (Throwable e) {
+				log.useSource(element.sourcefile);
+				log.error(initMethod, SPrinter.err("Cannot load content data for: " + element));
+				return;
+			}
 
 			ClassSymbol settingsSymbol = (ClassSymbol) contentTypeSymbol.members().findFirst(nameSetting, t -> t.kind == Kind.TYP);
 			if (settingsSymbol != null) {
@@ -249,7 +256,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				// 导入原本类的所有子类
 				writer.write("import " + settings.getQualifiedName() + ".*;\n");
 				writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
-				writer.write("@"+REF_OF_ANNO+"(" + settings.getQualifiedName() + ".class)\n"); // ← 加这行
+				writer.write("@" + REF_OF_ANNO + "(" + settings.getQualifiedName() + ".class)\n"); // ← 加这行
 				writer.write("public class " + REF_PREFIX + literalName + " {\n");
 				// writer.write(allEnumFields.entrySet().stream().reduce("\n",
 				//  (a, b) -> a + "\npublic static " + b.getValue() + " " + b.getKey().getSimpleName() + ";", (a, b) -> a + b));

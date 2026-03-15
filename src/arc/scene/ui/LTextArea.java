@@ -4,11 +4,11 @@ import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.util.pooling.Pools;
 
 @SuppressWarnings("SizeReplaceableByIsEmpty")
-public class GenTextArea extends TextArea {
-	public GenTextArea(String text) {
+public class LTextArea extends TextArea {
+	public LTextArea(String text) {
 		super(text);
 	}
-	public GenTextArea(String text, TextFieldStyle style) {
+	public LTextArea(String text, TextFieldStyle style) {
 		super(text, style);
 	}
 	public String insert(int position, CharSequence text, String to) {

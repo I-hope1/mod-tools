@@ -158,7 +158,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 	private static final Pattern startComment = Pattern.compile("\\s*?//");
 
-	public class MyTextArea extends GenTextArea {
+	public class MyTextArea extends LTextArea {
 		public  float    parentHeight = 0;
 		private float    scrollY      = 0;
 		public  Runnable trackCursor  = null;

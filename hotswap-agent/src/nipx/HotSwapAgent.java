@@ -35,7 +35,7 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Core State Management
-	static               Instrumentation     inst;
+	static Instrumentation inst;
 	static final         Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	/** 直接作为 watch 路径传入的 jar/zip 文件（区别于目录内扫描到的） */
 	static final         Set<Path>           activeWatchJars = new CopyOnWriteArraySet<>();
@@ -737,6 +737,7 @@ public class HotSwapAgent {
 	//region Logging System
 	public static Logger logger = new DefaultLogger();
 
+
 	public static class DefaultLogger implements Logger {
 		@Override
 		public void log(String msg) {
@@ -944,6 +945,9 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Utility Methods
+	public static Instrumentation getInst() {
+		return inst;
+	}
 	public static String bytesToHex(byte[] bytes) {
 		StringBuilder sb = new StringBuilder();
 		for (byte b : bytes) {

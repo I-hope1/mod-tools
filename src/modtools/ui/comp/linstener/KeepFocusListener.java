@@ -11,10 +11,10 @@ public class KeepFocusListener  extends InputListener {
 		this.element = element;
 	}
 	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+		element.requestKeyboard();
 		return true;
 	}
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
-		element.requestKeyboard();
 		super.touchUp(event, x, y, pointer, button);
 	}
 }

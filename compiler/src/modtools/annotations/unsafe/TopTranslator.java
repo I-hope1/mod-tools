@@ -447,13 +447,13 @@ public class TopTranslator extends TreeTranslator {
 		var           symbols = List.from(owner.members().getSymbolsByName(name));
 		if (symbols.size() > 1) {
 			log.useSource(toplevel.sourcefile);
-			log.error(SPrinter.err("Find more than one symbol for " + owner + "." + name + ": " + symbols));
+			log.error(selected, SPrinter.err("Find more than one symbol for " + owner + "." + name + ": " + symbols));
 			// throw new CheckException(""); // 生产环境不应抛出，而是更优雅地处理
 			// 为避免编译中断，这里尝试选择一个，但应警告开发者
 			select.sym = (Symbol) symbols.head; // 尝试选择第一个，可能不准确
 		} else if (symbols.head == null) {
 			log.useSource(toplevel.sourcefile);
-			log.error(SPrinter.err("can't resolve symbol for " + owner + "." + name + ":" + selected));
+			log.error(selected, SPrinter.err("can't resolve symbol for " + owner + "." + name + ":" + selected));
 			// throw new CheckException(""); // 生产环境不应抛出
 			select.sym = symtab.errSymbol; // 设置为错误符号
 		} else {

@@ -22,6 +22,7 @@ public class Contents {
 	public static KeyCodeSetter key_code_setter;
 	public static Pause         pause;
 	public static GameSettings  game_settings;
+	public static Profiler      profiler;
 	public static WindowManager window_manager;
 
 	/**

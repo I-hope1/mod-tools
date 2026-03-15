@@ -82,70 +82,119 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	 */
 	private static byte[] injectProfiler(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
 		ClassReader cr = new ClassReader(bytes);
-
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		// COMPUTE_FRAMES 会调用 getCommonSuperClass 推断类型层级。
+		// 默认实现用 Class.forName 加载类，在 transformer 内部触发新的类加载，
+		// 可能导致 LinkageError: duplicate class definition（正在被定义的类被二次加载）。
+		// 解法：完全绕开类加载，直接从 bytecodeCache 读字节码提取 superName，
+		// 在 cache 中找不到时才 fallback 到 java/lang/Object。
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
+			@Override
+			protected String getCommonSuperClass(String type1, String type2) {
+				// 用字节码遍历 type1 的祖先链，看是否能到达 type2（或反向）
+				// 不触发任何 ClassLoader.loadClass / Class.forName
+				if (type1.equals(type2)) return type1;
+				if (isAssignableFromCache(type2, type1)) return type2;
+				if (isAssignableFromCache(type1, type2)) return type1;
+				return "java/lang/Object";
+			}
+			/** 判断 superCandidate 是否是 subCandidate 的祖先（从 bytecodeCache 读字节码爬继承链） */
+			private boolean isAssignableFromCache(String superCandidate, String subCandidate) {
+				String cur = subCandidate;
+				for (int depth = 0; depth < 64; depth++) { // 最多爬 64 层，防止死循环
+					if (cur == null || cur.equals("java/lang/Object")) break;
+					if (cur.equals(superCandidate)) return true;
+					cur = getSuperNameFromCache(cur);
+				}
+				return false;
+			}
+			/** 从 bytecodeCache 读字节码取 superName，找不到返回 null */
+			private String getSuperNameFromCache(String slashName) {
+				String dotName = slashName.replace('/', '.');
+				byte[] cached  = bytecodeCache.get(dotName);
+				if (cached == null) return null;
+				try {
+					return new ClassReader(cached).getSuperName();
+				} catch (Throwable e) {
+					return null;
+				}
+			}
+		};
 
 		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			boolean anyProfiled = false;
+
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-				return
 
-				 new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+				// 跳过构造函数、静态代码块、桥接方法等不需要统计的底层方法
+				if (name.startsWith("<") || (access & Opcodes.ACC_SYNTHETIC) != 0 || (access & Opcodes.ACC_BRIDGE) != 0) {
+					return mv;
+				}
 
-					 // 标志位：当前方法是否有 @Profile
-					 boolean isProfiled = false;
+				// 检查该方法是否在动态目标名单中
+				boolean isTargeted = ProfilerData.isTargeted(slashClassName, name);
 
-					 @Override
-					 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-						 if (descriptor.equals(profileDesc)) {
-							 anyProfiled = true;
-							 isProfiled = true;
-							 // info("Found @Profile on: " + dotClassName + "." + name); // 移到这里
-						 }
-						 return super.visitAnnotation(descriptor, visible);
-					 }
+				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+					boolean isProfiled = isTargeted;
+					int startTimeVar;
+					int durationVar; // 用于存储计算好的耗时
 
-					 int startTimeVar;
-					 int durationVar; // 声明为类成员
-					 @Override
-					 protected void onMethodEnter() {
-						 // 只有被打标的方法才插桩
-						 if (!isProfiled) return;
+					@Override
+					public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+						if (descriptor.equals(profileDesc)) {
+							isProfiled = true;
+						}
+						return super.visitAnnotation(descriptor, visible);
+					}
 
-						 startTimeVar = newLocal(Type.LONG_TYPE);
-						 durationVar = newLocal(Type.LONG_TYPE); // 在入口处统一分配
-						 // long startTime = System.nanoTime();
-						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-						 startTimeVar = newLocal(Type.LONG_TYPE);
-						 visitVarInsn(LSTORE, startTimeVar);
-					 }
+					@Override
+					protected void onMethodEnter() {
+						if (!isProfiled) return;
+						anyProfiled = true;
 
-					 @Override
-					 protected void onMethodExit(int opcode) {
-						 if (!isProfiled) return;
-						 if (opcode == ATHROW) return;
+						// 所有的局部变量分配 (newLocal) 必须在方法入口处统一执行一次！
+						startTimeVar = newLocal(Type.LONG_TYPE);
+						durationVar = newLocal(Type.LONG_TYPE);
 
-						 visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-						 visitVarInsn(LLOAD, startTimeVar);
-						 visitInsn(LSUB);
+						// 记录 startTime = System.nanoTime();
+						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+						visitVarInsn(LSTORE, startTimeVar);
+					}
 
-						 visitVarInsn(LSTORE, durationVar); // 复用已分配的局部变量
-						 visitLdcInsn(slashClassName + "." + name);
-						 visitVarInsn(LLOAD, durationVar);
-						 visitMethodInsn(INVOKESTATIC, dot2slash(ProfilerData.class), "record", "(Ljava/lang/String;J)V", false);
-					 }
-				 };
+					@Override
+					protected void onMethodExit(int opcode) {
+						// 如果是抛出异常退出，则不记录耗时（或者你也可以选择记录）
+						if (!isProfiled || opcode == ATHROW) return;
+
+						// 记录 duration = System.nanoTime() - startTime;
+						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+						visitVarInsn(LLOAD, startTimeVar);
+						visitInsn(LSUB);
+
+						// 【修正点】：这里直接 STORE 到刚才在 Enter 分配好的变量里，绝不能再 newLocal
+						visitVarInsn(LSTORE, durationVar);
+
+						// 提取类名简写 (例如从 mindustry/gen/Building 变成 Building)
+						String simpleClassName = slashClassName.substring(slashClassName.lastIndexOf('/') + 1);
+						// 推入参数 1：String methodName
+						visitLdcInsn(simpleClassName + "." + name);
+						// 推入参数 2：long duration
+						visitVarInsn(LLOAD, durationVar);
+						// 调用 ProfilerData.record(String, long)
+						visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData", "record", "(Ljava/lang/String;J)V", false);
+					}
+				};
 			}
 		};
 
 		try {
 			cr.accept(cv, ClassReader.EXPAND_FRAMES);
-			if (!cv.anyProfiled) return bytes;
-			return cw.toByteArray();
+			// 只有发生了实际注入，才返回新字节码，否则返回原始字节码节省内存
+			return cv.anyProfiled ? cw.toByteArray() : bytes;
 		} catch (Throwable e) {
+			HotSwapAgent.error("Profiler injection failed for " + slashClassName, e);
 			return bytes;
 		}
 	}

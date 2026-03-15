@@ -12,6 +12,7 @@ import modtools.misc.PairProv.SingleProv;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.search.*;
+import modtools.utils.ui.ShowInfoWindow;
 import nipx.profiler.*;
 
 import java.util.List;
@@ -42,6 +43,7 @@ public class Profiler extends Content {
 	public static class ProfilerWindow extends Window {
 		private FilterTable<String> statsTable;
 		private Pattern             pattern;
+		private Search<String>      search;
 		private int                 sortType = 0;
 
 		public ProfilerWindow() {
@@ -59,7 +61,7 @@ public class Profiler extends Content {
 		private void build() {
 			// 搜索与工具栏
 			cont.table(t -> {
-				var search = new Search<>((_, p) -> pattern = p);
+				search = new Search<>((_, p) -> pattern = p);
 				t.button(Icon.trashSmall, ProfilerData::clear).size(40);
 				t.button(STR."Sort: \{getSortName(sortType)}", Styles.flatBordert, () -> {
 					sortType = (sortType + 1) % 3;
@@ -123,25 +125,32 @@ public class Profiler extends Content {
 				statsTable.bind(s.name);
 
 				statsTable.table(Styles.black3, t -> {
-					t.update(s::refresh); // 每帧刷新 ProfileStats 字段
+					t.update(() -> s.refresh()); // 每帧刷新 ProfileStats 字段
 					t.left().defaults().left();
-					// 名字：限制最大宽度防止挤压后两列，tooltip 显示完整名
-					t.add(s.name).growX().maxWidth(200).ellipsis(true)
-					 .tooltip(s.name);
-					SingleProv prov = new SingleProv(() -> Tmp.v1.set((float) s.avgMs, 0));
+					// 1. 名字：点击尝试找到对应类并打开 ShowInfoWindow
+					t.add(displayName(s.name)).growX().maxWidth(200).ellipsis(true)
+					 .tooltip(s.name); // tooltip 保留完整 key
+					// 2. SingleProv 读 s 的字段，不再直接访问 ProfilerData
+					SingleProv prov = new SingleProv(() -> Tmp.v1.set((float) s.avgMs, 0), s1 -> s1 + " ms");
 					prov.digits = 7;
 					t.label(prov).width(120).color(Pal.accent);
-					t.label(new SingleProv(() -> Tmp.v1.set(s.calls, 0)))
+					t.label(new SingleProv(() -> Tmp.v1.set(s.calls, 0), s1 -> s1 + " calls"))
 					 .width(120).color(Color.gray);
 				}).growX().pad(2).row();
 			}
 			statsTable.unbind();
 		}
 	}
+	/** 仅用于 UI 显示：去掉内部类宿主前缀，"A$B.method" → "B.method" */
+	private static String displayName(String name) {
+		int dollar = name.indexOf('$');
+		return dollar >= 0 ? name.substring(dollar + 1) : name;
+	}
 
 	public static class ProbeSelectorWindow extends Window {
 		private Class<?>            selectedBase = Building.class;
 		private FilterTable<String> methodTable;
+		private Search<String>      search;
 		private Pattern             pattern;
 
 		public ProbeSelectorWindow() {
@@ -168,9 +177,13 @@ public class Profiler extends Content {
 					selectedBase = Effect.class;
 					rebuild();
 				}).checked(i -> selectedBase == Effect.class);
+				// 打开当前基类的完整反射视图
+				t.button(Icon.eyeSmall, Styles.cleari, () ->
+				 new ShowInfoWindow(null, selectedBase).show()
+				).size(40);
 			}).row();
 
-			Search<String> search = new Search<>((_, p) -> pattern = p);
+			search = new Search<>((_, p) -> pattern = p);
 			search.build(cont, null);
 			cont.row();
 
@@ -196,6 +209,13 @@ public class Profiler extends Content {
 					t.label(() -> mName)
 					 .growX()
 					 .update(l -> l.setColor(ProfilerData.dynamicTargets.contains("*." + mName) ? Pal.accent : Color.white));
+
+					// 跳到 ShowInfoWindow 查看该方法的完整反射信息
+					t.button(Icon.eyeSmall, Styles.cleari, () -> {
+						ShowInfoWindow win = new ShowInfoWindow(null, selectedBase);
+						win.show();
+						win.search(mName);
+					}).size(32);
 
 					t.button(Icon.add, Styles.cleari, () -> {
 						boolean isEnabled = ProfilerData.dynamicTargets.contains("*." + mName);

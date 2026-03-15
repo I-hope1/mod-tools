@@ -5,6 +5,7 @@ import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.scene.Element;
+import arc.scene.event.ChangeListener.ChangeEvent;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.*;
@@ -41,6 +42,7 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
+import static java.lang.StringTemplate.STR;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
@@ -87,15 +89,22 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	}
 
 
-	TextField    textField;
+	TextField textField;
+	public void search(String text) {
+		// 填入方法名让搜索框直接定位
+		ChangeEvent changeEvent = Pools.obtain(ChangeEvent.class, ChangeEvent::new);
+		boolean     cancelled   = fire(changeEvent);
+		textField.setText(cancelled ? "" : text);
+		Pools.free(changeEvent);
+	}
 
-	public int modifiers = -1;
+	int modifiers = -1;
 	public void rebuildReflect() {
 		buildReflect(obj, build, pattern);
 	}
-	public Table   build;
-	public Pattern pattern = PatternUtils.ANY;
-	public Search<Member> search;
+	Table          build;
+	Pattern        pattern = PatternUtils.ANY;
+	Search<Member> search;
 
 	public void build() {
 		build = new LimitTable();
@@ -135,11 +144,11 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			this.pattern = pattern;
 			rebuildReflect();
 		});
-		search.addStatusFilter("modifiers", ModifierR.values(),4,
-		 i -> {
-			 modifiers = i;
-			 rebuild0.run();
-		 }, () -> modifiers, Member::getModifiers)
+		search.addStatusFilter("modifiers", ModifierR.values(), 4,
+			i -> {
+				modifiers = i;
+				rebuild0.run();
+			}, () -> modifiers, Member::getModifiers)
 		 .addBlackList(rebuild0)
 		 .addFilter("searchType", SearchType.values(), SearchType.name);
 		search.build(topTable, null);
@@ -538,8 +547,8 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 						// watch
 						IntUI.addWatchButton(buttons,
-							STR."\{m.getDeclaringClass().getSimpleName()}: \{m.getName()}",
-							() -> m.invoke(o));
+						 STR."\{m.getDeclaringClass().getSimpleName()}: \{m.getName()}",
+						 () -> m.invoke(o));
 					}
 					if (!l.type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l.val, l.type);
 				})).right().colspan(1);

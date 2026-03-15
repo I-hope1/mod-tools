@@ -1,11 +1,15 @@
 package nipx.profiler;
 
-import nipx.HotSwapAgent;
+import arc.func.Cons;
+import mindustry.entities.Effect;
+import mindustry.entities.Effect.EffectContainer;
 import mindustry.gen.Building;
+import nipx.HotSwapAgent;
 
 import java.lang.instrument.Instrumentation;
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.Field;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DynamicProfilerAPI {
 	/**
@@ -18,8 +22,8 @@ public class DynamicProfilerAPI {
 		if (enable) { ProfilerData.dynamicTargets.add(target); } else ProfilerData.dynamicTargets.remove(target);
 
 		// 获取所有已加载的子类并重转换
-		List<Class<?>> toRetransform = new ArrayList<>();
-		Instrumentation inst         = HotSwapAgent.getInst();
+		List<Class<?>>  toRetransform = new ArrayList<>();
+		Instrumentation inst          = HotSwapAgent.getInst();
 		for (Class<?> clazz : inst.getAllLoadedClasses()) {
 			if (baseClass.isAssignableFrom(clazz) && !clazz.isInterface() && inst.isModifiableClass(clazz)) {
 				toRetransform.add(clazz);
@@ -72,5 +76,62 @@ public class DynamicProfilerAPI {
 		} catch (Exception e) {
 			HotSwapAgent.error("Failed to retransform Building classes", e);
 		}
+	}
+
+	/**
+	 * Effect.draw 是 DrawEffect 函数式字段，无法 retransform。
+	 * 直接用反射把字段替换成计时包装器，toggle 时还原原始值。
+	 */
+	private static final Map<Effect, Cons<EffectContainer>> originalEffectDraws = new ConcurrentHashMap<>();
+	private static       Field                              drawField;
+
+	private static Field getDrawField() throws ReflectiveOperationException {
+		if (drawField == null) {
+			drawField = Effect.class.getDeclaredField("draw");
+			drawField.setAccessible(true);
+		}
+		return drawField;
+	}
+
+	/**
+	 * @param effect     要探针的 Effect 实例（如 Fx.explosion）
+	 * @param recordName 记录到 ProfilerData 的 key（建议用字段名，如 "Fx.explosion"）
+	 * @param enable     开启或关闭
+	 */
+	public static void toggleEffectProbe(Effect effect, String recordName, boolean enable) {
+		try {
+			Field field = getDrawField();
+			if (enable) {
+				if (originalEffectDraws.containsKey(effect)) return; // 已经包装过，跳过
+				var original = (Cons<EffectContainer>) field.get(effect);
+				originalEffectDraws.put(effect, original);
+				field.set(effect, (Cons<EffectContainer>) e -> {
+					long start = System.nanoTime();
+					original.get(e);
+					ProfilerData.record(recordName, System.nanoTime() - start);
+				});
+				HotSwapAgent.info("Effect probe INSTALLED: " + recordName);
+			} else {
+				var original = originalEffectDraws.remove(effect);
+				if (original != null) {
+					field.set(effect, original);
+					HotSwapAgent.info("Effect probe UNINSTALLED: " + recordName);
+				}
+			}
+		} catch (ReflectiveOperationException e) {
+			HotSwapAgent.error("Failed to toggle effect probe: " + recordName, e);
+		}
+	}
+
+	/** 关闭所有 Effect 探针并还原原始 draw */
+	public static void clearAllEffectProbes() {
+		originalEffectDraws.forEach((effect, original) -> {
+			try {
+				getDrawField().set(effect, original);
+			} catch (ReflectiveOperationException e) {
+				HotSwapAgent.error("Failed to restore effect draw", e);
+			}
+		});
+		originalEffectDraws.clear();
 	}
 }

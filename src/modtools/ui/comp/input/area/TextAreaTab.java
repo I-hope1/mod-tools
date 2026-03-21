@@ -8,7 +8,7 @@ import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Rect;
-import arc.scene.Scene;
+import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;

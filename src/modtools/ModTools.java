@@ -126,6 +126,7 @@ public class ModTools extends Mod {
 		try {
 			if (OS.isAndroid) {
 				HiddenApi.setHiddenApiExemptions();
+				// HiddenApi.test();
 			}
 		} catch (Throwable e) {
 			Log.err(e);
@@ -264,6 +265,7 @@ public class ModTools extends Mod {
 		 */
 
 		loaded = true;
+
 		async(() -> {
 			AllTutorial.init();
 			if (SETTINGS.getBool("ShowMainMenuBackground")) {

@@ -75,7 +75,7 @@ import static modtools.ui.IntUI.topGroup;
 import static modtools.utils.Tools.*;
 
 public class Tester extends Content {
-	private static final int    FADE_ALIGN            = Align.bottomLeft;
+	private static final int FADE_ALIGN = Align.bottomLeft;
 
 	public static final float WIDTH = 420;
 
@@ -243,8 +243,12 @@ public class Tester extends Content {
 		if (!Vars.mobile) textarea.addListener(new EscapeAndAxesClearListener(area));
 
 		Runnable areaInvalidate = () -> {
+			Element focused = Core.scene.getKeyboardFocus();
+			Log.info("Before layout: " + focused);
 			textarea.getArea().invalidateHierarchy();
 			textarea.layout();
+			Log.info("After layout: " + Core.scene.getKeyboardFocus());
+			if (focused != null) Core.scene.setKeyboardFocus(focused); // 恢复焦点
 		};
 		ui.maximized(_ -> Time.runTask(0, areaInvalidate));
 		ui.sclListener.listener = areaInvalidate;
@@ -257,7 +261,7 @@ public class Tester extends Content {
 
 		Table center = _cont.table(t -> {
 			 t.defaults().padRight(4f).size(42);
-			 t.addListener(new KeepFocusListener(area));
+			 // t.addListener(new KeepFocusListener(area));
 
 			 ImageButton move = t.button(Icon.move, HopeStyles.hope_flati, () -> { }).get();
 			 move.clicked(() -> {
@@ -978,7 +982,7 @@ public class Tester extends Content {
 		private void complement() {
 			if (completionPopup == null || syntax == null) return; // Ensure dependencies are ready
 
-			int    originalCursor = area.getCursorPosition();
+			int originalCursor = area.getCursorPosition();
 			// String textContent    = area.getText();
 
 			// Determine prefix

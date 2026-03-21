@@ -14,7 +14,7 @@ import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
-import arc.scene.ui.layout.*;
+import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
@@ -798,6 +798,7 @@ public class Selection extends Content {
 
 	public void initTask() {
 		WorldUtils.uiWD.submit(() -> {
+			if (!state.isGame()) return;
 			WorldUtils.uiWD.alpha = Core.input.alt() ? 0.3f : 1f;
 
 			if (ui != null && ui.isShown()) {
@@ -810,6 +811,7 @@ public class Selection extends Content {
 		final Vec2 start = new Vec2(), end = new Vec2();
 		/* 更新动态选区  */
 		Tools.TASKS.add(() -> {
+			if (!state.isGame()) return;
 			for (Rect rect : dynamicSelectRegions) {
 				listener.updateRegion(
 				 rect.getPosition(start),
@@ -819,6 +821,7 @@ public class Selection extends Content {
 			}
 		});
 		Tools.TASKS.add(() -> {
+			if (!state.isGame()) return;
 			Element hit = HopeInput.mouseHit();
 			focusLocked = control.input.locked();
 			focusEnabled = !focusLocked && !scene.hasDialog() && (

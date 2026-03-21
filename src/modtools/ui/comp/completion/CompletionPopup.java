@@ -99,8 +99,10 @@ public class CompletionPopup extends Table {
 
 		setPosition(popupX, popupY);
 
+		// see #hide()
 		visible = true;
 		shown = true;
+		touchable = Touchable.enabled;
 		toFront();
 		// Do not steal focus: area.getScene().setKeyboardFocus(this);
 	}
@@ -166,6 +168,7 @@ public class CompletionPopup extends Table {
 		if (!shown) return;
 		visible = false;
 		shown = false;
+		touchable = Touchable.disabled; // 关键：隐藏时禁用触摸
 		// If this popup was added by a Hitter, the hitter would manage removal.
 		// If added directly to scene/stage, remove() might be needed if it's not reused.
 		// For now, just set invisible.

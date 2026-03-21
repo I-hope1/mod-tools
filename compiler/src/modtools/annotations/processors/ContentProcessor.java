@@ -298,12 +298,14 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// println(classDecl);
 
 		// 在ModTools里加载Class.forName(
+		if (mainClass.defs == null) return;
 		mMaker.at(mainClass.defs.last());
 		mainClass.defs = mainClass.defs.append(PBlock(
 		 mMaker.Try(PBlock(
-			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")), List.of(mMaker.Literal(settings.flatname.toString())))))
-			, List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock()))
-			, null)
+			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")),
+			  List.of(mMaker.Literal(settings.flatname.toString()))))),
+		  List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock())),
+		  null)
 		));
 
 		// println(classDecl);

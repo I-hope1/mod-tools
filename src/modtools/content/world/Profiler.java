@@ -125,16 +125,14 @@ public class Profiler extends Content {
 				statsTable.bind(s.name);
 
 				statsTable.table(Styles.black3, t -> {
-					t.update(() -> s.refresh()); // 每帧刷新 ProfileStats 字段
+					t.update(s::refresh); // 每帧刷新 ProfileStats 字段
 					t.left().defaults().left();
-					// 1. 名字：点击尝试找到对应类并打开 ShowInfoWindow
 					t.add(displayName(s.name)).growX().maxWidth(200).ellipsis(true)
 					 .tooltip(s.name); // tooltip 保留完整 key
-					// 2. SingleProv 读 s 的字段，不再直接访问 ProfilerData
-					SingleProv prov = new SingleProv(() -> Tmp.v1.set((float) s.avgMs, 0), s1 -> s1 + " ms");
+					SingleProv prov = new SingleProv(() -> Tmp.v1.set((float) s.avgMs, 0));
 					prov.digits = 7;
 					t.label(prov).width(120).color(Pal.accent);
-					t.label(new SingleProv(() -> Tmp.v1.set(s.calls, 0), s1 -> s1 + " calls"))
+					t.label(new SingleProv(() -> Tmp.v1.set(s.calls, 0)))
 					 .width(120).color(Color.gray);
 				}).growX().pad(2).row();
 			}

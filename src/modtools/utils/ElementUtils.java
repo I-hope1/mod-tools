@@ -5,6 +5,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
+import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.style.Style;
@@ -88,7 +89,7 @@ public interface ElementUtils {
 		pane.setScrollingDisabled(true, false);
 		pane.setOverscroll(false, false);
 		pane.update(() -> {
-			pane.setScrollingDisabled(true, pane.getHeight() == pane.getPrefHeight());
+			pane.setScrollingDisabled(true, Mathf.equal(pane.getHeight(), pane.getPrefHeight()));
 		});
 	}
 

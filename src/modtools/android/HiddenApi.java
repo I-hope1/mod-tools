@@ -1,15 +1,15 @@
 package modtools.android;
 
+import android.os.Debug;
 import arc.util.Log;
 import dalvik.system.VMRuntime;
+import mindustry.Vars;
 import modtools.jsfunc.reflect.UNSAFE;
-import modtools.utils.ByteCodeTools.MyClass;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
-import rhino.classfile.ByteCode;
 
 import java.lang.reflect.*;
 
-import static modtools.utils.ByteCodeTools.nativeName;
+import static ihope_lib.MyReflect.unsafe;
 
 /**
  * Only For Android
@@ -212,6 +212,10 @@ public class HiddenApi {
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.vaddressOf(ints);
 		try {
+			for (Executable method : HiddenApiBypass.getDeclaredMethods(Debug.class)) {
+				Log.info(method);
+			}
+			testReplaceCrossMethod();
 			// testReplaceModifier();
 			// replaceMethod();
 		} catch (Throwable e) {
@@ -219,164 +223,50 @@ public class HiddenApi {
 		}
 	}
 
-	// ---------------------------------
-
-	public static class A {
-		private A() {
-		}
-
-		private void _private() {
-			Log.info("private");
-		}
-
-		public void _public() {
-			Log.info("original");
-		}
-	}
-
-	public static class Target extends A {
-		public void _public() {
-			Log.info("successful: @", this);
-		}
-	}
-
-	static void testReplaceModifier() throws Exception {
-		Method aPrivate                  = A.class.getDeclaredMethod("_private");
-		Method aPublic                   = A.class.getDeclaredMethod("_public");
-		long   address_artMethod_private = UNSAFE.getLong(aPrivate, offset_art_method_);
-		long   address_artMethod_public  = UNSAFE.getLong(aPublic, offset_art_method_);
-		Log.info("Origin: @", A.class.getDeclaredMethod("_private"));
-
-		UNSAFE.copyMemory(address_artMethod_public + 4, address_artMethod_private + 4, 8);
-		Log.info("Result: @", A.class.getDeclaredMethod("_private"));
-
-		MyClass<Object> testA = new MyClass<>("testA", Object.class);
-		testA.addInterface(Runnable.class);
-		testA.setFunc("run", cfw -> { // new A()._private()
-			cfw.add(ByteCode.NEW, nativeName(A.class));
-			cfw.add(ByteCode.DUP);
-			cfw.addInvoke(ByteCode.INVOKESPECIAL, nativeName(Object.class), "<init>", "()V");
-			cfw.addInvoke(ByteCode.INVOKEVIRTUAL, nativeName(A.class), "_private", "()V");
-			cfw.add(ByteCode.RETURN);
-			return 1;
-		}, 1, void.class);
-
-		Runnable r = (Runnable) UNSAFE.allocateInstance(testA.define(A.class));
-		Log.info("Runnable: @", r);
-		r.run();
-		Log.info("After run");
-	}
-
-	static void testReplaceMethod() {
-		MyClass<Object> testA = new MyClass<>("testA", Object.class);
-		testA.addInterface(Runnable.class);
-		testA.setFunc("run", cfw -> {
-			cfw.add(ByteCode.NEW, nativeName(A.class));
-			cfw.add(ByteCode.DUP);
-			cfw.addInvoke(ByteCode.INVOKESPECIAL, nativeName(Object.class), "<init>", "()V");
-			cfw.addInvoke(ByteCode.INVOKEVIRTUAL, nativeName(A.class), "_public", "()V");
-			cfw.add(ByteCode.RETURN);
-			return 1;
-		}, 1, void.class);
-
-		Runnable r = (Runnable) UNSAFE.allocateInstance(testA.define(A.class));
-		Log.info("Runnable: @", r);
-		r.run();
-		Log.info("After run");
-	}
-
-	public static class Super {
-		public Class findLoadedClass(String name) {
-			System.out.println("Not impl yet");
-			return null;
-		}
-	}
-
-	static Method   vm;
-	static Class<?> Exception            = Exception.class;
-	static Class<?> NullPointerException = NullPointerException.class;
-
-	public static class Delegator extends Super {
-		public Class findLoadedClass(String name) {
-			if (name.equals("java.lang.Exception")) { return Exception; }
-			if (name.equals("java.lang.NullPointerException")) { return NullPointerException; }
-
-			try {
-				Class res = (Class) vm.invoke(this, name);
-				Log.info(res);
-				return res;
-			} catch (Exception e) {
-				throw new RuntimeException(e);
+	private static boolean DEBUG;
+	private static void testReplaceCrossMethod() throws Throwable {
+		// Log.info(HiddenApiBypass.getDeclaredMethods(VMRuntime.class));
+		class MyProxy {
+			public static void myHookLogger() {
+				Log.info("Inject");
 			}
 		}
+		replaceMethodx(Vars.class.getDeclaredMethod("loadLogger"), MyProxy.class.getDeclaredMethod("myHookLogger"));
+
+		Vars.loadLogger();
 	}
-
-	static void replaceMethod() throws Exception {
-		// {
-		// new A()._public();
-		// replaceAMethod(A.class.getDeclaredMethod("_public"),
-		// Target.class.getDeclaredMethod("_public"));
-		// new A()._public();
-		// }
-
+	private static void replaceMethodx(Method targetMethod, Method hookMethod) throws NoSuchFieldException, IllegalAccessException, NoSuchMethodException {
+		long methodOffset;
 		{
-			/*
-			 * MyClass<Object> testA = new MyClass<>("testReplace", Object.class);
-			 * testA.addInterface(Runnable.class);
-			 * Class<?> error=NoSuchMethodError.class;
-			 * testA.setFunc("findLoadedClass", (self, args) -> {
-			 * String name = (String) args.get(0);
-			 * System.out.println(args);
-			 * if (name.equals("java.lang.NoSuchMethodError")) return error;
-			 * return Tools.<Super>as(self).findLoadedClass(name);
-			 * }, 1, Class.class, String.class);
-			 * Class<?> delegator = testA.define(Vars.class.getClassLoader());
-			 */
-			vm = Class.forName("java.lang.ClassLoader").getDeclaredMethod("findLoadedClass", String.class);
-			vm.setAccessible(true);
+			Field field = HiddenApiBypass.class.getDeclaredField("methodOffset");
+			field.setAccessible(true);
+			methodOffset = (long) field.get(null);
+		}
+		long artMethodSize;
+		{
+			Field field = HiddenApiBypass.class.getDeclaredField("artMethodSize");
+			field.setAccessible(true);
+			artMethodSize = (long) field.get(null);
+		}
+		// 获取目标方法和你的 Hook 方法
 
-			// replaceAMethod(Super.class.getDeclaredMethod("findLoadedClass", String.class)
-			// , vm);
+		// 利用 HiddenApiBypass 已经计算出的偏移量，找到它们的 Native ArtMethod 指针
+		// 假设你已经按照 HiddenApiBypass 的 static 块初始化了 artOffset 等变量
+		long targetArtMethodPtr = unsafe.getLong(targetMethod, methodOffset);
+		long hookArtMethodPtr   = unsafe.getLong(hookMethod, methodOffset);
 
-			replaceAMethod(vm, Delegator.class.getDeclaredMethod("findLoadedClass", String.class));
+		if (DEBUG) {
+			Log.info("Target Method Ptr: " + Long.toHexString(targetArtMethodPtr));
+			Log.info("Hook Method Ptr: " + Long.toHexString(hookArtMethodPtr));
 		}
 
-		// new A()._private();
-	}
+		// 注意：不要只改 entrypoint，最稳妥的是覆盖整个 ArtMethod 结构体（除了少数受保护字段）
+		// 根据 HiddenApiBypass 计算的 artMethodSize 进行内存拷贝
+		long entryPointOffset = artMethodSize - 8;
 
-	private static void replaceAMethod(Method dest, Method src) {
-		long artDest = UNSAFE.getLong(dest, offset_art_method_);
-		long artSrc  = UNSAFE.getLong(src, offset_art_method_);
-
-		/*
-		 * API 33 ArtMethod 结构 (64-bit):
-		 * 0-3: declaring_class (uint32)
-		 * 4-7: access_flags (uint32)
-		 * 8-11: dex_code_item_offset (uint32)
-		 * 12-15: dex_method_index (uint32)
-		 * 16-17: method_index (uint16)
-		 * 18-19: hotness_count (uint16)
-		 * 20-23: imt_index (uint32)
-		 * 24-31: entry_point_from_quick_compiled_code (uint64)
-		 */
-
-		// 我们从偏移 8 开始拷贝，跳过 class 和 flags
-		// 这样可以保留原本的类归属关系，避免 NoSuchMethodError
-		int skip     = 8;
-		int copySize = (int) size_art_method - skip;
-
-		if (copySize > 0) {
-			UNSAFE.copyMemory(artSrc + skip, artDest + skip, copySize);
-		}
-
-		// 【关键】修改目标方法的 flags，防止它走解释模式或被内联
-		// 0x0100 是 kAccCompileDontBother (不要内联此方法)
-		// 0x0002 是 kAccPrivate -> 修改为和源方法一致或保留原样
-		// 这里我们强制让它看起来像是经过编译的
-		int flags = UNSAFE.getInt(artDest + 4);
-		flags |= 0x0100; // 禁止内联
-		UNSAFE.putInt(artDest + 4, flags);
-
-		Log.info("Hook applied to " + dest.getName());
+		// 2. 只拷贝入口点，不拷贝索引和类信息
+		// 这样 targetMethod 的“身份”还是原来的，但“灵魂（执行逻辑）”换成了 hookMethod 的
+		long hookEntryPoint = unsafe.getLong(hookArtMethodPtr + entryPointOffset);
+		unsafe.putLong(targetArtMethodPtr + entryPointOffset, hookEntryPoint);
 	}
 }

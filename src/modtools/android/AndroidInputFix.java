@@ -44,7 +44,7 @@ public class AndroidInputFix {
 				e.startTracking();
 			}
 
-			// 【修复】必须对 keyEvents 列表加锁，因为 Arc 的主循环也是 synchronized(keyEvents)
+			// 必须对 keyEvents 列表加锁，因为 Arc 的主循环也是 synchronized(keyEvents)
 			synchronized (keyEvents) {
 				if (action == KeyEvent.ACTION_DOWN) {
 					injectEvent(usedKeyEvents, keyEvents, time, KEY_DOWN, targetCode, (char) 0);

@@ -42,7 +42,6 @@ public class TemplateTable<R> extends Table {
 		template.act(delta);
 		if (!template.needsLayout()) return;
 		template.layout();
-		template.invalidate();
 		super.clearChildren();
 
 		var cells = template.getCells();

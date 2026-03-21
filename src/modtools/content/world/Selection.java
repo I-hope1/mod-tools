@@ -798,7 +798,8 @@ public class Selection extends Content {
 
 	public void initTask() {
 		WorldUtils.uiWD.submit(() -> {
-			if (!state.isGame()) return;
+			if (state.isMenu()) return;
+			// Log.info("ok");
 			WorldUtils.uiWD.alpha = Core.input.alt() ? 0.3f : 1f;
 
 			if (ui != null && ui.isShown()) {
@@ -811,7 +812,7 @@ public class Selection extends Content {
 		final Vec2 start = new Vec2(), end = new Vec2();
 		/* 更新动态选区  */
 		Tools.TASKS.add(() -> {
-			if (!state.isGame()) return;
+			if (state.isMenu()) return;
 			for (Rect rect : dynamicSelectRegions) {
 				listener.updateRegion(
 				 rect.getPosition(start),
@@ -821,7 +822,7 @@ public class Selection extends Content {
 			}
 		});
 		Tools.TASKS.add(() -> {
-			if (!state.isGame()) return;
+			if (state.isMenu()) return;
 			Element hit = HopeInput.mouseHit();
 			focusLocked = control.input.locked();
 			focusEnabled = !focusLocked && !scene.hasDialog() && (

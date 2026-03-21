@@ -460,7 +460,7 @@ public class IntUI {
 			p.row().defaults().colspan(cols).size(CellTools.unset);
 			// see JSRequest
 			SettingsBuilder.check("@jsrequest.nothideauto", b -> notHideAuto[0] = b, () -> notHideAuto[0]);
-			p.row();
+			p.row().defaults().colspan(1);
 			SettingsBuilder.clearBuild();
 		};
 	}

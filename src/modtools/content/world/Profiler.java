@@ -10,6 +10,7 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.content.Content;
 import modtools.misc.PairProv.SingleProv;
+import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.utils.search.*;
@@ -87,7 +88,7 @@ public class Profiler extends Content {
 
 			// 这里的逻辑：我们定时检查是否有新的方法产生（动态注入了新探针）
 			// 如果没有新 key，我们只更新现有 label 的数值，不重构 Table
-			cont.pane(statsTable).grow().update(p -> {
+			cont.pane(HopeStyles.h_smallPane, statsTable).grow().update(p -> {
 				if (ProfilerData.stats.size() != statsTable.getMapSize()) {
 					fullRebuild();
 				}
@@ -125,6 +126,9 @@ public class Profiler extends Content {
 
 		/** 0 GC的排序  */
 		private void sortUI() {
+			// Seq<ProfileStats> stats = getSortedStats();
+			// statsTable.getCells().sort(cell ->
+			//  cell.get() instanceof Table table ? stats.indexOf(t -> t.name.equals(table.name)) : 0);
 			Seq<ProfileStats> stats = getSortedStats();
 
 			// 获取 FilterTable 底层的单元格序列(布局)与子元素序列(渲染/事件)
@@ -203,7 +207,8 @@ public class Profiler extends Content {
 						MethodStats stat = ProfilerData.stats.get(mName);
 						return Tmp.v1.set(stat != null ? stat.count().sum() : 0, 0);
 					})).color(Color.gray);
-				}).growX().pad(2).row();
+				})
+				 .name(mName).growX().pad(2).row();
 			}
 			statsTable.unbind();
 		}
@@ -310,8 +315,11 @@ public class Profiler extends Content {
 			stats.name = name;
 			stats.totalNanos = totalNanos;
 			stats.calls = calls;
-			stats.avgMs = (calls == 0) ? 0 : ((totalNanos / 1_000_000.0) / calls);
+			stats.avgMs = avgMs(totalNanos,  calls);
 			return stats;
+		}
+		public static double avgMs(long totalNanos, long calls) {
+			return (calls == 0) ? 0 : ((totalNanos / 1_000_000.0) / calls);
 		}
 
 		public void reset() {

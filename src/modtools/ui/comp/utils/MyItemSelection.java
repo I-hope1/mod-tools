@@ -77,7 +77,7 @@ public class MyItemSelection {
 				cont.unbind();
 			} catch (Exception ignored) { }
 			if (++i % cols == 0) {
-				cont.row();
+				cont.newLine();
 			}
 		}
 

@@ -72,19 +72,16 @@ public class Profiler extends Content {
 				t.add("Method").minWidth(methodColWidth).growX();
 				t.defaults().width(colWidth).padLeft(4f);
 				t.button("Avg(ms)", Styles.flatBordert, () -> {
-					if (sortType == 0) return;
 					sortType = 0;
-					sortUI0GC();
+					sortUI();
 				}).color(Pal.accent);
 				t.button("Total(ms)", Styles.flatBordert, () -> {
-					if (sortType == 1) return;
 					sortType = 1;
-					sortUI0GC();
+					sortUI();
 				}).color(Color.gray);
 				t.button("Calls", Styles.flatBordert, () -> {
-					if (sortType == 2) return;
 					sortType = 2;
-					sortUI0GC();
+					sortUI();
 				}).color(Color.gray);
 			}).growX().pad(2).row();
 
@@ -126,19 +123,19 @@ public class Profiler extends Content {
 			return currentStats;
 		}
 
-		private void sortUI0GC() {
-			// 获取 0 GC 排序好的数据状态 (调用上一条回答优化的 getSortedStats)
+		/** 0 GC的排序  */
+		private void sortUI() {
 			Seq<ProfileStats> stats = getSortedStats();
 
-			// 2. 获取 FilterTable 底层的单元格序列(布局)与子元素序列(渲染/事件)
+			// 获取 FilterTable 底层的单元格序列(布局)与子元素序列(渲染/事件)
 			var cells    = statsTable.getCells();
 			var children = statsTable.getChildren();
 
-			// 3. 0 GC 清空（仅重置数组 size=0，不会解除父子绑定，不会产生垃圾）
+			// 0 GC 清空（仅重置数组 size=0，不会解除父子绑定，不会产生垃圾）
 			cells.clear();
 			children.clear();
 
-			// 4. 根据排好序的 stats 重新构建 Table 的物理顺序
+			// 根据排好序的 stats 重新构建 Table 的物理顺序
 			for (int i = 0; i < stats.size; i++) {
 				ProfileStats s = stats.get(i);
 

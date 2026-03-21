@@ -53,7 +53,7 @@ public class FormatHelper {
 	public static String fixed(float value, int digits) {
 		if (Float.isNaN(value)) return "NAN";
 		if (Float.isInfinite(value)) return value > 0 ? "+∞" : "-∞";
-		return Strings.autoFixed(value, digits);
+		return digits <= 4 ? Strings.autoFixed(value, digits) : Strings.fixed(value, digits);
 	}
 
 	// 去除颜色

@@ -3,6 +3,7 @@ package modtools.content.world;
 import arc.graphics.Color;
 import arc.struct.Seq;
 import arc.util.Tmp;
+import arc.util.pooling.*;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -16,7 +17,7 @@ import modtools.utils.ui.ShowInfoWindow;
 import nipx.profiler.*;
 import nipx.profiler.ProfilerData.MethodStats;
 
-import java.util.List;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class Profiler extends Content {
@@ -47,6 +48,9 @@ public class Profiler extends Content {
 		private Search<String>      search;
 		private int                 sortType = 0;
 
+		public int colWidth       = 125;
+		public int methodColWidth = 200;
+
 		public ProfilerWindow() {
 			super("Profiler Dashboard", 500, 600, true);
 			build();
@@ -62,6 +66,28 @@ public class Profiler extends Content {
 
 			statsTable = new FilterTable<>();
 
+			// 表头：不参与过滤，始终可见
+			cont.table(t -> {
+				t.left().defaults().left().height(45f);
+				t.add("Method").minWidth(methodColWidth).growX();
+				t.defaults().width(colWidth).padLeft(4f);
+				t.button("Avg(ms)", Styles.flatBordert, () -> {
+					if (sortType == 0) return;
+					sortType = 0;
+					sortUI0GC();
+				}).color(Pal.accent);
+				t.button("Total(ms)", Styles.flatBordert, () -> {
+					if (sortType == 1) return;
+					sortType = 1;
+					sortUI0GC();
+				}).color(Color.gray);
+				t.button("Calls", Styles.flatBordert, () -> {
+					if (sortType == 2) return;
+					sortType = 2;
+					sortUI0GC();
+				}).color(Color.gray);
+			}).growX().pad(2).row();
+
 			// 这里的逻辑：我们定时检查是否有新的方法产生（动态注入了新探针）
 			// 如果没有新 key，我们只更新现有 label 的数值，不重构 Table
 			cont.pane(statsTable).grow().update(p -> {
@@ -72,26 +98,73 @@ public class Profiler extends Content {
 
 			fullRebuild();
 		}
-		/**
-		 * 从 ProfilerData 获取快照并排序
-		 */
-		private Seq<ProfileStats> getSortedStats() {
-			Seq<ProfileStats> list = new Seq<>();
 
+		private static final Comparator<ProfileStats> SORT_AVG   = (a, b) -> Double.compare(b.avgMs, a.avgMs);
+		private static final Comparator<ProfileStats> SORT_TOTAL = (a, b) -> Long.compare(b.totalNanos, a.totalNanos);
+		private static final Comparator<ProfileStats> SORT_CALLS = (a, b) -> Long.compare(b.calls, a.calls);
+
+		final Seq<ProfileStats> currentStats = new Seq<>();
+		/** 从 ProfilerData 获取快照并排序 */
+		private Seq<ProfileStats> getSortedStats() {
+			Pools.freeAll(currentStats, true);
+			currentStats.clear();
+
+			// 游标归零
 			ProfilerData.stats.forEach((name, stat) -> {
 				long total = stat.time().sum();
 				long calls = stat.count().sum();
-
-				list.add(new ProfileStats(name, total, calls));
+				currentStats.add(ProfileStats.obtain(name, total, calls));
 			});
 
-			list.sort((a, b) -> switch (sortType) {
-				case 1 -> Long.compare(b.totalNanos, a.totalNanos);
-				case 2 -> Long.compare(b.calls, a.calls);
-				default -> Double.compare(b.avgMs, a.avgMs);
+			currentStats.sort(switch (sortType) {
+				case 0 -> SORT_AVG;
+				case 1 -> SORT_TOTAL;
+				case 2 -> SORT_CALLS;
+				default -> throw new IllegalArgumentException("Invalid sort type: " + sortType);
 			});
 
-			return list;
+			return currentStats;
+		}
+
+		private void sortUI0GC() {
+			// 获取 0 GC 排序好的数据状态 (调用上一条回答优化的 getSortedStats)
+			Seq<ProfileStats> stats = getSortedStats();
+
+			// 2. 获取 FilterTable 底层的单元格序列(布局)与子元素序列(渲染/事件)
+			var cells    = statsTable.getCells();
+			var children = statsTable.getChildren();
+
+			// 3. 0 GC 清空（仅重置数组 size=0，不会解除父子绑定，不会产生垃圾）
+			cells.clear();
+			children.clear();
+
+			// 4. 根据排好序的 stats 重新构建 Table 的物理顺序
+			for (int i = 0; i < stats.size; i++) {
+				ProfileStats s = stats.get(i);
+
+				// 利用 FilterTable 已有的映射，找回对应行的 BindCell
+				FilterTable.CellGroup group = statsTable.findBind(s.name);
+
+				if (group != null && !group.removed) {
+					// 遍历改组绑定的 Cell（通常每行只有1个）
+					for (int j = 0; j < group.size; j++) {
+						BindCell bc = group.get(j);
+
+						if (bc.cell != null) {
+							// ① 布局层：无论元素是否被过滤隐藏，都将其放入 cells（被隐藏的是 UNSET_CELL，占位用）
+							cells.add(bc.cell);
+
+							// ② 渲染层：利用 bc.cell.get() 判断当前组件是否存活。
+							// 仅当组件未被你的 Filter 搜索逻辑隐藏时，才把它放回 children 中
+							if (bc.cell.get() != null) {
+								children.add(bc.cell.get());
+							}
+						}
+					}
+				}
+			}
+
+			statsTable.invalidate();
 		}
 		// 只有当监测到的方法数量发生变化时才调用
 		private void fullRebuild() {
@@ -99,40 +172,45 @@ public class Profiler extends Content {
 			statsTable.top();
 			statsTable.setPatternUpdateListener(() -> pattern);
 
-			// 表头：不调用 bind，不参与过滤，始终可见
-			statsTable.table(t -> {
-				t.left().defaults().left().height(45f);
-				t.add("Method").growX();
-				t.button("Avg (ms)", Styles.flatBordert, () -> {
-					sortType = 0;
-					fullRebuild();
-				}).width(120).color(Pal.accent);
-				t.button("Calls", Styles.flatBordert, () -> {
-					sortType = 2;
-					fullRebuild();
-				}).width(120).color(Color.gray);
-			}).growX().pad(2).row();
-
 			// 按照 Avg 排序获取当前所有数据
 			Seq<ProfileStats> stats = getSortedStats();
 
 			for (ProfileStats s : stats) {
-				statsTable.bind(s.name);
+				final String mName = s.name;
+				statsTable.bind(mName);
 
 				statsTable.table(Styles.black3, t -> {
-					t.update(s::refresh); // 每帧刷新 ProfileStats 字段
-					t.left().defaults().left();
-					t.add(displayName(s.name)).growX().maxWidth(200).ellipsis(true)
-					 .tooltip(s.name); // tooltip 保留完整 key
-					SingleProv prov = new SingleProv(() -> Tmp.v1.set((float) s.avgMs, 0));
-					prov.digits = 7;
-					t.label(prov).width(120).color(Pal.accent);
-					t.label(new SingleProv(() -> Tmp.v1.set(s.calls, 0)))
-					 .width(120).color(Color.gray);
+					t.left().defaults().left().width(colWidth).padLeft(4f);
+					t.add(displayName(mName)).growX().width(methodColWidth).ellipsis(true)
+					 .tooltip(mName); // tooltip 保留完整 key
+
+					// 显示平均耗时
+					SingleProv avgProv = new SingleProv(() -> {
+						MethodStats stat = ProfilerData.stats.get(mName);
+						if (stat != null) {
+							long   calls = stat.count().sum();
+							double avg   = calls == 0 ? 0 : ((stat.time().sum() / 1_000_000.0) / calls);
+							Tmp.v1.set((float) avg, 0);
+						}
+						return Tmp.v1;
+					});
+					avgProv.digits = 6;
+					t.label(avgProv).color(Pal.accent);
+					// 显示总耗时
+					t.label(new SingleProv(() -> {
+						MethodStats stat = ProfilerData.stats.get(mName);
+						return Tmp.v1.set(stat != null ? stat.time().sum() / 1_000_000f : 0f, 0);
+					}));
+					// 显示调用次数
+					t.label(new SingleProv(() -> {
+						MethodStats stat = ProfilerData.stats.get(mName);
+						return Tmp.v1.set(stat != null ? stat.count().sum() : 0, 0);
+					})).color(Color.gray);
 				}).growX().pad(2).row();
 			}
 			statsTable.unbind();
 		}
+
 	}
 	/** 仅用于 UI 显示：去掉内部类宿主前缀，"A$B.method" → "B.method" */
 	private static String displayName(String name) {
@@ -222,26 +300,28 @@ public class Profiler extends Content {
 			methodTable.unbind();
 		}
 	}
-	public static class ProfileStats {
-		public String name;
-		public long   totalNanos;
-		public long   calls;
-		public double avgMs;
+	public static class ProfileStats implements Pool.Poolable {
+		public        String             name;
+		public        long               totalNanos;
+		public        long               calls;
+		public        double             avgMs;
+		public static Pool<ProfileStats> statsPool = Pools.get(ProfileStats.class, ProfileStats::new);
+		private ProfileStats() { }
 
-		public ProfileStats(String name, long totalNanos, long calls) {
-			this.name = name;
-			this.totalNanos = totalNanos;
-			this.calls = calls;
-			this.avgMs = (calls == 0) ? 0 : ((totalNanos / 1_000_000.0) / calls);
+		public static ProfileStats obtain(String name, long totalNanos, long calls) {
+			ProfileStats stats = statsPool.obtain();
+			stats.name = name;
+			stats.totalNanos = totalNanos;
+			stats.calls = calls;
+			stats.avgMs = (calls == 0) ? 0 : ((totalNanos / 1_000_000.0) / calls);
+			return stats;
 		}
 
-		/** 从 ProfilerData 拉取最新数据，由 UI 的 update() 每帧调用 */
-		public void refresh() {
-			MethodStats stat = ProfilerData.stats.get(name);
-			if (stat == null) return;
-			totalNanos = stat.time().sum();
-			calls = stat.count().sum();
-			avgMs = calls == 0 ? 0 : (totalNanos / 1_000_000.0) / calls;
+		public void reset() {
+			name = null;
+			totalNanos = 0;
+			calls = 0;
+			avgMs = 0;
 		}
 	}
 }

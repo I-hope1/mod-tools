@@ -258,7 +258,7 @@ public class KeyCodeSetter extends Content {
 	/** 内部按键的table */
 	private Table interanlTable() {
 		FilterTable<String> pane = new FilterTable<>();
-		pane.addPatternUpdateListener(() -> pattern);
+		pane.setPatternUpdateListener(() -> pattern);
 		// 监控keys
 		Cons<KeyCodeData> rebuild = new Cons<>() {
 			public void get(KeyCodeData data) {
@@ -294,7 +294,7 @@ public class KeyCodeSetter extends Content {
 		Table cont = new Table();
 
 		FilterTable<String[]> pane = new FilterTable<>();
-		pane.addPatternUpdateListener(() -> pattern);
+		pane.setPatternUpdateListener(() -> pattern);
 		// 监控keys
 		rebuild = () -> {
 			pane.clear();

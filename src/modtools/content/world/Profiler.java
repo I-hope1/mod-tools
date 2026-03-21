@@ -14,6 +14,7 @@ import modtools.ui.gen.HopeIcons;
 import modtools.utils.search.*;
 import modtools.utils.ui.ShowInfoWindow;
 import nipx.profiler.*;
+import nipx.profiler.ProfilerData.MethodStats;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -64,7 +65,7 @@ public class Profiler extends Content {
 			// 这里的逻辑：我们定时检查是否有新的方法产生（动态注入了新探针）
 			// 如果没有新 key，我们只更新现有 label 的数值，不重构 Table
 			cont.pane(statsTable).grow().update(p -> {
-				if (ProfilerData.totalTime.size() != statsTable.getMapSize()) {
+				if (ProfilerData.stats.size() != statsTable.getMapSize()) {
 					fullRebuild();
 				}
 			});
@@ -77,10 +78,9 @@ public class Profiler extends Content {
 		private Seq<ProfileStats> getSortedStats() {
 			Seq<ProfileStats> list = new Seq<>();
 
-			ProfilerData.totalTime.forEach((name, totalAdder) -> {
-				long total      = totalAdder.sum();
-				var  countAdder = ProfilerData.callCount.get(name);
-				long calls      = (countAdder != null) ? countAdder.sum() : 0;
+			ProfilerData.stats.forEach((name, stat) -> {
+				long total = stat.time().sum();
+				long calls = stat.count().sum();
 
 				list.add(new ProfileStats(name, total, calls));
 			});
@@ -97,7 +97,7 @@ public class Profiler extends Content {
 		private void fullRebuild() {
 			statsTable.clear();
 			statsTable.top();
-			statsTable.addPatternUpdateListener(() -> pattern);
+			statsTable.setPatternUpdateListener(() -> pattern);
 
 			// 表头：不调用 bind，不参与过滤，始终可见
 			statsTable.table(t -> {
@@ -190,7 +190,7 @@ public class Profiler extends Content {
 
 		private void rebuild() {
 			methodTable.clear();
-			methodTable.addPatternUpdateListener(() -> pattern);
+			methodTable.setPatternUpdateListener(() -> pattern);
 			List<String> methods = ProbeScanner.findCandidateMethods(selectedBase);
 
 			for (String mName : methods) {
@@ -214,7 +214,7 @@ public class Profiler extends Content {
 						boolean isEnabled = ProfilerTransformer.hasTargetMethod(selectedBase, mName);
 						DynamicProfilerAPI.toggleEntityProbe(selectedBase, mName, !isEnabled);
 					}).size(32).update(b -> {
-						boolean isEnabled = ProfilerTransformer.hasTargetMethod(selectedBase, mName);;
+						boolean isEnabled = ProfilerTransformer.hasTargetMethod(selectedBase, mName);
 						b.getStyle().imageUp = isEnabled ? Icon.cancel : Icon.add;
 					});
 				}).growX().pad(2).row();
@@ -237,10 +237,10 @@ public class Profiler extends Content {
 
 		/** 从 ProfilerData 拉取最新数据，由 UI 的 update() 每帧调用 */
 		public void refresh() {
-			var totalAdder = ProfilerData.totalTime.get(name);
-			var countAdder = ProfilerData.callCount.get(name);
-			totalNanos = totalAdder != null ? totalAdder.sum() : 0;
-			calls = countAdder != null ? countAdder.sum() : 0;
+			MethodStats stat = ProfilerData.stats.get(name);
+			if (stat == null) return;
+			totalNanos = stat.time().sum();
+			calls = stat.count().sum();
 			avgMs = calls == 0 ? 0 : (totalNanos / 1_000_000.0) / calls;
 		}
 	}

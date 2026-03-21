@@ -88,7 +88,7 @@ public interface MethodBuilder {
 			}
 		};
 		if (args.length > 4) table.name ^= argKey;
-		table.addIntUpdateListener(() -> table.name);
+		table.setIntUpdateListener(() -> table.name);
 		table.top().defaults().growY().top();
 		table.bind(argKey);
 		table.add("(").color(Color.lightGray);

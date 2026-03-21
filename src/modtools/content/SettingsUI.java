@@ -141,7 +141,7 @@ public class SettingsUI extends Content {
 		addSectionInternal("Hook", Icon.refreshSmall, t -> {
 			t.button("HotSwapLog", () -> {
 				if (R_Hook.hot_swap) HotSwapDialog.staticShow();
-			}).growX().height(45).disabled(_ -> !R_Hook.hot_swap);
+			}).growX().height(45).disabled(_ -> !R_Hook.hot_swap).row();
 
 			SettingsBuilder.build(t);
 			// watch的路径数组配置

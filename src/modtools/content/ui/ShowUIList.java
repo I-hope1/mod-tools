@@ -381,7 +381,7 @@ public class ShowUIList extends Content {
 				}
 			});
 			cons.get(t);
-			t.addPatternUpdateListener(() -> pattern);
+			t.setPatternUpdateListener(() -> pattern);
 		}) {
 			public <T1 extends Element> Cell<T1> add(T1 element) {
 				if (withDisabled && element instanceof Disableable button) {

@@ -65,7 +65,7 @@ public class ChangeClassDialog extends Window {
 		}).size(120, 45).row();
 
 		FilterTable<Method> wrapper = new FilterTable<>();
-		wrapper.addPatternUpdateListener(() -> pattern);
+		wrapper.setPatternUpdateListener(() -> pattern);
 		new Search<>((_, pattern) -> this.pattern = pattern).build(cont, wrapper);
 		wrapper.left().defaults().left().growX();
 		cont.pane(wrapper).grow();

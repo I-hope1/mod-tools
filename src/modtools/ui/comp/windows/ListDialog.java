@@ -43,7 +43,7 @@ public class ListDialog extends Window {
 		cont.add("@tester.tip").growX().left().row();
 		new Search<>((_, p0) -> pattern = p0)
 		 .build(cont, p);
-		p.addPatternUpdateListener(() -> pattern);
+		p.setPatternUpdateListener(() -> pattern);
 		p.top().defaults().top();
 		cont.pane(p).grow();
 

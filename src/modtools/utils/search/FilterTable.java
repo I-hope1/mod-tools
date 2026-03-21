@@ -153,31 +153,31 @@ public class FilterTable<E> extends LimitTable {
 	 * 添加整数更新监听器。
 	 * @param provider 提供整数值的提供者。
 	 */
-	public void addIntUpdateListener(Intp provider) {
-		addConditionUpdateListener(new IntBoolf(provider, i -> (int) i));
+	public void setIntUpdateListener(Intp provider) {
+		setConditionUpdateListener(new IntBoolf(provider, i -> (int) i));
 	}
 
 	/**
 	 * 添加整数类型的更新监听器。
 	 * @param provider 提供整数值的提供者。
 	 */
-	public void addUpdateListenerIntp(Intp provider) {
-		addConditionUpdateListener(new IntBoolf(provider, i -> ((Intp) i).get()));
+	public void setUpdateListenerIntp(Intp provider) {
+		setConditionUpdateListener(new IntBoolf(provider, i -> ((Intp) i).get()));
 	}
 
 	/**
 	 * 添加模式更新监听器。
 	 * @param provider 提供模式的提供者。
 	 */
-	public void addPatternUpdateListener(Prov<Pattern> provider) {
-		addConditionUpdateListener(new PatternBoolf<>(provider));
+	public void setPatternUpdateListener(Prov<Pattern> provider) {
+		setConditionUpdateListener(new PatternBoolf<>(provider));
 	}
 
 	/**
 	 * 添加条件更新监听器。
 	 * @param condition 更新条件。
 	 */
-	public void addConditionUpdateListener(Condition<E> condition) {
+	public void setConditionUpdateListener(Condition<E> condition) {
 		update(() -> {
 			if (condition.needUpdate()) filter(condition::valid);
 		});

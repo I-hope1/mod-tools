@@ -47,7 +47,7 @@ public class GameSettings extends Content {
 
 		IntUI.addTooltipListener(search.top.stack(new Image(Tex.pane), new Image(Icon.infoCircle)).get(),
 		 () -> "[accent]Unset[]: <clear>; [accent](DefaultValue)[]: [gray]*[]; [accent]Changed[]: [white]*");
-		cont.addConditionUpdateListener(item -> search.valid(pattern, item));
+		cont.setConditionUpdateListener(item -> search.valid(pattern, item));
 		// 将设置的所以值都列出来
 		// example1 true* 示例设置1 R(重置) S(修改)
 		// example2 10 示例设置2 R(重置) S(修改)

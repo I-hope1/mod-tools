@@ -39,7 +39,7 @@ public class AllCellsWindow extends Window implements IDisposable {
 	}
 	void init() {
 		FilterTable<Cell<?>> container = new FilterTable<>();
-		container.addConditionUpdateListener(c -> !ignoreEmptyCell || c.hasElement());
+		container.setConditionUpdateListener(c -> !ignoreEmptyCell || c.hasElement());
 		SettingsBuilder.build(cont);
 		SettingsBuilder.check("Filter out empty cell", b -> ignoreEmptyCell = b, () -> ignoreEmptyCell);
 		SettingsBuilder.clearBuild();

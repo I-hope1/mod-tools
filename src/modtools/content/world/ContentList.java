@@ -143,7 +143,7 @@ public class ContentList extends Content {
 		};
 		return new FilterTable<>(t -> {
 			rebuild[0].get(t);
-			t.addPatternUpdateListener(() -> pattern);
+			t.setPatternUpdateListener(() -> pattern);
 		});
 	}
 	/** @see mindustry.ui.dialogs.PlanetDialog#setup()  */

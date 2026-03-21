@@ -75,7 +75,7 @@ public class Executor extends Content {
 	}
 	public void build(FilterTable<Intp> cont, MySet<TaskNode> children) {
 		cont.top().defaults().top();
-		cont.addUpdateListenerIntp(() -> statusCode);
+		cont.setUpdateListenerIntp(() -> statusCode);
 		for (TaskNode node : children) {
 			cont.bind(() -> node.status.bit());
 			/* 布局

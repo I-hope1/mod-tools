@@ -1,7 +1,6 @@
 package nipx;
 
 import nipx.annotation.*;
-import nipx.profiler.ProfilerData;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
@@ -9,13 +8,22 @@ import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static nipx.HotSwapAgent.*;
 import static nipx.LambdaRef.onClassRedefined;
 
-public class MyClassFileTransformer implements ClassFileTransformer {
+/**
+ * <p>用于注解，注入代码
+ * <p>同时也用于获取bytecode，存入缓存
+ * @see Tracker
+ * @see Profile
+ * @see OnReload
+ */
+public class AnnotationTransformer implements ClassFileTransformer {
 	// 预先计算注解的描述符，避免重复计算
-	static final String      profileDesc     = "L" + dot2slash(Profile.class) + ";";
+	static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
 
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
 		return hasClassAnnotation(bytes, "L" + annotationClass.getName().replace('.', '/') + ";");
@@ -33,7 +41,6 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG);
 		return found[0];
 	}
-
 
 
 	/** @see InstanceTracker */
@@ -87,38 +94,7 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		// 可能导致 LinkageError: duplicate class definition（正在被定义的类被二次加载）。
 		// 解法：完全绕开类加载，直接从 bytecodeCache 读字节码提取 superName，
 		// 在 cache 中找不到时才 fallback 到 java/lang/Object。
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
-			@Override
-			protected String getCommonSuperClass(String type1, String type2) {
-				// 用字节码遍历 type1 的祖先链，看是否能到达 type2（或反向）
-				// 不触发任何 ClassLoader.loadClass / Class.forName
-				if (type1.equals(type2)) return type1;
-				if (isAssignableFromCache(type2, type1)) return type2;
-				if (isAssignableFromCache(type1, type2)) return type1;
-				return "java/lang/Object";
-			}
-			/** 判断 superCandidate 是否是 subCandidate 的祖先（从 bytecodeCache 读字节码爬继承链） */
-			private boolean isAssignableFromCache(String superCandidate, String subCandidate) {
-				String cur = subCandidate;
-				for (int depth = 0; depth < 64; depth++) { // 最多爬 64 层，防止死循环
-					if (cur == null || cur.equals("java/lang/Object")) break;
-					if (cur.equals(superCandidate)) return true;
-					cur = getSuperNameFromCache(cur);
-				}
-				return false;
-			}
-			/** 从 bytecodeCache 读字节码取 superName，找不到返回 null */
-			private String getSuperNameFromCache(String slashName) {
-				String dotName = slashName.replace('/', '.');
-				byte[] cached  = bytecodeCache.get(dotName);
-				if (cached == null) return null;
-				try {
-					return new ClassReader(cached).getSuperName();
-				} catch (Throwable e) {
-					return null;
-				}
-			}
-		};
+		ClassWriter cw = new MyClassWriter(cr, targetLoader);
 
 		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			boolean anyProfiled = false;
@@ -133,13 +109,10 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 					return mv;
 				}
 
-				// 检查该方法是否在动态目标名单中
-				boolean isTargeted = ProfilerData.isTargeted(slashClassName, name);
-
 				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
-					boolean isProfiled = isTargeted;
-					int startTimeVar;
-					int durationVar; // 用于存储计算好的耗时
+					boolean isProfiled = false;
+					int     startTimeVar;
+					int     durationVar; // 用于存储计算好的耗时
 
 					@Override
 					public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
@@ -202,17 +175,19 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 		if (className == null) return null;
+
 		if (loader == null) return null;
 		if (className.startsWith("org/objectweb/asm/")) return null;
 		if (className.startsWith("nipx/")) return null;
+
+		// 注册到继承树
+		HierarchyTree.register(classfileBuffer); // TODO: 如果父类是系统类，可能会出错
 
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 		if (classBeingRedefined != null) {
 			onClassRedefined(dotClassName);
 		}
-
-		bytecodeCache.put(dotClassName, classfileBuffer);
 
 		try {
 			if (HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
@@ -307,11 +282,172 @@ public class MyClassFileTransformer implements ClassFileTransformer {
 		}
 	}
 
-	static String dot2slash(String className) {
+	public static String dot2slash(String className) {
 		return className.replace('.', '/');
 	}
-	static String dot2slash(Class<?> clazz) {
+	public static String dot2slash(Class<?> clazz) {
 		return clazz.getName().replace('.', '/');
 	}
 
+
+	/**
+	 * 类层级缓存树
+	 * 用于在不触发 ClassLoader.loadClass 的前提下，判断类的继承与实现关系
+	 */
+	public static class HierarchyTree {
+		private static final ConcurrentHashMap<String, ClassNode> tree = new ConcurrentHashMap<>();
+
+		static class ClassNode {
+			String   superName;
+			String[] interfaces;
+			boolean  isInterface;
+
+			ClassNode(String superName, String[] interfaces, boolean isInterface) {
+				this.superName = superName;
+				this.interfaces = interfaces;
+				this.isInterface = isInterface;
+			}
+		}
+
+		/** 提取并注册类的继承信息 */
+		public static void register(byte[] classfileBuffer) {
+			try {
+				ClassReader cr          = new ClassReader(classfileBuffer);
+				String      className   = cr.getClassName();
+				String      superName   = cr.getSuperName();
+				String[]    interfaces  = cr.getInterfaces();
+				boolean     isInterface = (cr.getAccess() & Opcodes.ACC_INTERFACE) != 0;
+
+				tree.put(className, new ClassNode(superName, interfaces, isInterface));
+			} catch (Exception ignored) {
+				// 容错处理
+			}
+		}
+
+		/**
+		 * 核心逻辑：判断 subType 是否是 superType 的子类或实现类
+		 * 采用 BFS (广度优先搜索) 遍历继承树
+		 */
+		public static boolean isAssignableFrom(String superType, String subType, ClassLoader loader) {
+			if (superType.equals(subType) || "java/lang/Object".equals(superType)) {
+				return true;
+			}
+
+			Queue<String> queue   = new LinkedList<>();
+			Set<String>   visited = new HashSet<>();
+			queue.add(subType);
+			visited.add(subType);
+
+			while (!queue.isEmpty()) {
+				String    current = queue.poll();
+				ClassNode node    = getNode(current, loader);
+
+				if (node == null) continue;
+
+				// 检查父类
+				if (node.superName != null) {
+					if (node.superName.equals(superType)) return true;
+					if (visited.add(node.superName)) {
+						queue.add(node.superName);
+					}
+				}
+
+				// 检查接口
+				if (node.interfaces != null) {
+					for (String itf : node.interfaces) {
+						if (itf.equals(superType)) return true;
+						if (visited.add(itf)) {
+							queue.add(itf);
+						}
+					}
+				}
+			}
+			return false;
+		}
+
+		/**
+		 * 获取类节点，如果缓存中没有，尝试从目标 ClassLoader 以资源流的方式读取，
+		 * 坚决不使用 Class.forName！
+		 */
+		private static ClassNode getNode(String slashName, ClassLoader loader) {
+			ClassNode node = tree.get(slashName);
+			if (node != null) return node;
+
+			// 尝试从缓存获取 (兼容你原有的 bytecodeCache)
+			String dotName     = slashName.replace('/', '.');
+			byte[] cachedBytes = bytecodeCache.get(dotName);
+			if (cachedBytes != null) {
+				register(cachedBytes);
+				return tree.get(slashName);
+			}
+
+			// 兜底：作为资源读取，不触发类加载
+			if (loader == null) loader = ClassLoader.getSystemClassLoader();
+			try (InputStream is = loader.getResourceAsStream(slashName + ".class")) {
+				if (is != null) {
+					byte[] bytes = is.readAllBytes();
+					register(bytes);
+					return tree.get(slashName);
+				}
+			} catch (Exception ignored) { }
+
+			return null;
+		}
+
+		public static boolean isInterface(String slashName, ClassLoader loader) {
+			ClassNode node = getNode(slashName, loader);
+			return node != null && node.isInterface;
+		}
+	}
+	public static class MyClassWriter extends ClassWriter {
+		private final ClassLoader targetLoader;
+		public MyClassWriter(ClassReader cr, ClassLoader targetLoader) {
+			super(cr, ClassWriter.COMPUTE_FRAMES);
+			this.targetLoader = targetLoader;
+		}
+		@Override
+		protected String getCommonSuperClass(String type1, String type2) {
+			if (HierarchyTree.isInterface(type1, targetLoader) || HierarchyTree.isInterface(type2, targetLoader)) {
+				return "java/lang/Object";
+			}
+			if (HierarchyTree.isAssignableFrom(type1, type2, targetLoader)) {
+				return type1;
+			}
+			if (HierarchyTree.isAssignableFrom(type2, type1, targetLoader)) {
+				return type2;
+			}
+			// 向上寻找 type1 的父类，直到找到也是 type2 父类的类
+			String type1Super = type1;
+			do {
+				HierarchyTree.ClassNode node = HierarchyTree.getNode(type1Super, targetLoader);
+				if (node == null || node.superName == null) {
+					return "java/lang/Object";
+				}
+				type1Super = node.superName;
+			} while (!HierarchyTree.isAssignableFrom(type1Super, type2, targetLoader));
+
+			return type1Super;
+		}
+		/** 判断 superCandidate 是否是 subCandidate 的祖先（从 bytecodeCache 读字节码爬继承链） */
+		private boolean isAssignableFromCache(String superCandidate, String subCandidate) {
+			String cur = subCandidate;
+			for (int depth = 0; depth < 64; depth++) { // 最多爬 64 层，防止死循环
+				if (cur == null || cur.equals("java/lang/Object")) break;
+				if (cur.equals(superCandidate)) return true;
+				cur = getSuperNameFromCache(cur);
+			}
+			return false;
+		}
+		/** 从 bytecodeCache 读字节码取 superName，找不到返回 null */
+		private String getSuperNameFromCache(String slashName) {
+			String dotName = slashName.replace('/', '.');
+			byte[] cached  = bytecodeCache.get(dotName);
+			if (cached == null) return null;
+			try {
+				return new ClassReader(cached).getSuperName();
+			} catch (Throwable e) {
+				return null;
+			}
+		}
+	}
 }

@@ -1,6 +1,7 @@
 package nipx;
 
 import nipx.annotation.*;
+import nipx.profiler.DynamicProfilerAPI;
 import nipx.util.*;
 
 import java.io.*;
@@ -61,7 +62,7 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Agent Initialization
-	static MyClassFileTransformer transformer;
+	static AnnotationTransformer transformer;
 
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		HotSwapAgent.inst = inst;
@@ -76,8 +77,9 @@ public class HotSwapAgent {
 		initConfig();
 
 		if (transformer == null) {
-			transformer = new MyClassFileTransformer();
+			transformer = new AnnotationTransformer();
 			inst.addTransformer(transformer, true);
+			DynamicProfilerAPI.init();
 		}
 		var loadedClasses = inst.getAllLoadedClasses();
 		refreshPackageLoaders(loadedClasses);

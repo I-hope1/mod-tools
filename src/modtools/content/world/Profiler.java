@@ -50,23 +50,12 @@ public class Profiler extends Content {
 			super("Profiler Dashboard", 500, 600, true);
 			build();
 		}
-
-		private String getSortName(int type) {
-			return switch (type) {
-				case 1 -> "Total";
-				case 2 -> "Calls";
-				default -> "Avg";
-			};
-		}
 		private void build() {
 			// 搜索与工具栏
 			cont.table(t -> {
 				search = new Search<>((_, p) -> pattern = p);
 				t.button(Icon.trashSmall, ProfilerData::clear).size(40);
-				t.button(STR."Sort: \{getSortName(sortType)}", Styles.flatBordert, () -> {
-					sortType = (sortType + 1) % 3;
-					fullRebuild(); // 重新触发 FilterTable 的构建
-				}).size(130, 40).with(b -> b.update(() -> b.setText(STR."Sort: \{getSortName(sortType)}")));
+				t.button(Icon.refreshSmall, this::fullRebuild).size(40);
 				search.build(t, null);
 			}).growX().row();
 
@@ -112,10 +101,16 @@ public class Profiler extends Content {
 
 			// 表头：不调用 bind，不参与过滤，始终可见
 			statsTable.table(t -> {
-				t.left().defaults().left();
+				t.left().defaults().left().height(45f);
 				t.add("Method").growX();
-				t.add("Avg (ms)").width(120).color(Pal.accent);
-				t.add("Calls").width(120).color(Color.gray);
+				t.button("Avg (ms)", Styles.flatBordert, () -> {
+					sortType = 0;
+					fullRebuild();
+				}).width(120).color(Pal.accent);
+				t.button("Calls", Styles.flatBordert, () -> {
+					sortType = 2;
+					fullRebuild();
+				}).width(120).color(Color.gray);
 			}).growX().pad(2).row();
 
 			// 按照 Avg 排序获取当前所有数据
@@ -206,7 +201,7 @@ public class Profiler extends Content {
 
 					t.label(() -> mName)
 					 .growX()
-					 .update(l -> l.setColor(ProfilerData.dynamicTargets.contains("*." + mName) ? Pal.accent : Color.white));
+					 .update(l -> l.setColor(ProfilerTransformer.hasTargetMethod(selectedBase, mName) ? Pal.accent : Color.white));
 
 					// 跳到 ShowInfoWindow 查看该方法的完整反射信息
 					t.button(Icon.eyeSmall, Styles.cleari, () -> {
@@ -216,10 +211,10 @@ public class Profiler extends Content {
 					}).size(32);
 
 					t.button(Icon.add, Styles.cleari, () -> {
-						boolean isEnabled = ProfilerData.dynamicTargets.contains("*." + mName);
+						boolean isEnabled = ProfilerTransformer.hasTargetMethod(selectedBase, mName);
 						DynamicProfilerAPI.toggleEntityProbe(selectedBase, mName, !isEnabled);
 					}).size(32).update(b -> {
-						boolean isEnabled = ProfilerData.dynamicTargets.contains("*." + mName);
+						boolean isEnabled = ProfilerTransformer.hasTargetMethod(selectedBase, mName);;
 						b.getStyle().imageUp = isEnabled ? Icon.cancel : Icon.add;
 					});
 				}).growX().pad(2).row();

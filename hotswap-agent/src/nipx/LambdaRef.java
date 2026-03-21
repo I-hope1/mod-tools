@@ -16,7 +16,7 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 import static nipx.HotSwapAgent.*;
-import static nipx.MyClassFileTransformer.dot2slash;
+import static nipx.AnnotationTransformer.dot2slash;
 
 /** @see UpdateRef  */
 public class LambdaRef {

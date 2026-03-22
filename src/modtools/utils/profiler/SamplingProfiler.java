@@ -1,6 +1,6 @@
 package modtools.utils.profiler;
 
-import nipx.profiler.ProfilerData;
+import nipx.profiler.*;
 
 import java.util.*;
 
@@ -25,7 +25,7 @@ import static nipx.HotSwapAgent.*;
 public class SamplingProfiler {
 	// ── 配置 ─────────────────────────────────────────────────────────────────
 
-	/** 默认采样间隔（毫秒）。200 Hz ≈ 5 ms/sample，对 60 FPS 游戏足够。*/
+	/** 默认采样间隔（毫秒）。200 Hz ≈ 5 ms/sample，对 60 FPS 游戏足够。 */
 	public static volatile int intervalMs = 5;
 
 	/**
@@ -33,21 +33,21 @@ public class SamplingProfiler {
 	 * 留空表示不过滤（会包含 JDK/Arc 内部帧）。
 	 * 例：{"mindustry", "modtools", "nipx"}
 	 */
-	public static volatile String[] includePackages = {"mindustry", "modtools", "nipx"};
+	public static volatile String[] includePackages = {"mindustry", "arc"};
 
 	// ── 状态 ─────────────────────────────────────────────────────────────────
 
-	private static volatile Thread         samplerThread = null;
-	private static volatile Thread         targetThread  = null;
-	private static volatile boolean        running       = false;
+	private static volatile Thread  samplerThread = null;
+	private static volatile Thread  targetThread  = null;
+	private static volatile boolean running       = false;
 
 	// ── 公共 API ──────────────────────────────────────────────────────────────
 
-	/** 启动采样，目标为指定线程。重复调用会先停止旧的采样再重启。*/
+	/** 启动采样，目标为指定线程。重复调用会先停止旧的采样再重启。 */
 	public static synchronized void start(Thread target) {
 		stop();
 		targetThread = target;
-		running      = true;
+		running = true;
 		samplerThread = new Thread(SamplingProfiler::loop, "flame-sampler");
 		samplerThread.setDaemon(true);
 		samplerThread.setPriority(Thread.MIN_PRIORITY); // 不抢游戏线程的 CPU
@@ -56,7 +56,7 @@ public class SamplingProfiler {
 		     + ", interval=" + intervalMs + " ms");
 	}
 
-	/** 以当前线程为目标启动采样（在游戏主线程调用此方法，然后切回主循环）。*/
+	/** 以当前线程为目标启动采样（在游戏主线程调用此方法，然后切回主循环）。 */
 	public static void startCurrentThread() {
 		start(Thread.currentThread());
 	}
@@ -114,8 +114,8 @@ public class SamplingProfiler {
 
 		// 从栈底（老帧）到栈顶（新帧）遍历
 		for (int i = stack.length - 1; i >= 0; i--) {
-			StackTraceElement frame = stack[i];
-			String className = frame.getClassName();
+			StackTraceElement frame     = stack[i];
+			String            className = frame.getClassName();
 
 			// 包名过滤：pkgs 为空则全部接受
 			if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) continue;
@@ -140,7 +140,7 @@ public class SamplingProfiler {
 		return false;
 	}
 
-	/** "com.example.Foo$Bar" → "Foo$Bar"（保留内部类标记）。*/
+	/** "com.example.Foo$Bar" → "Foo$Bar"（保留内部类标记）。 */
 	private static String simpleClass(String className) {
 		int dot = className.lastIndexOf('.');
 		return dot < 0 ? className : className.substring(dot + 1);
@@ -172,4 +172,83 @@ public class SamplingProfiler {
 		}
 		return fallback;
 	}
+
+
+	/* static class LiveThread {
+		 *//**
+		 * 通过反射获取 {@code LiveStackFrame.getStackWalker()} 返回的 StackWalker。
+		 * 需要 {@code --add-opens java.base/java.lang=ALL-UNNAMED}。
+		 * 初始化失败时置 null，调用方检查后回退到模式 A。
+		 *//*
+		private static final java.lang.StackWalker LIVE_WALKER = initLiveWalker();
+		private static java.lang.StackWalker initLiveWalker() {
+			try {
+				Class<?> liveFrameClass = Class.forName("java.lang.LiveStackFrame");
+				Method getWalker = liveFrameClass.getMethod("getStackWalker",
+				 Set.class);
+				getWalker.setAccessible(true);
+				// RETAIN_CLASS_REFERENCE 让我们可以访问帧的 Class 对象
+				var walker = (java.lang.StackWalker) getWalker.invoke(null,
+				 EnumSet.of(java.lang.StackWalker.Option.RETAIN_CLASS_REFERENCE));
+				info("[SamplingProfiler] LiveStackFrame available — in-thread sampling enabled");
+				return walker;
+			} catch (Throwable t) {
+				info("[SamplingProfiler] LiveStackFrame unavailable (" + t.getMessage()
+				     + ") — cross-thread sampling only");
+				return null;
+			}
+		}
+		 *//** LiveStackFrame.getLocals() 方法的反射句柄，初始化时缓存。 *//*
+		private static final Method GET_LOCALS = initGetLocals();
+
+		private static Method initGetLocals() {
+			try {
+				Class<?> c = Class.forName("java.lang.LiveStackFrame");
+				Method   m = c.getMethod("getLocals");
+				m.setAccessible(true);
+				return m;
+			} catch (Throwable t) { return null; }
+		}
+	}
+	 *//**
+	 * 在游戏线程上直接调用——通过 LiveStackFrame 遍历当前调用栈，
+	 * 从每帧的 {@code getLocals()[0]} 读取 {@code this}，
+	 * 用 {@link EntityKeyExtractor} 提取实体 key。
+	 *
+	 * <p>典型调用点：插桩注入到游戏主循环的 update 调度方法，
+	 * 例如 {@code Groups.update()} 或 {@code EntityGroup.update()} 的入口处。
+	 *
+	 * <p>如果 LiveStackFrame 不可用，静默退化为无操作（不影响插桩模式）。
+	 *//*
+	public static void sampleCurrentThread() {
+		if (LiveThread.LIVE_WALKER == null || LiveThread.GET_LOCALS == null) return;
+		long     weight = intervalMs * 1_000_000L;
+		String[] pkgs   = includePackages;
+
+		// 用一个可变引用在 lambda 里传递当前节点
+		ProfilerData.FlameNode[] curHolder = {ProfilerData.flameRoot};
+
+		LiveThread.LIVE_WALKER.forEach(frame -> {
+			String className = frame.getClassName();
+			if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return;
+
+			// 尝试从 locals[0] 读 this
+			String entityPrefix = "";
+			try {
+				Object[] locals = (Object[]) LiveThread.GET_LOCALS.invoke(frame);
+				if (locals != null && locals.length > 0 && locals[0] != null
+				    && !(locals[0] instanceof java.lang.StackWalker.StackFrame)) {
+					// locals[0] 是 this（实例方法）或 primitive slot（静态方法，此时跳过）
+					entityPrefix = EntityKeyExtractor.key(locals[0]) + ".";
+				}
+			} catch (Throwable ignored) {  *//* primitive slot 等情况直接跳过 *//*  }
+
+			String key = entityPrefix + simpleClass(className) + "." + frame.getMethodName();
+			ProfilerData.FlameNode node = curHolder[0].children
+			 .computeIfAbsent(key, ProfilerData.FlameNode::new);
+			node.totalNanos.add(weight);
+			curHolder[0] = node; // 往叶方向移动
+		});
+	} */
+
 }

@@ -311,12 +311,18 @@ public class Profiler extends Content {
 		});
 	}
 
+
 	public enum Settings implements ISettings {
 		// 单位ms
 		mode(Mode.class, it -> it.buildEnum(Mode.sample, Mode.class)),
 		@FlushField
-		sampleFreq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
+		sample_freq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
+		@FlushField
+		include_packages(String[].class, it -> it.array(SamplingProfiler.includePackages)),
+
+		//
 		;
+		Settings() {}
 		Settings(Class<?> type, Cons<ISettings> builder) { }
 
 		static {

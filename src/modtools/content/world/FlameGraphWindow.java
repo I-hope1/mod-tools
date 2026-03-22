@@ -40,8 +40,8 @@ public class FlameGraphWindow extends Window {
 	private FlameCanvas canvas;
 	private Label       infoLabel;
 	private TextField   searchField;
-	private Button  backButton;
-	private Button  liveButton;
+	private Button      backButton;
+	private Button      liveButton;
 
 	public FlameGraphWindow() {
 		super("Flame Graph", 780, 620, true);
@@ -53,29 +53,30 @@ public class FlameGraphWindow extends Window {
 		cont.table(bar -> {
 			backButton = bar.button(Icon.leftSmall, HopeStyles.flati, this::goBack).size(32).pad(3).get();
 			backButton.setDisabled(true);
-			bar.button("Reset", () -> {
+			bar.button(Icon.eraserSmall, HopeStyles.flati, ProfilerData::clear).size(32).pad(3).tooltip("Clear Profile Data");
+			bar.button(Icon.refreshSmall, HopeStyles.flati, this::refresh).size(32).pad(3);
+			bar.button("Reset", Styles.flatt, () -> {
 				canvas.resetZoom();
 				syncBackButton();
-			}).size(80, 34).pad(3);
-			bar.button("Refresh", Icon.refreshSmall, this::refresh).size(150, 34).pad(3);
+			}).size(84, 34).pad(3);
 			liveButton = bar.button("Live", Styles.flatTogglet, () -> {
 				canvas.liveMode = !canvas.liveMode;
-			}).size(80, 34).pad(3).checked(b -> canvas.liveMode).get();
+			}).size(64, 32).pad(3).checked(b -> canvas.liveMode).get();
 
-			bar.button("Config", Icon.settingsSmall,() -> {
+			bar.button("Config", Icon.settingsSmall, HopeStyles.flatt,() -> {
 			}).with(b -> b.clicked(() -> {
 				IntUI.showSelectTable(b, (p, _, _) -> {
-					p.add().width(150);
+					p.add().width(160).row();
 					ISettings.buildAll(profiler.name, p, Profiler.Settings.class);
 				}, false);
-			})).size(108, 34);
+			})).size(108, 32);
 
 			bar.add("Search: ").padLeft(8);
 			searchField = bar.field("", txt -> {
 				 canvas.searchQuery = txt.toLowerCase(Locale.ROOT);
 				 canvas.invalidate();
 			 })
-			 .growX().height(34).pad(3).get();
+			 .growX().height(32).pad(3).get();
 		}).growX().padBottom(2).row();
 
 		// ── 画布（放在 ScrollPane 里支持纵向滚动） ───────────────────────────

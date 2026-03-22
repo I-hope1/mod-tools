@@ -368,7 +368,7 @@ public class HotSwapAgent {
 		return false;
 	}
 
-	static byte[] fetchOriginalBytecode(Class<?> clazz) {
+	public static byte[] fetchOriginalBytecode(Class<?> clazz) {
 		String      path = clazz.getName().replace('.', '/') + ".class";
 		ClassLoader cl   = clazz.getClassLoader();
 		if (cl == null) cl = ClassLoader.getSystemClassLoader();

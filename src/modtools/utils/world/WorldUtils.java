@@ -27,7 +27,7 @@ public interface WorldUtils {
 	Seq<StatusEffect> status  = content.statusEffects();
 	Seq<Planet>       planets = content.planets();
 
-	WorldDraw uiWD = new WorldDraw(Layer.overlayUI, "ui");
+	WorldDraw uiWD = new WorldDraw(Layer.overlayUI + 0.5f, "ui");
 
 	static UnitType unit(int id) {
 		return content.unit(id);

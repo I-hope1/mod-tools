@@ -389,14 +389,17 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public void updateDisplayText() {
 			updateTextIndex();
 			super.updateDisplayText();
-			for (int i = 0; i + 2 < linesBreak.size; i += 2) {
+			/* for (int i = 0; i + 2 < linesBreak.size; i += 2) {
 				int end   = linesBreak.get(i + 1);
 				int start = linesBreak.get(i + 2);
-				if (end == start && end < text.length()
-				    && text.charAt(end - 1) == '\r' && text.charAt(end) == '\n') {
-					linesBreak.removeRange(i + 2, i + 3); // 删掉多余那条
+				if (start == end + 1
+				    && end < text.length() - 1
+				    && text.charAt(end) == '\r'
+				    && text.charAt(end + 1) == '\n') {
+					linesBreak.removeRange(i + 2, i + 3);
+					i -= 2;
 				}
-			}
+			} */
 		}
 		protected void drawSelection(Drawable selection, Font font, float x, float y) {
 			int   firstLineShowing = getRealFirstLineShowing();

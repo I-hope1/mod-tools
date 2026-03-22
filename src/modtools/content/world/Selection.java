@@ -798,8 +798,6 @@ public class Selection extends Content {
 
 	public void initTask() {
 		WorldUtils.uiWD.submit(() -> {
-			if (state.isMenu()) return;
-			// Log.info("ok");
 			WorldUtils.uiWD.alpha = Core.input.alt() ? 0.3f : 1f;
 
 			if (ui != null && ui.isShown()) {

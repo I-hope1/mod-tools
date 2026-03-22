@@ -1,7 +1,7 @@
 package modtools.utils.world;
 
 import arc.*;
-import arc.func.Boolp;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.FrameBuffer;
@@ -18,6 +18,8 @@ public class WorldDraw {
 	public static final Rect CAMERA_RECT = new Rect();
 	/** 玩家视野的中心坐标 */
 	public static final Vec2 center      = new Vec2();
+
+	public static final Boolf<Boolp> REMOVE_BOOLF = boolp -> !boolp.get();
 
 	public static ObjectSet<Runnable> tasks = new ObjectSet<>();
 
@@ -37,9 +39,12 @@ public class WorldDraw {
 			Draw.reset();
 			Draw.flush();
 			Gl.flush();
-			Draw.z(z);
-			Draw.alpha(alpha);
-			drawSeq.removeAll(boolp -> !boolp.get());
+			float prevZ = Draw.z();
+			Draw.draw(z, () -> {
+				Draw.alpha(alpha);
+				drawSeq.removeAll(REMOVE_BOOLF);
+			});
+			Draw.z(prevZ);
 			Draw.reset();
 		});
 		/*Events.run(EventType.WorldLoadEvent.class, () -> {
@@ -68,18 +73,18 @@ public class WorldDraw {
 
 	public static void registerEvent() {
 		Events.run(Trigger.postDraw, Tools.delegate(() -> {
-			Draw.reset();
-			Draw.flush();
 			CAMERA_RECT.setPosition(Core.camera.unproject(0, 0));
 			Vec2 v2 = Core.camera.unproject(Core.graphics.getWidth(), Core.graphics.getHeight());
 			CAMERA_RECT.setSize(v2.x - CAMERA_RECT.x, v2.y - CAMERA_RECT.y);
+			CAMERA_RECT.normalize();
+			// Log.info(CAMERA_RECT);
 			CAMERA_RECT.getCenter(center);
 			tasks.each(Runnable::run);
 			Draw.reset();
 		}, ModTools::isDisposed));
 	}
 
-	public static TextureRegion  drawRegion(int width, int height, Runnable draw) {
+	public static TextureRegion drawRegion(int width, int height, Runnable draw) {
 		TextureRegion region = new TextureRegion(drawTexture(width, height, draw));
 		region.flip(false, true);
 		return region;

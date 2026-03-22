@@ -2,7 +2,7 @@ package modtools.content.world;
 
 import arc.graphics.Color;
 import arc.struct.Seq;
-import arc.util.Tmp;
+import arc.util.*;
 import arc.util.pooling.*;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
@@ -13,6 +13,8 @@ import modtools.misc.PairProv.SingleProv;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
+import modtools.unsupported.HotSwapManager;
+import modtools.utils.Tools;
 import modtools.utils.search.*;
 import modtools.utils.ui.ShowInfoWindow;
 import nipx.profiler.*;
@@ -25,6 +27,8 @@ public class Profiler extends Content {
 
 	public Profiler() {
 		super("profiler", HopeIcons.profile);
+		defLoadable = false;
+		if (!HotSwapManager.valid()) Tools.TASKS.add(this::disable);
 	}
 
 	Window ui;
@@ -124,7 +128,7 @@ public class Profiler extends Content {
 			return currentStats;
 		}
 
-		/** 0 GC的排序  */
+		/** 0 GC的排序 */
 		private void sortUI() {
 			// Seq<ProfileStats> stats = getSortedStats();
 			// statsTable.getCells().sort(cell ->
@@ -181,33 +185,33 @@ public class Profiler extends Content {
 				statsTable.bind(mName);
 
 				statsTable.table(Styles.black3, t -> {
-					t.left().defaults().left().width(colWidth).padLeft(4f);
-					t.add(displayName(mName)).growX().width(methodColWidth).ellipsis(true)
-					 .tooltip(mName); // tooltip 保留完整 key
+					 t.left().defaults().left().width(colWidth).padLeft(4f);
+					 t.add(displayName(mName)).growX().width(methodColWidth).ellipsis(true)
+						.tooltip(mName); // tooltip 保留完整 key
 
-					// 显示平均耗时
-					SingleProv avgProv = new SingleProv(() -> {
-						MethodStats stat = ProfilerData.stats.get(mName);
-						if (stat != null) {
-							long   calls = stat.count().sum();
-							double avg   = calls == 0 ? 0 : ((stat.time().sum() / 1_000_000.0) / calls);
-							Tmp.v1.set((float) avg, 0);
-						}
-						return Tmp.v1;
-					});
-					avgProv.digits = 6;
-					t.label(avgProv).color(Pal.accent);
-					// 显示总耗时
-					t.label(new SingleProv(() -> {
-						MethodStats stat = ProfilerData.stats.get(mName);
-						return Tmp.v1.set(stat != null ? stat.time().sum() / 1_000_000f : 0f, 0);
-					}));
-					// 显示调用次数
-					t.label(new SingleProv(() -> {
-						MethodStats stat = ProfilerData.stats.get(mName);
-						return Tmp.v1.set(stat != null ? stat.count().sum() : 0, 0);
-					})).color(Color.gray);
-				})
+					 // 显示平均耗时
+					 SingleProv avgProv = new SingleProv(() -> {
+						 MethodStats stat = ProfilerData.stats.get(mName);
+						 if (stat != null) {
+							 long   calls = stat.count().sum();
+							 double avg   = calls == 0 ? 0 : ((stat.time().sum() / 1_000_000.0) / calls);
+							 Tmp.v1.set((float) avg, 0);
+						 }
+						 return Tmp.v1;
+					 });
+					 avgProv.digits = 6;
+					 t.label(avgProv).color(Pal.accent);
+					 // 显示总耗时
+					 t.label(new SingleProv(() -> {
+						 MethodStats stat = ProfilerData.stats.get(mName);
+						 return Tmp.v1.set(stat != null ? stat.time().sum() / 1_000_000f : 0f, 0);
+					 }));
+					 // 显示调用次数
+					 t.label(new SingleProv(() -> {
+						 MethodStats stat = ProfilerData.stats.get(mName);
+						 return Tmp.v1.set(stat != null ? stat.count().sum() : 0, 0);
+					 })).color(Color.gray);
+				 })
 				 .name(mName).growX().pad(2).row();
 			}
 			statsTable.unbind();
@@ -315,7 +319,7 @@ public class Profiler extends Content {
 			stats.name = name;
 			stats.totalNanos = totalNanos;
 			stats.calls = calls;
-			stats.avgMs = avgMs(totalNanos,  calls);
+			stats.avgMs = avgMs(totalNanos, calls);
 			return stats;
 		}
 		public static double avgMs(long totalNanos, long calls) {

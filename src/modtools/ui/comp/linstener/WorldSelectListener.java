@@ -43,6 +43,7 @@ public class WorldSelectListener extends InputListener {
 			start.y = end.y + (end.y = start.y) * 0;
 		}
 	}
+	/** 在world中绘制  */
 	public void draw() {
 		Rect  rect = CAMERA_RECT;
 		float minX = Mathf.clamp(Math.min(start.x, end.x), rect.x, rect.x + rect.width);

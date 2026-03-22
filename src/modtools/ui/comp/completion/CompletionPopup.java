@@ -15,6 +15,7 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
+import modtools.ui.control.HopeInput;
 
 public class CompletionPopup extends Table {
 	private final TextField       area;
@@ -183,10 +184,14 @@ public class CompletionPopup extends Table {
 
 		if (keycode == KeyCode.escape) {
 			hide();
+			HopeInput.pressed.remove(keycode.ordinal());
+			HopeInput.justPressed.remove(keycode.ordinal());
 			return true;
 		}
 		if (keycode == KeyCode.enter || keycode == KeyCode.tab) {
 			selectCurrent();
+			HopeInput.pressed.remove(keycode.ordinal());
+			HopeInput.justPressed.remove(keycode.ordinal());
 			return true;
 		}
 		if (keycode == KeyCode.up) {

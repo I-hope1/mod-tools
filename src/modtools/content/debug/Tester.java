@@ -244,10 +244,10 @@ public class Tester extends Content {
 
 		Runnable areaInvalidate = () -> {
 			Element focused = Core.scene.getKeyboardFocus();
-			Log.info("Before layout: " + focused);
+			// Log.info("Before layout: " + focused);
 			textarea.getArea().invalidateHierarchy();
 			textarea.layout();
-			Log.info("After layout: " + Core.scene.getKeyboardFocus());
+			// Log.info("After layout: " + Core.scene.getKeyboardFocus());
 			if (focused != null) Core.scene.setKeyboardFocus(focused); // 恢复焦点
 		};
 		ui.maximized(_ -> Time.runTask(0, areaInvalidate));

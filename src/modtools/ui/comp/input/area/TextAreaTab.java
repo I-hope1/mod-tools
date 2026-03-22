@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
 public class TextAreaTab extends Table implements SyntaxDrawable {
 	public static boolean DEBUG = false;
 
-	public static final String INDENT = "  ";
+	public static final String INDENT = "\t";
 
 	private final MyTextArea   area;
 	public final  MyScrollPane pane;
@@ -203,6 +203,13 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		public float getRelativeX(int cursor) {
+			int lineStartIdx = cursorLine * 2;
+			if (lineStartIdx + 2 < linesBreak.size
+			    && cursor == linesBreak.items[lineStartIdx + 2]) {
+				// cursor 实际上在下一行行首，X 应为 0
+				return x + (getBackground() == null ? 0 : getBackground().getLeftWidth())
+				       + fontOffset + font.getData().cursorX;
+			}
 			int prev = this.cursor;
 			this.cursor = cursor;
 			float textOffset = cursor >= glyphPositions.size || cursorLine * 2 >= linesBreak.size ? 0
@@ -304,32 +311,59 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (start > max) throw new IllegalArgumentException("start: " + start + " > max:" + max);
 			if (font.getColor().a == 0) return;
 
-			for (int cursor = start; cursor < max; cursor++) {
-				char c = text.charAt(cursor);
-				if (c == '\n' || c == '\r' || cursor + displayTextStart == linesBreak.get(row * 2 + 1)) {
-					drawText(text, start, cursor);
-					start = c == '\n' || c == '\r' ? cursor + 1 : cursor;
-					offsetX = baseOffsetX;
-					offsetY -= area.lineHeight();
-					row++;
+			while (start < max) {
+				// 当前 row 在 linesBreak 中的绝对结束位置
+				int absRowEnd = (row * 2 + 1 < linesBreak.size)
+				 ? linesBreak.get(row * 2 + 1)
+				 : Integer.MAX_VALUE;
+				int relRowEnd = Math.min(absRowEnd - displayTextStart, max);
+
+				// 在 [start, min(relRowEnd, max)) 里找换行符
+				int     breakAt = -1;
+				boolean isHard  = false;
+				for (int cursor = start; cursor < max && cursor < relRowEnd; cursor++) {
+					char c = text.charAt(cursor);
+					if (c == '\n' || c == '\r') {
+						breakAt = cursor;
+						isHard = true;
+						break;
+					}
 				}
+				// 没找到换行符但到了 row 末尾（软换行）
+				if (breakAt == -1 && absRowEnd - displayTextStart < max) {
+					// 真正的软换行：row 的实际结束位置在文本末尾之前
+					breakAt = relRowEnd;
+					isHard = breakAt < max && (text.charAt(breakAt) == '\n' || text.charAt(breakAt) == '\r');
+				}
+
+				if (breakAt == -1) {
+					// 当前 row 内没有更多断点，画完剩余部分
+					drawText(text, start, max);
+					break;
+				}
+
+				drawText(text, start, breakAt);
+				start = isHard ? breakAt + 1 : breakAt;
+				offsetX = baseOffsetX;
+				offsetY -= area.lineHeight();
+				row++;
 			}
-			if (start < max) {
-				drawText(text, start, max);
-				if (DEBUG) {
-					Draw.color();
-					Lines.line(offsetX, offsetY, offsetX, offsetY - lineHeight());
-				}
+
+			if (DEBUG) {
+				Draw.color();
+				Lines.line(offsetX, offsetY, offsetX, offsetY - lineHeight());
 			}
 		}
 
-		private void drawText(CharSequence text, int start, int cursor) {
-			font.draw(text, offsetX, offsetY, start, cursor, 0f, Align.left, false);
+		private void drawText(CharSequence text, int start, int end) {
+			end = Math.min(end, text.length()); // 防止 end 越界
+			if (start >= end) return;           // 空区间不绘制
+			font.draw(text, offsetX, offsetY, start, end, 0f, Align.left, false);
 			// --- FIX: Convert relative indices to absolute and add a safety check ---
 			// The 'start' and 'cursor' here are relative to the substring being highlighted.
 			// We must convert them to absolute indices before accessing glyphPositions.
-			int absoluteStart = start + displayTextStart;
-			int absoluteCursor = cursor + displayTextStart;
+			int absoluteStart  = start + displayTextStart;
+			int absoluteCursor = end + displayTextStart;
 
 			// Log.info("start: " + start + " cursor: " + cursor + " absoluteStart: " + absoluteStart + " absoluteCursor: " + absoluteCursor);
 			// Log.info(text);
@@ -355,6 +389,14 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public void updateDisplayText() {
 			updateTextIndex();
 			super.updateDisplayText();
+			for (int i = 0; i + 2 < linesBreak.size; i += 2) {
+				int end   = linesBreak.get(i + 1);
+				int start = linesBreak.get(i + 2);
+				if (end == start && end < text.length()
+				    && text.charAt(end - 1) == '\r' && text.charAt(end) == '\n') {
+					linesBreak.removeRange(i + 2, i + 3); // 删掉多余那条
+				}
+			}
 		}
 		protected void drawSelection(Drawable selection, Font font, float x, float y) {
 			int   firstLineShowing = getRealFirstLineShowing();
@@ -496,18 +538,20 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				// --- SINGLE LINE INDENTATION ---
 				if (unindent) {
 					// Un-indent the current line
+					if (cursorLine * 2 >= linesBreak.size) return;
 					int lineStart = linesBreak.get(cursorLine * 2);
-					if (lineStart + INDENT.length() <= text.length() && text.startsWith(INDENT, lineStart)) {
-						// Safe to remove the tab
-						changeText(text, new StringBuilder(text).delete(lineStart, lineStart + INDENT.length()).toString());
-						cursor = Math.max(lineStart, cursor - INDENT.length());
-					}
+					if (lineStart > text.length()) return;
+					// Safe to remove the tab
+					changeText(text, new StringBuilder(text).delete(lineStart, lineStart + INDENT.length()).toString());
+					// 只在 cursor 超出 indent 部分时才偏移
+					int removed = lineStart + INDENT.length();
+					cursor = cursor >= removed ? cursor - INDENT.length() : lineStart;
 				} else {
 					// Insert a tab
 					String newText = insert(cursor, INDENT, text);
 					if (changeText(text, newText)) {
 						cursor += INDENT.length();
-						clearSelection();
+						updateDisplayText();
 					}
 				}
 				trackCursor();

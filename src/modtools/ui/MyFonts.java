@@ -64,8 +64,18 @@ public class MyFonts {
 		class MyFontData extends FreeTypeFontData {
 			final GlyphLayout layout = new GlyphLayout(Fonts.def, "");
 			public Glyph getGlyph(char ch) {
+				if (ch == '\t') {
+					Glyph space = super.getGlyph(' ');
+					if (space != null) {
+						Glyph tab = new Glyph();
+						Tools.clone(space, tab, Glyph.class, null);
+						tab.xadvance = space.xadvance * 2;
+						setGlyph('\t', tab);
+						return tab;
+					}
+				}
 				Glyph glyph = super.getGlyph(ch);
-				if (glyph != missingGlyph) return glyph;
+				if (glyph != missingGlyph && glyph != null) return glyph;
 				Glyph glyph1 = Fonts.def.getData().getGlyph(ch);
 				if (glyph1 == null) return null;
 				Glyph newGlyph = new Glyph();

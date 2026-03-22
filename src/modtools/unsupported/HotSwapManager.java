@@ -25,7 +25,7 @@ public class HotSwapManager {
 			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
 			UNSAFE.addExports(Object.class, "jdk.internal.loader");
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
-				if (ClassUtils.exists("nipx.HotSwapAgent")) {
+				if (loaded()) {
 					HotSwapAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
 				}
 			});
@@ -33,6 +33,9 @@ public class HotSwapManager {
 			initialized = true;
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
+	}
+	public static boolean loaded() {
+		return ClassUtils.exists("nipx.HotSwapAgent");
 	}
 	public static void hotswap(String watchPaths) {
 		try {

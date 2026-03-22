@@ -82,7 +82,10 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 					log.useSource(trees.getPath(element).getCompilationUnit().getSourceFile());
 					mMaker.toplevel = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 					dealElement((T) element);
-				} catch (Throwable e) { err(e); } finally {
+				} catch (Throwable e) {
+					err(e);
+					log.error(SPrinter.err(e.getMessage()));
+				} finally {
 					mMaker.toplevel = null;
 					log.useSource(null);
 				}

@@ -254,7 +254,12 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				writer.write(String.valueOf(unit.getPackage()));
 				writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
 				// 导入原本类的所有子类
-				writer.write("import " + settings.getQualifiedName() + ".*;\n");
+				var curr = settings;
+				while (true) {
+					writer.write("import " + curr.getQualifiedName() + ".*;\n");
+					if (!(curr.owner instanceof ClassSymbol classSymbol)) break;
+					curr = classSymbol;
+				}
 				writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
 				writer.write("@" + REF_OF_ANNO + "(" + settings.getQualifiedName() + ".class)\n"); // ← 加这行
 				writer.write("public class " + REF_PREFIX + literalName + " {\n");
@@ -303,9 +308,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		mainClass.defs = mainClass.defs.append(PBlock(
 		 mMaker.Try(PBlock(
 			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")),
-			  List.of(mMaker.Literal(settings.flatname.toString()))))),
-		  List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock())),
-		  null)
+				List.of(mMaker.Literal(settings.flatname.toString()))))),
+			List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock())),
+			null)
 		));
 
 		// println(classDecl);

@@ -116,6 +116,7 @@ public class SamplingProfiler {
 		for (int i = stack.length - 1; i >= 0; i--) {
 			StackTraceElement frame     = stack[i];
 			String            className = frame.getClassName();
+			if (isBlacklist(className)) continue;
 
 			// 包名过滤：pkgs 为空则全部接受
 			if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) continue;
@@ -129,6 +130,10 @@ public class SamplingProfiler {
 			// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
 			cur.totalNanos.add(intervalMs * 1_000_000L);
 		}
+	}
+
+	private static boolean isBlacklist(String className) {
+		return className.startsWith("nipx.");
 	}
 
 	// ── 辅助 ─────────────────────────────────────────────────────────────────

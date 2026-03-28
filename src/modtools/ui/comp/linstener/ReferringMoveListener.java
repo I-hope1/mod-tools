@@ -7,8 +7,9 @@ import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.ui.layout.Table;
-import arc.struct.FloatSeq;
+import arc.struct.*;
 import arc.util.Tmp;
+import arc.util.pooling.Pools;
 import mindustry.graphics.*;
 import modtools.utils.ui.LerpFun;
 
@@ -23,7 +24,7 @@ public class ReferringMoveListener extends MoveListener {
 
 
 	public ReferringMoveListener(Element touch, Table main, float[] horizontalLines,
-															 float[] verticalLines) {
+	                             float[] verticalLines) {
 		super(touch, main);
 		this.horizontalLines = horizontalLines;
 		this.verticalLines = verticalLines;
@@ -31,12 +32,25 @@ public class ReferringMoveListener extends MoveListener {
 
 	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 		super.touchUp(event, x, y, pointer, button);
+		clearLerpFuncs();
+	}
+	public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
+		clearLerpFuncs();
+		return super.touchDown(event, x, y, pointer, button);
 	}
 	public void display(float x, float y) {
+		clearLerpFuncs();
+
 		Vec2 result = snap(x, y);
 		super.display(result.x, result.y);
 	}
+	private static void clearLerpFuncs() {
+		Pools.freeAll(lerpFuns, true);
+		lerpFuns.clear();
+	}
 	protected Vec2 snap(float x, float y) {
+		// 如果不是手动拖动，则直接返回原位置
+		if (!isFiring) return Tmp.v2.set(x, y);
 		return snap(main, horizontalLines, verticalLines, x, y);
 	}
 
@@ -86,8 +100,9 @@ public class ReferringMoveListener extends MoveListener {
 		return Tmp.v2.set(x, y);
 	}
 
+	static Seq<LerpFun> lerpFuns = new Seq<>();
 	static float process(boolean vertical, float value, float prefValue, float halfValue, Element element,
-											 float drawingValue, Color lineColor) {
+	                     float drawingValue, Color lineColor) {
 		float res = UNSET;
 		/* 与元素中心点的距离 */
 		float dst = Math.abs(prefValue - value - halfValue);
@@ -95,13 +110,12 @@ public class ReferringMoveListener extends MoveListener {
 		if (dst < snapOffset) {
 			res = prefValue - halfValue;
 		} else if (Math.abs(dst - halfValue) < snapOffset) {
-			if (value < prefValue - snapOffset) res = prefValue - halfValue * 2;
-			else res = prefValue;
+			if (value < prefValue - snapOffset) { res = prefValue - halfValue * 2; } else res = prefValue;
 		}
 		if (res != UNSET) {
-			LerpFun.obtain(Interp.linear).transform(element.parent).onUI().registerDispose(0.3f,
+			lerpFuns.add(LerpFun.obtain(Interp.linear).transform(element.parent).onUI().registerDispose(0,
 			 vertical ? _ -> Drawf.dashLine(lineColor, 0, prefValue, drawingValue, prefValue)
-			 : _ -> Drawf.dashLine(lineColor, prefValue, 0, prefValue, drawingValue)
+				: _ -> Drawf.dashLine(lineColor, prefValue, 0, prefValue, drawingValue))
 			);
 		}
 		return res;

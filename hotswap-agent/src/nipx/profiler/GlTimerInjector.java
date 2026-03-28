@@ -51,16 +51,15 @@ public class GlTimerInjector implements ClassFileTransformer {
 							// 读当前插桩栈顶的 key 作为 flush 归属
 							// ProfilerData.currentFlushKey() 是下面新增的静态工具方法
 							visitMethodInsn(INVOKESTATIC,
-								"nipx/profiler/ProfilerData", "currentFlushKey",
-								"()Ljava/lang/String;", false);
+							 "nipx/profiler/ProfilerData", "currentFlushKey",
+							 "()Ljava/lang/String;", false);
 							visitMethodInsn(INVOKESTATIC,
-								PROFILER, "onFlushEnter",
-								"(Ljava/lang/String;)V", false);
+							 PROFILER, "onFlushEnter",
+							 "(Ljava/lang/String;)V", false);
 						}
 						@Override
 						protected void onMethodExit(int opcode) {
-							if (opcode != ATHROW)
-								visitMethodInsn(INVOKESTATIC, PROFILER, "onFlushExit", "()V", false);
+							if (opcode != ATHROW) { visitMethodInsn(INVOKESTATIC, PROFILER, "onFlushExit", "()V", false); }
 						}
 					};
 				}
@@ -81,6 +80,7 @@ public class GlTimerInjector implements ClassFileTransformer {
 	}
 
 	public void retransform(Instrumentation inst) {
+		HotSwapAgent.info("[GlTimerInjector] Retransforming " + batchClass + " and " + frameClass);
 		retransformOne(inst, batchClass.replace('/', '.'));
 		retransformOne(inst, frameClass.replace('/', '.'));
 	}
@@ -88,8 +88,11 @@ public class GlTimerInjector implements ClassFileTransformer {
 	private void retransformOne(Instrumentation inst, String dotName) {
 		for (Class<?> c : inst.getAllLoadedClasses()) {
 			if (!c.getName().equals(dotName) || !inst.isModifiableClass(c)) continue;
-			try { inst.retransformClasses(c); HotSwapAgent.info("[GlTimerInjector] injected → " + dotName); }
-			catch (UnmodifiableClassException e) { HotSwapAgent.error("[GlTimerInjector] failed: " + dotName, e); }
+			try {
+				inst.retransformClasses(c);
+			} catch (UnmodifiableClassException e) {
+				HotSwapAgent.error("[GlTimerInjector] failed: " + dotName, e);
+			}
 			return;
 		}
 	}

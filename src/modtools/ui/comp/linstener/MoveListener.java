@@ -4,7 +4,7 @@ package modtools.ui.comp.linstener;
 import arc.Core;
 import arc.input.KeyCode;
 import arc.math.Mathf;
-import arc.math.geom.Vec2;
+import arc.math.geom.*;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.layout.Table;
@@ -15,6 +15,7 @@ public class MoveListener extends InputListener {
 	protected final Element  touch;
 	protected final Table    main;
 	public          boolean  disabled = false;
+	/** 是否正在手动触发drag */
 	public          boolean  isFiring = false;
 	public          Runnable fire;
 
@@ -49,16 +50,15 @@ public class MoveListener extends InputListener {
 
 		updatePosition();
 	}
-
+	public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
+		super.touchUp(event, x, y, pointer, button);
+		isFiring = false;
+	}
+	public final Vec2 xClamp = new Vec2(), yClamp = new Vec2();
 	public void display(float x, float y) {
-		float mainWidth   = main.getWidth();
-		float mainHeight  = main.getHeight();
-		float touchWidth  = touch.getWidth();
-		float touchHeight = touch.getHeight();
-
 		main.setPosition(
-		 Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
-		Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight)
+		 Mathf.clamp(x, xClamp.x, xClamp.y),
+		Mathf.clamp(y, yClamp.x, yClamp.y)
 		);
 	}
 
@@ -68,6 +68,12 @@ public class MoveListener extends InputListener {
 	}
 
 	private void updatePosition() {
+		float mainWidth   = main.getWidth();
+		float mainHeight  = main.getHeight();
+		float touchWidth  = touch.getWidth();
+		float touchHeight = touch.getHeight();
+		xClamp.set(-touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f);
+		yClamp.set(-mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight);
 		display(lastMain.x + mouseVec.x - lastMouse.x, lastMain.y + mouseVec.y - lastMouse.y);
 	}
 }

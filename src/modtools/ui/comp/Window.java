@@ -77,7 +77,8 @@ public class Window extends Table implements Position {
 	static {
 		init();
 	}
-	static void init(){
+
+	static void init() {
 		IntVars.addResizeListener(() -> all.each(Window::display));
 		Tools.TASKS.add(() -> frontWindow = ArrayUtils.getBound(topGroup.acquireShownWindows(), -1));
 	}
@@ -139,12 +140,29 @@ public class Window extends Table implements Position {
 	noButtons;
 	private MoveListener moveListener;
 	public MoveListener moveListener() {
+		if (moveListener != null) return moveListener;
 		return new ReferringMoveListener(titleTable, this,
 		 new float[]{0, 0.5f, 1},
 		 new float[]{0, 0.5f, 1}) {
+			{ display = this::display; }
+
+			/** 超出屏幕外的距离 */
+			final float overMultiple = 0.33f;
 			public void display(float x, float y) {
-				Vec2 pos = snap(x, y);
-				Window.this.display(pos.x, pos.y);
+				float mainWidth  = getWidth(), mainHeight = getHeight();
+				float touchWidth = titleTable.getWidth(), touchHeight = titleTable.getHeight();
+
+				float   offset  = Scl.scl(45 * 4);
+				boolean isPopup = Window.this instanceof PopupWindow;
+
+				float minX = (isPopup ? 0 : Math.min(-touchWidth * overMultiple, -mainWidth + offset));
+				float maxX = (isPopup ? 0 : Math.max(-mainWidth + touchWidth * overMultiple, -offset)) + graphics.getWidth();
+				float minY = (isPopup ? 0 : -mainHeight + touchHeight * overMultiple * 2f);
+				float maxY = -mainHeight + graphics.getHeight();
+
+				xClamp.set(minX, maxX + 0f);
+				yClamp.set(minY + 0f, maxY);
+				super.display(x, y);
 			}
 		};
 	}
@@ -343,29 +361,10 @@ public class Window extends Table implements Position {
 
 
 	public void display() {
-		display(x, y);
+		display.get(x, y);
 	}
-	/** 超出屏幕外的距离 */
-	float overMultiple = 0.33f;
-	private void display(float x, float y) {
-		float mainWidth  = getWidth(), mainHeight = getHeight();
-		float touchWidth = titleTable.getWidth(), touchHeight = titleTable.getHeight();
-
-		float offset = Scl.scl(45 * 4);
-		float minX   = (this instanceof PopupWindow ? 0 : Math.min(-touchWidth * overMultiple, -mainWidth + offset));
-		float maxX = (this instanceof PopupWindow ? 0 : Math.max(-mainWidth + touchWidth * overMultiple, -offset))
-		             + graphics.getWidth();
-		float minY = (this instanceof PopupWindow ? 0 : -mainHeight + touchHeight * overMultiple * 2f);
-		float maxY = -mainHeight + graphics.getHeight();
-
-		super.setPosition(Mathf.clamp(x, minX, maxX),
-		 Mathf.clamp(y, minY, maxY));
-		/* if (lastMaximize) {
-			// false取反为true
-			isMaximize = false;
-			toggleMaximize();
-		} */
-	}
+	private static final Floatc2 EMPTY_DISPLAY = (x, y) -> { };
+	private              Floatc2 display       = EMPTY_DISPLAY;
 
 	public static boolean mobileDisabled = false;
 	/** 截图 */
@@ -683,7 +682,7 @@ public class Window extends Table implements Position {
 	}
 
 	private boolean unexpectedDrawException;
-	Window  exceptionConfirm;
+	Window exceptionConfirm;
 	final Mat oldTransform = new Mat();
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));

@@ -17,9 +17,11 @@ import modtools.utils.world.WorldDraw;
 
 import static modtools.ui.IntUI.topGroup;
 
-public class LerpFun implements Poolable {
+public final class LerpFun implements Poolable {
 	public Interp in, out;
 	public float last;
+	public Boolp drawTask;
+
 	private LerpFun() {
 	}
 	public static LerpFun obtain(Interp fun) {
@@ -37,10 +39,14 @@ public class LerpFun implements Poolable {
 		a = 0;
 		applyV = 0;
 		enabled = false;
+		if (drawSeq != null) {
+			drawSeq.remove(drawTask);
+		}
 		drawSeq = null;
 		reverse = false;
 		transElement = null;
 		onDispose = null;
+		drawTask = null;
 	}
 	public float apply(float a) {
 		return (last <= a ? in : out).apply(last = a);
@@ -104,7 +110,8 @@ public class LerpFun implements Poolable {
 	public LerpFun registerDispose(float step, Floatc floatc) {
 		if (drawSeq == null) throw new IllegalStateException("You don't set the drawSeq");
 		enabled = true;
-		drawSeq.add(() -> {
+		drawSeq.add(drawTask = () -> {
+			if (!enabled) return false;
 			if (transElement != null) {
 				Tmp.m1.set(Draw.proj());
 				Vec2 pos = ElementUtils.getAbsolutePos(transElement);

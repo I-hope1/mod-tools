@@ -12,7 +12,7 @@ import mindustry.game.EventType.Trigger;
 import modtools.ModTools;
 import modtools.utils.*;
 
-
+/** {@link #drawSeq}如果里{@link Boolp}返回false就删除这个{@link Boolp} */
 public class WorldDraw {
 	/** 玩家视野（渲染区域） */
 	public static final Rect CAMERA_RECT = new Rect();

@@ -941,7 +941,6 @@ public class ReviewElement extends Content {
 			}, t, AutoTextField::new);
 		});
 	}
-
 	public enum Settings implements ISettings {
 		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */,
 		/** （显示名称时）匿名类而不是非匿名超类 */

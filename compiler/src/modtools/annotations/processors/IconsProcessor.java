@@ -15,9 +15,9 @@ import java.util.*;
 public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 	@Override
 	public void dealElement(ClassSymbol element) throws Throwable {
-		JCClassDecl root  = trees.getTree(element);
+		JCClassDecl root = trees.getTree(element);
 		// 这里的getAnnotationByElement会直接修改Class的引用，获取class.getName()不需要mirror
-		IconAnn     icons = getAnnotationByElement(IconAnn.class, element, false);
+		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
 
 		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		if (!root.name.toString().endsWith("c")) {
@@ -40,9 +40,13 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		// 写入包名
 		out.append("package ").append(packageName).append(";\n\n");
 
-		// 复制原文件的 imports
+		// 复制原文件的 imports，但跳过生成类不需要的
 		for (JCTree def : unit.defs) {
-			if (def instanceof JCImport) {
+			if (def instanceof JCImport imp) {
+				String impStr = imp.qualid.toString();
+				// 跳过只属于源类（HopeIconsc）自身需要的 import
+				if (impStr.startsWith("modtools.annotations.") ||
+				    impStr.equals("modtools.ModTools")) { continue; }
 				out.append(def).append("\n");
 			}
 		}

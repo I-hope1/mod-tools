@@ -133,7 +133,7 @@ public class SamplingProfiler {
 	}
 
 	private static boolean isBlacklist(String className) {
-		return className.startsWith("nipx.");
+		return className.startsWith("nipx.") || className.startsWith("modtools.ui.windows.profile.");
 	}
 
 	// ── 辅助 ─────────────────────────────────────────────────────────────────

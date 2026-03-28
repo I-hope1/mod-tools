@@ -98,6 +98,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 		return true;
 	}
+	/** 在{@link #dealElement(Element)}之后执行  */
 	public void process() throws Throwable { }
 	protected static StringBuilder getUnderlineName(String fieldName) {
 		StringBuilder underlineName = new StringBuilder();

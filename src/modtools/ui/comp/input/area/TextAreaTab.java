@@ -835,6 +835,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
+			Color prev = font.getColor();
 			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
 			font.getColor().a *= parentAlpha * color.a;
 			GlyphLayout layout = font.draw(String.valueOf(row), x, offsetY);
@@ -844,6 +845,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				Lines.stroke(2);
 				Lines.line(x, y, x + layout.width, y);
 			}
+			font.setColor(prev);
 		}
 		public void draw() {
 			super.draw();

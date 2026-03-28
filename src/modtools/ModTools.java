@@ -60,6 +60,7 @@ public class ModTools extends Mod {
 		if (loaded) { throw new IllegalStateException("ModTools already loaded."); }
 
 		ScreenSampler.resetMark();
+		SettingsLoader.load();
 
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -131,6 +132,7 @@ public class ModTools extends Mod {
 		} catch (Throwable e) {
 			Log.err(e);
 		}
+
 		load("HotSwapManager", () -> {
 			if (HotSwapManager.valid()) {
 				HotSwapManager.start();

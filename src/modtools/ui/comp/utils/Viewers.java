@@ -135,15 +135,17 @@ public class Viewers {
 	};
 
 	/** 预缓存常用深度的缩进字符串，避免每次 repeat 产生新对象 */
+	public static final  String   SINGLE_INDENT     = " ";
 	private static final int      INDENT_CACHE_SIZE = 16;
 	private static final String[] INDENT_CACHE;
+
 
 	static {
 		INDENT_CACHE = new String[INDENT_CACHE_SIZE];
 		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < INDENT_CACHE_SIZE; i++) {
 			INDENT_CACHE[i] = sb.toString();
-			sb.append("  ");
+			sb.append(SINGLE_INDENT);
 		}
 	}
 

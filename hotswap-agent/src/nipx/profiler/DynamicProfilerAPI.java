@@ -1,5 +1,6 @@
 package nipx.profiler;
 
+import arc.Core;
 import nipx.HotSwapAgent;
 import org.objectweb.asm.*;
 
@@ -8,10 +9,13 @@ import java.util.*;
 
 public class DynamicProfilerAPI {
 	public static final ProfilerTransformer transformer = new ProfilerTransformer();
+	public static final GlTimerInjector glTimerInjector = new GlTimerInjector();
 
 	public static void init() {
 		Instrumentation inst = HotSwapAgent.getInst();
 		inst.addTransformer(transformer, true);
+		inst.addTransformer(glTimerInjector, true);
+		glTimerInjector.retransform(inst);
 
 		/* try {
 			loadWalker();

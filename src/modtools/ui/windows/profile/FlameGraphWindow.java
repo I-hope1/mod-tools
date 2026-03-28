@@ -1,4 +1,4 @@
-package modtools.content.world;
+package modtools.ui.windows.profile;
 
 import arc.Core;
 import arc.graphics.Color;
@@ -10,6 +10,8 @@ import arc.scene.ui.*;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.content.world.Profiler.Settings;
+import modtools.content.world.R_profiler;
 import modtools.events.ISettings;
 import modtools.ui.*;
 import modtools.ui.IntUI.HoverAndExitListener;
@@ -43,7 +45,11 @@ public class FlameGraphWindow extends Window {
 	private Button      backButton;
 	private Button      liveButton;
 
-	public FlameGraphWindow() {
+	private static final FlameGraphWindow instance = new FlameGraphWindow();
+	public static void staticShow() {
+		instance.show();
+	}
+	private FlameGraphWindow() {
 		super("Flame Graph", 780, 620, true);
 		buildUI();
 	}
@@ -59,15 +65,11 @@ public class FlameGraphWindow extends Window {
 				canvas.resetZoom();
 				syncBackButton();
 			}).size(84, 34).pad(3);
-			liveButton = bar.button("Live", Styles.flatTogglet, () -> {
-				canvas.liveMode = !canvas.liveMode;
-			}).size(64, 32).pad(3).checked(b -> canvas.liveMode).get();
-
 			bar.button("Config", Icon.settingsSmall, HopeStyles.flatt,() -> {
 			}).with(b -> b.clicked(() -> {
 				IntUI.showSelectTable(b, (p, _, _) -> {
 					p.add().width(160).row();
-					ISettings.buildAll(profiler.name, p, Profiler.Settings.class);
+					ISettings.buildAll(profiler.name, p, Settings.class);
 				}, false);
 			})).size(108, 32);
 
@@ -168,7 +170,6 @@ public class FlameGraphWindow extends Window {
 		FlameNode currentRoot = ProfilerData.flameRoot;
 		final Deque<FlameNode> zoomStack = new ArrayDeque<>();
 		String  searchQuery = "";
-		boolean liveMode    = false;
 		private long lastLiveMs = 0;
 
 		static final class Slot {
@@ -254,7 +255,7 @@ public class FlameGraphWindow extends Window {
 		@Override
 		public void act(float delta) {
 			super.act(delta);
-			if (!liveMode) return;
+			if (!R_profiler.auto_update_pane) return;
 			long now = System.currentTimeMillis();
 			if (now - lastLiveMs < LIVE_INTERVAL_MS) return;
 			lastLiveMs = now;

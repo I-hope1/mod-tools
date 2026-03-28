@@ -2,6 +2,7 @@ package modtools.annotations.processors;
 
 
 import com.google.auto.service.AutoService;
+import com.sun.tools.javac.code.Attribute.Compound;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
@@ -41,7 +42,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl;
-	private JCClassDecl mainClass;
 	public static void registerTodos(Context context) {
 		// 懒加载符号：第一次匹配时才 resolve
 		ClassSymbol[] iSettingsRef = {null};
@@ -107,7 +107,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 
 		// 读 @RefOf 注解 —— 在 .class 里也能拿到
-		Attribute.Compound refOf = rSym.getAnnotationMirrors().stream()
+		Compound refOf = rSym.getAnnotationMirrors().stream()
 		 .filter(a -> a.type.tsym.getQualifiedName().toString()
 			.equals(REF_OF_ANNO))
 		 .findFirst().orElse(null);
@@ -119,6 +119,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		return symbol;
 	}
 
+	/** 用于ModTools调用forName(设置类) */
+	public ArrayList<ClassSymbol> settingsClasses   = new ArrayList<>();
+	public StringBuilder          loadMethodBuilder = new StringBuilder();
 	public void lazyInit() throws Throwable {
 		nameSetting = ns("Settings");
 		mySettingsClass = C_MySettings();
@@ -127,7 +130,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		myEvents = findClassSymbol("modtools.events.MyEvents");
 		consType = findType("arc.func.Cons");
 		settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
-		mainClass = trees.getTree(findClassSymbol("modtools.ModTools"));
 	}
 
 	public void contentLoad(ClassSymbol element) throws IOException {
@@ -179,7 +181,22 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			processSetting(element, trees.getTree(element), value, annotation.parent(), annotation.fireEvent());
 		}
 	}
+	public void process() throws Throwable {
+		JavaFileObject file = mFiler.createSourceFile("modtools.SettingsLoader", settingsImpl);
+		try (Writer writer = file.openWriter()) {
+			writer.write("package modtools;\n");
+			writer.write("public class SettingsLoader {\n");
+			writer.write("  public static void load() {\n");
 
+			writer.write("    ");
+			writer.write(loadMethodBuilder.toString().replace("\n", "\n    "));
+			writer.write("\n");
+
+			writer.write("  }\n");
+			writer.write("}");
+		}
+		loadMethodBuilder.setLength(0);
+	}
 	public static class ZX {
 		static ClassSymbol settings;
 		static JCClassDecl classDecl;
@@ -192,6 +209,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
 		ZX.settings = settings;
 		ZX.classDecl = classDecl;
+		settingsClasses.add(settings);
 
 		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
 		// settingsImpl.flags_field &= ~Flags.FINAL;
@@ -303,15 +321,13 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// println(classDecl);
 
 		// 在ModTools里加载Class.forName(
-		if (mainClass.defs == null) return;
-		mMaker.at(mainClass.defs.last());
-		mainClass.defs = mainClass.defs.append(PBlock(
+		loadMethodBuilder.append(
 		 mMaker.Try(PBlock(
 			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")),
 				List.of(mMaker.Literal(settings.flatname.toString()))))),
 			List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock())),
 			null)
-		));
+		).append('\n');
 
 		// println(classDecl);
 

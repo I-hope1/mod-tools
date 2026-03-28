@@ -156,7 +156,8 @@ public class IntVars {
 		static {
 			init();
 		}
-		static void init(){
+
+		static void init() {
 			Tools.TASKS.add(() -> {
 				if (Vars.state.isGame()) {
 					mouseWorld.set(Core.camera.unproject(mouseVec.x, mouseVec.y));

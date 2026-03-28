@@ -32,7 +32,7 @@ public class HotSwapDialog extends Window {
 	// 原始 Logger，用于窗口关闭时恢复
 	private final Logger originalLogger;
 
-	public HotSwapDialog() {
+	private HotSwapDialog() {
 		super("HotSwap Control", 400, 300, true);
 
 		// 1. 劫持 Logger (Agent -> UI 的桥梁)

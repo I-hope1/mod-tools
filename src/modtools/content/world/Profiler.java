@@ -16,6 +16,7 @@ import modtools.misc.PairProv.SingleProv;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
+import modtools.ui.windows.profile.FlameGraphWindow;
 import modtools.unsupported.HotSwapManager;
 import modtools.utils.MySettings.Data;
 import modtools.utils.Tools;
@@ -41,18 +42,11 @@ public class Profiler extends Content {
 	public void lazyLoad() {
 		ui = new Window("Profiler", 300, 430, true);
 
-		ui.cont.button("Show Probe Selector Window", () -> {
-			new ProbeSelectorWindow().show();
-		}).size(220, 64).row();
-
-		ui.cont.button("Show Profiler Window", () -> {
-			new ProfilerWindow().show();
-		}).size(220, 64).row();
-
-		// ← 新增火焰图入口
-		ui.cont.button("Show Flame Graph", () -> {
-			new FlameGraphWindow().show();
-		}).size(220, 64);
+		ui.cont.defaults().size(220, 64);
+		ui.cont.button("Show Probe Selector Window", Styles.flatt, ProbeSelectorWindow::staticShow).row();
+		ui.cont.button("Show Profiler Window", Styles.flatt, ProfilerWindow::staticShow).row();
+		ui.cont.button("Show Flame Graph", Styles.flatt, FlameGraphWindow::staticShow).row();
+		ui.cont.button("Hot Swap Log", Styles.flatt, HotSwapDialog::staticShow).row();
 	}
 
 	public void build() {
@@ -72,7 +66,11 @@ public class Profiler extends Content {
 		public int colWidth       = 125;
 		public int methodColWidth = 200;
 
-		public ProfilerWindow() {
+		private static final ProfilerWindow instance = new ProfilerWindow();
+		public static void staticShow() {
+			instance.show();
+		}
+		private ProfilerWindow() {
 			super("Profiler Dashboard", 500, 600, true);
 			build();
 		}
@@ -204,7 +202,11 @@ public class Profiler extends Content {
 		private Search<String>      search;
 		private Pattern             pattern;
 
-		public ProbeSelectorWindow() {
+		private static final ProbeSelectorWindow instance = new ProbeSelectorWindow();
+		public static void staticShow() {
+			instance.show();
+		}
+		private ProbeSelectorWindow() {
 			super("Probe Manager", 400, 600, true);
 			mysetup();
 		}
@@ -311,10 +313,11 @@ public class Profiler extends Content {
 		});
 	}
 
-
 	public enum Settings implements ISettings {
 		// 单位ms
 		mode(Mode.class, it -> it.buildEnum(Mode.sample, Mode.class)),
+		auto_update_pane,
+		sample_gpu_time,
 		@FlushField
 		sample_freq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
 		@FlushField
@@ -322,12 +325,15 @@ public class Profiler extends Content {
 
 		//
 		;
-		Settings() {}
+		Settings() { }
 		Settings(Class<?> type, Cons<ISettings> builder) { }
 
 		static {
 			Runnable r = () -> {
-				Tools.runWhen(HotSwapManager::loaded, () -> SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample));
+				Tools.runWhen(HotSwapManager::loaded, () -> {
+					SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample);
+					Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
+				});
 			};
 			mode.onChange(r);
 			r.run();

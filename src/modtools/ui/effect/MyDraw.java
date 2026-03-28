@@ -156,8 +156,10 @@ public class MyDraw {
 	}
 	public static void drawText(String text, float x, float y, Color color, int align) {
 		if (color.a == 0) return;
+		Color oldColor = font.getColor();
 		font.setColor(color);
 		font.draw(text, x, y, align);
+		font.setColor(oldColor);
 	}
 
 	public interface DrawEffect {

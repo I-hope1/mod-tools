@@ -47,8 +47,6 @@ public class FlameGraphWindow extends Window {
 	private FlameCanvas canvas;
 	private Label       infoLabel;
 	private TextField   searchField;
-	private Button      backButton;
-	private Button      liveButton;
 	private SelectTable navigatorTable;
 
 	private static final FlameGraphWindow instance = new FlameGraphWindow();
@@ -69,13 +67,14 @@ public class FlameGraphWindow extends Window {
 	private void buildUI() {
 		// ── 顶部工具栏 ──────────────────────────────────────────────────────
 		cont.table(bar -> {
-			backButton = bar.button(Icon.leftSmall, HopeStyles.flati, this::goBack).size(32).pad(3).get();
-			backButton.setDisabled(true);
-			bar.button(Icon.eraserSmall, HopeStyles.flati, ProfilerData::clear).size(32).pad(3).tooltip("Clear Profile Data");
-			bar.button(Icon.refreshSmall, HopeStyles.flati, this::refresh).size(32).pad(3);
+			bar.defaults().size(32).pad(3);
+			bar.button(Icon.leftSmall, HopeStyles.flati, this::goBack).disabled(_ -> canvas.zoomStack.isEmpty()).tooltip("Back to previous zoom level");
+			bar.button(Icon.eraserSmall, HopeStyles.flati, ProfilerData::clear).tooltip("Clear Profile Data");
+			bar.button(Icon.refreshSmall, HopeStyles.flati, this::refresh);
+			bar.defaults().reset();
+
 			bar.button("Reset", Styles.flatt, () -> {
 				canvas.resetZoom();
-				syncBackButton();
 			}).size(84, 34).pad(3);
 			bar.button("Config", Icon.settingsSmall, HopeStyles.flatt, () -> {
 			}).with(b -> b.clicked(() -> {
@@ -107,7 +106,6 @@ public class FlameGraphWindow extends Window {
 
 		// ── 画布（放在 ScrollPane 里支持纵向滚动） ───────────────────────────
 		canvas = new FlameCanvas();
-		canvas.onZoomChanged = this::syncBackButton;
 
 		cont.pane(pane -> pane.add(canvas).grow()).grow().row();
 
@@ -142,16 +140,9 @@ public class FlameGraphWindow extends Window {
 	}
 	private void refresh() {
 		canvas.rebuild(cont.getWidth() - 32);
-		syncBackButton();
 	}
-
 	private void goBack() {
 		canvas.zoomOut();
-		syncBackButton();
-	}
-
-	private void syncBackButton() {
-		backButton.setDisabled(canvas.zoomStack.isEmpty());
 	}
 
 	// ─── 工具方法 ────────────────────────────────────────────────────────────
@@ -195,6 +186,7 @@ public class FlameGraphWindow extends Window {
 
 		FlameNode currentRoot = ProfilerData.flameRoot;
 		final Deque<FlameNode> zoomStack = new ArrayDeque<>();
+		// final List<FlameNode> hierarchy = new ArrayList<>();
 		String searchQuery = "";
 		private long lastLiveMs = 0;
 

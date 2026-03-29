@@ -70,11 +70,14 @@ public class Search<T> {
 	public void build(Table title, Table cont) {
 		title.add(top).padRight(8f).growX().top().row();
 		top.image(Icon.zoomSmall);
-		field = new TextField();
+		field = fieldProvider();
 		field.setMessageText("@players.search");
 		top.add(field).growX();
 		field.changed(() -> rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText())));
 		rebuild(cont, PatternUtils.ANY);
+	}
+	public TextField fieldProvider() {
+		return new TextField();
 	}
 	public final Cons2<Table, Pattern> rebuild;
 	protected void rebuild(Table cont, Pattern pattern) {

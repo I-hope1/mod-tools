@@ -40,7 +40,7 @@ import modtools.ui.windows.NameWindow.FileNameWindow;
 import modtools.utils.*;
 import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
-import modtools.utils.search.Search;
+import modtools.utils.search.*;
 import modtools.utils.ui.*;
 import org.lwjgl.sdl.SDLMouse;
 
@@ -319,7 +319,13 @@ public class IntUI {
 		Runnable hide  = t::hideInternal;
 		Runnable hide0 = mergeHide(t, hide);
 		if (searchable) {
-			newSearch(builder, hide0, t, p);
+			if (button instanceof TextField field) {
+				new NavigatorSearch<>(field, (cont, text) -> builder.get(cont, hide, text))
+				 .build(t, p);
+			} else {
+				new Search<>((cont, text) -> builder.get(cont, hide0, text))
+				 .build(t, p);
+			}
 		} else {// newSearch会自动构建一次
 			builder.get(p.row(), hide0, PatternUtils.ANY/* see Search */);
 		}
@@ -330,11 +336,6 @@ public class IntUI {
 	}
 	private static Runnable mergeHide(SelectTable t, Runnable hide) {
 		return () -> (t.hide != null ? t.hide : hide).run();
-	}
-	private static void newSearch(Builder rebuild, Runnable hide,
-	                              SelectTable title, Table container) {
-		new Search<>((cont, text) -> rebuild.get(cont, hide, text))
-		 .build(title, container);
 	}
 
 	public static <T extends Element> SelectTable
@@ -395,6 +396,7 @@ public class IntUI {
 		});
 		return table;
 	}
+
 
 	/**
 	 * 弹出一个可以选择内容的窗口（类似物品液体源的选择）
@@ -936,7 +938,7 @@ public class IntUI {
 		}
 		public void init() {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
-			top().add(pane).grow().pad(0f).top();
+			cell = top().add(pane).grow().pad(0f).top();
 			ElementUtils.hideBarIfValid(pane);
 		}
 		Hitter hitter = new Hitter(this::hideInternal);
@@ -945,6 +947,8 @@ public class IntUI {
 			 Actions.run(() -> fire(new VisibilityEvent(true))),
 			 Actions.remove());
 		}
+		public Cell<ScrollPane> cell;
+
 		public final     Table    table;
 		public final     Element  button;
 		/**

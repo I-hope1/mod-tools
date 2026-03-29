@@ -4,23 +4,28 @@ import arc.Core;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
+import arc.math.Mathf;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.*;
+import arc.struct.Seq;
 import arc.util.Align;
+import arc.util.pooling.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.content.world.*;
 import modtools.events.ISettings;
 import modtools.ui.*;
-import modtools.ui.IntUI.HoverAndExitListener;
+import modtools.ui.IntUI.*;
 import modtools.ui.comp.Window;
 import modtools.ui.effect.MyDraw;
+import modtools.utils.ElementUtils;
 import modtools.utils.profiler.SamplingProfiler;
 import nipx.profiler.ProfilerData;
 import nipx.profiler.ProfilerData.FlameNode;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import static modtools.ui.Contents.profiler;
 
@@ -44,8 +49,10 @@ public class FlameGraphWindow extends Window {
 	private TextField   searchField;
 	private Button      backButton;
 	private Button      liveButton;
+	private SelectTable navigatorTable;
 
 	private static final FlameGraphWindow instance = new FlameGraphWindow();
+
 	public static void staticShow() {
 		instance.show();
 	}
@@ -82,8 +89,20 @@ public class FlameGraphWindow extends Window {
 			searchField = bar.field("", txt -> {
 				 canvas.searchQuery = txt.toLowerCase(Locale.ROOT);
 				 canvas.invalidate();
+				 if (navigatorTable != null) {
+					 return;
+				 }
+				 navigatorTable = IntUI.showSelectListTable(searchField, canvas.slots,
+					() -> null,
+					slot -> canvas.zoomIn(slot.node), slot -> slot.node.name + ": " + slot.node.totalNanos.sum(),
+					120, 32, true, Align.bottom);
+				 float y1      = ElementUtils.getAbsolutePos(searchField).y;
+				 int   height1 = Core.graphics.getHeight();
+				 navigatorTable.cell.height(Mathf.clamp(Math.max(height1 - y1, y1) - searchField.getHeight() - 6f, 0, Core.graphics.getHeight()));
+				 navigatorTable.hidden(() -> navigatorTable = null);
 			 })
 			 .growX().height(32).pad(3).get();
+			searchField.setMessageText("@players.search");
 		}).growX().padBottom(2).row();
 
 		// ── 画布（放在 ScrollPane 里支持纵向滚动） ───────────────────────────
@@ -179,30 +198,37 @@ public class FlameGraphWindow extends Window {
 		String searchQuery = "";
 		private long lastLiveMs = 0;
 
+
 		static final class Slot {
-			final FlameNode node;
-			float x, y, w, childrenW;
-			final int   depth;
-			final Color color;
-			Slot(FlameNode node, float x, float y, float w, int depth, Color color, float childrenW) {
-				this.node = node;
-				this.x = x;
-				this.y = y;
-				this.w = w;
-				this.depth = depth;
-				this.color = color;
-				this.childrenW = childrenW;
+			static final Pool<Slot> pool = Pools.get(Slot.class, Slot::new);
+			private Slot() { }
+
+			FlameNode node;
+			float     x, y, w, childrenW;
+			int   depth;
+			Color color;
+			static Slot obtain(FlameNode node, float x, float y, float w, int depth, Color color, float childrenW) {
+				Slot slot = pool.obtain();
+				slot.node = node;
+				slot.x = x;
+				slot.y = y;
+				slot.w = w;
+				slot.depth = depth;
+				slot.color = color;
+				slot.childrenW = childrenW;
+				return slot;
 			}
 		}
 
-		final List<Slot> slots = new ArrayList<>();
+		final Seq<Slot> slots = new Seq<>();
 		float prefW = 600, prefH = 200;
 		FlameNode hoveredNode = null;
 
-		java.util.function.Consumer<FlameNode> onHover;
-		Runnable                               onZoomChanged;
+		Consumer<FlameNode> onHover;
+		Runnable            onZoomChanged;
 
 		void rebuild(float availW) {
+			Pools.freeAll(slots, true);
 			slots.clear();
 			hoveredNode = null;
 			if (currentRoot.children.isEmpty()) {
@@ -227,12 +253,12 @@ public class FlameGraphWindow extends Window {
 				childW += cw;
 				cx += cw;
 			}
-			slots.add(new Slot(node, x, slotY, w, depth, colorOf(node.name), childW));
+			slots.add(Slot.obtain(node, x, slotY, w, depth, colorOf(node.name), childW));
 		}
 
 		void liveUpdate() {
 			if (slots.isEmpty()) return;
-			Slot root = slots.get(slots.size() - 1);
+			Slot root = slots.peek();
 			applyWidths(root, 0f, prefW);
 		}
 
@@ -266,7 +292,7 @@ public class FlameGraphWindow extends Window {
 			long now = System.currentTimeMillis();
 			if (now - lastLiveMs < LIVE_INTERVAL_MS) return;
 			lastLiveMs = now;
-			if (countNodes(currentRoot) != slots.size()) { rebuild(prefW); } else liveUpdate();
+			if (countNodes(currentRoot) != slots.size) { rebuild(prefW); } else liveUpdate();
 		}
 
 		void zoomIn(FlameNode node) {

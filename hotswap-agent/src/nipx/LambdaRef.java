@@ -28,6 +28,8 @@ public class LambdaRef {
 		redefineCell();
 		Injector.redefine(TextField.class, "setValidator", dot2slash(TextFieldValidator.class));
 		Injector.redefine(Element.class, "update", dot2slash(Runnable.class));
+		Injector.redefine(Element.class, "clicked", dot2slash(Runnable.class));
+
 		// redefineTable();
 	}
 	//region Cell

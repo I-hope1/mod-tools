@@ -277,8 +277,24 @@ public class Window extends Table implements Position {
 		super.layout();
 		display();
 	}
+
+	private float lastWidth = -1f, lastHeight = -1f;
 	public void act(float delta) {
-		Tools.runLoggedException(() -> super.act(delta));
+		Tools.runLoggedException(() -> {
+			super.act(delta);
+
+			//fire resize events.
+			if (lastWidth >= 0 && lastHeight >= 0) {
+				if (!Mathf.equal(lastWidth, width) || !Mathf.equal(lastHeight, height)) {
+					SceneResizeEvent e = Pools.obtain(SceneResizeEvent.class, SceneResizeEvent::new);
+					fire(e);
+					Pools.free(e);
+				}
+			}
+
+			lastWidth = width;
+			lastHeight = height;
+		});
 		if (sticky) toFront();
 		sclListener.disabled0 = isMaximize;
 		if (moveListener != null) moveListener.disabled = sclListener.scling;

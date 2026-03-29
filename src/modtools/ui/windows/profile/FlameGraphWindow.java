@@ -5,7 +5,7 @@ import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.input.KeyCode;
 import arc.scene.Element;
-import arc.scene.event.InputEvent;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.util.Align;
 import mindustry.gen.Icon;
@@ -52,6 +52,11 @@ public class FlameGraphWindow extends Window {
 	private FlameGraphWindow() {
 		super("Flame Graph", 780, 620, true);
 		buildUI();
+		addListener(new ResizeListener() {
+			public void resized() {
+				Core.app.post(FlameGraphWindow.this::refresh);
+			}
+		});
 	}
 
 	private void buildUI() {
@@ -73,7 +78,7 @@ public class FlameGraphWindow extends Window {
 				}, false);
 			})).size(108, 32);
 
-			bar.add("Search: ").padLeft(8);
+			bar.image(Icon.zoomSmall);
 			searchField = bar.field("", txt -> {
 				 canvas.searchQuery = txt.toLowerCase(Locale.ROOT);
 				 canvas.invalidate();
@@ -111,6 +116,8 @@ public class FlameGraphWindow extends Window {
 			 "%s   |   %s (%.1f%%)   |   self %.3f ms   |   children %d",
 			 node.name, unit, pct, self / 1_000_000.0, node.children.size()));
 		};
+
+		canvas.resetZoom();
 
 		shown(() -> Core.app.post(this::refresh));
 	}

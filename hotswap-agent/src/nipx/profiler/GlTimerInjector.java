@@ -1,7 +1,6 @@
 package nipx.profiler;
 
-import nipx.HotSwapAgent;
-import nipx.AnnotationTransformer;
+import nipx.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
@@ -48,6 +47,13 @@ public class GlTimerInjector implements ClassFileTransformer {
 					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 						@Override
 						protected void onMethodEnter() {
+							// if (this.flushing) → 跳过外层协调调用
+							loadThis();
+							visitFieldInsn(GETFIELD,
+							 "arc/graphics/g2d/SpriteBatch", "idx", "I");
+							Label skip = new Label();
+							visitJumpInsn(IFEQ, skip);   // idx==0 → 没有 GPU 工作，跳过）
+
 							// 读当前插桩栈顶的 key 作为 flush 归属
 							// ProfilerData.currentFlushKey() 是下面新增的静态工具方法
 							visitMethodInsn(INVOKESTATIC,
@@ -56,10 +62,23 @@ public class GlTimerInjector implements ClassFileTransformer {
 							visitMethodInsn(INVOKESTATIC,
 							 PROFILER, "onFlushEnter",
 							 "(Ljava/lang/String;)V", false);
+
+							visitLabel(skip);
 						}
 						@Override
 						protected void onMethodExit(int opcode) {
-							if (opcode != ATHROW) { visitMethodInsn(INVOKESTATIC, PROFILER, "onFlushExit", "()V", false); }
+							if (opcode == ATHROW) return;
+
+							// 对称地只在内层退出时关 query
+							// loadThis();
+							// visitFieldInsn(GETFIELD,
+							//  "arc/graphics/g2d/SpriteBatch", "idx", "I");
+							// Label skip = new Label();
+							// visitJumpInsn(IFEQ, skip);   // idx==0 → 没有 GPU 工作，跳过
+
+							visitMethodInsn(INVOKESTATIC, PROFILER, "onFlushExit", "()V", false);
+
+							// visitLabel(skip);
 						}
 					};
 				}
@@ -94,6 +113,11 @@ public class GlTimerInjector implements ClassFileTransformer {
 				HotSwapAgent.error("[GlTimerInjector] failed: " + dotName, e);
 			}
 			return;
+		}
+		try {
+			Class.forName(dotName);
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);
 		}
 	}
 }

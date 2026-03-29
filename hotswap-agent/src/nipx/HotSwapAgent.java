@@ -36,13 +36,14 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Core State Management
-	static Instrumentation inst;
+	static               Instrumentation     inst;
 	static final         Set<Path>           activeWatchDirs = new CopyOnWriteArraySet<>();
 	/** 直接作为 watch 路径传入的 jar/zip 文件（区别于目录内扫描到的） */
 	static final         Set<Path>           activeWatchJars = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new CopyOnWriteArrayList<>();
 
-	/** 在不使用retransform的情况下，确保旧bytecode正确的唯一方法 */
+	/** 在不使用retransform的情况下，确保旧bytecode正确的唯一方法
+	 * dotClassName -> bytecode */
 	static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 仅记录byte的指纹
@@ -368,6 +369,11 @@ public class HotSwapAgent {
 		return false;
 	}
 
+	public static byte[] fetchCurrentBytecode(Class<?> clazz) {
+		String className = clazz.getName();
+		if (bytecodeCache.containsKey(className)) return bytecodeCache.get(className);
+		return fetchOriginalBytecode(clazz);
+	}
 	public static byte[] fetchOriginalBytecode(Class<?> clazz) {
 		String      path = clazz.getName().replace('.', '/') + ".class";
 		ClassLoader cl   = clazz.getClassLoader();

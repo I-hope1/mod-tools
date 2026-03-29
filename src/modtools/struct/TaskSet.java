@@ -8,6 +8,7 @@ import arc.util.Log;
 public class TaskSet extends Seq<Boolp> {
 	/** boolp.get()为{@code false}，就删除 */
 	public void exec() {
+		if (isEmpty()) return;
 		removeAll(boolp -> {
 			try {
 				return !boolp.get();

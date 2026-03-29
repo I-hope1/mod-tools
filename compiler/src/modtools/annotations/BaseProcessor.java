@@ -79,8 +79,11 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		for (TypeElement annotation : annotations) {
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
-					log.useSource(trees.getPath(element).getCompilationUnit().getSourceFile());
-					mMaker.toplevel = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
+					TreePath path = trees.getPath(element);
+					if (path != null) {
+						log.useSource(path.getCompilationUnit().getSourceFile());
+						mMaker.toplevel = (JCCompilationUnit) path.getCompilationUnit();
+					}
 					dealElement((T) element);
 				} catch (Throwable e) {
 					err(e);

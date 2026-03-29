@@ -75,6 +75,7 @@ public class FlameGraphWindow extends Window {
 
 			bar.button("Reset", Styles.flatt, () -> {
 				canvas.resetZoom();
+				refresh();
 			}).size(84, 34).pad(3);
 			bar.button("Config", Icon.settingsSmall, HopeStyles.flatt, () -> {
 			}).with(b -> b.clicked(() -> {
@@ -97,7 +98,7 @@ public class FlameGraphWindow extends Window {
 					120, 32, true, Align.bottom);
 				 float y1      = ElementUtils.getAbsolutePos(searchField).y;
 				 int   height1 = Core.graphics.getHeight();
-				 navigatorTable.cell.height(Mathf.clamp(Math.max(height1 - y1, y1) - searchField.getHeight() - 6f, 0, Core.graphics.getHeight()));
+				 navigatorTable.cell.maxHeight(Mathf.clamp(Math.max(height1 - y1, y1) - searchField.getHeight() - 6f, 0, Core.graphics.getHeight()));
 				 navigatorTable.hidden(() -> navigatorTable = null);
 			 })
 			 .growX().height(32).pad(3).get();

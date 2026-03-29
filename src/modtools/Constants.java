@@ -7,9 +7,9 @@ import arc.graphics.gl.FileTextureData;
 import arc.input.KeyBind.KeybindValue;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
-import arc.util.Reflect;
+import arc.util.*;
 import mindustry.Vars;
-import mindustry.graphics.MultiPacker;
+import mindustry.graphics.*;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
 import modtools.android.HiddenApi;
@@ -56,6 +56,11 @@ public class Constants {
 		long     TYPE      = fieldOffset(KeyEvent, "type");
 		long     KEY_CODE  = fieldOffset(KeyEvent, "keyCode");
 		long     KEY_CHAR  = fieldOffset(KeyEvent, "keyChar");
+	}
+
+	public interface IntelCheck {
+		Field wasIntel = nl(() -> IntelGpuCheck.class.getDeclaredField("wasIntel")),
+		 checkedLastLaunch = nl(() -> IntelGpuCheck.class.getDeclaredField("checkedLastLaunch"));
 	}
 
 	/** Constants related to desktop JVM internals (java.lang.invoke). Likely fragile. */

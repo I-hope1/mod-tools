@@ -28,11 +28,13 @@ import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
 import modtools.ui.comp.utils.*;
 import modtools.ui.menu.*;
+import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.reflect.*;
 import modtools.utils.search.*;
 import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
+import nipx.HotSwapAgent;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
@@ -119,7 +121,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		topTable.left().defaults().left().growX();
 		// 功能按钮栏
 		topTable.pane(t -> {
-			t.left().defaults().left();
+			t.left().defaults().left().size(42);
 			t.button(Icon.settingsSmall, clearNonei, () -> { })
 			 .with(b -> b.clicked(() -> {
 				 IntUI.showSelectTable(b, (p, _, _) -> {
@@ -129,16 +131,24 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 					 ISettings.buildAllWrap("jsfunc.display", p, "Display", E_JSFuncDisplay.class);
 					 ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
 				 }, false, Align.bottom);
-			 })).size(42);
-			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
-			t.button(Icon.refreshSmall, clearNonei, rebuild0).size(42);
+			 }));
+			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
+				 IntUI.showSelectTable(b, (p, _, _) -> {
+					 p.defaults().size(120, 45);
+					 p.button("View bytecode", Styles.flatt, () -> {
+						 dataDir.child("bytecode").child(clazz.getName() + ".class").writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
+					 }).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
+				 }, false, Align.bottom);
+			 }));
+			 // if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
+			 t.button(Icon.refreshSmall, clearNonei, rebuild0);
 			if (obj != null) {
 				IntUI.addStoreButton(t, "", () -> obj);
 				markDisplay(
 				 t.label(() -> "" + UNSAFE.vaddressOf(obj)).padLeft(8f),
 				 E_JSFuncDisplay.address);
 			}
-		}).height(42).row();
+		}).height(42);
 		// 搜索栏
 		search = new Search<>((_, pattern) -> {
 			this.pattern = pattern;
@@ -165,7 +175,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				copyText(clazz.getTypeName(), t);
 			}).size(32);
 			if (obj == null) t.add("NULL", defaultLabel).color(Color.red).padLeft(8f);
-		}).pad(6, 10, 6, 10).row();
+		}).colspan(2).pad(6, 10, 6, 10).row();
 		// cont.add(build).grow();
 
 		cont.add(topTable).row();

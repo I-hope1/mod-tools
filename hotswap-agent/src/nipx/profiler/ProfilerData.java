@@ -68,6 +68,7 @@ public class ProfilerData {
 		record(method, nanos);
 	}
 
+
 	/**
 	 * 返回当前线程插桩栈顶的方法 key，供 {@link GlTimerProfiler} 标记 flush 归属。
 	 * 栈为空时返回空串（flush 发生在所有被监控方法之外）。

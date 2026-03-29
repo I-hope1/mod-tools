@@ -8,9 +8,9 @@ import arc.util.*;
 import mindustry.Vars;
 import mindustry.core.*;
 import mindustry.graphics.IntelGpuCheck;
+import modtools.Constants.IntelCheck;
 import modtools.annotations.settings.*;
-import modtools.jsfunc.reflect.UNSAFE;
-import modtools.utils.reflect.FieldUtils;
+import modtools.utils.Tools;
 
 import java.util.Locale;
 
@@ -55,18 +55,22 @@ public enum E_Game implements ISettings {
 	static {
 		Fi file = new Fi(OS.getAppDataDirectoryString("Mindustry")).child("was_intel_gpu");
 		Runnable r = () -> {
-			if (!OS.isWindows) return;
-			file.writeString(force_enable_gl3.enabled() ? "2" : "1");
+			if (!OS.isWindows && !IntelGpuCheck.wasIntel()) return;
+			file.writeString(force_enable_gl3.enabled() ? "" : "1");
 			try {
-				long offset = UNSAFE.staticFieldOffset(IntelGpuCheck.class,"wasIntel");
-				FieldUtils.setValue(IntelGpuCheck.class, offset, force_enable_gl3.enabled(), boolean.class);
-				offset = UNSAFE.staticFieldOffset(IntelGpuCheck.class, "checkedLastLaunch");
-				FieldUtils.setValue(IntelGpuCheck.class, offset, true, boolean.class);
+				IntelCheck.wasIntel.setBoolean(null, !force_enable_gl3.enabled());
+				IntelCheck.checkedLastLaunch.setBoolean(null, true);
 			} catch (Exception e) {
 				Log.err(e);
 			}
 		};
 		r.run();
+		int[] arr = new int[]{1};
+		Tools.TASKS.add(() -> {
+			if (force_enable_gl3.enabled() && (arr[0]++ % 30 == 0)) {
+				r.run();
+			}
+		});
 		force_enable_gl3.onChange(r);
 	}
 

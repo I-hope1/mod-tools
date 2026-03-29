@@ -4,10 +4,13 @@ import arc.Core;
 import arc.files.Fi;
 import arc.func.Cons;
 import arc.scene.ui.layout.Table;
-import arc.util.OS;
+import arc.util.*;
 import mindustry.Vars;
-import mindustry.core.Version;
+import mindustry.core.*;
+import mindustry.graphics.IntelGpuCheck;
 import modtools.annotations.settings.*;
+import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.reflect.FieldUtils;
 
 import java.util.Locale;
 
@@ -43,17 +46,25 @@ public enum E_Game implements ISettings {
 	;
 
 	interface DEF {
-		/** @see mindustry.core.Renderer#minZoom */
+		/** @see Renderer#minZoom */
 		float minZoom = 1.5f;
-		/** @see mindustry.core.Renderer#maxZoom */
+		/** @see Renderer#maxZoom */
 		float maxZoom = 6f;
 	}
 
 	static {
+		Fi file = new Fi(OS.getAppDataDirectoryString("Mindustry")).child("was_intel_gpu");
 		Runnable r = () -> {
 			if (!OS.isWindows) return;
-			Fi file = new Fi(OS.getAppDataDirectoryString("Mindustry")).child("was_intel_gpu");
 			file.writeString(force_enable_gl3.enabled() ? "2" : "1");
+			try {
+				long offset = UNSAFE.staticFieldOffset(IntelGpuCheck.class,"wasIntel");
+				FieldUtils.setValue(IntelGpuCheck.class, offset, force_enable_gl3.enabled(), boolean.class);
+				offset = UNSAFE.staticFieldOffset(IntelGpuCheck.class, "checkedLastLaunch");
+				FieldUtils.setValue(IntelGpuCheck.class, offset, true, boolean.class);
+			} catch (Exception e) {
+				Log.err(e);
+			}
 		};
 		r.run();
 		force_enable_gl3.onChange(r);

@@ -103,20 +103,20 @@ public class GlTimerProfiler {
 	/** flush 入口：开始 GPU 计时，记录当前方法 key 作为归属。*/
 	public static void onFlushEnter(String flushKey) {
 		if (isQuerying || !enabled || !ensureInit()) return;
-		isQuerying = true;
 		// 如果已经绕了一圈还没读完，说明 GPU 太慢或 RING 太小，此时放弃这一条，防止覆盖
     if (writeIdx - readIdx >= RING) return;
 
 		int slot = writeIdx & (RING - 1); // 即使 writeIdx 溢出变为负数，结果依然正确
 		queryKeys[slot] = flushKey;
 		Core.gl30.glBeginQuery(GL_TIME_ELAPSED, queryIds[slot]);
+		isQuerying = true;
 	}
 
 	/** flush 出口：结束 GPU 计时，推进写指针。*/
 	public static void onFlushExit() {
 		if (!isQuerying || !enabled || queryIds == null) return;
-		isQuerying = false;
 		Core.gl30.glEndQuery(GL_TIME_ELAPSED);
+		isQuerying = false;
 		writeIdx++;
 	}
 

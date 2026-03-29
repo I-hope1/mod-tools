@@ -60,7 +60,6 @@ public class ModTools extends Mod {
 		if (loaded) { throw new IllegalStateException("ModTools already loaded."); }
 
 		ScreenSampler.resetMark();
-		SettingsLoader.load();
 
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
@@ -123,6 +122,7 @@ public class ModTools extends Mod {
 		}
 		resolveLibsCatch();
 		MySettings.load();
+		SettingsLoader.load();
 
 		try {
 			if (OS.isAndroid) {

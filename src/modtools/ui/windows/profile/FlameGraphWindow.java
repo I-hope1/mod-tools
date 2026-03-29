@@ -134,9 +134,10 @@ public class FlameGraphWindow extends Window {
 			 node.name, unit, pct, self / 1_000_000.0, node.children.size()));
 		};
 
-		canvas.resetZoom();
-
-		shown(() -> Core.app.post(this::refresh));
+		shown(() -> Core.app.post(() -> {
+			canvas.resetZoom();
+			refresh();
+		}));
 	}
 	private void refresh() {
 		canvas.rebuild(cont.getWidth() - 32);

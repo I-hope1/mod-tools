@@ -2,8 +2,8 @@ package modtools.annotations.processors;
 
 
 import com.google.auto.service.AutoService;
-import com.sun.tools.javac.code.Attribute.Compound;
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Attribute.Compound;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
@@ -27,7 +27,6 @@ import java.util.function.*;
 import java.util.stream.Collectors;
 
 import static modtools.annotations.NameString.ns0;
-import static modtools.annotations.processors.ContentProcessor.ZX.*;
 
 /** 添加new XXX()，并给对应Content的Settings（如果有）初始化 */
 @AutoService(Processor.class)
@@ -41,7 +40,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private Name        nameSetting;
 	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
-	 iSettings, myEvents, settingsImpl;
+	 iSettings, myEvents, settingsImpl, contentClass;
 	public static void registerTodos(Context context) {
 		// 懒加载符号：第一次匹配时才 resolve
 		ClassSymbol[] iSettingsRef = {null};
@@ -130,6 +129,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		myEvents = findClassSymbol("modtools.events.MyEvents");
 		consType = findType("arc.func.Cons");
 		settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
+		contentClass = findClassSymbol("modtools.content.Content");
 	}
 
 	public void contentLoad(ClassSymbol element) throws IOException {
@@ -143,24 +143,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				mMaker.Ident((Name) field.getSimpleName()),
 				mMaker.NewClass(null, List.nil(), variableTree.vartype, List.nil(), null)
 			 )));
-
-			TypeSymbol   contentTypeSymbol = variableTree.vartype.type.tsym;
-			JCMethodDecl initMethod        = (JCMethodDecl) trees.getTree(contentTypeSymbol.members().findFirst(names.init));
-			if (initMethod == null) continue;
-			Object literalName;
-			try {
-				literalName = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
-			} catch (Throwable e) {
-				log.useSource(element.sourcefile);
-				log.error(initMethod, SPrinter.err("Cannot load content data for: " + element));
-				return;
-			}
-
-			ClassSymbol settingsSymbol = (ClassSymbol) contentTypeSymbol.members().findFirst(nameSetting, t -> t.kind == Kind.TYP);
-			if (settingsSymbol != null) {
-				JCClassDecl settingsTree = trees.getTree(settingsSymbol);
-				processSetting(settingsSymbol, settingsTree, literalName, "", false);
-			}
 		}
 
 		loadMethod.body.stats = statements.toList();
@@ -168,12 +150,39 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	public void dealElement(ClassSymbol element) throws IOException {
-		if (element.getAnnotation(ContentInit.class) != null) {
+		if (element.getAnnotation(ContentsLoad.class) != null) {
 			contentLoad(element);
 			// print(element);
 		} else if (element.getAnnotation(SettingsInit.class) != null) {
 			SettingsInit annotation = element.getAnnotation(SettingsInit.class);
 			String       value      = annotation.value();
+			if (element.owner instanceof ClassSymbol contentOwner && contentOwner.isSubClass(contentClass, types)) {
+				JCMethodDecl initMethod = (JCMethodDecl) trees.getTree(contentOwner.members().findFirst(names.init));
+				if (initMethod == null) return;
+				Object literalName;
+				try {
+					literalName = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
+				} catch (Throwable e) {
+					log.useSource(element.sourcefile);
+					log.error(initMethod, SPrinter.err("Cannot load content data for: " + element));
+					return;
+				}
+
+				ClassSymbol settingsSymbol = (ClassSymbol) contentOwner.members().findFirst(nameSetting, t -> t.kind == Kind.TYP);
+				// println("[ContentProcessor] SettingsSymbol: " + settingsSymbol);
+				if (settingsSymbol != null) {
+					JCClassDecl settingsTree = trees.getTree(settingsSymbol);
+					if (settingsTree == null) {
+						// 关键：在增量编译时，如果拿不到 Tree，说明这个类没被包含在当前 Round 的源码中
+						// 此时不应继续尝试修改，否则会造成字节码不一致
+						println("[ContentProcessor] Warning：Cannot find the tree for:  " + settingsSymbol);
+						return;
+					}
+					// println("[ContentProcessor] Tree: " + settingsTree);
+					processSetting(settingsSymbol, settingsTree, literalName, "", false);
+				}
+				return;
+			}
 			if (value.equals(".")) {
 				value = element.getSimpleName().toString();
 				if (value.startsWith(SETTING_PREFIX)) value = value.substring(2);
@@ -197,18 +206,15 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 		loadMethodBuilder.setLength(0);
 	}
-	public static class ZX {
-		static ClassSymbol settings;
-		static JCClassDecl classDecl;
-		static Object      literalName; /* content初始使的字面量name（主要是用于设置的key） */
-		static String      parent;
-		static boolean     fireEvents;
-	}
+
+	ClassSymbol currentSettings;
+	JCClassDecl currentClassDecl;
+
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 	                            Object literalName, String parent, boolean fireEvents) throws IOException {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
-		ZX.settings = settings;
-		ZX.classDecl = classDecl;
+		this.currentSettings = settings;
+		this.currentClassDecl = classDecl;
 		settingsClasses.add(settings);
 
 		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
@@ -402,20 +408,20 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private void buildFlushField(JCFieldAccess classType, JCFieldAccess access, VarSymbol symbol) {
 		if (symbol.getAnnotation(FlushField.class) == null) return;
 
-		mMaker.at(classDecl.defs.last());
+		mMaker.at(currentClassDecl.defs.last());
 		flushAssignment.add(buildAssignment(classType, access, mMaker.Ident(symbol)));
-		JCMethodDecl existingSet = findChild(classDecl, Tag.METHODDEF,
+		JCMethodDecl existingSet = findChild(currentClassDecl, Tag.METHODDEF,
 		 (JCMethodDecl m) -> m.name.contentEquals("set")
 		                     && m.params.size() == 1
 		                     && m.params.get(0).vartype.type.equals(mSymtab.objectType));
 		MethodSymbol ms;
 
 		if (existingSet == null) {
-			mMaker.at(classDecl.defs.last());
+			mMaker.at(currentClassDecl.defs.last());
 			int flags = Flags.PUBLIC;
 			ms = new MethodSymbol(flags, ns("set"),
-			 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), settings),
-			 settings);
+			 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), currentSettings),
+			 currentSettings);
 
 			JCVariableDecl val = mMaker.Param(ns("val"), mSymtab.objectType, ms);
 			JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
@@ -424,15 +430,15 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			ms.params = List.of(val.sym);
 
 			JCMethodDecl method = mMaker.MethodDef(ms, body);
-			settings.members().enter(ms);
-			classDecl.defs = classDecl.defs.append(method);
+			currentSettings.members().enter(ms);
+			currentClassDecl.defs = currentClassDecl.defs.append(method);
 			existingSet = method;
 		}
 
 		existingSet.body.stats = existingSet.body.stats.append(
 		 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-			 mMaker.This(settings.type)),
-			buildAssignment(classType, access, mMaker.This(settings.type)), null)
+			 mMaker.This(currentSettings.type)),
+			buildAssignment(classType, access, mMaker.This(currentSettings.type)), null)
 		);
 	}
 	// ai 生成就是快
@@ -444,19 +450,19 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			...
 			return false;
 		} */
-		mMaker.at(classDecl.defs.last());
-		MethodSymbol            ms         = new MethodSymbol(Flags.PUBLIC, ns("hasSwitch"), mSymtab.booleanType, settings);
+		mMaker.at(currentClassDecl.defs.last());
+		MethodSymbol            ms         = new MethodSymbol(Flags.PUBLIC, ns("hasSwitch"), mSymtab.booleanType, currentSettings);
 		ListBuffer<JCStatement> listBuffer = new ListBuffer<>();
 		allSwitches.forEach((symbol, aSwitch) -> {
 			JCStatement ifState = mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-			 mMaker.This(settings.type)), mMaker.Return(mMaker.Literal(true)), null);
+			 mMaker.This(currentSettings.type)), mMaker.Return(mMaker.Literal(true)), null);
 			listBuffer.append(ifState);
 		});
 		listBuffer.append(mMaker.Return(mMaker.Literal(false)));
 		JCMethodDecl method = mMaker.MethodDef(ms, PBlock(listBuffer.toList()));
 		method.restype = mMaker.Type(mSymtab.booleanType);
-		settings.members().enter(ms);
-		classDecl.defs = classDecl.defs.append(method);
+		currentSettings.members().enter(ms);
+		currentClassDecl.defs = currentClassDecl.defs.append(method);
 
 		/* 仿照上面的，参加一个方法 String switchKey() {
 			if (this == %name1%) return %dependency1%;
@@ -465,19 +471,19 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			return ISettings.super.switchKey();
 		} */
 
-		mMaker.at(classDecl.defs.last());
-		ms = new MethodSymbol(Flags.PUBLIC, ns("switchKey"), mSymtab.stringType, settings);
+		mMaker.at(currentClassDecl.defs.last());
+		ms = new MethodSymbol(Flags.PUBLIC, ns("switchKey"), mSymtab.stringType, currentSettings);
 		listBuffer.clear();
 		allSwitches.forEach((symbol, aSwitch) -> {
 			if (aSwitch.dependency().isEmpty()) return;
 			listBuffer.append(mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-			 mMaker.This(settings.type)), mMaker.Return(mMaker.Literal(aSwitch.dependency())), null));
+			 mMaker.This(currentSettings.type)), mMaker.Return(mMaker.Literal(aSwitch.dependency())), null));
 		});
 		listBuffer.append(mMaker.Return(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Select(mMaker.Type(iSettings.type), ns("super")), ns("switchKey")), List.nil())));
 		method = mMaker.MethodDef(ms, PBlock(listBuffer.toList()));
 		method.restype = mMaker.Type(mSymtab.stringType);
-		settings.members().enter(ms);
-		classDecl.defs = classDecl.defs.append(method);
+		currentSettings.members().enter(ms);
+		currentClassDecl.defs = currentClassDecl.defs.append(method);
 	}
 	Map<VarSymbol, Switch> allSwitches   = new LinkedHashMap<>();
 	Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
@@ -536,6 +542,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	@Override
 	public Set<Class<?>> getSupportedAnnotationTypes0() {
-		return Set.of(ContentInit.class, SettingsInit.class);
+		return Set.of(ContentsLoad.class, SettingsInit.class);
 	}
 }

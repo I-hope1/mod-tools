@@ -388,7 +388,6 @@ public class ModTools extends Mod {
 		System.gc();
 		Core.app.post(() -> mods.removeMod(mod));
 	}
-
 	public static boolean isDisposed() {
 		return isDisposed;
 	}

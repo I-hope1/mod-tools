@@ -20,6 +20,7 @@ import mindustry.ui.Styles;
 import modtools.Constants.TABLE;
 import modtools.IntVars;
 import modtools.annotations.builder.DataColorFieldInit;
+import modtools.annotations.settings.SettingsInit;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.events.ISettings;
@@ -292,7 +293,7 @@ public class ReviewElement extends Content {
 		}
 
 		Fill.crect(rectX, rectY, rectW, rectH);
-		MyDraw.drawText(fixed(value * textMultiplier), textX, textY, color);
+		MyDraw.drawTextScale(fixed(value * textMultiplier), textX, textY, color);
 	}
 	/** 从元素到hover的元素的连线 */
 	public static void drawLine() {
@@ -941,6 +942,8 @@ public class ReviewElement extends Content {
 			}, t, AutoTextField::new);
 		});
 	}
+
+	@SettingsInit
 	public enum Settings implements ISettings {
 		hoverInfoWindow/* , contextMenu(MenuItem[].class, MyWrapTable.getContextMenu(null, null, null)) */,
 		/** （显示名称时）匿名类而不是非匿名超类 */
@@ -1178,12 +1181,12 @@ public class ReviewElement extends Content {
 				// 绝对坐标
 				// x: 0 -> x
 				if (pos.x != 0) {
-					MyDraw.drawText(fixed(pos.x),
+					MyDraw.drawTextScale(fixed(pos.x),
 					 pos.x / 2f, pos.y, Tmp.c1.set(posTextColor));
 				}
 				// y: 0 -> y
 				if (pos.y != 0) {
-					MyDraw.drawText(fixed(pos.y),
+					MyDraw.drawTextScale(fixed(pos.y),
 					 pos.x, pos.y / 2f, Tmp.c1.set(posTextColor));
 				}
 			}

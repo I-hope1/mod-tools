@@ -59,11 +59,11 @@ public class WorldSelectListener extends InputListener {
 
 		Lines.stroke(2);
 		// x: 0 -> x
-		MyDraw.drawText(Strings.autoFixed(rect.width, 1),
+		MyDraw.drawTextScale(Strings.autoFixed(rect.width, 1),
 		 cx, minY, Pal.accent);
 		Lines.line(minX, minY, maxX, minY);
 		// y: 0 -> y
-		MyDraw.drawText(Strings.autoFixed(rect.height, 1),
+		MyDraw.drawTextScale(Strings.autoFixed(rect.height, 1),
 		 minX, cy, Pal.accent);
 		Lines.line(minX, minY, minX, maxY);
 	}

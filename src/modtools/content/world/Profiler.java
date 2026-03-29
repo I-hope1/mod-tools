@@ -9,7 +9,7 @@ import mindustry.entities.Effect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
-import modtools.annotations.settings.FlushField;
+import modtools.annotations.settings.*;
 import modtools.content.Content;
 import modtools.events.ISettings;
 import modtools.misc.PairProv.SingleProv;
@@ -313,6 +313,7 @@ public class Profiler extends Content {
 		});
 	}
 
+	@SettingsInit
 	public enum Settings implements ISettings {
 		// 单位ms
 		mode(Mode.class, it -> it.buildEnum(Mode.sample, Mode.class)),

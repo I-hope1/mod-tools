@@ -7,15 +7,15 @@ import arc.input.KeyCode;
 import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.ui.*;
-import arc.util.*;
+import arc.util.Align;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
-import modtools.content.world.Profiler.Settings;
-import modtools.content.world.R_profiler;
+import modtools.content.world.*;
 import modtools.events.ISettings;
 import modtools.ui.*;
 import modtools.ui.IntUI.HoverAndExitListener;
 import modtools.ui.comp.Window;
+import modtools.ui.effect.MyDraw;
 import modtools.utils.profiler.SamplingProfiler;
 import nipx.profiler.ProfilerData;
 import nipx.profiler.ProfilerData.FlameNode;
@@ -65,11 +65,11 @@ public class FlameGraphWindow extends Window {
 				canvas.resetZoom();
 				syncBackButton();
 			}).size(84, 34).pad(3);
-			bar.button("Config", Icon.settingsSmall, HopeStyles.flatt,() -> {
+			bar.button("Config", Icon.settingsSmall, HopeStyles.flatt, () -> {
 			}).with(b -> b.clicked(() -> {
 				IntUI.showSelectTable(b, (p, _, _) -> {
 					p.add().width(160).row();
-					ISettings.buildAll(profiler.name, p, Settings.class);
+					ISettings.buildAll(profiler.name, p, Profiler.Settings.class);
 				}, false);
 			})).size(108, 32);
 
@@ -169,7 +169,7 @@ public class FlameGraphWindow extends Window {
 
 		FlameNode currentRoot = ProfilerData.flameRoot;
 		final Deque<FlameNode> zoomStack = new ArrayDeque<>();
-		String  searchQuery = "";
+		String searchQuery = "";
 		private long lastLiveMs = 0;
 
 		static final class Slot {
@@ -361,7 +361,7 @@ public class FlameGraphWindow extends Window {
 				if (font != null && rw > 24) {
 					Draw.color(Color.white, parentAlpha);
 					String lbl = fitLabel(font, s.node.name, rw - 6);
-					if (!lbl.isEmpty()) font.draw(lbl, wx + 3, wy + rh - 3);
+					if (!lbl.isEmpty()) MyDraw.drawText(lbl, wx + 3, wy + rh - 3, Color.white, Align.left);
 				}
 			}
 			Draw.color(Color.white, parentAlpha);

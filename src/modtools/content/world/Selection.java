@@ -30,6 +30,7 @@ import mindustry.ui.*;
 import mindustry.world.*;
 import mindustry.world.blocks.environment.*;
 import modtools.IntVars;
+import modtools.annotations.settings.SettingsInit;
 import modtools.content.*;
 import modtools.content.ui.ShowUIList.TotalLazyTable;
 import modtools.events.ISettings;
@@ -1230,6 +1231,7 @@ public class Selection extends Content {
 		return x1 <= pos.getX() && x2 >= pos.getX() && y1 <= pos.getY() && y2 >= pos.getY();
 	}
 
+	@SettingsInit
 	public enum Settings implements ISettings {
 		tile, building, unit, bullet, others
 		/* other */, focusOnWorld

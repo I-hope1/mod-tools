@@ -258,7 +258,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public void drawText(Font font, float x, float y) {
 			boolean had       = font.getData().markupEnabled;
-			Color   lastColor = font.getColor();
+			int     oldColor = font.getColor().rgba();/* 如果是直接getColor，是获取引用 */
 			font.getData().markupEnabled = false;
 
 			this.font = font;
@@ -273,7 +273,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			} else {
 				font.getColor().set(Color.white).mulA(alpha());
 
-				if (font.getColor().a == 0) return;
+				if (Mathf.zero(font.getColor().a)) return;
 				int   firstLineShowing = getRealFirstLineShowing();
 				int   linesShowing     = getRealLinesShowing() + 1;
 				float offsetY          = -firstLineShowing * lineHeight();
@@ -285,7 +285,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				}
 			}
 
-			font.setColor(lastColor);
+			font.getColor().set(oldColor);
 			font.getData().markupEnabled = had;
 		}
 
@@ -309,7 +309,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public void drawMultiText(CharSequence text, int start, int max) {
 			if (start == max) return;
 			if (start > max) throw new IllegalArgumentException("start: " + start + " > max:" + max);
-			if (font.getColor().a == 0) return;
+			if (Mathf.zero(font.getColor().a)) return;
 
 			while (start < max) {
 				// 当前 row 在 linesBreak 中的绝对结束位置
@@ -389,14 +389,13 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		public void updateDisplayText() {
 			updateTextIndex();
 			super.updateDisplayText();
-			/* for (int i = 0; i + 2 < linesBreak.size; i += 2) {
+			/* for (int i = 0; i < linesBreak.size; i += 2) {
+				int start = linesBreak.get(i);
 				int end   = linesBreak.get(i + 1);
-				int start = linesBreak.get(i + 2);
-				if (start == end + 1
+				if (start == end
 				    && end < text.length() - 1
-				    && text.charAt(end) == '\r'
-				    && text.charAt(end + 1) == '\n') {
-					linesBreak.removeRange(i + 2, i + 3);
+				    && text.charAt(end) == '\n') {
+					linesBreak.removeRange(i, i + 1);
 					i -= 2;
 				}
 			} */
@@ -835,7 +834,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
-			Color prev = font.getColor();
+			int oldColor = font.getColor().rgba();
 			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
 			font.getColor().a *= parentAlpha * color.a;
 			GlyphLayout layout = font.draw(String.valueOf(row), x, offsetY);
@@ -845,7 +844,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				Lines.stroke(2);
 				Lines.line(x, y, x + layout.width, y);
 			}
-			font.setColor(prev);
+			font.getColor().set(oldColor);
 		}
 		public void draw() {
 			super.draw();

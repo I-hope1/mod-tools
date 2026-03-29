@@ -5,19 +5,19 @@ import java.lang.annotation.*;
 
 /**
  * <p>用于初始化对于content对象</p>
- * {@snippet lang="java" :
- * @ContentInit
+ * {@snippet lang = "java":
+ * @ContentsLoad
  * class Contents {
  *   // fields
  *   public static void load() {}
  * }}
  * <p>这会生成</p>
- * {@snippet lang="java" :
- * @ContentInit
+ * {@snippet lang = "java":
+ * @ContentsLoad
  * class Contents {
  *   // fields
  *   public static void load() {
- *     $field1$ = new $Field1$()
+ *     $field1$ = new $Field1$();
  *     // ....
  *   }
  * }}
@@ -26,5 +26,5 @@ import java.lang.annotation.*;
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)
-public @interface ContentInit {
+public @interface ContentsLoad {
 }

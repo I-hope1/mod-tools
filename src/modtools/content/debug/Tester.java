@@ -32,7 +32,7 @@ import mindustry.mod.Scripts;
 import modtools.*;
 import modtools.Constants.RHINO;
 import modtools.annotations.asm.CopyConstValue;
-import modtools.annotations.settings.Switch;
+import modtools.annotations.settings.*;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.events.*;
@@ -919,6 +919,7 @@ public class Tester extends Content {
 		IntUI.showInfoFade(Core.bundle.format("jsfunc.saved", quietPut(val)), vec2);
 	}
 
+	@SettingsInit
 	public enum Settings implements ISettings {
 		ignore_popup_error, catch_outsize_error, wrap_ref,
 		rollback_history, multi_windows, output_to_log,

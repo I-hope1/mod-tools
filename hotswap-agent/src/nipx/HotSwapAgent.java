@@ -68,6 +68,7 @@ public class HotSwapAgent {
 		HotSwapAgent.inst = inst;
 		try {
 			init(agentArgs, false);
+
 		} catch (Throwable t) {
 			error("Critical error during agent initialization", t);
 		}

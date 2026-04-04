@@ -9,6 +9,13 @@ dependencies {
 	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
 	annotationProcessor files("$compilerJar")
 
+	def asmVersion = '9.9.1'
+	implementation "org.ow2.asm:asm:$asmVersion"
+	implementation "org.ow2.asm:asm-commons:$asmVersion"
+	implementation "org.ow2.asm:asm-analysis:$asmVersion"
+	implementation "org.ow2.asm:asm-util:$asmVersion"
+	implementation "org.ow2.asm:asm-tree:$asmVersion"
+
 //	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"
 
 //	implementation files("libs/Internal.jar")
@@ -17,7 +24,10 @@ dependencies {
 //	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 
 }
-jar {}
+jar {
+	exclude "module-info.class"
+	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
+}
 
 
 task anno(type: Jar) {

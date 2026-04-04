@@ -11,6 +11,7 @@ import java.lang.reflect.*;
 
 import static ihope_lib.MyReflect.unsafe;
 
+@SuppressWarnings("removal")
 public class FieldUtils {
 	/** 获取字段，并设置override */
 	public static @Nullable Field getFieldAccess(Class<?> cls, String name) {
@@ -224,6 +225,7 @@ public class FieldUtils {
 	}
 }
 
+@SuppressWarnings("removal")
 interface $OffsetGetter {
 	long fieldOffset(boolean isStatic, Field f);
 

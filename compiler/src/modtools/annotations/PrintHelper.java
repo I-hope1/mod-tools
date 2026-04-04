@@ -48,6 +48,13 @@ public interface PrintHelper {
 		static Error err(String err) {
 			return new Error("any", "1", err);
 		}
+		/* static Error errToLog(Throwable th) {
+			StringWriter sw = new StringWriter();
+			PrintWriter  pw = new PrintWriter(sw);
+			th.printStackTrace(pw);
+			String s = sw.toString();
+			return new Error("any", "1", s);
+		} */
 		static void err(Throwable th) {
 			StringWriter sw = new StringWriter();
 			PrintWriter  pw = new PrintWriter(sw);

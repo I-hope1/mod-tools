@@ -11,7 +11,7 @@ import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.unsafe.InitHandleC.DESKTOP.*;
 
 /* 获取<init>的方法句柄  */
-@SuppressWarnings("unchecked")
+@SuppressWarnings({"unchecked", "removal"})
 public class InitHandleC {
 	public static MethodHandle findInitDesktop
 	 (Class<?> refc, Constructor<?> ctor,

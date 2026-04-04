@@ -14,6 +14,7 @@ import static ihope_lib.MyReflect.*;
 import static modtools.Constants.DESKTOP_INIT.*;
 
 /** 获取类的{@code <init>}句柄 */
+@SuppressWarnings("removal")
 public class InitMethodHandle {
 	/**
 	 * for android<br>

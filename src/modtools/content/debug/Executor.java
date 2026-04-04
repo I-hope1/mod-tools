@@ -121,7 +121,7 @@ public class Executor extends Content {
 					t.add(foldedButton).size(42)
 					 .disabled(_ -> node.children.isEmpty());
 				}).row();
-				center.add(STR."(\{node.source})").color(Color.gray).row();
+				center.add("(" + node.source + ")").color(Color.gray).row();
 				FilterTable<Intp> table = new FilterTable<>();
 				foldedButton.setContainer(center.add(table).grow());
 				foldedButton.rebuild = () -> {

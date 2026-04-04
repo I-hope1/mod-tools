@@ -44,7 +44,6 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 import static ihope_lib.MyReflect.lookup;
-import static java.lang.StringTemplate.STR;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.HopeStyles.*;
 import static modtools.utils.JSFunc.JColor.*;
@@ -133,15 +132,15 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				 }, false, Align.bottom);
 			 }));
 			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
-				 IntUI.showSelectTable(b, (p, _, _) -> {
-					 p.defaults().size(120, 45);
-					 p.button("View bytecode", Styles.flatt, () -> {
-						 dataDir.child("bytecode").child(clazz.getName() + ".class").writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
-					 }).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
-				 }, false, Align.bottom);
-			 }));
-			 // if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
-			 t.button(Icon.refreshSmall, clearNonei, rebuild0);
+				IntUI.showSelectTable(b, (p, _, _) -> {
+					p.defaults().size(120, 45);
+					p.button("View bytecode", Styles.flatt, () -> {
+						dataDir.child("bytecode").child(clazz.getName() + ".class").writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
+					}).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
+				}, false, Align.bottom);
+			}));
+			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
+			t.button(Icon.refreshSmall, clearNonei, rebuild0);
 			if (obj != null) {
 				IntUI.addStoreButton(t, "", () -> obj);
 				markDisplay(
@@ -428,7 +427,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			 .color(Color.lightGray).top().padTop(6f)
 			 .touchable(Touchable.disabled);
 		} catch (Throwable e) {
-			MyLabel label = new MyLabel(STR."<\{e}>", defaultLabel);
+			MyLabel label = new MyLabel("<" + e + ">", defaultLabel);
 			label.setColor(Color.red);
 			fields.add(label);
 			Log.err(e);
@@ -457,7 +456,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		markDisplay(fields.add(new MyHoverTable(buttons -> {
 			if (!l[0].type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l[0].val, type);
 			IntUI.addWatchButton(buttons,
-				STR."\{f.getDeclaringClass().getSimpleName()}: \{f.getName()}",
+				f.getDeclaringClass().getSimpleName() + ": " + f.getName(),
 				() -> f.get(o))
 			 .disabled(_ -> !l[0].isValid());
 		})).right().top(), E_JSFuncDisplay.buttons);
@@ -557,7 +556,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 						}, l)).size(IntUI.FUNCTION_BUTTON_SIZE);
 						// watch
 						IntUI.addWatchButton(buttons,
-						 STR."\{m.getDeclaringClass().getSimpleName()}: \{m.getName()}",
+						 m.getDeclaringClass().getSimpleName() + ": " + m.getName(),
 						 () -> m.invoke(o));
 					}
 					if (!l.type.isPrimitive()) IntUI.addLabelButton(buttons, () -> l.val, l.type);
@@ -565,7 +564,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				if (buttonsCell != null) markDisplay(buttonsCell, E_JSFuncDisplay.buttons);
 			}).grow().left();
 		} catch (Throwable err) {
-			MyLabel label = new MyLabel(STR."<\{err}>", defaultLabel);
+			MyLabel label = new MyLabel("<" + err + ">", defaultLabel);
 			label.setColor(Color.red);
 			methods.add(label);
 			Log.err(err);
@@ -672,7 +671,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 
 
 	public String toString() {
-		return STR."\{getClass().getSimpleName()}#\{title.getText()}";
+		return getClass().getSimpleName() + "#" + title.getText();
 	}
 	/** @see IDisposable#clearAll() */
 	public void hide() {
@@ -801,7 +800,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
 			if (size == 1) return;
-			label.setText(STR."\{label.getText()}\{METHOD_COUNT_PREFIX}\{size}]");
+			label.setText(label.getText() + METHOD_COUNT_PREFIX + "[" + size + "]");
 		});
 
 		EventHelper.doubleClick(label, () -> {

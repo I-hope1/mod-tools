@@ -10,7 +10,7 @@ import jdk.internal.module.Modules;
 
 import static ihope_lib.MyReflect.unsafe;
 
-@SuppressWarnings({"unused", "deprecation"})
+@SuppressWarnings({"unused", "deprecation", "removal"})
 public interface UNSAFE {
 	/* /trust 不安全 */
 	Object lookup = MyReflect.lookup;

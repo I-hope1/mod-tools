@@ -7,7 +7,7 @@ import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeTranslator;
-import jdk.internal.org.objectweb.asm.*;
+import org.objectweb.asm.*;
 import modtools.annotations.asm.CopyConstValue;
 
 import javax.lang.model.element.Element;

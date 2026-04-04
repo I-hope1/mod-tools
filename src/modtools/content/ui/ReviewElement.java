@@ -118,11 +118,9 @@ public class ReviewElement extends Content {
 	@SuppressWarnings("StringTemplateMigration")
 	public static String getElementName(Element element) {
 		return element == scene.root ? "ROOT"
-		 : STR."""
-		 \{anonymousInsteadSuper.enabled() ? element.getClass().getSimpleName() : ReflectTools.getSimpleNameNotAnonymous(element.getClass())}\
-		 \{element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : ""}\
-		 \{element.name != null ? " ★" + element.name + "★" : ""}\
-		 """;
+		 : (anonymousInsteadSuper.enabled() ? element.getClass().getSimpleName() : ReflectTools.getSimpleNameNotAnonymous(element.getClass()))
+		   + (element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : "")
+		   + (element.name != null ? " ★" + element.name + "★" : "");
 	}
 
 	public void loadSettings(Data SETTINGS) {
@@ -643,7 +641,7 @@ public class ReviewElement extends Content {
 			/* 用于下面的侦听器  */
 			int eventChildIndex;
 			if (!DEBUG && element instanceof ReviewElementWindow) {
-				add(STR."!!!\{element.name}", defaultLabel).row();
+				add("!!!" + element.name, defaultLabel).row();
 				eventChildIndex = 0;
 			} else if (element instanceof Group group) {
 				buildForGroup(group);

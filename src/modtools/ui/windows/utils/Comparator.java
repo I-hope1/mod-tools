@@ -34,7 +34,7 @@ public class Comparator extends Window {
 			return;
 		}
 		if (o1 == null || o2 == null) {
-			comparator.cont.add(STR."\{o1 == null ? "o1" : "o2"} is null.");
+			comparator.cont.add((o1 == null ? "o1" : "o2") + " is null.");
 			Core.app.post(comparator::show);
 			return;
 		}

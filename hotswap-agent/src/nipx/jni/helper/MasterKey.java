@@ -23,6 +23,7 @@ public interface MasterKey {
 		return INSTANCE instanceof MasterKeyPanamaImpl;
 	}
 
+	@SuppressWarnings("removal")
 	class MasterKeyUnsafeImpl implements MasterKey {
 
 		public static MethodHandles.Lookup lookup;

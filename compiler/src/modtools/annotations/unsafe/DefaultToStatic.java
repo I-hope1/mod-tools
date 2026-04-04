@@ -54,6 +54,7 @@ public class DefaultToStatic extends TreeTranslator {
 				List<Name> prev = blackList;
 				blackList = blackList.appendList(tree.params.map(p -> p.name));
 				if (!hasCaptured) super.visitLambda(tree);
+				tree.owner = methodDecl.sym;
 				blackList = prev;
 				inLambda = false;
 			}
@@ -73,7 +74,7 @@ public class DefaultToStatic extends TreeTranslator {
 			make.at(methodDecl);
 			self = make.Param(names.fromString("default$this"), enclMethod.owner.type, null);
 			List<JCVariableDecl> copyParams = new TreeCopier<>(make).copy(methodDecl.params);
-			copyParams.map(param -> param.sym = new VarSymbol(0, param.name, param.type, null));
+			copyParams.map(param -> param.sym = new VarSymbol(Flags.PARAMETER, param.name, param.type, null));
 			genMethod = make.MethodDef(make.Modifiers(Flags.STATIC | Flags.PUBLIC),
 			 names.fromString(NAME_PREFIX + methodDecl.name), methodDecl.restype,
 			 methodDecl.typarams,
@@ -108,6 +109,10 @@ public class DefaultToStatic extends TreeTranslator {
 		result = methodDecl;
 	}
 
+	public void visitLambda(JCLambda tree) {
+		super.visitLambda(tree);
+		tree.owner = classDecl.sym;
+	}
 	public void visitIdent(JCIdent tree) {
 		if (tree.name == names._this && self != null) {
 			make.at(tree);

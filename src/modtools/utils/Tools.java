@@ -21,7 +21,7 @@ import java.util.function.Consumer;
 
 import static ihope_lib.MyReflect.unsafe;
 
-@SuppressWarnings("unchecked")
+@SuppressWarnings({"unchecked", "removal"})
 public class Tools {
 	public static final boolean DEBUG = false;
 

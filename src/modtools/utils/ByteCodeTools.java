@@ -33,6 +33,7 @@ public class ByteCodeTools {
 		return lastID++;
 	}
 
+	@SuppressWarnings("removal")
 	public static class MyClass<T> {
 		public final ClassFileWriter writer;
 		public final String adapterName, superName;

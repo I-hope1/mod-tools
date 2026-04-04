@@ -2,7 +2,6 @@ package modtools.annotations;
 
 import com.sun.source.util.DocTrees;
 import jdk.internal.module.Modules;
-import modtools.annotations.PrintHelper.SPrinter;
 import sun.misc.Unsafe;
 import sun.reflect.ReflectionFactory;
 
@@ -10,7 +9,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.*;
 
-@SuppressWarnings({"unchecked", "deprecation"})
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
 public class HopeReflect {
 	public static Unsafe unsafe = getUnsafe();
 	public static Lookup lookup = getLookup();
@@ -74,16 +73,18 @@ public class HopeReflect {
 		 "com.sun.tools.javac.resources",
 		 "com.sun.tools.javac.util"
 		);
-		
+
 		openTrust(Modules.loadModule("jdk.hotspot.agent"),
 		 "sun.jvm.hotspot");
 		// Modules.addOpens(AttributeTree.class.getModule(), "", MyReflect.class.getModule());
 	}
 	public static void openTrust(Module module, String... pkgs) {
 		for (String pkg : pkgs) {
-			Modules.addOpens(module, pkg, EVERYONE_MODULE);
-			/* debug模式可能不加载 编译参数（当然在 gradle.properties 里加也可以）  */
-			Modules.addExports(module, pkg);
+			try {
+				Modules.addOpens(module, pkg, EVERYONE_MODULE);
+				/* debug模式可能不加载 编译参数（当然在 gradle.properties 里加也可以）  */
+				Modules.addExports(module, pkg);
+			} catch (Throwable ignored) { }
 		}
 	}
 

@@ -79,8 +79,9 @@ public class EBBlur implements DrawEffect {
 	}
 
 	public static Shader genShader(float... convolutions) {
-		if (convolutions.length % 2 != 1)
+		if (convolutions.length % 2 != 1) {
 			throw new IllegalArgumentException("convolution numbers length must be odd number!");
+		}
 
 		int convLen = convolutions.length;
 
@@ -121,39 +122,38 @@ public class EBBlur implements DrawEffect {
 		convolution.append(";");
 
 		String vertexShader =
-		 STR."""
+		 """
 			attribute vec4 a_position;
 			attribute vec2 a_texCoord0;
-
+			
 			uniform vec2 dir;
 			uniform vec2 size;
-
+			
 			varying vec2 v_texCoords;
-			\{varyings}
+			%s
 			void main(){
 			  vec2 len = dir/size;
-
+			
 			  v_texCoords = a_texCoord0;
-			  \{assignVar}
+				%s
 			  gl_Position = a_position;
 			}
-			""";
+			""".formatted(varyings, assignVar);
 		String fragmentShader =
-		 STR."""
+		 """
 			uniform lowp sampler2D u_texture0;
 			uniform lowp sampler2D u_texture1;
-
+			
 			uniform lowp float def_alpha;
-
+			
 			varying vec2 v_texCoords;
-			\{varyings}
+			%s
 			void main(){
 			  vec4 blur = texture2D(u_texture0, v_texCoords);
 			  vec3 color = texture2D(u_texture1, v_texCoords).rgb;
-
+			
 			  if(blur.a > 0.0){
-			    vec3 blurColor = \{convolution}
-
+			    vec3 blurColor = %s
 			    gl_FragColor.rgb = blurColor;
 			    gl_FragColor.a = blur.a;
 			  } else {
@@ -161,7 +161,7 @@ public class EBBlur implements DrawEffect {
 			    gl_FragColor.a = def_alpha;
 			  }
 			}
-			""";
+			""".formatted(varyings, convolution);
 
 		// Log.info("vert: @\n\nfrag: @", 	(vertexShader, fragmentShader);
 

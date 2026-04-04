@@ -15,6 +15,7 @@ import static ihope_lib.MyReflect.unsafe;
  * Only For Android
  * @see <a href="https://lovesykun.cn/archives/android-hidden-api-bypass.html">LSPosed的实现</a>
  */
+@SuppressWarnings("removal")
 public class HiddenApi {
 	public static final VMRuntime runtime = VMRuntime.getRuntime();
 

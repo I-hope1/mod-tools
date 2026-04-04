@@ -7,6 +7,7 @@ import modtools.android.HiddenApi;
 
 import static ihope_lib.MyReflect.unsafe;
 
+@SuppressWarnings("removal")
 public interface StringUtils {
 
 	/** 通过内存设置，直接复制字符串 */

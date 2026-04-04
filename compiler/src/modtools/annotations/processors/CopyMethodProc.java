@@ -5,7 +5,7 @@ import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import jdk.internal.org.objectweb.asm.*;
+import org.objectweb.asm.*;
 import modtools.annotations.asm.CopyMethodFrom;
 import modtools.annotations.processors.asm.BaseASMProc;
 

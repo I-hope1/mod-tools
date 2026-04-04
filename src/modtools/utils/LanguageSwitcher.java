@@ -29,13 +29,13 @@ public class LanguageSwitcher {
 		//add new keys to each bundle
 		while (bundle != null) {
 			String str    = bundle.getLocale().toString();
-			String locale = STR."bundle\{str.isEmpty() ? "" : "_" + str}";
+			String locale = "bundle" + (str.isEmpty() ? "" : "_" + str);
 			assert MODS.bundles != null;
 			for (Fi file : MODS.bundles.get(locale, Seq::new)) {
 				try {
 					PropertiesUtils.load(bundle.getProperties(), file.reader());
 				} catch (Throwable e) {
-					Log.err(STR."Error loading bundle: \{file}/\{locale}", e);
+					Log.err("Error loading bundle: " + file + "/" + locale, e);
 				}
 			}
 			bundle = bundle.getParent();

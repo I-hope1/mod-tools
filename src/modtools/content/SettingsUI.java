@@ -541,7 +541,7 @@ public class SettingsUI extends Content {
 		public static void numberi(String text, Data data, String key, int defaultValue, Boolp condition, int min,
 		                           int max) {
 			if (defaultValue < min || defaultValue > max) {
-				throw new IllegalArgumentException(StringTemplate.STR."defaultValue(\{defaultValue}) must be in (\{min}, \{max})");
+				throw new IllegalArgumentException("defaultValue(" + defaultValue + ") must be in (" + min + ", " + max + ")");
 			}
 			numberi(text, val -> data.put(key, val), () -> data.getInt(key, defaultValue), condition, min, max);
 		}
@@ -558,7 +558,7 @@ public class SettingsUI extends Content {
 		public static void number(String text, Data data, String key, float defaultValue, Boolp condition, float min,
 		                          float max) {
 			if (defaultValue < min || defaultValue > max) {
-				throw new IllegalArgumentException(StringTemplate.STR."defaultValue must be between \{min} and \{max}. Current value: \{defaultValue}");
+				throw new IllegalArgumentException("defaultValue must be between " + min + " and " + max + ". Current value: " + defaultValue);
 			}
 			number(text, false, val -> data.put(key, val), () -> data.getFloat(key, defaultValue), condition, min, max);
 		}

@@ -255,7 +255,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 
 		// 生成访问代码 (Visit Code)
 		String firstParamType = BaseASMProc.classAccess(methodSym.params.head.type);
-		buffer.visitLogic.append(STR."if (\{firstParamType}.isAssignableFrom(clazz)) ");
+		buffer.visitLogic.append("if (" + firstParamType + ".isAssignableFrom(clazz)) ");
 
 		Class<?>[] bounds = (sm != null) ? sm.upperBoundClasses() : si.upperBoundClasses();
 		if (bounds.length > 0) {
@@ -268,15 +268,15 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		Name   targetName = (si != null) ? names.init : methodSym.name;
 		String paramTypes = methodSym.params.stream().map(BaseASMProc::classAccess).collect(Collectors.joining(", "));
 
-		buffer.visitLogic.append(STR."myClass.\{NAME_VISIT}(\"\{targetName}\", ");
-		if (si != null) buffer.visitLogic.append(STR."\"\{methodSym.name}\", ");
-		buffer.visitLogic.append(STR."new Class<?>[]{\{paramTypes}}, \{BaseASMProc.classAccess(methodSym.getReturnType())}, className);\n");
+		buffer.visitLogic.append("myClass." + NAME_VISIT + "(\"" + targetName + "\", ");
+		if (si != null) buffer.visitLogic.append("\"" + methodSym.name + "\", ");
+		buffer.visitLogic.append("new Class<?>[]{" + paramTypes + "}, " + BaseASMProc.classAccess(methodSym.getReturnType()) + ", className);\n");
 
 		// 处理 Package-Private 开放
 		if (openPkgPriv) {
 			String subParams = methodSym.params.stream().skip(1).map(BaseASMProc::classAccess).collect(Collectors.joining(", "));
-			buffer.packagePrivateLogic.append(STR."    if (\{firstParamType}.isAssignableFrom(clazz)) ");
-			buffer.packagePrivateLogic.append(STR."myClass.\{NAME_SET_FUNC}(\"\{targetName}\", (Func2) null, Modifier.PUBLIC, \{BaseASMProc.classAccess(methodSym.getReturnType())}, \{subParams});\n");
+			buffer.packagePrivateLogic.append("    if (" + firstParamType + ".isAssignableFrom(clazz)) ");
+			buffer.packagePrivateLogic.append("myClass." + NAME_SET_FUNC + "(\"" + targetName + "\", (Func2) null, Modifier.PUBLIC, " + BaseASMProc.classAccess(methodSym.getReturnType()) + ", " + subParams + ");\n");
 		}
 	}
 
@@ -288,16 +288,16 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		MethodSymbol getter = new MethodSymbol(Flags.PUBLIC, varSym.name,
 		 new MethodType(List.nil(), varSym.type, List.nil(), mSymtab.methodClass), interfaceSym);
 		interfaceSym.members().enter(getter);
-		buffer.interfaceMethods.append(STR."    \{typeName} \{fieldName}();\n");
+		buffer.interfaceMethods.append("    " + typeName + " " + fieldName + "();\n");
 
 		// Setter
 		MethodSymbol setter = new MethodSymbol(Flags.PUBLIC, varSym.name,
 		 new MethodType(List.of(varSym.type), mSymtab.voidType, List.nil(), mSymtab.methodClass), interfaceSym);
 		interfaceSym.members().enter(setter);
-		buffer.interfaceMethods.append(STR."    void \{fieldName}(\{typeName} value);\n");
+		buffer.interfaceMethods.append("    void " + fieldName + "(" + typeName + " value);\n");
 
 		// Visit Field
-		buffer.visitLogic.append(STR."    myClass.\{NAME_VISIT_FIELD}(\"\{fieldName}\", \{typeName}.class);\n");
+		buffer.visitLogic.append("    myClass." + NAME_VISIT_FIELD + "(\"" + fieldName + "\", " + typeName + ".class);\n");
 	}
 	/**
 	 * 为 super 调用生成接口声明和字节码桥接逻辑
@@ -327,7 +327,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		 " throws " + targetMethod.type.getThrownTypes().stream()
 			.map(t -> BaseASMProc.className(types.erasure(t)))
 			.collect(Collectors.joining(", "));
-		buffer.interfaceMethods.append(STR."  \{returnType} \{superMethodName}(\{params})\{throw_str};\n");
+		buffer.interfaceMethods.append("  ").append(returnType).append(" ").append(superMethodName).append("(").append(params).append(")").append(throw_str).append(";\n");
 
 
 		// 生成 visit 逻辑中的字节码桥接调用: myClass.buildSuperFunc("super$$onKey", "onKey", void.class, View.class, ...)
@@ -342,7 +342,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 			 BaseASMProc.classAccess(targetMethod.params.head.type) :
 			 BaseASMProc.classAccess(targetMethod.owner.type);
 
-			buffer.visitLogic.append(STR."        myClass.buildSuperFunc(\"\{superMethodName}\", \"\{targetMethod.name}\", \{ownerClassAccess}, \{BaseASMProc.classAccess(targetMethod.getReturnType())}\{paramClasses.isEmpty() ? "" : ", " + paramClasses});\n");
+			buffer.visitLogic.append("        myClass.buildSuperFunc(\"").append(superMethodName).append("\", \"").append(targetMethod.name).append("\", ").append(ownerClassAccess).append(", ").append(BaseASMProc.classAccess(targetMethod.getReturnType())).append(paramClasses.isEmpty() ? "" : ", " + paramClasses).append(");\n");
 		}
 	}
 	/**
@@ -376,69 +376,70 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		String interfaceName = ownerName + AConstants.INTERFACE_SUFFIX;
 
 		String defaultClassLogic = sample.defaultClass().isBlank() ? "" :
-		 STR."if (clazz == Object.class) clazz = ClassUtils.forName(\"\{sample.defaultClass()}\");";
+		 "if (clazz == Object.class) clazz = ClassUtils.forName(\"" + sample.defaultClass() + "\");";
 
 		String myClassInit = sample.openPackagePrivate()
-		 ? STR."new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", myClass.define())"
+		 ? "new MyClass(Sample.AConstants.legalName(clazz.getName()) + \"i\", myClass.define())"
 		 : "new MyClass(myClass.define(), \"i\")";
 
-		return STR."""
-package \{pkg};
-
-\{imports}
-import arc.func.Func2;
-import arc.func.Cons;
-import modtools.utils.ByteCodeTools;
-import modtools.utils.ByteCodeTools.MyClass;
-import modtools.utils.Tools;
-import modtools.utils.reflect.ClassUtils;
-import java.lang.reflect.*;
-import java.util.*;
-
-public interface \{interfaceName} {
-
-\{buffer.interfaceMethods}
-
-    Map<Class<?>, Class<?>> cache = new LinkedHashMap<>();
-
-    static Class<?> visit(Class<?> clazz) {
-        return visit(clazz, null);
-    }
-
-    static Class<?> visit(Class<?> clazz, Cons<MyClass<?>> builder) {
-        \{defaultClassLogic}
-        if (cache.containsKey(clazz)) return cache.get(clazz);
-        if (\{interfaceName}.class.isAssignableFrom(clazz)) return clazz;
-
-        var myClass = new MyClass(clazz, "\{AConstants.GEN_CLASS_NAME_SUFFIX}");
-        \{buffer.packagePrivateLogic}
-        if (builder != null) builder.get(myClass);
-
-        String className = ByteCodeTools.nativeName(\{ownerName}.class);
-        myClass = \{myClassInit};
-        \{buffer.visitLogic}
-        myClass.addInterface(\{interfaceName}.class);
-
-        if (builder != null) builder.get(myClass);
-        var newClass = myClass.define(\{ownerName}.class);
-        cache.put(clazz, newClass);
-        return newClass;
-    }
-
-    static <T> T changeClass(T obj) {
-        return Tools.newInstance(obj, visit(obj.getClass()));
-    }
-
-    @SuppressWarnings("unchecked")
-    static <T> T newInstance(Class<T> c) {
-        try {
-            return (T) visit(c).getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-}
-""";
+		return ("""
+		 package %s;
+		 
+		 %s
+		 import arc.func.Func2;
+		 import arc.func.Cons;
+		 import modtools.utils.ByteCodeTools;
+		 import modtools.utils.ByteCodeTools.MyClass;
+		 import modtools.utils.Tools;
+		 import modtools.utils.reflect.ClassUtils;
+		 import java.lang.reflect.*;
+		 import java.util.*;
+		 
+		 public interface %s {
+		 
+		 %s
+		 
+		     Map<Class<?>, Class<?>> cache = new LinkedHashMap<>();
+		 
+		     static Class<?> visit(Class<?> clazz) {
+		         return visit(clazz, null);
+		     }
+		 
+		     static Class<?> visit(Class<?> clazz, Cons<MyClass<?>> builder) {
+		         %s
+		         if (cache.containsKey(clazz)) return cache.get(clazz);
+		         if (%s.class.isAssignableFrom(clazz)) return clazz;
+		 
+		         var myClass = new MyClass(clazz, "%s");
+		         %s
+		         if (builder != null) builder.get(myClass);
+		 
+		         String className = ByteCodeTools.nativeName(%s.class);
+		         myClass = %s;
+		         %s
+		         myClass.addInterface(%s.class);
+		 
+		         if (builder != null) builder.get(myClass);
+		         var newClass = myClass.define(%s.class);
+		         cache.put(clazz, newClass);
+		         return newClass;
+		     }
+		 
+		     static <T> T changeClass(T obj) {
+		         return Tools.newInstance(obj, visit(obj.getClass()));
+		     }
+		 
+		     @SuppressWarnings("unchecked")
+		     static <T> T newInstance(Class<T> c) {
+		         try {
+		             return (T) visit(c).getDeclaredConstructor().newInstance();
+		         } catch (Exception e) {
+		             throw new RuntimeException(e);
+		         }
+		     }
+		 }
+		 """)
+		 .formatted(pkg, imports, interfaceName, buffer.interfaceMethods, defaultClassLogic, interfaceName, AConstants.GEN_CLASS_NAME_SUFFIX, buffer.packagePrivateLogic, ownerName, myClassInit, buffer.visitLogic, interfaceName, ownerName);
 	}
 
 	private void writeSource(JavaFileObject file, String content) {

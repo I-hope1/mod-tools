@@ -17,7 +17,8 @@ import java.net.*;
 import java.util.*;
 import java.util.function.Consumer;
 
-import static jdk.internal.classfile.Classfile.*;
+import static rhino.classfile.ByteCode.*;
+
 
 /**
  * 切换镜像

@@ -120,7 +120,7 @@ public class WorldDraw {
 		return buffer.getTexture();
 	}
 	public String toString() {
-		return STR."WorldDraw{name='\{name}'}";
+		return "WorldDraw{name='" + name + "'}";
 	}
 	public void submit(Runnable r) {
 		drawSeq.add(() -> {

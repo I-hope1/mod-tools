@@ -483,7 +483,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		if (list.any()) list.add(UnderlineItem.with());
 		detailsBuild(list);
 		list.add(MenuItem.with("clear", Icon.eraserSmall, "@clear", this::clearVal));
-		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> STR."\{enableTruncate ? "Disable" : "Enable"} Truncate", () -> {
+		/* list.add(MenuItem.with("truncate", Icon.listSmall, () -> (enableTruncate ? "Disable" : "Enable") + " Truncate", () -> {
 			enableTruncate = !enableTruncate;
 		})); */
 
@@ -527,7 +527,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	}
 	public static void copyStyle(Object val1) {
 		Class<?>      cls     = val1.getClass();
-		StringBuilder builder = new StringBuilder(STR."new \{ClassUtils.getSuperExceptAnonymous(cls).getSimpleName()}(){{\n");
+		StringBuilder builder = new StringBuilder("new " + ClassUtils.getSuperExceptAnonymous(cls).getSimpleName() + "(){{\n");
 		ClassUtils.walkPublicNotStaticKeys(cls, field -> {
 			Object fieldVal = FieldUtils.getOrNull(field, val1);
 			if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
@@ -535,7 +535,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			 CatchSR.of(() -> FormatHelper.getUIKey(fieldVal))
 				.get(() -> String.valueOf(fieldVal))
 			);
-			builder.append(STR."\t\{field.getName()} = \{uiKey};\n");
+			builder.append("\t" + field.getName() + " = " + uiKey + ";\n");
 		});
 		builder.append("}}");
 		JSFunc.copyText(builder);
@@ -579,9 +579,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		 }, Cell.class)
 		 .isExtend(_ -> {
 			 list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
-				STR."\{
-				 val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on"
-				 } world",
+			  (val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on") + " world",
 				this::valueIsNull, () -> {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));

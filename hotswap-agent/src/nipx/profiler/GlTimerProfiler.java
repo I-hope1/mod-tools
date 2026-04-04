@@ -128,6 +128,7 @@ public class GlTimerProfiler {
 	 */
 	public static void drainResults() {
 		if (queryIds == null) return;
+		// if (!Mathf.chance(0.1f)) return;
 		GL30 gl = Core.gl30;
 
 		while (readIdx < writeIdx) {

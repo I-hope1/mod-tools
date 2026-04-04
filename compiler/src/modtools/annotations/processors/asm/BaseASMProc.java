@@ -10,7 +10,7 @@ import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.Name;
-import jdk.internal.org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.ClassWriter;
 import modtools.annotations.*;
 import modtools.annotations.asm.Sample.AConstants;
 import modtools.annotations.unsafe.TopTranslator;
@@ -104,11 +104,11 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 			// SPrinter.println("access=" + expression);
 			// 尝试从import 中查找
 			for (var i : unit.getImports()) {
-				if (i.qualid.name.contentEquals(name)) {
+				if (!i.isStatic() && i.getQualifiedIdentifier() instanceof JCFieldAccess qualid && qualid.name.contentEquals(name)) {
 					if (expressionCpy instanceof JCFieldAccess && expression instanceof JCFieldAccess access) {
-						access.selected = mMaker.Select(i.qualid.selected, name);
+						access.selected = mMaker.Select(qualid.selected, name);
 					} else {
-						JCFieldAccess m = mMaker.Select(i.qualid.selected, name);
+						JCFieldAccess m = mMaker.Select(qualid.selected, name);
 						HopeReflect.setAccess(DCReference.class, reference, "qualifierExpression", m);
 					}
 
@@ -116,11 +116,11 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 					break l;
 				}
 
-				if (!i.isStatic() && i.qualid.name.toString().equals("*")) {
+				if (!i.isStatic() && i.getQualifiedIdentifier() instanceof JCFieldAccess qualid && qualid.name.toString().equals("*")) {
 					if (expressionCpy instanceof JCFieldAccess && expression instanceof JCFieldAccess access) {
-						access.selected = mMaker.Select(i.qualid.selected, name);
+						access.selected = mMaker.Select(qualid.selected, name);
 					} else {
-						JCFieldAccess m = mMaker.Select(i.qualid.selected, name);
+						JCFieldAccess m = mMaker.Select(qualid.selected, name);
 						HopeReflect.setAccess(DCReference.class, reference, "qualifierExpression", m);
 					}
 

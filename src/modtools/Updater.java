@@ -31,7 +31,7 @@ public class Updater {
 
 	/** asynchronously checks for updates. */
 	public static void checkUpdate(Boolc done) {
-		Http.get(STR."https://api.github.com/repos/\{IntVars.meta.repo}/releases/latest")
+		Http.get("https://api.github.com/repos/" + IntVars.meta.repo + "/releases/latest")
 		 .error(e -> Core.app.post(() -> {
 			 Log.err(e);
 			 done.get(false);
@@ -54,7 +54,7 @@ public class Updater {
 					 return;
 				 }
 				 String url = asset.getString("browser_download_url", "");
-				 Log.info(STR."Downloading mod-tools from: \{url}");
+				 Log.info("Downloading mod-tools from: @", url);
 				 updateAvailable = true;
 				 updateBuild = newBuild;
 				 updateUrl = url;
@@ -81,7 +81,7 @@ public class Updater {
 
 		if (!headless) {
 			checkUpdates = false;
-			ConfirmWindow window = IntUI.showCustomConfirm(STR."\{Core.bundle.format("mod-tools.update", "")} \{updateBuild}",
+			ConfirmWindow window = IntUI.showCustomConfirm(Core.bundle.format("mod-tools.update", "") + " " + updateBuild,
 			 "@mod-tools.update.confirm",
 			 "@ok", "@mod-tools.ignore",
 			 () -> {
@@ -93,7 +93,7 @@ public class Updater {
 					 AtomicInteger length      = new AtomicInteger();
 
 					 Fi fileDir = IntVars.dataDirectory.child("versions");
-					 Fi file    = fileDir.child(STR."mod-tools.\{updateBuild}.jar");
+					 Fi file    = fileDir.child("mod-tools." + updateBuild + ".jar");
 
 					 Window dialog = new NoTopWindow("@mod-tools.updating");
 					 download(updateUrl, file, length::set, setProgress,

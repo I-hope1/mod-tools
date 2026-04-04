@@ -123,21 +123,17 @@ public class Tester extends Content {
 				String taskName = startupTask().name;
 				String mainCode =
 				 map.getBool("disposable") && map.containsKey("type") ?
-					STR."""
-					Events.on(\{map.get("type")}, $e$ => {\
-					 try {\
-					  \{readFiOrEmpty(bookmarkDirectory.child(entry.key))};
-					 } catch(e) { Log.err(e); }});
 					"""
+					Events.on({%type%}, $e$ => {\
+					 try {\
+					  {%code%};
+					 } catch(e) { Log.err(e); }});
+					""".replace("%type%", "" + map.get("type"))
+					 .replace("%code%", readFiOrEmpty(bookmarkDirectory.child(entry.key)))
 					: readFiOrEmpty(bookmarkDirectory.child(entry.key));
-				String source = STR."""
-				(() => {\
-				modName='\{taskName}';\
-				scriptName=`\{entry.key}`;\
-				\{mainCode}
-				})()""";
+				String source = "(() => { modName=`" + taskName + "`; scriptName=`" + entry.key + "` " + mainCode + "})();";
 				ExecuteTree.node(() -> {
-					 cx.evaluateString(customScope, source, STR."<\{taskName}>\{entry.key}", 1);
+					 cx.evaluateString(customScope, source, "<" + taskName + ">" + entry.key, 1);
 				 }, taskName, entry.key, Icon.none, IntVars.EMPTY_RUN)
 				 .intervalSeconds(map.getFloat("intervalSeconds", 0.1f))
 				 .repeatCount(map.getBool("disposable") ? 0 : map.getInt("repeatCount", 0))
@@ -389,7 +385,7 @@ public class Tester extends Content {
 			if (logs.isResolved()) return;
 			lg.clearChildren();
 			logs.each(item -> {
-				lg.add(STR."[\{item.charAt(0)}]")
+				lg.add("[" + item.charAt(0) + "]")
 				 .style(HopeStyles.defaultLabel)
 				 .color(logLevelToColor(item)).top();
 				lg.add(item.substring(1))
@@ -547,7 +543,7 @@ public class Tester extends Content {
 			historyIndex = forward ? history.list.size() - 1 : -1;
 			return false;
 		}
-		IntUI.showInfoFade(STR."\{historyIndex + 1}/[lightgray]\{historySize}", pos, FADE_ALIGN);
+		IntUI.showInfoFade(historyIndex + 1 + "/[lightgray]" + historySize, pos, FADE_ALIGN);
 		switchHistory(history.list.get(historyIndex));
 		return true;
 	}
@@ -638,7 +634,7 @@ public class Tester extends Content {
 		if (output_to_log.enabled()) Log.err(name, ex);
 		if (!ignore_popup_error.enabled()) { IntUI.showException(Core.bundle.get("error_in_execution"), ex); }
 		log = fromExecutor && ex instanceof RhinoException
-		 ? STR."\{ex.getMessage()}\n\{((RhinoException) ex).getScriptStackTrace()}"
+		 ? ex.getMessage() + "\n" + ((RhinoException) ex).getScriptStackTrace()
 		 : Strings.neatError(ex);
 		errorLabel.get().setText(log);
 		logLabelCell.replace(errorLabel.get());
@@ -785,7 +781,7 @@ public class Tester extends Content {
 				Func<Object, String> stringify =
 				 val -> val instanceof Class<?> cl ? cl.getSimpleName() : String.valueOf(val);
 				Func<Object, String> valuify = val -> val instanceof Class<?> cl ? cl.getSimpleName()
-				 : val instanceof Content ? STR."Vars.mods.mainLoader().loadClass('\{clName(val)}')"
+				 : val instanceof Content ? "Vars.mods.mainLoader().loadClass('" + clName(val) + "')"
 				 : String.valueOf(val);
 				SettingsBuilder.list("Event", val -> JS.put("type", valuify.get(val)),
 				 () -> JS.get("type"), classes,

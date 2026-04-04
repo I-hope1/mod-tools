@@ -93,7 +93,7 @@ public interface ISettings extends E_DataInterface {
 		data().setDef(name(), o);
 	}
 	default void defTrue() {
-		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
+		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
 		data().setDef(name(), true);
 	}
 	default void set(Object o) {
@@ -101,7 +101,7 @@ public interface ISettings extends E_DataInterface {
 		data().put(name(), o);
 	}
 	default void set(boolean b) {
-		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
+		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
 		set((Boolean) b);
 	}
 
@@ -109,11 +109,11 @@ public interface ISettings extends E_DataInterface {
 	// getter
 	/** 获取设置是否可用，如果禁用，则返回false */
 	default boolean enabled() {
-		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
+		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
 		return isSwitchOn() && data().getBool(name());
 	}
 	default void toggle() {
-		if (type() != boolean.class) { throw new IllegalStateException(STR."the settings is \{type()} not boolean.class"); }
+		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
 		set(!enabled());
 	}
 	default Object get() {
@@ -145,7 +145,7 @@ public interface ISettings extends E_DataInterface {
 			set(o = array2Jval(o, String[].class));
 		} else {
 			set(o = new JsonArray());
-			Log.err(new IllegalStateException(STR."the settings \{type()} is not supported"));
+			Log.err(new IllegalStateException("the settings " + type() + " is not supported"));
 		}
 		return (JsonArray) o;
 	}
@@ -173,15 +173,15 @@ public interface ISettings extends E_DataInterface {
 		}
 	}
 	default int getInt() {
-		if (type() != int.class) { throw new IllegalStateException(STR."the settings is \{type()} not int.class"); }
+		if (type() != int.class) { throw new IllegalStateException("the settings " + type() + " not int.class"); }
 		return data().getInt(name(), 0);
 	}
 	default float getFloat() {
-		if (type() != float.class) { throw new IllegalStateException(STR."the settings is \{type()} not float.class"); }
+		if (type() != float.class) { throw new IllegalStateException("the settings " + type() + " not float.class"); }
 		return data().getFloat(name(), 0);
 	}
 	default int getColorInt() {
-		if (type() != Color.class) { throw new IllegalStateException(STR."the settings is \{type()} not Color.class"); }
+		if (type() != Color.class) { throw new IllegalStateException("the settings " + type() + " not Color.class"); }
 		return data().get0xInt(name(), -1);
 	}
 
@@ -192,7 +192,7 @@ public interface ISettings extends E_DataInterface {
 	}
 	default Vec2 getPosition() {
 		if (type() != Position.class) {
-			throw new IllegalStateException(STR."the settings is \{type()} not Position.class");
+			throw new IllegalStateException("the settings " + type() + " not Position.class");
 		}
 		String s = getString();
 		int    i = s.indexOf(',');

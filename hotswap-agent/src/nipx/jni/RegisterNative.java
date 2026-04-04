@@ -52,7 +52,7 @@ public class RegisterNative {
          Arena arena = Arena.ofConfined();
          GlobalRef jclassRef = jniEnv.FindClass(clazz);
         ) {
-            MemorySegment methods = arena.allocateArray(JNI_NATIVE_METHOD_LAYOUT, methodBinderRequests.size());
+            MemorySegment methods = arena.allocate(JNI_NATIVE_METHOD_LAYOUT, methodBinderRequests.size());
 
             int i = 0;
             for (MethodBinderRequest request : methodBinderRequests) {
@@ -75,8 +75,8 @@ public class RegisterNative {
                                 functionDescriptor,
                                 Arena.global()
                         );
-                MemorySegment namePtr = arena.allocateUtf8String(name);
-                MemorySegment signaturePtr = arena.allocateUtf8String(signature);
+                MemorySegment namePtr = arena.allocateFrom(name);
+                MemorySegment signaturePtr = arena.allocateFrom(signature);
 
                 long offset = i * JNI_NATIVE_METHOD_LAYOUT.byteSize();
                 nameVH.set(methods, offset, namePtr);

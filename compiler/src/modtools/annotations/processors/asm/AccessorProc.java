@@ -7,7 +7,7 @@ import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Type.ArrayType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import jdk.internal.org.objectweb.asm.*;
+import org.objectweb.asm.*;
 import modtools.annotations.asm.HAccessor.*;
 import modtools.annotations.asm.Sample.AConstants;
 

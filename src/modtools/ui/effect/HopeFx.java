@@ -70,7 +70,7 @@ public class HopeFx {
 	public static void changedFx(Element element) {
 		if (element.getScene() == null) return;
 		DrawExecutor executor = ElementUtils.findDrawExecutor(element);
-		if (executor == null) throw new IllegalStateException(STR."No executor for draw \{element}");
+		if (executor == null) throw new IllegalStateException("No executor for draw " + element);
 		changedFx(element, executor);
 	}
 	public static void changedFx(Element element, DrawExecutor executor) {

@@ -3,7 +3,6 @@ package modtools.annotations.unsafe;
 import com.sun.source.util.*;
 import com.sun.tools.javac.api.*;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Directive.ExportsDirective;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Lint.LintCategory;
 import com.sun.tools.javac.code.Source.Feature;
@@ -38,7 +37,6 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.function.*;
 import java.util.regex.*;
-import java.util.stream.Collectors;
 
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
@@ -46,6 +44,7 @@ import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
 
+@SuppressWarnings("removal")
 public class Replace {
 	public static final String forceJavaVersionOri = "targetVersion";
 	public static final String forceJavaVersion    = "-A" + forceJavaVersionOri;
@@ -68,7 +67,7 @@ public class Replace {
 	public static Log          log;
 
 	static DefaultToStatic       defaultToStatic;
-	static DesugarStringTemplate desugarStringTemplate;
+	// static DesugarStringTemplate desugarStringTemplate;
 	static DesugarRecord         desugarRecord;
 	static Properties            bundles = new Properties();
 
@@ -98,7 +97,7 @@ public class Replace {
 		compiler = JavaCompiler.instance(context);
 
 		defaultToStatic = new DefaultToStatic(context);
-		desugarStringTemplate = new DesugarStringTemplate(context);
+		// desugarStringTemplate = new DesugarStringTemplate(context);
 		desugarRecord = new DesugarRecord();
 
 		messages.add(locale -> new ListResourceBundle() {
@@ -135,57 +134,11 @@ public class Replace {
 
 		forcePreview();
 
-		moduleExports();
-
 		other();
 
 		try {
 			ContentProcessor.registerTodos(context);
-		} catch (NoSuchFieldError _) { }
-	}
-	private static void moduleExports() throws Exception {
-		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
-
-		handler.getDiagnostics().stream().filter(d -> d.isFlagSet(DiagnosticFlag.RESOLVE_ERROR))
-		 .filter(d -> d.getArgs()[0] instanceof PackageSymbol)
-		 .forEach(d -> {
-			 PackageSymbol pkg = (PackageSymbol) d.getArgs()[0];
-			 needExportedApi.add(pkg);
-			 searchModuleExport(pkg.modle);
-		 });
-
-		Method initModule = Modules.class.getDeclaredMethod("setupAutomaticModule", ModuleSymbol.class);
-		initModule.setAccessible(true);
-		Modules modules = Modules.instance(context);
-
-		Map<ModuleSymbol, Set<ExportsDirective>> addExports = getAccess(Modules.class, modules, "addExports");
-		Consumer<ModuleSymbol> exportAll = m -> {
-			var prev = m.exports;
-			try {
-				initModule.invoke(modules, m);
-			} catch (IllegalAccessException | InvocationTargetException e) {
-				throw new RuntimeException(e);
-			}
-
-			Set<ExportsDirective> set = m.exports.stream().collect(Collectors.toSet());
-			set.removeIf(d -> d.packge.fullname.isEmpty());
-			m.exports = List.from(set);
-
-			for (ExportsDirective export : m.exports) {
-				export.packge.modle = m;
-				addExports.computeIfAbsent(m, k -> new HashSet<>()).add(new ExportsDirective(export.packge, List.of(syms.unnamedModule)));
-			}
-			m.exports = prev;
-		};
-		Field field = Symtab.class.getDeclaredField("modules");
-		field.setAccessible(true);
-		var moduleMap = (Map<Name, ModuleSymbol>) field.get(syms);
-		var module    = moduleMap.get(ns.fromString("jdk.hotspot.agent"));
-		modules.allModules().add(module);
-		for (ModuleSymbol m : modules.allModules()) {
-			exportAll.accept(m);
-		}
-		// exportAll.accept(moduleFinder.findModule(ns.fromString("jdk.unsupported")));
+		} catch (NoClassDefFoundError | NoSuchFieldError _) { }
 	}
 
 	static Symbol NOT_FOUND;
@@ -287,6 +240,7 @@ public class Replace {
 	public static final HashSet<PackageSymbol> needExportedApi = new HashSet<>();
 	public static void fixSyntaxErrorAndSkipInvisibleError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
+		Collection<JCDiagnostic> deferred = getAccess(DeferredDiagnosticHandler.class, handler, "deferred");
 		ListBuffer<JCDiagnostic>  buffer  = new ListBuffer<>();
 
 		int[] positionOffset = {0};
@@ -294,7 +248,7 @@ public class Replace {
 		boolean illegalStartOf = true;
 		// handler.getDiagnostics()
 		//  .stream().forEach(diag -> println(diag.getMessage(Locale.getDefault()) + ":" + getAccess(JCDiagnostic.class, diag, "flags")));
-		buffer.addAll(handler.getDiagnostics()
+		buffer.addAll(deferred
 		 .stream()
 		 .filter(diag -> {
 			 // skip包不可见的错误
@@ -340,7 +294,8 @@ public class Replace {
 			 }
 			 return true;
 		 }).toList());
-		setAccess(DeferredDiagnosticHandler.class, handler, "deferred", buffer);
+		setAccess(DeferredDiagnosticHandler.class, handler, "deferred",
+		 deferred instanceof java.util.List<JCDiagnostic> ? new ArrayList<>(buffer) : buffer);
 	}
 
 	public static void forceJavaVersion() {
@@ -400,7 +355,7 @@ public class Replace {
 		// 用于适配低版本
 		runIgnoredException(() -> setAccess(Lower.class, Lower.instance(context), "useMatchException", false));
 		setAccess(Lower.class, Lower.instance(context), "target", target);
-		setAccess(LambdaToMethod.class, LambdaToMethod.instance(context), "nestmateLambdas", false);
+		runIgnoredException(() -> setAccess(LambdaToMethod.class, LambdaToMethod.instance(context), "nestmateLambdas", false));
 		setAccess(Gen.class, Gen.instance(context), "concat", StringConcat.instance(context));
 		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
 	}
@@ -527,14 +482,14 @@ public class Replace {
 			});
 			if (false) saveAllApi(map);
 
-			desugarStringTemplate.thenRuns.clear();
+			// desugarStringTemplate.thenRuns.clear();
 			map.forEach((cdef, unit) -> {
 				// copyValueProc.translateTopLevelClass(unit);
 				defaultToStatic.translateTopLevelClass(unit, cdef);
-				desugarStringTemplate.translateTopLevelClass(unit, cdef);
+				// desugarStringTemplate.translateTopLevelClass(unit, cdef);
 				desugarRecord.translateTopLevelClass(unit, cdef);
 			});
-			desugarStringTemplate.thenRuns.forEach(Runnable::run);
+			// desugarStringTemplate.thenRuns.forEach(Runnable::run);
 		} catch (Throwable e) {
 			err(e);
 		} finally {

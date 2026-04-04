@@ -6,7 +6,7 @@ import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
 import com.sun.tools.javac.util.List;
-import jdk.internal.org.objectweb.asm.*;
+import org.objectweb.asm.*;
 import modtools.annotations.asm.CopyConstValue;
 
 import javax.annotation.processing.Processor;

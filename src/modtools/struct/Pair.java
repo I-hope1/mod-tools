@@ -36,6 +36,6 @@ public class Pair<T1, T2> {
 		return Objects.hash(first, second);
 	}
 	public String toString() {
-		return STR."Pair[\{first}, \{second}\{']'}";
+		return "Pair[" + first + ", " + second + ']';
 	}
 }

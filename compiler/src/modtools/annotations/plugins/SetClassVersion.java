@@ -1,7 +1,7 @@
 // Save as SetClassVersion.java
 package modtools.annotations.plugins;
 
-import jdk.internal.org.objectweb.asm.*;
+import org.objectweb.asm.*;
 import modtools.annotations.HopeReflect;
 
 import java.io.*;

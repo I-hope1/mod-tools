@@ -97,8 +97,8 @@ public class UnitSpawn extends Content {
 				selectUnit = (UnitType) group.getChecked().userObject;
 				lastSize = allChecked.size;
 
-				nameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.name}\{allChecked.size > 1 ? "[]..." : ""}");
-				localizedNameL.setText(allChecked.size == 0 ? "[red]ERROR" : STR."\{selectUnit.localizedName}\{allChecked.size > 1 ? "[]..." : ""}");
+				nameL.setText(allChecked.size == 0 ? "[red]ERROR" : selectUnit.name + (allChecked.size > 1 ? "[]..." : ""));
+				localizedNameL.setText(allChecked.size == 0 ? "[red]ERROR" : selectUnit.localizedName + (allChecked.size > 1 ? "[]..." : ""));
 			});
 			right.add(nameL).growX().wrap().row();
 			right.add(localizedNameL).growX().wrap().row();
@@ -186,7 +186,7 @@ public class UnitSpawn extends Content {
 			table.button("Post Task", HopeStyles.cleart, () -> {
 				ExecuteTree.context(root, () ->
 				 ExecuteTree.node(String.valueOf(localizedNameL.getText()),
-					STR."(\{spawnX},\{spawnY})\n{\{team}}[accent]×\{amount}",
+				  "(" + spawnX + "," + spawnY + ")\n{" + team + "}[accent]×" + amount,
 					getSpawnRun()).code(generateCode()).resubmitted().worldTimer()
 				);
 				var dialog = INFO_DIALOG.dialog(t -> {
@@ -249,8 +249,8 @@ public class UnitSpawn extends Content {
 		return () -> units.each(u -> spawn(u, amount0, team0, x0, y0));
 	}
 	public String generateCode() {
-		return STR."$.Contents.unit_spawn.spawn($.unit(\"\{(
-		 selectUnit.name)}\"),\{amount},Team.get(\{team.id}),\{spawnX},\{spawnY})";
+		return "$.Contents.unit_spawn.spawn($.unit(\"" + (
+		 selectUnit.name) + "\")," + amount + ",Team.get(" + team.id + ")," + spawnX + "," + spawnY + ")";
 	}
 
 	public void spawn(UnitType selectUnit, int amount, Team team, float x, float y) {

@@ -50,8 +50,8 @@ public class PairProv implements Prov<CharSequence> {
 	 * @return 格式化后的字符序列
 	 */
 	public String getString(Vec2 vec) {
-		return parentheses ? STR."(\{getString(vec.x)}\{delimiter}\{getString(vec.y)})"
-		 : STR."\{getString(vec.x)}\{delimiter}\{getString(vec.y)}";
+		return parentheses ? "(" + getString(vec.x) + delimiter + getString(vec.y) + ")"
+		 : getString(vec.x) + delimiter + getString(vec.y);
 	}
 
 	/**

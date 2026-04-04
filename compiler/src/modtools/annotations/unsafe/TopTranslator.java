@@ -7,15 +7,18 @@ import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
-import com.sun.tools.javac.comp.Resolve;
+import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import com.sun.tools.javac.util.List;
+import modtools.annotations.HopeReflect;
 import modtools.annotations.PrintHelper.SPrinter;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.*;
 
@@ -26,9 +29,10 @@ public class TopTranslator extends TreeTranslator {
 	final Log        log;
 	final Names      names;
 	final Symtab     symtab;
-	final TreeMaker  maker;
+	final TreeMaker  make;
 	final Resolve    resolve;
 	final Types      types;
+	final Operators  operators;
 
 	public static final String LOCAL_PREFIX = "$$letexpr$$";
 
@@ -43,9 +47,10 @@ public class TopTranslator extends TreeTranslator {
 		log = Log.instance(context);
 		names = Names.instance(context);
 		symtab = Symtab.instance(context);
-		maker = TreeMaker.instance(context);
+		make = TreeMaker.instance(context);
 		resolve = Resolve.instance(context);
 		types = Types.instance(context);
+		operators = Operators.instance(context);
 
 		addDefaultTodo();
 		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
@@ -67,10 +72,10 @@ public class TopTranslator extends TreeTranslator {
 				 // List.of(args) -> Arrays.asList(args)
 				 // 参数列表保持不变
 				 List<JCExpression> newArgs = List.of(
-					maker.NewArray(maker.Ident(symtab.objectType.tsym), List.nil(), originalInvocation.args).setType(types.makeArrayType(symtab.objectType)));
+					make.NewArray(make.Ident(symtab.objectType.tsym), List.nil(), originalInvocation.args).setType(types.makeArrayType(symtab.objectType)));
 				 // 方法选择表达式：Arrays.asList
-				 JCExpression newMethodSelect = makeSelect(maker.QualIdent(targetSym.owner), targetSym.name, targetSym);
-				 return maker.at(originalInvocation.pos).App(
+				 JCExpression newMethodSelect = makeSelect(make.QualIdent(targetSym.owner), targetSym.name, targetSym);
+				 return make.at(originalInvocation.pos).App(
 					newMethodSelect, newArgs
 				 );
 			 }
@@ -203,8 +208,6 @@ public class TopTranslator extends TreeTranslator {
 	// (为了代码完整性，我保留了你的大部分代码，只增加了上述修改和相关的辅助方法)
 
 	private void replaceMethod(TypeSymbol thisSymbol, String originalMethodName, String targetMethodName) {
-		// 这个旧方法现在可能不太适用你的新需求，因为它查找的是无参方法。
-		// 你可以根据需要更新它，或者只使用新的 replaceMethod。
 		MethodSymbol originalSymbol = (MethodSymbol) thisSymbol.members().findFirst(names.fromString(originalMethodName),
 		 s -> s.isPublic() && s instanceof MethodSymbol ms && ms.params.isEmpty());
 		MethodSymbol targetSymbol = (MethodSymbol) thisSymbol.members().findFirst(names.fromString(targetMethodName),
@@ -248,22 +251,22 @@ public class TopTranslator extends TreeTranslator {
 	}
 
 	public JCExpression makeClassExpr(ClassSymbol classSymbol, Symbol owner) {
-		if (classSymbol.isPublic()) return maker.ClassLiteral(classSymbol);
+		if (classSymbol.isPublic()) return make.ClassLiteral(classSymbol);
 
 		// loadClass(String)
 		MethodSymbol forName = (MethodSymbol) symtab.classType.tsym.members().findFirst(names.fromString("forName"),
 		 s -> s.isPublic() && s instanceof MethodSymbol ms && ms.params.size() == 1 && ms.params.get(0).type.tsym == symtab.stringType.tsym);
-		JCMethodInvocation apply = maker.App(
-		 makeSelect(maker.Ident(symtab.classType.tsym),
+		JCMethodInvocation apply = make.App(
+		 makeSelect(make.Ident(symtab.classType.tsym),
 			names.fromString("forName"), forName), List.of(makeString(classSymbol.flatName().toString()))
 		);
 		// 创建一个局部变量 %LOCAL_PREFIX%
 		VarSymbol localSym = new VarSymbol(0, names.fromString(LOCAL_PREFIX + classSymbol.name), symtab.classType, owner);
 		localSym.flags_field |= Flags.LocalVarFlags;
-		JCVariableDecl local = maker.VarDef(localSym, apply);
+		JCVariableDecl local = make.VarDef(localSym, apply);
 
 		// let (local = %moduleRep[0]%.class.getClassLoader().loadClass("%classSymbol.name%");) in local
-		return maker.LetExpr(List.of(local), maker.Ident(local)).setType(symtab.classType);
+		return make.LetExpr(List.of(local), make.Ident(local)).setType(symtab.classType);
 	}
 
 	public static class ToTranslate {
@@ -417,18 +420,48 @@ public class TopTranslator extends TreeTranslator {
 	//endregion visit
 
 	public JCLiteral makeNullLiteral() {
-		return maker.Literal(TypeTag.BOT, null).setType(symtab.botType);
+		return make.Literal(TypeTag.BOT, null).setType(symtab.botType);
 	}
 
-	public JCExpression makeString(String s) {
-		return Replace.desugarStringTemplate.makeString(s);
+	public JCExpression makeLit(Type type, Object value) {
+		return make.Literal(type.getTag(), value).setType(type.constType(value));
 	}
-
 	/**
 	 * 用到{@link ToTranslate}时，make.Binary需要改为用这个
 	 */
+	public JCExpression makeStringList(List<String> strings) {
+		Symbol list = symtab.arraysType.tsym.members().findFirst(names.fromString("asList"));
+		// code: Arrays.asList(trees)
+		return make.App(make.Select(make.Ident(symtab.arraysType.tsym), list), strings.map(this::makeString));
+	}
+	public JCExpression makeList(List<JCExpression> trees) {
+		Symbol list = symtab.arraysType.tsym.members().findFirst(names.fromString("asList"));
+		// code: Arrays.asList(trees)
+		return make.App(make.Select(make.Ident(symtab.arraysType.tsym), list), trees);
+	}
+	public JCExpression makeString(String s) {
+		return makeLit(symtab.stringType, s);
+	}
+
+	static Method operatorMethod = HopeReflect.nl(() -> Operators.class.getDeclaredMethod("resolveBinary", DiagnosticPosition.class, Tag.class, Type.class, Type.class));
 	public JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
-		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
+		JCBinary tree = make.Binary(tag, lhs, rhs);
+		tree.operator = HopeReflect.iv(operatorMethod, operators, tree, tag, lhs.type, rhs.type);
+		tree.type = tree.operator.type.getReturnType();
+		return tree;
+	}
+	public JCExpression concatExpression(List<String> fragments, List<JCExpression> expressions) {
+		JCExpression           expr     = null;
+		Iterator<JCExpression> iterator = expressions.iterator();
+		for (String fragment : fragments) {
+			expr = expr == null ? makeString(fragment)
+			 : makeBinary(Tag.PLUS, expr, makeString(fragment));
+			if (iterator.hasNext()) {
+				JCExpression expression = iterator.next();
+				expr = makeBinary(Tag.PLUS, expr, expression);
+			}
+		}
+		return expr;
 	}
 
 	public JCFieldAccess makeSelect(ClassType owner, Name name) {
@@ -436,14 +469,14 @@ public class TopTranslator extends TreeTranslator {
 	}
 
 	public JCFieldAccess makeSelect(ClassSymbol owner, Name name) {
-		return makeSelect(maker.Ident(owner), name, owner);
+		return makeSelect(make.Ident(owner), name, owner);
 	}
 
 	/**
 	 * 用到{@link ToTranslate}时，make.Select需要改为用这个
 	 */
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, TypeSymbol owner) {
-		JCFieldAccess select  = maker.Select(selected, name);
+		JCFieldAccess select  = make.Select(selected, name);
 		var           symbols = List.from(owner.members().getSymbolsByName(name));
 		if (symbols.size() > 1) {
 			log.useSource(toplevel.sourcefile);
@@ -467,7 +500,7 @@ public class TopTranslator extends TreeTranslator {
 	 * 用到{@link ToTranslate}时，make.Select需要改为用这个
 	 */
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, MethodSymbol ms) {
-		JCFieldAccess select = maker.Select(selected, name);
+		JCFieldAccess select = make.Select(selected, name);
 		if (ms == null) {
 			log.useSource(toplevel.sourcefile);
 			log.error(SPrinter.err("can't resolve method symbol for " + name + ":" + selected));
@@ -484,19 +517,19 @@ public class TopTranslator extends TreeTranslator {
 		if (type.isPrimitive()) {
 			TypeTag tag = type.getTag();
 			return switch (tag) {
-				case BYTE -> maker.Literal((byte) 0);
-				case CHAR -> maker.Literal((char) 0);
-				case SHORT -> maker.Literal((short) 0);
-				case LONG -> maker.Literal(0L);
-				case FLOAT -> maker.Literal(0F);
-				case INT -> maker.Literal(0);
-				case DOUBLE -> maker.Literal(0D);
-				case BOOLEAN -> maker.Literal(false);
-				case BOT -> maker.Literal(tag, null);
+				case BYTE -> make.Literal((byte) 0);
+				case CHAR -> make.Literal((char) 0);
+				case SHORT -> make.Literal((short) 0);
+				case LONG -> make.Literal(0L);
+				case FLOAT -> make.Literal(0F);
+				case INT -> make.Literal(0);
+				case DOUBLE -> make.Literal(0D);
+				case BOOLEAN -> make.Literal(false);
+				case BOT -> make.Literal(tag, null);
 				default -> throw new IllegalStateException("Unexpected value: " + tag);
 			};
 		}
-		return maker.Literal(TypeTag.BOT, null);
+		return make.Literal(TypeTag.BOT, null);
 	}
 
 	int localVarIndex = 0;
@@ -516,24 +549,24 @@ public class TopTranslator extends TreeTranslator {
 		if (returnType == symtab.voidType) {
 			throw new IllegalArgumentException("methodDecl is void method");
 		}
-		maker.at(block);
+		make.at(block);
 		ListBuffer<JCStatement> defs      = new ListBuffer<>();
 		VarSymbol               varSymbol = new VarSymbol(0, names.fromString(LOCAL_PREFIX + nextLocalVarIndex()), returnType, owner);
-		defs.add(maker.VarDef(varSymbol, defaultValue(returnType)));
-		defs.appendList(new TreeCopier<Void>(maker) {
+		defs.add(make.VarDef(varSymbol, defaultValue(returnType)));
+		defs.appendList(new TreeCopier<Void>(make) {
 			public JCTree visitReturn(ReturnTree node, Void unused) {
-				return maker.Exec(maker.Assign(maker.Ident(varSymbol), (JCExpression) node.getExpression()));
+				return make.Exec(make.Assign(make.Ident(varSymbol), (JCExpression) node.getExpression()));
 			}
 		}.copy(block.stats));
-		LetExpr letExpr = maker.LetExpr(defs.toList(), maker.Ident(varSymbol));
+		LetExpr letExpr = make.LetExpr(defs.toList(), make.Ident(varSymbol));
 		letExpr.type = returnType;
 		return letExpr;
 	}
 
 	public ClassSymbol getClassSymbolByDoc(JCIdent i) {
-		DocCommentTree doc    = trees.getDocCommentTree(i.sym);
+		DocCommentTree doc = trees.getDocCommentTree(i.sym);
 		if (doc == null) return null;
-		SeeTree        seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
+		SeeTree seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
 		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) { return null; }
 
 		return (ClassSymbol) trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(i.sym), doc), reference));

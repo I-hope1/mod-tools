@@ -60,15 +60,15 @@ public interface ElementUtils {
 		StringBuilder sb = new StringBuilder();
 		while (el != null) {
 			if (el.name != null) {
-				return STR."Core.scene.find(\"\{el.name}\")\{sb}";
+				return "Core.scene.find(\"" + el.name + "\")" + sb;
 			} else if (el instanceof Group && ShowUIList.uiKeyMap.containsKey(el)) {
-				return STR."Vars.ui.\{ShowUIList.uiKeyMap.get(el)}\{sb}";
+				return "Vars.ui." + ShowUIList.uiKeyMap.get(el) + sb;
 			} else {
 				sb.append(".children.get(").append(el.getZIndex()).append(')');
 				el = el.parent;
 			}
 		}
-		return element.getScene() != null ? STR."Core.scene.root\{sb}" : sb.delete(0, 0);
+		return element.getScene() != null ? "Core.scene.root" + sb : sb.delete(0, 0);
 	}
 
 	static void scrollTo(Element actor, Element target) {

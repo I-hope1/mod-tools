@@ -2,7 +2,6 @@ import sun.reflect.ReflectionFactory
 
 import java.lang.invoke.MethodHandles.Lookup
 import java.lang.reflect.Constructor
-import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Consumer
 
 plugins {
@@ -34,18 +33,20 @@ allprojects {
 			"jdk.compiler/com.sun.tools.javac.main",
 			"jdk.attach/sun.tools.attach",
 	] + Reflect.jdkExports0
+//	println "jdkExports: $jdkExports"
 	ext {
 		buildDir0 = layout.buildDirectory.get().asFile
 	}
 	tasks.withType(JavaCompile) {
 		options.incremental = true
 		options.encoding = 'UTF-8'
-		sourceCompatibility = 21
-		targetCompatibility = 21
+		sourceCompatibility = JavaVersion.current()
+		targetCompatibility = JavaVersion.current()
 
 		options.compilerArgs += "-AtargetVersion=8"
 //		options.compilerArgs += "-Xlint:unchecked"
 		options.compilerArgs.add("--enable-preview")
+
 
 		options.compilerArgs.addAll(jdkExports.collectMany { ["--add-exports", "${it}=ALL-UNNAMED"] })
 
@@ -448,28 +449,45 @@ publishing {
 
 //@groovy.transform.CompileStatic
 class Reflect {
-	static jdkExports0 = []
-	public static final Lookup IMPL_LOOKUP;
+	static final jdkExports0
+	static moduleBlackList = [
+	        'jdk.jdeps',
+			'jdk.naming.dns',
+			'jdk.jlink',
+			'jdk.charsets',
+			'jdk.jpackage',
+			'jdk.localedata',
+			'jdk.jstatd',
+			'jdk.naming.rmi',
+			'jdk.editpad',
+			'jdk.crypto.mscapi',
+			'jdk.crypto.cryptoki',
+			'jdk.jdeps',
+			'jdk.proxy',
+			'jdk.hotspot.agent'
+	]
+	public static final Lookup IMPL_LOOKUP
 	static {
+		var jdkExports = []
 		try {
 			Constructor<?> constructor = ReflectionFactory.getReflectionFactory().newConstructorForSerialization(Lookup.class, Lookup.class.getDeclaredConstructor(Class.class));
 			Lookup lookup = (Lookup) constructor.newInstance(Lookup.class);
 			var methodHandle = lookup.findStaticGetter(Lookup.class, "IMPL_LOOKUP", Lookup.class)
 			IMPL_LOOKUP = (Lookup) methodHandle.invokeWithArguments();
 //			def mh = IMPL.findGetter(Module.class, "exportedPackages", Map.class)
-			def WPM = Class.forName('java.lang.WeakPairMap')
-			def exports = IMPL_LOOKUP.findStaticGetter(Class.forName('java.lang.Module$ReflectionData'), 'exports', WPM).invokeWithArguments()
-			def map = IMPL_LOOKUP.findGetter(WPM, 'map', ConcurrentHashMap.class).invokeWithArguments(exports)
-			map.forEach { k, v ->
-				def m = (Module) k.first()
-				if (m.name.startsWith('jdk.proxy') || m.name.startsWith('jdk.hotspot.agent')) return
+//			def WPM = Class.forName('java.lang.WeakPairMap')
+//			def exports = IMPL_LOOKUP.findStaticGetter(Class.forName('java.lang.Module$ReflectionData'), 'exports', WPM).invokeWithArguments()
+//			def map = IMPL_LOOKUP.findGetter(WPM, 'map', ConcurrentHashMap.class).invokeWithArguments(exports)
+			ModuleLayer.boot().modules().forEach { m ->
+				if (m.name in moduleBlackList) return
 				m.packages.forEach {
-					jdkExports0 += "$m.name/$it"
+					jdkExports += "$m.name/$it"
 				}
 			}
 //			println jdkExports0
 		} catch (Throwable e) {
 			e.printStackTrace()
 		}
+		jdkExports0 = jdkExports
 	}
 }

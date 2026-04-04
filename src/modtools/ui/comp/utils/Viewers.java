@@ -166,6 +166,9 @@ public class Viewers {
 	}
 
 	static {
+		loadViewer();
+	}
+	static void loadViewer(){
 		// map.put(String.class, (val, label) -> {
 		// 	label.appendValue(label.getText(), val);
 		// 	return true;
@@ -770,7 +773,7 @@ public class Viewers {
 		return CatchSR.apply(() ->
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
-				: val instanceof Character ? STR."'\{val}'"
+				: val instanceof Character ? "'" + val + "'"
 				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
 				: val instanceof Class ? ((Class<?>) val).getSimpleName()
 

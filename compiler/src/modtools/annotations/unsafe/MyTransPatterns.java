@@ -21,20 +21,22 @@ public class MyTransPatterns extends TransPatterns {
 		return super.translateTopLevelClass(env, cdef, make);
 	}
 }
-/** TODO: owner可能有问题  */
+/** TODO: owner可能有问题 */
 class SwitchDesugar extends TreeTranslator {
 	public static final String LABEL_SWITCH = "label$switch";
 
-	final        Symtab    syms;
-	final        TreeMaker make;
-	final        Names     names;
-	public final Check     chk;
+	final Symtab        syms;
+	final TreeMaker     make;
+	final Names         names;
+	final Check         chk;
+	final TopTranslator topTranslator;
 
 	SwitchDesugar(Context context) {
 		syms = Symtab.instance(context);
 		make = TreeMaker.instance(context);
 		names = Names.instance(context);
 		chk = Check.instance(context);
+		topTranslator = TopTranslator.instance(context);
 	}
 
 	MethodSymbol currentMethod;
@@ -108,8 +110,8 @@ class SwitchDesugar extends TreeTranslator {
 				breakTranslator.translate(cases);
 			}
 			make.at(selector);
-			JCBlock        block        = make.Block(0, List.nil());
-			VarSymbol      selector_var = new VarSymbol(0, names.fromString("$switch$input"), selector.type, currentMethod != null ? currentMethod : currentClass);
+			JCBlock   block        = make.Block(0, List.nil());
+			VarSymbol selector_var = new VarSymbol(0, names.fromString("$switch$input"), selector.type, currentMethod != null ? currentMethod : currentClass);
 			block.stats = block.stats.append(make.VarDef(selector_var, selector));
 
 			JCIf        first  = null;
@@ -171,7 +173,7 @@ class SwitchDesugar extends TreeTranslator {
 		return ifCondition == null ? truepart : make.If(ifCondition, truepart, null);
 	}
 	JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
-		return Replace.desugarStringTemplate.makeBinary(tag, lhs, rhs);
+		return topTranslator.makeBinary(tag, lhs, rhs);
 	}
 
 	JCExpression makePatternMatchCondition(JCExpression condition, JCExpression selector, JCPattern pattern) {

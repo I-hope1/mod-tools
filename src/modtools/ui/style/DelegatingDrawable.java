@@ -72,7 +72,7 @@ public class DelegatingDrawable extends BaseDrawable {
 		try {
 			if (color == Color.white) return FormatHelper.getUIKeyOrNull(drawable);
 
-			return STR."\{FormatHelper.getUIKeyOrNull(drawable)}#\{FormatHelper.color(color)}";
+			return FormatHelper.getUIKeyOrNull(drawable) + "#" + FormatHelper.color(color);
 		} catch (Throwable e) {
 			return drawable + "#" + FormatHelper.color(color);
 		}

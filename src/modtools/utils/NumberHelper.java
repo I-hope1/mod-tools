@@ -68,7 +68,7 @@ public class NumberHelper {
 		try {
 			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
 		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-			throw new NumberParseException(STR."\{text} cannot be cast to \{type0}", e);
+			throw new NumberParseException(text + " cannot be cast to " + type0, e);
 		}
 	}
 

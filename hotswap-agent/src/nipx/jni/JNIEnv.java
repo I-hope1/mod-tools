@@ -122,7 +122,7 @@ public class JNIEnv {
             return throwable(() -> new GlobalRef(this, (MemorySegment) JNIEnvFunctions.FindClassMH.invokeExact(
                     functions.FindClassFp,
                     jniEnvPointer,
-                    allocator.allocateUtf8String(c.getName().replace(".", "/"))))
+                    allocator.allocateFrom(c.getName().replace(".", "/"))))
             );
         }
 
@@ -130,7 +130,7 @@ public class JNIEnv {
         {
             try (GlobalRef threadRef = CallStaticMethodByName(Thread.class.getMethod("currentThread"));
                  GlobalRef classLoaderJobjectRef = CallMethodByName(Thread.class.getMethod("getContextClassLoader"), threadRef.ref());
-                 GlobalRef classNameRef = cstrToJstring((allocator.allocateUtf8String(c.getName())))
+                 GlobalRef classNameRef = cstrToJstring((allocator.allocateFrom(c.getName())))
             ) {
 //                Class<?> name = Class.forName("top.dreamlike.unsafe.jni.JNIEnv", true, loader);
                 MemorySegment segment = allocator.allocate(JValue.jvalueLayout);
@@ -155,8 +155,8 @@ public class JNIEnv {
                         functions.GetStaticFieldIDFp,
                         jniEnvPointer,
                         clsRef.ref(),
-                        allocator.allocateUtf8String(field.getName()),
-                        allocator.allocateUtf8String(NativeHelper.classToSig(field.getType()))
+                        allocator.allocateFrom(field.getName()),
+                        allocator.allocateFrom(NativeHelper.classToSig(field.getType()))
                 );
                 boolean isRef = false;
                 long value = switch (field.getType().getName()) {
@@ -199,8 +199,8 @@ public class JNIEnv {
                         functions.GetStaticFieldIDFp,
                         jniEnvPointer,
                         clsRef.ref(),
-                        allocator.allocateUtf8String(field.getName()),
-                        allocator.allocateUtf8String(NativeHelper.classToSig(field.getType()))
+                        allocator.allocateFrom(field.getName()),
+                        allocator.allocateFrom(NativeHelper.classToSig(field.getType()))
                 );
                 switch (field.getType().getName()) {
                     case "boolean" ->
@@ -237,8 +237,8 @@ public class JNIEnv {
                         functions.GetFieldIDFp,
                         jniEnvPointer,
                         clsRef.ref(),
-                        allocator.allocateUtf8String(field.getName()),
-                        allocator.allocateUtf8String(NativeHelper.classToSig(field.getType()))
+                        allocator.allocateFrom(field.getName()),
+                        allocator.allocateFrom(NativeHelper.classToSig(field.getType()))
                 );
                 boolean isRef = false;
                 long value = switch (field.getType().getName()) {
@@ -279,8 +279,8 @@ public class JNIEnv {
                         functions.GetFieldIDFp,
                         jniEnvPointer,
                         clsRef.ref(),
-                        allocator.allocateUtf8String(field.getName()),
-                        allocator.allocateUtf8String(NativeHelper.classToSig(field.getType()))
+                        allocator.allocateFrom(field.getName()),
+                        allocator.allocateFrom(NativeHelper.classToSig(field.getType()))
                 );
                 switch (field.getType().getName()) {
                     case "boolean" ->
@@ -331,7 +331,7 @@ public class JNIEnv {
         for (int i = 0; i < jvalues.length; i++) {
             longs[i] = jvalues[i].getLong();
         }
-        MemorySegment jValuesPtr = allocator.allocateArray(JValue.jvalueLayout, jvalues.length);
+        MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, jvalues.length);
         jValuesPtr.copyFrom(MemorySegment.ofArray(longs));
         return CallStaticMethodByName(method, jValuesPtr, "(" + paramSig + ")" + NativeHelper.classToSig(method.getReturnType()));
     }
@@ -355,7 +355,7 @@ public class JNIEnv {
         return throwable(() -> {
             //todo解析错误的问题
             try (GlobalRef jclassRef = FindClass(ownerClass)) {
-                MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetStaticMethodID_MH.invokeExact(functions.GetStaticMethodIDFp, jniEnvPointer, jclassRef.ref(), allocator.allocateUtf8String(methodName), allocator.allocateUtf8String(sig));
+                MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetStaticMethodID_MH.invokeExact(functions.GetStaticMethodIDFp, jniEnvPointer, jclassRef.ref(), allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
                 boolean isRef = false;
                 long jvalue = switch (method.getReturnType().getName()) {
                     case "void" -> {
@@ -412,7 +412,7 @@ public class JNIEnv {
             boolean isRef = false;
             MemorySegment clazz = (MemorySegment) JNIEnvFunctions.GetObjectClass_MH.invokeExact(functions.GetObjectClassFp, jniEnvPointer, jobject);
             try (GlobalRef ref = new GlobalRef(this, clazz);) {
-                MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, ref.ref(), allocator.allocateUtf8String(methodName), allocator.allocateUtf8String(sig));
+                MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, ref.ref(), allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
                 long returnValue = switch (method.getReturnType().getName()) {
                     case "void" -> {
                         JNIEnvFunctions.CallVoidMethodA_MH.invokeExact(functions.CallVoidMethodAFp, jniEnvPointer, jobject, mid, jvalues);
@@ -475,12 +475,12 @@ public class JNIEnv {
         String methodSig = "(" + sig + ")V";
 
         return throwable(() -> {
-            MemorySegment jValuesPtr = allocator.allocateArray(JValue.jvalueLayout, jValues.length);
+            MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, jValues.length);
             for (int i = 0; i < jValues.length; i++) {
                 jValuesPtr.set(ValueLayout.JAVA_LONG, i * JValue.jvalueLayout.byteSize(), jValues[i].getLong());
             }
             try (GlobalRef clsRef = FindClass(ctr.getDeclaringClass())) {
-                MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, clsRef.ref(), allocator.allocateUtf8String("<init>"), allocator.allocateUtf8String(methodSig));
+                MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, clsRef.ref(), allocator.allocateFrom("<init>"), allocator.allocateFrom(methodSig));
                 MemorySegment newobject = (MemorySegment) JNIEnvFunctions.NewObject_MH.invokeExact(functions.NewObjectAFp, jniEnvPointer, clsRef.ref(), mid, jValuesPtr);
                 return new GlobalRef(this, newobject);
             }

@@ -3,6 +3,7 @@ package modtools.events;
 import arc.Core;
 import arc.files.Fi;
 import arc.func.Cons;
+import arc.math.Mathf;
 import arc.scene.ui.layout.Table;
 import arc.util.*;
 import mindustry.Vars;
@@ -65,9 +66,8 @@ public enum E_Game implements ISettings {
 			}
 		};
 		r.run();
-		int[] arr = new int[]{1};
 		Tools.TASKS.add(() -> {
-			if (force_enable_gl3.enabled() && (arr[0]++ % 30 == 0)) {
+			if (force_enable_gl3.enabled() && Mathf.chance(0.1f)) {
 				r.run();
 			}
 		});

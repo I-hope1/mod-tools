@@ -53,6 +53,7 @@ public class LinkClassProcessor extends BaseASMProc<TypeSymbol> {
 			// 创建proxy
 			JCExpression classLoader = mMaker.App(translator.makeSelect(classLiteral, ns("getClassLoader"), mSymtab.classType.tsym));
 			JCLambda     newLambda   = mMaker.Lambda(List.nil(), null);
+			newLambda.owner = owner;
 			// 3个参数
 			// public Object invoke(Object proxy, Method method, Object[] args);
 			JCVariableDecl arg_proxy  = mMaker.Param(ns("proxy"), mSymtab.objectType, owner);

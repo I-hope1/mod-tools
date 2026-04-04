@@ -29,15 +29,14 @@ public class VirtualClass {
 	static {
 		try {
 			try (InputStream in = HopeReflect.class.getClassLoader()
-			 .getResourceAsStream(NULL.class.getName().replace('.', '/') + ".class")) {
-				VirtualClass.defaultBytes = in.readAllBytes();
+			 .getResourceAsStream("modtools/annotations/reflect/NULL.class")) {
+				defaultBytes = in.readAllBytes();
 			}
 		} catch (IOException e) {
 			errs(e);
 			throw new RuntimeException(e);
 		}
 	}
-	public static class NULL { }
 
 	public static Class<?> mirrorType  = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypeExceptionProxy");
 	public static Class<?> mirrorTypes = classOrNull("com.sun.tools.javac.model.AnnotationProxyMaker$MirroredTypesExceptionProxy");
@@ -108,16 +107,14 @@ public class VirtualClass {
 			ClassSymbol symbol = new ClassSymbol(type.tsym.flags_field, type.tsym.name, type.tsym.owner);
 			symbol.type.tsym = symbol;
 			if (tryCreate(type, symbol)) return null;
-			byte[] bytes;
-			try {
-				ByteArrayOutputStream out = new ByteArrayOutputStream();
-				mClassWriter.writeClassFile(out, symbol);
-				bytes = out.toByteArray();
-			} catch (Throwable e) {
-				errs(e);
-				bytes = defaultBytes;
-			}
-			cl = defineHiddenClass(bytes);
+			// try {
+			// 	ByteArrayOutputStream out = new ByteArrayOutputStream();
+			// 	mClassWriter.writeClassFile(out, symbol);
+			// 	cl = defineHiddenClass(out.toByteArray());
+			// } catch (Throwable e) {
+			// 	errs(e);
+				cl = defineHiddenClass(defaultBytes);
+			// }
 			HopeReflect.setAccess(Class.class, cl, "name", "" + type.tsym.flatName());
 			Object rd = HopeReflect.invoke(Class.class, cl, "reflectionData", new Object[0]);
 			// 设置canonicalName
@@ -132,21 +129,37 @@ public class VirtualClass {
 			throw new RuntimeException(e);
 		}
 	}
+	/** @see java.lang.invoke.MethodHandleNatives.Constants#STRONG_LOADER_LINK  */
 	public static Class<?> defineHiddenClass(byte[] bytes) throws Throwable {
 		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
 		try {
 			return SharedSecrets.getJavaLangAccess().defineClass(
-			 VirtualClass.class.getClassLoader(), Object.class, null, bytes, null, true, -1, null);
+			 new ClassLoader() { }, Class.forName("modtools.annotations.reflect.NULL"), null, bytes, null,
+			 false/* 防止超类被尝试加载 */, 2/* hidden class */, null);
 			// HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
 			// new Object[]{null, bytes}, String.class, byte[].class);
-		} catch (Throwable e) { }
+		} catch (Throwable e) {
+			errs("Plan A failed");
+			SPrinter.err(e);
+		}
 
-		Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
-		 Class.forName("jdk.internal.util.ClassFileDumper"));
+		try {
+
+			Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", String.class, byte[].class, Set.class,
+			 Class.forName("jdk.internal.util.ClassFileDumper"));
+			definerM.setAccessible(true);
+			Object dumper  = HopeReflect.getAccess(Lookup.class, null, "DEFAULT_DUMPER");
+			Object definer = definerM.invoke(HopeReflect.lookup, null, bytes, Set.of(), dumper);
+
+			return HopeReflect.invoke(definer, "defineClass", new Object[]{true}, boolean.class);
+		} catch (Throwable e) {
+			errs("Plan B failed");
+			SPrinter.err(e);
+		}
+		Method definerM = Lookup.class.getDeclaredMethod("makeHiddenClassDefiner", byte[].class, boolean.class, int.class);
 		definerM.setAccessible(true);
-		Object dumper  = HopeReflect.getAccess(Lookup.class, null, "DEFAULT_DUMPER");
-		Object definer = definerM.invoke(HopeReflect.lookup, null, bytes, Set.of(), dumper);
-
+		Object definer = HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
+		 new Object[]{bytes, true, 2}, byte[].class, boolean.class, int.class);
 		return HopeReflect.invoke(definer, "defineClass", new Object[]{true}, boolean.class);
 	}
 	private static boolean tryCreate(ClassType type, ClassSymbol symbol) {
@@ -222,3 +235,5 @@ public class VirtualClass {
 		code.entryPoint();
 	}
 }
+
+class NULL { }

@@ -178,7 +178,7 @@ public class Frag extends Table {
 			 Mathf.clamp(x, -touchWidth / 3f, Core.graphics.getWidth() - mainWidth / 2f),
 			 Mathf.clamp(y, -mainHeight + touchHeight, Core.graphics.getHeight() - mainHeight)
 			);
-			if (writeSetting) position.set(STR."(\{main.x},\{main.y})");
+			if (writeSetting) position.set("(" + main.x + "," + main.y + ")");
 		}
 
 		public void display(float x, float y) {

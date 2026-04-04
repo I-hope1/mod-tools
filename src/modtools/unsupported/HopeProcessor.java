@@ -1,9 +1,6 @@
 package modtools.unsupported;
 
 import arc.func.Cons;
-import arc.graphics.Color;
-import arc.graphics.g2d.TextureRegion;
-import arc.scene.style.Drawable;
 import arc.struct.ObjectMap;
 import arc.util.*;
 import arc.util.serialization.JsonValue;
@@ -13,12 +10,8 @@ import modtools.annotations.asm.Inline;
 import modtools.annotations.asm.Sample.SampleTemp.Template;
 import modtools.annotations.linker.*;
 import modtools.annotations.linker.LinkMethod.MTemp;
-import modtools.ui.IntUI;
-import modtools.ui.comp.input.ExtendingLabel;
-import modtools.ui.comp.input.ExtendingLabel.DrawType;
 import modtools.utils.reflect.HopeReflect;
 
-import java.lang.StringTemplate.Processor;
 import java.util.*;
 
 @SuppressWarnings("StringTemplateMigration")
@@ -31,7 +24,7 @@ public class HopeProcessor {
 	 * <p>.fragments().get(i)都会被替换 为 字符串片段
 	 * <p>Processor类可能没有，所以不要加载类
 	 **/
-	public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
+	/* public static final Processor<String, RuntimeException> NPX = string -> modtools.IntVars.modName + "-" + string.interpolate();
 
 	public static final Processor<String, RuntimeException>         S_TIP = string -> "@" + IntUI.TIP_PREFIX + string.interpolate();
 	public static final Processor<ExtendingLabel, RuntimeException> LABEL = template -> {
@@ -61,7 +54,7 @@ public class HopeProcessor {
 		label.setText(sb.toString());
 		return label;
 	};
-
+ */
 
 	public static class Wrapper {
 		/** @see mindustry.mod.ContentParser#read(Runnable) */
@@ -85,7 +78,7 @@ public class HopeProcessor {
 		String aa = "10203";
 		int    a  = 1, b = 2;
 		Cons<String> run = d -> {
-			System.out.println(NPX."aa\{aa}");
+			// System.out.println(NPX."aa\{aa}");
 			Log.info(a + b + d);
 		};
 		run.get(aa);

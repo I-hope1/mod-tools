@@ -1,4 +1,7 @@
-apply plugin: 'java'
+plugins {
+	id 'java'
+    id 'maven-publish'
+}
 
 sourceSets.main.java.srcDirs = ["src"]
 //tasks.withType(JavaCompile) {

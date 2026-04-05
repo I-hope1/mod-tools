@@ -3,9 +3,6 @@ plugins {
     id 'maven-publish'
 }
 
-group = 'nipx'
-version = "1.0"
-
 sourceSets.main.java.srcDirs = ["src"]
 
 repositories {
@@ -29,6 +26,13 @@ jar {
 	}
 }
 
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+		}
+	}
+}
 dependencies {
 	annotationProcessor files(compilerJar)
 }

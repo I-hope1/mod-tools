@@ -5,6 +5,13 @@ plugins {
 
 sourceSets.main.java.srcDirs = ["src"]
 
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+		}
+	}
+}
 dependencies {
 	implementation project(":annotations")
 

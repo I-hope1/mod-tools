@@ -1,12 +1,19 @@
 plugins {
 	id 'java'
-    id 'maven-publish'
+	id 'maven-publish'
 }
 
 sourceSets.main.java.srcDirs = ["src"]
 //tasks.withType(JavaCompile) {
 //	options.compilerArgs += "-AdisableDesugar"
 //}
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+		}
+	}
+}
 dependencies {
 	annotationProcessor files("$compilerJar")
 //	annotationProcessor "com.github.EB-wilson.UniverseCore:annotations:$uncVersion"

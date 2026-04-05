@@ -1,9 +1,7 @@
 plugins {
 	id 'java'
+	id 'maven-publish'
 }
-
-group = 'nipx'
-version = "1.0"
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -13,6 +11,13 @@ repositories {
 	mavenLocal()
 }
 
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+		}
+	}
+}
 dependencies {
 
 //	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {

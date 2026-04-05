@@ -66,6 +66,13 @@ allprojects {
 		}
 	}
 }
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+		}
+	}
+}
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -446,16 +453,6 @@ task playAndroid {
 		}
 	}
 }
-
-
-publishing {
-	publications {
-		maven(MavenPublication) {
-			from components.java
-		}
-	}
-}
-
 
 //@groovy.transform.CompileStatic
 class Reflect {

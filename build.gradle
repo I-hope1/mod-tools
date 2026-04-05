@@ -58,6 +58,12 @@ allprojects {
 		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
 		maven { url 'https://jitpack.io' }
 		google()
+		//Downloads the server-release JAR file from Mindustry releases; does not use any real repository. Surprisingly, this is the most reliable option.
+		ivy {
+			url 'https://github.com/'
+			patternLayout { artifact '/[organisation]/[module]/releases/download/[revision]/dependencies.jar' }
+			metadataSources { artifact() }
+		}
 	}
 }
 
@@ -116,13 +122,15 @@ dependencies {
 	implementation files(extractHiddenApiBypass)
 
 
-	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
-		exclude module: "flabel"
-	}
+	compileOnly "Anuken:Mindustry:$mindustryVersion"
+
+//	compileOnly("com.github.anuken.mindustry:core:$mindustryVersion") {
+//		exclude module: "flabel"
+//	}
 //	mindustryVersion = "v146"
-	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+//	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-android:$mindustryVersion"
-	compileOnly("com.github.Anuken.Arc:backend-sdl:$mindustryVersion")
+	compileOnly "com.github.Anuken.Arc:backend-sdl:$mindustryVersion"
 	compileOnly("com.github.Anuken.Arc:backend-sdl3:$mindustryVersion") {
 		exclude group: 'org.lwjgl'
 	}
@@ -453,7 +461,7 @@ publishing {
 class Reflect {
 	static final jdkExports0
 	static moduleBlackList = [
-	        'jdk.jdeps',
+			'jdk.jdeps',
 			'jdk.naming.dns',
 			'jdk.jlink',
 			'jdk.charsets',

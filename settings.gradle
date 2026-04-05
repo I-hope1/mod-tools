@@ -7,3 +7,4 @@ include 'compiler'
 include 'hotswap-agent'
 
 include 'utils-agent'
+include 'jni-agent'

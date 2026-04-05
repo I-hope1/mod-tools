@@ -67,9 +67,12 @@ public interface MasterKey {
 		static {
 			try (Arena arena = Arena.ofConfined()) {
 				JNIEnv    jniEnv     = new JNIEnv(arena);
-				GlobalRef implLookup = jniEnv.GetStaticFieldByName(MethodHandles.Lookup.class.getDeclaredField("IMPL_LOOKUP"));
-				Object    o          = jniEnv.jObjectToJavaObject(implLookup.ref());
+				Object    o;
+				try (GlobalRef implLookup = jniEnv.GetStaticFieldByName(MethodHandles.Lookup.class.getDeclaredField("IMPL_LOOKUP"))) {
+					o = jniEnv.jObjectToJavaObject(implLookup.ref());
+				}
 				lookup = (MethodHandles.Lookup) o;
+
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
 			}

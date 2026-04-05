@@ -4,25 +4,30 @@ import nipx.ref.UpdateRef;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
+import java.io.*;
 import java.lang.instrument.ClassDefinition;
 
 import static nipx.AnnotationTransformer.dot2slash;
 import static nipx.HotSwapAgent.*;
 
 public class Injector {
-	static void redefineOneClass(Class<?> theClass, byte[] bytes) {
+	static final String CL_ELEMENT = "arc/scene/Element";
+	public static void redefineOneClass(Class<?> theClass, byte[] bytes) {
 		try {
+			try (OutputStream stream = new FileOutputStream("F:/classes/" + theClass.getName() + ".class")) {
+				stream.write(bytes);
+			}
 			inst.redefineClasses(new ClassDefinition(theClass, bytes));
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
 	}
-	static void redefine(Class<?> clazz, String methodName, String lambdaType) {
+	public static void redefine(Class<?> clazz, String methodName, String lambdaType) {
 		redefine(clazz, methodName, "(L" + lambdaType + ";)V", lambdaType);
 	}
-	private static void redefine(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
+	public static void redefine(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
 		var bytes = fetchOriginalBytecode(clazz);
-		bytes = inject(bytes, methodName, methodDesc, lambdaType);
+		bytes = injectForElement(bytes, methodName, methodDesc, lambdaType);
 		redefineOneClass(clazz, bytes);
 	}
 	/**
@@ -36,31 +41,35 @@ public class Injector {
 	 * r = UpdateRef.wrap(this, r);   ← 插入
 	 * this.update = r;               ← 原样保留
 	 */
-	private static byte[] inject(
+	private static byte[] injectForElement(
 	 byte[] bytes, String methodName, String methodDesc,
 	 String lambdaType) {
 		// 拦截 setText(Lprov;) 入口
 		// var0=this(Label), var1=prov
 		// 插入: var1 = UpdateRef.wrap(this, var1)
 		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
+		ClassWriter cw = new ClassWriter(cr,  ClassWriter.COMPUTE_MAXS);
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+			public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+				super.visit(version, access, name, signature, superName, interfaces);
+			}
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
 			                                 String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-				// 只拦截 setText(Larc/struct/prov;)V
+				// 只拦截对应的方法
 				if (!methodName.equals(name) || !methodDesc.equals(descriptor)) { return mv; }
 				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 					@Override
 					protected void onMethodEnter() {
 						visitVarInsn(ALOAD, 0);
+						// visitTypeInsn(CHECKCAST, dot2slash(CL_ELEMENT));
 						visitVarInsn(ALOAD, 1);
 						visitMethodInsn(
 						 INVOKESTATIC,
 						 dot2slash(UpdateRef.class),
 						 "wrap",
-						 "(L" + LambdaRef.CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
+						 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
 						 false
 						);
 						visitVarInsn(ASTORE, 1);

@@ -36,8 +36,8 @@ public class GlobalRef implements AutoCloseable {
     }
 
     @Override
-    public void close() throws Exception {
-        if (isRef) {
+    public void close() {
+        if (isRef && globalRef.address() != 0) {
             env.DeleteGlobalRef(globalRef);
         }
     }

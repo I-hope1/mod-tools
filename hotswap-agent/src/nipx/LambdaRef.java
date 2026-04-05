@@ -3,23 +3,23 @@ package nipx;
 import arc.Core;
 import arc.func.*;
 import arc.scene.*;
+import arc.scene.event.ClickListener;
 import arc.scene.ui.*;
-import arc.scene.ui.Label;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import nipx.ref.UpdateRef;
 import org.objectweb.asm.*;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.lang.reflect.Field;
 import java.util.*;
 
-import static nipx.HotSwapAgent.*;
 import static nipx.AnnotationTransformer.dot2slash;
+import static nipx.HotSwapAgent.*;
 
-/** @see UpdateRef  */
+/** @see UpdateRef */
 public class LambdaRef {
-	static final String CL_ELEMENT = "arc/scene/Element";
 
 	public static void init() {
 		// 子类在前面，父类在后
@@ -27,8 +27,9 @@ public class LambdaRef {
 		Injector.redefine(Label.class, "setText", dot2slash(Prov.class));
 		redefineCell();
 		Injector.redefine(TextField.class, "setValidator", dot2slash(TextFieldValidator.class));
-		Injector.redefine(Element.class, "update", dot2slash(Runnable.class));
-		Injector.redefine(Element.class, "clicked", dot2slash(Runnable.class));
+		String lambdaType = dot2slash(Runnable.class);
+		Injector.redefine(Element.class, "update", "(L" + lambdaType + ";)L" + Injector.CL_ELEMENT + ";", lambdaType);
+		Injector.redefine(Element.class, "clicked", "(L" + lambdaType + ";)L" + dot2slash(ClickListener.class) + ";", lambdaType);
 
 		// redefineTable();
 	}
@@ -130,7 +131,7 @@ public class LambdaRef {
 		UpdateRef.clearLambda();
 
 		if (cleared > 0) {
-			info("HotSwap: cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
+			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
 		}
 
 		// if (Core.app != null && Core.scene != null) {
@@ -215,7 +216,7 @@ public class LambdaRef {
 			 INVOKESTATIC,
 			 dot2slash(UpdateRef.class),
 			 "wrap",
-			 "(Larc/scene/Element;" + lambdaType + ")" + lambdaType,
+			 "(L" + Injector.CL_ELEMENT + ";" + lambdaType + ")" + lambdaType,
 			 false
 			);
 			visitVarInsn(ASTORE, 1);

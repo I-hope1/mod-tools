@@ -1,5 +1,7 @@
 package nipx.profiler;
 
+import arc.graphics.g2d.SpriteBatch;
+import mindustry.core.Logic;
 import nipx.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -30,6 +32,9 @@ public class GlTimerInjector implements ClassFileTransformer {
 	public byte[] transform(ClassLoader loader, String className,
 	                        Class<?> classBeingRedefined,
 	                        ProtectionDomain domain, byte[] classfileBuffer) {
+		return inject(loader, className, classfileBuffer);
+	}
+	private static byte[] inject(ClassLoader loader, String className, byte[] classfileBuffer) {
 		boolean isBatch = batchClass.equals(className);
 		boolean isFrame = frameClass.equals(className);
 		if (!isBatch && !isFrame) return null;
@@ -98,26 +103,9 @@ public class GlTimerInjector implements ClassFileTransformer {
 		return cw.toByteArray();
 	}
 
-	public void retransform(Instrumentation inst) {
+	public void load() {
 		HotSwapAgent.info("[GlTimerInjector] Retransforming " + batchClass + " and " + frameClass);
-		retransformOne(inst, batchClass.replace('/', '.'));
-		retransformOne(inst, frameClass.replace('/', '.'));
-	}
-
-	private void retransformOne(Instrumentation inst, String dotName) {
-		for (Class<?> c : inst.getAllLoadedClasses()) {
-			if (!c.getName().equals(dotName) || !inst.isModifiableClass(c)) continue;
-			try {
-				inst.retransformClasses(c);
-			} catch (UnmodifiableClassException e) {
-				HotSwapAgent.error("[GlTimerInjector] failed: " + dotName, e);
-			}
-			return;
-		}
-		try {
-			Class.forName(dotName);
-		} catch (ClassNotFoundException e) {
-			throw new RuntimeException(e);
-		}
+		Injector.redefineOneClass(SpriteBatch.class, inject(SpriteBatch.class.getClassLoader(), batchClass, HotSwapAgent.fetchOriginalBytecode(SpriteBatch.class)));
+		Injector.redefineOneClass(Logic.class, inject(Logic.class.getClassLoader(), frameClass, HotSwapAgent.fetchOriginalBytecode(Logic.class)));
 	}
 }

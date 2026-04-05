@@ -1,8 +1,11 @@
 package modtools.unsupported;
 
+import arc.files.Fi;
 import arc.util.Log;
 import com.sun.tools.attach.VirtualMachine;
 import jdk.internal.misc.Unsafe;
+import mindustry.Vars;
+import modtools.IntVars;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.reflect.FieldUtils;
 import nipx.UtilsAgent;
@@ -15,7 +18,7 @@ import java.util.*;
 import java.util.jar.JarFile;
 
 public class UtilsAgentManager {
-	public static final  boolean DEBUG               = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
+	public static final boolean DEBUG = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 
 	public static final  String  AGENT_NAME          = "utils-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
@@ -93,7 +96,11 @@ public class UtilsAgentManager {
 	public static void init() throws Throwable {
 		if (initialized) return; // 避免重复
 		initialized = true;
-		// attachAgent(getAgentPath(), true, "");
+		attachAgent(getAgentPath(), true, "");
+		Fi fi   = IntVars.libs.child("jni-agent.jar");
+		Fi dest = Vars.tmpDirectory.child("jni-agent.jar");
+		fi.copyTo(dest);
+		appendToBootstrap(dest.absolutePath());
 	}
 
 	static void prepareSelfAttach() {

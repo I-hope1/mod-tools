@@ -50,8 +50,10 @@ public class IntVars {
 
 	/** mod的根目录 */
 	public static LoadedMod mod;
-	public static Fi        root          = new HFi(IntVars.class.getClassLoader());
-	public static Fi        dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
+	public static       Fi root          = new HFi(IntVars.class.getClassLoader());
+	/** 如果不为empty，在进入是显示 */
+	public static final Fi libs          = root.child("libs");
+	public static       Fi dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
 
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();

@@ -1,7 +1,9 @@
 package modtools.utils.profiler;
 
+import nipx.jni.JNIEnv;
 import nipx.profiler.*;
 
+import java.lang.foreign.Arena;
 import java.util.*;
 
 import static nipx.HotSwapAgent.*;
@@ -78,24 +80,36 @@ public class SamplingProfiler {
 	// ── 采样循环 ──────────────────────────────────────────────────────────────
 
 	private static void loop() {
-		while (running) {
-			try {
-				Thread.sleep(intervalMs);
-			} catch (InterruptedException e) {
-				break;
+		try (Arena arena = Arena.ofConfined()) {
+			JNIEnv jniEnv = new JNIEnv(arena);
+			while (running) {
+				try {
+					Thread.sleep(intervalMs);
+				} catch (InterruptedException e) {
+					break;
+				}
+
+				Thread target = targetThread;
+				if (target == null || !target.isAlive()) continue;
+
+				// try {
+				// 	for (FrameLocals locals : StackCapture.capture(jniEnv, target)) {
+				// 		Log.info(locals.className() + locals.methodName() + locals.methodSignature() + locals.location());
+				// 		Log.info(locals.locals());
+				// 	}
+				// } catch (Throwable _) { }
+
+				planA(target);
 			}
-
-			Thread target = targetThread;
-			if (target == null || !target.isAlive()) continue;
-
-			// ① 抓栈——此处触发目标线程进入 safepoint（~10–50 µs）
-			//    分配在 profiler 线程，不影响游戏线程 GC
-			StackTraceElement[] stack = target.getStackTrace();
-			if (stack.length == 0) continue;
-
-			// ② 过滤 + 写入火焰图树
-			sample(stack);
 		}
+	}
+	private static void planA(Thread target) {
+		// ① 抓栈——此处触发目标线程进入 safepoint（~10–50 µs）
+		//    分配在 profiler 线程，不影响游戏线程 GC
+		StackTraceElement[] stack = target.getStackTrace();
+		if (stack.length == 0) return;
+		// // ② 过滤 + 写入火焰图树
+		sample(stack);
 	}
 
 	/**
@@ -180,11 +194,11 @@ public class SamplingProfiler {
 
 
 	/* static class LiveThread {
-		 *//**
-		 * 通过反射获取 {@code LiveStackFrame.getStackWalker()} 返回的 StackWalker。
-		 * 需要 {@code --add-opens java.base/java.lang=ALL-UNNAMED}。
-		 * 初始化失败时置 null，调用方检查后回退到模式 A。
-		 *//*
+	 *//**
+	 * 通过反射获取 {@code LiveStackFrame.getStackWalker()} 返回的 StackWalker。
+	 * 需要 {@code --add-opens java.base/java.lang=ALL-UNNAMED}。
+	 * 初始化失败时置 null，调用方检查后回退到模式 A。
+	 *//*
 		private static final java.lang.StackWalker LIVE_WALKER = initLiveWalker();
 		private static java.lang.StackWalker initLiveWalker() {
 			try {

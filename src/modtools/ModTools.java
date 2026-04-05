@@ -44,8 +44,6 @@ import static modtools.utils.MySettings.SETTINGS;
 public class ModTools extends Mod {
 	public static final boolean TEST = false;
 
-	/** 如果不为empty，在进入是显示 */
-	private static final Fi             libs   = root.child("libs");
 	/** Stores errors encountered during library loading. */
 	private static final Seq<Throwable> errors = new Seq<>();
 	public static        boolean        isV6   = Version.number <= 135;

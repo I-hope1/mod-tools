@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("rawtypes")
 public class RegisterNative {
     private static final MemoryLayout JNI_NATIVE_METHOD_LAYOUT = MemoryLayout.structLayout(
             ValueLayout.ADDRESS, /*name*/

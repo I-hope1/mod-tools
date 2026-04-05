@@ -477,6 +477,12 @@ final static MethodHandle GetObjectField = Linker.nativeLinker().downcallHandle(
             /*jfieldID fieldID*/ ValueLayout.ADDRESS,
             /*jdouble value*/ ValueLayout.JAVA_DOUBLE
     ));
+    final static MethodHandle IsSameObject_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.of(
+            ValueLayout.JAVA_BOOLEAN,
+            /*JNIEnv *env */ ValueLayout.ADDRESS,
+            /*jobject obj1*/ ValueLayout.ADDRESS,
+            /*jobject obj2*/ ValueLayout.ADDRESS
+    ));
 
     JNIEnvFunctions(MemorySegment jniEnvPointer) {
         this.jniEnvPointer = jniEnvPointer;

@@ -1,0 +1,39 @@
+plugins {
+	id 'java'
+}
+
+group = 'nipx'
+version = "1.0"
+
+sourceSets.main.java.srcDirs = ["src"]
+
+repositories {
+	mavenCentral()
+	maven { url 'https://jitpack.io' }
+	mavenLocal()
+}
+
+dependencies {
+}
+
+jar {
+	manifest {
+		attributes(
+				'Agent-Class': 'nipx.JNIAgent',
+				'Premain-Class': 'nipx.JNIAgent',
+				'Can-Retransform-Classes': true,
+				'Can-Redefine-Classes': true
+		)
+	}
+	exclude "module-info.class"
+	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
+}
+
+dependencies {
+	annotationProcessor files(compilerJar)
+}
+
+
+test {
+	useJUnitPlatform()
+}

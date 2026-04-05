@@ -11,7 +11,9 @@ before_install:
   - yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
 
   # 切回 JDK 25，把干净且包含 android.jar 的环境交还给 Gradle
+  - sdk install java 25.0.2-open
   - sdk use java 25.0.2-open
+  - java -version
 
 install:
   - ./gradlew publishToMavenLocal -DANDROID_HOME=$ANDROID_HOME

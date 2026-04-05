@@ -1,6 +1,7 @@
 package modtools.annotations.unsafe;
 
 import com.sun.tools.javac.code.*;
+import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
@@ -24,11 +25,15 @@ public class DesugarRecord extends TreeTranslator {
 		}
 
 		maker.at(tree);
-		tree.mods.flags |= Flags.STATIC;
+		if (tree.sym.owner instanceof ClassSymbol) tree.mods.flags |= Flags.STATIC;
 		tree.mods.flags &= ~Flags.RECORD;
 		tree.sym.flags_field = tree.mods.flags;
 		// tree.mods.flags |= Flags.FINAL;
-		var fields = tree.defs.stream().filter(d -> d instanceof JCVariableDecl).map(d -> (JCVariableDecl) d).toList();
+		var fields = tree.defs.stream()
+		 .filter(d -> d instanceof JCVariableDecl)
+		 .map(d -> (JCVariableDecl) d)
+		 .filter(f -> (f.mods.flags & Flags.STATIC) == 0/* 排除static */)
+		 .toList();
 		// 将private设成public
 		fields.forEach(field -> {
 			field.mods.flags &= ~Flags.PRIVATE;
@@ -55,6 +60,27 @@ public class DesugarRecord extends TreeTranslator {
 		}
 
 		ListBuffer<JCStatement> buffer = new ListBuffer<>();
+		addEquals(tree, buffer, fields);
+		addHashCode(tree, buffer, fields);
+		addToString(tree, buffer, fields);
+
+		// println("-------DesugarRecord-------");
+		// if (Boolean.parseBoolean(System.getenv().get("nipx.debug.desugar_record"))) println(tree);
+	}
+	private static void addEquals(JCClassDecl tree, ListBuffer<JCStatement> buffer,
+	                              java.util.List<JCVariableDecl> fields) {
+		// 判断是否已经添加了equals
+		if (tree.sym.members().anyMatch(
+		 m -> m instanceof MethodSymbol ms
+		      && ms.name.contentEquals(ns.equals)
+		      && ms.getReturnType() == syms.booleanType
+		      && ms.params.size() == 1
+		      && ms.params.get(0).type == syms.objectType
+		)) {
+			return;
+		}
+
+		buffer.clear();
 		// 添加boolean equals(Object other)方法
 		// 判断this == other
 		JCIf checkThis = maker.If(maker.Binary(Tag.EQ, maker.This(tree.type), maker.Ident(ns.fromString("other"))),
@@ -67,12 +93,12 @@ public class DesugarRecord extends TreeTranslator {
 		buffer.add(checkNull);
 		// 判断this和other是不是同一个类型 if (other.getClass() != $other.getClass()) return false;
 		JCIf checkType = maker.If(maker.Binary(Tag.NE, maker.Apply(List.nil(), maker.Select(maker.Ident(ns.fromString("other")), ns.getClass), List.nil()),
-		 maker.Apply(List.nil(), maker.Select(maker.This(tree.type), ns.getClass), List.nil())),
+			maker.Apply(List.nil(), maker.Select(maker.This(tree.type), ns.getClass), List.nil())),
 		 maker.Return(maker.Literal(false)), null);
 		buffer.add(checkType);
 		// var $other = (Record) other;
 		buffer.add(maker.VarDef(maker.Modifiers(Flags.FINAL), ns.fromString("$other"), maker.Ident(tree.name),
-		 maker.TypeCast(maker.Ident(tree.name), maker.Ident(ns.fromString("other")))));
+		 maker.TypeCast(maker.Type(tree.type), maker.Ident(ns.fromString("other")))));
 
 		/* 遍历所有字段，判断是否相等
 		 如果是基本数据类型：if (!($other.element == element)) return false;
@@ -90,6 +116,9 @@ public class DesugarRecord extends TreeTranslator {
 			}
 			resCondition = resCondition == null ? condition : maker.Binary(Tag.AND, resCondition, condition);
 		}
+		if (resCondition == null) {
+			resCondition = maker.Literal(true);
+		}
 		buffer.add(maker.Return(resCondition));
 		// 声明方法equals
 		tree.defs = tree.defs.append(
@@ -98,6 +127,15 @@ public class DesugarRecord extends TreeTranslator {
 			List.of(maker.VarDef(maker.Modifiers(Flags.PARAMETER), ns.fromString("other"), maker.Type(syms.objectType), null)),
 			List.nil(),
 			maker.Block(0, buffer.toList()), null));
+	}
+	private static void addHashCode(JCClassDecl tree, ListBuffer<JCStatement> buffer,
+	                                java.util.List<JCVariableDecl> fields) {
+		// 判断是否已经添加了int hashCode()
+		if (tree.sym.members().anyMatch(
+		 m -> m instanceof MethodSymbol ms
+		      && ms.name.contentEquals(ns.hashCode)
+		      && ms.getReturnType() == syms.intType
+		      && ms.params.isEmpty())) { return; }
 
 		// 添加int hashCode()
 		// 使用Objects.hash(...)
@@ -110,6 +148,15 @@ public class DesugarRecord extends TreeTranslator {
 			List.nil(),
 			List.nil(),
 			maker.Block(0, buffer.toList()), null));
+	}
+	private static void addToString(JCClassDecl tree, ListBuffer<JCStatement> buffer,
+	                                java.util.List<JCVariableDecl> fields) {
+		// 判断是否已经添加了String toString()
+		if (tree.sym.members().anyMatch(
+		 m -> m instanceof MethodSymbol ms
+		      && ms.name.contentEquals(ns.toString)
+		      && ms.getReturnType() == syms.stringType
+		      && ms.params.isEmpty())) { return; }
 
 		// 添加String toString()
 		// "类名[" +
@@ -119,10 +166,16 @@ public class DesugarRecord extends TreeTranslator {
 		buffer.clear();
 		buffer.add(maker.Return(
 		 maker.Binary(Tag.PLUS, maker.Literal(tree.getSimpleName().toString() + "["),
-			maker.Binary(Tag.PLUS, fields.stream().map(f -> maker.Binary(Tag.PLUS,
-				 maker.Binary(Tag.PLUS, maker.Binary(Tag.PLUS, maker.Literal(f.name.toString()), maker.Literal("=")), maker.Ident(f)), maker.Literal(", ")))
-				.reduce(null, (a, b) -> a == null ? b : maker.Binary(Tag.PLUS, a, b)),
-			 maker.Literal("]")))));
+			maker.Binary(Tag.PLUS, fields.stream().map(f -> {
+				 // "字段名=" + 字段 + ", "
+				 return maker.Binary(Tag.PLUS,
+					maker.Binary(Tag.PLUS,
+					 maker.Binary(Tag.PLUS, maker.Literal(f.name.toString()), maker.Literal("=")),
+					 maker.Ident(f)),
+					maker.Literal(", "));
+			 }).reduce(null, (a, b) -> a == null ? b : maker.Binary(Tag.PLUS, a, b)),
+			 maker.Literal("]")))
+		));
 
 
 		tree.defs = tree.defs.append(
@@ -131,9 +184,6 @@ public class DesugarRecord extends TreeTranslator {
 			List.nil(),
 			List.nil(),
 			maker.Block(0, buffer.toList()), null));
-
-		// println("-------DesugarRecord-------");
-		// println(tree);
 	}
 	public void translateTopLevelClass(JCCompilationUnit toplevel, JCTree tree) {
 		try {

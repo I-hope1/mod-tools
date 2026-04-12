@@ -59,10 +59,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		if (!AINIT.hasMindustry) return true;
 		this.roundEnv = roundEnv;
 		runTimes++;
+		// println("-----");
+		// println(runTimes);
+		// println(annotations);
+		// roundEnv.getRootElements().stream().filter(e -> e.getSimpleName().toString().contains("HopeIconsc")).forEach(e -> println(e));
 		if (runTimes > 2) {
 			return true;
 		}
 		if (runTimes > 1) {
+			dealWithRound(annotations, roundEnv);
 			try {
 				process2();
 			} catch (Throwable e) { err(e); }
@@ -76,6 +81,15 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 			} catch (Throwable e) { err(e); }
 		}
 		// 第一次
+		dealWithRound(annotations, roundEnv);
+		try {
+			process();
+		} catch (Throwable e) { err(e); }
+		if (RECORD_TIME) Times.printElapsed("@ms for @", this);
+
+		return true;
+	}
+	private void dealWithRound(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		for (TypeElement annotation : annotations) {
 			for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
 				try {
@@ -94,14 +108,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 				}
 			}
 		}
-		try {
-			process();
-		} catch (Throwable e) { err(e); }
-		if (RECORD_TIME) Times.printElapsed("@ms for @", this);
-
-		return true;
 	}
-	/** 在{@link #dealElement(Element)}之后执行  */
+	/** 在{@link #dealElement(Element)}之后执行 */
 	public void process() throws Throwable { }
 	protected static StringBuilder getUnderlineName(String fieldName) {
 		StringBuilder underlineName = new StringBuilder();
@@ -117,8 +125,10 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 	public abstract void dealElement(T element) throws Throwable;
 
+	public ProcessingEnvironment env;
 	public final synchronized void init(ProcessingEnvironment env) {
 		super.init(env);
+		this.env = env;
 		// println("initialized");
 		initConst(env);
 		if (!AINIT.hasMindustry) return;

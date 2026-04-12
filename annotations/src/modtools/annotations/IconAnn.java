@@ -9,9 +9,12 @@ import java.lang.annotation.*;
  * @see modtools.ui.gen.HopeIconsc
  */
 @Target(ElementType.TYPE)
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.CLASS)
 public @interface IconAnn {
 	Class<?> mainClass();
 	String iconDir() default "sprites/ui/icons";
 	String genPackage() default ".";
+
+	/** internal use  */
+	boolean skip() default false;
 }

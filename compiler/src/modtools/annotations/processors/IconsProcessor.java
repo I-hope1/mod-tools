@@ -18,6 +18,8 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		JCClassDecl root = trees.getTree(element);
 		// 这里的getAnnotationByElement会直接修改Class的引用，获取class.getName()不需要mirror
 		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
+		// println(element + ":" +icons);
+		if (icons.skip()) return;
 
 		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 		if (!root.name.toString().endsWith("c")) {
@@ -43,10 +45,10 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		// 复制原文件的 imports，但跳过生成类不需要的
 		for (JCTree def : unit.defs) {
 			if (def instanceof JCImport imp) {
-				String impStr = imp.qualid.toString();
+				// String impStr = imp.qualid.toString();
 				// 跳过只属于源类（HopeIconsc）自身需要的 import
-				if (impStr.startsWith("modtools.annotations.") ||
-				    impStr.equals("modtools.ModTools")) { continue; }
+				// if (impStr.startsWith("modtools.annotations.") ||
+				//     impStr.equals("modtools.ModTools")) { continue; }
 				out.append(def).append("\n");
 			}
 		}
@@ -55,8 +57,12 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		out.append("import arc.graphics.g2d.TextureRegion;\n");
 		out.append("import arc.graphics.Texture;\n\n");
 
+		// 添加注解
+		out.append("@").append(IconAnn.class.getName()).append("(mainClass = Object.class, skip = true)\n");
 		// 声明新类 (Public 修饰)
 		out.append("public class ").append(genName).append(" {\n");
+
+		// out.append("    public static ").append(s).append(" pxakajsak;");
 
 		// modName 字段
 		out.append("    public static String modName;\n\n");

@@ -3,7 +3,7 @@ package modtools.content.world;
 import arc.func.Cons;
 import arc.graphics.Color;
 import arc.struct.Seq;
-import arc.util.Tmp;
+import arc.util.*;
 import arc.util.pooling.*;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
@@ -324,7 +324,6 @@ public class Profiler extends Content {
 		sample_freq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
 		@FlushField
 		include_packages(String[].class, it -> it.array(SamplingProfiler.includePackages)),
-		@FlushField
 		capture_method_signature(boolean.class, it -> it.$(SamplingProfiler.captureMethodSignature)) {
 			public boolean isSwitchOn() {
 				return isPanama();
@@ -346,8 +345,10 @@ public class Profiler extends Content {
 			capture_method_signature.def(isPanama());
 
 			capture_method_signature.onChange(() -> {
-				//noinspection Convert2MethodRef
-				Tools.runWhen(HotSwapManager::loaded, () -> ProfilerData.clear());
+				Tools.runWhen(HotSwapManager::loaded, () -> {
+					SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
+					ProfilerData.clear();
+				});
 			});
 			mode.onChange(r);
 			r.run();

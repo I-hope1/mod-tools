@@ -2,7 +2,6 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
-import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticFlag;
 import modtools.annotations.*;
@@ -15,21 +14,19 @@ import java.util.*;
 public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 	@Override
 	public void dealElement(ClassSymbol element) throws Throwable {
-		JCClassDecl root = trees.getTree(element);
 		// 这里的getAnnotationByElement会直接修改Class的引用，获取class.getName()不需要mirror
 		IconAnn icons = getAnnotationByElement(IconAnn.class, element, false);
 		// println(element + ":" +icons);
 		if (icons.skip()) return;
 
-		var unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
-		if (!root.name.toString().endsWith("c")) {
-			log.error(DiagnosticFlag.MANDATORY, unit.toString().indexOf(root.name.toString()) + root.name.length() - 1,
-			 SPrinter.err("The class name must end with 'c' to use the @IconAnn annotation."));
+		if (!element.name.toString().endsWith("c")) {
+			log.error(DiagnosticFlag.MANDATORY, 0,
+			 SPrinter.err("The class name '" + element.name + "' must end with 'c' to use the @IconAnn annotation."));
 			return;
 		}
 
 		// 获取原类名和去掉 'c' 的新类名
-		String s       = root.name.toString();
+		String s       = element.name.toString();
 		String genName = s.substring(0, s.length() - 1);
 
 		// 解析包名和生成的全限定名
@@ -42,23 +39,24 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		// 写入包名
 		out.append("package ").append(packageName).append(";\n\n");
 
+		out.append("import ").append(element.getQualifiedName()).append(";\n");
 		// 复制原文件的 imports，但跳过生成类不需要的
-		for (JCTree def : unit.defs) {
-			if (def instanceof JCImport imp) {
-				// String impStr = imp.qualid.toString();
-				// 跳过只属于源类（HopeIconsc）自身需要的 import
-				// if (impStr.startsWith("modtools.annotations.") ||
-				//     impStr.equals("modtools.ModTools")) { continue; }
-				out.append(def).append("\n");
-			}
-		}
+		// for (JCTree def : unit.defs) {
+		// 	if (def instanceof JCImport imp) {
+		// 		// String impStr = imp.qualid.toString();
+		// 		// 跳过只属于源类（HopeIconsc）自身需要的 import
+		// 		// if (impStr.startsWith("modtools.annotations.") ||
+		// 		//     impStr.equals("modtools.ModTools")) { continue; }
+		// 		out.append(def).append("\n");
+		// 	}
+		// }
 		// 添加我们生成的类所需的 imports
 		out.append("import arc.scene.style.TextureRegionDrawable;\n");
 		out.append("import arc.graphics.g2d.TextureRegion;\n");
 		out.append("import arc.graphics.Texture;\n\n");
 
 		// 添加注解
-		out.append("@").append(IconAnn.class.getName()).append("(mainClass = Object.class, skip = true)\n");
+		// out.append("@").append(IconAnn.class.getName()).append("(mainClass = Object.class, skip = true)\n");
 		// 声明新类 (Public 修饰)
 		out.append("public class ").append(genName).append(" {\n");
 

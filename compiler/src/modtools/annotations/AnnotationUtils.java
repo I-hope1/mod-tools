@@ -86,8 +86,8 @@ public interface AnnotationUtils {
 	 */
 	default <T extends Annotation> T getAnnotationByElement(
 	 Class<T> clazz, Element el, boolean overwrite) {
-		CompilationUnitTree unit = trees.getPath(el).getCompilationUnit();
-		JCTree              tree = elements.getTree(el);
+		CompilationUnitTree unit = overwrite ? trees.getPath(el).getCompilationUnit() : null;
+		JCTree              tree = overwrite ? elements.getTree(el) : null;
 		return getAnnotation0(clazz, unit, tree, el, overwrite);
 	}
 

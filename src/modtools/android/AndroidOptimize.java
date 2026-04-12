@@ -26,15 +26,13 @@ public class AndroidOptimize {
 		cur = new MySpriteBatch(4096);
 		Core.batch = cur;
 
-		Core.scene.add(new Table() {
-			{
+		Core.scene.add(new Table() {{
 				left().bottom();
 				TextButton button = new TextButton("Toggle", Styles.flatTogglet);
 				button.changed(AndroidOptimize::toggle);
 				button.update(() -> button.setChecked(AndroidOptimize.cur == Core.batch));
 				add(button).size(90, 90).left().bottom();
-			}
-		});
+		}});
 	}
 	public static void toggle() {
 		Core.batch = Core.batch == cur ? prev : cur;

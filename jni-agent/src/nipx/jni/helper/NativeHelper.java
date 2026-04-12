@@ -12,8 +12,19 @@ public class NativeHelper {
 		T get() throws Throwable;
 	}
 
+	@FunctionalInterface
+	public interface IntThrowableFn {
+		int get() throws Throwable;
+	}
 
 	public static <T> T throwable(ThrowableFn<T> supplier) {
+		try {
+			return supplier.get();
+		} catch (Throwable t) {
+			throw new RuntimeException(t);
+		}
+	}
+	public static int throwable(IntThrowableFn supplier) {
 		try {
 			return supplier.get();
 		} catch (Throwable t) {

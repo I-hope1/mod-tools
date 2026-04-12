@@ -2,6 +2,7 @@ package nipx.jvmti;
 
 import nipx.jni.JNIEnv;
 import nipx.jni.helper.GlobalRef;
+import nipx.jvmti.JVMTIEnv.FrameConsumer;
 
 import java.lang.foreign.MemorySegment;
 import java.util.List;
@@ -32,13 +33,8 @@ public final class StackCapture {
 	private StackCapture() { }
 
 	public static List<FrameLocals> capture(JNIEnv jniEnv, Thread thread) {
-		try (GlobalRef ref = jniEnv.JavaObjectToJObject(thread)) {
-			MemorySegment threadHandle = ref.ref();
 			return JVMTIEnv.getInstance()
-			 .captureThreadLocals(jniEnv, threadHandle, 32, 0); // 远程线程不需要跳过本地帧
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
+			 .captureThreadLocals(jniEnv, thread, 32, 0); // 远程线程不需要跳过本地帧
 	}
 
 	/**
@@ -67,6 +63,14 @@ public final class StackCapture {
 	public static List<FrameLocals> captureCurrent(JNIEnv jniEnv, int maxDepth, int skipFrames) {
 		return JVMTIEnv.getInstance()
 		 .captureCurrentThreadLocals(jniEnv, maxDepth, skipFrames);
+	}
+	public static void captureInto(JNIEnv jniEnv, Thread thread, FrameConsumer consumer) {
+		try (GlobalRef ref = jniEnv.JavaObjectToJObject(thread)) {
+			MemorySegment threadHandle = ref.ref();
+			JVMTIEnv.getInstance().walkCurrentThreadFrames(jniEnv, threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, consumer);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	// -------------------------------------------------------------------------

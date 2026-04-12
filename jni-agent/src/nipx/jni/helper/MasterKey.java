@@ -5,6 +5,7 @@ import sun.misc.Unsafe;
 
 import java.lang.foreign.Arena;
 import java.lang.invoke.*;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
 
 public interface MasterKey {
@@ -17,7 +18,7 @@ public interface MasterKey {
 
 	VarHandle openTheDoor(Field field);
 
-	MethodHandles.Lookup getTrustedLookup();
+	Lookup getTrustedLookup();
 
 	static boolean isPanamaBackend() {
 		return INSTANCE instanceof MasterKeyPanamaImpl;
@@ -26,17 +27,17 @@ public interface MasterKey {
 	@SuppressWarnings("removal")
 	class MasterKeyUnsafeImpl implements MasterKey {
 
-		public static MethodHandles.Lookup lookup;
+		public static Lookup lookup;
 
 		static {
 			try {
 				Field field = Unsafe.class.getDeclaredField("theUnsafe");
 				field.setAccessible(true);
 				Unsafe unsafe          = (Unsafe) field.get(null);
-				Field  implLookupField = MethodHandles.Lookup.class.getDeclaredField("IMPL_LOOKUP");
+				Field  implLookupField = Lookup.class.getDeclaredField("IMPL_LOOKUP");
 				Object base            = unsafe.staticFieldBase(implLookupField);
 				long   fieldOffset     = unsafe.staticFieldOffset(implLookupField);
-				lookup = ((MethodHandles.Lookup) unsafe.getObject(base, fieldOffset));
+				lookup = ((Lookup) unsafe.getObject(base, fieldOffset));
 				System.out.println("unsafe impl");
 			} catch (Exception e) {
 				throw new RuntimeException(e);
@@ -56,22 +57,22 @@ public interface MasterKey {
 		}
 
 		@Override
-		public MethodHandles.Lookup getTrustedLookup() {
+		public Lookup getTrustedLookup() {
 			return lookup;
 		}
 	}
 
 	class MasterKeyPanamaImpl implements MasterKey {
-		public static MethodHandles.Lookup lookup;
+		public static Lookup lookup;
 
 		static {
 			try (Arena arena = Arena.ofConfined()) {
 				JNIEnv    jniEnv     = new JNIEnv(arena);
 				Object    o;
-				try (GlobalRef implLookup = jniEnv.GetStaticFieldByName(MethodHandles.Lookup.class.getDeclaredField("IMPL_LOOKUP"))) {
+				try (GlobalRef implLookup = jniEnv.GetStaticFieldByName(Lookup.class.getDeclaredField("IMPL_LOOKUP"))) {
 					o = jniEnv.jObjectToJavaObject(implLookup.ref());
 				}
-				lookup = (MethodHandles.Lookup) o;
+				lookup = (Lookup) o;
 
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
@@ -91,7 +92,7 @@ public interface MasterKey {
 		}
 
 		@Override
-		public MethodHandles.Lookup getTrustedLookup() {
+		public Lookup getTrustedLookup() {
 			return lookup;
 		}
 

@@ -101,6 +101,9 @@ public class UtilsAgentManager {
 		Fi dest = Vars.tmpDirectory.child("jni-agent.jar");
 		fi.copyTo(dest);
 		appendToBootstrap(dest.absolutePath());
+		// attachAgent(dest.absolutePath(), true, "");
+		// JVMTIEnv.getInstance().asyncGetStack();
+		// JNIAgent.load();
 	}
 
 	static void prepareSelfAttach() {

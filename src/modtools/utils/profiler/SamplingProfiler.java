@@ -1,7 +1,11 @@
 package modtools.utils.profiler;
 
+import arc.util.*;
 import nipx.jni.JNIEnv;
+import nipx.jni.helper.MasterKey;
+import nipx.jvmti.*;
 import nipx.profiler.*;
+import nipx.profiler.ProfilerData.FlameNode;
 
 import java.lang.foreign.Arena;
 import java.util.*;
@@ -36,6 +40,8 @@ public class SamplingProfiler {
 	 * 例：{"mindustry", "modtools", "nipx"}
 	 */
 	public static volatile String[] includePackages = {"mindustry", "arc"};
+
+	public static boolean captureMethodSignature = true;
 
 	// ── 状态 ─────────────────────────────────────────────────────────────────
 
@@ -80,27 +86,92 @@ public class SamplingProfiler {
 	// ── 采样循环 ──────────────────────────────────────────────────────────────
 
 	private static void loop() {
-		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv jniEnv = new JNIEnv(arena);
+		if (!MasterKey.isPanamaBackend()) {
 			while (running) {
-				try {
-					Thread.sleep(intervalMs);
-				} catch (InterruptedException e) {
-					break;
-				}
+				Threads.sleep(intervalMs);
 
 				Thread target = targetThread;
 				if (target == null || !target.isAlive()) continue;
 
-				// try {
-				// 	for (FrameLocals locals : StackCapture.capture(jniEnv, target)) {
-				// 		Log.info(locals.className() + locals.methodName() + locals.methodSignature() + locals.location());
-				// 		Log.info(locals.locals());
-				// 	}
-				// } catch (Throwable _) { }
-
 				planA(target);
 			}
+			return;
+		}
+		try (Arena arena = Arena.ofConfined()) {
+			JNIEnv jniEnv = new JNIEnv(arena);
+			while (running) {
+				Threads.sleep(intervalMs);
+
+				Thread target = targetThread;
+				if (target == null || !target.isAlive()) continue;
+
+				if (captureMethodSignature) {
+					planC(jniEnv, target);
+				} else {
+					planA(target);
+				}
+				// planC(jniEnv, target);
+				// planB(jniEnv, target);
+				// planA(target);
+			}
+		}
+	}
+	private static final StringBuilder keyBuf = new StringBuilder();
+	private static void planC(JNIEnv jniEnv, Thread target) {
+		FlameNode[] curHolder = {ProfilerData.flameRoot};
+		String[]    pkgs      = includePackages;
+		try {
+			StackCapture.captureInto(jniEnv, target, (className, methodName, methodSig, thisAddr) -> {
+				if (isBlacklist(className)) return;
+				if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return;
+				// Log.info(className + "." + methodName + " " + methodSig);
+
+				// 复用 StringBuilder 拼 key
+				keyBuf.setLength(0);
+				keyBuf.append(simpleClass(className)).append('.').append(methodName)
+				 .append(methodSig);
+				// if (!className.startsWith("Larc/scene/") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
+				String key = keyBuf.toString(); // 这里仍有一次 String 分配，但比之前少很多
+
+				curHolder[0] = curHolder[0].children
+				 .computeIfAbsent(key, FlameNode::new);
+				curHolder[0].totalNanos.add(intervalMs * 1_000_000L);
+			});
+		} catch (Throwable e) {
+			// Log.err(e);
+		}
+	}
+	private static void planB(JNIEnv jniEnv, Thread target) {
+		try {
+			var      stack = StackCapture.capture(jniEnv, target);
+			String[] pkgs  = includePackages;
+
+			ProfilerData.FlameNode cur = ProfilerData.flameRoot;
+
+			// 从栈底（老帧）到栈顶（新帧）遍历
+			for (int i = stack.size() - 1; i >= 0; i--) {
+				FrameLocals frame     = stack.get(i);
+				String      className = frame.className();
+				if (isBlacklist(className)) continue;
+
+				// 包名过滤：pkgs 为空则全部接受
+				if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) continue;
+
+				// key 格式与插桩模式相同："ClassName.methodName"
+				var thisLocal = frame.locals().stream().filter(l -> "this".equals(l.name())).findFirst();
+				String key = simpleClass(className) + "." + frame.methodName()
+				             + frame.methodSignature()
+				             + (thisLocal.map(localVariable -> ": " + Long.toHexString(localVariable.getAddress())).orElse(""));
+				// Log.info(frame.locals());
+
+				// computeIfAbsent：key 存在时无 GC；首次出现才 new FlameNode
+				cur = cur.children.computeIfAbsent(key, ProfilerData.FlameNode::new);
+
+				// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
+				cur.totalNanos.add(intervalMs * 1_000_000L);
+			}
+		} catch (Throwable e) {
+			Log.err(e);
 		}
 	}
 	private static void planA(Thread target) {
@@ -124,7 +195,7 @@ public class SamplingProfiler {
 	static void sample(StackTraceElement[] stack) {
 		String[] pkgs = includePackages;
 
-		ProfilerData.FlameNode cur = ProfilerData.flameRoot;
+		FlameNode cur = ProfilerData.flameRoot;
 
 		// 从栈底（老帧）到栈顶（新帧）遍历
 		for (int i = stack.length - 1; i >= 0; i--) {
@@ -139,7 +210,7 @@ public class SamplingProfiler {
 			String key = simpleClass(className) + "." + frame.getMethodName();
 
 			// computeIfAbsent：key 存在时无 GC；首次出现才 new FlameNode
-			cur = cur.children.computeIfAbsent(key, ProfilerData.FlameNode::new);
+			cur = cur.children.computeIfAbsent(key, FlameNode::new);
 
 			// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
 			cur.totalNanos.add(intervalMs * 1_000_000L);
@@ -191,83 +262,4 @@ public class SamplingProfiler {
 		}
 		return fallback;
 	}
-
-
-	/* static class LiveThread {
-	 *//**
-	 * 通过反射获取 {@code LiveStackFrame.getStackWalker()} 返回的 StackWalker。
-	 * 需要 {@code --add-opens java.base/java.lang=ALL-UNNAMED}。
-	 * 初始化失败时置 null，调用方检查后回退到模式 A。
-	 *//*
-		private static final java.lang.StackWalker LIVE_WALKER = initLiveWalker();
-		private static java.lang.StackWalker initLiveWalker() {
-			try {
-				Class<?> liveFrameClass = Class.forName("java.lang.LiveStackFrame");
-				Method getWalker = liveFrameClass.getMethod("getStackWalker",
-				 Set.class);
-				getWalker.setAccessible(true);
-				// RETAIN_CLASS_REFERENCE 让我们可以访问帧的 Class 对象
-				var walker = (java.lang.StackWalker) getWalker.invoke(null,
-				 EnumSet.of(java.lang.StackWalker.Option.RETAIN_CLASS_REFERENCE));
-				info("[SamplingProfiler] LiveStackFrame available — in-thread sampling enabled");
-				return walker;
-			} catch (Throwable t) {
-				info("[SamplingProfiler] LiveStackFrame unavailable (" + t.getMessage()
-				     + ") — cross-thread sampling only");
-				return null;
-			}
-		}
-		 *//** LiveStackFrame.getLocals() 方法的反射句柄，初始化时缓存。 *//*
-		private static final Method GET_LOCALS = initGetLocals();
-
-		private static Method initGetLocals() {
-			try {
-				Class<?> c = Class.forName("java.lang.LiveStackFrame");
-				Method   m = c.getMethod("getLocals");
-				m.setAccessible(true);
-				return m;
-			} catch (Throwable t) { return null; }
-		}
-	}
-	 *//**
-	 * 在游戏线程上直接调用——通过 LiveStackFrame 遍历当前调用栈，
-	 * 从每帧的 {@code getLocals()[0]} 读取 {@code this}，
-	 * 用 {@link EntityKeyExtractor} 提取实体 key。
-	 *
-	 * <p>典型调用点：插桩注入到游戏主循环的 update 调度方法，
-	 * 例如 {@code Groups.update()} 或 {@code EntityGroup.update()} 的入口处。
-	 *
-	 * <p>如果 LiveStackFrame 不可用，静默退化为无操作（不影响插桩模式）。
-	 *//*
-	public static void sampleCurrentThread() {
-		if (LiveThread.LIVE_WALKER == null || LiveThread.GET_LOCALS == null) return;
-		long     weight = intervalMs * 1_000_000L;
-		String[] pkgs   = includePackages;
-
-		// 用一个可变引用在 lambda 里传递当前节点
-		ProfilerData.FlameNode[] curHolder = {ProfilerData.flameRoot};
-
-		LiveThread.LIVE_WALKER.forEach(frame -> {
-			String className = frame.getClassName();
-			if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return;
-
-			// 尝试从 locals[0] 读 this
-			String entityPrefix = "";
-			try {
-				Object[] locals = (Object[]) LiveThread.GET_LOCALS.invoke(frame);
-				if (locals != null && locals.length > 0 && locals[0] != null
-				    && !(locals[0] instanceof java.lang.StackWalker.StackFrame)) {
-					// locals[0] 是 this（实例方法）或 primitive slot（静态方法，此时跳过）
-					entityPrefix = EntityKeyExtractor.key(locals[0]) + ".";
-				}
-			} catch (Throwable ignored) {  *//* primitive slot 等情况直接跳过 *//*  }
-
-			String key = entityPrefix + simpleClass(className) + "." + frame.getMethodName();
-			ProfilerData.FlameNode node = curHolder[0].children
-			 .computeIfAbsent(key, ProfilerData.FlameNode::new);
-			node.totalNanos.add(weight);
-			curHolder[0] = node; // 往叶方向移动
-		});
-	} */
-
 }

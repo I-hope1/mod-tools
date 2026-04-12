@@ -9,6 +9,7 @@ import mindustry.entities.Effect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.content.Content;
 import modtools.events.ISettings;
@@ -323,6 +324,12 @@ public class Profiler extends Content {
 		sample_freq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
 		@FlushField
 		include_packages(String[].class, it -> it.array(SamplingProfiler.includePackages)),
+		@FlushField
+		capture_method_signature(boolean.class, it -> it.$(SamplingProfiler.captureMethodSignature)) {
+			public boolean isSwitchOn() {
+				return isPanama();
+			}
+		},
 
 		//
 		;
@@ -336,9 +343,18 @@ public class Profiler extends Content {
 					Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
 				});
 			};
+			capture_method_signature.def(isPanama());
+
+			capture_method_signature.onChange(() -> {
+				//noinspection Convert2MethodRef
+				Tools.runWhen(HotSwapManager::loaded, () -> ProfilerData.clear());
+			});
 			mode.onChange(r);
 			r.run();
 		}
+	}
+	private static boolean isPanama() {
+		return IntVars.javaVersion >= 22;
 	}
 
 	public enum Mode {

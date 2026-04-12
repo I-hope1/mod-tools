@@ -5,17 +5,17 @@ import nipx.jni.helper.*;
 
 import java.lang.foreign.*;
 import java.lang.invoke.*;
-import java.lang.reflect.Field;
+import java.lang.reflect.*;
 import java.util.*;
 
 /**
  * Pure-Panama wrapper around a {@code jvmtiEnv*}.
  *
  * <h3>Depth consistency guarantee</h3>
- * JVMTI depths are measured from the <em>current</em> top of the stack at the
+ * JVMTI depths are measured from the top of the stack at the
  * moment of each call.  This implementation therefore performs all
  * {@code GetLocal*} reads <strong>inline</strong> inside
- * {@link #captureCurrentThreadLocals} — never from a nested helper — so the
+ * {@link #captureThreadLocals} — never from a nested helper — so the
  * depth values obtained by {@code GetStackTrace} remain valid when passed to
  * {@code GetLocal*} later in the same method body.
  */
@@ -40,29 +40,32 @@ public class JVMTIEnv {
 	 * in the 128-byte bitfield struct.
 	 */
 	private static final int  CAN_ACCESS_LOCAL_VARIABLES = 1 << 14;
-	private static final int  CAN_SUSPEND                = 1 << 19;
+	private static final int  CAN_SUSPEND                = 1 << 20;
 	private static final long JVMTICAPS_SIZE             = 128L;
 
 	// -------------------------------------------------------------------------
 	// JVMTI function-table slot indices  (0-based, i.e. spec slot N → index N-1)
 	// Source: jvmti.h from OpenJDK 21+ (includes GetAllModules at slot 3)
 	// -------------------------------------------------------------------------
-	private static final long IDX_GetFrameCount           = 15;  // slot 16
-	private static final long IDX_GetLocalObject          = 20;  // slot 21
-	private static final long IDX_GetLocalInt             = 21;  // slot 22
-	private static final long IDX_GetLocalLong            = 22;  // slot 23
-	private static final long IDX_GetLocalFloat           = 23;  // slot 24
-	private static final long IDX_GetLocalDouble          = 24;  // slot 25
-	private static final long IDX_Deallocate              = 46;  // slot 47
-	private static final long IDX_GetClassSignature       = 47;  // slot 48
-	private static final long IDX_GetMethodName           = 63;  // slot 64
-	private static final long IDX_GetMethodDeclaringClass = 64;  // slot 65
-	private static final long IDX_GetLocalVariableTable   = 71;  // slot 72
-	private static final long IDX_SuspendThread           = 4;  // slot 5
-	private static final long IDX_ResumeThread            = 5;  // slot 6
-	private static final long IDX_GetStackTrace           = 103; // slot 104
-	private static final long IDX_GetThreadState          = 108; // slot 109
-	private static final long IDX_AddCapabilities         = 141; // slot 142
+	private static final long IDX_SuspendThread            = 4;  // slot 5
+	private static final long IDX_ResumeThread             = 5;  // slot 6
+	private static final long IDX_GetFrameCount            = 15;  // slot 16
+	private static final long IDX_GetThreadState           = 16; // slot 17
+	private static final long IDX_GetLocalObject           = 20;  // slot 21
+	private static final long IDX_GetLocalInt              = 21;  // slot 22
+	private static final long IDX_GetLocalLong             = 22;  // slot 23
+	private static final long IDX_GetLocalFloat            = 23;  // slot 24
+	private static final long IDX_GetLocalDouble           = 24;  // slot 25
+	private static final long IDX_Deallocate               = 46;  // slot 47
+	private static final long IDX_GetClassSignature        = 47;  // slot 48
+	private static final long IDX_GetMethodName            = 63;  // slot 64
+	private static final long IDX_GetMethodDeclaringClass  = 64;  // slot 65
+	private static final long IDX_GetMethodModifiers       = 65;  // slot 66
+	private static final long IDX_GetLocalVariableTable    = 71;  // slot 72
+	private static final long IDX_GetCapabilities          = 88; // slot 89
+	private static final long IDX_GetStackTrace            = 103; // slot 104
+	private static final long IDX_GetPotentialCapabilities = 139; // slot 141
+	private static final long IDX_AddCapabilities          = 141; // slot 142
 
 	/** JNIInvokeInterface_ index for GetEnv (0-based). */
 	private static final long IDX_JavaVM_GetEnv = 6;
@@ -107,25 +110,31 @@ public class JVMTIEnv {
 	 ));
 
 	/** AddCapabilities(env, caps*) → jint */
-	private static final MethodHandle MH_AddCapabilities = Linker.nativeLinker().downcallHandle(
+	private static final MethodHandle MH_AddCapabilities          = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS   // const jvmtiCapabilities*
 	 ));
+	/** GetPotentialCapabilities(env, caps*) → jint */
+	private static final MethodHandle MH_GetPotentialCapabilities = Linker.nativeLinker().downcallHandle(
+	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
+		ValueLayout.ADDRESS,  // jvmtiEnv*
+		ValueLayout.ADDRESS   // jvmtiCapabilities* (out)
+	 ));
 	/** SuspendThread(env, thread) → jint */
-	private static final MethodHandle MH_SuspendThread   = Linker.nativeLinker().downcallHandle(
+	private static final MethodHandle MH_SuspendThread            = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS, // jvmtiEnv*
 		ValueLayout.ADDRESS // jthread
 	 ));
 	/** ResumeThread(env, thread) → jint */
-	private static final MethodHandle MH_ResumeThread    = Linker.nativeLinker().downcallHandle(
+	private static final MethodHandle MH_ResumeThread             = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS, // jvmtiEnv*
 		ValueLayout.ADDRESS // jthread
 	 ));
 	/** GetThreadState(env, thread, thread_state*) → jint */
-	private static final MethodHandle MH_GetThreadState  = Linker.nativeLinker().downcallHandle(
+	private static final MethodHandle MH_GetThreadState           = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS,  // jthread
@@ -191,12 +200,18 @@ public class JVMTIEnv {
 	 ));
 
 	/** GetClassSignature(env, jclass, char** sig, char** generic) → jint */
-	private static final MethodHandle MH_GetClassSignature = Linker.nativeLinker().downcallHandle(
+	private static final MethodHandle MH_GetClassSignature  = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS,  // jclass
 		ValueLayout.ADDRESS,  // char** signature_ptr
 		ValueLayout.ADDRESS   // char** generic_ptr (we pass NULL)
+	 ));
+	/** GetMethodModifiers(env, methodID, modifiers*) → jint */
+	private static final MethodHandle MH_GetMethodModifiers = Linker.nativeLinker().downcallHandle(
+	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
+		ValueLayout.ADDRESS,  // jvmtiEnv*
+		ValueLayout.ADDRESS  // jmethodID
 	 ));
 
 	/** Deallocate(env, mem*) → jint */
@@ -205,6 +220,7 @@ public class JVMTIEnv {
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS   // void* mem
 	 ));
+
 
 	//endregion
 	//region Instance state
@@ -222,17 +238,18 @@ public class JVMTIEnv {
 	private final MemorySegment fpGetLocalDouble;
 	private final MemorySegment fpGetMethodName;
 	private final MemorySegment fpGetMethodDeclaringClass;
+	private final MemorySegment fpGetMethodModifiers;
 	private final MemorySegment fpGetClassSignature;
 	private final MemorySegment fpDeallocate;
 	private final MemorySegment fpSuspendThread;
 	private final MemorySegment fpResumeThread;
 	private final MemorySegment fpGetThreadState;
+	private final MemorySegment fpGetPotentialCapabilities;
 
 	//endregion
 	//region Singleton
 
 	private static volatile JVMTIEnv INSTANCE;
-
 	/** Returns the process-wide singleton, creating it on first call. */
 	public static JVMTIEnv getInstance() {
 		if (INSTANCE == null) {
@@ -262,11 +279,13 @@ public class JVMTIEnv {
 		fpGetLocalDouble = fp(IDX_GetLocalDouble);
 		fpGetMethodName = fp(IDX_GetMethodName);
 		fpGetMethodDeclaringClass = fp(IDX_GetMethodDeclaringClass);
+		fpGetMethodModifiers = fp(IDX_GetMethodModifiers);
 		fpGetClassSignature = fp(IDX_GetClassSignature);
 		fpDeallocate = fp(IDX_Deallocate);
 		fpSuspendThread = fp(IDX_SuspendThread);
 		fpResumeThread = fp(IDX_ResumeThread);
 		fpGetThreadState = fp(IDX_GetThreadState);
+		fpGetPotentialCapabilities = fp(IDX_GetPotentialCapabilities);
 
 		enableRequiredCapabilities();
 	}
@@ -313,48 +332,50 @@ public class JVMTIEnv {
 		}
 	}
 
-	/** 包括can_suspend，can_access_local_variables */
+	/** @see #CAN_ACCESS_LOCAL_VARIABLES */
 	private void enableRequiredCapabilities() {
-		try (Arena tmp = Arena.ofConfined()) {
-			MemorySegment caps = tmp.allocate(JVMTICAPS_SIZE, 8);
-			// jvmtiCapabilities 位定义 (first jint, offset 0):
-			caps.set(ValueLayout.JAVA_INT, 0, CAN_ACCESS_LOCAL_VARIABLES);
-			int rc = (int) MH_AddCapabilities.invokeExact(
-			 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);
-			if (rc != JVMTI_ERROR_NONE) {
-				// 仅仅记录警告，不要 throw
-				System.err.println("[W] JVMTI: Local variable access not available in this phase (rc=" + rc + ")");
+		/* try (Arena arena = Arena.ofConfined()) {
+			MemorySegment caps = arena.allocate(16L); // jvmtiCapabilities = 128bit
+
+			int rc = (int) MH_GetPotentialCapabilities.invokeExact(fpGetPotentialCapabilities, jvmtiEnvPtr, caps);
+			System.out.printf("GetPotentialCapabilities rc=%d%n", rc);
+
+			// 打印前16字节的bit，定位can_suspend实际在哪一位
+			for (int i = 0; i < 16; i++) {
+				byte b = caps.get(ValueLayout.JAVA_BYTE, i);
+				System.out.printf("byte[%2d] = 0x%02X  %s%n", i, b & 0xFF,
+				 Integer.toBinaryString((b & 0xFF) | 0x100).substring(1));
 			}
+		} catch (Throwable t) {
+			throw new RuntimeException(t);
+		} */
+		try (Arena arena = Arena.ofConfined()) {
+			{
+				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
+				// jvmtiCapabilities 位定义 (first jint, offset 0):
+				caps.set(ValueLayout.JAVA_INT, 0, CAN_ACCESS_LOCAL_VARIABLES);
+
+				int rc = (int) MH_AddCapabilities.invokeExact(
+				 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);
+				if (rc != JVMTI_ERROR_NONE) {
+					// 仅仅记录警告，不要 throw
+					System.err.println("[W] JVMTI: Local variable access not available in this phase (rc=" + rc + ")");
+				}
+			}
+			/* MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
+			int rc = (int) Linker.nativeLinker().downcallHandle(FunctionDescriptor.of(ValueLayout.JAVA_INT,
+			 ValueLayout.ADDRESS, ValueLayout.ADDRESS)).invokeExact(
+			 fp(IDX_GetCapabilities), jvmtiEnvPtr, caps);
+
+			System.out.printf("GetCapabilities rc=%d byte[1]=0x%02X byte[2]=0x%02X%n",
+			 rc, caps.get(ValueLayout.JAVA_BYTE, 1), caps.get(ValueLayout.JAVA_BYTE, 2)); */
 		} catch (Throwable t) {
 			throw new RuntimeException(t);
 		}
 	}
-	private boolean canSafelySuspend(MemorySegment thread) {
-		try (Arena tmp = Arena.ofConfined()) {
-			MemorySegment stateOut = tmp.allocate(ValueLayout.JAVA_INT);
-			int rc = (int) MH_GetThreadState.invokeExact(
-			 fpGetThreadState, jvmtiEnvPtr, thread, stateOut);
-			if (rc != JVMTI_ERROR_NONE) return false;
-
-			int state = stateOut.get(ValueLayout.JAVA_INT, 0);
-
-			// 不能挂起的状态
-			if ((state & 0x2) != 0) return false;  // JVMTI_THREAD_STATE_TERMINATED
-			if ((state & 0x10) != 0) return false; // JVMTI_THREAD_STATE_SUSPENDED (已挂起)
-			if ((state & 0x200) != 0) return false;// JVMTI_THREAD_STATE_IN_NATIVE (native 中，风险高)
-
-			// 谨慎挂起的状态（可选）
-			// if ((state & 0x40) != 0) return false; // JVMTI_THREAD_STATE_WAITING
-
-			return true;
-		} catch (Throwable e) {
-			e.printStackTrace();
-			return false; // 保守策略：检查失败就不挂起
-		}
-	}
-
 	//endregion
 	//region Public API
+
 
 	/**
 	 * Captures local variables for every frame of the <em>current</em> thread.
@@ -369,29 +390,42 @@ public class JVMTIEnv {
 	 * @return immutable list of {@link FrameLocals}, shallowest first
 	 */
 	public List<FrameLocals> captureCurrentThreadLocals(JNIEnv jniEnv, int maxDepth, int skipFrames) {
-		return captureThreadLocals(jniEnv, MemorySegment.NULL, maxDepth, skipFrames);
+		return captureThreadLocals(jniEnv, Thread.currentThread(), maxDepth, skipFrames);
 	}
-	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, MemorySegment targetThread, int maxDepth,
+	public int getThreadState(MemorySegment jthread) throws Throwable {
+		try (Arena arena = Arena.ofConfined()) {
+			// jthread: jthread reference
+			MemorySegment stateOut = arena.allocate(ValueLayout.JAVA_INT);
+			int           rc       = (int) MH_GetThreadState.invokeExact(fpGetThreadState, jvmtiEnvPtr, jthread, stateOut);
+			System.out.printf("GetThreadState rc=%d state=0x%X%n",
+			 rc, stateOut.get(ValueLayout.JAVA_INT, 0));
+			// rc=10 → jthread 引用本身就是坏的
+			// state & 0x20 (JVMTI_THREAD_STATE_SUSPENDED) → 确认是否被挂起
+			return rc;
+		}
+	}
+	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, Thread thread, int maxDepth,
 	                                             int skipFrames) {
-		boolean isCurrent = targetThread.equals(MemorySegment.NULL) || targetThread.address() == 0;
-		boolean suspended = false;
-
-
-		// 如果不是当前线程，必须挂起
-		/* if (!isCurrent) {
+		MemorySegment targetThread;
+		GlobalRef     globalRef = null;   // 生命周期手动管理
+		boolean       suspended = false;
+		if (thread == Thread.currentThread()) {
+			targetThread = MemorySegment.NULL;
+		} else {
+			globalRef = jniEnv.JavaObjectToJObject(thread);
+			targetThread = globalRef.ref();
 			try {
-				// System.out.println(jniEnv.jObjectToJavaObject(targetThread)); // 没问题
-				int rc = (int) MH_SuspendThread.invokeExact(fpSuspendThread, jvmtiEnvPtr, targetThread);
-				if (rc == 15 || rc == 99) {
-					return Collections.emptyList(); // 线程已消失，直接返回空结果，不报错
-				}
-				if (rc != JVMTI_ERROR_NONE) {
-					// 其他错误（如权限问题）再抛出
-					checkError(rc, "SuspendThread");
-				}
+				int rc = (int) MH_SuspendThread.invokeExact(
+				 fpSuspendThread, jvmtiEnvPtr, targetThread);
+				// System.out.println("SuspendThread(offset=32) rc=" + rc);
+				checkError(rc, "SuspendThread");
 				suspended = true;
-			} catch (Throwable t) { throw new RuntimeException(t); }
-		} */
+				// getThreadState(targetThread);
+			} catch (Throwable e) {
+				suspended = false;
+			}
+		}
+
 		try (Arena arena = Arena.ofConfined()) {
 
 			// ------------------------------------------------------------------
@@ -441,6 +475,7 @@ public class JVMTIEnv {
 			//    slot reads target the wrong frame.
 			// ------------------------------------------------------------------
 			List<FrameLocals> result = new ArrayList<>(frameCount - skipFrames);
+			// 循环内：只存地址，不转换
 
 			for (int d = skipFrames; d < frameCount; d++) {
 				VarEntry[]          vars   = tables[d];
@@ -468,17 +503,12 @@ public class JVMTIEnv {
 								if (err == JVMTI_ERROR_NONE) {
 									MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
 									if (ref.address() != 0L) {
-										// 被动获取信息：不调用 Java 方法，只调用 JVMTI/JNI 基础函数
-										MemorySegment jclass = jniEnv.GetObjectClass(ref);
-										String        sig    = fetchClassSig(arena, jclass);
-
-										// 仅仅记录描述信息，不进行对象转换
-										// 这样就避免了触发 Class.forName 或任何 Java 代码执行
-										value = String.format("[%s @ 0x%x]", sig, ref.address());
+										value = ref;
 									} else {
 										value = "null";
 									}
 								}
+								// System.out.println(err);
 							}
 							// ---- boolean, byte, char, short, int ---------------
 							case 'Z', 'B', 'C', 'S', 'I' -> {
@@ -523,8 +553,9 @@ public class JVMTIEnv {
 							}
 							default -> { /* void / unknown — leave null */ }
 						}
-					} catch (Throwable ignored) {
+					} catch (Throwable e) {
 						// Any GetLocal* failure → leave value as null
+						// e.printStackTrace();
 					}
 
 					locals.add(new LocalVariable(v.name, v.sig, v.slot, value));
@@ -538,36 +569,99 @@ public class JVMTIEnv {
 			return Collections.unmodifiableList(result);
 
 		} catch (Throwable t) {
-			throw new RuntimeException("captureCurrentThreadLocals failed", t);
-		} /* finally {
-			// 无论成功失败，只要挂起了，就必须恢复
-			if (!isCurrent && suspended) {
+			throw new RuntimeException("captureThreadLocals failed", t);
+		} finally {
+			if (targetThread != MemorySegment.NULL && suspended) {
 				try {
-					MH_ResumeThread.invokeExact(fpResumeThread, jvmtiEnvPtr, targetThread);
-				} catch (Throwable ignored) { }
+					int rc = (int) MH_ResumeThread.invokeExact(fpResumeThread, jvmtiEnvPtr, targetThread);
+					checkError(rc, "ResumeThread");
+				} catch (Throwable _) { }
 			}
-		} */
-	}
-	private int suspendThread(MemorySegment thread) throws Throwable {
-		long deadline = System.currentTimeMillis() + 1000;
-
-		while (System.currentTimeMillis() < deadline) {
-			if (!canSafelySuspend(thread)) {
-				Thread.sleep(5); // 短暂等待后重试
-				continue;
-			}
-
-			int rc = (int) MH_SuspendThread.invokeExact(
-			 fpSuspendThread, jvmtiEnvPtr, thread);
-
-			if (rc == JVMTI_ERROR_NONE) return rc;
-			if (rc == 15) return rc; // THREAD_NOT_ALIVE - 线程已消失
-			if (rc == 99) return rc; // 能力不足 - 不应重试
-
-			// 其他错误：短暂等待后重试
-			Thread.sleep(2);
+			if (globalRef != null) globalRef.close();
 		}
-		return 99; // 超时
+	}
+
+	private final MethodMeta[]          metasBuf    = new MethodMeta[256];
+	private final long[]                locsBuf     = new long[256];
+	private final long[]                thisAddrBuf = new long[256];
+	// MethodMeta 按 method ID 缓存，方法元数据在类生命周期内不变
+	private final Map<Long, MethodMeta> metaCache   = new HashMap<>();
+	public void walkCurrentThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
+	                                    int maxDepth, int skipFrames,
+	                                    FrameConsumer consumer) {
+		try (Arena arena = Arena.ofConfined()) {
+			int           total    = maxDepth + skipFrames;
+			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
+			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
+
+			int rc = (int) MH_GetStackTrace.invokeExact(
+			 fpGetStackTrace, jvmtiEnvPtr,
+			 targetThread, 0, total, frameBuf, cntOut);
+			checkError(rc, "GetStackTrace");
+
+			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
+
+			// 复用数组，零分配
+			for (int d = frameCount - 1; d >= 0; d--) {
+				long          off = d * FRAME_SIZE;
+				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
+				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
+
+				// 缓存命中时零分配
+				long       midAddr = mid.address();
+				MethodMeta meta    = metaCache.get(midAddr);
+				if (meta == null) {
+					meta = fetchMethodMeta(arena, mid); // 仅首次分配
+					metaCache.put(midAddr, meta);
+				}
+				// metasBuf[d] = meta;
+				consumer.accept(meta.className, meta.methodName, meta.methodSig, 0);
+			}
+
+			/* // 批量读 this
+			for (int d = skipFrames; d < frameCount; d++) {
+				int flags = metasBuf[d].flags;
+				if (Modifier.isStatic(flags) || Modifier.isNative(flags)) {
+					thisAddrBuf[d] = 0L;
+					continue;
+				}
+				try {
+					MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
+					int err = (int) MH_GetLocalObject.invokeExact(
+					 fpGetLocalObject, jvmtiEnvPtr,
+					 targetThread, d, 0, out);
+					thisAddrBuf[d] = 0L;
+					if (err == JVMTI_ERROR_NONE) {
+						MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
+						thisAddrBuf[d] = jniEnv.identityHashCode(ref) & 0xFFFFFFFFL;
+					}
+					if (err != 13) {
+						System.out.println(err);
+					}
+				} catch (Throwable e) {
+					// e.printStackTrace();
+					thisAddrBuf[d] = 0L;
+				}
+			} */
+
+			// 回调，栈底到栈顶
+			// for (int d = frameCount - 1; d >= skipFrames; d--) {
+			// 	MethodMeta meta = metasBuf[d];
+			// 	consumer.accept(meta.className, meta.methodName, meta.methodSig, 0);
+			// }
+		} catch (Throwable t) {
+			throw new RuntimeException("walkCurrentThreadFrames failed", t);
+		}
+	}
+	@FunctionalInterface
+	public interface FrameConsumer {
+		/**
+		 * @param className   类名
+		 * @param methodName  方法名
+		 * @param methodSig   方法签名
+		 * @param thisAddress this 的地址，0 表示静态方法或未找到
+		 */
+		void accept(String className, String methodName, String methodSig, long thisAddress);
 	}
 
 	//endregion
@@ -577,6 +671,7 @@ public class JVMTIEnv {
 		String className  = "<unknown>";
 		String methodName = "<unknown>";
 		String methodSig  = "";
+		int    flags      = -1;
 		try {
 			// -- GetMethodName --
 			MemorySegment namePtrOut = arena.allocate(ValueLayout.ADDRESS);
@@ -604,8 +699,13 @@ public class JVMTIEnv {
 				MemorySegment jclass = classOut.get(ValueLayout.ADDRESS, 0);
 				className = fetchClassSig(arena, jclass);
 			}
-		} catch (Throwable ignored) { }
-		return new MethodMeta(className, methodName, methodSig);
+
+			// -- GetMethodModifiers --
+			flags = (int) MH_GetMethodModifiers.invokeExact(fpGetMethodModifiers, jvmtiEnvPtr, methodId);
+		} catch (Throwable e) {
+			// e.printStackTrace();
+		}
+		return new MethodMeta(className, methodName, methodSig, flags);
 	}
 
 	private String fetchClassSig(Arena arena, MemorySegment jclass) {
@@ -705,7 +805,7 @@ public class JVMTIEnv {
 
 	//endregion
 	//region Private value types
-	private record MethodMeta(String className, String methodName, String methodSig) { }
+	private record MethodMeta(String className, String methodName, String methodSig, int flags) { }
 	private record VarEntry(String name, String sig, int slot, long startLoc, int length) {
 		static final VarEntry[] EMPTY = new VarEntry[0];
 	}

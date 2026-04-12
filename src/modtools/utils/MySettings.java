@@ -52,7 +52,7 @@ public class MySettings {
 			Object old = super.put(key, value);
 			/* 以下情况不write(), [it=value.getClass()]
 			(it.isPrimitive() || it == String) -> equals(old, value) */
-			if (old == null && value == null) return old;
+			if (old == null && value == null) return null;
 
 			Class<?> it = value == null ? old.getClass() : value.getClass();
 			if (CAST.unbox(it).isPrimitive() || it == String.class) {
@@ -63,6 +63,7 @@ public class MySettings {
 			fireChanged(key);
 			return old;
 		}
+
 		public Object remove(String key) {
 			Object o = super.remove(key);
 			fireChanged(key);
@@ -81,7 +82,7 @@ public class MySettings {
 			}
 		};
 		public void write() {
-			TaskManager.scheduleOrReset(0.8f, task);
+			TaskManager.scheduleOrReset(0.2f, task);
 		}
 
 		public void setDef(String key, Object value) {

@@ -8,6 +8,7 @@ import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.comp.*;
+import com.sun.tools.javac.jvm.Target;
 import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
@@ -33,6 +34,7 @@ public class TopTranslator extends TreeTranslator {
 	final Resolve    resolve;
 	final Types      types;
 	final Operators  operators;
+	final Target     target;
 
 	public static final String LOCAL_PREFIX = "$$letexpr$$";
 
@@ -51,6 +53,7 @@ public class TopTranslator extends TreeTranslator {
 		resolve = Resolve.instance(context);
 		types = Types.instance(context);
 		operators = Operators.instance(context);
+		target = Target.instance(context);
 
 		addDefaultTodo();
 		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
@@ -372,7 +375,10 @@ public class TopTranslator extends TreeTranslator {
 		super.visitLambda(tree);
 		transTree(tree);
 	}
-
+	public void visitReference(JCMemberReference tree) {
+		super.visitReference(tree);
+		transTree(tree);
+	}
 	public void visitReturn(JCReturn tree) {
 		super.visitReturn(tree);
 		transTree(tree);

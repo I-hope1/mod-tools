@@ -47,7 +47,9 @@ public class JNIEnv {
 
 	private final MemorySegment midGetSecret;
 	private final MemorySegment midSetSecret;
+	private final MemorySegment midIdentityHashCode;
 	private final GlobalRef     classJNIEnvRef;
+	private final GlobalRef     classSystem;
 
 
 	public JNIEnv(SegmentAllocator allocator) {
@@ -55,10 +57,15 @@ public class JNIEnv {
 		jniEnvPointer = initJniEnv();
 		functions = new JNIEnvFunctions(jniEnvPointer);
 		classJNIEnvRef = FindClass(JNIEnv.class); // 此时是初始阶段，查找是安全的
+		classSystem = FindClass(System.class);
 		try {
 			// 手动获取 mid，避免调用 CallStaticMethodByName
-			midGetSecret = getStaticMethodID(classJNIEnvRef.ref(), "getSecret", "()Ljava/lang/Object;");
-			midSetSecret = getStaticMethodID(classJNIEnvRef.ref(), "setSecret", "(Ljava/lang/Object;)V");
+			MemorySegment ref = classJNIEnvRef.ref();
+			midGetSecret = getStaticMethodID(ref, "getSecret", "()Ljava/lang/Object;");
+			midSetSecret = getStaticMethodID(ref, "setSecret", "(Ljava/lang/Object;)V");
+		} catch (Throwable t) { throw new RuntimeException(t); }
+		try {
+			midIdentityHashCode = getStaticMethodID(classSystem.ref(), "identityHashCode", "(Ljava/lang/Object;)I");
 		} catch (Throwable t) { throw new RuntimeException(t); }
 	}
 	// 增加一个底层的获取 ID 的方法
@@ -164,7 +171,6 @@ public class JNIEnv {
 			throw new IllegalArgumentException("only support static field");
 		}
 		return throwable(() -> {
-
 			try (var clsRef = FindClass(field.getDeclaringClass())) {
 				var fidRef = (MemorySegment) JNIEnvFunctions.GetStaticFieldID_MH.invokeExact(
 				 functions.GetStaticFieldIDFp,
@@ -462,9 +468,11 @@ public class JNIEnv {
 	public Object jObjectToJavaObject(MemorySegment jobject) {
 		return throwable(() -> {
 			MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, 1);
-			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{jobject.address()}));
+			long          address    = jobject.address();
+			if (address == 0) return null;
+			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{address}));
 			JNIEnvFunctions.CallStaticVoidMethodA_MH.invokeExact(
-			 functions.CallStaticObjectMethodAFp, jniEnvPointer, classJNIEnvRef.ref(), midSetSecret, jValuesPtr);
+			 functions.CallStaticVoidMethodAFp, jniEnvPointer, classJNIEnvRef.ref(), midSetSecret, jValuesPtr);
 			Object res = jniToJava.get();
 			jniToJava.remove();
 			return res;
@@ -478,10 +486,21 @@ public class JNIEnv {
 			long address = (long) JNIEnvFunctions.CallStaticObjectMethodA_MH.invokeExact(
 			 functions.CallStaticObjectMethodAFp, jniEnvPointer, classJNIEnvRef.ref(), midGetSecret, MemorySegment.NULL);
 			if (address == 0) return null;
-			MemorySegment localRef     = MemorySegment.ofAddress(address);
-			MemorySegment jobj = NewGlobalRef(localRef);
+			MemorySegment localRef = MemorySegment.ofAddress(address);
+			MemorySegment jobj     = NewGlobalRef(localRef);
 			jniToJava.remove();
 			return new GlobalRef(this, jobj);
+		});
+	}
+
+	public int identityHashCode(MemorySegment ref) {
+		return throwable(() -> {
+			MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, 1);
+			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{ref.address()}));
+			int hashCode = (int) (long) JNIEnvFunctions.CallStaticIntMethodA_MH.invokeExact(
+			 functions.CallStaticIntMethodAFp,
+			 jniEnvPointer, classSystem.ref(), midIdentityHashCode, jValuesPtr);
+			return hashCode;
 		});
 	}
 
@@ -508,6 +527,9 @@ public class JNIEnv {
 			}
 		});
 	}
+	public MemorySegment getJniEnvPointer() {
+		return jniEnvPointer;
+	}
 
 	private MemorySegment initJniEnv() {
 		try {
@@ -521,6 +543,6 @@ public class JNIEnv {
 		return throwable(() -> (MemorySegment) JNIEnvFunctions.GetObjectClass_MH.invokeExact(functions.GetObjectClassFp, jniEnvPointer, ref));
 	}
 	public boolean IsSameObject(MemorySegment m1, MemorySegment m2) {
-		return throwable(() -> (boolean)JNIEnvFunctions.IsSameObject_MH.invokeExact(functions.IsSameObjectFp, jniEnvPointer, m1, m2));
+		return throwable(() -> (boolean) JNIEnvFunctions.IsSameObject_MH.invokeExact(functions.IsSameObjectFp, jniEnvPointer, m1, m2));
 	}
 }

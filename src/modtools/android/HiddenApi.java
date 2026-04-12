@@ -1,6 +1,5 @@
 package modtools.android;
 
-import android.os.Debug;
 import arc.util.Log;
 import dalvik.system.VMRuntime;
 import mindustry.Vars;
@@ -212,16 +211,6 @@ public class HiddenApi {
 		/* Method是指针，大小相当于int */
 		int[] ints = (int[]) runtime.newNonMovableArray(int.class, 0);
 		offset = runtime.addressOf(ints) - UNSAFE.vaddressOf(ints);
-		try {
-			for (Executable method : HiddenApiBypass.getDeclaredMethods(Debug.class)) {
-				Log.info(method);
-			}
-			testReplaceCrossMethod();
-			// testReplaceModifier();
-			// replaceMethod();
-		} catch (Throwable e) {
-			Log.err(e);
-		}
 	}
 
 	private static boolean DEBUG;

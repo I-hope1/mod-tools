@@ -57,9 +57,10 @@ public class FlameGraphWindow extends Window {
 	private FlameGraphWindow() {
 		super("Flame Graph", 780, 620, true);
 		buildUI();
+		Runnable refresh = FlameGraphWindow.this::refresh;
 		addListener(new ResizeListener() {
 			public void resized() {
-				Core.app.post(FlameGraphWindow.this::refresh);
+				Core.app.post(refresh);
 			}
 		});
 	}

@@ -52,19 +52,6 @@ allprojects {
 
 		//	options.compilerArgs.add("-verbose")
 	}
-	repositories {
-		mavenLocal()
-		mavenCentral()
-		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
-		maven { url 'https://jitpack.io' }
-		google()
-		//Downloads the server-release JAR file from Mindustry releases; does not use any real repository. Surprisingly, this is the most reliable option.
-		ivy {
-			url 'https://github.com/'
-			patternLayout { artifact '/[organisation]/[module]/releases/download/[revision]/dependencies.jar' }
-			metadataSources { artifact() }
-		}
-	}
 }
 publishing {
 	publications {
@@ -128,6 +115,8 @@ dependencies {
 	aarLib('org.lsposed.hiddenapibypass:hiddenapibypass:6.1') { transitive = false }
 	implementation files(extractHiddenApiBypass)
 
+
+	compileOnly "com.github.EB-wilson.UniverseKit:graphic:$unkVersion"
 
 	compileOnly "Anuken:Mindustry:$mindustryVersion"
 

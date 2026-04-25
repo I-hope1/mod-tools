@@ -206,7 +206,7 @@ public class EBBlur implements DrawEffect {
 		Gl.depthMask(false);
 
 		screen.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
-		ScreenSampler.getToBuffer(screen, true);
+		ScreenSampler.instance.getToBuffer(screen, true);
 		screen.getTexture().bind(1);
 		pingpong.begin();
 		blurShader.bind();

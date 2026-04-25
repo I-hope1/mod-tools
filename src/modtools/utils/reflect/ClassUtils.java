@@ -118,4 +118,11 @@ public class ClassUtils {
 		}
 		return result;
 	}
+	public static boolean hasMethod(Class<?> cls, String name) {
+		try {
+		 return cls != null && cls.getMethod(name) != null;// 获取指定名称的方法
+		} catch (NoSuchMethodException e) {
+			return false;
+		}
+	}
 }

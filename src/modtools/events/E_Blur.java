@@ -9,7 +9,7 @@ import modtools.ui.effect.ScreenSampler;
 public enum E_Blur implements ISettings {
 	enabled {
 		public boolean isSwitchOn() {
-			return ScreenSampler.activity;
+			return ScreenSampler.instance.activity();
 		}
 	},
 	/** @see ISettings#$(float def, float min, float max, float step) */

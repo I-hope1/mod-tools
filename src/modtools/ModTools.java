@@ -53,11 +53,13 @@ public class ModTools extends Mod {
 	public static final boolean DISABLE_UI       = false;
 
 	public static boolean loaded = false;
+	static {
+		ScreenSampler.BaseScreenSampler.resetMark();
+	}
 
 	public ModTools() {
 		if (loaded) { throw new IllegalStateException("ModTools already loaded."); }
 
-		ScreenSampler.resetMark();
 		if (ui != null && ui.hudGroup != null) {
 			isImportFromGame = true;
 		}

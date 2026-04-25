@@ -266,7 +266,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 			}
 		});
 
-		Core.app.post(ScreenSampler::setup);
+		Core.app.post(Tools.runT(ScreenSampler.instance::setup));
 	}
 
 	public Seq<Window> acquireShownWindows() {

@@ -8,3 +8,20 @@ include 'hotswap-agent'
 
 include 'utils-agent'
 include 'jni-agent'
+
+dependencyResolutionManagement {
+	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+	repositories {
+		mavenLocal()
+		mavenCentral()
+		maven { url 'https://jitpack.io' }
+		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
+		google()
+		//Downloads the server-release JAR file from Mindustry releases; does not use any real repository. Surprisingly, this is the most reliable option.
+		ivy {
+			url 'https://github.com/'
+			patternLayout { artifact '/[organisation]/[module]/releases/download/[revision]/dependencies.jar' }
+			metadataSources { artifact() }
+		}
+	}
+}

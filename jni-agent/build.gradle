@@ -5,11 +5,6 @@ plugins {
 
 sourceSets.main.java.srcDirs = ["src"]
 
-repositories {
-	mavenCentral()
-	maven { url 'https://jitpack.io' }
-	mavenLocal()
-}
 publishing {
 	publications {
 		maven(MavenPublication) {

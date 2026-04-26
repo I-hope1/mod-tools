@@ -21,7 +21,6 @@ import modtools.struct.TaskSet;
 import modtools.ui.*;
 import modtools.ui.comp.utils.Viewers;
 import modtools.ui.control.HopeInput;
-import modtools.ui.effect.ScreenSampler;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
 import modtools.unsupported.HopeProcessor.MyContentParser;
@@ -54,7 +53,7 @@ public class ModTools extends Mod {
 
 	public static boolean loaded = false;
 	static {
-		ScreenSampler.BaseScreenSampler.resetMark();
+		// ScreenSampler.BaseScreenSampler.resetMark();
 	}
 
 	public ModTools() {

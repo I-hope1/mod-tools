@@ -248,6 +248,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				// enumx(float.class, it -> it.$(...))
 				if (newClass.args.size() >= 1 && newClass.args.get(0) instanceof JCFieldAccess classType) {
 					allEnumFields.put(symbol, "" + classType.selected);
+					// flushInitList.add(mMaker.Exec(mMaker.Assign(classType.selected, mMaker.Apply(mMaker.Select(name, ns("get")))));
 				}
 				if (newClass.args.size() == 2 && newClass.args.get(1) instanceof JCLambda lambda) {
 					lambda.accept(new TreeScanner() {
@@ -404,6 +405,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// println("------------------------------");
 		// println(classDecl);
 	}
+	// 初始化值的block
 	ListBuffer<JCStatement> flushAssignment = new ListBuffer<>();
 	private void buildFlushField(JCFieldAccess classType, JCFieldAccess access, VarSymbol symbol) {
 		if (symbol.getAnnotation(FlushField.class) == null) return;

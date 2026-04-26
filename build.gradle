@@ -7,6 +7,7 @@ import java.util.function.Consumer
 plugins {
 	id 'java'
 	id 'maven-publish'
+	id 'org.jetbrains.kotlin.jvm'
 }
 
 group 'com.github.I-hope1.' + modName
@@ -40,8 +41,6 @@ allprojects {
 	tasks.withType(JavaCompile) {
 		options.incremental = true
 		options.encoding = 'UTF-8'
-		sourceCompatibility = JavaVersion.current()
-		targetCompatibility = JavaVersion.current()
 
 		options.compilerArgs += "-AtargetVersion=8"
 //		options.compilerArgs += "-Xlint:unchecked"
@@ -116,7 +115,7 @@ dependencies {
 	implementation files(extractHiddenApiBypass)
 
 
-	compileOnly "com.github.EB-wilson.UniverseKit:graphic:$unkVersion"
+	implementation "com.github.EB-wilson.UniverseKit:graphic:$unkVersion"
 
 	compileOnly "Anuken:Mindustry:$mindustryVersion"
 
@@ -133,6 +132,7 @@ dependencies {
 
 //	compileOnly "org.lwjgl:lwjgl-sdl:3.4.0"
 	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'
+	implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 }
 
 task jarAndroid(type: JavaExec) {
@@ -183,6 +183,7 @@ jar {
 		def agent = project(":" + name)
 		from("${agent.buildDir0}/libs/") { include "$name-${agent.version}.jar" rename { o -> "libs/${name}.jar" } }
 	}
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	includeLib.accept("hotswap-agent")
 	includeLib.accept("utils-agent")
 	includeLib.accept("jni-agent")

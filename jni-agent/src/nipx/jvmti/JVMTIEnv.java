@@ -417,11 +417,14 @@ public class JVMTIEnv {
 			try {
 				int rc = (int) MH_SuspendThread.invokeExact(
 				 fpSuspendThread, jvmtiEnvPtr, targetThread);
-				// System.out.println("SuspendThread(offset=32) rc=" + rc);
+				if (rc != JVMTI_ERROR_NONE) {
+					System.err.println("SuspendThread(offset=32) rc=" + rc);
+				}
 				checkError(rc, "SuspendThread");
 				suspended = true;
 				// getThreadState(targetThread);
 			} catch (Throwable e) {
+				// e.printStackTrace();
 				suspended = false;
 			}
 		}

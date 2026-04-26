@@ -40,10 +40,13 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 
 	@Override
 	public void dealElement(Symbol element) throws Throwable {
-		if (!(element instanceof MethodSymbol methodSym)) return;
+		if (!(element instanceof MethodSymbol methodSym && methodSym.owner instanceof ClassSymbol owner)) return;
+		if (trees.getTree(owner) == null) {
+			log.warning(trees.getTree(owner), SPrinter.warn("Cannot get tree of " + owner));
+			return;
+		}
 
-		ClassSymbol owner  = (ClassSymbol) methodSym.owner;
-		Sample      sample = owner.getAnnotation(Sample.class);
+		Sample sample = owner.getAnnotation(Sample.class);
 		if (sample == null) {
 			log.error(trees.getTree(methodSym).mods, SPrinter.err(
 			 "@SampleForMethod / @SampleForInitializer is only allowed on methods within a class annotated with @Sample"

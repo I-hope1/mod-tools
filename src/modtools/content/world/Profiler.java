@@ -5,6 +5,7 @@ import arc.graphics.Color;
 import arc.struct.Seq;
 import arc.util.*;
 import arc.util.pooling.*;
+import arc.util.serialization.Jval;
 import mindustry.entities.Effect;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
@@ -320,12 +321,12 @@ public class Profiler extends Content {
 		mode(Mode.class, it -> it.buildEnum(Mode.sample, Mode.class)),
 		auto_update_pane,
 		sample_gpu_time,
-		@FlushField
-		sample_freq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
-		@FlushField
-		include_packages(String[].class, it -> it.array(SamplingProfiler.includePackages)),
-		@FlushField
-		capture_method_signature(boolean.class, it -> it.$(SamplingProfiler.captureMethodSignature)) {
+		/** @see SamplingProfiler#intervalMs  */
+		sample_freq(int.class, it -> it.$(5, 1, 10)),
+		/** @see SamplingProfiler#includePackages  */
+		include_packages(String[].class, it -> it.array(new String[]{"mindustry", "arc"})),
+		/** @see SamplingProfiler#captureMethodSignature  */
+		capture_method_signature(boolean.class, it -> it.$(true)) {
 			public boolean isSwitchOn() {
 				return isPanama();
 			}
@@ -345,6 +346,22 @@ public class Profiler extends Content {
 			};
 			capture_method_signature.def(isPanama());
 
+			/* 不用@FlushField是因为SamplingProfiler可能还未加载  */
+			Tools.runWhen(HotSwapManager::loaded, () -> {
+				SamplingProfiler.intervalMs = sample_freq.getInt();
+				SamplingProfiler.includePackages = include_packages.getArray().map(Jval::toString).toArray(String.class);
+				SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
+			});
+			sample_freq.onChange(() -> {
+				Tools.runWhen(HotSwapManager::loaded, () -> {
+					SamplingProfiler.intervalMs = sample_freq.getInt();
+				});
+			});
+			sample_gpu_time.onChange(() -> {
+				Tools.runWhen(HotSwapManager::loaded, () -> {
+					GlTimerProfiler.enabled = sample_gpu_time.enabled();
+				});
+			});
 			capture_method_signature.onChange(() -> {
 				Tools.runWhen(HotSwapManager::loaded, () -> {
 					SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();

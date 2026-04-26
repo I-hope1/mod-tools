@@ -284,6 +284,7 @@ public class FlameGraphWindow extends Window {
 		public void act(float delta) {
 			super.act(delta);
 			if (!R_profiler.auto_update_pane) return;
+			// if (currentRoot != ProfilerData.flameRoot) rebuild(prefW);
 			long now = System.currentTimeMillis();
 			if (now - lastLiveMs < LIVE_INTERVAL_MS) return;
 			lastLiveMs = now;

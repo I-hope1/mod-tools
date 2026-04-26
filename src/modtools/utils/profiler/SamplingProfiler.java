@@ -39,7 +39,7 @@ public class SamplingProfiler {
 	 * 留空表示不过滤（会包含 JDK/Arc 内部帧）。
 	 * 例：{"mindustry", "modtools", "nipx"}
 	 */
-	public static volatile String[] includePackages = {"mindustry", "arc"};
+	public static volatile String[] includePackages = {};
 
 	public static boolean captureMethodSignature = true;
 

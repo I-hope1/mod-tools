@@ -324,6 +324,7 @@ public class Profiler extends Content {
 		sample_freq(int.class, it -> it.$(SamplingProfiler.intervalMs, 1, 10)),
 		@FlushField
 		include_packages(String[].class, it -> it.array(SamplingProfiler.includePackages)),
+		@FlushField
 		capture_method_signature(boolean.class, it -> it.$(SamplingProfiler.captureMethodSignature)) {
 			public boolean isSwitchOn() {
 				return isPanama();

@@ -134,6 +134,7 @@ public class ModTools extends Mod {
 
 		load("HotSwapManager", () -> {
 			if (HotSwapManager.valid()) {
+				// UtilsAgentManager.init();
 				HotSwapManager.start();
 			}
 		});

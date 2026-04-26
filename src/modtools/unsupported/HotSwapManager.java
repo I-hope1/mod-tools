@@ -49,7 +49,7 @@ public class HotSwapManager {
 		}
 	}
 
-	private static String getAgentPath() throws Exception {
+	static String getAgentPath() throws Exception {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}

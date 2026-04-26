@@ -86,7 +86,7 @@ public class SamplingProfiler {
 	// ── 采样循环 ──────────────────────────────────────────────────────────────
 
 	private static void loop() {
-		if (!MasterKey.isPanamaBackend()) {
+		if (!jniValid()) {
 			while (running) {
 				Threads.sleep(intervalMs);
 
@@ -114,6 +114,13 @@ public class SamplingProfiler {
 				// planB(jniEnv, target);
 				// planA(target);
 			}
+		}
+	}
+	private static boolean jniValid() {
+		try {
+			return MasterKey.isPanamaBackend();
+		} catch (NoClassDefFoundError e) {
+			return false;
 		}
 	}
 	private static final StringBuilder keyBuf = new StringBuilder();

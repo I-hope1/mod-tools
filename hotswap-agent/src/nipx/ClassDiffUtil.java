@@ -20,8 +20,6 @@ import java.util.function.*;
  * 5. 提供详细的变更日志输出
  */
 public final class ClassDiffUtil {
-	/** 线程本地变量，存储比较上下文，避免重复创建对象 */
-	private static final ThreadLocal<ComparisonContext> CONTEXT = ThreadLocal.withInitial(ComparisonContext::new);
 
 	/**
 	 * 比较上下文类
@@ -29,11 +27,13 @@ public final class ClassDiffUtil {
 	 * 使用对象复用模式提升性能
 	 */
 	private static class ComparisonContext {
+		/** 线程本地变量，存储比较上下文，避免重复创建对象 */
+		static final ThreadLocal<ComparisonContext> CONTEXT       = ThreadLocal.withInitial(ComparisonContext::new);
 		/** 旧版本接口映射表：hash -> 接口全限定名 */
-		final LongObjectMap<String>
-		 oldInterfaces = new LongObjectMap<>(),
-		 /** 新版本接口映射表：hash -> 接口全限定名 */
-		 newInterfaces = new LongObjectMap<>();
+		final                LongObjectMap<String>
+		                                                    oldInterfaces = new LongObjectMap<>(),
+		/** 新版本接口映射表：hash -> 接口全限定名 */
+		newInterfaces = new LongObjectMap<>();
 
 		/** 字段映射表：复合hash(字段名+描述符) -> 字段名 */
 		final LongObjectMap<String>     fieldMap  = new LongObjectMap<>(256);
@@ -98,7 +98,7 @@ public final class ClassDiffUtil {
 		final List<String> removedMethods      = new ArrayList<>();
 		/** 字段变更列表：包括新增和删除的字段，存储格式为 "+ fieldName" 或 "- fieldName" */
 		final List<String> changedFields       = new ArrayList<>();
-		
+
 		/** 继承层次是否发生变化（父类或接口变更） */
 		boolean hierarchyChanged = false;
 		/** 错误信息列表：记录严重的不兼容变更 */
@@ -148,13 +148,12 @@ public final class ClassDiffUtil {
 	 * 2. 遍历新版本元素，在映射表中查找匹配项
 	 * 3. 找到则移除，未找到则是新增
 	 * 4. 映射表中剩余的就是被删除的元素
-	 *
 	 * @param oldC 旧版本类节点
 	 * @param newC 新版本类节点
 	 * @return 差异结果
 	 */
 	private static ClassDiff diff(ClassNode oldC, ClassNode newC) {
-		ComparisonContext ctx = CONTEXT.get();
+		ComparisonContext ctx = ComparisonContext.CONTEXT.get();
 		ctx.reset();
 
 		ClassDiff d = ctx.result;
@@ -244,7 +243,7 @@ public final class ClassDiffUtil {
 	 * @param m1 旧版本方法节点
 	 * @param m2 新版本方法节点
 	 * @return true表示代码有变化，false表示代码相同
-	 *
+	 * <p>
 	 * 检测策略：
 	 * 1. 首先快速检查访问权限是否改变（不同则肯定有变化）
 	 * 2. 然后计算两个方法的逻辑指纹进行精确对比
@@ -280,16 +279,17 @@ public final class ClassDiffUtil {
 	 * 输出类差异日志
 	 * @param className 类的全限定名
 	 * @param diff      差异结果对象
-	 *
-	 * 日志格式示例：
-	 * [DIFF] com.example.MyClass:
-	 *  !!!Errors:   [! CRITICAL: Superclass changed: java.lang.Object -> java.util.ArrayList]
-	 *  *Modified: [method1()V, method2(I)Z]
-	 *  +Added:    [newMethod()V]
-	 *  -Removed:  [oldMethod()V]
-	 *  !Fields:   [+ newField, - oldField]
+	 *                  <p>
+	 *                  日志格式示例：
+	 *                  [DIFF] com.example.MyClass:
+	 *                  !!!Errors:   [! CRITICAL: Superclass changed: java.lang.Object -> java.util.ArrayList]
+	 *                  *Modified: [method1()V, method2(I)Z]
+	 *                  +Added:    [newMethod()V]
+	 *                  -Removed:  [oldMethod()V]
+	 *                  !Fields:   [+ newField, - oldField]
 	 */
 	static void logDiff(String className, ClassDiffUtil.ClassDiff diff) {
+		HotSwapAgent.log(className + " is " + (diff.hasChange() ? "Changed" : "Unchanged"));
 		// 如果没有任何变更，直接返回不输出日志
 		if (!diff.hasChange()) return;
 
@@ -314,7 +314,7 @@ public final class ClassDiffUtil {
 
 	/**
 	 * 辅助方法：如果集合非空则追加到StringBuilder
-	 * @param sb StringBuilder对象
+	 * @param sb    StringBuilder对象
 	 * @param label 标签前缀
 	 * @param items 要追加的集合
 	 */

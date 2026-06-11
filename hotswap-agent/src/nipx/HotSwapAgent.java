@@ -1,7 +1,6 @@
 package nipx;
 
 import nipx.annotation.*;
-import nipx.profiler.DynamicProfilerAPI;
 import nipx.util.*;
 
 import java.io.*;
@@ -24,7 +23,7 @@ import static nipx.MountManager.*;
 @SuppressWarnings("StringTemplateMigration")
 public class HotSwapAgent {
 	//region Configuration Fields
-	public static boolean      DEBUG              = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
+	public static boolean      DEBUG              = true;//Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 	public static boolean      UCP_APPEND         = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
 	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;
@@ -80,7 +79,7 @@ public class HotSwapAgent {
 		if (transformer == null) {
 			transformer = new AnnotationTransformer();
 			inst.addTransformer(transformer, true);
-			DynamicProfilerAPI.init();
+			// DynamicProfilerAPI.init();
 		}
 		var loadedClasses = inst.getAllLoadedClasses();
 		refreshPackageLoaders(loadedClasses);
@@ -303,7 +302,7 @@ public class HotSwapAgent {
 						bytecodeCache.put(className, bytecode);
 					}
 				}
-			} catch (Exception e) {
+			} catch (Throwable e) {
 				error("Failed to process " + path, e);
 			}
 		}
@@ -884,12 +883,12 @@ public class HotSwapAgent {
 						}
 
 						// 处理普通类文件变化
-						if (fullPath.toString().endsWith(".class")) {
+						String name = fullPath.toString();
+						if (name.endsWith(".class")) {
 							handleFileChange(fullPath);
 						}
 
 						// 处理 jar / zip 包变化（仅监控 root 一级，子目录不处理）
-						String name = fullPath.toString();
 						if ((name.endsWith(".jar") || name.endsWith(".zip")) && triggeredDir.equals(root)) {
 							handleJarChange(fullPath);
 						}

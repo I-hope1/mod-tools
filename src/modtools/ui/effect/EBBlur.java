@@ -168,15 +168,14 @@ public class EBBlur implements DrawEffect {
 		return new Shader(vertexShader, fragmentShader);
 		// return null;
 	}
-
-	public void resize(int width, int height) {
+	public void resize(float width, float height) {
 		blurScl = E_Blur.scale_level.getInt();
 		if (blurScl == 0) blurScl = 1;
 		width /= blurScl;
 		height /= blurScl;
 
-		buffer.resize(width, height);
-		pingpong.resize(width, height);
+		buffer.resize((int) width, (int) height);
+		pingpong.resize((int) width, (int) height);
 
 		blurShader.bind();
 		blurShader.setUniformf("size", width, height);

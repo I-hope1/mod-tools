@@ -703,7 +703,7 @@ public class Window extends Table implements Position {
 	public void draw() {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
 		float prev = Draw.z();
-		Draw.draw(getZIndex() + 11, () -> {
+		Draw.draw(getZIndex() + 1, () -> {
 			Draw.alpha(parentAlpha);
 			MyDraw.blurRect(x, y, width, height);
 		});

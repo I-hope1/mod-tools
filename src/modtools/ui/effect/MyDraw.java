@@ -61,7 +61,7 @@ public class MyDraw {
 	public static void blurRect(float x, float y, float w, float h) {
 		if (!isBlurEnable()) return;
 		// draws.get("blur", Seq::new).add(draw);
-		blur.get().resize((int) w, (int) h);
+		blur.get().resize(w, h);
 		blur.get().capture(x, y, w, h);
 		blur.get().render();
 		Draw.flush();
@@ -163,7 +163,7 @@ public class MyDraw {
 	}
 
 	public interface DrawEffect {
-		void resize(int width, int height);
+		void resize(float width, float height);
 
 		void capture(float x, float y, float w, float h);
 

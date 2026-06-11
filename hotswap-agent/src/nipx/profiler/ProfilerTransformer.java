@@ -34,6 +34,7 @@ public class ProfilerTransformer implements ClassFileTransformer {
 
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+		// if (!ENABLED) return null;
 		resetState();
 
 		targetMethods.forEach((clazz, methodNames) -> {

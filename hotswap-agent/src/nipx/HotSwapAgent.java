@@ -23,7 +23,7 @@ import static nipx.MountManager.*;
 @SuppressWarnings("StringTemplateMigration")
 public class HotSwapAgent {
 	//region Configuration Fields
-	public static boolean      DEBUG              = true;//Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
+	public static boolean      DEBUG              = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
 	public static boolean      UCP_APPEND         = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
 	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;

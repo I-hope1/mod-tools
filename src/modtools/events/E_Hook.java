@@ -36,14 +36,15 @@ public enum E_Hook implements ISettings {
 
 
 	// ------------
+	profile,
 
-	dynamic_jdwp {
+	/* dynamic_jdwp {
 		public boolean isSwitchOn() {
 			return IntVars.isDesktop();
 		}
 	},
 	@Switch(dependency = "dynamic_jdwp")
-	dynamic_jdwp_port(int.class, i -> i.intField(5005, 1, 65535)),
+	dynamic_jdwp_port(int.class, i -> i.intField(5005, 1, 65535)), */
 	android_input_fix {
 		public boolean isSwitchOn() {
 			return OS.isAndroid;

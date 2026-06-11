@@ -138,9 +138,9 @@ public class ModTools extends Mod {
 				HotSwapManager.start();
 			}
 		});
-		if (R_Hook.dynamic_jdwp) {
+/* 		if (R_Hook.dynamic_jdwp) {
 			load("JDWP", JDWP::load);
-		}
+		} */
 
 		WorldDraw.registerEvent();
 		HopeCall.registerPacket();

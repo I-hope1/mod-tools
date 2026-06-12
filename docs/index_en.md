@@ -169,9 +169,11 @@ public class MyService {
     }
 }
 
-// Refresh all live instances after a hot-reload
-List<Object> instances = InstanceTracker.getInstances(MyService.class);
-instances.forEach(obj -> ((MyService) obj).reloadConfig());
+void main() {
+    // Refresh all live instances after a hot-reload
+    List<Object> instances = InstanceTracker.getInstances(MyService.class);
+    instances.forEach(obj -> ((MyService) obj).reloadConfig());
+}
 ```
 
 ### 2.2 @Profile — Performance Profiling
@@ -244,11 +246,13 @@ The entire hot-reload process is divided into the following serialized stages:
 `MyClassFileTransformer` intervenes when a class is first loaded, inserting probe code at the entry/exit points of methods using ASM's `AdviceAdapter`. It employs a "pre-emptive exit" strategy: if it detects that the class does not have any of the target annotations, it immediately returns `null` (without modifying the bytecode), resulting in zero performance overhead for unrelated classes.
 
 ```java
-// Simplified enhancement logic
-if (hasClassAnnotation(bytes, Tracker.class)) {
-    bytes = injectTracker(bytes, className, loader);
+void logic() {
+    // Simplified enhancement logic
+    if (hasClassAnnotation(bytes, Tracker.class)) {
+        bytes = injectTracker(bytes, className, loader);
+    }
+    bytes = injectProfiler(bytes, className, loader);  // Method-level scan
 }
-bytes = injectProfiler(bytes, className, loader);  // Method-level scan
 ```
 
 ### 3.3 The Lambda Alignment Problem
@@ -270,24 +274,22 @@ When a brand new class appears in the watch directory, the target `ClassLoader`'
 
 ## 4. Configuration and Startup
 
-### 4.1 Agent Startup Parameters
+### 4.1 Mindustry Startup Parameters
 
-(`mod-tools` will load agent automatically when enabled.)
-Attach the Agent Jar to the target process using JVM startup parameters, without any need to modify business code:
+(Mindustry load mod `mod-tools`, and then load agent automatically when mod is enabled)
+Use JVM startup parameters to better attach to the target process, without any need to modify business code:
 
 ```bash
-# Basic attachment (watching a single directory)
-java -javaagent:nipx-agent.jar=watchDir=/path/to/classes \
-     -XX:+EnableDynamicAgentLoading \
-     -jar your-app.jar
+# Normal JDK
+java -XX:+EnableDynamicAgentLoading \
+  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
+  -jar Mindustry.jar
 
-# Monitoring multiple directories (comma-separated)
-java -javaagent:nipx-agent.jar=watchDir=/mod1/classes,/mod2/classes \
-     -jar your-app.jar
-
-# Debug mode (writes .class files to local disk)
-java -javaagent:nipx-agent.jar=watchDir=/path/to/classes,debug=true \
-     -jar your-app.jar
+# Using JetBrainsRuntime SDK (strongly recommended)
+java -XX:+EnableDynamicAgentLoading \
+  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
+  -XX:+AllowEnhancedClassRedefinition \
+  -jar Mindustry.jar
 ```
 
 ### 4.2 Runtime Switches
@@ -304,9 +306,11 @@ java -javaagent:nipx-agent.jar=watchDir=/path/to/classes,debug=true \
 You can add package prefixes of classes that should not be processed to a blacklist by calling `HotSwapAgent.addBlacklist(String prefix)`. This makes the Transformer skip these classes directly, avoiding unnecessary bytecode analysis overhead:
 
 ```java
-// Add in premain or dynamically at runtime
-HotSwapAgent.addBlacklist("com.thirdparty.legacy");
-HotSwapAgent.addBlacklist("org.springframework.cglib");
+void main() {
+    // Add in premain or dynamically at runtime
+    HotSwapAgent.addBlacklist("com.thirdparty.legacy");
+    HotSwapAgent.addBlacklist("org.springframework.cglib");
+}
 ```
 
 ---
@@ -378,12 +382,14 @@ The `InstanceTracker` class needs to be visible to the target class's `ClassLoad
 `ProfilerData.record()` accumulates data in memory. You can read it in the following ways:
 
 ```java
-// Print the execution time statistics for all collected methods
-ProfilerData.printAll();
+void main() {
+    // Print the execution time statistics for all collected methods
+    ProfilerData.printAll();
 
-// Get the statistics object for a specific method
-ProfilerData.Stats stats = ProfilerData.get("com.example.MyClass.myMethod");
-System.out.println("avg: " + stats.avgNanos() + "ns, count: " + stats.count());
+    // Get the statistics object for a specific method
+    ProfilerData.Stats stats = ProfilerData.get("com.example.MyClass.myMethod");
+    System.out.println("avg: " + stats.avgNanos() + "ns, count: " + stats.count());
+}
 ```
 
 ### Q5: How does the system handle changes in the inheritance hierarchy?
@@ -399,9 +405,11 @@ System.out.println("avg: " + stats.avgNanos() + "ns, count: " + stats.count());
 Besides being automatically triggered by file monitoring, you can also programmatically trigger a reload for a specific class:
 
 ```java
-// Read the new bytecode and manually trigger a reload
-byte[] newBytes = Files.readAllBytes(Path.of("/path/to/MyClass.class"));
-HotSwapAgent.redefineClass(MyClass.class, newBytes);
+void main() {
+    // Read the new bytecode and manually trigger a reload
+    byte[] newBytes = Files.readAllBytes(Path.of("/path/to/MyClass.class"));
+    HotSwapAgent.redefineClass(MyClass.class, newBytes);
+}
 ```
 
 ### 7.2 Extending the `ProfilerData` Storage Backend
@@ -413,7 +421,3 @@ By default, `ProfilerData` stores statistics in a `ConcurrentHashMap`. If you ne
 The default implementation of `isBlacklisted()` uses prefix matching. If you need more complex filtering (e.g., regex, containment), you can modify the logic in `HotSwapAgent` or provide a custom `Predicate<String>` to be injected into the system.
 
 > **Tip**: It is recommended to use `@Profile` in production environments only during performance testing or diagnostic phases. Once diagnostics are complete, remove the annotation and redeploy to eliminate the minor performance overhead introduced by bytecode injection.
-
-```
-
-```

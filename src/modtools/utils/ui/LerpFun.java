@@ -40,7 +40,8 @@ public final class LerpFun implements Poolable {
 		applyV = 0;
 		enabled = false;
 		if (drawSeq != null) {
-			drawSeq.remove(drawTask);
+			Seq<Boolp> seq = drawSeq;
+			Core.app.post(() -> seq.remove(drawTask));
 		}
 		drawSeq = null;
 		reverse = false;

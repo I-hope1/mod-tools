@@ -9,14 +9,18 @@ public class TaskSet extends Seq<Boolp> {
 	/** boolp.get()为{@code false}，就删除 */
 	public void exec() {
 		if (isEmpty()) return;
-		removeAll(boolp -> {
-			try {
-				return !boolp.get();
-			} catch (Throwable e) {
-				Log.err("Failed to run " + boolp, e);
-				return false;
-			}
-		});
+		try {
+			removeAll(boolp -> {
+				try {
+					return !boolp.get();
+				} catch (Throwable e) {
+					Log.err("Failed to run " + boolp, e);
+					return false;
+				}
+			});
+		} catch (IndexOutOfBoundsException e) {
+			Log.err("Failed to run task", e);
+		}
 	}
 	/** 添加常驻任务 */
 	public void add(Runnable run) {

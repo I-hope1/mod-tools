@@ -1,6 +1,7 @@
 package nipx;
 
 import nipx.annotation.*;
+import nipx.ref.InitFix;
 import nipx.util.*;
 
 import java.io.*;
@@ -31,6 +32,7 @@ public class HotSwapAgent {
 	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "false"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      LAMBDA_ALIGN;
+	public static boolean      HOTSWAP_PLUS;
 	public static boolean      UI_HOOK;
 	//endregion
 
@@ -41,8 +43,10 @@ public class HotSwapAgent {
 	static final         Set<Path>           activeWatchJars = new CopyOnWriteArraySet<>();
 	private static final List<WatcherThread> activeWatchers  = new CopyOnWriteArrayList<>();
 
-	/** 在不使用retransform的情况下，确保旧bytecode正确的唯一方法
-	 * dotClassName -> bytecode */
+	/**
+	 * 在不使用retransform的情况下，确保旧bytecode正确的唯一方法
+	 * dotClassName -> bytecode
+	 */
 	static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 仅记录byte的指纹
@@ -133,6 +137,8 @@ public class HotSwapAgent {
 		info("Redefine Mode: " + REDEFINE_MODE);
 		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
 		info("Injection Blacklist: " + String.join(",", HOTSWAP_BLACKLIST));
+		HOTSWAP_PLUS = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_plus", "false"));
+		info("HotSwap Plus: " + HOTSWAP_PLUS);
 		ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
 		info("HotSwap Event: " + ENABLE_HOTSWAP_EVENT);
 		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "true"));
@@ -273,6 +279,7 @@ public class HotSwapAgent {
 								log("[DCEVM] Structure change detected, proceeding with enhanced redefinition.");
 							}
 						}
+						if (HOTSWAP_PLUS) newBytecode = InitFix.transform(newBytecode, diff);
 					} else {
 						log("[WARN] Cannot diff " + className + " (missing old bytecode). Proceeding with redefine.");
 					}

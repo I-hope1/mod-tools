@@ -34,6 +34,7 @@ import modtools.utils.*;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
+import nipx.annotation.Tracker;
 
 import java.util.IdentityHashMap;
 
@@ -41,7 +42,7 @@ import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
-
+@Tracker
 public abstract class ValueLabel extends ExtendingLabel {
 	//region Static Fields & Constants
 	public static final boolean DEBUG  = false;
@@ -620,7 +621,6 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public long getOffset() {
 		throw new UnsupportedOperationException("Not implemented yet");
 	}
-
 	public Prov<Point2> getPoint2Prov(Object val) {
 		return () -> {
 			int start = startIndexMap.findKey(val, true, Integer.MAX_VALUE);

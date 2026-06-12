@@ -90,24 +90,26 @@ public final class ClassDiffUtil {
 	 * 包含所有类型的变更信息
 	 */
 	public static final class ClassDiff {
+		public ClassNode oldClass, newClass;
 		/** 方法体被修改的方法列表：存储格式为 "methodName + methodDescriptor" */
-		final List<String> modifiedBodyMethods = new ArrayList<>();
+		public final List<String> modifiedBodyMethods = new ArrayList<>();
 		/** 新增的方法列表：存储格式为 "methodName + methodDescriptor" */
-		final List<String> addedMethods        = new ArrayList<>();
+		public final List<String> addedMethods        = new ArrayList<>();
 		/** 删除的方法列表：存储格式为 "methodName + methodDescriptor" */
-		final List<String> removedMethods      = new ArrayList<>();
+		public final List<String> removedMethods      = new ArrayList<>();
 		/** 字段变更列表：包括新增和删除的字段，存储格式为 "+ fieldName" 或 "- fieldName" */
-		final List<String> changedFields       = new ArrayList<>();
+		public final List<String> changedFields       = new ArrayList<>();
 
 		/** 继承层次是否发生变化（父类或接口变更） */
-		boolean hierarchyChanged = false;
+		public boolean hierarchyChanged = false;
 		/** 错误信息列表：记录严重的不兼容变更 */
-		final List<String> errors = new ArrayList<>();
+		public final List<String> errors = new ArrayList<>();
 
 		/**
 		 * 重置所有集合，清空之前的比较结果
 		 */
-		void reset() {
+		public void reset() {
+			oldClass = newClass = null;
 			modifiedBodyMethods.clear();
 			addedMethods.clear();
 			removedMethods.clear();
@@ -157,6 +159,8 @@ public final class ClassDiffUtil {
 		ctx.reset();
 
 		ClassDiff d = ctx.result;
+		d.oldClass = oldC;
+		d.newClass = newC;
 
 		// 检查父类是否变更
 		if (!Objects.equals(oldC.superName, newC.superName)) {

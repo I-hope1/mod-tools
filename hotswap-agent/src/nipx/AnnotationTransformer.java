@@ -1,6 +1,8 @@
 package nipx;
 
+import arc.Core;
 import nipx.annotation.*;
+import nipx.ref.InitFix;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
@@ -12,7 +14,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static nipx.HotSwapAgent.*;
-import static nipx.LambdaRef.onClassRedefined;
 
 /**
  * <p>用于注解，注入代码
@@ -78,7 +79,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		};
 
-		cr.accept(cv, 0);
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
 		return cw.toByteArray();
 	}
 
@@ -186,7 +187,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 		if (classBeingRedefined != null) {
-			onClassRedefined(dotClassName);
+			LambdaRef.onClassRedefined(dotClassName);
+			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined));
 		}
 
 		try {

@@ -3,6 +3,7 @@ package nipx;
 import nipx.util.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.*;
+import org.objectweb.asm.tree.*;
 
 import java.util.*;
 
@@ -191,9 +192,13 @@ public class LambdaAligner {
 				}
 			}
 		}
+		// 应用重命名规则
+		byte[] alignedBytes = ctx.renameMap.isEmpty() ? newBytes : applyTransform(newBytes, ctx);
 
-		return ctx.renameMap.isEmpty() ? newBytes : applyTransform(newBytes, ctx);
+		// 不管有没有发生重命名，都要检查是否有被遗弃的旧 Lambda 并执行复活注入
+		return resurrectOrphanedLambdas(oldBytes, alignedBytes, ctx);
 	}
+
 	//endregion
 
 	//region 字节码转换+扫描
@@ -286,6 +291,112 @@ public class LambdaAligner {
 		};
 		new ClassReader(bytes).accept(visitor, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 		return visitor.className;
+	}
+	/**
+	 * 将被删除的 Lambda 以“空方法体”的形式复活注入到新字节码中，
+	 * 防止被缓存的 CallSite 抛出 NoSuchMethodError
+	 * @param oldBytes 旧版本原始字节码
+	 * @param newBytes 经过 LambdaAligner 阶段二重命名处理后的新版本字节码
+	 * @param ctx      当前匹配上下文
+	 * @return 注入幽灵方法后的最终字节码
+	 */
+	private static byte[] resurrectOrphanedLambdas(byte[] oldBytes, byte[] newBytes, MatchContext ctx) {
+		// 1. 寻找被彻底遗弃（既没有被精确匹配，也没有被顺位占用的旧版本 Lambda）
+		Set<String> orphanedNames = new HashSet<>();
+		for (Object v : ctx.oldGroups.values()) {
+			if (!LongObjectMap.isValid(v)) continue;
+			@SuppressWarnings("unchecked")
+			var oldGroup = (List<SyntheticInfo>) v;
+			for (SyntheticInfo oi : oldGroup) {
+				// 如果旧方法名不在 usedOldNames 中，说明新类中彻底抛弃了它，它成了一个致命的游离端点
+				if (!ctx.usedOldNames.contains(oi.name)) {
+					orphanedNames.add(oi.name + oi.desc);
+				}
+			}
+		}
+
+		// 如果所有的旧 Lambda 都被复用了，那我们就无需多此一举
+		if (orphanedNames.isEmpty()) {
+			return newBytes;
+		}
+
+		// 2. 从旧字节码中提取这些遗弃方法的签名信息（access, exceptions 等）
+		ClassNode oldClass = new ClassNode();
+		new ClassReader(oldBytes).accept(oldClass, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+
+		List<MethodNode> toInject = new ArrayList<>();
+		for (MethodNode mn : oldClass.methods) {
+			if (orphanedNames.contains(mn.name + mn.desc)) {
+				toInject.add(mn);
+			}
+		}
+
+		// 3. 将它们以“安全空壳”的形式追加到新类的末尾
+		ClassReader cr = new ClassReader(newBytes);
+		// 关键点：开启 COMPUTE_MAXS 和 COMPUTE_FRAMES，让 ASM 自动帮我们计算局部变量表和操作数栈深度
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
+
+		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public void visitEnd() {
+				// 在类结束访问之前，强行插入我们的幽灵方法
+				for (MethodNode mn : toInject) {
+					// 继承原方法的访问修饰符（通常是 ACC_PRIVATE | ACC_SYNTHETIC | ACC_STATIC）
+					MethodVisitor dummy = super.visitMethod(mn.access, mn.name, mn.desc, mn.signature,
+					 mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
+					if (dummy != null) {
+						injectDummyBody(dummy, mn.desc);
+					}
+				}
+				super.visitEnd();
+			}
+		};
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		return cw.toByteArray();
+	}
+
+	/**
+	 * 智能注入符合 JVM 规范的空方法体指令流
+	 */
+	private static void injectDummyBody(MethodVisitor mv, String desc) {
+		mv.visitCode();
+		Type returnType = Type.getReturnType(desc);
+
+		switch (returnType.getSort()) {
+			case Type.VOID:
+				mv.visitInsn(Opcodes.RETURN);
+				break;
+			case Type.BOOLEAN:
+			case Type.CHAR:
+			case Type.BYTE:
+			case Type.SHORT:
+			case Type.INT:
+				mv.visitInsn(Opcodes.ICONST_0); // 压入 0 / false
+				mv.visitInsn(Opcodes.IRETURN);
+				break;
+			case Type.FLOAT:
+				mv.visitInsn(Opcodes.FCONST_0);
+				mv.visitInsn(Opcodes.FRETURN);
+				break;
+			case Type.LONG:
+				mv.visitInsn(Opcodes.LCONST_0);
+				mv.visitInsn(Opcodes.LRETURN);
+				break;
+			case Type.DOUBLE:
+				mv.visitInsn(Opcodes.DCONST_0);
+				mv.visitInsn(Opcodes.DRETURN);
+				break;
+			case Type.OBJECT:
+			case Type.ARRAY:
+				mv.visitInsn(Opcodes.ACONST_NULL); // 压入 null 引用
+				mv.visitInsn(Opcodes.ARETURN);
+				break;
+			default:
+				throw new IllegalStateException("Unhandled return type parsing: " + desc);
+		}
+		// 配合 COMPUTE_MAXS，写入 0, 0 即可，ASM 会在写入类字节流时自动纠正
+		mv.visitMaxs(0, 0);
+		mv.visitEnd();
 	}
 	//endregion
 

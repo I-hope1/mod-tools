@@ -1,6 +1,7 @@
 package modtools.utils.ui;
 
 import arc.Core;
+import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -132,11 +133,14 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				 }, false, Align.bottom);
 			 }));
 			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
-				IntUI.showSelectTable(b, (p, _, _) -> {
+				IntUI.showSelectTable(b, (p, hide, _) -> {
 					p.defaults().size(120, 45);
-					p.button("View bytecode", Styles.flatt, () -> {
-						dataDir.child("bytecode").child(clazz.getName() + ".class").writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
-					}).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
+					p.button("View Bytecode", Styles.flatt, runT(() -> {
+						Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
+						fi.writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
+						IntUI.showInfoFade("See: " + fi.absolutePath());
+						hide.run();
+					})).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
 				}, false, Align.bottom);
 			}));
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);

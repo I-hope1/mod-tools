@@ -262,7 +262,9 @@ public class HotSwapAgent {
 						if (LAMBDA_ALIGN) {
 							newBytecode = LambdaAligner.align(oldBytecode, newBytecode);
 						}
-
+					}
+					bytecodeCache.put(className, newBytecode);
+					if (oldBytecode != null) {
 						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
 						ClassDiffUtil.logDiff(className, diff);
 						if (diff.hierarchyChanged) {
@@ -279,13 +281,14 @@ public class HotSwapAgent {
 								log("[DCEVM] Structure change detected, proceeding with enhanced redefinition.");
 							}
 						}
-						if (HOTSWAP_PLUS) newBytecode = InitFix.transform(newBytecode, diff);
+						if (HOTSWAP_PLUS) {
+							newBytecode = InitFix.transform(newBytecode, diff);
+						}
 					} else {
 						log("[WARN] Cannot diff " + className + " (missing old bytecode). Proceeding with redefine.");
 					}
 
 					definitions.add(new ClassDefinition(targetClass, newBytecode));
-					bytecodeCache.put(className, newBytecode);
 				} else {
 					if (DEBUG) log("[NEW] " + className);
 					// 类尚未加载：根据 REDEFINE_MODE 处理

@@ -40,7 +40,7 @@ public class InitFix {
 		newClass.accept(cw);
 		return cw.toByteArray();
 	}
-	public static byte[] transform(byte[] newBytes, ClassDiff diff) {
+	public static byte[]  transform(byte[] newBytes, ClassDiff diff) {
 		if (!HotSwapAgent.HOTSWAP_PLUS) return newBytes;
 		// diff.changedFields 里 "+ fieldName" 就是新增字段
 		Set<String> addedFields = diff.changedFields.stream()

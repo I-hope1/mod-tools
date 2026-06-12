@@ -41,6 +41,7 @@ public final class LerpFun implements Poolable {
 		enabled = false;
 		if (drawSeq != null) {
 			Seq<Boolp> seq = drawSeq;
+			// 与removeAll错开
 			Core.app.post(() -> seq.remove(drawTask));
 		}
 		drawSeq = null;

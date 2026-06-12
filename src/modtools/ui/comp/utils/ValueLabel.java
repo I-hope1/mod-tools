@@ -42,7 +42,7 @@ import static modtools.events.E_JSFunc.*;
 import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.Contents.selection;
 import static modtools.ui.IntUI.topGroup;
-@Tracker
+
 public abstract class ValueLabel extends ExtendingLabel {
 	//region Static Fields & Constants
 	public static final boolean DEBUG  = false;

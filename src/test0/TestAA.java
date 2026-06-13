@@ -41,11 +41,11 @@ public class TestAA {
 	public static class ChildClass extends ParentClass2 {
 	}
 
-	// public static Runnable runx = () -> Log.info("run");
+	public static Runnable runx = () -> Log.info("run");
 	@OnReload
 	public static void reload() {
 		Log.info("reload");
-		// runx.run();
+		runx.run();
 		/* try (Arena arena = Arena.ofConfined()) {
 			JNIEnv   env      = new JNIEnv(arena);
 			JVMTIEnv jvmtiEnv = JVMTIEnv.getInstance();

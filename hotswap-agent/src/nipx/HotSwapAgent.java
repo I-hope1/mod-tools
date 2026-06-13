@@ -336,7 +336,7 @@ public class HotSwapAgent {
 
 			if (!clazz.isAnnotationPresent(Reloadable.class)) continue;
 
-			Core.app.post(() -> processAnnotationsInternal(clazz));
+			Core.app.post(() -> Core.app.post(() -> processAnnotationsInternal(clazz)));
 		}
 	}
 	private static void processAnnotationsInternal(Class<?> clazz) {

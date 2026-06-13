@@ -52,7 +52,7 @@ public class ChangeClassDialog extends Window {
 				Script script = syntax.compile();
 				myClass.setFunc(m.getName(), (self, args) -> {
 					return script.exec(IScript.cx, JSRequest.wrapper(Tester.wrap(self) instanceof Scriptable sc ? sc : null,
-					 ClassUtils.wrapArgs(args.toArray())));
+					 ClassUtils.wrapArgs(args)));
 				}, Modifier.PUBLIC, m.getReturnType(), m.getParameterTypes());
 			}
 			if (OS.isAndroid && E_JSFunc.change_class_reference_when_edit.enabled()) {

@@ -390,7 +390,7 @@ public class FlameGraphWindow extends Window {
 				if (font != null && rw > 24) {
 					Draw.color(Color.white, parentAlpha);
 					String lbl = fitLabel(font, s.node.name, rw - 6);
-					if (!lbl.isEmpty()) MyDraw.drawText(lbl, wx + 3, wy + rh - 3, Color.white, Align.left);
+					if (!lbl.isEmpty()) MyDraw.drawText(lbl, wx + 3, wy + rh - 3, Draw.getColor(), Align.left);
 				}
 			}
 			Draw.color(Color.white, parentAlpha);

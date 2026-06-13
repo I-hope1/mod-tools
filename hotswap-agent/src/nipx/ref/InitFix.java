@@ -55,7 +55,7 @@ public class InitFix {
 
 		List<?> instances = InstanceTracker.getInstances(clazz);
 		if (instances.isEmpty()) return;
-		HotSwapAgent.info("Applying field init patch to " + clazz + " (" + instances + ")");
+		HotSwapAgent.info("Applying field init patch to " + clazz/*  + " (" + instances + ")" */);
 		applyFieldInitToInstances(clazz, instances);
 	}
 

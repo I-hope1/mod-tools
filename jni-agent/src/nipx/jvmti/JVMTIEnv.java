@@ -5,8 +5,9 @@ import nipx.jni.helper.*;
 
 import java.lang.foreign.*;
 import java.lang.invoke.*;
-import java.lang.reflect.*;
+import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Pure-Panama wrapper around a {@code jvmtiEnv*}.
@@ -41,7 +42,7 @@ public class JVMTIEnv {
 	 */
 	private static final int  CAN_ACCESS_LOCAL_VARIABLES = 1 << 14;
 	private static final int  CAN_SUSPEND                = 1 << 20;
-	private static final long JVMTICAPS_SIZE             = 128L;
+	private static final long JVMTICAPS_SIZE             = 16L;
 
 	// -------------------------------------------------------------------------
 	// JVMTI function-table slot indices  (0-based, i.e. spec slot N → index N-1)
@@ -211,7 +212,8 @@ public class JVMTIEnv {
 	private static final MethodHandle MH_GetMethodModifiers = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
-		ValueLayout.ADDRESS  // jmethodID
+		ValueLayout.ADDRESS,  // jmethodID
+		ValueLayout.ADDRESS   // jint* modifiers_ptr
 	 ));
 
 	/** Deallocate(env, mem*) → jint */
@@ -401,7 +403,7 @@ public class JVMTIEnv {
 			 rc, stateOut.get(ValueLayout.JAVA_INT, 0));
 			// rc=10 → jthread 引用本身就是坏的
 			// state & 0x20 (JVMTI_THREAD_STATE_SUSPENDED) → 确认是否被挂起
-			return rc;
+			return stateOut.get(ValueLayout.JAVA_INT, 0);
 		}
 	}
 	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, Thread thread, int maxDepth,
@@ -588,7 +590,7 @@ public class JVMTIEnv {
 	private final long[]                locsBuf     = new long[256];
 	private final long[]                thisAddrBuf = new long[256];
 	// MethodMeta 按 method ID 缓存，方法元数据在类生命周期内不变
-	private final Map<Long, MethodMeta> metaCache   = new HashMap<>();
+	private final Map<Long, MethodMeta> metaCache   = new ConcurrentHashMap<>();
 	public void walkCurrentThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
 	                                    int maxDepth, int skipFrames,
 	                                    FrameConsumer consumer) {
@@ -605,7 +607,7 @@ public class JVMTIEnv {
 			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
 
 			// 复用数组，零分配
-			for (int d = frameCount - 1; d >= 0; d--) {
+			for (int d = frameCount - 1; d >= skipFrames; d--) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
 				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
@@ -704,7 +706,13 @@ public class JVMTIEnv {
 			}
 
 			// -- GetMethodModifiers --
-			flags = (int) MH_GetMethodModifiers.invokeExact(fpGetMethodModifiers, jvmtiEnvPtr, methodId);
+			MemorySegment modifiersOut = arena.allocate(ValueLayout.JAVA_INT);
+			rc = (int) MH_GetMethodModifiers.invokeExact(fpGetMethodModifiers, jvmtiEnvPtr, methodId, modifiersOut);
+			if (rc == JVMTI_ERROR_NONE) {
+				flags = modifiersOut.get(ValueLayout.JAVA_INT, 0);
+			} else {
+				flags = 0; // 失败时赋予默认值
+			}
 		} catch (Throwable e) {
 			// e.printStackTrace();
 		}
@@ -813,4 +821,5 @@ public class JVMTIEnv {
 		static final VarEntry[] EMPTY = new VarEntry[0];
 	}
 	//endregion
+
 }

@@ -62,7 +62,7 @@ public class InitFix {
 	public static void applyFieldInitToInstances(
 	 Class<?> clazz, List<?> existingInstances) {
 		try {
-			String desc  = "(L" + clazz.getName().replace('.', '/') + ";)V";
+			// String desc  = "(L" + clazz.getName().replace('.', '/') + ";)V";
 			Method patch = clazz.getDeclaredMethod(PATCH_METHOD, clazz);
 			patch.setAccessible(true);
 			for (Object instance : existingInstances) {

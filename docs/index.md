@@ -328,14 +328,14 @@ void main() {
 
 `ClassDiffUtil.diff(byte[] oldBytes, byte[] newBytes)` 是差异分析的入口点。它返回一个包含以下信息的 `ClassDiff` 对象：
 
-| 字段                    | 含义                                         |
-|-----------------------|--------------------------------------------|
-| `modifiedBodyMethods` | 方法体被修改的方法列表 (方法名 + 描述符)                    |
-| `addedMethods`        | 新增方法列表                                     |
-| `removedMethods`      | 已删除方法列表                                    |
-| `changedFields`       | 字段变更，格式为 `"+ fieldName"` 或 `"- fieldName"` |
-| `hierarchyChanged`    | 父类或接口是否已更改 (布尔值)                           |
-| `errors`              | 严重不兼容变更的错误消息列表                             |
+| 字段                    | 含义                                                          |
+|-----------------------|-------------------------------------------------------------|
+| `modifiedBodyMethods` | 方法体被修改的方法列表 (方法名 + 描述符)                                     |
+| `addedMethods`        | 新增方法列表                                                      |
+| `removedMethods`      | 已删除方法列表                                                     |
+| `changedFields`       | 字段变更，格式为 `"+/- *fieldName"`，`"+/- fieldName"`（`*` 表示static） |
+| `hierarchyChanged`    | 父类或接口是否已更改 (布尔值)                                            |
+| `errors`              | 严重不兼容变更的错误消息列表                                              |
 
 ### 5.2 结构性 vs. 非结构性变更
 

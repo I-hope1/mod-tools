@@ -19,7 +19,7 @@ English|[中文](index.md)
 - Built-in `IntFunc` class (Alias as `$`)
 
 | Alias                                     | Object/Expression              | Description                                                     |
-| ----------------------------------------- | ------------------------------ | --------------------------------------------------------------- |
+|-------------------------------------------|--------------------------------|-----------------------------------------------------------------|
 | `IntFunc`                                 | `$`                            | -                                                               |
 | `$p`                                      | Packages                       | -                                                               |
 | `$.J`, `$.I`, ...                         | long.class, int.class          | Encoding of Primitive Type                                      |
@@ -120,7 +120,7 @@ NipX HotSwap Agent is a **hot-reload framework** based on the Java Instrumentati
 ### 1.1 Core Capabilities
 
 | Capability            | Key Class                | Description                                                                              |
-| --------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
+|-----------------------|--------------------------|------------------------------------------------------------------------------------------|
 | Hot-Reload Scheduling | `HotSwapAgent`           | Monitors file changes and drives the entire reload process                               |
 | Bytecode Enhancement  | `MyClassFileTransformer` | Injects tracking and performance profiling code during class loading                     |
 | Difference Detection  | `ClassDiffUtil`          | Precisely compares the structure of old and new classes to decide on the reload strategy |
@@ -129,7 +129,7 @@ NipX HotSwap Agent is a **hot-reload framework** based on the Java Instrumentati
 ### 1.2 Module Structure
 
 | Class Name               | Responsibility                                                                                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `HotSwapAgent`           | Agent entry point, file monitoring, reload scheduling, the core driver for class redefinition                                                                   |
 | `MyClassFileTransformer` | `ClassFileTransformer` implementation, responsible for injecting `@Tracker` and `@Profile` code during class loading                                            |
 | `ClassDiffUtil`          | A bytecode-level difference analysis tool based on ASM to compare additions, deletions, and modifications of fields and methods, identifying structural changes |
@@ -146,7 +146,7 @@ NipX HotSwap Agent is a **hot-reload framework** based on the Java Instrumentati
 The system provides 4 annotations as the core API for users. By annotating business code with these, capabilities like tracking, profiling, and reloading can be activated without any invasive code changes.
 
 | Annotation    | Target       | Description                                                                                                                                                                                                                         |
-| ------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `@Reloadable` | Class-level  | Marks the class to be included in the hot-reload process. When the system detects a change in this class's `.class` file, it will perform a precise bytecode comparison and redefinition.                                           |
 | `@Tracker`    | Class-level  | Enables instance tracking. During the bytecode enhancement phase, the system injects a call to `InstanceTracker.register(this)` into all `<init>` constructors of the class to record every live instance.                          |
 | `@Profile`    | Method-level | Enables method-level performance profiling. During bytecode enhancement, the system records `nanoTime()` at the method entry and calculates the elapsed time at the exit, reporting it to `ProfilerData.record()`.                  |
@@ -233,7 +233,7 @@ public class CacheManager {
 The entire hot-reload process is divided into the following serialized stages:
 
 | Stage     | Step                                | Description                                                                                                                                                |
-| --------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-----------|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | ①Sense    | File system change monitoring       | `WatchService` listens for `CREATE` / `MODIFY` events on `.class` files, supporting concurrent monitoring of multiple directories                          |
 | ②Read     | Bytecode cache update               | Reads the new `.class` file and sends it along with the old version from `bytecodeCache` to the difference analysis process                                |
 | ③Analyze  | `ClassDiffUtil.diff()`              | Precisely compares additions, deletions, and modifications of fields and methods to determine if Lambda alignment is needed or if it's a structural change |
@@ -297,7 +297,7 @@ java -XX:+EnableDynamicAgentLoading \
 `HotSwapAgent` maintains the following static switches, which can be adjusted in the Agent code as needed:
 
 | Field                  | Default | Purpose                                                                                   |
-| ---------------------- | ------- | ----------------------------------------------------------------------------------------- |
+|------------------------|---------|-------------------------------------------------------------------------------------------|
 | `ENABLE_HOTSWAP_EVENT` | `true`  | Main switch. If `false`, the Transformer will not perform any injection logic.            |
 | `DEBUG`                | `false` | Debug mode. If `true`, the enhanced bytecode will be written to local files for analysis. |
 
@@ -321,14 +321,14 @@ void main() {
 
 `ClassDiffUtil.diff(byte[] oldBytes, byte[] newBytes)` is the entry point for difference analysis. It returns a `ClassDiff` object containing the following information:
 
-| Field                 | Meaning                                                                      |
-| --------------------- | ---------------------------------------------------------------------------- |
-| `modifiedBodyMethods` | A list of methods whose bodies have been modified (method name + descriptor) |
-| `addedMethods`        | A list of newly added methods                                                |
-| `removedMethods`      | A list of deleted methods                                                    |
-| `changedFields`       | Field changes, formatted as `"+ fieldName"` or `"- fieldName"`               |
-| `hierarchyChanged`    | Whether the superclass or interfaces have changed (boolean)                  |
-| `errors`              | A list of error messages for severe incompatible changes                     |
+| Field                 | Meaning                                                                                 |
+|-----------------------|-----------------------------------------------------------------------------------------|
+| `modifiedBodyMethods` | A list of methods whose bodies have been modified (method name + descriptor)            |
+| `addedMethods`        | A list of newly added methods                                                           |
+| `removedMethods`      | A list of deleted methods                                                               |
+| `changedFields`       | Field changes, formatted as `"+/- *fieldName"`，`"+/- fieldName"` (`*` signals `static`) |
+| `hierarchyChanged`    | Whether the superclass or interfaces have changed (boolean)                             |
+| `errors`              | A list of error messages for severe incompatible changes                                |
 
 ### 5.2 Structural vs. Non-Structural Changes
 

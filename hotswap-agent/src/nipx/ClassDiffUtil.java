@@ -1,7 +1,7 @@
 package nipx;
 
 import nipx.util.*;
-import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
 import java.util.*;
@@ -198,15 +198,27 @@ public final class ClassDiffUtil {
 		var oldFieldsMap = ctx.fieldMap;
 		// 将旧版本所有字段放入映射表，key为字段名和描述符的复合哈希
 		for (FieldNode f : oldC.fields) {
-			oldFieldsMap.put(Utils.compositeHash(f.name, f.desc), f.name);
+			boolean isStatic = (f.access & Opcodes.ACC_STATIC) != 0;
+			oldFieldsMap.put(Utils.compositeHash(f.name, f.desc), (isStatic ? "*" : "") + f.name);
 		}
 
 		// 遍历新版本字段
 		for (FieldNode newF : newC.fields) {
 			long key = Utils.compositeHash(newF.name, newF.desc);
+			String oldVal = oldFieldsMap.remove(key);
+			boolean newIsStatic = (newF.access & Opcodes.ACC_STATIC) != 0;
 			// 如果旧映射表中没有此key，说明是新增字段
-			if (oldFieldsMap.remove(key) == null) {
-				d.changedFields.add("+ " + newF.name);
+			if (oldVal == null) {
+				d.changedFields.add("+ " + (newIsStatic ? "*" : "") + newF.name);
+			} else {
+				boolean oldIsStatic = oldVal.startsWith("*");
+				if (oldIsStatic != newIsStatic) {
+					String cleanName = oldIsStatic ? oldVal.substring(1) : oldVal;
+					// 判定为：旧字段删除，新字段新增
+					d.changedFields.add("- " + (oldIsStatic ? "*" : "") + cleanName);
+					d.changedFields.add("+ " + (newIsStatic ? "*" : "") + newF.name);
+					// d.errors.add("! CRITICAL: Field static modifier changed: " + cleanName);
+				}
 			}
 		}
 		// 映射表中剩余的就是被删除的字段

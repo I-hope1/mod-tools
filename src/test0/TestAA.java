@@ -4,10 +4,6 @@ import arc.scene.ui.Tooltip.Tooltips;
 import arc.util.Log;
 import modtools.ui.IntUI.ITooltip;
 import nipx.annotation.*;
-import nipx.jni.JNIEnv;
-import nipx.jvmti.JVMTIEnv;
-
-import java.lang.foreign.*;
 
 @Reloadable
 public class TestAA {
@@ -45,16 +41,18 @@ public class TestAA {
 	public static class ChildClass extends ParentClass2 {
 	}
 
+	// public static Runnable runx = () -> Log.info("run");
 	@OnReload
 	public static void reload() {
 		Log.info("reload");
-		try (Arena arena = Arena.ofConfined()) {
+		// runx.run();
+		/* try (Arena arena = Arena.ofConfined()) {
 			JNIEnv   env      = new JNIEnv(arena);
 			JVMTIEnv jvmtiEnv = JVMTIEnv.getInstance();
 			jvmtiEnv.walkCurrentThreadFrames(env, MemorySegment.NULL, 64, 0, (className, methodName, methodSig, thisAddress) -> {
 				System.out.println(className + " " + methodName + " " + methodSig + " " + thisAddress);
 			});
-		}
+		} */
 	}
 
 

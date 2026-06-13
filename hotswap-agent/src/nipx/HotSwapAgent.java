@@ -1,5 +1,6 @@
 package nipx;
 
+import arc.Core;
 import nipx.annotation.*;
 import nipx.ref.InitFix;
 import nipx.util.*;
@@ -206,9 +207,10 @@ public class HotSwapAgent {
 		// 获取当前所有已加载类的快照
 		loadClassSnap(classes);
 
-		List<ClassDefinition> definitions   = new ArrayList<>();
-		int                   skippedCount  = 0;
-		int                   injectedCount = 0;
+		List<ClassDefinition> definitions = new ArrayList<>();
+		// List<Class<?>>        unloadedClasses  = new ArrayList<>();
+		int skippedCount  = 0;
+		int injectedCount = 0;
 
 		for (Path path : changedFiles) {
 			if (DEBUG) log("Processing changes: " + path);
@@ -334,39 +336,42 @@ public class HotSwapAgent {
 
 			if (!clazz.isAnnotationPresent(Reloadable.class)) continue;
 
-			Method reloadMethod = null;
-			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.isAnnotationPresent(OnReload.class)) {
-					reloadMethod = m;
-					reloadMethod.setAccessible(true);
-					break;
-				}
+			Core.app.post(() -> processAnnotationsInternal(clazz));
+		}
+	}
+	private static void processAnnotationsInternal(Class<?> clazz) {
+		Method reloadMethod = null;
+		for (Method m : clazz.getDeclaredMethods()) {
+			if (m.isAnnotationPresent(OnReload.class)) {
+				reloadMethod = m;
+				reloadMethod.setAccessible(true);
+				break;
 			}
-			if (reloadMethod == null) continue;
-			info("[Reload] Found @OnReload on " + clazz);
+		}
+		if (reloadMethod == null) return;
+		info("[Reload] Found @OnReload on " + clazz);
 
-			if (Modifier.isStatic(reloadMethod.getModifiers())) {
-				try {
-					reloadMethod.invoke(null);
-					if (DEBUG) log("[Reload] Invoked @OnReload static method.");
-				} catch (Exception e) {
-					error("Error invoking @OnReload", e);
-				}
-				if (DEBUG) log("[Reload] Invoked @OnReload on " + clazz);
-				continue;
+		if (Modifier.isStatic(reloadMethod.getModifiers())) {
+			try {
+				reloadMethod.invoke(null);
+				if (DEBUG) log("[Reload] Invoked @OnReload static method.");
+			} catch (Exception e) {
+				error("Error invoking @OnReload", e);
 			}
+			if (DEBUG) log("[Reload] Invoked @OnReload on " + clazz);
+			return;
+		}
 
-			var instances = InstanceTracker.getInstances(clazz);
-			if (instances.isEmpty()) continue;
+		var instances = InstanceTracker.getInstances(clazz);
+		if (instances.isEmpty()) return;
 
 
-			for (Object obj : instances) {
-				try {
-					reloadMethod.invoke(obj);
-					if (DEBUG) log("[Reload] Invoked @OnReload on " + obj);
-				} catch (Exception e) {
-					error("Error invoking @OnReload", e);
-				}
+		for (Object obj : instances) {
+			try {
+				reloadMethod.invoke(obj);
+				if (DEBUG) log("[Reload] Invoked @OnReload on " + obj);
+			} catch (Exception e) {
+				error("Error invoking @OnReload", e);
 			}
 		}
 	}

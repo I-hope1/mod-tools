@@ -5,7 +5,7 @@ import nipx.jni.helper.*;
 
 import java.lang.foreign.*;
 import java.lang.invoke.*;
-import java.lang.reflect.Field;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -620,40 +620,30 @@ public class JVMTIEnv {
 					metaCache.put(midAddr, meta);
 				}
 				// metasBuf[d] = meta;
-				consumer.accept(meta.className, meta.methodName, meta.methodSig, 0);
+				int  flags = meta.flags;
+				long thisAddress = 0;
+				if (!(Modifier.isStatic(flags) || Modifier.isNative(flags))) {
+					try {
+						MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
+						int err = (int) MH_GetLocalObject.invokeExact(
+						 fpGetLocalObject, jvmtiEnvPtr,
+						 targetThread, d, 0, out);
+
+						if (err == JVMTI_ERROR_NONE) {
+							MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
+							thisAddress = jniEnv.identityHashCode(ref) & 0xFFFFFFFFL;
+						}
+						if (err != 13) {
+							System.out.println(err);
+						}
+					} catch (Throwable e) {
+						// e.printStackTrace();
+						thisAddress = 0L;
+					}
+				}
+				consumer.accept(meta.className, meta.methodName, meta.methodSig, thisAddress);
 			}
 
-			/* // 批量读 this
-			for (int d = skipFrames; d < frameCount; d++) {
-				int flags = metasBuf[d].flags;
-				if (Modifier.isStatic(flags) || Modifier.isNative(flags)) {
-					thisAddrBuf[d] = 0L;
-					continue;
-				}
-				try {
-					MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
-					int err = (int) MH_GetLocalObject.invokeExact(
-					 fpGetLocalObject, jvmtiEnvPtr,
-					 targetThread, d, 0, out);
-					thisAddrBuf[d] = 0L;
-					if (err == JVMTI_ERROR_NONE) {
-						MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
-						thisAddrBuf[d] = jniEnv.identityHashCode(ref) & 0xFFFFFFFFL;
-					}
-					if (err != 13) {
-						System.out.println(err);
-					}
-				} catch (Throwable e) {
-					// e.printStackTrace();
-					thisAddrBuf[d] = 0L;
-				}
-			} */
-
-			// 回调，栈底到栈顶
-			// for (int d = frameCount - 1; d >= skipFrames; d--) {
-			// 	MethodMeta meta = metasBuf[d];
-			// 	consumer.accept(meta.className, meta.methodName, meta.methodSig, 0);
-			// }
 		} catch (Throwable t) {
 			throw new RuntimeException("walkCurrentThreadFrames failed", t);
 		}

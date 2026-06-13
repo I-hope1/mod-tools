@@ -69,9 +69,9 @@ public class FlameGraphWindow extends Window {
 		// ── 顶部工具栏 ──────────────────────────────────────────────────────
 		cont.table(bar -> {
 			bar.defaults().size(32).pad(3);
-			bar.button(Icon.leftSmall, HopeStyles.flati, this::goBack).disabled(_ -> canvas.zoomStack.isEmpty()).tooltip("Back to previous zoom level");
-			bar.button(Icon.eraserSmall, HopeStyles.flati, ProfilerData::clear).tooltip("Clear Profile Data");
-			bar.button(Icon.refreshSmall, HopeStyles.flati, this::refresh);
+			IntUI.addTooltipListener(bar.button(Icon.leftSmall, HopeStyles.flati, this::goBack).disabled(_ -> canvas.zoomStack.isEmpty()).get(), () -> "Back to previous zoom level");
+			IntUI.addTooltipListener(bar.button(Icon.eraserSmall, HopeStyles.flati, ProfilerData::clear).get(), () -> "Clear Profile Data");
+			IntUI.addTooltipListener(bar.button(Icon.refreshSmall, HopeStyles.flati, this::refresh).get(), () -> "Refresh");
 			bar.defaults().reset();
 
 			bar.button("Reset", Styles.flatt, () -> {

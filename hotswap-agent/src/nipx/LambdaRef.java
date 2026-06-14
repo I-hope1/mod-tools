@@ -5,6 +5,7 @@ import arc.func.*;
 import arc.input.KeyCode;
 import arc.scene.*;
 import arc.scene.event.*;
+import arc.scene.event.EventListener;
 import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
@@ -15,7 +16,6 @@ import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.lang.reflect.Field;
 import java.util.*;
-import java.util.EventListener;
 
 import static nipx.AnnotationTransformer.*;
 import static nipx.HotSwapAgent.*;
@@ -175,8 +175,7 @@ public class LambdaRef {
 				cleared++;
 			}
 		} */
-		long cleared = UpdateRef.getAll().stream().filter(ref -> ref.get() == null).count();
-		UpdateRef.clearLambda();
+		int cleared = UpdateRef.clearLambda();
 
 		if (cleared > 0) {
 			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);

@@ -15,9 +15,7 @@ public class UIHookRegistry {
 	// 使用弱引用，当 UI 界面销毁时，垃圾回收器会自动清理，不留任何隐患
 	public static final Map<UILocation, List<WeakReference<Element>>> registry = new ConcurrentHashMap<>();
 
-	/**
-	 * 插桩注入的目标方法，用于运行时收集实例
-	 */
+	/** 插桩注入的目标方法，用于运行时收集实例 */
 	public static void register(Object obj, String className, String methodName, int lineNumber, int index) {
 		if (obj == null) return;
 		Element element;
@@ -41,7 +39,7 @@ public class UIHookRegistry {
 	 * 精准定向更新文本
 	 */
 	public static void updateText(String className, String methodName, int lineNumber, int index, String newText) {
-		UILocation                  loc  = new UILocation(className, methodName, lineNumber, index);
+		UILocation                   loc  = new UILocation(className, methodName, lineNumber, index);
 		List<WeakReference<Element>> refs = registry.get(loc);
 		if (refs == null) return;
 

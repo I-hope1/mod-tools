@@ -2,6 +2,8 @@ package nipx.ref;
 
 import arc.func.*;
 import arc.scene.Element;
+import arc.scene.event.*;
+import arc.scene.event.EventListener;
 import arc.scene.ui.TextField.TextFieldValidator;
 
 import java.lang.ref.WeakReference;
@@ -16,8 +18,17 @@ public class UpdateRef {
 	public static List<WeakReference<UpdateRef>> getAll() {
 		return ALL;
 	}
-	public static void clearLambda() {
-		ALL.removeIf(x -> x.get() == null);
+	/** Returns the count of cleared lambda(s). */
+	public static int clearLambda() {
+		int               count = 0;
+		final Iterator<?> each  = ALL.iterator();
+		while (each.hasNext()) {
+			if (each.next() == null) {
+				each.remove();
+				count++;
+			}
+		}
+		return count;
 	}
 
 	private volatile Object fn;
@@ -67,6 +78,21 @@ public class UpdateRef {
 		if (returnOriginal(original)) return original;
 		UpdateRef ref = new UpdateRef(original, element, element::remove);
 		return ref::runValidator;
+	}
+	public static Floatc wrap(Element element, Floatc original) {
+		if (returnOriginal(original)) return original;
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::runFloatc;
+	}
+	public static Floatc2 wrap(Element element, Floatc2 original) {
+		if (returnOriginal(original)) return original;
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::runFloatc2;
+	}
+	public static EventListener wrap(Element element, EventListener original) {
+		if (returnOriginal(original)) return original;
+		UpdateRef ref = new UpdateRef(original, element, element::remove);
+		return ref::runEventListener;
 	}
 
 	private static boolean returnOriginal(Object original) {
@@ -136,11 +162,39 @@ public class UpdateRef {
 			return false;
 		}
 	}
+	public void runFloatc(float f) {
+		var fn = (Floatc) this.fn;
+		if (checkFn(fn)) return;
+		try {
+			fn.get(f);
+		} catch (NoSuchMethodError e) {
+			clearFn();
+		}
+	}
+	public void runFloatc2(float f1, float f2) {
+		var fn = (Floatc2) this.fn;
+		if (checkFn(fn)) return;
+		try {
+			fn.get(f1, f2);
+		} catch (NoSuchMethodError e) {
+			clearFn();
+		}
+	}
 	public boolean runValidator(String t) {
 		var f = (TextFieldValidator) this.fn;
 		if (checkFn(f)) return false;
 		try {
 			return f.valid(t);
+		} catch (NoSuchMethodError e) {
+			clearFn();
+			return false;
+		}
+	}
+	public boolean runEventListener(SceneEvent eventType) {
+		var f = (EventListener) this.fn;
+		if (checkFn(f)) return false;
+		try {
+			return f.handle(eventType);
 		} catch (NoSuchMethodError e) {
 			clearFn();
 			return false;

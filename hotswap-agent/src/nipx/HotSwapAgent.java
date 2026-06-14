@@ -3,7 +3,7 @@ package nipx;
 import arc.Core;
 import nipx.annotation.*;
 import nipx.ref.InitFix;
-import nipx.uihook.UIUpdateDispatcher;
+import nipx.uihook.*;
 import nipx.util.*;
 
 import java.io.*;
@@ -85,6 +85,7 @@ public class HotSwapAgent {
 		if (transformer == null) {
 			transformer = new AnnotationTransformer();
 			inst.addTransformer(transformer, true);
+			// if (UI_HOOK) inst.addTransformer(new UIHookTransformer(), true);
 			// DynamicProfilerAPI.init();
 		}
 		var loadedClasses = inst.getAllLoadedClasses();
@@ -323,7 +324,7 @@ public class HotSwapAgent {
 		// 批量执行重定义（针对已加载类）
 		applyRedefinitions(definitions);
 		processAnnotations(definitions);
-		processUIHooks(definitions);
+		processUIDispatch(definitions);
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
@@ -379,7 +380,10 @@ public class HotSwapAgent {
 		}
 	}
 
-	private static void processUIHooks(List<ClassDefinition> definitions) {
+
+	private static boolean DISABLE_UI_DISPATCH = true;
+	private static void processUIDispatch(List<ClassDefinition> definitions) {
+		if (DISABLE_UI_DISPATCH) return;
 		if (!UI_HOOK || definitions.isEmpty()) return;
 		for (ClassDefinition def : definitions) {
 			Class<?> clazz       = def.getDefinitionClass();

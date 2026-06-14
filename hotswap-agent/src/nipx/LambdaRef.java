@@ -2,8 +2,9 @@ package nipx;
 
 import arc.Core;
 import arc.func.*;
+import arc.input.KeyCode;
 import arc.scene.*;
-import arc.scene.event.ClickListener;
+import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
@@ -22,15 +23,33 @@ import static nipx.HotSwapAgent.*;
 public class LambdaRef {
 
 	public static void init() {
+		String runnableType = dot2slash(Runnable.class);
+		String boolpType    = dot2slash(Boolp.class);
+		String provType     = dot2slash(Prov.class);
+		String consType     = dot2slash(Cons.class);
+
+		String inputListenerType = dot2slash(InputListener.class);
+
 		// 子类在前面，父类在后
-		Injector.redefine(Button.class, "setDisabled", dot2slash(Boolp.class));
-		Injector.redefine(Label.class, "setText", dot2slash(Prov.class));
+		Injector.redefine(Button.class, "setDisabled", boolpType);
+		Injector.redefine(Label.class, "setText", provType);
 		redefineCell();
 		Injector.redefine(TextField.class, "setValidator", dot2slash(TextFieldValidator.class));
-		String lambdaType = dot2slash(Runnable.class);
-		Injector.redefine(Element.class, "update", "(L" + lambdaType + ";)L" + Injector.CL_ELEMENT + ";", lambdaType);
-		Injector.redefine(Element.class, "clicked", "(L" + lambdaType + ";)L" + dot2slash(ClickListener.class) + ";", lambdaType);
 
+		Injector.redefine(Element.class, "clicked", "(L" + runnableType + ";)L" + dot2slash(ClickListener.class) + ";", runnableType);
+		Injector.redefine(Element.class, "clicked", "(L" + dot2slash(KeyCode.class) + ";L" + runnableType + ";)L" + dot2slash(ClickListener.class) + ";", runnableType, 1);
+		Injector.redefine(Element.class, "clicked", "(L" + consType + ";L" + runnableType + ";)L" + dot2slash(ClickListener.class) + ";", runnableType, 1);
+		Injector.redefine(Element.class, "clicked", "(L" + consType + ";L" + consType + ";)L" + dot2slash(ClickListener.class) + ";", dot2slash(Cons.class), 1);
+		Injector.redefine(Element.class, "keyDown", "(L" + runnableType + ";)V", consType);
+		Injector.redefine(Element.class, "tapped", "(L" + runnableType + ";)L" + inputListenerType + ";", runnableType);
+		Injector.redefine(Element.class, "hovered", "(L" + runnableType + ";)L" + inputListenerType + ";", runnableType);
+		Injector.redefine(Element.class, "released", "(L" + runnableType + ";)L" + inputListenerType + ";", runnableType);
+		Injector.redefine(Element.class, "changed", "(L" + runnableType + ";)V", runnableType);
+		Injector.redefine(Element.class, "update", "(L" + runnableType + ";)L" + Injector.CL_ELEMENT + ";", runnableType);
+		Injector.redefine(Element.class, "visible", "(L" + boolpType + ";)L" + Injector.CL_ELEMENT + ";", boolpType);
+		Injector.redefine(Element.class, "touchable", "(L" + provType + ";)L" + Injector.CL_ELEMENT + ";", provType);
+
+		Injector.batchProcess();
 		// redefineTable();
 	}
 	//region Cell
@@ -53,11 +72,20 @@ public class LambdaRef {
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-				// 只拦截 update(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
+				// 拦截 update(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
 				if ("update".equals(name) && "(Larc/func/Cons;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
 					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;");
 				}
+				// 拦截 disabled(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;
 				if ("disabled".equals(name) && "(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;");
+				}
+				// 拦截 tooltip(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
+				if ("tooltip".equals(name) && "(Larc/func/Cons;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;");
+				}
+				// 拦截 checked(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;
+				if ("checked".equals(name) && "(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
 					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;");
 				}
 				return mv;

@@ -6,6 +6,7 @@ import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.io.*;
 import java.lang.instrument.ClassDefinition;
+import java.util.*;
 
 import static nipx.AnnotationTransformer.dot2slash;
 import static nipx.HotSwapAgent.*;
@@ -25,10 +26,24 @@ public class Injector {
 	public static void redefine(Class<?> clazz, String methodName, String lambdaType) {
 		redefine(clazz, methodName, "(L" + lambdaType + ";)V", lambdaType);
 	}
+
+	static Map<Class<?>, Runnable> todos = new HashMap<>();
+	static Map<Class<?>, byte[]> cacheBytecodes = new HashMap<>();
+
+	/** 批量处理所有任务  */
+	public static void batchProcess() {
+		for (var entry : todos.entrySet()) {
+			entry.getValue().run();
+		}
+		todos.clear();
+	}
 	public static void redefine(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
-		var bytes = fetchOriginalBytecode(clazz);
-		bytes = injectForElement(bytes, methodName, methodDesc, lambdaType);
-		redefineOneClass(clazz, bytes);
+		redefine(clazz, methodName, methodDesc, lambdaType, 1);
+	}
+	public static void redefine(Class<?> clazz, String methodName, String methodDesc, String lambdaType, int lambdaSlot) {
+		var fromBytecode = cacheBytecodes.computeIfAbsent(clazz, _ -> fetchOriginalBytecode(clazz));
+		var toBytecode = injectForElement(fromBytecode, methodName, methodDesc, lambdaType, lambdaSlot);
+		todos.put(clazz, () -> redefineOneClass(clazz, toBytecode));
 	}
 	/**
 	 * 拦截 Element.update(Runnable) 等方法，
@@ -40,10 +55,12 @@ public class Injector {
 	 * 注入后效果：
 	 * r = UpdateRef.wrap(this, r);   ← 插入
 	 * this.update = r;               ← 原样保留
+	 *
+	 * @param lambdaSlot lambda 参数的slot（long，double占两位slot）
 	 */
 	private static byte[] injectForElement(
 	 byte[] bytes, String methodName, String methodDesc,
-	 String lambdaType) {
+	 String lambdaType, int lambdaSlot) {
 		// 拦截 setText(Lprov;) 入口
 		// var0=this(Label), var1=prov
 		// 插入: var1 = UpdateRef.wrap(this, var1)
@@ -62,9 +79,9 @@ public class Injector {
 				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 					@Override
 					protected void onMethodEnter() {
-						visitVarInsn(ALOAD, 0);
+						visitVarInsn(ALOAD, 0); // load this
 						// visitTypeInsn(CHECKCAST, dot2slash(CL_ELEMENT));
-						visitVarInsn(ALOAD, 1);
+						visitVarInsn(ALOAD, lambdaSlot); // load lambda
 						visitMethodInsn(
 						 INVOKESTATIC,
 						 dot2slash(UpdateRef.class),
@@ -72,7 +89,7 @@ public class Injector {
 						 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
 						 false
 						);
-						visitVarInsn(ASTORE, 1);
+						visitVarInsn(ASTORE, lambdaSlot);
 					}
 				};
 			}

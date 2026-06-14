@@ -60,7 +60,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	public static final Pool<ClassMember> CLASS_MEMBER_POOL   = Pools.get(ClassMember.class, ClassMember::new, 500);
 
 
-	/* non-null */
+	/** non-null */
 	private final       Class<?> clazz;
 	private final       Object   obj;
 	private final       MyEvents events   = new MyEvents();
@@ -90,6 +90,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		MyEvents.current = prev;
 	}
 
+	//region Search
 
 	TextField textField;
 	public void search(String text) {
@@ -107,91 +108,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	Table          build;
 	Pattern        pattern = PatternUtils.ANY;
 	Search<Member> search;
-
-	public void build() {
-		build = new LimitTable();
-		// 默认左居中
-		build.left().top().defaults().left();
-
-		// Runnable[] last = {null};
-		Runnable rebuild0 = this::rebuildReflect;
-
-		final Table topTable = new Table();
-		// 默认左居中
-		topTable.left().defaults().left().growX();
-		// 功能按钮栏
-		topTable.pane(t -> {
-			t.left().defaults().left().size(42);
-			t.button(Icon.settingsSmall, clearNonei, () -> { })
-			 .with(b -> b.clicked(() -> {
-				 IntUI.showSelectTable(b, (p, _, _) -> {
-					 p.left().defaults().left().growX();
-					 ISettings.buildAll("jsfunc", p, E_JSFunc.class);
-					 // addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
-					 ISettings.buildAllWrap("jsfunc.display", p, "Display", E_JSFuncDisplay.class);
-					 ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
-				 }, false, Align.bottom);
-			 }));
-			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
-				IntUI.showSelectTable(b, (p, hide, _) -> {
-					p.defaults().size(120, 45);
-					p.button("View Bytecode", Styles.flatt, runT(() -> {
-						Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
-						fi.writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
-						IntUI.showInfoFade("See: " + fi.absolutePath());
-						hide.run();
-					})).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
-				}, false, Align.bottom);
-			}));
-			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
-			t.button(Icon.refreshSmall, clearNonei, rebuild0);
-			if (obj != null) {
-				IntUI.addStoreButton(t, "", () -> obj);
-				markDisplay(
-				 t.label(() -> "" + UNSAFE.vaddressOf(obj)).padLeft(8f),
-				 E_JSFuncDisplay.address);
-			}
-		}).height(42);
-		// 搜索栏
-		search = new Search<>((_, pattern) -> {
-			this.pattern = pattern;
-			rebuildReflect();
-		});
-		search.addStatusFilter("modifiers", ModifierR.values(), 4,
-			i -> {
-				modifiers = i;
-				rebuild0.run();
-			}, () -> modifiers, Member::getModifiers)
-		 .addBlackList(rebuild0)
-		 .addFilter("searchType", SearchType.values(), SearchType.name);
-		search.build(topTable, null);
-
-		textField = search.field;
-		addCaptureListener(new FocusSearchListener(textField));
-
-		// 信息栏
-		topTable.table(t -> {
-			t.left().defaults().left();
-			t.pane(t0 -> t0.left().add(clazz.getTypeName(), defaultLabel).left())
-			 .with(p -> p.setScrollingDisabledY(true)).grow();
-			t.button(Icon.copySmall, Styles.cleari, () -> {
-				copyText(clazz.getTypeName(), t);
-			}).size(32);
-			if (obj == null) t.add("NULL", defaultLabel).color(Color.red).padLeft(8f);
-		}).colspan(2).pad(6, 10, 6, 10).row();
-		// cont.add(build).grow();
-
-		cont.add(topTable).row();
-		cont.add(new ScrollPane(build, Styles.smallPane))
-		 .with(p -> p.setOverscroll(false, true))
-		 .grow().row();
-
-		for (E_JSFuncDisplay value : E_JSFuncDisplay.values()) {
-			events.fireIns(value);
-		}
-		pack();
-	}
-
 
 	public enum SearchType implements SearchItem<Member> {
 		name((p, member) -> find(p, member.getName())),
@@ -299,6 +215,100 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		if (!table.lastEmpty && table.current.hasChildren()) {
 			table.current.getChildren().peek().remove();
 		}
+	}
+
+	//endregion
+
+	public void build() {
+		build = new LimitTable();
+		// 默认左居中
+		build.left().top().defaults().left();
+
+		// Runnable[] last = {null};
+		Runnable rebuild0 = this::rebuildReflect;
+
+		final Table topTable = new Table();
+		// 默认左居中
+		topTable.left().defaults().left().growX();
+		// 功能按钮栏
+		topTable.pane(t -> {
+			t.left().defaults().left().size(42);
+			t.button(Icon.settingsSmall, clearNonei, () -> { })
+			 .with(b -> b.clicked(() -> {
+				 IntUI.showSelectTable(b, (p, _, _) -> {
+					 p.left().defaults().left().growX();
+					 ISettings.buildAll("jsfunc", p, E_JSFunc.class);
+					 // addSettingsTable(p, "", n -> "jsfunc." + n, E_JSFunc.class);
+					 ISettings.buildAllWrap("jsfunc.display", p, "Display", E_JSFuncDisplay.class);
+					 ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
+				 }, false, Align.bottom);
+			 }));
+			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
+				IntUI.showSelectTable(b, (p, hide, _) -> {
+					p.defaults().size(140, 45);
+					p.button("View Bytecode", Styles.flatt, runT(() -> {
+						Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
+						fi.writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
+						IntUI.showInfoFade("See: " + fi.absolutePath());
+						hide.run();
+					}))
+					 .disabled(_ -> !(HotSwapManager.valid() && clazz != null)).row();
+					p.button("View MemBytecode", Styles.flatt, runT(() -> {
+						Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
+						fi.writeBytes(HotSwapAgent.fetchBytecodeMemory(clazz));
+						IntUI.showInfoFade("See: " + fi.absolutePath());
+						hide.run();
+					})).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
+
+				}, false, Align.bottom);
+			}));
+			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
+			t.button(Icon.refreshSmall, clearNonei, rebuild0);
+			if (obj != null) {
+				IntUI.addStoreButton(t, "", () -> obj);
+				markDisplay(
+				 t.label(() -> "" + UNSAFE.vaddressOf(obj)).padLeft(8f),
+				 E_JSFuncDisplay.address);
+			}
+		}).height(42);
+		// 搜索栏
+		search = new Search<>((_, pattern) -> {
+			this.pattern = pattern;
+			rebuildReflect();
+		});
+		search.addStatusFilter("modifiers", ModifierR.values(), 4,
+			i -> {
+				modifiers = i;
+				rebuild0.run();
+			}, () -> modifiers, Member::getModifiers)
+		 .addBlackList(rebuild0)
+		 .addFilter("searchType", SearchType.values(), SearchType.name);
+		search.build(topTable, null);
+
+		textField = search.field;
+		addCaptureListener(new FocusSearchListener(textField));
+
+		// 信息栏
+		topTable.table(t -> {
+			t.left().defaults().left();
+			t.pane(t0 -> t0.left().add(clazz.getTypeName(), defaultLabel).left())
+			 .with(p -> p.setScrollingDisabledY(true)).grow();
+			t.button(Icon.copySmall, Styles.cleari, () -> {
+				copyText(clazz.getTypeName(), t);
+			}).size(32);
+			if (obj == null) t.add("NULL", defaultLabel).color(Color.red).padLeft(8f);
+		}).colspan(2).pad(6, 10, 6, 10).row();
+		// cont.add(build).grow();
+
+		cont.add(topTable).row();
+		cont.add(new ScrollPane(build, Styles.smallPane))
+		 .with(p -> p.setOverscroll(false, true))
+		 .grow().row();
+
+		for (E_JSFuncDisplay value : E_JSFuncDisplay.values()) {
+			events.fireIns(value);
+		}
+		pack();
 	}
 
 	static BindCell markDisplay(Cell<?> cell0, E_JSFuncDisplay type) {
@@ -791,12 +801,6 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			stickX = true;
 		}
 	}
-	private static MethodHandle getSpecialHandle(Method m) throws IllegalAccessException {
-		return lookup.unreflectSpecial(m, m.getDeclaringClass());
-	}
-	private static MethodHandle getHandle(Constructor<?> ctor) throws IllegalAccessException {
-		return lookup.unreflectConstructor(ctor);
-	}
 
 	private static void mergeOne(ReflectTable table, Member member, MyLabel label,
 	                             Element attribute) {
@@ -810,6 +814,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		EventHelper.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new)
 			 .getFirst(ShowInfoWindow::newPairTable).hasChildren()) { return; }
+
 			IntUI.showSelectTable(attribute, (p, _, _) -> {
 				 table.left().top().defaults().left().top();
 				 var   pair = table.map.get(member.getName());
@@ -827,6 +832,13 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		return new Table(t -> t.left().defaults().left().top());
 	}
 
+	//region invoker
+	private static MethodHandle getSpecialHandle(Method m) throws IllegalAccessException {
+		return lookup.unreflectSpecial(m, m.getDeclaringClass());
+	}
+	private static MethodHandle getHandle(Constructor<?> ctor) throws IllegalAccessException {
+		return lookup.unreflectConstructor(ctor);
+	}
 	private static Runnable methodInvoker(Object o, Method m, boolean noParam, Cell<?> cell, ReflectValueLabel l) {
 		return runT(() -> {
 			if (noParam) {
@@ -884,6 +896,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			});
 		}, l);
 	}
+	//endregion
 
 
 	final TaskSet drawTaskSet = new TaskSet();

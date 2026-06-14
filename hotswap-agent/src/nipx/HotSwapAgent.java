@@ -3,6 +3,7 @@ package nipx;
 import arc.Core;
 import nipx.annotation.*;
 import nipx.ref.InitFix;
+import nipx.uihook.UIUpdateDispatcher;
 import nipx.util.*;
 
 import java.io.*;
@@ -11,6 +12,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.reflect.*;
 import java.net.URL;
 import java.nio.file.*;
+import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
@@ -22,7 +24,6 @@ import static nipx.MountManager.*;
  * HotSwap Agent
  * 其由AppLoader加载，但不属于java.base模块
  */
-@SuppressWarnings("StringTemplateMigration")
 public class HotSwapAgent {
 	//region Configuration Fields
 	public static boolean      DEBUG              = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
@@ -322,10 +323,12 @@ public class HotSwapAgent {
 		// 批量执行重定义（针对已加载类）
 		applyRedefinitions(definitions);
 		processAnnotations(definitions);
+		processUIHooks(definitions);
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
 	}
+
 
 	/** 在 applyRedefinitions(definitions) 后调用 */
 	private static void processAnnotations(List<ClassDefinition> definitions) {
@@ -376,6 +379,21 @@ public class HotSwapAgent {
 		}
 	}
 
+	private static void processUIHooks(List<ClassDefinition> definitions) {
+		if (!UI_HOOK || definitions.isEmpty()) return;
+		for (ClassDefinition def : definitions) {
+			Class<?> clazz       = def.getDefinitionClass();
+			String   className   = clazz.getName();
+			byte[]   oldBytecode = bytecodeCache.get(className); // 旧字节码
+			byte[]   newBytecode = def.getDefinitionClassFile(); // 新字节码
+			if (oldBytecode != null && newBytecode != null) {
+				// 执行自动 UI 更新
+				UIUpdateDispatcher.diffAndUpdate(className, oldBytecode, newBytecode);
+			}
+		}
+	}
+
+
 	static boolean isBlacklisted(String className) {
 		for (String prefix : HOTSWAP_BLACKLIST) {
 			if (className.startsWith(prefix)) return true;
@@ -383,6 +401,27 @@ public class HotSwapAgent {
 		return false;
 	}
 
+	public static byte[] fetchBytecodeMemory(Class<?> clazz) throws UnmodifiableClassException {
+		byte[][] bytecode = {null};
+		class MyTransformer implements ClassFileTransformer {
+			@Override
+			public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
+			                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+				if (
+				 clazz == classBeingRedefined
+				 /* className.equals(clazz.getName()) && loader == clazz.getClassLoader() */) bytecode[0] = classfileBuffer;
+				return null;
+			}
+		}
+		MyTransformer transformer1 = new MyTransformer();
+		inst.addTransformer(transformer1, true);
+		try {
+			inst.retransformClasses(clazz);
+			return bytecode[0];
+		} finally {
+			inst.removeTransformer(transformer1);
+		}
+	}
 	public static byte[] fetchCurrentBytecode(Class<?> clazz) {
 		String className = clazz.getName();
 		if (bytecodeCache.containsKey(className)) return bytecodeCache.get(className);

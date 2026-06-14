@@ -15,39 +15,59 @@ import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.EventListener;
 
-import static nipx.AnnotationTransformer.dot2slash;
+import static nipx.AnnotationTransformer.*;
 import static nipx.HotSwapAgent.*;
 
 /** @see UpdateRef */
 public class LambdaRef {
 
 	public static void init() {
-		String runnableType = dot2slash(Runnable.class);
-		String boolpType    = dot2slash(Boolp.class);
-		String provType     = dot2slash(Prov.class);
-		String consType     = dot2slash(Cons.class);
+		String runnableType   = dot2slash(Runnable.class);
+		String boolpType      = dot2slash(Boolp.class);
+		String provType       = dot2slash(Prov.class);
+		String consType       = dot2slash(Cons.class);
+		String floatcType = dot2slash(Floatc.class);
+		String floatc2Type = dot2slash(Floatc2.class);
+		String eventListenerType = dot2slash(EventListener.class);
 
-		String inputListenerType = dot2slash(InputListener.class);
+		String runnableNative = typeToNative(Runnable.class);
+		String boolpNative    = typeToNative(Boolp.class);
+		String provNative     = typeToNative(Prov.class);
+		String consNative     = typeToNative(Cons.class);
+		String floatcNative = typeToNative(Floatc.class);
+		String floatc2Native = typeToNative(Floatc2.class);
+		String eventListenerNative = typeToNative(EventListener.class);
+
+		String elementType         = typeToNative(Element.class);
+		String inputListenerNative = typeToNative(InputListener.class);
+		String clickListenerNative = typeToNative(ClickListener.class);
+		String keyCodeNative = typeToNative(KeyCode.class);
 
 		// 子类在前面，父类在后
-		Injector.redefine(Button.class, "setDisabled", boolpType);
-		Injector.redefine(Label.class, "setText", provType);
+		Injector.redefineTask(Button.class, "setDisabled", boolpNative);
+		Injector.redefineTask(Label.class, "setText", provNative);
 		redefineCell();
-		Injector.redefine(TextField.class, "setValidator", dot2slash(TextFieldValidator.class));
+		Injector.redefineTask(TextField.class, "setValidator", dot2slash(TextFieldValidator.class));
 
-		Injector.redefine(Element.class, "clicked", "(L" + runnableType + ";)L" + dot2slash(ClickListener.class) + ";", runnableType);
-		Injector.redefine(Element.class, "clicked", "(L" + dot2slash(KeyCode.class) + ";L" + runnableType + ";)L" + dot2slash(ClickListener.class) + ";", runnableType, 1);
-		Injector.redefine(Element.class, "clicked", "(L" + consType + ";L" + runnableType + ";)L" + dot2slash(ClickListener.class) + ";", runnableType, 1);
-		Injector.redefine(Element.class, "clicked", "(L" + consType + ";L" + consType + ";)L" + dot2slash(ClickListener.class) + ";", dot2slash(Cons.class), 1);
-		Injector.redefine(Element.class, "keyDown", "(L" + runnableType + ";)V", consType);
-		Injector.redefine(Element.class, "tapped", "(L" + runnableType + ";)L" + inputListenerType + ";", runnableType);
-		Injector.redefine(Element.class, "hovered", "(L" + runnableType + ";)L" + inputListenerType + ";", runnableType);
-		Injector.redefine(Element.class, "released", "(L" + runnableType + ";)L" + inputListenerType + ";", runnableType);
-		Injector.redefine(Element.class, "changed", "(L" + runnableType + ";)V", runnableType);
-		Injector.redefine(Element.class, "update", "(L" + runnableType + ";)L" + Injector.CL_ELEMENT + ";", runnableType);
-		Injector.redefine(Element.class, "visible", "(L" + boolpType + ";)L" + Injector.CL_ELEMENT + ";", boolpType);
-		Injector.redefine(Element.class, "touchable", "(L" + provType + ";)L" + Injector.CL_ELEMENT + ";", provType);
+		Injector.redefineTask(Element.class, "dragged", "(" + floatc2Native + ")V", floatc2Type);
+		Injector.redefineTask(Element.class, "scrolled", "(" + floatcNative + ")V", floatcType);
+		Injector.redefineTask(Element.class, "addListener", "(" + eventListenerNative + ")V", eventListenerType);
+		Injector.redefineTask(Element.class, "addCaptureListener", "(" + eventListenerNative + ")V", eventListenerType);
+		Injector.redefineTask(Element.class, "clicked", "(" + runnableNative + ")" + clickListenerNative, runnableType);
+		Injector.redefineTask(Element.class, "clicked", "(" + keyCodeNative + runnableNative + ")" + clickListenerNative, runnableType, 2);
+		Injector.redefineTask(Element.class, "clicked", "(" + consNative + runnableNative + ")" + clickListenerNative, runnableType, 2);
+		Injector.redefineTask(Element.class, "clicked", "(" + consNative + consNative + ")" + clickListenerNative, consType, 2);
+		Injector.redefineTask(Element.class, "keyDown", "(" + keyCodeNative + runnableNative + ")V", runnableType, 2);
+		Injector.redefineTask(Element.class, "keyDown", "(" + consNative + ")V", consType);
+		Injector.redefineTask(Element.class, "tapped", "(" + runnableNative + ")" + inputListenerNative, runnableType);
+		Injector.redefineTask(Element.class, "hovered", "(" + runnableNative + ")V", runnableType);
+		Injector.redefineTask(Element.class, "released", "(" + runnableNative + ")V", runnableType);
+		Injector.redefineTask(Element.class, "changed", "(" + runnableNative + ")V", runnableType);
+		Injector.redefineTask(Element.class, "update", "(" + runnableNative + ")" + elementType, runnableType);
+		Injector.redefineTask(Element.class, "visible", "(" + boolpNative + ")" + elementType, boolpType);
+		Injector.redefineTask(Element.class, "touchable", "(" + provNative + ")" + elementType, provType);
 
 		Injector.batchProcess();
 		// redefineTable();

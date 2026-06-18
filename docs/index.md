@@ -282,7 +282,7 @@ BootstrapMethod。
 
 ### 4.1 Mindustry 启动参数
 
-(Mindustry会加载`mod-tools`，然后自动加载 agent)
+(在Mindustry中，下载并启用`mod-tools`，在设置中启用`hotswap`，然后就会自动加载 agent)<br>
 使用 JVM 启动参数 更好附加agent，无需修改任何业务代码：
 
 ```bash
@@ -297,6 +297,9 @@ java -XX:+EnableDynamicAgentLoading \
   -XX:+AllowEnhancedClassRedefinition \
   -jar Mindustry.jar
 ```
+
+建议在idea中添加jar应用启动配置<br>
+![](./screenshots/run_config.png)
 
 ### 4.2 运行时开关
 

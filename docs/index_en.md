@@ -276,7 +276,7 @@ When a brand new class appears in the watch directory, the target `ClassLoader`'
 
 ### 4.1 Mindustry Startup Parameters
 
-(Mindustry load mod `mod-tools`, and then load agent automatically when mod is enabled)
+(In Mindustry, enable mod `mod-tools`, enable `hotswap` in the settings, and agent is loaded automatically when mod is enabled)
 Use JVM startup parameters to better attach to the target process, without any need to modify business code:
 
 ```bash
@@ -291,6 +291,9 @@ java -XX:+EnableDynamicAgentLoading \
   -XX:+AllowEnhancedClassRedefinition \
   -jar Mindustry.jar
 ```
+
+It is recommended to add a jar application startup configuration in Idea.<br>
+![](./screenshots/run_config.png)
 
 ### 4.2 Runtime Switches
 

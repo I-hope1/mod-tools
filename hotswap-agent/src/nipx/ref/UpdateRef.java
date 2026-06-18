@@ -10,6 +10,7 @@ import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+/** @see nipx.LambdaRef  */
 public class UpdateRef {
 	public static final List<WeakReference<UpdateRef>> ALL =
 	 new CopyOnWriteArrayList<>();

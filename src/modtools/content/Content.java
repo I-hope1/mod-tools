@@ -1,4 +1,3 @@
-
 package modtools.content;
 
 import arc.Core;

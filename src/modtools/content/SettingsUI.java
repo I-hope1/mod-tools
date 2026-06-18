@@ -187,14 +187,25 @@ public class SettingsUI extends Content {
 				ft.add("@mod-tools.functions").color(Pal.accent).center().row();
 				ft.button("@settings.cancelmodsrestart", Icon.cancelSmall, HopeStyles.flatt, SettingsUI::disabledRestart).row();
 				if (IntVars.isDesktop()) {
-					ft.button("@settings.switchlanguage", Icon.chatSmall, HopeStyles.flatt, () -> {
-						IntVars.async("Switching Language...", LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language switched!"));
-					}).row();
+					ft.button("@settings.switchlanguage", Icon.chatSmall, HopeStyles.flatt, IntVars.EMPTY_RUN)
+					 .with(b -> {
+						 IntUI.addTooltipListener(b, () -> "@settings.tip.switchlanguage");
+						 EventHelper.longPress(b, longPress -> {
+							 if (longPress) {
+								 IntUI.showSelectListTable(b, new Seq<>(Vars.locales), () -> null, locale -> {
+									 if (locale == null) return;
+									 IntVars.async("Switching Language...", () -> LanguageSwitcher.switchLanguage(locale), () -> IntUI.showInfoFade("Language switched!"));
+								 }, LocaleUtils::getDisplayName, 100, 42, true, Align.left);
+							 } else {
+								 IntVars.async("Switching Language...", LanguageSwitcher::switchLanguage, () -> IntUI.showInfoFade("Language switched!"));
+							 }
+						 });
+					 }).row();
 				}
-				ft.button("@settings.enabledebuglevel", Icon.terminalSmall, HopeStyles.flatt, () -> {
+				IntUI.addTooltipListener(ft.button("@settings.enabledebuglevel", Icon.terminalSmall, HopeStyles.flatt, () -> {
 					Log.level = LogLevel.debug;
 					IntUI.showInfoFade("Debug log level enabled.");
-				});
+				}).get(), () -> "@settings.tip.enabledebuglevel");
 			}).growX().padTop(8f).row();
 
 			// 关于按钮
@@ -410,6 +421,7 @@ public class SettingsUI extends Content {
 			String localizedText = "@" + prefix + "." + key.toLowerCase();
 			return list(localizedText, v -> data.put(key, v), () -> data.getString(key, list.get(0)), list, stringify, () -> true);
 		}
+
 		public static <T> Cell<Table> list(String text, Cons<T> cons, Prov<T> prov,
 		                                   Seq<T> list, Func<T, String> stringify,
 		                                   Boolp condition) {
@@ -424,7 +436,9 @@ public class SettingsUI extends Content {
 				});
 				String tipKey = stripFirstDot(text);
 				b.clicked(() -> {
-					if (condition.get()) IntUI.showSelectListTable(b, tipKey, list, prov, cons, stringify, 100, 42, true, Align.left);
+					if (condition.get()) {
+						IntUI.showSelectListTable(b, tipKey, list, prov, cons, stringify, 100, 42, true, Align.left);
+					}
 				});
 				b.setDisabled(() -> !condition.get());
 				tryAddTip(b, tipKey);

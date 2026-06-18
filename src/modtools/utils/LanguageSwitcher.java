@@ -12,11 +12,13 @@ import java.util.Locale;
 public class LanguageSwitcher {
 	public static final Locale
 	 defaultLocale = Locale.getDefault(),
-	 toLocale      = defaultLocale == Locale.ENGLISH ? Locale.CHINA : Locale.ENGLISH;
+	 toLocale      = defaultLocale == Locale.ENGLISH ? Locale.SIMPLIFIED_CHINESE : Locale.ENGLISH;
 	public static final I18NBundle origin = Core.bundle;
 	public static void switchLanguage() {
+		switchLanguage(Locale.getDefault() == defaultLocale ? toLocale : defaultLocale);
+	}
+	public static void switchLanguage(Locale locale) {
 		Fi     handle = Core.files.internal("bundles/bundle");
-		Locale locale = Locale.getDefault() == defaultLocale ? toLocale : defaultLocale;
 		Locale.setDefault(locale);
 		I18NBundle newBundle = I18NBundle.createBundle(handle, locale);
 		addKeyToBundle(newBundle);

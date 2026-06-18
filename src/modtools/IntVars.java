@@ -107,6 +107,7 @@ public class IntVars {
 		CompletableFuture.runAsync(() -> {
 			runnable.run();
 			if (callback != null) callback.run();
+			if (displayUI) Core.app.post(() -> ui.loadfrag.hide());
 		}).exceptionally((th) -> {
 			showException(th, displayUI);
 			return null;

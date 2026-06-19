@@ -297,7 +297,8 @@ java -XX:+EnableDynamicAgentLoading \
 It is recommended to add a jar application startup configuration in Idea.<br>
 ![](./screenshots/run_config.png)
 <br>
-PS: The directory path for Mindustry must not contain special characters (such as Chinese). It is recommended to use only English.
+**PS**: The directory path for Mindustry must not contain special characters (such as Chinese). It is recommended to use only English.
+**PS**: Set the env `MINDUSTRY_DATA_DIR` to change the directory.
 
 ### 4.2 Runtime Switches
 

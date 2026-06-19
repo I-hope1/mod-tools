@@ -303,7 +303,8 @@ java -XX:+EnableDynamicAgentLoading \
 建议在idea中添加jar应用启动配置<br>
 ![](./screenshots/run_config.png)
 <br>
-**PS**: Mindustry的目录路径不能有特殊字符（中文等），建议全英文
+**PS**: Mindustry的目录路径不能有特殊字符（中文等），建议全英文，否则可能会导致启动失败。
+**PS**: 可以设置环境变量`MINDUSTRY_DATA_DIR`来改变目录
 
 ### 4.2 运行时开关
 

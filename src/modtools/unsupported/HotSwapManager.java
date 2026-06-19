@@ -1,12 +1,14 @@
 package modtools.unsupported;
 
+import arc.files.Fi;
+import modtools.IntVars;
 import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.ClassUtils;
 import nipx.HotSwapAgent;
 
-import java.io.*;
-import java.nio.file.Files;
+import java.io.File;
 
 /**
  * 负责执行热更新的核心逻辑。
@@ -49,23 +51,16 @@ public class HotSwapManager {
 		}
 	}
 
-	static String getAgentPath() throws Exception {
+	static String getAgentPath() {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
-		try (InputStream is = HotSwapManager.class.getResourceAsStream(AGENT_RESOURCE_PATH)) {
-			if (is == null) {
-				throw new RuntimeException("Agent JAR not found in resources: " + AGENT_RESOURCE_PATH);
-			}
-			File tempFile = File.createTempFile(AGENT_NAME + "-", ".jar");
-			tempFile.deleteOnExit();
-
-			try (OutputStream os = Files.newOutputStream(tempFile.toPath())) {
-				is.transferTo(os);
-			}
-			agentPathCache = tempFile.getAbsolutePath();
-			return agentPathCache;
-		}
+		Fi   lib      = IntVars.libs.child(AGENT_NAME + ".jar");
+		Fi tempFile = FileUtils.copyToTmp(lib);
+		tempFile.file().deleteOnExit();
+		lib.copyTo(tempFile);
+		agentPathCache = tempFile.path();
+		return agentPathCache;
 	}
 
 	public static boolean valid() {

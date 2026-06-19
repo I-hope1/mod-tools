@@ -7,13 +7,13 @@ import jdk.internal.misc.Unsafe;
 import mindustry.Vars;
 import modtools.IntVars;
 import modtools.jsfunc.reflect.UNSAFE;
+import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import nipx.UtilsAgent;
 import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.jar.JarFile;
 
@@ -25,23 +25,16 @@ public class UtilsAgentManager {
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
 
-	public static String getAgentPath() throws Exception {
+	public static String getAgentPath() {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
-		try (InputStream is = UtilsAgentManager.class.getResourceAsStream(AGENT_RESOURCE_PATH)) {
-			if (is == null) {
-				throw new RuntimeException("Agent JAR not found in resources: " + AGENT_RESOURCE_PATH);
-			}
-			File tempFile = File.createTempFile(AGENT_NAME + "-", ".jar");
-			tempFile.deleteOnExit();
-
-			try (OutputStream os = Files.newOutputStream(tempFile.toPath())) {
-				is.transferTo(os);
-			}
-			agentPathCache = tempFile.getAbsolutePath();
-			return agentPathCache;
-		}
+		Fi   lib      = IntVars.libs.child(AGENT_NAME + ".jar");
+		Fi tempFile = FileUtils.copyToTmp(lib);
+		tempFile.file().deleteOnExit();
+		lib.copyTo(tempFile);
+		agentPathCache = tempFile.path();
+		return agentPathCache;
 	}
 	/** 添加类路径到启动类路径 */
 	public static void appendToBootstrap(String path) throws IOException {

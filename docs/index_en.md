@@ -144,6 +144,7 @@ NipX HotSwap Agent is a **hot-reload framework** based on the Java Instrumentati
 ## 2. Annotation Usage Guide
 
 The system provides 4 annotations as the core API for users. By annotating business code with these, capabilities like tracking, profiling, and reloading can be activated without any invasive code changes.
+Add dependency: `compileOnly 'com.github.I-hope1.mod-tools:annotations:1.5.9'`
 
 | Annotation    | Target       | Description                                                                                                                                                                                                                         |
 |---------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

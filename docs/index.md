@@ -286,12 +286,13 @@ BootstrapMethod。
 使用 JVM 启动参数 更好附加agent，无需修改任何业务代码：
 
 ```bash
-# 普通jdk
+# 普通jdk （不是jre）
 java -XX:+EnableDynamicAgentLoading \
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
   -jar Mindustry.jar
 
 # 使用JetBrainsRuntime SDK(强烈建议)
+# 如：https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk-25.0.3-windows-x64-b508.4.zip
 java -XX:+EnableDynamicAgentLoading \
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
   -XX:+AllowEnhancedClassRedefinition \
@@ -300,6 +301,8 @@ java -XX:+EnableDynamicAgentLoading \
 
 建议在idea中添加jar应用启动配置<br>
 ![](./screenshots/run_config.png)
+<br>
+**PS**: Mindustry的目录路径不能有特殊字符（中文等），建议全英文
 
 ### 4.2 运行时开关
 

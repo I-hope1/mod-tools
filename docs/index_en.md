@@ -280,12 +280,13 @@ When a brand new class appears in the watch directory, the target `ClassLoader`'
 Use JVM startup parameters to better attach to the target process, without any need to modify business code:
 
 ```bash
-# Normal JDK
+# Normal JDK (not jre)
 java -XX:+EnableDynamicAgentLoading \
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
   -jar Mindustry.jar
 
 # Using JetBrainsRuntime SDK (strongly recommended)
+# e.g. https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk-25.0.3-windows-x64-b508.4.zip
 java -XX:+EnableDynamicAgentLoading \
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
   -XX:+AllowEnhancedClassRedefinition \
@@ -294,6 +295,8 @@ java -XX:+EnableDynamicAgentLoading \
 
 It is recommended to add a jar application startup configuration in Idea.<br>
 ![](./screenshots/run_config.png)
+<br>
+PS: The directory path for Mindustry must not contain special characters (such as Chinese). It is recommended to use only English.
 
 ### 4.2 Runtime Switches
 

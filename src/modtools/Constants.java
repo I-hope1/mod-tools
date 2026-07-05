@@ -206,7 +206,7 @@ public class Constants {
 
 	/**
 	 * Executes a provider that might throw checked exceptions, wrapping them in RuntimeException.
-	 * Ensures accessible objects are made accessible.
+	 * Ensures {@link AccessibleObject} are made accessible.
 	 */
 	public static <R> R nl(CProv<R> prov) {
 		try {

@@ -411,26 +411,152 @@ public class FlameGraphWindow extends Window {
 		static Color colorOf(String name) { return PALETTE[Math.abs(name.hashCode()) % PALETTE_SIZE]; }
 		private static Font getFont() { return MyFonts.def; }
 
+		// 线程局部复用，完全消除垃圾回收负担
+		private static final ThreadLocal<StringBuilder> SB_PARSE = ThreadLocal.withInitial(() -> new StringBuilder(128));
+		private static final ThreadLocal<StringBuilder> SB_TEST  = ThreadLocal.withInitial(() -> new StringBuilder(128));
+
 		private static final GlyphLayout _gl = new GlyphLayout();
-		private static String fitLabel(Font font, String text, float maxWidth) {
+		public static String fitLabel(Font font, String text, float maxWidth) {
+			if (text == null) return "";
+
 			_gl.setText(font, text);
 			if (_gl.width <= maxWidth) return text;
-			int    dot    = text.lastIndexOf('.');
-			String simple = dot >= 0 ? text.substring(dot + 1) : text;
+
+			// 获取并清空用于解析简化的 StringBuilder
+			StringBuilder simple = SB_PARSE.get();
+			simple.setLength(0);
+			simplifySignature(text, simple);
+
 			_gl.setText(font, simple);
-			if (_gl.width <= maxWidth) return simple;
-			int    lo     = 1, hi = simple.length();
-			String result = "";
+			if (_gl.width <= maxWidth) return simple.toString(); // 精简后能装下，仅在这里构造一次 String
+
+			// 二分查找
+			int           lo      = 1, hi = simple.length();
+			int           bestMid = 0;
+			StringBuilder testSb  = SB_TEST.get();
+
 			while (lo <= hi) {
-				int    mid = (lo + hi) >> 1;
-				String c   = simple.substring(0, mid) + "…";
-				_gl.setText(font, c);
+				int mid = (lo + hi) >> 1;
+
+				testSb.setLength(0);
+				testSb.append(simple, 0, mid);
+				testSb.append('…');
+
+				// 直接传递 StringBuilder，底层由于接受 CharSequence 从而实现 0 内存分配
+				_gl.setText(font, testSb);
+
 				if (_gl.width <= maxWidth) {
-					result = c;
+					bestMid = mid;
 					lo = mid + 1;
-				} else { hi = mid - 1; }
+				} else {
+					hi = mid - 1;
+				}
 			}
-			return result;
+
+			if (bestMid == 0) return "…"; // 极端情况装不下任何字
+
+			// 查找完毕，只在最后构造一次最终的截断字符串
+			testSb.setLength(0);
+			testSb.append(simple, 0, bestMid);
+			testSb.append('…');
+			return testSb.toString();
+		}
+
+		/**
+		 * 单次扫描指针跳转，不产生任何临时 String，直接将最简签名写入给定的 StringBuilder。
+		 */
+		private static void simplifySignature(String text, StringBuilder sb) {
+			int len   = text.length();
+			int paren = text.indexOf('(');
+
+			// 处理无方法括号的情况（纯类路径或字段）
+			if (paren == -1) {
+				int idx = Math.max(text.lastIndexOf('/'), text.lastIndexOf('.'));
+				if (idx >= 0) {
+					sb.append(text, idx + 1, len);
+				} else {
+					sb.append(text);
+				}
+				return;
+			}
+
+			// 提取并简化方法的所有者类名 (owner) 和方法名 (method)
+			int dot = text.lastIndexOf('.', paren);
+			if (dot >= 0) {
+				int slash      = text.lastIndexOf('/', dot);
+				int ownerStart = (slash >= 0) ? slash + 1 : 0;
+				sb.append(text, ownerStart, dot); // 写入简化后的类名（例如 Draw）
+				sb.append('.');
+				sb.append(text, dot + 1, paren);   // 写入方法名（例如 color）
+			} else {
+				int slash      = text.lastIndexOf('/', paren);
+				int ownerStart = (slash >= 0) ? slash + 1 : 0;
+				sb.append(text, ownerStart, paren);
+			}
+
+			sb.append('(');
+
+			// 寻找右括号
+			int closingParen = text.indexOf(')', paren);
+			if (closingParen < 0) {
+				closingParen = len;
+			}
+
+			// 单次扫描并格式化参数（格式化为 Color, F 风格）
+			int     i          = paren + 1;
+			boolean firstParam = true;
+
+			while (i < closingParen) {
+				// 计算数组层级
+				int arrStart = i;
+				while (i < closingParen && text.charAt(i) == '[') {
+					i++;
+				}
+				int arrCount = i - arrStart;
+
+				if (i >= closingParen) break;
+
+				// 追加逗号分隔符
+				if (!firstParam) {
+					sb.append(", ");
+				} else {
+					firstParam = false;
+				}
+
+				char c = text.charAt(i);
+				if (c == 'L') {
+					// 查找类描述符结尾的分号
+					int semi = text.indexOf(';', i);
+					if (semi < 0 || semi >= closingParen) {
+						sb.append(text, i, closingParen);
+						break;
+					}
+
+					// 仅定位类描述符中最后一个斜杠或点，以剥离包路径
+					int slash = Math.max(text.lastIndexOf('/', semi), text.lastIndexOf('.', semi));
+					// 必须在当前类名区间内才能视为该类的包分隔符，避免定位到前面 owner 的斜杠
+					int classStart = (slash >= i + 1) ? slash + 1 : i + 1;
+
+					sb.append(text, classStart, semi);
+					i = semi + 1;
+				} else {
+					// 基本数据类型 (例如 F -> F)，保持字节码特征但优雅分隔
+					sb.append(c);
+					i++;
+				}
+
+				// 还原数组后缀
+				for (int a = 0; a < arrCount; a++) {
+					sb.append("[]");
+				}
+			}
+
+			sb.append(')');
+
+			// 追加返回值类型 (例如 V)
+			if (closingParen < len) {
+				sb.append(text, closingParen + 1, len);
+			}
 		}
 	}
 }

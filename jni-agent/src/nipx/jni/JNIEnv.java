@@ -497,10 +497,9 @@ public class JNIEnv {
 		return throwable(() -> {
 			MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, 1);
 			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{ref.address()}));
-			int hashCode = (int) (long) JNIEnvFunctions.CallStaticIntMethodA_MH.invokeExact(
+			return JValue.getInt((long) JNIEnvFunctions.CallStaticIntMethodA_MH.invokeExact(
 			 functions.CallStaticIntMethodAFp,
-			 jniEnvPointer, classSystem.ref(), midIdentityHashCode, jValuesPtr);
-			return hashCode;
+			 jniEnvPointer, classSystem.ref(), midIdentityHashCode, jValuesPtr));
 		});
 	}
 

@@ -137,7 +137,8 @@ public class SamplingProfiler {
 				keyBuf.setLength(0);
 				keyBuf.append(simpleClass(className)).append('.').append(methodName)
 				 .append(methodSig);
-				// if (!className.startsWith("Larc/scene/") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
+				// Log.info("thisAddr: @",thisAddr);
+				if (!className.startsWith("Larc/scene/") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
 				String key = keyBuf.toString(); // 这里仍有一次 String 分配，但比之前少很多
 
 				curHolder[0] = curHolder[0].children

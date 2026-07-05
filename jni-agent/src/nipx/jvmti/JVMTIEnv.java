@@ -28,11 +28,12 @@ public class JVMTIEnv {
 
 	public static final int JVMTI_VERSION_1_2 = 0x30010200;
 
-	public static final int JVMTI_ERROR_NONE         = 0;
-	public static final int JVMTI_ERROR_OPAQUE_FRAME = 31;
-	public static final int JVMTI_ERROR_INVALID_SLOT = 35;
-	public static final int JVMTI_ERROR_ABSENT_INFO  = 101;
-	public static final int JNI_OK                   = 0;
+	public static final int JVMTI_ERROR_NONE             = 0;
+	public static final int JVMTI_ERROR_THREAD_NOT_ALIVE = 10;
+	public static final int JVMTI_ERROR_OPAQUE_FRAME     = 31;
+	public static final int JVMTI_ERROR_INVALID_SLOT     = 35;
+	public static final int JVMTI_ERROR_ABSENT_INFO      = 101;
+	public static final int JNI_OK                       = 0;
 
 	/** @see <a href=https://pages.cs.wisc.edu/~starr/bots/EISBot-src/html/structjvmtiCapabilities.html>REF</a> */
 	private static final int  CAN_GET_THREAD_STATE       = 1 << 2;
@@ -445,6 +446,7 @@ public class JVMTIEnv {
 			 targetThread,
 			 0, total,
 			 frameBuf, cntOut);
+			if (rc == JVMTI_ERROR_THREAD_NOT_ALIVE) return Collections.emptyList();
 			checkError(rc, "GetStackTrace");
 
 			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
@@ -602,6 +604,7 @@ public class JVMTIEnv {
 			int rc = (int) MH_GetStackTrace.invokeExact(
 			 fpGetStackTrace, jvmtiEnvPtr,
 			 targetThread, 0, total, frameBuf, cntOut);
+			if (rc == JVMTI_ERROR_THREAD_NOT_ALIVE) return;
 			checkError(rc, "GetStackTrace");
 
 			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
@@ -620,7 +623,7 @@ public class JVMTIEnv {
 					metaCache.put(midAddr, meta);
 				}
 				// metasBuf[d] = meta;
-				int  flags = meta.flags;
+				int  flags       = meta.flags;
 				long thisAddress = 0;
 				if (!(Modifier.isStatic(flags) || Modifier.isNative(flags))) {
 					try {
@@ -633,9 +636,9 @@ public class JVMTIEnv {
 							MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
 							thisAddress = jniEnv.identityHashCode(ref) & 0xFFFFFFFFL;
 						}
-						if (err != 13) {
-							System.out.println(err);
-						}
+						// if (err != 13) {
+						checkError(err, "GetLocalObject");
+						// }
 					} catch (Throwable e) {
 						// e.printStackTrace();
 						thisAddress = 0L;

@@ -17,38 +17,68 @@ public class JValue {
         heapSegment.set(ValueLayout.JAVA_LONG, 0, returnValue);
     }
 
+    private static final ThreadLocal<MemorySegment> staticHeapSegment = ThreadLocal.withInitial(() -> MemorySegment.ofArray(new long[1]));
+    public static boolean getBoolean(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (boolean) jbooleanVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static byte getByte(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (byte) jbyteVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static char getChar(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (char) jcharVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static short getShort(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (short) jshortVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static int getInt(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (int) jintVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static long getLong(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (long) jlongVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static float getFloat(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (float) jfloatVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static double getDouble(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (double) jdoubleVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+    public static MemorySegment getObject(long returnValue) {
+        staticHeapSegment.get().set(ValueLayout.JAVA_LONG, 0, returnValue);
+        return (MemorySegment) jobjectVarhandle.get(staticHeapSegment.get(), 0L);
+    }
+
     public boolean getBoolean() {
         return (boolean) jbooleanVarhandle.get(heapSegment, 0L);
     }
-
     public byte getByte() {
         return (byte) jbyteVarhandle.get(heapSegment, 0L);
     }
-
     public char getChar() {
         return (char) jcharVarhandle.get(heapSegment, 0L);
     }
-
     public short getShort() {
         return (short) jshortVarhandle.get(heapSegment, 0L);
     }
-
     public int getInt() {
         return (int) jintVarhandle.get(heapSegment, 0L);
     }
-
     public long getLong() {
         return (long) jlongVarhandle.get(heapSegment, 0L);
     }
-
     public float getFloat() {
         return (float) jfloatVarhandle.get(heapSegment, 0L);
     }
-
     public double getDouble() {
         return (double) jdoubleVarhandle.get(heapSegment, 0L);
     }
-
     public MemorySegment getObject() {
         return (MemorySegment) jobjectVarhandle.get(heapSegment, 0L);
     }

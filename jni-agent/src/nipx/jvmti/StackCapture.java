@@ -1,11 +1,16 @@
 package nipx.jvmti;
 
+import com.sun.jdi.*;
+import com.sun.jdi.connect.AttachingConnector;
+import com.sun.jdi.connect.Connector.Argument;
 import nipx.jni.JNIEnv;
 import nipx.jni.helper.GlobalRef;
 import nipx.jvmti.JVMTIEnv.FrameConsumer;
 
 import java.lang.foreign.MemorySegment;
-import java.util.List;
+import java.lang.management.ManagementFactory;
+import java.util.*;
+import java.util.function.Supplier;
 
 /**
  * Convenient entry point for capturing stack-frame local variables.
@@ -33,8 +38,8 @@ public final class StackCapture {
 	private StackCapture() { }
 
 	public static List<FrameLocals> capture(JNIEnv jniEnv, Thread thread) {
-			return JVMTIEnv.getInstance()
-			 .captureThreadLocals(jniEnv, thread, 32, 0); // 远程线程不需要跳过本地帧
+		return withSuspend(thread, () ->
+		 JVMTIEnv.getInstance().captureThreadLocals(jniEnv, thread, 32, 0));
 	}
 
 	/**
@@ -67,15 +72,16 @@ public final class StackCapture {
 	public static void captureInto(JNIEnv jniEnv, Thread thread, FrameConsumer consumer) {
 		try (GlobalRef ref = jniEnv.JavaObjectToJObject(thread)) {
 			MemorySegment threadHandle = ref.ref();
-			JVMTIEnv.getInstance().walkCurrentThreadFrames(jniEnv, threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, consumer);
+			withSuspend(thread, () -> {
+				JVMTIEnv.getInstance().walkCurrentThreadFrames(jniEnv, threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, consumer);
+				return null;
+			});
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// Convenience: pretty-print to stdout
-	// -------------------------------------------------------------------------
+	//region dump: pretty-print to stdout
 
 	/** Prints a formatted snapshot of the current thread's local variables. */
 	public static void dump(JNIEnv jniEnv) {
@@ -86,4 +92,76 @@ public final class StackCapture {
 		}
 		System.out.println("=====================================");
 	}
+	//endregion
+
+
+	//region utils
+
+	private static Integer findJdwpPort() {
+		List<String> args = ManagementFactory.getRuntimeMXBean().getInputArguments();
+		for (String arg : args) {
+			if (arg.contains("jdwp") && arg.contains("address=")) {
+				try {
+					String address = arg.substring(arg.indexOf("address=") + 8);
+					if (address.contains(",")) address = address.split(",")[0];
+					if (address.contains(":")) address = address.split(":")[1];
+					return Integer.parseInt(address);
+				} catch (Exception ignored) { }
+			}
+		}
+		return null;
+	}
+
+	private static VirtualMachine attachLocal(int port) throws Exception {
+		AttachingConnector connector = Bootstrap.virtualMachineManager().attachingConnectors().stream()
+		 .filter(c -> c.name().equals("com.sun.jdi.SocketAttach"))
+		 .findFirst().orElseThrow();
+		Map<String, Argument> args = connector.defaultArguments();
+		args.get("port").setValue(String.valueOf(port));
+		args.get("hostname").setValue("127.0.0.1");
+		return connector.attach(args);
+	}
+
+	private static volatile VirtualMachine cachedVM        = null;
+	private static final    String         TMP_THREAD_NAME = "StackCapture&&&";
+	private static synchronized VirtualMachine getVM(int port) throws Exception {
+		if (cachedVM == null) {
+			cachedVM = attachLocal(port);
+		}
+		return cachedVM;
+	}
+
+	private static <T> T withSuspend(Thread thread, Supplier<T> r) {
+		Integer port = findJdwpPort();
+		if (port == null) {
+			return r.get();
+		}
+		String prevThreadName = thread.getName();
+		try {
+			VirtualMachine vm = getVM(port);
+			thread.setName(TMP_THREAD_NAME);
+			List<ThreadReference> list = vm.allThreads();
+			for (ThreadReference tr : list) {
+				if (!TMP_THREAD_NAME.equals(tr.name())) continue;
+				// System.out.println("[StackCapture] Suspending thread " + prevThreadName);
+
+				tr.suspend(); // 借助 JDWP 的力量挂起
+				try {
+					return r.get();
+				} finally {
+					tr.resume();
+				}
+			}
+		} catch (Exception e) {
+			// System.err.println("[StackCapture] JDI bridge failed: " + e.getMessage());
+			// 回退到原生尝试
+			return r.get();
+		} finally {
+			try {
+				thread.setName(prevThreadName);
+			} catch (Throwable ignored) { }
+		}
+		return null;
+	}
+	//endregion
 }

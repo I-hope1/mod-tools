@@ -508,9 +508,9 @@ public class JVMTIEnv {
 								 targetThread, d, v.slot, out);
 
 								if (err == JVMTI_ERROR_NONE) {
-									MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
-									if (ref.address() != 0L) {
-										value = ref;
+									MemorySegment localRef = out.get(ValueLayout.ADDRESS, 0);
+									if (localRef.address() != 0L) {
+										value = localRef;
 									} else {
 										value = "null";
 									}
@@ -633,8 +633,16 @@ public class JVMTIEnv {
 						 targetThread, d, 0, out);
 
 						if (err == JVMTI_ERROR_NONE) {
-							MemorySegment ref = out.get(ValueLayout.ADDRESS, 0);
-							thisAddress = jniEnv.identityHashCode(ref) & 0xFFFFFFFFL;
+							MemorySegment localRef = out.get(ValueLayout.ADDRESS, 0);
+							if (localRef.address() != 0) {
+								// 提升为global ref，避免GC
+								MemorySegment globalRef = jniEnv.NewGlobalRef(localRef);
+								try {
+									thisAddress = jniEnv.identityHashCode(globalRef) & 0xFFFFFFFFL;
+								} finally {
+									jniEnv.DeleteGlobalRef(globalRef);
+								}
+							}
 						}
 						// if (err != 13) {
 						checkError(err, "GetLocalObject");

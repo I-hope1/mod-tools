@@ -73,7 +73,6 @@ public interface MasterKey {
 					o = jniEnv.jObjectToJavaObject(implLookup.ref());
 				}
 				lookup = (Lookup) o;
-
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
 			}

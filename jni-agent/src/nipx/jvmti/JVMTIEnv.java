@@ -357,6 +357,7 @@ public class JVMTIEnv {
 				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
 				// jvmtiCapabilities 位定义 (first jint, offset 0):
 				caps.set(ValueLayout.JAVA_INT, 0, CAN_ACCESS_LOCAL_VARIABLES);
+				// caps.set(ValueLayout.JAVA_INT, 0, CAN_SUSPEND);
 
 				int rc = (int) MH_AddCapabilities.invokeExact(
 				 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);

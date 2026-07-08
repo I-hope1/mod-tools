@@ -4,7 +4,8 @@ import arc.util.*;
 import nipx.jni.JNIEnv;
 import nipx.jni.helper.MasterKey;
 import nipx.jvmti.*;
-import nipx.profiler.*;
+import nipx.jvmti.JVMTIEnv.FrameConsumer;
+import nipx.profiler.ProfilerData;
 import nipx.profiler.ProfilerData.FlameNode;
 
 import java.lang.foreign.Arena;
@@ -123,28 +124,30 @@ public class SamplingProfiler {
 			return false;
 		}
 	}
-	private static final StringBuilder keyBuf = new StringBuilder();
+	private static final StringBuilder keyBuf   = new StringBuilder();
+	private static       FlameNode     curHolder;
+	private static final FrameConsumer CONSUMER = (className, methodName, methodSig, thisAddr) -> {
+		if (isBlacklist(className)) return;
+		String[] pkgs = includePackages;
+		if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return;
+		// Log.info(className + "." + methodName + " " + methodSig);
+
+		// 复用 StringBuilder 拼 key
+		keyBuf.setLength(0);
+		keyBuf.append(simpleClass(className)).append('.').append(methodName)
+		 .append(methodSig);
+		// Log.info("thisAddr: @",thisAddr);
+		if (!className.startsWith("Larc/scene/") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
+		String key = keyBuf.toString();
+
+		curHolder = curHolder.children
+		 .computeIfAbsent(key, FlameNode::new);
+		curHolder.totalNanos.add(intervalMs * 1_000_000L);
+	};
 	private static void planC(JNIEnv jniEnv, Thread target) {
-		FlameNode[] curHolder = {ProfilerData.flameRoot};
-		String[]    pkgs      = includePackages;
+		curHolder = ProfilerData.flameRoot;
 		try {
-			StackCapture.captureInto(jniEnv, target, (className, methodName, methodSig, thisAddr) -> {
-				if (isBlacklist(className)) return;
-				if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return;
-				// Log.info(className + "." + methodName + " " + methodSig);
-
-				// 复用 StringBuilder 拼 key
-				keyBuf.setLength(0);
-				keyBuf.append(simpleClass(className)).append('.').append(methodName)
-				 .append(methodSig);
-				// Log.info("thisAddr: @",thisAddr);
-				if (!className.startsWith("Larc/scene/") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
-				String key = keyBuf.toString(); // 这里仍有一次 String 分配，但比之前少很多
-
-				curHolder[0] = curHolder[0].children
-				 .computeIfAbsent(key, FlameNode::new);
-				curHolder[0].totalNanos.add(intervalMs * 1_000_000L);
-			});
+			StackCapture.captureInto(jniEnv, target, CONSUMER);
 		} catch (Throwable e) {
 			// Log.err(e);
 		}

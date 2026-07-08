@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 import static nipx.jni.helper.NativeHelper.throwable;
 
+/** <a href="https://github.com/dreamlike-ocean/UnsafeJava/blob/master/unsafe-core/src/main/java/top/dreamlike/unsafe/core/panama/jni/JNIEnv.java">JNIEnv</a>*/
 public class JNIEnv {
 
 	public final static  int           JNI_VERSION     = 0x00150000;
@@ -141,7 +142,7 @@ public class JNIEnv {
 		}
 	}
 
-	public GlobalRef FindClass(Class c) {
+	public GlobalRef FindClass(Class<?> c) {
 		boolean isSystemClassloader = c.getClassLoader() == null;
 		if (isSystemClassloader) {
 			return throwable(() -> new GlobalRef(this, (MemorySegment) JNIEnvFunctions.FindClassMH.invokeExact(
@@ -156,7 +157,6 @@ public class JNIEnv {
 			     GlobalRef classLoaderJobjectRef = CallMethodByName(Thread.class.getMethod("getContextClassLoader"), threadRef.ref());
 			     GlobalRef classNameRef = cstrToJstring((allocator.allocateFrom(c.getName())))
 			) {
-				//                Class<?> name = Class.forName("top.dreamlike.unsafe.jni.JNIEnv", true, loader);
 				MemorySegment segment = allocator.allocate(JValue.jvalueLayout);
 				segment.set(ValueLayout.JAVA_BOOLEAN, 0, false);
 				return CallStaticMethodByName(Class.class.getDeclaredMethod("forName", String.class, boolean.class, ClassLoader.class),

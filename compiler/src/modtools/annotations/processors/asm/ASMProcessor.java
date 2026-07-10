@@ -1,13 +1,12 @@
 package modtools.annotations.processors.asm;
 
 import com.google.auto.service.AutoService;
-import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
 import com.sun.tools.javac.util.List;
-import org.objectweb.asm.*;
 import modtools.annotations.asm.CopyConstValue;
+import org.objectweb.asm.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.ElementKind;
@@ -23,8 +22,6 @@ public class ASMProcessor extends BaseASMProc<VarSymbol> {
 		DocReference seeReference = getSeeReference(CopyConstValue.class, element, ElementKind.FIELD);
 		if (seeReference == null) return;
 		VarSymbol field = (VarSymbol) seeReference.element();
-
-		CompilationUnitTree unit = trees.getPath(element).getCompilationUnit();
 
 		element.flags_field |= Flags.FINAL;
 		var tree = ((JCVariableDecl) trees.getTree(element));

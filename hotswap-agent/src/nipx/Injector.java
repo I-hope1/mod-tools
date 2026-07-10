@@ -4,7 +4,7 @@ import nipx.ref.UpdateRef;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
-import java.lang.instrument.ClassDefinition;
+import java.lang.instrument.*;
 import java.util.*;
 
 import static nipx.AnnotationTransformer.dot2slash;
@@ -28,15 +28,22 @@ public class Injector {
 
 	/** 批量处理所有任务 */
 	public static void batchProcess() {
+		List<ClassDefinition> tasks = new ArrayList<>();
 		for (var entry : todos.entrySet()) {
 			Class<?> clazz           = entry.getKey();
 			byte[]   currentBytecode = fetchCurrentBytecode(clazz);
 			for (Todo todo : entry.getValue()) {
 				currentBytecode = injectForElement(currentBytecode, todo.methodName, todo.methodDesc, todo.lambdaType, todo.lambdaSlot);
 			}
-			redefineOneClass(clazz, currentBytecode);
+			tasks.add(new ClassDefinition(clazz, currentBytecode));
 		}
-		todos.clear();
+		try {
+			inst.redefineClasses(tasks.toArray(new ClassDefinition[0]));
+		} catch (ClassNotFoundException | UnmodifiableClassException e) {
+			throw new RuntimeException(e);
+		} finally {
+			todos.clear();
+		}
 	}
 	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
 		redefineTask(clazz, methodName, methodDesc, lambdaType, 1);

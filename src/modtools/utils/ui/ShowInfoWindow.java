@@ -18,7 +18,7 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
-import modtools.jsfunc.reflect.*;
+import modtools.jsfunc.reflect.InitMethodHandle;
 import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.*;
@@ -246,29 +246,30 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
 				IntUI.showSelectTable(b, (p, hide, _) -> {
 					p.defaults().size(140, 45);
+					Boolf<TextButton> boolf = _ -> !(HotSwapManager.valid() && clazz != null);
 					p.button("View Bytecode", Styles.flatt, runT(() -> {
-						Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
-						fi.writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
-						IntUI.showInfoFade("See: " + fi.absolutePath());
-						hide.run();
-					}))
-					 .disabled(_ -> !(HotSwapManager.valid() && clazz != null)).row();
+						 Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
+						 fi.writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
+						 IntUI.showInfoFade("See: " + fi.absolutePath());
+						 hide.run();
+					 }))
+					 .disabled(boolf).row();
 					p.button("View MemBytecode", Styles.flatt, runT(() -> {
-						Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
-						fi.writeBytes(HotSwapAgent.fetchBytecodeMemory(clazz));
-						IntUI.showInfoFade("See: " + fi.absolutePath());
-						hide.run();
-					})).disabled(_ -> !(HotSwapManager.valid() && clazz != null));
-
+						 Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
+						 fi.writeBytes(HotSwapAgent.fetchBytecodeMemory(clazz));
+						 IntUI.showInfoFade("See: " + fi.absolutePath());
+						 hide.run();
+					 }))
+					 .disabled(boolf).row();
 				}, false, Align.bottom);
 			}));
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, clearNonei, rebuild0);
 			if (obj != null) {
 				IntUI.addStoreButton(t, "", () -> obj);
-				markDisplay(
-				 t.label(() -> "" + UNSAFE.vaddressOf(obj)).padLeft(8f),
-				 E_JSFuncDisplay.address);
+				/* markDisplay(
+				 t.label(() -> "" + UNSAFE.vaddressOf(obj)).fontScale(0.7f).padLeft(8f),
+				 E_JSFuncDisplay.address); */
 			}
 		}).height(42);
 		// 搜索栏

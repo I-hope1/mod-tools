@@ -64,7 +64,17 @@ public class LongLongMap {
 		}
 		return NOT_FOUND;
 	}
-
+	public boolean containsKey(long l) {
+		if (l == EMPTY_KEY) {
+			return hasZero;
+		}
+		int idx = hash(l) & (capacity - 1);
+		while (keys[idx] != EMPTY_KEY) {
+			if (keys[idx] == l) return true;
+			idx = (idx + 1) & (capacity - 1);
+		}
+		return false;
+	}
 	public void clear() {
 		Arrays.fill(keys, EMPTY_KEY);
 		Arrays.fill(values, EMPTY_KEY);

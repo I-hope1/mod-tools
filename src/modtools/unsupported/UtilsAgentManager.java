@@ -29,7 +29,7 @@ public class UtilsAgentManager {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
-		Fi   lib      = IntVars.libs.child(AGENT_NAME + ".jar");
+		Fi lib      = IntVars.libs.child(AGENT_NAME + ".jar");
 		Fi tempFile = FileUtils.copyToTmp(lib);
 		tempFile.file().deleteOnExit();
 		lib.copyTo(tempFile);
@@ -94,12 +94,7 @@ public class UtilsAgentManager {
 		Fi dest = Vars.tmpDirectory.child("jni-agent.jar");
 		fi.copyTo(dest);
 		appendToBootstrap(dest.absolutePath());
-		/* try (var arena = Arena.ofConfined()) {
-			JNIEnv env = new JNIEnv(arena);
-			for (FrameLocals local : JVMTIEnv.getInstance().captureThreadLocals(env, Thread.currentThread(), 100, 2)) {
-				Log.info(local.locals());
-			}
-		} */
+		// CrashCaptureHook.load();
 		// attachAgent(dest.absolutePath(), true, "");
 		// JVMTIEnv.getInstance().asyncGetStack();
 		// JNIAgent.load();

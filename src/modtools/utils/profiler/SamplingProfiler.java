@@ -1,8 +1,8 @@
 package modtools.utils.profiler;
 
 import arc.util.*;
+import modtools.unsupported.HotSwapManager;
 import nipx.jni.JNIEnv;
-import nipx.jni.helper.MasterKey;
 import nipx.jvmti.*;
 import nipx.jvmti.JVMTIEnv.FrameConsumer;
 import nipx.profiler.ProfilerData;
@@ -87,7 +87,7 @@ public class SamplingProfiler {
 	// ── 采样循环 ──────────────────────────────────────────────────────────────
 
 	private static void loop() {
-		if (!jniValid()) {
+		if (!HotSwapManager.jniValid()) {
 			while (running) {
 				Threads.sleep(intervalMs);
 
@@ -115,13 +115,6 @@ public class SamplingProfiler {
 				// planB(jniEnv, target);
 				// planA(target);
 			}
-		}
-	}
-	private static boolean jniValid() {
-		try {
-			return MasterKey.isPanamaBackend();
-		} catch (NoClassDefFoundError e) {
-			return false;
 		}
 	}
 	private static final StringBuilder keyBuf   = new StringBuilder();

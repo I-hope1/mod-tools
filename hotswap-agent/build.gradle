@@ -19,6 +19,7 @@ dependencies {
 //	}
 //	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "Anuken:Mindustry:$mindustryVersion"
+	compileOnly project(':jni-agent')
 
 	// asm
 	def asmVersion = '9.9.1'

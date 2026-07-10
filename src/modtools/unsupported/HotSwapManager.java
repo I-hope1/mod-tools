@@ -7,6 +7,7 @@ import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.ClassUtils;
 import nipx.HotSwapAgent;
+import nipx.jni.helper.MasterKey;
 
 import java.io.File;
 
@@ -65,5 +66,12 @@ public class HotSwapManager {
 
 	public static boolean valid() {
 		return E_Hook.hot_swap.enabled();
+	}
+	public static boolean jniValid() {
+		try {
+			return MasterKey.isPanamaBackend();
+		} catch (NoClassDefFoundError e) {
+			return false;
+		}
 	}
 }

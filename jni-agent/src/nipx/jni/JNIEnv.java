@@ -2,37 +2,29 @@ package nipx.jni;
 
 import nipx.jni.helper.*;
 
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SegmentAllocator;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
+import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.Parameter;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.lang.reflect.*;
+import java.nio.file.*;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static nipx.jni.helper.NativeHelper.throwable;
 
-/** <a href="https://github.com/dreamlike-ocean/UnsafeJava/blob/master/unsafe-core/src/main/java/top/dreamlike/unsafe/core/panama/jni/JNIEnv.java">JNIEnv</a>*/
+/** <a href="https://github.com/dreamlike-ocean/UnsafeJava/blob/master/unsafe-core/src/main/java/top/dreamlike/unsafe/core/panama/jni/JNIEnv.java">JNIEnv</a> */
 public class JNIEnv {
 
-	public final static  int           JNI_VERSION     = 0x00150000;
-	private final static MemorySegment MAIN_VM_Pointer = throwable(JNIEnv::initMainVM);
-	private final static MethodHandle  GET_JNIENV_MH   = throwable(JNIEnv::initGetJNIEnvMH);
+	public static final  int           JNI_VERSION     = 0x00150000;
+	private static final MemorySegment MAIN_VM_POINTER = throwable(JNIEnv::initMainVM);
+	private static final MethodHandle  MH_GET_JNIENV   = throwable(JNIEnv::initGetJNIEnvMH);
 
 	/** java 与 jni 通信的途径，jobject与Object互转 */
-	private final static ThreadLocal<Object> jniToJava = new ThreadLocal<>();
+	private static final ThreadLocal<Object> jniToJava = new ThreadLocal<>();
 
-	private final static MethodHandle     NewStringPlatform = throwable(() -> {
+	private static JNIEnv jniEnvInstance;
+
+	private static final MethodHandle     NewStringPlatform = throwable(() -> {
 		MemorySegment JNU_NewStringPlatformFP = SymbolLookup.loaderLookup()
 		 .find("JNU_NewStringPlatform")
 		 .get();
@@ -43,6 +35,19 @@ public class JNIEnv {
 			/*const char *str*/ ValueLayout.ADDRESS
 		 )).bindTo(JNU_NewStringPlatformFP);
 	});
+	//region Cache
+	/** 方法签名缓存：Method → "([paramSig)returnSig" */
+	private static final ConcurrentHashMap<Method, String> METHOD_SIG_CACHE = new ConcurrentHashMap<>(256);
+
+	/** 类名路径缓存：Class.getName() → "pkg/Cls" 格式 */
+	private static final ConcurrentHashMap<Class<?>, String> CLASS_PATH_CACHE = new ConcurrentHashMap<>(128);
+
+	/** 可复用的 JValue 写入缓冲区（最大 8 个参数，一般足够） */
+	private static final int MAX_JVALUES = 8;
+	private static final ThreadLocal<long[]> JVALUE_LONGS = ThreadLocal.withInitial(() -> new long[MAX_JVALUES]);
+	//endregion
+
+
 	public final         JNIEnvFunctions  functions;
 	private final        SegmentAllocator allocator;
 	private final        MemorySegment    jniEnvPointer;
@@ -53,6 +58,18 @@ public class JNIEnv {
 	private final GlobalRef     classJNIEnvRef;
 	private final GlobalRef     classSystem;
 
+
+	public JNIEnv(SegmentAllocator allocator, MemorySegment jniEnvPointer) {
+		if (jniEnvInstance == null) throw new IllegalStateException("Cannot init jniEnvInstance");
+		this.allocator = allocator;
+		this.jniEnvPointer = jniEnvPointer;
+		functions = jniEnvInstance.functions;
+		classJNIEnvRef = jniEnvInstance.classJNIEnvRef;
+		classSystem = jniEnvInstance.classSystem;
+		midGetSecret = jniEnvInstance.midGetSecret;
+		midSetSecret = jniEnvInstance.midSetSecret;
+		midIdentityHashCode = jniEnvInstance.midIdentityHashCode;
+	}
 
 	public JNIEnv(SegmentAllocator allocator) {
 		this.allocator = allocator;
@@ -70,6 +87,7 @@ public class JNIEnv {
 			// System#identityHashCode
 			midIdentityHashCode = getStaticMethodID(classSystem.ref(), "identityHashCode", "(Ljava/lang/Object;)I");
 		} catch (Throwable t) { throw new RuntimeException(t); }
+		jniEnvInstance = this;
 	}
 	/** @return 底层的 方法ID */
 	private MemorySegment getStaticMethodID(MemorySegment cls, String name, String sig) throws Throwable {
@@ -181,8 +199,8 @@ public class JNIEnv {
 				 allocator.allocateFrom(field.getName()),
 				 allocator.allocateFrom(NativeHelper.classToSig(field.getType()))
 				);
-				boolean isRef = false;
-				MemorySegment ref = null;
+				boolean       isRef = false;
+				MemorySegment ref   = null;
 				long value = switch (field.getType().getName()) {
 					case "boolean" ->
 					 (boolean) JNIEnvFunctions.GetStaticBooleanField_MH.invokeExact(functions.GetStaticBooleanFieldFp, jniEnvPointer, clsRef.ref(), fidRef) ? 1 : 0;
@@ -267,8 +285,8 @@ public class JNIEnv {
 				 allocator.allocateFrom(field.getName()),
 				 allocator.allocateFrom(NativeHelper.classToSig(field.getType()))
 				);
-				boolean isRef = false;
-				MemorySegment ref = null;
+				boolean       isRef = false;
+				MemorySegment ref   = null;
 				long value = switch (field.getType().getName()) {
 					case "boolean" ->
 					 (boolean) JNIEnvFunctions.GetBooleanField.invokeExact(functions.GetBooleanFieldFp, jniEnvPointer, jobject.ref(), fidRef) ? 1 : 0;
@@ -387,7 +405,7 @@ public class JNIEnv {
 			try (GlobalRef jclassRef = FindClass(ownerClass)) {
 				MemorySegment mid   = (MemorySegment) JNIEnvFunctions.GetStaticMethodID_MH.invokeExact(functions.GetStaticMethodIDFp, jniEnvPointer, jclassRef.ref(), allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
 				boolean       isRef = false;
-				MemorySegment ref = null;
+				MemorySegment ref   = null;
 				long jvalue = switch (method.getReturnType().getName()) {
 					case "void" -> {
 						JNIEnvFunctions.CallStaticVoidMethodA_MH.invokeExact(functions.CallStaticVoidMethodAFp, jniEnvPointer, jclassRef.ref(), mid, jvalues);
@@ -418,7 +436,7 @@ public class JNIEnv {
 				if (isRef) {
 					return new GlobalRef(this, ref);
 				}
-				return  new GlobalRef(this, new JValue(jvalue));
+				return new GlobalRef(this, new JValue(jvalue));
 			}
 		});
 	}
@@ -448,7 +466,7 @@ public class JNIEnv {
 			MemorySegment clazz = (MemorySegment) JNIEnvFunctions.GetObjectClass_MH.invokeExact(functions.GetObjectClassFp, jniEnvPointer, jobject);
 			try (GlobalRef ref = new GlobalRef(this, clazz)) {
 				MemorySegment rref = null;
-				MemorySegment mid = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, ref.ref(), allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
+				MemorySegment mid  = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, ref.ref(), allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
 				long returnValue = switch (method.getReturnType().getName()) {
 					case "void" -> {
 						JNIEnvFunctions.CallVoidMethodA_MH.invokeExact(functions.CallVoidMethodAFp, jniEnvPointer, jobject, mid, jvalues);
@@ -550,9 +568,13 @@ public class JNIEnv {
 		return jniEnvPointer;
 	}
 
+	public static MemorySegment getMainVmPointer() {
+		return MAIN_VM_POINTER;
+	}
+
 	private MemorySegment initJniEnv() {
 		try {
-			return ((MemorySegment) GET_JNIENV_MH.invokeExact(MAIN_VM_Pointer, JNI_VERSION))
+			return ((MemorySegment) MH_GET_JNIENV.invokeExact(MAIN_VM_POINTER, JNI_VERSION))
 			 .reinterpret(Long.MAX_VALUE);
 		} catch (Throwable t) {
 			throw new RuntimeException(t);

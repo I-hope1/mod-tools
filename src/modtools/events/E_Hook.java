@@ -39,6 +39,8 @@ public enum E_Hook implements ISettings {
 
 	// ------------
 	profile,
+	@Switch(dependency = "profile")
+	capture_locals,
 
 	/* dynamic_jdwp {
 		public boolean isSwitchOn() {
@@ -61,7 +63,7 @@ public enum E_Hook implements ISettings {
 	}
 
 	static void init() {
-		hot_swap.def(false);
+		capture_locals.defTrue();
 		lambda_align.defTrue();
 
 		hotswapOnChange(redefine_mode, () -> redefine_mode.getString().trim());
@@ -71,6 +73,7 @@ public enum E_Hook implements ISettings {
 		hotswapOnChange(lambda_align, () -> lambda_align.getString().trim());
 		hotswapOnChange(ui_hook, () -> ui_hook.getString().trim());
 		System.setProperty("nipx.agent.retransform_loaded", retransform_loaded.getString());
+		System.setProperty("nipx.agent.capture_locals", capture_locals.getString());
 	}
 	static void hotswapOnChange(ISettings setting, Prov<String> prov) {
 		setting.runAndOnChange(() -> {

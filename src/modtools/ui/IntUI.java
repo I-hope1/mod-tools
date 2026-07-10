@@ -155,8 +155,11 @@ public class IntUI {
 
 	public static void addStoreButton(Table table, String key, Prov<?> prov) {
 		table.button(buildStoreKey(key),
-			HopeStyles.flatBordert, IntVars.EMPTY_RUN).padLeft(8f).size(180, 40)
-		 .with(b -> b.clicked(() -> Tester.put(b, prov.get())));
+			HopeStyles.flatBordert, IntVars.EMPTY_RUN).padLeft(8f).size(120, 40)
+		 .with(b -> {
+			 b.getLabelCell().fontScale(0.7f);
+			 b.clicked(() -> Tester.put(b, prov.get()));
+		 });
 	}
 	public static String buildStoreKey(String key) {
 		return key == null || key.isEmpty() ? Core.bundle.get("jsfunc.store_as_js_var2")

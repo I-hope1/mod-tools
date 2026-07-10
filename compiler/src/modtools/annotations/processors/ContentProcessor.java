@@ -191,6 +191,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 	}
 	public void process() throws Throwable {
+		ClassSymbol    typeElement = elements.getTypeElement("modtools.SettingsLoader");
+		if (typeElement != null) return;
 		JavaFileObject file = mFiler.createSourceFile("modtools.SettingsLoader", settingsImpl);
 		try (Writer writer = file.openWriter()) {
 			writer.write("package modtools;\n");

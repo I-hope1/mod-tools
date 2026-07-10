@@ -103,13 +103,13 @@ public class IntVars {
 	 * @param displayUI Whether to show a loading fragment and display errors in the UI.
 	 */
 	public static void async(String text, Runnable runnable, Runnable callback, boolean displayUI) {
-		if (displayUI) ui.loadfrag.show(text);
+		if (displayUI) Core.app.post(() -> ui.loadfrag.show(text));
 		CompletableFuture.runAsync(() -> {
 			runnable.run();
-			if (callback != null) callback.run();
+			if (callback != null) Core.app.post(callback);
 			if (displayUI) Core.app.post(() -> ui.loadfrag.hide());
 		}).exceptionally((th) -> {
-			showException(th, displayUI);
+			Core.app.post(() -> showException(th, displayUI));
 			return null;
 		}).getNow(null);
 	}

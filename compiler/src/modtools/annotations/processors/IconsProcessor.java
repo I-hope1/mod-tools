@@ -33,6 +33,12 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		String packageName = icons.genPackage().equals(".") ? element.getEnclosingElement().toString() : icons.genPackage();
 		String flatName    = packageName + "." + genName;
 
+		ClassSymbol typeElement = elements.getTypeElement(flatName);
+		if (typeElement != null) {
+			// log.error(SPrinter.err(typeElement + ":" + typeElement.members()));
+			return;
+		}
+
 		// 使用 StringBuilder 直接构造新文件的代码文本（完全不修改原 root 和 unit）
 		StringBuilder out = new StringBuilder();
 
@@ -103,7 +109,7 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 			writer = source.openWriter();
 			writer.write(out.toString());
 			writer.flush();
-		} catch (IOException e) {
+		} catch (IOException | RuntimeException e) {
 			println("Error when writing file.");
 			err(e);
 		} finally {

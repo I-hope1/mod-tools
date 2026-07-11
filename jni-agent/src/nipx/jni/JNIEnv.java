@@ -15,6 +15,8 @@ import static nipx.jni.helper.NativeHelper.throwable;
 /** <a href="https://github.com/dreamlike-ocean/UnsafeJava/blob/master/unsafe-core/src/main/java/top/dreamlike/unsafe/core/panama/jni/JNIEnv.java">JNIEnv</a> */
 public class JNIEnv {
 
+	//region Constants & Static Fields
+
 	public static final  int           JNI_VERSION     = 0x00150000;
 	private static final MemorySegment MAIN_VM_POINTER = throwable(JNIEnv::initMainVM);
 	private static final MethodHandle  MH_GET_JNIENV   = throwable(JNIEnv::initGetJNIEnvMH);
@@ -24,7 +26,7 @@ public class JNIEnv {
 
 	private static JNIEnv jniEnvInstance;
 
-	private static final MethodHandle     NewStringPlatform = throwable(() -> {
+	private static final MethodHandle NewStringPlatform = throwable(() -> {
 		MemorySegment JNU_NewStringPlatformFP = SymbolLookup.loaderLookup()
 		 .find("JNU_NewStringPlatform")
 		 .get();
@@ -35,7 +37,11 @@ public class JNIEnv {
 			/*const char *str*/ ValueLayout.ADDRESS
 		 )).bindTo(JNU_NewStringPlatformFP);
 	});
+
+	//endregion
+
 	//region Cache
+
 	/** 方法签名缓存：Method → "([paramSig)returnSig" */
 	private static final ConcurrentHashMap<Method, String> METHOD_SIG_CACHE = new ConcurrentHashMap<>(256);
 
@@ -43,14 +49,16 @@ public class JNIEnv {
 	private static final ConcurrentHashMap<Class<?>, String> CLASS_PATH_CACHE = new ConcurrentHashMap<>(128);
 
 	/** 可复用的 JValue 写入缓冲区（最大 8 个参数，一般足够） */
-	private static final int MAX_JVALUES = 8;
+	private static final int                 MAX_JVALUES  = 8;
 	private static final ThreadLocal<long[]> JVALUE_LONGS = ThreadLocal.withInitial(() -> new long[MAX_JVALUES]);
+
 	//endregion
 
+	//region Instance Fields
 
-	public final         JNIEnvFunctions  functions;
-	private final        SegmentAllocator allocator;
-	private final        MemorySegment    jniEnvPointer;
+	public final  JNIEnvFunctions  functions;
+	private final SegmentAllocator allocator;
+	private final MemorySegment    jniEnvPointer;
 
 	private final MemorySegment midGetSecret;
 	private final MemorySegment midSetSecret;
@@ -58,6 +66,9 @@ public class JNIEnv {
 	private final GlobalRef     classJNIEnvRef;
 	private final GlobalRef     classSystem;
 
+	//endregion
+
+	//region Constructors
 
 	public JNIEnv(SegmentAllocator allocator, MemorySegment jniEnvPointer) {
 		if (jniEnvInstance == null) throw new IllegalStateException("Cannot init jniEnvInstance");
@@ -75,33 +86,70 @@ public class JNIEnv {
 		this.allocator = allocator;
 		jniEnvPointer = initJniEnv();
 		functions = new JNIEnvFunctions(jniEnvPointer);
-		classJNIEnvRef = FindClass(JNIEnv.class); // 此时是初始阶段，查找是安全的
-		classSystem = FindClass(System.class);
+
+		classJNIEnvRef = getJNIEnvRef(allocator);
 		try {
-			// 手动获取 mid，避免调用 CallStaticMethodByName
 			MemorySegment ref = classJNIEnvRef.ref();
+			// 手动获取 mid，避免调用 CallStaticMethodByName
 			midGetSecret = getStaticMethodID(ref, "getSecret", "()Ljava/lang/Object;");
 			midSetSecret = getStaticMethodID(ref, "setSecret", "(Ljava/lang/Object;)V");
 		} catch (Throwable t) { throw new RuntimeException(t); }
+
+		classSystem = FindClass(System.class);
 		try {
 			// System#identityHashCode
 			midIdentityHashCode = getStaticMethodID(classSystem.ref(), "identityHashCode", "(Ljava/lang/Object;)I");
 		} catch (Throwable t) { throw new RuntimeException(t); }
 		jniEnvInstance = this;
 	}
-	/** @return 底层的 方法ID */
-	private MemorySegment getStaticMethodID(MemorySegment cls, String name, String sig) throws Throwable {
-		return (MemorySegment) JNIEnvFunctions.GetStaticMethodID_MH.invokeExact(
-		 functions.GetStaticMethodIDFp, jniEnvPointer, cls,
-		 allocator.allocateFrom(name), allocator.allocateFrom(sig));
+
+	//endregion
+
+	//region JNI Environment Initialization
+
+	private GlobalRef getJNIEnvRef(SegmentAllocator allocator) {
+		GlobalRef     jstr        = null;
+		MemorySegment threadClass = null, classClass = null, currentThread = null, classLoader = null;
+		try {
+			threadClass = NewGlobalRef(findClassDirect("java/lang/Thread"));
+			classClass = NewGlobalRef(findClassDirect("java/lang/Class"));
+
+			var midCurrentThread = getStaticMethodID(threadClass, "currentThread", "()Ljava/lang/Thread;");
+			var midGetContextCL  = getMethodID(threadClass, "getContextClassLoader", "()Ljava/lang/ClassLoader;");
+			var midForName = getStaticMethodID(classClass, "forName",
+			 "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;");
+
+			currentThread = NewGlobalRef(callStaticObjectMethodA(threadClass, midCurrentThread, MemorySegment.NULL));
+
+			classLoader = NewGlobalRef(callObjectMethodA(currentThread, midGetContextCL, MemorySegment.NULL));
+			var clsName = allocator.allocateFrom(JNIEnv.class.getName());
+
+			jstr = cstrToJstring(clsName);
+			var args = allocator.allocate(ValueLayout.JAVA_LONG, 3);
+			args.set(ValueLayout.JAVA_LONG, 0, jstr.ref().address());
+			args.set(ValueLayout.JAVA_LONG, 8, 0L);                  // false
+			args.set(ValueLayout.JAVA_LONG, 16, classLoader.address());
+
+			var jniEnvClass = callStaticObjectMethodA(classClass, midForName, args);
+			return new GlobalRef(this, jniEnvClass);
+		} catch (Throwable t) {
+			throw new RuntimeException(t);
+		} finally {
+			if (jstr != null) jstr.close();
+			if (threadClass != null) DeleteGlobalRef(threadClass);
+			if (classClass != null) DeleteGlobalRef(classClass);
+			if (currentThread != null) DeleteGlobalRef(currentThread);
+			if (classLoader != null) DeleteGlobalRef(classLoader);
+		}
 	}
 
-	private static Object getSecret() {
-		return jniToJava.get();
-	}
-
-	private static void setSecret(Object o) {
-		jniToJava.set(o);
+	private MemorySegment initJniEnv() {
+		try {
+			return ((MemorySegment) MH_GET_JNIENV.invokeExact(MAIN_VM_POINTER, JNI_VERSION))
+			 .reinterpret(Long.MAX_VALUE);
+		} catch (Throwable t) {
+			throw new RuntimeException(t);
+		}
 	}
 
 	private static MemorySegment initMainVM() throws Throwable {
@@ -144,6 +192,55 @@ public class JNIEnv {
 		 .bindTo(JNU_GetEnv_FP);
 	}
 
+	//endregion
+
+	//region JNI Private Helpers
+
+	private MemorySegment findClassDirect(String slashName) {
+		return throwable(() -> (MemorySegment) JNIEnvFunctions.FindClass_MH.invokeExact(
+		 functions.FindClassFp, jniEnvPointer, allocator.allocateFrom(slashName)));
+	}
+
+	private MemorySegment getMethodID(MemorySegment cls, String name, String sig) {
+		return throwable(() -> (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(
+		 functions.GetMethodIDFp, jniEnvPointer, cls,
+		 allocator.allocateFrom(name), allocator.allocateFrom(sig)));
+	}
+
+	private MemorySegment callStaticObjectMethodA(MemorySegment cls, MemorySegment mid, MemorySegment jvalues) {
+		return throwable(() -> (MemorySegment) JNIEnvFunctions.CallStaticObjectMethodA_MH.invokeExact(
+		 functions.CallStaticObjectMethodAFp, jniEnvPointer, cls, mid, jvalues));
+	}
+
+	private MemorySegment callObjectMethodA(MemorySegment obj, MemorySegment mid, MemorySegment jvalues) {
+		return throwable(() -> (MemorySegment) JNIEnvFunctions.CallObjectMethodA_MH.invokeExact(
+		 functions.CallObjectMethodAFp, jniEnvPointer, obj, mid, jvalues));
+	}
+
+	/** @return 底层的 方法ID */
+	private MemorySegment getStaticMethodID(MemorySegment cls, String name, String sig) throws Throwable {
+		return (MemorySegment) JNIEnvFunctions.GetStaticMethodID_MH.invokeExact(
+		 functions.GetStaticMethodIDFp, jniEnvPointer, cls,
+		 allocator.allocateFrom(name), allocator.allocateFrom(sig));
+	}
+
+	/** for JNI */
+	private static Object getSecret() {
+		return jniToJava.get();
+	}
+
+	private static void setSecret(Object o) {
+		jniToJava.set(o);
+	}
+
+	private GlobalRef cstrToJstring(MemorySegment cstr) {
+		return throwable(() -> new GlobalRef(this, (MemorySegment) NewStringPlatform.invokeExact(jniEnvPointer, cstr)));
+	}
+
+	//endregion
+
+	//region Global Reference Management
+
 	public MemorySegment NewGlobalRef(MemorySegment jobject) {
 		try {
 			return (MemorySegment) JNIEnvFunctions.NewGlobalRef_MH.invokeExact(functions.NewGlobalRefFp, jniEnvPointer, jobject);
@@ -161,30 +258,12 @@ public class JNIEnv {
 	}
 
 	public GlobalRef FindClass(Class<?> c) {
-		boolean isSystemClassloader = c.getClassLoader() == null;
-		if (isSystemClassloader) {
-			return throwable(() -> new GlobalRef(this, (MemorySegment) JNIEnvFunctions.FindClassMH.invokeExact(
-			 functions.FindClassFp,
-			 jniEnvPointer,
-			 allocator.allocateFrom(c.getName().replace(".", "/"))))
-			);
-		}
-
-		return throwable(() -> {
-			try (GlobalRef threadRef = CallStaticMethodByName(Thread.class.getMethod("currentThread"));
-			     GlobalRef classLoaderJobjectRef = CallMethodByName(Thread.class.getMethod("getContextClassLoader"), threadRef.ref());
-			     GlobalRef classNameRef = cstrToJstring((allocator.allocateFrom(c.getName())))
-			) {
-				MemorySegment segment = allocator.allocate(JValue.jvalueLayout);
-				segment.set(ValueLayout.JAVA_BOOLEAN, 0, false);
-				return CallStaticMethodByName(Class.class.getDeclaredMethod("forName", String.class, boolean.class, ClassLoader.class),
-				 new JValue(classNameRef.ref().address()),
-				 new JValue(segment.get(ValueLayout.JAVA_LONG, 0)),
-				 new JValue(classLoaderJobjectRef.ref().address())
-				);
-			}
-		});
+		return JavaObjectToJObject(c);
 	}
+
+	//endregion
+
+	//region Field Operations
 
 	public GlobalRef GetStaticFieldByName(Field field) {
 		if (!Modifier.isStatic(field.getModifiers())) {
@@ -355,9 +434,9 @@ public class JNIEnv {
 		});
 	}
 
-	private GlobalRef cstrToJstring(MemorySegment cstr) {
-		return throwable(() -> new GlobalRef(this, (MemorySegment) NewStringPlatform.invokeExact(jniEnvPointer, cstr)));
-	}
+	//endregion
+
+	//region Method Invocation
 
 	public GlobalRef CallStaticMethodByName(Method method) {
 		return CallStaticMethodByName(method, MemorySegment.NULL, "()" + NativeHelper.classToSig(method.getReturnType()));
@@ -503,6 +582,10 @@ public class JNIEnv {
 		});
 	}
 
+	//endregion
+
+	//region Java / JNI Object Conversion
+
 	public Object jObjectToJavaObject(MemorySegment jobject) {
 		return throwable(() -> {
 			MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, 1);
@@ -530,6 +613,10 @@ public class JNIEnv {
 			}
 		});
 	}
+
+	//endregion
+
+	//region Other Public Methods
 
 	public int identityHashCode(MemorySegment ref) {
 		return throwable(() -> {
@@ -564,6 +651,7 @@ public class JNIEnv {
 			}
 		});
 	}
+
 	public MemorySegment getJniEnvPointer() {
 		return jniEnvPointer;
 	}
@@ -572,18 +660,13 @@ public class JNIEnv {
 		return MAIN_VM_POINTER;
 	}
 
-	private MemorySegment initJniEnv() {
-		try {
-			return ((MemorySegment) MH_GET_JNIENV.invokeExact(MAIN_VM_POINTER, JNI_VERSION))
-			 .reinterpret(Long.MAX_VALUE);
-		} catch (Throwable t) {
-			throw new RuntimeException(t);
-		}
-	}
 	public MemorySegment GetObjectClass(MemorySegment ref) {
 		return throwable(() -> (MemorySegment) JNIEnvFunctions.GetObjectClass_MH.invokeExact(functions.GetObjectClassFp, jniEnvPointer, ref));
 	}
+
 	public boolean IsSameObject(MemorySegment m1, MemorySegment m2) {
 		return throwable(() -> (boolean) JNIEnvFunctions.IsSameObject_MH.invokeExact(functions.IsSameObjectFp, jniEnvPointer, m1, m2));
 	}
+
+	//endregion
 }

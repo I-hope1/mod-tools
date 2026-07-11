@@ -74,7 +74,8 @@ public class CrashVariableInterceptor {
 			// 将底层的 jobject exception 转换回 Java 的 Throwable 实例
 			// System.out.println(Thread.currentThread());
 			Object javaThrowable = jniEnv.jObjectToJavaObject(exception);
-			if (javaThrowable instanceof ClassNotFoundException || javaThrowable instanceof IOException) return;
+			if (javaThrowable instanceof IOException
+			    || javaThrowable instanceof ReflectiveOperationException) return;
 			if (javaThrowable.getClass().getName().startsWith("sun.nio.fs.")) return;
 			if (javaThrowable instanceof Throwable th) {
 				var locals = JVMTIEnv.getInstance().captureThreadLocals(jniEnv, MemorySegment.NULL, 32, 14, true);

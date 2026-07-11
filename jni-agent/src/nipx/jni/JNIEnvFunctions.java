@@ -11,7 +11,7 @@ public class JNIEnvFunctions {
 
     private static final long ADDRESS_SIZE = ValueLayout.ADDRESS.byteSize();
 
-    final static MethodHandle FindClassMH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.of(
+    final static MethodHandle FindClass_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.of(
             /*jclass*/ValueLayout.ADDRESS,
             /*JNIEnv *env */ValueLayout.ADDRESS,
             /*const char *name*/ ValueLayout.ADDRESS

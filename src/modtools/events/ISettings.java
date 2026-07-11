@@ -22,6 +22,7 @@ import modtools.IntVars;
 import modtools.annotations.settings.SettingsInit;
 import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.ui.*;
+import modtools.ui.comp.Underline;
 import modtools.ui.comp.limit.LimitTextButton;
 import modtools.ui.menu.MenuItem;
 import modtools.ui.style.DelegatingDrawable;
@@ -93,7 +94,9 @@ public interface ISettings extends E_DataInterface {
 		data().setDef(name(), o);
 	}
 	default void defTrue() {
-		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
+		if (type() != boolean.class) {
+			throw new IllegalStateException("the settings is " + type() + " not boolean.class");
+		}
 		data().setDef(name(), true);
 	}
 	default void set(Object o) {
@@ -101,7 +104,9 @@ public interface ISettings extends E_DataInterface {
 		data().put(name(), o);
 	}
 	default void set(boolean b) {
-		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
+		if (type() != boolean.class) {
+			throw new IllegalStateException("the settings is " + type() + " not boolean.class");
+		}
 		set((Boolean) b);
 	}
 
@@ -109,17 +114,21 @@ public interface ISettings extends E_DataInterface {
 	// getter
 	/** 获取设置是否可用，如果禁用，则返回false */
 	default boolean enabled() {
-		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
+		if (type() != boolean.class) {
+			throw new IllegalStateException("the settings is " + type() + " not boolean.class");
+		}
 		return isSwitchOn() && data().getBool(name());
 	}
 	default void toggle() {
-		if (type() != boolean.class) { throw new IllegalStateException("the settings is " + type() + " not boolean.class"); }
+		if (type() != boolean.class) {
+			throw new IllegalStateException("the settings is " + type() + " not boolean.class");
+		}
 		set(!enabled());
 	}
 	default Object get() {
 		return data().get(name());
 	}
-	/** 仅仅是调用{@link String#valueOf(Object)}  */
+	/** 仅仅是调用{@link String#valueOf(Object)} */
 	default String getString() {
 		Object o = get();
 		if (type() == String.class && o instanceof Jval) set(o = ((Jval) o).asString());
@@ -220,7 +229,11 @@ public interface ISettings extends E_DataInterface {
 	/* Internal  */
 	private static void buildAll0(String prefix, Table table, Class<? extends ISettings> cl) {
 		for (ISettings value : cl.getEnumConstants()) {
-			value.build(prefix, table);
+			if (value.name().startsWith("_")) {
+				Underline.of(table, 1);
+			} else {
+				value.build(prefix, table);
+			}
 		}
 	}
 
@@ -253,11 +266,11 @@ public interface ISettings extends E_DataInterface {
 		if (hasSwitch()) {
 			buildSwitch(prefix, table);
 		}
-		SettingsBuilder.build(table);
 		text = (prefix + name()).toLowerCase();
 		Class<?> type = type();
 
 		try {
+			SettingsBuilder.build(table);
 			Cons<ISettings> builder = builder();
 			if (builder == null) {
 				$(false);

@@ -41,6 +41,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl, contentClass;
+	private Name prefix_underline;
+
 	public static void registerTodos(Context context) {
 		// 懒加载符号：第一次匹配时才 resolve
 		ClassSymbol[] iSettingsRef = {null};
@@ -130,6 +132,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		consType = findType("arc.func.Cons");
 		settingsImpl = findClassSymbol("modtools.events.SettingsImpl");
 		contentClass = findClassSymbol("modtools.content.Content");
+		prefix_underline = ns("_");
 	}
 
 	public void contentLoad(ClassSymbol element) throws IOException {
@@ -239,6 +242,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
+				if (tree.name.startsWith(prefix_underline)) return;
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				VarSymbol symbol = getSymbol(unit, tree);
 

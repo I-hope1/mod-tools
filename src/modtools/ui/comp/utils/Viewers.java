@@ -776,10 +776,11 @@ public class Viewers {
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? "'" + val + "'"
 				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
+			  : val instanceof Number ? String.valueOf(val)
 				: val instanceof Class ? ((Class<?>) val).getSimpleName()
 
 				: val instanceof Element ? ReviewElement.getElementName((Element) val)
-				: FormatHelper.getUIKey(val))
+				: FormatHelper.getUIKeyOrNull(val))
 			.get(() -> String.valueOf(val))
 			/** @see Objects#toIdentityString(Object)  */
 			.get(() -> Tools.clName(val) + "@" + Integer.toHexString(System.identityHashCode(val)))

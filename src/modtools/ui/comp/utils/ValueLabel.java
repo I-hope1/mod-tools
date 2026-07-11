@@ -532,7 +532,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			Object fieldVal = FieldUtils.getOrNull(field, val1);
 			if (fieldVal == null || (fieldVal instanceof Number n && n.intValue() == 0)) return;
 			String uiKey = CatchSR.apply(() ->
-			 CatchSR.of(() -> FormatHelper.getUIKey(fieldVal))
+			 CatchSR.of(() -> FormatHelper.getUIKeyOrNull(fieldVal))
 				.get(() -> String.valueOf(fieldVal))
 			);
 			builder.append("\t" + field.getName() + " = " + uiKey + ";\n");

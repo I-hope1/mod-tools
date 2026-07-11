@@ -49,15 +49,19 @@ public class NumberHelper {
 		}
 	}
 	public static int asInt(String text) {
-		return CatchSR.apply(() ->
-		 CatchSR.of(() -> Strings.parseInt(text))
-			.get(() -> (int) asFloat(text))
-			.get(() -> 0)
-		);
+		try {
+			return Strings.parseInt(text);
+		} catch (Throwable _) { }
+		try {
+			return (int) asFloat(text);
+		} catch (Throwable _) { }
+		return 0;
 	}
 
 	public static Number parse(String text, Class<?> type0) {
-		if (!Number.class.isAssignableFrom(type0)) throw new NumberParseException("Cannot parse " + text + " to " + type0, null);
+		if (!Number.class.isAssignableFrom(type0)) {
+			throw new NumberParseException("Cannot parse " + text + " to " + type0, null);
+		}
 
 		Class<?> type = CAST.box(type0);
 		if (type == Float.class) return asFloat(text);
@@ -73,7 +77,7 @@ public class NumberHelper {
 			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
 		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException _) {
 			try {
-				return (Number) type.getDeclaredConstructor(String.class).newInstance( text);
+				return (Number) type.getDeclaredConstructor(String.class).newInstance(text);
 			} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
 				throw new NumberParseException("Cannot parse " + text + " to " + type, e);
 			}

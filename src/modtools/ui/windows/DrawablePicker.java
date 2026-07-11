@@ -63,8 +63,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 	/**
 	 * 显示DrawablePicker窗口，并设置初始的Drawable、是否包含透明度以及回调函数。
 	 * @param drawable0 初始的Drawable
-	 * @param hasAlpha 是否包含透明度
-	 * @param consumer 选择Drawable后的回调函数
+	 * @param hasAlpha  是否包含透明度
+	 * @param consumer  选择Drawable后的回调函数
 	 */
 	public void show(Drawable drawable0, boolean hasAlpha, Cons<Drawable> consumer) {
 		this.current.set(color);
@@ -72,8 +72,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 		show();
 
 		isIconColor = true;
-		Color sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
-		boolean isDelegate = drawable0 instanceof DelegatingDrawable;
+		Color   sourceColor = new Color(iconCurrent.set(getTint(drawable0)));
+		boolean isDelegate  = drawable0 instanceof DelegatingDrawable;
 		drawable = sourceColor.equals(Color.white) && !isDelegate ? drawable0 : cloneDrawable(drawable0);
 
 		resetColor(sourceColor);
@@ -95,7 +95,7 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 				fn.table(Styles.black6, buttons -> {
 					buttons.left().defaults().padLeft(4f).padRight(4f);
 					buttons.label(() -> CatchSR.apply(() ->
-					 CatchSR.of(() -> FormatHelper.getUIKey(drawable))
+					 CatchSR.of(() -> FormatHelper.getUIKeyOrNull(drawable))
 						.get(() -> "" + drawable)
 					)).fontScale(0.6f).growX().labelAlign(Align.left).row();
 					buttons.left().defaults().growX().height(32);

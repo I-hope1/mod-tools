@@ -1485,7 +1485,15 @@ public class ReviewElement extends Content {
 		@Override
 		public void update(Element element) {
 			try {
-				Style style = (Style) element.getClass().getMethod("getStyle").invoke(element);
+				Style style = switch (element) {
+					case Button button -> button.getStyle();
+					case ScrollPane pane -> pane.getStyle();
+					case Label label -> label.getStyle();
+					case TextField field -> field.getStyle();
+					case ProgressBar bar -> bar.getStyle();
+					case Dialog dialog -> dialog.getStyle();
+					default -> (Style) element.getClass().getMethod("getStyle").invoke(element);
+				};
 				if (style != null && ShowUIList.styleKeyMap.containsKey(style)) {
 					setVisible(true);
 					styleLabel.setText(FormatHelper.fieldFormat(ShowUIList.styleKeyMap.get(style)));

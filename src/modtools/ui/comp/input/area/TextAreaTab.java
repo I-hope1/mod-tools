@@ -881,14 +881,17 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		 **/
 		public int realCursorLine;
 
+		StringBuilder sb = new StringBuilder();
 		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
+			// Log.info(offsetY + "," + row);
 			// Log.debug(cursorLine[0] + "," + cline[0]);
-			int prevColor = font.getColor().rgba();
-			float x = this.x;
+			int   prevColor = font.getColor().rgba();
+			float x         = this.x;
 			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
 			font.getColor().a *= parentAlpha * color.a;
-			GlyphLayout layout = font.draw(String.valueOf(row), x, offsetY);
+			sb.setLength(0);
+			GlyphLayout layout = font.draw(sb.append(row), x, offsetY);
 			if (realCursorLine == row) {
 				float y = offsetY - area.lineHeight();
 				Draw.color(Pal.accent);
@@ -917,14 +920,18 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			int start = firstLineShowing * 2,
 			 end = start + linesShowing * 2;
 			for (; i <= end && i < linesBreak.size; i += 2) {
+				if (i == 0) {
+					realCursorLine = 1;
+					task.run();
+				}
 				if (i == start) {
-					if (i == 0) task.run();
 					task = getTask(offsetY, row);
 				}
 				if (i >= start) offsetY -= area.lineHeight();
 				if (i == cursorLine) realCursorLine = row;
 				try {
-					if (text.charAt(linesBreak.get(i + 1)) == '\n') {
+					int index = linesBreak.get(i + 1);
+					if (index < text.length() && text.charAt(index) == '\n') {
 						if (i >= start) task.run();
 						row++;
 						if (i >= start) task = getTask(offsetY, row);
@@ -936,9 +943,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 					if (i >= start) task = getTask(offsetY, row);
 				}
 			}
-			if (area.newLineAtEnd()) {
+			if (i != 0 && area.newLineAtEnd()) {
 				if (linesBreak.size == cursorLine) realCursorLine = row;
-				// if (i >= linesBreak.peek()) task.run();
+				if (i >= linesBreak.peek()) task.run();
 			}
 			/* else {
 				drawLine(offsetY + area.lineHeight(), row);
@@ -948,6 +955,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		private Runnable getTask(float offsetY, int row) {
+			// System.out.println(row);
 			return () -> drawLine(offsetY, row);
 		}
 	}

@@ -45,7 +45,7 @@ public class Constants {
 
 	public interface AndroidInput_ {
 		/** @see AndroidInput#processEvents() */
-		Method processEvents = nl(() -> AndroidInput.class.getDeclaredMethod("processEvents"));
+		Method processEvents  = nl(() -> AndroidInput.class.getDeclaredMethod("processEvents"));
 		/** @see AndroidInput#processDevices() () */
 		Method processDevices = nl(() -> AndroidInput.class.getDeclaredMethod("processDevices"));
 	}
@@ -59,7 +59,7 @@ public class Constants {
 	}
 
 	public interface IntelCheck {
-		Field wasIntel = nl(() -> IntelGpuCheck.class.getDeclaredField("wasIntel")),
+		Field wasIntel     = nl(() -> IntelGpuCheck.class.getDeclaredField("wasIntel")),
 		 checkedLastLaunch = nl(() -> IntelGpuCheck.class.getDeclaredField("checkedLastLaunch"));
 	}
 
@@ -67,7 +67,7 @@ public class Constants {
 	@SuppressWarnings("DataFlowIssue")
 	public interface DESKTOP_INIT {
 		/** @see java.lang.invoke.MemberName */
-		Class<?> MEMBER_NAME = nl("java.lang.invoke.MemberName");
+		Class<?> MEMBER_NAME          = nl("java.lang.invoke.MemberName");
 		Class<?> DIRECT_METHOD_HANDLE = nl("java.lang.invoke.DirectMethodHandle");
 
 		/** @see MemberName#flags */
@@ -87,11 +87,11 @@ public class Constants {
 		 "resolveOrFail", byte.class, MEMBER_NAME, Class.class, int.class, Class.class);
 		/** @see Lookup#getDirectMethodCommon(byte, Class, MemberName, boolean, boolean, Lookup) */
 		Method GET_DIRECT_METHOD = CatchSR.apply(
-		 ()-> CatchSR.of(() -> method(
-		 Lookup.class, "getDirectMethodCommonx",
-		 byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class))
-		  .get(() -> method(DIRECT_METHOD_HANDLE,
-		   "make", byte.class, Class.class, MEMBER_NAME, Class.class))
+		 () -> CatchSR.of(() -> method(
+			 Lookup.class, "getDirectMethodCommon",
+			 byte.class, Class.class, MEMBER_NAME, boolean.class, boolean.class, Lookup.class))
+			.get(() -> method(DIRECT_METHOD_HANDLE,
+			 "make", byte.class, Class.class, MEMBER_NAME, Class.class))
 		);
 
 
@@ -209,6 +209,15 @@ public class Constants {
 	 * Ensures {@link AccessibleObject} are made accessible.
 	 */
 	public static <R> R nl(CProv<R> prov) {
+		try {
+			Object r = prov.get();
+			if (r instanceof AccessibleObject ao) ao.setAccessible(true);
+			return (R) r;
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
+	}
+	public static <R> R nlOrNull(CProv<R> prov) {
 		try {
 			Object r = prov.get();
 			if (r instanceof AccessibleObject ao) ao.setAccessible(true);

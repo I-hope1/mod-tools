@@ -90,6 +90,10 @@ public class FormatHelper {
 			default -> null;
 		};
 	}
+	public static Object getUIKeyOr(Object val, Object def) {
+		String res = getUIKeyOrNull(val);
+		return res == null ? def : res;
+	}
 	/** 如果找不到，就抛出一个错误 */
 	public static String getUIKey(Object val) {
 		String res = getUIKeyOrNull(val);

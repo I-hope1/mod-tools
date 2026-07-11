@@ -87,7 +87,7 @@ public class InitFix {
 			staticPatch.setAccessible(true);
 			HotSwapAgent.info("Applying static field init patch to " + clazz.getName());
 			staticPatch.invoke(null);
-		} catch (NoSuchMethodException e) {
+		} catch (NoSuchMethodException _) {
 			// 无新增静态字段
 		} catch (Throwable e) {
 			HotSwapAgent.error("Static field init patch failed: " + e.getMessage());

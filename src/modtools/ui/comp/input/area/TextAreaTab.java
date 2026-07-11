@@ -310,6 +310,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (start == max) return;
 			if (start > max) throw new IllegalArgumentException("start: " + start + " > max:" + max);
 			if (Mathf.zero(font.getColor().a)) return;
+			max = Math.min(max, text.length());
+			start = Math.max(start, 0);
 
 			while (start < max) {
 				// 当前 row 在 linesBreak 中的绝对结束位置

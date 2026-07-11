@@ -35,12 +35,18 @@ public enum E_Hook implements ISettings {
 	lambda_align,
 	@Switch(dependency = "hot_swap")
 	ui_hook,
-
-
+	_1,
 	// ------------
 	profile,
 	@Switch(dependency = "profile")
 	capture_locals,
+	_2,
+
+	capture_exceptions,
+	@Switch(dependency = "capture_exceptions")
+	capture_all_exceptions,
+
+	_3,
 
 	/* dynamic_jdwp {
 		public boolean isSwitchOn() {
@@ -63,7 +69,6 @@ public enum E_Hook implements ISettings {
 	}
 
 	static void init() {
-		capture_locals.defTrue();
 		lambda_align.defTrue();
 
 		hotswapOnChange(redefine_mode, () -> redefine_mode.getString().trim());
@@ -72,9 +77,16 @@ public enum E_Hook implements ISettings {
 		hotswapOnChange(hotswap_plus, () -> hotswap_plus.getString().trim());
 		hotswapOnChange(lambda_align, () -> lambda_align.getString().trim());
 		hotswapOnChange(ui_hook, () -> ui_hook.getString().trim());
-		System.setProperty("nipx.agent.retransform_loaded", retransform_loaded.getString());
-		System.setProperty("nipx.agent.capture_locals", capture_locals.getString());
+
+		setProperty(retransform_loaded);
+		setProperty(capture_locals);
+		setProperty(capture_exceptions);
+		setProperty(capture_all_exceptions);
 	}
+	private static void setProperty(E_Hook _enum) {
+		System.setProperty("nipx.agent." + _enum.name(), _enum.getString());
+	}
+
 	static void hotswapOnChange(ISettings setting, Prov<String> prov) {
 		setting.runAndOnChange(() -> {
 			System.setProperty("nipx.agent." + setting.name(), prov.get());

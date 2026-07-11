@@ -847,15 +847,18 @@ public class Tester extends Content {
 	}
 
 	private static void setAppClassLoader(ClassLoader loader) {
-		try {
-			ForRhino.factory.getApplicationClassLoader().loadClass(ModTools.class.getName());
-		} catch (Throwable _) {
-			loader = OS.isAndroid ? AndroidLoader.loader(loader) : loader;
+		if (ForRhino.factory.getApplicationClassLoader() != null) {
 			try {
-				ForRhino.factory.initApplicationClassLoader(loader);
-			} catch (Throwable e) {
-				Reflect.set(ContextFactory.class, ForRhino.factory
-				 , "applicationClassLoader", loader);
+				// 判断是否能加载到mod的类
+				ForRhino.factory.getApplicationClassLoader().loadClass(ModTools.class.getName());
+			} catch (Throwable _) {
+				loader = OS.isAndroid ? AndroidLoader.loader(loader) : loader;
+				try {
+					ForRhino.factory.initApplicationClassLoader(loader);
+				} catch (Throwable _) {
+					Reflect.set(ContextFactory.class, ForRhino.factory
+					 , "applicationClassLoader", loader);
+				}
 			}
 		}
 		cx.setApplicationClassLoader(loader);

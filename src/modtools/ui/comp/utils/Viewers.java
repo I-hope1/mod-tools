@@ -495,6 +495,7 @@ public class Viewers {
 				return false;
 			} finally {
 				currentDepth--; // 绝对对称
+				label.postAppendDelimiter();
 			}
 		}
 

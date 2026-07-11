@@ -166,7 +166,7 @@ public class JNIEnvFunctions {
     final static MethodHandle CallStaticVoidMethodA_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.ofVoid(
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -174,7 +174,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_BOOLEAN,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -182,7 +182,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_BYTE,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -190,7 +190,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_CHAR,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -198,7 +198,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_SHORT,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -206,7 +206,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_INT,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -214,7 +214,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_LONG,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -222,7 +222,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_FLOAT,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -230,7 +230,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_DOUBLE,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -238,7 +238,7 @@ public class JNIEnvFunctions {
             ValueLayout.ADDRESS,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -255,7 +255,7 @@ public class JNIEnvFunctions {
             ValueLayout.ADDRESS,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -263,7 +263,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_BOOLEAN,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -271,7 +271,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_BYTE,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -279,7 +279,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_CHAR,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -287,7 +287,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_SHORT,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -295,7 +295,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_INT,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -303,7 +303,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_LONG,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -311,7 +311,7 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_FLOAT,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -319,14 +319,14 @@ public class JNIEnvFunctions {
             ValueLayout.JAVA_DOUBLE,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
     final static MethodHandle CallVoidMethodA_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.ofVoid(
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jobject obj*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 
@@ -340,7 +340,7 @@ public class JNIEnvFunctions {
             ValueLayout.ADDRESS,
             /*JNIEnv *env */ ValueLayout.ADDRESS,
             /*jclass clazz*/ ValueLayout.ADDRESS,
-            /*jmethodID methodID*/ ValueLayout.ADDRESS,
+            /*methodID methodID*/ ValueLayout.ADDRESS,
             /*jvalue *args*/ ValueLayout.ADDRESS
     ));
 

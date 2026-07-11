@@ -14,7 +14,6 @@ public class CrashVariableInterceptor {
 	// 全局弱引用 Map：自动在 Throwable 被 GC 时回收内存
 	public static final    Map<Throwable, List<FrameLocals>> CRASH_LOCALS_MAP =
 	 Collections.synchronizedMap(new WeakHashMap<>());
-	public static volatile List<FrameLocals>                 lastLocals;
 
 	// Exception 事件类型 ID = 58
 	private static final int JVMTI_EVENT_EXCEPTION       = 58;
@@ -27,10 +26,10 @@ public class CrashVariableInterceptor {
 	 ValueLayout.ADDRESS, // jvmtiEnv *jvmti_env
 	 ValueLayout.ADDRESS, // JNIEnv* jni_env
 	 ValueLayout.ADDRESS, // jthread thread
-	 ValueLayout.ADDRESS, // jmethodID method
+	 ValueLayout.ADDRESS, // methodID method
 	 ValueLayout.JAVA_LONG, // jlocation location
 	 ValueLayout.ADDRESS, // jobject exception
-	 ValueLayout.ADDRESS, // jmethodID catch_method
+	 ValueLayout.ADDRESS, // methodID catch_method
 	 ValueLayout.JAVA_LONG  // jlocation catch_location
 	);
 
@@ -49,21 +48,20 @@ public class CrashVariableInterceptor {
 	}
 
 
-	private static final ThreadLocal<Boolean> IN_CALLBACK =
-	 ThreadLocal.withInitial(() -> false);
-	private static final StringBuilder        sb          = new StringBuilder();
+	private static final ThreadLocal<Boolean>       IN_CALLBACK = ThreadLocal.withInitial(() -> false);
+	private static final ThreadLocal<StringBuilder> SB          = ThreadLocal.withInitial(StringBuilder::new);
 	// 异常抛出时的 C++ 回调入口
 	public static void onExceptionThrown(
 	 MemorySegment jvmtiEnvPtr, MemorySegment jniEnvPtr, MemorySegment jthread,
 	 MemorySegment method, long location, MemorySegment exception,
 	 MemorySegment catchMethod, long catchLocation) {
 		if (Thread.currentThread().getContextClassLoader() == null
-		|| exception.address() == 0) return;
+		    || exception.address() == 0) { return; }
 		// boolean isFatal = catchMethod.address() == 0L;
 		// if (isFatal) return;
 
 
-		if (IN_CALLBACK.get()) return;
+		if (IN_CALLBACK.get() == Boolean.TRUE) return;
 		IN_CALLBACK.set(Boolean.TRUE);
 
 
@@ -71,6 +69,7 @@ public class CrashVariableInterceptor {
 			if (!captureAllExceptions() && !isCatchMethodInClass(arena, JVMTIEnv.getInstance(), catchMethod, "arc.backend.sdl.SdlApplication")) {
 				return;
 			}
+			StringBuilder sb = SB.get();
 			JNIEnv jniEnv = new JNIEnv(arena, jniEnvPtr);
 			// 将底层的 jobject exception 转换回 Java 的 Throwable 实例
 			// System.out.println(Thread.currentThread());
@@ -78,32 +77,32 @@ public class CrashVariableInterceptor {
 			if (javaThrowable instanceof ClassNotFoundException || javaThrowable instanceof IOException) return;
 			if (javaThrowable.getClass().getName().startsWith("sun.nio.fs.")) return;
 			if (javaThrowable instanceof Throwable th) {
-				// System.out.println(thread);
-				lastLocals = JVMTIEnv.getInstance().captureThreadLocals(jniEnv, MemorySegment.NULL, 32, 14, true);
+				var locals = JVMTIEnv.getInstance().captureThreadLocals(jniEnv, MemorySegment.NULL, 32, 14, true);
 				sb.setLength(0);
 				sb.append(th.getClass().getName()).append(": ").append(th.getMessage()).append('\n');
-				for (FrameLocals frame : lastLocals) {
-					// int lineNumber = JVMTIEnv.getInstance().getLineNumber(method, location);
-					// int lineNumber = stackTrace[frame.depth()].getLineNumber();
-					sb.append("Frame#").append(frame.depth()).append(" ")
-					 .append(frame.className()).append('.').append(frame.methodName()).append(frame.methodSignature())
-					 .append(" @").append(Long.toHexString(frame.location()))
-					 .append('\n');
-					for (LocalVariable local : (frame.locals())) {
-						sb.append('\t').append(local.name()).append(": ");
-						if (local.isReference() && local.value() != null) {
-							String str = local.typeName();
+				for (FrameLocals frame : locals) {
+					try (frame) {
+						int lineNumber = JVMTIEnv.getInstance().getLineNumber(MemorySegment.ofAddress(frame.methodID()), frame.location());
+						// int lineNumber = stackTrace[frame.depth()].getLineNumber();
+						sb.append("Frame#").append(frame.depth()).append(" ")
+						 .append(frame.className()).append('.').append(frame.methodName()).append(frame.methodSignature())
+						 .append(" :").append(lineNumber)
+						 .append('\n');
+						for (LocalVariable local : (frame.locals())) {
+							sb.append('\t').append(local.name()).append(": ");
+							if (local.isReference() && local.value() != null) {
+								String str = local.typeName();
 							/* if (local.value() instanceof MemorySegment ref) {
 								Object o = jniEnv.jObjectToJavaObject(ref);
 								if (o.getClass().isInterface()) str = o.toString();
 							} */
-							sb.append(str).append('@').append(Integer.toHexString(local.hash()));
-						} else {
-							sb.append(local.value());
+								sb.append(str).append('@').append(Integer.toHexString(local.hash()));
+							} else {
+								sb.append(local.value());
+							}
+							sb.append('\n');
 						}
-						sb.append('\n');
 					}
-					frame.close();
 				}
 				System.out.println(sb);
 				/* StackCapture.captureInto(jniEnv, Thread.currentThread(), ((className, methodName, methodSig, thisAddress) -> {
@@ -121,7 +120,7 @@ public class CrashVariableInterceptor {
 	/**
 	 * 判断 catchMethod 是否属于指定类的方法
 	 * @param jvmtiEnv             JVMTI 环境指针 (MemorySegment)
-	 * @param catchMethod          要检查的 jmethodID (MemorySegment)
+	 * @param catchMethod          要检查的 methodID (MemorySegment)
 	 * @param targetClassSignature 目标类的 JVM 内部签名，如 "Ljava/lang/RuntimeException;"
 	 * @return true 如果 catchMethod 属于目标类
 	 */

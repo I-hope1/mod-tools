@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
 
 public class GameSettings extends Content {
 	public GameSettings() {
-		super("gameSettings");
+		super("gameSettings", Icon.settingsSmall);
 	}
 
 	Window ui;

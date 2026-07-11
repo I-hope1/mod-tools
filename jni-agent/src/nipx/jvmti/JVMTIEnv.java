@@ -39,6 +39,7 @@ public class JVMTIEnv {
 	/** @see <a href=https://pages.cs.wisc.edu/~starr/bots/EISBot-src/html/structjvmtiCapabilities.html>REF</a> */
 	public static final  int CAN_TAG_OBJECTS               = 1;
 	private static final int CAN_GET_THREAD_STATE          = 1 << 2;
+	private static final int CAN_GET_LINE_NUMBERS          = 1 << 12;
 	/**
 	 * jvmtiCapabilities.can_access_local_variables is bit 14 of the first jint
 	 * in the 128-byte bitfield struct.
@@ -85,7 +86,7 @@ public class JVMTIEnv {
 	private static final long IDX_JavaVM_GetEnv = 6;
 
 	//endregion
-	//region jvmtiFrameInfo  { jmethodID(8) | jlocation/jlong(8) }  = 16 bytes
+	//region jvmtiFrameInfo  { methodID(8) | jlocation/jlong(8) }  = 16 bytes
 	private static final long FRAME_SIZE         = 16L;
 	private static final long FRAME_METHOD_OFF   = 0L;
 	private static final long FRAME_LOCATION_OFF = 8L;
@@ -109,6 +110,16 @@ public class JVMTIEnv {
 	private static final long LVE_SIGNATURE = 24L;
 	private static final long LVE_GENERIC   = 32L;
 	private static final long LVE_SLOT      = 40L;
+
+	// ---------------------------------------------------------------------------
+	// jvmtiLineNumberEntry layout (64-bit, with natural padding):
+	//   0  : jlocation start_location  (8)
+	//   8  : jint line_number          (4)
+	//   12 : padding                   (4)
+	//   total: 16 bytes
+	private static final long LNE_SIZE      = 16L;
+	private static final long LNE_START_LOC = 0L;
+	private static final long LNE_LINE_NUM  = 8L;
 
 	// -------------------------------------------------------------------------
 	// Unbound MethodHandles (function pointer is the FIRST invoke argument)
@@ -213,7 +224,7 @@ public class JVMTIEnv {
 	private static final MethodHandle MH_GetLocalVariableTable = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
-		ValueLayout.ADDRESS,  // jmethodID
+		ValueLayout.ADDRESS,  // methodID
 		ValueLayout.ADDRESS,  // jint* entry_count_ptr
 		ValueLayout.ADDRESS   // jvmtiLocalVariableEntry** table_ptr
 	 ));
@@ -240,8 +251,8 @@ public class JVMTIEnv {
 	private static final MethodHandle MH_GetLineNumberTable = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
-		ValueLayout.ADDRESS,  // jmethodID
-		ValueLayout.JAVA_INT, // jint* entry_count_ptr
+		ValueLayout.ADDRESS,  // methodID
+		ValueLayout.ADDRESS, // jint* entry_count_ptr
 		ValueLayout.ADDRESS   // jvmtiLineNumberEntry** table_ptr
 	 ));
 
@@ -249,7 +260,7 @@ public class JVMTIEnv {
 	private static final MethodHandle MH_GetMethodName = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
-		ValueLayout.ADDRESS,  // jmethodID
+		ValueLayout.ADDRESS,  // methodID
 		ValueLayout.ADDRESS,  // char** name_ptr
 		ValueLayout.ADDRESS,  // char** signature_ptr
 		ValueLayout.ADDRESS   // char** generic_ptr (we pass NULL)
@@ -259,7 +270,7 @@ public class JVMTIEnv {
 	static final MethodHandle MH_GetMethodDeclaringClass = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
-		ValueLayout.ADDRESS,  // jmethodID
+		ValueLayout.ADDRESS,  // methodID
 		ValueLayout.ADDRESS   // jclass* declaring_class_ptr
 	 ));
 
@@ -275,7 +286,7 @@ public class JVMTIEnv {
 	private static final MethodHandle MH_GetMethodModifiers = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
-		ValueLayout.ADDRESS,  // jmethodID
+		ValueLayout.ADDRESS,  // methodID
 		ValueLayout.ADDRESS   // jint* modifiers_ptr
 	 ));
 
@@ -328,7 +339,6 @@ public class JVMTIEnv {
 
 	// Cached function pointers
 	private final MemorySegment fpGetStackTrace;
-	private final MemorySegment fpGetLocalVariableTable;
 	private final MemorySegment fpGetLocalObject;
 	private final MemorySegment fpGetLocalInt;
 	private final MemorySegment fpGetLocalLong;
@@ -337,6 +347,8 @@ public class JVMTIEnv {
 	private final MemorySegment fpGetMethodName;
 	private final MemorySegment fpGetMethodDeclaringClass;
 	private final MemorySegment fpGetMethodModifiers;
+	private final MemorySegment fpGetLineNumberTable;
+	private final MemorySegment fpGetLocalVariableTable;
 	private final MemorySegment fpGetClassSignature;
 	private final MemorySegment fpDeallocate;
 	private final MemorySegment fpSuspendThread;
@@ -370,16 +382,17 @@ public class JVMTIEnv {
 		this.fnTable = jvmtiEnvPtr.get(ValueLayout.ADDRESS, 0).reinterpret(Long.MAX_VALUE);
 
 		fpGetStackTrace = fp(IDX_GetStackTrace);
-		fpGetLocalVariableTable = fp(IDX_GetLocalVariableTable);
 		fpGetLocalObject = fp(IDX_GetLocalObject);
 		fpGetLocalInt = fp(IDX_GetLocalInt);
 		fpGetLocalLong = fp(IDX_GetLocalLong);
 		fpGetLocalFloat = fp(IDX_GetLocalFloat);
 		fpGetLocalDouble = fp(IDX_GetLocalDouble);
+		fpGetClassSignature = fp(IDX_GetClassSignature);
 		fpGetMethodName = fp(IDX_GetMethodName);
 		fpGetMethodDeclaringClass = fp(IDX_GetMethodDeclaringClass);
 		fpGetMethodModifiers = fp(IDX_GetMethodModifiers);
-		fpGetClassSignature = fp(IDX_GetClassSignature);
+		fpGetLineNumberTable = fp(IDX_GetLineNumberTable);
+		fpGetLocalVariableTable = fp(IDX_GetLocalVariableTable);
 		fpDeallocate = fp(IDX_Deallocate);
 		fpSuspendThread = fp(IDX_SuspendThread);
 		fpResumeThread = fp(IDX_ResumeThread);
@@ -452,7 +465,8 @@ public class JVMTIEnv {
 				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
 				// jvmtiCapabilities 位定义 (first jint, offset 0):
 				caps.set(ValueLayout.JAVA_INT, 0,
-				 CAN_TAG_OBJECTS | CAN_ACCESS_LOCAL_VARIABLES | CAN_GENERATE_EXCEPTION_EVENTS);
+				 CAN_TAG_OBJECTS | CAN_ACCESS_LOCAL_VARIABLES |
+				 CAN_GENERATE_EXCEPTION_EVENTS | CAN_GET_LINE_NUMBERS);
 				// caps.set(ValueLayout.JAVA_INT, 0, CAN_SUSPEND);
 
 				int rc = (int) MH_AddCapabilities.invokeExact(
@@ -476,6 +490,40 @@ public class JVMTIEnv {
 	//endregion
 	//region Public API
 
+	public int getLineNumber(MemorySegment method, long location) {
+		try (Arena arena = Arena.ofConfined()) {
+			MemorySegment entryCountOut = arena.allocate(ValueLayout.JAVA_INT);
+			MemorySegment tablePtrOut   = arena.allocate(ValueLayout.ADDRESS);
+			int           rc            = (int) MH_GetLineNumberTable.invokeExact(fpGetLineNumberTable, jvmtiEnvPtr, method, entryCountOut, tablePtrOut);
+			if (rc != JVMTI_ERROR_NONE) return -1;
+
+			int           entryCount = entryCountOut.get(ValueLayout.JAVA_INT, 0);
+			MemorySegment rawTable   = tablePtrOut.get(ValueLayout.ADDRESS, 0);
+			if (entryCount <= 0 || rawTable.address() == 0L) return -1;
+
+			MemorySegment tablePtr = rawTable.reinterpret(entryCount * LNE_SIZE);
+
+			// 二分查找最大的 start_location <= location
+			int lo     = 0, hi = entryCount - 1;
+			int result = -1;
+			while (lo <= hi) {
+				int  mid      = (lo + hi) / 2;
+				long startLoc = tablePtr.get(ValueLayout.JAVA_LONG, mid * LNE_SIZE + LNE_START_LOC);
+				if (startLoc <= location) {
+					result = tablePtr.get(ValueLayout.JAVA_INT, mid * LNE_SIZE + LNE_LINE_NUM);
+					lo = mid + 1; // 向右
+				} else {
+					hi = mid - 1; // 向左
+				}
+			}
+			jvmtiDeallocate(rawTable);
+
+			return Math.max(-1, result); // 没有行号信息（比如 native 方法）
+		} catch (Throwable e) {
+			e.printStackTrace();
+			return -1;
+		}
+	}
 
 	/**
 	 * Captures local variables for every frame of the <em>current</em> thread.
@@ -525,9 +573,9 @@ public class JVMTIEnv {
 		}
 	}
 
-	final MethodMeta[] metasCache  = new MethodMeta[64];
-	final VarEntry[][] tablesCache = new VarEntry[64][];
-	final long[]       locsCache   = new long[64];
+	static final ThreadLocal<MethodMeta[]> metasCache  = ThreadLocal.withInitial(() -> new MethodMeta[64]);
+	static final ThreadLocal<VarEntry[][]> tablesCache = ThreadLocal.withInitial(() -> new VarEntry[64][]);
+	static final ThreadLocal<long[]>       locsCache   = ThreadLocal.withInitial(() -> new long[64]);
 	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, MemorySegment targetThread, int maxDepth,
 	                                             int skipFrames, boolean isCurrentThread) {
 		boolean suspended;
@@ -571,22 +619,26 @@ public class JVMTIEnv {
 			//    here because we have not started calling GetLocal* yet).
 			// ------------------------------------------------------------------
 
+			MethodMeta[] metas  = metasCache.get();
+			VarEntry[][] tables = tablesCache.get();
+			long[]       locs   = locsCache.get();
+
 			for (int d = 0; d < frameCount; d++) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
 				long          loc = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
-				locsCache[d] = loc;
+				locs[d] = loc;
 				long       midAddr = mid.address();
 				MethodMeta meta    = metaCache.get(midAddr);
 				if (meta == null) {
 					meta = fetchMethodMeta(arena, mid); // 仅首次分配
 					metaCache.put(midAddr, meta);
 				}
-				metasCache[d] = meta;
+				metas[d] = meta;
 
 				// Skip GetLocalVariableTable for frames we are about to discard
 				if (d < skipFrames) {
-					tablesCache[d] = VarEntry.EMPTY;
+					tables[d] = VarEntry.EMPTY;
 					continue;
 				}
 
@@ -596,7 +648,7 @@ public class JVMTIEnv {
 					if (varTable == null) varTable = VarEntry.EMPTY;
 					varCache.put(midAddr, varTable);
 				}
-				tablesCache[d] = varTable;
+				tables[d] = varTable;
 			}
 
 			// ------------------------------------------------------------------
@@ -610,8 +662,8 @@ public class JVMTIEnv {
 			// 循环内：只存地址，不转换
 
 			for (int d = skipFrames; d < frameCount; d++) {
-				VarEntry[]          vars   = tablesCache[d];
-				long                loc    = locsCache[d];
+				VarEntry[]          vars   = tables[d];
+				long                loc    = locs[d];
 				List<LocalVariable> locals = new ArrayList<>(vars.length);
 
 				for (VarEntry v : vars) {
@@ -698,13 +750,14 @@ public class JVMTIEnv {
 					locals.add(new LocalVariable(v.name, v.sig, v.slot, value, hash));
 				}
 
+				MethodMeta meta = metas[d];
 				result.add(new FrameLocals(
-				 metasCache[d].className, metasCache[d].methodName, metasCache[d].methodSig,
+				 meta.className, meta.methodId, meta.methodName, meta.methodSig,
 				 d, loc, locals));
 			}
 
-			Arrays.fill(metasCache, null);
-			Arrays.fill(tablesCache, null);
+			Arrays.fill(metas, null);
+			Arrays.fill(tables, null);
 			return result;
 		} catch (Throwable t) {
 			throw new RuntimeException("captureThreadLocals failed", t);
@@ -844,7 +897,7 @@ public class JVMTIEnv {
 		} catch (Throwable e) {
 			// e.printStackTrace();
 		}
-		return new MethodMeta(className, methodName, methodSig, flags);
+		return new MethodMeta(className, methodId.address(), methodName, methodSig, flags);
 	}
 
 	public String fetchClassSig(Arena arena, MemorySegment jclass) {
@@ -875,7 +928,8 @@ public class JVMTIEnv {
 		 fpGetClassSignature, jvmtiEnvPtr, jclass,
 		 sigPtrOut, MemorySegment.NULL);
 	}
-	public int getClassSignature(MemorySegment jclass, MemorySegment sigPtrOut, MemorySegment genericPtrOut) throws Throwable {
+	public int getClassSignature(MemorySegment jclass, MemorySegment sigPtrOut, MemorySegment genericPtrOut)
+	 throws Throwable {
 		return (int) MH_GetClassSignature.invokeExact(
 		 fpGetClassSignature, jvmtiEnvPtr, jclass,
 		 sigPtrOut, genericPtrOut);
@@ -955,7 +1009,7 @@ public class JVMTIEnv {
 
 	//endregion
 	//region Private value types
-	private record MethodMeta(String className, String methodName, String methodSig, int flags) { }
+	private record MethodMeta(String className, long methodId, String methodName, String methodSig, int flags) { }
 	private record VarEntry(String name, String sig, int slot, long startLoc, int length) {
 		static final VarEntry[] EMPTY = new VarEntry[0];
 	}

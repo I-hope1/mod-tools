@@ -12,7 +12,6 @@ public class InitFix {
 	private static final String PATCH_METHOD        = "$hotswap$initNewFields$";
 	private static final String STATIC_PATCH_METHOD = "$hotswap$initNewStaticFields$";
 
-
 	public static byte[] transform(byte[] newBytes, ClassDiff diff) {
 		if (!HotSwapAgent.HOTSWAP_PLUS) return newBytes;
 		Set<String> addedStaticFields   = new HashSet<>();
@@ -79,10 +78,12 @@ public class InitFix {
 		newClass.accept(cw);
 		return cw.toByteArray();
 	}
-	public static void afterRedefined(Class<?> clazz) {
+	public static void afterRedefined(Class<?> clazz, byte[] newBytes) {
 		if (!HotSwapAgent.HOTSWAP_PLUS) return;
 
+		l:
 		try {
+			if (!hasMethodAsm(newBytes, STATIC_PATCH_METHOD, "()V")) break l;
 			Method staticPatch = clazz.getDeclaredMethod(STATIC_PATCH_METHOD);
 			staticPatch.setAccessible(true);
 			HotSwapAgent.info("Applying static field init patch to " + clazz.getName());
@@ -93,9 +94,11 @@ public class InitFix {
 			HotSwapAgent.error("Static field init patch failed: " + e.getMessage());
 		}
 
+		l:
 		try {
+			if (!hasMethodAsm(newBytes, PATCH_METHOD, "(" + AnnotationTransformer.typeToNative(clazz) + ")")) break l;
 			List<?> instances = InstanceTracker.getInstances(clazz);
-			if (instances.isEmpty()) return;
+			if (instances.isEmpty()) break l;
 			HotSwapAgent.info("Applying instance field init patch to " + clazz.getName());
 			// String desc  = "(L" + clazz.getName().replace('.', '/') + ";)V";
 			Method patch = clazz.getDeclaredMethod(PATCH_METHOD, clazz);
@@ -108,6 +111,22 @@ public class InitFix {
 		} catch (Throwable e) {
 			HotSwapAgent.error("Field init patch failed: " + e.getMessage());
 		}
+	}
+	public static boolean hasMethodAsm(byte[] classBytes, String methodName, String desc) {
+		ClassReader cr = new ClassReader(classBytes);
+		// 使用 ClassVisitor 只访问方法，轻量扫描
+		boolean[] found = {false};
+		cr.accept(new ClassVisitor(Opcodes.ASM9) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				if (name.equals(methodName) && descriptor.equals(desc)) {
+					found[0] = true;
+				}
+				return null; // 不深入方法体
+			}
+		}, ClassReader.SKIP_CODE); // 跳过方法体，更快
+		return found[0];
 	}
 	/**
 	 * 基于操作数栈模拟（微型 AST）的高健壮性指令提取算法
@@ -227,6 +246,7 @@ public class InitFix {
 	}
 
 	// ==================== JVM 栈计算映射表 ====================
+	@SuppressWarnings("DuplicateBranchesInSwitch")
 	private static int getPopCount(AbstractInsnNode insn) {
 		int opcode = insn.getOpcode();
 		return switch (opcode) {
@@ -297,6 +317,7 @@ public class InitFix {
 		};
 	}
 
+	@SuppressWarnings("DuplicateBranchesInSwitch")
 	private static int getPushCount(AbstractInsnNode insn) {
 		int opcode = insn.getOpcode();
 		return switch (opcode) {

@@ -188,7 +188,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 		if (classBeingRedefined != null) {
 			LambdaRef.onClassRedefined(dotClassName);
-			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined));
+			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, classfileBuffer));
 		}
 
 		try {

@@ -9,7 +9,7 @@ import modtools.utils.Tools;
 
 import java.lang.reflect.*;
 
-import static ihope_lib.MyReflect.unsafe;
+import static ihope_lib.MyReflect.*;
 
 @SuppressWarnings("removal")
 public class FieldUtils {
@@ -46,20 +46,26 @@ public class FieldUtils {
 	}
 
 
-	public static void walkAllConstOf(Class<?> cls, Cons2<Field, ?> cons, Boolf<?> boolf,
+	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Boolf<T> boolf,
 	                                  Object object) {
 		for (Field field : cls.getDeclaredFields()) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;
+			setOverride(field);
 			Object o = getOrNull(field, object);
 			if (boolf.get(Tools.as(o))) cons.get(field, Tools.as(o));
 		}
 	}
 	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass,
-	                                      Object object) {
-		walkAllConstOf(cls, cons, filterClass::isInstance, object);
+	                                   Object object) {
+		for (Field field : cls.getDeclaredFields()) {
+			if (!Modifier.isStatic(field.getModifiers()) || !filterClass.isAssignableFrom(field.getType())) continue;
+			setOverride(field);
+			Object o = getOrNull(field, object);
+			cons.get(field, Tools.as(o));
+		}
 	}
 	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass) {
-		walkAllConstOf(cls, cons, filterClass::isInstance, null);
+		walkAllConstOf(cls, cons, filterClass, null);
 	}
 
 

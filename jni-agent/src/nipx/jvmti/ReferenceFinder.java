@@ -25,7 +25,6 @@ public class ReferenceFinder {
 	 int refKind, MemorySegment refInfo, long classTag, long referrerClassTag,
 	 long size, MemorySegment tagPtr, MemorySegment referrerTagPtr,
 	 int length, MemorySegment userData) {
-
 		long targetTag = tagPtr.get(ValueLayout.JAVA_LONG, 0);
 		if (targetTag == targetTag() && referrerTagPtr.address() != 0L) {
 			// 找到了引用关系！将父对象打上 REFERRER_TAG

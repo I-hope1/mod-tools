@@ -70,26 +70,27 @@ public enum E_Hook implements ISettings {
 
 	static void init() {
 		lambda_align.defTrue();
+		Func<ISettings, String> func = x -> x.getString().trim();
 
-		hotswapOnChange(redefine_mode, () -> redefine_mode.getString().trim());
-		hotswapOnChange(hotswap_blacklist, () -> String.join(",", hotswap_blacklist.getArray().map(Jval::asString)));
-		hotswapOnChange(hotswap_event, () -> hotswap_event.getString().trim());
-		hotswapOnChange(hotswap_plus, () -> hotswap_plus.getString().trim());
-		hotswapOnChange(lambda_align, () -> lambda_align.getString().trim());
-		hotswapOnChange(ui_hook, () -> ui_hook.getString().trim());
+		hotswapOnChange(redefine_mode, func);
+		hotswapOnChange(hotswap_blacklist, x -> String.join(",", x.getArray().map(Jval::asString)));
+		hotswapOnChange(hotswap_event, func);
+		hotswapOnChange(hotswap_plus, func);
+		hotswapOnChange(lambda_align, func);
+		hotswapOnChange(ui_hook, func);
 
 		setProperty(retransform_loaded);
 		setProperty(capture_locals);
 		setProperty(capture_exceptions);
-		setProperty(capture_all_exceptions);
+		hotswapOnChange(capture_all_exceptions, func);
 	}
 	private static void setProperty(E_Hook _enum) {
 		System.setProperty("nipx.agent." + _enum.name(), _enum.getString());
 	}
 
-	static void hotswapOnChange(ISettings setting, Prov<String> prov) {
+	static void hotswapOnChange(ISettings setting, Func<ISettings, String> func) {
 		setting.runAndOnChange(() -> {
-			System.setProperty("nipx.agent." + setting.name(), prov.get());
+			System.setProperty("nipx.agent." + setting.name(), func.get(setting));
 			try {
 				HotSwapAgent.initConfig();
 			} catch (NoClassDefFoundError _) { }

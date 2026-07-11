@@ -226,6 +226,15 @@ public class Constants {
 		}
 	}
 
+	public static <R> R iv(MethodHandle handle) {
+		try {
+			return (R) handle.invoke();
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+			// return null;
+		}
+	}
+
 	public static <R> R iv(MethodHandle handle, Object... args) {
 		try {
 			return (R) handle.invokeWithArguments(args);

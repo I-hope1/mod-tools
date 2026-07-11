@@ -8,7 +8,7 @@ import arc.graphics.g2d.GlyphLayout.GlyphRun;
 import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Rect;
-import arc.scene.*;
+import arc.scene.Scene;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -16,13 +16,17 @@ import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.pooling.Pools;
+import ihope_lib.MyReflect;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.*;
+import modtools.Constants;
 import modtools.ui.*;
 import modtools.ui.comp.input.highlight.*;
-import modtools.utils.SR;
+import modtools.utils.*;
 
+import java.lang.invoke.*;
 import java.util.regex.Pattern;
 
 
@@ -170,6 +174,51 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return (background == null ? 0 : background.getTopHeight())
 			       + scrollOffsetY;
 		}
+		static final MethodHandle MH_calculateOffsets = Constants.nl(() -> MyReflect.lookup.findSpecial(TextField.class, "calculateOffsets", MethodType.methodType(void.class), TextField.class));
+		static final MethodHandle MH_showCursor       = Constants.nl(() -> MyReflect.lookup.findSpecial(TextArea.class, "showCursor", MethodType.methodType(void.class), TextArea.class));
+		protected void calculateOffsets() {
+			Tools.runIgnoredException(() -> MH_calculateOffsets.invoke(this));
+			if (!this.text.equals(lastText)) {
+				this.lastText = text;
+				Font font = style.font;
+				float maxWidthLine = this.getWidth()
+				                     - (style.background != null ? style.background.getLeftWidth() + style.background.getRightWidth() : 0);
+				linesBreak.clear();
+				int         lineStart = 0;
+				int         lastSpace = 0;
+				char        lastCharacter;
+				GlyphLayout layout    = Pools.obtain(GlyphLayout.class, GlyphLayout::new);
+				layout.ignoreMarkup = true;
+				for (int i = 0; i < text.length(); i++) {
+					lastCharacter = text.charAt(i);
+					if (lastCharacter == '\n' || lastCharacter == '\r') {
+						linesBreak.add(lineStart);
+						linesBreak.add(i);
+						lineStart = i + 1;
+					} else {
+						lastSpace = (continueCursor(i, 0) || Character.isWhitespace(lastCharacter) ? lastSpace : i);
+						// if (lastCharacter == ' ') lineStart++;
+						layout.setText(font, text.subSequence(lineStart, i + 1));
+						if (layout.width > maxWidthLine) {
+							if (lineStart >= lastSpace) {
+								lastSpace = i - 1;
+							}
+							linesBreak.add(lineStart);
+							linesBreak.add(lastSpace + 1);
+							lineStart = lastSpace + 1;
+							lastSpace = lineStart;
+						}
+					}
+				}
+				Pools.free(layout);
+				// Add last line
+				if (lineStart < text.length()) {
+					linesBreak.add(lineStart);
+					linesBreak.add(text.length());
+				}
+				Tools.runIgnoredException(() -> MH_showCursor.invoke(this));
+			}
+		}
 		public void setSelectionUncheck(int start, int end) {
 			selectionStart = start;
 			cursor = end;
@@ -257,7 +306,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		}
 
 		public void drawText(Font font, float x, float y) {
-			boolean had       = font.getData().markupEnabled;
+			boolean had      = font.getData().markupEnabled;
 			int     oldColor = font.getColor().rgba();/* 如果是直接getColor，是获取引用 */
 			font.getData().markupEnabled = false;
 
@@ -361,7 +410,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			end = Math.min(end, text.length()); // 防止 end 越界
 			if (start >= end) return;           // 空区间不绘制
 			font.draw(text, offsetX, offsetY, start, end, 0f, Align.left, false);
-			// --- FIX: Convert relative indices to absolute and add a safety check ---
 			// The 'start' and 'cursor' here are relative to the substring being highlighted.
 			// We must convert them to absolute indices before accessing glyphPositions.
 			int absoluteStart  = start + displayTextStart;
@@ -836,7 +884,8 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
 			// Log.debug(cursorLine[0] + "," + cline[0]);
-			int oldColor = font.getColor().rgba();
+			int prevColor = font.getColor().rgba();
+			float x = this.x;
 			font.setColor(realCursorLine == row ? Pal.accent : Color.lightGray);
 			font.getColor().a *= parentAlpha * color.a;
 			GlyphLayout layout = font.draw(String.valueOf(row), x, offsetY);
@@ -846,7 +895,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 				Lines.stroke(2);
 				Lines.line(x, y, x + layout.width, y);
 			}
-			font.getColor().set(oldColor);
+			font.getColor().set(prevColor);
 		}
 		public void draw() {
 			super.draw();
@@ -889,7 +938,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			}
 			if (area.newLineAtEnd()) {
 				if (linesBreak.size == cursorLine) realCursorLine = row;
-				if (i >= linesBreak.size) task.run();
+				// if (i >= linesBreak.peek()) task.run();
 			}
 			/* else {
 				drawLine(offsetY + area.lineHeight(), row);

@@ -5,7 +5,7 @@ import modtools.jsfunc.type.CAST;
 import rhino.ScriptRuntime;
 
 import java.lang.reflect.InvocationTargetException;
-import java.math.BigDecimal;
+import java.math.*;
 
 /**
  * Positive: {@code num >= 0}<br>
@@ -57,6 +57,8 @@ public class NumberHelper {
 	}
 
 	public static Number parse(String text, Class<?> type0) {
+		if (!Number.class.isAssignableFrom(type0)) throw new NumberParseException("Cannot parse " + text + " to " + type0, null);
+
 		Class<?> type = CAST.box(type0);
 		if (type == Float.class) return asFloat(text);
 		if (type == Integer.class) return asInt(text);
@@ -65,10 +67,16 @@ public class NumberHelper {
 		if (type == Short.class) return Short.parseShort(text);
 		if (type == Byte.class) return Byte.parseByte(text);
 		if (type == BigDecimal.class) return new BigDecimal(text);
+		if (type == BigInteger.class) return new BigInteger(text);
+
 		try {
 			return (Number) type.getDeclaredMethod("valueOf", String.class).invoke(null, text);
-		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-			throw new NumberParseException(text + " cannot be cast to " + type0, e);
+		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException _) {
+			try {
+				return (Number) type.getDeclaredConstructor(String.class).newInstance( text);
+			} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+				throw new NumberParseException("Cannot parse " + text + " to " + type, e);
+			}
 		}
 	}
 

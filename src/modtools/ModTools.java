@@ -144,7 +144,7 @@ public class ModTools extends Mod {
 		} */
 
 		WorldDraw.registerEvent();
-		HopeCall.registerPacket();
+		load("NetPacket", HopeCall::registerPacket);
 
 		if (isImportFromGame) {
 			// loadContent();

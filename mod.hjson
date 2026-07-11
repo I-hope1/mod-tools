@@ -3,25 +3,22 @@ description: '''
 A mod provides various tools for modding.
 
 -----------------
-Version 1.5.9
+Version 1.6.0
 
 ## Highlight
-1. 新增Profiler
-2. 构建支持增量编译
-3. 优化界面布局和性能
-4. 禁用JDWP功能（根本无法使用Java启动）
-5. 修复一些bug
-  - 修复areaTable的`\t`显示问题和drawMultiText的bug
-  - 修复Tester代码补全快捷键冲突问题
-  - 改Trigger.postDraw为Trigger.draw适配Helium
-  - 修复ReferringMoveListener的只显示一会的问题
+1. Support Mindustry 159.2
+2. feat(capture_exceptions): Hook exceptions and print (Desktop Only)
+3. Optimize flame graph performance.
+4. Fix some bugs:
+	- Improve the security check logic for application class loader settings in Tester.
+	- Add text boundary safety checks to TextAreaTab to prevent array out-of-bounds errors.
 
 -----------------
 WIKI: https://i-hope1.github.io/mod-tools
 '''
 author: "I hope..."
 hidden: true
-version: 1.5.9
-minGameVersion: "154"
+version: 1.6.0
+minGameVersion: "159.2"
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

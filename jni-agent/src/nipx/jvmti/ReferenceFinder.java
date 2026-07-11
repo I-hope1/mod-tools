@@ -10,8 +10,14 @@ import java.util.*;
 import static nipx.jvmti.JVMTIEnv.*;
 
 public class ReferenceFinder {
-	private static final long TARGET_TAG   = 10001L;
-	private static final long REFERRER_TAG = 20002L;
+	public static final long TARGET_TAG   = 20001L;
+	public static final long REFERRER_TAG = 20002L;
+	public static long targetTag() {
+		return Thread.currentThread().threadId() + TARGET_TAG;
+	}
+	public static long referrerTag() {
+		return Thread.currentThread().threadId() + REFERRER_TAG;
+	}
 
 	// 回调的核心逻辑：如果指向的对象是我们的目标 Lambda（带 TARGET_TAG），
 	// 那么就给引用者（referrer）打上 REFERRER_TAG
@@ -21,9 +27,9 @@ public class ReferenceFinder {
 	 int length, MemorySegment userData) {
 
 		long targetTag = tagPtr.get(ValueLayout.JAVA_LONG, 0);
-		if (targetTag == TARGET_TAG) {
+		if (targetTag == targetTag() && referrerTagPtr.address() != 0L) {
 			// 找到了引用关系！将父对象打上 REFERRER_TAG
-			referrerTagPtr.set(ValueLayout.JAVA_LONG, 0, REFERRER_TAG);
+			referrerTagPtr.set(ValueLayout.JAVA_LONG, 0, referrerTag());
 		}
 		return 0; // 继续遍历 (JVMTI_VISIT_OBJECTS)
 	}
@@ -40,7 +46,7 @@ public class ReferenceFinder {
 		     GlobalRef targetRef = jniEnv.JavaObjectToJObject(lambdaObj)) {
 
 			// 1. 给目标 Lambda 对象打标
-			int rc = (int) MH_SetTag.invokeExact(fpSetTag, jvmtiEnvPtr, targetRef.ref(), TARGET_TAG);
+			int rc = (int) MH_SetTag.invokeExact(fpSetTag, jvmtiEnvPtr, targetRef.ref(), targetTag());
 			if (rc != 0) throw new RuntimeException("SetTag failed: " + rc);
 
 			// 2. 生成 Java 回调的 upcall stub
@@ -76,7 +82,7 @@ public class ReferenceFinder {
 
 			// 5. 提取所有被打上 REFERRER_TAG 的父对象
 			MemorySegment tagBuf = arena.allocate(ValueLayout.JAVA_LONG);
-			tagBuf.set(ValueLayout.JAVA_LONG, 0, REFERRER_TAG);
+			tagBuf.set(ValueLayout.JAVA_LONG, 0, referrerTag());
 
 			MemorySegment countOut     = arena.allocate(ValueLayout.JAVA_INT);
 			MemorySegment objResultPtr = arena.allocate(ValueLayout.ADDRESS);

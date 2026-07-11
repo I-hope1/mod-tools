@@ -261,6 +261,12 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 						 hide.run();
 					 }))
 					 .disabled(boolf).row();
+					/* p.button("View References", Styles.flatt, runT(() -> {
+						 try (Arena arena = Arena.ofConfined()) {
+							 Log.info(ReferenceFinder.findReferrers(new JNIEnv(arena), JVMTIEnv.getInstance(), obj));
+						 }
+					 }))
+					 .disabled(_ -> !MasterKey.isPanamaBackend() || obj == null); */
 				}, false, Align.bottom);
 			}));
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);

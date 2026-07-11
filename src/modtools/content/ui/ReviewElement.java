@@ -1492,6 +1492,7 @@ public class ReviewElement extends Content {
 					case TextField field -> field.getStyle();
 					case ProgressBar bar -> bar.getStyle();
 					case Dialog dialog -> dialog.getStyle();
+					case Image _, Stack _ -> null;
 					default -> (Style) element.getClass().getMethod("getStyle").invoke(element);
 				};
 				if (style != null && ShowUIList.styleKeyMap.containsKey(style)) {

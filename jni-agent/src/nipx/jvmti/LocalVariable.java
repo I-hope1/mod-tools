@@ -1,6 +1,7 @@
 package nipx.jvmti;
 
 import nipx.jni.JNIEnv;
+import nipx.jni.helper.GlobalRef;
 
 import java.lang.foreign.MemorySegment;
 
@@ -15,8 +16,9 @@ public record LocalVariable(
  /* JVM type descriptor, e.g. "I", "J", "Ljava/lang/String;", "[B" */
  String typeSignature,
  int slot,
- Object value
-) {
+ Object value,
+ int hash
+) implements AutoCloseable {
 	/** Returns {@code true} for object/array types (L or [). */
 	public boolean isReference() {
 		if (typeSignature == null || typeSignature.isEmpty()) return false;
@@ -61,5 +63,10 @@ public record LocalVariable(
 	@Override
 	public String toString() {
 		return typeName() + " " + name + " = " + value + "  [slot=" + slot + "]";
+	}
+	public void close() throws Exception {
+		if (value instanceof GlobalRef ref) {
+			ref.close();
+		}
 	}
 }

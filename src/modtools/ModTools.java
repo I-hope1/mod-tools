@@ -138,6 +138,7 @@ public class ModTools extends Mod {
 				HotSwapManager.start();
 			}
 		});
+		load("ExceptionCapturer", CrashCaptureHook::load);
 /* 		if (R_Hook.dynamic_jdwp) {
 			load("JDWP", JDWP::load);
 		} */

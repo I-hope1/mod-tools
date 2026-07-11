@@ -135,7 +135,7 @@ public final class StackCapture {
 	}
 
 	static <T> T withSuspend(Thread thread, Supplier<T> r) {
-		if (CAPTURE_LOCALS || thread == Thread.currentThread()) {
+		if (!CAPTURE_LOCALS || thread == Thread.currentThread()) {
 			return r.get();
 		}
 		Integer port = findJdwpPort();

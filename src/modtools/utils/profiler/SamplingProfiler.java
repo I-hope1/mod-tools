@@ -173,6 +173,8 @@ public class SamplingProfiler {
 
 				// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
 				cur.totalNanos.add(intervalMs * 1_000_000L);
+
+				frame.close();
 			}
 		} catch (Throwable e) {
 			Log.err(e);

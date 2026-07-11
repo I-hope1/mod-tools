@@ -6,7 +6,7 @@ import nipx.util.LongObjectMap;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.util.*;
 
 /**
@@ -23,7 +23,7 @@ import java.util.*;
 public class JVMTIEnv {
 
 	// region Constants
-	public static final String       UNKNOWN = "<unknown>";
+	public static final String UNKNOWN = "<unknown>";
 
 	private static final long ADDR_SIZE = ValueLayout.ADDRESS.byteSize();
 
@@ -69,6 +69,7 @@ public class JVMTIEnv {
 	private static final long IDX_GetMethodName            = 63;  // slot 64
 	private static final long IDX_GetMethodDeclaringClass  = 64;  // slot 65
 	private static final long IDX_GetMethodModifiers       = 65;  // slot 66
+	private static final long IDX_GetLineNumberTable       = 69;  // slot 70
 	private static final long IDX_GetLocalVariableTable    = 71;  // slot 72
 	private static final long IDX_GetCapabilities          = 88;  // slot 89
 	private static final long IDX_GetStackTrace            = 103; // slot 104
@@ -228,13 +229,20 @@ public class JVMTIEnv {
 	 ));
 
 	/** GetLocalInt / GetLocalLong / GetLocalFloat / GetLocalDouble share this shape. */
-	private static final MethodHandle MH_GetLocalPrimitive = Linker.nativeLinker().downcallHandle(
+	private static final MethodHandle MH_GetLocalPrimitive  = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS,  // jthread
 		ValueLayout.JAVA_INT, // depth
 		ValueLayout.JAVA_INT, // slot
 		ValueLayout.ADDRESS   // T* out
+	 ));
+	private static final MethodHandle MH_GetLineNumberTable = Linker.nativeLinker().downcallHandle(
+	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
+		ValueLayout.ADDRESS,  // jvmtiEnv*
+		ValueLayout.ADDRESS,  // jmethodID
+		ValueLayout.JAVA_INT, // jint* entry_count_ptr
+		ValueLayout.ADDRESS   // jvmtiLineNumberEntry** table_ptr
 	 ));
 
 	/** GetMethodName(env, methodID, char** name, char** sig, char** generic) → jint */
@@ -248,7 +256,7 @@ public class JVMTIEnv {
 	 ));
 
 	/** GetMethodDeclaringClass(env, methodID, jclass*) → jint */
-	private static final MethodHandle MH_GetMethodDeclaringClass = Linker.nativeLinker().downcallHandle(
+	static final MethodHandle MH_GetMethodDeclaringClass = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS,  // jmethodID
@@ -256,12 +264,12 @@ public class JVMTIEnv {
 	 ));
 
 	/** GetClassSignature(env, jclass, char** sig, char** generic) → jint */
-	private static final MethodHandle MH_GetClassSignature  = Linker.nativeLinker().downcallHandle(
+	static final         MethodHandle MH_GetClassSignature  = Linker.nativeLinker().downcallHandle(
 	 FunctionDescriptor.of(ValueLayout.JAVA_INT,
 		ValueLayout.ADDRESS,  // jvmtiEnv*
 		ValueLayout.ADDRESS,  // jclass
 		ValueLayout.ADDRESS,  // char** signature_ptr
-		ValueLayout.ADDRESS   // char** generic_ptr (we pass NULL)
+		ValueLayout.ADDRESS   // char** generic_ptr
 	 ));
 	/** GetMethodModifiers(env, methodID, modifiers*) → jint */
 	private static final MethodHandle MH_GetMethodModifiers = Linker.nativeLinker().downcallHandle(
@@ -509,14 +517,18 @@ public class JVMTIEnv {
 			targetThread = globalRef.ref();
 		}
 		try {
-			return captureThreadLocals(targetThread, maxDepth, skipFrames, thread == Thread.currentThread());
+			return captureThreadLocals(jniEnv, targetThread, maxDepth, skipFrames, thread == Thread.currentThread());
 		} finally {
 			if (globalRef != null) {
 				globalRef.close();
 			}
 		}
 	}
-	public List<FrameLocals> captureThreadLocals(MemorySegment targetThread, int maxDepth,
+
+	final MethodMeta[] metasCache  = new MethodMeta[64];
+	final VarEntry[][] tablesCache = new VarEntry[64][];
+	final long[]       locsCache   = new long[64];
+	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, MemorySegment targetThread, int maxDepth,
 	                                             int skipFrames, boolean isCurrentThread) {
 		boolean suspended;
 		try {
@@ -532,7 +544,6 @@ public class JVMTIEnv {
 			// getThreadState(targetThread);
 		} catch (Throwable e) {
 			// e.printStackTrace();
-			//noinspection DataFlowIssue
 			suspended = false;
 		}
 
@@ -559,23 +570,33 @@ public class JVMTIEnv {
 			// 2. Collect method metadata & variable tables (helper calls are fine
 			//    here because we have not started calling GetLocal* yet).
 			// ------------------------------------------------------------------
-			MethodMeta[] metas  = new MethodMeta[frameCount];
-			VarEntry[][] tables = new VarEntry[frameCount][];
-			long[]       locs   = new long[frameCount];
 
 			for (int d = 0; d < frameCount; d++) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
 				long          loc = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
-				locs[d] = loc;
-				metas[d] = fetchMethodMeta(arena, mid);
+				locsCache[d] = loc;
+				long       midAddr = mid.address();
+				MethodMeta meta    = metaCache.get(midAddr);
+				if (meta == null) {
+					meta = fetchMethodMeta(arena, mid); // 仅首次分配
+					metaCache.put(midAddr, meta);
+				}
+				metasCache[d] = meta;
 
 				// Skip GetLocalVariableTable for frames we are about to discard
 				if (d < skipFrames) {
-					tables[d] = VarEntry.EMPTY;
+					tablesCache[d] = VarEntry.EMPTY;
 					continue;
 				}
-				tables[d] = fetchVarTable(arena, mid);
+
+				VarEntry[] varTable = varCache.get(midAddr);
+				if (varTable == null) {
+					varTable = fetchVarTable(arena, mid);
+					if (varTable == null) varTable = VarEntry.EMPTY;
+					varCache.put(midAddr, varTable);
+				}
+				tablesCache[d] = varTable;
 			}
 
 			// ------------------------------------------------------------------
@@ -589,8 +610,8 @@ public class JVMTIEnv {
 			// 循环内：只存地址，不转换
 
 			for (int d = skipFrames; d < frameCount; d++) {
-				VarEntry[]          vars   = tables[d];
-				long                loc    = locs[d];
+				VarEntry[]          vars   = tablesCache[d];
+				long                loc    = locsCache[d];
 				List<LocalVariable> locals = new ArrayList<>(vars.length);
 
 				for (VarEntry v : vars) {
@@ -601,6 +622,7 @@ public class JVMTIEnv {
 
 					Object value = null;
 					char   kind  = v.sig.isEmpty() ? 0 : v.sig.charAt(0);
+					int    hash  = -1;
 
 					try {
 						switch (kind) {
@@ -614,9 +636,13 @@ public class JVMTIEnv {
 								if (err == JVMTI_ERROR_NONE) {
 									MemorySegment localRef = out.get(ValueLayout.ADDRESS, 0);
 									if (localRef.address() != 0L) {
+										MemorySegment ref = jniEnv.NewGlobalRef(localRef);
+										try {
+											hash = jniEnv.identityHashCode(ref);
+										} finally {
+											jniEnv.DeleteGlobalRef(ref);
+										}
 										value = localRef;
-									} else {
-										value = "null";
 									}
 								}
 								// System.out.println(err);
@@ -669,15 +695,17 @@ public class JVMTIEnv {
 						// e.printStackTrace();
 					}
 
-					locals.add(new LocalVariable(v.name, v.sig, v.slot, value));
+					locals.add(new LocalVariable(v.name, v.sig, v.slot, value, hash));
 				}
 
 				result.add(new FrameLocals(
-				 metas[d].className, metas[d].methodName, metas[d].methodSig,
-				 d, loc, Collections.unmodifiableList(locals)));
+				 metasCache[d].className, metasCache[d].methodName, metasCache[d].methodSig,
+				 d, loc, locals));
 			}
 
-			return Collections.unmodifiableList(result);
+			Arrays.fill(metasCache, null);
+			Arrays.fill(tablesCache, null);
+			return result;
 		} catch (Throwable t) {
 			throw new RuntimeException("captureThreadLocals failed", t);
 		} finally {
@@ -692,6 +720,7 @@ public class JVMTIEnv {
 
 	// MethodMeta 按 method ID 缓存，方法元数据在类生命周期内不变
 	private final LongObjectMap<MethodMeta> metaCache = new LongObjectMap<>();
+	private final LongObjectMap<VarEntry[]> varCache  = new LongObjectMap<>();
 	public void walkThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
 	                             int maxDepth, int skipFrames,
 	                             FrameConsumer consumer) {
@@ -798,8 +827,7 @@ public class JVMTIEnv {
 
 			// -- GetMethodDeclaringClass → GetClassSignature --
 			MemorySegment classOut = arena.allocate(ValueLayout.ADDRESS);
-			rc = (int) MH_GetMethodDeclaringClass.invokeExact(
-			 fpGetMethodDeclaringClass, jvmtiEnvPtr, methodId, classOut);
+			rc = getMethodDeclaringClass(methodId, classOut);
 			if (rc == JVMTI_ERROR_NONE) {
 				MemorySegment jclass = classOut.get(ValueLayout.ADDRESS, 0);
 				className = fetchClassSig(arena, jclass);
@@ -819,12 +847,10 @@ public class JVMTIEnv {
 		return new MethodMeta(className, methodName, methodSig, flags);
 	}
 
-	private String fetchClassSig(Arena arena, MemorySegment jclass) {
+	public String fetchClassSig(Arena arena, MemorySegment jclass) {
 		try {
 			MemorySegment sigPtrOut = arena.allocate(ValueLayout.ADDRESS);
-			int rc = (int) MH_GetClassSignature.invokeExact(
-			 fpGetClassSignature, jvmtiEnvPtr, jclass,
-			 sigPtrOut, MemorySegment.NULL);
+			int           rc        = getClassSignature(jclass, sigPtrOut);
 			if (rc != JVMTI_ERROR_NONE) return "<unknown>";
 			MemorySegment sp = sigPtrOut.get(ValueLayout.ADDRESS, 0);
 			if (sp.address() == 0L) return "<unknown>";
@@ -839,6 +865,20 @@ public class JVMTIEnv {
 		} catch (Throwable ignored) {
 			return "<unknown>";
 		}
+	}
+	public int getMethodDeclaringClass(MemorySegment methodId, MemorySegment classOut) throws Throwable {
+		return (int) MH_GetMethodDeclaringClass.invokeExact(
+		 fpGetMethodDeclaringClass, jvmtiEnvPtr, methodId, classOut);
+	}
+	public int getClassSignature(MemorySegment jclass, MemorySegment sigPtrOut) throws Throwable {
+		return (int) MH_GetClassSignature.invokeExact(
+		 fpGetClassSignature, jvmtiEnvPtr, jclass,
+		 sigPtrOut, MemorySegment.NULL);
+	}
+	public int getClassSignature(MemorySegment jclass, MemorySegment sigPtrOut, MemorySegment genericPtrOut) throws Throwable {
+		return (int) MH_GetClassSignature.invokeExact(
+		 fpGetClassSignature, jvmtiEnvPtr, jclass,
+		 sigPtrOut, genericPtrOut);
 	}
 
 	/**
@@ -899,14 +939,13 @@ public class JVMTIEnv {
 
 	//endregion
 	//region Low-level helpers
-
-	void jvmtiDeallocate(MemorySegment ptr) {
+	public void jvmtiDeallocate(MemorySegment ptr) {
 		try {
 			int _ = (int) MH_Deallocate.invokeExact(fpDeallocate, jvmtiEnvPtr, ptr);
 		} catch (Throwable ignored) { }
 	}
 
-	private void freeIfNonNull(MemorySegment ptr) {
+	public void freeIfNonNull(MemorySegment ptr) {
 		if (ptr.address() != 0L) jvmtiDeallocate(ptr);
 	}
 

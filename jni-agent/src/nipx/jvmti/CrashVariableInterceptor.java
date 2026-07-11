@@ -2,6 +2,7 @@ package nipx.jvmti;
 
 import nipx.jni.JNIEnv;
 
+import java.io.IOException;
 import java.lang.foreign.*;
 import java.lang.invoke.*;
 import java.util.*;
@@ -49,38 +50,121 @@ public class CrashVariableInterceptor {
 
 
 	private static final ThreadLocal<Boolean> IN_CALLBACK =
-        ThreadLocal.withInitial(() -> false);
+	 ThreadLocal.withInitial(() -> false);
+	private static final StringBuilder        sb          = new StringBuilder();
 	// 异常抛出时的 C++ 回调入口
 	public static void onExceptionThrown(
 	 MemorySegment jvmtiEnvPtr, MemorySegment jniEnvPtr, MemorySegment jthread,
 	 MemorySegment method, long location, MemorySegment exception,
 	 MemorySegment catchMethod, long catchLocation) {
-		if (Thread.currentThread().getContextClassLoader() == null) return;
-		boolean isFatal = catchMethod.address() == 0L;
-		if (isFatal) return;
+		if (Thread.currentThread().getContextClassLoader() == null
+		|| exception.address() == 0) return;
+		// boolean isFatal = catchMethod.address() == 0L;
+		// if (isFatal) return;
+
 
 		if (IN_CALLBACK.get()) return;
-		IN_CALLBACK.set(true);
+		IN_CALLBACK.set(Boolean.TRUE);
+
 
 		try (Arena arena = Arena.ofConfined()) {
+			if (!captureAllExceptions() && !isCatchMethodInClass(arena, JVMTIEnv.getInstance(), catchMethod, "arc.backend.sdl.SdlApplication")) {
+				return;
+			}
 			JNIEnv jniEnv = new JNIEnv(arena, jniEnvPtr);
 			// 将底层的 jobject exception 转换回 Java 的 Throwable 实例
 			// System.out.println(Thread.currentThread());
 			Object javaThrowable = jniEnv.jObjectToJavaObject(exception);
-			if (javaThrowable instanceof Throwable throwable) {
+			if (javaThrowable instanceof ClassNotFoundException || javaThrowable instanceof IOException) return;
+			if (javaThrowable.getClass().getName().startsWith("sun.nio.fs.")) return;
+			if (javaThrowable instanceof Throwable th) {
 				// System.out.println(thread);
-				StackCapture.captureInto(jniEnv, Thread.currentThread(), ((className, methodName, methodSig, thisAddress) -> {
-					System.out.println(thisAddress);
-				}));
+				lastLocals = JVMTIEnv.getInstance().captureThreadLocals(jniEnv, MemorySegment.NULL, 32, 14, true);
+				sb.setLength(0);
+				sb.append(th.getClass().getName()).append(": ").append(th.getMessage()).append('\n');
+				for (FrameLocals frame : lastLocals) {
+					// int lineNumber = JVMTIEnv.getInstance().getLineNumber(method, location);
+					// int lineNumber = stackTrace[frame.depth()].getLineNumber();
+					sb.append("Frame#").append(frame.depth()).append(" ")
+					 .append(frame.className()).append('.').append(frame.methodName()).append(frame.methodSignature())
+					 .append(" @").append(Long.toHexString(frame.location()))
+					 .append('\n');
+					for (LocalVariable local : (frame.locals())) {
+						sb.append('\t').append(local.name()).append(": ");
+						if (local.isReference() && local.value() != null) {
+							String str = local.typeName();
+							/* if (local.value() instanceof MemorySegment ref) {
+								Object o = jniEnv.jObjectToJavaObject(ref);
+								if (o.getClass().isInterface()) str = o.toString();
+							} */
+							sb.append(str).append('@').append(Integer.toHexString(local.hash()));
+						} else {
+							sb.append(local.value());
+						}
+						sb.append('\n');
+					}
+					frame.close();
+				}
+				System.out.println(sb);
+				/* StackCapture.captureInto(jniEnv, Thread.currentThread(), ((className, methodName, methodSig, thisAddress) -> {
+					System.out.println(methodSig);
+				})); */
 			}
+		} catch (Throwable _) {
+		} finally {
+			IN_CALLBACK.set(Boolean.FALSE);
 		}
 	}
+	private static boolean captureAllExceptions() {
+		return Boolean.parseBoolean(System.getProperty("nipx.agent.capture_all_exceptions"));
+	}
+	/**
+	 * 判断 catchMethod 是否属于指定类的方法
+	 * @param jvmtiEnv             JVMTI 环境指针 (MemorySegment)
+	 * @param catchMethod          要检查的 jmethodID (MemorySegment)
+	 * @param targetClassSignature 目标类的 JVM 内部签名，如 "Ljava/lang/RuntimeException;"
+	 * @return true 如果 catchMethod 属于目标类
+	 */
+	public static boolean isCatchMethodInClass(
+	 Arena arena,
+	 JVMTIEnv jvmtiEnv,
+	 MemorySegment catchMethod,
+	 String targetClassSignature
+	) {
+		if (catchMethod == null || catchMethod.address() == 0L) {
+			return false; // 未捕获的异常
+		}
+
+		try {
+			// 获取 catchMethod 的声明类
+			MemorySegment classOut = arena.allocate(ValueLayout.ADDRESS);
+			int           rc       = jvmtiEnv.getMethodDeclaringClass(catchMethod, classOut);
+			if (rc != JVMTI_ERROR_NONE) return false;
+			MemorySegment declaringClass  = classOut.get(ValueLayout.ADDRESS, 0);
+			String        actualSignature = jvmtiEnv.fetchClassSig(arena, declaringClass);
+			return targetClassSignature.equals(actualSignature);
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+	/* public static boolean isBoxClass(Class<?> c) {
+		if (c == null) return false;
+		return c == Integer.class ||
+		       c == Float.class ||
+		       c == Long.class ||
+		       c == Double.class ||
+		       c == Boolean.class ||
+		       c == Character.class ||
+		       c == Byte.class ||
+		       c == Short.class ||
+		       c == Void.class;
+	} */
 
 	/** 在游戏启动初始化时调用此方法，开启崩溃现场变量捕获 */
 	public static void install() {
 		try {
 			Arena         globalArena = Arena.global();
-			JNIEnv        jniEnv      = new JNIEnv(globalArena);
+			JNIEnv        _           = new JNIEnv(globalArena);
 			JVMTIEnv      jvmtiEnv    = JVMTIEnv.getInstance();
 			MemorySegment upcallStub  = Linker.nativeLinker().upcallStub(CALLBACK_MH, EXCEPTION_CALLBACK_DESC, globalArena);
 

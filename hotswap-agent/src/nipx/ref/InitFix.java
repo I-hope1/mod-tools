@@ -1,7 +1,7 @@
 package nipx.ref;
 
-import nipx.ClassDiffUtil.ClassDiff;
 import nipx.*;
+import nipx.ClassDiffUtil.ClassDiff;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
@@ -96,7 +96,7 @@ public class InitFix {
 
 		l:
 		try {
-			if (!hasMethodAsm(newBytes, PATCH_METHOD, "(" + AnnotationTransformer.typeToNative(clazz) + ")")) break l;
+			if (!hasMethodAsm(newBytes, PATCH_METHOD, "(" + AnnotationTransformer.typeToNative(clazz) + ")V")) break l;
 			List<?> instances = InstanceTracker.getInstances(clazz);
 			if (instances.isEmpty()) break l;
 			HotSwapAgent.info("Applying instance field init patch to " + clazz.getName());
@@ -120,12 +120,13 @@ public class InitFix {
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
+				if (found[0]) return null;
 				if (name.equals(methodName) && descriptor.equals(desc)) {
 					found[0] = true;
 				}
 				return null; // 不深入方法体
 			}
-		}, ClassReader.SKIP_CODE); // 跳过方法体，更快
+		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG); // 跳过方法体，更快
 		return found[0];
 	}
 	/**

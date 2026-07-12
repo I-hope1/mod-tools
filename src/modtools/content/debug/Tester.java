@@ -29,8 +29,8 @@ import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.*;
 import mindustry.mod.Scripts;
-import modtools.*;
 import modtools.Constants.RHINO;
+import modtools.*;
 import modtools.annotations.asm.CopyConstValue;
 import modtools.annotations.settings.*;
 import modtools.content.Content;
@@ -124,11 +124,11 @@ public class Tester extends Content {
 				String mainCode =
 				 map.getBool("disposable") && map.containsKey("type") ?
 					"""
-					Events.on({%type%}, $e$ => {\
-					 try {\
-					  {%code%};
-					 } catch(e) { Log.err(e); }});
-					""".replace("%type%", "" + map.get("type"))
+					 Events.on({%type%}, $e$ => {\
+					  try {\
+					   {%code%};
+					  } catch(e) { Log.err(e); }});
+					 """.replace("%type%", "" + map.get("type"))
 					 .replace("%code%", readFiOrEmpty(bookmarkDirectory.child(entry.key)))
 					: readFiOrEmpty(bookmarkDirectory.child(entry.key));
 				String source = "(() => { modName=`" + taskName + "`; scriptName=`" + entry.key + "` " + mainCode + "})();";

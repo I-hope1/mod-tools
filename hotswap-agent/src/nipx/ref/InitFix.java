@@ -1,12 +1,16 @@
 package nipx.ref;
 
-import nipx.*;
 import nipx.ClassDiffUtil.ClassDiff;
+import nipx.*;
+import nipx.jvmti.LibTool;
 import org.objectweb.asm.*;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.*;
+
+import static nipx.HotSwapAgent.log;
 
 public class InitFix {
 	private static final String PATCH_METHOD        = "$hotswap$initNewFields$";
@@ -37,10 +41,33 @@ public class InitFix {
 		new ClassReader(newBytes).accept(newClass, 0);
 
 		// 提取实例字段<init>指令
-		MethodNode init = newClass.methods.stream()
-		 .filter(m -> "<init>".equals(m.name) && "()V".equals(m.desc))
-		 .findFirst().orElse(null);
-		List<AbstractInsnNode> initInsns = extractFieldInits(init, addedInstanceFields, false);
+		List<AbstractInsnNode> initInsns = new ArrayList<>();
+		{
+			Set<String> remainingFields = new HashSet<>(addedInstanceFields);
+
+			// 筛选出所有的构造函数（包括带参数的）
+			List<MethodNode> initMethods = newClass.methods.stream()
+			 .filter(m -> "<init>".equals(m.name))
+			 .toList();
+
+			for (MethodNode init : initMethods) {
+				log("Extracting field init for " + className + "." + init.name + "()");
+				if (remainingFields.isEmpty()) {
+					break;
+				}
+				// 针对当前构造函数，尝试提取剩余未解析字段的初始化指令
+				List<AbstractInsnNode> extracted = extractFieldInits(init, remainingFields, false);
+				if (!extracted.isEmpty()) {
+					initInsns.addAll(extracted);
+					// 遍历已提取的指令，将成功解析的 PUTFIELD 字段从 remainingFields 中移除，防止后续构造函数重复提取
+					for (AbstractInsnNode insn : extracted) {
+						if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD) {
+							remainingFields.remove(f.name);
+						}
+					}
+				}
+			}
+		}
 		// 提取静态字段<clinit>指令
 		MethodNode clinit = newClass.methods.stream()
 		 .filter(m -> "<clinit>".equals(m.name) && "()V".equals(m.desc))
@@ -50,10 +77,9 @@ public class InitFix {
 		if (initInsns.isEmpty() && clinitInsns.isEmpty()) return newBytes;
 
 		if (!initInsns.isEmpty()) {
-			String desc = "(L" + className + ";)V";
 			MethodNode patch = new MethodNode(
 			 Opcodes.ACC_STATIC | Opcodes.ACC_PUBLIC,
-			 PATCH_METHOD, desc, null, null
+			 PATCH_METHOD, "(L" + className + ";)V", null, null
 			);
 			for (AbstractInsnNode insn : initInsns) {
 				patch.instructions.add(insn);
@@ -83,7 +109,7 @@ public class InitFix {
 
 		l:
 		try {
-			if (!hasMethodAsm(newBytes, STATIC_PATCH_METHOD, "()V")) break l;
+			if (!hasStaticMethodAsm(newBytes, STATIC_PATCH_METHOD, "()V")) break l;
 			Method staticPatch = clazz.getDeclaredMethod(STATIC_PATCH_METHOD);
 			staticPatch.setAccessible(true);
 			HotSwapAgent.info("Applying static field init patch to " + clazz.getName());
@@ -91,28 +117,31 @@ public class InitFix {
 		} catch (NoSuchMethodException _) {
 			// 无新增静态字段
 		} catch (Throwable e) {
+			e.printStackTrace();
 			HotSwapAgent.error("Static field init patch failed: " + e.getMessage());
 		}
 
 		l:
 		try {
-			if (!hasMethodAsm(newBytes, PATCH_METHOD, "(" + AnnotationTransformer.typeToNative(clazz) + ")V")) break l;
-			List<?> instances = InstanceTracker.getInstances(clazz);
-			if (instances.isEmpty()) break l;
-			HotSwapAgent.info("Applying instance field init patch to " + clazz.getName());
+			if (!hasStaticMethodAsm(newBytes, PATCH_METHOD, "(" + AnnotationTransformer.typeToNative(clazz) + ")V")) break l;
+			Object instances = LibTool.initialized() ? LibTool.getInstances(clazz) : InstanceTracker.getInstances(clazz).toArray();
+			int    length    = Array.getLength(instances);
+			if (length == 0) break l;
+			HotSwapAgent.info("Applying instance field init patch to " + clazz.getName() + ", count=" + length);
 			// String desc  = "(L" + clazz.getName().replace('.', '/') + ";)V";
 			Method patch = clazz.getDeclaredMethod(PATCH_METHOD, clazz);
 			patch.setAccessible(true);
-			for (Object instance : instances) {
-				patch.invoke(null, instance);
+			for (int i = 0; i < length; i++) {
+				patch.invoke(null, Array.get(instances, i));
 			}
-		} catch (NoSuchMethodException e) {
+		} catch (NoSuchMethodException _) {
 			// 无新增实例字段，跳过
 		} catch (Throwable e) {
+			e.printStackTrace();
 			HotSwapAgent.error("Field init patch failed: " + e.getMessage());
 		}
 	}
-	public static boolean hasMethodAsm(byte[] classBytes, String methodName, String desc) {
+	public static boolean hasStaticMethodAsm(byte[] classBytes, String methodName, String desc) {
 		ClassReader cr = new ClassReader(classBytes);
 		// 使用 ClassVisitor 只访问方法，轻量扫描
 		boolean[] found = {false};
@@ -120,7 +149,7 @@ public class InitFix {
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
-				if (found[0]) return null;
+				if (found[0] || (access & Opcodes.ACC_STATIC) == 0) return null;
 				if (name.equals(methodName) && descriptor.equals(desc)) {
 					found[0] = true;
 				}
@@ -203,7 +232,7 @@ public class InitFix {
 					} else {
 						// 打印一条温和的警告，说明该字段因为复杂的局部变量依赖被安全忽略
 						FieldInsnNode f = (FieldInsnNode) insn;
-						HotSwapAgent.log("Field '" + f.name + "' initialization skipped: depends on local variables.");
+						log("Field '" + f.name + "' initialization skipped: depends on local variables.");
 					}
 				}
 

@@ -463,10 +463,18 @@ public class JVMTIEnv {
 		try (Arena arena = Arena.ofConfined()) {
 			{
 				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
+				caps.set(ValueLayout.JAVA_INT, 0, CAN_TAG_OBJECTS);
+				int rc = (int) MH_AddCapabilities.invokeExact(
+				 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);
+				if (rc != JVMTI_ERROR_NONE) {
+					System.err.println("[E] JVMTI: Failed to add CAN_TAG_OBJECTS capability (rc=" + rc + ")");
+				}
+			}
+			{
+				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
 				// jvmtiCapabilities 位定义 (first jint, offset 0):
 				caps.set(ValueLayout.JAVA_INT, 0,
-				 CAN_TAG_OBJECTS | CAN_ACCESS_LOCAL_VARIABLES |
-				 CAN_GENERATE_EXCEPTION_EVENTS | CAN_GET_LINE_NUMBERS);
+				  CAN_ACCESS_LOCAL_VARIABLES | CAN_GENERATE_EXCEPTION_EVENTS | CAN_GET_LINE_NUMBERS);
 				// caps.set(ValueLayout.JAVA_INT, 0, CAN_SUSPEND);
 
 				int rc = (int) MH_AddCapabilities.invokeExact(

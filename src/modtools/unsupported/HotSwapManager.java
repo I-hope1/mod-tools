@@ -1,6 +1,7 @@
 package modtools.unsupported;
 
 import arc.files.Fi;
+import arc.util.*;
 import modtools.IntVars;
 import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -20,6 +21,7 @@ public class HotSwapManager {
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
+
 
 	public static void start() throws Throwable {
 		if (!initialized) {
@@ -56,10 +58,9 @@ public class HotSwapManager {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
-		Fi   lib      = IntVars.libs.child(AGENT_NAME + ".jar");
+		Fi lib      = IntVars.libs.child(AGENT_NAME + ".jar");
 		Fi tempFile = FileUtils.copyToTmp(lib);
 		tempFile.file().deleteOnExit();
-		lib.copyTo(tempFile);
 		agentPathCache = tempFile.path();
 		return agentPathCache;
 	}

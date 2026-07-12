@@ -166,7 +166,7 @@ public class LambdaAligner {
 			}
 		}
 
-		// 【阶段二】扫尾防线：统一处理全部未匹配的新方法，防止内部重组带来的 ClassFormatError
+		// 【阶段二】统一处理全部未匹配的新方法，防止内部重组带来的 ClassFormatError
 		int freshId = 0;
 		for (int i = 0; i < cap; i++) {
 			Object v = vs[i];
@@ -230,7 +230,7 @@ public class LambdaAligner {
 			/** 处理 $deserializeLambda$ 内部的方法名字符串常量 */
 			@Override
 			public Object mapValue(Object value) {
-				if (value instanceof String s && s.length() > LAMBDA_LENGTH) {
+				if (value instanceof String s && s.length() > LAMBDA_LENGTH) { // 为了kotlin/scala的lambda
 					if (ctx.renameMap.containsKey(s)) { // 快速预过滤 lambda$ 或 access$
 						return ctx.renameMap.get(s);
 					}

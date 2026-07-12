@@ -818,7 +818,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			label.setText(label.getText() + METHOD_COUNT_PREFIX + "[" + size + "]");
 		});
 
-		EventHelper.doubleClick(label, () -> {
+	EventHelper.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new)
 			 .getFirst(ShowInfoWindow::newPairTable).hasChildren()) { return; }
 

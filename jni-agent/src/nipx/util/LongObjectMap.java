@@ -315,7 +315,9 @@ public final class LongObjectMap<V> {
 		return h;
 	}
 
+	/** 内部使用，请勿修改 */
 	public long[] keys() { return keys; }
+	/** 内部使用，请勿修改 */
 	public Object[] values() { return values; }
 	/** 快速判断该位置是否有有效值 (逻辑内联) */
 	public static boolean isValid(Object value) {

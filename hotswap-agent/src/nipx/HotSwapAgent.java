@@ -285,9 +285,7 @@ public class HotSwapAgent {
 								log("[DCEVM] Structure change detected, proceeding with enhanced redefinition.");
 							}
 						}
-						if (HOTSWAP_PLUS) {
-							newBytecode = InitFix.transform(newBytecode, diff);
-						}
+						newBytecode = InitFix.transform(newBytecode, diff);
 					} else {
 						log("[WARN] Cannot diff " + className + " (missing old bytecode). Proceeding with redefine.");
 					}
@@ -413,7 +411,9 @@ public class HotSwapAgent {
 			                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 				if (
 				 clazz == classBeingRedefined
-				 /* className.equals(clazz.getName()) && loader == clazz.getClassLoader() */) bytecode[0] = classfileBuffer;
+					/* className.equals(clazz.getName()) && loader == clazz.getClassLoader() */) {
+					bytecode[0] = classfileBuffer;
+				}
 				return null;
 			}
 		}

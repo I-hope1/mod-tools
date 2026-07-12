@@ -17,6 +17,7 @@ public class LibTool {
 		if (initialized) return;
 		Lib.load();
 		initialized = true;
+		// getInstances(Unsafe.class);
 		System.out.println("[NIPX] Loaded libtool.");
 	}
 	static class Lib {
@@ -61,28 +62,19 @@ public class LibTool {
 			// 初始化本次调用所需的 JNIEnv
 			JNIEnv jniEnv = new JNIEnv(arena);
 
-			// 1. 获取目标类的 jclass 引用
+			// 获取目标类的 jclass 引用
 			try (GlobalRef classRef = jniEnv.FindClass(clazz)) {
 				MemorySegment klass = classRef.ref();
 
-				// 2. 构造指向指针的指针 (Pointer to Pointer)
-				// Zig 侧期望接收的是存储了环境指针地址的内存槽地址
-				MemorySegment jvmtiPtrPtr = arena.allocate(ValueLayout.ADDRESS);
-				jvmtiPtrPtr.set(ValueLayout.ADDRESS, 0, jvmtiEnv.jvmtiEnvPtr);
-
-				MemorySegment jniEnvPtrPtr = arena.allocate(ValueLayout.ADDRESS);
-				jniEnvPtrPtr.set(ValueLayout.ADDRESS, 0, jniEnv.getJniEnvPointer());
-
-				// 3. 发起原生调用
+				// 原生调用
 				MemorySegment resultArrayRef = (MemorySegment) Lib.MH_GetInstances.invokeExact(
-				 jvmtiPtrPtr, jniEnvPtrPtr, klass);
+				 jvmtiEnv.jvmtiEnvPtr, jniEnv.getJniEnvPointer(), klass);
 
 				if (resultArrayRef.address() == 0) {
 					return (T[]) Array.newInstance(clazz, 0);
 				}
 
-				// 4. 将 native 的 jobjectArray 转换回 Java 侧真实的 T[] 数组
-				// 借助你在 JNIEnv 中实现的 jObjectToJavaObject 机制，它能完美处理句柄转换
+				// 将 native 的 jobjectArray 转换回 Java 侧真实的 T[] 数组
 				Object arrayObj = jniEnv.jObjectToJavaObject(resultArrayRef);
 				return (T[]) arrayObj;
 			}

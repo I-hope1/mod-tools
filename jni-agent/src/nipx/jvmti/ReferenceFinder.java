@@ -60,10 +60,6 @@ public class ReferenceFinder {
 			// 写入 heap_reference_callback 槽位 (第2个地址指针)
 			callbacks.set(ValueLayout.ADDRESS, 8, upcallStub);
 
-			System.out.println("[Debug] jvmtiEnvPtr address: " + jvmtiEnvPtr.address());
-			System.out.println("[Debug] callbacks struct address: " + callbacks.address());
-			System.out.println("[Debug] upcallStub address: " + upcallStub.address());
-
 			// 读取刚刚写入 callbacks 结构体偏移量为 8 的位置，看它是否正确保存了 upcallStub 的地址
 			MemorySegment storedRefCallback = callbacks.get(ValueLayout.ADDRESS, 8);
 			System.out.println("[Debug] Stored heap_reference_callback address: " + storedRefCallback.address());

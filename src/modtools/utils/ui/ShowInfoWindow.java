@@ -18,7 +18,9 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.events.*;
+import modtools.jsfunc.INFO_DIALOG;
 import modtools.jsfunc.reflect.InitMethodHandle;
+import modtools.jsfunc.type.CAST;
 import modtools.struct.*;
 import modtools.ui.*;
 import modtools.ui.comp.*;
@@ -36,6 +38,7 @@ import modtools.utils.search.*;
 import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import nipx.HotSwapAgent;
+import nipx.jvmti.LibTool;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
@@ -265,8 +268,16 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 						 try (Arena arena = Arena.ofConfined()) {
 							 Log.info(ReferenceFinder.findReferrers(new JNIEnv(arena), JVMTIEnv.getInstance(), obj));
 						 }
+						hide.run();
 					 }))
 					 .disabled(_ -> !MasterKey.isPanamaBackend() || obj == null); */
+					p.button("View All Instances", Styles.flatt, runT(() -> {
+						 INFO_DIALOG.showInfo(LibTool.getInstances(clazz));
+						 hide.run();
+					 }))
+					 .disabled(_ -> !(clazz != null && clazz != String.class && clazz != Object.class
+					                  && !Reflect.isWrapper(CAST.box(clazz))
+					                  && LibTool.initialized()));
 				}, false, Align.bottom);
 			}));
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
@@ -818,7 +829,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			label.setText(label.getText() + METHOD_COUNT_PREFIX + "[" + size + "]");
 		});
 
-	EventHelper.doubleClick(label, () -> {
+		EventHelper.doubleClick(label, () -> {
 			if (!table.map.get(member.getName(), Pair::new)
 			 .getFirst(ShowInfoWindow::newPairTable).hasChildren()) { return; }
 

@@ -150,10 +150,6 @@ public class ExtendingLabel extends InlineLabel {
 
 	private final Seq<DrawRun> drawRuns = new Seq<>();
 
-	public void clearMouseEvents() {
-		clicks.clear();
-		hovers.clear();
-	}
 	public void clearDrawRuns() {
 		Pools.freeAll(drawRuns, true);
 		drawRuns.clear();

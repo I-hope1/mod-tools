@@ -38,6 +38,7 @@ import modtools.utils.search.*;
 import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import nipx.HotSwapAgent;
+import nipx.jni.helper.MasterKey;
 import nipx.jvmti.LibTool;
 import rhino.NativeArray;
 
@@ -264,20 +265,18 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 						 hide.run();
 					 }))
 					 .disabled(boolf).row();
-					/* p.button("View References", Styles.flatt, runT(() -> {
-						 try (Arena arena = Arena.ofConfined()) {
-							 Log.info(ReferenceFinder.findReferrers(new JNIEnv(arena), JVMTIEnv.getInstance(), obj));
-						 }
-						hide.run();
+					p.button("View Referrers", Styles.flatt, runT(() -> {
+						 INFO_DIALOG.showInfo(LibTool.getReferrers(obj));
+						 hide.run();
 					 }))
-					 .disabled(_ -> !MasterKey.isPanamaBackend() || obj == null); */
+					 .disabled(_ -> !MasterKey.isPanamaBackend() || obj == null).row();
 					p.button("View All Instances", Styles.flatt, runT(() -> {
 						 INFO_DIALOG.showInfo(LibTool.getInstances(clazz));
 						 hide.run();
 					 }))
-					 .disabled(_ -> !(clazz != null && clazz != String.class && clazz != Object.class
+					 .disabled(_ -> !(MasterKey.isPanamaBackend() && clazz != null && clazz != String.class && clazz != Object.class
 					                  && !Reflect.isWrapper(CAST.box(clazz))
-					                  && LibTool.initialized()));
+					                  && LibTool.initialized())).row();
 				}, false, Align.bottom);
 			}));
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);

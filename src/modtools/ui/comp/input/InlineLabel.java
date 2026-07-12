@@ -344,6 +344,11 @@ public class InlineLabel extends NoMarkupLabel {
 		}
 		super.draw();
 	}
+
+	public void clearMouseEvents() {
+		clicks.clear();
+		hovers.clear();
+	}
 	public final ObjectMap<Prov<Point2>, Runnable> clicks = new ObjectMap<>();
 	public final ObjectMap<Prov<Point2>, Runnable> hovers = new ObjectMap<>();
 
@@ -369,6 +374,7 @@ public class InlineLabel extends NoMarkupLabel {
 						int start = point2.x, end = point2.y;
 						if (start <= cursor && cursor <= end) {
 							InlineLabel.downChunk.set(point2);
+							event.cancel();
 							return true;
 						}
 					}
@@ -378,9 +384,11 @@ public class InlineLabel extends NoMarkupLabel {
 			}
 			public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button) {
 				super.touchUp(event, x, y, pointer, button);
+				event.cancel();
 				InlineLabel.downChunk.set(UNSET_P);
 			}
 			public void clicked(InputEvent event, float x, float y) {
+				event.cancel();
 				int cursor = getCursor(x, y);
 				for (var entry : clicks) {
 					Point2 point2 = entry.key.get();

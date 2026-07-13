@@ -56,7 +56,7 @@ public class TestAA {
 	Runnable rx;
 	public void say() {
 		if (rx != null) rx.run();
-		var x = 1293;
+		var x = 129323;
 		rx = () -> {
 			Log.info("rx");
 			Log.info(x);

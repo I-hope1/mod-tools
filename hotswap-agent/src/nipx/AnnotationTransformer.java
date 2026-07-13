@@ -5,6 +5,7 @@ import nipx.annotation.*;
 import nipx.ref.InitFix;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
+import org.objectweb.asm.tree.*;
 
 import java.io.*;
 import java.lang.annotation.Annotation;
@@ -14,6 +15,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static nipx.HotSwapAgent.*;
+import static org.objectweb.asm.Opcodes.*;
 
 /**
  * <p>用于注解，注入代码
@@ -31,7 +33,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	}
 	private static boolean hasClassAnnotation(byte[] bytes, String annotationDesc) {
 		final boolean[] found = {false};
-		new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+		new ClassReader(bytes).accept(new ClassVisitor(ASM9) {
 			@Override
 			public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
 				if (descriptor.equals(annotationDesc)) {
@@ -49,14 +51,14 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
-		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 				// 只拦截构造函数 <init>
 				if ("<init>".equals(name)) {
-					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
 						@Override
 						protected void onMethodExit(int opcode) {
 							// 在构造函数返回之前 (RETURN 或 ATHROW 之前) 插入代码
@@ -97,7 +99,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		// 在 cache 中找不到时才 fallback 到 java/lang/Object。
 		ClassWriter cw = new MyClassWriter(cr, targetLoader);
 
-		var cv = new ClassVisitor(Opcodes.ASM9, cw) {
+		var cv = new ClassVisitor(ASM9, cw) {
 			boolean anyProfiled = false;
 
 			@Override
@@ -106,11 +108,11 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 
 				// 跳过构造函数、静态代码块、桥接方法等不需要统计的底层方法
-				if (name.startsWith("<") || (access & Opcodes.ACC_SYNTHETIC) != 0 || (access & Opcodes.ACC_BRIDGE) != 0) {
+				if (name.startsWith("<") || (access & ACC_SYNTHETIC) != 0 || (access & ACC_BRIDGE) != 0) {
 					return mv;
 				}
 
-				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+				return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
 					boolean isProfiled = false;
 					int     startTimeVar;
 					int     durationVar; // 用于存储计算好的耗时
@@ -188,7 +190,15 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		boolean modified = false;
 		if (HOTSWAP_PLUS) {
 			classfileBuffer = forceStaticLambdas(classfileBuffer, className, loader);
-			modified = classfileBuffer != bytes;
+			if (classfileBuffer != bytes) {
+				bytes = classfileBuffer;
+				modified = true;
+			}
+			classfileBuffer = stabilizeLambdaCaptures(bytes, className, loader);
+			if (classfileBuffer != bytes) {
+				bytes = classfileBuffer;
+				modified = true;
+			}
 		}
 
 		String dotClassName = className.replace('/', '.');
@@ -228,7 +238,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 	// ====================================================================
 	// Lambda 静态化 — 预防 IncompatibleClassChangeError
-	// 纯 visitor API，无需 BootstrapMethodsNode，兼容所有 ASM 版本
 	// ====================================================================
 
 	/**
@@ -252,15 +261,15 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		try {
 			// Pass 1: 收集
-			new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+			new ClassReader(bytes).accept(new ClassVisitor(ASM9) {
 				@Override
 				public MethodVisitor visitMethod(int access, String name, String desc,
 				                                 String sig, String[] exc) {
-					if ((access & Opcodes.ACC_SYNTHETIC) != 0
-					    && (access & Opcodes.ACC_STATIC) == 0) {
+					if ((access & ACC_SYNTHETIC) != 0
+					    && (access & ACC_STATIC) == 0) {
 						instanceSyntheticMethods.add(name + ":" + desc);
 					}
-					return new MethodVisitor(Opcodes.ASM9) {
+					return new MethodVisitor(ASM9) {
 						@Override
 						public void visitInvokeDynamicInsn(String indyName, String indyDesc,
 						                                   Handle bsm, Object... bsmArgs) {
@@ -289,31 +298,31 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			ClassWriter cw = new MyClassWriter(
 			 cr2, targetLoader);
 
-			cr2.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+			cr2.accept(new ClassVisitor(ASM9, cw) {
 				@Override
 				public MethodVisitor visitMethod(int access, String name, String desc,
 				                                 String sig, String[] exc) {
 					String key = name + ":" + desc;
 					if (needConversion.contains(key)) {
-						access |= Opcodes.ACC_STATIC;
+						access |= ACC_STATIC;
 						desc = "(" + "L" + slashClassName + ";" + desc.substring(1);
 					}
 					MethodVisitor mv = super.visitMethod(access, name, desc, sig, exc);
 
-					return new MethodVisitor(Opcodes.ASM9, mv) {
+					return new MethodVisitor(ASM9, mv) {
 						@Override
 						public void visitInvokeDynamicInsn(String indyName, String indyDesc,
 						                                   Handle bsm, Object... bsmArgs) {
 							if (isLambdaMetafactory(bsm) && bsmArgs.length >= 2
 							    && bsmArgs[1] instanceof Handle impl) {
-								String key  = impl.getName() + ":" + impl.getDesc();
+								String key = impl.getName() + ":" + impl.getDesc();
 								if (needConversion.contains(key)) {
 									// 只改 tag: H_INVOKESPECIAL → H_INVOKESTATIC
 									String newDesc = "(" + "L" + slashClassName + ";"
-                                    + impl.getDesc().substring(1);
+									                 + impl.getDesc().substring(1);
 									// indyDesc 保持不变（编译器已包含 this）
 									bsmArgs[1] = new Handle(
-									 Opcodes.H_INVOKESTATIC,
+									 H_INVOKESTATIC,
 									 impl.getOwner(),
 									 impl.getName(),
 									 newDesc,
@@ -333,24 +342,437 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 	}
+	// ====================================================================
+	// Lambda 捕获参数稳定化 — 预防 NoSuchMethodError
+	// ====================================================================
+
+	/**
+	 * 为每个 lambda 方法生成 Object[] 代理，将所有捕获变量打包成单一数组。
+	 * <p>
+	 * 效果：CallSite 始终引用签名不变的 L$args(Object[], SAMArgs...)R，
+	 * 热交换后方法体自动更新，签名不匹配问题彻底消除。
+	 */
+	private static byte[] stabilizeLambdaCaptures(byte[] bytes, String slashClassName, ClassLoader loader) {
+		ClassNode cn = new ClassNode(ASM9);
+		try {
+			// 修正点 1：使用 SKIP_FRAMES，防范重写指令和原 StackMapTable 冲突引发异常
+			new ClassReader(bytes).accept(cn, ClassReader.SKIP_FRAMES);
+		} catch (Exception e) {
+			return bytes;
+		}
+
+		// ============================
+		// Phase 1: 收集所有 lambda 方法
+		// ============================
+		Map<String, MethodNode> lambdaMethods = new LinkedHashMap<>();
+		for (MethodNode mn : cn.methods) {
+			if ((mn.access & ACC_SYNTHETIC) != 0 && mn.name.contains("lambda$")) {
+				lambdaMethods.put(mn.name + ":" + mn.desc, mn);
+			}
+		}
+		if (lambdaMethods.isEmpty()) return bytes;
+
+		// ============================
+		// Phase 2: 扫描 invokedynamic
+		// ============================
+		record LambdaRef(MethodNode container, InvokeDynamicInsnNode indy, Handle impl, String implKey) { }
+
+		List<LambdaRef> references = new ArrayList<>();
+		for (MethodNode mn : cn.methods) {
+			if (mn.instructions == null) continue;
+			for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn.getType() != AbstractInsnNode.INVOKE_DYNAMIC_INSN) continue;
+				InvokeDynamicInsnNode indy = (InvokeDynamicInsnNode) insn;
+				if (indy.bsmArgs == null || indy.bsmArgs.length < 2) continue;
+				if (!(indy.bsmArgs[1] instanceof Handle impl)) continue;
+				if (!slashClassName.equals(impl.getOwner())) continue;
+
+				String key = impl.getName() + ":" + impl.getDesc();
+				if (lambdaMethods.containsKey(key)) {
+					references.add(new LambdaRef(mn, indy, impl, key));
+				}
+			}
+		}
+		if (references.isEmpty()) return bytes;
+
+		// ============================
+		// Phase 3: 为每个被引用的 lambda 生成代理方法
+		// ============================
+		Map<String, String> proxyMap = new HashMap<>();
+		Map<String, Boolean> forceCaptureThisMap = new HashMap<>(); // 用于同步 Phase 3 和 Phase 4 的强制捕获决策
+
+		for (LambdaRef ref : references) {
+			if (proxyMap.containsKey(ref.implKey)) continue;
+
+			MethodNode original     = lambdaMethods.get(ref.implKey);
+			Type       originalType = Type.getMethodType(original.desc);
+			Type       returnType   = originalType.getReturnType();
+
+			// 修正点 2：从 invokedynamic 的描述符中精准提取捕获变量的类型，排除非捕获类的参数干扰
+			Type[] captureTypes = Type.getArgumentTypes(ref.indy.desc);
+			int    captureCount = captureTypes.length;
+
+			// 【新增判定】：是否需要强制捕获 this
+			// 1. 外部容器方法必须是实例方法且【非构造函数】（由于构造函数未完成初始化，强制捕获 uninitializedThis 会导致 VerifyError）
+			// 2. 且当前 Lambda 描述符里第 0 位还没有捕获 this
+			boolean isInstanceMethod = (ref.container.access & ACC_STATIC) == 0;
+			boolean isConstructor = ref.container.name.equals("<init>");
+			boolean alreadyCapturesThis = captureTypes.length > 0
+			                              && captureTypes[0].getSort() == Type.OBJECT
+			                              && captureTypes[0].getInternalName().equals(slashClassName);
+			boolean forceCaptureThis = isInstanceMethod && !isConstructor && !alreadyCapturesThis;
+
+			// 将当前 Lambda 的强制捕获 this 决策记录，供 Phase 4 共享使用，避免多调用点决策不一致导致 ClassCastException
+			forceCaptureThisMap.put(ref.implKey, forceCaptureThis);
+
+			// 修正点 3：从 BSM 参数中提取最原本的 SAM 函数式接口形参类型
+			Type   samMethodType = (Type) ref.indy.bsmArgs[0];
+			Type[] samArgTypes   = samMethodType.getArgumentTypes();
+
+			String proxyName = original.name + "$args";
+			// 修正点 4：补齐缺失的数组标志 [。代理签名的入参一律特化为 ([Ljava/lang/Object;, SAMArgs...)ReturnType
+			Type[] proxyParamTypes = new Type[1 + samArgTypes.length];
+			proxyParamTypes[0] = Type.getType("[Ljava/lang/Object;");
+			System.arraycopy(samArgTypes, 0, proxyParamTypes, 1, samArgTypes.length);
+			String proxyDesc = Type.getMethodDescriptor(returnType, proxyParamTypes);
+
+			// ---------- 生成代理方法体 ----------
+			MethodNode proxy = new MethodNode(
+			 ACC_PRIVATE | ACC_STATIC | ACC_SYNTHETIC,
+			 proxyName, proxyDesc, null, null
+			);
+
+			InsnList insns = new InsnList();
+
+			// 3a. 零变量本地槽开销解包。直接从 Object[] 数组（Slot 0）解包捕获变量至操作数栈顶
+			for (int i = 0; i < captureCount; i++) {
+				LabelNode lLoad = new LabelNode();
+				LabelNode lDone = new LabelNode();
+
+				// 如果强制捕获了 this，原捕获变量在数组中的索引整体向后移动 1 位（留出 index 0 给 this）
+				int arrayIndex = forceCaptureThis ? (i + 1) : i;
+
+				// 检查数组长度是否大于当前要获取的索引 arrayIndex
+				insns.add(new VarInsnNode(ALOAD, 0));
+				insns.add(new InsnNode(ARRAYLENGTH));
+				pushInt(insns, arrayIndex);
+				insns.add(new JumpInsnNode(IF_ICMPGT, lLoad)); // if array.length > arrayIndex, jump to lLoad
+
+				// 默认值路径（如果旧实例缺失该捕获变量）
+				pushDefaultValue(insns, captureTypes[i]);
+				insns.add(new JumpInsnNode(GOTO, lDone));
+
+				// 正常加载解包路径
+				insns.add(lLoad);
+				insns.add(new VarInsnNode(ALOAD, 0));
+				pushInt(insns, arrayIndex);
+				insns.add(new InsnNode(AALOAD));
+				unboxInsn(insns, captureTypes[i]);
+
+				insns.add(lDone);
+			}
+
+			// 3b. 提取并推送 SAM 本身形参，并根据原始方法的需求进行自动特化强转/拆箱
+			int     slot               = 1; // Slot 0 为 Object[] 数组
+			boolean isOriginalInstance = (ref.impl.getTag() != H_INVOKESTATIC);
+			int     samArgsStart       = isOriginalInstance ? (captureCount - 1) : captureCount;
+			Type[]  origParams         = originalType.getArgumentTypes();
+
+			for (int j = 0; j < samArgTypes.length; j++) {
+				Type samType = samArgTypes[j];
+				insns.add(new VarInsnNode(getLoadOpcode(samType), slot));
+
+				// 修正点 5：只有当代理传入的形参类型与原目标方法要求的特化类型不一致时，才需要执行强转/拆箱
+				if (samArgsStart + j < origParams.length) {
+					Type expectedType = origParams[samArgsStart + j];
+					if (!samType.equals(expectedType)) {
+						unboxInsn(insns, expectedType);
+					}
+				}
+
+				slot += samType.getSize();
+			}
+
+			// 3c. 适配调用协议唤起原始 Lambda 目标方法
+			int invokeOpcode = switch (ref.impl.getTag()) {
+				case H_INVOKESTATIC -> INVOKESTATIC;
+				case H_INVOKEVIRTUAL -> INVOKEVIRTUAL;
+				case H_INVOKESPECIAL, H_NEWINVOKESPECIAL -> INVOKESPECIAL;
+				case H_INVOKEINTERFACE -> INVOKEINTERFACE;
+				default -> INVOKESTATIC;
+			};
+
+			insns.add(new MethodInsnNode(
+			 invokeOpcode, ref.impl.getOwner(), ref.impl.getName(), ref.impl.getDesc(), ref.impl.isInterface()
+			));
+			insns.add(new InsnNode(getReturnOpcode(returnType.getSort())));
+
+			proxy.instructions = insns;
+			proxy.maxLocals = slot;
+			proxy.maxStack = Math.max(3, captureCount + 2 + slot);
+
+			cn.methods.add(proxy);
+			proxyMap.put(ref.implKey, proxyName + ":" + proxyDesc);
+		}
+
+		// ============================
+		// Phase 4: 修改 invokedynamic 站点
+		// ============================
+		for (LambdaRef ref : references) {
+			InvokeDynamicInsnNode indy     = ref.indy;
+			String                proxyKey = proxyMap.get(ref.implKey);
+			if (proxyKey == null) continue;
+
+			int    colon     = proxyKey.indexOf(':');
+			String proxyName = proxyKey.substring(0, colon);
+			String proxyDesc = proxyKey.substring(colon + 1);
+
+			// 修正点 6：确保从调用的 indy.desc 精确读得真实的捕获列表，消除 Operand stack underflow
+			Type[] captureTypes = Type.getArgumentTypes(indy.desc);
+			int    captureCount = captureTypes.length;
+
+			// 【判定】：重用 Phase 3 的强制捕获决策，避免多个调用点（例如不同构造函数、或者普通方法和构造方法）决策不一致引发 ClassCastException
+			boolean forceCaptureThis = forceCaptureThisMap.getOrDefault(ref.implKey, false);
+
+			// 4a: 精准计算调用侧方法内的最大可用 LVT 索引（双重防范本地槽冲突）
+			int baseLocal = 0;
+			if (ref.container.instructions != null) {
+				for (AbstractInsnNode ain = ref.container.instructions.getFirst();
+				     ain != null; ain = ain.getNext()) {
+					if (ain instanceof VarInsnNode v) {
+						int size = (v.getOpcode() == LLOAD || v.getOpcode() == LSTORE ||
+						            v.getOpcode() == DLOAD || v.getOpcode() == DSTORE) ? 2 : 1;
+						baseLocal = Math.max(baseLocal, v.var + size);
+					}
+				}
+			}
+			if (ref.container.localVariables != null) {
+				for (LocalVariableNode lvn : ref.container.localVariables) {
+					int size = ("J".equals(lvn.desc) || "D".equals(lvn.desc)) ? 2 : 1;
+					baseLocal = Math.max(baseLocal, lvn.index + size);
+				}
+			}
+
+			// 4b: 插入打包代码（在 invokedynamic 之前）
+			InsnList wrapper = new InsnList();
+
+			// 4b-1: 按 getSize() 精确对齐每个暂存局部变量的宽度，防止 long/double 重叠覆盖
+			int[] temps     = new int[captureCount];
+			int   nextLocal = baseLocal;
+			for (int i = 0; i < captureCount; i++) {
+				temps[i] = nextLocal;
+				nextLocal += captureTypes[i].getSize();
+			}
+
+			for (int i = captureCount - 1; i >= 0; i--) {
+				Type ct = captureTypes[i];
+				if (isPrimitive(ct.getSort())) {
+					wrapper.add(new MethodInsnNode(
+					 INVOKESTATIC,
+					 getWrapperClass(ct.getSort()),
+					 "valueOf",
+					 getBoxMethodDesc(ct.getSort()),
+					 false
+					));
+				}
+				wrapper.add(new VarInsnNode(ASTORE, temps[i]));
+			}
+
+			// 计算实际数组长度：若强制捕获 this，数组大小 + 1
+			int arraySize = forceCaptureThis ? (captureCount + 1) : captureCount;
+			pushInt(wrapper, arraySize);
+			wrapper.add(new TypeInsnNode(ANEWARRAY, "java/lang/Object"));
+
+			// 4b-2: 若强制捕获 this，首先将实例方法的 `this` (即本地变量 LVT 0 号槽) 写入数组第 0 位
+			if (forceCaptureThis) {
+				wrapper.add(new InsnNode(DUP));
+				pushInt(wrapper, 0);
+				wrapper.add(new VarInsnNode(ALOAD, 0)); // 实例方法中，LVT 0 永远是 this
+				wrapper.add(new InsnNode(AASTORE));
+			}
+
+			// 4b-3: 存入其他的捕获变量（根据 forceCaptureThis 顺延写入位置）
+			for (int i = 0; i < captureCount; i++) {
+				wrapper.add(new InsnNode(DUP));
+				int arrayIndex = forceCaptureThis ? (i + 1) : i;
+				pushInt(wrapper, arrayIndex);
+				wrapper.add(new VarInsnNode(ALOAD, temps[i]));
+				wrapper.add(new InsnNode(AASTORE));
+			}
+
+			ref.container.instructions.insertBefore(indy, wrapper);
+
+			// 4c: 修改 invokedynamic 描述符为 ([Ljava/lang/Object;)LFunctionalInterface;
+			Type indyType = Type.getMethodType(indy.desc);
+			indy.desc = "([Ljava/lang/Object;)" + indyType.getReturnType().getDescriptor();
+
+			// 4d: 更新 bsmArgs[1] impl 句柄 → 统一代理静态方法
+			indy.bsmArgs[1] = new Handle(
+			 H_INVOKESTATIC,
+			 slashClassName,
+			 proxyName,
+			 proxyDesc,
+			 ref.impl.isInterface()
+			);
+		}
+
+		// ============================
+		// Phase 5: 写出
+		// ============================
+		MyClassWriter cw = new MyClassWriter(loader, ClassWriter.COMPUTE_FRAMES);
+		try {
+			cn.accept(cw);
+			return cw.toByteArray();
+		} catch (Exception e) {
+			HotSwapAgent.error("stabilizeLambdaCaptures failed for " + slashClassName, e);
+			return bytes;
+		}
+	}
+
+	// ==================== 小工具方法 ====================
+
+	private static void pushDefaultValue(InsnList insns, Type type) {
+		int sort = type.getSort();
+		insns.add(new InsnNode(switch (sort) {
+			case Type.BOOLEAN, Type.CHAR, Type.BYTE, Type.SHORT, Type.INT -> ICONST_0;
+			case Type.LONG -> LCONST_0;
+			case Type.FLOAT -> FCONST_0;
+			case Type.DOUBLE -> DCONST_0;
+			default -> ACONST_NULL;
+		}));
+	}
 	/** 判断是否为 LambdaMetafactory 的 bootstrap 方法 */
 	private static boolean isLambdaMetafactory(Handle h) {
 		return "java/lang/invoke/LambdaMetafactory".equals(h.getOwner())
 		       && ("metafactory".equals(h.getName()) || "altMetafactory".equals(h.getName()));
 	}
+	// 修正点 7：更正 Primitive 判定上限至 DOUBLE
+	private static boolean isPrimitive(int sort) {
+		return sort >= Type.BOOLEAN && sort <= Type.DOUBLE;
+	}
+
+	/** 把栈顶 Object 拆箱成原始类型（或 checkcast 为对象类型） */
+	private static void unboxInsn(InsnList insns, Type type) {
+		int sort = type.getSort();
+		if (sort == Type.OBJECT || sort == Type.ARRAY) {
+			if (!type.getDescriptor().equals("Ljava/lang/Object;")) {
+				insns.add(new TypeInsnNode(CHECKCAST, type.getInternalName()));
+			}
+			return;
+		}
+		String wrapper = getWrapperClass(sort);
+		String method;
+		String desc;
+		switch (sort) {
+			case Type.INT:
+				method = "intValue";
+				desc = "()I";
+				break;
+			case Type.BOOLEAN:
+				method = "booleanValue";
+				desc = "()Z";
+				break;
+			case Type.BYTE:
+				method = "byteValue";
+				desc = "()B";
+				break;
+			case Type.CHAR:
+				method = "charValue";
+				desc = "()C";
+				break;
+			case Type.SHORT:
+				method = "shortValue";
+				desc = "()S";
+				break;
+			case Type.LONG:
+				method = "longValue";
+				desc = "()J";
+				break;
+			case Type.FLOAT:
+				method = "floatValue";
+				desc = "()F";
+				break;
+			case Type.DOUBLE:
+				method = "doubleValue";
+				desc = "()D";
+				break;
+			default:
+				return;
+		}
+		insns.add(new TypeInsnNode(CHECKCAST, wrapper));
+		insns.add(new MethodInsnNode(INVOKEVIRTUAL, wrapper, method, desc, false));
+	}
+
+	private static String getWrapperClass(int sort) {
+		return switch (sort) {
+			case Type.INT -> "java/lang/Integer";
+			case Type.BOOLEAN -> "java/lang/Boolean";
+			case Type.BYTE -> "java/lang/Byte";
+			case Type.CHAR -> "java/lang/Character";
+			case Type.SHORT -> "java/lang/Short";
+			case Type.LONG -> "java/lang/Long";
+			case Type.FLOAT -> "java/lang/Float";
+			case Type.DOUBLE -> "java/lang/Double";
+			default -> throw new IllegalArgumentException("not primitive: " + sort);
+		};
+	}
+
+	private static String getBoxMethodDesc(int sort) {
+		return switch (sort) {
+			case Type.INT -> "(I)Ljava/lang/Integer;";
+			case Type.BOOLEAN -> "(Z)Ljava/lang/Boolean;";
+			case Type.BYTE -> "(B)Ljava/lang/Byte;";
+			case Type.CHAR -> "(C)Ljava/lang/Character;";
+			case Type.SHORT -> "(S)Ljava/lang/Short;";
+			case Type.LONG -> "(J)Ljava/lang/Long;";
+			case Type.FLOAT -> "(F)Ljava/lang/Float;";
+			case Type.DOUBLE -> "(D)Ljava/lang/Double;";
+			default -> throw new IllegalArgumentException("not primitive: " + sort);
+		};
+	}
+
+	private static void pushInt(InsnList insns, int value) {
+		if (value >= -1 && value <= 5) {
+			insns.add(new InsnNode(ICONST_0 + value));
+		} else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
+			insns.add(new IntInsnNode(BIPUSH, value));
+		} else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
+			insns.add(new IntInsnNode(SIPUSH, value));
+		} else {
+			insns.add(new LdcInsnNode(value));
+		}
+	}
+
+	private static int getReturnOpcode(int sort) {
+		if (sort == Type.VOID) return RETURN;
+		if (sort == Type.LONG) return LRETURN;
+		if (sort == Type.FLOAT) return FRETURN;
+		if (sort == Type.DOUBLE) return DRETURN;
+		if (isPrimitive(sort)) return IRETURN;
+		return ARETURN;
+	}
+
+	private static int getLoadOpcode(Type type) {
+		return type.getOpcode(ILOAD);
+	}
+
+	private static int getStoreOpcode(Type type) {
+		return type.getOpcode(ISTORE);
+	}
+
 	private static byte[] injectBuildingProfiler(byte[] bytes) {
 		ClassReader cr = new ClassReader(bytes);
 		// 【修改点 1】必须使用 COMPUTE_FRAMES 来自动重新计算 StackMapTable
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
 
-		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 
 				if ("updateTile".equals(name) && "()V".equals(descriptor)) {
-					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
 						int startTimeVar;
 
 						@Override
@@ -449,7 +871,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				String      className   = cr.getClassName();
 				String      superName   = cr.getSuperName();
 				String[]    interfaces  = cr.getInterfaces();
-				boolean     isInterface = (cr.getAccess() & Opcodes.ACC_INTERFACE) != 0;
+				boolean     isInterface = (cr.getAccess() & ACC_INTERFACE) != 0;
 
 				tree.put(className, new ClassNode(superName, interfaces, isInterface));
 			} catch (Exception ignored) {
@@ -532,11 +954,15 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return node != null && node.isInterface;
 		}
 	}
-	/** 避免查找时，重新触发加载类  */
+	/** 避免查找时，重新触发加载类 */
 	public static class MyClassWriter extends ClassWriter {
 		private final ClassLoader targetLoader;
 		public MyClassWriter(ClassReader cr, ClassLoader targetLoader) {
 			super(cr, ClassWriter.COMPUTE_FRAMES);
+			this.targetLoader = targetLoader;
+		}
+		public MyClassWriter(ClassLoader targetLoader, int flags) {
+			super(flags);
 			this.targetLoader = targetLoader;
 		}
 		@Override

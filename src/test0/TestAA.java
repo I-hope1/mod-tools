@@ -58,7 +58,7 @@ public class TestAA {
 		if (rx != null) rx.run();
 		var x = 129323;
 		rx = () -> {
-			Log.info("rx");
+			Log.info("rx" + rx);
 			Log.info(x);
 		};
 	}

@@ -5,7 +5,6 @@ import arc.util.Log;
 import modtools.ui.IntUI.ITooltip;
 import nipx.annotation.*;
 
-@Reloadable
 public class TestAA {
 	public static void main(String[] args) {
 		byte b  = -1;
@@ -53,6 +52,15 @@ public class TestAA {
 				System.out.println(className + " " + methodName + " " + methodSig + " " + thisAddress);
 			});
 		} */
+	}
+	Runnable rx;
+	public void say() {
+		if (rx != null) rx.run();
+		var x = 1293;
+		rx = () -> {
+			Log.info("rx");
+			Log.info(x);
+		};
 	}
 
 

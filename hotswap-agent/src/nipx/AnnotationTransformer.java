@@ -184,18 +184,23 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		// 注册到继承树
 		HierarchyTree.register(classfileBuffer); // TODO: 如果父类是系统类，可能会出错
 
+		byte[]  bytes    = classfileBuffer;  // 不clone，用引用做"是否修改"判断
+		boolean modified = false;
+		if (HOTSWAP_PLUS) {
+			classfileBuffer = forceStaticLambdas(classfileBuffer, className, loader);
+			modified = classfileBuffer != bytes;
+		}
+
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 		if (classBeingRedefined != null) {
 			LambdaRef.onClassRedefined(dotClassName);
-			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, classfileBuffer));
+			byte[] finalClassfileBuffer = classfileBuffer;
+			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, finalClassfileBuffer));
 		}
 
 		try {
-			if (HotSwapAgent.ENABLE_HOTSWAP_EVENT) {
-				byte[]  bytes    = classfileBuffer;  // 不clone，用引用做"是否修改"判断
-				boolean modified = false;
-
+			if (ENABLE_HOTSWAP_EVENT) {
 				if (hasClassAnnotation(bytes, Tracker.class)) {
 					bytes = injectTracker(bytes, className, loader);
 					modified = true;
@@ -208,10 +213,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 					modified = true;
 				}
 
-				if (HotSwapAgent.DEBUG && modified) writeTo(className, bytes);
+				if (DEBUG && modified) writeTo(className, bytes);
 
 				// info("Transformed: " + dotClassName + ":" + modified);
-				return modified ? bytes : null;  // ← 关键：未修改返回null
+				return modified ? bytes : null;
 			}
 		} catch (Throwable t) {
 			error("Transformer crashed for class: " + dotClassName, t);
@@ -221,6 +226,118 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	}
 
 
+	// ====================================================================
+	// Lambda 静态化 — 预防 IncompatibleClassChangeError
+	// 纯 visitor API，无需 BootstrapMethodsNode，兼容所有 ASM 版本
+	// ====================================================================
+
+	/**
+	 * 将当前类中所有实例 lambda 方法强制转为静态方法。
+	 * <p>
+	 * 热交换时若 lambda 从「不捕获 this」变成「捕获 this」，
+	 * 合成方法从 static 变为 instance，触发 IncompatibleClassChangeError。
+	 * 本方法在类加载时统一将所有实例 lambda 转为 static
+	 * （this 作为首个显式参数），彻底杜绝此问题。
+	 * <p>
+	 * 方法体无需改动：aload 0 原本加载 this，转换后加载第一个参数（即显式的 this）。
+	 * <p>
+	 * 实现方案：两遍扫描（纯 visitor API）
+	 * - Pass 1: 扫描出所有「被 LambdaMetafactory 引用且是实例方法」的合成方法
+	 * - Pass 2: 修改方法定义（+ACC_STATIC + desc 前面插入 this）、修改 invokedynamic 的 bsm 和 desc
+	 */
+	private static byte[] forceStaticLambdas(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
+		final Set<String> instanceSyntheticMethods = new HashSet<>();
+		final Set<String> lambdaReferencedMethods  = new HashSet<>();
+		final Set<String> needConversion           = new HashSet<>();
+
+		try {
+			// Pass 1: 收集
+			new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+				@Override
+				public MethodVisitor visitMethod(int access, String name, String desc,
+				                                 String sig, String[] exc) {
+					if ((access & Opcodes.ACC_SYNTHETIC) != 0
+					    && (access & Opcodes.ACC_STATIC) == 0) {
+						instanceSyntheticMethods.add(name + ":" + desc);
+					}
+					return new MethodVisitor(Opcodes.ASM9) {
+						@Override
+						public void visitInvokeDynamicInsn(String indyName, String indyDesc,
+						                                   Handle bsm, Object... bsmArgs) {
+							if (!isLambdaMetafactory(bsm)) return;
+							if (bsmArgs.length < 2 || !(bsmArgs[1] instanceof Handle impl)) return;
+							if (!slashClassName.equals(impl.getOwner())) return;
+							lambdaReferencedMethods.add(impl.getName() + ":" + impl.getDesc());
+						}
+					};
+				}
+
+				@Override
+				public void visitEnd() {
+					for (String key : lambdaReferencedMethods) {
+						if (instanceSyntheticMethods.contains(key)) {
+							needConversion.add(key);
+						}
+					}
+				}
+			}, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+
+			if (needConversion.isEmpty()) return bytes;
+
+			// Pass 2: 转换
+			ClassReader cr2 = new ClassReader(bytes);
+			ClassWriter cw = new MyClassWriter(
+			 cr2, targetLoader);
+
+			cr2.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+				@Override
+				public MethodVisitor visitMethod(int access, String name, String desc,
+				                                 String sig, String[] exc) {
+					String key = name + ":" + desc;
+					if (needConversion.contains(key)) {
+						access |= Opcodes.ACC_STATIC;
+						desc = "(" + "L" + slashClassName + ";" + desc.substring(1);
+					}
+					MethodVisitor mv = super.visitMethod(access, name, desc, sig, exc);
+
+					return new MethodVisitor(Opcodes.ASM9, mv) {
+						@Override
+						public void visitInvokeDynamicInsn(String indyName, String indyDesc,
+						                                   Handle bsm, Object... bsmArgs) {
+							if (isLambdaMetafactory(bsm) && bsmArgs.length >= 2
+							    && bsmArgs[1] instanceof Handle impl) {
+								String key  = impl.getName() + ":" + impl.getDesc();
+								if (needConversion.contains(key)) {
+									// 只改 tag: H_INVOKESPECIAL → H_INVOKESTATIC
+									String newDesc = "(" + "L" + slashClassName + ";"
+                                    + impl.getDesc().substring(1);
+									// indyDesc 保持不变（编译器已包含 this）
+									bsmArgs[1] = new Handle(
+									 Opcodes.H_INVOKESTATIC,
+									 impl.getOwner(),
+									 impl.getName(),
+									 newDesc,
+									 impl.isInterface()
+									);
+								}
+							}
+							super.visitInvokeDynamicInsn(indyName, indyDesc, bsm, bsmArgs);
+						}
+					};
+				}
+			}, ClassReader.EXPAND_FRAMES);
+
+			return cw.toByteArray();
+		} catch (Exception e) {
+			HotSwapAgent.error("forceStaticLambdas failed for " + slashClassName, e);
+			return bytes;
+		}
+	}
+	/** 判断是否为 LambdaMetafactory 的 bootstrap 方法 */
+	private static boolean isLambdaMetafactory(Handle h) {
+		return "java/lang/invoke/LambdaMetafactory".equals(h.getOwner())
+		       && ("metafactory".equals(h.getName()) || "altMetafactory".equals(h.getName()));
+	}
 	private static byte[] injectBuildingProfiler(byte[] bytes) {
 		ClassReader cr = new ClassReader(bytes);
 		// 【修改点 1】必须使用 COMPUTE_FRAMES 来自动重新计算 StackMapTable
@@ -415,6 +532,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return node != null && node.isInterface;
 		}
 	}
+	/** 避免查找时，重新触发加载类  */
 	public static class MyClassWriter extends ClassWriter {
 		private final ClassLoader targetLoader;
 		public MyClassWriter(ClassReader cr, ClassLoader targetLoader) {

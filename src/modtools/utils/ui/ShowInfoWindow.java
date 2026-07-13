@@ -373,7 +373,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			field.setValidator(NumberHelper::isNumber);
 			field.changed(Tools.runT(() -> {
 				if (!field.isValid()) return;
-				l.setNewVal(NumberHelper.parse(field.getText(), l.type));
+				l.setNewVal(NumberHelper.parse(field.getText(), CAST.box(l.type)));
 			}));
 			cell.setElement(field);
 			cell.height(42);

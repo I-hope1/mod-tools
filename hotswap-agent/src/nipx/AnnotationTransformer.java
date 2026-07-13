@@ -55,11 +55,15 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		if (className == null) return null;
 
 		if (loader == null) return null;
-		if (className.startsWith("org/objectweb.asm/")) return null;
+		if (className.startsWith("org/objectweb/asm/")) return null;
 		if (className.startsWith("nipx/")) return null;
 
 		// 注册到继承树
 		HierarchyTree.register(classfileBuffer); // TODO: 如果父类是系统类，可能会出错
+
+
+		String dotClassName = className.replace('/', '.');
+		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
 		byte[]  bytes    = classfileBuffer;  // 不clone，用引用做"是否修改"判断
 		boolean modified = false;
@@ -75,9 +79,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				modified = true;
 			}
 		}
-
-		String dotClassName = className.replace('/', '.');
-		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 		if (classBeingRedefined != null) {
 			LambdaRef.onClassRedefined(dotClassName);
 			byte[] finalClassfileBuffer = classfileBuffer;
@@ -611,20 +612,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 					));
 				}
 				// 此时栈顶一定是 Object 引用，安全地通过 ASTORE 存入对应的单 slot 变量
-				wrapper.add(new VarInsnNode(ASTORE, temps[i]));
-			}
-
-			for (int i = captureCount - 1; i >= 0; i--) {
-				Type ct = captureTypes[i];
-				if (isPrimitive(ct.getSort())) {
-					wrapper.add(new MethodInsnNode(
-					 INVOKESTATIC,
-					 getWrapperClass(ct.getSort()),
-					 "valueOf",
-					 getBoxMethodDesc(ct.getSort()),
-					 false
-					));
-				}
 				wrapper.add(new VarInsnNode(ASTORE, temps[i]));
 			}
 

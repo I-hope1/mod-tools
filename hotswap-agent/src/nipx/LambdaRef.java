@@ -7,11 +7,11 @@ import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.event.EventListener;
 import arc.scene.ui.*;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import nipx.ref.UpdateRef;
 import org.objectweb.asm.*;
-import org.objectweb.asm.Label;
 import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.lang.reflect.Field;

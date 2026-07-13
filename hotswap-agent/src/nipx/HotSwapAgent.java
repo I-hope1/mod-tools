@@ -2,6 +2,7 @@ package nipx;
 
 import arc.Core;
 import nipx.annotation.*;
+import nipx.jvmti.LibTool;
 import nipx.ref.InitFix;
 import nipx.uihook.*;
 import nipx.util.*;
@@ -364,9 +365,7 @@ public class HotSwapAgent {
 			return;
 		}
 
-		var instances = InstanceTracker.getInstances(clazz);
-		if (instances.isEmpty()) return;
-
+		Object[] instances = LibTool.initialized() ? LibTool.getInstances(clazz) : InstanceTracker.getInstances(clazz).toArray();
 
 		for (Object obj : instances) {
 			try {

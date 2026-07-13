@@ -9,6 +9,9 @@ public class InstanceTracker {
 
 	// 被注入的代码会调用这个
 	public static void register(Object obj) {
+		/* // 已经有更好的方法
+		if (LibTool.initialized()) return; */
+		if (obj == null) return;
 		watchedInstances.add(obj);
 	}
 

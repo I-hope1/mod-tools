@@ -25,6 +25,8 @@ import static org.objectweb.asm.Opcodes.*;
  * @see OnReload
  */
 public class AnnotationTransformer implements ClassFileTransformer {
+
+	//region Fields and Annotation Utilities
 	// 预先计算注解的描述符，避免重复计算
 	static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
 
@@ -44,143 +46,16 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG);
 		return found[0];
 	}
+	//endregion
 
-
-	/** @see InstanceTracker */
-	private static byte[] injectTracker(byte[] bytes, String slashClassName, ClassLoader classLoader) {
-		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
-
-		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
-			@Override
-			public MethodVisitor visitMethod(int access, String name, String descriptor,
-			                                 String signature, String[] exceptions) {
-				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-				// 只拦截构造函数 <init>
-				if ("<init>".equals(name)) {
-					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
-						@Override
-						protected void onMethodExit(int opcode) {
-							// 在构造函数返回之前 (RETURN 或 ATHROW 之前) 插入代码
-							if (opcode != ATHROW) {
-								// 加载 this
-								mv.visitVarInsn(ALOAD, 0);
-								// 调用静态方法: InstanceTracker.register(Object)
-								// 注意：你需要确保 InstanceTracker 类在目标 ClassLoader 中可见！
-								// 如果 Agent 在 BootClassLoader，而目标类在 AppClassLoader，
-								// 这里可能需要反射调用，或者把 Tracker 注入到 AppClassLoader。
-								// 简单起见，假设它们能互相访问。
-								mv.visitMethodInsn(INVOKESTATIC,
-								 dot2slash(InstanceTracker.class),
-								 "register", "(Ljava/lang/Object;)V", false);
-							}
-						}
-					};
-				}
-				return mv;
-			}
-		};
-
-		cr.accept(cv, ClassReader.EXPAND_FRAMES);
-		return cw.toByteArray();
-	}
-
-	/**
-	 * @param slashClassName 类名，如 nipx/MyClass
-	 * @return 如果没有拦截点，则返回原始 bytes，否则返回修改后的字节码
-	 * @see nipx.profiler.ProfilerData
-	 */
-	private static byte[] injectProfiler(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
-		ClassReader cr = new ClassReader(bytes);
-		// COMPUTE_FRAMES 会调用 getCommonSuperClass 推断类型层级。
-		// 默认实现用 Class.forName 加载类，在 transformer 内部触发新的类加载，
-		// 可能导致 LinkageError: duplicate class definition（正在被定义的类被二次加载）。
-		// 解法：完全绕开类加载，直接从 bytecodeCache 读字节码提取 superName，
-		// 在 cache 中找不到时才 fallback 到 java/lang/Object。
-		ClassWriter cw = new MyClassWriter(cr, targetLoader);
-
-		var cv = new ClassVisitor(ASM9, cw) {
-			boolean anyProfiled = false;
-
-			@Override
-			public MethodVisitor visitMethod(int access, String name, String descriptor,
-			                                 String signature, String[] exceptions) {
-				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-
-				// 跳过构造函数、静态代码块、桥接方法等不需要统计的底层方法
-				if (name.startsWith("<") || (access & ACC_SYNTHETIC) != 0 || (access & ACC_BRIDGE) != 0) {
-					return mv;
-				}
-
-				return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
-					boolean isProfiled = false;
-					int     startTimeVar;
-					int     durationVar; // 用于存储计算好的耗时
-
-					@Override
-					public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-						if (descriptor.equals(profileDesc)) {
-							isProfiled = true;
-						}
-						return super.visitAnnotation(descriptor, visible);
-					}
-
-					@Override
-					protected void onMethodEnter() {
-						if (!isProfiled) return;
-						anyProfiled = true;
-
-						// 所有的局部变量分配 (newLocal) 必须在方法入口处统一执行一次！
-						startTimeVar = newLocal(Type.LONG_TYPE);
-						durationVar = newLocal(Type.LONG_TYPE);
-
-						// 记录 startTime = System.nanoTime();
-						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-						visitVarInsn(LSTORE, startTimeVar);
-					}
-
-					@Override
-					protected void onMethodExit(int opcode) {
-						// 如果是抛出异常退出，则不记录耗时（或者你也可以选择记录）
-						if (!isProfiled || opcode == ATHROW) return;
-
-						// 记录 duration = System.nanoTime() - startTime;
-						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-						visitVarInsn(LLOAD, startTimeVar);
-						visitInsn(LSUB);
-
-						// 【修正点】：这里直接 STORE 到刚才在 Enter 分配好的变量里，绝不能再 newLocal
-						visitVarInsn(LSTORE, durationVar);
-
-						// 提取类名简写 (例如从 mindustry/gen/Building 变成 Building)
-						String simpleClassName = slashClassName.substring(slashClassName.lastIndexOf('/') + 1);
-						// 推入参数 1：String methodName
-						visitLdcInsn(simpleClassName + "." + name);
-						// 推入参数 2：long duration
-						visitVarInsn(LLOAD, durationVar);
-						// 调用 ProfilerData.record(String, long)
-						visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData", "record", "(Ljava/lang/String;J)V", false);
-					}
-				};
-			}
-		};
-
-		try {
-			cr.accept(cv, ClassReader.EXPAND_FRAMES);
-			// 只有发生了实际注入，才返回新字节码，否则返回原始字节码节省内存
-			return cv.anyProfiled ? cw.toByteArray() : bytes;
-		} catch (Throwable e) {
-			HotSwapAgent.error("Profiler injection failed for " + slashClassName, e);
-			return bytes;
-		}
-	}
+	//region ClassFileTransformer Core
 	@Override
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 		if (className == null) return null;
 
 		if (loader == null) return null;
-		if (className.startsWith("org/objectweb/asm/")) return null;
+		if (className.startsWith("org/objectweb.asm/")) return null;
 		if (className.startsWith("nipx/")) return null;
 
 		// 注册到继承树
@@ -234,12 +109,186 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 		return null;
 	}
+	//endregion
 
+	//region Bytecode Injection - Instance Tracker
+	/** @see InstanceTracker */
+	private static byte[] injectTracker(byte[] bytes, String slashClassName, ClassLoader classLoader) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
-	// ====================================================================
-	// Lambda 静态化 — 预防 IncompatibleClassChangeError
-	// ====================================================================
+		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+				// 只拦截构造函数 <init>
+				if ("<init>".equals(name)) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodExit(int opcode) {
+							// 在构造函数返回之前 (RETURN 或 ATHROW 之前) 插入代码
+							if (opcode != ATHROW) {
+								// 加载 this
+								mv.visitVarInsn(ALOAD, 0);
+								// 调用静态方法: InstanceTracker.register(Object)
+								mv.visitMethodInsn(INVOKESTATIC,
+								 dot2slash(InstanceTracker.class),
+								 "register", "(Ljava/lang/Object;)V", false);
+							}
+						}
+					};
+				}
+				return mv;
+			}
+		};
 
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		return cw.toByteArray();
+	}
+	//endregion
+
+	//region Bytecode Injection - Profiler
+	/**
+	 * <p>注入代码到类中，添加方法调用
+	 * <p>跳过构造函数，静态代码块，桥接方法，以及无注解的方法
+	 * @param slashClassName 类名，如 nipx/MyClass
+	 * @return 如果没有拦截点，则返回原始 bytes，否则返回修改后的字节码
+	 * @see nipx.profiler.ProfilerData
+	 */
+	private static byte[] injectProfiler(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassWriter cw = new MyClassWriter(cr, targetLoader);
+
+		var cv = new ClassVisitor(ASM9, cw) {
+			boolean anyProfiled = false;
+
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+
+				// 跳过构造函数、静态代码块、桥接方法等不需要统计的底层方法
+				if (name.startsWith("<") || (access & ACC_SYNTHETIC) != 0 || (access & ACC_BRIDGE) != 0) {
+					return mv;
+				}
+
+				return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+					boolean isProfiled = false;
+					int     startTimeVar;
+					int     durationVar; // 用于存储计算好的耗时
+
+					@Override
+					public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+						if (descriptor.equals(profileDesc)) {
+							isProfiled = true;
+						}
+						return super.visitAnnotation(descriptor, visible);
+					}
+
+					@Override
+					protected void onMethodEnter() {
+						if (!isProfiled) return;
+						anyProfiled = true;
+
+						// 所有的局部变量分配 (newLocal) 必须在方法入口处统一执行一次！
+						startTimeVar = newLocal(Type.LONG_TYPE);
+						durationVar = newLocal(Type.LONG_TYPE);
+
+						// 记录 startTime = System.nanoTime();
+						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+						visitVarInsn(LSTORE, startTimeVar);
+					}
+
+					@Override
+					protected void onMethodExit(int opcode) {
+						// 如果是抛出异常退出，则不记录耗时（或者你也可以选择记录）
+						if (!isProfiled || opcode == ATHROW) return;
+
+						// 记录 duration = System.nanoTime() - startTime;
+						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+						visitVarInsn(LLOAD, startTimeVar);
+						visitInsn(LSUB);
+
+						// 直接 STORE 到刚才在 Enter 分配好的变量里，不再 newLocal
+						visitVarInsn(LSTORE, durationVar);
+
+						// 提取类名简写 (例如从 mindustry/gen/Building 变成 Building)
+						String simpleClassName = slashClassName.substring(slashClassName.lastIndexOf('/') + 1);
+						// 推入参数 1：String methodName
+						visitLdcInsn(simpleClassName + "." + name);
+						// 推入参数 2：long duration
+						visitVarInsn(LLOAD, durationVar);
+						// 调用 ProfilerData.record(String, long)
+						visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData", "record", "(Ljava/lang/String;J)V", false);
+					}
+				};
+			}
+		};
+
+		try {
+			cr.accept(cv, ClassReader.EXPAND_FRAMES);
+			// 只有发生了实际注入，才返回新字节码，否则返回原始字节码节省内存
+			return cv.anyProfiled ? cw.toByteArray() : bytes;
+		} catch (Throwable e) {
+			HotSwapAgent.error("Profiler injection failed for " + slashClassName, e);
+			return bytes;
+		}
+	}
+
+	private static byte[] injectBuildingProfiler(byte[] bytes) {
+		ClassReader cr = new ClassReader(bytes);
+		// 使用 COMPUTE_FRAMES 来自动重新计算 StackMapTable
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
+
+		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+
+				if ("updateTile".equals(name) && "()V".equals(descriptor)) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+						int startTimeVar;
+
+						@Override
+						protected void onMethodEnter() {
+							// 插入 nanoTime()
+							visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+							startTimeVar = newLocal(Type.LONG_TYPE);
+							visitVarInsn(LSTORE, startTimeVar);
+						}
+
+						@Override
+						protected void onMethodExit(int opcode) {
+							if (opcode != ATHROW) {
+								// 1. 获取当前时间并计算耗时
+								visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
+								visitVarInsn(LLOAD, startTimeVar);
+								visitInsn(LSUB);
+								int durationVar = newLocal(Type.LONG_TYPE);
+								visitVarInsn(LSTORE, durationVar);
+
+								// 2. 准备参数调用 recordBuilding(Object obj, long duration)
+								visitVarInsn(ALOAD, 0);      // 加载 this (Object类型)
+								visitVarInsn(LLOAD, durationVar); // 加载 duration
+
+								// 调用 Java 辅助方法
+								visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData",
+								 "recordBuilding", "(Ljava/lang/Object;J)V", false);
+							}
+						}
+					};
+				}
+				return mv;
+			}
+		};
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		return cw.toByteArray();
+	}
+	//endregion
+
+	//region Lambda Transformations
 	/**
 	 * 将当前类中所有实例 lambda 方法强制转为静态方法。
 	 * <p>
@@ -295,8 +344,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 			// Pass 2: 转换
 			ClassReader cr2 = new ClassReader(bytes);
-			ClassWriter cw = new MyClassWriter(
-			 cr2, targetLoader);
+			ClassWriter cw = new MyClassWriter(cr2, targetLoader);
 
 			cr2.accept(new ClassVisitor(ASM9, cw) {
 				@Override
@@ -342,9 +390,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 	}
-	// ====================================================================
-	// Lambda 捕获参数稳定化 — 预防 NoSuchMethodError
-	// ====================================================================
 
 	/**
 	 * 为每个 lambda 方法生成 Object[] 代理，将所有捕获变量打包成单一数组。
@@ -355,15 +400,13 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	private static byte[] stabilizeLambdaCaptures(byte[] bytes, String slashClassName, ClassLoader loader) {
 		ClassNode cn = new ClassNode(ASM9);
 		try {
-			// 修正点 1：使用 SKIP_FRAMES，防范重写指令和原 StackMapTable 冲突引发异常
+			// 使用 SKIP_FRAMES，防范重写指令和原 StackMapTable 冲突引发异常
 			new ClassReader(bytes).accept(cn, ClassReader.SKIP_FRAMES);
 		} catch (Exception e) {
 			return bytes;
 		}
 
-		// ============================
 		// Phase 1: 收集所有 lambda 方法
-		// ============================
 		Map<String, MethodNode> lambdaMethods = new LinkedHashMap<>();
 		for (MethodNode mn : cn.methods) {
 			if ((mn.access & ACC_SYNTHETIC) != 0 && mn.name.contains("lambda$")) {
@@ -372,9 +415,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 		if (lambdaMethods.isEmpty()) return bytes;
 
-		// ============================
 		// Phase 2: 扫描 invokedynamic
-		// ============================
 		record LambdaRef(MethodNode container, InvokeDynamicInsnNode indy, Handle impl, String implKey) { }
 
 		List<LambdaRef> references = new ArrayList<>();
@@ -395,9 +436,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 		if (references.isEmpty()) return bytes;
 
-		// ============================
 		// Phase 3: 为每个被引用的 lambda 生成代理方法
-		// ============================
 		Map<String, String> proxyMap = new HashMap<>();
 		Map<String, Boolean> forceCaptureThisMap = new HashMap<>(); // 用于同步 Phase 3 和 Phase 4 的强制捕获决策
 
@@ -408,13 +447,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			Type       originalType = Type.getMethodType(original.desc);
 			Type       returnType   = originalType.getReturnType();
 
-			// 修正点 2：从 invokedynamic 的描述符中精准提取捕获变量的类型，排除非捕获类的参数干扰
+			// 从 invokedynamic 的描述符中精准提取捕获变量的类型，排除非捕获类的参数干扰
 			Type[] captureTypes = Type.getArgumentTypes(ref.indy.desc);
 			int    captureCount = captureTypes.length;
 
-			// 【新增判定】：是否需要强制捕获 this
-			// 1. 外部容器方法必须是实例方法且【非构造函数】（由于构造函数未完成初始化，强制捕获 uninitializedThis 会导致 VerifyError）
-			// 2. 且当前 Lambda 描述符里第 0 位还没有捕获 this
 			boolean isInstanceMethod = (ref.container.access & ACC_STATIC) == 0;
 			boolean isConstructor = ref.container.name.equals("<init>");
 			boolean alreadyCapturesThis = captureTypes.length > 0
@@ -425,18 +461,18 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			// 将当前 Lambda 的强制捕获 this 决策记录，供 Phase 4 共享使用，避免多调用点决策不一致导致 ClassCastException
 			forceCaptureThisMap.put(ref.implKey, forceCaptureThis);
 
-			// 修正点 3：从 BSM 参数中提取最原本的 SAM 函数式接口形参类型
+			// 从 BSM 参数中提取最原本的 SAM 函数式接口形参类型
 			Type   samMethodType = (Type) ref.indy.bsmArgs[0];
 			Type[] samArgTypes   = samMethodType.getArgumentTypes();
 
 			String proxyName = original.name + "$args";
-			// 修正点 4：补齐缺失的数组标志 [。代理签名的入参一律特化为 ([Ljava/lang/Object;, SAMArgs...)ReturnType
+			// 补齐缺失的数组标志，代理签名的入参一律特化为 `([Ljava/lang/Object;, SAMArgs...)ReturnType`
 			Type[] proxyParamTypes = new Type[1 + samArgTypes.length];
 			proxyParamTypes[0] = Type.getType("[Ljava/lang/Object;");
 			System.arraycopy(samArgTypes, 0, proxyParamTypes, 1, samArgTypes.length);
 			String proxyDesc = Type.getMethodDescriptor(returnType, proxyParamTypes);
 
-			// ---------- 生成代理方法体 ----------
+			// 生成代理方法体
 			MethodNode proxy = new MethodNode(
 			 ACC_PRIVATE | ACC_STATIC | ACC_SYNTHETIC,
 			 proxyName, proxyDesc, null, null
@@ -482,7 +518,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				Type samType = samArgTypes[j];
 				insns.add(new VarInsnNode(getLoadOpcode(samType), slot));
 
-				// 修正点 5：只有当代理传入的形参类型与原目标方法要求的特化类型不一致时，才需要执行强转/拆箱
+				// 只有当代理传入的形参类型与原目标方法要求的特化类型不一致时，才需要执行强转/拆箱
 				if (samArgsStart + j < origParams.length) {
 					Type expectedType = origParams[samArgsStart + j];
 					if (!samType.equals(expectedType)) {
@@ -515,9 +551,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			proxyMap.put(ref.implKey, proxyName + ":" + proxyDesc);
 		}
 
-		// ============================
 		// Phase 4: 修改 invokedynamic 站点
-		// ============================
 		for (LambdaRef ref : references) {
 			InvokeDynamicInsnNode indy     = ref.indy;
 			String                proxyKey = proxyMap.get(ref.implKey);
@@ -527,11 +561,11 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			String proxyName = proxyKey.substring(0, colon);
 			String proxyDesc = proxyKey.substring(colon + 1);
 
-			// 修正点 6：确保从调用的 indy.desc 精确读得真实的捕获列表，消除 Operand stack underflow
+			// 确保从调用的 indy.desc 精确读得真实的捕获列表，消除 Operand stack underflow
 			Type[] captureTypes = Type.getArgumentTypes(indy.desc);
 			int    captureCount = captureTypes.length;
 
-			// 【判定】：重用 Phase 3 的强制捕获决策，避免多个调用点（例如不同构造函数、或者普通方法和构造方法）决策不一致引发 ClassCastException
+			// 重用 Phase 3 的强制捕获决策
 			boolean forceCaptureThis = forceCaptureThisMap.getOrDefault(ref.implKey, false);
 
 			// 4a: 精准计算调用侧方法内的最大可用 LVT 索引（双重防范本地槽冲突）
@@ -556,12 +590,28 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			// 4b: 插入打包代码（在 invokedynamic 之前）
 			InsnList wrapper = new InsnList();
 
-			// 4b-1: 按 getSize() 精确对齐每个暂存局部变量的宽度，防止 long/double 重叠覆盖
+			// 4b-1: 统一按 1 个 slot 分配所有临时变量
 			int[] temps     = new int[captureCount];
 			int   nextLocal = baseLocal;
 			for (int i = 0; i < captureCount; i++) {
 				temps[i] = nextLocal;
-				nextLocal += captureTypes[i].getSize();
+				nextLocal += 1; // 统一 +1，不使用 getSize()
+			}
+
+			// 倒序从操作数栈中 pop 出变量、装箱并存入临时变量中
+			for (int i = captureCount - 1; i >= 0; i--) {
+				Type ct = captureTypes[i];
+				if (isPrimitive(ct.getSort())) {
+					wrapper.add(new MethodInsnNode(
+					 INVOKESTATIC,
+					 getWrapperClass(ct.getSort()),
+					 "valueOf",
+					 getBoxMethodDesc(ct.getSort()),
+					 false
+					));
+				}
+				// 此时栈顶一定是 Object 引用，安全地通过 ASTORE 存入对应的单 slot 变量
+				wrapper.add(new VarInsnNode(ASTORE, temps[i]));
 			}
 
 			for (int i = captureCount - 1; i >= 0; i--) {
@@ -616,9 +666,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			);
 		}
 
-		// ============================
 		// Phase 5: 写出
-		// ============================
 		MyClassWriter cw = new MyClassWriter(loader, ClassWriter.COMPUTE_FRAMES);
 		try {
 			cn.accept(cw);
@@ -628,9 +676,9 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 	}
+	//endregion
 
-	// ==================== 小工具方法 ====================
-
+	//region ASM and Bytecode Utilities
 	private static void pushDefaultValue(InsnList insns, Type type) {
 		int sort = type.getSort();
 		insns.add(new InsnNode(switch (sort) {
@@ -641,12 +689,14 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			default -> ACONST_NULL;
 		}));
 	}
+
 	/** 判断是否为 LambdaMetafactory 的 bootstrap 方法 */
 	private static boolean isLambdaMetafactory(Handle h) {
 		return "java/lang/invoke/LambdaMetafactory".equals(h.getOwner())
 		       && ("metafactory".equals(h.getName()) || "altMetafactory".equals(h.getName()));
 	}
-	// 修正点 7：更正 Primitive 判定上限至 DOUBLE
+
+	/** 判断是否为原始类型  */
 	private static boolean isPrimitive(int sort) {
 		return sort >= Type.BOOLEAN && sort <= Type.DOUBLE;
 	}
@@ -760,59 +810,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		return type.getOpcode(ISTORE);
 	}
 
-	private static byte[] injectBuildingProfiler(byte[] bytes) {
-		ClassReader cr = new ClassReader(bytes);
-		// 【修改点 1】必须使用 COMPUTE_FRAMES 来自动重新计算 StackMapTable
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
-
-		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
-			@Override
-			public MethodVisitor visitMethod(int access, String name, String descriptor,
-			                                 String signature, String[] exceptions) {
-				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-
-				if ("updateTile".equals(name) && "()V".equals(descriptor)) {
-					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
-						int startTimeVar;
-
-						@Override
-						protected void onMethodEnter() {
-							// 插入 nanoTime()
-							visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-							startTimeVar = newLocal(Type.LONG_TYPE);
-							visitVarInsn(LSTORE, startTimeVar);
-						}
-
-						@Override
-						protected void onMethodExit(int opcode) {
-							if (opcode != ATHROW) {
-								// 1. 获取当前时间并计算耗时
-								visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
-								visitVarInsn(LLOAD, startTimeVar);
-								visitInsn(LSUB);
-								int durationVar = newLocal(Type.LONG_TYPE);
-								visitVarInsn(LSTORE, durationVar);
-
-								// 2. 准备参数调用 recordBuilding(Object obj, long duration)
-								visitVarInsn(ALOAD, 0);      // 加载 this (Object类型)
-								visitVarInsn(LLOAD, durationVar); // 加载 duration
-
-								// 调用我们刚才定义的 Java 辅助方法
-								visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData",
-								 "recordBuilding", "(Ljava/lang/Object;J)V", false);
-							}
-						}
-					};
-				}
-				return mv;
-			}
-		};
-		cr.accept(cv, ClassReader.EXPAND_FRAMES);
-		return cw.toByteArray();
-	}
-	// --------------
-
-
 	private static void writeTo(String className, byte[] classfileBuffer) {
 		File file = new File("./classes/" + className + ".class");
 		file.getParentFile().mkdirs();
@@ -843,8 +840,9 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		return "L" + dot2slash(cls) + ";";
 	}
+	//endregion
 
-
+	//region Hierarchy Tree
 	/**
 	 * 类层级缓存树
 	 * 用于在不触发 ClassLoader.loadClass 的前提下，判断类的继承与实现关系
@@ -928,7 +926,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			ClassNode node = tree.get(slashName);
 			if (node != null) return node;
 
-			// 尝试从缓存获取 (兼容你原有的 bytecodeCache)
+			// 尝试从缓存获取 (兼容原有的 bytecodeCache)
 			String dotName     = slashName.replace('/', '.');
 			byte[] cachedBytes = bytecodeCache.get(dotName);
 			if (cachedBytes != null) {
@@ -954,7 +952,16 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return node != null && node.isInterface;
 		}
 	}
-	/** 避免查找时，重新触发加载类 */
+	//endregion
+
+	//region Custom ClassWriter
+	/**
+	 *  <p>COMPUTE_FRAMES 会调用 getCommonSuperClass 推断类型层级。
+	 *  <p>默认实现用 Class.forName 加载类，在 transformer 内部触发新的类加载，
+	 *  <p>可能导致 LinkageError: duplicate class definition（正在被定义的类被二次加载）。
+	 *  <p>该类完全绕开类加载，直接从 bytecodeCache 读字节码提取 superName，
+	 *  <p>在 cache 中找不到时才 fallback 到 java/lang/Object。
+	 **/
 	public static class MyClassWriter extends ClassWriter {
 		private final ClassLoader targetLoader;
 		public MyClassWriter(ClassReader cr, ClassLoader targetLoader) {
@@ -1010,4 +1017,5 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 	}
+	//endregion
 }

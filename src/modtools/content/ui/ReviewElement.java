@@ -967,10 +967,6 @@ public class ReviewElement extends Content {
 		Settings(Class<?> a, Cons<ISettings> builder) { }
 	}
 
-	// ========================================================================
-	// 1. 核心抽象：DetailEntry 接口
-	// ========================================================================
-
 	/**
 	 * 代表信息面板中的一个可管理的条目。
 	 * 每个条目封装了自己的UI、更新逻辑和可见性规则。
@@ -991,11 +987,6 @@ public class ReviewElement extends Content {
 		boolean valid(Element element);
 	}
 
-
-	// ========================================================================
-	// 2. 重构后的 InfoDetails 类
-	// ========================================================================
-
 	/**
 	 * InfoDetails 现在是一个高层次的协调者。
 	 * 它管理一个DetailEntry列表，并委托所有构建和更新任务。
@@ -1010,19 +1001,31 @@ public class ReviewElement extends Content {
 			entries.add(new SimpleEntry("Touchable", e -> FormatHelper.touchable(e.touchable), e -> touchableToColor(e.touchable)));
 			entries.add(new ColorEntry());
 			entries.add(new BoolEntry("Transform", e -> e instanceof Group g && g.isTransform()));
-			entries.add(new ElemFieldEntry("rotation"));
-			entries.add(new ElemFieldEntry(Element.class, "translation", new PairCons(", ")));
 			entries.add(new RotationEntry());
+
+			entries.add(new Vec2Entry<>("Translation", Element.class,
+			 e -> e.translation,
+			 e -> e.translation.x != 0 || e.translation.y != 0, ", ")
+			);
 			entries.add(new StyleEntry());
 			entries.add(new AlignEntry<>("Align", Table.class, Table::getAlign));
-			entries.add(new ElemScaleEntry());
+			entries.add(new Vec2Entry<>("ElemScale", Element.class,
+			 e -> Tmp.v1.set(e.scaleX, e.scaleY),
+			 e -> !Mathf.equal(e.scaleX, 1) || !Mathf.equal(e.scaleY, 1))
+			);
 
 			// Cell 相关条目
 			entries.add(new SeparatorEntry(4, 2, 4, 2));
 			entries.add(new CellAlignEntry());
 			entries.add(new ColspanEntry());
-			entries.add(new SizePairEntry("MinSize", CellTools::minSize, cell -> CellTools.minWidth(cell) != 0 || CellTools.minHeight(cell) != 0));
-			entries.add(new SizePairEntry("MaxSize", CellTools::maxSize, cell -> CellTools.maxWidth(cell) != 0 || CellTools.maxHeight(cell) != 0));
+			entries.add(new Vec2Entry<>("MinSize", Cell.class,
+			 cell -> CellTools.minSize(cell).scl(1 / Scl.scl()),
+			 cell -> CellTools.minWidth(cell) != 0 || CellTools.minHeight(cell) != 0)
+			);
+			entries.add(new Vec2Entry<>("MaxSize", Cell.class,
+			 cell -> CellTools.maxSize(cell).scl(1 / Scl.scl()),
+			 cell -> CellTools.maxWidth(cell) != 0 || CellTools.maxHeight(cell) != 0)
+			);
 			entries.add(new BoolPairEntry<Cell<?>>("Expand", ProviderType.cell, cell -> Tmp.v1.set(CellTools.expandX(cell), CellTools.expandY(cell))));
 			entries.add(new BoolPairEntry<Cell<?>>("Fill", ProviderType.cell, cell -> Tmp.v1.set(CellTools.fillX(cell), CellTools.fillY(cell))));
 			entries.add(new BoolPairEntry<Cell<?>>("Uniform", ProviderType.cell, cell -> Tmp.v1.set(CellTools.uniformX(cell) ? 1 : 0, CellTools.uniformY(cell) ? 1 : 0)));
@@ -1031,6 +1034,10 @@ public class ReviewElement extends Content {
 			entries.add(new SeparatorEntry(4, 2, 4, 2));
 			entries.add(new AlignEntry<>("LabelAlign", Label.class, Label::getLabelAlign));
 			entries.add(new AlignEntry<>("LineAlign", Label.class, Label::getLineAlign));
+			entries.add(new Vec2Entry<>("LabelScale", Label.class,
+			 l -> Tmp.v1.set(l.getFontScaleX(), l.getFontScaleY()),
+			 l -> !Mathf.equal(l.getFontScaleX(), 1) || !Mathf.equal(l.getFontScaleY(), 1))
+			);
 			entries.add(new LabelWrapEntry());
 			entries.add(new ScalingEntry());
 
@@ -1082,11 +1089,6 @@ public class ReviewElement extends Content {
 		}
 	}
 
-
-	// ========================================================================
-	// 3. 重构后的 ReviewFocusTask 类
-	// ========================================================================
-
 	/**
 	 * ReviewFocusTask 现在职责清晰：
 	 * - 绘制焦点视觉效果。
@@ -1123,7 +1125,7 @@ public class ReviewElement extends Content {
 		}
 		@Override
 		public void drawFocus(Element elem, Vec2 pos) {
-			// --- 步骤 1: 绘制焦点 (原始逻辑) ---
+			// --- 步骤 1: 绘制焦点 ---
 			super.afterAll();
 			if (FOCUS_WINDOW instanceof ReviewElementWindow w && w.drawCell) {
 				if (elem.parent instanceof Table t0) {
@@ -1136,14 +1138,14 @@ public class ReviewElement extends Content {
 
 			if (!hoverInfoWindow.enabled()) return;
 
-			// --- 步骤 2: 更新数据模型 (性能优化的核心) ---
+			// --- 步骤 2: 更新数据模型 ---
 			// 只有当焦点元素改变时，才执行昂贵的更新和布局操作
 			if (elem != lastFocusedElement) {
 				updateInfoPanel(elem);
 				lastFocusedElement = elem;
 			}
 
-			// --- 步骤 3: 绘制UI (轻量级) ---
+			// --- 步骤 3: 绘制UI ---
 			// table.draw() 只是将已计算好的顶点数据发送给GPU，非常快。
 			table.draw();
 		}
@@ -1248,11 +1250,6 @@ public class ReviewElement extends Content {
 		}
 
 	}
-
-	// ========================================================================
-	// 4. DetailEntry 的具体实现类
-	//    这些类现在封装了所有的UI和逻辑。
-	// ========================================================================
 	//region Entry classes
 
 	/** 辅助基类，用于处理通用的 "Key: Value" 行，并管理可见性 */
@@ -1421,37 +1418,65 @@ public class ReviewElement extends Content {
 			});
 		}
 	}
-	private static class RotationEntry extends BaseEntry {
-		private VLabel rotationLabel;
-		@Override
-		public void build(Table table) {
-			rotationLabel = new VLabel(valueScale, Color.lightGray);
-			buildRow(table, "Rotation", rotationLabel);
+
+	/**
+	 * 通用的二维向量/双值展示条目
+	 * @param <T> 数据源的类型（例如 Element, Cell, 或其他自定义类型）
+	 */
+	private static class Vec2Entry<T> extends BaseEntry {
+		private final String        key;
+		private final Class<T>      targetClass;
+		private final Func<T, Vec2> vecProvider;
+		private final Boolf<T>      visibilityChecker;
+		private final String        delimiter;
+
+		private final Vec2 tempVec = new Vec2();
+
+		public Vec2Entry(String key, Class<T> targetClass, Func<T, Vec2> vecProvider, Boolf<T> visibilityChecker) {
+			this(key, targetClass, vecProvider, visibilityChecker, " × ");
 		}
 
-		@Override
-		public void update(Element element) {
-			boolean visible = Mathf.equal(element.rotation % 360f, 0);
-			setVisible(visible);
-			if (visible) {
-				rotationLabel.setText(fixed(element.rotation));
+		public Vec2Entry(String key, Class<T> targetClass, Func<T, Vec2> vecProvider, Boolf<T> visibilityChecker,
+		                 String delimiter) {
+			this.key = key;
+			this.targetClass = targetClass;
+			this.vecProvider = vecProvider;
+			this.visibilityChecker = visibilityChecker;
+			this.delimiter = delimiter;
+
+			// 如果目标是 Cell，自动挂载 Cell 存在性检查
+			if (targetClass == Cell.class) {
+				cellValidator();
 			}
 		}
-	}
 
-	private static class ElemScaleEntry extends BaseEntry {
-		private final Vec2 scaleVec = new Vec2();
 		@Override
 		public void build(Table table) {
-			VLabel scaleLabel = new VLabel(valueScale, Color.white);
-			scaleLabel.setText(new SizeProv(() -> scaleVec, " × "));
-			buildRow(table, "ElemScale", scaleLabel);
+			// SizeProv 会自动根据 delimiter 格式化 tempVec
+			SizeProv sizeProv   = new SizeProv(() -> tempVec, delimiter);
+			Label    valueLabel = new Label("");
+			valueLabel.setFontScale(valueScale);
+			valueLabel.setText(sizeProv);
+			buildRow(table, key, valueLabel);
 		}
+
+		@SuppressWarnings("unchecked")
 		@Override
 		public void update(Element element) {
-			scaleVec.set(element.scaleX, element.scaleY);
-			boolean visible = !Mathf.equal(element.scaleX, 1) && Mathf.equal(element.scaleY, 1);
+			T target = null;
+			if (targetClass == Cell.class) {
+				// 特殊处理 Cell 类型
+				target = (T) CellTools.getCell(element);
+			} else if (targetClass.isInstance(element)) {
+				target = (T) element;
+			}
+
+			boolean visible = target != null && (visibilityChecker == null || visibilityChecker.get(target));
 			setVisible(visible);
+
+			if (visible) {
+				tempVec.set(vecProvider.get(target));
+			}
 		}
 	}
 	private static class ScalingEntry extends BaseEntry {
@@ -1472,7 +1497,23 @@ public class ReviewElement extends Content {
 			setVisible(imgVisible);
 		}
 	}
+	private static class RotationEntry extends BaseEntry {
+		private VLabel rotationLabel;
+		@Override
+		public void build(Table table) {
+			rotationLabel = new VLabel(valueScale, Color.lightGray);
+			buildRow(table, "Rotation", rotationLabel);
+		}
 
+		@Override
+		public void update(Element element) {
+			boolean visible = !Mathf.equal(element.rotation % 360f, 0);
+			setVisible(visible);
+			if (visible) {
+				rotationLabel.setText(fixed(element.rotation));
+			}
+		}
+	}
 	private static class StyleEntry extends BaseEntry {
 		private Label styleLabel;
 		@Override
@@ -1621,52 +1662,6 @@ public class ReviewElement extends Content {
 			bindCell.toggle(b);
 		}
 	}
-	/**
-	 * 用于显示一个 Vec2 值的条目，例如 MinSize, MaxSize。
-	 * 它使用 SizeProv 来格式化输出。
-	 */
-	private static class SizePairEntry extends BaseEntry {
-		private final String                 key;
-		private final Func<Cell<?>, Vec2>    valueProvider;
-		private final Func<Cell<?>, Boolean> visibilityChecker;
-		private final Vec2                   valueVec = new Vec2();
-
-		/**
-		 * @param key               显示的标签文本，如 "MinSize"
-		 * @param valueProvider     一个函数，根据 Cell 返回 Vec2 值
-		 * @param visibilityChecker 一个函数，判断此条目是否应该可见
-		 */
-		public SizePairEntry(String key, Func<Cell<?>, Vec2> valueProvider, Func<Cell<?>, Boolean> visibilityChecker) {
-			this.key = key;
-			this.valueProvider = valueProvider;
-			this.visibilityChecker = visibilityChecker;
-			cellValidator();
-		}
-
-		@Override
-		public void build(Table table) {
-			// SizeProv 会自动监听 valueVec 的变化并更新文本
-			SizeProv sizeProv   = new SizeProv(() -> valueVec);
-			Label    valueLabel = new Label(sizeProv);
-			valueLabel.setFontScale(valueScale); // 假设 valueScale 是一个可访问的常量
-			buildRow(table, key, valueLabel);
-		}
-
-		@Override
-		public void update(Element element) {
-			Cell<?> cell = CellTools.getCell(element);
-
-			boolean visible = visibilityChecker.get(cell);
-			setVisible(visible);
-
-			if (visible) {
-				// 从 provider 获取值并更新本地的 Vec2，
-				// SizeProv 会自动处理标签的文本更新。
-				Vec2 providedValue = valueProvider.get(cell);
-				valueVec.set(providedValue.scl(1 / Scl.scl())); // 假设需要进行缩放
-			}
-		}
-	}
 	private enum ProviderType {
 		element(Element.class), label(Label.class), scroll(ScrollPane.class),
 		cell(Element.class) {
@@ -1731,33 +1726,7 @@ public class ReviewElement extends Content {
 			return enabled ? "[accent]" : "[gray]";
 		}
 	}
-	private static class TranslationEntry extends BaseEntry {
-		private final Vec2 translationVec = new Vec2();
-
-		@Override
-		public void build(Table table) {
-			// PairProv 会自动监听 translationVec 的变化
-			PairProv pairProv         = new PairProv(() -> translationVec, ", ");
-			Label    translationLabel = new VLabel("", valueScale, Color.orange);
-			translationLabel.setText(pairProv);
-			buildRow(table, "Translation", translationLabel);
-		}
-
-		@Override
-		public void update(Element element) {
-			Vec2    translation = element.translation;
-			boolean visible     = (translation.x != 0 || translation.y != 0);
-			setVisible(visible);
-
-			if (visible) {
-				// 更新本地的 Vec2，PairProv 会自动更新 Label 的文本
-				translationVec.set(translation);
-			}
-		}
-	}
-	/**
-	 * 用于显示 Table, Label 的 align 属性。
-	 */
+	/** 用于显示 Table, Label 的 align 属性。 */
 	private static class AlignEntry<P> extends BaseEntry {
 		private final String   key;
 		private final Class<P> providerClass;

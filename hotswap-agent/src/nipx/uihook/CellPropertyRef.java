@@ -1,7 +1,10 @@
 package nipx.uihook;
 
 import arc.Core;
+import arc.scene.Element;
+import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
+import arc.scene.ui.*;
 import nipx.Injector;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -17,11 +20,13 @@ import static nipx.AnnotationTransformer.internalName;
 import static nipx.HotSwapAgent.*;
 import static org.objectweb.asm.Opcodes.*;
 
-/** Cell 属性追踪器 */
+/** Cell 属性及子元素追踪器 */
+@SuppressWarnings({"rawtypes", "unchecked"})
 public class CellPropertyRef {
 
 	public static final String CL_TABLE = "arc/scene/ui/layout/Table";
 	public static final String CL_CELL = "arc/scene/ui/layout/Cell";
+
 	//region 数据结构
 	public record PropertyCall(String method, String desc, Object[] args, int line) { }
 
@@ -32,10 +37,10 @@ public class CellPropertyRef {
 	/** Cell → 唯一标识（使用 WeakHashMap，防止 Cell 内存泄漏） */
 	private static final Map<Cell<?>, CellIdentity> cellToId = new WeakHashMap<>();
 
-	/** 唯一标识 → Cell 弱引用（实现 O(1) 级别的高性能反向查找） */
+	/** 唯一标识 → Cell 弱引用 */
 	private static final Map<CellIdentity, WeakReference<Cell<?>>> idToCell = new ConcurrentHashMap<>();
 
-	/** 标识 → 当前属性调用列表 */
+	/** 标识 → 当前方法调用链列表 (首个元素为 CreatorCall) */
 	private static final Map<CellIdentity, List<PropertyCall>> records = new ConcurrentHashMap<>();
 
 	/** 宿主类 → 该类的所有 Cell 标识 */
@@ -48,9 +53,69 @@ public class CellPropertyRef {
 	private static volatile boolean enabled = false;
 	//endregion
 
-	//region 运行时记录
+	//region 运行时记录与生命周期
+	/** 运行时：在 Cell 实例构造结束时自动捕获注册 */
+	public static void registerCellAtCreation(Cell<?> cell) {
+		if (!enabled || cell == null) return;
+
+		StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+
+		// 寻找 Cell 的构造函数栈帧位置
+		int cellInitIdx = -1;
+		for (int i = 0; i < stack.length; i++) {
+			String cn = stack[i].getClassName();
+			if (cn.equals("arc.scene.ui.layout.Cell") && stack[i].getMethodName().equals("<init>")) {
+				cellInitIdx = i;
+				break;
+			}
+		}
+
+		// Table 的 creator 方法 (如 add, button, image 等) 是构造函数的上一级，它的上一级才是宿主
+		if (cellInitIdx == -1 || cellInitIdx + 2 >= stack.length) {
+			return;
+		}
+
+		StackTraceElement hostFrame = stack[cellInitIdx + 2];
+		String hostClass = hostFrame.getClassName();
+
+		// 如果创建该单元格的直接源头是底层库，则属于隐式嵌套，不予追踪
+		if (hostClass.startsWith("arc.") || hostClass.startsWith("java.") || hostClass.startsWith("nipx.")) {
+			return;
+		}
+
+		String hostMethod = hostFrame.getMethodName();
+		String hostDesc = "()V"; // 占位签名
+
+		String slashClass = hostClass.replace('.', '/');
+		String key = slashClass + "#" + hostMethod + ":" + hostDesc;
+
+		int seq;
+		synchronized (methodCounters) {
+			int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
+			seq = counter[0]++;
+		}
+
+		CellIdentity id = new CellIdentity(slashClass, hostMethod, hostDesc, seq);
+
+		synchronized (cellToId) {
+			cellToId.put(cell, id);
+		}
+		idToCell.put(id, new WeakReference<>(cell));
+		classToCells.computeIfAbsent(slashClass, _ -> new CopyOnWriteArrayList<>()).add(id);
+
+		if (DEBUG) {
+			log("[CellProperty] Registered at creation: " + id.hostClass + "#"
+			    + id.hostMethod + "[" + id.sequence + "]");
+		}
+	}
+
 	public static void registerCell(Cell<?> cell, String hostClass, String hostMethod, String hostDesc) {
 		if (!enabled || cell == null) return;
+
+		// 避免因构造阶段已被成功捕捉后的重复注册
+		synchronized (cellToId) {
+			if (cellToId.containsKey(cell)) return;
+		}
 
 		String key = hostClass + "#" + hostMethod + ":" + hostDesc;
 		int    seq;
@@ -65,13 +130,7 @@ public class CellPropertyRef {
 			cellToId.put(cell, id);
 		}
 		idToCell.put(id, new WeakReference<>(cell));
-
 		classToCells.computeIfAbsent(hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
-
-		if (DEBUG) {
-			log("[CellProperty] Registered " + id.hostClass + "#"
-			    + id.hostMethod + "[" + id.sequence + "]");
-		}
 	}
 
 	public static void recordPropertyCall(Cell<?> cell, String method, String desc, Object[] args) {
@@ -82,7 +141,6 @@ public class CellPropertyRef {
 			id = cellToId.get(cell);
 		}
 		if (id == null) {
-			// 未注册的 Cell — 尝试栈推断
 			id = inferCellIdentity(cell);
 			if (id == null) return;
 
@@ -90,9 +148,32 @@ public class CellPropertyRef {
 				cellToId.put(cell, id);
 			}
 			idToCell.put(id, new WeakReference<>(cell));
-
-			// 将推断出的 id 注册进宿主类的 Cell 列表中
 			classToCells.computeIfAbsent(id.hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
+		}
+
+		if (!records.containsKey(id)) {
+			try {
+				byte[] currentBytecode = fetchCurrentBytecode(Class.forName(id.hostClass.replace('/', '.')));
+				if (currentBytecode != null) {
+					Map<String, List<List<PropertyCall>>> currentChains = extractCellChains(currentBytecode);
+					String methodKey = id.hostMethod + ":" + id.hostDesc;
+					List<List<PropertyCall>> chains = currentChains.get(methodKey);
+					if (chains == null) {
+						for (Map.Entry<String, List<List<PropertyCall>>> entry : currentChains.entrySet()) {
+							if (entry.getKey().startsWith(id.hostMethod + ":")) {
+								chains = entry.getValue();
+								break;
+							}
+						}
+					}
+					if (chains != null && id.sequence < chains.size()) {
+						records.put(id, new CopyOnWriteArrayList<>(chains.get(id.sequence)));
+					}
+				}
+			} catch (Throwable t) {
+				// 忽略提取失败
+			}
+			records.putIfAbsent(id, new CopyOnWriteArrayList<>());
 		}
 
 		int line = -1;
@@ -100,8 +181,19 @@ public class CellPropertyRef {
 			line = inferLineNumber();
 		}
 
-		PropertyCall call = new PropertyCall(method, desc, args, line);
-		records.computeIfAbsent(id, _ -> new CopyOnWriteArrayList<>()).add(call);
+		List<PropertyCall> chain = records.get(id);
+		if (chain != null) {
+			boolean exists = false;
+			for (PropertyCall pc : chain) {
+				if (pc.method.equals(method) && argsEqual(pc.args, args)) {
+					exists = true;
+					break;
+				}
+			}
+			if (!exists) {
+				chain.add(new PropertyCall(method, desc, args, line));
+			}
+		}
 
 		if (DEBUG) {
 			log("[CellProperty] " + id.hostClass + "#" + id.hostMethod + "[" + id.sequence
@@ -123,13 +215,16 @@ public class CellPropertyRef {
 			return;
 		}
 
-		// 提取新字节码中的 Cell 调用链
 		Map<String, List<List<PropertyCall>>> newChainsByMethod = extractCellChains(newBytecode);
 
 		int totalUpdated = 0;
 		int totalSkipped = 0;
+		int totalRemoved = 0;
+		int totalAdded = 0;
 
-		for (CellIdentity id : cellIds) {
+		List<CellIdentity> idsSnapshot = new ArrayList<>(cellIds);
+
+		for (CellIdentity id : idsSnapshot) {
 			Cell<?> cell = findCellById(id);
 			if (cell == null) {
 				totalSkipped++;
@@ -139,7 +234,6 @@ public class CellPropertyRef {
 			String                   methodKey = id.hostMethod + ":" + id.hostDesc;
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
 
-			// 模糊匹配：匹配首个以方法名开头的方法链（忽略参数签名差异）
 			if (newChains == null) {
 				for (Map.Entry<String, List<List<PropertyCall>>> entry : newChainsByMethod.entrySet()) {
 					if (entry.getKey().startsWith(id.hostMethod + ":")) {
@@ -149,35 +243,117 @@ public class CellPropertyRef {
 				}
 			}
 
+			// 【一、删除逻辑】：如果新的调用链不再包含该 Cell (注释/删除)
 			if (newChains == null || id.sequence >= newChains.size()) {
-				totalSkipped++;
+				Table table = cell.getTable();
+				if (table != null) {
+					Element element = cell.get();
+					if (element != null) {
+						element.remove();
+					}
+					try {
+						table.getCells().remove(cell, true);
+					} catch (Throwable t) {
+						// 忽略
+					}
+					Core.app.post(table::invalidateHierarchy);
+				}
+				removeCell(cell);
+				totalRemoved++;
 				continue;
 			}
 
 			List<PropertyCall> newCalls = newChains.get(id.sequence);
 			List<PropertyCall> oldCalls = records.get(id);
 
-			if (oldCalls == null) {
-				applyAllCalls(cell, newCalls);
+			if (oldCalls == null || oldCalls.isEmpty()) {
+				if (!newCalls.isEmpty() && isTableCellCreator(CL_TABLE, newCalls.get(0).method)) {
+					updateChildElement(cell, newCalls.get(0));
+				}
+				List<PropertyCall> properties = newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size());
+				applyAllCalls(cell, properties);
 				totalUpdated++;
 			} else {
 				boolean applied = applyDiff(cell, oldCalls, newCalls);
 				if (applied) totalUpdated++;
 			}
-			Core.app.post(cell.get()::invalidateHierarchy);
+			Core.app.post(() -> {
+				if (cell.get() != null) {
+					cell.get().invalidateHierarchy();
+				}
+			});
 
 			records.put(id, newCalls);
 		}
 
-		info("[CellProperty] Updated " + totalUpdated + " Cells, skipped "
-		     + totalSkipped + " for " + dotClassName);
+		// 【二、新增逻辑】：当新链数量多于旧链时，追加多出来的 UI 元素
+		if (!idsSnapshot.isEmpty()) {
+			CellIdentity firstId = idsSnapshot.get(0);
+			String       methodKey = firstId.hostMethod + ":" + firstId.hostDesc;
+			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
+
+			if (newChains == null) {
+				for (Map.Entry<String, List<List<PropertyCall>>> entry : newChainsByMethod.entrySet()) {
+					if (entry.getKey().startsWith(firstId.hostMethod + ":")) {
+						newChains = entry.getValue();
+						break;
+					}
+				}
+			}
+
+			if (newChains != null && newChains.size() > idsSnapshot.size()) {
+				Table table = null;
+				for (CellIdentity id : idsSnapshot) {
+					Cell<?> existingCell = findCellById(id);
+					if (existingCell != null && existingCell.getTable() != null) {
+						table = existingCell.getTable();
+						break;
+					}
+				}
+
+				if (table != null) {
+					for (int seq = idsSnapshot.size(); seq < newChains.size(); seq++) {
+						List<PropertyCall> newCalls = newChains.get(seq);
+						if (newCalls == null || newCalls.isEmpty()) continue;
+
+						PropertyCall creator = newCalls.get(0);
+						try {
+							Method method = findTableMethod(creator.method, creator.desc);
+							if (method != null) {
+								Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+								Cell<?> newCell = (Cell<?>) method.invoke(table, converted);
+								if (newCell != null) {
+									CellIdentity newId = new CellIdentity(slashName, firstId.hostMethod, firstId.hostDesc, seq);
+									synchronized (cellToId) {
+										cellToId.put(newCell, newId);
+									}
+									idToCell.put(newId, new WeakReference<>(newCell));
+									classToCells.computeIfAbsent(slashName, _ -> new CopyOnWriteArrayList<>()).add(newId);
+
+									List<PropertyCall> properties = newCalls.subList(1, newCalls.size());
+									applyAllCalls(newCell, properties);
+
+									records.put(newId, newCalls);
+									totalAdded++;
+								}
+							}
+						} catch (Exception e) {
+							error("[CellProperty] Failed to dynamically append new cell for creator: " + creator.method, e);
+						}
+					}
+					Core.app.post(table::invalidateHierarchy);
+				}
+			}
+		}
+
+		info("[CellProperty] Updated: " + totalUpdated + ", Removed: " + totalRemoved
+		     + ", Added: " + totalAdded + ", Skipped: " + totalSkipped + " for " + dotClassName);
 	}
 	//endregion
 
-	//region 属性回放
+	//region 属性与子元素更新
 	private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {
 		for (PropertyCall call : calls) {
-			// 在此增加空安全校验，未成功解析参数（为 null）时跳过调用
 			if (hasUsableArgs(call)) {
 				invokeCellMethod(cell, call.method, call.args);
 			}
@@ -185,20 +361,87 @@ public class CellPropertyRef {
 	}
 
 	private static boolean applyDiff(Cell<?> cell, List<PropertyCall> oldCalls, List<PropertyCall> newCalls) {
-		if (callsEqual(oldCalls, newCalls)) {
-			return false;
+		PropertyCall oldCreator = oldCalls.isEmpty() ? null : oldCalls.get(0);
+		PropertyCall newCreator = newCalls.isEmpty() ? null : newCalls.get(0);
+
+		boolean elementUpdated = false;
+		if (newCreator != null && isTableCellCreator(CL_TABLE, newCreator.method)) {
+			if (oldCreator == null || !oldCreator.method.equals(newCreator.method) || !argsEqual(oldCreator.args, newCreator.args)) {
+				updateChildElement(cell, newCreator);
+				elementUpdated = true;
+			}
 		}
 
-		// 重置 Cell 的约束和布局属性（不影响内部 element 和 table 关联）
-		cell.set(Cell.defaults());
+		List<PropertyCall> oldProperties = oldCalls.subList(oldCalls.isEmpty() ? 0 : 1, oldCalls.size());
+		List<PropertyCall> newProperties = newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size());
 
-		// 重新应用最新的方法调用链
-		applyAllCalls(cell, newCalls);
-
-		if (DEBUG) {
-			log("[CellProperty] Reapplied property chain due to changes.");
+		if (elementUpdated || !callsEqual(oldProperties, newProperties)) {
+			cell.set(Cell.defaults());
+			applyAllCalls(cell, newProperties);
+			if (DEBUG) {
+				log("[CellProperty] Reapplied property chain due to changes (Element updated: " + elementUpdated + ").");
+			}
+			return true;
 		}
-		return true;
+		return false;
+	}
+
+	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
+		Element oldElement = cell.get();
+
+		if (oldElement != null && creator.args != null && creator.args.length > 0 && creator.args[0] instanceof String newText) {
+			if (oldElement instanceof Label label) {
+				label.setText(newText);
+				return;
+			}
+			if (oldElement instanceof TextButton button) {
+				button.setText(newText);
+				return;
+			}
+		}
+
+		Table table = cell.getTable();
+		if (table == null) return;
+
+		try {
+			Method method = findTableMethod(creator.method, creator.desc);
+			if (method == null) return;
+
+			Table dummyTable = new Table();
+			Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+			Cell<?> dummyCell = (Cell<?>) method.invoke(dummyTable, converted);
+			if (dummyCell == null || dummyCell.get() == null) return;
+
+			Element newElement = dummyCell.get();
+			replaceElement(table, cell, oldElement, newElement);
+		} catch (Exception e) {
+			error("[CellProperty] Failed to update child element for creator: " + creator.method, e);
+		}
+	}
+
+	private static void replaceElement(Table table, Cell<?> cell, Element oldElement, Element newElement) {
+		if (oldElement == newElement || newElement == null) return;
+
+		int index = table.getChildren().indexOf(oldElement, true);
+		if (index >= 0) {
+			table.removeChild(oldElement); // 标准 API：清除事件焦点
+			table.addChildAt(index, newElement); // 标准 API：递归挂载并分配 Scene 引用
+			((Cell) cell).setElement(newElement);
+			if (DEBUG) {
+				log("[CellProperty] Sub-element successfully replaced in Table hierarchy: "
+				    + (oldElement != null ? oldElement.getClass().getSimpleName() : "null")
+				    + " -> " + newElement.getClass().getSimpleName());
+			}
+		}
+	}
+
+	private static Method findTableMethod(String name, String desc) {
+		for (Method m : Table.class.getMethods()) {
+			if (m.getName().equals(name) && Type.getMethodDescriptor(m).equals(desc)) {
+				return m;
+			}
+		}
+		return null;
 	}
 
 	private static boolean callsEqual(List<PropertyCall> a, List<PropertyCall> b) {
@@ -287,6 +530,8 @@ public class CellPropertyRef {
 				}
 			} else if (target == String.class) {
 				result[i] = args[i].toString();
+			} else if (CharSequence.class.isAssignableFrom(target)) {
+				result[i] = args[i].toString();
 			} else {
 				result[i] = args[i];
 			}
@@ -359,6 +604,8 @@ public class CellPropertyRef {
 						chains.add(currentChain);
 					}
 					currentChain = new ArrayList<>();
+					Object[] args = extractArgs(cn, mn, mi);
+					currentChain.add(new PropertyCall(mi.name, mi.desc, args, -1));
 					inCell = true;
 				} else if (inCell && isCellProperty(mi.owner, mi.name)) {
 					Object[] args = extractArgs(cn, mn, mi);
@@ -538,7 +785,6 @@ public class CellPropertyRef {
 	                                      Set<String> visitingMethods) {
 		if (insn == null) return null;
 
-		// 新增：支持 GETSTATIC 静态字段解析（如 Color.red、Align.center 等）
 		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
 			try {
 				String   className = fin.owner.replace('/', '.');
@@ -546,75 +792,74 @@ public class CellPropertyRef {
 				Field    field     = clazz.getField(fin.name);
 				return field.get(null);
 			} catch (Throwable t) {
-				// 忽略解析失败，后续会安全跳过
+				// 忽略
 			}
 		}
 
-		switch (insn) {
-			case LdcInsnNode ldcInsnNode -> {
-				return ldcInsnNode.cst;
-			}
-			case InsnNode insnNode -> {
-				int opcode = insnNode.getOpcode();
-				switch (opcode) {
-					case ICONST_M1 -> { return -1; }
-					case ICONST_0 -> { return 0; }
-					case ICONST_1 -> { return 1; }
-					case ICONST_2 -> { return 2; }
-					case ICONST_3 -> { return 3; }
-					case ICONST_4 -> { return 4; }
-					case ICONST_5 -> { return 5; }
-					case FCONST_0 -> { return 0.0f; }
-					case FCONST_1 -> { return 1.0f; }
-					case FCONST_2 -> { return 2.0f; }
-					case DCONST_0 -> { return 0.0d; }
-					case DCONST_1 -> { return 1.0d; }
-					case LCONST_0 -> { return 0L; }
-					case LCONST_1 -> { return 1L; }
+		if (insn instanceof LdcInsnNode) {
+			return ((LdcInsnNode) insn).cst;
+		} else if (insn instanceof InsnNode) {
+			int opcode = insn.getOpcode();
+			switch (opcode) {
+				case ICONST_M1: return -1;
+				case ICONST_0: return 0;
+				case ICONST_1: return 1;
+				case ICONST_2: return 2;
+				case ICONST_3: return 3;
+				case ICONST_4: return 4;
+				case ICONST_5: return 5;
+				case FCONST_0: return 0.0f;
+				case FCONST_1: return 1.0f;
+				case FCONST_2: return 2.0f;
+				case DCONST_0: return 0.0d;
+				case DCONST_1: return 1.0d;
+				case LCONST_0: return 0L;
+				case LCONST_1: return 1L;
 
-					case I2L, I2F, I2D, L2I, L2F, L2D, F2I, F2L, F2D, D2I, D2L, D2F, I2B, I2C, I2S -> {
-						AbstractInsnNode prev = insn.getPrevious();
-						if (prev == null) break;
+				case I2L: case I2F: case I2D: case L2I: case L2F: case L2D: case F2I: case F2L: case F2D: case D2I: case D2L: case D2F: case I2B: case I2C: case I2S: {
+					AbstractInsnNode prev = insn.getPrevious();
+					if (prev == null) break;
 
+					Object val = resolveConstant(cn, mn, prev, visitingMethods);
+					if (val instanceof Number num) {
+						switch (opcode) {
+							case I2L: case F2L: case D2L:
+								return num.longValue();
+							case I2F: case L2F: case D2F:
+								return num.floatValue();
+							case I2D: case L2D: case F2D:
+								return num.doubleValue();
+							case L2I: case F2I: case D2I:
+								return num.intValue();
+							case I2B:
+								return num.byteValue();
+							case I2C:
+								return (char) num.intValue();
+							case I2S:
+								return num.shortValue();
+						}
+					}
+					break;
+				}
+				case IADD: case ISUB: case IMUL: case IDIV: case LADD: case LSUB: case LMUL: case LDIV: case FADD: case FSUB: case FMUL: case FDIV: case DADD: case DSUB: case DMUL: case DDIV: {
+					AbstractInsnNode rightInsn = insn.getPrevious();
+					if (rightInsn != null) {
+						AbstractInsnNode leftInsn = skipExpression(rightInsn);
+						Object           rightVal = resolveConstant(cn, mn, rightInsn, visitingMethods);
+						Object           leftVal  = resolveConstant(cn, mn, leftInsn, visitingMethods);
+						return evaluateBinaryOp(opcode, leftVal, rightVal);
+					}
+					break;
+				}
+				case INEG: case LNEG: case FNEG: case DNEG: {
+					AbstractInsnNode prev = insn.getPrevious();
+					if (prev != null) {
 						Object val = resolveConstant(cn, mn, prev, visitingMethods);
-						if (val instanceof Number num) {
-							switch (opcode) {
-								case I2L, F2L, D2L:
-									return num.longValue();
-								case I2F, L2F, D2F:
-									return num.floatValue();
-								case I2D, L2D, F2D:
-									return num.doubleValue();
-								case L2I, F2I, D2I:
-									return num.intValue();
-								case I2B:
-									return num.byteValue();
-								case I2C:
-									return (char) num.intValue();
-								case I2S:
-									return num.shortValue();
-							}
-						}
+						return evaluateUnaryOp(opcode, val);
 					}
-					case IADD, ISUB, IMUL, IDIV, LADD, LSUB, LMUL, LDIV, FADD, FSUB, FMUL, FDIV, DADD, DSUB, DMUL, DDIV -> {
-						AbstractInsnNode rightInsn = insn.getPrevious();
-						if (rightInsn != null) {
-							AbstractInsnNode leftInsn = skipExpression(rightInsn);
-							Object           rightVal = resolveConstant(cn, mn, rightInsn, visitingMethods);
-							Object           leftVal  = resolveConstant(cn, mn, leftInsn, visitingMethods);
-							return evaluateBinaryOp(opcode, leftVal, rightVal);
-						}
-					}
-					case INEG, LNEG, FNEG, DNEG -> {
-						AbstractInsnNode prev = insn.getPrevious();
-						if (prev != null) {
-							Object val = resolveConstant(cn, mn, prev, visitingMethods);
-							return evaluateUnaryOp(opcode, val);
-						}
-					}
+					break;
 				}
 			}
-			default -> { }
 		}
 		if (insn instanceof IntInsnNode iin && (insn.getOpcode() == BIPUSH || insn.getOpcode() == SIPUSH)) {
 			return iin.operand;
@@ -742,6 +987,25 @@ public class CellPropertyRef {
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 
+				// 核心突破：注入构造函数以确保任何隐式或无链式的 Cell 绝对捕获并生成对应的运行时 Sequence
+				if (name.equals("<init>")) {
+					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodExit(int opcode) {
+							if (opcode == ATHROW) return;
+
+							mv.visitVarInsn(ALOAD, 0);
+							mv.visitMethodInsn(
+							 INVOKESTATIC,
+							 internalName(CellPropertyRef.class),
+							 "registerCellAtCreation",
+							 "(Larc/scene/ui/layout/Cell;)V",
+							 false
+							);
+						}
+					};
+				}
+
 				if (name.startsWith("<")) return mv;
 				if (!CELL_PROPERTY_METHODS.contains(name)) return mv;
 				if (!descriptor.endsWith(")Larc/scene/ui/layout/Cell;")) return mv;
@@ -846,36 +1110,53 @@ public class CellPropertyRef {
 
 	private static CellIdentity inferCellIdentity(Cell<?> cell) {
 		StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-		for (StackTraceElement ste : stack) {
-			String cn = ste.getClassName();
-			if (cn.startsWith("nipx.") || cn.startsWith("arc.") || cn.startsWith("java.")) continue;
-			String slash      = cn.replace('.', '/');
-			String hostMethod = ste.getMethodName();
 
-			int seq = -1;
-			try {
-				Table table = cell.getTable();
-				if (table != null) {
-					var cells = table.getCells();
-					if (cells != null) {
-						seq = cells.indexOf(cell, true);
-					}
-				}
-			} catch (Throwable t) {
-				// 忽略不同底层框架版本微调导致的异常
+		int cellFrameIdx = -1;
+		for (int i = 0; i < stack.length; i++) {
+			String cn = stack[i].getClassName();
+			if (cn.equals("arc.scene.ui.layout.Cell")) {
+				cellFrameIdx = i;
+				break;
 			}
-
-			if (seq < 0) {
-				String key = slash + "#" + hostMethod + ":()V";
-				synchronized (methodCounters) {
-					int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
-					seq = counter[0]++;
-				}
-			}
-
-			return new CellIdentity(slash, hostMethod, "()V", seq);
 		}
-		return null;
+
+		if (cellFrameIdx == -1 || cellFrameIdx + 1 >= stack.length) {
+			return null;
+		}
+
+		StackTraceElement callerFrame = stack[cellFrameIdx + 1];
+		String callerClass = callerFrame.getClassName();
+
+		// 如果直接调用者是库类，说明是内部嵌套调用，不作为外部宿主方法 Cell 追踪
+		if (callerClass.startsWith("arc.") || callerClass.startsWith("java.") || callerClass.startsWith("nipx.")) {
+			return null;
+		}
+
+		String slash = callerClass.replace('.', '/');
+		String hostMethod = callerFrame.getMethodName();
+
+		int seq = -1;
+		try {
+			Table table = cell.getTable();
+			if (table != null) {
+				var cells = table.getCells();
+				if (cells != null) {
+					seq = cells.indexOf(cell, true);
+				}
+			}
+		} catch (Throwable t) {
+			// 忽略
+		}
+
+		if (seq < 0) {
+			String key = slash + "#" + hostMethod + ":()V";
+			synchronized (methodCounters) {
+				int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
+				seq = counter[0]++;
+			}
+		}
+
+		return new CellIdentity(slash, hostMethod, "()V", seq);
 	}
 
 	private static int inferLineNumber() {

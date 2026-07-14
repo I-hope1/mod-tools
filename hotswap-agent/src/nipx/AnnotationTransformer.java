@@ -27,7 +27,7 @@ import static org.objectweb.asm.Opcodes.*;
 public class AnnotationTransformer implements ClassFileTransformer {
 
 	//region Fields and Annotation Utilities
-	static final String profileDesc = "L" + dot2slash(Profile.class) + ";";
+	static final String profileDesc = "L" + internalName(Profile.class) + ";";
 
 	private static boolean hasClassAnnotation(byte[] bytes, Class<? extends Annotation> annotationClass) {
 		return hasClassAnnotation(bytes, "L" + annotationClass.getName().replace('.', '/') + ";");
@@ -73,7 +73,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 		if (classBeingRedefined != null) {
-			LambdaRef.onClassRedefined(dotClassName);
+			LambdaRef.onClassRedefined(dotClassName, classfileBuffer);
 			byte[] finalClassfileBuffer = classfileBuffer;
 			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, finalClassfileBuffer));
 		}
@@ -126,7 +126,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 								mv.visitVarInsn(ALOAD, 0); // this
 								// InstanceTracker.register(Object)
 								mv.visitMethodInsn(INVOKESTATIC,
-								 dot2slash(InstanceTracker.class),
+								 internalName(InstanceTracker.class),
 								 "register", "(Ljava/lang/Object;)V", false);
 							}
 						}
@@ -475,10 +475,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 	}
 
-	public static String dot2slash(String className) {
-		return className.replace('.', '/');
+	public static String dot2slash(String dotClassName) {
+		return dotClassName.replace('.', '/');
 	}
-	public static String dot2slash(Class<?> clazz) {
+	public static String internalName(Class<?> clazz) {
 		return clazz.getName().replace('.', '/');
 	}
 	public static String typeToNative(Class<?> cls) {
@@ -493,7 +493,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		if (cls == boolean.class) return "Z";
 		if (cls == void.class) return "V";
 
-		return "L" + dot2slash(cls) + ";";
+		return "L" + internalName(cls) + ";";
 	}
 	//endregion
 

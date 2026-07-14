@@ -3,6 +3,7 @@ package test0;
 import arc.scene.ui.Tooltip.Tooltips;
 import arc.util.Log;
 import modtools.ui.IntUI.ITooltip;
+import modtools.ui.comp.Window;
 import nipx.annotation.*;
 
 public class TestAA {
@@ -38,6 +39,12 @@ public class TestAA {
 		}
 	}
 	public static class ChildClass extends ParentClass2 {
+	}
+
+	public static void newWindow() {
+		new Window("www") {{
+			cont.image().size(203, 133);
+		}}.show();
 	}
 
 	public static Runnable runx = () -> Log.info("run");

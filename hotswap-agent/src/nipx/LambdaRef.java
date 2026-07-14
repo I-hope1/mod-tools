@@ -11,6 +11,7 @@ import arc.scene.ui.Label;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import nipx.ref.UpdateRef;
+import nipx.uihook.CellPropertyRef;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
@@ -24,32 +25,34 @@ import static nipx.HotSwapAgent.*;
 public class LambdaRef {
 
 	public static void init() {
-		String runnableType   = dot2slash(Runnable.class);
-		String boolpType      = dot2slash(Boolp.class);
-		String provType       = dot2slash(Prov.class);
-		String consType       = dot2slash(Cons.class);
-		String floatcType = dot2slash(Floatc.class);
-		String floatc2Type = dot2slash(Floatc2.class);
-		String eventListenerType = dot2slash(EventListener.class);
+		String runnableType      = internalName(Runnable.class);
+		String boolpType         = internalName(Boolp.class);
+		String provType          = internalName(Prov.class);
+		String consType          = internalName(Cons.class);
+		String floatcType        = internalName(Floatc.class);
+		String floatc2Type       = internalName(Floatc2.class);
+		String eventListenerType = internalName(EventListener.class);
 
-		String runnableNative = typeToNative(Runnable.class);
-		String boolpNative    = typeToNative(Boolp.class);
-		String provNative     = typeToNative(Prov.class);
-		String consNative     = typeToNative(Cons.class);
-		String floatcNative = typeToNative(Floatc.class);
-		String floatc2Native = typeToNative(Floatc2.class);
+		String runnableNative      = typeToNative(Runnable.class);
+		String boolpNative         = typeToNative(Boolp.class);
+		String provNative          = typeToNative(Prov.class);
+		String consNative          = typeToNative(Cons.class);
+		String floatcNative        = typeToNative(Floatc.class);
+		String floatc2Native       = typeToNative(Floatc2.class);
 		String eventListenerNative = typeToNative(EventListener.class);
 
 		String elementType         = typeToNative(Element.class);
 		String inputListenerNative = typeToNative(InputListener.class);
 		String clickListenerNative = typeToNative(ClickListener.class);
-		String keyCodeNative = typeToNative(KeyCode.class);
+		String keyCodeNative       = typeToNative(KeyCode.class);
+
+		redefineCell();
+		CellPropertyRef.redefineCellProperties();
 
 		// 子类在前面，父类在后
 		Injector.redefineTask(Button.class, "setDisabled", boolpNative);
 		Injector.redefineTask(Label.class, "setText", provNative);
-		redefineCell();
-		Injector.redefineTask(TextField.class, "setValidator", dot2slash(TextFieldValidator.class));
+		Injector.redefineTask(TextField.class, "setValidator", internalName(TextFieldValidator.class));
 
 		Injector.redefineTask(Element.class, "dragged", "(" + floatc2Native + ")V", floatc2Type);
 		Injector.redefineTask(Element.class, "scrolled", "(" + floatcNative + ")V", floatcType);
@@ -70,11 +73,12 @@ public class LambdaRef {
 		Injector.redefineTask(Element.class, "touchable", "(" + provNative + ")" + elementType, provType);
 
 		Injector.batchProcess();
+
 		// redefineTable();
 	}
 	//region Cell
 	private static void redefineCell() {
-		var bytes = fetchOriginalBytecode(Cell.class);
+		var bytes = fetchCurrentBytecode(Cell.class);
 		bytes = injectCell(bytes);
 		Injector.redefineOneClass(Cell.class, bytes);
 	}
@@ -166,8 +170,9 @@ public class LambdaRef {
 	 * 当某个类被 HotSwap 重载时调用。
 	 * 清除所有 UpdateRef 中来自该类的 lambda，避免 NoSuchMethodError。
 	 * @param dotClassName 被重载的类名，如 com.example.MyView
+	 * @param newBytecode 新的类字节码
 	 */
-	public static void onClassRedefined(String dotClassName) {
+	public static void onClassRedefined(String dotClassName, byte[] newBytecode) {
 		/* int cleared = 0;
 		for (var ref : UpdateRef.getAll()) {
 			UpdateRef updateRef = ref.get();
@@ -179,6 +184,10 @@ public class LambdaRef {
 
 		if (cleared > 0) {
 			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
+		}
+
+		if (CellPropertyRef.isEnabled()) {
+			CellPropertyRef.onClassRedefined(dotClassName, newBytecode);
 		}
 
 		// if (Core.app != null && Core.scene != null) {
@@ -261,7 +270,7 @@ public class LambdaRef {
 			visitVarInsn(ALOAD, 1);  // Cons
 			visitMethodInsn(
 			 INVOKESTATIC,
-			 dot2slash(UpdateRef.class),
+			 internalName(UpdateRef.class),
 			 "wrap",
 			 "(L" + Injector.CL_ELEMENT + ";" + lambdaType + ")" + lambdaType,
 			 false

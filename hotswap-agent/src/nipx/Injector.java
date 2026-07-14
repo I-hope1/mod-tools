@@ -7,7 +7,6 @@ import org.objectweb.asm.commons.AdviceAdapter;
 import java.lang.instrument.*;
 import java.util.*;
 
-import static nipx.AnnotationTransformer.dot2slash;
 import static nipx.HotSwapAgent.*;
 
 public class Injector {
@@ -91,7 +90,7 @@ public class Injector {
 						visitVarInsn(ALOAD, lambdaSlot); // load lambda
 						visitMethodInsn(
 						 INVOKESTATIC,
-						 dot2slash(UpdateRef.class),
+						 AnnotationTransformer.internalName(UpdateRef.class),
 						 "wrap",
 						 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
 						 false

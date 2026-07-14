@@ -45,7 +45,7 @@ public class ProfilerTransformer implements ClassFileTransformer {
 				targetMethodNames = methodNames;
 			}
 			if (classBeingRedefined == null &&
-				HierarchyTree.isAssignableFrom(AnnotationTransformer.dot2slash(clazz), className, loader)) {
+				HierarchyTree.isAssignableFrom(AnnotationTransformer.internalName(clazz), className, loader)) {
 				classReader = new ClassReader(classfileBuffer);
 				classWriter = new AnnotationTransformer.MyClassWriter(classReader, loader);
 				targetMethodNames = methodNames;

@@ -50,7 +50,7 @@ public class HotSwapAgent {
 	 * 在不使用retransform的情况下，确保旧bytecode正确的唯一方法
 	 * dotClassName -> bytecode
 	 */
-	static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
+	public static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
 
 	// 仅记录byte的指纹
 	private static final LongLongMap fileDiskHashes = new LongLongMap(2048);
@@ -97,6 +97,7 @@ public class HotSwapAgent {
 		}
 		if (UI_HOOK) {
 			LambdaRef.init();
+			CellPropertyRef.enable();
 		}
 
 		// 解析传入的监控路径 (支持分号或冒号分割)，按类型分流
@@ -378,20 +379,7 @@ public class HotSwapAgent {
 	}
 
 
-	private static boolean DISABLE_UI_DISPATCH = true;
 	private static void processUIDispatch(List<ClassDefinition> definitions) {
-		if (DISABLE_UI_DISPATCH) return;
-		if (!UI_HOOK || definitions.isEmpty()) return;
-		for (ClassDefinition def : definitions) {
-			Class<?> clazz       = def.getDefinitionClass();
-			String   className   = clazz.getName();
-			byte[]   oldBytecode = bytecodeCache.get(className); // 旧字节码
-			byte[]   newBytecode = def.getDefinitionClassFile(); // 新字节码
-			if (oldBytecode != null && newBytecode != null) {
-				// 执行自动 UI 更新
-				UIUpdateDispatcher.diffAndUpdate(className, oldBytecode, newBytecode);
-			}
-		}
 	}
 
 

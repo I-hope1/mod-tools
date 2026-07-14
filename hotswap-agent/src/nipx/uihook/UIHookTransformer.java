@@ -1,10 +1,9 @@
 package nipx.uihook;
 
+import nipx.AnnotationTransformer;
 import org.objectweb.asm.*;
 
 import java.lang.instrument.ClassFileTransformer;
-
-import static nipx.AnnotationTransformer.dot2slash;
 
 public class UIHookTransformer implements ClassFileTransformer {
 	@Override
@@ -49,7 +48,7 @@ public class UIHookTransformer implements ClassFileTransformer {
 								visitLdcInsn(currentLineNumber);
 								visitLdcInsn(callIndexOnLine);
 								// 自动注册实例
-								super.visitMethodInsn(Opcodes.INVOKESTATIC, dot2slash(UIHookRegistry.class), "register", "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;II)V", false);
+								super.visitMethodInsn(Opcodes.INVOKESTATIC, AnnotationTransformer.internalName(UIHookRegistry.class), "register", "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;II)V", false);
 								callIndexOnLine++;
 							}
 						}

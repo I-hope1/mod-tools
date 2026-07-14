@@ -8,6 +8,7 @@ import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.*;
@@ -176,45 +177,42 @@ public class CellPropertyRef {
 	//region 属性回放
 	private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {
 		for (PropertyCall call : calls) {
-			invokeCellMethod(cell, call.method, call.args);
+			// 在此增加空安全校验，未成功解析参数（为 null）时跳过调用
+			if (hasUsableArgs(call)) {
+				invokeCellMethod(cell, call.method, call.args);
+			}
 		}
 	}
 
 	private static boolean applyDiff(Cell<?> cell, List<PropertyCall> oldCalls, List<PropertyCall> newCalls) {
-		boolean changed = false;
-		int     minLen  = Math.min(oldCalls.size(), newCalls.size());
-
-		for (int i = 0; i < minLen; i++) {
-			PropertyCall oldCall = oldCalls.get(i);
-			PropertyCall newCall = newCalls.get(i);
-
-			if (!oldCall.method.equals(newCall.method)) {
-				if (hasUsableArgs(newCall)) {
-					invokeCellMethod(cell, newCall.method, newCall.args);
-					changed = true;
-					if (DEBUG) log(" " + oldCall.method + " → " + newCall.method);
-				}
-			} else if (!argsEqual(oldCall.args, newCall.args)) {
-				if (hasUsableArgs(newCall)) {
-					invokeCellMethod(cell, newCall.method, newCall.args);
-					changed = true;
-					if (DEBUG) log(" " + newCall.method + " args changed");
-				}
-			}
+		if (callsEqual(oldCalls, newCalls)) {
+			return false;
 		}
 
-		if (newCalls.size() > oldCalls.size()) {
-			for (int i = oldCalls.size(); i < newCalls.size(); i++) {
-				PropertyCall call = newCalls.get(i);
-				if (hasUsableArgs(call)) {
-					invokeCellMethod(cell, call.method, call.args);
-					changed = true;
-					if (DEBUG) log(" new call: " + call.method);
-				}
-			}
-		}
+		// 重置 Cell 的约束和布局属性（不影响内部 element 和 table 关联）
+		cell.set(Cell.defaults());
 
-		return changed;
+		// 重新应用最新的方法调用链
+		applyAllCalls(cell, newCalls);
+
+		if (DEBUG) {
+			log("[CellProperty] Reapplied property chain due to changes.");
+		}
+		return true;
+	}
+
+	private static boolean callsEqual(List<PropertyCall> a, List<PropertyCall> b) {
+		if (a == b) return true;
+		if (a == null || b == null) return false;
+		if (a.size() != b.size()) return false;
+		for (int i = 0; i < a.size(); i++) {
+			PropertyCall ca = a.get(i);
+			PropertyCall cb = b.get(i);
+			if (!ca.method.equals(cb.method)) return false;
+			if (!ca.desc.equals(cb.desc)) return false;
+			if (!argsEqual(ca.args, cb.args)) return false;
+		}
+		return true;
 	}
 
 	private static boolean argsEqual(Object[] a, Object[] b) {
@@ -399,7 +397,7 @@ public class CellPropertyRef {
 	private static int getPushes(AbstractInsnNode insn) {
 		int opcode = insn.getOpcode();
 		if (opcode == ACONST_NULL) return 1;
-		if (opcode >= ICONST_M1 && opcode <= DCONST_1) return 1; // 修复：扩大至 DCONST_1，正确支持 FCONST 和 DCONST
+		if (opcode >= ICONST_M1 && opcode <= DCONST_1) return 1;
 		if (opcode == BIPUSH || opcode == SIPUSH || opcode == LDC) return 1;
 		if (opcode >= ILOAD && opcode <= ALOAD) return 1;
 		if (opcode >= IADD && opcode <= DREM) return 1;
@@ -412,7 +410,7 @@ public class CellPropertyRef {
 		if (opcode == NEW) return 1;
 		if (opcode == DUP) return 1;
 		if (opcode == ARRAYLENGTH || opcode == INSTANCEOF) return 1;
-		if (opcode >= IALOAD && opcode <= SALOAD) return 1; // 新增支持：数组读取入栈 1
+		if (opcode >= IALOAD && opcode <= SALOAD) return 1;
 		if (insn instanceof MethodInsnNode mi) {
 			Type retType = Type.getReturnType(mi.desc);
 			return retType.getSort() == Type.VOID ? 0 : 1;
@@ -442,8 +440,8 @@ public class CellPropertyRef {
 		if (opcode >= IFEQ && opcode <= IFLE) return 1;
 		if (opcode >= IF_ICMPEQ && opcode <= IF_ACMPNE) return 2;
 		if (opcode == IFNULL || opcode == IFNONNULL) return 1;
-		if (opcode >= IALOAD && opcode <= SALOAD) return 2;   // 新增支持：数组读取消耗 2
-		if (opcode >= IASTORE && opcode <= SASTORE) return 3; // 新增支持：数组写入消耗 3
+		if (opcode >= IALOAD && opcode <= SALOAD) return 2;
+		if (opcode >= IASTORE && opcode <= SASTORE) return 3;
 		if (insn instanceof MethodInsnNode mi) {
 			int pops = Type.getArgumentTypes(mi.desc).length;
 			if (opcode != INVOKESTATIC) {
@@ -538,10 +536,21 @@ public class CellPropertyRef {
 
 	private static Object resolveConstant(ClassNode cn, MethodNode mn, AbstractInsnNode insn,
 	                                      Set<String> visitingMethods) {
-		switch (insn) {
-			case null -> {
-				return null;
+		if (insn == null) return null;
+
+		// 新增：支持 GETSTATIC 静态字段解析（如 Color.red、Align.center 等）
+		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
+			try {
+				String   className = fin.owner.replace('/', '.');
+				Class<?> clazz     = Class.forName(className, true, CellPropertyRef.class.getClassLoader());
+				Field    field     = clazz.getField(fin.name);
+				return field.get(null);
+			} catch (Throwable t) {
+				// 忽略解析失败，后续会安全跳过
 			}
+		}
+
+		switch (insn) {
 			case LdcInsnNode ldcInsnNode -> {
 				return ldcInsnNode.cst;
 			}
@@ -563,7 +572,6 @@ public class CellPropertyRef {
 					case LCONST_0 -> { return 0L; }
 					case LCONST_1 -> { return 1L; }
 
-					// 新增：安全支持基础基本类型的 JVM 强制或隐式数值转换（例如 I2F、I2D）
 					case I2L, I2F, I2D, L2I, L2F, L2D, F2I, F2L, F2D, D2I, D2L, D2F, I2B, I2C, I2S -> {
 						AbstractInsnNode prev = insn.getPrevious();
 						if (prev == null) break;
@@ -625,7 +633,6 @@ public class CellPropertyRef {
 	}
 
 	private static Object resolveVar(ClassNode cn, MethodNode mn, int varIndex, Set<String> visitingMethods) {
-		// 修复方案：将检测粒度细化至 槽位级别，防止同一个方法中多级解析常数时误判为无限递归。
 		String visitKey = mn.name + ":" + mn.desc + "#" + varIndex;
 		if (visitingMethods.contains(visitKey)) {
 			return null;

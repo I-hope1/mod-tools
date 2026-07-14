@@ -383,7 +383,7 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 	public Class<?>      elementType     = Element.class;
 	public Cons<Element> elementCallback = null;
 
-	public static final Color  maskColor     = Color.valueOf("#00000033");
+	public static final Color  maskColor     = new Color(0x00000033);
 	public static final Drawer defaultDrawer = (selecting, el) -> {
 		if (!selecting) return;
 		Draw.color();

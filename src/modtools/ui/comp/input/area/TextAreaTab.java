@@ -169,7 +169,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 
 		public float visualRY() {
-			float    scrollOffsetY = scrollY - (int) (scrollY / lineHeight()) * lineHeight();
+			float    scrollOffsetY = scrollY - (scrollY / lineHeight()) * lineHeight();
 			Drawable background    = getBackground();
 			return (background == null ? 0 : background.getTopHeight())
 			       + scrollOffsetY;
@@ -866,7 +866,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 
 		public LinesShow(MyTextArea area) {
 			super(HopeTex.paneRight);
-			image().color(Color.gray).marginRight(6f);
+			image().color(Color.gray).marginRight(6f).touchable(Touchable.disabled);
 			this.area = area;
 		}
 
@@ -881,7 +881,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 		 **/
 		public int realCursorLine;
 
-		StringBuilder sb = new StringBuilder();
+		final StringBuilder sb = new StringBuilder();
 		/** 渲染行号 */
 		void drawLine(float offsetY, int row) {
 			// Log.info(offsetY + "," + row);
@@ -920,10 +920,6 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			int start = firstLineShowing * 2,
 			 end = start + linesShowing * 2;
 			for (; i <= end && i < linesBreak.size; i += 2) {
-				if (i == 0) {
-					realCursorLine = 1;
-					task.run();
-				}
 				if (i == start) {
 					task = getTask(offsetY, row);
 				}
@@ -936,7 +932,7 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 						row++;
 						if (i >= start) task = getTask(offsetY, row);
 					}
-				} catch (Throwable ignored) {
+				} catch (Throwable e) {
 					if (i >= start) task.run();
 					row++;
 					offsetY -= area.lineHeight();
@@ -946,7 +942,9 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			if (i != 0 && area.newLineAtEnd()) {
 				if (linesBreak.size == cursorLine) realCursorLine = row;
 				if (i >= linesBreak.peek()) task.run();
+				task = getTask(offsetY, row);
 			}
+			task.run();
 			/* else {
 				drawLine(offsetY + area.lineHeight(), row);
 			}*/

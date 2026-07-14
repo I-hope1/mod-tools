@@ -184,8 +184,8 @@ public class FlameGraphWindow extends Window {
 			return p;
 		}
 
-		static final Color SEARCH_HIGHLIGHT = Color.valueOf("ffdd55cc");
-		static final Color SELF_TIME_TINT   = Color.valueOf("00000044");
+		static final Color SEARCH_HIGHLIGHT = new Color(0xffdd55cc);
+		static final Color SELF_TIME_TINT   = new Color(0x00000044);
 
 		FlameNode currentRoot = ProfilerData.flameRoot;
 		final Deque<FlameNode> zoomStack = new ArrayDeque<>();

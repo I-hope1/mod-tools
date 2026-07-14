@@ -1,10 +1,11 @@
 package test0;
 
+import arc.graphics.Color;
 import arc.scene.ui.Tooltip.Tooltips;
 import arc.util.Log;
 import modtools.ui.IntUI.ITooltip;
 import modtools.ui.comp.Window;
-import nipx.annotation.*;
+import nipx.annotation.OnReload;
 
 public class TestAA {
 	public static void main(String[] args) {
@@ -45,7 +46,7 @@ public class TestAA {
 		new Window("www") {{
 			float size = 100 * 3;
 			float h = size * 0.9f;
-			cont.image().size(size, h);
+			cont.image().width(size).growY().color(Color.acid);
 		}}.show();
 	}
 

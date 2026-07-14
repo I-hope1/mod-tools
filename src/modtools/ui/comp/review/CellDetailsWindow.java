@@ -138,7 +138,15 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		 f -> {
 			 Reflect.set(Cell.class, cell, name, valueOf.get(f));
 			 Core.app.post(() -> {
-				 if (cell.get() != null) cell.get().invalidateHierarchy();
+				 if (cell.getTable() != null) {
+					 CellTools.recalculateColumns(cell.getTable());
+				 }
+				 Element element = cell.get();
+				 if (element != null) {
+					 element.layout();
+					 element.invalidateHierarchy();
+					 cell.getTable().layout();
+				 }
 			 });
 		 });
 		table.left();
@@ -196,8 +204,11 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 					Number val;
 
 					// 装箱时最好别用三目表达式
-					if (useInt) val = (int) v;
-					else val = v;
+					if (useInt) {
+						val = (int) v;
+					} else {
+						val = v;
+					}
 
 					Tools.runShowedException(() -> jfield.set(obj, val));
 					field.setText(FormatHelper.fixed(v));

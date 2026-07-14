@@ -3,6 +3,7 @@ package modtools.utils.ui;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.layout.*;
+import arc.struct.Seq;
 import arc.util.*;
 import modtools.annotations.asm.CopyConstValue;
 import modtools.utils.reflect.FieldUtils;
@@ -157,5 +158,42 @@ public interface CellTools {
 		int   index = table.getCells().indexOf(cell);
 		if (index == -1 || index == 0) return null;
 		return table.getCells().get(index - 1);
+	}
+
+	class $table {
+		static Field columnsField;
+
+		static {
+			try {
+				columnsField = Table.class.getDeclaredField("columns");
+				columnsField.setAccessible(true);
+			} catch (NoSuchFieldException e) {
+				columnsField = null;
+			}
+		}
+	}
+	@SuppressWarnings("rawtypes")
+	static void recalculateColumns(Table table) {
+		int       maxCols = 0;
+		Seq<Cell> cells   = table.getCells();
+		for (int i = 0; i < cells.size; ) {
+			Cell c       = cells.get(i);
+			int  rowCols = 0;
+			do {
+				rowCols += CellTools.colspan(c);
+				i++;
+				if (i >= cells.size) break;
+				c = cells.get(i);
+			} while (!c.isEndRow());
+			if (rowCols > maxCols) maxCols = rowCols;
+		}
+
+		// 使用反射设置 Table.columns
+		try {
+			$table.columnsField.setInt(table, maxCols);
+		} catch (Exception e) {
+			// fallback: 如果反射失败，至少 invalidate
+			table.invalidate();
+		}
 	}
 }

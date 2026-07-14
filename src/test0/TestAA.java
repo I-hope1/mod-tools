@@ -43,7 +43,9 @@ public class TestAA {
 
 	public static void newWindow() {
 		new Window("www") {{
-			cont.image().size(203, 133);
+			float size = 100 * 3;
+			float h = size * 0.9f;
+			cont.image().size(size, h);
 		}}.show();
 	}
 

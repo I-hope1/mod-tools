@@ -10,7 +10,7 @@ rootProject.name = "mod-tools"
 
 include 'annotations'
 include 'compiler'
-//include 'test'
+include 'test'
 
 include 'hotswap-agent'
 

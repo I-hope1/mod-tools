@@ -19,6 +19,8 @@ import static org.objectweb.asm.Opcodes.*;
 /** Cell 属性追踪器 */
 public class CellPropertyRef {
 
+	public static final String CL_TABLE = "arc/scene/ui/layout/Table";
+	public static final String CL_CELL = "arc/scene/ui/layout/Cell";
 	//region 数据结构
 	public record PropertyCall(String method, String desc, Object[] args, int line) { }
 
@@ -63,7 +65,7 @@ public class CellPropertyRef {
 		}
 		idToCell.put(id, new WeakReference<>(cell));
 
-		classToCells.computeIfAbsent(hostClass, k -> new CopyOnWriteArrayList<>()).add(id);
+		classToCells.computeIfAbsent(hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
 
 		if (DEBUG) {
 			log("[CellProperty] Registered " + id.hostClass + "#"
@@ -88,9 +90,8 @@ public class CellPropertyRef {
 			}
 			idToCell.put(id, new WeakReference<>(cell));
 
-			// 【修复重要 Bug 1】：必须要将推断出的 id 注册进宿主类的 Cell 列表中！
-			// 否则在 classRedefined 时该类会被视作“没有任何关联的 Cell”而直接跳过。
-			classToCells.computeIfAbsent(id.hostClass, k -> new CopyOnWriteArrayList<>()).add(id);
+			// 将推断出的 id 注册进宿主类的 Cell 列表中
+			classToCells.computeIfAbsent(id.hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
 		}
 
 		int line = -1;
@@ -99,7 +100,7 @@ public class CellPropertyRef {
 		}
 
 		PropertyCall call = new PropertyCall(method, desc, args, line);
-		records.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>()).add(call);
+		records.computeIfAbsent(id, _ -> new CopyOnWriteArrayList<>()).add(call);
 
 		if (DEBUG) {
 			log("[CellProperty] " + id.hostClass + "#" + id.hostMethod + "[" + id.sequence
@@ -137,8 +138,7 @@ public class CellPropertyRef {
 			String                   methodKey = id.hostMethod + ":" + id.hostDesc;
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
 
-			// 【修复重要 Bug 2】：如果直接匹配描述符失败（比如栈推断写死了 "()V"，实际是带参构造），
-			// 我们进行模糊匹配——匹配首个以方法名开头的方法链（忽略参数签名差异）
+			// 模糊匹配：匹配首个以方法名开头的方法链（忽略参数签名差异）
 			if (newChains == null) {
 				for (Map.Entry<String, List<List<PropertyCall>>> entry : newChainsByMethod.entrySet()) {
 					if (entry.getKey().startsWith(id.hostMethod + ":")) {
@@ -282,7 +282,6 @@ public class CellPropertyRef {
 			} else if (target == int.class) {
 				result[i] = ((Number) args[i]).intValue();
 			} else if (target == boolean.class || target == Boolean.class) {
-				// 【修复 Bug 3】：ICONST_1 在 ASM 级别被解析成数值，这里强制安全还原为 Boolean
 				if (args[i] instanceof Number) {
 					result[i] = ((Number) args[i]).intValue() != 0;
 				} else {
@@ -335,7 +334,7 @@ public class CellPropertyRef {
 			cr.accept(cn, ClassReader.EXPAND_FRAMES);
 
 			for (MethodNode mn : cn.methods) {
-				List<List<PropertyCall>> chains = extractFromMethod(mn);
+				List<List<PropertyCall>> chains = extractFromMethod(cn, mn);
 				if (!chains.isEmpty()) {
 					result.put(mn.name + ":" + mn.desc, chains);
 				}
@@ -347,7 +346,7 @@ public class CellPropertyRef {
 		return result;
 	}
 
-	private static List<List<PropertyCall>> extractFromMethod(MethodNode mn) {
+	private static List<List<PropertyCall>> extractFromMethod(ClassNode cn, MethodNode mn) {
 		List<List<PropertyCall>> chains = new ArrayList<>();
 		if (mn.instructions == null) return chains;
 
@@ -355,8 +354,7 @@ public class CellPropertyRef {
 		boolean            inCell       = false;
 
 		for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof MethodInsnNode) {
-				MethodInsnNode mi = (MethodInsnNode) insn;
+			if (insn instanceof MethodInsnNode mi) {
 
 				if (isTableCellCreator(mi.owner, mi.name)) {
 					if (currentChain != null && !currentChain.isEmpty()) {
@@ -365,7 +363,7 @@ public class CellPropertyRef {
 					currentChain = new ArrayList<>();
 					inCell = true;
 				} else if (inCell && isCellProperty(mi.owner, mi.name)) {
-					Object[] args = extractArgs(mn.instructions, mi);
+					Object[] args = extractArgs(cn, mn, mi);
 					currentChain.add(new PropertyCall(mi.name, mi.desc, args, -1));
 				} else {
 					if (inCell && !currentChain.isEmpty()) {
@@ -385,82 +383,329 @@ public class CellPropertyRef {
 	}
 
 	private static boolean isTableCellCreator(String owner, String name) {
-		return "arc/scene/ui/layout/Table".equals(owner) && TABLE_CELL_CREATORS.contains(name);
+		return CL_TABLE.equals(owner) && TABLE_CELL_CREATORS.contains(name);
 	}
 
 	private static boolean isCellProperty(String owner, String name) {
-		if ("arc/scene/ui/layout/Cell".equals(owner) && CELL_PROPERTY_METHODS.contains(name)) {
+		if (CL_CELL.equals(owner) && CELL_PROPERTY_METHODS.contains(name)) {
 			return true;
 		}
-		if ("arc/scene/ui/layout/Table".equals(owner) && CELL_PROPERTY_METHODS.contains(name)) {
+		if (CL_TABLE.equals(owner) && CELL_PROPERTY_METHODS.contains(name)) {
 			return true;
 		}
 		return false;
 	}
 
-	private static Object[] extractArgs(InsnList instructions, MethodInsnNode target) {
+	private static int getPushes(AbstractInsnNode insn) {
+		int opcode = insn.getOpcode();
+		if (opcode == ACONST_NULL) return 1;
+		if (opcode >= ICONST_M1 && opcode <= DCONST_1) return 1; // 修复：扩大至 DCONST_1，正确支持 FCONST 和 DCONST
+		if (opcode == BIPUSH || opcode == SIPUSH || opcode == LDC) return 1;
+		if (opcode >= ILOAD && opcode <= ALOAD) return 1;
+		if (opcode >= IADD && opcode <= DREM) return 1;
+		if (opcode >= ISHL && opcode <= LXOR) return 1;
+		if (opcode >= INEG && opcode <= DNEG) return 1;
+		if (opcode >= I2L && opcode <= I2S) return 1;
+		if (opcode >= LCMP && opcode <= DCMPG) return 1;
+		if (opcode == GETSTATIC) return 1;
+		if (opcode == GETFIELD) return 1;
+		if (opcode == NEW) return 1;
+		if (opcode == DUP) return 1;
+		if (opcode == ARRAYLENGTH || opcode == INSTANCEOF) return 1;
+		if (opcode >= IALOAD && opcode <= SALOAD) return 1; // 新增支持：数组读取入栈 1
+		if (insn instanceof MethodInsnNode mi) {
+			Type retType = Type.getReturnType(mi.desc);
+			return retType.getSort() == Type.VOID ? 0 : 1;
+		}
+		if (insn instanceof InvokeDynamicInsnNode indy) {
+			Type retType = Type.getReturnType(indy.desc);
+			return retType.getSort() == Type.VOID ? 0 : 1;
+		}
+		return 0;
+	}
+
+	private static int getPops(AbstractInsnNode insn) {
+		int opcode = insn.getOpcode();
+		if (opcode >= ISTORE && opcode <= ASTORE) return 1;
+		if (opcode >= IADD && opcode <= DREM) return 2;
+		if (opcode >= ISHL && opcode <= LXOR) return 2;
+		if (opcode >= INEG && opcode <= DNEG) return 1;
+		if (opcode >= I2L && opcode <= I2S) return 1;
+		if (opcode >= LCMP && opcode <= DCMPG) return 2;
+		if (opcode == GETFIELD) return 1;
+		if (opcode == PUTFIELD) return 2;
+		if (opcode == PUTSTATIC) return 1;
+		if (opcode == DUP) return 1;
+		if (opcode == ARRAYLENGTH || opcode == INSTANCEOF || opcode == ATHROW || opcode == MONITORENTER || opcode == MONITOREXIT) {
+			return 1;
+		}
+		if (opcode >= IFEQ && opcode <= IFLE) return 1;
+		if (opcode >= IF_ICMPEQ && opcode <= IF_ACMPNE) return 2;
+		if (opcode == IFNULL || opcode == IFNONNULL) return 1;
+		if (opcode >= IALOAD && opcode <= SALOAD) return 2;   // 新增支持：数组读取消耗 2
+		if (opcode >= IASTORE && opcode <= SASTORE) return 3; // 新增支持：数组写入消耗 3
+		if (insn instanceof MethodInsnNode mi) {
+			int pops = Type.getArgumentTypes(mi.desc).length;
+			if (opcode != INVOKESTATIC) {
+				pops += 1;
+			}
+			return pops;
+		}
+		if (insn instanceof InvokeDynamicInsnNode indy) {
+			return Type.getArgumentTypes(indy.desc).length;
+		}
+		return 0;
+	}
+
+	private static AbstractInsnNode skipExpression(AbstractInsnNode insn) {
+		if (insn == null) return null;
+		int              needed = 1;
+		AbstractInsnNode curr   = insn;
+		while (curr != null) {
+			int pops   = getPops(curr);
+			int pushes = getPushes(curr);
+			needed -= pushes;
+			needed += pops;
+			if (needed <= 0) {
+				return curr.getPrevious();
+			}
+			curr = curr.getPrevious();
+		}
+		return null;
+	}
+
+	private static AbstractInsnNode getPrevArgInsn(AbstractInsnNode start, Type[] argTypes, int targetIdx) {
+		AbstractInsnNode prev = start;
+		for (int i = argTypes.length - 1; i >= 0 && prev != null; i--) {
+			if (i == targetIdx) {
+				return prev;
+			}
+			prev = skipExpression(prev);
+		}
+		return null;
+	}
+
+	private static Object[] extractArgs(ClassNode cn, MethodNode mn, MethodInsnNode target) {
 		Type[] argTypes = Type.getArgumentTypes(target.desc);
 		if (argTypes.length == 0) return new Object[0];
 
-		Object[]         args = new Object[argTypes.length];
-		AbstractInsnNode prev = target.getPrevious();
-
-		for (int i = argTypes.length - 1; i >= 0 && prev != null; i--) {
-			args[i] = resolveConstant(prev);
-
-			Type t    = argTypes[i];
-			int  size = t.getSize();
-			for (int s = 1; s < size && prev != null; s++) {
-				prev = prev.getPrevious();
-			}
-			if (prev != null) {
-				prev = prev.getPrevious();
-			}
+		Object[]    args            = new Object[argTypes.length];
+		Set<String> visitingMethods = new HashSet<>();
+		for (int i = 0; i < argTypes.length; i++) {
+			AbstractInsnNode argInsn = getPrevArgInsn(target.getPrevious(), argTypes, i);
+			args[i] = resolveConstant(cn, mn, argInsn, visitingMethods);
 		}
 
 		return args;
 	}
 
-	private static Object resolveConstant(AbstractInsnNode insn) {
-		if (insn instanceof LdcInsnNode) {
-			return ((LdcInsnNode) insn).cst;
-		}
-		if (insn instanceof InsnNode) {
-			switch (insn.getOpcode()) {
-				case ICONST_M1:
-					return -1;
-				case ICONST_0:
-					return 0;
-				case ICONST_1:
-					return 1;
-				case ICONST_2:
-					return 2;
-				case ICONST_3:
-					return 3;
-				case ICONST_4:
-					return 4;
-				case ICONST_5:
-					return 5;
-				case FCONST_0:
-					return 0.0f;
-				case FCONST_1:
-					return 1.0f;
-				case FCONST_2:
-					return 2.0f;
-				case DCONST_0:
-					return 0.0d;
-				case DCONST_1:
-					return 1.0d;
-				case LCONST_0:
-					return 0L;
-				case LCONST_1:
-					return 1L;
+	private static Object evaluateBinaryOp(int opcode, Object left, Object right) {
+		if (left == null || right == null) return null;
+		if (!(left instanceof Number l) || !(right instanceof Number r)) return null;
+
+		return switch (opcode) {
+			case IADD -> l.intValue() + r.intValue();
+			case ISUB -> l.intValue() - r.intValue();
+			case IMUL -> l.intValue() * r.intValue();
+			case IDIV -> r.intValue() == 0 ? null : l.intValue() / r.intValue();
+			case LADD -> l.longValue() + r.longValue();
+			case LSUB -> l.longValue() - r.longValue();
+			case LMUL -> l.longValue() * r.longValue();
+			case LDIV -> r.longValue() == 0L ? null : l.longValue() / r.longValue();
+			case FADD -> l.floatValue() + r.floatValue();
+			case FSUB -> l.floatValue() - r.floatValue();
+			case FMUL -> l.floatValue() * r.floatValue();
+			case FDIV -> r.floatValue() == 0.0f ? null : l.floatValue() / r.floatValue();
+			case DADD -> l.doubleValue() + r.doubleValue();
+			case DSUB -> l.doubleValue() - r.doubleValue();
+			case DMUL -> l.doubleValue() * r.doubleValue();
+			case DDIV -> r.doubleValue() == 0.0d ? null : l.doubleValue() / r.doubleValue();
+			default -> null;
+		};
+	}
+
+	private static Object evaluateUnaryOp(int opcode, Object val) {
+		if (val == null) return null;
+		if (!(val instanceof Number n)) return null;
+		return switch (opcode) {
+			case INEG -> -n.intValue();
+			case LNEG -> -n.longValue();
+			case FNEG -> -n.floatValue();
+			case DNEG -> -n.doubleValue();
+			default -> null;
+		};
+	}
+
+	private static Object resolveConstant(ClassNode cn, MethodNode mn, AbstractInsnNode insn,
+	                                      Set<String> visitingMethods) {
+		switch (insn) {
+			case null -> {
+				return null;
 			}
+			case LdcInsnNode ldcInsnNode -> {
+				return ldcInsnNode.cst;
+			}
+			case InsnNode insnNode -> {
+				int opcode = insnNode.getOpcode();
+				switch (opcode) {
+					case ICONST_M1 -> { return -1; }
+					case ICONST_0 -> { return 0; }
+					case ICONST_1 -> { return 1; }
+					case ICONST_2 -> { return 2; }
+					case ICONST_3 -> { return 3; }
+					case ICONST_4 -> { return 4; }
+					case ICONST_5 -> { return 5; }
+					case FCONST_0 -> { return 0.0f; }
+					case FCONST_1 -> { return 1.0f; }
+					case FCONST_2 -> { return 2.0f; }
+					case DCONST_0 -> { return 0.0d; }
+					case DCONST_1 -> { return 1.0d; }
+					case LCONST_0 -> { return 0L; }
+					case LCONST_1 -> { return 1L; }
+
+					// 新增：安全支持基础基本类型的 JVM 强制或隐式数值转换（例如 I2F、I2D）
+					case I2L, I2F, I2D, L2I, L2F, L2D, F2I, F2L, F2D, D2I, D2L, D2F, I2B, I2C, I2S -> {
+						AbstractInsnNode prev = insn.getPrevious();
+						if (prev == null) break;
+
+						Object val = resolveConstant(cn, mn, prev, visitingMethods);
+						if (val instanceof Number num) {
+							switch (opcode) {
+								case I2L, F2L, D2L:
+									return num.longValue();
+								case I2F, L2F, D2F:
+									return num.floatValue();
+								case I2D, L2D, F2D:
+									return num.doubleValue();
+								case L2I, F2I, D2I:
+									return num.intValue();
+								case I2B:
+									return num.byteValue();
+								case I2C:
+									return (char) num.intValue();
+								case I2S:
+									return num.shortValue();
+							}
+						}
+					}
+					case IADD, ISUB, IMUL, IDIV, LADD, LSUB, LMUL, LDIV, FADD, FSUB, FMUL, FDIV, DADD, DSUB, DMUL, DDIV -> {
+						AbstractInsnNode rightInsn = insn.getPrevious();
+						if (rightInsn != null) {
+							AbstractInsnNode leftInsn = skipExpression(rightInsn);
+							Object           rightVal = resolveConstant(cn, mn, rightInsn, visitingMethods);
+							Object           leftVal  = resolveConstant(cn, mn, leftInsn, visitingMethods);
+							return evaluateBinaryOp(opcode, leftVal, rightVal);
+						}
+					}
+					case INEG, LNEG, FNEG, DNEG -> {
+						AbstractInsnNode prev = insn.getPrevious();
+						if (prev != null) {
+							Object val = resolveConstant(cn, mn, prev, visitingMethods);
+							return evaluateUnaryOp(opcode, val);
+						}
+					}
+				}
+			}
+			default -> { }
 		}
 		if (insn instanceof IntInsnNode iin && (insn.getOpcode() == BIPUSH || insn.getOpcode() == SIPUSH)) {
 			return iin.operand;
 		}
+		if (insn instanceof VarInsnNode vin) {
+			int opcode = vin.getOpcode();
+			if (opcode == ILOAD || opcode == FLOAD || opcode == LLOAD || opcode == DLOAD || opcode == ALOAD) {
+				return resolveVar(cn, mn, vin.var, visitingMethods);
+			}
+		}
 		return null;
+	}
+
+	private static boolean isConstantType(Object val) {
+		return val instanceof String || val instanceof Number || val instanceof Boolean || val instanceof Character;
+	}
+
+	private static Object resolveVar(ClassNode cn, MethodNode mn, int varIndex, Set<String> visitingMethods) {
+		// 修复方案：将检测粒度细化至 槽位级别，防止同一个方法中多级解析常数时误判为无限递归。
+		String visitKey = mn.name + ":" + mn.desc + "#" + varIndex;
+		if (visitingMethods.contains(visitKey)) {
+			return null;
+		}
+		visitingMethods.add(visitKey);
+		tryLabel:
+		try {
+			int              writes      = 0;
+			AbstractInsnNode singleStore = null;
+			for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof VarInsnNode vin) {
+					int opcode = vin.getOpcode();
+					if (opcode == ISTORE || opcode == LSTORE || opcode == FSTORE || opcode == DSTORE || opcode == ASTORE) {
+						if (vin.var == varIndex) {
+							writes++;
+							singleStore = insn;
+						}
+					}
+				} else if (insn instanceof IincInsnNode iin) {
+					if (iin.var == varIndex) {
+						writes++;
+					}
+				}
+			}
+
+			if (writes == 1 && singleStore != null) {
+				AbstractInsnNode prev = singleStore.getPrevious();
+				if (prev != null) {
+					Object val = resolveConstant(cn, mn, prev, visitingMethods);
+					if (isConstantType(val)) {
+						return val;
+					}
+				}
+				break tryLabel;
+			}
+			if (writes != 0) break tryLabel;
+
+			int    localIndex = ((mn.access & ACC_STATIC) != 0) ? 0 : 1;
+			Type[] args       = Type.getArgumentTypes(mn.desc);
+			int    argIdx     = -1;
+			for (int i = 0; i < args.length; i++) {
+				if (localIndex == varIndex) {
+					argIdx = i;
+					break;
+				}
+				localIndex += args[i].getSize();
+			}
+
+			if (argIdx < 0 || (!mn.name.startsWith("lambda$") && !mn.name.contains("$lambda"))) break tryLabel;
+
+			for (MethodNode parentMn : cn.methods) {
+				for (AbstractInsnNode insn = parentMn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+					if (!(insn instanceof InvokeDynamicInsnNode indy) || indy.bsmArgs == null || indy.bsmArgs.length <= 1) {
+						continue;
+					}
+					for (Object bsmArg : indy.bsmArgs) {
+						if (!(bsmArg instanceof Handle h) || !h.getName().equals(mn.name) || !h.getOwner().equals(cn.name)) {
+							continue;
+						}
+						Type[] indyArgs = Type.getArgumentTypes(indy.desc);
+						if (argIdx >= indyArgs.length) continue;
+
+						Object val = extractIndyArg(cn, parentMn, indy, argIdx, visitingMethods);
+						if (isConstantType(val)) {
+							return val;
+						}
+					}
+				}
+			}
+		} finally {
+			visitingMethods.remove(visitKey);
+		}
+		return null;
+	}
+
+	private static Object extractIndyArg(ClassNode cn, MethodNode mn, InvokeDynamicInsnNode indy, int argIdx,
+	                                     Set<String> visitingMethods) {
+		Type[]           argTypes = Type.getArgumentTypes(indy.desc);
+		AbstractInsnNode argInsn  = getPrevArgInsn(indy.getPrevious(), argTypes, argIdx);
+		return resolveConstant(cn, mn, argInsn, visitingMethods);
 	}
 	//endregion
 
@@ -592,11 +837,6 @@ public class CellPropertyRef {
 		return ref != null ? ref.get() : null;
 	}
 
-	/**
-	 * 【重大优化 3】：动态精准匹配 Sequence 序号
-	 * 结合 Table 物理结构，获取当前 Cell 在其 Table.getCells() 数组中的准确下标（即在 Table 中的创建顺序）。
-	 * 如果无法通过 table 获取，则安全回退到计数器递增逻辑。
-	 */
 	private static CellIdentity inferCellIdentity(Cell<?> cell) {
 		StackTraceElement[] stack = Thread.currentThread().getStackTrace();
 		for (StackTraceElement ste : stack) {
@@ -611,15 +851,13 @@ public class CellPropertyRef {
 				if (table != null) {
 					var cells = table.getCells();
 					if (cells != null) {
-						// indexOf(element, identity) 快速定位 Cell 的真实创建顺序下标
 						seq = cells.indexOf(cell, true);
 					}
 				}
 			} catch (Throwable t) {
-				// 忽略不同底层框架版本微调导致的反编译/方法签名异常
+				// 忽略不同底层框架版本微调导致的异常
 			}
 
-			// 如果反射/Table精确查找失败，退化为全局序号生成器
 			if (seq < 0) {
 				String key = slash + "#" + hostMethod + ":()V";
 				synchronized (methodCounters) {

@@ -2,17 +2,18 @@ package nipx.uihook;
 
 import arc.Core;
 import arc.scene.Element;
+import arc.scene.ui.*;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
-import arc.scene.ui.*;
+import arc.scene.ui.layout.Stack;
 import nipx.Injector;
 import org.objectweb.asm.*;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -25,7 +26,7 @@ import static org.objectweb.asm.Opcodes.*;
 public class CellPropertyRef {
 
 	public static final String CL_TABLE = "arc/scene/ui/layout/Table";
-	public static final String CL_CELL = "arc/scene/ui/layout/Cell";
+	public static final String CL_CELL  = "arc/scene/ui/layout/Cell";
 
 	//region 数据结构
 	public record PropertyCall(String method, String desc, Object[] args, int line) { }
@@ -76,7 +77,7 @@ public class CellPropertyRef {
 		}
 
 		StackTraceElement hostFrame = stack[cellInitIdx + 2];
-		String hostClass = hostFrame.getClassName();
+		String            hostClass = hostFrame.getClassName();
 
 		// 如果创建该单元格的直接源头是底层库，则属于隐式嵌套，不予追踪
 		if (hostClass.startsWith("arc.") || hostClass.startsWith("java.") || hostClass.startsWith("nipx.")) {
@@ -84,10 +85,10 @@ public class CellPropertyRef {
 		}
 
 		String hostMethod = hostFrame.getMethodName();
-		String hostDesc = "()V"; // 占位签名
+		String hostDesc   = "()V"; // 占位签名
 
 		String slashClass = hostClass.replace('.', '/');
-		String key = slashClass + "#" + hostMethod + ":" + hostDesc;
+		String key        = slashClass + "#" + hostMethod + ":" + hostDesc;
 
 		int seq;
 		synchronized (methodCounters) {
@@ -156,8 +157,8 @@ public class CellPropertyRef {
 				byte[] currentBytecode = fetchCurrentBytecode(Class.forName(id.hostClass.replace('/', '.')));
 				if (currentBytecode != null) {
 					Map<String, List<List<PropertyCall>>> currentChains = extractCellChains(currentBytecode);
-					String methodKey = id.hostMethod + ":" + id.hostDesc;
-					List<List<PropertyCall>> chains = currentChains.get(methodKey);
+					String                                methodKey     = id.hostMethod + ":" + id.hostDesc;
+					List<List<PropertyCall>>              chains        = currentChains.get(methodKey);
 					if (chains == null) {
 						for (Map.Entry<String, List<List<PropertyCall>>> entry : currentChains.entrySet()) {
 							if (entry.getKey().startsWith(id.hostMethod + ":")) {
@@ -220,7 +221,7 @@ public class CellPropertyRef {
 		int totalUpdated = 0;
 		int totalSkipped = 0;
 		int totalRemoved = 0;
-		int totalAdded = 0;
+		int totalAdded   = 0;
 
 		List<CellIdentity> idsSnapshot = new ArrayList<>(cellIds);
 
@@ -288,8 +289,8 @@ public class CellPropertyRef {
 
 		// 【二、新增逻辑】：当新链数量多于旧链时，追加多出来的 UI 元素
 		if (!idsSnapshot.isEmpty()) {
-			CellIdentity firstId = idsSnapshot.get(0);
-			String       methodKey = firstId.hostMethod + ":" + firstId.hostDesc;
+			CellIdentity             firstId   = idsSnapshot.get(0);
+			String                   methodKey = firstId.hostMethod + ":" + firstId.hostDesc;
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
 
 			if (newChains == null) {
@@ -321,7 +322,7 @@ public class CellPropertyRef {
 							Method method = findTableMethod(creator.method, creator.desc);
 							if (method != null) {
 								Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
-								Cell<?> newCell = (Cell<?>) method.invoke(table, converted);
+								Cell<?>  newCell   = (Cell<?>) method.invoke(table, converted);
 								if (newCell != null) {
 									CellIdentity newId = new CellIdentity(slashName, firstId.hostMethod, firstId.hostDesc, seq);
 									synchronized (cellToId) {
@@ -386,9 +387,22 @@ public class CellPropertyRef {
 		return false;
 	}
 
+
 	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
 		Element oldElement = cell.get();
 
+		if (oldElement != null) {
+			// 如果旧元素已经是 Table 且新创建的也是 table，直接跳过替换过程
+			// 这样内部的 Lambda 渲染的子元素就不会被干掉
+			if ((creator.method.equals("table") && oldElement instanceof Table) ||
+			    (creator.method.equals("pane") && oldElement instanceof ScrollPane) ||
+			    (creator.method.equals("stack") && oldElement instanceof Stack)) {
+				if (DEBUG) log("[CellProperty] Skipping replacement for container: " + creator.method);
+				return;
+			}
+		}
+
+		// 针对文本类元素的优化更新（无需销毁重建）
 		if (oldElement != null && creator.args != null && creator.args.length > 0 && creator.args[0] instanceof String newText) {
 			if (oldElement instanceof Label label) {
 				label.setText(newText);
@@ -407,8 +421,10 @@ public class CellPropertyRef {
 			Method method = findTableMethod(creator.method, creator.desc);
 			if (method == null) return;
 
-			Table dummyTable = new Table();
-			Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+			Table    dummyTable = new Table();
+			Object[] converted  = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+
+			// 如果 creator 是 table(cons)，这里会调用我们提供的空 Cons
 			Cell<?> dummyCell = (Cell<?>) method.invoke(dummyTable, converted);
 			if (dummyCell == null || dummyCell.get() == null) return;
 
@@ -513,11 +529,18 @@ public class CellPropertyRef {
 	private static Object[] convertArgs(Class<?>[] paramTypes, Object[] args) {
 		Object[] result = new Object[args.length];
 		for (int i = 0; i < args.length; i++) {
+			Class<?> target = paramTypes[i];
 			if (args[i] == null) {
-				result[i] = null;
+				if (!target.isInterface()) {
+					result[i] = null;
+					continue;
+				}
+				result[i] = Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
+					if (method.getDeclaringClass() == Object.class) return method.invoke(proxy, methodArgs);
+					return null;
+				});
 				continue;
 			}
-			Class<?> target = paramTypes[i];
 			if (target == float.class) {
 				result[i] = ((Number) args[i]).floatValue();
 			} else if (target == int.class) {
@@ -801,35 +824,71 @@ public class CellPropertyRef {
 		} else if (insn instanceof InsnNode) {
 			int opcode = insn.getOpcode();
 			switch (opcode) {
-				case ICONST_M1: return -1;
-				case ICONST_0: return 0;
-				case ICONST_1: return 1;
-				case ICONST_2: return 2;
-				case ICONST_3: return 3;
-				case ICONST_4: return 4;
-				case ICONST_5: return 5;
-				case FCONST_0: return 0.0f;
-				case FCONST_1: return 1.0f;
-				case FCONST_2: return 2.0f;
-				case DCONST_0: return 0.0d;
-				case DCONST_1: return 1.0d;
-				case LCONST_0: return 0L;
-				case LCONST_1: return 1L;
+				case ICONST_M1:
+					return -1;
+				case ICONST_0:
+					return 0;
+				case ICONST_1:
+					return 1;
+				case ICONST_2:
+					return 2;
+				case ICONST_3:
+					return 3;
+				case ICONST_4:
+					return 4;
+				case ICONST_5:
+					return 5;
+				case FCONST_0:
+					return 0.0f;
+				case FCONST_1:
+					return 1.0f;
+				case FCONST_2:
+					return 2.0f;
+				case DCONST_0:
+					return 0.0d;
+				case DCONST_1:
+					return 1.0d;
+				case LCONST_0:
+					return 0L;
+				case LCONST_1:
+					return 1L;
 
-				case I2L: case I2F: case I2D: case L2I: case L2F: case L2D: case F2I: case F2L: case F2D: case D2I: case D2L: case D2F: case I2B: case I2C: case I2S: {
+				case I2L:
+				case I2F:
+				case I2D:
+				case L2I:
+				case L2F:
+				case L2D:
+				case F2I:
+				case F2L:
+				case F2D:
+				case D2I:
+				case D2L:
+				case D2F:
+				case I2B:
+				case I2C:
+				case I2S: {
 					AbstractInsnNode prev = insn.getPrevious();
 					if (prev == null) break;
 
 					Object val = resolveConstant(cn, mn, prev, visitingMethods);
 					if (val instanceof Number num) {
 						switch (opcode) {
-							case I2L: case F2L: case D2L:
+							case I2L:
+							case F2L:
+							case D2L:
 								return num.longValue();
-							case I2F: case L2F: case D2F:
+							case I2F:
+							case L2F:
+							case D2F:
 								return num.floatValue();
-							case I2D: case L2D: case F2D:
+							case I2D:
+							case L2D:
+							case F2D:
 								return num.doubleValue();
-							case L2I: case F2I: case D2I:
+							case L2I:
+							case F2I:
+							case D2I:
 								return num.intValue();
 							case I2B:
 								return num.byteValue();
@@ -841,7 +900,22 @@ public class CellPropertyRef {
 					}
 					break;
 				}
-				case IADD: case ISUB: case IMUL: case IDIV: case LADD: case LSUB: case LMUL: case LDIV: case FADD: case FSUB: case FMUL: case FDIV: case DADD: case DSUB: case DMUL: case DDIV: {
+				case IADD:
+				case ISUB:
+				case IMUL:
+				case IDIV:
+				case LADD:
+				case LSUB:
+				case LMUL:
+				case LDIV:
+				case FADD:
+				case FSUB:
+				case FMUL:
+				case FDIV:
+				case DADD:
+				case DSUB:
+				case DMUL:
+				case DDIV: {
 					AbstractInsnNode rightInsn = insn.getPrevious();
 					if (rightInsn != null) {
 						AbstractInsnNode leftInsn = skipExpression(rightInsn);
@@ -851,7 +925,10 @@ public class CellPropertyRef {
 					}
 					break;
 				}
-				case INEG: case LNEG: case FNEG: case DNEG: {
+				case INEG:
+				case LNEG:
+				case FNEG:
+				case DNEG: {
 					AbstractInsnNode prev = insn.getPrevious();
 					if (prev != null) {
 						Object val = resolveConstant(cn, mn, prev, visitingMethods);
@@ -1125,14 +1202,14 @@ public class CellPropertyRef {
 		}
 
 		StackTraceElement callerFrame = stack[cellFrameIdx + 1];
-		String callerClass = callerFrame.getClassName();
+		String            callerClass = callerFrame.getClassName();
 
 		// 如果直接调用者是库类，说明是内部嵌套调用，不作为外部宿主方法 Cell 追踪
 		if (callerClass.startsWith("arc.") || callerClass.startsWith("java.") || callerClass.startsWith("nipx.")) {
 			return null;
 		}
 
-		String slash = callerClass.replace('.', '/');
+		String slash      = callerClass.replace('.', '/');
 		String hostMethod = callerFrame.getMethodName();
 
 		int seq = -1;

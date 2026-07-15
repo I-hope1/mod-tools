@@ -3,6 +3,8 @@ package test0;
 import arc.graphics.Color;
 import arc.scene.ui.Tooltip.Tooltips;
 import arc.util.Log;
+import mindustry.graphics.Pal;
+import mindustry.ui.Styles;
 import modtools.ui.IntUI.ITooltip;
 import modtools.ui.comp.Window;
 import nipx.annotation.OnReload;
@@ -44,9 +46,21 @@ public class TestAA {
 
 	public static void newWindow() {
 		new Window("www") {{
-			float size = 100 * 3;
-			float h = size * 0.9f;
-			cont.image().width(size).growY().color(Color.acid);
+			float size = 10 * 3 / 2f;
+			float s = size * 1.9f;
+			cont.table(t -> {
+				t.add("acosijasc");
+				t.image().size(30).color(Pal.accent);
+			}).growX().colspan(5).row();
+
+			cont.image().size(30).color(Color.acid);
+			cont.image().size(s).color(Color.yellow);
+			cont.image().size(42).color(Color.lightGray);
+			cont.button("777", Styles.flatBordert, () -> Log.info("ojaso"))
+			 .size(64).row();
+
+			cont.image().size(42).color(Color.purple);
+			cont.image().size(size).color(Color.white);
 		}}.show();
 	}
 

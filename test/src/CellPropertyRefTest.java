@@ -47,6 +47,11 @@ public class CellPropertyRefTest {
             float size = 100f * 3f;
             table.add().size(size, size * 0.7f);
         }
+
+        void testRowProperty(Table table) {
+            table.add().growX().row();
+            table.add().width(42f);
+        }
     }
 
     private byte[] getClassBytecode(Class<?> clazz) throws Exception {
@@ -100,6 +105,12 @@ public class CellPropertyRefTest {
         assertEquals(1, arithmeticChains.size());
         assertEquals(300.0f, arithmeticChains.get(0).get(0).args()[0]);
         assertEquals(210.0f, arithmeticChains.get(0).get(0).args()[1]);
+
+        // Verify row() is tracked as a cell property so hot reload can keep row boundaries.
+        List<List<CellPropertyRef.PropertyCall>> rowChains = findChains(chains, "testRowProperty");
+        assertNotNull(rowChains);
+        assertEquals(2, rowChains.size());
+        assertEquals("row", rowChains.get(0).get(2).method());
     }
 
     private List<List<CellPropertyRef.PropertyCall>> findChains(Map<String, List<List<CellPropertyRef.PropertyCall>>> chains, String methodName) {

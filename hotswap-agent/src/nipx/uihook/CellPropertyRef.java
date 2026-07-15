@@ -508,7 +508,7 @@ public class CellPropertyRef {
 		List<PropertyCall> newProperties = newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size());
 
 		if (elementUpdated || !callsEqual(oldProperties, newProperties)) {
-			cell.set(Cell.defaults());
+			resetCell(cell);
 			applyAllCalls(cell, newProperties);
 			if (DEBUG) {
 				log("[CellProperty] Reapplied property chain due to changes (Element updated: " + elementUpdated + ").");
@@ -518,6 +518,29 @@ public class CellPropertyRef {
 		return false;
 	}
 
+
+	private static void resetCell(Cell<?> cell) {
+		cell.set(Cell.defaults());
+		resetCellEndRow(cell);
+	}
+
+	private static void resetCellEndRow(Cell<?> cell) {
+		for (String fieldName : new String[]{"endRow", "row"}) {
+			try {
+				Field field = Cell.class.getDeclaredField(fieldName);
+				if (field.getType() == boolean.class) {
+					field.setAccessible(true);
+					field.setBoolean(cell, false);
+					return;
+				}
+			} catch (NoSuchFieldException ignored) {
+				// Try the next known field name used by different Arc versions.
+			} catch (IllegalAccessException e) {
+				error("[CellProperty] Failed to reset Cell end-row flag", e);
+				return;
+			}
+		}
+	}
 
 	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
 		Element oldElement = cell.get();
@@ -703,6 +726,7 @@ public class CellPropertyRef {
 	 "fill", "fillX", "fillY",
 	 "align", "center", "top", "left", "bottom", "right",
 	 "grow", "growX", "growY",
+	 "row",
 	 "expand", "expandX", "expandY",
 	 "colspan",
 	 "uniform", "uniformX", "uniformY",

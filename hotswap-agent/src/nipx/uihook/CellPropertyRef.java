@@ -224,6 +224,8 @@ public class CellPropertyRef {
 		int totalAdded   = 0;
 
 		List<CellIdentity> idsSnapshot = new ArrayList<>(cellIds);
+		Map<CellIdentity, Integer> newChainIndexes = mapCellsToNewChains(idsSnapshot, newChainsByMethod);
+		Map<String, List<Integer>> newChainAdditions = findNewChainAdditions(idsSnapshot, newChainsByMethod, newChainIndexes);
 
 		for (CellIdentity id : idsSnapshot) {
 			Cell<?> cell = findCellById(id);
@@ -232,20 +234,11 @@ public class CellPropertyRef {
 				continue;
 			}
 
-			String                   methodKey = id.hostMethod + ":" + id.hostDesc;
-			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
-
-			if (newChains == null) {
-				for (Map.Entry<String, List<List<PropertyCall>>> entry : newChainsByMethod.entrySet()) {
-					if (entry.getKey().startsWith(id.hostMethod + ":")) {
-						newChains = entry.getValue();
-						break;
-					}
-				}
-			}
+			List<List<PropertyCall>> newChains = findChainsForId(newChainsByMethod, id);
+			Integer                  newIndex  = newChainIndexes.get(id);
 
 			// 【一、删除逻辑】：如果新的调用链不再包含该 Cell (注释/删除)
-			if (newChains == null || id.sequence >= newChains.size()) {
+			if (newChains == null || newIndex == null || newIndex >= newChains.size()) {
 				Table table = cell.getTable();
 				if (table != null) {
 					Element element = cell.get();
@@ -264,7 +257,7 @@ public class CellPropertyRef {
 				continue;
 			}
 
-			List<PropertyCall> newCalls = newChains.get(id.sequence);
+			List<PropertyCall> newCalls = newChains.get(newIndex);
 			List<PropertyCall> oldCalls = records.get(id);
 
 			if (oldCalls == null || oldCalls.isEmpty()) {
@@ -287,24 +280,21 @@ public class CellPropertyRef {
 			records.put(id, newCalls);
 		}
 
-		// 【二、新增逻辑】：当新链数量多于旧链时，追加多出来的 UI 元素
-		if (!idsSnapshot.isEmpty()) {
-			CellIdentity             firstId   = idsSnapshot.get(0);
-			String                   methodKey = firstId.hostMethod + ":" + firstId.hostDesc;
+		// 【二、新增逻辑】：按宿主方法分别追加无法匹配到旧 Cell 的新调用链。
+		for (Map.Entry<String, List<Integer>> additionEntry : newChainAdditions.entrySet()) {
+			String                   methodKey = additionEntry.getKey();
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
+			if (newChains == null) continue;
 
-			if (newChains == null) {
-				for (Map.Entry<String, List<List<PropertyCall>>> entry : newChainsByMethod.entrySet()) {
-					if (entry.getKey().startsWith(firstId.hostMethod + ":")) {
-						newChains = entry.getValue();
-						break;
-					}
+			List<CellIdentity> methodIds = new ArrayList<>();
+			for (CellIdentity id : idsSnapshot) {
+				if (methodKeyMatches(id, methodKey)) {
+					methodIds.add(id);
 				}
 			}
-
-			if (newChains != null && newChains.size() > idsSnapshot.size()) {
+			if (!methodIds.isEmpty()) {
 				Table table = null;
-				for (CellIdentity id : idsSnapshot) {
+				for (CellIdentity id : methodIds) {
 					Cell<?> existingCell = findCellById(id);
 					if (existingCell != null && existingCell.getTable() != null) {
 						table = existingCell.getTable();
@@ -313,7 +303,7 @@ public class CellPropertyRef {
 				}
 
 				if (table != null) {
-					for (int seq = idsSnapshot.size(); seq < newChains.size(); seq++) {
+					for (int seq : additionEntry.getValue()) {
 						List<PropertyCall> newCalls = newChains.get(seq);
 						if (newCalls == null || newCalls.isEmpty()) continue;
 
@@ -324,7 +314,7 @@ public class CellPropertyRef {
 								Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
 								Cell<?>  newCell   = (Cell<?>) method.invoke(table, converted);
 								if (newCell != null) {
-									CellIdentity newId = new CellIdentity(slashName, firstId.hostMethod, firstId.hostDesc, seq);
+									CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
 									synchronized (cellToId) {
 										cellToId.put(newCell, newId);
 									}
@@ -351,6 +341,147 @@ public class CellPropertyRef {
 		     + ", Added: " + totalAdded + ", Skipped: " + totalSkipped + " for " + dotClassName);
 	}
 	//endregion
+
+	private static Map<CellIdentity, Integer> mapCellsToNewChains(List<CellIdentity> idsSnapshot,
+	                                                              Map<String, List<List<PropertyCall>>> newChainsByMethod) {
+		Map<CellIdentity, Integer> result = new HashMap<>();
+		Map<String, List<CellIdentity>> idsByMethod = new LinkedHashMap<>();
+		for (CellIdentity id : idsSnapshot) {
+			String methodKey = findMethodKeyForId(newChainsByMethod, id);
+			if (methodKey != null) {
+				idsByMethod.computeIfAbsent(methodKey, _ -> new ArrayList<>()).add(id);
+			}
+		}
+
+		for (Map.Entry<String, List<CellIdentity>> entry : idsByMethod.entrySet()) {
+			List<List<PropertyCall>> newChains = newChainsByMethod.get(entry.getKey());
+			if (newChains == null) continue;
+
+			Set<Integer> usedNewIndexes = new HashSet<>();
+
+			// 先用旧记录与新链内容做相似匹配，避免中间插入/删除时按序号整体错位。
+			for (CellIdentity id : entry.getValue()) {
+				List<PropertyCall> oldCalls = records.get(id);
+				if (oldCalls == null || oldCalls.isEmpty()) continue;
+
+				int bestIndex = findBestChainIndex(newChains, oldCalls, usedNewIndexes);
+				if (bestIndex >= 0) {
+					result.put(id, bestIndex);
+					usedNewIndexes.add(bestIndex);
+				}
+			}
+
+			// 旧运行时没有记录时，才退回到原 sequence，但避免覆盖已经精确匹配的链。
+			for (CellIdentity id : entry.getValue()) {
+				if (result.containsKey(id)) continue;
+				if (id.sequence < newChains.size() && !usedNewIndexes.contains(id.sequence)) {
+					result.put(id, id.sequence);
+					usedNewIndexes.add(id.sequence);
+				}
+			}
+		}
+
+		return result;
+	}
+
+	private static Map<String, List<Integer>> findNewChainAdditions(List<CellIdentity> idsSnapshot,
+	                                                                Map<String, List<List<PropertyCall>>> newChainsByMethod,
+	                                                                Map<CellIdentity, Integer> mappedIndexes) {
+		Map<String, List<Integer>> additions = new LinkedHashMap<>();
+		for (String methodKey : newChainsByMethod.keySet()) {
+			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
+			if (newChains == null || newChains.isEmpty()) continue;
+
+			boolean hasTrackedCells = false;
+			Set<Integer> usedIndexes = new HashSet<>();
+			for (CellIdentity id : idsSnapshot) {
+				if (!methodKeyMatches(id, methodKey)) continue;
+				hasTrackedCells = true;
+				Integer index = mappedIndexes.get(id);
+				if (index != null) usedIndexes.add(index);
+			}
+			if (!hasTrackedCells) continue;
+
+			for (int i = 0; i < newChains.size(); i++) {
+				if (!usedIndexes.contains(i)) {
+					additions.computeIfAbsent(methodKey, _ -> new ArrayList<>()).add(i);
+				}
+			}
+		}
+		return additions;
+	}
+
+	private static int findBestChainIndex(List<List<PropertyCall>> newChains, List<PropertyCall> oldCalls,
+	                                      Set<Integer> usedNewIndexes) {
+		int bestIndex = -1;
+		int bestScore = 0;
+		for (int i = 0; i < newChains.size(); i++) {
+			if (usedNewIndexes.contains(i)) continue;
+
+			int score = chainSimilarity(oldCalls, newChains.get(i));
+			if (score > bestScore) {
+				bestScore = score;
+				bestIndex = i;
+			}
+		}
+		return bestScore > 0 ? bestIndex : -1;
+	}
+
+	private static int chainSimilarity(List<PropertyCall> oldCalls, List<PropertyCall> newCalls) {
+		if (callsEqual(oldCalls, newCalls)) return Integer.MAX_VALUE;
+		if (oldCalls == null || newCalls == null || oldCalls.isEmpty() || newCalls.isEmpty()) return 0;
+
+		int score = 0;
+		PropertyCall oldCreator = oldCalls.get(0);
+		PropertyCall newCreator = newCalls.get(0);
+		if (oldCreator.method.equals(newCreator.method)) score += 2;
+		if (oldCreator.desc.equals(newCreator.desc)) score += 2;
+		if (argsEqual(oldCreator.args, newCreator.args)) score += 6;
+
+		int max = Math.min(oldCalls.size(), newCalls.size());
+		for (int i = 1; i < max; i++) {
+			PropertyCall oldCall = oldCalls.get(i);
+			PropertyCall newCall = newCalls.get(i);
+			if (oldCall.method.equals(newCall.method)) score++;
+			if (oldCall.desc.equals(newCall.desc)) score++;
+			if (argsEqual(oldCall.args, newCall.args)) score += 2;
+		}
+		return score;
+	}
+
+	private static List<List<PropertyCall>> findChainsForId(Map<String, List<List<PropertyCall>>> chainsByMethod,
+	                                                        CellIdentity id) {
+		String methodKey = findMethodKeyForId(chainsByMethod, id);
+		return methodKey == null ? null : chainsByMethod.get(methodKey);
+	}
+
+	private static String findMethodKeyForId(Map<String, List<List<PropertyCall>>> chainsByMethod, CellIdentity id) {
+		String exactKey = id.hostMethod + ":" + id.hostDesc;
+		if (chainsByMethod.containsKey(exactKey)) {
+			return exactKey;
+		}
+		for (String key : chainsByMethod.keySet()) {
+			if (methodKeyMatches(id, key)) {
+				return key;
+			}
+		}
+		return null;
+	}
+
+	private static boolean methodKeyMatches(CellIdentity id, String methodKey) {
+		if (methodKey.equals(id.hostMethod + ":" + id.hostDesc)) return true;
+		return methodKey.startsWith(id.hostMethod + ":");
+	}
+
+	private static String methodNameFromKey(String methodKey) {
+		int colon = methodKey.indexOf(':');
+		return colon < 0 ? methodKey : methodKey.substring(0, colon);
+	}
+
+	private static String methodDescFromKey(String methodKey) {
+		int colon = methodKey.indexOf(':');
+		return colon < 0 ? "()V" : methodKey.substring(colon + 1);
+	}
 
 	//region 属性与子元素更新
 	private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {

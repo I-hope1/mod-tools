@@ -109,12 +109,20 @@ public class JNIEnv {
 	//endregion
 
 	//region JNI Environment Initialization
-	static { MASTER_ENV = new JNIEnv(Arena.global()); }
+	static {
+		try (Arena arena = Arena.ofConfined()) {
+			MASTER_ENV = new JNIEnv(arena);
+		}
+	}
 
 	public static void load() { }
 	private GlobalRef getJNIEnvRef(SegmentAllocator allocator) {
-		GlobalRef     jstr        = null;
-		MemorySegment threadClass = null, classClass = null, currentThread = null, classLoader = null;
+		MemorySegment
+		 jstr = null,
+		 threadClass = null,
+		 classClass = null,
+		 currentThread = null,
+		 classLoader = null;
 		try {
 			threadClass = NewGlobalRef(findClassDirect("java/lang/Thread"));
 			classClass = NewGlobalRef(findClassDirect("java/lang/Class"));
@@ -127,10 +135,10 @@ public class JNIEnv {
 			currentThread = NewGlobalRef(callStaticObjectMethodA(threadClass, midCurrentThread, MemorySegment.NULL)); // Thread.currentThread()
 			classLoader = NewGlobalRef(callObjectMethodA(currentThread, midGetContextCL, MemorySegment.NULL)); // Thread.currentThread().getContextClassLoader()
 
-			jstr = cstrToJstring(allocator.allocateFrom(JNIEnv.class.getName()));
+			jstr = NewGlobalRef((MemorySegment) NewStringPlatform.invokeExact(jniEnvPointer, allocator.allocateFrom(JNIEnv.class.getName())));
 			var args = allocator.allocate(JValue.jvalueLayout, 3);
 			args.copyFrom(MemorySegment.ofArray(new long[]{
-			 jstr.ref().address(),
+			 jstr.address(),
 			 0L, // false
 			 classLoader.address()
 			}));
@@ -140,7 +148,7 @@ public class JNIEnv {
 		} catch (Throwable t) {
 			throw new RuntimeException(t);
 		} finally {
-			if (jstr != null) jstr.close();
+			if (jstr != null) DeleteGlobalRef(jstr);
 			if (threadClass != null) DeleteGlobalRef(threadClass);
 			if (classClass != null) DeleteGlobalRef(classClass);
 			if (currentThread != null) DeleteGlobalRef(currentThread);

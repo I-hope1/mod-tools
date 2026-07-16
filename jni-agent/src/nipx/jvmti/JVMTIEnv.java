@@ -581,9 +581,9 @@ public class JVMTIEnv {
 		}
 	}
 
-	static final ThreadLocal<MethodMeta[]> metasCache  = ThreadLocal.withInitial(() -> new MethodMeta[64]);
-	static final ThreadLocal<VarEntry[][]> tablesCache = ThreadLocal.withInitial(() -> new VarEntry[64][]);
-	static final ThreadLocal<long[]>       locsCache   = ThreadLocal.withInitial(() -> new long[64]);
+	static final ThreadLocal<MethodMeta[]> metasCache  = ThreadLocal.withInitial(() -> new MethodMeta[128]);
+	static final ThreadLocal<VarEntry[][]> tablesCache = ThreadLocal.withInitial(() -> new VarEntry[128][]);
+	static final ThreadLocal<long[]>       locsCache   = ThreadLocal.withInitial(() -> new long[128]);
 	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, MemorySegment targetThread, int maxDepth,
 	                                             int skipFrames, boolean isCurrentThread) {
 		boolean suspended;
@@ -785,6 +785,11 @@ public class JVMTIEnv {
 	public void walkThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
 	                             int maxDepth, int skipFrames,
 	                             FrameConsumer consumer) {
+		walkThreadFrames(jniEnv, targetThread, maxDepth, skipFrames, false, consumer);
+	}
+	public void walkThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
+	                             int maxDepth, int skipFrames, boolean captureThis,
+	                             FrameConsumer consumer) {
 		try (Arena arena = Arena.ofConfined()) {
 			int           total    = maxDepth + skipFrames;
 			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
@@ -814,7 +819,7 @@ public class JVMTIEnv {
 				// metasBuf[d] = meta;
 				int  flags       = meta.flags;
 				long thisAddress = 0;
-				if (StackCapture.CAPTURE_LOCALS && !(Modifier.isStatic(flags) || Modifier.isNative(flags))) {
+				if (captureThis && (StackCapture.CAPTURE_LOCALS && !(Modifier.isStatic(flags) || Modifier.isNative(flags)))) {
 					try {
 						MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
 						int err = (int) MH_GetLocalObject.invokeExact(
@@ -916,10 +921,7 @@ public class JVMTIEnv {
 			MemorySegment sp = sigPtrOut.get(ValueLayout.ADDRESS, 0);
 			if (sp.address() == 0L) return "<unknown>";
 			try {
-				String sig = sp.reinterpret(Long.MAX_VALUE).getString(0);
-				// "Lcom/example/Foo;" → "com.example.Foo"
-				if (sig.startsWith("L") && sig.endsWith(";")) { return sig.substring(1, sig.length() - 1).replace('/', '.'); }
-				return sig;
+				return sp.reinterpret(Long.MAX_VALUE).getString(0);
 			} finally {
 				jvmtiDeallocate(sp);
 			}

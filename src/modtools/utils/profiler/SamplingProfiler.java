@@ -140,7 +140,7 @@ public class SamplingProfiler {
 	private static void planC(JNIEnv jniEnv, Thread target) {
 		curHolder = ProfilerData.flameRoot;
 		try {
-			StackCapture.captureInto(jniEnv, target, CONSUMER);
+			StackCapture.captureInto(jniEnv, target, true, CONSUMER);
 		} catch (Throwable e) {
 			// Log.err(e);
 		}

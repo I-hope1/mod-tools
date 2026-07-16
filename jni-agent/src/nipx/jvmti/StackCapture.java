@@ -72,11 +72,11 @@ public final class StackCapture {
 		return JVMTIEnv.getInstance()
 		 .captureCurrentThreadLocals(jniEnv, maxDepth, skipFrames);
 	}
-	public static void captureInto(JNIEnv jniEnv, Thread thread, FrameConsumer consumer) {
+	public static void captureInto(JNIEnv jniEnv, Thread thread, boolean captureThis, FrameConsumer consumer) {
 		try (GlobalRef ref = jniEnv.JavaObjectToJObject(thread)) {
 			MemorySegment threadHandle = ref.ref();
 			withSuspend(thread, () -> {
-				JVMTIEnv.getInstance().walkThreadFrames(jniEnv, threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, consumer);
+				JVMTIEnv.getInstance().walkThreadFrames(jniEnv, threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, captureThis, consumer);
 				return null;
 			});
 		} catch (Exception e) {

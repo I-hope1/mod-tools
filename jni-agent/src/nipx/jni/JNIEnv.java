@@ -119,16 +119,16 @@ public class JNIEnv {
 			var midForName = getStaticMethodID(classClass, "forName",
 			 "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;");
 
-			currentThread = NewGlobalRef(callStaticObjectMethodA(threadClass, midCurrentThread, MemorySegment.NULL));
+			currentThread = NewGlobalRef(callStaticObjectMethodA(threadClass, midCurrentThread, MemorySegment.NULL)); // Thread.currentThread()
+			classLoader = NewGlobalRef(callObjectMethodA(currentThread, midGetContextCL, MemorySegment.NULL)); // Thread.currentThread().getContextClassLoader()
 
-			classLoader = NewGlobalRef(callObjectMethodA(currentThread, midGetContextCL, MemorySegment.NULL));
-			var clsName = allocator.allocateFrom(JNIEnv.class.getName());
-
-			jstr = cstrToJstring(clsName);
-			var args = allocator.allocate(ValueLayout.JAVA_LONG, 3);
-			args.set(ValueLayout.JAVA_LONG, 0, jstr.ref().address());
-			args.set(ValueLayout.JAVA_LONG, 8, 0L);                  // false
-			args.set(ValueLayout.JAVA_LONG, 16, classLoader.address());
+			jstr = cstrToJstring(allocator.allocateFrom(JNIEnv.class.getName()));
+			var args = allocator.allocate(JValue.jvalueLayout, 3);
+			args.copyFrom(MemorySegment.ofArray(new long[]{
+			 jstr.ref().address(),
+			 0L, // false
+			 classLoader.address()
+			}));
 
 			var jniEnvClass = callStaticObjectMethodA(classClass, midForName, args);
 			return new GlobalRef(this, jniEnvClass);

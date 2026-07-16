@@ -49,14 +49,14 @@ public class TestAA {
 			float size = 10 * 3 / 2f;
 			float s = size * 1.9f;
 			cont.table(t -> {
-				t.add("acosijasc");
-				t.image().size(30).color(Pal.accent);
+				t.add("acosijasc").width(100);
+				t.image().size(30).color(Pal.lancerLaser);
 			}).growX().colspan(5).row();
 
-			cont.image().size(30).color(Color.acid);
+			cont.image().size(30).color(Color.purple);
 			cont.image().size(s).color(Color.yellow);
 			cont.image().size(42).color(Color.lightGray);
-			cont.button("777", Styles.flatBordert, () -> Log.info("ojaso"))
+			cont.button("999", Styles.flatBordert, () -> Log.info("ojaso"))
 			 .size(64).row();
 
 			cont.image().size(42).color(Color.purple);

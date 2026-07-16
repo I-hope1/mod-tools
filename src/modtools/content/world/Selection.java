@@ -18,7 +18,8 @@ import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
-import arc.util.pooling.Pool;
+import arc.util.pooling.*;
+import arc.util.pooling.Pool.Poolable;
 import mindustry.content.Blocks;
 import mindustry.entities.EntityGroup;
 import mindustry.game.Team;
@@ -40,6 +41,7 @@ import modtools.ui.*;
 import modtools.ui.TopGroup.*;
 import modtools.ui.comp.*;
 import modtools.ui.comp.Window.NoTopWindow;
+import modtools.ui.comp.input.NoMarkupLabel;
 import modtools.ui.comp.linstener.*;
 import modtools.ui.comp.utils.MyItemSelection;
 import modtools.ui.control.*;
@@ -636,11 +638,13 @@ public class Selection extends Content {
 			// tile.display(table);
 			// table.row();
 			t.left().defaults().left().padRight(4f);
-			t.image(new TextureRegionDrawable(WorldUtils.getToDisplay(tile).uiIcon)).size(24);
+			t.image(WorldUtils.getToDisplay(tile).uiIcon).size(24);
 			t.add(tile.block().name).with(EventHelper::addDClickCopy);
 			buildPos(t, new Vec2().set(tile.x, tile.y));
-			if (tile.overlay().itemDrop != null) t.image(tile.overlay().itemDrop.uiIcon).size(24);
-			if (tile.floor().liquidDrop != null) t.image(tile.floor().liquidDrop.uiIcon).size(24);
+			Item itemDrop = tile.overlay().itemDrop;
+			if (itemDrop != null) t.image(itemDrop.uiIcon).size(24);
+			Liquid liquidDrop = tile.floor().liquidDrop;
+			if (liquidDrop != null) t.image(liquidDrop.uiIcon).size(24);
 		}
 
 		public IntMap<TextureRegion> map = new IntMap<>();
@@ -961,6 +965,7 @@ public class Selection extends Content {
 			}
 			return el;
 		}
+
 		private void buildCont0() {
 			pane.left().defaults().left();
 			if (!mobile) pane.add(tipKey("fixed", fixedKeyCode.getText())).color(Color.lightGray).fontScale(0.8f).row();
@@ -989,12 +994,45 @@ public class Selection extends Content {
 			}).update(cons).grow().row();
 		}
 
-		public Tile lastTile;
-		private void addMoreButton(Table t, Object o) {
-			t.button("More", HopeStyles.flatBordert, () -> INFO_DIALOG.showInfo(o)).size(80, 24);
+		private static class MoreButton extends TextButton implements Poolable {
+			private static final Pool<MoreButton> moreButtonPool = Pools.get(MoreButton.class, MoreButton::new, 100);
+			public MoreButton() {
+				super("More", HopeStyles.flatBordert);
+			}
+			public static MoreButton init(Object o) {
+				MoreButton moreButton = moreButtonPool.obtain();
+				moreButton.remove();
+				moreButton.clicked(() -> INFO_DIALOG.showInfo(o));
+				return moreButton;
+			}
+			public void reset() {
+				remove();
+				clearListeners();
+			}
+			public static void free(MoreButton moreButton) {
+				moreButtonPool.free(moreButton);
+			}
 		}
+		private void addMoreButton(Table t, Object o) {
+			t.button("More", HopeStyles.flatBordert,  () -> INFO_DIALOG.showInfo(o)).size(80, 24);
+		}
+		/* private void freeMoreButton(Table table) {
+			SnapshotSeq<Element> children = table.getChildren();
+			for (Element elem : children.begin()) {
+				if (elem instanceof MoreButton moreButton) {
+					MoreButton.free(moreButton);
+				}
+				if (elem instanceof Table t) {
+					freeMoreButton(t);
+				}
+			}
+			children.end();
+		} */
+
+		public Tile lastTile;
 		private void buildCont(Table table, Tile tile) {
 			if (lastTile == tile) return;
+			// freeMoreButton(table);
 			table.clearChildren();
 			lastTile = tile;
 			if (tile == null) return;
@@ -1006,9 +1044,11 @@ public class Selection extends Content {
 			}).row();
 		}
 
+		public final StringBuilder sb = new StringBuilder(), bulletSb = new StringBuilder();
 		public Building lastBuild;
 		private void buildCont(Table table, Building build) {
 			if (lastBuild == build) return;
+			// freeMoreButton(table);
 			table.clearChildren();
 			lastBuild = build;
 			if (build == null) return;
@@ -1022,7 +1062,11 @@ public class Selection extends Content {
 				t.table(t1 -> {
 					t1.left().defaults().left();
 					t1.add("ID: ").color(Pal.accent);
-					t1.add(build.id + "(build); " + build.block.id + "(block)").color(Color.gray).fontScale(0.6f);
+					sb.setLength(0);
+					sb.append(build.id).append("(build);").append(build.block.id).append("(block)");
+					t1.add(new NoMarkupLabel(sb)).color(Color.gray).fontScale(0.6f);
+					sb.setLength(0);
+
 					addMoreButton(t1, build);
 				}).colspan(3);
 			}).row();
@@ -1033,6 +1077,7 @@ public class Selection extends Content {
 		private       int nowUnitSize;
 		private void buildCont(Table table, ObjectSet<Unit> unitSet) {
 			if (lastUnitSize == unitSet.size) return;
+			// freeMoreButton(table);
 			table.clearChildren();
 			lastUnitSize = unitSet.size;
 			if (lastUnitSize == 0) return;
@@ -1056,8 +1101,10 @@ public class Selection extends Content {
 					t.table(t1 -> {
 						t1.left().defaults().left();
 						t1.add("ID: ").color(Pal.accent);
-						t1.add(u.id + "(unit); " + u.type.id + "(type)").color(Color.gray).fontScale(0.6f);
-						// t.add("pathfind:" + u.pathType());
+						sb.setLength(0);
+						sb.append(u.id).append("(unit);").append(u.type.id).append("(type)");
+						t1.add(sb).color(Color.gray).fontScale(0.6f);
+						sb.setLength(0);
 						addMoreButton(t1, u);
 					});
 				}).growX().row();
@@ -1067,6 +1114,7 @@ public class Selection extends Content {
 		public int lastBulletSize;
 		private void buildCont1(Table table, ObjectSet<Bullet> bulletSet) {
 			if (lastBulletSize == bulletSet.size) return;
+			// freeMoreButton(table);
 			table.clearChildren();
 			lastBulletSize = bulletSet.size;
 			if (lastBulletSize == 0) return;
@@ -1075,8 +1123,10 @@ public class Selection extends Content {
 				MenuBuilder.addShowMenuListenerp(t, () -> WFunction.getMenuLists(b));
 				t.left().defaults().padRight(6f).growY().left();
 				t.image(Icon.starSmall).size(10).color(b.team.color).colspan(0);
-				//noinspection StringTemplateMigration
-				t.label(() -> b.time + "[lightgray]/[]" + b.lifetime).size(10).colspan(2).row();
+				t.label(() -> {
+					bulletSb.setLength(0);
+					return bulletSb.append(b.time).append("[lightgray]/[]").append(b.lifetime);
+				}).size(10).colspan(2).row();
 				// t.add("" + b.type).with(JSFunc::addDClickCopy);
 
 				buildPos(t, b);
@@ -1084,7 +1134,9 @@ public class Selection extends Content {
 				t.table(t1 -> {
 					t1.left().defaults().left();
 					t1.add("ID: ").color(Pal.accent);
-					t1.add(b.id + "(bullet); " + b.type.id + "(type)").color(Color.gray).fontScale(0.6f);
+					sb.setLength(0);
+					t1.add(sb.append(b.id).append("(bullet); ").append(b.type.id).append("(type)")).color(Color.gray).fontScale(0.6f);
+					sb.setLength(0);
 					addMoreButton(t1, b);
 				}).colspan(4);
 			}).growX().row());

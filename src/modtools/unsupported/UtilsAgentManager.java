@@ -10,6 +10,7 @@ import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import nipx.UtilsAgent;
+import nipx.jni.JNIEnv;
 import nipx.jvmti.LibTool;
 import sun.tools.attach.HotSpotVirtualMachine;
 
@@ -106,6 +107,7 @@ public class UtilsAgentManager {
 		appendToBootstrap(dest.absolutePath());
 
 		try {
+			JNIEnv.load();
 			Fi lib = IntVars.libs.child(mapLibraryName("tool"));
 			System.setProperty("nipx.path.libtool", FileUtils.copyToTmp(lib).absolutePath());
 			LibTool.init();

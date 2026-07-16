@@ -99,7 +99,7 @@ public class SamplingProfiler {
 			return;
 		}
 		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv jniEnv = new JNIEnv(arena);
+			JNIEnv jniEnv = JNIEnv.getInstance(arena);
 			while (running) {
 				Threads.sleep(intervalMs);
 

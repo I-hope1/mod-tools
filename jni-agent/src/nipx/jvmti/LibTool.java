@@ -73,7 +73,7 @@ public class LibTool {
 
 		try (Arena arena = Arena.ofConfined()) {
 			// 初始化本次调用所需的 JNIEnv
-			JNIEnv jniEnv = new JNIEnv(arena);
+			JNIEnv jniEnv = JNIEnv.getInstance(arena);
 
 			// 获取目标类的 jclass 引用
 			try (GlobalRef classRef = jniEnv.FindClass(clazz)) {
@@ -99,7 +99,7 @@ public class LibTool {
 	public static Object[] getReferrers(Object targetObject) {
 		JVMTIEnv jvmtiEnv = JVMTIEnv.getInstance();
 		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv jniEnv = new JNIEnv(arena);
+			JNIEnv jniEnv = JNIEnv.getInstance(arena);
 			try (GlobalRef targetObjectRef = jniEnv.JavaObjectToJObject(targetObject)) {
 				MemorySegment resultArrayRef = (MemorySegment) Lib.MH_GetReferrers.invokeExact(
 				 jvmtiEnv.jvmtiEnvPtr, jniEnv.getJniEnvPointer(), targetObjectRef.ref());

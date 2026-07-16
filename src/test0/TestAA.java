@@ -70,7 +70,7 @@ public class TestAA {
 		Log.info("reload");
 		runx.run();
 		/* try (Arena arena = Arena.ofConfined()) {
-			JNIEnv   env      = new JNIEnv(arena);
+			JNIEnv   env      = JNIEnv.getInstance(arena);
 			JVMTIEnv jvmtiEnv = JVMTIEnv.getInstance();
 			jvmtiEnv.walkCurrentThreadFrames(env, MemorySegment.NULL, 64, 0, (className, methodName, methodSig, thisAddress) -> {
 				System.out.println(className + " " + methodName + " " + methodSig + " " + thisAddress);

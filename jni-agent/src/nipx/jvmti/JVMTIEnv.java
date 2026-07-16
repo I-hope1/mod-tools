@@ -474,7 +474,7 @@ public class JVMTIEnv {
 				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
 				// jvmtiCapabilities 位定义 (first jint, offset 0):
 				caps.set(ValueLayout.JAVA_INT, 0,
-				  CAN_ACCESS_LOCAL_VARIABLES | CAN_GENERATE_EXCEPTION_EVENTS | CAN_GET_LINE_NUMBERS);
+				 CAN_ACCESS_LOCAL_VARIABLES | CAN_GENERATE_EXCEPTION_EVENTS | CAN_GET_LINE_NUMBERS);
 				// caps.set(ValueLayout.JAVA_INT, 0, CAN_SUSPEND);
 
 				int rc = (int) MH_AddCapabilities.invokeExact(
@@ -921,7 +921,10 @@ public class JVMTIEnv {
 			MemorySegment sp = sigPtrOut.get(ValueLayout.ADDRESS, 0);
 			if (sp.address() == 0L) return "<unknown>";
 			try {
-				return sp.reinterpret(Long.MAX_VALUE).getString(0);
+				String sig = sp.reinterpret(Long.MAX_VALUE).getString(0);
+				// "Lcom/example/Foo;" → "com.example.Foo"
+				if (sig.startsWith("L") && sig.endsWith(";")) { return sig.substring(1, sig.length() - 1); }
+				return sig;
 			} finally {
 				jvmtiDeallocate(sp);
 			}
@@ -1019,7 +1022,21 @@ public class JVMTIEnv {
 
 	//endregion
 	//region Private value types
+	/**
+	 * @param className  slashClassName: "com/example/Foo"
+	 * @param methodName methodName
+	 * @param methodSig  rawMethodSignature: "(FLjava/lang/Runnable)V"
+	 * @param flags      methodModifiers {@link Modifier}
+	 */
 	private record MethodMeta(String className, long methodId, String methodName, String methodSig, int flags) { }
+	/**
+	 * Variable entry
+	 * @param name     variable name
+	 * @param sig      variable signature
+	 * @param slot     variable slot number
+	 * @param startLoc start location of the variable in the method
+	 * @param length   length of the variable in the method
+	 */
 	private record VarEntry(String name, String sig, int slot, long startLoc, int length) {
 		static final VarEntry[] EMPTY = new VarEntry[0];
 	}

@@ -24,7 +24,7 @@ public class JNIEnv {
 	/** java 与 jni 通信的途径，jobject与Object互转 */
 	private static final ThreadLocal<Object> jniToJava = new ThreadLocal<>();
 
-	private static JNIEnv jniEnvInstance;
+	private static JNIEnv MASTER_ENV;
 
 	private static final MethodHandle NewStringPlatform = throwable(() -> {
 		MemorySegment JNU_NewStringPlatformFP = SymbolLookup.loaderLookup()
@@ -69,22 +69,22 @@ public class JNIEnv {
 	//endregion
 
 	//region Constructors
-
+	/** @param jniEnvPointer 必须是当前线程的jniEnv指针 */
 	public JNIEnv(SegmentAllocator allocator, MemorySegment jniEnvPointer) {
-		if (jniEnvInstance == null) throw new IllegalStateException("Cannot init jniEnvInstance");
+		if (MASTER_ENV == null) throw new IllegalStateException("Cannot init jniEnvInstance");
 		this.allocator = allocator;
 		this.jniEnvPointer = jniEnvPointer;
-		functions = jniEnvInstance.functions;
-		classJNIEnvRef = jniEnvInstance.classJNIEnvRef;
-		classSystem = jniEnvInstance.classSystem;
-		midGetSecret = jniEnvInstance.midGetSecret;
-		midSetSecret = jniEnvInstance.midSetSecret;
-		midIdentityHashCode = jniEnvInstance.midIdentityHashCode;
+		functions = MASTER_ENV.functions;
+		classJNIEnvRef = MASTER_ENV.classJNIEnvRef;
+		classSystem = MASTER_ENV.classSystem;
+		midGetSecret = MASTER_ENV.midGetSecret;
+		midSetSecret = MASTER_ENV.midSetSecret;
+		midIdentityHashCode = MASTER_ENV.midIdentityHashCode;
 	}
 
-	public JNIEnv(SegmentAllocator allocator) {
+	private JNIEnv(SegmentAllocator allocator) {
 		this.allocator = allocator;
-		jniEnvPointer = initJniEnv();
+		jniEnvPointer = getCurrentThreadEnvPointer();
 		functions = new JNIEnvFunctions(jniEnvPointer);
 
 		classJNIEnvRef = getJNIEnvRef(allocator);
@@ -100,13 +100,18 @@ public class JNIEnv {
 			// System#identityHashCode
 			midIdentityHashCode = getStaticMethodID(classSystem.ref(), "identityHashCode", "(Ljava/lang/Object;)I");
 		} catch (Throwable t) { throw new RuntimeException(t); }
-		jniEnvInstance = this;
+		MASTER_ENV = this;
 	}
 
+	public static JNIEnv getInstance(SegmentAllocator allocator) {
+		return new JNIEnv(allocator, getCurrentThreadEnvPointer());
+	}
 	//endregion
 
 	//region JNI Environment Initialization
+	static { MASTER_ENV = new JNIEnv(Arena.global()); }
 
+	public static void load() { }
 	private GlobalRef getJNIEnvRef(SegmentAllocator allocator) {
 		GlobalRef     jstr        = null;
 		MemorySegment threadClass = null, classClass = null, currentThread = null, classLoader = null;
@@ -143,7 +148,7 @@ public class JNIEnv {
 		}
 	}
 
-	private MemorySegment initJniEnv() {
+	public static MemorySegment getCurrentThreadEnvPointer() {
 		try {
 			return ((MemorySegment) MH_GET_JNIENV.invokeExact(MAIN_VM_POINTER, JNI_VERSION))
 			 .reinterpret(Long.MAX_VALUE);
@@ -238,7 +243,6 @@ public class JNIEnv {
 	}
 
 	//endregion
-
 	//region Global Reference Management
 
 	public MemorySegment NewGlobalRef(MemorySegment jobject) {

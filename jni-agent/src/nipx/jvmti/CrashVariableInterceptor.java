@@ -164,7 +164,6 @@ public class CrashVariableInterceptor {
 	public static void install() {
 		try {
 			Arena         globalArena = Arena.global();
-			JNIEnv        _           = new JNIEnv(globalArena);
 			JVMTIEnv      jvmtiEnv    = JVMTIEnv.getInstance();
 			MemorySegment upcallStub  = Linker.nativeLinker().upcallStub(CALLBACK_MH, EXCEPTION_CALLBACK_DESC, globalArena);
 

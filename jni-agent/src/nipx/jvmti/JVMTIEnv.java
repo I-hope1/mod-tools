@@ -913,6 +913,7 @@ public class JVMTIEnv {
 		return new MethodMeta(className, methodId.address(), methodName, methodSig, flags);
 	}
 
+	/** @return slashClassName (internalName)  */
 	public String fetchClassSig(Arena arena, MemorySegment jclass) {
 		try {
 			MemorySegment sigPtrOut = arena.allocate(ValueLayout.ADDRESS);

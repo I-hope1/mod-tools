@@ -10,11 +10,6 @@ import java.util.*;
 import static nipx.jvmti.JVMTIEnv.*;
 
 public class CrashVariableInterceptor {
-
-	// 全局弱引用 Map：自动在 Throwable 被 GC 时回收内存
-	public static final    Map<Throwable, List<FrameLocals>> CRASH_LOCALS_MAP =
-	 Collections.synchronizedMap(new WeakHashMap<>());
-
 	// Exception 事件类型 ID = 58
 	private static final int JVMTI_EVENT_EXCEPTION       = 58;
 	private static final int JVMTI_EVENT_EXCEPTION_CATCH = 59;
@@ -57,16 +52,15 @@ public class CrashVariableInterceptor {
 	 MemorySegment catchMethod, long catchLocation) {
 		if (Thread.currentThread().getContextClassLoader() == null
 		    || exception.address() == 0) { return; }
-		// boolean isFatal = catchMethod.address() == 0L;
+		boolean isFatal = catchMethod.address() == 0L;
 		// if (isFatal) return;
-
 
 		if (IN_CALLBACK.get() == Boolean.TRUE) return;
 		IN_CALLBACK.set(Boolean.TRUE);
 
 
 		try (Arena arena = Arena.ofConfined()) {
-			if (!captureAllExceptions() && !isCatchMethodInClass(arena, JVMTIEnv.getInstance(), catchMethod, "arc.backend.sdl.SdlApplication")) {
+			if (!isFatal && !captureAllExceptions() && !isCatchMethodInClass(arena, JVMTIEnv.getInstance(), catchMethod, "arc/backend/sdl/SdlApplication")) {
 				return;
 			}
 			StringBuilder sb = SB.get();

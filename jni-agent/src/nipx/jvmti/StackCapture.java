@@ -4,11 +4,8 @@ import com.sun.jdi.*;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector.Argument;
 import nipx.jni.JNIEnv;
-import nipx.jni.helper.GlobalRef;
-import nipx.jvmti.JVMTIEnv.FrameConsumer;
 import nipx.util.LongLongMap;
 
-import java.lang.foreign.MemorySegment;
 import java.lang.management.ManagementFactory;
 import java.util.*;
 import java.util.function.Supplier;
@@ -71,17 +68,6 @@ public final class StackCapture {
 	public static List<FrameLocals> captureCurrent(JNIEnv jniEnv, int maxDepth, int skipFrames) {
 		return JVMTIEnv.getInstance()
 		 .captureCurrentThreadLocals(jniEnv, maxDepth, skipFrames);
-	}
-	public static void captureInto(JNIEnv jniEnv, Thread thread, boolean captureThis, FrameConsumer consumer) {
-		try (GlobalRef ref = jniEnv.JavaObjectToJObject(thread)) {
-			MemorySegment threadHandle = ref.ref();
-			withSuspend(thread, () -> {
-				JVMTIEnv.getInstance().walkThreadFrames(threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, captureThis, consumer);
-				return null;
-			});
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
 	}
 
 	//region dump: pretty-print to stdout

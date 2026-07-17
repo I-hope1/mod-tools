@@ -3,12 +3,13 @@ package modtools.utils.profiler;
 import arc.util.*;
 import modtools.unsupported.HotSwapManager;
 import nipx.jni.JNIEnv;
+import nipx.jni.helper.GlobalRef;
 import nipx.jvmti.*;
 import nipx.jvmti.JVMTIEnv.FrameConsumer;
 import nipx.profiler.ProfilerData;
 import nipx.profiler.ProfilerData.FlameNode;
 
-import java.lang.foreign.Arena;
+import java.lang.foreign.*;
 import java.util.*;
 
 import static nipx.HotSwapAgent.*;
@@ -98,22 +99,16 @@ public class SamplingProfiler {
 			}
 			return;
 		}
-		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv jniEnv = JNIEnv.getInstance(arena);
-			while (running) {
-				Threads.sleep(intervalMs);
+		while (running) {
+			Threads.sleep(intervalMs);
 
-				Thread target = targetThread;
-				if (target == null || !target.isAlive()) continue;
+			Thread target = targetThread;
+			if (target == null || !target.isAlive()) continue;
 
-				if (captureMethodSignature) {
-					planC(jniEnv, target);
-				} else {
-					planA(target);
-				}
-				// planC(jniEnv, target);
-				// planB(jniEnv, target);
-				// planA(target);
+			if (captureMethodSignature) {
+				planC();
+			} else {
+				planA(target);
 			}
 		}
 	}
@@ -138,10 +133,24 @@ public class SamplingProfiler {
 		curHolder.totalNanos.add(intervalMs * 1_000_000L);
 		return true;
 	};
-	private static void planC(JNIEnv jniEnv, Thread target) {
+
+	static class $c {
+		static final GlobalRef ref_targetThread;
+
+		static {
+			try (Arena arena = Arena.ofConfined()) {
+				ref_targetThread = JNIEnv.getInstance(arena).JavaObjectToJObject(targetThread);
+			}
+		}
+	}
+	private static void planC() {
 		curHolder = ProfilerData.flameRoot;
 		try {
-			StackCapture.captureInto(jniEnv, target, true, CONSUMER);
+			JVMTIEnv.getInstance().walkThreadFramesReversed($c.ref_targetThread.ref(),
+			 128,
+			 0/* 不是当前线程 */,
+			 true,
+			 CONSUMER);
 		} catch (Throwable e) {
 			// Log.err(e);
 		}
@@ -151,7 +160,7 @@ public class SamplingProfiler {
 			var      stack = StackCapture.capture(jniEnv, target);
 			String[] pkgs  = includePackages;
 
-			ProfilerData.FlameNode cur = ProfilerData.flameRoot;
+			FlameNode cur = ProfilerData.flameRoot;
 
 			// 从栈底（老帧）到栈顶（新帧）遍历
 			for (int i = stack.size() - 1; i >= 0; i--) {
@@ -170,7 +179,7 @@ public class SamplingProfiler {
 				// Log.info(frame.locals());
 
 				// computeIfAbsent：key 存在时无 GC；首次出现才 new FlameNode
-				cur = cur.children.computeIfAbsent(key, ProfilerData.FlameNode::new);
+				cur = cur.children.computeIfAbsent(key, FlameNode::new);
 
 				// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
 				cur.totalNanos.add(intervalMs * 1_000_000L);

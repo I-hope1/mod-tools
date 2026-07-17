@@ -48,38 +48,41 @@ public class HotSwapDialog extends Window {
 			t.defaults().size(40);
 
 			// 手动触发检测 (对应 processChanges)
-			t.button(Icon.refresh, Styles.cleari, () -> {
+			IntUI.addTooltipListener(t.button(Icon.refresh, Styles.cleari, () -> {
 				log("[lightgray]Triggering manual hotswap...[]");
 				// 在后台执行，防止卡顿 UI
 				Threads.daemon(HotSwapAgent::triggerHotswap);
-			}).tooltip("Check for changes & Hotswap");
+			}).get(),
+			 () -> "Check for changes & Hotswap");
 
 			// 强制全量重扫 (对应 transformLoaded)
-			t.button(Icon.box, Styles.cleari, () -> {
+			IntUI.addTooltipListener(t.button(Icon.box, Styles.cleari, () -> {
 				// 这里需要反射或者修改 Agent 公开 transformLoaded
 				// 假设你在 Agent 里把 transformLoaded 改为了 public static
 				Threads.daemon(HotSwapAgent::retransformLoaded);
-			}).tooltip("Force Retransform Loaded Classes");
+			}).get(), () -> "Force Retransform All Classes");
 
 			// 垃圾回收
-			t.button(Icon.trash, Styles.cleari, () -> {
+			IntUI.addTooltipListener(t.button(Icon.trash, Styles.cleari, () -> {
 				System.gc();
 				log("[lightgray]GC invoked. Heap: " + Core.app.getJavaHeap() / 1024 / 1024 + "MB[]");
-			}).tooltip("Force GC");
+			}).get(), () -> "Force GC");
 
 			// Profile
-			t.button(HopeIcons.profile, Styles.cleari, ProfilerData::printReport).tooltip("Print profile data");
+			IntUI.addTooltipListener(t.button(HopeIcons.profile, Styles.cleari, ProfilerData::printReport).get(),
+			 () -> "Print profile data");
 
 			// Profile Clear
-			t.button(Icon.eraser, Styles.cleari, ProfilerData::clear).tooltip("Clear profile");
+			IntUI.addTooltipListener(t.button(Icon.eraser, Styles.cleari, ProfilerData::clear).get(),
+			 () -> "Clear profile");
 
 			t.add().growX();
 
 			// 清空日志
-			t.button(Icon.trash, Styles.cleari, () -> {
+			IntUI.addTooltipListener(t.button(Icon.trash, Styles.cleari, () -> {
 				logBuilder.setLength(0);
 				logLabel.setText("");
-			}).tooltip("Clear Log");
+			}).get(), () -> "Clear Log");
 
 		}).growX().row();
 

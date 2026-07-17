@@ -854,6 +854,73 @@ public class JVMTIEnv {
 			throw new RuntimeException("walkCurrentThreadFrames failed", t);
 		}
 	}
+	public void walkThreadFramesReversed(MemorySegment targetThread,
+	                             int maxDepth, int skipFrames, boolean captureThis,
+	                             FrameConsumer consumer) {
+		try (Arena arena = Arena.ofConfined()) {
+			JNIEnv        jniEnv   = JNIEnv.getInstance(arena);
+			int           total    = maxDepth + skipFrames;
+			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
+			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
+
+			int rc = (int) MH_GetStackTrace.invokeExact(
+			 fpGetStackTrace, jvmtiEnvPtr,
+			 targetThread, 0, total, frameBuf, cntOut);
+			if (rc == JVMTI_ERROR_THREAD_NOT_ALIVE) return;
+			checkError(rc, "GetStackTrace");
+
+			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
+
+			// 复用数组，零分配
+			for (int d = frameCount - 1; d >= skipFrames; d--) {
+				long          off = d * FRAME_SIZE;
+				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
+				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
+
+				// 缓存命中时零分配
+				long       midAddr = mid.address();
+				MethodMeta meta    = metaCache.get(midAddr);
+				if (meta == null) {
+					meta = fetchMethodMeta(arena, mid); // 仅首次分配
+					metaCache.put(midAddr, meta);
+				}
+				// metasBuf[d] = meta;
+				int  flags       = meta.flags;
+				long thisAddress = 0;
+				if (captureThis && (StackCapture.CAPTURE_LOCALS && !(Modifier.isStatic(flags) || Modifier.isNative(flags)))) {
+					try {
+						MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
+						int err = (int) MH_GetLocalObject.invokeExact(
+						 fpGetLocalObject, jvmtiEnvPtr,
+						 targetThread, d, 0, out);
+
+						if (err == JVMTI_ERROR_NONE) {
+							MemorySegment localRef = out.get(ValueLayout.ADDRESS, 0);
+							if (localRef.address() != 0) {
+								// 提升为global ref，避免GC
+								MemorySegment globalRef = jniEnv.NewGlobalRef(localRef);
+								try {
+									thisAddress = jniEnv.identityHashCode(globalRef) & 0xFFFFFFFFL;
+								} finally {
+									jniEnv.DeleteGlobalRef(globalRef);
+								}
+							}
+						}
+						// if (err != 13) {
+						checkError(err, "GetLocalObject");
+						// }
+					} catch (Throwable e) {
+						// e.printStackTrace();
+						thisAddress = 0L;
+					}
+				}
+				if (!consumer.accept(meta.className, meta.methodName, meta.methodSig, thisAddress)) break;
+			}
+
+		} catch (Throwable t) {
+			throw new RuntimeException("walkCurrentThreadFrames failed", t);
+		}
+	}
 	@FunctionalInterface
 	public interface FrameConsumer {
 		/**

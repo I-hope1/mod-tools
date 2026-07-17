@@ -2,6 +2,7 @@ package modtools.ui.comp;
 
 import arc.Core;
 import arc.func.*;
+import arc.input.KeyCode;
 import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
@@ -33,7 +34,7 @@ public class ModifiableLabel extends NoMarkupLabel {
 	 Cons2<TextField, Label> modifier,
 	 Table t, Prov<TextField> fieldProv) {
 		var label = new ModifiableLabel(def);
-		label.cell = t.add(label).height(label.getPrefHeight() / Scl.scl());
+		label.cell = t.add(label).margin(4).height(label.getPrefHeight() / Scl.scl());
 		label.field = fieldProv.get();
 		if (validator != null) label.field.setValidator(validator);
 		label.modifier = modifier;
@@ -47,6 +48,11 @@ public class ModifiableLabel extends NoMarkupLabel {
 				modifier.get(field, this);
 				setText(field.getText());
 				cell.setElement(this);
+			}
+		});
+		field.keyDown(keycode -> {
+			if (keycode == KeyCode.enter) {
+				Core.scene.setKeyboardFocus(null);
 			}
 		});
 		clicked(() -> {

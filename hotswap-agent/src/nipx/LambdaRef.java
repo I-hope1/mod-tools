@@ -169,10 +169,10 @@ public class LambdaRef {
 	/**
 	 * 当某个类被 HotSwap 重载时调用。
 	 * 清除所有 UpdateRef 中来自该类的 lambda，避免 NoSuchMethodError。
-	 * @param dotClassName 被重载的类名，如 com.example.MyView
+	 * @param slashClassName 被重载的类名，如 com/example/MyView
 	 * @param newBytecode 新的类字节码
 	 */
-	public static void onClassRedefined(String dotClassName, byte[] newBytecode) {
+	public static void onClassRedefined(String slashClassName, byte[] newBytecode) {
 		/* int cleared = 0;
 		for (var ref : UpdateRef.getAll()) {
 			UpdateRef updateRef = ref.get();
@@ -183,11 +183,11 @@ public class LambdaRef {
 		int cleared = UpdateRef.clearLambda();
 
 		if (cleared > 0) {
-			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
+			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + slashClassName);
 		}
 
 		if (CellPropertyRef.isEnabled()) {
-			CellPropertyRef.onClassRedefined(dotClassName, newBytecode);
+			CellPropertyRef.onClassRedefined(slashClassName, newBytecode);
 		}
 
 		// if (Core.app != null && Core.scene != null) {

@@ -76,7 +76,7 @@ public final class StackCapture {
 		try (GlobalRef ref = jniEnv.JavaObjectToJObject(thread)) {
 			MemorySegment threadHandle = ref.ref();
 			withSuspend(thread, () -> {
-				JVMTIEnv.getInstance().walkThreadFrames(jniEnv, threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, captureThis, consumer);
+				JVMTIEnv.getInstance().walkThreadFrames(threadHandle, 64, thread == Thread.currentThread() ? 0 : 3, captureThis, consumer);
 				return null;
 			});
 		} catch (Exception e) {

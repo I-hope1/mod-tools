@@ -6,12 +6,17 @@ import arc.scene.ui.*;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
 import arc.scene.ui.layout.Stack;
+import arc.struct.Seq;
+import arc.util.pooling.Pools;
+import mindustry.Vars;
 import nipx.Injector;
+import nipx.jvmti.JVMTIEnv;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
 
+import java.lang.foreign.MemorySegment;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.*;
@@ -59,36 +64,32 @@ public class CellPropertyRef {
 	public static void registerCellAtCreation(Cell<?> cell) {
 		if (!enabled || cell == null) return;
 
-		StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-
-		// 寻找 Cell 的构造函数栈帧位置
-		int cellInitIdx = -1;
-		for (int i = 0; i < stack.length; i++) {
-			String cn = stack[i].getClassName();
-			if (cn.equals("arc.scene.ui.layout.Cell") && stack[i].getMethodName().equals("<init>")) {
-				cellInitIdx = i;
-				break;
+		String[] callbackFrame = {null, null, null};
+		int[]    x             = {-1};
+		JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
+			if (x[0] >= 0 && ++x[0] == 2) {
+				callbackFrame[0] = className;
+				callbackFrame[1] = methodName;
+				callbackFrame[2] = methodDesc;
+				return false;
 			}
-		}
+			if (CL_CELL.equals(className) && "<init>".equals(methodName)) {
+				x[0] = 0;
+			}
+			return true;
+		});
 
-		// Table 的 creator 方法 (如 add, button, image 等) 是构造函数的上一级，它的上一级才是宿主
-		if (cellInitIdx == -1 || cellInitIdx + 2 >= stack.length) {
-			return;
-		}
-
-		StackTraceElement hostFrame = stack[cellInitIdx + 2];
-		String            hostClass = hostFrame.getClassName();
+		String hostClass = callbackFrame[0];
 
 		// 如果创建该单元格的直接源头是底层库，则属于隐式嵌套，不予追踪
-		if (hostClass.startsWith("arc.") || hostClass.startsWith("java.") || hostClass.startsWith("nipx.")) {
+		if (hostClass == null || hostClass.startsWith("arc/") || hostClass.startsWith("java/") || hostClass.startsWith("nipx/")) {
 			return;
 		}
 
-		String hostMethod = hostFrame.getMethodName();
-		String hostDesc   = "()V"; // 占位签名
+		String hostMethod = callbackFrame[1];
+		String hostDesc   = callbackFrame[2];
 
-		String slashClass = hostClass.replace('.', '/');
-		String key        = slashClass + "#" + hostMethod + ":" + hostDesc;
+		String key = hostClass + "#" + hostMethod + ":" + hostDesc;
 
 		int seq;
 		synchronized (methodCounters) {
@@ -96,13 +97,13 @@ public class CellPropertyRef {
 			seq = counter[0]++;
 		}
 
-		CellIdentity id = new CellIdentity(slashClass, hostMethod, hostDesc, seq);
+		CellIdentity id = new CellIdentity(hostClass, hostMethod, hostDesc, seq);
 
 		synchronized (cellToId) {
 			cellToId.put(cell, id);
 		}
 		idToCell.put(id, new WeakReference<>(cell));
-		classToCells.computeIfAbsent(slashClass, _ -> new CopyOnWriteArrayList<>()).add(id);
+		classToCells.computeIfAbsent(hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
 
 		if (DEBUG) {
 			log("[CellProperty] Registered at creation: " + id.hostClass + "#"
@@ -204,15 +205,14 @@ public class CellPropertyRef {
 	//endregion
 
 	//region 热替换回调
-	public static void onClassRedefined(String dotClassName, byte[] newBytecode) {
+	public static void onClassRedefined(String slashName, byte[] newBytecode) {
 		if (!enabled) return;
 
-		String slashName = dotClassName.replace('.', '/');
-		info("[CellProperty] Class redefined: " + dotClassName);
+		info("[CellProperty] Class redefined: " + slashName);
 
 		List<CellIdentity> cellIds = classToCells.get(slashName);
 		if (cellIds == null || cellIds.isEmpty()) {
-			if (DEBUG) log("[CellProperty] ℹ No tracked Cells for " + dotClassName);
+			if (DEBUG) log("[CellProperty] ; No tracked Cells for " + slashName);
 			return;
 		}
 
@@ -223,8 +223,8 @@ public class CellPropertyRef {
 		int totalRemoved = 0;
 		int totalAdded   = 0;
 
-		List<CellIdentity> idsSnapshot = new ArrayList<>(cellIds);
-		Map<CellIdentity, Integer> newChainIndexes = mapCellsToNewChains(idsSnapshot, newChainsByMethod);
+		List<CellIdentity>         idsSnapshot       = new ArrayList<>(cellIds);
+		Map<CellIdentity, Integer> newChainIndexes   = mapCellsToNewChains(idsSnapshot, newChainsByMethod);
 		Map<String, List<Integer>> newChainAdditions = findNewChainAdditions(idsSnapshot, newChainsByMethod, newChainIndexes);
 
 		for (CellIdentity id : idsSnapshot) {
@@ -241,10 +241,9 @@ public class CellPropertyRef {
 			if (newChains == null || newIndex == null || newIndex >= newChains.size()) {
 				Table table = cell.getTable();
 				if (table != null) {
-					Element element = cell.get();
-					if (element != null) {
-						element.remove();
-					}
+					BindCell bind = BindCell.of(cell);
+					bind.remove();
+					Pools.free(bind);
 					try {
 						table.getCells().remove(cell, true);
 					} catch (Throwable t) {
@@ -271,11 +270,6 @@ public class CellPropertyRef {
 				boolean applied = applyDiff(cell, oldCalls, newCalls);
 				if (applied) totalUpdated++;
 			}
-			Core.app.post(() -> {
-				if (cell.get() != null) {
-					cell.get().invalidateHierarchy();
-				}
-			});
 
 			records.put(id, newCalls);
 		}
@@ -338,13 +332,13 @@ public class CellPropertyRef {
 		}
 
 		info("[CellProperty] Updated: " + totalUpdated + ", Removed: " + totalRemoved
-		     + ", Added: " + totalAdded + ", Skipped: " + totalSkipped + " for " + dotClassName);
+		     + ", Added: " + totalAdded + ", Skipped: " + totalSkipped + " for " + slashName);
 	}
 	//endregion
 
 	private static Map<CellIdentity, Integer> mapCellsToNewChains(List<CellIdentity> idsSnapshot,
 	                                                              Map<String, List<List<PropertyCall>>> newChainsByMethod) {
-		Map<CellIdentity, Integer> result = new HashMap<>();
+		Map<CellIdentity, Integer>      result      = new HashMap<>();
 		Map<String, List<CellIdentity>> idsByMethod = new LinkedHashMap<>();
 		for (CellIdentity id : idsSnapshot) {
 			String methodKey = findMethodKeyForId(newChainsByMethod, id);
@@ -392,8 +386,8 @@ public class CellPropertyRef {
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
 			if (newChains == null || newChains.isEmpty()) continue;
 
-			boolean hasTrackedCells = false;
-			Set<Integer> usedIndexes = new HashSet<>();
+			boolean      hasTrackedCells = false;
+			Set<Integer> usedIndexes     = new HashSet<>();
 			for (CellIdentity id : idsSnapshot) {
 				if (!methodKeyMatches(id, methodKey)) continue;
 				hasTrackedCells = true;
@@ -431,7 +425,7 @@ public class CellPropertyRef {
 		if (callsEqual(oldCalls, newCalls)) return Integer.MAX_VALUE;
 		if (oldCalls == null || newCalls == null || oldCalls.isEmpty() || newCalls.isEmpty()) return 0;
 
-		int score = 0;
+		int          score      = 0;
 		PropertyCall oldCreator = oldCalls.get(0);
 		PropertyCall newCreator = newCalls.get(0);
 		if (oldCreator.method.equals(newCreator.method)) score += 2;
@@ -492,7 +486,8 @@ public class CellPropertyRef {
 		}
 	}
 
-	private static boolean applyDiff(Cell<?> cell, List<PropertyCall> oldCalls, List<PropertyCall> newCalls) {
+	private static boolean applyDiff(Cell<?> cell, List<PropertyCall> oldCalls,
+	                                 List<CellPropertyRef.PropertyCall> newCalls) {
 		PropertyCall oldCreator = oldCalls.isEmpty() ? null : oldCalls.get(0);
 		PropertyCall newCreator = newCalls.isEmpty() ? null : newCalls.get(0);
 
@@ -507,9 +502,13 @@ public class CellPropertyRef {
 		List<PropertyCall> oldProperties = oldCalls.subList(oldCalls.isEmpty() ? 0 : 1, oldCalls.size());
 		List<PropertyCall> newProperties = newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size());
 
-		if (elementUpdated || !callsEqual(oldProperties, newProperties)) {
-			resetCell(cell);
-			applyAllCalls(cell, newProperties);
+		boolean propertiesChanged = !callsEqual(oldProperties, newProperties);
+
+		if (elementUpdated || propertiesChanged) {
+			if (propertiesChanged) {
+				resetCell(cell);
+				applyAllCalls(cell, newProperties);
+			}
 			if (DEBUG) {
 				log("[CellProperty] Reapplied property chain due to changes (Element updated: " + elementUpdated + ").");
 			}
@@ -523,26 +522,19 @@ public class CellPropertyRef {
 		cell.set(Cell.defaults());
 		resetCellEndRow(cell);
 	}
-
 	private static void resetCellEndRow(Cell<?> cell) {
-		for (String fieldName : new String[]{"endRow", "row"}) {
-			try {
-				Field field = Cell.class.getDeclaredField(fieldName);
-				if (field.getType() == boolean.class) {
-					field.setAccessible(true);
-					field.setBoolean(cell, false);
-					return;
-				}
-			} catch (NoSuchFieldException ignored) {
-				// Try the next known field name used by different Arc versions.
-			} catch (IllegalAccessException e) {
-				error("[CellProperty] Failed to reset Cell end-row flag", e);
-				return;
-			}
+		if (f_endRow == null) {
+			error("[CellProperty] Failed to reset Cell end-row flag", new NullPointerException("F_cell_endRow is null"));
+			return;
+		}
+		try {
+			f_endRow.setBoolean(cell, false);
+		} catch (Throwable e) {
+			error("[CellProperty] Failed to reset Cell end-row flag", e);
 		}
 	}
 
-	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
+	private static void updateChildElement(Cell<?> cell, CellPropertyRef.PropertyCall creator) {
 		Element oldElement = cell.get();
 
 		if (oldElement != null) {
@@ -583,25 +575,13 @@ public class CellPropertyRef {
 			if (dummyCell == null || dummyCell.get() == null) return;
 
 			Element newElement = dummyCell.get();
-			replaceElement(table, cell, oldElement, newElement);
+
+			// 优化：使用 BindCell 替换子元素并恢复约束
+			BindCell bind = BindCell.of(cell);
+			bind.replace(newElement, false);
+			Pools.free(bind);
 		} catch (Exception e) {
 			error("[CellProperty] Failed to update child element for creator: " + creator.method, e);
-		}
-	}
-
-	private static void replaceElement(Table table, Cell<?> cell, Element oldElement, Element newElement) {
-		if (oldElement == newElement || newElement == null) return;
-
-		int index = table.getChildren().indexOf(oldElement, true);
-		if (index >= 0) {
-			table.removeChild(oldElement); // 标准 API：清除事件焦点
-			table.addChildAt(index, newElement); // 标准 API：递归挂载并分配 Scene 引用
-			((Cell) cell).setElement(newElement);
-			if (DEBUG) {
-				log("[CellProperty] Sub-element successfully replaced in Table hierarchy: "
-				    + (oldElement != null ? oldElement.getClass().getSimpleName() : "null")
-				    + " -> " + newElement.getClass().getSimpleName());
-			}
 		}
 	}
 
@@ -639,7 +619,7 @@ public class CellPropertyRef {
 	}
 
 	private static boolean hasUsableArgs(PropertyCall call) {
-		if (call.args == null) return false;
+		if (call.args == null) return true;
 		for (Object arg : call.args) {
 			if (arg == null) return false;
 		}
@@ -647,19 +627,31 @@ public class CellPropertyRef {
 	}
 
 	private static void invokeCellMethod(Cell<?> cell, String methodName, Object[] args) {
-		if (args == null) args = new Object[0];
-
 		try {
-			Method method = findMatchingMethod(methodName, args.length);
-			if (method == null) {
-				error("[CellProperty] No matching method: " + methodName
-				      + "(" + args.length + " args)");
+			int len = args == null ? 0 : args.length;
+			if ("row".equals(methodName) && len == 0 && f_endRow != null) {
+				f_endRow.setBoolean(cell, true);
 				return;
 			}
+			Method method = findMatchingMethod(methodName, len);
+			if (method == null) {
+				error("[CellProperty] No matching method: " + methodName
+				      + "(" + len + " args)");
+				return;
+			}
+			// if (DEBUG) log("[CellProperty] Invoking " + method + ": " + argsString(args));
 
 			Object[] converted = convertArgs(method.getParameterTypes(), args);
 			method.invoke(cell, converted);
-
+			if ("colspan".equals(methodName)) {
+				Table table = cell.getTable();
+				if (table == null) return;
+				recalculateColumns(table);
+				if (cell.hasElement()) cell.get().invalidateHierarchy();
+				table.invalidate();
+				table.layout();
+				if (DEBUG) log("[CellProperty] Recalculated columns for colspan changed.");
+			}
 		} catch (Exception e) {
 			error("[CellProperty] Failed to invoke " + methodName, e);
 		}
@@ -681,6 +673,7 @@ public class CellPropertyRef {
 	}
 
 	private static Object[] convertArgs(Class<?>[] paramTypes, Object[] args) {
+		if (args == null) return null;
 		Object[] result = new Object[args.length];
 		for (int i = 0; i < args.length; i++) {
 			Class<?> target = paramTypes[i];
@@ -767,6 +760,39 @@ public class CellPropertyRef {
 		return result;
 	}
 
+	private static boolean isTableClass(ClassNode cn, String owner) {
+		if (CL_TABLE.equals(owner)) return true;
+		if (cn != null && owner.equals(cn.name)) {
+			if (cn.superName != null && (cn.superName.equals(CL_TABLE) || cn.superName.contains("Table"))) {
+				return true;
+			}
+		}
+		return owner.endsWith("Table") || owner.contains("/Table");
+	}
+
+	private static boolean isCellClass(String owner) {
+		if (CL_CELL.equals(owner)) return true;
+		return owner.endsWith("Cell") || owner.contains("/Cell");
+	}
+
+	private static boolean isTableCellCreator(ClassNode cn, String owner, String name) {
+		return isTableClass(cn, owner) && TABLE_CELL_CREATORS.contains(name);
+	}
+
+	private static boolean isTableCellCreator(String owner, String name) {
+		return isTableCellCreator(null, owner, name);
+	}
+
+	private static boolean isCellProperty(ClassNode cn, String owner, String name, String desc) {
+		if (isCellClass(owner) && CELL_PROPERTY_METHODS.contains(name) && (desc.endsWith(")L" + CL_CELL + ";") || "()V".equals(desc) && "row".equals(name))) {
+			return true;
+		}
+		if (isTableClass(cn, owner) && CELL_PROPERTY_METHODS.contains(name)) {
+			return true;
+		}
+		return false;
+	}
+
 	private static List<List<PropertyCall>> extractFromMethod(ClassNode cn, MethodNode mn) {
 		List<List<PropertyCall>> chains = new ArrayList<>();
 		if (mn.instructions == null) return chains;
@@ -774,10 +800,17 @@ public class CellPropertyRef {
 		List<PropertyCall> currentChain = null;
 		boolean            inCell       = false;
 
+		if (DEBUG) {
+			log("[CellProperty] Scanning method: " + mn.name + mn.desc);
+		}
+
 		for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 			if (insn instanceof MethodInsnNode mi) {
+				if (DEBUG) {
+					log("  [Insn] " + mi.owner + " # " + mi.name + " " + mi.desc + " (inCell: " + inCell + ")");
+				}
 
-				if (isTableCellCreator(mi.owner, mi.name)) {
+				if (isTableCellCreator(cn, mi.owner, mi.name)) {
 					if (currentChain != null && !currentChain.isEmpty()) {
 						chains.add(currentChain);
 					}
@@ -785,15 +818,24 @@ public class CellPropertyRef {
 					Object[] args = extractArgs(cn, mn, mi);
 					currentChain.add(new PropertyCall(mi.name, mi.desc, args, -1));
 					inCell = true;
-				} else if (inCell && isCellProperty(mi.owner, mi.name)) {
+					if (DEBUG) {
+						log("    -> Matched Creator: " + mi.name);
+					}
+				} else if (inCell && isCellProperty(cn, mi.owner, mi.name, mi.desc)) {
 					Object[] args = extractArgs(cn, mn, mi);
 					currentChain.add(new PropertyCall(mi.name, mi.desc, args, -1));
+					if (DEBUG) {
+						log("    -> Matched Property: " + mi.name);
+					}
 				} else {
 					if (inCell && !currentChain.isEmpty()) {
 						chains.add(currentChain);
 					}
 					currentChain = null;
 					inCell = false;
+					if (DEBUG) {
+						log("    -> Chain broken / not matched");
+					}
 				}
 			}
 		}
@@ -803,20 +845,6 @@ public class CellPropertyRef {
 		}
 
 		return chains;
-	}
-
-	private static boolean isTableCellCreator(String owner, String name) {
-		return CL_TABLE.equals(owner) && TABLE_CELL_CREATORS.contains(name);
-	}
-
-	private static boolean isCellProperty(String owner, String name) {
-		if (CL_CELL.equals(owner) && CELL_PROPERTY_METHODS.contains(name)) {
-			return true;
-		}
-		if (CL_TABLE.equals(owner) && CELL_PROPERTY_METHODS.contains(name)) {
-			return true;
-		}
-		return false;
 	}
 
 	private static int getPushes(AbstractInsnNode insn) {
@@ -910,7 +938,7 @@ public class CellPropertyRef {
 
 	private static Object[] extractArgs(ClassNode cn, MethodNode mn, MethodInsnNode target) {
 		Type[] argTypes = Type.getArgumentTypes(target.desc);
-		if (argTypes.length == 0) return new Object[0];
+		if (argTypes.length == 0) return null;
 
 		Object[]    args            = new Object[argTypes.length];
 		Set<String> visitingMethods = new HashSet<>();
@@ -966,7 +994,7 @@ public class CellPropertyRef {
 		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
 			try {
 				String   className = fin.owner.replace('/', '.');
-				Class<?> clazz     = Class.forName(className, true, CellPropertyRef.class.getClassLoader());
+				Class<?> clazz     = Class.forName(className, true, Vars.mods.mainLoader());
 				Field    field     = clazz.getField(fin.name);
 				return field.get(null);
 			} catch (Throwable t) {
@@ -1240,7 +1268,9 @@ public class CellPropertyRef {
 
 				if (name.startsWith("<")) return mv;
 				if (!CELL_PROPERTY_METHODS.contains(name)) return mv;
-				if (!descriptor.endsWith(")Larc/scene/ui/layout/Cell;")) return mv;
+				if (!(descriptor.endsWith(")Larc/scene/ui/layout/Cell;") || ("row".equals(name) && "()V".equals(descriptor)))) {
+					return mv;
+				}
 
 				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 					@Override
@@ -1341,31 +1371,31 @@ public class CellPropertyRef {
 	}
 
 	private static CellIdentity inferCellIdentity(Cell<?> cell) {
-		StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-
-		int cellFrameIdx = -1;
-		for (int i = 0; i < stack.length; i++) {
-			String cn = stack[i].getClassName();
-			if (cn.equals("arc.scene.ui.layout.Cell")) {
-				cellFrameIdx = i;
-				break;
+		String[] callbackFrame = {null, null, null};
+		int[]    x             = {-1};
+		JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
+			if (x[0] >= 0 && ++x[0] == 1) {
+				callbackFrame[0] = className;
+				callbackFrame[1] = methodName;
+				callbackFrame[2] = methodDesc;
+				return false;
 			}
-		}
+			if (CL_CELL.equals(className)) {
+				x[0] = 0;
+			}
+			return true;
+		});
 
-		if (cellFrameIdx == -1 || cellFrameIdx + 1 >= stack.length) {
-			return null;
-		}
 
-		StackTraceElement callerFrame = stack[cellFrameIdx + 1];
-		String            callerClass = callerFrame.getClassName();
+		String callerClass = callbackFrame[0];
 
 		// 如果直接调用者是库类，说明是内部嵌套调用，不作为外部宿主方法 Cell 追踪
-		if (callerClass.startsWith("arc.") || callerClass.startsWith("java.") || callerClass.startsWith("nipx.")) {
+		if (callerClass == null || callerClass.startsWith("arc/") || callerClass.startsWith("java/") || callerClass.startsWith("nipx/")) {
 			return null;
 		}
 
-		String slash      = callerClass.replace('.', '/');
-		String hostMethod = callerFrame.getMethodName();
+		String hostMethod = callbackFrame[1];
+		String hostDesc   = callbackFrame[2];
 
 		int seq = -1;
 		try {
@@ -1381,14 +1411,14 @@ public class CellPropertyRef {
 		}
 
 		if (seq < 0) {
-			String key = slash + "#" + hostMethod + ":()V";
+			String key = callerClass + "#" + hostMethod + ":" + hostDesc;
 			synchronized (methodCounters) {
 				int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
 				seq = counter[0]++;
 			}
 		}
 
-		return new CellIdentity(slash, hostMethod, "()V", seq);
+		return new CellIdentity(callerClass, hostMethod, hostDesc, seq);
 	}
 
 	private static int inferLineNumber() {
@@ -1462,6 +1492,62 @@ public class CellPropertyRef {
 		       + "  Tracked Cells: " + cellToIdSize + "\n"
 		       + "  Records: " + records.size() + "\n"
 		       + "  Host Classes: " + classToCells.size();
+	}
+	//endregion
+
+	//region Reflect
+	private static final Field f_endRow  = nl(() -> Cell.class.getDeclaredField("endRow"));
+	private static final Field f_colspan = nl(() -> Cell.class.getDeclaredField("colspan"));
+	static class $table {
+		static Field columnsField;
+
+		static {
+			try {
+				columnsField = Table.class.getDeclaredField("columns");
+				columnsField.setAccessible(true);
+			} catch (NoSuchFieldException e) {
+				columnsField = null;
+			}
+		}
+	}
+	@SuppressWarnings("rawtypes")
+	static void recalculateColumns(Table table) throws IllegalAccessException {
+		assert f_colspan != null;
+
+		int       maxCols = 0;
+		Seq<Cell> cells   = table.getCells();
+		for (int i = 0; i < cells.size; ) {
+			Cell c       = cells.get(i);
+			int  rowCols = 0;
+			do {
+				rowCols += f_colspan.getInt(c);
+				i++;
+				if (i >= cells.size) break;
+				c = cells.get(i);
+			} while (!c.isEndRow());
+			if (rowCols > maxCols) maxCols = rowCols;
+		}
+
+		// 使用反射设置 Table.columns
+		try {
+			$table.columnsField.setInt(table, maxCols);
+		} catch (Exception e) {
+			// fallback: 如果反射失败，至少 invalidate
+			table.invalidate();
+		}
+	}
+	private static <T> T nl(NLSupplier<T> supplier) {
+		try {
+			T t = supplier.get();
+			if (t instanceof AccessibleObject ac) ac.setAccessible(true);
+			return t;
+		} catch (Throwable e) {
+			error("[CellProperty] Failed to execute NLSupplier", e);
+			return null;
+		}
+	}
+	private interface NLSupplier<T> {
+		T get() throws Throwable;
 	}
 	//endregion
 }

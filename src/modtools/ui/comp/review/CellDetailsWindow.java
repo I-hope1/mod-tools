@@ -1,6 +1,5 @@
 package modtools.ui.comp.review;
 
-import arc.Core;
 import arc.func.Func;
 import arc.graphics.Color;
 import arc.math.Mathf;
@@ -115,7 +114,8 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 	static Cell<Table> buildSetter(Table t, Cell<?> cell, String name) {
 		return t.add(ReviewElement.floatSetter(null, () -> FormatHelper.fixed(Reflect.get(Cell.class, cell, name)), f -> {
 			Reflect.set(Cell.class, cell, name, f);
-			if (cell.get() != null) cell.get().invalidateHierarchy();
+
+			update(cell);
 		})).pad(0, -2, 0, -2);
 	}
 	static Cell<Table> buildWithName(Table t, Cell<?> cell, String name) {
@@ -137,17 +137,7 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 		 () -> fixedAny(Reflect.get(Cell.class, cell, name)),
 		 f -> {
 			 Reflect.set(Cell.class, cell, name, valueOf.get(f));
-			 Core.app.post(() -> {
-				 if (cell.getTable() != null) {
-					 CellTools.recalculateColumns(cell.getTable());
-				 }
-				 Element element = cell.get();
-				 if (element != null) {
-					 element.layout();
-					 element.invalidateHierarchy();
-					 cell.getTable().layout();
-				 }
-			 });
+			 update(cell);
 		 });
 		table.left();
 		return CellTools.rowSelf(t.add(table));
@@ -182,8 +172,13 @@ public class CellDetailsWindow extends Window implements IDisposable, CellView {
 			t.layout();
 			t.invalidate();
 		} else if (obj instanceof Cell<?> c) {
-			c.getTable().layout();
-			c.getTable().invalidate();
+			Table table = c.getTable();
+			if (table != null) {
+				CellTools.recalculateColumns(table);
+				if (c.hasElement()) c.get().invalidateHierarchy();
+				table.invalidate();
+				table.layout();
+			}
 		}
 	}
 	private static <T> void addFloatSetter(

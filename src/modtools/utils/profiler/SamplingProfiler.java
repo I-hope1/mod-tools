@@ -120,9 +120,9 @@ public class SamplingProfiler {
 	private static final StringBuilder keyBuf   = new StringBuilder();
 	private static       FlameNode     curHolder;
 	private static final FrameConsumer CONSUMER = (className, methodName, methodSig, thisAddr) -> {
-		if (isBlacklist(className)) return;
+		if (isBlacklist(className)) return true;
 		String[] pkgs = includePackages;
-		if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return;
+		if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return true;
 		// Log.info(className + "." + methodName + " " + methodSig);
 
 		// 复用 StringBuilder 拼 key
@@ -136,6 +136,7 @@ public class SamplingProfiler {
 		curHolder = curHolder.children
 		 .computeIfAbsent(key, FlameNode::new);
 		curHolder.totalNanos.add(intervalMs * 1_000_000L);
+		return true;
 	};
 	private static void planC(JNIEnv jniEnv, Thread target) {
 		curHolder = ProfilerData.flameRoot;

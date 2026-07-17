@@ -782,15 +782,16 @@ public class JVMTIEnv {
 	// MethodMeta 按 method ID 缓存，方法元数据在类生命周期内不变
 	private final LongObjectMap<MethodMeta> metaCache = new LongObjectMap<>();
 	private final LongObjectMap<VarEntry[]> varCache  = new LongObjectMap<>();
-	public void walkThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
+	public void walkThreadFrames(MemorySegment targetThread,
 	                             int maxDepth, int skipFrames,
 	                             FrameConsumer consumer) {
-		walkThreadFrames(jniEnv, targetThread, maxDepth, skipFrames, false, consumer);
+		walkThreadFrames(targetThread, maxDepth, skipFrames + 1 /* 这里额外加了一层 */, false, consumer);
 	}
-	public void walkThreadFrames(JNIEnv jniEnv, MemorySegment targetThread,
+	public void walkThreadFrames(MemorySegment targetThread,
 	                             int maxDepth, int skipFrames, boolean captureThis,
 	                             FrameConsumer consumer) {
 		try (Arena arena = Arena.ofConfined()) {
+			JNIEnv        jniEnv   = JNIEnv.getInstance(arena);
 			int           total    = maxDepth + skipFrames;
 			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
 			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
@@ -804,7 +805,7 @@ public class JVMTIEnv {
 			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
 
 			// 复用数组，零分配
-			for (int d = frameCount - 1; d >= skipFrames; d--) {
+			for (int d = skipFrames; d < frameCount; d++) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
 				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
@@ -846,7 +847,7 @@ public class JVMTIEnv {
 						thisAddress = 0L;
 					}
 				}
-				consumer.accept(meta.className, meta.methodName, meta.methodSig, thisAddress);
+				if (!consumer.accept(meta.className, meta.methodName, meta.methodSig, thisAddress)) break;
 			}
 
 		} catch (Throwable t) {
@@ -860,8 +861,9 @@ public class JVMTIEnv {
 		 * @param methodName  方法名
 		 * @param methodSig   方法签名
 		 * @param thisAddress this 的地址，0 表示静态方法或未找到
+		 * @return 是否继续遍历
 		 */
-		void accept(String className, String methodName, String methodSig, long thisAddress);
+		boolean accept(String className, String methodName, String methodSig, long thisAddress);
 	}
 
 	//endregion
@@ -913,7 +915,7 @@ public class JVMTIEnv {
 		return new MethodMeta(className, methodId.address(), methodName, methodSig, flags);
 	}
 
-	/** @return slashClassName (internalName)  */
+	/** @return slashClassName (internalName) */
 	public String fetchClassSig(Arena arena, MemorySegment jclass) {
 		try {
 			MemorySegment sigPtrOut = arena.allocate(ValueLayout.ADDRESS);

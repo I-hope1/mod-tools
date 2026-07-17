@@ -172,6 +172,11 @@ public interface CellTools {
 			}
 		}
 	}
+	/**
+	 * 重新计算列数，用于设置colspan时不崩溃
+	 * @see Table#computeSize()
+	 * @see Table#endRow()
+	 */
 	@SuppressWarnings("rawtypes")
 	static void recalculateColumns(Table table) {
 		int       maxCols = 0;

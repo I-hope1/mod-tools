@@ -73,7 +73,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 		if (classBeingRedefined != null) {
-			LambdaRef.onClassRedefined(dotClassName, classfileBuffer);
+			LambdaRef.onClassRedefined(className, classfileBuffer);
 			byte[] finalClassfileBuffer = classfileBuffer;
 			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, finalClassfileBuffer));
 		}

@@ -1,20 +1,16 @@
-package modtools.utils.search;
+package nipx.uihook;
 
 import arc.scene.Element;
 import arc.scene.ui.layout.*;
 import arc.util.pooling.*;
 import arc.util.pooling.Pool.Poolable;
-import modtools.utils.ui.CellTools;
 
 @SuppressWarnings("rawtypes")
 public final class BindCell implements Poolable {
 	public static final  Cell<?>        UNSET_CELL   = new Cell<>();
 	private static final Pool<Cell>     cellPool     = Pools.get(Cell.class, Cell::new);
 	private static final Pool<BindCell> bindCellPool = Pools.get(BindCell.class, BindCell::new);
-
-	/* static {
-		UNSET_CELL.colspan(0);
-	} */
+	public static final  float          UNSET        = Float.NEGATIVE_INFINITY;
 
 	public  Cell<?> cell;
 	private Cell<?> cpy;
@@ -35,7 +31,6 @@ public final class BindCell implements Poolable {
 		return new BindCell().init(cell);
 	}
 
-
 	public void require() {
 		this.el = cell.get();
 	}
@@ -48,7 +43,7 @@ public final class BindCell implements Poolable {
 		build();
 	}
 	public void unsetSize() {
-		cell.size(CellTools.unset);
+		cell.size(UNSET);
 	}
 	public Cell<?> getCpy() {
 		if (cpy == null) {
@@ -66,7 +61,7 @@ public final class BindCell implements Poolable {
 		getCpy();
 		cell.set(UNSET_CELL).clearElement();
 	}
-	/** clear时会回收自己（不包括cell，cell由table回收）  */
+	/** clear时会回收自己（不包括cell，cell由table回收） */
 	public void clear() {
 		if (el != null) el.clear();
 		if (cell != null) cell.clearElement();
@@ -78,8 +73,7 @@ public final class BindCell implements Poolable {
 		toggle(cell.get() != el);
 	}
 	public void toggle(boolean b) {
-		if (b) build();
-		else remove();
+		if (b) { build(); } else remove();
 	}
 	public boolean toggle1(boolean b) {
 		toggle(b);

@@ -3,6 +3,7 @@ package nipx;
 import arc.Core;
 import nipx.annotation.*;
 import nipx.ref.InitFix;
+import nipx.uihook.CellPropertyRef;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
@@ -73,8 +74,11 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 		if (classBeingRedefined != null) {
-			LambdaRef.onClassRedefined(className, classfileBuffer);
+			LambdaRef.beforeClassRedefined(className, classfileBuffer);
 			byte[] finalClassfileBuffer = classfileBuffer;
+			if (CellPropertyRef.isEnabled()) {
+				Core.app.post(() -> CellPropertyRef.afterRedefined(className, finalClassfileBuffer));
+			}
 			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, finalClassfileBuffer));
 		}
 
@@ -312,9 +316,9 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 
-		final Set<String> instanceSyntheticMethods = new HashSet<>();
-		final Set<String> staticSyntheticMethods   = new HashSet<>();
-		final List<ForceLambdaRef> references      = new ArrayList<>();
+		final Set<String>          instanceSyntheticMethods = new HashSet<>();
+		final Set<String>          staticSyntheticMethods   = new HashSet<>();
+		final List<ForceLambdaRef> references               = new ArrayList<>();
 
 		// 收集所有合成（Lambda）方法
 		for (MethodNode mn : cn.methods) {
@@ -391,7 +395,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				ref.indy.bsmArgs[1] = handle;
 
 				Type[] captureTypes = Type.getArgumentTypes(ref.indy.desc);
-				int captureCount = captureTypes.length;
+				int    captureCount = captureTypes.length;
 
 				InsnList wrapper = new InsnList();
 				if (captureCount > 0) {
@@ -399,8 +403,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 					int baseLocal = getBaseLocal(ref);
 
 					// 将原有已在栈上的捕获变量按原类型大小保存在临时局部变量槽中
-					int[] temps = new int[captureCount];
-					int nextLocal = baseLocal;
+					int[] temps     = new int[captureCount];
+					int   nextLocal = baseLocal;
 					for (int i = 0; i < captureCount; i++) {
 						temps[i] = nextLocal;
 						nextLocal += captureTypes[i].getSize();
@@ -447,7 +451,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			for (AbstractInsnNode ain = ref.container.instructions.getFirst(); ain != null; ain = ain.getNext()) {
 				if (ain instanceof VarInsnNode v) {
 					int size = (v.getOpcode() == LLOAD || v.getOpcode() == LSTORE ||
-								v.getOpcode() == DLOAD || v.getOpcode() == DSTORE) ? 2 : 1;
+					            v.getOpcode() == DLOAD || v.getOpcode() == DSTORE) ? 2 : 1;
 					baseLocal = Math.max(baseLocal, v.var + size);
 				}
 			}
@@ -609,11 +613,11 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 	//region Custom ClassWriter
 	/**
-	 *  <p>COMPUTE_FRAMES 会调用 getCommonSuperClass 推断类型层级。<br>
-	 *  默认实现用 Class.forName 加载类，在 transformer 内部触发新的类加载，<br>
-	 *  可能导致 LinkageError: duplicate class definition（正在被定义的类被二次加载）。<br>
-	 *  该类完全绕开类加载，直接从 bytecodeCache 读字节码提取 superName，<br>
-	 *  在 cache 中找不到时才 fallback 到 java/lang/Object。
+	 * <p>COMPUTE_FRAMES 会调用 getCommonSuperClass 推断类型层级。<br>
+	 * 默认实现用 Class.forName 加载类，在 transformer 内部触发新的类加载，<br>
+	 * 可能导致 LinkageError: duplicate class definition（正在被定义的类被二次加载）。<br>
+	 * 该类完全绕开类加载，直接从 bytecodeCache 读字节码提取 superName，<br>
+	 * 在 cache 中找不到时才 fallback 到 java/lang/Object。
 	 **/
 	public static class MyClassWriter extends ClassWriter {
 		private final ClassLoader targetLoader;

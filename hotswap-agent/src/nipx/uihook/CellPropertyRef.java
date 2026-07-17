@@ -231,7 +231,7 @@ public class CellPropertyRef {
 	//endregion
 
 	//region 热替换回调
-	public static void onClassRedefined(String slashName, byte[] newBytecode) {
+	public static void afterRedefined(String slashName, byte[] newBytecode) {
 		if (!enabled) return;
 
 		info("[CellProperty] Class redefined: " + slashName);

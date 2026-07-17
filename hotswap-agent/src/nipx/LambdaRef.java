@@ -172,7 +172,7 @@ public class LambdaRef {
 	 * @param slashClassName 被重载的类名，如 com/example/MyView
 	 * @param newBytecode 新的类字节码
 	 */
-	public static void onClassRedefined(String slashClassName, byte[] newBytecode) {
+	public static void beforeClassRedefined(String slashClassName, byte[] newBytecode) {
 		/* int cleared = 0;
 		for (var ref : UpdateRef.getAll()) {
 			UpdateRef updateRef = ref.get();
@@ -184,10 +184,6 @@ public class LambdaRef {
 
 		if (cleared > 0) {
 			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + slashClassName);
-		}
-
-		if (CellPropertyRef.isEnabled()) {
-			Core.app.post(() -> CellPropertyRef.onClassRedefined(slashClassName, newBytecode));
 		}
 
 		// if (Core.app != null && Core.scene != null) {

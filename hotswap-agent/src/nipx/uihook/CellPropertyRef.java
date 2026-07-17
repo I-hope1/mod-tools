@@ -263,7 +263,7 @@ public class CellPropertyRef {
 			List<List<PropertyCall>> newChains = findChainsForId(newChainsByMethod, id);
 			Integer                  newIndex  = newChainIndexes.get(id);
 
-			// 【一、删除逻辑】：如果新的调用链不再包含该 Cell (注释/删除)
+			// 如果新的调用链不再包含该 Cell (注释/删除)
 			if (newChains == null || newIndex == null || newIndex >= newChains.size()) {
 				Table table = cell.getTable();
 				if (table != null) {
@@ -304,59 +304,137 @@ public class CellPropertyRef {
 			records.put(id, newCalls);
 		}
 
-		// 【二、新增逻辑】：按宿主方法分别追加无法匹配到旧 Cell 的新调用链。
-		for (Entry<String, List<Integer>> additionEntry : newChainAdditions.entrySet()) {
+		// 按宿主方法分别追加无法匹配到旧 Cell 的新调用链。
+		for (Map.Entry<String, List<Integer>> additionEntry : newChainAdditions.entrySet()) {
 			String                   methodKey = additionEntry.getKey();
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
 			if (newChains == null) continue;
 
-			List<CellIdentity> methodIds = new ArrayList<>();
-			for (CellIdentity id : idsSnapshot) {
-				if (methodKeyMatches(id, methodKey)) {
-					methodIds.add(id);
-				}
-			}
-			if (!methodIds.isEmpty()) {
-				Table table = null;
-				for (CellIdentity id : methodIds) {
-					Cell<?> existingCell = findCellById(id);
-					if (existingCell != null && existingCell.getTable() != null) {
-						table = existingCell.getTable();
-						break;
-					}
-				}
+			for (int seq : additionEntry.getValue()) {
+				List<PropertyCall> newCalls = newChains.get(seq);
+				if (newCalls == null || newCalls.isEmpty()) continue;
 
-				if (table != null) {
-					for (int seq : additionEntry.getValue()) {
-						List<PropertyCall> newCalls = newChains.get(seq);
-						if (newCalls == null || newCalls.isEmpty()) continue;
+				Table targetTable     = null;
+				int   insertCellIndex = -1;
 
-						PropertyCall creator = newCalls.get(0);
-						try {
-							Method method = findTableMethod(creator.method, creator.desc);
-							if (method != null) {
-								Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
-								Cell<?>  newCell   = (Cell<?>) method.invoke(table, converted);
-								if (newCell != null) {
-									CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
-									synchronized (cellToId) {
-										cellToId.put(newCell, newId);
-									}
-									idToCell.put(newId, new WeakReference<>(newCell));
-									classToCells.computeIfAbsent(slashName, _ -> new CopyOnWriteArrayList<>()).add(newId);
+				// 寻找前后最近的存活 Cell，以此来定位该新 Cell 应该插入的目标 Table 以及相对位置
+				int     closestNewSeq = -1;
+				Cell<?> closestCell   = null;
 
-									List<PropertyCall> properties = newCalls.subList(1, newCalls.size());
-									applyAllCalls(newCell, properties);
-
-									records.put(newId, newCalls);
-									totalAdded++;
-								}
-							}
-						} catch (Exception e) {
-							error("[CellProperty] Failed to dynamically append new cell for creator: " + creator.method, e);
+				for (CellIdentity id : idsSnapshot) {
+					if (!methodKeyMatches(id, methodKey)) continue;
+					Integer newSeq = newChainIndexes.get(id);
+					// 找在这个新元素“之前”的最近一个存活元素
+					if (newSeq != null && newSeq < seq && newSeq > closestNewSeq) {
+						Cell<?> cell = findCellById(id);
+						if (cell != null && cell.getTable() != null) {
+							closestNewSeq = newSeq;
+							closestCell = cell;
 						}
 					}
-					Core.app.post(table::invalidateHierarchy);
+				}
+
+				if (closestCell != null) {
+					targetTable = closestCell.getTable();
+					insertCellIndex = targetTable.getCells().indexOf(closestCell, true) + 1;
+				} else {
+					int closestAfterSeq = Integer.MAX_VALUE;
+					for (CellIdentity id : idsSnapshot) {
+						if (!methodKeyMatches(id, methodKey)) continue;
+						Integer newSeq = newChainIndexes.get(id);
+						// 找不到前面的，就找在它“之后”的最近存活元素
+						if (newSeq != null && newSeq > seq && newSeq < closestAfterSeq) {
+							Cell<?> cell = findCellById(id);
+							if (cell != null && cell.getTable() != null) {
+								closestAfterSeq = newSeq;
+								closestCell = cell;
+							}
+						}
+					}
+					if (closestCell != null) {
+						targetTable = closestCell.getTable();
+						insertCellIndex = targetTable.getCells().indexOf(closestCell, true);
+					}
+				}
+
+				// 如果这个方法目前没有任何存活的 Cell（比如一上来全被删光了），那就回退到随便找个目标 Table 追加
+				if (targetTable == null) {
+					for (CellIdentity id : idsSnapshot) {
+						if (methodKeyMatches(id, methodKey)) {
+							Cell<?> existingCell = findCellById(id);
+							if (existingCell != null && existingCell.getTable() != null) {
+								targetTable = existingCell.getTable();
+								insertCellIndex = targetTable.getCells().size;
+								break;
+							}
+						}
+					}
+				}
+
+				l1:
+				if (targetTable != null) {
+					PropertyCall creator = newCalls.get(0);
+					try {
+						Method method = findTableMethod(creator.method, creator.desc);
+						if (method == null) break l1;
+
+						Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+
+						// 反射调用（这步默认会把它添加到 Table 的最后面）
+						Cell<?> newCell = (Cell<?>) method.invoke(targetTable, converted);
+						if (newCell == null) break l1;
+
+						// 逻辑和渲染层级的顺序校正
+						if (insertCellIndex < 0) break l1;
+						Seq<Cell> cells = targetTable.getCells();
+						// 如果当前本来就没在最后（说明是插队），就需要调整位置
+						if (insertCellIndex < cells.size - 1) {
+							cells.remove(newCell, true);
+							cells.insert(insertCellIndex, newCell);
+
+							Element element = newCell.get();
+							if (element != null) {
+								Seq<Element> children = targetTable.getChildren();
+								children.remove(element, true);
+
+								int elementInsertIndex = children.size;
+								// 寻找下一个包含真实 Element 的 Cell 作为插入锚点
+								for (int i = insertCellIndex + 1; i < cells.size; i++) {
+									Cell<?> nextCell = cells.get(i);
+									if (nextCell.hasElement()) {
+										int idx = children.indexOf(nextCell.get(), true);
+										if (idx != -1) {
+											elementInsertIndex = idx;
+											break;
+										}
+									}
+								}
+								children.insert(elementInsertIndex, element);
+							}
+						}
+
+						CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
+						synchronized (cellToId) {
+							cellToId.put(newCell, newId);
+						}
+						idToCell.put(newId, new WeakReference<>(newCell));
+						classToCells.computeIfAbsent(slashName, _ -> new CopyOnWriteArrayList<>()).add(newId);
+
+						// 把刚才新添加并找好位置的元素，直接拉进本轮重载的快照池中。
+						// 这样如果你一次性写了多个新增的控件（比如连续写了5个add），后续的控件就能把前面刚加进去的当作定位锚点！
+						idsSnapshot.add(newId);
+						newChainIndexes.put(newId, seq);
+
+						List<PropertyCall> properties = newCalls.subList(1, newCalls.size());
+						applyAllCalls(newCell, properties);
+
+						records.put(newId, newCalls);
+						totalAdded++;
+
+						Core.app.post(targetTable::invalidateHierarchy);
+					} catch (Exception e) {
+						error("[CellProperty] Failed to dynamically append new cell for creator: " + creator.method, e);
+					}
 				}
 			}
 		}

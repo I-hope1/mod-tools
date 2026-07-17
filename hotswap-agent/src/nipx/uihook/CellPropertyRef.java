@@ -10,6 +10,7 @@ import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import nipx.Injector;
+import nipx.jni.helper.MasterKey;
 import nipx.jvmti.JVMTIEnv;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
@@ -17,9 +18,11 @@ import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
 
 import java.lang.foreign.MemorySegment;
+import java.lang.invoke.*;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.*;
 
 import static nipx.AnnotationTransformer.internalName;
@@ -184,7 +187,7 @@ public class CellPropertyRef {
 					String                                methodKey     = id.hostMethod + ":" + id.hostDesc;
 					List<List<PropertyCall>>              chains        = currentChains.get(methodKey);
 					if (chains == null) {
-						for (Map.Entry<String, List<List<PropertyCall>>> entry : currentChains.entrySet()) {
+						for (Entry<String, List<List<PropertyCall>>> entry : currentChains.entrySet()) {
 							if (entry.getKey().startsWith(id.hostMethod + ":")) {
 								chains = entry.getValue();
 								break;
@@ -196,7 +199,7 @@ public class CellPropertyRef {
 					}
 				}
 			} catch (Throwable t) {
-				// 忽略提取失败
+				error("[CellProperty] Failed to extract cell chains for " + id.hostClass + "#" + id.hostMethod, t);
 			}
 			records.putIfAbsent(id, new CopyOnWriteArrayList<>());
 		}
@@ -270,7 +273,7 @@ public class CellPropertyRef {
 					try {
 						table.getCells().remove(cell, true);
 					} catch (Throwable t) {
-						// 忽略
+						error("[CellProperty] Failed to remove cell " + cell, t);
 					}
 					Core.app.post(table::invalidateHierarchy);
 				}
@@ -302,7 +305,7 @@ public class CellPropertyRef {
 		}
 
 		// 【二、新增逻辑】：按宿主方法分别追加无法匹配到旧 Cell 的新调用链。
-		for (Map.Entry<String, List<Integer>> additionEntry : newChainAdditions.entrySet()) {
+		for (Entry<String, List<Integer>> additionEntry : newChainAdditions.entrySet()) {
 			String                   methodKey = additionEntry.getKey();
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
 			if (newChains == null) continue;
@@ -374,7 +377,7 @@ public class CellPropertyRef {
 			}
 		}
 
-		for (Map.Entry<String, List<CellIdentity>> entry : idsByMethod.entrySet()) {
+		for (Entry<String, List<CellIdentity>> entry : idsByMethod.entrySet()) {
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(entry.getKey());
 			if (newChains == null) continue;
 
@@ -528,7 +531,7 @@ public class CellPropertyRef {
 	}
 
 	private static boolean applyDiff(Cell<?> cell, List<PropertyCall> oldCalls,
-	                                 List<CellPropertyRef.PropertyCall> newCalls) {
+	                                 List<PropertyCall> newCalls) {
 		PropertyCall oldCreator = oldCalls.isEmpty() ? null : oldCalls.get(0);
 		PropertyCall newCreator = newCalls.isEmpty() ? null : newCalls.get(0);
 
@@ -575,7 +578,7 @@ public class CellPropertyRef {
 		}
 	}
 
-	private static void updateChildElement(Cell<?> cell, CellPropertyRef.PropertyCall creator) {
+	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
 		Element oldElement = cell.get();
 
 		if (oldElement != null) {
@@ -737,53 +740,8 @@ public class CellPropertyRef {
 				continue;
 			}
 			if (args[i] instanceof LambdaInfo li) {
-				result[i] = Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
-					if (method.getDeclaringClass() == Object.class) {
-						return switch (method.getName()) {
-							case "toString" -> "LambdaProxy[" + li.methodName + "]";
-							case "hashCode" -> System.identityHashCode(proxy);
-							case "equals" -> proxy == methodArgs[0];
-							default -> null;
-						};
-					}
-					try {
-						Class<?> owner = Class.forName(li.ownerClass.replace('/', '.'), true, target.getClassLoader());
-						Method   impl  = null;
-						for (Method m : owner.getDeclaredMethods()) {
-							if (m.getName().equals(li.methodName)) {
-								impl = m;
-								break;
-							}
-						}
-						if (impl != null) {
-							impl.setAccessible(true);
-							// 将被捕获的变量（captures）和实际调用传递的参数（methodArgs）合并，送进真正的 Lambda 里
-							Object[] allArgs = new Object[li.captures.length + (methodArgs == null ? 0 : methodArgs.length)];
-							System.arraycopy(li.captures, 0, allArgs, 0, li.captures.length);
-							if (methodArgs != null) {
-								System.arraycopy(methodArgs, 0, allArgs, li.captures.length, methodArgs.length);
-							}
-
-							if (Modifier.isStatic(impl.getModifiers())) {
-								return impl.invoke(null, allArgs);
-							} else {
-								Object instance = allArgs.length > 0 ? allArgs[0] : null;
-								if (instance == null) return null; // 缺少实例上下文(如this)时安全返回
-								Object[] actualArgs = new Object[Math.max(0, allArgs.length - 1)];
-								if (actualArgs.length > 0) {
-									System.arraycopy(allArgs, 1, actualArgs, 0, actualArgs.length);
-								}
-								return impl.invoke(instance, actualArgs);
-							}
-						}
-					} catch (Throwable t) {
-						// 忽略
-					}
-					return null;
-				});
-				continue;
-			}
-			if (target == float.class) {
+				result[i] = makeLambda(li, target);
+			} else if (target == float.class) {
 				result[i] = ((Number) args[i]).floatValue();
 			} else if (target == int.class) {
 				result[i] = ((Number) args[i]).intValue();
@@ -802,6 +760,118 @@ public class CellPropertyRef {
 			}
 		}
 		return result;
+	}
+
+	private static Object makeLambda(LambdaInfo li, Class<?> target) {
+		return Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
+			if (method.getDeclaringClass() == Object.class) {
+				return switch (method.getName()) {
+					case "toString" -> "LambdaProxy[" + li.methodName() + "]";
+					case "hashCode" -> System.identityHashCode(proxy);
+					case "equals" -> proxy == methodArgs[0];
+					default -> null;
+				};
+			}
+
+			try {
+				// 寻找宿主类
+				Class<?>     owner          = loadClass(li.ownerClass().replace('/', '.'));
+				boolean      isStatic;
+				MethodHandle handle;
+				String       methodDesc     = li.methodDesc();
+				int          max            = methodDesc.lastIndexOf(')');
+				String       str_returnType = methodDesc.substring(max + 1);
+				Class<?> returnType = switch (str_returnType) {
+					case "V" -> void.class;
+					case "Z" -> boolean.class;
+					case "C" -> char.class;
+					case "B" -> byte.class;
+					case "S" -> short.class;
+					case "I" -> int.class;
+					case "J" -> long.class;
+					case "F" -> float.class;
+					case "D" -> double.class;
+					default -> loadClass(str_returnType.substring(1, str_returnType.length() - 1).replace('/', '.')); // 去除'L'与';'
+				};
+				List<Class<?>> paramTypes = new ArrayList<>();
+				for (int j = 1; j < max - 1; j++) {
+					paramTypes.add(switch (methodDesc.charAt(j)) {
+						case 'Z' -> boolean.class;
+						case 'C' -> char.class;
+						case 'B' -> byte.class;
+						case 'S' -> short.class;
+						case 'I' -> int.class;
+						case 'J' -> long.class;
+						case 'F' -> float.class;
+						case 'D' -> double.class;
+						case 'L' -> {
+							int fromIndex = j + 1;
+							int endIndex  = methodDesc.indexOf(';', fromIndex);
+							j = endIndex;
+							yield loadClass(methodDesc.substring(fromIndex, endIndex).replace('/', '.'));
+						}
+						default -> throw new IllegalStateException("Unexpected value: " + methodDesc.charAt(j));
+					});
+				}
+				Class[] paramTypesArr = paramTypes.toArray(Class[]::new);
+				try {
+					handle = MasterKey.INSTANCE.getTrustedLookup()
+					 .findStatic(owner, li.methodName(), MethodType.methodType(returnType, paramTypesArr));
+					isStatic = true;
+				} catch (Throwable e) {
+					error("", e);
+					handle = MasterKey.INSTANCE.getTrustedLookup()
+					 .findSpecial(owner, li.methodName(), MethodType.methodType(returnType, paramTypesArr), owner);
+					isStatic = false;
+				}
+
+				if (handle == null) {
+					// 【重点排错】：如果报这个错，说明 JVM 的反射缓存没有刷新新方法
+					error("[CellProperty] 致命错误: 反射未能找到 Lambda 目标方法 " + li.methodName() + "！这可能是由于 JVM 的热重载未正确刷新反射缓存。", new NoSuchMethodException(li.methodName()));
+					return null;
+				}
+				// 合并捕获变量与实际参数
+				Object[] allArgs = new Object[li.captures().length + (methodArgs == null ? 0 : methodArgs.length)];
+				System.arraycopy(li.captures(), 0, allArgs, 0, li.captures().length);
+				if (methodArgs != null) {
+					System.arraycopy(methodArgs, 0, allArgs, li.captures().length, methodArgs.length);
+				}
+
+				// 反射执行真正的 Lambda
+				if (isStatic) {
+					return switch (allArgs.length) {
+						case 0 -> handle.invoke();
+						case 1 -> handle.invoke(allArgs[0]);
+						case 2 -> handle.invoke(allArgs[0], allArgs[1]);
+						case 3 -> handle.invoke(allArgs[0], allArgs[1], allArgs[2]);
+						case 4 -> handle.invoke(allArgs[0], allArgs[1], allArgs[2], allArgs[3]);
+						default -> handle.asSpreader(Object.class, allArgs.length).invoke(allArgs);
+					};
+				} else {
+					Object instance = allArgs.length > 0 ? allArgs[0] : null;
+					if (instance == null) {
+						error("[CellProperty] Lambda missing instance (this) for: " + li.methodName(), new NullPointerException());
+						return null;
+					}
+					Object[] actualArgs = new Object[Math.max(0, allArgs.length - 1)];
+					if (actualArgs.length > 0) {
+						System.arraycopy(allArgs, 1, actualArgs, 0, actualArgs.length);
+					}
+					return switch (actualArgs.length) {
+						case 0 -> handle.invoke(instance);
+						case 1 -> handle.invoke(instance, actualArgs[0]);
+						case 2 -> handle.invoke(instance, actualArgs[0], actualArgs[1]);
+						case 3 -> handle.invoke(instance, actualArgs[0], actualArgs[1], actualArgs[2]);
+						case 4 -> handle.invoke(actualArgs[0], actualArgs[1], actualArgs[2], actualArgs[3]);
+						default -> handle.asSpreader(Object.class, actualArgs.length).bindTo(instance).invoke(instance, actualArgs);
+					};
+				}
+			} catch (Throwable t) {
+				// 【重点排错】：捕获 Lambda 内部执行崩溃
+				error("[CellProperty] 致命错误: Lambda 执行时发生异常！" + li.methodName(), t);
+			}
+			return null;
+		});
 	}
 	//endregion
 
@@ -1003,25 +1073,33 @@ public class CellPropertyRef {
 		return 0;
 	}
 
+	private static AbstractInsnNode skipPseudo(AbstractInsnNode insn) {
+		while (insn != null && (insn.getType() == AbstractInsnNode.LABEL ||
+		                        insn.getType() == AbstractInsnNode.LINE ||
+		                        insn.getType() == AbstractInsnNode.FRAME)) {
+			insn = insn.getPrevious();
+		}
+		return insn;
+	}
 	private static AbstractInsnNode skipExpression(AbstractInsnNode insn) {
 		if (insn == null) return null;
 		int              needed = 1;
-		AbstractInsnNode curr   = insn;
+		AbstractInsnNode curr   = skipPseudo(insn);
 		while (curr != null) {
 			int pops   = getPops(curr);
 			int pushes = getPushes(curr);
 			needed -= pushes;
 			needed += pops;
 			if (needed <= 0) {
-				return curr.getPrevious();
+				return skipPseudo(curr.getPrevious());
 			}
-			curr = curr.getPrevious();
+			curr = skipPseudo(curr.getPrevious());
 		}
 		return null;
 	}
 
 	private static AbstractInsnNode getPrevArgInsn(AbstractInsnNode start, Type[] argTypes, int targetIdx) {
-		AbstractInsnNode prev = start;
+		AbstractInsnNode prev = skipPseudo(start);
 		for (int i = argTypes.length - 1; i >= 0 && prev != null; i--) {
 			if (i == targetIdx) {
 				return prev;
@@ -1090,10 +1168,13 @@ public class CellPropertyRef {
 			try {
 				String   className = fin.owner.replace('/', '.');
 				Class<?> clazz     = loadClass(className);
-				Field    field     = clazz.getField(fin.name);
+				Field    field     = clazz.getDeclaredField(fin.name);
+				if (!Modifier.isStatic(field.getModifiers())) return null;
+
+				field.setAccessible(true);
 				return field.get(null);
 			} catch (Throwable t) {
-				// 忽略
+				// error("[CellProperty] Failed to resolve constant " + fin.owner + "." + fin.name + ":" + fin.desc, t);
 			}
 		}
 
@@ -1239,10 +1320,6 @@ public class CellPropertyRef {
 		}
 		return null;
 	}
-	private static Class<?> loadClass(String className) throws ClassNotFoundException {
-		return Class.forName(className, true, Vars.mods.mainLoader());
-	}
-
 	private static boolean isConstantType(Object val) {
 		return val instanceof String || val instanceof Number || val instanceof Boolean || val instanceof Character;
 	}
@@ -1351,7 +1428,7 @@ public class CellPropertyRef {
 		ClassReader cr = new ClassReader(bytes);
 		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
-		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
 			@Override
 			public MethodVisitor visitMethod(int access, String name, String descriptor,
 			                                 String signature, String[] exceptions) {
@@ -1475,7 +1552,11 @@ public class CellPropertyRef {
 	//endregion
 
 	//region 辅助方法
-	private static Cell<?> findCellById(CellPropertyRef.CellIdentity target) {
+	private static Class<?> loadClass(String className) throws ClassNotFoundException {
+		return Class.forName(className, true, Vars.mods.mainLoader());
+	}
+
+	private static Cell<?> findCellById(CellIdentity target) {
 		WeakReference<Cell<?>> ref = idToCell.get(target);
 		return ref != null ? ref.get() : null;
 	}
@@ -1517,7 +1598,7 @@ public class CellPropertyRef {
 				}
 			}
 		} catch (Throwable t) {
-			// 忽略
+			error("[CellProperty] Failed to infer cell identity", t);
 		}
 
 		if (seq < 0) {

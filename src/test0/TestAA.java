@@ -3,7 +3,6 @@ package test0;
 import arc.graphics.Color;
 import arc.scene.ui.Tooltip.Tooltips;
 import arc.util.Log;
-import mindustry.graphics.Pal;
 import modtools.ui.IntUI.ITooltip;
 import modtools.ui.comp.Window;
 import nipx.annotation.OnReload;
@@ -47,15 +46,16 @@ public class TestAA {
 		new Window("www") {{
 			float size = 10 * 3 / 2f;
 			float s = size * 1.9f;
-			cont.table(t -> {
+		/* 	cont.table(t -> {
 				t.add("aasasasa").width(100);
 				t.image().size(30).color(Pal.muddy);
 				t.image().size(size).color(Color.lightGray);
-			}).pad(4);
-			cont.table(t -> t.add("asasx")).row();
+			}).pad(4); */
+			cont.table(t -> t.add("1")).row();
+			// cont.table(t -> t.add("2")).row();
 
-			cont.image().height(1).growX().color(Color.cyan).colspan(2).row();
-			cont.add("asijsa").growX();
+			cont.image().growX().color(Color.cyan).colspan(2).row();
+			cont.add("33333").growX();
 			/* cont.image().size(s).color(Color.yellow);
 			cont.image().size(42).color(Color.lightGray);
 			cont.button("777", Styles.flatBordert, () -> Log.info("ojaso"))

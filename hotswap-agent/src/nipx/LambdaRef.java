@@ -187,7 +187,7 @@ public class LambdaRef {
 		}
 
 		if (CellPropertyRef.isEnabled()) {
-			CellPropertyRef.onClassRedefined(slashClassName, newBytecode);
+			Core.app.post(() -> CellPropertyRef.onClassRedefined(slashClassName, newBytecode));
 		}
 
 		// if (Core.app != null && Core.scene != null) {

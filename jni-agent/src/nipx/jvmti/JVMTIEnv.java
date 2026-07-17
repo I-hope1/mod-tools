@@ -872,7 +872,7 @@ public class JVMTIEnv {
 			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
 
 			// 复用数组，零分配
-			for (int d = frameCount - 1; d >= skipFrames; d--) {
+			for (int d = frameCount - 1; d  >= skipFrames; d--) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
 				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);

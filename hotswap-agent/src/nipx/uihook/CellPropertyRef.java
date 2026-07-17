@@ -37,6 +37,29 @@ public class CellPropertyRef {
 	public record PropertyCall(String method, String desc, Object[] args, int line) { }
 
 	public record CellIdentity(String hostClass, String hostMethod, String hostDesc, int sequence) { }
+	public record LambdaInfo(String ownerClass, String methodName, String methodDesc, Object[] captures) {
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof LambdaInfo that)) return false;
+			return ownerClass.equals(that.ownerClass) &&
+			       methodName.equals(that.methodName) &&
+			       methodDesc.equals(that.methodDesc) &&
+			       Arrays.equals(captures, that.captures);
+		}
+
+		@Override
+		public int hashCode() {
+			int result = Objects.hash(ownerClass, methodName, methodDesc);
+			result = 31 * result + Arrays.hashCode(captures);
+			return result;
+		}
+
+		@Override
+		public String toString() {
+			return "Lambda[" + methodName + "]";
+		}
+	}
 	//endregion
 
 	//region 全局状态
@@ -155,7 +178,7 @@ public class CellPropertyRef {
 
 		if (!records.containsKey(id)) {
 			try {
-				byte[] currentBytecode = fetchCurrentBytecode(Class.forName(id.hostClass.replace('/', '.')));
+				byte[] currentBytecode = fetchCurrentBytecode(loadClass(id.hostClass.replace('/', '.')));
 				if (currentBytecode != null) {
 					Map<String, List<List<PropertyCall>>> currentChains = extractCellChains(currentBytecode);
 					String                                methodKey     = id.hostMethod + ":" + id.hostDesc;
@@ -701,7 +724,61 @@ public class CellPropertyRef {
 					continue;
 				}
 				result[i] = Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
-					if (method.getDeclaringClass() == Object.class) return method.invoke(proxy, methodArgs);
+					if (method.getDeclaringClass() == Object.class) {
+						return switch (method.getName()) {
+							case "toString" -> "DummyProxy[" + target.getSimpleName() + "]";
+							case "hashCode" -> System.identityHashCode(proxy);
+							case "equals" -> proxy == methodArgs[0];
+							default -> null;
+						};
+					}
+					return null;
+				});
+				continue;
+			}
+			if (args[i] instanceof LambdaInfo li) {
+				result[i] = Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
+					if (method.getDeclaringClass() == Object.class) {
+						return switch (method.getName()) {
+							case "toString" -> "LambdaProxy[" + li.methodName + "]";
+							case "hashCode" -> System.identityHashCode(proxy);
+							case "equals" -> proxy == methodArgs[0];
+							default -> null;
+						};
+					}
+					try {
+						Class<?> owner = Class.forName(li.ownerClass.replace('/', '.'), true, target.getClassLoader());
+						Method   impl  = null;
+						for (Method m : owner.getDeclaredMethods()) {
+							if (m.getName().equals(li.methodName)) {
+								impl = m;
+								break;
+							}
+						}
+						if (impl != null) {
+							impl.setAccessible(true);
+							// 将被捕获的变量（captures）和实际调用传递的参数（methodArgs）合并，送进真正的 Lambda 里
+							Object[] allArgs = new Object[li.captures.length + (methodArgs == null ? 0 : methodArgs.length)];
+							System.arraycopy(li.captures, 0, allArgs, 0, li.captures.length);
+							if (methodArgs != null) {
+								System.arraycopy(methodArgs, 0, allArgs, li.captures.length, methodArgs.length);
+							}
+
+							if (Modifier.isStatic(impl.getModifiers())) {
+								return impl.invoke(null, allArgs);
+							} else {
+								Object instance = allArgs.length > 0 ? allArgs[0] : null;
+								if (instance == null) return null; // 缺少实例上下文(如this)时安全返回
+								Object[] actualArgs = new Object[Math.max(0, allArgs.length - 1)];
+								if (actualArgs.length > 0) {
+									System.arraycopy(allArgs, 1, actualArgs, 0, actualArgs.length);
+								}
+								return impl.invoke(instance, actualArgs);
+							}
+						}
+					} catch (Throwable t) {
+						// 忽略
+					}
 					return null;
 				});
 				continue;
@@ -1012,7 +1089,7 @@ public class CellPropertyRef {
 		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
 			try {
 				String   className = fin.owner.replace('/', '.');
-				Class<?> clazz     = Class.forName(className, true, Vars.mods.mainLoader());
+				Class<?> clazz     = loadClass(className);
 				Field    field     = clazz.getField(fin.name);
 				return field.get(null);
 			} catch (Throwable t) {
@@ -1148,7 +1225,22 @@ public class CellPropertyRef {
 				return resolveVar(cn, mn, vin.var, visitingMethods);
 			}
 		}
+		if (insn instanceof InvokeDynamicInsnNode indy && indy.bsm != null && "java/lang/invoke/LambdaMetafactory".equals(indy.bsm.getOwner())
+		    && indy.bsmArgs != null && indy.bsmArgs.length >= 2 && indy.bsmArgs[1] instanceof Handle handle) {
+			Type[]   captureTypes = Type.getArgumentTypes(indy.desc);
+			Object[] captures     = new Object[captureTypes.length];
+			// 倒推栈上推送的闭包捕获变量
+			for (int i = 0; i < captureTypes.length; i++) {
+				AbstractInsnNode argInsn = getPrevArgInsn(indy.getPrevious(), captureTypes, i);
+				captures[i] = resolveConstant(cn, mn, argInsn, visitingMethods);
+			}
+			// info("[CellProperty] Resolved lambda: " + indy.name + " " + indy.desc + " " + indy.bsm);
+			return new LambdaInfo(handle.getOwner(), handle.getName(), handle.getDesc(), captures);
+		}
 		return null;
+	}
+	private static Class<?> loadClass(String className) throws ClassNotFoundException {
+		return Class.forName(className, true, Vars.mods.mainLoader());
 	}
 
 	private static boolean isConstantType(Object val) {

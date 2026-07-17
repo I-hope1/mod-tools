@@ -49,10 +49,12 @@ public class TestAA {
 			float s = size * 1.9f;
 			cont.table(t -> {
 				t.add("aasasasa").width(100);
-				t.image().size(30).color(Pal.meltdownHit);
+				t.image().size(30).color(Pal.muddy);
+				t.image().size(size).color(Color.lightGray);
 			}).growX().colspan(4).row();
 
-			cont.image().size(30).color(Color.violet);
+			cont.image().size(30).color(Color.cyan);
+			cont.add("asijsa").growX().colspan(3);
 			/* cont.image().size(s).color(Color.yellow);
 			cont.image().size(42).color(Color.lightGray);
 			cont.button("777", Styles.flatBordert, () -> Log.info("ojaso"))

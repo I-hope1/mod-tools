@@ -259,6 +259,10 @@ public class CellPropertyRef {
 			List<PropertyCall> newCalls = newChains.get(newIndex);
 			List<PropertyCall> oldCalls = records.get(id);
 
+			if (DEBUG) {
+				log("[CellProperty] " + id.hostClass + "#" + id.hostMethod + "[" + id.sequence
+				    + "]: " + oldCalls + " → " + newCalls);
+			}
 			if (oldCalls == null || oldCalls.isEmpty()) {
 				if (!newCalls.isEmpty() && isTableCellCreator(CL_TABLE, newCalls.get(0).method)) {
 					updateChildElement(cell, newCalls.get(0));
@@ -358,6 +362,17 @@ public class CellPropertyRef {
 				List<PropertyCall> oldCalls = records.get(id);
 				if (oldCalls == null || oldCalls.isEmpty()) continue;
 
+				// 优先尝试原序号：只要 creator 方法名没变就直接复用，避免误配
+				if (id.sequence < newChains.size() && !usedNewIndexes.contains(id.sequence)) {
+					PropertyCall oc = oldCalls.get(0);
+					PropertyCall nc = newChains.get(id.sequence).get(0);
+					if (oc.method.equals(nc.method)) {
+						result.put(id, id.sequence);
+						usedNewIndexes.add(id.sequence);
+						continue;
+					}
+				}
+
 				int bestIndex = findBestChainIndex(newChains, oldCalls, usedNewIndexes);
 				if (bestIndex >= 0) {
 					result.put(id, bestIndex);
@@ -408,7 +423,7 @@ public class CellPropertyRef {
 	private static int findBestChainIndex(List<List<PropertyCall>> newChains, List<PropertyCall> oldCalls,
 	                                      Set<Integer> usedNewIndexes) {
 		int bestIndex = -1;
-		int bestScore = 0;
+		int bestScore = 3;
 		for (int i = 0; i < newChains.size(); i++) {
 			if (usedNewIndexes.contains(i)) continue;
 
@@ -425,19 +440,22 @@ public class CellPropertyRef {
 		if (callsEqual(oldCalls, newCalls)) return Integer.MAX_VALUE;
 		if (oldCalls == null || newCalls == null || oldCalls.isEmpty() || newCalls.isEmpty()) return 0;
 
-		int          score      = 0;
 		PropertyCall oldCreator = oldCalls.get(0);
 		PropertyCall newCreator = newCalls.get(0);
-		if (oldCreator.method.equals(newCreator.method)) score += 2;
-		if (oldCreator.desc.equals(newCreator.desc)) score += 2;
+
+		// 方法名不一致直接判定不相似
+		if (!oldCreator.method.equals(newCreator.method)) return 0;
+
+		int score = 4; // 方法名一致的基础分
+		if (oldCreator.desc.equals(newCreator.desc)) score += 1;
 		if (argsEqual(oldCreator.args, newCreator.args)) score += 6;
 
 		int max = Math.min(oldCalls.size(), newCalls.size());
 		for (int i = 1; i < max; i++) {
 			PropertyCall oldCall = oldCalls.get(i);
 			PropertyCall newCall = newCalls.get(i);
-			if (oldCall.method.equals(newCall.method)) score++;
-			if (oldCall.desc.equals(newCall.desc)) score++;
+			if (!oldCall.method.equals(newCall.method)) continue; // 方法名都不同就不计分
+			score += 2;
 			if (argsEqual(oldCall.args, newCall.args)) score += 2;
 		}
 		return score;
@@ -540,9 +558,9 @@ public class CellPropertyRef {
 		if (oldElement != null) {
 			// 如果旧元素已经是 Table 且新创建的也是 table，直接跳过替换过程
 			// 这样内部的 Lambda 渲染的子元素就不会被干掉
-			if ((creator.method.equals("table") && oldElement instanceof Table) ||
-			    (creator.method.equals("pane") && oldElement instanceof ScrollPane) ||
-			    (creator.method.equals("stack") && oldElement instanceof Stack)) {
+			if (("table".equals(creator.method) && oldElement instanceof Table) ||
+			    ("pane".equals(creator.method) && oldElement instanceof ScrollPane) ||
+			    ("stack".equals(creator.method) && oldElement instanceof Stack)) {
 				if (DEBUG) log("[CellProperty] Skipping replacement for container: " + creator.method);
 				return;
 			}

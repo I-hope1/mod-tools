@@ -51,8 +51,9 @@ public class TestAA {
 				t.image().size(30).color(Pal.muddy);
 				t.image().size(size).color(Color.lightGray);
 			}).pad(4); */
-			cont.table(t -> t.add("1")).row();
-			// cont.table(t -> t.add("2")).row();
+			// cont.table(t -> t.add("1")).row();
+			cont.table(t -> t.add("2")).row();
+			cont.image().size(s).color(Color.lightGray).row();
 
 			cont.image().growX().color(Color.cyan).colspan(2).row();
 			cont.add("33333").growX();

@@ -384,53 +384,50 @@ public class CellPropertyRef {
 						Cell<?> newCell = (Cell<?>) method.invoke(targetTable, converted);
 						if (newCell == null) break l1;
 
+						CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
+						synchronized (cellToId) { cellToId.put(newCell, newId); }
+						idToCell.put(newId, new WeakReference<>(newCell));
+						classToCells.computeIfAbsent(slashName, _ -> new CopyOnWriteArrayList<>()).add(newId);
+
+						idsSnapshot.add(newId);
+						newChainIndexes.put(newId, seq);
+						records.put(newId, newCalls);
+						List<PropertyCall> properties = newCalls.subList(1, newCalls.size());
+						applyAllCalls(newCell, properties);
+
 						// 逻辑和渲染层级的顺序校正
 						if (insertCellIndex < 0) break l1;
-						Seq<Cell> cells = targetTable.getCells();
+
+						Seq<Cell> cells      = targetTable.getCells();
+						int       currentIdx = cells.indexOf(newCell, true);
 						// 如果当前本来就没在最后（说明是插队），就需要调整位置
-						if (insertCellIndex < cells.size - 1) {
+						l2:
+						if (currentIdx != -1 && insertCellIndex < cells.size - 1) {
 							cells.remove(newCell, true);
 							cells.insert(insertCellIndex, newCell);
 
 							Element element = newCell.get();
-							if (element != null) {
-								Seq<Element> children = targetTable.getChildren();
-								children.remove(element, true);
+							if (element == null) break l2;
 
-								int elementInsertIndex = children.size;
-								// 寻找下一个包含真实 Element 的 Cell 作为插入锚点
-								for (int i = insertCellIndex + 1; i < cells.size; i++) {
-									Cell<?> nextCell = cells.get(i);
-									if (nextCell.hasElement()) {
-										int idx = children.indexOf(nextCell.get(), true);
-										if (idx != -1) {
-											elementInsertIndex = idx;
-											break;
-										}
-									}
+							Seq<Element> children = targetTable.getChildren();
+							children.remove(element, true);
+
+							int elementInsertIndex = children.size;
+							// 寻找下一个包含真实 Element 的 Cell 作为插入锚点
+							for (int i = insertCellIndex + 1; i < cells.size; i++) {
+								Cell<?> nextCell = cells.get(i);
+								if (!nextCell.hasElement()) continue;
+
+								int idx = children.indexOf(nextCell.get(), true);
+								if (idx != -1) {
+									elementInsertIndex = idx;
+									break;
 								}
-								children.insert(elementInsertIndex, element);
 							}
+							children.insert(elementInsertIndex, element);
 						}
-
-						CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
-						synchronized (cellToId) {
-							cellToId.put(newCell, newId);
-						}
-						idToCell.put(newId, new WeakReference<>(newCell));
-						classToCells.computeIfAbsent(slashName, _ -> new CopyOnWriteArrayList<>()).add(newId);
-
-						// 把刚才新添加并找好位置的元素，直接拉进本轮重载的快照池中。
-						// 这样如果你一次性写了多个新增的控件（比如连续写了5个add），后续的控件就能把前面刚加进去的当作定位锚点！
-						idsSnapshot.add(newId);
-						newChainIndexes.put(newId, seq);
-
-						List<PropertyCall> properties = newCalls.subList(1, newCalls.size());
-						applyAllCalls(newCell, properties);
-
-						records.put(newId, newCalls);
+						repairTableGrid(targetTable);
 						totalAdded++;
-
 						Core.app.post(targetTable::invalidateHierarchy);
 					} catch (Exception e) {
 						error("[CellProperty] Failed to dynamically append new cell for creator: " + creator.method, e);
@@ -1803,6 +1800,49 @@ public class CellPropertyRef {
 		} catch (Exception e) {
 			// fallback: 如果反射失败，至少 invalidate
 			table.invalidate();
+		}
+	}
+	private static final Field f_table_rows    = nl(() -> Table.class.getDeclaredField("rows"));
+	private static final Field f_table_columns = nl(() -> Table.class.getDeclaredField("columns"));
+	private static final Field f_cell_row     = nl(() -> Cell.class.getDeclaredField("row"));
+	private static final Field f_cell_column = nl(() -> Cell.class.getDeclaredField("column"));
+
+	private static void repairTableGrid(Table table) {
+		if (table == null) return;
+		assert f_table_rows != null;
+		assert f_table_columns != null;
+		try {
+			Seq<Cell> cells = table.getCells();
+			if (cells == null) return;
+
+			int currentRow = 0;
+			int currentCol = 0;
+			int maxCols    = 0;
+
+			// 重新遍历所有 Cell 并校正它们的行列坐标
+			for (int i = 0; i < cells.size; i++) {
+				Cell<?> c = cells.get(i);
+
+				f_cell_row.setInt(c, currentRow);
+				f_cell_column.setInt(c, currentCol);
+
+				int span = f_colspan != null ? f_colspan.getInt(c) : 1;
+				currentCol += span;
+
+				if (c.isEndRow()) {
+					if (currentCol > maxCols) maxCols = currentCol;
+					currentCol = 0;
+					currentRow++;
+				}
+			}
+			if (currentCol > maxCols) maxCols = currentCol;
+
+			// 必须同步修复 Table 内部的缓存行数与列数，否则 layout() 时数组会越界或交叠
+			f_table_rows.setInt(table, currentRow + (currentCol > 0 ? 1 : 0));
+			f_table_columns.setInt(table, maxCols);
+
+		} catch (Throwable t) {
+			error("[CellProperty] Failed to repair table grid", t);
 		}
 	}
 	private static <T> T nl(NLSupplier<T> supplier) {

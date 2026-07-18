@@ -744,7 +744,7 @@ public class JVMTIEnv {
 	                             int maxDepth, int skipFrames, boolean captureThis,
 	                             FrameConsumer consumer) {
 		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv        jniEnv   = JNIEnv.getInstance(arena);
+			JNIEnv        jniEnv   = null; // 仅在需要时创建
 			int           total    = maxDepth + skipFrames;
 			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
 			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
@@ -783,6 +783,7 @@ public class JVMTIEnv {
 						if (err == JVMTI_ERROR_NONE) {
 							MemorySegment localRef = out.get(ValueLayout.ADDRESS, 0);
 							if (localRef.address() != 0) {
+								if (jniEnv == null) jniEnv = JNIEnv.getInstance(arena); // 仅在需要时分配
 								// 提升为global ref，避免GC
 								MemorySegment globalRef = jniEnv.NewGlobalRef(localRef);
 								try {

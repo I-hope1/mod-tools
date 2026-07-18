@@ -19,6 +19,7 @@ import org.objectweb.asm.tree.*;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.*;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.*;
@@ -294,6 +295,39 @@ public class CellPropertyRef {
 				log("[CellProperty] " + id.hostClass + "#" + id.hostMethod + "[" + id.sequence
 				    + "]: " + oldCalls + " → " + newCalls);
 			}
+			if (oldCalls != null && !oldCalls.isEmpty() && newCalls != null && newCalls.size() == oldCalls.size()) {
+				List<PropertyCall> mergedCalls = new ArrayList<>(newCalls);
+				boolean            changed     = false;
+				for (int i = 0; i < mergedCalls.size(); i++) {
+					PropertyCall staticCall  = mergedCalls.get(i);
+					PropertyCall runtimeCall = oldCalls.get(i);
+					Object[]     staticArgs  = staticCall.args;
+					Object[]     runArgs     = runtimeCall.args;
+					Object[]     mergedArgs  = null;
+
+					if (staticArgs != null) {
+						mergedArgs = staticArgs.clone();
+						if (runArgs != null && mergedArgs.length == runArgs.length) {
+							for (int j = 0; j < mergedArgs.length; j++) {
+								if (mergedArgs[j] == null && runArgs[j] != null) {
+									mergedArgs[j] = runArgs[j];
+								}
+							}
+						}
+					} else if (runArgs != null) {
+						mergedArgs = runArgs.clone();
+					}
+
+					if (!Arrays.equals(staticArgs, mergedArgs)) {
+						mergedCalls.set(i, new PropertyCall(staticCall.method, staticCall.desc, mergedArgs, staticCall.line));
+						changed = true;
+					}
+				}
+				if (changed) {
+					newCalls = mergedCalls; // 使用合并后的调用链作为应用基准
+				}
+			}
+
 			if (oldCalls == null || oldCalls.isEmpty()) {
 				if (!newCalls.isEmpty() && isTableCellCreator(CL_TABLE, newCalls.get(0).method)) {
 					updateChildElement(cell, newCalls.get(0));
@@ -380,13 +414,14 @@ public class CellPropertyRef {
 				if (targetTable != null) {
 					PropertyCall creator = newCalls.get(0);
 					try {
-						Method method = findTableMethod(creator.method, creator.desc);
-						if (method == null) break l1;
+						MethodType   methodType   = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
+						MethodHandle methodHandle = findTableMethod(creator.method, methodType);
+						if (methodHandle == null) break l1;
 
-						Object[] converted = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+						Object[] converted = creator.args == null ? null : convertArgs(methodType, creator.args);
 
 						// 反射调用（这步默认会把它添加到 Table 的最后面）
-						Cell<?> newCell = (Cell<?>) method.invoke(targetTable, converted);
+						Cell<?> newCell = invoke(methodHandle, targetTable, converted);
 						if (newCell == null) break l1;
 
 						CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
@@ -434,7 +469,7 @@ public class CellPropertyRef {
 						repairTableGrid(targetTable);
 						totalAdded++;
 						Core.app.post(targetTable::invalidateHierarchy);
-					} catch (Exception e) {
+					} catch (Throwable e) {
 						error("[CellProperty] Failed to dynamically append new cell for creator: " + creator.method, e);
 					}
 				}
@@ -459,7 +494,21 @@ public class CellPropertyRef {
 
 		for (Entry<String, List<CellIdentity>> entry : idsByMethod.entrySet()) {
 			List<List<PropertyCall>> newChains = newChainsByMethod.get(entry.getKey());
-			if (newChains == null) continue;
+			if (newChains == null || newChains.isEmpty()) continue;
+
+			List<CellIdentity> sortedIds = new ArrayList<>(entry.getValue());
+			sortedIds.sort(Comparator.comparingInt(id -> id.sequence));
+
+			if (newChains.size() == 1) {
+				PropertyCall newCreator = newChains.get(0).get(0);
+				for (CellIdentity id : sortedIds) {
+					List<PropertyCall> oldCalls = records.get(id);
+					if (oldCalls != null && !oldCalls.isEmpty() && oldCalls.get(0).method.equals(newCreator.method)) {
+						result.put(id, 0);
+					}
+				}
+				continue;
+			}
 
 			Set<Integer> usedNewIndexes = new HashSet<>();
 
@@ -688,14 +737,15 @@ public class CellPropertyRef {
 		if (table == null) return;
 
 		try {
-			Method method = findTableMethod(creator.method, creator.desc);
-			if (method == null) return;
+			MethodType   methodType   = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
+			MethodHandle methodHandle = findTableMethod(creator.method, methodType);
+			if (methodHandle == null) return;
 
 			Table    dummyTable = new Table();
-			Object[] converted  = creator.args == null ? null : convertArgs(method.getParameterTypes(), creator.args);
+			Object[] converted  = creator.args == null ? null : convertArgs(methodType, creator.args);
 
 			// 如果 creator 是 table(cons)，这里会调用我们提供的空 Cons
-			Cell<?> dummyCell = (Cell<?>) method.invoke(dummyTable, converted);
+			Cell<?> dummyCell = invoke(methodHandle, dummyTable, converted);
 			if (dummyCell == null || dummyCell.get() == null) return;
 
 			Element newElement = dummyCell.get();
@@ -704,17 +754,15 @@ public class CellPropertyRef {
 			BindCell bind = BindCell.of(cell);
 			bind.replace(newElement, false);
 			Pools.free(bind);
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			error("[CellProperty] Failed to update child element for creator: " + creator.method, e);
 		}
 	}
 
-	private static Method findTableMethod(String name, String desc) {
-		for (Method m : Table.class.getMethods()) {
-			if (m.getName().equals(name) && Type.getMethodDescriptor(m).equals(desc)) {
-				return m;
-			}
-		}
+	private static MethodHandle findTableMethod(String name, MethodType methodType) {
+		try {
+			return lookup().findVirtual(Table.class, name, methodType);
+		} catch (Throwable ignored) { }
 		return null;
 	}
 
@@ -757,16 +805,27 @@ public class CellPropertyRef {
 				f_endRow.setBoolean(cell, true);
 				return;
 			}
-			Method method = findMatchingMethod(methodName, methodDesc);
-			if (method == null) {
-				error("[CellProperty] No matching method: " + methodName
+			MethodType   methodType   = MethodType.fromMethodDescriptorString(methodDesc, Vars.mods.mainLoader());
+			MethodHandle methodHandle = findMatchingMethod(methodName, methodType);
+			if (methodHandle == null) {
+				error("[CellProperty] No matching methodHandle: " + methodName
 				      + "(" + len + " args)");
 				return;
 			}
-			// if (DEBUG) log("[CellProperty] Invoking " + method + ": " + argsString(args));
+			// if (DEBUG) log("[CellProperty] Invoking " + methodHandle + ": " + argsString(args));
 
-			Object[] converted = convertArgs(method.getParameterTypes(), args);
-			method.invoke(cell, converted);
+			Object[] converted    = convertArgs(methodType, args);
+			Class<?> receiverType = methodHandle.type().parameterType(0);
+			if (receiverType.isAssignableFrom(Cell.class)) {
+				invoke(methodHandle, cell, converted);
+			} else if (receiverType.isAssignableFrom(Table.class)) {
+				invoke(methodHandle, cell.getTable(), converted);
+			} else {
+				error("[CellProperty] Unexpected receiver type: " + receiverType);
+				return;
+			}
+
+			// 更新列数
 			if ("colspan".equals(methodName)) {
 				Table table = cell.getTable();
 				if (table == null) return;
@@ -776,36 +835,31 @@ public class CellPropertyRef {
 				table.layout();
 				if (DEBUG) log("[CellProperty] Recalculated columns for colspan changed.");
 			}
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			error("[CellProperty] Failed to invoke " + methodName, e);
 		}
 	}
 
-	private static Method findMatchingMethod(String name, String desc) {
-		for (Method m : Cell.class.getMethods()) {
-			if (m.getName().equals(name) && Type.getMethodDescriptor(m).equals(desc)) {
-				return m;
-			}
-		}
-		for (Method m : Table.class.getMethods()) {
-			if (m.getName().equals(name) && Type.getMethodDescriptor(m).equals(desc)
-			    && Cell.class.isAssignableFrom(m.getReturnType())) {
-				return m;
-			}
-		}
+	private static MethodHandle findMatchingMethod(String name, MethodType methodType) {
+		try {
+			return lookup().findVirtual(Cell.class, name, methodType);
+		} catch (Throwable ignored) { }
+		try {
+			return lookup().findVirtual(Table.class, name, methodType);
+		} catch (Throwable ignored) { }
 		return null;
 	}
 
-	private static Object[] convertArgs(Class<?>[] paramTypes, Object[] args) {
+	private static Object[] convertArgs(MethodType methodType, Object[] args) {
 		if (args == null) return null;
 		Object[] result = new Object[args.length];
 		for (int i = 0; i < args.length; i++) {
 			Object arg = args[i];
-			if (i >= paramTypes.length) {
+			if (i >= methodType.parameterCount()) {
 				result[i] = arg;
 				continue;
 			}
-			Class<?> target = paramTypes[i];
+			Class<?> target = methodType.parameterType(i);
 			if (arg == null) {
 				result[i] = !target.isInterface() ? null :
 				 Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
@@ -861,12 +915,10 @@ public class CellPropertyRef {
 				String     methodDesc = li.methodDesc();
 				MethodType type       = MethodType.fromMethodDescriptorString(methodDesc, owner.getClassLoader());
 				try {
-					handle = MasterKey.INSTANCE.getTrustedLookup()
-					 .findStatic(owner, li.methodName(), type);
+					handle = lookup().findStatic(owner, li.methodName(), type);
 					isStatic = true;
 				} catch (Throwable e) {
-					handle = MasterKey.INSTANCE.getTrustedLookup()
-					 .findSpecial(owner, li.methodName(), type, owner);
+					handle = lookup().findSpecial(owner, li.methodName(), type, owner);
 					isStatic = false;
 				}
 
@@ -883,14 +935,7 @@ public class CellPropertyRef {
 
 				// 反射执行真正的 Lambda
 				if (isStatic) {
-					return switch (allArgs.length) {
-						case 0 -> handle.invoke();
-						case 1 -> handle.invoke(allArgs[0]);
-						case 2 -> handle.invoke(allArgs[0], allArgs[1]);
-						case 3 -> handle.invoke(allArgs[0], allArgs[1], allArgs[2]);
-						case 4 -> handle.invoke(allArgs[0], allArgs[1], allArgs[2], allArgs[3]);
-						default -> handle.asSpreader(Object.class, allArgs.length).invoke(allArgs);
-					};
+					return invoke(handle, allArgs);
 				} else {
 					Object instance = allArgs.length > 0 ? allArgs[0] : null;
 					if (instance == null) {
@@ -901,14 +946,7 @@ public class CellPropertyRef {
 					if (actualArgs.length > 0) {
 						System.arraycopy(allArgs, 1, actualArgs, 0, actualArgs.length);
 					}
-					return switch (actualArgs.length) {
-						case 0 -> handle.invoke(instance);
-						case 1 -> handle.invoke(instance, actualArgs[0]);
-						case 2 -> handle.invoke(instance, actualArgs[0], actualArgs[1]);
-						case 3 -> handle.invoke(instance, actualArgs[0], actualArgs[1], actualArgs[2]);
-						case 4 -> handle.invoke(instance, actualArgs[0], actualArgs[1], actualArgs[2], actualArgs[3]);
-						default -> handle.bindTo(instance).asSpreader(Object.class, actualArgs.length).invoke(actualArgs);
-					};
+					return invoke(handle, instance, actualArgs);
 				}
 			} catch (Throwable t) {
 				error("[CellProperty] Fatal Error: Failed to run lambda " + li.methodName() + li.methodDesc(), t);
@@ -1701,6 +1739,40 @@ public class CellPropertyRef {
 		return enabled;
 	}
 
+	/**
+	 * 局部清理：仅清除指定宿主类的追踪记录与关联 Cell 映射
+	 * 适合在循环/动态布局类的热重载后，进行局部的状态重置
+	 * @param hostSlashName hostClass的slashName
+	 */
+	public static void clearClassRecords(String hostSlashName) {
+		if (hostSlashName == null) return;
+
+		List<CellIdentity> cellIds = classToCells.remove(hostSlashName);
+		if (cellIds != null && !cellIds.isEmpty()) {
+			Set<CellIdentity> idSet = new HashSet<>(cellIds);
+
+			for (CellIdentity id : cellIds) {
+				WeakReference<Cell<?>> ref = idToCell.remove(id);
+				records.remove(id);
+
+				if (ref != null) {
+					Cell<?> cell = ref.get();
+					if (cell != null && cell.getTable() != null) {
+						BindCell bind = BindCell.of(cell);
+						bind.remove();
+						Pools.free(bind);
+						cell.getTable().getCells().remove(cell, true);
+					}
+				}
+			}
+
+			synchronized (cellToId) {
+				cellToId.entrySet().removeIf(entry -> idSet.contains(entry.getValue()));
+			}
+		}
+
+		methodCounters.keySet().removeIf(key -> key.startsWith(hostSlashName + "#"));
+	}
 	public static void clearAll() {
 		synchronized (cellToId) {
 			cellToId.clear();
@@ -1739,6 +1811,29 @@ public class CellPropertyRef {
 	//endregion
 
 	//region Reflect
+	@SuppressWarnings("unchecked")
+	private static <T> T invoke(MethodHandle handle, Object instance, Object[] args) throws Throwable {
+		return (T) switch (args == null ? 0 : args.length) {
+			case 0 -> handle.invoke(instance);
+			case 1 -> handle.invoke(instance, args[0]);
+			case 2 -> handle.invoke(instance, args[0], args[1]);
+			case 3 -> handle.invoke(instance, args[0], args[1], args[2]);
+			case 4 -> handle.invoke(instance, args[0], args[1], args[2], args[3]);
+			default -> handle.bindTo(instance).asSpreader(Object.class, args.length).invoke(args);
+		};
+	}
+	@SuppressWarnings("unchecked")
+	private static <T> T invoke(MethodHandle handle, Object[] args) throws Throwable {
+		return (T) switch (args == null ? 0 : args.length) {
+			case 0 -> handle.invoke();
+			case 1 -> handle.invoke(args[0]);
+			case 2 -> handle.invoke(args[0], args[1]);
+			case 3 -> handle.invoke(args[0], args[1], args[2]);
+			case 4 -> handle.invoke(args[0], args[1], args[2], args[3]);
+			default -> handle.asSpreader(Object.class, args.length).invoke(args);
+		};
+	}
+
 	static class $table {
 		static final Field
 		 f_table_columns = nl(() -> Table.class.getDeclaredField("columns")),
@@ -1819,6 +1914,10 @@ public class CellPropertyRef {
 		} catch (Throwable t) {
 			error("[CellProperty] Failed to repair table grid", t);
 		}
+	}
+	/** 获取{@link Lookup#IMPL_LOOKUP}  */
+	private static Lookup lookup() {
+		return MasterKey.INSTANCE.getTrustedLookup();
 	}
 	private static <T> T nl(NLSupplier<T> supplier) {
 		try {

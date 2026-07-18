@@ -72,7 +72,7 @@ public class CrashVariableInterceptor {
 			    || javaThrowable instanceof ReflectiveOperationException) return;
 			if (javaThrowable.getClass().getName().startsWith("sun.nio.fs.")) return;
 			if (javaThrowable instanceof Throwable th) {
-				var locals = JVMTIEnv.getInstance().captureThreadLocals(jniEnv, MemorySegment.NULL, 32, 14, true);
+				var locals = JVMTIEnv.getInstance().captureThreadLocals(MemorySegment.NULL, 32, 14);
 				sb.setLength(0);
 				sb.append(th.getClass().getName()).append(": ").append(th.getMessage()).append('\n');
 				for (FrameLocals frame : locals) {

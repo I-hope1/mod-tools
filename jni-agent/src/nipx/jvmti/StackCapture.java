@@ -3,7 +3,6 @@ package nipx.jvmti;
 import com.sun.jdi.*;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector.Argument;
-import nipx.jni.JNIEnv;
 import nipx.util.LongLongMap;
 
 import java.lang.management.ManagementFactory;
@@ -36,52 +35,6 @@ public final class StackCapture {
 	private StackCapture() { }
 
 	static final boolean CAPTURE_LOCALS = Boolean.parseBoolean(System.getProperty("nipx.agent.capture_locals"));
-
-	public static List<FrameLocals> capture(JNIEnv jniEnv, Thread thread) {
-		return withSuspend(thread, () ->
-		 JVMTIEnv.getInstance().captureThreadLocals(jniEnv, thread, 32, 0));
-	}
-
-	/**
-	 * Captures up to 32 frames, automatically skipping the two infrastructure
-	 * frames ({@code JVMTIEnv.captureCurrentThreadLocals} and this method).
-	 */
-	public static List<FrameLocals> captureCurrent(JNIEnv jniEnv) {
-		return captureCurrent(jniEnv, 32, 2);
-	}
-
-	/**
-	 * Captures up to {@code maxDepth} frames, skipping {@code skipFrames} from
-	 * the top.
-	 *
-	 * <p>The default skip value of {@code 2} hides:
-	 * <ol>
-	 *   <li>{@code JVMTIEnv.captureCurrentThreadLocals} (depth 0)</li>
-	 *   <li>{@code StackCapture.capture} itself (depth 1)</li>
-	 * </ol>
-	 * so depth 0 of the returned list is your immediate caller.
-	 * @param jniEnv     an active {@link JNIEnv} (must remain open for the
-	 *                   duration of this call)
-	 * @param maxDepth   maximum frames to return
-	 * @param skipFrames infrastructure frames to hide (≥ 2 recommended)
-	 */
-	public static List<FrameLocals> captureCurrent(JNIEnv jniEnv, int maxDepth, int skipFrames) {
-		return JVMTIEnv.getInstance()
-		 .captureCurrentThreadLocals(jniEnv, maxDepth, skipFrames);
-	}
-
-	//region dump: pretty-print to stdout
-
-	/** Prints a formatted snapshot of the current thread's local variables. */
-	public static void dump(JNIEnv jniEnv) {
-		List<FrameLocals> frames = captureCurrent(jniEnv, 32, 3); // +1 for dump() itself
-		System.out.println("=== Stack local-variable snapshot ===");
-		for (FrameLocals f : frames) {
-			System.out.print(f);
-		}
-		System.out.println("=====================================");
-	}
-	//endregion
 
 
 	//region utils

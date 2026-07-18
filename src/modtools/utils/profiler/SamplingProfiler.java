@@ -155,41 +155,6 @@ public class SamplingProfiler {
 			// Log.err(e);
 		}
 	}
-	private static void planB(JNIEnv jniEnv, Thread target) {
-		try {
-			var      stack = StackCapture.capture(jniEnv, target);
-			String[] pkgs  = includePackages;
-
-			FlameNode cur = ProfilerData.flameRoot;
-
-			// 从栈底（老帧）到栈顶（新帧）遍历
-			for (int i = stack.size() - 1; i >= 0; i--) {
-				FrameLocals frame     = stack.get(i);
-				String      className = frame.className();
-				if (isBlacklist(className)) continue;
-
-				// 包名过滤：pkgs 为空则全部接受
-				if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) continue;
-
-				// key 格式与插桩模式相同："ClassName.methodName"
-				var thisLocal = frame.locals().stream().filter(l -> "this".equals(l.name())).findFirst();
-				String key = simpleClass(className) + "." + frame.methodName()
-				             + frame.methodSignature()
-				             + (thisLocal.map(localVariable -> ": " + Long.toHexString(localVariable.getAddress())).orElse(""));
-				// Log.info(frame.locals());
-
-				// computeIfAbsent：key 存在时无 GC；首次出现才 new FlameNode
-				cur = cur.children.computeIfAbsent(key, FlameNode::new);
-
-				// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
-				cur.totalNanos.add(intervalMs * 1_000_000L);
-
-				frame.close();
-			}
-		} catch (Throwable e) {
-			Log.err(e);
-		}
-	}
 	private static void planA(Thread target) {
 		// ① 抓栈——此处触发目标线程进入 safepoint（~10–50 µs）
 		//    分配在 profiler 线程，不影响游戏线程 GC

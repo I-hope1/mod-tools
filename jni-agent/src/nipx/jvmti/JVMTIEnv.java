@@ -533,78 +533,39 @@ public class JVMTIEnv {
 		}
 	}
 
-	/**
-	 * Captures local variables for every frame of the <em>current</em> thread.
-	 *
-	 * <p><b>Depth note:</b> all {@code GetLocal*} calls are made directly
-	 * inside this method so that depth values from {@code GetStackTrace} remain
-	 * valid.  Do <em>not</em> move those calls into sub-methods.
-	 * @param maxDepth   maximum number of frames to inspect (e.g. 32)
-	 * @param skipFrames frames to drop from the top of the trace.
-	 *                   Pass {@code 1} to hide this method itself;
-	 *                   pass {@code 2} when called through {@link StackCapture}.
-	 * @return immutable list of {@link FrameLocals}, shallowest first
-	 */
-	public List<FrameLocals> captureCurrentThreadLocals(JNIEnv jniEnv, int maxDepth, int skipFrames) {
-		return captureThreadLocals(jniEnv, Thread.currentThread(), maxDepth, skipFrames);
-	}
 	public int getThreadState(MemorySegment jthread) throws Throwable {
 		try (Arena arena = Arena.ofConfined()) {
 			// jthread: jthread reference
 			MemorySegment stateOut = arena.allocate(ValueLayout.JAVA_INT);
 			int           rc       = (int) MH_GetThreadState.invokeExact(fpGetThreadState, jvmtiEnvPtr, jthread, stateOut);
-			System.out.printf("GetThreadState rc=%d state=0x%X%n",
-			 rc, stateOut.get(ValueLayout.JAVA_INT, 0));
+			checkError(rc, "GetThreadState");
+			// System.out.printf("GetThreadState rc=%d state=0x%X%n",
+			//  rc, stateOut.get(ValueLayout.JAVA_INT, 0));
 			// rc=10 → jthread 引用本身就是坏的
 			// state & 0x20 (JVMTI_THREAD_STATE_SUSPENDED) → 确认是否被挂起
 			return stateOut.get(ValueLayout.JAVA_INT, 0);
-		}
-	}
-	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, Thread thread, int maxDepth,
-	                                             int skipFrames) {
-		MemorySegment targetThread;
-		GlobalRef     globalRef = null;   // 生命周期手动管理
-		if (thread == Thread.currentThread()) {
-			targetThread = MemorySegment.NULL;
-		} else if (!StackCapture.CAPTURE_LOCALS) {
-			return Collections.emptyList();
-		} else {
-			globalRef = jniEnv.JavaObjectToJObject(thread);
-			targetThread = globalRef.ref();
-		}
-		try {
-			return captureThreadLocals(jniEnv, targetThread, maxDepth, skipFrames, thread == Thread.currentThread());
-		} finally {
-			if (globalRef != null) {
-				globalRef.close();
-			}
 		}
 	}
 
 	static final ThreadLocal<MethodMeta[]> metasCache  = ThreadLocal.withInitial(() -> new MethodMeta[128]);
 	static final ThreadLocal<VarEntry[][]> tablesCache = ThreadLocal.withInitial(() -> new VarEntry[128][]);
 	static final ThreadLocal<long[]>       locsCache   = ThreadLocal.withInitial(() -> new long[128]);
-	public List<FrameLocals> captureThreadLocals(JNIEnv jniEnv, MemorySegment targetThread, int maxDepth,
-	                                             int skipFrames, boolean isCurrentThread) {
-		boolean suspended;
-		try {
-			if (!isCurrentThread) {
-				int rc = (int) MH_SuspendThread.invokeExact(
-				 fpSuspendThread, jvmtiEnvPtr, targetThread);
-				if (rc != JVMTI_ERROR_NONE) {
-					System.err.println("SuspendThread(offset=32) rc=" + rc);
-				}
-				checkError(rc, "SuspendThread");
-			}
-			suspended = true;
-			// getThreadState(targetThread);
-		} catch (Throwable e) {
-			// e.printStackTrace();
-			suspended = false;
-		}
-
+	/**
+	 * Captures local variables for every frame of the {@code targetThread} thread.
+	 *
+	 * <p><b>Depth note:</b> all {@code GetLocal*} calls are made directly
+	 * inside this method so that depth values from {@code GetStackTrace} remain
+	 * valid.  Do <em>not</em> move those calls into sub-methods.
+	 * @param targetThread {@link MemorySegment#NULL} represents the current thread, other threads need to be paused manually
+	 * @param maxDepth   maximum number of frames to inspect (e.g. 32)
+	 * @param skipFrames frames to drop from the top of the trace.
+	 *                   Pass {@code 1} to hide this method itself;
+	 *                   pass {@code 2} when called through {@link StackCapture}.
+	 * @return immutable list of {@link FrameLocals}, shallowest first
+	 * */
+	public List<FrameLocals> captureThreadLocals(MemorySegment targetThread, int maxDepth, int skipFrames) {
 		try (Arena arena = Arena.ofConfined()) {
-
+			JNIEnv jniEnv = JNIEnv.getInstance(arena);
 			// ------------------------------------------------------------------
 			// 1. GetStackTrace  (NULL thread → current thread)
 			// ------------------------------------------------------------------
@@ -702,7 +663,6 @@ public class JVMTIEnv {
 										} finally {
 											jniEnv.DeleteGlobalRef(ref);
 										}
-										value = localRef;
 									}
 								}
 								// System.out.println(err);
@@ -769,13 +729,6 @@ public class JVMTIEnv {
 			return result;
 		} catch (Throwable t) {
 			throw new RuntimeException("captureThreadLocals failed", t);
-		} finally {
-			if (targetThread != MemorySegment.NULL && suspended) {
-				try {
-					int rc = (int) MH_ResumeThread.invokeExact(fpResumeThread, jvmtiEnvPtr, targetThread);
-					checkError(rc, "ResumeThread");
-				} catch (Throwable _) { }
-			}
 		}
 	}
 
@@ -808,7 +761,7 @@ public class JVMTIEnv {
 			for (int d = skipFrames; d < frameCount; d++) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
-				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
+				// long loc = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
 
 				// 缓存命中时零分配
 				long       midAddr = mid.address();
@@ -839,9 +792,7 @@ public class JVMTIEnv {
 								}
 							}
 						}
-						// if (err != 13) {
 						checkError(err, "GetLocalObject");
-						// }
 					} catch (Throwable e) {
 						// e.printStackTrace();
 						thisAddress = 0L;
@@ -855,8 +806,8 @@ public class JVMTIEnv {
 		}
 	}
 	public void walkThreadFramesReversed(MemorySegment targetThread,
-	                             int maxDepth, int skipFrames, boolean captureThis,
-	                             FrameConsumer consumer) {
+	                                     int maxDepth, int skipFrames, boolean captureThis,
+	                                     FrameConsumer consumer) {
 		try (Arena arena = Arena.ofConfined()) {
 			JNIEnv        jniEnv   = JNIEnv.getInstance(arena);
 			int           total    = maxDepth + skipFrames;
@@ -872,10 +823,9 @@ public class JVMTIEnv {
 			int frameCount = cntOut.get(ValueLayout.JAVA_INT, 0);
 
 			// 复用数组，零分配
-			for (int d = frameCount - 1; d  >= skipFrames; d--) {
+			for (int d = frameCount - 1; d >= skipFrames; d--) {
 				long          off = d * FRAME_SIZE;
 				MemorySegment mid = frameBuf.get(ValueLayout.ADDRESS, off + FRAME_METHOD_OFF);
-				// locsBuf[d] = frameBuf.get(ValueLayout.JAVA_LONG, off + FRAME_LOCATION_OFF);
 
 				// 缓存命中时零分配
 				long       midAddr = mid.address();

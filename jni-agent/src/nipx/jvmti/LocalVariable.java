@@ -10,6 +10,9 @@ import java.lang.foreign.MemorySegment;
  * Primitive values are boxed; reference values are the live Java objects.
  * {@code value} is {@code null} when the slot is out of scope, the frame is
  * compiled without debug info, or the read otherwise failed.
+ * @param value 元素类型的值
+ * @param hash 如果值是引用类型，则存储对象的哈希值，否则为-1
+ *
  */
 public record LocalVariable(
  String name,

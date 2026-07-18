@@ -27,10 +27,11 @@ import java.util.concurrent.*;
 
 import static nipx.AnnotationTransformer.internalName;
 import static nipx.HotSwapAgent.*;
+import static nipx.uihook.CellPropertyRef.$table.*;
 import static org.objectweb.asm.Opcodes.*;
 
 /** Cell 属性及子元素追踪器 */
-@SuppressWarnings({"rawtypes", "unchecked"})
+@SuppressWarnings({"rawtypes"})
 public class CellPropertyRef {
 
 	public static final String CL_TABLE = "arc/scene/ui/layout/Table";
@@ -257,6 +258,10 @@ public class CellPropertyRef {
 			Cell<?> cell = findCellById(id);
 			if (cell == null) {
 				totalSkipped++;
+				// 顺便清理cell
+				idToCell.remove(id);
+				records.remove(id);
+				cellIds.remove(id);
 				continue;
 			}
 
@@ -534,7 +539,7 @@ public class CellPropertyRef {
 				bestIndex = i;
 			}
 		}
-		return bestScore > 0 ? bestIndex : -1;
+		return bestIndex;
 	}
 
 	private static int chainSimilarity(List<PropertyCall> oldCalls, List<PropertyCall> newCalls) {
@@ -600,7 +605,7 @@ public class CellPropertyRef {
 	private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {
 		for (PropertyCall call : calls) {
 			if (hasUsableArgs(call)) {
-				invokeCellMethod(cell, call.method, call.args);
+				invokeCellMethod(cell, call.method, call.desc, call.args);
 			}
 		}
 	}
@@ -638,7 +643,7 @@ public class CellPropertyRef {
 
 
 	private static void resetCell(Cell<?> cell) {
-		cell.set(Cell.defaults());
+		cell.set(Cell.defaults()); // 不会设置table，element为null
 		resetCellEndRow(cell);
 	}
 	private static void resetCellEndRow(Cell<?> cell) {
@@ -745,14 +750,14 @@ public class CellPropertyRef {
 		return true;
 	}
 
-	private static void invokeCellMethod(Cell<?> cell, String methodName, Object[] args) {
+	private static void invokeCellMethod(Cell<?> cell, String methodName, String methodDesc, Object[] args) {
 		try {
 			int len = args == null ? 0 : args.length;
 			if ("row".equals(methodName) && len == 0 && f_endRow != null) {
 				f_endRow.setBoolean(cell, true);
 				return;
 			}
-			Method method = findMatchingMethod(methodName, len);
+			Method method = findMatchingMethod(methodName, methodDesc);
 			if (method == null) {
 				error("[CellProperty] No matching method: " + methodName
 				      + "(" + len + " args)");
@@ -776,14 +781,14 @@ public class CellPropertyRef {
 		}
 	}
 
-	private static Method findMatchingMethod(String name, int paramCount) {
+	private static Method findMatchingMethod(String name, String desc) {
 		for (Method m : Cell.class.getMethods()) {
-			if (m.getName().equals(name) && m.getParameterCount() == paramCount) {
+			if (m.getName().equals(name) && Type.getMethodDescriptor(m).equals(desc)) {
 				return m;
 			}
 		}
 		for (Method m : Table.class.getMethods()) {
-			if (m.getName().equals(name) && m.getParameterCount() == paramCount
+			if (m.getName().equals(name) && Type.getMethodDescriptor(m).equals(desc)
 			    && Cell.class.isAssignableFrom(m.getReturnType())) {
 				return m;
 			}
@@ -795,44 +800,43 @@ public class CellPropertyRef {
 		if (args == null) return null;
 		Object[] result = new Object[args.length];
 		for (int i = 0; i < args.length; i++) {
-			Class<?> target = paramTypes[i];
-			if (args[i] == null) {
-				if (!target.isInterface()) {
-					result[i] = null;
-					continue;
-				}
-				result[i] = Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
-					if (method.getDeclaringClass() == Object.class) {
-						return switch (method.getName()) {
-							case "toString" -> "DummyProxy[" + target.getSimpleName() + "]";
-							case "hashCode" -> System.identityHashCode(proxy);
-							case "equals" -> proxy == methodArgs[0];
-							default -> null;
-						};
-					}
-					return null;
-				});
+			Object arg = args[i];
+			if (i >= paramTypes.length) {
+				result[i] = arg;
 				continue;
 			}
-			if (args[i] instanceof LambdaInfo li) {
-				result[i] = makeLambda(li, target);
-			} else if (target == float.class) {
-				result[i] = ((Number) args[i]).floatValue();
-			} else if (target == int.class) {
-				result[i] = ((Number) args[i]).intValue();
-			} else if (target == boolean.class || target == Boolean.class) {
-				if (args[i] instanceof Number) {
-					result[i] = ((Number) args[i]).intValue() != 0;
-				} else {
-					result[i] = args[i];
-				}
-			} else if (target == String.class) {
-				result[i] = args[i].toString();
-			} else if (CharSequence.class.isAssignableFrom(target)) {
-				result[i] = args[i].toString();
-			} else {
-				result[i] = args[i];
+			Class<?> target = paramTypes[i];
+			if (arg == null) {
+				result[i] = !target.isInterface() ? null :
+				 Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
+					 if (method.getDeclaringClass() == Object.class) {
+						 return switch (method.getName()) {
+							 case "toString" -> "DummyProxy[" + target.getSimpleName() + "]";
+							 case "hashCode" -> System.identityHashCode(proxy);
+							 case "equals" -> proxy == methodArgs[0];
+							 default -> null;
+						 };
+					 }
+					 return null;
+				 });
+				continue;
 			}
+			if (arg instanceof LambdaInfo li) {
+				result[i] = makeLambda(li, target);
+				continue;
+			}
+			result[i] = switch (target.getTypeName()) {
+				case "void" -> arg;
+				case "boolean" -> arg instanceof Number n ? n.intValue() != 0 : arg;
+				case "byte" -> ((Number) arg).byteValue();
+				case "char" -> (char) arg;
+				case "short" -> ((Number) arg).shortValue();
+				case "int" -> ((Number) arg).intValue();
+				case "long" -> ((Number) arg).longValue();
+				case "float" -> ((Number) arg).floatValue();
+				case "double" -> ((Number) arg).doubleValue();
+				default -> CharSequence.class.isAssignableFrom(target) ? String.valueOf(arg) : arg;
+			};
 		}
 		return result;
 	}
@@ -850,59 +854,24 @@ public class CellPropertyRef {
 
 			try {
 				// 寻找宿主类
-				Class<?>     owner          = loadClass(li.ownerClass().replace('/', '.'));
+				Class<?>     owner = loadClass(li.ownerClass().replace('/', '.'));
 				boolean      isStatic;
 				MethodHandle handle;
-				String       methodDesc     = li.methodDesc();
-				int          max            = methodDesc.lastIndexOf(')');
-				String       str_returnType = methodDesc.substring(max + 1);
-				Class<?> returnType = switch (str_returnType) {
-					case "V" -> void.class;
-					case "Z" -> boolean.class;
-					case "C" -> char.class;
-					case "B" -> byte.class;
-					case "S" -> short.class;
-					case "I" -> int.class;
-					case "J" -> long.class;
-					case "F" -> float.class;
-					case "D" -> double.class;
-					default -> loadClass(str_returnType.substring(1, str_returnType.length() - 1).replace('/', '.')); // 去除'L'与';'
-				};
-				List<Class<?>> paramTypes = new ArrayList<>();
-				for (int j = 1; j < max - 1; j++) {
-					paramTypes.add(switch (methodDesc.charAt(j)) {
-						case 'Z' -> boolean.class;
-						case 'C' -> char.class;
-						case 'B' -> byte.class;
-						case 'S' -> short.class;
-						case 'I' -> int.class;
-						case 'J' -> long.class;
-						case 'F' -> float.class;
-						case 'D' -> double.class;
-						case 'L' -> {
-							int fromIndex = j + 1;
-							int endIndex  = methodDesc.indexOf(';', fromIndex);
-							j = endIndex;
-							yield loadClass(methodDesc.substring(fromIndex, endIndex).replace('/', '.'));
-						}
-						default -> throw new IllegalStateException("Unexpected value: " + methodDesc.charAt(j));
-					});
-				}
-				Class[] paramTypesArr = paramTypes.toArray(Class[]::new);
+
+				String     methodDesc = li.methodDesc();
+				MethodType type       = MethodType.fromMethodDescriptorString(methodDesc, owner.getClassLoader());
 				try {
 					handle = MasterKey.INSTANCE.getTrustedLookup()
-					 .findStatic(owner, li.methodName(), MethodType.methodType(returnType, paramTypesArr));
+					 .findStatic(owner, li.methodName(), type);
 					isStatic = true;
 				} catch (Throwable e) {
-					error("", e);
 					handle = MasterKey.INSTANCE.getTrustedLookup()
-					 .findSpecial(owner, li.methodName(), MethodType.methodType(returnType, paramTypesArr), owner);
+					 .findSpecial(owner, li.methodName(), type, owner);
 					isStatic = false;
 				}
 
 				if (handle == null) {
-					// 【重点排错】：如果报这个错，说明 JVM 的反射缓存没有刷新新方法
-					error("[CellProperty] 致命错误: 反射未能找到 Lambda 目标方法 " + li.methodName() + "！这可能是由于 JVM 的热重载未正确刷新反射缓存。", new NoSuchMethodException(li.methodName()));
+					error("[CellProperty] Cannot find method " + li.methodName() + li.methodDesc(), new NoSuchMethodException(li.methodName() + li.methodDesc));
 					return null;
 				}
 				// 合并捕获变量与实际参数
@@ -937,13 +906,12 @@ public class CellPropertyRef {
 						case 1 -> handle.invoke(instance, actualArgs[0]);
 						case 2 -> handle.invoke(instance, actualArgs[0], actualArgs[1]);
 						case 3 -> handle.invoke(instance, actualArgs[0], actualArgs[1], actualArgs[2]);
-						case 4 -> handle.invoke(actualArgs[0], actualArgs[1], actualArgs[2], actualArgs[3]);
-						default -> handle.asSpreader(Object.class, actualArgs.length).bindTo(instance).invoke(instance, actualArgs);
+						case 4 -> handle.invoke(instance, actualArgs[0], actualArgs[1], actualArgs[2], actualArgs[3]);
+						default -> handle.bindTo(instance).asSpreader(Object.class, actualArgs.length).invoke(actualArgs);
 					};
 				}
 			} catch (Throwable t) {
-				// 【重点排错】：捕获 Lambda 内部执行崩溃
-				error("[CellProperty] 致命错误: Lambda 执行时发生异常！" + li.methodName(), t);
+				error("[CellProperty] Fatal Error: Failed to run lambda " + li.methodName() + li.methodDesc(), t);
 			}
 			return null;
 		});
@@ -1147,7 +1115,16 @@ public class CellPropertyRef {
 		}
 		return 0;
 	}
-
+	/**
+	 * 跳过伪指令节点，向前查找第一个非伪指令节点。
+	 * <p>
+	 * 伪指令节点包括 {@link AbstractInsnNode#LABEL}, {@link AbstractInsnNode#LINE} 和 {@link AbstractInsnNode#FRAME} 类型，这些节点不包含实际可执行指令。
+	 * 该方法从给定节点开始向前（即向指令列表头部方向）遍历，跳过所有伪指令节点，
+	 * 返回遇到的第一个真正指令节点。
+	 * </p>
+	 * @param insn 起始指令节点
+	 * @return 第一个非伪指令节点；若向前遍历至列表头部仍未找到，则返回 null
+	 */
 	private static AbstractInsnNode skipPseudo(AbstractInsnNode insn) {
 		while (insn != null && (insn.getType() == AbstractInsnNode.LABEL ||
 		                        insn.getType() == AbstractInsnNode.LINE ||
@@ -1426,7 +1403,7 @@ public class CellPropertyRef {
 			}
 
 			if (writes == 1 && singleStore != null) {
-				AbstractInsnNode prev = singleStore.getPrevious();
+				AbstractInsnNode prev = skipPseudo(singleStore.getPrevious());
 				if (prev != null) {
 					Object val = resolveConstant(cn, mn, prev, visitingMethods);
 					if (isConstantType(val)) {
@@ -1762,23 +1739,21 @@ public class CellPropertyRef {
 	//endregion
 
 	//region Reflect
-	private static final Field f_endRow  = nl(() -> Cell.class.getDeclaredField("endRow"));
-	private static final Field f_colspan = nl(() -> Cell.class.getDeclaredField("colspan"));
 	static class $table {
-		static Field columnsField;
-
-		static {
-			try {
-				columnsField = Table.class.getDeclaredField("columns");
-				columnsField.setAccessible(true);
-			} catch (NoSuchFieldException e) {
-				columnsField = null;
-			}
-		}
+		static final Field
+		 f_table_columns = nl(() -> Table.class.getDeclaredField("columns")),
+		 f_table_rows    = nl(() -> Table.class.getDeclaredField("rows")),
+		 f_cell_row      = nl(() -> Cell.class.getDeclaredField("row")),
+		 f_cell_column   = nl(() -> Cell.class.getDeclaredField("column")),
+		 f_endRow        = nl(() -> Cell.class.getDeclaredField("endRow")),
+		 f_colspan       = nl(() -> Cell.class.getDeclaredField("colspan"));
 	}
 	@SuppressWarnings("rawtypes")
 	static void recalculateColumns(Table table) throws IllegalAccessException {
-		assert f_colspan != null;
+		if (f_colspan == null) {
+			error("[CellProperty] Failed to recalculate columns.", new NullPointerException("Field f_colspan is null"));
+			return;
+		}
 
 		int       maxCols = 0;
 		Seq<Cell> cells   = table.getCells();
@@ -1796,22 +1771,22 @@ public class CellPropertyRef {
 
 		// 使用反射设置 Table.columns
 		try {
-			$table.columnsField.setInt(table, maxCols);
+			f_table_columns.setInt(table, maxCols);
 		} catch (Exception e) {
 			// fallback: 如果反射失败，至少 invalidate
 			table.invalidate();
 		}
 	}
-	private static final Field f_table_rows    = nl(() -> Table.class.getDeclaredField("rows"));
-	private static final Field f_table_columns = nl(() -> Table.class.getDeclaredField("columns"));
-	private static final Field f_cell_row     = nl(() -> Cell.class.getDeclaredField("row"));
-	private static final Field f_cell_column = nl(() -> Cell.class.getDeclaredField("column"));
 
 	private static void repairTableGrid(Table table) {
 		if (table == null) return;
-		assert f_table_rows != null;
-		assert f_table_columns != null;
+
 		try {
+			if (f_table_rows == null) throw new AssertionError("Field f_table_rows is null");
+			if (f_table_columns == null) throw new AssertionError("Field f_table_columns is null");
+			if (f_cell_row == null) throw new AssertionError("Field f_cell_row is null");
+			if (f_cell_column == null) throw new AssertionError("Field f_cell_column is null");
+
 			Seq<Cell> cells = table.getCells();
 			if (cells == null) return;
 

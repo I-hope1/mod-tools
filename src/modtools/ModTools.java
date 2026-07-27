@@ -52,6 +52,7 @@ public class ModTools extends Mod {
 	public static final boolean DISABLE_UI       = false;
 
 	public static boolean loaded = false;
+
 	static {
 		// ScreenSampler.BaseScreenSampler.resetMark();
 	}
@@ -119,18 +120,17 @@ public class ModTools extends Mod {
 		if (!isImportFromGame) {
 			meta.hidden = false;
 		}
+		if (OS.isAndroid) {
+			try {
+				HiddenApi.setHiddenApiExemptions();
+			} catch (Throwable e) {
+				Log.err(e);
+			}
+		}
+
 		resolveLibsCatch();
 		MySettings.load();
 		SettingsLoader.load();
-
-		try {
-			if (OS.isAndroid) {
-				HiddenApi.setHiddenApiExemptions();
-				// HiddenApi.test();
-			}
-		} catch (Throwable e) {
-			Log.err(e);
-		}
 
 		load("HotSwapManager", () -> {
 			if (HotSwapManager.valid()) {

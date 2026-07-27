@@ -30,8 +30,8 @@ public interface StringUtils {
 		// unsafe.putInt(from, STRING_COUNT, unsafe.getInt(to, STRING_COUNT));
 		// Log.info("now count: " + from.length());
 		// Log.info("COUNT_OFF: @", STRING_COUNT);
-		long src_address  = HiddenApi.addressOf(strings);
-		long dest_address = src_address + HiddenApi.IBYTES;
+		long src_address  = HiddenApi.Util.addressOf(strings);
+		long dest_address = src_address + HiddenApi.Util.IBYTES;
 		// unsafe.putLong(unsafe.getInt(src_address) + 12, unsafe.getLong(
 		// 	 unsafe.getInt(dest_address) + 12));
 		/* unsafe.copyMemory(unsafe.getInt(address2) + 8,

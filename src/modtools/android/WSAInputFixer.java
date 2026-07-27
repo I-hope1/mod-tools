@@ -108,7 +108,7 @@ public class WSAInputFixer {
         Core.scene.addCaptureListener(focusListener);
     }
 
-    private static void syncFocusToNative() {
+    static void syncFocusToNative() {
         if (proxyView == null) return;
         proxyView.requestFocus();
         InputMethodManager imm = (InputMethodManager) proxyView.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);

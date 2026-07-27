@@ -174,8 +174,10 @@ public class TextAreaTab extends Table implements SyntaxDrawable {
 			return (background == null ? 0 : background.getTopHeight())
 			       + scrollOffsetY;
 		}
-		static final MethodHandle MH_calculateOffsets = Constants.nl(() -> MyReflect.lookup.findSpecial(TextField.class, "calculateOffsets", MethodType.methodType(void.class), TextField.class));
-		static final MethodHandle MH_showCursor       = Constants.nl(() -> MyReflect.lookup.findSpecial(TextArea.class, "showCursor", MethodType.methodType(void.class), TextArea.class));
+		// Android上privateLookupIn没啥限制
+		// https://cs.android.com/android/platform/superproject/+/android-latest-release:libcore/ojluni/src/main/java/java/lang/invoke/MethodHandles.java;drc=6ec3aca14ff528adb24aa81014ad0b1f5334837b;l=139
+		static final MethodHandle MH_calculateOffsets = Constants.nl(() -> MethodHandles.privateLookupIn(TextField.class, MyReflect.lookup).findSpecial(TextField.class, "calculateOffsets", MethodType.methodType(void.class), TextField.class));
+		static final MethodHandle MH_showCursor       = Constants.nl(() -> MethodHandles.privateLookupIn(TextArea.class, MyReflect.lookup).findSpecial(TextArea.class, "showCursor", MethodType.methodType(void.class), TextArea.class));
 		protected void calculateOffsets() {
 			Tools.runIgnoredException(() -> MH_calculateOffsets.invoke(this));
 			if (!this.text.equals(lastText)) {

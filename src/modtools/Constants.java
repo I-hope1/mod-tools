@@ -7,12 +7,11 @@ import arc.graphics.gl.FileTextureData;
 import arc.input.KeyBind.KeybindValue;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Reflect;
 import mindustry.Vars;
 import mindustry.graphics.*;
 import mindustry.input.Binding;
 import mindustry.mod.Mods;
-import modtools.android.HiddenApi;
 import modtools.annotations.asm.CopyConstValue;
 import modtools.jsfunc.reflect.InitMethodHandle;
 import modtools.utils.CatchSR;
@@ -115,7 +114,14 @@ public class Constants {
 		 "java.lang.invoke.MethodHandleImpl",
 		 long.class, int.class, MethodType.class);
 
-		long ART_METHOD = fieldOffset(Executable.class, "artMethod", HiddenApi.offset_art_method_);
+		/**
+		 * <a href=
+		 * "https://cs.android.com/android/platform/superproject/main/+/main:art/runtime/mirror/executable.h;bpv=1;bpt=1;l=73?q=executable&ss=android&gsn=art_method_&gs=KYTHE%3A%2F%2Fkythe%3A%2F%2Fandroid.googlesource.com%2Fplatform%2Fsuperproject%2Fmain%2F%2Fmain%3Flang%3Dc%252B%252B%3Fpath%3Dart%2Fruntime%2Fmirror%2Fexecutable.h%23GLbGh3aGsjxEudfgKrvQvNcLL3KUjmUaJTc4nCOKuVY">
+		 * uint64_t Executable::art_method_</a>
+		 */
+		int offset_art_method_ = 24;
+
+		long ART_METHOD = fieldOffset(Executable.class, "artMethod", offset_art_method_);
 
 		// long OBJECT_SIZE = FieldUtils.fieldOffset(nl(() ->
 		//  Class.class.getDeclaredField("objectSize")));

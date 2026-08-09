@@ -2,13 +2,16 @@ name: Custom AI Agent # 适用于任意 OpenAI 兼容模型
 
 on:
   issues:
-    types:
+    types: [opened]
   issue_comment:
-    types:
+    types: [created]
 
 jobs:
   run-agent:
     runs-on: ubuntu-latest
+    if: |
+      contains(fromJSON('["OWNER", "COLLABORATOR", "MEMBER"]'), github.event.comment.author_association) ||
+      contains(fromJSON('["OWNER", "COLLABORATOR", "MEMBER"]'), github.event.issue.author_association)
     permissions:
       issues: write        # 必须给写 Issue 的权限才能发评论
       contents: read       # 读取代码权限

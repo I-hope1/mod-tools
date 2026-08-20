@@ -665,6 +665,7 @@ public class JVMTIEnv {
 										}
 									}
 								}
+								value = LocalVariable.SLOT;
 								// System.out.println(err);
 							}
 							// ---- boolean, byte, char, short, int ---------------

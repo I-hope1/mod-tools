@@ -1,9 +1,6 @@
 package nipx.jvmti;
 
-import nipx.jni.JNIEnv;
 import nipx.jni.helper.GlobalRef;
-
-import java.lang.foreign.MemorySegment;
 
 /**
  * A single local variable (or parameter) captured from a stack frame.
@@ -22,24 +19,20 @@ public record LocalVariable(
  Object value,
  int hash
 ) implements AutoCloseable {
+	static final Object SLOT = new Object();
+
 	/** Returns {@code true} for object/array types (L or [). */
 	public boolean isReference() {
 		if (typeSignature == null || typeSignature.isEmpty()) return false;
 		char c = typeSignature.charAt(0);
 		return c == 'L' || c == '[';
 	}
-
-	public Object getValue(JNIEnv env) {
-		if (value instanceof MemorySegment ms) {
-			return env.jObjectToJavaObject( ms);
-		}
-		return value;
+	/** Returns {@code null} if value is object. (Not primitive)  */
+	public Object value() {
+		return value != SLOT ? value : null;
 	}
-	public long getAddress() {
-		if (value instanceof MemorySegment ms) {
-			return ms.address();
-		}
-		return 0;
+	public boolean isNull() {
+		return value == null;
 	}
 
 	/** Returns a human-readable type name. */

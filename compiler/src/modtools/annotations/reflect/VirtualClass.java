@@ -134,7 +134,7 @@ public class VirtualClass {
 		// if (true) return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
 		try {
 			return SharedSecrets.getJavaLangAccess().defineClass(
-			 new ClassLoader() { }, Class.forName("modtools.annotations.reflect.NULL"), null, bytes, null,
+			 new ClassLoader() { }/* 独立的加载器 */, Class.forName("modtools.annotations.reflect.NULL"), null, bytes, null,
 			 false/* 防止超类被尝试加载 */, 2/* hidden class */, null);
 			// HopeReflect.invoke(Lookup.class, HopeReflect.lookup, "makeHiddenClassDefiner",
 			// new Object[]{null, bytes}, String.class, byte[].class);

@@ -63,10 +63,9 @@ public class TopTranslator extends TreeTranslator {
 		// 你的旧方法，现在可能可以简化或移除
 		replaceMethod(symtab.classType.tsym, "componentType", "getComponentType");
 
-		// 1. List.of(...) -> Arrays.asList(...)
-		// 首先，我们精确找到 List.of 和 Arrays.asList 的 MethodSymbol
-		// List.of是静态方法，通常接受 Object... 或具体的类型数组
+		// List.of
 		MethodSymbol listOfMethod       = findMethodSymbol(symtab.listType.tsym, names.fromString("of"), -1, true); // -1 for varargs
+		// Arrays.asList
 		MethodSymbol arraysAsListMethod = findMethodSymbol(symtab.arraysType.tsym, names.fromString("asList"), -1, true);
 
 		if (listOfMethod != null && arraysAsListMethod != null) {
@@ -205,10 +204,6 @@ public class TopTranslator extends TreeTranslator {
 		 }
 		));
 	}
-
-
-	// === 以下是你原本已有的辅助方法和类，保持不变或略作调整 ===
-	// (为了代码完整性，我保留了你的大部分代码，只增加了上述修改和相关的辅助方法)
 
 	private void replaceMethod(TypeSymbol thisSymbol, String originalMethodName, String targetMethodName) {
 		MethodSymbol originalSymbol = (MethodSymbol) thisSymbol.members().findFirst(names.fromString(originalMethodName),

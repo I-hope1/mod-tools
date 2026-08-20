@@ -82,6 +82,7 @@ public final class BindCell implements Poolable {
 	public void reset() {
 		if (cpy != null) {
 			cpy.clearElement();
+			CellPropertyRef.onCellFreed(cpy);
 			cellPool.free(cpy);
 		}
 		el = null;

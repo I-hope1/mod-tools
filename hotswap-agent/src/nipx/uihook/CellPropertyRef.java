@@ -10,7 +10,6 @@ import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import nipx.Injector;
-import nipx.jni.helper.MasterKey;
 import nipx.jvmti.JVMTIEnv;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
@@ -19,7 +18,6 @@ import org.objectweb.asm.tree.*;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.*;
-import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.*;
@@ -28,7 +26,7 @@ import java.util.concurrent.*;
 
 import static nipx.AnnotationTransformer.internalName;
 import static nipx.HotSwapAgent.*;
-import static nipx.uihook.CellPropertyRef.$table.*;
+import static nipx.uihook.ArcReflectionAdapter.*;
 import static org.objectweb.asm.Opcodes.*;
 
 /** Cell 属性及子元素追踪器 */
@@ -80,50 +78,96 @@ public class CellPropertyRef {
 	/** 宿主类 → 该类的所有 Cell 标识 */
 	private static final Map<String, List<CellIdentity>> classToCells = new ConcurrentHashMap<>();
 
-	/** 每个 (宿主类, 方法, 描述符) 的序号计数器 */
-	private static final Map<String, int[]> methodCounters = new ConcurrentHashMap<>();
+	/**
+	 * 每个 (宿主类, 方法, 描述符) 的序号计数器 —— ThreadLocal 保证：
+	 *  1. 线程安全，无需额外同步
+	 *  2. 每次方法调用的序列从 0 开始，循环中多次创建的 Cell 序号稳定可重现
+	 *     （当 liveCountPerKey 归零后，下次进入同 key 时计数器自动 reset）
+	 */
+	private static final ThreadLocal<Map<String, int[]>> methodCounters =
+			ThreadLocal.withInitial(HashMap::new);
+
+	/**
+	 * 每个 (宿主类, 方法, 描述符) 当前存活的 Cell 数量 —— ThreadLocal。
+	 * 当某 key 的存活数从 >0 降为 0（所有 Cell 被 free），下次再请求该 key 时
+	 * 序列计数器归零，正确对应新的一次方法调用。
+	 */
+	private static final ThreadLocal<Map<String, int[]>> liveCountPerKey =
+			ThreadLocal.withInitial(HashMap::new);
 
 	/** 是否启用 */
 	private static volatile boolean enabled = false;
+
+	/** 线程上下文宿主信息：[hostClass, hostMethod, hostDesc] */
+	public static final ThreadLocal<String[]> currentHostContext = new ThreadLocal<>();
 	//endregion
 
 	//region 运行时记录与生命周期
+	/** 当 Cell 被回收归还至 Pools 时调用，清除残留的状态映射 */
+	public static void onCellFreed(Cell<?> cell) {
+		if (cell == null) return;
+		removeCell(cell);
+	}
+
 	/** 运行时：在 Cell 实例构造结束时自动捕获注册 */
 	public static void registerCellAtCreation(Cell<?> cell) {
 		if (!enabled || cell == null) return;
 
-		String[] callbackFrame = {null, null, null};
-		int[]    x             = {-1};
-		JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
-			if (x[0] >= 0 && ++x[0] == 2) {
-				callbackFrame[0] = className;
-				callbackFrame[1] = methodName;
-				callbackFrame[2] = methodDesc;
-				return false;
-			}
-			if (CL_CELL.equals(className) && "<init>".equals(methodName)) {
-				x[0] = 0;
-			}
-			return true;
-		});
+		// 若该 Cell 曾存在于池中并被重用，首先移除旧的身份绑定
+		removeCell(cell);
 
-		String hostClass = callbackFrame[0];
+		String hostClass = null;
+		String hostMethod = null;
+		String hostDesc = null;
+
+		String[] ctx = currentHostContext.get();
+		if (ctx != null && ctx.length >= 3 && ctx[0] != null) {
+			hostClass = ctx[0];
+			hostMethod = ctx[1];
+			hostDesc = ctx[2];
+		} else {
+			String[] callbackFrame = {null, null, null};
+			int[]    x             = {-1};
+			try {
+				JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
+					if (x[0] >= 0 && ++x[0] == 2) {
+						callbackFrame[0] = className;
+						callbackFrame[1] = methodName;
+						callbackFrame[2] = methodDesc;
+						return false;
+					}
+					if (CL_CELL.equals(className) && "<init>".equals(methodName)) {
+						x[0] = 0;
+					}
+					return true;
+				});
+			} catch (Throwable t) {
+				if (DEBUG) log("[CellProperty] walkThreadFrames failed: " + t.getMessage());
+			}
+			hostClass = callbackFrame[0];
+			hostMethod = callbackFrame[1];
+			hostDesc = callbackFrame[2];
+		}
 
 		// 如果创建该单元格的直接源头是底层库，则属于隐式嵌套，不予追踪
 		if (hostClass == null || hostClass.startsWith("arc/") || hostClass.startsWith("java/") || hostClass.startsWith("nipx/")) {
 			return;
 		}
 
-		String hostMethod = callbackFrame[1];
-		String hostDesc   = callbackFrame[2];
-
 		String key = hostClass + "#" + hostMethod + ":" + hostDesc;
 
-		int seq;
-		synchronized (methodCounters) {
-			int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
-			seq = counter[0]++;
+		Map<String, int[]> counters = methodCounters.get();
+		Map<String, int[]> liveCounts = liveCountPerKey.get();
+
+		// 若该 key 的存活数为 0，说明上一次方法调用已全部结束，序列归零（循环/热重载都正确）
+		int[] live = liveCounts.computeIfAbsent(key, _ -> new int[]{0});
+		if (live[0] == 0) {
+			counters.put(key, new int[]{0});
 		}
+
+		int[] counter = counters.computeIfAbsent(key, _ -> new int[]{0});
+		int seq = counter[0]++;
+		live[0]++;
 
 		CellIdentity id = new CellIdentity(hostClass, hostMethod, hostDesc, seq);
 
@@ -148,11 +192,15 @@ public class CellPropertyRef {
 		}
 
 		String key = hostClass + "#" + hostMethod + ":" + hostDesc;
-		int    seq;
-		synchronized (methodCounters) {
-			int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
-			seq = counter[0]++;
+		Map<String, int[]> counters = methodCounters.get();
+		Map<String, int[]> liveCounts = liveCountPerKey.get();
+		int[] live = liveCounts.computeIfAbsent(key, _ -> new int[]{0});
+		if (live[0] == 0) {
+			counters.put(key, new int[]{0});
 		}
+		int[] counter = counters.computeIfAbsent(key, _ -> new int[]{0});
+		int seq = counter[0]++;
+		live[0]++;
 
 		CellIdentity id = new CellIdentity(hostClass, hostMethod, hostDesc, seq);
 
@@ -170,6 +218,18 @@ public class CellPropertyRef {
 		synchronized (cellToId) {
 			id = cellToId.get(cell);
 		}
+
+		// 校验已绑定的 id 是否与当前宿主上下文匹配（防止 Cell 从对象池取出后残存上一次使用的身份）
+		if (id != null) {
+			String[] currentCtx = currentHostContext.get();
+			if (currentCtx != null && currentCtx.length >= 2 && currentCtx[0] != null) {
+				if (!id.hostClass.equals(currentCtx[0]) || !id.hostMethod.equals(currentCtx[1])) {
+					removeCell(cell);
+					id = null;
+				}
+			}
+		}
+
 		if (id == null) {
 			id = inferCellIdentity(cell);
 			if (id == null) return;
@@ -420,6 +480,11 @@ public class CellPropertyRef {
 
 						Object[] converted = creator.args == null ? null : convertArgs(methodType, creator.args);
 
+						// 清除 implicitEndRow：上次 computeSize() 可能把它置为 true，
+						// 导致 applyAllCalls 内 cell.row() → table.row() 里 endRow() 被跳过，
+						// table.rows 不递增，新 Cell 的 cell.row 越界
+						ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+
 						// 反射调用（这步默认会把它添加到 Table 的最后面）
 						Cell<?> newCell = invoke(methodHandle, targetTable, converted);
 						if (newCell == null) break l1;
@@ -432,8 +497,12 @@ public class CellPropertyRef {
 						idsSnapshot.add(newId);
 						newChainIndexes.put(newId, seq);
 						records.put(newId, newCalls);
-						List<PropertyCall> properties = newCalls.subList(1, newCalls.size());
+						List<PropertyCall> properties = new ArrayList<>(newCalls.subList(1, newCalls.size()));
 						applyAllCalls(newCell, properties);
+
+						// 保底防护：确保 table.rows 不小于新 Cell 所在行 + 1
+						ArcReflectionAdapter.ensureTableRows(targetTable, ArcReflectionAdapter.getCellRow(newCell) + 1);
+						targetTable.invalidate();
 
 						// 逻辑和渲染层级的顺序校正
 						if (insertCellIndex < 0) break l1;
@@ -672,8 +741,8 @@ public class CellPropertyRef {
 			}
 		}
 
-		List<PropertyCall> oldProperties = oldCalls.subList(oldCalls.isEmpty() ? 0 : 1, oldCalls.size());
-		List<PropertyCall> newProperties = newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size());
+		List<PropertyCall> oldProperties = new ArrayList<>(oldCalls.subList(oldCalls.isEmpty() ? 0 : 1, oldCalls.size()));
+		List<PropertyCall> newProperties = new ArrayList<>(newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size()));
 
 		boolean propertiesChanged = !callsEqual(oldProperties, newProperties);
 
@@ -696,15 +765,7 @@ public class CellPropertyRef {
 		resetCellEndRow(cell);
 	}
 	private static void resetCellEndRow(Cell<?> cell) {
-		if (f_endRow == null) {
-			error("[CellProperty] Failed to reset Cell end-row flag", new NullPointerException("F_cell_endRow is null"));
-			return;
-		}
-		try {
-			f_endRow.setBoolean(cell, false);
-		} catch (Throwable e) {
-			error("[CellProperty] Failed to reset Cell end-row flag", e);
-		}
+		ArcReflectionAdapter.setEndRow(cell, false);
 	}
 
 	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
@@ -801,8 +862,8 @@ public class CellPropertyRef {
 	private static void invokeCellMethod(Cell<?> cell, String methodName, String methodDesc, Object[] args) {
 		try {
 			int len = args == null ? 0 : args.length;
-			if ("row".equals(methodName) && len == 0 && f_endRow != null) {
-				f_endRow.setBoolean(cell, true);
+			if ("row".equals(methodName) && len == 0) {
+				ArcReflectionAdapter.setEndRow(cell, true);
 				return;
 			}
 			MethodType   methodType   = MethodType.fromMethodDescriptorString(methodDesc, Vars.mods.mainLoader());
@@ -812,7 +873,6 @@ public class CellPropertyRef {
 				      + "(" + len + " args)");
 				return;
 			}
-			// if (DEBUG) log("[CellProperty] Invoking " + methodHandle + ": " + argsString(args));
 
 			Object[] converted    = convertArgs(methodType, args);
 			Class<?> receiverType = methodHandle.type().parameterType(0);
@@ -829,7 +889,7 @@ public class CellPropertyRef {
 			if ("colspan".equals(methodName)) {
 				Table table = cell.getTable();
 				if (table == null) return;
-				recalculateColumns(table);
+				ArcReflectionAdapter.recalculateColumns(table);
 				if (cell.hasElement()) cell.get().invalidateHierarchy();
 				table.invalidate();
 				table.layout();
@@ -1543,6 +1603,25 @@ public class CellPropertyRef {
 					};
 				}
 
+				// 注入 setLayout：Table.obtainCell() 在 cellPool.obtain() 之后立刻调用 cell.setLayout(this)
+				// 因此这是感知 Cell 被从对象池取出并重新分配的最可靠时机
+				// 在方法入口清除旧的 CellIdentity 绑定，使下次 recordPropertyCall 能通过 JVMTI 重新推断正确的宿主方法
+				if (name.equals("setLayout")) {
+					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodEnter() {
+							mv.visitVarInsn(ALOAD, 0);
+							mv.visitMethodInsn(
+							 INVOKESTATIC,
+							 internalName(CellPropertyRef.class),
+							 "onCellFreed",
+							 "(Larc/scene/ui/layout/Cell;)V",
+							 false
+							);
+						}
+					};
+				}
+
 				if (name.startsWith("<")) return mv;
 				if (!CELL_PROPERTY_METHODS.contains(name)) return mv;
 				if (!(descriptor.endsWith(")Larc/scene/ui/layout/Cell;") || ("row".equals(name) && "()V".equals(descriptor)))) {
@@ -1652,31 +1731,43 @@ public class CellPropertyRef {
 	}
 
 	private static CellIdentity inferCellIdentity(Cell<?> cell) {
-		String[] callbackFrame = {null, null, null};
-		int[]    x             = {-1};
-		JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
-			if (x[0] >= 0 && ++x[0] == 1) {
-				callbackFrame[0] = className;
-				callbackFrame[1] = methodName;
-				callbackFrame[2] = methodDesc;
-				return false;
-			}
-			if (CL_CELL.equals(className)) {
-				x[0] = 0;
-			}
-			return true;
-		});
+		String callerClass = null;
+		String hostMethod = null;
+		String hostDesc = null;
 
-
-		String callerClass = callbackFrame[0];
+		String[] ctx = currentHostContext.get();
+		if (ctx != null && ctx.length >= 3 && ctx[0] != null) {
+			callerClass = ctx[0];
+			hostMethod = ctx[1];
+			hostDesc = ctx[2];
+		} else {
+			String[] callbackFrame = {null, null, null};
+			int[]    x             = {-1};
+			try {
+				JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
+					if (x[0] >= 0 && ++x[0] == 1) {
+						callbackFrame[0] = className;
+						callbackFrame[1] = methodName;
+						callbackFrame[2] = methodDesc;
+						return false;
+					}
+					if (CL_CELL.equals(className)) {
+						x[0] = 0;
+					}
+					return true;
+				});
+			} catch (Throwable t) {
+				if (DEBUG) log("[CellProperty] walkThreadFrames failed in inferCellIdentity: " + t.getMessage());
+			}
+			callerClass = callbackFrame[0];
+			hostMethod = callbackFrame[1];
+			hostDesc = callbackFrame[2];
+		}
 
 		// 如果直接调用者是库类，说明是内部嵌套调用，不作为外部宿主方法 Cell 追踪
 		if (callerClass == null || callerClass.startsWith("arc/") || callerClass.startsWith("java/") || callerClass.startsWith("nipx/")) {
 			return null;
 		}
-
-		String hostMethod = callbackFrame[1];
-		String hostDesc   = callbackFrame[2];
 
 		int seq = -1;
 		try {
@@ -1693,10 +1784,15 @@ public class CellPropertyRef {
 
 		if (seq < 0) {
 			String key = callerClass + "#" + hostMethod + ":" + hostDesc;
-			synchronized (methodCounters) {
-				int[] counter = methodCounters.computeIfAbsent(key, _ -> new int[]{0});
-				seq = counter[0]++;
+			Map<String, int[]> counters   = methodCounters.get();
+			Map<String, int[]> liveCounts = liveCountPerKey.get();
+			int[] live = liveCounts.computeIfAbsent(key, _ -> new int[]{0});
+			if (live[0] == 0) {
+				counters.put(key, new int[]{0});
 			}
+			int[] counter = counters.computeIfAbsent(key, _ -> new int[]{0});
+			seq = counter[0]++;
+			live[0]++;
 		}
 
 		return new CellIdentity(callerClass, hostMethod, hostDesc, seq);
@@ -1771,7 +1867,8 @@ public class CellPropertyRef {
 			}
 		}
 
-		methodCounters.keySet().removeIf(key -> key.startsWith(hostSlashName + "#"));
+		methodCounters.get().keySet().removeIf(key -> key.startsWith(hostSlashName + "#"));
+		liveCountPerKey.get().keySet().removeIf(key -> key.startsWith(hostSlashName + "#"));
 	}
 	public static void clearAll() {
 		synchronized (cellToId) {
@@ -1780,7 +1877,8 @@ public class CellPropertyRef {
 		idToCell.clear();
 		records.clear();
 		classToCells.clear();
-		methodCounters.clear();
+		methodCounters.get().clear();
+		liveCountPerKey.get().clear();
 		info("[CellProperty] 🗑 Cleared all records");
 	}
 
@@ -1794,6 +1892,14 @@ public class CellPropertyRef {
 			records.remove(id);
 			List<CellIdentity> list = classToCells.get(id.hostClass);
 			if (list != null) list.remove(id);
+
+			// 减少存活计数；降为 0 时下次同 key 进入会重置序列计数器
+			String key = id.hostClass + "#" + id.hostMethod + ":" + id.hostDesc;
+			Map<String, int[]> liveCounts = liveCountPerKey.get();
+			int[] live = liveCounts.get(key);
+			if (live != null && live[0] > 0) {
+				live[0]--;
+			}
 		}
 	}
 
@@ -1832,105 +1938,6 @@ public class CellPropertyRef {
 			case 4 -> handle.invoke(args[0], args[1], args[2], args[3]);
 			default -> handle.asSpreader(Object.class, args.length).invoke(args);
 		};
-	}
-
-	static class $table {
-		static final Field
-		 f_table_columns = nl(() -> Table.class.getDeclaredField("columns")),
-		 f_table_rows    = nl(() -> Table.class.getDeclaredField("rows")),
-		 f_cell_row      = nl(() -> Cell.class.getDeclaredField("row")),
-		 f_cell_column   = nl(() -> Cell.class.getDeclaredField("column")),
-		 f_endRow        = nl(() -> Cell.class.getDeclaredField("endRow")),
-		 f_colspan       = nl(() -> Cell.class.getDeclaredField("colspan"));
-	}
-	@SuppressWarnings("rawtypes")
-	static void recalculateColumns(Table table) throws IllegalAccessException {
-		if (f_colspan == null) {
-			error("[CellProperty] Failed to recalculate columns.", new NullPointerException("Field f_colspan is null"));
-			return;
-		}
-
-		int       maxCols = 0;
-		Seq<Cell> cells   = table.getCells();
-		for (int i = 0; i < cells.size; ) {
-			Cell c       = cells.get(i);
-			int  rowCols = 0;
-			do {
-				rowCols += f_colspan.getInt(c);
-				i++;
-				if (i >= cells.size) break;
-				c = cells.get(i);
-			} while (!c.isEndRow());
-			if (rowCols > maxCols) maxCols = rowCols;
-		}
-
-		// 使用反射设置 Table.columns
-		try {
-			f_table_columns.setInt(table, maxCols);
-		} catch (Exception e) {
-			// fallback: 如果反射失败，至少 invalidate
-			table.invalidate();
-		}
-	}
-
-	private static void repairTableGrid(Table table) {
-		if (table == null) return;
-
-		try {
-			if (f_table_rows == null) throw new AssertionError("Field f_table_rows is null");
-			if (f_table_columns == null) throw new AssertionError("Field f_table_columns is null");
-			if (f_cell_row == null) throw new AssertionError("Field f_cell_row is null");
-			if (f_cell_column == null) throw new AssertionError("Field f_cell_column is null");
-
-			Seq<Cell> cells = table.getCells();
-			if (cells == null) return;
-
-			int currentRow = 0;
-			int currentCol = 0;
-			int maxCols    = 0;
-
-			// 重新遍历所有 Cell 并校正它们的行列坐标
-			for (int i = 0; i < cells.size; i++) {
-				Cell<?> c = cells.get(i);
-
-				f_cell_row.setInt(c, currentRow);
-				f_cell_column.setInt(c, currentCol);
-
-				int span = f_colspan != null ? f_colspan.getInt(c) : 1;
-				currentCol += span;
-
-				if (c.isEndRow()) {
-					if (currentCol > maxCols) maxCols = currentCol;
-					currentCol = 0;
-					currentRow++;
-				}
-			}
-			if (currentCol > maxCols) maxCols = currentCol;
-
-			// 必须同步修复 Table 内部的缓存行数与列数，否则 layout() 时数组会越界或交叠
-			f_table_rows.setInt(table, currentRow + (currentCol > 0 ? 1 : 0));
-			f_table_columns.setInt(table, maxCols);
-
-		} catch (Throwable t) {
-			error("[CellProperty] Failed to repair table grid", t);
-		}
-	}
-	/** 获取{@link Lookup#IMPL_LOOKUP}  */
-	private static Lookup lookup() {
-		return MasterKey.INSTANCE.getTrustedLookup();
-	}
-	private static <T> T nl(NLSupplier<T> supplier) {
-		try {
-			T t = supplier.get();
-			if (t instanceof AccessibleObject ac) ac.setAccessible(true);
-			return t;
-		} catch (Throwable e) {
-			error("[CellProperty] Failed to execute NLSupplier", e);
-			return null;
-		}
-	}
-	private interface NLSupplier<T> {
-		T get() throws Throwable;
 	}
 	//endregion
 }

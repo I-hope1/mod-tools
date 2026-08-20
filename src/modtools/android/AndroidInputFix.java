@@ -21,7 +21,6 @@ import static modtools.annotations.asm.Sample.SampleTemp._super;
 
 @Sample
 public class AndroidInputFix {
-	// 使用弱引用或在合适时机清理，防止内存泄漏。但在 Arc 环境下 AndroidInput 通常是单例，暂且保留
 	static IdentityHashMap<AndroidInput, IdentityHashMap<String, Object>> allvariables = new IdentityHashMap<>();
 
 	static final int KEY_DOWN  = 0;

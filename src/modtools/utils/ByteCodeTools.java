@@ -32,7 +32,6 @@ public class ByteCodeTools {
 		return lastID++;
 	}
 
-	@SuppressWarnings("removal")
 	public static class MyClass<T> {
 		public final ClassFileWriter writer;
 		public final String          adapterName, superName;
@@ -149,7 +148,7 @@ public class ByteCodeTools {
 
 			writer.stopMethod(max); // this + args + var * 1
 		}
-		public short typeSize(Class<?> type) {
+		public static short typeSize(Class<?> type) {
 			if (type == void.class) return 0;
 			if (type == long.class || type == double.class) return 2;
 			return 1;
@@ -210,45 +209,27 @@ public class ByteCodeTools {
 		}
 
 		private int addLoad(Class<?> type) {
-			if (type == boolean.class) {
-				return ILOAD;
-			} else if (type == byte.class) {
-				return ILOAD;
-			} else if (type == char.class) {
-				return ILOAD;
-			} else if (type == short.class) {
-				return ILOAD;
-			} else if (type == int.class) {
-				return ILOAD;
-			} else if (type == float.class) {
-				return FLOAD;
-			} else if (type == long.class) {
-				return LLOAD;
-			} else if (type == double.class) {
-				return DLOAD;
-			} else { return ALOAD; }
+			if (type == boolean.class) return ILOAD;
+			if (type == byte.class) return ILOAD;
+			if (type == char.class) return ILOAD;
+			if (type == short.class) return ILOAD;
+			if (type == int.class) return ILOAD;
+			if (type == float.class) return FLOAD;
+			if (type == long.class) return LLOAD;
+			if (type == double.class) return DLOAD;
+			return ALOAD;
 		}
 
 		private int addStore(Class<?> type) {
-			if (type == boolean.class) {
-				return ISTORE;
-			} else if (type == byte.class) {
-				return ISTORE;
-			} else if (type == char.class) {
-				return ISTORE;
-			} else if (type == short.class) {
-				return ISTORE;
-			} else if (type == int.class) {
-				return ISTORE;
-			} else if (type == float.class) {
-				return FSTORE;
-			} else if (type == long.class) {
-				return LSTORE;
-			} else if (type == double.class) {
-				return DSTORE;
-			} else {
-				return ASTORE;
-			}
+			if (type == boolean.class) return ISTORE;
+			if (type == byte.class) return ISTORE;
+			if (type == char.class) return ISTORE;
+			if (type == short.class) return ISTORE;
+			if (type == int.class) return ISTORE;
+			if (type == float.class) return FSTORE;
+			if (type == long.class) return LSTORE;
+			if (type == double.class) return DSTORE;
+			return ASTORE;
 		}
 
 		public void buildSuperFunc(String thisMethodName, String superMethodName, Class<?> superClass,
@@ -444,10 +425,8 @@ public class ByteCodeTools {
 			String name = writer.getClassName();
 			fi = fi.child(name.replace('/', '.') + ".class");
 		}
-		try {
-			FileOutputStream outputStream = new FileOutputStream(fi.file());
+		try (FileOutputStream outputStream = new FileOutputStream(fi.file())) {
 			outputStream.write(writer.toByteArray());
-			outputStream.close();
 		} catch (Exception e) {
 			Log.err(e);
 		}
@@ -528,19 +507,13 @@ public class ByteCodeTools {
 		    || returnType == byte.class || returnType == short.class
 		    || returnType == char.class) {
 			return IRETURN;
-		} else if (returnType == long.class) {
-			return LRETURN;
-		} else if (returnType == float.class) {
-			return FRETURN;
-		} else if (returnType == double.class) {
-			return DRETURN;
-		} else if (returnType == void.class) {
-			return RETURN;
 		}
-		// else if (returnType == byte.class) return ByteCode.BRETURN;
-		else {
-			return ARETURN;
-		}
+		if (returnType == long.class) return LRETURN;
+		if (returnType == float.class) return FRETURN;
+		if (returnType == double.class) return DRETURN;
+		if (returnType == void.class) return RETURN;
+		// if (returnType == byte.class) return ByteCode.BRETURN;
+		return ARETURN;
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)

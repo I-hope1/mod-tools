@@ -54,12 +54,12 @@ public class TestAA {
 			// cont.table(t -> t.add("1")).row();
 			cont.table(t -> t.add("2")).row();
 
-		/* 	for (int i = 0; i < 5; i++) {
-				cont.image().size(s + i * 4f).color(Color.violet).row();
-			} */
+			for (int i = 0; i < 5; i++) {
+				cont.image().size(40 + i * 4f).color(Color.violet).row();
+			}
 
 			cont.image().growX().color(Color.cyan).colspan(2).row();
-			cont.add("6666").growX();
+			cont.add("73020").growX();
 			/* cont.image().size(s).color(Color.yellow);
 			cont.image().size(42).color(Color.lightGray);
 			cont.button("777", Styles.flatBordert, () -> Log.info("ojaso"))

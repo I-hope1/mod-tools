@@ -85,7 +85,7 @@ public class CrashVariableInterceptor {
 						 .append('\n');
 						for (LocalVariable local : (frame.locals())) {
 							sb.append('\t').append(local.name()).append(": ");
-							if (local.isReference() && local.value() != null) {
+							if (local.isReference() && !local.isNull()) {
 								String str = local.typeName();
 							/* if (local.value() instanceof MemorySegment ref) {
 								Object o = jniEnv.jObjectToJavaObject(ref);

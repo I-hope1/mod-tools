@@ -23,17 +23,13 @@ import modtools.ui.comp.utils.Viewers;
 import modtools.ui.control.HopeInput;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.tutorial.AllTutorial;
-import modtools.unsupported.HopeProcessor.MyContentParser;
 import modtools.unsupported.*;
 import modtools.utils.*;
 import modtools.utils.Tools.CatchRun;
 import modtools.utils.io.FileUtils;
 import modtools.utils.ui.DropFile;
 import modtools.utils.world.WorldDraw;
-import sun.reflect.ReflectionFactory;
 
-import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 import static mindustry.Vars.*;
@@ -98,22 +94,6 @@ public class ModTools extends Mod {
 		if (OS.isAndroid) {
 			AndroidInputFix.load();
 		}
-
-		if (TEST) {
-			test();
-		}
-	}
-
-	private static void test() {
-		try {
-			Log.info(ReflectionFactory.getReflectionFactory().newConstructorForSerialization(
-			 Lookup.class,
-			 Lookup.class.getDeclaredConstructor(Class.class)).newInstance(Lookup.class));
-		} catch (InstantiationException | IllegalAccessException | InvocationTargetException
-		         | NoSuchMethodException e) {
-			throw new RuntimeException(e);
-		}
-		new MyContentParser();
 	}
 
 	private void loadCore() {

@@ -8,6 +8,7 @@ plugins {
 	id 'java'
 	id 'maven-publish'
 	id 'org.jetbrains.kotlin.jvm'
+	id 'me.champeau.jmh' version '0.7.2'
 }
 
 group 'com.github.I-hope1.' + modName
@@ -39,12 +40,15 @@ allprojects {
 		buildDir0 = layout.buildDirectory.get().asFile
 	}
 	tasks.withType(JavaCompile) {
+		sourceCompatibility = 21
+		targetCompatibility = 21
+
 		options.incremental = true
 		options.encoding = 'UTF-8'
 
 		options.compilerArgs += "-AtargetVersion=8"
 //		options.compilerArgs += "-Xlint:unchecked"
-		options.compilerArgs.add("--enable-preview")
+//		options.compilerArgs.add("--enable-preview")
 
 
 		options.compilerArgs.addAll(jdkExports.collectMany { ["--add-exports", "${it}=ALL-UNNAMED"] })
@@ -61,6 +65,15 @@ publishing {
 }
 
 sourceSets.main.java.srcDirs = ["src"]
+sourceSets.test.java.srcDirs = ["test"]
+sourceSets.jmh.java.srcDirs = ["jmh"]
+
+jmh {
+    iterations = 3
+    warmupIterations = 2
+    fork = 1
+	jvm = 'F:/files/java/jdks/openjdk-21.0.2/bin/java.exe'
+}
 
 //force arc version
 configurations.configureEach {

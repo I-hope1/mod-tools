@@ -18,6 +18,8 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
+/** 使用{@link jdk.internal.reflect.MagicAccessorImpl}
+ * 不过新版本的JDK（jdk 22+）已经移除了这个类 */
 @AutoService(Processor.class)
 public class AccessorProc extends BaseASMProc<MethodSymbol> {
 	Map<Symbol, ClassWriter> classWriterMap = new LinkedHashMap<>();
@@ -200,7 +202,7 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 				slot += typeSize(arg);
 			}
 			mv.visitMethodInsn(Opcodes.INVOKESTATIC, owner, targetMethod.name.toString(),
-			 methodDesc, false);
+			 methodDesc, false); // 静态方法不可能为interface方法
 			mv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
 			mv.visitMaxs(0, 0); // 自动计算栈深
 			mv.visitEnd();
@@ -239,9 +241,10 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 				mv.visitVarInsn(loadOpcode(typeSymbol), slot);
 				slot += typeSize(typeSymbol);
 			}
+			boolean isInterface = targetMethod.owner.isInterface();
 			mv.visitMethodInsn(hMethod.isSpecial() ? Opcodes.INVOKESPECIAL : Opcodes.INVOKEVIRTUAL, owner, targetMethod.name.toString(),
 			 targetMethod.getParameters().stream().map(v -> typeToDescriptor(v.type))
-				.collect(Collectors.joining("", "(", ")")) + descriptor, false);
+				.collect(Collectors.joining("", "(", ")")) + descriptor, isInterface);
 			mv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
 			mv.visitMaxs(0, 0); // 自动计算栈深
 			mv.visitEnd();

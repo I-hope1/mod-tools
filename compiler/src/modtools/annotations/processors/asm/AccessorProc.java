@@ -7,14 +7,13 @@ import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Type.ArrayType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
-import org.objectweb.asm.*;
 import modtools.annotations.asm.HAccessor.*;
 import modtools.annotations.asm.Sample.AConstants;
+import org.objectweb.asm.*;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.type.TypeKind;
-import java.io.IOException;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
@@ -22,7 +21,7 @@ import java.util.stream.Collectors;
 @AutoService(Processor.class)
 public class AccessorProc extends BaseASMProc<MethodSymbol> {
 	Map<Symbol, ClassWriter> classWriterMap = new LinkedHashMap<>();
-	Map<ClassWriter, String> classNamesMap = new LinkedHashMap<>();
+	Map<ClassWriter, String> classNamesMap  = new LinkedHashMap<>();
 	public void dealElement(MethodSymbol element) throws Throwable {
 		HField hField = element.getAnnotation(HField.class);
 		if (hField != null) {
@@ -48,7 +47,7 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		}
 		throw new IllegalArgumentException("No annotation found");
 	}
-	private void setClassWriter(MethodSymbol element, HMarkMagic magic) throws IOException, ClassNotFoundException {
+	private void setClassWriter(MethodSymbol element, HMarkMagic magic) {
 		if (classWriterMap.containsKey(element.owner)) {
 			classWriter = classWriterMap.get(element.owner);
 			genClassName = classNamesMap.get(classWriter);
@@ -97,13 +96,13 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		genClassName = null;
 	}
 	public void process(MethodSymbol methodSymbol, HField hField) {
-		DocReference reference = getSeeReference(HField.class, methodSymbol, ElementKind.FIELD);
-		VarSymbol    target    = (VarSymbol) reference.element();
+		DocReference reference  = getSeeReference(HField.class, methodSymbol, ElementKind.FIELD);
+		VarSymbol    target     = (VarSymbol) reference.element();
 		boolean      isGetter   = hField.isGetter();
 		boolean      isStatic   = target.isStatic();
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
 		// 检查方法返回值是否符合调用
-		if (!methodSymbol.getReturnType().tsym.equals((isGetter ? target.type : mSymtab.voidType).tsym)) {
+		if (!types.isSameType(methodSymbol.getReturnType(), (isGetter ? target.type : mSymtab.voidType))) {
 			log.error(methodDecl.restype, SPrinter.err("Field type mismatch the return type: " + (isGetter ? target.type : "void") + " != " + methodSymbol.getReturnType()));
 			return;
 		}
@@ -113,25 +112,31 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		// 或 public static void x0(<FieldOwner> owner, <FieldType> val) { owner.<fieldName> = val; }
 		// (static) 或 public static <FieldType> x0() { return <StaticOwner>.<fieldName>; }
 		// (static) 或 public static void x0(<FieldType> val) { <StaticOwner>.<fieldName> = val; }
-		StringBuilder sb = new StringBuilder();
-		sb.append('(');
-		sb.append(isStatic ? "" : typeToDescriptor(target.owner.type))
-		 .append(isGetter ? ")" + typeToDescriptor(target.type) : "V");
+		String methodDesc = '(' +
+		                    (isStatic ? "" : typeToDescriptor(target.owner.type)) +
+		                    (isGetter ? ")" + typeToDescriptor(target.type) : "V");
 		String genMethodName = genMethodName();
 		MethodVisitor mv = classWriter.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, genMethodName,
-		 sb.toString(), null, null);
+		 methodDesc, null, null);
 		String owner      = dotToSlash(target.owner.type);
 		String descriptor = typeToDescriptor(target.type);
 		if (!isStatic) mv.visitVarInsn(Opcodes.ALOAD, 0); // load this
 		if (isGetter) {
 			mv.visitFieldInsn(isStatic ? Opcodes.GETSTATIC : Opcodes.GETFIELD,
 			 owner, target.name.toString(), descriptor);
-			mv.visitInsn(Opcodes.ARETURN);
+			mv.visitInsn(returnOpcode(target.type));
 		} else {
+			if (!isStatic) {
+				mv.visitVarInsn(Opcodes.ALOAD, 0); // owner
+				mv.visitVarInsn(loadOpcode(target.type.tsym), 1); // val
+			} else {
+				mv.visitVarInsn(loadOpcode(target.type.tsym), 0); // static 时槽位0就是 val
+			}
 			mv.visitFieldInsn(isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD,
 			 owner, target.name.toString(), descriptor);
+			mv.visitInsn(Opcodes.RETURN);
 		}
-		mv.visitMaxs(1, 1);
+		mv.visitMaxs(0, 0); // 自动计算栈深
 		mv.visitEnd();
 		classWriter.visitEnd();
 
@@ -152,8 +157,8 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		DocReference reference    = getSeeReference(HMethod.class, methodSymbol, ElementKind.METHOD, ElementKind.CONSTRUCTOR);
 		MethodSymbol targetMethod = (MethodSymbol) reference.element();
 
-		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
-		String genMethodName = genMethodName();
+		JCMethodDecl methodDecl    = trees.getTree(methodSymbol);
+		String       genMethodName = genMethodName();
 		if (targetMethod.isStatic()/*  && !(hMethod.isSpecial() && targetMethod.isConstructor()) */) {
 			if (hMethod.isSpecial()) {
 				log.error(methodDecl.mods, SPrinter.err("Special method cannot be static"));
@@ -168,12 +173,12 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 			for (int i = 0; i < targetMethod.getParameters().size(); i++) {
 				VarSymbol targetParam = targetMethod.getParameters().get(i);
 				VarSymbol param       = methodSymbol.params.get(i);
-				if (!targetParam.type.tsym.equals(param.type.tsym)) {
+				if (!types.isSameType(targetParam.type, param.type)) {
 					log.error(param.pos, SPrinter.err("Method parametertype mismatch"));
 				}
 			}
 
-			if (!targetMethod.getReturnType().tsym.equals(methodSymbol.getReturnType().tsym)) {
+			if (!types.isSameType(targetMethod.getReturnType(), methodSymbol.getReturnType())) {
 				log.error(methodDecl.restype, SPrinter.err("Method return type mismatch"));
 				return;
 			}
@@ -181,21 +186,24 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 			List<TypeSymbol> args = targetMethod.getParameters().map(v -> v.type.tsym);
 
 			// 创建方法
-			StringBuilder sb = new StringBuilder();
-			sb.append('(');
-			sb.append(targetMethod.getParameters().stream().map(v -> dotToSlash(v.type)).collect(Collectors.joining("")));
-			sb.append(')');
-			sb.append(typeToDescriptor(methodSymbol.getReturnType()));
+			String methodDesc = targetMethod.getParameters().stream()
+			                     .map(v -> typeToDescriptor(v.type))
+			                     .collect(Collectors.joining("", "(", ")"))
+			                    + typeToDescriptor(methodSymbol.getReturnType());
+
 			MethodVisitor mv = classWriter.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, genMethodName,
-			 sb.toString(), null, null);
-			String owner      = dotToSlash(targetMethod.owner.type);
-			String descriptor = typeToDescriptor(methodSymbol.getReturnType());
-			for (int i = 0; i < args.size(); i++) {
-				mv.visitVarInsn(loadOpcode(args.get(i)), i);
+			 methodDesc, null, null);
+			String owner = dotToSlash(targetMethod.owner.type);
+			int    slot  = 0;
+			for (TypeSymbol arg : args) {
+				mv.visitVarInsn(loadOpcode(arg), slot);
+				slot += typeSize(arg);
 			}
 			mv.visitMethodInsn(Opcodes.INVOKESTATIC, owner, targetMethod.name.toString(),
-			 "(" + sb.substring(1, sb.length() - 1) + ")" + descriptor, false);
-			mv.visitMaxs(100, 100); // todo
+			 methodDesc, false);
+			mv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
+			mv.visitMaxs(0, 0); // 自动计算栈深
+			mv.visitEnd();
 		} else {
 			// methodSymbol第一个参数应该是targetMethod的this
 			List<TypeSymbol> paramsL = methodSymbol.params.map(v -> v.type.tsym);
@@ -213,30 +221,30 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 				}
 			}
 
-			if (!targetMethod.getReturnType().tsym.equals(methodSymbol.getReturnType().tsym)) {
+			if (!types.isSameType(targetMethod.getReturnType(), methodSymbol.getReturnType())) {
 				log.error(methodDecl.restype, SPrinter.err("Method return type mismatch: " + methodSymbol.getReturnType() + " != " + targetMethod.getReturnType()));
 				return;
 			}
 
 			// 创建方法
-			StringBuilder sb = new StringBuilder();
-			sb.append('(');
-			sb.append(paramsL.stream().map(v -> typeToDescriptor(v.type)).collect(Collectors.joining("")));
-			sb.append(')');
-			sb.append(typeToDescriptor(methodSymbol.getReturnType()));
-			// println(sb);
+			String methodDesc = paramsL.stream().map(v -> typeToDescriptor(v.type)).collect(Collectors.joining("", "(", ")")) +
+			                    typeToDescriptor(methodSymbol.getReturnType());
+			// println(methodDesc);
 			MethodVisitor mv = classWriter.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, genMethodName,
-			 sb.toString(), null, null);
+			 methodDesc, null, null);
 			String owner      = dotToSlash(targetMethod.owner.type);
 			String descriptor = typeToDescriptor(methodSymbol.getReturnType());
-			for (int i = 0; i < paramsL.size(); i++) {
-				mv.visitVarInsn(loadOpcode(paramsL.get(i)), i);
+			int    slot       = 0;
+			for (TypeSymbol typeSymbol : paramsL) {
+				mv.visitVarInsn(loadOpcode(typeSymbol), slot);
+				slot += typeSize(typeSymbol);
 			}
 			mv.visitMethodInsn(hMethod.isSpecial() ? Opcodes.INVOKESPECIAL : Opcodes.INVOKEVIRTUAL, owner, targetMethod.name.toString(),
 			 targetMethod.getParameters().stream().map(v -> typeToDescriptor(v.type))
-			  .collect(Collectors.joining("", "(", ")")) + descriptor, false);
+				.collect(Collectors.joining("", "(", ")")) + descriptor, false);
 			mv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
-			mv.visitMaxs(100, 100); // todo
+			mv.visitMaxs(0, 0); // 自动计算栈深
+			mv.visitEnd();
 		}
 
 		JCMethodInvocation apply = mMaker.Apply(null, mMaker.Select(mMaker.QualIdent(classSymbol()), ns(genMethodName)), methodDecl.params.map(v -> mMaker.Ident(v)));
@@ -256,25 +264,18 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 
 
 	public static int loadOpcode(TypeSymbol type) {
-		return loadOpcode(type, () -> { });
-	}
-	public static int loadOpcode(TypeSymbol type, Runnable icrementor) {
-		icrementor.run();
 		return switch (type.getQualifiedName().toString()) {
 			case "boolean", "int", "char", "byte", "short" -> Opcodes.ILOAD;
 			case "float" -> Opcodes.FLOAD;
-			case "long" -> {
-				icrementor.run();
-				yield Opcodes.LLOAD;
-			}
-			case "double" -> {
-				icrementor.run();
-				yield Opcodes.DLOAD;
-			}
+			case "long" -> Opcodes.LLOAD;
+			case "double" -> Opcodes.DLOAD;
 			default -> Opcodes.ALOAD;
 		};
 	}
 	public static String dotToSlash(Type type) {
+		if (type instanceof ArrayType arrayType) {
+			return typeToDescriptor(arrayType);
+		}
 		String s = type.tsym.flatName().toString();
 		return switch (s) {
 			case "boolean" -> "Z";
@@ -312,6 +313,13 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 			case "void" -> "V";
 			default -> "L" + s.replace('.', '/') + ";";
 		};
+	}
+
+	public static short typeSize(TypeSymbol typeSymobl) {
+		Type type = typeSymobl.type;
+		if (type == mSymtab.voidType) return 0;
+		if (type == mSymtab.longType || type == mSymtab.doubleType) return 2;
+		return 1;
 	}
 	private int methodId;
 	public String genMethodName() {

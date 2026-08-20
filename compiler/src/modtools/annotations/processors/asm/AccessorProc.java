@@ -18,8 +18,10 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
-/** 使用{@link jdk.internal.reflect.MagicAccessorImpl}
- * 不过新版本的JDK（jdk 22+）已经移除了这个类 */
+/**
+ * 使用{@link jdk.internal.reflect.MagicAccessorImpl}
+ * 不过新版本的JDK（jdk 22+）已经移除了这个类
+ */
 @AutoService(Processor.class)
 public class AccessorProc extends BaseASMProc<MethodSymbol> {
 	Map<Symbol, ClassWriter> classWriterMap = new LinkedHashMap<>();
@@ -116,13 +118,17 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		// (static) 或 public static void x0(<FieldType> val) { <StaticOwner>.<fieldName> = val; }
 		String methodDesc = '(' +
 		                    (isStatic ? "" : typeToDescriptor(target.owner.type)) +
-		                    (isGetter ? ")" + typeToDescriptor(target.type) : "V");
+		                    (isGetter
+		                     ? ")" + typeToDescriptor(target.type)
+		                     : typeToDescriptor(target.type) + ")V"
+		                    );
 		String genMethodName = genMethodName();
 		MethodVisitor mv = classWriter.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, genMethodName,
 		 methodDesc, null, null);
 		String owner      = dotToSlash(target.owner.type);
 		String descriptor = typeToDescriptor(target.type);
 		if (!isStatic) mv.visitVarInsn(Opcodes.ALOAD, 0); // load this
+
 		if (isGetter) {
 			mv.visitFieldInsn(isStatic ? Opcodes.GETSTATIC : Opcodes.GETFIELD,
 			 owner, target.name.toString(), descriptor);

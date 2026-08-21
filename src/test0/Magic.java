@@ -25,6 +25,7 @@ public class Magic {
 	public static int callAddOne(int result) { return 0; }
 
 
+
 	static final        Unsafe unsafe = getUnsafe();
 	public static final Lookup lookup = getLookup();
 	public static void install() throws Throwable {

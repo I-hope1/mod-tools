@@ -65,19 +65,19 @@ public interface AnnotationUtils {
 	 * 这个会替换{@link ExceptionProxy}，使之可以直接访问{@link Class}
 	 * 如{@snippet lang = "java":
 	 * public class A {
-	 * 	public @interface Test {
-	 * 	  Class<?> value();
-	 * 	}
-	 * 	@Test(value = Test.class) class TestClass {}
-	 * 	// 编译器处理
-	 * 	void process() {
-	 * 	Test test = TestClass.class.getAnnotation(Test.class);
-	 * 	test.value(); // 这会抛出异常	 *
-	 * 	}
-	 * 	void process2() {
-	 * 	Test test = getAnnotationByElement(Test.class);
-	 * 	test.value(); // 这不会抛出异常
-	 * 	}
+	 *   public @interface Test {
+	 *     Class<?> value();
+	 *   }
+	 *   @Test(value = Test.class) class TestClass {}
+	 *   // 编译器处理
+	 *   void process() {
+	 *     Test test = TestClass.class.getAnnotation(Test.class);
+	 *     test.value(); // 这会抛出异常
+	 *   }
+	 *   void process2() {
+	 *     Test test = getAnnotationByElement(Test.class);
+	 *     test.value(); // 这不会抛出异常
+	 *   }
 	 * }
 	 *}
 	 * @param clazz     the annotation class

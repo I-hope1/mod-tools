@@ -7,10 +7,10 @@ import java.lang.annotation.*;
  * {@snippet lang="java" :
  * @SettingsInit
  * enum Settings {
- *  	// 自动刷新XXX.xxx
- *  	@Switch
- *  	aaa(int.class, XXX.xxx, 0, 10)
- *  	//...
+ *   // 自动刷新XXX.xxx
+ *   @Switch
+ *   aaa(int.class, XXX.xxx, 0, 10)
+ *   //...
  * }}
  * @see modtools.annotations.processors.ContentProcessor#dealElement(com.sun.tools.javac.code.Symbol.ClassSymbol) )
  * @see modtools.utils.JSFunc

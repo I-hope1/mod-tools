@@ -58,30 +58,6 @@ public class AccessorProc extends BaseASMProc<MethodSymbol> {
 		} else {
 			classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			String s = magic.magicClass().getName();
-			// String         delegator = AConstants.nextGenClassName();
-			// JavaFileObject classFile = mFiler.createClassFile(s);
-			// byte[] bytes;
-			// try (OutputStream outputStream = classFile.openOutputStream()) {
-			// 	ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			// 	cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, s.replace('.', '/'), null,
-			// 	 delegator, null);
-			// 	outputStream.write(bytes = cw.toByteArray());
-			// } catch (IOException e) {
-			// 	throw new RuntimeException(e);
-			// }
-			// JavaFileObject fileObject = HopeReflect.getAccess(Class.forName("com.sun.tools.javac.processing.JavacFiler$FilerOutputJavaFileObject"), classFile, "javaFileObject");
-			// Path           path       = HopeReflect.getAccess(Class.forName("com.sun.tools.javac.file.PathFileObject$DirectoryFileObject"), fileObject, "userPackageRootDir");
-			// println(path.getClass());
-			// Map<String, JavaFileObject> map = mFiler.getGeneratedClasses().get(mSymtab.unnamedModule);
-			// map.forEach((key, value) -> {
-			// 	if (value == classFile) map.remove(key);
-			// });
-			// ClassSymbol classSymbol = mSymtab.enterClass(mSymtab.unnamedModule, ns(s));
-			// classSymbol.classfile = classFile;
-			// URI uri = URI.create(path.toUri() + delegator.replace('.', '/') + ".class");
-			// try (var output = new FileOutputStream(new File(uri))) {
-			// 	output.write(bytes);
-			// }
 
 			genClassName = AConstants.nextGenClassName();
 			classWriter.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, genClassName.replace('.', '/'), null,

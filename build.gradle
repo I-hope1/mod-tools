@@ -69,6 +69,7 @@ sourceSets.test.java.srcDirs = ["test"]
 sourceSets.jmh.java.srcDirs = ["jmh"]
 
 jmh {
+	includes = ["MethodBenchmark"]
     iterations = 3
     warmupIterations = 2
     fork = 1

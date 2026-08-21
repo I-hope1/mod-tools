@@ -20,6 +20,10 @@ public class Magic {
 	@HField(isGetter = true)
 	public static int getXp() { return 0; }
 
+	/** @see TestAccess#addOne(int) */
+	@HMethod
+	public static int callAddOne(int result) { return 0; }
+
 
 	static final        Unsafe unsafe = getUnsafe();
 	public static final Lookup lookup = getLookup();

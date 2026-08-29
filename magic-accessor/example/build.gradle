@@ -1,0 +1,23 @@
+plugins {
+	id 'application'
+}
+
+dependencies {
+	compileOnly project.findProject(':magic-accessor:annotations') ?: project(':annotations')
+	implementation project.findProject(':magic-accessor:annotations') ?: project(':annotations')
+	annotationProcessor project.findProject(':magic-accessor:compiler') ?: project(':compiler')
+}
+
+application {
+	mainClass = 'hope.magic.example.Main'
+	applicationDefaultJvmArgs = [
+		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
+	]
+}
+
+tasks.named('run', JavaExec) {
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}

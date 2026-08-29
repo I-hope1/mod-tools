@@ -1,0 +1,32 @@
+plugins {
+	id 'java-library'
+	id 'maven-publish'
+}
+
+dependencies {
+	implementation project.findProject(':magic-accessor:annotations') ?: project(':annotations')
+
+	compileOnly 'com.google.auto.service:auto-service:1.1.1'
+	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+
+	def asmVersion = '9.7.1'
+	implementation "org.ow2.asm:asm:$asmVersion"
+	implementation "org.ow2.asm:asm-commons:$asmVersion"
+	implementation "org.ow2.asm:asm-tree:$asmVersion"
+}
+
+jar {
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from {
+		configurations.runtimeClasspath.findAll { it.name.startsWith("asm-") }.collect { zipTree(it) }
+	}
+}
+
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+			artifactId = 'magic-accessor-compiler'
+		}
+	}
+}

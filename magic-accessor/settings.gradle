@@ -1,0 +1,12 @@
+rootProject.name = 'magic-accessor'
+
+include 'annotations'
+include 'compiler'
+include 'example'
+
+dependencyResolutionManagement {
+	repositories {
+		mavenCentral()
+		maven { url 'https://jitpack.io' }
+	}
+}

@@ -1,0 +1,90 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.github.I-hope1.mod-tools",
+    "module": "magic-accessor-compiler",
+    "version": "1.0.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.4.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "magic-accessor-compiler-1.0.0.jar",
+          "url": "magic-accessor-compiler-1.0.0.jar",
+          "size": 270894,
+          "sha512": "33533b208a33d64c87cb1fe954f415e3f58acfad1de6b7ba065325ee26e4dff0b283f0dfe87550bbc7fa14d0c934d345e956cd28af39a94c09d3e758f380dabf",
+          "sha256": "87b403a7a469a9b297fff507e2aace8a20e0d797e89e945d9aa6dc68dced9ee7",
+          "sha1": "d00b91978f92f0397b176535d5fca2350b00fc38",
+          "md5": "295e11b3f3a652e87beee3001d124960"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.github.I-hope1.mod-tools",
+          "module": "magic-accessor-annotations",
+          "version": {
+            "requires": "1.0.0"
+          }
+        },
+        {
+          "group": "org.ow2.asm",
+          "module": "asm",
+          "version": {
+            "requires": "9.7.1"
+          }
+        },
+        {
+          "group": "org.ow2.asm",
+          "module": "asm-commons",
+          "version": {
+            "requires": "9.7.1"
+          }
+        },
+        {
+          "group": "org.ow2.asm",
+          "module": "asm-tree",
+          "version": {
+            "requires": "9.7.1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "magic-accessor-compiler-1.0.0.jar",
+          "url": "magic-accessor-compiler-1.0.0.jar",
+          "size": 270894,
+          "sha512": "33533b208a33d64c87cb1fe954f415e3f58acfad1de6b7ba065325ee26e4dff0b283f0dfe87550bbc7fa14d0c934d345e956cd28af39a94c09d3e758f380dabf",
+          "sha256": "87b403a7a469a9b297fff507e2aace8a20e0d797e89e945d9aa6dc68dced9ee7",
+          "sha1": "d00b91978f92f0397b176535d5fca2350b00fc38",
+          "md5": "295e11b3f3a652e87beee3001d124960"
+        }
+      ]
+    }
+  ]
+}

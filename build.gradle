@@ -147,6 +147,17 @@ dependencies {
 //	compileOnly "org.lwjgl:lwjgl-sdl:3.4.0"
 	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'
 	implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+	testImplementation project(":annotations")
+}
+
+configurations {
+	testImplementation.extendsFrom compileOnly
+}
+
+task runTest(type: JavaExec) {
+	dependsOn compileTestJava
+	classpath = sourceSets.test.runtimeClasspath + configurations.compileClasspath + sourceSets.main.output
+	mainClass = "JSSyntaxTest"
 }
 
 task jarAndroid(type: JavaExec) {

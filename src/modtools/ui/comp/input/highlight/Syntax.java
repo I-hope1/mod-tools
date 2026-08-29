@@ -207,8 +207,8 @@ public class Syntax {
 		boolean isFinished() { return finished; }
 
 		void setColor(int from, int to) {
-			setColor(displayText.substring(from, to));
 			lastTokenIndex = to;
+			setColor(displayText.substring(from, to));
 		}
 
 		void setColor(String token) {

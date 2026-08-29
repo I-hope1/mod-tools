@@ -1039,6 +1039,11 @@ public class Tester extends Content {
 					JSSyntax.constantSet.each(s -> {
 						if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
 					});
+					if (syntax != null) {
+						syntax.eachLocalName(s -> {
+							if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
+						});
+					}
 				}
 				if (obj instanceof NativeJavaClass || (obj instanceof NativeJavaObject njo && njo.unwrap() instanceof Class)) { // if completing on a class name itself
 					if (RHINO.javaClassPropertyName.toLowerCase().startsWith(prefix.toLowerCase())) {

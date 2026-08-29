@@ -17,6 +17,10 @@ include 'hotswap-agent'
 include 'utils-agent'
 include 'jni-agent'
 
+include 'magic-accessor:annotations'
+include 'magic-accessor:compiler'
+include 'magic-accessor:example'
+
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 	repositories {

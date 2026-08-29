@@ -1,5 +1,6 @@
 package modtools.ui.comp.input.highlight;
 
+import arc.func.Cons;
 import arc.graphics.Color;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
@@ -104,9 +105,73 @@ public class JSSyntax extends Syntax {
 		} while (true);
 	}
 
-	final ObjectSet<String> localVars      = new ObjectSet<>();
-	final ObjectSet<String> localConstants = new ObjectSet<>();
-	final ObjectSet<String> localFunctions = new ObjectSet<>();
+	public static class LocalScope {
+		public final ObjectSet<String> vars      = new ObjectSet<>();
+		public final ObjectSet<String> constants = new ObjectSet<>();
+		public final ObjectSet<String> functions = new ObjectSet<>();
+
+		public void clear() {
+			vars.clear();
+			constants.clear();
+			functions.clear();
+		}
+	}
+
+	final Seq<LocalScope> scopeStack            = new Seq<>();
+	final LocalScope      rootScope             = new LocalScope();
+	final Seq<String>     pendingFunctionParams = new Seq<>();
+
+	public enum DeclType { NONE, VAR, CONST }
+	public enum DeclPhase { ID, VALUE }
+
+	public DeclType  currentDeclType  = DeclType.NONE;
+	public DeclPhase currentDeclPhase = DeclPhase.ID;
+	public DeclPhase paramPhase       = DeclPhase.ID;
+
+	public boolean isLocalVar(String token) {
+		for (int j = scopeStack.size - 1; j >= 0; j--) {
+			if (scopeStack.get(j).vars.contains(token)) return true;
+		}
+		return false;
+	}
+
+	public boolean isLocalConst(String token) {
+		for (int j = scopeStack.size - 1; j >= 0; j--) {
+			if (scopeStack.get(j).constants.contains(token)) return true;
+		}
+		return false;
+	}
+
+	public boolean isLocalFunction(String token) {
+		for (int j = scopeStack.size - 1; j >= 0; j--) {
+			if (scopeStack.get(j).functions.contains(token)) return true;
+		}
+		return false;
+	}
+
+	public void addLocalVar(String token) {
+		if (scopeStack.isEmpty()) scopeStack.add(rootScope);
+		scopeStack.peek().vars.add(token);
+	}
+
+	public void addLocalConst(String token) {
+		if (scopeStack.isEmpty()) scopeStack.add(rootScope);
+		scopeStack.peek().constants.add(token);
+	}
+
+	public void addLocalFunction(String token) {
+		if (scopeStack.isEmpty()) scopeStack.add(rootScope);
+		scopeStack.peek().functions.add(token);
+	}
+
+	public void eachLocalName(Cons<String> cons) {
+		for (int j = scopeStack.size - 1; j >= 0; j--) {
+			LocalScope scope = scopeStack.get(j);
+			scope.vars.each(cons);
+			scope.constants.each(cons);
+			scope.functions.each(cons);
+		}
+	}
 
 	final ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
 	final ObjectSet<String> constKeywords = ObjectSet.with("const");
@@ -135,7 +200,20 @@ public class JSSyntax extends Syntax {
 	private final Integer           OBJ_NUMBER = -189021039;
 
 
-	// --- FINAL FIX: Unified Identifier Handling Logic ---
+	public char getNextNonWhitespaceChar(DrawToken task) {
+		if (displayText == null || task == null || task.token == null) return '\0';
+		int fromIndex = task.lastIndex + task.token.length();
+		int length = displayText.length();
+		for (int i = fromIndex; i < length; i++) {
+			char ch = displayText.charAt(i);
+			if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+				return ch;
+			}
+		}
+		return '\0';
+	}
+
+	// --- Unified Identifier Handling Logic ---
 	public TokenDraw[] tokenDraws = {
 	 // Rule 1: The "Brain". Handles all identifier logic: declaration, parameters, and usage.
 	 task -> {
@@ -143,41 +221,64 @@ public class JSSyntax extends Syntax {
 		 String         token      = task.token;
 		 String         lastToken  = task.lastToken;
 
-		 // Priority 1: Check for declaration context.
-		 if (lastToken != null) {
-			 // Is it a variable declaration?
-			 if (localKeywords.contains(lastToken)) {
-				 localVars.add(token);
-				 return c_localvar;
-			 }
-			 // Is it a constant declaration?
-			 if (constKeywords.contains(lastToken)) {
-				 localConstants.add(token);
-				 return c_constants;
-			 }
-			 // Is it a function declaration?
-			 if ("function".equals(lastToken)) {
-				 localFunctions.add(token);
-				 completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
-				 return c_functions;
-			 }
+		 // 1. Function declaration name
+		 if ("function".equals(lastToken)) {
+			 addLocalFunction(token);
+			 completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
+			 currentDeclType = DeclType.NONE;
+			 return c_functions;
 		 }
 
-		 // Priority 2: Check if we are inside function parameters.
+		 // 2. Declaration keywords
+		 if (localKeywords.contains(token)) {
+			 currentDeclType = DeclType.VAR;
+			 currentDeclPhase = DeclPhase.ID;
+			 return null;
+		 }
+		 if (constKeywords.contains(token)) {
+			 currentDeclType = DeclType.CONST;
+			 currentDeclPhase = DeclPhase.ID;
+			 return null;
+		 }
+		 if ("function".equals(token)) {
+			 completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
+			 currentDeclType = DeclType.NONE;
+			 return null;
+		 }
+
+		 // 3. Inside function parameters
 		 if (completion.state == DrawCompletion.ParseState.INSIDE_PARAMS) {
-			 if (!token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
-				 localVars.add(token); // Parameters are local variables.
+			 if (paramPhase == DeclPhase.ID && !token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
+				 if (getNextNonWhitespaceChar(task) == ':') {
+					 return c_objects;
+				 }
+				 pendingFunctionParams.add(token);
 				 return c_localvar;
 			 }
 		 }
 
-		 // Priority 3: If not a declaration, check if it's a *usage* of an already-defined local.
-		 // This is the key fix for highlighting the 'x' on the second line.
-		 if (localFunctions.contains(token)) return c_functions;
-		 if (localVars.contains(token)) return c_localvar;
-		 if (localConstants.contains(token)) return c_constants;
+		 // 4. Variable / Constant declaration expecting an identifier
+		 if (currentDeclType != DeclType.NONE && currentDeclPhase == DeclPhase.ID) {
+			 if (!token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
+				 if (getNextNonWhitespaceChar(task) == ':') {
+					 return c_objects;
+				 }
+				 if (currentDeclType == DeclType.CONST) {
+					 addLocalConst(token);
+					 return c_constants;
+				 } else {
+					 addLocalVar(token);
+					 return c_localvar;
+				 }
+			 }
+		 }
 
-		 // If none of the above, let subsequent rules handle it (e.g., keywords, globals).
+		 // 5. Usage of defined local identifiers
+		 if (isLocalFunction(token)) return c_functions;
+		 if (isLocalVar(token)) return c_localvar;
+		 if (isLocalConst(token)) return c_constants;
+		 if (pendingFunctionParams.contains(token)) return c_localvar;
+
 		 return null;
 	 },
 
@@ -241,6 +342,21 @@ public class JSSyntax extends Syntax {
 			pkg = null;
 			nextObject = sc;
 			colorToReturn = c_localvar;
+		} else if (o != null && o != NOT_FOUND) {
+			try {
+				Object wrapped = Context.javaToJS(o, customScope);
+				if (wrapped instanceof Scriptable sc) {
+					pkg = null;
+					nextObject = sc;
+					colorToReturn = c_localvar;
+				} else {
+					nextObject = Undefined.SCRIPTABLE_UNDEFINED;
+					colorToReturn = null;
+				}
+			} catch (Throwable t) {
+				nextObject = Undefined.SCRIPTABLE_UNDEFINED;
+				colorToReturn = null;
+			}
 		} else {
 			nextObject = Undefined.SCRIPTABLE_UNDEFINED;
 			colorToReturn = null;
@@ -329,9 +445,15 @@ public class JSSyntax extends Syntax {
 			cursorObj = null;
 			lastTokenStackSize = -1;
 
-			localVars.clear();
-			localConstants.clear();
-			localFunctions.clear();
+			scopeStack.clear();
+			rootScope.clear();
+			scopeStack.add(rootScope);
+			pendingFunctionParams.clear();
+
+			currentDeclType = DeclType.NONE;
+			currentDeclPhase = DeclPhase.ID;
+			paramPhase = DeclPhase.ID;
+
 			state = ParseState.DEFAULT;
 		}
 		private static class RMethod implements Poolable {
@@ -357,12 +479,50 @@ public class JSSyntax extends Syntax {
 
 			switch (state) {
 				case AWAITING_PARAMS_START:
-					if (c == '(') { state = ParseState.INSIDE_PARAMS; } else if (c != ' ' && c != '\n')
+					if (c == '(') {
+						state = ParseState.INSIDE_PARAMS;
+						paramPhase = DeclPhase.ID;
+					} else if (c != ' ' && c != '\n') {
 						state = ParseState.DEFAULT;
+					}
 					break;
 				case INSIDE_PARAMS:
-					if (c == ')') state = ParseState.DEFAULT;
+					if (c == ')') {
+						state = ParseState.DEFAULT;
+						paramPhase = DeclPhase.ID;
+					}
 					break;
+			}
+
+			if (c == '{') {
+				if (!pendingFunctionParams.isEmpty()) {
+					LocalScope fnScope = new LocalScope();
+					fnScope.vars.addAll(pendingFunctionParams);
+					pendingFunctionParams.clear();
+					scopeStack.add(fnScope);
+				} else if (currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.ID) {
+					scopeStack.add(new LocalScope());
+				}
+			}
+			if (c == '}') {
+				if (scopeStack.size > 1 && (currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.ID)) {
+					scopeStack.pop();
+				}
+			}
+
+			if (c == '=') {
+				if (state == ParseState.INSIDE_PARAMS) {
+					paramPhase = DeclPhase.VALUE;
+				} else if (currentDeclType != DeclType.NONE) {
+					currentDeclPhase = DeclPhase.VALUE;
+				}
+			}
+			if (c == ',' || c == ':') {
+				if (state == ParseState.INSIDE_PARAMS) {
+					paramPhase = DeclPhase.ID;
+				} else if (currentDeclType != DeclType.NONE) {
+					currentDeclPhase = DeclPhase.ID;
+				}
 			}
 
 			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())
@@ -371,6 +531,13 @@ public class JSSyntax extends Syntax {
 				updateCursorObj();
 				operatesSymbol.lastSymbol = '\0';
 			}
+
+			if (c == ';' || (c == '\n' && stack.isEmpty())) {
+				currentDeclType = DeclType.NONE;
+				currentDeclPhase = DeclPhase.ID;
+				pendingFunctionParams.clear();
+			}
+
 			if (c == '(') if (currentObject instanceof Scriptable sc) stack.add(RMethod.obtain(sc));
 			if (c == ',' && inFunction()) stack.lastElement().args.add(currentObject);
 			if (c == ')' && inFunction()) {

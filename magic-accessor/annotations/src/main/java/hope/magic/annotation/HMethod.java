@@ -15,9 +15,14 @@ public @interface HMethod {
 	/**
 	 * 当为 {@code true} 时：
 	 * <ul>
-	 *     <li>常规方法：生成 invokespecial 指令（绕过虚方法派发）</li>
+	 *     <li>常规方法：生成 invokespecial 指令 / linkToSpecial</li>
 	 *     <li>构造器：调用 {@code <init>} 方法</li>
 	 * </ul>
 	 */
 	boolean isSpecial() default false;
+
+	/**
+	 * 可单独覆盖该方法的生成方案模式。默认为 {@link AccessMode#AUTO}（继承外层类的设置）。
+	 */
+	AccessMode mode() default AccessMode.AUTO;
 }

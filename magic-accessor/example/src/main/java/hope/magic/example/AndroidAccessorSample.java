@@ -6,11 +6,11 @@ import hope.magic.annotation.HMarkMagic;
 import hope.magic.annotation.HMethod;
 
 /**
- * 方案 2：Unsafe（字段访问）+ linkToXX（方法访问）
- * 全版本兼容（包括 JDK 22+ / JDK 25+）。
+ * 方案 2B：Unsafe（字段） + MethodHandle.invokeExact（方法）
+ * 专用于 Android (ART VM) 以及非 HotSpot 虚拟机。
  */
-@HMarkMagic(mode = AccessMode.UNSAFE_AND_INDY)
-public class MagicAccessorSample {
+@HMarkMagic(mode = AccessMode.UNSAFE_AND_METHODHANDLE)
+public class AndroidAccessorSample {
 
 	/** @see TargetObject#secretCode */
 	@HField(isGetter = true)
@@ -21,17 +21,6 @@ public class MagicAccessorSample {
 	/** @see TargetObject#secretCode */
 	@HField(isGetter = false)
 	public static void setSecretCode(TargetObject target, int value) {
-	}
-
-	/** @see TargetObject#message */
-	@HField(isGetter = true)
-	public static String getMessage(TargetObject target) {
-		return null;
-	}
-
-	/** @see TargetObject#message */
-	@HField(isGetter = false)
-	public static void setMessage(TargetObject target, String value) {
 	}
 
 	/** @see TargetObject#multiply(int, int) */

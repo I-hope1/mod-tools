@@ -16,4 +16,9 @@ public @interface HField {
 	 * 如果为 {@code true} 代表 Getter，为 {@code false} 代表 Setter。
 	 */
 	boolean isGetter();
+
+	/**
+	 * 可单独覆盖该字段的生成方案模式。默认为 {@link AccessMode#AUTO}（继承外层类的设置）。
+	 */
+	AccessMode mode() default AccessMode.AUTO;
 }

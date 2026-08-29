@@ -6,6 +6,7 @@ dependencies {
 	compileOnly project.findProject(':magic-accessor:annotations') ?: project(':annotations')
 	implementation project.findProject(':magic-accessor:annotations') ?: project(':annotations')
 	annotationProcessor project.findProject(':magic-accessor:compiler') ?: project(':compiler')
+//	implementation 'org.ow2.asm:asm:9.7.1'
 }
 
 application {

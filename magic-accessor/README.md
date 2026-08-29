@@ -1,8 +1,54 @@
 # Magic Accessor
 
-基于 **Javac 编译期 AST 重写 + ASM 字节码生成 + JVM MagicAccessorImpl 特权** 实现的高性能私有成员访问工具库。
+基于 **Javac 编译期 AST 重写 + ASM 字节码生成 + JVM 特权与底层机制** 实现的高性能私有成员访问工具库。
 
 可以在无常规反射性能损耗的前提下，直接读取/修改私有/受保护字段（Getter / Setter）以及调用私有/受保护方法。
+
+---
+
+## 三大实现方案对比与手动配置
+
+Magic Accessor 现已内置并保留了 **三种高性能方案**，可根据部署平台与 JDK 环境灵活配置：
+
+| 方案模式 (`AccessMode`) | 字段访问机制 | 方法调用机制 | 兼容环境 | 核心优势 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`UNSAFE_AND_INDY`**<br>(默认推荐) | `Unsafe` 内存偏移量读写 | JVM 原生 `invokedynamic`<br>(绑定 `ConstantCallSite`) | **全平台**<br>(JDK 8 ~ 25+，包括 Android 8.0+) | 标准字节码规范，首次 BSM 引导解析，后续 JIT 深度内联机器码，零反射与预热损耗 |
+| **`UNSAFE_AND_METHODHANDLE`**<br>(Android / 跨平台) | `Unsafe` 内存偏移量读写 | `MethodHandle.invokeExact` | **Android (ART)**<br>及所有标准 VM | 针对经典 Android 环境提供静态缓存直调适配 |
+| **`MAGIC_ACCESSOR`**<br>(传统特权方案) | 继承 `MagicAccessorImpl`<br>发射 `GETFIELD/PUTFIELD` | 继承 `MagicAccessorImpl`<br>发射 `INVOKEVIRTUAL/SPECIAL` | **JDK &le; 21**<br>(JDK 22+ 移除) | 经典的 Magic 体系特权方案 |
+
+### 手动配置方式
+
+#### 1. 类级别配置
+在访问器类上的 `@HMarkMagic` 注解中指定 `mode`：
+```java
+// 方式 A: 采用 invokedynamic (indy) 极速直调方案 (默认推荐)
+@HMarkMagic(mode = AccessMode.UNSAFE_AND_INDY)
+public class MyAccessor { ... }
+
+// 方式 B: 采用 Android (ART) / 跨平台兼容方案
+@HMarkMagic(mode = AccessMode.UNSAFE_AND_METHODHANDLE)
+public class MyAccessor { ... }
+
+// 方式 C: 采用传统 MagicAccessorImpl 方案 (JDK <= 21)
+@HMarkMagic(mode = AccessMode.MAGIC_ACCESSOR)
+public class MyAccessor { ... }
+```
+
+#### 2. 方法/字段级别局部覆盖配置
+可以在单个 `@HField` 或 `@HMethod` 上单独覆盖设置：
+```java
+@HMarkMagic
+public class MyAccessor {
+
+    /** @see Target#field */
+    @HField(isGetter = true, mode = AccessMode.UNSAFE_AND_LINKTO)
+    public static int getField(Target t) { return 0; }
+
+    /** @see Target#method */
+    @HMethod(mode = AccessMode.UNSAFE_AND_METHODHANDLE)
+    public static void callMethod(Target t) {}
+}
+```
 
 ---
 
@@ -58,6 +104,7 @@ tasks.withType(JavaCompile).configureEach {
         "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
         "--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED",
         "--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED",
+        "--add-exports", "java.base/java.lang.invoke=ALL-UNNAMED",
     ])
 }
 ```
@@ -71,16 +118,16 @@ tasks.withType(JavaCompile).configureEach {
 ```java
 package com.example;
 
-public class User {
-    private int id = 1001;
-    private String name = "Alice";
+public class TargetObject {
+    private int secretCode = 12345;
+    private String message = "Hello, Private Field!";
 
-    private void printSecret(String prefix) {
-        System.out.println(prefix + " -> " + name);
+    private int multiply(int a, int b) {
+        return a * b;
     }
 
-    private static String staticHelper(String str) {
-        return "Processed: " + str;
+    private static String staticPrivateGreet(String name) {
+        return "Greetings, " + name;
     }
 }
 ```
@@ -92,36 +139,37 @@ public class User {
 ```java
 package com.example;
 
+import hope.magic.annotation.AccessMode;
 import hope.magic.annotation.HField;
 import hope.magic.annotation.HMarkMagic;
 import hope.magic.annotation.HMethod;
 
-@HMarkMagic
-public class UserAccessor {
+@HMarkMagic(mode = AccessMode.UNSAFE_AND_LINKTO) // 可选 UNSAFE_AND_LINKTO, UNSAFE_AND_METHODHANDLE, MAGIC_ACCESSOR
+public class TargetAccessor {
 
-    /** @see User#id */
+    /** @see TargetObject#secretCode */
     @HField(isGetter = true)
-    public static int getId(User user) { return 0; }
+    public static int getSecretCode(TargetObject target) { return 0; }
 
-    /** @see User#id */
+    /** @see TargetObject#secretCode */
     @HField(isGetter = false)
-    public static void setId(User user, int id) {}
+    public static void setSecretCode(TargetObject target, int value) {}
 
-    /** @see User#name */
+    /** @see TargetObject#message */
     @HField(isGetter = true)
-    public static String getName(User user) { return null; }
+    public static String getMessage(TargetObject target) { return null; }
 
-    /** @see User#name */
+    /** @see TargetObject#message */
     @HField(isGetter = false)
-    public static void setName(User user, String name) {}
+    public static void setMessage(TargetObject target, String value) {}
 
-    /** @see User#printSecret(String) */
+    /** @see TargetObject#multiply(int, int) */
     @HMethod
-    public static void callPrintSecret(User user, String prefix) {}
+    public static int callMultiply(TargetObject target, int a, int b) { return 0; }
 
-    /** @see User#staticHelper(String) */
+    /** @see TargetObject#staticPrivateGreet(String) */
     @HMethod
-    public static String callStaticHelper(String str) { return null; }
+    public static String callStaticPrivateGreet(String name) { return null; }
 }
 ```
 
@@ -136,33 +184,22 @@ import hope.magic.runtime.Magic;
 
 public class Main {
     public static void main(String[] args) {
-        // 1. 初始化 Magic 运行时（加载特权基类）
+        // 1. 初始化 Magic 运行时
         Magic.install();
 
-        User user = new User();
+        TargetObject target = new TargetObject();
 
-        // 2. 读取私有字段
-        System.out.println(UserAccessor.getName(user)); // Alice
+        // 2. 读取私有字段（零反射性能损耗）
+        int code = TargetAccessor.getSecretCode(target); // 12345
+        String msg = TargetAccessor.getMessage(target);
 
         // 3. 修改私有字段
-        UserAccessor.setName(user, "Bob");
-        System.out.println(UserAccessor.getName(user)); // Bob
+        TargetAccessor.setSecretCode(target, 99999);
+        TargetAccessor.setMessage(target, "Modified value!");
 
         // 4. 调用私有方法
-        UserAccessor.callPrintSecret(user, "DEBUG");    // DEBUG -> Bob
-
-        // 5. 调用静态私有方法
-        System.out.println(UserAccessor.callStaticHelper("test")); // Processed: test
+        int result = TargetAccessor.callMultiply(target, 6, 7); // 42
+        String greet = TargetAccessor.callStaticPrivateGreet("Developer");
     }
 }
 ```
-
----
-
-## 原理简介
-
-1. **`@HMarkMagic`**：告知编译器该类需要使用 MagicAccessorImpl 体系。
-2. **`@HField` / `@HMethod` + Javadoc `@see`**：APT 编译器自动解析目标类的成员类型和签名。
-3. **编译期 ASM 生成**：编译器生成一个继承自 `MagicAccessorImpl` 的动态辅助类，利用直接字节码（`GETFIELD`, `PUTFIELD`, `INVOKEVIRTUAL`, `INVOKESPECIAL`, `INVOKESTATIC`）进行访问。
-4. **AST 重写**：编译器自动将声明的方法体替换为对生成的辅助类静态方法的直接调用。
-5. **运行期特权**：JVM 在执行 `MagicAccessorImpl` 子类的字节码指令时会跳过 Java 访问权限检查，从而达到接近原生代码的直接执行效率。

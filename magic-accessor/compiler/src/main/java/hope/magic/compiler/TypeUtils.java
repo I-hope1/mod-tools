@@ -78,4 +78,60 @@ public class TypeUtils {
 		if (type == symtab.longType || type == symtab.doubleType) return 2;
 		return 1;
 	}
+
+	public static String unsafeGetterMethodName(Type type) {
+		return switch (type.getKind()) {
+			case BOOLEAN -> "getBoolean";
+			case BYTE -> "getByte";
+			case CHAR -> "getChar";
+			case SHORT -> "getShort";
+			case INT -> "getInt";
+			case LONG -> "getLong";
+			case FLOAT -> "getFloat";
+			case DOUBLE -> "getDouble";
+			default -> "getObject";
+		};
+	}
+
+	public static String unsafeGetterMethodDesc(Type type) {
+		return switch (type.getKind()) {
+			case BOOLEAN -> "(Ljava/lang/Object;J)Z";
+			case BYTE -> "(Ljava/lang/Object;J)B";
+			case CHAR -> "(Ljava/lang/Object;J)C";
+			case SHORT -> "(Ljava/lang/Object;J)S";
+			case INT -> "(Ljava/lang/Object;J)I";
+			case LONG -> "(Ljava/lang/Object;J)J";
+			case FLOAT -> "(Ljava/lang/Object;J)F";
+			case DOUBLE -> "(Ljava/lang/Object;J)D";
+			default -> "(Ljava/lang/Object;J)Ljava/lang/Object;";
+		};
+	}
+
+	public static String unsafeSetterMethodName(Type type) {
+		return switch (type.getKind()) {
+			case BOOLEAN -> "putBoolean";
+			case BYTE -> "putByte";
+			case CHAR -> "putChar";
+			case SHORT -> "putShort";
+			case INT -> "putInt";
+			case LONG -> "putLong";
+			case FLOAT -> "putFloat";
+			case DOUBLE -> "putDouble";
+			default -> "putObject";
+		};
+	}
+
+	public static String unsafeSetterMethodDesc(Type type) {
+		return switch (type.getKind()) {
+			case BOOLEAN -> "(Ljava/lang/Object;JZ)V";
+			case BYTE -> "(Ljava/lang/Object;JB)V";
+			case CHAR -> "(Ljava/lang/Object;JC)V";
+			case SHORT -> "(Ljava/lang/Object;JS)V";
+			case INT -> "(Ljava/lang/Object;JI)V";
+			case LONG -> "(Ljava/lang/Object;JJ)V";
+			case FLOAT -> "(Ljava/lang/Object;JF)V";
+			case DOUBLE -> "(Ljava/lang/Object;JD)V";
+			default -> "(Ljava/lang/Object;JLjava/lang/Object;)V";
+		};
+	}
 }

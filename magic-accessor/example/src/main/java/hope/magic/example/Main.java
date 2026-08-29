@@ -3,9 +3,12 @@ package hope.magic.example;
 import hope.magic.runtime.Magic;
 
 public class Main {
-	public static void main(String[] args) {
+	public static void main(String[] args) throws ClassNotFoundException {
 		// 1. 初始化 Magic 运行时（自动定义 Bootstrap 特权类与加载 linkToXX 支撑类）
 		Magic.install();
+
+		// 测试FieldUtils是否存在
+		System.out.println(Class.forName("hope_android.FieldUtils"));
 
 		TargetObject obj = new TargetObject();
 		System.out.println("====== 初始对象状态 ======");

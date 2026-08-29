@@ -1,5 +1,6 @@
 package hope.magic.runtime;
 
+import hope_android.FieldUtils;
 import sun.misc.Unsafe;
 
 import java.lang.invoke.CallSite;
@@ -14,13 +15,21 @@ import java.lang.reflect.Method;
  * 提供 Unsafe 字段偏移查找与 invokedynamic (indy) 引导方法支持。
  */
 public class LinkerHelper {
+	public static final boolean IS_ANDROID = isAndroid();
+	private static boolean isAndroid() {
+		try {
+			Class.forName("android.os.Build");
+			return true;
+		} catch (ClassNotFoundException e) {
+			return false;
+		}
+	}
 	public static final Unsafe UNSAFE = Magic.unsafe;
 
 	public static long getFieldOffset(Class<?> clazz, String fieldName) {
 		try {
 			Field field = getDeclaredFieldRecursive(clazz, fieldName);
-			field.setAccessible(true);
-			return UNSAFE.objectFieldOffset(field);
+			return IS_ANDROID ? FieldUtils.getFieldOffset(field) : UNSAFE.objectFieldOffset(field);
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to get field offset for " + clazz.getName() + "#" + fieldName, e);
 		}
@@ -29,8 +38,7 @@ public class LinkerHelper {
 	public static long getStaticFieldOffset(Class<?> clazz, String fieldName) {
 		try {
 			Field field = getDeclaredFieldRecursive(clazz, fieldName);
-			field.setAccessible(true);
-			return UNSAFE.staticFieldOffset(field);
+			return IS_ANDROID ? FieldUtils.getFieldOffset(field) : UNSAFE.staticFieldOffset(field);
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to get static field offset for " + clazz.getName() + "#" + fieldName, e);
 		}
@@ -39,8 +47,7 @@ public class LinkerHelper {
 	public static Object getStaticFieldBase(Class<?> clazz, String fieldName) {
 		try {
 			Field field = getDeclaredFieldRecursive(clazz, fieldName);
-			field.setAccessible(true);
-			return UNSAFE.staticFieldBase(field);
+			return field.getDeclaringClass();
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to get static field base for " + clazz.getName() + "#" + fieldName, e);
 		}

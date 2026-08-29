@@ -3,6 +3,14 @@ plugins {
 	id 'maven-publish'
 }
 
+dependencies {
+	implementation files("libs/AndroidField.jar")
+}
+
+jar {
+	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
+}
+
 publishing {
 	publications {
 		maven(MavenPublication) {

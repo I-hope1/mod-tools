@@ -44,6 +44,26 @@ tasks.register('jmh', JavaExec) {
 	}
 }
 
+tasks.register('jmhWarmup1', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'org.openjdk.jmh.Main'
+	args = [
+		'hope.magic.example.AccessorWarmupOnceBenchmark',
+		'-f', '1',
+		'-wi', '1',
+		'-i', '3',
+		'-bm', 'avgt',
+		'-tu', 'ns'
+	]
+	jvmArgs = [
+		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
+	]
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
 tasks.register('jmhCold', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'

@@ -2,10 +2,15 @@ package hope.magic.compiler;
 
 import com.google.auto.service.AutoService;
 import com.sun.source.util.TreePath;
+import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.code.Scope.WriteableScope;
 import com.sun.tools.javac.code.Symbol;
+import com.sun.tools.javac.code.Symbol.Completer;
 import com.sun.tools.javac.code.Symbol.MethodSymbol;
 import com.sun.tools.javac.code.Symbol.TypeSymbol;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
@@ -35,6 +40,7 @@ import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -70,6 +76,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 	private final Map<String, FieldOffsetRecord> fieldOffsetMap = new LinkedHashMap<>();
 	private final Map<String, String> memberNameMap = new LinkedHashMap<>();
 	private final Map<String, String> methodHandleMap = new LinkedHashMap<>();
+	private final Set<Symbol> installedClasses = new HashSet<>();
 
 	private int fieldId = 0;
 	private int mnId = 0;
@@ -150,6 +157,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 			fieldOffsetMap.clear();
 			memberNameMap.clear();
 			methodHandleMap.clear();
+			installedClasses.clear();
 			hasLinkToMethods = false;
 		}
 
@@ -291,6 +299,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (hField != null) {
 			AccessMode mode = resolveMode(element, hField.mode());
 			if (mode == AccessMode.MAGIC_ACCESSOR) {
+				injectLegacyClinitInstall(element.owner);
 				String magicSuperClass = getMagicSuperClassName(element.owner);
 				ClassWriter cw = getOrCreateLegacyClassWriter(element, magicSuperClass);
 				processFieldMagic(element, hField, cw, legacyClassNamesMap.get(cw));
@@ -305,13 +314,15 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (hMethod != null) {
 			AccessMode mode = resolveMode(element, hMethod.mode());
 			if (mode == AccessMode.MAGIC_ACCESSOR) {
+				injectLegacyClinitInstall(element.owner);
 				String magicSuperClass = getMagicSuperClassName(element.owner);
 				ClassWriter cw = getOrCreateLegacyClassWriter(element, magicSuperClass);
 				processMethodMagic(element, hMethod, cw, legacyClassNamesMap.get(cw));
 			} else if (mode == AccessMode.UNSAFE_AND_LINKTO) {
-				ClassWriter bdw = getOrCreateBridgeDataWriter();
 				ClassWriter bw = getOrCreateBridgeWriter();
-				processMethodLinkToBridge(element, hMethod, bdw, bw, bridgeDataClassName, bridgeClinitInits);
+				getOrCreateBridgeDataWriter(); // 保证生成 MagicBridgeData 基础设施
+				injectClassClinitInstall(element.owner);
+				processMethodLinkToBridge(element, hMethod, bw, bridgeClinitInits);
 			} else {
 				ClassWriter cw = getOrCreateBridgeDataWriter();
 				if (mode == AccessMode.UNSAFE_AND_METHODHANDLE) {
@@ -320,6 +331,39 @@ public class AccessorProcessor extends BaseAccessorProc {
 					// UNSAFE_AND_INDY
 					processMethodIndy(element, hMethod, cw, bridgeDataClassName);
 				}
+			}
+		}
+	}
+
+	private final Set<Symbol> legacyInstalledClasses = new HashSet<>();
+	private void injectLegacyClinitInstall(Symbol owner) {
+		if (legacyInstalledClasses.add(owner)) {
+			JCClassDecl classDecl = (JCClassDecl) trees.getTree(owner);
+			if (classDecl != null) {
+				JCExpression installCall = mMaker.Apply(
+					List.nil(),
+					mMaker.Select(mMaker.QualIdent(classSymbol("hope.magic.runtime.Magic")), names.fromString("install")),
+					List.nil()
+				);
+				classDecl.defs = classDecl.defs.prepend(
+					mMaker.Block(Flags.STATIC, List.of(mMaker.Exec(installCall)))
+				);
+			}
+		}
+	}
+
+	private void injectClassClinitInstall(Symbol owner) {
+		if (installedClasses.add(owner)) {
+			JCClassDecl classDecl = (JCClassDecl) trees.getTree(owner);
+			if (classDecl != null) {
+				JCExpression installCall = mMaker.Apply(
+					List.nil(),
+					mMaker.Select(mMaker.QualIdent(classSymbol(bridgeDataClassName)), names.fromString("install")),
+					List.nil()
+				);
+				classDecl.defs = classDecl.defs.prepend(
+					mMaker.Block(Flags.STATIC, List.of(mMaker.Exec(installCall)))
+				);
 			}
 		}
 	}
@@ -624,9 +668,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 	private void processMethodLinkToBridge(
 		MethodSymbol methodSymbol,
 		HMethod hMethod,
-		ClassWriter bridgeDataWriter,
 		ClassWriter bridgeWriter,
-		String targetClassName,
 		java.util.List<Consumer<MethodVisitor>> bridgeClinitList
 	) {
 		DocReference reference = getSeeReference(HMethod.class, methodSymbol, ElementKind.METHOD, ElementKind.CONSTRUCTOR);
@@ -701,22 +743,16 @@ public class AccessorProcessor extends BaseAccessorProc {
 				// name
 				mv.visitLdcInsn(targetMethod.name.toString());
 
-				// MethodType.methodType(returnType, paramTypesArray)
-				pushClassForBootstrap(mv, targetMethod.getReturnType());
-				List<VarSymbol> params = targetMethod.getParameters();
-				mv.visitIntInsn(Opcodes.BIPUSH, params.size());
-				mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
-				for (int i = 0; i < params.size(); i++) {
-					mv.visitInsn(Opcodes.DUP);
-					mv.visitIntInsn(Opcodes.BIPUSH, i);
-					pushClassForBootstrap(mv, params.get(i).type);
-					mv.visitInsn(Opcodes.AASTORE);
-				}
+				// MethodType.fromMethodDescriptorString(desc, ClassLoader.getSystemClassLoader())
+				String targetMethodDesc = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
+					typeToDescriptor(targetMethod.getReturnType());
+				mv.visitLdcInsn(targetMethodDesc);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
 				mv.visitMethodInsn(
 					Opcodes.INVOKESTATIC,
 					"java/lang/invoke/MethodType",
-					"methodType",
-					"(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/invoke/MethodType;",
+					"fromMethodDescriptorString",
+					"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;",
 					false
 				);
 
@@ -829,47 +865,35 @@ public class AccessorProcessor extends BaseAccessorProc {
 		bridgeMv.visitMaxs(0, 0);
 		bridgeMv.visitEnd();
 
-		// 3. 在 MagicBridgeData 中生成强类型中转入口（带 @ForceInline）
-		String dataMethodDesc = paramsL.stream().map(v -> typeToDescriptor(v.type)).collect(Collectors.joining("", "(", ")")) +
-			typeToDescriptor(methodSymbol.getReturnType());
-
-		MethodVisitor dataMv = bridgeDataWriter.visitMethod(
-			Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC,
-			genMethodName,
-			dataMethodDesc,
-			null,
-			null
-		);
-		dataMv.visitAnnotation("Ljdk/internal/vm/annotation/ForceInline;", true).visitEnd();
-		dataMv.visitAnnotation("Ljava/lang/invoke/ForceInline;", true).visitEnd();
-		dataMv.visitAnnotation("Ljdk/internal/vm/annotation/Hidden;", true).visitEnd();
-		dataMv.visitAnnotation("Ljava/lang/invoke/LambdaForm$Hidden;", true).visitEnd();
-		dataMv.visitCode();
-
-		slot = 0;
-		for (TypeSymbol typeSymbol : paramsL) {
-			dataMv.visitVarInsn(loadOpcode(typeSymbol), slot);
-			slot += typeSize(typeSymbol, mSymtab);
+		// 3. 在 Javac 符号表中声明 MagicBridge 的对应方法（所有引用类型擦除为 Object，与 Bootstrap 字节码严格对齐）
+		Symbol.ClassSymbol bridgeCs = classSymbol(bridgeClassName);
+		if (bridgeCs.members_field == null) {
+			bridgeCs.members_field = WriteableScope.create(bridgeCs);
+			bridgeCs.flags_field = Flags.PUBLIC;
+			bridgeCs.completer = Completer.NULL_COMPLETER;
 		}
+		List<Type> bridgeParamTypes = List.from(methodSymbol.params.map(v ->
+			isReferenceKind(v.type.getKind()) ? mSymtab.objectType : v.type
+		));
+		Type bridgeReturnType = (methodSymbol.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(methodSymbol.getReturnType().getKind()))
+			? mSymtab.objectType : methodSymbol.getReturnType();
 
-		dataMv.visitMethodInsn(
-			Opcodes.INVOKESTATIC,
-			bridgeInternalName,
-			genMethodName,
-			bridgeMethodDesc.toString(),
-			false
+		Type.MethodType mt = new Type.MethodType(
+			bridgeParamTypes,
+			bridgeReturnType,
+			List.nil(),
+			mSymtab.methodClass
 		);
+		MethodSymbol ms = new MethodSymbol(
+			Flags.PUBLIC | Flags.STATIC,
+			names.fromString(genMethodName),
+			mt,
+			bridgeCs
+		);
+		bridgeCs.members_field.enter(ms);
 
-		if (methodSymbol.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(methodSymbol.getReturnType().getKind())) {
-			dataMv.visitTypeInsn(Opcodes.CHECKCAST, dotToSlash(methodSymbol.getReturnType()));
-		}
-
-		dataMv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
-		dataMv.visitMaxs(0, 0);
-		dataMv.visitEnd();
-
-		// 4. 用户类调用 MagicBridgeData.<genMethodName>
-		rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+		// 4. 用户类直接调用 MagicBridge.<genMethodName>
+		rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
 	}
 
 	// ======================== 方案 2B: invokedynamic (indy) 动态调用点 ========================

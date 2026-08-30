@@ -4,14 +4,30 @@ import hope_android.FieldUtils;
 import sun.misc.Unsafe;
 
 import java.lang.invoke.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 提供 Unsafe 字段偏移查找与 invokedynamic (indy) 引导方法支持。
+ * 提供 Unsafe 字段偏移查找、trusted lookup MethodHandle 缓存、以及 MemberName 解析与 invokedynamic 引导方法支持。
  */
 public class LinkerHelper {
-	public static final boolean IS_ANDROID = isAndroid();
+	public static final  Unsafe       UNSAFE                  = Magic.unsafe;
+	public static final  boolean      IS_ANDROID              = isAndroid();
+	private static final MethodHandle INTERNAL_MEMBER_NAME_MH = initInternalMemberName();
+
+	private static final Map<String, MethodHandle> METHOD_HANDLE_CACHE = new ConcurrentHashMap<>();
+	private static final Map<String, Object>       MEMBER_NAME_CACHE   = new ConcurrentHashMap<>();
+
+	private static MethodHandle initInternalMemberName() {
+		try {
+			Class<?> memberNameClass = Class.forName("java.lang.invoke.MemberName");
+			return Magic.lookup.findVirtual(MethodHandle.class, "internalMemberName", MethodType.methodType(memberNameClass));
+		} catch (Throwable ignored) {
+			return null;
+		}
+	}
+
 	private static boolean isAndroid() {
 		try {
 			Class.forName("android.os.Build");
@@ -20,7 +36,6 @@ public class LinkerHelper {
 			return false;
 		}
 	}
-	public static final Unsafe UNSAFE = Magic.unsafe;
 
 	public static long getFieldOffset(Class<?> clazz, String fieldName) {
 		try {
@@ -54,18 +69,18 @@ public class LinkerHelper {
 	 * 在 call site 首次执行时由 JVM 自动调用并生成 ConstantCallSite，JIT 后续直接内联。
 	 */
 	public static CallSite bootstrap(
-		MethodHandles.Lookup lookup,
-		String name,
-		MethodType type,
-		Class<?> targetClass,
-		String targetMethodName,
-		int flags
+	 MethodHandles.Lookup lookup,
+	 String name,
+	 MethodType type,
+	 Class<?> targetClass,
+	 String targetMethodName,
+	 int flags
 	) {
 		try {
-			boolean isStatic = (flags & 1) != 0;
+			boolean isStatic  = (flags & 1) != 0;
 			boolean isSpecial = (flags & 2) != 0;
 
-			Class<?> returnType = type.returnType();
+			Class<?>   returnType = type.returnType();
 			Class<?>[] parameterTypes;
 			if (isStatic) {
 				parameterTypes = type.parameterArray();
@@ -82,83 +97,86 @@ public class LinkerHelper {
 		}
 	}
 
+	/**
+	 * 基于 trusted lookup (IMPL_LOOKUP) 获取 MethodHandle 并缓存。
+	 */
 	public static MethodHandle getMethodHandle(
-		Class<?> clazz,
-		String methodName,
-		Class<?> returnType,
-		Class<?>[] parameterTypes,
-		boolean isStatic,
-		boolean isSpecial
+	 Class<?> clazz,
+	 String methodName,
+	 Class<?> returnType,
+	 Class<?>[] parameterTypes,
+	 boolean isStatic,
+	 boolean isSpecial
 	) {
-		try {
-			MethodType methodType = MethodType.methodType(returnType, parameterTypes);
-			if (isStatic) {
-				return Magic.lookup.findStatic(clazz, methodName, methodType);
-			} else if (isSpecial) {
-				return Magic.lookup.findSpecial(clazz, methodName, methodType, clazz);
-			} else {
-				try {
-					return Magic.lookup.findVirtual(clazz, methodName, methodType);
-				} catch (Throwable t) {
-					Method m = getDeclaredMethodRecursive(clazz, methodName, parameterTypes);
-					m.setAccessible(true);
-					return Magic.lookup.unreflect(m);
+		if (isAndroid()) return AndroidLinker.getMethodHandle(clazz, methodName, parameterTypes, isStatic, isSpecial);
+
+		byte   refKind = (byte) (isStatic ? 6 : (isSpecial ? 7 : 5));
+		String key     = makeMethodKey(clazz, methodName, returnType, parameterTypes, refKind);
+		return METHOD_HANDLE_CACHE.computeIfAbsent(key, k -> {
+			try {
+				MethodType methodType = MethodType.methodType(returnType, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+				if (isStatic) {
+					return Magic.lookup.findStatic(clazz, methodName, methodType);
+				} else if (isSpecial) {
+					return Magic.lookup.findSpecial(clazz, methodName, methodType, clazz);
+				} else {
+					try {
+						return Magic.lookup.findVirtual(clazz, methodName, methodType);
+					} catch (Throwable t) {
+						Method m = getDeclaredMethodRecursive(clazz, methodName, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+						m.setAccessible(true);
+						return Magic.lookup.unreflect(m);
+					}
 				}
+			} catch (Throwable e) {
+				throw new RuntimeException("Failed to resolve MethodHandle for " + clazz.getName() + "#" + methodName, e);
 			}
-		} catch (Throwable e) {
-			throw new RuntimeException("Failed to resolve MethodHandle for " + clazz.getName() + "#" + methodName, e);
-		}
+		});
 	}
 
+	/**
+	 * 使用 trusted lookup 获取底层 DirectMethodHandle 中的 MemberName 并缓存。
+	 */
 	public static Object resolveMemberName(
-		Class<?> clazz,
-		String methodName,
-		Class<?> returnType,
-		Class<?>[] parameterTypes,
-		byte refKind
+	 Class<?> clazz,
+	 String methodName,
+	 Class<?> returnType,
+	 Class<?>[] parameterTypes,
+	 byte refKind
 	) {
-		try {
-			Class<?> memberNameClass = Class.forName("java.lang.invoke.MemberName");
-			MethodType methodType = MethodType.methodType(returnType, parameterTypes);
-
-			java.lang.reflect.Constructor<?> ctor = memberNameClass.getDeclaredConstructor(
-				Class.class, String.class, MethodType.class, byte.class
-			);
-			ctor.setAccessible(true);
-			Object memberName = ctor.newInstance(clazz, methodName, methodType, refKind);
-
-			Method resolveOrFail = Class.forName("java.lang.invoke.MethodHandleNatives").getDeclaredMethod(
-				"resolve", memberNameClass, Class.class, int.class, boolean.class);
-			resolveOrFail.setAccessible(true);
-			return resolveOrFail.invoke(null, memberName, clazz, refKind, false);
-		} catch (Throwable t) {
-			boolean isStatic = (refKind == 6);
-			boolean isSpecial = (refKind == 7);
-			boolean isInterface = (refKind == 9);
-			return getMemberName(clazz, methodName, returnType, parameterTypes, isStatic, isSpecial, isInterface);
-		}
+		String key = makeMethodKey(clazz, methodName, returnType, parameterTypes, refKind);
+		return MEMBER_NAME_CACHE.computeIfAbsent(key, k -> {
+			boolean      isStatic  = (refKind == 6);
+			boolean      isSpecial = (refKind == 7);
+			MethodHandle mh        = getMethodHandle(clazz, methodName, returnType, parameterTypes, isStatic, isSpecial);
+			return extractMemberName(mh);
+		});
 	}
 
-	public static Object getMemberName(
-		Class<?> clazz,
-		String methodName,
-		Class<?> returnType,
-		Class<?>[] parameterTypes,
-		boolean isStatic,
-		boolean isSpecial,
-		boolean isInterface
-	) {
-		MethodHandle mh = getMethodHandle(clazz, methodName, returnType, parameterTypes, isStatic, isSpecial);
-		return extractMemberName(mh);
-	}
+	private static volatile long MEMBER_FIELD_OFFSET = -2;
 
 	public static Object extractMemberName(MethodHandle mh) {
+		if (mh == null) return null;
+		if (INTERNAL_MEMBER_NAME_MH != null) {
+			try {
+				Object mn = INTERNAL_MEMBER_NAME_MH.invoke(mh);
+				if (mn != null) return mn;
+			} catch (Throwable ignored) {
+			}
+		}
 		try {
+			long off = MEMBER_FIELD_OFFSET;
+			if (off >= 0) {
+				Object mn = UNSAFE.getObject(mh, off);
+				if (mn != null) return mn;
+			}
+
 			Class<?> current = mh.getClass();
 			while (current != null && current != Object.class) {
 				try {
 					Field field = current.getDeclaredField("member");
-					long off = UNSAFE.objectFieldOffset(field);
+					off = UNSAFE.objectFieldOffset(field);
+					MEMBER_FIELD_OFFSET = off;
 					return UNSAFE.getObject(mh, off);
 				} catch (NoSuchFieldException ignored) {
 					current = current.getSuperclass();
@@ -166,7 +184,8 @@ public class LinkerHelper {
 			}
 			for (Field field : mh.getClass().getDeclaredFields()) {
 				if (field.getType().getName().equals("java.lang.invoke.MemberName")) {
-					long off = UNSAFE.objectFieldOffset(field);
+					off = UNSAFE.objectFieldOffset(field);
+					MEMBER_FIELD_OFFSET = off;
 					return UNSAFE.getObject(mh, off);
 				}
 			}
@@ -174,6 +193,23 @@ public class LinkerHelper {
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to extract MemberName from MethodHandle", e);
 		}
+	}
+
+	private static String makeMethodKey(
+	 Class<?> clazz,
+	 String methodName,
+	 Class<?> returnType,
+	 Class<?>[] parameterTypes,
+	 byte refKind
+	) {
+		StringBuilder sb = new StringBuilder(clazz.getName()).append('#').append(methodName).append('#').append(refKind).append('(');
+		if (parameterTypes != null) {
+			for (Class<?> p : parameterTypes) {
+				sb.append(p.getName()).append(';');
+			}
+		}
+		sb.append(')').append(returnType == null ? "V" : returnType.getName());
+		return sb.toString();
 	}
 
 	private static Field getDeclaredFieldRecursive(Class<?> clazz, String name) throws NoSuchFieldException {
@@ -188,7 +224,8 @@ public class LinkerHelper {
 		throw new NoSuchFieldException(clazz.getName() + "#" + name);
 	}
 
-	private static Method getDeclaredMethodRecursive(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException {
+	private static Method getDeclaredMethodRecursive(Class<?> clazz, String name, Class<?>[] params)
+	 throws NoSuchMethodException {
 		Class<?> c = clazz;
 		while (c != null && c != Object.class) {
 			try {

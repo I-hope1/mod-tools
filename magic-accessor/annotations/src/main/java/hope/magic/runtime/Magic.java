@@ -27,27 +27,36 @@ public class Magic {
 			ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.reflect");
 			ModuleOpen.openModule(Object.class.getModule(), "java.lang.invoke");
 
-			// 初始化 Bootstrap 原生 Linker (包含 linkToSpecial / linkToStatic / linkToVirtual 指令)
-			MagicBootLinker.init();
-
-			// 尝试定义 MagicAccessorImpl 基础特权类 (适用于 JDK <= 21)
+			// 尝试定义 MagicAccessorImpl 基础特权类 (适用于 JDK <= 21 的 MAGIC_ACCESSOR 模式)
 			try {
-				byte[] magicPublicBytes = new byte[]{
-					-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 1, 1, 0, 38, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5
-				};
-				defineClass(null, magicPublicBytes);
+				try {
+					Class.forName("jdk.internal.reflect.MagicAccessorImpl_PUBLIC", false, null);
+				} catch (ClassNotFoundException e) {
+					byte[] magicPublicBytes = new byte[]{
+						-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 1, 1, 0, 38, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5
+					};
+					defineClass(null, magicPublicBytes);
+				}
 
-				byte[] magicImplBytes = buildMagicSubclassBytes(
-					"hope/magic/runtime/MAGICIMPL",
-					"jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
-				);
-				defineClass(null, magicImplBytes);
+				try {
+					Class.forName("hope.magic.runtime.MAGICIMPL", false, null);
+				} catch (ClassNotFoundException e) {
+					byte[] magicImplBytes = buildMagicSubclassBytes(
+						"hope/magic/runtime/MAGICIMPL",
+						"jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
+					);
+					defineClass(null, magicImplBytes);
+				}
 
-				byte[] apzMagicImplBytes = buildMagicSubclassBytes(
-					"apzmagic/MAGICIMPL",
-					"jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
-				);
-				defineClass(null, apzMagicImplBytes);
+				try {
+					Class.forName("apzmagic.MAGICIMPL", false, null);
+				} catch (ClassNotFoundException e) {
+					byte[] apzMagicImplBytes = buildMagicSubclassBytes(
+						"apzmagic/MAGICIMPL",
+						"jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
+					);
+					defineClass(null, apzMagicImplBytes);
+				}
 			} catch (Throwable ignored) {
 			}
 
@@ -57,13 +66,38 @@ public class Magic {
 		}
 	}
 
-	public static Class<?> defineClassInInvokePackage(byte[] bytes) {
-		try {
-			Class<?> memberNameClass = Class.forName("java.lang.invoke.MemberName");
-			Lookup invokeLookup = MethodHandles.privateLookupIn(memberNameClass, lookup);
-			return invokeLookup.defineClass(bytes);
-		} catch (Throwable t) {
-			return defineClass(null, bytes);
+	private static final java.util.Set<String> INSTALLED_BRIDGES = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
+	/**
+	 * 安装指定的 Bridge 桥接类到 Bootstrap ClassLoader。
+	 * 内部采用 DCL (双重检查锁定) 与线程安全的内存缓存，保证严格的线程安全与幂等性。
+	 */
+	public static void installBridge(String className, String base64) {
+		if (className == null || base64 == null || base64.isEmpty()) return;
+		if (INSTALLED_BRIDGES.contains(className)) return; // 极速无锁快路径
+
+		synchronized (Magic.class) {
+			if (INSTALLED_BRIDGES.contains(className)) return;
+
+			try {
+				Class.forName(className, false, null);
+				INSTALLED_BRIDGES.add(className);
+				return; // 已经在 Bootstrap 中定义过，直接返回
+			} catch (ClassNotFoundException ignored) {
+			}
+
+			try {
+				byte[] bytes = java.util.Base64.getDecoder().decode(base64);
+				defineClass(null, bytes);
+				INSTALLED_BRIDGES.add(className);
+			} catch (Throwable t) {
+				try {
+					Class.forName(className, false, null);
+					INSTALLED_BRIDGES.add(className);
+				} catch (Throwable ignored) {
+					throw new RuntimeException("Failed to install bridge " + className, t);
+				}
+			}
 		}
 	}
 

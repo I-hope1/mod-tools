@@ -21,7 +21,7 @@ public class MagicBootLinker {
 			}
 
 			byte[] bytes = buildBootLinkerBytes();
-			Magic.defineClassInInvokePackage(bytes);
+			Magic.defineClass(null/* boot */, bytes);
 			initialized = true;
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to initialize java.lang.invoke.MagicBootLinker", e);

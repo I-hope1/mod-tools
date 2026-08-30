@@ -1,22 +1,14 @@
 package hope.magic.example;
 
-import hope.magic.runtime.Magic;
-
 public class Main {
-	public static void main(String[] args) throws ClassNotFoundException {
-		// 1. 初始化 Magic 运行时（自动定义 Bootstrap 特权类与加载 linkToXX 支撑类）
-		Magic.install();
-
-		// 测试FieldUtils是否存在
-		System.out.println(Class.forName("hope_android.FieldUtils"));
-
+	public static void main(String[] args) {
 		TargetObject obj = new TargetObject();
 		System.out.println("====== 初始对象状态 ======");
 		System.out.println("obj.getSecretCode() = " + obj.getSecretCode());
 		System.out.println("obj.getMessage() = " + obj.getMessage());
 
-		// ======================== 方案 2A: Unsafe + invokedynamic (indy 动态调用点) ========================
-		System.out.println("\n====== 测试方案 2A: Unsafe + invokedynamic 模式 (JVM 原生 indy 极速直调) ======");
+		// ======================== 方案 2A: Unsafe + MagicBridge linkToXX (编译期生成 + 运行期注入) ========================
+		System.out.println("\n====== 测试方案 2A: Unsafe + MagicBridge linkToXX 模式 (编译期签名收集 + 运行期注入 java.lang.invoke) ======");
 		int secretLinkTo = MagicAccessorSample.getSecretCode(obj);
 		String msgLinkTo = MagicAccessorSample.getMessage(obj);
 		System.out.println("[Unsafe Getter] secretCode = " + secretLinkTo);
@@ -28,13 +20,27 @@ public class Main {
 		System.out.println("[Unsafe Setter] 新的 message = " + obj.getMessage());
 
 		int productLinkTo = MagicAccessorSample.callMultiply(obj, 9, 9);
-		System.out.println("[invokedynamic special] callMultiply(obj, 9, 9) = " + productLinkTo);
+		System.out.println("[MagicBridge linkToSpecial] callMultiply(obj, 9, 9) = " + productLinkTo);
 
-		String greetLinkTo = MagicAccessorSample.callStaticPrivateGreet("indy Static User");
-		System.out.println("[invokedynamic static] callStaticPrivateGreet = " + greetLinkTo);
+		String greetLinkTo = MagicAccessorSample.callStaticPrivateGreet("linkTo User");
+		System.out.println("[MagicBridge linkToStatic] callStaticPrivateGreet = " + greetLinkTo);
 
-		// ======================== 方案 2B: Unsafe + MethodHandle (Android ART / 跨平台通用) ========================
-		System.out.println("\n====== 测试方案 2B: Unsafe + MethodHandle 模式 (Android ART / 跨平台兼容) ======");
+		// ======================== 方案 2B: Unsafe + invokedynamic (indy 动态调用点) ========================
+		System.out.println("\n====== 测试方案 2B: Unsafe + invokedynamic 模式 (JVM 原生 indy 极速直调) ======");
+		int secretIndy = IndyAccessorSample.getSecretCode(obj);
+		System.out.println("[Indy Unsafe Getter] secretCode = " + secretIndy);
+
+		IndyAccessorSample.setSecretCode(obj, 55555);
+		System.out.println("[Indy Unsafe Setter] 新的 secretCode = " + obj.getSecretCode());
+
+		int productIndy = IndyAccessorSample.callMultiply(obj, 7, 7);
+		System.out.println("[invokedynamic special] callMultiply(obj, 7, 7) = " + productIndy);
+
+		String greetIndy = IndyAccessorSample.callStaticPrivateGreet("indy User");
+		System.out.println("[invokedynamic static] callStaticPrivateGreet = " + greetIndy);
+
+		// ======================== 方案 2C: Unsafe + MethodHandle (Android ART / 跨平台通用) ========================
+		System.out.println("\n====== 测试方案 2C: Unsafe + MethodHandle 模式 (Android ART / 跨平台兼容) ======");
 		int secretAndroid = AndroidAccessorSample.getSecretCode(obj);
 		System.out.println("[Android Unsafe Getter] secretCode = " + secretAndroid);
 

@@ -3,11 +3,7 @@ package hope.magic.runtime;
 import hope_android.FieldUtils;
 import sun.misc.Unsafe;
 
-import java.lang.invoke.CallSite;
-import java.lang.invoke.ConstantCallSite;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
+import java.lang.invoke.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -111,6 +107,35 @@ public class LinkerHelper {
 			}
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to resolve MethodHandle for " + clazz.getName() + "#" + methodName, e);
+		}
+	}
+
+	public static Object resolveMemberName(
+		Class<?> clazz,
+		String methodName,
+		Class<?> returnType,
+		Class<?>[] parameterTypes,
+		byte refKind
+	) {
+		try {
+			Class<?> memberNameClass = Class.forName("java.lang.invoke.MemberName");
+			MethodType methodType = MethodType.methodType(returnType, parameterTypes);
+
+			java.lang.reflect.Constructor<?> ctor = memberNameClass.getDeclaredConstructor(
+				Class.class, String.class, MethodType.class, byte.class
+			);
+			ctor.setAccessible(true);
+			Object memberName = ctor.newInstance(clazz, methodName, methodType, refKind);
+
+			Method resolveOrFail = Class.forName("java.lang.invoke.MethodHandleNatives").getDeclaredMethod(
+				"resolve", memberNameClass, Class.class, int.class, boolean.class);
+			resolveOrFail.setAccessible(true);
+			return resolveOrFail.invoke(null, memberName, clazz, refKind, false);
+		} catch (Throwable t) {
+			boolean isStatic = (refKind == 6);
+			boolean isSpecial = (refKind == 7);
+			boolean isInterface = (refKind == 9);
+			return getMemberName(clazz, methodName, returnType, parameterTypes, isStatic, isSpecial, isInterface);
 		}
 	}
 

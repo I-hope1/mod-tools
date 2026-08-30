@@ -27,11 +27,11 @@
         {
           "name": "magic-accessor-compiler-1.0.0.jar",
           "url": "magic-accessor-compiler-1.0.0.jar",
-          "size": 276787,
-          "sha512": "7970de7dd5cb03c78de28f7b85b164bf3b810cbe67dcd89e52d395eb83007bd22d09cde141168e708d14207f9597a6f7325668a36f18e44048858f4ddf66a0e0",
-          "sha256": "bcb907964601746d47424ea3c1d96e2361f37d6421557f6d21c7b779b27f8b3d",
-          "sha1": "557ecd2caffdea15cca1fb806a6d6a0902948e9e",
-          "md5": "fb3d6cf9a04d88051922b363a4e6f8dd"
+          "size": 282896,
+          "sha512": "7319e3a8b64297654f29b2c57ba5499552494161faf55251935da14e1d31bf4a536ee8ae041f942fe3c973686dce93bc55b628ff7bedf1950d01a023f4de570a",
+          "sha256": "c53b44d6b60ea7da6c3ba071e6b2165b927f9d134a6157e309ec4d79e2fda9aa",
+          "sha1": "31d1c37a6dd44b6700568bf85de75ee2e97dc231",
+          "md5": "aa76ffbbf9fe82fee7940aa38767a905"
         }
       ]
     },
@@ -78,11 +78,11 @@
         {
           "name": "magic-accessor-compiler-1.0.0.jar",
           "url": "magic-accessor-compiler-1.0.0.jar",
-          "size": 276787,
-          "sha512": "7970de7dd5cb03c78de28f7b85b164bf3b810cbe67dcd89e52d395eb83007bd22d09cde141168e708d14207f9597a6f7325668a36f18e44048858f4ddf66a0e0",
-          "sha256": "bcb907964601746d47424ea3c1d96e2361f37d6421557f6d21c7b779b27f8b3d",
-          "sha1": "557ecd2caffdea15cca1fb806a6d6a0902948e9e",
-          "md5": "fb3d6cf9a04d88051922b363a4e6f8dd"
+          "size": 282896,
+          "sha512": "7319e3a8b64297654f29b2c57ba5499552494161faf55251935da14e1d31bf4a536ee8ae041f942fe3c973686dce93bc55b628ff7bedf1950d01a023f4de570a",
+          "sha256": "c53b44d6b60ea7da6c3ba071e6b2165b927f9d134a6157e309ec4d79e2fda9aa",
+          "sha1": "31d1c37a6dd44b6700568bf85de75ee2e97dc231",
+          "md5": "aa76ffbbf9fe82fee7940aa38767a905"
         }
       ]
     }

@@ -6,11 +6,11 @@ import hope.magic.annotation.HMarkMagic;
 import hope.magic.annotation.HMethod;
 
 /**
- * 方案 2A：Unsafe（字段访问）+ MagicBridge linkToXX（编译期收集签名生成 MagicBridge，运行期注入 java.lang.invoke）
- * 零预热、零反射、C2 JIT 直通硬件机器指令。
+ * 方案 2B：Unsafe（字段访问）+ invokedynamic（方法访问）
+ * 基于 JVM 标准 indy 指令与 ConstantCallSite 绑定。
  */
-@HMarkMagic(mode = AccessMode.UNSAFE_AND_LINKTO)
-public class MagicAccessorSample {
+@HMarkMagic(mode = AccessMode.UNSAFE_AND_INDY)
+public class IndyAccessorSample {
 
 	/** @see TargetObject#secretCode */
 	@HField(isGetter = true)
@@ -21,17 +21,6 @@ public class MagicAccessorSample {
 	/** @see TargetObject#secretCode */
 	@HField(isGetter = false)
 	public static void setSecretCode(TargetObject target, int value) {
-	}
-
-	/** @see TargetObject#message */
-	@HField(isGetter = true)
-	public static String getMessage(TargetObject target) {
-		return null;
-	}
-
-	/** @see TargetObject#message */
-	@HField(isGetter = false)
-	public static void setMessage(TargetObject target, String value) {
 	}
 
 	/** @see TargetObject#multiply(int, int) */

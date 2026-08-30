@@ -75,7 +75,6 @@ repositories {
 ```groovy
 dependencies {
     // 1. 注解与运行时基础支持
-    compileOnly "com.github.I-hope1.mod-tools:magic-accessor-annotations:v1.0.0"
     implementation "com.github.I-hope1.mod-tools:magic-accessor-annotations:v1.0.0"
 
     // 2. 编译期注解处理器 (APT)
@@ -86,31 +85,8 @@ dependencies {
 **Gradle (Kotlin DSL):**
 ```kotlin
 dependencies {
-    compileOnly("com.github.I-hope1.mod-tools:magic-accessor-annotations:v1.0.0")
     implementation("com.github.I-hope1.mod-tools:magic-accessor-annotations:v1.0.0")
     annotationProcessor("com.github.I-hope1.mod-tools:magic-accessor-compiler:v1.0.0")
-}
-```
-
-> **注意**：如果是在 JDK 17+ 编译环境，需在 `build.gradle` 中为 `JavaCompile` 任务添加 Javac 内部模块导出参数：
-```groovy
-tasks.withType(JavaCompile).configureEach {
-    options.compilerArgs.addAll([
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
-        "--add-exports", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
-        "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-        "--add-exports", "java.base/jdk.internal.reflect=ALL-UNNAMED",
-        "--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED",
-        "--add-exports", "java.base/java.lang.invoke=ALL-UNNAMED",
-    ])
 }
 ```
 

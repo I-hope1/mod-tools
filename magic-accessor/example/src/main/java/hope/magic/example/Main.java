@@ -1,5 +1,7 @@
 package hope.magic.example;
 
+import hope.magic.runtime.Magic;
+
 public class Main {
 	public static void main(String[] args) {
 		TargetObject obj = new TargetObject();
@@ -55,6 +57,7 @@ public class Main {
 
 		// ======================== 方案 1: MagicAccessorImpl (经典特权方案) ========================
 		try {
+			Magic.install();
 			System.out.println("\n====== 测试方案 1: MagicAccessorImpl 模式 (JDK <= 21) ======");
 			int legacySecret = LegacyMagicAccessorSample.getSecretCode(obj);
 			System.out.println("[MagicAccessor Getter] secretCode = " + legacySecret);

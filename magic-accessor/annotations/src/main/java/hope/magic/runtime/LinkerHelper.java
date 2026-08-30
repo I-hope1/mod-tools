@@ -12,6 +12,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * 提供 Unsafe 字段偏移查找、trusted lookup MethodHandle 缓存、以及 MemberName 解析与 invokedynamic 引导方法支持。
  */
 public class LinkerHelper {
+	public static final boolean FAST_OFFSET = true; // 是否使用 jdk的Unsafe 直接获取 offset
+
+	static {
+		if (FAST_OFFSET) Magic.openModule();
+	}
+
 	public static final  Unsafe       UNSAFE                  = Magic.unsafe;
 	public static final  boolean      IS_ANDROID              = isAndroid();
 	private static final MethodHandle INTERNAL_MEMBER_NAME_MH = initInternalMemberName();
@@ -39,6 +45,9 @@ public class LinkerHelper {
 
 	public static long getFieldOffset(Class<?> clazz, String fieldName) {
 		try {
+			if (FAST_OFFSET) {
+				return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
+			}
 			Field field = getDeclaredFieldRecursive(clazz, fieldName);
 			return IS_ANDROID ? FieldUtils.getFieldOffset(field) : UNSAFE.objectFieldOffset(field);
 		} catch (Throwable e) {
@@ -48,6 +57,10 @@ public class LinkerHelper {
 
 	public static long getStaticFieldOffset(Class<?> clazz, String fieldName) {
 		try {
+			if (FAST_OFFSET) {
+				// 这里 objectFieldOffset 也可以获取静态字段的偏移量，返回的是静态字段在类对象中的偏移量
+				return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
+			}
 			Field field = getDeclaredFieldRecursive(clazz, fieldName);
 			return IS_ANDROID ? FieldUtils.getFieldOffset(field) : UNSAFE.staticFieldOffset(field);
 		} catch (Throwable e) {
@@ -134,8 +147,20 @@ public class LinkerHelper {
 		});
 	}
 
+	private static final MethodHandle RESOLVE_OR_FAIL_MH = initResolveOrFail();
+
+	private static MethodHandle initResolveOrFail() {
+		try {
+			Method m = MethodHandles.Lookup.class.getDeclaredMethod("resolveOrFail", byte.class, Class.class, String.class, MethodType.class);
+			m.setAccessible(true);
+			return Magic.lookup.unreflect(m);
+		} catch (Throwable ignored) {
+			return null;
+		}
+	}
+
 	/**
-	 * 使用 trusted lookup 获取底层 DirectMethodHandle 中的 MemberName 并缓存。
+	 * 获取底层 DirectMethodHandle 中的 MemberName 并缓存（优先使用 JVM 内部极速 resolveOrFail 直调）。
 	 */
 	public static Object resolveMemberName(
 	 Class<?> clazz,
@@ -146,6 +171,15 @@ public class LinkerHelper {
 	) {
 		String key = makeMethodKey(clazz, methodName, returnType, parameterTypes, refKind);
 		return MEMBER_NAME_CACHE.computeIfAbsent(key, k -> {
+			MethodType methodType = MethodType.methodType(returnType, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+			if (RESOLVE_OR_FAIL_MH != null) {
+				try {
+					Object mn = RESOLVE_OR_FAIL_MH.invoke(Magic.lookup, refKind, clazz, methodName, methodType);
+					if (mn != null) return mn;
+				} catch (Throwable ignored) {
+				}
+			}
+
 			boolean      isStatic  = (refKind == 6);
 			boolean      isSpecial = (refKind == 7);
 			MethodHandle mh        = getMethodHandle(clazz, methodName, returnType, parameterTypes, isStatic, isSpecial);

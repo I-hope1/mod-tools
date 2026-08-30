@@ -30,4 +30,11 @@ subprojects {
 		options.encoding = 'UTF-8'
 		options.compilerArgs.addAll(jdkExports.collectMany { ["--add-exports", "${it}=ALL-UNNAMED"] })
 	}
+	tasks.withType(JavaExec).configureEach {
+        jvmArgs += [
+            '-Dfile.encoding=UTF-8',
+            '-Dsun.stdout.encoding=UTF-8',
+            '-Dsun.stderr.encoding=UTF-8'
+        ]
+    }
 }

@@ -40,8 +40,8 @@ allprojects {
 		buildDir0 = layout.buildDirectory.get().asFile
 	}
 	tasks.withType(JavaCompile) {
-		sourceCompatibility = 21
-		targetCompatibility = 21
+		sourceCompatibility = 25
+		targetCompatibility = 25
 
 		options.incremental = true
 		options.encoding = 'UTF-8'

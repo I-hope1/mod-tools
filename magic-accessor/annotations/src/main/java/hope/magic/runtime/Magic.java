@@ -15,6 +15,19 @@ public class Magic {
 	public static final Lookup lookup = getLookup();
 
 	private static volatile boolean installed = false;
+	private static volatile boolean moduleOpened = false;
+
+	static {
+		openModule();
+	}
+
+	public static synchronized void openModule() {
+		if (moduleOpened) return;
+		ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.misc");
+		ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.reflect");
+		ModuleOpen.openModule(Object.class.getModule(), "java.lang.invoke");
+		moduleOpened = true;
+	}
 
 	/**
 	 * 安装 MagicAccessor 运行期基础设施。
@@ -23,9 +36,7 @@ public class Magic {
 	public static synchronized void install() {
 		if (installed) return;
 		try {
-			ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.misc");
-			ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.reflect");
-			ModuleOpen.openModule(Object.class.getModule(), "java.lang.invoke");
+			openModule();
 
 			// 尝试定义 MagicAccessorImpl 基础特权类 (适用于 JDK <= 21 的 MAGIC_ACCESSOR 模式)
 			try {
@@ -33,7 +44,7 @@ public class Magic {
 					Class.forName("jdk.internal.reflect.MagicAccessorImpl_PUBLIC", false, null);
 				} catch (ClassNotFoundException e) {
 					byte[] magicPublicBytes = new byte[]{
-						-54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 1, 1, 0, 38, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5
+					 -54, -2, -70, -66, 0, 0, 0, 52, 0, 13, 1, 0, 45, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 95, 80, 85, 66, 76, 73, 67, 7, 0, 1, 1, 0, 38, 106, 100, 107, 47, 105, 110, 116, 101, 114, 110, 97, 108, 47, 114, 101, 102, 108, 101, 99, 116, 47, 77, 97, 103, 105, 99, 65, 99, 99, 101, 115, 115, 111, 114, 73, 109, 112, 108, 7, 0, 3, 1, 0, 13, 95, 95, 66, 89, 84, 69, 95, 67, 108, 97, 115, 115, 48, 1, 0, 6, 60, 105, 110, 105, 116, 62, 1, 0, 3, 40, 41, 86, 12, 0, 6, 0, 7, 10, 0, 4, 0, 8, 1, 0, 4, 67, 111, 100, 101, 1, 0, 13, 83, 116, 97, 99, 107, 77, 97, 112, 84, 97, 98, 108, 101, 1, 0, 10, 83, 111, 117, 114, 99, 101, 70, 105, 108, 101, 0, 1, 0, 2, 0, 4, 0, 0, 0, 0, 0, 1, 0, 1, 0, 6, 0, 7, 0, 1, 0, 10, 0, 0, 0, 25, 0, 1, 0, 1, 0, 0, 0, 5, 42, -73, 0, 9, -79, 0, 0, 0, 1, 0, 11, 0, 0, 0, 2, 0, 0, 0, 1, 0, 12, 0, 0, 0, 2, 0, 5
 					};
 					defineClass(null, magicPublicBytes);
 				}
@@ -42,8 +53,8 @@ public class Magic {
 					Class.forName("hope.magic.runtime.MAGICIMPL", false, null);
 				} catch (ClassNotFoundException e) {
 					byte[] magicImplBytes = buildMagicSubclassBytes(
-						"hope/magic/runtime/MAGICIMPL",
-						"jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
+					 "hope/magic/runtime/MAGICIMPL",
+					 "jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
 					);
 					defineClass(null, magicImplBytes);
 				}
@@ -52,8 +63,8 @@ public class Magic {
 					Class.forName("apzmagic.MAGICIMPL", false, null);
 				} catch (ClassNotFoundException e) {
 					byte[] apzMagicImplBytes = buildMagicSubclassBytes(
-						"apzmagic/MAGICIMPL",
-						"jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
+					 "apzmagic/MAGICIMPL",
+					 "jdk/internal/reflect/MagicAccessorImpl_PUBLIC"
 					);
 					defineClass(null, apzMagicImplBytes);
 				}
@@ -107,7 +118,7 @@ public class Magic {
 		} catch (Throwable t1) {
 			try {
 				Method defineClassMethod = Unsafe.class.getDeclaredMethod(
-					"defineClass", String.class, byte[].class, int.class, int.class, ClassLoader.class, java.security.ProtectionDomain.class
+				 "defineClass", String.class, byte[].class, int.class, int.class, ClassLoader.class, java.security.ProtectionDomain.class
 				);
 				defineClassMethod.setAccessible(true);
 				return (Class<?>) defineClassMethod.invoke(unsafe, null, bytes, 0, bytes.length, loader, null);
@@ -123,7 +134,7 @@ public class Magic {
 	public static byte[] buildMagicSubclassBytes(String internalName, String superInternalName) {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			DataOutputStream out = new DataOutputStream(baos);
+			DataOutputStream      out  = new DataOutputStream(baos);
 
 			out.writeInt(0xCAFEBABE);
 			out.writeShort(0);
@@ -222,18 +233,23 @@ public class Magic {
 	private static Lookup getLookup() {
 		try {
 			Field implLookupField = Lookup.class.getDeclaredField("IMPL_LOOKUP");
-			long offset = unsafe.staticFieldOffset(implLookupField);
+			long  offset          = unsafe.staticFieldOffset(implLookupField);
 			return (Lookup) unsafe.getObject(Lookup.class, offset);
 		} catch (Throwable e) {
 			try {
 				Lookup baseLookup = MethodHandles.lookup();
-				Field modesField = Lookup.class.getDeclaredField("allowedModes");
-				long offset = unsafe.objectFieldOffset(modesField);
+				Field  modesField = Lookup.class.getDeclaredField("allowedModes");
+				long   offset     = unsafe.objectFieldOffset(modesField);
 				unsafe.putInt(baseLookup, offset, -1);
 				return baseLookup;
 			} catch (Throwable ex) {
 				throw new RuntimeException(ex);
 			}
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	public static <E extends Throwable> RuntimeException sneakyThrow(Throwable t) throws E {
+		throw (E) t;
 	}
 }

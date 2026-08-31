@@ -30,7 +30,9 @@ public class Main {
 				MagicAccessorSample.setMessage(obj, "Updated by 2A");
 				int    p = MagicAccessorSample.callMultiply(obj, 9, 9);
 				String g = MagicAccessorSample.callStaticPrivateGreet("linkTo User");
+				TargetObject created = MagicAccessorSample.newTargetObject(2026, "Created via 2A linkTo <init>");
 				System.out.println("  [2A 结果] secretCode=" + s + ", message=" + m + ", multiply=" + p + ", greet=" + g);
+				System.out.println("  [2A 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
 			}
 			@Override
 			public void runSecond(TargetObject obj) {
@@ -40,6 +42,7 @@ public class Main {
 				MagicAccessorSample.setMessage(obj, "2A 2nd");
 				MagicAccessorSample.callMultiply(obj, 3, 3);
 				MagicAccessorSample.callStaticPrivateGreet("User 2");
+				MagicAccessorSample.newTargetObject(111, "2nd");
 			}
 		});
 
@@ -53,7 +56,9 @@ public class Main {
 				IndyAccessorSample.setSecretCode(obj, 55555);
 				int    p = IndyAccessorSample.callMultiply(obj, 7, 7);
 				String g = IndyAccessorSample.callStaticPrivateGreet("indy User");
+				TargetObject created = IndyAccessorSample.newTargetObject(2026, "Created via 2B indy <init>");
 				System.out.println("  [2B 结果] secretCode=" + s + ", multiply=" + p + ", greet=" + g);
+				System.out.println("  [2B 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
 			}
 			@Override
 			public void runSecond(TargetObject obj) {
@@ -61,6 +66,7 @@ public class Main {
 				IndyAccessorSample.setSecretCode(obj, 99999);
 				IndyAccessorSample.callMultiply(obj, 3, 3);
 				IndyAccessorSample.callStaticPrivateGreet("User 2");
+				IndyAccessorSample.newTargetObject(111, "2nd");
 			}
 		});
 
@@ -74,7 +80,9 @@ public class Main {
 				AndroidAccessorSample.setSecretCode(obj, 66666);
 				int    p = AndroidAccessorSample.callMultiply(obj, 5, 5);
 				String g = AndroidAccessorSample.callStaticPrivateGreet("Android User");
+				TargetObject created = AndroidAccessorSample.newTargetObject(2026, "Created via 2C MH <init>");
 				System.out.println("  [2C 结果] secretCode=" + s + ", multiply=" + p + ", greet=" + g);
+				System.out.println("  [2C 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
 			}
 			@Override
 			public void runSecond(TargetObject obj) {
@@ -82,32 +90,31 @@ public class Main {
 				AndroidAccessorSample.setSecretCode(obj, 99999);
 				AndroidAccessorSample.callMultiply(obj, 3, 3);
 				AndroidAccessorSample.callStaticPrivateGreet("User 2");
+				AndroidAccessorSample.newTargetObject(111, "2nd");
 			}
 		});
 
-		// 方案 1: MagicAccessorImpl (JDK <= 21)
+		// AUTO 智能自适应模式 (Desktop -> linkToXX / Android -> MethodHandle)
 		tasks.add(new SchemeTask() {
 			@Override
-			public String name() { return "方案 1 (MagicAccessorImpl)"; }
+			public String name() { return "AUTO 智能模式 (自适应宿主环境)"; }
 			@Override
 			public void runFirst(TargetObject obj) {
-				try {
-					Magic.install();
-					int s = LegacyMagicAccessorSample.getSecretCode(obj);
-					LegacyMagicAccessorSample.setSecretCode(obj, 77777);
-					int p = LegacyMagicAccessorSample.callMultiply(obj, 8, 8);
-					System.out.println("  [1 结果] secretCode=" + s + ", multiply=" + p);
-				} catch (Throwable t) {
-					System.out.println("  [1 结果] 当前 JDK 环境不适用: " + t.getMessage());
-				}
+				int s = AutoAccessorSample.getSecretCode(obj);
+				AutoAccessorSample.setSecretCode(obj, 10101);
+				int p = AutoAccessorSample.callMultiply(obj, 4, 4);
+				String g = AutoAccessorSample.callStaticPrivateGreet("Auto User");
+				TargetObject created = AutoAccessorSample.newTargetObject(2026, "Created via AUTO <init>");
+				System.out.println("  [AUTO 结果] secretCode=" + s + ", multiply=" + p + ", greet=" + g);
+				System.out.println("  [AUTO 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
 			}
 			@Override
 			public void runSecond(TargetObject obj) {
-				try {
-					LegacyMagicAccessorSample.getSecretCode(obj);
-					LegacyMagicAccessorSample.setSecretCode(obj, 99999);
-					LegacyMagicAccessorSample.callMultiply(obj, 3, 3);
-				} catch (Throwable ignored) { }
+				AutoAccessorSample.getSecretCode(obj);
+				AutoAccessorSample.setSecretCode(obj, 99999);
+				AutoAccessorSample.callMultiply(obj, 3, 3);
+				AutoAccessorSample.callStaticPrivateGreet("User 2");
+				AutoAccessorSample.newTargetObject(111, "2nd");
 			}
 		});
 

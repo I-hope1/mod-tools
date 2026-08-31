@@ -12,14 +12,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * 提供 Unsafe 字段偏移查找、trusted lookup MethodHandle 缓存、以及 MemberName 解析与 invokedynamic 引导方法支持。
  */
 public class LinkerHelper {
-	public static final boolean FAST_OFFSET = true; // 是否使用 jdk的Unsafe 直接获取 offset
+	public static final  boolean      IS_ANDROID              = isAndroid();
+	public static final  boolean      FAST_OFFSET             = !IS_ANDROID; // 是否使用 jdk的Unsafe 直接获取 offset
 
 	static {
-		if (FAST_OFFSET) Magic.openModule();
+		if (IS_ANDROID) {
+			Magic.bypassHiddenApi();
+		} else if (FAST_OFFSET) {
+			Magic.openModule();
+		}
 	}
 
 	public static final  Unsafe       UNSAFE                  = Magic.unsafe;
-	public static final  boolean      IS_ANDROID              = isAndroid();
 	private static final MethodHandle INTERNAL_MEMBER_NAME_MH = initInternalMemberName();
 
 	private static final Map<String, MethodHandle> METHOD_HANDLE_CACHE = new ConcurrentHashMap<>();
@@ -45,7 +49,7 @@ public class LinkerHelper {
 
 	public static long getFieldOffset(Class<?> clazz, String fieldName) {
 		try {
-			if (FAST_OFFSET) {
+			if (FAST_OFFSET && !IS_ANDROID) {
 				return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 			}
 			Field field = getDeclaredFieldRecursive(clazz, fieldName);
@@ -57,7 +61,7 @@ public class LinkerHelper {
 
 	public static long getStaticFieldOffset(Class<?> clazz, String fieldName) {
 		try {
-			if (FAST_OFFSET) {
+			if (FAST_OFFSET && !IS_ANDROID) {
 				// 这里 objectFieldOffset 也可以获取静态字段的偏移量，返回的是静态字段在类对象中的偏移量
 				return jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName);
 			}
@@ -90,8 +94,15 @@ public class LinkerHelper {
 	 int flags
 	) {
 		try {
+			boolean isConstructor = (flags & 8) != 0 || targetMethodName.equals("<init>") || targetMethodName.equals("__init__");
 			boolean isStatic  = (flags & 1) != 0;
 			boolean isSpecial = (flags & 2) != 0;
+
+			if (isConstructor) {
+				MethodType constructorType = MethodType.methodType(void.class, type.parameterArray());
+				MethodHandle mh = Magic.lookup.findConstructor(targetClass, constructorType);
+				return new ConstantCallSite(mh.asType(type));
+			}
 
 			Class<?>   returnType = type.returnType();
 			Class<?>[] parameterTypes;
@@ -122,6 +133,18 @@ public class LinkerHelper {
 	 boolean isSpecial
 	) {
 		if (isAndroid()) return AndroidLinker.getMethodHandle(clazz, methodName, parameterTypes, isStatic, isSpecial);
+
+		if (methodName.equals("<init>")) {
+			String key = makeMethodKey(clazz, methodName, clazz, parameterTypes, (byte) 8);
+			return METHOD_HANDLE_CACHE.computeIfAbsent(key, k -> {
+				try {
+					MethodType constructorType = MethodType.methodType(void.class, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+					return Magic.lookup.findConstructor(clazz, constructorType);
+				} catch (Throwable e) {
+					throw new RuntimeException("Failed to resolve Constructor MethodHandle for " + clazz.getName(), e);
+				}
+			});
+		}
 
 		byte   refKind = (byte) (isStatic ? 6 : (isSpecial ? 7 : 5));
 		String key     = makeMethodKey(clazz, methodName, returnType, parameterTypes, refKind);

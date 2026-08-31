@@ -18,15 +18,33 @@ public class Magic {
 	private static volatile boolean moduleOpened = false;
 
 	static {
-		openModule();
+		if (!LinkerHelper.IS_ANDROID) {
+			openModule();
+		} else {
+			bypassHiddenApi();
+		}
+	}
+
+	public static synchronized void bypassHiddenApi() {
+		if (LinkerHelper.IS_ANDROID) {
+			try {
+				Class<?> hiddenApiBypass = Class.forName("org.lsposed.hiddenapibypass.HiddenApiBypass");
+				Method setHiddenApiExemptions = hiddenApiBypass.getMethod("setHiddenApiExemptions", String[].class);
+				setHiddenApiExemptions.invoke(null, (Object) new String[]{"L"});
+			} catch (Throwable ignored) {
+			}
+		}
 	}
 
 	public static synchronized void openModule() {
-		if (moduleOpened) return;
-		ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.misc");
-		ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.reflect");
-		ModuleOpen.openModule(Object.class.getModule(), "java.lang.invoke");
-		moduleOpened = true;
+		if (moduleOpened || LinkerHelper.IS_ANDROID) return;
+		try {
+			ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.misc");
+			ModuleOpen.openModule(Object.class.getModule(), "jdk.internal.reflect");
+			ModuleOpen.openModule(Object.class.getModule(), "java.lang.invoke");
+			moduleOpened = true;
+		} catch (Throwable ignored) {
+		}
 	}
 
 	/**
@@ -36,7 +54,11 @@ public class Magic {
 	public static synchronized void install() {
 		if (installed) return;
 		try {
-			openModule();
+			if (LinkerHelper.IS_ANDROID) {
+				bypassHiddenApi();
+			} else {
+				openModule();
+			}
 
 			// 尝试定义 MagicAccessorImpl 基础特权类 (适用于 JDK <= 21 的 MAGIC_ACCESSOR 模式)
 			try {
@@ -83,8 +105,8 @@ public class Magic {
 	 * 安装指定的 Bridge 桥接类到 Bootstrap ClassLoader。
 	 * 内部采用 DCL (双重检查锁定) 与线程安全的内存缓存，保证严格的线程安全与幂等性。
 	 */
-	public static void installBridge(String className, String base64) {
-		if (className == null || base64 == null || base64.isEmpty()) return;
+	public static void installBridge(String className, byte[] bytes) {
+		if (className == null || bytes == null || bytes.length == 0) return;
 		if (INSTALLED_BRIDGES.contains(className)) return; // 极速无锁快路径
 
 		synchronized (Magic.class) {
@@ -98,7 +120,6 @@ public class Magic {
 			}
 
 			try {
-				byte[] bytes = java.util.Base64.getDecoder().decode(base64);
 				defineClass(null, bytes);
 				INSTALLED_BRIDGES.add(className);
 			} catch (Throwable t) {
@@ -110,6 +131,24 @@ public class Magic {
 				}
 			}
 		}
+	}
+
+	public static void installBridge(String className, String rawBytesOrBase64) {
+		if (className == null || rawBytesOrBase64 == null || rawBytesOrBase64.isEmpty()) return;
+		if (INSTALLED_BRIDGES.contains(className)) return;
+
+		byte[] bytes;
+		try {
+			byte[] candidate = rawBytesOrBase64.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+			if (candidate.length >= 4 && candidate[0] == (byte)0xCA && candidate[1] == (byte)0xFE && candidate[2] == (byte)0xBA && candidate[3] == (byte)0xBE) {
+				bytes = candidate; // 0 Base64 损耗的 ISO_8859_1 原生字节码直传
+			} else {
+				bytes = java.util.Base64.getDecoder().decode(rawBytesOrBase64);
+			}
+		} catch (Throwable t) {
+			bytes = java.util.Base64.getDecoder().decode(rawBytesOrBase64);
+		}
+		installBridge(className, bytes);
 	}
 
 	public static Class<?> defineClass(ClassLoader loader, byte[] bytes) {

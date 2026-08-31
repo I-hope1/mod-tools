@@ -1,0 +1,36 @@
+plugins {
+	id 'java-library'
+	id 'maven-publish'
+}
+
+dependencies {
+	api project(':magic-accessor:annotations')
+
+	def asmVersion = '9.7.1'
+	implementation "org.ow2.asm:asm:$asmVersion"
+	implementation "org.ow2.asm:asm-commons:$asmVersion"
+	implementation "org.ow2.asm:asm-tree:$asmVersion"
+
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+	useJUnitPlatform()
+}
+
+jar {
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from {
+		configurations.runtimeClasspath.findAll { it.name.startsWith("asm-") }.collect { zipTree(it) }
+	}
+}
+
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+			artifactId = 'magic-accessor-js'
+		}
+	}
+}

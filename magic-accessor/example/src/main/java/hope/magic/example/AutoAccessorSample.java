@@ -6,11 +6,10 @@ import hope.magic.annotation.HMarkMagic;
 import hope.magic.annotation.HMethod;
 
 /**
- * 方案 2B：Unsafe（字段访问）+ invokedynamic（方法访问）
- * 基于 JVM 标准 indy 指令与 ConstantCallSite 绑定。
+ * AUTO 模式访问器：在 Desktop JVM 上自动选用 UNSAFE_AND_LINKTO，在 Android (targetVersion=8) 上自动选用 UNSAFE_AND_METHODHANDLE。
  */
-@HMarkMagic(mode = AccessMode.UNSAFE_AND_INDY)
-public class IndyAccessorSample {
+@HMarkMagic(mode = AccessMode.AUTO)
+public class AutoAccessorSample {
 
 	/** @see TargetObject#secretCode */
 	@HField(isGetter = true)

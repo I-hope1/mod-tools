@@ -20,6 +20,7 @@ include 'jni-agent'
 include 'magic-accessor:annotations'
 include 'magic-accessor:compiler'
 include 'magic-accessor:example'
+include 'magic-accessor:magic-js'
 
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)

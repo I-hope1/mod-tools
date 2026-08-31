@@ -34,4 +34,10 @@ public class AndroidAccessorSample {
 	public static String callStaticPrivateGreet(String name) {
 		return null;
 	}
+
+	/** @see TargetObject#TargetObject(int, String) */
+	@HMethod
+	public static TargetObject newTargetObject(int secretCode, String message) {
+		return null;
+	}
 }

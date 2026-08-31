@@ -27,4 +27,10 @@ public class LegacyMagicAccessorSample {
 	public static int callMultiply(TargetObject target, int a, int b) {
 		return 0;
 	}
+
+	/** @see TargetObject#TargetObject(int, String) */
+	@HMethod
+	public static TargetObject newTargetObject(int secretCode, String message) {
+		return null;
+	}
 }

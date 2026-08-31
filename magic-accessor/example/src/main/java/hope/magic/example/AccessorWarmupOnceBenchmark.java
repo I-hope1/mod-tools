@@ -30,6 +30,7 @@ public class AccessorWarmupOnceBenchmark {
 
 	private Field reflectField;
 	private Method reflectMethod;
+	private java.lang.reflect.Constructor<TargetObject> reflectCtor;
 	private MethodHandle directMH;
 
 	@Setup(Level.Trial)
@@ -42,6 +43,9 @@ public class AccessorWarmupOnceBenchmark {
 
 		reflectMethod = TargetObject.class.getDeclaredMethod("multiply", int.class, int.class);
 		reflectMethod.setAccessible(true);
+
+		reflectCtor = TargetObject.class.getDeclaredConstructor(int.class, String.class);
+		reflectCtor.setAccessible(true);
 
 		directMH = Magic.lookup.findSpecial(
 			TargetObject.class,
@@ -108,6 +112,33 @@ public class AccessorWarmupOnceBenchmark {
 	@Benchmark
 	public int plan2C_android_methodhandle_method() {
 		return AndroidAccessorSample.callMultiply(target, a, b);
+	}
+
+	// ==================== 私有构造器实例化测试 ====================
+
+	@Benchmark
+	public TargetObject reflect_constructor_newInstance() throws Exception {
+		return reflectCtor.newInstance(a, "reflect");
+	}
+
+	@Benchmark
+	public TargetObject plan1_magic_accessor_constructor() {
+		return LegacyMagicAccessorSample.newTargetObject(a, "magic");
+	}
+
+	@Benchmark
+	public TargetObject plan2A_linkTo_constructor() {
+		return MagicAccessorSample.newTargetObject(a, "linkTo");
+	}
+
+	@Benchmark
+	public TargetObject plan2B_indy_constructor() {
+		return IndyAccessorSample.newTargetObject(a, "indy");
+	}
+
+	@Benchmark
+	public TargetObject plan2C_android_constructor() {
+		return AndroidAccessorSample.newTargetObject(a, "android");
 	}
 
 	public static void main(String[] args) throws Exception {

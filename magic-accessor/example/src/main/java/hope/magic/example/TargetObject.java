@@ -4,7 +4,15 @@ public class TargetObject {
 	private int secretCode = 12345;
 	private String message = "Hello, Private Field!";
 
-	private int multiply(int a, int b) {
+	public TargetObject() {
+	}
+
+	private TargetObject(int secretCode, String message) {
+		this.secretCode = secretCode;
+		this.message = message;
+	}
+
+	public int multiply(int a, int b) {
 		return a * b;
 	}
 

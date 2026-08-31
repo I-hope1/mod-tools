@@ -3,12 +3,33 @@ plugins {
 	id 'maven-publish'
 }
 
+configurations {
+	aarLib
+}
+
 dependencies {
 	implementation files("libs/AndroidField.jar")
+	aarLib('org.lsposed.hiddenapibypass:hiddenapibypass:6.1') { transitive = false }
+}
+
+def extractHiddenApiBypass = tasks.register('extractHiddenApiBypass', Jar) {
+	from {
+		zipTree(configurations.aarLib.singleFile).matching { include 'classes.jar' }
+				.collect {
+					zipTree(it)
+				}
+	}
+	archiveFileName = "hiddenapibypass.jar"
+	destinationDirectory = layout.buildDirectory.dir("libs")
+}
+
+dependencies {
+	implementation files(extractHiddenApiBypass)
 }
 
 jar {
 	from(configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) })
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 publishing {

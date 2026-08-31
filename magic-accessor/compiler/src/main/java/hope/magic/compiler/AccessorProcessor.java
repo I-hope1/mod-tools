@@ -27,6 +27,7 @@ import org.objectweb.asm.Opcodes;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.annotation.processing.SupportedOptions;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
@@ -54,8 +55,38 @@ import static hope.magic.compiler.TypeUtils.*;
 	"hope.magic.annotation.HField",
 	"hope.magic.annotation.HMethod"
 })
+@SupportedOptions({
+	"magic.optimize.p1",
+	"targetVersion",
+	"magic.target",
+	"magic.mode"
+})
 public class AccessorProcessor extends BaseAccessorProc {
 	private static final AtomicInteger ID_GEN = new AtomicInteger(0);
+
+	private boolean isP1OptimizationEnabled() {
+		if (env != null && env.getOptions() != null) {
+			String opt = env.getOptions().get("magic.optimize.p1");
+			if (opt != null) return Boolean.parseBoolean(opt);
+		}
+		String prop = System.getProperty("magic.optimize.p1");
+		if (prop != null) return Boolean.parseBoolean(prop);
+		String envVal = System.getenv("MAGIC_OPTIMIZE_P1");
+		if (envVal != null) return Boolean.parseBoolean(envVal);
+		return true;
+	}
+
+	private boolean isTargetAndroid() {
+		if (env != null && env.getOptions() != null) {
+			String targetVer = env.getOptions().get("targetVersion");
+			if (targetVer != null && (targetVer.equals("8") || targetVer.equalsIgnoreCase("android"))) return true;
+			String target = env.getOptions().get("magic.target");
+			if (target != null && target.equalsIgnoreCase("android")) return true;
+		}
+		String targetProp = System.getProperty("magic.target");
+		if (targetProp != null && targetProp.equalsIgnoreCase("android")) return true;
+		return false;
+	}
 
 	// 编译期唯一的 Session Suffix，隔离多模块冲突
 	private final String sessionSuffix = Long.toHexString(System.currentTimeMillis()) + "_" + Integer.toHexString(System.identityHashCode(this));
@@ -85,6 +116,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 	private final Map<String, String> memberNameMap = new LinkedHashMap<>();
 	private final Map<String, String> linkToMethodMap = new LinkedHashMap<>();
+	private final Map<String, String> bridgeClassFieldMap = new LinkedHashMap<>();
 
 	private final Map<String, String> methodHandleMap = new LinkedHashMap<>();
 	private final Map<String, String> methodHandleMethodMap = new LinkedHashMap<>();
@@ -100,6 +132,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 	private int fieldId = 0;
 	private int mnId = 0;
 	private int mhId = 0;
+	private int classFieldId = 0;
 	private int methodId = 0;
 	private boolean hasLinkToMethods = false;
 
@@ -270,107 +303,142 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 	private void generateFinalBridgeData() {
 		try {
-			String base64 = "";
+			boolean p1Enabled = isP1OptimizationEnabled();
 			if (bridgeWriter != null) {
-				// 生成 MagicBridge 内部的原生 <clinit>：集中且唯一加载外部类，复用 ClassLoader 与 Factory
+				// 生成 MagicBridge 内部的原生 <clinit>
 				if (!bridgeMemberNameEntries.isEmpty()) {
 					MethodVisitor bridgeClinit = bridgeWriter.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
 					bridgeClinit.visitCode();
 
-					// 1. 槽位 0: 获取系统类加载器 ClassLoader.getSystemClassLoader() (全局仅 1 次)
-					bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
-					bridgeClinit.visitVarInsn(Opcodes.ASTORE, 0);
+					Map<String, Integer> externalClassSlotMap = null;
+					if (p1Enabled) {
+						// P1 优化路径: 槽位 0(ClassLoader), 槽位 1(Factory), 局部变量缓存外部类
+						bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
+						bridgeClinit.visitVarInsn(Opcodes.ASTORE, 0);
 
-					// 2. 槽位 1: 获取 Factory 单例 MemberName.getFactory() (全局仅 1 次)
-					bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
-					bridgeClinit.visitVarInsn(Opcodes.ASTORE, 1);
+						bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
+						bridgeClinit.visitVarInsn(Opcodes.ASTORE, 1);
 
-					// 3. 收集所有外部类并分配局部变量槽位，每个外部类只调用 1 次 Class.forName
-					Map<String, Integer> externalClassSlotMap = new LinkedHashMap<>();
-					int nextSlot = 2;
-					for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
-						if (!isBootstrapType(entry.ownerType)) {
-							String flatName = entry.ownerType.tsym.flatName().toString();
-							if (!externalClassSlotMap.containsKey(flatName)) {
-								int slot = nextSlot++;
-								externalClassSlotMap.put(flatName, slot);
+						externalClassSlotMap = new LinkedHashMap<>();
+						int nextSlot = 2;
+						for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
+							if (!isBootstrapType(entry.ownerType)) {
+								String flatName = entry.ownerType.tsym.flatName().toString();
+								if (!externalClassSlotMap.containsKey(flatName)) {
+									int slot = nextSlot++;
+									externalClassSlotMap.put(flatName, slot);
 
-								bridgeClinit.visitLdcInsn(flatName);
-								bridgeClinit.visitInsn(Opcodes.ICONST_1);
-								bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
-								bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
-								bridgeClinit.visitVarInsn(Opcodes.ASTORE, slot);
+									bridgeClinit.visitLdcInsn(flatName);
+									bridgeClinit.visitInsn(Opcodes.ICONST_1);
+									bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
+									bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
+									bridgeClinit.visitVarInsn(Opcodes.ASTORE, slot);
+								}
 							}
+						}
+
+						for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
+							bridgeClinit.visitVarInsn(Opcodes.ALOAD, 1);
+							bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
+							bridgeClinit.visitTypeInsn(Opcodes.NEW, "java/lang/invoke/MemberName");
+							bridgeClinit.visitInsn(Opcodes.DUP);
+
+							if (isBootstrapType(entry.ownerType)) {
+								bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(entry.ownerType)));
+							} else {
+								String flatName = entry.ownerType.tsym.flatName().toString();
+								int slot = externalClassSlotMap.get(flatName);
+								bridgeClinit.visitVarInsn(Opcodes.ALOAD, slot);
+							}
+
+							bridgeClinit.visitLdcInsn(entry.methodName);
+							bridgeClinit.visitLdcInsn(entry.methodDesc);
+							bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
+							bridgeClinit.visitMethodInsn(
+								Opcodes.INVOKESTATIC,
+								"java/lang/invoke/MethodType",
+								"fromMethodDescriptorString",
+								"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;",
+								false
+							);
+
+							bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
+							bridgeClinit.visitMethodInsn(
+								Opcodes.INVOKESPECIAL,
+								"java/lang/invoke/MemberName",
+								"<init>",
+								"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V",
+								false
+							);
+
+							bridgeClinit.visitInsn(Opcodes.ACONST_NULL);
+							bridgeClinit.visitInsn(Opcodes.ICONST_M1);
+							bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType("Ljava/lang/NoSuchMethodException;"));
+							bridgeClinit.visitMethodInsn(
+								Opcodes.INVOKEVIRTUAL,
+								"java/lang/invoke/MemberName$Factory",
+								"resolveOrFail",
+								"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;",
+								false
+							);
+							bridgeClinit.visitFieldInsn(Opcodes.PUTSTATIC, bridgeInternalName, entry.fieldName, "Ljava/lang/invoke/MemberName;");
+						}
+					} else {
+						// 未开启 P1: 每次重复 Class.forName 与多次 getSystemClassLoader()
+						for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
+							bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
+							bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
+							bridgeClinit.visitTypeInsn(Opcodes.NEW, "java/lang/invoke/MemberName");
+							bridgeClinit.visitInsn(Opcodes.DUP);
+
+							pushClassForBootstrap(bridgeClinit, entry.ownerType);
+							bridgeClinit.visitLdcInsn(entry.methodName);
+							bridgeClinit.visitLdcInsn(entry.methodDesc);
+							bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
+							bridgeClinit.visitMethodInsn(
+								Opcodes.INVOKESTATIC,
+								"java/lang/invoke/MethodType",
+								"fromMethodDescriptorString",
+								"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;",
+								false
+							);
+
+							bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
+							bridgeClinit.visitMethodInsn(
+								Opcodes.INVOKESPECIAL,
+								"java/lang/invoke/MemberName",
+								"<init>",
+								"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V",
+								false
+							);
+
+							bridgeClinit.visitInsn(Opcodes.ACONST_NULL);
+							bridgeClinit.visitInsn(Opcodes.ICONST_M1);
+							bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType("Ljava/lang/NoSuchMethodException;"));
+							bridgeClinit.visitMethodInsn(
+								Opcodes.INVOKEVIRTUAL,
+								"java/lang/invoke/MemberName$Factory",
+								"resolveOrFail",
+								"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;",
+								false
+							);
+							bridgeClinit.visitFieldInsn(Opcodes.PUTSTATIC, bridgeInternalName, entry.fieldName, "Ljava/lang/invoke/MemberName;");
 						}
 					}
 
-					// 4. 批量执行 MemberName 原生 resolveOrFail 解析
-					for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
-						// 参数 0 (this of Factory): ALOAD 1
-						bridgeClinit.visitVarInsn(Opcodes.ALOAD, 1);
-
-						// 参数 1: byte refKind
-						bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
-
-						// 参数 2: new MemberName(...)
-						bridgeClinit.visitTypeInsn(Opcodes.NEW, "java/lang/invoke/MemberName");
-						bridgeClinit.visitInsn(Opcodes.DUP);
-
-						// defClass: 系统类直接 LDC Class，外部类从局部变量槽位 ALOAD (0 冗余反射)
-						if (isBootstrapType(entry.ownerType)) {
-							bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(entry.ownerType)));
+					// 初始化构造器目标类的 static final Class 字段 (C2 JIT 常量折叠)
+					for (Map.Entry<String, String> entry : bridgeClassFieldMap.entrySet()) {
+						String flatName = entry.getKey();
+						String clsField = entry.getValue();
+						if (p1Enabled && externalClassSlotMap != null && externalClassSlotMap.containsKey(flatName)) {
+							bridgeClinit.visitVarInsn(Opcodes.ALOAD, externalClassSlotMap.get(flatName));
 						} else {
-							String flatName = entry.ownerType.tsym.flatName().toString();
-							int slot = externalClassSlotMap.get(flatName);
-							bridgeClinit.visitVarInsn(Opcodes.ALOAD, slot);
+							bridgeClinit.visitLdcInsn(flatName);
+							bridgeClinit.visitInsn(Opcodes.ICONST_1);
+							bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
+							bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
 						}
-
-						// name
-						bridgeClinit.visitLdcInsn(entry.methodName);
-
-						// MethodType: MethodType.fromMethodDescriptorString(desc, cl)
-						bridgeClinit.visitLdcInsn(entry.methodDesc);
-						bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
-						bridgeClinit.visitMethodInsn(
-							Opcodes.INVOKESTATIC,
-							"java/lang/invoke/MethodType",
-							"fromMethodDescriptorString",
-							"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;",
-							false
-						);
-
-						// refKind
-						bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
-
-						// MemberName.<init>
-						bridgeClinit.visitMethodInsn(
-							Opcodes.INVOKESPECIAL,
-							"java/lang/invoke/MemberName",
-							"<init>",
-							"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V",
-							false
-						);
-
-						// 参数 3: lookupClass = null
-						bridgeClinit.visitInsn(Opcodes.ACONST_NULL);
-
-						// 参数 4: allowedModes = -1 (LM_TRUSTED)
-						bridgeClinit.visitInsn(Opcodes.ICONST_M1);
-
-						// 参数 5: nsmClass = NoSuchMethodException.class
-						bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType("Ljava/lang/NoSuchMethodException;"));
-
-						// 调用 resolveOrFail
-						bridgeClinit.visitMethodInsn(
-							Opcodes.INVOKEVIRTUAL,
-							"java/lang/invoke/MemberName$Factory",
-							"resolveOrFail",
-							"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;",
-							false
-						);
-
-						// 赋值给 static final 字段
-						bridgeClinit.visitFieldInsn(Opcodes.PUTSTATIC, bridgeInternalName, entry.fieldName, "Ljava/lang/invoke/MemberName;");
+						bridgeClinit.visitFieldInsn(Opcodes.PUTSTATIC, bridgeInternalName, clsField, "Ljava/lang/Class;");
 					}
 
 					bridgeClinit.visitInsn(Opcodes.RETURN);
@@ -379,36 +447,77 @@ public class AccessorProcessor extends BaseAccessorProc {
 				}
 
 				bridgeWriter.visitEnd();
-				base64 = Base64.getEncoder().encodeToString(bridgeWriter.toByteArray());
+				byte[] bridgeBytes = bridgeWriter.toByteArray();
+
+				ClassWriter bdw = getOrCreateBridgeDataWriter();
+				if (p1Enabled) {
+					// P1 优化: ISO_8859_1 直转 byte[] 数组存储
+					bdw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, "BYTES", "[B", null, null).visitEnd();
+
+					MethodVisitor installMv = bdw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "install", "()V", null, null);
+					installMv.visitCode();
+					installMv.visitLdcInsn(bridgeClassName);
+					installMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeDataClassName.replace('.', '/'), "BYTES", "[B");
+					installMv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/runtime/Magic", "installBridge", "(Ljava/lang/String;[B)V", false);
+					installMv.visitInsn(Opcodes.RETURN);
+					installMv.visitMaxs(2, 0);
+					installMv.visitEnd();
+
+					MethodVisitor clinitMv = bdw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+					clinitMv.visitCode();
+					clinitMv.visitLdcInsn(new String(bridgeBytes, java.nio.charset.StandardCharsets.ISO_8859_1));
+					clinitMv.visitFieldInsn(Opcodes.GETSTATIC, "java/nio/charset/StandardCharsets", "ISO_8859_1", "Ljava/nio/charset/Charset;");
+					clinitMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "getBytes", "(Ljava/nio/charset/Charset;)[B", false);
+					clinitMv.visitFieldInsn(Opcodes.PUTSTATIC, bridgeDataClassName.replace('.', '/'), "BYTES", "[B");
+
+					clinitMv.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeDataClassName.replace('.', '/'), "install", "()V", false);
+					for (Consumer<MethodVisitor> init : bridgeDataClinitInits) {
+						init.accept(clinitMv);
+					}
+					clinitMv.visitInsn(Opcodes.RETURN);
+					clinitMv.visitMaxs(2, 0);
+					clinitMv.visitEnd();
+				} else {
+					// 未开启 P1: Base64 字符串存储
+					String base64 = Base64.getEncoder().encodeToString(bridgeBytes);
+					bdw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, "BASE64", "Ljava/lang/String;", null, base64).visitEnd();
+
+					MethodVisitor installMv = bdw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "install", "()V", null, null);
+					installMv.visitCode();
+					installMv.visitLdcInsn(bridgeClassName);
+					installMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeDataClassName.replace('.', '/'), "BASE64", "Ljava/lang/String;");
+					installMv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/runtime/Magic", "installBridge", "(Ljava/lang/String;Ljava/lang/String;)V", false);
+					installMv.visitInsn(Opcodes.RETURN);
+					installMv.visitMaxs(2, 0);
+					installMv.visitEnd();
+
+					MethodVisitor clinitMv = bdw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+					clinitMv.visitCode();
+					clinitMv.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeDataClassName.replace('.', '/'), "install", "()V", false);
+					for (Consumer<MethodVisitor> init : bridgeDataClinitInits) {
+						init.accept(clinitMv);
+					}
+					clinitMv.visitInsn(Opcodes.RETURN);
+					clinitMv.visitMaxs(0, 0);
+					clinitMv.visitEnd();
+				}
+
+				bdw.visitEnd();
+				writeClassBytes(mFiler.createClassFile(bridgeDataClassName), bdw.toByteArray());
+			} else if (bridgeDataWriter != null) {
+				ClassWriter bdw = bridgeDataWriter;
+				MethodVisitor clinitMv = bdw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+				clinitMv.visitCode();
+				for (Consumer<MethodVisitor> init : bridgeDataClinitInits) {
+					init.accept(clinitMv);
+				}
+				clinitMv.visitInsn(Opcodes.RETURN);
+				clinitMv.visitMaxs(0, 0);
+				clinitMv.visitEnd();
+
+				bdw.visitEnd();
+				writeClassBytes(mFiler.createClassFile(bridgeDataClassName), bdw.toByteArray());
 			}
-
-			ClassWriter bdw = getOrCreateBridgeDataWriter();
-			bdw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, "BASE64", "Ljava/lang/String;", null, base64).visitEnd();
-
-			MethodVisitor installMv = bdw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "install", "()V", null, null);
-			installMv.visitCode();
-			if (!base64.isEmpty()) {
-				installMv.visitLdcInsn(bridgeClassName);
-				installMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeDataClassName.replace('.', '/'), "BASE64", "Ljava/lang/String;");
-				installMv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/runtime/Magic", "installBridge", "(Ljava/lang/String;Ljava/lang/String;)V", false);
-			}
-			installMv.visitInsn(Opcodes.RETURN);
-			installMv.visitMaxs(2, 0);
-			installMv.visitEnd();
-
-			MethodVisitor clinitMv = bdw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
-			clinitMv.visitCode();
-			clinitMv.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeDataClassName.replace('.', '/'), "install", "()V", false);
-			for (Consumer<MethodVisitor> init : bridgeDataClinitInits) {
-				init.accept(clinitMv);
-			}
-			clinitMv.visitInsn(Opcodes.RETURN);
-			clinitMv.visitMaxs(0, 0);
-			clinitMv.visitEnd();
-
-			bdw.visitEnd();
-
-			writeClassBytes(mFiler.createClassFile(bridgeDataClassName), bdw.toByteArray());
 		} catch (Throwable e) {
 			messager.printMessage(Diagnostic.Kind.ERROR, "生成收敛 MagicBridgeData 失败: " + e.getMessage());
 		}
@@ -488,6 +597,39 @@ public class AccessorProcessor extends BaseAccessorProc {
 	}
 
 	private boolean validateMethodSignature(MethodSymbol methodSymbol, MethodSymbol targetMethod) {
+		boolean isConstructor = targetMethod.isConstructor() || targetMethod.name.toString().equals("<init>");
+		if (isConstructor) {
+			if (!types.isSameType(methodSymbol.getReturnType(), targetMethod.owner.type)) {
+				messager.printMessage(
+					Diagnostic.Kind.ERROR,
+					"构造方法访问器返回类型须为目标类: 期望 " + targetMethod.owner.type + ", 实际 " + methodSymbol.getReturnType(),
+					methodSymbol
+				);
+				return false;
+			}
+			List<VarSymbol> targetParams = targetMethod.getParameters();
+			List<VarSymbol> accessorParams = methodSymbol.params;
+			if (accessorParams.size() != targetParams.size()) {
+				messager.printMessage(
+					Diagnostic.Kind.ERROR,
+					"构造方法访问器参数个数不匹配: 期望 " + targetParams.size() + " 个, 实际 " + accessorParams.size() + " 个",
+					methodSymbol
+				);
+				return false;
+			}
+			for (int i = 0; i < targetParams.size(); i++) {
+				if (!types.isSameType(accessorParams.get(i).type, targetParams.get(i).type)) {
+					messager.printMessage(
+						Diagnostic.Kind.ERROR,
+						"参数 " + (i + 1) + " (" + accessorParams.get(i).name + ") 类型不匹配: 期望 " + targetParams.get(i).type + ", 实际 " + accessorParams.get(i).type,
+						methodSymbol
+					);
+					return false;
+				}
+			}
+			return true;
+		}
+
 		if (!types.isSameType(methodSymbol.getReturnType(), targetMethod.getReturnType())) {
 			messager.printMessage(
 				Diagnostic.Kind.ERROR,
@@ -558,6 +700,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 		HMarkMagic mark = element.owner.getAnnotation(HMarkMagic.class);
 		if (mark != null && mark.mode() != AccessMode.AUTO) {
 			return mark.mode();
+		}
+		if (isTargetAndroid()) {
+			return AccessMode.UNSAFE_AND_METHODHANDLE;
 		}
 		return AccessMode.UNSAFE_AND_LINKTO;
 	}
@@ -643,8 +788,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (!validateMethodSignature(methodSymbol, targetMethod)) return;
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
+		boolean isConstructor = targetMethod.isConstructor() || targetMethod.name.toString().equals("<init>");
 
-		if (targetMethod.isStatic()) {
+		if (targetMethod.isStatic() && !isConstructor) {
 			if (hMethod.isSpecial()) {
 				messager.printMessage(Diagnostic.Kind.ERROR, "静态方法不支持 isSpecial=true", methodSymbol);
 				return;
@@ -652,10 +798,10 @@ public class AccessorProcessor extends BaseAccessorProc {
 		}
 
 		// 方法去重
-		String methodKey = targetClassName + "#" + targetMethod.owner.type + "#" + targetMethod.name + "#" + targetMethod.type + "#" + hMethod.isSpecial();
+		String methodKey = targetClassName + "#" + targetMethod.owner.type + "#" + targetMethod.name + "#" + targetMethod.type + "#" + (isConstructor || hMethod.isSpecial());
 		String genMethodName = legacyMethodMethodMap.get(methodKey);
 		if (genMethodName != null) {
-			rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 			return;
 		}
 
@@ -673,35 +819,50 @@ public class AccessorProcessor extends BaseAccessorProc {
 			null,
 			null
 		);
+		mv.visitCode();
 
-		int slot = 0;
-		for (TypeSymbol typeSymbol : paramsL) {
-			mv.visitVarInsn(loadOpcode(typeSymbol), slot);
-			slot += typeSize(typeSymbol, mSymtab);
-		}
-
-		int opcode;
-		if (targetMethod.isStatic()) {
-			opcode = Opcodes.INVOKESTATIC;
-		} else if (hMethod.isSpecial() || targetMethod.isPrivate() || targetMethod.isConstructor()) {
-			opcode = Opcodes.INVOKESPECIAL;
-		} else if (targetMethod.owner.isInterface()) {
-			opcode = Opcodes.INVOKEINTERFACE;
+		if (isConstructor) {
+			String owner = dotToSlash(targetMethod.owner.type);
+			mv.visitTypeInsn(Opcodes.NEW, owner);
+			mv.visitInsn(Opcodes.DUP);
+			int slot = 0;
+			for (TypeSymbol typeSymbol : paramsL) {
+				mv.visitVarInsn(loadOpcode(typeSymbol), slot);
+				slot += typeSize(typeSymbol, mSymtab);
+			}
+			String ctorDesc = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) + "V";
+			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, owner, "<init>", ctorDesc, false);
+			mv.visitInsn(Opcodes.ARETURN);
 		} else {
-			opcode = Opcodes.INVOKEVIRTUAL;
+			int slot = 0;
+			for (TypeSymbol typeSymbol : paramsL) {
+				mv.visitVarInsn(loadOpcode(typeSymbol), slot);
+				slot += typeSize(typeSymbol, mSymtab);
+			}
+
+			int opcode;
+			if (targetMethod.isStatic()) {
+				opcode = Opcodes.INVOKESTATIC;
+			} else if (hMethod.isSpecial() || targetMethod.isPrivate()) {
+				opcode = Opcodes.INVOKESPECIAL;
+			} else if (targetMethod.owner.isInterface()) {
+				opcode = Opcodes.INVOKEINTERFACE;
+			} else {
+				opcode = Opcodes.INVOKEVIRTUAL;
+			}
+
+			String owner = dotToSlash(targetMethod.owner.type);
+			String name = targetMethod.name.toString();
+			String descriptor = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
+				typeToDescriptor(targetMethod.getReturnType());
+
+			mv.visitMethodInsn(opcode, owner, name, descriptor, opcode == Opcodes.INVOKEINTERFACE);
+			mv.visitInsn(returnOpcode(targetMethod.getReturnType()));
 		}
-
-		String owner = dotToSlash(targetMethod.owner.type);
-		String name = targetMethod.name.toString();
-		String descriptor = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
-			typeToDescriptor(targetMethod.getReturnType());
-
-		mv.visitMethodInsn(opcode, owner, name, descriptor, opcode == Opcodes.INVOKEINTERFACE);
-		mv.visitInsn(returnOpcode(targetMethod.getReturnType()));
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
 
-		rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+		rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 	}
 
 	// ======================== 方案 2: Unsafe 字段访问 (收敛到 MagicBridgeData 并去重字段和方法) ========================
@@ -827,14 +988,18 @@ public class AccessorProcessor extends BaseAccessorProc {
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
 		hasLinkToMethods = true;
 
-		boolean isStatic = targetMethod.isStatic();
-		boolean isPrivate = targetMethod.isPrivate();
+		boolean isConstructor = targetMethod.isConstructor() || targetMethod.name.toString().equals("<init>");
+		boolean isStatic = targetMethod.isStatic() && !isConstructor;
+		boolean isPrivate = targetMethod.isPrivate() || isConstructor;
 		boolean isSpecial = hMethod.isSpecial() || isPrivate;
 		boolean isInterface = targetMethod.owner.isInterface();
 
 		byte refKind;
 		String linkToType;
-		if (isStatic) {
+		if (isConstructor) {
+			refKind = 7;
+			linkToType = "linkToSpecial";
+		} else if (isStatic) {
 			refKind = 6;
 			linkToType = "linkToStatic";
 		} else if (isSpecial) {
@@ -848,8 +1013,29 @@ public class AccessorProcessor extends BaseAccessorProc {
 			linkToType = "linkToVirtual";
 		}
 
+		String targetMethodName = isConstructor ? "<init>" : targetMethod.name.toString();
+		String targetMethodDesc = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
+			(isConstructor ? "V" : typeToDescriptor(targetMethod.getReturnType()));
+
+		String clsFieldName = null;
+		if (isConstructor) {
+			String clsKey = targetMethod.owner.type.tsym.flatName().toString();
+			clsFieldName = bridgeClassFieldMap.get(clsKey);
+			if (clsFieldName == null) {
+				clsFieldName = "CLS_" + (classFieldId++);
+				bridgeWriter.visitField(
+					Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+					clsFieldName,
+					"Ljava/lang/Class;",
+					null,
+					null
+				).visitEnd();
+				bridgeClassFieldMap.put(clsKey, clsFieldName);
+			}
+		}
+
 		// 1. MemberName 字段去重定义在 MagicBridge 内部（强类型 static final MemberName）
-		String mnKey = targetMethod.owner.type.toString() + "#" + targetMethod.name.toString() + "#" + targetMethod.type.toString() + "#" + refKind;
+		String mnKey = targetMethod.owner.type.toString() + "#" + targetMethodName + "#" + targetMethodDesc + "#" + refKind;
 		String mnFieldName = memberNameMap.get(mnKey);
 		if (mnFieldName == null) {
 			int id = mnId++;
@@ -864,14 +1050,11 @@ public class AccessorProcessor extends BaseAccessorProc {
 				null
 			).visitEnd();
 
-			// 收集该 MemberName 记录，统一在 <clinit> 阶段高效解析（每个外部类仅 Class.forName 一次）
-			String targetMethodDesc = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
-				typeToDescriptor(targetMethod.getReturnType());
 			bridgeMemberNameEntries.add(new BridgeMemberNameEntry(
 				mnFieldName,
 				refKind,
 				targetMethod.owner.type,
-				targetMethod.name.toString(),
+				targetMethodName,
 				targetMethodDesc
 			));
 
@@ -881,7 +1064,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		// 2. MagicBridge 访问器方法去重：同目标方法、同调用模式复用同一个桥接方法
 		String genMethodName = linkToMethodMap.get(mnKey);
 		if (genMethodName != null) {
-			rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, true);
 			return;
 		}
 
@@ -901,7 +1084,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 			}
 		}
 		bridgeMethodDesc.append(")");
-		if (methodSymbol.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(methodSymbol.getReturnType().getKind())) {
+		if (isConstructor) {
+			bridgeMethodDesc.append("Ljava/lang/Object;");
+		} else if (methodSymbol.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(methodSymbol.getReturnType().getKind())) {
 			bridgeMethodDesc.append("Ljava/lang/Object;");
 		} else {
 			bridgeMethodDesc.append(typeToDescriptor(methodSymbol.getReturnType()));
@@ -920,43 +1105,83 @@ public class AccessorProcessor extends BaseAccessorProc {
 		bridgeMv.visitAnnotation("Ljava/lang/invoke/LambdaForm$Hidden;", true).visitEnd();
 		bridgeMv.visitCode();
 
-		int slot = 0;
-		for (TypeSymbol typeSymbol : paramsL) {
-			bridgeMv.visitVarInsn(loadOpcode(typeSymbol), slot);
-			slot += typeSize(typeSymbol, mSymtab);
-		}
+		if (isConstructor) {
+			// Constructor: 1. allocateInstance -> 2. DUP -> 3. load params -> 4. linkToSpecial(<init>) -> 5. return instance
+			bridgeMv.visitMethodInsn(Opcodes.INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+			if (isBootstrapType(targetMethod.owner.type)) {
+				bridgeMv.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(targetMethod.owner.type)));
+			} else {
+				bridgeMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeInternalName, clsFieldName, "Ljava/lang/Class;");
+			}
+			bridgeMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+			bridgeMv.visitInsn(Opcodes.DUP);
 
-		// 直接读取 MagicBridge 内部的 static final MemberName 字段（0 checkcast，C2 编译期常量折叠）
-		bridgeMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeInternalName, mnFieldName, "Ljava/lang/invoke/MemberName;");
+			int slot = 0;
+			for (TypeSymbol typeSymbol : paramsL) {
+				bridgeMv.visitVarInsn(loadOpcode(typeSymbol), slot);
+				slot += typeSize(typeSymbol, mSymtab);
+			}
 
-		// 组装 linkToDescriptor
-		StringBuilder linkToDesc = new StringBuilder("(");
-		if (!isStatic) {
-			linkToDesc.append("Ljava/lang/Object;");
-		}
-		for (VarSymbol p : targetMethod.getParameters()) {
-			if (isReferenceKind(p.type.getKind())) {
+			bridgeMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeInternalName, mnFieldName, "Ljava/lang/invoke/MemberName;");
+
+			StringBuilder linkToDesc = new StringBuilder("(Ljava/lang/Object;");
+			for (VarSymbol p : targetMethod.getParameters()) {
+				if (isReferenceKind(p.type.getKind())) {
+					linkToDesc.append("Ljava/lang/Object;");
+				} else {
+					linkToDesc.append(typeToDescriptor(p.type));
+				}
+			}
+			linkToDesc.append("Ljava/lang/invoke/MemberName;)V");
+
+			bridgeMv.visitMethodInsn(
+				Opcodes.INVOKESTATIC,
+				"java/lang/invoke/MethodHandle",
+				"linkToSpecial",
+				linkToDesc.toString(),
+				false
+			);
+
+			bridgeMv.visitInsn(Opcodes.ARETURN);
+		} else {
+			int slot = 0;
+			for (TypeSymbol typeSymbol : paramsL) {
+				bridgeMv.visitVarInsn(loadOpcode(typeSymbol), slot);
+				slot += typeSize(typeSymbol, mSymtab);
+			}
+
+			// 直接读取 MagicBridge 内部的 static final MemberName 字段（0 checkcast，C2 编译期常量折叠）
+			bridgeMv.visitFieldInsn(Opcodes.GETSTATIC, bridgeInternalName, mnFieldName, "Ljava/lang/invoke/MemberName;");
+
+			// 组装 linkToDescriptor
+			StringBuilder linkToDesc = new StringBuilder("(");
+			if (!isStatic) {
+				linkToDesc.append("Ljava/lang/Object;");
+			}
+			for (VarSymbol p : targetMethod.getParameters()) {
+				if (isReferenceKind(p.type.getKind())) {
+					linkToDesc.append("Ljava/lang/Object;");
+				} else {
+					linkToDesc.append(typeToDescriptor(p.type));
+				}
+			}
+			linkToDesc.append("Ljava/lang/invoke/MemberName;)");
+			if (targetMethod.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(targetMethod.getReturnType().getKind())) {
 				linkToDesc.append("Ljava/lang/Object;");
 			} else {
-				linkToDesc.append(typeToDescriptor(p.type));
+				linkToDesc.append(typeToDescriptor(targetMethod.getReturnType()));
 			}
-		}
-		linkToDesc.append("Ljava/lang/invoke/MemberName;)");
-		if (targetMethod.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(targetMethod.getReturnType().getKind())) {
-			linkToDesc.append("Ljava/lang/Object;");
-		} else {
-			linkToDesc.append(typeToDescriptor(targetMethod.getReturnType()));
-		}
 
-		bridgeMv.visitMethodInsn(
-			Opcodes.INVOKESTATIC,
-			"java/lang/invoke/MethodHandle",
-			linkToType,
-			linkToDesc.toString(),
-			false
-		);
+			bridgeMv.visitMethodInsn(
+				Opcodes.INVOKESTATIC,
+				"java/lang/invoke/MethodHandle",
+				linkToType,
+				linkToDesc.toString(),
+				false
+			);
 
-		bridgeMv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
+			bridgeMv.visitInsn(returnOpcode(methodSymbol.getReturnType()));
+		}
 		bridgeMv.visitMaxs(0, 0);
 		bridgeMv.visitEnd();
 
@@ -970,8 +1195,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 		List<Type> bridgeParamTypes = List.from(methodSymbol.params.map(v ->
 			isReferenceKind(v.type.getKind()) ? mSymtab.objectType : v.type
 		));
-		Type bridgeReturnType = (methodSymbol.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(methodSymbol.getReturnType().getKind()))
-			? mSymtab.objectType : methodSymbol.getReturnType();
+		Type bridgeReturnType = isConstructor ? mSymtab.objectType :
+			((methodSymbol.getReturnType().getKind() != TypeKind.VOID && isReferenceKind(methodSymbol.getReturnType().getKind()))
+			? mSymtab.objectType : methodSymbol.getReturnType());
 
 		Type.MethodType mt = new Type.MethodType(
 			bridgeParamTypes,
@@ -988,7 +1214,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		bridgeCs.members_field.enter(ms);
 
 		// 5. 用户类直接调用 MagicBridge.<genMethodName>
-		rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+		rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, true);
 	}
 
 	// ======================== 方案 2B: invokedynamic (indy) 动态调用点 (去重方法) ========================
@@ -1007,18 +1233,20 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
 
-		boolean isStatic = targetMethod.isStatic();
-		boolean isPrivate = targetMethod.isPrivate();
+		boolean isConstructor = targetMethod.isConstructor() || targetMethod.name.toString().equals("<init>");
+		boolean isStatic = targetMethod.isStatic() && !isConstructor;
+		boolean isPrivate = targetMethod.isPrivate() || isConstructor;
 		boolean isSpecial = hMethod.isSpecial() || isPrivate;
 		boolean isInterface = targetMethod.owner.isInterface();
 
-		int flags = (isStatic ? 1 : 0) | (isSpecial ? 2 : 0) | (isInterface ? 4 : 0);
+		int flags = (isStatic ? 1 : 0) | (isSpecial ? 2 : 0) | (isInterface ? 4 : 0) | (isConstructor ? 8 : 0);
+		String targetMethodName = isConstructor ? "<init>" : targetMethod.name.toString();
 
 		// 方法去重
-		String methodKey = targetMethod.owner.type.toString() + "#" + targetMethod.name.toString() + "#" + targetMethod.type.toString() + "#" + flags;
+		String methodKey = targetMethod.owner.type.toString() + "#" + targetMethodName + "#" + targetMethod.type.toString() + "#" + flags;
 		String genMethodName = indyMethodMap.get(methodKey);
 		if (genMethodName != null) {
-			rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 			return;
 		}
 
@@ -1046,12 +1274,13 @@ public class AccessorProcessor extends BaseAccessorProc {
 			false
 		);
 
+		String indyCallName = isConstructor ? "__init__" : targetMethod.name.toString();
 		mv.visitInvokeDynamicInsn(
-			targetMethod.name.toString(),
+			indyCallName,
 			methodDesc,
 			bsmHandle,
 			org.objectweb.asm.Type.getType(typeToDescriptor(targetMethod.owner.type)),
-			targetMethod.name.toString(),
+			indyCallName,
 			flags
 		);
 
@@ -1059,7 +1288,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
 
-		rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+		rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 	}
 
 	// ======================== 方案 2C: MethodHandle.invokeExact (Android ART / 跨平台通用, 去重字段和方法) ========================
@@ -1079,11 +1308,13 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
 
-		boolean isStatic = targetMethod.isStatic();
-		boolean isSpecial = hMethod.isSpecial();
+		boolean isConstructor = targetMethod.isConstructor() || targetMethod.name.toString().equals("<init>");
+		boolean isStatic = targetMethod.isStatic() && !isConstructor;
+		boolean isSpecial = hMethod.isSpecial() || isConstructor;
+		String targetMethodName = isConstructor ? "<init>" : targetMethod.name.toString();
 
 		// 1. MethodHandle 字段去重
-		String mhKey = targetMethod.owner.type.toString() + "#" + targetMethod.name.toString() + "#" + targetMethod.type.toString() + "#" + isStatic + "#" + isSpecial;
+		String mhKey = targetMethod.owner.type.toString() + "#" + targetMethodName + "#" + targetMethod.type.toString() + "#" + isStatic + "#" + isSpecial;
 		String mhFieldName = methodHandleMap.get(mhKey);
 		if (mhFieldName == null) {
 			int id = mhId++;
@@ -1096,8 +1327,8 @@ public class AccessorProcessor extends BaseAccessorProc {
 			String finalMhFieldName = mhFieldName;
 			clinitList.add(mv -> {
 				pushClass(mv, targetMethod.owner.type);
-				mv.visitLdcInsn(targetMethod.name.toString());
-				pushClass(mv, targetMethod.getReturnType());
+				mv.visitLdcInsn(targetMethodName);
+				pushClass(mv, isConstructor ? targetMethod.owner.type : targetMethod.getReturnType());
 
 				List<VarSymbol> params = targetMethod.getParameters();
 				mv.visitIntInsn(Opcodes.BIPUSH, params.size());
@@ -1128,7 +1359,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		// 2. 访问器方法去重
 		String genMethodName = methodHandleMethodMap.get(mhKey);
 		if (genMethodName != null) {
-			rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 			return;
 		}
 
@@ -1166,7 +1397,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
 
-		rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+		rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 	}
 
 	private void rewriteMethodBody(JCMethodDecl methodDecl, String genClassName, String genMethodName, boolean hasReturn) {
@@ -1215,6 +1446,17 @@ public class AccessorProcessor extends BaseAccessorProc {
 		}
 
 		return null;
+	}
+
+	private void pushClassForBootstrap(MethodVisitor mv, com.sun.tools.javac.code.Type type) {
+		if (isBootstrapType(type)) {
+			mv.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(type)));
+		} else {
+			mv.visitLdcInsn(type.tsym.flatName().toString());
+			mv.visitInsn(Opcodes.ICONST_1);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
+		}
 	}
 
 	private void pushClass(MethodVisitor mv, com.sun.tools.javac.code.Type type) {

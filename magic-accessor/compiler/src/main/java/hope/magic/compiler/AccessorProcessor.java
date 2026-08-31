@@ -14,7 +14,6 @@ import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
-import com.sun.tools.javac.tree.JCTree.JCMethodInvocation;
 import com.sun.tools.javac.util.List;
 import hope.magic.annotation.AccessMode;
 import hope.magic.annotation.HField;
@@ -42,7 +41,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -69,14 +67,35 @@ public class AccessorProcessor extends BaseAccessorProc {
 	private ClassWriter bridgeDataWriter;
 	private ClassWriter bridgeWriter;
 	private final java.util.List<Consumer<MethodVisitor>> bridgeDataClinitInits = new ArrayList<>();
-	private final java.util.List<Consumer<MethodVisitor>> bridgeClinitInits = new ArrayList<>();
 
-	// 字段 / MemberName / MethodHandle 静态常量字段去重映射表
+	// MagicBridge MemberName 记录，用于在 <clinit> 中批量极速解析并去重外部类加载
+	public record BridgeMemberNameEntry(
+		String fieldName,
+		byte refKind,
+		Type ownerType,
+		String methodName,
+		String methodDesc
+	) {}
+	private final java.util.List<BridgeMemberNameEntry> bridgeMemberNameEntries = new ArrayList<>();
+
+	// 字段 / MemberName / MethodHandle 静态常量字段及生成方法去重映射表
 	public record FieldOffsetRecord(String offsetFieldName, String baseFieldName) {}
 	private final Map<String, FieldOffsetRecord> fieldOffsetMap = new LinkedHashMap<>();
+	private final Map<String, String> fieldMethodMap = new LinkedHashMap<>();
+
 	private final Map<String, String> memberNameMap = new LinkedHashMap<>();
+	private final Map<String, String> linkToMethodMap = new LinkedHashMap<>();
+
 	private final Map<String, String> methodHandleMap = new LinkedHashMap<>();
+	private final Map<String, String> methodHandleMethodMap = new LinkedHashMap<>();
+
+	private final Map<String, String> indyMethodMap = new LinkedHashMap<>();
+
+	private final Map<String, String> legacyFieldMethodMap = new LinkedHashMap<>();
+	private final Map<String, String> legacyMethodMethodMap = new LinkedHashMap<>();
+
 	private final Set<Symbol> installedClasses = new HashSet<>();
+	private final Set<Symbol> legacyInstalledClasses = new HashSet<>();
 
 	private int fieldId = 0;
 	private int mnId = 0;
@@ -153,11 +172,18 @@ public class AccessorProcessor extends BaseAccessorProc {
 			bridgeDataWriter = null;
 			bridgeWriter = null;
 			bridgeDataClinitInits.clear();
-			bridgeClinitInits.clear();
+			bridgeMemberNameEntries.clear();
 			fieldOffsetMap.clear();
+			fieldMethodMap.clear();
 			memberNameMap.clear();
+			linkToMethodMap.clear();
 			methodHandleMap.clear();
+			methodHandleMethodMap.clear();
+			indyMethodMap.clear();
+			legacyFieldMethodMap.clear();
+			legacyMethodMethodMap.clear();
 			installedClasses.clear();
+			legacyInstalledClasses.clear();
 			hasLinkToMethods = false;
 		}
 
@@ -246,13 +272,107 @@ public class AccessorProcessor extends BaseAccessorProc {
 		try {
 			String base64 = "";
 			if (bridgeWriter != null) {
-				// 生成 MagicBridge 内部的原生 <clinit>
-				if (!bridgeClinitInits.isEmpty()) {
+				// 生成 MagicBridge 内部的原生 <clinit>：集中且唯一加载外部类，复用 ClassLoader 与 Factory
+				if (!bridgeMemberNameEntries.isEmpty()) {
 					MethodVisitor bridgeClinit = bridgeWriter.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
 					bridgeClinit.visitCode();
-					for (Consumer<MethodVisitor> init : bridgeClinitInits) {
-						init.accept(bridgeClinit);
+
+					// 1. 槽位 0: 获取系统类加载器 ClassLoader.getSystemClassLoader() (全局仅 1 次)
+					bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
+					bridgeClinit.visitVarInsn(Opcodes.ASTORE, 0);
+
+					// 2. 槽位 1: 获取 Factory 单例 MemberName.getFactory() (全局仅 1 次)
+					bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
+					bridgeClinit.visitVarInsn(Opcodes.ASTORE, 1);
+
+					// 3. 收集所有外部类并分配局部变量槽位，每个外部类只调用 1 次 Class.forName
+					Map<String, Integer> externalClassSlotMap = new LinkedHashMap<>();
+					int nextSlot = 2;
+					for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
+						if (!isBootstrapType(entry.ownerType)) {
+							String flatName = entry.ownerType.tsym.flatName().toString();
+							if (!externalClassSlotMap.containsKey(flatName)) {
+								int slot = nextSlot++;
+								externalClassSlotMap.put(flatName, slot);
+
+								bridgeClinit.visitLdcInsn(flatName);
+								bridgeClinit.visitInsn(Opcodes.ICONST_1);
+								bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
+								bridgeClinit.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
+								bridgeClinit.visitVarInsn(Opcodes.ASTORE, slot);
+							}
+						}
 					}
+
+					// 4. 批量执行 MemberName 原生 resolveOrFail 解析
+					for (BridgeMemberNameEntry entry : bridgeMemberNameEntries) {
+						// 参数 0 (this of Factory): ALOAD 1
+						bridgeClinit.visitVarInsn(Opcodes.ALOAD, 1);
+
+						// 参数 1: byte refKind
+						bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
+
+						// 参数 2: new MemberName(...)
+						bridgeClinit.visitTypeInsn(Opcodes.NEW, "java/lang/invoke/MemberName");
+						bridgeClinit.visitInsn(Opcodes.DUP);
+
+						// defClass: 系统类直接 LDC Class，外部类从局部变量槽位 ALOAD (0 冗余反射)
+						if (isBootstrapType(entry.ownerType)) {
+							bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(entry.ownerType)));
+						} else {
+							String flatName = entry.ownerType.tsym.flatName().toString();
+							int slot = externalClassSlotMap.get(flatName);
+							bridgeClinit.visitVarInsn(Opcodes.ALOAD, slot);
+						}
+
+						// name
+						bridgeClinit.visitLdcInsn(entry.methodName);
+
+						// MethodType: MethodType.fromMethodDescriptorString(desc, cl)
+						bridgeClinit.visitLdcInsn(entry.methodDesc);
+						bridgeClinit.visitVarInsn(Opcodes.ALOAD, 0); // ClassLoader
+						bridgeClinit.visitMethodInsn(
+							Opcodes.INVOKESTATIC,
+							"java/lang/invoke/MethodType",
+							"fromMethodDescriptorString",
+							"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;",
+							false
+						);
+
+						// refKind
+						bridgeClinit.visitIntInsn(Opcodes.BIPUSH, entry.refKind);
+
+						// MemberName.<init>
+						bridgeClinit.visitMethodInsn(
+							Opcodes.INVOKESPECIAL,
+							"java/lang/invoke/MemberName",
+							"<init>",
+							"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V",
+							false
+						);
+
+						// 参数 3: lookupClass = null
+						bridgeClinit.visitInsn(Opcodes.ACONST_NULL);
+
+						// 参数 4: allowedModes = -1 (LM_TRUSTED)
+						bridgeClinit.visitInsn(Opcodes.ICONST_M1);
+
+						// 参数 5: nsmClass = NoSuchMethodException.class
+						bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType("Ljava/lang/NoSuchMethodException;"));
+
+						// 调用 resolveOrFail
+						bridgeClinit.visitMethodInsn(
+							Opcodes.INVOKEVIRTUAL,
+							"java/lang/invoke/MemberName$Factory",
+							"resolveOrFail",
+							"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;",
+							false
+						);
+
+						// 赋值给 static final 字段
+						bridgeClinit.visitFieldInsn(Opcodes.PUTSTATIC, bridgeInternalName, entry.fieldName, "Ljava/lang/invoke/MemberName;");
+					}
+
 					bridgeClinit.visitInsn(Opcodes.RETURN);
 					bridgeClinit.visitMaxs(0, 0);
 					bridgeClinit.visitEnd();
@@ -322,7 +442,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 				ClassWriter bw = getOrCreateBridgeWriter();
 				getOrCreateBridgeDataWriter(); // 保证生成 MagicBridgeData 基础设施
 				injectClassClinitInstall(element.owner);
-				processMethodLinkToBridge(element, hMethod, bw, bridgeClinitInits);
+				processMethodLinkToBridge(element, hMethod, bw);
 			} else {
 				ClassWriter cw = getOrCreateBridgeDataWriter();
 				if (mode == AccessMode.UNSAFE_AND_METHODHANDLE) {
@@ -335,7 +455,6 @@ public class AccessorProcessor extends BaseAccessorProc {
 		}
 	}
 
-	private final Set<Symbol> legacyInstalledClasses = new HashSet<>();
 	private void injectLegacyClinitInstall(Symbol owner) {
 		if (legacyInstalledClasses.add(owner)) {
 			JCClassDecl classDecl = (JCClassDecl) trees.getTree(owner);
@@ -464,11 +583,21 @@ public class AccessorProcessor extends BaseAccessorProc {
 			return;
 		}
 
+		// 方法去重
+		String methodKey = targetClassName + "#" + target.owner.type + "#" + target.name + "#" + isGetter + "#" + isStatic;
+		String genMethodName = legacyFieldMethodMap.get(methodKey);
+		if (genMethodName != null) {
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, isGetter);
+			return;
+		}
+
+		genMethodName = "x" + (methodId++);
+		legacyFieldMethodMap.put(methodKey, genMethodName);
+
 		String methodDesc = '(' +
 			(isStatic ? "" : typeToDescriptor(target.owner.type)) +
 			(isGetter ? ")" + typeToDescriptor(target.type) : typeToDescriptor(target.type) + ")V");
 
-		String genMethodName = "x" + (methodId++);
 		MethodVisitor mv = classWriter.visitMethod(
 			Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC,
 			genMethodName,
@@ -514,7 +643,6 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (!validateMethodSignature(methodSymbol, targetMethod)) return;
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
-		String genMethodName = "x" + (methodId++);
 
 		if (targetMethod.isStatic()) {
 			if (hMethod.isSpecial()) {
@@ -522,6 +650,17 @@ public class AccessorProcessor extends BaseAccessorProc {
 				return;
 			}
 		}
+
+		// 方法去重
+		String methodKey = targetClassName + "#" + targetMethod.owner.type + "#" + targetMethod.name + "#" + targetMethod.type + "#" + hMethod.isSpecial();
+		String genMethodName = legacyMethodMethodMap.get(methodKey);
+		if (genMethodName != null) {
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			return;
+		}
+
+		genMethodName = "x" + (methodId++);
+		legacyMethodMethodMap.put(methodKey, genMethodName);
 
 		List<TypeSymbol> paramsL = methodSymbol.params.map(v -> v.type.tsym);
 		String methodDesc = paramsL.stream().map(v -> typeToDescriptor(v.type)).collect(Collectors.joining("", "(", ")")) +
@@ -565,7 +704,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
 	}
 
-	// ======================== 方案 2: Unsafe 字段访问 (收敛到 MagicBridgeData 并去重) ========================
+	// ======================== 方案 2: Unsafe 字段访问 (收敛到 MagicBridgeData 并去重字段和方法) ========================
 
 	private void processFieldUnsafe(
 		MethodSymbol methodSymbol,
@@ -587,9 +726,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 			return;
 		}
 
-		String genMethodName = "x" + (methodId++);
-
-		// 字段 Offset / Base 去重：同类、同名、同静态属性的字段共享同一个静态常量字段
+		// 1. 字段 Offset / Base 去重：同类、同名、同静态属性的字段共享同一个静态常量字段
 		String fieldKey = target.owner.type.toString() + "#" + target.name.toString() + "#" + isStatic;
 		FieldOffsetRecord record = fieldOffsetMap.get(fieldKey);
 		if (record == null) {
@@ -597,13 +734,13 @@ public class AccessorProcessor extends BaseAccessorProc {
 			String offsetFieldName = "OFF_" + id;
 			String baseFieldName = isStatic ? "BASE_" + id : null;
 
-			// 1. 添加静态常量字段 (static final)
+			// 添加静态常量字段 (static final)
 			classWriter.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, offsetFieldName, "J", null, null).visitEnd();
 			if (isStatic) {
 				classWriter.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, baseFieldName, "Ljava/lang/Object;", null, null).visitEnd();
 			}
 
-			// 2. 注册 <clinit> 初始化
+			// 注册 <clinit> 初始化
 			clinitList.add(mv -> {
 				pushClass(mv, target.owner.type);
 				mv.visitLdcInsn(target.name.toString());
@@ -624,6 +761,17 @@ public class AccessorProcessor extends BaseAccessorProc {
 			record = new FieldOffsetRecord(offsetFieldName, baseFieldName);
 			fieldOffsetMap.put(fieldKey, record);
 		}
+
+		// 2. 访问器方法去重：同目标字段、同Getter/Setter共享同一个生成方法
+		String methodKey = target.owner.type.toString() + "#" + target.name.toString() + "#" + isGetter + "#" + isStatic;
+		String genMethodName = fieldMethodMap.get(methodKey);
+		if (genMethodName != null) {
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, isGetter);
+			return;
+		}
+
+		genMethodName = "x" + (methodId++);
+		fieldMethodMap.put(methodKey, genMethodName);
 
 		// 3. 生成访问器方法
 		String methodDesc = '(' +
@@ -668,8 +816,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 	private void processMethodLinkToBridge(
 		MethodSymbol methodSymbol,
 		HMethod hMethod,
-		ClassWriter bridgeWriter,
-		java.util.List<Consumer<MethodVisitor>> bridgeClinitList
+		ClassWriter bridgeWriter
 	) {
 		DocReference reference = getSeeReference(HMethod.class, methodSymbol, ElementKind.METHOD, ElementKind.CONSTRUCTOR);
 		if (reference == null) return;
@@ -678,7 +825,6 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (!validateMethodSignature(methodSymbol, targetMethod)) return;
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
-		String genMethodName = "x" + (methodId++);
 		hasLinkToMethods = true;
 
 		boolean isStatic = targetMethod.isStatic();
@@ -718,82 +864,31 @@ public class AccessorProcessor extends BaseAccessorProc {
 				null
 			).visitEnd();
 
-			// 在 MagicBridge <clinit> 中直接使用 MemberName.getFactory().resolveOrFail 内部原生解析
-			String finalMnFieldName = mnFieldName;
-			bridgeClinitList.add(mv -> {
-				// 获取 Factory 单例: MemberName.getFactory()
-				mv.visitMethodInsn(
-					Opcodes.INVOKESTATIC,
-					"java/lang/invoke/MemberName",
-					"getFactory",
-					"()Ljava/lang/invoke/MemberName$Factory;",
-					false
-				);
-
-				// 参数 1: byte refKind
-				mv.visitIntInsn(Opcodes.BIPUSH, refKind);
-
-				// 参数 2: new MemberName(Class defClass, String name, MethodType type, byte refKind)
-				mv.visitTypeInsn(Opcodes.NEW, "java/lang/invoke/MemberName");
-				mv.visitInsn(Opcodes.DUP);
-
-				// defClass (通过 ClassLoader.getSystemClassLoader 动态加载，避免常量池中生成未解析 Class 符号)
-				pushClassForBootstrap(mv, targetMethod.owner.type);
-
-				// name
-				mv.visitLdcInsn(targetMethod.name.toString());
-
-				// MethodType.fromMethodDescriptorString(desc, ClassLoader.getSystemClassLoader())
-				String targetMethodDesc = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
-					typeToDescriptor(targetMethod.getReturnType());
-				mv.visitLdcInsn(targetMethodDesc);
-				mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
-				mv.visitMethodInsn(
-					Opcodes.INVOKESTATIC,
-					"java/lang/invoke/MethodType",
-					"fromMethodDescriptorString",
-					"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;",
-					false
-				);
-
-				// refKind
-				mv.visitIntInsn(Opcodes.BIPUSH, refKind);
-
-				// 调用 MemberName 构造器
-				mv.visitMethodInsn(
-					Opcodes.INVOKESPECIAL,
-					"java/lang/invoke/MemberName",
-					"<init>",
-					"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V",
-					false
-				);
-
-				// 参数 3: lookupClass = null
-				mv.visitInsn(Opcodes.ACONST_NULL);
-
-				// 参数 4: allowedModes = -1 (LM_TRUSTED)
-				mv.visitInsn(Opcodes.ICONST_M1);
-
-				// 参数 5: nsmClass = NoSuchMethodException.class
-				mv.visitLdcInsn(org.objectweb.asm.Type.getType("Ljava/lang/NoSuchMethodException;"));
-
-				// 调用 resolveOrFail: Factory.resolveOrFail(byte, MemberName, Class, int, Class)
-				mv.visitMethodInsn(
-					Opcodes.INVOKEVIRTUAL,
-					"java/lang/invoke/MemberName$Factory",
-					"resolveOrFail",
-					"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;",
-					false
-				);
-
-				// 赋值给 static final 字段
-				mv.visitFieldInsn(Opcodes.PUTSTATIC, bridgeInternalName, finalMnFieldName, "Ljava/lang/invoke/MemberName;");
-			});
+			// 收集该 MemberName 记录，统一在 <clinit> 阶段高效解析（每个外部类仅 Class.forName 一次）
+			String targetMethodDesc = targetMethod.getParameters().stream().map(p -> typeToDescriptor(p.type)).collect(Collectors.joining("", "(", ")")) +
+				typeToDescriptor(targetMethod.getReturnType());
+			bridgeMemberNameEntries.add(new BridgeMemberNameEntry(
+				mnFieldName,
+				refKind,
+				targetMethod.owner.type,
+				targetMethod.name.toString(),
+				targetMethodDesc
+			));
 
 			memberNameMap.put(mnKey, mnFieldName);
 		}
 
-		// 2. 在 MagicBridge 内部生成原生直调方法 (带 @ForceInline 和 @Hidden)
+		// 2. MagicBridge 访问器方法去重：同目标方法、同调用模式复用同一个桥接方法
+		String genMethodName = linkToMethodMap.get(mnKey);
+		if (genMethodName != null) {
+			rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			return;
+		}
+
+		genMethodName = "x" + (methodId++);
+		linkToMethodMap.put(mnKey, genMethodName);
+
+		// 3. 在 MagicBridge 内部生成原生直调方法 (带 @ForceInline 和 @Hidden)
 		List<TypeSymbol> paramsL = methodSymbol.params.map(v -> v.type.tsym);
 
 		// 在 Bootstrap ClassLoader 中，对象参数统一擦除为 Object 以免 ClassNotFound
@@ -865,7 +960,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		bridgeMv.visitMaxs(0, 0);
 		bridgeMv.visitEnd();
 
-		// 3. 在 Javac 符号表中声明 MagicBridge 的对应方法（所有引用类型擦除为 Object，与 Bootstrap 字节码严格对齐）
+		// 4. 在 Javac 符号表中声明 MagicBridge 的对应方法（所有引用类型擦除为 Object，与 Bootstrap 字节码严格对齐）
 		Symbol.ClassSymbol bridgeCs = classSymbol(bridgeClassName);
 		if (bridgeCs.members_field == null) {
 			bridgeCs.members_field = WriteableScope.create(bridgeCs);
@@ -892,11 +987,11 @@ public class AccessorProcessor extends BaseAccessorProc {
 		);
 		bridgeCs.members_field.enter(ms);
 
-		// 4. 用户类直接调用 MagicBridge.<genMethodName>
+		// 5. 用户类直接调用 MagicBridge.<genMethodName>
 		rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
 	}
 
-	// ======================== 方案 2B: invokedynamic (indy) 动态调用点 ========================
+	// ======================== 方案 2B: invokedynamic (indy) 动态调用点 (去重方法) ========================
 
 	private void processMethodIndy(
 		MethodSymbol methodSymbol,
@@ -911,7 +1006,6 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (!validateMethodSignature(methodSymbol, targetMethod)) return;
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
-		String genMethodName = "x" + (methodId++);
 
 		boolean isStatic = targetMethod.isStatic();
 		boolean isPrivate = targetMethod.isPrivate();
@@ -919,6 +1013,17 @@ public class AccessorProcessor extends BaseAccessorProc {
 		boolean isInterface = targetMethod.owner.isInterface();
 
 		int flags = (isStatic ? 1 : 0) | (isSpecial ? 2 : 0) | (isInterface ? 4 : 0);
+
+		// 方法去重
+		String methodKey = targetMethod.owner.type.toString() + "#" + targetMethod.name.toString() + "#" + targetMethod.type.toString() + "#" + flags;
+		String genMethodName = indyMethodMap.get(methodKey);
+		if (genMethodName != null) {
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			return;
+		}
+
+		genMethodName = "x" + (methodId++);
+		indyMethodMap.put(methodKey, genMethodName);
 
 		List<TypeSymbol> paramsL = methodSymbol.params.map(v -> v.type.tsym);
 		String methodDesc = paramsL.stream().map(v -> typeToDescriptor(v.type)).collect(Collectors.joining("", "(", ")")) +
@@ -957,7 +1062,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
 	}
 
-	// ======================== 方案 2C: MethodHandle.invokeExact (Android ART / 跨平台通用, MethodHandle 去重) ========================
+	// ======================== 方案 2C: MethodHandle.invokeExact (Android ART / 跨平台通用, 去重字段和方法) ========================
 
 	private void processMethodHandle(
 		MethodSymbol methodSymbol,
@@ -973,22 +1078,21 @@ public class AccessorProcessor extends BaseAccessorProc {
 		if (!validateMethodSignature(methodSymbol, targetMethod)) return;
 
 		JCMethodDecl methodDecl = trees.getTree(methodSymbol);
-		String genMethodName = "x" + (methodId++);
 
 		boolean isStatic = targetMethod.isStatic();
 		boolean isSpecial = hMethod.isSpecial();
 
-		// MethodHandle 去重
+		// 1. MethodHandle 字段去重
 		String mhKey = targetMethod.owner.type.toString() + "#" + targetMethod.name.toString() + "#" + targetMethod.type.toString() + "#" + isStatic + "#" + isSpecial;
 		String mhFieldName = methodHandleMap.get(mhKey);
 		if (mhFieldName == null) {
 			int id = mhId++;
 			mhFieldName = "MH_" + id;
 
-			// 1. 添加静态 MethodHandle 字段
+			// 添加静态 MethodHandle 字段
 			classWriter.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, mhFieldName, "Ljava/lang/invoke/MethodHandle;", null, null).visitEnd();
 
-			// 2. 注册 <clinit> 初始化 MethodHandle
+			// 注册 <clinit> 初始化 MethodHandle
 			String finalMhFieldName = mhFieldName;
 			clinitList.add(mv -> {
 				pushClass(mv, targetMethod.owner.type);
@@ -1020,6 +1124,16 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 			methodHandleMap.put(mhKey, mhFieldName);
 		}
+
+		// 2. 访问器方法去重
+		String genMethodName = methodHandleMethodMap.get(mhKey);
+		if (genMethodName != null) {
+			rewriteMethodBody(methodDecl, targetClassName, genMethodName, methodDecl.getReturnType().type.getKind() != TypeKind.VOID);
+			return;
+		}
+
+		genMethodName = "x" + (methodId++);
+		methodHandleMethodMap.put(mhKey, genMethodName);
 
 		// 3. 生成基于 invokeExact 的方法调用
 		List<TypeSymbol> paramsL = methodSymbol.params.map(v -> v.type.tsym);
@@ -1115,32 +1229,6 @@ public class AccessorProcessor extends BaseAccessorProc {
 			case DOUBLE -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Double", "TYPE", "Ljava/lang/Class;");
 			case VOID -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Void", "TYPE", "Ljava/lang/Class;");
 			default -> mv.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(type)));
-		}
-	}
-
-	private void pushClassForBootstrap(MethodVisitor mv, com.sun.tools.javac.code.Type type) {
-		switch (type.getKind()) {
-			case BOOLEAN -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Boolean", "TYPE", "Ljava/lang/Class;");
-			case BYTE -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Byte", "TYPE", "Ljava/lang/Class;");
-			case CHAR -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Character", "TYPE", "Ljava/lang/Class;");
-			case SHORT -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Short", "TYPE", "Ljava/lang/Class;");
-			case INT -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Integer", "TYPE", "Ljava/lang/Class;");
-			case LONG -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Long", "TYPE", "Ljava/lang/Class;");
-			case FLOAT -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Float", "TYPE", "Ljava/lang/Class;");
-			case DOUBLE -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Double", "TYPE", "Ljava/lang/Class;");
-			case VOID -> mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Void", "TYPE", "Ljava/lang/Class;");
-			default -> {
-				if (isBootstrapType(type)) {
-					// Bootstrap ClassLoader 本身持有的类（如 java.*, javax.*, sun.*, jdk.* 等系统类），直接使用 LDC class 字节码指令极速直载
-					mv.visitLdcInsn(org.objectweb.asm.Type.getType(typeToDescriptor(type)));
-				} else {
-					// 应用自定义类，通过 Class.forName 借助 AppClassLoader 动态加载，避免在 Bootstrap 常量池中产生未解析符号导致 NoClassDefFoundError
-					mv.visitLdcInsn(type.tsym.flatName().toString());
-					mv.visitInsn(Opcodes.ICONST_1);
-					mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
-					mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
-				}
-			}
 		}
 	}
 

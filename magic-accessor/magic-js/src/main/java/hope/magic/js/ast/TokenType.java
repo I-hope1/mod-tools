@@ -2,12 +2,13 @@ package hope.magic.js.ast;
 
 public enum TokenType {
 	// 关键字
-	VAR, LET, CONST, FUNCTION, RETURN, IF, ELSE, WHILE, FOR, NEW, THIS,
+	VAR, LET, CONST, FUNCTION, RETURN, IF, ELSE, WHILE, FOR, OF, IN, NEW, THIS,
 	BREAK, CONTINUE,
+	TYPEOF, VOID, DELETE, THROW, TRY, CATCH, FINALLY, DO, SWITCH, CASE, DEFAULT,
 	TRUE, FALSE, NULL, UNDEFINED,
 
 	// 字面量与标识符
-	NUMBER, STRING, IDENTIFIER,
+	NUMBER, STRING, REGEXP, IDENTIFIER,
 
 	// 算术与位运算符
 	PLUS,           // +
@@ -39,7 +40,9 @@ public enum TokenType {
 	SLASH_ASSIGN,   // /=
 
 	// 分隔符与标点
+	ARROW,          // =>
 	DOT,            // .
+	ELLIPSIS,       // ...
 	COMMA,          // ,
 	COLON,          // :
 	SEMICOLON,      // ;

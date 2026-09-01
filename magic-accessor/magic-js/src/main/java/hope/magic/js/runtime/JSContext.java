@@ -21,20 +21,28 @@ public class JSContext {
 		return GLOBAL_SLOT_REGISTRY.computeIfAbsent(name, k -> NEXT_GLOBAL_SLOT.getAndIncrement());
 	}
 
-	public Object[] globalSlots = new Object[64];
-	private final Map<String, Object> globals = new HashMap<>();
+	private static final Object NULL_VALUE = new Object();
+
+	public volatile Object[] globalSlots = new Object[64];
+	private final ConcurrentHashMap<String, Object> globals = new ConcurrentHashMap<>();
 
 	public JSContext() {
 		initStandardGlobals();
 	}
 
-	private void ensureGlobalSlotCapacity(int slot) {
+	private synchronized void ensureGlobalSlotCapacity(int slot) {
 		if (slot >= globalSlots.length) {
 			globalSlots = Arrays.copyOf(globalSlots, Math.max(globalSlots.length * 2, slot + 1));
 		}
 	}
 
 	private void initStandardGlobals() {
+		// 标准全局变量
+		set("NaN", Double.NaN);
+		set("Infinity", Double.POSITIVE_INFINITY);
+		set("undefined", JSUndefined.INSTANCE);
+		set("JSOps", JSOps.class);
+
 		// print / console.log
 		set("print", (JSFunction) (cx, thisObj, args) -> {
 			StringBuilder sb = new StringBuilder();
@@ -61,6 +69,26 @@ public class JSContext {
 		math.put("floor", (JSFunction) (cx, thisObj, args) -> Math.floor(JSOps.toDouble(args[0])));
 		math.put("ceil", (JSFunction) (cx, thisObj, args) -> Math.ceil(JSOps.toDouble(args[0])));
 		math.put("round", (JSFunction) (cx, thisObj, args) -> (double) Math.round(JSOps.toDouble(args[0])));
+		math.put("sin", (JSFunction) (cx, thisObj, args) -> Math.sin(JSOps.toDouble(args[0])));
+		math.put("cos", (JSFunction) (cx, thisObj, args) -> Math.cos(JSOps.toDouble(args[0])));
+		math.put("tan", (JSFunction) (cx, thisObj, args) -> Math.tan(JSOps.toDouble(args[0])));
+		math.put("asin", (JSFunction) (cx, thisObj, args) -> Math.asin(JSOps.toDouble(args[0])));
+		math.put("acos", (JSFunction) (cx, thisObj, args) -> Math.acos(JSOps.toDouble(args[0])));
+		math.put("atan", (JSFunction) (cx, thisObj, args) -> Math.atan(JSOps.toDouble(args[0])));
+		math.put("atan2", (JSFunction) (cx, thisObj, args) -> Math.atan2(JSOps.toDouble(args[0]), JSOps.toDouble(args[1])));
+		math.put("pow", (JSFunction) (cx, thisObj, args) -> Math.pow(JSOps.toDouble(args[0]), JSOps.toDouble(args[1])));
+		math.put("random", (JSFunction) (cx, thisObj, args) -> Math.random());
+		math.put("log", (JSFunction) (cx, thisObj, args) -> Math.log(JSOps.toDouble(args[0])));
+		math.put("exp", (JSFunction) (cx, thisObj, args) -> Math.exp(JSOps.toDouble(args[0])));
+		math.put("sign", (JSFunction) (cx, thisObj, args) -> Math.signum(JSOps.toDouble(args[0])));
+		math.put("trunc", (JSFunction) (cx, thisObj, args) -> {
+			double d = JSOps.toDouble(args[0]);
+			return d < 0 ? Math.ceil(d) : Math.floor(d);
+		});
+		math.put("cbrt", (JSFunction) (cx, thisObj, args) -> Math.cbrt(JSOps.toDouble(args[0])));
+		math.put("hypot", (JSFunction) (cx, thisObj, args) -> Math.hypot(JSOps.toDouble(args[0]), JSOps.toDouble(args[1])));
+		math.put("log10", (JSFunction) (cx, thisObj, args) -> Math.log10(JSOps.toDouble(args[0])));
+		math.put("log2", (JSFunction) (cx, thisObj, args) -> Math.log(JSOps.toDouble(args[0])) / 0.6931471805599453);
 		set("Math", math);
 
 		// importClass
@@ -92,31 +120,44 @@ public class JSContext {
 				}
 			}
 		});
+
+		// RegExp 构造函数
+		JSFunction regExpCtor = (cx, thisObj, args) -> {
+			if (args.length == 0) return new JSRegExp("", "");
+			if (args[0] instanceof JSRegExp oldReg) {
+				String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : oldReg.getFlags();
+				return new JSRegExp(oldReg.getPattern(), flags);
+			}
+			String pat = JSOps.toStr(args[0]);
+			String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : "";
+			return new JSRegExp(pat, flags);
+		};
+		set("RegExp", regExpCtor);
 	}
 
-	public void set(String name, Object value) {
-		globals.put(name, value);
+	public synchronized void set(String name, Object value) {
+		globals.put(name, value == null ? NULL_VALUE : value);
 		int slot = getGlobalSlot(name);
 		ensureGlobalSlotCapacity(slot);
-		globalSlots[slot] = value;
+		globalSlots[slot] = value == null ? NULL_VALUE : value;
 	}
 
 	public Object get(String name) {
 		int slot = GLOBAL_SLOT_REGISTRY.getOrDefault(name, -1);
-		if (slot >= 0 && slot < globalSlots.length) {
-			Object val = globalSlots[slot];
+		Object[] slots = this.globalSlots;
+		if (slot >= 0 && slot < slots.length) {
+			Object val = slots[slot];
+			if (val == NULL_VALUE) return null;
 			if (val != null) return val;
 		}
 		Object val = globals.get(name);
 		if (val != null) {
+			if (val == NULL_VALUE) return null;
 			if (slot >= 0) {
 				ensureGlobalSlotCapacity(slot);
 				globalSlots[slot] = val;
 			}
 			return val;
-		}
-		if (globals.containsKey(name)) {
-			return null;
 		}
 		if (Character.isUpperCase(name.charAt(0))) {
 			try {
@@ -134,18 +175,18 @@ public class JSContext {
 	}
 
 	public final Object getSlot(int slot) {
-		if (slot < globalSlots.length) {
-			Object val = globalSlots[slot];
+		Object[] slots = this.globalSlots;
+		if (slot < slots.length) {
+			Object val = slots[slot];
+			if (val == NULL_VALUE) return null;
 			if (val != null) return val;
 		}
 		return JSUndefined.INSTANCE;
 	}
 
-	public final void setSlot(int slot, Object value) {
-		if (slot >= globalSlots.length) {
-			ensureGlobalSlotCapacity(slot);
-		}
-		globalSlots[slot] = value;
+	public synchronized final void setSlot(int slot, Object value) {
+		ensureGlobalSlotCapacity(slot);
+		globalSlots[slot] = value == null ? NULL_VALUE : value;
 	}
 
 	public Map<String, Object> getGlobals() {

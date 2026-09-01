@@ -5,6 +5,7 @@ import hope.magic.js.ast.Token;
 import hope.magic.js.ast.TokenType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class JSParser {
@@ -49,6 +50,18 @@ public class JSParser {
 		if (t.type == TokenType.FOR) {
 			return parseForStatement();
 		}
+		if (t.type == TokenType.DO) {
+			return parseDoWhileStatement();
+		}
+		if (t.type == TokenType.THROW) {
+			return parseThrowStatement();
+		}
+		if (t.type == TokenType.TRY) {
+			return parseTryStatement();
+		}
+		if (t.type == TokenType.SWITCH) {
+			return parseSwitchStatement();
+		}
 		if (t.type == TokenType.RETURN) {
 			return parseReturnStatement();
 		}
@@ -70,6 +83,40 @@ public class JSParser {
 			return null;
 		}
 
+		if (t.type == TokenType.LBRACKET) {
+			int saveCursor = cursor;
+			try {
+				ArrayPattern pattern = parseArrayPattern();
+				if (match(TokenType.ASSIGN)) {
+					Node right = parseExpression();
+					match(TokenType.SEMICOLON);
+					List<Node> stmts = new ArrayList<>();
+					pattern.desugar(right, false, stmts, t.line, t.column);
+					return new Node.BlockStmt(stmts, t.line, t.column);
+				}
+			} catch (Exception ignored) {
+			}
+			cursor = saveCursor;
+		}
+
+		if (t.type == TokenType.LPAREN && peekNext().type == TokenType.LBRACE) {
+			int saveCursor = cursor;
+			try {
+				advance(); // consume '('
+				ObjectPattern pattern = parseObjectPattern();
+				if (match(TokenType.ASSIGN)) {
+					Node right = parseExpression();
+					consume(TokenType.RPAREN, "Expected ')'");
+					match(TokenType.SEMICOLON);
+					List<Node> stmts = new ArrayList<>();
+					pattern.desugar(right, false, stmts, t.line, t.column);
+					return new Node.BlockStmt(stmts, t.line, t.column);
+				}
+			} catch (Exception ignored) {
+			}
+			cursor = saveCursor;
+		}
+
 		// 表达式语句
 		Node expr = parseExpression();
 		match(TokenType.SEMICOLON);
@@ -78,13 +125,34 @@ public class JSParser {
 
 	private Node parseVarDecl() {
 		Token kw = advance();
-		Token id = consume(TokenType.IDENTIFIER, "Expected identifier after " + kw.text);
-		Node init = null;
-		if (match(TokenType.ASSIGN)) {
-			init = parseExpression();
-		}
+		List<Node> stmts = new ArrayList<>();
+
+		do {
+			if (check(TokenType.LBRACE)) {
+				ObjectPattern pattern = parseObjectPattern();
+				consume(TokenType.ASSIGN, "Expected '=' in destructuring declaration");
+				Node init = parseExpression();
+				pattern.desugar(init, true, stmts, kw.line, kw.column);
+			} else if (check(TokenType.LBRACKET)) {
+				ArrayPattern pattern = parseArrayPattern();
+				consume(TokenType.ASSIGN, "Expected '=' in destructuring declaration");
+				Node init = parseExpression();
+				pattern.desugar(init, true, stmts, kw.line, kw.column);
+			} else {
+				Token id = consume(TokenType.IDENTIFIER, "Expected identifier after " + kw.text);
+				Node init = null;
+				if (match(TokenType.ASSIGN)) {
+					init = parseExpression();
+				}
+				stmts.add(new Node.VarDecl(id.text, init, kw.line, kw.column));
+			}
+		} while (match(TokenType.COMMA));
+
 		match(TokenType.SEMICOLON);
-		return new Node.VarDecl(id.text, init, kw.line, kw.column);
+		if (stmts.size() == 1) {
+			return stmts.get(0);
+		}
+		return new Node.BlockStmt(stmts, kw.line, kw.column);
 	}
 
 	private Node parseFunctionDecl() {
@@ -92,17 +160,13 @@ public class JSParser {
 		Token id = consume(TokenType.IDENTIFIER, "Expected function name");
 		consume(TokenType.LPAREN, "Expected '(' after function name");
 
-		List<String> params = new ArrayList<>();
-		if (!check(TokenType.RPAREN)) {
-			do {
-				Token p = consume(TokenType.IDENTIFIER, "Expected parameter name");
-				params.add(p.text);
-			} while (match(TokenType.COMMA));
-		}
+		ParamParseResult paramRes = parseFunctionParams(kw);
 		consume(TokenType.RPAREN, "Expected ')' after parameters");
 
-		Node.BlockStmt body = parseBlockStatement();
-		return new Node.FunctionDecl(id.text, params, body, kw.line, kw.column);
+		Node.BlockStmt rawBody = parseBlockStatement();
+		List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+		allStmts.addAll(rawBody.statements);
+		return new Node.FunctionDecl(id.text, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), kw.line, kw.column);
 	}
 
 	private Node parseIfStatement() {
@@ -133,6 +197,25 @@ public class JSParser {
 		Token kw = advance();
 		consume(TokenType.LPAREN, "Expected '(' after 'for'");
 
+		// Check for "for (var/let/const x of/in iterable/object)" or "for (x of/in iterable/object)"
+		int saveCursor = cursor;
+		boolean isDecl = match(TokenType.VAR) || match(TokenType.LET) || match(TokenType.CONST);
+		if (check(TokenType.IDENTIFIER)) {
+			Token varId = advance();
+			if (match(TokenType.OF)) {
+				Node iterable = parseExpression();
+				consume(TokenType.RPAREN, "Expected ')' after for-of expression");
+				Node body = parseStatement();
+				return new Node.ForOfStmt(varId.text, isDecl, iterable, body, kw.line, kw.column);
+			} else if (match(TokenType.IN)) {
+				Node object = parseExpression();
+				consume(TokenType.RPAREN, "Expected ')' after for-in expression");
+				Node body = parseStatement();
+				return new Node.ForInStmt(varId.text, isDecl, object, body, kw.line, kw.column);
+			}
+		}
+		cursor = saveCursor;
+
 		Node init = null;
 		if (!check(TokenType.SEMICOLON)) {
 			if (check(TokenType.VAR) || check(TokenType.LET) || check(TokenType.CONST)) {
@@ -159,6 +242,80 @@ public class JSParser {
 
 		Node body = parseStatement();
 		return new Node.ForStmt(init, condition, update, body, kw.line, kw.column);
+	}
+
+	private Node parseDoWhileStatement() {
+		Token kw = advance(); // consume 'do'
+		Node body = parseStatement();
+		consume(TokenType.WHILE, "Expected 'while' after 'do' body");
+		consume(TokenType.LPAREN, "Expected '(' after 'while'");
+		Node condition = parseExpression();
+		consume(TokenType.RPAREN, "Expected ')' after while condition");
+		match(TokenType.SEMICOLON);
+		return new Node.DoWhileStmt(body, condition, kw.line, kw.column);
+	}
+
+	private Node parseThrowStatement() {
+		Token kw = advance(); // consume 'throw'
+		Node expr = parseExpression();
+		match(TokenType.SEMICOLON);
+		return new Node.ThrowStmt(expr, kw.line, kw.column);
+	}
+
+	private Node parseTryStatement() {
+		Token kw = advance(); // consume 'try'
+		Node.BlockStmt tryBlock = parseBlockStatement();
+		String catchParam = null;
+		Node.BlockStmt catchBlock = null;
+		if (match(TokenType.CATCH)) {
+			if (match(TokenType.LPAREN)) {
+				Token param = consume(TokenType.IDENTIFIER, "Expected identifier in catch clause");
+				catchParam = param.text;
+				consume(TokenType.RPAREN, "Expected ')' after catch parameter");
+			}
+			catchBlock = parseBlockStatement();
+		}
+		Node.BlockStmt finallyBlock = null;
+		if (match(TokenType.FINALLY)) {
+			finallyBlock = parseBlockStatement();
+		}
+		return new Node.TryStmt(tryBlock, catchParam, catchBlock, finallyBlock, kw.line, kw.column);
+	}
+
+	private Node parseSwitchStatement() {
+		Token kw = advance(); // consume 'switch'
+		consume(TokenType.LPAREN, "Expected '(' after 'switch'");
+		Node discriminant = parseExpression();
+		consume(TokenType.RPAREN, "Expected ')' after switch discriminant");
+		consume(TokenType.LBRACE, "Expected '{' before switch cases");
+
+		List<Node.CaseClause> cases = new ArrayList<>();
+		while (!check(TokenType.RBRACE) && !isAtEnd()) {
+			if (match(TokenType.CASE)) {
+				Token caseToken = previous();
+				Node test = parseExpression();
+				consume(TokenType.COLON, "Expected ':' after case expression");
+				List<Node> stmts = new ArrayList<>();
+				while (!check(TokenType.CASE) && !check(TokenType.DEFAULT) && !check(TokenType.RBRACE) && !isAtEnd()) {
+					Node stmt = parseStatement();
+					if (stmt != null) stmts.add(stmt);
+				}
+				cases.add(new Node.CaseClause(test, stmts, caseToken.line, caseToken.column));
+			} else if (match(TokenType.DEFAULT)) {
+				Token defaultToken = previous();
+				consume(TokenType.COLON, "Expected ':' after 'default'");
+				List<Node> stmts = new ArrayList<>();
+				while (!check(TokenType.CASE) && !check(TokenType.DEFAULT) && !check(TokenType.RBRACE) && !isAtEnd()) {
+					Node stmt = parseStatement();
+					if (stmt != null) stmts.add(stmt);
+				}
+				cases.add(new Node.CaseClause(null, stmts, defaultToken.line, defaultToken.column));
+			} else {
+				throw new RuntimeException("Expected 'case' or 'default' in switch at line " + peek().line + ":" + peek().column);
+			}
+		}
+		consume(TokenType.RBRACE, "Expected '}' after switch cases");
+		return new Node.SwitchStmt(discriminant, cases, kw.line, kw.column);
 	}
 
 	private Node parseReturnStatement() {
@@ -189,16 +346,36 @@ public class JSParser {
 	}
 
 	private Node parseAssignment() {
-		Node left = parseLogicalOr();
+		Node left = parseConditional();
 
 		if (check(TokenType.ASSIGN) || check(TokenType.PLUS_ASSIGN) || check(TokenType.MINUS_ASSIGN)
 			|| check(TokenType.STAR_ASSIGN) || check(TokenType.SLASH_ASSIGN)) {
 			Token op = advance();
 			Node right = parseAssignment();
+			if (op.type == TokenType.ASSIGN) {
+				if (left instanceof Node.ArrayLiteralExpr arrLit) {
+					return desugarArrayDestructuringAssignment(arrLit, right, op.line, op.column);
+				}
+				if (left instanceof Node.ObjectLiteralExpr objLit) {
+					return desugarObjectDestructuringAssignment(objLit, right, op.line, op.column);
+				}
+			}
 			return new Node.AssignExpr(left, op.type, right, op.line, op.column);
 		}
 
 		return left;
+	}
+
+	private Node parseConditional() {
+		Node expr = parseLogicalOr();
+		if (match(TokenType.QUESTION)) {
+			Token op = previous();
+			Node thenExpr = parseAssignment();
+			consume(TokenType.COLON, "Expected ':' in conditional expression");
+			Node elseExpr = parseAssignment();
+			return new Node.TernaryExpr(expr, thenExpr, elseExpr, op.line, op.column);
+		}
+		return expr;
 	}
 
 	private Node parseLogicalOr() {
@@ -267,6 +444,21 @@ public class JSParser {
 			Node right = parseUnary();
 			return new Node.UnaryExpr(op.type, right, true, op.line, op.column);
 		}
+		if (match(TokenType.TYPEOF)) {
+			Token op = previous();
+			Node right = parseUnary();
+			return new Node.TypeOfExpr(right, op.line, op.column);
+		}
+		if (match(TokenType.VOID)) {
+			Token op = previous();
+			Node right = parseUnary();
+			return new Node.VoidExpr(right, op.line, op.column);
+		}
+		if (match(TokenType.DELETE)) {
+			Token op = previous();
+			Node right = parseUnary();
+			return new Node.UnaryExpr(TokenType.DELETE, right, true, op.line, op.column);
+		}
 		return parsePostfix();
 	}
 
@@ -307,6 +499,11 @@ public class JSParser {
 		if (match(TokenType.NUMBER, TokenType.STRING)) {
 			return new Node.LiteralExpr(previous().value, previous().line, previous().column);
 		}
+		if (match(TokenType.REGEXP)) {
+			Token token = previous();
+			String[] parts = (String[]) token.value;
+			return new Node.RegExpLiteral(parts[0], parts[1], token.line, token.column);
+		}
 		if (match(TokenType.TRUE)) {
 			return new Node.LiteralExpr(Boolean.TRUE, previous().line, previous().column);
 		}
@@ -317,11 +514,25 @@ public class JSParser {
 			return new Node.LiteralExpr(null, previous().line, previous().column);
 		}
 		if (match(TokenType.UNDEFINED)) {
-			return new Node.LiteralExpr(null, previous().line, previous().column);
+			return new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, previous().line, previous().column);
 		}
 		if (match(TokenType.THIS)) {
 			return new Node.IdentifierExpr("this", previous().line, previous().column);
 		}
+		// 单参数箭头函数: x => x * 2 或 x => { ... }
+		if (check(TokenType.IDENTIFIER) && peekNext().type == TokenType.ARROW) {
+			Token param = advance();
+			consume(TokenType.ARROW, "Expected '=>'");
+			Node.BlockStmt body;
+			if (check(TokenType.LBRACE)) {
+				body = parseBlockStatement();
+			} else {
+				Node expr = parseExpression();
+				body = new Node.BlockStmt(Collections.singletonList(new Node.ReturnStmt(expr, expr.line, expr.column)), expr.line, expr.column);
+			}
+			return new Node.FunctionExpr(null, Collections.singletonList(param.text), body, param.line, param.column);
+		}
+
 		if (match(TokenType.IDENTIFIER)) {
 			return new Node.IdentifierExpr(previous().text, previous().line, previous().column);
 		}
@@ -348,18 +559,15 @@ public class JSParser {
 				name = advance().text;
 			}
 			consume(TokenType.LPAREN, "Expected '(' in function expression");
-			List<String> params = new ArrayList<>();
-			if (!check(TokenType.RPAREN)) {
-				do {
-					params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").text);
-				} while (match(TokenType.COMMA));
-			}
+			ParamParseResult paramRes = parseFunctionParams(kw);
 			consume(TokenType.RPAREN, "Expected ')' after parameters");
-			Node.BlockStmt body = parseBlockStatement();
-			return new Node.FunctionExpr(name, params, body, kw.line, kw.column);
+			Node.BlockStmt rawBody = parseBlockStatement();
+			List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+			allStmts.addAll(rawBody.statements);
+			return new Node.FunctionExpr(name, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), kw.line, kw.column);
 		}
 
-		// 对象字面量 { a: 1, b: 2 }
+		// 对象字面量 { a: 1, b: 2 } 或属性简写 { a, b }
 		if (match(TokenType.LBRACE)) {
 			Token lbrace = previous();
 			List<Node.ObjectLiteralExpr.Entry> entries = new ArrayList<>();
@@ -367,8 +575,12 @@ public class JSParser {
 				do {
 					Token keyToken = advance();
 					String key = keyToken.text;
-					consume(TokenType.COLON, "Expected ':' after property key");
-					Node val = parseExpression();
+					Node val;
+					if (match(TokenType.COLON)) {
+						val = parseExpression();
+					} else {
+						val = new Node.IdentifierExpr(key, keyToken.line, keyToken.column);
+					}
 					entries.add(new Node.ObjectLiteralExpr.Entry(key, val));
 				} while (match(TokenType.COMMA));
 			}
@@ -389,8 +601,27 @@ public class JSParser {
 			return new Node.ArrayLiteralExpr(elements, lbracket.line, lbracket.column);
 		}
 
-		// 括号表达式 ( expr )
+		// 括号表达式 或 箭头函数 ( a, b ) => expr
 		if (match(TokenType.LPAREN)) {
+			Token lparen = previous();
+			if (isArrowParamList()) {
+				ParamParseResult paramRes = parseFunctionParams(lparen);
+				consume(TokenType.RPAREN, "Expected ')' after parameters");
+				consume(TokenType.ARROW, "Expected '=>'");
+				Node.BlockStmt body;
+				if (check(TokenType.LBRACE)) {
+					Node.BlockStmt rawBody = parseBlockStatement();
+					List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+					allStmts.addAll(rawBody.statements);
+					body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+				} else {
+					Node expr = parseExpression();
+					List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+					allStmts.add(new Node.ReturnStmt(expr, expr.line, expr.column));
+					body = new Node.BlockStmt(allStmts, expr.line, expr.column);
+				}
+				return new Node.FunctionExpr(null, paramRes.params, body, lparen.line, lparen.column);
+			}
 			Node expr = parseExpression();
 			consume(TokenType.RPAREN, "Expected ')' after expression");
 			return expr;
@@ -399,11 +630,383 @@ public class JSParser {
 		throw new RuntimeException("Unexpected token " + t + " at line " + t.line + ":" + t.column);
 	}
 
-	// ==================== 辅助方法 ====================
+	// ==================== 辅助方法与 ES6 解构脱糖 ====================
+
+	private static final java.util.concurrent.atomic.AtomicInteger TEMP_VAR_GEN = new java.util.concurrent.atomic.AtomicInteger(0);
+
+	private static class ParamParseResult {
+		final List<String> params = new ArrayList<>();
+		final List<Node> unpackStmts = new ArrayList<>();
+	}
+
+	private ParamParseResult parseFunctionParams(Token contextToken) {
+		ParamParseResult result = new ParamParseResult();
+		if (!check(TokenType.RPAREN)) {
+			int paramIdx = 0;
+			do {
+				if (check(TokenType.LBRACE)) {
+					ObjectPattern pattern = parseObjectPattern();
+					String paramName = "$p_" + (paramIdx++);
+					result.params.add(paramName);
+					Node defaultValue = null;
+					if (match(TokenType.ASSIGN)) {
+						defaultValue = parseAssignment();
+					}
+					Node paramRef = new Node.IdentifierExpr(paramName, contextToken.line, contextToken.column);
+					Node srcExpr = defaultValue != null
+						? new Node.TernaryExpr(new Node.BinaryExpr(paramRef, TokenType.NOT_EQ_EQ, new Node.IdentifierExpr("undefined", contextToken.line, contextToken.column), contextToken.line, contextToken.column), paramRef, defaultValue, contextToken.line, contextToken.column)
+						: paramRef;
+					pattern.desugar(srcExpr, true, result.unpackStmts, contextToken.line, contextToken.column);
+				} else if (check(TokenType.LBRACKET)) {
+					ArrayPattern pattern = parseArrayPattern();
+					String paramName = "$p_" + (paramIdx++);
+					result.params.add(paramName);
+					Node defaultValue = null;
+					if (match(TokenType.ASSIGN)) {
+						defaultValue = parseAssignment();
+					}
+					Node paramRef = new Node.IdentifierExpr(paramName, contextToken.line, contextToken.column);
+					Node srcExpr = defaultValue != null
+						? new Node.TernaryExpr(new Node.BinaryExpr(paramRef, TokenType.NOT_EQ_EQ, new Node.IdentifierExpr("undefined", contextToken.line, contextToken.column), contextToken.line, contextToken.column), paramRef, defaultValue, contextToken.line, contextToken.column)
+						: paramRef;
+					pattern.desugar(srcExpr, true, result.unpackStmts, contextToken.line, contextToken.column);
+				} else {
+					Token p = consume(TokenType.IDENTIFIER, "Expected parameter name");
+					result.params.add(p.text);
+					if (match(TokenType.ASSIGN)) {
+						Node defaultVal = parseAssignment();
+						Node paramRef = new Node.IdentifierExpr(p.text, contextToken.line, contextToken.column);
+						Node cond = new Node.BinaryExpr(paramRef, TokenType.EQ_EQ, new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, contextToken.line, contextToken.column), contextToken.line, contextToken.column);
+						result.unpackStmts.add(new Node.IfStmt(cond, new Node.ExprStmt(new Node.AssignExpr(paramRef, TokenType.ASSIGN, defaultVal, contextToken.line, contextToken.column), contextToken.line, contextToken.column), null, contextToken.line, contextToken.column));
+					}
+				}
+			} while (match(TokenType.COMMA));
+		}
+		return result;
+	}
+
+	private ObjectPattern parseObjectPattern() {
+		consume(TokenType.LBRACE, "Expected '{'");
+		ObjectPattern pattern = new ObjectPattern();
+		if (!check(TokenType.RBRACE)) {
+			do {
+				if (match(TokenType.ELLIPSIS)) {
+					Token restId = consume(TokenType.IDENTIFIER, "Expected identifier after '...'");
+					pattern.entries.add(new ObjectPattern.Entry(restId.text, restId.text, null, null, true));
+					break;
+				}
+				Token keyToken = consume(TokenType.IDENTIFIER, "Expected property name");
+				String key = keyToken.text;
+				String targetName = key;
+				DestructuringPattern nested = null;
+				if (match(TokenType.COLON)) {
+					if (check(TokenType.LBRACE)) {
+						nested = parseObjectPattern();
+						targetName = null;
+					} else if (check(TokenType.LBRACKET)) {
+						nested = parseArrayPattern();
+						targetName = null;
+					} else {
+						Token alias = consume(TokenType.IDENTIFIER, "Expected alias identifier");
+						targetName = alias.text;
+					}
+				}
+				Node defaultValue = null;
+				if (match(TokenType.ASSIGN)) {
+					defaultValue = parseAssignment();
+				}
+				pattern.entries.add(new ObjectPattern.Entry(key, targetName, nested, defaultValue, false));
+			} while (match(TokenType.COMMA) && !check(TokenType.RBRACE));
+		}
+		consume(TokenType.RBRACE, "Expected '}'");
+		return pattern;
+	}
+
+	private ArrayPattern parseArrayPattern() {
+		consume(TokenType.LBRACKET, "Expected '['");
+		ArrayPattern pattern = new ArrayPattern();
+		while (!check(TokenType.RBRACKET) && !isAtEnd()) {
+			if (match(TokenType.COMMA)) {
+				pattern.elements.add(new ArrayPattern.Element(null, null, null, false, true));
+				continue;
+			}
+			if (match(TokenType.ELLIPSIS)) {
+				Token restId = consume(TokenType.IDENTIFIER, "Expected identifier after '...'");
+				pattern.elements.add(new ArrayPattern.Element(restId.text, null, null, true, false));
+				match(TokenType.COMMA);
+				break;
+			}
+			if (check(TokenType.LBRACE)) {
+				DestructuringPattern nested = parseObjectPattern();
+				Node defaultValue = null;
+				if (match(TokenType.ASSIGN)) {
+					defaultValue = parseAssignment();
+				}
+				pattern.elements.add(new ArrayPattern.Element(null, nested, defaultValue, false, false));
+			} else if (check(TokenType.LBRACKET)) {
+				DestructuringPattern nested = parseArrayPattern();
+				Node defaultValue = null;
+				if (match(TokenType.ASSIGN)) {
+					defaultValue = parseAssignment();
+				}
+				pattern.elements.add(new ArrayPattern.Element(null, nested, defaultValue, false, false));
+			} else {
+				Token id = consume(TokenType.IDENTIFIER, "Expected identifier in array pattern");
+				Node defaultValue = null;
+				if (match(TokenType.ASSIGN)) {
+					defaultValue = parseAssignment();
+				}
+				pattern.elements.add(new ArrayPattern.Element(id.text, null, defaultValue, false, false));
+			}
+			match(TokenType.COMMA);
+		}
+		consume(TokenType.RBRACKET, "Expected ']'");
+		return pattern;
+	}
+
+	public interface DestructuringPattern {
+		void desugar(Node sourceExpr, boolean isDecl, List<Node> outStmts, int line, int column);
+	}
+
+	public static class ObjectPattern implements DestructuringPattern {
+		public static class Entry {
+			public final String key;
+			public final String targetName;
+			public final DestructuringPattern nestedPattern;
+			public final Node defaultValue;
+			public final boolean isRest;
+
+			public Entry(String key, String targetName, DestructuringPattern nestedPattern, Node defaultValue, boolean isRest) {
+				this.key = key;
+				this.targetName = targetName;
+				this.nestedPattern = nestedPattern;
+				this.defaultValue = defaultValue;
+				this.isRest = isRest;
+			}
+		}
+
+		public final List<Entry> entries = new ArrayList<>();
+
+		@Override
+		public void desugar(Node sourceExpr, boolean isDecl, List<Node> outStmts, int line, int column) {
+			String tmpVar = "$d_tmp_" + TEMP_VAR_GEN.getAndIncrement();
+			outStmts.add(new Node.VarDecl(tmpVar, sourceExpr, line, column));
+
+			List<String> normalKeys = new ArrayList<>();
+			for (Entry entry : entries) {
+				if (!entry.isRest) {
+					normalKeys.add(entry.key);
+				}
+			}
+
+			for (Entry entry : entries) {
+				if (entry.isRest) {
+					String csv = String.join(",", normalKeys);
+					List<Node> args = List.of(
+						new Node.IdentifierExpr(tmpVar, line, column),
+						new Node.LiteralExpr(csv, line, column)
+					);
+					Node restCall = new Node.CallExpr(
+						new Node.MemberAccessExpr(
+							new Node.IdentifierExpr("JSOps", line, column),
+							"restObject",
+							line, column
+						),
+						args,
+						line, column
+					);
+					if (entry.targetName != null) {
+						if (isDecl) {
+							outStmts.add(new Node.VarDecl(entry.targetName, restCall, line, column));
+						} else {
+							outStmts.add(new Node.ExprStmt(new Node.AssignExpr(new Node.IdentifierExpr(entry.targetName, line, column), TokenType.ASSIGN, restCall, line, column), line, column));
+						}
+					}
+					continue;
+				}
+
+				Node propAccess = new Node.MemberAccessExpr(new Node.IdentifierExpr(tmpVar, line, column), entry.key, line, column);
+				Node valExpr;
+				if (entry.defaultValue != null) {
+					Node undef = new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, line, column);
+					Node cond = new Node.BinaryExpr(propAccess, TokenType.NOT_EQ_EQ, undef, line, column);
+					valExpr = new Node.TernaryExpr(cond, propAccess, entry.defaultValue, line, column);
+				} else {
+					valExpr = propAccess;
+				}
+
+				if (entry.nestedPattern != null) {
+					entry.nestedPattern.desugar(valExpr, isDecl, outStmts, line, column);
+				} else if (entry.targetName != null) {
+					if (isDecl) {
+						outStmts.add(new Node.VarDecl(entry.targetName, valExpr, line, column));
+					} else {
+						outStmts.add(new Node.ExprStmt(new Node.AssignExpr(new Node.IdentifierExpr(entry.targetName, line, column), TokenType.ASSIGN, valExpr, line, column), line, column));
+					}
+				}
+			}
+		}
+	}
+
+	public static class ArrayPattern implements DestructuringPattern {
+		public static class Element {
+			public final String targetName;
+			public final DestructuringPattern nestedPattern;
+			public final Node defaultValue;
+			public final boolean isRest;
+			public final boolean isOmitted;
+
+			public Element(String targetName, DestructuringPattern nestedPattern, Node defaultValue, boolean isRest, boolean isOmitted) {
+				this.targetName = targetName;
+				this.nestedPattern = nestedPattern;
+				this.defaultValue = defaultValue;
+				this.isRest = isRest;
+				this.isOmitted = isOmitted;
+			}
+		}
+
+		public final List<Element> elements = new ArrayList<>();
+
+		@Override
+		public void desugar(Node sourceExpr, boolean isDecl, List<Node> outStmts, int line, int column) {
+			String tmpVar = "$d_tmp_" + TEMP_VAR_GEN.getAndIncrement();
+			outStmts.add(new Node.VarDecl(tmpVar, sourceExpr, line, column));
+
+			for (int i = 0; i < elements.size(); i++) {
+				Element elem = elements.get(i);
+				if (elem.isOmitted) continue;
+
+				if (elem.isRest) {
+					List<Node> args = List.of(
+						new Node.IdentifierExpr(tmpVar, line, column),
+						new Node.LiteralExpr(i, line, column)
+					);
+					Node sliceCall = new Node.CallExpr(
+						new Node.MemberAccessExpr(
+							new Node.IdentifierExpr("JSOps", line, column),
+							"slice",
+							line, column
+						),
+						args,
+						line, column
+					);
+					if (elem.targetName != null) {
+						if (isDecl) {
+							outStmts.add(new Node.VarDecl(elem.targetName, sliceCall, line, column));
+						} else {
+							outStmts.add(new Node.ExprStmt(new Node.AssignExpr(new Node.IdentifierExpr(elem.targetName, line, column), TokenType.ASSIGN, sliceCall, line, column), line, column));
+						}
+					}
+					continue;
+				}
+
+				Node idxAccess = new Node.IndexAccessExpr(new Node.IdentifierExpr(tmpVar, line, column), new Node.LiteralExpr(i, line, column), line, column);
+				Node valExpr;
+				if (elem.defaultValue != null) {
+					Node undef = new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, line, column);
+					Node cond = new Node.BinaryExpr(idxAccess, TokenType.NOT_EQ_EQ, undef, line, column);
+					valExpr = new Node.TernaryExpr(cond, idxAccess, elem.defaultValue, line, column);
+				} else {
+					valExpr = idxAccess;
+				}
+
+				if (elem.nestedPattern != null) {
+					elem.nestedPattern.desugar(valExpr, isDecl, outStmts, line, column);
+				} else if (elem.targetName != null) {
+					if (isDecl) {
+						outStmts.add(new Node.VarDecl(elem.targetName, valExpr, line, column));
+					} else {
+						outStmts.add(new Node.ExprStmt(new Node.AssignExpr(new Node.IdentifierExpr(elem.targetName, line, column), TokenType.ASSIGN, valExpr, line, column), line, column));
+					}
+				}
+			}
+		}
+	}
+
+	private Node desugarArrayDestructuringAssignment(Node.ArrayLiteralExpr arrLit, Node right, int line, int column) {
+		ArrayPattern pattern = convertArrayLiteralToPattern(arrLit);
+		List<Node> stmts = new ArrayList<>();
+		String resVar = "$d_res_" + TEMP_VAR_GEN.getAndIncrement();
+		stmts.add(new Node.VarDecl(resVar, right, line, column));
+		pattern.desugar(new Node.IdentifierExpr(resVar, line, column), false, stmts, line, column);
+		stmts.add(new Node.ReturnStmt(new Node.IdentifierExpr(resVar, line, column), line, column));
+		Node.FunctionExpr fn = new Node.FunctionExpr(null, Collections.emptyList(), new Node.BlockStmt(stmts, line, column), line, column);
+		return new Node.CallExpr(fn, Collections.emptyList(), line, column);
+	}
+
+	private Node desugarObjectDestructuringAssignment(Node.ObjectLiteralExpr objLit, Node right, int line, int column) {
+		ObjectPattern pattern = convertObjectLiteralToPattern(objLit);
+		List<Node> stmts = new ArrayList<>();
+		String resVar = "$d_res_" + TEMP_VAR_GEN.getAndIncrement();
+		stmts.add(new Node.VarDecl(resVar, right, line, column));
+		pattern.desugar(new Node.IdentifierExpr(resVar, line, column), false, stmts, line, column);
+		stmts.add(new Node.ReturnStmt(new Node.IdentifierExpr(resVar, line, column), line, column));
+		Node.FunctionExpr fn = new Node.FunctionExpr(null, Collections.emptyList(), new Node.BlockStmt(stmts, line, column), line, column);
+		return new Node.CallExpr(fn, Collections.emptyList(), line, column);
+	}
+
+	private ArrayPattern convertArrayLiteralToPattern(Node.ArrayLiteralExpr arrLit) {
+		ArrayPattern pattern = new ArrayPattern();
+		for (Node elem : arrLit.elements) {
+			if (elem == null) {
+				pattern.elements.add(new ArrayPattern.Element(null, null, null, false, true));
+			} else if (elem instanceof Node.IdentifierExpr id) {
+				pattern.elements.add(new ArrayPattern.Element(id.name, null, null, false, false));
+			} else if (elem instanceof Node.AssignExpr assign && assign.target instanceof Node.IdentifierExpr id) {
+				pattern.elements.add(new ArrayPattern.Element(id.name, null, assign.value, false, false));
+			} else if (elem instanceof Node.ArrayLiteralExpr nestedArr) {
+				pattern.elements.add(new ArrayPattern.Element(null, convertArrayLiteralToPattern(nestedArr), null, false, false));
+			} else if (elem instanceof Node.ObjectLiteralExpr nestedObj) {
+				pattern.elements.add(new ArrayPattern.Element(null, convertObjectLiteralToPattern(nestedObj), null, false, false));
+			}
+		}
+		return pattern;
+	}
+
+	private ObjectPattern convertObjectLiteralToPattern(Node.ObjectLiteralExpr objLit) {
+		ObjectPattern pattern = new ObjectPattern();
+		for (Node.ObjectLiteralExpr.Entry prop : objLit.entries) {
+			String key = prop.key();
+			Node val = prop.value();
+			if (val instanceof Node.IdentifierExpr id) {
+				pattern.entries.add(new ObjectPattern.Entry(key, id.name, null, null, false));
+			} else if (val instanceof Node.AssignExpr assign && assign.target instanceof Node.IdentifierExpr id) {
+				pattern.entries.add(new ObjectPattern.Entry(key, id.name, null, assign.value, false));
+			} else if (val instanceof Node.ObjectLiteralExpr nestedObj) {
+				pattern.entries.add(new ObjectPattern.Entry(key, null, convertObjectLiteralToPattern(nestedObj), null, false));
+			} else if (val instanceof Node.ArrayLiteralExpr nestedArr) {
+				pattern.entries.add(new ObjectPattern.Entry(key, null, convertArrayLiteralToPattern(nestedArr), null, false));
+			}
+		}
+		return pattern;
+	}
+
+	private boolean isArrowParamList() {
+		int i = cursor;
+		int depth = 1;
+		while (i < tokens.size()) {
+			TokenType type = tokens.get(i).type;
+			if (type == TokenType.LPAREN || type == TokenType.LBRACE || type == TokenType.LBRACKET) {
+				depth++;
+			} else if (type == TokenType.RPAREN || type == TokenType.RBRACE || type == TokenType.RBRACKET) {
+				depth--;
+				if (depth == 0) {
+					return i + 1 < tokens.size() && tokens.get(i + 1).type == TokenType.ARROW;
+				}
+			}
+			i++;
+		}
+		return false;
+	}
 
 	private boolean check(TokenType type) {
 		if (isAtEnd()) return false;
 		return peek().type == type;
+	}
+
+	private Token peekNext() {
+		if (cursor + 1 < tokens.size()) return tokens.get(cursor + 1);
+		return tokens.get(tokens.size() - 1);
 	}
 
 	private boolean match(TokenType... types) {

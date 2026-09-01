@@ -1,6 +1,8 @@
 package hope.magic.example;
 
-import hope.magic.runtime.Magic;
+import hope.magic.js.compiler.JSCompiler;
+import hope.magic.js.runtime.*;
+
 import java.util.*;
 
 public class Main {
@@ -12,6 +14,17 @@ public class Main {
 
 	public static void main(String[] args) throws Throwable {
 		TargetObject obj = new TargetObject();
+
+		JSScript script = JSCompiler.compile("""
+		 var arr = [1, 2, 3];
+
+arr[3] = 4;
+
+arr.length;    // 3.0，而不是 4.0
+		 """);
+		JSContext cx = new JSContext();
+		cx.set("target", obj);
+		System.out.println(script.run(cx));
 		System.out.println("====== 初始对象状态 ======");
 		System.out.println("obj.getSecretCode() = " + obj.getSecretCode());
 		System.out.println("obj.getMessage() = " + obj.getMessage());
@@ -28,8 +41,8 @@ public class Main {
 				String m = MagicAccessorSample.getMessage(obj);
 				MagicAccessorSample.setSecretCode(obj, 88888);
 				MagicAccessorSample.setMessage(obj, "Updated by 2A");
-				int    p = MagicAccessorSample.callMultiply(obj, 9, 9);
-				String g = MagicAccessorSample.callStaticPrivateGreet("linkTo User");
+				int          p       = MagicAccessorSample.callMultiply(obj, 9, 9);
+				String       g       = MagicAccessorSample.callStaticPrivateGreet("linkTo User");
 				TargetObject created = MagicAccessorSample.newTargetObject(2026, "Created via 2A linkTo <init>");
 				System.out.println("  [2A 结果] secretCode=" + s + ", message=" + m + ", multiply=" + p + ", greet=" + g);
 				System.out.println("  [2A 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
@@ -54,8 +67,8 @@ public class Main {
 			public void runFirst(TargetObject obj) {
 				int s = IndyAccessorSample.getSecretCode(obj);
 				IndyAccessorSample.setSecretCode(obj, 55555);
-				int    p = IndyAccessorSample.callMultiply(obj, 7, 7);
-				String g = IndyAccessorSample.callStaticPrivateGreet("indy User");
+				int          p       = IndyAccessorSample.callMultiply(obj, 7, 7);
+				String       g       = IndyAccessorSample.callStaticPrivateGreet("indy User");
 				TargetObject created = IndyAccessorSample.newTargetObject(2026, "Created via 2B indy <init>");
 				System.out.println("  [2B 结果] secretCode=" + s + ", multiply=" + p + ", greet=" + g);
 				System.out.println("  [2B 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
@@ -78,8 +91,8 @@ public class Main {
 			public void runFirst(TargetObject obj) {
 				int s = AndroidAccessorSample.getSecretCode(obj);
 				AndroidAccessorSample.setSecretCode(obj, 66666);
-				int    p = AndroidAccessorSample.callMultiply(obj, 5, 5);
-				String g = AndroidAccessorSample.callStaticPrivateGreet("Android User");
+				int          p       = AndroidAccessorSample.callMultiply(obj, 5, 5);
+				String       g       = AndroidAccessorSample.callStaticPrivateGreet("Android User");
 				TargetObject created = AndroidAccessorSample.newTargetObject(2026, "Created via 2C MH <init>");
 				System.out.println("  [2C 结果] secretCode=" + s + ", multiply=" + p + ", greet=" + g);
 				System.out.println("  [2C 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());
@@ -102,8 +115,8 @@ public class Main {
 			public void runFirst(TargetObject obj) {
 				int s = AutoAccessorSample.getSecretCode(obj);
 				AutoAccessorSample.setSecretCode(obj, 10101);
-				int p = AutoAccessorSample.callMultiply(obj, 4, 4);
-				String g = AutoAccessorSample.callStaticPrivateGreet("Auto User");
+				int          p       = AutoAccessorSample.callMultiply(obj, 4, 4);
+				String       g       = AutoAccessorSample.callStaticPrivateGreet("Auto User");
 				TargetObject created = AutoAccessorSample.newTargetObject(2026, "Created via AUTO <init>");
 				System.out.println("  [AUTO 结果] secretCode=" + s + ", multiply=" + p + ", greet=" + g);
 				System.out.println("  [AUTO 私有构造测试] created: code=" + created.getSecretCode() + ", msg=" + created.getMessage());

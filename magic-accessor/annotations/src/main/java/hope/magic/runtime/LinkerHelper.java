@@ -26,8 +26,10 @@ public class LinkerHelper {
 	public static final  Unsafe       UNSAFE                  = Magic.unsafe;
 	private static final MethodHandle INTERNAL_MEMBER_NAME_MH = initInternalMemberName();
 
-	private static final Map<String, MethodHandle> METHOD_HANDLE_CACHE = new ConcurrentHashMap<>();
-	private static final Map<String, Object>       MEMBER_NAME_CACHE   = new ConcurrentHashMap<>();
+	public record MethodMemberKey(Class<?> clazz, String methodName, MethodType methodType, byte refKind) {}
+
+	private static final Map<MethodMemberKey, MethodHandle> METHOD_HANDLE_CACHE = new ConcurrentHashMap<>();
+	private static final Map<MethodMemberKey, Object>       MEMBER_NAME_CACHE   = new ConcurrentHashMap<>();
 
 	private static MethodHandle initInternalMemberName() {
 		try {
@@ -44,6 +46,14 @@ public class LinkerHelper {
 			return true;
 		} catch (ClassNotFoundException e) {
 			return false;
+		}
+	}
+
+	public static long getFieldOffset(Field field) {
+		try {
+			return IS_ANDROID ? FieldUtils.getFieldOffset(field) : jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(field);
+		} catch (Throwable e) {
+			throw new RuntimeException("Failed to get field offset for " + field.getDeclaringClass().getName() + "#" + field.getName(), e);
 		}
 	}
 
@@ -135,10 +145,10 @@ public class LinkerHelper {
 		if (isAndroid()) return AndroidLinker.getMethodHandle(clazz, methodName, parameterTypes, isStatic, isSpecial);
 
 		if (methodName.equals("<init>")) {
-			String key = makeMethodKey(clazz, methodName, clazz, parameterTypes, (byte) 8);
+			MethodType constructorType = MethodType.methodType(void.class, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+			MethodMemberKey key = new MethodMemberKey(clazz, methodName, constructorType, (byte) 8);
 			return METHOD_HANDLE_CACHE.computeIfAbsent(key, k -> {
 				try {
-					MethodType constructorType = MethodType.methodType(void.class, parameterTypes == null ? new Class<?>[0] : parameterTypes);
 					return Magic.lookup.findConstructor(clazz, constructorType);
 				} catch (Throwable e) {
 					throw new RuntimeException("Failed to resolve Constructor MethodHandle for " + clazz.getName(), e);
@@ -147,10 +157,10 @@ public class LinkerHelper {
 		}
 
 		byte   refKind = (byte) (isStatic ? 6 : (isSpecial ? 7 : 5));
-		String key     = makeMethodKey(clazz, methodName, returnType, parameterTypes, refKind);
+		MethodType methodType = MethodType.methodType(returnType, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+		MethodMemberKey key   = new MethodMemberKey(clazz, methodName, methodType, refKind);
 		return METHOD_HANDLE_CACHE.computeIfAbsent(key, k -> {
 			try {
-				MethodType methodType = MethodType.methodType(returnType, parameterTypes == null ? new Class<?>[0] : parameterTypes);
 				if (isStatic) {
 					return Magic.lookup.findStatic(clazz, methodName, methodType);
 				} else if (isSpecial) {
@@ -192,9 +202,9 @@ public class LinkerHelper {
 	 Class<?>[] parameterTypes,
 	 byte refKind
 	) {
-		String key = makeMethodKey(clazz, methodName, returnType, parameterTypes, refKind);
+		MethodType methodType = MethodType.methodType(returnType, parameterTypes == null ? new Class<?>[0] : parameterTypes);
+		MethodMemberKey key = new MethodMemberKey(clazz, methodName, methodType, refKind);
 		return MEMBER_NAME_CACHE.computeIfAbsent(key, k -> {
-			MethodType methodType = MethodType.methodType(returnType, parameterTypes == null ? new Class<?>[0] : parameterTypes);
 			if (RESOLVE_OR_FAIL_MH != null) {
 				try {
 					Object mn = RESOLVE_OR_FAIL_MH.invoke(Magic.lookup, refKind, clazz, methodName, methodType);
@@ -250,23 +260,6 @@ public class LinkerHelper {
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to extract MemberName from MethodHandle", e);
 		}
-	}
-
-	private static String makeMethodKey(
-	 Class<?> clazz,
-	 String methodName,
-	 Class<?> returnType,
-	 Class<?>[] parameterTypes,
-	 byte refKind
-	) {
-		StringBuilder sb = new StringBuilder(clazz.getName()).append('#').append(methodName).append('#').append(refKind).append('(');
-		if (parameterTypes != null) {
-			for (Class<?> p : parameterTypes) {
-				sb.append(p.getName()).append(';');
-			}
-		}
-		sb.append(')').append(returnType == null ? "V" : returnType.getName());
-		return sb.toString();
 	}
 
 	private static Field getDeclaredFieldRecursive(Class<?> clazz, String name) throws NoSuchFieldException {

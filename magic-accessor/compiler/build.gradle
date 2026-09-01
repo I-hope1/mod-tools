@@ -9,7 +9,7 @@ dependencies {
 	compileOnly 'com.google.auto.service:auto-service:1.1.1'
 	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
 
-	def asmVersion = '9.7.1'
+	def asmVersion = '9.9.1'
 	implementation "org.ow2.asm:asm:$asmVersion"
 	implementation "org.ow2.asm:asm-commons:$asmVersion"
 	implementation "org.ow2.asm:asm-tree:$asmVersion"

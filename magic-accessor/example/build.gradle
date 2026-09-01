@@ -6,8 +6,12 @@ dependencies {
 	implementation project.findProject(':magic-accessor:annotations') ?: project(':annotations')
 	annotationProcessor project.findProject(':magic-accessor:compiler') ?: project(':compiler')
 	implementation project(':magic-accessor:magic-js')
-	implementation 'org.mozilla:rhino:1.7.15'
-	implementation 'org.ow2.asm:asm:9.7.1'
+	implementation 'org.mozilla:rhino:1.9.1'
+	implementation 'org.openjdk.nashorn:nashorn-core:15.7'
+	implementation 'com.googlecode.aviator:aviator:5.4.4'
+	implementation 'org.graalvm.polyglot:polyglot:24.1.2'
+	implementation 'org.graalvm.polyglot:js-community:24.1.2'
+	implementation 'org.ow2.asm:asm:9.9.1'
 
 	implementation 'org.openjdk.jmh:jmh-core:1.37'
 	annotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
@@ -38,10 +42,6 @@ tasks.register('jmh', JavaExec) {
 		'-bm', 'avgt',
 		'-tu', 'ns'
 	]
-	jvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
-	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
 	}
@@ -58,10 +58,6 @@ tasks.register('jmhWarmup1', JavaExec) {
 		'-bm', 'avgt',
 		'-tu', 'ns'
 	]
-	jvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
-	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
 	}
@@ -77,10 +73,6 @@ tasks.register('jmhCold', JavaExec) {
 		'-i', '1',
 		'-bm', 'ss',
 		'-tu', 'us'
-	]
-	jvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
 	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
@@ -103,23 +95,26 @@ tasks.register('jmhDecode', JavaExec) {
 	}
 }
 
+def graalVMJdk = new File("F:/files/java/jdks/graalvm-jdk-21.0.12/bin/java.exe")
+def openJdk = new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe")
+def jsBenchmarkJdk = (project.findProperty('jsJdk') == 'openjdk') ? openJdk : (graalVMJdk.exists() ? graalVMJdk : openJdk)
+
 tasks.register('jmhJS', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
+	jvmArgs(
+			"-Dpolyglot.engine.WarnInterpreterOnly=true",
+	)
 	args = [
 		'hope.magic.example.MagicJSBenchmark',
-		'-f', '3',
-		'-wi', '3',
-		'-i', '5',
+		'-f', '1',
+		'-wi', '2',
+		'-i', '3',
 		'-bm', 'avgt',
 		'-tu', 'ns'
 	]
-	jvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
-	]
-	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
-		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
 	}
 }
 
@@ -134,11 +129,45 @@ tasks.register('jmhInvoker', JavaExec) {
 		'-bm', 'avgt',
 		'-tu', 'ns'
 	]
-	jvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
-	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
+tasks.register('coldJS', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.MagicJSColdStartBenchmark'
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
+	}
+}
+
+tasks.register('gradientJS', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.GradientShapeBenchmark'
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
+	}
+}
+
+tasks.register('compareAviator', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.AviatorComparisonBenchmark'
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
+tasks.register('printInlining', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.MagicJSInliningBenchmark'
+	jvmArgs = [
+		'-XX:+UnlockDiagnosticVMOptions',
+		'-XX:+PrintInlining',
+		'-XX:+TieredCompilation',
+		'-XX:CICompilerCount=2',
+	]
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
 	}
 }

@@ -20,6 +20,12 @@ public abstract class Node {
 		R visitIfStmt(IfStmt node, C context);
 		R visitWhileStmt(WhileStmt node, C context);
 		R visitForStmt(ForStmt node, C context);
+		R visitForOfStmt(ForOfStmt node, C context);
+		R visitForInStmt(ForInStmt node, C context);
+		R visitDoWhileStmt(DoWhileStmt node, C context);
+		R visitThrowStmt(ThrowStmt node, C context);
+		R visitTryStmt(TryStmt node, C context);
+		R visitSwitchStmt(SwitchStmt node, C context);
 		R visitReturnStmt(ReturnStmt node, C context);
 		R visitBreakStmt(BreakStmt node, C context);
 		R visitContinueStmt(ContinueStmt node, C context);
@@ -29,6 +35,8 @@ public abstract class Node {
 		R visitAssignExpr(AssignExpr node, C context);
 		R visitBinaryExpr(BinaryExpr node, C context);
 		R visitUnaryExpr(UnaryExpr node, C context);
+		R visitTypeOfExpr(TypeOfExpr node, C context);
+		R visitVoidExpr(VoidExpr node, C context);
 		R visitLiteralExpr(LiteralExpr node, C context);
 		R visitIdentifierExpr(IdentifierExpr node, C context);
 		R visitMemberAccessExpr(MemberAccessExpr node, C context);
@@ -37,7 +45,9 @@ public abstract class Node {
 		R visitNewExpr(NewExpr node, C context);
 		R visitObjectLiteralExpr(ObjectLiteralExpr node, C context);
 		R visitArrayLiteralExpr(ArrayLiteralExpr node, C context);
+		R visitRegExpLiteral(RegExpLiteral node, C context);
 		R visitFunctionExpr(FunctionExpr node, C context);
+		R visitTernaryExpr(TernaryExpr node, C context);
 	}
 
 	// ==================== 语句 Statements ====================
@@ -121,9 +131,9 @@ public abstract class Node {
 	}
 
 	public static class ForStmt extends Node {
-		public final Node init;      // can be null
-		public final Node condition; // can be null
-		public final Node update;    // can be null
+		public final Node init;      // VarDeclStmt, Expression, or null
+		public final Node condition; // Expression or null
+		public final Node update;    // Expression or null
 		public final Node body;
 
 		public ForStmt(Node init, Node condition, Node update, Node body, int line, int column) {
@@ -137,6 +147,126 @@ public abstract class Node {
 		@Override
 		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
 			return visitor.visitForStmt(this, context);
+		}
+	}
+
+	public static class ForOfStmt extends Node {
+		public final String varName;
+		public final boolean isDeclaration;
+		public final Node iterable;
+		public final Node body;
+
+		public ForOfStmt(String varName, boolean isDeclaration, Node iterable, Node body, int line, int column) {
+			super(line, column);
+			this.varName = varName;
+			this.isDeclaration = isDeclaration;
+			this.iterable = iterable;
+			this.body = body;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitForOfStmt(this, context);
+		}
+	}
+
+	public static class ForInStmt extends Node {
+		public final String varName;
+		public final boolean isDeclaration;
+		public final Node object;
+		public final Node body;
+
+		public ForInStmt(String varName, boolean isDeclaration, Node object, Node body, int line, int column) {
+			super(line, column);
+			this.varName = varName;
+			this.isDeclaration = isDeclaration;
+			this.object = object;
+			this.body = body;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitForInStmt(this, context);
+		}
+	}
+
+	public static class DoWhileStmt extends Node {
+		public final Node body;
+		public final Node condition;
+
+		public DoWhileStmt(Node body, Node condition, int line, int column) {
+			super(line, column);
+			this.body = body;
+			this.condition = condition;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitDoWhileStmt(this, context);
+		}
+	}
+
+	public static class ThrowStmt extends Node {
+		public final Node expr;
+
+		public ThrowStmt(Node expr, int line, int column) {
+			super(line, column);
+			this.expr = expr;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitThrowStmt(this, context);
+		}
+	}
+
+	public static class TryStmt extends Node {
+		public final BlockStmt tryBlock;
+		public final String catchParam; // can be null
+		public final BlockStmt catchBlock; // can be null
+		public final BlockStmt finallyBlock; // can be null
+
+		public TryStmt(BlockStmt tryBlock, String catchParam, BlockStmt catchBlock, BlockStmt finallyBlock, int line, int column) {
+			super(line, column);
+			this.tryBlock = tryBlock;
+			this.catchParam = catchParam;
+			this.catchBlock = catchBlock;
+			this.finallyBlock = finallyBlock;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitTryStmt(this, context);
+		}
+	}
+
+	public static class CaseClause {
+		public final Node test; // null for default clause
+		public final List<Node> consequent;
+		public final int line;
+		public final int column;
+
+		public CaseClause(Node test, List<Node> consequent, int line, int column) {
+			this.test = test;
+			this.consequent = consequent;
+			this.line = line;
+			this.column = column;
+		}
+	}
+
+	public static class SwitchStmt extends Node {
+		public final Node discriminant;
+		public final List<CaseClause> cases;
+
+		public SwitchStmt(Node discriminant, List<CaseClause> cases, int line, int column) {
+			super(line, column);
+			this.discriminant = discriminant;
+			this.cases = cases;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitSwitchStmt(this, context);
 		}
 	}
 
@@ -264,6 +394,34 @@ public abstract class Node {
 		}
 	}
 
+	public static class TypeOfExpr extends Node {
+		public final Node expr;
+
+		public TypeOfExpr(Node expr, int line, int column) {
+			super(line, column);
+			this.expr = expr;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitTypeOfExpr(this, context);
+		}
+	}
+
+	public static class VoidExpr extends Node {
+		public final Node expr;
+
+		public VoidExpr(Node expr, int line, int column) {
+			super(line, column);
+			this.expr = expr;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitVoidExpr(this, context);
+		}
+	}
+
 	public static class LiteralExpr extends Node {
 		public final Object value; // Double, String, Boolean, null, etc.
 
@@ -386,6 +544,22 @@ public abstract class Node {
 		}
 	}
 
+	public static class RegExpLiteral extends Node {
+		public final String pattern;
+		public final String flags;
+
+		public RegExpLiteral(String pattern, String flags, int line, int column) {
+			super(line, column);
+			this.pattern = pattern;
+			this.flags = flags;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitRegExpLiteral(this, context);
+		}
+	}
+
 	public static class FunctionExpr extends Node {
 		public final String name; // can be null
 		public final List<String> params;
@@ -401,6 +575,24 @@ public abstract class Node {
 		@Override
 		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
 			return visitor.visitFunctionExpr(this, context);
+		}
+	}
+
+	public static class TernaryExpr extends Node {
+		public final Node condition;
+		public final Node thenExpr;
+		public final Node elseExpr;
+
+		public TernaryExpr(Node condition, Node thenExpr, Node elseExpr, int line, int column) {
+			super(line, column);
+			this.condition = condition;
+			this.thenExpr = thenExpr;
+			this.elseExpr = elseExpr;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitTernaryExpr(this, context);
 		}
 	}
 }

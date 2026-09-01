@@ -6,7 +6,7 @@ plugins {
 dependencies {
 	api project(':magic-accessor:annotations')
 
-	def asmVersion = '9.7.1'
+	def asmVersion = '9.9.1'
 	implementation "org.ow2.asm:asm:$asmVersion"
 	implementation "org.ow2.asm:asm-commons:$asmVersion"
 	implementation "org.ow2.asm:asm-tree:$asmVersion"
@@ -17,6 +17,10 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs += ['-Xlint:none', '-nowarn']
 }
 
 jar {

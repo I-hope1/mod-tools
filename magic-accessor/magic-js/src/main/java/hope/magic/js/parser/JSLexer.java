@@ -21,8 +21,21 @@ public class JSLexer {
 		KEYWORDS.put("else", TokenType.ELSE);
 		KEYWORDS.put("while", TokenType.WHILE);
 		KEYWORDS.put("for", TokenType.FOR);
+		KEYWORDS.put("of", TokenType.OF);
+		KEYWORDS.put("in", TokenType.IN);
 		KEYWORDS.put("break", TokenType.BREAK);
 		KEYWORDS.put("continue", TokenType.CONTINUE);
+		KEYWORDS.put("typeof", TokenType.TYPEOF);
+		KEYWORDS.put("void", TokenType.VOID);
+		KEYWORDS.put("delete", TokenType.DELETE);
+		KEYWORDS.put("throw", TokenType.THROW);
+		KEYWORDS.put("try", TokenType.TRY);
+		KEYWORDS.put("catch", TokenType.CATCH);
+		KEYWORDS.put("finally", TokenType.FINALLY);
+		KEYWORDS.put("do", TokenType.DO);
+		KEYWORDS.put("switch", TokenType.SWITCH);
+		KEYWORDS.put("case", TokenType.CASE);
+		KEYWORDS.put("default", TokenType.DEFAULT);
 		KEYWORDS.put("new", TokenType.NEW);
 		KEYWORDS.put("this", TokenType.THIS);
 		KEYWORDS.put("true", TokenType.TRUE);
@@ -60,7 +73,15 @@ public class JSLexer {
 				case '[': tokens.add(new Token(TokenType.LBRACKET, "[", null, startLine, startCol)); break;
 				case ']': tokens.add(new Token(TokenType.RBRACKET, "]", null, startLine, startCol)); break;
 				case ',': tokens.add(new Token(TokenType.COMMA, ",", null, startLine, startCol)); break;
-				case '.': tokens.add(new Token(TokenType.DOT, ".", null, startLine, startCol)); break;
+				case '.':
+					if (cursor < length && source.charAt(cursor) == '.' && cursor + 1 < length && source.charAt(cursor + 1) == '.') {
+						advance();
+						advance();
+						tokens.add(new Token(TokenType.ELLIPSIS, "...", null, startLine, startCol));
+					} else {
+						tokens.add(new Token(TokenType.DOT, ".", null, startLine, startCol));
+					}
+					break;
 				case ';': tokens.add(new Token(TokenType.SEMICOLON, ";", null, startLine, startCol)); break;
 				case ':': tokens.add(new Token(TokenType.COLON, ":", null, startLine, startCol)); break;
 				case '?': tokens.add(new Token(TokenType.QUESTION, "?", null, startLine, startCol)); break;
@@ -84,14 +105,21 @@ public class JSLexer {
 					break;
 
 				case '/':
-					if (match('=')) tokens.add(new Token(TokenType.SLASH_ASSIGN, "/=", null, startLine, startCol));
-					else tokens.add(new Token(TokenType.SLASH, "/", null, startLine, startCol));
+					if (isRegExpContext(tokens)) {
+						tokens.add(scanRegExp(startLine, startCol));
+					} else if (match('=')) {
+						tokens.add(new Token(TokenType.SLASH_ASSIGN, "/=", null, startLine, startCol));
+					} else {
+						tokens.add(new Token(TokenType.SLASH, "/", null, startLine, startCol));
+					}
 					break;
 
 				case '=':
 					if (match('=')) {
 						if (match('=')) tokens.add(new Token(TokenType.EQ_EQ, "===", null, startLine, startCol));
 						else tokens.add(new Token(TokenType.EQ, "==", null, startLine, startCol));
+					} else if (match('>')) {
+						tokens.add(new Token(TokenType.ARROW, "=>", null, startLine, startCol));
 					} else {
 						tokens.add(new Token(TokenType.ASSIGN, "=", null, startLine, startCol));
 					}
@@ -131,6 +159,10 @@ public class JSLexer {
 					tokens.add(scanString(c, startLine, startCol));
 					break;
 
+				case '`':
+					tokens.add(scanTemplateString(startLine, startCol));
+					break;
+
 				default:
 					if (isDigit(c)) {
 						cursor--; // back up
@@ -167,9 +199,43 @@ public class JSLexer {
 					case 'r': sb.append('\r'); break;
 					case 'b': sb.append('\b'); break;
 					case 'f': sb.append('\f'); break;
+					case '0': sb.append('\0'); break;
 					case '\\': sb.append('\\'); break;
 					case '\'': sb.append('\''); break;
 					case '"': sb.append('"'); break;
+					case '`': sb.append('`'); break;
+					case 'u': {
+						if (cursor + 4 <= length) {
+							String hex = source.substring(cursor, cursor + 4);
+							try {
+								int code = Integer.parseInt(hex, 16);
+								sb.append((char) code);
+								cursor += 4;
+								column += 4;
+							} catch (NumberFormatException e) {
+								sb.append('u');
+							}
+						} else {
+							sb.append('u');
+						}
+						break;
+					}
+					case 'x': {
+						if (cursor + 2 <= length) {
+							String hex = source.substring(cursor, cursor + 2);
+							try {
+								int code = Integer.parseInt(hex, 16);
+								sb.append((char) code);
+								cursor += 2;
+								column += 2;
+							} catch (NumberFormatException e) {
+								sb.append('x');
+							}
+						} else {
+							sb.append('x');
+						}
+						break;
+					}
 					default: sb.append(esc); break;
 				}
 			} else {
@@ -179,12 +245,116 @@ public class JSLexer {
 		throw new RuntimeException("Unterminated string starting at line " + startLine + ":" + startCol);
 	}
 
+	private Token scanTemplateString(int startLine, int startCol) {
+		StringBuilder sb = new StringBuilder();
+		while (!isAtEnd()) {
+			char c = advance();
+			if (c == '`') {
+				return new Token(TokenType.STRING, sb.toString(), sb.toString(), startLine, startCol);
+			}
+			if (c == '\\') {
+				if (isAtEnd()) break;
+				char esc = advance();
+				switch (esc) {
+					case 'n': sb.append('\n'); break;
+					case 't': sb.append('\t'); break;
+					case 'r': sb.append('\r'); break;
+					case 'b': sb.append('\b'); break;
+					case 'f': sb.append('\f'); break;
+					case '0': sb.append('\0'); break;
+					case '\\': sb.append('\\'); break;
+					case '`': sb.append('`'); break;
+					case '$': sb.append('$'); break;
+					case 'u': {
+						if (cursor + 4 <= length) {
+							String hex = source.substring(cursor, cursor + 4);
+							try {
+								int code = Integer.parseInt(hex, 16);
+								sb.append((char) code);
+								cursor += 4;
+								column += 4;
+							} catch (NumberFormatException e) {
+								sb.append('u');
+							}
+						} else {
+							sb.append('u');
+						}
+						break;
+					}
+					case 'x': {
+						if (cursor + 2 <= length) {
+							String hex = source.substring(cursor, cursor + 2);
+							try {
+								int code = Integer.parseInt(hex, 16);
+								sb.append((char) code);
+								cursor += 2;
+								column += 2;
+							} catch (NumberFormatException e) {
+								sb.append('x');
+							}
+						} else {
+							sb.append('x');
+						}
+						break;
+					}
+					default: sb.append(esc); break;
+				}
+			} else {
+				sb.append(c);
+			}
+		}
+		throw new RuntimeException("Unterminated template string starting at line " + startLine + ":" + startCol);
+	}
+
 	private Token scanNumber(int startLine, int startCol) {
 		int start = cursor;
+		if (source.charAt(cursor) == '0' && cursor + 1 < length) {
+			char next = source.charAt(cursor + 1);
+			if (next == 'x' || next == 'X') {
+				advance(); advance(); // consume 0x
+				int hexStart = cursor;
+				while (!isAtEnd() && isHexDigit(peek())) advance();
+				String hex = source.substring(hexStart, cursor);
+				double val = 0.0;
+				try {
+					val = (double) Long.parseUnsignedLong(hex, 16);
+				} catch (Exception ignored) {}
+				return new Token(TokenType.NUMBER, source.substring(start, cursor), val, startLine, startCol);
+			} else if (next == 'b' || next == 'B') {
+				advance(); advance(); // consume 0b
+				int binStart = cursor;
+				while (!isAtEnd() && (peek() == '0' || peek() == '1')) advance();
+				String bin = source.substring(binStart, cursor);
+				double val = 0.0;
+				try {
+					val = (double) Long.parseUnsignedLong(bin, 2);
+				} catch (Exception ignored) {}
+				return new Token(TokenType.NUMBER, source.substring(start, cursor), val, startLine, startCol);
+			} else if (next == 'o' || next == 'O') {
+				advance(); advance(); // consume 0o
+				int octStart = cursor;
+				while (!isAtEnd() && peek() >= '0' && peek() <= '7') advance();
+				String oct = source.substring(octStart, cursor);
+				double val = 0.0;
+				try {
+					val = (double) Long.parseUnsignedLong(oct, 8);
+				} catch (Exception ignored) {}
+				return new Token(TokenType.NUMBER, source.substring(start, cursor), val, startLine, startCol);
+			}
+		}
+
 		while (!isAtEnd() && isDigit(peek())) advance();
 
 		if (!isAtEnd() && peek() == '.' && cursor + 1 < length && isDigit(source.charAt(cursor + 1))) {
 			advance(); // consume '.'
+			while (!isAtEnd() && isDigit(peek())) advance();
+		}
+
+		if (!isAtEnd() && (peek() == 'e' || peek() == 'E')) {
+			advance(); // consume 'e'
+			if (!isAtEnd() && (peek() == '+' || peek() == '-')) {
+				advance();
+			}
 			while (!isAtEnd() && isDigit(peek())) advance();
 		}
 
@@ -206,7 +376,8 @@ public class JSLexer {
 			else if (type == TokenType.FALSE) val = Boolean.FALSE;
 			return new Token(type, text, val, startLine, startCol);
 		}
-		return new Token(TokenType.IDENTIFIER, text, text, startLine, startCol);
+		String sym = hope.magic.js.runtime.SymbolTable.symbol(text);
+		return new Token(TokenType.IDENTIFIER, sym, sym, startLine, startCol);
 	}
 
 	private void skipWhitespaceAndComments() {
@@ -238,6 +409,49 @@ public class JSLexer {
 		}
 	}
 
+	private boolean isRegExpContext(List<Token> tokens) {
+		if (tokens.isEmpty()) return true;
+		Token last = tokens.get(tokens.size() - 1);
+		return switch (last.type) {
+			case IDENTIFIER, NUMBER, STRING, REGEXP,
+			     TRUE, FALSE, NULL, UNDEFINED, THIS,
+			     RPAREN, RBRACKET, RBRACE,
+			     PLUS_PLUS, MINUS_MINUS -> false;
+			default -> true;
+		};
+	}
+
+	private Token scanRegExp(int startLine, int startCol) {
+		StringBuilder pattern = new StringBuilder();
+		boolean inClass = false;
+		while (!isAtEnd()) {
+			char c = advance();
+			if (c == '\\') {
+				if (isAtEnd()) break;
+				pattern.append('\\');
+				pattern.append(advance());
+			} else if (c == '[') {
+				inClass = true;
+				pattern.append(c);
+			} else if (c == ']') {
+				inClass = false;
+				pattern.append(c);
+			} else if (c == '/' && !inClass) {
+				StringBuilder flags = new StringBuilder();
+				while (!isAtEnd() && isAlpha(peek())) {
+					flags.append(advance());
+				}
+				String raw = "/" + pattern + "/" + flags;
+				return new Token(TokenType.REGEXP, raw, new String[]{pattern.toString(), flags.toString()}, startLine, startCol);
+			} else if (c == '\n') {
+				break;
+			} else {
+				pattern.append(c);
+			}
+		}
+		throw new RuntimeException("Unterminated regular expression literal at line " + startLine + ":" + startCol);
+	}
+
 	private boolean isAtEnd() {
 		return cursor >= length;
 	}
@@ -261,6 +475,10 @@ public class JSLexer {
 
 	private boolean isDigit(char c) {
 		return c >= '0' && c <= '9';
+	}
+
+	private boolean isHexDigit(char c) {
+		return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 	}
 
 	private boolean isAlpha(char c) {

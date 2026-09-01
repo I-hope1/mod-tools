@@ -26,6 +26,9 @@ public class JSObject {
 	}
 
 	public Object getSlot(int offset) {
+		if (offset < 64 && ((doubleFieldMask >>> offset) & 1L) != 0L) {
+			return doubleSlots[offset];
+		}
 		if (offset == 0) return slot0;
 		if (offset == 1) return slot1;
 		if (offset == 2) return slot2;
@@ -34,7 +37,7 @@ public class JSObject {
 	}
 
 	public double getDoubleSlot(int offset) {
-		if (((int) (doubleFieldMask >>> offset) & 1) != 0) {
+		if (offset < 64 && ((int) (doubleFieldMask >>> offset) & 1) != 0) {
 			return doubleSlots[offset];
 		}
 		return getDoubleSlotSlow(offset);
@@ -56,12 +59,15 @@ public class JSObject {
 
 	public void setDoubleSlot(int offset, double value) {
 		if (doubleSlots == null || offset >= doubleSlots.length) {
-			double[] newArr = new double[Math.max(IN_OBJECT_SLOTS, offset + 1)];
-			if (doubleSlots != null) System.arraycopy(doubleSlots, 0, newArr, 0, doubleSlots.length);
-			doubleSlots = newArr;
+			ensureDoubleCapacity(offset);
 		}
 		doubleSlots[offset] = value;
 		doubleFieldMask |= (1L << offset);
+	}
+	private void ensureDoubleCapacity(int offset) {
+		double[] newArr = new double[Math.max(IN_OBJECT_SLOTS, offset + 1)];
+		if (doubleSlots != null) System.arraycopy(doubleSlots, 0, newArr, 0, doubleSlots.length);
+		doubleSlots = newArr;
 	}
 
 	public void setSlot(int offset, Object value) {

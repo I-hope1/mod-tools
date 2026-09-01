@@ -27,11 +27,11 @@
         {
           "name": "magic-accessor-annotations-1.0.0.jar",
           "url": "magic-accessor-annotations-1.0.0.jar",
-          "size": 19336,
-          "sha512": "eb458bba169642d17c5b1888833312d5780856011a7bd00472a5525029269a3f21a167e947b5da219921c32433e441eb18198b19e875150888c8ba50cc88276f",
-          "sha256": "dd1714c8627fa0b3f7e2312c89bafdc0b43774d72401ba683e7d90f2e746eee1",
-          "sha1": "978c90a9ff6b5913546323f88abd77f72ce693fa",
-          "md5": "671cd25ccdd6af55db587d0aca3349ca"
+          "size": 36579,
+          "sha512": "a5937e1c369e32002f1292a1f05a9238aadc80f032ed92c459cee4f0b9fb144ef835b08384937dd96f6619cbbec1dab77b79785a249e0cab8eebe8a64bf9b181",
+          "sha256": "95f3315a23e1ff63090b499a6a4958bdef54164f4f4caff3406b30febb65c6f2",
+          "sha1": "c88887e7ca8996c110be5bc7aa8cdc0738bf80d3",
+          "md5": "cbab7e5b7340b6d2be261fe30da8e17e"
         }
       ]
     },
@@ -48,11 +48,11 @@
         {
           "name": "magic-accessor-annotations-1.0.0.jar",
           "url": "magic-accessor-annotations-1.0.0.jar",
-          "size": 19336,
-          "sha512": "eb458bba169642d17c5b1888833312d5780856011a7bd00472a5525029269a3f21a167e947b5da219921c32433e441eb18198b19e875150888c8ba50cc88276f",
-          "sha256": "dd1714c8627fa0b3f7e2312c89bafdc0b43774d72401ba683e7d90f2e746eee1",
-          "sha1": "978c90a9ff6b5913546323f88abd77f72ce693fa",
-          "md5": "671cd25ccdd6af55db587d0aca3349ca"
+          "size": 36579,
+          "sha512": "a5937e1c369e32002f1292a1f05a9238aadc80f032ed92c459cee4f0b9fb144ef835b08384937dd96f6619cbbec1dab77b79785a249e0cab8eebe8a64bf9b181",
+          "sha256": "95f3315a23e1ff63090b499a6a4958bdef54164f4f4caff3406b30febb65c6f2",
+          "sha1": "c88887e7ca8996c110be5bc7aa8cdc0738bf80d3",
+          "md5": "cbab7e5b7340b6d2be261fe30da8e17e"
         }
       ]
     }

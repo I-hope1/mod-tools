@@ -1,7 +1,6 @@
 package hope.magic.js.runtime;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -21,26 +20,20 @@ public final class JSShape {
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, -1, TYPE_UNKNOWN);
 
 	public final int id;
-	private final JSShape parent;
 	public final int propertyId;
-	private final int slotIndex;
-	private final byte propertyType;
 	public final int[] keyIds;
 	public final int[] offsets;
-	public final byte[] slotTypes;
-	private final ConcurrentHashMap<Integer, JSShape> transitions = new ConcurrentHashMap<>();
+	public final  byte[]                     slotTypes;
+	private final IntObjectMap<JSShape> transitions = new IntObjectMap<>();
 
 	public final int cachedKeyId;
 	public final int cachedOffset;
 
 	private JSShape(JSShape parent, int propertyId, int slotIndex, byte propertyType) {
 		this.id = SHAPE_ID_GEN.getAndIncrement();
-		this.parent = parent;
 		this.propertyId = propertyId;
-		this.slotIndex = slotIndex;
-		this.propertyType = propertyType;
 		this.cachedKeyId = this.propertyId;
-		this.cachedOffset = this.slotIndex;
+		this.cachedOffset = slotIndex;
 
 		int totalCount = (parent == null ? 0 : parent.keyIds.length) + (this.propertyId >= 0 && slotIndex >= 0 ? 1 : 0);
 		this.keyIds = new int[totalCount];
@@ -64,14 +57,14 @@ public final class JSShape {
 	 */
 	public int getOffset(int propId) {
 		if (this.cachedKeyId == propId && propId >= 0) return this.cachedOffset;
-		int[] k = this.keyIds;
-		int[] o = this.offsets;
-		for (int i = 0; i < k.length; i++) {
-			if (k[i] == propId) {
-				return o[i];
-			}
-		}
-		return -1;
+    int[] k = this.keyIds;
+    // JS 编程中，最近添加/后添加的属性被访问的概率通常更高
+    for (int i = k.length - 1; i >= 0; i--) {
+        if (k[i] == propId) {
+            return this.offsets[i];
+        }
+    }
+    return -1;
 	}
 
 	/**
@@ -94,7 +87,8 @@ public final class JSShape {
 	}
 
 	public JSShape addProperty(int propId, byte type) {
-		return transitions.computeIfAbsent(propId, k -> new JSShape(this, k, this.keyIds.length, type));
+		return transitions.computeIfAbsent((propId << 3) | (type & 0x07),
+		 k -> new JSShape(this, propId, this.keyIds.length, type));
 	}
 
 	public JSShape addProperty(String key) {

@@ -78,7 +78,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		if (index >= 0 && index < denseSize) {
 			return elements[index];
 		}
-		return getElementSlow((long) index);
+		return getElementSlow(index);
 	}
 
 	public Object getElement(long index) {

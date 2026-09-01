@@ -1,6 +1,9 @@
 package hope.magic.js.test;
 
+import hope.magic.js.runtime.JSArray;
 import hope.magic.js.runtime.JSContext;
+import hope.magic.js.runtime.JSShape;
+import hope.magic.js.runtime.SymbolTable;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -434,9 +437,9 @@ public class MagicJSTest {
 	public void testCanonicalArrayIndexAndDirectAPI() {
 		JSContext cx = new JSContext();
 		// 1. JSArray Java Direct API 不应抛出 IndexOutOfBoundsException
-		hope.magic.js.runtime.JSArray rawArr = new hope.magic.js.runtime.JSArray();
+		JSArray rawArr = new JSArray();
 		rawArr.setElement(-1, 999);
-		Assertions.assertEquals(999, rawArr.getElement(-1));
+		Assertions.assertEquals(999.0, ((Number)rawArr.getElement(-1)).doubleValue());
 		Assertions.assertEquals(0, rawArr.length());
 
 		// 2. 规范数组索引 vs 普通字符串属性 (ECMAScript 规范测试)
@@ -574,7 +577,7 @@ public class MagicJSTest {
 
 	@Test
 	public void testJSObjectDeleteAndKeys() {
-		hope.magic.js.runtime.JSObject obj = new hope.magic.js.runtime.JSObject();
+		var obj = new hope.magic.js.runtime.JSObject();
 		obj.put("a", 100);
 		obj.put("b", 200);
 		Assertions.assertTrue(obj.has("a"));
@@ -589,6 +592,21 @@ public class MagicJSTest {
 		Assertions.assertTrue(obj.keys().contains("b"));
 		Assertions.assertFalse(obj.keys().contains("a"));
 		Assertions.assertEquals(1, obj.getProperties().size());
+	}
+
+	@Test
+	public void testShapeTransitionCachedByPropIdKeepsOldType() {
+		// 验证：JSShape.transitions 仅以 propId 为 key 时，重复 addProperty(propId, differentType)
+		// 会命中之前缓存的 shape，导致返回的 shape 中 slotTypes 使用第一次添加的类型。
+		JSShape root = JSShape.ROOT;
+		int propId = SymbolTable.id("x_test_transition");
+		JSShape s1 = root.addProperty(propId, JSShape.TYPE_INT);
+		int off = s1.cachedOffset;
+		Assertions.assertEquals(JSShape.TYPE_INT, s1.getSlotType(off));
+		JSShape s2 = root.addProperty(propId, JSShape.TYPE_DOUBLE);
+		// 如果 transitions 只用 propId 寻址，则 s2 会是第一次创建的 shape（类型为 INT）
+		Assertions.assertNotSame(s1, s2);
+		Assertions.assertEquals(JSShape.TYPE_DOUBLE, s2.getSlotType(s2.cachedOffset));
 	}
 
 	@Test
@@ -854,8 +872,8 @@ public class MagicJSTest {
 			var isG = r.global;
 			[t1, t2, src, flags, isI, isG];
 		""");
-		Assertions.assertInstanceOf(hope.magic.js.runtime.JSArray.class, test1);
-		hope.magic.js.runtime.JSArray arr1 = (hope.magic.js.runtime.JSArray) test1;
+		Assertions.assertInstanceOf(JSArray.class, test1);
+		JSArray arr1 = (JSArray) test1;
 		Assertions.assertEquals(Boolean.TRUE, arr1.getElement(0));
 		Assertions.assertEquals(Boolean.FALSE, arr1.getElement(1));
 		Assertions.assertEquals("^hello\\s+world", arr1.getElement(2));
@@ -869,8 +887,8 @@ public class MagicJSTest {
 			var match = r.exec("John Smith 123");
 			[match[0], match[1], match[2], match.index, match.input];
 		""");
-		Assertions.assertInstanceOf(hope.magic.js.runtime.JSArray.class, test2);
-		hope.magic.js.runtime.JSArray arr2 = (hope.magic.js.runtime.JSArray) test2;
+		Assertions.assertInstanceOf(JSArray.class, test2);
+		JSArray arr2 = (JSArray) test2;
 		Assertions.assertEquals("John Smith", arr2.getElement(0));
 		Assertions.assertEquals("John", arr2.getElement(1));
 		Assertions.assertEquals("Smith", arr2.getElement(2));
@@ -890,7 +908,7 @@ public class MagicJSTest {
 			var m4 = r.exec(str);
 			[m1, idx1, m2, idx2, m3, idx3, m4];
 		""");
-		hope.magic.js.runtime.JSArray arr3 = (hope.magic.js.runtime.JSArray) test3;
+		JSArray arr3 = (JSArray) test3;
 		Assertions.assertEquals("12", arr3.getElement(0));
 		Assertions.assertEquals(3.0, ((Number) arr3.getElement(1)).doubleValue());
 		Assertions.assertEquals("34", arr3.getElement(2));
@@ -905,7 +923,7 @@ public class MagicJSTest {
 			var r2 = RegExp(r1, "i");
 			[r1.test("123"), r2.ignoreCase, r2.source];
 		""");
-		hope.magic.js.runtime.JSArray arr4 = (hope.magic.js.runtime.JSArray) test4;
+		JSArray arr4 = (JSArray) test4;
 		Assertions.assertEquals(Boolean.TRUE, arr4.getElement(0));
 		Assertions.assertEquals(Boolean.TRUE, arr4.getElement(1));
 		Assertions.assertEquals("\\d+", arr4.getElement(2));
@@ -917,7 +935,7 @@ public class MagicJSTest {
 			var singleMatch = str.match(/item(\\d)/);
 			[gMatches[0], gMatches[1], gMatches[2], singleMatch[1]];
 		""");
-		hope.magic.js.runtime.JSArray arr5 = (hope.magic.js.runtime.JSArray) test5;
+		JSArray arr5 = (JSArray) test5;
 		Assertions.assertEquals("item1", arr5.getElement(0));
 		Assertions.assertEquals("item2", arr5.getElement(1));
 		Assertions.assertEquals("item3", arr5.getElement(2));
@@ -930,7 +948,7 @@ public class MagicJSTest {
 			var pos2 = s.search(/not_exist/);
 			[pos1, pos2];
 		""");
-		hope.magic.js.runtime.JSArray arr6 = (hope.magic.js.runtime.JSArray) test6;
+		JSArray arr6 = (JSArray) test6;
 		Assertions.assertEquals(6.0, ((Number) arr6.getElement(0)).doubleValue());
 		Assertions.assertEquals(-1.0, ((Number) arr6.getElement(1)).doubleValue());
 
@@ -942,7 +960,7 @@ public class MagicJSTest {
 			var r2 = text.replace(/(\\w)(\\d)/g, (match, letter, digit) => letter.toUpperCase() + "_" + (digit * 10));
 			[r1, r2];
 		""");
-		hope.magic.js.runtime.JSArray arr7 = (hope.magic.js.runtime.JSArray) test7;
+		JSArray arr7 = (JSArray) test7;
 		Assertions.assertEquals("08/31/2026", arr7.getElement(0));
 		Assertions.assertEquals("A_10 B_20 C_30", arr7.getElement(1));
 
@@ -952,7 +970,7 @@ public class MagicJSTest {
 			var parts = data.split(/[,;\\s]+/);
 			[parts.length, parts[0], parts[1], parts[2], parts[3]];
 		""");
-		hope.magic.js.runtime.JSArray arr8 = (hope.magic.js.runtime.JSArray) test8;
+		JSArray arr8 = (JSArray) test8;
 		Assertions.assertEquals(4.0, ((Number) arr8.getElement(0)).doubleValue());
 		Assertions.assertEquals("apple", arr8.getElement(1));
 		Assertions.assertEquals("banana", arr8.getElement(2));
@@ -967,7 +985,7 @@ public class MagicJSTest {
 			var arr = [10 / 2, /foo/.test("foobar")];
 			[a, b, isDigit, arr[0], arr[1]];
 		""");
-		hope.magic.js.runtime.JSArray arr9 = (hope.magic.js.runtime.JSArray) test9;
+		JSArray arr9 = (JSArray) test9;
 		Assertions.assertEquals(50.0, ((Number) arr9.getElement(0)).doubleValue());
 		Assertions.assertEquals(50.0, ((Number) arr9.getElement(1)).doubleValue());
 		Assertions.assertEquals(Boolean.TRUE, arr9.getElement(2));
@@ -1160,7 +1178,7 @@ public class MagicJSTest {
 
 	@Test
 	public void testJSArrayIterable() {
-		hope.magic.js.runtime.JSArray arr = new hope.magic.js.runtime.JSArray();
+		JSArray arr = new JSArray();
 		arr.push(10);
 		arr.push(20);
 		arr.push(30);

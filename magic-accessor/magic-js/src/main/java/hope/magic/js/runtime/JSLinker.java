@@ -1706,6 +1706,9 @@ public class JSLinker {
 
 	private static int getInheritanceDistance(Class<?> from, Class<?> to) {
 		if (from == to) return 0;
+		if (to.isArray() && from.isArray()) {
+        return getInheritanceDistance(from.getComponentType(), to.getComponentType());
+    }
 		if (to.isInterface()) {
 			int minDistance = COST_INCOMPATIBLE;
 			for (Class<?> iface : from.getInterfaces()) {
@@ -1839,7 +1842,8 @@ public class JSLinker {
 					} else {
 						return false;
 					}
-				} else if (!t1.isAssignableFrom(t2)) {
+				} else {
+					// 如果 t1 不能转换为 t2，说明 m1 在此参数上不比 m2 更具体，必须返回 false
 					return false;
 				}
 			}

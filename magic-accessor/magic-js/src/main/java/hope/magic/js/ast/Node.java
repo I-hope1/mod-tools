@@ -50,7 +50,7 @@ public abstract class Node {
 		R visitTernaryExpr(TernaryExpr node, C context);
 	}
 
-	// ==================== 语句 Statements ====================
+	//region 语句 Statements
 
 	public static class Program extends Node {
 		public final List<Node> body;
@@ -337,8 +337,9 @@ public abstract class Node {
 			return visitor.visitFunctionDecl(this, context);
 		}
 	}
+	//endregion
 
-	// ==================== 表达式 Expressions ====================
+	//region 表达式 Expressions
 
 	public static class AssignExpr extends Node {
 		public final Node target;
@@ -595,4 +596,5 @@ public abstract class Node {
 			return visitor.visitTernaryExpr(this, context);
 		}
 	}
+	//endregion
 }

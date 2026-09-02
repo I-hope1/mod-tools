@@ -18,6 +18,66 @@ public class JSOps {
 		return toDouble(a) + toDouble(b);
 	}
 
+	//region Primitive 特化 (Zero-Boxing Fast Paths)
+
+	public static double add(double a, double b) {
+		return a + b;
+	}
+
+	public static int add(int a, int b) {
+		return a + b;
+	}
+
+	public static double add(int a, double b) {
+		return a + b;
+	}
+
+	public static double add(double a, int b) {
+		return a + b;
+	}
+
+	public static String add(String a, String b) {
+		return a + b;
+	}
+
+	public static String add(String a, Object b) {
+		return a + toStr(b);
+	}
+
+	public static String add(Object a, String b) {
+		return toStr(a) + b;
+	}
+
+	public static Object add(Object a, double b) {
+		if (a instanceof String s) return s + toStr(b);
+		return toDouble(a) + b;
+	}
+
+	public static Object add(double a, Object b) {
+		if (b instanceof String s) return toStr(a) + s;
+		return a + toDouble(b);
+	}
+
+	public static Object add(Object a, int b) {
+		if (a instanceof String s) return s + b;
+		if (a instanceof Integer ai) {
+			long res = (long) ai + (long) b;
+			if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) return (int) res;
+			return (double) res;
+		}
+		return toDouble(a) + b;
+	}
+
+	public static Object add(int a, Object b) {
+		if (b instanceof String s) return a + s;
+		if (b instanceof Integer bi) {
+			long res = (long) a + (long) bi;
+			if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) return (int) res;
+			return (double) res;
+		}
+		return a + toDouble(b);
+	}
+
 	public static Object sub(Object a, Object b) {
 		if (a instanceof Double && b instanceof Double) return (Double) a - (Double) b;
 		if (a instanceof Integer && b instanceof Integer) {
@@ -26,6 +86,30 @@ public class JSOps {
 			return (double) res;
 		}
 		return toDouble(a) - toDouble(b);
+	}
+
+	public static double sub(double a, double b) {
+		return a - b;
+	}
+
+	public static int sub(int a, int b) {
+		return a - b;
+	}
+
+	public static double sub(int a, double b) {
+		return a - b;
+	}
+
+	public static double sub(double a, int b) {
+		return a - b;
+	}
+
+	public static double sub(Object a, double b) {
+		return toDouble(a) - b;
+	}
+
+	public static double sub(double a, Object b) {
+		return a - toDouble(b);
 	}
 
 	public static Object mul(Object a, Object b) {
@@ -38,9 +122,57 @@ public class JSOps {
 		return toDouble(a) * toDouble(b);
 	}
 
+	public static double mul(double a, double b) {
+		return a * b;
+	}
+
+	public static int mul(int a, int b) {
+		return a * b;
+	}
+
+	public static double mul(int a, double b) {
+		return a * b;
+	}
+
+	public static double mul(double a, int b) {
+		return a * b;
+	}
+
+	public static double mul(Object a, double b) {
+		return toDouble(a) * b;
+	}
+
+	public static double mul(double a, Object b) {
+		return a * toDouble(b);
+	}
+
 	public static Object div(Object a, Object b) {
 		if (a instanceof Double && b instanceof Double) return (Double) a / (Double) b;
 		return toDouble(a) / toDouble(b);
+	}
+
+	public static double div(double a, double b) {
+		return a / b;
+	}
+
+	public static double div(int a, int b) {
+		return (double) a / (double) b;
+	}
+
+	public static double div(int a, double b) {
+		return (double) a / b;
+	}
+
+	public static double div(double a, int b) {
+		return a / (double) b;
+	}
+
+	public static double div(Object a, double b) {
+		return toDouble(a) / b;
+	}
+
+	public static double div(double a, Object b) {
+		return a / toDouble(b);
 	}
 
 	public static Object mod(Object a, Object b) {
@@ -50,6 +182,30 @@ public class JSOps {
 		}
 		if (a instanceof Double && b instanceof Double) return (Double) a % (Double) b;
 		return toDouble(a) % toDouble(b);
+	}
+
+	public static double mod(double a, double b) {
+		return a % b;
+	}
+
+	public static int mod(int a, int b) {
+		return b == 0 ? 0 : a % b;
+	}
+
+	public static double mod(int a, double b) {
+		return (double) a % b;
+	}
+
+	public static double mod(double a, int b) {
+		return a % (double) b;
+	}
+
+	public static double mod(Object a, double b) {
+		return toDouble(a) % b;
+	}
+
+	public static double mod(double a, Object b) {
+		return a % toDouble(b);
 	}
 
 	public static boolean isEq(Object a, Object b) {
@@ -458,4 +614,5 @@ public class JSOps {
 		if (t != null && t.getCause() instanceof JSException jse) return jse.value;
 		return t != null ? (t.getMessage() != null ? t.getMessage() : t.toString()) : "Error";
 	}
+	//endregion
 }

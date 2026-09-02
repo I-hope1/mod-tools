@@ -1,12 +1,13 @@
 package hope.magic.js.runtime;
 
-import hope.magic.runtime.Magic;
+import hope.magic.runtime.*;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -22,16 +23,16 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class MagicJIT implements Opcodes {
 
-	private record InvokerKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {}
-	private record CtorKey(Class<?> clazz, int arity) {}
-	private record MemberKey(Class<?> clazz, String memberName) {}
-	private record PrimMemberKey(Class<?> clazz, String memberName, Class<?> primType) {}
+	private record InvokerKey(Class<?> clazz, String methodName, int arity, boolean isStatic) { }
+	private record CtorKey(Class<?> clazz, int arity) { }
+	private record MemberKey(Class<?> clazz, String memberName) { }
+	private record PrimMemberKey(Class<?> clazz, String memberName, Class<?> primType) { }
 
-	private static final AtomicLong COUNTER = new AtomicLong();
-	private static final Map<InvokerKey, MagicInvoker> INVOKER_CACHE = new ConcurrentHashMap<>();
-	private static final Map<CtorKey, MagicConstructorInvoker> CTOR_CACHE = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, MethodHandle> FN_ADAPTER_MH_CACHE = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, MethodHandle> OBJ_ADAPTER_MH_CACHE = new ConcurrentHashMap<>();
+	private static final AtomicLong                            COUNTER              = new AtomicLong();
+	private static final Map<InvokerKey, MagicInvoker>         INVOKER_CACHE        = new ConcurrentHashMap<>();
+	private static final Map<CtorKey, MagicConstructorInvoker> CTOR_CACHE           = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, MethodHandle>           FN_ADAPTER_MH_CACHE  = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, MethodHandle>           OBJ_ADAPTER_MH_CACHE = new ConcurrentHashMap<>();
 
 	@FunctionalInterface
 	public interface MagicInvoker {
@@ -60,15 +61,15 @@ public class MagicJIT implements Opcodes {
 
 		try {
 			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicInvoker_" + COUNTER.incrementAndGet();
+			ClassWriter cw        = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      className = "hope/magic/gen/MagicInvoker_" + COUNTER.incrementAndGet();
 			cw.visit(
-				V1_8,
-				ACC_PUBLIC | ACC_FINAL,
-				className,
-				null,
-				"hope/magic/runtime/MAGICIMPL",
-				new String[]{ "hope/magic/js/runtime/MagicJIT$MagicInvoker" }
+			 V1_8,
+			 ACC_PUBLIC | ACC_FINAL,
+			 className,
+			 null,
+			 "hope/magic/runtime/MAGICIMPL",
+			 new String[]{"hope/magic/js/runtime/MagicJIT$MagicInvoker"}
 			);
 
 			// <init>
@@ -76,11 +77,11 @@ public class MagicJIT implements Opcodes {
 
 			// Object invoke(Object target, Object[] args)
 			MethodVisitor mv = cw.visitMethod(
-				ACC_PUBLIC,
-				"invoke",
-				"(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
-				null,
-				new String[]{ "java/lang/Throwable" }
+			 ACC_PUBLIC,
+			 "invoke",
+			 "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+			 null,
+			 new String[]{"java/lang/Throwable"}
 			);
 			mv.visitCode();
 
@@ -113,7 +114,7 @@ public class MagicJIT implements Opcodes {
 			mv.visitEnd();
 
 			cw.visitEnd();
-			byte[] bytes = cw.toByteArray();
+			byte[]   bytes    = cw.toByteArray();
 			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), bytes);
 			return (MagicInvoker) genClass.getDeclaredConstructor().newInstance();
 		} catch (Throwable e) {
@@ -128,15 +129,15 @@ public class MagicJIT implements Opcodes {
 
 		try {
 			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicCtorInvoker_" + COUNTER.incrementAndGet();
+			ClassWriter cw        = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      className = "hope/magic/gen/MagicCtorInvoker_" + COUNTER.incrementAndGet();
 			cw.visit(
-				V1_8,
-				ACC_PUBLIC | ACC_FINAL,
-				className,
-				null,
-				"hope/magic/runtime/MAGICIMPL",
-				new String[]{ "hope/magic/js/runtime/MagicJIT$MagicConstructorInvoker" }
+			 V1_8,
+			 ACC_PUBLIC | ACC_FINAL,
+			 className,
+			 null,
+			 "hope/magic/runtime/MAGICIMPL",
+			 new String[]{"hope/magic/js/runtime/MagicJIT$MagicConstructorInvoker"}
 			);
 
 			// <init>
@@ -144,11 +145,11 @@ public class MagicJIT implements Opcodes {
 
 			// Object newInstance(Object[] args)
 			MethodVisitor mv = cw.visitMethod(
-				ACC_PUBLIC,
-				"newInstance",
-				"([Ljava/lang/Object;)Ljava/lang/Object;",
-				null,
-				new String[]{ "java/lang/Throwable" }
+			 ACC_PUBLIC,
+			 "newInstance",
+			 "([Ljava/lang/Object;)Ljava/lang/Object;",
+			 null,
+			 new String[]{"java/lang/Throwable"}
 			);
 			mv.visitCode();
 
@@ -171,7 +172,7 @@ public class MagicJIT implements Opcodes {
 			mv.visitEnd();
 
 			cw.visitEnd();
-			byte[] bytes = cw.toByteArray();
+			byte[]   bytes    = cw.toByteArray();
 			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), bytes);
 			return (MagicConstructorInvoker) genClass.getDeclaredConstructor().newInstance();
 		} catch (Throwable e) {
@@ -188,8 +189,8 @@ public class MagicJIT implements Opcodes {
 		initMv.visitEnd();
 	}
 
-	private static final Map<MemberKey, MethodHandle> GETTER_CACHE = new ConcurrentHashMap<>();
-	private static final Map<MemberKey, MethodHandle> SETTER_CACHE = new ConcurrentHashMap<>();
+	private static final Map<MemberKey, MethodHandle>     GETTER_CACHE           = new ConcurrentHashMap<>();
+	private static final Map<MemberKey, MethodHandle>     SETTER_CACHE           = new ConcurrentHashMap<>();
 	private static final Map<PrimMemberKey, MethodHandle> PRIMITIVE_GETTER_CACHE = new ConcurrentHashMap<>();
 
 	public static MethodHandle getFieldGetterStub(Class<?> clazz, String fieldName) {
@@ -207,64 +208,48 @@ public class MagicJIT implements Opcodes {
 		return PRIMITIVE_GETTER_CACHE.computeIfAbsent(key, k -> createExactPrimitiveFieldGetterStub(clazz, fieldName, primitiveType));
 	}
 
-	public static MethodHandle createExactPrimitiveFieldGetterStub(Class<?> clazz, String fieldName, Class<?> primitiveType) {
+	public static MethodHandle createExactPrimitiveFieldGetterStub(Class<?> clazz, String fieldName,
+	                                                               Class<?> primitiveType) {
 		Field field = getDeclaredFieldRecursive(clazz, fieldName);
 		if (field == null) return null;
 		field.setAccessible(true);
-
-		try {
-			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicPrimGetter_" + COUNTER.incrementAndGet();
-			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL", null);
-
-			// <init>
-			createMagicInitMethod(cw);
-
-			// public static <primitiveType> get(Object target)
-			String primDesc = Type.getDescriptor(primitiveType);
-			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "get", "(Ljava/lang/Object;)" + primDesc, null, null);
-			mv.visitCode();
-			String owner = Type.getInternalName(field.getDeclaringClass());
-			boolean isStatic = Modifier.isStatic(field.getModifiers());
-			if (!isStatic) {
-				mv.visitVarInsn(ALOAD, 0);
-				mv.visitTypeInsn(CHECKCAST, owner);
-				mv.visitFieldInsn(GETFIELD, owner, fieldName, Type.getDescriptor(field.getType()));
-			} else {
-				mv.visitFieldInsn(GETSTATIC, owner, fieldName, Type.getDescriptor(field.getType()));
-			}
-
-			// 原始类型精确强转
-			Class<?> fType = field.getType();
-			if (primitiveType == int.class) {
-				if (fType == long.class) mv.visitInsn(L2I);
-				else if (fType == double.class) mv.visitInsn(D2I);
-				else if (fType == float.class) mv.visitInsn(F2I);
-				mv.visitInsn(IRETURN);
-			} else if (primitiveType == double.class) {
-				if (fType == int.class || fType == short.class || fType == byte.class || fType == char.class) mv.visitInsn(I2D);
-				else if (fType == long.class) mv.visitInsn(L2D);
-				else if (fType == float.class) mv.visitInsn(F2D);
-				mv.visitInsn(DRETURN);
-			} else if (primitiveType == long.class) {
-				if (fType == int.class || fType == short.class || fType == byte.class || fType == char.class) mv.visitInsn(I2L);
-				else if (fType == double.class) mv.visitInsn(D2L);
-				else if (fType == float.class) mv.visitInsn(F2L);
-				mv.visitInsn(LRETURN);
-			} else if (primitiveType == boolean.class) {
-				mv.visitInsn(IRETURN);
-			}
-
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-
-			cw.visitEnd();
-			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), cw.toByteArray());
-			return Magic.lookup.findStatic(genClass, "get", MethodType.methodType(primitiveType, Object.class));
-		} catch (Throwable e) {
-			throw new RuntimeException("Failed to generate MagicPrimGetter for " + clazz.getName() + "." + fieldName, e);
+		long offset = LinkerHelper.getFieldOffset(field);
+		Class<?> fType = field.getType();
+		MethodHandle mh;
+		if (primitiveType == int.class) {
+			if (fType == int.class) mh = JSLinker.FieldMH.GET_INT_PRIM;
+			else if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE_AS_INT;
+			else if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG_AS_INT;
+			else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT_AS_INT;
+			else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT_AS_INT;
+			else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE_AS_INT;
+			else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR_AS_INT;
+			else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN_AS_INT;
+			else mh = JSLinker.FieldMH.GET_OBJECT_AS_INT;
+		} else if (primitiveType == double.class) {
+			if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE_PRIM;
+			else if (fType == int.class) mh = JSLinker.FieldMH.GET_INT_AS_DOUBLE;
+			else if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG_AS_DOUBLE;
+			else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT_AS_DOUBLE;
+			else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT_AS_DOUBLE;
+			else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE_AS_DOUBLE;
+			else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR_AS_DOUBLE;
+			else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN_AS_DOUBLE;
+			else mh = JSLinker.FieldMH.GET_OBJECT_AS_DOUBLE;
+		} else if (primitiveType == long.class) {
+			if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG_PRIM;
+			else if (fType == int.class) mh = JSLinker.FieldMH.GET_INT_AS_LONG;
+			else if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE_AS_LONG;
+			else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT_AS_LONG;
+			else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT_AS_LONG;
+			else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE_AS_LONG;
+			else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR_AS_LONG;
+			else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN_AS_LONG;
+			else mh = JSLinker.FieldMH.GET_OBJECT_AS_LONG;
+		} else {
+			mh = JSLinker.FieldMH.GET_OBJECT;
 		}
+		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
 	private static final Map<Method, MethodHandle> EXACT_METHOD_CACHE = new ConcurrentHashMap<>();
@@ -278,39 +263,19 @@ public class MagicJIT implements Opcodes {
 		Field field = getDeclaredFieldRecursive(clazz, fieldName);
 		if (field == null) return null;
 		field.setAccessible(true);
-
-		try {
-			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicGetter_" + COUNTER.incrementAndGet();
-			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL", null);
-
-			// <init>
-			createMagicInitMethod(cw);
-
-			// public static Object get(Object target)
-			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "get", "(Ljava/lang/Object;)Ljava/lang/Object;", null, null);
-			mv.visitCode();
-			String owner = Type.getInternalName(field.getDeclaringClass());
-			boolean isStatic = Modifier.isStatic(field.getModifiers());
-			if (!isStatic) {
-				mv.visitVarInsn(ALOAD, 0);
-				mv.visitTypeInsn(CHECKCAST, owner);
-				mv.visitFieldInsn(GETFIELD, owner, fieldName, Type.getDescriptor(field.getType()));
-			} else {
-				mv.visitFieldInsn(GETSTATIC, owner, fieldName, Type.getDescriptor(field.getType()));
-			}
-			emitReturnBox(mv, field.getType());
-			mv.visitInsn(ARETURN);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-
-			cw.visitEnd();
-			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), cw.toByteArray());
-			return Magic.lookup.findStatic(genClass, "get", MethodType.methodType(Object.class, Object.class));
-		} catch (Throwable e) {
-			throw new RuntimeException("Failed to generate MagicGetter for " + clazz.getName() + "." + fieldName, e);
-		}
+		long offset = LinkerHelper.getFieldOffset(field);
+		Class<?> fType = field.getType();
+		MethodHandle mh;
+		if (fType == int.class) mh = JSLinker.FieldMH.GET_INT;
+		else if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE;
+		else if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG;
+		else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT;
+		else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT;
+		else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE;
+		else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR;
+		else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN;
+		else mh = JSLinker.FieldMH.GET_OBJECT;
+		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
 	public static MethodHandle createExactFieldSetterStub(Class<?> clazz, String fieldName) {
@@ -322,42 +287,19 @@ public class MagicJIT implements Opcodes {
 		Field field = getDeclaredFieldRecursive(clazz, fieldName);
 		if (field == null) return null;
 		field.setAccessible(true);
-
-		try {
-			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicSetter_" + COUNTER.incrementAndGet();
-			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL", null);
-
-			// <init>
-			createMagicInitMethod(cw);
-
-			// public static void set(Object target, Object val)
-			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "set", "(Ljava/lang/Object;Ljava/lang/Object;)V", null, null);
-			mv.visitCode();
-			String owner = Type.getInternalName(field.getDeclaringClass());
-			boolean isStatic = Modifier.isStatic(field.getModifiers());
-			if (!isStatic) {
-				mv.visitVarInsn(ALOAD, 0);
-				mv.visitTypeInsn(CHECKCAST, owner);
-				mv.visitVarInsn(ALOAD, 1);
-				emitArgumentCast(mv, field.getType());
-				mv.visitFieldInsn(PUTFIELD, owner, fieldName, Type.getDescriptor(field.getType()));
-			} else {
-				mv.visitVarInsn(ALOAD, 1);
-				emitArgumentCast(mv, field.getType());
-				mv.visitFieldInsn(PUTSTATIC, owner, fieldName, Type.getDescriptor(field.getType()));
-			}
-			mv.visitInsn(RETURN);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-
-			cw.visitEnd();
-			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), cw.toByteArray());
-			return Magic.lookup.findStatic(genClass, "set", MethodType.methodType(void.class, Object.class, Object.class));
-		} catch (Throwable e) {
-			throw new RuntimeException("Failed to generate MagicSetter for " + clazz.getName() + "." + fieldName, e);
-		}
+		long offset = LinkerHelper.getFieldOffset(field);
+		Class<?> fType = field.getType();
+		MethodHandle mh;
+		if (fType == int.class) mh = JSLinker.FieldMH.PUT_INT;
+		else if (fType == double.class) mh = JSLinker.FieldMH.PUT_DOUBLE;
+		else if (fType == long.class) mh = JSLinker.FieldMH.PUT_LONG;
+		else if (fType == float.class) mh = JSLinker.FieldMH.PUT_FLOAT;
+		else if (fType == short.class) mh = JSLinker.FieldMH.PUT_SHORT;
+		else if (fType == byte.class) mh = JSLinker.FieldMH.PUT_BYTE;
+		else if (fType == char.class) mh = JSLinker.FieldMH.PUT_CHAR;
+		else if (fType == boolean.class) mh = JSLinker.FieldMH.PUT_BOOLEAN;
+		else mh = JSLinker.FieldMH.PUT_OBJECT;
+		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
 	public static MethodHandle createExactMethodStub(Class<?> clazz, Method targetMethod) {
@@ -365,13 +307,13 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static MethodHandle generateExactMethodStub(Class<?> clazz, Method targetMethod) {
-		int arity = targetMethod.getParameterCount();
+		int     arity    = targetMethod.getParameterCount();
 		boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
 
 		try {
 			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicExactMethod_" + COUNTER.incrementAndGet();
+			ClassWriter cw        = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      className = "hope/magic/gen/MagicExactMethod_" + COUNTER.incrementAndGet();
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL", null);
 
 			// <init>
@@ -421,11 +363,11 @@ public class MagicJIT implements Opcodes {
 	private static Field getDeclaredFieldRecursive(Class<?> clazz, String fieldName) {
 		Class<?> cur = clazz;
 		while (cur != null && cur != Object.class) {
-			try {
-				return cur.getDeclaredField(fieldName);
-			} catch (NoSuchFieldException ignored) {
-				cur = cur.getSuperclass();
+				// if (LinkerHelper.FAST_OFFSET && jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName) > 0)
+			for (Field field : cur.getDeclaredFields()) {
+				if (field.getName().equals(fieldName)) return field;
 			}
+			cur = cur.getSuperclass();
 		}
 		return null;
 	}
@@ -497,7 +439,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	// ==================== 动态接口适配器生成 (JIT Interface Adapters) ====================
+	//region 动态接口适配器生成 (JIT Interface Adapters)
 
 	public static Object getFunctionAdapter(Class<?> targetType, JSFunction fn) {
 		if (targetType == null || fn == null) return null;
@@ -551,16 +493,16 @@ public class MagicJIT implements Opcodes {
 
 		try {
 			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/JSFunctionAdapter_" + COUNTER.incrementAndGet();
-			String targetOwner = Type.getInternalName(targetType);
+			ClassWriter cw          = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      className   = "hope/magic/gen/JSFunctionAdapter_" + COUNTER.incrementAndGet();
+			String      targetOwner = Type.getInternalName(targetType);
 			cw.visit(
-				V1_8,
-				ACC_PUBLIC | ACC_FINAL,
-				className,
-				null,
-				"hope/magic/runtime/MAGICIMPL",
-				new String[]{ targetOwner }
+			 V1_8,
+			 ACC_PUBLIC | ACC_FINAL,
+			 className,
+			 null,
+			 "hope/magic/runtime/MAGICIMPL",
+			 new String[]{targetOwner}
 			);
 
 			// public final JSFunction fn;
@@ -585,9 +527,9 @@ public class MagicJIT implements Opcodes {
 			emitAdapterObjectMethods(cw, className, "JSFunctionAdapter[" + targetType.getSimpleName() + "]");
 
 			cw.visitEnd();
-			byte[] bytes = cw.toByteArray();
-			Class<?> genClass = Magic.defineClass(targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader(), bytes);
-			Constructor<?> ctor = genClass.getDeclaredConstructor(JSFunction.class);
+			byte[]         bytes    = cw.toByteArray();
+			Class<?>       genClass = Magic.defineClass(targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader(), bytes);
+			Constructor<?> ctor     = genClass.getDeclaredConstructor(JSFunction.class);
 			ctor.setAccessible(true);
 			return ctor;
 		} catch (Throwable e) {
@@ -599,10 +541,9 @@ public class MagicJIT implements Opcodes {
 	 * 生成优化的 JSFunction 调用字节码。
 	 * 根据参数个数选择特化的方法（call0/call1/call2/call3）或通用 call 方法。
 	 * 假设 JSFunction 对象已在栈顶，context 和 thisObj 也已被压栈。
-	 *
-	 * @param mv 方法访问器
+	 * @param mv         方法访问器
 	 * @param paramTypes 参数类型数组
-	 * @param retType 返回类型
+	 * @param retType    返回类型
 	 */
 	private static void emitOptimizedJSFunctionCall(MethodVisitor mv, Class<?>[] paramTypes, Class<?> retType) {
 		if (paramTypes.length == 0) {
@@ -644,10 +585,10 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static void emitAdapterSAMMethod(ClassWriter cw, String className, Method sam) {
-		String methodName = sam.getName();
-		String methodDesc = Type.getMethodDescriptor(sam);
+		String     methodName = sam.getName();
+		String     methodDesc = Type.getMethodDescriptor(sam);
 		Class<?>[] paramTypes = sam.getParameterTypes();
-		Class<?> retType = sam.getReturnType();
+		Class<?>   retType    = sam.getReturnType();
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, methodName, methodDesc, null, getExceptionNames(sam));
 		mv.visitCode();
@@ -661,7 +602,7 @@ public class MagicJIT implements Opcodes {
 		mv.visitInsn(ACONST_NULL); // thisObj
 
 		// 3. Zero-Allocation 特化直调 (call0, call1, call2, call3)
-				emitOptimizedJSFunctionCall(mv, paramTypes, retType);
+		emitOptimizedJSFunctionCall(mv, paramTypes, retType);
 
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
@@ -670,16 +611,16 @@ public class MagicJIT implements Opcodes {
 	private static Constructor<?> createObjectAdapterConstructor(Class<?> targetType) {
 		try {
 			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/JSObjectAdapter_" + COUNTER.incrementAndGet();
-			String targetOwner = Type.getInternalName(targetType);
+			ClassWriter cw          = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      className   = "hope/magic/gen/JSObjectAdapter_" + COUNTER.incrementAndGet();
+			String      targetOwner = Type.getInternalName(targetType);
 			cw.visit(
-				V1_8,
-				ACC_PUBLIC | ACC_FINAL,
-				className,
-				null,
-				"hope/magic/runtime/MAGICIMPL",
-				new String[]{ targetOwner }
+			 V1_8,
+			 ACC_PUBLIC | ACC_FINAL,
+			 className,
+			 null,
+			 "hope/magic/runtime/MAGICIMPL",
+			 new String[]{targetOwner}
 			);
 
 			// public final JSObject jsObj;
@@ -707,9 +648,9 @@ public class MagicJIT implements Opcodes {
 			emitAdapterObjectMethods(cw, className, "JSObjectAdapter[" + targetType.getSimpleName() + "]");
 
 			cw.visitEnd();
-			byte[] bytes = cw.toByteArray();
-			Class<?> genClass = Magic.defineClass(targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader(), bytes);
-			Constructor<?> ctor = genClass.getDeclaredConstructor(JSObject.class);
+			byte[]         bytes    = cw.toByteArray();
+			Class<?>       genClass = Magic.defineClass(targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader(), bytes);
+			Constructor<?> ctor     = genClass.getDeclaredConstructor(JSObject.class);
 			ctor.setAccessible(true);
 			return ctor;
 		} catch (Throwable e) {
@@ -718,10 +659,10 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static void emitObjectAdapterMethod(ClassWriter cw, String className, Method m) {
-		String methodName = m.getName();
-		String methodDesc = Type.getMethodDescriptor(m);
+		String     methodName = m.getName();
+		String     methodDesc = Type.getMethodDescriptor(m);
 		Class<?>[] paramTypes = m.getParameterTypes();
-		Class<?> retType = m.getReturnType();
+		Class<?>   retType    = m.getReturnType();
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, methodName, methodDesc, null, getExceptionNames(m));
 		mv.visitCode();
@@ -905,7 +846,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static boolean isObjectMethod(Method m) {
-		String name = m.getName();
+		String     name   = m.getName();
 		Class<?>[] params = m.getParameterTypes();
 		if ("equals".equals(name) && params.length == 1 && params[0] == Object.class) return true;
 		if ("hashCode".equals(name) && params.length == 0) return true;
@@ -925,7 +866,7 @@ public class MagicJIT implements Opcodes {
 
 	public static Object createProxyFunctionAdapter(Class<?> targetType, JSFunction fn) {
 		ClassLoader cl = targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader();
-		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{ targetType }, (proxy, method, methodArgs) -> {
+		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
 			if (method.getDeclaringClass() == Object.class) {
 				String name = method.getName();
 				switch (name) {
@@ -935,8 +876,8 @@ public class MagicJIT implements Opcodes {
 				}
 			}
 			Object[] safeArgs = methodArgs == null ? new Object[0] : methodArgs;
-			Object result = fn.call(null, null, safeArgs);
-			Class<?> retType = method.getReturnType();
+			Object   result   = fn.call(null, null, safeArgs);
+			Class<?> retType  = method.getReturnType();
 			if (retType == void.class) return null;
 			return JSLinker.castValue(result, retType);
 		});
@@ -944,7 +885,7 @@ public class MagicJIT implements Opcodes {
 
 	public static Object createProxyObjectAdapter(Class<?> targetType, JSObject jsObj) {
 		ClassLoader cl = targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader();
-		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{ targetType }, (proxy, method, methodArgs) -> {
+		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
 			if (method.getDeclaringClass() == Object.class) {
 				String name = method.getName();
 				switch (name) {
@@ -954,11 +895,11 @@ public class MagicJIT implements Opcodes {
 				}
 			}
 			String methodName = method.getName();
-			Object member = jsObj.get(methodName);
+			Object member     = jsObj.get(methodName);
 			if (member instanceof JSFunction fn) {
 				Object[] safeArgs = methodArgs == null ? new Object[0] : methodArgs;
-				Object result = fn.call(null, jsObj, safeArgs);
-				Class<?> retType = method.getReturnType();
+				Object   result   = fn.call(null, jsObj, safeArgs);
+				Class<?> retType  = method.getReturnType();
 				if (retType == void.class) return null;
 				return JSLinker.castValue(result, retType);
 			}
@@ -973,4 +914,5 @@ public class MagicJIT implements Opcodes {
 			return JSLinker.castValue(null, retType);
 		});
 	}
+	//endregion
 }

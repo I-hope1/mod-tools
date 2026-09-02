@@ -57,8 +57,7 @@ public class AccessorColdStartBenchmark {
 		);
 	}
 
-	// ==================== 字段 Getter 冷调用 ====================
-
+	//region 字段 Getter 冷调用
 	@Benchmark
 	public int baseline_direct_field_get() {
 		return target.getSecretCode();
@@ -85,9 +84,9 @@ public class AccessorColdStartBenchmark {
 	public int plan2A_linkTo_unsafe_field_get() {
 		return MagicAccessorSample.getSecretCode(target);
 	}
+	//endregion
 
-	// ==================== 方法调用冷调用 ====================
-
+	//region 方法调用冷调用
 	@Benchmark
 	public int baseline_direct_math_compute() {
 		return a * b;
@@ -140,9 +139,9 @@ public class AccessorColdStartBenchmark {
 	public int plan2C_android_methodhandle_method() {
 		return AndroidAccessorSample.callMultiply(target, a, b);
 	}
+	//endregion
 
-	// ==================== 私有构造器冷调用 ====================
-
+	//region 私有构造器冷调用
 	@Benchmark
 	public TargetObject dynamic_lookup_and_reflect_constructor_newInstance() throws Exception {
 		java.lang.reflect.Constructor<TargetObject> c = TargetObject.class.getDeclaredConstructor(int.class, String.class);
@@ -174,6 +173,7 @@ public class AccessorColdStartBenchmark {
 	public TargetObject plan2C_android_constructor() {
 		return AndroidAccessorSample.newTargetObject(a, "cold_android");
 	}
+	//endregion
 
 	public static void main(String[] args) throws Exception {
 		Options opt = new OptionsBuilder()

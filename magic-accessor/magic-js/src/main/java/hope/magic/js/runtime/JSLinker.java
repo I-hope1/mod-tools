@@ -1,6 +1,7 @@
 package hope.magic.js.runtime;
 
 import hope.magic.runtime.*;
+import sun.misc.Unsafe;
 
 import java.lang.invoke.*;
 import java.lang.reflect.*;
@@ -10,6 +11,9 @@ import java.util.regex.Matcher;
 
 @SuppressWarnings({"unused", "unchecked", "rawtypes"})
 public class JSLinker {
+	static final Unsafe UNSAFE = Magic.unsafe;
+	static final MethodHandles.Lookup LOOKUP = Magic.lookup;
+
 	public enum InvocationStrategy {
 		MAGIC_ACCESSOR, // 基于 MagicAccessorImpl (MAGICIMPL) 的原生字节码 JIT 直调 (1.95ns)
 		SPREADER,       // 基于 MethodHandle.asSpreader 的数组自适应展开 (5.15ns)
@@ -18,9 +22,8 @@ public class JSLinker {
 
 	public static volatile InvocationStrategy STRATEGY = InvocationStrategy.HYBRID;
 
-	private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
-	// ==================== 基础类型转换与快路径 MethodHandle 常量 (核心加载) ====================
+	//region 基础类型转换与快路径 MethodHandle 常量 (核心加载)
 	public static final MethodHandle MH_TO_INT;
 	public static final MethodHandle MH_TO_LONG;
 	public static final MethodHandle MH_TO_DOUBLE;
@@ -71,51 +74,139 @@ public class JSLinker {
 		}
 	}
 
-	// ==================== Nestmate Lazy Holders (按领域按需懒加载) ====================
+	private static MethodHandle findVirtualMH(Class<?> clazz, String name, MethodType type) {
+		try {
+			return LOOKUP.findVirtual(clazz, name, type);
+		} catch (Throwable e) {
+			throw new ExceptionInInitializerError(e);
+		}
+	}
+	//endregion
+
+	//region Nestmate Lazy Holders (按领域按需懒加载)
 
 	public static final class PropMH {
-		public static final MethodHandle GET_GENERIC = findMH(JSLinker.class, "getPropGeneric", MethodType.methodType(Object.class, Object.class, String.class));
-		public static final MethodHandle GET_FALLBACK = findMH(JSLinker.class, "getPropFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle GET_MEGAMORPHIC = findMH(JSLinker.class, "getPropMegamorphic", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle GET_INT_GENERIC = findMH(JSLinker.class, "getPropIntGeneric", MethodType.methodType(int.class, Object.class, String.class));
-		public static final MethodHandle GET_INT_FALLBACK = findMH(JSLinker.class, "getPropIntFallback", MethodType.methodType(int.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle GET_INT_MEGAMORPHIC = findMH(JSLinker.class, "getPropIntMegamorphic", MethodType.methodType(int.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle GET_DOUBLE_GENERIC = findMH(JSLinker.class, "getPropDoubleGeneric", MethodType.methodType(double.class, Object.class, String.class));
-		public static final MethodHandle GET_DOUBLE_FALLBACK = findMH(JSLinker.class, "getPropDoubleFallback", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle GET_GENERIC            = findMH(JSLinker.class, "getPropGeneric", MethodType.methodType(Object.class, Object.class, String.class));
+		public static final MethodHandle GET_FALLBACK           = findMH(JSLinker.class, "getPropFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle GET_MEGAMORPHIC        = findMH(JSLinker.class, "getPropMegamorphic", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle GET_INT_GENERIC        = findMH(JSLinker.class, "getPropIntGeneric", MethodType.methodType(int.class, Object.class, String.class));
+		public static final MethodHandle GET_INT_FALLBACK       = findMH(JSLinker.class, "getPropIntFallback", MethodType.methodType(int.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle GET_INT_MEGAMORPHIC    = findMH(JSLinker.class, "getPropIntMegamorphic", MethodType.methodType(int.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle GET_DOUBLE_GENERIC     = findMH(JSLinker.class, "getPropDoubleGeneric", MethodType.methodType(double.class, Object.class, String.class));
+		public static final MethodHandle GET_DOUBLE_FALLBACK    = findMH(JSLinker.class, "getPropDoubleFallback", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class));
 		public static final MethodHandle GET_DOUBLE_MEGAMORPHIC = findMH(JSLinker.class, "getPropDoubleMegamorphic", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle GET_DOUBLE_SLOT = findMH(JSLinker.class, "getJSObjDoubleSlot", MethodType.methodType(double.class, int.class, Object.class));
-		public static final MethodHandle GET_LONG_GENERIC = findMH(JSLinker.class, "getPropLongGeneric", MethodType.methodType(long.class, Object.class, String.class));
-		public static final MethodHandle GET_LONG_FALLBACK = findMH(JSLinker.class, "getPropLongFallback", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle GET_LONG_MEGAMORPHIC = findMH(JSLinker.class, "getPropLongMegamorphic", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class));
-		public static final MethodHandle SET_GENERIC = findMH(JSLinker.class, "setPropGeneric", MethodType.methodType(void.class, Object.class, Object.class, String.class));
-		public static final MethodHandle SET_FALLBACK = findMH(JSLinker.class, "setPropFallback", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, Object.class, String.class));
-		public static final MethodHandle SET_MEGAMORPHIC = findMH(JSLinker.class, "setPropMegamorphic", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, Object.class, String.class));
+		public static final MethodHandle GET_DOUBLE_SLOT        = findMH(JSLinker.class, "getJSObjDoubleSlot", MethodType.methodType(double.class, int.class, Object.class));
+		public static final MethodHandle GET_LONG_GENERIC       = findMH(JSLinker.class, "getPropLongGeneric", MethodType.methodType(long.class, Object.class, String.class));
+		public static final MethodHandle GET_LONG_FALLBACK      = findMH(JSLinker.class, "getPropLongFallback", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle GET_LONG_MEGAMORPHIC   = findMH(JSLinker.class, "getPropLongMegamorphic", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class));
+		public static final MethodHandle SET_GENERIC            = findMH(JSLinker.class, "setPropGeneric", MethodType.methodType(void.class, Object.class, Object.class, String.class));
+		public static final MethodHandle SET_FALLBACK           = findMH(JSLinker.class, "setPropFallback", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, Object.class, String.class));
+		public static final MethodHandle SET_MEGAMORPHIC        = findMH(JSLinker.class, "setPropMegamorphic", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, Object.class, String.class));
 	}
 
 	public static final class InvokeMH {
-		public static final MethodHandle INVOKE_GENERIC = findMH(JSLinker.class, "invokeGeneric", MethodType.methodType(Object.class, Object.class, Object[].class, String.class));
+		public static final MethodHandle INVOKE_GENERIC  = findMH(JSLinker.class, "invokeGeneric", MethodType.methodType(Object.class, Object.class, Object[].class, String.class));
 		public static final MethodHandle INVOKE_FALLBACK = findMH(JSLinker.class, "invokeFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class, String.class));
-		public static final MethodHandle NEW_GENERIC = findMH(JSLinker.class, "newGeneric", MethodType.methodType(Object.class, Object.class, Object[].class));
-		public static final MethodHandle NEW_FALLBACK = findMH(JSLinker.class, "newFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class));
+		public static final MethodHandle NEW_GENERIC     = findMH(JSLinker.class, "newGeneric", MethodType.methodType(Object.class, Object.class, Object[].class));
+		public static final MethodHandle NEW_FALLBACK    = findMH(JSLinker.class, "newFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class));
+	}
+
+	public static final class JSFuncMH {
+		public static final MethodHandle CALL  = findVirtualMH(JSFunction.class, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class));
+		public static final MethodHandle CALL0 = findVirtualMH(JSFunction.class, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class));
+		public static final MethodHandle CALL1 = findVirtualMH(JSFunction.class, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class));
+		public static final MethodHandle CALL2 = findVirtualMH(JSFunction.class, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class));
+		public static final MethodHandle CALL3 = findVirtualMH(JSFunction.class, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class));
 	}
 
 	public static final class OpMH {
 		private static final MethodType BIN_TYPE = MethodType.methodType(Object.class, Object.class, Object.class);
-		public static final MethodHandle ADD = findMH(JSOps.class, "add", BIN_TYPE);
-		public static final MethodHandle SUB = findMH(JSOps.class, "sub", BIN_TYPE);
-		public static final MethodHandle MUL = findMH(JSOps.class, "mul", BIN_TYPE);
-		public static final MethodHandle DIV = findMH(JSOps.class, "div", BIN_TYPE);
-		public static final MethodHandle MOD = findMH(JSOps.class, "mod", BIN_TYPE);
-		public static final MethodHandle EQ = findMH(JSOps.class, "eq", BIN_TYPE);
+		private static final MethodType BIN_DD_D = MethodType.methodType(double.class, double.class, double.class);
+		private static final MethodType BIN_II_I = MethodType.methodType(int.class, int.class, int.class);
+		private static final MethodType BIN_ID_D = MethodType.methodType(double.class, int.class, double.class);
+		private static final MethodType BIN_DI_D = MethodType.methodType(double.class, double.class, int.class);
+
+		private static final MethodType BIN_OD_O = MethodType.methodType(Object.class, Object.class, double.class);
+		private static final MethodType BIN_DO_O = MethodType.methodType(Object.class, double.class, Object.class);
+		private static final MethodType BIN_OI_O = MethodType.methodType(Object.class, Object.class, int.class);
+		private static final MethodType BIN_IO_O = MethodType.methodType(Object.class, int.class, Object.class);
+
+		private static final MethodType BIN_SS_S = MethodType.methodType(String.class, String.class, String.class);
+		private static final MethodType BIN_SO_S = MethodType.methodType(String.class, String.class, Object.class);
+		private static final MethodType BIN_OS_S = MethodType.methodType(String.class, Object.class, String.class);
+
+		// Generic (Object, Object) -> Object
+		public static final MethodHandle ADD       = findMH(JSOps.class, "add", BIN_TYPE);
+		public static final MethodHandle SUB       = findMH(JSOps.class, "sub", BIN_TYPE);
+		public static final MethodHandle MUL       = findMH(JSOps.class, "mul", BIN_TYPE);
+		public static final MethodHandle DIV       = findMH(JSOps.class, "div", BIN_TYPE);
+		public static final MethodHandle MOD       = findMH(JSOps.class, "mod", BIN_TYPE);
+		public static final MethodHandle EQ        = findMH(JSOps.class, "eq", BIN_TYPE);
 		public static final MethodHandle STRICT_EQ = findMH(JSOps.class, "strictEq", BIN_TYPE);
-		public static final MethodHandle NE = findMH(JSOps.class, "ne", BIN_TYPE);
+		public static final MethodHandle NE        = findMH(JSOps.class, "ne", BIN_TYPE);
 		public static final MethodHandle STRICT_NE = findMH(JSOps.class, "strictNe", BIN_TYPE);
-		public static final MethodHandle LT = findMH(JSOps.class, "lt", BIN_TYPE);
-		public static final MethodHandle LTE = findMH(JSOps.class, "lte", BIN_TYPE);
-		public static final MethodHandle GT = findMH(JSOps.class, "gt", BIN_TYPE);
-		public static final MethodHandle GTE = findMH(JSOps.class, "gte", BIN_TYPE);
-		public static final MethodHandle AND = findMH(JSOps.class, "and", BIN_TYPE);
-		public static final MethodHandle OR = findMH(JSOps.class, "or", BIN_TYPE);
+		public static final MethodHandle LT        = findMH(JSOps.class, "lt", BIN_TYPE);
+		public static final MethodHandle LTE       = findMH(JSOps.class, "lte", BIN_TYPE);
+		public static final MethodHandle GT        = findMH(JSOps.class, "gt", BIN_TYPE);
+		public static final MethodHandle GTE       = findMH(JSOps.class, "gte", BIN_TYPE);
+		public static final MethodHandle AND       = findMH(JSOps.class, "and", BIN_TYPE);
+		public static final MethodHandle OR        = findMH(JSOps.class, "or", BIN_TYPE);
+
+		// Primitive & Specialized ADD
+		public static final MethodHandle ADD_DD_D = findMH(JSOps.class, "add", BIN_DD_D);
+		public static final MethodHandle ADD_II_I = findMH(JSOps.class, "add", BIN_II_I);
+		public static final MethodHandle ADD_ID_D = findMH(JSOps.class, "add", BIN_ID_D);
+		public static final MethodHandle ADD_DI_D = findMH(JSOps.class, "add", BIN_DI_D);
+		public static final MethodHandle ADD_OD_O = findMH(JSOps.class, "add", BIN_OD_O);
+		public static final MethodHandle ADD_DO_O = findMH(JSOps.class, "add", BIN_DO_O);
+		public static final MethodHandle ADD_OI_O = findMH(JSOps.class, "add", BIN_OI_O);
+		public static final MethodHandle ADD_IO_O = findMH(JSOps.class, "add", BIN_IO_O);
+		public static final MethodHandle ADD_SS_S = findMH(JSOps.class, "add", BIN_SS_S);
+		public static final MethodHandle ADD_SO_S = findMH(JSOps.class, "add", BIN_SO_S);
+		public static final MethodHandle ADD_OS_S = findMH(JSOps.class, "add", BIN_OS_S);
+
+		// Primitive SUB
+		public static final MethodHandle SUB_DD_D = findMH(JSOps.class, "sub", BIN_DD_D);
+		public static final MethodHandle SUB_II_I = findMH(JSOps.class, "sub", BIN_II_I);
+		public static final MethodHandle SUB_ID_D = findMH(JSOps.class, "sub", BIN_ID_D);
+		public static final MethodHandle SUB_DI_D = findMH(JSOps.class, "sub", BIN_DI_D);
+		public static final MethodHandle SUB_OD_D = findMH(JSOps.class, "sub", MethodType.methodType(double.class, Object.class, double.class));
+		public static final MethodHandle SUB_DO_D = findMH(JSOps.class, "sub", MethodType.methodType(double.class, double.class, Object.class));
+
+		// Primitive MUL
+		public static final MethodHandle MUL_DD_D = findMH(JSOps.class, "mul", BIN_DD_D);
+		public static final MethodHandle MUL_II_I = findMH(JSOps.class, "mul", BIN_II_I);
+		public static final MethodHandle MUL_ID_D = findMH(JSOps.class, "mul", BIN_ID_D);
+		public static final MethodHandle MUL_DI_D = findMH(JSOps.class, "mul", BIN_DI_D);
+		public static final MethodHandle MUL_OD_D = findMH(JSOps.class, "mul", MethodType.methodType(double.class, Object.class, double.class));
+		public static final MethodHandle MUL_DO_D = findMH(JSOps.class, "mul", MethodType.methodType(double.class, double.class, Object.class));
+
+		// Primitive DIV
+		public static final MethodHandle DIV_DD_D = findMH(JSOps.class, "div", BIN_DD_D);
+		public static final MethodHandle DIV_II_D = findMH(JSOps.class, "div", MethodType.methodType(double.class, int.class, int.class));
+		public static final MethodHandle DIV_ID_D = findMH(JSOps.class, "div", BIN_ID_D);
+		public static final MethodHandle DIV_DI_D = findMH(JSOps.class, "div", BIN_DI_D);
+		public static final MethodHandle DIV_OD_D = findMH(JSOps.class, "div", MethodType.methodType(double.class, Object.class, double.class));
+		public static final MethodHandle DIV_DO_D = findMH(JSOps.class, "div", MethodType.methodType(double.class, double.class, Object.class));
+
+		// Primitive MOD
+		public static final MethodHandle MOD_DD_D = findMH(JSOps.class, "mod", BIN_DD_D);
+		public static final MethodHandle MOD_II_I = findMH(JSOps.class, "mod", BIN_II_I);
+		public static final MethodHandle MOD_ID_D = findMH(JSOps.class, "mod", BIN_ID_D);
+		public static final MethodHandle MOD_DI_D = findMH(JSOps.class, "mod", BIN_DI_D);
+		public static final MethodHandle MOD_OD_D = findMH(JSOps.class, "mod", MethodType.methodType(double.class, Object.class, double.class));
+		public static final MethodHandle MOD_DO_D = findMH(JSOps.class, "mod", MethodType.methodType(double.class, double.class, Object.class));
+
+		// Equality Specializations with Primitive
+		public static final MethodHandle EQ_OI_Z = findMH(JSOps.class, "isEqInt", MethodType.methodType(boolean.class, Object.class, int.class));
+		public static final MethodHandle EQ_OD_Z = findMH(JSOps.class, "isEqDouble", MethodType.methodType(boolean.class, Object.class, double.class));
+		public static final MethodHandle EQ_OB_Z = findMH(JSOps.class, "isEqBool", MethodType.methodType(boolean.class, Object.class, boolean.class));
+		public static final MethodHandle EQ_OS_Z = findMH(JSOps.class, "isEqString", MethodType.methodType(boolean.class, Object.class, String.class));
+
+		public static final MethodHandle STRICT_EQ_OI_Z = findMH(JSOps.class, "isStrictEqInt", MethodType.methodType(boolean.class, Object.class, int.class));
+		public static final MethodHandle STRICT_EQ_OD_Z = findMH(JSOps.class, "isStrictEqDouble", MethodType.methodType(boolean.class, Object.class, double.class));
+		public static final MethodHandle STRICT_EQ_OB_Z = findMH(JSOps.class, "isStrictEqBool", MethodType.methodType(boolean.class, Object.class, boolean.class));
+		public static final MethodHandle STRICT_EQ_OS_Z = findMH(JSOps.class, "isStrictEqString", MethodType.methodType(boolean.class, Object.class, String.class));
 	}
 
 	public static final class IndexMH {
@@ -125,74 +216,91 @@ public class JSLinker {
 
 	public static final class FieldMH {
 		private static final MethodType GET_DIR_TYPE = MethodType.methodType(Object.class, long.class, Object.class);
-		public static final MethodHandle GET_INT = findMH(JSLinker.class, "getIntDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_DOUBLE = findMH(JSLinker.class, "getDoubleDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_LONG = findMH(JSLinker.class, "getLongDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_FLOAT = findMH(JSLinker.class, "getFloatDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_SHORT = findMH(JSLinker.class, "getShortDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_BYTE = findMH(JSLinker.class, "getByteDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_CHAR = findMH(JSLinker.class, "getCharDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_BOOLEAN = findMH(JSLinker.class, "getBooleanDirect", GET_DIR_TYPE);
-		public static final MethodHandle GET_OBJECT = findMH(JSLinker.class, "getObjectDirect", GET_DIR_TYPE);
+
+		public static final MethodHandle
+		 GET_INT     = findMH(JSLinker.class, "getIntDirect", GET_DIR_TYPE),
+		 GET_DOUBLE  = findMH(JSLinker.class, "getDoubleDirect", GET_DIR_TYPE),
+		 GET_LONG    = findMH(JSLinker.class, "getLongDirect", GET_DIR_TYPE),
+		 GET_FLOAT   = findMH(JSLinker.class, "getFloatDirect", GET_DIR_TYPE),
+		 GET_SHORT   = findMH(JSLinker.class, "getShortDirect", GET_DIR_TYPE),
+		 GET_BYTE    = findMH(JSLinker.class, "getByteDirect", GET_DIR_TYPE),
+		 GET_CHAR    = findMH(JSLinker.class, "getCharDirect", GET_DIR_TYPE),
+		 GET_BOOLEAN = findMH(JSLinker.class, "getBooleanDirect", GET_DIR_TYPE),
+		 GET_OBJECT  = findMH(JSLinker.class, "getObjectDirect", GET_DIR_TYPE);
 
 		private static final MethodType PUT_DIR_TYPE = MethodType.methodType(void.class, long.class, Object.class, Object.class);
-		public static final MethodHandle PUT_INT = findMH(JSLinker.class, "putIntDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_DOUBLE = findMH(JSLinker.class, "putDoubleDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_LONG = findMH(JSLinker.class, "putLongDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_FLOAT = findMH(JSLinker.class, "putFloatDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_SHORT = findMH(JSLinker.class, "putShortDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_BYTE = findMH(JSLinker.class, "putByteDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_CHAR = findMH(JSLinker.class, "putCharDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_BOOLEAN = findMH(JSLinker.class, "putBooleanDirect", PUT_DIR_TYPE);
-		public static final MethodHandle PUT_OBJECT = findMH(JSLinker.class, "putObjectDirect", PUT_DIR_TYPE);
+
+		public static final MethodHandle
+		 PUT_INT     = findMH(JSLinker.class, "putIntDirect", PUT_DIR_TYPE),
+		 PUT_DOUBLE  = findMH(JSLinker.class, "putDoubleDirect", PUT_DIR_TYPE),
+		 PUT_LONG    = findMH(JSLinker.class, "putLongDirect", PUT_DIR_TYPE),
+		 PUT_FLOAT   = findMH(JSLinker.class, "putFloatDirect", PUT_DIR_TYPE),
+		 PUT_SHORT   = findMH(JSLinker.class, "putShortDirect", PUT_DIR_TYPE),
+		 PUT_BYTE    = findMH(JSLinker.class, "putByteDirect", PUT_DIR_TYPE),
+		 PUT_CHAR    = findMH(JSLinker.class, "putCharDirect", PUT_DIR_TYPE),
+		 PUT_BOOLEAN = findMH(JSLinker.class, "putBooleanDirect", PUT_DIR_TYPE),
+		 PUT_OBJECT  = findMH(JSLinker.class, "putObjectDirect", PUT_DIR_TYPE);
 
 		private static final MethodType PRIM_INT_TYPE = MethodType.methodType(int.class, long.class, Object.class);
-		public static final MethodHandle GET_INT_PRIM = findMH(JSLinker.class, "getIntDirectPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_DOUBLE_AS_INT = findMH(JSLinker.class, "getDoubleAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_LONG_AS_INT = findMH(JSLinker.class, "getLongAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_FLOAT_AS_INT = findMH(JSLinker.class, "getFloatAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_SHORT_AS_INT = findMH(JSLinker.class, "getShortAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_BYTE_AS_INT = findMH(JSLinker.class, "getByteAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_CHAR_AS_INT = findMH(JSLinker.class, "getCharAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_BOOLEAN_AS_INT = findMH(JSLinker.class, "getBooleanAsIntPrim", PRIM_INT_TYPE);
-		public static final MethodHandle GET_OBJECT_AS_INT = findMH(JSLinker.class, "getObjectAsIntPrim", PRIM_INT_TYPE);
+
+		public static final MethodHandle
+		 GET_INT_PRIM       = findMH(JSLinker.class, "getIntDirectPrim", PRIM_INT_TYPE),
+		 GET_DOUBLE_AS_INT  = findMH(JSLinker.class, "getDoubleAsIntPrim", PRIM_INT_TYPE),
+		 GET_LONG_AS_INT    = findMH(JSLinker.class, "getLongAsIntPrim", PRIM_INT_TYPE),
+		 GET_FLOAT_AS_INT   = findMH(JSLinker.class, "getFloatAsIntPrim", PRIM_INT_TYPE),
+		 GET_SHORT_AS_INT   = findMH(JSLinker.class, "getShortAsIntPrim", PRIM_INT_TYPE),
+		 GET_BYTE_AS_INT    = findMH(JSLinker.class, "getByteAsIntPrim", PRIM_INT_TYPE),
+		 GET_CHAR_AS_INT    = findMH(JSLinker.class, "getCharAsIntPrim", PRIM_INT_TYPE),
+		 GET_BOOLEAN_AS_INT = findMH(JSLinker.class, "getBooleanAsIntPrim", PRIM_INT_TYPE),
+		 GET_OBJECT_AS_INT  = findMH(JSLinker.class, "getObjectAsIntPrim", PRIM_INT_TYPE);
 
 		private static final MethodType PRIM_DOUBLE_TYPE = MethodType.methodType(double.class, long.class, Object.class);
-		public static final MethodHandle GET_DOUBLE_PRIM = findMH(JSLinker.class, "getDoubleDirectPrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_INT_AS_DOUBLE = findMH(JSLinker.class, "getIntAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_LONG_AS_DOUBLE = findMH(JSLinker.class, "getLongAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_FLOAT_AS_DOUBLE = findMH(JSLinker.class, "getFloatAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_SHORT_AS_DOUBLE = findMH(JSLinker.class, "getShortAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_BYTE_AS_DOUBLE = findMH(JSLinker.class, "getByteAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_CHAR_AS_DOUBLE = findMH(JSLinker.class, "getCharAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_BOOLEAN_AS_DOUBLE = findMH(JSLinker.class, "getBooleanAsDoublePrim", PRIM_DOUBLE_TYPE);
-		public static final MethodHandle GET_OBJECT_AS_DOUBLE = findMH(JSLinker.class, "getObjectAsDoublePrim", PRIM_DOUBLE_TYPE);
+
+		public static final MethodHandle
+		 GET_DOUBLE_PRIM       = findMH(JSLinker.class, "getDoubleDirectPrim", PRIM_DOUBLE_TYPE),
+		 GET_INT_AS_DOUBLE     = findMH(JSLinker.class, "getIntAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_LONG_AS_DOUBLE    = findMH(JSLinker.class, "getLongAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_FLOAT_AS_DOUBLE   = findMH(JSLinker.class, "getFloatAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_SHORT_AS_DOUBLE   = findMH(JSLinker.class, "getShortAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_BYTE_AS_DOUBLE    = findMH(JSLinker.class, "getByteAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_CHAR_AS_DOUBLE    = findMH(JSLinker.class, "getCharAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_BOOLEAN_AS_DOUBLE = findMH(JSLinker.class, "getBooleanAsDoublePrim", PRIM_DOUBLE_TYPE),
+		 GET_OBJECT_AS_DOUBLE  = findMH(JSLinker.class, "getObjectAsDoublePrim", PRIM_DOUBLE_TYPE);
 
 		private static final MethodType PRIM_LONG_TYPE = MethodType.methodType(long.class, long.class, Object.class);
-		public static final MethodHandle GET_LONG_PRIM = findMH(JSLinker.class, "getLongDirectPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_INT_AS_LONG = findMH(JSLinker.class, "getIntAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_DOUBLE_AS_LONG = findMH(JSLinker.class, "getDoubleAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_FLOAT_AS_LONG = findMH(JSLinker.class, "getFloatAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_SHORT_AS_LONG = findMH(JSLinker.class, "getShortAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_BYTE_AS_LONG = findMH(JSLinker.class, "getByteAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_CHAR_AS_LONG = findMH(JSLinker.class, "getCharAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_BOOLEAN_AS_LONG = findMH(JSLinker.class, "getBooleanAsLongPrim", PRIM_LONG_TYPE);
-		public static final MethodHandle GET_OBJECT_AS_LONG = findMH(JSLinker.class, "getObjectAsLongPrim", PRIM_LONG_TYPE);
-	}
 
-	// ==================== ChainedCallSite (IC 状态机与 Megamorphic 防护) ====================
+		public static final MethodHandle
+		 GET_LONG_PRIM       = findMH(JSLinker.class, "getLongDirectPrim", PRIM_LONG_TYPE),
+		 GET_INT_AS_LONG     = findMH(JSLinker.class, "getIntAsLongPrim", PRIM_LONG_TYPE),
+		 GET_DOUBLE_AS_LONG  = findMH(JSLinker.class, "getDoubleAsLongPrim", PRIM_LONG_TYPE),
+		 GET_FLOAT_AS_LONG   = findMH(JSLinker.class, "getFloatAsLongPrim", PRIM_LONG_TYPE),
+		 GET_SHORT_AS_LONG   = findMH(JSLinker.class, "getShortAsLongPrim", PRIM_LONG_TYPE),
+		 GET_BYTE_AS_LONG    = findMH(JSLinker.class, "getByteAsLongPrim", PRIM_LONG_TYPE),
+		 GET_CHAR_AS_LONG    = findMH(JSLinker.class, "getCharAsLongPrim", PRIM_LONG_TYPE),
+		 GET_BOOLEAN_AS_LONG = findMH(JSLinker.class, "getBooleanAsLongPrim", PRIM_LONG_TYPE),
+		 GET_OBJECT_AS_LONG  = findMH(JSLinker.class, "getObjectAsLongPrim", PRIM_LONG_TYPE);
+	}
+	//endregion
+
+	//region ChainedCallSite (IC 状态机与 Megamorphic 防护)
 
 	public static class ChainedCallSite extends MutableCallSite {
-		public static final int MAX_CHAIN_DEPTH = 3; // Shape 种类 <= 3 时使用链式 Guard, >= 4 时自动演化为 Megamorphic 缓存表
-		private int chainDepth = 0;
-		private volatile boolean megamorphic = false;
-		private MethodHandle megamorphicTarget;
+		public static final int          MAX_CHAIN_DEPTH = 3; // Shape 种类 <= 3 时使用链式 Guard, >= 4 时自动演化为 Megamorphic 缓存表
+		private             int          chainDepth      = 0;
+		private volatile    boolean      megamorphic     = false;
+		private             MethodHandle megamorphicTarget;
+
+		// Offset-Equivalent IC (同偏移多态状态)
+		private       int           commonOffset     = -1;
+		private       byte          commonType       = -1;
+		private       boolean       offsetEquivalent = true;
+		private final List<JSShape> observedShapes   = new ArrayList<>(4);
 
 		// Megamorphic 多槽直接映射表 (Direct Mapped Fast Shape->Offset Cache)
-		public static final int CACHE_SIZE = 8;
-		public static final int CACHE_MASK = CACHE_SIZE - 1;
-		public final JSShape[] shapeCache = new JSShape[CACHE_SIZE];
-		public final int[] offsetCache = new int[CACHE_SIZE];
+		public static final int       CACHE_SIZE  = 8;
+		public static final int       CACHE_MASK  = CACHE_SIZE - 1;
+		public final        JSShape[] shapeCache  = new JSShape[CACHE_SIZE];
+		public final        int[]     offsetCache = new int[CACHE_SIZE];
 
 		public ChainedCallSite(MethodType type, MethodHandle megamorphicTarget) {
 			super(type);
@@ -203,12 +311,44 @@ public class JSLinker {
 			this.megamorphicTarget = target;
 		}
 
+		public MethodHandle getMegamorphicTarget() {
+			return this.megamorphicTarget;
+		}
+
 		public boolean isMegamorphic() {
 			return megamorphic;
 		}
 
 		public int getChainDepth() {
 			return chainDepth;
+		}
+
+		public synchronized void recordShape(JSShape shape, int offset, byte type) {
+			if (!observedShapes.contains(shape)) {
+				observedShapes.add(shape);
+				if (commonOffset == -1) {
+					commonOffset = offset;
+					commonType = type;
+				} else if (commonOffset != offset || commonType != type) {
+					offsetEquivalent = false;
+				}
+			}
+		}
+
+		public boolean isOffsetEquivalent() {
+			return offsetEquivalent && commonOffset >= 0 && observedShapes.size() >= 2;
+		}
+
+		public int getCommonOffset() {
+			return commonOffset;
+		}
+
+		public byte getCommonType() {
+			return commonType;
+		}
+
+		public List<JSShape> getObservedShapes() {
+			return observedShapes;
 		}
 
 		public synchronized boolean installGuardOrSwitchMegamorphic(MethodHandle test, MethodHandle fastTarget) {
@@ -224,23 +364,64 @@ public class JSLinker {
 				return false;
 			}
 			MethodHandle currentFallback = getTarget();
-			MethodHandle guard = MethodHandles.guardWithTest(test, fastTarget.asType(type()), currentFallback);
+			MethodHandle guard           = MethodHandles.guardWithTest(test, fastTarget.asType(type()), currentFallback);
 			setTarget(guard);
 			return true;
 		}
 	}
+	//endregion
 
-	// ==================== BSM 引导方法 ====================
+	//region Multi-Shape Guard Stubs (同偏移多态坍缩快速守卫)
+
+	public static boolean isMatchMask(long expectedMask, Object target) {
+		return target instanceof JSObject jsObj && (jsObj.shape.mask & expectedMask) != 0L;
+	}
+
+	public static boolean isShapeN(JSShape[] shapes, Object target) {
+		if (target instanceof JSObject jsObj) {
+			JSShape s = jsObj.shape;
+			for (JSShape shape : shapes) {
+				if (s == shape) return true;
+			}
+		}
+		return false;
+	}
+
+	private static MethodHandle buildMultiShapeGuard(List<JSShape> shapes) {
+		int n = shapes.size();
+		if (n == 1) return MH_IS_EXACT_SHAPE.bindTo(shapes.get(0));
+
+		// 位掩码多态守卫 (Bitmask-Based Multi-Shape Guard): 汇编级单条 TEST 指令，无分支比对
+		long    combinedMask = 0L;
+		boolean allHaveMask  = true;
+		for (JSShape s : shapes) {
+			if (s.mask == 0L) {
+				allHaveMask = false;
+				break;
+			}
+			combinedMask |= s.mask;
+		}
+
+		if (allHaveMask && combinedMask != 0L) {
+			MethodHandle mh = findMH(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
+			return MethodHandles.insertArguments(mh, 0, combinedMask);
+		}
+
+		return findMH(JSLinker.class, "isShapeN", MethodType.methodType(boolean.class, JSShape[].class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
+	}
+	//endregion
+
+	//region BSM 引导方法
 
 	public static CallSite bootstrapGetProp(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String propName
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String propName
 	) {
-		String sym = SymbolTable.symbol(propName);
-		ChainedCallSite site = new ChainedCallSite(type, null);
-		MethodHandle megamorphic = MethodHandles.insertArguments(PropMH.GET_MEGAMORPHIC, 2, sym).bindTo(site);
+		String          sym         = SymbolTable.symbol(propName);
+		ChainedCallSite site        = new ChainedCallSite(type, null);
+		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_FALLBACK, 2, sym).bindTo(site);
 		site.setTarget(fallback.asType(type));
@@ -248,14 +429,14 @@ public class JSLinker {
 	}
 
 	public static CallSite bootstrapGetPropInt(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String propName
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String propName
 	) {
-		String sym = SymbolTable.symbol(propName);
-		ChainedCallSite site = new ChainedCallSite(type, null);
-		MethodHandle megamorphic = MethodHandles.insertArguments(PropMH.GET_INT_MEGAMORPHIC, 2, sym).bindTo(site);
+		String          sym         = SymbolTable.symbol(propName);
+		ChainedCallSite site        = new ChainedCallSite(type, null);
+		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_INT_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_INT_FALLBACK, 2, sym).bindTo(site);
 		site.setTarget(fallback.asType(type));
@@ -263,14 +444,14 @@ public class JSLinker {
 	}
 
 	public static CallSite bootstrapGetPropDouble(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String propName
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String propName
 	) {
-		String sym = SymbolTable.symbol(propName);
-		ChainedCallSite site = new ChainedCallSite(type, null);
-		MethodHandle megamorphic = MethodHandles.insertArguments(PropMH.GET_DOUBLE_MEGAMORPHIC, 2, sym).bindTo(site);
+		String          sym         = SymbolTable.symbol(propName);
+		ChainedCallSite site        = new ChainedCallSite(type, null);
+		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_DOUBLE_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_DOUBLE_FALLBACK, 2, sym).bindTo(site);
 		site.setTarget(fallback.asType(type));
@@ -278,14 +459,14 @@ public class JSLinker {
 	}
 
 	public static CallSite bootstrapGetPropLong(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String propName
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String propName
 	) {
-		String sym = SymbolTable.symbol(propName);
-		ChainedCallSite site = new ChainedCallSite(type, null);
-		MethodHandle megamorphic = MethodHandles.insertArguments(PropMH.GET_LONG_MEGAMORPHIC, 2, sym).bindTo(site);
+		String          sym         = SymbolTable.symbol(propName);
+		ChainedCallSite site        = new ChainedCallSite(type, null);
+		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_LONG_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_LONG_FALLBACK, 2, sym).bindTo(site);
 		site.setTarget(fallback.asType(type));
@@ -293,14 +474,14 @@ public class JSLinker {
 	}
 
 	public static CallSite bootstrapSetProp(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String propName
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String propName
 	) {
-		String sym = SymbolTable.symbol(propName);
-		ChainedCallSite site = new ChainedCallSite(type, null);
-		MethodHandle megamorphic = MethodHandles.insertArguments(PropMH.SET_MEGAMORPHIC, 3, sym).bindTo(site);
+		String          sym         = SymbolTable.symbol(propName);
+		ChainedCallSite site        = new ChainedCallSite(type, null);
+		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.SET_MEGAMORPHIC, 3, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.SET_FALLBACK, 3, sym).bindTo(site);
 		site.setTarget(fallback.asType(type));
@@ -308,40 +489,44 @@ public class JSLinker {
 	}
 
 	public static CallSite bootstrapInvoke(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String methodName
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String methodName
 	) {
 		MethodHandle megamorphic = MethodHandles.insertArguments(InvokeMH.INVOKE_GENERIC, 2, methodName)
-			.asCollector(1, Object[].class, type.parameterCount() - 1);
+		 .asCollector(1, Object[].class, type.parameterCount() - 1);
 		ChainedCallSite site = new ChainedCallSite(type, megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(InvokeMH.INVOKE_FALLBACK, 3, methodName)
-			.bindTo(site).asCollector(1, Object[].class, type.parameterCount() - 1);
+		 .bindTo(site).asCollector(1, Object[].class, type.parameterCount() - 1);
 		site.setTarget(fallback.asType(type));
 		return site;
 	}
 
 	public static CallSite bootstrapNew(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type
 	) {
-		MethodHandle megamorphic = InvokeMH.NEW_GENERIC.asCollector(1, Object[].class, type.parameterCount() - 1);
-		ChainedCallSite site = new ChainedCallSite(type, megamorphic);
+		MethodHandle    megamorphic = InvokeMH.NEW_GENERIC.asCollector(1, Object[].class, type.parameterCount() - 1);
+		ChainedCallSite site        = new ChainedCallSite(type, megamorphic);
 		MethodHandle fallback = InvokeMH.NEW_FALLBACK.bindTo(site)
-			.asCollector(1, Object[].class, type.parameterCount() - 1);
+		 .asCollector(1, Object[].class, type.parameterCount() - 1);
 		site.setTarget(fallback.asType(type));
 		return site;
 	}
 
 	public static CallSite bootstrapBinaryOp(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type,
-		String op
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type,
+	 String op
 	) {
-		MethodHandle mh = switch (op) {
+		MethodHandle mh = findSpecializedBinaryOp(op, type);
+		if (mh != null) {
+			return new ConstantCallSite(mh.asType(type));
+		}
+		mh = switch (op) {
 			case "+" -> OpMH.ADD;
 			case "-" -> OpMH.SUB;
 			case "*" -> OpMH.MUL;
@@ -362,23 +547,84 @@ public class JSLinker {
 		return new ConstantCallSite(mh.asType(type));
 	}
 
+	private static MethodHandle findSpecializedBinaryOp(String op, MethodType type) {
+		if (type.parameterCount() != 2) return null;
+		Class<?> p0  = type.parameterType(0);
+		Class<?> p1  = type.parameterType(1);
+		Class<?> ret = type.returnType();
+
+		if ("+".equals(op)) {
+			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.ADD_DD_D;
+			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.ADD_II_I;
+			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.ADD_ID_D;
+			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.ADD_DI_D;
+			if (p0 == Object.class && p1 == double.class) return OpMH.ADD_OD_O;
+			if (p0 == double.class && p1 == Object.class) return OpMH.ADD_DO_O;
+			if (p0 == Object.class && p1 == int.class) return OpMH.ADD_OI_O;
+			if (p0 == int.class && p1 == Object.class) return OpMH.ADD_IO_O;
+			if (p0 == String.class && p1 == String.class) return OpMH.ADD_SS_S;
+			if (p0 == String.class && p1 == Object.class) return OpMH.ADD_SO_S;
+			if (p0 == Object.class && p1 == String.class) return OpMH.ADD_OS_S;
+		} else if ("-".equals(op)) {
+			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.SUB_DD_D;
+			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.SUB_II_I;
+			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.SUB_ID_D;
+			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.SUB_DI_D;
+			if (p0 == Object.class && p1 == double.class) return OpMH.SUB_OD_D;
+			if (p0 == double.class && p1 == Object.class) return OpMH.SUB_DO_D;
+		} else if ("*".equals(op)) {
+			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.MUL_DD_D;
+			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.MUL_II_I;
+			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.MUL_ID_D;
+			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.MUL_DI_D;
+			if (p0 == Object.class && p1 == double.class) return OpMH.MUL_OD_D;
+			if (p0 == double.class && p1 == Object.class) return OpMH.MUL_DO_D;
+		} else if ("/".equals(op)) {
+			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.DIV_DD_D;
+			if (p0 == int.class && p1 == int.class) return OpMH.DIV_II_D;
+			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.DIV_ID_D;
+			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.DIV_DI_D;
+			if (p0 == Object.class && p1 == double.class) return OpMH.DIV_OD_D;
+			if (p0 == double.class && p1 == Object.class) return OpMH.DIV_DO_D;
+		} else if ("%".equals(op)) {
+			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.MOD_DD_D;
+			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.MOD_II_I;
+			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.MOD_ID_D;
+			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.MOD_DI_D;
+			if (p0 == Object.class && p1 == double.class) return OpMH.MOD_OD_D;
+			if (p0 == double.class && p1 == Object.class) return OpMH.MOD_DO_D;
+		} else if ("==".equals(op)) {
+			if (p0 == Object.class && p1 == int.class) return OpMH.EQ_OI_Z;
+			if (p0 == Object.class && p1 == double.class) return OpMH.EQ_OD_Z;
+			if (p0 == Object.class && p1 == boolean.class) return OpMH.EQ_OB_Z;
+			if (p0 == Object.class && p1 == String.class) return OpMH.EQ_OS_Z;
+		} else if ("===".equals(op)) {
+			if (p0 == Object.class && p1 == int.class) return OpMH.STRICT_EQ_OI_Z;
+			if (p0 == Object.class && p1 == double.class) return OpMH.STRICT_EQ_OD_Z;
+			if (p0 == Object.class && p1 == boolean.class) return OpMH.STRICT_EQ_OB_Z;
+			if (p0 == Object.class && p1 == String.class) return OpMH.STRICT_EQ_OS_Z;
+		}
+		return null;
+	}
+
 	public static CallSite bootstrapGetIndex(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type
 	) {
 		return new ConstantCallSite(IndexMH.GET.asType(type));
 	}
 
 	public static CallSite bootstrapSetIndex(
-		MethodHandles.Lookup caller,
-		String name,
-		MethodType type
+	 MethodHandles.Lookup caller,
+	 String name,
+	 MethodType type
 	) {
 		return new ConstantCallSite(IndexMH.SET.asType(type));
 	}
+	//endregion
 
-	// ==================== Fallback 与 Inline Cache 实现 ====================
+	//region Fallback 与 Inline Cache 实现
 
 	public static double getJSObjDoubleSlot(int slot, Object target) {
 		return ((JSObject) target).getDoubleSlot(slot);
@@ -386,8 +632,11 @@ public class JSLinker {
 
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			int idx = s.id & ChainedCallSite.CACHE_MASK;
+			if (site.isOffsetEquivalent()) {
+				return jsObj.getSlot(site.getCommonOffset());
+			}
+			JSShape s   = jsObj.shape;
+			int     idx = s.id & ChainedCallSite.CACHE_MASK;
 			if (site.shapeCache[idx] == s) {
 				return jsObj.getSlot(site.offsetCache[idx]);
 			}
@@ -405,8 +654,11 @@ public class JSLinker {
 
 	public static double getPropDoubleMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			int idx = s.id & ChainedCallSite.CACHE_MASK;
+			if (site.isOffsetEquivalent()) {
+				return jsObj.getDoubleSlot(site.getCommonOffset());
+			}
+			JSShape s   = jsObj.shape;
+			int     idx = s.id & ChainedCallSite.CACHE_MASK;
 			if (site.shapeCache[idx] == s) {
 				return jsObj.getDoubleSlot(site.offsetCache[idx]);
 			}
@@ -424,8 +676,11 @@ public class JSLinker {
 
 	public static int getPropIntMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			int idx = s.id & ChainedCallSite.CACHE_MASK;
+			if (site.isOffsetEquivalent()) {
+				return (int) jsObj.getDoubleSlot(site.getCommonOffset());
+			}
+			JSShape s   = jsObj.shape;
+			int     idx = s.id & ChainedCallSite.CACHE_MASK;
 			if (site.shapeCache[idx] == s) {
 				return (int) jsObj.getDoubleSlot(site.offsetCache[idx]);
 			}
@@ -443,8 +698,11 @@ public class JSLinker {
 
 	public static long getPropLongMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			int idx = s.id & ChainedCallSite.CACHE_MASK;
+			if (site.isOffsetEquivalent()) {
+				return (long) jsObj.getDoubleSlot(site.getCommonOffset());
+			}
+			JSShape s   = jsObj.shape;
+			int     idx = s.id & ChainedCallSite.CACHE_MASK;
 			if (site.shapeCache[idx] == s) {
 				return (long) jsObj.getDoubleSlot(site.offsetCache[idx]);
 			}
@@ -462,8 +720,12 @@ public class JSLinker {
 
 	public static void setPropMegamorphic(ChainedCallSite site, Object target, Object value, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			int idx = s.id & ChainedCallSite.CACHE_MASK;
+			if (site.isOffsetEquivalent()) {
+				jsObj.setSlot(site.getCommonOffset(), value);
+				return;
+			}
+			JSShape s   = jsObj.shape;
+			int     idx = s.id & ChainedCallSite.CACHE_MASK;
 			if (site.shapeCache[idx] == s) {
 				jsObj.setSlot(site.offsetCache[idx], value);
 				return;
@@ -508,7 +770,7 @@ public class JSLinker {
 		} catch (Throwable ignored) {
 		}
 
-		String capName = Character.toUpperCase(propName.charAt(0)) + (propName.length() > 1 ? propName.substring(1) : "");
+		String   capName          = Character.toUpperCase(propName.charAt(0)) + (propName.length() > 1 ? propName.substring(1) : "");
 		String[] getterCandidates = new String[]{"get" + capName, "is" + capName, propName};
 		for (String candidate : getterCandidates) {
 			try {
@@ -582,18 +844,24 @@ public class JSLinker {
 
 	private static void setFieldDirect(Object target, Field field, Object value) throws IllegalAccessException {
 		Class<?> type = field.getType();
-		if (type == int.class) field.setInt(target, JSOps.toInt(value));
-		else if (type == double.class) field.setDouble(target, JSOps.toDouble(value));
-		else if (type == long.class) field.setLong(target, JSOps.toLong(value));
-		else if (type == float.class) field.setFloat(target, (float) JSOps.toDouble(value));
-		else if (type == short.class) field.setShort(target, (short) JSOps.toInt(value));
-		else if (type == byte.class) field.setByte(target, (byte) JSOps.toInt(value));
-		else if (type == char.class) field.setChar(target, (value instanceof Character ch) ? ch : (value != null && !value.toString().isEmpty()) ? value.toString().charAt(0) : '\0');
-		else if (type == boolean.class) field.setBoolean(target, JSOps.isTruthy(value));
-		else field.set(target, value);
+		if (type == int.class) { field.setInt(target, JSOps.toInt(value)); } else if (type == double.class) {
+			field.setDouble(target, JSOps.toDouble(value));
+		} else if (type == long.class) {
+			field.setLong(target, JSOps.toLong(value));
+		} else if (type == float.class) {
+			field.setFloat(target, (float) JSOps.toDouble(value));
+		} else if (type == short.class) {
+			field.setShort(target, (short) JSOps.toInt(value));
+		} else if (type == byte.class) {
+			field.setByte(target, (byte) JSOps.toInt(value));
+		} else if (type == char.class) {
+			field.setChar(target, (value instanceof Character ch) ? ch : (value != null && !value.toString().isEmpty()) ? value.toString().charAt(0) : '\0');
+		} else if (type == boolean.class) { field.setBoolean(target, JSOps.isTruthy(value)); } else {
+			field.set(target, value);
+		}
 	}
 
-	public static Object getPropFallback(ChainedCallSite site, Object target, String propName) throws  Throwable {
+	public static Object getPropFallback(ChainedCallSite site, Object target, String propName) throws Throwable {
 		if (target == null || target == JSUndefined.INSTANCE) {
 			return JSUndefined.INSTANCE;
 		}
@@ -601,17 +869,20 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
-				MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
-				MethodHandle directSlotGetter;
-				if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR && offset < JSObject.IN_OBJECT_SLOTS) {
-					directSlotGetter = MagicJIT.createExactFieldGetterStub(JSObject.class, "slot" + offset);
-				} else {
-					directSlotGetter = MethodHandles.insertArguments(
-						MH_GET_JS_OBJ_SLOT,
-						0,
-						offset
-					);
+				byte type = jsObj.shape.getSlotType(offset);
+				site.recordShape(jsObj.shape, offset, type);
+
+				if (site.isOffsetEquivalent()) {
+					int commonOff = site.getCommonOffset();
+					MethodHandle test = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff);
+					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
+					return jsObj.getSlot(commonOff);
 				}
+
+				MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+				MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
 				site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				return jsObj.getSlot(offset);
 			}
@@ -645,8 +916,8 @@ public class JSLinker {
 		}
 
 		try {
-			Field field = getDeclaredFieldRecursive(targetClass, propName);
-			long offset = LinkerHelper.getFieldOffset(field);
+			Field        field        = getDeclaredFieldRecursive(targetClass, propName);
+			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildDirectFieldGetter(targetClass, field, offset);
 
 			// 构造单态/多态内联缓存
@@ -674,21 +945,40 @@ public class JSLinker {
 		return JSUndefined.INSTANCE;
 	}
 
-	public static void setPropFallback(ChainedCallSite site, Object target, Object value, String propName) throws Throwable {
+	public static void setPropFallback(ChainedCallSite site, Object target, Object value, String propName)
+	 throws Throwable {
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
+				byte type = jsObj.shape.getSlotType(offset);
+				site.recordShape(jsObj.shape, offset, type);
+
+				if (site.isOffsetEquivalent()) {
+					int          commonOff = site.getCommonOffset();
+					MethodHandle test      = MethodHandles.dropArguments(buildMultiShapeGuard(site.getObservedShapes()), 1, Object.class);
+					MethodHandle directSlotSetter;
+					if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR && commonOff < JSObject.IN_OBJECT_SLOTS) {
+						directSlotSetter = MagicJIT.createExactFieldSetterStub(JSObject.class, "slot" + commonOff);
+					} else {
+						directSlotSetter = MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, commonOff);
+					}
+					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					site.setTarget(MethodHandles.guardWithTest(test, directSlotSetter.asType(site.type()), fallbackTarget.asType(site.type())));
+					jsObj.setSlot(commonOff, value);
+					return;
+				}
+
 				MethodHandle test = MethodHandles.dropArguments(MH_IS_EXACT_SHAPE.bindTo(jsObj.shape), 1, Object.class);
 				MethodHandle directSlotSetter;
 				if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR && offset < JSObject.IN_OBJECT_SLOTS) {
 					directSlotSetter = MagicJIT.createExactFieldSetterStub(JSObject.class, "slot" + offset);
 				} else {
 					directSlotSetter = MethodHandles.insertArguments(
-						MH_SET_JS_OBJ_SLOT,
-						0,
-						offset
+					 MH_SET_JS_OBJ_SLOT,
+					 0,
+					 offset
 					);
 				}
 				site.installGuardOrSwitchMegamorphic(test, directSlotSetter);
@@ -712,7 +1002,7 @@ public class JSLinker {
 				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
 				if (exactSetter != null) {
 					MethodHandle test = findStatic("isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class))
-						.bindTo(targetClass);
+					 .bindTo(targetClass);
 					test = MethodHandles.dropArguments(test, 1, Object.class);
 					site.installGuardOrSwitchMegamorphic(test, exactSetter);
 					exactSetter.invokeExact(target, value);
@@ -723,12 +1013,12 @@ public class JSLinker {
 		}
 
 		try {
-			Field field = getDeclaredFieldRecursive(targetClass, propName);
-			long offset = LinkerHelper.getFieldOffset(field);
+			Field        field        = getDeclaredFieldRecursive(targetClass, propName);
+			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directSetter = buildDirectFieldSetter(targetClass, field, offset);
 
 			MethodHandle test = findStatic("isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class))
-				.bindTo(targetClass);
+			 .bindTo(targetClass);
 			test = MethodHandles.dropArguments(test, 1, Object.class);
 			site.installGuardOrSwitchMegamorphic(test, directSetter);
 			directSetter.invoke(target, value);
@@ -747,8 +1037,9 @@ public class JSLinker {
 			}
 		}
 	}
+	//endregion
 
-	// ==================== Dynalink / JLS 规范级重载决议 (Overload Resolution) ====================
+	//region Dynalink / JLS 规范级重载决议 (Overload Resolution)
 
 	private static final int COST_INCOMPATIBLE = 1_000_000;
 
@@ -779,7 +1070,7 @@ public class JSLinker {
 	}
 
 	private static boolean isObjectMethod(Method m) {
-		String name = m.getName();
+		String     name   = m.getName();
 		Class<?>[] params = m.getParameterTypes();
 		if ("equals".equals(name) && params.length == 1 && params[0] == Object.class) return true;
 		if ("hashCode".equals(name) && params.length == 0) return true;
@@ -828,8 +1119,8 @@ public class JSLinker {
 			}
 			return minDistance != COST_INCOMPATIBLE ? minDistance : 10;
 		}
-		int distance = 0;
-		Class<?> curr = from;
+		int      distance = 0;
+		Class<?> curr     = from;
 		while (curr != null && curr != to) {
 			curr = curr.getSuperclass();
 			distance++;
@@ -838,8 +1129,8 @@ public class JSLinker {
 	}
 
 	private static int getHierarchyDepth(Class<?> clazz) {
-		int depth = 0;
-		Class<?> curr = clazz;
+		int      depth = 0;
+		Class<?> curr  = clazz;
 		while (curr != null) {
 			depth++;
 			curr = curr.getSuperclass();
@@ -878,7 +1169,7 @@ public class JSLinker {
 
 		// 2. 基本类型与包装类型转换
 		int fromPrim = getPrimitiveTypeIndex(fromType);
-		int toPrim = getPrimitiveTypeIndex(targetType);
+		int toPrim   = getPrimitiveTypeIndex(targetType);
 
 		if (fromPrim >= 0 && toPrim >= 0) {
 			// boolean 单独处理
@@ -924,9 +1215,9 @@ public class JSLinker {
 	}
 
 	public static boolean isMoreSpecific(Method m1, Method m2) {
-		Class<?>[] p1 = m1.getParameterTypes();
-		Class<?>[] p2 = m2.getParameterTypes();
-		boolean oneMoreSpecific = false;
+		Class<?>[] p1              = m1.getParameterTypes();
+		Class<?>[] p2              = m2.getParameterTypes();
+		boolean    oneMoreSpecific = false;
 		for (int i = 0; i < p1.length; i++) {
 			Class<?> t1 = p1[i];
 			Class<?> t2 = p2[i];
@@ -958,15 +1249,15 @@ public class JSLinker {
 		if (candidates.isEmpty()) return null;
 
 		// Phase 1: 固定参数匹配 (Fixed-Arity)
-		Method bestMethod = null;
-		int minCost = COST_INCOMPATIBLE;
+		Method       bestMethod = null;
+		int          minCost    = COST_INCOMPATIBLE;
 		List<Method> applicable = new ArrayList<>();
 
 		for (Method m : candidates) {
 			if (m.getParameterCount() != args.length) continue;
-			Class<?>[] params = m.getParameterTypes();
-			int totalCost = 0;
-			boolean ok = true;
+			Class<?>[] params    = m.getParameterTypes();
+			int        totalCost = 0;
+			boolean    ok        = true;
 			for (int i = 0; i < args.length; i++) {
 				int c = computeConversionCost(args[i], params[i]);
 				if (c >= COST_INCOMPATIBLE) {
@@ -989,7 +1280,7 @@ public class JSLinker {
 			List<Method> bestCandidates = new ArrayList<>();
 			for (Method m : applicable) {
 				Class<?>[] params = m.getParameterTypes();
-				int cost = 0;
+				int        cost   = 0;
 				for (int i = 0; i < args.length; i++) cost += computeConversionCost(args[i], params[i]);
 				if (cost == minCost) bestCandidates.add(m);
 			}
@@ -1010,19 +1301,25 @@ public class JSLinker {
 			if (!m.isVarArgs()) continue;
 			int paramCount = m.getParameterCount();
 			if (args.length < paramCount - 1) continue;
-			Class<?>[] params = m.getParameterTypes();
-			Class<?> varargElemType = params[paramCount - 1].getComponentType();
-			boolean ok = true;
-			int totalCost = 1000; // Varargs 惩罚项
+			Class<?>[] params         = m.getParameterTypes();
+			Class<?>   varargElemType = params[paramCount - 1].getComponentType();
+			boolean    ok             = true;
+			int        totalCost      = 1000; // Varargs 惩罚项
 			for (int i = 0; i < paramCount - 1; i++) {
 				int c = computeConversionCost(args[i], params[i]);
-				if (c >= COST_INCOMPATIBLE) { ok = false; break; }
+				if (c >= COST_INCOMPATIBLE) {
+					ok = false;
+					break;
+				}
 				totalCost += c;
 			}
 			if (ok) {
 				for (int i = paramCount - 1; i < args.length; i++) {
 					int c = computeConversionCost(args[i], varargElemType);
-					if (c >= COST_INCOMPATIBLE) { ok = false; break; }
+					if (c >= COST_INCOMPATIBLE) {
+						ok = false;
+						break;
+					}
 					totalCost += c;
 				}
 			}
@@ -1058,12 +1355,12 @@ public class JSLinker {
 			}
 		}
 
-		Class<?> clazz = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
-		Method targetMethod = findBestMatchingMethod(clazz, methodName, args);
+		Class<?> clazz        = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
+		Method   targetMethod = findBestMatchingMethod(clazz, methodName, args);
 		if (targetMethod != null) {
 			targetMethod.setAccessible(true);
 			Class<?>[] paramTypes = targetMethod.getParameterTypes();
-			Object[] castedArgs = new Object[args.length];
+			Object[]   castedArgs = new Object[args.length];
 			for (int i = 0; i < args.length; i++) {
 				castedArgs[i] = castValue(args[i], paramTypes[i]);
 			}
@@ -1077,12 +1374,53 @@ public class JSLinker {
 		return invokeJavaMethod(target, methodName, args);
 	}
 
-	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName) throws Throwable {
+	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName)
+	 throws Throwable {
 		if (target == null || target == JSUndefined.INSTANCE) {
 			throw new NullPointerException("Cannot invoke method '" + methodName + "' on null/undefined");
 		}
 
 		if (target instanceof JSFunction func) {
+			int arity = args.length;
+			MethodHandle directMh;
+			if (arity == 0) {
+				directMh = JSFuncMH.CALL0;
+				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
+				directMh = directMh.asType(MethodType.genericMethodType(2));
+				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(1), 0, 0);
+			} else if (arity == 1) {
+				directMh = JSFuncMH.CALL1;
+				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
+				directMh = directMh.asType(MethodType.genericMethodType(3));
+				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(2), 0, 0, 1);
+			} else if (arity == 2) {
+				directMh = JSFuncMH.CALL2;
+				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
+				directMh = directMh.asType(MethodType.genericMethodType(4));
+				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(3), 0, 0, 1, 2);
+			} else if (arity == 3) {
+				directMh = JSFuncMH.CALL3;
+				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
+				directMh = directMh.asType(MethodType.genericMethodType(5));
+				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(4), 0, 0, 1, 2, 3);
+			} else {
+				directMh = JSFuncMH.CALL;
+				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
+				directMh = directMh.asType(MethodType.methodType(Object.class, Object.class, Object.class, Object[].class));
+				directMh = MethodHandles.permuteArguments(directMh, MethodType.methodType(Object.class, Object.class, Object[].class), 0, 0, 1);
+				directMh = directMh.asSpreader(Object[].class, arity);
+			}
+
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
+
+			if (arity == 0) return func.call0(null, target);
+			if (arity == 1) return func.call1(null, target, args[0]);
+			if (arity == 2) return func.call2(null, target, args[0], args[1]);
+			if (arity == 3) return func.call3(null, target, args[0], args[1], args[2]);
 			return func.call(null, target, args);
 		}
 
@@ -1096,7 +1434,8 @@ public class JSLinker {
 		return invokeFallbackSlow(site, target, args, methodName);
 	}
 
-	public static Object invokeFallbackSlow(ChainedCallSite site, Object target, Object[] args, String methodName) throws Throwable {
+	public static Object invokeFallbackSlow(ChainedCallSite site, Object target, Object[] args, String methodName)
+	 throws Throwable {
 		if (target instanceof CharSequence seq) {
 			Object strRes = invokeStringMethod(seq.toString(), methodName, args);
 			if (strRes != null || "search".equals(methodName) || "match".equals(methodName)) {
@@ -1104,8 +1443,8 @@ public class JSLinker {
 			}
 		}
 
-		Class<?> clazz = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
-		boolean isStatic = (target instanceof Class<?>);
+		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
+		boolean  isStatic = (target instanceof Class<?>);
 
 		// 查找最匹配的重载方法
 		Method targetMethod = findBestMatchingMethod(clazz, methodName, args);
@@ -1114,7 +1453,7 @@ public class JSLinker {
 			targetMethod.setAccessible(true);
 
 			boolean preferMagicAccessor = (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR)
-				|| (STRATEGY == InvocationStrategy.HYBRID && hasComplexParameters(targetMethod));
+			                              || (STRATEGY == InvocationStrategy.HYBRID && hasComplexParameters(targetMethod));
 
 			if (preferMagicAccessor) {
 				try {
@@ -1135,13 +1474,13 @@ public class JSLinker {
 			}
 
 			try {
-				MethodHandle mh = Magic.lookup.unreflect(targetMethod);
+				MethodHandle mh      = Magic.lookup.unreflect(targetMethod);
 				MethodHandle adapted = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
 
 				Class<?>[] paramTypes = targetMethod.getParameterTypes();
-				int argOffset = 1; // index 0 is receiver or dropped target
+				int        argOffset  = 1; // index 0 is receiver or dropped target
 				for (int i = 0; i < paramTypes.length; i++) {
-					Class<?> pType = paramTypes[i];
+					Class<?>     pType  = paramTypes[i];
 					MethodHandle filter = getArgumentFilter(pType);
 					if (filter != null) {
 						adapted = MethodHandles.filterArguments(adapted, argOffset + i, filter);
@@ -1200,8 +1539,8 @@ public class JSLinker {
 	public static boolean toBoolean(Object val) { return JSOps.toBoolean(val); }
 	public static String toStringVal(Object val) { return JSOps.toStr(val); }
 
-	private record CtorKey(Class<?> clazz, int arity) {}
-	private record MethodKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {}
+	private record CtorKey(Class<?> clazz, int arity) { }
+	private record MethodKey(Class<?> clazz, String methodName, int arity, boolean isStatic) { }
 
 	private static final Map<CtorKey, MethodHandle> CTOR_SPREADER_CACHE = new ConcurrentHashMap<>();
 
@@ -1211,9 +1550,9 @@ public class JSLinker {
 			Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
 			if (c == null) return null;
 			try {
-				MethodHandle mh = Magic.lookup.unreflectConstructor(c);
-				Class<?>[] paramTypes = c.getParameterTypes();
-				MethodHandle adapted = mh;
+				MethodHandle mh         = Magic.lookup.unreflectConstructor(c);
+				Class<?>[]   paramTypes = c.getParameterTypes();
+				MethodHandle adapted    = mh;
 				for (int i = 0; i < paramTypes.length; i++) {
 					MethodHandle filter = getArgumentFilter(paramTypes[i]);
 					if (filter != null) {
@@ -1232,7 +1571,7 @@ public class JSLinker {
 		if (ctor instanceof Class<?> clazz) {
 			Constructor<?> c = MethodResolver.findConstructor(clazz, args.length);
 			if (c != null) {
-				Object[] castedArgs = new Object[args.length];
+				Object[]   castedArgs = new Object[args.length];
 				Class<?>[] paramTypes = c.getParameterTypes();
 				for (int i = 0; i < args.length; i++) {
 					castedArgs[i] = castValue(args[i], paramTypes[i]);
@@ -1244,7 +1583,7 @@ public class JSLinker {
 
 		if (ctor instanceof JSFunction) {
 			JSObject newObj = new JSObject();
-			Object res = ((JSFunction) ctor).call(null, newObj, args);
+			Object   res    = ((JSFunction) ctor).call(null, newObj, args);
 			if (res instanceof JSObject) return res;
 			return newObj;
 		}
@@ -1302,15 +1641,42 @@ public class JSLinker {
 
 	public static void setArrayElement(Object target, int idx, Object value) {
 		if (idx < 0) return;
-		if (target instanceof Object[] a) { if (idx < a.length) a[idx] = value; return; }
-		if (target instanceof int[] a) { if (idx < a.length) a[idx] = JSOps.toInt(value); return; }
-		if (target instanceof double[] a) { if (idx < a.length) a[idx] = JSOps.toDouble(value); return; }
-		if (target instanceof long[] a) { if (idx < a.length) a[idx] = JSOps.toLong(value); return; }
-		if (target instanceof float[] a) { if (idx < a.length) a[idx] = JSOps.toFloat(value); return; }
-		if (target instanceof short[] a) { if (idx < a.length) a[idx] = JSOps.toShort(value); return; }
-		if (target instanceof byte[] a) { if (idx < a.length) a[idx] = JSOps.toByte(value); return; }
-		if (target instanceof boolean[] a) { if (idx < a.length) a[idx] = JSOps.toBoolean(value); return; }
-		if (target instanceof char[] a) { if (idx < a.length) a[idx] = JSOps.toChar(value); return; }
+		if (target instanceof Object[] a) {
+			if (idx < a.length) a[idx] = value;
+			return;
+		}
+		if (target instanceof int[] a) {
+			if (idx < a.length) a[idx] = JSOps.toInt(value);
+			return;
+		}
+		if (target instanceof double[] a) {
+			if (idx < a.length) a[idx] = JSOps.toDouble(value);
+			return;
+		}
+		if (target instanceof long[] a) {
+			if (idx < a.length) a[idx] = JSOps.toLong(value);
+			return;
+		}
+		if (target instanceof float[] a) {
+			if (idx < a.length) a[idx] = JSOps.toFloat(value);
+			return;
+		}
+		if (target instanceof short[] a) {
+			if (idx < a.length) a[idx] = JSOps.toShort(value);
+			return;
+		}
+		if (target instanceof byte[] a) {
+			if (idx < a.length) a[idx] = JSOps.toByte(value);
+			return;
+		}
+		if (target instanceof boolean[] a) {
+			if (idx < a.length) a[idx] = JSOps.toBoolean(value);
+			return;
+		}
+		if (target instanceof char[] a) {
+			if (idx < a.length) a[idx] = JSOps.toChar(value);
+			return;
+		}
 	}
 
 	public static Object getIndex(Object target, int index) {
@@ -1329,7 +1695,7 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			return jsObj.get(String.valueOf(index));
 		}
-		return getIndex(target, (Object) Integer.valueOf(index));
+		return getIndex(target, Integer.valueOf(index));
 	}
 
 	public static void setIndex(Object target, int index, Object value) {
@@ -1358,7 +1724,7 @@ public class JSLinker {
 			jsObj.put(String.valueOf(index), value);
 			return;
 		}
-		setIndex(target, (Object) Integer.valueOf(index), value);
+		setIndex(target, Integer.valueOf(index), value);
 	}
 
 	public static Object getIndex(Object target, Object index) {
@@ -1451,8 +1817,9 @@ public class JSLinker {
 			((Map<Object, Object>) target).put(index, value);
 		}
 	}
+	//endregion
 
-	// ==================== 辅助方法与直接 MethodHandle 构建 ====================
+	//region 辅助方法与直接 MethodHandle 构建
 
 	public static boolean isExactClass(Class<?> expected, Object target) {
 		return target != null && target.getClass() == expected;
@@ -1470,39 +1837,58 @@ public class JSLinker {
 		((JSObject) target).setSlot(slot, val);
 	}
 
-	private static MethodHandle buildPrimFieldGetter(Class<?> targetClass, Field field, long offset, Class<?> requestedPrim) {
-		Class<?> fType = field.getType();
+	private static MethodHandle buildPrimFieldGetter(Class<?> targetClass, Field field, long offset,
+	                                                 Class<?> requestedPrim) {
+		Class<?>     fType = field.getType();
 		MethodHandle mh;
 		if (requestedPrim == int.class) {
-			if (fType == int.class) mh = FieldMH.GET_INT_PRIM;
-			else if (fType == double.class) mh = FieldMH.GET_DOUBLE_AS_INT;
-			else if (fType == long.class) mh = FieldMH.GET_LONG_AS_INT;
-			else if (fType == float.class) mh = FieldMH.GET_FLOAT_AS_INT;
-			else if (fType == short.class) mh = FieldMH.GET_SHORT_AS_INT;
-			else if (fType == byte.class) mh = FieldMH.GET_BYTE_AS_INT;
-			else if (fType == char.class) mh = FieldMH.GET_CHAR_AS_INT;
-			else if (fType == boolean.class) mh = FieldMH.GET_BOOLEAN_AS_INT;
-			else mh = FieldMH.GET_OBJECT_AS_INT;
+			if (fType == int.class) { mh = FieldMH.GET_INT_PRIM; } else if (fType == double.class) {
+				mh = FieldMH.GET_DOUBLE_AS_INT;
+			} else if (fType == long.class) {
+				mh = FieldMH.GET_LONG_AS_INT;
+			} else if (fType == float.class) {
+				mh = FieldMH.GET_FLOAT_AS_INT;
+			} else if (fType == short.class) {
+				mh = FieldMH.GET_SHORT_AS_INT;
+			} else if (fType == byte.class) {
+				mh = FieldMH.GET_BYTE_AS_INT;
+			} else if (fType == char.class) {
+				mh = FieldMH.GET_CHAR_AS_INT;
+			} else if (fType == boolean.class) {
+				mh = FieldMH.GET_BOOLEAN_AS_INT;
+			} else { mh = FieldMH.GET_OBJECT_AS_INT; }
 		} else if (requestedPrim == double.class) {
-			if (fType == double.class) mh = FieldMH.GET_DOUBLE_PRIM;
-			else if (fType == int.class) mh = FieldMH.GET_INT_AS_DOUBLE;
-			else if (fType == long.class) mh = FieldMH.GET_LONG_AS_DOUBLE;
-			else if (fType == float.class) mh = FieldMH.GET_FLOAT_AS_DOUBLE;
-			else if (fType == short.class) mh = FieldMH.GET_SHORT_AS_DOUBLE;
-			else if (fType == byte.class) mh = FieldMH.GET_BYTE_AS_DOUBLE;
-			else if (fType == char.class) mh = FieldMH.GET_CHAR_AS_DOUBLE;
-			else if (fType == boolean.class) mh = FieldMH.GET_BOOLEAN_AS_DOUBLE;
-			else mh = FieldMH.GET_OBJECT_AS_DOUBLE;
+			if (fType == double.class) { mh = FieldMH.GET_DOUBLE_PRIM; } else if (fType == int.class) {
+				mh = FieldMH.GET_INT_AS_DOUBLE;
+			} else if (fType == long.class) {
+				mh = FieldMH.GET_LONG_AS_DOUBLE;
+			} else if (fType == float.class) {
+				mh = FieldMH.GET_FLOAT_AS_DOUBLE;
+			} else if (fType == short.class) {
+				mh = FieldMH.GET_SHORT_AS_DOUBLE;
+			} else if (fType == byte.class) {
+				mh = FieldMH.GET_BYTE_AS_DOUBLE;
+			} else if (fType == char.class) {
+				mh = FieldMH.GET_CHAR_AS_DOUBLE;
+			} else if (fType == boolean.class) {
+				mh = FieldMH.GET_BOOLEAN_AS_DOUBLE;
+			} else { mh = FieldMH.GET_OBJECT_AS_DOUBLE; }
 		} else {
-			if (fType == long.class) mh = FieldMH.GET_LONG_PRIM;
-			else if (fType == int.class) mh = FieldMH.GET_INT_AS_LONG;
-			else if (fType == double.class) mh = FieldMH.GET_DOUBLE_AS_LONG;
-			else if (fType == float.class) mh = FieldMH.GET_FLOAT_AS_LONG;
-			else if (fType == short.class) mh = FieldMH.GET_SHORT_AS_LONG;
-			else if (fType == byte.class) mh = FieldMH.GET_BYTE_AS_LONG;
-			else if (fType == char.class) mh = FieldMH.GET_CHAR_AS_LONG;
-			else if (fType == boolean.class) mh = FieldMH.GET_BOOLEAN_AS_LONG;
-			else mh = FieldMH.GET_OBJECT_AS_LONG;
+			if (fType == long.class) { mh = FieldMH.GET_LONG_PRIM; } else if (fType == int.class) {
+				mh = FieldMH.GET_INT_AS_LONG;
+			} else if (fType == double.class) {
+				mh = FieldMH.GET_DOUBLE_AS_LONG;
+			} else if (fType == float.class) {
+				mh = FieldMH.GET_FLOAT_AS_LONG;
+			} else if (fType == short.class) {
+				mh = FieldMH.GET_SHORT_AS_LONG;
+			} else if (fType == byte.class) {
+				mh = FieldMH.GET_BYTE_AS_LONG;
+			} else if (fType == char.class) {
+				mh = FieldMH.GET_CHAR_AS_LONG;
+			} else if (fType == boolean.class) {
+				mh = FieldMH.GET_BOOLEAN_AS_LONG;
+			} else { mh = FieldMH.GET_OBJECT_AS_LONG; }
 		}
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
@@ -1525,7 +1911,19 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
-				MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+				byte type = jsObj.shape.getSlotType(offset);
+				site.recordShape(jsObj.shape, offset, type);
+
+				if (site.isOffsetEquivalent()) {
+					int          commonOff        = site.getCommonOffset();
+					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, commonOff);
+					MethodHandle fallbackTarget   = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
+					return JSOps.toInt(jsObj.getSlot(commonOff));
+				}
+
+				MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 				MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, offset);
 				site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				return JSOps.toInt(jsObj.getSlot(offset));
@@ -1538,10 +1936,10 @@ public class JSLinker {
 		Class<?> targetClass = target.getClass();
 
 		try {
-			Field field = getDeclaredFieldRecursive(targetClass, propName);
-			long offset = LinkerHelper.getFieldOffset(field);
+			Field        field        = getDeclaredFieldRecursive(targetClass, propName);
+			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildPrimFieldGetter(targetClass, field, offset, int.class);
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+			MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (int) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
@@ -1556,23 +1954,35 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
-				MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
-				MethodHandle directSlotGetter = MethodHandles.insertArguments(PropMH.GET_DOUBLE_SLOT, 0, offset);
+				byte type = jsObj.shape.getSlotType(offset);
+				site.recordShape(jsObj.shape, offset, type);
+
+				if (site.isOffsetEquivalent()) {
+					int          commonOff        = site.getCommonOffset();
+					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, commonOff);
+					MethodHandle fallbackTarget   = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
+					return jsObj.getDoubleSlot(commonOff);
+				}
+
+				MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+				MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, offset);
 				site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				return jsObj.getDoubleSlot(offset);
 			}
 		}
 
 		if (target.getClass().isArray() && "length".equals(propName)) {
-			return (double) java.lang.reflect.Array.getLength(target);
+			return Array.getLength(target);
 		}
 		Class<?> targetClass = target.getClass();
 
 		try {
-			Field field = getDeclaredFieldRecursive(targetClass, propName);
-			long offset = LinkerHelper.getFieldOffset(field);
+			Field        field        = getDeclaredFieldRecursive(targetClass, propName);
+			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildPrimFieldGetter(targetClass, field, offset, double.class);
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+			MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (double) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
@@ -1587,7 +1997,19 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
-				MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+				byte type = jsObj.shape.getSlotType(offset);
+				site.recordShape(jsObj.shape, offset, type);
+
+				if (site.isOffsetEquivalent()) {
+					int          commonOff        = site.getCommonOffset();
+					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, commonOff);
+					MethodHandle fallbackTarget   = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
+					return JSOps.toLong(jsObj.getSlot(commonOff));
+				}
+
+				MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 				MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, offset);
 				site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				return JSOps.toLong(jsObj.getSlot(offset));
@@ -1600,10 +2022,10 @@ public class JSLinker {
 		Class<?> targetClass = target.getClass();
 
 		try {
-			Field field = getDeclaredFieldRecursive(targetClass, propName);
-			long offset = LinkerHelper.getFieldOffset(field);
+			Field        field        = getDeclaredFieldRecursive(targetClass, propName);
+			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildPrimFieldGetter(targetClass, field, offset, long.class);
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+			MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (long) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
@@ -1612,35 +2034,46 @@ public class JSLinker {
 		return getPropLongGeneric(target, propName);
 	}
 
-	public static int getIntDirectPrim(long offset, Object target) { return Magic.unsafe.getInt(target, offset); }
-	public static int getDoubleAsIntPrim(long offset, Object target) { return (int) Magic.unsafe.getDouble(target, offset); }
-	public static int getLongAsIntPrim(long offset, Object target) { return (int) Magic.unsafe.getLong(target, offset); }
-	public static int getFloatAsIntPrim(long offset, Object target) { return (int) Magic.unsafe.getFloat(target, offset); }
-	public static int getShortAsIntPrim(long offset, Object target) { return Magic.unsafe.getShort(target, offset); }
-	public static int getByteAsIntPrim(long offset, Object target) { return Magic.unsafe.getByte(target, offset); }
-	public static int getCharAsIntPrim(long offset, Object target) { return Magic.unsafe.getChar(target, offset); }
-	public static int getBooleanAsIntPrim(long offset, Object target) { return Magic.unsafe.getBoolean(target, offset) ? 1 : 0; }
-	public static int getObjectAsIntPrim(long offset, Object target) { return JSOps.toInt(Magic.unsafe.getObject(target, offset)); }
+	public static int getIntDirectPrim(long offset, Object target) { return UNSAFE.getInt(target, offset); }
+	public static int getDoubleAsIntPrim(long offset, Object target) { return (int) UNSAFE.getDouble(target, offset); }
+	public static int getLongAsIntPrim(long offset, Object target) { return (int) UNSAFE.getLong(target, offset); }
+	public static int getFloatAsIntPrim(long offset, Object target) { return (int) UNSAFE.getFloat(target, offset); }
+	public static int getShortAsIntPrim(long offset, Object target) { return UNSAFE.getShort(target, offset); }
+	public static int getByteAsIntPrim(long offset, Object target) { return UNSAFE.getByte(target, offset); }
+	public static int getCharAsIntPrim(long offset, Object target) { return UNSAFE.getChar(target, offset); }
+	public static int getBooleanAsIntPrim(long offset,
+	                                      Object target) { return UNSAFE.getBoolean(target, offset) ? 1 : 0; }
+	public static int getObjectAsIntPrim(long offset,
+	                                     Object target) { return JSOps.toInt(UNSAFE.getObject(target, offset)); }
 
-	public static double getDoubleDirectPrim(long offset, Object target) { return Magic.unsafe.getDouble(target, offset); }
-	public static double getIntAsDoublePrim(long offset, Object target) { return (double) Magic.unsafe.getInt(target, offset); }
-	public static double getLongAsDoublePrim(long offset, Object target) { return (double) Magic.unsafe.getLong(target, offset); }
-	public static double getFloatAsDoublePrim(long offset, Object target) { return (double) Magic.unsafe.getFloat(target, offset); }
-	public static double getShortAsDoublePrim(long offset, Object target) { return (double) Magic.unsafe.getShort(target, offset); }
-	public static double getByteAsDoublePrim(long offset, Object target) { return (double) Magic.unsafe.getByte(target, offset); }
-	public static double getCharAsDoublePrim(long offset, Object target) { return (double) Magic.unsafe.getChar(target, offset); }
-	public static double getBooleanAsDoublePrim(long offset, Object target) { return Magic.unsafe.getBoolean(target, offset) ? 1.0 : 0.0; }
-	public static double getObjectAsDoublePrim(long offset, Object target) { return JSOps.toDouble(Magic.unsafe.getObject(target, offset)); }
+	public static double getDoubleDirectPrim(long offset, Object target) { return UNSAFE.getDouble(target, offset); }
+	public static double getIntAsDoublePrim(long offset, Object target) { return (double) UNSAFE.getInt(target, offset); }
+	public static double getLongAsDoublePrim(long offset,
+	                                         Object target) { return (double) UNSAFE.getLong(target, offset); }
+	public static double getFloatAsDoublePrim(long offset,
+	                                          Object target) { return (double) UNSAFE.getFloat(target, offset); }
+	public static double getShortAsDoublePrim(long offset,
+	                                          Object target) { return (double) UNSAFE.getShort(target, offset); }
+	public static double getByteAsDoublePrim(long offset,
+	                                         Object target) { return (double) UNSAFE.getByte(target, offset); }
+	public static double getCharAsDoublePrim(long offset,
+	                                         Object target) { return (double) UNSAFE.getChar(target, offset); }
+	public static double getBooleanAsDoublePrim(long offset,
+	                                            Object target) { return UNSAFE.getBoolean(target, offset) ? 1.0 : 0.0; }
+	public static double getObjectAsDoublePrim(long offset,
+	                                           Object target) { return JSOps.toDouble(UNSAFE.getObject(target, offset)); }
 
-	public static long getLongDirectPrim(long offset, Object target) { return Magic.unsafe.getLong(target, offset); }
-	public static long getIntAsLongPrim(long offset, Object target) { return (long) Magic.unsafe.getInt(target, offset); }
-	public static long getDoubleAsLongPrim(long offset, Object target) { return (long) Magic.unsafe.getDouble(target, offset); }
-	public static long getFloatAsLongPrim(long offset, Object target) { return (long) Magic.unsafe.getFloat(target, offset); }
-	public static long getShortAsLongPrim(long offset, Object target) { return (long) Magic.unsafe.getShort(target, offset); }
-	public static long getByteAsLongPrim(long offset, Object target) { return (long) Magic.unsafe.getByte(target, offset); }
-	public static long getCharAsLongPrim(long offset, Object target) { return (long) Magic.unsafe.getChar(target, offset); }
-	public static long getBooleanAsLongPrim(long offset, Object target) { return Magic.unsafe.getBoolean(target, offset) ? 1L : 0L; }
-	public static long getObjectAsLongPrim(long offset, Object target) { return JSOps.toLong(Magic.unsafe.getObject(target, offset)); }
+	public static long getLongDirectPrim(long offset, Object target) { return UNSAFE.getLong(target, offset); }
+	public static long getIntAsLongPrim(long offset, Object target) { return (long) UNSAFE.getInt(target, offset); }
+	public static long getDoubleAsLongPrim(long offset, Object target) { return (long) UNSAFE.getDouble(target, offset); }
+	public static long getFloatAsLongPrim(long offset, Object target) { return (long) UNSAFE.getFloat(target, offset); }
+	public static long getShortAsLongPrim(long offset, Object target) { return (long) UNSAFE.getShort(target, offset); }
+	public static long getByteAsLongPrim(long offset, Object target) { return (long) UNSAFE.getByte(target, offset); }
+	public static long getCharAsLongPrim(long offset, Object target) { return (long) UNSAFE.getChar(target, offset); }
+	public static long getBooleanAsLongPrim(long offset,
+	                                        Object target) { return UNSAFE.getBoolean(target, offset) ? 1L : 0L; }
+	public static long getObjectAsLongPrim(long offset,
+	                                       Object target) { return JSOps.toLong(UNSAFE.getObject(target, offset)); }
 
 	private static final Map<MethodKey, MethodHandle> METHOD_SPREADER_CACHE = new ConcurrentHashMap<>();
 
@@ -1651,17 +2084,17 @@ public class JSLinker {
 			if (targetMethod == null) return null;
 			targetMethod.setAccessible(true);
 			try {
-				MethodHandle mh = Magic.lookup.unreflect(targetMethod);
-				MethodHandle adapted = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
-				Class<?>[] paramTypes = targetMethod.getParameterTypes();
+				MethodHandle mh         = Magic.lookup.unreflect(targetMethod);
+				MethodHandle adapted    = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
+				Class<?>[]   paramTypes = targetMethod.getParameterTypes();
 				for (int i = 0; i < paramTypes.length; i++) {
 					MethodHandle filter = getArgumentFilter(paramTypes[i]);
 					if (filter != null) {
 						adapted = MethodHandles.filterArguments(adapted, 1 + i, filter);
 					}
 				}
-				MethodType genericType = MethodType.genericMethodType(1 + arity);
-				MethodHandle genericMh = adapted.asType(genericType);
+				MethodType   genericType = MethodType.genericMethodType(1 + arity);
+				MethodHandle genericMh   = adapted.asType(genericType);
 				return genericMh.asSpreader(Object[].class, arity);
 			} catch (Throwable e) {
 				throw new RuntimeException(e);
@@ -1671,10 +2104,10 @@ public class JSLinker {
 
 	private static Object invokeStringMethod(String str, String methodName, Object[] args) throws Throwable {
 		if ("match".equals(methodName)) {
-			Object regArg = args.length > 0 ? args[0] : "";
-			JSRegExp reg = regArg instanceof JSRegExp r ? r : new JSRegExp(JSOps.toStr(regArg), "");
+			Object   regArg = args.length > 0 ? args[0] : "";
+			JSRegExp reg    = regArg instanceof JSRegExp r ? r : new JSRegExp(JSOps.toStr(regArg), "");
 			if (reg.isGlobal()) {
-				Matcher m = reg.getCompiledPattern().matcher(str);
+				Matcher m   = reg.getCompiledPattern().matcher(str);
 				JSArray arr = new JSArray();
 				while (m.find()) {
 					arr.push(m.group(0));
@@ -1685,9 +2118,9 @@ public class JSLinker {
 			}
 		}
 		if ("search".equals(methodName)) {
-			Object regArg = args.length > 0 ? args[0] : "";
-			JSRegExp reg = regArg instanceof JSRegExp r ? r : new JSRegExp(JSOps.toStr(regArg), "");
-			Matcher m = reg.getCompiledPattern().matcher(str);
+			Object   regArg = args.length > 0 ? args[0] : "";
+			JSRegExp reg    = regArg instanceof JSRegExp r ? r : new JSRegExp(JSOps.toStr(regArg), "");
+			Matcher  m      = reg.getCompiledPattern().matcher(str);
 			return m.find() ? (double) m.start() : -1.0;
 		}
 		if ("replace".equals(methodName)) {
@@ -1697,18 +2130,18 @@ public class JSLinker {
 				return replaceWithRegExp(str, reg, repArg, false);
 			} else {
 				String searchStr = JSOps.toStr(regArg);
-				int idx = str.indexOf(searchStr);
+				int    idx       = str.indexOf(searchStr);
 				if (idx < 0) return str;
 				if (repArg instanceof JSFunction func) {
-					Object[] funcArgs = new Object[]{ searchStr, (double) idx, str };
-					String replStr = JSOps.toStr(func.call(null, null, funcArgs));
+					Object[] funcArgs = new Object[]{searchStr, (double) idx, str};
+					String   replStr  = JSOps.toStr(func.call(null, null, funcArgs));
 					return str.substring(0, idx) + replStr + str.substring(idx + searchStr.length());
 				} else {
 					String repStr = JSOps.toStr(repArg);
 					if (repStr.contains("$")) {
 						repStr = repStr.replace("$$", "\0")
-						               .replace("$&", searchStr)
-						               .replace("\0", "$");
+						 .replace("$&", searchStr)
+						 .replace("\0", "$");
 					}
 					return str.substring(0, idx) + repStr + str.substring(idx + searchStr.length());
 				}
@@ -1725,15 +2158,15 @@ public class JSLinker {
 				String repStr = JSOps.toStr(repArg);
 				if (repStr.contains("$")) {
 					repStr = repStr.replace("$$", "\0")
-					               .replace("$&", searchStr)
-					               .replace("\0", "$");
+					 .replace("$&", searchStr)
+					 .replace("\0", "$");
 				}
 				return str.replace(searchStr, repStr);
 			}
 		}
 		if ("split".equals(methodName) && args.length > 0 && args[0] instanceof JSRegExp reg) {
 			String[] parts = reg.getCompiledPattern().split(str, args.length > 1 ? JSOps.toInt(args[1]) : 0);
-			JSArray arr = new JSArray();
+			JSArray  arr   = new JSArray();
 			for (String p : parts) arr.push(p);
 			return arr;
 		}
@@ -1741,13 +2174,13 @@ public class JSLinker {
 	}
 
 	private static String replaceWithRegExp(String str, JSRegExp reg, Object repArg, boolean forceAll) throws Throwable {
-		Matcher m = reg.getCompiledPattern().matcher(str);
+		Matcher m      = reg.getCompiledPattern().matcher(str);
 		boolean global = forceAll || reg.isGlobal();
 		if (repArg instanceof JSFunction func) {
 			StringBuilder sb = new StringBuilder();
 			while (m.find()) {
-				int groupCount = m.groupCount();
-				Object[] funcArgs = new Object[groupCount + 3];
+				int      groupCount = m.groupCount();
+				Object[] funcArgs   = new Object[groupCount + 3];
 				funcArgs[0] = m.group(0);
 				for (int i = 1; i <= groupCount; i++) {
 					funcArgs[i] = m.group(i);
@@ -1800,8 +2233,8 @@ public class JSLinker {
 	}
 
 	private static Object invokeJavaMethod(Object target, String methodName, Object[] args) throws Throwable {
-		Class<?> clazz = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
-		boolean isStatic = (target instanceof Class<?>);
+		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
+		boolean  isStatic = (target instanceof Class<?>);
 
 		if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
 			try {
@@ -1863,107 +2296,118 @@ public class JSLinker {
 	}
 
 	private static MethodHandle buildDirectFieldGetter(Class<?> clazz, Field field, long offset) {
-		Class<?> type = field.getType();
+		Class<?>     type = field.getType();
 		MethodHandle mh;
-		if (type == int.class) mh = FieldMH.GET_INT;
-		else if (type == double.class) mh = FieldMH.GET_DOUBLE;
-		else if (type == long.class) mh = FieldMH.GET_LONG;
-		else if (type == float.class) mh = FieldMH.GET_FLOAT;
-		else if (type == short.class) mh = FieldMH.GET_SHORT;
-		else if (type == byte.class) mh = FieldMH.GET_BYTE;
-		else if (type == char.class) mh = FieldMH.GET_CHAR;
-		else if (type == boolean.class) mh = FieldMH.GET_BOOLEAN;
-		else mh = FieldMH.GET_OBJECT;
+		if (type == int.class) { mh = FieldMH.GET_INT; } else if (type == double.class) {
+			mh = FieldMH.GET_DOUBLE;
+		} else if (type == long.class) {
+			mh = FieldMH.GET_LONG;
+		} else if (type == float.class) {
+			mh = FieldMH.GET_FLOAT;
+		} else if (type == short.class) {
+			mh = FieldMH.GET_SHORT;
+		} else if (type == byte.class) {
+			mh = FieldMH.GET_BYTE;
+		} else if (type == char.class) {
+			mh = FieldMH.GET_CHAR;
+		} else if (type == boolean.class) {
+			mh = FieldMH.GET_BOOLEAN;
+		} else { mh = FieldMH.GET_OBJECT; }
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
 	private static MethodHandle buildDirectFieldSetter(Class<?> clazz, Field field, long offset) {
-		Class<?> type = field.getType();
+		Class<?>     type = field.getType();
 		MethodHandle mh;
-		if (type == int.class) mh = FieldMH.PUT_INT;
-		else if (type == double.class) mh = FieldMH.PUT_DOUBLE;
-		else if (type == long.class) mh = FieldMH.PUT_LONG;
-		else if (type == float.class) mh = FieldMH.PUT_FLOAT;
-		else if (type == short.class) mh = FieldMH.PUT_SHORT;
-		else if (type == byte.class) mh = FieldMH.PUT_BYTE;
-		else if (type == char.class) mh = FieldMH.PUT_CHAR;
-		else if (type == boolean.class) mh = FieldMH.PUT_BOOLEAN;
-		else mh = FieldMH.PUT_OBJECT;
+		if (type == int.class) { mh = FieldMH.PUT_INT; } else if (type == double.class) {
+			mh = FieldMH.PUT_DOUBLE;
+		} else if (type == long.class) {
+			mh = FieldMH.PUT_LONG;
+		} else if (type == float.class) {
+			mh = FieldMH.PUT_FLOAT;
+		} else if (type == short.class) {
+			mh = FieldMH.PUT_SHORT;
+		} else if (type == byte.class) {
+			mh = FieldMH.PUT_BYTE;
+		} else if (type == char.class) {
+			mh = FieldMH.PUT_CHAR;
+		} else if (type == boolean.class) {
+			mh = FieldMH.PUT_BOOLEAN;
+		} else { mh = FieldMH.PUT_OBJECT; }
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
 	public static Object getIntDirect(long offset, Object target) {
-		return (double) Magic.unsafe.getInt(target, offset);
+		return (double) UNSAFE.getInt(target, offset);
 	}
 
 	public static Object getDoubleDirect(long offset, Object target) {
-		return Magic.unsafe.getDouble(target, offset);
+		return UNSAFE.getDouble(target, offset);
 	}
 
 	public static Object getLongDirect(long offset, Object target) {
-		return (double) Magic.unsafe.getLong(target, offset);
+		return (double) UNSAFE.getLong(target, offset);
 	}
 
 	public static Object getFloatDirect(long offset, Object target) {
-		return (double) Magic.unsafe.getFloat(target, offset);
+		return (double) UNSAFE.getFloat(target, offset);
 	}
 
 	public static Object getShortDirect(long offset, Object target) {
-		return (double) Magic.unsafe.getShort(target, offset);
+		return (double) UNSAFE.getShort(target, offset);
 	}
 
 	public static Object getByteDirect(long offset, Object target) {
-		return (double) Magic.unsafe.getByte(target, offset);
+		return (double) UNSAFE.getByte(target, offset);
 	}
 
 	public static Object getCharDirect(long offset, Object target) {
-		return String.valueOf(Magic.unsafe.getChar(target, offset));
+		return String.valueOf(UNSAFE.getChar(target, offset));
 	}
 
 	public static Object getBooleanDirect(long offset, Object target) {
-		return Magic.unsafe.getBoolean(target, offset);
+		return UNSAFE.getBoolean(target, offset);
 	}
 
 	public static Object getObjectDirect(long offset, Object target) {
-		Object val = Magic.unsafe.getObject(target, offset);
-		return val == null ? null : val;
+		return UNSAFE.getObject(target, offset);
 	}
 
 	public static void putIntDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putInt(target, offset, val instanceof Number n ? n.intValue() : JSOps.toInt(val));
+		UNSAFE.putInt(target, offset, val instanceof Number n ? n.intValue() : JSOps.toInt(val));
 	}
 
 	public static void putDoubleDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putDouble(target, offset, val instanceof Number n ? n.doubleValue() : JSOps.toDouble(val));
+		UNSAFE.putDouble(target, offset, val instanceof Number n ? n.doubleValue() : JSOps.toDouble(val));
 	}
 
 	public static void putLongDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putLong(target, offset, val instanceof Number n ? n.longValue() : JSOps.toLong(val));
+		UNSAFE.putLong(target, offset, val instanceof Number n ? n.longValue() : JSOps.toLong(val));
 	}
 
 	public static void putFloatDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putFloat(target, offset, val instanceof Number n ? n.floatValue() : (float) JSOps.toDouble(val));
+		UNSAFE.putFloat(target, offset, val instanceof Number n ? n.floatValue() : (float) JSOps.toDouble(val));
 	}
 
 	public static void putShortDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putShort(target, offset, val instanceof Number n ? n.shortValue() : (short) JSOps.toInt(val));
+		UNSAFE.putShort(target, offset, val instanceof Number n ? n.shortValue() : (short) JSOps.toInt(val));
 	}
 
 	public static void putByteDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putByte(target, offset, val instanceof Number n ? n.byteValue() : (byte) JSOps.toInt(val));
+		UNSAFE.putByte(target, offset, val instanceof Number n ? n.byteValue() : (byte) JSOps.toInt(val));
 	}
 
 	public static void putCharDirect(long offset, Object target, Object val) {
 		char c = (val instanceof Character ch) ? ch : (val != null && !val.toString().isEmpty()) ? val.toString().charAt(0) : '\0';
-		Magic.unsafe.putChar(target, offset, c);
+		UNSAFE.putChar(target, offset, c);
 	}
 
 	public static void putBooleanDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putBoolean(target, offset, JSOps.isTruthy(val));
+		UNSAFE.putBoolean(target, offset, JSOps.isTruthy(val));
 	}
 
 	public static void putObjectDirect(long offset, Object target, Object val) {
-		Magic.unsafe.putObject(target, offset, val);
+		UNSAFE.putObject(target, offset, val);
 	}
 
 	private static Field getDeclaredFieldRecursive(Class<?> clazz, String name) throws NoSuchFieldException {
@@ -1989,4 +2433,5 @@ public class JSLinker {
 			throw new RuntimeException("Failed to find static method " + name, e);
 		}
 	}
+	//endregion
 }

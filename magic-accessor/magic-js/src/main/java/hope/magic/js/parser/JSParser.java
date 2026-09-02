@@ -31,7 +31,7 @@ public class JSParser {
 		return new Node.Program(body, line, col);
 	}
 
-	// ==================== 语句解析 ====================
+	//region 语句解析
 
 	private Node parseStatement() {
 		Token t = peek();
@@ -338,8 +338,9 @@ public class JSParser {
 		consume(TokenType.RBRACE, "Expected '}' after block");
 		return new Node.BlockStmt(stmts, lbrace.line, lbrace.column);
 	}
+	//endregion
 
-	// ==================== 表达式解析 (Pratt / Precedence) ====================
+	//region 表达式解析 (Pratt / Precedence)
 
 	public Node parseExpression() {
 		return parseAssignment();
@@ -629,8 +630,9 @@ public class JSParser {
 
 		throw new RuntimeException("Unexpected token " + t + " at line " + t.line + ":" + t.column);
 	}
+	//endregion
 
-	// ==================== 辅助方法与 ES6 解构脱糖 ====================
+	//region 辅助方法与 ES6 解构脱糖
 
 	private static final java.util.concurrent.atomic.AtomicInteger TEMP_VAR_GEN = new java.util.concurrent.atomic.AtomicInteger(0);
 
@@ -1041,4 +1043,5 @@ public class JSParser {
 	private boolean isAtEnd() {
 		return peek().type == TokenType.EOF;
 	}
+	//endregion
 }

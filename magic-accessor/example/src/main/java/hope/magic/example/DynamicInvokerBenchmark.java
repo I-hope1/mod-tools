@@ -145,23 +145,22 @@ public class DynamicInvokerBenchmark {
 		return MethodHandles.insertArguments(linkToSpecial, 3, mn);
 	}
 
-	// ==================== 1. Java Direct 原生基准 ====================
-
+	//region 1. Java Direct 原生基准
 	@Benchmark
 	public int test_0_java_direct() {
 		return MagicAccessorSample.callMultiply(target, 6, 7);
 	}
+	//endregion
 
-	// ==================== 2. invokeWithArguments (低速通用路径) ====================
-
+	//region 2. invokeWithArguments (低速通用路径)
 	@Benchmark
 	public Object test_1_invokeWithArguments() throws Throwable {
 		Object[] fullArgs = new Object[]{ target, args[0], args[1] };
 		return adaptedMh.invokeWithArguments(fullArgs);
 	}
+	//endregion
 
-	// ==================== 3. 方案 1: switch (args.length) + mh.invoke(...) ====================
-
+	//region 3. 方案 1: switch (args.length) + mh.invoke(...)
 	@Benchmark
 	public Object test_2_switch_invoke() throws Throwable {
 		return fastInvoke(adaptedMh, target, args);
@@ -183,32 +182,33 @@ public class DynamicInvokerBenchmark {
 		System.arraycopy(args, 0, res, 1, args.length);
 		return res;
 	}
+	//endregion
 
-	// ==================== 4. 方案 B-1: MethodHandle.asSpreader(...) ====================
-
+	//region 4. 方案 B-1: MethodHandle.asSpreader(...)
 	@Benchmark
 	public Object test_3_asSpreader() throws Throwable {
 		return asSpreaderMh.invokeExact((Object) target, args);
 	}
+	//endregion
 
-	// ==================== 5. 方案 B-2: MethodHandles.spreadInvoker(...) ====================
-
+	//region 5. 方案 B-2: MethodHandles.spreadInvoker(...)
 	@Benchmark
 	public Object test_4_spreadInvoker() throws Throwable {
 		return spreadInvokerMh.invokeExact(adaptedMh, (Object) target, args);
 	}
+	//endregion
 
-	// ==================== 6. 方案 C: 动态 ASM JIT 编译 linkToSpecial 存根 ====================
-
+	//region 6. 方案 C: 动态 ASM JIT 编译 linkToSpecial 存根
 	@Benchmark
 	public int test_5_dynamic_linkTo_stub() throws Throwable {
 		return (int) dynamicLinkToMh.invokeExact((Object) target, 6, 7);
 	}
+	//endregion
 
-	// ==================== 7. 方案 D: 动态 MagicAccessorImpl (MAGICIMPL) 原生 invokespecial ====================
-
+	//region 7. 方案 D: 动态 MagicAccessorImpl (MAGICIMPL) 原生 invokespecial
 	@Benchmark
 	public Object test_6_magic_accessor_impl() {
 		return magicAccessorInvoker.invoke(target, args);
 	}
+	//endregion
 }

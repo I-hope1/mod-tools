@@ -55,8 +55,7 @@ public class AccessorWarmupOnceBenchmark {
 		);
 	}
 
-	// ==================== 字段 Getter 测试 ====================
-
+	//region 字段 Getter 测试
 	@Benchmark
 	public int baseline_direct_field_get() {
 		return target.getSecretCode();
@@ -76,9 +75,9 @@ public class AccessorWarmupOnceBenchmark {
 	public int plan2A_linkTo_unsafe_field_get() {
 		return MagicAccessorSample.getSecretCode(target);
 	}
+	//endregion
 
-	// ==================== 方法调用测试 ====================
-
+	//region 方法调用测试
 	@Benchmark
 	public int baseline_direct_math_compute() {
 		return a * b;
@@ -113,9 +112,9 @@ public class AccessorWarmupOnceBenchmark {
 	public int plan2C_android_methodhandle_method() {
 		return AndroidAccessorSample.callMultiply(target, a, b);
 	}
+	//endregion
 
-	// ==================== 私有构造器实例化测试 ====================
-
+	//region 私有构造器实例化测试
 	@Benchmark
 	public TargetObject reflect_constructor_newInstance() throws Exception {
 		return reflectCtor.newInstance(a, "reflect");
@@ -140,6 +139,7 @@ public class AccessorWarmupOnceBenchmark {
 	public TargetObject plan2C_android_constructor() {
 		return AndroidAccessorSample.newTargetObject(a, "android");
 	}
+	//endregion
 
 	public static void main(String[] args) throws Exception {
 		Options opt = new OptionsBuilder()

@@ -25,8 +25,19 @@ tasks.withType(JavaCompile).configureEach {
 
 jar {
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	manifest {
+		attributes 'Main-Class': 'hope.magic.js.cli.Main'
+	}
 	from {
 		configurations.runtimeClasspath.findAll { it.name.startsWith("asm-") }.collect { zipTree(it) }
+	}
+}
+
+tasks.register('magicjs', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.js.cli.Main'
+	if (project.hasProperty('args')) {
+		args = Eval.me(project.property('args').toString())
 	}
 }
 

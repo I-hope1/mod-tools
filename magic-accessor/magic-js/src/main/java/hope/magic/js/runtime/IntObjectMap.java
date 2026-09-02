@@ -14,7 +14,10 @@ public final class IntObjectMap<V> {
 	private static final Object TOMBSTONE   = new Object();
 	private static final float  LOAD_FACTOR = 0.75f;
 
-	private int[]   keys;
+	/** @see HashMap#MAXIMUM_CAPACITY */
+	static final int MAXIMUM_CAPACITY = 1 << 30;
+
+	private int[]    keys;
 	private Object[] values;
 	private int      size;
 	private int      tombstoneCount;
@@ -41,9 +44,10 @@ public final class IntObjectMap<V> {
 		this.tombstoneCount = 0;
 	}
 
+	/** @see HashMap#tableSizeFor(int)   */
 	private static int tableSizeFor(int cap) {
 		int n = -1 >>> Integer.numberOfLeadingZeros(cap - 1);
-    return (n < 4) ? 4 : (n >= (1 << 30)) ? (1 << 30) : n + 1;
+		return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
 	}
 
 	public int size() { return size; }
@@ -236,7 +240,7 @@ public final class IntObjectMap<V> {
 		for (int i = 0, cap = other.capacity; i < cap; i++) {
 			// 直接访问数组比 get 效率更高（减少哈希计算）
 			int key   = keys1[i];
-			V    value = (V) values1[i];
+			V   value = (V) values1[i];
 			// valueAt 已经处理了墓碑返回 null
 			if (value != null && value != TOMBSTONE) {
 				this.put(key, value);

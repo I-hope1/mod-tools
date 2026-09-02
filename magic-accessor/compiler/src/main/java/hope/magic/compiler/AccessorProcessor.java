@@ -707,7 +707,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		return AccessMode.UNSAFE_AND_LINKTO;
 	}
 
-	// ======================== 方案 1: MagicAccessorImpl (经典特权方案) ========================
+	//region 方案 1: MagicAccessorImpl (经典特权方案)
 
 	private void processFieldMagic(
 		MethodSymbol methodSymbol,
@@ -864,8 +864,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 		rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 	}
+	//endregion
 
-	// ======================== 方案 2: Unsafe 字段访问 (收敛到 MagicBridgeData 并去重字段和方法) ========================
+	//region 方案 2: Unsafe 字段访问 (收敛到 MagicBridgeData 并去重字段和方法)
 
 	private void processFieldUnsafe(
 		MethodSymbol methodSymbol,
@@ -971,8 +972,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 		rewriteMethodBody(methodDecl, targetClassName, genMethodName, isGetter);
 	}
+	//endregion
 
-	// ======================== 方案 2A: MagicBridge 内部原生直调 + static final MemberName + resolveOrFail ========================
+	//region 方案 2A: MagicBridge 内部原生直调 + static final MemberName + resolveOrFail
 
 	private void processMethodLinkToBridge(
 		MethodSymbol methodSymbol,
@@ -1216,8 +1218,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 		// 5. 用户类直接调用 MagicBridge.<genMethodName>
 		rewriteMethodBody(methodDecl, bridgeClassName, genMethodName, true);
 	}
+	//endregion
 
-	// ======================== 方案 2B: invokedynamic (indy) 动态调用点 (去重方法) ========================
+	//region 方案 2B: invokedynamic (indy) 动态调用点 (去重方法)
 
 	private void processMethodIndy(
 		MethodSymbol methodSymbol,
@@ -1290,8 +1293,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 		rewriteMethodBody(methodDecl, targetClassName, genMethodName, true);
 	}
+	//endregion
 
-	// ======================== 方案 2C: MethodHandle.invokeExact (Android ART / 跨平台通用, 去重字段和方法) ========================
+	//region 方案 2C: MethodHandle.invokeExact (Android ART / 跨平台通用, 去重字段和方法)
 
 	private void processMethodHandle(
 		MethodSymbol methodSymbol,
@@ -1536,4 +1540,5 @@ public class AccessorProcessor extends BaseAccessorProc {
 			default -> "Ljava/lang/Object;";
 		};
 	}
+	//endregion
 }

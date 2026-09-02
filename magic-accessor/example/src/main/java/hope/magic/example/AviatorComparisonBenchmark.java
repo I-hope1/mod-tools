@@ -31,7 +31,7 @@ public class AviatorComparisonBenchmark {
 		List<Integer> sampleList = new ArrayList<>();
 		for (int i = 1; i <= 100; i++) sampleList.add(i);
 
-		// ==================== 1. 引擎初始化冷启动对比 ====================
+		//region 1. 引擎初始化冷启动对比
 		System.out.println("【1. 引擎初始化冷启动时延对比】");
 
 		long t0 = System.nanoTime();
@@ -45,8 +45,9 @@ public class AviatorComparisonBenchmark {
 		System.out.printf("  • MagicJS 首次 new JSContext():               %8.3f ms (%d ns)%n", magicInitNs / 1_000_000.0, magicInitNs);
 		System.out.printf("  • AviatorScript 首次 newInstance():           %8.3f ms (%d ns)%n", aviatorInitNs / 1_000_000.0, aviatorInitNs);
 		System.out.printf("  ==> 引擎初始化对比: MagicJS 比 AviatorScript 快  %8.2fx%n%n", (double) aviatorInitNs / magicInitNs);
+		//endregion
 
-		// ==================== 2. 素数计算场景（密集循环与局部变量运算） ====================
+		//region 2. 素数计算场景（密集循环与局部变量运算）
 		System.out.println("【2. 典型算术密集型场景：1000 以内素数求和】");
 
 		String magicPrimeCode = """
@@ -121,8 +122,9 @@ public class AviatorComparisonBenchmark {
 		System.out.printf("  • AviatorScript: 首次编译: %7.3f ms | 首次冷执行: %7.3f ms | 稳态单次热执行: %8.3f µs  [结果: %s]%n",
 			aCompNs / 1_000_000.0, aRun1Ns / 1_000_000.0, aWarmAvgNs / 1_000.0, aRes);
 		System.out.printf("  ==> 稳态执行速度对比: MagicJS 比 AviatorScript 快 %8.2fx ⚡%n%n", (double) aWarmAvgNs / mWarmAvgNs);
+		//endregion
 
-		// ==================== 3. 集合遍历场景 (List Loop) ====================
+		//region 3. 集合遍历场景 (List Loop)
 		System.out.println("【3. 集合遍历场景：遍历 100 个元素 Java List 并求和】");
 
 		String magicListCode = """
@@ -179,6 +181,7 @@ public class AviatorComparisonBenchmark {
 		System.out.printf("  • AviatorScript: 首次编译: %7.3f ms | 首次冷执行: %7.3f ms | 稳态单次热执行: %8.3f µs  [结果: %s]%n",
 			alCompNs / 1_000_000.0, alRunNs / 1_000_000.0, alWarm / 1_000.0, alRes);
 		System.out.printf("  ==> 集合遍历稳态速度对比: MagicJS 比 AviatorScript 快 %8.2fx ⚡%n%n", (double) alWarm / mlWarm);
+		//endregion
 
 		System.out.println("================================================================================");
 		System.out.println("                          深度对比测试完成                                      ");

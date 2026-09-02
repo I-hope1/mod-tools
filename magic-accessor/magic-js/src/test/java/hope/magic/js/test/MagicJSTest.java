@@ -601,12 +601,13 @@ public class MagicJSTest {
 		JSShape root = JSShape.ROOT;
 		int propId = SymbolTable.id("x_test_transition");
 		JSShape s1 = root.addProperty(propId, JSShape.TYPE_INT);
-		int off = s1.cachedOffset;
-		Assertions.assertEquals(JSShape.TYPE_INT, s1.getSlotType(off));
+		int off1 = s1.getOffset(propId);
+		Assertions.assertEquals(JSShape.TYPE_INT, s1.getSlotType(off1));
 		JSShape s2 = root.addProperty(propId, JSShape.TYPE_DOUBLE);
 		// 如果 transitions 只用 propId 寻址，则 s2 会是第一次创建的 shape（类型为 INT）
 		Assertions.assertNotSame(s1, s2);
-		Assertions.assertEquals(JSShape.TYPE_DOUBLE, s2.getSlotType(s2.cachedOffset));
+		int off2 = s2.getOffset(propId);
+		Assertions.assertEquals(JSShape.TYPE_DOUBLE, s2.getSlotType(off2));
 	}
 
 	@Test

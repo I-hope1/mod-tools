@@ -89,35 +89,40 @@ public class GradientShapeBenchmark {
 		return sb.toString();
 	}
 
-	// ==================== 1. Shape = 1 (Monomorphic 单态) ====================
+	//region 1. Shape = 1 (Monomorphic 单态)
 	@Benchmark
 	public Object magic_shape_01() throws Throwable { return magicScript_1.run(magicContext); }
 	@Benchmark
 	public Object graal_shape_01() { return graalContext.eval(graalScript_1); }
+	//endregion
 
-	// ==================== 2. Shape = 2 (Bimorphic 双态) ====================
+	//region 2. Shape = 2 (Bimorphic 双态)
 	@Benchmark
 	public Object magic_shape_02() throws Throwable { return magicScript_2.run(magicContext); }
 	@Benchmark
 	public Object graal_shape_02() { return graalContext.eval(graalScript_2); }
+	//endregion
 
-	// ==================== 3. Shape = 4 (Polymorphic-4 多态) ====================
+	//region 3. Shape = 4 (Polymorphic-4 多态)
 	@Benchmark
 	public Object magic_shape_04() throws Throwable { return magicScript_4.run(magicContext); }
 	@Benchmark
 	public Object graal_shape_04() { return graalContext.eval(graalScript_4); }
+	//endregion
 
-	// ==================== 4. Shape = 8 (Polymorphic-8 链上限) ====================
+	//region 4. Shape = 8 (Polymorphic-8 链上限)
 	@Benchmark
 	public Object magic_shape_08() throws Throwable { return magicScript_8.run(magicContext); }
 	@Benchmark
 	public Object graal_shape_08() { return graalContext.eval(graalScript_8); }
+	//endregion
 
-	// ==================== 5. Shape = 64 (Deep Megamorphic 巨态) ====================
+	//region 5. Shape = 64 (Deep Megamorphic 巨态)
 	@Benchmark
 	public Object magic_shape_64() throws Throwable { return magicScript_64.run(magicContext); }
 	@Benchmark
 	public Object graal_shape_64() { return graalContext.eval(graalScript_64); }
+	//endregion
 
 	public static String generateCompoundGradientCode(int numShapes) {
 		StringBuilder sb = new StringBuilder();

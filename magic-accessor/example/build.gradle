@@ -107,9 +107,9 @@ tasks.register('jmhJS', JavaExec) {
 	)
 	args = [
 		'hope.magic.example.MagicJSBenchmark',
-		'-f', '1',
-		'-wi', '2',
-		'-i', '3',
+		'-f', '3',
+		'-wi', '3',
+		'-i', '5',
 		'-bm', 'avgt',
 		'-tu', 'ns'
 	]
@@ -161,12 +161,19 @@ tasks.register('compareAviator', JavaExec) {
 tasks.register('printInlining', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'hope.magic.example.MagicJSInliningBenchmark'
-	jvmArgs = [
-		'-XX:+UnlockDiagnosticVMOptions',
-		'-XX:+PrintInlining',
-		'-XX:+TieredCompilation',
-		'-XX:CICompilerCount=2',
-	]
+	jvmArgs(
+			'-XX:+UnlockDiagnosticVMOptions',
+			'-XX:+PrintInlining',
+	)
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
+
+tasks.register('benchBun', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.BunVsMagicJSBenchmark'
 	if (jsBenchmarkJdk.exists()) {
 		executable = jsBenchmarkJdk.absolutePath
 	}

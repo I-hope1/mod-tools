@@ -186,8 +186,7 @@ public class MagicJSBenchmark {
 		}
 	}
 
-	// ==================== 1. Java Direct 原生基准 ====================
-
+	//region 1. Java Direct 原生基准
 	@Benchmark
 	public int baseline_java_direct_field() {
 		return target.getSecretCode();
@@ -214,18 +213,18 @@ public class MagicJSBenchmark {
 		}
 		return sum;
 	}
+	//endregion
 
-	// ==================== 2. 字段访问对比 (MagicJS vs Rhino vs Nashorn vs GraalJS) ====================
-
+	//region 2. 字段访问对比 (MagicJS vs Rhino vs Nashorn vs GraalJS)
 	@Benchmark
 	public Object magic_js_field_read() throws Throwable {
 		return magicFieldScript.run(magicContext);
 	}
 
-	@Benchmark
+	/* @Benchmark
 	public Object rhino_js_field_read() {
 		return rhinoFieldScript.exec(rhinoContext, rhinoScope);
-	}
+	} */
 
 	@Benchmark
 	public Object nashorn_js_field_read() throws Exception {
@@ -236,18 +235,18 @@ public class MagicJSBenchmark {
 	public Object graal_js_field_read() {
 		return graalContext.eval(graalFieldScript);
 	}
+	//endregion
 
-	// ==================== 3. 方法调用对比 (MagicJS vs Rhino vs Nashorn vs GraalJS) ====================
-
+	//region 3. 方法调用对比 (MagicJS vs Rhino vs Nashorn vs GraalJS)
 	@Benchmark
 	public Object magic_js_method_call() throws Throwable {
 		return magicMethodScript.run(magicContext);
 	}
 
-	@Benchmark
+	/* @Benchmark
 	public Object rhino_js_method_call() {
 		return rhinoMethodScript.exec(rhinoContext, rhinoScope);
-	}
+	} */
 
 	@Benchmark
 	public Object nashorn_js_method_call() throws Exception {
@@ -258,18 +257,18 @@ public class MagicJSBenchmark {
 	public Object graal_js_method_call() {
 		return graalContext.eval(graalMethodScript);
 	}
+	//endregion
 
-	// ==================== 4. 1000以内质数和计算 (MagicJS vs Rhino vs Nashorn vs GraalJS) ====================
-
+	//region 4. 1000以内质数和计算 (MagicJS vs Rhino vs Nashorn vs GraalJS)
 	@Benchmark
 	public Object magic_js_prime_sum_1000() throws Throwable {
 		return magicLoopScript.run(magicContext);
 	}
 
-	@Benchmark
+	/* @Benchmark
 	public Object rhino_js_prime_sum_1000() {
 		return rhinoLoopScript.exec(rhinoContext, rhinoScope);
-	}
+	} */
 
 	@Benchmark
 	public Object nashorn_js_prime_sum_1000() throws Exception {
@@ -280,18 +279,18 @@ public class MagicJSBenchmark {
 	public Object graal_js_prime_sum_1000() {
 		return graalContext.eval(graalLoopScript);
 	}
+	//endregion
 
-	// ==================== 5. 动态 JSObject 属性访问 (Shape IC vs Rhino vs Nashorn vs GraalJS) ====================
-
+	//region 5. 动态 JSObject 属性访问 (Shape IC vs Rhino vs Nashorn vs GraalJS)
 	@Benchmark
 	public Object magic_js_dynamic_obj_read() throws Throwable {
 		return magicObjScript.run(magicContext);
 	}
 
-	@Benchmark
+	/* @Benchmark
 	public Object rhino_js_dynamic_obj_read() {
 		return rhinoObjScript.exec(rhinoContext, rhinoScope);
-	}
+	} */
 
 	@Benchmark
 	public Object nashorn_js_dynamic_obj_read() throws Exception {
@@ -302,18 +301,17 @@ public class MagicJSBenchmark {
 	public Object graal_js_dynamic_obj_read() {
 		return graalContext.eval(graalObjScript);
 	}
+	//endregion
 
-
-	// ==================== 6. Poly ====================
-
+	//region 6. Poly
 	@Benchmark
 	public Object magic_js_poly() throws Throwable {
 		return magicPolyScript.run(magicContext);
 	}
-	@Benchmark
+	/* @Benchmark
 	public Object rhino_js_poly() {
 		return rhinoPolyScript.exec(rhinoContext, rhinoScope);
-	}
+	} */
 	@Benchmark
 	public Object nashorn_js_poly() throws Exception {
 		return nashornPolyScript.eval(nashornBindings);
@@ -322,4 +320,5 @@ public class MagicJSBenchmark {
 	public Object graal_js_poly() {
 		return graalContext.eval(graalPolyScript);
 	}
+	//endregion
 }

@@ -21,6 +21,9 @@ public class JSCompiler {
 		false
 	);
 
+	// 语义化控制常量
+	public static final long MASK_UINT32 = JSOps.UINT32_MASK; // 0xFFFFFFFFL (用于无符号位移 >>> 0 等)
+
 	private static final Handle BSM_GET_PROP_INT = new Handle(
 		Opcodes.H_INVOKESTATIC,
 		Type.getInternalName(JSLinker.class),
@@ -49,6 +52,14 @@ public class JSCompiler {
 	 Opcodes.H_INVOKESTATIC,
 	 Type.getInternalName(JSLinker.class),
 	 "bootstrapSetProp",
+	 MethodType.methodType(CallSite.class, MethodHandles.Lookup.class, String.class, MethodType.class, String.class).toMethodDescriptorString(),
+	 false
+	);
+
+	private static final Handle BSM_SET_PROP_DOUBLE = new Handle(
+	 Opcodes.H_INVOKESTATIC,
+	 Type.getInternalName(JSLinker.class),
+	 "bootstrapSetPropDouble",
 	 MethodType.methodType(CallSite.class, MethodHandles.Lookup.class, String.class, MethodType.class, String.class).toMethodDescriptorString(),
 	 false
 	);
@@ -112,8 +123,21 @@ public class JSCompiler {
 		return (JSScript) loadedClass.getDeclaredConstructor().newInstance();
 	}
 
+	private static class FastClassWriter extends ClassWriter {
+		public FastClassWriter(int flags) {
+			super(flags);
+		}
+
+		@Override
+		protected String getCommonSuperClass(String type1, String type2) {
+			if (type1.equals(type2)) return type1;
+			// JS 运行时代币绝大多数直接汇聚于 java/lang/Object
+			return "java/lang/Object";
+		}
+	}
+
 	private static byte[] generateScriptBytecode(String className, Node.Program program) {
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, className, null, Type.getInternalName(JSScript.class), null);
 
 		// 默认构造函数 <init>()
@@ -176,13 +200,6 @@ public class JSCompiler {
 		runMv.visitMaxs(0, 0);
 		runMv.visitEnd();
 
-		for (int i = 0; i < ctx.nextSiteId; i++) {
-			for (int s = 0; s < 3; s++) {
-				cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "$shape_" + i + "_" + s, "L" + Type.getInternalName(JSShape.class) + ";", null, null).visitEnd();
-				cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "$offset_" + i + "_" + s, "I", null, null).visitEnd();
-			}
-		}
-
 		cw.visitEnd();
 		return cw.toByteArray();
 	}
@@ -229,6 +246,7 @@ public class JSCompiler {
 		int tempVarCounter = 0;
 		boolean isFunction = false;
 		String functionName = null;
+		boolean isDoubleSpecialized = false;
 
 		final Deque<Label> breakTargets    = new ArrayDeque<>();
 		final Deque<Label> continueTargets = new ArrayDeque<>();
@@ -247,6 +265,14 @@ public class JSCompiler {
 			int slot = nextLocalSlot;
 			nextLocalSlot += 2;
 			return slot;
+		}
+
+		int markTempSlots() {
+			return nextLocalSlot;
+		}
+
+		void resetTempSlots(int mark) {
+			this.nextLocalSlot = mark;
 		}
 
 		LocalVar declareLocal(String name, VarType type) {
@@ -308,14 +334,22 @@ public class JSCompiler {
 			if (left == VarType.LONG && right == VarType.LONG && op != TokenType.SLASH) {
 				return VarType.LONG;
 			}
+			// JS 规范：位运算产出 32 位整型 (>>> 除外可能超过 31 位正数)
+			if (op == TokenType.BIT_OR || op == TokenType.BIT_AND || op == TokenType.BIT_XOR
+			    || op == TokenType.SHL || op == TokenType.SHR) {
+				return VarType.INT;
+			}
+			if (op == TokenType.USHR) {
+				return VarType.DOUBLE;
+			}
+
 			// JS 规范：* / - % 是纯数值运算，只要不是纯整型，统一推断为 DOUBLE
 			if (op == TokenType.STAR || op == TokenType.SLASH || op == TokenType.MINUS || op == TokenType.PERCENT) {
 				return VarType.DOUBLE;
 			}
-			// 如果 + 且两侧均为数值类型，则为 DOUBLE
+			// 如果 + 且两侧非字符串，只要一侧是数值类型或数值表达式，在数学计算中推断为 DOUBLE
 			if (op == TokenType.PLUS && !isStringExpr(bin.left) && !isStringExpr(bin.right)) {
-				if (left.isPrimitive() && right.isPrimitive()) return VarType.DOUBLE;
-				if ((isNumeric(left) && isNumeric(right)) || (isNumericExpr(bin.left) && isNumericExpr(bin.right))) {
+				if (left.isPrimitive() || right.isPrimitive() || isNumeric(left) || isNumeric(right) || isNumericExpr(bin.left) || isNumericExpr(bin.right)) {
 					return VarType.DOUBLE;
 				}
 			}
@@ -329,7 +363,7 @@ public class JSCompiler {
 			if (op == TokenType.MINUS) {
 				return inferVarType(un.expr, ctx);
 			}
-			if (op == TokenType.NOT) {
+			if (op == TokenType.NOT || op == TokenType.BIT_NOT) {
 				return VarType.INT;
 			}
 		}
@@ -361,11 +395,15 @@ public class JSCompiler {
 		if (node instanceof Node.LiteralExpr lit && lit.value instanceof Number) return true;
 		if (node instanceof Node.BinaryExpr bin) {
 			if (bin.op == TokenType.STAR || bin.op == TokenType.SLASH || bin.op == TokenType.MINUS || bin.op == TokenType.PERCENT) return true;
-			if (bin.op == TokenType.PLUS && isNumericExpr(bin.left) && isNumericExpr(bin.right)) {
+			if (bin.op == TokenType.PLUS && !isStringExpr(bin.left) && !isStringExpr(bin.right)) {
+				return isNumericExpr(bin.left) || isNumericExpr(bin.right);
+			}
+			if (bin.op == TokenType.BIT_OR || bin.op == TokenType.BIT_AND || bin.op == TokenType.BIT_XOR
+			    || bin.op == TokenType.SHL || bin.op == TokenType.SHR || bin.op == TokenType.USHR) {
 				return true;
 			}
 		}
-		if (node instanceof Node.UnaryExpr un && (un.op == TokenType.MINUS || un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS)) return true;
+		if (node instanceof Node.UnaryExpr un && (un.op == TokenType.MINUS || un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS || un.op == TokenType.BIT_NOT)) return true;
 		return false;
 	}
 
@@ -381,6 +419,63 @@ public class JSCompiler {
 		return VarType.OBJECT;
 	}
 
+	private static boolean isVarUsedAsNumeric(String name, Node node) {
+		if (node == null) return false;
+		if (node instanceof Node.BinaryExpr bin) {
+			TokenType op = bin.op;
+			boolean isLeft = bin.left instanceof Node.IdentifierExpr id && id.name.equals(name);
+			boolean isRight = bin.right instanceof Node.IdentifierExpr id && id.name.equals(name);
+			if (isLeft || isRight) {
+				if (op == TokenType.STAR || op == TokenType.SLASH || op == TokenType.MINUS || op == TokenType.PERCENT
+				    || op == TokenType.BIT_AND || op == TokenType.BIT_OR || op == TokenType.BIT_XOR
+				    || op == TokenType.SHL || op == TokenType.SHR || op == TokenType.USHR
+				    || op == TokenType.LT || op == TokenType.LTE || op == TokenType.GT || op == TokenType.GTE) {
+					return true;
+				}
+				if (op == TokenType.EQ || op == TokenType.EQ_EQ || op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ) {
+					Node other = isLeft ? bin.right : bin.left;
+					if (isLiteralNumber(other)) return true;
+				}
+			}
+			return isVarUsedAsNumeric(name, bin.left) || isVarUsedAsNumeric(name, bin.right);
+		}
+		if (node instanceof Node.UnaryExpr un) {
+			if (un.expr instanceof Node.IdentifierExpr id && id.name.equals(name)) {
+				if (un.op == TokenType.MINUS || un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS || un.op == TokenType.BIT_NOT) {
+					return true;
+				}
+			}
+			return isVarUsedAsNumeric(name, un.expr);
+		}
+		if (node instanceof Node.Program prog) {
+			for (Node s : prog.body) if (isVarUsedAsNumeric(name, s)) return true;
+		} else if (node instanceof Node.BlockStmt b) {
+			for (Node s : b.statements) if (isVarUsedAsNumeric(name, s)) return true;
+		} else if (node instanceof Node.IfStmt ifStmt) {
+			if (isVarUsedAsNumeric(name, ifStmt.condition)) return true;
+			if (isVarUsedAsNumeric(name, ifStmt.thenBranch)) return true;
+			if (ifStmt.elseBranch != null && isVarUsedAsNumeric(name, ifStmt.elseBranch)) return true;
+		} else if (node instanceof Node.WhileStmt w) {
+			if (isVarUsedAsNumeric(name, w.condition)) return true;
+			if (isVarUsedAsNumeric(name, w.body)) return true;
+		} else if (node instanceof Node.DoWhileStmt dw) {
+			if (isVarUsedAsNumeric(name, dw.condition)) return true;
+			if (isVarUsedAsNumeric(name, dw.body)) return true;
+		} else if (node instanceof Node.ForStmt f) {
+			if (isVarUsedAsNumeric(name, f.init)) return true;
+			if (isVarUsedAsNumeric(name, f.condition)) return true;
+			if (isVarUsedAsNumeric(name, f.update)) return true;
+			if (isVarUsedAsNumeric(name, f.body)) return true;
+		} else if (node instanceof Node.AssignExpr assign) {
+			return isVarUsedAsNumeric(name, assign.value);
+		} else if (node instanceof Node.ExprStmt exprStmt) {
+			return isVarUsedAsNumeric(name, exprStmt.expr);
+		} else if (node instanceof Node.ReturnStmt ret) {
+			return isVarUsedAsNumeric(name, ret.value);
+		}
+		return false;
+	}
+
 	private static void preScanVariables(Node root, CompileContext ctx) {
 		if (root == null || ctx == null) return;
 		List<Node.VarDecl> varDecls = new ArrayList<>();
@@ -388,6 +483,10 @@ public class JSCompiler {
 
 		for (Node.VarDecl decl : varDecls) {
 			VarType init = decl.init != null ? inferVarType(decl.init, ctx) : null;
+			if ((decl.init instanceof Node.MemberAccessExpr || decl.init instanceof Node.IndexAccessExpr)
+			    && isVarUsedAsNumeric(decl.name, root)) {
+				init = VarType.DOUBLE;
+			}
 			ctx.preInferredTypes.put(decl.name, init != null ? init : VarType.INT);
 		}
 
@@ -577,8 +676,12 @@ public class JSCompiler {
 			return findAssignedType(name, exprStmt.expr, ctx);
 		} else if (node instanceof Node.AssignExpr assign) {
 			if (assign.target instanceof Node.IdentifierExpr ident && ident.name.equals(name)) {
-				if (assign.op == TokenType.SLASH_ASSIGN) return VarType.DOUBLE;
-				if (assign.op == TokenType.PLUS_ASSIGN || assign.op == TokenType.MINUS_ASSIGN || assign.op == TokenType.STAR_ASSIGN) {
+				if (assign.op == TokenType.SLASH_ASSIGN || assign.op == TokenType.USHR_ASSIGN) return VarType.DOUBLE;
+				if (assign.op == TokenType.BIT_AND_ASSIGN || assign.op == TokenType.BIT_OR_ASSIGN
+				    || assign.op == TokenType.BIT_XOR_ASSIGN || assign.op == TokenType.SHL_ASSIGN
+				    || assign.op == TokenType.SHR_ASSIGN) return VarType.INT;
+				if (assign.op == TokenType.PLUS_ASSIGN || assign.op == TokenType.MINUS_ASSIGN
+				    || assign.op == TokenType.STAR_ASSIGN || assign.op == TokenType.PERCENT_ASSIGN) {
 					VarType valType = inferVarType(assign.value, ctx);
 					if (isNumeric(valType)) {
 						return valType == VarType.DOUBLE ? VarType.DOUBLE : (valType == VarType.LONG ? VarType.LONG : VarType.INT);
@@ -645,6 +748,16 @@ public class JSCompiler {
 			mv.visitIntInsn(Opcodes.SIPUSH, iVal);
 		} else {
 			mv.visitLdcInsn(iVal);
+		}
+	}
+
+	private static void pushLong(MethodVisitor mv, long lVal) {
+		if (lVal == 0L) {
+			mv.visitInsn(Opcodes.LCONST_0);
+		} else if (lVal == 1L) {
+			mv.visitInsn(Opcodes.LCONST_1);
+		} else {
+			mv.visitLdcInsn(lVal);
 		}
 	}
 
@@ -1013,6 +1126,15 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.ReturnStmt returnStmt) {
+			if (ctx.isDoubleSpecialized) {
+				if (returnStmt.value != null) {
+					compileNodeAsDouble(returnStmt.value, ctx);
+				} else {
+					mv.visitLdcInsn(0.0);
+				}
+				mv.visitInsn(Opcodes.DRETURN);
+				return;
+			}
 			if (returnStmt.value != null) {
 				compileNode(returnStmt.value, ctx, true);
 			} else {
@@ -1077,12 +1199,27 @@ public class JSCompiler {
 			if (assign.target instanceof Node.IdentifierExpr ident) {
 				String   name = ident.name;
 				LocalVar var  = ctx.getLocal(name);
-				String opStr = assign.op == TokenType.PLUS_ASSIGN ? "+" :
-				 (assign.op == TokenType.MINUS_ASSIGN ? "-" :
-					(assign.op == TokenType.STAR_ASSIGN ? "*" : "/"));
+				String opStr = switch (assign.op) {
+					case PLUS_ASSIGN -> "+";
+					case MINUS_ASSIGN -> "-";
+					case STAR_ASSIGN -> "*";
+					case SLASH_ASSIGN -> "/";
+					case PERCENT_ASSIGN -> "%";
+					case BIT_AND_ASSIGN -> "&";
+					case BIT_OR_ASSIGN -> "|";
+					case BIT_XOR_ASSIGN -> "^";
+					case SHL_ASSIGN -> "<<";
+					case SHR_ASSIGN -> ">>";
+					case USHR_ASSIGN -> ">>>";
+					default -> null;
+				};
 				if (var != null) {
-					boolean isCompound = assign.op == TokenType.PLUS_ASSIGN || assign.op == TokenType.MINUS_ASSIGN
-					                      || assign.op == TokenType.STAR_ASSIGN || assign.op == TokenType.SLASH_ASSIGN;
+					boolean isIntCompound = assign.op == TokenType.PLUS_ASSIGN || assign.op == TokenType.MINUS_ASSIGN
+					                      || assign.op == TokenType.STAR_ASSIGN || assign.op == TokenType.PERCENT_ASSIGN
+					                      || assign.op == TokenType.BIT_AND_ASSIGN || assign.op == TokenType.BIT_OR_ASSIGN
+					                      || assign.op == TokenType.BIT_XOR_ASSIGN || assign.op == TokenType.SHL_ASSIGN
+					                      || assign.op == TokenType.SHR_ASSIGN || assign.op == TokenType.USHR_ASSIGN;
+					boolean isCompound = isIntCompound || assign.op == TokenType.SLASH_ASSIGN;
 
 					if (var.isInt()) {
 						if (assign.op == TokenType.ASSIGN) {
@@ -1095,14 +1232,20 @@ public class JSCompiler {
 							} else {
 								mv.visitVarInsn(Opcodes.ISTORE, var.slot);
 							}
-						} else if (isCompound) {
+						} else if (isIntCompound) {
 							mv.visitVarInsn(Opcodes.ILOAD, var.slot);
 							compileNodeAsInt(assign.value, ctx);
 							switch (assign.op) {
 								case PLUS_ASSIGN -> mv.visitInsn(Opcodes.IADD);
 								case MINUS_ASSIGN -> mv.visitInsn(Opcodes.ISUB);
 								case STAR_ASSIGN -> mv.visitInsn(Opcodes.IMUL);
-								case SLASH_ASSIGN -> mv.visitInsn(Opcodes.IDIV);
+								case PERCENT_ASSIGN -> mv.visitInsn(Opcodes.IREM);
+								case BIT_AND_ASSIGN -> mv.visitInsn(Opcodes.IAND);
+								case BIT_OR_ASSIGN -> mv.visitInsn(Opcodes.IOR);
+								case BIT_XOR_ASSIGN -> mv.visitInsn(Opcodes.IXOR);
+								case SHL_ASSIGN -> mv.visitInsn(Opcodes.ISHL);
+								case SHR_ASSIGN -> mv.visitInsn(Opcodes.ISHR);
+								case USHR_ASSIGN -> mv.visitInsn(Opcodes.IUSHR);
 							}
 							if (needResult) {
 								mv.visitInsn(Opcodes.DUP);
@@ -1135,6 +1278,10 @@ public class JSCompiler {
 								case MINUS_ASSIGN -> mv.visitInsn(Opcodes.LSUB);
 								case STAR_ASSIGN -> mv.visitInsn(Opcodes.LMUL);
 								case SLASH_ASSIGN -> mv.visitInsn(Opcodes.LDIV);
+								case PERCENT_ASSIGN -> mv.visitInsn(Opcodes.LREM);
+								case BIT_AND_ASSIGN -> mv.visitInsn(Opcodes.LAND);
+								case BIT_OR_ASSIGN -> mv.visitInsn(Opcodes.LOR);
+								case BIT_XOR_ASSIGN -> mv.visitInsn(Opcodes.LXOR);
 							}
 							if (needResult) {
 								mv.visitInsn(Opcodes.DUP2);
@@ -1160,12 +1307,66 @@ public class JSCompiler {
 							}
 						} else if (isCompound) {
 							mv.visitVarInsn(Opcodes.DLOAD, var.slot);
-							compileNodeAsDouble(assign.value, ctx);
 							switch (assign.op) {
-								case PLUS_ASSIGN -> mv.visitInsn(Opcodes.DADD);
-								case MINUS_ASSIGN -> mv.visitInsn(Opcodes.DSUB);
-								case STAR_ASSIGN -> mv.visitInsn(Opcodes.DMUL);
-								case SLASH_ASSIGN -> mv.visitInsn(Opcodes.DDIV);
+								case PLUS_ASSIGN -> {
+									compileNodeAsDouble(assign.value, ctx);
+									mv.visitInsn(Opcodes.DADD);
+								}
+								case MINUS_ASSIGN -> {
+									compileNodeAsDouble(assign.value, ctx);
+									mv.visitInsn(Opcodes.DSUB);
+								}
+								case STAR_ASSIGN -> {
+									compileNodeAsDouble(assign.value, ctx);
+									mv.visitInsn(Opcodes.DMUL);
+								}
+								case SLASH_ASSIGN -> {
+									compileNodeAsDouble(assign.value, ctx);
+									mv.visitInsn(Opcodes.DDIV);
+								}
+								case PERCENT_ASSIGN -> {
+									compileNodeAsDouble(assign.value, ctx);
+									mv.visitInsn(Opcodes.DREM);
+								}
+								case BIT_AND_ASSIGN -> {
+									mv.visitInsn(Opcodes.D2I);
+									compileNodeAsInt(assign.value, ctx);
+									mv.visitInsn(Opcodes.IAND);
+									mv.visitInsn(Opcodes.I2D);
+								}
+								case BIT_OR_ASSIGN -> {
+									mv.visitInsn(Opcodes.D2I);
+									compileNodeAsInt(assign.value, ctx);
+									mv.visitInsn(Opcodes.IOR);
+									mv.visitInsn(Opcodes.I2D);
+								}
+								case BIT_XOR_ASSIGN -> {
+									mv.visitInsn(Opcodes.D2I);
+									compileNodeAsInt(assign.value, ctx);
+									mv.visitInsn(Opcodes.IXOR);
+									mv.visitInsn(Opcodes.I2D);
+								}
+								case SHL_ASSIGN -> {
+									mv.visitInsn(Opcodes.D2I);
+									compileNodeAsInt(assign.value, ctx);
+									mv.visitInsn(Opcodes.ISHL);
+									mv.visitInsn(Opcodes.I2D);
+								}
+								case SHR_ASSIGN -> {
+									mv.visitInsn(Opcodes.D2I);
+									compileNodeAsInt(assign.value, ctx);
+									mv.visitInsn(Opcodes.ISHR);
+									mv.visitInsn(Opcodes.I2D);
+								}
+								case USHR_ASSIGN -> {
+									mv.visitInsn(Opcodes.D2I);
+									compileNodeAsInt(assign.value, ctx);
+									mv.visitInsn(Opcodes.IUSHR);
+									mv.visitInsn(Opcodes.I2L);
+									pushLong(mv, MASK_UINT32);
+									mv.visitInsn(Opcodes.LAND);
+									mv.visitInsn(Opcodes.L2D);
+								}
 							}
 							if (needResult) {
 								mv.visitInsn(Opcodes.DUP2);
@@ -1211,6 +1412,21 @@ public class JSCompiler {
 			}
 
 			if (assign.target instanceof Node.MemberAccessExpr member) {
+				VarType valType = inferVarType(assign.value, ctx);
+				boolean isNum = isNumeric(valType) || isNumericExpr(assign.value);
+				if (isNum && assign.op == TokenType.ASSIGN) {
+					compileNode(member.target, ctx, true);
+					compileNodeAsDouble(assign.value, ctx);
+					if (needResult) {
+						mv.visitInsn(Opcodes.DUP2_X1);
+						mv.visitInvokeDynamicInsn("setPropDouble", "(Ljava/lang/Object;D)V", BSM_SET_PROP_DOUBLE, member.property);
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					} else {
+						mv.visitInvokeDynamicInsn("setPropDouble", "(Ljava/lang/Object;D)V", BSM_SET_PROP_DOUBLE, member.property);
+					}
+					return;
+				}
+
 				compileNode(member.target, ctx, true);
 				compileNode(assign.value, ctx, true);
 				if (needResult) {
@@ -1222,6 +1438,21 @@ public class JSCompiler {
 
 			if (assign.target instanceof Node.IndexAccessExpr idxAccess) {
 				if (idxAccess.index instanceof Node.LiteralExpr lit && lit.value instanceof String s) {
+					VarType valType = inferVarType(assign.value, ctx);
+					boolean isNum = isNumeric(valType) || isNumericExpr(assign.value);
+					if (isNum && assign.op == TokenType.ASSIGN) {
+						compileNode(idxAccess.target, ctx, true);
+						compileNodeAsDouble(assign.value, ctx);
+						if (needResult) {
+							mv.visitInsn(Opcodes.DUP2_X1);
+							mv.visitInvokeDynamicInsn("setPropDouble", "(Ljava/lang/Object;D)V", BSM_SET_PROP_DOUBLE, s);
+							mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+						} else {
+							mv.visitInvokeDynamicInsn("setPropDouble", "(Ljava/lang/Object;D)V", BSM_SET_PROP_DOUBLE, s);
+						}
+						return;
+					}
+
 					compileNode(idxAccess.target, ctx, true);
 					compileNode(assign.value, ctx, true);
 					if (needResult) {
@@ -1233,45 +1464,50 @@ public class JSCompiler {
 
 				VarType idxType = inferVarType(idxAccess.index, ctx);
 				if (idxType == VarType.INT) {
-					int targetSlot = ctx.allocTempSlot();
-					int idxSlot = ctx.allocTempSlot();
-					int valSlot = ctx.allocTempSlot();
+					int mark = ctx.markTempSlots();
+					try {
+						int targetSlot = ctx.allocTempSlot();
+						int idxSlot = ctx.allocTempSlot();
+						int valSlot = ctx.allocTempSlot();
 
-					compileNode(idxAccess.target, ctx, true);
-					mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+						compileNode(idxAccess.target, ctx, true);
+						mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
 
-					compileNodeAsInt(idxAccess.index, ctx);
-					mv.visitVarInsn(Opcodes.ISTORE, idxSlot);
+						compileNodeAsInt(idxAccess.index, ctx);
+						mv.visitVarInsn(Opcodes.ISTORE, idxSlot);
 
-					compileNode(assign.value, ctx, true);
-					if (needResult) {
-						mv.visitInsn(Opcodes.DUP);
+						compileNode(assign.value, ctx, true);
+						if (needResult) {
+							mv.visitInsn(Opcodes.DUP);
+						}
+						mv.visitVarInsn(Opcodes.ASTORE, valSlot);
+
+						Label slowPath = new Label();
+						Label endLabel = new Label();
+
+						// 1. JSArray fast-path
+						mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+						mv.visitTypeInsn(Opcodes.INSTANCEOF, Type.getInternalName(JSArray.class));
+						mv.visitJumpInsn(Opcodes.IFEQ, slowPath);
+
+						mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+						mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSArray.class));
+						mv.visitVarInsn(Opcodes.ILOAD, idxSlot);
+						mv.visitVarInsn(Opcodes.ALOAD, valSlot);
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSArray.class), "setElement", "(ILjava/lang/Object;)V", false);
+						mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+						// 2. slowPath: fallback to JSLinker.setIndex(target, idx, val)
+						mv.visitLabel(slowPath);
+						mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+						mv.visitVarInsn(Opcodes.ILOAD, idxSlot);
+						mv.visitVarInsn(Opcodes.ALOAD, valSlot);
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, Type.getInternalName(JSLinker.class), "setIndex", "(Ljava/lang/Object;ILjava/lang/Object;)V", false);
+
+						mv.visitLabel(endLabel);
+					} finally {
+						ctx.resetTempSlots(mark);
 					}
-					mv.visitVarInsn(Opcodes.ASTORE, valSlot);
-
-					Label slowPath = new Label();
-					Label endLabel = new Label();
-
-					// 1. JSArray fast-path
-					mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-					mv.visitTypeInsn(Opcodes.INSTANCEOF, Type.getInternalName(JSArray.class));
-					mv.visitJumpInsn(Opcodes.IFEQ, slowPath);
-
-					mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-					mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSArray.class));
-					mv.visitVarInsn(Opcodes.ILOAD, idxSlot);
-					mv.visitVarInsn(Opcodes.ALOAD, valSlot);
-					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSArray.class), "setElement", "(ILjava/lang/Object;)V", false);
-					mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-					// 2. slowPath: fallback to JSLinker.setIndex(target, idx, val)
-					mv.visitLabel(slowPath);
-					mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-					mv.visitVarInsn(Opcodes.ILOAD, idxSlot);
-					mv.visitVarInsn(Opcodes.ALOAD, valSlot);
-					mv.visitMethodInsn(Opcodes.INVOKESTATIC, Type.getInternalName(JSLinker.class), "setIndex", "(Ljava/lang/Object;ILjava/lang/Object;)V", false);
-
-					mv.visitLabel(endLabel);
 					return;
 				}
 
@@ -1367,6 +1603,33 @@ public class JSCompiler {
 				return;
 			}
 
+			if (bin.op == TokenType.BIT_OR || bin.op == TokenType.BIT_AND || bin.op == TokenType.BIT_XOR
+			    || bin.op == TokenType.SHL || bin.op == TokenType.SHR) {
+				if (!needResult) {
+					compileNode(bin.left, ctx, false);
+					compileNode(bin.right, ctx, false);
+					return;
+				}
+				compileNodeAsInt(bin, ctx);
+				mv.visitInsn(Opcodes.I2D);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+				return;
+			}
+			if (bin.op == TokenType.USHR) {
+				if (!needResult) {
+					compileNode(bin.left, ctx, false);
+					compileNode(bin.right, ctx, false);
+					return;
+				}
+				compileNodeAsInt(bin, ctx);
+				mv.visitInsn(Opcodes.I2L);
+				pushLong(mv, MASK_UINT32);
+				mv.visitInsn(Opcodes.LAND);
+				mv.visitInsn(Opcodes.L2D);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+				return;
+			}
+
 			if (bin.op == TokenType.EQ || bin.op == TokenType.EQ_EQ || bin.op == TokenType.NOT_EQ || bin.op == TokenType.NOT_EQ_EQ
 			    || bin.op == TokenType.LT || bin.op == TokenType.LTE || bin.op == TokenType.GT || bin.op == TokenType.GTE) {
 				if (!needResult) {
@@ -1394,6 +1657,12 @@ public class JSCompiler {
 				case STAR -> "*";
 				case SLASH -> "/";
 				case PERCENT -> "%";
+				case BIT_AND -> "&";
+				case BIT_OR -> "|";
+				case BIT_XOR -> "^";
+				case SHL -> "<<";
+				case SHR -> ">>";
+				case USHR -> ">>>";
 				default -> throw new IllegalArgumentException("Unsupported binary op: " + bin.op);
 			};
 
@@ -1403,7 +1672,16 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
-			if (un.op == TokenType.NOT) {
+			if (un.op == TokenType.BIT_NOT) {
+				if (!needResult) {
+					compileNode(un.expr, ctx, false);
+					return;
+				}
+				compileNodeAsInt(un, ctx);
+				mv.visitInsn(Opcodes.I2D);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+				return;
+			} else if (un.op == TokenType.NOT) {
 				if (!needResult) {
 					compileNode(un.expr, ctx, false);
 					return;
@@ -1553,6 +1831,20 @@ public class JSCompiler {
 			if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
 				// 自递归单态直连调用 (Direct self-recursive monomorphic invocation on 'this')
 				int arity = call.arguments.size();
+				if (ctx.isDoubleSpecialized && arity <= 3) {
+					mv.visitVarInsn(Opcodes.ALOAD, 0); // this
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					for (int i = 0; i < arity; i++) {
+						compileNodeAsDouble(call.arguments.get(i), ctx);
+					}
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, ctx.className, "call" + arity + "Double", getPrimDesc(arity), false);
+					if (needResult) {
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+					} else {
+						mv.visitInsn(Opcodes.POP2);
+					}
+					return;
+				}
 				mv.visitVarInsn(Opcodes.ALOAD, 0); // this
 				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 				mv.visitInsn(Opcodes.ACONST_NULL); // thisObj
@@ -1622,23 +1914,41 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.ObjectLiteralExpr objLit) {
-			mv.visitTypeInsn(Opcodes.NEW, Type.getInternalName(JSObject.class));
-			mv.visitInsn(Opcodes.DUP);
-			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, Type.getInternalName(JSObject.class), "<init>", "()V", false);
-
-			for (Node.ObjectLiteralExpr.Entry entry : objLit.entries) {
+			// 1. 预先在编译期推断完整 Shape，避免对象字面量构造过程中反复触发 3~5 次动态迁移与 putDoubleSlow
+			JSShape finalShape = JSShape.ROOT;
+			boolean[] isDoubleField = new boolean[objLit.entries.size()];
+			for (int i = 0; i < objLit.entries.size(); i++) {
+				Node.ObjectLiteralExpr.Entry entry = objLit.entries.get(i);
 				int propId = SymbolTable.id(entry.key());
 				VarType valType = inferVarType(entry.value(), ctx);
-				if (valType == VarType.DOUBLE || (entry.value() instanceof Node.LiteralExpr lit && lit.value instanceof Number num && num.doubleValue() != num.intValue())) {
-					mv.visitInsn(Opcodes.DUP);
-					pushInt(mv, propId);
+				boolean isNum = (valType == VarType.DOUBLE || valType == VarType.INT || valType == VarType.LONG
+						|| (entry.value() instanceof Node.LiteralExpr lit && lit.value instanceof Number));
+				isDoubleField[i] = isNum;
+				byte fieldType = isNum ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+				finalShape = finalShape.addProperty(propId, fieldType);
+			}
+
+			int shapeId = JSShape.registerPrecomputedShape(finalShape);
+
+			// 2. 实例化 JSObject 并直传预构建 Shape (0 动态迁移)
+			mv.visitTypeInsn(Opcodes.NEW, Type.getInternalName(JSObject.class));
+			mv.visitInsn(Opcodes.DUP);
+			mv.visitFieldInsn(Opcodes.GETSTATIC, Type.getInternalName(JSShape.class), "PRECOMPUTED_SHAPES", "[L" + Type.getInternalName(JSShape.class) + ";");
+			pushInt(mv, shapeId);
+			mv.visitInsn(Opcodes.AALOAD);
+			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, Type.getInternalName(JSObject.class), "<init>", "(L" + Type.getInternalName(JSShape.class) + ";)V", false);
+
+			// 3. 槽位直接注入 (offset 已在编译期固定为 0, 1, 2...，直接发射 setDoubleSlot / setSlot，0 动态查表)
+			for (int i = 0; i < objLit.entries.size(); i++) {
+				Node.ObjectLiteralExpr.Entry entry = objLit.entries.get(i);
+				mv.visitInsn(Opcodes.DUP);
+				pushInt(mv, i);
+				if (isDoubleField[i]) {
 					compileNodeAsDouble(entry.value(), ctx);
-					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "putDouble", "(ID)V", false);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "setDoubleSlot", "(ID)V", false);
 				} else {
-					mv.visitInsn(Opcodes.DUP);
-					pushInt(mv, propId);
 					compileNode(entry.value(), ctx, true);
-					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "put", "(ILjava/lang/Object;)V", false);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "setSlot", "(ILjava/lang/Object;)V", false);
 				}
 			}
 			if (!needResult) mv.visitInsn(Opcodes.POP);
@@ -1700,13 +2010,104 @@ public class JSCompiler {
 		}
 	}
 
+	private static String getPrimDesc(int arity) {
+		return switch (arity) {
+			case 0 -> "(L" + Type.getInternalName(JSContext.class) + ";)D";
+			case 1 -> "(L" + Type.getInternalName(JSContext.class) + ";D)D";
+			case 2 -> "(L" + Type.getInternalName(JSContext.class) + ";DD)D";
+			case 3 -> "(L" + Type.getInternalName(JSContext.class) + ";DDD)D";
+			default -> throw new IllegalArgumentException("Unsupported arity: " + arity);
+		};
+	}
+
+	private static boolean isNumericFunction(Node.BlockStmt body, List<String> params, String functionName) {
+		if (body == null || body.statements.isEmpty()) return false;
+		List<Node.ReturnStmt> returns = new ArrayList<>();
+		collectReturnStmts(body, returns);
+		if (returns.isEmpty()) return false;
+		Set<String> paramSet = new HashSet<>(params);
+		for (Node.ReturnStmt ret : returns) {
+			if (ret.value == null) return false;
+			if (!isNumericReturnExpr(ret.value, paramSet, functionName)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static boolean isNumericReturnExpr(Node node, Set<String> params, String functionName) {
+		if (node == null) return false;
+		if (node instanceof Node.LiteralExpr lit) {
+			return lit.value instanceof Number;
+		}
+		if (node instanceof Node.IdentifierExpr ident) {
+			return params.contains(ident.name);
+		}
+		if (node instanceof Node.BinaryExpr bin) {
+			TokenType op = bin.op;
+			if (op == TokenType.STAR || op == TokenType.SLASH || op == TokenType.MINUS || op == TokenType.PERCENT
+			    || op == TokenType.BIT_AND || op == TokenType.BIT_OR || op == TokenType.BIT_XOR
+			    || op == TokenType.SHL || op == TokenType.SHR || op == TokenType.USHR) {
+				return true;
+			}
+			if (op == TokenType.PLUS) {
+				return isNumericReturnExpr(bin.left, params, functionName)
+				    && isNumericReturnExpr(bin.right, params, functionName);
+			}
+			return false;
+		}
+		if (node instanceof Node.UnaryExpr un) {
+			return un.op == TokenType.MINUS || un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS || un.op == TokenType.BIT_NOT;
+		}
+		if (node instanceof Node.CallExpr call) {
+			if (call.callee instanceof Node.IdentifierExpr ident && ident.name.equals(functionName)) {
+				return true;
+			}
+			if (call.callee instanceof Node.MemberAccessExpr mem && mem.target instanceof Node.IdentifierExpr t && t.name.equals("Math")) {
+				return true;
+			}
+			return false;
+		}
+		if (node instanceof Node.TernaryExpr ternary) {
+			return isNumericReturnExpr(ternary.thenExpr, params, functionName)
+			    && isNumericReturnExpr(ternary.elseExpr, params, functionName);
+		}
+		return false;
+	}
+
+	private static void collectReturnStmts(Node node, List<Node.ReturnStmt> out) {
+		if (node == null) return;
+		if (node instanceof Node.ReturnStmt ret) {
+			out.add(ret);
+		} else if (node instanceof Node.BlockStmt block) {
+			for (Node s : block.statements) collectReturnStmts(s, out);
+		} else if (node instanceof Node.IfStmt ifStmt) {
+			collectReturnStmts(ifStmt.thenBranch, out);
+			collectReturnStmts(ifStmt.elseBranch, out);
+		} else if (node instanceof Node.WhileStmt whileStmt) {
+			collectReturnStmts(whileStmt.body, out);
+		} else if (node instanceof Node.ForStmt forStmt) {
+			collectReturnStmts(forStmt.body, out);
+		} else if (node instanceof Node.DoWhileStmt doWhile) {
+			collectReturnStmts(doWhile.body, out);
+		} else if (node instanceof Node.TryStmt tryStmt) {
+			collectReturnStmts(tryStmt.tryBlock, out);
+			if (tryStmt.catchBlock != null) collectReturnStmts(tryStmt.catchBlock, out);
+			if (tryStmt.finallyBlock != null) collectReturnStmts(tryStmt.finallyBlock, out);
+		} else if (node instanceof Node.SwitchStmt switchStmt) {
+			for (Node.CaseClause c : switchStmt.cases) {
+				for (Node s : c.consequent) collectReturnStmts(s, out);
+			}
+		}
+	}
+
 	public static String generateFunctionClass(List<String> params, Node.BlockStmt body) {
 		return generateFunctionClass(null, params, body);
 	}
 
 	public static String generateFunctionClass(String functionName, List<String> params, Node.BlockStmt body) {
 		String funcClassName = "hope/magic/gen/MagicJSFunction_" + SCRIPT_ID.incrementAndGet();
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, "java/lang/Object", new String[]{ Type.getInternalName(JSFunction.class) });
 
 		// public JSContext cx;
@@ -1751,97 +2152,183 @@ public class JSCompiler {
 			targetMethodDesc = "(L" + Type.getInternalName(JSContext.class) + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;";
 		}
 
-		// 主执行方法 (当 paramCount <= 3 时编译为特化 call0..call3，零 Object[] 堆分配)
-		MethodVisitor callMv = cw.visitMethod(
-			Opcodes.ACC_PUBLIC,
-			targetMethodName,
-			targetMethodDesc,
-			null,
-			new String[]{ "java/lang/Throwable" }
-		);
-		callMv.visitCode();
+		boolean isNumFunc = isNumericFunction(body, params, functionName) && paramCount <= 3;
 
-		Label cxReady = new Label();
-		callMv.visitVarInsn(Opcodes.ALOAD, 1);
-		callMv.visitJumpInsn(Opcodes.IFNONNULL, cxReady);
-		callMv.visitVarInsn(Opcodes.ALOAD, 0);
-		callMv.visitFieldInsn(Opcodes.GETFIELD, funcClassName, "cx", "L" + Type.getInternalName(JSContext.class) + ";");
-		callMv.visitVarInsn(Opcodes.ASTORE, 1);
-		callMv.visitLabel(cxReady);
+		if (isNumFunc) {
+			String primMethodName = "call" + paramCount + "Double";
+			String primMethodDesc = getPrimDesc(paramCount);
+			MethodVisitor primMv = cw.visitMethod(
+				Opcodes.ACC_PUBLIC,
+				primMethodName,
+				primMethodDesc,
+				null,
+				new String[]{ "java/lang/Throwable" }
+			);
+			primMv.visitCode();
 
-		Node.Program fakeProg = new Node.Program(body.statements, body.line, body.column);
-		CompileContext ctx = new CompileContext(callMv, funcClassName, fakeProg);
-		ctx.isFunction = true;
-		ctx.functionName = functionName;
-		registerTryCatchBlocks(fakeProg, callMv, ctx.tryCatchMap);
-		preScanVariables(fakeProg, ctx);
+			Label cxReadyPrim = new Label();
+			primMv.visitVarInsn(Opcodes.ALOAD, 1);
+			primMv.visitJumpInsn(Opcodes.IFNONNULL, cxReadyPrim);
+			primMv.visitVarInsn(Opcodes.ALOAD, 0);
+			primMv.visitFieldInsn(Opcodes.GETFIELD, funcClassName, "cx", "L" + Type.getInternalName(JSContext.class) + ";");
+			primMv.visitVarInsn(Opcodes.ASTORE, 1);
+			primMv.visitLabel(cxReadyPrim);
 
-		if (paramCount <= 3) {
-			// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)
-			ctx.nextLocalSlot = 3;
+			Node.Program fakeProgPrim = new Node.Program(body.statements, body.line, body.column);
+			CompileContext primCtx = new CompileContext(primMv, funcClassName, fakeProgPrim);
+			primCtx.isFunction = true;
+			primCtx.functionName = functionName;
+			primCtx.isDoubleSpecialized = true;
+			registerTryCatchBlocks(fakeProgPrim, primMv, primCtx.tryCatchMap);
+			preScanVariables(fakeProgPrim, primCtx);
+
+			primCtx.nextLocalSlot = 2;
 			for (int i = 0; i < paramCount; i++) {
-				ctx.declareLocal(params.get(i), VarType.OBJECT);
+				primCtx.declareLocal(params.get(i), VarType.DOUBLE);
 			}
+
+			// 嵌套函数局部作用域与提升
+			List<Node.FunctionDecl> nestedFuncsPrim = new ArrayList<>();
+			collectFunctionDecls(fakeProgPrim, nestedFuncsPrim);
+			for (Node.FunctionDecl fd : nestedFuncsPrim) {
+				if (primCtx.getLocal(fd.name) == null) {
+					primCtx.declareLocal(fd.name, VarType.OBJECT);
+				}
+			}
+			for (Node.FunctionDecl fd : nestedFuncsPrim) {
+				LocalVar var = primCtx.getLocal(fd.name);
+				if (var != null) {
+					String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body);
+					primMv.visitTypeInsn(Opcodes.NEW, childFuncClass);
+					primMv.visitInsn(Opcodes.DUP);
+					primMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					primMv.visitMethodInsn(Opcodes.INVOKESPECIAL, childFuncClass, "<init>", "(L" + Type.getInternalName(JSContext.class) + ";)V", false);
+					primMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
+			}
+
+			for (int i = 0; i < body.statements.size(); i++) {
+				compileNode(body.statements.get(i), primCtx, false);
+			}
+
+			primMv.visitLdcInsn(0.0);
+			primMv.visitInsn(Opcodes.DRETURN);
+			primMv.visitMaxs(0, 0);
+			primMv.visitEnd();
+
+			// 生成转发到 callXDouble 的快速包装方法 targetMethodName (call0..call3)
+			MethodVisitor callMv = cw.visitMethod(
+				Opcodes.ACC_PUBLIC,
+				targetMethodName,
+				targetMethodDesc,
+				null,
+				new String[]{ "java/lang/Throwable" }
+			);
+			callMv.visitCode();
+			callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+			callMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+			for (int i = 0; i < paramCount; i++) {
+				callMv.visitVarInsn(Opcodes.ALOAD, 3 + i);
+				callMv.visitMethodInsn(Opcodes.INVOKESTATIC, Type.getInternalName(JSOps.class), "toDouble", "(Ljava/lang/Object;)D", false);
+			}
+			callMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, primMethodName, primMethodDesc, false);
+			callMv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+			callMv.visitInsn(Opcodes.ARETURN);
+			callMv.visitMaxs(0, 0);
+			callMv.visitEnd();
 		} else {
-			ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
-			// Bind parameters
-			for (int i = 0; i < params.size(); i++) {
-				String paramName = params.get(i);
-				LocalVar var = ctx.declareLocal(paramName, VarType.OBJECT);
-				Label defaultUndefined = new Label();
-				Label storeEnd = new Label();
+			// 主执行方法 (当 paramCount <= 3 时编译为特化 call0..call3，零 Object[] 堆分配)
+			MethodVisitor callMv = cw.visitMethod(
+				Opcodes.ACC_PUBLIC,
+				targetMethodName,
+				targetMethodDesc,
+				null,
+				new String[]{ "java/lang/Throwable" }
+			);
+			callMv.visitCode();
 
-				callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
-				callMv.visitJumpInsn(Opcodes.IFNULL, defaultUndefined);
+			Label cxReady = new Label();
+			callMv.visitVarInsn(Opcodes.ALOAD, 1);
+			callMv.visitJumpInsn(Opcodes.IFNONNULL, cxReady);
+			callMv.visitVarInsn(Opcodes.ALOAD, 0);
+			callMv.visitFieldInsn(Opcodes.GETFIELD, funcClassName, "cx", "L" + Type.getInternalName(JSContext.class) + ";");
+			callMv.visitVarInsn(Opcodes.ASTORE, 1);
+			callMv.visitLabel(cxReady);
 
-				callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
-				callMv.visitInsn(Opcodes.ARRAYLENGTH);
-				pushInt(callMv, i);
-				callMv.visitJumpInsn(Opcodes.IF_ICMPLE, defaultUndefined);
+			Node.Program fakeProg = new Node.Program(body.statements, body.line, body.column);
+			CompileContext ctx = new CompileContext(callMv, funcClassName, fakeProg);
+			ctx.isFunction = true;
+			ctx.functionName = functionName;
+			registerTryCatchBlocks(fakeProg, callMv, ctx.tryCatchMap);
+			preScanVariables(fakeProg, ctx);
 
-				callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
-				pushInt(callMv, i);
-				callMv.visitInsn(Opcodes.AALOAD);
-				callMv.visitJumpInsn(Opcodes.GOTO, storeEnd);
+			if (paramCount <= 3) {
+				// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)
+				ctx.nextLocalSlot = 3;
+				for (int i = 0; i < paramCount; i++) {
+					ctx.declareLocal(params.get(i), VarType.OBJECT);
+				}
+			} else {
+				ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
+				// Bind parameters
+				for (int i = 0; i < params.size(); i++) {
+					String paramName = params.get(i);
+					LocalVar var = ctx.declareLocal(paramName, VarType.OBJECT);
+					Label defaultUndefined = new Label();
+					Label storeEnd = new Label();
 
-				callMv.visitLabel(defaultUndefined);
-				callMv.visitFieldInsn(Opcodes.GETSTATIC, Type.getInternalName(JSUndefined.class), "INSTANCE", "L" + Type.getInternalName(JSUndefined.class) + ";");
+					callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+					callMv.visitJumpInsn(Opcodes.IFNULL, defaultUndefined);
 
-				callMv.visitLabel(storeEnd);
-				callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+					callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+					callMv.visitInsn(Opcodes.ARRAYLENGTH);
+					pushInt(callMv, i);
+					callMv.visitJumpInsn(Opcodes.IF_ICMPLE, defaultUndefined);
+
+					callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+					pushInt(callMv, i);
+					callMv.visitInsn(Opcodes.AALOAD);
+					callMv.visitJumpInsn(Opcodes.GOTO, storeEnd);
+
+					callMv.visitLabel(defaultUndefined);
+					callMv.visitFieldInsn(Opcodes.GETSTATIC, Type.getInternalName(JSUndefined.class), "INSTANCE", "L" + Type.getInternalName(JSUndefined.class) + ";");
+
+					callMv.visitLabel(storeEnd);
+					callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
 			}
-		}
 
-		// 嵌套函数局部作用域与提升 (Nested Function Hoisting)
-		List<Node.FunctionDecl> nestedFuncs = new ArrayList<>();
-		collectFunctionDecls(fakeProg, nestedFuncs);
-		for (Node.FunctionDecl fd : nestedFuncs) {
-			if (ctx.getLocal(fd.name) == null) {
-				ctx.declareLocal(fd.name, VarType.OBJECT);
+			// 嵌套函数局部作用域与提升 (Nested Function Hoisting)
+			List<Node.FunctionDecl> nestedFuncs = new ArrayList<>();
+			collectFunctionDecls(fakeProg, nestedFuncs);
+			for (Node.FunctionDecl fd : nestedFuncs) {
+				if (ctx.getLocal(fd.name) == null) {
+					ctx.declareLocal(fd.name, VarType.OBJECT);
+				}
 			}
-		}
-		for (Node.FunctionDecl fd : nestedFuncs) {
-			LocalVar var = ctx.getLocal(fd.name);
-			if (var != null) {
-				String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body);
-				callMv.visitTypeInsn(Opcodes.NEW, childFuncClass);
-				callMv.visitInsn(Opcodes.DUP);
-				callMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-				callMv.visitMethodInsn(Opcodes.INVOKESPECIAL, childFuncClass, "<init>", "(L" + Type.getInternalName(JSContext.class) + ";)V", false);
-				callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			for (Node.FunctionDecl fd : nestedFuncs) {
+				LocalVar var = ctx.getLocal(fd.name);
+				if (var != null) {
+					String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body);
+					callMv.visitTypeInsn(Opcodes.NEW, childFuncClass);
+					callMv.visitInsn(Opcodes.DUP);
+					callMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					callMv.visitMethodInsn(Opcodes.INVOKESPECIAL, childFuncClass, "<init>", "(L" + Type.getInternalName(JSContext.class) + ";)V", false);
+					callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
 			}
-		}
 
-		// Compile statements
-		for (int i = 0; i < body.statements.size(); i++) {
-			Node stmt = body.statements.get(i);
-			compileNode(stmt, ctx, false);
-		}
+			// Compile statements
+			for (int i = 0; i < body.statements.size(); i++) {
+				Node stmt = body.statements.get(i);
+				compileNode(stmt, ctx, false);
+			}
 
-		callMv.visitFieldInsn(Opcodes.GETSTATIC, Type.getInternalName(JSUndefined.class), "INSTANCE", "L" + Type.getInternalName(JSUndefined.class) + ";");
-		callMv.visitInsn(Opcodes.ARETURN);
-		callMv.visitMaxs(0, 0);
-		callMv.visitEnd();
+			callMv.visitFieldInsn(Opcodes.GETSTATIC, Type.getInternalName(JSUndefined.class), "INSTANCE", "L" + Type.getInternalName(JSUndefined.class) + ";");
+			callMv.visitInsn(Opcodes.ARETURN);
+			callMv.visitMaxs(0, 0);
+			callMv.visitEnd();
+		}
 
 		// 当 paramCount <= 3 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
 		if (paramCount <= 3) {
@@ -1877,13 +2364,6 @@ public class JSCompiler {
 			bridgeMv.visitInsn(Opcodes.ARETURN);
 			bridgeMv.visitMaxs(0, 0);
 			bridgeMv.visitEnd();
-		}
-
-		for (int i = 0; i < ctx.nextSiteId; i++) {
-			for (int s = 0; s < 3; s++) {
-				cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "$shape_" + i + "_" + s, "L" + Type.getInternalName(JSShape.class) + ";", null, null).visitEnd();
-				cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "$offset_" + i + "_" + s, "I", null, null).visitEnd();
-			}
 		}
 
 		cw.visitEnd();
@@ -1960,10 +2440,46 @@ public class JSCompiler {
 				compileNodeAsInt(bin.right, ctx);
 				mv.visitInsn(Opcodes.IDIV);
 				return;
+			} else if (bin.op == TokenType.BIT_OR) {
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.IOR);
+				return;
+			} else if (bin.op == TokenType.BIT_AND) {
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.IAND);
+				return;
+			} else if (bin.op == TokenType.BIT_XOR) {
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.IXOR);
+				return;
+			} else if (bin.op == TokenType.SHL) {
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.ISHL);
+				return;
+			} else if (bin.op == TokenType.SHR) {
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.ISHR);
+				return;
+			} else if (bin.op == TokenType.USHR) {
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.IUSHR);
+				return;
 			}
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
+			if (un.op == TokenType.BIT_NOT) {
+				compileNodeAsInt(un.expr, ctx);
+				mv.visitInsn(Opcodes.ICONST_M1);
+				mv.visitInsn(Opcodes.IXOR);
+				return;
+			}
 			if (un.op == TokenType.MINUS) {
 				compileNodeAsInt(un.expr, ctx);
 				mv.visitInsn(Opcodes.INEG);
@@ -1983,8 +2499,7 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.MemberAccessExpr member) {
-			compileMemberAccessAsDouble(member, ctx);
-			mv.visitInsn(Opcodes.D2I);
+			compileMemberAccessAsInt(member, ctx);
 			return;
 		}
 
@@ -2077,6 +2592,11 @@ public class JSCompiler {
 			}
 		}
 
+		if (node instanceof Node.MemberAccessExpr member) {
+			compileMemberAccessAsLong(member, ctx);
+			return;
+		}
+
 		// 通用降级
 		compileNodeAsDouble(node, ctx);
 		mv.visitInsn(Opcodes.D2L);
@@ -2149,10 +2669,27 @@ public class JSCompiler {
 				compileNodeAsDouble(bin.right, ctx);
 				mv.visitInsn(Opcodes.DADD);
 				return;
+			} else if (bin.op == TokenType.BIT_OR || bin.op == TokenType.BIT_AND || bin.op == TokenType.BIT_XOR
+			           || bin.op == TokenType.SHL || bin.op == TokenType.SHR) {
+				compileNodeAsInt(bin, ctx);
+				mv.visitInsn(Opcodes.I2D);
+				return;
+			} else if (bin.op == TokenType.USHR) {
+				compileNodeAsInt(bin, ctx);
+				mv.visitInsn(Opcodes.I2L);
+				pushLong(mv, MASK_UINT32);
+				mv.visitInsn(Opcodes.LAND);
+				mv.visitInsn(Opcodes.L2D);
+				return;
 			}
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
+			if (un.op == TokenType.BIT_NOT) {
+				compileNodeAsInt(un, ctx);
+				mv.visitInsn(Opcodes.I2D);
+				return;
+			}
 			if (un.op == TokenType.MINUS) {
 				compileNodeAsDouble(un.expr, ctx);
 				mv.visitInsn(Opcodes.DNEG);
@@ -2220,6 +2757,30 @@ public class JSCompiler {
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "pow", "(DD)D", false);
 					return;
 				}
+			}
+
+			int arity = call.arguments.size();
+			if (arity <= 3) {
+				if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
+					// 自递归单态直连调用 (Direct self-recursive monomorphic invocation on 'this')
+					mv.visitVarInsn(Opcodes.ALOAD, 0); // this
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					for (int i = 0; i < arity; i++) {
+						compileNodeAsDouble(call.arguments.get(i), ctx);
+					}
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, ctx.className, "call" + arity + "Double", getPrimDesc(arity), false);
+					return;
+				}
+
+				// 普通已知 JSFunction 接口调用 (利用 JSFunction.callXDouble 原生快速通道)
+				compileNode(call.callee, ctx, true);
+				mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSFunction.class));
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				for (int i = 0; i < arity; i++) {
+					compileNodeAsDouble(call.arguments.get(i), ctx);
+				}
+				mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, Type.getInternalName(JSFunction.class), "call" + arity + "Double", getPrimDesc(arity), true);
+				return;
 			}
 		}
 
@@ -2352,7 +2913,14 @@ public class JSCompiler {
 				if (op == TokenType.LT || op == TokenType.LTE || op == TokenType.GT || op == TokenType.GTE) {
 					compileNodeAsDouble(bin.left, ctx);
 					compileNodeAsDouble(bin.right, ctx);
-					mv.visitInsn(Opcodes.DCMPG);
+					// IEEE 754 规范: 与 NaN 比较恒为 false
+					// < 和 <= 使用 DCMPG (遇到 NaN 产出 1, IFLT/IFLE 判定失败)
+					// > 和 >= 必须使用 DCMPL (遇到 NaN 产出 -1, IFGT/IFGE 判定失败)
+					if (op == TokenType.LT || op == TokenType.LTE) {
+						mv.visitInsn(Opcodes.DCMPG);
+					} else {
+						mv.visitInsn(Opcodes.DCMPL);
+					}
 					if (jumpOnTrue) {
 						switch (op) {
 							case LT -> mv.visitJumpInsn(Opcodes.IFLT, targetLabel);
@@ -2472,6 +3040,31 @@ public class JSCompiler {
 						: (Number) ((Node.LiteralExpr) bin.right).value;
 					Node target = isLiteralNumber(bin.left) ? bin.right : bin.left;
 
+					VarType targetType = inferVarType(target, ctx);
+					boolean isTargetNumeric = isNumeric(targetType) || isNumericExpr(target);
+					if (isTargetNumeric) {
+						if (targetType == VarType.INT && numVal.doubleValue() == numVal.intValue()) {
+							compileNodeAsInt(target, ctx);
+							pushInt(mv, numVal.intValue());
+							if (op == TokenType.EQ_EQ || op == TokenType.EQ) {
+								mv.visitJumpInsn(jumpOnTrue ? Opcodes.IF_ICMPEQ : Opcodes.IF_ICMPNE, targetLabel);
+							} else {
+								mv.visitJumpInsn(jumpOnTrue ? Opcodes.IF_ICMPNE : Opcodes.IF_ICMPEQ, targetLabel);
+							}
+							return;
+						} else {
+							compileNodeAsDouble(target, ctx);
+							mv.visitLdcInsn(numVal.doubleValue());
+							mv.visitInsn(Opcodes.DCMPL);
+							if (op == TokenType.EQ_EQ || op == TokenType.EQ) {
+								mv.visitJumpInsn(jumpOnTrue ? Opcodes.IFEQ : Opcodes.IFNE, targetLabel);
+							} else {
+								mv.visitJumpInsn(jumpOnTrue ? Opcodes.IFNE : Opcodes.IFEQ, targetLabel);
+							}
+							return;
+						}
+					}
+
 					if (op == TokenType.EQ_EQ || op == TokenType.NOT_EQ_EQ) {
 						compileNode(target, ctx, true);
 						mv.visitLdcInsn(numVal.doubleValue());
@@ -2558,277 +3151,36 @@ public class JSCompiler {
 	private static void compileMemberAccess(Node.MemberAccessExpr member, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
 		String propName = SymbolTable.symbol(member.property);
-		int propId = SymbolTable.id(member.property);
-
-		if (!needResult) {
-			compileNode(member.target, ctx, true);
-			mv.visitInvokeDynamicInsn("getProp", "(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_PROP, propName);
-			mv.visitInsn(Opcodes.POP);
-			return;
-		}
-
-		int siteId = ctx.nextSiteId++;
-		int targetSlot = ctx.allocTempSlot();
-		int resSlot = ctx.allocTempSlot();
-		int shapeSlot = ctx.allocTempSlot();
 
 		compileNode(member.target, ctx, true);
-		mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
-
-		Label trySlot1 = new Label();
-		Label trySlot2 = new Label();
-		Label slowPath = new Label();
-		Label endLabel = new Label();
-
-		// 1. 检查 target 是否为 JSObject
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.INSTANCEOF, Type.getInternalName(JSObject.class));
-		mv.visitJumpInsn(Opcodes.IFEQ, slowPath);
-
-		// 提取 target.shape
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETFIELD, Type.getInternalName(JSObject.class), "shape", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ASTORE, shapeSlot);
-
-		// Slot 0 检查
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IF_ACMPNE, trySlot1);
-
-		// Slot 0 命中快路径
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$offset_" + siteId + "_0", "I");
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "getSlot", "(I)Ljava/lang/Object;", false);
-		mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-		// Slot 1 检查
-		mv.visitLabel(trySlot1);
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IF_ACMPNE, trySlot2);
-
-		// Slot 1 命中快路径
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$offset_" + siteId + "_1", "I");
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "getSlot", "(I)Ljava/lang/Object;", false);
-		mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-		// Slot 2 检查
-		mv.visitLabel(trySlot2);
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_2", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IF_ACMPNE, slowPath);
-
-		// Slot 2 命中快路径
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$offset_" + siteId + "_2", "I");
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "getSlot", "(I)Ljava/lang/Object;", false);
-		mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-		// 慢路径：调用 invokedynamic getProp 并回填 3 槽内联缓存
-		mv.visitLabel(slowPath);
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
 		mv.visitInvokeDynamicInsn("getProp", "(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_PROP, propName);
-		mv.visitVarInsn(Opcodes.ASTORE, resSlot);
-
-		Label skipUpdate = new Label();
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.INSTANCEOF, Type.getInternalName(JSObject.class));
-		mv.visitJumpInsn(Opcodes.IFEQ, skipUpdate);
-
-		int offSlot = ctx.allocTempSlot();
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETFIELD, Type.getInternalName(JSObject.class), "shape", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ASTORE, shapeSlot);
-
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		pushInt(mv, propId);
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSShape.class), "getOffset", "(I)I", false);
-		mv.visitVarInsn(Opcodes.ISTORE, offSlot);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitJumpInsn(Opcodes.IFLT, skipUpdate);
-
-		Label fillSlot1 = new Label();
-		Label fillSlot2 = new Label();
-
-		// 检查 Slot 0
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IFNONNULL, fillSlot1);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$offset_" + siteId + "_0", "I");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.GOTO, skipUpdate);
-
-		// 检查 Slot 1
-		mv.visitLabel(fillSlot1);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitJumpInsn(Opcodes.IF_ACMPEQ, skipUpdate);
-
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IFNONNULL, fillSlot2);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$offset_" + siteId + "_1", "I");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.GOTO, skipUpdate);
-
-		// 检查 Slot 2
-		mv.visitLabel(fillSlot2);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitJumpInsn(Opcodes.IF_ACMPEQ, skipUpdate);
-
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_2", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IFNONNULL, skipUpdate);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$offset_" + siteId + "_2", "I");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$shape_" + siteId + "_2", "L" + Type.getInternalName(JSShape.class) + ";");
-
-		mv.visitLabel(skipUpdate);
-		mv.visitVarInsn(Opcodes.ALOAD, resSlot);
-		mv.visitLabel(endLabel);
+		if (!needResult) {
+			mv.visitInsn(Opcodes.POP);
+		}
 	}
 
 	private static void compileMemberAccessAsDouble(Node.MemberAccessExpr member, CompileContext ctx) {
 		MethodVisitor mv = ctx.mv;
-		int siteId = ctx.nextSiteId++;
 		String propName = SymbolTable.symbol(member.property);
-		int propId = SymbolTable.id(member.property);
-		int targetSlot = ctx.allocTempSlot();
-		int resSlot = ctx.allocDoubleTempSlot();
-		int shapeSlot = ctx.allocTempSlot();
 
 		compileNode(member.target, ctx, true);
-		mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
-
-		Label trySlot1 = new Label();
-		Label trySlot2 = new Label();
-		Label slowPath = new Label();
-		Label endLabel = new Label();
-
-		// 1. 检查 target 是否为 JSObject
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.INSTANCEOF, Type.getInternalName(JSObject.class));
-		mv.visitJumpInsn(Opcodes.IFEQ, slowPath);
-
-		// 提取 target.shape
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETFIELD, Type.getInternalName(JSObject.class), "shape", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ASTORE, shapeSlot);
-
-		// Slot 0 检查
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IF_ACMPNE, trySlot1);
-
-		// Slot 0 命中快路径
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$offset_" + siteId + "_0", "I");
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "getDoubleSlot", "(I)D", false);
-		mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-		// Slot 1 检查
-		mv.visitLabel(trySlot1);
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IF_ACMPNE, trySlot2);
-
-		// Slot 1 命中快路径
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$offset_" + siteId + "_1", "I");
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "getDoubleSlot", "(I)D", false);
-		mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-		// Slot 2 检查
-		mv.visitLabel(trySlot2);
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_2", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IF_ACMPNE, slowPath);
-
-		// Slot 2 命中快路径
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$offset_" + siteId + "_2", "I");
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSObject.class), "getDoubleSlot", "(I)D", false);
-		mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-		// 慢路径：调用 invokedynamic getPropDouble 并回填 3 槽内联缓存
-		mv.visitLabel(slowPath);
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
 		mv.visitInvokeDynamicInsn("getPropDouble", "(Ljava/lang/Object;)D", BSM_GET_PROP_DOUBLE, propName);
-		mv.visitVarInsn(Opcodes.DSTORE, resSlot);
+	}
 
-		Label skipUpdate = new Label();
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.INSTANCEOF, Type.getInternalName(JSObject.class));
-		mv.visitJumpInsn(Opcodes.IFEQ, skipUpdate);
+	private static void compileMemberAccessAsInt(Node.MemberAccessExpr member, CompileContext ctx) {
+		MethodVisitor mv = ctx.mv;
+		String propName = SymbolTable.symbol(member.property);
 
-		int offSlot = ctx.allocTempSlot();
-		mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-		mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSObject.class));
-		mv.visitFieldInsn(Opcodes.GETFIELD, Type.getInternalName(JSObject.class), "shape", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ASTORE, shapeSlot);
+		compileNode(member.target, ctx, true);
+		mv.visitInvokeDynamicInsn("getPropInt", "(Ljava/lang/Object;)I", BSM_GET_PROP_INT, propName);
+	}
 
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		pushInt(mv, propId);
-		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, Type.getInternalName(JSShape.class), "getOffset", "(I)I", false);
-		mv.visitVarInsn(Opcodes.ISTORE, offSlot);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitJumpInsn(Opcodes.IFLT, skipUpdate);
+	private static void compileMemberAccessAsLong(Node.MemberAccessExpr member, CompileContext ctx) {
+		MethodVisitor mv = ctx.mv;
+		String propName = SymbolTable.symbol(member.property);
 
-		Label fillSlot1 = new Label();
-		Label fillSlot2 = new Label();
-
-		// 检查 Slot 0
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IFNONNULL, fillSlot1);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$offset_" + siteId + "_0", "I");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.GOTO, skipUpdate);
-
-		// 检查 Slot 1
-		mv.visitLabel(fillSlot1);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_0", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitJumpInsn(Opcodes.IF_ACMPEQ, skipUpdate);
-
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IFNONNULL, fillSlot2);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$offset_" + siteId + "_1", "I");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.GOTO, skipUpdate);
-
-		// 检查 Slot 2
-		mv.visitLabel(fillSlot2);
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_1", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitJumpInsn(Opcodes.IF_ACMPEQ, skipUpdate);
-
-		mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.className, "$shape_" + siteId + "_2", "L" + Type.getInternalName(JSShape.class) + ";");
-		mv.visitJumpInsn(Opcodes.IFNONNULL, skipUpdate);
-		mv.visitVarInsn(Opcodes.ILOAD, offSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$offset_" + siteId + "_2", "I");
-		mv.visitVarInsn(Opcodes.ALOAD, shapeSlot);
-		mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.className, "$shape_" + siteId + "_2", "L" + Type.getInternalName(JSShape.class) + ";");
-
-		mv.visitLabel(skipUpdate);
-		mv.visitVarInsn(Opcodes.DLOAD, resSlot);
-		mv.visitLabel(endLabel);
+		compileNode(member.target, ctx, true);
+		mv.visitInvokeDynamicInsn("getPropLong", "(Ljava/lang/Object;)J", BSM_GET_PROP_LONG, propName);
 	}
 
 	private static void compileIndexAccess(Node.IndexAccessExpr idxAccess, CompileContext ctx, boolean needResult) {
@@ -2840,14 +3192,16 @@ public class JSCompiler {
 
 		VarType idxType = inferVarType(idxAccess.index, ctx);
 		if (idxType == VarType.INT) {
-			int targetSlot = ctx.allocTempSlot();
-			int idxSlot = ctx.allocTempSlot();
+			int mark = ctx.markTempSlots();
+			try {
+				int targetSlot = ctx.allocTempSlot();
+				int idxSlot = ctx.allocTempSlot();
 
-			compileNode(idxAccess.target, ctx, true);
-			mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+				compileNode(idxAccess.target, ctx, true);
+				mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
 
-			compileNodeAsInt(idxAccess.index, ctx);
-			mv.visitVarInsn(Opcodes.ISTORE, idxSlot);
+				compileNodeAsInt(idxAccess.index, ctx);
+				mv.visitVarInsn(Opcodes.ISTORE, idxSlot);
 
 			Label slowPath = new Label();
 			Label endLabel = new Label();
@@ -2872,6 +3226,9 @@ public class JSCompiler {
 			if (!needResult) mv.visitInsn(Opcodes.POP);
 
 			mv.visitLabel(endLabel);
+			} finally {
+				ctx.resetTempSlots(mark);
+			}
 			return;
 		}
 

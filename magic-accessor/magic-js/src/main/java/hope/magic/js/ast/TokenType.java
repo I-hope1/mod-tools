@@ -18,6 +18,13 @@ public enum TokenType {
 	PERCENT,        // %
 	PLUS_PLUS,      // ++
 	MINUS_MINUS,    // --
+	BIT_AND,        // &
+	BIT_OR,         // |
+	BIT_XOR,        // ^
+	BIT_NOT,        // ~
+	SHL,            // <<
+	SHR,            // >>
+	USHR,           // >>>
 
 	// 比较与逻辑运算符
 	EQ,             // ==
@@ -38,6 +45,13 @@ public enum TokenType {
 	MINUS_ASSIGN,   // -=
 	STAR_ASSIGN,    // *=
 	SLASH_ASSIGN,   // /=
+	PERCENT_ASSIGN, // %=
+	BIT_AND_ASSIGN, // &=
+	BIT_OR_ASSIGN,  // |=
+	BIT_XOR_ASSIGN, // ^=
+	SHL_ASSIGN,     // <<=
+	SHR_ASSIGN,     // >>=
+	USHR_ASSIGN,    // >>>=
 
 	// 分隔符与标点
 	ARROW,          // =>

@@ -1,6 +1,11 @@
 package hope.magic.js.runtime;
 
+import hope.magic.runtime.Magic;
+
+import java.lang.invoke.*;
+import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -12,13 +17,57 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 4. 支持物理 Offset 直通，配合 Unsafe 达成 1 指令寻址。
  */
 public final class JSShape {
+	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
-	private static final AtomicInteger SHAPE_ID_GEN = new AtomicInteger(0);
+	private static final AtomicInteger SHAPE_ID_GEN = new AtomicInteger(1);
+	private static final ConcurrentHashMap<String, VarHandle> VAR_HANDLES = new ConcurrentHashMap<>();
+
+	// 语义化控制常量
+	public static final int  SHAPE_ID_SHIFT              = 32;
+	public static final long OFFSET_MASK                 = 0xFFFFFFFFL;
+	public static final int  BITMASK_MAX_SHAPES          = 64;
+	public static final int  PRECOMPUTED_SHAPES_CAPACITY = 65536;
+	public static final int  INLINE_PROPERTY_CAPACITY    = 4;
+	public static final int  TRANSITION_TYPE_SHIFT       = 3;
+	public static final int  TRANSITION_TYPE_MASK        = 0x7;
+
+	public static long packIC(int shapeId, int offset) {
+		return ((long) shapeId << SHAPE_ID_SHIFT) | (offset & OFFSET_MASK);
+	}
+
+	public static boolean casIC(Class<?> clazz, String fieldName, long expected, long update) {
+		String key = clazz.getName() + "." + fieldName;
+		VarHandle vh = VAR_HANDLES.get(key);
+		if (vh == null) {
+			try {
+				vh = LOOKUP.findStaticVarHandle(clazz, fieldName, long.class);
+				VAR_HANDLES.put(key, vh);
+			} catch (Throwable t) {
+				try {
+					Field f = clazz.getField(fieldName);
+					long offset = Magic.unsafe.staticFieldOffset(f);
+					return Magic.unsafe.compareAndSwapLong(clazz, offset, expected, update);
+				} catch (Throwable ignored) {
+					return false;
+				}
+			}
+		}
+		return vh.compareAndSet(expected, update);
+	}
 
 	public static final byte TYPE_UNKNOWN = 0;
 	public static final byte TYPE_DOUBLE  = 1;
 	public static final byte TYPE_INT     = 2;
 	public static final byte TYPE_OBJECT  = 3;
+
+	public static final JSShape[] PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
+	private static final AtomicInteger PRECOMPUTED_ID = new AtomicInteger(0);
+
+	public static int registerPrecomputedShape(JSShape shape) {
+		int id = PRECOMPUTED_ID.getAndIncrement();
+		PRECOMPUTED_SHAPES[id] = shape;
+		return id;
+	}
 
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN);
 
@@ -43,7 +92,7 @@ public final class JSShape {
 
 	private JSShape(JSShape parent, int propId, byte propType) {
 		this.id = SHAPE_ID_GEN.getAndIncrement();
-		this.mask = (this.id < 64) ? (1L << this.id) : 0L;
+		this.mask = (this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		this.propertyId = propId;
 		this.propertyType = propType;
 		int count = (parent == null ? 0 : parent.propertyCount) + (propId >= 0 ? 1 : 0);
@@ -63,14 +112,14 @@ public final class JSShape {
 			this.t1 = (count == 2) ? propType : parent.t1;
 			this.k2 = (count == 3) ? propId : parent.k2;
 			this.t2 = (count == 3) ? propType : parent.t2;
-			this.k3 = (count == 4) ? propId : parent.k3;
-			this.t3 = (count == 4) ? propType : parent.t3;
+			this.k3 = (count == INLINE_PROPERTY_CAPACITY) ? propId : parent.k3;
+			this.t3 = (count == INLINE_PROPERTY_CAPACITY) ? propType : parent.t3;
 
-			if (count <= 4) {
+			if (count <= INLINE_PROPERTY_CAPACITY) {
 				this.overflowKeys = null;
 				this.overflowTypes = null;
 			} else {
-				int overflowLen = count - 4;
+				int overflowLen = count - INLINE_PROPERTY_CAPACITY;
 				int[] ofKeys = new int[overflowLen];
 				byte[] ofTypes = new byte[overflowLen];
 				if (parent.overflowKeys != null) {
@@ -107,7 +156,7 @@ public final class JSShape {
 
 	private static int scanOverflow(int[] of, int propId) {
 		for (int i = 0; i < of.length; i++) {
-			if (of[i] == propId) return i + 4;
+			if (of[i] == propId) return i + INLINE_PROPERTY_CAPACITY;
 		}
 		return -1;
 	}
@@ -123,18 +172,39 @@ public final class JSShape {
 			case 1 -> t1;
 			case 2 -> t2;
 			case 3 -> t3;
-			default -> (overflowTypes != null && offset - 4 < overflowTypes.length)
-			 ? overflowTypes[offset - 4]
+			default -> (overflowTypes != null && offset - INLINE_PROPERTY_CAPACITY < overflowTypes.length)
+			 ? overflowTypes[offset - INLINE_PROPERTY_CAPACITY]
 			 : TYPE_UNKNOWN;
 		};
+	}
+
+	/**
+	 * 哨兵编码值：低 3 位设为 0b111 (7)，高位全为 1 (0x7FFFFFFF)。
+	 * <p>
+	 * <b>数学不可达性证明：</b><br>
+	 * 任何合法属性迁移的 {@code type} 仅占用 2 位（{@link #TYPE_UNKNOWN}=0, {@link #TYPE_DOUBLE}=1,
+	 * {@link #TYPE_INT}=2, {@link #TYPE_OBJECT}=3，即 {@code 0b00 ~ 0b11}），
+	 * 其低 3 位的值必然 {@code <= 3 (0b011)}，第 2 位（权重 4）恒为 0。<br>
+	 * 而 {@code SENTINEL_ENCODED} 的低 3 位为 7（{@code 0b111}）。<br>
+	 * 因此对于任意非负 {@code propId} 和合法 {@code type}，{@code (propId << 3) | type} 严格不等于 {@code SENTINEL_ENCODED}。
+	 */
+	public static final int SENTINEL_ENCODED = 0x7FFFFFFF;
+
+	public static int encodeKey(int propId, byte type) {
+		assert (type >= 0 && type <= 3) : "Invalid property type: " + type;
+		assert propId >= 0 : "Invalid propId: " + propId;
+		int encoded = (propId << TRANSITION_TYPE_SHIFT) | (type & TRANSITION_TYPE_MASK);
+		assert encoded != SENTINEL_ENCODED : "Mathematical impossibility violated: encoded collided with SENTINEL_ENCODED";
+		return encoded;
 	}
 
 	// 迁移树构建 (极简编码，快路径 < 28 字节，100% C2 内联)
 
 	public JSShape addProperty(int propId, byte type) {
-		int encoded = (propId << 3) | type;
-		if (this.singleKey == encoded) {
-			return this.singleTransition;
+		int encoded = encodeKey(propId, type);
+		JSShape trans = this.singleTransition;
+		if (this.singleKey == encoded && trans != null) {
+			return trans;
 		}
 		return addPropertySlow(encoded, propId, type);
 	}
@@ -147,8 +217,9 @@ public final class JSShape {
 		// 第一条生长分支：直接装入 singleTransition，避免 new IntObjectMap
 		if (this.singleTransition == null && this.multiTransitions == null) {
 			JSShape next = new JSShape(this, propId, type);
-			this.singleKey = encoded;
+			// 必须先写 singleTransition 后写 singleKey，利用 volatile 内存屏障保证其他线程读到 singleKey 时 transition 必定非空
 			this.singleTransition = next;
+			this.singleKey = encoded;
 			return next;
 		}
 
@@ -163,6 +234,18 @@ public final class JSShape {
 		if (next == null) {
 			next = new JSShape(this, propId, type);
 			this.multiTransitions.put(encoded, next);
+		}
+
+		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
+		if (encoded == SENTINEL_ENCODED) {
+			switch (propId) {
+				case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
+				case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
+				case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24:
+				case 25: case 26: case 27: case 28: case 29: case 30: case 31: case 32:
+				case 33: case 34: case 35: case 36: case 37: case 38: case 39: case 40:
+					return next; // 关键防御契约：即便极端情况下触及屏障分支，也恒定返回有效 JSShape，绝不返回 null！
+			}
 		}
 		return next;
 	}

@@ -7,15 +7,17 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 public class JSObject {
-	public static final int IN_OBJECT_SLOTS = 0;
+	public static final int IN_OBJECT_FIELD_COUNT     = 8;
+	public static final int IN_OBJECT_SLOTS           = IN_OBJECT_FIELD_COUNT;
+	public static final int OVERFLOW_INITIAL_CAPACITY = 4;
 
 	public static final Unsafe UNSAFE             = Magic.unsafe;
-	public static final long[] PRIM_FIELD_OFFSETS = new long[8];
-	public static final long[] OBJ_FIELD_OFFSETS  = new long[8];
+	public static final long[] PRIM_FIELD_OFFSETS = new long[IN_OBJECT_FIELD_COUNT];
+	public static final long[] OBJ_FIELD_OFFSETS  = new long[IN_OBJECT_FIELD_COUNT];
 
 	static {
 		try {
-			for (int i = 0; i < 8; i++) {
+			for (int i = 0; i < IN_OBJECT_FIELD_COUNT; i++) {
 				Field pField = JSObject.class.getDeclaredField("prim" + i);
 				Field oField = JSObject.class.getDeclaredField("obj" + i);
 				PRIM_FIELD_OFFSETS[i] = UNSAFE.objectFieldOffset(pField);
@@ -45,6 +47,10 @@ public class JSObject {
 
 	public JSObject() { }
 
+	public JSObject(JSShape shape) {
+		this.shape = shape;
+	}
+
 	public JSObject(JSObject prototype) {
 		this.prototype = prototype;
 	}
@@ -60,7 +66,7 @@ public class JSObject {
 			case 5 -> Double.longBitsToDouble(prim5);
 			case 6 -> Double.longBitsToDouble(prim6);
 			case 7 -> Double.longBitsToDouble(prim7);
-			default -> getOverflowDouble(offset - 8);
+			default -> getOverflowDouble(offset - IN_OBJECT_FIELD_COUNT);
 		};
 	}
 
@@ -82,14 +88,14 @@ public class JSObject {
 			case 5 -> prim5 = raw;
 			case 6 -> prim6 = raw;
 			case 7 -> prim7 = raw;
-			default -> setOverflowDouble(offset - 8, value);
+			default -> setOverflowDouble(offset - IN_OBJECT_FIELD_COUNT, value);
 		}
 	}
 
 	private void setOverflowDouble(int idx, double value) {
 		long raw = Double.doubleToRawLongBits(value);
 		if (overflowPrim == null) {
-			overflowPrim = new long[Math.max(4, idx + 1)];
+			overflowPrim = new long[Math.max(OVERFLOW_INITIAL_CAPACITY, idx + 1)];
 		} else if (idx >= overflowPrim.length) {
 			overflowPrim = Arrays.copyOf(overflowPrim, Math.max(overflowPrim.length * 2, idx + 1));
 		}
@@ -106,7 +112,7 @@ public class JSObject {
 			case 5 -> obj5;
 			case 6 -> obj6;
 			case 7 -> obj7;
-			default -> getOverflowObject(offset - 8);
+			default -> getOverflowObject(offset - IN_OBJECT_FIELD_COUNT);
 		};
 	}
 
@@ -130,17 +136,17 @@ public class JSObject {
 		}
 	}
 
-	private void clearDoubleMask(int offset) {
+	public void clearDoubleMask(int offset) {
 		doubleFieldMask &= ~(1L << offset);
 	}
 
 	private void setOverflowSlot(int offset, Object value) {
-		setOverflowObject(offset - 8, value);
+		setOverflowObject(offset - IN_OBJECT_FIELD_COUNT, value);
 	}
 
 	private void setOverflowObject(int idx, Object value) {
 		if (overflowObj == null) {
-			overflowObj = new Object[Math.max(4, idx + 1)];
+			overflowObj = new Object[Math.max(OVERFLOW_INITIAL_CAPACITY, idx + 1)];
 		} else if (idx >= overflowObj.length) {
 			overflowObj = Arrays.copyOf(overflowObj, Math.max(overflowObj.length * 2, idx + 1));
 		}
@@ -204,11 +210,27 @@ public class JSObject {
 		putDoubleSlow(propId, value);
 	}
 
+	public static final int SENTINEL_PROP_ID = Integer.MIN_VALUE;
+
+	@SuppressWarnings("DataFlowIssue")
 	private void putDoubleSlow(int propId, double value) {
 		if (shape.getOffset(propId) < 0) {
 			shape = shape.addProperty(propId, JSShape.TYPE_DOUBLE);
 		}
 		setDoubleSlot(shape.propertyCount - 1, value);
+
+		// 确保本冷路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
+		// SymbolTable 分配的 propId 恒 >= 0，数学上与 SENTINEL_PROP_ID (负无穷边界) 绝对正交互斥
+		if (propId == SENTINEL_PROP_ID) {
+			switch (propId) {
+				case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
+				case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
+				case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24:
+				case 25: case 26: case 27: case 28: case 29: case 30: case 31: case 32:
+				case 33: case 34: case 35: case 36: case 37: case 38: case 39: case 40:
+					return;
+			}
+		}
 	}
 
 	public void putDouble(String key, double value) {
@@ -229,9 +251,22 @@ public class JSObject {
 		putSlow(propId, value);
 	}
 
+	@SuppressWarnings("DataFlowIssue")
 	private void putSlow(int propId, Object value) {
 		shape = shape.addProperty(propId, JSShape.TYPE_OBJECT);
 		setSlot(shape.propertyCount - 1, value);
+
+		// 确保本冷路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
+		if (propId == SENTINEL_PROP_ID) {
+			switch (propId) {
+				case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
+				case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
+				case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24:
+				case 25: case 26: case 27: case 28: case 29: case 30: case 31: case 32:
+				case 33: case 34: case 35: case 36: case 37: case 38: case 39: case 40:
+					return;
+			}
+		}
 	}
 
 	public void put(String key, Object value) {

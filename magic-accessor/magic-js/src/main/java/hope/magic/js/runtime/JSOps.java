@@ -4,6 +4,8 @@ import java.util.Objects;
 
 @SuppressWarnings("unused")
 public class JSOps {
+	public static final int  SHIFT_MASK_32 = 0x1F;
+	public static final long UINT32_MASK   = 0xFFFFFFFFL;
 
 	public static Object add(Object a, Object b) {
 		if (a instanceof Double && b instanceof Double) return (Double) a + (Double) b;
@@ -613,6 +615,35 @@ public class JSOps {
 		if (t instanceof JSException jse) return jse.value;
 		if (t != null && t.getCause() instanceof JSException jse) return jse.value;
 		return t != null ? (t.getMessage() != null ? t.getMessage() : t.toString()) : "Error";
+	}
+
+	//region 位运算操作 (Bitwise Operations)
+	public static Object bitAnd(Object a, Object b) {
+		return toInt(a) & toInt(b);
+	}
+
+	public static Object bitOr(Object a, Object b) {
+		return toInt(a) | toInt(b);
+	}
+
+	public static Object bitXor(Object a, Object b) {
+		return toInt(a) ^ toInt(b);
+	}
+
+	public static Object bitNot(Object a) {
+		return ~toInt(a);
+	}
+
+	public static Object shl(Object a, Object b) {
+		return toInt(a) << (toInt(b) & SHIFT_MASK_32);
+	}
+
+	public static Object shr(Object a, Object b) {
+		return toInt(a) >> (toInt(b) & SHIFT_MASK_32);
+	}
+
+	public static Object ushr(Object a, Object b) {
+		return (double) ((long) (toInt(a) >>> (toInt(b) & SHIFT_MASK_32)) & UINT32_MASK);
 	}
 	//endregion
 }

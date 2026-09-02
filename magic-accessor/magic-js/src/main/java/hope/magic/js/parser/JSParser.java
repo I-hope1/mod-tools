@@ -350,7 +350,9 @@ public class JSParser {
 		Node left = parseConditional();
 
 		if (check(TokenType.ASSIGN) || check(TokenType.PLUS_ASSIGN) || check(TokenType.MINUS_ASSIGN)
-			|| check(TokenType.STAR_ASSIGN) || check(TokenType.SLASH_ASSIGN)) {
+			|| check(TokenType.STAR_ASSIGN) || check(TokenType.SLASH_ASSIGN) || check(TokenType.PERCENT_ASSIGN)
+			|| check(TokenType.BIT_AND_ASSIGN) || check(TokenType.BIT_OR_ASSIGN) || check(TokenType.BIT_XOR_ASSIGN)
+			|| check(TokenType.SHL_ASSIGN) || check(TokenType.SHR_ASSIGN) || check(TokenType.USHR_ASSIGN)) {
 			Token op = advance();
 			Node right = parseAssignment();
 			if (op.type == TokenType.ASSIGN) {
@@ -390,8 +392,38 @@ public class JSParser {
 	}
 
 	private Node parseLogicalAnd() {
-		Node expr = parseEquality();
+		Node expr = parseBitwiseOr();
 		while (match(TokenType.AND)) {
+			Token op = previous();
+			Node right = parseBitwiseOr();
+			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);
+		}
+		return expr;
+	}
+
+	private Node parseBitwiseOr() {
+		Node expr = parseBitwiseXor();
+		while (match(TokenType.BIT_OR)) {
+			Token op = previous();
+			Node right = parseBitwiseXor();
+			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);
+		}
+		return expr;
+	}
+
+	private Node parseBitwiseXor() {
+		Node expr = parseBitwiseAnd();
+		while (match(TokenType.BIT_XOR)) {
+			Token op = previous();
+			Node right = parseBitwiseAnd();
+			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);
+		}
+		return expr;
+	}
+
+	private Node parseBitwiseAnd() {
+		Node expr = parseEquality();
+		while (match(TokenType.BIT_AND)) {
 			Token op = previous();
 			Node right = parseEquality();
 			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);
@@ -410,8 +442,18 @@ public class JSParser {
 	}
 
 	private Node parseRelational() {
-		Node expr = parseAdditive();
+		Node expr = parseShift();
 		while (match(TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE)) {
+			Token op = previous();
+			Node right = parseShift();
+			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);
+		}
+		return expr;
+	}
+
+	private Node parseShift() {
+		Node expr = parseAdditive();
+		while (match(TokenType.SHL, TokenType.SHR, TokenType.USHR)) {
 			Token op = previous();
 			Node right = parseAdditive();
 			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);
@@ -440,7 +482,7 @@ public class JSParser {
 	}
 
 	private Node parseUnary() {
-		if (match(TokenType.NOT, TokenType.MINUS, TokenType.PLUS, TokenType.PLUS_PLUS, TokenType.MINUS_MINUS)) {
+		if (match(TokenType.NOT, TokenType.BIT_NOT, TokenType.MINUS, TokenType.PLUS, TokenType.PLUS_PLUS, TokenType.MINUS_MINUS)) {
 			Token op = previous();
 			Node right = parseUnary();
 			return new Node.UnaryExpr(op.type, right, true, op.line, op.column);

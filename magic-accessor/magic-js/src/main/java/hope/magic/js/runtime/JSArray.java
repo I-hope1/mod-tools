@@ -11,8 +11,11 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public class JSArray extends JSObject implements Iterable<Object> {
-	public static final int MAX_DENSE_CAPACITY = 65536;
-	private static final Object NULL_SENTINEL = new Object();
+	public static final int  MAX_DENSE_CAPACITY     = 65536;
+	public static final int  INITIAL_DENSE_CAPACITY = 8;
+	public static final long MAX_ARRAY_INDEX        = 4294967294L; // 2^32 - 2 (ECMAScript 规范标准上限)
+
+	private static final Object   NULL_SENTINEL  = new Object();
 	private static final Object[] EMPTY_ELEMENTS = new Object[0];
 
 	public Object[] elements = EMPTY_ELEMENTS;
@@ -26,7 +29,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		if (initial != null) {
 			int sz = initial.size();
 			if (sz > 0 && sz <= MAX_DENSE_CAPACITY) {
-				this.elements = new Object[Math.max(sz, 8)];
+				this.elements = new Object[Math.max(sz, INITIAL_DENSE_CAPACITY)];
 				int idx = 0;
 				for (Object elem : initial) {
 					this.elements[idx++] = elem;
@@ -49,7 +52,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			if (initial instanceof Collection<?> c) {
 				int sz = c.size();
 				if (sz > 0 && sz <= MAX_DENSE_CAPACITY) {
-					this.elements = new Object[Math.max(sz, 8)];
+					this.elements = new Object[Math.max(sz, INITIAL_DENSE_CAPACITY)];
 					int idx = 0;
 					for (Object elem : c) {
 						this.elements[idx++] = elem;
@@ -89,7 +92,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	private Object getElementSlow(long index) {
-		if (index < 0 || index > 4294967294L) {
+		if (index < 0 || index > MAX_ARRAY_INDEX) {
 			return super.get(String.valueOf(index));
 		}
 		Object sparseVal = sparse.get(index);
@@ -109,7 +112,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	private void grow(int minCapacity) {
 		int oldCap = elements.length;
-		int newCap = oldCap == 0 ? 8 : (oldCap + (oldCap >> 1));
+		int newCap = oldCap == 0 ? INITIAL_DENSE_CAPACITY : (oldCap + (oldCap >> 1));
 		if (newCap < minCapacity) newCap = minCapacity;
 		if (newCap > MAX_DENSE_CAPACITY) newCap = MAX_DENSE_CAPACITY;
 		Object[] newArr = new Object[newCap];
@@ -121,7 +124,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public void setElement(long index, Object value) {
-		if (index < 0 || index > 4294967294L) {
+		if (index < 0 || index > MAX_ARRAY_INDEX) {
 			super.put(String.valueOf(index), value);
 			return;
 		}

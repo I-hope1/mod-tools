@@ -2,13 +2,17 @@ package hope.magic.js.test;
 
 import hope.magic.js.runtime.JSArray;
 import hope.magic.js.runtime.JSContext;
+import hope.magic.js.runtime.JSObject;
+import hope.magic.js.runtime.JSScript;
 import hope.magic.js.runtime.JSShape;
 import hope.magic.js.runtime.SymbolTable;
+import hope.magic.js.compiler.JSCompiler;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.lang.reflect.Method;
 
 public class MagicJSTest {
 
@@ -635,6 +639,137 @@ public class MagicJSTest {
 			future.get();
 		}
 		pool.shutdown();
+	}
+
+	@Test
+	public void testConcurrentCallSiteInitializationWithCAS() throws Exception {
+		// 单一编译产物，跨线程并发复用，针对同一调用点并发争抢不同 Shape
+		JSScript script = JSCompiler.compile("obj.x");
+		int threadCount = 16;
+		int iterations = 500;
+		java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+		java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+		List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+
+		for (int t = 0; t < threadCount; t++) {
+			final int threadId = t;
+			futures.add(pool.submit(() -> {
+				startLatch.await();
+				JSContext cx = new JSContext();
+				for (int i = 0; i < iterations; i++) {
+					// 偶数线程持 Shape A，奇数线程持 Shape B
+					JSObject obj = new JSObject();
+					if (threadId % 2 == 0) {
+						obj.put("x", 100.0);
+						obj.put("extraA", 1.0);
+					} else {
+						obj.put("extraB", 2.0);
+						obj.put("x", 200.0);
+					}
+					cx.set("obj", obj);
+					Object res;
+					try {
+						res = script.run(cx);
+					} catch (Throwable ex) {
+						throw new RuntimeException(ex);
+					}
+					double expected = (threadId % 2 == 0) ? 100.0 : 200.0;
+					Assertions.assertEquals(expected, ((Number) res).doubleValue());
+				}
+				return null;
+			}));
+		}
+
+		startLatch.countDown();
+		for (java.util.concurrent.Future<?> f : futures) {
+			f.get();
+		}
+		pool.shutdown();
+
+		// 验证重构后生成的脚本类无任何冗余静态 $ic 字段，彻底避免元空间膨胀与静态锁竞争
+		Class<?> scriptClass = script.getClass();
+		boolean hasOldIcField = false;
+		for (java.lang.reflect.Field f : scriptClass.getDeclaredFields()) {
+			if (f.getName().startsWith("$ic_")) {
+				hasOldIcField = true;
+				break;
+			}
+		}
+		Assertions.assertFalse(hasOldIcField, "重构后的 Indy PIC 不得在脚本类中展开任何静态 $ic 槽位字段");
+	}
+
+	@Test
+	public void testNaNComparisonSemantics() {
+		JSContext cx = new JSContext();
+		// IEEE 754 规范: 任何与 NaN 的关系比较必须恒为 false
+		Assertions.assertEquals(false, cx.eval("var x = NaN; x > 1"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; x >= 1"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; x < 1"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; x <= 1"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; 1 > x"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; 1 >= x"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; 1 < x"));
+		Assertions.assertEquals(false, cx.eval("var x = NaN; 1 <= x"));
+
+		// 三元表达式判定
+		Assertions.assertEquals("OK", cx.eval("var x = NaN; x > 1 ? 'ERR' : 'OK';"));
+		Assertions.assertEquals("OK", cx.eval("var x = NaN; x >= 1 ? 'ERR' : 'OK';"));
+		Assertions.assertEquals("OK", cx.eval("var x = NaN; x < 1 ? 'ERR' : 'OK';"));
+		Assertions.assertEquals("OK", cx.eval("var x = NaN; x <= 1 ? 'ERR' : 'OK';"));
+
+		// 分支语句中的跳转判定
+		Assertions.assertEquals("OK", cx.eval("var res; var x = NaN; if (x > 1) res = 'ERR'; else res = 'OK'; res;"));
+		Assertions.assertEquals("OK", cx.eval("var res; var x = NaN; if (x >= 1) res = 'ERR'; else res = 'OK'; res;"));
+		Assertions.assertEquals("OK", cx.eval("var res; var x = NaN; if (x < 1) res = 'ERR'; else res = 'OK'; res;"));
+		Assertions.assertEquals("OK", cx.eval("var res; var x = NaN; if (x <= 1) res = 'ERR'; else res = 'OK'; res;"));
+	}
+
+	@Test
+	public void testSlashAssignDivisionSemantics() {
+		JSContext cx = new JSContext();
+		// JS 中 5 /= 2 的结果是浮点 2.5，不能被 IDIV 截断为 2
+		Assertions.assertEquals(2.5, ((Number) cx.eval("var a = 5; a /= 2; a;")).doubleValue());
+		Assertions.assertEquals(0.5, ((Number) cx.eval("var a = 1; a /= 2; a;")).doubleValue());
+	}
+
+	@Test
+	public void testBitwiseOperationsAndPrecedence() {
+		JSContext cx = new JSContext();
+
+		// 基础位运算
+		Assertions.assertEquals(3.0, ((Number) cx.eval("1 | 2")).doubleValue());
+		Assertions.assertEquals(2.0, ((Number) cx.eval("6 & 3")).doubleValue());
+		Assertions.assertEquals(5.0, ((Number) cx.eval("6 ^ 3")).doubleValue());
+		Assertions.assertEquals(-6.0, ((Number) cx.eval("~5")).doubleValue());
+		Assertions.assertEquals(16.0, ((Number) cx.eval("2 << 3")).doubleValue());
+		Assertions.assertEquals(2.0, ((Number) cx.eval("16 >> 3")).doubleValue());
+		Assertions.assertEquals(-1.0, ((Number) cx.eval("-4 >> 2")).doubleValue());
+
+		// 零填充右移 (>>>) 与无符号 32 位溢出转换
+		Assertions.assertEquals(4294967295.0, ((Number) cx.eval("-1 >>> 0")).doubleValue());
+		Assertions.assertEquals(1073741823.0, ((Number) cx.eval("-4 >>> 2")).doubleValue());
+
+		// 运算符优先级: Additive > Shift > Relational > Equality > BitwiseAnd > BitwiseXor > BitwiseOr
+		// 1. Additive vs Shift: 3 << 1 + 2 => 3 << 3 = 24
+		Assertions.assertEquals(24.0, ((Number) cx.eval("3 << 1 + 2")).doubleValue());
+		// 2. BitwiseAnd vs BitwiseOr: 1 | 2 & 3 => 1 | (2 & 3) = 1 | 2 = 3
+		Assertions.assertEquals(3.0, ((Number) cx.eval("1 | 2 & 3")).doubleValue());
+		// 3. BitwiseXor vs BitwiseOr: 1 | 2 ^ 2 => 1 | (2 ^ 2) = 1 | 0 = 1
+		Assertions.assertEquals(1.0, ((Number) cx.eval("1 | 2 ^ 2")).doubleValue());
+		// 4. BitwiseAnd vs BitwiseXor: 1 ^ 2 & 3 => 1 ^ 2 = 3
+		Assertions.assertEquals(3.0, ((Number) cx.eval("1 ^ 2 & 3")).doubleValue());
+	}
+
+	@Test
+	public void testBitwiseCompoundAssignments() {
+		JSContext cx = new JSContext();
+
+		Assertions.assertEquals(7.0, ((Number) cx.eval("var a = 5; a |= 2; a;")).doubleValue());
+		Assertions.assertEquals(1.0, ((Number) cx.eval("var a = 5; a &= 3; a;")).doubleValue());
+		Assertions.assertEquals(6.0, ((Number) cx.eval("var a = 5; a ^= 3; a;")).doubleValue());
+		Assertions.assertEquals(20.0, ((Number) cx.eval("var a = 5; a <<= 2; a;")).doubleValue());
+		Assertions.assertEquals(5.0, ((Number) cx.eval("var a = 20; a >>= 2; a;")).doubleValue());
+		Assertions.assertEquals(4294967295.0, ((Number) cx.eval("var a = -1; a >>>= 0; a;")).doubleValue());
 	}
 
 	public static class MegaType0 { public int val = 0; public int getVal() { return 0; } }
@@ -1544,5 +1679,70 @@ public class MagicJSTest {
 	public void testStringReplaceTokens() {
 		JSContext cx = new JSContext();
 		Assertions.assertEquals("foo[abc]bar", cx.eval("'fooabcbar'.replace('abc', '[$&]');"));
+	}
+
+	@Test
+	public void testShapeSentinelNonCollidabilityAndNeverNull() throws Exception {
+		// 1. 数学不变量验证：测试所有合法类型 (0..3) 在极大/极小边界 propId 下，生成的 encoded 严格不等于 SENTINEL_ENCODED
+		byte[] validTypes = { JSShape.TYPE_UNKNOWN, JSShape.TYPE_DOUBLE, JSShape.TYPE_INT, JSShape.TYPE_OBJECT };
+		int[] testPropIds = {
+			0, 1, 2, 100, 1000, 65535, 1_000_000,
+			0x0FFFFFFF, 0x0FFFFFFF >> 1, 0x0FFFFFFF >> 2,
+			Integer.MAX_VALUE >> 3, (Integer.MAX_VALUE >> 3) - 1
+		};
+
+		for (int propId : testPropIds) {
+			for (byte type : validTypes) {
+				int encoded = JSShape.encodeKey(propId, type);
+				// 契约 1: 绝对不能等于哨兵值 0x7FFFFFFF
+				Assertions.assertNotEquals(JSShape.SENTINEL_ENCODED, encoded,
+					() -> "Collision detected! propId=" + propId + ", type=" + type);
+				// 契约 2: 低 3 位的值必然在 [0, 3] 区间，第 2 位 (权重 4) 恒等于 0
+				Assertions.assertTrue((encoded & 0x7) <= 3);
+				Assertions.assertEquals(0, encoded & 0x4);
+			}
+		}
+
+		// 验证 SENTINEL_ENCODED 的低 3 位确为 7 (0b111)
+		Assertions.assertEquals(7, JSShape.SENTINEL_ENCODED & 0x7);
+
+		// 2. 极端属性添加测试：验证绝不返回 null
+		JSShape shape = JSShape.ROOT;
+		for (int propId : testPropIds) {
+			for (byte type : validTypes) {
+				JSShape next = shape.addProperty(propId, type);
+				Assertions.assertNotNull(next, "addProperty must never return null for propId=" + propId);
+				Assertions.assertTrue(next.propertyCount() > 0);
+				shape = next;
+			}
+		}
+
+		// 3. 防御契约终极验证：通过反射直接注入 SENTINEL_ENCODED 调用 addPropertySlow，确保绝对不会返回 null
+		Method slowMethod = JSShape.class.getDeclaredMethod("addPropertySlow", int.class, int.class, byte.class);
+		slowMethod.setAccessible(true);
+		JSShape res = (JSShape) slowMethod.invoke(JSShape.ROOT, JSShape.SENTINEL_ENCODED, 12345, JSShape.TYPE_DOUBLE);
+		Assertions.assertNotNull(res, "Defensive contract: addPropertySlow must NEVER return null even if sentinel is hit!");
+	}
+
+	@Test
+	public void testContextCreationBenchmark() {
+		// 测量第 1 次创建时延 (包含类加载与静态初始化)
+		long t0 = System.nanoTime();
+		JSContext c1 = new JSContext();
+		long coldNs = System.nanoTime() - t0;
+
+		// 测量后续 1000 次创建的平均时延
+		int N = 1000;
+		long t1 = System.nanoTime();
+		for (int i = 0; i < N; i++) {
+			JSContext c = new JSContext();
+		}
+		long warmNs = (System.nanoTime() - t1) / N;
+
+		System.out.printf(">>> 首次 new JSContext() 时延: %.3f ms, 稳态单次: %.3f µs%n",
+			coldNs / 1_000_000.0, warmNs / 1_000.0);
+		Assertions.assertNotNull(c1);
+		Assertions.assertTrue(coldNs < 50_000_000L, "First new JSContext() should take less than 50ms");
+		Assertions.assertTrue(warmNs < 50_000L, "Warm new JSContext() should take less than 50µs");
 	}
 }

@@ -85,7 +85,19 @@ public class JSLexer {
 				case ';': tokens.add(new Token(TokenType.SEMICOLON, ";", null, startLine, startCol)); break;
 				case ':': tokens.add(new Token(TokenType.COLON, ":", null, startLine, startCol)); break;
 				case '?': tokens.add(new Token(TokenType.QUESTION, "?", null, startLine, startCol)); break;
-				case '%': tokens.add(new Token(TokenType.PERCENT, "%", null, startLine, startCol)); break;
+				case '%':
+					if (match('=')) tokens.add(new Token(TokenType.PERCENT_ASSIGN, "%=", null, startLine, startCol));
+					else tokens.add(new Token(TokenType.PERCENT, "%", null, startLine, startCol));
+					break;
+
+				case '^':
+					if (match('=')) tokens.add(new Token(TokenType.BIT_XOR_ASSIGN, "^=", null, startLine, startCol));
+					else tokens.add(new Token(TokenType.BIT_XOR, "^", null, startLine, startCol));
+					break;
+
+				case '~':
+					tokens.add(new Token(TokenType.BIT_NOT, "~", null, startLine, startCol));
+					break;
 
 				case '+':
 					if (match('+')) tokens.add(new Token(TokenType.PLUS_PLUS, "++", null, startLine, startCol));
@@ -136,22 +148,38 @@ public class JSLexer {
 
 				case '<':
 					if (match('=')) tokens.add(new Token(TokenType.LTE, "<=", null, startLine, startCol));
+					else if (match('<')) {
+						if (match('=')) tokens.add(new Token(TokenType.SHL_ASSIGN, "<<=", null, startLine, startCol));
+						else tokens.add(new Token(TokenType.SHL, "<<", null, startLine, startCol));
+					}
 					else tokens.add(new Token(TokenType.LT, "<", null, startLine, startCol));
 					break;
 
 				case '>':
 					if (match('=')) tokens.add(new Token(TokenType.GTE, ">=", null, startLine, startCol));
+					else if (match('>')) {
+						if (match('>')) {
+							if (match('=')) tokens.add(new Token(TokenType.USHR_ASSIGN, ">>>=", null, startLine, startCol));
+							else tokens.add(new Token(TokenType.USHR, ">>>", null, startLine, startCol));
+						} else if (match('=')) {
+							tokens.add(new Token(TokenType.SHR_ASSIGN, ">>=", null, startLine, startCol));
+						} else {
+							tokens.add(new Token(TokenType.SHR, ">>", null, startLine, startCol));
+						}
+					}
 					else tokens.add(new Token(TokenType.GT, ">", null, startLine, startCol));
 					break;
 
 				case '&':
 					if (match('&')) tokens.add(new Token(TokenType.AND, "&&", null, startLine, startCol));
-					else throw new RuntimeException("Unexpected character '&' at line " + startLine + ":" + startCol);
+					else if (match('=')) tokens.add(new Token(TokenType.BIT_AND_ASSIGN, "&=", null, startLine, startCol));
+					else tokens.add(new Token(TokenType.BIT_AND, "&", null, startLine, startCol));
 					break;
 
 				case '|':
 					if (match('|')) tokens.add(new Token(TokenType.OR, "||", null, startLine, startCol));
-					else throw new RuntimeException("Unexpected character '|' at line " + startLine + ":" + startCol);
+					else if (match('=')) tokens.add(new Token(TokenType.BIT_OR_ASSIGN, "|=", null, startLine, startCol));
+					else tokens.add(new Token(TokenType.BIT_OR, "|", null, startLine, startCol));
 					break;
 
 				case '"':

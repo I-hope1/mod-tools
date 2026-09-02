@@ -1,22 +1,17 @@
 package hope.magic.example;
 
-import hope.magic.js.ast.*;
+import hope.magic.js.ast.Node;
+import hope.magic.js.ast.Token;
 import hope.magic.js.compiler.*;
 import hope.magic.js.parser.*;
 import hope.magic.js.runtime.*;
-import org.graalvm.polyglot.Engine;
-import org.graalvm.polyglot.Source;
-import org.graalvm.polyglot.Value;
+import hope.magic.js.runtime.JSScript;
+import org.graalvm.polyglot.*;
+import org.mozilla.javascript.*;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Script;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 
-import javax.script.Bindings;
-import javax.script.Compilable;
-import javax.script.CompiledScript;
-import javax.script.ScriptEngine;
+import javax.script.*;
 import java.util.*;
 
 public class MagicJSColdStartBenchmark {
@@ -266,7 +261,7 @@ public class MagicJSColdStartBenchmark {
 		compareScenario("场景 B: Java 反射与实例方法直调 (target.multiply(6, 7))", "target.multiply(6, 7);", magicContext, graalContext, rhinoContext, rhinoScope, nashorn, nashornBindings);
 		compareScenario("场景 C: 动态 JS 对象字面量与属性访问 ({ x: 10, y: 20 }.x)", "var o = { x: 100, y: 200, name: 'MagicJS' }; o.x + o.y;", magicContext, graalContext, rhinoContext, rhinoScope, nashorn, nashornBindings);
 		compareScenario("场景 D: 箭头/匿名函数与 Java 函数式接口 SAM 适配", "target.computeBinary(function(x, y) { return x * y + 5; }, 4, 5);", magicContext, graalContext, rhinoContext, rhinoScope, nashorn, nashornBindings);
-		compareScenario("场景 E: 循环遍历 Java 集合 (Java List for-loop)", "var total = 0; for (var i = 0; i < list.size(); i++) { total += list.get(i); } total;", magicContext, graalContext, rhinoContext, rhinoScope, nashorn, nashornBindings);
+		compareScenario("场景 E: 循环遍历 Java 集合 (Java List for-loop)", "var total = 0; for (var i = 0; i < list.size; i++) { total += list.get(i); } total;", magicContext, graalContext, rhinoContext, rhinoScope, nashorn, nashornBindings);
 
 		String polyPipelineCode = """
 			var pool = [

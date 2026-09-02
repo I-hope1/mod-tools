@@ -117,6 +117,18 @@ public class BunVsMagicJSBenchmark {
 		""";
 		runFullComparison("【场景 4: 深度递归函数调用】递归计算 fib(30) (Recursive Call Stack)", fibCode, magicContext, graalContext, 200);
 
+		// ==================== 5. 场景五：32 位整型位运算 (Bitwise Hash & Shifts) ====================
+		String bitwiseCode = """
+			var h = 0x12345678;
+			for (var i = 0; i < 50000; i++) {
+			    h = (h ^ i) * 0x5bd1e995;
+			    h = h ^ (h >> 15);
+			    h = (h << 5) | (h >> 27);
+			}
+			h;
+		""";
+		runFullComparison("【场景 5: 32 位整型位运算循环】50,000 次位移与异或哈希 (Bitwise Hash & Shifts)", bitwiseCode, magicContext, graalContext, 2000);
+
 		graalContext.close();
 		System.out.println("================================================================================");
 		System.out.println("                          基准测试全部圆满完成                                  ");

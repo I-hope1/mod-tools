@@ -1,5 +1,8 @@
 package hope.magic.example;
 
+import com.caoccao.javet.interop.*;
+import com.caoccao.javet.interop.converters.JavetProxyConverter;
+import com.caoccao.javet.interop.executors.IV8Executor;
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.JSContext;
 import hope.magic.js.runtime.JSScript;
@@ -10,9 +13,9 @@ import org.mozilla.javascript.Scriptable;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 
-import javax.script.Bindings;
 import javax.script.Compilable;
 import javax.script.CompiledScript;
+import javax.script.Bindings;
 import javax.script.ScriptEngine;
 import java.util.concurrent.TimeUnit;
 
@@ -26,7 +29,7 @@ public class MagicJSBenchmark {
 
 	private TargetObject target;
 
-	// MagicJS compiled scripts
+	// 1. MagicJS 编译脚本
 	private JSContext magicContext;
 	private JSScript  magicFieldScript;
 	private JSScript  magicMethodScript;
@@ -34,7 +37,7 @@ public class MagicJSBenchmark {
 	private JSScript  magicObjScript;
 	private JSScript  magicPolyScript;
 
-	// Rhino compiled scripts
+	// 2. Mozilla Rhino 编译脚本
 	private Context    rhinoContext;
 	private Scriptable rhinoScope;
 	private Script     rhinoFieldScript;
@@ -43,7 +46,7 @@ public class MagicJSBenchmark {
 	private Script     rhinoObjScript;
 	private Script     rhinoPolyScript;
 
-	// GraalJS compiled scripts
+	// 3. Oracle GraalJS 编译脚本
 	private org.graalvm.polyglot.Context graalContext;
 	private Source                       graalFieldScript;
 	private Source                       graalMethodScript;
@@ -51,7 +54,7 @@ public class MagicJSBenchmark {
 	private Source                       graalObjScript;
 	private Source                       graalPolyScript;
 
-	// Nashorn compiled scripts
+	// 4. OpenJDK Nashorn 编译脚本
 	private ScriptEngine   nashornEngine;
 	private Bindings       nashornBindings;
 	private CompiledScript nashornFieldScript;
@@ -59,6 +62,14 @@ public class MagicJSBenchmark {
 	private CompiledScript nashornLoopScript;
 	private CompiledScript nashornObjScript;
 	private CompiledScript nashornPolyScript;
+
+	// 5. Google V8 (Javet) 执行句柄
+	private V8Runtime   v8Runtime;
+	private IV8Executor v8FieldScript;
+	private IV8Executor v8MethodScript;
+	private IV8Executor v8LoopScript;
+	private IV8Executor v8ObjScript;
+	private IV8Executor v8PolyScript;
 
 	@Setup(Level.Trial)
 	public void setup() throws Exception {
@@ -123,7 +134,7 @@ public class MagicJSBenchmark {
 
 		target = MagicAccessorSample.newTargetObject(98765, "Benchmark Object");
 
-		// 1. 初始化 MagicJS
+		// ==================== 1. 初始化 MagicJS ====================
 		magicContext = new JSContext();
 		magicContext.set("target", target);
 		magicContext.eval(dynObj);
@@ -134,10 +145,10 @@ public class MagicJSBenchmark {
 		magicObjScript = JSCompiler.compile(code_dyn_field);
 		magicPolyScript = JSCompiler.compile(code_poly);
 
-
-		// 2. 初始化 Mozilla Rhino
+		// ==================== 2. 初始化 Mozilla Rhino ====================
 		rhinoContext = Context.enter();
 		rhinoContext.setOptimizationLevel(9); // JIT 编译级别 9
+		rhinoContext.setInterpretedMode(false);
 		rhinoScope = rhinoContext.initStandardObjects();
 		Object wrappedTarget = Context.javaToJS(target, rhinoScope);
 		org.mozilla.javascript.ScriptableObject.putProperty(rhinoScope, "target", wrappedTarget);
@@ -149,7 +160,7 @@ public class MagicJSBenchmark {
 		rhinoObjScript = rhinoContext.compileString(code_dyn_field, "objScript", 1, null);
 		rhinoPolyScript = rhinoContext.compileString(code_poly, "polyScript", 1, null);
 
-		// 3. 初始化 Oracle GraalJS
+		// ==================== 3. 初始化 Oracle GraalJS ====================
 		graalContext = org.graalvm.polyglot.Context.newBuilder("js")
 		 .allowAllAccess(true)
 		 .build();
@@ -163,7 +174,7 @@ public class MagicJSBenchmark {
 		graalObjScript = Source.newBuilder("js", code_dyn_field, "objScript").cached(true).build();
 		graalPolyScript = Source.newBuilder("js", code_poly, "polyScript").cached(true).build();
 
-		// 4. 初始化 OpenJDK Nashorn
+		// ==================== 4. 初始化 OpenJDK Nashorn ====================
 		NashornScriptEngineFactory nashornFactory = new NashornScriptEngineFactory();
 		nashornEngine = nashornFactory.getScriptEngine();
 		Compilable compilable = (Compilable) nashornEngine;
@@ -176,13 +187,40 @@ public class MagicJSBenchmark {
 		nashornLoopScript = compilable.compile(code);
 		nashornObjScript = compilable.compile(code_dyn_field);
 		nashornPolyScript = compilable.compile(code_poly);
+
+		// ==================== 5. 初始化 Google V8 (Javet) ====================
+		v8Runtime = V8Host.getV8Instance().createV8Runtime();
+		// 开启 ProxyConverter 以便让 V8 直接通过反射调用 Java 对象属性与方法
+		v8Runtime.setConverter(new JavetProxyConverter());
+		v8Runtime.getGlobalObject().set("target", target);
+		v8Runtime.getExecutor(dynObj).executeVoid();
+
+		v8FieldScript = v8Runtime.getExecutor(code_field);
+		v8MethodScript = v8Runtime.getExecutor(code_method);
+		v8LoopScript = v8Runtime.getExecutor(code);
+		v8ObjScript = v8Runtime.getExecutor(code_dyn_field);
+		v8PolyScript = v8Runtime.getExecutor(code_poly);
 	}
 
 	@TearDown(Level.Trial)
-	public void tearDown() {
+	public void tearDown() throws Exception {
 		Context.exit();
 		if (graalContext != null) {
 			graalContext.close();
+		}
+		if (v8Runtime != null && !v8Runtime.isClosed()) {
+			try {
+				// 1. 从 V8 全局对象上解绑 Java 代理，释放那 7 个 Native Callback Context
+				v8Runtime.getGlobalObject().delete("target");
+				v8Runtime.getGlobalObject().delete("dynamicObj");
+				v8Runtime.getGlobalObject().delete("pool");
+
+				// 2. 通知 V8 执行一次内存整理
+				v8Runtime.lowMemoryNotification();
+			} catch (Throwable ignored) { }
+
+			// 3. 安全关闭 V8 运行时
+			v8Runtime.close();
 		}
 	}
 
@@ -215,16 +253,16 @@ public class MagicJSBenchmark {
 	}
 	//endregion
 
-	//region 2. 字段访问对比 (MagicJS vs Rhino vs Nashorn vs GraalJS)
+	//region 2. 字段访问对比 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
-	public Object magic_js_field_read() throws Throwable {
-		return magicFieldScript.run(magicContext);
+	public double magic_js_field_read() throws Throwable {
+		return magicFieldScript.runDouble(magicContext);
 	}
 
-	/* @Benchmark
-	public Object rhino_js_field_read() {
-		return rhinoFieldScript.exec(rhinoContext, rhinoScope);
-	} */
+	@Benchmark
+	public int v8_js_field_read() throws Exception {
+		return v8FieldScript.executeInteger();
+	}
 
 	@Benchmark
 	public Object nashorn_js_field_read() throws Exception {
@@ -237,16 +275,16 @@ public class MagicJSBenchmark {
 	}
 	//endregion
 
-	//region 3. 方法调用对比 (MagicJS vs Rhino vs Nashorn vs GraalJS)
+	//region 3. 方法调用对比 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
-	public Object magic_js_method_call() throws Throwable {
-		return magicMethodScript.run(magicContext);
+	public double magic_js_method_call() throws Throwable {
+		return magicMethodScript.runDouble(magicContext);
 	}
 
-	/* @Benchmark
-	public Object rhino_js_method_call() {
-		return rhinoMethodScript.exec(rhinoContext, rhinoScope);
-	} */
+	@Benchmark
+	public int v8_js_method_call() throws Exception {
+		return v8MethodScript.executeInteger();
+	}
 
 	@Benchmark
 	public Object nashorn_js_method_call() throws Exception {
@@ -259,16 +297,16 @@ public class MagicJSBenchmark {
 	}
 	//endregion
 
-	//region 4. 1000以内质数和计算 (MagicJS vs Rhino vs Nashorn vs GraalJS)
+	//region 4. 1000以内质数和计算 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
-	public Object magic_js_prime_sum_1000() throws Throwable {
-		return magicLoopScript.run(magicContext);
+	public double magic_js_prime_sum_1000() throws Throwable {
+		return magicLoopScript.runDouble(magicContext);
 	}
 
-	/* @Benchmark
-	public Object rhino_js_prime_sum_1000() {
-		return rhinoLoopScript.exec(rhinoContext, rhinoScope);
-	} */
+	@Benchmark
+	public double v8_js_prime_sum_1000() throws Exception {
+		return v8LoopScript.executeDouble();
+	}
 
 	@Benchmark
 	public Object nashorn_js_prime_sum_1000() throws Exception {
@@ -281,16 +319,16 @@ public class MagicJSBenchmark {
 	}
 	//endregion
 
-	//region 5. 动态 JSObject 属性访问 (Shape IC vs Rhino vs Nashorn vs GraalJS)
+	//region 5. 动态 JSObject 属性访问 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
-	public Object magic_js_dynamic_obj_read() throws Throwable {
-		return magicObjScript.run(magicContext);
+	public double magic_js_dynamic_obj_read() throws Throwable {
+		return magicObjScript.runDouble(magicContext);
 	}
 
-	/* @Benchmark
-	public Object rhino_js_dynamic_obj_read() {
-		return rhinoObjScript.exec(rhinoContext, rhinoScope);
-	} */
+	@Benchmark
+	public double v8_js_dynamic_obj_read() throws Exception {
+		return v8ObjScript.executeDouble();
+	}
 
 	@Benchmark
 	public Object nashorn_js_dynamic_obj_read() throws Exception {
@@ -303,19 +341,22 @@ public class MagicJSBenchmark {
 	}
 	//endregion
 
-	//region 6. Poly
+	//region 6. 5-Shape 多态流水线 Poly (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
-	public Object magic_js_poly() throws Throwable {
-		return magicPolyScript.run(magicContext);
+	public double magic_js_poly() throws Throwable {
+		return magicPolyScript.runDouble(magicContext);
 	}
-	/* @Benchmark
-	public Object rhino_js_poly() {
-		return rhinoPolyScript.exec(rhinoContext, rhinoScope);
-	} */
+
+	@Benchmark
+	public double v8_js_poly() throws Exception {
+		return v8PolyScript.executeDouble();
+	}
+
 	@Benchmark
 	public Object nashorn_js_poly() throws Exception {
 		return nashornPolyScript.eval(nashornBindings);
 	}
+
 	@Benchmark
 	public Object graal_js_poly() {
 		return graalContext.eval(graalPolyScript);

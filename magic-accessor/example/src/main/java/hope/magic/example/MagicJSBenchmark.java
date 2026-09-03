@@ -2,21 +2,16 @@ package hope.magic.example;
 
 import com.caoccao.javet.interop.*;
 import com.caoccao.javet.interop.converters.JavetProxyConverter;
-import com.caoccao.javet.interop.executors.IV8Executor;
+import com.caoccao.javet.values.reference.IV8ValueFunction;
 import hope.magic.js.compiler.JSCompiler;
-import hope.magic.js.runtime.JSContext;
+import hope.magic.js.runtime.*;
 import hope.magic.js.runtime.JSScript;
 import org.graalvm.polyglot.Source;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Script;
-import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.*;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 
-import javax.script.Compilable;
-import javax.script.CompiledScript;
-import javax.script.Bindings;
-import javax.script.ScriptEngine;
+import javax.script.*;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -64,12 +59,12 @@ public class MagicJSBenchmark {
 	private CompiledScript nashornPolyScript;
 
 	// 5. Google V8 (Javet) 执行句柄
-	private V8Runtime   v8Runtime;
-	private IV8Executor v8FieldScript;
-	private IV8Executor v8MethodScript;
-	private IV8Executor v8LoopScript;
-	private IV8Executor v8ObjScript;
-	private IV8Executor v8PolyScript;
+	private V8Runtime        v8Runtime;
+	private IV8ValueFunction v8FieldScript;
+	private IV8ValueFunction v8MethodScript;
+	private IV8ValueFunction v8LoopScript;
+	private IV8ValueFunction v8ObjScript;
+	private IV8ValueFunction v8PolyScript;
 
 	@Setup(Level.Trial)
 	public void setup() throws Exception {
@@ -88,10 +83,19 @@ public class MagicJSBenchmark {
 		 }
 		 sum;
 		 """;
-		String dynObj         = "var dynamicObj = { x: 100, y: 200, name: 'MagicJS' };";
-		String code_field     = "target.secretCode;";
-		String code_method    = "target.multiply(6, 7);";
-		String code_dyn_field = "dynamicObj.x;";
+		String dynObj      = "var dynamicObj = { x: 100, y: 200, name: 'MagicJS' };";
+		String code_field  = "target.secretCode;";
+		String code_method = "target.multiply(6, 7);";
+		String code_dyn_field = """
+		 var obj = { x: 10, y: 20, z: 30, w: 40 };
+		 var sum = 0;
+		 for (var i = 0; i < 10000; i++) {
+		     obj.x = obj.x + 1;
+		     obj.y = obj.y + 2;
+		     sum = sum + obj.x + obj.y + obj.z + obj.w;
+		 }
+		 sum;
+		 """;
 		String code_poly = """
 		 var pool = [
 		     { type: 1, val: 10, tag: 5 },
@@ -195,11 +199,11 @@ public class MagicJSBenchmark {
 		v8Runtime.getGlobalObject().set("target", target);
 		v8Runtime.getExecutor(dynObj).executeVoid();
 
-		v8FieldScript = v8Runtime.getExecutor(code_field);
-		v8MethodScript = v8Runtime.getExecutor(code_method);
-		v8LoopScript = v8Runtime.getExecutor(code);
-		v8ObjScript = v8Runtime.getExecutor(code_dyn_field);
-		v8PolyScript = v8Runtime.getExecutor(code_poly);
+		v8FieldScript = v8Runtime.getExecutor("(function() { " + code_field + " })").execute();
+		v8MethodScript = v8Runtime.getExecutor("(function() { " + code_method + " })").execute();
+		v8LoopScript = v8Runtime.getExecutor("(function() { " + code + " })").execute();
+		v8ObjScript = v8Runtime.getExecutor("(function() { " + code_dyn_field + " })").execute();
+		v8PolyScript = v8Runtime.getExecutor("(function() { " + code_poly + " })").execute();
 	}
 
 	@TearDown(Level.Trial)
@@ -260,8 +264,10 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public int v8_js_field_read() throws Exception {
-		return v8FieldScript.executeInteger();
+	public Object v8_js_field_read() throws Exception {
+		try (var result = v8FieldScript.call(null)) {
+        return result;
+    }
 	}
 
 	@Benchmark
@@ -282,8 +288,10 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public int v8_js_method_call() throws Exception {
-		return v8MethodScript.executeInteger();
+	public Object v8_js_method_call() throws Exception {
+		try (var result = v8FieldScript.call(null)) {
+        return result;
+    }
 	}
 
 	@Benchmark
@@ -304,8 +312,10 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public double v8_js_prime_sum_1000() throws Exception {
-		return v8LoopScript.executeDouble();
+	public Object v8_js_prime_sum_1000() throws Exception {
+		try (var result = v8LoopScript.call(null)) {
+			return result;
+		}
 	}
 
 	@Benchmark
@@ -326,8 +336,10 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public double v8_js_dynamic_obj_read() throws Exception {
-		return v8ObjScript.executeDouble();
+	public Object v8_js_dynamic_obj_read() throws Exception {
+		try (var result = v8ObjScript.call(null)) {
+			return result;
+		}
 	}
 
 	@Benchmark
@@ -348,8 +360,8 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public double v8_js_poly() throws Exception {
-		return v8PolyScript.executeDouble();
+	public Object v8_js_poly() throws Exception {
+		return v8PolyScript.call(null);
 	}
 
 	@Benchmark

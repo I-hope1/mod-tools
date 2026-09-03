@@ -61,7 +61,7 @@ public class BunVsMagicJSBenchmark {
 			}
 			sum;
 		""";
-		runFullComparison("【场景 2: 对象属性存取】10,000 次字段密集读写 (Object Property Access)", objectCode, magicContext, graalContext, 2000);
+		runFullComparison("【场景 2: 对象属性存取】100000 次字段密集读写 (Object Property Access)", objectCode, magicContext, graalContext, 100000);
 
 		// ==================== 3. 场景三：5-Shape 动态多态流水线 (Polymorphic Pipeline) ====================
 		String polyCode = """
@@ -98,7 +98,7 @@ public class BunVsMagicJSBenchmark {
 			}
 			total;
 		""";
-		runFullComparison("【场景 3: 5-Shape 混合多态流水线】2000 轮动态分发 (Polymorphic IC Guard Pipeline)", polyCode, magicContext, graalContext, 2000);
+		runFullComparison("【场景 3: 5-Shape 混合多态流水线】20000 轮动态分发 (Polymorphic IC Guard Pipeline)", polyCode, magicContext, graalContext, 20000);
 
 		// ==================== 4. 场景四：递归与函数调用栈 (Fibonacci 30) ====================
 		String fibCode = """

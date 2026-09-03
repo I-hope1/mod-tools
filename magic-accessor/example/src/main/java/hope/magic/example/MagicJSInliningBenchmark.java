@@ -133,7 +133,7 @@ public class MagicJSInliningBenchmark {
 			total;
 		""");
 		for (int i = 0; i < 50_000; i++) {
-			polyScript.run(cx);
+			polyScript.runDouble(cx);
 		}
 
 		System.out.println(">>> 预热完成，所有热点脚本（包括多态流水线）已深度达到 C2 JIT 稳态！");

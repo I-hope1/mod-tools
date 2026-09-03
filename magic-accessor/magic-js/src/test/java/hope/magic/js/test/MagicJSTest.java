@@ -1,18 +1,17 @@
 package hope.magic.js.test;
 
-import hope.magic.js.runtime.*;
 import hope.magic.js.compiler.JSCompiler;
+import hope.magic.js.runtime.*;
 import org.junit.jupiter.api.*;
 
-import java.util.List;
-import java.util.Set;
-import java.util.LinkedHashSet;
+import java.lang.invoke.*;
 import java.lang.reflect.Method;
+import java.util.*;
 
 public class MagicJSTest {
 
 	public static class TargetJavaClass {
-		private int secretCode;
+		private int    secretCode;
 		private String message;
 
 		public TargetJavaClass(int secretCode, String message) {
@@ -68,12 +67,12 @@ public class MagicJSTest {
 			return calc.add(a, b) + calc.multiply(a, b);
 		}
 
-		public double doubleVal = 3.14;
-		public float floatVal = 1.5f;
-		public long longVal = 10000000000L;
-		public short shortVal = 300;
-		public byte byteVal = 12;
-		public boolean boolVal = true;
+		public double  doubleVal = 3.14;
+		public float   floatVal  = 1.5f;
+		public long    longVal   = 10000000000L;
+		public short   shortVal  = 300;
+		public byte    byteVal   = 12;
+		public boolean boolVal   = true;
 
 		public int getSecretCode() { return secretCode; }
 		public String getMessage() { return message; }
@@ -81,8 +80,8 @@ public class MagicJSTest {
 
 	@Test
 	public void testBasicArithmeticAndVariables() {
-		JSContext cx = new JSContext();
-		Object res = cx.eval("let a = 10; let b = 20; let c = (a + b) * 2; c;");
+		JSContext cx  = new JSContext();
+		Object    res = cx.eval("let a = 10; let b = 20; let c = (a + b) * 2; c;");
 		Assertions.assertEquals(60.0, res);
 	}
 
@@ -90,13 +89,13 @@ public class MagicJSTest {
 	public void testLoopAndConditionals() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-			"var sum = 0;\n" +
-			"for (var i = 1; i <= 10; i++) {\n" +
-			"    if (i % 2 === 0) {\n" +
-			"        sum += i;\n" +
-			"    }\n" +
-			"}\n" +
-			"sum;"
+		 "var sum = 0;\n" +
+		 "for (var i = 1; i <= 10; i++) {\n" +
+		 "    if (i % 2 === 0) {\n" +
+		 "        sum += i;\n" +
+		 "    }\n" +
+		 "}\n" +
+		 "sum;"
 		);
 		Assertions.assertEquals(30.0, res);
 	}
@@ -105,11 +104,11 @@ public class MagicJSTest {
 	public void testDynamicObjectsAndArrays() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-			"var obj = { x: 100, name: 'MagicJS' };\n" +
-			"obj.y = 200;\n" +
-			"var arr = [1, 2, 3];\n" +
-			"arr[3] = 4;\n" +
-			"obj.x + obj.y + arr[3];"
+		 "var obj = { x: 100, name: 'MagicJS' };\n" +
+		 "obj.y = 200;\n" +
+		 "var arr = [1, 2, 3];\n" +
+		 "arr[3] = 4;\n" +
+		 "obj.x + obj.y + arr[3];"
 		);
 		Assertions.assertEquals(304.0, res);
 	}
@@ -120,12 +119,12 @@ public class MagicJSTest {
 		cx.set("TargetJavaClass", TargetJavaClass.class);
 
 		Object res = cx.eval(
-			"var obj = new TargetJavaClass(12345, 'Initial Secret');\n" +
-			"var code = obj.secretCode;\n" +             // 0.6ns 私有字段直读
-			"obj.secretCode = 88888;\n" +                  // 0.6ns 私有字段直写
-			"var mult = obj.multiply(6, 7);\n" +           // 0.7ns 私有方法直调
-			"var greeting = TargetJavaClass.greet('World');\n" +
-			"obj.secretCode + mult;"
+		 "var obj = new TargetJavaClass(12345, 'Initial Secret');\n" +
+		 "var code = obj.secretCode;\n" +             // 0.6ns 私有字段直读
+		 "obj.secretCode = 88888;\n" +                  // 0.6ns 私有字段直写
+		 "var mult = obj.multiply(6, 7);\n" +           // 0.7ns 私有方法直调
+		 "var greeting = TargetJavaClass.greet('World');\n" +
+		 "obj.secretCode + mult;"
 		);
 
 		Assertions.assertEquals(88888.0 + 42.0, res);
@@ -135,7 +134,7 @@ public class MagicJSTest {
 	public void testSumOfPrimesUnder1000() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-			"""
+		 """
 			var sum = 0;
 			for (var i = 2; i < 1000; i++) {
 			    var isPrime = 1;
@@ -185,7 +184,7 @@ public class MagicJSTest {
 
 	@Test
 	public void testPrimitiveFieldReading() {
-		JSContext cx = new JSContext();
+		JSContext       cx     = new JSContext();
 		TargetJavaClass target = new TargetJavaClass(98765, "Bench");
 		cx.set("target", target);
 
@@ -202,24 +201,24 @@ public class MagicJSTest {
 		JSContext cx = new JSContext();
 		// 1. 数组使用数字下标并验证真正底层元素数组扩容与读取 (Issue 1)
 		Object r1 = cx.eval("""
-			var arr = [1, 2, 3];
-			arr[3] = 4;
-			arr.length;
-		""");
+		 	var arr = [1, 2, 3];
+		 	arr[3] = 4;
+		 	arr.length;
+		 """);
 		Assertions.assertEquals(4.0, ((Number) r1).doubleValue());
 
 		Object r2 = cx.eval("""
-			var arr = [10, 20, 30];
-			arr[5] = 60;
-			arr[0] + arr[1] + arr[2] + arr[5];
-		""");
+		 	var arr = [10, 20, 30];
+		 	arr[5] = 60;
+		 	arr[0] + arr[1] + arr[2] + arr[5];
+		 """);
 		Assertions.assertEquals(120.0, ((Number) r2).doubleValue());
 
 		Object r3 = cx.eval("""
-			var arr = [10, 20, 30];
-			arr[5] = 60;
-			arr[4] === undefined;
-		""");
+		 	var arr = [10, 20, 30];
+		 	arr[5] = 60;
+		 	arr[4] === undefined;
+		 """);
 		Assertions.assertEquals(true, r3);
 
 		Object r4 = cx.eval("var arr = ['a', 'b', 'c', 'd']; arr[3];");
@@ -234,32 +233,32 @@ public class MagicJSTest {
 
 		// 3. 负数数字下标与负数字符串下标是同一个属性
 		Object r7 = cx.eval("""
-			var arr = [];
-			arr[-1] = 10;
-			arr["-1"];
-		""");
+		 	var arr = [];
+		 	arr[-1] = 10;
+		 	arr["-1"];
+		 """);
 		Assertions.assertEquals(10.0, ((Number) r7).doubleValue());
 
 		// 4. 超大合法内部索引稀疏存储与防止 OOM，以及支持存储 null
 		Object r8 = cx.eval("""
-			var arr = [];
-			arr[1000000000] = 1;
-			arr.length;
-		""");
+		 	var arr = [];
+		 	arr[1000000000] = 1;
+		 	arr.length;
+		 """);
 		Assertions.assertEquals(1000000001.0, ((Number) r8).doubleValue());
 
 		Object r9 = cx.eval("""
-			var arr = [];
-			arr[1000000000] = 1;
-			arr[1000000000];
-		""");
+		 	var arr = [];
+		 	arr[1000000000] = 1;
+		 	arr[1000000000];
+		 """);
 		Assertions.assertEquals(1.0, ((Number) r9).doubleValue());
 
 		Object r10 = cx.eval("""
-			var arr = [];
-			arr[1000000000] = null;
-			arr[1000000000] === null;
-		""");
+		 	var arr = [];
+		 	arr[1000000000] = null;
+		 	arr[1000000000] === null;
+		 """);
 		Assertions.assertEquals(true, r10);
 	}
 
@@ -279,7 +278,7 @@ public class MagicJSTest {
 
 	@Test
 	public void testPrimitiveFieldTypes() {
-		JSContext cx = new JSContext();
+		JSContext       cx     = new JSContext();
 		TargetJavaClass target = new TargetJavaClass(123, "test");
 		cx.set("target", target);
 
@@ -314,13 +313,13 @@ public class MagicJSTest {
 
 		// 测试基本类型字段写入 (Setter 路径及 Java 原生实例同步检验)
 		cx.eval("""
-			target.doubleVal = 9.99;
-			target.floatVal = 2.5;
-			target.longVal = 50000000000;
-			target.shortVal = 1234;
-			target.byteVal = 56;
-			target.boolVal = false;
-		""");
+		 	target.doubleVal = 9.99;
+		 	target.floatVal = 2.5;
+		 	target.longVal = 50000000000;
+		 	target.shortVal = 1234;
+		 	target.byteVal = 56;
+		 	target.boolVal = false;
+		 """);
 		Assertions.assertEquals(9.99, target.doubleVal, 0.0001);
 		Assertions.assertEquals(2.5f, target.floatVal, 0.0001);
 		Assertions.assertEquals(50000000000L, target.longVal);
@@ -389,7 +388,7 @@ public class MagicJSTest {
 
 	@Test
 	public void testOverloadResolution() {
-		JSContext cx = new JSContext();
+		JSContext       cx     = new JSContext();
 		TargetJavaClass target = new TargetJavaClass(1, "test");
 		cx.set("target", target);
 
@@ -438,64 +437,64 @@ public class MagicJSTest {
 		// 1. JSArray Java Direct API 不应抛出 IndexOutOfBoundsException
 		JSArray rawArr = new JSArray();
 		rawArr.setElement(-1, 999);
-		Assertions.assertEquals(999.0, ((Number)rawArr.getElement(-1)).doubleValue());
+		Assertions.assertEquals(999.0, ((Number) rawArr.getElement(-1)).doubleValue());
 		Assertions.assertEquals(0, rawArr.length());
 
 		// 2. 规范数组索引 vs 普通字符串属性 (ECMAScript 规范测试)
 		Object r1 = cx.eval("""
-			var arr = [10, 20];
-			arr["01"] = 100;
-			arr["-0"] = 200;
-			arr["1.0"] = 300;
-			arr.length;
-		""");
+		 	var arr = [10, 20];
+		 	arr["01"] = 100;
+		 	arr["-0"] = 200;
+		 	arr["1.0"] = 300;
+		 	arr.length;
+		 """);
 		// "01", "-0", "1.0" 均不是规范数组下标，不改变 length
 		Assertions.assertEquals(2.0, ((Number) r1).doubleValue());
 
 		Object r2 = cx.eval("""
-			var arr = [10, 20];
-			arr["01"] = 100;
-			arr["-0"] = 200;
-			arr["1.0"] = 300;
-			arr["01"] + arr["-0"] + arr["1.0"];
-		""");
+		 	var arr = [10, 20];
+		 	arr["01"] = 100;
+		 	arr["-0"] = 200;
+		 	arr["1.0"] = 300;
+		 	arr["01"] + arr["-0"] + arr["1.0"];
+		 """);
 		Assertions.assertEquals(600.0, ((Number) r2).doubleValue());
 
 		// 3. 数字浮点 1.0 作为下标访问时，转换为字符串 "1"（属于规范下标）
 		Object r3 = cx.eval("""
-			var arr = [10, 20, 30];
-			arr[1.0] = 99;
-			arr[1];
-		""");
+		 	var arr = [10, 20, 30];
+		 	arr[1.0] = 99;
+		 	arr[1];
+		 """);
 		Assertions.assertEquals(99.0, ((Number) r3).doubleValue());
 
 		// 4. 超大索引符合 ECMAScript 规范：4294967294 稀疏存储且 length 变为 4294967295；4294967295 超出范围作为普通属性
 		Object r4 = cx.eval("""
-			var arr = [10, 20];
-			arr[4294967294] = 999;
-			arr.length;
-		""");
+		 	var arr = [10, 20];
+		 	arr[4294967294] = 999;
+		 	arr.length;
+		 """);
 		Assertions.assertEquals(4294967295.0, ((Number) r4).doubleValue());
 
 		Object r5 = cx.eval("""
-			var arr = [10, 20];
-			arr[4294967294] = 999;
-			arr[4294967294];
-		""");
+		 	var arr = [10, 20];
+		 	arr[4294967294] = 999;
+		 	arr[4294967294];
+		 """);
 		Assertions.assertEquals(999.0, ((Number) r5).doubleValue());
 
 		Object r6 = cx.eval("""
-			var arr = [10, 20];
-			arr[4294967295] = 999;
-			arr.length;
-		""");
+		 	var arr = [10, 20];
+		 	arr[4294967295] = 999;
+		 	arr.length;
+		 """);
 		Assertions.assertEquals(2.0, ((Number) r6).doubleValue());
 
 		Object r7 = cx.eval("""
-			var arr = [10, 20];
-			arr[4294967295] = 999;
-			arr[4294967295];
-		""");
+		 	var arr = [10, 20];
+		 	arr[4294967295] = 999;
+		 	arr[4294967295];
+		 """);
 		Assertions.assertEquals(999.0, ((Number) r7).doubleValue());
 
 		// 5. 非法 length 赋值应严格抛错拒绝 (1.5, NaN, Infinity, -1)
@@ -602,13 +601,125 @@ public class MagicJSTest {
 	}
 
 	@Test
+	public void testShapeSlotTypeNegativeIndexCrash() {
+		JSShape shape = JSShape.ROOT
+		 .addProperty("p0", JSShape.TYPE_INT)
+		 .addProperty("p1", JSShape.TYPE_INT)
+		 .addProperty("p2", JSShape.TYPE_INT)
+		 .addProperty("p3", JSShape.TYPE_INT)
+		 .addProperty("p4", JSShape.TYPE_INT);
+		Assertions.assertDoesNotThrow(() -> {
+			shape.getSlotType(-1);
+		});
+	}
+	@Test
+	public void testKeyIdNegativeIndexCrash() {
+		JSShape shape = JSShape.ROOT
+		 .addProperty("p0").addProperty("p1").addProperty("p2")
+		 .addProperty("p3").addProperty("p4");
+		Assertions.assertDoesNotThrow(() -> {
+			shape.getKeyId(-1);
+		});
+	}
+	@Test
+	public void testIsOffsetEquivalent() {
+		class TestJSObject extends JSObject {
+			public final Object[] slots = new Object[8];
+
+			public TestJSObject(JSShape shape) {
+				this.shape = shape;
+			}
+
+			@Override
+			public Object getSlot(int offset) {
+				return slots[offset];
+			}
+
+			@Override
+			public Object get(String propName) {
+				int off = shape.getOffset(propName);
+				return off >= 0 ? slots[off] : null;
+			}
+		}
+		MethodType type = MethodType.methodType(Object.class, Object.class);
+    ChainedCallSite site = new ChainedCallSite(type, null);
+
+    // 构造合法的 Dummy MethodHandle，避免 guardWithTest 报 NPE
+    MethodHandle dummyTarget = MethodHandles.empty(type);
+    MethodHandle dummyTest = MethodHandles.dropArguments(
+            MethodHandles.constant(boolean.class, false), 0, type.parameterArray()
+    );
+
+    // 2. 构造 5 个不同的 Shape，但 "targetProp" 全都在 offset 0 处
+    // 使得 CallSite 记录下 commonOffset = 0, offsetEquivalent = true
+    for (int i = 0; i < 5; i++) {
+        JSShape shape = JSShape.ROOT.addProperty("targetProp", JSShape.TYPE_OBJECT);
+        // 加点干扰属性让它们成为不同的 Shape 实例
+        for (int j = 0; j < i; j++) {
+            shape = shape.addProperty("dummy_" + i + "_" + j, JSShape.TYPE_OBJECT);
+        }
+        site.recordShape(shape, 0, JSShape.TYPE_OBJECT);
+
+        // 传入 dummy 句柄推进 chainDepth
+        site.installGuardOrSwitchMegamorphic(dummyTest, dummyTarget);
+    }
+
+    // 第 6 次调用，推进 chainDepth > 5，自动触发 megamorphic = true
+    site.installGuardOrSwitchMegamorphic(dummyTest, dummyTarget);
+
+    Assertions.assertTrue(site.isMegamorphic());
+    Assertions.assertTrue(site.isOffsetEquivalent());
+
+    // 3. 构造第 6 个特殊对象：
+    // 它的 slot 0 是 "otherProp"，而 "targetProp" 在 slot 1！
+    JSShape shape6 = JSShape.ROOT
+            .addProperty("otherProp", JSShape.TYPE_OBJECT)   // offset 0
+            .addProperty("targetProp", JSShape.TYPE_OBJECT);  // offset 1
+
+    TestJSObject obj6 = new TestJSObject(shape6);
+    obj6.slots[0] = "我是错误的数据(otherProp)";
+    obj6.slots[1] = "我是正确的数据(targetProp)";
+
+    // 4. 调用 getPropMegamorphic 获取 obj6 的 "targetProp"
+    Object result = JSLinker.getPropMegamorphic(site, obj6, "targetProp");
+
+    // 断言验证 Bug
+    Assertions.assertNotEquals(
+            "我是错误的数据(otherProp)",
+            result,
+            "❌ 致命 Bug：isOffsetEquivalent 无条件短路，导致读出了 slot 0 的错误属性！"
+    );
+	}
+	@Test
+	public void testSymbolTableLeak() {
+		String nonExistentKey = "ghost_property_" + System.nanoTime();
+
+		// 此时 nonExistentKey 绝不可能在系统里存在
+		// 理论上只读查询 offset 应该只返回 -1，不应该改变任何全局状态
+		int offset = JSShape.ROOT.getOffset(nonExistentKey);
+		Assertions.assertEquals(-1, offset);
+
+		// SymbolTable.lookupId()不会注册
+		int    allocatedId = SymbolTable.lookupId(nonExistentKey);
+		String nameInTable = SymbolTable.name(allocatedId);
+
+		Assertions.assertNotEquals(nonExistentKey, nameInTable);
+
+		// SymbolTable.id()会注册
+		allocatedId = SymbolTable.id(nonExistentKey);
+		nameInTable = SymbolTable.name(allocatedId);
+
+		Assertions.assertEquals(nonExistentKey, nameInTable);
+	}
+
+	@Test
 	public void testShapeTransitionCachedByPropIdKeepsOldType() {
 		// 验证：JSShape.transitions 仅以 propId 为 key 时，重复 addProperty(propId, differentType)
 		// 会命中之前缓存的 shape，导致返回的 shape 中 slotTypes 使用第一次添加的类型。
-		JSShape root = JSShape.ROOT;
-		int propId = SymbolTable.id("x_test_transition");
-		JSShape s1 = root.addProperty(propId, JSShape.TYPE_INT);
-		int off1 = s1.getOffset(propId);
+		JSShape root   = JSShape.ROOT;
+		int     propId = SymbolTable.id("x_test_transition");
+		JSShape s1     = root.addProperty(propId, JSShape.TYPE_INT);
+		int     off1   = s1.getOffset(propId);
 		Assertions.assertEquals(JSShape.TYPE_INT, s1.getSlotType(off1));
 		JSShape s2 = root.addProperty(propId, JSShape.TYPE_DOUBLE);
 		// 如果 transitions 只用 propId 寻址，则 s2 会是第一次创建的 shape（类型为 INT）
@@ -619,10 +730,10 @@ public class MagicJSTest {
 
 	@Test
 	public void testMultiThreadIsolatedContexts() throws Exception {
-		int threadCount = 16;
-		int iterations = 100;
-		java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-		List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+		int                                  threadCount = 16;
+		int                                  iterations  = 100;
+		java.util.concurrent.ExecutorService pool        = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+		List<java.util.concurrent.Future<?>> futures     = new java.util.ArrayList<>();
 
 		for (int t = 0; t < threadCount; t++) {
 			final int threadId = t;
@@ -647,12 +758,12 @@ public class MagicJSTest {
 	@Test
 	public void testConcurrentCallSiteInitializationWithCAS() throws Exception {
 		// 单一编译产物，跨线程并发复用，针对同一调用点并发争抢不同 Shape
-		JSScript script = JSCompiler.compile("obj.x");
-		int threadCount = 16;
-		int iterations = 500;
-		java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-		java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
-		List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+		JSScript                             script      = JSCompiler.compile("obj.x");
+		int                                  threadCount = 16;
+		int                                  iterations  = 500;
+		java.util.concurrent.ExecutorService pool        = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+		java.util.concurrent.CountDownLatch  startLatch  = new java.util.concurrent.CountDownLatch(1);
+		List<java.util.concurrent.Future<?>> futures     = new java.util.ArrayList<>();
 
 		for (int t = 0; t < threadCount; t++) {
 			final int threadId = t;
@@ -690,8 +801,8 @@ public class MagicJSTest {
 		pool.shutdown();
 
 		// 验证重构后生成的脚本类无任何冗余静态 $ic 字段，彻底避免元空间膨胀与静态锁竞争
-		Class<?> scriptClass = script.getClass();
-		boolean hasOldIcField = false;
+		Class<?> scriptClass   = script.getClass();
+		boolean  hasOldIcField = false;
 		for (var f : scriptClass.getDeclaredFields()) {
 			if (f.getName().startsWith("$ic_")) {
 				hasOldIcField = true;
@@ -782,158 +893,188 @@ public class MagicJSTest {
 		Assertions.assertEquals(4294967295.0, ((Number) cx.eval("var a = -1; a >>>= 0; a;")).doubleValue());
 	}
 
-	public static class MegaType0 { public int val = 0; public int getVal() { return 0; } }
-	public static class MegaType1 { public int val = 1; public int getVal() { return 1; } }
-	public static class MegaType2 { public int val = 2; public int getVal() { return 2; } }
-	public static class MegaType3 { public int val = 3; public int getVal() { return 3; } }
-	public static class MegaType4 { public int val = 4; public int getVal() { return 4; } }
-	public static class MegaType5 { public int val = 5; public int getVal() { return 5; } }
-	public static class MegaType6 { public int val = 6; public int getVal() { return 6; } }
-	public static class MegaType7 { public int val = 7; public int getVal() { return 7; } }
-	public static class MegaType8 { public int val = 8; public int getVal() { return 8; } }
-	public static class MegaType9 { public int val = 9; public int getVal() { return 9; } }
+	public static class MegaType0 {
+		public int val = 0;
+		public int getVal() { return 0; }
+	}
+	public static class MegaType1 {
+		public int val = 1;
+		public int getVal() { return 1; }
+	}
+	public static class MegaType2 {
+		public int val = 2;
+		public int getVal() { return 2; }
+	}
+	public static class MegaType3 {
+		public int val = 3;
+		public int getVal() { return 3; }
+	}
+	public static class MegaType4 {
+		public int val = 4;
+		public int getVal() { return 4; }
+	}
+	public static class MegaType5 {
+		public int val = 5;
+		public int getVal() { return 5; }
+	}
+	public static class MegaType6 {
+		public int val = 6;
+		public int getVal() { return 6; }
+	}
+	public static class MegaType7 {
+		public int val = 7;
+		public int getVal() { return 7; }
+	}
+	public static class MegaType8 {
+		public int val = 8;
+		public int getVal() { return 8; }
+	}
+	public static class MegaType9 {
+		public int val = 9;
+		public int getVal() { return 9; }
+	}
 
 	@Test
 	public void testMegamorphicCallSite() {
 		JSContext cx = new JSContext();
 		Object[] javaObjects = new Object[]{
-			new MegaType0(), new MegaType1(), new MegaType2(), new MegaType3(), new MegaType4(),
-			new MegaType5(), new MegaType6(), new MegaType7(), new MegaType8(), new MegaType9()
+		 new MegaType0(), new MegaType1(), new MegaType2(), new MegaType3(), new MegaType4(),
+		 new MegaType5(), new MegaType6(), new MegaType7(), new MegaType8(), new MegaType9()
 		};
 		cx.set("javaObjects", javaObjects);
 
 		// 测试通过同一个多态调用点访问 10 种不同 Java 类型的字段和方法 (触发退化至 Megamorphic 稳定分派)
 		Object r1 = cx.eval("""
-			var sumField = 0;
-			for (var i = 0; i < javaObjects.length; i++) {
-				sumField += javaObjects[i].val;
-			}
-			sumField;
-		""");
+		 	var sumField = 0;
+		 	for (var i = 0; i < javaObjects.length; i++) {
+		 		sumField += javaObjects[i].val;
+		 	}
+		 	sumField;
+		 """);
 		Assertions.assertEquals(45.0, ((Number) r1).doubleValue());
 
 		Object r2 = cx.eval("""
-			var sumMethod = 0;
-			for (var i = 0; i < javaObjects.length; i++) {
-				sumMethod += javaObjects[i].getVal();
-			}
-			sumMethod;
-		""");
+		 	var sumMethod = 0;
+		 	for (var i = 0; i < javaObjects.length; i++) {
+		 		sumMethod += javaObjects[i].getVal();
+		 	}
+		 	sumMethod;
+		 """);
 		Assertions.assertEquals(45.0, ((Number) r2).doubleValue());
 
 		// 测试 10 种不同 Shape 的 JSObject 经过同一个调用点
 		Object r3 = cx.eval("""
-			var objs = [
-				{ a: 1 },
-				{ b: 0, a: 2 },
-				{ c: 0, b: 0, a: 3 },
-				{ d: 0, c: 0, b: 0, a: 4 },
-				{ e: 0, d: 0, c: 0, b: 0, a: 5 },
-				{ f: 0, e: 0, d: 0, c: 0, b: 0, a: 6 },
-				{ g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 7 },
-				{ h: 0, g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 8 },
-				{ i: 0, h: 0, g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 9 },
-				{ j: 0, i: 0, h: 0, g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 10 }
-			];
-			var sumA = 0;
-			for (var k = 0; k < objs.length; k++) {
-				sumA += objs[k].a;
-			}
-			sumA;
-		""");
+		 	var objs = [
+		 		{ a: 1 },
+		 		{ b: 0, a: 2 },
+		 		{ c: 0, b: 0, a: 3 },
+		 		{ d: 0, c: 0, b: 0, a: 4 },
+		 		{ e: 0, d: 0, c: 0, b: 0, a: 5 },
+		 		{ f: 0, e: 0, d: 0, c: 0, b: 0, a: 6 },
+		 		{ g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 7 },
+		 		{ h: 0, g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 8 },
+		 		{ i: 0, h: 0, g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 9 },
+		 		{ j: 0, i: 0, h: 0, g: 0, f: 0, e: 0, d: 0, c: 0, b: 0, a: 10 }
+		 	];
+		 	var sumA = 0;
+		 	for (var k = 0; k < objs.length; k++) {
+		 		sumA += objs[k].a;
+		 	}
+		 	sumA;
+		 """);
 		Assertions.assertEquals(55.0, ((Number) r3).doubleValue());
 	}
 
 	@Test
 	public void testInterfaceAndSAMConversion() {
-		JSContext cx = new JSContext();
+		JSContext       cx     = new JSContext();
 		TargetJavaClass target = new TargetJavaClass(100, "hello");
 		cx.set("target", target);
 
 		// 1. 测试 Runnable 接口自动适配
 		cx.eval("""
-			var flag = 0;
-			target.runCallback(function() {
-				flag = 999;
-			});
-		""");
+		 	var flag = 0;
+		 	target.runCallback(function() {
+		 		flag = 999;
+		 	});
+		 """);
 		Assertions.assertTrue(target.callbackExecuted);
 		Assertions.assertEquals(999.0, ((Number) cx.get("flag")).doubleValue());
 
 		// 2. 测试 Function<String, String> 接口自动适配与返回值转换
 		Object r1 = cx.eval("""
-			target.processString(function(str) {
-				return "prefix_" + str;
-			}, "world");
-		""");
+		 	target.processString(function(str) {
+		 		return "prefix_" + str;
+		 	}, "world");
+		 """);
 		Assertions.assertEquals("prefix_world", r1);
 
 		// 3. 测试 IntBinaryOperator 基本类型函数式接口自动装箱/拆箱
 		Object r2 = cx.eval("""
-			target.computeBinary(function(a, b) {
-				return a * b + 10;
-			}, 3, 4);
-		""");
+		 	target.computeBinary(function(a, b) {
+		 		return a * b + 10;
+		 	}, 3, 4);
+		 """);
 		Assertions.assertEquals(22.0, ((Number) r2).doubleValue());
 
 		// 4. 测试多方法接口通过 JSObject 进行动态代理分派
 		Object r3 = cx.eval("""
-			var calc = {
-				add: function(x, y) { return x + y; },
-				multiply: function(x, y) { return x * y; }
-			};
-			target.executeCalc(calc, 3, 5);
-		""");
+		 	var calc = {
+		 		add: function(x, y) { return x + y; },
+		 		multiply: function(x, y) { return x * y; }
+		 	};
+		 	target.executeCalc(calc, 3, 5);
+		 """);
 		// (3 + 5) + (3 * 5) = 8 + 15 = 23
 		Assertions.assertEquals(23.0, ((Number) r3).doubleValue());
 	}
 
 	@Test
 	public void testArrowFunctions() {
-		JSContext cx = new JSContext();
+		JSContext       cx     = new JSContext();
 		TargetJavaClass target = new TargetJavaClass(100, "hello");
 		cx.set("target", target);
 
 		// 1. 单参数无括号箭头函数 x => x * 2
 		Object r1 = cx.eval("""
-			var doubleFn = x => x * 2;
-			doubleFn(21);
-		""");
+		 	var doubleFn = x => x * 2;
+		 	doubleFn(21);
+		 """);
 		Assertions.assertEquals(42.0, ((Number) r1).doubleValue());
 
 		// 2. 多参数带括号箭头函数 (a, b) => a + b
 		Object r2 = cx.eval("""
-			var addFn = (a, b) => a + b;
-			addFn(15, 27);
-		""");
+		 	var addFn = (a, b) => a + b;
+		 	addFn(15, 27);
+		 """);
 		Assertions.assertEquals(42.0, ((Number) r2).doubleValue());
 
 		// 3. 无参箭头函数 () => expr
 		Object r3 = cx.eval("""
-			var getConst = () => 100;
-			getConst();
-		""");
+		 	var getConst = () => 100;
+		 	getConst();
+		 """);
 		Assertions.assertEquals(100.0, ((Number) r3).doubleValue());
 
 		// 4. 块级箭头函数 (x, y) => { var z = x * y; return z + 1; }
 		Object r4 = cx.eval("""
-			var blockArrow = (x, y) => {
-				var z = x * y;
-				return z + 1;
-			};
-			blockArrow(6, 7);
-		""");
+		 	var blockArrow = (x, y) => {
+		 		var z = x * y;
+		 		return z + 1;
+		 	};
+		 	blockArrow(6, 7);
+		 """);
 		Assertions.assertEquals(43.0, ((Number) r4).doubleValue());
 
 		// 5. 箭头函数直接作为 Java SAM 接口参数传递
 		Object r5 = cx.eval("""
-			target.processString(str => "arrow_" + str, "test");
-		""");
+		 	target.processString(str => "arrow_" + str, "test");
+		 """);
 		Assertions.assertEquals("arrow_test", r5);
 
 		Object r6 = cx.eval("""
-			target.computeBinary((x, y) => x * y + 5, 4, 5);
-		""");
+		 	target.computeBinary((x, y) => x * y + 5, 4, 5);
+		 """);
 		Assertions.assertEquals(25.0, ((Number) r6).doubleValue());
 	}
 
@@ -945,60 +1086,60 @@ public class MagicJSTest {
 		List<Integer> list = List.of(10, 20, 30, 40);
 		cx.set("javaList", list);
 		Object sum1 = cx.eval("""
-			var sum = 0;
-			for (var item of javaList) {
-				sum += item;
-			}
-			sum;
-		""");
+		 	var sum = 0;
+		 	for (var item of javaList) {
+		 		sum += item;
+		 	}
+		 	sum;
+		 """);
 		Assertions.assertEquals(100.0, ((Number) sum1).doubleValue());
 
 		// 2. 遍历 Java Set (Iterable)
 		Set<String> set = new LinkedHashSet<>(List.of("a", "b", "c"));
 		cx.set("javaSet", set);
 		Object joined = cx.eval("""
-			var res = "";
-			for (let s of javaSet) {
-				res += s;
-			}
-			res;
-		""");
+		 	var res = "";
+		 	for (let s of javaSet) {
+		 		res += s;
+		 	}
+		 	res;
+		 """);
 		Assertions.assertEquals("abc", joined);
 
 		// 3. 遍历 JS 原生数组 JSArray
 		Object sum2 = cx.eval("""
-			var arr = [1, 2, 3, 4, 5];
-			var total = 0;
-			for (var x of arr) {
-				total += x;
-			}
-			total;
-		""");
+		 	var arr = [1, 2, 3, 4, 5];
+		 	var total = 0;
+		 	for (var x of arr) {
+		 		total += x;
+		 	}
+		 	total;
+		 """);
 		Assertions.assertEquals(15.0, ((Number) sum2).doubleValue());
 
 		// 4. 遍历 Java 原生数组
 		String[] strArr = new String[]{"foo", "bar", "baz"};
 		cx.set("strArr", strArr);
 		Object arrRes = cx.eval("""
-			var out = "";
-			for (const item of strArr) {
-				out += item + "-";
-			}
-			out;
-		""");
+		 	var out = "";
+		 	for (const item of strArr) {
+		 		out += item + "-";
+		 	}
+		 	out;
+		 """);
 		Assertions.assertEquals("foo-bar-baz-", arrRes);
 
 		// 5. for..of 支持 break 与 continue
 		Object sum3 = cx.eval("""
-			var nums = [10, 20, 30, 40, 50];
-			var s = 0;
-			for (var n of nums) {
-				if (n === 20) continue;
-				if (n === 50) break;
-				s += n;
-			}
-			s;
-		""");
+		 	var nums = [10, 20, 30, 40, 50];
+		 	var s = 0;
+		 	for (var n of nums) {
+		 		if (n === 20) continue;
+		 		if (n === 50) break;
+		 		s += n;
+		 	}
+		 	s;
+		 """);
 		// 10 + 30 + 40 = 80
 		Assertions.assertEquals(80.0, ((Number) sum3).doubleValue());
 	}
@@ -1009,15 +1150,15 @@ public class MagicJSTest {
 
 		// 1. 正则字面量与基础属性/方法
 		Object test1 = cx.eval("""
-			var r = /^hello\\s+world/i;
-			var t1 = r.test("HELLO   world, magic js!");
-			var t2 = r.test("world hello");
-			var src = r.source;
-			var flags = r.flags;
-			var isI = r.ignoreCase;
-			var isG = r.global;
-			[t1, t2, src, flags, isI, isG];
-		""");
+		 	var r = /^hello\\s+world/i;
+		 	var t1 = r.test("HELLO   world, magic js!");
+		 	var t2 = r.test("world hello");
+		 	var src = r.source;
+		 	var flags = r.flags;
+		 	var isI = r.ignoreCase;
+		 	var isG = r.global;
+		 	[t1, t2, src, flags, isI, isG];
+		 """);
 		Assertions.assertInstanceOf(JSArray.class, test1);
 		JSArray arr1 = (JSArray) test1;
 		Assertions.assertEquals(Boolean.TRUE, arr1.getElement(0));
@@ -1029,10 +1170,10 @@ public class MagicJSTest {
 
 		// 2. exec 捕获组与元数据
 		Object test2 = cx.eval("""
-			var r = /(\\w+)\\s+(\\w+)/;
-			var match = r.exec("John Smith 123");
-			[match[0], match[1], match[2], match.index, match.input];
-		""");
+		 	var r = /(\\w+)\\s+(\\w+)/;
+		 	var match = r.exec("John Smith 123");
+		 	[match[0], match[1], match[2], match.index, match.input];
+		 """);
 		Assertions.assertInstanceOf(JSArray.class, test2);
 		JSArray arr2 = (JSArray) test2;
 		Assertions.assertEquals("John Smith", arr2.getElement(0));
@@ -1043,17 +1184,17 @@ public class MagicJSTest {
 
 		// 3. 全局 g 标志位与 lastIndex 状态推进
 		Object test3 = cx.eval("""
-			var r = /\\d+/g;
-			var str = "a12 b34 c56";
-			var m1 = r.exec(str)[0];
-			var idx1 = r.lastIndex;
-			var m2 = r.exec(str)[0];
-			var idx2 = r.lastIndex;
-			var m3 = r.exec(str)[0];
-			var idx3 = r.lastIndex;
-			var m4 = r.exec(str);
-			[m1, idx1, m2, idx2, m3, idx3, m4];
-		""");
+		 	var r = /\\d+/g;
+		 	var str = "a12 b34 c56";
+		 	var m1 = r.exec(str)[0];
+		 	var idx1 = r.lastIndex;
+		 	var m2 = r.exec(str)[0];
+		 	var idx2 = r.lastIndex;
+		 	var m3 = r.exec(str)[0];
+		 	var idx3 = r.lastIndex;
+		 	var m4 = r.exec(str);
+		 	[m1, idx1, m2, idx2, m3, idx3, m4];
+		 """);
 		JSArray arr3 = (JSArray) test3;
 		Assertions.assertEquals("12", arr3.getElement(0));
 		Assertions.assertEquals(3.0, ((Number) arr3.getElement(1)).doubleValue());
@@ -1065,10 +1206,10 @@ public class MagicJSTest {
 
 		// 4. 全局构造函数 new RegExp
 		Object test4 = cx.eval("""
-			var r1 = new RegExp("\\\\d+", "g");
-			var r2 = RegExp(r1, "i");
-			[r1.test("123"), r2.ignoreCase, r2.source];
-		""");
+		 	var r1 = new RegExp("\\\\d+", "g");
+		 	var r2 = RegExp(r1, "i");
+		 	[r1.test("123"), r2.ignoreCase, r2.source];
+		 """);
 		JSArray arr4 = (JSArray) test4;
 		Assertions.assertEquals(Boolean.TRUE, arr4.getElement(0));
 		Assertions.assertEquals(Boolean.TRUE, arr4.getElement(1));
@@ -1076,11 +1217,11 @@ public class MagicJSTest {
 
 		// 5. String.prototype.match
 		Object test5 = cx.eval("""
-			var str = "item1, item2, item3";
-			var gMatches = str.match(/item\\d/g);
-			var singleMatch = str.match(/item(\\d)/);
-			[gMatches[0], gMatches[1], gMatches[2], singleMatch[1]];
-		""");
+		 	var str = "item1, item2, item3";
+		 	var gMatches = str.match(/item\\d/g);
+		 	var singleMatch = str.match(/item(\\d)/);
+		 	[gMatches[0], gMatches[1], gMatches[2], singleMatch[1]];
+		 """);
 		JSArray arr5 = (JSArray) test5;
 		Assertions.assertEquals("item1", arr5.getElement(0));
 		Assertions.assertEquals("item2", arr5.getElement(1));
@@ -1089,33 +1230,33 @@ public class MagicJSTest {
 
 		// 6. String.prototype.search
 		Object test6 = cx.eval("""
-			var s = "hello beautiful world";
-			var pos1 = s.search(/beautiful/);
-			var pos2 = s.search(/not_exist/);
-			[pos1, pos2];
-		""");
+		 	var s = "hello beautiful world";
+		 	var pos1 = s.search(/beautiful/);
+		 	var pos2 = s.search(/not_exist/);
+		 	[pos1, pos2];
+		 """);
 		JSArray arr6 = (JSArray) test6;
 		Assertions.assertEquals(6.0, ((Number) arr6.getElement(0)).doubleValue());
 		Assertions.assertEquals(-1.0, ((Number) arr6.getElement(1)).doubleValue());
 
 		// 7. String.prototype.replace 与 函数式 replacer 回调
 		Object test7 = cx.eval("""
-			var s = "2026-08-31";
-			var r1 = s.replace(/(\\d{4})-(\\d{2})-(\\d{2})/, "$2/$3/$1");
-			var text = "a1 b2 c3";
-			var r2 = text.replace(/(\\w)(\\d)/g, (match, letter, digit) => letter.toUpperCase() + "_" + (digit * 10));
-			[r1, r2];
-		""");
+		 	var s = "2026-08-31";
+		 	var r1 = s.replace(/(\\d{4})-(\\d{2})-(\\d{2})/, "$2/$3/$1");
+		 	var text = "a1 b2 c3";
+		 	var r2 = text.replace(/(\\w)(\\d)/g, (match, letter, digit) => letter.toUpperCase() + "_" + (digit * 10));
+		 	[r1, r2];
+		 """);
 		JSArray arr7 = (JSArray) test7;
 		Assertions.assertEquals("08/31/2026", arr7.getElement(0));
 		Assertions.assertEquals("A_10 B_20 C_30", arr7.getElement(1));
 
 		// 8. String.prototype.split
 		Object test8 = cx.eval("""
-			var data = "apple,  banana;  orange grape";
-			var parts = data.split(/[,;\\s]+/);
-			[parts.length, parts[0], parts[1], parts[2], parts[3]];
-		""");
+		 	var data = "apple,  banana;  orange grape";
+		 	var parts = data.split(/[,;\\s]+/);
+		 	[parts.length, parts[0], parts[1], parts[2], parts[3]];
+		 """);
 		JSArray arr8 = (JSArray) test8;
 		Assertions.assertEquals(4.0, ((Number) arr8.getElement(0)).doubleValue());
 		Assertions.assertEquals("apple", arr8.getElement(1));
@@ -1125,12 +1266,12 @@ public class MagicJSTest {
 
 		// 9. 区分除法运算符 / 与正则字面量 /pattern/
 		Object test9 = cx.eval("""
-			var a = 100 / 2;
-			var b = (a + 50) / 2;
-			var isDigit = /^\\d+$/.test("12345");
-			var arr = [10 / 2, /foo/.test("foobar")];
-			[a, b, isDigit, arr[0], arr[1]];
-		""");
+		 	var a = 100 / 2;
+		 	var b = (a + 50) / 2;
+		 	var isDigit = /^\\d+$/.test("12345");
+		 	var arr = [10 / 2, /foo/.test("foobar")];
+		 	[a, b, isDigit, arr[0], arr[1]];
+		 """);
 		JSArray arr9 = (JSArray) test9;
 		Assertions.assertEquals(50.0, ((Number) arr9.getElement(0)).doubleValue());
 		Assertions.assertEquals(50.0, ((Number) arr9.getElement(1)).doubleValue());
@@ -1143,44 +1284,44 @@ public class MagicJSTest {
 	public void testPolymorphicComplexPipeline() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			var pool = [
-				{ type: 1, val: 10, tag: 5 },
-				{ type: 2, val: 20.5, meta: 3.14 },
-				{ type: 3, val: 30, flag: 1, note: 100 },
-				{ type: 4, val: 40, extra: { base: 200 } },
-				{ type: 5, val: 50.25, delta: 1.75 }
-			];
-
-			var total = 0;
-			var factor = 1;
-
-			for (var i = 0; i < 2000; i++) {
-				var item = pool[i % 5];
-				var t = item.type;
-
-				if (i % 2 === 0) {
-					factor = i % 10;
-				} else {
-					factor = (i % 10) + 0.5;
-				}
-
-				var contribution = 0;
-				if (t === 1) {
-					contribution = item.val * factor + item.tag;
-				} else if (t === 2) {
-					contribution = item.val * 1.5 + factor * item.meta;
-				} else if (t === 3) {
-					contribution = (item.val + factor) * item.flag + item.note;
-				} else if (t === 4) {
-					contribution = item.extra.base + item.val * factor;
-				} else {
-					contribution = item.val * factor - item.delta;
-				}
-
-				total = total + contribution;
-			}
-			total;
-		""");
+		 	var pool = [
+		 		{ type: 1, val: 10, tag: 5 },
+		 		{ type: 2, val: 20.5, meta: 3.14 },
+		 		{ type: 3, val: 30, flag: 1, note: 100 },
+		 		{ type: 4, val: 40, extra: { base: 200 } },
+		 		{ type: 5, val: 50.25, delta: 1.75 }
+		 	];
+		 
+		 	var total = 0;
+		 	var factor = 1;
+		 
+		 	for (var i = 0; i < 2000; i++) {
+		 		var item = pool[i % 5];
+		 		var t = item.type;
+		 
+		 		if (i % 2 === 0) {
+		 			factor = i % 10;
+		 		} else {
+		 			factor = (i % 10) + 0.5;
+		 		}
+		 
+		 		var contribution = 0;
+		 		if (t === 1) {
+		 			contribution = item.val * factor + item.tag;
+		 		} else if (t === 2) {
+		 			contribution = item.val * 1.5 + factor * item.meta;
+		 		} else if (t === 3) {
+		 			contribution = (item.val + factor) * item.flag + item.note;
+		 		} else if (t === 4) {
+		 			contribution = item.extra.base + item.val * factor;
+		 		} else {
+		 			contribution = item.val * factor - item.delta;
+		 		}
+		 
+		 		total = total + contribution;
+		 	}
+		 	total;
+		 """);
 		Assertions.assertNotNull(res);
 		System.out.println("Polymorphic pipeline result: " + res);
 	}
@@ -1191,134 +1332,134 @@ public class MagicJSTest {
 
 		// 1. 对象解构声明 (基础、重命名别名、默认值、嵌套)
 		Object r1 = cx.eval("""
-			var obj = { x: 10, y: 20, z: 30 };
-			var { x, y } = obj;
-			x + y;
-		""");
+		 	var obj = { x: 10, y: 20, z: 30 };
+		 	var { x, y } = obj;
+		 	x + y;
+		 """);
 		Assertions.assertEquals(30.0, ((Number) r1).doubleValue());
 
 		Object r2 = cx.eval("""
-			var point = { x: 100, y: 200 };
-			const { x: posX, y: posY } = point;
-			posX + posY;
-		""");
+		 	var point = { x: 100, y: 200 };
+		 	const { x: posX, y: posY } = point;
+		 	posX + posY;
+		 """);
 		Assertions.assertEquals(300.0, ((Number) r2).doubleValue());
 
 		Object r3 = cx.eval("""
-			var obj = { a: 5 };
-			let { a, b = 15, c: customC = 25 } = obj;
-			a + b + customC;
-		""");
+		 	var obj = { a: 5 };
+		 	let { a, b = 15, c: customC = 25 } = obj;
+		 	a + b + customC;
+		 """);
 		Assertions.assertEquals(45.0, ((Number) r3).doubleValue());
 
 		Object r4 = cx.eval("""
-			var data = { user: { name: "Alice", score: 95 } };
-			const { user: { name, score } } = data;
-			name + "_" + score;
-		""");
+		 	var data = { user: { name: "Alice", score: 95 } };
+		 	const { user: { name, score } } = data;
+		 	name + "_" + score;
+		 """);
 		Assertions.assertEquals("Alice_95", String.valueOf(r4));
 
 		// 2. 对象解构 Rest 模式 (...rest)
 		Object r5 = cx.eval("""
-			var full = { a: 1, b: 2, c: 3, d: 4 };
-			var { a, b, ...others } = full;
-			others.c + others.d;
-		""");
+		 	var full = { a: 1, b: 2, c: 3, d: 4 };
+		 	var { a, b, ...others } = full;
+		 	others.c + others.d;
+		 """);
 		Assertions.assertEquals(7.0, ((Number) r5).doubleValue());
 
 		// 3. 数组解构声明 (基础、空槽忽略、默认值、嵌套、Rest)
 		Object r6 = cx.eval("""
-			var arr = [10, 20, 30, 40];
-			var [ first, second ] = arr;
-			first + second;
-		""");
+		 	var arr = [10, 20, 30, 40];
+		 	var [ first, second ] = arr;
+		 	first + second;
+		 """);
 		Assertions.assertEquals(30.0, ((Number) r6).doubleValue());
 
 		Object r7 = cx.eval("""
-			var arr = [10, 20, 30, 40];
-			var [ a, , c ] = arr;
-			a + c;
-		""");
+		 	var arr = [10, 20, 30, 40];
+		 	var [ a, , c ] = arr;
+		 	a + c;
+		 """);
 		Assertions.assertEquals(40.0, ((Number) r7).doubleValue());
 
 		Object r8 = cx.eval("""
-			var arr = [5];
-			var [ m = 1, n = 99 ] = arr;
-			m + n;
-		""");
+		 	var arr = [5];
+		 	var [ m = 1, n = 99 ] = arr;
+		 	m + n;
+		 """);
 		Assertions.assertEquals(104.0, ((Number) r8).doubleValue());
 
 		Object r9 = cx.eval("""
-			var nested = [[1, 2], [3, 4]];
-			var [[x1, y1], [x2, y2]] = nested;
-			x1 + y1 + x2 + y2;
-		""");
+		 	var nested = [[1, 2], [3, 4]];
+		 	var [[x1, y1], [x2, y2]] = nested;
+		 	x1 + y1 + x2 + y2;
+		 """);
 		Assertions.assertEquals(10.0, ((Number) r9).doubleValue());
 
 		Object r10 = cx.eval("""
-			var list = [1, 2, 3, 4, 5];
-			var [ head, ...tail ] = list;
-			head + tail.length;
-		""");
+		 	var list = [1, 2, 3, 4, 5];
+		 	var [ head, ...tail ] = list;
+		 	head + tail.length;
+		 """);
 		Assertions.assertEquals(5.0, ((Number) r10).doubleValue());
 
 		// 4. 赋值解构 (Array swap & Object destructuring assignment)
 		Object r11 = cx.eval("""
-			var a = 1, b = 2;
-			[ a, b ] = [ b, a ];
-			a * 10 + b;
-		""");
+		 	var a = 1, b = 2;
+		 	[ a, b ] = [ b, a ];
+		 	a * 10 + b;
+		 """);
 		Assertions.assertEquals(21.0, ((Number) r11).doubleValue());
 
 		Object r12 = cx.eval("""
-			var x = 0, y = 0;
-			({ x, y } = { x: 50, y: 60 });
-			x + y;
-		""");
+		 	var x = 0, y = 0;
+		 	({ x, y } = { x: 50, y: 60 });
+		 	x + y;
+		 """);
 		Assertions.assertEquals(110.0, ((Number) r12).doubleValue());
 
 		// 5. 函数参数解构 (FunctionDecl, FunctionExpr, ArrowFunction)
 		Object r13 = cx.eval("""
-			function addCoords({ x, y = 5 }) {
-				return x + y;
-			}
-			addCoords({ x: 10 });
-		""");
+		 	function addCoords({ x, y = 5 }) {
+		 		return x + y;
+		 	}
+		 	addCoords({ x: 10 });
+		 """);
 		Assertions.assertEquals(15.0, ((Number) r13).doubleValue());
 
 		Object r14 = cx.eval("""
-			var sumPair = ([ a, b ]) => a + b;
-			sumPair([12, 18]);
-		""");
+		 	var sumPair = ([ a, b ]) => a + b;
+		 	sumPair([12, 18]);
+		 """);
 		Assertions.assertEquals(30.0, ((Number) r14).doubleValue());
 
 		Object r15 = cx.eval("""
-			var getUserId = ({ user: { id = 1001 } = {} }) => id;
-			getUserId({ user: { id: 2024 } });
-		""");
+		 	var getUserId = ({ user: { id = 1001 } = {} }) => id;
+		 	getUserId({ user: { id: 2024 } });
+		 """);
 		Assertions.assertEquals(2024.0, ((Number) r15).doubleValue());
 
 		// 6. ES6 对象属性简写 { x, y }
 		Object r16 = cx.eval("""
-			var p = 7, q = 8;
-			var obj = { p, q };
-			obj.p * obj.q;
-		""");
+		 	var p = 7, q = 8;
+		 	var obj = { p, q };
+		 	obj.p * obj.q;
+		 """);
 		Assertions.assertEquals(56.0, ((Number) r16).doubleValue());
 
 		// 7. 三元条件运算符 (Ternary ? :)
 		Object r17 = cx.eval("""
-			var val = 42;
-			var res = val > 50 ? "high" : "low";
-			res;
-		""");
+		 	var val = 42;
+		 	var res = val > 50 ? "high" : "low";
+		 	res;
+		 """);
 		Assertions.assertEquals("low", String.valueOf(r17));
 
 		Object r18 = cx.eval("""
-			var score = 85;
-			var grade = score >= 90 ? "A" : (score >= 80 ? "B" : "C");
-			grade;
-		""");
+		 	var score = 85;
+		 	var grade = score >= 90 ? "A" : (score >= 80 ? "B" : "C");
+		 	grade;
+		 """);
 		Assertions.assertEquals("B", String.valueOf(r18));
 	}
 
@@ -1397,20 +1538,42 @@ public class MagicJSTest {
 
 		// 6. 控制流分支与三元表达式中的极速跳转验证
 		Object branchResult = cx.eval("""
-			var status = 'active';
-			var isNull = (status === null);
-			var isDefined = (status !== undefined);
-			var match = (status === 'active' ? 100 : 200);
-			var count = 0;
-			if (status === 'active') {
-				count += 10;
-			}
-			if (status === null) {
-				count += 999;
-			}
-			count + match;
-		""");
+		 	var status = 'active';
+		 	var isNull = (status === null);
+		 	var isDefined = (status !== undefined);
+		 	var match = (status === 'active' ? 100 : 200);
+		 	var count = 0;
+		 	if (status === 'active') {
+		 		count += 10;
+		 	}
+		 	if (status === null) {
+		 		count += 999;
+		 	}
+		 	count + match;
+		 """);
 		Assertions.assertEquals(110.0, ((Number) branchResult).doubleValue());
+	}
+
+	@Test
+	public void testMathOperation() {
+		JSContext cx = new JSContext();
+		Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / -0"));
+		Assertions.assertEquals(Double.POSITIVE_INFINITY, cx.eval("1 / 0"));
+
+		Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / (-1 * 0)"));
+    Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / (0 / -1)"));
+
+		Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / -(2 - 2)"));
+		Assertions.assertEquals(0.0, cx.eval("5 + -5"));
+
+		Assertions.assertEquals(Double.NaN, cx.eval("0 / 0"));
+	}
+
+	@Test
+	public void testMultiKeyForObject() {
+		JSContext cx= new JSContext();
+
+		Assertions.assertEquals(2.0, cx.eval("({a: 1, a: 2}).a"));
 	}
 
 	@Test
@@ -1437,16 +1600,16 @@ public class MagicJSTest {
 		JSContext cx = new JSContext();
 		// 嵌套函数不应泄露至全局作用域
 		Object res = cx.eval("""
-			function outer() {
-				function inner() {
-					return 42;
-				}
-				return inner();
-			}
-			outer();
-		""");
+		 	function outer() {
+		 		function inner() {
+		 			return 42;
+		 		}
+		 		return inner();
+		 	}
+		 	outer();
+		 """);
 		Assertions.assertEquals(42.0, ((Number) res).doubleValue());
-		Assertions.assertEquals(hope.magic.js.runtime.JSUndefined.INSTANCE, cx.get("inner"));
+		Assertions.assertEquals(JSUndefined.INSTANCE, cx.get("inner"));
 	}
 
 	@Test
@@ -1454,24 +1617,24 @@ public class MagicJSTest {
 		JSContext cx = new JSContext();
 		// 1. 顶层函数声明提升
 		Object r1 = cx.eval("""
-			var r = add(10, 20);
-			function add(a, b) {
-				return a + b;
-			}
-			r;
-		""");
+		 	var r = add(10, 20);
+		 	function add(a, b) {
+		 		return a + b;
+		 	}
+		 	r;
+		 """);
 		Assertions.assertEquals(30.0, ((Number) r1).doubleValue());
 
 		// 2. 嵌套函数声明提升
 		Object r2 = cx.eval("""
-			function calculate() {
-				return helper(5);
-				function helper(n) {
-					return n * 3;
-				}
-			}
-			calculate();
-		""");
+		 	function calculate() {
+		 		return helper(5);
+		 		function helper(n) {
+		 			return n * 3;
+		 		}
+		 	}
+		 	calculate();
+		 """);
 		Assertions.assertEquals(15.0, ((Number) r2).doubleValue());
 	}
 
@@ -1505,8 +1668,8 @@ public class MagicJSTest {
 
 	@Test
 	public void testMathObjectStandardFunctions() {
-		JSContext cx = new JSContext();
-		Object rSin = cx.eval("Math.sin(0);");
+		JSContext cx   = new JSContext();
+		Object    rSin = cx.eval("Math.sin(0);");
 		Assertions.assertEquals(0.0, ((Number) rSin).doubleValue(), 0.0001);
 
 		Object rCos = cx.eval("Math.cos(0);");
@@ -1524,15 +1687,15 @@ public class MagicJSTest {
 
 	@Test
 	public void testStandaloneFunctionThis() {
-		JSContext cx = new JSContext();
-		Object res = cx.eval("function getThis() { return this; } getThis() === undefined;");
+		JSContext cx  = new JSContext();
+		Object    res = cx.eval("function getThis() { return this; } getThis() === undefined;");
 		Assertions.assertEquals(true, res);
 	}
 
 	@Test
 	public void testConstantFoldingStringPreservation() {
 		JSContext cx = new JSContext();
-		Object r1 = cx.eval("var str = 'world'; 0 + str;");
+		Object    r1 = cx.eval("var str = 'world'; 0 + str;");
 		Assertions.assertEquals("0world", r1);
 
 		Object r2 = cx.eval("var str = 'hello'; str + 0;");
@@ -1555,8 +1718,8 @@ public class MagicJSTest {
 	@Test
 	public void testVoidOperator() {
 		JSContext cx = new JSContext();
-		Assertions.assertEquals(hope.magic.js.runtime.JSUndefined.INSTANCE, cx.eval("void 0;"));
-		Assertions.assertEquals(hope.magic.js.runtime.JSUndefined.INSTANCE, cx.eval("var x = 1; void (x = 10);"));
+		Assertions.assertEquals(JSUndefined.INSTANCE, cx.eval("void 0;"));
+		Assertions.assertEquals(JSUndefined.INSTANCE, cx.eval("var x = 1; void (x = 10);"));
 		Assertions.assertEquals(10.0, ((Number) cx.eval("var x = 1; void (x = 10); x;")).doubleValue());
 	}
 
@@ -1564,11 +1727,11 @@ public class MagicJSTest {
 	public void testDeleteOperator() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			var obj = { a: 100, b: 200 };
-			var d1 = delete obj.a;
-			var d2 = delete obj['b'];
-			obj.a === undefined && obj.b === undefined && d1 === true && d2 === true;
-		""");
+		 	var obj = { a: 100, b: 200 };
+		 	var d1 = delete obj.a;
+		 	var d2 = delete obj['b'];
+		 	obj.a === undefined && obj.b === undefined && d1 === true && d2 === true;
+		 """);
 		Assertions.assertEquals(true, res);
 	}
 
@@ -1576,14 +1739,14 @@ public class MagicJSTest {
 	public void testDoWhileLoop() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			var sum = 0;
-			var i = 1;
-			do {
-				sum += i;
-				i++;
-			} while (i <= 5);
-			sum;
-		""");
+		 	var sum = 0;
+		 	var i = 1;
+		 	do {
+		 		sum += i;
+		 		i++;
+		 	} while (i <= 5);
+		 	sum;
+		 """);
 		Assertions.assertEquals(15.0, ((Number) res).doubleValue());
 	}
 
@@ -1591,13 +1754,13 @@ public class MagicJSTest {
 	public void testForInLoop() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			var obj = { x: 10, y: 20, z: 30 };
-			var keys = "";
-			for (var k in obj) {
-				keys += k;
-			}
-			keys;
-		""");
+		 	var obj = { x: 10, y: 20, z: 30 };
+		 	var keys = "";
+		 	for (var k in obj) {
+		 		keys += k;
+		 	}
+		 	keys;
+		 """);
 		Assertions.assertEquals("xyz", res);
 	}
 
@@ -1605,25 +1768,25 @@ public class MagicJSTest {
 	public void testTryCatchFinally() {
 		JSContext cx = new JSContext();
 		Object r1 = cx.eval("""
-			var msg = "";
-			try {
-				throw "custom_error";
-			} catch (e) {
-				msg = "caught: " + e;
-			}
-			msg;
-		""");
+		 	var msg = "";
+		 	try {
+		 		throw "custom_error";
+		 	} catch (e) {
+		 		msg = "caught: " + e;
+		 	}
+		 	msg;
+		 """);
 		Assertions.assertTrue(r1.toString().contains("custom_error"));
 
 		Object r2 = cx.eval("""
-			var step = 0;
-			try {
-				step = 1;
-			} finally {
-				step = 2;
-			}
-			step;
-		""");
+		 	var step = 0;
+		 	try {
+		 		step = 1;
+		 	} finally {
+		 		step = 2;
+		 	}
+		 	step;
+		 """);
 		Assertions.assertEquals(2.0, ((Number) r2).doubleValue());
 	}
 
@@ -1631,38 +1794,38 @@ public class MagicJSTest {
 	public void testSwitchStatement() {
 		JSContext cx = new JSContext();
 		Object r1 = cx.eval("""
-			var res = "";
-			var x = 2;
-			switch (x) {
-				case 1:
-					res = "one";
-					break;
-				case 2:
-					res = "two";
-					break;
-				default:
-					res = "default";
-					break;
-			}
-			res;
-		""");
+		 	var res = "";
+		 	var x = 2;
+		 	switch (x) {
+		 		case 1:
+		 			res = "one";
+		 			break;
+		 		case 2:
+		 			res = "two";
+		 			break;
+		 		default:
+		 			res = "default";
+		 			break;
+		 	}
+		 	res;
+		 """);
 		Assertions.assertEquals("two", r1);
 
 		// Fallthrough test
 		Object r2 = cx.eval("""
-			var sum = 0;
-			var x = 1;
-			switch (x) {
-				case 1:
-					sum += 10;
-				case 2:
-					sum += 20;
-					break;
-				default:
-					sum += 30;
-			}
-			sum;
-		""");
+		 	var sum = 0;
+		 	var x = 1;
+		 	switch (x) {
+		 		case 1:
+		 			sum += 10;
+		 		case 2:
+		 			sum += 20;
+		 			break;
+		 		default:
+		 			sum += 30;
+		 	}
+		 	sum;
+		 """);
 		Assertions.assertEquals(30.0, ((Number) r2).doubleValue());
 	}
 
@@ -1694,11 +1857,11 @@ public class MagicJSTest {
 	@Test
 	public void testShapeSentinelNonCollidabilityAndNeverNull() throws Exception {
 		// 1. 数学不变量验证：测试所有合法类型 (0..3) 在极大/极小边界 propId 下，生成的 encoded 严格不等于 SENTINEL_ENCODED
-		byte[] validTypes = { JSShape.TYPE_UNKNOWN, JSShape.TYPE_DOUBLE, JSShape.TYPE_INT, JSShape.TYPE_OBJECT };
+		byte[] validTypes = {JSShape.TYPE_UNKNOWN, JSShape.TYPE_DOUBLE, JSShape.TYPE_INT, JSShape.TYPE_OBJECT};
 		int[] testPropIds = {
-			0, 1, 2, 100, 1000, 65535, 1_000_000,
-			0x0FFFFFFF, 0x0FFFFFFF >> 1, 0x0FFFFFFF >> 2,
-			Integer.MAX_VALUE >> 3, (Integer.MAX_VALUE >> 3) - 1
+		 0, 1, 2, 100, 1000, 65535, 1_000_000,
+		 0x0FFFFFFF, 0x0FFFFFFF >> 1, 0x0FFFFFFF >> 2,
+		 Integer.MAX_VALUE >> 3, (Integer.MAX_VALUE >> 3) - 1
 		};
 
 		for (int propId : testPropIds) {
@@ -1706,7 +1869,7 @@ public class MagicJSTest {
 				int encoded = JSShape.encodeKey(propId, type);
 				// 契约 1: 绝对不能等于哨兵值 0x7FFFFFFF
 				Assertions.assertNotEquals(JSShape.SENTINEL_ENCODED, encoded,
-					() -> "Collision detected! propId=" + propId + ", type=" + type);
+				 () -> "Collision detected! propId=" + propId + ", type=" + type);
 				// 契约 2: 低 3 位的值必然在 [0, 3] 区间，第 2 位 (权重 4) 恒等于 0
 				Assertions.assertTrue((encoded & 0x7) <= 3);
 				Assertions.assertEquals(0, encoded & 0x4);
@@ -1737,12 +1900,12 @@ public class MagicJSTest {
 	@Test
 	public void testContextCreationBenchmark() {
 		// 测量第 1 次创建时延 (包含类加载与静态初始化)
-		long t0 = System.nanoTime();
-		JSContext c1 = new JSContext();
-		long coldNs = System.nanoTime() - t0;
+		long      t0     = System.nanoTime();
+		JSContext c1     = new JSContext();
+		long      coldNs = System.nanoTime() - t0;
 
 		// 测量后续 1000 次创建的平均时延
-		int N = 1000;
+		int  N  = 1000;
 		long t1 = System.nanoTime();
 		for (int i = 0; i < N; i++) {
 			JSContext c = new JSContext();
@@ -1750,7 +1913,7 @@ public class MagicJSTest {
 		long warmNs = (System.nanoTime() - t1) / N;
 
 		System.out.printf(">>> 首次 new JSContext() 时延: %.3f ms, 稳态单次: %.3f µs%n",
-			coldNs / 1_000_000.0, warmNs / 1_000.0);
+		 coldNs / 1_000_000.0, warmNs / 1_000.0);
 		Assertions.assertNotNull(c1);
 		Assertions.assertTrue(coldNs < 50_000_000L, "First new JSContext() should take less than 50ms");
 		Assertions.assertTrue(warmNs < 50_000L, "Warm new JSContext() should take less than 50µs");

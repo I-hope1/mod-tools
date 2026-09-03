@@ -1211,7 +1211,7 @@ public class JSLinker {
 				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
 					return jsObj.getDoubleSlot(offset);
 				}
-				return jsObj.getAsDouble((int) entry);
+				return jsObj.getAsDouble(propName);
 			}
 
 			int offset = s.getOffset(propName);
@@ -1238,7 +1238,7 @@ public class JSLinker {
 				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
 					return (int) jsObj.getDoubleSlot(offset);
 				}
-				return (int) jsObj.getAsDouble((int) entry);
+				return (int) jsObj.getAsDouble(propName);
 			}
 
 			int offset = s.getOffset(propName);
@@ -1265,7 +1265,7 @@ public class JSLinker {
 				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
 					return (long) jsObj.getDoubleSlot(offset);
 				}
-				return (long) jsObj.getAsDouble((int) entry);
+				return (long) jsObj.getAsDouble(propName);
 			}
 
 			int offset = s.getOffset(propName);
@@ -1427,7 +1427,9 @@ public class JSLinker {
 
 	private static void setFieldDirect(Object target, Field field, Object value) throws IllegalAccessException {
 		Class<?> type = field.getType();
-		if (type == int.class) { field.setInt(target, JSOps.toInt(value)); } else if (type == double.class) {
+		if (type == int.class) {
+			field.setInt(target, JSOps.toInt(value));
+		} else if (type == double.class) {
 			field.setDouble(target, JSOps.toDouble(value));
 		} else if (type == long.class) {
 			field.setLong(target, JSOps.toLong(value));
@@ -1438,12 +1440,26 @@ public class JSLinker {
 		} else if (type == byte.class) {
 			field.setByte(target, (byte) JSOps.toInt(value));
 		} else if (type == char.class) {
-			field.setChar(target, (value instanceof Character ch) ? ch : (value != null && !value.toString().isEmpty()) ? value.toString().charAt(0) : '\0');
+			char c = tc(value);
+			field.setChar(target, c);
 		} else if (type == boolean.class) {
 			field.setBoolean(target, JSOps.isTruthy(value));
 		} else {
 			field.set(target, value);
 		}
+	}
+	private static char tc(Object value) {
+		char c;
+		if (value instanceof Character ch) {
+			c = ch;
+		} else if (value instanceof Number num) {
+			c = (char) num.intValue();
+		} else if (value != null && !value.toString().isEmpty()) {
+			c = value.toString().charAt(0);
+		} else {
+			c = '\0';
+		}
+		return c;
 	}
 
 	public static Object getPropFallback(ChainedCallSite site, Object target, String propName) {
@@ -2055,11 +2071,11 @@ public class JSLinker {
 			}
 			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 
-			if (arity == 0) return func.call0(null, target);
-			if (arity == 1) return func.call1(null, target, args[0]);
-			if (arity == 2) return func.call2(null, target, args[0], args[1]);
-			if (arity == 3) return func.call3(null, target, args[0], args[1], args[2]);
-			return func.call(null, target, args);
+			if (arity == 0) return func.call0(null, JSUndefined.INSTANCE);
+			if (arity == 1) return func.call1(null, JSUndefined.INSTANCE, args[0]);
+			if (arity == 2) return func.call2(null, JSUndefined.INSTANCE, args[0], args[1]);
+			if (arity == 3) return func.call3(null, JSUndefined.INSTANCE, args[0], args[1], args[2]);
+			return func.call(null, JSUndefined.INSTANCE, args);
 		}
 
 		if (target instanceof JSObject jsObj) {
@@ -3093,16 +3109,19 @@ public class JSLinker {
 				if (i + 1 < jsRep.length()) {
 					char next = jsRep.charAt(i + 1);
 					if (next == '&') {
-						sb.append("$0");
-						i++;
+						sb.append("$0"); // $& 在 JS 中是全匹配，对应 Java Matcher 的 $0
 					} else if (next == '$') {
-						sb.append("\\$");
+						sb.append("\\$"); // $$ 在 JS 中代表单个 $ 字面量
 						i++;
 					} else if (Character.isDigit(next)) {
-						sb.append("$").append(next);
+						if (next == '0') {
+							sb.append("\\$0"); // JS 中的 $0 是普通字面量，必须转义为 \$0，防止 Java 误当整串
+						} else {
+							sb.append("$").append(next);
+						}
 						i++;
 					} else {
-						sb.append("\\$"); // 单个 $ 作为字面量
+						sb.append("\\$"); // 单个无效 $ 作为字面量转义
 					}
 				} else {
 					sb.append("\\$");     // 末尾单个 $ 必须转义为 \$，防止 Java Matcher 抛出异常
@@ -3282,7 +3301,7 @@ public class JSLinker {
 	}
 
 	public static void putCharDirect(long offset, Object target, Object val) {
-		char c = (val instanceof Character ch) ? ch : (val != null && !val.toString().isEmpty()) ? val.toString().charAt(0) : '\0';
+		char c = tc(val);
 		UNSAFE.putChar(target, offset, c);
 	}
 

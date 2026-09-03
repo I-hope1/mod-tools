@@ -190,8 +190,8 @@ public class JSOps {
 		return a % b;
 	}
 
-	public static int mod(int a, int b) {
-		return b == 0 ? 0 : a % b;
+	public static double mod(int a, int b) {
+		return b == 0 ? Double.NaN : (double) (a % b);
 	}
 
 	public static double mod(int a, double b) {
@@ -211,20 +211,18 @@ public class JSOps {
 	}
 
 	public static boolean isEq(Object a, Object b) {
+		// js 中 NaN 的任何比较都应返回 false
+		if ((a instanceof Double d1 && d1.isNaN()) || (b instanceof Double d2 && d2.isNaN())) return false;
 		if (a == b) return true;
 		if (a == null || a == JSUndefined.INSTANCE) {
 			return b == null || b == JSUndefined.INSTANCE;
 		}
 		if (b == null || b == JSUndefined.INSTANCE) return false;
+		if (a instanceof Boolean) a = ((Boolean) a) ? 1.0 : 0.0;
+		if (b instanceof Boolean) b = ((Boolean) b) ? 1.0 : 0.0;
 
 		if (a instanceof Number && b instanceof Number) {
 			return ((Number) a).doubleValue() == ((Number) b).doubleValue();
-		}
-		if (a instanceof Boolean && b instanceof Number) {
-			return (((Boolean) a) ? 1.0 : 0.0) == ((Number) b).doubleValue();
-		}
-		if (a instanceof Number && b instanceof Boolean) {
-			return ((Number) a).doubleValue() == (((Boolean) b) ? 1.0 : 0.0);
 		}
 		if (a instanceof String && b instanceof Number) {
 			return toDouble(a) == ((Number) b).doubleValue();
@@ -239,6 +237,8 @@ public class JSOps {
 	}
 
 	public static boolean isStrictEq(Object a, Object b) {
+		// js 中 NaN 的任何比较都应返回 false
+		if ((a instanceof Double d1 && d1.isNaN()) || (b instanceof Double d2 && d2.isNaN())) return false;
 		if (a == b) return true;
 		if (a == null || b == null || a == JSUndefined.INSTANCE || b == JSUndefined.INSTANCE) return false;
 		if (a instanceof Number && b instanceof Number) {
@@ -349,7 +349,9 @@ public class JSOps {
 	public static boolean isTruthy(Object val) {
 		if (val == null || val == JSUndefined.INSTANCE) return false;
 		if (val instanceof Boolean) return (Boolean) val;
-		if (val instanceof Number) return ((Number) val).doubleValue() != 0.0 && !Double.isNaN(((Number) val).doubleValue());
+		if (val instanceof Number) {
+			return ((Number) val).doubleValue() != 0.0 && !Double.isNaN(((Number) val).doubleValue());
+		}
 		if (val instanceof String) return !((String) val).isEmpty();
 		return true;
 	}
@@ -368,8 +370,10 @@ public class JSOps {
 		if (val == null || val == JSUndefined.INSTANCE) return Double.NaN;
 		if (val instanceof Boolean b) return b ? 1.0 : 0.0;
 		if (val instanceof String s) {
+			String trimmed = s.trim();
+			if (trimmed.isEmpty()) return 0.0;
 			try {
-				return Double.parseDouble(s);
+				return Double.parseDouble(trimmed);
 			} catch (NumberFormatException e) {
 				return Double.NaN;
 			}
@@ -467,7 +471,7 @@ public class JSOps {
 			return java.util.Arrays.asList(arr).iterator();
 		}
 		if (target.getClass().isArray()) {
-			int len = java.lang.reflect.Array.getLength(target);
+			int                    len  = java.lang.reflect.Array.getLength(target);
 			java.util.List<Object> list = new java.util.ArrayList<>(len);
 			for (int i = 0; i < len; i++) {
 				list.add(java.lang.reflect.Array.get(target, i));
@@ -564,7 +568,7 @@ public class JSOps {
 			return indices.iterator();
 		}
 		if (target.getClass().isArray()) {
-			int len = java.lang.reflect.Array.getLength(target);
+			int                    len     = java.lang.reflect.Array.getLength(target);
 			java.util.List<String> indices = new java.util.ArrayList<>();
 			for (int i = 0; i < len; i++) indices.add(String.valueOf(i));
 			return indices.iterator();

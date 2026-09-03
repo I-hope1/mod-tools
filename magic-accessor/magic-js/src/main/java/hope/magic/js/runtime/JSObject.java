@@ -171,7 +171,7 @@ public class JSObject {
 		if (offset >= 0) {
 			return getSlot(offset);
 		}
-		return getSlow(SymbolTable.name(propId));
+		return getSlow(propId);
 	}
 
 	public Object get(String key) {
@@ -186,16 +186,16 @@ public class JSObject {
 			}
 			return JSOps.toDouble(getObjectSlot(offset));
 		}
-		return JSOps.toDouble(getSlow(SymbolTable.name(propId)));
+		return JSOps.toDouble(getSlow(propId));
 	}
 
 	public double getAsDouble(String key) {
 		return getAsDouble(SymbolTable.id(key));
 	}
 
-	private Object getSlow(String key) {
-		if (key == null || prototype == null) return JSUndefined.INSTANCE;
-		return prototype.get(key);
+	private Object getSlow(int propId) {
+		if (propId < 0 || prototype == null) return JSUndefined.INSTANCE;
+		return prototype.get(propId);
 	}
 
 	// 通用写 API (put / putDouble)
@@ -280,8 +280,7 @@ public class JSObject {
 		if (offset >= 0) {
 			return getSlot(offset) != JSUndefined.INSTANCE;
 		}
-		String key = SymbolTable.name(propId);
-		return prototype != null && key != null && prototype.has(key);
+		return prototype != null && propId >= 0 && prototype.has(propId);
 	}
 
 	public boolean has(String key) {

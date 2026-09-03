@@ -641,54 +641,54 @@ public class MagicJSTest {
 				return off >= 0 ? slots[off] : null;
 			}
 		}
-		MethodType type = MethodType.methodType(Object.class, Object.class);
-    ChainedCallSite site = new ChainedCallSite(type, null);
+		MethodType      type = MethodType.methodType(Object.class, Object.class);
+		ChainedCallSite site = new ChainedCallSite(type, null);
 
-    // 构造合法的 Dummy MethodHandle，避免 guardWithTest 报 NPE
-    MethodHandle dummyTarget = MethodHandles.empty(type);
-    MethodHandle dummyTest = MethodHandles.dropArguments(
-            MethodHandles.constant(boolean.class, false), 0, type.parameterArray()
-    );
+		// 构造合法的 Dummy MethodHandle，避免 guardWithTest 报 NPE
+		MethodHandle dummyTarget = MethodHandles.empty(type);
+		MethodHandle dummyTest = MethodHandles.dropArguments(
+		 MethodHandles.constant(boolean.class, false), 0, type.parameterArray()
+		);
 
-    // 2. 构造 5 个不同的 Shape，但 "targetProp" 全都在 offset 0 处
-    // 使得 CallSite 记录下 commonOffset = 0, offsetEquivalent = true
-    for (int i = 0; i < 5; i++) {
-        JSShape shape = JSShape.ROOT.addProperty("targetProp", JSShape.TYPE_OBJECT);
-        // 加点干扰属性让它们成为不同的 Shape 实例
-        for (int j = 0; j < i; j++) {
-            shape = shape.addProperty("dummy_" + i + "_" + j, JSShape.TYPE_OBJECT);
-        }
-        site.recordShape(shape, 0, JSShape.TYPE_OBJECT);
+		// 2. 构造 5 个不同的 Shape，但 "targetProp" 全都在 offset 0 处
+		// 使得 CallSite 记录下 commonOffset = 0, offsetEquivalent = true
+		for (int i = 0; i < 5; i++) {
+			JSShape shape = JSShape.ROOT.addProperty("targetProp", JSShape.TYPE_OBJECT);
+			// 加点干扰属性让它们成为不同的 Shape 实例
+			for (int j = 0; j < i; j++) {
+				shape = shape.addProperty("dummy_" + i + "_" + j, JSShape.TYPE_OBJECT);
+			}
+			site.recordShape(shape, 0, JSShape.TYPE_OBJECT);
 
-        // 传入 dummy 句柄推进 chainDepth
-        site.installGuardOrSwitchMegamorphic(dummyTest, dummyTarget);
-    }
+			// 传入 dummy 句柄推进 chainDepth
+			site.installGuardOrSwitchMegamorphic(dummyTest, dummyTarget);
+		}
 
-    // 第 6 次调用，推进 chainDepth > 5，自动触发 megamorphic = true
-    site.installGuardOrSwitchMegamorphic(dummyTest, dummyTarget);
+		// 第 6 次调用，推进 chainDepth > 5，自动触发 megamorphic = true
+		site.installGuardOrSwitchMegamorphic(dummyTest, dummyTarget);
 
-    Assertions.assertTrue(site.isMegamorphic());
-    Assertions.assertTrue(site.isOffsetEquivalent());
+		Assertions.assertTrue(site.isMegamorphic());
+		Assertions.assertTrue(site.isOffsetEquivalent());
 
-    // 3. 构造第 6 个特殊对象：
-    // 它的 slot 0 是 "otherProp"，而 "targetProp" 在 slot 1！
-    JSShape shape6 = JSShape.ROOT
-            .addProperty("otherProp", JSShape.TYPE_OBJECT)   // offset 0
-            .addProperty("targetProp", JSShape.TYPE_OBJECT);  // offset 1
+		// 3. 构造第 6 个特殊对象：
+		// 它的 slot 0 是 "otherProp"，而 "targetProp" 在 slot 1！
+		JSShape shape6 = JSShape.ROOT
+		 .addProperty("otherProp", JSShape.TYPE_OBJECT)   // offset 0
+		 .addProperty("targetProp", JSShape.TYPE_OBJECT);  // offset 1
 
-    TestJSObject obj6 = new TestJSObject(shape6);
-    obj6.slots[0] = "我是错误的数据(otherProp)";
-    obj6.slots[1] = "我是正确的数据(targetProp)";
+		TestJSObject obj6 = new TestJSObject(shape6);
+		obj6.slots[0] = "我是错误的数据(otherProp)";
+		obj6.slots[1] = "我是正确的数据(targetProp)";
 
-    // 4. 调用 getPropMegamorphic 获取 obj6 的 "targetProp"
-    Object result = JSLinker.getPropMegamorphic(site, obj6, "targetProp");
+		// 4. 调用 getPropMegamorphic 获取 obj6 的 "targetProp"
+		Object result = JSLinker.getPropMegamorphic(site, obj6, "targetProp");
 
-    // 断言验证 Bug
-    Assertions.assertNotEquals(
-            "我是错误的数据(otherProp)",
-            result,
-            "❌ 致命 Bug：isOffsetEquivalent 无条件短路，导致读出了 slot 0 的错误属性！"
-    );
+		// 断言验证 Bug
+		Assertions.assertNotEquals(
+		 "我是错误的数据(otherProp)",
+		 result,
+		 "❌ 致命 Bug：isOffsetEquivalent 无条件短路，导致读出了 slot 0 的错误属性！"
+		);
 	}
 	@Test
 	public void testSymbolTableLeak() {
@@ -1561,7 +1561,7 @@ public class MagicJSTest {
 		Assertions.assertEquals(Double.POSITIVE_INFINITY, cx.eval("1 / 0"));
 
 		Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / (-1 * 0)"));
-    Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / (0 / -1)"));
+		Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / (0 / -1)"));
 
 		Assertions.assertEquals(Double.NEGATIVE_INFINITY, cx.eval("1 / -(2 - 2)"));
 		Assertions.assertEquals(0.0, cx.eval("5 + -5"));
@@ -1571,7 +1571,7 @@ public class MagicJSTest {
 
 	@Test
 	public void testMultiKeyForObject() {
-		JSContext cx= new JSContext();
+		JSContext cx = new JSContext();
 
 		Assertions.assertEquals(2.0, cx.eval("({a: 1, a: 2}).a"));
 	}
@@ -1733,6 +1733,12 @@ public class MagicJSTest {
 		 	obj.a === undefined && obj.b === undefined && d1 === true && d2 === true;
 		 """);
 		Assertions.assertEquals(true, res);
+		res = cx.eval("""
+		 	var obj = { a: 100 };
+		 	delete obj.a;
+		 	obj.a;
+		 """);
+		Assertions.assertEquals(JSUndefined.INSTANCE, res);
 	}
 
 	@Test
@@ -1896,6 +1902,22 @@ public class MagicJSTest {
 		JSShape res = (JSShape) slowMethod.invoke(JSShape.ROOT, JSShape.SENTINEL_ENCODED, 12345, JSShape.TYPE_DOUBLE);
 		Assertions.assertNotNull(res, "Defensive contract: addPropertySlow must NEVER return null even if sentinel is hit!");
 	}
+
+	/* @Test
+	public void testLotOfShape() {
+		JSContext cx = new JSContext();
+		Assertions.assertEquals("hello", cx.eval("""
+		 		 var obj = {};
+		 for (var i = 0; i < 65; i++) {
+		     obj['p' + i] = i; // 都是 double
+		 }
+		 // 把第 0 个属性改为字符串对象
+		 obj.p0 = "hello";
+		 // 此时如果修改第 64 个属性为 double
+		 obj.p64 = 999.0;
+		 obj.p0
+		 """));
+	} */
 
 	@Test
 	public void testContextCreationBenchmark() {

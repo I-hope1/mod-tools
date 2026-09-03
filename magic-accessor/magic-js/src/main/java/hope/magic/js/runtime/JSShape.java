@@ -210,14 +210,17 @@ public final class JSShape {
 	// 迁移树构建 (极简编码，快路径 < 28 字节，100% C2 内联)
 
 	public JSShape addProperty(int propId, byte type) {
-		int     encoded = encodeKey(propId, type);
-		JSShape trans   = this.singleTransition;
-		if (this.singleKey == encoded && trans != null) {
-			return trans;
+		int encoded = encodeKey(propId, type);
+		// 先读 volatile singleKey
+		if (this.singleKey == encoded) {
+			// 确保匹配后再读 volatile singleTransition，此时必定非空且已完全初始化
+			JSShape trans = this.singleTransition;
+			if (trans != null) return trans;
 		}
 		return addPropertySlow(encoded, propId, type);
 	}
 
+	@SuppressWarnings("DuplicatedCode")
 	private synchronized JSShape addPropertySlow(int encoded, int propId, byte type) {
 		if (this.singleKey == encoded && this.singleTransition != null) {
 			return this.singleTransition;
@@ -246,11 +249,15 @@ public final class JSShape {
 		}
 
 		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
+		// 让 C2 有更多预算内联其他方法
 		if (encoded == SENTINEL_ENCODED) {
 			switch (propId) {
-				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-				     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 -> {
-					return next; // 关键防御契约：即便极端情况下触及屏障分支，也恒定返回有效 JSShape，绝不返回 null！
+				// 1-70
+				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+				     21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+				     41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+				     61, 62, 63, 64, 65, 66, 67, 68, 69, 70 -> {
+					return next; // 即便极端情况下触及屏障分支，也恒定返回有效 JSShape，绝不返回 null！
 				}
 			}
 		}

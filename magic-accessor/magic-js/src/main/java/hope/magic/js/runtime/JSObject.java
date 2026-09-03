@@ -37,16 +37,16 @@ public class JSObject {
 		}
 	}
 
-	public JSShape shape           = JSShape.ROOT;
-	public long    doubleFieldMask = 0L; // 记录哪些 offset 槽位存储的是 double
+	public JSShape shape = JSShape.ROOT;
+	public long    doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double
 
 	public long prim0, prim1, prim2, prim3, prim4, prim5, prim6, prim7;
-	public long[] overflowPrim = null;
+	public long[] overflowPrim/*  = null */;
 
 	public Object obj0, obj1, obj2, obj3, obj4, obj5, obj6, obj7;
-	public Object[] overflowObj = null;
+	public Object[] overflowObj/*  = null */;
 
-	private JSObject prototype = null;
+	private JSObject prototype/*  = null */;
 
 	//endregion
 	//region 构造器
@@ -221,7 +221,7 @@ public class JSObject {
 	}
 
 	private Object getBoxedDouble(int offset) {
-		return Double.valueOf(getDoubleSlot(offset));
+		return getDoubleSlot(offset);
 	}
 
 	//endregion
@@ -280,13 +280,11 @@ public class JSObject {
 
 	public void putDouble(int propId, double value) {
 		int offset = shape.getOffset(propId);
-		if (offset >= 0 && offset < 8) {
-			doubleFieldMask |= (1L << offset);
-			UNSAFE.putDouble(this, PRIM_FIELD_OFFSETS[offset], value);
-			UNSAFE.putObject(this, OBJ_FIELD_OFFSETS[offset], null);
+		if (offset < 0 || offset >= 8) {
+			putDoubleSlow(propId, value);
 			return;
 		}
-		putDoubleSlow(propId, value);
+		setDoubleSlot(offset, value);
 	}
 
 	public static final int SENTINEL_PROP_ID = Integer.MIN_VALUE;
@@ -300,10 +298,15 @@ public class JSObject {
 		}
 		setDoubleSlot(offset, value);
 
+		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
+		// 让 C2 有更多预算内联其他方法
 		if (propId == SENTINEL_PROP_ID) {
 			switch (propId) {
-				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-				     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 -> {
+				// 1-70
+				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+				     21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+				     41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+				     61, 62, 63, 64, 65, 66, 67, 68, 69, 70 -> {
 					return;
 				}
 			}
@@ -333,10 +336,15 @@ public class JSObject {
 		shape = shape.addProperty(propId, JSShape.TYPE_OBJECT);
 		setSlot(shape.propertyCount - 1, value);
 
+		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
+		// 让 C2 有更多预算内联其他方法
 		if (propId == SENTINEL_PROP_ID) {
 			switch (propId) {
-				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-				     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 -> {
+				// 1-70
+				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+				     21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+				     41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+				     61, 62, 63, 64, 65, 66, 67, 68, 69, 70 -> {
 					return;
 				}
 			}
@@ -373,9 +381,9 @@ public class JSObject {
 	public void delete(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			clearDoubleMask(offset);
 			clearPrimSlot(offset);
-			setSlot(offset, DELETED);
+			setSlot(offset, DELETED); // setSlot 里有 clearDoubleMask(offset);
+
 		}
 	}
 

@@ -1206,7 +1206,12 @@ public class JSLinker {
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				return jsObj.getDoubleSlot((int) entry);
+				int offset = (int) entry;
+				// 必须验证该槽位当前存储的是不是原生 double
+				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
+					return jsObj.getDoubleSlot(offset);
+				}
+				return jsObj.getAsDouble((int) entry);
 			}
 
 			int offset = s.getOffset(propName);
@@ -1228,7 +1233,12 @@ public class JSLinker {
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				return (int) jsObj.getDoubleSlot((int) entry);
+				int offset = (int) entry;
+				// 必须验证该槽位当前存储的是不是原生 double
+				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
+					return (int) jsObj.getDoubleSlot(offset);
+				}
+				return (int) jsObj.getAsDouble((int) entry);
 			}
 
 			int offset = s.getOffset(propName);
@@ -1250,7 +1260,12 @@ public class JSLinker {
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				return (long) jsObj.getDoubleSlot((int) entry);
+				int offset = (int) entry;
+				// 必须验证该槽位当前存储的是不是原生 double
+				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
+					return (long) jsObj.getDoubleSlot(offset);
+				}
+				return (long) jsObj.getAsDouble((int) entry);
 			}
 
 			int offset = s.getOffset(propName);
@@ -1305,7 +1320,7 @@ public class JSLinker {
 				jsObj.setDoubleSlot(offset, value);
 				return;
 			}
-			jsObj.put(propName, value);
+			jsObj.putDouble(propName, value);
 			return;
 		}
 		setPropDoubleGeneric(target, value, propName);
@@ -1816,7 +1831,7 @@ public class JSLinker {
 			if (fromPrim == 2 && toPrim >= 3) { // char -> int/long/float/double
 				return 2 + (toPrim - 3);
 			}
-			if (fromPrim < toPrim/*  && fromPrim != 2 */) {
+			if (fromPrim < toPrim && toPrim != 2) {
 				return 2 + (toPrim - fromPrim);
 			}
 
@@ -2018,29 +2033,19 @@ public class JSLinker {
 			MethodHandle directMh;
 			if (arity == 0) {
 				directMh = JSFuncMH.CALL0;
-				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
-				directMh = directMh.asType(MethodType.genericMethodType(2));
-				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(1), 0, 0);
+				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
 			} else if (arity == 1) {
 				directMh = JSFuncMH.CALL1;
-				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
-				directMh = directMh.asType(MethodType.genericMethodType(3));
-				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(2), 0, 0, 1);
+				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
 			} else if (arity == 2) {
 				directMh = JSFuncMH.CALL2;
-				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
-				directMh = directMh.asType(MethodType.genericMethodType(4));
-				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(3), 0, 0, 1, 2);
+				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
 			} else if (arity == 3) {
 				directMh = JSFuncMH.CALL3;
-				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
-				directMh = directMh.asType(MethodType.genericMethodType(5));
-				directMh = MethodHandles.permuteArguments(directMh, MethodType.genericMethodType(4), 0, 0, 1, 2, 3);
+				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
 			} else {
 				directMh = JSFuncMH.CALL;
-				directMh = MethodHandles.insertArguments(directMh, 1, (Object) null);
-				directMh = directMh.asType(MethodType.methodType(Object.class, Object.class, Object.class, Object[].class));
-				directMh = MethodHandles.permuteArguments(directMh, MethodType.methodType(Object.class, Object.class, Object[].class), 0, 0, 1);
+				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
 				directMh = directMh.asSpreader(Object[].class, arity);
 			}
 

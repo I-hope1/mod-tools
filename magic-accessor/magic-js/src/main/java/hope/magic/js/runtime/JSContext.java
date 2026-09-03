@@ -1,21 +1,16 @@
 package hope.magic.js.runtime;
 
-import hope.magic.js.ast.Node;
-import hope.magic.js.ast.Token;
+import hope.magic.js.ast.*;
 import hope.magic.js.compiler.JSCompiler;
-import hope.magic.js.parser.JSLexer;
-import hope.magic.js.parser.JSParser;
+import hope.magic.js.parser.*;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class JSContext {
 	private static final ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY = new ConcurrentHashMap<>();
-	private static final AtomicInteger NEXT_GLOBAL_SLOT = new AtomicInteger(0);
+	private static final AtomicInteger                      NEXT_GLOBAL_SLOT     = new AtomicInteger(0);
 
 	public static int getGlobalSlot(String name) {
 		return GLOBAL_SLOT_REGISTRY.computeIfAbsent(name, k -> NEXT_GLOBAL_SLOT.getAndIncrement());
@@ -23,9 +18,9 @@ public class JSContext {
 
 	private static final Object NULL_VALUE = new Object();
 
-	public static final int INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
-	public volatile Object[] globalSlots = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
-	private final ConcurrentHashMap<String, Object> globals = new ConcurrentHashMap<>();
+	public static final int                               INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
+	public volatile     Object[]                          globalSlots                   = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
+	private final       ConcurrentHashMap<String, Object> globals                       = new ConcurrentHashMap<>();
 
 	public static class JSMathFunction implements JSFunction {
 		public static final int OP_ABS    = 0;
@@ -206,10 +201,19 @@ public class JSContext {
 				String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : oldReg.getFlags();
 				return new JSRegExp(oldReg.getPattern(), flags);
 			}
-			String pat = JSOps.toStr(args[0]);
+			String pat   = JSOps.toStr(args[0]);
 			String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : "";
 			return new JSRegExp(pat, flags);
 		};
+	}
+
+	public long rawReturnBits;
+
+	public final double getReturnDouble() {
+		return Double.longBitsToDouble(rawReturnBits);
+	}
+	public final int getReturnInt() {
+		return (int) rawReturnBits;
 	}
 
 	public JSContext() {
@@ -218,16 +222,24 @@ public class JSContext {
 
 	private Object resolveLazyGlobal(int slot) {
 		Object val = null;
-		if (slot == SLOT_NAN) val = Double.NaN;
-		else if (slot == SLOT_INFINITY) val = Double.POSITIVE_INFINITY;
-		else if (slot == SLOT_UNDEFINED) val = JSUndefined.INSTANCE;
-		else if (slot == SLOT_JSOPS) val = JSOps.class;
-		else if (slot == SLOT_PRINT) val = LazyBuiltins.PRINT;
-		else if (slot == SLOT_CONSOLE) val = LazyBuiltins.CONSOLE;
-		else if (slot == SLOT_MATH) val = LazyBuiltins.MATH;
-		else if (slot == SLOT_IMPORT_CLASS) val = LazyBuiltins.IMPORT_CLASS;
-		else if (slot == SLOT_PACKAGES) val = LazyBuiltins.PACKAGES;
-		else if (slot == SLOT_REGEXP) val = LazyBuiltins.REGEXP;
+		if (slot == SLOT_NAN) { val = Double.NaN; } else if (slot == SLOT_INFINITY) {
+			val = Double.POSITIVE_INFINITY;
+		} else if (slot == SLOT_UNDEFINED) {
+			val = JSUndefined.INSTANCE;
+		} else if (slot == SLOT_JSOPS) {
+			val = JSOps.class;
+		} else if (slot == SLOT_PRINT) {
+			val = LazyBuiltins.PRINT;
+		} else if (slot == SLOT_CONSOLE) {
+			val = LazyBuiltins.CONSOLE;
+		} else if (slot == SLOT_MATH) {
+			val = LazyBuiltins.MATH;
+		} else if (slot == SLOT_IMPORT_CLASS) {
+			val = LazyBuiltins.IMPORT_CLASS;
+		} else if (slot == SLOT_PACKAGES) {
+			val = LazyBuiltins.PACKAGES;
+		} else if (slot == SLOT_REGEXP)
+			val = LazyBuiltins.REGEXP;
 
 		if (val != null) {
 			ensureGlobalSlotCapacity(slot);
@@ -251,7 +263,7 @@ public class JSContext {
 	}
 
 	public Object get(String name) {
-		int slot = GLOBAL_SLOT_REGISTRY.getOrDefault(name, -1);
+		int      slot  = GLOBAL_SLOT_REGISTRY.getOrDefault(name, -1);
 		Object[] slots = this.globalSlots;
 		if (slot >= 0 && slot < slots.length) {
 			Object val = slots[slot];
@@ -309,9 +321,9 @@ public class JSContext {
 
 	public Object eval(String code) {
 		try {
-			JSLexer lexer = new JSLexer(code);
-			List<Token> tokens = lexer.tokenize();
-			JSParser parser = new JSParser(tokens);
+			JSLexer      lexer   = new JSLexer(code);
+			List<Token>  tokens  = lexer.tokenize();
+			JSParser     parser  = new JSParser(tokens);
 			Node.Program program = parser.parse();
 
 			JSScript script = JSCompiler.compile(program);

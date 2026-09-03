@@ -1,19 +1,14 @@
 package hope.magic.js.runtime;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class JSArray extends JSObject implements Iterable<Object> {
 	public static final int  MAX_DENSE_CAPACITY     = 65536;
 	public static final int  INITIAL_DENSE_CAPACITY = 8;
 	public static final long MAX_ARRAY_INDEX        = 4294967294L; // 2^32 - 2 (ECMAScript 规范标准上限)
+
+	public static final int LENGTH_PROP_ID = SymbolTable.id("length");
 
 	private static final Object   NULL_SENTINEL  = new Object();
 	private static final Object[] EMPTY_ELEMENTS = new Object[0];
@@ -23,18 +18,37 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	private final Map<Long, Object> sparse = new HashMap<>();
 	private long length = 0;
 
-	public JSArray() {}
+	//region 构造函数
+
+	public JSArray() {
+		super();
+	}
+
+	public JSArray(int initialCapacity) {
+		super();
+		if (initialCapacity > 0) {
+			int cap = Math.min(initialCapacity, MAX_DENSE_CAPACITY);
+			this.elements = new Object[Math.max(cap, INITIAL_DENSE_CAPACITY)];
+			Arrays.fill(this.elements, JSUndefined.INSTANCE);
+		}
+	}
+
+	public JSArray(JSObject prototype) {
+		super(prototype);
+	}
 
 	public JSArray(Collection<?> initial) {
+		super();
 		if (initial != null) {
 			int sz = initial.size();
 			if (sz > 0 && sz <= MAX_DENSE_CAPACITY) {
-				this.elements = new Object[Math.max(sz, INITIAL_DENSE_CAPACITY)];
+				int cap = Math.max(sz, INITIAL_DENSE_CAPACITY);
+				this.elements = new Object[cap];
 				int idx = 0;
 				for (Object elem : initial) {
 					this.elements[idx++] = elem;
 				}
-				for (int i = idx; i < elements.length; i++) {
+				for (int i = idx; i < cap; i++) {
 					this.elements[i] = JSUndefined.INSTANCE;
 				}
 				this.denseSize = sz;
@@ -48,16 +62,18 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public JSArray(Iterable<?> initial) {
+		super();
 		if (initial != null) {
 			if (initial instanceof Collection<?> c) {
 				int sz = c.size();
 				if (sz > 0 && sz <= MAX_DENSE_CAPACITY) {
-					this.elements = new Object[Math.max(sz, INITIAL_DENSE_CAPACITY)];
+					int cap = Math.max(sz, INITIAL_DENSE_CAPACITY);
+					this.elements = new Object[cap];
 					int idx = 0;
 					for (Object elem : c) {
 						this.elements[idx++] = elem;
 					}
-					for (int i = idx; i < elements.length; i++) {
+					for (int i = idx; i < cap; i++) {
 						this.elements[i] = JSUndefined.INSTANCE;
 					}
 					this.denseSize = sz;
@@ -73,9 +89,41 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 	}
 
+	//endregion
+	//region 长度属性操作
+
 	public long length() {
 		return length;
 	}
+
+	public void setLength(double d) {
+		if (Double.isFinite(d) && d >= 0 && d <= 4294967295L && d == Math.floor(d)) {
+			long newLen = (long) d;
+			this.length = newLen;
+			if (newLen < denseSize) {
+				for (int i = (int) newLen; i < denseSize; i++) {
+					elements[i] = JSUndefined.INSTANCE;
+				}
+				denseSize = (int) newLen;
+			}
+			if (!sparse.isEmpty()) {
+				sparse.keySet().removeIf(k -> k >= newLen);
+			}
+			return;
+		}
+		throw new IllegalArgumentException("RangeError: Invalid array length: " + d);
+	}
+
+	public void setLength(Object value) {
+		if (value instanceof Number num) {
+			setLength(num.doubleValue());
+			return;
+		}
+		throw new IllegalArgumentException("RangeError: Invalid array length: " + value);
+	}
+
+	//endregion
+	//region 元素快速访问 (getElement / setElement)
 
 	public Object getElement(int index) {
 		if (index >= 0 && index < denseSize) {
@@ -89,6 +137,20 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return elements[(int) index];
 		}
 		return getElementSlow(index);
+	}
+
+	public double getElementDouble(int index) {
+		if (index >= 0 && index < denseSize) {
+			return JSOps.toDouble(elements[index]);
+		}
+		return JSOps.toDouble(getElementSlow(index));
+	}
+
+	public double getElementDouble(long index) {
+		if (index >= 0 && index < denseSize) {
+			return JSOps.toDouble(elements[(int) index]);
+		}
+		return JSOps.toDouble(getElementSlow(index));
 	}
 
 	private Object getElementSlow(long index) {
@@ -110,17 +172,12 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		setElement((long) index, value);
 	}
 
-	private void grow(int minCapacity) {
-		int oldCap = elements.length;
-		int newCap = oldCap == 0 ? INITIAL_DENSE_CAPACITY : (oldCap + (oldCap >> 1));
-		if (newCap < minCapacity) newCap = minCapacity;
-		if (newCap > MAX_DENSE_CAPACITY) newCap = MAX_DENSE_CAPACITY;
-		Object[] newArr = new Object[newCap];
-		System.arraycopy(elements, 0, newArr, 0, denseSize);
-		for (int i = denseSize; i < newCap; i++) {
-			newArr[i] = JSUndefined.INSTANCE;
-		}
-		this.elements = newArr;
+	public void setElementDouble(int index, double value) {
+		setElement(index, (Double) value);
+	}
+
+	public void setElementDouble(long index, double value) {
+		setElement(index, (Double) value);
 	}
 
 	public void setElement(long index, Object value) {
@@ -145,6 +202,21 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 	}
 
+	private void grow(int minCapacity) {
+		int oldCap = elements.length;
+		int newCap = oldCap == 0 ? INITIAL_DENSE_CAPACITY : (oldCap + (oldCap >> 1));
+		if (newCap < minCapacity) newCap = minCapacity;
+		if (newCap > MAX_DENSE_CAPACITY) newCap = MAX_DENSE_CAPACITY;
+		Object[] newArr = new Object[newCap];
+		if (denseSize > 0) {
+			System.arraycopy(elements, 0, newArr, 0, denseSize);
+		}
+		for (int i = denseSize; i < newCap; i++) {
+			newArr[i] = JSUndefined.INSTANCE;
+		}
+		this.elements = newArr;
+	}
+
 	public void push(Object value) {
 		if (length == denseSize && denseSize < MAX_DENSE_CAPACITY) {
 			if (denseSize == elements.length) {
@@ -155,6 +227,10 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return;
 		}
 		setElement(length, value);
+	}
+
+	public void pushDouble(double value) {
+		push(Double.valueOf(value));
 	}
 
 	public Object pop() {
@@ -171,79 +247,44 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		return val;
 	}
 
-	public static String toPropertyKey(Object key) {
-		if (key instanceof String s) return s;
-		if (key instanceof Integer i) return i.toString();
-		if (key instanceof Long l) return l.toString();
-		if (key instanceof Number num) {
-			double d = num.doubleValue();
-			if (Double.isFinite(d) && d == Math.floor(d)) {
-				if (d == 0.0) return "0"; // -0.0 -> "0"
-				if (d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
-					return Long.toString((long) d);
-				}
-			}
-			return JSOps.toStr(num);
+	public boolean hasElement(long index) {
+		if (index >= 0 && index < denseSize) {
+			return elements[(int) index] != JSUndefined.INSTANCE;
 		}
-		return JSOps.toStr(key);
+		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
+			return sparse.containsKey(index);
+		}
+		return false;
 	}
 
-	public static Long parseIndex(String key) {
-		if (key == null || key.isEmpty()) return null;
-		int len = key.length();
-		if (len > 10) return null;
-		char first = key.charAt(0);
-		if (first < '0' || first > '9') return null;
-		if (len > 1 && first == '0') return null; // 排除非规范前导零如 "01", "00"
-		long val = 0;
-		for (int i = 0; i < len; i++) {
-			char ch = key.charAt(i);
-			if (ch < '0' || ch > '9') return null;
-			val = val * 10 + (ch - '0');
+	public void deleteElement(long index) {
+		if (index >= 0 && index < denseSize) {
+			elements[(int) index] = JSUndefined.INSTANCE;
+		} else if (index >= 0 && index <= MAX_ARRAY_INDEX) {
+			sparse.remove(index);
 		}
-		if (val <= 4294967294L) { // ECMAScript: [0, 2^32 - 2]
-			return val;
-		}
-		return null;
 	}
 
-	public static Long toValidArrayIndex(Object index) {
-		if (index instanceof Integer i) {
-			int v = i.intValue();
-			return v >= 0 ? (long) v : null;
-		}
-		if (index instanceof Long l) {
-			long v = l.longValue();
-			return (v >= 0 && v <= 4294967294L) ? v : null;
-		}
-		if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= 4294967294L && val == (long) val) {
-				return (long) val;
-			}
-			return null;
-		}
-		String key = toPropertyKey(index);
-		return parseIndex(key);
-	}
+	//endregion
+	//region 继承自 JSObject 的属性存取体系对接
 
-	public static Integer toValidJavaArrayIndex(Object index) {
-		if (index instanceof Integer i) {
-			int v = i.intValue();
-			return v >= 0 ? v : null;
+	@Override
+	public Object get(int propId) {
+		if (propId == LENGTH_PROP_ID) {
+			return (double) length;
 		}
-		if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				return (int) val;
+		int offset = shape.getOffset(propId);
+		if (offset >= 0) {
+			return getSlot(offset);
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				return getElement(idx);
 			}
-			return null;
 		}
-		Long idx = toValidArrayIndex(index);
-		if (idx != null && idx <= Integer.MAX_VALUE) {
-			return idx.intValue();
-		}
-		return null;
+		return super.get(propId);
 	}
 
 	@Override
@@ -259,24 +300,61 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	@Override
+	public double getAsDouble(int propId) {
+		if (propId == LENGTH_PROP_ID) {
+			return (double) length;
+		}
+		int offset = shape.getOffset(propId);
+		if (offset >= 0) {
+			if ((doubleFieldMask & (1L << offset)) != 0L) {
+				return getDoubleSlot(offset);
+			}
+			return JSOps.toDouble(getObjectSlot(offset));
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				return getElementDouble(idx);
+			}
+		}
+		return super.getAsDouble(propId);
+	}
+
+	@Override
+	public double getAsDouble(String key) {
+		if ("length".equals(key)) {
+			return (double) length;
+		}
+		Long idx = parseIndex(key);
+		if (idx != null) {
+			return getElementDouble(idx);
+		}
+		return super.getAsDouble(key);
+	}
+
+	@Override
+	public void put(int propId, Object value) {
+		if (propId == LENGTH_PROP_ID) {
+			setLength(value);
+			return;
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				setElement(idx, value);
+				return;
+			}
+		}
+		super.put(propId, value);
+	}
+
+	@Override
 	public void put(String key, Object value) {
 		if ("length".equals(key)) {
-			if (value instanceof Number num) {
-				double d = num.doubleValue();
-				if (Double.isFinite(d) && d >= 0 && d < 4294967295L && d == Math.floor(d)) {
-					long newLen = (long) d;
-					this.length = newLen;
-					if (newLen < denseSize) {
-						for (int i = (int) newLen; i < denseSize; i++) {
-							elements[i] = JSUndefined.INSTANCE;
-						}
-						denseSize = (int) newLen;
-					}
-					sparse.keySet().removeIf(k -> k >= newLen);
-					return;
-				}
-			}
-			throw new IllegalArgumentException("RangeError: Invalid array length: " + value);
+			setLength(value);
+			return;
 		}
 		Long idx = parseIndex(key);
 		if (idx != null) {
@@ -284,6 +362,138 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return;
 		}
 		super.put(key, value);
+	}
+
+	@Override
+	public void putDouble(int propId, double value) {
+		if (propId == LENGTH_PROP_ID) {
+			setLength(value);
+			return;
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				setElementDouble(idx, value);
+				return;
+			}
+		}
+		super.putDouble(propId, value);
+	}
+
+	@Override
+	public void putDouble(String key, double value) {
+		if ("length".equals(key)) {
+			setLength(value);
+			return;
+		}
+		Long idx = parseIndex(key);
+		if (idx != null) {
+			setElementDouble(idx, value);
+			return;
+		}
+		super.putDouble(key, value);
+	}
+
+	@Override
+	public boolean has(int propId) {
+		if (propId == LENGTH_PROP_ID) {
+			return true;
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				return hasElement(idx);
+			}
+		}
+		return super.has(propId);
+	}
+
+	@Override
+	public boolean has(String key) {
+		if ("length".equals(key)) {
+			return true;
+		}
+		Long idx = parseIndex(key);
+		if (idx != null) {
+			return hasElement(idx);
+		}
+		return super.has(key);
+	}
+
+	@Override
+	public void delete(int propId) {
+		if (propId == LENGTH_PROP_ID) {
+			return; // ECMAScript: array length is non-configurable
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				deleteElement(idx);
+				return;
+			}
+		}
+		super.delete(propId);
+	}
+
+	@Override
+	public void delete(String key) {
+		if ("length".equals(key)) {
+			return;
+		}
+		Long idx = parseIndex(key);
+		if (idx != null) {
+			deleteElement(idx);
+			return;
+		}
+		super.delete(key);
+	}
+
+	//endregion
+	//region 遍历与反射支持
+
+	@Override
+	public Set<String> keys() {
+		Set<String> allKeys = new LinkedHashSet<>();
+		// 1. 数组索引按升序遍历
+		for (int i = 0; i < denseSize; i++) {
+			if (elements[i] != JSUndefined.INSTANCE) {
+				allKeys.add(String.valueOf(i));
+			}
+		}
+		if (!sparse.isEmpty()) {
+			List<Long> sparseKeys = new ArrayList<>(sparse.keySet());
+			Collections.sort(sparseKeys);
+			for (Long k : sparseKeys) {
+				allKeys.add(String.valueOf(k));
+			}
+		}
+		// 2. 继承自 JSObject 的自定义属性
+		allKeys.addAll(super.keys());
+		return allKeys;
+	}
+
+	@Override
+	public Map<String, Object> getProperties() {
+		Map<String, Object> map = new LinkedHashMap<>();
+		for (int i = 0; i < denseSize; i++) {
+			Object val = elements[i];
+			if (val != JSUndefined.INSTANCE) {
+				map.put(String.valueOf(i), val);
+			}
+		}
+		if (!sparse.isEmpty()) {
+			List<Long> sparseKeys = new ArrayList<>(sparse.keySet());
+			Collections.sort(sparseKeys);
+			for (Long k : sparseKeys) {
+				Object val = sparse.get(k);
+				map.put(String.valueOf(k), val == NULL_SENTINEL ? null : val);
+			}
+		}
+		map.putAll(super.getProperties());
+		return map;
 	}
 
 	@Override
@@ -326,4 +536,82 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 		return "[JSArray (length: " + length + ")]";
 	}
+
+	//endregion
+	//region 静态工具方法
+
+	public static String toPropertyKey(Object key) {
+		if (key instanceof String s) return s;
+		if (key instanceof Integer i) return i.toString();
+		if (key instanceof Long l) return l.toString();
+		if (key instanceof Number num) {
+			double d = num.doubleValue();
+			if (Double.isFinite(d) && d == Math.floor(d)) {
+				if (d == 0.0) return "0"; // -0.0 -> "0"
+				if (d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
+					return Long.toString((long) d);
+				}
+			}
+			return JSOps.toStr(num);
+		}
+		return JSOps.toStr(key);
+	}
+
+	public static Long parseIndex(String key) {
+		if (key == null || key.isEmpty()) return null;
+		int len = key.length();
+		if (len > 10) return null;
+		char first = key.charAt(0);
+		if (first < '0' || first > '9') return null;
+		if (len > 1 && first == '0') return null; // 排除非规范前导零如 "01", "00"
+		long val = 0;
+		for (int i = 0; i < len; i++) {
+			char ch = key.charAt(i);
+			if (ch < '0' || ch > '9') return null;
+			val = val * 10 + (ch - '0');
+		}
+		if (val <= MAX_ARRAY_INDEX) {
+			return val;
+		}
+		return null;
+	}
+
+	public static Long toValidArrayIndex(Object index) {
+		if (index instanceof Integer i) {
+			return i >= 0 ? (long) i : null;
+		}
+		if (index instanceof Long l) {
+			long v = l;
+			return (v >= 0 && v <= MAX_ARRAY_INDEX) ? l : null; // 不必重新装箱
+		}
+		if (index instanceof Double d) {
+			double val = d;
+			if (val >= 0 && val <= MAX_ARRAY_INDEX && val == (long) val) {
+				return (long) val;
+			}
+			return null;
+		}
+		String key = toPropertyKey(index);
+		return parseIndex(key);
+	}
+
+	public static Integer toValidJavaArrayIndex(Object index) {
+		if (index instanceof Integer i) {
+			return i >= 0 ? i : null; // 不必重新装箱
+		}
+		if (index instanceof Double d) {
+			double val = d;
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				return (int) val;
+			}
+			return null;
+		}
+		Long idx = toValidArrayIndex(index);
+		if (idx != null && idx <= Integer.MAX_VALUE) {
+			return idx.intValue();
+		}
+		return null;
+	}
+
+	//endregion
 }

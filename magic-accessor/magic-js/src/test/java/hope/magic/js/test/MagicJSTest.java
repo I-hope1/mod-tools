@@ -1,11 +1,6 @@
 package hope.magic.js.test;
 
-import hope.magic.js.runtime.JSArray;
-import hope.magic.js.runtime.JSContext;
-import hope.magic.js.runtime.JSObject;
-import hope.magic.js.runtime.JSScript;
-import hope.magic.js.runtime.JSShape;
-import hope.magic.js.runtime.SymbolTable;
+import hope.magic.js.runtime.*;
 import hope.magic.js.compiler.JSCompiler;
 import org.junit.jupiter.api.*;
 
@@ -596,6 +591,14 @@ public class MagicJSTest {
 		Assertions.assertTrue(obj.keys().contains("b"));
 		Assertions.assertFalse(obj.keys().contains("a"));
 		Assertions.assertEquals(1, obj.getProperties().size());
+
+		obj.put("a", JSUndefined.INSTANCE);
+		Assertions.assertTrue(obj.has("a"));
+		Assertions.assertTrue(obj.has("b"));
+		Assertions.assertEquals(2, obj.keys().size());
+		Assertions.assertTrue(obj.keys().contains("b"));
+		Assertions.assertTrue(obj.keys().contains("a"));
+		Assertions.assertEquals(2, obj.getProperties().size());
 	}
 
 	@Test
@@ -681,7 +684,7 @@ public class MagicJSTest {
 		}
 
 		startLatch.countDown();
-		for (java.util.concurrent.Future<?> f : futures) {
+		for (var f : futures) {
 			f.get();
 		}
 		pool.shutdown();
@@ -689,7 +692,7 @@ public class MagicJSTest {
 		// 验证重构后生成的脚本类无任何冗余静态 $ic 字段，彻底避免元空间膨胀与静态锁竞争
 		Class<?> scriptClass = script.getClass();
 		boolean hasOldIcField = false;
-		for (java.lang.reflect.Field f : scriptClass.getDeclaredFields()) {
+		for (var f : scriptClass.getDeclaredFields()) {
 			if (f.getName().startsWith("$ic_")) {
 				hasOldIcField = true;
 				break;
@@ -758,6 +761,13 @@ public class MagicJSTest {
 		Assertions.assertEquals(1.0, ((Number) cx.eval("1 | 2 ^ 2")).doubleValue());
 		// 4. BitwiseAnd vs BitwiseXor: 1 ^ 2 & 3 => 1 ^ 2 = 3
 		Assertions.assertEquals(3.0, ((Number) cx.eval("1 ^ 2 & 3")).doubleValue());
+	}
+
+	@Test
+	public void testPackages() {
+		JSContext cx = new JSContext();
+
+		Assertions.assertEquals(Runtime.getRuntime(), cx.eval("Packages['java.lang.Runtime'].getRuntime();"));
 	}
 
 	@Test

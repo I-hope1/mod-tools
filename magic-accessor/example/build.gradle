@@ -12,6 +12,9 @@ dependencies {
 	implementation 'com.googlecode.aviator:aviator:5.4.4'
 	implementation 'org.graalvm.polyglot:polyglot:24.1.2'
 	implementation 'org.graalvm.polyglot:js-community:24.1.2'
+	implementation 'com.caoccao.javet:javet:5.0.11'
+	implementation 'com.caoccao.javet:javet-v8-windows-x86_64:5.0.11:'
+
 	implementation 'org.ow2.asm:asm:9.9.1'
 
 	implementation 'org.openjdk.jmh:jmh-core:1.37'

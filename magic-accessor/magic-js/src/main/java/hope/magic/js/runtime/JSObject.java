@@ -7,6 +7,15 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 public class JSObject {
+	//region 初始化
+	/** 内部删除哨兵（Tombstone），专用于区分“属性不存在”与“属性值为 undefined” */
+	private static final Object DELETED = new Object() {
+		@Override
+		public String toString() {
+			return "<deleted>";
+		}
+	};
+
 	public static final int IN_OBJECT_FIELD_COUNT     = 8;
 	public static final int IN_OBJECT_SLOTS           = IN_OBJECT_FIELD_COUNT;
 	public static final int OVERFLOW_INITIAL_CAPACITY = 4;
@@ -31,20 +40,16 @@ public class JSObject {
 	public JSShape shape           = JSShape.ROOT;
 	public long    doubleFieldMask = 0L; // 记录哪些 offset 槽位存储的是 double
 
-	// ----------------------------------------------------
-	// In-Object 原生槽位 (8 x 64bit long, 存 double/int)
-	// ----------------------------------------------------
 	public long prim0, prim1, prim2, prim3, prim4, prim5, prim6, prim7;
 	public long[] overflowPrim = null;
 
-	// ----------------------------------------------------
-	// In-Object 引用槽位 (8 x Object, 存 JSObject/String 等)
-	// ----------------------------------------------------
 	public Object obj0, obj1, obj2, obj3, obj4, obj5, obj6, obj7;
 	public Object[] overflowObj = null;
 
 	private JSObject prototype = null;
 
+	//endregion
+	//region 构造器
 	public JSObject() { }
 
 	public JSObject(JSShape shape) {
@@ -55,7 +60,9 @@ public class JSObject {
 		this.prototype = prototype;
 	}
 
-	// 底层槽位存取 (直接字段访问，C2 JIT 配合常量偏移时实现 100% 单指令 MOV 汇编直读)
+	//endregion
+	//region 槽位访问
+
 	public double getDoubleSlot(int offset) {
 		return switch (offset) {
 			case 0 -> Double.longBitsToDouble(prim0);
@@ -80,14 +87,38 @@ public class JSObject {
 		doubleFieldMask |= (1L << offset);
 		long raw = Double.doubleToRawLongBits(value);
 		switch (offset) {
-			case 0 -> prim0 = raw;
-			case 1 -> prim1 = raw;
-			case 2 -> prim2 = raw;
-			case 3 -> prim3 = raw;
-			case 4 -> prim4 = raw;
-			case 5 -> prim5 = raw;
-			case 6 -> prim6 = raw;
-			case 7 -> prim7 = raw;
+			case 0 -> {
+				prim0 = raw;
+				obj0 = null;
+			}
+			case 1 -> {
+				prim1 = raw;
+				obj1 = null;
+			}
+			case 2 -> {
+				prim2 = raw;
+				obj2 = null;
+			}
+			case 3 -> {
+				prim3 = raw;
+				obj3 = null;
+			}
+			case 4 -> {
+				prim4 = raw;
+				obj4 = null;
+			}
+			case 5 -> {
+				prim5 = raw;
+				obj5 = null;
+			}
+			case 6 -> {
+				prim6 = raw;
+				obj6 = null;
+			}
+			case 7 -> {
+				prim7 = raw;
+				obj7 = null;
+			}
 			default -> setOverflowDouble(offset - IN_OBJECT_FIELD_COUNT, value);
 		}
 	}
@@ -100,9 +131,12 @@ public class JSObject {
 			overflowPrim = Arrays.copyOf(overflowPrim, Math.max(overflowPrim.length * 2, idx + 1));
 		}
 		overflowPrim[idx] = raw;
+		if (overflowObj != null && idx < overflowObj.length) {
+			overflowObj[idx] = null;
+		}
 	}
 
-	public Object getObjectSlot(int offset) {
+	public Object getRawObjectSlot(int offset) {
 		return switch (offset) {
 			case 0 -> obj0;
 			case 1 -> obj1;
@@ -118,7 +152,12 @@ public class JSObject {
 
 	private Object getOverflowObject(int idx) {
 		Object[] of = overflowObj;
-		return (of != null && idx < of.length) ? of[idx] : JSUndefined.INSTANCE;
+		return (of != null && idx < of.length) ? of[idx] : DELETED;
+	}
+
+	public Object getObjectSlot(int offset) {
+		Object val = getRawObjectSlot(offset);
+		return (val == DELETED) ? JSUndefined.INSTANCE : val;
 	}
 
 	public void setSlot(int offset, Object value) {
@@ -140,6 +179,24 @@ public class JSObject {
 		doubleFieldMask &= ~(1L << offset);
 	}
 
+	private void clearPrimSlot(int offset) {
+		switch (offset) {
+			case 0 -> prim0 = 0L;
+			case 1 -> prim1 = 0L;
+			case 2 -> prim2 = 0L;
+			case 3 -> prim3 = 0L;
+			case 4 -> prim4 = 0L;
+			case 5 -> prim5 = 0L;
+			case 6 -> prim6 = 0L;
+			case 7 -> prim7 = 0L;
+			default -> {
+				if (overflowPrim != null && offset - IN_OBJECT_FIELD_COUNT < overflowPrim.length) {
+					overflowPrim[offset - IN_OBJECT_FIELD_COUNT] = 0L;
+				}
+			}
+		}
+	}
+
 	private void setOverflowSlot(int offset, Object value) {
 		setOverflowObject(offset - IN_OBJECT_FIELD_COUNT, value);
 	}
@@ -153,6 +210,9 @@ public class JSObject {
 		overflowObj[idx] = value;
 	}
 
+	/**
+	 * 供 Linker / IC 快速读槽位：若为 DELETED，严格返回 JSUndefined.INSTANCE，绝不泄露内部哨兵
+	 */
 	public Object getSlot(int offset) {
 		if ((doubleFieldMask & (1L << offset)) == 0L) {
 			return getObjectSlot(offset);
@@ -164,12 +224,18 @@ public class JSObject {
 		return Double.valueOf(getDoubleSlot(offset));
 	}
 
-	// 通用读 API (get / getAsDouble)
-
+	//endregion
+	//region 通用读 API (遇 DELETED 视为自身无属性，回退原型链)
 	public Object get(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			return getSlot(offset);
+			if ((doubleFieldMask & (1L << offset)) != 0L) {
+				return getBoxedDouble(offset);
+			}
+			Object val = getRawObjectSlot(offset);
+			if (val != DELETED) {
+				return val; // 包括 null 与 JSUndefined.INSTANCE 均属于合法属性值
+			}
 		}
 		return getSlow(propId);
 	}
@@ -184,7 +250,10 @@ public class JSObject {
 			if ((doubleFieldMask & (1L << offset)) != 0L) {
 				return getDoubleSlot(offset);
 			}
-			return JSOps.toDouble(getObjectSlot(offset));
+			Object val = getRawObjectSlot(offset);
+			if (val != DELETED) {
+				return JSOps.toDouble(val);
+			}
 		}
 		return JSOps.toDouble(getSlow(propId));
 	}
@@ -198,13 +267,15 @@ public class JSObject {
 		return prototype.get(propId);
 	}
 
-	// 通用写 API (put / putDouble)
+	//endregion
+	//region 通用写 API (覆盖原值或 DELETED 槽位)
 
 	public void putDouble(int propId, double value) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0 && offset < 8) {
 			doubleFieldMask |= (1L << offset);
 			UNSAFE.putDouble(this, PRIM_FIELD_OFFSETS[offset], value);
+			UNSAFE.putObject(this, OBJ_FIELD_OFFSETS[offset], null);
 			return;
 		}
 		putDoubleSlow(propId, value);
@@ -214,20 +285,55 @@ public class JSObject {
 
 	@SuppressWarnings("DataFlowIssue")
 	private void putDoubleSlow(int propId, double value) {
-		if (shape.getOffset(propId) < 0) {
+		int offset = shape.getOffset(propId);
+		if (offset < 0) {
 			shape = shape.addProperty(propId, JSShape.TYPE_DOUBLE);
+			offset = shape.propertyCount - 1;
 		}
-		setDoubleSlot(shape.propertyCount - 1, value);
+		setDoubleSlot(offset, value);
 
-		// 确保本冷路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
-		// SymbolTable 分配的 propId 恒 >= 0，数学上与 SENTINEL_PROP_ID (负无穷边界) 绝对正交互斥
 		if (propId == SENTINEL_PROP_ID) {
 			switch (propId) {
-				case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
-				case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
-				case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24:
-				case 25: case 26: case 27: case 28: case 29: case 30: case 31: case 32:
-				case 33: case 34: case 35: case 36: case 37: case 38: case 39: case 40:
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+				case 6:
+				case 7:
+				case 8:
+				case 9:
+				case 10:
+				case 11:
+				case 12:
+				case 13:
+				case 14:
+				case 15:
+				case 16:
+				case 17:
+				case 18:
+				case 19:
+				case 20:
+				case 21:
+				case 22:
+				case 23:
+				case 24:
+				case 25:
+				case 26:
+				case 27:
+				case 28:
+				case 29:
+				case 30:
+				case 31:
+				case 32:
+				case 33:
+				case 34:
+				case 35:
+				case 36:
+				case 37:
+				case 38:
+				case 39:
+				case 40:
 					return;
 			}
 		}
@@ -256,14 +362,48 @@ public class JSObject {
 		shape = shape.addProperty(propId, JSShape.TYPE_OBJECT);
 		setSlot(shape.propertyCount - 1, value);
 
-		// 确保本冷路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
 		if (propId == SENTINEL_PROP_ID) {
 			switch (propId) {
-				case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
-				case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
-				case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24:
-				case 25: case 26: case 27: case 28: case 29: case 30: case 31: case 32:
-				case 33: case 34: case 35: case 36: case 37: case 38: case 39: case 40:
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+				case 6:
+				case 7:
+				case 8:
+				case 9:
+				case 10:
+				case 11:
+				case 12:
+				case 13:
+				case 14:
+				case 15:
+				case 16:
+				case 17:
+				case 18:
+				case 19:
+				case 20:
+				case 21:
+				case 22:
+				case 23:
+				case 24:
+				case 25:
+				case 26:
+				case 27:
+				case 28:
+				case 29:
+				case 30:
+				case 31:
+				case 32:
+				case 33:
+				case 34:
+				case 35:
+				case 36:
+				case 37:
+				case 38:
+				case 39:
+				case 40:
 					return;
 			}
 		}
@@ -273,12 +413,17 @@ public class JSObject {
 		put(SymbolTable.id(key), value);
 	}
 
-	// 对象查询、删除与反射元数据 API
+	//endregion
+	//region 查询与删除 API
 
 	public boolean has(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			return getSlot(offset) != JSUndefined.INSTANCE;
+			if ((doubleFieldMask & (1L << offset)) != 0L) {
+				return true;
+			}
+			// 只有 DELETED 表示不存在；null 和 undefined 均为对象上的有效属性
+			return getRawObjectSlot(offset) != DELETED;
 		}
 		return prototype != null && propId >= 0 && prototype.has(propId);
 	}
@@ -290,7 +435,9 @@ public class JSObject {
 	public void delete(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			setSlot(offset, JSUndefined.INSTANCE);
+			clearDoubleMask(offset);
+			clearPrimSlot(offset);
+			setSlot(offset, DELETED);
 		}
 	}
 
@@ -298,7 +445,8 @@ public class JSObject {
 		delete(SymbolTable.id(key));
 	}
 
-	// 对象反射与遍历 API
+	//endregion
+	//region 反射与遍历 API (仅过滤 DELETED，保留 undefined 属性)
 
 	public Set<String> keys() {
 		int count = shape.propertyCount;
@@ -308,13 +456,10 @@ public class JSObject {
 
 		Set<String> activeKeys = new LinkedHashSet<>(count);
 		for (int i = 0; i < count; i++) {
-			// offset 恒等于 i，直接读槽位判断是否被 delete 为 undefined
-			if (getSlot(i) != JSUndefined.INSTANCE) {
-				int    keyId = shape.getKeyId(i);
-				String name  = SymbolTable.name(keyId);
-				if (name != null) {
-					activeKeys.add(name);
-				}
+			if ((doubleFieldMask & (1L << i)) != 0L || getRawObjectSlot(i) != DELETED) {
+				int keyId = shape.getKeyId(i);
+				String name = SymbolTable.name(keyId);
+				if (name != null) activeKeys.add(name);
 			}
 		}
 		return activeKeys;
@@ -328,12 +473,20 @@ public class JSObject {
 
 		Map<String, Object> map = new LinkedHashMap<>(count);
 		for (int i = 0; i < count; i++) {
-			Object val = getSlot(i);
-			if (val != JSUndefined.INSTANCE) {
+			if ((doubleFieldMask & (1L << i)) != 0L) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
 				if (name != null) {
-					map.put(name, val);
+					map.put(name, getBoxedDouble(i));
+				}
+			} else {
+				Object raw = getRawObjectSlot(i);
+				if (raw != DELETED) {
+					int    keyId = shape.getKeyId(i);
+					String name  = SymbolTable.name(keyId);
+					if (name != null) {
+						map.put(name, raw);
+					}
 				}
 			}
 		}
@@ -352,4 +505,5 @@ public class JSObject {
 		sb.append("}");
 		return sb.toString();
 	}
+	//endregion
 }

@@ -225,7 +225,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 	private ClassWriter getOrCreateBridgeDataWriter() {
 		if (bridgeDataWriter == null) {
-			bridgeDataWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			bridgeDataWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 			bridgeDataWriter.visit(
 				Opcodes.V1_8,
 				Opcodes.ACC_PUBLIC,
@@ -248,7 +248,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 
 	private ClassWriter getOrCreateBridgeWriter() {
 		if (bridgeWriter == null) {
-			bridgeWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			bridgeWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 			bridgeWriter.visit(
 				Opcodes.V1_8,
 				Opcodes.ACC_PUBLIC,
@@ -274,7 +274,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 			return legacyClassWriterMap.get(element.owner);
 		}
 
-		ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		String genClassName = "hope.magic.gen.MagicGenX" + ID_GEN.incrementAndGet();
 		String superClassName = magicSuperClass != null ? magicSuperClass.replace('.', '/') : "hope/magic/runtime/MAGICIMPL";
 
@@ -371,8 +371,8 @@ public class AccessorProcessor extends BaseAccessorProc {
 								false
 							);
 
-							bridgeClinit.visitInsn(Opcodes.ACONST_NULL);
-							bridgeClinit.visitInsn(Opcodes.ICONST_M1);
+							bridgeClinit.visitInsn(Opcodes.ACONST_NULL); // null
+							bridgeClinit.visitInsn(Opcodes.ICONST_M1); // LM_TRUSTED
 							bridgeClinit.visitLdcInsn(org.objectweb.asm.Type.getType("Ljava/lang/NoSuchMethodException;"));
 							bridgeClinit.visitMethodInsn(
 								Opcodes.INVOKEVIRTUAL,
@@ -1025,13 +1025,15 @@ public class AccessorProcessor extends BaseAccessorProc {
 			clsFieldName = bridgeClassFieldMap.get(clsKey);
 			if (clsFieldName == null) {
 				clsFieldName = "CLS_" + (classFieldId++);
-				bridgeWriter.visitField(
+				var fv = bridgeWriter.visitField(
 					Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
 					clsFieldName,
 					"Ljava/lang/Class;",
 					null,
 					null
-				).visitEnd();
+				);
+				fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+				fv.visitEnd();
 				bridgeClassFieldMap.put(clsKey, clsFieldName);
 			}
 		}
@@ -1044,13 +1046,15 @@ public class AccessorProcessor extends BaseAccessorProc {
 			mnFieldName = "MN_" + id;
 
 			// 在 MagicBridge 中声明 public static final MemberName 字段
-			bridgeWriter.visitField(
+			var fv = bridgeWriter.visitField(
 				Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
 				mnFieldName,
 				"Ljava/lang/invoke/MemberName;",
 				null,
 				null
-			).visitEnd();
+			);
+			fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+			fv.visitEnd();
 
 			bridgeMemberNameEntries.add(new BridgeMemberNameEntry(
 				mnFieldName,

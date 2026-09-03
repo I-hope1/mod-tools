@@ -96,6 +96,9 @@ public class ConstantFolder {
 			Node foldedBody   = foldNode(forStmt.body);
 
 			if (foldedCond instanceof Node.LiteralExpr lit && !JSOps.isTruthy(lit.value)) {
+				if (foldedInit instanceof Node.VarDecl || foldedInit instanceof Node.ExprStmt) {
+					return foldedInit;
+				}
 				return foldedInit != null ? new Node.ExprStmt(foldedInit, forStmt.line, forStmt.column)
 				 : new Node.BlockStmt(Collections.emptyList(), forStmt.line, forStmt.column);
 			}
@@ -159,8 +162,9 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.AssignExpr assign) {
-			Node foldedVal = foldNode(assign.value);
-			return new Node.AssignExpr(assign.target, assign.op, foldedVal, assign.line, assign.column);
+			Node foldedTarget = foldNode(assign.target);
+			Node foldedVal    = foldNode(assign.value);
+			return new Node.AssignExpr(foldedTarget, assign.op, foldedVal, assign.line, assign.column);
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
@@ -168,14 +172,9 @@ public class ConstantFolder {
 			if (inner instanceof Node.LiteralExpr lit) {
 				Object val = lit.value;
 				if (un.op == TokenType.MINUS) {
-					if (val instanceof Integer i) {
-						return new Node.LiteralExpr(-i, un.line, un.column);
-					}
-					if (val instanceof Long l) {
-						return new Node.LiteralExpr(-l, un.line, un.column);
-					}
 					if (val instanceof Number num) {
-						return new Node.LiteralExpr(-num.doubleValue(), un.line, un.column);
+						// 统一转成 double 取负后通过 createNumberLiteral 打包，完美兼顾 -0.0 与溢出提升
+						return createNumberLiteral(-num.doubleValue(), un.line, un.column);
 					}
 				} else if (un.op == TokenType.NOT) {
 					boolean b = !JSOps.isTruthy(val);
@@ -270,13 +269,34 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.ObjectLiteralExpr objLit) {
-			Map<Object, Node.ObjectLiteralExpr.Entry> entryMap = new LinkedHashMap<>();
+			List<Node.ObjectLiteralExpr.Entry> newEntries = new ArrayList<>();
+			// 记录可被安全原地替换的【纯字面量】在 newEntries 中的下标
+			Map<Object, Integer> literalIndexMap = new HashMap<>();
+
 			for (var e : objLit.entries) {
-				// 相同 key 会覆盖前面的 entry
-				entryMap.put(e.key(), new Node.ObjectLiteralExpr.Entry(e.key(), foldNode(e.value())));
+				var     foldedVal        = foldNode(e.value());
+				boolean currentIsLiteral = foldedVal instanceof Node.LiteralExpr;
+				Integer prevLiteralIdx   = literalIndexMap.get(e.key());
+
+				if (prevLiteralIdx != null && currentIsLiteral) {
+					// 条件满足：旧值是纯字面量，且新值也是纯字面量
+					// 原地替换！不仅删除了旧死代码，还完美保留了第一次声明时的 Key 遍历顺序
+					newEntries.set(prevLiteralIdx, new Node.ObjectLiteralExpr.Entry(e.key(), foldedVal));
+				} else {
+					// 含有副作用（旧值含副作用需保留，或新值含副作用不能随意提前）
+					// 追加到末尾，保留原样交给运行时
+					newEntries.add(new Node.ObjectLiteralExpr.Entry(e.key(), foldedVal));
+
+					if (currentIsLiteral) {
+						// 如果当前是纯字面量，记录其位置，供后续可能出现的同名属性替换
+						literalIndexMap.put(e.key(), newEntries.size() - 1);
+					} else {
+						// 如果当前属性有副作用，后续即便有同名属性也不能替换当前项
+						literalIndexMap.remove(e.key());
+					}
+				}
 			}
 
-			List<Node.ObjectLiteralExpr.Entry> newEntries = new ArrayList<>(entryMap.values());
 			return new Node.ObjectLiteralExpr(newEntries, objLit.line, objLit.column);
 		}
 
@@ -329,6 +349,10 @@ public class ConstantFolder {
 						yield createNumberLiteral((double) res, line, column);
 					}
 					case STAR -> {
+						// 任何负数乘以 0（或 0 乘以负数），在 JS 中必须产出 -0.0
+						if ((l == 0 && r < 0) || (r == 0 && l < 0)) {
+							yield new Node.LiteralExpr(-0.0, line, column);
+						}
 						long res = (long) l * (long) r;
 						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) {
 							yield new Node.LiteralExpr((int) res, line, column);
@@ -395,13 +419,14 @@ public class ConstantFolder {
 
 	private static Node.LiteralExpr createNumberLiteral(double val, int line, int column) {
 		// 保护 -0.0，防止 (int) 强转丢失符号位
-    if (val == 0.0 && Double.doubleToRawLongBits(val) == 0x8000000000000000L) {
-        return new Node.LiteralExpr(-0.0, line, column);
-    }
-    if (val >= Integer.MIN_VALUE && val <= Integer.MAX_VALUE && val == Math.floor(val) && !Double.isInfinite(val)) {
-        return new Node.LiteralExpr((int) val, line, column);
-    }
-		if (val == Math.floor(val) && !Double.isInfinite(val)) {
+		if (val == 0.0 && Double.doubleToRawLongBits(val) == 0x8000000000000000L) {
+			return new Node.LiteralExpr(-0.0, line, column);
+		}
+		if (val >= Integer.MIN_VALUE && val <= Integer.MAX_VALUE && val == Math.floor(val) && !Double.isInfinite(val)) {
+			return new Node.LiteralExpr((int) val, line, column);
+		}
+		// 仅在 double 属于合法 Long 范围内时才转为 long
+		if (val >= -9.2233720368547758E18 && val <= 9.2233720368547758E18 && val == Math.floor(val) && !Double.isInfinite(val)) {
 			return new Node.LiteralExpr((long) val, line, column);
 		}
 		return new Node.LiteralExpr(val, line, column);

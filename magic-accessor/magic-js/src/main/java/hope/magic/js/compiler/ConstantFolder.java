@@ -1,6 +1,7 @@
 package hope.magic.js.compiler;
 
 import hope.magic.js.ast.*;
+import hope.magic.js.ast.Node.BlockStmt;
 import hope.magic.js.runtime.JSOps;
 
 import java.util.*;
@@ -89,27 +90,27 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.ForStmt forStmt) {
-			Node foldedInit = forStmt.init != null ? foldNode(forStmt.init) : null;
-			Node foldedCond = forStmt.condition != null ? foldNode(forStmt.condition) : null;
+			Node foldedInit   = forStmt.init != null ? foldNode(forStmt.init) : null;
+			Node foldedCond   = forStmt.condition != null ? foldNode(forStmt.condition) : null;
 			Node foldedUpdate = forStmt.update != null ? foldNode(forStmt.update) : null;
-			Node foldedBody = foldNode(forStmt.body);
+			Node foldedBody   = foldNode(forStmt.body);
 
 			if (foldedCond instanceof Node.LiteralExpr lit && !JSOps.isTruthy(lit.value)) {
 				return foldedInit != null ? new Node.ExprStmt(foldedInit, forStmt.line, forStmt.column)
-					: new Node.BlockStmt(Collections.emptyList(), forStmt.line, forStmt.column);
+				 : new Node.BlockStmt(Collections.emptyList(), forStmt.line, forStmt.column);
 			}
 			return new Node.ForStmt(foldedInit, foldedCond, foldedUpdate, foldedBody, forStmt.line, forStmt.column);
 		}
 
 		if (node instanceof Node.ForOfStmt forOf) {
 			Node foldedIterable = foldNode(forOf.iterable);
-			Node foldedBody = foldNode(forOf.body);
+			Node foldedBody     = foldNode(forOf.body);
 			return new Node.ForOfStmt(forOf.varName, forOf.isDeclaration, foldedIterable, foldedBody, forOf.line, forOf.column);
 		}
 
 		if (node instanceof Node.ForInStmt forIn) {
 			Node foldedObject = foldNode(forIn.object);
-			Node foldedBody = foldNode(forIn.body);
+			Node foldedBody   = foldNode(forIn.body);
 			return new Node.ForInStmt(forIn.varName, forIn.isDeclaration, foldedObject, foldedBody, forIn.line, forIn.column);
 		}
 
@@ -124,17 +125,17 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.TryStmt tryStmt) {
-			Node.BlockStmt tryB = (Node.BlockStmt) foldNode(tryStmt.tryBlock);
+			Node.BlockStmt tryB   = (Node.BlockStmt) foldNode(tryStmt.tryBlock);
 			Node.BlockStmt catchB = tryStmt.catchBlock != null ? (Node.BlockStmt) foldNode(tryStmt.catchBlock) : null;
-			Node.BlockStmt finB = tryStmt.finallyBlock != null ? (Node.BlockStmt) foldNode(tryStmt.finallyBlock) : null;
+			Node.BlockStmt finB   = tryStmt.finallyBlock != null ? (Node.BlockStmt) foldNode(tryStmt.finallyBlock) : null;
 			return new Node.TryStmt(tryB, tryStmt.catchParam, catchB, finB, tryStmt.line, tryStmt.column);
 		}
 
 		if (node instanceof Node.SwitchStmt switchStmt) {
-			Node foldedDisc = foldNode(switchStmt.discriminant);
-			List<Node.CaseClause> newCases = new ArrayList<>();
+			Node                  foldedDisc = foldNode(switchStmt.discriminant);
+			List<Node.CaseClause> newCases   = new ArrayList<>();
 			for (Node.CaseClause c : switchStmt.cases) {
-				Node newTest = c.test != null ? foldNode(c.test) : null;
+				Node       newTest  = c.test != null ? foldNode(c.test) : null;
 				List<Node> newStmts = new ArrayList<>();
 				for (Node s : c.consequent) {
 					Node fs = foldNode(s);
@@ -185,7 +186,7 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.BinaryExpr bin) {
-			Node left = foldNode(bin.left);
+			Node left  = foldNode(bin.left);
 			Node right = foldNode(bin.right);
 
 			// 左右均为常量：直接计算并返回 LiteralExpr
@@ -240,8 +241,8 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.CallExpr call) {
-			Node callee = foldNode(call.callee);
-			List<Node> args = new ArrayList<>();
+			Node       callee = foldNode(call.callee);
+			List<Node> args   = new ArrayList<>();
 			for (Node a : call.arguments) {
 				args.add(foldNode(a));
 			}
@@ -249,7 +250,7 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.NewExpr newExpr) {
-			Node ctor = foldNode(newExpr.constructor);
+			Node       ctor = foldNode(newExpr.constructor);
 			List<Node> args = new ArrayList<>();
 			for (Node a : newExpr.arguments) {
 				args.add(foldNode(a));
@@ -264,24 +265,35 @@ public class ConstantFolder {
 
 		if (node instanceof Node.IndexAccessExpr idx) {
 			Node target = foldNode(idx.target);
-			Node index = foldNode(idx.index);
+			Node index  = foldNode(idx.index);
 			return new Node.IndexAccessExpr(target, index, idx.line, idx.column);
 		}
 
 		if (node instanceof Node.ObjectLiteralExpr objLit) {
-			List<Node.ObjectLiteralExpr.Entry> newEntries = new ArrayList<>();
-			for (Node.ObjectLiteralExpr.Entry e : objLit.entries) {
-				newEntries.add(new Node.ObjectLiteralExpr.Entry(e.key(), foldNode(e.value())));
+			Map<Object, Node.ObjectLiteralExpr.Entry> entryMap = new LinkedHashMap<>();
+			for (var e : objLit.entries) {
+				// 相同 key 会覆盖前面的 entry
+				entryMap.put(e.key(), new Node.ObjectLiteralExpr.Entry(e.key(), foldNode(e.value())));
 			}
+
+			List<Node.ObjectLiteralExpr.Entry> newEntries = new ArrayList<>(entryMap.values());
 			return new Node.ObjectLiteralExpr(newEntries, objLit.line, objLit.column);
 		}
 
 		if (node instanceof Node.ArrayLiteralExpr arrLit) {
 			List<Node> newElems = new ArrayList<>();
-			for (Node e : arrLit.elements) {
+			for (var e : arrLit.elements) {
 				newElems.add(foldNode(e));
 			}
 			return new Node.ArrayLiteralExpr(newElems, arrLit.line, arrLit.column);
+		}
+
+		if (node instanceof Node.FunctionDecl fn) {
+			return new Node.FunctionDecl(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.line, fn.column);
+		}
+
+		if (node instanceof Node.FunctionExpr fn) {
+			return new Node.FunctionExpr(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.line, fn.column);
 		}
 
 		return node;
@@ -296,7 +308,7 @@ public class ConstantFolder {
 		// 2. 数值运算
 		if (lVal instanceof Number lNum && rVal instanceof Number rNum) {
 			boolean isIntOp = (lVal instanceof Integer || lVal instanceof Short || lVal instanceof Byte)
-				&& (rVal instanceof Integer || rVal instanceof Short || rVal instanceof Byte);
+			                  && (rVal instanceof Integer || rVal instanceof Short || rVal instanceof Byte);
 
 			if (isIntOp && op != TokenType.SLASH) {
 				int l = lNum.intValue();
@@ -304,17 +316,23 @@ public class ConstantFolder {
 				return switch (op) {
 					case PLUS -> {
 						long res = (long) l + (long) r;
-						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) yield new Node.LiteralExpr((int) res, line, column);
+						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) {
+							yield new Node.LiteralExpr((int) res, line, column);
+						}
 						yield createNumberLiteral((double) res, line, column);
 					}
 					case MINUS -> {
 						long res = (long) l - (long) r;
-						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) yield new Node.LiteralExpr((int) res, line, column);
+						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) {
+							yield new Node.LiteralExpr((int) res, line, column);
+						}
 						yield createNumberLiteral((double) res, line, column);
 					}
 					case STAR -> {
 						long res = (long) l * (long) r;
-						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) yield new Node.LiteralExpr((int) res, line, column);
+						if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) {
+							yield new Node.LiteralExpr((int) res, line, column);
+						}
 						yield createNumberLiteral((double) res, line, column);
 					}
 					case PERCENT -> r != 0 ? new Node.LiteralExpr(l % r, line, column) : null;
@@ -365,8 +383,8 @@ public class ConstantFolder {
 
 		if (op == TokenType.EQ_EQ || op == TokenType.NOT_EQ_EQ || op == TokenType.EQ || op == TokenType.NOT_EQ) {
 			if (lVal == null || lVal instanceof hope.magic.js.runtime.JSUndefined || rVal == null || rVal instanceof hope.magic.js.runtime.JSUndefined) {
-				Object eqRes = (op == TokenType.EQ_EQ || op == TokenType.NOT_EQ_EQ) ? JSOps.strictEq(lVal, rVal) : JSOps.eq(lVal, rVal);
-				boolean res = (Boolean) eqRes;
+				Object  eqRes = (op == TokenType.EQ_EQ || op == TokenType.NOT_EQ_EQ) ? JSOps.strictEq(lVal, rVal) : JSOps.eq(lVal, rVal);
+				boolean res   = (Boolean) eqRes;
 				if (op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ) res = !res;
 				return new Node.LiteralExpr(res, line, column);
 			}
@@ -376,9 +394,13 @@ public class ConstantFolder {
 	}
 
 	private static Node.LiteralExpr createNumberLiteral(double val, int line, int column) {
-		if (val >= Integer.MIN_VALUE && val <= Integer.MAX_VALUE && val == Math.floor(val) && !Double.isInfinite(val)) {
-			return new Node.LiteralExpr((int) val, line, column);
-		}
+		// 保护 -0.0，防止 (int) 强转丢失符号位
+    if (val == 0.0 && Double.doubleToRawLongBits(val) == 0x8000000000000000L) {
+        return new Node.LiteralExpr(-0.0, line, column);
+    }
+    if (val >= Integer.MIN_VALUE && val <= Integer.MAX_VALUE && val == Math.floor(val) && !Double.isInfinite(val)) {
+        return new Node.LiteralExpr((int) val, line, column);
+    }
 		if (val == Math.floor(val) && !Double.isInfinite(val)) {
 			return new Node.LiteralExpr((long) val, line, column);
 		}

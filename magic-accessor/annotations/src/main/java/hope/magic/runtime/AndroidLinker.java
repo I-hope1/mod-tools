@@ -1,7 +1,10 @@
 package hope.magic.runtime;
 
 import hope_android.FieldUtils;
+import sun.misc.Unsafe;
+
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -12,6 +15,10 @@ public class AndroidLinker {
 	private static final int            INVOKE_STATIC     = 3;
 	private static final long           ART_METHOD_OFFSET = initArtMethodOffset();
 	private static final Constructor<?> MH_IMPL_CTOR;
+
+
+	public static     final Unsafe UNSAFE = Magic.unsafe;
+	public static     final Lookup LOOKUP = Magic.lookup;
 
 	static {
 		Constructor<?> ctor = null;
@@ -28,7 +35,7 @@ public class AndroidLinker {
 	private static long initArtMethodOffset() {
 		try {
 			Class<?> executableClass = Class.forName("java.lang.reflect.Executable");
-			Field field = executableClass.getDeclaredField("artMethod");
+			Field    field           = executableClass.getDeclaredField("artMethod");
 			field.setAccessible(true);
 			return FieldUtils.getFieldOffset(field);
 		} catch (Throwable ignored) {
@@ -40,7 +47,7 @@ public class AndroidLinker {
 	public static MethodHandle createVirtualInstanceHandle(Class<?> targetClass, Method method) throws Exception {
 		if (MH_IMPL_CTOR == null) {
 			method.setAccessible(true);
-			return Magic.lookup.unreflect(method);
+			return LOOKUP.unreflect(method);
 		}
 		long artMethod = getArtMethod(method);
 		MethodType type = MethodType.methodType(method.getReturnType(), method.getParameterTypes())
@@ -52,7 +59,7 @@ public class AndroidLinker {
 	public static MethodHandle createPrivateInstanceHandle(Class<?> targetClass, Method method) throws Exception {
 		if (MH_IMPL_CTOR == null) {
 			method.setAccessible(true);
-			return Magic.lookup.unreflectSpecial(method, targetClass);
+			return LOOKUP.unreflectSpecial(method, targetClass);
 		}
 		long artMethod = getArtMethod(method);
 		MethodType type = MethodType.methodType(method.getReturnType(), method.getParameterTypes())
@@ -64,7 +71,7 @@ public class AndroidLinker {
 	public static MethodHandle createInitInPlaceHandle(Class<?> targetClass, Constructor<?> ctor) throws Exception {
 		if (MH_IMPL_CTOR == null) {
 			ctor.setAccessible(true);
-			return Magic.lookup.unreflectConstructor(ctor);
+			return LOOKUP.unreflectConstructor(ctor);
 		}
 		long artMethod = getArtMethod(ctor);
 		MethodType initType = MethodType.methodType(void.class, ctor.getParameterTypes())
@@ -76,7 +83,7 @@ public class AndroidLinker {
 	public static MethodHandle createStaticHandle(Method method) throws Exception {
 		if (MH_IMPL_CTOR == null) {
 			method.setAccessible(true);
-			return Magic.lookup.unreflect(method);
+			return LOOKUP.unreflect(method);
 		}
 		long       artMethod = getArtMethod(method);
 		MethodType type      = MethodType.methodType(method.getReturnType(), method.getParameterTypes());
@@ -84,16 +91,16 @@ public class AndroidLinker {
 	}
 
 	private static long getArtMethod(Object executable) {
-		return Magic.unsafe.getLong(executable, ART_METHOD_OFFSET);
+		return UNSAFE.getLong(executable, ART_METHOD_OFFSET);
 	}
 
 	public static MethodHandle getMethodHandle(Class<?> clazz, String methodName, Class<?>[] parameterTypes,
-	                                    boolean isStatic, boolean isSpecial) {
+	                                           boolean isStatic, boolean isSpecial) {
 		try {
 			if ("<init>".equals(methodName) || "__init__".equals(methodName)) {
 				Constructor<?> ctor = clazz.getDeclaredConstructor(parameterTypes == null ? new Class<?>[0] : parameterTypes);
 				ctor.setAccessible(true);
-				return Magic.lookup.unreflectConstructor(ctor);
+				return LOOKUP.unreflectConstructor(ctor);
 			}
 			Method method = clazz.getDeclaredMethod(methodName, parameterTypes == null ? new Class<?>[0] : parameterTypes);
 			method.setAccessible(true);

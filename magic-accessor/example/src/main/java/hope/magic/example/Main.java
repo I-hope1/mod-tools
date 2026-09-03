@@ -1,8 +1,5 @@
 package hope.magic.example;
 
-import hope.magic.js.compiler.JSCompiler;
-import hope.magic.js.runtime.*;
-
 import java.util.*;
 
 public class Main {
@@ -15,16 +12,6 @@ public class Main {
 	public static void main(String[] args) throws Throwable {
 		TargetObject obj = new TargetObject();
 
-		JSScript script = JSCompiler.compile("""
-		 var arr = [1, 2, 3];
-
-arr[3] = 4;
-
-arr.length;    // 3.0，而不是 4.0
-		 """);
-		JSContext cx = new JSContext();
-		cx.set("target", obj);
-		System.out.println(script.run(cx));
 		System.out.println("====== 初始对象状态 ======");
 		System.out.println("obj.getSecretCode() = " + obj.getSecretCode());
 		System.out.println("obj.getMessage() = " + obj.getMessage());

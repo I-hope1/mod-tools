@@ -8,6 +8,7 @@ import hope.magic.js.parser.JSLexer;
 import hope.magic.js.parser.JSParser;
 import hope.magic.js.runtime.JSContext;
 import hope.magic.js.runtime.JSScript;
+import hope.magic.js.runtime.JSUndefined;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -105,7 +106,7 @@ public class Main {
 			JSContext cx = new JSContext();
 			JSScript script = JSCompiler.compile(code);
 			Object res = script.run(cx);
-			if (res != null && res != hope.magic.js.runtime.JSUndefined.INSTANCE) {
+			if (res != null && res != JSUndefined.INSTANCE) {
 				System.out.println(res);
 			}
 		} catch (Throwable e) {
@@ -212,13 +213,12 @@ public class Main {
 				line = line.trim();
 				if (line.isEmpty()) continue;
 
-				JSScript script = JSCompiler.compile(line);
-				Object res = script.run(cx);
-				if (res != null && res != hope.magic.js.runtime.JSUndefined.INSTANCE) {
+				Object res = cx.eval(line);
+				if (res != null && res != JSUndefined.INSTANCE) {
 					System.out.println(res);
 				}
 			} catch (Throwable e) {
-				System.out.println("Error: " + e.getMessage());
+				System.out.println(e.getClass().getSimpleName() + ": " + e.getMessage());
 			}
 		}
 	}

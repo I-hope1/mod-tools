@@ -3,8 +3,9 @@ plugins {
 }
 
 dependencies {
-	implementation project.findProject(':magic-accessor:annotations') ?: project(':annotations')
-	annotationProcessor project.findProject(':magic-accessor:compiler') ?: project(':compiler')
+	implementation project(':magic-accessor:annotations') ?: project(':annotations')
+	// magic-js包括了:magic-accessor:annotations
+	annotationProcessor project(':magic-accessor:compiler') ?: project(':compiler')
 	implementation project(':magic-accessor:magic-js')
 	implementation 'org.mozilla:rhino:1.9.1'
 	implementation 'org.openjdk.nashorn:nashorn-core:15.7'
@@ -20,8 +21,8 @@ dependencies {
 application {
 	mainClass = 'hope.magic.example.Main'
 	applicationDefaultJvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
 	]
 }
 
@@ -35,12 +36,12 @@ tasks.register('jmh', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
 	args = [
-		'hope.magic.example.AccessorBenchmark',
-		'-f', '1',
-		'-wi', '2',
-		'-i', '3',
-		'-bm', 'avgt',
-		'-tu', 'ns'
+			'hope.magic.example.AccessorBenchmark',
+			'-f', '1',
+			'-wi', '2',
+			'-i', '3',
+			'-bm', 'avgt',
+			'-tu', 'ns'
 	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
@@ -51,12 +52,12 @@ tasks.register('jmhWarmup1', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
 	args = [
-		'hope.magic.example.AccessorWarmupOnceBenchmark',
-		'-f', '1',
-		'-wi', '1',
-		'-i', '3',
-		'-bm', 'avgt',
-		'-tu', 'ns'
+			'hope.magic.example.AccessorWarmupOnceBenchmark',
+			'-f', '1',
+			'-wi', '1',
+			'-i', '3',
+			'-bm', 'avgt',
+			'-tu', 'ns'
 	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
@@ -67,12 +68,12 @@ tasks.register('jmhCold', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
 	args = [
-		'hope.magic.example.AccessorColdStartBenchmark',
-		'-f', '5',
-		'-wi', '0',
-		'-i', '1',
-		'-bm', 'ss',
-		'-tu', 'us'
+			'hope.magic.example.AccessorColdStartBenchmark',
+			'-f', '5',
+			'-wi', '0',
+			'-i', '1',
+			'-bm', 'ss',
+			'-tu', 'us'
 	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
@@ -83,12 +84,12 @@ tasks.register('jmhDecode', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
 	args = [
-		'hope.magic.example.BytecodeDecodeMicroBenchmark',
-		'-f', '1',
-		'-wi', '2',
-		'-i', '3',
-		'-bm', 'avgt',
-		'-tu', 'ns'
+			'hope.magic.example.BytecodeDecodeMicroBenchmark',
+			'-f', '1',
+			'-wi', '2',
+			'-i', '3',
+			'-bm', 'avgt',
+			'-tu', 'ns'
 	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
@@ -104,14 +105,17 @@ tasks.register('jmhJS', JavaExec) {
 	mainClass = 'org.openjdk.jmh.Main'
 	jvmArgs(
 			"-Dpolyglot.engine.WarnInterpreterOnly=true",
+			'-XX:+EnableJVMCI',
+			'-XX:+UseJVMCICompiler',
 	)
 	args = [
-		'hope.magic.example.MagicJSBenchmark',
-		'-f', '3',
-		'-wi', '3',
-		'-i', '5',
-		'-bm', 'avgt',
-		'-tu', 'ns'
+			'hope.magic.example.MagicJSBenchmark',
+			'-f', '3',
+			'-wi', '3',
+			'-i', '5',
+			'-bm', 'avgt',
+			'-tu', 'ns',
+			'-prof', 'gc',
 	]
 	if (jsBenchmarkJdk.exists()) {
 		executable = jsBenchmarkJdk.absolutePath
@@ -122,12 +126,12 @@ tasks.register('jmhInvoker', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
 	args = [
-		'hope.magic.example.DynamicInvokerBenchmark',
-		'-f', '3',
-		'-wi', '5',
-		'-i', '10',
-		'-bm', 'avgt',
-		'-tu', 'ns'
+			'hope.magic.example.DynamicInvokerBenchmark',
+			'-f', '3',
+			'-wi', '5',
+			'-i', '10',
+			'-bm', 'avgt',
+			'-tu', 'ns'
 	]
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"

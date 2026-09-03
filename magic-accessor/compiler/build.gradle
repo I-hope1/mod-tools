@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-	implementation project.findProject(':magic-accessor:annotations') ?: project(':annotations')
+	implementation project(':magic-accessor:annotations') ?: project(':annotations')
 
 	compileOnly 'com.google.auto.service:auto-service:1.1.1'
 	annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
@@ -16,6 +16,8 @@ dependencies {
 }
 
 jar {
+	dependsOn project(':magic-accessor:annotations').getTasksByName('jar', false)
+
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	from {
 		configurations.runtimeClasspath.findAll { it.name.startsWith("asm-") }.collect { zipTree(it) }

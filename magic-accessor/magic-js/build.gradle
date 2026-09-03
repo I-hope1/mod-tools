@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-	api project(':magic-accessor:annotations')
+	implementation project(':magic-accessor:annotations')
 
 	def asmVersion = '9.9.1'
 	implementation "org.ow2.asm:asm:$asmVersion"
@@ -24,12 +24,13 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 jar {
+	dependsOn project(':magic-accessor:annotations').getTasksByName('jar', false)
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	manifest {
 		attributes 'Main-Class': 'hope.magic.js.cli.Main'
 	}
 	from {
-		configurations.runtimeClasspath.findAll { it.name.startsWith("asm-") }.collect { zipTree(it) }
+		configurations.runtimeClasspath.collect { zipTree(it) }
 	}
 }
 
